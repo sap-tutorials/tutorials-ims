@@ -7,7 +7,8 @@ import { parseV2Steps } from './parsers/v2.js'
 import { parseV1Steps } from './parsers/v1.js'
 import { resolveImageURLs } from './parsers/images.js'
 import { convertOptionBlocks } from './parsers/options.js'
-import type { TutorialStep, TutorialNavEntry } from './parsers/types.js'
+import { fetchGitHubMeta } from './parsers/github.js'
+import type { TutorialStep, TutorialNavEntry, ValidationQuestion, GitHubContributor } from './parsers/types.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -31,6 +32,39 @@ const CACHE_DIR = join(__dirname, '..', '.tutorial-cache')
 const OUTPUT_DIR = join(__dirname, '..', 'site', 'tutorials')
 
 const ACRONYMS = new Set(['SAP', 'HANA', 'CAP', 'BTP', 'CDS', 'UI', 'API', 'MTA', 'XSUAA', 'OData', 'HTML5', 'ABAP'])
+
+const VALIDATION_DATA: Record<string, Record<number, ValidationQuestion[]>> = {
+  'hana-cloud-cap-create-project': {
+    3: [{
+      id: 'q1',
+      question: 'What name should you use for the CAP project as recommended in this tutorial?',
+      type: 'multiple-choice',
+      options: ['MyHANAApp', 'MyCloudApp', 'HanaProject', 'CAPDemo'],
+      correctAnswer: 'MyHANAApp',
+    }],
+    7: [{
+      id: 'q1',
+      question: 'Why is it recommended to perform a commit at the end of each tutorial?',
+      type: 'multiple-choice',
+      options: [
+        'To create a version that allows you to revert and compare changes',
+        'To automatically deploy changes to the cloud',
+        'To share code with other developers',
+        'To trigger CI/CD pipelines',
+      ],
+      correctAnswer: 'To create a version that allows you to revert and compare changes',
+    }],
+  },
+  'hana-cloud-deploying': {
+    1: [{
+      id: 'q1',
+      question: 'What is the minimum memory required for an SAP HANA Cloud instance?',
+      type: 'multiple-choice',
+      options: ['16 GB', '30 GB', '32 GB', '64 GB'],
+      correctAnswer: '30 GB',
+    }],
+  },
+}
 
 function humanizeTag(raw: string): string {
   const value = raw.includes('>') ? raw.split('>').pop()! : raw
@@ -99,6 +133,8 @@ function writeVitePressPage(
   prerequisites: string,
   steps: TutorialStep[],
   nav: TutorialNavEntry,
+  lastUpdated: string,
+  contributors: GitHubContributor[],
 ): void {
   const fm: Record<string, unknown> = {
     layout: 'tutorial',
@@ -121,7 +157,14 @@ function writeVitePressPage(
     displayTags: [...new Set([primaryTag, ...tags])].map(humanizeTag).filter(t => t.length > 0),
     youWillLearn,
     prerequisites: splitPrerequisites(prerequisites),
-    steps: steps.map(s => ({ number: s.number, title: s.title })),
+    lastUpdated: lastUpdated || null,
+    contributors: contributors.slice(0, 10).map(c => ({ login: c.login, name: c.name, avatarUrl: c.avatarUrl })),
+    steps: steps.map(s => {
+      const v = VALIDATION_DATA[slug]?.[s.number]
+      const entry: Record<string, unknown> = { number: s.number, title: s.title }
+      if (v) entry.validation = v
+      return entry
+    }),
   }
 
   const frontmatter = `---\n${yamlStringify(fm).trimEnd()}\n---\n\n`
@@ -155,6 +198,8 @@ async function main() {
 
     const steps = isV2 ? parseV2Steps(processedBody) : parseV1Steps(processedBody)
 
+    const ghMeta = await fetchGitHubMeta(t.slug, t.repo)
+
     navEntries[i].title = title
 
     writeVitePressPage(
@@ -171,6 +216,8 @@ async function main() {
       prerequisites,
       steps,
       navEntries[i],
+      ghMeta.lastUpdated,
+      ghMeta.contributors,
     )
 
     console.log(`  → ${steps.length} steps, level: ${level}, time: ${frontmatter.time}min`)

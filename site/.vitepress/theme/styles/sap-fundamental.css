@@ -1,3 +1,4 @@
+@import './sap-theme-vars.css';
 @import 'fundamental-styles/dist/theming/sap_horizon.css';
 @import 'fundamental-styles/dist/button.css';
 @import 'fundamental-styles/dist/card.css';
@@ -6,6 +7,15 @@
 @import 'fundamental-styles/dist/badge.css';
 @import 'fundamental-styles/dist/icon.css';
 @import 'fundamental-styles/dist/tabs.css';
+@import 'fundamental-styles/dist/breadcrumb.css';
+@import 'fundamental-styles/dist/popover.css';
+@import 'fundamental-styles/dist/bar.css';
+@import 'fundamental-styles/dist/form-item.css';
+@import 'fundamental-styles/dist/form-label.css';
+@import 'fundamental-styles/dist/radio.css';
+@import 'fundamental-styles/dist/input.css';
+@import 'fundamental-styles/dist/link.css';
+@import './sap-horizon-dark-scoped.css';
 
 :root {
   --vp-c-brand-1: var(--sapBrandColor, #0070f2);
@@ -104,15 +114,56 @@ a:hover {
   border-radius: 0.25rem;
 }
 
-/* FD button overrides for proper display */
+/* FD button Horizon styling */
 .fd-button {
   cursor: pointer;
+  font-family: var(--sapFontFamily);
+  font-size: var(--sapFontSize, 0.875rem);
+  font-weight: 700;
+  height: 2.25rem;
+  min-width: 2.25rem;
+  padding: 0 0.625rem;
+  border-radius: var(--sapButton_BorderCornerRadius, 0.5rem);
+  transition: all 0.15s ease;
 }
 
 .fd-button--emphasized {
-  background-color: var(--sapButton_Emphasized_Background, #0070f2) !important;
-  color: var(--sapButton_Emphasized_TextColor, #fff) !important;
+  background: var(--sapButton_Emphasized_Background, #0070f2) !important;
   border-color: var(--sapButton_Emphasized_BorderColor, #0064d9) !important;
+  color: var(--sapButton_Emphasized_TextColor, #fff) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.fd-button--emphasized:hover {
+  background: var(--sapButton_Emphasized_Hover_Background, #0064d9) !important;
+  border-color: var(--sapButton_Emphasized_Hover_BorderColor, #0058c0) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.16);
+}
+
+.fd-button--emphasized:active,
+.fd-button--emphasized.is-active {
+  background: var(--sapButton_Emphasized_Active_Background, #0058c0) !important;
+  border-color: var(--sapButton_Emphasized_Active_BorderColor, #004da5) !important;
+}
+
+.fd-button--emphasized[disabled],
+.fd-button--emphasized.is-disabled {
+  background: var(--sapButton_Background, #fff) !important;
+  border-color: var(--sapButton_BorderColor, #bcc3ca) !important;
+  color: var(--sapContent_DisabledTextColor, #bcc3ca) !important;
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.fd-button--transparent {
+  background: transparent;
+  border-color: transparent;
+  color: var(--sapButton_Lite_TextColor, #0064d9);
+}
+
+.fd-button--transparent:hover {
+  background: var(--sapButton_Lite_Hover_Background, rgba(0, 100, 217, 0.06));
 }
 
 /* Search input in light mode */
@@ -124,4 +175,38 @@ a:hover {
 /* Tutorial cards white background */
 .tutorial-card {
   background-color: var(--sapTile_Background, #fff);
+}
+
+/* Dark mode VitePress overrides */
+html.dark .VPNav,
+html.dark .VPNavBar {
+  background-color: var(--sapShellColor) !important;
+}
+
+html.dark .VPNavBar .title {
+  color: var(--sapShell_TextColor) !important;
+}
+
+html.dark .VPNavBar .VPNavBarMenuLink,
+html.dark .VPNavBarMenu .VPLink {
+  color: var(--sapShell_TextColor) !important;
+}
+
+html.dark .VPContent,
+html.dark .VPDoc,
+html.dark .vp-doc {
+  background-color: var(--sapBaseColor) !important;
+}
+
+html.dark .vp-doc div[class*='language-'] {
+  background-color: var(--sapNeutralBackground) !important;
+}
+
+html.dark .vp-doc div[class*='language-'] code {
+  color: var(--sapTextColor) !important;
+}
+
+html.dark .vp-doc :not(pre) > code {
+  background-color: var(--sapNeutralBackground) !important;
+  color: var(--sapTextColor) !important;
 }

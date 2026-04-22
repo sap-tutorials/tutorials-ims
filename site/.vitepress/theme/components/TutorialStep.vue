@@ -1,6 +1,15 @@
 <script setup lang="ts">
 import { ref, computed, inject, watch } from 'vue'
 import { useApi } from '../composables/useApi'
+import StepValidation from './StepValidation.vue'
+
+interface ValidationQuestion {
+  id: string
+  question: string
+  type: 'multiple-choice' | 'text'
+  options?: string[]
+  correctAnswer: string
+}
 
 const props = defineProps<{
   number: number
@@ -11,23 +20,31 @@ const props = defineProps<{
 const completedSteps = inject<import('vue').Ref<Set<number>>>('completedSteps', ref(new Set()))
 const onStepCompleted = inject<(n: number) => void>('onStepCompleted', () => {})
 const allExpanded = inject<import('vue').Ref<boolean | null>>('allExpanded', ref(null))
+const stepValidationMap = inject<import('vue').Ref<Record<number, ValidationQuestion[]>>>('stepValidationMap', ref({}))
 
 const isCompleted = computed(() => completedSteps.value.has(props.number))
 const expanded = ref(props.number === 1)
 const completing = ref(false)
-const { post, error } = useApi()
+const validationPassed = ref(false)
+const { post } = useApi()
+
+const validation = computed(() => stepValidationMap.value[props.number] ?? [])
+const hasValidation = computed(() => validation.value.length > 0)
+const canComplete = computed(() => !hasValidation.value || validationPassed.value)
 
 watch(allExpanded, (val) => {
   if (val !== null) expanded.value = val
 })
 
-async function markDone() {
+function onValidated() {
+  validationPassed.value = true
+}
+
+function markDone() {
   completing.value = true
-  await post(`/tutorials/${props.slug}/steps/${props.number}/complete`)
+  onStepCompleted(props.number)
+  post(`/tutorials/${props.slug}/steps/${props.number}/complete`).catch(() => {})
   completing.value = false
-  if (!error.value) {
-    onStepCompleted(props.number)
-  }
 }
 
 function toggle() {
@@ -52,7 +69,12 @@ function toggle() {
       <div class="step-content">
         <slot />
       </div>
-      <div v-if="!isCompleted" class="step-actions">
+      <StepValidation
+        v-if="hasValidation && !isCompleted"
+        :questions="validation"
+        @validated="onValidated"
+      />
+      <div v-if="!isCompleted && canComplete" class="step-actions">
         <button
           class="fd-button fd-button--emphasized"
           :disabled="completing"
@@ -60,7 +82,6 @@ function toggle() {
         >
           {{ completing ? 'Saving...' : 'Done' }}
         </button>
-        <p v-if="error" class="step-error">Failed to save progress. Try again.</p>
       </div>
     </div>
   </div>
@@ -73,7 +94,7 @@ function toggle() {
   margin-bottom: 1rem;
   overflow: hidden;
   background: var(--sapBaseColor, #fff);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--sapContent_Shadow0, 0 1px 4px rgba(0, 0, 0, 0.06));
 }
 .step-header {
   display: flex;

@@ -4,7 +4,7 @@ import { useData } from 'vitepress'
 import { useApi } from '../composables/useApi'
 import ProgressBar from './ProgressBar.vue'
 import PointsBadge from './PointsBadge.vue'
-import MiniNavigator from './MiniNavigator.vue'
+import TutorialNavigatorDropdown from './TutorialNavigatorDropdown.vue'
 
 const { frontmatter } = useData()
 const { get } = useApi()
@@ -13,6 +13,14 @@ const completedSteps = ref<Set<number>>(new Set())
 const points = ref(0)
 const badges = ref<Array<{ name: string; icon: string }>>([])
 const allExpanded = ref<boolean | null>(null)
+const navDropdownOpen = ref(false)
+
+function toggleNavDropdown(e: Event) {
+  e.preventDefault()
+  e.stopPropagation()
+  navDropdownOpen.value = !navDropdownOpen.value
+}
+function closeNavDropdown() { navDropdownOpen.value = false }
 
 const stepCount = computed(() => frontmatter.value.stepCount ?? 0)
 const completedCount = computed(() => completedSteps.value.size)
@@ -25,6 +33,16 @@ const prerequisites = computed<string[]>(() => {
 })
 const displayTags = computed<string[]>(() => frontmatter.value.displayTags ?? [])
 const stepsList = computed<Array<{ number: number; title: string }>>(() => frontmatter.value.steps ?? [])
+const stepValidationMap = computed<Record<number, any[]>>(() => {
+  const steps = frontmatter.value.steps ?? []
+  const map: Record<number, any[]> = {}
+  for (const step of steps) {
+    if (step.validation && step.validation.length > 0) {
+      map[step.number] = step.validation
+    }
+  }
+  return map
+})
 const authorAvatar = computed(() => {
   const profile = frontmatter.value.authorProfile
   if (profile && profile.startsWith('https://github.com/')) {
@@ -33,6 +51,18 @@ const authorAvatar = computed(() => {
   }
   return ''
 })
+const lastUpdatedFormatted = computed(() => {
+  const d = frontmatter.value.lastUpdated
+  if (!d) return ''
+  return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+})
+const contributors = computed<Array<{ login: string; name: string; avatarUrl: string }>>(() => frontmatter.value.contributors ?? [])
+const visibleContributors = computed(() => contributors.value.slice(0, 8))
+const extraContributorCount = computed(() => Math.max(0, contributors.value.length - 8))
+
+function isStepCompleted(n: number) {
+  return completedSteps.value.has(n)
+}
 
 function onStepCompleted(stepNumber: number) {
   completedSteps.value.add(stepNumber)
@@ -58,6 +88,7 @@ function mdInline(text: string): string {
 provide('completedSteps', completedSteps)
 provide('onStepCompleted', onStepCompleted)
 provide('allExpanded', allExpanded)
+provide('stepValidationMap', stepValidationMap)
 
 onMounted(async () => {
   const slug = frontmatter.value.slug
@@ -73,138 +104,265 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="tutorial-page">
-    <aside class="tutorial-sidebar">
-      <MiniNavigator />
-    </aside>
-    <main class="tutorial-main">
-      <!-- Breadcrumb -->
-      <nav class="tutorial-breadcrumb">
-        <a href="/">{{ frontmatter.missionTitle }}</a>
-        <span class="breadcrumb-sep">&rsaquo;</span>
-        <span>{{ frontmatter.groupTitle }}</span>
-        <span class="breadcrumb-sep">&rsaquo;</span>
-        <span class="breadcrumb-current">{{ frontmatter.title }}</span>
-      </nav>
-
-      <!-- Top Navigation -->
-      <div class="tutorial-nav">
-        <a v-if="frontmatter.prev" :href="`/tutorials/${frontmatter.prev}`" class="nav-pill">
-          &larr; Previous
-        </a>
-        <div class="nav-spacer"></div>
-        <a v-if="frontmatter.next" :href="`/tutorials/${frontmatter.next}`" class="nav-pill nav-pill--primary">
-          Next &rarr;
-        </a>
-      </div>
-
-      <!-- Title -->
-      <h1 class="tutorial-title">{{ frontmatter.title }}</h1>
-
-      <!-- Meta row -->
-      <div class="tutorial-meta">
-        <span class="meta-item">
-          <span class="meta-icon">&#127891;</span>
-          <span class="meta-level">{{ frontmatter.level }}</span>
-        </span>
-        <span class="meta-item">
-          <span class="meta-icon">&#9201;</span>
-          <span>{{ frontmatter.time }} min.</span>
-        </span>
-      </div>
-
-      <!-- Tags -->
-      <div v-if="displayTags.length" class="tutorial-tags">
-        <span class="meta-icon">&#127991;</span>
-        <span v-for="tag in displayTags" :key="tag" class="tutorial-tag">{{ tag }}</span>
-      </div>
-
-      <!-- Description -->
-      <p class="tutorial-description">{{ frontmatter.description }}</p>
-
-      <!-- You will learn -->
-      <div v-if="youWillLearn.length" class="you-will-learn">
-        <h3>You will learn</h3>
-        <ul>
-          <li v-for="(item, i) in youWillLearn" :key="i">
-            <span class="check-icon">&#10004;</span>
-            <span v-html="mdInline(item)"></span>
+  <div class="tutorial-wrapper">
+    <!-- Breadcrumb bar -->
+    <nav class="tutorial-breadcrumb-bar">
+      <div class="breadcrumb-inner breadcrumb-inner--with-dropdown">
+        <ul class="fd-breadcrumb">
+          <li class="fd-breadcrumb__item">
+            <a class="fd-breadcrumb__link breadcrumb-dropdown-trigger" href="#" @click="toggleNavDropdown">
+              Tutorial Navigator <span class="breadcrumb-caret">&#9662;</span>
+            </a>
           </li>
+          <li class="fd-breadcrumb__item"><span class="fd-breadcrumb__link">{{ frontmatter.groupTitle }}</span></li>
+          <li class="fd-breadcrumb__item"><span class="fd-breadcrumb__link fd-breadcrumb__link--current">{{ frontmatter.title }}</span></li>
         </ul>
+        <TutorialNavigatorDropdown
+          :current-slug="frontmatter.slug"
+          :is-open="navDropdownOpen"
+          @close="closeNavDropdown"
+        />
       </div>
+    </nav>
 
-      <!-- Author -->
-      <div class="tutorial-author" v-if="frontmatter.author">
-        <img v-if="authorAvatar" :src="authorAvatar" :alt="frontmatter.author" class="author-avatar" />
-        <strong>{{ frontmatter.author }}</strong>
+    <!-- Action bar -->
+    <div class="tutorial-action-bar">
+      <div class="action-bar-inner">
+        <div class="action-bar-nav">
+          <a v-if="frontmatter.prev" :href="`/tutorials/${frontmatter.prev}`" class="nav-pill">
+            &larr; Previous
+          </a>
+        </div>
+        <div class="action-bar-actions">
+          <span class="action-link">&#128172; Feedback</span>
+          <span class="action-link">&#8618; Share</span>
+          <a v-if="frontmatter.next" :href="`/tutorials/${frontmatter.next}`" class="nav-pill nav-pill--primary">
+            Next &rarr;
+          </a>
+        </div>
       </div>
+    </div>
 
-      <!-- Prerequisites -->
-      <div v-if="prerequisites.length" class="prerequisites-box">
-        <h4>Prerequisites</h4>
-        <ul>
-          <li v-for="(item, i) in prerequisites" :key="i" v-html="mdInline(item)"></li>
-        </ul>
-      </div>
+    <!-- Main layout: content + right sidebar -->
+    <div class="tutorial-page">
+      <main class="tutorial-main">
+        <!-- Title -->
+        <h1 class="tutorial-title">{{ frontmatter.title }}</h1>
 
-      <!-- Progress -->
-      <ProgressBar :completed="completedCount" :total="stepCount" label="Tutorial Progress" />
-      <PointsBadge :points="points" :badges="badges" />
+        <!-- Meta row + Tags inline -->
+        <div class="tutorial-meta">
+          <span class="meta-item">
+            <span class="meta-icon">&#127891;</span>
+            <span class="meta-level">{{ frontmatter.level }}</span>
+          </span>
+          <span class="meta-item">
+            <span class="meta-icon">&#9201;</span>
+            <span>{{ frontmatter.time }} min.</span>
+          </span>
+          <span v-if="displayTags.length" class="meta-tags">
+            <span class="meta-icon">&#127991;</span>
+            <span v-for="tag in displayTags" :key="tag" class="tutorial-tag">{{ tag }}</span>
+          </span>
+        </div>
 
-      <!-- Step TOC -->
-      <div v-if="stepsList.length" class="step-toc">
-        <a
-          v-for="step in stepsList"
-          :key="step.number"
-          class="step-toc-item"
-          href="#"
-          @click.prevent="scrollToStep(step.number)"
-        >
-          <span class="step-toc-number">{{ step.number }}</span>
-          <span class="step-toc-label">Step {{ step.number }}:</span>
-          <span class="step-toc-title">{{ step.title }}</span>
-        </a>
-        <a href="#" class="step-toc-back" @click.prevent="window.scrollTo({ top: 0, behavior: 'smooth' })">Back to Top</a>
-      </div>
+        <!-- Description -->
+        <p class="tutorial-description">{{ frontmatter.description }}</p>
 
-      <!-- Step controls -->
-      <div class="step-controls">
-        <a href="#" @click.prevent="expandAll">Open all</a>
-        <a href="#" @click.prevent="collapseAll">Close all</a>
-      </div>
+        <!-- You will learn -->
+        <div v-if="youWillLearn.length" class="you-will-learn">
+          <h3>You will learn</h3>
+          <ul>
+            <li v-for="(item, i) in youWillLearn" :key="i">
+              <span class="check-icon">&#10004;</span>
+              <span v-html="mdInline(item)"></span>
+            </li>
+          </ul>
+        </div>
 
-      <!-- Tutorial steps -->
-      <div class="tutorial-steps">
-        <Content />
-      </div>
+        <!-- Author -->
+        <div class="tutorial-author" v-if="frontmatter.author">
+          <img v-if="authorAvatar" :src="authorAvatar" :alt="frontmatter.author" class="author-avatar" />
+          <div class="author-info">
+            <strong>{{ frontmatter.author }}</strong>
+            <span v-if="lastUpdatedFormatted" class="last-updated">Last updated: {{ lastUpdatedFormatted }}</span>
+          </div>
+        </div>
 
-      <!-- Bottom Navigation -->
-      <div class="tutorial-nav tutorial-nav-bottom">
-        <a v-if="frontmatter.prev" :href="`/tutorials/${frontmatter.prev}`" class="nav-pill">
-          &larr; Previous
-        </a>
-        <div class="nav-spacer"></div>
-        <a v-if="frontmatter.next" :href="`/tutorials/${frontmatter.next}`" class="nav-pill nav-pill--primary">
-          Next &rarr;
-        </a>
-      </div>
-    </main>
+        <!-- Contributors -->
+        <div v-if="visibleContributors.length" class="tutorial-contributors">
+          <span class="contributors-label">Contributors</span>
+          <div class="contributors-avatars">
+            <a
+              v-for="c in visibleContributors"
+              :key="c.login"
+              :href="`https://github.com/${c.login}`"
+              :title="c.name || c.login"
+              class="contributor-avatar-link"
+              target="_blank"
+              rel="noopener"
+            >
+              <img :src="c.avatarUrl + '&s=28'" :alt="c.login" class="contributor-avatar" />
+            </a>
+            <span v-if="extraContributorCount > 0" class="contributor-extra">+{{ extraContributorCount }}</span>
+          </div>
+        </div>
+
+        <!-- Prerequisites -->
+        <div v-if="prerequisites.length" class="prerequisites-box">
+          <h4>Prerequisites</h4>
+          <ul>
+            <li v-for="(item, i) in prerequisites" :key="i" v-html="mdInline(item)"></li>
+          </ul>
+        </div>
+
+        <!-- Progress -->
+        <ProgressBar :completed="completedCount" :total="stepCount" label="Tutorial Progress" />
+        <PointsBadge :points="points" :badges="badges" />
+
+        <!-- Step controls -->
+        <div class="step-controls">
+          <a href="#" @click.prevent="expandAll">Open all</a>
+          <a href="#" @click.prevent="collapseAll">Close all</a>
+        </div>
+
+        <!-- Tutorial steps -->
+        <div class="tutorial-steps">
+          <Content />
+        </div>
+
+        <!-- Bottom Navigation -->
+        <div class="tutorial-nav-bottom">
+          <a v-if="frontmatter.prev" :href="`/tutorials/${frontmatter.prev}`" class="nav-pill">
+            &larr; Previous
+          </a>
+          <div class="nav-spacer"></div>
+          <a v-if="frontmatter.next" :href="`/tutorials/${frontmatter.next}`" class="nav-pill nav-pill--primary">
+            Next &rarr;
+          </a>
+        </div>
+      </main>
+
+      <!-- Right sidebar: Step TOC -->
+      <aside v-if="stepsList.length" class="step-toc-sidebar">
+        <div class="step-toc">
+          <a
+            v-for="step in stepsList"
+            :key="step.number"
+            class="step-toc-item"
+            href="#"
+            @click.prevent="scrollToStep(step.number)"
+          >
+            <span class="step-toc-circle" :class="{ completed: isStepCompleted(step.number) }">
+              <span v-if="isStepCompleted(step.number)">&#10003;</span>
+              <span v-else>{{ step.number }}</span>
+            </span>
+            <span class="step-toc-text">
+              <span class="step-toc-label">Step {{ step.number }}:</span>
+              {{ step.title }}
+            </span>
+          </a>
+          <a href="#" class="step-toc-back" @click.prevent="scrollToStep(1)">Back to Top</a>
+        </div>
+      </aside>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.tutorial-page {
-  display: flex;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 1rem;
-  gap: 2rem;
+/* Full-width wrapper */
+.tutorial-wrapper {
   background: var(--sapBackgroundColor, #f5f6f7);
   min-height: 100vh;
 }
-.tutorial-sidebar {
-  width: 280px;
-  flex-shrink: 0;
+
+/* Breadcrumb bar */
+.tutorial-breadcrumb-bar {
+  background: var(--sapBaseColor, #fff);
+  border-bottom: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+  padding: 0.75rem 0;
+}
+.breadcrumb-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--sapNeutralTextColor, #6a6d70);
+}
+.breadcrumb-inner--with-dropdown {
+  position: relative;
+}
+.breadcrumb-dropdown-trigger {
+  cursor: pointer;
+}
+.breadcrumb-caret {
+  font-size: 0.625rem;
+  margin-left: 0.15rem;
+  vertical-align: middle;
+}
+.fd-breadcrumb {
+  padding: 0;
+  margin: 0;
+}
+.breadcrumb-inner .fd-breadcrumb__link {
+  font-size: 0.8125rem;
+}
+.breadcrumb-inner .fd-breadcrumb__link--current {
+  color: var(--sapTextColor, #32363a);
+  cursor: default;
+}
+
+/* Action bar */
+.tutorial-action-bar {
+  background: var(--sapShellColor, #354a5f);
+  padding: 0.625rem 0;
+}
+.action-bar-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.action-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+.action-link {
+  color: var(--sapShell_TextColor, #fff);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0.9;
+}
+.action-link:hover { opacity: 1; }
+.action-bar-inner .nav-pill {
+  border-color: var(--sapShell_TextColor, #fff);
+  color: var(--sapShell_TextColor, #fff);
+}
+.action-bar-inner .nav-pill:hover {
+  background: rgba(255,255,255,0.15);
+  color: var(--sapShell_TextColor, #fff);
+}
+.action-bar-inner .nav-pill--primary {
+  background: var(--sapContent_ContrastTextColor, #fff);
+  color: var(--sapShellColor, #354a5f);
+  border-color: var(--sapContent_ContrastTextColor, #fff);
+}
+.action-bar-inner .nav-pill--primary:hover {
+  background: rgba(255,255,255,0.9);
+  color: var(--sapShellColor, #354a5f);
+}
+
+/* Main layout */
+.tutorial-page {
+  display: flex;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1.5rem 2rem;
+  gap: 2rem;
 }
 .tutorial-main {
   flex: 1;
@@ -214,41 +372,65 @@ onMounted(async () => {
   padding: 2rem;
 }
 
-/* Breadcrumb */
-.tutorial-breadcrumb {
-  font-size: 0.8125rem;
-  margin-bottom: 1rem;
-  color: var(--sapNeutralTextColor, #6a6d70);
-  line-height: 1.5;
+/* Right sidebar */
+.step-toc-sidebar {
+  width: 320px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 1rem;
+  align-self: flex-start;
 }
-.tutorial-breadcrumb a {
+.step-toc {
+  background: var(--sapBaseColor, #fff);
+  border: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+.step-toc-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.4rem 0;
+  text-decoration: none;
   color: var(--sapLinkColor, #0064d9);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+.step-toc-item:hover { text-decoration: underline; }
+.step-toc-circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.625rem;
+  height: 1.625rem;
+  border-radius: 50%;
+  border: 2px solid var(--sapNeutralBorderColor, #bcc3ca);
+  color: var(--sapNeutralTextColor, #6a6d70);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+.step-toc-circle.completed {
+  background: var(--sapPositiveColor, #107e3e);
+  border-color: var(--sapPositiveColor, #107e3e);
+  color: #fff;
+}
+.step-toc-label {
+  font-weight: 600;
+}
+.step-toc-back {
+  display: block;
+  text-align: right;
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--sapTextColor, #32363a);
   text-decoration: none;
 }
-.tutorial-breadcrumb a:hover {
-  text-decoration: underline;
-}
-.breadcrumb-sep {
-  margin: 0 0.25rem;
-  color: var(--sapNeutralTextColor, #6a6d70);
-}
-.breadcrumb-current {
-  color: var(--sapTextColor, #32363a);
-}
+.step-toc-back:hover { text-decoration: underline; }
 
-/* Navigation pills */
-.tutorial-nav {
-  display: flex;
-  align-items: center;
-  margin-bottom: 1.5rem;
-}
-.tutorial-nav-bottom {
-  margin-top: 2rem;
-  margin-bottom: 0;
-}
-.nav-spacer {
-  flex: 1;
-}
+/* Nav pills */
 .nav-pill {
   display: inline-flex;
   align-items: center;
@@ -283,12 +465,13 @@ onMounted(async () => {
   color: var(--sapTextColor, #32363a);
 }
 
-/* Meta */
+/* Meta + Tags (inline) */
 .tutorial-meta {
   display: flex;
-  gap: 1.5rem;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
   align-items: center;
-  margin-bottom: 0.75rem;
+  margin-bottom: 1rem;
   font-size: 0.875rem;
   color: var(--sapTextColor, #32363a);
 }
@@ -297,28 +480,21 @@ onMounted(async () => {
   align-items: center;
   gap: 0.35rem;
 }
-.meta-icon {
-  font-size: 1rem;
-}
-.meta-level {
-  text-transform: capitalize;
-}
-
-/* Tags */
-.tutorial-tags {
-  display: flex;
+.meta-icon { font-size: 1rem; }
+.meta-level { text-transform: capitalize; }
+.meta-tags {
+  display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  gap: 0.35rem;
 }
 .tutorial-tag {
   display: inline-block;
-  padding: 0.2rem 0.75rem;
+  padding: 0.125rem 0.5rem;
   border: 1px solid var(--sapBrandColor, #0070f2);
   border-radius: 1rem;
   color: var(--sapBrandColor, #0070f2);
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 600;
 }
 
@@ -331,20 +507,14 @@ onMounted(async () => {
 }
 
 /* You will learn */
-.you-will-learn {
-  margin-bottom: 1.5rem;
-}
+.you-will-learn { margin-bottom: 1.5rem; }
 .you-will-learn h3 {
   font-size: 1rem;
   font-weight: 600;
   margin-bottom: 0.5rem;
   color: var(--sapTextColor, #32363a);
 }
-.you-will-learn ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
+.you-will-learn ul { list-style: none; padding: 0; margin: 0; }
 .you-will-learn li {
   display: flex;
   gap: 0.5rem;
@@ -357,9 +527,7 @@ onMounted(async () => {
   font-size: 0.875rem;
   margin-top: 0.15rem;
 }
-.you-will-learn :deep(a) {
-  color: var(--sapLinkColor, #0064d9);
-}
+.you-will-learn :deep(a) { color: var(--sapLinkColor, #0064d9); }
 
 /* Author */
 .tutorial-author {
@@ -375,10 +543,62 @@ onMounted(async () => {
   border-radius: 50%;
   border: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
 }
+.author-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.last-updated {
+  font-size: 0.75rem;
+  color: var(--sapNeutralTextColor, #6a6d70);
+  font-weight: 400;
+}
+
+/* Contributors */
+.tutorial-contributors {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.8125rem;
+}
+.contributors-label {
+  color: var(--sapNeutralTextColor, #6a6d70);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.contributors-avatars {
+  display: flex;
+  align-items: center;
+}
+.contributor-avatar-link {
+  display: inline-block;
+  margin-left: -0.25rem;
+  transition: transform 0.15s;
+}
+.contributor-avatar-link:first-child {
+  margin-left: 0;
+}
+.contributor-avatar-link:hover {
+  transform: scale(1.15);
+  z-index: 1;
+}
+.contributor-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--sapBaseColor, #fff);
+}
+.contributor-extra {
+  margin-left: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--sapNeutralTextColor, #6a6d70);
+}
 
 /* Prerequisites */
 .prerequisites-box {
-  background: #e8f4fd;
+  background: var(--sapInformationBackground, #e8f4fd);
   border-left: 4px solid var(--sapBrandColor, #0070f2);
   padding: 1rem 1.25rem;
   border-radius: 0 0.5rem 0.5rem 0;
@@ -390,72 +610,16 @@ onMounted(async () => {
   font-weight: 600;
   color: var(--sapTextColor, #32363a);
 }
-.prerequisites-box ul {
-  margin: 0;
-  padding-left: 1.25rem;
-}
-.prerequisites-box li {
-  margin-bottom: 0.35rem;
-  line-height: 1.5;
-}
-.prerequisites-box :deep(a) {
-  color: var(--sapLinkColor, #0064d9);
-}
-
-/* Step TOC */
-.step-toc {
-  border: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
-  border-radius: 0.5rem;
-  padding: 1rem;
-  margin: 1.5rem 0;
-}
-.step-toc-item {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 0;
-  text-decoration: none;
-  color: var(--sapLinkColor, #0064d9);
-  font-size: 0.875rem;
-}
-.step-toc-item:hover {
-  text-decoration: underline;
-}
-.step-toc-number {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.75rem;
-  height: 1.75rem;
-  border-radius: 50%;
-  border: 2px solid var(--sapBrandColor, #0070f2);
-  color: var(--sapBrandColor, #0070f2);
-  font-weight: 600;
-  font-size: 0.75rem;
-  flex-shrink: 0;
-}
-.step-toc-label {
-  font-weight: 600;
-}
-.step-toc-title {
-  color: var(--sapLinkColor, #0064d9);
-}
-.step-toc-back {
-  display: block;
-  text-align: right;
-  margin-top: 0.5rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--sapTextColor, #32363a);
-  text-decoration: none;
-}
+.prerequisites-box ul { margin: 0; padding-left: 1.25rem; }
+.prerequisites-box li { margin-bottom: 0.35rem; line-height: 1.5; }
+.prerequisites-box :deep(a) { color: var(--sapLinkColor, #0064d9); }
 
 /* Step controls */
 .step-controls {
   display: flex;
   justify-content: flex-end;
   gap: 1.5rem;
-  margin-bottom: 0.75rem;
+  margin: 1.5rem 0 0.75rem;
   font-size: 0.875rem;
 }
 .step-controls a {
@@ -463,19 +627,23 @@ onMounted(async () => {
   text-decoration: none;
   font-weight: 600;
 }
-.step-controls a:hover {
-  text-decoration: underline;
-}
+.step-controls a:hover { text-decoration: underline; }
 
+/* Bottom nav */
+.tutorial-nav-bottom {
+  display: flex;
+  align-items: center;
+  margin-top: 2rem;
+}
+.nav-spacer { flex: 1; }
+
+@media (max-width: 960px) {
+  .step-toc-sidebar { display: none; }
+  .tutorial-page { padding: 1rem; }
+  .tutorial-main { padding: 1.5rem; }
+}
 @media (max-width: 768px) {
-  .tutorial-page {
-    flex-direction: column;
-  }
-  .tutorial-sidebar {
-    width: 100%;
-  }
-  .tutorial-title {
-    font-size: 1.5rem;
-  }
+  .tutorial-title { font-size: 1.5rem; }
+  .action-bar-inner { flex-wrap: wrap; gap: 0.5rem; }
 }
 </style>

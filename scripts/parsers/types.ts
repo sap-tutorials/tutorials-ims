@@ -9,10 +9,19 @@ export interface TutorialFrontmatter {
   description?: string
 }
 
+export interface ValidationQuestion {
+  id: string
+  question: string
+  type: 'multiple-choice' | 'text'
+  options?: string[]
+  correctAnswer: string
+}
+
 export interface TutorialStep {
   number: number
   title: string
   content: string
+  validation?: ValidationQuestion[]
 }
 
 export interface ParsedTutorial {
@@ -44,3 +53,9 @@ export interface TutorialNavEntry {
 }
 
 export const RAW_BASE_URL = 'https://raw.githubusercontent.com'
+
+export interface GitHubContributor {
+  name: string
+  login: string
+  avatarUrl: string
+}
