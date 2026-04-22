@@ -6,6 +6,7 @@ export default defineConfig({
   srcDir: '.',
   outDir: '.vitepress/dist',
   ignoreDeadLinks: true,
+  appearance: false,
 
   themeConfig: {
     nav: [
