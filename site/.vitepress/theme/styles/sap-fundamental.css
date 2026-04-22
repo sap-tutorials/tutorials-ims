@@ -1,0 +1,20 @@
+@import 'fundamental-styles/dist/theming/sap_horizon.css';
+@import 'fundamental-styles/dist/button.css';
+@import 'fundamental-styles/dist/card.css';
+@import 'fundamental-styles/dist/panel.css';
+@import 'fundamental-styles/dist/progress-indicator.css';
+@import 'fundamental-styles/dist/badge.css';
+@import 'fundamental-styles/dist/icon.css';
+@import 'fundamental-styles/dist/tabs.css';
+
+:root {
+  --vp-c-brand-1: var(--sapBrandColor);
+  --vp-c-brand-2: var(--sapHighlightColor);
+  --vp-c-bg: var(--sapBackgroundColor);
+  --vp-c-text-1: var(--sapTextColor);
+  --vp-font-family-base: var(--sapFontFamily);
+}
+
+.fd-button {
+  cursor: pointer;
+}
