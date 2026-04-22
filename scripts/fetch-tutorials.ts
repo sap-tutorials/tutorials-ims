@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { stringify as yamlStringify } from 'yaml'
 import { extractFrontmatter } from './parsers/frontmatter.js'
 import { parseV2Steps } from './parsers/v2.js'
 import { parseV1Steps } from './parsers/v1.js'
@@ -9,6 +10,8 @@ import { convertOptionBlocks } from './parsers/options.js'
 import type { TutorialStep, TutorialNavEntry } from './parsers/types.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
+
+const MISSION_TITLE = 'Combine CAP with SAP HANA Cloud to Create Full-Stack Applications'
 
 const POC_TUTORIALS: Array<{
   slug: string
@@ -26,6 +29,29 @@ const POC_TUTORIALS: Array<{
 
 const CACHE_DIR = join(__dirname, '..', '.tutorial-cache')
 const OUTPUT_DIR = join(__dirname, '..', 'site', 'tutorials')
+
+const ACRONYMS = new Set(['SAP', 'HANA', 'CAP', 'BTP', 'CDS', 'UI', 'API', 'MTA', 'XSUAA', 'OData', 'HTML5', 'ABAP'])
+
+function humanizeTag(raw: string): string {
+  const value = raw.includes('>') ? raw.split('>').pop()! : raw
+  return value
+    .replace(/[-_]/g, ' ')
+    .split(' ')
+    .map(word => {
+      const upper = word.toUpperCase()
+      if (ACRONYMS.has(upper)) return upper
+      return word.charAt(0).toUpperCase() + word.slice(1)
+    })
+    .join(' ')
+}
+
+function splitPrerequisites(prereqText: string): string[] {
+  if (!prereqText) return []
+  return prereqText
+    .split('\n')
+    .map(line => line.replace(/^\s*-\s+/, '').trim())
+    .filter(line => line.length > 0)
+}
 
 async function fetchMarkdown(slug: string, repo: string): Promise<{ content: string; branch: string }> {
   const cacheFile = join(CACHE_DIR, `${slug}.md`)
@@ -51,6 +77,7 @@ function buildNavEntries(): TutorialNavEntry[] {
     slug: t.slug,
     title: '',
     missionId: t.missionId,
+    missionTitle: MISSION_TITLE,
     groupId: t.groupId,
     groupTitle: t.groupTitle,
     prev: i > 0 ? POC_TUTORIALS[i - 1].slug : null,
@@ -67,45 +94,43 @@ function writeVitePressPage(
   tags: string[],
   primaryTag: string,
   author: string,
+  authorProfile: string,
   youWillLearn: string[],
   prerequisites: string,
   steps: TutorialStep[],
   nav: TutorialNavEntry,
 ): void {
-  const frontmatter = [
-    '---',
-    'layout: tutorial',
-    `slug: ${slug}`,
-    `title: "${title.replace(/"/g, '\\"')}"`,
-    `description: "${description.replace(/"/g, '\\"')}"`,
-    `time: ${time}`,
-    `level: ${level}`,
-    `tags: [${tags.map(t => `"${t}"`).join(', ')}]`,
-    `primaryTag: "${primaryTag}"`,
-    `author: "${author}"`,
-    `stepCount: ${steps.length}`,
-    `missionId: ${nav.missionId}`,
-    `groupId: ${nav.groupId}`,
-    `groupTitle: "${nav.groupTitle}"`,
-    nav.prev ? `prev: "${nav.prev}"` : 'prev: null',
-    nav.next ? `next: "${nav.next}"` : 'next: null',
-    '---',
-    '',
-  ].join('\n')
+  const fm: Record<string, unknown> = {
+    layout: 'tutorial',
+    slug,
+    title,
+    description,
+    time,
+    level,
+    tags,
+    primaryTag,
+    author,
+    authorProfile,
+    stepCount: steps.length,
+    missionId: nav.missionId,
+    missionTitle: MISSION_TITLE,
+    groupId: nav.groupId,
+    groupTitle: nav.groupTitle,
+    prev: nav.prev,
+    next: nav.next,
+    displayTags: [...new Set([primaryTag, ...tags])].map(humanizeTag).filter(t => t.length > 0),
+    youWillLearn,
+    prerequisites: splitPrerequisites(prerequisites),
+    steps: steps.map(s => ({ number: s.number, title: s.title })),
+  }
 
-  const youWillLearnMd = youWillLearn.length > 0
-    ? `## You will learn\n\n${youWillLearn.map(item => `- ${item}`).join('\n')}\n\n`
-    : ''
-
-  const prereqMd = prerequisites
-    ? `## Prerequisites\n\n${prerequisites}\n\n`
-    : ''
+  const frontmatter = `---\n${yamlStringify(fm).trimEnd()}\n---\n\n`
 
   const stepsMd = steps.map(step =>
     `<TutorialStep :number="${step.number}" title="${step.title.replace(/"/g, '&quot;')}" slug="${slug}">\n\n${step.content}\n\n</TutorialStep>`
   ).join('\n\n')
 
-  const content = `${frontmatter}# ${title}\n\n${youWillLearnMd}${prereqMd}${stepsMd}\n`
+  const content = `${frontmatter}${stepsMd}\n`
 
   mkdirSync(OUTPUT_DIR, { recursive: true })
   writeFileSync(join(OUTPUT_DIR, `${slug}.md`), content, 'utf-8')
@@ -141,6 +166,7 @@ async function main() {
       frontmatter.tags ?? [],
       frontmatter.primary_tag ?? '',
       frontmatter.author_name ?? 'Unknown',
+      frontmatter.author_profile ?? '',
       youWillLearn,
       prerequisites,
       steps,

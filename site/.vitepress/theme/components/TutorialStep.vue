@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, inject } from 'vue'
+import { ref, computed, inject, watch } from 'vue'
 import { useApi } from '../composables/useApi'
 
 const props = defineProps<{
@@ -10,11 +10,16 @@ const props = defineProps<{
 
 const completedSteps = inject<import('vue').Ref<Set<number>>>('completedSteps', ref(new Set()))
 const onStepCompleted = inject<(n: number) => void>('onStepCompleted', () => {})
+const allExpanded = inject<import('vue').Ref<boolean | null>>('allExpanded', ref(null))
 
 const isCompleted = computed(() => completedSteps.value.has(props.number))
-const expanded = ref(true)
+const expanded = ref(props.number === 1)
 const completing = ref(false)
 const { post, error } = useApi()
+
+watch(allExpanded, (val) => {
+  if (val !== null) expanded.value = val
+})
 
 async function markDone() {
   completing.value = true
@@ -31,15 +36,22 @@ function toggle() {
 </script>
 
 <template>
-  <div class="tutorial-step" :class="{ 'is-completed': isCompleted }">
-    <div class="step-header fd-panel__header" @click="toggle">
-      <span class="step-number">{{ number }}</span>
-      <span class="step-title">{{ title }}</span>
-      <span v-if="isCompleted" class="step-check">&#10003;</span>
-      <span class="step-toggle">{{ expanded ? '▲' : '▼' }}</span>
+  <div :id="'step-' + number" class="tutorial-step" :class="{ 'is-completed': isCompleted }">
+    <div class="step-header" @click="toggle">
+      <span class="step-check-circle" :class="{ completed: isCompleted }">
+        <span v-if="isCompleted">&#10003;</span>
+      </span>
+      <div class="step-header-text">
+        <span class="step-label">Step {{ number }}</span>
+        <span class="step-title-text">{{ title }}</span>
+      </div>
+      <span class="step-toggle-icon">{{ expanded ? '—' : '+' }}</span>
     </div>
-    <div v-show="expanded" class="step-content">
-      <slot />
+    <div v-show="expanded" class="step-body">
+      <hr class="step-divider" />
+      <div class="step-content">
+        <slot />
+      </div>
       <div v-if="!isCompleted" class="step-actions">
         <button
           class="fd-button fd-button--emphasized"
@@ -60,45 +72,71 @@ function toggle() {
   border-radius: 0.5rem;
   margin-bottom: 1rem;
   overflow: hidden;
+  background: var(--sapBaseColor, #fff);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
 .step-header {
   display: flex;
-  align-items: center;
-  padding: 0.75rem 1rem;
+  align-items: flex-start;
+  padding: 1rem 1.25rem;
   cursor: pointer;
-  background: var(--sapNeutralBackground, #f5f6f7);
-  gap: 0.75rem;
+  gap: 1rem;
+  user-select: none;
 }
-.step-number {
+.step-check-circle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  background: var(--sapBrandColor, #0070f2);
-  color: #fff;
-  font-weight: 600;
+  border: 2px solid var(--sapNeutralBorderColor, #bcc3ca);
+  color: transparent;
   font-size: 0.875rem;
   flex-shrink: 0;
+  margin-top: 0.125rem;
+  transition: all 0.2s;
 }
-.is-completed .step-number {
+.step-check-circle.completed {
   background: var(--sapPositiveColor, #107e3e);
+  border-color: var(--sapPositiveColor, #107e3e);
+  color: #fff;
 }
-.step-title {
+.step-header-text {
   flex: 1;
-  font-weight: 600;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
 }
-.step-check {
-  color: var(--sapPositiveColor, #107e3e);
-  font-size: 1.25rem;
-}
-.step-toggle {
+.step-label {
+  text-transform: uppercase;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   color: var(--sapNeutralTextColor, #6a6d70);
-  font-size: 0.75rem;
+}
+.step-title-text {
+  font-size: 1.25rem;
+  font-weight: 400;
+  color: var(--sapBrandColor, #0070f2);
+  line-height: 1.3;
+}
+.step-toggle-icon {
+  font-size: 1.5rem;
+  color: var(--sapNeutralTextColor, #6a6d70);
+  flex-shrink: 0;
+  line-height: 1;
+}
+.step-body {
+  padding: 0 1.25rem 1.25rem;
+}
+.step-divider {
+  border: none;
+  border-top: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+  margin: 0 0 1rem;
 }
 .step-content {
-  padding: 1rem;
+  line-height: 1.7;
 }
 .step-actions {
   margin-top: 1.5rem;

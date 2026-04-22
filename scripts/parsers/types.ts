@@ -36,6 +36,7 @@ export interface TutorialNavEntry {
   slug: string
   title: string
   missionId: number
+  missionTitle: string
   groupId: number
   groupTitle: string
   prev: string | null
