@@ -1,0 +1,22 @@
+{
+  "name": "tutorials-poc",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "fetch-tutorials": "tsx scripts/fetch-tutorials.ts",
+    "build": "vitepress build site",
+    "dev": "vitepress dev site",
+    "preview": "vitepress preview site",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.0",
+    "vue": "^3.5.0",
+    "tsx": "^4.0.0",
+    "vitest": "^3.0.0",
+    "fundamental-styles": "^0.39.0",
+    "gray-matter": "^4.0.3",
+    "yaml": "^2.7.0"
+  }
+}
