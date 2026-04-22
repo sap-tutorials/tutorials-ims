@@ -1,0 +1,38 @@
+_schema-version: 3.3.0
+ID: tutorials-poc
+version: 1.0.0
+
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        - npm install
+        - npm run fetch-tutorials
+        - npm run build
+        - mkdir -p approuter/static
+        - cp -r site/.vitepress/dist/* approuter/static/
+
+modules:
+  - name: tutorials-approuter
+    type: approuter.nodejs
+    path: approuter
+    requires:
+      - name: tutorials-xsuaa
+      - name: tutorials-api-destination
+    parameters:
+      disk-quota: 256M
+      memory: 256M
+
+resources:
+  - name: tutorials-xsuaa
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: xsuaa
+      service-plan: application
+      path: xs-security.json
+
+  - name: tutorials-api-destination
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: destination
+      service-plan: lite

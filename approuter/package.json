@@ -1,0 +1,9 @@
+{
+  "name": "tutorials-approuter",
+  "dependencies": {
+    "@sap/approuter": "^16.0.0"
+  },
+  "scripts": {
+    "start": "node node_modules/@sap/approuter/approuter.js"
+  }
+}
