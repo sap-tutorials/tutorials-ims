@@ -12,9 +12,9 @@ Replace Adobe Experience Manager (AEM) as the tutorial hosting platform on devel
 - **No new CAP backend.** The existing CAP/HANA service already exposes progress, validation, and gamification APIs. The VitePress frontend consumes these directly through an AppRouter destination.
 - **AEM is fully removed.** The AEM-specific endpoints (`/bin/sapdx/*`) are replaced by direct calls to the CAP backend. AEM content paths are not used.
 - **VitePress + SAP Fundamental Styles.** VitePress generates static HTML from tutorial markdown. SAP Fundamental Styles provides the SAP design system. Custom Vue components handle interactive features (step completion, validation, progress).
-- **Content from GitHub at build time.** Tutorials are fetched from `sap-tutorials` GitHub repos during the build, not at runtime. The same v1/v2 markdown parsers documented in the sap-devs-cli tutorials spec are reused.
+- **Content from GitHub at build time.** Tutorials are fetched from `sap-tutorials` GitHub repos during the build, not at runtime. The v1/v2 markdown parsing logic documented in the sap-devs-cli tutorials spec is reimplemented in TypeScript (the sap-devs-cli version is Go).
 - **Single MTA deployment.** AppRouter + static site in one deployment unit. The CAP backend is a separate, already-deployed service reached via BTP Destination.
-- **POC scope:** 3-5 tutorials from the `hana-cloud-cap` mission, demonstrating the full mission > group > tutorial hierarchy, step navigation, progress tracking, validation, and points/badges.
+- **POC scope:** 5 tutorials from the `hana-cloud-cap` mission, demonstrating the full mission > group > tutorial hierarchy, step navigation, progress tracking, validation, and points/badges.
 
 ## Architecture
 
@@ -115,11 +115,12 @@ tutorials-poc/
       "source": "^/api/(.*)$",
       "target": "$1",
       "destination": "tutorials-api",
-      "authenticationType": "xsuaa"
+      "authenticationType": "xsuaa",
+      "csrfProtection": false
     },
     {
       "source": "^(.*)$",
-      "localDir": "../site/.vitepress/dist",
+      "localDir": "static",
       "authenticationType": "xsuaa"
     }
   ]
@@ -127,8 +128,23 @@ tutorials-poc/
 ```
 
 - All requests require XSUAA authentication (SAP IDP login).
-- `/api/*` routes proxy to the existing CAP/HANA backend via a BTP Destination named `tutorials-api`.
-- All other routes serve the static VitePress build.
+- `/api/*` routes proxy to the existing CAP/HANA backend via a BTP Destination named `tutorials-api`. The AppRouter forwards the user's JWT token via `forwardAuthToken: true` on the destination configuration, so the CAP backend receives the authenticated user identity.
+- All other routes serve the static VitePress build from the `static/` directory within the AppRouter module. The VitePress build output is copied into `approuter/static/` during the MTA build phase (see Section 6). This avoids `../` path traversals which do not resolve in a deployed CF app.
+
+### Content Security Policy
+
+The AppRouter needs CSP headers to allow YouTube embeds, SAP CDN resources for Fundamental Styles fonts/icons, and `raw.githubusercontent.com` for tutorial images. Add to `xs-app.json`:
+
+```json
+{
+  "responseHeaders": [
+    {
+      "name": "Content-Security-Policy",
+      "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.youtube.com; frame-src https://www.youtube.com; img-src 'self' https://raw.githubusercontent.com https://*.sap.com data:; style-src 'self' 'unsafe-inline' https://*.sap.com; font-src 'self' https://*.sap.com"
+    }
+  ]
+}
+```
 
 ### xs-security.json
 
@@ -234,7 +250,20 @@ fetch-tutorials.ts
 
 **v1 (legacy):** Steps delimited by `[ACCORDION-BEGIN [Step N: ](Title)]` / `[ACCORDION-END]`.
 
-**OPTION blocks:** `[OPTION BEGIN [Tab Name]]` / `[OPTION END]` pairs rendered as labeled subsections.
+**OPTION blocks:** `[OPTION BEGIN [Tab Name]]` / `[OPTION END]` pairs converted to a custom Vue component `<OptionTabs>` in the generated markdown. The parser outputs:
+
+```md
+<OptionTabs :tabs="['SAP Business Application Studio', 'Visual Studio Code']">
+<template #tab-0>
+... content for BAS ...
+</template>
+<template #tab-1>
+... content for VS Code ...
+</template>
+</OptionTabs>
+```
+
+This preserves the tabbed selection UX from the current AEM site. `OptionTabs.vue` is a Vue component registered globally in the theme.
 
 ### Image URL Resolution
 
@@ -250,9 +279,74 @@ Paths with `../` traversals left unchanged. Absolute URLs left unchanged.
 
 ## 4. VitePress Theme
 
+### Dependencies
+
+Root `package.json`:
+
+```json
+{
+  "name": "tutorials-poc",
+  "private": true,
+  "scripts": {
+    "fetch-tutorials": "tsx scripts/fetch-tutorials.ts",
+    "build": "vitepress build site",
+    "dev": "vitepress dev site",
+    "preview": "vitepress preview site"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6",
+    "vue": "^3.5",
+    "tsx": "^4.0",
+    "fundamental-styles": "^0.39",
+    "gray-matter": "^4.0",
+    "yaml": "^2.0"
+  }
+}
+```
+
+Node.js >= 20 required (for VitePress and native fetch in the build script).
+
 ### SAP Fundamental Styles Integration
 
-Install `fundamental-styles` npm package. Import core styles in the custom theme:
+SAP Fundamental Styles and VitePress's default theme use different CSS conventions. The integration strategy is a **hybrid approach**: use VitePress's default layout skeleton (sidebar, content area, nav) but override its CSS custom properties (`--vp-c-*`) to map to SAP Horizon theme tokens, and use Fundamental Styles components (`fd-*` classes) for interactive elements (buttons, cards, accordions, badges, progress indicators). The `sap-fundamental.css` file bridges the two:
+
+```css
+/* site/.vitepress/theme/styles/sap-fundamental.css */
+@import 'fundamental-styles/dist/theming/sap_horizon.css';
+@import 'fundamental-styles/dist/button.css';
+@import 'fundamental-styles/dist/card.css';
+@import 'fundamental-styles/dist/panel.css';
+@import 'fundamental-styles/dist/progress-indicator.css';
+@import 'fundamental-styles/dist/badge.css';
+@import 'fundamental-styles/dist/icon.css';
+
+:root {
+  --vp-c-brand-1: var(--sapBrandColor);
+  --vp-c-brand-2: var(--sapHighlightColor);
+  --vp-c-bg: var(--sapBackgroundColor);
+  --vp-c-text-1: var(--sapTextColor);
+  --vp-font-family-base: var(--sapFontFamily);
+}
+```
+
+This selectively imports only the Fundamental Styles modules used by the Vue components, avoiding the full ~500KB bundle. VitePress's layout structure is preserved; only colors, typography, and interactive components get the SAP treatment.
+
+**Risk mitigation:** The CSS integration should be prototyped early (first implementation task) to validate that the hybrid approach renders correctly before building all Vue components on top.
+
+### VitePress Layout Mechanism
+
+Tutorial pages use a custom VitePress layout. Each generated `.md` file includes `layout: tutorial` in its frontmatter:
+
+```yaml
+---
+layout: tutorial
+slug: hana-cloud-cap-create-project
+title: "Create a CAP Project for SAP HANA Cloud"
+# ... other metadata
+---
+```
+
+The theme registers `TutorialLayout` as the layout for `layout: tutorial` pages:
 
 ```ts
 // site/.vitepress/theme/index.ts
@@ -264,11 +358,14 @@ export default {
   extends: DefaultTheme,
   enhanceApp({ app }) {
     app.component('TutorialLayout', TutorialLayout)
+  },
+  Layout() {
+    // VitePress uses the 'layout' frontmatter to select the component
   }
 }
 ```
 
-Override VitePress CSS variables to match SAP Horizon theme colors, typography, and spacing.
+The `index.md` listing page uses the default VitePress layout with the `TutorialList.vue` component embedded.
 
 ### Vue Components
 
@@ -302,10 +399,12 @@ Override VitePress CSS variables to match SAP Horizon theme colors, typography, 
 - Click to navigate between tutorials
 
 **StepValidation.vue** — Inline validation:
+- Validation questions are defined in the CAP backend (not in the tutorial markdown). The frontend fetches them per step from `GET /api/tutorials/{slug}/steps/{n}/validation`.
 - Renders validation questions (multiple choice, text input) within a step
 - Submits answers to `POST /api/tutorials/{slug}/steps/{n}/validate`
 - Shows validated/error/empty state
 - "Done" button disabled until validation passes
+- **POC note:** If the CAP backend does not yet serve validation questions for the POC tutorials, the StepValidation component renders as a simple self-assessed "Mark as done" confirmation instead. Validation is a progressive enhancement.
 
 **TutorialList.vue** — Tutorial navigator/search page:
 - Search bar with full-text search
@@ -335,6 +434,8 @@ This set exercises:
 
 ## 6. MTA Deployment
 
+Single AppRouter module that bundles the VitePress static site. The MTA build copies the VitePress dist output into the AppRouter's `static/` directory so the `localDir: "static"` route works at runtime.
+
 ```yaml
 _schema-version: 3.3.0
 ID: tutorials-poc
@@ -350,15 +451,14 @@ modules:
     parameters:
       disk-quota: 256M
       memory: 256M
-
-  - name: tutorials-site
-    type: staticfile
-    path: site/.vitepress/dist
     build-parameters:
       builder: custom
       commands:
-        - npm run fetch-tutorials
-        - npm run build
+        - npm install --prefix ..
+        - npm run fetch-tutorials --prefix ..
+        - npm run build --prefix ..
+        - mkdir -p static
+        - cp -r ../site/.vitepress/dist/* static/
 
 resources:
   - name: tutorials-xsuaa
@@ -366,7 +466,7 @@ resources:
     parameters:
       service: xsuaa
       service-plan: application
-      path: xs-security.json
+      path: ../xs-security.json
 
   - name: tutorials-api-destination
     type: org.cloudfoundry.managed-service
@@ -375,7 +475,20 @@ resources:
       service-plan: lite
 ```
 
-The destination `tutorials-api` must be configured in the BTP cockpit to point at the existing CAP/HANA backend URL.
+### Destination Configuration
+
+The `tutorials-api` destination must be configured in the BTP cockpit (or via MTA extension):
+
+| Property | Value |
+| --- | --- |
+| Name | `tutorials-api` |
+| URL | `https://<cap-backend-app>.cfapps.<region>.hana.ondemand.com` |
+| Authentication | `OAuth2UserTokenExchange` |
+| Token Service URL | `https://<xsuaa-tenant>.authentication.<region>.hana.ondemand.com/oauth/token` |
+| Client ID | *(from CAP backend XSUAA binding)* |
+| Client Secret | *(from CAP backend XSUAA binding)* |
+
+The `OAuth2UserTokenExchange` authentication type ensures the AppRouter exchanges the user's XSUAA token for one accepted by the CAP backend, preserving user identity across the proxy. The route in `xs-app.json` uses `"authenticationType": "xsuaa"` to trigger this flow.
 
 ## 7. Local Development
 
@@ -419,10 +532,14 @@ export default {
 5. **Interactive features survive.** Step completion, validation, progress tracking, and gamification all work in the new architecture.
 6. **Navigation hierarchy is preserved.** Mission > Group > Tutorial structure renders correctly with the MiniNavigator sidebar.
 
-## 9. Open Questions / Gaps
+## 9. Prerequisites (before implementation)
 
-- **CAP API surface mapping:** Need to confirm the exact endpoint paths on the existing CAP backend and whether they match the contract in Section 2. Any gaps need thin adapter endpoints or frontend adjustments.
+- **CAP API surface mapping (BLOCKER):** Before building Vue components, confirm the exact endpoint paths on the existing CAP/HANA backend and whether they match the contract in Section 2. Document the real request/response shapes. If endpoints are missing (e.g., no `GET /api/missions/{id}/navigation` equivalent), decide whether to: (a) add thin adapter endpoints to the CAP service, or (b) adjust the frontend to work with available APIs. The fallback for the POC is to mock missing endpoints with static JSON served from the AppRouter.
+
+## 10. Open Questions / Gaps
+
 - **Bookmarks:** The current site uses `people-api.services.sap.com/bs/bookmarks`. Need to determine if this is consumed from the CAP backend or called directly.
-- **Full-scale build:** POC fetches 5 tutorials. Full migration (~1,290 tutorials) needs incremental sync, caching, and CI/CD pipeline integration. The sap-devs-cli spec has a detailed design for this.
+- **Full-scale build:** POC fetches 5 tutorials. Full migration (~1,290 tutorials) needs incremental sync, caching, and CI/CD pipeline integration. The sap-devs-cli spec has a detailed design for this. At scale, tutorial images should move to a proper CDN (e.g., BTP Object Store) rather than relying on `raw.githubusercontent.com`.
 - **SEO / public access:** Current tutorials are publicly accessible (auth only needed for progress tracking). The POC requires login for all pages. A production version might need a split: public content + authenticated progress.
 - **Video embeds:** YouTube embeds in tutorial steps need to work within VitePress markdown rendering. VitePress supports custom Vue components in markdown, so this is achievable.
+- **VitePress search:** The POC uses server-side search via the CAP backend (`TutorialList.vue`). VitePress's built-in MiniSearch is disabled to avoid two competing search mechanisms. A production version might use client-side search for offline/fast filtering with server-side for faceted queries.
