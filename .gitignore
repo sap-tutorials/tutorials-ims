@@ -7,3 +7,5 @@ approuter/static/
 .tutorial-cache/
 *.local
 .env
+.playwright-mcp/
+*.png

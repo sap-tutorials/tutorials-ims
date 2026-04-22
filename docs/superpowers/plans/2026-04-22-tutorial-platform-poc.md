@@ -1,0 +1,2440 @@
+# Tutorial Platform POC Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Replace AEM with a VitePress static site on BTP that renders SAP tutorials with SAP Fundamental Styles, consuming an existing CAP/HANA backend for progress/gamification.
+
+**Architecture:** VitePress generates static HTML from tutorial markdown fetched at build time from sap-tutorials GitHub. An AppRouter on BTP CF provides XSUAA/SAP IDP auth and proxies `/api/*` to the existing CAP backend via a BTP Destination. MTA bundles the AppRouter + static site for deployment.
+
+**Tech Stack:** VitePress 1.6+, Vue 3.5+, SAP Fundamental Styles 0.39+, TypeScript, tsx, gray-matter, @sap/approuter, MTA, XSUAA
+
+**Spec:** `docs/superpowers/specs/2026-04-22-tutorial-platform-poc-design.md`
+
+---
+
+## File Map
+
+| File | Purpose |
+|------|---------|
+| **Create:** `package.json` | Root project — scripts, devDependencies |
+| **Create:** `tsconfig.json` | TypeScript config for scripts/ |
+| **Create:** `approuter/package.json` | @sap/approuter dependency |
+| **Create:** `approuter/xs-app.json` | Routing rules (XSUAA auth, /api proxy, static) |
+| **Create:** `xs-security.json` | XSUAA service config |
+| **Create:** `mta.yaml` | MTA deployment descriptor |
+| **Create:** `site/.vitepress/config.ts` | VitePress config (title, theme, vite proxy) |
+| **Create:** `site/.vitepress/theme/index.ts` | Custom theme (layout dispatch, component registration) |
+| **Create:** `site/.vitepress/theme/styles/sap-fundamental.css` | SAP Horizon tokens → VitePress CSS vars |
+| **Create:** `site/.vitepress/theme/composables/useApi.ts` | Fetch wrapper for `/api/*` calls |
+| **Create:** `site/.vitepress/theme/components/TutorialLayout.vue` | Main tutorial page shell |
+| **Create:** `site/.vitepress/theme/components/TutorialStep.vue` | Collapsible step with Done button |
+| **Create:** `site/.vitepress/theme/components/ProgressBar.vue` | SAP FD progress indicator |
+| **Create:** `site/.vitepress/theme/components/PointsBadge.vue` | Points + badge display |
+| **Create:** `site/.vitepress/theme/components/MiniNavigator.vue` | Mission > Group > Tutorial sidebar |
+| **Create:** `site/.vitepress/theme/components/StepValidation.vue` | Inline validation per step |
+| **Create:** `site/.vitepress/theme/components/OptionTabs.vue` | Tabbed OPTION blocks |
+| **Create:** `site/.vitepress/theme/components/TutorialList.vue` | Browse/search page |
+| **Create:** `site/index.md` | Homepage with TutorialList component |
+| **Create:** `scripts/fetch-tutorials.ts` | Build-time GitHub fetch + parse pipeline |
+| **Create:** `scripts/parsers/frontmatter.ts` | YAML frontmatter extraction |
+| **Create:** `scripts/parsers/v2.ts` | H3-delimited step parser |
+| **Create:** `scripts/parsers/v1.ts` | ACCORDION-delimited step parser |
+| **Create:** `scripts/parsers/images.ts` | Relative → raw GitHub URL resolver |
+| **Create:** `scripts/parsers/options.ts` | OPTION block → OptionTabs conversion |
+| **Create:** `scripts/parsers/types.ts` | Shared types (TutorialMeta, TutorialStep, etc.) |
+| **Create:** `scripts/__tests__/frontmatter.test.ts` | Frontmatter parser tests |
+| **Create:** `scripts/__tests__/v2.test.ts` | V2 parser tests |
+| **Create:** `scripts/__tests__/v1.test.ts` | V1 parser tests |
+| **Create:** `scripts/__tests__/images.test.ts` | Image URL resolver tests |
+| **Create:** `scripts/__tests__/options.test.ts` | OPTION block parser tests |
+
+---
+
+### Task 1: Project Scaffolding
+
+**Files:**
+- Create: `package.json`
+- Create: `tsconfig.json`
+- Create: `.gitignore`
+
+- [ ] **Step 1: Create `package.json`**
+
+```json
+{
+  "name": "tutorials-poc",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "fetch-tutorials": "tsx scripts/fetch-tutorials.ts",
+    "build": "vitepress build site",
+    "dev": "vitepress dev site",
+    "preview": "vitepress preview site",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.0",
+    "vue": "^3.5.0",
+    "tsx": "^4.0.0",
+    "vitest": "^3.0.0",
+    "fundamental-styles": "^0.39.0",
+    "gray-matter": "^4.0.3",
+    "yaml": "^2.7.0"
+  }
+}
+```
+
+- [ ] **Step 2: Create `tsconfig.json`**
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "dist",
+    "rootDir": ".",
+    "resolveJsonModule": true
+  },
+  "include": ["scripts/**/*.ts", "site/.vitepress/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
+```
+
+- [ ] **Step 3: Create `.gitignore`**
+
+```
+node_modules/
+dist/
+site/.vitepress/dist/
+site/.vitepress/cache/
+site/tutorials/
+approuter/static/
+.tutorial-cache/
+*.local
+.env
+```
+
+Note: `site/tutorials/` is git-ignored because it is generated by `fetch-tutorials.ts`.
+
+- [ ] **Step 4: Run `npm install`**
+
+Run: `npm install`
+Expected: `node_modules/` created, `package-lock.json` generated.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add package.json package-lock.json tsconfig.json .gitignore
+git commit -m "feat: scaffold project with VitePress, Fundamental Styles, and build tooling"
+```
+
+---
+
+### Task 2: AppRouter + XSUAA + MTA Configuration
+
+**Files:**
+- Create: `approuter/package.json`
+- Create: `approuter/xs-app.json`
+- Create: `xs-security.json`
+- Create: `mta.yaml`
+
+- [ ] **Step 1: Create `approuter/package.json`**
+
+```json
+{
+  "name": "tutorials-approuter",
+  "dependencies": {
+    "@sap/approuter": "^16.0.0"
+  },
+  "scripts": {
+    "start": "node node_modules/@sap/approuter/approuter.js"
+  }
+}
+```
+
+- [ ] **Step 2: Create `approuter/xs-app.json`**
+
+```json
+{
+  "authenticationMethod": "route",
+  "responseHeaders": [
+    {
+      "name": "Content-Security-Policy",
+      "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.youtube.com; frame-src https://www.youtube.com; img-src 'self' https://raw.githubusercontent.com https://*.sap.com data:; style-src 'self' 'unsafe-inline' https://*.sap.com; font-src 'self' https://*.sap.com"
+    }
+  ],
+  "routes": [
+    {
+      "source": "^/api/(.*)$",
+      "target": "$1",
+      "destination": "tutorials-api",
+      "authenticationType": "xsuaa",
+      "csrfProtection": false
+    },
+    {
+      "source": "^(.*)$",
+      "localDir": "static",
+      "authenticationType": "xsuaa"
+    }
+  ]
+}
+```
+
+- [ ] **Step 3: Create `xs-security.json`**
+
+```json
+{
+  "xsappname": "tutorials-poc",
+  "tenant-mode": "dedicated",
+  "scopes": [],
+  "role-templates": [],
+  "oauth2-configuration": {
+    "redirect-uris": ["https://*.cfapps.*.hana.ondemand.com/**"]
+  }
+}
+```
+
+- [ ] **Step 4: Create `mta.yaml`**
+
+```yaml
+_schema-version: 3.3.0
+ID: tutorials-poc
+version: 1.0.0
+
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        - npm install
+        - npm run fetch-tutorials
+        - npm run build
+        - mkdir -p approuter/static
+        - cp -r site/.vitepress/dist/* approuter/static/
+
+modules:
+  - name: tutorials-approuter
+    type: approuter.nodejs
+    path: approuter
+    requires:
+      - name: tutorials-xsuaa
+      - name: tutorials-api-destination
+    parameters:
+      disk-quota: 256M
+      memory: 256M
+
+resources:
+  - name: tutorials-xsuaa
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: xsuaa
+      service-plan: application
+      path: xs-security.json
+
+  - name: tutorials-api-destination
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: destination
+      service-plan: lite
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add approuter/package.json approuter/xs-app.json xs-security.json mta.yaml
+git commit -m "feat: add AppRouter, XSUAA, and MTA deployment config"
+```
+
+---
+
+### Task 3: Parser Types and Shared Interfaces
+
+**Files:**
+- Create: `scripts/parsers/types.ts`
+
+- [ ] **Step 1: Create `scripts/parsers/types.ts`**
+
+```ts
+export interface TutorialFrontmatter {
+  time: number
+  author_name: string
+  author_profile: string
+  tags: string[]
+  primary_tag: string
+  parser?: string
+  title?: string
+  description?: string
+}
+
+export interface TutorialStep {
+  number: number
+  title: string
+  content: string
+}
+
+export interface ParsedTutorial {
+  slug: string
+  title: string
+  description: string
+  time: number
+  level: string
+  tags: string[]
+  primaryTag: string
+  author: string
+  authorProfile: string
+  repo: string
+  branch: string
+  youWillLearn: string[]
+  prerequisites: string
+  steps: TutorialStep[]
+}
+
+export interface TutorialNavEntry {
+  slug: string
+  title: string
+  missionId: number
+  groupId: number
+  groupTitle: string
+  prev: string | null
+  next: string | null
+}
+
+export const RAW_BASE_URL = 'https://raw.githubusercontent.com'
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add scripts/parsers/types.ts
+git commit -m "feat: add shared parser types"
+```
+
+---
+
+### Task 4: Frontmatter Parser
+
+**Files:**
+- Create: `scripts/parsers/frontmatter.ts`
+- Create: `scripts/__tests__/frontmatter.test.ts`
+
+- [ ] **Step 1: Write the failing test**
+
+Create `scripts/__tests__/frontmatter.test.ts`:
+
+```ts
+import { describe, it, expect } from 'vitest'
+import { extractFrontmatter } from '../parsers/frontmatter.js'
+
+const SAMPLE_MD = `---
+time: 15
+author_name: Thomas Jung
+author_profile: https://github.com/jung-thomas
+tags: [ tutorial>beginner, products>sap-business-application-studio, software-product-function>sap-cloud-application-programming-model]
+primary_tag: products>sap-hana-cloud
+parser: v2
+---
+
+# Create an SAP Cloud Application Programming Model Project
+
+<!-- description --> Use the wizard for the SAP Cloud Application Programming Model.
+
+## You will learn
+
+- How to create an application with the wizard
+- How to use the local Git repository
+
+## Prerequisites
+
+- This tutorial is designed for SAP HANA Cloud.
+- You have created a BTP instance.
+
+### Create dev space
+Step 1 content here.
+`
+
+describe('extractFrontmatter', () => {
+  it('parses YAML frontmatter fields', () => {
+    const result = extractFrontmatter(SAMPLE_MD)
+    expect(result.frontmatter.time).toBe(15)
+    expect(result.frontmatter.author_name).toBe('Thomas Jung')
+    expect(result.frontmatter.primary_tag).toBe('products>sap-hana-cloud')
+    expect(result.frontmatter.parser).toBe('v2')
+    expect(result.frontmatter.tags).toContain('tutorial>beginner')
+  })
+
+  it('extracts title from first H1', () => {
+    const result = extractFrontmatter(SAMPLE_MD)
+    expect(result.title).toBe('Create an SAP Cloud Application Programming Model Project')
+  })
+
+  it('extracts description from HTML comment', () => {
+    const result = extractFrontmatter(SAMPLE_MD)
+    expect(result.description).toBe('Use the wizard for the SAP Cloud Application Programming Model.')
+  })
+
+  it('extracts you-will-learn bullet list', () => {
+    const result = extractFrontmatter(SAMPLE_MD)
+    expect(result.youWillLearn).toHaveLength(2)
+    expect(result.youWillLearn[0]).toContain('wizard')
+  })
+
+  it('extracts prerequisites section', () => {
+    const result = extractFrontmatter(SAMPLE_MD)
+    expect(result.prerequisites).toContain('SAP HANA Cloud')
+  })
+
+  it('normalizes level from tags', () => {
+    const result = extractFrontmatter(SAMPLE_MD)
+    expect(result.level).toBe('beginner')
+  })
+})
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run scripts/__tests__/frontmatter.test.ts`
+Expected: FAIL — module `../parsers/frontmatter.js` not found.
+
+- [ ] **Step 3: Implement frontmatter parser**
+
+Create `scripts/parsers/frontmatter.ts`:
+
+```ts
+import matter from 'gray-matter'
+import type { TutorialFrontmatter } from './types.js'
+
+export interface FrontmatterResult {
+  frontmatter: TutorialFrontmatter
+  title: string
+  description: string
+  youWillLearn: string[]
+  prerequisites: string
+  level: string
+  body: string
+}
+
+export function extractFrontmatter(md: string): FrontmatterResult {
+  const { data, content } = matter(md)
+  const fm = data as TutorialFrontmatter
+
+  const titleMatch = content.match(/^# (.+)$/m)
+  const title = fm.title ?? titleMatch?.[1]?.trim() ?? ''
+
+  const descMatch = content.match(/<!--\s*description\s*-->\s*(.+)$/m)
+  const description = fm.description ?? descMatch?.[1]?.trim() ?? ''
+
+  const youWillLearn = extractBulletList(content, 'You will learn')
+  const prerequisites = extractSection(content, 'Prerequisites')
+  const level = normalizeLevel(fm.tags ?? [])
+
+  return { frontmatter: fm, title, description, youWillLearn, prerequisites, level, body: content }
+}
+
+function extractBulletList(content: string, heading: string): string[] {
+  const pattern = new RegExp(`^## ${heading}\\s*\\n([\\s\\S]*?)(?=\\n## |\\n### |$)`, 'm')
+  const match = content.match(pattern)
+  if (!match) return []
+  return match[1]
+    .split('\n')
+    .filter(line => line.match(/^\s*-\s+/))
+    .map(line => line.replace(/^\s*-\s+/, '').trim())
+}
+
+function extractSection(content: string, heading: string): string {
+  const pattern = new RegExp(`^## ${heading}\\s*\\n([\\s\\S]*?)(?=\\n## |\\n### |$)`, 'm')
+  const match = content.match(pattern)
+  return match?.[1]?.trim() ?? ''
+}
+
+function normalizeLevel(tags: string[]): string {
+  for (const tag of tags) {
+    if (tag.includes('tutorial>beginner')) return 'beginner'
+    if (tag.includes('tutorial>intermediate')) return 'intermediate'
+    if (tag.includes('tutorial>advanced')) return 'advanced'
+  }
+  return 'beginner'
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `npx vitest run scripts/__tests__/frontmatter.test.ts`
+Expected: All 6 tests PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add scripts/parsers/frontmatter.ts scripts/__tests__/frontmatter.test.ts
+git commit -m "feat: add frontmatter parser with level normalization"
+```
+
+---
+
+### Task 5: Image URL Resolver
+
+**Files:**
+- Create: `scripts/parsers/images.ts`
+- Create: `scripts/__tests__/images.test.ts`
+
+- [ ] **Step 1: Write the failing test**
+
+Create `scripts/__tests__/images.test.ts`:
+
+```ts
+import { describe, it, expect } from 'vitest'
+import { resolveImageURLs } from '../parsers/images.js'
+
+describe('resolveImageURLs', () => {
+  const opts = { repo: 'Tutorials', branch: 'master', slug: 'hana-cloud-cap-create-project' }
+  const base = 'https://raw.githubusercontent.com/sap-tutorials/Tutorials/master/tutorials/hana-cloud-cap-create-project'
+
+  it('resolves bare filename', () => {
+    const result = resolveImageURLs('![Run](27.png)', opts)
+    expect(result).toBe(`![Run](${base}/27.png)`)
+  })
+
+  it('strips leading slash', () => {
+    const result = resolveImageURLs('![alt](/27.png)', opts)
+    expect(result).toBe(`![alt](${base}/27.png)`)
+  })
+
+  it('resolves subdirectory path', () => {
+    const result = resolveImageURLs('![alt](images/foo.png)', opts)
+    expect(result).toBe(`![alt](${base}/images/foo.png)`)
+  })
+
+  it('leaves absolute URLs unchanged', () => {
+    const input = '![alt](https://example.com/x.png)'
+    expect(resolveImageURLs(input, opts)).toBe(input)
+  })
+
+  it('leaves traversal paths unchanged', () => {
+    const input = '![alt](../sibling/x.png)'
+    expect(resolveImageURLs(input, opts)).toBe(input)
+  })
+
+  it('handles multiple images in one string', () => {
+    const input = '![a](1.png) text ![b](2.png)'
+    const result = resolveImageURLs(input, opts)
+    expect(result).toContain(`${base}/1.png`)
+    expect(result).toContain(`${base}/2.png`)
+  })
+})
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run scripts/__tests__/images.test.ts`
+Expected: FAIL — module not found.
+
+- [ ] **Step 3: Implement image resolver**
+
+Create `scripts/parsers/images.ts`:
+
+```ts
+import { RAW_BASE_URL } from './types.js'
+
+export interface ImageResolveOpts {
+  repo: string
+  branch: string
+  slug: string
+}
+
+export function resolveImageURLs(content: string, opts: ImageResolveOpts): string {
+  const { repo, branch, slug } = opts
+  const base = `${RAW_BASE_URL}/sap-tutorials/${repo}/${branch}/tutorials/${slug}`
+
+  return content.replace(
+    /!\[([^\]]*)\]\(([^)]+)\)/g,
+    (_match, alt: string, path: string) => {
+      if (path.startsWith('http://') || path.startsWith('https://')) return _match
+      if (path.includes('../')) return _match
+      const clean = path.replace(/^\//, '')
+      return `![${alt}](${base}/${clean})`
+    }
+  )
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `npx vitest run scripts/__tests__/images.test.ts`
+Expected: All 6 tests PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add scripts/parsers/images.ts scripts/__tests__/images.test.ts
+git commit -m "feat: add image URL resolver for relative tutorial paths"
+```
+
+---
+
+### Task 6: OPTION Block Parser
+
+**Files:**
+- Create: `scripts/parsers/options.ts`
+- Create: `scripts/__tests__/options.test.ts`
+
+- [ ] **Step 1: Write the failing test**
+
+Create `scripts/__tests__/options.test.ts`:
+
+```ts
+import { describe, it, expect } from 'vitest'
+import { convertOptionBlocks } from '../parsers/options.js'
+
+describe('convertOptionBlocks', () => {
+  it('converts a single OPTION block pair to OptionTabs', () => {
+    const input = `Some intro text.
+
+[OPTION BEGIN [SAP Business Application Studio]]
+
+BAS content here.
+
+[OPTION END]
+
+[OPTION BEGIN [Visual Studio Code]]
+
+VS Code content here.
+
+[OPTION END]
+
+Trailing text.`
+
+    const result = convertOptionBlocks(input)
+    expect(result).toContain('<OptionTabs :tabs="[\'SAP Business Application Studio\',\'Visual Studio Code\']">')
+    expect(result).toContain('<template #tab-0>')
+    expect(result).toContain('BAS content here.')
+    expect(result).toContain('<template #tab-1>')
+    expect(result).toContain('VS Code content here.')
+    expect(result).toContain('</OptionTabs>')
+    expect(result).toContain('Some intro text.')
+    expect(result).toContain('Trailing text.')
+  })
+
+  it('returns unchanged content when no OPTION blocks present', () => {
+    const input = 'Just plain markdown.'
+    expect(convertOptionBlocks(input)).toBe(input)
+  })
+
+  it('handles multiple independent OPTION groups', () => {
+    const input = `[OPTION BEGIN [A]]
+A content
+[OPTION END]
+[OPTION BEGIN [B]]
+B content
+[OPTION END]
+
+Other stuff.
+
+[OPTION BEGIN [X]]
+X content
+[OPTION END]
+[OPTION BEGIN [Y]]
+Y content
+[OPTION END]`
+
+    const result = convertOptionBlocks(input)
+    const tabsCount = (result.match(/<OptionTabs/g) ?? []).length
+    expect(tabsCount).toBe(2)
+  })
+})
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run scripts/__tests__/options.test.ts`
+Expected: FAIL — module not found.
+
+- [ ] **Step 3: Implement OPTION block converter**
+
+Create `scripts/parsers/options.ts`:
+
+```ts
+interface OptionEntry {
+  matchIndex: number
+  tabName: string
+  content: string
+}
+
+export function convertOptionBlocks(content: string): string {
+  const optionPattern = /\[OPTION BEGIN \[([^\]]+)\]\]\s*\n([\s\S]*?)\[OPTION END\]/g
+
+  const matches = [...content.matchAll(optionPattern)]
+  if (matches.length === 0) return content
+
+  const groups: OptionEntry[][] = []
+  let currentGroup: OptionEntry[] = []
+
+  for (let i = 0; i < matches.length; i++) {
+    const entry: OptionEntry = {
+      matchIndex: i,
+      tabName: matches[i][1],
+      content: matches[i][2].trim(),
+    }
+
+    if (currentGroup.length > 0) {
+      const prevMatch = matches[i - 1]
+      const prevEnd = prevMatch.index! + prevMatch[0].length
+      const gap = content.slice(prevEnd, matches[i].index!).trim()
+      if (gap.length > 0) {
+        groups.push(currentGroup)
+        currentGroup = []
+      }
+    }
+    currentGroup.push(entry)
+  }
+  if (currentGroup.length > 0) {
+    groups.push(currentGroup)
+  }
+
+  let result = content
+  for (const group of groups.reverse()) {
+    const firstMatch = matches[group[0].matchIndex]
+    const lastMatch = matches[group[group.length - 1].matchIndex]
+    const start = firstMatch.index!
+    const end = lastMatch.index! + lastMatch[0].length
+
+    const tabNames = group.map(b => `'${b.tabName}'`).join(',')
+    const slots = group.map((b, i) =>
+      `<template #tab-${i}>\n\n${b.content}\n\n</template>`
+    ).join('\n')
+
+    const replacement = `<OptionTabs :tabs="[${tabNames}]">\n${slots}\n</OptionTabs>`
+    result = result.slice(0, start) + replacement + result.slice(end)
+  }
+
+  return result
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `npx vitest run scripts/__tests__/options.test.ts`
+Expected: All 3 tests PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add scripts/parsers/options.ts scripts/__tests__/options.test.ts
+git commit -m "feat: add OPTION block to OptionTabs Vue component converter"
+```
+
+---
+
+### Task 7: V2 Parser (H3-Delimited Steps)
+
+**Files:**
+- Create: `scripts/parsers/v2.ts`
+- Create: `scripts/__tests__/v2.test.ts`
+
+- [ ] **Step 1: Write the failing test**
+
+Create `scripts/__tests__/v2.test.ts`:
+
+```ts
+import { describe, it, expect } from 'vitest'
+import { parseV2Steps } from '../parsers/v2.js'
+
+const BODY = `
+# Title Here
+
+<!-- description --> Some description.
+
+## You will learn
+
+- item 1
+- item 2
+
+## Prerequisites
+
+Some prereqs.
+
+### Step One Title
+
+Step one content with **bold**.
+
+Some more content.
+
+### Step Two Title
+
+Step two content.
+
+\`\`\`js
+console.log('hello')
+\`\`\`
+
+### Step Three Title
+
+Step three.
+`
+
+describe('parseV2Steps', () => {
+  it('splits content into steps at H3 boundaries', () => {
+    const steps = parseV2Steps(BODY)
+    expect(steps).toHaveLength(3)
+  })
+
+  it('extracts step titles', () => {
+    const steps = parseV2Steps(BODY)
+    expect(steps[0].title).toBe('Step One Title')
+    expect(steps[1].title).toBe('Step Two Title')
+    expect(steps[2].title).toBe('Step Three Title')
+  })
+
+  it('numbers steps sequentially from 1', () => {
+    const steps = parseV2Steps(BODY)
+    expect(steps[0].number).toBe(1)
+    expect(steps[2].number).toBe(3)
+  })
+
+  it('preserves code blocks in step content', () => {
+    const steps = parseV2Steps(BODY)
+    expect(steps[1].content).toContain("console.log('hello')")
+  })
+
+  it('does not include preamble (H1, H2 sections) in steps', () => {
+    const steps = parseV2Steps(BODY)
+    expect(steps[0].content).not.toContain('You will learn')
+    expect(steps[0].content).not.toContain('Prerequisites')
+  })
+})
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run scripts/__tests__/v2.test.ts`
+Expected: FAIL — module not found.
+
+- [ ] **Step 3: Implement V2 parser**
+
+Create `scripts/parsers/v2.ts`:
+
+```ts
+import type { TutorialStep } from './types.js'
+
+export function parseV2Steps(body: string): TutorialStep[] {
+  const lines = body.split('\n')
+  const steps: TutorialStep[] = []
+  let currentTitle = ''
+  let currentLines: string[] = []
+  let inStep = false
+
+  for (const line of lines) {
+    const h3Match = line.match(/^### (.+)$/)
+    if (h3Match) {
+      if (inStep) {
+        steps.push({
+          number: steps.length + 1,
+          title: currentTitle,
+          content: currentLines.join('\n').trim()
+        })
+      }
+      currentTitle = h3Match[1].trim()
+      currentLines = []
+      inStep = true
+      continue
+    }
+    if (inStep) {
+      currentLines.push(line)
+    }
+  }
+
+  if (inStep) {
+    steps.push({
+      number: steps.length + 1,
+      title: currentTitle,
+      content: currentLines.join('\n').trim()
+    })
+  }
+
+  return steps
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `npx vitest run scripts/__tests__/v2.test.ts`
+Expected: All 5 tests PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add scripts/parsers/v2.ts scripts/__tests__/v2.test.ts
+git commit -m "feat: add V2 (H3-delimited) tutorial step parser"
+```
+
+---
+
+### Task 8: V1 Parser (ACCORDION Format)
+
+**Files:**
+- Create: `scripts/parsers/v1.ts`
+- Create: `scripts/__tests__/v1.test.ts`
+
+- [ ] **Step 1: Write the failing test**
+
+Create `scripts/__tests__/v1.test.ts`:
+
+```ts
+import { describe, it, expect } from 'vitest'
+import { parseV1Steps } from '../parsers/v1.js'
+
+const BODY = `
+# Title
+
+Some preamble.
+
+[ACCORDION-BEGIN [Step 1: ](First Step Title)]
+
+First step content here.
+
+[ACCORDION-END]
+
+[ACCORDION-BEGIN [Step 2: ](Second Step Title)]
+
+Second step content.
+
+\`\`\`bash
+echo "hello"
+\`\`\`
+
+[ACCORDION-END]
+`
+
+describe('parseV1Steps', () => {
+  it('splits ACCORDION blocks into steps', () => {
+    const steps = parseV1Steps(BODY)
+    expect(steps).toHaveLength(2)
+  })
+
+  it('extracts step titles', () => {
+    const steps = parseV1Steps(BODY)
+    expect(steps[0].title).toBe('First Step Title')
+    expect(steps[1].title).toBe('Second Step Title')
+  })
+
+  it('numbers steps from BEGIN markers', () => {
+    const steps = parseV1Steps(BODY)
+    expect(steps[0].number).toBe(1)
+    expect(steps[1].number).toBe(2)
+  })
+
+  it('preserves content between BEGIN and END', () => {
+    const steps = parseV1Steps(BODY)
+    expect(steps[0].content).toContain('First step content here.')
+    expect(steps[1].content).toContain('echo "hello"')
+  })
+})
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run scripts/__tests__/v1.test.ts`
+Expected: FAIL — module not found.
+
+- [ ] **Step 3: Implement V1 parser**
+
+Create `scripts/parsers/v1.ts`:
+
+```ts
+import type { TutorialStep } from './types.js'
+
+const ACCORDION_BEGIN = /\[ACCORDION-BEGIN \[Step (\d+):\s*\]\((.+?)\)\]/
+const ACCORDION_END = /\[ACCORDION-END\]/
+
+export function parseV1Steps(body: string): TutorialStep[] {
+  const lines = body.split('\n')
+  const steps: TutorialStep[] = []
+  let currentNumber = 0
+  let currentTitle = ''
+  let currentLines: string[] = []
+  let inStep = false
+
+  for (const line of lines) {
+    const beginMatch = line.match(ACCORDION_BEGIN)
+    if (beginMatch) {
+      currentNumber = parseInt(beginMatch[1], 10)
+      currentTitle = beginMatch[2].trim()
+      currentLines = []
+      inStep = true
+      continue
+    }
+
+    if (ACCORDION_END.test(line)) {
+      if (inStep) {
+        steps.push({
+          number: currentNumber,
+          title: currentTitle,
+          content: currentLines.join('\n').trim()
+        })
+      }
+      inStep = false
+      continue
+    }
+
+    if (inStep) {
+      currentLines.push(line)
+    }
+  }
+
+  return steps
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `npx vitest run scripts/__tests__/v1.test.ts`
+Expected: All 4 tests PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add scripts/parsers/v1.ts scripts/__tests__/v1.test.ts
+git commit -m "feat: add V1 (ACCORDION) tutorial step parser"
+```
+
+---
+
+### Task 9: Fetch Tutorials Build Script
+
+**Files:**
+- Create: `scripts/fetch-tutorials.ts`
+
+This is the build-time pipeline that fetches tutorial markdown from GitHub, parses it, and writes VitePress-compatible `.md` files.
+
+- [ ] **Step 1: Create the POC tutorial manifest**
+
+The POC hardcodes the 5 target tutorials. We don't need repository-groups.json resolution for 5 known slugs. Create `scripts/fetch-tutorials.ts`:
+
+```ts
+import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { extractFrontmatter } from './parsers/frontmatter.js'
+import { parseV2Steps } from './parsers/v2.js'
+import { parseV1Steps } from './parsers/v1.js'
+import { resolveImageURLs } from './parsers/images.js'
+import { convertOptionBlocks } from './parsers/options.js'
+import type { TutorialStep, TutorialNavEntry } from './parsers/types.js'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+
+const POC_TUTORIALS: Array<{
+  slug: string
+  repo: string
+  missionId: number
+  groupId: number
+  groupTitle: string
+}> = [
+  { slug: 'hana-cloud-deploying', repo: 'Tutorials', missionId: 14094, groupId: 14091, groupTitle: 'Set Up SAP HANA Cloud and CAP Project' },
+  { slug: 'hana-cloud-cap-create-project', repo: 'Tutorials', missionId: 14094, groupId: 14091, groupTitle: 'Set Up SAP HANA Cloud and CAP Project' },
+  { slug: 'hana-cloud-cap-create-database-cds', repo: 'Tutorials', missionId: 14094, groupId: 14091, groupTitle: 'Set Up SAP HANA Cloud and CAP Project' },
+  { slug: 'hana-cloud-cap-create-ui', repo: 'Tutorials', missionId: 14094, groupId: 14092, groupTitle: 'Build a Full-Stack Application' },
+  { slug: 'hana-cloud-cap-add-authentication', repo: 'Tutorials', missionId: 14094, groupId: 14092, groupTitle: 'Build a Full-Stack Application' },
+]
+
+const CACHE_DIR = join(__dirname, '..', '.tutorial-cache')
+const OUTPUT_DIR = join(__dirname, '..', 'site', 'tutorials')
+
+async function fetchMarkdown(slug: string, repo: string): Promise<{ content: string; branch: string }> {
+  const cacheFile = join(CACHE_DIR, `${slug}.md`)
+  if (existsSync(cacheFile)) {
+    console.log(`  [cache] ${slug}`)
+    return { content: readFileSync(cacheFile, 'utf-8'), branch: 'master' }
+  }
+
+  const branch = repo === 'Tutorials' ? 'master' : 'main'
+  const url = `https://raw.githubusercontent.com/sap-tutorials/${repo}/${branch}/tutorials/${slug}/${slug}.md`
+  console.log(`  [fetch] ${url}`)
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`Failed to fetch ${slug}: ${res.status}`)
+  const content = await res.text()
+
+  mkdirSync(CACHE_DIR, { recursive: true })
+  writeFileSync(cacheFile, content, 'utf-8')
+  return { content, branch }
+}
+
+function buildNavEntries(): TutorialNavEntry[] {
+  return POC_TUTORIALS.map((t, i) => ({
+    slug: t.slug,
+    title: '',
+    missionId: t.missionId,
+    groupId: t.groupId,
+    groupTitle: t.groupTitle,
+    prev: i > 0 ? POC_TUTORIALS[i - 1].slug : null,
+    next: i < POC_TUTORIALS.length - 1 ? POC_TUTORIALS[i + 1].slug : null,
+  }))
+}
+
+function writeVitePressPage(
+  slug: string,
+  title: string,
+  description: string,
+  time: number,
+  level: string,
+  tags: string[],
+  primaryTag: string,
+  author: string,
+  youWillLearn: string[],
+  prerequisites: string,
+  steps: TutorialStep[],
+  nav: TutorialNavEntry,
+): void {
+  const frontmatter = [
+    '---',
+    'layout: tutorial',
+    `slug: ${slug}`,
+    `title: "${title.replace(/"/g, '\\"')}"`,
+    `description: "${description.replace(/"/g, '\\"')}"`,
+    `time: ${time}`,
+    `level: ${level}`,
+    `tags: [${tags.map(t => `"${t}"`).join(', ')}]`,
+    `primaryTag: "${primaryTag}"`,
+    `author: "${author}"`,
+    `stepCount: ${steps.length}`,
+    `missionId: ${nav.missionId}`,
+    `groupId: ${nav.groupId}`,
+    `groupTitle: "${nav.groupTitle}"`,
+    nav.prev ? `prev: "${nav.prev}"` : 'prev: null',
+    nav.next ? `next: "${nav.next}"` : 'next: null',
+    '---',
+    '',
+  ].join('\n')
+
+  const youWillLearnMd = youWillLearn.length > 0
+    ? `## You will learn\n\n${youWillLearn.map(item => `- ${item}`).join('\n')}\n\n`
+    : ''
+
+  const prereqMd = prerequisites
+    ? `## Prerequisites\n\n${prerequisites}\n\n`
+    : ''
+
+  const stepsMd = steps.map(step =>
+    `<TutorialStep :number="${step.number}" title="${step.title.replace(/"/g, '&quot;')}" slug="${slug}">\n\n${step.content}\n\n</TutorialStep>`
+  ).join('\n\n')
+
+  const content = `${frontmatter}# ${title}\n\n${youWillLearnMd}${prereqMd}${stepsMd}\n`
+
+  mkdirSync(OUTPUT_DIR, { recursive: true })
+  writeFileSync(join(OUTPUT_DIR, `${slug}.md`), content, 'utf-8')
+}
+
+async function main() {
+  console.log('Fetching POC tutorials...\n')
+
+  const navEntries = buildNavEntries()
+  mkdirSync(OUTPUT_DIR, { recursive: true })
+
+  for (let i = 0; i < POC_TUTORIALS.length; i++) {
+    const t = POC_TUTORIALS[i]
+    console.log(`[${i + 1}/${POC_TUTORIALS.length}] ${t.slug}`)
+
+    const { content: rawMd, branch } = await fetchMarkdown(t.slug, t.repo)
+    const { title, description, youWillLearn, prerequisites, level, frontmatter, body } = extractFrontmatter(rawMd)
+
+    const isV2 = frontmatter.parser === 'v2'
+    let processedBody = resolveImageURLs(body, { repo: t.repo, branch, slug: t.slug })
+    processedBody = convertOptionBlocks(processedBody)
+
+    const steps = isV2 ? parseV2Steps(processedBody) : parseV1Steps(processedBody)
+
+    navEntries[i].title = title
+
+    writeVitePressPage(
+      t.slug,
+      title,
+      description,
+      frontmatter.time ?? 15,
+      level,
+      frontmatter.tags ?? [],
+      frontmatter.primary_tag ?? '',
+      frontmatter.author_name ?? 'Unknown',
+      youWillLearn,
+      prerequisites,
+      steps,
+      navEntries[i],
+    )
+
+    console.log(`  → ${steps.length} steps, level: ${level}, time: ${frontmatter.time}min`)
+  }
+
+  const navPath = join(OUTPUT_DIR, '_nav.json')
+  writeFileSync(navPath, JSON.stringify(navEntries, null, 2), 'utf-8')
+  console.log(`\nWrote ${POC_TUTORIALS.length} tutorials + nav to ${OUTPUT_DIR}`)
+}
+
+main().catch(err => {
+  console.error(err)
+  process.exit(1)
+})
+```
+
+- [ ] **Step 2: Run the fetch script**
+
+Run: `npm run fetch-tutorials`
+Expected: 5 tutorials fetched, parsed, and written to `site/tutorials/`. Console output shows step counts. No errors.
+
+- [ ] **Step 3: Verify generated files**
+
+Run: `ls site/tutorials/ && head -20 site/tutorials/hana-cloud-cap-create-project.md`
+Expected: 5 `.md` files + `_nav.json`. Each `.md` has `layout: tutorial` frontmatter with slug, title, stepCount, prev/next.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add scripts/fetch-tutorials.ts
+git commit -m "feat: add build-time tutorial fetch + parse pipeline"
+```
+
+---
+
+### Task 10: VitePress Config and SAP Fundamental Styles Integration
+
+**Files:**
+- Create: `site/.vitepress/config.ts`
+- Create: `site/.vitepress/theme/styles/sap-fundamental.css`
+- Create: `site/.vitepress/theme/index.ts`
+- Create: `site/index.md`
+
+This is the CSS integration prototype — spec says to validate early before building all components on top.
+
+- [ ] **Step 1: Create `site/.vitepress/config.ts`**
+
+```ts
+import { defineConfig } from 'vitepress'
+
+export default defineConfig({
+  title: 'SAP Tutorial Platform POC',
+  description: 'Tutorials powered by VitePress on SAP BTP',
+  srcDir: '.',
+  outDir: '.vitepress/dist',
+
+  themeConfig: {
+    nav: [
+      { text: 'Tutorials', link: '/' },
+    ],
+  },
+
+  vite: {
+    server: {
+      proxy: {
+        '/api': {
+          target: 'http://localhost:4004',
+          changeOrigin: true,
+          rewrite: (path: string) => path.replace(/^\/api/, ''),
+        },
+      },
+    },
+  },
+})
+```
+
+- [ ] **Step 2: Create `site/.vitepress/theme/styles/sap-fundamental.css`**
+
+```css
+@import 'fundamental-styles/dist/theming/sap_horizon.css';
+@import 'fundamental-styles/dist/button.css';
+@import 'fundamental-styles/dist/card.css';
+@import 'fundamental-styles/dist/panel.css';
+@import 'fundamental-styles/dist/progress-indicator.css';
+@import 'fundamental-styles/dist/badge.css';
+@import 'fundamental-styles/dist/icon.css';
+@import 'fundamental-styles/dist/tabs.css';
+
+:root {
+  --vp-c-brand-1: var(--sapBrandColor);
+  --vp-c-brand-2: var(--sapHighlightColor);
+  --vp-c-bg: var(--sapBackgroundColor);
+  --vp-c-text-1: var(--sapTextColor);
+  --vp-font-family-base: var(--sapFontFamily);
+}
+
+.fd-button {
+  cursor: pointer;
+}
+```
+
+- [ ] **Step 3: Create `site/.vitepress/theme/index.ts`**
+
+```ts
+import DefaultTheme from 'vitepress/theme'
+import { h } from 'vue'
+import { useData } from 'vitepress'
+import './styles/sap-fundamental.css'
+import TutorialLayout from './components/TutorialLayout.vue'
+import TutorialStep from './components/TutorialStep.vue'
+import OptionTabs from './components/OptionTabs.vue'
+
+function Layout() {
+  const { frontmatter } = useData()
+  if (frontmatter.value.layout === 'tutorial') {
+    return h(TutorialLayout)
+  }
+  return h(DefaultTheme.Layout)
+}
+
+export default {
+  extends: DefaultTheme,
+  Layout,
+  enhanceApp({ app }: { app: any }) {
+    app.component('TutorialStep', TutorialStep)
+    app.component('OptionTabs', OptionTabs)
+  },
+}
+```
+
+- [ ] **Step 4: Create stub components to unblock dev server**
+
+The theme imports `TutorialLayout.vue`, `TutorialStep.vue`, and `OptionTabs.vue`. Create minimal stubs so VitePress boots.
+
+Create `site/.vitepress/theme/components/TutorialLayout.vue`:
+
+```vue
+<script setup lang="ts">
+import { useData } from 'vitepress'
+
+const { frontmatter, page } = useData()
+</script>
+
+<template>
+  <div class="tutorial-layout">
+    <h1>{{ frontmatter.title }}</h1>
+    <p>{{ frontmatter.description }}</p>
+    <p>Level: {{ frontmatter.level }} | Time: {{ frontmatter.time }} min | Steps: {{ frontmatter.stepCount }}</p>
+    <Content />
+  </div>
+</template>
+
+<style scoped>
+.tutorial-layout {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+</style>
+```
+
+Create `site/.vitepress/theme/components/OptionTabs.vue`:
+
+```vue
+<script setup lang="ts">
+import { ref } from 'vue'
+
+const props = defineProps<{ tabs: string[] }>()
+const activeTab = ref(0)
+</script>
+
+<template>
+  <div class="option-tabs">
+    <div class="fd-tabs" role="tablist">
+      <div
+        v-for="(tab, i) in tabs"
+        :key="i"
+        class="fd-tabs__item"
+        :class="{ 'is-selected': activeTab === i }"
+        role="tab"
+        @click="activeTab = i"
+      >
+        <a class="fd-tabs__link">{{ tab }}</a>
+      </div>
+    </div>
+    <div class="fd-tabs__panel">
+      <template v-for="(tab, i) in tabs" :key="i">
+        <div v-show="activeTab === i">
+          <slot :name="`tab-${i}`" />
+        </div>
+      </template>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.option-tabs {
+  margin: 1rem 0;
+}
+.fd-tabs__item {
+  cursor: pointer;
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border-bottom: 2px solid transparent;
+}
+.fd-tabs__item.is-selected {
+  border-bottom-color: var(--sapBrandColor, #0070f2);
+}
+</style>
+```
+
+- [ ] **Step 5: Create `site/index.md`**
+
+```md
+---
+layout: home
+---
+
+# SAP Tutorial Platform POC
+
+Browse the tutorials below. This is a proof-of-concept for hosting SAP tutorials on BTP with VitePress.
+
+## Tutorials
+
+- [Deploy SAP HANA Cloud](/tutorials/hana-cloud-deploying)
+- [Create a CAP Project for SAP HANA Cloud](/tutorials/hana-cloud-cap-create-project)
+- [Create Database Artifacts Using CDS](/tutorials/hana-cloud-cap-create-database-cds)
+- [Create a User Interface with CAP](/tutorials/hana-cloud-cap-create-ui)
+- [Add User Authentication](/tutorials/hana-cloud-cap-add-authentication)
+```
+
+- [ ] **Step 6: Run the dev server and validate CSS integration**
+
+Run: `npm run fetch-tutorials && npm run dev`
+Expected: VitePress dev server starts on `http://localhost:5173`. Navigate to `/tutorials/hana-cloud-cap-create-project` — page renders with SAP Fundamental Styles colors (Horizon theme tokens). Verify:
+- SAP brand color applied (blue `#0070f2`)
+- Font family changed to SAP 72
+- Tutorial layout shows title, level, time, steps from frontmatter
+- No CSS import errors in browser console
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add site/.vitepress/config.ts site/.vitepress/theme/ site/index.md
+git commit -m "feat: add VitePress config, SAP Fundamental Styles theme, and stub components"
+```
+
+---
+
+### Task 11: API Client Composable
+
+**Files:**
+- Create: `site/.vitepress/theme/composables/useApi.ts`
+
+The API client wraps `fetch` for `/api/*` calls. In local dev, the Vite proxy handles routing. On BTP, the AppRouter routes to the CAP backend.
+
+- [ ] **Step 1: Create `site/.vitepress/theme/composables/useApi.ts`**
+
+```ts
+import { ref } from 'vue'
+
+const API_BASE = '/api'
+
+export interface ApiError {
+  status: number
+  message: string
+}
+
+export function useApi() {
+  const loading = ref(false)
+  const error = ref<ApiError | null>(null)
+
+  async function get<T>(path: string): Promise<T | null> {
+    loading.value = true
+    error.value = null
+    try {
+      const res = await fetch(`${API_BASE}${path}`)
+      if (!res.ok) {
+        error.value = { status: res.status, message: res.statusText }
+        return null
+      }
+      return await res.json() as T
+    } catch (e) {
+      error.value = { status: 0, message: (e as Error).message }
+      return null
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function post<T>(path: string, body?: unknown): Promise<T | null> {
+    loading.value = true
+    error.value = null
+    try {
+      const res = await fetch(`${API_BASE}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: body ? JSON.stringify(body) : undefined,
+      })
+      if (!res.ok) {
+        error.value = { status: res.status, message: res.statusText }
+        return null
+      }
+      if (res.status === 201 || res.status === 204) return null
+      return await res.json() as T
+    } catch (e) {
+      error.value = { status: 0, message: (e as Error).message }
+      return null
+    } finally {
+      loading.value = false
+    }
+  }
+
+  return { get, post, loading, error }
+}
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add site/.vitepress/theme/composables/useApi.ts
+git commit -m "feat: add API client composable for CAP backend calls"
+```
+
+---
+
+### Task 12: TutorialStep Component
+
+**Files:**
+- Create: `site/.vitepress/theme/components/TutorialStep.vue`
+
+- [ ] **Step 1: Create `site/.vitepress/theme/components/TutorialStep.vue`**
+
+This component is used inline in VitePress markdown (generated by `fetch-tutorials.ts`), so it cannot receive reactive props from TutorialLayout. Instead, it uses Vue's `inject` to read/write shared completion state that TutorialLayout provides.
+
+```vue
+<script setup lang="ts">
+import { ref, computed, inject } from 'vue'
+import { useApi } from '../composables/useApi'
+
+const props = defineProps<{
+  number: number
+  title: string
+  slug: string
+}>()
+
+const completedSteps = inject<import('vue').Ref<Set<number>>>('completedSteps', ref(new Set()))
+const onStepCompleted = inject<(n: number) => void>('onStepCompleted', () => {})
+
+const isCompleted = computed(() => completedSteps.value.has(props.number))
+const expanded = ref(true)
+const completing = ref(false)
+const { post, error } = useApi()
+
+async function markDone() {
+  completing.value = true
+  await post(`/tutorials/${props.slug}/steps/${props.number}/complete`)
+  completing.value = false
+  if (!error.value) {
+    onStepCompleted(props.number)
+  }
+}
+
+function toggle() {
+  expanded.value = !expanded.value
+}
+</script>
+
+<template>
+  <div class="tutorial-step" :class="{ 'is-completed': isCompleted }">
+    <div class="step-header fd-panel__header" @click="toggle">
+      <span class="step-number">{{ number }}</span>
+      <span class="step-title">{{ title }}</span>
+      <span v-if="isCompleted" class="step-check">&#10003;</span>
+      <span class="step-toggle">{{ expanded ? '▲' : '▼' }}</span>
+    </div>
+    <div v-show="expanded" class="step-content">
+      <slot />
+      <div v-if="!isCompleted" class="step-actions">
+        <button
+          class="fd-button fd-button--emphasized"
+          :disabled="completing"
+          @click="markDone"
+        >
+          {{ completing ? 'Saving...' : 'Done' }}
+        </button>
+        <p v-if="error" class="step-error">Failed to save progress. Try again.</p>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.tutorial-step {
+  border: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+  overflow: hidden;
+}
+.step-header {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  background: var(--sapNeutralBackground, #f5f6f7);
+  gap: 0.75rem;
+}
+.step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  background: var(--sapBrandColor, #0070f2);
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+.is-completed .step-number {
+  background: var(--sapPositiveColor, #107e3e);
+}
+.step-title {
+  flex: 1;
+  font-weight: 600;
+}
+.step-check {
+  color: var(--sapPositiveColor, #107e3e);
+  font-size: 1.25rem;
+}
+.step-toggle {
+  color: var(--sapNeutralTextColor, #6a6d70);
+  font-size: 0.75rem;
+}
+.step-content {
+  padding: 1rem;
+}
+.step-actions {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+}
+.step-error {
+  color: var(--sapNegativeColor, #b00);
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+}
+</style>
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add site/.vitepress/theme/components/TutorialStep.vue
+git commit -m "feat: add TutorialStep accordion component with Done button"
+```
+
+---
+
+### Task 13: ProgressBar Component
+
+**Files:**
+- Create: `site/.vitepress/theme/components/ProgressBar.vue`
+
+- [ ] **Step 1: Create `site/.vitepress/theme/components/ProgressBar.vue`**
+
+```vue
+<script setup lang="ts">
+import { computed } from 'vue'
+
+const props = defineProps<{
+  completed: number
+  total: number
+  label?: string
+}>()
+
+const percentage = computed(() =>
+  props.total > 0 ? Math.round((props.completed / props.total) * 100) : 0
+)
+</script>
+
+<template>
+  <div class="progress-bar">
+    <div v-if="label" class="progress-label">{{ label }}</div>
+    <div class="fd-progress-indicator" role="progressbar" :aria-valuenow="percentage" aria-valuemin="0" aria-valuemax="100">
+      <div class="fd-progress-indicator__container">
+        <div class="fd-progress-indicator__progress-bar" :style="{ width: `${percentage}%` }"></div>
+      </div>
+      <span class="fd-progress-indicator__label">{{ completed }}/{{ total }} ({{ percentage }}%)</span>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.progress-bar {
+  margin: 0.5rem 0;
+}
+.progress-label {
+  font-size: 0.875rem;
+  margin-bottom: 0.25rem;
+  color: var(--sapTextColor, #32363a);
+}
+</style>
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add site/.vitepress/theme/components/ProgressBar.vue
+git commit -m "feat: add ProgressBar component using SAP Fundamental Styles"
+```
+
+---
+
+### Task 14: PointsBadge Component
+
+**Files:**
+- Create: `site/.vitepress/theme/components/PointsBadge.vue`
+
+- [ ] **Step 1: Create `site/.vitepress/theme/components/PointsBadge.vue`**
+
+```vue
+<script setup lang="ts">
+defineProps<{
+  points: number
+  badges: Array<{ name: string; icon: string }>
+}>()
+</script>
+
+<template>
+  <div class="points-badge">
+    <span class="fd-badge">{{ points }} pts</span>
+    <span
+      v-for="badge in badges"
+      :key="badge.name"
+      class="fd-badge fd-badge--accent-color-1"
+      :title="badge.name"
+    >
+      {{ badge.name }}
+    </span>
+  </div>
+</template>
+
+<style scoped>
+.points-badge {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+</style>
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add site/.vitepress/theme/components/PointsBadge.vue
+git commit -m "feat: add PointsBadge gamification component"
+```
+
+---
+
+### Task 15: MiniNavigator Component
+
+**Files:**
+- Create: `site/.vitepress/theme/components/MiniNavigator.vue`
+
+- [ ] **Step 1: Create `site/.vitepress/theme/components/MiniNavigator.vue`**
+
+```vue
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import { useData } from 'vitepress'
+import { useApi } from '../composables/useApi'
+import ProgressBar from './ProgressBar.vue'
+
+interface NavNode {
+  title: string
+  slug?: string
+  type: 'mission' | 'group' | 'tutorial'
+  progress: number
+  url?: string
+  children?: NavNode[]
+}
+
+const { frontmatter } = useData()
+const { get } = useApi()
+const navTree = ref<NavNode[]>([])
+const expandedGroups = ref<Set<string>>(new Set())
+
+const currentSlug = computed(() => frontmatter.value.slug)
+
+onMounted(async () => {
+  const missionId = frontmatter.value.missionId
+  if (!missionId) return
+
+  const data = await get<{ context: NavNode[] }>(`/missions/${missionId}/navigation`)
+  if (data) {
+    navTree.value = data.context
+    for (const node of data.context) {
+      if (node.children?.some(c => c.slug === currentSlug.value)) {
+        expandedGroups.value.add(node.title)
+      }
+    }
+  }
+})
+
+function toggleGroup(title: string) {
+  if (expandedGroups.value.has(title)) {
+    expandedGroups.value.delete(title)
+  } else {
+    expandedGroups.value.add(title)
+  }
+}
+</script>
+
+<template>
+  <nav class="mini-navigator" v-if="navTree.length">
+    <div v-for="mission in navTree" :key="mission.title" class="nav-mission">
+      <div class="nav-mission-title">{{ mission.title }}</div>
+      <div v-for="group in mission.children" :key="group.title" class="nav-group">
+        <div class="nav-group-header" @click="toggleGroup(group.title)">
+          <span>{{ expandedGroups.has(group.title) ? '▼' : '▶' }}</span>
+          <span>{{ group.title }}</span>
+        </div>
+        <div v-if="expandedGroups.has(group.title)" class="nav-group-items">
+          <a
+            v-for="tut in group.children"
+            :key="tut.slug"
+            :href="`/tutorials/${tut.slug}`"
+            class="nav-tutorial"
+            :class="{ 'is-current': tut.slug === currentSlug }"
+          >
+            <span class="nav-tutorial-title">{{ tut.title }}</span>
+            <ProgressBar v-if="tut.progress > 0" :completed="tut.progress" :total="100" />
+          </a>
+        </div>
+      </div>
+    </div>
+  </nav>
+</template>
+
+<style scoped>
+.mini-navigator {
+  font-size: 0.875rem;
+  border: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+.nav-mission-title {
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  color: var(--sapBrandColor, #0070f2);
+}
+.nav-group-header {
+  cursor: pointer;
+  padding: 0.25rem 0;
+  display: flex;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+.nav-group-items {
+  padding-left: 1rem;
+}
+.nav-tutorial {
+  display: block;
+  padding: 0.375rem 0;
+  color: var(--sapLinkColor, #0064d9);
+  text-decoration: none;
+}
+.nav-tutorial:hover {
+  text-decoration: underline;
+}
+.nav-tutorial.is-current {
+  font-weight: 700;
+  color: var(--sapTextColor, #32363a);
+}
+</style>
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add site/.vitepress/theme/components/MiniNavigator.vue
+git commit -m "feat: add MiniNavigator sidebar component for mission/group/tutorial tree"
+```
+
+---
+
+### Task 16: StepValidation Component
+
+**Files:**
+- Create: `site/.vitepress/theme/components/StepValidation.vue`
+
+Per spec: if the CAP backend doesn't serve validation questions, falls back to "Mark as done" confirmation.
+
+- [ ] **Step 1: Create `site/.vitepress/theme/components/StepValidation.vue`**
+
+```vue
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+import { useApi } from '../composables/useApi'
+
+const props = defineProps<{
+  slug: string
+  stepNumber: number
+}>()
+
+const emit = defineEmits<{
+  validated: []
+}>()
+
+interface ValidationQuestion {
+  id: string
+  question: string
+  type: 'multiple-choice' | 'text'
+  options?: string[]
+}
+
+const { get, post, loading, error } = useApi()
+const questions = ref<ValidationQuestion[]>([])
+const answers = ref<Record<string, string>>({})
+const validated = ref(false)
+const validationError = ref('')
+const hasValidation = ref(false)
+
+onMounted(async () => {
+  const data = await get<{ questions: ValidationQuestion[] }>(
+    `/tutorials/${props.slug}/steps/${props.stepNumber}/validation`
+  )
+  if (data && data.questions.length > 0) {
+    questions.value = data.questions
+    hasValidation.value = true
+  }
+})
+
+async function submitValidation() {
+  validationError.value = ''
+  const result = await post<{ valid: boolean; message?: string }>(
+    `/tutorials/${props.slug}/steps/${props.stepNumber}/validate`,
+    answers.value
+  )
+  if (result?.valid) {
+    validated.value = true
+    emit('validated')
+  } else {
+    validationError.value = result?.message ?? 'Incorrect. Try again.'
+  }
+}
+</script>
+
+<template>
+  <div class="step-validation" v-if="hasValidation && !validated">
+    <h4>Validation</h4>
+    <div v-for="q in questions" :key="q.id" class="validation-question">
+      <p>{{ q.question }}</p>
+      <div v-if="q.type === 'multiple-choice'">
+        <label v-for="opt in q.options" :key="opt" class="validation-option">
+          <input type="radio" :name="q.id" :value="opt" v-model="answers[q.id]" />
+          {{ opt }}
+        </label>
+      </div>
+      <div v-else>
+        <input type="text" v-model="answers[q.id]" class="validation-text-input" />
+      </div>
+    </div>
+    <button
+      class="fd-button fd-button--positive"
+      :disabled="loading"
+      @click="submitValidation"
+    >
+      {{ loading ? 'Checking...' : 'Validate' }}
+    </button>
+    <p v-if="validationError" class="validation-error">{{ validationError }}</p>
+  </div>
+  <div v-if="validated" class="validation-success">
+    <span class="fd-badge fd-badge--accent-color-8">&#10003; Validated</span>
+  </div>
+</template>
+
+<style scoped>
+.step-validation {
+  background: var(--sapInformationBackground, #e8f0fe);
+  padding: 1rem;
+  border-radius: 0.5rem;
+  margin: 1rem 0;
+}
+.validation-question {
+  margin-bottom: 1rem;
+}
+.validation-option {
+  display: block;
+  padding: 0.25rem 0;
+  cursor: pointer;
+}
+.validation-text-input {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+  border-radius: 0.25rem;
+}
+.validation-error {
+  color: var(--sapNegativeColor, #b00);
+  margin-top: 0.5rem;
+}
+.validation-success {
+  margin: 1rem 0;
+}
+</style>
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add site/.vitepress/theme/components/StepValidation.vue
+git commit -m "feat: add StepValidation component with API fallback"
+```
+
+---
+
+### Task 17: Full TutorialLayout Component
+
+**Files:**
+- Modify: `site/.vitepress/theme/components/TutorialLayout.vue`
+
+Replace the stub created in Task 10 with the full layout including MiniNavigator sidebar, step accordion, progress bar, and prev/next navigation. The layout `provide`s completion state so that `TutorialStep` components rendered inline by VitePress's `<Content />` can `inject` it.
+
+- [ ] **Step 1: Rewrite `TutorialLayout.vue`**
+
+Replace the full content of `site/.vitepress/theme/components/TutorialLayout.vue`:
+
+```vue
+<script setup lang="ts">
+import { ref, computed, provide, onMounted } from 'vue'
+import { useData } from 'vitepress'
+import { useApi } from '../composables/useApi'
+import ProgressBar from './ProgressBar.vue'
+import PointsBadge from './PointsBadge.vue'
+import MiniNavigator from './MiniNavigator.vue'
+
+const { frontmatter } = useData()
+const { get } = useApi()
+
+const completedSteps = ref<Set<number>>(new Set())
+const points = ref(0)
+const badges = ref<Array<{ name: string; icon: string }>>([])
+
+const stepCount = computed(() => frontmatter.value.stepCount ?? 0)
+const completedCount = computed(() => completedSteps.value.size)
+
+function onStepCompleted(stepNumber: number) {
+  completedSteps.value.add(stepNumber)
+  completedSteps.value = new Set(completedSteps.value)
+}
+
+provide('completedSteps', completedSteps)
+provide('onStepCompleted', onStepCompleted)
+
+onMounted(async () => {
+  const slug = frontmatter.value.slug
+  const progress = await get<{ completedSteps: number[]; points: number; badges: Array<{ name: string; icon: string }> }>(
+    `/tutorials/${slug}/progress`
+  )
+  if (progress) {
+    completedSteps.value = new Set(progress.completedSteps)
+    points.value = progress.points
+    badges.value = progress.badges
+  }
+})
+</script>
+
+<template>
+  <div class="tutorial-page">
+    <aside class="tutorial-sidebar">
+      <MiniNavigator />
+    </aside>
+    <main class="tutorial-main">
+      <div class="tutorial-header">
+        <div class="tutorial-breadcrumb">
+          <a href="/">Tutorials</a>
+          <span v-if="frontmatter.groupTitle"> / {{ frontmatter.groupTitle }}</span>
+        </div>
+        <h1>{{ frontmatter.title }}</h1>
+        <p class="tutorial-description">{{ frontmatter.description }}</p>
+        <div class="tutorial-meta">
+          <span class="fd-badge">{{ frontmatter.level }}</span>
+          <span>{{ frontmatter.time }} min</span>
+          <span>{{ frontmatter.author }}</span>
+        </div>
+        <ProgressBar
+          :completed="completedCount"
+          :total="stepCount"
+          label="Tutorial Progress"
+        />
+        <PointsBadge :points="points" :badges="badges" />
+      </div>
+
+      <div class="tutorial-nav-top">
+        <a v-if="frontmatter.prev" :href="`/tutorials/${frontmatter.prev}`" class="fd-button">
+          ← Previous
+        </a>
+        <a v-if="frontmatter.next" :href="`/tutorials/${frontmatter.next}`" class="fd-button">
+          Next →
+        </a>
+      </div>
+
+      <div class="tutorial-steps">
+        <Content />
+      </div>
+
+      <div class="tutorial-nav-bottom">
+        <a v-if="frontmatter.prev" :href="`/tutorials/${frontmatter.prev}`" class="fd-button">
+          ← Previous
+        </a>
+        <a v-if="frontmatter.next" :href="`/tutorials/${frontmatter.next}`" class="fd-button fd-button--emphasized">
+          Next →
+        </a>
+      </div>
+    </main>
+  </div>
+</template>
+
+<style scoped>
+.tutorial-page {
+  display: flex;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1rem;
+  gap: 2rem;
+}
+.tutorial-sidebar {
+  width: 280px;
+  flex-shrink: 0;
+}
+.tutorial-main {
+  flex: 1;
+  min-width: 0;
+}
+.tutorial-header {
+  margin-bottom: 2rem;
+}
+.tutorial-breadcrumb {
+  font-size: 0.875rem;
+  margin-bottom: 0.5rem;
+  color: var(--sapNeutralTextColor, #6a6d70);
+}
+.tutorial-breadcrumb a {
+  color: var(--sapLinkColor, #0064d9);
+}
+.tutorial-description {
+  color: var(--sapNeutralTextColor, #6a6d70);
+  margin: 0.5rem 0;
+}
+.tutorial-meta {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin: 0.5rem 0;
+  font-size: 0.875rem;
+}
+.tutorial-nav-top,
+.tutorial-nav-bottom {
+  display: flex;
+  justify-content: space-between;
+  margin: 1.5rem 0;
+}
+
+@media (max-width: 768px) {
+  .tutorial-page {
+    flex-direction: column;
+  }
+  .tutorial-sidebar {
+    width: 100%;
+  }
+}
+</style>
+```
+
+- [ ] **Step 2: Run dev server and verify layout**
+
+Run: `npm run dev`
+Navigate to `http://localhost:5173/tutorials/hana-cloud-cap-create-project`
+Expected: Tutorial renders with:
+- Header showing title, description, level badge, time, author
+- Breadcrumb with "Tutorials / Set Up SAP HANA Cloud and CAP Project"
+- Progress bar (0/7 initially — API not connected yet, that's OK)
+- Previous/Next navigation links
+- Tutorial content from VitePress `<Content />` component
+- Sidebar placeholder (MiniNavigator will show empty until API is connected)
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add site/.vitepress/theme/components/TutorialLayout.vue
+git commit -m "feat: implement full TutorialLayout with sidebar, progress, and navigation"
+```
+
+---
+
+### Task 18: TutorialList Component
+
+**Files:**
+- Create: `site/.vitepress/theme/components/TutorialList.vue`
+- Modify: `site/index.md`
+
+- [ ] **Step 1: Create `site/.vitepress/theme/components/TutorialList.vue`**
+
+```vue
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+
+interface TutorialEntry {
+  slug: string
+  title: string
+  missionId: number
+  groupId: number
+  groupTitle: string
+  prev: string | null
+  next: string | null
+}
+
+const tutorials = ref<TutorialEntry[]>([])
+const searchQuery = ref('')
+
+onMounted(async () => {
+  const res = await fetch('/tutorials/_nav.json')
+  if (res.ok) {
+    tutorials.value = await res.json()
+  }
+})
+
+const filtered = computed(() => {
+  if (!searchQuery.value) return tutorials.value
+  const q = searchQuery.value.toLowerCase()
+  return tutorials.value.filter(t =>
+    t.title.toLowerCase().includes(q) || t.slug.toLowerCase().includes(q)
+  )
+})
+
+const groups = computed(() => {
+  const map = new Map<string, TutorialEntry[]>()
+  for (const t of filtered.value) {
+    const list = map.get(t.groupTitle) ?? []
+    list.push(t)
+    map.set(t.groupTitle, list)
+  }
+  return map
+})
+</script>
+
+<template>
+  <div class="tutorial-list">
+    <div class="search-bar">
+      <input
+        type="text"
+        v-model="searchQuery"
+        placeholder="Search tutorials..."
+        class="search-input"
+      />
+    </div>
+    <div v-for="[groupTitle, tuts] in groups" :key="groupTitle" class="tutorial-group">
+      <h3>{{ groupTitle }}</h3>
+      <div class="tutorial-cards">
+        <a
+          v-for="t in tuts"
+          :key="t.slug"
+          :href="`/tutorials/${t.slug}`"
+          class="fd-card tutorial-card"
+          role="listitem"
+        >
+          <div class="fd-card__header">
+            <div class="fd-card__title-area">
+              <span class="fd-card__title">{{ t.title }}</span>
+            </div>
+          </div>
+        </a>
+      </div>
+    </div>
+    <p v-if="filtered.length === 0">No tutorials found.</p>
+  </div>
+</template>
+
+<style scoped>
+.tutorial-list {
+  max-width: 900px;
+  margin: 0 auto;
+}
+.search-bar {
+  margin-bottom: 1.5rem;
+}
+.search-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+  border-radius: 0.5rem;
+  font-size: 1rem;
+}
+.tutorial-group h3 {
+  margin-top: 1.5rem;
+}
+.tutorial-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+.tutorial-card {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  padding: 1rem;
+  border: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+  border-radius: 0.5rem;
+  transition: box-shadow 0.2s;
+}
+.tutorial-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+</style>
+```
+
+- [ ] **Step 2: Update `site/index.md` to use TutorialList**
+
+Replace `site/index.md`:
+
+```md
+---
+layout: page
+---
+
+# SAP Tutorial Platform POC
+
+<TutorialList />
+```
+
+- [ ] **Step 3: Register TutorialList globally**
+
+Edit `site/.vitepress/theme/index.ts` — add `TutorialList` import and registration:
+
+```ts
+import DefaultTheme from 'vitepress/theme'
+import { h } from 'vue'
+import { useData } from 'vitepress'
+import './styles/sap-fundamental.css'
+import TutorialLayout from './components/TutorialLayout.vue'
+import TutorialStep from './components/TutorialStep.vue'
+import OptionTabs from './components/OptionTabs.vue'
+import TutorialList from './components/TutorialList.vue'
+
+function Layout() {
+  const { frontmatter } = useData()
+  if (frontmatter.value.layout === 'tutorial') {
+    return h(TutorialLayout)
+  }
+  return h(DefaultTheme.Layout)
+}
+
+export default {
+  extends: DefaultTheme,
+  Layout,
+  enhanceApp({ app }: { app: any }) {
+    app.component('TutorialStep', TutorialStep)
+    app.component('OptionTabs', OptionTabs)
+    app.component('TutorialList', TutorialList)
+  },
+}
+```
+
+- [ ] **Step 4: Run dev server and verify listing page**
+
+Run: `npm run dev`
+Navigate to `http://localhost:5173/`
+Expected: Page shows "SAP Tutorial Platform POC" heading, search bar, and 5 tutorial cards grouped by group title. Clicking a card navigates to the tutorial page.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add site/.vitepress/theme/components/TutorialList.vue site/index.md site/.vitepress/theme/index.ts
+git commit -m "feat: add TutorialList browse page with search and card grid"
+```
+
+---
+
+### Task 19: End-to-End Smoke Test in Browser
+
+**Files:** No new files. This task validates the full flow by running the dev server and manually testing.
+
+- [ ] **Step 1: Run the full build chain**
+
+```bash
+npm run fetch-tutorials && npm run dev
+```
+
+- [ ] **Step 2: Test the tutorial listing page**
+
+Navigate to `http://localhost:5173/`
+Verify:
+- [ ] Page loads with SAP Fundamental Styles colors
+- [ ] Search bar filters tutorials by title
+- [ ] Tutorial cards are grouped by group title
+- [ ] Clicking a tutorial card navigates to `/tutorials/<slug>`
+
+- [ ] **Step 3: Test tutorial page**
+
+Navigate to `http://localhost:5173/tutorials/hana-cloud-cap-create-project`
+Verify:
+- [ ] Header shows: title, description, "beginner" badge, "15 min", "Thomas Jung"
+- [ ] Breadcrumb shows "Tutorials / Set Up SAP HANA Cloud and CAP Project"
+- [ ] Previous link goes to `hana-cloud-deploying`
+- [ ] Next link goes to `hana-cloud-cap-create-database-cds`
+- [ ] Tutorial content renders as **collapsible step accordions** (TutorialStep components)
+- [ ] Each step shows: numbered badge, title, expand/collapse toggle
+- [ ] Each step has a "Done" button at the bottom
+- [ ] Images resolve to `raw.githubusercontent.com` URLs (visible in img src)
+- [ ] No JavaScript errors in browser console
+
+- [ ] **Step 4: Test OptionTabs (if any POC tutorial has OPTION blocks)**
+
+If a tutorial contains OPTION blocks, verify:
+- [ ] Tabs render with tab names
+- [ ] Clicking a tab switches content
+- [ ] Content renders correctly within each tab
+
+- [ ] **Step 5: Test static build**
+
+```bash
+npm run build && npm run preview
+```
+
+Navigate to `http://localhost:4173/` and repeat basic checks.
+Expected: Static site serves correctly, all pages reachable, no hydration errors.
+
+- [ ] **Step 6: Commit any fixes from smoke testing**
+
+If any issues were found and fixed during testing, commit them:
+
+```bash
+git add -A
+git commit -m "fix: address issues found during smoke testing"
+```
+
+---
+
+### Task 20: VitePress Build Validation
+
+**Files:** No new files.
+
+- [ ] **Step 1: Run all tests**
+
+```bash
+npm test
+```
+
+Expected: All parser tests pass (frontmatter, v2, v1, images, options).
+
+- [ ] **Step 2: Run full build**
+
+```bash
+npm run fetch-tutorials && npm run build
+```
+
+Expected: VitePress builds successfully. Output in `site/.vitepress/dist/`. No build errors.
+
+- [ ] **Step 3: Verify build output structure**
+
+```bash
+ls site/.vitepress/dist/tutorials/
+ls site/.vitepress/dist/
+```
+
+Expected: HTML files for each tutorial, `index.html` for the listing page, assets directory with CSS/JS bundles.
+
+- [ ] **Step 4: Final commit**
+
+```bash
+git add -A
+git commit -m "chore: verify full build pipeline passes"
+```
