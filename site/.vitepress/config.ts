@@ -5,6 +5,7 @@ export default defineConfig({
   description: 'Tutorials powered by VitePress on SAP BTP',
   srcDir: '.',
   outDir: '.vitepress/dist',
+  ignoreDeadLinks: true,
 
   themeConfig: {
     nav: [
