@@ -346,21 +346,30 @@ title: "Create a CAP Project for SAP HANA Cloud"
 ---
 ```
 
-The theme registers `TutorialLayout` as the layout for `layout: tutorial` pages:
+The theme registers `TutorialLayout` as the layout for `layout: tutorial` pages. The custom `Layout` component checks frontmatter and delegates accordingly:
 
 ```ts
 // site/.vitepress/theme/index.ts
 import DefaultTheme from 'vitepress/theme'
+import { h } from 'vue'
+import { useData } from 'vitepress'
 import './styles/sap-fundamental.css'
 import TutorialLayout from './components/TutorialLayout.vue'
+import OptionTabs from './components/OptionTabs.vue'
+
+function Layout() {
+  const { frontmatter } = useData()
+  if (frontmatter.value.layout === 'tutorial') {
+    return h(TutorialLayout)
+  }
+  return h(DefaultTheme.Layout)
+}
 
 export default {
   extends: DefaultTheme,
+  Layout,
   enhanceApp({ app }) {
-    app.component('TutorialLayout', TutorialLayout)
-  },
-  Layout() {
-    // VitePress uses the 'layout' frontmatter to select the component
+    app.component('OptionTabs', OptionTabs)
   }
 }
 ```
@@ -441,6 +450,16 @@ _schema-version: 3.3.0
 ID: tutorials-poc
 version: 1.0.0
 
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        - npm install
+        - npm run fetch-tutorials
+        - npm run build
+        - mkdir -p approuter/static
+        - cp -r site/.vitepress/dist/* approuter/static/
+
 modules:
   - name: tutorials-approuter
     type: approuter.nodejs
@@ -451,14 +470,6 @@ modules:
     parameters:
       disk-quota: 256M
       memory: 256M
-    build-parameters:
-      builder: custom
-      commands:
-        - npm install --prefix ..
-        - npm run fetch-tutorials --prefix ..
-        - npm run build --prefix ..
-        - mkdir -p static
-        - cp -r ../site/.vitepress/dist/* static/
 
 resources:
   - name: tutorials-xsuaa
@@ -466,7 +477,7 @@ resources:
     parameters:
       service: xsuaa
       service-plan: application
-      path: ../xs-security.json
+      path: xs-security.json
 
   - name: tutorials-api-destination
     type: org.cloudfoundry.managed-service
