@@ -14,7 +14,15 @@
 @import 'fundamental-styles/dist/form-label.css';
 @import 'fundamental-styles/dist/radio.css';
 @import 'fundamental-styles/dist/input.css';
+@import 'fundamental-styles/dist/input-group.css';
 @import 'fundamental-styles/dist/link.css';
+@import 'fundamental-styles/dist/checkbox.css';
+@import 'fundamental-styles/dist/info-label.css';
+@import 'fundamental-styles/dist/toolbar.css';
+@import 'fundamental-styles/dist/shellbar.css';
+@import 'fundamental-styles/dist/tile.css';
+@import 'fundamental-styles/dist/counter.css';
+@import 'fundamental-styles/dist/object-status.css';
 @import './sap-horizon-dark-scoped.css';
 
 :root {
@@ -57,11 +65,26 @@
   color: var(--sapShell_TextColor, #fff) !important;
 }
 
-/* Main content area white background */
-.VPContent,
+/* Prevent horizontal scrollbar from full-bleed elements */
+html {
+  overflow-x: hidden;
+  background-color: var(--sapBackgroundColor, #f5f6f7);
+}
+
+/* Main content area white background (for doc/tutorial pages) */
 .VPDoc,
 .vp-doc {
   background-color: var(--sapBaseColor, #fff) !important;
+}
+
+/* VPContent — match SAP background so no white seams show */
+.VPContent {
+  background-color: var(--sapBackgroundColor, #f5f6f7) !important;
+}
+
+/* VPPage used by tutorial navigator — allow full-bleed backgrounds */
+.VPPage {
+  background-color: var(--sapBackgroundColor, #f5f6f7);
 }
 
 /* Tutorial page overrides */

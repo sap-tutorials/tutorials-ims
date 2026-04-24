@@ -1,7 +1,6 @@
 ---
 layout: page
+title: Tutorial Navigator
 ---
 
-# SAP Tutorial Platform POC
-
-<TutorialList />
+<TutorialNavigator />

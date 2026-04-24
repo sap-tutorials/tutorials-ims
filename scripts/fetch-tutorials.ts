@@ -110,6 +110,12 @@ function buildNavEntries(): TutorialNavEntry[] {
   return POC_TUTORIALS.map((t, i) => ({
     slug: t.slug,
     title: '',
+    description: '',
+    time: 15,
+    level: 'beginner',
+    stepCount: 0,
+    primaryTag: '',
+    displayTags: [],
     missionId: t.missionId,
     missionTitle: MISSION_TITLE,
     groupId: t.groupId,
@@ -201,6 +207,13 @@ async function main() {
     const ghMeta = await fetchGitHubMeta(t.slug, t.repo)
 
     navEntries[i].title = title
+    navEntries[i].description = description
+    navEntries[i].time = frontmatter.time ?? 15
+    navEntries[i].level = level
+    navEntries[i].stepCount = steps.length
+    navEntries[i].primaryTag = humanizeTag(frontmatter.primary_tag ?? '')
+    navEntries[i].displayTags = [...new Set([frontmatter.primary_tag ?? '', ...(frontmatter.tags ?? [])])]
+      .map(humanizeTag).filter(t => t.length > 0)
 
     writeVitePressPage(
       t.slug,

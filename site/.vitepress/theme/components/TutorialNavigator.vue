@@ -1,0 +1,891 @@
+<script setup lang="ts">
+import { ref, computed, onMounted, reactive } from 'vue'
+
+interface TutorialEntry {
+  slug: string
+  title: string
+  description: string
+  time: number
+  level: string
+  stepCount: number
+  primaryTag: string
+  displayTags: string[]
+  missionId: number
+  missionTitle: string
+  groupId: number
+  groupTitle: string
+  prev: string | null
+  next: string | null
+}
+
+interface CardItem {
+  type: 'mission' | 'group' | 'tutorial'
+  id: string
+  title: string
+  description: string
+  time: number
+  level: string
+  tutorialCount: number
+  primaryTag: string
+  displayTags: string[]
+  href: string
+  stepCount: number
+}
+
+const tutorials = ref<TutorialEntry[]>([])
+const searchQuery = ref('')
+const filtersOpen = ref(true)
+const productSearch = ref('')
+const topicSearch = ref('')
+
+const filters = reactive({
+  levels: [] as string[],
+  types: [] as string[],
+  products: [] as string[],
+  topics: [] as string[],
+})
+
+onMounted(async () => {
+  const res = await fetch('/tutorials/_nav.json')
+  if (res.ok) {
+    tutorials.value = await res.json()
+  }
+})
+
+const LEVEL_ORDER: Record<string, number> = { beginner: 0, intermediate: 1, advanced: 2 }
+
+const PRODUCT_TO_TOPICS: Record<string, string[]> = {
+  'SAP HANA': ['Database & Data Management'],
+  'SAP HANA Cloud': ['Cloud', 'Database & Data Management'],
+  'SAP Business Application Studio': ['Development Tools'],
+  'SAP Cloud Application Programming Model': ['Application Development', 'Cloud'],
+}
+
+function lowestLevel(levels: string[]): string {
+  return levels.sort((a, b) => (LEVEL_ORDER[a] ?? 9) - (LEVEL_ORDER[b] ?? 9))[0] || 'beginner'
+}
+
+function formatTime(minutes: number): string {
+  if (minutes < 60) return `${minutes} min.`
+  const hrs = Math.floor(minutes / 60)
+  const mins = minutes % 60
+  return mins > 0 ? `${hrs} hr. ${mins} min.` : `${hrs} hr.`
+}
+
+function capitalizeLevel(level: string): string {
+  return level.charAt(0).toUpperCase() + level.slice(1)
+}
+
+const TYPE_LABELS: Record<string, string> = {
+  mission: 'MISSION',
+  group: 'GROUP',
+  tutorial: 'TUTORIAL',
+}
+
+const allCards = computed<CardItem[]>(() => {
+  const tuts = tutorials.value
+  if (!tuts.length) return []
+
+  const items: CardItem[] = []
+
+  const missionGroups = new Map<number, TutorialEntry[]>()
+  const groupMap = new Map<number, TutorialEntry[]>()
+
+  for (const t of tuts) {
+    const mList = missionGroups.get(t.missionId) ?? []
+    mList.push(t)
+    missionGroups.set(t.missionId, mList)
+
+    const gList = groupMap.get(t.groupId) ?? []
+    gList.push(t)
+    groupMap.set(t.groupId, gList)
+  }
+
+  for (const [missionId, mTuts] of missionGroups) {
+    const allTags = [...new Set(mTuts.flatMap(t => t.displayTags))]
+    items.push({
+      type: 'mission',
+      id: `mission-${missionId}`,
+      title: mTuts[0].missionTitle,
+      description: `Complete this mission to build full-stack applications combining CAP with SAP HANA Cloud. Includes ${mTuts.length} tutorials across ${groupMap.size} groups.`,
+      time: mTuts.reduce((sum, t) => sum + t.time, 0),
+      level: lowestLevel(mTuts.map(t => t.level)),
+      tutorialCount: mTuts.length,
+      primaryTag: mTuts[0].primaryTag,
+      displayTags: allTags,
+      href: `/tutorials/${mTuts[0].slug}`,
+      stepCount: mTuts.reduce((sum, t) => sum + t.stepCount, 0),
+    })
+  }
+
+  for (const [groupId, gTuts] of groupMap) {
+    const allTags = [...new Set(gTuts.flatMap(t => t.displayTags))]
+    items.push({
+      type: 'group',
+      id: `group-${groupId}`,
+      title: gTuts[0].groupTitle,
+      description: `${gTuts.length} tutorials covering ${gTuts.map(t => t.title).join(', ')}.`,
+      time: gTuts.reduce((sum, t) => sum + t.time, 0),
+      level: lowestLevel(gTuts.map(t => t.level)),
+      tutorialCount: gTuts.length,
+      primaryTag: gTuts[0].primaryTag,
+      displayTags: allTags,
+      href: `/tutorials/${gTuts[0].slug}`,
+      stepCount: gTuts.reduce((sum, t) => sum + t.stepCount, 0),
+    })
+  }
+
+  for (const t of tuts) {
+    items.push({
+      type: 'tutorial',
+      id: t.slug,
+      title: t.title,
+      description: t.description,
+      time: t.time,
+      level: t.level,
+      tutorialCount: 1,
+      primaryTag: t.primaryTag,
+      displayTags: t.displayTags,
+      href: `/tutorials/${t.slug}`,
+      stepCount: t.stepCount,
+    })
+  }
+
+  return items
+})
+
+const availableProducts = computed(() => {
+  const tagSet = new Set<string>()
+  for (const t of tutorials.value) {
+    for (const tag of t.displayTags) {
+      if (tag !== 'Beginner' && tag !== 'Intermediate' && tag !== 'Advanced') {
+        tagSet.add(tag)
+      }
+    }
+  }
+  return [...tagSet].sort()
+})
+
+const filteredProducts = computed(() => {
+  if (!productSearch.value) return availableProducts.value
+  const q = productSearch.value.toLowerCase()
+  return availableProducts.value.filter(t => t.toLowerCase().includes(q))
+})
+
+const availableTopics = computed(() => {
+  const topicSet = new Set<string>()
+  for (const t of tutorials.value) {
+    for (const tag of t.displayTags) {
+      const topics = PRODUCT_TO_TOPICS[tag]
+      if (topics) {
+        for (const topic of topics) topicSet.add(topic)
+      }
+    }
+  }
+  return [...topicSet].sort()
+})
+
+const filteredTopics = computed(() => {
+  if (!topicSearch.value) return availableTopics.value
+  const q = topicSearch.value.toLowerCase()
+  return availableTopics.value.filter(t => t.toLowerCase().includes(q))
+})
+
+function tutorialMatchesTopic(item: CardItem, topic: string): boolean {
+  return item.displayTags.some(tag => (PRODUCT_TO_TOPICS[tag] ?? []).includes(topic))
+}
+
+const filteredItems = computed(() => {
+  return allCards.value.filter(item => {
+    if (searchQuery.value) {
+      const q = searchQuery.value.toLowerCase()
+      const matches = item.title.toLowerCase().includes(q) ||
+        item.description.toLowerCase().includes(q) ||
+        item.displayTags.some(t => t.toLowerCase().includes(q))
+      if (!matches) return false
+    }
+
+    if (filters.types.length > 0 && !filters.types.includes(item.type)) {
+      return false
+    }
+
+    if (filters.levels.length > 0 && !filters.levels.includes(item.level)) {
+      return false
+    }
+
+    if (filters.products.length > 0) {
+      const hasProduct = item.displayTags.some(t => filters.products.includes(t))
+      if (!hasProduct) return false
+    }
+
+    if (filters.topics.length > 0) {
+      const hasTopic = filters.topics.some(topic => tutorialMatchesTopic(item, topic))
+      if (!hasTopic) return false
+    }
+
+    return true
+  })
+})
+
+const counts = computed(() => {
+  const all = filteredItems.value
+  return {
+    missions: all.filter(i => i.type === 'mission').length,
+    groups: all.filter(i => i.type === 'group').length,
+    tutorials: all.filter(i => i.type === 'tutorial').length,
+  }
+})
+
+function toggleFilter(arr: string[], value: string) {
+  const idx = arr.indexOf(value)
+  if (idx >= 0) arr.splice(idx, 1)
+  else arr.push(value)
+}
+
+function clearFilters() {
+  searchQuery.value = ''
+  filters.levels = []
+  filters.types = []
+  filters.products = []
+  filters.topics = []
+  productSearch.value = ''
+  topicSearch.value = ''
+}
+
+const hasActiveFilters = computed(() => {
+  return searchQuery.value.length > 0 ||
+    filters.levels.length > 0 ||
+    filters.types.length > 0 ||
+    filters.products.length > 0 ||
+    filters.topics.length > 0
+})
+</script>
+
+<template>
+  <div class="tutorial-navigator">
+    <!-- Section: Hero Banner -->
+    <section class="navigator-hero">
+      <div class="hero-inner">
+        <div class="hero-text">
+          <h1>SAP Tutorials</h1>
+          <p>
+            Get hands-on experience with SAP HANA Cloud, CAP, and SAP Business Technology Platform.
+            Follow step-by-step tutorials, earn badges, and build real-world applications.
+          </p>
+        </div>
+        <div class="hero-promo">
+          <div class="hero-promo-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--sapBrandColor, #0070f2)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="6"/><path d="M9 14l-2 8 5-3 5 3-2-8"/></svg>
+          </div>
+          <div class="hero-promo-text">
+            <strong>Earn badges as you learn!</strong>
+            <span>Complete a tutorial mission, mark your progress, answer all the questions and earn badges.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section: Search + Filter -->
+    <div class="navigator-body">
+      <section class="navigator-search">
+        <div class="fd-input-group">
+          <input
+            type="text"
+            v-model="searchQuery"
+            placeholder="Search for a tutorial"
+            class="fd-input fd-input-group__input"
+          />
+          <span class="fd-input-group__addon fd-input-group__addon--button">
+            <button class="fd-button fd-button--emphasized fd-input-group__button" aria-label="Search">Search</button>
+          </span>
+        </div>
+        <button
+          class="fd-button filter-toggle-btn"
+          :class="filtersOpen ? 'fd-button--toggled' : 'fd-button--transparent'"
+          @click="filtersOpen = !filtersOpen"
+          :title="filtersOpen ? 'Hide filters' : 'Show filters'"
+          aria-label="Toggle filters"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1 2h14l-5 6v5l-4 2V8z"/></svg>
+        </button>
+      </section>
+
+      <!-- Section: Filter Panel -->
+      <section v-show="filtersOpen" class="navigator-filters">
+        <h2 class="filters-heading">Filter Your Search</h2>
+        <div class="filters-grid">
+          <div class="filter-column">
+            <h3 class="filter-title">Topic</h3>
+            <div class="fd-input-group filter-tag-search">
+              <input
+                type="text"
+                v-model="topicSearch"
+                placeholder="Search for a topic"
+                class="fd-input fd-input-group__input"
+              />
+            </div>
+            <div class="filter-list">
+              <label v-for="topic in filteredTopics" :key="topic" class="filter-option">
+                <input type="checkbox" :checked="filters.topics.includes(topic)" @change="toggleFilter(filters.topics, topic)" class="filter-checkbox" />
+                <span class="filter-label">{{ topic }}</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="filter-column">
+            <h3 class="filter-title">Software Product</h3>
+            <div class="fd-input-group filter-tag-search">
+              <input
+                type="text"
+                v-model="productSearch"
+                placeholder="Search for a product"
+                class="fd-input fd-input-group__input"
+              />
+            </div>
+            <div class="filter-list">
+              <label v-for="product in filteredProducts" :key="product" class="filter-option">
+                <input type="checkbox" :checked="filters.products.includes(product)" @change="toggleFilter(filters.products, product)" class="filter-checkbox" />
+                <span class="filter-label">{{ product }}</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="filter-column">
+            <h3 class="filter-title">Experience</h3>
+            <div class="filter-list">
+              <label v-for="level in ['beginner', 'intermediate', 'advanced']" :key="level" class="filter-option">
+                <input type="checkbox" :checked="filters.levels.includes(level)" @change="toggleFilter(filters.levels, level)" class="filter-checkbox" />
+                <span class="filter-label">{{ capitalizeLevel(level) }}</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="filter-column">
+            <h3 class="filter-title">Type</h3>
+            <div class="filter-list">
+              <label v-for="type in ['mission', 'group', 'tutorial']" :key="type" class="filter-option">
+                <input type="checkbox" :checked="filters.types.includes(type)" @change="toggleFilter(filters.types, type)" class="filter-checkbox" />
+                <span class="filter-label">{{ type.charAt(0).toUpperCase() + type.slice(1) }}</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section: Result Count Bar -->
+      <section class="navigator-toolbar">
+        <div class="toolbar-counts">
+          <span class="toolbar-count">
+            <span class="toolbar-count-num count-mission">{{ counts.missions }}</span> Mission
+          </span>
+          <span class="toolbar-sep">&middot;</span>
+          <span class="toolbar-count">
+            <span class="toolbar-count-num count-group">{{ counts.groups }}</span> Group
+          </span>
+          <span class="toolbar-sep">&middot;</span>
+          <span class="toolbar-count">
+            <span class="toolbar-count-num count-tutorial">{{ counts.tutorials }}</span> Tutorial
+          </span>
+        </div>
+        <button v-if="hasActiveFilters" class="fd-button fd-button--transparent" @click="clearFilters">
+          Clear all filters
+        </button>
+      </section>
+
+      <!-- Section: Card Grid -->
+      <section class="navigator-grid">
+        <a
+          v-for="item in filteredItems"
+          :key="item.id"
+          :href="item.href"
+          class="nav-card"
+        >
+          <div class="nav-card__type" :class="`nav-card__type--${item.type}`">
+            {{ TYPE_LABELS[item.type] }}
+          </div>
+
+          <h3 class="nav-card__title">{{ item.title }}</h3>
+
+          <p class="nav-card__desc">{{ item.description }}</p>
+
+          <div class="nav-card__meta">
+            <span class="nav-card__meta-item">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 13V3h4l2 2h6v8H2z"/></svg>
+              {{ capitalizeLevel(item.level) }}
+            </span>
+            <span class="nav-card__meta-sep">&middot;</span>
+            <span class="nav-card__meta-item">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8l2.5 1.5"/></svg>
+              {{ formatTime(item.time) }}
+            </span>
+            <template v-if="item.type !== 'tutorial'">
+              <span class="nav-card__meta-sep">&middot;</span>
+              <span class="nav-card__meta-item">{{ item.tutorialCount }} Tutorials</span>
+            </template>
+          </div>
+
+          <div class="nav-card__tag">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h5l7 7-5 5-7-7V3zm3 2a1 1 0 100 2 1 1 0 000-2z"/></svg>
+            {{ item.primaryTag }}
+          </div>
+        </a>
+      </section>
+
+      <!-- Empty State -->
+      <div v-if="filteredItems.length === 0 && tutorials.length > 0" class="navigator-empty">
+        <p>No results match your filters.</p>
+        <button class="fd-button fd-button--transparent" @click="clearFilters">Clear all filters</button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.tutorial-navigator {
+  font-family: var(--sapFontFamily, '72', '72full', Arial, Helvetica, sans-serif);
+  color: var(--sapTextColor, #32363a);
+  background: var(--sapBackgroundColor, #f5f6f7);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ─── Hero ─── */
+.navigator-hero {
+  background: var(--sapShellColor, #354a5f);
+  color: var(--sapShell_TextColor, #fff);
+  padding: 2.5rem 2rem 3rem;
+}
+
+.hero-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 3rem;
+}
+
+.hero-text {
+  flex: 1;
+}
+
+.hero-text h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0 0 0.75rem;
+  color: inherit;
+  letter-spacing: -0.01em;
+}
+
+.hero-text p {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  opacity: 0.88;
+  max-width: 560px;
+}
+
+.hero-promo {
+  flex-shrink: 0;
+  background: var(--sapBaseColor, #fff);
+  color: var(--sapTextColor, #32363a);
+  border-radius: 0.75rem;
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+  max-width: 340px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.hero-promo-icon {
+  flex-shrink: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  background: var(--sapInformationBackground, #e1f4ff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hero-promo-text strong {
+  display: block;
+  color: var(--sapBrandColor, #0070f2);
+  font-size: 0.875rem;
+  margin-bottom: 0.25rem;
+}
+
+.hero-promo-text span {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--sapContent_LabelColor, #556b82);
+}
+
+/* ─── Body ─── */
+.navigator-body {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem 2rem 3rem;
+}
+
+/* ─── Search ─── */
+.navigator-search {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+  margin-bottom: 1.5rem;
+}
+
+.navigator-search .fd-input-group {
+  flex: 1;
+}
+
+.navigator-search .fd-input {
+  height: 2.75rem;
+  font-size: 0.9375rem;
+}
+
+.navigator-search .fd-button--emphasized {
+  height: 2.75rem;
+  padding: 0 1.5rem;
+  border-radius: 0 var(--sapButton_BorderCornerRadius, 0.5rem) var(--sapButton_BorderCornerRadius, 0.5rem) 0;
+}
+
+.filter-toggle-btn {
+  height: 2.75rem;
+  width: 2.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.fd-button--toggled {
+  background: var(--sapButton_Selected_Background, rgba(0, 100, 217, 0.08));
+  border: 1px solid var(--sapButton_Selected_BorderColor, #0064d9);
+  color: var(--sapButton_Selected_TextColor, #0064d9);
+  border-radius: var(--sapButton_BorderCornerRadius, 0.5rem);
+  cursor: pointer;
+}
+
+/* ─── Filters ─── */
+.navigator-filters {
+  background: var(--sapBaseColor, #fff);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.filters-heading {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin: 0 0 1.25rem;
+  color: var(--sapTextColor, #32363a);
+}
+
+.filters-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 1.5rem;
+}
+
+.filter-title {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sapContent_LabelColor, #556b82);
+  margin: 0 0 0.75rem;
+}
+
+.filter-tag-search {
+  margin-bottom: 0.75rem;
+}
+
+.filter-tag-search .fd-input {
+  height: 2rem;
+  font-size: 0.8125rem;
+}
+
+.filter-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  max-height: 7.5rem;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.filter-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.filter-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.filter-list::-webkit-scrollbar-thumb {
+  background: var(--sapScrollBar_FaceColor, #94a2b3);
+  border-radius: 2px;
+}
+
+.filter-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--sapTextColor, #32363a);
+}
+
+.filter-option .filter-checkbox {
+  accent-color: var(--sapBrandColor, #0070f2);
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.filter-option .filter-label {
+  cursor: pointer;
+}
+
+/* ─── Toolbar / Result Bar ─── */
+.navigator-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  padding: 0.5rem 0;
+}
+
+.toolbar-counts {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--sapContent_LabelColor, #556b82);
+}
+
+.toolbar-count {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-weight: 600;
+}
+
+.toolbar-count-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.375rem;
+  height: 1.375rem;
+  padding: 0 0.375rem;
+  border-radius: 0.75rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.count-mission { background: var(--sapAccentColor6, #046c7a); }
+.count-group { background: var(--sapAccentColor8, #6c32a9); }
+.count-tutorial { background: var(--sapAccentColor10, #5b738b); }
+
+.toolbar-sep {
+  color: var(--sapNeutralBorderColor, #d9d9d9);
+  font-size: 1rem;
+}
+
+/* ─── Card Grid ─── */
+.navigator-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.nav-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--sapBaseColor, #fff);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  text-decoration: none;
+  color: inherit;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  min-height: 200px;
+}
+
+.nav-card:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+/* ─── Card Type Label ─── */
+.nav-card__type {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.nav-card__type--mission { color: var(--sapAccentColor6, #046c7a); }
+.nav-card__type--group { color: var(--sapAccentColor8, #6c32a9); }
+.nav-card__type--tutorial { color: var(--sapAccentColor10, #5b738b); }
+
+.nav-card__type::before {
+  content: '';
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* ─── Card Title ─── */
+.nav-card__title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--sapTextColor, #32363a);
+  margin: 0 0 0.5rem;
+  line-height: 1.4;
+}
+
+.nav-card:hover .nav-card__title {
+  color: var(--sapBrandColor, #0070f2);
+}
+
+/* ─── Card Description ─── */
+.nav-card__desc {
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--sapContent_LabelColor, #556b82);
+  margin: 0;
+  flex: 1;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ─── Card Meta ─── */
+.nav-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 1rem;
+  font-size: 0.75rem;
+  color: var(--sapContent_LabelColor, #556b82);
+  flex-wrap: wrap;
+}
+
+.nav-card__meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.nav-card__meta-item svg {
+  opacity: 0.6;
+}
+
+.nav-card__meta-sep {
+  color: var(--sapNeutralBorderColor, #d9d9d9);
+}
+
+/* ─── Card Tag ─── */
+.nav-card__tag {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--sapGroup_ContentBorderColor, #e5e5e5);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--sapBrandColor, #0070f2);
+}
+
+.nav-card__tag svg {
+  opacity: 0.7;
+}
+
+/* ─── Empty State ─── */
+.navigator-empty {
+  text-align: center;
+  padding: 3rem 2rem;
+}
+
+.navigator-empty p {
+  font-size: 1rem;
+  color: var(--sapContent_LabelColor, #556b82);
+  margin-bottom: 1rem;
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 1024px) {
+  .navigator-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .filters-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .hero-inner {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .hero-promo {
+    max-width: 100%;
+  }
+
+  .hero-text h1 {
+    font-size: 1.375rem;
+  }
+
+  .filters-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .navigator-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .navigator-hero {
+    padding: 1.5rem 1rem 2rem;
+  }
+
+  .navigator-body {
+    padding: 1rem 1rem 2rem;
+  }
+
+  .navigator-search {
+    flex-direction: column;
+  }
+
+  .filter-toggle-btn {
+    align-self: flex-end;
+  }
+
+  .navigator-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

@@ -44,6 +44,12 @@ export interface ParsedTutorial {
 export interface TutorialNavEntry {
   slug: string
   title: string
+  description: string
+  time: number
+  level: string
+  stepCount: number
+  primaryTag: string
+  displayTags: string[]
   missionId: number
   missionTitle: string
   groupId: number

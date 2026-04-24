@@ -6,6 +6,7 @@ import TutorialLayout from './components/TutorialLayout.vue'
 import TutorialStep from './components/TutorialStep.vue'
 import OptionTabs from './components/OptionTabs.vue'
 import TutorialList from './components/TutorialList.vue'
+import TutorialNavigator from './components/TutorialNavigator.vue'
 
 function Layout() {
   const { frontmatter } = useData()
@@ -22,5 +23,6 @@ export default {
     app.component('TutorialStep', TutorialStep)
     app.component('OptionTabs', OptionTabs)
     app.component('TutorialList', TutorialList)
+    app.component('TutorialNavigator', TutorialNavigator)
   },
 }
