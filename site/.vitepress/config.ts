@@ -11,6 +11,7 @@ export default defineConfig({
   themeConfig: {
     nav: [
       { text: 'Tutorials', link: '/' },
+      { text: 'App Space', link: '/app-space' },
     ],
   },
 
@@ -21,6 +22,11 @@ export default defineConfig({
           target: 'http://localhost:4004',
           changeOrigin: true,
           rewrite: (path: string) => path.replace(/^\/api/, ''),
+        },
+        '/bin/sapdx': {
+          target: 'https://developers.sap.com',
+          changeOrigin: true,
+          secure: true,
         },
       },
     },

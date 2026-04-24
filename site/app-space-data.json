@@ -1,0 +1,455 @@
+{
+  "eventId": 38,
+  "type": "COMPLEX",
+  "paths": [
+    {
+      "id": 974,
+      "title": "ABAP Cloud",
+      "description": "Get started with ABAP Cloud development on SAP BTP. Learn to create projects, extend CDS views, and build modern ABAP applications.",
+      "items": [
+        {
+          "imsId": 1,
+          "title": "Get an SAP BTP Trial Account",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Beginner",
+          "timeToComplete": 900,
+          "url": "https://developers.sap.com/tutorials/hcp-create-trial-account.html",
+          "description": "Sign up for a free trial account on SAP Business Technology Platform."
+        },
+        {
+          "imsId": 2,
+          "title": "Create an ABAP Cloud Project in ADT",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Beginner",
+          "timeToComplete": 1200,
+          "url": "https://developers.sap.com/tutorials/abap-environment-trial-onboarding.html",
+          "description": "Set up ABAP Development Tools and create your first ABAP Cloud project."
+        },
+        {
+          "imsId": 3,
+          "title": "Extend a CDS View in ABAP Cloud",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Intermediate",
+          "timeToComplete": 1800,
+          "url": "https://developers.sap.com/tutorials/abap-environment-authorize-cds-view.html",
+          "description": "Create and extend CDS views to build data models in ABAP Cloud."
+        },
+        {
+          "imsId": 10,
+          "title": "ABAP Cloud Track Prize",
+          "type": "PRIZE",
+          "status": "",
+          "progress": 0,
+          "experience": "",
+          "timeToComplete": 0,
+          "url": "",
+          "description": "Congratulations! You earned a prize for completing the ABAP Cloud track. Scan this code then contact an App Space expert to claim it.",
+          "recordId": 43296
+        }
+      ]
+    },
+    {
+      "id": 975,
+      "title": "Artificial Intelligence",
+      "description": "Explore generative AI capabilities on SAP BTP. Set up the AI Hub and work with foundation models.",
+      "items": [
+        {
+          "imsId": 4,
+          "title": "Set Up SAP AI Launchpad and Generative AI Hub",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Beginner",
+          "timeToComplete": 1200,
+          "url": "https://developers.sap.com/tutorials/ai-core-generative-ai.html",
+          "description": "Configure SAP AI Core and access the Generative AI Hub for foundation models."
+        },
+        {
+          "imsId": 5,
+          "title": "Introduction to SAP Databricks",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Intermediate",
+          "timeToComplete": 1500,
+          "url": "https://developers.sap.com/tutorials/sap-databricks-getting-started.html",
+          "description": "Get started with SAP Databricks for data engineering and machine learning workloads."
+        },
+        {
+          "imsId": 12,
+          "title": "AI Track Prize",
+          "type": "PRIZE",
+          "status": "",
+          "progress": 0,
+          "experience": "",
+          "timeToComplete": 0,
+          "url": "",
+          "description": "Congratulations! You earned a prize for completing the Artificial Intelligence track. Scan this code then contact an App Space expert to claim it.",
+          "recordId": 43293
+        }
+      ]
+    },
+    {
+      "id": 976,
+      "title": "SAP Cloud Application Programming Model",
+      "description": "Build full-stack cloud applications with SAP CAP. From project setup through to deployment.",
+      "items": [
+        {
+          "imsId": 6,
+          "title": "Set Up SAP Build Code",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Beginner",
+          "timeToComplete": 600,
+          "url": "https://developers.sap.com/tutorials/build-code-setup.html",
+          "description": "Get started with SAP Build Code for cloud application development."
+        },
+        {
+          "imsId": 7,
+          "title": "Create a CAP Project",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Beginner",
+          "timeToComplete": 900,
+          "url": "https://developers.sap.com/tutorials/cap-service-deploy.html",
+          "description": "Initialize a new CAP project with data models and service definitions."
+        },
+        {
+          "imsId": 8,
+          "title": "Develop a Full-Stack CAP Application",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Intermediate",
+          "timeToComplete": 1800,
+          "url": "https://developers.sap.com/tutorials/cap-roles-restrict.html",
+          "description": "Add business logic, authorization, and a Fiori UI to your CAP application."
+        },
+        {
+          "imsId": 9,
+          "title": "Build and Deploy a CAP Application",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Intermediate",
+          "timeToComplete": 1500,
+          "url": "https://developers.sap.com/tutorials/cap-app-deploy-btp.html",
+          "description": "Build your CAP application with MTA and deploy it to SAP BTP Cloud Foundry."
+        },
+        {
+          "imsId": 15,
+          "title": "CAP Track Prize",
+          "type": "PRIZE",
+          "status": "",
+          "progress": 0,
+          "experience": "",
+          "timeToComplete": 0,
+          "url": "",
+          "description": "Congratulations! You earned a prize for completing the CAP track. Scan this code then contact an App Space expert to claim it.",
+          "recordId": 43295
+        }
+      ]
+    },
+    {
+      "id": 977,
+      "title": "SAP Build",
+      "description": "Low-code/no-code development with SAP Build Process Automation. Create workflows and automate business processes.",
+      "items": [
+        {
+          "imsId": 16,
+          "title": "Set Up SAP Build Process Automation",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Beginner",
+          "timeToComplete": 600,
+          "url": "https://developers.sap.com/tutorials/spa-subscribe-booster.html",
+          "description": "Subscribe to SAP Build Process Automation and configure your environment."
+        },
+        {
+          "imsId": 17,
+          "title": "Acquire a Project Template",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Beginner",
+          "timeToComplete": 900,
+          "url": "https://developers.sap.com/tutorials/spa-acquire-businessprocess-template.html",
+          "description": "Acquire and customize a process automation template from the SAP Build store."
+        },
+        {
+          "imsId": 18,
+          "title": "Create an API Trigger",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Intermediate",
+          "timeToComplete": 1200,
+          "url": "https://developers.sap.com/tutorials/spa-create-process-api-trigger.html",
+          "description": "Create an API trigger to start your business process programmatically."
+        },
+        {
+          "imsId": 19,
+          "title": "Test the API Trigger",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Intermediate",
+          "timeToComplete": 900,
+          "url": "https://developers.sap.com/tutorials/spa-run-process-api-trigger.html",
+          "description": "Test your API trigger and verify the automated workflow executes correctly."
+        },
+        {
+          "imsId": 20,
+          "title": "SAP Build Track Prize",
+          "type": "PRIZE",
+          "status": "",
+          "progress": 0,
+          "experience": "",
+          "timeToComplete": 0,
+          "url": "",
+          "description": "Congratulations! You earned a prize for completing the SAP Build track. Scan this code then contact an App Space expert to claim it.",
+          "recordId": 43297
+        }
+      ]
+    },
+    {
+      "id": 978,
+      "title": "Integration",
+      "description": "Explore SAP APIs and integration technologies. Tour the Business Accelerator Hub and learn to test APIs.",
+      "items": [
+        {
+          "imsId": 21,
+          "title": "Tour the SAP Business Accelerator Hub",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Beginner",
+          "timeToComplete": 900,
+          "url": "https://developers.sap.com/tutorials/api-hub-overview.html",
+          "description": "Explore the SAP Business Accelerator Hub and discover available APIs."
+        },
+        {
+          "imsId": 22,
+          "title": "Test APIs with curl",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Intermediate",
+          "timeToComplete": 1200,
+          "url": "https://developers.sap.com/tutorials/api-tools-postman-install.html",
+          "description": "Use curl and other tools to test SAP API endpoints directly."
+        },
+        {
+          "imsId": 23,
+          "title": "Explore SAP Event Mesh",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Intermediate",
+          "timeToComplete": 1500,
+          "url": "https://developers.sap.com/tutorials/cp-enterprisemessaging-instance-create.html",
+          "description": "Set up event-driven architectures with SAP Event Mesh."
+        },
+        {
+          "imsId": 24,
+          "title": "Integration Track Prize",
+          "type": "PRIZE",
+          "status": "",
+          "progress": 0,
+          "experience": "",
+          "timeToComplete": 0,
+          "url": "",
+          "description": "Congratulations! You earned a prize for completing the Integration track. Scan this code then contact an App Space expert to claim it.",
+          "recordId": 43298
+        }
+      ]
+    },
+    {
+      "id": 979,
+      "title": "Data and Analytics",
+      "description": "Get hands-on with SAP HANA Cloud. Provision instances, run advanced analytics, and explore data management.",
+      "items": [
+        {
+          "imsId": 25,
+          "title": "Start Using SAP HANA Cloud",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Beginner",
+          "timeToComplete": 900,
+          "url": "https://developers.sap.com/tutorials/hana-cloud-deploying.html",
+          "description": "Get started with SAP HANA Cloud and understand the basics of the platform."
+        },
+        {
+          "imsId": 26,
+          "title": "Provision an SAP HANA Cloud Instance",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Beginner",
+          "timeToComplete": 1200,
+          "url": "https://developers.sap.com/tutorials/hana-cloud-mission-trial-2.html",
+          "description": "Create and configure an SAP HANA Cloud instance in your trial account."
+        },
+        {
+          "imsId": 27,
+          "title": "Advanced Analytics with SAP HANA Cloud",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Intermediate",
+          "timeToComplete": 1800,
+          "url": "https://developers.sap.com/tutorials/hana-cloud-sqlscript-1.html",
+          "description": "Use SQLScript and advanced analytics features in SAP HANA Cloud."
+        },
+        {
+          "imsId": 28,
+          "title": "Data and Analytics Track Prize",
+          "type": "PRIZE",
+          "status": "",
+          "progress": 0,
+          "experience": "",
+          "timeToComplete": 0,
+          "url": "",
+          "description": "Congratulations! You earned a prize for completing the Data and Analytics track. Scan this code then contact an App Space expert to claim it.",
+          "recordId": 43299
+        }
+      ]
+    },
+    {
+      "id": 980,
+      "title": "SAP UI Technologies",
+      "description": "Build SAP Fiori apps with SAPUI5. Set up Business Application Studio, create projects, and debug applications.",
+      "items": [
+        {
+          "imsId": 29,
+          "title": "Set Up SAP Business Application Studio",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Beginner",
+          "timeToComplete": 600,
+          "url": "https://developers.sap.com/tutorials/appstudio-onboarding.html",
+          "description": "Subscribe to SAP Business Application Studio and create a development space."
+        },
+        {
+          "imsId": 30,
+          "title": "Create a Dev Space for SAPUI5",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Beginner",
+          "timeToComplete": 600,
+          "url": "https://developers.sap.com/tutorials/appstudio-devspace-fiori-create.html",
+          "description": "Create a specialized development space for SAPUI5 and SAP Fiori development."
+        },
+        {
+          "imsId": 31,
+          "title": "Create a Destination in SAP BTP",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Beginner",
+          "timeToComplete": 900,
+          "url": "https://developers.sap.com/tutorials/cp-cf-create-destination.html",
+          "description": "Configure HTTP destinations in SAP BTP for connecting to backend services."
+        },
+        {
+          "imsId": 32,
+          "title": "Create Your First SAPUI5 Project",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Intermediate",
+          "timeToComplete": 1500,
+          "url": "https://developers.sap.com/tutorials/sapui5-101-create-project.html",
+          "description": "Create a new SAPUI5 freestyle application from scratch."
+        },
+        {
+          "imsId": 33,
+          "title": "Debug Your SAPUI5 Application",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Intermediate",
+          "timeToComplete": 1200,
+          "url": "https://developers.sap.com/tutorials/sapui5-debug.html",
+          "description": "Use browser developer tools and SAPUI5 diagnostics to debug your application."
+        },
+        {
+          "imsId": 34,
+          "title": "UI Technologies Track Prize",
+          "type": "PRIZE",
+          "status": "",
+          "progress": 0,
+          "experience": "",
+          "timeToComplete": 0,
+          "url": "",
+          "description": "Congratulations! You earned a prize for completing the UI Technologies track. Scan this code then contact an App Space expert to claim it.",
+          "recordId": 43300
+        }
+      ]
+    },
+    {
+      "id": 981,
+      "title": "SAP UI Services",
+      "description": "Deploy and manage SAP UI applications. Learn CLI tools and MTA-based deployment workflows.",
+      "items": [
+        {
+          "imsId": 35,
+          "title": "Set Up Application Frontend with SAP Build Work Zone",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Beginner",
+          "timeToComplete": 900,
+          "url": "https://developers.sap.com/tutorials/btp-app-work-zone-setup.html",
+          "description": "Configure SAP Build Work Zone to host and manage your application frontends."
+        },
+        {
+          "imsId": 36,
+          "title": "Deploy with the Cloud Foundry CLI",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Intermediate",
+          "timeToComplete": 1200,
+          "url": "https://developers.sap.com/tutorials/btp-app-cf-deploy.html",
+          "description": "Use the CF CLI to deploy your application to SAP BTP Cloud Foundry."
+        },
+        {
+          "imsId": 37,
+          "title": "Deploy an MTA Application",
+          "type": "TUTORIAL",
+          "status": "",
+          "progress": 0,
+          "experience": "Intermediate",
+          "timeToComplete": 1500,
+          "url": "https://developers.sap.com/tutorials/btp-app-cap-mta-deployment.html",
+          "description": "Build and deploy a multi-target application (MTA) to SAP BTP."
+        },
+        {
+          "imsId": 38,
+          "title": "UI Services Track Prize",
+          "type": "PRIZE",
+          "status": "",
+          "progress": 0,
+          "experience": "",
+          "timeToComplete": 0,
+          "url": "",
+          "description": "Congratulations! You earned a prize for completing the UI Services track. Scan this code then contact an App Space expert to claim it.",
+          "recordId": 43301
+        }
+      ]
+    }
+  ]
+}
