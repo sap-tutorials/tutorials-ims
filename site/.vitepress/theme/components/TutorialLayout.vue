@@ -14,10 +14,9 @@ const points = ref(0)
 const badges = ref<Array<{ name: string; icon: string }>>([])
 const allExpanded = ref<boolean | null>(null)
 const navDropdownOpen = ref(false)
+const navToggleBtn = ref<HTMLElement | null>(null)
 
-function toggleNavDropdown(e: Event) {
-  e.preventDefault()
-  e.stopPropagation()
+function toggleNavDropdown() {
   navDropdownOpen.value = !navDropdownOpen.value
 }
 function closeNavDropdown() { navDropdownOpen.value = false }
@@ -109,17 +108,26 @@ onMounted(async () => {
     <nav class="tutorial-breadcrumb-bar">
       <div class="breadcrumb-inner breadcrumb-inner--with-dropdown">
         <ul class="fd-breadcrumb">
-          <li class="fd-breadcrumb__item">
-            <a class="fd-breadcrumb__link breadcrumb-dropdown-trigger" href="#" @click="toggleNavDropdown">
-              Tutorial Navigator <span class="breadcrumb-caret">&#9662;</span>
-            </a>
+          <li class="fd-breadcrumb__item breadcrumb-nav-item">
+            <a class="fd-breadcrumb__link" href="/">Tutorial Navigator</a>
+            <button ref="navToggleBtn" class="breadcrumb-dropdown-trigger" @click="toggleNavDropdown" aria-label="Toggle tutorial navigation">
+              <span class="breadcrumb-caret">&#9662;</span>
+            </button>
           </li>
-          <li class="fd-breadcrumb__item"><span class="fd-breadcrumb__link">{{ frontmatter.groupTitle }}</span></li>
+          <li class="fd-breadcrumb__item">
+            <a v-if="frontmatter.missionSlug" class="fd-breadcrumb__link" :href="`/tutorials/mission-${frontmatter.missionSlug}`">{{ frontmatter.missionTitle }}</a>
+            <span v-else class="fd-breadcrumb__link">{{ frontmatter.missionTitle }}</span>
+          </li>
+          <li class="fd-breadcrumb__item">
+            <a v-if="frontmatter.groupSlug" class="fd-breadcrumb__link" :href="`/tutorials/group-${frontmatter.groupSlug}`">{{ frontmatter.groupTitle }}</a>
+            <span v-else class="fd-breadcrumb__link">{{ frontmatter.groupTitle }}</span>
+          </li>
           <li class="fd-breadcrumb__item"><span class="fd-breadcrumb__link fd-breadcrumb__link--current">{{ frontmatter.title }}</span></li>
         </ul>
         <TutorialNavigatorDropdown
           :current-slug="frontmatter.slug"
           :is-open="navDropdownOpen"
+          :toggle-element="navToggleBtn"
           @close="closeNavDropdown"
         />
       </div>
@@ -292,12 +300,25 @@ onMounted(async () => {
 .breadcrumb-inner--with-dropdown {
   position: relative;
 }
+.breadcrumb-nav-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+}
 .breadcrumb-dropdown-trigger {
+  background: none;
+  border: none;
+  padding: 0.125rem 0.25rem;
   cursor: pointer;
+  color: inherit;
+  line-height: 1;
+  border-radius: 0.25rem;
+}
+.breadcrumb-dropdown-trigger:hover {
+  background: var(--sapNeutralBackground, #edeff0);
 }
 .breadcrumb-caret {
   font-size: 0.625rem;
-  margin-left: 0.15rem;
   vertical-align: middle;
 }
 .fd-breadcrumb {

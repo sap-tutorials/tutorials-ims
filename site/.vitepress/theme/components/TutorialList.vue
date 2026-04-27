@@ -17,7 +17,8 @@ const searchQuery = ref('')
 onMounted(async () => {
   const res = await fetch('/tutorials/_nav.json')
   if (res.ok) {
-    tutorials.value = await res.json()
+    const navData = await res.json()
+    tutorials.value = navData.tutorials ?? navData
   }
 })
 

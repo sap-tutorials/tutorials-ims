@@ -54,8 +54,31 @@ export interface TutorialNavEntry {
   missionTitle: string
   groupId: number
   groupTitle: string
+  missionSlug: string
+  groupSlug: string
   prev: string | null
   next: string | null
+}
+
+export interface GroupRef {
+  id: number
+  title: string
+  slug: string
+  missionId: number
+  tutorials: string[]
+}
+
+export interface MissionMeta {
+  id: number
+  title: string
+  slug: string
+  groups: GroupRef[]
+}
+
+export interface NavData {
+  tutorials: TutorialNavEntry[]
+  missions: MissionMeta[]
+  groups: GroupRef[]
 }
 
 export const RAW_BASE_URL = 'https://raw.githubusercontent.com'

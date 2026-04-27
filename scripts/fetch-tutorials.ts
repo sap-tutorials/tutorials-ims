@@ -8,11 +8,18 @@ import { parseV1Steps } from './parsers/v1.js'
 import { resolveImageURLs } from './parsers/images.js'
 import { convertOptionBlocks } from './parsers/options.js'
 import { fetchGitHubMeta } from './parsers/github.js'
-import type { TutorialStep, TutorialNavEntry, ValidationQuestion, GitHubContributor } from './parsers/types.js'
+import type { TutorialStep, TutorialNavEntry, ValidationQuestion, GitHubContributor, MissionMeta, GroupRef, NavData } from './parsers/types.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const MISSION_TITLE = 'Combine CAP with SAP HANA Cloud to Create Full-Stack Applications'
+const MISSION_SLUG = 'hana-cloud-cap'
+const MISSION_ID = 14094
+
+const GROUP_META: Record<number, { title: string; slug: string }> = {
+  14091: { title: 'Set Up SAP HANA Cloud and CAP Project', slug: 'hana-cloud-cap-setup' },
+  14092: { title: 'Build a Full-Stack Application', slug: 'hana-cloud-cap-build-full-stack' },
+}
 
 const POC_TUTORIALS: Array<{
   slug: string
@@ -21,11 +28,11 @@ const POC_TUTORIALS: Array<{
   groupId: number
   groupTitle: string
 }> = [
-  { slug: 'hana-cloud-deploying', repo: 'Tutorials', missionId: 14094, groupId: 14091, groupTitle: 'Set Up SAP HANA Cloud and CAP Project' },
-  { slug: 'hana-cloud-cap-create-project', repo: 'Tutorials', missionId: 14094, groupId: 14091, groupTitle: 'Set Up SAP HANA Cloud and CAP Project' },
-  { slug: 'hana-cloud-cap-create-database-cds', repo: 'Tutorials', missionId: 14094, groupId: 14091, groupTitle: 'Set Up SAP HANA Cloud and CAP Project' },
-  { slug: 'hana-cloud-cap-create-ui', repo: 'Tutorials', missionId: 14094, groupId: 14092, groupTitle: 'Build a Full-Stack Application' },
-  { slug: 'hana-cloud-cap-add-authentication', repo: 'Tutorials', missionId: 14094, groupId: 14092, groupTitle: 'Build a Full-Stack Application' },
+  { slug: 'hana-cloud-deploying', repo: 'Tutorials', missionId: MISSION_ID, groupId: 14091, groupTitle: 'Set Up SAP HANA Cloud and CAP Project' },
+  { slug: 'hana-cloud-cap-create-project', repo: 'Tutorials', missionId: MISSION_ID, groupId: 14091, groupTitle: 'Set Up SAP HANA Cloud and CAP Project' },
+  { slug: 'hana-cloud-cap-create-database-cds', repo: 'Tutorials', missionId: MISSION_ID, groupId: 14091, groupTitle: 'Set Up SAP HANA Cloud and CAP Project' },
+  { slug: 'hana-cloud-cap-create-ui', repo: 'Tutorials', missionId: MISSION_ID, groupId: 14092, groupTitle: 'Build a Full-Stack Application' },
+  { slug: 'hana-cloud-cap-add-authentication', repo: 'Tutorials', missionId: MISSION_ID, groupId: 14092, groupTitle: 'Build a Full-Stack Application' },
 ]
 
 const CACHE_DIR = join(__dirname, '..', '.tutorial-cache')
@@ -118,8 +125,10 @@ function buildNavEntries(): TutorialNavEntry[] {
     displayTags: [],
     missionId: t.missionId,
     missionTitle: MISSION_TITLE,
+    missionSlug: MISSION_SLUG,
     groupId: t.groupId,
     groupTitle: t.groupTitle,
+    groupSlug: GROUP_META[t.groupId]?.slug ?? '',
     prev: i > 0 ? POC_TUTORIALS[i - 1].slug : null,
     next: i < POC_TUTORIALS.length - 1 ? POC_TUTORIALS[i + 1].slug : null,
   }))
@@ -156,8 +165,10 @@ function writeVitePressPage(
     stepCount: steps.length,
     missionId: nav.missionId,
     missionTitle: MISSION_TITLE,
+    missionSlug: MISSION_SLUG,
     groupId: nav.groupId,
     groupTitle: nav.groupTitle,
+    groupSlug: GROUP_META[nav.groupId]?.slug ?? '',
     prev: nav.prev,
     next: nav.next,
     displayTags: [...new Set([primaryTag, ...tags])].map(humanizeTag).filter(t => t.length > 0),
@@ -183,6 +194,80 @@ function writeVitePressPage(
 
   mkdirSync(OUTPUT_DIR, { recursive: true })
   writeFileSync(join(OUTPUT_DIR, `${slug}.md`), content, 'utf-8')
+}
+
+const LEVEL_ORDER: Record<string, number> = { beginner: 0, intermediate: 1, advanced: 2 }
+
+function lowestLevel(levels: string[]): string {
+  return levels.sort((a, b) => (LEVEL_ORDER[a] ?? 9) - (LEVEL_ORDER[b] ?? 9))[0] || 'beginner'
+}
+
+function writeMissionPage(navEntries: TutorialNavEntry[]): void {
+  const groupMap = new Map<number, TutorialNavEntry[]>()
+  for (const t of navEntries) {
+    const list = groupMap.get(t.groupId) ?? []
+    list.push(t)
+    groupMap.set(t.groupId, list)
+  }
+
+  const groups = Array.from(groupMap.entries()).map(([groupId, tuts]) => ({
+    id: groupId,
+    slug: GROUP_META[groupId]?.slug ?? '',
+    title: GROUP_META[groupId]?.title ?? tuts[0].groupTitle,
+    tutorials: tuts.map(t => ({
+      slug: t.slug, title: t.title, description: t.description,
+      time: t.time, level: t.level, stepCount: t.stepCount, primaryTag: t.primaryTag,
+    })),
+  }))
+
+  const allTags = [...new Set(navEntries.flatMap(t => t.displayTags))]
+  const totalTime = navEntries.reduce((sum, t) => sum + t.time, 0)
+
+  const fm: Record<string, unknown> = {
+    layout: 'mission',
+    slug: MISSION_SLUG,
+    missionId: MISSION_ID,
+    title: MISSION_TITLE,
+    tutorialCount: navEntries.length,
+    groupCount: groups.length,
+    totalTime,
+    level: lowestLevel(navEntries.map(t => t.level)),
+    displayTags: allTags,
+    groups,
+  }
+
+  const content = `---\n${yamlStringify(fm).trimEnd()}\n---\n`
+  writeFileSync(join(OUTPUT_DIR, `mission-${MISSION_SLUG}.md`), content, 'utf-8')
+}
+
+function writeGroupPage(groupId: number, navEntries: TutorialNavEntry[]): void {
+  const groupTuts = navEntries.filter(t => t.groupId === groupId)
+  const meta = GROUP_META[groupId]
+  if (!meta || !groupTuts.length) return
+
+  const allTags = [...new Set(groupTuts.flatMap(t => t.displayTags))]
+  const totalTime = groupTuts.reduce((sum, t) => sum + t.time, 0)
+
+  const fm: Record<string, unknown> = {
+    layout: 'group',
+    slug: meta.slug,
+    groupId,
+    title: meta.title,
+    missionId: MISSION_ID,
+    missionTitle: MISSION_TITLE,
+    missionSlug: MISSION_SLUG,
+    tutorialCount: groupTuts.length,
+    totalTime,
+    level: lowestLevel(groupTuts.map(t => t.level)),
+    displayTags: allTags,
+    tutorials: groupTuts.map(t => ({
+      slug: t.slug, title: t.title, description: t.description,
+      time: t.time, level: t.level, stepCount: t.stepCount, primaryTag: t.primaryTag,
+    })),
+  }
+
+  const content = `---\n${yamlStringify(fm).trimEnd()}\n---\n`
+  writeFileSync(join(OUTPUT_DIR, `group-${meta.slug}.md`), content, 'utf-8')
 }
 
 async function main() {
@@ -236,9 +321,45 @@ async function main() {
     console.log(`  → ${steps.length} steps, level: ${level}, time: ${frontmatter.time}min`)
   }
 
+  writeMissionPage(navEntries)
+  const groupIds = [...new Set(POC_TUTORIALS.map(t => t.groupId))]
+  for (const gid of groupIds) {
+    writeGroupPage(gid, navEntries)
+  }
+
+  const groupMap = new Map<number, string[]>()
+  for (const t of navEntries) {
+    const list = groupMap.get(t.groupId) ?? []
+    list.push(t.slug)
+    groupMap.set(t.groupId, list)
+  }
+
+  const navData: NavData = {
+    tutorials: navEntries,
+    missions: [{
+      id: MISSION_ID,
+      title: MISSION_TITLE,
+      slug: MISSION_SLUG,
+      groups: groupIds.map(gid => ({
+        id: gid,
+        title: GROUP_META[gid]?.title ?? '',
+        slug: GROUP_META[gid]?.slug ?? '',
+        missionId: MISSION_ID,
+        tutorials: groupMap.get(gid) ?? [],
+      })),
+    }],
+    groups: groupIds.map(gid => ({
+      id: gid,
+      title: GROUP_META[gid]?.title ?? '',
+      slug: GROUP_META[gid]?.slug ?? '',
+      missionId: MISSION_ID,
+      tutorials: groupMap.get(gid) ?? [],
+    })),
+  }
+
   const navPath = join(OUTPUT_DIR, '_nav.json')
-  writeFileSync(navPath, JSON.stringify(navEntries, null, 2), 'utf-8')
-  console.log(`\nWrote ${POC_TUTORIALS.length} tutorials + nav to ${OUTPUT_DIR}`)
+  writeFileSync(navPath, JSON.stringify(navData, null, 2), 'utf-8')
+  console.log(`\nWrote ${POC_TUTORIALS.length} tutorials + ${groupIds.length} groups + 1 mission + nav to ${OUTPUT_DIR}`)
 }
 
 main().catch(err => {

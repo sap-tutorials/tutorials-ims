@@ -32,7 +32,22 @@ interface CardItem {
   stepCount: number
 }
 
+interface MissionRef {
+  id: number
+  slug: string
+  title: string
+}
+
+interface GroupRef {
+  id: number
+  slug: string
+  title: string
+  missionId: number
+}
+
 const tutorials = ref<TutorialEntry[]>([])
+const missionsMeta = ref<MissionRef[]>([])
+const groupsMeta = ref<GroupRef[]>([])
 const searchQuery = ref('')
 const filtersOpen = ref(true)
 const productSearch = ref('')
@@ -48,7 +63,10 @@ const filters = reactive({
 onMounted(async () => {
   const res = await fetch('/tutorials/_nav.json')
   if (res.ok) {
-    tutorials.value = await res.json()
+    const navData = await res.json()
+    tutorials.value = navData.tutorials ?? navData
+    missionsMeta.value = navData.missions ?? []
+    groupsMeta.value = navData.groups ?? []
   }
 })
 
@@ -103,6 +121,7 @@ const allCards = computed<CardItem[]>(() => {
 
   for (const [missionId, mTuts] of missionGroups) {
     const allTags = [...new Set(mTuts.flatMap(t => t.displayTags))]
+    const mMeta = missionsMeta.value.find(m => m.id === missionId)
     items.push({
       type: 'mission',
       id: `mission-${missionId}`,
@@ -113,13 +132,14 @@ const allCards = computed<CardItem[]>(() => {
       tutorialCount: mTuts.length,
       primaryTag: mTuts[0].primaryTag,
       displayTags: allTags,
-      href: `/tutorials/${mTuts[0].slug}`,
+      href: mMeta ? `/tutorials/mission-${mMeta.slug}` : `/tutorials/${mTuts[0].slug}`,
       stepCount: mTuts.reduce((sum, t) => sum + t.stepCount, 0),
     })
   }
 
   for (const [groupId, gTuts] of groupMap) {
     const allTags = [...new Set(gTuts.flatMap(t => t.displayTags))]
+    const gMeta = groupsMeta.value.find(g => g.id === groupId)
     items.push({
       type: 'group',
       id: `group-${groupId}`,
@@ -130,7 +150,7 @@ const allCards = computed<CardItem[]>(() => {
       tutorialCount: gTuts.length,
       primaryTag: gTuts[0].primaryTag,
       displayTags: allTags,
-      href: `/tutorials/${gTuts[0].slug}`,
+      href: gMeta ? `/tutorials/group-${gMeta.slug}` : `/tutorials/${gTuts[0].slug}`,
       stepCount: gTuts.reduce((sum, t) => sum + t.stepCount, 0),
     })
   }

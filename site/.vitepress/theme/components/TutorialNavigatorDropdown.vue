@@ -15,6 +15,7 @@ interface NavEntry {
 const props = defineProps<{
   currentSlug: string
   isOpen: boolean
+  toggleElement?: HTMLElement | null
 }>()
 
 const emit = defineEmits<{
@@ -38,7 +39,9 @@ const groups = computed(() => {
 const missionTitle = computed(() => navEntries.value[0]?.missionTitle ?? '')
 
 function onClickOutside(e: MouseEvent) {
-  if (dropdownEl.value && !dropdownEl.value.contains(e.target as Node)) {
+  const target = e.target as Node
+  if (dropdownEl.value && !dropdownEl.value.contains(target) &&
+      !(props.toggleElement && props.toggleElement.contains(target))) {
     emit('close')
   }
 }
@@ -46,7 +49,10 @@ function onClickOutside(e: MouseEvent) {
 onMounted(async () => {
   try {
     const res = await fetch('/tutorials/_nav.json')
-    if (res.ok) navEntries.value = await res.json()
+    if (res.ok) {
+      const navData = await res.json()
+      navEntries.value = navData.tutorials ?? navData
+    }
   } catch {}
   document.addEventListener('click', onClickOutside, true)
 })
