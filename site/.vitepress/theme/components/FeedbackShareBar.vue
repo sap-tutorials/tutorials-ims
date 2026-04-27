@@ -89,17 +89,17 @@ function closeAll() {
           <div class="feedback-option">
             <svg width="48" height="48" viewBox="0 0 48 48" fill="none"><path d="M18 28.5c-.56 0-1.03-.2-1.41-.59-.38-.44-.56-.93-.56-1.47v-6.09H7.41c-.38 0-.7.15-.98.44-.28.3-.43.67-.43 1.1v10.2c0 .39.14.72.42 1.03.28.29.63.44 1 .44h2.74c.05.15.07.34.07.59.05.2.05.49 0 .85-.14.83-.41 1.47-.79 1.91-.33.39-.5.59-.5.59s.42-.05 1.27-.15c.84-.1 1.59-.47 2.25-1.11.47-.39.72-.86.92-1.4.19-.54.28-1 .28-1.34h11.33c.38 0 .7-.15.98-.44.28-.29.43-.66.43-1.03V28.5H18zm22.15-18H14.29c-.47 0-.89.17-1.27.51-.37.34-.56.78-.56 1.32v12.99c0 .49.16.93.5 1.32.37.34.82.51 1.34.51h13.27c.05.44.17 1 .35 1.69.23.69.63 1.3 1.19 1.83.84.78 1.8 1.24 2.88 1.39 1.08.15 1.62.22 1.62.22s-.23-.27-.7-.81c-.42-.54-.73-1.37-.98-2.49-.09-.39-.14-.74-.14-1.03.05-.29.12-.56.21-.74h3.17c.47 0 .87-.17 1.19-.51.38-.34.56-.78.56-1.32V11.83c0-.49-.16-.91-.49-1.25-.33-.39-.75-.59-1.27-.59z" fill="#E8A400"/></svg>
             <span>Get help doing the tutorial</span>
-            <a :href="communityUrl" target="_blank" rel="noopener" class="feedback-btn feedback-btn--blue">Ask the community</a>
+            <a :href="communityUrl" target="_blank" rel="noopener" class="feedback-btn">Ask the community</a>
           </div>
           <div class="feedback-option">
             <svg width="48" height="48" viewBox="0 0 48 48" fill="none"><path d="M24 8c-1.1 0-2 .45-2.7 1.35l-1.3 2c-.3.45-.6.7-1 .8l-2.3.5c-1.1.25-1.85.85-2.25 1.8-.4.95-.3 1.9.3 2.8l1.5 1.9c.3.35.4.75.35 1.15l-.25 2.4c-.1 1.1.2 2 .95 2.65.75.65 1.6.85 2.6.55l2.3-.7c.4-.15.8-.15 1.2 0l2.3.7c1 .3 1.85.1 2.6-.55.75-.65 1.05-1.55.95-2.65l-.25-2.4c-.05-.4.05-.8.35-1.15l1.5-1.9c.6-.9.7-1.85.3-2.8-.4-.95-1.15-1.55-2.25-1.8l-2.3-.5c-.4-.1-.7-.35-1-.8l-1.3-2C26 8.45 25.1 8 24 8zm0 28v4m-8-2l2-3.46M16 38l-2-3.46M32 38l-2-3.46m2 3.46l2-3.46" stroke="#E8A400" stroke-width="2" fill="none"/></svg>
             <span>Help improve the tutorial</span>
-            <a :href="githubIssueUrl" target="_blank" rel="noopener" class="feedback-btn feedback-btn--orange">Contribute suggestion</a>
+            <a :href="githubIssueUrl" target="_blank" rel="noopener" class="feedback-btn">Contribute suggestion</a>
           </div>
           <div class="feedback-option">
             <svg width="48" height="48" viewBox="0 0 48 48" fill="none"><rect x="10" y="12" width="28" height="20" rx="2" stroke="#E8A400" stroke-width="2" fill="none"/><path d="M10 16l14 10 14-10" stroke="#E8A400" stroke-width="2" fill="none"/><path d="M18 36h12M22 36v-4h4v4" stroke="#E8A400" stroke-width="2" fill="none"/></svg>
             <span>Send us your thoughts</span>
-            <a :href="surveyUrl" target="_blank" rel="noopener" class="feedback-btn feedback-btn--teal">Take our survey</a>
+            <a :href="surveyUrl" target="_blank" rel="noopener" class="feedback-btn">Take our survey</a>
           </div>
         </div>
       </div>
@@ -226,19 +226,19 @@ function closeAll() {
 }
 .feedback-btn {
   display: inline-block;
-  padding: 0.5rem 1rem;
-  border-radius: 0.375rem;
+  padding: 0 1.25rem;
+  height: 2.25rem;
+  line-height: 2.25rem;
+  border-radius: 0.25rem;
+  background: #085caf;
   color: #fff;
   text-decoration: none;
-  font-size: 0.8125rem;
-  font-weight: 600;
+  font-size: 0.875rem;
+  font-weight: 700;
   white-space: nowrap;
-  transition: opacity 0.15s;
+  transition: background 0.15s;
 }
-.feedback-btn:hover { opacity: 0.85; color: #fff; }
-.feedback-btn--blue { background: #0070f2; }
-.feedback-btn--orange { background: #e76500; }
-.feedback-btn--teal { background: #0a7e8c; }
+.feedback-btn:hover { background: #064a8a; color: #fff; }
 
 /* Share icons */
 .share-icons {
