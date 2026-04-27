@@ -1,6 +1,8 @@
-# SAP Tutorial Platform POC
+# SAP Tutorial Platform
 
-A VitePress-based static site that replaces Adobe Experience Manager (AEM) as the tutorial hosting platform for [developers.sap.com](https://developers.sap.com). Fetches tutorial markdown from the [`sap-tutorials`](https://github.com/sap-tutorials) GitHub organization at build time, renders it with SAP Fiori Horizon styling, and deploys on SAP BTP Cloud Foundry behind an AppRouter with XSUAA authentication.
+A VitePress-based static site replacing Adobe Experience Manager (AEM) and the Git-based authoring interface as the tutorial hosting platform for [developers.sap.com](https://developers.sap.com). Fetches tutorial markdown from the [`sap-tutorials`](https://github.com/sap-tutorials) GitHub organization at build time, renders it with SAP Fiori Horizon styling, and deploys on SAP BTP Cloud Foundry behind an AppRouter with XSUAA authentication.
+
+> **Note:** This project began as a proof-of-concept and has been promoted to a **production replacement** for the AEM tutorial hosting and Git interface portions of developers.sap.com (as of April 2026).
 
 **Stack:** VitePress 1.6 &middot; Vue 3.5 &middot; SAP Fundamental Styles &middot; TypeScript &middot; SAP BTP
 
@@ -184,9 +186,9 @@ Test coverage includes unit tests for all parsers: V1 step extraction, V2 step e
 
 - **`site/tutorials/` is entirely generated.** Never edit these files directly. They are overwritten by `npm run fetch-tutorials`. To change tutorial content, edit the source in the `sap-tutorials` GitHub org. To change how content is parsed, edit `scripts/parsers/`.
 
-- **The POC tutorial list is hardcoded.** The 5 tutorials (one mission, two groups) are defined in the `POC_TUTORIALS` array at the top of `scripts/fetch-tutorials.ts`. Adding tutorials means editing that array.
+- **The tutorial list is hardcoded.** The tutorials (one mission, two groups) are defined in the `POC_TUTORIALS` array at the top of `scripts/fetch-tutorials.ts`. Adding tutorials means editing that array. This will be replaced with dynamic discovery as part of the production buildout.
 
-- **Validation quiz data is hardcoded.** The `VALIDATION_DATA` object in `scripts/fetch-tutorials.ts` contains step quiz questions. This is a POC shortcut — production would source these from the CAP backend.
+- **Validation quiz data is hardcoded.** The `VALIDATION_DATA` object in `scripts/fetch-tutorials.ts` contains step quiz questions. Production will source these from the CAP backend.
 
 - **Cache clearing.** `.tutorial-cache/` caches raw markdown and GitHub metadata. Delete it to force a full re-fetch from GitHub. There is no incremental invalidation.
 
@@ -194,4 +196,4 @@ Test coverage includes unit tests for all parsers: V1 step extraction, V2 step e
 
 ## License
 
-SAP Internal POC &mdash; Not for redistribution.
+SAP Internal &mdash; Not for redistribution.
