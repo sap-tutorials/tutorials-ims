@@ -47,11 +47,23 @@ The `/bin/sapdx/*` paths are **AEM Sling servlets**, not IMS endpoints. AEM acts
 
 The `/api/*` paths go to the **CAP backend** — a separate Node.js service that is the planned replacement for the AEM proxy layer.
 
+### Cross-Reference Confidence Levels
+
+The IMS endpoint mappings below are **inferred** by matching AEM response shapes to IMS's API surface. We do not have access to the AEM Sling servlet source code, so the exact internal call chains are not directly observable. Each endpoint is annotated with a confidence level:
+
+| Level | Meaning |
+|---|---|
+| **HIGH** | The IMS endpoint clearly matches the data in the AEM response. The mapping is unambiguous. |
+| **MEDIUM** | The IMS endpoint is the most likely source for the data, but AEM may call additional endpoints or perform extra transformations we cannot verify. |
+| **LOW** | The AEM endpoint has no clear IMS equivalent, or the internal behavior is largely opaque. The IMS mapping is speculative or absent. |
+
 ---
 
 ## Endpoint-by-Endpoint Cross-Reference
 
 ### 1. miniNavigator — Mission Structure with Progress
+
+> **Confidence: MEDIUM** — The response shape (nested Mission → Group → Tutorial with progress) strongly suggests `completion-graph` and `findTaskProgressByUserAndTasksIds`, but AEM may call additional IMS endpoints or perform transformations we cannot verify without the Sling servlet source.
 
 | Layer | Detail |
 |---|---|
@@ -95,6 +107,8 @@ The `/api/*` paths go to the **CAP backend** — a separate Node.js service that
 ---
 
 ### 2. Progress Series — Mission Progress with Tracks
+
+> **Confidence: MEDIUM** — The core tutorial/group progress maps clearly to `completion-graph` and `byUserAndTasks`. However, the response also includes `eventId`, item-level `experience` tags, `recordId` fields, and CHECKPOINT/PRIZE item types — suggesting AEM also calls prize-record and possibly event-related IMS endpoints that we cannot confirm. The `recordId` field in particular implies AEM fetches or creates `TaskRecord` / `PrizeRecord` IDs and passes them through.
 
 | Layer | Detail |
 |---|---|
@@ -148,6 +162,8 @@ The `/api/*` paths go to the **CAP backend** — a separate Node.js service that
 
 ### 3. Solr Search — Mission Icon Lookup
 
+> **Confidence: LOW** — This endpoint queries AEM's own Apache Solr content index. **There is no IMS equivalent.** IMS has no `icon` field on Mission or any other entity. The Solr index is built from AEM content pages and is entirely outside the IMS domain. Any replacement must source icons from a different system (build-time metadata, a new CAP/IMS field, or a static asset mapping).
+
 | Layer | Detail |
 |---|---|
 | **Frontend call** | `GET /bin/sapdx/v3/solr/search?json={encoded_query}` |
@@ -171,6 +187,8 @@ The `/api/*` paths go to the **CAP backend** — a separate Node.js service that
 
 ### 4. QR Code Generation
 
+> **Confidence: LOW** — This endpoint returns a generated **QR code image**, not JSON data. We can infer from the parameters (`imsId`, `recordId`, `type`) that AEM validates against IMS prize records, but the actual behavior is opaque: what URL gets encoded in the QR image, what happens when scanned (prize fulfillment flow), and exactly which IMS endpoints are called are all inside the AEM servlet. The IMS mappings below (`prize-records`) are plausible but speculative.
+
 | Layer | Detail |
 |---|---|
 | **Frontend URL** | `/bin/sapdx/github/qrcode?imsId={id}&type={type}&eventId=38&recordId={recordId}` |
@@ -186,6 +204,8 @@ The `/api/*` paths go to the **CAP backend** — a separate Node.js service that
 ---
 
 ### 5. Tutorial Progress — CAP Backend (New)
+
+> **Confidence: HIGH** — This is a CAP endpoint with clear IMS equivalents. The `completedSteps` array maps directly to `findTaskProgressByUserAndTasksIds` (which returns step-level records). The `points` and `badges` fields map to `findUserProgress` and accomplishment records.
 
 | Layer | Detail |
 |---|---|
@@ -211,6 +231,8 @@ The `/api/*` paths go to the **CAP backend** — a separate Node.js service that
 
 ### 6. Mark Step Complete — CAP Backend (New)
 
+> **Confidence: HIGH** — The IMS pattern for recording step completion is well-documented: `POST /task-records` creates a `TaskRecord` entity, which triggers event-driven cascading via status calculators. The one-to-one mapping is clear.
+
 | Layer | Detail |
 |---|---|
 | **Frontend call** | `POST /api/tutorials/{slug}/steps/{stepNumber}/complete` |
@@ -226,6 +248,8 @@ The `/api/*` paths go to the **CAP backend** — a separate Node.js service that
 ---
 
 ### 7. Mission Navigation Tree — CAP Backend (New)
+
+> **Confidence: HIGH** — This directly replaces the miniNavigator AEM servlet. The IMS `completion-graph` endpoint returns the same Mission → Group → Tutorial hierarchy that this endpoint reshapes.
 
 | Layer | Detail |
 |---|---|
@@ -265,6 +289,8 @@ The `/api/*` paths go to the **CAP backend** — a separate Node.js service that
 
 ### 8. Tutorial Catalog — Static Build Artifact
 
+> **Confidence: HIGH** — No IMS involvement at all. Content is sourced from GitHub at build time. The IMS equivalents listed below are for reference only (what the old AEM-based catalog used).
+
 | Layer | Detail |
 |---|---|
 | **Frontend call** | `GET /tutorials/_nav.json` |
@@ -279,30 +305,30 @@ The `/api/*` paths go to the **CAP backend** — a separate Node.js service that
 
 ## Summary: Migration Status
 
-| # | Frontend Endpoint | Current Backend | IMS Dependency | Migration Status |
-|---|---|---|---|---|
-| 1 | `/bin/sapdx/v2/tutorial/miniNavigator.{id}.json` | AEM → IMS | Yes: completion-graph, task-records | **Replaced** by CAP `/api/missions/{id}/navigation` |
-| 2 | `/bin/sapdx/tutorials/v3/progress/series?missionId={id}` | AEM → IMS | Yes: completion-graph, task-records, users | **Still AEM** — used by AppSpace.vue |
-| 3 | `/bin/sapdx/v3/solr/search?json=...` | AEM Solr only | **No** — AEM content index | **Still AEM** — icon lookup, no IMS equivalent |
-| 4 | `/bin/sapdx/github/qrcode?...` | AEM → IMS | Yes: prize-records | **Still AEM** — event-specific |
-| 5 | `/api/tutorials/{slug}/progress` | CAP backend | TBD | **New** — CAP replaces AEM |
-| 6 | `/api/tutorials/{slug}/steps/{n}/complete` | CAP backend | TBD | **New** — CAP replaces AEM |
-| 7 | `/api/missions/{id}/navigation` | CAP backend | TBD | **New** — CAP replaces AEM |
-| 8 | `/tutorials/_nav.json` | Static file | **No** | **New** — GitHub-sourced |
+| # | Frontend Endpoint | Current Backend | IMS Dependency | Confidence | Migration Status |
+|---|---|---|---|---|---|
+| 1 | `/bin/sapdx/v2/tutorial/miniNavigator.{id}.json` | AEM → IMS | Yes: completion-graph, task-records | MEDIUM | **Replaced** by CAP `/api/missions/{id}/navigation` |
+| 2 | `/bin/sapdx/tutorials/v3/progress/series?missionId={id}` | AEM → IMS | Yes: completion-graph, task-records, users; possibly prize-records | MEDIUM | **Still AEM** — used by AppSpace.vue |
+| 3 | `/bin/sapdx/v3/solr/search?json=...` | AEM Solr only | **No** — AEM content index, no IMS equivalent | LOW | **Still AEM** — icon lookup |
+| 4 | `/bin/sapdx/github/qrcode?...` | AEM → IMS (speculative) | Possibly: prize-records | LOW | **Still AEM** — event-specific |
+| 5 | `/api/tutorials/{slug}/progress` | CAP backend | Yes: findTaskProgressByUserAndTasksIds, findUserProgress | HIGH | **New** — CAP replaces AEM |
+| 6 | `/api/tutorials/{slug}/steps/{n}/complete` | CAP backend | Yes: POST /task-records | HIGH | **New** — CAP replaces AEM |
+| 7 | `/api/missions/{id}/navigation` | CAP backend | Yes: completion-graph, export | HIGH | **New** — CAP replaces AEM |
+| 8 | `/tutorials/_nav.json` | Static file | **No** | HIGH | **New** — GitHub-sourced |
 
 ### IMS Endpoints Used by AEM (Summary)
 
-These are the IMS REST endpoints that AEM's Sling servlets call internally:
+These are the IMS REST endpoints that AEM's Sling servlets call internally. Since we do not have AEM servlet source code, these mappings are inferred from response shapes and IMS API surface analysis.
 
-| IMS Endpoint | Used By (AEM Servlet) | Purpose |
-|---|---|---|
-| `GET /missions/{id}/completion-graph?userId={id}` | miniNavigator, progressSeries | Mission hierarchy + user progress |
-| `GET /task-records/search/findTaskProgressByUserAndTasksIds` | miniNavigator | Step-level progress |
-| `GET /task-records/search/byUserAndTasks` | progressSeries | Bulk progress lookup |
-| `POST /task-records` | Step completion flow | Record task done |
-| `GET /users/resolve?accountNumber={acct}` | All authenticated calls | Map IDP session → IMS userId |
-| `PATCH /prize-records/{id}` | QR code / prize claim | Update prize status |
-| `GET /prize-records/findByUserAndPrizeIds` | Prize display | Check prize eligibility |
+| IMS Endpoint | Used By (AEM Servlet) | Purpose | Confidence |
+|---|---|---|---|
+| `GET /missions/{id}/completion-graph?userId={id}` | miniNavigator, progressSeries | Mission hierarchy + user progress | MEDIUM |
+| `GET /task-records/search/findTaskProgressByUserAndTasksIds` | miniNavigator | Step-level progress | MEDIUM |
+| `GET /task-records/search/byUserAndTasks` | progressSeries | Bulk progress lookup | MEDIUM |
+| `POST /task-records` | Step completion flow | Record task done | HIGH |
+| `GET /users/resolve?accountNumber={acct}` | All authenticated calls | Map IDP session → IMS userId | MEDIUM |
+| `PATCH /prize-records/{id}` | QR code / prize claim | Update prize status | LOW |
+| `GET /prize-records/findByUserAndPrizeIds` | Prize display | Check prize eligibility | LOW |
 
 ### What the CAP Backend Must Handle
 
