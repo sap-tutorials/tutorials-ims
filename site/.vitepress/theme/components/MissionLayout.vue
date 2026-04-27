@@ -4,6 +4,7 @@ import { useData } from 'vitepress'
 import { useAemEnrichment } from '../composables/useAemEnrichment'
 import ProgressBar from './ProgressBar.vue'
 import TutorialNavigatorDropdown from './TutorialNavigatorDropdown.vue'
+import FeedbackShareBar from './FeedbackShareBar.vue'
 
 const { frontmatter } = useData()
 const { data: aemData, loading, fetchForMission } = useAemEnrichment()
@@ -100,15 +101,7 @@ onMounted(() => {
     </nav>
 
     <!-- Action bar -->
-    <div class="mission-action-bar">
-      <div class="action-bar-inner">
-        <div class="action-bar-nav"></div>
-        <div class="action-bar-actions">
-          <span class="action-link">&#128172; Feedback</span>
-          <span class="action-link">&#8618; Share</span>
-        </div>
-      </div>
-    </div>
+    <FeedbackShareBar :title="frontmatter.title" :slug="frontmatter.slug" page-type="mission" />
 
     <!-- Hero -->
     <section class="mission-hero">
@@ -229,33 +222,6 @@ onMounted(() => {
 .fd-breadcrumb { padding: 0; margin: 0; }
 .breadcrumb-inner .fd-breadcrumb__link { font-size: 0.8125rem; }
 .breadcrumb-inner .fd-breadcrumb__link--current { color: var(--sapTextColor, #32363a); cursor: default; }
-
-/* Action bar */
-.mission-action-bar {
-  background: var(--sapShellColor, #354a5f);
-  padding: 0.625rem 0;
-}
-.action-bar-inner {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 0 2rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.action-bar-actions {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-}
-.action-link {
-  color: var(--sapShell_TextColor, #fff);
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  opacity: 0.9;
-}
-.action-link:hover { opacity: 1; }
 
 .mission-hero {
   background: var(--sapShellColor, #354a5f);

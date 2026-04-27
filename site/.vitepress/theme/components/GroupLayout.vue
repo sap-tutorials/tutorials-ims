@@ -3,6 +3,7 @@ import { computed, onMounted } from 'vue'
 import { useData } from 'vitepress'
 import { useAemEnrichment } from '../composables/useAemEnrichment'
 import ProgressBar from './ProgressBar.vue'
+import FeedbackShareBar from './FeedbackShareBar.vue'
 
 const { frontmatter } = useData()
 const { data: aemData, fetchForMission } = useAemEnrichment()
@@ -58,6 +59,9 @@ onMounted(() => {
         </ul>
       </div>
     </nav>
+
+    <!-- Action bar -->
+    <FeedbackShareBar :title="frontmatter.title" :slug="frontmatter.slug" page-type="group" />
 
     <!-- Hero -->
     <section class="group-hero">

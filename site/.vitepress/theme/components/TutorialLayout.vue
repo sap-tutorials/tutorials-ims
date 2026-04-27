@@ -5,6 +5,7 @@ import { useApi } from '../composables/useApi'
 import ProgressBar from './ProgressBar.vue'
 import PointsBadge from './PointsBadge.vue'
 import TutorialNavigatorDropdown from './TutorialNavigatorDropdown.vue'
+import FeedbackShareBar from './FeedbackShareBar.vue'
 
 const { frontmatter } = useData()
 const { get } = useApi()
@@ -134,22 +135,18 @@ onMounted(async () => {
     </nav>
 
     <!-- Action bar -->
-    <div class="tutorial-action-bar">
-      <div class="action-bar-inner">
-        <div class="action-bar-nav">
-          <a v-if="frontmatter.prev" :href="`/tutorials/${frontmatter.prev}`" class="nav-pill">
-            &larr; Previous
-          </a>
-        </div>
-        <div class="action-bar-actions">
-          <span class="action-link">&#128172; Feedback</span>
-          <span class="action-link">&#8618; Share</span>
-          <a v-if="frontmatter.next" :href="`/tutorials/${frontmatter.next}`" class="nav-pill nav-pill--primary">
-            Next &rarr;
-          </a>
-        </div>
-      </div>
-    </div>
+    <FeedbackShareBar :title="frontmatter.title" :slug="frontmatter.slug" :primary-tag="frontmatter.primaryTag" page-type="tutorial">
+      <template #nav-left>
+        <a v-if="frontmatter.prev" :href="`/tutorials/${frontmatter.prev}`" class="nav-pill">
+          &larr; Previous
+        </a>
+      </template>
+      <template #nav-right>
+        <a v-if="frontmatter.next" :href="`/tutorials/${frontmatter.next}`" class="nav-pill nav-pill--primary">
+          Next &rarr;
+        </a>
+      </template>
+    </FeedbackShareBar>
 
     <!-- Main layout: content + right sidebar -->
     <div class="tutorial-page">
@@ -333,46 +330,21 @@ onMounted(async () => {
   cursor: default;
 }
 
-/* Action bar */
-.tutorial-action-bar {
-  background: var(--sapShellColor, #354a5f);
-  padding: 0.625rem 0;
-}
-.action-bar-inner {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 0 2rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.action-bar-actions {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-}
-.action-link {
-  color: var(--sapShell_TextColor, #fff);
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  opacity: 0.9;
-}
-.action-link:hover { opacity: 1; }
-.action-bar-inner .nav-pill {
+/* Nav pill overrides for action bar slot content */
+:deep(.action-bar-inner) .nav-pill {
   border-color: var(--sapShell_TextColor, #fff);
   color: var(--sapShell_TextColor, #fff);
 }
-.action-bar-inner .nav-pill:hover {
+:deep(.action-bar-inner) .nav-pill:hover {
   background: rgba(255,255,255,0.15);
   color: var(--sapShell_TextColor, #fff);
 }
-.action-bar-inner .nav-pill--primary {
+:deep(.action-bar-inner) .nav-pill--primary {
   background: var(--sapContent_ContrastTextColor, #fff);
   color: var(--sapShellColor, #354a5f);
   border-color: var(--sapContent_ContrastTextColor, #fff);
 }
-.action-bar-inner .nav-pill--primary:hover {
+:deep(.action-bar-inner) .nav-pill--primary:hover {
   background: rgba(255,255,255,0.9);
   color: var(--sapShellColor, #354a5f);
 }
