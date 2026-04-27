@@ -399,17 +399,17 @@ const hasActiveFilters = computed(() => {
       <!-- Section: Result Count Bar -->
       <section class="navigator-toolbar">
         <div class="toolbar-counts">
-          <span class="toolbar-count">
+          <button class="toolbar-count" :class="{ active: filters.types.includes('mission') }" @click="toggleFilter(filters.types, 'mission')">
             <span class="toolbar-count-num count-mission">{{ counts.missions }}</span> Mission
-          </span>
+          </button>
           <span class="toolbar-sep">&middot;</span>
-          <span class="toolbar-count">
+          <button class="toolbar-count" :class="{ active: filters.types.includes('group') }" @click="toggleFilter(filters.types, 'group')">
             <span class="toolbar-count-num count-group">{{ counts.groups }}</span> Group
-          </span>
+          </button>
           <span class="toolbar-sep">&middot;</span>
-          <span class="toolbar-count">
+          <button class="toolbar-count" :class="{ active: filters.types.includes('tutorial') }" @click="toggleFilter(filters.types, 'tutorial')">
             <span class="toolbar-count-num count-tutorial">{{ counts.tutorials }}</span> Tutorial
-          </span>
+          </button>
         </div>
         <button v-if="hasActiveFilters" class="fd-button fd-button--transparent" @click="clearFilters">
           Clear all filters
@@ -700,6 +700,25 @@ const hasActiveFilters = computed(() => {
   align-items: center;
   gap: 0.25rem;
   font-weight: 600;
+  background: none;
+  border: 1.5px solid transparent;
+  border-radius: 1rem;
+  padding: 0.25rem 0.625rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  color: inherit;
+  font-size: inherit;
+  font-family: inherit;
+}
+
+.toolbar-count:hover {
+  background: var(--sapList_Hover_Background, #eaeff5);
+}
+
+.toolbar-count.active {
+  border-color: var(--sapSelectedColor, #0070f2);
+  background: var(--sapSelectedColor, #0070f2);
+  color: #fff;
 }
 
 .toolbar-count-num {
@@ -718,6 +737,10 @@ const hasActiveFilters = computed(() => {
 .count-mission { background: var(--sapAccentColor6, #046c7a); }
 .count-group { background: var(--sapAccentColor8, #6c32a9); }
 .count-tutorial { background: var(--sapAccentColor10, #5b738b); }
+
+.toolbar-count.active .toolbar-count-num {
+  background: rgba(255, 255, 255, 0.25);
+}
 
 .toolbar-sep {
   color: var(--sapNeutralBorderColor, #d9d9d9);

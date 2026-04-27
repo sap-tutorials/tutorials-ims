@@ -23,7 +23,11 @@ const description = computed(() =>
   `Complete this mission to build full-stack applications. Includes ${frontmatter.value.tutorialCount} tutorials across ${frontmatter.value.groupCount} groups.`
 )
 const progress = computed(() => aemData.value?.progress ?? 0)
-const missionIcon = computed(() => aemData.value?.icon ?? '')
+const missionIcon = computed(() => {
+  const raw = aemData.value?.icon ?? ''
+  if (!raw || !raw.startsWith('<')) return ''
+  return raw
+})
 
 function capitalizeLevel(level: string): string {
   return level.charAt(0).toUpperCase() + level.slice(1)
