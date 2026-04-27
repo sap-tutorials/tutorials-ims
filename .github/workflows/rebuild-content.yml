@@ -57,7 +57,7 @@ jobs:
       - name: Fetch tutorials
         run: npm run fetch-tutorials
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.TUTORIALS_GITHUB_TOKEN }}
 
       - name: Build VitePress
         run: npm run build
