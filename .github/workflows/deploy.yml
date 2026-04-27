@@ -1,0 +1,97 @@
+name: Deploy Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - qa
+          - prod
+
+env:
+  NODE_VERSION: '20'
+  MBT_VERSION: '1.2.31'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install MTA Build Tool
+        run: npm install -g mbt@${{ env.MBT_VERSION }}
+
+      - name: Build MTA archive
+        run: mbt build -e deploy/${{ inputs.environment }}.mtaext
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload MTAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mtar-${{ inputs.environment }}-${{ github.run_number }}
+          path: mta_archives/*.mtar
+          retention-days: 30
+
+      - name: Set CF space
+        id: cf
+        run: |
+          case "${{ inputs.environment }}" in
+            dev)  echo "space=${{ secrets.CF_SPACE_DEV }}" >> "$GITHUB_OUTPUT" ;;
+            qa)   echo "space=${{ secrets.CF_SPACE_QA }}" >> "$GITHUB_OUTPUT" ;;
+            prod) echo "space=${{ secrets.CF_SPACE_PROD }}" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Install CF CLI
+        run: |
+          curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github" | tar xz
+          sudo mv cf8 /usr/local/bin/cf
+
+      - name: Install CF MTA plugin
+        run: cf install-plugin multiapps -f
+
+      - name: CF Login
+        run: |
+          cf login \
+            -a "${{ secrets.CF_API_ENDPOINT }}" \
+            -u "${{ secrets.CF_USERNAME }}" \
+            -p "${{ secrets.CF_PASSWORD }}" \
+            -o "${{ secrets.CF_ORG }}" \
+            -s "${{ steps.cf.outputs.space }}"
+
+      - name: Deploy MTA
+        run: cf deploy mta_archives/tutorials-poc_1.0.0.mtar -e deploy/${{ inputs.environment }}.mtaext -f
+
+      - name: Post-deploy — set REBUILD_API_KEY
+        run: |
+          APP_NAME="tutorials-${{ inputs.environment }}-approuter"
+          CURRENT=$(cf env "$APP_NAME" | grep REBUILD_API_KEY || true)
+          if [ -z "$CURRENT" ]; then
+            echo "::warning::REBUILD_API_KEY not set on $APP_NAME. Run: cf set-env $APP_NAME REBUILD_API_KEY <secret> && cf restart $APP_NAME"
+          fi
+
+      - name: Summary
+        run: |
+          echo "### MTA Deploy Complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Environment:** ${{ inputs.environment }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Space:** ${{ steps.cf.outputs.space }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Post-deploy checklist:**" >> "$GITHUB_STEP_SUMMARY"
+          echo "- [ ] Verify REBUILD_API_KEY is set: \`cf env tutorials-${{ inputs.environment }}-approuter\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- [ ] Test login at approuter URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "- [ ] Test /api/* proxy to IMS backend" >> "$GITHUB_STEP_SUMMARY"

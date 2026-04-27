@@ -1,0 +1,30 @@
+# Tutorial Repo Dispatch Workflow
+#
+# Copy this file to .github/workflows/notify-tutorials-poc.yml in each
+# sap-tutorials repo that should trigger a content rebuild.
+#
+# Required secrets (set at org or repo level):
+#   TUTORIALS_DISPATCH_TOKEN — GitHub PAT with `repo` scope on the tutorials-poc repo
+
+name: Notify Tutorials Platform
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.md'
+      - '**.png'
+      - '**.jpg'
+      - '**.gif'
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger content rebuild
+        run: |
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.TUTORIALS_DISPATCH_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            -d '{"event_type":"tutorial-updated","client_payload":{"repository":"${{ github.repository }}","ref":"${{ github.ref }}","sha":"${{ github.sha }}"}}' \
+            "https://api.github.com/repos/<OWNER>/tutorials-poc/dispatches"

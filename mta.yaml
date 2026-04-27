@@ -9,30 +9,34 @@ build-parameters:
         - npm install
         - npm run fetch-tutorials
         - npm run build
+        - cd display-app && npm install && npm run build && cd ..
         - mkdir -p approuter/static
         - cp -r site/.vitepress/dist/* approuter/static/
+        - cp -r display-app/dist approuter/static/display-app
 
 modules:
   - name: tutorials-approuter
     type: approuter.nodejs
     path: approuter
-    requires:
-      - name: tutorials-xsuaa
-      - name: tutorials-api-destination
     parameters:
       disk-quota: 256M
       memory: 256M
+      app-name: tutorials-approuter
+    properties:
+      destinations: >
+        [
+          {
+            "name": "tutorials-api",
+            "url": "https://imsdev.cfapps.us30.hana.ondemand.com",
+            "forwardAuthToken": true
+          }
+        ]
+      XS_APP_LOG_LEVEL: info
+    requires:
+      - name: tutorials-xsuaa
 
 resources:
   - name: tutorials-xsuaa
-    type: org.cloudfoundry.managed-service
+    type: org.cloudfoundry.existing-service
     parameters:
-      service: xsuaa
-      service-plan: application
-      path: xs-security.json
-
-  - name: tutorials-api-destination
-    type: org.cloudfoundry.managed-service
-    parameters:
-      service: destination
-      service-plan: lite
+      service-name: xsuaa-imsdev

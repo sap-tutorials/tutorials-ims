@@ -1,0 +1,24 @@
+_schema-version: 3.3.0
+ID: tutorials-poc-dev
+extends: tutorials-poc
+
+modules:
+  - name: tutorials-approuter
+    parameters:
+      app-name: tutorials-dev-approuter
+    properties:
+      destinations: >
+        [
+          {
+            "name": "tutorials-api",
+            "url": "https://imsdev.cfapps.us30.hana.ondemand.com",
+            "forwardAuthToken": true
+          }
+        ]
+      XS_APP_LOG_LEVEL: debug
+      DEBUG: "xs-approuter:*"
+
+resources:
+  - name: tutorials-xsuaa
+    parameters:
+      service-name: xsuaa-imsdev

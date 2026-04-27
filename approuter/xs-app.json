@@ -3,7 +3,7 @@
   "responseHeaders": [
     {
       "name": "Content-Security-Policy",
-      "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.youtube.com; frame-src https://www.youtube.com; img-src 'self' https://raw.githubusercontent.com https://*.sap.com data:; style-src 'self' 'unsafe-inline' https://*.sap.com; font-src 'self' https://*.sap.com"
+      "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.youtube.com; frame-src https://www.youtube.com; img-src 'self' https://raw.githubusercontent.com https://*.sap.com data:; style-src 'self' 'unsafe-inline' https://*.sap.com; font-src 'self' https://*.sap.com; connect-src 'self' https://*.cfapps.us30.hana.ondemand.com wss://*.cfapps.us30.hana.ondemand.com"
     }
   ],
   "routes": [

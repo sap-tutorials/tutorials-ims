@@ -1,0 +1,106 @@
+name: Rebuild Content
+
+on:
+  repository_dispatch:
+    types: [tutorial-updated]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - qa
+          - prod
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Determine environment
+        id: env
+        run: |
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            echo "target=dev" >> "$GITHUB_OUTPUT"
+          else
+            echo "target=${{ inputs.environment }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set approuter URL
+        id: url
+        run: |
+          case "${{ steps.env.outputs.target }}" in
+            dev)  echo "approuter_url=${{ secrets.APPROUTER_URL_DEV }}" >> "$GITHUB_OUTPUT" ;;
+            qa)   echo "approuter_url=${{ secrets.APPROUTER_URL_QA }}" >> "$GITHUB_OUTPUT" ;;
+            prod) echo "approuter_url=${{ secrets.APPROUTER_URL_PROD }}" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Fetch tutorials
+        run: npm run fetch-tutorials
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build VitePress
+        run: npm run build
+
+      - name: Build display app
+        run: npm run build:display
+
+      - name: Assemble static content
+        run: npm run copy:static
+
+      - name: Create content tarball
+        run: tar czf content.tar.gz -C approuter/static .
+
+      - name: Upload content artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: content-${{ steps.env.outputs.target }}-${{ github.run_number }}
+          path: content.tar.gz
+          retention-days: 7
+
+      - name: Push content to AppRouter
+        run: |
+          HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.REBUILD_API_KEY }}" \
+            -H "Content-Type: application/gzip" \
+            --data-binary @content.tar.gz \
+            "${{ steps.url.outputs.approuter_url }}/admin/rebuild")
+
+          echo "HTTP Status: $HTTP_STATUS"
+          cat response.json
+
+          if [ "$HTTP_STATUS" -ne 200 ]; then
+            echo "::error::Content rebuild failed with HTTP $HTTP_STATUS"
+            exit 1
+          fi
+
+      - name: Summary
+        run: |
+          echo "### Content Rebuild Complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Environment:** ${{ steps.env.outputs.target }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Trigger:** ${{ github.event_name }}" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            echo "- **Source repo:** ${{ github.event.client_payload.repository }}" >> "$GITHUB_STEP_SUMMARY"
+          fi

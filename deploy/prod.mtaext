@@ -1,0 +1,22 @@
+_schema-version: 3.3.0
+ID: tutorials-poc-prod
+extends: tutorials-poc
+
+modules:
+  - name: tutorials-approuter
+    parameters:
+      app-name: tutorials-prod-approuter
+    properties:
+      destinations: >
+        [
+          {
+            "name": "tutorials-api",
+            "url": "https://imsprod.cfapps.us30.hana.ondemand.com",
+            "forwardAuthToken": true
+          }
+        ]
+
+resources:
+  - name: tutorials-xsuaa
+    parameters:
+      service-name: xsuaa-imsprod
