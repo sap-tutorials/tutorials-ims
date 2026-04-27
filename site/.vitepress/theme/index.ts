@@ -10,6 +10,7 @@ import OptionTabs from './components/OptionTabs.vue'
 import TutorialList from './components/TutorialList.vue'
 import TutorialNavigator from './components/TutorialNavigator.vue'
 import AppSpace from './components/AppSpace.vue'
+import EventDisplay from './components/EventDisplay.vue'
 
 function Layout() {
   const { frontmatter } = useData()
@@ -28,5 +29,6 @@ export default {
     app.component('TutorialList', TutorialList)
     app.component('TutorialNavigator', TutorialNavigator)
     app.component('AppSpace', AppSpace)
+    app.component('EventDisplay', EventDisplay)
   },
 }

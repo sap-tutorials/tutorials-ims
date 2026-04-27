@@ -12,6 +12,7 @@ export default defineConfig({
     nav: [
       { text: 'Tutorials', link: '/' },
       { text: 'App Space', link: '/app-space' },
+      { text: 'Event Display', link: '/event-display' },
     ],
   },
 
