@@ -87,7 +87,7 @@ export function useAemEnrichment() {
   async function fetchForMission(missionId: number): Promise<void> {
     loading.value = true
     try {
-      const miniRes = await fetch(`/bin/sapdx/v2/tutorial/miniNavigator.0.${missionId}.json`)
+      const miniRes = await fetch(`/bin/sapdx/v2/tutorial/miniNavigator.${missionId}.json`)
       if (miniRes.ok) {
         const json = await miniRes.json()
         data.value = parseMiniNavigator(json)

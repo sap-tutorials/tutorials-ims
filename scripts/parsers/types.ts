@@ -50,12 +50,14 @@ export interface TutorialNavEntry {
   stepCount: number
   primaryTag: string
   displayTags: string[]
-  missionId: number
-  missionTitle: string
-  groupId: number
-  groupTitle: string
-  missionSlug: string
-  groupSlug: string
+  repo?: string
+  branch?: string
+  missionId?: number
+  missionTitle?: string
+  groupId?: number
+  groupTitle?: string
+  missionSlug?: string
+  groupSlug?: string
   prev: string | null
   next: string | null
 }

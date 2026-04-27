@@ -10,10 +10,10 @@ interface TutorialEntry {
   stepCount: number
   primaryTag: string
   displayTags: string[]
-  missionId: number
-  missionTitle: string
-  groupId: number
-  groupTitle: string
+  missionId?: number
+  missionTitle?: string
+  groupId?: number
+  groupTitle?: string
   prev: string | null
   next: string | null
 }
@@ -110,13 +110,17 @@ const allCards = computed<CardItem[]>(() => {
   const groupMap = new Map<number, TutorialEntry[]>()
 
   for (const t of tuts) {
-    const mList = missionGroups.get(t.missionId) ?? []
-    mList.push(t)
-    missionGroups.set(t.missionId, mList)
+    if (t.missionId) {
+      const mList = missionGroups.get(t.missionId) ?? []
+      mList.push(t)
+      missionGroups.set(t.missionId, mList)
+    }
 
-    const gList = groupMap.get(t.groupId) ?? []
-    gList.push(t)
-    groupMap.set(t.groupId, gList)
+    if (t.groupId) {
+      const gList = groupMap.get(t.groupId) ?? []
+      gList.push(t)
+      groupMap.set(t.groupId, gList)
+    }
   }
 
   for (const [missionId, mTuts] of missionGroups) {

@@ -4,6 +4,9 @@ import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const CACHE_FILE = join(__dirname, '..', '..', '.tutorial-cache', 'github-meta.json')
+const ORG = 'sap-tutorials'
+const GRAPHQL_URL = 'https://api.github.com/graphql'
+const BATCH_SIZE = 20
 
 export interface GitHubContributor {
   name: string
@@ -14,7 +17,14 @@ export interface GitHubContributor {
 export interface GitHubMeta {
   lastUpdated: string
   createdAt: string
+  lastCommitSha: string
   contributors: GitHubContributor[]
+}
+
+export interface DiscoveredTutorial {
+  slug: string
+  repo: string
+  branch: string
 }
 
 type CacheData = Record<string, GitHubMeta>
@@ -31,69 +41,195 @@ function saveCache(data: CacheData) {
   writeFileSync(CACHE_FILE, JSON.stringify(data, null, 2), 'utf-8')
 }
 
-export async function fetchGitHubMeta(slug: string, repo: string): Promise<GitHubMeta> {
-  const cache = loadCache()
-  if (cache[slug]) {
-    console.log(`  [cache] github-meta for ${slug}`)
-    return cache[slug]
+function slugToAlias(slug: string): string {
+  return 't_' + slug.replace(/[^a-zA-Z0-9]/g, '_')
+}
+
+function aliasToSlug(alias: string, slugs: string[]): string | undefined {
+  return slugs.find(s => slugToAlias(s) === alias)
+}
+
+async function graphqlRequest(query: string): Promise<any> {
+  const token = process.env.GITHUB_TOKEN
+  if (!token) throw new Error('GITHUB_TOKEN is required for GraphQL API')
+
+  const res = await fetch(GRAPHQL_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'User-Agent': 'tutorials-poc-build',
+    },
+    body: JSON.stringify({ query }),
+  })
+
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`GraphQL request failed: ${res.status} ${body}`)
   }
 
-  const branch = repo === 'Tutorials' ? 'master' : 'main'
-  const path = `tutorials/${slug}/${slug}.md`
-  const url = `https://api.github.com/repos/sap-tutorials/${repo}/commits?path=${path}&sha=${branch}&per_page=100`
-
-  const headers: Record<string, string> = {
-    Accept: 'application/vnd.github.v3+json',
-    'User-Agent': 'tutorials-poc-build',
+  const json = await res.json()
+  if (json.errors?.length) {
+    const msgs = json.errors.map((e: any) => e.message).join('; ')
+    console.warn(`  [graphql-warn] ${msgs}`)
   }
-  if (process.env.GITHUB_TOKEN) {
-    headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`
-  }
+  return json.data
+}
 
-  console.log(`  [fetch] github commits for ${slug}`)
+export async function discoverAllTutorials(): Promise<DiscoveredTutorial[]> {
+  const includeContribution = process.env.INCLUDE_CONTRIBUTION_REPOS === 'true'
+  const tutorials: DiscoveredTutorial[] = []
+  let cursor: string | null = null
+  let page = 0
 
-  try {
-    const res = await fetch(url, { headers })
-    if (!res.ok) {
-      console.warn(`  [warn] GitHub API ${res.status} for ${slug}, using fallback`)
-      return fallback()
-    }
-
-    const commits: Array<{
-      commit: {
-        author: { name: string; date: string }
+  while (true) {
+    page++
+    const afterClause = cursor ? `, after: "${cursor}"` : ''
+    const query = `{
+      organization(login: "${ORG}") {
+        repositories(first: 100${afterClause}, orderBy: {field: NAME, direction: ASC}) {
+          nodes {
+            name
+            isArchived
+            isDisabled
+            isFork
+            defaultBranchRef { name }
+            tutorials: object(expression: "HEAD:tutorials") {
+              ... on Tree {
+                entries { name type }
+              }
+            }
+          }
+          pageInfo { endCursor hasNextPage }
+        }
       }
-      author?: { login: string; avatar_url: string } | null
-    }> = await res.json()
+    }`
 
-    if (commits.length === 0) return fallback()
+    console.log(`  [graphql] Discovering repos (page ${page})...`)
+    const data = await graphqlRequest(query)
+    const repos = data.organization.repositories
 
-    const lastUpdated = commits[0].commit.author.date
-    const createdAt = commits[commits.length - 1].commit.author.date
+    for (const repo of repos.nodes) {
+      if (repo.isArchived || repo.isDisabled || repo.isFork) continue
+      if (!includeContribution && repo.name.endsWith('-Contribution')) continue
+      const branch = repo.defaultBranchRef?.name
+      if (!branch) continue
 
-    const seen = new Set<string>()
-    const contributors: GitHubContributor[] = []
-    for (const c of commits) {
-      const login = c.author?.login ?? ''
-      if (!login || seen.has(login)) continue
-      seen.add(login)
-      contributors.push({
-        name: c.commit.author.name,
-        login,
-        avatarUrl: c.author?.avatar_url ?? '',
-      })
+      const tree = repo.tutorials
+      if (!tree?.entries) continue
+
+      const dirs = tree.entries.filter((e: any) => e.type === 'tree')
+      if (dirs.length > 0) {
+        console.log(`  ${repo.name} (${branch}): ${dirs.length} tutorials`)
+        for (const dir of dirs) {
+          tutorials.push({ slug: dir.name, repo: repo.name, branch })
+        }
+      }
     }
 
-    const meta: GitHubMeta = { lastUpdated, createdAt, contributors }
-    cache[slug] = meta
-    saveCache(cache)
-    return meta
-  } catch (err) {
-    console.warn(`  [warn] GitHub fetch failed for ${slug}:`, err)
-    return fallback()
+    if (!repos.pageInfo.hasNextPage) break
+    cursor = repos.pageInfo.endCursor
   }
+
+  return tutorials
+}
+
+export async function fetchGitHubMetaBatch(
+  repo: string,
+  branch: string,
+  slugs: string[],
+): Promise<Map<string, GitHubMeta>> {
+  const cache: CacheData = {}
+  const results = new Map<string, GitHubMeta>()
+
+  for (let i = 0; i < slugs.length; i += BATCH_SIZE) {
+    const batch = slugs.slice(i, i + BATCH_SIZE)
+    const historyFields = batch.map(slug => {
+      const alias = slugToAlias(slug)
+      const path = `tutorials/${slug}/${slug}.md`
+      return `${alias}: history(first: 10, path: "${path}") {
+        nodes {
+          oid
+          authoredDate
+          author {
+            name
+            user { login avatarUrl }
+          }
+        }
+      }`
+    }).join('\n            ')
+
+    const query = `{
+      repository(owner: "${ORG}", name: "${repo}") {
+        defaultBranchRef {
+          target {
+            ... on Commit {
+              ${historyFields}
+            }
+          }
+        }
+      }
+    }`
+
+    try {
+      const data = await graphqlRequest(query)
+      const commit = data.repository?.defaultBranchRef?.target
+      if (!commit) continue
+
+      for (const [alias, historyData] of Object.entries(commit) as Array<[string, any]>) {
+        if (alias === '__typename') continue
+        const slug = aliasToSlug(alias, batch)
+        if (!slug) continue
+
+        const nodes = historyData?.nodes ?? []
+        if (nodes.length === 0) {
+          results.set(slug, fallback())
+          continue
+        }
+
+        const lastCommitSha = nodes[0].oid ?? ''
+        const lastUpdated = nodes[0].authoredDate ?? ''
+        const createdAt = nodes[nodes.length - 1].authoredDate ?? ''
+
+        const seen = new Set<string>()
+        const contributors: GitHubContributor[] = []
+        for (const node of nodes) {
+          const login = node.author?.user?.login ?? ''
+          if (!login || seen.has(login)) continue
+          seen.add(login)
+          contributors.push({
+            name: node.author?.name ?? login,
+            login,
+            avatarUrl: node.author?.user?.avatarUrl ?? '',
+          })
+        }
+
+        const meta: GitHubMeta = { lastCommitSha, lastUpdated, createdAt, contributors }
+        results.set(slug, meta)
+        cache[slug] = meta
+      }
+    } catch (err) {
+      console.warn(`  [warn] GraphQL batch failed for ${repo} batch ${Math.floor(i / BATCH_SIZE) + 1}: ${err instanceof Error ? err.message : err}`)
+      for (const slug of batch) {
+        if (!results.has(slug)) results.set(slug, fallback())
+      }
+    }
+  }
+
+  const existingCache = loadCache()
+  Object.assign(existingCache, cache)
+  saveCache(existingCache)
+  return results
+}
+
+export async function fetchGitHubMeta(slug: string, repo: string, branch: string): Promise<GitHubMeta> {
+  const cache = loadCache()
+  if (cache[slug]) return cache[slug]
+
+  const batchResult = await fetchGitHubMetaBatch(repo, branch, [slug])
+  return batchResult.get(slug) ?? fallback()
 }
 
 function fallback(): GitHubMeta {
-  return { lastUpdated: '', createdAt: '', contributors: [] }
+  return { lastCommitSha: '', lastUpdated: '', createdAt: '', contributors: [] }
 }

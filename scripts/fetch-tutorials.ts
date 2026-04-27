@@ -1,76 +1,51 @@
 import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { performance } from 'node:perf_hooks'
 import { stringify as yamlStringify } from 'yaml'
 import { extractFrontmatter } from './parsers/frontmatter.js'
 import { parseV2Steps } from './parsers/v2.js'
 import { parseV1Steps } from './parsers/v1.js'
 import { resolveImageURLs } from './parsers/images.js'
 import { convertOptionBlocks } from './parsers/options.js'
-import { fetchGitHubMeta } from './parsers/github.js'
-import type { TutorialStep, TutorialNavEntry, ValidationQuestion, GitHubContributor, MissionMeta, GroupRef, NavData } from './parsers/types.js'
+import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, type DiscoveredTutorial } from './parsers/github.js'
+import { fetchAllMissions, fetchAllMissionHierarchies, loadAemCache, saveAemCache, type AemMission, type AemHierarchy, type AemHierarchyGroup } from './parsers/aem.js'
+import type { TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } from './parsers/types.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
-const MISSION_TITLE = 'Combine CAP with SAP HANA Cloud to Create Full-Stack Applications'
-const MISSION_SLUG = 'hana-cloud-cap'
-const MISSION_ID = 14094
-
-const GROUP_META: Record<number, { title: string; slug: string }> = {
-  14091: { title: 'Set Up SAP HANA Cloud and CAP Project', slug: 'hana-cloud-cap-setup' },
-  14092: { title: 'Build a Full-Stack Application', slug: 'hana-cloud-cap-build-full-stack' },
-}
-
-const POC_TUTORIALS: Array<{
-  slug: string
-  repo: string
-  missionId: number
-  groupId: number
-  groupTitle: string
-}> = [
-  { slug: 'hana-cloud-deploying', repo: 'Tutorials', missionId: MISSION_ID, groupId: 14091, groupTitle: 'Set Up SAP HANA Cloud and CAP Project' },
-  { slug: 'hana-cloud-cap-create-project', repo: 'Tutorials', missionId: MISSION_ID, groupId: 14091, groupTitle: 'Set Up SAP HANA Cloud and CAP Project' },
-  { slug: 'hana-cloud-cap-create-database-cds', repo: 'Tutorials', missionId: MISSION_ID, groupId: 14091, groupTitle: 'Set Up SAP HANA Cloud and CAP Project' },
-  { slug: 'hana-cloud-cap-create-ui', repo: 'Tutorials', missionId: MISSION_ID, groupId: 14092, groupTitle: 'Build a Full-Stack Application' },
-  { slug: 'hana-cloud-cap-add-authentication', repo: 'Tutorials', missionId: MISSION_ID, groupId: 14092, groupTitle: 'Build a Full-Stack Application' },
-]
-
 const CACHE_DIR = join(__dirname, '..', '.tutorial-cache')
 const OUTPUT_DIR = join(__dirname, '..', 'site', 'tutorials')
+const CONCURRENCY = 5
 
 const ACRONYMS = new Set(['SAP', 'HANA', 'CAP', 'BTP', 'CDS', 'UI', 'API', 'MTA', 'XSUAA', 'OData', 'HTML5', 'ABAP'])
 
-const VALIDATION_DATA: Record<string, Record<number, ValidationQuestion[]>> = {
-  'hana-cloud-cap-create-project': {
-    3: [{
-      id: 'q1',
-      question: 'What name should you use for the CAP project as recommended in this tutorial?',
-      type: 'multiple-choice',
-      options: ['MyHANAApp', 'MyCloudApp', 'HanaProject', 'CAPDemo'],
-      correctAnswer: 'MyHANAApp',
-    }],
-    7: [{
-      id: 'q1',
-      question: 'Why is it recommended to perform a commit at the end of each tutorial?',
-      type: 'multiple-choice',
-      options: [
-        'To create a version that allows you to revert and compare changes',
-        'To automatically deploy changes to the cloud',
-        'To share code with other developers',
-        'To trigger CI/CD pipelines',
-      ],
-      correctAnswer: 'To create a version that allows you to revert and compare changes',
-    }],
-  },
-  'hana-cloud-deploying': {
-    1: [{
-      id: 'q1',
-      question: 'What is the minimum memory required for an SAP HANA Cloud instance?',
-      type: 'multiple-choice',
-      options: ['16 GB', '30 GB', '32 GB', '64 GB'],
-      correctAnswer: '30 GB',
-    }],
-  },
+interface ErrorEntry {
+  slug: string
+  repo: string
+  error: string
+  timestamp: string
+}
+
+interface TutorialTiming {
+  slug: string
+  repo: string
+  durationMs: number
+}
+
+async function runWithConcurrency<T>(tasks: Array<() => Promise<T>>, limit: number): Promise<T[]> {
+  const results: T[] = []
+  let idx = 0
+
+  async function worker() {
+    while (idx < tasks.length) {
+      const i = idx++
+      results[i] = await tasks[i]()
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, () => worker()))
+  return results
 }
 
 function humanizeTag(raw: string): string {
@@ -94,44 +69,30 @@ function splitPrerequisites(prereqText: string): string[] {
     .filter(line => line.length > 0)
 }
 
-async function fetchMarkdown(slug: string, repo: string): Promise<{ content: string; branch: string }> {
+type CacheStatus = 'cached' | 'refreshed' | 'fetched'
+
+async function fetchMarkdown(slug: string, repo: string, branch: string, currentSha: string): Promise<{ content: string; cacheStatus: CacheStatus }> {
   const cacheFile = join(CACHE_DIR, `${slug}.md`)
-  if (existsSync(cacheFile)) {
-    console.log(`  [cache] ${slug}`)
-    return { content: readFileSync(cacheFile, 'utf-8'), branch: 'master' }
+  const shaFile = join(CACHE_DIR, `${slug}.sha`)
+
+  if (existsSync(cacheFile) && currentSha) {
+    const storedSha = existsSync(shaFile) ? readFileSync(shaFile, 'utf-8').trim() : ''
+    if (storedSha === currentSha) {
+      return { content: readFileSync(cacheFile, 'utf-8'), cacheStatus: 'cached' }
+    }
   }
 
-  const branch = repo === 'Tutorials' ? 'master' : 'main'
+  const hadCache = existsSync(cacheFile)
   const url = `https://raw.githubusercontent.com/sap-tutorials/${repo}/${branch}/tutorials/${slug}/${slug}.md`
-  console.log(`  [fetch] ${url}`)
   const res = await fetch(url)
   if (!res.ok) throw new Error(`Failed to fetch ${slug}: ${res.status}`)
   const content = await res.text()
 
   mkdirSync(CACHE_DIR, { recursive: true })
   writeFileSync(cacheFile, content, 'utf-8')
-  return { content, branch }
-}
+  if (currentSha) writeFileSync(shaFile, currentSha, 'utf-8')
 
-function buildNavEntries(): TutorialNavEntry[] {
-  return POC_TUTORIALS.map((t, i) => ({
-    slug: t.slug,
-    title: '',
-    description: '',
-    time: 15,
-    level: 'beginner',
-    stepCount: 0,
-    primaryTag: '',
-    displayTags: [],
-    missionId: t.missionId,
-    missionTitle: MISSION_TITLE,
-    missionSlug: MISSION_SLUG,
-    groupId: t.groupId,
-    groupTitle: t.groupTitle,
-    groupSlug: GROUP_META[t.groupId]?.slug ?? '',
-    prev: i > 0 ? POC_TUTORIALS[i - 1].slug : null,
-    next: i < POC_TUTORIALS.length - 1 ? POC_TUTORIALS[i + 1].slug : null,
-  }))
+  return { content, cacheStatus: hadCache ? 'refreshed' : 'fetched' }
 }
 
 function writeVitePressPage(
@@ -149,7 +110,7 @@ function writeVitePressPage(
   steps: TutorialStep[],
   nav: TutorialNavEntry,
   lastUpdated: string,
-  contributors: GitHubContributor[],
+  contributors: Array<{ name: string; login: string; avatarUrl: string }>,
 ): void {
   const fm: Record<string, unknown> = {
     layout: 'tutorial',
@@ -163,12 +124,6 @@ function writeVitePressPage(
     author,
     authorProfile,
     stepCount: steps.length,
-    missionId: nav.missionId,
-    missionTitle: MISSION_TITLE,
-    missionSlug: MISSION_SLUG,
-    groupId: nav.groupId,
-    groupTitle: nav.groupTitle,
-    groupSlug: GROUP_META[nav.groupId]?.slug ?? '',
     prev: nav.prev,
     next: nav.next,
     displayTags: [...new Set([primaryTag, ...tags])].map(humanizeTag).filter(t => t.length > 0),
@@ -176,13 +131,15 @@ function writeVitePressPage(
     prerequisites: splitPrerequisites(prerequisites),
     lastUpdated: lastUpdated || null,
     contributors: contributors.slice(0, 10).map(c => ({ login: c.login, name: c.name, avatarUrl: c.avatarUrl })),
-    steps: steps.map(s => {
-      const v = VALIDATION_DATA[slug]?.[s.number]
-      const entry: Record<string, unknown> = { number: s.number, title: s.title }
-      if (v) entry.validation = v
-      return entry
-    }),
+    steps: steps.map(s => ({ number: s.number, title: s.title })),
   }
+
+  if (nav.missionId) fm.missionId = nav.missionId
+  if (nav.missionTitle) fm.missionTitle = nav.missionTitle
+  if (nav.missionSlug) fm.missionSlug = nav.missionSlug
+  if (nav.groupId) fm.groupId = nav.groupId
+  if (nav.groupTitle) fm.groupTitle = nav.groupTitle
+  if (nav.groupSlug) fm.groupSlug = nav.groupSlug
 
   const frontmatter = `---\n${yamlStringify(fm).trimEnd()}\n---\n\n`
 
@@ -196,170 +153,486 @@ function writeVitePressPage(
   writeFileSync(join(OUTPUT_DIR, `${slug}.md`), content, 'utf-8')
 }
 
-const LEVEL_ORDER: Record<string, number> = { beginner: 0, intermediate: 1, advanced: 2 }
+function patchTutorialFrontmatter(slug: string, nav: TutorialNavEntry): void {
+  const filePath = join(OUTPUT_DIR, `${slug}.md`)
+  if (!existsSync(filePath)) return
 
-function lowestLevel(levels: string[]): string {
-  return levels.sort((a, b) => (LEVEL_ORDER[a] ?? 9) - (LEVEL_ORDER[b] ?? 9))[0] || 'beginner'
-}
+  const raw = readFileSync(filePath, 'utf-8')
+  const endOfFm = raw.indexOf('\n---\n\n', 4)
+  if (endOfFm === -1) return
 
-function writeMissionPage(navEntries: TutorialNavEntry[]): void {
-  const groupMap = new Map<number, TutorialNavEntry[]>()
-  for (const t of navEntries) {
-    const list = groupMap.get(t.groupId) ?? []
-    list.push(t)
-    groupMap.set(t.groupId, list)
+  const body = raw.slice(endOfFm + 6)
+  const fmBlock = raw.slice(4, endOfFm)
+  const lines = fmBlock.split('\n')
+
+  const patchFields: Record<string, string | number | null> = {
+    prev: nav.prev,
+    next: nav.next,
+  }
+  if (nav.missionId) patchFields.missionId = nav.missionId
+  if (nav.missionTitle) patchFields.missionTitle = nav.missionTitle
+  if (nav.missionSlug) patchFields.missionSlug = nav.missionSlug
+  if (nav.groupId) patchFields.groupId = nav.groupId
+  if (nav.groupTitle) patchFields.groupTitle = nav.groupTitle
+  if (nav.groupSlug) patchFields.groupSlug = nav.groupSlug
+
+  const existingKeys = new Set(lines.map(l => l.match(/^(\w+):/)?.[1]).filter(Boolean))
+  const updatedLines = lines.map(line => {
+    const keyMatch = line.match(/^(\w+):/)
+    if (keyMatch && keyMatch[1] in patchFields) {
+      const val = patchFields[keyMatch[1]]
+      return `${keyMatch[1]}: ${val === null ? 'null' : typeof val === 'string' ? JSON.stringify(val) : val}`
+    }
+    return line
+  })
+
+  for (const [key, val] of Object.entries(patchFields)) {
+    if (!existingKeys.has(key)) {
+      const yamlVal = val === null ? 'null' : typeof val === 'string' ? JSON.stringify(val) : val
+      updatedLines.push(`${key}: ${yamlVal}`)
+    }
   }
 
-  const groups = Array.from(groupMap.entries()).map(([groupId, tuts]) => ({
-    id: groupId,
-    slug: GROUP_META[groupId]?.slug ?? '',
-    title: GROUP_META[groupId]?.title ?? tuts[0].groupTitle,
-    tutorials: tuts.map(t => ({
-      slug: t.slug, title: t.title, description: t.description,
-      time: t.time, level: t.level, stepCount: t.stepCount, primaryTag: t.primaryTag,
-    })),
-  }))
+  const content = `---\n${updatedLines.join('\n')}\n---\n\n${body}`
+  writeFileSync(filePath, content, 'utf-8')
+}
 
-  const allTags = [...new Set(navEntries.flatMap(t => t.displayTags))]
-  const totalTime = navEntries.reduce((sum, t) => sum + t.time, 0)
+function writeMissionPage(
+  mission: AemMission,
+  groups: GroupRef[],
+  navBySlug: Map<string, TutorialNavEntry>,
+): void {
+  const groupsData = groups.map(g => {
+    const tutorials = g.tutorials
+      .map(slug => navBySlug.get(slug))
+      .filter((n): n is TutorialNavEntry => !!n)
+      .map(n => ({
+        slug: n.slug,
+        title: n.title,
+        description: n.description,
+        time: n.time,
+        level: n.level,
+        stepCount: n.stepCount,
+      }))
+
+    return {
+      id: g.id,
+      title: g.title,
+      slug: g.slug,
+      tutorials,
+    }
+  })
+
+  const allTutorials = groupsData.flatMap(g => g.tutorials)
+  const totalTime = allTutorials.reduce((s, t) => s + t.time, 0)
+  const levels = allTutorials.map(t => t.level)
+  const missionLevel = levels.includes('advanced') ? 'advanced'
+    : levels.includes('intermediate') ? 'intermediate'
+    : mission.level || 'beginner'
+
+  const displayTags = allTutorials
+    .flatMap(t => {
+      const nav = navBySlug.get(t.slug)
+      return nav?.displayTags ?? []
+    })
+    .filter((tag, i, arr) => arr.indexOf(tag) === i)
+    .slice(0, 6)
 
   const fm: Record<string, unknown> = {
     layout: 'mission',
-    slug: MISSION_SLUG,
-    missionId: MISSION_ID,
-    title: MISSION_TITLE,
-    tutorialCount: navEntries.length,
-    groupCount: groups.length,
+    slug: mission.slug,
+    missionId: mission.imsId,
+    title: mission.title,
+    description: mission.description,
+    level: missionLevel,
     totalTime,
-    level: lowestLevel(navEntries.map(t => t.level)),
-    displayTags: allTags,
-    groups,
+    tutorialCount: allTutorials.length,
+    groupCount: groupsData.length,
+    displayTags,
+    groups: groupsData,
   }
 
   const content = `---\n${yamlStringify(fm).trimEnd()}\n---\n`
-  writeFileSync(join(OUTPUT_DIR, `mission-${MISSION_SLUG}.md`), content, 'utf-8')
+  writeFileSync(join(OUTPUT_DIR, `mission-${mission.slug}.md`), content, 'utf-8')
 }
 
-function writeGroupPage(groupId: number, navEntries: TutorialNavEntry[]): void {
-  const groupTuts = navEntries.filter(t => t.groupId === groupId)
-  const meta = GROUP_META[groupId]
-  if (!meta || !groupTuts.length) return
+function writeGroupPage(
+  group: AemHierarchyGroup,
+  mission: AemMission,
+  tutorials: Array<{
+    slug: string
+    title: string
+    description: string
+    time: number
+    level: string
+    stepCount: number
+    primaryTag: string
+  }>,
+): void {
+  const totalTime = tutorials.reduce((s, t) => s + t.time, 0)
+  const levels = tutorials.map(t => t.level)
+  const groupLevel = levels.includes('advanced') ? 'advanced'
+    : levels.includes('intermediate') ? 'intermediate'
+    : 'beginner'
 
-  const allTags = [...new Set(groupTuts.flatMap(t => t.displayTags))]
-  const totalTime = groupTuts.reduce((sum, t) => sum + t.time, 0)
+  const displayTags = tutorials
+    .map(t => t.primaryTag)
+    .filter(t => t.length > 0)
+    .map(humanizeTag)
+    .filter((tag, i, arr) => arr.indexOf(tag) === i)
+    .slice(0, 6)
 
   const fm: Record<string, unknown> = {
     layout: 'group',
-    slug: meta.slug,
-    groupId,
-    title: meta.title,
-    missionId: MISSION_ID,
-    missionTitle: MISSION_TITLE,
-    missionSlug: MISSION_SLUG,
-    tutorialCount: groupTuts.length,
+    slug: group.slug,
+    groupId: group.imsId,
+    missionId: mission.imsId,
+    missionSlug: mission.slug,
+    missionTitle: mission.title,
+    title: group.title,
+    description: group.description,
+    level: groupLevel,
     totalTime,
-    level: lowestLevel(groupTuts.map(t => t.level)),
-    displayTags: allTags,
-    tutorials: groupTuts.map(t => ({
-      slug: t.slug, title: t.title, description: t.description,
-      time: t.time, level: t.level, stepCount: t.stepCount, primaryTag: t.primaryTag,
-    })),
+    tutorialCount: tutorials.length,
+    displayTags,
+    tutorials,
   }
 
   const content = `---\n${yamlStringify(fm).trimEnd()}\n---\n`
-  writeFileSync(join(OUTPUT_DIR, `group-${meta.slug}.md`), content, 'utf-8')
+  writeFileSync(join(OUTPUT_DIR, `group-${group.slug}.md`), content, 'utf-8')
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms.toFixed(0)}ms`
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`
+  const mins = Math.floor(ms / 60_000)
+  const secs = ((ms % 60_000) / 1000).toFixed(1)
+  return `${mins}m ${secs}s`
 }
 
 async function main() {
-  console.log('Fetching POC tutorials...\n')
+  const totalStart = performance.now()
 
-  const navEntries = buildNavEntries()
+  if (!process.env.GITHUB_TOKEN) {
+    console.error('ERROR: GITHUB_TOKEN is required for the GraphQL API.')
+    console.error('  Set GITHUB_TOKEN before running this script.\n')
+    process.exit(1)
+  }
+
+  // ── Phase 1: Discovery via GraphQL ──
+  console.log('Phase 1: Discovering tutorials via GraphQL...\n')
+  const discoveryStart = performance.now()
+
+  const allTutorials = await discoverAllTutorials()
+  const discoveryMs = performance.now() - discoveryStart
+
+  console.log(`\nDiscovered ${allTutorials.length} tutorials (${formatDuration(discoveryMs)})\n`)
+
+  // ── Phase 2: Batch prefetch GitHub metadata via GraphQL ──
+  console.log('Phase 2: Prefetching GitHub metadata (batched GraphQL)...\n')
+  const metaStart = performance.now()
+
+  const byRepo = new Map<string, DiscoveredTutorial[]>()
+  for (const t of allTutorials) {
+    const list = byRepo.get(t.repo) ?? []
+    list.push(t)
+    byRepo.set(t.repo, list)
+  }
+
+  const metaTasks = Array.from(byRepo.entries()).map(([repo, tuts]) => async () => {
+    const branch = tuts[0].branch
+    const slugs = tuts.map(t => t.slug)
+    console.log(`  ${repo}: ${slugs.length} tutorials...`)
+    await fetchGitHubMetaBatch(repo, branch, slugs)
+  })
+
+  await runWithConcurrency(metaTasks, 3)
+
+  const metaMs = performance.now() - metaStart
+  console.log(`\nMetadata prefetch complete (${formatDuration(metaMs)})\n`)
+
+  // ── Phase 3: Process tutorials (fetch markdown, parse, generate pages) ──
+  console.log('Phase 3: Processing tutorials...\n')
+  const processStart = performance.now()
+
   mkdirSync(OUTPUT_DIR, { recursive: true })
 
-  for (let i = 0; i < POC_TUTORIALS.length; i++) {
-    const t = POC_TUTORIALS[i]
-    console.log(`[${i + 1}/${POC_TUTORIALS.length}] ${t.slug}`)
+  const navEntries: TutorialNavEntry[] = []
+  const errors: ErrorEntry[] = []
+  const timings: TutorialTiming[] = []
+  let successCount = 0
+  let cacheHits = 0
+  let cacheRefreshes = 0
+  let cacheFetches = 0
 
-    const { content: rawMd, branch } = await fetchMarkdown(t.slug, t.repo)
-    const { title, description, youWillLearn, prerequisites, level, frontmatter, body } = extractFrontmatter(rawMd)
+  const tasks = allTutorials.map((t, idx) => async () => {
+    const tutStart = performance.now()
+    const label = `[${idx + 1}/${allTutorials.length}] ${t.repo}/${t.slug}`
+    try {
+      const ghMeta = await fetchGitHubMeta(t.slug, t.repo, t.branch)
+      const { content: rawMd, cacheStatus } = await fetchMarkdown(t.slug, t.repo, t.branch, ghMeta.lastCommitSha)
 
-    const isV2 = frontmatter.parser === 'v2'
-    let processedBody = resolveImageURLs(body, { repo: t.repo, branch, slug: t.slug })
-    processedBody = convertOptionBlocks(processedBody)
+      if (cacheStatus === 'cached') cacheHits++
+      else if (cacheStatus === 'refreshed') cacheRefreshes++
+      else cacheFetches++
 
-    const steps = isV2 ? parseV2Steps(processedBody) : parseV1Steps(processedBody)
+      console.log(`${label} [${cacheStatus}]`)
 
-    const ghMeta = await fetchGitHubMeta(t.slug, t.repo)
+      const { title, description, youWillLearn, prerequisites, level, frontmatter, body } = extractFrontmatter(rawMd)
 
-    navEntries[i].title = title
-    navEntries[i].description = description
-    navEntries[i].time = frontmatter.time ?? 15
-    navEntries[i].level = level
-    navEntries[i].stepCount = steps.length
-    navEntries[i].primaryTag = humanizeTag(frontmatter.primary_tag ?? '')
-    navEntries[i].displayTags = [...new Set([frontmatter.primary_tag ?? '', ...(frontmatter.tags ?? [])])]
-      .map(humanizeTag).filter(t => t.length > 0)
+      const isV2 = frontmatter.parser === 'v2'
+      let processedBody = resolveImageURLs(body, { repo: t.repo, branch: t.branch, slug: t.slug })
+      processedBody = convertOptionBlocks(processedBody)
+      processedBody = processedBody.replace(/^<{4,7} .+\n[\s\S]*?^={4,7}\n([\s\S]*?)^>{4,7} .+\n?/gm, '$1')
 
-    writeVitePressPage(
-      t.slug,
-      title,
-      description,
-      frontmatter.time ?? 15,
-      level,
-      frontmatter.tags ?? [],
-      frontmatter.primary_tag ?? '',
-      frontmatter.author_name ?? 'Unknown',
-      frontmatter.author_profile ?? '',
-      youWillLearn,
-      prerequisites,
-      steps,
-      navEntries[i],
-      ghMeta.lastUpdated,
-      ghMeta.contributors,
-    )
+      const steps = isV2 ? parseV2Steps(processedBody) : parseV1Steps(processedBody)
 
-    console.log(`  → ${steps.length} steps, level: ${level}, time: ${frontmatter.time}min`)
+      const nav: TutorialNavEntry = {
+        slug: t.slug,
+        title,
+        description,
+        time: frontmatter.time ?? 15,
+        level,
+        stepCount: steps.length,
+        primaryTag: humanizeTag(frontmatter.primary_tag ?? ''),
+        displayTags: [...new Set([frontmatter.primary_tag ?? '', ...(frontmatter.tags ?? [])])]
+          .map(humanizeTag).filter(tag => tag.length > 0),
+        repo: t.repo,
+        branch: t.branch,
+        prev: null,
+        next: null,
+      }
+
+      writeVitePressPage(
+        t.slug,
+        title,
+        description,
+        frontmatter.time ?? 15,
+        level,
+        frontmatter.tags ?? [],
+        frontmatter.primary_tag ?? '',
+        frontmatter.author_name ?? 'Unknown',
+        frontmatter.author_profile ?? '',
+        youWillLearn,
+        prerequisites,
+        steps,
+        nav,
+        ghMeta.lastUpdated,
+        ghMeta.contributors,
+      )
+
+      navEntries.push(nav)
+      successCount++
+
+      const tutMs = performance.now() - tutStart
+      timings.push({ slug: t.slug, repo: t.repo, durationMs: tutMs })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      errors.push({ slug: t.slug, repo: t.repo, error: message, timestamp: new Date().toISOString() })
+      console.error(`  ✗ ${label}: ${message}`)
+
+      const tutMs = performance.now() - tutStart
+      timings.push({ slug: t.slug, repo: t.repo, durationMs: tutMs })
+    }
+  })
+
+  await runWithConcurrency(tasks, CONCURRENCY)
+  const processMs = performance.now() - processStart
+
+  // ── Phase 4: AEM Missions & Groups ──
+  console.log('\nPhase 4: Fetching missions & groups from AEM...\n')
+  const aemStart = performance.now()
+
+  let missions: AemMission[] = []
+  let hierarchies: AemHierarchy[] = []
+  let aemCacheUsed = false
+
+  const forceAem = process.argv.includes('--force-aem')
+  const cached = forceAem ? null : loadAemCache()
+
+  if (cached) {
+    missions = cached.missions
+    hierarchies = cached.hierarchies
+    aemCacheUsed = true
+    console.log(`  [aem] Using cached data (${missions.length} missions)`)
+  } else {
+    try {
+      missions = await fetchAllMissions()
+      console.log(`  [aem] Discovered ${missions.length} missions`)
+
+      hierarchies = await fetchAllMissionHierarchies(missions)
+      saveAemCache(missions, hierarchies)
+      console.log(`  [aem] Fetched all hierarchies`)
+    } catch (err) {
+      console.warn(`  [aem-warn] AEM fetch failed: ${err instanceof Error ? err.message : err}`)
+      console.warn('  [aem-warn] Continuing without missions/groups')
+    }
   }
 
-  writeMissionPage(navEntries)
-  const groupIds = [...new Set(POC_TUTORIALS.map(t => t.groupId))]
-  for (const gid of groupIds) {
-    writeGroupPage(gid, navEntries)
+  const navBySlug = new Map(navEntries.map(n => [n.slug, n]))
+  const missionsMeta: MissionMeta[] = []
+  const allGroupRefs: GroupRef[] = []
+  let matchedTutorials = 0
+  let unmatchedTutorials = 0
+
+  for (const mission of missions) {
+    const hierarchy = hierarchies.find(h => h.missionImsId === mission.imsId)
+    if (!hierarchy) continue
+
+    const missionGroups: GroupRef[] = []
+    const isFlat = hierarchy.groups.length === 0 && hierarchy.tutorialSlugs.length > 0
+
+    const groupsToProcess: AemHierarchyGroup[] = isFlat
+      ? [{
+          imsId: mission.imsId,
+          title: mission.title,
+          slug: mission.slug,
+          description: mission.description,
+          tutorialSlugs: hierarchy.tutorialSlugs,
+        }]
+      : hierarchy.groups
+
+    for (const group of groupsToProcess) {
+      const groupRef: GroupRef = {
+        id: group.imsId,
+        title: group.title,
+        slug: group.slug,
+        missionId: mission.imsId,
+        tutorials: [],
+      }
+
+      const groupTutorialEntries: Array<{
+        slug: string
+        title: string
+        description: string
+        time: number
+        level: string
+        stepCount: number
+        primaryTag: string
+      }> = []
+
+      for (let i = 0; i < group.tutorialSlugs.length; i++) {
+        const tSlug = group.tutorialSlugs[i]
+        const nav = navBySlug.get(tSlug)
+        if (!nav) {
+          unmatchedTutorials++
+          continue
+        }
+
+        matchedTutorials++
+        groupRef.tutorials.push(tSlug)
+
+        nav.missionId = mission.imsId
+        nav.missionTitle = mission.title
+        nav.missionSlug = mission.slug
+        if (!isFlat) {
+          nav.groupId = group.imsId
+          nav.groupTitle = group.title
+          nav.groupSlug = group.slug
+        }
+
+        const prevSlug = i > 0 ? group.tutorialSlugs[i - 1] : null
+        const nextSlug = i < group.tutorialSlugs.length - 1 ? group.tutorialSlugs[i + 1] : null
+        if (prevSlug && navBySlug.has(prevSlug)) nav.prev = prevSlug
+        if (nextSlug && navBySlug.has(nextSlug)) nav.next = nextSlug
+
+        groupTutorialEntries.push({
+          slug: nav.slug,
+          title: nav.title,
+          description: nav.description,
+          time: nav.time,
+          level: nav.level,
+          stepCount: nav.stepCount,
+          primaryTag: nav.primaryTag,
+        })
+      }
+
+      missionGroups.push(groupRef)
+      if (!isFlat) {
+        allGroupRefs.push(groupRef)
+        writeGroupPage(group, mission, groupTutorialEntries)
+      }
+    }
+
+    missionsMeta.push({
+      id: mission.imsId,
+      title: mission.title,
+      slug: mission.slug,
+      groups: missionGroups,
+    })
+
+    writeMissionPage(mission, missionGroups, navBySlug)
   }
 
-  const groupMap = new Map<number, string[]>()
-  for (const t of navEntries) {
-    const list = groupMap.get(t.groupId) ?? []
-    list.push(t.slug)
-    groupMap.set(t.groupId, list)
+  let patchedCount = 0
+  for (const nav of navEntries) {
+    if (nav.missionId || nav.prev || nav.next) {
+      patchTutorialFrontmatter(nav.slug, nav)
+      patchedCount++
+    }
   }
+
+  const aemMs = performance.now() - aemStart
+  console.log(`\nAEM phase complete: ${missions.length} missions, ${allGroupRefs.length} groups, ${matchedTutorials} tutorials matched, ${unmatchedTutorials} unmatched, ${patchedCount} pages patched (${formatDuration(aemMs)})`)
+
+  // ── Phase 5: Write outputs ──
+  navEntries.sort((a, b) => a.slug.localeCompare(b.slug))
 
   const navData: NavData = {
     tutorials: navEntries,
-    missions: [{
-      id: MISSION_ID,
-      title: MISSION_TITLE,
-      slug: MISSION_SLUG,
-      groups: groupIds.map(gid => ({
-        id: gid,
-        title: GROUP_META[gid]?.title ?? '',
-        slug: GROUP_META[gid]?.slug ?? '',
-        missionId: MISSION_ID,
-        tutorials: groupMap.get(gid) ?? [],
-      })),
-    }],
-    groups: groupIds.map(gid => ({
-      id: gid,
-      title: GROUP_META[gid]?.title ?? '',
-      slug: GROUP_META[gid]?.slug ?? '',
-      missionId: MISSION_ID,
-      tutorials: groupMap.get(gid) ?? [],
-    })),
+    missions: missionsMeta,
+    groups: allGroupRefs,
   }
 
   const navPath = join(OUTPUT_DIR, '_nav.json')
   writeFileSync(navPath, JSON.stringify(navData, null, 2), 'utf-8')
-  console.log(`\nWrote ${POC_TUTORIALS.length} tutorials + ${groupIds.length} groups + 1 mission + nav to ${OUTPUT_DIR}`)
+
+  // Write error log
+  if (errors.length > 0) {
+    mkdirSync(CACHE_DIR, { recursive: true })
+    const errorPath = join(CACHE_DIR, 'errors.json')
+    writeFileSync(errorPath, JSON.stringify(errors, null, 2), 'utf-8')
+    console.log(`\nError log written to ${errorPath}`)
+  }
+
+  // ── Timing Summary ──
+  const totalMs = performance.now() - totalStart
+  const sortedTimings = [...timings].sort((a, b) => b.durationMs - a.durationMs)
+  const avgMs = timings.length > 0 ? timings.reduce((s, t) => s + t.durationMs, 0) / timings.length : 0
+
+  console.log('\n' + '═'.repeat(60))
+  console.log('  BUILD SUMMARY')
+  console.log('═'.repeat(60))
+  console.log(`  Tutorials:  ${successCount} succeeded, ${errors.length} failed`)
+  console.log(`  Cache:      ${cacheHits} cached, ${cacheRefreshes} refreshed, ${cacheFetches} fetched`)
+  console.log(`  Missions:   ${missionsMeta.length} missions, ${allGroupRefs.length} groups`)
+  console.log(`  Mapping:    ${matchedTutorials} tutorials mapped, ${unmatchedTutorials} unmatched`)
+  console.log('─'.repeat(60))
+  console.log('  PHASE TIMING')
+  console.log(`    Discovery (GraphQL):     ${formatDuration(discoveryMs)}`)
+  console.log(`    Metadata prefetch:       ${formatDuration(metaMs)}`)
+  console.log(`    Tutorial processing:     ${formatDuration(processMs)}`)
+  console.log(`    AEM missions/groups:     ${formatDuration(aemMs)}${aemCacheUsed ? ' (cached)' : ''}`)
+  console.log(`    Total:                   ${formatDuration(totalMs)}`)
+  console.log('─'.repeat(60))
+  console.log('  PER-TUTORIAL STATS')
+  console.log(`    Average:   ${formatDuration(avgMs)}`)
+  if (sortedTimings.length > 0) {
+    console.log(`    Slowest:   ${formatDuration(sortedTimings[0].durationMs)} (${sortedTimings[0].repo}/${sortedTimings[0].slug})`)
+    console.log(`    Fastest:   ${formatDuration(sortedTimings[sortedTimings.length - 1].durationMs)} (${sortedTimings[sortedTimings.length - 1].repo}/${sortedTimings[sortedTimings.length - 1].slug})`)
+  }
+  console.log(`    Throughput: ${(timings.length / (totalMs / 1000)).toFixed(1)} tutorials/sec`)
+  console.log('─'.repeat(60))
+
+  if (errors.length > 0) {
+    console.log('  ERRORS')
+    for (const e of errors) {
+      console.log(`    ✗ ${e.repo}/${e.slug}: ${e.error}`)
+    }
+    console.log('─'.repeat(60))
+  }
+
+  console.log('═'.repeat(60))
 }
 
 main().catch(err => {

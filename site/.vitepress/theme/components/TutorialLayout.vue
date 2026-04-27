@@ -115,13 +115,11 @@ onMounted(async () => {
               <span class="breadcrumb-caret">&#9662;</span>
             </button>
           </li>
-          <li class="fd-breadcrumb__item">
-            <a v-if="frontmatter.missionSlug" class="fd-breadcrumb__link" :href="`/tutorials/mission-${frontmatter.missionSlug}`">{{ frontmatter.missionTitle }}</a>
-            <span v-else class="fd-breadcrumb__link">{{ frontmatter.missionTitle }}</span>
+          <li v-if="frontmatter.missionSlug" class="fd-breadcrumb__item">
+            <a class="fd-breadcrumb__link" :href="`/tutorials/mission-${frontmatter.missionSlug}`">{{ frontmatter.missionTitle }}</a>
           </li>
-          <li class="fd-breadcrumb__item">
-            <a v-if="frontmatter.groupSlug" class="fd-breadcrumb__link" :href="`/tutorials/group-${frontmatter.groupSlug}`">{{ frontmatter.groupTitle }}</a>
-            <span v-else class="fd-breadcrumb__link">{{ frontmatter.groupTitle }}</span>
+          <li v-if="frontmatter.groupSlug" class="fd-breadcrumb__item">
+            <a class="fd-breadcrumb__link" :href="`/tutorials/group-${frontmatter.groupSlug}`">{{ frontmatter.groupTitle }}</a>
           </li>
           <li class="fd-breadcrumb__item"><span class="fd-breadcrumb__link fd-breadcrumb__link--current">{{ frontmatter.title }}</span></li>
         </ul>
