@@ -61,11 +61,19 @@ function humanizeTag(raw: string): string {
     .join(' ')
 }
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
 function splitPrerequisites(prereqText: string): string[] {
   if (!prereqText) return []
   return prereqText
     .split('\n')
     .map(line => line.replace(/^\s*-\s+/, '').trim())
+    .map(line => escapeHtml(line))
     .filter(line => line.length > 0)
 }
 
