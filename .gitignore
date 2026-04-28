@@ -12,3 +12,10 @@ approuter/static/
 *.png
 aem-missions.json
 hugo/static/js/
+
+# CAP
+gen/
+db.sqlite
+*.db
+.cdsrc-private.json
+default-env.json

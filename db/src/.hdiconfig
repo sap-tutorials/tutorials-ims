@@ -1,0 +1,7 @@
+{
+  "file_suffixes": {
+    "hdbsequence": {
+      "plugin_name": "com.sap.hana.di.sequence"
+    }
+  }
+}

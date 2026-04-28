@@ -3,6 +3,13 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "start": "cds-serve",
+    "watch": "cds watch",
+    "watch:hybrid": "cds watch --profile hybrid",
+    "dev:hybrid": "npm run watch:hybrid & npm run start:approuter",
+    "start:approuter": "cd approuter && npm start",
+    "bind:setup": "node scripts/setup-hybrid-env.js",
+    "build:cds": "cds build --production",
     "fetch-tutorials": "tsx scripts/fetch-tutorials.ts --target hugo",
     "fetch-tutorials:hugo": "tsx scripts/fetch-tutorials.ts --target hugo",
     "generate-dark-theme": "tsx scripts/generate-dark-theme.ts",
@@ -14,9 +21,12 @@
     "build:all": "npm run fetch-tutorials -- --regenerate && npm run build:css && npm run build:apps && npm run build:hugo && npm run build:display",
     "dev": "hugo server --source hugo",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:cap": "vitest run test/"
   },
   "devDependencies": {
+    "@cap-js/cds-test": "^1.0.0",
+    "@sap/cds-dk": "^9.9.0",
     "fundamental-styles": "^0.41.4",
     "gray-matter": "^4.0.3",
     "markdown-it": "^14.1.1",
@@ -28,6 +38,23 @@
     "yaml": "^2.7.0"
   },
   "dependencies": {
-    "@stomp/stompjs": "^7.3.0"
+    "@cap-js/hana": "^2.7.1",
+    "@cap-js/sqlite": "^2.2.1",
+    "@sap/cds": "^9.9.0",
+    "@sap/xssec": "^4.13.0",
+    "@stomp/stompjs": "^7.3.0",
+    "passport": "^0.7.0"
+  },
+  "cds": {
+    "requires": {
+      "db": {
+        "[hybrid]": {
+          "kind": "hana"
+        },
+        "[production]": {
+          "kind": "hana"
+        }
+      }
+    }
   }
 }
