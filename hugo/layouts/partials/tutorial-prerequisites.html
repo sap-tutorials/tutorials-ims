@@ -1,0 +1,10 @@
+{{ with .Params.prerequisites }}
+<div class="tutorial-prerequisites">
+  <h3>Prerequisites</h3>
+  <ul>
+    {{ range . }}
+    <li>{{ . | markdownify }}</li>
+    {{ end }}
+  </ul>
+</div>
+{{ end }}

@@ -1,0 +1,87 @@
+{{ define "main" }}
+<div class="mission-wrapper">
+  <!-- Breadcrumb -->
+  <nav class="mission-breadcrumb-bar">
+    <div class="breadcrumb-inner">
+      <ul class="fd-breadcrumb">
+        <li class="fd-breadcrumb__item"><a class="fd-breadcrumb__link" href="/">Tutorial Navigator</a></li>
+        <li class="fd-breadcrumb__item"><span class="fd-breadcrumb__link fd-breadcrumb__link--current">{{ .Title }}</span></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="mission-hero">
+    <div class="hero-inner">
+      <div class="hero-top">
+        <div class="hero-text">
+          <span class="type-badge type-badge--mission">MISSION</span>
+          <h1>{{ .Title }}</h1>
+          <p class="mission-description">{{ .Params.description }}</p>
+          <div class="mission-meta">
+            <span class="meta-item">{{ .Params.level | title }}</span>
+            <span class="meta-sep">&middot;</span>
+            <span class="meta-item">{{ .Params.totalTime }} min.</span>
+            <span class="meta-sep">&middot;</span>
+            <span class="meta-item">{{ .Params.tutorialCount }} Tutorials</span>
+            <span class="meta-sep">&middot;</span>
+            <span class="meta-item">{{ .Params.groupCount }} Groups</span>
+          </div>
+          {{ with .Params.displayTags }}
+          <div class="mission-tags">
+            {{ range . }}<span class="tag-pill">{{ . }}</span>{{ end }}
+          </div>
+          {{ end }}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Groups -->
+  <div class="mission-body">
+    <div class="groups-section">
+      <h2>Groups in this Mission</h2>
+      {{ range .Params.groups }}
+      <div class="group-card">
+        <div class="group-card-header" onclick="this.parentElement.classList.toggle('expanded')">
+          <div class="group-header-left">
+            <span class="type-badge type-badge--group">GROUP</span>
+            <h3><a href="/tutorials/group-{{ .slug }}" onclick="event.stopPropagation()">{{ .title }}</a></h3>
+            <span class="group-meta">{{ len .tutorials }} Tutorials</span>
+          </div>
+          <span class="group-chevron">&#9662;</span>
+        </div>
+        <div class="group-card-body">
+          <ol class="group-tutorials">
+            {{ range $idx, $tut := .tutorials }}
+            <li class="tutorial-item">
+              <span class="tutorial-number">{{ add $idx 1 }}</span>
+              <div class="tutorial-info">
+                <a href="/tutorials/{{ $tut.slug }}" class="tutorial-link">{{ $tut.title }}</a>
+                <div class="tutorial-meta-row">
+                  <span>{{ $tut.level | title }}</span>
+                  <span class="meta-sep">&middot;</span>
+                  <span>{{ $tut.time }} min.</span>
+                  <span class="meta-sep">&middot;</span>
+                  <span>{{ $tut.stepCount }} steps</span>
+                </div>
+              </div>
+            </li>
+            {{ end }}
+          </ol>
+          <a href="/tutorials/group-{{ .slug }}" class="group-start-link">View Group &rarr;</a>
+        </div>
+      </div>
+      {{ end }}
+    </div>
+  </div>
+</div>
+
+<script>
+// Expand first group by default
+document.addEventListener('DOMContentLoaded', function() {
+  var firstCard = document.querySelector('.group-card');
+  if (firstCard) firstCard.classList.add('expanded');
+});
+</script>
+{{ end }}

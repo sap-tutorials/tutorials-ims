@@ -1,0 +1,13 @@
+<nav class="tutorial-breadcrumbs fd-breadcrumb" aria-label="Breadcrumb">
+  <ul class="fd-breadcrumb__list">
+    <li class="fd-breadcrumb__item"><a class="fd-breadcrumb__link" href="/">Tutorials</a></li>
+    {{ with .Params.missionTitle }}
+    <li class="fd-breadcrumb__item"><a class="fd-breadcrumb__link" href="{{ $.Params.missionUrl }}">{{ . }}</a></li>
+    {{ end }}
+    {{ with .Params.groupTitle }}
+    <li class="fd-breadcrumb__item"><a class="fd-breadcrumb__link" href="{{ $.Params.groupUrl }}">{{ . }}</a></li>
+    {{ end }}
+    <li class="fd-breadcrumb__item">{{ .Title }}</li>
+  </ul>
+  <div id="nav-dropdown-mount" data-slug="{{ .Params.slug }}"></div>
+</nav>

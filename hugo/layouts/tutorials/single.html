@@ -1,0 +1,45 @@
+{{ define "main" }}
+{{ partial "breadcrumbs.html" . }}
+<div id="nav-dropdown-mount" data-slug="{{ .Params.slug }}" style="position: relative;"></div>
+{{ partial "feedback-share.html" . }}
+
+<div class="tutorial-page">
+  <main class="tutorial-main">
+    <h1 class="tutorial-title">{{ .Title }}</h1>
+    {{ partial "tutorial-meta.html" . }}
+    <p class="tutorial-description">{{ .Params.description }}</p>
+
+    {{ with .Params.youWillLearn }}
+    <div class="you-will-learn">
+      <h3>You will learn</h3>
+      <ul>{{ range . }}<li><span class="check-icon">✔</span> {{ . | markdownify }}</li>{{ end }}</ul>
+    </div>
+    {{ end }}
+
+    {{ partial "tutorial-author.html" . }}
+    {{ partial "tutorial-prerequisites.html" . }}
+
+    <div id="progress-bar" data-step-count="{{ .Params.stepCount }}" data-slug="{{ .Params.slug }}"></div>
+
+    <div class="step-controls">
+      <a href="#" onclick="expandAllSteps(); return false">Open all</a>
+      <a href="#" onclick="collapseAllSteps(); return false">Close all</a>
+    </div>
+
+    <div class="tutorial-steps">{{ .Content }}</div>
+
+    {{ partial "tutorial-nav-bottom.html" . }}
+  </main>
+  {{ partial "tutorial-sidebar.html" . }}
+  <div id="mini-navigator-mount" data-slug="{{ .Params.slug }}" data-mission-id="{{ .Params.missionId }}"></div>
+</div>
+
+{{ with .Params.steps }}
+<script id="tutorial-data" type="application/json">{{ . | jsonify }}</script>
+{{ end }}
+
+{{ $js := resources.Get "js/tutorial.ts" | js.Build (dict "minify" true) }}
+<script src="{{ $js.RelPermalink }}" defer></script>
+<script type="module" src="/js/nav-dropdown.js"></script>
+<script type="module" src="/js/mini-navigator.js"></script>
+{{ end }}

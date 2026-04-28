@@ -1,0 +1,727 @@
+@import './sap-theme-vars.css';
+@import 'fundamental-styles/dist/theming/sap_horizon.css';
+@import 'fundamental-styles/dist/button.css';
+@import 'fundamental-styles/dist/card.css';
+@import 'fundamental-styles/dist/panel.css';
+@import 'fundamental-styles/dist/progress-indicator.css';
+@import 'fundamental-styles/dist/badge.css';
+@import 'fundamental-styles/dist/icon.css';
+@import 'fundamental-styles/dist/tabs.css';
+@import 'fundamental-styles/dist/breadcrumb.css';
+@import 'fundamental-styles/dist/popover.css';
+@import 'fundamental-styles/dist/bar.css';
+@import 'fundamental-styles/dist/form-item.css';
+@import 'fundamental-styles/dist/form-label.css';
+@import 'fundamental-styles/dist/radio.css';
+@import 'fundamental-styles/dist/input.css';
+@import 'fundamental-styles/dist/input-group.css';
+@import 'fundamental-styles/dist/link.css';
+@import 'fundamental-styles/dist/checkbox.css';
+@import 'fundamental-styles/dist/info-label.css';
+@import 'fundamental-styles/dist/toolbar.css';
+@import 'fundamental-styles/dist/shellbar.css';
+@import 'fundamental-styles/dist/tile.css';
+@import 'fundamental-styles/dist/counter.css';
+@import 'fundamental-styles/dist/object-status.css';
+@import './sap-horizon-dark-scoped.css';
+
+:root {
+  --vp-c-brand-1: var(--sapBrandColor, #0070f2);
+  --vp-c-brand-2: var(--sapHighlightColor, #0064d9);
+  --vp-c-brand-3: var(--sapBrandColor, #0070f2);
+
+  --vp-c-bg: var(--sapBackgroundColor, #f5f6f7);
+  --vp-c-bg-soft: var(--sapGroup_ContentBackground, #fff);
+  --vp-c-bg-alt: var(--sapBaseColor, #fff);
+
+  --vp-c-text-1: var(--sapTextColor, #32363a);
+  --vp-c-text-2: var(--sapContent_LabelColor, #556b82);
+  --vp-c-text-3: var(--sapNeutralTextColor, #6a6d70);
+
+  --vp-c-divider: var(--sapGroup_ContentBorderColor, #d9d9d9);
+  --vp-c-gutter: var(--sapGroup_ContentBorderColor, #d9d9d9);
+
+  --vp-font-family-base: var(--sapFontFamily, '72', '72full', Arial, Helvetica, sans-serif);
+
+  --vp-nav-bg-color: var(--sapShellColor, #354a5f);
+
+  --vp-c-default-1: var(--sapButton_BorderColor, #0064d9);
+  --vp-c-default-soft: var(--sapNeutralBackground, #f5f6f7);
+}
+
+/* Force VitePress nav bar to SAP shell styling */
+.VPNav,
+.VPNavBar {
+  background-color: var(--sapShellColor, #354a5f) !important;
+  border-bottom: none !important;
+}
+
+.VPNavBar .title {
+  color: var(--sapShell_TextColor, #fff) !important;
+}
+
+.VPNavBar .VPNavBarMenuLink,
+.VPNavBarMenu .VPLink {
+  color: var(--sapShell_TextColor, #fff) !important;
+}
+
+/* Prevent horizontal scrollbar from full-bleed elements */
+html {
+  overflow-x: hidden;
+  background-color: var(--sapBackgroundColor, #f5f6f7);
+}
+
+/* Main content area white background (for doc/tutorial pages) */
+.VPDoc,
+.vp-doc {
+  background-color: var(--sapBaseColor, #fff) !important;
+}
+
+/* VPContent — match SAP background so no white seams show */
+.VPContent {
+  background-color: var(--sapBackgroundColor, #f5f6f7) !important;
+}
+
+/* VPPage used by tutorial navigator — allow full-bleed backgrounds */
+.VPPage {
+  background-color: var(--sapBackgroundColor, #f5f6f7);
+}
+
+/* Tutorial page overrides */
+.tutorial-page {
+  background-color: var(--sapBackgroundColor, #f5f6f7);
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 2rem;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1.5rem 2rem;
+}
+
+.tutorial-main {
+  background-color: var(--sapBaseColor, #fff);
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+}
+
+.tutorial-sidebar {
+  position: sticky;
+  top: 4rem;
+  align-self: start;
+  max-height: calc(100vh - 5rem);
+  overflow-y: auto;
+}
+
+/* Ensure proper link colors */
+a {
+  color: var(--sapLinkColor, #0064d9);
+}
+
+a:hover {
+  color: var(--sapLink_Hover_Color, #0064d9);
+}
+
+/* Code blocks */
+.vp-doc div[class*='language-'] {
+  background-color: var(--sapNeutralBackground, #f5f6f7) !important;
+}
+
+.vp-doc div[class*='language-'] code {
+  color: var(--sapTextColor, #32363a) !important;
+}
+
+/* Inline code */
+.vp-doc :not(pre) > code {
+  background-color: var(--sapNeutralBackground, #f5f6f7) !important;
+  color: var(--sapTextColor, #32363a) !important;
+}
+
+/* Blockquotes */
+.vp-doc blockquote {
+  border-left-color: var(--sapInformationBorderColor, #0070f2) !important;
+  background-color: var(--sapInformationBackground, #e1f4ff);
+  padding: 0.75rem 1rem;
+  border-radius: 0 0.25rem 0.25rem 0;
+  color: var(--sapTextColor, #32363a);
+}
+
+/* Images in tutorials */
+.vp-doc img {
+  border: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+  border-radius: 0.25rem;
+}
+
+/* FD button Horizon styling */
+.fd-button {
+  cursor: pointer;
+  font-family: var(--sapFontFamily);
+  font-size: var(--sapFontSize, 0.875rem);
+  font-weight: 700;
+  height: 2.25rem;
+  min-width: 2.25rem;
+  padding: 0 0.625rem;
+  border-radius: var(--sapButton_BorderCornerRadius, 0.5rem);
+  transition: all 0.15s ease;
+}
+
+.fd-button--emphasized {
+  background: var(--sapButton_Emphasized_Background, #0070f2) !important;
+  border-color: var(--sapButton_Emphasized_BorderColor, #0064d9) !important;
+  color: var(--sapButton_Emphasized_TextColor, #fff) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.fd-button--emphasized:hover {
+  background: var(--sapButton_Emphasized_Hover_Background, #0064d9) !important;
+  border-color: var(--sapButton_Emphasized_Hover_BorderColor, #0058c0) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.16);
+}
+
+.fd-button--emphasized:active,
+.fd-button--emphasized.is-active {
+  background: var(--sapButton_Emphasized_Active_Background, #0058c0) !important;
+  border-color: var(--sapButton_Emphasized_Active_BorderColor, #004da5) !important;
+}
+
+.fd-button--emphasized[disabled],
+.fd-button--emphasized.is-disabled {
+  background: var(--sapButton_Background, #fff) !important;
+  border-color: var(--sapButton_BorderColor, #bcc3ca) !important;
+  color: var(--sapContent_DisabledTextColor, #bcc3ca) !important;
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.fd-button--transparent {
+  background: transparent;
+  border-color: transparent;
+  color: var(--sapButton_Lite_TextColor, #0064d9);
+}
+
+.fd-button--transparent:hover {
+  background: var(--sapButton_Lite_Hover_Background, rgba(0, 100, 217, 0.06));
+}
+
+/* Search input in light mode */
+.search-input {
+  background-color: var(--sapField_Background, #fff);
+  color: var(--sapField_TextColor, #32363a);
+}
+
+/* Tutorial cards white background */
+.tutorial-card {
+  background-color: var(--sapTile_Background, #fff);
+}
+
+/* Dark mode VitePress overrides */
+html.dark .VPNav,
+html.dark .VPNavBar {
+  background-color: var(--sapShellColor) !important;
+}
+
+html.dark .VPNavBar .title {
+  color: var(--sapShell_TextColor) !important;
+}
+
+html.dark .VPNavBar .VPNavBarMenuLink,
+html.dark .VPNavBarMenu .VPLink {
+  color: var(--sapShell_TextColor) !important;
+}
+
+html.dark .VPContent,
+html.dark .VPDoc,
+html.dark .vp-doc {
+  background-color: var(--sapBaseColor) !important;
+}
+
+html.dark .vp-doc div[class*='language-'] {
+  background-color: var(--sapNeutralBackground) !important;
+}
+
+html.dark .vp-doc div[class*='language-'] code {
+  color: var(--sapTextColor) !important;
+}
+
+html.dark .vp-doc :not(pre) > code {
+  background-color: var(--sapNeutralBackground) !important;
+  color: var(--sapTextColor) !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   Mission & Group Layout Styles
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── Shared: breadcrumb bars ── */
+.mission-breadcrumb-bar,
+.group-breadcrumb-bar {
+  background: var(--sapBaseColor, #fff);
+  border-bottom: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+  padding: 0.75rem 0;
+}
+.mission-breadcrumb-bar .breadcrumb-inner,
+.group-breadcrumb-bar .breadcrumb-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  font-size: 0.8125rem;
+}
+.mission-breadcrumb-bar .fd-breadcrumb,
+.group-breadcrumb-bar .fd-breadcrumb {
+  padding: 0;
+  margin: 0;
+}
+.mission-breadcrumb-bar .fd-breadcrumb__link,
+.group-breadcrumb-bar .fd-breadcrumb__link {
+  font-size: 0.8125rem;
+}
+.mission-breadcrumb-bar .fd-breadcrumb__link--current,
+.group-breadcrumb-bar .fd-breadcrumb__link--current {
+  color: var(--sapTextColor, #32363a);
+  cursor: default;
+}
+
+/* ── Shared: type badges ── */
+.type-badge {
+  display: inline-block;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.625rem;
+  border-radius: 1rem;
+  margin-bottom: 0.75rem;
+}
+.type-badge--mission {
+  background: rgba(4, 108, 122, 0.2);
+  color: #7dd3de;
+  border: 1px solid rgba(125, 211, 222, 0.3);
+}
+.type-badge--group {
+  background: rgba(108, 50, 169, 0.15);
+  color: var(--sapAccentColor8, #6c32a9);
+  border: 1px solid rgba(108, 50, 169, 0.25);
+}
+
+/* In hero context, group badge uses lighter palette */
+.mission-hero .type-badge--mission,
+.group-hero .type-badge--group {
+  color: #c4a0ef;
+  background: rgba(108, 50, 169, 0.2);
+  border: 1px solid rgba(196, 160, 239, 0.3);
+}
+.mission-hero .type-badge--mission {
+  color: #7dd3de;
+  background: rgba(4, 108, 122, 0.2);
+  border: 1px solid rgba(125, 211, 222, 0.3);
+}
+
+/* ── Shared: meta ── */
+.mission-meta,
+.group-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  opacity: 0.85;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.meta-sep {
+  opacity: 0.5;
+}
+
+/* ── Shared: tag pills ── */
+.mission-tags,
+.group-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+.tag-pill {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 1rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* ── Mission wrapper ── */
+.mission-wrapper,
+.group-wrapper {
+  background: var(--sapBackgroundColor, #f5f6f7);
+  min-height: 100vh;
+}
+
+/* ── Mission hero ── */
+.mission-hero,
+.group-hero {
+  background: var(--sapShellColor, #354a5f);
+  color: var(--sapShell_TextColor, #fff);
+  padding: 2.5rem 2rem;
+}
+.mission-hero .hero-inner,
+.group-hero .hero-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+}
+.mission-hero .hero-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 2rem;
+}
+.mission-hero .hero-text {
+  flex: 1;
+  min-width: 0;
+}
+.mission-hero h1,
+.group-hero h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0 0 0.75rem;
+  color: inherit;
+  line-height: 1.25;
+}
+.mission-description,
+.group-description {
+  font-size: 1rem;
+  line-height: 1.7;
+  opacity: 0.9;
+  max-width: 700px;
+  margin: 0 0 1rem;
+}
+
+/* ── Mission body ── */
+.mission-body,
+.group-body {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1.5rem 2rem 3rem;
+}
+
+.groups-section h2,
+.group-body h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 1.5rem 0 1rem;
+  color: var(--sapTextColor, #32363a);
+}
+
+/* ── Group cards (on mission page) ── */
+.group-card {
+  background: var(--sapBaseColor, #fff);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+.group-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.group-header-left {
+  flex: 1;
+  min-width: 0;
+}
+.group-card-header h3 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin: 0.25rem 0 0.25rem;
+  color: var(--sapTextColor, #32363a);
+}
+.group-card-header h3 a {
+  color: inherit;
+  text-decoration: none;
+}
+.group-card-header h3 a:hover {
+  color: var(--sapBrandColor, #0070f2);
+}
+.group-card-header .group-meta {
+  font-size: 0.8125rem;
+  color: var(--sapNeutralTextColor, #6a6d70);
+  opacity: 1;
+  margin-bottom: 0;
+}
+.group-chevron {
+  font-size: 0.875rem;
+  color: var(--sapNeutralTextColor, #6a6d70);
+  transition: transform 0.2s;
+  flex-shrink: 0;
+  margin-top: 0.25rem;
+  padding: 0.25rem;
+}
+.group-card.expanded .group-chevron {
+  transform: rotate(180deg);
+}
+
+/* Collapse/expand group card body */
+.group-card-body {
+  margin-top: 1rem;
+  display: none;
+}
+.group-card.expanded .group-card-body {
+  display: block;
+}
+
+/* ── Tutorial list (shared by mission groups + group page) ── */
+.group-tutorials {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.tutorial-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--sapGroup_ContentBorderColor, #e5e5e5);
+}
+.tutorial-item:last-child {
+  border-bottom: none;
+}
+.tutorial-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  border: 2px solid var(--sapNeutralBorderColor, #bcc3ca);
+  color: var(--sapNeutralTextColor, #6a6d70);
+  font-weight: 600;
+  font-size: 0.75rem;
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+.tutorial-info {
+  flex: 1;
+  min-width: 0;
+}
+.tutorial-link {
+  color: var(--sapLinkColor, #0064d9);
+  text-decoration: none;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.tutorial-link:hover {
+  text-decoration: underline;
+}
+.tutorial-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--sapNeutralTextColor, #6a6d70);
+  margin-top: 0.15rem;
+}
+.tutorial-meta-row .meta-sep {
+  color: var(--sapNeutralBorderColor, #d9d9d9);
+}
+
+.group-start-link {
+  display: inline-block;
+  margin-top: 0.75rem;
+  color: var(--sapBrandColor, #0070f2);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+.group-start-link:hover {
+  text-decoration: underline;
+}
+
+/* ── Timeline (group page) ── */
+.tutorial-timeline {
+  display: flex;
+  flex-direction: column;
+}
+.timeline-item {
+  display: flex;
+  gap: 1rem;
+}
+.timeline-connector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  width: 2rem;
+}
+.timeline-circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  border: 2px solid var(--sapNeutralBorderColor, #bcc3ca);
+  color: var(--sapNeutralTextColor, #6a6d70);
+  font-weight: 700;
+  font-size: 0.8125rem;
+  background: var(--sapBaseColor, #fff);
+  z-index: 1;
+}
+.timeline-line {
+  width: 2px;
+  flex: 1;
+  background: var(--sapNeutralBorderColor, #bcc3ca);
+  min-height: 1rem;
+}
+.timeline-card {
+  flex: 1;
+  background: var(--sapBaseColor, #fff);
+  border-radius: 0.75rem;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 0.75rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  transition: box-shadow 0.15s;
+}
+.timeline-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+.timeline-card-header h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0 0 0.25rem;
+  line-height: 1.4;
+}
+.timeline-card-header h3 a {
+  color: var(--sapTextColor, #32363a);
+  text-decoration: none;
+}
+.timeline-card-header h3 a:hover {
+  color: var(--sapBrandColor, #0070f2);
+}
+.timeline-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--sapNeutralTextColor, #6a6d70);
+}
+.timeline-card-meta .meta-sep {
+  color: var(--sapNeutralBorderColor, #d9d9d9);
+}
+.timeline-card-desc {
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--sapContent_LabelColor, #556b82);
+  margin: 0.5rem 0;
+}
+.timeline-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--sapGroup_ContentBorderColor, #e5e5e5);
+}
+.timeline-card-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--sapBrandColor, #0070f2);
+}
+.start-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.375rem 1rem;
+  border-radius: 2rem;
+  background: var(--sapBrandColor, #0070f2);
+  color: #fff;
+  text-decoration: none;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.start-btn:hover {
+  background: var(--sapHighlightColor, #0064d9);
+  color: #fff;
+}
+
+/* ── Tutorial prev/next navigation ── */
+.tutorial-nav-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+  gap: 1rem;
+}
+
+.tutorial-nav-prev,
+.tutorial-nav-next {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  font-size: 0.875rem;
+  color: var(--sapLinkColor, #0064d9);
+}
+
+.tutorial-nav-prev:hover,
+.tutorial-nav-next:hover {
+  color: var(--sapLink_Hover_Color, #0064d9);
+  text-decoration: underline;
+}
+
+.tutorial-nav-next {
+  margin-left: auto;
+}
+
+/* ── Tutorial page responsive breakpoints ── */
+@media (max-width: 1024px) {
+  .tutorial-page {
+    grid-template-columns: 1fr;
+    padding: 1rem;
+  }
+  .tutorial-sidebar {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .tutorial-nav-bottom {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .tutorial-nav-next {
+    margin-left: 0;
+    text-align: right;
+  }
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .mission-hero h1,
+  .group-hero h1 {
+    font-size: 1.5rem;
+  }
+  .mission-body,
+  .group-body {
+    padding: 1rem;
+  }
+  .group-card {
+    padding: 1rem;
+  }
+  .mission-hero .hero-top {
+    flex-direction: column;
+  }
+  .timeline-card {
+    padding: 1rem;
+  }
+}

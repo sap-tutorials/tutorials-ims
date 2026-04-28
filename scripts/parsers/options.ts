@@ -4,7 +4,9 @@ interface OptionEntry {
   content: string
 }
 
-export function convertOptionBlocks(content: string): string {
+export type OptionsTarget = 'vitepress' | 'hugo'
+
+export function convertOptionBlocks(content: string, target: OptionsTarget = 'vitepress'): string {
   const optionPattern = /\[OPTION BEGIN \[([^\]]+)\]\]\s*\n([\s\S]*?)\[OPTION END\]/g
 
   const matches = [...content.matchAll(optionPattern)]
@@ -42,12 +44,21 @@ export function convertOptionBlocks(content: string): string {
     const start = firstMatch.index!
     const end = lastMatch.index! + lastMatch[0].length
 
-    const tabNames = group.map(b => `'${b.tabName}'`).join(',')
-    const slots = group.map((b, i) =>
-      `<template #tab-${i}>\n\n${b.content}\n\n</template>`
-    ).join('\n')
+    let replacement: string
+    if (target === 'hugo') {
+      const tabNames = group.map(b => b.tabName).join(',')
+      const tabs = group.map((b, i) =>
+        `{{% tab index="${i}" name="${b.tabName}" %}}\n\n${b.content}\n\n{{% /tab %}}`
+      ).join('\n')
+      replacement = `{{% option-tabs tabs="${tabNames}" %}}\n${tabs}\n{{% /option-tabs %}}`
+    } else {
+      const tabNames = group.map(b => `'${b.tabName}'`).join(',')
+      const slots = group.map((b, i) =>
+        `<template #tab-${i}>\n\n${b.content}\n\n</template>`
+      ).join('\n')
+      replacement = `<OptionTabs :tabs="[${tabNames}]">\n${slots}\n</OptionTabs>`
+    }
 
-    const replacement = `<OptionTabs :tabs="[${tabNames}]">\n${slots}\n</OptionTabs>`
     result = result.slice(0, start) + replacement + result.slice(end)
   }
 
