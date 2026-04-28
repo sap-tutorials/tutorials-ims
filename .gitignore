@@ -10,3 +10,5 @@ approuter/static/
 .playwright-mcp/
 *.png
 aem-missions.json
+hugo/static/js/*.js
+hugo/static/js/chunks/
