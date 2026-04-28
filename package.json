@@ -43,6 +43,7 @@
     "@sap/cds": "^9.9.0",
     "@sap/xssec": "^4.13.0",
     "@stomp/stompjs": "^7.3.0",
+    "node-cron": "^4.2.1",
     "passport": "^0.7.0"
   },
   "cds": {
