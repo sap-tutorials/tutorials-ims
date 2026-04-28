@@ -1,5 +1,6 @@
 {{ define "main" }}
 {{ partial "breadcrumbs.html" . }}
+<div id="nav-dropdown-mount" data-slug="{{ .Params.slug }}" style="position: relative;"></div>
 {{ partial "feedback-share.html" . }}
 
 <div class="tutorial-page">
@@ -30,6 +31,7 @@
     {{ partial "tutorial-nav-bottom.html" . }}
   </main>
   {{ partial "tutorial-sidebar.html" . }}
+  <div id="mini-navigator-mount" data-slug="{{ .Params.slug }}" data-mission-id="{{ .Params.missionId }}"></div>
 </div>
 
 {{ with .Params.steps }}
@@ -38,4 +40,6 @@
 
 {{ $js := resources.Get "js/tutorial.ts" | js.Build (dict "minify" true) }}
 <script src="{{ $js.RelPermalink }}" defer></script>
+<script type="module" src="/js/nav-dropdown.js"></script>
+<script type="module" src="/js/mini-navigator.js"></script>
 {{ end }}
