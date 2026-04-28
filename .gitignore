@@ -1,7 +1,5 @@
 node_modules/
 dist/
-site/.vitepress/dist/
-site/.vitepress/cache/
 site/tutorials/
 approuter/static/
 .tutorial-cache/
