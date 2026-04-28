@@ -11,5 +11,31 @@
   },
   "odata": {
     "version": "v4"
+  },
+  "requires": {
+    "auth": {
+      "kind": "mocked",
+      "[hybrid]": { "kind": "xsuaa" },
+      "[production]": { "kind": "xsuaa" },
+      "users": {
+        "developer": {
+          "password": "developer",
+          "roles": ["DeveloperApp", "authenticated-user"],
+          "attr": {
+            "email": "dev@test.com",
+            "given_name": "Test",
+            "family_name": "Developer"
+          }
+        },
+        "admin": {
+          "password": "admin",
+          "roles": ["Admin", "DeveloperApp", "DisplayApp", "ContentAuthor", "ConsolidationScope", "authenticated-user"]
+        },
+        "display": {
+          "password": "display",
+          "roles": ["DisplayApp", "authenticated-user"]
+        }
+      }
+    }
   }
 }
