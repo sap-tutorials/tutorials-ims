@@ -37,7 +37,9 @@
     "@cap-js/hana": "^2.7.1",
     "@cap-js/sqlite": "^2.2.1",
     "@sap/cds": "^9.9.0",
-    "@stomp/stompjs": "^7.3.0"
+    "@sap/xssec": "^4.13.0",
+    "@stomp/stompjs": "^7.3.0",
+    "passport": "^0.7.0"
   },
   "cds": {
     "requires": {
