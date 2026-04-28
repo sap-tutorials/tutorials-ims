@@ -225,18 +225,52 @@ export default class AdminService extends cds.ApplicationService {
       return SELECT.from(TaskRecords).where({ user_ID: user.ID });
     });
 
-    // --- Integration stubs (Plan 3) ---
+    // --- Integrations (wired) ---
 
     this.on('sendToNgds', async (req) => {
-      return req.reject(501, 'sendToNgds: Not yet implemented (Plan 3 - Integrations)');
+      const { taskRecordLegacyId } = req.data;
+      const record = await SELECT.one.from(TaskRecords).where({ legacyId: taskRecordLegacyId });
+      if (!record) return req.reject(404, `TaskRecord not found: ${taskRecordLegacyId}`);
+
+      const user = await SELECT.one.from(Users).where({ ID: record.user_ID });
+      const { sendToNgds: send } = await import('./lib/ngds-client.js');
+      const result = await send({
+        uuid: user?.uuid,
+        taskLegacyId: record.taskLegacyId,
+        taskType: record.taskType,
+        taskTitle: record.titleSnapshot || '',
+        completionDate: record.completionDate,
+        eventLegacyId: null,
+        sapId: user?.sapId
+      });
+      return result;
     });
 
     this.on('syncTutorialMetadata', async (req) => {
-      return req.reject(501, 'syncTutorialMetadata: Not yet implemented (Plan 3 - Integrations)');
+      const { syncTutorialMetadata: sync } = await import('./lib/tutorial-sync.js');
+      const fs = await import('fs');
+      const path = await import('path');
+
+      const cachePath = path.join(process.cwd(), '.tutorial-cache', 'metadata.json');
+      let metadataSource = [];
+      try {
+        const raw = fs.readFileSync(cachePath, 'utf-8');
+        metadataSource = JSON.parse(raw);
+      } catch {
+        return { synced: 0, message: 'No metadata cache found' };
+      }
+      return sync(metadataSource);
     });
 
     this.on('sendContributorNotifications', async (req) => {
-      return req.reject(501, 'sendContributorNotifications: Not yet implemented (Plan 3 - Integrations)');
+      const { computeStaleNotifications, markNotificationSent } = await import('./lib/contributor-notifications.js');
+      const notifications = await computeStaleNotifications(180);
+
+      for (const n of notifications) {
+        await markNotificationSent(n.tutorialId);
+      }
+
+      return { notified: notifications.length };
     });
 
     await super.init();

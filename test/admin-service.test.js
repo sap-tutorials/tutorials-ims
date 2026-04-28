@@ -186,12 +186,12 @@ describe('AdminService', () => {
     });
   });
 
-  describe('Integration Stubs', () => {
-    it('sendToNgds returns 501', async () => {
+  describe('Integration Actions', () => {
+    it('sendToNgds returns 404 for non-existent task record', async () => {
       const { status } = await project.post('/admin/sendToNgds',
         { taskRecordLegacyId: 1 },
         { ...adminAuth, validateStatus: () => true });
-      expect(status).toBe(501);
+      expect(status).toBe(404);
     });
   });
 });

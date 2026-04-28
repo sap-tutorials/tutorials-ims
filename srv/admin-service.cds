@@ -47,9 +47,17 @@ service AdminService {
   action setFeaturedOrder(taskLegacyId : Integer, taskType : String, featuredOrder : Integer);
 
   // Integration-dependent (stubs in Plan 2, implemented in Plan 3)
-  action sendToNgds(taskRecordLegacyId : Integer);
-  action syncTutorialMetadata();
-  action sendContributorNotifications();
+  action sendToNgds(taskRecordLegacyId : Integer) returns {
+    success : Boolean;
+    error   : String;
+  };
+  action syncTutorialMetadata() returns {
+    synced  : Integer;
+    message : String;
+  };
+  action sendContributorNotifications() returns {
+    notified : Integer;
+  };
 
   // --- Statistics & export functions ---
 
