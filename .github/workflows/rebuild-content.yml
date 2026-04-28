@@ -60,6 +60,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.TUTORIALS_GITHUB_TOKEN }}
 
+      - name: Validate tutorials
+        run: npm run validate-tutorials
+
       - name: Build VitePress
         run: npm run build
 

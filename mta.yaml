@@ -8,6 +8,7 @@ build-parameters:
       commands:
         - npm install
         - npm run fetch-tutorials
+        - npm run validate-tutorials
         - npm run build
         - cd display-app && npm install && npm run build && cd ..
         - mkdir -p approuter/static
