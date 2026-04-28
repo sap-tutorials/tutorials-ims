@@ -4,6 +4,8 @@
   "type": "module",
   "scripts": {
     "fetch-tutorials": "tsx scripts/fetch-tutorials.ts",
+    "fetch-tutorials:hugo": "tsx scripts/fetch-tutorials.ts --target hugo",
+    "fetch-tutorials:vitepress": "tsx scripts/fetch-tutorials.ts",
     "generate-dark-theme": "tsx scripts/generate-dark-theme.ts",
     "validate-tutorials": "tsx scripts/validate-tutorials.ts",
     "build": "vitepress build site",
