@@ -25,8 +25,9 @@ The CAP project lives at the repository root (`db/`, `srv/`) alongside the exist
 ```
 tutorials-poc/
 ├── db/
-│   ├── schema.cds              # CDS data model
-│   └── sequences.hdbsequence   # HANA sequences for integer keys
+│   ├── schema.cds              # CDS data model (entities + Tasks view)
+│   └── src/
+│       └── sequences.hdbsequence  # HANA sequences for legacyId fields
 ├── srv/
 │   ├── developer-service.cds   # Frontend-facing API
 │   ├── developer-service.js    # Custom handlers
@@ -64,24 +65,42 @@ tutorials-poc/
 
 ### Design Philosophy
 
-The Java app uses single-table JPA inheritance (`ims_task` with `task_type` discriminator). In CDS, we use separate entities with a shared aspect. This maps more cleanly to HANA, avoids the "god table" pattern, and gives each entity type its own table with only relevant columns.
+The Java app uses single-table JPA inheritance (`ims_task` with `task_type` discriminator). In CDS, we use **separate entities with a shared aspect** for clean storage, plus a **union view** that replicates the legacy single-table surface with a discriminator column. This gives us:
 
-### Integer Key Strategy
+- **Clean storage**: Each entity type gets its own HANA table with only relevant columns
+- **Legacy compatibility**: A `Tasks` view unions all task entities with a `taskType` discriminator, so consumers expecting the flat single-table shape (admin UI, NGDS payloads, migration scripts) see the same interface
+- **Best of both**: New code uses the typed entities directly; legacy-facing services expose the view
 
-The IMS uses HANA sequences for all entity IDs. Since CAP has no built-in auto-increment for Integer keys, we handle this explicitly:
+### Key Strategy: UUID Primary + Integer Business Key
 
-1. **HANA deployment**: Custom `.hdbsequence` files in `db/src/` define sequences (e.g., `IMS_USER_SEQ`, `IMS_TASK_SEQ`, `IMS_TASK_RECORD_SEQ`). Service handlers call `SELECT <seq>.NEXTVAL FROM DUMMY` before inserts.
-2. **SQLite (local dev)**: A helper function simulates sequences using a `Sequences` config table with current values. This is only for local development — production always uses HANA sequences.
-3. **Migration safety**: Sequences start at a high offset (e.g., 10,000,000) so that migrated IDs from the old system (which uses lower ranges) never collide with newly generated IDs.
+All entities use **UUID as the technical primary key** (via CAP's `cuid` aspect) for proper OData navigation, deep inserts, and CAP framework compatibility. A separate **Integer `legacyId`** field (populated by HANA sequences) provides backward-compatible numeric identifiers for:
+
+- Existing API consumers that reference records by integer ID
+- NGDS payloads that send integer IDs
+- Migration: imported records retain their original integer IDs in the `legacyId` field
+- URLs/references in existing systems
+
+```cds
+// Sequence-backed business ID aspect
+aspect LegacyKeyed {
+  legacyId                  : Integer @readonly;  // Populated by HANA sequence on create
+}
+```
+
+**HANA deployment**: `.hdbsequence` files in `db/src/` define sequences. Service `before('CREATE')` handlers call `SELECT <seq>.NEXTVAL FROM DUMMY` to populate `legacyId`.
+
+**SQLite (local dev)**: A helper simulates sequences via a counter table. Only for local dev — production uses HANA sequences.
+
+**Migration**: Imported records get their original integer IDs written directly to `legacyId`. New sequences start at offset 10,000,000 to avoid collisions.
 
 ### Core Task Hierarchy
 
 ```cds
 namespace com.sap.developers.ims;
-using { managed } from '@sap/cds/common';
+using { managed, cuid } from '@sap/cds/common';
 
-aspect TaskBase : managed {
-  key ID                    : Integer;
+// Shared aspect for all task types
+aspect TaskBase : cuid, managed, LegacyKeyed {
   title                     : String(255) @mandatory;
   description               : LargeString;
   status                    : String(50);
@@ -119,12 +138,54 @@ entity Steps : TaskBase {
 entity Checkpoints : TaskBase { }
 ```
 
+### Legacy Compatibility View
+
+```cds
+// Union view replicating the single-table pattern for backward-compatible APIs
+view Tasks as
+  SELECT from Tutorials {
+    ID, legacyId, title, description, status, deletionReason,
+    primaryTag, experienceTag, averageTimeToComplete,
+    'TUTORIAL' as taskType : String(20),
+    createdAt, modifiedAt
+  }
+  UNION ALL
+  SELECT from Missions {
+    ID, legacyId, title, description, status, deletionReason,
+    primaryTag, experienceTag, averageTimeToComplete,
+    'MISSION' as taskType : String(20),
+    createdAt, modifiedAt
+  }
+  UNION ALL
+  SELECT from Groups {
+    ID, legacyId, title, description, status, deletionReason,
+    primaryTag, experienceTag, averageTimeToComplete,
+    'GROUP' as taskType : String(20),
+    createdAt, modifiedAt
+  }
+  UNION ALL
+  SELECT from Steps {
+    ID, legacyId, title, description, status, deletionReason,
+    primaryTag, experienceTag, averageTimeToComplete,
+    'STEP' as taskType : String(20),
+    createdAt, modifiedAt
+  }
+  UNION ALL
+  SELECT from Checkpoints {
+    ID, legacyId, title, description, status, deletionReason,
+    primaryTag, experienceTag, averageTimeToComplete,
+    'CHECKPOINT' as taskType : String(20),
+    createdAt, modifiedAt
+  };
+```
+
+This view can be exposed in the AdminService for legacy consumers that expect a flat task list with discriminator filtering.
+
 ### User & Progress
 
 ```cds
-entity Users {
-  key ID                    : Integer;
-  uuid                      : String(36) @mandatory;  // unique, immutable
+entity Users : cuid, managed, LegacyKeyed {
+  uuid                      : String(36) @mandatory;  // unique, immutable (from XSUAA)
   sapId                     : String(255);            // unique, optional
   // Profile (flattened from Java's @Embedded Profile)
   firstName                 : String(255);
@@ -140,15 +201,14 @@ entity Users {
   environmentTabs           : Composition of many DeveloperEnvironmentTabs on environmentTabs.user = $self;
 }
 
-entity TaskRecords {
-  key ID                    : Integer;
+entity TaskRecords : cuid, managed, LegacyKeyed {
   user                      : Association to Users @mandatory;
-  // Polymorphic FK: taskId + taskType together identify the target entity.
+  // Polymorphic reference: taskLegacyId + taskType identify the target entity.
+  // For new code, use the Tasks view to look up by legacyId + taskType.
   // CAP cannot enforce referential integrity on polymorphic references,
-  // so validation is handled in service handlers. OData consumers cannot
-  // $expand to the task — they must use taskType to determine which entity
-  // to query separately. This mirrors the Java system's JPA @NotFound(IGNORE).
-  taskId                    : Integer;
+  // so validation is handled in service handlers. This mirrors the Java
+  // system's JPA @NotFound(IGNORE).
+  taskLegacyId              : Integer;
   taskType                  : String enum { TUTORIAL; MISSION; GROUP; STEP; CHECKPOINT; };
   status                    : String enum { COMPLETED; IN_PROGRESS; };
   progress                  : Integer default 0;  // 0-100
@@ -163,23 +223,20 @@ entity TaskRecords {
   event                     : Association to Events;
 }
 
-entity UserMetaData {
-  key ID                    : Integer;
+entity UserMetaData : cuid, LegacyKeyed {
   user                      : Association to Users;
-  key_                      : String(255);  // metadata key
+  ![key]                    : String(255);  // metadata key (CDS quoted identifier)
   value                     : String(2000);
 }
 
-entity DeveloperEnvironmentTabs {
-  key ID                    : Integer;
+entity DeveloperEnvironmentTabs : cuid, LegacyKeyed {
   user                      : Association to Users;
   tabName                   : String(255);
   tabOrder                  : Integer;
   links                     : Composition of many DeveloperEnvironmentLinks on links.tab = $self;
 }
 
-entity DeveloperEnvironmentLinks {
-  key ID                    : Integer;
+entity DeveloperEnvironmentLinks : cuid, LegacyKeyed {
   tab                       : Association to DeveloperEnvironmentTabs;
   title                     : String(255);
   url                       : String(1000);
@@ -190,8 +247,7 @@ entity DeveloperEnvironmentLinks {
 ### Events, Prizes & Accomplishments
 
 ```cds
-entity Events {
-  key ID                    : Integer;
+entity Events : cuid, managed, LegacyKeyed {
   name                      : String(255);
   startDate                 : Timestamp;
   endDate                   : Timestamp;
@@ -200,14 +256,12 @@ entity Events {
   prizes                    : Composition of many Prizes on prizes.event = $self;
 }
 
-entity Prizes {
-  key ID                    : Integer;
+entity Prizes : cuid, LegacyKeyed {
   name                      : String(255);
   event                     : Association to Events;
 }
 
-entity PrizeRecords {
-  key ID                    : Integer;
+entity PrizeRecords : cuid, LegacyKeyed {
   user                      : Association to Users;
   event                     : Association to Events;
   prize                     : Association to Prizes;
@@ -215,8 +269,7 @@ entity PrizeRecords {
   status                    : String(50);
 }
 
-entity Tags {
-  key ID                    : Integer;
+entity Tags : cuid, LegacyKeyed {
   name                      : String(255);
 }
 
@@ -225,31 +278,27 @@ entity TutorialTags {
   key tag                   : Association to Tags;
 }
 
-entity Accomplishments {
-  key ID                    : Integer;
+entity Accomplishments : cuid, LegacyKeyed {
   name                      : String(255);
   rule                      : String(2000);  // SQL pattern for evaluation
   description               : String(1000);
 }
 
-entity AccomplishmentRecords {
-  key ID                    : Integer;
+entity AccomplishmentRecords : cuid, LegacyKeyed {
   user                      : Association to Users;
   accomplishment            : Association to Accomplishments;
   awardedAt                 : Timestamp;
 }
 
-entity CompletionPaths {
-  key ID                    : Integer;
+entity CompletionPaths : cuid, LegacyKeyed {
   mission                   : Association to Missions;
   name                      : String(255);
   items                     : Composition of many CompletionPathItems on items.path = $self;
 }
 
-entity CompletionPathItems {
-  key ID                    : Integer;
+entity CompletionPathItems : cuid, LegacyKeyed {
   path                      : Association to CompletionPaths;
-  taskId                    : Integer;
+  taskLegacyId              : Integer;
   taskType                  : String(20);
   itemOrder                 : Integer;
 }
@@ -258,8 +307,7 @@ entity CompletionPathItems {
 ### Tutorial Metadata & Content Management
 
 ```cds
-entity TutorialMeta {
-  key ID                    : Integer;
+entity TutorialMeta : cuid, LegacyKeyed {
   tutorial                  : Association to Tutorials;
   reviewedDate              : Timestamp;
   owner                     : String(255);
@@ -268,16 +316,14 @@ entity TutorialMeta {
   lastNotificationDate      : Timestamp;
 }
 
-entity TutorialContributors {
-  key ID                    : Integer;
+entity TutorialContributors : cuid, LegacyKeyed {
   tutorial                  : Association to Tutorials;
   name                      : String(255);
   email                     : String(255);
   role                      : String(50);    // AUTHOR, REVIEWER, MAINTAINER
 }
 
-entity TutorialRepositories {
-  key ID                    : Integer;
+entity TutorialRepositories : cuid, LegacyKeyed {
   tutorial                  : Association to Tutorials;
   repoUrl                   : String(1000);
   branch                    : String(255);
@@ -288,30 +334,26 @@ entity TutorialRepositories {
 ### Analytics, Jobs & System
 
 ```cds
-entity ActiveLearnerRecords {
-  key ID                    : Integer;
+entity ActiveLearnerRecords : cuid, LegacyKeyed {
   recordDate                : Date;
   count                     : Integer;
 }
 
-entity DashboardMonitoredRecords {
-  key ID                    : Integer;
+entity DashboardMonitoredRecords : cuid, LegacyKeyed {
   event                     : Association to Events;
   metric                    : String(255);
   value                     : Integer;
   recordedAt                : Timestamp;
 }
 
-entity StepFailures {
-  key ID                    : Integer;
+entity StepFailures : cuid, LegacyKeyed {
   taskRecord                : Association to TaskRecords;
   stepNumber                : Integer;
   failureDate               : Timestamp;
   errorMessage              : String(2000);
 }
 
-entity NGDSFailedMessages {
-  key ID                    : Integer;
+entity NGDSFailedMessages : cuid, LegacyKeyed {
   payload                   : LargeString;
   errorMessage              : String(2000);
   createdAt                 : Timestamp;
@@ -321,8 +363,7 @@ entity NGDSFailedMessages {
 }
 
 // Application configuration (key-value store)
-entity ImsConfig {
-  key ID                    : Integer;
+entity ImsConfig : cuid, LegacyKeyed {
   ![key]                    : String(255);  // CDS quoted identifier for reserved word
   value                     : String(2000);
 }
@@ -336,14 +377,12 @@ entity JobLocks {
 }
 
 // Account merge workflow tracking
-entity PrimaryAccounts {
-  key ID                    : Integer;
+entity PrimaryAccounts : cuid, LegacyKeyed {
   uuid                      : String(36);
   status                    : String(50);
 }
 
-entity SecondaryAccounts {
-  key ID                    : Integer;
+entity SecondaryAccounts : cuid, LegacyKeyed {
   uuid                      : String(36);
   primaryAccount            : Association to PrimaryAccounts;
   status                    : String(50);
@@ -351,8 +390,7 @@ entity SecondaryAccounts {
 }
 
 // Privacy/GDPR
-entity PrivacyProtectionActions {
-  key ID                    : Integer;
+entity PrivacyProtectionActions : cuid, LegacyKeyed {
   userUuid                  : String(36);
   actionType                : String(50);
   requestedAt               : Timestamp;
@@ -361,9 +399,8 @@ entity PrivacyProtectionActions {
 }
 
 // Featured tasks ordering
-entity FeaturedTasks {
-  key ID                    : Integer;
-  taskId                    : Integer;
+entity FeaturedTasks : cuid, LegacyKeyed {
+  taskLegacyId              : Integer;
   taskType                  : String(20);
   featuredOrder             : Integer;
 }
@@ -394,11 +431,11 @@ service DeveloperService {
     badges: many { name: String; icon: String; };
   };
 
-  // IMS-compatible endpoints (ID-based)
-  action createTaskRecord(taskId: Integer, taskType: String, eventId: Integer) returns TaskRecords;
-  function findTaskProgressByUserAndTasksIds(userId: Integer, taskIds: array of Integer) returns many TaskRecords;
-  function countCompletedMissionsTotal(userId: Integer) returns Integer;
-  function countCompletedMissionsPercent(userId: Integer) returns Decimal;
+  // IMS-compatible endpoints (legacyId-based for backward compatibility)
+  action createTaskRecord(taskLegacyId: Integer, taskType: String, eventLegacyId: Integer) returns TaskRecords;
+  function findTaskProgressByUserAndTasksIds(userLegacyId: Integer, taskLegacyIds: array of Integer) returns many TaskRecords;
+  function countCompletedMissionsTotal(userLegacyId: Integer) returns Integer;
+  function countCompletedMissionsPercent(userLegacyId: Integer) returns Decimal;
 }
 ```
 
@@ -435,6 +472,7 @@ service AdminService {
   entity SecondaryAccounts as projection on ims.SecondaryAccounts;
   entity PrivacyProtectionActions as projection on ims.PrivacyProtectionActions;
   entity ActiveLearnerRecords as projection on ims.ActiveLearnerRecords;
+  @readonly entity Tasks as projection on ims.Tasks;  // Legacy compatibility view
 
   // Admin actions
   action anonymizeUser(uuid: String);
@@ -466,7 +504,7 @@ service AdminService {
     primaryUuid: String; status: String; mergedAt: Timestamp;
     secondaryCount: Integer;
   };
-  function findByAccountNumber(accountNumber: String) returns many TaskRecords;
+  function findByAccountNumber(accountNumber: String) returns many TaskRecords;  // GDPR/DSR lookup
 }
 ```
 
@@ -845,10 +883,10 @@ This eliminates the AEM dependency entirely while maintaining the same data avai
 
 ### Approach
 
-- **Schema**: CDS → HDI deployer (no Liquibase). `.hdbsequence` files for integer key generation.
+- **Schema**: CDS → HDI deployer (no Liquibase). `.hdbsequence` files for `legacyId` generation on new records.
 - **Reference data**: REST-based migration script reads from old IMS API, writes to new CAP API
 - **User progress**: Migrated before route cutover (step 4 in cutover plan). Dual-write during transition window.
-- **Sequences**: HANA sequences start at offset 10,000,000. Migrated records retain original IDs (all < 10M).
+- **Key mapping**: Migrated records get new UUID primary keys (auto-generated by CAP) while their original integer IDs are preserved in the `legacyId` field. New sequences start at offset 10,000,000 for `legacyId` to avoid collisions.
 
 ### Migration Script Design
 
