@@ -17,4 +17,30 @@ steps:
     title: "Second Step"
 ---
 
-This is placeholder content. Shortcodes will be added in Task 5.
+{{% tutorial-step number="1" title="First Step" %}}
+
+This is the first step content with **bold** and `code`.
+
+{{% /tutorial-step %}}
+
+{{% tutorial-step number="2" title="Second Step" %}}
+
+This is the second step.
+
+{{% option-tabs tabs="Option A,Option B" %}}
+
+{{% tab index="0" name="Option A" %}}
+
+Content for Option A.
+
+{{% /tab %}}
+
+{{% tab index="1" name="Option B" %}}
+
+Content for Option B.
+
+{{% /tab %}}
+
+{{% /option-tabs %}}
+
+{{% /tutorial-step %}}

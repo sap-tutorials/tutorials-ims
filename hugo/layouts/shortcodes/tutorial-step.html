@@ -1,0 +1,22 @@
+{{ $number := .Get "number" }}
+{{ $title := .Get "title" }}
+{{ $isFirst := eq $number "1" }}
+
+<div id="step-{{ $number }}" class="tutorial-step" data-step="{{ $number }}">
+  <div class="step-header" data-action="toggle-step">
+    <span class="step-check-circle"></span>
+    <div class="step-header-text">
+      <span class="step-label">Step {{ $number }}</span>
+      <span class="step-title-text">{{ $title }}</span>
+    </div>
+    <span class="step-toggle-icon">{{ if $isFirst }}—{{ else }}+{{ end }}</span>
+  </div>
+  <div class="step-body"{{ if not $isFirst }} hidden{{ end }}>
+    <hr class="step-divider" />
+    <div class="step-content">{{ .Inner }}</div>
+    <div class="step-validation-mount" data-step="{{ $number }}"></div>
+    <div class="step-actions">
+      <button class="fd-button fd-button--emphasized" data-action="mark-done" data-step="{{ $number }}">Done</button>
+    </div>
+  </div>
+</div>
