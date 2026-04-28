@@ -14,6 +14,7 @@
     "fetch-tutorials:hugo": "tsx scripts/fetch-tutorials.ts --target hugo",
     "generate-dark-theme": "tsx scripts/generate-dark-theme.ts",
     "validate-tutorials": "tsx scripts/validate-tutorials.ts",
+    "migrate:reference": "node scripts/migrate-reference-data.js",
     "build:css": "postcss hugo/assets/css/sap-fundamental.css --config hugo/ --no-map -o hugo/static/css/sap-fundamental.css",
     "build:apps": "npm --prefix apps run build",
     "build:hugo": "hugo --source hugo --minify",
