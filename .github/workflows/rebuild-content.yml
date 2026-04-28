@@ -17,7 +17,6 @@ on:
 
 env:
   NODE_VERSION: '20'
-  NODE_OPTIONS: '--max-old-space-size=16384'
 
 jobs:
   rebuild:
@@ -33,6 +32,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+
+      - name: Install Hugo
+        run: curl -fsSL https://github.com/gohugoio/hugo/releases/download/v0.147.7/hugo_extended_0.147.7_linux-amd64.tar.gz | tar -xz -C /tmp hugo
 
       - name: Determine environment
         id: env
@@ -53,7 +55,9 @@ jobs:
           esac
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm ci
+          npm --prefix apps install
 
       - name: Fetch tutorials
         run: npm run fetch-tutorials
@@ -63,14 +67,20 @@ jobs:
       - name: Validate tutorials
         run: npm run validate-tutorials
 
-      - name: Build VitePress
-        run: npm run build
+      - name: Build Vue apps
+        run: npm --prefix apps run build
+
+      - name: Build Hugo site
+        run: /tmp/hugo --source hugo --minify
 
       - name: Build display app
         run: npm run build:display
 
       - name: Assemble static content
-        run: npm run copy:static
+        run: |
+          mkdir -p approuter/static
+          cp -r hugo/public/* approuter/static/
+          cp -r display-app/dist approuter/static/display-app
 
       - name: Create content tarball
         run: tar czf content.tar.gz -C approuter/static .
