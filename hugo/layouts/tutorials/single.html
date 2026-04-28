@@ -35,4 +35,7 @@
 {{ with .Params.steps }}
 <script id="tutorial-data" type="application/json">{{ . | jsonify }}</script>
 {{ end }}
+
+{{ $js := resources.Get "js/tutorial.ts" | js.Build (dict "minify" true) }}
+<script src="{{ $js.RelPermalink }}" defer></script>
 {{ end }}
