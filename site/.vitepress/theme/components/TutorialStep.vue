@@ -64,7 +64,7 @@ function toggle() {
       </div>
       <span class="step-toggle-icon">{{ expanded ? '—' : '+' }}</span>
     </div>
-    <div v-show="expanded" class="step-body">
+    <div v-if="expanded" class="step-body">
       <hr class="step-divider" />
       <div class="step-content">
         <slot />
