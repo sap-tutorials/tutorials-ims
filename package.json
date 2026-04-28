@@ -3,6 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "start": "cds-serve",
+    "watch": "cds watch",
+    "build:cds": "cds build --production",
     "fetch-tutorials": "tsx scripts/fetch-tutorials.ts --target hugo",
     "fetch-tutorials:hugo": "tsx scripts/fetch-tutorials.ts --target hugo",
     "generate-dark-theme": "tsx scripts/generate-dark-theme.ts",
@@ -17,6 +20,7 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
+    "@sap/cds-dk": "^9.9.0",
     "fundamental-styles": "^0.41.4",
     "gray-matter": "^4.0.3",
     "markdown-it": "^14.1.1",
@@ -28,6 +32,17 @@
     "yaml": "^2.7.0"
   },
   "dependencies": {
+    "@cap-js/sqlite": "^2.2.1",
+    "@sap/cds": "^9.9.0",
     "@stomp/stompjs": "^7.3.0"
+  },
+  "cds": {
+    "requires": {
+      "db": {
+        "kind": "sqlite",
+        "[hybrid]": { "kind": "hana" },
+        "[production]": { "kind": "hana" }
+      }
+    }
   }
 }

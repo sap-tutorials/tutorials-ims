@@ -1,0 +1,15 @@
+{
+  "build": {
+    "target": "gen",
+    "tasks": [
+      { "for": "hana", "src": "db", "dest": "db" },
+      { "for": "nodejs", "src": "srv", "dest": "srv" }
+    ]
+  },
+  "hana": {
+    "deploy-format": "hdbtable"
+  },
+  "odata": {
+    "version": "v4"
+  }
+}
