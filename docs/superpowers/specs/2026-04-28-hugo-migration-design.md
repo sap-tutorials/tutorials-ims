@@ -80,6 +80,9 @@ tutorials-poc/
 │   │   ├── event-display/
 │   │   │   ├── main.ts
 │   │   │   └── EventDisplay.vue
+│   │   ├── nav-dropdown/
+│   │   │   ├── main.ts            ← Mounts on every tutorial page breadcrumb
+│   │   │   └── TutorialNavigatorDropdown.vue
 │   │   └── shared/
 │   │       ├── useApi.ts           ← API composable
 │   │       └── types.ts
@@ -107,7 +110,10 @@ GitHub API (sap-tutorials org)
 .tutorial-cache/ (raw markdown + metadata)
      │
      ▼
-parsers/frontmatter.ts → parsers/v1.ts or v2.ts → parsers/images.ts → parsers/options.ts
+parsers/frontmatter.ts → parsers/v1.ts or v2.ts → parsers/images.ts
+     │
+     ▼
+convertOptionBlocks() — MUST be target-aware (see below)
      │
      ▼
 writeHugoPage()  ← NEW function (writeVitePressPage kept during migration)
@@ -116,24 +122,66 @@ writeHugoPage()  ← NEW function (writeVitePressPage kept during migration)
 hugo/content/tutorials/{slug}.md  +  hugo/static/tutorials/_nav.json
 ```
 
+### Modifications to `fetch-tutorials.ts`
+
+This is **substantial surgery**, not a minor flag addition. The following must be modified:
+
+1. **`main()` function:** Add `--target hugo` argument parsing. Branch on target to set:
+   - `OUTPUT_DIR` → `hugo/content/tutorials/` (instead of `site/tutorials/`)
+   - `NAV_OUTPUT` → `hugo/static/tutorials/_nav.json`
+   - Call `writeHugoPage()` instead of `writeVitePressPage()`
+
+2. **`convertOptionBlocks()` in `parsers/options.ts`:** Must become target-aware. Currently outputs Vue slot syntax (`<OptionTabs :tabs="[...]"><template #tab-0>...</template></OptionTabs>`). For Hugo target, must output Hugo shortcode syntax directly:
+
+   ```text
+   {{% option-tabs tabs="Video,Written Instructions" %}}
+   {{% tab index="0" name="Video" %}}
+   content...
+   {{% /tab %}}
+   {{% tab index="1" name="Written Instructions" %}}
+   content...
+   {{% /tab %}}
+   {{% /option-tabs %}}
+   ```
+   This is critical because option blocks are converted INSIDE step content before step wrapping occurs. If `convertOptionBlocks()` still outputs Vue syntax, the Hugo shortcode form of `tutorial-step` will receive raw Vue tags that render as literal text.
+
+3. **`patchTutorialFrontmatter()`:** Must be target-aware. Currently writes to hardcoded `OUTPUT_DIR`. For Hugo, must write to `hugo/content/tutorials/` and use Hugo-compatible frontmatter keys (e.g., `type: tutorials` instead of `layout: tutorial`).
+
+4. **`writeHugoPage()` (new function):** Wraps steps in `{{% tutorial-step %}}` shortcode syntax. Does NOT re-process option blocks (already converted by step 2).
+
 ### Content Format Transformation
 
 | Concern | VitePress output | Hugo output |
 |---------|-----------------|-------------|
-| Step wrapping | `<TutorialStep :number="1" title="..." slug="...">` | `{{</* tutorial-step number="1" title="..." */>}}` |
-| Option tabs | `<OptionTabs :tabs="[...]">` + `<template #tab-N>` | `{{</* option-tabs tabs="A,B" */>}}` + `{{</* tab "A" */>}}` |
+| Step wrapping | `<TutorialStep :number="1" title="..." slug="...">` | `{{% tutorial-step number="1" title="..." %}}` |
+| Option tabs | `<OptionTabs :tabs="[...]">` + `<template #tab-N>` | `{{% option-tabs tabs="A,B" %}}` + `{{% tab index="0" name="A" %}}` |
 | Frontmatter layout | `layout: tutorial` | `type: tutorials` (directory-based) |
 | HTML escaping | Aggressive (Vue template compiler) | Minimal (Goldmark passes through raw HTML) |
 
+**Important:** Hugo shortcode form must use `{{% %}}` (percent signs), NOT `{{< >}}` (angle brackets). The percent form tells Hugo to process inner content as markdown AND process nested shortcodes. The angle bracket form does NOT render markdown in inner content.
+
 ### `{{` Delimiter Scanning
 
-Some tutorials contain Go templates, Mustache, or workflow syntax with `{{`. The content generation phase scans for `{{` outside of code fences and wraps affected content in Hugo raw string blocks. A warning is emitted during generation so these can be manually verified.
+Some tutorials contain Go templates, Mustache, or workflow syntax with `{{`. The content generation phase scans for `{{` outside of code fences and wraps affected content in Hugo's raw string shortcode. A warning is emitted during generation for manual verification.
 
 ### What Becomes Unnecessary
 
 - `sanitizeStepContent()` — Hugo doesn't compile HTML as Vue templates
 - `balanceComponentTags()` — No component tag matching
 - `escapeHtmlTags()` — Only shortcode delimiters need attention
+
+### What Must Be Refactored (Not Removed)
+
+- `convertOptionBlocks()` — target-aware: Vue syntax for VitePress, Hugo shortcodes for Hugo
+- `patchTutorialFrontmatter()` — target-aware: different output dir and frontmatter keys
+
+### Parallel Coexistence During Migration
+
+During the migration period, `fetch-tutorials.ts` supports both targets:
+- `npm run fetch-tutorials` (no flag) — existing VitePress output to `site/tutorials/`
+- `npm run fetch-tutorials -- --target hugo` — Hugo output to `hugo/content/tutorials/`
+
+Both share the same `.tutorial-cache/` and AEM cache, so running both targets does not require double-fetching from GitHub. Only the final write step differs.
 
 ---
 
@@ -202,6 +250,8 @@ Replaces `TutorialLayout.vue`. Static parts (title, meta, author, prerequisites,
 
 ### Shortcode: `tutorial-step.html`
 
+**Important:** This shortcode is invoked with the `{{% %}}` form in content files. Hugo renders the inner content as markdown AND processes nested shortcodes before passing `.Inner` to this template. Therefore, `.Inner` already contains rendered HTML — do NOT pipe through `markdownify`.
+
 ```html
 {{ $number := .Get "number" }}
 {{ $title := .Get "title" }}
@@ -218,7 +268,7 @@ Replaces `TutorialLayout.vue`. Static parts (title, meta, author, prerequisites,
   </div>
   <div class="step-body"{{ if not $isFirst }} hidden{{ end }}>
     <hr class="step-divider" />
-    <div class="step-content">{{ .Inner | markdownify }}</div>
+    <div class="step-content">{{ .Inner }}</div>
     <div class="step-validation-mount" data-step="{{ $number }}"></div>
     <div class="step-actions">
       <button class="fd-button fd-button--emphasized" data-action="mark-done" data-step="{{ $number }}">Done</button>
@@ -228,6 +278,8 @@ Replaces `TutorialLayout.vue`. Static parts (title, meta, author, prerequisites,
 ```
 
 ### Shortcode: `option-tabs.html`
+
+Also invoked with `{{% %}}` form. `.Inner` contains the already-processed nested `tab` shortcodes.
 
 ```html
 {{ $tabs := split (.Get "tabs") "," }}
@@ -243,10 +295,13 @@ Replaces `TutorialLayout.vue`. Static parts (title, meta, author, prerequisites,
 
 ### Shortcode: `tab.html`
 
+The tab index is passed explicitly as a parameter (not derived from `.Ordinal`, which gives page-level position, not sibling position). The `index` param is generated by `convertOptionBlocks()` during content generation.
+
 ```html
-{{ $index := .Ordinal }}
-<div class="tab-panel" data-tab-panel="{{ $index }}"{{ if ne $index 0 }} hidden{{ end }}>
-  {{ .Inner | markdownify }}
+{{ $index := .Get "index" }}
+{{ $name := .Get "name" }}
+<div class="tab-panel" data-tab-panel="{{ $index }}" data-tab-name="{{ $name }}"{{ if ne $index "0" }} hidden{{ end }}>
+  {{ .Inner }}
 </div>
 ```
 
@@ -256,7 +311,7 @@ Replaces `TutorialLayout.vue`. Static parts (title, meta, author, prerequisites,
 
 ### Layer 1: `tutorial.ts` (Vanilla TypeScript)
 
-Bundled by Hugo's `js.Build` (esbuild). ~400-500 lines. No framework.
+Bundled by Hugo's `js.Build` (esbuild). ~600-700 lines. No framework.
 
 **Responsibilities:**
 - Step accordion toggle (expand/collapse via `hidden` attribute)
@@ -264,8 +319,35 @@ Bundled by Hugo's `js.Build` (esbuild). ~400-500 lines. No framework.
 - "Done" button → POST `/api/tutorials/{slug}/steps/{n}/complete`
 - Progress bar update
 - Step TOC sidebar completion highlighting
-- Validation quiz rendering (reads from `#tutorial-data` JSON)
+- **Validation quiz widget** (see below)
 - Load progress on page init → GET `/api/tutorials/{slug}/progress`
+
+**Validation Quiz Widget (~200 lines):**
+
+This reimplements `StepValidation.vue` in vanilla TS. On page load, reads the `#tutorial-data` JSON which contains step data including `validation` arrays. For each step that has validation questions:
+
+1. Renders into `.step-validation-mount[data-step="N"]` a form with:
+   - Multiple-choice: radio inputs in styled option cards
+   - Text: text input field
+2. Submit button validates answers client-side (same logic as current: exact match for multiple-choice, case-insensitive for text)
+3. On failure: shows error message, allows retry
+4. On success: shows success message, **enables the Done button** (which starts disabled when validation exists)
+5. The Done button's `disabled` state is controlled by checking `data-validated="true"` on the step element
+
+**Data flow for validation:**
+
+```text
+Hugo template → <script id="tutorial-data" type="application/json">
+                  [{ number: 1, title: "...", validation: [{ id, question, type, options, correctAnswer }] }, ...]
+                </script>
+
+tutorial.ts → on DOMContentLoaded:
+  1. Parse #tutorial-data JSON
+  2. For each step with validation[].length > 0:
+     - Set Done button to disabled
+     - Render quiz form into .step-validation-mount
+  3. On quiz submit: validate, if correct → enable Done button
+```
 
 **Pattern:** Event delegation on `document.body` via `data-action` attributes.
 
@@ -320,6 +402,7 @@ export default defineConfig({
         navigator: resolve(__dirname, 'src/navigator/main.ts'),
         'app-space': resolve(__dirname, 'src/app-space/main.ts'),
         'event-display': resolve(__dirname, 'src/event-display/main.ts'),
+        'nav-dropdown': resolve(__dirname, 'src/nav-dropdown/main.ts'),
       },
       output: {
         entryFileNames: '[name].js',
@@ -341,10 +424,12 @@ if (el) createApp(TutorialNavigator).mount(el)
 ```
 
 **Porting changes from current Vue components:**
-- Remove `import { useData } from 'vitepress'` — replace with reading data attributes or inline JSON from Hugo template
+
+- Remove `import { useData } from 'vitepress'` — not available outside VitePress
 - Remove VitePress `ClientOnly` wrapper — not needed in client-only apps
 - `useApi.ts` stays identical
-- AppSpace theme detection reads from URL params (same as current) and `document.documentElement.dataset.theme` instead of `useData().isDark`
+- AppSpace: `activeTheme` is already set by URL param `?theme=joule|sapphire` (no change needed). The `isDark` import from `useData()` can be replaced with reading `document.documentElement.dataset.theme`
+- NavDropdown: receives `currentSlug` as a data attribute on its mount element; reads mission navigation from API call (same as current)
 
 ### Layer 3: Dark Mode
 
@@ -364,6 +449,26 @@ SAP Horizon CSS variables define both light and dark tokens keyed on `[data-them
 
 ## Build Pipeline & Deployment
 
+### Package.json Scripts
+
+```json
+{
+  "scripts": {
+    "fetch-tutorials": "tsx scripts/fetch-tutorials.ts --target hugo",
+    "fetch-tutorials:vitepress": "tsx scripts/fetch-tutorials.ts",
+    "build:apps": "npm --prefix apps run build",
+    "build:hugo": "hugo --source hugo --minify",
+    "build:display": "npm --prefix display-app run build",
+    "build:static": "mkdir -p approuter/static && cp -r hugo/public/* approuter/static/ && cp -r display-app/dist approuter/static/display-app",
+    "build": "npm run fetch-tutorials -- --regenerate && npm run build:apps && npm run build:hugo && npm run build:display && npm run build:static",
+    "dev": "npm run fetch-tutorials && npm run build:apps && hugo server --source hugo",
+    "dev:apps": "npm --prefix apps run dev"
+  }
+}
+```
+
+Note: `hugo --source hugo` tells Hugo the site root is `./hugo/`. Output goes to `hugo/public/`.
+
 ### Build Order
 
 ```
@@ -377,11 +482,12 @@ build-parameters:
   before-all:
     - builder: custom
       commands:
+        - curl -fsSL https://github.com/gohugoio/hugo/releases/download/v0.147.0/hugo_extended_0.147.0_linux-amd64.tar.gz | tar -xz -C /tmp hugo
         - npm install
         - npm --prefix apps install
         - npm run fetch-tutorials -- --regenerate --target hugo
         - npm run build:apps
-        - npm run build:hugo
+        - /tmp/hugo --source hugo --minify
         - npm --prefix display-app install
         - npm --prefix display-app run build
         - mkdir -p approuter/static
@@ -391,8 +497,8 @@ build-parameters:
 
 ### Hugo Binary in CI
 
-- **GitHub Actions:** `peaceiris/actions-hugo@v2`
-- **MTA Build:** Download in build phase or include binary in repo
+- **GitHub Actions:** `peaceiris/actions-hugo@v2` action installs Hugo in ~2 seconds
+- **MTA Build Service (SAP BTP):** The container runs Linux x86_64. Download the Hugo extended binary directly in the build phase (shown above). The binary is ~50MB compressed, extracts to `/tmp/hugo`, and is invoked by absolute path. Pin the version to avoid drift.
 
 ### Dev Server
 
@@ -425,6 +531,8 @@ title = 'SAP Tutorial Platform'
 [params]
   apiBase = '/api'
 ```
+
+**Note on `outputs.home`:** Hugo's JSON output type is NOT used. The `_nav.json` file is generated directly by the fetch script into `hugo/static/tutorials/`, not by Hugo's output formats. The `['HTML']` setting is intentional.
 
 ---
 
@@ -460,8 +568,9 @@ title = 'SAP Tutorial Platform'
 
 ### Phase 4: Vue Mini-Apps (2 days)
 
-- `apps/` Vite project with Navigator, AppSpace, EventDisplay
+- `apps/` Vite project with Navigator, AppSpace, EventDisplay, NavDropdown
 - Components ported from current `.vue` files
+- `TutorialNavigatorDropdown` mounted on every tutorial page via `nav-dropdown.js` (loaded in `tutorials/single.html` template)
 - Vite builds to `hugo/static/js/`
 - Hugo templates mount apps
 
