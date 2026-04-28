@@ -15,8 +15,30 @@ import type { TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } f
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const CACHE_DIR = join(__dirname, '..', '.tutorial-cache')
-const OUTPUT_DIR = join(__dirname, '..', 'site', 'tutorials')
 const CONCURRENCY = 5
+
+export type BuildTarget = 'vitepress' | 'hugo'
+
+export function parseTarget(argv: string[]): BuildTarget {
+  const idx = argv.indexOf('--target')
+  if (idx !== -1 && idx + 1 < argv.length) {
+    const val = argv[idx + 1]
+    if (val === 'hugo') return 'hugo'
+    if (val === 'vitepress') return 'vitepress'
+    throw new Error(`Unknown target: ${val}. Must be 'vitepress' or 'hugo'.`)
+  }
+  return 'vitepress'
+}
+
+export function getOutputDir(target: BuildTarget): string {
+  if (target === 'hugo') return join(__dirname, '..', 'hugo', 'content', 'tutorials')
+  return join(__dirname, '..', 'site', 'tutorials')
+}
+
+export function getNavJsonDir(target: BuildTarget): string {
+  if (target === 'hugo') return join(__dirname, '..', 'hugo', 'static', 'tutorials')
+  return join(__dirname, '..', 'site', 'tutorials')
+}
 
 const ACRONYMS = new Set(['SAP', 'HANA', 'CAP', 'BTP', 'CDS', 'UI', 'API', 'MTA', 'XSUAA', 'OData', 'HTML5', 'ABAP'])
 
@@ -122,7 +144,9 @@ function writeVitePressPage(
   nav: TutorialNavEntry,
   lastUpdated: string,
   contributors: Array<{ name: string; login: string; avatarUrl: string }>,
+  outputDir: string,
 ): void {
+  const OUTPUT_DIR = outputDir
   const cleanTags = tags.map(t => t.replace(/\\/g, ''))
   const cleanPrimaryTag = primaryTag.replace(/\\/g, '')
 
@@ -265,8 +289,8 @@ function balanceComponentTags(content: string): string {
   writeFileSync(join(OUTPUT_DIR, `${slug}.md`), content, 'utf-8')
 }
 
-function patchTutorialFrontmatter(slug: string, nav: TutorialNavEntry): void {
-  const filePath = join(OUTPUT_DIR, `${slug}.md`)
+function patchTutorialFrontmatter(slug: string, nav: TutorialNavEntry, outputDir: string): void {
+  const filePath = join(outputDir, `${slug}.md`)
   if (!existsSync(filePath)) return
 
   const raw = readFileSync(filePath, 'utf-8')
@@ -313,6 +337,7 @@ function writeMissionPage(
   mission: AemMission,
   groups: GroupRef[],
   navBySlug: Map<string, TutorialNavEntry>,
+  outputDir: string,
 ): void {
   const groupsData = groups.map(g => {
     const tutorials = g.tutorials
@@ -365,7 +390,7 @@ function writeMissionPage(
   }
 
   const content = `---\n${yamlStringify(fm).trimEnd()}\n---\n`
-  writeFileSync(join(OUTPUT_DIR, `mission-${mission.slug}.md`), content, 'utf-8')
+  writeFileSync(join(outputDir, `mission-${mission.slug}.md`), content, 'utf-8')
 }
 
 function writeGroupPage(
@@ -380,6 +405,7 @@ function writeGroupPage(
     stepCount: number
     primaryTag: string
   }>,
+  outputDir: string,
 ): void {
   const totalTime = tutorials.reduce((s, t) => s + t.time, 0)
   const levels = tutorials.map(t => t.level)
@@ -411,7 +437,7 @@ function writeGroupPage(
   }
 
   const content = `---\n${yamlStringify(fm).trimEnd()}\n---\n`
-  writeFileSync(join(OUTPUT_DIR, `group-${group.slug}.md`), content, 'utf-8')
+  writeFileSync(join(outputDir, `group-${group.slug}.md`), content, 'utf-8')
 }
 
 function formatDuration(ms: number): string {
@@ -425,6 +451,9 @@ function formatDuration(ms: number): string {
 async function main() {
   const totalStart = performance.now()
   const regenerateMode = process.argv.includes('--regenerate')
+  const target = parseTarget(process.argv)
+  const OUTPUT_DIR = getOutputDir(target)
+  const NAV_JSON_DIR = getNavJsonDir(target)
 
   let allTutorials: DiscoveredTutorial[]
   let discoveryMs = 0
@@ -566,6 +595,7 @@ async function main() {
         nav,
         lastUpdated,
         contributors,
+        OUTPUT_DIR,
       )
 
       navEntries.push(nav)
@@ -697,7 +727,7 @@ async function main() {
       missionGroups.push(groupRef)
       if (!isFlat) {
         allGroupRefs.push(groupRef)
-        writeGroupPage(group, mission, groupTutorialEntries)
+        writeGroupPage(group, mission, groupTutorialEntries, OUTPUT_DIR)
       }
     }
 
@@ -708,13 +738,13 @@ async function main() {
       groups: missionGroups,
     })
 
-    writeMissionPage(mission, missionGroups, navBySlug)
+    writeMissionPage(mission, missionGroups, navBySlug, OUTPUT_DIR)
   }
 
   let patchedCount = 0
   for (const nav of navEntries) {
     if (nav.missionId || nav.prev || nav.next) {
-      patchTutorialFrontmatter(nav.slug, nav)
+      patchTutorialFrontmatter(nav.slug, nav, OUTPUT_DIR)
       patchedCount++
     }
   }
@@ -731,13 +761,17 @@ async function main() {
     groups: allGroupRefs,
   }
 
-  const navPath = join(OUTPUT_DIR, '_nav.json')
+  const navJsonDir = NAV_JSON_DIR
+  mkdirSync(navJsonDir, { recursive: true })
+  const navPath = join(navJsonDir, '_nav.json')
   writeFileSync(navPath, JSON.stringify(navData, null, 2), 'utf-8')
 
-  // Also write to public/ so VitePress copies it to dist as a static asset
-  const publicNavDir = join(__dirname, '..', 'site', 'public', 'tutorials')
-  mkdirSync(publicNavDir, { recursive: true })
-  writeFileSync(join(publicNavDir, '_nav.json'), JSON.stringify(navData, null, 2), 'utf-8')
+  if (target === 'vitepress') {
+    // Also write to public/ so VitePress copies it to dist as a static asset
+    const publicNavDir = join(__dirname, '..', 'site', 'public', 'tutorials')
+    mkdirSync(publicNavDir, { recursive: true })
+    writeFileSync(join(publicNavDir, '_nav.json'), JSON.stringify(navData, null, 2), 'utf-8')
+  }
 
   // Write error log
   if (errors.length > 0) {
@@ -787,7 +821,14 @@ async function main() {
   console.log('═'.repeat(60))
 }
 
-main().catch(err => {
-  console.error(err)
-  process.exit(1)
-})
+// Only run main() when this file is executed directly (not when imported)
+const isMainModule = process.argv[1] && (
+  process.argv[1].endsWith('fetch-tutorials.ts') ||
+  process.argv[1].endsWith('fetch-tutorials.js')
+)
+if (isMainModule) {
+  main().catch(err => {
+    console.error(err)
+    process.exit(1)
+  })
+}
