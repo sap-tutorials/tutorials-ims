@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__plugin_cds-mcp_cds-mcp__search_model"
+    ]
+  }
+}
