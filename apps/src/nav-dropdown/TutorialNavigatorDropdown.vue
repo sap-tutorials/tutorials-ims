@@ -12,6 +12,11 @@ interface NavEntry {
   next: string | null
 }
 
+interface StepEntry {
+  number: number
+  title: string
+}
+
 const props = defineProps<{
   currentSlug: string
   isOpen: boolean
@@ -23,6 +28,8 @@ const emit = defineEmits<{
 }>()
 
 const navEntries = ref<NavEntry[]>([])
+const stepEntries = ref<StepEntry[]>([])
+const mode = ref<'mission' | 'steps'>('mission')
 const dropdownEl = ref<HTMLElement | null>(null)
 
 const groups = computed(() => {
@@ -46,14 +53,37 @@ function onClickOutside(e: MouseEvent) {
   }
 }
 
+function extractStepsFromDOM(): StepEntry[] {
+  const steps: StepEntry[] = []
+  document.querySelectorAll('.tutorial-step').forEach(el => {
+    const num = parseInt(el.getAttribute('data-step') || '0', 10)
+    const titleEl = el.querySelector('.step-title-text')
+    if (num && titleEl) {
+      steps.push({ number: num, title: titleEl.textContent?.trim() || `Step ${num}` })
+    }
+  })
+  return steps
+}
+
 onMounted(async () => {
   try {
     const res = await fetch('/tutorials/_nav.json')
     if (res.ok) {
       const navData = await res.json()
-      navEntries.value = navData.tutorials ?? navData
+      const allTutorials: NavEntry[] = navData.tutorials ?? navData
+      const current = allTutorials.find(t => t.slug === props.currentSlug)
+      if (current && current.missionId) {
+        navEntries.value = allTutorials.filter(t => t.missionId === current.missionId)
+        mode.value = 'mission'
+      } else {
+        stepEntries.value = extractStepsFromDOM()
+        mode.value = 'steps'
+      }
     }
-  } catch {}
+  } catch {
+    stepEntries.value = extractStepsFromDOM()
+    mode.value = 'steps'
+  }
   document.addEventListener('click', onClickOutside, true)
 })
 
@@ -64,29 +94,57 @@ onUnmounted(() => {
 
 <template>
   <div v-if="isOpen" ref="dropdownEl" class="nav-dropdown">
-    <div class="nav-dropdown-header">
-      <span class="nav-dropdown-icon">&#127919;</span>
-      <div>
-        <div class="nav-dropdown-mission">{{ missionTitle }}</div>
-        <div class="nav-dropdown-count">{{ navEntries.length }} tutorials</div>
+    <!-- Mission mode: show sibling tutorials grouped by group -->
+    <template v-if="mode === 'mission'">
+      <div class="nav-dropdown-header">
+        <span class="nav-dropdown-icon">&#127919;</span>
+        <div>
+          <div class="nav-dropdown-mission">{{ missionTitle }}</div>
+          <div class="nav-dropdown-count">{{ navEntries.length }} tutorials</div>
+        </div>
       </div>
-    </div>
-    <div v-for="group in groups" :key="group.title" class="nav-dropdown-group">
-      <div class="nav-dropdown-group-title">{{ group.title }}</div>
-      <a
-        v-for="tut in group.tutorials"
-        :key="tut.slug"
-        :href="`/tutorials/${tut.slug}`"
-        class="nav-dropdown-item"
-        :class="{ 'is-current': tut.slug === currentSlug }"
-      >
-        <span class="nav-dropdown-bullet" :class="{ current: tut.slug === currentSlug }">
-          <span v-if="tut.slug === currentSlug">&#9658;</span>
-          <span v-else>&#9675;</span>
-        </span>
-        <span class="nav-dropdown-item-title">{{ tut.title }}</span>
-      </a>
-    </div>
+      <div v-for="group in groups" :key="group.title" class="nav-dropdown-group">
+        <div class="nav-dropdown-group-title">{{ group.title }}</div>
+        <a
+          v-for="tut in group.tutorials"
+          :key="tut.slug"
+          :href="`/tutorials/${tut.slug}`"
+          class="nav-dropdown-item"
+          :class="{ 'is-current': tut.slug === currentSlug }"
+        >
+          <span class="nav-dropdown-bullet" :class="{ current: tut.slug === currentSlug }">
+            <span v-if="tut.slug === currentSlug">&#9658;</span>
+            <span v-else>&#9675;</span>
+          </span>
+          <span class="nav-dropdown-item-title">{{ tut.title }}</span>
+        </a>
+      </div>
+    </template>
+
+    <!-- Steps mode: show tutorial steps as in-page navigation -->
+    <template v-else>
+      <div class="nav-dropdown-header">
+        <span class="nav-dropdown-icon">&#128221;</span>
+        <div>
+          <div class="nav-dropdown-mission">Tutorial Steps</div>
+          <div class="nav-dropdown-count">{{ stepEntries.length }} steps</div>
+        </div>
+      </div>
+      <div class="nav-dropdown-group">
+        <a
+          v-for="step in stepEntries"
+          :key="step.number"
+          :href="`#step-${step.number}`"
+          class="nav-dropdown-item"
+          @click="emit('close')"
+        >
+          <span class="nav-dropdown-bullet">
+            <span class="step-num">{{ step.number }}</span>
+          </span>
+          <span class="nav-dropdown-item-title">{{ step.title }}</span>
+        </a>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -179,5 +237,10 @@ onUnmounted(() => {
 
 .nav-dropdown-item-title {
   flex: 1;
+}
+
+.step-num {
+  font-size: 0.6875rem;
+  font-weight: 600;
 }
 </style>
