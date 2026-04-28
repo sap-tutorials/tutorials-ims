@@ -3,12 +3,13 @@
   "tenant-mode": "dedicated",
   "description": "Reference documentation only. Deployment binds to existing IMS XSUAA instances (xsuaa-imsdev/imsqa/imsprod) via org.cloudfoundry.existing-service in mta.yaml. These scope and role definitions mirror the IMS XSUAA configuration.",
   "scopes": [
-    { "name": "$XSAPPNAME.Admin",         "description": "Full admin access" },
-    { "name": "$XSAPPNAME.ContentAuthor", "description": "Create and edit content" },
-    { "name": "$XSAPPNAME.DeveloperApp",  "description": "Developer operations" },
-    { "name": "$XSAPPNAME.MobileApp",     "description": "Mobile app features" },
-    { "name": "$XSAPPNAME.DisplayApp",    "description": "Read-only UI access" },
-    { "name": "$XSAPPNAME.Everyone",      "description": "Baseline access" }
+    { "name": "$XSAPPNAME.Admin",              "description": "Full admin access" },
+    { "name": "$XSAPPNAME.ContentAuthor",      "description": "Create and edit content" },
+    { "name": "$XSAPPNAME.DeveloperApp",       "description": "Developer operations" },
+    { "name": "$XSAPPNAME.MobileApp",          "description": "Mobile app features" },
+    { "name": "$XSAPPNAME.DisplayApp",         "description": "Read-only UI access" },
+    { "name": "$XSAPPNAME.ConsolidationScope", "description": "Account merge operations (SCI technical user)" },
+    { "name": "$XSAPPNAME.Everyone",           "description": "Baseline access" }
   ],
   "role-templates": [
     {
@@ -35,6 +36,11 @@
       "name": "DisplayApp",
       "description": "Read-only user",
       "scope-references": ["$XSAPPNAME.DisplayApp", "$XSAPPNAME.Everyone"]
+    },
+    {
+      "name": "ConsolidationScope",
+      "description": "Account consolidation (SCI)",
+      "scope-references": ["$XSAPPNAME.ConsolidationScope"]
     },
     {
       "name": "Everyone",
