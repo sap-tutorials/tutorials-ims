@@ -90,12 +90,26 @@ html {
 /* Tutorial page overrides */
 .tutorial-page {
   background-color: var(--sapBackgroundColor, #f5f6f7);
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 2rem;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1.5rem 2rem;
 }
 
 .tutorial-main {
   background-color: var(--sapBaseColor, #fff);
   border-radius: 0.5rem;
   padding: 1.5rem;
+}
+
+.tutorial-sidebar {
+  position: sticky;
+  top: 4rem;
+  align-self: start;
+  max-height: calc(100vh - 5rem);
+  overflow-y: auto;
 }
 
 /* Ensure proper link colors */
@@ -636,6 +650,59 @@ html.dark .vp-doc :not(pre) > code {
 .start-btn:hover {
   background: var(--sapHighlightColor, #0064d9);
   color: #fff;
+}
+
+/* ── Tutorial prev/next navigation ── */
+.tutorial-nav-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+  gap: 1rem;
+}
+
+.tutorial-nav-prev,
+.tutorial-nav-next {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  font-size: 0.875rem;
+  color: var(--sapLinkColor, #0064d9);
+}
+
+.tutorial-nav-prev:hover,
+.tutorial-nav-next:hover {
+  color: var(--sapLink_Hover_Color, #0064d9);
+  text-decoration: underline;
+}
+
+.tutorial-nav-next {
+  margin-left: auto;
+}
+
+/* ── Tutorial page responsive breakpoints ── */
+@media (max-width: 1024px) {
+  .tutorial-page {
+    grid-template-columns: 1fr;
+    padding: 1rem;
+  }
+  .tutorial-sidebar {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .tutorial-nav-bottom {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .tutorial-nav-next {
+    margin-left: 0;
+    text-align: right;
+  }
 }
 
 /* ── Responsive ── */
