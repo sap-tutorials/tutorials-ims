@@ -7,10 +7,11 @@ build-parameters:
     - builder: custom
       commands:
         - npm install
-        - npm run fetch-tutorials
+        - npm run fetch-tutorials -- --regenerate
         - npm run validate-tutorials
         - npm run build
-        - cd display-app && npm install && npm run build && cd ..
+        - npm --prefix display-app install
+        - npm --prefix display-app run build
         - mkdir -p approuter/static
         - cp -r site/.vitepress/dist/* approuter/static/
         - cp -r display-app/dist approuter/static/display-app
@@ -20,8 +21,8 @@ modules:
     type: approuter.nodejs
     path: approuter
     parameters:
-      disk-quota: 256M
-      memory: 256M
+      disk-quota: 2048M
+      memory: 512M
       app-name: tutorials-approuter
     properties:
       destinations: >

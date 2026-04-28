@@ -734,6 +734,11 @@ async function main() {
   const navPath = join(OUTPUT_DIR, '_nav.json')
   writeFileSync(navPath, JSON.stringify(navData, null, 2), 'utf-8')
 
+  // Also write to public/ so VitePress copies it to dist as a static asset
+  const publicNavDir = join(__dirname, '..', 'site', 'public', 'tutorials')
+  mkdirSync(publicNavDir, { recursive: true })
+  writeFileSync(join(publicNavDir, '_nav.json'), JSON.stringify(navData, null, 2), 'utf-8')
+
   // Write error log
   if (errors.length > 0) {
     mkdirSync(CACHE_DIR, { recursive: true })

@@ -4,6 +4,7 @@ import type { Plugin } from 'vite'
 const COMPONENT_TAGS = new Set([
   'TutorialStep', 'OptionTabs', 'ClientOnly',
   'Content', 'VPBadge', 'VPTeamPage', 'VPTeamMembers',
+  'TutorialNavigator', 'AppSpace', 'EventDisplay',
 ])
 
 function tutorialAssetFallback(): Plugin {
