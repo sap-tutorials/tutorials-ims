@@ -21,6 +21,11 @@ npm run generate-dark-theme                   # Generate dark theme CSS variable
 npm run test                                  # Run all tests (vitest)
 npm run test:watch                            # Run tests in watch mode
 npx vitest run scripts/__tests__/v1.test.ts   # Run a single test file
+
+# Migration & Comparison
+npm run migrate:reference                     # Export reference data from Java IMS (or import to CAP)
+npm run migrate:users                         # Export user progress from Java IMS (with resume support)
+npm run compare                               # Compare Java IMS and CAP responses side-by-side
 ```
 
 Tutorials must be fetched before `dev` or `build`. Fetched markdown is cached in `.tutorial-cache/` and generated pages go to `site/tutorials/` — both are gitignored. To force re-fetch from GitHub, delete `.tutorial-cache/`.
@@ -57,6 +62,15 @@ sap-tutorials GitHub repos
 ### Deployment (BTP Cloud Foundry)
 
 Single MTA deployment (`mta.yaml`): AppRouter module serves VitePress static build from `approuter/static/`. The MTA build phase runs fetch + build + copies dist into the approuter. XSUAA provides SAP IDP authentication. `/api/*` routes proxy to an existing CAP/HANA backend via BTP Destination.
+
+### Data Migration
+
+Migration scripts in `scripts/` support parallel operation during cutover:
+- `migrate-reference-data.js` — export/import tutorials, missions, events, tags, etc.
+- `migrate-user-progress.js` — export/import users and task records (paged, resumable)
+- `compare-systems.js` — endpoint-by-endpoint diff between Java IMS and CAP
+
+Set `IMS_BASE_URL`, `CAP_BASE_URL`, and `IMS_AUTH_TOKEN` env vars. Export files go to `.migration-data/` (gitignored).
 
 ### Parsers (scripts/parsers/)
 
