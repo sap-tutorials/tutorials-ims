@@ -6,6 +6,10 @@
   --sapHighlightColor: #0064d9;
   --sapShellColor: #354a5f;
   --sapShell_TextColor: #fff;
+  --sapShell_InteractiveTextColor: #d1e8ff;
+  --sapShell_SubBrand_TextColor: #fff;
+  --sapShell_BorderColor: transparent;
+  --sapShell_Shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.2);
   --sapTextColor: #32363a;
   --sapNeutralTextColor: #6a6d70;
   --sapNeutralBorderColor: #d9d9d9;

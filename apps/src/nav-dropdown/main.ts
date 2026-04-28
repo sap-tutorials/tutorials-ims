@@ -6,7 +6,7 @@ if (el) {
   const slug = el.dataset.slug || ''
   const app = createApp(TutorialNavigatorDropdown, {
     currentSlug: slug,
-    isOpen: true,
+    isOpen: false,
     toggleElement: null,
   })
   app.mount(el)
