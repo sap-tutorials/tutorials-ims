@@ -7,6 +7,8 @@ document.addEventListener('click', (e) => {
   if (doneBtn) { markDone(doneBtn as HTMLButtonElement); return }
   const tabBtn = target.closest('[role="tab"]')
   if (tabBtn) { switchTab(tabBtn as HTMLButtonElement); return }
+  const themeBtn = target.closest('[data-action="toggle-theme"]')
+  if (themeBtn) { toggleTheme(); return }
 })
 
 function toggleStep(header: HTMLElement) {
@@ -17,6 +19,7 @@ function toggleStep(header: HTMLElement) {
   const icon = step.querySelector('.step-toggle-icon')
   body.hidden = !body.hidden
   if (icon) icon.textContent = body.hidden ? '+' : '—'
+  updateActiveTocItem()
 }
 
 function expandAllSteps() {
@@ -26,6 +29,7 @@ function expandAllSteps() {
     if (body) body.hidden = false
     if (icon) icon.textContent = '—'
   })
+  updateActiveTocItem()
 }
 
 function collapseAllSteps() {
@@ -35,6 +39,30 @@ function collapseAllSteps() {
     if (body) body.hidden = true
     if (icon) icon.textContent = '+'
   })
+  updateActiveTocItem()
+}
+
+// --- Sidebar TOC active highlighting ---
+function updateActiveTocItem() {
+  document.querySelectorAll('.step-toc-item').forEach(item => item.classList.remove('active'))
+  const expandedStep = document.querySelector('.tutorial-step .step-body:not([hidden])')
+  if (!expandedStep) return
+  const step = expandedStep.closest('.tutorial-step')
+  if (!step) return
+  const stepNum = (step as HTMLElement).dataset.step
+  if (stepNum) {
+    const tocItem = document.querySelector(`.step-toc-item[data-toc-step="${stepNum}"]`)
+    if (tocItem) tocItem.classList.add('active')
+  }
+}
+
+// --- Dark mode toggle ---
+function toggleTheme() {
+  const html = document.documentElement
+  const next = html.dataset.theme === 'dark' ? 'light' : 'dark'
+  html.dataset.theme = next
+  html.classList.toggle('dark', next === 'dark')
+  localStorage.setItem('theme', next)
 }
 
 // Expose globally for onclick handlers in template
@@ -273,4 +301,5 @@ document.addEventListener('DOMContentLoaded', () => {
   initProgressBar()
   loadProgress()
   initValidation()
+  updateActiveTocItem()
 })
