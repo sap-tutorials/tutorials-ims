@@ -17,9 +17,11 @@
     "build:all": "npm run fetch-tutorials -- --regenerate && npm run build:css && npm run build:apps && npm run build:hugo && npm run build:display",
     "dev": "hugo server --source hugo",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:cap": "vitest run test/"
   },
   "devDependencies": {
+    "@cap-js/cds-test": "^1.0.0",
     "@sap/cds-dk": "^9.9.0",
     "fundamental-styles": "^0.41.4",
     "gray-matter": "^4.0.3",
@@ -40,8 +42,12 @@
     "requires": {
       "db": {
         "kind": "sqlite",
-        "[hybrid]": { "kind": "hana" },
-        "[production]": { "kind": "hana" }
+        "[hybrid]": {
+          "kind": "hana"
+        },
+        "[production]": {
+          "kind": "hana"
+        }
       }
     }
   }
