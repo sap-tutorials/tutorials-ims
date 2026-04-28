@@ -1,6 +1,9 @@
 node_modules/
 dist/
 site/tutorials/
+hugo/content/tutorials/
+hugo/static/tutorials/
+hugo/public/
 approuter/static/
 .tutorial-cache/
 *.local
@@ -8,5 +11,4 @@ approuter/static/
 .playwright-mcp/
 *.png
 aem-missions.json
-hugo/static/js/*.js
-hugo/static/js/chunks/
+hugo/static/js/
