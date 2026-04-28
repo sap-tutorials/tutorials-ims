@@ -155,8 +155,122 @@ async function loadProgress() {
   updateProgressBar()
 }
 
+// --- Validation quiz ---
+interface ValidationQuestion {
+  id: string
+  question: string
+  type: 'multiple-choice' | 'text'
+  options?: string[]
+  correctAnswer: string
+}
+
+interface StepData {
+  number: number
+  title: string
+  validation?: ValidationQuestion[]
+}
+
+function initValidation() {
+  const dataEl = document.getElementById('tutorial-data')
+  if (!dataEl) return
+  let steps: StepData[]
+  try { steps = JSON.parse(dataEl.textContent || '[]') } catch { return }
+
+  for (const step of steps) {
+    if (!step.validation?.length) continue
+    const mount = document.querySelector(`.step-validation-mount[data-step="${step.number}"]`)
+    if (!mount) continue
+    const doneBtn = document.querySelector(`button[data-action="mark-done"][data-step="${step.number}"]`) as HTMLButtonElement
+    if (doneBtn) doneBtn.disabled = true
+    renderQuiz(mount as HTMLElement, String(step.number), step.validation)
+  }
+}
+
+function renderQuiz(mount: HTMLElement, stepNum: string, questions: ValidationQuestion[]) {
+  const form = document.createElement('form')
+  form.className = 'step-validation'
+  form.dataset.step = stepNum
+
+  questions.forEach((q, qi) => {
+    const fieldset = document.createElement('fieldset')
+    const legend = document.createElement('legend')
+    legend.textContent = q.question
+    fieldset.appendChild(legend)
+
+    if (q.type === 'multiple-choice' && q.options) {
+      q.options.forEach((opt) => {
+        const label = document.createElement('label')
+        label.className = 'option-card'
+        const radio = document.createElement('input')
+        radio.type = 'radio'
+        radio.name = `q-${stepNum}-${qi}`
+        radio.value = opt
+        label.appendChild(radio)
+        const span = document.createElement('span')
+        span.textContent = opt
+        label.appendChild(span)
+        fieldset.appendChild(label)
+      })
+    } else {
+      const input = document.createElement('input')
+      input.type = 'text'
+      input.className = 'fd-input'
+      input.name = `q-${stepNum}-${qi}`
+      input.placeholder = 'Type your answer...'
+      fieldset.appendChild(input)
+    }
+    form.appendChild(fieldset)
+  })
+
+  const submitBtn = document.createElement('button')
+  submitBtn.type = 'submit'
+  submitBtn.className = 'fd-button'
+  submitBtn.textContent = 'Submit Answer'
+  form.appendChild(submitBtn)
+
+  const feedback = document.createElement('div')
+  feedback.className = 'validation-feedback'
+  form.appendChild(feedback)
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault()
+    handleQuizSubmit(form, stepNum, questions)
+  })
+
+  mount.appendChild(form)
+}
+
+function handleQuizSubmit(form: HTMLFormElement, stepNum: string, questions: ValidationQuestion[]) {
+  const feedback = form.querySelector('.validation-feedback') as HTMLElement
+  let allCorrect = true
+
+  questions.forEach((q, qi) => {
+    const name = `q-${stepNum}-${qi}`
+    if (q.type === 'multiple-choice') {
+      const selected = form.querySelector(`input[name="${name}"]:checked`) as HTMLInputElement | null
+      if (!selected || selected.value !== q.correctAnswer) allCorrect = false
+    } else {
+      const input = form.querySelector(`input[name="${name}"]`) as HTMLInputElement | null
+      if (!input || input.value.trim().toLowerCase() !== q.correctAnswer.toLowerCase()) allCorrect = false
+    }
+  })
+
+  if (allCorrect) {
+    feedback.textContent = 'Correct!'
+    feedback.className = 'validation-feedback validation-success'
+    const step = document.querySelector(`.tutorial-step[data-step="${stepNum}"]`)
+    if (step) step.setAttribute('data-validated', 'true')
+    const doneBtn = step?.querySelector('[data-action="mark-done"]') as HTMLButtonElement | null
+    if (doneBtn) doneBtn.disabled = false
+  } else {
+    feedback.textContent = 'Not quite. Try again!'
+    feedback.className = 'validation-feedback validation-error'
+  }
+}
+
 // --- Init on DOMContentLoaded ---
 document.addEventListener('DOMContentLoaded', () => {
   initProgressBar()
   loadProgress()
+  initValidation()
 })
