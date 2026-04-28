@@ -6,7 +6,23 @@
       "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.youtube.com; frame-src https://www.youtube.com; img-src 'self' https://raw.githubusercontent.com https://*.sap.com data:; style-src 'self' 'unsafe-inline' https://*.sap.com; font-src 'self' https://*.sap.com; connect-src 'self' https://*.cfapps.us30.hana.ondemand.com wss://*.cfapps.us30.hana.ondemand.com"
     }
   ],
+  "login": {
+    "callbackEndpoint": "/login/callback"
+  },
   "routes": [
+    {
+      "source": "^/login$",
+      "authenticationType": "xsuaa",
+      "target": "/",
+      "localDir": "static"
+    },
+    {
+      "source": "^/auth/user$",
+      "authenticationType": "xsuaa",
+      "target": "/auth/user",
+      "destination": "srv-api",
+      "csrfProtection": false
+    },
     {
       "source": "^/admin/(.*)$",
       "target": "/admin/$1",
@@ -38,7 +54,7 @@
     {
       "source": "^(.*)$",
       "localDir": "static",
-      "authenticationType": "xsuaa"
+      "authenticationType": "none"
     }
   ]
 }

@@ -18,5 +18,85 @@
       html.classList.toggle('dark', next === 'dark');
       localStorage.setItem('theme', next);
     "></button>
+    <div class="fd-shellbar__action" id="user-menu">
+      <span id="user-avatar" class="fd-avatar fd-avatar--xs fd-avatar--circle fd-avatar--placeholder" role="button" tabindex="0" aria-label="User profile" onclick="handleProfileClick()"></span>
+      <div id="user-popover" class="fd-popover__body fd-popover__body--right">
+        <div class="user-popover__content">
+          <div class="user-popover__header">
+            <span id="user-avatar-large" class="fd-avatar fd-avatar--xl fd-avatar--circle fd-avatar--placeholder"></span>
+            <div id="user-name" class="user-popover__name"></div>
+            <div id="user-email" class="user-popover__email"></div>
+          </div>
+          <hr class="user-popover__separator">
+          <a href="https://account.sap.com" class="user-popover__link" target="_blank" rel="noopener">Manage my Account</a>
+          <a href="/dashboard" class="user-popover__link">Dashboard</a>
+          <a href="https://learning.sap.com" class="user-popover__link" target="_blank" rel="noopener">Learnings &#x2197;</a>
+          <a href="https://community.sap.com" class="user-popover__link" target="_blank" rel="noopener">Community &#x2197;</a>
+          <hr class="user-popover__separator">
+          <button type="button" class="fd-button fd-button--negative" id="logout-btn" onclick="window.location.href='/logout'">Logout</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
+<script>
+(function() {
+  const apiBase = document.documentElement.dataset.apiBase || '';
+  const avatar = document.getElementById('user-avatar');
+  const avatarLarge = document.getElementById('user-avatar-large');
+  const popover = document.getElementById('user-popover');
+  const userName = document.getElementById('user-name');
+  const userEmail = document.getElementById('user-email');
+  let isAuthenticated = false;
+
+  function setAvatarImage(el, url) {
+    el.classList.remove('fd-avatar--placeholder');
+    el.style.backgroundImage = 'url(' + url + ')';
+    el.style.backgroundSize = 'cover';
+  }
+
+  async function checkAuth() {
+    try {
+      const res = await fetch(apiBase + '/auth/user', { credentials: 'include' });
+      if (!res.ok) return;
+      const user = await res.json();
+      if (!user.authenticated) return;
+
+      isAuthenticated = true;
+      userName.textContent = (user.givenName + ' ' + user.familyName).trim() || user.id;
+      userEmail.textContent = user.email || '';
+      document.documentElement.dataset.authenticated = 'true';
+
+      if (user.avatarUrl) {
+        setAvatarImage(avatar, user.avatarUrl);
+        setAvatarImage(avatarLarge, user.avatarUrl);
+      } else {
+        var initials = (user.givenName?.[0] || '') + (user.familyName?.[0] || '');
+        if (initials) {
+          avatar.classList.remove('fd-avatar--placeholder');
+          avatar.textContent = initials.toUpperCase();
+          avatarLarge.classList.remove('fd-avatar--placeholder');
+          avatarLarge.textContent = initials.toUpperCase();
+        }
+      }
+      avatar.setAttribute('aria-label', userName.textContent);
+    } catch {}
+  }
+
+  window.handleProfileClick = function() {
+    if (!isAuthenticated) {
+      window.location.href = '/login';
+      return;
+    }
+    popover.style.display = popover.style.display === 'none' ? 'block' : 'none';
+  };
+
+  document.addEventListener('click', function(e) {
+    if (!document.getElementById('user-menu').contains(e.target)) {
+      popover.style.display = 'none';
+    }
+  });
+
+  checkAuth();
+})();
+</script>

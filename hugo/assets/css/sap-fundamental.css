@@ -20,6 +20,7 @@
 @import 'fundamental-styles/dist/info-label.css';
 @import 'fundamental-styles/dist/toolbar.css';
 @import 'fundamental-styles/dist/shellbar.css';
+@import 'fundamental-styles/dist/avatar.css';
 @import 'fundamental-styles/dist/tile.css';
 @import 'fundamental-styles/dist/counter.css';
 @import 'fundamental-styles/dist/object-status.css';
@@ -62,6 +63,65 @@
 }
 .fd-shellbar .fd-shellbar__logo img {
   height: 1.5rem;
+}
+
+/* User menu (shellbar profile) */
+#user-menu {
+  position: relative;
+}
+#user-avatar {
+  cursor: pointer;
+}
+#user-popover {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: 2.5rem;
+  z-index: 100;
+  background: var(--sapBackgroundColor, #fff);
+  border: 1px solid var(--sapGroup_TitleBorderColor, #d9d9d9);
+  border-radius: var(--sapElement_BorderCornerRadius, 0.5rem);
+  box-shadow: var(--sapContent_Shadow1, 0 0 0.5rem rgba(0,0,0,0.15));
+}
+#user-popover .user-popover__content {
+  padding: 1rem 1.25rem;
+  min-width: 14rem;
+}
+#user-popover .user-popover__header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+#user-popover .user-popover__name {
+  font-weight: 600;
+  font-size: 1rem;
+  margin-top: 0.75rem;
+}
+#user-popover .user-popover__email {
+  font-size: 0.875rem;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  margin-top: 0.25rem;
+}
+#user-popover .user-popover__separator {
+  border: none;
+  border-top: 1px solid var(--sapGroup_TitleBorderColor, #d9d9d9);
+  margin: 0.75rem 0;
+}
+#user-popover .user-popover__link {
+  display: block;
+  padding: 0.5rem 0;
+  color: var(--sapTextColor, #32363a);
+  text-decoration: none;
+  font-size: 0.875rem;
+}
+#user-popover .user-popover__link:hover {
+  color: var(--sapLinkColor, #0064d9);
+}
+#user-popover #logout-btn {
+  margin-top: 0.5rem;
+  width: 100%;
 }
 
 /* Body font */
