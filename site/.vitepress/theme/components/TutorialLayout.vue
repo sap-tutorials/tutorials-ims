@@ -219,8 +219,10 @@ onMounted(async () => {
         </div>
 
         <!-- Progress -->
+        <ClientOnly>
         <ProgressBar :completed="completedCount" :total="stepCount" label="Tutorial Progress" />
         <PointsBadge :points="points" :badges="badges" />
+        </ClientOnly>
 
         <!-- Step controls -->
         <div class="step-controls">
