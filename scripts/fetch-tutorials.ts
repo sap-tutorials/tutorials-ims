@@ -151,8 +151,22 @@ function writeVitePressPage(
 
   const frontmatter = `---\n${yamlStringify(fm).trimEnd()}\n---\n\n`
 
+function sanitizeStepContent(html: string): string {
+  let out = html
+  out = out.replace(/<ol[^>]*>/gi, '')
+  out = out.replace(/<\/ol>/gi, '')
+  out = out.replace(/<ul[^>]*>/gi, '')
+  out = out.replace(/<\/ul>/gi, '')
+  out = out.replace(/<\/li>\s*<li>/gi, '\n- ')
+  out = out.replace(/<li>/gi, '- ')
+  out = out.replace(/<\/li>/gi, '')
+  out = out.replace(/<br\s*\/?>/gi, '\n')
+  out = out.replace(/<\/?(?:div|span|p|table|thead|tbody|tr|td|th|details|summary|section|article|nav|header|footer|aside|figure|figcaption|main)[^>]*>/gi, '')
+  return out
+}
+
   const stepsMd = steps.map(step =>
-    `<TutorialStep :number="${step.number}" title="${step.title.replace(/"/g, '&quot;')}" slug="${slug}">\n\n${step.content}\n\n</TutorialStep>`
+    `<TutorialStep :number="${step.number}" title="${step.title.replace(/"/g, '&quot;')}" slug="${slug}">\n\n${sanitizeStepContent(step.content)}\n\n</TutorialStep>`
   ).join('\n\n')
 
   const content = `${frontmatter}${stepsMd}\n`
