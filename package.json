@@ -5,10 +5,12 @@
   "scripts": {
     "fetch-tutorials": "tsx scripts/fetch-tutorials.ts",
     "generate-dark-theme": "tsx scripts/generate-dark-theme.ts",
+    "validate-tutorials": "tsx scripts/validate-tutorials.ts",
     "build": "vitepress build site",
+    "build:resilient": "tsx scripts/resilient-build.ts",
     "build:display": "cd display-app && npm install && npm run build",
     "copy:static": "tsx scripts/copy-static.ts",
-    "build:all": "npm run fetch-tutorials && npm run build && npm run build:display && npm run copy:static",
+    "build:all": "npm run fetch-tutorials && npm run validate-tutorials && npm run build && npm run build:display && npm run copy:static",
     "dev": "vitepress dev site",
     "preview": "vitepress preview site",
     "test": "vitest run",
@@ -17,6 +19,7 @@
   "devDependencies": {
     "fundamental-styles": "^0.39.0",
     "gray-matter": "^4.0.3",
+    "markdown-it": "^14.1.1",
     "tsx": "^4.0.0",
     "vitepress": "^1.6.0",
     "vitest": "^3.0.0",

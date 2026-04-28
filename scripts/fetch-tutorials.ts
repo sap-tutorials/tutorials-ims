@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync, existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { performance } from 'node:perf_hooks'
@@ -51,8 +51,11 @@ async function runWithConcurrency<T>(tasks: Array<() => Promise<T>>, limit: numb
 function humanizeTag(raw: string): string {
   const value = raw.includes('>') ? raw.split('>').pop()! : raw
   return value
+    .replace(/\\/g, '')
     .replace(/[-_]/g, ' ')
-    .split(' ')
+    .trim()
+    .split(/\s+/)
+    .filter(w => w.length > 0)
     .map(word => {
       const upper = word.toUpperCase()
       if (ACRONYMS.has(upper)) return upper
@@ -120,6 +123,9 @@ function writeVitePressPage(
   lastUpdated: string,
   contributors: Array<{ name: string; login: string; avatarUrl: string }>,
 ): void {
+  const cleanTags = tags.map(t => t.replace(/\\/g, ''))
+  const cleanPrimaryTag = primaryTag.replace(/\\/g, '')
+
   const fm: Record<string, unknown> = {
     layout: 'tutorial',
     slug,
@@ -127,14 +133,14 @@ function writeVitePressPage(
     description,
     time,
     level,
-    tags,
-    primaryTag,
+    tags: cleanTags,
+    primaryTag: cleanPrimaryTag,
     author,
     authorProfile,
     stepCount: steps.length,
     prev: nav.prev,
     next: nav.next,
-    displayTags: [...new Set([primaryTag, ...tags])].map(humanizeTag).filter(t => t.length > 0),
+    displayTags: [...new Set([cleanPrimaryTag, ...cleanTags])].map(humanizeTag).filter(t => t.length > 0),
     youWillLearn,
     prerequisites: splitPrerequisites(prerequisites),
     lastUpdated: lastUpdated || null,
@@ -151,22 +157,106 @@ function writeVitePressPage(
 
   const frontmatter = `---\n${yamlStringify(fm).trimEnd()}\n---\n\n`
 
-function sanitizeStepContent(html: string): string {
-  let out = html
-  out = out.replace(/<ol[^>]*>/gi, '')
-  out = out.replace(/<\/ol>/gi, '')
-  out = out.replace(/<ul[^>]*>/gi, '')
-  out = out.replace(/<\/ul>/gi, '')
-  out = out.replace(/<\/li>\s*<li>/gi, '\n- ')
-  out = out.replace(/<li>/gi, '- ')
-  out = out.replace(/<\/li>/gi, '')
-  out = out.replace(/<br\s*\/?>/gi, '\n')
-  out = out.replace(/<\/?(?:div|span|p|table|thead|tbody|tr|td|th|details|summary|section|article|nav|header|footer|aside|figure|figcaption|main)[^>]*>/gi, '')
-  return out
+const ALLOWED_TAGS = new Set(['TutorialStep', 'OptionTabs', 'template'])
+
+function escapeHtmlTags(text: string): string {
+  return text
+    .replace(/<(\/?)\s*([a-zA-Z][a-zA-Z0-9:._-]*)[^>]*\/?>/g, (match, _slash: string, tagName: string) => {
+      if (ALLOWED_TAGS.has(tagName)) return match
+      return match.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    })
+    .replace(/<\?[^>]*\?>/g, (match) => match.replace(/</g, '&lt;').replace(/>/g, '&gt;'))
+    .replace(/\{\{/g, '&#123;&#123;')
+    .replace(/\}\}/g, '&#125;&#125;')
+}
+
+function sanitizeStepContent(content: string): string {
+  const lines = content.split('\n')
+  let inCodeFence = false
+  let fenceChar = ''
+  let fenceLen = 0
+  let fenceIndent = 0
+
+  const result = lines.map(line => {
+    if (inCodeFence) {
+      const closeMatch = line.match(/^(\s*)(```+|~~~+)\s*$/)
+      if (closeMatch && closeMatch[2].charAt(0) === fenceChar && closeMatch[2].length >= fenceLen) {
+        inCodeFence = false
+        return closeMatch[2]
+      }
+      if (fenceIndent > 0 && line.length > 0) {
+        const stripped = line.replace(new RegExp(`^ {0,${fenceIndent}}`), '')
+        return stripped
+      }
+      return line
+    }
+
+    const openMatch = line.match(/^(\s*)(```+|~~~+)(.*)$/)
+    if (openMatch) {
+      inCodeFence = true
+      fenceChar = openMatch[2].charAt(0)
+      fenceLen = openMatch[2].length
+      fenceIndent = openMatch[1].length
+      return openMatch[2] + openMatch[3]
+    }
+
+    return escapeHtmlTags(line)
+  })
+
+  return result.join('\n')
+}
+
+function balanceComponentTags(content: string): string {
+  const tagStack: string[] = []
+  const opens: Array<{ tag: string; idx: number }> = []
+  const closes: Array<{ tag: string; idx: number; len: number }> = []
+
+  const openRe = /<(OptionTabs|template)[\s>]/g
+  const closeRe = /<\/(OptionTabs|template)\s*>/g
+
+  let m
+  while ((m = openRe.exec(content)) !== null) {
+    opens.push({ tag: m[1], idx: m.index })
+  }
+  while ((m = closeRe.exec(content)) !== null) {
+    closes.push({ tag: m[1], idx: m.index, len: m[0].length })
+  }
+
+  const openStack: string[] = []
+  const orphanCloses: Array<{ idx: number; len: number }> = []
+
+  const all = [
+    ...opens.map(o => ({ ...o, type: 'open' as const, len: 0 })),
+    ...closes.map(c => ({ ...c, type: 'close' as const })),
+  ].sort((a, b) => a.idx - b.idx)
+
+  for (const item of all) {
+    if (item.type === 'open') {
+      openStack.push(item.tag)
+    } else {
+      const lastIdx = openStack.lastIndexOf(item.tag)
+      if (lastIdx !== -1) {
+        openStack.splice(lastIdx, 1)
+      } else {
+        orphanCloses.push({ idx: item.idx, len: item.len })
+      }
+    }
+  }
+
+  let result = content
+  for (const orphan of orphanCloses.reverse()) {
+    result = result.slice(0, orphan.idx) + result.slice(orphan.idx + orphan.len)
+  }
+
+  let suffix = ''
+  for (let i = openStack.length - 1; i >= 0; i--) {
+    suffix += `\n</${openStack[i]}>`
+  }
+  return suffix ? result + suffix : result
 }
 
   const stepsMd = steps.map(step =>
-    `<TutorialStep :number="${step.number}" title="${step.title.replace(/"/g, '&quot;')}" slug="${slug}">\n\n${sanitizeStepContent(step.content)}\n\n</TutorialStep>`
+    `<TutorialStep :number="${step.number}" title="${step.title.replace(/"/g, '&quot;')}" slug="${slug}">\n\n${balanceComponentTags(sanitizeStepContent(step.content))}\n\n</TutorialStep>`
   ).join('\n\n')
 
   const content = `${frontmatter}${stepsMd}\n`
@@ -334,44 +424,63 @@ function formatDuration(ms: number): string {
 
 async function main() {
   const totalStart = performance.now()
+  const regenerateMode = process.argv.includes('--regenerate')
 
-  if (!process.env.GITHUB_TOKEN) {
-    console.error('ERROR: GITHUB_TOKEN is required for the GraphQL API.')
-    console.error('  Set GITHUB_TOKEN before running this script.\n')
-    process.exit(1)
+  let allTutorials: DiscoveredTutorial[]
+  let discoveryMs = 0
+  let metaMs = 0
+
+  if (regenerateMode) {
+    console.log('Running in REGENERATE mode (from cache only, no GitHub API calls)\n')
+    const cachedFiles = existsSync(CACHE_DIR)
+      ? readdirSync(CACHE_DIR).filter(f => f.endsWith('.md')).map(f => f.replace('.md', ''))
+      : []
+    if (cachedFiles.length === 0) {
+      console.error('ERROR: No cached tutorials found. Run without --regenerate first.')
+      process.exit(1)
+    }
+    allTutorials = cachedFiles.map(slug => ({ slug, repo: 'unknown', branch: 'main' }))
+    console.log(`Found ${allTutorials.length} cached tutorials\n`)
+  } else {
+    if (!process.env.GITHUB_TOKEN) {
+      console.error('ERROR: GITHUB_TOKEN is required for the GraphQL API.')
+      console.error('  Set GITHUB_TOKEN before running this script.')
+      console.error('  Or use --regenerate to rebuild from cache.\n')
+      process.exit(1)
+    }
+
+    // ── Phase 1: Discovery via GraphQL ──
+    console.log('Phase 1: Discovering tutorials via GraphQL...\n')
+    const discoveryStart = performance.now()
+
+    allTutorials = await discoverAllTutorials()
+    discoveryMs = performance.now() - discoveryStart
+
+    console.log(`\nDiscovered ${allTutorials.length} tutorials (${formatDuration(discoveryMs)})\n`)
+
+    // ── Phase 2: Batch prefetch GitHub metadata via GraphQL ──
+    console.log('Phase 2: Prefetching GitHub metadata (batched GraphQL)...\n')
+    const metaStart = performance.now()
+
+    const byRepo = new Map<string, DiscoveredTutorial[]>()
+    for (const t of allTutorials) {
+      const list = byRepo.get(t.repo) ?? []
+      list.push(t)
+      byRepo.set(t.repo, list)
+    }
+
+    const metaTasks = Array.from(byRepo.entries()).map(([repo, tuts]) => async () => {
+      const branch = tuts[0].branch
+      const slugs = tuts.map(t => t.slug)
+      console.log(`  ${repo}: ${slugs.length} tutorials...`)
+      await fetchGitHubMetaBatch(repo, branch, slugs)
+    })
+
+    await runWithConcurrency(metaTasks, 3)
+
+    metaMs = performance.now() - metaStart
+    console.log(`\nMetadata prefetch complete (${formatDuration(metaMs)})\n`)
   }
-
-  // ── Phase 1: Discovery via GraphQL ──
-  console.log('Phase 1: Discovering tutorials via GraphQL...\n')
-  const discoveryStart = performance.now()
-
-  const allTutorials = await discoverAllTutorials()
-  const discoveryMs = performance.now() - discoveryStart
-
-  console.log(`\nDiscovered ${allTutorials.length} tutorials (${formatDuration(discoveryMs)})\n`)
-
-  // ── Phase 2: Batch prefetch GitHub metadata via GraphQL ──
-  console.log('Phase 2: Prefetching GitHub metadata (batched GraphQL)...\n')
-  const metaStart = performance.now()
-
-  const byRepo = new Map<string, DiscoveredTutorial[]>()
-  for (const t of allTutorials) {
-    const list = byRepo.get(t.repo) ?? []
-    list.push(t)
-    byRepo.set(t.repo, list)
-  }
-
-  const metaTasks = Array.from(byRepo.entries()).map(([repo, tuts]) => async () => {
-    const branch = tuts[0].branch
-    const slugs = tuts.map(t => t.slug)
-    console.log(`  ${repo}: ${slugs.length} tutorials...`)
-    await fetchGitHubMetaBatch(repo, branch, slugs)
-  })
-
-  await runWithConcurrency(metaTasks, 3)
-
-  const metaMs = performance.now() - metaStart
-  console.log(`\nMetadata prefetch complete (${formatDuration(metaMs)})\n`)
 
   // ── Phase 3: Process tutorials (fetch markdown, parse, generate pages) ──
   console.log('Phase 3: Processing tutorials...\n')
@@ -391,14 +500,29 @@ async function main() {
     const tutStart = performance.now()
     const label = `[${idx + 1}/${allTutorials.length}] ${t.repo}/${t.slug}`
     try {
-      const ghMeta = await fetchGitHubMeta(t.slug, t.repo, t.branch)
-      const { content: rawMd, cacheStatus } = await fetchMarkdown(t.slug, t.repo, t.branch, ghMeta.lastCommitSha)
+      let rawMd: string
+      let lastUpdated = ''
+      let contributors: Array<{ name: string; login: string; avatarUrl: string }> = []
 
-      if (cacheStatus === 'cached') cacheHits++
-      else if (cacheStatus === 'refreshed') cacheRefreshes++
-      else cacheFetches++
+      if (regenerateMode) {
+        const cacheFile = join(CACHE_DIR, `${t.slug}.md`)
+        if (!existsSync(cacheFile)) throw new Error(`Cache file not found: ${cacheFile}`)
+        rawMd = readFileSync(cacheFile, 'utf-8')
+        cacheHits++
+        console.log(`${label} [cached]`)
+      } else {
+        const ghMeta = await fetchGitHubMeta(t.slug, t.repo, t.branch)
+        const { content, cacheStatus } = await fetchMarkdown(t.slug, t.repo, t.branch, ghMeta.lastCommitSha)
+        rawMd = content
+        lastUpdated = ghMeta.lastUpdated
+        contributors = ghMeta.contributors
 
-      console.log(`${label} [${cacheStatus}]`)
+        if (cacheStatus === 'cached') cacheHits++
+        else if (cacheStatus === 'refreshed') cacheRefreshes++
+        else cacheFetches++
+
+        console.log(`${label} [${cacheStatus}]`)
+      }
 
       const { title, description, youWillLearn, prerequisites, level, frontmatter, body } = extractFrontmatter(rawMd)
 
@@ -418,6 +542,7 @@ async function main() {
         stepCount: steps.length,
         primaryTag: humanizeTag(frontmatter.primary_tag ?? ''),
         displayTags: [...new Set([frontmatter.primary_tag ?? '', ...(frontmatter.tags ?? [])])]
+          .map(t => t.replace(/\\/g, ''))
           .map(humanizeTag).filter(tag => tag.length > 0),
         repo: t.repo,
         branch: t.branch,
@@ -439,8 +564,8 @@ async function main() {
         prerequisites,
         steps,
         nav,
-        ghMeta.lastUpdated,
-        ghMeta.contributors,
+        lastUpdated,
+        contributors,
       )
 
       navEntries.push(nav)
