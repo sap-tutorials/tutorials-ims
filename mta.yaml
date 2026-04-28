@@ -6,12 +6,13 @@ build-parameters:
   before-all:
     - builder: custom
       commands:
-        - curl -fsSL https://github.com/gohugoio/hugo/releases/download/v0.147.7/hugo_extended_0.147.7_linux-amd64.tar.gz | tar -xz -C /tmp hugo
         - npm install
+        - npx cds build --production
         - npm --prefix apps install
         - npm run fetch-tutorials -- --regenerate --target hugo
         - npm run validate-tutorials
         - npm --prefix apps run build
+        - curl -fsSL https://github.com/gohugoio/hugo/releases/download/v0.147.7/hugo_extended_0.147.7_linux-amd64.tar.gz | tar -xz -C /tmp hugo
         - /tmp/hugo --source hugo --minify
         - npm --prefix display-app install
         - npm --prefix display-app run build
@@ -20,6 +21,31 @@ build-parameters:
         - cp -r display-app/dist approuter/static/display-app
 
 modules:
+  - name: tutorials-srv
+    type: nodejs
+    path: gen/srv
+    parameters:
+      memory: 1024M
+      disk-quota: 1024M
+      buildpack: nodejs_buildpack
+      instances: 1
+    provides:
+      - name: srv-api
+        properties:
+          srv-url: ${default-url}
+    requires:
+      - name: tutorials-hana
+      - name: tutorials-xsuaa
+      - name: tutorials-destination
+
+  - name: tutorials-db-deployer
+    type: hdb
+    path: gen/db
+    parameters:
+      buildpack: nodejs_buildpack
+    requires:
+      - name: tutorials-hana
+
   - name: tutorials-approuter
     type: approuter.nodejs
     path: approuter
@@ -28,20 +54,30 @@ modules:
       memory: 512M
       app-name: tutorials-approuter
     properties:
-      destinations: >
-        [
-          {
-            "name": "tutorials-api",
-            "url": "https://imsdev.cfapps.us30.hana.ondemand.com",
-            "forwardAuthToken": true
-          }
-        ]
       XS_APP_LOG_LEVEL: info
     requires:
       - name: tutorials-xsuaa
+      - name: srv-api
+        group: destinations
+        properties:
+          name: srv-api
+          url: ~{srv-url}
+          forwardAuthToken: true
 
 resources:
+  - name: tutorials-hana
+    type: com.sap.xs.hdi-container
+    parameters:
+      service: hana
+      service-plan: hdi-shared
+
   - name: tutorials-xsuaa
     type: org.cloudfoundry.existing-service
     parameters:
       service-name: xsuaa-imsdev
+
+  - name: tutorials-destination
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: destination
+      service-plan: lite
