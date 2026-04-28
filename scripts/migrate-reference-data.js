@@ -6,6 +6,32 @@ const IMS_BASE_URL = process.env.IMS_BASE_URL || 'https://imsprod-approuter.cfap
 const CAP_BASE_URL = process.env.CAP_BASE_URL || 'http://localhost:4004';
 const OUTPUT_DIR = process.env.MIGRATION_OUTPUT_DIR || '.migration-data';
 const AUTH_TOKEN = process.env.IMS_AUTH_TOKEN;
+const AEM_CACHE_FILE = '.tutorial-cache/aem-missions.json';
+
+function loadAemSlugs() {
+  const missions = new Map();
+  const paths = new Map();
+
+  if (!existsSync(AEM_CACHE_FILE)) {
+    console.log('  [slug] No AEM cache found — slugs will not be populated');
+    return { missions, paths };
+  }
+
+  const cache = JSON.parse(readFileSync(AEM_CACHE_FILE, 'utf-8'));
+
+  for (const m of cache.missions || []) {
+    if (m.imsId && m.slug) missions.set(m.imsId, m.slug);
+  }
+
+  for (const h of cache.hierarchies || []) {
+    for (const g of h.groups || []) {
+      if (g.imsId && g.slug) paths.set(g.imsId, g.slug);
+    }
+  }
+
+  console.log(`  [slug] Loaded ${missions.size} mission slugs, ${paths.size} group/path slugs from AEM cache`);
+  return { missions, paths };
+}
 
 const ENTITY_ENDPOINTS = [
   { name: 'tutorials', path: '/api/tutorials', capEntity: 'Tutorials' },
@@ -55,6 +81,8 @@ async function exportData() {
 }
 
 async function importData() {
+  const aemSlugs = loadAemSlugs();
+
   for (const entity of ENTITY_ENDPOINTS) {
     const filePath = join(OUTPUT_DIR, `${entity.name}.json`);
     if (!existsSync(filePath)) {
@@ -68,6 +96,9 @@ async function importData() {
     let imported = 0;
     let failed = 0;
     for (const record of records) {
+      if (entity.name === 'missions' && aemSlugs.missions.has(record.legacyId)) {
+        record.slug = aemSlugs.missions.get(record.legacyId);
+      }
       const res = await fetch(`${CAP_BASE_URL}/admin/${entity.capEntity}`, {
         method: 'POST',
         headers: {
@@ -95,9 +126,65 @@ if (mode === 'export') {
   exportData().catch(console.error);
 } else if (mode === 'import') {
   importData().catch(console.error);
+} else if (mode === 'populate-slugs') {
+  populateSlugs().catch(console.error);
 } else {
-  console.log('Usage: node scripts/migrate-reference-data.js [export|import]');
-  console.log('  export — Fetch from Java IMS and save as JSON');
-  console.log('  import — Load JSON into CAP system');
+  console.log('Usage: node scripts/migrate-reference-data.js [export|import|populate-slugs]');
+  console.log('  export          — Fetch from Java IMS and save as JSON');
+  console.log('  import          — Load JSON into CAP system');
+  console.log('  populate-slugs  — Patch slug fields from AEM cache into CAP');
   process.exit(1);
+}
+
+async function populateSlugs() {
+  const { missions, paths } = loadAemSlugs();
+  if (missions.size === 0 && paths.size === 0) {
+    console.error('No slug data available. Ensure .tutorial-cache/aem-missions.json exists.');
+    console.error('Run "npm run fetch-tutorials -- --force-aem" to generate it.');
+    process.exit(1);
+  }
+
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(AUTH_TOKEN ? { Authorization: `Bearer ${AUTH_TOKEN}` } : {})
+  };
+
+  console.log(`Patching ${missions.size} mission slugs...`);
+  let patched = 0;
+  let skipped = 0;
+  for (const [legacyId, slug] of missions) {
+    const query = await fetch(`${CAP_BASE_URL}/admin/Missions?$filter=legacyId eq ${legacyId}&$select=ID,slug`, { headers });
+    if (!query.ok) { skipped++; continue; }
+    const { value } = await query.json();
+    if (!value || value.length === 0) { skipped++; continue; }
+    const record = value[0];
+    if (record.slug === slug) { skipped++; continue; }
+
+    const patch = await fetch(`${CAP_BASE_URL}/admin/Missions(${record.ID})`, {
+      method: 'PATCH', headers, body: JSON.stringify({ slug })
+    });
+    if (patch.ok) patched++;
+    else skipped++;
+  }
+  console.log(`  → ${patched} missions patched, ${skipped} skipped`);
+
+  console.log(`Patching ${paths.size} completion path slugs...`);
+  patched = 0;
+  skipped = 0;
+  for (const [legacyId, slug] of paths) {
+    const query = await fetch(`${CAP_BASE_URL}/admin/CompletionPaths?$filter=legacyId eq ${legacyId}&$select=ID,slug`, { headers });
+    if (!query.ok) { skipped++; continue; }
+    const { value } = await query.json();
+    if (!value || value.length === 0) { skipped++; continue; }
+    const record = value[0];
+    if (record.slug === slug) { skipped++; continue; }
+
+    const patch = await fetch(`${CAP_BASE_URL}/admin/CompletionPaths(${record.ID})`, {
+      method: 'PATCH', headers, body: JSON.stringify({ slug })
+    });
+    if (patch.ok) patched++;
+    else skipped++;
+  }
+  console.log(`  → ${patched} paths patched, ${skipped} skipped`);
+  console.log('Done.');
 }

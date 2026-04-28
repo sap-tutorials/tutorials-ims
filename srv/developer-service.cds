@@ -40,4 +40,27 @@ service DeveloperService {
 
   function countCompletedMissionsTotal(userLegacyId : Integer) returns Integer;
   function countCompletedMissionsPercent(userLegacyId : Integer) returns Decimal;
+
+  // App Space progress (replaces AEM /bin/sapdx/tutorials/v3/progress/series)
+  function getEventProgress(missionLegacyId : Integer) returns {
+    eventId : Integer;
+    type    : String;
+    paths   : many {
+      id          : Integer;
+      title       : String;
+      description : String;
+      items       : many {
+        imsId          : Integer;
+        title          : String;
+        type           : String;
+        status         : String;
+        progress       : Integer;
+        experience     : String;
+        timeToComplete : Integer;
+        url            : String;
+        description    : String;
+        recordId       : Integer;
+      };
+    };
+  };
 }

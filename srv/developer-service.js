@@ -7,7 +7,9 @@ export default class DeveloperService extends cds.ApplicationService {
   async init() {
     const db = await cds.connect.to('db');
     const { Tutorials: dbTutorials, Steps: dbSteps, TaskRecords: dbTaskRecords,
-            Users: dbUsers, Events: dbEvents } = cds.entities('com.sap.developers.ims');
+            Users: dbUsers, Events: dbEvents, Missions: dbMissions,
+            CompletionPaths: dbPaths, CompletionPathItems: dbPathItems,
+            Checkpoints: dbCheckpoints } = cds.entities('com.sap.developers.ims');
 
     // Auto-assign legacyId on TaskRecord creation
     this.before('CREATE', 'TaskRecords', async (req) => {
@@ -200,6 +202,84 @@ export default class DeveloperService extends cds.ApplicationService {
       if (totalMissions.length === 0) return 0;
 
       return Math.round((completedMissions.length / totalMissions.length) * 100) / 100;
+    });
+
+    // --- App Space progress (replaces AEM progress/series) ---
+
+    this.on('getEventProgress', async (req) => {
+      const { missionLegacyId } = req.data;
+      const user = req.user;
+
+      const mission = await SELECT.one.from(dbMissions).where({ legacyId: missionLegacyId });
+      if (!mission) return req.reject(404, `Mission not found: ${missionLegacyId}`);
+
+      const paths = await SELECT.from(dbPaths)
+        .where({ mission_ID: mission.ID })
+        .orderBy('legacyId');
+
+      const pathIds = paths.map(p => p.ID);
+      const allItems = pathIds.length > 0
+        ? await SELECT.from(dbPathItems).where({ path_ID: { in: pathIds } }).orderBy('itemOrder')
+        : [];
+
+      const taskLegacyIds = allItems.map(i => i.taskLegacyId);
+
+      const tutorials = taskLegacyIds.length > 0
+        ? await SELECT.from(dbTutorials).where({ legacyId: { in: taskLegacyIds } })
+        : [];
+      const checkpoints = taskLegacyIds.length > 0
+        ? await SELECT.from(dbCheckpoints).where({ legacyId: { in: taskLegacyIds } })
+        : [];
+
+      const taskMap = new Map();
+      for (const t of tutorials) taskMap.set(`TUTORIAL:${t.legacyId}`, t);
+      for (const c of checkpoints) taskMap.set(`CHECKPOINT:${c.legacyId}`, c);
+
+      let userRecords = [];
+      const dbUser = await SELECT.one.from(dbUsers).where({ uuid: user.id });
+      if (dbUser) {
+        userRecords = await SELECT.from(dbTaskRecords).where({
+          user_ID: dbUser.ID,
+          taskLegacyId: { in: taskLegacyIds }
+        });
+      }
+      const recordMap = new Map();
+      for (const r of userRecords) recordMap.set(`${r.taskType}:${r.taskLegacyId}`, r);
+
+      const event = await SELECT.one.from(dbEvents).orderBy('startDate desc');
+
+      const result = {
+        eventId: event?.legacyId ?? 0,
+        type: 'COMPLEX',
+        paths: paths.map(p => {
+          const items = allItems
+            .filter(i => i.path_ID === p.ID)
+            .map(i => {
+              const task = taskMap.get(`${i.taskType}:${i.taskLegacyId}`);
+              const record = recordMap.get(`${i.taskType}:${i.taskLegacyId}`);
+              return {
+                imsId: i.taskLegacyId,
+                title: task?.title || record?.titleSnapshot || '',
+                type: i.taskType,
+                status: record?.status || '',
+                progress: record?.progress || 0,
+                experience: task?.experienceTag || '',
+                timeToComplete: task?.averageTimeToComplete || 0,
+                url: task?.slug ? `/tutorials/${task.slug}.html` : '',
+                description: task?.description || '',
+                recordId: record?.legacyId || 0
+              };
+            });
+          return {
+            id: p.legacyId,
+            title: p.name,
+            description: mission.description || '',
+            items
+          };
+        })
+      };
+
+      return result;
     });
 
     // --- Accomplishment Evaluation ---

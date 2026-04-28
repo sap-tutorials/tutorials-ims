@@ -30,6 +30,7 @@ entity Tutorials : TaskBase {
 }
 
 entity Missions : TaskBase {
+  slug                      : String(255);
   communityMissionId        : String(255);
   group                     : Association to Groups;
   completionPaths           : Composition of many CompletionPaths on completionPaths.mission = $self;
@@ -144,6 +145,7 @@ entity AccomplishmentRecords : cuid, LegacyKeyed {
 entity CompletionPaths : cuid, LegacyKeyed {
   mission                   : Association to Missions;
   name                      : String(255);
+  slug                      : String(255);
   items                     : Composition of many CompletionPathItems on items.path = $self;
 }
 
@@ -241,4 +243,16 @@ entity FeaturedTasks : cuid, LegacyKeyed {
   taskLegacyId              : Integer;
   taskType                  : String(20);
   featuredOrder             : Integer;
+}
+
+entity FailedEmails : cuid {
+  to                        : String(2000);
+  cc                        : String(2000);
+  subject                   : String(500);
+  body                      : LargeString;
+  errorMessage              : String(2000);
+  createdAt                 : Timestamp;
+  retryCount                : Integer default 0;
+  maxRetries                : Integer default 3;
+  status                    : String(20) default 'PENDING';
 }

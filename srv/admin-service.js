@@ -263,14 +263,61 @@ export default class AdminService extends cds.ApplicationService {
     });
 
     this.on('sendContributorNotifications', async (req) => {
-      const { computeStaleNotifications, markNotificationSent } = await import('./lib/contributor-notifications.js');
+      const { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList } = await import('./lib/contributor-notifications.js');
+      const { sendNotificationEmail } = await import('./lib/mail-client.js');
+
+      const adminEmails = await getAdminEmailList();
       const notifications = await computeStaleNotifications(180);
+      const dashboardUrl = process.env.DASHBOARD_URL || 'https://tutorials-approuter.cfapps.us30.hana.ondemand.com/ui/tutorialDashboard';
 
+      let sent = 0;
       for (const n of notifications) {
+        const { to, cc } = determineRecipients(n, adminEmails);
+        if (to.length === 0) continue;
+        await sendNotificationEmail({
+          to, cc, subject: n.title,
+          level: n.notificationLevel,
+          variables: { dashboardUrl }
+        });
         await markNotificationSent(n.tutorialId);
+        sent++;
       }
+      return { notified: sent };
+    });
 
-      return { notified: notifications.length };
+    this.on('updateNotificationRecipients', async (req) => {
+      const { ImsConfig } = cds.entities('com.sap.developers.ims');
+      const { emails } = req.data;
+      const existing = await SELECT.one.from(ImsConfig).where({ key: 'emailListForOutdated' });
+      if (existing) {
+        await UPDATE(ImsConfig, existing.ID).set({ value: emails });
+      } else {
+        await INSERT.into(ImsConfig).entries({ key: 'emailListForOutdated', value: emails });
+      }
+      return { updated: true };
+    });
+
+    this.on('toggleNotifications', async (req) => {
+      const { ImsConfig } = cds.entities('com.sap.developers.ims');
+      const { enabled } = req.data;
+      const value = String(enabled);
+      const existing = await SELECT.one.from(ImsConfig).where({ key: 'isNotificationSendingAllowed' });
+      if (existing) {
+        await UPDATE(ImsConfig, existing.ID).set({ value });
+      } else {
+        await INSERT.into(ImsConfig).entries({ key: 'isNotificationSendingAllowed', value });
+      }
+      return { enabled };
+    });
+
+    this.on('getNotificationConfig', async () => {
+      const { ImsConfig } = cds.entities('com.sap.developers.ims');
+      const enabledConfig = await SELECT.one.from(ImsConfig).where({ key: 'isNotificationSendingAllowed' });
+      const recipientsConfig = await SELECT.one.from(ImsConfig).where({ key: 'emailListForOutdated' });
+      return {
+        enabled: enabledConfig?.value === 'true',
+        recipients: recipientsConfig?.value || ''
+      };
     });
 
     await super.init();

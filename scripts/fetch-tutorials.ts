@@ -10,7 +10,8 @@ import { resolveImageURLs } from './parsers/images.js'
 import { convertOptionBlocks } from './parsers/options.js'
 import { escapeHugoDelimiters } from './parsers/hugo-delimiters.js'
 import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, type DiscoveredTutorial } from './parsers/github.js'
-import { fetchAllMissions, fetchAllMissionHierarchies, loadAemCache, saveAemCache, type AemMission, type AemHierarchy, type AemHierarchyGroup } from './parsers/aem.js'
+import { fetchBuildCatalog, loadCapCache, saveCapCache } from './parsers/cap.js'
+import { type AemMission, type AemHierarchy, type AemHierarchyGroup } from './parsers/aem.js'
 import type { TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } from './parsers/types.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -682,33 +683,33 @@ async function main() {
   await runWithConcurrency(tasks, CONCURRENCY)
   const processMs = performance.now() - processStart
 
-  // ── Phase 4: AEM Missions & Groups ──
-  console.log('\nPhase 4: Fetching missions & groups from AEM...\n')
+  // ── Phase 4: Missions & Groups from CAP ──
+  console.log('\nPhase 4: Fetching missions & groups from CAP...\n')
   const aemStart = performance.now()
 
   let missions: AemMission[] = []
   let hierarchies: AemHierarchy[] = []
   let aemCacheUsed = false
 
-  const forceAem = process.argv.includes('--force-aem')
-  const cached = forceAem ? null : loadAemCache()
+  const forceAem = process.argv.includes('--force-aem') || process.argv.includes('--force-cap')
+  const cached = forceAem ? null : loadCapCache()
 
   if (cached) {
     missions = cached.missions
     hierarchies = cached.hierarchies
     aemCacheUsed = true
-    console.log(`  [aem] Using cached data (${missions.length} missions)`)
+    console.log(`  [cap] Using cached data (${missions.length} missions)`)
   } else {
     try {
-      missions = await fetchAllMissions()
-      console.log(`  [aem] Discovered ${missions.length} missions`)
-
-      hierarchies = await fetchAllMissionHierarchies(missions)
-      saveAemCache(missions, hierarchies)
-      console.log(`  [aem] Fetched all hierarchies`)
+      const capBaseUrl = process.env.CAP_BASE_URL || 'http://localhost:4004'
+      const catalog = await fetchBuildCatalog(capBaseUrl)
+      missions = catalog.missions
+      hierarchies = catalog.hierarchies
+      saveCapCache(missions, hierarchies)
+      console.log(`  [cap] Fetched ${missions.length} missions with hierarchies`)
     } catch (err) {
-      console.warn(`  [aem-warn] AEM fetch failed: ${err instanceof Error ? err.message : err}`)
-      console.warn('  [aem-warn] Continuing without missions/groups')
+      console.warn(`  [cap-warn] CAP fetch failed: ${err instanceof Error ? err.message : err}`)
+      console.warn('  [cap-warn] Continuing without missions/groups')
     }
   }
 
@@ -816,7 +817,7 @@ async function main() {
   }
 
   const aemMs = performance.now() - aemStart
-  console.log(`\nAEM phase complete: ${missions.length} missions, ${allGroupRefs.length} groups, ${matchedTutorials} tutorials matched, ${unmatchedTutorials} unmatched, ${patchedCount} pages patched (${formatDuration(aemMs)})`)
+  console.log(`\nCAP phase complete: ${missions.length} missions, ${allGroupRefs.length} groups, ${matchedTutorials} tutorials matched, ${unmatchedTutorials} unmatched, ${patchedCount} pages patched (${formatDuration(aemMs)})`)
 
   // ── Phase 5: Write outputs ──
   navEntries.sort((a, b) => a.slug.localeCompare(b.slug))
@@ -864,7 +865,7 @@ async function main() {
   console.log(`    Discovery (GraphQL):     ${formatDuration(discoveryMs)}`)
   console.log(`    Metadata prefetch:       ${formatDuration(metaMs)}`)
   console.log(`    Tutorial processing:     ${formatDuration(processMs)}`)
-  console.log(`    AEM missions/groups:     ${formatDuration(aemMs)}${aemCacheUsed ? ' (cached)' : ''}`)
+  console.log(`    CAP missions/groups:     ${formatDuration(aemMs)}${aemCacheUsed ? ' (cached)' : ''}`)
   console.log(`    Total:                   ${formatDuration(totalMs)}`)
   console.log('─'.repeat(60))
   console.log('  PER-TUTORIAL STATS')

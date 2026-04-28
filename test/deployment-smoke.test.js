@@ -75,4 +75,15 @@ describe('deployment smoke tests', () => {
       expect(id).toBeGreaterThan(10000000);
     });
   });
+
+  describe('build catalog (unauthenticated)', () => {
+    it('GET /build/catalog returns missions and hierarchies', async () => {
+      const res = await project.get('/build/catalog', { validateStatus: () => true });
+      expect(res.status).toBe(200);
+      expect(res.data).toHaveProperty('missions');
+      expect(res.data).toHaveProperty('hierarchies');
+      expect(Array.isArray(res.data.missions)).toBe(true);
+      expect(Array.isArray(res.data.hierarchies)).toBe(true);
+    });
+  });
 });

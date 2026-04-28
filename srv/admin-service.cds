@@ -26,6 +26,7 @@ service AdminService {
   entity NGDSFailedMessages as projection on ims.NGDSFailedMessages;
   entity DeveloperEnvironmentTabs as projection on ims.DeveloperEnvironmentTabs;
   entity FeaturedTasks as projection on ims.FeaturedTasks;
+  entity FailedEmails as projection on ims.FailedEmails;
   entity PrimaryAccounts as projection on ims.PrimaryAccounts;
   entity SecondaryAccounts as projection on ims.SecondaryAccounts;
   entity PrivacyProtectionActions as projection on ims.PrivacyProtectionActions;
@@ -58,6 +59,9 @@ service AdminService {
   action sendContributorNotifications() returns {
     notified : Integer;
   };
+  action updateNotificationRecipients(emails : String) returns { updated : Boolean };
+  action toggleNotifications(enabled : Boolean) returns { enabled : Boolean };
+  function getNotificationConfig() returns { enabled : Boolean; recipients : String };
 
   // --- Statistics & export functions ---
 

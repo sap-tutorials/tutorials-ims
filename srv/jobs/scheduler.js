@@ -4,7 +4,8 @@ import { cleanupStepFailures, cleanupUnusedTags } from './cleanup.js';
 import { recordActiveLearners } from './analytics.js';
 import { retryNgds } from './ngds-retry.js';
 import { processAccountMerges } from './account-merge-job.js';
-import { computeStaleNotifications, markNotificationSent } from '../lib/contributor-notifications.js';
+import { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, isNotificationsEnabled } from '../lib/contributor-notifications.js';
+import { sendNotificationEmail, retryFailedEmails } from '../lib/mail-client.js';
 import { syncTutorialMetadata } from '../lib/tutorial-sync.js';
 import cds from '@sap/cds';
 
@@ -67,12 +68,36 @@ export function registerJobs() {
   // Weekly Monday 09:00 — contributor notifications
   cron.schedule('0 9 * * 1', () =>
     runWithLock('contributor-notifications', 1800000, async () => {
-      const notifications = await computeStaleNotifications(180);
-      for (const n of notifications) {
-        await markNotificationSent(n.tutorialId);
+      if (!await isNotificationsEnabled()) {
+        LOG.info('Contributor notifications disabled via config');
+        return;
       }
-      LOG.info(`Processed ${notifications.length} contributor notifications`);
+      const adminEmails = await getAdminEmailList();
+      const notifications = await computeStaleNotifications(180);
+      const dashboardUrl = process.env.DASHBOARD_URL || 'https://tutorials-approuter.cfapps.us30.hana.ondemand.com/ui/tutorialDashboard';
+
+      let sent = 0;
+      for (const n of notifications) {
+        const { to, cc } = determineRecipients(n, adminEmails);
+        if (to.length === 0) continue;
+        const result = await sendNotificationEmail({
+          to, cc,
+          subject: n.title,
+          level: n.notificationLevel,
+          variables: { dashboardUrl }
+        });
+        if (result.success) {
+          await markNotificationSent(n.tutorialId);
+          sent++;
+        }
+      }
+      LOG.info(`Processed ${notifications.length} stale tutorials, sent ${sent} emails`);
     })
+  );
+
+  // Every 4 hours — email retry
+  cron.schedule('0 */4 * * *', () =>
+    runWithLock('email-retry', 900000, retryFailedEmails)
   );
 
   LOG.info('All scheduled jobs registered');

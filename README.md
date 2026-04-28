@@ -1,10 +1,10 @@
 # SAP Tutorial Platform
 
-A VitePress-based static site replacing Adobe Experience Manager (AEM) and the Git-based authoring interface as the tutorial hosting platform for [developers.sap.com](https://developers.sap.com). Fetches tutorial markdown from the [`sap-tutorials`](https://github.com/sap-tutorials) GitHub organization at build time, renders it with SAP Fiori Horizon styling, and deploys on SAP BTP Cloud Foundry behind an AppRouter with XSUAA authentication.
+A tutorial hosting platform for [developers.sap.com](https://developers.sap.com) that replaces both Adobe Experience Manager (AEM) and the legacy Java IMS backend. Fetches tutorial markdown from the [`sap-tutorials`](https://github.com/sap-tutorials) GitHub organization at build time, renders static pages with SAP Fundamental Styles (Horizon theme) via Hugo, and deploys on SAP BTP Cloud Foundry behind an AppRouter with XSUAA authentication. The CAP Node.js backend provides progress tracking, event management, and all services previously handled by the Spring Boot IMS application.
 
-> **Note:** This project began as a proof-of-concept and has been promoted to a **production replacement** for the AEM tutorial hosting and Git interface portions of developers.sap.com (as of April 2026).
+> **Production system** replacing AEM tutorial hosting, Git-based authoring interface, and Java IMS backend on developers.sap.com (April 2026).
 
-**Stack:** VitePress 1.6 &middot; Vue 3.5 &middot; SAP Fundamental Styles &middot; TypeScript &middot; SAP BTP
+**Stack:** Hugo &middot; CAP Node.js (CDS 9.x) &middot; SAP HANA Cloud &middot; SAP Fundamental Styles &middot; Vue 3 (apps) &middot; TypeScript &middot; SAP BTP Cloud Foundry
 
 ## Quick Start
 
@@ -12,188 +12,301 @@ A VitePress-based static site replacing Adobe Experience Manager (AEM) and the G
 
 ```bash
 npm install
-npm run fetch-tutorials
-npm run dev
+npm run fetch-tutorials   # Fetch tutorial markdown from GitHub + CAP catalog
+cds watch                 # Start CAP server (http://localhost:4004)
 ```
 
-Open [http://localhost:5173](http://localhost:5173) in your browser.
+For the full static site build:
 
-Tutorials must be fetched before running `dev` or `build`. The fetch step downloads markdown from GitHub, parses it, and generates VitePress pages in `site/tutorials/`.
+```bash
+npm run dev               # Hugo dev server (requires fetch-tutorials first)
+npm run build             # Production build → hugo/public/
+```
 
 ## Scripts
 
 | Script | Description |
 |--------|-------------|
-| `npm run fetch-tutorials` | Fetch tutorial markdown from GitHub, parse, and generate VitePress pages |
-| `npm run dev` | Start VitePress dev server with hot reload |
-| `npm run build` | Production build to `site/.vitepress/dist/` |
-| `npm run preview` | Preview the production build locally |
-| `npm run generate-dark-theme` | Regenerate dark theme CSS variables from Fundamental Styles |
+| `npm install` | Install all dependencies |
+| `npm run fetch-tutorials` | Fetch markdown from GitHub, parse, generate Hugo content pages |
+| `npm run dev` | Hugo dev server with live reload |
+| `npm run build` | Production static build (Hugo) |
 | `npm run test` | Run all tests (Vitest) |
 | `npm run test:watch` | Run tests in watch mode |
+| `cds watch` | Start CAP backend (http://localhost:4004) |
+| `npm run migrate:reference` | Export/import reference data from Java IMS |
+| `npm run migrate:users` | Export/import user progress (paged, resumable) |
+| `npm run compare` | Compare Java IMS and CAP responses side-by-side |
 
 ## Environment Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `GITHUB_TOKEN` | No | GitHub personal access token. Avoids API rate limits when fetching commit metadata (authors, timestamps). Without it, unauthenticated requests may fail on repeated builds. |
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `GITHUB_TOKEN` | No | — | Avoids GitHub API rate limits when fetching commit metadata |
+| `CAP_BASE_URL` | No | `http://localhost:4004` | CAP backend URL for build pipeline and migration scripts |
+| `IMS_BASE_URL` | No | `https://imsprod-approuter...` | Legacy Java IMS URL (migration only) |
+| `IMS_AUTH_TOKEN` | No | — | Bearer token for Java IMS API (migration only) |
+| `SMTP_HOST` | No | — | SMTP server for local email testing (e.g., MailHog) |
+| `DASHBOARD_URL` | No | Production URL | Tutorial Dashboard URL used in notification emails |
 
-## Project Structure
+## Architecture Overview
 
 ```
-tutorials-poc/
-├── site/                          # VitePress source
-│   ├── .vitepress/
-│   │   ├── config.ts              # VitePress + Vite proxy config
-│   │   └── theme/
-│   │       ├── index.ts           # Custom theme entry (layout routing)
-│   │       ├── components/        # Vue components (layouts, steps, nav)
-│   │       ├── composables/       # useApi, useAemEnrichment
-│   │       └── styles/            # SAP Fundamental CSS, Horizon vars, dark theme
-│   ├── tutorials/                 # Generated pages (gitignored)
-│   ├── index.md                   # Tutorial Navigator landing page
-│   └── app-space.md               # Event-themed tutorial space
-├── scripts/
-│   ├── fetch-tutorials.ts         # Main build script: fetch + parse + generate
-│   ├── generate-dark-theme.ts     # Dark theme CSS generator
-│   ├── parsers/
-│   │   ├── v1.ts                  # Legacy parser (ACCORDION markers)
-│   │   ├── v2.ts                  # Current parser (H3 headings)
-│   │   ├── frontmatter.ts         # YAML frontmatter extraction
-│   │   ├── images.ts              # Image URL resolution + comment stripping
-│   │   ├── options.ts             # Option blocks → OptionTabs components
-│   │   ├── github.ts              # GitHub API: commits, authors, timestamps
-│   │   └── types.ts               # Shared TypeScript types
-│   └── __tests__/                 # Vitest unit tests for all parsers
-├── approuter/                     # SAP AppRouter (BTP deployment)
-│   ├── xs-app.json                # Route config: /api/* → Destination, /* → static
-│   └── package.json               # @sap/approuter dependency
-├── .tutorial-cache/               # Build cache (gitignored)
-├── mta.yaml                       # MTA deployment descriptor
-├── xs-security.json               # XSUAA service config
-└── package.json                   # Scripts, devDependencies, type: module
+┌────────────────────────────────────────────────────────────────────────┐
+│ SAP BTP Cloud Foundry                                                  │
+│                                                                        │
+│  ┌──────────────┐     ┌──────────────┐     ┌──────────────────────┐   │
+│  │  AppRouter   │────▶│  CAP srv     │────▶│  SAP HANA Cloud      │   │
+│  │  (static +   │     │  (Node.js)   │     │  (HDI container)     │   │
+│  │   auth)      │     │              │     └──────────────────────┘   │
+│  └──────────────┘     │  Services:   │                                │
+│        │              │  /api        │     ┌──────────────────────┐   │
+│        │              │  /admin      │────▶│  BTP Destination     │   │
+│        ▼              │  /display    │     │  (NGDS, SCI)         │   │
+│  ┌──────────────┐     │  /api/v1     │     └──────────────────────┘   │
+│  │  XSUAA       │     │              │                                │
+│  │  (SAP IDP)   │     │  Custom:     │     ┌──────────────────────┐   │
+│  └──────────────┘     │  /api/qrcode │────▶│  BTP Mail Service    │   │
+│                       │  /build/     │     │  (SMTP notifications)│   │
+│                       │  catalog     │     └──────────────────────┘   │
+│                       │              │                                │
+│                       │  WebSocket:  │     ┌──────────────────────┐   │
+│                       │  /display/   │────▶│  Adobe Analytics     │   │
+│                       │  websocket   │     │  (event beacons)     │   │
+│                       └──────────────┘     └──────────────────────┘   │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Architecture
+## CAP Backend (srv/)
 
-### Build Pipeline
+The CAP Node.js service is the complete replacement for the Java IMS Spring Boot application.
+
+### Services
+
+| Service | Path | Auth | Purpose |
+|---------|------|------|---------|
+| DeveloperService | `/api` | DeveloperApp | Tutorial progress, step completion, event progress |
+| AdminService | `/admin` | Admin | Full CRUD, GDPR, statistics, export, notifications |
+| DisplayService | `/display` | DisplayApp | Event leaderboard, burnup charts, track stats |
+| ConsolidationService | `/api/v1` | ConsolidationScope | Account merge, legacy compatibility |
+
+### Custom Endpoints (Express)
+
+Registered via `cds.on('bootstrap')` in [srv/server.js](srv/server.js):
+
+| Endpoint | Auth | Purpose |
+|----------|------|---------|
+| `GET /api/qrcode` | None (through AppRouter) | Generate QR code PNG for tutorial completion |
+| `GET /build/catalog` | None | Unauthenticated mission/group data for static site build |
+
+### WebSocket
+
+STOMP-over-WebSocket broker at `/display/websocket` for real-time event dashboard updates. Broadcasts tutorial completion events to subscribed display monitors. Implementation: [srv/lib/stomp-broker.js](srv/lib/stomp-broker.js).
+
+### Scheduled Jobs
+
+Registered via `cds.on('served')` in [srv/jobs/scheduler.js](srv/jobs/scheduler.js). All jobs use distributed locking for multi-instance safety.
+
+| Schedule | Job | Description |
+|----------|-----|-------------|
+| Daily 00:00 | Step failure cleanup | Remove step failures older than 90 days |
+| Daily 00:15 | Active learner analytics | Record daily active user count |
+| Every 2h | NGDS retry | Retry failed NGDS message deliveries |
+| Daily 01:00 | Account merge batch | Process scheduled account merges |
+| Jan 2 / Jul 2 | Tag cleanup | Remove unused tags |
+| Weekly Sun 02:00 | Tutorial metadata sync | Sync tutorial metadata from cache |
+| Weekly Mon 09:00 | Contributor notifications | Send escalating emails to outdated tutorial authors |
+| Every 4h | Email retry | Retry failed email deliveries |
+
+### Key Libraries (srv/lib/)
+
+| File | Purpose |
+|------|---------|
+| `accomplishment-evaluator.js` | Evaluate badge/accomplishment rules against user progress |
+| `contributor-notifications.js` | Compute stale tutorials, escalation routing, config helpers |
+| `mail-client.js` | Nodemailer transport with BTP Mail binding, template rendering, retry |
+| `stomp-broker.js` | Lightweight STOMP frame parser + WebSocket pub/sub |
+| `ngds-client.js` | NGDS analytics integration with dead-letter retry |
+| `adobe-analytics.js` | Adobe Analytics XML beacon on tutorial completion |
+| `account-merge.js` | Merge duplicate user accounts |
+| `build-catalog.js` | Build pipeline data (missions, paths, tutorials) |
+| `qrcode-handler.js` | QR code PNG generation |
+| `tutorial-sync.js` | Sync tutorial metadata from GitHub cache |
+| `legacy-id.js` | HANA sequence-backed legacy integer IDs |
+
+### Data Model (db/schema.cds)
+
+Core entities:
+
+- **Users** — SAP IDP users (uuid, sapId, displayName)
+- **Tutorials** — Tutorial metadata (slug, title, steps)
+- **Missions** — Collections of completion paths
+- **CompletionPaths** — Ordered groups of tutorials within a mission
+- **Events** — Time-boxed learning events (SAP TechEd, etc.)
+- **TaskRecords** — User completion records (step, tutorial, mission)
+- **AccomplishmentRecords** — Earned badges/prizes
+- **TutorialMeta** — Notification tracking (reviewed date, notification level)
+- **ImsConfig** — Key-value configuration store
+
+Supporting entities: Steps, Tags, Prizes, PrizeRecords, TutorialContributors, TutorialRepositories, StepFailures, NGDSFailedMessages, FailedEmails, JobLocks, ActiveLearnerRecords, DashboardMonitoredRecords, FeaturedTasks.
+
+### Notification Escalation System
+
+Tutorial contributors receive escalating email reminders when tutorials go 6+ months without review:
+
+| Level | TO | CC | Message |
+|-------|----|----|---------|
+| 0 (First) | Tutorial owner/author | — | 90-day retirement warning |
+| 1 (Second) | Tutorial owner/author | Repo owner | 60-day warning |
+| 2 (Third) | Tutorial owner/author | Repo owner + admin list | 30-day warning |
+| 3 (Final) | Admin list | — | Deadline passed, arrange removal |
+
+Resend interval: 30 days between escalation levels. Controlled via `ImsConfig` entries `isNotificationSendingAllowed` and `emailListForOutdated`.
+
+## Build Pipeline
 
 ```
 sap-tutorials GitHub repos
   → scripts/fetch-tutorials.ts         Fetch raw markdown (cached in .tutorial-cache/)
     → scripts/parsers/*                Parse frontmatter, steps, images, options
-      → site/tutorials/*.md            Generated VitePress pages with YAML frontmatter
-        → site/tutorials/_nav.json     Navigation index for Tutorial Navigator
+      → hugo/content/tutorials/*.md    Generated Hugo content pages
+
+CAP backend (CAP_BASE_URL)
+  → GET /build/catalog (unauthenticated)
+    → missions + completion paths + tutorial ordering
+      → hugo/content/missions/*.md and groups/*.md pages
 ```
 
-### Frontend
+### Parsers (scripts/parsers/)
 
-The site uses VitePress with a fully custom Vue 3 theme. Layout routing is driven by the `layout` field in each page's YAML frontmatter:
+| Parser | Detection | Delimiter |
+|--------|-----------|-----------|
+| V2 (current) | `parser: v2` in frontmatter | `###` (H3) headings = step titles |
+| V1 (legacy) | Default | `[ACCORDION-BEGIN]`/`[ACCORDION-END]` markers |
 
-- `layout: tutorial` renders via `TutorialLayout.vue` (step accordion, sidebar TOC, progress)
-- `layout: mission` renders via `MissionLayout.vue` (collapsible groups, hero banner)
-- `layout: group` renders via `GroupLayout.vue` (timeline of tutorials)
-- Default layout renders `TutorialNavigator.vue` on the home page (search, facet filters, card grid)
+Shared processing: image URL resolution to GitHub raw CDN, comment stripping, option block → Vue component conversion.
 
-### Styling
+### Cache
 
-Hybrid approach combining VitePress layout with SAP Fundamental Styles (Horizon theme):
+`.tutorial-cache/` stores:
+- Raw tutorial markdown from GitHub
+- GitHub commit metadata (authors, timestamps)
+- CAP catalog data (missions, paths) — 24h TTL
 
-- SAP `fd-*` CSS classes for UI components (breadcrumbs, buttons, forms)
-- CSS custom properties bridge VitePress tokens (`--vp-c-*`) to SAP Horizon tokens (`--sap*`)
-- Full dark mode support via SAP Horizon dark theme variables
-- Event theme overlays (Joule, Sapphire) via `data-theme` CSS attribute selectors
+Delete the directory to force a full re-fetch.
 
-**Important:** Always use `--sap*` CSS variables for colors, never hardcode hex values. This ensures dark mode and theme variants work correctly.
+## Frontend Apps
 
-### Dev Proxies
+### Static Site (Hugo)
 
-During local development, Vite proxies two paths:
+Hugo generates the static tutorial pages with SAP Fundamental Styles. Deployed as static files in `approuter/static/`.
 
-| Path | Target | Purpose |
-|------|--------|---------|
-| `/api/*` | `http://localhost:4004` | CAP/HANA backend (progress, points) |
-| `/bin/sapdx/*` | `https://developers.sap.com` | Legacy AEM endpoints (enrichment data) |
+### AppSpace (apps/src/app-space/)
 
-## Tutorial Parser Formats
+Event-themed tutorial space (Vue 3 SPA) used at SAP events. Features:
+- Joule/Sapphire theme overlays
+- Progress tracking via `/api/getEventProgress`
+- QR code generation via `/api/qrcode`
+- Real-time updates via STOMP WebSocket
 
-The build script auto-detects parser format via the `parser` frontmatter field:
+### Display App (display-app/)
 
-**V2 (current):** Uses `###` (H3) headings to delimit steps. Each H3 becomes a step title.
+Event monitor dashboard (Vue 3 SPA) for big screens at SAP events. Shows:
+- Leaderboard, burnup charts, track statistics
+- 5 rotating views with auto-refresh
+- Real-time updates via STOMP WebSocket at `/display/websocket`
 
-**V1 (legacy):** Uses `[ACCORDION-BEGIN]` / `[ACCORDION-END]` markers from the original AEM platform.
+## Deployment
 
-Both parsers share common processing:
+Single MTA deployment to SAP BTP Cloud Foundry:
 
-- **Image resolution:** Relative paths (e.g., `trial4.png`) are converted to absolute GitHub raw URLs (`https://raw.githubusercontent.com/sap-tutorials/{repo}/{branch}/tutorials/{slug}/trial4.png`)
-- **Comment stripping:** SAP tutorial conventions like `<!-- border -->` before images are removed so VitePress can parse the markdown correctly
-- **Option blocks:** `[OPTION BEGIN]` / `[OPTION END]` markers are converted to `<OptionTabs>` Vue components for tabbed content
-
-## Key Components
-
-| Component | Purpose |
-|-----------|---------|
-| `TutorialNavigator.vue` | Home page: search bar, facet filters, mission/group/tutorial card grid |
-| `TutorialLayout.vue` | Tutorial shell: breadcrumbs, step accordion, sidebar TOC, progress tracking |
-| `MissionLayout.vue` | Mission detail: hero banner, collapsible group cards, progress |
-| `GroupLayout.vue` | Group detail: tutorial timeline with completion status |
-| `TutorialStep.vue` | Collapsible step with Done button and optional quiz validation |
-| `FeedbackShareBar.vue` | Action bar with Feedback popup (community, GitHub, survey) and Share popup (social) |
-| `AppSpace.vue` | Event-themed tutorial space with Joule/Sapphire branding |
-| `TutorialNavigatorDropdown.vue` | Breadcrumb dropdown for quick mission/group navigation |
-
-## Deployment (SAP BTP Cloud Foundry)
-
-The project deploys as a single MTA (Multi-Target Application):
-
-```
+```bash
 mbt build
 cf deploy mta_archives/tutorials-poc_1.0.0.mtar
 ```
 
-### What the MTA Build Does
+### MTA Modules
 
-1. Runs `npm install` + `npm run fetch-tutorials` + `npm run build`
-2. Copies `site/.vitepress/dist/*` into `approuter/static/`
-3. Deploys the AppRouter module to Cloud Foundry
+| Module | Type | Purpose |
+|--------|------|---------|
+| `tutorials-srv` | nodejs | CAP backend (all services + jobs + WebSocket) |
+| `tutorials-db-deployer` | hdb | HANA schema deployment |
+| `tutorials-approuter` | approuter.nodejs | Static files + XSUAA auth |
 
-### Required BTP Services
+### BTP Service Bindings
 
-| Service | Plan | Purpose |
-|---------|------|---------|
-| XSUAA | `application` | SAP IDP authentication (OAuth2/JWT) |
-| Destination | `lite` | Proxy `/api/*` requests to a CAP/HANA backend |
+| Resource | Service | Purpose |
+|----------|---------|---------|
+| `tutorials-hana` | hana (hdi-shared) | SAP HANA Cloud database |
+| `tutorials-xsuaa` | existing (`xsuaa-imsdev`) | Authentication (SAP IDP) |
+| `tutorials-destination` | destination (lite) | NGDS, SCI remote services |
+| `tutorials-mail` | existing (`mail-imsdev`) | SMTP for notification emails |
 
 ### Route Architecture
 
 ```
 Browser → AppRouter (XSUAA auth)
-  → /api/*     → BTP Destination → CAP backend
-  → /*         → static/ (VitePress build)
+  → /api/*      → Destination → CAP srv (DeveloperService)
+  → /admin/*    → Destination → CAP srv (AdminService)
+  → /display/*  → Destination → CAP srv (DisplayService)
+  → /*          → static/ (Hugo build + display-app)
+
+Display monitors → CAP srv directly (no AppRouter)
+  → ws://srv-url/display/websocket (STOMP, unauthenticated)
+  → /build/catalog (unauthenticated)
 ```
+
+## Data Migration
+
+Migration scripts in `scripts/` support parallel operation during cutover from Java IMS:
+
+| Script | Purpose |
+|--------|---------|
+| `migrate-reference-data.js export` | Export tutorials, missions, events, tags from Java IMS |
+| `migrate-reference-data.js import` | Import JSON into CAP system |
+| `migrate-reference-data.js populate-slugs` | Patch URL slugs from AEM cache into CAP |
+| `migrate-user-progress.js export` | Export users + task records (paged, resumable) |
+| `migrate-user-progress.js import` | Import user progress into CAP |
+| `compare-systems.js` | Endpoint-by-endpoint diff between Java IMS and CAP |
+
+Export files go to `.migration-data/` (gitignored).
 
 ## Testing
 
 ```bash
-npm run test                                    # Run all tests
-npm run test:watch                              # Watch mode
-npx vitest run scripts/__tests__/v1.test.ts     # Single test file
+npm run test                                     # Full suite (180 tests)
+npm run test:watch                               # Watch mode
+npx vitest run test/lib/mail-client.test.js      # Single test file
+npx vitest run test/deployment-smoke.test.js     # Smoke tests
 ```
 
-Test coverage includes unit tests for all parsers: V1 step extraction, V2 step extraction, frontmatter parsing, image URL resolution, and option block conversion.
+Test categories:
+- **Unit tests** (`test/lib/`) — Pure function tests for all srv/lib/ modules
+- **Service tests** (`test/*.test.js`) — CDS service integration tests with in-memory SQLite
+- **Integration tests** (`test/integration/`) — End-to-end workflows (create user → complete tutorial → evaluate accomplishment)
+- **Parser tests** (`scripts/__tests__/`) — Tutorial markdown parsing
+- **Smoke tests** (`test/deployment-smoke.test.js`) — Service registration, auth enforcement, build catalog
 
-## Development Notes
+## External Integrations
 
-- **`site/tutorials/` is entirely generated.** Never edit these files directly. They are overwritten by `npm run fetch-tutorials`. To change tutorial content, edit the source in the `sap-tutorials` GitHub org. To change how content is parsed, edit `scripts/parsers/`.
+| System | Direction | Purpose |
+|--------|-----------|---------|
+| NGDS | Outbound | Analytics events on tutorial/accomplishment completion |
+| Adobe Analytics | Outbound | XML beacons for completion tracking (event86) |
+| BTP Mail | Outbound | SMTP notifications to tutorial contributors |
+| SCI (Cross-domain Identity) | Inbound | User identity resolution |
+| GitHub (sap-tutorials) | Build-time | Tutorial markdown source |
 
-- **The tutorial list is hardcoded.** The tutorials (one mission, two groups) are defined in the `POC_TUTORIALS` array at the top of `scripts/fetch-tutorials.ts`. Adding tutorials means editing that array. This will be replaced with dynamic discovery as part of the production buildout.
+## Key Design Decisions
 
-- **Validation quiz data is hardcoded.** The `VALIDATION_DATA` object in `scripts/fetch-tutorials.ts` contains step quiz questions. Production will source these from the CAP backend.
-
-- **Cache clearing.** `.tutorial-cache/` caches raw markdown and GitHub metadata. Delete it to force a full re-fetch from GitHub. There is no incremental invalidation.
-
-- **Dark mode.** Use `--sap*` CSS custom properties for all colors. The Horizon dark theme remaps these variables automatically. SVG icons should use `currentColor` to inherit theme colors.
+- **CAP `bootstrap` vs `served` events**: Custom Express routes (`/api/qrcode`, `/build/catalog`) register on `bootstrap` (before CDS auth middleware). Side-effects (jobs, STOMP broker) register on `served` (after services ready).
+- **Unauthenticated build endpoint**: `/build/catalog` runs in CI without user credentials. Registered via Express before CDS auth applies.
+- **STOMP over plain WebSocket**: Display app is already deployed with STOMP client. Zero client changes during cutover.
+- **Notification toggle**: The `isNotificationSendingAllowed` config gates only the scheduled job. Manual admin trigger (`sendContributorNotifications` action) always works.
+- **Email retry queue**: Failed emails go to `FailedEmails` table with exponential retry. Transport failures (no SMTP in dev) are graceful, not fatal.
+- **Legacy ID sequences**: HANA `.hdbsequence` files generate integer IDs for backward compatibility with Java IMS consumers during parallel operation.
+- **Slug fields**: `Missions.slug` and `CompletionPaths.slug` are required for the static build pipeline to generate URL-friendly page paths. Populated via migration script from AEM cache data.
 
 ## License
 
-SAP Internal &mdash; Not for redistribution.
+SAP Internal — Not for redistribution.

@@ -50,7 +50,7 @@ const demoState = ref(0) // 0=default, 1=partial, 2=track complete, 3=reset
 // ── Data loading ───────────────────────────────────────────────────
 async function loadData(): Promise<AppSpaceData | null> {
   try {
-    const res = await fetch(`/bin/sapdx/tutorials/v3/progress/series?missionId=${MISSION_ID}`)
+    const res = await fetch(`/api/getEventProgress(missionLegacyId=${MISSION_ID})`)
     if (res.ok) {
       isLoggedIn.value = true
       return await res.json()
@@ -152,7 +152,7 @@ function handleItemClick(track: AppSpaceTrack, index: number, item: AppSpaceItem
 }
 
 function qrCodeUrl(item: AppSpaceItem): string {
-  return `/bin/sapdx/github/qrcode?imsId=${item.imsId}&type=${item.type}&eventId=38&recordId=${item.recordId ?? 0}`
+  return `/api/qrcode?imsId=${item.imsId}&type=${item.type}&eventId=38&recordId=${item.recordId ?? 0}`
 }
 
 // ── Computed ───────────────────────────────────────────────────────
@@ -402,7 +402,7 @@ const demoLabel = computed(() => {
             <!-- Prize QR code section -->
             <div v-if="item.type === 'PRIZE' && (item.status === 'EARNED' || isItemUnlocked(selectedTrack, index))" class="prize-section">
               <div class="prize-qr">
-                <div class="qr-placeholder">
+                <div class="qr-placeholder" v-if="item.status !== 'EARNED'">
                   <svg width="120" height="120" viewBox="0 0 120 120" fill="none">
                     <rect width="120" height="120" rx="8" fill="currentColor" opacity="0.06"/>
                     <rect x="15" y="15" width="35" height="35" rx="4" stroke="currentColor" opacity="0.3" stroke-width="2"/>
@@ -421,8 +421,9 @@ const demoLabel = computed(() => {
                     <rect x="94" y="94" width="8" height="8" fill="currentColor" opacity="0.15"/>
                   </svg>
                 </div>
+                <img v-else :src="qrCodeUrl(item)" alt="Prize QR code" class="qr-image" width="150" height="150" />
                 <p class="prize-message" v-if="item.status === 'EARNED'">
-                  {{ item.description || 'Congratulations! You earned a prize. Show this QR code to an App Space expert to claim it.' }}
+                  {{ item.description || 'Congratulations! You earned a prize. Scan this code then contact an App Space expert to claim it.' }}
                 </p>
                 <p class="prize-message prize-message--locked" v-else>
                   Complete all tutorials above to unlock this prize.
@@ -998,6 +999,11 @@ const demoLabel = computed(() => {
 .qr-placeholder {
   flex-shrink: 0;
   color: var(--sapTextColor, #32363a);
+}
+
+.qr-image {
+  flex-shrink: 0;
+  border-radius: 0.5rem;
 }
 
 .prize-message {

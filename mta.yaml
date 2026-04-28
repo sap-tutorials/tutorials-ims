@@ -37,6 +37,7 @@ modules:
       - name: tutorials-hana
       - name: tutorials-xsuaa
       - name: tutorials-destination
+      - name: tutorials-mail
 
   - name: tutorials-db-deployer
     type: hdb
@@ -81,3 +82,8 @@ resources:
     parameters:
       service: destination
       service-plan: lite
+
+  - name: tutorials-mail
+    type: org.cloudfoundry.existing-service
+    parameters:
+      service-name: mail-imsdev
