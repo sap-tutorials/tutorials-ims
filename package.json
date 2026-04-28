@@ -55,6 +55,23 @@
         "[production]": {
           "kind": "hana"
         }
+      },
+      "ngds": {
+        "kind": "rest",
+        "[hybrid]": {
+          "kind": "rest",
+          "credentials": {
+            "destination": "ngds-destination",
+            "path": "/ngds/developers/ims"
+          }
+        },
+        "[production]": {
+          "kind": "rest",
+          "credentials": {
+            "destination": "ngds-destination",
+            "path": "/ngds/developers/ims"
+          }
+        }
       }
     }
   }

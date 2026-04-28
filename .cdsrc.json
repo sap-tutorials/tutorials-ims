@@ -36,6 +36,12 @@
           "roles": ["DisplayApp", "authenticated-user"]
         }
       }
+    },
+    "ngds": {
+      "kind": "rest",
+      "credentials": {
+        "url": "http://localhost:0/ngds-mock"
+      }
     }
   }
 }
