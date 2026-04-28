@@ -289,7 +289,69 @@ function balanceComponentTags(content: string): string {
   writeFileSync(join(OUTPUT_DIR, `${slug}.md`), content, 'utf-8')
 }
 
-function patchTutorialFrontmatter(slug: string, nav: TutorialNavEntry, outputDir: string): void {
+export function writeHugoPage(
+  slug: string,
+  title: string,
+  description: string,
+  time: number,
+  level: string,
+  tags: string[],
+  primaryTag: string,
+  author: string,
+  authorProfile: string,
+  youWillLearn: string[],
+  prerequisites: string,
+  steps: TutorialStep[],
+  nav: TutorialNavEntry,
+  lastUpdated: string,
+  contributors: Array<{ name: string; login: string; avatarUrl: string }>,
+  outputDir: string,
+): void {
+  const cleanTags = tags.map(t => t.replace(/\\/g, ''))
+  const cleanPrimaryTag = primaryTag.replace(/\\/g, '')
+
+  const fm: Record<string, unknown> = {
+    type: 'tutorials',
+    slug,
+    title,
+    description,
+    time,
+    level,
+    tags: cleanTags,
+    primaryTag: cleanPrimaryTag,
+    author,
+    authorProfile,
+    stepCount: steps.length,
+    prev: nav.prev,
+    next: nav.next,
+    displayTags: [...new Set([cleanPrimaryTag, ...cleanTags])].map(humanizeTag).filter(t => t.length > 0),
+    youWillLearn,
+    prerequisites: splitPrerequisites(prerequisites),
+    lastUpdated: lastUpdated || null,
+    contributors: contributors.slice(0, 10).map(c => ({ login: c.login, name: c.name, avatarUrl: c.avatarUrl })),
+    steps: steps.map(s => ({ number: s.number, title: s.title })),
+  }
+
+  if (nav.missionId) fm.missionId = nav.missionId
+  if (nav.missionTitle) fm.missionTitle = nav.missionTitle
+  if (nav.missionSlug) fm.missionSlug = nav.missionSlug
+  if (nav.groupId) fm.groupId = nav.groupId
+  if (nav.groupTitle) fm.groupTitle = nav.groupTitle
+  if (nav.groupSlug) fm.groupSlug = nav.groupSlug
+
+  const frontmatter = `---\n${yamlStringify(fm).trimEnd()}\n---\n\n`
+
+  const stepsMd = steps.map(step =>
+    `{{% tutorial-step number="${step.number}" title="${step.title.replace(/"/g, '&quot;')}" %}}\n\n${step.content}\n\n{{% /tutorial-step %}}`
+  ).join('\n\n')
+
+  const content = `${frontmatter}${stepsMd}\n`
+
+  mkdirSync(outputDir, { recursive: true })
+  writeFileSync(join(outputDir, `${slug}.md`), content, 'utf-8')
+}
+
+function patchTutorialFrontmatter(slug: string, nav: TutorialNavEntry, outputDir: string, target: BuildTarget = 'vitepress'): void {
   const filePath = join(outputDir, `${slug}.md`)
   if (!existsSync(filePath)) return
 
@@ -557,7 +619,7 @@ async function main() {
 
       const isV2 = frontmatter.parser === 'v2'
       let processedBody = resolveImageURLs(body, { repo: t.repo, branch: t.branch, slug: t.slug })
-      processedBody = convertOptionBlocks(processedBody)
+      processedBody = convertOptionBlocks(processedBody, target)
       processedBody = processedBody.replace(/^<{4,7} .+\n[\s\S]*?^={4,7}\n([\s\S]*?)^>{4,7} .+\n?/gm, '$1')
 
       const steps = isV2 ? parseV2Steps(processedBody) : parseV1Steps(processedBody)
@@ -579,7 +641,8 @@ async function main() {
         next: null,
       }
 
-      writeVitePressPage(
+      const writePage = target === 'hugo' ? writeHugoPage : writeVitePressPage
+      writePage(
         t.slug,
         title,
         description,
@@ -744,7 +807,7 @@ async function main() {
   let patchedCount = 0
   for (const nav of navEntries) {
     if (nav.missionId || nav.prev || nav.next) {
-      patchTutorialFrontmatter(nav.slug, nav, OUTPUT_DIR)
+      patchTutorialFrontmatter(nav.slug, nav, OUTPUT_DIR, target)
       patchedCount++
     }
   }
