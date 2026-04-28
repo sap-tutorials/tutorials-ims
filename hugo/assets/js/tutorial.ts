@@ -54,5 +54,109 @@ function switchTab(btn: HTMLButtonElement) {
   })
 }
 
-// Stub function referenced in event delegation (implemented in later task)
-function markDone(_btn: HTMLButtonElement) {}
+// --- API Helper ---
+const API_BASE = document.documentElement.dataset.apiBase || '/api'
+
+async function apiGet<T>(path: string): Promise<T | null> {
+  try {
+    const res = await fetch(`${API_BASE}${path}`)
+    return res.ok ? res.json() : null
+  } catch { return null }
+}
+
+async function apiPost(path: string, body?: unknown): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    })
+    return res.ok
+  } catch { return false }
+}
+
+// --- Progress tracking ---
+async function markDone(btn: HTMLButtonElement) {
+  const stepNum = btn.dataset.step
+  if (!stepNum || btn.disabled) return
+  const slug = document.querySelector('#progress-bar')?.getAttribute('data-slug')
+  if (!slug) return
+
+  btn.disabled = true
+  btn.textContent = 'Saving...'
+  const ok = await apiPost(`/tutorials/${slug}/steps/${stepNum}/complete`)
+
+  const step = btn.closest('.tutorial-step')
+  if (ok && step) {
+    step.classList.add('completed')
+    const circle = step.querySelector('.step-check-circle')
+    if (circle) circle.textContent = '✓'
+    const tocItem = document.querySelector(`.step-toc-item[data-toc-step="${stepNum}"]`)
+    if (tocItem) tocItem.classList.add('completed')
+    updateProgressBar()
+  }
+  btn.textContent = 'Done'
+  btn.disabled = false
+}
+
+function initProgressBar() {
+  const container = document.getElementById('progress-bar')
+  if (!container) return
+  const count = parseInt(container.dataset.stepCount || '0', 10)
+  if (count === 0) return
+
+  const bar = document.createElement('div')
+  bar.className = 'progress-segments'
+  for (let i = 1; i <= count; i++) {
+    const seg = document.createElement('div')
+    seg.className = 'progress-segment'
+    seg.dataset.step = String(i)
+    bar.appendChild(seg)
+  }
+  container.appendChild(bar)
+
+  const label = document.createElement('div')
+  label.className = 'progress-label'
+  label.textContent = `0 / ${count}`
+  container.appendChild(label)
+}
+
+function updateProgressBar() {
+  const completed = document.querySelectorAll('.tutorial-step.completed').length
+  const total = document.querySelectorAll('.tutorial-step').length
+
+  document.querySelectorAll('.progress-segment').forEach(seg => {
+    const el = seg as HTMLElement
+    const step = parseInt(el.dataset.step || '0', 10)
+    el.classList.toggle('completed', step <= completed)
+  })
+
+  const label = document.querySelector('.progress-label')
+  if (label) label.textContent = `${completed} / ${total}`
+}
+
+async function loadProgress() {
+  const slug = document.querySelector('#progress-bar')?.getAttribute('data-slug')
+  if (!slug) return
+
+  const data = await apiGet<{ completedSteps: number[] }>(`/tutorials/${slug}/progress`)
+  if (!data?.completedSteps) return
+
+  for (const stepNum of data.completedSteps) {
+    const step = document.querySelector(`.tutorial-step[data-step="${stepNum}"]`)
+    if (step) {
+      step.classList.add('completed')
+      const circle = step.querySelector('.step-check-circle')
+      if (circle) circle.textContent = '✓'
+      const tocItem = document.querySelector(`.step-toc-item[data-toc-step="${stepNum}"]`)
+      if (tocItem) tocItem.classList.add('completed')
+    }
+  }
+  updateProgressBar()
+}
+
+// --- Init on DOMContentLoaded ---
+document.addEventListener('DOMContentLoaded', () => {
+  initProgressBar()
+  loadProgress()
+})
