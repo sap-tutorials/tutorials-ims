@@ -74,6 +74,9 @@ export default defineConfig({
 
   vite: {
     plugins: [tutorialAssetFallback()],
+    build: {
+      sourcemap: false,
+    },
     server: {
       proxy: {
         '/api': {
