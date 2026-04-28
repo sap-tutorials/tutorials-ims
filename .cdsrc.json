@@ -34,6 +34,10 @@
         "display": {
           "password": "display",
           "roles": ["DisplayApp", "authenticated-user"]
+        },
+        "consolidation": {
+          "password": "consolidation",
+          "roles": ["ConsolidationScope", "authenticated-user"]
         }
       }
     },
