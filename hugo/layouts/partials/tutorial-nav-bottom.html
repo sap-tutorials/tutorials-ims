@@ -1,0 +1,8 @@
+<div class="tutorial-nav-bottom">
+  {{ with .Params.prevTutorial }}
+  <a href="/tutorials/{{ .slug }}" class="fd-button fd-button--transparent tutorial-nav-prev">← {{ .title }}</a>
+  {{ end }}
+  {{ with .Params.nextTutorial }}
+  <a href="/tutorials/{{ .slug }}" class="fd-button fd-button--transparent tutorial-nav-next">{{ .title }} →</a>
+  {{ end }}
+</div>
