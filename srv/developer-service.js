@@ -7,7 +7,7 @@ export default class DeveloperService extends cds.ApplicationService {
   async init() {
     const db = await cds.connect.to('db');
     const { Tutorials: dbTutorials, Steps: dbSteps, TaskRecords: dbTaskRecords,
-            Users: dbUsers, Events: dbEvents } = db.entities('com.sap.developers.ims');
+            Users: dbUsers, Events: dbEvents } = cds.entities('com.sap.developers.ims');
 
     // Auto-assign legacyId on TaskRecord creation
     this.before('CREATE', 'TaskRecords', async (req) => {
@@ -195,7 +195,7 @@ export default class DeveloperService extends cds.ApplicationService {
       });
 
       // Count total missions available
-      const { Missions: dbMissions } = db.entities('com.sap.developers.ims');
+      const { Missions: dbMissions } = cds.entities('com.sap.developers.ims');
       const totalMissions = await SELECT.from(dbMissions).columns('ID');
       if (totalMissions.length === 0) return 0;
 
@@ -207,7 +207,7 @@ export default class DeveloperService extends cds.ApplicationService {
 
   async _updateTutorialProgress(dbUser, tutorial, db) {
     const { Steps: dbSteps, TaskRecords: dbTaskRecords } =
-      db.entities('com.sap.developers.ims');
+      cds.entities('com.sap.developers.ims');
 
     const steps = await SELECT.from(dbSteps).where({ tutorial_ID: tutorial.ID });
     const stepLegacyIds = steps.map(s => s.legacyId);
@@ -249,7 +249,7 @@ export default class DeveloperService extends cds.ApplicationService {
 
   async _getProgressForTutorial(dbUser, tutorial, db) {
     const { Steps: dbSteps, TaskRecords: dbTaskRecords } =
-      db.entities('com.sap.developers.ims');
+      cds.entities('com.sap.developers.ims');
 
     const steps = await SELECT.from(dbSteps).where({ tutorial_ID: tutorial.ID });
     const stepLegacyIds = steps.map(s => s.legacyId);

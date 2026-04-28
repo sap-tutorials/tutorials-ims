@@ -42,7 +42,6 @@
   "cds": {
     "requires": {
       "db": {
-        "kind": "sqlite",
         "[hybrid]": {
           "kind": "hana"
         },
