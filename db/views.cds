@@ -4,7 +4,7 @@ using { com.sap.developers.ims as ims } from './schema';
 
 view Tasks as
   SELECT from ims.Tutorials {
-    ID, legacyId, title, description, status, deletionReason,
+    key ID, legacyId, title, description, status, deletionReason,
     primaryTag, experienceTag, averageTimeToComplete,
     'TUTORIAL' as taskType : String(20),
     createdAt, modifiedAt
