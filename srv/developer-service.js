@@ -202,6 +202,35 @@ export default class DeveloperService extends cds.ApplicationService {
       return Math.round((completedMissions.length / totalMissions.length) * 100) / 100;
     });
 
+    // --- Accomplishment Evaluation ---
+    this.after('createTaskRecord', async (result, req) => {
+      if (!result || result.status !== 'COMPLETED') return;
+
+      const { Accomplishments, AccomplishmentRecords } = cds.entities('com.sap.developers.ims');
+      const { evaluateRules } = await import('./lib/accomplishment-evaluator.js');
+
+      const allAccomplishments = await SELECT.from(Accomplishments);
+      if (allAccomplishments.length === 0) return;
+
+      const existingRecords = await SELECT.from(AccomplishmentRecords)
+        .where({ user_ID: result.user_ID });
+      const alreadyAwarded = new Set(existingRecords.map(r => r.accomplishment_ID));
+
+      const unevaluated = allAccomplishments.filter(a => !alreadyAwarded.has(a.ID));
+      if (unevaluated.length === 0) return;
+
+      const awarded = await evaluateRules(unevaluated, result.user_ID, db);
+
+      for (const accId of awarded) {
+        await INSERT.into(AccomplishmentRecords).entries({
+          user_ID: result.user_ID,
+          accomplishment_ID: accId,
+          awardedAt: new Date().toISOString(),
+          legacyId: await getNextLegacyId('AccomplishmentRecords', db)
+        });
+      }
+    });
+
     await super.init();
   }
 

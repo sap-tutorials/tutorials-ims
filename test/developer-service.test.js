@@ -84,4 +84,45 @@ describe('DeveloperService', () => {
       expect(data.status).toBe('COMPLETED');
     });
   });
+
+  describe('accomplishment evaluation', () => {
+    beforeAll(async () => {
+      const { Accomplishments } = cds.entities('com.sap.developers.ims');
+      await INSERT.into(Accomplishments).entries({
+        ID: 'test-acc-1',
+        legacyId: 99901,
+        name: 'First Tutorial',
+        rule: "SELECT CASE WHEN COUNT(*) >= 1 THEN 100 ELSE 0 END as score FROM COM_SAP_DEVELOPERS_IMS_TASKRECORDS WHERE USER_ID = ? AND STATUS = 'COMPLETED' AND TASKTYPE = 'TUTORIAL'",
+        description: 'Complete your first tutorial'
+      });
+    });
+
+    it('awards accomplishment when rule passes after task completion', async () => {
+      const { AccomplishmentRecords, Users } = cds.entities('com.sap.developers.ims');
+
+      const res = await project.post('/api/createTaskRecord',
+        { taskLegacyId: 10001, taskType: 'TUTORIAL' },
+        { auth: { username: 'developer', password: 'developer' } });
+      expect(res.status).toBe(200);
+
+      const user = await SELECT.one.from(Users).where({ uuid: 'developer' });
+      const records = await SELECT.from(AccomplishmentRecords).where({ user_ID: user.ID });
+      expect(records.some(r => r.accomplishment_ID === 'test-acc-1')).toBe(true);
+    });
+
+    it('does not double-award accomplishments', async () => {
+      const res = await project.post('/api/createTaskRecord',
+        { taskLegacyId: 10002, taskType: 'TUTORIAL' },
+        { auth: { username: 'developer', password: 'developer' } });
+      expect(res.status).toBe(200);
+
+      const { AccomplishmentRecords, Users } = cds.entities('com.sap.developers.ims');
+      const user = await SELECT.one.from(Users).where({ uuid: 'developer' });
+      const records = await SELECT.from(AccomplishmentRecords).where({
+        user_ID: user.ID,
+        accomplishment_ID: 'test-acc-1'
+      });
+      expect(records.length).toBe(1);
+    });
+  });
 });
