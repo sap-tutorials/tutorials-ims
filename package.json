@@ -5,6 +5,10 @@
   "scripts": {
     "start": "cds-serve",
     "watch": "cds watch",
+    "watch:hybrid": "cds watch --profile hybrid",
+    "dev:hybrid": "npm run watch:hybrid & npm run start:approuter",
+    "start:approuter": "cd approuter && npm start",
+    "bind:setup": "node scripts/setup-hybrid-env.js",
     "build:cds": "cds build --production",
     "fetch-tutorials": "tsx scripts/fetch-tutorials.ts --target hugo",
     "fetch-tutorials:hugo": "tsx scripts/fetch-tutorials.ts --target hugo",
