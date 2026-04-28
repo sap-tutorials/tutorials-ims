@@ -1,0 +1,9 @@
+{{ $tabs := split (.Get "tabs") "," }}
+<div class="option-tabs" data-component="tabs">
+  <div class="fd-tabs" role="tablist">
+    {{ range $i, $tab := $tabs }}
+    <button class="fd-tabs__item{{ if eq $i 0 }} is-selected{{ end }}" role="tab" data-tab-index="{{ $i }}">{{ $tab }}</button>
+    {{ end }}
+  </div>
+  <div class="tab-panels">{{ .Inner }}</div>
+</div>

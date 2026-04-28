@@ -1,0 +1,22 @@
+<div class="fd-shellbar">
+  <div class="fd-shellbar__group fd-shellbar__group--product">
+    <a href="/" class="fd-shellbar__logo">
+      <img src="/img/sap-logo.svg" alt="SAP">
+    </a>
+    <span class="fd-shellbar__title">Tutorial Platform</span>
+  </div>
+  <div class="fd-shellbar__group fd-shellbar__group--actions">
+    <nav>
+      <a href="/" class="fd-shellbar__action">Tutorials</a>
+      <a href="/app-space" class="fd-shellbar__action">App Space</a>
+      <a href="/event-display" class="fd-shellbar__action">Event Display</a>
+    </nav>
+    <button type="button" class="fd-shellbar__action" data-action="toggle-theme" aria-label="Toggle dark mode" onclick="
+      const html = document.documentElement;
+      const next = html.dataset.theme === 'dark' ? 'light' : 'dark';
+      html.dataset.theme = next;
+      html.classList.toggle('dark', next === 'dark');
+      localStorage.setItem('theme', next);
+    "></button>
+  </div>
+</div>

@@ -1,7 +1,5 @@
 node_modules/
 dist/
-site/.vitepress/dist/
-site/.vitepress/cache/
 site/tutorials/
 approuter/static/
 .tutorial-cache/
@@ -10,3 +8,5 @@ approuter/static/
 .playwright-mcp/
 *.png
 aem-missions.json
+hugo/static/js/*.js
+hugo/static/js/chunks/

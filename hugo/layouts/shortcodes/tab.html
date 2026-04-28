@@ -1,0 +1,5 @@
+{{ $index := .Get "index" }}
+{{ $name := .Get "name" }}
+<div class="tab-panel" data-tab-panel="{{ $index }}" data-tab-name="{{ $name }}"{{ if ne $index "0" }} hidden{{ end }}>
+  {{ .Inner }}
+</div>

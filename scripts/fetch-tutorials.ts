@@ -8,6 +8,7 @@ import { parseV2Steps } from './parsers/v2.js'
 import { parseV1Steps } from './parsers/v1.js'
 import { resolveImageURLs } from './parsers/images.js'
 import { convertOptionBlocks } from './parsers/options.js'
+import { escapeHugoDelimiters } from './parsers/hugo-delimiters.js'
 import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, type DiscoveredTutorial } from './parsers/github.js'
 import { fetchAllMissions, fetchAllMissionHierarchies, loadAemCache, saveAemCache, type AemMission, type AemHierarchy, type AemHierarchyGroup } from './parsers/aem.js'
 import type { TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } from './parsers/types.js'
@@ -15,8 +16,30 @@ import type { TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } f
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const CACHE_DIR = join(__dirname, '..', '.tutorial-cache')
-const OUTPUT_DIR = join(__dirname, '..', 'site', 'tutorials')
 const CONCURRENCY = 5
+
+export type BuildTarget = 'vitepress' | 'hugo'
+
+export function parseTarget(argv: string[]): BuildTarget {
+  const idx = argv.indexOf('--target')
+  if (idx !== -1 && idx + 1 < argv.length) {
+    const val = argv[idx + 1]
+    if (val === 'hugo') return 'hugo'
+    if (val === 'vitepress') return 'vitepress'
+    throw new Error(`Unknown target: ${val}. Must be 'vitepress' or 'hugo'.`)
+  }
+  return 'vitepress'
+}
+
+export function getOutputDir(target: BuildTarget): string {
+  if (target === 'hugo') return join(__dirname, '..', 'hugo', 'content', 'tutorials')
+  return join(__dirname, '..', 'site', 'tutorials')
+}
+
+export function getNavJsonDir(target: BuildTarget): string {
+  if (target === 'hugo') return join(__dirname, '..', 'hugo', 'static', 'tutorials')
+  return join(__dirname, '..', 'site', 'tutorials')
+}
 
 const ACRONYMS = new Set(['SAP', 'HANA', 'CAP', 'BTP', 'CDS', 'UI', 'API', 'MTA', 'XSUAA', 'OData', 'HTML5', 'ABAP'])
 
@@ -122,7 +145,9 @@ function writeVitePressPage(
   nav: TutorialNavEntry,
   lastUpdated: string,
   contributors: Array<{ name: string; login: string; avatarUrl: string }>,
+  outputDir: string,
 ): void {
+  const OUTPUT_DIR = outputDir
   const cleanTags = tags.map(t => t.replace(/\\/g, ''))
   const cleanPrimaryTag = primaryTag.replace(/\\/g, '')
 
@@ -265,8 +290,70 @@ function balanceComponentTags(content: string): string {
   writeFileSync(join(OUTPUT_DIR, `${slug}.md`), content, 'utf-8')
 }
 
-function patchTutorialFrontmatter(slug: string, nav: TutorialNavEntry): void {
-  const filePath = join(OUTPUT_DIR, `${slug}.md`)
+export function writeHugoPage(
+  slug: string,
+  title: string,
+  description: string,
+  time: number,
+  level: string,
+  tags: string[],
+  primaryTag: string,
+  author: string,
+  authorProfile: string,
+  youWillLearn: string[],
+  prerequisites: string,
+  steps: TutorialStep[],
+  nav: TutorialNavEntry,
+  lastUpdated: string,
+  contributors: Array<{ name: string; login: string; avatarUrl: string }>,
+  outputDir: string,
+): void {
+  const cleanTags = tags.map(t => t.replace(/\\/g, ''))
+  const cleanPrimaryTag = primaryTag.replace(/\\/g, '')
+
+  const fm: Record<string, unknown> = {
+    type: 'tutorials',
+    slug,
+    title,
+    description,
+    time,
+    level,
+    tags: cleanTags,
+    primaryTag: cleanPrimaryTag,
+    author,
+    authorProfile,
+    stepCount: steps.length,
+    prev: nav.prev,
+    next: nav.next,
+    displayTags: [...new Set([cleanPrimaryTag, ...cleanTags])].map(humanizeTag).filter(t => t.length > 0),
+    youWillLearn,
+    prerequisites: splitPrerequisites(prerequisites),
+    lastUpdated: lastUpdated || null,
+    contributors: contributors.slice(0, 10).map(c => ({ login: c.login, name: c.name, avatarUrl: c.avatarUrl })),
+    steps: steps.map(s => ({ number: s.number, title: s.title })),
+  }
+
+  if (nav.missionId) fm.missionId = nav.missionId
+  if (nav.missionTitle) fm.missionTitle = nav.missionTitle
+  if (nav.missionSlug) fm.missionSlug = nav.missionSlug
+  if (nav.groupId) fm.groupId = nav.groupId
+  if (nav.groupTitle) fm.groupTitle = nav.groupTitle
+  if (nav.groupSlug) fm.groupSlug = nav.groupSlug
+
+  const frontmatter = `---\n${yamlStringify(fm).trimEnd()}\n---\n\n`
+
+  const stepsMd = steps.map(step =>
+    `{{% tutorial-step number="${step.number}" title="${step.title.replace(/"/g, '&quot;')}" %}}\n\n${escapeHugoDelimiters(step.content)}\n\n{{% /tutorial-step %}}`
+  ).join('\n\n')
+
+  const content = `${frontmatter}${stepsMd}\n`
+
+  mkdirSync(outputDir, { recursive: true })
+  writeFileSync(join(outputDir, `${slug}.md`), content, 'utf-8')
+}
+
+function patchTutorialFrontmatter(slug: string, nav: TutorialNavEntry, outputDir: string, target: BuildTarget = 'vitepress'): void {
+  const filePath = join(outputDir, `${slug}.md`)
   if (!existsSync(filePath)) return
 
   const raw = readFileSync(filePath, 'utf-8')
@@ -313,6 +400,8 @@ function writeMissionPage(
   mission: AemMission,
   groups: GroupRef[],
   navBySlug: Map<string, TutorialNavEntry>,
+  outputDir: string,
+  target: BuildTarget = 'vitepress',
 ): void {
   const groupsData = groups.map(g => {
     const tutorials = g.tutorials
@@ -351,7 +440,7 @@ function writeMissionPage(
     .slice(0, 6)
 
   const fm: Record<string, unknown> = {
-    layout: 'mission',
+    ...(target === 'hugo' ? { type: 'missions', url: `/tutorials/mission-${mission.slug}` } : { layout: 'mission' }),
     slug: mission.slug,
     missionId: mission.imsId,
     title: mission.title,
@@ -365,7 +454,7 @@ function writeMissionPage(
   }
 
   const content = `---\n${yamlStringify(fm).trimEnd()}\n---\n`
-  writeFileSync(join(OUTPUT_DIR, `mission-${mission.slug}.md`), content, 'utf-8')
+  writeFileSync(join(outputDir, `mission-${mission.slug}.md`), content, 'utf-8')
 }
 
 function writeGroupPage(
@@ -380,6 +469,8 @@ function writeGroupPage(
     stepCount: number
     primaryTag: string
   }>,
+  outputDir: string,
+  target: BuildTarget = 'vitepress',
 ): void {
   const totalTime = tutorials.reduce((s, t) => s + t.time, 0)
   const levels = tutorials.map(t => t.level)
@@ -395,7 +486,7 @@ function writeGroupPage(
     .slice(0, 6)
 
   const fm: Record<string, unknown> = {
-    layout: 'group',
+    ...(target === 'hugo' ? { type: 'groups', url: `/tutorials/group-${group.slug}` } : { layout: 'group' }),
     slug: group.slug,
     groupId: group.imsId,
     missionId: mission.imsId,
@@ -411,7 +502,7 @@ function writeGroupPage(
   }
 
   const content = `---\n${yamlStringify(fm).trimEnd()}\n---\n`
-  writeFileSync(join(OUTPUT_DIR, `group-${group.slug}.md`), content, 'utf-8')
+  writeFileSync(join(outputDir, `group-${group.slug}.md`), content, 'utf-8')
 }
 
 function formatDuration(ms: number): string {
@@ -425,6 +516,9 @@ function formatDuration(ms: number): string {
 async function main() {
   const totalStart = performance.now()
   const regenerateMode = process.argv.includes('--regenerate')
+  const target = parseTarget(process.argv)
+  const OUTPUT_DIR = getOutputDir(target)
+  const NAV_JSON_DIR = getNavJsonDir(target)
 
   let allTutorials: DiscoveredTutorial[]
   let discoveryMs = 0
@@ -528,7 +622,7 @@ async function main() {
 
       const isV2 = frontmatter.parser === 'v2'
       let processedBody = resolveImageURLs(body, { repo: t.repo, branch: t.branch, slug: t.slug })
-      processedBody = convertOptionBlocks(processedBody)
+      processedBody = convertOptionBlocks(processedBody, target)
       processedBody = processedBody.replace(/^<{4,7} .+\n[\s\S]*?^={4,7}\n([\s\S]*?)^>{4,7} .+\n?/gm, '$1')
 
       const steps = isV2 ? parseV2Steps(processedBody) : parseV1Steps(processedBody)
@@ -550,7 +644,8 @@ async function main() {
         next: null,
       }
 
-      writeVitePressPage(
+      const writePage = target === 'hugo' ? writeHugoPage : writeVitePressPage
+      writePage(
         t.slug,
         title,
         description,
@@ -566,6 +661,7 @@ async function main() {
         nav,
         lastUpdated,
         contributors,
+        OUTPUT_DIR,
       )
 
       navEntries.push(nav)
@@ -697,7 +793,7 @@ async function main() {
       missionGroups.push(groupRef)
       if (!isFlat) {
         allGroupRefs.push(groupRef)
-        writeGroupPage(group, mission, groupTutorialEntries)
+        writeGroupPage(group, mission, groupTutorialEntries, OUTPUT_DIR, target)
       }
     }
 
@@ -708,13 +804,13 @@ async function main() {
       groups: missionGroups,
     })
 
-    writeMissionPage(mission, missionGroups, navBySlug)
+    writeMissionPage(mission, missionGroups, navBySlug, OUTPUT_DIR, target)
   }
 
   let patchedCount = 0
   for (const nav of navEntries) {
     if (nav.missionId || nav.prev || nav.next) {
-      patchTutorialFrontmatter(nav.slug, nav)
+      patchTutorialFrontmatter(nav.slug, nav, OUTPUT_DIR, target)
       patchedCount++
     }
   }
@@ -731,13 +827,17 @@ async function main() {
     groups: allGroupRefs,
   }
 
-  const navPath = join(OUTPUT_DIR, '_nav.json')
+  const navJsonDir = NAV_JSON_DIR
+  mkdirSync(navJsonDir, { recursive: true })
+  const navPath = join(navJsonDir, '_nav.json')
   writeFileSync(navPath, JSON.stringify(navData, null, 2), 'utf-8')
 
-  // Also write to public/ so VitePress copies it to dist as a static asset
-  const publicNavDir = join(__dirname, '..', 'site', 'public', 'tutorials')
-  mkdirSync(publicNavDir, { recursive: true })
-  writeFileSync(join(publicNavDir, '_nav.json'), JSON.stringify(navData, null, 2), 'utf-8')
+  if (target === 'vitepress') {
+    // Also write to public/ so VitePress copies it to dist as a static asset
+    const publicNavDir = join(__dirname, '..', 'site', 'public', 'tutorials')
+    mkdirSync(publicNavDir, { recursive: true })
+    writeFileSync(join(publicNavDir, '_nav.json'), JSON.stringify(navData, null, 2), 'utf-8')
+  }
 
   // Write error log
   if (errors.length > 0) {
@@ -787,7 +887,14 @@ async function main() {
   console.log('═'.repeat(60))
 }
 
-main().catch(err => {
-  console.error(err)
-  process.exit(1)
-})
+// Only run main() when this file is executed directly (not when imported)
+const isMainModule = process.argv[1] && (
+  process.argv[1].endsWith('fetch-tutorials.ts') ||
+  process.argv[1].endsWith('fetch-tutorials.js')
+)
+if (isMainModule) {
+  main().catch(err => {
+    console.error(err)
+    process.exit(1)
+  })
+}

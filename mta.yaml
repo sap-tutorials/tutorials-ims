@@ -6,14 +6,17 @@ build-parameters:
   before-all:
     - builder: custom
       commands:
+        - curl -fsSL https://github.com/gohugoio/hugo/releases/download/v0.147.7/hugo_extended_0.147.7_linux-amd64.tar.gz | tar -xz -C /tmp hugo
         - npm install
-        - npm run fetch-tutorials -- --regenerate
+        - npm --prefix apps install
+        - npm run fetch-tutorials -- --regenerate --target hugo
         - npm run validate-tutorials
-        - npm run build
+        - npm --prefix apps run build
+        - /tmp/hugo --source hugo --minify
         - npm --prefix display-app install
         - npm --prefix display-app run build
         - mkdir -p approuter/static
-        - cp -r site/.vitepress/dist/* approuter/static/
+        - cp -r hugo/public/* approuter/static/
         - cp -r display-app/dist approuter/static/display-app
 
 modules:
