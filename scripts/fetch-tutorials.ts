@@ -401,6 +401,7 @@ function writeMissionPage(
   groups: GroupRef[],
   navBySlug: Map<string, TutorialNavEntry>,
   outputDir: string,
+  target: BuildTarget = 'vitepress',
 ): void {
   const groupsData = groups.map(g => {
     const tutorials = g.tutorials
@@ -439,7 +440,7 @@ function writeMissionPage(
     .slice(0, 6)
 
   const fm: Record<string, unknown> = {
-    layout: 'mission',
+    ...(target === 'hugo' ? { type: 'missions', url: `/tutorials/mission-${mission.slug}` } : { layout: 'mission' }),
     slug: mission.slug,
     missionId: mission.imsId,
     title: mission.title,
@@ -469,6 +470,7 @@ function writeGroupPage(
     primaryTag: string
   }>,
   outputDir: string,
+  target: BuildTarget = 'vitepress',
 ): void {
   const totalTime = tutorials.reduce((s, t) => s + t.time, 0)
   const levels = tutorials.map(t => t.level)
@@ -484,7 +486,7 @@ function writeGroupPage(
     .slice(0, 6)
 
   const fm: Record<string, unknown> = {
-    layout: 'group',
+    ...(target === 'hugo' ? { type: 'groups', url: `/tutorials/group-${group.slug}` } : { layout: 'group' }),
     slug: group.slug,
     groupId: group.imsId,
     missionId: mission.imsId,
@@ -791,7 +793,7 @@ async function main() {
       missionGroups.push(groupRef)
       if (!isFlat) {
         allGroupRefs.push(groupRef)
-        writeGroupPage(group, mission, groupTutorialEntries, OUTPUT_DIR)
+        writeGroupPage(group, mission, groupTutorialEntries, OUTPUT_DIR, target)
       }
     }
 
@@ -802,7 +804,7 @@ async function main() {
       groups: missionGroups,
     })
 
-    writeMissionPage(mission, missionGroups, navBySlug, OUTPUT_DIR)
+    writeMissionPage(mission, missionGroups, navBySlug, OUTPUT_DIR, target)
   }
 
   let patchedCount = 0
