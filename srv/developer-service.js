@@ -231,6 +231,25 @@ export default class DeveloperService extends cds.ApplicationService {
       }
     });
 
+    // --- STOMP WebSocket broadcast ---
+    this.after('createTaskRecord', async (result) => {
+      if (!result || result.status !== 'COMPLETED') return;
+      if (result.taskType !== 'TUTORIAL' || !result.event_ID) return;
+      if (!cds.broker) return;
+
+      const event = await SELECT.one.from(dbEvents).where({ ID: result.event_ID });
+      if (!event) return;
+
+      const tutorial = await SELECT.one.from(dbTutorials).where({ legacyId: result.taskLegacyId });
+      cds.broker.publish(
+        `/topic/events/${event.legacyId}/tutorials`,
+        JSON.stringify({
+          bucketName: tutorial?.primaryTag || 'unknown',
+          completeDate: new Date().toISOString().slice(0, 10)
+        })
+      );
+    });
+
     await super.init();
   }
 

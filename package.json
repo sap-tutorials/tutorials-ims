@@ -47,7 +47,8 @@
     "@sap/xssec": "^4.13.0",
     "@stomp/stompjs": "^7.3.0",
     "node-cron": "^4.2.1",
-    "passport": "^0.7.0"
+    "passport": "^0.7.0",
+    "ws": "^8.20.0"
   },
   "cds": {
     "requires": {
