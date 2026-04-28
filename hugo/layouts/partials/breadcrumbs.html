@@ -7,7 +7,11 @@
     {{ with .Params.groupTitle }}
     <li class="fd-breadcrumb__item"><a class="fd-breadcrumb__link" href="{{ $.Params.groupUrl }}">{{ . }}</a></li>
     {{ end }}
-    <li class="fd-breadcrumb__item">{{ .Title }}</li>
+    <li class="fd-breadcrumb__item fd-breadcrumb__item--current">
+      <button type="button" id="nav-dropdown-toggle" class="breadcrumb-dropdown-toggle" aria-expanded="false" aria-haspopup="true">
+        {{ .Title }} <span class="breadcrumb-chevron">▾</span>
+      </button>
+    </li>
   </ul>
-  <div id="nav-dropdown-mount" data-slug="{{ .Params.slug }}"></div>
+  <div id="nav-dropdown-mount" data-slug="{{ .Params.slug }}" class="nav-dropdown-container"></div>
 </nav>
