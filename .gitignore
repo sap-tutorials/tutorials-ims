@@ -6,6 +6,8 @@ hugo/static/tutorials/
 hugo/public/
 approuter/static/
 .tutorial-cache/
+.comparison-results/
+.migration-data/
 *.local
 .env
 .playwright-mcp/

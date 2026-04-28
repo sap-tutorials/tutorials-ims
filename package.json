@@ -16,6 +16,7 @@
     "validate-tutorials": "tsx scripts/validate-tutorials.ts",
     "migrate:reference": "node scripts/migrate-reference-data.js",
     "migrate:users": "node scripts/migrate-user-progress.js",
+    "compare": "node scripts/compare-systems.js",
     "build:css": "postcss hugo/assets/css/sap-fundamental.css --config hugo/ --no-map -o hugo/static/css/sap-fundamental.css",
     "build:apps": "npm --prefix apps run build",
     "build:hugo": "hugo --source hugo --minify",
