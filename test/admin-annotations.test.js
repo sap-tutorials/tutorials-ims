@@ -38,4 +38,16 @@ describe('UI Annotations in $metadata', () => {
       expect(metadata).toContain('Tags');
     });
   });
+
+  describe('Groups annotations', () => {
+    it('has Groups LineItem annotation', () => {
+      expect(metadata).toContain('Group');
+    });
+  });
+
+  describe('Tutorials annotations', () => {
+    it('has Tutorials LineItem annotation', () => {
+      expect(metadata).toContain('Tutorial');
+    });
+  });
 });
