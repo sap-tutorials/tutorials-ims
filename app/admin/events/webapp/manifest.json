@@ -1,0 +1,87 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.events",
+    "type": "application",
+    "title": "Events",
+    "description": "Manage Events",
+    "applicationVersion": { "version": "0.0.1" },
+    "dataSources": {
+      "mainService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "Event-manage": {
+          "semanticObject": "Event",
+          "action": "manage",
+          "title": "Events",
+          "signature": { "parameters": {}, "additionalParameters": "allowed" }
+        }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": { "sap.fe.templates": {} }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      }
+    },
+    "routing": {
+      "routes": [
+        {
+          "pattern": ":?query:",
+          "name": "EventsList",
+          "target": "EventsList"
+        },
+        {
+          "pattern": "Events({key}):?query:",
+          "name": "EventsObjectPage",
+          "target": "EventsObjectPage"
+        }
+      ],
+      "targets": {
+        "EventsList": {
+          "type": "Component",
+          "id": "EventsList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/Events",
+              "variantManagement": "Page",
+              "initialLoad": "Enabled",
+              "navigation": {
+                "Events": { "detail": { "route": "EventsObjectPage" } }
+              }
+            }
+          }
+        },
+        "EventsObjectPage": {
+          "type": "Component",
+          "id": "EventsObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/Events",
+              "editableHeaderContent": false
+            }
+          }
+        }
+      }
+    }
+  }
+}
