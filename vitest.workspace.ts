@@ -6,7 +6,7 @@ export default defineWorkspace([
     test: {
       name: 'unit',
       include: ['test/**/*.test.{js,ts}', 'scripts/__tests__/**/*.test.ts'],
-      exclude: ['node_modules', 'gen', 'hugo', 'test/hybrid/**']
+      exclude: ['node_modules', 'gen', 'hugo', 'test/hybrid/**', 'test/smoke/**']
     }
   },
   {
@@ -15,6 +15,14 @@ export default defineWorkspace([
       name: 'hybrid',
       include: ['test/hybrid/**/*.test.{js,ts}'],
       testTimeout: 60000
+    }
+  },
+  {
+    extends: './vitest.config.ts',
+    test: {
+      name: 'smoke',
+      include: ['test/smoke/**/*.test.{js,ts}'],
+      testTimeout: 30000
     }
   }
 ]);

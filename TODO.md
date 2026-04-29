@@ -43,8 +43,8 @@ The rewrite documented in `docs/superpowers/plans/` has been **executed**. What 
 - [ ] **Adobe Analytics destination config** — Client exists but BTP Destination for `sap.d1.sc.omtrdc.net` may not be configured
 - [ ] **NGDS destination config** — Client exists but BTP Destination not verified
 - [ ] **Mail service binding** — `mail-client.js` exists but no BTP Mail Service instance confirmed
-- [ ] **Leaderboard cache** — DisplayService has `getLeaderboard` but no TTL cache (IMS uses 600s eventId cache)
-- [ ] **Production smoke tests** — No automated deployment verification suite
+- [x] **Leaderboard cache** — All 5 DisplayService functions cached with 600s TTL per eventLegacyId (`srv/lib/ttl-cache.js`)
+- [x] **Production smoke tests** — Smoke suite in `test/smoke/` validates health, public endpoints, auth enforcement, OData metadata, and static content post-deploy
 - [x] **Plan checkboxes** — The 4 plan files in `docs/superpowers/plans/` still show all tasks unchecked; update them to reflect reality
 
 ---

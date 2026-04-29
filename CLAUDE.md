@@ -21,6 +21,7 @@ npm run generate-dark-theme                   # Generate dark theme CSS variable
 npm run test                                  # Run unit tests (vitest, in-memory SQLite)
 npm run test:watch                            # Run tests in watch mode
 npm run test:hybrid                           # Run hybrid integration tests against real HANA (requires cf login)
+npm run test:smoke                            # Run smoke tests against a deployed URL (set SMOKE_BASE_URL)
 npx vitest run scripts/__tests__/v1.test.ts   # Run a single test file
 
 # CAP backend
@@ -83,10 +84,11 @@ The fetch script detects parser format via frontmatter field `parser: v2`. V2 us
 
 ### Testing
 
-Two Vitest workspaces defined in `vitest.workspace.ts`:
+Three Vitest workspaces defined in `vitest.workspace.ts`:
 
 - **unit** — In-memory SQLite, fast, no external dependencies. Runs with `npm test`.
 - **hybrid** — Real HANA Cloud via `cds bind --exec`. Runs with `npm run test:hybrid` (requires `cf login` to DEV space).
+- **smoke** — HTTP-based tests against deployed URLs. Runs with `npm run test:smoke`. Set `SMOKE_BASE_URL` (approuter) and `SMOKE_SRV_URL` (srv) env vars. Runs automatically after deploy in CI.
 
 Hybrid test files in `test/hybrid/`:
 
@@ -99,6 +101,16 @@ Hybrid test files in `test/hybrid/`:
 | `admin-crud.test.js` | CRUD on Events, Tags, ImsConfig; read validation on Tutorials/Missions |
 
 A write-safety guard (`test/hybrid/_guard.js`) checks `ALLOW_HYBRID_WRITES=true` before any INSERT/UPDATE/DELETE tests run. Tests that create data use a `__TEST__` prefix and clean up in `afterAll`.
+
+Smoke test files in `test/smoke/`:
+
+| File | Coverage |
+| ---- | -------- |
+| `health.test.js` | `/health` alive check, `/health/db` HANA connectivity |
+| `public-endpoints.test.js` | `/build/catalog` and `/build/navigator` respond with JSON |
+| `auth-enforcement.test.js` | Protected endpoints reject unauthenticated requests |
+| `odata-metadata.test.js` | DeveloperService and AdminService `$metadata` return EDMX |
+| `static-content.test.js` | Root serves HTML, security headers present via approuter |
 
 ## Gotchas
 

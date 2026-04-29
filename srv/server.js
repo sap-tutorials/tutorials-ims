@@ -20,6 +20,20 @@ cds.on('bootstrap', (app) => {
       next();
     });
   }
+
+  app.get('/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  app.get('/health/db', async (req, res) => {
+    try {
+      await cds.db?.run('SELECT 1 FROM DUMMY');
+      res.json({ status: 'ok', db: 'connected' });
+    } catch (err) {
+      res.status(503).json({ status: 'degraded', db: 'error', message: err.message });
+    }
+  });
+
   app.use(basicAuthMiddleware);
   app.get('/api/qrcode', qrcodeHandler);
   app.get('/build/catalog', buildCatalogHandler);

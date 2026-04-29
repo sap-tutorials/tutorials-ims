@@ -8,6 +8,9 @@
       "Bash(cp -r hugo/public/* approuter/static/)",
       "Bash(mkdir -p d:/projects/tutorials-poc/scripts/grammars)",
       "Bash(cp \"/c/Users/I809764/.vscode/extensions/sapse.vscode-cds-9.9.0/node_modules/@sap/cds-lsp/syntaxes/cds.tmLanguage.json\" d:/projects/tutorials-poc/scripts/grammars/cds.tmLanguage.json)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\I809764\\.claude\\plans"
     ]
   }
 }

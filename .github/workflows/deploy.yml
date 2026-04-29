@@ -23,6 +23,8 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: write
+    outputs:
+      environment: ${{ steps.env.outputs.target }}
 
     steps:
       - name: Checkout
@@ -123,3 +125,51 @@ jobs:
           echo "- **Environment:** ${{ steps.env.outputs.target }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Space:** ${{ steps.cf.outputs.space }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Release:** v${{ steps.version.outputs.version }}-${{ steps.env.outputs.target }}" >> "$GITHUB_STEP_SUMMARY"
+
+  smoke-test:
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for app stabilization
+        run: sleep 30
+
+      - name: Resolve environment URLs
+        id: urls
+        run: |
+          case "${{ needs.deploy.outputs.environment }}" in
+            dev)  echo "base_url=${{ vars.APPROUTER_URL_DEV }}" >> "$GITHUB_OUTPUT"
+                  echo "srv_url=${{ vars.SRV_URL_DEV }}" >> "$GITHUB_OUTPUT" ;;
+            qa)   echo "base_url=${{ vars.APPROUTER_URL_QA }}" >> "$GITHUB_OUTPUT"
+                  echo "srv_url=${{ vars.SRV_URL_QA }}" >> "$GITHUB_OUTPUT" ;;
+            prod) echo "base_url=${{ vars.APPROUTER_URL_PROD }}" >> "$GITHUB_OUTPUT"
+                  echo "srv_url=${{ vars.SRV_URL_PROD }}" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Run smoke tests
+        run: npm run test:smoke
+        env:
+          SMOKE_BASE_URL: ${{ steps.urls.outputs.base_url }}
+          SMOKE_SRV_URL: ${{ steps.urls.outputs.srv_url }}
+          SMOKE_TECH_USER: ${{ secrets.SMOKE_TECH_USER }}
+          SMOKE_TECH_PASSWORD: ${{ secrets.SMOKE_TECH_PASSWORD }}
+
+      - name: Smoke test summary
+        if: always()
+        run: |
+          echo "### Smoke Test Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Target:** ${{ needs.deploy.outputs.environment }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **URL:** ${{ steps.urls.outputs.base_url }}" >> "$GITHUB_STEP_SUMMARY"
