@@ -57,4 +57,41 @@ describe('Draft Enablement', () => {
     const tutorialsSection = data.split('EntityType Name="Tutorials"')[1]?.split('</EntityType>')[0] ?? '';
     expect(tutorialsSection).not.toContain('DraftAdministrativeData');
   });
+
+  describe('Draft Composition CRUD', () => {
+    it('creates a mission with a completion path via draft', async () => {
+      // Create draft mission
+      const { data: mission } = await project.post('/admin/Missions', {
+        title: '__TEST__ Comp Mission', slug: 'test-comp'
+      }, adminAuth);
+
+      // Add completion path to draft
+      const { status, data: path } = await project.post(
+        `/admin/Missions(ID=${mission.ID},IsActiveEntity=false)/completionPaths`,
+        { name: '__TEST__ Path', slug: 'test-path' },
+        adminAuth
+      );
+      expect(status).toBe(201);
+      expect(path.name).toBe('__TEST__ Path');
+
+      // Add item to path
+      const { status: itemStatus } = await project.post(
+        `/admin/CompletionPaths(ID=${path.ID},IsActiveEntity=false)/items`,
+        { taskLegacyId: 999, taskType: 'TUTORIAL', itemOrder: 10 },
+        adminAuth
+      );
+      expect(itemStatus).toBe(201);
+
+      // Activate draft
+      const { status: activateStatus } = await project.post(
+        `/admin/Missions(ID=${mission.ID},IsActiveEntity=false)/AdminService.draftActivate`,
+        {},
+        adminAuth
+      );
+      expect(activateStatus).toBe(201);
+
+      // Cleanup
+      await project.delete(`/admin/Missions(ID=${mission.ID},IsActiveEntity=true)`, adminAuth);
+    });
+  });
 });
