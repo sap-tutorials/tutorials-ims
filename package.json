@@ -37,6 +37,16 @@
   "devDependencies": {
     "@cap-js/cds-test": "^1.0.0",
     "@sap/cds-dk": "^9.9.0",
+    "cds-plugin-ui5": "^0.17.0",
+    "sap.tutorials.admin.events": "file:app/admin/events",
+    "sap.tutorials.admin.missions": "file:app/admin/missions",
+    "sap.tutorials.admin.groups": "file:app/admin/groups",
+    "sap.tutorials.admin.tutorials": "file:app/admin/tutorials",
+    "sap.tutorials.admin.tags": "file:app/admin/tags",
+    "sap.tutorials.admin.accomplishments": "file:app/admin/accomplishments",
+    "sap.tutorials.admin.prizes": "file:app/admin/prizes",
+    "sap.tutorials.admin.operations": "file:app/admin/operations",
+    "sap.tutorials.admin.accounts": "file:app/admin/accounts",
     "fundamental-styles": "^0.41.4",
     "gray-matter": "^4.0.3",
     "markdown-it": "^14.1.1",
@@ -63,6 +73,20 @@
     "ws": "^8.20.0"
   },
   "cds": {
+    "cds-plugin-ui5": {
+      "modules": {
+        "sap.tutorials.admin.events": { "mountPath": "/admin/events" },
+        "sap.tutorials.admin.missions": { "mountPath": "/admin/missions" },
+        "sap.tutorials.admin.groups": { "mountPath": "/admin/groups" },
+        "sap.tutorials.admin.tutorials": { "mountPath": "/admin/tutorials" },
+        "sap.tutorials.admin.tags": { "mountPath": "/admin/tags" },
+        "sap.tutorials.admin.accomplishments": { "mountPath": "/admin/accomplishments" },
+        "sap.tutorials.admin.prizes": { "mountPath": "/admin/prizes" },
+        "sap.tutorials.admin.operations": { "mountPath": "/admin/operations" },
+        "sap.tutorials.admin.accounts": { "mountPath": "/admin/accounts" },
+        "admin-custom": { "mountPath": "/admin-custom" }
+      }
+    },
     "requires": {
       "db": {
         "[hybrid]": {

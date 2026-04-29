@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-The tutorials-poc project has a working **learner-facing frontend** (tutorial navigation, progress tracking, App Space event view) and a **CAP backend** that is substantially complete. The CDS data model covers all 35 IMS entities, all 4 services are implemented with handlers, the job scheduler is running, and the STOMP broker is wired. The remaining gaps are: **admin UI** (no frontend for admin operations), **content push pipeline** (template only, not deployed), **static content webhook** (no CI/CD), and a few backend edge cases not yet validated against production IMS.
+The tutorials-poc project has a working **learner-facing frontend** (tutorial navigation, progress tracking, App Space event view), a **CAP backend** that is substantially complete, and a full **admin UI** (9 Fiori Elements apps + 1 freestyle SAPUI5 app). The remaining gaps are: **content push pipeline** (template only, not deployed), **static content webhook** (no CI/CD), and a few backend edge cases not yet validated against production IMS.
 
 ---
 
@@ -49,23 +49,23 @@ The rewrite documented in `docs/superpowers/plans/` has been **executed**. What 
 
 ---
 
-## 2. Admin UI (Entirely Missing)
+## 2. Admin UI (Implemented — PR #1)
 
-The IMS React 15 admin frontend has **11 pages** — none have equivalents:
+The IMS React 15 admin frontend has **11 pages** — all reimplemented as Fiori Elements V4 + freestyle SAPUI5:
 
-- [ ] Tutorial Dashboard (freshness/ownership tracking) — **HIGH** priority, most operationally important
-- [ ] Mission Management (nested completion paths) — **HIGH** priority, complex nested form
-- [ ] Groups Management (CRUD) — **HIGH** priority, required for mission composition
-- [ ] Events Management (CRUD) — **MEDIUM** priority, currently hardcoded (`eventId=38`)
-- [ ] Privacy/GDPR Tools (lookup + anonymize) — **MEDIUM** priority, compliance requirement
-- [ ] Board/Analytics Dashboard (KPIs + charts) — **MEDIUM** priority, operational visibility
-- [ ] Featured Tasks Curation — **MEDIUM** priority, homepage curation tool
-- [ ] Prizes Management (simple CRUD) — **LOW** priority, name-only entity
-- [ ] Accomplishments Management (rule-based badges) — **LOW** priority, SQL rules engine
-- [ ] Statistics Export (CSV download) — **LOW** priority, date-range form
-- [ ] Tags (read-only table) — **LOW** priority, reference data
+- [x] Tutorial Dashboard (freshness/ownership tracking) — freestyle SAPUI5 grid table view
+- [x] Mission Management (nested completion paths) — Fiori Elements List Report + Object Page with draft
+- [x] Groups Management (CRUD) — Fiori Elements List Report + Object Page with draft
+- [x] Events Management (CRUD) — Fiori Elements List Report + Object Page with draft
+- [x] Privacy/GDPR Tools (lookup + anonymize) — freestyle SAPUI5 wizard view
+- [x] Board/Analytics Dashboard (KPIs + charts) — freestyle SAPUI5 Board view
+- [x] Featured Tasks Curation — Fiori Elements List Report (Operations app)
+- [x] Prizes Management (simple CRUD) — Fiori Elements List Report + Object Page
+- [x] Accomplishments Management (rule-based badges) — Fiori Elements List Report + Object Page with draft
+- [x] Statistics Export (CSV download) — freestyle SAPUI5 export view
+- [x] Tags (read-only table) — Fiori Elements List Report
 - [ ] **Research: Change Tracking V2** — Evaluate `@cap-js/change-tracking` v2 for Admin UI audit trail. Uses DB-level triggers (2.4x–50x faster than v1), tree-table visualization of parent/child changes, CXL expressions in `@changelog` annotations, full-text search across change logs. Would give admins visibility into who changed tutorials, missions, events, and config. Note: v2 has schema-breaking changes requiring HANA migration. See <https://cap.cloud.sap/docs/releases/2026/apr26#change-tracking-v2>
-- [ ] **Research: UI5 Dev Server plugin (`cds-plugin-ui5`)** — Integrates UI5/Fiori Elements tooling directly into `cds watch` via express middlewares, eliminating the need for a separate UI dev server. Handles TypeScript transpilation for UI5 controls automatically. Would streamline Admin UI development by serving Fiori Elements apps alongside the CAP backend in a single process — no proxy config or CORS needed during local dev. See <https://cap.cloud.sap/docs/plugins/#ui5-dev-server>
+- [x] **UI5 Dev Server plugin (`cds-plugin-ui5`)** — Integrated: all 10 admin apps served via `cds watch` using `file:` devDependencies for nested Fiori Elements apps + direct detection for `admin-custom`. Mount paths configured in `package.json` under `cds.cds-plugin-ui5.modules`. No separate UI dev server needed.
 - [ ] **Research: Audit Logging plugin (`@cap-js/audit-logging`)** — Provides annotation-driven audit logging for personal data operations via `@PersonalData` annotations on entities/fields. Logs to console in dev, routes to SAP Audit Log Service on BTP in production. Uses Transactional Outbox for resilience. Would cover GDPR-relevant access logging for the Privacy/GDPR admin tools (user lookup, anonymization) and track admin access to `Users`, `UserMetaData`, and `TaskRecords`. Complements Change Tracking (which tracks *what* changed) by recording *who accessed* personal data. See <https://cap.cloud.sap/docs/plugins/#audit-logging>
 
 ---
@@ -132,8 +132,8 @@ No mechanism exists to update the AppRouter's static content when tutorials chan
 
 ### Not Yet Implemented
 
-- [ ] **Email retry dashboard** — `FailedEmails` entity exists and retry job runs, but no UI to inspect/manage failed emails
-- [ ] **NGDS failed message inspector** — `NGDSFailedMessages` entity has data but no admin view to triage failures
+- [x] **Email retry dashboard** — `FailedEmails` entity exposed in Operations admin app (Fiori Elements List Report)
+- [x] **NGDS failed message inspector** — `NGDSFailedMessages` entity exposed in Operations admin app (Fiori Elements List Report)
 - [ ] **Notification 4-stage escalation** — Current impl does level-based routing but needs verification against IMS's exact stage-0/1/2/3 logic and resend-after-1-month timing
 - [ ] **Research: Telemetry plugin (`@cap-js/telemetry`)** — Provides automatic OpenTelemetry instrumentation for traces, metrics, and logs with zero code changes. Shows hierarchical timing breakdowns (request → service → DB query) in console during dev. Exports to SAP Cloud Logging, Dynatrace, or Jaeger in production. Would give visibility into slow endpoints (e.g. `createTaskRecord` with accomplishment evaluation, NGDS calls, account merge), job execution times, and DB query performance — critical for operating at scale with 7 scheduled jobs and multiple external integrations. See <https://cap.cloud.sap/docs/plugins/#telemetry>
 - [ ] **Research: ORD plugin (`@sap/cds-ord`)** — Generates Open Resource Discovery documents exposing a standard metadata catalog of all CDS services, entities, and APIs. Provides a single Service Provider Interface endpoint for external systems to automatically discover available resources. Would make our 4 services (DeveloperService, AdminService, DisplayService, ConsolidationService) discoverable by BTP integration tools, API Management, and other SAP landscape systems without manual documentation. Supports both static catalog generation and runtime inspection. See <https://cap.cloud.sap/docs/plugins/#ord-open-resource-discovery>
@@ -148,10 +148,10 @@ No mechanism exists to update the AppRouter's static content when tutorials chan
 | 1 | Content push pipeline (dispatch + receiving workflow) | Blocks author workflow | Low | Not started |
 | 2 | Static content webhook (CI/CD redeploy) | Blocks production content updates | Medium | Not started |
 | 3 | AEM endpoint retirement (3 remaining) | Blocks AEM decommission | Medium | QR done, 2 remain |
-| 4 | Admin UI — Tutorial Dashboard | Blocks content operations | High | Not started |
-| 5 | Admin UI — Missions + Groups CRUD | Blocks content curation | High | Not started |
+| 4 | Admin UI — Tutorial Dashboard | Blocks content operations | High | **Done** — PR #1 |
+| 5 | Admin UI — Missions + Groups CRUD | Blocks content curation | High | **Done** — PR #1 |
 | 6 | BTP service bindings (Mail, NGDS dest, Analytics dest) | Blocks production job execution | Medium | Code done, config needed |
-| 7 | GDPR/Privacy tools (admin UI) | Compliance risk | Medium | Backend done, no UI |
+| 7 | GDPR/Privacy tools (admin UI) | Compliance risk | Medium | **Done** — PR #1 |
 | 8 | Integration testing on HANA | Confidence in deploy | Medium | **Done** — 91 tests passing |
 | 9 | Real-time display (frontend WebSocket) | Event experience degradation | Medium | Backend done, frontend not wired |
 | 10 | Plan doc cleanup | Housekeeping | Low | Plans show unchecked but work is done |
