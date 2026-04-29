@@ -183,7 +183,7 @@ annotate AdminService.Events with @UI: {
 
 ### 4.2 Missions (Most Complex)
 
-**List Report columns:** legacyId, title, experienceTag, primaryTagRef.name
+**List Report columns:** legacyId, title, experience, event.name
 
 **Object Page facets:**
 
@@ -221,7 +221,7 @@ annotate AdminService.Missions with {
 
 ### 4.3 Groups
 
-**List Report columns:** legacyId, title, averageTimeToComplete, experienceTag
+**List Report columns:** legacyId, title, timeToComplete, experience
 
 **Object Page facets:**
 
@@ -253,7 +253,7 @@ List Report only. Columns: legacyId, name. Searchable, sortable.
 | Entity | List Report | Object Page | Draft | Compositions | Value Helps |
 |--------|:-----------:|:-----------:|:-----:|:------------:|:-----------:|
 | Events | ✓ | ✓ | ✓ | — | — |
-| Missions | ✓ | ✓ | ✓ | CompletionPaths → Items | Tags |
+| Missions | ✓ | ✓ | ✓ | CompletionPaths → Items | Tags, Events |
 | Groups | ✓ | ✓ | ✓ | Missions (association) | Tags |
 | Accomplishments | ✓ | ✓ | ✓ | — | — |
 | Prizes | ✓ | ✓ | — | — | — |
