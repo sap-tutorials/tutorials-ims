@@ -1,0 +1,106 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.missions",
+    "type": "application",
+    "title": "Missions",
+    "description": "Manage Missions",
+    "applicationVersion": { "version": "0.0.1" },
+    "dataSources": {
+      "mainService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "Mission-manage": {
+          "semanticObject": "Mission",
+          "action": "manage",
+          "title": "Missions",
+          "signature": { "parameters": {}, "additionalParameters": "allowed" }
+        }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": { "sap.fe.templates": {} }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      }
+    },
+    "routing": {
+      "routes": [
+        {
+          "pattern": ":?query:",
+          "name": "MissionsList",
+          "target": "MissionsList"
+        },
+        {
+          "pattern": "Missions({key}):?query:",
+          "name": "MissionsObjectPage",
+          "target": "MissionsObjectPage"
+        },
+        {
+          "pattern": "Missions({key})/completionPaths({key2}):?query:",
+          "name": "CompletionPathsObjectPage",
+          "target": "CompletionPathsObjectPage"
+        }
+      ],
+      "targets": {
+        "MissionsList": {
+          "type": "Component",
+          "id": "MissionsList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/Missions",
+              "variantManagement": "Page",
+              "initialLoad": "Enabled",
+              "navigation": {
+                "Missions": { "detail": { "route": "MissionsObjectPage" } }
+              }
+            }
+          }
+        },
+        "MissionsObjectPage": {
+          "type": "Component",
+          "id": "MissionsObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/Missions",
+              "editableHeaderContent": false,
+              "navigation": {
+                "completionPaths": { "detail": { "route": "CompletionPathsObjectPage" } }
+              }
+            }
+          }
+        },
+        "CompletionPathsObjectPage": {
+          "type": "Component",
+          "id": "CompletionPathsObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/Missions/completionPaths",
+              "editableHeaderContent": false
+            }
+          }
+        }
+      }
+    }
+  }
+}

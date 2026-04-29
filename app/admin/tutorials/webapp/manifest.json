@@ -1,0 +1,68 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.tutorials",
+    "type": "application",
+    "title": "Tutorials",
+    "description": "View Tutorials",
+    "applicationVersion": { "version": "0.0.1" },
+    "dataSources": {
+      "mainService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "Tutorial-display": {
+          "semanticObject": "Tutorial",
+          "action": "display",
+          "title": "Tutorials",
+          "signature": { "parameters": {}, "additionalParameters": "allowed" }
+        }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": { "sap.fe.templates": {} }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      }
+    },
+    "routing": {
+      "routes": [
+        {
+          "pattern": ":?query:",
+          "name": "TutorialsList",
+          "target": "TutorialsList"
+        }
+      ],
+      "targets": {
+        "TutorialsList": {
+          "type": "Component",
+          "id": "TutorialsList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/Tutorials",
+              "variantManagement": "Page",
+              "initialLoad": "Enabled"
+            }
+          }
+        }
+      }
+    }
+  }
+}

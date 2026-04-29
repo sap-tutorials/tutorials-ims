@@ -1,0 +1,68 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.tags",
+    "type": "application",
+    "title": "Tags",
+    "description": "View Tags",
+    "applicationVersion": { "version": "0.0.1" },
+    "dataSources": {
+      "mainService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "Tag-display": {
+          "semanticObject": "Tag",
+          "action": "display",
+          "title": "Tags",
+          "signature": { "parameters": {}, "additionalParameters": "allowed" }
+        }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": { "sap.fe.templates": {} }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      }
+    },
+    "routing": {
+      "routes": [
+        {
+          "pattern": ":?query:",
+          "name": "TagsList",
+          "target": "TagsList"
+        }
+      ],
+      "targets": {
+        "TagsList": {
+          "type": "Component",
+          "id": "TagsList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/Tags",
+              "variantManagement": "Page",
+              "initialLoad": "Enabled"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,87 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.groups",
+    "type": "application",
+    "title": "Groups",
+    "description": "Manage Groups",
+    "applicationVersion": { "version": "0.0.1" },
+    "dataSources": {
+      "mainService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "Group-manage": {
+          "semanticObject": "Group",
+          "action": "manage",
+          "title": "Groups",
+          "signature": { "parameters": {}, "additionalParameters": "allowed" }
+        }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": { "sap.fe.templates": {} }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      }
+    },
+    "routing": {
+      "routes": [
+        {
+          "pattern": ":?query:",
+          "name": "GroupsList",
+          "target": "GroupsList"
+        },
+        {
+          "pattern": "Groups({key}):?query:",
+          "name": "GroupsObjectPage",
+          "target": "GroupsObjectPage"
+        }
+      ],
+      "targets": {
+        "GroupsList": {
+          "type": "Component",
+          "id": "GroupsList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/Groups",
+              "variantManagement": "Page",
+              "initialLoad": "Enabled",
+              "navigation": {
+                "Groups": { "detail": { "route": "GroupsObjectPage" } }
+              }
+            }
+          }
+        },
+        "GroupsObjectPage": {
+          "type": "Component",
+          "id": "GroupsObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/Groups",
+              "editableHeaderContent": false
+            }
+          }
+        }
+      }
+    }
+  }
+}
