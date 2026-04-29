@@ -1,0 +1,8 @@
+{
+  "name": "tutorials-admin-fiori",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix events run build && npm --prefix missions run build && npm --prefix groups run build && npm --prefix accomplishments run build && npm --prefix prizes run build && npm --prefix tutorials run build && npm --prefix tags run build && npm --prefix operations run build && npm --prefix accounts run build"
+  }
+}
