@@ -61,6 +61,15 @@ CAP backend (http://localhost:4004 or CAP_BASE_URL)
 - **Jobs**: Scheduled tasks in `srv/jobs/` (tutorial sync, NGDS export)
 - **Bootstrap**: `srv/server.js` registers custom express routes on `cds.on('bootstrap')`, attaches STOMP broker and jobs on `cds.on('served')`
 
+### Admin UI (app/)
+
+- **`app/admin/`** — 9 Fiori Elements List Report + Object Page apps (events, missions, groups, accomplishments, prizes, tutorials, tags, operations, accounts)
+- **`app/admin-custom/`** — Freestyle SAPUI5 app (Board, Dashboard, Statistics, Privacy views)
+- **`app/admin-flp/`** — FLP sandbox for local development only
+- **`app/admin-annotations.cds`** — All @UI/@Common CDS annotations for admin screens
+- Deployed via HTML5 Application Repository (`tutorials-admin-ui-deployer` module in mta.yaml)
+- Access at `/admin-ui/` route (XSUAA-protected)
+
 ### Frontend (apps/)
 
 - **AppSpace** (`apps/src/app-space/AppSpace.vue`): Event-themed tutorial space (Joule/Sapphire themes). Fetches progress from `/api/getEventProgress`, displays QR codes via `/api/qrcode`
@@ -122,3 +131,4 @@ Smoke test files in `test/smoke/`:
 - **Cache clearing** — `.tutorial-cache/` caches raw markdown, GitHub metadata, and CAP catalog data. Delete it to force a full re-fetch. There is no incremental invalidation.
 - **Node.js >= 20 required** — Build scripts use native `fetch` (no polyfill).
 - **Slug fields** — `Missions.slug` and `CompletionPaths.slug` must be populated for the build pipeline to generate mission/group pages. Run `node scripts/migrate-reference-data.js populate-slugs` after data import.
+- **`app/` vs `apps/`** — Completely separate directories. `app/` contains SAPUI5 admin screens served via HTML5 App Repo. `apps/` contains Vue 3 public-facing components bundled by Vite. Do not mix them.
