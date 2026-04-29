@@ -46,12 +46,12 @@
     "postcss-import": "^16.1.1",
     "sap.tutorials.admin.accomplishments": "file:app/admin/accomplishments",
     "sap.tutorials.admin.accounts": "file:app/admin/accounts",
+    "sap.tutorials.admin.changelog": "file:app/admin/changelog",
     "sap.tutorials.admin.events": "file:app/admin/events",
     "sap.tutorials.admin.groups": "file:app/admin/groups",
     "sap.tutorials.admin.missions": "file:app/admin/missions",
     "sap.tutorials.admin.operations": "file:app/admin/operations",
     "sap.tutorials.admin.prizes": "file:app/admin/prizes",
-    "sap.tutorials.admin.changelog": "file:app/admin/changelog",
     "sap.tutorials.admin.tags": "file:app/admin/tags",
     "sap.tutorials.admin.tutorials": "file:app/admin/tutorials",
     "shiki": "^4.0.2",
@@ -60,6 +60,7 @@
     "yaml": "^2.7.0"
   },
   "dependencies": {
+    "@cap-js/audit-logging": "^1.2.0",
     "@cap-js/change-tracking": "^1.2.1",
     "@cap-js/hana": "^2.7.1",
     "@cap-js/sqlite": "^2.2.1",
