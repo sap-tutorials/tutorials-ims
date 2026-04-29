@@ -1,6 +1,6 @@
 # IMS CAP Rewrite — Plan 2: AdminService + DisplayService
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add AdminService (full CRUD + event statistics, CSV export, GDPR anonymization, cleanup actions) and DisplayService (read-only event dashboard with leaderboard) to the CAP project.
 
@@ -54,7 +54,7 @@ test/
 **Files:**
 - Create: `srv/admin-service.cds`
 
-- [ ] **Step 1: Create the AdminService CDS file**
+- [x] **Step 1: Create the AdminService CDS file**
 
 ```cds
 using { com.sap.developers.ims as ims } from '../db/schema';
@@ -153,17 +153,17 @@ service AdminService {
 }
 ```
 
-- [ ] **Step 2: Verify CDS compiles**
+- [x] **Step 2: Verify CDS compiles**
 
 Run: `npx cds compile srv/admin-service.cds --to json > /dev/null`
 Expected: No errors. Exit code 0.
 
-- [ ] **Step 3: Verify service is served**
+- [x] **Step 3: Verify service is served**
 
 Run: `npx cds serve --project . --in-memory 2>&1 | head -20`
 Expected: Output includes `[cds] - serving AdminService { at: '/admin' }`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add srv/admin-service.cds
@@ -180,7 +180,7 @@ git commit -m "feat: add AdminService CDS definition with entity projections and
 
 This library provides pure computation functions that take arrays of records and produce statistics. Used by both AdminService and DisplayService handlers.
 
-- [ ] **Step 1: Write failing tests for getEventStatistics**
+- [x] **Step 1: Write failing tests for getEventStatistics**
 
 ```js
 // test/lib/event-statistics.test.js
@@ -323,12 +323,12 @@ describe('event-statistics', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `npx vitest run test/lib/event-statistics.test.js`
 Expected: FAIL — module not found
 
-- [ ] **Step 3: Implement the event-statistics library**
+- [x] **Step 3: Implement the event-statistics library**
 
 ```js
 // srv/lib/event-statistics.js
@@ -480,12 +480,12 @@ function parseOffsetToMs(offset) {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `npx vitest run test/lib/event-statistics.test.js`
 Expected: All 9 tests PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add srv/lib/event-statistics.js test/lib/event-statistics.test.js
@@ -502,7 +502,7 @@ git commit -m "feat: add event statistics computation library with unit tests"
 
 Provides CSV and JSON formatting for task record export. The Java app exports CSV with columns: DATE & TIME, TYPE, TITLE, TIME SPENT.
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```js
 // test/lib/export-helpers.test.js
@@ -570,12 +570,12 @@ describe('export-helpers', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `npx vitest run test/lib/export-helpers.test.js`
 Expected: FAIL — module not found
 
-- [ ] **Step 3: Implement export helpers**
+- [x] **Step 3: Implement export helpers**
 
 ```js
 // srv/lib/export-helpers.js
@@ -637,12 +637,12 @@ function escapeCSV(value) {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `npx vitest run test/lib/export-helpers.test.js`
 Expected: All 5 tests PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add srv/lib/export-helpers.js test/lib/export-helpers.test.js
@@ -659,7 +659,7 @@ git commit -m "feat: add CSV export helpers with unit tests"
 
 Implements user anonymization logic per GDPR requirements. The Java app: (1) nulls User.sapId, (2) deletes UserMetaData, (3) blanks audit fields (createdBy/modifiedBy on all related records). In CAP, `managed` aspect auto-populates createdBy/modifiedBy — we null those on anonymization.
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```js
 // test/lib/anonymization.test.js
@@ -714,12 +714,12 @@ describe('anonymization', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `npx vitest run test/lib/anonymization.test.js`
 Expected: FAIL — module not found
 
-- [ ] **Step 3: Implement anonymization library**
+- [x] **Step 3: Implement anonymization library**
 
 ```js
 // srv/lib/anonymization.js
@@ -747,12 +747,12 @@ export function buildAnonymizationOps(user) {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `npx vitest run test/lib/anonymization.test.js`
 Expected: All 2 tests PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add srv/lib/anonymization.js test/lib/anonymization.test.js
@@ -768,7 +768,7 @@ git commit -m "feat: add GDPR anonymization operations builder with unit tests"
 
 Wires the statistics, export, and anonymization libraries into the AdminService. Implements inline: cleanup actions, featured ordering, account merge status, DSR lookup. Stubs integration-dependent actions.
 
-- [ ] **Step 1: Create the AdminService handler**
+- [x] **Step 1: Create the AdminService handler**
 
 ```js
 // srv/admin-service.js
@@ -1039,12 +1039,12 @@ export default class AdminService extends cds.ApplicationService {
 }
 ```
 
-- [ ] **Step 2: Verify CDS and handler load without errors**
+- [x] **Step 2: Verify CDS and handler load without errors**
 
 Run: `npx cds serve --project . --in-memory 2>&1 | head -20`
 Expected: Output includes both `[cds] - serving AdminService { at: '/admin' }` and `[cds] - serving DeveloperService { at: '/api' }`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add srv/admin-service.js
@@ -1060,7 +1060,7 @@ git commit -m "feat: implement AdminService handlers for statistics, export, GDP
 
 Tests AdminService endpoints via `cds.test()` with mocked auth (admin user from `.cdsrc.json`).
 
-- [ ] **Step 1: Write integration tests**
+- [x] **Step 1: Write integration tests**
 
 ```js
 // test/admin-service.test.js
@@ -1265,16 +1265,16 @@ describe('AdminService', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests**
+- [x] **Step 2: Run tests**
 
 Run: `npx vitest run test/admin-service.test.js`
 Expected: All tests PASS
 
-- [ ] **Step 3: Fix any failures and re-run**
+- [x] **Step 3: Fix any failures and re-run**
 
 If tests fail due to CDS compilation or handler issues, fix the handler code and re-run.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test/admin-service.test.js
@@ -1290,7 +1290,7 @@ git commit -m "test: add AdminService integration tests for CRUD, stats, GDPR, a
 
 Read-only service for the event display dashboard. Uses `DisplayApp` scope.
 
-- [ ] **Step 1: Create the DisplayService CDS file**
+- [x] **Step 1: Create the DisplayService CDS file**
 
 ```cds
 using { com.sap.developers.ims as ims } from '../db/schema';
@@ -1337,12 +1337,12 @@ service DisplayService {
 }
 ```
 
-- [ ] **Step 2: Verify CDS compiles**
+- [x] **Step 2: Verify CDS compiles**
 
 Run: `npx cds compile srv/display-service.cds --to json > /dev/null`
 Expected: Exit code 0
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add srv/display-service.cds
@@ -1359,7 +1359,7 @@ git commit -m "feat: add DisplayService CDS definition with read-only event dash
 
 Reuses the event-statistics library. Adds `getEventBuckets` (distribution of users by completion count) and `getLeaderboard`.
 
-- [ ] **Step 1: Create the DisplayService handler**
+- [x] **Step 1: Create the DisplayService handler**
 
 ```js
 // srv/display-service.js
@@ -1468,7 +1468,7 @@ export default class DisplayService extends cds.ApplicationService {
 }
 ```
 
-- [ ] **Step 2: Write integration tests**
+- [x] **Step 2: Write integration tests**
 
 ```js
 // test/display-service.test.js
@@ -1596,17 +1596,17 @@ describe('DisplayService', () => {
 });
 ```
 
-- [ ] **Step 3: Run all tests**
+- [x] **Step 3: Run all tests**
 
 Run: `npx vitest run test/display-service.test.js`
 Expected: All tests PASS
 
-- [ ] **Step 4: Run the full test suite**
+- [x] **Step 4: Run the full test suite**
 
 Run: `npx vitest run test/`
 Expected: All test files pass (developer-service, admin-service, display-service, unit tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add srv/display-service.js test/display-service.test.js
@@ -1620,7 +1620,7 @@ git commit -m "feat: implement DisplayService with event dashboard endpoints and
 **Files:**
 - Possibly modify: `srv/admin-service.js`, `srv/admin-service.cds`, `srv/display-service.js` (fix any issues found)
 
-- [ ] **Step 1: Start all services and verify**
+- [x] **Step 1: Start all services and verify**
 
 Run: `npx cds serve --project . --in-memory 2>&1 | head -30`
 Expected output includes all three services:
@@ -1630,17 +1630,17 @@ Expected output includes all three services:
 [cds] - serving DisplayService { at: '/display' }
 ```
 
-- [ ] **Step 2: Run the complete test suite**
+- [x] **Step 2: Run the complete test suite**
 
 Run: `npx vitest run`
 Expected: All tests pass across all test files.
 
-- [ ] **Step 3: Verify CDS builds for production**
+- [x] **Step 3: Verify CDS builds for production**
 
 Run: `npx cds build --production 2>&1 | tail -10`
 Expected: Build completes without errors. `gen/srv/` and `gen/db/` are produced.
 
-- [ ] **Step 4: Commit any fixes**
+- [x] **Step 4: Commit any fixes**
 
 If fixes were needed, commit them:
 ```bash

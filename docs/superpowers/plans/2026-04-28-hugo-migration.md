@@ -1,6 +1,6 @@
 # Hugo Migration Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Migrate from VitePress to Hugo while preserving all functionality, theming, and BTP deployment.
 
@@ -20,7 +20,7 @@
 - Create: `hugo/layouts/_default/list.html`
 - Create: `hugo/layouts/index.html`
 
-- [ ] **Step 1: Create `hugo/hugo.toml`**
+- [x] **Step 1: Create `hugo/hugo.toml`**
 
 ```toml
 baseURL = '/'
@@ -48,7 +48,7 @@ title = 'SAP Tutorial Platform'
   apiBase = '/api'
 ```
 
-- [ ] **Step 2: Create `hugo/layouts/_default/baseof.html`**
+- [x] **Step 2: Create `hugo/layouts/_default/baseof.html`**
 
 ```html
 <!DOCTYPE html>
@@ -64,7 +64,7 @@ title = 'SAP Tutorial Platform'
 </html>
 ```
 
-- [ ] **Step 3: Create `hugo/layouts/_default/list.html`**
+- [x] **Step 3: Create `hugo/layouts/_default/list.html`**
 
 Minimal list template (Hugo requires it):
 
@@ -75,7 +75,7 @@ Minimal list template (Hugo requires it):
 {{ end }}
 ```
 
-- [ ] **Step 4: Create `hugo/layouts/index.html`**
+- [x] **Step 4: Create `hugo/layouts/index.html`**
 
 Home page with Navigator mount point:
 
@@ -86,7 +86,7 @@ Home page with Navigator mount point:
 {{ end }}
 ```
 
-- [ ] **Step 5: Create placeholder `hugo/content/_index.md`**
+- [x] **Step 5: Create placeholder `hugo/content/_index.md`**
 
 ```markdown
 ---
@@ -94,12 +94,12 @@ title: "SAP Tutorial Platform"
 ---
 ```
 
-- [ ] **Step 6: Verify Hugo builds with no errors**
+- [x] **Step 6: Verify Hugo builds with no errors**
 
 Run: `hugo --source hugo`
 Expected: Build completes, creates `hugo/public/index.html`
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add hugo/
@@ -115,12 +115,12 @@ git commit -m "feat(hugo): init Hugo skeleton with base templates"
 - Create: `hugo/static/css/sap-fundamental.css`
 - Create: `hugo/static/css/sap-theme-vars.css`
 
-- [ ] **Step 1: Copy SAP Fundamental Styles CSS**
+- [x] **Step 1: Copy SAP Fundamental Styles CSS**
 
 Copy `site/.vitepress/theme/styles/sap-fundamental.css` to `hugo/static/css/sap-fundamental.css`.
 Copy any Horizon theme variables CSS to `hugo/static/css/sap-theme-vars.css`.
 
-- [ ] **Step 2: Create `hugo/layouts/partials/head.html`**
+- [x] **Step 2: Create `hugo/layouts/partials/head.html`**
 
 ```html
 <meta charset="utf-8">
@@ -135,12 +135,12 @@ Copy any Horizon theme variables CSS to `hugo/static/css/sap-theme-vars.css`.
 </script>
 ```
 
-- [ ] **Step 3: Verify dark mode inline script runs**
+- [x] **Step 3: Verify dark mode inline script runs**
 
 Run: `hugo server --source hugo`
 Expected: Page loads, `data-theme` is set on `<html>`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add hugo/layouts/partials/head.html hugo/static/css/
@@ -155,7 +155,7 @@ git commit -m "feat(hugo): add SAP Fundamental Styles and head partial"
 - Create: `hugo/layouts/partials/header.html`
 - Create: `hugo/layouts/partials/footer.html`
 
-- [ ] **Step 1: Create `hugo/layouts/partials/header.html`**
+- [x] **Step 1: Create `hugo/layouts/partials/header.html`**
 
 Read `site/.vitepress/theme/components/TutorialLayout.vue` (the header/shellbar section near line 1-50 of the template) and translate to a static Hugo partial. Structure:
 
@@ -178,7 +178,7 @@ Read `site/.vitepress/theme/components/TutorialLayout.vue` (the header/shellbar 
 </div>
 ```
 
-- [ ] **Step 2: Create `hugo/layouts/partials/footer.html`**
+- [x] **Step 2: Create `hugo/layouts/partials/footer.html`**
 
 Minimal footer with copyright and links:
 
@@ -192,12 +192,12 @@ Minimal footer with copyright and links:
 
 Minimal footer partial.
 
-- [ ] **Step 3: Verify pages render with header/footer**
+- [x] **Step 3: Verify pages render with header/footer**
 
 Run: `hugo server --source hugo`
 Expected: Shell bar visible on home page.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add hugo/layouts/partials/
@@ -219,19 +219,19 @@ git commit -m "feat(hugo): add header/footer partials with shell bar"
 - Create: `hugo/layouts/partials/feedback-share.html`
 - Create: `hugo/layouts/partials/progress-bar.html`
 
-- [ ] **Step 1: Create `hugo/layouts/tutorials/single.html`**
+- [x] **Step 1: Create `hugo/layouts/tutorials/single.html`**
 
 Full tutorial layout per spec (title, meta, you-will-learn, steps container, sidebar, data script).
 
-- [ ] **Step 2: Create supporting partials**
+- [x] **Step 2: Create supporting partials**
 
 breadcrumbs.html, tutorial-meta.html, tutorial-sidebar.html, tutorial-author.html, tutorial-prerequisites.html, tutorial-nav-bottom.html, feedback-share.html, progress-bar.html
 
-- [ ] **Step 3: Create a manual test tutorial**
+- [x] **Step 3: Create a manual test tutorial**
 
 Create `hugo/content/tutorials/test-tutorial.md` with frontmatter and one shortcode step (will add shortcode in next task).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add hugo/layouts/tutorials/ hugo/layouts/partials/ hugo/content/tutorials/test-tutorial.md
@@ -247,7 +247,7 @@ git commit -m "feat(hugo): tutorial single layout with all partials"
 - Create: `hugo/layouts/shortcodes/option-tabs.html`
 - Create: `hugo/layouts/shortcodes/tab.html`
 
-- [ ] **Step 1: Create `hugo/layouts/shortcodes/tutorial-step.html`**
+- [x] **Step 1: Create `hugo/layouts/shortcodes/tutorial-step.html`**
 
 ```html
 {{ $number := .Get "number" }}
@@ -274,7 +274,7 @@ git commit -m "feat(hugo): tutorial single layout with all partials"
 </div>
 ```
 
-- [ ] **Step 2: Create `hugo/layouts/shortcodes/option-tabs.html`**
+- [x] **Step 2: Create `hugo/layouts/shortcodes/option-tabs.html`**
 
 ```html
 {{ $tabs := split (.Get "tabs") "," }}
@@ -288,7 +288,7 @@ git commit -m "feat(hugo): tutorial single layout with all partials"
 </div>
 ```
 
-- [ ] **Step 3: Create `hugo/layouts/shortcodes/tab.html`**
+- [x] **Step 3: Create `hugo/layouts/shortcodes/tab.html`**
 
 ```html
 {{ $index := .Get "index" }}
@@ -298,16 +298,16 @@ git commit -m "feat(hugo): tutorial single layout with all partials"
 </div>
 ```
 
-- [ ] **Step 4: Update test tutorial to use shortcodes**
+- [x] **Step 4: Update test tutorial to use shortcodes**
 
 Add `{{% tutorial-step number="1" title="Hello World" %}}` content to test-tutorial.md.
 
-- [ ] **Step 5: Verify shortcodes render**
+- [x] **Step 5: Verify shortcodes render**
 
 Run: `hugo server --source hugo`
 Expected: Tutorial page shows step accordion HTML, option tabs functional.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add hugo/layouts/shortcodes/ hugo/content/tutorials/test-tutorial.md
@@ -323,7 +323,7 @@ git commit -m "feat(hugo): tutorial-step, option-tabs, and tab shortcodes"
 **Files:**
 - Modify: `scripts/fetch-tutorials.ts`
 
-- [ ] **Step 1: Write a test for target parsing**
+- [x] **Step 1: Write a test for target parsing**
 
 Create `scripts/__tests__/hugo-target.test.ts`:
 ```typescript
@@ -331,23 +331,23 @@ import { describe, it, expect } from 'vitest'
 // Test that parseArgs extracts --target flag
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run scripts/__tests__/hugo-target.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: Implement target argument parsing**
+- [x] **Step 3: Implement target argument parsing**
 
 In `scripts/fetch-tutorials.ts`, add logic to parse `--target hugo` from `process.argv`. Set `OUTPUT_DIR` and `NAV_OUTPUT` based on target:
 - `hugo` → `hugo/content/tutorials/`, `hugo/static/tutorials/_nav.json`
 - default → `site/tutorials/`, `site/tutorials/_nav.json`
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run scripts/__tests__/hugo-target.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add scripts/fetch-tutorials.ts scripts/__tests__/hugo-target.test.ts
@@ -362,7 +362,7 @@ git commit -m "feat(hugo): add --target hugo flag to fetch-tutorials"
 - Modify: `scripts/parsers/options.ts`
 - Test: `scripts/__tests__/options-hugo.test.ts`
 
-- [ ] **Step 1: Write test for Hugo option block output**
+- [x] **Step 1: Write test for Hugo option block output**
 
 ```typescript
 import { describe, it, expect } from 'vitest'
@@ -385,12 +385,12 @@ text content
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run scripts/__tests__/options-hugo.test.ts`
 Expected: FAIL (function doesn't accept target param yet)
 
-- [ ] **Step 3: Add `target` parameter to `convertOptionBlocks()`**
+- [x] **Step 3: Add `target` parameter to `convertOptionBlocks()`**
 
 Modify `scripts/parsers/options.ts` to accept optional `target: 'vitepress' | 'hugo'` parameter (default: `'vitepress'`). When target is `'hugo'`, output:
 ```text
@@ -401,17 +401,17 @@ content...
 {{% /option-tabs %}}
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run scripts/__tests__/options-hugo.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Verify existing VitePress tests still pass**
+- [x] **Step 5: Verify existing VitePress tests still pass**
 
 Run: `npx vitest run scripts/__tests__/`
 Expected: All tests PASS (default target unchanged)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add scripts/parsers/options.ts scripts/__tests__/options-hugo.test.ts
@@ -426,16 +426,16 @@ git commit -m "feat(hugo): make convertOptionBlocks target-aware"
 - Modify: `scripts/fetch-tutorials.ts`
 - Test: `scripts/__tests__/hugo-write.test.ts`
 
-- [ ] **Step 1: Write test for Hugo page output format**
+- [x] **Step 1: Write test for Hugo page output format**
 
 Test that `writeHugoPage()` produces correct frontmatter (with `type: tutorials`) and wraps steps in `{{% tutorial-step %}}` shortcodes. Also test that output does NOT contain artifacts from `sanitizeStepContent()`, `balanceComponentTags()`, or `escapeHtmlTags()` (e.g., no `&lt;div&gt;` where raw HTML should appear).
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run scripts/__tests__/hugo-write.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: Implement `writeHugoPage()`**
+- [x] **Step 3: Implement `writeHugoPage()`**
 
 New function in `scripts/fetch-tutorials.ts` that:
 1. Writes Hugo-compatible frontmatter (`type: tutorials`, etc.)
@@ -444,7 +444,7 @@ New function in `scripts/fetch-tutorials.ts` that:
 4. Writes to `hugo/content/tutorials/{slug}.md`
 5. **Does NOT call** `sanitizeStepContent()`, `balanceComponentTags()`, or `escapeHtmlTags()` — these are VitePress-only concerns (Hugo's Goldmark passes raw HTML through without issue)
 
-- [ ] **Step 4: Make `patchTutorialFrontmatter()` target-aware**
+- [x] **Step 4: Make `patchTutorialFrontmatter()` target-aware**
 
 This function currently patches tutorial files (e.g., adding validation data) and writes to the hardcoded VitePress output dir. Refactor to accept a `target` parameter:
 - `hugo` → writes to `hugo/content/tutorials/` with `type: tutorials` frontmatter
@@ -452,12 +452,12 @@ This function currently patches tutorial files (e.g., adding validation data) an
 
 Write a test that verifies Hugo target produces correct path and frontmatter keys.
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `npx vitest run scripts/__tests__/hugo-write.test.ts`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add scripts/fetch-tutorials.ts scripts/__tests__/hugo-write.test.ts
@@ -472,28 +472,28 @@ git commit -m "feat(hugo): implement writeHugoPage and target-aware patchTutoria
 - Modify: `scripts/fetch-tutorials.ts`
 - Test: `scripts/__tests__/hugo-delimiters.test.ts`
 
-- [ ] **Step 1: Write test for delimiter scanning**
+- [x] **Step 1: Write test for delimiter scanning**
 
 Test that content with `{{` outside code fences gets wrapped in raw string handling, while `{{` inside code fences is left alone.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run scripts/__tests__/hugo-delimiters.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: Implement delimiter scanner**
+- [x] **Step 3: Implement delimiter scanner**
 
 Function that:
 1. Finds `{{` outside fenced code blocks
 2. Escapes them with Hugo's `{{</* */>}}` raw string delimiters or wraps in `{{` + `}}` rawstring shortcode
 3. Logs a warning for each occurrence
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run scripts/__tests__/hugo-delimiters.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add scripts/fetch-tutorials.ts scripts/__tests__/hugo-delimiters.test.ts
@@ -508,11 +508,11 @@ git commit -m "feat(hugo): scan and escape {{ delimiters in tutorial content"
 - Modify: `scripts/fetch-tutorials.ts` (wire everything together)
 - Modify: `package.json` (add new scripts)
 
-- [ ] **Step 1: Wire up main() for Hugo target**
+- [x] **Step 1: Wire up main() for Hugo target**
 
 Ensure `main()` calls the correct functions when `--target hugo` is passed: correct output dir, calls `writeHugoPage()`, generates `_nav.json` to `hugo/static/tutorials/`.
 
-- [ ] **Step 2: Add package.json scripts**
+- [x] **Step 2: Add package.json scripts**
 
 During the migration period, keep the default `fetch-tutorials` pointing to VitePress (unchanged) and add a separate Hugo script. In Phase 6, the default switches to Hugo.
 
@@ -523,21 +523,21 @@ During the migration period, keep the default `fetch-tutorials` pointing to Vite
 
 Note: The existing `"fetch-tutorials"` script remains unchanged (VitePress default) until Phase 6 cleanup.
 
-- [ ] **Step 3: Run full generation**
+- [x] **Step 3: Run full generation**
 
 Run: `npm run fetch-tutorials:hugo -- --regenerate`
 Expected: All tutorials generated in `hugo/content/tutorials/`, `_nav.json` in `hugo/static/tutorials/`.
 
-- [ ] **Step 4: Build Hugo**
+- [x] **Step 4: Build Hugo**
 
 Run: `hugo --source hugo`
 Expected: Build completes in <10 seconds with zero errors.
 
-- [ ] **Step 5: Spot-check 10 tutorials**
+- [x] **Step 5: Spot-check 10 tutorials**
 
 Verify shortcodes rendered correctly, option tabs present, no raw `{{` errors.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add scripts/fetch-tutorials.ts package.json
@@ -553,7 +553,7 @@ git commit -m "feat(hugo): full content generation pipeline for Hugo target"
 **Files:**
 - Create: `hugo/assets/js/tutorial.ts`
 
-- [ ] **Step 1: Create `hugo/assets/js/tutorial.ts` with event delegation**
+- [x] **Step 1: Create `hugo/assets/js/tutorial.ts` with event delegation**
 
 ```typescript
 document.addEventListener('click', (e) => {
@@ -567,15 +567,15 @@ document.addEventListener('click', (e) => {
 })
 ```
 
-- [ ] **Step 2: Implement `toggleStep()`**
+- [x] **Step 2: Implement `toggleStep()`**
 
 Toggle `hidden` attribute on `.step-body`, update toggle icon text between `—` and `+`.
 
-- [ ] **Step 3: Implement `expandAllSteps()` and `collapseAllSteps()`**
+- [x] **Step 3: Implement `expandAllSteps()` and `collapseAllSteps()`**
 
 Expose globally on window for the onclick handlers in the template.
 
-- [ ] **Step 4: Add js.Build resource to tutorial layout**
+- [x] **Step 4: Add js.Build resource to tutorial layout**
 
 In `hugo/layouts/tutorials/single.html`, add:
 ```html
@@ -583,12 +583,12 @@ In `hugo/layouts/tutorials/single.html`, add:
 <script src="{{ $js.RelPermalink }}" defer></script>
 ```
 
-- [ ] **Step 5: Verify step toggle works in browser**
+- [x] **Step 5: Verify step toggle works in browser**
 
 Run: `hugo server --source hugo`
 Expected: Clicking step headers expands/collapses steps. Open all/Close all work.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add hugo/assets/js/tutorial.ts hugo/layouts/tutorials/single.html
@@ -602,7 +602,7 @@ git commit -m "feat(hugo): step accordion toggle with event delegation"
 **Files:**
 - Modify: `hugo/assets/js/tutorial.ts`
 
-- [ ] **Step 1: Implement `switchTab()`**
+- [x] **Step 1: Implement `switchTab()`**
 
 ```typescript
 function switchTab(btn: HTMLButtonElement) {
@@ -618,12 +618,12 @@ function switchTab(btn: HTMLButtonElement) {
 }
 ```
 
-- [ ] **Step 2: Verify tab switching in browser**
+- [x] **Step 2: Verify tab switching in browser**
 
 Run: `hugo server --source hugo` (navigate to a tutorial with option tabs)
 Expected: Clicking tab buttons shows/hides corresponding panels.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add hugo/assets/js/tutorial.ts
@@ -638,7 +638,7 @@ git commit -m "feat(hugo): option tab switching"
 - Modify: `hugo/assets/js/tutorial.ts`
 - Modify: `hugo/hugo.toml` (dev environment config)
 
-- [ ] **Step 1: Add API helper functions**
+- [x] **Step 1: Add API helper functions**
 
 ```typescript
 const API_BASE = document.documentElement.dataset.apiBase || '/api'
@@ -658,7 +658,7 @@ async function apiPost(path: string, body?: unknown): Promise<boolean> {
 }
 ```
 
-- [ ] **Step 2: Configure dev proxy for API calls**
+- [x] **Step 2: Configure dev proxy for API calls**
 
 Hugo's dev server has no built-in proxy. For local development with `cds watch`, set `data-api-base` to point directly at the CAP server. Create `hugo/config/development/hugo.toml`:
 
@@ -669,24 +669,24 @@ Hugo's dev server has no built-in proxy. For local development with `cds watch`,
 
 Hugo merges this with the main `hugo.toml` when running `hugo server` (which defaults to `development` environment). In production builds, `hugo.toml` keeps `apiBase = '/api'` so the approuter handles proxying.
 
-- [ ] **Step 3: Implement `markDone()`**
+- [x] **Step 3: Implement `markDone()`**
 
 POST to API, update step UI (add `completed` class, check circle), update progress bar.
 
-- [ ] **Step 4: Implement progress loading on page init**
+- [x] **Step 4: Implement progress loading on page init**
 
 On DOMContentLoaded, GET progress from API, mark previously completed steps, update progress bar.
 
-- [ ] **Step 5: Implement progress bar rendering**
+- [x] **Step 5: Implement progress bar rendering**
 
 Read `data-step-count` and `data-slug` from `#progress-bar` div. Create progress segments using DOM APIs (`document.createElement`). Update segment classes as steps complete.
 
-- [ ] **Step 6: Verify end-to-end flow with local CAP backend**
+- [x] **Step 6: Verify end-to-end flow with local CAP backend**
 
 Run: `cds watch` (in another terminal) + `hugo server --source hugo`
 Expected: Done button → API call to `http://localhost:4004` → progress updates → refresh shows saved state.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add hugo/assets/js/tutorial.ts hugo/config/
@@ -700,7 +700,7 @@ git commit -m "feat(hugo): progress tracking with API integration and dev proxy 
 **Files:**
 - Modify: `hugo/assets/js/tutorial.ts`
 
-- [ ] **Step 1: Implement validation quiz renderer**
+- [x] **Step 1: Implement validation quiz renderer**
 
 On DOMContentLoaded, parse `#tutorial-data` JSON. For each step with validation questions:
 1. Disable the Done button (`btn.disabled = true`)
@@ -763,7 +763,7 @@ function renderQuiz(mount: HTMLElement, stepNum: string, questions: ValidationQu
 }
 ```
 
-- [ ] **Step 2: Implement `handleQuizSubmit()`**
+- [x] **Step 2: Implement `handleQuizSubmit()`**
 
 Validate answers: exact match for multiple-choice, case-insensitive trim for text. On success: enable Done button, show success feedback. On failure: show error, allow retry.
 
@@ -797,12 +797,12 @@ function handleQuizSubmit(form: HTMLFormElement, stepNum: string, questions: Val
 }
 ```
 
-- [ ] **Step 3: Verify quiz renders and validates**
+- [x] **Step 3: Verify quiz renders and validates**
 
 Run: `hugo server --source hugo` (navigate to tutorial with validation data)
 Expected: Quiz form renders, wrong answer shows error, correct answer enables Done.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add hugo/assets/js/tutorial.ts
@@ -818,20 +818,20 @@ git commit -m "feat(hugo): validation quiz widget with DOM-based rendering"
 - Modify: `hugo/layouts/partials/tutorial-sidebar.html`
 - Modify: `hugo/layouts/partials/header.html`
 
-- [ ] **Step 1: Implement sidebar step highlighting**
+- [x] **Step 1: Implement sidebar step highlighting**
 
 On step completion, find sidebar TOC item and add `completed` class.
 
-- [ ] **Step 2: Implement dark mode toggle**
+- [x] **Step 2: Implement dark mode toggle**
 
 Add toggle button in header. On click: flip `data-theme`, persist to localStorage.
 
-- [ ] **Step 3: Verify sidebar and dark mode**
+- [x] **Step 3: Verify sidebar and dark mode**
 
 Run: `hugo server --source hugo`
 Expected: Sidebar items highlight on step done. Dark mode toggles correctly.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add hugo/assets/js/tutorial.ts hugo/layouts/partials/
@@ -851,7 +851,7 @@ git commit -m "feat(hugo): sidebar TOC highlighting and dark mode toggle"
 - Create: `apps/src/shared/useApi.ts`
 - Create: `apps/src/shared/types.ts`
 
-- [ ] **Step 1: Create `apps/package.json`**
+- [x] **Step 1: Create `apps/package.json`**
 
 ```json
 {
@@ -873,20 +873,20 @@ git commit -m "feat(hugo): sidebar TOC highlighting and dark mode toggle"
 }
 ```
 
-- [ ] **Step 2: Create `apps/vite.config.ts`**
+- [x] **Step 2: Create `apps/vite.config.ts`**
 
 Multi-entry config per spec (navigator, app-space, event-display, nav-dropdown).
 
-- [ ] **Step 3: Create shared utilities**
+- [x] **Step 3: Create shared utilities**
 
 Copy `useApi.ts` from current codebase, remove VitePress imports. Create shared `types.ts`.
 
-- [ ] **Step 4: Install dependencies**
+- [x] **Step 4: Install dependencies**
 
 Run: `npm --prefix apps install`
 Expected: Dependencies installed, no errors.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/
@@ -901,7 +901,7 @@ git commit -m "feat(hugo): init apps/ Vite project for Vue mini-apps"
 - Create: `apps/src/navigator/main.ts`
 - Create: `apps/src/navigator/TutorialNavigator.vue`
 
-- [ ] **Step 1: Copy and port TutorialNavigator.vue**
+- [x] **Step 1: Copy and port TutorialNavigator.vue**
 
 Copy from `site/.vitepress/theme/components/TutorialNavigator.vue`. Remove:
 - `import { useData } from 'vitepress'`
@@ -910,7 +910,7 @@ Copy from `site/.vitepress/theme/components/TutorialNavigator.vue`. Remove:
 
 Replace `useData()` dark mode with `document.documentElement.dataset.theme`.
 
-- [ ] **Step 2: Create mount entry `apps/src/navigator/main.ts`**
+- [x] **Step 2: Create mount entry `apps/src/navigator/main.ts`**
 
 ```typescript
 import { createApp } from 'vue'
@@ -920,17 +920,17 @@ const el = document.getElementById('tutorial-navigator')
 if (el) createApp(TutorialNavigator).mount(el)
 ```
 
-- [ ] **Step 3: Build and verify**
+- [x] **Step 3: Build and verify**
 
 Run: `npm --prefix apps run build`
 Expected: `hugo/static/js/navigator.js` created.
 
-- [ ] **Step 4: Test in browser**
+- [x] **Step 4: Test in browser**
 
 Run: `hugo server --source hugo`
 Expected: Navigator loads on home page, search/filter/cards work.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/src/navigator/
@@ -953,19 +953,19 @@ git commit -m "feat(hugo): port TutorialNavigator to apps/"
 - Create: `hugo/layouts/page/app-space.html`
 - Create: `hugo/layouts/page/event-display.html`
 
-- [ ] **Step 1: Port AppSpace.vue**
+- [x] **Step 1: Port AppSpace.vue**
 
 Copy from current, remove VitePress dependencies. Create mount entry and Hugo layout page.
 
-- [ ] **Step 2: Port EventDisplay.vue**
+- [x] **Step 2: Port EventDisplay.vue**
 
 Same approach as AppSpace.
 
-- [ ] **Step 3: Port TutorialNavigatorDropdown.vue**
+- [x] **Step 3: Port TutorialNavigatorDropdown.vue**
 
 Mounts on every tutorial page's breadcrumb area. Reads `currentSlug` from mount element's `data-slug` attribute.
 
-- [ ] **Step 4: Port MiniNavigator.vue**
+- [x] **Step 4: Port MiniNavigator.vue**
 
 Copy from `site/.vitepress/theme/components/MiniNavigator.vue`. This is the sidebar navigation tree with mission/group hierarchy and progress bars. It uses `useAemEnrichment.ts` composable (which fetches from `/bin/sapdx/v2/tutorial/miniNavigator.{missionId}.json`). Port:
 - Remove VitePress `useData` import
@@ -973,7 +973,7 @@ Copy from `site/.vitepress/theme/components/MiniNavigator.vue`. This is the side
 - Mount point: a div in `hugo/layouts/tutorials/single.html` sidebar area with `data-mission-id` attribute
 - Add `mini-navigator` to `apps/vite.config.ts` rollupOptions input
 
-- [ ] **Step 5: Add NavDropdown and MiniNavigator scripts to tutorial layout**
+- [x] **Step 5: Add NavDropdown and MiniNavigator scripts to tutorial layout**
 
 In `hugo/layouts/tutorials/single.html`, add:
 ```html
@@ -981,24 +981,24 @@ In `hugo/layouts/tutorials/single.html`, add:
 <script type="module" src="/js/mini-navigator.js"></script>
 ```
 
-- [ ] **Step 6: Update `apps/vite.config.ts` with MiniNavigator entry**
+- [x] **Step 6: Update `apps/vite.config.ts` with MiniNavigator entry**
 
 Add to `rollupOptions.input`:
 ```typescript
 'mini-navigator': resolve(__dirname, 'src/mini-navigator/main.ts'),
 ```
 
-- [ ] **Step 7: Build all apps**
+- [x] **Step 7: Build all apps**
 
 Run: `npm --prefix apps run build`
 Expected: All five entry points produce JS in `hugo/static/js/`.
 
-- [ ] **Step 8: Verify each app in browser**
+- [x] **Step 8: Verify each app in browser**
 
 Run: `hugo server --source hugo`
 Expected: AppSpace themes work, EventDisplay loads, NavDropdown shows in tutorial breadcrumbs, MiniNavigator shows mission hierarchy in sidebar.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add apps/src/ hugo/layouts/page/ hugo/layouts/tutorials/single.html apps/vite.config.ts
@@ -1016,23 +1016,23 @@ git commit -m "feat(hugo): port AppSpace, EventDisplay, NavDropdown, and MiniNav
 - Create: `hugo/layouts/groups/single.html`
 - Modify: `scripts/fetch-tutorials.ts` (generate mission/group content pages)
 
-- [ ] **Step 1: Create mission layout**
+- [x] **Step 1: Create mission layout**
 
 Shows mission metadata, lists tutorial groups in order.
 
-- [ ] **Step 2: Create group layout**
+- [x] **Step 2: Create group layout**
 
 Shows group metadata, lists tutorials in order with completion status.
 
-- [ ] **Step 3: Generate mission/group pages in fetch-tutorials**
+- [x] **Step 3: Generate mission/group pages in fetch-tutorials**
 
 Output `hugo/content/missions/` and `hugo/content/groups/` markdown pages with appropriate frontmatter.
 
-- [ ] **Step 4: Verify navigation flow**
+- [x] **Step 4: Verify navigation flow**
 
 Navigator → Mission → Group → Tutorial works correctly.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add hugo/layouts/missions/ hugo/layouts/groups/ scripts/fetch-tutorials.ts
@@ -1047,19 +1047,19 @@ git commit -m "feat(hugo): mission and group layout pages"
 - Modify: `hugo/layouts/partials/tutorial-nav-bottom.html`
 - Modify: `hugo/static/css/sap-fundamental.css`
 
-- [ ] **Step 1: Implement prev/next links**
+- [x] **Step 1: Implement prev/next links**
 
 Read `prevTutorial` and `nextTutorial` from frontmatter params. Render as navigation links.
 
-- [ ] **Step 2: Verify responsive breakpoints**
+- [x] **Step 2: Verify responsive breakpoints**
 
 Check mobile, tablet, desktop layouts match current VitePress output.
 
-- [ ] **Step 3: Fix any responsive issues**
+- [x] **Step 3: Fix any responsive issues**
 
 Adjust CSS as needed for Hugo's output structure.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add hugo/layouts/partials/ hugo/static/css/
@@ -1072,7 +1072,7 @@ git commit -m "feat(hugo): prev/next navigation and responsive CSS fixes"
 
 **Files:** (no new files — verification task)
 
-- [ ] **Step 1: Side-by-side comparison**
+- [x] **Step 1: Side-by-side comparison**
 
 Run both VitePress and Hugo servers. Compare:
 - Tutorial page layout
@@ -1082,16 +1082,16 @@ Run both VitePress and Hugo servers. Compare:
 - AppSpace themes
 - Dark mode appearance
 
-- [ ] **Step 2: Fix any visual discrepancies**
+- [x] **Step 2: Fix any visual discrepancies**
 
 Adjust CSS/templates to match.
 
-- [ ] **Step 3: Run full build**
+- [x] **Step 3: Run full build**
 
 Run: `npm run fetch-tutorials:hugo -- --regenerate && npm --prefix apps run build && hugo --source hugo --minify`
 Expected: Clean build, all pages generated.
 
-- [ ] **Step 4: Commit any fixes**
+- [x] **Step 4: Commit any fixes**
 
 ```bash
 git add -A
@@ -1108,7 +1108,7 @@ git commit -m "fix(hugo): visual parity adjustments"
 - Modify: `mta.yaml`
 - Modify: `package.json`
 
-- [ ] **Step 1: Update `mta.yaml` build-parameters**
+- [x] **Step 1: Update `mta.yaml` build-parameters**
 
 Replace VitePress build commands with Hugo pipeline:
 ```yaml
@@ -1129,7 +1129,7 @@ build-parameters:
         - cp -r display-app/dist approuter/static/display-app
 ```
 
-- [ ] **Step 2: Update root package.json scripts**
+- [x] **Step 2: Update root package.json scripts**
 
 Make Hugo the new default. Rename the old VitePress script:
 
@@ -1146,12 +1146,12 @@ Make Hugo the new default. Rename the old VitePress script:
 
 Note: The default `fetch-tutorials` now targets Hugo (matching the spec). The `:vitepress` variant is kept until VitePress removal in Task 24.
 
-- [ ] **Step 3: Test MTA build locally**
+- [x] **Step 3: Test MTA build locally**
 
 Run: `mbt build`
 Expected: MTAR produced in `mta_archives/`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add mta.yaml package.json
@@ -1166,11 +1166,11 @@ git commit -m "feat(hugo): update MTA and package.json for Hugo build pipeline"
 - Modify: `.github/workflows/deploy.yml`
 - Modify: `.github/workflows/rebuild-content.yml`
 
-- [ ] **Step 1: Re-enable push trigger in `deploy.yml`**
+- [x] **Step 1: Re-enable push trigger in `deploy.yml`**
 
 Uncomment push trigger. The `mbt build` step already runs `before-all` commands from mta.yaml (which downloads Hugo binary inline via `curl`), so no additional Hugo install step is needed in this workflow.
 
-- [ ] **Step 2: Update `rebuild-content.yml` for Hugo**
+- [x] **Step 2: Update `rebuild-content.yml` for Hugo**
 
 This workflow rebuilds content without full MTA deploy. Replace VitePress commands with Hugo equivalents:
 - Add Hugo binary download step: `curl -fsSL https://github.com/gohugoio/hugo/releases/download/v0.147.0/hugo_extended_0.147.0_linux-amd64.tar.gz | tar -xz -C /tmp hugo`
@@ -1179,11 +1179,11 @@ This workflow rebuilds content without full MTA deploy. Replace VitePress comman
 - Remove `NODE_OPTIONS: '--max-old-space-size=16384'` from env (Hugo uses <1GB, no longer needed)
 - Update "Assemble static content" to copy from `hugo/public/` instead of `site/.vitepress/dist/`
 
-- [ ] **Step 3: Verify workflow syntax**
+- [x] **Step 3: Verify workflow syntax**
 
 Run: `gh workflow view deploy.yml` and `gh workflow view rebuild-content.yml` or validate YAML locally.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add .github/workflows/

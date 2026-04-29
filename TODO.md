@@ -38,14 +38,14 @@ The rewrite documented in `docs/superpowers/plans/` has been **executed**. What 
 
 ### Remaining Backend Gaps
 
-- [ ] **HANA sequences for legacyId** — `legacy-id.js` exists but may need actual HANA sequence objects deployed (vs. MAX+1 approach); verify under concurrent load
+- [x] **HANA sequences for legacyId** — 30 per-entity `.hdbsequence` files deployed in `db/src/`, START WITH 10000001 to avoid collision with migrated data; `legacy-id.js` validates entity names against known set
 - [ ] **Integration testing against real HANA** — Unit test coverage unknown; need to verify CDS compiles and deploys to HDI container
 - [ ] **Adobe Analytics destination config** — Client exists but BTP Destination for `sap.d1.sc.omtrdc.net` may not be configured
 - [ ] **NGDS destination config** — Client exists but BTP Destination not verified
 - [ ] **Mail service binding** — `mail-client.js` exists but no BTP Mail Service instance confirmed
 - [ ] **Leaderboard cache** — DisplayService has `getLeaderboard` but no TTL cache (IMS uses 600s eventId cache)
 - [ ] **Production smoke tests** — No automated deployment verification suite
-- [ ] **Plan checkboxes** — The 4 plan files in `docs/superpowers/plans/` still show all tasks unchecked; update them to reflect reality
+- [x] **Plan checkboxes** — The 4 plan files in `docs/superpowers/plans/` still show all tasks unchecked; update them to reflect reality
 
 ---
 
@@ -159,3 +159,12 @@ No mechanism exists to update the AppRouter's static content when tutorials chan
 - [ ] Configure BTP Destinations for NGDS and Adobe Analytics
 - [ ] Verify `cds deploy --to hana` succeeds with the full 35-entity schema
 - [ ] Decide on static content delivery — full MTA redeploy vs. HTML5 Repository vs. `cf push approuter`
+
+---
+
+## 10. Reported Bugs (Team Feedback 2026-04-29)
+
+- [ ] **Tutorial search blanks the screen** — Typing in the Navigator search causes the page to go blank (likely a Vue reactivity or error boundary issue in TutorialNavigator)
+- [ ] **App Space not showing data** — AppSpace.vue fails to display event/progress data (check `/api/getEventProgress` response and hardcoded `eventId`)
+- [ ] **Dark mode toggle not working** — Theme toggle button doesn't flip `data-theme` or persist to localStorage
+- [ ] **Mission/Group pages return 404** — Some mission/group links lead to non-existent pages (content generation only produces pages for missions with populated `slug` fields; see `populate-slugs` migration step)

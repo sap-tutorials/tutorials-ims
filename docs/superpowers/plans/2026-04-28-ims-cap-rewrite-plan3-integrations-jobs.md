@@ -1,6 +1,6 @@
 # IMS CAP Rewrite Plan 3: Integrations + Jobs
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Wire the existing stub endpoints to real integration clients (NGDS, Adobe Analytics, SCI account merge), add scheduled jobs with distributed locks, and implement tutorial metadata sync from the GitHub build pipeline.
 
@@ -63,7 +63,7 @@
 - Create: `srv/jobs/job-lock.js`
 - Test: `test/jobs/job-lock.test.js`
 
-- [ ] **Step 1: Write the failing test for acquireLock**
+- [x] **Step 1: Write the failing test for acquireLock**
 
 ```js
 // test/jobs/job-lock.test.js
@@ -115,12 +115,12 @@ describe('job-lock', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run test/jobs/job-lock.test.js`
 Expected: FAIL — module not found
 
-- [ ] **Step 3: Implement job-lock.js**
+- [x] **Step 3: Implement job-lock.js**
 
 ```js
 // srv/jobs/job-lock.js
@@ -153,12 +153,12 @@ export async function releaseLock(jobName, instanceId) {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run test/jobs/job-lock.test.js`
 Expected: PASS (4 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add srv/jobs/job-lock.js test/jobs/job-lock.test.js
@@ -173,7 +173,7 @@ git commit -m "feat(jobs): add distributed lock library using JobLocks entity"
 - Create: `srv/lib/ngds-client.js`
 - Test: `test/lib/ngds-client.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```js
 // test/lib/ngds-client.test.js
@@ -218,12 +218,12 @@ describe('ngds-client', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run test/lib/ngds-client.test.js`
 Expected: FAIL — module not found
 
-- [ ] **Step 3: Implement ngds-client.js**
+- [x] **Step 3: Implement ngds-client.js**
 
 ```js
 // srv/lib/ngds-client.js
@@ -297,12 +297,12 @@ export async function retryFailedMessages() {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run test/lib/ngds-client.test.js`
 Expected: PASS (2 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add srv/lib/ngds-client.js test/lib/ngds-client.test.js
@@ -317,7 +317,7 @@ git commit -m "feat(ngds): add NGDS client with payload builder and retry logic"
 - Create: `srv/lib/adobe-analytics.js`
 - Test: `test/lib/adobe-analytics.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```js
 // test/lib/adobe-analytics.test.js
@@ -356,12 +356,12 @@ describe('adobe-analytics', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run test/lib/adobe-analytics.test.js`
 Expected: FAIL — module not found
 
-- [ ] **Step 3: Implement adobe-analytics.js**
+- [x] **Step 3: Implement adobe-analytics.js**
 
 ```js
 // srv/lib/adobe-analytics.js
@@ -410,12 +410,12 @@ export async function sendAdobeBeacon(beaconData) {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run test/lib/adobe-analytics.test.js`
 Expected: PASS (2 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add srv/lib/adobe-analytics.js test/lib/adobe-analytics.test.js
@@ -430,7 +430,7 @@ git commit -m "feat(analytics): add Adobe Analytics XML beacon client"
 - Create: `srv/lib/account-merge.js`
 - Test: `test/lib/account-merge.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```js
 // test/lib/account-merge.test.js
@@ -487,12 +487,12 @@ describe('account-merge', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run test/lib/account-merge.test.js`
 Expected: FAIL — module not found
 
-- [ ] **Step 3: Implement account-merge.js**
+- [x] **Step 3: Implement account-merge.js**
 
 ```js
 // srv/lib/account-merge.js
@@ -548,12 +548,12 @@ export async function mergeAccounts(primaryUuid, secondaryUuid) {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run test/lib/account-merge.test.js`
 Expected: PASS (2 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add srv/lib/account-merge.js test/lib/account-merge.test.js
@@ -568,7 +568,7 @@ git commit -m "feat(merge): add account merge library for SCI consolidation"
 - Create: `srv/lib/tutorial-sync.js`
 - Test: `test/lib/tutorial-sync.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```js
 // test/lib/tutorial-sync.test.js
@@ -621,12 +621,12 @@ describe('tutorial-sync', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run test/lib/tutorial-sync.test.js`
 Expected: FAIL — module not found
 
-- [ ] **Step 3: Implement tutorial-sync.js**
+- [x] **Step 3: Implement tutorial-sync.js**
 
 ```js
 // srv/lib/tutorial-sync.js
@@ -672,12 +672,12 @@ export async function syncTutorialMetadata(metadataSource) {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run test/lib/tutorial-sync.test.js`
 Expected: PASS (2 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add srv/lib/tutorial-sync.js test/lib/tutorial-sync.test.js
@@ -692,7 +692,7 @@ git commit -m "feat(sync): add tutorial metadata sync from build pipeline"
 - Create: `srv/lib/contributor-notifications.js`
 - Test: `test/lib/contributor-notifications.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```js
 // test/lib/contributor-notifications.test.js
@@ -752,12 +752,12 @@ describe('contributor-notifications', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run test/lib/contributor-notifications.test.js`
 Expected: FAIL — module not found
 
-- [ ] **Step 3: Implement contributor-notifications.js**
+- [x] **Step 3: Implement contributor-notifications.js**
 
 ```js
 // srv/lib/contributor-notifications.js
@@ -802,12 +802,12 @@ export async function markNotificationSent(tutorialId) {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run test/lib/contributor-notifications.test.js`
 Expected: PASS (2 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add srv/lib/contributor-notifications.js test/lib/contributor-notifications.test.js
@@ -823,7 +823,7 @@ git commit -m "feat(notifications): add stale tutorial contributor notification 
 - Create: `srv/consolidation-service.js`
 - Test: `test/consolidation-service.test.js`
 
-- [ ] **Step 1: Write the CDS definition**
+- [x] **Step 1: Write the CDS definition**
 
 ```cds
 // srv/consolidation-service.cds
@@ -842,7 +842,7 @@ service ConsolidationService {
 }
 ```
 
-- [ ] **Step 2: Write the failing integration test**
+- [x] **Step 2: Write the failing integration test**
 
 ```js
 // test/consolidation-service.test.js
@@ -897,12 +897,12 @@ describe('ConsolidationService', () => {
 });
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `npx vitest run test/consolidation-service.test.js`
 Expected: FAIL — service not found / handler not implemented
 
-- [ ] **Step 4: Implement consolidation-service.js**
+- [x] **Step 4: Implement consolidation-service.js**
 
 ```js
 // srv/consolidation-service.js
@@ -945,12 +945,12 @@ export default class ConsolidationService extends cds.ApplicationService {
 }
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `npx vitest run test/consolidation-service.test.js`
 Expected: PASS (3 tests)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add srv/consolidation-service.cds srv/consolidation-service.js test/consolidation-service.test.js
@@ -965,7 +965,7 @@ git commit -m "feat(consolidation): add ConsolidationService for SCI account mer
 - Modify: `srv/admin-service.js` (replace stubs with real implementations)
 - Test: `test/admin-service-integrations.test.js`
 
-- [ ] **Step 1: Write the failing integration test**
+- [x] **Step 1: Write the failing integration test**
 
 ```js
 // test/admin-service-integrations.test.js
@@ -1043,12 +1043,12 @@ describe('AdminService integrations', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run test/admin-service-integrations.test.js`
 Expected: FAIL — stubs still return 501
 
-- [ ] **Step 3: Update admin-service.js to wire real implementations**
+- [x] **Step 3: Update admin-service.js to wire real implementations**
 
 Replace the three stub handlers in `srv/admin-service.js` (lines 230-240) with:
 
@@ -1107,17 +1107,17 @@ Replace the three stub handlers in `srv/admin-service.js` (lines 230-240) with:
 Also add the necessary import at the top of `admin-service.js`:
 - No new top-level imports needed (using dynamic imports within handlers for lazy loading)
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run test/admin-service-integrations.test.js`
 Expected: PASS (3 tests)
 
-- [ ] **Step 5: Run all existing admin tests to verify no regressions**
+- [x] **Step 5: Run all existing admin tests to verify no regressions**
 
 Run: `npx vitest run test/admin-service.test.js`
 Expected: PASS (all 13 existing tests pass — stubs are replaced)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add srv/admin-service.js test/admin-service-integrations.test.js
@@ -1137,13 +1137,13 @@ git commit -m "feat(admin): wire sendToNgds, syncTutorialMetadata, sendContribut
 - Modify: `package.json` (add `node-cron` dependency)
 - Create: `srv/server.js` (bootstrap hook to register scheduler)
 
-- [ ] **Step 1: Install node-cron**
+- [x] **Step 1: Install node-cron**
 
 ```bash
 npm install node-cron
 ```
 
-- [ ] **Step 2: Create srv/jobs/cleanup.js**
+- [x] **Step 2: Create srv/jobs/cleanup.js**
 
 ```js
 // srv/jobs/cleanup.js
@@ -1172,7 +1172,7 @@ export async function cleanupUnusedTags() {
 }
 ```
 
-- [ ] **Step 3: Create srv/jobs/analytics.js**
+- [x] **Step 3: Create srv/jobs/analytics.js**
 
 ```js
 // srv/jobs/analytics.js
@@ -1204,7 +1204,7 @@ export async function recordActiveLearners() {
 }
 ```
 
-- [ ] **Step 4: Create srv/jobs/ngds-retry.js**
+- [x] **Step 4: Create srv/jobs/ngds-retry.js**
 
 ```js
 // srv/jobs/ngds-retry.js
@@ -1215,7 +1215,7 @@ export async function retryNgds() {
 }
 ```
 
-- [ ] **Step 5: Create srv/jobs/account-merge-job.js**
+- [x] **Step 5: Create srv/jobs/account-merge-job.js**
 
 ```js
 // srv/jobs/account-merge-job.js
@@ -1250,7 +1250,7 @@ export async function processAccountMerges() {
 }
 ```
 
-- [ ] **Step 6: Create srv/jobs/scheduler.js**
+- [x] **Step 6: Create srv/jobs/scheduler.js**
 
 ```js
 // srv/jobs/scheduler.js
@@ -1335,7 +1335,7 @@ export function registerJobs() {
 }
 ```
 
-- [ ] **Step 7: Create srv/server.js to bootstrap scheduler**
+- [x] **Step 7: Create srv/server.js to bootstrap scheduler**
 
 ```js
 // srv/server.js
@@ -1349,12 +1349,12 @@ cds.on('served', () => {
 });
 ```
 
-- [ ] **Step 8: Run all tests to verify nothing is broken**
+- [x] **Step 8: Run all tests to verify nothing is broken**
 
 Run: `npx vitest run`
 Expected: All tests pass. The scheduler is not activated during tests because `NODE_ENV=test`.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add srv/jobs/scheduler.js srv/jobs/cleanup.js srv/jobs/analytics.js srv/jobs/ngds-retry.js srv/jobs/account-merge-job.js srv/server.js package.json package-lock.json
@@ -1369,7 +1369,7 @@ git commit -m "feat(jobs): add scheduled jobs with distributed locks (cron + Job
 - Modify: `package.json` (add ngds destination binding under `cds.requires`)
 - Modify: `.cdsrc.json` (add mock ngds for local dev)
 
-- [ ] **Step 1: Add NGDS destination to cds requires in package.json**
+- [x] **Step 1: Add NGDS destination to cds requires in package.json**
 
 Add to `"cds"."requires"` in `package.json`:
 
@@ -1393,7 +1393,7 @@ Add to `"cds"."requires"` in `package.json`:
 }
 ```
 
-- [ ] **Step 2: Add mock NGDS service for local dev in .cdsrc.json**
+- [x] **Step 2: Add mock NGDS service for local dev in .cdsrc.json**
 
 Under `"requires"`, add a mocked NGDS service configuration so local tests don't try to hit a real destination:
 
@@ -1406,12 +1406,12 @@ Under `"requires"`, add a mocked NGDS service configuration so local tests don't
 }
 ```
 
-- [ ] **Step 3: Run full test suite to verify configuration doesn't break existing tests**
+- [x] **Step 3: Run full test suite to verify configuration doesn't break existing tests**
 
 Run: `npx vitest run`
 Expected: All tests pass
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add package.json .cdsrc.json
@@ -1427,7 +1427,7 @@ git commit -m "feat(config): add NGDS destination binding configuration"
 
 This test exercises the complete flow: developer completes a step → NGDS payload is queued → admin can retry → merge works.
 
-- [ ] **Step 1: Write the full workflow integration test**
+- [x] **Step 1: Write the full workflow integration test**
 
 ```js
 // test/integration/full-workflow.test.js
@@ -1509,17 +1509,17 @@ describe('Full integration workflow', () => {
 });
 ```
 
-- [ ] **Step 2: Run integration test**
+- [x] **Step 2: Run integration test**
 
 Run: `npx vitest run test/integration/full-workflow.test.js`
 Expected: PASS (2 tests)
 
-- [ ] **Step 3: Run full test suite**
+- [x] **Step 3: Run full test suite**
 
 Run: `npx vitest run`
 Expected: All tests pass
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test/integration/full-workflow.test.js
@@ -1530,22 +1530,22 @@ git commit -m "test: add full integration workflow test (step completion → NGD
 
 ### Task 12: Verify Build and Final Cleanup
 
-- [ ] **Step 1: Run CDS build to verify everything compiles**
+- [x] **Step 1: Run CDS build to verify everything compiles**
 
 Run: `npx cds build --production`
 Expected: Build succeeds with no errors
 
-- [ ] **Step 2: Run full test suite one final time**
+- [x] **Step 2: Run full test suite one final time**
 
 Run: `npx vitest run`
 Expected: All tests pass (should be ~40+ tests across all files)
 
-- [ ] **Step 3: Verify CDS services are listed correctly**
+- [x] **Step 3: Verify CDS services are listed correctly**
 
 Run: `npx cds compile srv --service all --to json | node -e "const j=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); console.log(Object.keys(j.definitions).filter(k=>j.definitions[k].kind==='service'))"`
 Expected: Lists DeveloperService, AdminService, DisplayService, ConsolidationService
 
-- [ ] **Step 4: Final commit (if any cleanup needed)**
+- [x] **Step 4: Final commit (if any cleanup needed)**
 
 ```bash
 git add -A

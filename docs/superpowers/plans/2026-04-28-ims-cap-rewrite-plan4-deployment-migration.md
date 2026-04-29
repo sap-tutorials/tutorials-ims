@@ -1,6 +1,6 @@
 # IMS CAP Rewrite — Plan 4: Deployment + Migration
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Complete deployment configuration (AppRouter routes, XSUAA scopes), implement the accomplishment evaluator, create data migration tooling, and build comparison testing infrastructure for safe cutover from the Java IMS.
 
@@ -51,7 +51,7 @@ test/
 **Files:**
 - Modify: `approuter/xs-app.json`
 
-- [ ] **Step 1: Add routes for AdminService, DisplayService, and ConsolidationService**
+- [x] **Step 1: Add routes for AdminService, DisplayService, and ConsolidationService**
 
 The AppRouter needs explicit routes for each CAP service path so that requests are forwarded with XSUAA tokens. Routes are evaluated top-to-bottom; more specific routes must come before the catch-all static route.
 
@@ -102,13 +102,13 @@ The AppRouter needs explicit routes for each CAP service path so that requests a
 }
 ```
 
-- [ ] **Step 2: Verify route ordering is correct**
+- [x] **Step 2: Verify route ordering is correct**
 
 Run: `cat approuter/xs-app.json | python -m json.tool`
 
 Expected: Valid JSON with `/admin`, `/display`, `/api/v1` before the generic `/api` route, and the static catch-all last.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add approuter/xs-app.json
@@ -122,7 +122,7 @@ git commit -m "feat: add AppRouter routes for admin, display, and consolidation 
 **Files:**
 - Modify: `xs-security.json`
 
-- [ ] **Step 1: Add ConsolidationScope and role template**
+- [x] **Step 1: Add ConsolidationScope and role template**
 
 The ConsolidationService at `/api/v1` requires `ConsolidationScope`. This maps to the SCI (SAP Cloud Integration) technical user that triggers account merges.
 
@@ -183,13 +183,13 @@ The ConsolidationService at `/api/v1` requires `ConsolidationScope`. This maps t
 }
 ```
 
-- [ ] **Step 2: Verify JSON validity**
+- [x] **Step 2: Verify JSON validity**
 
 Run: `cat xs-security.json | python -m json.tool`
 
 Expected: Valid JSON, ConsolidationScope appears in both scopes and role-templates.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add xs-security.json
@@ -203,7 +203,7 @@ git commit -m "feat: add ConsolidationScope to XSUAA configuration"
 **Files:**
 - Create: `test/lib/accomplishment-evaluator.test.js`
 
-- [ ] **Step 1: Write failing tests for the accomplishment evaluator**
+- [x] **Step 1: Write failing tests for the accomplishment evaluator**
 
 The evaluator takes a user and evaluates all SQL rules from the Accomplishments entity. A rule returns a score 0-100; a score of 100 means the accomplishment is earned. Only SELECT statements are allowed (security validation).
 
@@ -299,13 +299,13 @@ describe('accomplishment-evaluator', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run test/lib/accomplishment-evaluator.test.js`
 
 Expected: FAIL — module `../../srv/lib/accomplishment-evaluator.js` not found.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add test/lib/accomplishment-evaluator.test.js
@@ -319,7 +319,7 @@ git commit -m "test: add failing tests for accomplishment evaluator"
 **Files:**
 - Create: `srv/lib/accomplishment-evaluator.js`
 
-- [ ] **Step 1: Implement the accomplishment evaluator**
+- [x] **Step 1: Implement the accomplishment evaluator**
 
 ```javascript
 import cds from '@sap/cds';
@@ -358,13 +358,13 @@ export async function evaluateRules(accomplishments, userId, db) {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they pass**
+- [x] **Step 2: Run tests to verify they pass**
 
 Run: `npx vitest run test/lib/accomplishment-evaluator.test.js`
 
 Expected: All tests PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add srv/lib/accomplishment-evaluator.js
@@ -378,7 +378,7 @@ git commit -m "feat: implement accomplishment evaluator with SQL rule validation
 **Files:**
 - Modify: `srv/developer-service.js`
 
-- [ ] **Step 1: Write failing integration test**
+- [x] **Step 1: Write failing integration test**
 
 Add a new `describe` block to `test/developer-service.test.js` (which uses `const project = cds.test('serve', '--project', '.', '--in-memory')` at the top):
 
@@ -425,13 +425,13 @@ describe('accomplishment evaluation', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run test/developer-service.test.js -t "accomplishment evaluation"`
 
 Expected: FAIL — accomplishment not awarded (no hook registered yet).
 
-- [ ] **Step 3: Add accomplishment evaluation hook to DeveloperService**
+- [x] **Step 3: Add accomplishment evaluation hook to DeveloperService**
 
 Add at the end of the `init()` method in `srv/developer-service.js`, before `await super.init()`:
 
@@ -468,19 +468,19 @@ Add at the end of the `init()` method in `srv/developer-service.js`, before `awa
 
 Note: `result.user_ID` is available because the `createTaskRecord` handler returns a full `TaskRecords` row via `SELECT.one.from(dbTaskRecords)`, which includes the `user` association's foreign key. The `db` variable is from the enclosing `init()` scope.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `npx vitest run test/developer-service.test.js -t "accomplishment evaluation"`
 
 Expected: All tests PASS.
 
-- [ ] **Step 5: Run full test suite to check for regressions**
+- [x] **Step 5: Run full test suite to check for regressions**
 
 Run: `npx vitest run`
 
 Expected: All tests PASS (125+ existing + new accomplishment tests).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add srv/developer-service.js test/developer-service.test.js
@@ -494,7 +494,7 @@ git commit -m "feat: wire accomplishment evaluator into DeveloperService after t
 **Files:**
 - Create: `scripts/migrate-reference-data.js`
 
-- [ ] **Step 1: Write the reference data migration script**
+- [x] **Step 1: Write the reference data migration script**
 
 This script fetches reference data (tutorials, missions, groups, events, accomplishments, tags) from the Java IMS REST API and writes it as JSON ready for CDS import. It can run in export-only mode (fetch and save JSON) or import mode (load JSON into the CAP system).
 
@@ -604,14 +604,14 @@ if (mode === 'export') {
 }
 ```
 
-- [ ] **Step 2: Add npm script**
+- [x] **Step 2: Add npm script**
 
 Add to `package.json` scripts:
 ```json
 "migrate:reference": "node scripts/migrate-reference-data.js"
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add scripts/migrate-reference-data.js package.json
@@ -625,7 +625,7 @@ git commit -m "feat: add reference data migration script (export from Java IMS, 
 **Files:**
 - Create: `scripts/migrate-user-progress.js`
 
-- [ ] **Step 1: Write the user progress migration script**
+- [x] **Step 1: Write the user progress migration script**
 
 This script handles the high-volume data: user records, task records, accomplishment records. It pages through the Java IMS API and writes batched import files. Supports resume from the last exported page.
 
@@ -761,14 +761,14 @@ if (mode === 'export') {
 }
 ```
 
-- [ ] **Step 2: Add npm script**
+- [x] **Step 2: Add npm script**
 
 Add to `package.json` scripts:
 ```json
 "migrate:users": "node scripts/migrate-user-progress.js"
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add scripts/migrate-user-progress.js package.json
@@ -782,7 +782,7 @@ git commit -m "feat: add user progress migration script with paging and resume s
 **Files:**
 - Create: `scripts/compare-systems.js`
 
-- [ ] **Step 1: Write the comparison test harness**
+- [x] **Step 1: Write the comparison test harness**
 
 Calls the same endpoints on both Java IMS and CAP, diffs the responses. Designed for parallel operation validation during cutover.
 
@@ -916,7 +916,7 @@ runComparisons().catch(err => {
 });
 ```
 
-- [ ] **Step 2: Add npm script and .gitignore entry**
+- [x] **Step 2: Add npm script and .gitignore entry**
 
 Add to `package.json` scripts:
 ```json
@@ -925,7 +925,7 @@ Add to `package.json` scripts:
 
 Add `.comparison-results/` and `.migration-data/` to `.gitignore`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add scripts/compare-systems.js package.json .gitignore
@@ -939,7 +939,7 @@ git commit -m "feat: add system comparison harness for parallel operation valida
 **Files:**
 - Create: `test/deployment-smoke.test.js`
 
-- [ ] **Step 1: Write deployment smoke tests**
+- [x] **Step 1: Write deployment smoke tests**
 
 These tests verify that all service endpoints are reachable through the correct paths and require appropriate authentication. They run against the local `cds.test()` server.
 
@@ -1024,7 +1024,7 @@ describe('deployment smoke tests', () => {
 });
 ```
 
-- [ ] **Step 2: Add mock users for ConsolidationService scope**
+- [x] **Step 2: Add mock users for ConsolidationService scope**
 
 Check `.cdsrc.json` for mock users. Add a `consolidation` user with `ConsolidationScope` role if missing:
 
@@ -1033,13 +1033,13 @@ In `.cdsrc.json` under `[development].auth.users`, add:
 "consolidation": { "password": "consolidation", "roles": ["ConsolidationScope", "authenticated-user"] }
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `npx vitest run test/deployment-smoke.test.js`
 
 Expected: All smoke tests PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test/deployment-smoke.test.js .cdsrc.json
@@ -1053,7 +1053,7 @@ git commit -m "test: add deployment smoke tests verifying all service paths and 
 **Files:**
 - Modify: `CLAUDE.md` (project instructions)
 
-- [ ] **Step 1: Update CLAUDE.md with new npm scripts and migration info**
+- [x] **Step 1: Update CLAUDE.md with new npm scripts and migration info**
 
 Add to the Commands section:
 ```bash
@@ -1075,7 +1075,7 @@ Migration scripts in `scripts/` support parallel operation during cutover:
 Set `IMS_BASE_URL`, `CAP_BASE_URL`, and `IMS_AUTH_TOKEN` env vars. Export files go to `.migration-data/` (gitignored).
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add CLAUDE.md

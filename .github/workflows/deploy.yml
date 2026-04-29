@@ -1,8 +1,6 @@
 name: Build & Deploy
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       environment:
@@ -23,6 +21,8 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -30,12 +30,14 @@ jobs:
 
       - name: Determine environment
         id: env
+        run: echo "target=${{ inputs.environment }}" >> "$GITHUB_OUTPUT"
+
+      - name: Set version
+        id: version
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            echo "target=dev" >> "$GITHUB_OUTPUT"
-          else
-            echo "target=${{ inputs.environment }}" >> "$GITHUB_OUTPUT"
-          fi
+          VERSION="1.0.${{ github.run_number }}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          sed -i "s/^version: .*/version: $VERSION/" mta.yaml
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -85,7 +87,7 @@ jobs:
             -s "${{ steps.cf.outputs.space }}"
 
       - name: Deploy MTA
-        run: cf deploy mta_archives/tutorials-poc_1.0.0.mtar -e deploy/${{ steps.env.outputs.target }}.mtaext -f
+        run: cf deploy mta_archives/tutorials-poc_${{ steps.version.outputs.version }}.mtar -e deploy/${{ steps.env.outputs.target }}.mtaext -f
 
       - name: Configure environment variables
         run: |
@@ -101,11 +103,23 @@ jobs:
 
           cf restart "$APP_NAME"
 
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v${{ steps.version.outputs.version }}-${{ steps.env.outputs.target }}"
+          MTAR_FILE="mta_archives/tutorials-poc_${{ steps.version.outputs.version }}.mtar"
+
+          gh release create "$TAG" "$MTAR_FILE" \
+            --title "v${{ steps.version.outputs.version }} (${{ steps.env.outputs.target }})" \
+            --notes "Deployed to **${{ steps.env.outputs.target }}** from commit ${{ github.sha }}" \
+            --target "${{ github.sha }}"
+
       - name: Summary
         run: |
           echo "### Build & Deploy Complete" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Version:** ${{ steps.version.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Environment:** ${{ steps.env.outputs.target }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Space:** ${{ steps.cf.outputs.space }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Trigger:** ${{ github.event_name }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **REBUILD_API_KEY:** injected from secrets" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Release:** v${{ steps.version.outputs.version }}-${{ steps.env.outputs.target }}" >> "$GITHUB_STEP_SUMMARY"

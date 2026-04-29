@@ -1,6 +1,6 @@
 # IMS CAP Rewrite — Plan 1: Foundation + DeveloperService
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Stand up a working CAP Node.js service with the complete IMS data model and DeveloperService (frontend-facing progress tracking API), testable locally with `cds watch` and deployable to BTP.
 
@@ -49,7 +49,7 @@ tutorials-poc/
 - Create: `.cdsrc.json`
 - Create: `.gitignore` additions
 
-- [ ] **Step 1: Install CAP dependencies**
+- [x] **Step 1: Install CAP dependencies**
 
 Run:
 ```bash
@@ -57,7 +57,7 @@ npm add @sap/cds @cap-js/sqlite
 npm add -D @sap/cds-dk
 ```
 
-- [ ] **Step 2: Add CDS configuration to package.json**
+- [x] **Step 2: Add CDS configuration to package.json**
 
 Add to `package.json` (after existing `dependencies`):
 ```json
@@ -76,7 +76,7 @@ Add to `package.json` (after existing `dependencies`):
 
 Note: Auth configuration is added later in Task 10 via `.cdsrc.json` to keep a single source of truth for mocked users.
 
-- [ ] **Step 3: Create .cdsrc.json**
+- [x] **Step 3: Create .cdsrc.json**
 
 Create `.cdsrc.json`:
 ```json
@@ -97,7 +97,7 @@ Create `.cdsrc.json`:
 }
 ```
 
-- [ ] **Step 4: Add CAP entries to .gitignore**
+- [x] **Step 4: Add CAP entries to .gitignore**
 
 Append to `.gitignore`:
 ```
@@ -109,7 +109,7 @@ db.sqlite
 default-env.json
 ```
 
-- [ ] **Step 5: Add CAP scripts to package.json**
+- [x] **Step 5: Add CAP scripts to package.json**
 
 Add scripts:
 ```json
@@ -122,13 +122,13 @@ Add scripts:
 }
 ```
 
-- [ ] **Step 6: Verify CAP starts with empty model**
+- [x] **Step 6: Verify CAP starts with empty model**
 
 Run: `npx cds watch --open false`
 
 Expected: Server starts on port 4004, no services listed (empty model). Ctrl+C to stop.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add package.json package-lock.json .cdsrc.json .gitignore
@@ -142,7 +142,7 @@ git commit -m "feat: initialize CAP Node.js project structure"
 **Files:**
 - Create: `db/schema.cds`
 
-- [ ] **Step 1: Create db/schema.cds with namespace, aspects, and task entities**
+- [x] **Step 1: Create db/schema.cds with namespace, aspects, and task entities**
 
 Create `db/schema.cds`:
 ```cds
@@ -391,13 +391,13 @@ entity FeaturedTasks : cuid, LegacyKeyed {
 }
 ```
 
-- [ ] **Step 2: Verify model compiles**
+- [x] **Step 2: Verify model compiles**
 
 Run: `npx cds compile db/schema.cds --to sql`
 
 Expected: SQL DDL output for all entities, no errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add db/schema.cds
@@ -411,7 +411,7 @@ git commit -m "feat: add complete CDS data model for IMS entities"
 **Files:**
 - Create: `db/views.cds`
 
-- [ ] **Step 1: Create db/views.cds**
+- [x] **Step 1: Create db/views.cds**
 
 Create `db/views.cds`:
 ```cds
@@ -459,13 +459,13 @@ view Tasks as
   };
 ```
 
-- [ ] **Step 2: Verify combined model compiles**
+- [x] **Step 2: Verify combined model compiles**
 
 Run: `npx cds compile db/ --to sql`
 
 Expected: SQL output includes CREATE VIEW statement for Tasks, no errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add db/views.cds
@@ -485,7 +485,7 @@ git commit -m "feat: add Tasks union view for legacy compatibility"
 
 These sequences are only used when deployed to HANA. SQLite uses in-memory counters (see `srv/lib/legacy-id.js`).
 
-- [ ] **Step 1: Create db/src/ directory and sequence files**
+- [x] **Step 1: Create db/src/ directory and sequence files**
 
 Create `db/src/COM_SAP_DEVELOPERS_IMS_USERS_SEQ.hdbsequence`:
 ```sql
@@ -529,13 +529,13 @@ SEQUENCE "COM_SAP_DEVELOPERS_IMS_GENERIC_SEQ"
 
 Note: The GENERIC sequence is used for all other entity types (Prizes, Tags, etc.) where a dedicated sequence isn't needed. All start at 10M+ to avoid collision with migrated legacy IDs.
 
-- [ ] **Step 2: Verify cds build includes the sequences**
+- [x] **Step 2: Verify cds build includes the sequences**
 
 Run: `npx cds build --production && ls gen/db/src/`
 
 Expected: The `.hdbsequence` files appear in `gen/db/src/` alongside the generated `.hdbtable` files.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add db/src/
@@ -549,7 +549,7 @@ git commit -m "feat: add HANA sequences for legacyId generation"
 **Files:**
 - Create: `srv/developer-service.cds`
 
-- [ ] **Step 1: Create srv/developer-service.cds**
+- [x] **Step 1: Create srv/developer-service.cds**
 
 Create `srv/developer-service.cds`:
 ```cds
@@ -598,13 +598,13 @@ service DeveloperService {
 }
 ```
 
-- [ ] **Step 2: Verify service compiles and CAP starts**
+- [x] **Step 2: Verify service compiles and CAP starts**
 
 Run: `npx cds watch --open false`
 
 Expected: Server starts, logs show `[cds] - serving DeveloperService { path: '/api' }`. Ctrl+C to stop.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add srv/developer-service.cds
@@ -619,7 +619,7 @@ git commit -m "feat: add DeveloperService CDS definition"
 - Create: `srv/lib/status-calculator.js`
 - Create: `test/lib/status-calculator.test.js`
 
-- [ ] **Step 1: Write the status calculator test**
+- [x] **Step 1: Write the status calculator test**
 
 Create `test/lib/status-calculator.test.js`:
 ```js
@@ -668,13 +668,13 @@ describe('status-calculator', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run test/lib/status-calculator.test.js`
 
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement status-calculator.js**
+- [x] **Step 3: Implement status-calculator.js**
 
 Create `srv/lib/status-calculator.js`:
 ```js
@@ -693,13 +693,13 @@ export function calculateMissionProgress(completedTutorials, totalTutorials) {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run test/lib/status-calculator.test.js`
 
 Expected: All 6 tests PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add srv/lib/status-calculator.js test/lib/status-calculator.test.js
@@ -713,7 +713,7 @@ git commit -m "feat: add task status calculator with tests"
 **Files:**
 - Create: `srv/lib/legacy-id.js`
 
-- [ ] **Step 1: Create legacy-id helper**
+- [x] **Step 1: Create legacy-id helper**
 
 Create `srv/lib/legacy-id.js`:
 ```js
@@ -744,7 +744,7 @@ export function resetCounters() {
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add srv/lib/legacy-id.js
@@ -758,7 +758,7 @@ git commit -m "feat: add legacyId sequence helper for SQLite/HANA"
 **Files:**
 - Create: `srv/developer-service.js`
 
-- [ ] **Step 1: Create developer-service.js handler**
+- [x] **Step 1: Create developer-service.js handler**
 
 Create `srv/developer-service.js`:
 ```js
@@ -1006,13 +1006,13 @@ export default class DeveloperService extends cds.ApplicationService {
 }
 ```
 
-- [ ] **Step 2: Verify CAP starts with service handler**
+- [x] **Step 2: Verify CAP starts with service handler**
 
 Run: `npx cds watch --open false`
 
 Expected: Server starts, `DeveloperService` listed at `/api`. No errors. Ctrl+C.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add srv/developer-service.js
@@ -1026,7 +1026,7 @@ git commit -m "feat: implement DeveloperService custom handlers"
 **Files:**
 - Create: `test/developer-service.test.js`
 
-- [ ] **Step 1: Write integration tests using cds.test()**
+- [x] **Step 1: Write integration tests using cds.test()**
 
 Create `test/developer-service.test.js`:
 ```js
@@ -1121,7 +1121,7 @@ describe('DeveloperService', () => {
 });
 ```
 
-- [ ] **Step 2: Create vitest.config.ts for CAP tests**
+- [x] **Step 2: Create vitest.config.ts for CAP tests**
 
 Create `vitest.config.ts`:
 ```ts
@@ -1140,7 +1140,7 @@ export default defineConfig({
 
 Note: `globals: true` is required because `cds.test()` internally uses `beforeAll`/`afterAll` from the global scope. The 30s timeout accounts for CAP server startup time.
 
-- [ ] **Step 3: Add test:cap script to package.json**
+- [x] **Step 3: Add test:cap script to package.json**
 
 Add to `package.json` scripts:
 ```json
@@ -1151,13 +1151,13 @@ Add to `package.json` scripts:
 }
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `npx vitest run test/developer-service.test.js`
 
 Expected: Tests may need iteration to align with actual CAP behavior (mocked auth user, exact API shape). Fix any failures by adjusting test expectations or handler logic. The goal is all tests GREEN.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add test/ package.json
@@ -1171,7 +1171,7 @@ git commit -m "test: add DeveloperService integration tests"
 **Files:**
 - Create: `.cdsrc.json` (update)
 
-- [ ] **Step 1: Add mocked users for local testing**
+- [x] **Step 1: Add mocked users for local testing**
 
 Update `.cdsrc.json` to include mocked users and auth profile configuration:
 ```json
@@ -1218,7 +1218,7 @@ Update `.cdsrc.json` to include mocked users and auth profile configuration:
 }
 ```
 
-- [ ] **Step 2: Verify mocked auth works**
+- [x] **Step 2: Verify mocked auth works**
 
 Run: `npx cds watch --open false`
 
@@ -1229,7 +1229,7 @@ curl -u developer:developer http://localhost:4004/api/Tutorials
 
 Expected: 200 OK with empty `{ value: [] }` (no tutorials seeded yet).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add .cdsrc.json
@@ -1243,7 +1243,7 @@ git commit -m "feat: configure mocked auth users for local development"
 **Files:**
 - Modify: `mta.yaml`
 
-- [ ] **Step 1: Update mta.yaml to add CAP srv + db-deployer modules**
+- [x] **Step 1: Update mta.yaml to add CAP srv + db-deployer modules**
 
 Replace the entire `mta.yaml` with:
 ```yaml
@@ -1332,7 +1332,7 @@ resources:
       service-plan: lite
 ```
 
-- [ ] **Step 2: Update approuter xs-app.json to route /api to CAP srv**
+- [x] **Step 2: Update approuter xs-app.json to route /api to CAP srv**
 
 Update `approuter/xs-app.json`:
 ```json
@@ -1363,13 +1363,13 @@ Update `approuter/xs-app.json`:
 
 Note: The destination changed from `tutorials-api` (external IMS) to `srv-api` (internal CAP service).
 
-- [ ] **Step 3: Verify cds build produces gen/ output**
+- [x] **Step 3: Verify cds build produces gen/ output**
 
 Run: `npx cds build --production`
 
 Expected: `gen/srv/` and `gen/db/` directories created with compiled artifacts.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add mta.yaml approuter/xs-app.json
@@ -1383,17 +1383,17 @@ git commit -m "feat: update MTA for CAP service + HDI deployer deployment"
 **Files:**
 - Modify: `package.json`
 
-- [ ] **Step 1: Install HANA adapter**
+- [x] **Step 1: Install HANA adapter**
 
 Run: `npm add @cap-js/hana`
 
-- [ ] **Step 2: Verify cds build still works**
+- [x] **Step 2: Verify cds build still works**
 
 Run: `npx cds build --production`
 
 Expected: `gen/db/` now includes `.hdbtable` and `.hdbview` files for all entities.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add package.json package-lock.json
@@ -1406,7 +1406,7 @@ git commit -m "feat: add @cap-js/hana for production HANA deployment"
 
 **Files:** None (verification only)
 
-- [ ] **Step 1: Clean start**
+- [x] **Step 1: Clean start**
 
 Run:
 ```bash
@@ -1416,7 +1416,7 @@ npx cds watch --open false
 
 Expected: Server starts, creates fresh SQLite DB, DeveloperService at `/api`.
 
-- [ ] **Step 2: Test with curl**
+- [x] **Step 2: Test with curl**
 
 In another terminal:
 ```bash
@@ -1429,19 +1429,19 @@ curl -s -u developer:developer "http://localhost:4004/api/getProgress(slug='test
 
 Expected: Empty tutorial list (200 OK), 404 for nonexistent slug.
 
-- [ ] **Step 3: Run full test suite**
+- [x] **Step 3: Run full test suite**
 
 Run: `npx vitest run`
 
 Expected: All tests pass (both the existing project tests and new CAP tests).
 
-- [ ] **Step 4: Verify production build**
+- [x] **Step 4: Verify production build**
 
 Run: `npx cds build --production && ls gen/srv/ gen/db/`
 
 Expected: Both directories exist with compiled output.
 
-- [ ] **Step 5: Final commit (if any fixes needed)**
+- [x] **Step 5: Final commit (if any fixes needed)**
 
 ```bash
 git add -A
