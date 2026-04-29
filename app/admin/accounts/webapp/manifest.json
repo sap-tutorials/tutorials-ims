@@ -1,0 +1,75 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.accounts",
+    "type": "application",
+    "title": "Accounts",
+    "crossNavigation": {
+      "inbounds": {
+        "Accounts-manage": {
+          "semanticObject": "Accounts",
+          "action": "manage",
+          "title": "Accounts"
+        }
+      }
+    },
+    "dataSources": {
+      "adminService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": {
+        "sap.m": {},
+        "sap.fe.templates": {}
+      }
+    },
+    "models": {
+      "": {
+        "dataSource": "adminService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      }
+    },
+    "routing": {
+      "routes": [
+        { "pattern": ":?query:", "name": "PrimaryAccountsList", "target": "PrimaryAccountsList" },
+        { "pattern": "SecondaryAccounts:?query:", "name": "SecondaryAccountsList", "target": "SecondaryAccountsList" }
+      ],
+      "targets": {
+        "PrimaryAccountsList": {
+          "type": "Component",
+          "id": "PrimaryAccountsList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/PrimaryAccounts",
+              "initialLoad": "Enabled"
+            }
+          }
+        },
+        "SecondaryAccountsList": {
+          "type": "Component",
+          "id": "SecondaryAccountsList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/SecondaryAccounts",
+              "initialLoad": "Enabled"
+            }
+          }
+        }
+      }
+    }
+  }
+}

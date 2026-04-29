@@ -199,3 +199,133 @@ annotate AdminService.Tags with @UI: {
     { Value: name, Label: 'Name' }
   ]
 };
+
+// --- FeaturedTasks (inline editing of featuredOrder) ---
+annotate AdminService.FeaturedTasks with @UI: {
+  HeaderInfo: {
+    TypeName: 'Featured Task', TypeNamePlural: 'Featured Tasks',
+    Title: { Value: taskLegacyId }
+  },
+  SelectionFields: [ taskType ],
+  LineItem: [
+    { Value: taskLegacyId, Label: 'Task ID' },
+    { Value: taskType, Label: 'Type' },
+    { Value: featuredOrder, Label: 'Order', ![@UI.Importance]: #High }
+  ]
+};
+
+// --- ImsConfig (key/value CRUD) ---
+// Note: the schema field is `![key]` (escaped CDS keyword)
+annotate AdminService.ImsConfig with @UI: {
+  HeaderInfo: {
+    TypeName: 'Configuration', TypeNamePlural: 'Configurations',
+    Title: { Value: ![key] }
+  },
+  SelectionFields: [ ![key] ],
+  LineItem: [
+    { Value: ![key], Label: 'Key' },
+    { Value: value, Label: 'Value' }
+  ],
+  Facets: [{
+    $Type: 'UI.ReferenceFacet',
+    Target: '@UI.FieldGroup#General',
+    Label: 'Configuration'
+  }],
+  FieldGroup#General: { Data: [
+    { Value: ![key] },
+    { Value: value }
+  ]}
+};
+
+// --- StepFailures (read-only, filterable) ---
+annotate AdminService.StepFailures with @(
+  UI: {
+    HeaderInfo: {
+      TypeName: 'Step Failure', TypeNamePlural: 'Step Failures',
+      Title: { Value: stepNumber }
+    },
+    SelectionFields: [ failureDate ],
+    LineItem: [
+      { Value: stepNumber, Label: 'Step #' },
+      { Value: errorMessage, Label: 'Error' },
+      { Value: failureDate, Label: 'Date' }
+    ]
+  },
+  Capabilities.DeleteRestrictions.Deletable: false,
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable: false
+);
+
+// --- NGDSFailedMessages (read-only, retry action per row) ---
+annotate AdminService.NGDSFailedMessages with @(
+  UI: {
+    HeaderInfo: {
+      TypeName: 'NGDS Failed Message', TypeNamePlural: 'NGDS Failed Messages',
+      Title: { Value: ID }
+    },
+    SelectionFields: [ status ],
+    LineItem: [
+      { Value: ID, Label: 'ID' },
+      { Value: status, Label: 'Status' },
+      { Value: errorMessage, Label: 'Error' },
+      { Value: createdAt, Label: 'Failed At' }
+    ]
+  },
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable: false
+);
+
+// --- FailedEmails (read-only, deletable) ---
+annotate AdminService.FailedEmails with @(
+  UI: {
+    HeaderInfo: {
+      TypeName: 'Failed Email', TypeNamePlural: 'Failed Emails',
+      Title: { Value: subject }
+    },
+    SelectionFields: [ createdAt ],
+    LineItem: [
+      { Value: to, Label: 'Recipient' },
+      { Value: subject, Label: 'Subject' },
+      { Value: createdAt, Label: 'Failed At' }
+    ]
+  },
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable: false
+);
+
+// --- PrimaryAccounts / SecondaryAccounts (read-only) ---
+annotate AdminService.PrimaryAccounts with @(
+  UI: {
+    HeaderInfo: {
+      TypeName: 'Primary Account', TypeNamePlural: 'Primary Accounts',
+      Title: { Value: uuid }
+    },
+    SelectionFields: [ uuid, status ],
+    LineItem: [
+      { Value: uuid, Label: 'UUID' },
+      { Value: status, Label: 'Status' }
+    ]
+  },
+  Capabilities.DeleteRestrictions.Deletable: false,
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable: false
+);
+
+annotate AdminService.SecondaryAccounts with @(
+  UI: {
+    HeaderInfo: {
+      TypeName: 'Secondary Account', TypeNamePlural: 'Secondary Accounts',
+      Title: { Value: uuid }
+    },
+    SelectionFields: [ uuid, status ],
+    LineItem: [
+      { Value: uuid, Label: 'UUID' },
+      { Value: primaryAccount_ID, Label: 'Primary Acct' },
+      { Value: status, Label: 'Status' },
+      { Value: mergedAt, Label: 'Merged At' }
+    ]
+  },
+  Capabilities.DeleteRestrictions.Deletable: false,
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable: false
+);

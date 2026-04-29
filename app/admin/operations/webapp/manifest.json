@@ -1,0 +1,126 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.operations",
+    "type": "application",
+    "title": "Operations",
+    "crossNavigation": {
+      "inbounds": {
+        "Operations-featured": {
+          "semanticObject": "Operations",
+          "action": "featured",
+          "title": "Featured Tasks"
+        }
+      }
+    },
+    "dataSources": {
+      "adminService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": {
+        "sap.m": {},
+        "sap.fe.templates": {}
+      }
+    },
+    "models": {
+      "": {
+        "dataSource": "adminService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      }
+    },
+    "routing": {
+      "routes": [
+        { "pattern": ":?query:", "name": "FeaturedTasksList", "target": "FeaturedTasksList" },
+        { "pattern": "ImsConfig:?query:", "name": "ImsConfigList", "target": "ImsConfigList" },
+        { "pattern": "ImsConfig({key}):?query:", "name": "ImsConfigDetail", "target": "ImsConfigDetail" },
+        { "pattern": "StepFailures:?query:", "name": "StepFailuresList", "target": "StepFailuresList" },
+        { "pattern": "NGDSFailedMessages:?query:", "name": "NGDSFailedMessagesList", "target": "NGDSFailedMessagesList" },
+        { "pattern": "FailedEmails:?query:", "name": "FailedEmailsList", "target": "FailedEmailsList" }
+      ],
+      "targets": {
+        "FeaturedTasksList": {
+          "type": "Component",
+          "id": "FeaturedTasksList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/FeaturedTasks",
+              "initialLoad": "Enabled"
+            }
+          }
+        },
+        "ImsConfigList": {
+          "type": "Component",
+          "id": "ImsConfigList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/ImsConfig",
+              "initialLoad": "Enabled",
+              "navigation": {
+                "ImsConfig": { "detail": { "route": "ImsConfigDetail" } }
+              }
+            }
+          }
+        },
+        "ImsConfigDetail": {
+          "type": "Component",
+          "id": "ImsConfigDetail",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/ImsConfig",
+              "editableHeaderContent": false
+            }
+          }
+        },
+        "StepFailuresList": {
+          "type": "Component",
+          "id": "StepFailuresList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/StepFailures",
+              "initialLoad": "Enabled"
+            }
+          }
+        },
+        "NGDSFailedMessagesList": {
+          "type": "Component",
+          "id": "NGDSFailedMessagesList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/NGDSFailedMessages",
+              "initialLoad": "Enabled"
+            }
+          }
+        },
+        "FailedEmailsList": {
+          "type": "Component",
+          "id": "FailedEmailsList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/FailedEmails",
+              "initialLoad": "Enabled"
+            }
+          }
+        }
+      }
+    }
+  }
+}
