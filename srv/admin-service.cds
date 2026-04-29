@@ -1,9 +1,12 @@
 using { com.sap.developers.ims as ims } from '../db/schema';
 using from '../db/views';
+using { sap.changelog.ChangeView } from '@cap-js/change-tracking';
 
 @path: '/admin'
 @requires: 'Admin'
 service AdminService {
+
+  @readonly entity ChangeLog as projection on ChangeView;
 
   // Full CRUD entity projections
   entity Users as projection on ims.Users;

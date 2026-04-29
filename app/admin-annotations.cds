@@ -21,11 +21,10 @@ annotate AdminService.Events with @UI: {
     { Value: startDate, Label: 'Start Date' },
     { Value: endDate, Label: 'End Date' }
   ],
-  Facets: [{
-    $Type: 'UI.ReferenceFacet',
-    Target: '@UI.FieldGroup#General',
-    Label: 'General Information'
-  }],
+  Facets: [
+    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'General Information' },
+    { $Type: 'UI.ReferenceFacet', Target: 'changes/@UI.PresentationVariant', Label: 'Change History', ![@UI.PartOfPreview]: false }
+  ],
   FieldGroup#General: { Data: [
     { Value: name },
     { Value: startDate },
@@ -50,7 +49,8 @@ annotate AdminService.Missions with @UI: {
   ],
   Facets: [
     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'General' },
-    { $Type: 'UI.ReferenceFacet', Target: 'completionPaths/@UI.LineItem', Label: 'Completion Paths' }
+    { $Type: 'UI.ReferenceFacet', Target: 'completionPaths/@UI.LineItem', Label: 'Completion Paths' },
+    { $Type: 'UI.ReferenceFacet', Target: 'changes/@UI.PresentationVariant', Label: 'Change History', ![@UI.PartOfPreview]: false }
   ],
   FieldGroup#General: { Data: [
     { Value: title },
@@ -104,7 +104,8 @@ annotate AdminService.Groups with @UI: {
   ],
   Facets: [
     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'General' },
-    { $Type: 'UI.ReferenceFacet', Target: 'missions/@UI.LineItem', Label: 'Missions' }
+    { $Type: 'UI.ReferenceFacet', Target: 'missions/@UI.LineItem', Label: 'Missions' },
+    { $Type: 'UI.ReferenceFacet', Target: 'changes/@UI.PresentationVariant', Label: 'Change History', ![@UI.PartOfPreview]: false }
   ],
   FieldGroup#General: { Data: [
     { Value: title },
@@ -137,11 +138,10 @@ annotate AdminService.Accomplishments with @UI: {
     { Value: name, Label: 'Name' },
     { Value: description, Label: 'Description' }
   ],
-  Facets: [{
-    $Type: 'UI.ReferenceFacet',
-    Target: '@UI.FieldGroup#General',
-    Label: 'Details'
-  }],
+  Facets: [
+    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'Details' },
+    { $Type: 'UI.ReferenceFacet', Target: 'changes/@UI.PresentationVariant', Label: 'Change History', ![@UI.PartOfPreview]: false }
+  ],
   FieldGroup#General: { Data: [
     { Value: name },
     { Value: description },
@@ -163,11 +163,10 @@ annotate AdminService.Prizes with @UI: {
     { Value: legacyId, Label: 'ID' },
     { Value: name, Label: 'Name' }
   ],
-  Facets: [{
-    $Type: 'UI.ReferenceFacet',
-    Target: '@UI.FieldGroup#General',
-    Label: 'Details'
-  }],
+  Facets: [
+    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'Details' },
+    { $Type: 'UI.ReferenceFacet', Target: 'changes/@UI.PresentationVariant', Label: 'Change History', ![@UI.PartOfPreview]: false }
+  ],
   FieldGroup#General: { Data: [
     { Value: name }
   ]}
@@ -226,11 +225,10 @@ annotate AdminService.ImsConfig with @UI: {
     { Value: ![key], Label: 'Key' },
     { Value: value, Label: 'Value' }
   ],
-  Facets: [{
-    $Type: 'UI.ReferenceFacet',
-    Target: '@UI.FieldGroup#General',
-    Label: 'Configuration'
-  }],
+  Facets: [
+    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'Configuration' },
+    { $Type: 'UI.ReferenceFacet', Target: 'changes/@UI.PresentationVariant', Label: 'Change History', ![@UI.PartOfPreview]: false }
+  ],
   FieldGroup#General: { Data: [
     { Value: ![key] },
     { Value: value }
@@ -292,6 +290,16 @@ annotate AdminService.FailedEmails with @(
   Capabilities.InsertRestrictions.Insertable: false,
   Capabilities.UpdateRestrictions.Updatable: false
 );
+
+// --- ChangeLog (centralized change history viewer) ---
+annotate AdminService.ChangeLog with @UI: {
+  HeaderInfo: {
+    TypeName: 'Change', TypeNamePlural: 'Changes',
+    Title: { Value: objectID },
+    Description: { Value: entity }
+  },
+  SelectionFields: [ entity, createdBy, createdAt, modification ]
+};
 
 // --- PrimaryAccounts / SecondaryAccounts (read-only) ---
 annotate AdminService.PrimaryAccounts with @(

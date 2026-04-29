@@ -38,27 +38,29 @@
     "@cap-js/cds-test": "^1.0.0",
     "@sap/cds-dk": "^9.9.0",
     "cds-plugin-ui5": "^0.17.0",
-    "sap.tutorials.admin.events": "file:app/admin/events",
-    "sap.tutorials.admin.missions": "file:app/admin/missions",
-    "sap.tutorials.admin.groups": "file:app/admin/groups",
-    "sap.tutorials.admin.tutorials": "file:app/admin/tutorials",
-    "sap.tutorials.admin.tags": "file:app/admin/tags",
-    "sap.tutorials.admin.accomplishments": "file:app/admin/accomplishments",
-    "sap.tutorials.admin.prizes": "file:app/admin/prizes",
-    "sap.tutorials.admin.operations": "file:app/admin/operations",
-    "sap.tutorials.admin.accounts": "file:app/admin/accounts",
     "fundamental-styles": "^0.41.4",
     "gray-matter": "^4.0.3",
     "markdown-it": "^14.1.1",
     "postcss": "^8.5.12",
     "postcss-cli": "^11.0.1",
     "postcss-import": "^16.1.1",
+    "sap.tutorials.admin.accomplishments": "file:app/admin/accomplishments",
+    "sap.tutorials.admin.accounts": "file:app/admin/accounts",
+    "sap.tutorials.admin.events": "file:app/admin/events",
+    "sap.tutorials.admin.groups": "file:app/admin/groups",
+    "sap.tutorials.admin.missions": "file:app/admin/missions",
+    "sap.tutorials.admin.operations": "file:app/admin/operations",
+    "sap.tutorials.admin.prizes": "file:app/admin/prizes",
+    "sap.tutorials.admin.changelog": "file:app/admin/changelog",
+    "sap.tutorials.admin.tags": "file:app/admin/tags",
+    "sap.tutorials.admin.tutorials": "file:app/admin/tutorials",
     "shiki": "^4.0.2",
     "tsx": "^4.0.0",
     "vitest": "^3.0.0",
     "yaml": "^2.7.0"
   },
   "dependencies": {
+    "@cap-js/change-tracking": "^1.2.1",
     "@cap-js/hana": "^2.7.1",
     "@cap-js/sqlite": "^2.2.1",
     "@sap/cds": "^9.9.0",
@@ -75,16 +77,39 @@
   "cds": {
     "cds-plugin-ui5": {
       "modules": {
-        "sap.tutorials.admin.events": { "mountPath": "/admin/events" },
-        "sap.tutorials.admin.missions": { "mountPath": "/admin/missions" },
-        "sap.tutorials.admin.groups": { "mountPath": "/admin/groups" },
-        "sap.tutorials.admin.tutorials": { "mountPath": "/admin/tutorials" },
-        "sap.tutorials.admin.tags": { "mountPath": "/admin/tags" },
-        "sap.tutorials.admin.accomplishments": { "mountPath": "/admin/accomplishments" },
-        "sap.tutorials.admin.prizes": { "mountPath": "/admin/prizes" },
-        "sap.tutorials.admin.operations": { "mountPath": "/admin/operations" },
-        "sap.tutorials.admin.accounts": { "mountPath": "/admin/accounts" },
-        "admin-custom": { "mountPath": "/admin-custom" }
+        "sap.tutorials.admin.events": {
+          "mountPath": "/admin/events"
+        },
+        "sap.tutorials.admin.missions": {
+          "mountPath": "/admin/missions"
+        },
+        "sap.tutorials.admin.groups": {
+          "mountPath": "/admin/groups"
+        },
+        "sap.tutorials.admin.tutorials": {
+          "mountPath": "/admin/tutorials"
+        },
+        "sap.tutorials.admin.tags": {
+          "mountPath": "/admin/tags"
+        },
+        "sap.tutorials.admin.accomplishments": {
+          "mountPath": "/admin/accomplishments"
+        },
+        "sap.tutorials.admin.prizes": {
+          "mountPath": "/admin/prizes"
+        },
+        "sap.tutorials.admin.operations": {
+          "mountPath": "/admin/operations"
+        },
+        "sap.tutorials.admin.accounts": {
+          "mountPath": "/admin/accounts"
+        },
+        "sap.tutorials.admin.changelog": {
+          "mountPath": "/admin/changelog"
+        },
+        "admin-custom": {
+          "mountPath": "/admin-custom"
+        }
       }
     },
     "requires": {
