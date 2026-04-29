@@ -31,3 +31,18 @@ describe('OData metadata', () => {
     expect(text).toContain('<edmx:Edmx');
   });
 });
+
+describe('Admin UI Draft Annotations', () => {
+  it('AdminService $metadata includes draft annotations for Missions', async () => {
+    const headers = {};
+    const auth = authHeader();
+    if (auth) headers['Authorization'] = auth;
+
+    const res = await fetchWithRetry(`${SRV_URL}/admin/$metadata`, { headers });
+    if (res.status === 401 || res.status === 403) return;
+
+    const text = await res.text();
+    expect(text).toContain('DraftAdministrativeData');
+    expect(text).toContain('IsActiveEntity');
+  });
+});
