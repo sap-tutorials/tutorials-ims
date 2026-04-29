@@ -14,6 +14,7 @@ build-parameters:
         - npm --prefix apps run build
         - curl -fsSL https://github.com/gohugoio/hugo/releases/download/v0.147.7/hugo_extended_0.147.7_linux-amd64.tar.gz | tar -xz -C /tmp hugo
         - /tmp/hugo --source hugo --minify
+        - npx tsx scripts/highlight-cds.ts
         - npm --prefix display-app install
         - npm --prefix display-app run build
         - mkdir -p approuter/static
@@ -67,10 +68,9 @@ modules:
 
 resources:
   - name: tutorials-hana
-    type: com.sap.xs.hdi-container
+    type: org.cloudfoundry.existing-service
     parameters:
-      service: hana
-      service-plan: hdi-shared
+      service-name: tutorials-hana
 
   - name: tutorials-xsuaa
     type: org.cloudfoundry.existing-service
@@ -87,3 +87,4 @@ resources:
     type: org.cloudfoundry.existing-service
     parameters:
       service-name: mail-imsdev
+    optional: true
