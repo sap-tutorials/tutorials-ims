@@ -12,6 +12,7 @@ export default class AdminService extends cds.ApplicationService {
             PrimaryAccounts, SecondaryAccounts, PrivacyProtectionActions,
             FeaturedTasks, CompletionPaths, CompletionPathItems } = cds.entities('com.sap.developers.ims');
     const db = await cds.connect.to('db');
+    const audit = await cds.connect.to('audit-log');
 
     // Auto-assign legacyId on creation for entities that need it
     const legacyKeyedEntities = [
@@ -134,6 +135,10 @@ export default class AdminService extends cds.ApplicationService {
       if (!user) return req.reject(404, `User not found with sapId: ${sapId}`);
 
       await this._executeAnonymization(user);
+
+      await audit.log('SecurityEvent', {
+        data: { action: 'AnonymizeUser', sapId }
+      });
     });
 
     this.on('anonymizeByDsrRequest', async (req) => {
@@ -154,6 +159,10 @@ export default class AdminService extends cds.ApplicationService {
       await UPDATE(PrivacyProtectionActions)
         .where({ userUuid: user.uuid, actionType: 'ANONYMIZE', status: 'PROCESSING' })
         .set({ status: 'COMPLETED', completedAt: new Date().toISOString() });
+
+      await audit.log('SecurityEvent', {
+        data: { action: 'AnonymizeUser', sapId, dsrRequestNumber }
+      });
     });
 
     // --- Cleanup & Maintenance ---

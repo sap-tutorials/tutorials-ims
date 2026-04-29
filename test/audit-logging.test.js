@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import cds from '@sap/cds';
 
 describe('Audit Logging Annotations', () => {
@@ -47,5 +47,19 @@ describe('Audit Logging Annotations', () => {
   it('TaskRecords.user has DataSubjectID field semantics', async () => {
     const { TaskRecords } = cds.entities('com.sap.developers.ims');
     expect(TaskRecords.elements.user['@PersonalData.FieldSemantics']).toBe('DataSubjectID');
+  });
+});
+
+describe('Audit Logging - SecurityEvent Configuration', () => {
+
+  it('audit-log service is configured in CDS requires', async () => {
+    const auditConfig = cds.env.requires['audit-log'];
+    expect(auditConfig).toBeDefined();
+    expect(auditConfig.kind).toBe('audit-log-to-console');
+  });
+
+  it('audit-log service handles SecurityEvent operations', async () => {
+    const auditConfig = cds.env.requires['audit-log'];
+    expect(auditConfig.handle).toContain('WRITE');
   });
 });
