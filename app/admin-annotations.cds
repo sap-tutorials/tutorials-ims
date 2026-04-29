@@ -33,3 +33,57 @@ annotate AdminService.Events with @UI: {
     { Value: timeZone }
   ]}
 };
+
+// --- Missions ---
+annotate AdminService.Missions with @UI: {
+  HeaderInfo: {
+    TypeName: 'Mission', TypeNamePlural: 'Missions',
+    Title: { Value: title },
+    Description: { Value: experienceTag }
+  },
+  SelectionFields: [ title, experienceTag, status ],
+  LineItem: [
+    { Value: legacyId, Label: 'Mission ID' },
+    { Value: title, Label: 'Title' },
+    { Value: experienceTag, Label: 'Experience' },
+    { Value: primaryTagRef.name, Label: 'Primary Tag' }
+  ],
+  Facets: [
+    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'General' },
+    { $Type: 'UI.ReferenceFacet', Target: 'completionPaths/@UI.LineItem', Label: 'Completion Paths' }
+  ],
+  FieldGroup#General: { Data: [
+    { Value: title },
+    { Value: description },
+    { Value: communityMissionId },
+    { Value: experienceTag },
+    { Value: primaryTagRef_ID },
+    { Value: status }
+  ]}
+};
+
+annotate AdminService.Missions with {
+  primaryTagRef @Common.ValueList: {
+    CollectionPath: 'Tags',
+    Parameters: [
+      { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: primaryTagRef_ID, ValueListProperty: 'ID' },
+      { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'name' }
+    ]
+  };
+};
+
+// CompletionPaths line items
+annotate AdminService.CompletionPaths with @UI: {
+  LineItem: [
+    { Value: name, Label: 'Path Name' },
+    { Value: slug, Label: 'Slug' }
+  ]
+};
+
+annotate AdminService.CompletionPathItems with @UI: {
+  LineItem: [
+    { Value: taskLegacyId, Label: 'Task ID' },
+    { Value: taskType, Label: 'Type' },
+    { Value: itemOrder, Label: 'Order' }
+  ]
+};

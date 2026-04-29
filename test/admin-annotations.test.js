@@ -27,4 +27,15 @@ describe('UI Annotations in $metadata', () => {
       expect(metadata).toContain('UI.LineItem');
     });
   });
+
+  describe('Missions annotations', () => {
+    it('has HeaderInfo for Missions', () => {
+      expect(metadata).toContain('TypeName');
+    });
+
+    it('has ValueList annotation for primaryTagRef', () => {
+      expect(metadata).toContain('Common.ValueList');
+      expect(metadata).toContain('Tags');
+    });
+  });
 });
