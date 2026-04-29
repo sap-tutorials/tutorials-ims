@@ -6,6 +6,116 @@ A tutorial hosting platform for [developers.sap.com](https://developers.sap.com)
 
 **Stack:** Hugo &middot; CAP Node.js (CDS 9.x) &middot; SAP HANA Cloud &middot; SAP Fundamental Styles &middot; Vue 3 (apps) &middot; TypeScript &middot; SAP BTP Cloud Foundry
 
+## Folder Map
+
+```
+tutorials-ims/
+├── approuter/                  # BTP AppRouter — serves static files + proxies to CAP via XSUAA auth
+│   ├── static/                 #   Pre-built assets deployed to CF (Hugo output + Vue app bundles)
+│   │   ├── app-space/          #     AppSpace SPA bundle (event tutorial kiosk)
+│   │   ├── display-app/        #     Display App SPA bundle (event monitor dashboard)
+│   │   ├── css/                #     Global stylesheets (Fundamental Styles, theme)
+│   │   ├── img/                #     Static images (logos, icons)
+│   │   ├── js/                 #     Shared JavaScript (Vue components injected into Hugo pages)
+│   │   └── tutorials/          #     Generated tutorial HTML pages (Hugo output)
+│   └── xs-app.json             #   Route definitions (static, /api, /admin, /display proxies)
+├── apps/                       # Vue 3 micro-apps (built with Vite, output injected into Hugo/static)
+│   └── src/
+│       ├── app-space/          #   Event-themed tutorial kiosk (Joule/Sapphire themes)
+│       ├── event-display/      #   Event display embed (leaderboard widget)
+│       ├── mini-navigator/     #   Compact tutorial navigator sidebar
+│       ├── nav-dropdown/       #   Navigation dropdown component
+│       ├── navigator/          #   Full tutorial navigator page
+│       └── shared/             #   Shared utilities, API client, types
+├── db/                         # CAP data model — CDS schema + HANA native artifacts
+│   ├── schema.cds              #   Entity definitions (Users, Tutorials, Missions, Events, etc.)
+│   └── src/                    #   Native HANA artifacts (.hdbsequence files for legacy integer IDs)
+├── deploy/                     # MTA extension descriptors for environment-specific overrides
+│   ├── dev.mtaext              #   Development overrides (instance counts, memory)
+│   ├── qa.mtaext               #   QA/staging overrides
+│   └── prod.mtaext             #   Production overrides
+├── display-app/                # Event monitor dashboard — standalone Vue 3 SPA (Vite)
+│   ├── src/
+│   │   ├── components/         #   Vue components (leaderboard, burnup chart, track stats)
+│   │   └── composables/        #   Composition API hooks (WebSocket, polling, data fetch)
+│   └── dist/                   #   Built bundle (copied to approuter/static/display-app/)
+├── docs/                       # Design specs and implementation plans
+│   └── superpowers/
+│       ├── specs/              #   Feature specifications (admin UI, notifications, etc.)
+│       └── plans/              #   Step-by-step implementation plans
+├── hugo/                       # Hugo static site generator — tutorial pages + layouts
+│   ├── assets/
+│   │   ├── css/                #   SCSS/CSS source (Fundamental Styles Horizon theme)
+│   │   └── js/                 #   Page-level JavaScript (step navigation, progress sync)
+│   ├── config/                 #   Hugo configuration (hugo.toml, environment overrides)
+│   ├── content/
+│   │   ├── tutorials/          #   Generated tutorial markdown (from fetch-tutorials)
+│   │   ├── app-space/          #   AppSpace single-page wrapper
+│   │   └── event-display/      #   Event display single-page wrapper
+│   ├── layouts/
+│   │   ├── _default/           #   Base templates (baseof.html, list.html)
+│   │   ├── tutorials/          #   Tutorial single-page layout (steps, progress bar)
+│   │   ├── missions/           #   Mission overview layout
+│   │   ├── groups/             #   Completion path group layout
+│   │   ├── partials/           #   Reusable template fragments (header, footer, nav)
+│   │   └── shortcodes/         #   Custom Hugo shortcodes (tabs, options, alerts)
+│   ├── static/                 #   Pass-through static assets (images, pre-built JS/CSS)
+│   └── public/                 #   Build output (gitignored, deployed to approuter/static/)
+├── scripts/                    # Build-time scripts — fetch, parse, migrate
+│   ├── fetch-tutorials.ts      #   Main entry: fetches markdown from GitHub, generates Hugo pages
+│   ├── parsers/                #   Markdown parsing pipeline
+│   │   ├── v1.ts               #     Legacy parser ([ACCORDION-BEGIN] format)
+│   │   ├── v2.ts               #     Current parser (H3-delimited steps)
+│   │   ├── images.ts           #     Resolves relative image paths to GitHub raw CDN
+│   │   ├── options.ts          #     Converts [OPTION] blocks to Vue tab components
+│   │   ├── cap.ts              #     Fetches mission/group catalog from CAP /build/catalog
+│   │   ├── github.ts           #     GitHub API client (commit metadata, rate limiting)
+│   │   └── types.ts            #     Shared TypeScript types
+│   ├── grammars/               #   TextMate grammars for syntax highlighting in tutorials
+│   ├── __tests__/              #   Parser unit tests (Vitest)
+│   ├── migrate-reference-data.js  # Export/import tutorials, missions, events from Java IMS
+│   ├── migrate-user-progress.js   # Export/import user progress (paged, resumable)
+│   └── compare-systems.js      #   Endpoint-by-endpoint diff between Java IMS and CAP
+├── srv/                        # CAP Node.js backend — services, handlers, business logic
+│   ├── server.js               #   Bootstrap: registers Express routes + STOMP + jobs
+│   ├── developer-service.cds   #   DeveloperService definition (/api)
+│   ├── admin-service.cds       #   AdminService definition (/admin)
+│   ├── display-service.cds     #   DisplayService definition (/display)
+│   ├── consolidation-service.cds # ConsolidationService definition (/api/v1)
+│   ├── lib/                    #   Shared libraries (business logic, integrations)
+│   │   ├── accomplishment-evaluator.js  # Badge/prize rule engine
+│   │   ├── contributor-notifications.js # Stale tutorial detection + escalation
+│   │   ├── mail-client.js      #     SMTP transport, template rendering, retry queue
+│   │   ├── stomp-broker.js     #     WebSocket STOMP pub/sub for real-time updates
+│   │   ├── ngds-client.js      #     NGDS analytics outbound integration
+│   │   ├── adobe-analytics.js  #     Adobe Analytics beacon on completion
+│   │   ├── account-merge.js    #     Merge duplicate user accounts
+│   │   ├── build-catalog.js    #     /build/catalog data assembly
+│   │   ├── qrcode-handler.js   #     QR code PNG generation
+│   │   ├── tutorial-sync.js    #     Sync tutorial metadata from cache
+│   │   └── legacy-id.js        #     HANA sequence-backed integer IDs
+│   ├── jobs/                   #   Scheduled background tasks (cron-like)
+│   │   └── scheduler.js        #     Job registration + distributed locking
+│   └── templates/
+│       └── notification/       #   Email HTML templates (Handlebars)
+├── test/                       # Test suites (Vitest)
+│   ├── lib/                    #   Unit tests for srv/lib/ modules
+│   ├── jobs/                   #   Unit tests for scheduled jobs
+│   ├── integration/            #   End-to-end workflow tests (SQLite in-memory)
+│   ├── hybrid/                 #   Integration tests against real HANA Cloud
+│   └── smoke/                  #   HTTP smoke tests against deployed URLs
+├── .github/workflows/          # CI/CD pipelines (GitHub Actions)
+│   ├── deploy.yml              #   Build MTA + deploy to BTP Cloud Foundry + smoke tests
+│   └── rebuild-content.yml     #   Re-fetch tutorials + rebuild static content
+├── .tutorial-cache/            # Cached GitHub markdown + metadata (gitignored)
+├── .migration-data/            # Migration export files from Java IMS (gitignored)
+├── gen/                        # CDS build output (generated, gitignored)
+├── site/                       # Legacy VitePress output directory (deprecated, gitignored)
+├── mta.yaml                    # MTA deployment descriptor (modules, resources, bindings)
+├── package.json                # Root dependencies + npm scripts
+└── vitest.workspace.ts         # Vitest workspace config (unit, hybrid, smoke)
+```
+
 ## Quick Start
 
 **Prerequisites:** Node.js >= 20, npm

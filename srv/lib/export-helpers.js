@@ -1,5 +1,6 @@
 export function formatTimeSpent(seconds) {
   if (seconds == null) return '';
+  seconds = Number(seconds);
   if (seconds === 0) return '0 min';
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.round((seconds % 3600) / 60);

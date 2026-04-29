@@ -1,4 +1,9 @@
 {
+  "features": {
+    "ieee754compatible": true,
+    "compat_srv_getters": false,
+    "compat_texts_entities": false
+  },
   "build": {
     "target": "gen",
     "tasks": [

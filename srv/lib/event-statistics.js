@@ -97,7 +97,7 @@ export function computeCompletionSpeed(records, tasks) {
     .filter(t => grouped.has(t.legacyId))
     .map(t => {
       const times = grouped.get(t.legacyId);
-      const avgSeconds = times.reduce((sum, v) => sum + v, 0) / times.length;
+      const avgSeconds = times.reduce((sum, v) => sum + Number(v), 0) / times.length;
       return {
         taskLegacyId: t.legacyId,
         title: t.title,

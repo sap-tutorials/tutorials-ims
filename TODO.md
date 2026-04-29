@@ -64,6 +64,9 @@ The IMS React 15 admin frontend has **11 pages** — none have equivalents:
 - [ ] Accomplishments Management (rule-based badges) — **LOW** priority, SQL rules engine
 - [ ] Statistics Export (CSV download) — **LOW** priority, date-range form
 - [ ] Tags (read-only table) — **LOW** priority, reference data
+- [ ] **Research: Change Tracking V2** — Evaluate `@cap-js/change-tracking` v2 for Admin UI audit trail. Uses DB-level triggers (2.4x–50x faster than v1), tree-table visualization of parent/child changes, CXL expressions in `@changelog` annotations, full-text search across change logs. Would give admins visibility into who changed tutorials, missions, events, and config. Note: v2 has schema-breaking changes requiring HANA migration. See <https://cap.cloud.sap/docs/releases/2026/apr26#change-tracking-v2>
+- [ ] **Research: UI5 Dev Server plugin (`cds-plugin-ui5`)** — Integrates UI5/Fiori Elements tooling directly into `cds watch` via express middlewares, eliminating the need for a separate UI dev server. Handles TypeScript transpilation for UI5 controls automatically. Would streamline Admin UI development by serving Fiori Elements apps alongside the CAP backend in a single process — no proxy config or CORS needed during local dev. See <https://cap.cloud.sap/docs/plugins/#ui5-dev-server>
+- [ ] **Research: Audit Logging plugin (`@cap-js/audit-logging`)** — Provides annotation-driven audit logging for personal data operations via `@PersonalData` annotations on entities/fields. Logs to console in dev, routes to SAP Audit Log Service on BTP in production. Uses Transactional Outbox for resilience. Would cover GDPR-relevant access logging for the Privacy/GDPR admin tools (user lookup, anonymization) and track admin access to `Users`, `UserMetaData`, and `TaskRecords`. Complements Change Tracking (which tracks *what* changed) by recording *who accessed* personal data. See <https://cap.cloud.sap/docs/plugins/#audit-logging>
 
 ---
 
@@ -108,6 +111,7 @@ No mechanism exists to update the AppRouter's static content when tutorials chan
 - [ ] WebSocket subscription in AppSpace.vue (currently fetches once on mount)
 - [ ] Display UI equivalent (big-screen dashboard for events) — separate React app in IMS
 - [ ] STOMP broker already registered in `srv/server.js` — wire frontend to it
+- [ ] **Research: Replace custom STOMP broker with `@cap-js/websocket` plugin** — The official CAP WebSocket plugin exposes CDS services over WebSocket/Socket.IO via a simple `@protocol: 'websocket'` annotation. Would replace our hand-rolled `srv/lib/stomp-broker.js` + manual `ws` dependency + `cds.on('listening')` wiring with a declarative CDS event model. Supports both standard WebSocket and Socket.IO, integrates with CDS auth, and eliminates custom Express attachment code. Current STOMP broker broadcasts `tutorialCompleted` events — these would become CDS events on the DisplayService. See <https://cap.cloud.sap/docs/plugins/#websocket>
 
 ---
 
@@ -131,6 +135,9 @@ No mechanism exists to update the AppRouter's static content when tutorials chan
 - [ ] **Email retry dashboard** — `FailedEmails` entity exists and retry job runs, but no UI to inspect/manage failed emails
 - [ ] **NGDS failed message inspector** — `NGDSFailedMessages` entity has data but no admin view to triage failures
 - [ ] **Notification 4-stage escalation** — Current impl does level-based routing but needs verification against IMS's exact stage-0/1/2/3 logic and resend-after-1-month timing
+- [ ] **Research: Telemetry plugin (`@cap-js/telemetry`)** — Provides automatic OpenTelemetry instrumentation for traces, metrics, and logs with zero code changes. Shows hierarchical timing breakdowns (request → service → DB query) in console during dev. Exports to SAP Cloud Logging, Dynatrace, or Jaeger in production. Would give visibility into slow endpoints (e.g. `createTaskRecord` with accomplishment evaluation, NGDS calls, account merge), job execution times, and DB query performance — critical for operating at scale with 7 scheduled jobs and multiple external integrations. See <https://cap.cloud.sap/docs/plugins/#telemetry>
+- [ ] **Research: ORD plugin (`@sap/cds-ord`)** — Generates Open Resource Discovery documents exposing a standard metadata catalog of all CDS services, entities, and APIs. Provides a single Service Provider Interface endpoint for external systems to automatically discover available resources. Would make our 4 services (DeveloperService, AdminService, DisplayService, ConsolidationService) discoverable by BTP integration tools, API Management, and other SAP landscape systems without manual documentation. Supports both static catalog generation and runtime inspection. See <https://cap.cloud.sap/docs/plugins/#ord-open-resource-discovery>
+- [ ] **Research: Swagger UI (`cds-swagger-ui-express`)** — Community plugin that mounts an interactive Swagger UI at dev time, auto-generated from CDS service definitions. Registers on `cds.on('bootstrap')` with a one-liner and serves OpenAPI specs for all services. Dev-only (gated behind `NODE_ENV !== 'production'`). Would give developers and API consumers an interactive explorer for DeveloperService, AdminService, DisplayService, and ConsolidationService endpoints without maintaining separate API docs. Also supports `cds compile srv --to openapi` for static spec generation. See <https://www.npmjs.com/package/cds-swagger-ui-express>
 
 ---
 
