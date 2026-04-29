@@ -39,6 +39,7 @@ modules:
       - name: tutorials-xsuaa
       - name: tutorials-destination
       - name: tutorials-mail
+      - name: tutorials-audit-log
 
   - name: tutorials-db-deployer
     type: hdb
@@ -123,3 +124,9 @@ resources:
     parameters:
       service: html5-apps-repo
       service-plan: app-runtime
+
+  - name: tutorials-audit-log
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: auditlog
+      service-plan: premium
