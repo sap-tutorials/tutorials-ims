@@ -1,0 +1,64 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.custom",
+    "type": "application",
+    "title": "Admin Tools",
+    "applicationVersion": { "version": "0.0.1" },
+    "dataSources": {
+      "adminService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "Admin-board": { "semanticObject": "Admin", "action": "board", "title": "Board" },
+        "Admin-dashboard": { "semanticObject": "Admin", "action": "dashboard", "title": "Tutorial Dashboard" },
+        "Admin-statistics": { "semanticObject": "Admin", "action": "statistics", "title": "Statistics" },
+        "Admin-privacy": { "semanticObject": "Admin", "action": "privacy", "title": "Privacy" }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": { "sap.m": {}, "sap.ui.core": {}, "sap.ui.layout": {}, "sap.ui.table": {} }
+    },
+    "models": {
+      "admin": {
+        "dataSource": "adminService",
+        "preload": true,
+        "settings": { "synchronizationMode": "None", "operationMode": "Server", "autoExpandSelect": true }
+      }
+    },
+    "rootView": {
+      "viewName": "sap.tutorials.admin.custom.view.App",
+      "type": "XML",
+      "id": "app"
+    },
+    "routing": {
+      "config": {
+        "routerClass": "sap.m.routing.Router",
+        "type": "View",
+        "viewType": "XML",
+        "path": "sap.tutorials.admin.custom.view",
+        "controlId": "appControl",
+        "controlAggregation": "pages"
+      },
+      "routes": [
+        { "pattern": "", "name": "board", "target": "board" },
+        { "pattern": "dashboard", "name": "dashboard", "target": "dashboard" },
+        { "pattern": "statistics", "name": "statistics", "target": "statistics" },
+        { "pattern": "privacy", "name": "privacy", "target": "privacy" }
+      ],
+      "targets": {
+        "board": { "viewName": "Board" },
+        "dashboard": { "viewName": "TutorialDashboard" },
+        "statistics": { "viewName": "Statistics" },
+        "privacy": { "viewName": "Privacy" }
+      }
+    }
+  }
+}

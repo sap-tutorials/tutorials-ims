@@ -1,0 +1,14 @@
+{
+  "name": "sap.tutorials.admin.custom",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Admin Freestyle App (Board, Dashboard, Statistics, Privacy)",
+  "sapux": true,
+  "scripts": {
+    "start": "fiori run --open index.html",
+    "build": "ui5 build --clean-dest"
+  },
+  "devDependencies": {
+    "@ui5/cli": "^4.0.0"
+  }
+}
