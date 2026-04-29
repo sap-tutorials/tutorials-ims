@@ -1,0 +1,110 @@
+{{- $raw := .Type | default "" -}}
+{{- $lang := $raw -}}
+{{- $displayName := "" -}}
+
+{{/* Language alias map: normalize misspellings, case, and map to closest Chroma lexer */}}
+{{- $aliases := dict
+  "cds" "sql"
+  "sqlcript" "sql"
+  "sqlscript" "sql"
+  "hdbsql" "sql"
+  "shell" "bash"
+  "terminal" "bash"
+  "prompt" "bash"
+  "sh" "bash"
+  "ssh" "bash"
+  "dos" "bat"
+  "javasccript" "javascript"
+  "javasscript" "javascript"
+  "js" "javascript"
+  "ts" "typescript"
+  "dockerfile" "docker"
+  "code" "text"
+  "output" "text"
+  "log" "text"
+  "console" "bash"
+  "csv" "text"
+  "env" "bash"
+  "dotenv" "bash"
+  "i18n" "ini"
+  "hcl" "hcl"
+-}}
+
+{{/* Display name overrides: show friendly name in header */}}
+{{- $displayNames := dict
+  "cds" "CDS"
+  "sqlcript" "SQLScript"
+  "sqlscript" "SQLScript"
+  "hdbsql" "SQL"
+  "shell" "Shell"
+  "terminal" "Terminal"
+  "bash" "Shell"
+  "sh" "Shell"
+  "prompt" "Shell"
+  "ssh" "Shell"
+  "dos" "Shell"
+  "bat" "Shell"
+  "javascript" "JavaScript"
+  "javasccript" "JavaScript"
+  "javasscript" "JavaScript"
+  "js" "JavaScript"
+  "typescript" "TypeScript"
+  "ts" "TypeScript"
+  "python" "Python"
+  "java" "Java"
+  "json" "JSON"
+  "yaml" "YAML"
+  "xml" "XML"
+  "html" "HTML"
+  "css" "CSS"
+  "sql" "SQL"
+  "abap" "ABAP"
+  "swift" "Swift"
+  "kotlin" "Kotlin"
+  "powershell" "PowerShell"
+  "dockerfile" "Dockerfile"
+  "docker" "Dockerfile"
+  "diff" "Diff"
+  "text" "Text"
+  "code" "Code"
+  "output" "Output"
+  "log" "Log"
+  "csv" "CSV"
+  "hcl" "HCL"
+  "c" "C"
+  "http" "HTTP"
+  "ini" "INI"
+  "i18n" "Properties"
+-}}
+
+{{- $lower := $raw | lower -}}
+{{- if index $aliases $lower -}}
+  {{- $lang = index $aliases $lower -}}
+{{- else -}}
+  {{- $lang = $lower -}}
+{{- end -}}
+
+{{- if index $displayNames $lower -}}
+  {{- $displayName = index $displayNames $lower -}}
+{{- else if $raw -}}
+  {{- $displayName = $raw -}}
+{{- else -}}
+  {{- $displayName = "Code" -}}
+{{- end -}}
+
+<div class="code-block"{{ if eq $lower "cds" }} data-lang="cds"{{ end }}>
+  <div class="code-block-header">
+    <span class="code-block-lang">{{ $displayName }}</span>
+    <button type="button" class="code-block-copy" onclick="copyCodeBlock(this)" aria-label="Copy code">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4V1.5C4 1.22 4.22 1 4.5 1H13.5C13.78 1 14 1.22 14 1.5V10.5C14 10.78 13.78 11 13.5 11H11" stroke="currentColor" stroke-width="1.2"/><rect x="2" y="5" width="9" height="10" rx=".5" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
+      <span class="copy-label">Copy</span>
+    </button>
+  </div>
+  <div class="code-block-body">
+    {{- if eq $lang "text" -}}
+      <pre><code>{{ .Inner }}</code></pre>
+    {{- else -}}
+      {{ highlight .Inner $lang "" }}
+    {{- end -}}
+  </div>
+</div>

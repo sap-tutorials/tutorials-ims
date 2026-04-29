@@ -16,6 +16,7 @@
     {{ end }}
 
     {{ partial "tutorial-author.html" . }}
+    {{ partial "tutorial-contributors.html" . }}
     {{ partial "tutorial-prerequisites.html" . }}
 
     <div id="progress-bar" data-step-count="{{ .Params.stepCount }}" data-slug="{{ .Params.slug }}"></div>
@@ -27,10 +28,13 @@
 
     <div class="tutorial-steps">{{ .Content }}</div>
 
+    {{ partial "next-steps.html" . }}
     {{ partial "tutorial-nav-bottom.html" . }}
   </main>
-  {{ partial "tutorial-sidebar.html" . }}
-  <div id="mini-navigator-mount" data-slug="{{ .Params.slug }}" data-mission-id="{{ .Params.missionId }}"></div>
+  <div class="tutorial-right-col">
+    {{ partial "mini-navigator.html" . }}
+    {{ partial "tutorial-sidebar.html" . }}
+  </div>
 </div>
 
 {{ with .Params.steps }}

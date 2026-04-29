@@ -1508,17 +1508,84 @@
   --vp-nav-bg-color: var(--sapShellColor, #354a5f);
 
   --vp-c-default-1: var(--sapButton_BorderColor, #0064d9);
-  --vp-c-default-soft: var(--sapNeutralBackground, #f5f6f7);
+  --vp-c-default-soft: var(--sapField_Background, #f5f6f7);
 }/* Shellbar text color overrides */.fd-shellbar .fd-shellbar__title {
   color: var(--sapShell_TextColor, #fff);
+}.fd-shellbar .fd-shellbar__group--actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}.fd-shellbar .fd-shellbar__group--actions nav {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
 }.fd-shellbar .fd-shellbar__action {
   color: var(--sapShell_TextColor, #fff);
   text-decoration: none;
+  padding: 0.375rem 0.625rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+  white-space: nowrap;
 }.fd-shellbar .fd-shellbar__action:hover {
   color: var(--sapShell_InteractiveTextColor, #d1e8ff);
+  background: rgba(255,255,255,0.08);
 }.fd-shellbar .fd-shellbar__logo img {
   height: 1.5rem;
-}/* User menu (shellbar profile) */#user-menu {
+}.shellbar-separator {
+  width: 1px;
+  height: 1.25rem;
+  background: rgba(255,255,255,0.25);
+  margin: 0 0.25rem;
+}/* Theme toggle switch */
+.theme-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  margin: 0 0.5rem;
+}
+.theme-toggle-track {
+  position: relative;
+  width: 2.5rem;
+  height: 1.375rem;
+  background: rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.4);
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0.3rem;
+  transition: background 0.2s, border-color 0.2s;
+}
+.theme-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 1rem;
+  height: 1rem;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+[data-theme="dark"] .theme-toggle-thumb {
+  transform: translateX(1.125rem);
+}
+[data-theme="dark"] .theme-toggle-track {
+  background: rgba(255,255,255,0.15);
+  border-color: rgba(255,255,255,0.3);
+}
+.theme-toggle-icon {
+  color: rgba(255,255,255,0.85);
+  flex-shrink: 0;
+}
+.theme-toggle-sun { opacity: 1; }
+.theme-toggle-moon { opacity: 0.5; }
+[data-theme="dark"] .theme-toggle-sun { opacity: 0.5; }
+[data-theme="dark"] .theme-toggle-moon { opacity: 1; }
+/* User menu (shellbar profile) */#user-menu {
   position: relative;
 }#user-avatar {
   cursor: pointer;
@@ -1583,13 +1650,186 @@
   margin-left: 0.25rem;
 }.nav-dropdown-container {
   position: relative;
+}/* Tutorial breadcrumb bar */.tutorial-breadcrumbs {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0.625rem 2rem;
+}/* ── Action bar (feedback / share / nav pills) ── */.action-bar {
+  background: var(--sapShellColor, #354a5f);
+  padding: 0.625rem 0;
+}.action-bar-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}.action-bar-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}.action-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}.action-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  background: none;
+  border: none;
+  color: var(--sapShell_TextColor, #fff);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0.9;
+  padding: 0;
+  font-family: inherit;
+}.action-link:hover { opacity: 1; color: var(--sapShell_TextColor, #fff); }.action-link svg { flex-shrink: 0; }/* Nav pills */.nav-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 1.25rem;
+  border-radius: 2rem;
+  border: 1px solid var(--sapBrandColor, #0070f2);
+  color: var(--sapBrandColor, #0070f2);
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: all 0.15s;
+}.nav-pill:hover {
+  background: var(--sapBrandColor, #0070f2);
+  color: #fff;
+}.nav-pill--primary {
+  background: var(--sapBrandColor, #0070f2);
+  color: #fff;
+}.nav-pill--primary:hover {
+  background: var(--sapHighlightColor, #0064d9);
+  color: #fff;
+}.nav-pill--shell {
+  border-color: var(--sapShell_TextColor, #fff);
+  color: var(--sapShell_TextColor, #fff);
+}.nav-pill--shell:hover {
+  background: rgba(255,255,255,0.15);
+  color: var(--sapShell_TextColor, #fff);
+}.nav-pill--primary-shell {
+  background: var(--sapContent_ContrastTextColor, #fff);
+  color: var(--sapShellColor, #354a5f);
+  border-color: var(--sapContent_ContrastTextColor, #fff);
+}.nav-pill--primary-shell:hover {
+  background: rgba(255,255,255,0.9);
+  color: var(--sapShellColor, #354a5f);
+}/* Popup overlay */.popup-hidden { display: none !important; }.popup-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--sapBlockLayer_Background, rgba(0, 0, 0, 0.4));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}.popup-card {
+  background: var(--sapBackgroundColor, #f5f6f7);
+  border: 1px solid var(--sapGroup_ContentBorderColor, #e5e5e5);
+  border-radius: 0.75rem;
+  padding: 2rem 2.5rem;
+  max-width: 640px;
+  width: 90%;
+  position: relative;
+  box-shadow: var(--sapContent_Shadow2, 0 8px 32px rgba(0, 0, 0, 0.15));
+}.popup-card--share {
+  max-width: 400px;
+  text-align: center;
+}.popup-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--sapContent_IconColor, #6a6d70);
+  cursor: pointer;
+  padding: 0.25rem;
+  line-height: 1;
+}.popup-close:hover { color: var(--sapTextColor, #32363a); }.popup-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0 0 1.5rem;
+  color: var(--sapTitleColor, #32363a);
+}.feedback-options {
+  display: flex;
+  gap: 1.5rem;
+}.feedback-option {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.75rem;
+}.feedback-icon {
+  color: var(--sapContent_IconColor, #6a6d70);
+}.feedback-option span {
+  font-size: 0.8125rem;
+  color: var(--sapContent_LabelColor, #556b82);
+  line-height: 1.4;
+}.feedback-btn {
+  display: inline-block;
+  padding: 0 1.25rem;
+  height: 2.25rem;
+  line-height: 2.25rem;
+  border-radius: var(--sapButton_BorderCornerRadius, 0.5rem);
+  background: var(--sapButton_Emphasized_Background, #0070f2);
+  color: var(--sapButton_Emphasized_TextColor, #fff);
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: background 0.15s;
+}.feedback-btn:hover {
+  background: var(--sapButton_Emphasized_Hover_Background, #0064d9);
+  color: var(--sapButton_Emphasized_TextColor, #fff);
+}.share-icons {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}.share-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  transition: transform 0.15s;
+}.share-icon:hover { transform: scale(1.1); }/* Bottom nav */.tutorial-nav-bottom {
+  display: flex;
+  align-items: center;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+}.nav-spacer { flex: 1; }/* Sidebar back-to-top link */.step-toc-back {
+  display: block;
+  text-align: right;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--sapTextColor, #32363a);
+  text-decoration: none;
+}.step-toc-back:hover { text-decoration: underline; }/* Sidebar step label */.step-toc-text {
+  display: inline;
+}.step-toc-label {
+  font-weight: 600;
+}@media (max-width: 640px) {
+  .feedback-options { flex-direction: column; gap: 1rem; }
+  .popup-card { padding: 1.5rem; }
+  .action-bar-inner { flex-wrap: wrap; gap: 0.5rem; }
 }/* Prevent horizontal scrollbar from full-bleed elements */html {
   overflow-x: hidden;
   background-color: var(--sapBackgroundColor, #f5f6f7);
 }/* Tutorial page overrides */.tutorial-page {
   background-color: var(--sapBackgroundColor, #f5f6f7);
   display: grid;
-  grid-template-columns: 1fr 280px;
+  grid-template-columns: 1fr 320px;
   gap: 2rem;
   max-width: 1280px;
   margin: 0 auto;
@@ -1598,25 +1838,79 @@
   background-color: var(--sapBaseColor, #fff);
   border-radius: 0.5rem;
   padding: 1.5rem;
-}.tutorial-sidebar {
+}.tutorial-right-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
   position: sticky;
   top: 4rem;
   align-self: start;
   max-height: calc(100vh - 5rem);
   overflow-y: auto;
+}.tutorial-sidebar {
+  align-self: start;
 }/* Ensure proper link colors */a {
   color: var(--sapLinkColor, #0064d9);
 }a:hover {
   color: var(--sapLink_Hover_Color, #0064d9);
-}/* Code blocks */pre {
-  background-color: var(--sapNeutralBackground, #f5f6f7);
+}/* Code blocks */
+.code-block {
+  border: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+  border-radius: 0.5rem;
+  margin: 1rem 0;
+  overflow: hidden;
+}
+.code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.375rem 0.75rem;
+  background: var(--sapObjectHeader_Background, #f5f6f7);
+  border-bottom: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+  font-size: 0.75rem;
+}
+.code-block-lang {
+  font-weight: 600;
+  color: var(--sapContent_LabelColor, #556b82);
+  text-transform: capitalize;
+}
+.code-block-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--sapLinkColor, #0064d9);
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+}
+.code-block-copy:hover {
+  background: var(--sapList_Hover_Background, #eaeff5);
+}
+.copy-label {
+  font-size: 0.75rem;
+}
+.code-block-body pre {
+  margin: 0;
+  padding: 1rem;
+  overflow-x: auto;
+  background-color: var(--sapField_Background, #f5f6f7);
+}
+.code-block-body code {
+  color: var(--sapTextColor, #32363a);
+}
+pre {
+  background-color: var(--sapField_Background, #f5f6f7);
   padding: 1rem;
   border-radius: 0.375rem;
   overflow-x: auto;
-}pre code {
+}
+pre code {
   color: var(--sapTextColor, #32363a);
 }/* Inline code */:not(pre) > code {
-  background-color: var(--sapNeutralBackground, #f5f6f7);
+  background-color: var(--sapField_Background, #f5f6f7);
   color: var(--sapTextColor, #32363a);
   padding: 0.125rem 0.375rem;
   border-radius: 0.25rem;
@@ -1628,10 +1922,489 @@
   border-radius: 0 0.25rem 0.25rem 0;
   color: var(--sapTextColor, #32363a);
   margin: 1rem 0;
+}/* Tutorial meta bar (tags + time) */.tutorial-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  align-items: center;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  color: var(--sapTextColor, #32363a);
+}.meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}.meta-icon {
+  font-size: 1rem;
+}.meta-icon-svg {
+  vertical-align: middle;
+  margin-right: 0.25rem;
+}.meta-level {
+  text-transform: capitalize;
+}.meta-tags {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}.tutorial-tag {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--sapBrandColor, #0070f2);
+  border-radius: 1rem;
+  color: var(--sapBrandColor, #0070f2);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}/* Step progress bar */#progress-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--sapContent_LabelColor, #556b82);
+  margin: 1.25rem 0 0.5rem;
+}/* Step controls (Open all / Close all) */.step-controls {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.8125rem;
+}.step-controls a {
+  color: var(--sapLinkColor, #0064d9);
+  text-decoration: none;
+}.step-controls a:hover {
+  text-decoration: underline;
+}/* Sidebar step TOC card */.step-toc {
+  background-color: var(--sapBaseColor, #fff);
+  border: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+  border-radius: 0.5rem;
+  padding: 1rem 1.25rem;
+}.step-toc h4 {
+  margin: 0 0 0.75rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--sapTextColor, #32363a);
+}.step-toc-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}.step-toc-list li {
+  margin-bottom: 0.5rem;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}.step-toc-list a {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  color: var(--sapTextColor, #32363a);
+  text-decoration: none;
+  transition: color 0.15s;
+}.step-toc-list a:hover {
+  color: var(--sapBrandColor, #0070f2);
+}.step-toc-list a:hover .step-toc-circle {
+  border-color: var(--sapBrandColor, #0070f2);
+  color: var(--sapBrandColor, #0070f2);
+}.step-toc-circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.625rem;
+  height: 1.625rem;
+  border-radius: 50%;
+  border: 2px solid var(--sapNeutralBorderColor, #bcc3ca);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  flex-shrink: 0;
+  color: var(--sapContent_LabelColor, #556b82);
+  transition: border-color 0.15s, color 0.15s;
+}.step-toc-list li.active .step-toc-circle {
+  border-color: var(--sapBrandColor, #0070f2);
+  background: var(--sapBrandColor, #0070f2);
+  color: #fff;
+}.step-toc-list li.completed .step-toc-circle {
+  border-color: var(--sapPositiveColor, #30914c);
+  background: var(--sapPositiveColor, #30914c);
+  color: #fff;
+}/* ── Tutorial step accordion ── */.tutorial-step {
+  border: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+  border-radius: 0.5rem;
+  margin-bottom: 0.75rem;
+  background: var(--sapBaseColor, #fff);
+  overflow: hidden;
+}.tutorial-step.completed {
+  border-color: var(--sapPositiveBorderColor, #30914c);
+}.step-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1.25rem;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: background 0.1s;
+}.step-header:hover {
+  background: var(--sapList_Hover_Background, rgba(0, 0, 0, 0.04));
+}.step-check-circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  border: 2px solid var(--sapNeutralBorderColor, #bcc3ca);
+  font-size: 0.75rem;
+  flex-shrink: 0;
+  color: transparent;
+}.tutorial-step.completed .step-check-circle {
+  border-color: var(--sapPositiveColor, #30914c);
+  background: var(--sapPositiveColor, #30914c);
+  color: #fff;
+}.step-header-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}.step-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sapContent_LabelColor, #556b82);
+}.step-title-text {
+  font-size: 1.25rem;
+  font-weight: 400;
+  color: var(--sapBrandColor, #0070f2);
+  line-height: 1.3;
+}.step-toggle-icon {
+  font-size: 1.25rem;
+  font-weight: 400;
+  color: var(--sapContent_IconColor, #556b82);
+  flex-shrink: 0;
+  width: 1.25rem;
+  text-align: center;
+}.step-body {
+  padding: 0 1.25rem 1.25rem;
+}.step-divider {
+  border: none;
+  border-top: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+  margin: 0 0 1rem;
+}.step-content {
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  color: var(--sapTextColor, #32363a);
+}.step-content h2,
+.step-content h3,
+.step-content h4 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: var(--sapTextColor, #32363a);
+}.step-content p {
+  margin: 0.75rem 0;
+}.step-content ul,
+.step-content ol {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}.step-content li {
+  margin-bottom: 0.375rem;
+}.step-actions {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--sapGroup_ContentBorderColor, #e5e5e5);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}.step-validation-mount:empty {
+  display: none;
+}/* Progress bar segments */.progress-segments {
+  display: flex;
+  gap: 3px;
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+}.progress-segment {
+  flex: 1;
+  background: var(--sapField_Background, #e5e5e5);
+  border-radius: 3px;
+  transition: background 0.2s;
+}.progress-segment.completed {
+  background: var(--sapPositiveColor, #30914c);
+}.progress-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--sapContent_LabelColor, #556b82);
+  white-space: nowrap;
+}/* Validation quiz styles */.step-validation {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: var(--sapInformationBackground, #e1f4ff);
+  border-radius: 0.5rem;
+  border: 1px solid var(--sapInformationBorderColor, #0070f2);
+}.step-validation fieldset {
+  border: none;
+  padding: 0;
+  margin: 0 0 0.75rem;
+}.step-validation legend {
+  font-weight: 600;
+  font-size: 0.875rem;
+  margin-bottom: 0.5rem;
+  color: var(--sapTextColor, #32363a);
+}.step-validation .option-card {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+  border-radius: 0.375rem;
+  margin-bottom: 0.375rem;
+  cursor: pointer;
+  background: var(--sapBaseColor, #fff);
+  font-size: 0.875rem;
+  transition: border-color 0.15s;
+}.step-validation .option-card:hover {
+  border-color: var(--sapBrandColor, #0070f2);
+}.validation-feedback {
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}.validation-success {
+  color: var(--sapPositiveColor, #30914c);
+}.validation-error {
+  color: var(--sapNegativeColor, #bb0000);
+}/* You will learn section */.you-will-learn {
+  margin: 0 0 1.5rem;
+}.you-will-learn h3 {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+  color: var(--sapTextColor, #32363a);
+}.you-will-learn ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}.you-will-learn li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}.you-will-learn .check-icon {
+  color: var(--sapPositiveColor, #30914c);
+  font-size: 0.75rem;
+}/* Tutorial title & description */.tutorial-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0 0 0.75rem;
+  line-height: 1.3;
+  color: var(--sapTextColor, #32363a);
+}.tutorial-description {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--sapContent_LabelColor, #556b82);
+  margin: 0 0 1.25rem;
+}/* Tutorial author row */
+.tutorial-author-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.8125rem;
+  margin-bottom: 0.75rem;
+  padding: 0.625rem 0;
+  border-bottom: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+}
+.author-left {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+.author-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.author-avatar-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--sapAccentColor6, #286eb4);
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+.author-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+.author-role {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--sapNeutralTextColor, #6a6d70);
+}
+.author-name {
+  font-weight: 600;
+  color: var(--sapLinkColor, #0064d9);
+  text-decoration: none;
+}
+a.author-name:hover {
+  text-decoration: underline;
+}
+span.author-name {
+  color: var(--sapTextColor, #32363a);
+}
+.author-date {
+  font-size: 0.75rem;
+  color: var(--sapNeutralTextColor, #6a6d70);
+  white-space: nowrap;
+}
+/* Tutorial contributors row */
+.tutorial-contributors-row {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: 0.8125rem;
+  margin-bottom: 1rem;
+}
+.contributors-label {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--sapNeutralTextColor, #6a6d70);
+}
+.contributors-stack {
+  display: flex;
+  align-items: center;
+}
+.contributor-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--sapBaseColor, #fff);
+  margin-left: -8px;
+  object-fit: cover;
+}
+.contributor-avatar:first-child {
+  margin-left: 0;
+}
+.contributors-overflow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--sapNeutralBackground, #f5f6f7);
+  border: 2px solid var(--sapBaseColor, #fff);
+  margin-left: -8px;
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: var(--sapNeutralTextColor, #6a6d70);
+}/* Tutorial prerequisites */.tutorial-prerequisites {
+  background: var(--sapInformationBackground, #e8f4fd);
+  border-left: 4px solid var(--sapBrandColor, #0070f2);
+  border-radius: 0 0.5rem 0.5rem 0;
+  padding: 1rem 1.25rem;
+  margin: 0 0 1.5rem;
+}.tutorial-prerequisites h3 {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+  color: var(--sapTextColor, #32363a);
+}.tutorial-prerequisites ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  list-style: disc;
+}.tutorial-prerequisites li {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  margin-bottom: 0.25rem;
+  color: var(--sapTextColor, #32363a);
+}.tutorial-prerequisites a {
+  color: var(--sapLinkColor, #0064d9);
+  text-decoration: none;
+}.tutorial-prerequisites a:hover {
+  text-decoration: underline;
+}/* Option tabs (multi-option steps) */.option-tabs {
+  margin: 1rem 0;
+  border: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}.option-tabs .fd-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+  background: var(--sapField_Background, #f5f6f7);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}.option-tabs .fd-tabs__item {
+  padding: 0.625rem 1.25rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--sapContent_LabelColor, #556b82);
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}.option-tabs .fd-tabs__item:hover {
+  color: var(--sapBrandColor, #0070f2);
+  background: var(--sapList_Hover_Background, rgba(0, 0, 0, 0.04));
+}.option-tabs .fd-tabs__item.is-selected {
+  color: var(--sapBrandColor, #0070f2);
+  border-bottom-color: var(--sapBrandColor, #0070f2);
+  background: var(--sapBaseColor, #fff);
+}.tab-panels {
+  padding: 1.25rem;
+}.tab-panel {
+  font-size: 0.9375rem;
+  line-height: 1.7;
+}/* Sidebar TOC active state */.step-toc-item.active a {
+  color: var(--sapBrandColor, #0070f2);
+  font-weight: 700;
+}.step-toc-item.completed a {
+  color: var(--sapPositiveColor, #30914c);
+}.step-toc-item.completed a::after {
+  content: ' ✓';
+  font-size: 0.6875rem;
+}/* Tables in tutorial content */.step-content table,
+.tutorial-main table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.875rem;
+}.step-content th,
+.tutorial-main th {
+  background: var(--sapField_Background, #f5f6f7);
+  font-weight: 700;
+  text-align: left;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+  color: var(--sapTextColor, #32363a);
+}.step-content td,
+.tutorial-main td {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+  color: var(--sapTextColor, #32363a);
+}.step-content tr:nth-child(even),
+.tutorial-main tr:nth-child(even) {
+  background: var(--sapField_Background, #f9fafb);
 }/* Images in tutorials */.tutorial-main img {
   border: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
   border-radius: 0.25rem;
   max-width: 100%;
+}/* Headings in tutorial main area */.tutorial-main h2 {
+  font-size: 1.375rem;
+  font-weight: 700;
+  margin: 1.5rem 0 0.75rem;
+  color: var(--sapTextColor, #32363a);
+}.tutorial-main h3 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin: 1.25rem 0 0.5rem;
+  color: var(--sapTextColor, #32363a);
 }/* FD button Horizon styling */.fd-button {
   cursor: pointer;
   font-family: var(--sapFontFamily);
@@ -2014,7 +2787,7 @@
     grid-template-columns: 1fr;
     padding: 1rem;
   }
-  .tutorial-sidebar {
+  .tutorial-right-col {
     display: none;
   }
 }@media (max-width: 640px) {
@@ -2044,4 +2817,203 @@
   .timeline-card {
     padding: 1rem;
   }
+}
+
+/* ── Next Steps ── */
+.next-steps {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+}
+.next-steps-heading {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: var(--sapTextColor, #32363a);
+}
+.next-steps-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+  border-radius: 0.5rem;
+  text-decoration: none;
+  color: var(--sapTextColor, #32363a);
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+.next-steps-card:hover {
+  border-color: var(--sapSelectedColor, #0064d9);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+.next-steps-label {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--sapNeutralTextColor, #6a6d70);
+  background: var(--sapNeutralBackground, #f5f6f7);
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+}
+.next-steps-title {
+  flex: 1;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+.next-steps-meta {
+  font-size: 0.75rem;
+  color: var(--sapNeutralTextColor, #6a6d70);
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.next-steps-time-icon {
+  font-size: 0.875rem;
+}
+.next-steps-expand {
+  font-size: 1.25rem;
+  color: var(--sapNeutralTextColor, #6a6d70);
+}
+
+/* ── Mini Navigator ── */
+.mini-nav {
+  background: var(--sapBaseColor, #fff);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  border: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+}
+.mini-nav-breadcrumb {
+  font-size: 0.6875rem;
+  color: var(--sapNeutralTextColor, #6a6d70);
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+.mini-nav-breadcrumb a {
+  color: var(--sapLinkColor, #0064d9);
+  text-decoration: none;
+}
+.mini-nav-breadcrumb a:hover {
+  text-decoration: underline;
+}
+.mini-nav-sep {
+  color: var(--sapNeutralTextColor, #6a6d70);
+}
+.mini-nav-group-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin: 0.5rem 0 0.75rem;
+  color: var(--sapTextColor, #32363a);
+}
+.mini-nav-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+.mini-nav-progress-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--sapNeutralBackground, #e8e8e8);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.mini-nav-progress-fill {
+  height: 100%;
+  background: var(--sapPositiveColor, #188918);
+  border-radius: 2px;
+  width: 0;
+  transition: width 0.3s;
+}
+.mini-nav-progress-icon {
+  color: var(--sapNeutralTextColor, #6a6d70);
+  flex-shrink: 0;
+}
+.mini-nav-progress-label {
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--sapNeutralTextColor, #6a6d70);
+  margin-bottom: 0.75rem;
+}
+.mini-nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.mini-nav-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.375rem 0;
+  font-size: 0.8125rem;
+  position: relative;
+}
+.mini-nav-item + .mini-nav-item {
+  border-top: 1px solid var(--sapGroup_ContentBorderColor, #e8e8e8);
+}
+.mini-nav-circle {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--sapNeutralBorderColor, #a8b2bd);
+  flex-shrink: 0;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.625rem;
+  color: transparent;
+}
+.mini-nav-item.is-completed .mini-nav-circle {
+  background: var(--sapPositiveColor, #188918);
+  border-color: var(--sapPositiveColor, #188918);
+  color: #fff;
+}
+.mini-nav-item.is-completed .mini-nav-circle::after {
+  content: '✓';
+}
+.mini-nav-item.is-current .mini-nav-circle {
+  border-color: var(--sapSelectedColor, #0064d9);
+  background: var(--sapSelectedColor, #0064d9);
+}
+.mini-nav-item.is-current .mini-nav-circle::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff;
+}
+.mini-nav-link {
+  color: var(--sapTextColor, #32363a);
+  text-decoration: none;
+  line-height: 1.3;
+}
+.mini-nav-item.is-current .mini-nav-link {
+  font-weight: 600;
+  color: var(--sapSelectedColor, #0064d9);
+}
+.mini-nav-link:hover {
+  text-decoration: underline;
+}
+
+/* Shiki dual-theme: light by default, dark when html.dark */
+.shiki,
+.shiki span {
+  color: var(--shiki-light);
+  background-color: var(--shiki-light-bg);
+}
+html.dark .shiki,
+html.dark .shiki span {
+  color: var(--shiki-dark);
+  background-color: var(--shiki-dark-bg);
+}
+.code-block .shiki {
+  margin: 0;
+  padding: 1rem;
+  overflow-x: auto;
 }

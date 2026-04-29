@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, reactive } from 'vue'
+import { ref, computed, onMounted, reactive, watch } from 'vue'
 import type { TutorialEntry, CardItem, MissionRef, GroupRef } from '@shared/types'
 
 const tutorials = ref<TutorialEntry[]>([])
@@ -9,6 +9,8 @@ const searchQuery = ref('')
 const filtersOpen = ref(true)
 const productSearch = ref('')
 const topicSearch = ref('')
+const currentPage = ref(1)
+const pageSize = 48
 
 const filters = reactive({
   levels: [] as string[],
@@ -18,12 +20,40 @@ const filters = reactive({
 })
 
 onMounted(async () => {
-  const res = await fetch('/tutorials/_nav.json')
-  if (res.ok) {
-    const navData = await res.json()
-    tutorials.value = navData.tutorials ?? navData
-    missionsMeta.value = navData.missions ?? []
-    groupsMeta.value = navData.groups ?? []
+  const [navRes, catalogRes] = await Promise.all([
+    fetch('/tutorials/_nav.json'),
+    fetch('/build/navigator'),
+  ])
+
+  if (navRes.ok) {
+    const navData = await navRes.json()
+    const tuts: TutorialEntry[] = navData.tutorials ?? navData
+    tutorials.value = tuts
+  }
+
+  if (catalogRes.ok) {
+    const catalog = await catalogRes.json()
+    missionsMeta.value = catalog.missions ?? []
+    groupsMeta.value = catalog.groups ?? []
+
+    if (catalog.tutorialMappings && tutorials.value.length) {
+      const mappingBySlug = new Map(catalog.tutorialMappings.map((m: any) => [m.slug, m]))
+      tutorials.value = tutorials.value.map(t => {
+        const mapping = mappingBySlug.get(t.slug)
+        if (mapping) {
+          return {
+            ...t,
+            missionId: mapping.missionId,
+            missionTitle: mapping.missionTitle,
+            groupId: mapping.groupId,
+            groupTitle: mapping.groupTitle,
+            prev: mapping.prev ?? t.prev,
+            next: mapping.next ?? t.next,
+          }
+        }
+        return t
+      })
+    }
   }
 })
 
@@ -240,6 +270,59 @@ const hasActiveFilters = computed(() => {
     filters.products.length > 0 ||
     filters.topics.length > 0
 })
+
+const totalPages = computed(() => Math.ceil(filteredItems.value.length / pageSize))
+
+const paginatedItems = computed(() => {
+  const start = (currentPage.value - 1) * pageSize
+  return filteredItems.value.slice(start, start + pageSize)
+})
+
+const paginatorPages = computed(() => {
+  const total = totalPages.value
+  if (total <= 1) return []
+  const current = currentPage.value
+  const pages: Array<{ label: string; page: number; isCurrent: boolean; isRange: boolean }> = []
+
+  if (total <= 9) {
+    for (let i = 1; i <= total; i++) {
+      pages.push({ label: String(i), page: i, isCurrent: i === current, isRange: false })
+    }
+    return pages
+  }
+
+  const nearby: number[] = []
+  for (let i = Math.max(1, current - 3); i <= Math.min(total, current + 5); i++) {
+    nearby.push(i)
+  }
+  if (nearby.length > 9) nearby.length = 9
+
+  for (const p of nearby) {
+    pages.push({ label: String(p), page: p, isCurrent: p === current, isRange: false })
+  }
+
+  const lastNearby = nearby[nearby.length - 1]
+  if (lastNearby < total) {
+    const rangeSize = 9
+    let rangeStart = lastNearby + 1
+    while (rangeStart <= total) {
+      const rangeEnd = Math.min(rangeStart + rangeSize - 1, total)
+      pages.push({ label: `${rangeStart}-${rangeEnd}`, page: rangeStart, isCurrent: false, isRange: true })
+      rangeStart = rangeEnd + 1
+    }
+  }
+
+  return pages
+})
+
+function goToPage(page: number) {
+  currentPage.value = Math.max(1, Math.min(page, totalPages.value))
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+watch([searchQuery, () => filters.levels, () => filters.types, () => filters.products, () => filters.topics], () => {
+  currentPage.value = 1
+}, { deep: true })
 </script>
 
 <template>
@@ -376,7 +459,7 @@ const hasActiveFilters = computed(() => {
       <!-- Section: Card Grid -->
       <section class="navigator-grid">
         <a
-          v-for="item in filteredItems"
+          v-for="item in paginatedItems"
           :key="item.id"
           :href="item.href"
           class="nav-card"
@@ -411,6 +494,29 @@ const hasActiveFilters = computed(() => {
           </div>
         </a>
       </section>
+
+      <!-- Section: Pagination -->
+      <nav v-if="totalPages > 1" class="navigator-pagination" aria-label="Page navigation">
+        <button
+          class="pagination-btn pagination-prev"
+          :disabled="currentPage === 1"
+          @click="goToPage(currentPage - 1)"
+          aria-label="Previous page"
+        >&lsaquo;</button>
+        <button
+          v-for="p in paginatorPages"
+          :key="p.label"
+          class="pagination-btn"
+          :class="{ 'pagination-btn--current': p.isCurrent, 'pagination-btn--range': p.isRange }"
+          @click="goToPage(p.page)"
+        >{{ p.label }}</button>
+        <button
+          class="pagination-btn pagination-next"
+          :disabled="currentPage === totalPages"
+          @click="goToPage(currentPage + 1)"
+          aria-label="Next page"
+        >&rsaquo;</button>
+      </nav>
 
       <!-- Empty State -->
       <div v-if="filteredItems.length === 0 && tutorials.length > 0" class="navigator-empty">
@@ -832,6 +938,64 @@ const hasActiveFilters = computed(() => {
   font-size: 1rem;
   color: var(--sapContent_LabelColor, #556b82);
   margin-bottom: 1rem;
+}
+
+/* ─── Pagination ─── */
+.navigator-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  margin-top: 2rem;
+  padding: 1rem 0;
+}
+
+.pagination-btn {
+  min-width: 2.25rem;
+  height: 2.25rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--sapButton_BorderColor, #bcc3ca);
+  border-radius: var(--sapButton_BorderCornerRadius, 0.5rem);
+  background: var(--sapButton_Background, #fff);
+  color: var(--sapButton_TextColor, #32363a);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s ease;
+  font-family: inherit;
+}
+
+.pagination-btn:hover:not(:disabled):not(.pagination-btn--current) {
+  background: var(--sapButton_Hover_Background, #eaeff5);
+  border-color: var(--sapButton_Hover_BorderColor, #0064d9);
+}
+
+.pagination-btn--current {
+  background: var(--sapSelectedColor, #0070f2);
+  border-color: var(--sapSelectedColor, #0070f2);
+  color: #fff;
+  cursor: default;
+}
+
+.pagination-btn--range {
+  font-size: 0.75rem;
+  padding: 0 0.625rem;
+  color: var(--sapContent_LabelColor, #556b82);
+  border-style: dashed;
+}
+
+.pagination-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pagination-prev,
+.pagination-next {
+  font-size: 1.25rem;
+  font-weight: 400;
 }
 
 /* ─── Responsive ─── */

@@ -1,3 +1,19 @@
+// --- Copy code block ---
+;(window as any).copyCodeBlock = function(btn: HTMLButtonElement) {
+  const block = btn.closest('.code-block')
+  if (!block) return
+  const code = block.querySelector('.code-block-body code, .code-block-body pre')
+  if (!code) return
+  const text = code.textContent || ''
+  navigator.clipboard.writeText(text).then(() => {
+    const label = btn.querySelector('.copy-label')
+    if (label) {
+      label.textContent = 'Copied!'
+      setTimeout(() => { label.textContent = 'Copy' }, 2000)
+    }
+  })
+}
+
 // Event delegation
 document.addEventListener('click', (e) => {
   const target = e.target as HTMLElement
@@ -296,10 +312,43 @@ function handleQuizSubmit(form: HTMLFormElement, stepNum: string, questions: Val
   }
 }
 
+// --- Mini-navigator progress ---
+async function initMiniNavProgress() {
+  const nav = document.getElementById('mini-navigator-static')
+  if (!nav) return
+  const items = nav.querySelectorAll('.mini-nav-item')
+  if (!items.length) return
+
+  const slug = document.querySelector('#progress-bar')?.getAttribute('data-slug')
+  if (!slug) return
+
+  const groupSlug = document.documentElement.dataset.groupSlug
+  if (!groupSlug) return
+
+  const data = await apiGet<{ completedSlugs: string[] }>(`/groups/${groupSlug}/progress`)
+  if (!data?.completedSlugs) return
+
+  let completed = 0
+  items.forEach(item => {
+    const el = item as HTMLElement
+    if (data.completedSlugs.includes(el.dataset.slug || '')) {
+      el.classList.add('is-completed')
+      completed++
+    }
+  })
+
+  const total = items.length
+  const fill = document.getElementById('mini-nav-progress-fill')
+  const label = document.getElementById('mini-nav-progress-label')
+  if (fill) fill.style.width = `${Math.round((completed / total) * 100)}%`
+  if (label) label.textContent = `${completed}/${total} TASKS COMPLETED`
+}
+
 // --- Init on DOMContentLoaded ---
 document.addEventListener('DOMContentLoaded', () => {
   initProgressBar()
   loadProgress()
   initValidation()
   updateActiveTocItem()
+  initMiniNavProgress()
 })

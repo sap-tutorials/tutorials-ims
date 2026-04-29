@@ -1,12 +1,16 @@
 <aside class="tutorial-sidebar">
   <nav class="step-toc" aria-label="Steps">
     <h4>Steps</h4>
-    <ol class="step-toc-list">
+    <ul class="step-toc-list">
       {{ range .Params.steps }}
       <li class="step-toc-item" data-toc-step="{{ .number }}">
-        <a href="#step-{{ .number }}">{{ .title }}</a>
+        <a href="#step-{{ .number }}">
+          <span class="step-toc-circle">{{ .number }}</span>
+          <span class="step-toc-text"><span class="step-toc-label">Step {{ .number }}:</span> {{ .title }}</span>
+        </a>
       </li>
       {{ end }}
-    </ol>
+    </ul>
+    <a href="#" class="step-toc-back" onclick="window.scrollTo({top:0,behavior:'smooth'});return false">Back to Top</a>
   </nav>
 </aside>

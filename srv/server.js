@@ -3,6 +3,7 @@ import { registerJobs } from './jobs/scheduler.js';
 import { createStompBroker } from './lib/stomp-broker.js';
 import { qrcodeHandler } from './lib/qrcode-handler.js';
 import { buildCatalogHandler } from './lib/build-catalog.js';
+import { navigatorCatalogHandler } from './lib/navigator-catalog.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
 
 cds.on('bootstrap', (app) => {
@@ -22,6 +23,7 @@ cds.on('bootstrap', (app) => {
   app.use(basicAuthMiddleware);
   app.get('/api/qrcode', qrcodeHandler);
   app.get('/build/catalog', buildCatalogHandler);
+  app.get('/build/navigator', navigatorCatalogHandler);
 });
 
 cds.on('served', () => {

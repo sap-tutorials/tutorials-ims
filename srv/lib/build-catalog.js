@@ -15,7 +15,7 @@ export async function buildCatalogHandler(req, res) {
     const missionList = missions.map(m => ({
       imsId: m.legacyId,
       title: m.title || '',
-      slug: m.slug || '',
+      slug: m.slug || String(m.legacyId),
       description: m.description || '',
       level: m.experienceTag || 'beginner',
       time: Math.round((m.averageTimeToComplete || 0) / 60),
@@ -35,7 +35,7 @@ export async function buildCatalogHandler(req, res) {
         return {
           imsId: p.legacyId,
           title: p.name || '',
-          slug: p.slug || '',
+          slug: p.slug || String(p.legacyId),
           description: '',
           tutorialSlugs,
         };

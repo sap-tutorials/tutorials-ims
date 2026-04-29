@@ -1,6 +1,25 @@
 {{ with .Params.author }}
-<div class="tutorial-author">
-  <span class="author-label">Written by</span>
-  <span class="author-name">{{ . }}</span>
+{{ $profile := $.Params.authorProfile }}
+{{ $username := "" }}
+{{ if $profile }}{{ $username = path.Base $profile }}{{ end }}
+<div class="tutorial-author-row">
+  <div class="author-left">
+    {{ if $username }}
+    <img src="https://github.com/{{ $username }}.png?size=40" alt="{{ . }}" class="author-avatar" />
+    {{ else }}
+    <div class="author-avatar author-avatar-placeholder">{{ substr . 0 1 }}</div>
+    {{ end }}
+    <div class="author-info">
+      <span class="author-role">Created by</span>
+      {{ if $username }}
+      <a href="{{ $profile }}" class="author-name" target="_blank" rel="noopener">{{ . }}</a>
+      {{ else }}
+      <span class="author-name">{{ . }}</span>
+      {{ end }}
+    </div>
+  </div>
+  {{ with $.Params.lastUpdated }}
+  <span class="author-date">Last updated: {{ . }}</span>
+  {{ end }}
 </div>
 {{ end }}

@@ -11,8 +11,27 @@ export interface FrontmatterResult {
   body: string
 }
 
+/**
+ * Clean raw markdown before YAML frontmatter parsing:
+ * - Strip git merge conflict markers (keeping "ours" side)
+ * - Fix missing space after YAML keys (e.g. `tags:[` → `tags: [`)
+ * - Remove double commas in tag arrays
+ */
+function sanitizeRawMarkdown(md: string): string {
+  // Strip git merge conflict markers — keep the HEAD (ours) version
+  md = md.replace(
+    /^<<<<<<< .+\n([\s\S]*?)^=======\n[\s\S]*?^>>>>>>> .+\n/gm,
+    '$1'
+  )
+  // Fix missing space after colon in YAML keys (e.g. `tags:[` → `tags: [`)
+  md = md.replace(/^(\w+):(\[)/gm, '$1: $2')
+  // Remove double commas in YAML arrays
+  md = md.replace(/,,/g, ',')
+  return md
+}
+
 export function extractFrontmatter(md: string): FrontmatterResult {
-  const { data, content } = matter(md)
+  const { data, content } = matter(sanitizeRawMarkdown(md))
   const fm = data as TutorialFrontmatter
 
   const titleMatch = content.match(/^# (.+)$/m)

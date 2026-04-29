@@ -1,3 +1,5 @@
+process.chdir(__dirname)
+
 const approuter = require('@sap/approuter')
 const { mkdirSync, rmSync, renameSync, existsSync } = require('fs')
 const { join } = require('path')

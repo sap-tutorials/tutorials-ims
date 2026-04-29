@@ -11,15 +11,16 @@
       <a href="/app-space" class="fd-shellbar__action">App Space</a>
       <a href="/event-display" class="fd-shellbar__action">Event Display</a>
     </nav>
-    <button type="button" class="fd-shellbar__action" data-action="toggle-theme" aria-label="Toggle dark mode" onclick="
-      const html = document.documentElement;
-      const next = html.dataset.theme === 'dark' ? 'light' : 'dark';
-      html.dataset.theme = next;
-      html.classList.toggle('dark', next === 'dark');
-      localStorage.setItem('theme', next);
-    "></button>
+    <span class="shellbar-separator"></span>
+    <button type="button" class="theme-toggle" data-action="toggle-theme" aria-label="Toggle dark mode" title="Toggle dark/light mode">
+      <span class="theme-toggle-track">
+        <span class="theme-toggle-thumb"></span>
+        <svg class="theme-toggle-icon theme-toggle-sun" viewBox="0 0 16 16" width="12" height="12"><circle cx="8" cy="8" r="3.5" fill="currentColor"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <svg class="theme-toggle-icon theme-toggle-moon" viewBox="0 0 16 16" width="12" height="12"><path d="M13.36 10.2a5.5 5.5 0 0 1-7.56-7.56A6 6 0 1 0 13.36 10.2z" fill="currentColor"/></svg>
+      </span>
+    </button>
     <div class="fd-shellbar__action" id="user-menu">
-      <span id="user-avatar" class="fd-avatar fd-avatar--xs fd-avatar--circle fd-avatar--placeholder" role="button" tabindex="0" aria-label="User profile" onclick="handleProfileClick()"></span>
+      <span id="user-avatar" class="fd-avatar fd-avatar--xs fd-avatar--circle fd-avatar--placeholder" role="button" tabindex="0" aria-label="User profile" onclick="handleProfileClick()"><i class="sap-icon--person-placeholder"></i></span>
       <div id="user-popover" class="fd-popover__body fd-popover__body--right">
         <div class="user-popover__content">
           <div class="user-popover__header">

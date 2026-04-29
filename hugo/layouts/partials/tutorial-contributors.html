@@ -1,0 +1,15 @@
+{{ with .Params.contributors }}
+{{ if gt (len .) 0 }}
+<div class="tutorial-contributors-row">
+  <span class="contributors-label">Contributors</span>
+  <div class="contributors-stack">
+    {{ range first 5 . }}
+    <img src="https://github.com/{{ . }}.png?size=28" alt="{{ . }}" class="contributor-avatar" title="{{ . }}" />
+    {{ end }}
+    {{ if gt (len .) 5 }}
+    <span class="contributors-overflow">+{{ sub (len .) 5 }}</span>
+    {{ end }}
+  </div>
+</div>
+{{ end }}
+{{ end }}

@@ -326,6 +326,7 @@ export function writeHugoPage(
     stepCount: steps.length,
     prev: nav.prev,
     next: nav.next,
+    aliases: [`/tutorials/${slug}.html`],
     displayTags: [...new Set([cleanPrimaryTag, ...cleanTags])].map(humanizeTag).filter(t => t.length > 0),
     youWillLearn,
     prerequisites: splitPrerequisites(prerequisites),
@@ -517,6 +518,7 @@ function formatDuration(ms: number): string {
 async function main() {
   const totalStart = performance.now()
   const regenerateMode = process.argv.includes('--regenerate')
+  const discoverOnly = process.argv.includes('--discover-only')
   const target = parseTarget(process.argv)
   const OUTPUT_DIR = getOutputDir(target)
   const NAV_JSON_DIR = getNavJsonDir(target)
@@ -524,6 +526,25 @@ async function main() {
   let allTutorials: DiscoveredTutorial[]
   let discoveryMs = 0
   let metaMs = 0
+
+  const DISCOVERY_CACHE = join(CACHE_DIR, '_discovery.json')
+
+  if (discoverOnly) {
+    if (!process.env.GITHUB_TOKEN) {
+      console.error('ERROR: GITHUB_TOKEN is required for --discover-only.')
+      process.exit(1)
+    }
+    console.log('Running DISCOVERY ONLY mode (builds repo mapping for image URLs)\n')
+    const discoveryStart = performance.now()
+    const discovered = await discoverAllTutorials()
+    const discoveryMap: Record<string, { slug: string; repo: string; branch: string }> = {}
+    for (const t of discovered) discoveryMap[t.slug] = t
+    mkdirSync(dirname(DISCOVERY_CACHE), { recursive: true })
+    writeFileSync(DISCOVERY_CACHE, JSON.stringify(discoveryMap, null, 2), 'utf-8')
+    console.log(`\nSaved discovery map for ${discovered.length} tutorials to ${DISCOVERY_CACHE}`)
+    console.log(`Done in ${formatDuration(performance.now() - discoveryStart)}`)
+    return
+  }
 
   if (regenerateMode) {
     console.log('Running in REGENERATE mode (from cache only, no GitHub API calls)\n')
@@ -534,7 +555,15 @@ async function main() {
       console.error('ERROR: No cached tutorials found. Run without --regenerate first.')
       process.exit(1)
     }
-    allTutorials = cachedFiles.map(slug => ({ slug, repo: 'unknown', branch: 'main' }))
+    const discoveryMap: Record<string, { slug: string; repo: string; branch: string }> = existsSync(DISCOVERY_CACHE)
+      ? JSON.parse(readFileSync(DISCOVERY_CACHE, 'utf-8'))
+      : {}
+    allTutorials = cachedFiles.map(slug => discoveryMap[slug] || { slug, repo: 'unknown', branch: 'main' })
+    const unknownCount = allTutorials.filter(t => t.repo === 'unknown').length
+    if (unknownCount > 0) {
+      console.warn(`WARNING: ${unknownCount}/${allTutorials.length} tutorials have unknown repo (images will break).`)
+      console.warn(`  Run with --discover-only first to build the repo mapping.\n`)
+    }
     console.log(`Found ${allTutorials.length} cached tutorials\n`)
   } else {
     if (!process.env.GITHUB_TOKEN) {
@@ -550,6 +579,12 @@ async function main() {
 
     allTutorials = await discoverAllTutorials()
     discoveryMs = performance.now() - discoveryStart
+
+    // Persist discovery mapping so --regenerate can resolve image URLs
+    const discoveryMap: Record<string, { slug: string; repo: string; branch: string }> = {}
+    for (const t of allTutorials) discoveryMap[t.slug] = t
+    mkdirSync(dirname(DISCOVERY_CACHE), { recursive: true })
+    writeFileSync(DISCOVERY_CACHE, JSON.stringify(discoveryMap, null, 2), 'utf-8')
 
     console.log(`\nDiscovered ${allTutorials.length} tutorials (${formatDuration(discoveryMs)})\n`)
 

@@ -1,8 +1,9 @@
 <div class="tutorial-nav-bottom">
-  {{ with .Params.prevTutorial }}
-  <a href="/tutorials/{{ .slug }}" class="fd-button fd-button--transparent tutorial-nav-prev">← {{ .title }}</a>
+  {{ with .Params.prev }}
+  <a href="/tutorials/{{ . }}" class="nav-pill">&larr; Previous</a>
   {{ end }}
-  {{ with .Params.nextTutorial }}
-  <a href="/tutorials/{{ .slug }}" class="fd-button fd-button--transparent tutorial-nav-next">{{ .title }} →</a>
+  <div class="nav-spacer"></div>
+  {{ with .Params.next }}
+  <a href="/tutorials/{{ . }}" class="nav-pill nav-pill--primary">Next &rarr;</a>
   {{ end }}
 </div>

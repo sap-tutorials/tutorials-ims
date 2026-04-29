@@ -1,8 +1,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ .Title }} | {{ .Site.Title }}</title>
-<link rel="stylesheet" href="https://unpkg.com/@sap-theming/theming-base-content@11/content/Base/baseLib/sap_horizon/css_variables.css">
-<link rel="stylesheet" href="https://unpkg.com/fundamental-styles@0.41.4/dist/fonts.css">
+<link rel="stylesheet" href="https://unpkg.com/fundamental-styles@0.41.4/dist/icon.css">
+<style>
+@font-face {
+  font-family: "SAP-icons";
+  src: url("https://unpkg.com/@sap-theming/theming-base-content@11/content/Base/baseLib/baseTheme/fonts/SAP-icons.woff2") format("woff2");
+  font-weight: normal;
+  font-style: normal;
+}
+</style>
+{{ $themeVars := resources.Get "css/sap-theme-vars.css" }}
+{{ $darkVars := resources.Get "css/sap-horizon-dark.css" }}
+<link rel="stylesheet" href="{{ $themeVars.RelPermalink }}">
+<link rel="stylesheet" href="{{ $darkVars.RelPermalink }}">
 <link rel="stylesheet" href="/css/sap-fundamental.css">
 <script>
   const t = localStorage.getItem('theme') ||

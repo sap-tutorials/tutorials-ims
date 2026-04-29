@@ -37,3 +37,25 @@ view Tasks as
     'CHECKPOINT' as taskType : String(20),
     createdAt, modifiedAt
   };
+
+// Pre-joined view for the navigator: only missions/paths/items that reference actual tutorials
+view NavigatorCatalog as
+  SELECT from ims.CompletionPathItems as item
+  inner join ims.Tutorials as tut on tut.legacyId = item.taskLegacyId
+  inner join ims.CompletionPaths as path on path.ID = item.path.ID
+  inner join ims.Missions as mission on mission.ID = path.mission.ID
+  {
+    key item.ID as itemId,
+    mission.ID as missionUUID,
+    mission.legacyId as missionId,
+    mission.title as missionTitle,
+    mission.slug as missionSlug,
+    path.ID as pathUUID,
+    path.legacyId as pathId,
+    path.name as pathName,
+    path.slug as pathSlug,
+    tut.slug as tutorialSlug,
+    item.itemOrder,
+    item.taskType
+  }
+  where item.taskType = 'TUTORIAL' and tut.slug is not null;

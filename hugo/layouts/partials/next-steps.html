@@ -1,0 +1,25 @@
+{{ with .Params.next }}
+{{ $nextSlug := . }}
+{{ $nextPage := site.GetPage (printf "/tutorials/%s" $nextSlug) }}
+<div class="next-steps">
+  <h3 class="next-steps-heading">Next Steps</h3>
+  {{ if $nextPage }}
+  <a href="/tutorials/{{ $nextSlug }}" class="next-steps-card">
+    <span class="next-steps-label">TUTORIAL</span>
+    <span class="next-steps-title">{{ $nextPage.Title }}</span>
+    {{ with $nextPage.Params.time }}
+    <span class="next-steps-meta">
+      <span class="next-steps-time-icon">&#9201;</span> {{ . }} min.
+    </span>
+    {{ end }}
+    <span class="next-steps-expand">+</span>
+  </a>
+  {{ else }}
+  <a href="/tutorials/{{ $nextSlug }}" class="next-steps-card">
+    <span class="next-steps-label">TUTORIAL</span>
+    <span class="next-steps-title">{{ $nextSlug | humanize | title }}</span>
+    <span class="next-steps-expand">+</span>
+  </a>
+  {{ end }}
+</div>
+{{ end }}
