@@ -26,9 +26,11 @@
     "build:display": "cd display-app && npm install && npm run build",
     "build:all": "npm run fetch-tutorials -- --regenerate && npm run build:css && npm run build:apps && npm run build:hugo && npm run build:highlight && npm run build:display",
     "dev": "hugo server --source hugo",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:cap": "vitest run test/"
+    "test": "vitest run --project unit",
+    "test:watch": "vitest --project unit",
+    "test:hybrid": "cds bind --exec -- npx vitest run --project hybrid",
+    "test:hybrid:watch": "cds bind --exec -- npx vitest --project hybrid",
+    "test:all": "cds bind --exec -- npx vitest run"
   },
   "devDependencies": {
     "@cap-js/cds-test": "^1.0.0",

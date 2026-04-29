@@ -18,8 +18,9 @@ npm run dev                                   # VitePress dev server (http://loc
 npm run build                                 # Production build → site/.vitepress/dist/
 npm run preview                               # Preview production build locally
 npm run generate-dark-theme                   # Generate dark theme CSS variables
-npm run test                                  # Run all tests (vitest)
+npm run test                                  # Run unit tests (vitest, in-memory SQLite)
 npm run test:watch                            # Run tests in watch mode
+npm run test:hybrid                           # Run hybrid integration tests against real HANA (requires cf login)
 npx vitest run scripts/__tests__/v1.test.ts   # Run a single test file
 
 # CAP backend
@@ -79,6 +80,25 @@ Set `IMS_BASE_URL`, `CAP_BASE_URL`, and `IMS_AUTH_TOKEN` env vars. Export files 
 ### Parsers (scripts/parsers/)
 
 The fetch script detects parser format via frontmatter field `parser: v2`. V2 uses H3 headings to delimit steps; V1 (legacy) uses `[ACCORDION-BEGIN]`/`[ACCORDION-END]` markers. `images.ts` resolves relative image paths to `raw.githubusercontent.com` CDN URLs. `options.ts` converts `[OPTION BEGIN]`/`[OPTION END]` blocks to `<OptionTabs>` Vue components. `cap.ts` fetches mission/group catalog from the CAP backend at build time. Shared types in `types.ts`.
+
+### Testing
+
+Two Vitest workspaces defined in `vitest.workspace.ts`:
+
+- **unit** — In-memory SQLite, fast, no external dependencies. Runs with `npm test`.
+- **hybrid** — Real HANA Cloud via `cds bind --exec`. Runs with `npm run test:hybrid` (requires `cf login` to DEV space).
+
+Hybrid test files in `test/hybrid/`:
+
+| File | Coverage |
+| ---- | -------- |
+| `schema-deploy.test.js` | All 35 entities accessible, column structure validation |
+| `hana-sequences.test.js` | Legacy ID generation from 27 `.hdbsequence` files |
+| `views.test.js` | Tasks UNION view and NavigatorCatalog view |
+| `developer-workflow.test.js` | Task record creation, progress cascade, idempotent inserts |
+| `admin-crud.test.js` | CRUD on Events, Tags, ImsConfig; read validation on Tutorials/Missions |
+
+A write-safety guard (`test/hybrid/_guard.js`) checks `ALLOW_HYBRID_WRITES=true` before any INSERT/UPDATE/DELETE tests run. Tests that create data use a `__TEST__` prefix and clean up in `afterAll`.
 
 ## Gotchas
 

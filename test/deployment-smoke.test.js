@@ -66,16 +66,6 @@ describe('deployment smoke tests', () => {
     });
   });
 
-  describe('HANA sequence integration (hybrid only)', () => {
-    it.skipIf(!process.env.CDS_ENV?.includes('hybrid'))('getNextLegacyId returns numeric sequence value', async () => {
-      const { getNextLegacyId } = await import('../srv/lib/legacy-id.js');
-      const db = await cds.connect.to('db');
-      const id = await getNextLegacyId('TaskRecords', db);
-      expect(typeof id).toBe('number');
-      expect(id).toBeGreaterThan(10000000);
-    });
-  });
-
   describe('build catalog (unauthenticated)', () => {
     it('GET /build/catalog returns missions and hierarchies', async () => {
       const res = await project.get('/build/catalog', { validateStatus: () => true });

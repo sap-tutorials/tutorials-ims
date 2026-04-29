@@ -39,7 +39,7 @@ The rewrite documented in `docs/superpowers/plans/` has been **executed**. What 
 ### Remaining Backend Gaps
 
 - [x] **HANA sequences for legacyId** — 30 per-entity `.hdbsequence` files deployed in `db/src/`, START WITH 10000001 to avoid collision with migrated data; `legacy-id.js` validates entity names against known set
-- [ ] **Integration testing against real HANA** — Unit test coverage unknown; need to verify CDS compiles and deploys to HDI container
+- [x] **Integration testing against real HANA** — Vitest workspace with `hybrid` project; 5 test files (schema-deploy, hana-sequences, views, developer-workflow, admin-crud) run via `npm run test:hybrid` using `cds bind --exec`
 - [ ] **Adobe Analytics destination config** — Client exists but BTP Destination for `sap.d1.sc.omtrdc.net` may not be configured
 - [ ] **NGDS destination config** — Client exists but BTP Destination not verified
 - [ ] **Mail service binding** — `mail-client.js` exists but no BTP Mail Service instance confirmed
@@ -145,7 +145,7 @@ No mechanism exists to update the AppRouter's static content when tutorials chan
 | 5 | Admin UI — Missions + Groups CRUD | Blocks content curation | High | Not started |
 | 6 | BTP service bindings (Mail, NGDS dest, Analytics dest) | Blocks production job execution | Medium | Code done, config needed |
 | 7 | GDPR/Privacy tools (admin UI) | Compliance risk | Medium | Backend done, no UI |
-| 8 | Integration testing on HANA | Confidence in deploy | Medium | Not started |
+| 8 | Integration testing on HANA | Confidence in deploy | Medium | **Done** — 91 tests passing |
 | 9 | Real-time display (frontend WebSocket) | Event experience degradation | Medium | Backend done, frontend not wired |
 | 10 | Plan doc cleanup | Housekeeping | Low | Plans show unchecked but work is done |
 
