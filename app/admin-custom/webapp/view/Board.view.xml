@@ -1,0 +1,27 @@
+<mvc:View
+  controllerName="sap.tutorials.admin.custom.controller.Board"
+  xmlns:mvc="sap.ui.core.mvc"
+  xmlns="sap.m"
+  xmlns:l="sap.ui.layout">
+  <Page title="{i18n>boardTitle}" enableScrolling="true">
+    <content>
+      <l:VerticalLayout class="sapUiSmallMargin" width="100%">
+        <GenericTile header="Total Tutorials" subheader="All content" class="sapUiTinyMarginEnd">
+          <TileContent>
+            <NumericContent value="{board>/totalTutorials}" />
+          </TileContent>
+        </GenericTile>
+        <GenericTile header="Up to Date" subheader="Reviewed recently" class="sapUiTinyMarginEnd">
+          <TileContent>
+            <NumericContent value="{board>/upToDate}" valueColor="Good" />
+          </TileContent>
+        </GenericTile>
+        <GenericTile header="Needs Review" subheader="Outdated" class="sapUiTinyMarginEnd">
+          <TileContent>
+            <NumericContent value="{board>/needsReview}" valueColor="Critical" />
+          </TileContent>
+        </GenericTile>
+      </l:VerticalLayout>
+    </content>
+  </Page>
+</mvc:View>

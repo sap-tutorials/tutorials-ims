@@ -1,0 +1,15 @@
+{
+  "name": "sap.tutorials.admin.prizes",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Prizes - Admin Fiori Elements",
+  "sapux": true,
+  "scripts": {
+    "start": "fiori run --open index.html",
+    "build": "ui5 build --clean-dest"
+  },
+  "devDependencies": {
+    "@sap/ux-specification": "latest",
+    "@ui5/cli": "^4.0.0"
+  }
+}

@@ -1,0 +1,87 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.prizes",
+    "type": "application",
+    "title": "Prizes",
+    "description": "Manage Prizes",
+    "applicationVersion": { "version": "0.0.1" },
+    "dataSources": {
+      "mainService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "Prize-manage": {
+          "semanticObject": "Prize",
+          "action": "manage",
+          "title": "Prizes",
+          "signature": { "parameters": {}, "additionalParameters": "allowed" }
+        }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": { "sap.fe.templates": {} }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      }
+    },
+    "routing": {
+      "routes": [
+        {
+          "pattern": ":?query:",
+          "name": "PrizesList",
+          "target": "PrizesList"
+        },
+        {
+          "pattern": "Prizes({key}):?query:",
+          "name": "PrizesObjectPage",
+          "target": "PrizesObjectPage"
+        }
+      ],
+      "targets": {
+        "PrizesList": {
+          "type": "Component",
+          "id": "PrizesList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/Prizes",
+              "variantManagement": "Page",
+              "initialLoad": "Enabled",
+              "navigation": {
+                "Prizes": { "detail": { "route": "PrizesObjectPage" } }
+              }
+            }
+          }
+        },
+        "PrizesObjectPage": {
+          "type": "Component",
+          "id": "PrizesObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/Prizes",
+              "editableHeaderContent": true
+            }
+          }
+        }
+      }
+    }
+  }
+}
