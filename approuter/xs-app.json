@@ -11,6 +11,12 @@
   },
   "routes": [
     {
+      "source": "^/admin-ui/(.*)$",
+      "target": "/admin-ui/$1",
+      "service": "html5-apps-repo-rt",
+      "authenticationType": "xsuaa"
+    },
+    {
       "source": "^/login$",
       "authenticationType": "xsuaa",
       "target": "/",
