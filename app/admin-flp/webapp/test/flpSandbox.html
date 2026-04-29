@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Admin - FLP Sandbox</title>
+  <script>
+    window["sap-ushell-config"] = {
+      defaultRenderer: "fiori2",
+      applications: {
+        "Event-manage": {
+          title: "Events",
+          description: "Manage Events",
+          additionalInformation: "SAPUI5.Component=sap.tutorials.admin.events",
+          applicationType: "URL",
+          url: "/admin/events/webapp",
+          navigationMode: "embedded"
+        },
+        "Mission-manage": {
+          title: "Missions",
+          description: "Manage Missions",
+          additionalInformation: "SAPUI5.Component=sap.tutorials.admin.missions",
+          applicationType: "URL",
+          url: "/admin/missions/webapp",
+          navigationMode: "embedded"
+        },
+        "Group-manage": {
+          title: "Groups",
+          description: "Manage Groups",
+          additionalInformation: "SAPUI5.Component=sap.tutorials.admin.groups",
+          applicationType: "URL",
+          url: "/admin/groups/webapp",
+          navigationMode: "embedded"
+        },
+        "Tutorial-display": {
+          title: "Tutorials",
+          description: "View Tutorials",
+          additionalInformation: "SAPUI5.Component=sap.tutorials.admin.tutorials",
+          applicationType: "URL",
+          url: "/admin/tutorials/webapp",
+          navigationMode: "embedded"
+        },
+        "Tag-display": {
+          title: "Tags",
+          description: "View Tags",
+          additionalInformation: "SAPUI5.Component=sap.tutorials.admin.tags",
+          applicationType: "URL",
+          url: "/admin/tags/webapp",
+          navigationMode: "embedded"
+        },
+        "Accomplishment-manage": {
+          title: "Accomplishments",
+          description: "Manage Accomplishments",
+          additionalInformation: "SAPUI5.Component=sap.tutorials.admin.accomplishments",
+          applicationType: "URL",
+          url: "/admin/accomplishments/webapp",
+          navigationMode: "embedded"
+        },
+        "Prize-manage": {
+          title: "Prizes",
+          description: "Manage Prizes",
+          additionalInformation: "SAPUI5.Component=sap.tutorials.admin.prizes",
+          applicationType: "URL",
+          url: "/admin/prizes/webapp",
+          navigationMode: "embedded"
+        },
+        "Admin-board": {
+          title: "Board",
+          description: "Analytics Dashboard",
+          additionalInformation: "SAPUI5.Component=sap.tutorials.admin.custom",
+          applicationType: "URL",
+          url: "/admin-custom/webapp",
+          navigationMode: "embedded"
+        },
+        "Admin-dashboard": {
+          title: "Tutorial Dashboard",
+          description: "Content Operations",
+          additionalInformation: "SAPUI5.Component=sap.tutorials.admin.custom",
+          applicationType: "URL",
+          url: "/admin-custom/webapp#/dashboard",
+          navigationMode: "embedded"
+        },
+        "Admin-statistics": {
+          title: "Statistics",
+          description: "Export & Reports",
+          additionalInformation: "SAPUI5.Component=sap.tutorials.admin.custom",
+          applicationType: "URL",
+          url: "/admin-custom/webapp#/statistics",
+          navigationMode: "embedded"
+        },
+        "Admin-privacy": {
+          title: "Privacy",
+          description: "GDPR Tools",
+          additionalInformation: "SAPUI5.Component=sap.tutorials.admin.custom",
+          applicationType: "URL",
+          url: "/admin-custom/webapp#/privacy",
+          navigationMode: "embedded"
+        }
+      }
+    };
+  </script>
+  <script id="sap-ui-bootstrap"
+    src="https://ui5.sap.com/1.136.0/resources/sap-ui-core.js"
+    data-sap-ui-libs="sap.m, sap.ushell, sap.fe.templates"
+    data-sap-ui-compatVersion="edge"
+    data-sap-ui-theme="sap_horizon"
+    data-sap-ui-frameOptions="allow"
+    data-sap-ui-async="true">
+  </script>
+  <script>
+    sap.ui.require(["sap/ushell/Container"], function (Container) {
+      Container.createRenderer().then(function (renderer) {
+        renderer.placeAt("content");
+      });
+    });
+  </script>
+</head>
+<body class="sapUiBody" id="content"></body>
+</html>
