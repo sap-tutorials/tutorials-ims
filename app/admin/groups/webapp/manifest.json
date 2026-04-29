@@ -77,7 +77,18 @@
           "options": {
             "settings": {
               "contextPath": "/Groups",
-              "editableHeaderContent": false
+              "editableHeaderContent": false,
+              "content": {
+                "body": {
+                  "sections": {
+                    "ItemReorderSection": {
+                      "template": "sap.tutorials.admin.groups.ext.ItemReorder",
+                      "title": "Path Items (Drag to Reorder)",
+                      "position": { "anchor": "CompletionPathsSection", "placement": "After" }
+                    }
+                  }
+                }
+              }
             }
           }
         }
