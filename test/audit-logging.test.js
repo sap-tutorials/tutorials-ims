@@ -58,8 +58,8 @@ describe('Audit Logging - SecurityEvent Configuration', () => {
     expect(auditConfig.kind).toBe('audit-log-to-console');
   });
 
-  it('audit-log service handles SecurityEvent operations', async () => {
+  it('audit-log service handles both READ and WRITE operations', async () => {
     const auditConfig = cds.env.requires['audit-log'];
-    expect(auditConfig.handle).toContain('WRITE');
+    expect(auditConfig.handle).toEqual(['READ', 'WRITE']);
   });
 });

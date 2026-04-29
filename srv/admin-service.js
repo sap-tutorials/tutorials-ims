@@ -137,7 +137,7 @@ export default class AdminService extends cds.ApplicationService {
       await this._executeAnonymization(user);
 
       await audit.log('SecurityEvent', {
-        data: { action: 'AnonymizeUser', sapId }
+        data: { action: 'AnonymizeUser', sapId, dsrRequestNumber: null }
       });
     });
 
