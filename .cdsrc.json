@@ -12,7 +12,7 @@
     ]
   },
   "hana": {
-    "deploy-format": "hdbmigrationtable"
+    "deploy-format": "hdbtable"
   },
   "odata": {
     "version": "v4"
