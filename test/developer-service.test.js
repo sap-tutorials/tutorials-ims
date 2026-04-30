@@ -176,3 +176,47 @@ describe('DeveloperService', () => {
     });
   });
 });
+
+describe('getEventProgress slug fallback', () => {
+  let auth;
+
+  beforeAll(async () => {
+    auth = { auth: { username: 'developer', password: 'developer' } };
+    const { Tutorials, Missions, CompletionPaths, CompletionPathItems } = cds.entities('com.sap.developers.ims');
+
+    await INSERT.into(Missions).entries({
+      ID: 'sf-m1', legacyId: 77001, slug: 'slug-fallback-mission', title: 'Slug Fallback Mission'
+    });
+    await INSERT.into(CompletionPaths).entries({
+      ID: 'sf-p1', legacyId: 77101, slug: 'sf-path', name: 'SF Path', mission_ID: 'sf-m1'
+    });
+    await INSERT.into(Tutorials).entries([
+      { ID: 'sf-t1', legacyId: 77201, slug: 'has-slug', title: 'Has Slug', status: 'ACTIVE' },
+      { ID: 'sf-t2', legacyId: 77202, slug: null, title: 'No Slug Yet', status: 'ACTIVE' },
+    ]);
+    await INSERT.into(CompletionPathItems).entries([
+      { ID: 'sf-cpi1', path_ID: 'sf-p1', taskLegacyId: 77201, taskType: 'TUTORIAL', itemOrder: 1 },
+      { ID: 'sf-cpi2', path_ID: 'sf-p1', taskLegacyId: 77202, taskType: 'TUTORIAL', itemOrder: 2 },
+    ]);
+  });
+
+  it('returns url for tutorial with slug', async () => {
+    const { data } = await project.get(
+      `/api/getEventProgress(missionLegacyId=77001)`,
+      auth
+    );
+    const items = data.paths[0].items;
+    const withSlug = items.find(i => i.imsId === 77201);
+    expect(withSlug.url).toBe('/tutorials/has-slug.html');
+  });
+
+  it('returns empty url for tutorial without slug (no fresh data)', async () => {
+    const { data } = await project.get(
+      `/api/getEventProgress(missionLegacyId=77001)`,
+      auth
+    );
+    const items = data.paths[0].items;
+    const noSlug = items.find(i => i.imsId === 77202);
+    expect(noSlug.url).toBe('');
+  });
+});
