@@ -34,46 +34,37 @@ export default class SearchService extends cds.ApplicationService {
       const { search, taskTypes, experience } = req.data;
       const { SearchableItems: View } = cds.entities('com.sap.developers.ims');
 
-      // Build WHERE conditions using safe CQL parameter binding
-      function buildWhere(search, taskTypes, experience) {
-        const conditions = [];
+      function applyFilters(query, search, taskTypes, experience) {
         if (search) {
           const pattern = `%${search}%`;
-          conditions.push({ or: [
-            { title: { like: pattern } },
-            { description: { like: pattern } },
-            { primaryTag: { like: pattern } },
-          ]});
+          query.where`(title like ${pattern} or description like ${pattern} or primaryTag like ${pattern})`;
         }
         if (taskTypes?.length) {
-          conditions.push({ taskType: { in: taskTypes } });
+          query.where({ taskType: { in: taskTypes } });
         }
         if (experience?.length) {
-          conditions.push({ experienceTag: { in: experience } });
+          query.where({ experienceTag: { in: experience } });
         }
-        return conditions.length ? { and: conditions } : {};
+        return query;
       }
 
-      const where = buildWhere(search, taskTypes, experience);
-
       const [typeCounts, experienceCounts, tagCounts, totalResult] = await Promise.all([
-        SELECT.from(View)
-          .columns('taskType as name', 'count(*) as count')
-          .where(where)
-          .groupBy('taskType'),
-        SELECT.from(View)
-          .columns('experienceTag as name', 'count(*) as count')
-          .where({ ...where, experienceTag: { '!=': null } })
-          .groupBy('experienceTag'),
-        SELECT.from(View)
-          .columns('primaryTag as name', 'count(*) as count')
-          .where({ ...where, primaryTag: { '!=': null } })
-          .groupBy('primaryTag')
-          .orderBy('count desc')
-          .limit(20),
-        SELECT.one.from(View)
-          .columns('count(*) as count')
-          .where(where),
+        applyFilters(
+          SELECT.from(View).columns('taskType as name', 'count(*) as count'),
+          search, taskTypes, experience
+        ).groupBy('taskType'),
+        applyFilters(
+          SELECT.from(View).columns('experienceTag as name', 'count(*) as count'),
+          search, taskTypes, experience
+        ).where({ experienceTag: { '!=': null } }).groupBy('experienceTag'),
+        applyFilters(
+          SELECT.from(View).columns('primaryTag as name', 'count(*) as count'),
+          search, taskTypes, experience
+        ).where({ primaryTag: { '!=': null } }).groupBy('primaryTag').orderBy('count desc').limit(20),
+        applyFilters(
+          SELECT.one.from(View).columns('count(*) as count'),
+          search, taskTypes, experience
+        ),
       ]);
 
       return {

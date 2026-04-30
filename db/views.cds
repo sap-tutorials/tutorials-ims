@@ -65,16 +65,16 @@ view SearchableItems as
     key ID, legacyId, title, description, slug,
     primaryTag, experienceTag, averageTimeToComplete, status,
     'TUTORIAL' as taskType : String(20)
-  } where status = 'ACTIVE'
+  } where status is null or status = 'ACTIVE'
   UNION ALL
   SELECT from ims.Missions {
     ID, legacyId, title, description, slug,
     primaryTag, experienceTag, averageTimeToComplete, status,
     'MISSION' as taskType : String(20)
-  } where status = 'ACTIVE'
+  } where status is null or status = 'ACTIVE'
   UNION ALL
   SELECT from ims.Groups {
     ID, legacyId, title, description, null as slug : String(255),
     primaryTag, experienceTag, averageTimeToComplete, status,
     'GROUP' as taskType : String(20)
-  } where status = 'ACTIVE';
+  } where status is null or status = 'ACTIVE';
