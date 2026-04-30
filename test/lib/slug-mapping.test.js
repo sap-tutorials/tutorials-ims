@@ -81,4 +81,35 @@ describe('slug-mapping', () => {
       expect(result.flat.find(r => r.slug === 'has-slug-no-legacy')).toBeUndefined();
     });
   });
+
+  describe('findMissingSlugs', () => {
+
+    beforeAll(async () => {
+      const { CompletionPathItems } = cds.entities('com.sap.developers.ims');
+
+      await INSERT.into(CompletionPathItems).entries([
+        { ID: 'slug-cpi1', path_ID: 'slug-p1', taskLegacyId: 5001, taskType: 'TUTORIAL', itemOrder: 1 },
+        { ID: 'slug-cpi2', path_ID: 'slug-p1', taskLegacyId: 5002, taskType: 'TUTORIAL', itemOrder: 2 },
+        { ID: 'slug-cpi3', path_ID: 'slug-p1', taskLegacyId: 9999, taskType: 'CHECKPOINT', itemOrder: 3 },
+      ]);
+    });
+
+    it('returns items whose referenced tutorial has no slug', async () => {
+      const { findMissingSlugs } = await import('../../srv/lib/slug-mapping.js');
+      const result = await findMissingSlugs();
+
+      expect(result).toHaveLength(1);
+      expect(result[0].taskLegacyId).toBe(5002);
+      expect(result[0].taskType).toBe('TUTORIAL');
+      expect(result[0].pathName).toBe('Track 1: Basics');
+      expect(result[0].missionTitle).toBe('Developer Advocate Mission');
+    });
+
+    it('does not include non-TUTORIAL items', async () => {
+      const { findMissingSlugs } = await import('../../srv/lib/slug-mapping.js');
+      const result = await findMissingSlugs();
+
+      expect(result.find(r => r.taskLegacyId === 9999)).toBeUndefined();
+    });
+  });
 });
