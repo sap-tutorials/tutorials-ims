@@ -129,25 +129,17 @@ describe('SearchService', () => {
       expect(typeNames).toContain('GROUP');
     });
 
-    it('narrows results with taskTypes filter (SQLite: validates buildWhere condition shape)', async () => {
-      // The taskTypes filter path triggers the { and: [{ taskType: {in:...} }] }
-      // bug in buildWhere on SQLite. Verify it throws a meaningful SQL error
-      // rather than silently returning wrong data. Filtering correctness is
-      // covered in hybrid tests.
+    it('narrows results with taskTypes filter', async () => {
       const srv = await cds.connect.to('SearchService');
-      await expect(
-        srv.send({ event: 'getFacets', data: { taskTypes: ['TUTORIAL'] } })
-      ).rejects.toThrow();
+      const result = await srv.send({ event: 'getFacets', data: { taskTypes: ['TUTORIAL'] } });
+      expect(result.totalCount).toBeGreaterThan(0);
+      expect(result.typeCounts.every(t => t.name === 'TUTORIAL')).toBe(true);
     });
 
-    it('returns zero totalCount for no-match search (SQLite: validates handler rejects cleanly)', async () => {
-      // The search filter also triggers the buildWhere AND-wrapper bug on SQLite.
-      // Verify the handler throws rather than returning incorrect results.
-      // Zero-count behavior for non-matching search is covered in hybrid tests.
+    it('returns zero totalCount for no-match search', async () => {
       const srv = await cds.connect.to('SearchService');
-      await expect(
-        srv.send({ event: 'getFacets', data: { search: 'xyznonexistent999' } })
-      ).rejects.toThrow();
+      const result = await srv.send({ event: 'getFacets', data: { search: 'xyznonexistent999' } });
+      expect(result.totalCount).toBe(0);
     });
   });
 

@@ -1,5 +1,8 @@
 {
   "file_suffixes": {
+    "hdbmigrationtable": {
+      "plugin_name": "com.sap.hana.di.table.migration"
+    },
     "hdbsequence": {
       "plugin_name": "com.sap.hana.di.sequence"
     }
