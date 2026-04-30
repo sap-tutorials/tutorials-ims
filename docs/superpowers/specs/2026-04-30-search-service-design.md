@@ -321,64 +321,94 @@ The TutorialNavigator currently performs **all search and filtering client-side*
 
 This approach loads ~1700 items upfront and offers no fuzzy/typo tolerance.
 
-### Target State
+### Target State: Hybrid Client/Server Model
 
-Replace the client-side search/filter with server-side OData queries to the SearchService. The navigator becomes a thin search UI that delegates to the backend.
+The navigator operates in two modes depending on whether the user is actively searching:
 
-### Changes Required
+**Browse mode** (no search term): Behaves exactly as today — pre-fetched data, instant client-side filters, client-side pagination. No server round-trips for filter toggles.
 
-#### File: `apps/src/navigator/TutorialNavigator.vue`
+**Search mode** (search term active): Delegates to the SearchService — fuzzy matching, server-side ranking, server-side pagination. Filters compose as OData `$filter` alongside `$search`.
 
-**Data fetching — replace bulk load with on-demand search:**
+This hybrid approach preserves the snappy feel of the current UI for browsing while adding fuzzy search quality when the user needs it.
 
-| Current | New |
-| ------- | --- |
-| `fetch('/tutorials/_nav.json')` on mount | Remove — no longer needed for search |
-| `fetch('/build/navigator')` on mount | Remove — SearchableItems already includes missions/groups |
-| Local `allCards` computed property | Server query: `GET /search/SearchableItems?$search=...&$filter=...&$top=48&$skip=...&$count=true` |
-| Local `counts` computed property | Server query: `GET /search/getFacets(search='...')` |
+### Mode Switching Logic
 
-**Search behavior:**
+```text
+searchTerm.length === 0  →  BROWSE MODE (client-side everything)
+searchTerm.length >= 2   →  SEARCH MODE (server-side via OData)
+searchTerm.length === 1  →  No-op (wait for more input)
+```
 
-- Debounce text input (300ms) before issuing `$search` query
-- Show loading indicator while request is in flight
-- Empty search box → omit `$search` param (returns all items, server-paginated)
-- Minimum 2 characters before triggering search (avoid expensive single-char queries)
+The transition is seamless: when the user clears the search box, results snap back to the pre-fetched browse data with whatever client-side filters are active. No loading state needed for that transition.
 
-**Filter mapping to OData $filter:**
+### Browse Mode (Client-Side)
 
-| UI Filter | OData $filter expression |
-| --------- | ----------------------- |
-| Type (mission/group/tutorial) | `taskType eq 'MISSION'` (uppercase to match UNION view) |
-| Experience (beginner/intermediate/advanced) | `experienceTag eq 'intermediate'` |
-| Product/Topic (tag-based) | `primaryTag eq 'SAP HANA Cloud'` |
+Retains current behavior for these operations:
+
+| Operation | Implementation |
+| --------- | -------------- |
+| Type filter (Tutorial/Mission/Group) | Client-side filter on pre-fetched `allCards` |
+| Experience filter (beginner/intermediate/advanced) | Client-side filter on pre-fetched `allCards` |
+| Product/Topic filter | Client-side filter on `displayTags` |
+| Pagination | Client-side slice (48 items per page) |
+| Facet counts | Computed from filtered `allCards` array |
+
+Data source on mount remains the same: `/build/navigator` (missions/groups) + `/tutorials/_nav.json` (tutorials). This data feeds browse mode and populates filter panel options.
+
+### Search Mode (Server-Side)
+
+When `searchTerm.length >= 2`, the navigator switches to server-side:
+
+| Operation | Implementation |
+| --------- | -------------- |
+| Text search | `GET /search/SearchableItems?$search={term}&$top=48&$skip=...&$count=true` |
+| Type filter | Appended as `$filter=taskType eq 'TUTORIAL'` |
+| Experience filter | Appended as `$filter=experienceTag eq 'intermediate'` |
+| Product/Topic filter | Appended as `$filter=primaryTag eq 'SAP HANA Cloud'` |
+| Pagination | Server-side `$top/$skip`, total from `@odata.count` |
+| Facet counts | `GET /search/getFacets(search='{term}',taskTypes=[...],experience=[...])` |
+
+**Filter composition in search mode:**
 
 Multiple selections within a filter group use `or`:
+
 ```text
 $filter=taskType eq 'TUTORIAL' or taskType eq 'MISSION'
 ```
 
 Cross-group filters combine with `and`:
+
 ```text
 $filter=(taskType eq 'TUTORIAL' or taskType eq 'MISSION') and experienceTag eq 'beginner'
 ```
 
-**Pagination — server-side:**
+**Search behavior:**
 
-- Pass `$top=48&$skip={(page-1)*48}&$count=true`
-- Use `@odata.count` from response for total page calculation
-- No more client-side slice
+- Debounce text input (300ms) before issuing server request
+- Show loading indicator while request is in flight
+- Minimum 2 characters before triggering search (avoid expensive single-char queries)
+- Clearing the search box immediately returns to browse mode (no loading state)
 
-**Facet counts — from getFacets:**
+### Changes Required
 
-- Call `getFacets(search='...', taskTypes=[...], experience=[...])` alongside the main search query
-- Map response `typeCounts` → toolbar count badges (Mission · Group · Tutorial)
-- Update counts reactively when search/filter changes
+#### File: `apps/src/navigator/TutorialNavigator.vue`
+
+**Keep existing data fetching for browse mode:**
+
+- `/tutorials/_nav.json` and `/build/navigator` on mount — unchanged
+- `allCards` computed property — still used in browse mode
+- Client-side filters (type, experience, product) — still used in browse mode
+
+**Add search mode overlay:**
+
+- New reactive state: `searchMode: boolean` (derived from `searchTerm.length >= 2`)
+- When `searchMode` is true, the displayed results come from the server response instead of the filtered `allCards`
+- When `searchMode` is false, display logic uses existing client-side filtering
+- Facet counts switch source: computed from `allCards` in browse mode, from `getFacets` in search mode
 
 **Result mapping — SearchableItems → CardItem:**
 
 ```typescript
-// Map OData response to existing CardItem interface
 function mapToCardItem(item: SearchableItem): CardItem {
   return {
     type: item.taskType.toLowerCase() as 'mission' | 'group' | 'tutorial',
@@ -387,16 +417,16 @@ function mapToCardItem(item: SearchableItem): CardItem {
     description: item.description ?? '',
     time: item.averageTimeToComplete ?? 0,
     level: item.experienceTag ?? 'beginner',
-    tutorialCount: 1,  // server doesn't aggregate this; display 1 for now
+    tutorialCount: 1,
     primaryTag: item.primaryTag ?? '',
     displayTags: [item.primaryTag].filter(Boolean),
     href: item.slug ? `/tutorials/${item.slug}` : `/tutorials/?id=${item.legacyId}`,
-    stepCount: 0,  // not available from search view
+    stepCount: 0,
   }
 }
 ```
 
-**Note on `tutorialCount` and `stepCount`:** These fields are computed client-side today by grouping tutorials. The SearchableItems view returns flat results (each mission/group is its own row without child counts). For the MVP, these display as 1/0. A follow-up could add computed columns to the view or a separate detail lookup.
+**Note on `tutorialCount` and `stepCount`:** These fields are computed client-side today by grouping tutorials. In search mode, the SearchableItems view returns flat results without child counts. These display as 1/0 in search results. In browse mode they remain accurate (computed from pre-fetched data as today).
 
 #### File: `apps/src/shared/types.ts`
 
@@ -426,44 +456,40 @@ export interface SearchFacets {
 
 #### File: `apps/src/navigator/useSearch.ts` (new composable)
 
-Extract search logic into a composable for testability:
+Extract server-side search logic into a composable:
 
 ```typescript
 // Responsibilities:
-// - Debounced $search query construction
-// - $filter building from reactive filter state
+// - Reactive searchMode flag (searchTerm.length >= 2)
+// - Debounced $search query construction (300ms)
+// - $filter building from reactive filter state (only in search mode)
 // - Parallel fetch of SearchableItems + getFacets
 // - Loading/error state management
 // - Response mapping to CardItem[]
+// - Exposes: searchResults, searchFacets, isSearching, searchError
 ```
+
+The composable does NOT own filter state — it receives filter values as reactive inputs from the parent component. This keeps the component in control of what mode it's in.
 
 ### UX Behavior Changes
 
-| Behavior | Before (client-side) | After (server-side) |
-| -------- | -------------------- | ------------------- |
-| Initial load | Shows all ~1700 items immediately | Shows first page (48 items) immediately |
-| Search latency | Instant (in-memory filter) | ~100-300ms (network + HANA query) |
-| Typo tolerance | None | Yes (HANA fuzzy at 0.7 threshold) |
-| Loading indicator | None needed | Required (spinner/skeleton during fetch) |
-| Filter panel products/topics | Derived from loaded data | Derived from `getFacets` response (`tagCounts`) |
-| URL state | Not reflected | Reflect search/filter in URL params for shareability |
-| Offline / slow network | Works after initial load | Requires connectivity per search |
-
-### Progressive Enhancement Strategy
-
-To avoid a jarring transition, implement in two phases:
-
-**Phase 1 (this spec):** Wire up server search for the text search box only. Keep the facet filters working against a locally-cached initial load (first page of all items via `/search/SearchableItems?$top=200`). This lets users experience fuzzy search immediately while filters still feel instant.
-
-**Phase 2 (follow-up):** Move all filters to server-side `$filter` queries. Remove the bulk initial load entirely. Add URL state synchronization. Add loading skeletons.
+| Behavior | Before | After (hybrid) |
+| -------- | ------ | --------------- |
+| Initial load | Shows all ~1700 items | Unchanged — same pre-fetch, same display |
+| Browse filters | Instant (client-side) | Unchanged — still instant, still client-side |
+| Text search quality | `String.includes()`, no fuzzy | HANA fuzzy at 0.7 threshold, field-weighted ranking |
+| Search latency | Instant (in-memory) | ~100-300ms (network + HANA query) |
+| Typo tolerance | None | Yes ("hanna" → "hana", "tutroial" → "tutorial") |
+| Loading indicator | None needed | Only in search mode (spinner while server responds) |
+| Clear search box | N/A | Instant snap back to browse mode, no loading |
+| Filter panel options | Derived from loaded data | Same in browse mode; from `getFacets` in search mode |
+| Offline / slow network | Works after initial load | Browse mode works; search mode requires connectivity |
 
 ### Filter Panel: Available Options
 
-Currently, the "Software Product" and "Topic" filter lists are derived from the loaded tutorials' `displayTags` array. With server-side search, these need a source:
-
-- **Experience levels:** Static list (beginner, intermediate, advanced) — no change needed
-- **Types:** Static list (Mission, Group, Tutorial) — no change needed  
-- **Products/Topics:** Use `/search/Tags?$orderby=name` to populate the filter panel. This replaces the client-side derivation from `displayTags`.
+- **Experience levels:** Static list (beginner, intermediate, advanced) — no change
+- **Types:** Static list (Mission, Group, Tutorial) — no change
+- **Products/Topics:** Derived from pre-fetched data in browse mode (as today). In search mode, `getFacets` response provides `tagCounts` showing which tags have results for the current search term.
 
 ## Migration
 
