@@ -1,0 +1,6 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_TutorialTags (
+  tutorial_ID NVARCHAR(36) NOT NULL,
+  tag_ID NVARCHAR(36) NOT NULL,
+  PRIMARY KEY(tutorial_ID, tag_ID)
+)

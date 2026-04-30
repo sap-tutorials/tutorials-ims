@@ -1,0 +1,14 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_FailedEmails (
+  ID NVARCHAR(36) NOT NULL,
+  "TO" NVARCHAR(2000),
+  cc NVARCHAR(2000),
+  subject NVARCHAR(500),
+  body NCLOB,
+  errorMessage NVARCHAR(2000),
+  createdAt TIMESTAMP,
+  retryCount INTEGER DEFAULT 0,
+  maxRetries INTEGER DEFAULT 3,
+  status NVARCHAR(20) DEFAULT 'PENDING',
+  PRIMARY KEY(ID)
+)

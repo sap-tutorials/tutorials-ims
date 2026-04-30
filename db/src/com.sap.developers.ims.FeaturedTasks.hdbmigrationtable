@@ -1,0 +1,9 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_FeaturedTasks (
+  ID NVARCHAR(36) NOT NULL,
+  legacyId INTEGER,
+  taskLegacyId INTEGER,
+  taskType NVARCHAR(20),
+  featuredOrder INTEGER,
+  PRIMARY KEY(ID)
+)

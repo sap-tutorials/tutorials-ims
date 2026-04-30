@@ -1,0 +1,20 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_Steps (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  legacyId INTEGER,
+  title NVARCHAR(255),
+  description NCLOB,
+  status NVARCHAR(50),
+  deletionReason NVARCHAR(500),
+  primaryTag NVARCHAR(255),
+  experienceTag NVARCHAR(255),
+  averageTimeToComplete INTEGER,
+  primaryTagRef_ID NVARCHAR(36),
+  tutorial_ID NVARCHAR(36),
+  stepOrder INTEGER,
+  PRIMARY KEY(ID)
+)

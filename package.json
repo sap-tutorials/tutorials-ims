@@ -61,7 +61,7 @@
   },
   "dependencies": {
     "@cap-js/audit-logging": "^1.2.0",
-    "@cap-js/change-tracking": "^1.2.1",
+    "@cap-js/change-tracking": "^2.0.0-beta.11",
     "@cap-js/hana": "^2.7.1",
     "@cap-js/sqlite": "^2.2.1",
     "@sap/cds": "^9.9.0",

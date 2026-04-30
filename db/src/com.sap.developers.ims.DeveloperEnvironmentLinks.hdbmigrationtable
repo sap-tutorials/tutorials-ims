@@ -1,0 +1,10 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_DeveloperEnvironmentLinks (
+  ID NVARCHAR(36) NOT NULL,
+  legacyId INTEGER,
+  tab_ID NVARCHAR(36),
+  title NVARCHAR(255),
+  url NVARCHAR(1000),
+  linkOrder INTEGER,
+  PRIMARY KEY(ID)
+)

@@ -1,0 +1,10 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_TutorialRepositories (
+  ID NVARCHAR(36) NOT NULL,
+  legacyId INTEGER,
+  tutorial_ID NVARCHAR(36),
+  repoUrl NVARCHAR(1000),
+  branch NVARCHAR(255),
+  owner NVARCHAR(255),
+  PRIMARY KEY(ID)
+)

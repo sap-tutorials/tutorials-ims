@@ -1,0 +1,10 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_CompletionPathItems (
+  ID NVARCHAR(36) NOT NULL,
+  legacyId INTEGER,
+  path_ID NVARCHAR(36),
+  taskLegacyId INTEGER,
+  taskType NVARCHAR(20),
+  itemOrder INTEGER,
+  PRIMARY KEY(ID)
+)

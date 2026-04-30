@@ -15,8 +15,8 @@
     },
     "crossNavigation": {
       "inbounds": {
-        "ChangeLog-display": {
-          "semanticObject": "ChangeLog",
+        "ChangeView-display": {
+          "semanticObject": "ChangeView",
           "action": "display",
           "title": "Change Log",
           "signature": { "parameters": {}, "additionalParameters": "allowed" }
@@ -45,18 +45,18 @@
       "routes": [
         {
           "pattern": ":?query:",
-          "name": "ChangeLogList",
-          "target": "ChangeLogList"
+          "name": "ChangeViewList",
+          "target": "ChangeViewList"
         }
       ],
       "targets": {
-        "ChangeLogList": {
+        "ChangeViewList": {
           "type": "Component",
-          "id": "ChangeLogList",
+          "id": "ChangeViewList",
           "name": "sap.fe.templates.ListReport",
           "options": {
             "settings": {
-              "contextPath": "/ChangeLog",
+              "contextPath": "/ChangeView",
               "variantManagement": "Page",
               "initialLoad": "Enabled"
             }

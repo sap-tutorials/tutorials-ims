@@ -1,0 +1,14 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_Events (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  legacyId INTEGER,
+  name NVARCHAR(255),
+  startDate TIMESTAMP,
+  endDate TIMESTAMP,
+  "TIMEZONE" NVARCHAR(50),
+  PRIMARY KEY(ID)
+)

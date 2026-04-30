@@ -1,0 +1,8 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_PrimaryAccounts (
+  ID NVARCHAR(36) NOT NULL,
+  legacyId INTEGER,
+  uuid NVARCHAR(36),
+  status NVARCHAR(50),
+  PRIMARY KEY(ID)
+)

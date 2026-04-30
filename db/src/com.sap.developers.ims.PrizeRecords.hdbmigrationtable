@@ -1,0 +1,11 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_PrizeRecords (
+  ID NVARCHAR(36) NOT NULL,
+  legacyId INTEGER,
+  user_ID NVARCHAR(36),
+  event_ID NVARCHAR(36),
+  prize_ID NVARCHAR(36),
+  completionPathItem_ID NVARCHAR(36),
+  status NVARCHAR(50),
+  PRIMARY KEY(ID)
+)

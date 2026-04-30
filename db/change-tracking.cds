@@ -1,10 +1,6 @@
-using { sap.changelog.aspect as changelog } from '@cap-js/change-tracking';
-using { com.sap.developers.ims as ims } from './schema';
-
-extend ims.Events with changelog;
-extend ims.Missions with changelog;
-extend ims.Groups with changelog;
-extend ims.Accomplishments with changelog;
-extend ims.Prizes with changelog;
-extend ims.ImsConfig with changelog;
-extend ims.FeaturedTasks with changelog;
+// Change tracking is configured via @changelog annotations at the service level
+// in srv/change-tracking.cds. The @cap-js/change-tracking plugin automatically
+// adds the 'changes' association and UI facet to annotated entities at runtime.
+//
+// Annotating at the service level (AdminService) means only admin UI changes
+// are tracked — bulk imports, scheduled jobs, and replication are excluded.

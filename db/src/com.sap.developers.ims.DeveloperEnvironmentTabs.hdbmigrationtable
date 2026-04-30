@@ -1,0 +1,9 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_DeveloperEnvironmentTabs (
+  ID NVARCHAR(36) NOT NULL,
+  legacyId INTEGER,
+  user_ID NVARCHAR(36),
+  tabName NVARCHAR(255),
+  tabOrder INTEGER,
+  PRIMARY KEY(ID)
+)

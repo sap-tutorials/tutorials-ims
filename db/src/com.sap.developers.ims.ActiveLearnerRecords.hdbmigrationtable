@@ -1,0 +1,8 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_ActiveLearnerRecords (
+  ID NVARCHAR(36) NOT NULL,
+  legacyId INTEGER,
+  recordDate DATE,
+  "COUNT" INTEGER,
+  PRIMARY KEY(ID)
+)

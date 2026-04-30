@@ -1,0 +1,36 @@
+using { com.sap.developers.ims as ims } from './schema';
+
+// Deploy as .hdbmigrationtable for schema evolution (ALTER TABLE instead of DROP+CREATE)
+annotate ims.Tutorials with @cds.persistence.journal;
+annotate ims.Missions with @cds.persistence.journal;
+annotate ims.Groups with @cds.persistence.journal;
+annotate ims.Steps with @cds.persistence.journal;
+annotate ims.Checkpoints with @cds.persistence.journal;
+annotate ims.Users with @cds.persistence.journal;
+annotate ims.TaskRecords with @cds.persistence.journal;
+annotate ims.UserMetaData with @cds.persistence.journal;
+annotate ims.DeveloperEnvironmentTabs with @cds.persistence.journal;
+annotate ims.DeveloperEnvironmentLinks with @cds.persistence.journal;
+annotate ims.Events with @cds.persistence.journal;
+annotate ims.Prizes with @cds.persistence.journal;
+annotate ims.PrizeRecords with @cds.persistence.journal;
+annotate ims.Tags with @cds.persistence.journal;
+annotate ims.TutorialTags with @cds.persistence.journal;
+annotate ims.Accomplishments with @cds.persistence.journal;
+annotate ims.AccomplishmentRecords with @cds.persistence.journal;
+annotate ims.CompletionPaths with @cds.persistence.journal;
+annotate ims.CompletionPathItems with @cds.persistence.journal;
+annotate ims.TutorialMeta with @cds.persistence.journal;
+annotate ims.TutorialContributors with @cds.persistence.journal;
+annotate ims.TutorialRepositories with @cds.persistence.journal;
+annotate ims.ActiveLearnerRecords with @cds.persistence.journal;
+annotate ims.DashboardMonitoredRecords with @cds.persistence.journal;
+annotate ims.StepFailures with @cds.persistence.journal;
+annotate ims.NGDSFailedMessages with @cds.persistence.journal;
+annotate ims.ImsConfig with @cds.persistence.journal;
+annotate ims.JobLocks with @cds.persistence.journal;
+annotate ims.PrimaryAccounts with @cds.persistence.journal;
+annotate ims.SecondaryAccounts with @cds.persistence.journal;
+annotate ims.PrivacyProtectionActions with @cds.persistence.journal;
+annotate ims.FeaturedTasks with @cds.persistence.journal;
+annotate ims.FailedEmails with @cds.persistence.journal;

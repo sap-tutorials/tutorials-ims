@@ -1,0 +1,11 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_PrivacyProtectionActions (
+  ID NVARCHAR(36) NOT NULL,
+  legacyId INTEGER,
+  userUuid NVARCHAR(36),
+  actionType NVARCHAR(50),
+  requestedAt TIMESTAMP,
+  completedAt TIMESTAMP,
+  status NVARCHAR(50),
+  PRIMARY KEY(ID)
+)

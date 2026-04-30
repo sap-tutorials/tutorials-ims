@@ -1,0 +1,9 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_CompletionPaths (
+  ID NVARCHAR(36) NOT NULL,
+  legacyId INTEGER,
+  mission_ID NVARCHAR(36),
+  name NVARCHAR(255),
+  slug NVARCHAR(255),
+  PRIMARY KEY(ID)
+)

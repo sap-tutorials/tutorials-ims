@@ -1,0 +1,7 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_Tags (
+  ID NVARCHAR(36) NOT NULL,
+  legacyId INTEGER,
+  name NVARCHAR(255),
+  PRIMARY KEY(ID)
+)

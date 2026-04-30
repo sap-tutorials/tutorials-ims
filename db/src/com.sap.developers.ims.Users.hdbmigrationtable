@@ -1,0 +1,17 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_Users (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  legacyId INTEGER,
+  uuid NVARCHAR(36),
+  sapId NVARCHAR(255),
+  firstName NVARCHAR(255),
+  lastName NVARCHAR(255),
+  email NVARCHAR(255),
+  displayName NVARCHAR(255),
+  avatarUrl NVARCHAR(1000),
+  PRIMARY KEY(ID)
+)

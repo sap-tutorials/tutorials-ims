@@ -1,0 +1,12 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_NGDSFailedMessages (
+  ID NVARCHAR(36) NOT NULL,
+  legacyId INTEGER,
+  payload NCLOB,
+  errorMessage NVARCHAR(2000),
+  createdAt TIMESTAMP,
+  retryCount INTEGER DEFAULT 0,
+  maxRetries INTEGER DEFAULT 10,
+  status NVARCHAR(30),
+  PRIMARY KEY(ID)
+)

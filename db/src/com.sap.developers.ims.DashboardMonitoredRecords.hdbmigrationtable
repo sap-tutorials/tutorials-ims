@@ -1,0 +1,10 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_DashboardMonitoredRecords (
+  ID NVARCHAR(36) NOT NULL,
+  legacyId INTEGER,
+  event_ID NVARCHAR(36),
+  metric NVARCHAR(255),
+  value INTEGER,
+  recordedAt TIMESTAMP,
+  PRIMARY KEY(ID)
+)

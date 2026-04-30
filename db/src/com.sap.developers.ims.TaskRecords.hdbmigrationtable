@@ -1,0 +1,24 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_TaskRecords (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  legacyId INTEGER,
+  user_ID NVARCHAR(36),
+  taskLegacyId INTEGER,
+  taskType NVARCHAR(5000),
+  status NVARCHAR(5000),
+  progress INTEGER DEFAULT 0,
+  completionTime BIGINT,
+  completionDate TIMESTAMP,
+  contentLanguage NVARCHAR(10),
+  siteLanguage NVARCHAR(10),
+  submissionIdStarted NVARCHAR(36),
+  submissionIdCompleted NVARCHAR(36),
+  titleSnapshot NVARCHAR(255),
+  progressNote NVARCHAR(1000),
+  event_ID NVARCHAR(36),
+  PRIMARY KEY(ID)
+)

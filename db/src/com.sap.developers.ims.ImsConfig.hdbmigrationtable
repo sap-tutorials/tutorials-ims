@@ -1,0 +1,8 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_ImsConfig (
+  ID NVARCHAR(36) NOT NULL,
+  legacyId INTEGER,
+  key NVARCHAR(255),
+  value NVARCHAR(2000),
+  PRIMARY KEY(ID)
+)

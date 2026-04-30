@@ -1,0 +1,8 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_JobLocks (
+  jobName NVARCHAR(100) NOT NULL,
+  lockedBy NVARCHAR(255),
+  lockedAt TIMESTAMP,
+  expiresAt TIMESTAMP,
+  PRIMARY KEY(jobName)
+)

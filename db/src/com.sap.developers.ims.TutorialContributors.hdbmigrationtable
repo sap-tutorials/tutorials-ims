@@ -1,0 +1,10 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_TutorialContributors (
+  ID NVARCHAR(36) NOT NULL,
+  legacyId INTEGER,
+  tutorial_ID NVARCHAR(36),
+  name NVARCHAR(255),
+  email NVARCHAR(255),
+  role NVARCHAR(50),
+  PRIMARY KEY(ID)
+)

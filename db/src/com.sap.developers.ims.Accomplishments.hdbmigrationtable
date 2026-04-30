@@ -1,0 +1,9 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_Accomplishments (
+  ID NVARCHAR(36) NOT NULL,
+  legacyId INTEGER,
+  name NVARCHAR(255),
+  rule NVARCHAR(2000),
+  description NVARCHAR(1000),
+  PRIMARY KEY(ID)
+)

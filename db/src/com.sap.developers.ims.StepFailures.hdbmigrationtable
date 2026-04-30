@@ -1,0 +1,10 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_StepFailures (
+  ID NVARCHAR(36) NOT NULL,
+  legacyId INTEGER,
+  taskRecord_ID NVARCHAR(36),
+  stepNumber INTEGER,
+  failureDate TIMESTAMP,
+  errorMessage NVARCHAR(2000),
+  PRIMARY KEY(ID)
+)
