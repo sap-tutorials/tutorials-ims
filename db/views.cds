@@ -59,3 +59,22 @@ view NavigatorCatalog as
     item.taskType
   }
   where item.taskType = 'TUTORIAL' and tut.slug is not null;
+
+view SearchableItems as
+  SELECT from ims.Tutorials {
+    key ID, legacyId, title, description, slug,
+    primaryTag, experienceTag, averageTimeToComplete, status,
+    'TUTORIAL' as taskType : String(20)
+  } where status = 'ACTIVE'
+  UNION ALL
+  SELECT from ims.Missions {
+    ID, legacyId, title, description, slug,
+    primaryTag, experienceTag, averageTimeToComplete, status,
+    'MISSION' as taskType : String(20)
+  } where status = 'ACTIVE'
+  UNION ALL
+  SELECT from ims.Groups {
+    ID, legacyId, title, description, null as slug : String(255),
+    primaryTag, experienceTag, averageTimeToComplete, status,
+    'GROUP' as taskType : String(20)
+  } where status = 'ACTIVE';
