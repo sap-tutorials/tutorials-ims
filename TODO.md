@@ -66,7 +66,7 @@ The IMS React 15 admin frontend has **11 pages** — all reimplemented as Fiori 
 - [x] Tags (read-only table) — Fiori Elements List Report
 - [x] **Change Tracking** — Implemented `@cap-js/change-tracking` for Admin UI audit trail. 7 entities tracked (Events, Missions, Groups, Accomplishments, Prizes, ImsConfig, FeaturedTasks). Change History tab on all Object Pages via `changes/@UI.PresentationVariant` facet. Tracks field-level changes with who/when/what.
 - [x] **UI5 Dev Server plugin (`cds-plugin-ui5`)** — Integrated: all 10 admin apps served via `cds watch` using `file:` devDependencies for nested Fiori Elements apps + direct detection for `admin-custom`. Mount paths configured in `package.json` under `cds.cds-plugin-ui5.modules`. No separate UI dev server needed.
-- [ ] **Research: Audit Logging plugin (`@cap-js/audit-logging`)** — Provides annotation-driven audit logging for personal data operations via `@PersonalData` annotations on entities/fields. Logs to console in dev, routes to SAP Audit Log Service on BTP in production. Uses Transactional Outbox for resilience. Would cover GDPR-relevant access logging for the Privacy/GDPR admin tools (user lookup, anonymization) and track admin access to `Users`, `UserMetaData`, and `TaskRecords`. Complements Change Tracking (which tracks *what* changed) by recording *who accessed* personal data. See <https://cap.cloud.sap/docs/plugins/#audit-logging>
+- [x] **Audit Logging plugin (`@cap-js/audit-logging`)** — Implemented: `@PersonalData` annotations on `Users` (DataSubject), `UserMetaData`, `TaskRecords` (DataSubjectDetails). SecurityEvent emitted on anonymization. MTA resource bound (`auditlog` premium plan). Logs to console in dev, routes to SAP Audit Log Service in production. 9 unit tests in `test/audit-logging.test.js`.
 
 ---
 
@@ -88,7 +88,7 @@ Current state: `docs/tutorial-repo-dispatch.yml` is a **template** workflow file
 
 - [ ] Install workflow in sap-tutorials repos (or at org level via reusable workflow)
 - [ ] Fill in `<OWNER>` placeholder in the dispatch URL
-- [ ] Create receiving workflow in tutorials-poc (`.github/workflows/rebuild-on-dispatch.yml`)
+- [ ] Create receiving workflow in tutorials-ims (`.github/workflows/rebuild-on-dispatch.yml`)
 - [ ] Configure `TUTORIALS_DISPATCH_TOKEN` secret (GitHub PAT with repo scope)
 
 ---
