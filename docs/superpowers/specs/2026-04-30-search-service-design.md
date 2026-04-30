@@ -306,6 +306,165 @@ These tests are mandatory before production deployment. They validate HANA-speci
 - No user-specific data exposed (only catalog metadata)
 - HANA fuzzy search is parameterized (no SQL injection risk via $search)
 
+## Frontend Integration
+
+### Current State (`apps/src/navigator/TutorialNavigator.vue`)
+
+The TutorialNavigator currently performs **all search and filtering client-side**:
+
+1. On mount, fetches entire dataset: `/tutorials/_nav.json` (tutorials) + `/build/navigator` (missions/groups)
+2. Constructs `CardItem[]` array by grouping tutorials into missions/groups locally
+3. Search: `String.includes()` on title, description, and displayTags
+4. Filters: level, type, product, topic — all applied as computed property filters
+5. Pagination: client-side slice of filtered results (48 items per page)
+6. Facet counts: computed from the filtered results array
+
+This approach loads ~1700 items upfront and offers no fuzzy/typo tolerance.
+
+### Target State
+
+Replace the client-side search/filter with server-side OData queries to the SearchService. The navigator becomes a thin search UI that delegates to the backend.
+
+### Changes Required
+
+#### File: `apps/src/navigator/TutorialNavigator.vue`
+
+**Data fetching — replace bulk load with on-demand search:**
+
+| Current | New |
+| ------- | --- |
+| `fetch('/tutorials/_nav.json')` on mount | Remove — no longer needed for search |
+| `fetch('/build/navigator')` on mount | Remove — SearchableItems already includes missions/groups |
+| Local `allCards` computed property | Server query: `GET /search/SearchableItems?$search=...&$filter=...&$top=48&$skip=...&$count=true` |
+| Local `counts` computed property | Server query: `GET /search/getFacets(search='...')` |
+
+**Search behavior:**
+
+- Debounce text input (300ms) before issuing `$search` query
+- Show loading indicator while request is in flight
+- Empty search box → omit `$search` param (returns all items, server-paginated)
+- Minimum 2 characters before triggering search (avoid expensive single-char queries)
+
+**Filter mapping to OData $filter:**
+
+| UI Filter | OData $filter expression |
+| --------- | ----------------------- |
+| Type (mission/group/tutorial) | `taskType eq 'MISSION'` (uppercase to match UNION view) |
+| Experience (beginner/intermediate/advanced) | `experienceTag eq 'intermediate'` |
+| Product/Topic (tag-based) | `primaryTag eq 'SAP HANA Cloud'` |
+
+Multiple selections within a filter group use `or`:
+```text
+$filter=taskType eq 'TUTORIAL' or taskType eq 'MISSION'
+```
+
+Cross-group filters combine with `and`:
+```text
+$filter=(taskType eq 'TUTORIAL' or taskType eq 'MISSION') and experienceTag eq 'beginner'
+```
+
+**Pagination — server-side:**
+
+- Pass `$top=48&$skip={(page-1)*48}&$count=true`
+- Use `@odata.count` from response for total page calculation
+- No more client-side slice
+
+**Facet counts — from getFacets:**
+
+- Call `getFacets(search='...', taskTypes=[...], experience=[...])` alongside the main search query
+- Map response `typeCounts` → toolbar count badges (Mission · Group · Tutorial)
+- Update counts reactively when search/filter changes
+
+**Result mapping — SearchableItems → CardItem:**
+
+```typescript
+// Map OData response to existing CardItem interface
+function mapToCardItem(item: SearchableItem): CardItem {
+  return {
+    type: item.taskType.toLowerCase() as 'mission' | 'group' | 'tutorial',
+    id: item.ID,
+    title: item.title,
+    description: item.description ?? '',
+    time: item.averageTimeToComplete ?? 0,
+    level: item.experienceTag ?? 'beginner',
+    tutorialCount: 1,  // server doesn't aggregate this; display 1 for now
+    primaryTag: item.primaryTag ?? '',
+    displayTags: [item.primaryTag].filter(Boolean),
+    href: item.slug ? `/tutorials/${item.slug}` : `/tutorials/?id=${item.legacyId}`,
+    stepCount: 0,  // not available from search view
+  }
+}
+```
+
+**Note on `tutorialCount` and `stepCount`:** These fields are computed client-side today by grouping tutorials. The SearchableItems view returns flat results (each mission/group is its own row without child counts). For the MVP, these display as 1/0. A follow-up could add computed columns to the view or a separate detail lookup.
+
+#### File: `apps/src/shared/types.ts`
+
+Add a `SearchableItem` interface matching the OData response shape:
+
+```typescript
+export interface SearchableItem {
+  ID: string
+  legacyId: number
+  title: string
+  description: string | null
+  slug: string | null
+  primaryTag: string | null
+  experienceTag: string | null
+  averageTimeToComplete: number | null
+  status: string
+  taskType: 'TUTORIAL' | 'MISSION' | 'GROUP'
+}
+
+export interface SearchFacets {
+  totalCount: number
+  typeCounts: Array<{ name: string; count: number }>
+  experienceCounts: Array<{ name: string; count: number }>
+  tagCounts: Array<{ name: string; count: number }>
+}
+```
+
+#### File: `apps/src/navigator/useSearch.ts` (new composable)
+
+Extract search logic into a composable for testability:
+
+```typescript
+// Responsibilities:
+// - Debounced $search query construction
+// - $filter building from reactive filter state
+// - Parallel fetch of SearchableItems + getFacets
+// - Loading/error state management
+// - Response mapping to CardItem[]
+```
+
+### UX Behavior Changes
+
+| Behavior | Before (client-side) | After (server-side) |
+| -------- | -------------------- | ------------------- |
+| Initial load | Shows all ~1700 items immediately | Shows first page (48 items) immediately |
+| Search latency | Instant (in-memory filter) | ~100-300ms (network + HANA query) |
+| Typo tolerance | None | Yes (HANA fuzzy at 0.7 threshold) |
+| Loading indicator | None needed | Required (spinner/skeleton during fetch) |
+| Filter panel products/topics | Derived from loaded data | Derived from `getFacets` response (`tagCounts`) |
+| URL state | Not reflected | Reflect search/filter in URL params for shareability |
+| Offline / slow network | Works after initial load | Requires connectivity per search |
+
+### Progressive Enhancement Strategy
+
+To avoid a jarring transition, implement in two phases:
+
+**Phase 1 (this spec):** Wire up server search for the text search box only. Keep the facet filters working against a locally-cached initial load (first page of all items via `/search/SearchableItems?$top=200`). This lets users experience fuzzy search immediately while filters still feel instant.
+
+**Phase 2 (follow-up):** Move all filters to server-side `$filter` queries. Remove the bulk initial load entirely. Add URL state synchronization. Add loading skeletons.
+
+### Filter Panel: Available Options
+
+Currently, the "Software Product" and "Topic" filter lists are derived from the loaded tutorials' `displayTags` array. With server-side search, these need a source:
+
+- **Experience levels:** Static list (beginner, intermediate, advanced) — no change needed
+- **Types:** Static list (Mission, Group, Tutorial) — no change needed  
+- **Products/Topics:** Use `/search/Tags?$orderby=name` to populate the filter panel. This replaces the client-side derivation from `displayTags`.
+
 ## Migration
 
 The AEM Solr endpoint reference in `scripts/parsers/aem.ts` (Pattern A: full discovery) is already replaced by `/build/catalog`. The remaining client-side usage (Pattern B: icon/tag lookup for tutorial cards) will be replaced by this SearchService.
