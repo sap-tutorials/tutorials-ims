@@ -41,3 +41,23 @@ export interface GroupRef {
   title: string
   missionId: number
 }
+
+export interface SearchableItem {
+  ID: string
+  legacyId: number
+  title: string
+  description: string | null
+  slug: string | null
+  primaryTag: string | null
+  experienceTag: string | null
+  averageTimeToComplete: number | null
+  status: string
+  taskType: 'TUTORIAL' | 'MISSION' | 'GROUP'
+}
+
+export interface SearchFacets {
+  totalCount: number
+  typeCounts: Array<{ name: string; count: number }>
+  experienceCounts: Array<{ name: string; count: number }>
+  tagCounts: Array<{ name: string; count: number }>
+}
