@@ -74,8 +74,8 @@ The IMS React 15 admin frontend has **11 pages** — all reimplemented as Fiori 
 
 3 of 8 frontend endpoints still route through AEM:
 
-- [ ] Progress Series (`/bin/ims/progressSeries`) — AppSpace.vue completion data; needs slug-to-IMS-ID mapping in CAP
-- [ ] Solr Search (`/bin/ims/search`) — Icon/tag lookup for tutorial cards; need CAP equivalent or direct tag resolution
+- [x] Progress Series (`/bin/ims/progressSeries`) — AppSpace.vue completion data; needs slug-to-IMS-ID mapping in CAP
+- [x] Solr Search (`/bin/ims/search`) — Icon/tag lookup for tutorial cards; need CAP equivalent or direct tag resolution
 - [ ] QR Code (`/bin/ims/qrcode`) — PNG generation for event badges; already has `/api/qrcode` in CAP — verify wiring
 
 Endpoints 1, 5, 6, 7, 8 are replaced by CAP. The AEM proxy layer can be fully retired once these 3 are resolved.
