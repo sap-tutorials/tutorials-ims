@@ -125,4 +125,54 @@ describe('DeveloperService', () => {
       expect(records.length).toBe(1);
     });
   });
+
+  describe('getSlugMapping', () => {
+
+    beforeAll(async () => {
+      const { Tutorials, Missions, CompletionPaths } = cds.entities('com.sap.developers.ims');
+      await INSERT.into(Tutorials).entries({
+        ID: 'sm-t1', legacyId: 7001, slug: 'slug-mapping-test', title: 'Slug Test', status: 'ACTIVE'
+      });
+      await INSERT.into(Missions).entries({
+        ID: 'sm-m1', legacyId: 7002, slug: 'slug-mission-test', title: 'Mission Test'
+      });
+      await INSERT.into(CompletionPaths).entries({
+        ID: 'sm-p1', legacyId: 7003, slug: 'slug-path-test', name: 'Path Test', mission_ID: 'sm-m1'
+      });
+    });
+
+    it('returns slug mapping with all three formats', async () => {
+      const { status, data } = await project.get('/api/getSlugMapping()',
+        { auth: { username: 'developer', password: 'developer' } });
+
+      expect(status).toBe(200);
+      expect(data).toHaveProperty('flat');
+      expect(data).toHaveProperty('grouped');
+      expect(data).toHaveProperty('keyed');
+      expect(Array.isArray(data.flat)).toBe(true);
+      expect(data.grouped).toHaveProperty('tutorials');
+      expect(data.grouped).toHaveProperty('missions');
+      expect(data.grouped).toHaveProperty('paths');
+      expect(Array.isArray(data.keyed)).toBe(true);
+    });
+
+    it('flat entries include entityType field', async () => {
+      const { data } = await project.get('/api/getSlugMapping()',
+        { auth: { username: 'developer', password: 'developer' } });
+
+      const tutorialEntry = data.flat.find(e => e.entityType === 'TUTORIAL');
+      expect(tutorialEntry).toBeDefined();
+      expect(tutorialEntry.legacyId).toBeTypeOf('number');
+      expect(tutorialEntry.slug).toBeTypeOf('string');
+    });
+
+    it('keyed entries use compositeKey format', async () => {
+      const { data } = await project.get('/api/getSlugMapping()',
+        { auth: { username: 'developer', password: 'developer' } });
+
+      const entry = data.keyed.find(e => e.compositeKey?.startsWith('TUTORIAL:'));
+      expect(entry).toBeDefined();
+      expect(entry.slug).toBeTypeOf('string');
+    });
+  });
 });

@@ -330,6 +330,11 @@ export default class DeveloperService extends cds.ApplicationService {
       );
     });
 
+    this.on('getSlugMapping', async () => {
+      const { buildSlugMapping } = await import('./lib/slug-mapping.js');
+      return buildSlugMapping();
+    });
+
     await super.init();
   }
 
