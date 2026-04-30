@@ -103,4 +103,11 @@ service AdminService {
   };
 
   function findByAccountNumber(sapId : String) returns many TaskRecords;
+
+  function findMissingSlugs() returns many {
+    taskLegacyId : Integer;
+    taskType     : String;
+    pathName     : String;
+    missionTitle : String;
+  };
 }

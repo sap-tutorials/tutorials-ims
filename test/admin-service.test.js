@@ -194,4 +194,50 @@ describe('AdminService', () => {
       expect(status).toBe(404);
     });
   });
+
+  describe('findMissingSlugs', () => {
+    beforeAll(async () => {
+      const { Tutorials, Missions, CompletionPaths, CompletionPathItems } = cds.entities('com.sap.developers.ims');
+
+      await INSERT.into(Missions).entries({
+        ID: 'ms-m1', legacyId: 88001, slug: 'ms-mission', title: 'Missing Slugs Mission'
+      });
+      await INSERT.into(CompletionPaths).entries({
+        ID: 'ms-p1', legacyId: 88101, slug: 'ms-path', name: 'MS Path', mission_ID: 'ms-m1'
+      });
+      await INSERT.into(Tutorials).entries([
+        { ID: 'ms-t1', legacyId: 88201, slug: 'has-slug', title: 'Has Slug', status: 'ACTIVE' },
+        { ID: 'ms-t2', legacyId: 88202, slug: null, title: 'Missing Slug', status: 'ACTIVE' },
+      ]);
+      await INSERT.into(CompletionPathItems).entries([
+        { ID: 'ms-cpi1', path_ID: 'ms-p1', taskLegacyId: 88201, taskType: 'TUTORIAL', itemOrder: 1 },
+        { ID: 'ms-cpi2', path_ID: 'ms-p1', taskLegacyId: 88202, taskType: 'TUTORIAL', itemOrder: 2 },
+      ]);
+    });
+
+    it('requires admin auth', async () => {
+      const { status } = await project.get(
+        '/admin/findMissingSlugs()',
+        { ...devAuth, validateStatus: () => true }
+      );
+      expect(status).toBe(403);
+    });
+
+    it('returns tutorials with missing slugs', async () => {
+      const { data } = await project.get('/admin/findMissingSlugs()', adminAuth);
+      // OData V4 wraps array returns in { value: [...] }
+      const results = data.value || data;
+      const missing = results.find(r => r.taskLegacyId === 88202);
+      expect(missing).toBeDefined();
+      expect(missing.taskType).toBe('TUTORIAL');
+      expect(missing.pathName).toBe('MS Path');
+      expect(missing.missionTitle).toBe('Missing Slugs Mission');
+    });
+
+    it('does not include tutorials that have slugs', async () => {
+      const { data } = await project.get('/admin/findMissingSlugs()', adminAuth);
+      const results = data.value || data;
+      expect(results.find(r => r.taskLegacyId === 88201)).toBeUndefined();
+    });
+  });
 });
