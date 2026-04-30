@@ -77,6 +77,7 @@ describe('slug-mapping', () => {
       const { buildSlugMapping } = await import('../../srv/lib/slug-mapping.js');
       const result = await buildSlugMapping();
 
+      expect(result.flat).toHaveLength(3);
       expect(result.flat.find(r => r.slug === 'has-slug-no-legacy')).toBeUndefined();
     });
   });
