@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, reactive, watch } from 'vue'
 import type { TutorialEntry, CardItem, MissionRef, GroupRef } from '@shared/types'
+import { useSearch } from './useSearch'
+import type { SearchFacets } from '@shared/types'
 
 const tutorials = ref<TutorialEntry[]>([])
 const missionsMeta = ref<MissionRef[]>([])
@@ -17,6 +19,13 @@ const filters = reactive({
   types: [] as string[],
   products: [] as string[],
   topics: [] as string[],
+})
+
+const { searchMode, searchResults, searchFacets, searchTotalCount, isSearching, searchError } = useSearch({
+  searchTerm: searchQuery,
+  filterTypes: computed(() => filters.types.map(t => t.toUpperCase())),
+  filterLevels: computed(() => filters.levels),
+  filterProducts: computed(() => filters.products),
 })
 
 onMounted(async () => {
@@ -278,6 +287,28 @@ const paginatedItems = computed(() => {
   return filteredItems.value.slice(start, start + pageSize)
 })
 
+const displayedItems = computed(() => {
+  if (searchMode.value) return searchResults.value
+  return paginatedItems.value
+})
+
+const displayedTotalCount = computed(() => {
+  if (searchMode.value) return searchTotalCount.value
+  return filteredItems.value.length
+})
+
+const displayedCounts = computed(() => {
+  if (searchMode.value && searchFacets.value) {
+    const facets = searchFacets.value
+    return {
+      missions: facets.typeCounts.find(t => t.name === 'MISSION')?.count ?? 0,
+      groups: facets.typeCounts.find(t => t.name === 'GROUP')?.count ?? 0,
+      tutorials: facets.typeCounts.find(t => t.name === 'TUTORIAL')?.count ?? 0,
+    }
+  }
+  return counts.value
+})
+
 const paginatorPages = computed(() => {
   const total = totalPages.value
   if (total <= 1) return []
@@ -440,15 +471,15 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
       <section class="navigator-toolbar">
         <div class="toolbar-counts">
           <button class="toolbar-count" :class="{ active: filters.types.includes('mission') }" @click="toggleFilter(filters.types, 'mission')">
-            <span class="toolbar-count-num count-mission">{{ counts.missions }}</span> Mission
+            <span class="toolbar-count-num count-mission">{{ displayedCounts.missions }}</span> Mission
           </button>
           <span class="toolbar-sep">&middot;</span>
           <button class="toolbar-count" :class="{ active: filters.types.includes('group') }" @click="toggleFilter(filters.types, 'group')">
-            <span class="toolbar-count-num count-group">{{ counts.groups }}</span> Group
+            <span class="toolbar-count-num count-group">{{ displayedCounts.groups }}</span> Group
           </button>
           <span class="toolbar-sep">&middot;</span>
           <button class="toolbar-count" :class="{ active: filters.types.includes('tutorial') }" @click="toggleFilter(filters.types, 'tutorial')">
-            <span class="toolbar-count-num count-tutorial">{{ counts.tutorials }}</span> Tutorial
+            <span class="toolbar-count-num count-tutorial">{{ displayedCounts.tutorials }}</span> Tutorial
           </button>
         </div>
         <button v-if="hasActiveFilters" class="fd-button fd-button--transparent" @click="clearFilters">
@@ -457,9 +488,12 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
       </section>
 
       <!-- Section: Card Grid -->
+      <div v-if="isSearching" class="navigator-loading">
+        <div class="fd-busy-indicator fd-busy-indicator--m" aria-label="Loading search results"></div>
+      </div>
       <section class="navigator-grid">
         <a
-          v-for="item in paginatedItems"
+          v-for="item in displayedItems"
           :key="item.id"
           :href="item.href"
           class="nav-card"
@@ -496,7 +530,7 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
       </section>
 
       <!-- Section: Pagination -->
-      <nav v-if="totalPages > 1" class="navigator-pagination" aria-label="Page navigation">
+      <nav v-if="totalPages > 1 && !searchMode" class="navigator-pagination" aria-label="Page navigation">
         <button
           class="pagination-btn pagination-prev"
           :disabled="currentPage === 1"
@@ -519,7 +553,7 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
       </nav>
 
       <!-- Empty State -->
-      <div v-if="filteredItems.length === 0 && tutorials.length > 0" class="navigator-empty">
+      <div v-if="displayedItems.length === 0 && !isSearching && (tutorials.length > 0 || searchMode)" class="navigator-empty">
         <p>No results match your filters.</p>
         <button class="fd-button fd-button--transparent" @click="clearFilters">Clear all filters</button>
       </div>
@@ -1055,5 +1089,11 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
   .navigator-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.navigator-loading {
+  display: flex;
+  justify-content: center;
+  padding: 2rem;
 }
 </style>
