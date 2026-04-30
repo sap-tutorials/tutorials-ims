@@ -58,6 +58,13 @@
       "csrfProtection": false
     },
     {
+      "source": "^/search/(.*)$",
+      "target": "/search/$1",
+      "destination": "srv-api",
+      "authenticationType": "none",
+      "csrfProtection": false
+    },
+    {
       "source": "^/build/(.*)$",
       "target": "/build/$1",
       "destination": "srv-api",
