@@ -329,6 +329,11 @@ export default class AdminService extends cds.ApplicationService {
       };
     });
 
+    this.on('findMissingSlugs', async () => {
+      const { findMissingSlugs } = await import('./lib/slug-mapping.js');
+      return findMissingSlugs();
+    });
+
     await super.init();
   }
 

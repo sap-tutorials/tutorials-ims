@@ -125,4 +125,98 @@ describe('DeveloperService', () => {
       expect(records.length).toBe(1);
     });
   });
+
+  describe('getSlugMapping', () => {
+
+    beforeAll(async () => {
+      const { Tutorials, Missions, CompletionPaths } = cds.entities('com.sap.developers.ims');
+      await INSERT.into(Tutorials).entries({
+        ID: 'sm-t1', legacyId: 7001, slug: 'slug-mapping-test', title: 'Slug Test', status: 'ACTIVE'
+      });
+      await INSERT.into(Missions).entries({
+        ID: 'sm-m1', legacyId: 7002, slug: 'slug-mission-test', title: 'Mission Test'
+      });
+      await INSERT.into(CompletionPaths).entries({
+        ID: 'sm-p1', legacyId: 7003, slug: 'slug-path-test', name: 'Path Test', mission_ID: 'sm-m1'
+      });
+    });
+
+    it('returns slug mapping with all three formats', async () => {
+      const { status, data } = await project.get('/api/getSlugMapping()',
+        { auth: { username: 'developer', password: 'developer' } });
+
+      expect(status).toBe(200);
+      expect(data).toHaveProperty('flat');
+      expect(data).toHaveProperty('grouped');
+      expect(data).toHaveProperty('keyed');
+      expect(Array.isArray(data.flat)).toBe(true);
+      expect(data.grouped).toHaveProperty('tutorials');
+      expect(data.grouped).toHaveProperty('missions');
+      expect(data.grouped).toHaveProperty('paths');
+      expect(Array.isArray(data.keyed)).toBe(true);
+    });
+
+    it('flat entries include entityType field', async () => {
+      const { data } = await project.get('/api/getSlugMapping()',
+        { auth: { username: 'developer', password: 'developer' } });
+
+      const tutorialEntry = data.flat.find(e => e.entityType === 'TUTORIAL');
+      expect(tutorialEntry).toBeDefined();
+      expect(tutorialEntry.legacyId).toBeTypeOf('number');
+      expect(tutorialEntry.slug).toBeTypeOf('string');
+    });
+
+    it('keyed entries use compositeKey format', async () => {
+      const { data } = await project.get('/api/getSlugMapping()',
+        { auth: { username: 'developer', password: 'developer' } });
+
+      const entry = data.keyed.find(e => e.compositeKey?.startsWith('TUTORIAL:'));
+      expect(entry).toBeDefined();
+      expect(entry.slug).toBeTypeOf('string');
+    });
+  });
+});
+
+describe('getEventProgress slug fallback', () => {
+  let auth;
+
+  beforeAll(async () => {
+    auth = { auth: { username: 'developer', password: 'developer' } };
+    const { Tutorials, Missions, CompletionPaths, CompletionPathItems } = cds.entities('com.sap.developers.ims');
+
+    await INSERT.into(Missions).entries({
+      ID: 'sf-m1', legacyId: 77001, slug: 'slug-fallback-mission', title: 'Slug Fallback Mission'
+    });
+    await INSERT.into(CompletionPaths).entries({
+      ID: 'sf-p1', legacyId: 77101, slug: 'sf-path', name: 'SF Path', mission_ID: 'sf-m1'
+    });
+    await INSERT.into(Tutorials).entries([
+      { ID: 'sf-t1', legacyId: 77201, slug: 'has-slug', title: 'Has Slug', status: 'ACTIVE' },
+      { ID: 'sf-t2', legacyId: 77202, slug: null, title: 'No Slug Yet', status: 'ACTIVE' },
+    ]);
+    await INSERT.into(CompletionPathItems).entries([
+      { ID: 'sf-cpi1', path_ID: 'sf-p1', taskLegacyId: 77201, taskType: 'TUTORIAL', itemOrder: 1 },
+      { ID: 'sf-cpi2', path_ID: 'sf-p1', taskLegacyId: 77202, taskType: 'TUTORIAL', itemOrder: 2 },
+    ]);
+  });
+
+  it('returns url for tutorial with slug', async () => {
+    const { data } = await project.get(
+      `/api/getEventProgress(missionLegacyId=77001)`,
+      auth
+    );
+    const items = data.paths[0].items;
+    const withSlug = items.find(i => i.imsId === 77201);
+    expect(withSlug.url).toBe('/tutorials/has-slug.html');
+  });
+
+  it('returns empty url for tutorial without slug (no fresh data)', async () => {
+    const { data } = await project.get(
+      `/api/getEventProgress(missionLegacyId=77001)`,
+      auth
+    );
+    const items = data.paths[0].items;
+    const noSlug = items.find(i => i.imsId === 77202);
+    expect(noSlug.url).toBe('');
+  });
 });

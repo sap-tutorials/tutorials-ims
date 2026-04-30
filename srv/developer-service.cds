@@ -41,6 +41,17 @@ service DeveloperService {
   function countCompletedMissionsTotal(userLegacyId : Integer) returns Integer;
   function countCompletedMissionsPercent(userLegacyId : Integer) returns Decimal;
 
+  // Slug mapping (used by frontend components and build pipeline)
+  function getSlugMapping() returns {
+    flat    : many { legacyId : Integer; slug : String; entityType : String; title : String };
+    grouped : {
+      tutorials : many { legacyId : Integer; slug : String; title : String };
+      missions  : many { legacyId : Integer; slug : String; title : String };
+      paths     : many { legacyId : Integer; slug : String; title : String };
+    };
+    keyed   : many { compositeKey : String; slug : String; title : String };
+  };
+
   // App Space progress (replaces AEM /bin/sapdx/tutorials/v3/progress/series)
   function getEventProgress(missionLegacyId : Integer) returns {
     eventId : Integer;

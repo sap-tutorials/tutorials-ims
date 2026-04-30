@@ -235,6 +235,19 @@ export default class DeveloperService extends cds.ApplicationService {
       for (const t of tutorials) taskMap.set(`TUTORIAL:${t.legacyId}`, t);
       for (const c of checkpoints) taskMap.set(`CHECKPOINT:${c.legacyId}`, c);
 
+      const missingSlugIds = allItems
+        .filter(i => i.taskType === 'TUTORIAL' && taskMap.has(`TUTORIAL:${i.taskLegacyId}`))
+        .filter(i => !taskMap.get(`TUTORIAL:${i.taskLegacyId}`).slug)
+        .map(i => i.taskLegacyId);
+
+      if (missingSlugIds.length > 0) {
+        const freshTutorials = await SELECT.from(dbTutorials)
+          .where({ legacyId: { in: missingSlugIds }, slug: { '!=': null } });
+        for (const t of freshTutorials) {
+          taskMap.set(`TUTORIAL:${t.legacyId}`, t);
+        }
+      }
+
       let userRecords = [];
       const dbUser = await SELECT.one.from(dbUsers).where({ uuid: user.id });
       if (dbUser) {
@@ -328,6 +341,11 @@ export default class DeveloperService extends cds.ApplicationService {
           completeDate: new Date().toISOString().slice(0, 10)
         })
       );
+    });
+
+    this.on('getSlugMapping', async () => {
+      const { buildSlugMapping } = await import('./lib/slug-mapping.js');
+      return buildSlugMapping();
     });
 
     await super.init();
