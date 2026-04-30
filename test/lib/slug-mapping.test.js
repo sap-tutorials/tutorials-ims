@@ -113,3 +113,14 @@ describe('slug-mapping', () => {
     });
   });
 });
+
+describe('/build/slug-mapping route', () => {
+  it('returns 200 with JSON mapping (no auth required)', async () => {
+    const { status, data } = await project.get('/build/slug-mapping');
+
+    expect(status).toBe(200);
+    expect(data).toHaveProperty('flat');
+    expect(data).toHaveProperty('grouped');
+    expect(data).toHaveProperty('keyed');
+  });
+});

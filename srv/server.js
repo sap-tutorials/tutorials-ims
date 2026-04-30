@@ -38,6 +38,11 @@ cds.on('bootstrap', (app) => {
   app.get('/api/qrcode', qrcodeHandler);
   app.get('/build/catalog', buildCatalogHandler);
   app.get('/build/navigator', navigatorCatalogHandler);
+  app.get('/build/slug-mapping', async (req, res) => {
+    const { buildSlugMapping } = await import('./lib/slug-mapping.js');
+    const mapping = await buildSlugMapping();
+    res.json(mapping);
+  });
 });
 
 cds.on('served', () => {
