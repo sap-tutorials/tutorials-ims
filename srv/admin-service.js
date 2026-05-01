@@ -30,6 +30,14 @@ export default class AdminService extends cds.ApplicationService {
       });
     }
 
+    // Reset notification escalation when reviewedDate is updated via Fiori UI
+    this.before('UPDATE', 'TutorialMeta', (req) => {
+      if (req.data.reviewedDate) {
+        req.data.notificationNumber = 0;
+        req.data.lastNotificationDate = null;
+      }
+    });
+
     // --- Event Statistics ---
 
     this.on('getEventStatistics', async (req) => {
@@ -269,6 +277,34 @@ export default class AdminService extends cds.ApplicationService {
         return { synced: 0, message: 'No metadata cache found' };
       }
       return sync(metadataSource);
+    });
+
+    // --- Tutorial Review & Notification Reset ---
+
+    this.on('reviewTutorial', async (req) => {
+      const { TutorialMeta } = cds.entities('com.sap.developers.ims');
+      const { tutorialId } = req.data;
+      const meta = await SELECT.one.from(TutorialMeta).where({ tutorial_ID: tutorialId });
+      if (!meta) return req.reject(404, `TutorialMeta not found for tutorial: ${tutorialId}`);
+
+      const now = new Date().toISOString();
+      await UPDATE(TutorialMeta, meta.ID).set({
+        reviewedDate: now,
+        notificationNumber: 0,
+        lastNotificationDate: null
+      });
+      return { reviewedDate: now, notificationNumber: 0 };
+    });
+
+    this.on('snoozeTutorial', async (req) => {
+      const { TutorialMeta } = cds.entities('com.sap.developers.ims');
+      const { tutorialId, days } = req.data;
+      const meta = await SELECT.one.from(TutorialMeta).where({ tutorial_ID: tutorialId });
+      if (!meta) return req.reject(404, `TutorialMeta not found for tutorial: ${tutorialId}`);
+
+      const snoozeUntil = new Date(Date.now() + (days || 30) * 86400000).toISOString();
+      await UPDATE(TutorialMeta, meta.ID).set({ lastNotificationDate: snoozeUntil });
+      return { lastNotificationDate: snoozeUntil, notificationNumber: meta.notificationNumber };
     });
 
     this.on('sendContributorNotifications', async (req) => {

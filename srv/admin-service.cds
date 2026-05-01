@@ -47,6 +47,16 @@ service AdminService {
   action cleanupUnusedTags();
   action setFeaturedOrder(taskLegacyId : Integer, taskType : String, featuredOrder : Integer);
 
+  // Tutorial review & notification management
+  action reviewTutorial(tutorialId : UUID) returns {
+    reviewedDate         : Timestamp;
+    notificationNumber   : Integer;
+  };
+  action snoozeTutorial(tutorialId : UUID, days : Integer) returns {
+    lastNotificationDate : Timestamp;
+    notificationNumber   : Integer;
+  };
+
   // Integration-dependent (stubs in Plan 2, implemented in Plan 3)
   action sendToNgds(taskRecordLegacyId : Integer) returns {
     success : Boolean;
