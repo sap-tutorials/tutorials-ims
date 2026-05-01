@@ -22,7 +22,7 @@ The rewrite documented in `docs/superpowers/plans/` has been **executed**. What 
 - [x] **AdminService** (`srv/admin-service.cds` + `.js`) — Full CRUD projections for all 25+ entities + admin actions (anonymize, cleanup, featured order, NGDS, sync, notifications, statistics, export)
 - [x] **DisplayService** (`srv/display-service.cds` + `.js`) — Event buckets, burnup, track stats, completion speed, leaderboard
 - [x] **ConsolidationService** (`srv/consolidation-service.cds` + `.js`) — `userMerge` + `getMergeStatus`
-- [x] **STOMP WebSocket broker** (`srv/lib/stomp-broker.js`) — Attached to HTTP server on `cds.on('listening')`, broadcasts on tutorial completion
+- [x] **~~STOMP WebSocket broker~~ → `@cap-js-community/websocket`** — Replaced custom `stomp-broker.js` with CDS-native WebSocket plugin. `EventStreamService` (`@protocol: ['websocket','rest']`) + `DisplayService` (`@protocol: ['odata','websocket']`). Socket.IO transport.
 - [x] **Job scheduler** (`srv/jobs/scheduler.js`) — node-cron with distributed lock: step-failure cleanup (daily), active learner analytics (daily), NGDS retry (2h), account merge (daily), tag cleanup (biannual), tutorial metadata review (weekly), contributor notifications (weekly Mon 9am), email retry (4h)
 - [x] **Job lock library** (`srv/jobs/job-lock.js`) — Database-backed distributed lock using JobLocks entity
 - [x] **NGDS client** (`srv/lib/ngds-client.js`) + retry job (`srv/jobs/ngds-retry.js`)
@@ -76,36 +76,36 @@ All 8 AEM endpoints have been replaced by CAP and the AEM proxy layer has been d
 
 ---
 
-## 4. Content Push Pipeline (Template Only)
+## 4. Content Push Pipeline ✅
 
-Current state: `docs/tutorial-repo-dispatch.yml` is a **template** workflow file, not deployed anywhere.
+Dispatch template in `docs/tutorial-repo-dispatch.yml`. Receiving workflow in `.github/workflows/rebuild-content.yml`. AppRouter rebuild handler in `approuter/server.js` (atomic directory swap with rollback).
 
-- [ ] Install workflow in sap-tutorials repos (or at org level via reusable workflow)
-- [ ] Fill in `<OWNER>` placeholder in the dispatch URL
-- [ ] Create receiving workflow in tutorials-ims (`.github/workflows/rebuild-on-dispatch.yml`)
+- [x] Create dispatch workflow template (`docs/tutorial-repo-dispatch.yml`)
+- [x] Create receiving workflow (`.github/workflows/rebuild-content.yml`) — triggers on `repository_dispatch` type `tutorial-updated` + manual `workflow_dispatch`
+- [x] Implement AppRouter rebuild endpoint (`/admin/rebuild`) — receives gzipped tarball, atomic swap
+- [ ] Install dispatch workflow in sap-tutorials repos (or at org level via reusable workflow)
+- [ ] Fill in `<OWNER>` placeholder in the dispatch URL (`sap-tutorials/tutorials-poc`)
 - [ ] Configure `TUTORIALS_DISPATCH_TOKEN` secret (GitHub PAT with repo scope)
+- [ ] Configure `REBUILD_API_KEY` secret in tutorials-poc repo (for workflow → AppRouter auth)
+- [ ] Configure `TUTORIALS_GITHUB_TOKEN` secret (for fetch-tutorials to access sap-tutorials org)
 
 ---
 
-## 5. Static Content Update Webhook (Not Implemented)
+## 5. Static Content Update Webhook ✅
 
-No mechanism exists to update the AppRouter's static content when tutorials change.
+Solved via the content push pipeline above — the receiving workflow POSTs a content tarball directly to the running AppRouter. No full MTA redeploy needed.
 
-- [ ] Decide on delivery approach:
-  - Option A: GitHub Actions dispatch → rebuild → `cf deploy` (simplest, full redeploy)
-  - Option B: GitHub Actions dispatch → rebuild → push to HTML5 Repository (incremental)
-  - Option C: Hybrid — rebuild static + `cf push approuter` only (faster than full MTA)
-- [ ] Implement CI/CD pipeline for chosen approach
+- [x] Decide on delivery approach: **Custom rebuild endpoint** (dispatch → rebuild → POST tarball to AppRouter `/admin/rebuild`)
+- [x] Implement CI/CD pipeline (`.github/workflows/rebuild-content.yml`)
 - [ ] Test end-to-end: tutorial commit → dispatch → rebuild → deployed content updated
 
 ---
 
-## 6. Real-Time Event Display (Deferred to Phase 2)
+## 6. Real-Time Event Display ✅
 
-- [ ] WebSocket subscription in AppSpace.vue (currently fetches once on mount)
-- [ ] Display UI equivalent (big-screen dashboard for events) — separate React app in IMS
-- [ ] STOMP broker already registered in `srv/server.js` — wire frontend to it
-- [ ] **Research: Replace custom STOMP broker with `@cap-js/websocket` plugin** — The official CAP WebSocket plugin exposes CDS services over WebSocket/Socket.IO via a simple `@protocol: 'websocket'` annotation. Would replace our hand-rolled `srv/lib/stomp-broker.js` + manual `ws` dependency + `cds.on('listening')` wiring with a declarative CDS event model. Supports both standard WebSocket and Socket.IO, integrates with CDS auth, and eliminates custom Express attachment code. Current STOMP broker broadcasts `tutorialCompleted` events — these would become CDS events on the DisplayService. See <https://cap.cloud.sap/docs/plugins/#websocket>
+- [x] WebSocket subscription in AppSpace.vue — real-time `tutorialCompleted` events via Socket.IO with confetti + toast celebration effects
+- [x] Display UI equivalent (big-screen dashboard for events) — `display-app/` rewritten from STOMP to Socket.IO (`display-app/src/event-stream.ts`)
+- [x] **Replaced custom STOMP broker with `@cap-js-community/websocket` plugin** — CDS-native WebSocket via `@protocol: 'websocket'` annotation. Removed `srv/lib/stomp-broker.js`. `EventStreamService` (unauthenticated kiosk displays) at `/ws/event-stream` + `/rest/event-stream`. `DisplayService` dual-protocol at `/display`. Context-based filtering via `wsContext` emit. Smoke tests verify Socket.IO handshake and REST endpoint.
 
 ---
 
@@ -139,15 +139,15 @@ No mechanism exists to update the AppRouter's static content when tutorials chan
 
 | # | Gap | Impact | Effort | Status |
 |---|-----|--------|--------|--------|
-| 1 | Content push pipeline (dispatch + receiving workflow) | Blocks author workflow | Low | Not started |
-| 2 | Static content webhook (CI/CD redeploy) | Blocks production content updates | Medium | Not started |
+| 1 | Content push pipeline (dispatch + receiving workflow) | Blocks author workflow | Low | **Done** — workflow + rebuild handler implemented |
+| 2 | Static content webhook (CI/CD redeploy) | Blocks production content updates | Medium | **Done** — solved by rebuild endpoint |
 | 3 | AEM endpoint retirement (0 remaining) | Blocks AEM decommission | Medium | **Done** — all 8 wired to CAP |
 | 4 | Admin UI — Tutorial Dashboard | Blocks content operations | High | **Done** — PR #1 |
 | 5 | Admin UI — Missions + Groups CRUD | Blocks content curation | High | **Done** — PR #1 |
 | 6 | BTP service bindings (Mail, NGDS dest, Analytics dest) | Blocks production job execution | Medium | Code done, config needed |
 | 7 | GDPR/Privacy tools (admin UI) | Compliance risk | Medium | **Done** — PR #1 |
 | 8 | Integration testing on HANA | Confidence in deploy | Medium | **Done** — 91 tests passing |
-| 9 | Real-time display (frontend WebSocket) | Event experience degradation | Medium | Backend done, frontend not wired |
+| 9 | Real-time display (frontend WebSocket) | Event experience degradation | Medium | **Done** — `@cap-js-community/websocket` + Socket.IO |
 | 10 | Plan doc cleanup | Housekeeping | Low | Plans show unchecked but work is done |
 
 ---
@@ -155,11 +155,11 @@ No mechanism exists to update the AppRouter's static content when tutorials chan
 ## 9. Immediate Action Items
 
 - [ ] Deploy the dispatch workflow to at least one sap-tutorials repo as proof-of-concept
-- [ ] Create the receiving workflow in tutorials-poc (`.github/workflows/rebuild.yml`)
+- [x] Create the receiving workflow in tutorials-poc (`.github/workflows/rebuild-content.yml`)
 - [x] Wire all AEM endpoints to CAP (progress series, search, QR code — all complete)
 - [ ] Configure BTP Destinations for NGDS and Adobe Analytics
 - [ ] Verify `cds deploy --to hana` succeeds with the full 35-entity schema
-- [ ] Decide on static content delivery — full MTA redeploy vs. HTML5 Repository vs. `cf push approuter`
+- [x] Decide on static content delivery — rebuild endpoint on AppRouter (`/admin/rebuild`)
 
 ---
 
