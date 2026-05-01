@@ -6,7 +6,6 @@ const isDark = ref(document.documentElement.dataset.theme === 'dark')
 const activeTheme = ref<'joule' | 'sapphire' | null>(null)
 
 const eventId = ref<number | null>(null)
-const imsUrl = ref('')
 const bucketCount = ref<number | null>(null)
 const isDemo = ref(false)
 
@@ -70,7 +69,7 @@ const eventLabel = computed(() => {
 })
 
 const showSetup = computed(() =>
-  !isDemo.value && (!eventId.value || !imsUrl.value)
+  !isDemo.value && !eventId.value
 )
 
 function barWidth(count: number): string {
@@ -93,12 +92,11 @@ onMounted(() => {
   if (eid) eventId.value = parseInt(eid, 10)
   const bc = params.get('bucketCount')
   if (bc) bucketCount.value = parseInt(bc, 10)
-  imsUrl.value = params.get('imsUrl') ?? ''
 
   if (isDemo.value) {
     startDemo()
-  } else if (eventId.value && imsUrl.value) {
-    connect(imsUrl.value, eventId.value)
+  } else if (eventId.value) {
+    connect('', eventId.value)
   }
 })
 </script>
@@ -131,17 +129,12 @@ onMounted(() => {
             <tr class="fd-table__row">
               <td class="fd-table__cell"><code>demo=true</code></td>
               <td class="fd-table__cell">-</td>
-              <td class="fd-table__cell">Run with simulated data (no IMS needed)</td>
+              <td class="fd-table__cell">Run with simulated data</td>
             </tr>
             <tr class="fd-table__row">
               <td class="fd-table__cell"><code>eventId</code></td>
               <td class="fd-table__cell">Yes</td>
-              <td class="fd-table__cell">IMS event ID (e.g. 38)</td>
-            </tr>
-            <tr class="fd-table__row">
-              <td class="fd-table__cell"><code>imsUrl</code></td>
-              <td class="fd-table__cell">Yes</td>
-              <td class="fd-table__cell">IMS base URL (e.g. https://ims.example.com)</td>
+              <td class="fd-table__cell">Event ID (e.g. 38)</td>
             </tr>
             <tr class="fd-table__row">
               <td class="fd-table__cell"><code>bucketCount</code></td>
@@ -158,7 +151,7 @@ onMounted(() => {
         <div class="setup-examples">
           <p><strong>Examples:</strong></p>
           <code>?demo=true</code><br />
-          <code>?eventId=38&imsUrl=https://ims.example.com&bucketCount=6&theme=sapphire</code>
+          <code>?eventId=38&bucketCount=6&theme=sapphire</code>
         </div>
       </div>
     </div>

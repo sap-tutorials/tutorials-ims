@@ -20,4 +20,13 @@
     (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
   document.documentElement.dataset.theme = t;
   if (t === 'dark') document.documentElement.classList.add('dark');
+  document.addEventListener('click', function(e) {
+    if (e.target.closest('[data-action="toggle-theme"]')) {
+      var html = document.documentElement;
+      var next = html.dataset.theme === 'dark' ? 'light' : 'dark';
+      html.dataset.theme = next;
+      html.classList.toggle('dark', next === 'dark');
+      localStorage.setItem('theme', next);
+    }
+  });
 </script>

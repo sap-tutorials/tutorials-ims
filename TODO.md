@@ -165,7 +165,6 @@ Solved via the content push pipeline above — the receiving workflow POSTs a co
 
 ## 10. Reported Bugs (Team Feedback 2026-04-29)
 
-- [ ] **Tutorial search blanks the screen** — Typing in the Navigator search causes the page to go blank (likely a Vue reactivity or error boundary issue in TutorialNavigator)
-- [ ] **App Space not showing data** — AppSpace.vue fails to display event/progress data (check `/api/getEventProgress` response and hardcoded `eventId`)
-- [ ] **Dark mode toggle not working** — Theme toggle button doesn't flip `data-theme` or persist to localStorage
+- [x] **App Space not showing data** — Root cause: EventDisplay required an `imsUrl` URL parameter (legacy from Java IMS era). Fixed by removing the parameter and using relative URLs via AppRouter proxy. Also added `/rest/` route to `xs-app.json`. AppSpace.vue itself was already using relative paths correctly.
+- [x] **Dark mode toggle not working** — Root cause: `toggleTheme()` handler only existed in `tutorial.ts` (loaded only on tutorial detail pages). Fixed by moving the click delegation handler to the inline `<script>` in `head.html` (runs on all pages). Also fixed toggle alignment in shellbar (added explicit height, line-height:0, centered thumb).
 - [ ] **Mission/Group pages return 404** — Some mission/group links lead to non-existent pages (content generation only produces pages for missions with populated `slug` fields; see `populate-slugs` migration step)

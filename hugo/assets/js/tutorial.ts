@@ -23,8 +23,6 @@ document.addEventListener('click', (e) => {
   if (doneBtn) { markDone(doneBtn as HTMLButtonElement); return }
   const tabBtn = target.closest('[role="tab"]')
   if (tabBtn) { switchTab(tabBtn as HTMLButtonElement); return }
-  const themeBtn = target.closest('[data-action="toggle-theme"]')
-  if (themeBtn) { toggleTheme(); return }
 })
 
 function toggleStep(header: HTMLElement) {
@@ -70,15 +68,6 @@ function updateActiveTocItem() {
     const tocItem = document.querySelector(`.step-toc-item[data-toc-step="${stepNum}"]`)
     if (tocItem) tocItem.classList.add('active')
   }
-}
-
-// --- Dark mode toggle ---
-function toggleTheme() {
-  const html = document.documentElement
-  const next = html.dataset.theme === 'dark' ? 'light' : 'dark'
-  html.dataset.theme = next
-  html.classList.toggle('dark', next === 'dark')
-  localStorage.setItem('theme', next)
 }
 
 // Expose globally for onclick handlers in template

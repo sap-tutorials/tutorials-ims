@@ -18,7 +18,6 @@ const {
 
 // ── URL Parameters ───────────────────────────────
 const eventId = ref<number | null>(null)
-const imsUrl = ref('')
 const isDemo = ref(false)
 const rotationTime = ref(10000)
 const chartCount = ref(5)
@@ -148,7 +147,7 @@ const showTicker = computed(() => {
 
 // ── Setup Prompt ─────────────────────────────────
 const showSetup = computed(() =>
-  !isDemo.value && (!eventId.value || !imsUrl.value)
+  !isDemo.value && !eventId.value
 )
 
 const qrUrl = computed(() => participateUrl.value || 'https://developers.sap.com/app-space.html')
@@ -161,7 +160,6 @@ onMounted(() => {
   isDemo.value = p.get('demo') === 'true' || p.get('demoMode') === 'on'
   const eid = p.get('eventId')
   if (eid) eventId.value = parseInt(eid, 10)
-  imsUrl.value = p.get('imsUrl') ?? ''
   rotationTime.value = parseInt(p.get('rotationTime') ?? '') || 10000
   chartCount.value = parseInt(p.get('chartCount') ?? '') || 5
   rankCount.value = parseInt(p.get('rankCount') ?? '') || 5
@@ -177,8 +175,8 @@ onMounted(() => {
 
   if (isDemo.value) {
     startDemo()
-  } else if (eventId.value && imsUrl.value) {
-    connect(imsUrl.value, eventId.value)
+  } else if (eventId.value) {
+    connect('', eventId.value)
   }
 
   if (!showSetup.value) rotateViews()
@@ -207,8 +205,7 @@ onMounted(() => {
           <thead><tr><th>Parameter</th><th>Default</th><th>Description</th></tr></thead>
           <tbody>
             <tr><td><code>demo=true</code></td><td>&mdash;</td><td>Run with simulated data</td></tr>
-            <tr><td><code>eventId</code></td><td>&mdash;</td><td>IMS event ID</td></tr>
-            <tr><td><code>imsUrl</code></td><td>&mdash;</td><td>IMS base URL</td></tr>
+            <tr><td><code>eventId</code></td><td>&mdash;</td><td>Event ID</td></tr>
             <tr><td><code>rotationTime</code></td><td>10000</td><td>View rotation interval (ms)</td></tr>
             <tr><td><code>chartCount</code></td><td>5</td><td>Max bars in chart view</td></tr>
             <tr><td><code>rankCount</code></td><td>5</td><td>Max items in leaderboard</td></tr>
@@ -222,7 +219,7 @@ onMounted(() => {
         <div class="setup-examples">
           <strong>Quick start:</strong>
           <code>?demo=true</code>
-          <code>?eventId=38&amp;imsUrl=https://ims.example.com&amp;chartCount=6&amp;theme=sapphire</code>
+          <code>?eventId=38&amp;chartCount=6&amp;theme=sapphire</code>
         </div>
       </div>
     </div>
