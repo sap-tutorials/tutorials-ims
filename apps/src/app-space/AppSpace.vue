@@ -508,6 +508,23 @@ const demoLabel = computed(() => {
       </div>
     </div>
   </div>
+
+  <!-- Confetti overlay -->
+  <div v-if="confettiActive" class="confetti-overlay" aria-hidden="true">
+    <span
+      v-for="p in particles"
+      :key="p.id"
+      class="confetti-particle"
+      :style="{ left: p.x + '%', animationDelay: p.delay + 's', backgroundColor: p.color }"
+    />
+  </div>
+
+  <!-- Toast notification -->
+  <Transition name="toast-slide">
+    <div v-if="toastVisible" class="toast-notification" role="status" aria-live="polite">
+      {{ toastMessage }}
+    </div>
+  </Transition>
 </template>
 
 <style scoped>
@@ -1532,5 +1549,66 @@ const demoLabel = computed(() => {
 
 .app-space[data-theme="sapphire"][data-dark] .step--earned .timeline-content {
   border-left: 3px solid #E070D0;
+}
+
+/* ── Confetti overlay ───────────────────────────────────────────── */
+.confetti-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  overflow: hidden;
+}
+
+.confetti-particle {
+  position: absolute;
+  top: -10px;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  animation: confetti-fall 3.5s ease-in forwards;
+}
+
+@keyframes confetti-fall {
+  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+}
+
+/* ── Toast notification ─────────────────────────────────────────── */
+.toast-notification {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--sapInformationBackground, #e8f0fe);
+  color: var(--sapTextColor, #32363a);
+  border: 1px solid var(--sapInformationBorderColor, #0854a0);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  z-index: 10000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.toast-slide-enter-active,
+.toast-slide-leave-active {
+  transition: opacity 0.3s, transform 0.3s;
+}
+
+.toast-slide-enter-from,
+.toast-slide-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(1rem);
+}
+
+/* ── Badge glow animation ───────────────────────────────────────── */
+.badge-glow {
+  animation: glow-pulse 0.5s ease-in-out 3;
+}
+
+@keyframes glow-pulse {
+  0%, 100% { filter: drop-shadow(0 0 0 transparent); }
+  50% { filter: drop-shadow(0 0 8px var(--sapPositiveColor, #107e3e)); }
 }
 </style>

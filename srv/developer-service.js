@@ -329,28 +329,32 @@ export default class DeveloperService extends cds.ApplicationService {
       if (!result || result.status !== 'COMPLETED') return;
       if (result.taskType !== 'TUTORIAL' || !result.event_ID) return;
 
-      const event = await SELECT.one.from(dbEvents).where({ ID: result.event_ID });
-      if (!event) return;
+      try {
+        const event = await SELECT.one.from(dbEvents).where({ ID: result.event_ID });
+        if (!event) return;
 
-      const tutorial = await SELECT.one.from(dbTutorials).where({ legacyId: result.taskLegacyId });
-      const user = await SELECT.one.from(dbUsers).where({ ID: result.user_ID });
+        const tutorial = await SELECT.one.from(dbTutorials).where({ legacyId: result.taskLegacyId });
+        const user = await SELECT.one.from(dbUsers).where({ ID: result.user_ID });
 
-      const payload = {
-        bucketName: tutorial?.primaryTag || 'unknown',
-        completeDate: new Date().toISOString().slice(0, 10),
-        tutorialTitle: tutorial?.title || 'Unknown Tutorial',
-      };
+        const payload = {
+          bucketName: tutorial?.primaryTag || 'unknown',
+          completeDate: new Date().toISOString().slice(0, 10),
+          tutorialTitle: tutorial?.title || 'Unknown Tutorial',
+        };
 
-      // Broadcast to kiosks (unauthenticated, no user info)
-      const eventStream = await cds.connect.to('EventStreamService');
-      await eventStream.emit('tutorialCompleted', payload, { contexts: [String(event.legacyId)] });
+        // Broadcast to kiosks (unauthenticated, no user info)
+        const eventStream = await cds.connect.to('EventStreamService');
+        await eventStream.emit('tutorialCompleted', payload, { contexts: [String(event.legacyId)] });
 
-      // Broadcast to authenticated clients (with user name)
-      const display = await cds.connect.to('DisplayService');
-      await display.emit('tutorialCompleted',
-        { ...payload, userName: user?.displayName || 'Someone' },
-        { contexts: [String(event.legacyId)] }
-      );
+        // Broadcast to authenticated clients (with user name)
+        const display = await cds.connect.to('DisplayService');
+        await display.emit('tutorialCompleted',
+          { ...payload, userName: user?.displayName || 'Someone' },
+          { contexts: [String(event.legacyId)] }
+        );
+      } catch (e) {
+        cds.log('ws').warn('Failed to emit tutorialCompleted:', e.message);
+      }
     });
 
     this.on('getSlugMapping', async () => {

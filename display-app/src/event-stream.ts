@@ -113,7 +113,7 @@ export function useEventStream() {
 
     // Fetch initial bucket data from unauthenticated EventStreamService
     try {
-      const res = await fetch(`${url}/ws/event-stream/getEventBuckets(eventLegacyId=${eventId})`)
+      const res = await fetch(`${url}/rest/event-stream/getEventBuckets(eventLegacyId=${eventId})`)
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`)
       const json = await res.json()
       const data: Array<{ bucketName: string; count: number }> = json.value ?? json
