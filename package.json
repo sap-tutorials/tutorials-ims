@@ -64,6 +64,7 @@
     "@cap-js/audit-logging": "^1.2.0",
     "@cap-js/change-tracking": "^2.0.0-beta.11",
     "@cap-js/hana": "^2.7.1",
+    "@cap-js/ord": "^1.6.0",
     "@cap-js/sqlite": "^2.2.1",
     "@cap-js/telemetry": "^1.6.0",
     "@grpc/grpc-js": "^1.14.3",
@@ -170,6 +171,12 @@
     },
     "websocket": {
       "kind": "socket.io"
+    },
+    "ord": {
+      "namespace": "sap.tutorials",
+      "description": "SAP Developer Tutorial Platform — progress tracking, mission management, and real-time event dashboards for developers.sap.com",
+      "policyLevels": ["sap:core:v1"],
+      "defaultVisibility": "public"
     }
   }
 }

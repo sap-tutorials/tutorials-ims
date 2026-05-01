@@ -20,4 +20,24 @@ describe('Public endpoints', () => {
     expect(body).toBeTruthy();
     expect(typeof body).toBe('object');
   });
+
+  it('GET /.well-known/open-resource-discovery returns ORD configuration', async () => {
+    const res = await fetchWithRetry(`${SRV_URL}/.well-known/open-resource-discovery`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/application\/json/);
+
+    const body = await res.json();
+    expect(body.openResourceDiscoveryV1).toBeDefined();
+    expect(body.openResourceDiscoveryV1.documents).toBeDefined();
+  });
+
+  it('GET /ord/v1/documents/ord-document returns ORD document', async () => {
+    const res = await fetchWithRetry(`${SRV_URL}/ord/v1/documents/ord-document`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/application\/json/);
+
+    const body = await res.json();
+    expect(body.apiResources).toBeDefined();
+    expect(body.apiResources.length).toBeGreaterThan(0);
+  });
 });

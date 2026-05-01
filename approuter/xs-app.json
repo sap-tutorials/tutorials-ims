@@ -79,6 +79,20 @@
       "csrfProtection": false
     },
     {
+      "source": "^/.well-known/(.*)$",
+      "target": "/.well-known/$1",
+      "destination": "srv-api",
+      "authenticationType": "none",
+      "csrfProtection": false
+    },
+    {
+      "source": "^/ord/(.*)$",
+      "target": "/ord/$1",
+      "destination": "srv-api",
+      "authenticationType": "none",
+      "csrfProtection": false
+    },
+    {
       "source": "^(.*)$",
       "localDir": "static",
       "authenticationType": "none"
