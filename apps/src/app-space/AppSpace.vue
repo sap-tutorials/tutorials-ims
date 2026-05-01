@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted, watch } from 'vue'
+import { useRealtimeProgress } from './useRealtimeProgress'
+import { useConfetti } from '../composables/useConfetti'
 
 // ── Configuration (easily customizable per event) ──────────────────
 const MISSION_ID = 24609
@@ -47,6 +49,22 @@ const loading = ref(true)
 const isLoggedIn = ref(false)
 const demoState = ref(0) // 0=default, 1=partial, 2=track complete, 3=reset
 
+// ── Real-time celebration ─────────────────────────────────────────
+const { fireConfetti, particles, active: confettiActive } = useConfetti()
+const currentUser = ref<{ displayName: string } | null>(null)
+
+// Toast notification state
+const toastMessage = ref('')
+const toastVisible = ref(false)
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+function showToast(message: string) {
+  toastMessage.value = message
+  toastVisible.value = true
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => { toastVisible.value = false }, 3000)
+}
+
 // ── Data loading ───────────────────────────────────────────────────
 async function loadData(): Promise<AppSpaceData | null> {
   try {
@@ -76,6 +94,56 @@ onMounted(async () => {
   }
   loading.value = false
 })
+
+// ── Real-time progress (requires login + event context) ───────────
+const eventIdForWs = ref<string>('')
+
+watch([() => tracks.value, isLoggedIn], ([t, loggedIn]) => {
+  if (!loggedIn || !t.length) return
+  const params = new URLSearchParams(window.location.search)
+  const eid = params.get('eventId') || ''
+  if (eid) eventIdForWs.value = eid
+}, { immediate: true })
+
+const realtimeActive = computed(() => isLoggedIn.value && eventIdForWs.value !== '')
+
+// Dev: VITE_CAP_URL=http://localhost:4004, Prod: empty (same-origin via AppRouter)
+const wsBaseUrl = import.meta.env.VITE_CAP_URL || ''
+
+let rtCleanup: (() => void) | null = null
+watch(realtimeActive, (active) => {
+  if (active && !rtCleanup) {
+    const { lastCompletion, connected } = useRealtimeProgress(wsBaseUrl, eventIdForWs.value)
+
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+    let debounceQueue: string[] = []
+
+    watch(lastCompletion, (completion) => {
+      if (!completion) return
+
+      debounceQueue.push(completion.userName)
+
+      if (debounceTimer) clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => {
+        if (debounceQueue.length > 1) {
+          showToast(`${debounceQueue.length} people just completed tutorials!`)
+          fireConfetti('large')
+        } else {
+          const isMe = completion.userName === currentUser.value?.displayName
+          fireConfetti(isMe ? 'large' : 'normal')
+          showToast(`${completion.userName} completed "${completion.tutorialTitle}"!`)
+          if (isMe) {
+            document.querySelector('.app-space-badge')?.classList.add('badge-glow')
+            setTimeout(() => {
+              document.querySelector('.app-space-badge')?.classList.remove('badge-glow')
+            }, 2000)
+          }
+        }
+        debounceQueue = []
+      }, 500)
+    })
+  }
+}, { immediate: true })
 
 // ── Helpers ────────────────────────────────────────────────────────
 function formatTime(seconds: number): string {
