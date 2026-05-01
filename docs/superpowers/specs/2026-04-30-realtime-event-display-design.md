@@ -21,7 +21,7 @@ srv.emit('tutorialCompleted', payload, { contexts: [eventLegacyId] })  // header
 │  EventStreamService            │  │  DisplayService                │
 │  @protocol: 'websocket'       │  │  @protocol: ['odata','websocket']│
 │  @requires: 'any'             │  │  @requires: 'DisplayApp'       │
-│  /ws/event-stream              │  │  /ws/display                   │
+│  /ws/event-stream              │  │  /display (absolute @path)     │
 │                                │  │                                │
 │  → display-app (kiosk)         │  │  → AppSpace.vue (user)         │
 │    socket.io-client            │  │    socket.io-client + XSUAA    │
@@ -57,7 +57,7 @@ service EventStreamService {
 // srv/display-service.cds (add websocket protocol + event)
 @protocol: ['odata', 'websocket']
 @requires: 'DisplayApp'
-@path: 'display'
+@path: '/display'
 service DisplayService {
   // ... existing entities and functions unchanged ...
 
@@ -77,7 +77,7 @@ The `userName` field is only available on the authenticated `DisplayService` cha
 ```javascript
 // srv/developer-service.js — modified after('createTaskRecord') handler
 
-this.after('createTaskRecord', async (result) => {
+this.after('createTaskRecord', async (result, req) => {
   if (!result || result.status !== 'COMPLETED') return
   if (result.taskType !== 'TUTORIAL' || !result.event_ID) return
 
@@ -96,11 +96,11 @@ this.after('createTaskRecord', async (result) => {
   // Broadcast to kiosks (unauthenticated, no user info)
   // 'contexts' header scopes delivery to clients who joined that context
   const eventStream = await cds.connect.to('EventStreamService')
-  eventStream.emit('tutorialCompleted', payload, { contexts: [String(event.legacyId)] })
+  await eventStream.tx(req).emit('tutorialCompleted', payload, { contexts: [String(event.legacyId)] })
 
   // Broadcast to authenticated clients (with user name)
   const display = await cds.connect.to('DisplayService')
-  display.emit('tutorialCompleted',
+  await display.tx(req).emit('tutorialCompleted',
     { ...payload, userName: user?.displayName || 'Someone' },
     { contexts: [String(event.legacyId)] }
   )
@@ -173,6 +173,10 @@ export function useEventStream(baseUrl: string, eventId: string) {
 
 Minimal — the composable API (`buckets`, `status`, `lastEvent`) is unchanged. All 8 rotating views, animations, and confetti continue working as-is.
 
+### Full API surface preserved
+
+The actual `useEventStream` composable exposes a rich API: `buckets`, `totalCount`, `connectionState`, `errorMessage`, `speed` (completions/hr), `recentEvents` (last 30), `bucketVelocity` (5-min sliding window), plus imperative methods `connect(url, eventId)`, `startDemo()`, and `disconnect()`. The rewrite MUST preserve all of these. The simplified code above shows only the Socket.IO connection logic; internal bookkeeping (`applyUpdate`, speed calculation cron, `justUpdated` flash flag, `bucketTimestamps`) carries over unchanged — only the transport layer (STOMP → Socket.IO) and initial data fetch (REST endpoint path) change.
+
 ## Client: AppSpace.vue (Celebration Mode)
 
 ### New composable
@@ -190,7 +194,7 @@ export function useRealtimeProgress(baseUrl: string, eventId: string) {
   } | null>(null)
   const connected = ref(false)
 
-  const socket: Socket = io(`${baseUrl}/ws/display`, {
+  const socket: Socket = io(`${baseUrl}/display`, {
     transports: ['websocket'],
     reconnection: true,
     reconnectionDelay: 2000,
@@ -333,4 +337,4 @@ No changes — `DisplayApp` scope already exists in `xs-security.json`. AppSpace
 - This is a breaking change for the WebSocket protocol (STOMP → Socket.IO). Both client apps must be deployed simultaneously with the backend.
 - Demo mode in display-app remains unchanged (generates local fake data, no server connection).
 - **Reconnection:** Socket.IO `connect` event fires on both initial connection and reconnection. The `wsContext` emit in the `connect` handler ensures context is re-joined after any disconnect — no additional reconnection logic needed.
-- **Path convention:** CDS `@path` uses relative paths (no leading slash) so the plugin mounts under `/ws/`. OData continues to serve at the existing absolute paths.
+- **Path convention:** The `@cap-js-community/websocket` plugin mounts WebSocket endpoints using the service's `@path`. For relative paths (no leading slash, e.g., `'event-stream'`), the plugin adds a `/ws/` prefix → `/ws/event-stream`. For absolute paths (leading slash, e.g., `'/display'`), it uses the path verbatim → `/display`. The existing DisplayService uses an absolute `@path: '/display'`, so its WebSocket endpoint is at `/display` (same as OData). EventStreamService uses relative `@path: 'event-stream'` → WebSocket at `/ws/event-stream`.
