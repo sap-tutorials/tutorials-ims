@@ -1,5 +1,5 @@
 import { ref, readonly, onUnmounted } from 'vue'
-import { Client } from '@stomp/stompjs'
+import { io, type Socket } from 'socket.io-client'
 
 export interface Bucket {
   name: string
@@ -29,7 +29,7 @@ export function useEventStream() {
   const connectionState = ref<ConnectionState>('idle')
   const errorMessage = ref('')
 
-  let stompClient: Client | null = null
+  let socket: Socket | null = null
   let demoInterval: ReturnType<typeof setInterval> | null = null
 
   function sortBuckets() {
@@ -59,64 +59,51 @@ export function useEventStream() {
     }, 1200)
   }
 
-  async function connect(imsUrl: string, eventId: number) {
+  async function connect(baseUrl: string, eventId: number | string) {
     connectionState.value = 'connecting'
     errorMessage.value = ''
+    const url = String(baseUrl).replace(/\/+$/, '')
 
-    const baseUrl = imsUrl.replace(/\/+$/, '')
-
+    // Fetch initial bucket data from unauthenticated EventStreamService
     try {
-      const res = await fetch(`${baseUrl}/statistic/events/${eventId}/buckets`)
+      const res = await fetch(`${url}/ws/event-stream/getEventBuckets(eventLegacyId=${eventId})`)
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`)
-      const data: Array<{ name: string; count: number }> = await res.json()
-      buckets.value = data.map(b => ({ ...b, justUpdated: false }))
+      const json = await res.json()
+      const data: Array<{ bucketName: string; count: number }> = json.value ?? json
+      buckets.value = data.map(b => ({ name: b.bucketName, count: b.count, justUpdated: false }))
       sortBuckets()
       recalcTotal()
     } catch (e) {
       connectionState.value = 'error'
-      errorMessage.value = `Failed to fetch buckets from ${baseUrl}: ${(e as Error).message}`
+      errorMessage.value = `Failed to fetch buckets from ${url}: ${(e as Error).message}`
       return
     }
 
-    const wsScheme = baseUrl.startsWith('https') ? 'wss' : 'ws'
-    const wsHost = baseUrl.replace(/^https?:\/\//, '')
-    const wsUrl = `${wsScheme}://${wsHost}/display/websocket`
-
-    stompClient = new Client({
-      brokerURL: wsUrl,
-      reconnectDelay: 5000,
-      heartbeatIncoming: 10000,
-      heartbeatOutgoing: 10000,
-
-      onConnect: () => {
-        connectionState.value = 'connected'
-        stompClient!.subscribe(`/topic/events/${eventId}/tutorials`, (message) => {
-          try {
-            const update = JSON.parse(message.body)
-            if (update.bucketName) {
-              applyUpdate(update.bucketName)
-            }
-          } catch { /* ignore malformed messages */ }
-        })
-      },
-
-      onDisconnect: () => {
-        connectionState.value = 'reconnecting'
-      },
-
-      onStompError: (frame) => {
-        connectionState.value = 'error'
-        errorMessage.value = `STOMP error: ${frame.headers['message'] ?? 'Unknown'}`
-      },
-
-      onWebSocketClose: () => {
-        if (connectionState.value === 'connected') {
-          connectionState.value = 'reconnecting'
-        }
-      },
+    // Connect via Socket.IO to EventStreamService
+    socket = io(`${url}/ws/event-stream`, {
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionDelay: 2000,
+      reconnectionDelayMax: 10000,
     })
 
-    stompClient.activate()
+    socket.on('connect', () => {
+      connectionState.value = 'connected'
+      socket!.emit('wsContext', { context: String(eventId) })
+    })
+
+    socket.on('disconnect', () => {
+      connectionState.value = 'reconnecting'
+    })
+
+    socket.on('connect_error', () => {
+      connectionState.value = 'error'
+      errorMessage.value = 'WebSocket connection error'
+    })
+
+    socket.on('tutorialCompleted', (data: { bucketName: string }) => {
+      if (data.bucketName) applyUpdate(data.bucketName)
+    })
   }
 
   function startDemo() {
@@ -132,9 +119,9 @@ export function useEventStream() {
   }
 
   function disconnect() {
-    if (stompClient) {
-      stompClient.deactivate()
-      stompClient = null
+    if (socket) {
+      socket.disconnect()
+      socket = null
     }
     if (demoInterval) {
       clearInterval(demoInterval)
