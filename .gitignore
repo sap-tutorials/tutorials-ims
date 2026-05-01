@@ -12,7 +12,6 @@ approuter/static/
 .env
 .playwright-mcp/
 *.png
-aem-missions.json
 hugo/static/js/
 
 # CAP

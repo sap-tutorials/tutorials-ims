@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A tutorial hosting platform that replaces Adobe Experience Manager (AEM) as the frontend for developers.sap.com. Fetches tutorial markdown from the `sap-tutorials` GitHub organization at build time, parses it into Hugo static pages styled with SAP Fundamental Styles (Horizon theme), and deploys behind an AppRouter on SAP BTP Cloud Foundry with XSUAA authentication. Backed by a CAP Node.js service with SAP HANA Cloud for progress tracking (IMS rewrite).
+A tutorial hosting platform that replaces Adobe Experience Manager (AEM) as the frontend for developers.sap.com. Fetches tutorial markdown from the `sap-tutorials` GitHub organization at build time, parses it into Hugo static pages styled with SAP Fundamental Styles (Horizon theme), and deploys behind an AppRouter on SAP BTP Cloud Foundry with XSUAA authentication. Backed by a CAP Node.js service with SAP HANA Cloud for progress tracking (IMS rewrite). AEM has been fully decommissioned.
 
 ## Commands
 
@@ -40,7 +40,7 @@ npm run migrate:reference                     # Export reference data from Java 
 npm run migrate:users                         # Export user progress from Java IMS (with resume support)
 npm run migrate:hana                          # Direct HANA-to-HANA migration
 npm run compare                               # Compare Java IMS and CAP responses side-by-side
-node scripts/migrate-reference-data.js populate-slugs  # Patch slug fields from AEM cache
+node scripts/migrate-reference-data.js populate-slugs  # Patch slug fields from CAP catalog cache
 ```
 
 Tutorials must be fetched before `dev` or `build`. Fetched markdown is cached in `.tutorial-cache/` and generated pages go to `hugo/content/tutorials/` — both are gitignored. To force re-fetch from GitHub, delete `.tutorial-cache/`.
@@ -93,7 +93,7 @@ Single MTA deployment (`mta.yaml`): AppRouter module serves Hugo static build fr
 ### Data Migration
 
 Migration scripts in `scripts/` support parallel operation during cutover:
-- `migrate-reference-data.js` — export/import tutorials, missions, events, tags; `populate-slugs` mode patches slug fields from AEM cache
+- `migrate-reference-data.js` — export/import tutorials, missions, events, tags; `populate-slugs` mode patches slug fields from CAP catalog cache
 - `migrate-user-progress.js` — export/import users and task records (paged, resumable)
 - `compare-systems.js` — endpoint-by-endpoint diff between Java IMS and CAP
 

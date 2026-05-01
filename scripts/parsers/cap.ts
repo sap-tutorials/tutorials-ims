@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { AemMission, AemHierarchy } from './aem.js'
+import type { Mission, MissionHierarchy } from './types.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const CACHE_FILE = join(__dirname, '..', '..', '.tutorial-cache', 'cap-catalog.json')
@@ -9,8 +9,8 @@ const CACHE_TTL_MS = 24 * 60 * 60 * 1000
 
 interface CapCacheData {
   timestamp: number
-  missions: AemMission[]
-  hierarchies: AemHierarchy[]
+  missions: Mission[]
+  hierarchies: MissionHierarchy[]
 }
 
 export function loadCapCache(): CapCacheData | null {
@@ -24,13 +24,13 @@ export function loadCapCache(): CapCacheData | null {
   }
 }
 
-export function saveCapCache(missions: AemMission[], hierarchies: AemHierarchy[]): void {
+export function saveCapCache(missions: Mission[], hierarchies: MissionHierarchy[]): void {
   mkdirSync(dirname(CACHE_FILE), { recursive: true })
   const data: CapCacheData = { timestamp: Date.now(), missions, hierarchies }
   writeFileSync(CACHE_FILE, JSON.stringify(data, null, 2), 'utf-8')
 }
 
-export async function fetchBuildCatalog(baseUrl: string): Promise<{ missions: AemMission[]; hierarchies: AemHierarchy[] }> {
+export async function fetchBuildCatalog(baseUrl: string): Promise<{ missions: Mission[]; hierarchies: MissionHierarchy[] }> {
   const url = `${baseUrl}/build/catalog`
   const res = await fetch(url, {
     headers: { 'Accept': 'application/json' },
@@ -40,6 +40,6 @@ export async function fetchBuildCatalog(baseUrl: string): Promise<{ missions: Ae
     throw new Error(`CAP build catalog failed: ${res.status} ${res.statusText}`)
   }
 
-  const data = await res.json() as { missions: AemMission[]; hierarchies: AemHierarchy[] }
+  const data = await res.json() as { missions: Mission[]; hierarchies: MissionHierarchy[] }
   return data
 }

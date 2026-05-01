@@ -70,15 +70,9 @@ The IMS React 15 admin frontend has **11 pages** — all reimplemented as Fiori 
 
 ---
 
-## 3. AEM Endpoints Still Active
+## ~~3. AEM Endpoints~~ **REMOVED**
 
-3 of 8 frontend endpoints still route through AEM:
-
-- [x] Progress Series (`/bin/ims/progressSeries`) — AppSpace.vue completion data; needs slug-to-IMS-ID mapping in CAP
-- [x] Solr Search (`/bin/ims/search`) — Icon/tag lookup for tutorial cards; need CAP equivalent or direct tag resolution
-- [ ] QR Code (`/bin/ims/qrcode`) — PNG generation for event badges; already has `/api/qrcode` in CAP — verify wiring
-
-Endpoints 1, 5, 6, 7, 8 are replaced by CAP. The AEM proxy layer can be fully retired once these 3 are resolved.
+All 8 AEM endpoints have been replaced by CAP and the AEM proxy layer has been decommissioned. The `scripts/parsers/aem.ts` file has been deleted.
 
 ---
 
@@ -147,7 +141,7 @@ No mechanism exists to update the AppRouter's static content when tutorials chan
 |---|-----|--------|--------|--------|
 | 1 | Content push pipeline (dispatch + receiving workflow) | Blocks author workflow | Low | Not started |
 | 2 | Static content webhook (CI/CD redeploy) | Blocks production content updates | Medium | Not started |
-| 3 | AEM endpoint retirement (3 remaining) | Blocks AEM decommission | Medium | QR done, 2 remain |
+| 3 | AEM endpoint retirement (0 remaining) | Blocks AEM decommission | Medium | **Done** — all 8 wired to CAP |
 | 4 | Admin UI — Tutorial Dashboard | Blocks content operations | High | **Done** — PR #1 |
 | 5 | Admin UI — Missions + Groups CRUD | Blocks content curation | High | **Done** — PR #1 |
 | 6 | BTP service bindings (Mail, NGDS dest, Analytics dest) | Blocks production job execution | Medium | Code done, config needed |
@@ -162,7 +156,7 @@ No mechanism exists to update the AppRouter's static content when tutorials chan
 
 - [ ] Deploy the dispatch workflow to at least one sap-tutorials repo as proof-of-concept
 - [ ] Create the receiving workflow in tutorials-poc (`.github/workflows/rebuild.yml`)
-- [ ] Wire the 2 remaining AEM endpoints to CAP (progress series slug mapping is the key blocker; QR code already done)
+- [x] Wire all AEM endpoints to CAP (progress series, search, QR code — all complete)
 - [ ] Configure BTP Destinations for NGDS and Adobe Analytics
 - [ ] Verify `cds deploy --to hana` succeeds with the full 35-entity schema
 - [ ] Decide on static content delivery — full MTA redeploy vs. HTML5 Repository vs. `cf push approuter`

@@ -11,8 +11,7 @@ import { convertOptionBlocks } from './parsers/options.js'
 import { escapeHugoDelimiters } from './parsers/hugo-delimiters.js'
 import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, type DiscoveredTutorial } from './parsers/github.js'
 import { fetchBuildCatalog, loadCapCache, saveCapCache } from './parsers/cap.js'
-import { type AemMission, type AemHierarchy, type AemHierarchyGroup } from './parsers/aem.js'
-import type { TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } from './parsers/types.js'
+import type { Mission, MissionHierarchy, HierarchyGroup, TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } from './parsers/types.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -399,7 +398,7 @@ function patchTutorialFrontmatter(slug: string, nav: TutorialNavEntry, outputDir
 }
 
 function writeMissionPage(
-  mission: AemMission,
+  mission: Mission,
   groups: GroupRef[],
   navBySlug: Map<string, TutorialNavEntry>,
   outputDir: string,
@@ -460,8 +459,8 @@ function writeMissionPage(
 }
 
 function writeGroupPage(
-  group: AemHierarchyGroup,
-  mission: AemMission,
+  group: HierarchyGroup,
+  mission: Mission,
   tutorials: Array<{
     slug: string
     title: string
@@ -720,19 +719,19 @@ async function main() {
 
   // ── Phase 4: Missions & Groups from CAP ──
   console.log('\nPhase 4: Fetching missions & groups from CAP...\n')
-  const aemStart = performance.now()
+  const capStart = performance.now()
 
-  let missions: AemMission[] = []
-  let hierarchies: AemHierarchy[] = []
-  let aemCacheUsed = false
+  let missions: Mission[] = []
+  let hierarchies: MissionHierarchy[] = []
+  let capCacheUsed = false
 
-  const forceAem = process.argv.includes('--force-aem') || process.argv.includes('--force-cap')
-  const cached = forceAem ? null : loadCapCache()
+  const forceRefresh = process.argv.includes('--force-cap')
+  const cached = forceRefresh ? null : loadCapCache()
 
   if (cached) {
     missions = cached.missions
     hierarchies = cached.hierarchies
-    aemCacheUsed = true
+    capCacheUsed = true
     console.log(`  [cap] Using cached data (${missions.length} missions)`)
   } else {
     try {
@@ -761,7 +760,7 @@ async function main() {
     const missionGroups: GroupRef[] = []
     const isFlat = hierarchy.groups.length === 0 && hierarchy.tutorialSlugs.length > 0
 
-    const groupsToProcess: AemHierarchyGroup[] = isFlat
+    const groupsToProcess: HierarchyGroup[] = isFlat
       ? [{
           imsId: mission.imsId,
           title: mission.title,
@@ -851,8 +850,8 @@ async function main() {
     }
   }
 
-  const aemMs = performance.now() - aemStart
-  console.log(`\nCAP phase complete: ${missions.length} missions, ${allGroupRefs.length} groups, ${matchedTutorials} tutorials matched, ${unmatchedTutorials} unmatched, ${patchedCount} pages patched (${formatDuration(aemMs)})`)
+  const capMs = performance.now() - capStart
+  console.log(`\nCAP phase complete: ${missions.length} missions, ${allGroupRefs.length} groups, ${matchedTutorials} tutorials matched, ${unmatchedTutorials} unmatched, ${patchedCount} pages patched (${formatDuration(capMs)})`)
 
   // ── Phase 5: Write outputs ──
   navEntries.sort((a, b) => a.slug.localeCompare(b.slug))
@@ -900,7 +899,7 @@ async function main() {
   console.log(`    Discovery (GraphQL):     ${formatDuration(discoveryMs)}`)
   console.log(`    Metadata prefetch:       ${formatDuration(metaMs)}`)
   console.log(`    Tutorial processing:     ${formatDuration(processMs)}`)
-  console.log(`    CAP missions/groups:     ${formatDuration(aemMs)}${aemCacheUsed ? ' (cached)' : ''}`)
+  console.log(`    CAP missions/groups:     ${formatDuration(capMs)}${capCacheUsed ? ' (cached)' : ''}`)
   console.log(`    Total:                   ${formatDuration(totalMs)}`)
   console.log('─'.repeat(60))
   console.log('  PER-TUTORIAL STATS')

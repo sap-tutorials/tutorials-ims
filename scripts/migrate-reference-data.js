@@ -6,18 +6,18 @@ const IMS_BASE_URL = process.env.IMS_BASE_URL || 'https://imsprod-approuter.cfap
 const CAP_BASE_URL = process.env.CAP_BASE_URL || 'http://localhost:4004';
 const OUTPUT_DIR = process.env.MIGRATION_OUTPUT_DIR || '.migration-data';
 const AUTH_TOKEN = process.env.IMS_AUTH_TOKEN;
-const AEM_CACHE_FILE = '.tutorial-cache/aem-missions.json';
+const CAP_CACHE_FILE = '.tutorial-cache/cap-catalog.json';
 
-function loadAemSlugs() {
+function loadCatalogSlugs() {
   const missions = new Map();
   const paths = new Map();
 
-  if (!existsSync(AEM_CACHE_FILE)) {
-    console.log('  [slug] No AEM cache found — slugs will not be populated');
+  if (!existsSync(CAP_CACHE_FILE)) {
+    console.log('  [slug] No CAP catalog cache found — slugs will not be populated');
     return { missions, paths };
   }
 
-  const cache = JSON.parse(readFileSync(AEM_CACHE_FILE, 'utf-8'));
+  const cache = JSON.parse(readFileSync(CAP_CACHE_FILE, 'utf-8'));
 
   for (const m of cache.missions || []) {
     if (m.imsId && m.slug) missions.set(m.imsId, m.slug);
@@ -29,7 +29,7 @@ function loadAemSlugs() {
     }
   }
 
-  console.log(`  [slug] Loaded ${missions.size} mission slugs, ${paths.size} group/path slugs from AEM cache`);
+  console.log(`  [slug] Loaded ${missions.size} mission slugs, ${paths.size} group/path slugs from CAP catalog cache`);
   return { missions, paths };
 }
 
@@ -81,7 +81,7 @@ async function exportData() {
 }
 
 async function importData() {
-  const aemSlugs = loadAemSlugs();
+  const catalogSlugs = loadCatalogSlugs();
 
   for (const entity of ENTITY_ENDPOINTS) {
     const filePath = join(OUTPUT_DIR, `${entity.name}.json`);
@@ -96,8 +96,8 @@ async function importData() {
     let imported = 0;
     let failed = 0;
     for (const record of records) {
-      if (entity.name === 'missions' && aemSlugs.missions.has(record.legacyId)) {
-        record.slug = aemSlugs.missions.get(record.legacyId);
+      if (entity.name === 'missions' && catalogSlugs.missions.has(record.legacyId)) {
+        record.slug = catalogSlugs.missions.get(record.legacyId);
       }
       const res = await fetch(`${CAP_BASE_URL}/admin/${entity.capEntity}`, {
         method: 'POST',
@@ -137,7 +137,7 @@ if (mode === 'export') {
 }
 
 async function populateSlugs() {
-  const { missions, paths } = loadAemSlugs();
+  const { missions, paths } = loadCatalogSlugs();
   if (missions.size === 0 && paths.size === 0) {
     console.error('No slug data available. Ensure .tutorial-cache/aem-missions.json exists.');
     console.error('Run "npm run fetch-tutorials -- --force-aem" to generate it.');

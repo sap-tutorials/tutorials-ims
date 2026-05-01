@@ -90,3 +90,28 @@ export interface GitHubContributor {
   login: string
   avatarUrl: string
 }
+
+export interface Mission {
+  imsId: number
+  title: string
+  slug: string
+  description: string
+  level: string
+  time: number
+  icon: string
+  tasksCount: number
+}
+
+export interface HierarchyGroup {
+  imsId: number
+  title: string
+  slug: string
+  description: string
+  tutorialSlugs: string[]
+}
+
+export interface MissionHierarchy {
+  missionImsId: number
+  groups: HierarchyGroup[]
+  tutorialSlugs: string[]
+}
