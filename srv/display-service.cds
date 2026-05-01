@@ -1,5 +1,6 @@
 using { com.sap.developers.ims as ims } from '../db/schema';
 
+@protocol: ['odata', 'websocket']
 @path: '/display'
 @requires: 'DisplayApp'
 service DisplayService {
@@ -39,4 +40,11 @@ service DisplayService {
     completions  : Integer;
     points       : Integer;
   };
+
+  event tutorialCompleted {
+    bucketName    : String;
+    completeDate  : String;
+    tutorialTitle : String;
+    userName      : String;
+  }
 }

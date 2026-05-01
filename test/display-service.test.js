@@ -117,4 +117,13 @@ describe('DisplayService', () => {
       expect(status).toBe(404);
     });
   });
+
+  it('DisplayService model includes tutorialCompleted event', async () => {
+    const model = cds.model;
+    const event = model.definitions['DisplayService.tutorialCompleted'];
+    expect(event).toBeDefined();
+    expect(event.kind).toBe('event');
+    expect(event.elements.bucketName).toBeDefined();
+    expect(event.elements.userName).toBeDefined();
+  });
 });
