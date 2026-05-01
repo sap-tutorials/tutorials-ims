@@ -158,7 +158,7 @@ Solved via the content push pipeline above — the receiving workflow POSTs a co
 - [x] Create the receiving workflow in tutorials-poc (`.github/workflows/rebuild-content.yml`)
 - [x] Wire all AEM endpoints to CAP (progress series, search, QR code — all complete)
 - [ ] Configure BTP Destinations for NGDS and Adobe Analytics
-- [ ] Verify `cds deploy --to hana` succeeds with the full 35-entity schema
+- [ ] Verify `cds deploy --to hana` succeeds with the full 35-entity schema (see §11 below)
 - [x] Decide on static content delivery — rebuild endpoint on AppRouter (`/admin/rebuild`)
 
 ---
@@ -167,4 +167,67 @@ Solved via the content push pipeline above — the receiving workflow POSTs a co
 
 - [x] **App Space not showing data** — Root cause: EventDisplay required an `imsUrl` URL parameter (legacy from Java IMS era). Fixed by removing the parameter and using relative URLs via AppRouter proxy. Also added `/rest/` route to `xs-app.json`. AppSpace.vue itself was already using relative paths correctly.
 - [x] **Dark mode toggle not working** — Root cause: `toggleTheme()` handler only existed in `tutorial.ts` (loaded only on tutorial detail pages). Fixed by moving the click delegation handler to the inline `<script>` in `head.html` (runs on all pages). Also fixed toggle alignment in shellbar (added explicit height, line-height:0, centered thumb).
-- [ ] **Mission/Group pages return 404** — Some mission/group links lead to non-existent pages (content generation only produces pages for missions with populated `slug` fields; see `populate-slugs` migration step)
+- [x] **Mission/Group pages return 404** — Fixed: `build-catalog.js` now falls back to `String(legacyId)` when slug is null, ensuring pages are always generated. The `/build/slug-mapping` endpoint and `populate-slugs` migration provide paths to backfill friendly slugs.
+
+---
+
+## 11. Fresh HDI Container Deploy Plan (2026-05-02)
+
+**Context:** The DEV HDI container was originally deployed with `.hdbtable` artifacts (no migration support). Converting to `@cds.persistence.journal` (`.hdbmigrationtable`) in-place proved brittle — HDI rejected multi-version ALTER migrations against the existing tables. A fresh container avoids all backwards-compatibility issues and matches the production deployment path (clean HDI → full schema → data import).
+
+**State after cleanup:**
+
+- `db/src/*.hdbmigrationtable` — 33 files, all version=1 with the FULL current model (including `primaryTagRef_ID`, `groupOrder`)
+- `db/undeploy.json` — lists 33 old `.hdbtable` paths + trigger glob (harmless on fresh container)
+- `cds build` succeeds and produces matching `gen/db/src/` output
+- `db/last-dev/csn.json` — current model state, in sync
+
+**Steps:**
+
+1. **Delete the DEV HDI container service instance**
+
+   ```bash
+   cf login -a https://api.cf.us30.hana.ondemand.com  # DEV space
+   cf delete-service tutorials-poc-db -f
+   # Wait for async delete to complete:
+   cf service tutorials-poc-db  # should return "not found"
+   ```
+
+2. **Recreate and deploy**
+
+   ```bash
+   cds build
+   cds deploy --to hana
+   # This creates a new HDI container, deploys all 33 migration tables + views + sequences
+   ```
+
+3. **Verify schema (hybrid tests)**
+
+   ```bash
+   npm run test:hybrid
+   # Confirms all 35 entities accessible, column structure correct, sequences working
+   ```
+
+4. **Re-import reference data from QA**
+
+   ```bash
+   # Set source (QA/Java IMS)
+   export IMS_BASE_URL=https://imsprod-approuter.cfapps.us30.hana.ondemand.com
+   export IMS_AUTH_TOKEN=<token>
+   export CAP_BASE_URL=http://localhost:4004  # or DEV srv URL
+
+   node scripts/migrate-reference-data.js export   # exports to .migration-data/
+   node scripts/migrate-reference-data.js import   # imports into fresh CAP
+   node scripts/migrate-reference-data.js populate-slugs  # backfill slug fields
+   ```
+
+5. **Optionally re-import user progress** (if needed for DEV testing)
+
+   ```bash
+   node scripts/migrate-user-progress.js export
+   node scripts/migrate-user-progress.js import
+   ```
+
+6. **Mark TODO §9 line as done**
+
+**Why this works for production too:** Production will be a first-time deploy to a new HDI container (never had the old `.hdbtable` artifacts). The version=1 migration files create tables with the full current schema. No ALTER history needed.
