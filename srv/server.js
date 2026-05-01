@@ -1,6 +1,5 @@
 import cds from '@sap/cds';
 import { registerJobs } from './jobs/scheduler.js';
-import { createStompBroker } from './lib/stomp-broker.js';
 import { qrcodeHandler } from './lib/qrcode-handler.js';
 import { buildCatalogHandler } from './lib/build-catalog.js';
 import { navigatorCatalogHandler } from './lib/navigator-catalog.js';
@@ -70,11 +69,5 @@ cds.on('served', () => {
 
   if (process.env.NODE_ENV !== 'test') {
     registerJobs();
-  }
-});
-
-cds.on('listening', ({ server }) => {
-  if (process.env.NODE_ENV !== 'test') {
-    cds.broker = createStompBroker(server);
   }
 });
