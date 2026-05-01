@@ -38,6 +38,7 @@
     "@cap-js/cds-test": "^1.0.0",
     "@sap/cds-dk": "^9.9.0",
     "cds-plugin-ui5": "^0.17.0",
+    "cds-swagger-ui-express": "^0.11.0",
     "fundamental-styles": "^0.41.4",
     "gray-matter": "^4.0.3",
     "markdown-it": "^14.1.1",
@@ -175,8 +176,16 @@
     "ord": {
       "namespace": "sap.tutorials",
       "description": "SAP Developer Tutorial Platform — progress tracking, mission management, and real-time event dashboards for developers.sap.com",
-      "policyLevels": ["sap:core:v1"],
+      "policyLevels": [
+        "sap:core:v1"
+      ],
       "defaultVisibility": "public"
+    },
+    "[development]": {
+      "swagger": {
+        "basePath": "/$api-docs",
+        "diagram": true
+      }
     }
   }
 }
