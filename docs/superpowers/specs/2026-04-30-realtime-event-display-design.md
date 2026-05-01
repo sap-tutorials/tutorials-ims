@@ -15,7 +15,7 @@ Developer completes tutorial
         ↓
 DeveloperService.after('createTaskRecord')
         ↓
-srv.emit('tutorialCompleted', payload, { contexts: [eventLegacyId] })
+srv.emit('tutorialCompleted', payload, { contexts: [eventLegacyId] })  // header-based context filter
         ↓
 ┌────────────────────────────────┐  ┌────────────────────────────────┐
 │  EventStreamService            │  │  DisplayService                │
@@ -30,7 +30,7 @@ srv.emit('tutorialCompleted', payload, { contexts: [eventLegacyId] })
 ```
 
 **Transport:** Socket.IO (`cds.websocket.kind: "socket.io"`)
-**Context filtering:** Clients `enter` an event context by legacyId; broadcasts scoped to that context
+**Context filtering:** Clients emit `wsContext` to join an event context by legacyId; server emits with `contexts` header to scope broadcasts
 **Scaling:** `@socket.io/redis-adapter` for multi-instance CF deployments (deferred until needed)
 
 ## CDS Service Definitions
@@ -41,7 +41,7 @@ srv.emit('tutorialCompleted', payload, { contexts: [eventLegacyId] })
 // srv/event-stream-service.cds
 @protocol: 'websocket'
 @requires: 'any'
-@path: '/event-stream'
+@path: 'event-stream'
 service EventStreamService {
   event tutorialCompleted {
     bucketName    : String;
@@ -57,7 +57,7 @@ service EventStreamService {
 // srv/display-service.cds (add websocket protocol + event)
 @protocol: ['odata', 'websocket']
 @requires: 'DisplayApp'
-@path: '/display'
+@path: 'display'
 service DisplayService {
   // ... existing entities and functions unchanged ...
 
@@ -76,8 +76,6 @@ The `userName` field is only available on the authenticated `DisplayService` cha
 
 ```javascript
 // srv/developer-service.js — modified after('createTaskRecord') handler
-const EventStreamService = cds.connect.to('EventStreamService')
-const DisplayService = cds.connect.to('DisplayService')
 
 this.after('createTaskRecord', async (result) => {
   if (!result || result.status !== 'COMPLETED') return
@@ -96,11 +94,12 @@ this.after('createTaskRecord', async (result) => {
   }
 
   // Broadcast to kiosks (unauthenticated, no user info)
-  const eventStream = await EventStreamService
+  // 'contexts' header scopes delivery to clients who joined that context
+  const eventStream = await cds.connect.to('EventStreamService')
   eventStream.emit('tutorialCompleted', payload, { contexts: [String(event.legacyId)] })
 
   // Broadcast to authenticated clients (with user name)
-  const display = await DisplayService
+  const display = await cds.connect.to('DisplayService')
   display.emit('tutorialCompleted',
     { ...payload, userName: user?.displayName || 'Someone' },
     { contexts: [String(event.legacyId)] }
@@ -132,13 +131,27 @@ export function useEventStream(baseUrl: string, eventId: string) {
   const status = ref<'connecting' | 'connected' | 'disconnected' | 'error'>('connecting')
   const lastEvent = ref<{ bucketName: string; tutorialTitle: string } | null>(null)
 
+  // Fetch initial bucket counts before subscribing to incremental updates
+  fetch(`${baseUrl}/display/getEventBuckets(eventLegacyId=${eventId})`)
+    .then(res => res.json())
+    .then(data => {
+      for (const bucket of data.value || []) {
+        buckets.value.set(bucket.bucketName, bucket.count)
+      }
+    })
+    .catch(() => { /* proceed with empty buckets */ })
+
   const socket: Socket = io(`${baseUrl}/ws/event-stream`, {
     transports: ['websocket'],
+    reconnection: true,
+    reconnectionDelay: 2000,
+    reconnectionDelayMax: 10000,
   })
 
   socket.on('connect', () => {
     status.value = 'connected'
-    socket.emit('enter', { context: eventId })
+    // Join event context (re-emitted on reconnect since 'connect' fires again)
+    socket.emit('wsContext', { context: eventId })
   })
 
   socket.on('disconnect', () => { status.value = 'disconnected' })
@@ -179,12 +192,16 @@ export function useRealtimeProgress(baseUrl: string, eventId: string) {
 
   const socket: Socket = io(`${baseUrl}/ws/display`, {
     transports: ['websocket'],
+    reconnection: true,
+    reconnectionDelay: 2000,
+    reconnectionDelayMax: 10000,
     // Auth automatic — browser sends XSUAA cookie on HTTP upgrade
   })
 
   socket.on('connect', () => {
     connected.value = true
-    socket.emit('enter', { context: eventId })
+    // Join event context (re-emitted on reconnect since 'connect' fires again)
+    socket.emit('wsContext', { context: eventId })
   })
 
   socket.on('disconnect', () => { connected.value = false })
@@ -238,6 +255,7 @@ Copy `useConfetti.ts` (~50 lines) from `display-app/src/composables/` into `apps
 
 **Remove (root):**
 - `ws: ^8.20.0`
+- `@stomp/stompjs: ^7.3.0`
 
 **Add (display-app):**
 - `socket.io-client: ^4.x`
@@ -247,6 +265,9 @@ Copy `useConfetti.ts` (~50 lines) from `display-app/src/composables/` into `apps
 
 **Add (apps):**
 - `socket.io-client: ^4.x`
+
+**Remove (apps):**
+- `@stomp/stompjs` (if listed)
 
 ### CDS configuration
 
@@ -293,9 +314,11 @@ No changes — `DisplayApp` scope already exists in `xs-security.json`. AppSpace
 | MODIFY | `srv/server.js` | Remove STOMP broker `cds.on('listening')` block |
 | MODIFY | `display-app/src/event-stream.ts` | Rewrite: STOMP → Socket.IO |
 | MODIFY | `display-app/package.json` | Swap @stomp/stompjs → socket.io-client |
+| MODIFY | `apps/src/event-display/useEventStream.ts` | Rewrite: STOMP → Socket.IO (same pattern as display-app) |
+| MODIFY | `apps/src/event-display/EventDisplay.vue` | Update to use rewritten composable |
 | MODIFY | `apps/src/app-space/AppSpace.vue` | Add realtime watch + celebration effects |
-| MODIFY | `apps/package.json` | Add socket.io-client |
-| MODIFY | `package.json` (root) | Add plugin + socket.io, remove ws |
+| MODIFY | `apps/package.json` | Add socket.io-client, remove @stomp/stompjs |
+| MODIFY | `package.json` (root) | Add plugin + socket.io, remove ws + @stomp/stompjs |
 | DELETE | `srv/lib/stomp-broker.js` | Replaced by plugin |
 
 ## Testing
@@ -309,4 +332,5 @@ No changes — `DisplayApp` scope already exists in `xs-security.json`. AppSpace
 
 - This is a breaking change for the WebSocket protocol (STOMP → Socket.IO). Both client apps must be deployed simultaneously with the backend.
 - Demo mode in display-app remains unchanged (generates local fake data, no server connection).
-- The `apps/src/event-display/EventDisplay.vue` component also uses STOMP via its own `useEventStream.ts` — it needs the same Socket.IO rewrite as display-app.
+- **Reconnection:** Socket.IO `connect` event fires on both initial connection and reconnection. The `wsContext` emit in the `connect` handler ensures context is re-joined after any disconnect — no additional reconnection logic needed.
+- **Path convention:** CDS `@path` uses relative paths (no leading slash) so the plugin mounts under `/ws/`. OData continues to serve at the existing absolute paths.
