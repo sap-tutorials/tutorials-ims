@@ -6,7 +6,8 @@ export default defineWorkspace([
     test: {
       name: 'unit',
       include: ['test/**/*.test.{js,ts}', 'scripts/__tests__/**/*.test.ts'],
-      exclude: ['node_modules', 'gen', 'hugo', 'test/hybrid/**', 'test/smoke/**']
+      exclude: ['node_modules', 'gen', 'hugo', 'test/hybrid/**', 'test/smoke/**'],
+      env: { NO_TELEMETRY: 'true' }
     }
   },
   {

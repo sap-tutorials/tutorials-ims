@@ -65,6 +65,10 @@
     "@cap-js/change-tracking": "^2.0.0-beta.11",
     "@cap-js/hana": "^2.7.1",
     "@cap-js/sqlite": "^2.2.1",
+    "@cap-js/telemetry": "^1.6.0",
+    "@grpc/grpc-js": "^1.14.3",
+    "@opentelemetry/exporter-metrics-otlp-grpc": "^0.57.2",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.57.2",
     "@sap/cds": "^9.9.0",
     "@sap/xsenv": "^5.6.1",
     "@sap/xssec": "^4.13.0",
@@ -142,6 +146,22 @@
             "destination": "ngds-destination",
             "path": "/ngds/developers/ims"
           }
+        }
+      },
+      "telemetry": {
+        "kind": "telemetry-to-console",
+        "tracing": {
+          "sampler": {
+            "kind": "ParentBasedSampler",
+            "root": "AlwaysOnSampler",
+            "ignoreIncomingPaths": [
+              "/health",
+              "/health/db"
+            ]
+          }
+        },
+        "[production]": {
+          "kind": "telemetry-to-cloud-logging"
         }
       }
     },
