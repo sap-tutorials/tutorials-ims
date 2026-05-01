@@ -48,6 +48,13 @@ service EventStreamService {
     completeDate  : String;
     tutorialTitle : String;
   }
+
+  // Unauthenticated bucket counts for kiosk initial load
+  function getEventBuckets(eventLegacyId : Integer) returns many {
+    bucketName  : String;
+    count       : Integer;
+    percentage  : Decimal;
+  };
 }
 ```
 
@@ -119,63 +126,86 @@ cds.on('listening', ({ server }) => {
 
 ## Client: display-app (Kiosk)
 
-### Rewritten composable
+### Rewritten composable (illustrative — Socket.IO wiring only)
+
+The code below shows **only** the transport-layer change (STOMP → Socket.IO). The full composable preserves the existing imperative API shape: `connect(baseUrl, eventId)`, `startDemo()`, `disconnect()`, and all returned refs (`buckets`, `totalCount`, `connectionState`, `errorMessage`, `speed`, `recentEvents`, `bucketVelocity`). Internal bookkeeping (`applyUpdate`, speed calculation cron, `justUpdated` flash flag, `bucketTimestamps`) carries over unchanged.
 
 ```typescript
-// display-app/src/event-stream.ts
+// display-app/src/event-stream.ts — TRANSPORT CHANGE ONLY (simplified)
 import { io, Socket } from 'socket.io-client'
 import { ref, onUnmounted } from 'vue'
 
-export function useEventStream(baseUrl: string, eventId: string) {
-  const buckets = ref<Map<string, number>>(new Map())
-  const status = ref<'connecting' | 'connected' | 'disconnected' | 'error'>('connecting')
-  const lastEvent = ref<{ bucketName: string; tutorialTitle: string } | null>(null)
+export function useEventStream() {
+  // ... all existing refs and internal state preserved ...
 
-  // Fetch initial bucket counts before subscribing to incremental updates
-  fetch(`${baseUrl}/display/getEventBuckets(eventLegacyId=${eventId})`)
-    .then(res => res.json())
-    .then(data => {
-      for (const bucket of data.value || []) {
-        buckets.value.set(bucket.bucketName, bucket.count)
-      }
+  let socket: Socket | null = null
+
+  async function connect(baseUrl: string, eventId: string) {
+    connectionState.value = 'connecting'
+
+    // Fetch initial bucket counts (unauthenticated EventStreamService endpoint)
+    try {
+      const res = await fetch(`${baseUrl}/ws/event-stream/getEventBuckets(eventLegacyId=${eventId})`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      // ... populate buckets from data.value ...
+    } catch (e) {
+      connectionState.value = 'error'
+      errorMessage.value = `Failed to fetch: ${(e as Error).message}`
+      return
+    }
+
+    socket = io(`${baseUrl}/ws/event-stream`, {
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionDelay: 2000,
+      reconnectionDelayMax: 10000,
     })
-    .catch(() => { /* proceed with empty buckets */ })
 
-  const socket: Socket = io(`${baseUrl}/ws/event-stream`, {
-    transports: ['websocket'],
-    reconnection: true,
-    reconnectionDelay: 2000,
-    reconnectionDelayMax: 10000,
-  })
+    socket.on('connect', () => {
+      connectionState.value = 'connected'
+      socket!.emit('wsContext', { context: eventId })
+    })
 
-  socket.on('connect', () => {
-    status.value = 'connected'
-    // Join event context (re-emitted on reconnect since 'connect' fires again)
-    socket.emit('wsContext', { context: eventId })
-  })
+    socket.on('disconnect', () => { connectionState.value = 'reconnecting' })
+    socket.on('connect_error', () => { connectionState.value = 'error' })
 
-  socket.on('disconnect', () => { status.value = 'disconnected' })
-  socket.on('connect_error', () => { status.value = 'error' })
+    socket.on('tutorialCompleted', (data) => {
+      applyUpdate(data.bucketName)  // existing internal method
+    })
 
-  socket.on('tutorialCompleted', (data) => {
-    const count = buckets.value.get(data.bucketName) || 0
-    buckets.value.set(data.bucketName, count + 1)
-    lastEvent.value = { bucketName: data.bucketName, tutorialTitle: data.tutorialTitle }
-  })
+    startCron()
+  }
 
-  onUnmounted(() => socket.disconnect())
+  function disconnect() {
+    if (socket) { socket.disconnect(); socket = null }
+    // ... clear intervals ...
+    connectionState.value = 'idle'
+  }
 
-  return { buckets, status, lastEvent }
+  // startDemo() unchanged — generates local fake data, no server connection
+
+  onUnmounted(disconnect)
+
+  return {
+    buckets, totalCount, connectionState, errorMessage,
+    speed, recentEvents, bucketVelocity,
+    connect, startDemo, disconnect,
+  }
 }
 ```
 
 ### Impact on App.vue
 
-Minimal — the composable API (`buckets`, `status`, `lastEvent`) is unchanged. All 8 rotating views, animations, and confetti continue working as-is.
+Zero API changes — the composable still returns the same refs and methods (`buckets`, `totalCount`, `connectionState`, `errorMessage`, `speed`, `recentEvents`, `bucketVelocity`, `connect`, `startDemo`, `disconnect`). All 8 rotating views, animations, and confetti continue working as-is.
 
-### Full API surface preserved
+### What changes internally
 
-The actual `useEventStream` composable exposes a rich API: `buckets`, `totalCount`, `connectionState`, `errorMessage`, `speed` (completions/hr), `recentEvents` (last 30), `bucketVelocity` (5-min sliding window), plus imperative methods `connect(url, eventId)`, `startDemo()`, and `disconnect()`. The rewrite MUST preserve all of these. The simplified code above shows only the Socket.IO connection logic; internal bookkeeping (`applyUpdate`, speed calculation cron, `justUpdated` flash flag, `bucketTimestamps`) carries over unchanged — only the transport layer (STOMP → Socket.IO) and initial data fetch (REST endpoint path) change.
+Only two things change inside the composable:
+1. **Transport:** `@stomp/stompjs` Client → `socket.io-client` Socket (connect/subscribe/disconnect)
+2. **Initial data URL:** Old IMS path `/statistic/events/${eventId}/buckets` → CAP path `/ws/event-stream/getEventBuckets(eventLegacyId=${eventId})`
+
+Everything else (speed approximation, bucket velocity, recent events, demo mode, cron interval) remains byte-for-byte identical.
 
 ## Client: AppSpace.vue (Celebration Mode)
 
@@ -310,7 +340,7 @@ No changes — `DisplayApp` scope already exists in `xs-security.json`. AppSpace
 | Action | File | Description |
 |--------|------|-------------|
 | CREATE | `srv/event-stream-service.cds` | New unauthenticated WebSocket service |
-| CREATE | `srv/event-stream-service.js` | Empty handler (just needs to exist for plugin) |
+| CREATE | `srv/event-stream-service.js` | Handler for `getEventBuckets` (delegates to same logic as DisplayService) |
 | CREATE | `apps/src/app-space/useRealtimeProgress.ts` | Socket.IO composable for AppSpace |
 | CREATE | `apps/src/composables/useConfetti.ts` | Copied from display-app |
 | MODIFY | `srv/display-service.cds` | Add `@protocol: ['odata','websocket']` + event |
@@ -318,7 +348,7 @@ No changes — `DisplayApp` scope already exists in `xs-security.json`. AppSpace
 | MODIFY | `srv/server.js` | Remove STOMP broker `cds.on('listening')` block |
 | MODIFY | `display-app/src/event-stream.ts` | Rewrite: STOMP → Socket.IO |
 | MODIFY | `display-app/package.json` | Swap @stomp/stompjs → socket.io-client |
-| MODIFY | `apps/src/event-display/useEventStream.ts` | Rewrite: STOMP → Socket.IO (same pattern as display-app) |
+| MODIFY | `apps/src/event-display/useEventStream.ts` | Rewrite transport: STOMP → Socket.IO (preserve existing API surface) |
 | MODIFY | `apps/src/event-display/EventDisplay.vue` | Update to use rewritten composable |
 | MODIFY | `apps/src/app-space/AppSpace.vue` | Add realtime watch + celebration effects |
 | MODIFY | `apps/package.json` | Add socket.io-client, remove @stomp/stompjs |
