@@ -54,6 +54,15 @@ jobs:
             prod) echo "approuter_url=${{ secrets.APPROUTER_URL_PROD }}" >> "$GITHUB_OUTPUT" ;;
           esac
 
+      - name: Set CAP srv URL
+        id: srv
+        run: |
+          case "${{ steps.env.outputs.target }}" in
+            dev)  echo "srv_url=${{ secrets.CAP_SRV_URL_DEV }}" >> "$GITHUB_OUTPUT" ;;
+            qa)   echo "srv_url=${{ secrets.CAP_SRV_URL_QA }}" >> "$GITHUB_OUTPUT" ;;
+            prod) echo "srv_url=${{ secrets.CAP_SRV_URL_PROD }}" >> "$GITHUB_OUTPUT" ;;
+          esac
+
       - name: Install dependencies
         run: |
           npm ci
@@ -73,6 +82,17 @@ jobs:
       - name: Build Hugo site
         run: /tmp/hugo --source hugo --minify
 
+      - name: Publish tutorial content to HANA
+        run: |
+          npx tsx scripts/publish-content.ts \
+            --hugo-dir hugo/public \
+            --base-url "${{ steps.srv.outputs.srv_url }}" \
+            --trigger "ci/${{ github.event_name }}@${{ github.sha }}" \
+            --hugo-version "0.147.7" \
+            --verbose
+        env:
+          CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
+
       - name: Build display app
         run: npm run build:display
 
@@ -80,6 +100,7 @@ jobs:
         run: |
           mkdir -p approuter/static
           cp -r hugo/public/* approuter/static/
+          rm -rf approuter/static/tutorials
           cp -r display-app/dist approuter/static/display-app
 
       - name: Create content tarball

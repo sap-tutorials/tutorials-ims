@@ -1,9 +1,11 @@
 import cds from '@sap/cds';
+import express from 'express';
 import { registerJobs } from './jobs/scheduler.js';
 import { qrcodeHandler } from './lib/qrcode-handler.js';
 import { buildCatalogHandler } from './lib/build-catalog.js';
 import { navigatorCatalogHandler } from './lib/navigator-catalog.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
+import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, navHandler, rollbackHandler } from './lib/content-store.js';
 
 cds.on('bootstrap', (app) => {
   if (process.env.NODE_ENV !== 'production') {
@@ -43,6 +45,13 @@ cds.on('bootstrap', (app) => {
     const mapping = await buildSlugMapping();
     res.json(mapping);
   });
+
+  // Content persistence endpoints
+  app.get('/content/nav', navHandler);
+  app.get('/content/hashes', hashesHandler);
+  app.get('/content/tutorials/*slug', serveHandler);
+  app.post('/content/publish', express.json({ limit: '100mb' }), contentAuthMiddleware, publishHandler);
+  app.post('/content/rollback', express.json(), contentAuthMiddleware, rollbackHandler);
 });
 
 cds.on('served', () => {

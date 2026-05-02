@@ -19,6 +19,7 @@ build-parameters:
         - npm --prefix display-app run build
         - mkdir -p approuter/static
         - cp -r hugo/public/* approuter/static/
+        - rm -rf approuter/static/tutorials
         - cp -r display-app/dist approuter/static/display-app
 
 modules:
@@ -93,14 +94,19 @@ modules:
 
 resources:
   - name: tutorials-hana
-    type: org.cloudfoundry.existing-service
+    type: com.sap.xs.hdi-container
     parameters:
+      service: hana
+      service-plan: hdi-shared
       service-name: tutorials-hana
 
   - name: tutorials-xsuaa
-    type: org.cloudfoundry.existing-service
+    type: org.cloudfoundry.managed-service
     parameters:
-      service-name: xsuaa-imsdev
+      service: xsuaa
+      service-plan: application
+      service-name: tutorials-xsuaa
+      path: ./xs-security.json
 
   - name: tutorials-destination
     type: org.cloudfoundry.managed-service
@@ -109,9 +115,11 @@ resources:
       service-plan: lite
 
   - name: tutorials-mail
-    type: org.cloudfoundry.existing-service
+    type: org.cloudfoundry.managed-service
     parameters:
-      service-name: mail-imsdev
+      service: mail
+      service-plan: standard
+      service-name: tutorials-mail
     optional: true
 
   - name: tutorials-html5-repo-host

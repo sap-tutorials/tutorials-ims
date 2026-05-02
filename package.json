@@ -15,6 +15,7 @@
     "discover-repos": "tsx scripts/fetch-tutorials.ts --discover-only",
     "generate-dark-theme": "tsx scripts/generate-dark-theme.ts",
     "validate-tutorials": "tsx scripts/validate-tutorials.ts",
+    "publish-content": "tsx scripts/publish-content.ts",
     "migrate:reference": "node scripts/migrate-reference-data.js",
     "migrate:users": "node scripts/migrate-user-progress.js",
     "migrate:hana": "node scripts/migrate-from-hana.js",

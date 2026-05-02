@@ -9,6 +9,31 @@ export async function cleanupStepFailures(olderThanDays = 90) {
   return result;
 }
 
+export async function cleanupContentVersions(keepCount = 3, olderThanDays = 7) {
+  const { ContentManifest, ContentFiles } = cds.entities('com.sap.developers.ims');
+  const LOG = cds.log('jobs/cleanup');
+  const cutoff = new Date(Date.now() - olderThanDays * 86400000).toISOString();
+
+  const candidates = await SELECT.from(ContentManifest)
+    .where({ status: { in: ['SUPERSEDED', 'ROLLED_BACK'] }, createdAt: { '<': cutoff } })
+    .orderBy('version desc')
+    .columns('version', 'status', 'createdAt');
+
+  // Always keep the N most recent superseded versions for rollback
+  const toPrune = candidates.slice(keepCount);
+  if (toPrune.length === 0) {
+    LOG.info('No content versions to prune');
+    return 0;
+  }
+
+  const versions = toPrune.map(r => r.version);
+  await DELETE.from(ContentFiles).where({ version: { in: versions } });
+  await DELETE.from(ContentManifest).where({ version: { in: versions } });
+
+  LOG.info(`Pruned ${toPrune.length} old content versions (kept last ${keepCount}, cutoff ${olderThanDays}d)`);
+  return toPrune.length;
+}
+
 export async function cleanupUnusedTags() {
   const { Tags, TutorialTags } = cds.entities('com.sap.developers.ims');
   const LOG = cds.log('jobs/cleanup');

@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { acquireLock, releaseLock } from './job-lock.js';
-import { cleanupStepFailures, cleanupUnusedTags } from './cleanup.js';
+import { cleanupStepFailures, cleanupUnusedTags, cleanupContentVersions } from './cleanup.js';
 import { recordActiveLearners } from './analytics.js';
 import { retryNgds } from './ngds-retry.js';
 import { processAccountMerges } from './account-merge-job.js';
@@ -50,6 +50,11 @@ export function registerJobs() {
   // Jan 2 and Jul 2 at 00:00 — tag cleanup
   cron.schedule('0 0 2 1,7 *', () =>
     runWithLock('tag-cleanup', 3600000, cleanupUnusedTags)
+  );
+
+  // Daily at 03:00 — prune old content versions (keep last 3, older than 7 days)
+  cron.schedule('0 3 * * *', () =>
+    runWithLock('content-gc', 600000, () => cleanupContentVersions(3, 7))
   );
 
   // Weekly Sunday 02:00 — tutorial metadata review

@@ -256,3 +256,24 @@ entity FailedEmails : cuid {
   maxRetries                : Integer default 3;
   status                    : String(20) default 'PENDING';
 }
+
+entity ContentFiles : managed {
+  key slug                  : String(255);
+  key version               : Integer;
+  content                   : LargeBinary;
+  contentHash               : String(64);
+  sizeBytes                 : Integer;
+  compressedBytes           : Integer;
+  mimeType                  : String(100) default 'text/html';
+}
+
+entity ContentManifest : managed {
+  key version               : Integer;
+  status                    : String(20) enum { PUBLISHING; ACTIVE; SUPERSEDED; ROLLED_BACK; };
+  trigger                   : String(500);
+  fileCount                 : Integer;
+  totalSizeBytes            : Int64;
+  changedSlugs              : LargeString;
+  hugoVersion               : String(20);
+  publishDurationMs         : Integer;
+}

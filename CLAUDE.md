@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A tutorial hosting platform that replaces Adobe Experience Manager (AEM) as the frontend for developers.sap.com. Fetches tutorial markdown from the `sap-tutorials` GitHub organization at build time, parses it into Hugo static pages styled with SAP Fundamental Styles (Horizon theme), and deploys behind an AppRouter on SAP BTP Cloud Foundry with XSUAA authentication. Backed by a CAP Node.js service with SAP HANA Cloud for progress tracking (IMS rewrite). AEM has been fully decommissioned.
+A tutorial hosting platform that replaces Adobe Experience Manager (AEM) as the frontend for developers.sap.com. Fetches tutorial markdown from the `sap-tutorials` GitHub organization at build time, parses it into Hugo static pages styled with SAP Fundamental Styles (Horizon theme), and deploys behind an AppRouter on SAP BTP Cloud Foundry with XSUAA authentication. Backed by a CAP Node.js service with SAP HANA Cloud for progress tracking (IMS rewrite) and tutorial content persistence (HTML stored as compressed BLOBs in HANA, served dynamically via CAP). AEM has been fully decommissioned.
 
 ## Commands
 
@@ -41,6 +41,12 @@ npm run migrate:users                         # Export user progress from Java I
 npm run migrate:hana                          # Direct HANA-to-HANA migration
 npm run compare                               # Compare Java IMS and CAP responses side-by-side
 node scripts/migrate-reference-data.js populate-slugs  # Patch slug fields from CAP catalog cache
+
+# Content publishing
+npm run publish-content                       # Publish Hugo tutorial HTML to HANA (delta-aware)
+npm run publish-content -- --dry-run          # Show what would change without publishing
+npm run publish-content -- --force            # Skip delta detection, publish all files
+npm run publish-content -- --verbose          # Extra logging
 ```
 
 Tutorials must be fetched before `dev` or `build`. Fetched markdown is cached in `.tutorial-cache/` and generated pages go to `hugo/content/tutorials/` — both are gitignored. To force re-fetch from GitHub, delete `.tutorial-cache/`.
@@ -54,6 +60,8 @@ sap-tutorials GitHub repos
   → scripts/fetch-tutorials.ts --target hugo (fetch + cache raw markdown)
     → scripts/parsers/ (parse frontmatter, steps, images, options)
       → hugo/content/tutorials/*.md (generated Hugo pages with YAML frontmatter)
+        → Hugo build → hugo/public/tutorials/*/index.html
+          → scripts/publish-content.ts (delta publish to HANA via /content/publish)
 
 CAP backend (http://localhost:4004 or CAP_BASE_URL)
   → GET /build/catalog (unauthenticated)
@@ -61,12 +69,20 @@ CAP backend (http://localhost:4004 or CAP_BASE_URL)
       → hugo/content/missions/*.md and hugo/content/groups/*.md
 ```
 
+Tutorial HTML is NOT served from static files. After Hugo builds, `publish-content.ts` computes SHA-256 hashes, compares with the remote `/content/hashes` endpoint, and uploads only changed slugs as gzip-compressed BLOBs to HANA via `POST /content/publish`. The AppRouter routes `/tutorials/*` to the CAP content-serve endpoint.
+
 ### CAP Backend (srv/)
 
 - **Services**: `DeveloperService` (@path: /api), `AdminService` (@path: /admin), `DisplayService` (@path: /display), `ConsolidationService` (@path: /api/v1)
 - **Custom endpoints**: `/api/qrcode` (QR code PNG generation), `/build/catalog` (unauthenticated mission/group data for build pipeline)
+- **Content persistence** (`srv/lib/content-store.js`): Tutorial HTML stored as gzip-compressed BLOBs in HANA (`ContentFiles` + `ContentManifest` entities). Endpoints:
+  - `POST /content/publish` — accepts `{ trigger, hugoVersion, files: { slug: base64gzip } }`, creates versioned manifest (bearer token auth via `CONTENT_API_KEY`)
+  - `GET /content/tutorials/:slug` — serves decompressed HTML with ETag, Cache-Control, bounded LRU cache (50MB)
+  - `GET /content/hashes` — returns `{ slug: sha256 }` map of active content (used by delta publish)
+  - `GET /content/nav` — navigation metadata for all published tutorials
+  - `POST /content/rollback` — reverts to previous manifest version (bearer token auth)
 - **WebSocket**: STOMP broker at `/display/websocket` for real-time event dashboard updates
-- **Jobs**: Scheduled tasks in `srv/jobs/` — scheduler.js orchestrates: account-merge-job, analytics, cleanup, ngds-retry (with job-lock.js for distributed locking)
+- **Jobs**: Scheduled tasks in `srv/jobs/` — scheduler.js orchestrates: account-merge-job, analytics, cleanup (including content GC), ngds-retry (with job-lock.js for distributed locking)
 - **Bootstrap**: `srv/server.js` registers custom express routes on `cds.on('bootstrap')`, attaches STOMP broker and jobs on `cds.on('served')`
 - **Audit Logging**: `@cap-js/audit-logging` with `@PersonalData` annotations on Users/UserMetaData/TaskRecords (see `db/audit-logging.cds`). SecurityEvent emitted on user anonymization.
 - **Change Tracking**: `@cap-js/change-tracking` on admin-managed entities (Events, Missions, Groups, Accomplishments, Prizes, ImsConfig, FeaturedTasks). See `db/change-tracking.cds`.
@@ -88,7 +104,7 @@ CAP backend (http://localhost:4004 or CAP_BASE_URL)
 
 ### Deployment (BTP Cloud Foundry)
 
-Single MTA deployment (`mta.yaml`): AppRouter module serves Hugo static build from `approuter/static/`. XSUAA provides SAP IDP authentication. Routes in `approuter/xs-app.json` proxy to CAP backend via BTP Destination.
+Single MTA deployment (`mta.yaml`): AppRouter module serves Hugo static build from `approuter/static/` (excluding tutorials — those are served from HANA). XSUAA provides SAP IDP authentication. Routes in `approuter/xs-app.json` proxy to CAP backend via BTP Destination. The `/tutorials/*` route rewrites to `/content/tutorials/$1` on the CAP srv, which decompresses and serves HTML from HANA BLOBs. Tutorials are explicitly removed from the AppRouter static directory during build (`rm -rf approuter/static/tutorials`).
 
 ### Data Migration
 
@@ -132,6 +148,7 @@ Smoke test files in `test/smoke/`:
 | `auth-enforcement.test.js` | Protected endpoints reject unauthenticated requests |
 | `odata-metadata.test.js` | DeveloperService and AdminService `$metadata` return EDMX |
 | `static-content.test.js` | Root serves HTML, security headers present via approuter |
+| `content-serve.test.js` | Tutorial serving via AppRouter → CAP → HANA (ETag, 304, 404) |
 
 ## Gotchas
 
@@ -145,3 +162,7 @@ Smoke test files in `test/smoke/`:
 - **Slug fields** — `Missions.slug` and `CompletionPaths.slug` must be populated for the build pipeline to generate mission/group pages. Run `node scripts/migrate-reference-data.js populate-slugs` after data import.
 - **`app/` vs `apps/` vs `display-app/`** — Three separate directories. `app/` contains SAPUI5 admin screens served via HTML5 App Repo. `apps/` contains Vue 3 public-facing components bundled by Vite. `display-app/` is a standalone Vue+Vite dashboard app for event monitors. Do not mix them.
 - **Hugo vs VitePress** — The project migrated from VitePress to Hugo. The `site/.vitepress/` directory still exists (with a built `dist/`) but is legacy. Active frontend work targets `hugo/`.
+- **`CONTENT_API_KEY` env var** — Required for `POST /content/publish` and `POST /content/rollback`. Set in CI secrets and locally when testing publish. Without it, publish requests return 401.
+- **Tutorials are DB-only** — Tutorial HTML is served exclusively from HANA BLOBs. There is no static file fallback. If no content has been published to HANA, `/tutorials/*` returns 404.
+- **Content garbage collection** — A daily cron job (03:00) prunes `SUPERSEDED`/`ROLLED_BACK` content versions older than 7 days, keeping the 3 most recent for rollback. Never touches `ACTIVE` or `PUBLISHING` manifests.
+- **`publish-content.ts` delta detection** — The script fetches `/content/hashes` to compute which slugs changed. Use `--force` to bypass delta detection and republish everything. Use `--dry-run` to preview changes without uploading.
