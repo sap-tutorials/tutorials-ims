@@ -2217,6 +2217,9 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
+}.step-actions button.is-auth-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }.step-validation-mount:empty {
   display: none;
 }/* Progress bar segments */.progress-segments {

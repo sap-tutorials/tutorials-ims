@@ -333,6 +333,47 @@ async function initMiniNavProgress() {
   if (label) label.textContent = `${completed}/${total} TASKS COMPLETED`
 }
 
+// --- Auth-aware button state ---
+function initAuthAwareButtons() {
+  const observer = new MutationObserver(() => {
+    if (document.documentElement.dataset.authenticated === 'true') {
+      enableDoneButtons()
+      observer.disconnect()
+    }
+  })
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-authenticated'] })
+
+  // If auth check completes before this runs
+  if (document.documentElement.dataset.authenticated === 'true') {
+    observer.disconnect()
+    return
+  }
+
+  // Disable after a short delay to allow auth check to complete first
+  setTimeout(() => {
+    if (document.documentElement.dataset.authenticated !== 'true') {
+      disableDoneButtons()
+    }
+  }, 1000)
+}
+
+function disableDoneButtons() {
+  document.querySelectorAll<HTMLButtonElement>('[data-action="mark-done"]').forEach(btn => {
+    if (btn.closest('.tutorial-step')?.querySelector('[data-validated="false"]')) return
+    btn.disabled = true
+    btn.title = 'Sign in to track your progress'
+    btn.classList.add('is-auth-disabled')
+  })
+}
+
+function enableDoneButtons() {
+  document.querySelectorAll<HTMLButtonElement>('[data-action="mark-done"].is-auth-disabled').forEach(btn => {
+    btn.disabled = false
+    btn.title = ''
+    btn.classList.remove('is-auth-disabled')
+  })
+}
+
 // --- Init on DOMContentLoaded ---
 document.addEventListener('DOMContentLoaded', () => {
   initProgressBar()
@@ -340,4 +381,5 @@ document.addEventListener('DOMContentLoaded', () => {
   initValidation()
   updateActiveTocItem()
   initMiniNavProgress()
+  initAuthAwareButtons()
 })

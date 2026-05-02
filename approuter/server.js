@@ -91,7 +91,7 @@ function staticHandler(req, res, next) {
 // Workaround: approuter destination proxy fails locally on Windows.
 // Forward API routes directly to CAP backend, applying xs-app.json rewrites.
 const CAP_URL = process.env.CAP_BASE_URL || 'http://localhost:4004'
-const PROXY_PREFIXES = ['/api/', '/build/', '/content/', '/admin/', '/display/', '/search/', '/rest/', '/ws/', '/socket.io/', '/health', '/.well-known/', '/ord/', '/auth/', '/tutorials/']
+const PROXY_PREFIXES = ['/api/', '/build/', '/content/', '/search/', '/rest/', '/ws/', '/socket.io/', '/health', '/.well-known/', '/ord/', '/auth/', '/tutorials/']
 const REWRITES = [
   { match: /^\/tutorials\/(.*)/, replace: '/content/tutorials/$1' }
 ]
