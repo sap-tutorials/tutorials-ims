@@ -65,8 +65,16 @@
   height: 1.5rem;
 }
 
+/* Nav links layout */
+.fd-shellbar nav {
+  display: inline-flex;
+  align-items: center;
+}
+
 /* Shellbar separator between nav items and controls */
 .shellbar-separator {
+  display: inline-block;
+  vertical-align: middle;
   width: 1px;
   height: 1.25rem;
   background: rgba(255,255,255,0.3);
@@ -106,12 +114,12 @@
   height: 1rem;
   background: #fff;
   border-radius: 50%;
-  transition: transform 0.2s;
+  transition: left 0.2s;
   transform: translateY(-50%);
   box-shadow: 0 1px 3px rgba(0,0,0,0.3);
 }
 [data-theme="dark"] .theme-toggle-thumb {
-  transform: translateY(-50%) translateX(1.0625rem);
+  left: calc(100% - 1rem - 2px);
 }
 [data-theme="dark"] .theme-toggle-track {
   background: rgba(255,255,255,0.15);
