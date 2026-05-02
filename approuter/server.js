@@ -1,11 +1,21 @@
 process.chdir(__dirname)
 
+// Merge VCAP_SERVICES from default-env.json (adds html5-apps-repo-rt binding for local dev)
+try {
+  const _env = require('./default-env.json')
+  if (_env.VCAP_SERVICES) {
+    const existing = process.env.VCAP_SERVICES ? JSON.parse(process.env.VCAP_SERVICES) : {}
+    process.env.VCAP_SERVICES = JSON.stringify({ ...existing, ..._env.VCAP_SERVICES })
+  }
+} catch (_) { /* running in CF with real env */ }
+
 const approuter = require('@sap/approuter')
 const { mkdirSync, rmSync, renameSync, existsSync } = require('fs')
 const { join, resolve, sep } = require('path')
 const { pipeline } = require('stream/promises')
 const { createGunzip } = require('zlib')
 const tar = require('tar')
+const serveStatic = require('serve-static')
 
 const STATIC_DIR = join(__dirname, 'static')
 const TEMP_DIR = join(__dirname, 'static-new')
@@ -70,13 +80,64 @@ async function rebuildHandler(req, res, next) {
   }
 }
 
+// Workaround: @sap/approuter's static-resource-handler uses path.sep to prefix
+// req.url, which produces backslashes on Windows and breaks serve-static lookups.
+// This middleware serves static files correctly on all platforms.
+const staticServe = serveStatic(STATIC_DIR, { fallthrough: true })
+function staticHandler(req, res, next) {
+  staticServe(req, res, next)
+}
+
+// Workaround: approuter destination proxy fails locally on Windows.
+// Forward API routes directly to CAP backend, applying xs-app.json rewrites.
+const CAP_URL = process.env.CAP_BASE_URL || 'http://localhost:4004'
+const PROXY_PREFIXES = ['/api/', '/build/', '/content/', '/admin/', '/display/', '/search/', '/rest/', '/health', '/.well-known/', '/ord/', '/auth/', '/tutorials/']
+const REWRITES = [
+  { match: /^\/tutorials\/(.*)/, replace: '/content/tutorials/$1' }
+]
+const http = require('http')
+const { URL } = require('url')
+
+function proxyHandler(req, res, next) {
+  if (!PROXY_PREFIXES.some(p => req.url.startsWith(p))) return next()
+
+  let url = req.url
+  for (const { match, replace } of REWRITES) {
+    if (match.test(url)) { url = url.replace(match, replace); break }
+  }
+
+  const target = new URL(url, CAP_URL)
+  const opts = {
+    hostname: target.hostname,
+    port: target.port,
+    path: target.pathname + target.search,
+    method: req.method,
+    headers: { ...req.headers, host: target.host }
+  }
+
+  const proxyReq = http.request(opts, (proxyRes) => {
+    res.writeHead(proxyRes.statusCode, proxyRes.headers)
+    proxyRes.pipe(res)
+  })
+  proxyReq.on('error', (err) => {
+    console.error('[proxy]', req.url, err.message)
+    if (!res.headersSent) {
+      res.writeHead(502, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Backend unavailable' }))
+    }
+  })
+  req.pipe(proxyReq)
+}
+
 const ar = approuter()
 ar.start({
   extensions: [
     {
       insertMiddleware: {
         first: [
-          { path: '/admin/rebuild', handler: rebuildHandler }
+          { path: '/admin/rebuild', handler: rebuildHandler },
+          { path: '/', handler: staticHandler },
+          { path: '/', handler: proxyHandler }
         ]
       }
     }

@@ -218,27 +218,44 @@ export async function serveHandler(req, res) {
     }
 
     // Find the latest version of this slug up to the active manifest version
-    const [row] = await SELECT.from(ContentFiles)
+    // First get metadata (no BLOB) to handle ETag/304 without LOB streaming issues
+    const [meta] = await SELECT.from(ContentFiles)
       .where({ slug, version: { '<=': activeVersion } })
       .orderBy('version desc')
       .limit(1)
-      .columns('content', 'contentHash', 'mimeType');
+      .columns('contentHash', 'mimeType', 'version');
 
-    if (!row) {
+    if (!meta) {
       return res.status(404).json({ error: `Tutorial not found: ${slug}` });
     }
 
     const ifNoneMatch = req.headers['if-none-match'];
-    if (ifNoneMatch && ifNoneMatch === `"${row.contentHash}"`) {
+    if (ifNoneMatch && ifNoneMatch === `"${meta.contentHash}"`) {
       return res.status(304).end();
     }
 
-    const contentBuf = await toBuffer(row.content);
+    // Read BLOB separately — CDS QL returns HANA BLOBs as streams with locators
+    // that expire before consumption. Raw SQL returns a Buffer directly.
+    // For SQLite (tests), CDS QL works fine since there's no LOB streaming.
+    const db = await cds.connect.to('db');
+    let contentBuf;
+    if (db.options?.kind === 'hana' || db.constructor?.name === 'HANAService') {
+      const [blobRow] = await db.run(
+        `SELECT TOP 1 "CONTENT" FROM "COM_SAP_DEVELOPERS_IMS_CONTENTFILES" WHERE "SLUG" = ? AND "VERSION" = ?`,
+        [slug, meta.version]
+      );
+      contentBuf = blobRow.CONTENT;
+    } else {
+      const blobRow = await SELECT.one.from(ContentFiles)
+        .where({ slug, version: meta.version })
+        .columns('content');
+      contentBuf = await toBuffer(blobRow.content);
+    }
     const decompressed = gunzipSync(contentBuf);
-    cache.set(slug, decompressed, row.contentHash);
+    cache.set(slug, decompressed, meta.contentHash);
 
-    res.setHeader('Content-Type', `${row.mimeType}; charset=utf-8`);
-    res.setHeader('ETag', `"${row.contentHash}"`);
+    res.setHeader('Content-Type', `${meta.mimeType}; charset=utf-8`);
+    res.setHeader('ETag', `"${meta.contentHash}"`);
     res.setHeader('Cache-Control', 'public, max-age=300');
     res.setHeader('X-Content-Source', 'db');
     res.send(decompressed);

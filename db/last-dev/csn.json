@@ -1518,6 +1518,128 @@
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_JOBLOCKS"
+    },
+    "com.sap.developers.ims.ContentFiles": {
+      "kind": "entity",
+      "@cds.persistence.journal": true,
+      "elements": {
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "slug": {
+          "key": true,
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "SLUG"
+        },
+        "version": {
+          "key": true,
+          "type": "cds.Integer",
+          "@cds.persistence.name": "VERSION"
+        },
+        "content": {
+          "type": "cds.LargeBinary",
+          "@cds.persistence.name": "CONTENT"
+        },
+        "contentHash": {
+          "type": "cds.String",
+          "length": 64,
+          "@cds.persistence.name": "CONTENTHASH"
+        },
+        "sizeBytes": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "SIZEBYTES"
+        },
+        "compressedBytes": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "COMPRESSEDBYTES"
+        },
+        "mimeType": {
+          "type": "cds.String",
+          "length": 100,
+          "default": {
+            "val": "text/html"
+          },
+          "@cds.persistence.name": "MIMETYPE"
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CONTENTFILES"
+    },
+    "com.sap.developers.ims.ContentManifest": {
+      "kind": "entity",
+      "@cds.persistence.journal": true,
+      "elements": {
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "version": {
+          "key": true,
+          "type": "cds.Integer",
+          "@cds.persistence.name": "VERSION"
+        },
+        "status": {
+          "type": "cds.String",
+          "length": 20,
+          "@cds.persistence.name": "STATUS"
+        },
+        "trigger": {
+          "type": "cds.String",
+          "length": 500,
+          "@cds.persistence.name": "TRIGGER"
+        },
+        "fileCount": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "FILECOUNT"
+        },
+        "totalSizeBytes": {
+          "type": "cds.Int64",
+          "@cds.persistence.name": "TOTALSIZEBYTES"
+        },
+        "changedSlugs": {
+          "type": "cds.LargeString",
+          "@cds.persistence.name": "CHANGEDSLUGS"
+        },
+        "hugoVersion": {
+          "type": "cds.String",
+          "length": 20,
+          "@cds.persistence.name": "HUGOVERSION"
+        },
+        "publishDurationMs": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "PUBLISHDURATIONMS"
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CONTENTMANIFEST"
     }
   },
   "meta": {

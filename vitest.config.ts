@@ -5,6 +5,30 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     testTimeout: 30000,
-    exclude: ['node_modules', 'gen', 'hugo']
+    exclude: ['node_modules', 'gen', 'hugo'],
+    projects: [
+      {
+        test: {
+          name: 'unit',
+          include: ['test/**/*.test.{js,ts}', 'scripts/__tests__/**/*.test.ts'],
+          exclude: ['node_modules', 'gen', 'hugo', 'test/hybrid/**', 'test/smoke/**'],
+          env: { NO_TELEMETRY: 'true' }
+        }
+      },
+      {
+        test: {
+          name: 'hybrid',
+          include: ['test/hybrid/**/*.test.{js,ts}'],
+          testTimeout: 60000
+        }
+      },
+      {
+        test: {
+          name: 'smoke',
+          include: ['test/smoke/**/*.test.{js,ts}'],
+          testTimeout: 30000
+        }
+      }
+    ]
   }
 });

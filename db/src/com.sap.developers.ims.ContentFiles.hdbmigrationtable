@@ -1,0 +1,15 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_ContentFiles (
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  slug NVARCHAR(255) NOT NULL,
+  version INTEGER NOT NULL,
+  content BLOB,
+  contentHash NVARCHAR(64),
+  sizeBytes INTEGER,
+  compressedBytes INTEGER,
+  "MIMETYPE" NVARCHAR(100) DEFAULT 'text/html',
+  PRIMARY KEY(slug, version)
+)

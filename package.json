@@ -58,7 +58,7 @@
     "sap.tutorials.admin.tutorials": "file:app/admin/tutorials",
     "shiki": "^4.0.2",
     "tsx": "^4.0.0",
-    "vitest": "^3.0.0",
+    "vitest": "^4.0.0",
     "yaml": "^2.7.0"
   },
   "dependencies": {
@@ -73,11 +73,11 @@
     "@opentelemetry/exporter-metrics-otlp-grpc": "^0.57.2",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.57.2",
     "@sap/cds": "^9.9.0",
-    "@sap/xsenv": "^5.6.1",
+    "@sap/xsenv": "^6.2.0",
     "@sap/xssec": "^4.13.0",
-    "hdb": "^0.19.12",
+    "hdb": "^2.27.1",
     "node-cron": "^4.2.1",
-    "nodemailer": "^6.10.1",
+    "nodemailer": "^8.0.7",
     "passport": "^0.7.0",
     "qrcode": "^1.5.4",
     "socket.io": "^4.8.0"

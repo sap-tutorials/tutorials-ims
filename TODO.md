@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-The tutorials-poc project has a working **learner-facing frontend** (tutorial navigation, progress tracking, App Space event view), a **CAP backend** that is substantially complete, and a full **admin UI** (9 Fiori Elements apps + 1 freestyle SAPUI5 app). The remaining gaps are: **content push pipeline** (template only, not deployed), **static content webhook** (no CI/CD), and a few backend edge cases not yet validated against production IMS.
+The tutorials-poc project has a working **learner-facing frontend** (tutorial navigation, progress tracking, App Space event view), a **CAP backend** that is substantially complete, and a full **admin UI** (9 Fiori Elements apps + 1 freestyle SAPUI5 app). Tutorial content is served from **HANA BLOBs** (delta-aware publish pipeline validated end-to-end). The remaining gaps are: **content push pipeline** (dispatch workflow template only, not deployed to sap-tutorials repos), and a few backend edge cases not yet validated against production IMS.
 
 ---
 
@@ -140,13 +140,13 @@ Solved via the content push pipeline above — the receiving workflow POSTs a co
 | # | Gap | Impact | Effort | Status |
 |---|-----|--------|--------|--------|
 | 1 | Content push pipeline (dispatch + receiving workflow) | Blocks author workflow | Low | **Done** — workflow + rebuild handler implemented |
-| 2 | Static content webhook (CI/CD redeploy) | Blocks production content updates | Medium | **Done** — solved by rebuild endpoint |
+| 2 | Static content webhook (CI/CD redeploy) | Blocks production content updates | Medium | **Done** — solved by HANA content persistence + rebuild endpoint |
 | 3 | AEM endpoint retirement (0 remaining) | Blocks AEM decommission | Medium | **Done** — all 8 wired to CAP |
 | 4 | Admin UI — Tutorial Dashboard | Blocks content operations | High | **Done** — PR #1 |
 | 5 | Admin UI — Missions + Groups CRUD | Blocks content curation | High | **Done** — PR #1 |
 | 6 | BTP service bindings (Mail, NGDS dest, Analytics dest) | Blocks production job execution | Medium | Code done, config needed |
 | 7 | GDPR/Privacy tools (admin UI) | Compliance risk | Medium | **Done** — PR #1 |
-| 8 | Integration testing on HANA | Confidence in deploy | Medium | **Done** — 91 tests passing |
+| 8 | Integration testing on HANA | Confidence in deploy | Medium | **Done** — 100 tests passing |
 | 9 | Real-time display (frontend WebSocket) | Event experience degradation | Medium | **Done** — `@cap-js-community/websocket` + Socket.IO |
 | 10 | Plan doc cleanup | Housekeeping | Low | Plans show unchecked but work is done |
 
@@ -158,7 +158,7 @@ Solved via the content push pipeline above — the receiving workflow POSTs a co
 - [x] Create the receiving workflow in tutorials-poc (`.github/workflows/rebuild-content.yml`)
 - [x] Wire all AEM endpoints to CAP (progress series, search, QR code — all complete)
 - [ ] Configure BTP Destinations for NGDS and Adobe Analytics
-- [ ] Verify `cds deploy --to hana` succeeds with the full 35-entity schema (see §11 below)
+- [x] Verify `cds deploy --to hana` succeeds with the full 35-entity schema (see §11)
 - [x] Decide on static content delivery — rebuild endpoint on AppRouter (`/admin/rebuild`)
 
 ---
@@ -171,70 +171,50 @@ Solved via the content push pipeline above — the receiving workflow POSTs a co
 
 ---
 
-## 11. Fresh HDI Container Deploy Plan (2026-05-02)
+## 11. Fresh HDI Container Deploy ✅ (2026-05-02)
 
-**Context:** The DEV HDI container was originally deployed with `.hdbtable` artifacts (no migration support). Converting to `@cds.persistence.journal` (`.hdbmigrationtable`) in-place proved brittle — HDI rejected multi-version ALTER migrations against the existing tables. A fresh container avoids all backwards-compatibility issues and matches the production deployment path (clean HDI → full schema → data import).
+**Completed.** Fresh HDI container created, all 33 migration tables + views + 30 sequences deployed via `cds deploy --to hana`. Data migrated from Java IMS HANA (IMSDBUSER schema) via direct HANA-to-HANA script. Autotest data purged (97% of missions, 95% of tutorials were automated test records). 100 hybrid tests passing against the clean dataset.
 
-**State after cleanup:**
-
-- `db/src/*.hdbmigrationtable` — 33 files, all version=1 with the FULL current model (including `primaryTagRef_ID`, `groupOrder`)
-- `db/undeploy.json` — lists 33 old `.hdbtable` paths + trigger glob (harmless on fresh container)
-- `cds build` succeeds and produces matching `gen/db/src/` output
-- `db/last-dev/csn.json` — current model state, in sync
-
-**Steps:**
-
-1. **Delete the DEV HDI container service instance**
-
-   ```bash
-   cf login -a https://api.cf.us30.hana.ondemand.com  # DEV space
-   cf delete-service tutorials-poc-db -f
-   # Wait for async delete to complete:
-   cf service tutorials-poc-db  # should return "not found"
-   ```
-
-2. **Recreate and deploy**
-
-   ```bash
-   cds build
-   cds deploy --to hana
-   # This creates a new HDI container, deploys all 33 migration tables + views + sequences
-   ```
-
-3. **Verify schema (hybrid tests)**
-
-   ```bash
-   npm run test:hybrid
-   # Confirms all 35 entities accessible, column structure correct, sequences working
-   ```
-
-4. **Re-import reference data from QA**
-
-   ```bash
-   # Set source (QA/Java IMS)
-   export IMS_BASE_URL=https://imsprod-approuter.cfapps.us30.hana.ondemand.com
-   export IMS_AUTH_TOKEN=<token>
-   export CAP_BASE_URL=http://localhost:4004  # or DEV srv URL
-
-   node scripts/migrate-reference-data.js export   # exports to .migration-data/
-   node scripts/migrate-reference-data.js import   # imports into fresh CAP
-   node scripts/migrate-reference-data.js populate-slugs  # backfill slug fields
-   ```
-
-5. **Optionally re-import user progress** (if needed for DEV testing)
-
-   ```bash
-   node scripts/migrate-user-progress.js export
-   node scripts/migrate-user-progress.js import
-   ```
-
-6. **Mark TODO §9 line as done**
-
-**Why this works for production too:** Production will be a first-time deploy to a new HDI container (never had the old `.hdbtable` artifacts). The version=1 migration files create tables with the full current schema. No ALTER history needed.
+Final dataset: 602 missions, 596 tutorials, 65 events, 5605 tags, 247K users, 2.5M task records.
 
 ---
 
-## 12. Security Review (2026-05-01)
+## 12. HANA Content Persistence ✅ (2026-05-02)
+
+**Completed.** Full end-to-end validation of the content publish → serve pipeline using real HANA Cloud. Tutorial HTML is stored as gzip-compressed BLOBs in `ContentFiles` with versioned manifests (`ContentManifest`). Delta-aware publishing via SHA-256 hash comparison.
+
+### Pipeline Verification Results
+
+| Test | Result |
+|------|--------|
+| Initial publish (3 tutorials, v1) | 965ms, all files stored |
+| Delta detect & re-publish 1 changed file (v2) | 859ms, only changed file uploaded |
+| Serve from HANA BLOB | 200 + correct decompressed HTML |
+| ETag → 304 Not Modified | Works |
+| LRU cache hit (`X-Content-Source: cache`) | Works |
+| Updated ETag after v2 publish | New hash served correctly |
+| Stale ETag → fresh 200 | Confirmed |
+| 404 for missing slug | Confirmed |
+| Unit tests (SQLite path) | 22/22 pass |
+
+### HANA LOB Locator Fix
+
+**Bug:** CDS QL returns HANA BLOB columns as `Readable` streams backed by LOB locators. When mixed with non-BLOB columns in a single SELECT, the locator expires before stream consumption — "invalid lob locator id (piecewise lob reading)".
+
+**Fix in `srv/lib/content-store.js`:** Split content serving into two queries:
+1. Metadata query (no BLOB) — handles ETag/304 without touching the LOB
+2. BLOB-only query using raw SQL on HANA (`db.run()` returns Buffer directly)
+
+Database-kind detection ensures SQLite (unit tests) still uses CDS QL, while HANA uses raw SQL for reliable BLOB retrieval. This also provides a performance benefit: most requests (cache hits + 304s) never read the BLOB at all.
+
+### HDI Migration Tables
+
+- `db/src/com.sap.developers.ims.ContentFiles.hdbmigrationtable` — slug, version, content (BLOB), contentHash, sizeBytes, compressedBytes, mimeType
+- `db/src/com.sap.developers.ims.ContentManifest.hdbmigrationtable` — version (PK), status, trigger, fileCount, totalSizeBytes, changedSlugs, hugoVersion, publishDurationMs
+
+---
+
+## 13. Security Review ✅ (2026-05-01)
 
 First comprehensive security audit of the full implementation. Findings ranked by exploitability confidence (≥80%).
 

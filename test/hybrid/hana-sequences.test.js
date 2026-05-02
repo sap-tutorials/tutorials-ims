@@ -13,12 +13,7 @@ describe('HANA sequences (legacyId generation)', () => {
     'TutorialMeta', 'TutorialContributors', 'TutorialRepositories',
     'UserMetaData', 'DeveloperEnvironmentTabs', 'DeveloperEnvironmentLinks',
     'ActiveLearnerRecords', 'DashboardMonitoredRecords',
-    'StepFailures'
-  ];
-
-  // These sequences exist as .hdbsequence source but may not yet be deployed
-  const PENDING_SEQUENCES = [
-    'NGDSFailedMessages', 'ImsConfig',
+    'StepFailures', 'NGDSFailedMessages', 'ImsConfig',
     'PrimaryAccounts', 'SecondaryAccounts',
     'PrivacyProtectionActions', 'FeaturedTasks'
   ];
@@ -52,7 +47,4 @@ describe('HANA sequences (legacyId generation)', () => {
     await expect(getNextLegacyId('NonExistentEntity', db)).rejects.toThrow();
   });
 
-  for (const entityName of PENDING_SEQUENCES) {
-    it.todo(`deploy sequence for ${entityName} (source exists, not yet in HDI)`);
-  }
 });

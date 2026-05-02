@@ -1,0 +1,16 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_ContentManifest (
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  version INTEGER NOT NULL,
+  status NVARCHAR(20),
+  trigger NVARCHAR(500),
+  fileCount INTEGER,
+  totalSizeBytes BIGINT,
+  changedSlugs NCLOB,
+  hugoVersion NVARCHAR(20),
+  publishDurationMs INTEGER,
+  PRIMARY KEY(version)
+)

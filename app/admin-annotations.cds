@@ -291,15 +291,7 @@ annotate AdminService.FailedEmails with @(
   Capabilities.UpdateRestrictions.Updatable: false
 );
 
-// --- ChangeView (centralized change history viewer, auto-exposed by @cap-js/change-tracking v2) ---
-annotate AdminService.ChangeView with @UI: {
-  HeaderInfo: {
-    TypeName: 'Change', TypeNamePlural: 'Changes',
-    Title: { Value: objectID },
-    Description: { Value: entity }
-  },
-  SelectionFields: [ entity, createdBy, createdAt, modification ]
-};
+// ChangeView UI annotations are provided by @cap-js/change-tracking plugin (index.cds)
 
 // --- PrimaryAccounts / SecondaryAccounts (read-only) ---
 annotate AdminService.PrimaryAccounts with @(
