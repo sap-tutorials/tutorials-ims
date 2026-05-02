@@ -311,7 +311,7 @@ First comprehensive security audit of the full implementation. Findings ranked b
 |-------|--------|
 | Category | Authentication Weakness |
 | Confidence | 8/10 |
-| Status | [ ] Open |
+| Status | [x] Fixed |
 
 **Description:** Basic Auth password comparison uses `!==` (short-circuits on first differing character). Tech users get `Admin` role on success. Timing analysis can progressively reveal the password.
 

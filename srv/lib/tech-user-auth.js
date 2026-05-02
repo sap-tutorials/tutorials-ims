@@ -1,4 +1,5 @@
 import cds from '@sap/cds';
+import { timingSafeEqual } from 'node:crypto';
 
 let techUsers = null;
 
@@ -55,7 +56,10 @@ export function basicAuthMiddleware(req, res, next) {
     const password = decoded.slice(colon + 1);
 
     const entry = users.get(username);
-    if (!entry || entry.password !== password) return next();
+    if (!entry) return next();
+    const expected = Buffer.from(entry.password);
+    const actual = Buffer.from(password);
+    if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return next();
 
     const mapping = loadTechUserMapping();
     const userId = mapping.get(username) || username;
