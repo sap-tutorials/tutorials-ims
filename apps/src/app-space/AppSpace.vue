@@ -47,7 +47,6 @@ const tracks = ref<AppSpaceTrack[]>([])
 const selectedTrack = ref<AppSpaceTrack | null>(null)
 const loading = ref(true)
 const isLoggedIn = ref(false)
-const demoState = ref(0) // 0=default, 1=partial, 2=track complete, 3=reset
 
 // ── Real-time celebration ─────────────────────────────────────────
 const { fireConfetti, particles, active: confettiActive } = useConfetti()
@@ -236,59 +235,8 @@ const completedTracks = computed(() =>
   tracks.value.filter(isTrackComplete).length
 )
 
-// ── Demo mode ──────────────────────────────────────────────────────
-function cycleDemo() {
-  demoState.value = (demoState.value + 1) % 4
 
-  for (const track of tracks.value) {
-    for (const item of track.items) {
-      item.status = ''
-      item.progress = 0
-    }
-  }
 
-  if (demoState.value === 1) {
-    // Partial progress: complete some items in first 3 tracks
-    for (let t = 0; t < Math.min(3, tracks.value.length); t++) {
-      const tuts = tutorialItems(tracks.value[t])
-      const completeCount = Math.min(Math.floor(tuts.length / 2) + 1, tuts.length)
-      for (let i = 0; i < completeCount; i++) {
-        tuts[i].status = 'COMPLETED'
-        tuts[i].progress = 100
-      }
-      if (completeCount < tuts.length) {
-        tuts[completeCount].status = 'IN_PROGRESS'
-        tuts[completeCount].progress = 40
-      }
-    }
-  } else if (demoState.value === 2) {
-    // Full track complete: complete all items in first track + prize
-    const track = tracks.value[0]
-    for (const item of track.items) {
-      if (item.type === 'TUTORIAL') {
-        item.status = 'COMPLETED'
-        item.progress = 100
-      } else if (item.type === 'PRIZE') {
-        item.status = 'EARNED'
-      }
-    }
-    // Partial in second track
-    const tuts2 = tutorialItems(tracks.value[1])
-    if (tuts2.length > 0) {
-      tuts2[0].status = 'COMPLETED'
-      tuts2[0].progress = 100
-    }
-  }
-  // demoState 3 = reset (already cleared above)
-  if (demoState.value === 3) demoState.value = 0
-}
-
-const demoLabel = computed(() => {
-  if (demoState.value === 0) return 'Demo: Default'
-  if (demoState.value === 1) return 'Demo: In Progress'
-  if (demoState.value === 2) return 'Demo: Track Complete'
-  return 'Demo: Default'
-})
 </script>
 
 <template>
@@ -332,9 +280,6 @@ const demoLabel = computed(() => {
           <span class="instruction-text">{{ step.text }}</span>
         </div>
       </div>
-      <button class="demo-toggle fd-button fd-button--transparent" @click="cycleDemo">
-        {{ demoLabel }}
-      </button>
     </section>
 
     <!-- ── Loading ────────────────────────────────────────── -->
@@ -632,24 +577,6 @@ const demoLabel = computed(() => {
   opacity: 0.9;
 }
 
-.demo-toggle {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  color: rgba(255, 255, 255, 0.7) !important;
-  font-size: 0.75rem !important;
-  border: 1px solid rgba(255, 255, 255, 0.25) !important;
-  background: rgba(255, 255, 255, 0.08) !important;
-  border-radius: 1rem !important;
-  padding: 0.25rem 0.75rem !important;
-  height: auto !important;
-  cursor: pointer;
-}
-
-.demo-toggle:hover {
-  background: rgba(255, 255, 255, 0.16) !important;
-  color: #fff !important;
-}
 
 /* ── Content Area ──────────────────────────────────────── */
 .content-area {
@@ -1230,15 +1157,6 @@ const demoLabel = computed(() => {
   background: rgba(255, 255, 255, 0.22);
 }
 
-.app-space[data-theme="joule"] .demo-toggle {
-  border-color: rgba(255, 255, 255, 0.3) !important;
-  background: rgba(255, 255, 255, 0.1) !important;
-}
-
-.app-space[data-theme="joule"] .demo-toggle:hover {
-  background: rgba(255, 255, 255, 0.2) !important;
-}
-
 .app-space[data-theme="joule"] .track-card:hover {
   border-color: #5D36FF;
   box-shadow: 0 0.25rem 1rem rgba(93, 54, 255, 0.15);
@@ -1387,15 +1305,6 @@ const demoLabel = computed(() => {
 
 .app-space[data-theme="sapphire"] .instruction-icon {
   background: rgba(255, 255, 255, 0.22);
-}
-
-.app-space[data-theme="sapphire"] .demo-toggle {
-  border-color: rgba(255, 255, 255, 0.3) !important;
-  background: rgba(255, 255, 255, 0.1) !important;
-}
-
-.app-space[data-theme="sapphire"] .demo-toggle:hover {
-  background: rgba(255, 255, 255, 0.2) !important;
 }
 
 .app-space[data-theme="sapphire"] .track-card:hover {
