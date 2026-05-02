@@ -7,6 +7,15 @@ import { navigatorCatalogHandler } from './lib/navigator-catalog.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
 import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, navHandler, rollbackHandler } from './lib/content-store.js';
 
+// Disable serve-static directory redirects globally. CAP serves app/ as static
+// content; on Windows the physical app/admin/tutorials/ directory matches OData
+// path /admin/Tutorials (case-insensitive), causing a 301 → /admin/Tutorials/
+// which OData parses as Tutorials('') → UUID validation error.
+const _static = express.static;
+express.static = function(root, options) {
+  return _static(root, { redirect: false, ...options });
+};
+
 cds.on('bootstrap', (app) => {
   if (process.env.NODE_ENV !== 'production') {
     app.use((req, res, next) => {
