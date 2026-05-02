@@ -90,6 +90,9 @@ function staticHandler(req, res, next) {
 
 // Workaround: approuter destination proxy fails locally on Windows.
 // Forward API routes directly to CAP backend, applying xs-app.json rewrites.
+// NOTE: /admin/ and /display/ are NOT here — they use authenticationType:"xsuaa"
+// in xs-app.json so the approuter handles OAuth redirect → IDP login → JWT forward.
+// Requires CAP running with --profile hybrid (real XSUAA validation).
 const CAP_URL = process.env.CAP_BASE_URL || 'http://localhost:4004'
 const PROXY_PREFIXES = ['/api/', '/build/', '/content/', '/search/', '/rest/', '/ws/', '/socket.io/', '/health', '/.well-known/', '/ord/', '/auth/', '/tutorials/']
 const REWRITES = [
@@ -176,7 +179,11 @@ function proxyHandler(req, res, next) {
 
   const proxyReq = http.request(opts, (proxyRes) => {
     const headers = { ...proxyRes.headers }
-    delete headers['www-authenticate']
+    // Strip WWW-Authenticate from non-navigation requests to prevent unwanted
+    // browser basic-auth prompts on background fetches. Keep it for page navigations
+    // (/admin/, /display/) so mocked-auth login works for local dev.
+    const isNavigation = req.headers['sec-fetch-mode'] === 'navigate'
+    if (!isNavigation) delete headers['www-authenticate']
     res.writeHead(proxyRes.statusCode, headers)
     proxyRes.pipe(res)
   })
