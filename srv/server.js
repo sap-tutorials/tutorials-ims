@@ -17,6 +17,16 @@ express.static = function(root, options) {
 };
 
 cds.on('bootstrap', (app) => {
+  // Strip trailing slashes from OData paths. The approuter (or browser)
+  // may append a slash after XSUAA redirect; CAP's OData parser interprets
+  // /admin/Tutorials/ as Tutorials('') which fails UUID validation.
+  app.use((req, _res, next) => {
+    if (req.path !== '/' && req.path.endsWith('/')) {
+      req.url = req.url.replace(/\/(\?|$)/, '$1');
+    }
+    next();
+  });
+
   if (process.env.NODE_ENV !== 'production') {
     app.use((req, res, next) => {
       const origin = req.headers.origin;

@@ -94,7 +94,8 @@ Tutorial HTML is NOT served from static files. After Hugo builds, `publish-conte
 - **`app/admin-flp/`** — FLP sandbox for local development only
 - **`app/admin-annotations.cds`** — All @UI/@Common CDS annotations for admin screens
 - Deployed via HTML5 Application Repository (`tutorials-admin-ui-deployer` module in mta.yaml)
-- Access at `/admin-ui/` route (XSUAA-protected)
+- **Production access**: `/admin-ui/` route (XSUAA-protected, served from HTML5 App Repository)
+- **Local dev access**: `/apps/<appname>/` (e.g. `/apps/tutorials/`, `/apps/events/`) — served by `cds-plugin-ui5` at these mount paths to avoid collisions with OData's `/admin/` service path
 
 ### Frontend (Hugo + Vue 3)
 
@@ -160,7 +161,8 @@ Smoke test files in `test/smoke/`:
 - **Cache clearing** — `.tutorial-cache/` caches raw markdown, GitHub metadata, and CAP catalog data. Delete it to force a full re-fetch. There is no incremental invalidation.
 - **Node.js >= 20 required** — Build scripts use native `fetch` (no polyfill).
 - **Slug fields** — `Missions.slug` and `CompletionPaths.slug` must be populated for the build pipeline to generate mission/group pages. Run `node scripts/migrate-reference-data.js populate-slugs` after data import.
-- **`app/` vs `apps/` vs `display-app/`** — Three separate directories. `app/` contains SAPUI5 admin screens served via HTML5 App Repo. `apps/` contains Vue 3 public-facing components bundled by Vite. `display-app/` is a standalone Vue+Vite dashboard app for event monitors. Do not mix them.
+- **`app/` vs `apps/` vs `display-app/`** — Three separate directories. `app/` contains SAPUI5 admin screens (Fiori Elements + custom); in production these are served from HTML5 App Repository at `/admin-ui/`, but locally `cds-plugin-ui5` mounts them at `/apps/*`. `apps/` contains Vue 3 public-facing components bundled by Vite. `display-app/` is a standalone Vue+Vite dashboard app for event monitors. Do not mix them.
+- **`/admin/` is OData only** — The AdminService OData endpoint lives at `/admin/`. UI5 admin apps are mounted at `/apps/` locally (and `/admin-ui/` in production) to avoid path collisions. On Windows, the case-insensitive filesystem causes `express.static` to match `/admin/Tutorials` to the physical `app/admin/tutorials/` directory — the monkey-patch in `srv/server.js` disables directory redirects to prevent this.
 - **Hugo vs VitePress** — The project migrated from VitePress to Hugo. The `site/.vitepress/` directory still exists (with a built `dist/`) but is legacy. Active frontend work targets `hugo/`.
 - **`CONTENT_API_KEY` env var** — Required for `POST /content/publish` and `POST /content/rollback`. Set in CI secrets and locally when testing publish. Without it, publish requests return 401.
 - **Tutorials are DB-only** — Tutorial HTML is served exclusively from HANA BLOBs. There is no static file fallback. If no content has been published to HANA, `/tutorials/*` returns 404.

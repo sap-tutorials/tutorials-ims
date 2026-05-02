@@ -86,34 +86,34 @@
     "cds-plugin-ui5": {
       "modules": {
         "sap.tutorials.admin.events": {
-          "mountPath": "/app/admin/events"
+          "mountPath": "/apps/events"
         },
         "sap.tutorials.admin.missions": {
-          "mountPath": "/app/admin/missions"
+          "mountPath": "/apps/missions"
         },
         "sap.tutorials.admin.groups": {
-          "mountPath": "/app/admin/groups"
+          "mountPath": "/apps/groups"
         },
         "sap.tutorials.admin.tutorials": {
-          "mountPath": "/app/admin/tutorials"
+          "mountPath": "/apps/tutorials"
         },
         "sap.tutorials.admin.tags": {
-          "mountPath": "/app/admin/tags"
+          "mountPath": "/apps/tags"
         },
         "sap.tutorials.admin.accomplishments": {
-          "mountPath": "/app/admin/accomplishments"
+          "mountPath": "/apps/accomplishments"
         },
         "sap.tutorials.admin.prizes": {
-          "mountPath": "/app/admin/prizes"
+          "mountPath": "/apps/prizes"
         },
         "sap.tutorials.admin.operations": {
-          "mountPath": "/app/admin/operations"
+          "mountPath": "/apps/operations"
         },
         "sap.tutorials.admin.accounts": {
-          "mountPath": "/app/admin/accounts"
+          "mountPath": "/apps/accounts"
         },
         "sap.tutorials.admin.changelog": {
-          "mountPath": "/app/admin/changelog"
+          "mountPath": "/apps/changelog"
         },
         "admin-custom": {
           "mountPath": "/admin-custom"
