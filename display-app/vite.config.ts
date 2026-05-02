@@ -10,6 +10,11 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      '/socket.io': {
+        target: 'http://localhost:4004',
+        changeOrigin: true,
+        ws: true,
+      },
       '/ws': {
         target: 'http://localhost:4004',
         changeOrigin: true,

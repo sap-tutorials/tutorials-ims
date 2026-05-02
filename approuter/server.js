@@ -91,12 +91,71 @@ function staticHandler(req, res, next) {
 // Workaround: approuter destination proxy fails locally on Windows.
 // Forward API routes directly to CAP backend, applying xs-app.json rewrites.
 const CAP_URL = process.env.CAP_BASE_URL || 'http://localhost:4004'
-const PROXY_PREFIXES = ['/api/', '/build/', '/content/', '/admin/', '/display/', '/search/', '/rest/', '/ws/', '/health', '/.well-known/', '/ord/', '/auth/', '/tutorials/']
+const PROXY_PREFIXES = ['/api/', '/build/', '/content/', '/admin/', '/display/', '/search/', '/rest/', '/ws/', '/socket.io/', '/health', '/.well-known/', '/ord/', '/auth/', '/tutorials/']
 const REWRITES = [
   { match: /^\/tutorials\/(.*)/, replace: '/content/tutorials/$1' }
 ]
 const http = require('http')
 const { URL } = require('url')
+
+// Intercept server creation to hijack WebSocket upgrade handling.
+// @sap/approuter handles upgrades at the server level (returns 403 locally without
+// a destination binding). We remove its listener and proxy WebSocket ourselves.
+const _createServer = http.createServer
+http.createServer = function(...args) {
+  const server = _createServer.apply(http, args)
+
+  const origListen = server.listen.bind(server)
+  server.listen = function(...listenArgs) {
+    const result = origListen(...listenArgs)
+    // After approuter has finished setting up, steal the upgrade event
+    process.nextTick(() => {
+      const approuterListeners = server.listeners('upgrade').slice()
+      server.removeAllListeners('upgrade')
+      server.on('upgrade', (req, socket, head) => {
+        if (req.url.startsWith('/socket.io/') || req.url.startsWith('/ws/')) {
+          const target = new URL(req.url, CAP_URL)
+          const opts = {
+            hostname: target.hostname,
+            port: target.port,
+            path: target.pathname + target.search,
+            method: 'GET',
+            headers: { ...req.headers, host: target.host }
+          }
+          const proxyReq = http.request(opts)
+          proxyReq.on('upgrade', (proxyRes, proxySocket, proxyHead) => {
+            socket.write(
+              'HTTP/1.1 101 Switching Protocols\r\n' +
+              Object.entries(proxyRes.headers).map(([k, v]) => `${k}: ${v}`).join('\r\n') +
+              '\r\n\r\n'
+            )
+            if (proxyHead.length) socket.write(proxyHead)
+            proxySocket.pipe(socket)
+            socket.pipe(proxySocket)
+            proxySocket.on('error', () => socket.destroy())
+            socket.on('error', () => proxySocket.destroy())
+          })
+          proxyReq.on('response', (res) => {
+            // Backend didn't upgrade — forward the error response
+            const headers = Object.entries(res.headers).map(([k, v]) => `${k}: ${v}`).join('\r\n')
+            socket.write(`HTTP/1.1 ${res.statusCode} ${res.statusMessage}\r\n${headers}\r\n\r\n`)
+            res.pipe(socket)
+          })
+          proxyReq.on('error', () => socket.destroy())
+          proxyReq.end()
+        } else {
+          for (const listener of approuterListeners) {
+            listener.call(server, req, socket, head)
+          }
+        }
+      })
+    })
+    return result
+  }
+
+  http.createServer = _createServer
+  return server
+}
 
 function proxyHandler(req, res, next) {
   if (!PROXY_PREFIXES.some(p => req.url.startsWith(p))) return next()
@@ -116,7 +175,9 @@ function proxyHandler(req, res, next) {
   }
 
   const proxyReq = http.request(opts, (proxyRes) => {
-    res.writeHead(proxyRes.statusCode, proxyRes.headers)
+    const headers = { ...proxyRes.headers }
+    delete headers['www-authenticate']
+    res.writeHead(proxyRes.statusCode, headers)
     proxyRes.pipe(res)
   })
   proxyReq.on('error', (err) => {
@@ -142,31 +203,4 @@ ar.start({
       }
     }
   ]
-}, (err, server) => {
-  if (err) { console.error(err); process.exit(1) }
-  if (!server) return
-  server.on('upgrade', (req, socket, head) => {
-    if (!PROXY_PREFIXES.some(p => req.url.startsWith(p))) return socket.destroy()
-    const target = new URL(req.url, CAP_URL)
-    const opts = {
-      hostname: target.hostname,
-      port: target.port,
-      path: target.pathname + target.search,
-      method: 'GET',
-      headers: { ...req.headers, host: target.host }
-    }
-    const proxyReq = http.request(opts)
-    proxyReq.on('upgrade', (proxyRes, proxySocket, proxyHead) => {
-      socket.write(
-        `HTTP/1.1 ${proxyRes.statusCode} ${proxyRes.statusMessage}\r\n` +
-        Object.entries(proxyRes.headers).map(([k, v]) => `${k}: ${v}`).join('\r\n') +
-        '\r\n\r\n'
-      )
-      if (proxyHead.length) socket.write(proxyHead)
-      proxySocket.pipe(socket)
-      socket.pipe(proxySocket)
-    })
-    proxyReq.on('error', () => socket.destroy())
-    proxyReq.end()
-  })
 })
