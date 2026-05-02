@@ -219,8 +219,8 @@ const filteredItems = computed(() => {
   return allCards.value.filter(item => {
     if (searchQuery.value) {
       const q = searchQuery.value.toLowerCase()
-      const matches = item.title.toLowerCase().includes(q) ||
-        item.description.toLowerCase().includes(q) ||
+      const matches = (item.title ?? '').toLowerCase().includes(q) ||
+        (item.description ?? '').toLowerCase().includes(q) ||
         item.displayTags.some(t => t.toLowerCase().includes(q))
       if (!matches) return false
     }
