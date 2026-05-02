@@ -1521,8 +1521,8 @@
 }/* Shellbar separator between nav items and controls */.shellbar-separator {
   width: 1px;
   height: 1.25rem;
-  background: rgba(255,255,255,0.25);
-  margin: 0 0.25rem;
+  background: rgba(255,255,255,0.3);
+  margin: 0 0.5rem;
 }/* Theme toggle switch */.theme-toggle {
   background: none;
   border: none;
@@ -1547,16 +1547,17 @@
   transition: background 0.2s, border-color 0.2s;
 }.theme-toggle-thumb {
   position: absolute;
-  top: 2px;
+  top: 50%;
   left: 2px;
   width: 1rem;
   height: 1rem;
   background: #fff;
   border-radius: 50%;
   transition: transform 0.2s;
+  transform: translateY(-50%);
   box-shadow: 0 1px 3px rgba(0,0,0,0.3);
 }[data-theme="dark"] .theme-toggle-thumb {
-  transform: translateX(1.0625rem);
+  transform: translateY(-50%) translateX(1.0625rem);
 }[data-theme="dark"] .theme-toggle-track {
   background: rgba(255,255,255,0.15);
   border-color: rgba(255,255,255,0.3);
