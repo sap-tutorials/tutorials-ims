@@ -325,11 +325,11 @@ First comprehensive security audit of the full implementation. Findings ranked b
 |-------|--------|
 | Category | Missing Authentication |
 | Confidence | 8/10 |
-| Status | [ ] Open |
+| Status | [x] Accepted Risk |
 
 **Description:** `EventStreamService` has `@requires: 'any'` (anonymous access). Anyone can connect via WebSocket and passively monitor real-time tutorial completion activity across all events.
 
-**Fix:** Add origin validation and/or token-based auth for WebSocket connections, or accept as intentional for kiosk displays and document the risk.
+**Accepted Risk:** This is intentional by design. The display app runs on unauthenticated kiosk monitors at SAP events and needs the WebSocket stream without login prompts. The data exposed (tutorial completion counts, anonymized activity) is non-sensitive — it's the same information shown on public event screens. No personal data (emails, user IDs) is broadcast over this channel.
 
 ---
 
