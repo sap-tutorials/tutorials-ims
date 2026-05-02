@@ -9,6 +9,7 @@ import { parseV1Steps } from './parsers/v1.js'
 import { resolveImageURLs } from './parsers/images.js'
 import { convertOptionBlocks } from './parsers/options.js'
 import { escapeHugoDelimiters } from './parsers/hugo-delimiters.js'
+import { stripDangerousHtml } from './parsers/sanitize-html.js'
 import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, type DiscoveredTutorial } from './parsers/github.js'
 import { fetchBuildCatalog, loadCapCache, saveCapCache } from './parsers/cap.js'
 import type { Mission, MissionHierarchy, HierarchyGroup, TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } from './parsers/types.js'
@@ -344,7 +345,7 @@ export function writeHugoPage(
   const frontmatter = `---\n${yamlStringify(fm).trimEnd()}\n---\n\n`
 
   const stepsMd = steps.map(step =>
-    `{{% tutorial-step number="${step.number}" title="${step.title.replace(/"/g, '&quot;')}" %}}\n\n${escapeHugoDelimiters(step.content)}\n\n{{% /tutorial-step %}}`
+    `{{% tutorial-step number="${step.number}" title="${step.title.replace(/"/g, '&quot;')}" %}}\n\n${escapeHugoDelimiters(stripDangerousHtml(step.content))}\n\n{{% /tutorial-step %}}`
   ).join('\n\n')
 
   const content = `${frontmatter}${stepsMd}\n`

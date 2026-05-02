@@ -62,16 +62,20 @@ describe('writeHugoPage', () => {
     expect(output).toContain('{{% tutorial-step number="2" title="Second Step" %}}')
   })
 
-  it('does NOT escape HTML content (no &lt;div&gt;)', () => {
+  it('preserves safe HTML but strips dangerous tags', () => {
+    const steps: TutorialStep[] = [
+      { number: 1, title: 'First Step', content: 'Step 1 with <div>safe html</div> and <script>alert("xss")</script>' },
+      { number: 2, title: 'Second Step', content: 'Step 2 content' },
+    ]
     writeHugoPage(
       'test-tutorial', 'Test Tutorial', 'A test', 10, 'beginner',
       ['sap'], 'sap', 'Author', 'profile', ['Learn X'], 'prereq',
-      makeSteps(), makeNav(), '2025-01-01', [], TMP_DIR,
+      steps, makeNav(), '2025-01-01', [], TMP_DIR,
     )
 
     const output = readFileSync(join(TMP_DIR, 'test-tutorial.md'), 'utf-8')
-    expect(output).toContain('<div>html</div>')
-    expect(output).not.toContain('&lt;div&gt;')
+    expect(output).toContain('<div>safe html</div>')
+    expect(output).not.toContain('<script>')
   })
 
   it('does not contain Vue component syntax', () => {

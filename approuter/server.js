@@ -2,7 +2,7 @@ process.chdir(__dirname)
 
 const approuter = require('@sap/approuter')
 const { mkdirSync, rmSync, renameSync, existsSync } = require('fs')
-const { join } = require('path')
+const { join, resolve, sep } = require('path')
 const { pipeline } = require('stream/promises')
 const { createGunzip } = require('zlib')
 const tar = require('tar')
@@ -37,7 +37,13 @@ async function rebuildHandler(req, res, next) {
     await pipeline(
       req,
       createGunzip(),
-      tar.extract({ cwd: TEMP_DIR })
+      tar.extract({
+        cwd: TEMP_DIR,
+        filter: (path) => {
+          const resolved = resolve(TEMP_DIR, path)
+          return resolved.startsWith(TEMP_DIR + sep)
+        }
+      })
     )
 
     if (existsSync(OLD_DIR)) rmSync(OLD_DIR, { recursive: true })
