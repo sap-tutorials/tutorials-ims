@@ -660,17 +660,33 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
 
 .navigator-search .fd-input-group {
   flex: 1;
+  background: var(--sapField_Background, #fff);
+  border: 1px solid var(--sapField_BorderColor, #89919a);
+  border-radius: var(--sapField_BorderCornerRadius, 0.5rem) 0 0 var(--sapField_BorderCornerRadius, 0.5rem);
+}
+
+.navigator-search .fd-input-group:focus-within {
+  border-color: var(--sapField_Focus_BorderColor, #0064d9);
+  outline: var(--sapContent_FocusWidth, 1px) dotted var(--sapContent_FocusColor, #0064d9);
+  outline-offset: 1px;
 }
 
 .navigator-search .fd-input {
   height: 2.75rem;
   font-size: 0.9375rem;
+  background: transparent;
+  border: none;
+  color: var(--sapField_TextColor, #32363a);
+}
+
+.navigator-search .fd-input::placeholder {
+  color: var(--sapField_PlaceholderTextColor, #a9b4be);
 }
 
 .navigator-search .fd-button--emphasized {
   height: 2.75rem;
   padding: 0 1.5rem;
-  border-radius: 0 var(--sapButton_BorderCornerRadius, 0.5rem) var(--sapButton_BorderCornerRadius, 0.5rem) 0;
+  border-radius: 0 var(--sapField_BorderCornerRadius, 0.5rem) var(--sapField_BorderCornerRadius, 0.5rem) 0;
 }
 
 .filter-toggle-btn {

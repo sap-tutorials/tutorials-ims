@@ -1,13 +1,16 @@
 {{ define "main" }}
 <div class="mission-wrapper">
   <!-- Breadcrumb -->
-  <nav class="mission-breadcrumb-bar">
-    <div class="breadcrumb-inner">
-      <ul class="fd-breadcrumb">
-        <li class="fd-breadcrumb__item"><a class="fd-breadcrumb__link" href="/">Tutorial Navigator</a></li>
-        <li class="fd-breadcrumb__item"><span class="fd-breadcrumb__link fd-breadcrumb__link--current">{{ .Title }}</span></li>
-      </ul>
-    </div>
+  <nav class="tutorial-breadcrumbs fd-breadcrumb" aria-label="Breadcrumb">
+    <ul class="fd-breadcrumb__list">
+      <li class="fd-breadcrumb__item"><a class="fd-breadcrumb__link" href="/">Tutorial Navigator</a></li>
+      <li class="fd-breadcrumb__item fd-breadcrumb__item--current">
+        <button type="button" id="nav-dropdown-toggle" class="breadcrumb-dropdown-toggle" aria-expanded="false" aria-haspopup="true">
+          {{ .Title }} <span class="breadcrumb-chevron">▾</span>
+        </button>
+      </li>
+    </ul>
+    <div id="nav-dropdown-mount" data-slug="{{ .Params.slug }}" class="nav-dropdown-container"></div>
   </nav>
 
   <!-- Hero -->
@@ -84,4 +87,5 @@ document.addEventListener('DOMContentLoaded', function() {
   if (firstCard) firstCard.classList.add('expanded');
 });
 </script>
+<script type="module" src="/js/nav-dropdown.js"></script>
 {{ end }}
