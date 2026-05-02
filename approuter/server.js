@@ -91,7 +91,7 @@ function staticHandler(req, res, next) {
 // Workaround: approuter destination proxy fails locally on Windows.
 // Forward API routes directly to CAP backend, applying xs-app.json rewrites.
 const CAP_URL = process.env.CAP_BASE_URL || 'http://localhost:4004'
-const PROXY_PREFIXES = ['/api/', '/build/', '/content/', '/admin/', '/display/', '/search/', '/rest/', '/health', '/.well-known/', '/ord/', '/auth/', '/tutorials/']
+const PROXY_PREFIXES = ['/api/', '/build/', '/content/', '/admin/', '/display/', '/search/', '/rest/', '/ws/', '/health', '/.well-known/', '/ord/', '/auth/', '/tutorials/']
 const REWRITES = [
   { match: /^\/tutorials\/(.*)/, replace: '/content/tutorials/$1' }
 ]
@@ -142,4 +142,31 @@ ar.start({
       }
     }
   ]
+}, (err, server) => {
+  if (err) { console.error(err); process.exit(1) }
+  if (!server) return
+  server.on('upgrade', (req, socket, head) => {
+    if (!PROXY_PREFIXES.some(p => req.url.startsWith(p))) return socket.destroy()
+    const target = new URL(req.url, CAP_URL)
+    const opts = {
+      hostname: target.hostname,
+      port: target.port,
+      path: target.pathname + target.search,
+      method: 'GET',
+      headers: { ...req.headers, host: target.host }
+    }
+    const proxyReq = http.request(opts)
+    proxyReq.on('upgrade', (proxyRes, proxySocket, proxyHead) => {
+      socket.write(
+        `HTTP/1.1 ${proxyRes.statusCode} ${proxyRes.statusMessage}\r\n` +
+        Object.entries(proxyRes.headers).map(([k, v]) => `${k}: ${v}`).join('\r\n') +
+        '\r\n\r\n'
+      )
+      if (proxyHead.length) socket.write(proxyHead)
+      proxySocket.pipe(socket)
+      socket.pipe(proxySocket)
+    })
+    proxyReq.on('error', () => socket.destroy())
+    proxyReq.end()
+  })
 })

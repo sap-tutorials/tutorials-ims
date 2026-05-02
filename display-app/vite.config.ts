@@ -10,12 +10,14 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/ims-proxy': {
-        target: 'https://imsprod-approuter.cfapps.us30.hana.ondemand.com',
+      '/ws': {
+        target: 'http://localhost:4004',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/ims-proxy/, ''),
-        secure: true,
         ws: true,
+      },
+      '/rest': {
+        target: 'http://localhost:4004',
+        changeOrigin: true,
       },
     },
   },

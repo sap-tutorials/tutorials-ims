@@ -65,6 +65,13 @@
       "csrfProtection": false
     },
     {
+      "source": "^/ws/(.*)$",
+      "target": "/ws/$1",
+      "destination": "srv-api",
+      "authenticationType": "none",
+      "csrfProtection": false
+    },
+    {
       "source": "^/rest/(.*)$",
       "target": "/rest/$1",
       "destination": "srv-api",
