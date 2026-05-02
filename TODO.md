@@ -283,7 +283,7 @@ First comprehensive security audit of the full implementation. Findings ranked b
 |-------|--------|
 | Category | Open Redirect / Phishing |
 | Confidence | 9/10 |
-| Status | [ ] Open |
+| Status | [x] Fixed |
 
 **Description:** The display app reads `participateUrl` from URL query parameters without validation and renders it as a QR code + clickable `<a href>` link. Any URL (including phishing sites) can be injected.
 

@@ -28,6 +28,18 @@ const participateUrl = ref('')
 const isDark = ref(false)
 const goalTarget = ref(5000)
 
+const ALLOWED_URL_PATTERNS = [
+  /^https:\/\/([a-z0-9-]+\.)*sap\.com(\/|$)/i,
+  /^https:\/\/([a-z0-9-]+\.)*hana\.ondemand\.com(\/|$)/i,
+  /^https:\/\/([a-z0-9-]+\.)*cfapps\.[a-z0-9-]+\.hana\.ondemand\.com(\/|$)/i,
+  /^https:\/\/([a-z0-9-]+\.)*cloud\.sap(\/|$)/i,
+]
+
+function isAllowedUrl(url: string): boolean {
+  if (!url) return false
+  return ALLOWED_URL_PATTERNS.some(pattern => pattern.test(url))
+}
+
 // ── Rotation State ───────────────────────────────
 const activeViewIndex = ref(0)
 const prevViewIndex = ref(-1)
@@ -164,7 +176,8 @@ onMounted(() => {
   chartCount.value = parseInt(p.get('chartCount') ?? '') || 5
   rankCount.value = parseInt(p.get('rankCount') ?? '') || 5
   startView.value = parseInt(p.get('startView') ?? '') || 0
-  participateUrl.value = p.get('participateUrl') ?? ''
+  const rawUrl = p.get('participateUrl') ?? ''
+  participateUrl.value = isAllowedUrl(rawUrl) ? rawUrl : ''
   goalTarget.value = parseInt(p.get('goalTarget') ?? '') || 5000
   const t = p.get('theme')
   if (t === 'joule' || t === 'sapphire') theme.value = t
