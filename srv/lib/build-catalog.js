@@ -61,7 +61,7 @@ export async function buildCatalogHandler(req, res) {
 
     res.json({ missions: missionList, hierarchies });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: 'Build catalog query failed', detail: msg });
+    console.error('[build/catalog]', err instanceof Error ? err.message : String(err));
+    res.status(500).json({ error: 'Build catalog query failed' });
   }
 }

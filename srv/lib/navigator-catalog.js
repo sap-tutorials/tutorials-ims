@@ -69,7 +69,7 @@ export async function navigatorCatalogHandler(req, res) {
     res.setHeader('X-Cache', 'MISS');
     res.json(result);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: 'Navigator catalog query failed', detail: msg });
+    console.error('[build/navigator]', err instanceof Error ? err.message : String(err));
+    res.status(500).json({ error: 'Navigator catalog query failed' });
   }
 }

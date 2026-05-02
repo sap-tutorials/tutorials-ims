@@ -297,7 +297,7 @@ First comprehensive security audit of the full implementation. Findings ranked b
 |-------|--------|
 | Category | Data Exposure |
 | Confidence | 8/10 |
-| Status | [ ] Open |
+| Status | [x] Fixed |
 
 **Description:** `/health/db`, `/build/catalog`, and `/build/navigator` (all unauthenticated) return raw `err.message` from database failures. HANA errors typically include hostnames, ports, and connection parameters.
 

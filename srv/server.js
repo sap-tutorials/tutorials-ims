@@ -29,7 +29,8 @@ cds.on('bootstrap', (app) => {
       await cds.db?.run('SELECT 1 FROM DUMMY');
       res.json({ status: 'ok', db: 'connected' });
     } catch (err) {
-      res.status(503).json({ status: 'degraded', db: 'error', message: err.message });
+      console.error('[health/db]', err.message);
+      res.status(503).json({ status: 'degraded', db: 'error' });
     }
   });
 
