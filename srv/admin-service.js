@@ -371,6 +371,10 @@ export default class AdminService extends cds.ApplicationService {
     });
 
     await super.init();
+
+    // Allow standalone read access to ChangeView (plugin sets Readable:false by default)
+    const changeView = this.model.definitions['AdminService.ChangeView'];
+    if (changeView) changeView['@Capabilities.ReadRestrictions.Readable'] = true;
   }
 
   async _executeAnonymization(user) {
