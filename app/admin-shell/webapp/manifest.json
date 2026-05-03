@@ -131,7 +131,6 @@
         "clearControlAggregation": false
       },
       "routes": [
-        { "name": "home", "pattern": "home", "target": "homeTarget" },
         { "name": "events", "pattern": "events", "target": "eventsTarget" },
         { "name": "missions", "pattern": "missions", "target": "missionsTarget" },
         { "name": "groups", "pattern": "groups", "target": "groupsTarget" },
@@ -148,10 +147,6 @@
         { "name": "privacy", "pattern": "privacy", "target": "privacyTarget" }
       ],
       "targets": {
-        "homeTarget": {
-          "viewName": "Home",
-          "viewLevel": 0
-        },
         "eventsTarget": {
           "viewName": "Events",
           "viewLevel": 1

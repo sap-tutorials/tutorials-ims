@@ -6,7 +6,7 @@ sap.ui.define([
   "use strict";
 
   var NAV_KEY_TO_ROUTE = {
-    home: "home",
+    dashboard: "dashboard",
     events: "events",
     missions: "missions",
     groups: "groups",
@@ -24,7 +24,7 @@ sap.ui.define([
   };
 
   var NAV_KEY_TO_TITLE = {
-    home: "",
+    dashboard: "Dashboard",
     events: "Events",
     missions: "Missions",
     groups: "Groups",

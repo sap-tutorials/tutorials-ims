@@ -34,7 +34,6 @@
         { "key": "accounts", "title": "Accounts", "icon": "sap-icon://person-placeholder" },
         { "key": "changelog", "title": "Change Log", "icon": "sap-icon://history" },
         { "key": "board", "title": "Board", "icon": "sap-icon://overview-chart" },
-        { "key": "dashboard", "title": "Dashboard", "icon": "sap-icon://monitor-payments" },
         { "key": "statistics", "title": "Statistics", "icon": "sap-icon://bar-chart" },
         { "key": "privacy", "title": "Privacy", "icon": "sap-icon://shield" }
       ]

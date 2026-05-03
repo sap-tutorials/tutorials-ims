@@ -36,7 +36,7 @@
     <tnt:sideContent>
       <tnt:SideNavigation id="sideNav" selectedKey="{nav>/selectedNavKey}" itemSelect=".onNavItemSelect">
         <tnt:NavigationList>
-          <tnt:NavigationListItem text="Home" icon="sap-icon://home" key="home" />
+          <tnt:NavigationListItem text="Dashboard" icon="sap-icon://monitor-payments" key="dashboard" />
           <tnt:NavigationListItem text="Content" icon="sap-icon://folder-blank" expanded="true">
             <tnt:NavigationListItem text="Events" icon="sap-icon://calendar" key="events" />
             <tnt:NavigationListItem text="Missions" icon="sap-icon://target-group" key="missions" />
@@ -53,7 +53,6 @@
             <tnt:NavigationListItem text="Accounts" icon="sap-icon://person-placeholder" key="accounts" />
             <tnt:NavigationListItem text="Change Log" icon="sap-icon://history" key="changelog" />
             <tnt:NavigationListItem text="Board" icon="sap-icon://overview-chart" key="board" />
-            <tnt:NavigationListItem text="Dashboard" icon="sap-icon://monitor-payments" key="dashboard" />
             <tnt:NavigationListItem text="Statistics" icon="sap-icon://bar-chart" key="statistics" />
             <tnt:NavigationListItem text="Privacy" icon="sap-icon://shield" key="privacy" />
           </tnt:NavigationListItem>
