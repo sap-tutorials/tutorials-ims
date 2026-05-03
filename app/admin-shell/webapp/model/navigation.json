@@ -1,0 +1,43 @@
+{
+  "selectedNavKey": "home",
+  "groups": [
+    {
+      "key": "content",
+      "title": "Content",
+      "icon": "sap-icon://folder-blank",
+      "expanded": true,
+      "items": [
+        { "key": "events", "title": "Events", "icon": "sap-icon://calendar" },
+        { "key": "missions", "title": "Missions", "icon": "sap-icon://target-group" },
+        { "key": "groups", "title": "Groups", "icon": "sap-icon://group" },
+        { "key": "tutorials", "title": "Tutorials", "icon": "sap-icon://education" },
+        { "key": "tags", "title": "Tags", "icon": "sap-icon://tags" }
+      ]
+    },
+    {
+      "key": "rewards",
+      "title": "Rewards",
+      "icon": "sap-icon://gift",
+      "expanded": true,
+      "items": [
+        { "key": "accomplishments", "title": "Accomplishments", "icon": "sap-icon://badge" },
+        { "key": "prizes", "title": "Prizes", "icon": "sap-icon://gift" }
+      ]
+    },
+    {
+      "key": "system",
+      "title": "System",
+      "icon": "sap-icon://action-settings",
+      "expanded": true,
+      "items": [
+        { "key": "operations", "title": "Operations", "icon": "sap-icon://action-settings" },
+        { "key": "accounts", "title": "Accounts", "icon": "sap-icon://person-placeholder" },
+        { "key": "changelog", "title": "Change Log", "icon": "sap-icon://history" },
+        { "key": "board", "title": "Board", "icon": "sap-icon://dashboard" },
+        { "key": "dashboard", "title": "Dashboard", "icon": "sap-icon://monitor-payments" },
+        { "key": "statistics", "title": "Statistics", "icon": "sap-icon://bar-chart" },
+        { "key": "privacy", "title": "Privacy", "icon": "sap-icon://shield" }
+      ]
+    }
+  ]
+}
