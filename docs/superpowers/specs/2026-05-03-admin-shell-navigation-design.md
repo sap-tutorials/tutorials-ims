@@ -52,7 +52,7 @@ app/admin-shell/
 | `sap.tnt.NavigationList` | Groups within the side nav |
 | `sap.tnt.NavigationListItem` | Individual nav items (nested = collapsible groups) |
 | `sap.m.ToolHeader` | Shell header bar |
-| `sap.m.NavContainer` | Content area — Router places View/Component targets here |
+| `sap.m.App` | Content area — Router places View/Component targets here |
 
 ### Shell OData Model
 
@@ -115,22 +115,24 @@ One entry per feature component (events, missions, groups, tutorials, tags, acco
 
 #### Component Loading via Router Targets
 
-The shell does NOT use a single shared `<ComponentContainer>` with bindable `usage`. Instead, the UI5 Router manages component creation and placement using `type: "Component"` targets. The shell view provides a `NavContainer` as the content area:
+The shell does NOT use a single shared `<ComponentContainer>` with bindable `usage`. Instead, the UI5 Router manages component creation and placement using `type: "Component"` targets. The shell view provides an `sap.m.App` as the content area:
 
 ```xml
 <!-- In Shell.view.xml, inside ToolPage mainContents -->
-<NavContainer id="contentArea" />
+<App id="contentArea" />
 ```
 
-The Router places both View targets and Component targets into this container's `pages` aggregation. The Router creates `ComponentContainer` instances automatically for Component targets — no explicit `<ComponentContainer>` in the view XML.
+`sap.m.App` extends `NavContainer` and is the idiomatic control for Router-managed page hosting — it properly handles both View pages and ComponentContainer pages that the Router creates automatically for Component targets. No explicit `<ComponentContainer>` in the view XML.
 
-Routing configuration (full example in shell `manifest.json`):
+Routing configuration (partial example — shows representative route types; see Shell-Level Routes for the complete list):
 
 ```json
 {
   "routing": {
     "config": {
       "routerClass": "sap.m.routing.Router",
+      "viewType": "XML",
+      "viewPath": "sap.tutorials.admin.shell.view",
       "controlId": "contentArea",
       "controlAggregation": "pages",
       "clearControlAggregation": false
@@ -190,7 +192,7 @@ Routing configuration (full example in shell `manifest.json`):
 
 Key points:
 
-- `clearControlAggregation: false` preserves previously loaded components in the NavContainer (they're hidden, not destroyed) — this enables session-state preservation
+- `clearControlAggregation: false` tells the Router not to remove previously placed pages from the App control when navigating — loaded pages remain in the `pages` aggregation and are simply shown/hidden by the Router, enabling session-state preservation
 - `type: "View"` targets handle shell-internal views (Board, Statistics, etc.)
 - `type: "Component"` targets handle Fiori Elements apps via `componentUsages`
 - `bypassed` configuration redirects invalid hashes back to Home
@@ -245,7 +247,7 @@ Some feature components (notably `operations` and `accounts`) have multiple inte
 ### Component Lifecycle
 
 - Components are loaded lazily on first access (Router creates the ComponentContainer on first route match)
-- Once loaded, they remain in the `NavContainer`'s `pages` aggregation for the session duration (`clearControlAggregation: false`)
+- Once loaded, they remain in the App control's `pages` aggregation for the session duration (`clearControlAggregation: false`)
 - Navigation between features shows the target page and hides others — no destroy/recreate
 - This preserves in-progress state (e.g., unsaved draft edits, scroll position) within a session
 - Memory is bounded by the number of features (max 14 pages) — acceptable for an admin tool
@@ -355,7 +357,7 @@ When in "Auto" mode, a `matchMedia` change listener updates the theme in real-ti
 ### Implementation
 
 ```javascript
-// In Component.js init()
+// In Component.js init() — requires: sap/ui/core/Theming
 const stored = localStorage.getItem("sap-tutorials-admin-theme");
 const osDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
 const theme = stored || (osDark ? "sap_horizon_dark" : "sap_horizon");
