@@ -1,0 +1,12 @@
+{
+  "name": "admin-shell",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "start": "ui5 serve --open index.html",
+    "build": "ui5 build --clean-dest --dest dist && node scripts/copy-components.js"
+  },
+  "devDependencies": {
+    "@ui5/cli": "^4.0.0"
+  }
+}

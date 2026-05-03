@@ -21,20 +21,19 @@ const STATIC_DIR = join(__dirname, 'static')
 const TEMP_DIR = join(__dirname, 'static-new')
 const OLD_DIR = join(__dirname, 'static-old')
 
-// Admin UI5 apps served directly by the approuter (replaces cds-plugin-ui5)
+// Admin shell + feature components served directly by approuter
 const APP_MOUNTS = {
-  '/apps/events': join(__dirname, '..', 'app', 'admin', 'events', 'webapp'),
-  '/apps/missions': join(__dirname, '..', 'app', 'admin', 'missions', 'webapp'),
-  '/apps/groups': join(__dirname, '..', 'app', 'admin', 'groups', 'webapp'),
-  '/apps/tutorials': join(__dirname, '..', 'app', 'admin', 'tutorials', 'webapp'),
-  '/apps/tags': join(__dirname, '..', 'app', 'admin', 'tags', 'webapp'),
-  '/apps/accomplishments': join(__dirname, '..', 'app', 'admin', 'accomplishments', 'webapp'),
-  '/apps/prizes': join(__dirname, '..', 'app', 'admin', 'prizes', 'webapp'),
-  '/apps/operations': join(__dirname, '..', 'app', 'admin', 'operations', 'webapp'),
-  '/apps/accounts': join(__dirname, '..', 'app', 'admin', 'accounts', 'webapp'),
-  '/apps/changelog': join(__dirname, '..', 'app', 'admin', 'changelog', 'webapp'),
-  '/admin-custom': join(__dirname, '..', 'app', 'admin-custom', 'webapp'),
-  '/admin-flp': join(__dirname, '..', 'app', 'admin-flp', 'webapp')
+  '/admin-ui/components/events': join(__dirname, '..', 'app', 'admin', 'events', 'webapp'),
+  '/admin-ui/components/missions': join(__dirname, '..', 'app', 'admin', 'missions', 'webapp'),
+  '/admin-ui/components/groups': join(__dirname, '..', 'app', 'admin', 'groups', 'webapp'),
+  '/admin-ui/components/tutorials': join(__dirname, '..', 'app', 'admin', 'tutorials', 'webapp'),
+  '/admin-ui/components/tags': join(__dirname, '..', 'app', 'admin', 'tags', 'webapp'),
+  '/admin-ui/components/accomplishments': join(__dirname, '..', 'app', 'admin', 'accomplishments', 'webapp'),
+  '/admin-ui/components/prizes': join(__dirname, '..', 'app', 'admin', 'prizes', 'webapp'),
+  '/admin-ui/components/operations': join(__dirname, '..', 'app', 'admin', 'operations', 'webapp'),
+  '/admin-ui/components/accounts': join(__dirname, '..', 'app', 'admin', 'accounts', 'webapp'),
+  '/admin-ui/components/changelog': join(__dirname, '..', 'app', 'admin', 'changelog', 'webapp'),
+  '/admin-ui': join(__dirname, '..', 'app', 'admin-shell', 'webapp')
 }
 const appServers = Object.entries(APP_MOUNTS).map(([prefix, dir]) => ({
   prefix,
@@ -122,8 +121,16 @@ function staticHandler(req, res, next) {
 
 // Workaround: approuter destination proxy fails locally on Windows.
 // Forward API routes directly to CAP backend, applying xs-app.json rewrites.
+// In production (CF), /admin/ and /display/ are routed through xs-app.json with
+// authenticationType: "xsuaa", which enforces OAuth before reaching the CAP backend.
+// Locally we proxy them directly since there's no real XSUAA binding.
 const CAP_URL = process.env.CAP_BASE_URL || 'http://localhost:4004'
-const PROXY_PREFIXES = ['/api/', '/build/', '/content/', '/search/', '/rest/', '/ws/', '/socket.io/', '/health', '/.well-known/', '/ord/', '/auth/', '/tutorials/']
+const isLocal = !process.env.VCAP_APPLICATION
+const PROXY_PREFIXES = [
+  '/api/', '/build/', '/content/', '/search/', '/rest/', '/ws/',
+  '/socket.io/', '/health', '/.well-known/', '/ord/', '/auth/', '/tutorials/',
+  ...(isLocal ? ['/admin/', '/display/'] : [])
+]
 const REWRITES = [
   { match: /^\/tutorials\/(.*)/, replace: '/content/tutorials/$1' }
 ]
@@ -198,12 +205,19 @@ function proxyHandler(req, res, next) {
   }
 
   const target = new URL(url, CAP_URL)
+  const headers = { ...req.headers, host: target.host }
+  if (isLocal && !headers.authorization) {
+    const mockUser = url.startsWith('/admin/') ? 'admin:admin'
+      : url.startsWith('/display/') ? 'display:display'
+      : 'developer:developer'
+    headers.authorization = 'Basic ' + Buffer.from(mockUser).toString('base64')
+  }
   const opts = {
     hostname: target.hostname,
     port: target.port,
     path: target.pathname + target.search,
     method: req.method,
-    headers: { ...req.headers, host: target.host }
+    headers
   }
 
   const proxyReq = http.request(opts, (proxyRes) => {

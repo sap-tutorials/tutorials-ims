@@ -20,7 +20,7 @@ npm run build:hugo                            # Hugo static build only
 npm run build:css                             # PostCSS → hugo/static/css/sap-fundamental.css
 npm run build:apps                            # Vue 3 public-facing apps (apps/)
 npm run build:display                         # Display dashboard app (display-app/)
-npm run build:admin                           # Fiori Elements admin apps (app/admin + app/admin-custom)
+npm run build:admin                           # Admin shell with embedded Fiori Elements components (app/admin-shell)
 npm run generate-dark-theme                   # Generate dark theme CSS variables
 npm run validate-tutorials                    # Validate fetched tutorial structure
 npm run discover-repos                        # List available tutorial repos without fetching
@@ -89,13 +89,13 @@ Tutorial HTML is NOT served from static files. After Hugo builds, `publish-conte
 
 ### Admin UI (app/)
 
-- **`app/admin/`** — 9 Fiori Elements List Report + Object Page apps (events, missions, groups, accomplishments, prizes, tutorials, tags, operations, accounts)
-- **`app/admin-custom/`** — Freestyle SAPUI5 app (Board, Dashboard, Statistics, Privacy views)
-- **`app/admin-flp/`** — FLP sandbox for local development only
+- **`app/admin-shell/`** — Unified admin shell using `sap.tnt.ToolPage` with collapsible side navigation, theme switching (light/dark/auto), and Router-managed content area
+- **`app/admin/`** — 10 Fiori Elements apps (events, missions, groups, accomplishments, prizes, tutorials, tags, operations, accounts, changelog) — loaded as headless components by the shell via `componentUsages`
 - **`app/admin-annotations.cds`** — All @UI/@Common CDS annotations for admin screens
 - Deployed via HTML5 Application Repository (`tutorials-admin-ui-deployer` module in mta.yaml)
 - **Production access**: `/admin-ui/` route (XSUAA-protected, served from HTML5 App Repository)
-- **Local dev access**: `/apps/<appname>/` (e.g. `/apps/tutorials/`, `/apps/events/`) — served by `cds-plugin-ui5` at these mount paths to avoid collisions with OData's `/admin/` service path
+- **Local dev access**: `/admin-ui/` — served by `adminAppsHandler` middleware in `approuter/server.js`; component sub-resources at `/admin-ui/components/<name>/`
+- **Theme**: `sap_horizon` (light) / `sap_horizon_dark` (dark), auto-detects OS preference, persisted to `localStorage` key `sap-tutorials-admin-theme`
 
 ### Frontend (Hugo + Vue 3)
 
@@ -161,8 +161,8 @@ Smoke test files in `test/smoke/`:
 - **Cache clearing** — `.tutorial-cache/` caches raw markdown, GitHub metadata, and CAP catalog data. Delete it to force a full re-fetch. There is no incremental invalidation.
 - **Node.js >= 20 required** — Build scripts use native `fetch` (no polyfill).
 - **Slug fields** — `Missions.slug` and `CompletionPaths.slug` must be populated for the build pipeline to generate mission/group pages. Run `node scripts/migrate-reference-data.js populate-slugs` after data import.
-- **`app/` vs `apps/` vs `display-app/`** — Three separate directories. `app/` contains SAPUI5 admin screens (Fiori Elements + custom); in production these are served from HTML5 App Repository at `/admin-ui/`, but locally `cds-plugin-ui5` mounts them at `/apps/*`. `apps/` contains Vue 3 public-facing components bundled by Vite. `display-app/` is a standalone Vue+Vite dashboard app for event monitors. Do not mix them.
-- **`/admin/` is OData only** — The AdminService OData endpoint lives at `/admin/`. UI5 admin apps are mounted at `/apps/` locally (and `/admin-ui/` in production) to avoid path collisions. On Windows, the case-insensitive filesystem causes `express.static` to match `/admin/Tutorials` to the physical `app/admin/tutorials/` directory — the monkey-patch in `srv/server.js` disables directory redirects to prevent this.
+- **`app/` vs `apps/` vs `display-app/`** — Three separate directories. `app/` contains SAPUI5 admin apps: `app/admin-shell/` is the unified shell (sap.tnt.ToolPage with side navigation) and `app/admin/` holds 10 Fiori Elements feature components loaded by the shell. In production, deployed via HTML5 App Repository at `/admin-ui/`; locally, the approuter's `adminAppsHandler` middleware mounts them at `/admin-ui/`. `apps/` contains Vue 3 public-facing components bundled by Vite. `display-app/` is a standalone Vue+Vite dashboard app for event monitors. Do not mix them.
+- **`/admin/` is OData only** — The AdminService OData endpoint lives at `/admin/`. The admin shell UI is served at `/admin-ui/` to avoid path collisions.
 - **Hugo vs VitePress** — The project migrated from VitePress to Hugo. The `site/.vitepress/` directory still exists (with a built `dist/`) but is legacy. Active frontend work targets `hugo/`.
 - **`CONTENT_API_KEY` env var** — Required for `POST /content/publish` and `POST /content/rollback`. Set in CI secrets and locally when testing publish. Without it, publish requests return 401.
 - **Tutorials are DB-only** — Tutorial HTML is served exclusively from HANA BLOBs. There is no static file fallback. If no content has been published to HANA, `/tutorials/*` returns 404.

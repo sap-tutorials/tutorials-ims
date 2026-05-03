@@ -1,0 +1,124 @@
+<h2>Admin Shell Layout</h2>
+<p class="subtitle">sap.tnt.ToolPage pattern — collapsible side nav + header with theme toggle</p>
+
+<div class="mockup">
+  <div class="mockup-header">Proposed Layout — Light Mode (expanded nav)</div>
+  <div class="mockup-body" style="padding:0;height:500px;display:flex;flex-direction:column;background:#f5f6f7;">
+    <!-- Shell Header -->
+    <div style="background:#354a5f;color:#fff;padding:10px 16px;display:flex;align-items:center;gap:12px;font-size:13px;flex-shrink:0;">
+      <div style="cursor:pointer;font-size:18px;opacity:0.8;">&#9776;</div>
+      <svg viewBox="0 0 92 92" fill="currentColor" style="width:22px;height:22px;opacity:0.9;">
+        <path d="M0 46C0 20.6 20.6 0 46 0s46 20.6 46 46-20.6 46-46 46S0 71.4 0 46zm50.8-11.3c-1 0-1.7.2-2.4.5l-8.7 4.3c-.8.4-1.5.5-2.4.5h-2.1v-5.3h-8.6v23h8.6v-5.4h2.1c.8 0 1.6.2 2.4.5l8.7 4.3c.6.3 1.4.5 2.4.5h7.8V34.7h-7.8z"/>
+      </svg>
+      <span style="font-weight:400;">Tutorial Platform — Admin Console</span>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:16px;">
+        <div style="background:rgba(255,255,255,0.15);border-radius:12px;padding:3px 10px;font-size:11px;cursor:pointer;">&#9788; / &#9790;</div>
+        <div style="width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;font-size:12px;">TJ</div>
+      </div>
+    </div>
+    <!-- Body -->
+    <div style="display:flex;flex:1;overflow:hidden;">
+      <!-- Side Nav -->
+      <div style="width:220px;background:#fff;border-right:1px solid #e4e4e4;overflow-y:auto;flex-shrink:0;font-size:12px;">
+        <div style="padding:12px 16px 6px;font-size:10px;font-weight:700;color:#556b82;text-transform:uppercase;letter-spacing:0.05em;">Content</div>
+        <div style="padding:8px 16px;color:#0070f2;background:#e8f4fd;border-left:3px solid #0070f2;font-weight:600;">&#xe034; Events</div>
+        <div style="padding:8px 16px;color:#1d2d3e;">&#xe10c; Missions</div>
+        <div style="padding:8px 16px;color:#1d2d3e;">&#xe0e5; Groups</div>
+        <div style="padding:8px 16px;color:#1d2d3e;">&#xe1c4; Tutorials</div>
+        <div style="padding:8px 16px;color:#1d2d3e;">&#xe0e8; Tags</div>
+        <div style="padding:12px 16px 6px;font-size:10px;font-weight:700;color:#556b82;text-transform:uppercase;letter-spacing:0.05em;border-top:1px solid #e4e4e4;margin-top:4px;">Rewards</div>
+        <div style="padding:8px 16px;color:#1d2d3e;">&#xe071; Accomplishments</div>
+        <div style="padding:8px 16px;color:#1d2d3e;">&#xe160; Prizes</div>
+        <div style="padding:12px 16px 6px;font-size:10px;font-weight:700;color:#556b82;text-transform:uppercase;letter-spacing:0.05em;border-top:1px solid #e4e4e4;margin-top:4px;">System</div>
+        <div style="padding:8px 16px;color:#1d2d3e;">&#xe024; Operations</div>
+        <div style="padding:8px 16px;color:#1d2d3e;">&#xe066; Accounts</div>
+        <div style="padding:8px 16px;color:#1d2d3e;">&#xe0b1; Change Log</div>
+        <div style="padding:8px 16px;color:#1d2d3e;">&#xe178; Board</div>
+      </div>
+      <!-- Content Area -->
+      <div style="flex:1;padding:20px;overflow-y:auto;">
+        <div style="font-size:16px;font-weight:600;color:#1d2d3e;margin-bottom:4px;">Events</div>
+        <div style="font-size:11px;color:#556b82;margin-bottom:16px;">Create and manage learning events</div>
+        <div style="background:#fff;border:1px solid #e4e4e4;border-radius:4px;padding:12px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+            <input type="text" placeholder="Search" style="flex:1;padding:6px 10px;border:1px solid #d4d4d4;border-radius:4px;font-size:11px;">
+            <div style="background:#0070f2;color:white;padding:6px 12px;border-radius:4px;font-size:11px;">+ Create</div>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:11px;">
+            <tr style="background:#f5f6f7;font-weight:600;color:#556b82;">
+              <td style="padding:8px;border-bottom:1px solid #e4e4e4;">Name</td>
+              <td style="padding:8px;border-bottom:1px solid #e4e4e4;">Status</td>
+              <td style="padding:8px;border-bottom:1px solid #e4e4e4;">Date</td>
+            </tr>
+            <tr><td style="padding:8px;border-bottom:1px solid #f0f0f0;color:#0070f2;">CAP CodeJam Berlin</td><td style="padding:8px;border-bottom:1px solid #f0f0f0;">Active</td><td style="padding:8px;border-bottom:1px solid #f0f0f0;">2026-05-15</td></tr>
+            <tr><td style="padding:8px;border-bottom:1px solid #f0f0f0;color:#0070f2;">HANA AI Workshop</td><td style="padding:8px;border-bottom:1px solid #f0f0f0;">Draft</td><td style="padding:8px;border-bottom:1px solid #f0f0f0;">2026-06-01</td></tr>
+            <tr><td style="padding:8px;color:#0070f2;">ABAP Cloud Summit</td><td style="padding:8px;">Completed</td><td style="padding:8px;">2026-04-20</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:24px;"></div>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">Collapsed Nav (icon-only)</div>
+    <div class="mockup-body" style="padding:0;height:300px;display:flex;flex-direction:column;background:#f5f6f7;">
+      <div style="background:#354a5f;color:#fff;padding:8px 12px;display:flex;align-items:center;gap:10px;font-size:12px;flex-shrink:0;">
+        <div>&#9776;</div>
+        <span>Admin Console</span>
+        <div style="margin-left:auto;font-size:10px;">&#9788;/&#9790;</div>
+      </div>
+      <div style="display:flex;flex:1;overflow:hidden;">
+        <div style="width:44px;background:#fff;border-right:1px solid #e4e4e4;padding-top:8px;text-align:center;font-size:14px;line-height:2.2;">
+          <div style="color:#0070f2;">&#xe034;</div>
+          <div>&#xe10c;</div>
+          <div>&#xe0e5;</div>
+          <div>&#xe1c4;</div>
+          <div style="border-top:1px solid #e4e4e4;margin-top:4px;padding-top:4px;">&#xe071;</div>
+          <div>&#xe160;</div>
+          <div style="border-top:1px solid #e4e4e4;margin-top:4px;padding-top:4px;">&#xe024;</div>
+          <div>&#xe066;</div>
+        </div>
+        <div style="flex:1;padding:16px;font-size:11px;color:#556b82;">
+          <div style="font-weight:600;color:#1d2d3e;margin-bottom:8px;">Events</div>
+          <div style="background:#fff;border:1px solid #e4e4e4;border-radius:4px;padding:12px;">Content area gets more space...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="mockup">
+    <div class="mockup-header">Dark Mode</div>
+    <div class="mockup-body" style="padding:0;height:300px;display:flex;flex-direction:column;background:#1c2228;">
+      <div style="background:#1a2733;color:#d4e3f5;padding:8px 12px;display:flex;align-items:center;gap:10px;font-size:12px;flex-shrink:0;border-bottom:1px solid #334455;">
+        <div>&#9776;</div>
+        <span>Admin Console</span>
+        <div style="margin-left:auto;font-size:10px;">&#9790;</div>
+      </div>
+      <div style="display:flex;flex:1;overflow:hidden;">
+        <div style="width:200px;background:#1e2a36;border-right:1px solid #334455;font-size:11px;padding-top:8px;">
+          <div style="padding:6px 14px;font-size:9px;font-weight:700;color:#7a99b5;text-transform:uppercase;">Content</div>
+          <div style="padding:7px 14px;color:#5db1ff;background:rgba(93,177,255,0.08);border-left:3px solid #5db1ff;">&#xe034; Events</div>
+          <div style="padding:7px 14px;color:#c8d8e8;">&#xe10c; Missions</div>
+          <div style="padding:7px 14px;color:#c8d8e8;">&#xe0e5; Groups</div>
+        </div>
+        <div style="flex:1;padding:16px;font-size:11px;color:#a0b8d0;">
+          <div style="font-weight:600;color:#e0ecf5;margin-bottom:8px;">Events</div>
+          <div style="background:#253340;border:1px solid #334455;border-radius:4px;padding:12px;">Dark themed content...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:20px;">
+  <h3>Key Interactions</h3>
+  <ul style="font-size:13px;line-height:1.8;color:#ccc;">
+    <li><strong>Hamburger icon</strong> toggles between expanded (220px) and collapsed (icon-only, ~48px)</li>
+    <li><strong>Section headers</strong> (Content, Rewards, System) are collapsible tree nodes</li>
+    <li><strong>Theme toggle</strong> in header switches sap_horizon ↔ sap_horizon_dark, persisted to localStorage</li>
+    <li><strong>Home icon</strong> (not shown) in the nav returns to tile grid view</li>
+  </ul>
+</div>

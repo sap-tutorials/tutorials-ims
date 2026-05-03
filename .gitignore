@@ -20,3 +20,7 @@ db.sqlite
 *.db
 .cdsrc-private.json
 default-env.json
+
+# Debug / scratch files
+_check-*.cjs
+cookies.txt

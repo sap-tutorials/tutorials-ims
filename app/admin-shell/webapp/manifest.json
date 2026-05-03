@@ -1,0 +1,212 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.shell",
+    "type": "application",
+    "title": "Admin Console",
+    "description": "Unified admin shell for tutorial platform management",
+    "applicationVersion": { "version": "0.0.1" },
+    "dataSources": {
+      "adminService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    }
+  },
+  "sap.ui": {
+    "technology": "UI5",
+    "deviceTypes": { "desktop": true, "tablet": true, "phone": true }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": {
+        "sap.m": {},
+        "sap.f": {},
+        "sap.tnt": {},
+        "sap.ui.core": {},
+        "sap.ui.layout": {},
+        "sap.ui.table": {}
+      }
+    },
+    "resourceRoots": {
+      "sap.tutorials.admin.events": "./components/events",
+      "sap.tutorials.admin.missions": "./components/missions",
+      "sap.tutorials.admin.groups": "./components/groups",
+      "sap.tutorials.admin.tutorials": "./components/tutorials",
+      "sap.tutorials.admin.tags": "./components/tags",
+      "sap.tutorials.admin.accomplishments": "./components/accomplishments",
+      "sap.tutorials.admin.prizes": "./components/prizes",
+      "sap.tutorials.admin.operations": "./components/operations",
+      "sap.tutorials.admin.accounts": "./components/accounts",
+      "sap.tutorials.admin.changelog": "./components/changelog"
+    },
+    "models": {
+      "admin": {
+        "dataSource": "adminService",
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": false
+        }
+      }
+    },
+    "componentUsages": {
+      "eventsComponent": {
+        "name": "sap.tutorials.admin.events",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "missionsComponent": {
+        "name": "sap.tutorials.admin.missions",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "groupsComponent": {
+        "name": "sap.tutorials.admin.groups",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "tutorialsComponent": {
+        "name": "sap.tutorials.admin.tutorials",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "tagsComponent": {
+        "name": "sap.tutorials.admin.tags",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "accomplishmentsComponent": {
+        "name": "sap.tutorials.admin.accomplishments",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "prizesComponent": {
+        "name": "sap.tutorials.admin.prizes",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "operationsComponent": {
+        "name": "sap.tutorials.admin.operations",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "accountsComponent": {
+        "name": "sap.tutorials.admin.accounts",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "changelogComponent": {
+        "name": "sap.tutorials.admin.changelog",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      }
+    },
+    "rootView": {
+      "viewName": "sap.tutorials.admin.shell.view.Shell",
+      "type": "XML",
+      "id": "shell"
+    },
+    "routing": {
+      "config": {
+        "routerClass": "sap.m.routing.Router",
+        "async": true,
+        "viewType": "XML",
+        "viewPath": "sap.tutorials.admin.shell.view",
+        "controlId": "contentArea",
+        "controlAggregation": "pages",
+        "clearControlAggregation": false
+      },
+      "routes": [
+        { "name": "events", "pattern": "events", "target": "eventsTarget" },
+        { "name": "missions", "pattern": "missions", "target": "missionsTarget" },
+        { "name": "groups", "pattern": "groups", "target": "groupsTarget" },
+        { "name": "tutorials", "pattern": "tutorials", "target": "tutorialsTarget" },
+        { "name": "tags", "pattern": "tags", "target": "tagsTarget" },
+        { "name": "accomplishments", "pattern": "accomplishments", "target": "accomplishmentsTarget" },
+        { "name": "prizes", "pattern": "prizes", "target": "prizesTarget" },
+        { "name": "operations", "pattern": "operations", "target": "operationsTarget" },
+        { "name": "accounts", "pattern": "accounts", "target": "accountsTarget" },
+        { "name": "changelog", "pattern": "changelog", "target": "changelogTarget" },
+        { "name": "board", "pattern": "board", "target": "boardTarget" },
+        { "name": "dashboard", "pattern": "", "target": "dashboardTarget" },
+        { "name": "statistics", "pattern": "statistics", "target": "statisticsTarget" },
+        { "name": "privacy", "pattern": "privacy", "target": "privacyTarget" }
+      ],
+      "targets": {
+        "eventsTarget": {
+          "viewName": "Events",
+          "viewLevel": 1
+        },
+        "missionsTarget": {
+          "viewName": "Missions",
+          "viewLevel": 1
+        },
+        "groupsTarget": {
+          "viewName": "Groups",
+          "viewLevel": 1
+        },
+        "tutorialsTarget": {
+          "viewName": "Tutorials",
+          "viewLevel": 1
+        },
+        "tagsTarget": {
+          "viewName": "Tags",
+          "viewLevel": 1
+        },
+        "accomplishmentsTarget": {
+          "viewName": "Accomplishments",
+          "viewLevel": 1
+        },
+        "prizesTarget": {
+          "viewName": "Prizes",
+          "viewLevel": 1
+        },
+        "operationsTarget": {
+          "viewName": "Operations",
+          "viewLevel": 1
+        },
+        "accountsTarget": {
+          "viewName": "Accounts",
+          "viewLevel": 1
+        },
+        "changelogTarget": {
+          "viewName": "Changelog",
+          "viewLevel": 1
+        },
+        "boardTarget": {
+          "viewName": "Board",
+          "viewLevel": 1
+        },
+        "dashboardTarget": {
+          "viewName": "TutorialDashboard",
+          "viewLevel": 1
+        },
+        "statisticsTarget": {
+          "viewName": "Statistics",
+          "viewLevel": 1
+        },
+        "privacyTarget": {
+          "viewName": "Privacy",
+          "viewLevel": 1
+        }
+      },
+      "bypassed": {
+        "target": "dashboardTarget"
+      }
+    }
+  }
+}

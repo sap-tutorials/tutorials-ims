@@ -72,20 +72,12 @@ modules:
 
   - name: tutorials-admin-ui-deployer
     type: com.sap.html5.application-content
-    path: app
+    path: app/admin-shell
     build-parameters:
       builder: custom
       commands:
-        - npm --prefix admin/events install && npm --prefix admin/events run build
-        - npm --prefix admin/missions install && npm --prefix admin/missions run build
-        - npm --prefix admin/groups install && npm --prefix admin/groups run build
-        - npm --prefix admin/accomplishments install && npm --prefix admin/accomplishments run build
-        - npm --prefix admin/prizes install && npm --prefix admin/prizes run build
-        - npm --prefix admin/tutorials install && npm --prefix admin/tutorials run build
-        - npm --prefix admin/tags install && npm --prefix admin/tags run build
-        - npm --prefix admin/operations install && npm --prefix admin/operations run build
-        - npm --prefix admin/accounts install && npm --prefix admin/accounts run build
-        - npm --prefix admin-custom install && npm --prefix admin-custom run build
+        - npm install && npm run build
+      build-result: dist
       supported-platforms: []
     requires:
       - name: tutorials-html5-repo-host

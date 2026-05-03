@@ -292,6 +292,7 @@ annotate AdminService.FailedEmails with @(
 );
 
 // ChangeView UI annotations are provided by @cap-js/change-tracking plugin (index.cds)
+// ReadRestrictions override is applied at runtime in srv/admin-service.js
 
 // --- PrimaryAccounts / SecondaryAccounts (read-only) ---
 annotate AdminService.PrimaryAccounts with @(

@@ -1,0 +1,74 @@
+<mvc:View
+  controllerName="sap.tutorials.admin.shell.controller.TutorialDashboard"
+  xmlns:mvc="sap.ui.core.mvc"
+  xmlns="sap.m"
+  xmlns:t="sap.ui.table"
+  xmlns:core="sap.ui.core"
+  xmlns:f="sap.ui.layout.form">
+  <Page title="Tutorial Dashboard" enableScrolling="false">
+    <headerContent>
+      <Button text="Sync Metadata" icon="sap-icon://synchronize" press=".onSyncMetadata" type="Emphasized"/>
+      <Button text="Send Notifications" icon="sap-icon://email" press=".onSendNotifications"/>
+    </headerContent>
+    <content>
+      <Toolbar class="sapUiSmallMarginTop">
+        <SearchField placeholder="Search tutorials..." liveChange=".onSearch" width="20%"/>
+        <ToolbarSpacer/>
+        <CheckBox text="Monitored by me" select=".onFilterMonitored"/>
+        <CheckBox text="Outdated only" select=".onFilterOutdated"/>
+      </Toolbar>
+
+      <t:Table id="tutorialMetaTable"
+        rows="{path: 'admin>/TutorialMeta', parameters: {$expand: 'tutorial($select=title,slug,primaryTag)'}}"
+        selectionMode="None"
+        visibleRowCount="20"
+        enableBusyIndicator="true"
+        enableColumnFreeze="true"
+        filter=".onColumnFilter">
+        <t:rowSettingsTemplate>
+          <t:RowSettings highlight="{parts: ['admin>reviewedDate'], formatter: '.formatRowHighlight'}"/>
+        </t:rowSettingsTemplate>
+        <t:columns>
+          <t:Column label="Tutorial" filterProperty="tutorial/title">
+            <t:template>
+              <Link text="{admin>tutorial/title}" press=".onTutorialLinkPress" wrapping="false"/>
+            </t:template>
+          </t:Column>
+          <t:Column label="Primary Tag" filterProperty="tutorial/primaryTag">
+            <t:template><Text text="{admin>tutorial/primaryTag}" wrapping="false"/></t:template>
+          </t:Column>
+          <t:Column label="Owner" filterProperty="owner">
+            <t:template><Text text="{admin>owner}" wrapping="false"/></t:template>
+          </t:Column>
+          <t:Column label="Status" filterProperty="monitoredStatus" width="7rem">
+            <t:template>
+              <ObjectStatus text="{admin>monitoredStatus}" state="{= ${admin>monitoredStatus} === 'CRITICAL' ? 'Error' : ${admin>monitoredStatus} === 'WARNING' ? 'Warning' : 'Success'}"/>
+            </t:template>
+          </t:Column>
+          <t:Column label="Last Reviewed" width="9rem">
+            <t:template><Text text="{path: 'admin>reviewedDate', type: 'sap.ui.model.type.Date', formatOptions: {style: 'medium'}}" wrapping="false"/></t:template>
+          </t:Column>
+          <t:Column label="Notifications" width="6rem">
+            <t:template>
+              <ObjectNumber number="{admin>notificationNumber}" state="{= ${admin>notificationNumber} >= 3 ? 'Error' : ${admin>notificationNumber} >= 1 ? 'Warning' : 'None'}"/>
+            </t:template>
+          </t:Column>
+          <t:Column label="Last Reminder" width="9rem">
+            <t:template><Text text="{path: 'admin>lastNotificationDate', type: 'sap.ui.model.type.Date', formatOptions: {style: 'medium'}}" wrapping="false"/></t:template>
+          </t:Column>
+        </t:columns>
+      </t:Table>
+
+      <Panel headerText="Notification Settings" expandable="true" expanded="false" class="sapUiSmallMarginTop">
+        <f:SimpleForm editable="true" layout="ResponsiveGridLayout">
+          <Label text="Notifications Enabled"/>
+          <Switch id="notifToggle" state="{notifConfig>/enabled}" change=".onToggleNotifications"/>
+          <Label text="Recipient Emails (comma-separated)"/>
+          <Input id="notifRecipients" value="{notifConfig>/recipients}" placeholder="admin@example.com, ops@example.com"/>
+          <Label text=""/>
+          <Button text="Save Recipients" press=".onSaveRecipients" type="Emphasized"/>
+        </f:SimpleForm>
+      </Panel>
+    </content>
+  </Page>
+</mvc:View>

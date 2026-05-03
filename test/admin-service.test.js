@@ -35,7 +35,7 @@ describe('AdminService', () => {
       expect(data.name).toBe('TechEd 2026');
       expect(data.ID).toBeDefined();
 
-      const { data: fetched } = await project.get(`/admin/Events(${data.ID})`, adminAuth);
+      const { data: fetched } = await project.get(`/admin/Events(ID=${data.ID},IsActiveEntity=${data.IsActiveEntity})`, adminAuth);
       expect(fetched.name).toBe('TechEd 2026');
     });
 
