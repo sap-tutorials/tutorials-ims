@@ -25,9 +25,9 @@
           selectedKey="{theme>/themeMode}"
           selectionChange=".onThemeChange">
           <items>
-            <SegmentedButtonItem key="auto" icon="sap-icon://circle-task-2" tooltip="Auto (OS)" />
+            <SegmentedButtonItem key="auto" icon="sap-icon://sys-monitor" tooltip="Auto (OS)" />
             <SegmentedButtonItem key="light" icon="sap-icon://lightbulb" tooltip="Light" />
-            <SegmentedButtonItem key="dark" icon="sap-icon://darkmode" tooltip="Dark" />
+            <SegmentedButtonItem key="dark" icon="sap-icon://dark-mode" tooltip="Dark" />
           </items>
         </SegmentedButton>
       </tnt:ToolHeader>
@@ -62,7 +62,7 @@
     </tnt:sideContent>
 
     <tnt:mainContents>
-      <App id="contentArea" />
+      <NavContainer id="contentArea" />
     </tnt:mainContents>
 
   </tnt:ToolPage>

@@ -78,7 +78,7 @@ sap.ui.define([
     },
 
     _onRouteMatched: function (oEvent) {
-      var sRouteName = oEvent.getParameter("name");
+      var sRouteName = oEvent.getParameter("name").replace("Deep", "");
       var oNavModel = this.getOwnerComponent().getModel("nav");
       if (oNavModel) {
         oNavModel.setProperty("/selectedNavKey", sRouteName);

@@ -205,12 +205,19 @@ function proxyHandler(req, res, next) {
   }
 
   const target = new URL(url, CAP_URL)
+  const headers = { ...req.headers, host: target.host }
+  if (isLocal && !headers.authorization) {
+    const mockUser = url.startsWith('/admin/') ? 'admin:admin'
+      : url.startsWith('/display/') ? 'display:display'
+      : 'developer:developer'
+    headers.authorization = 'Basic ' + Buffer.from(mockUser).toString('base64')
+  }
   const opts = {
     hostname: target.hostname,
     port: target.port,
     path: target.pathname + target.search,
     method: req.method,
-    headers: { ...req.headers, host: target.host }
+    headers
   }
 
   const proxyReq = http.request(opts, (proxyRes) => {

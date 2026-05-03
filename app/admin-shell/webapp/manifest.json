@@ -132,16 +132,16 @@
       },
       "routes": [
         { "name": "home", "pattern": "", "target": "homeTarget" },
-        { "name": "events", "pattern": "events/{*path}", "target": "eventsTarget" },
-        { "name": "missions", "pattern": "missions/{*path}", "target": "missionsTarget" },
-        { "name": "groups", "pattern": "groups/{*path}", "target": "groupsTarget" },
-        { "name": "tutorials", "pattern": "tutorials/{*path}", "target": "tutorialsTarget" },
-        { "name": "tags", "pattern": "tags/{*path}", "target": "tagsTarget" },
-        { "name": "accomplishments", "pattern": "accomplishments/{*path}", "target": "accomplishmentsTarget" },
-        { "name": "prizes", "pattern": "prizes/{*path}", "target": "prizesTarget" },
-        { "name": "operations", "pattern": "operations/{*path}", "target": "operationsTarget" },
-        { "name": "accounts", "pattern": "accounts/{*path}", "target": "accountsTarget" },
-        { "name": "changelog", "pattern": "changelog/{*path}", "target": "changelogTarget" },
+        { "name": "events", "pattern": "events", "target": "eventsTarget" },
+        { "name": "missions", "pattern": "missions", "target": "missionsTarget" },
+        { "name": "groups", "pattern": "groups", "target": "groupsTarget" },
+        { "name": "tutorials", "pattern": "tutorials", "target": "tutorialsTarget" },
+        { "name": "tags", "pattern": "tags", "target": "tagsTarget" },
+        { "name": "accomplishments", "pattern": "accomplishments", "target": "accomplishmentsTarget" },
+        { "name": "prizes", "pattern": "prizes", "target": "prizesTarget" },
+        { "name": "operations", "pattern": "operations", "target": "operationsTarget" },
+        { "name": "accounts", "pattern": "accounts", "target": "accountsTarget" },
+        { "name": "changelog", "pattern": "changelog", "target": "changelogTarget" },
         { "name": "board", "pattern": "board", "target": "boardTarget" },
         { "name": "dashboard", "pattern": "dashboard", "target": "dashboardTarget" },
         { "name": "statistics", "pattern": "statistics", "target": "statisticsTarget" },
@@ -149,78 +149,63 @@
       ],
       "targets": {
         "homeTarget": {
-          "type": "View",
-          "name": "Home",
+          "viewName": "Home",
           "viewLevel": 0
         },
         "eventsTarget": {
-          "type": "Component",
-          "usage": "eventsComponent",
-          "options": { "manifest": true }
+          "viewName": "Events",
+          "viewLevel": 1
         },
         "missionsTarget": {
-          "type": "Component",
-          "usage": "missionsComponent",
-          "options": { "manifest": true }
+          "viewName": "Missions",
+          "viewLevel": 1
         },
         "groupsTarget": {
-          "type": "Component",
-          "usage": "groupsComponent",
-          "options": { "manifest": true }
+          "viewName": "Groups",
+          "viewLevel": 1
         },
         "tutorialsTarget": {
-          "type": "Component",
-          "usage": "tutorialsComponent",
-          "options": { "manifest": true }
+          "viewName": "Tutorials",
+          "viewLevel": 1
         },
         "tagsTarget": {
-          "type": "Component",
-          "usage": "tagsComponent",
-          "options": { "manifest": true }
+          "viewName": "Tags",
+          "viewLevel": 1
         },
         "accomplishmentsTarget": {
-          "type": "Component",
-          "usage": "accomplishmentsComponent",
-          "options": { "manifest": true }
+          "viewName": "Accomplishments",
+          "viewLevel": 1
         },
         "prizesTarget": {
-          "type": "Component",
-          "usage": "prizesComponent",
-          "options": { "manifest": true }
+          "viewName": "Prizes",
+          "viewLevel": 1
         },
         "operationsTarget": {
-          "type": "Component",
-          "usage": "operationsComponent",
-          "options": { "manifest": true }
+          "viewName": "Operations",
+          "viewLevel": 1
         },
         "accountsTarget": {
-          "type": "Component",
-          "usage": "accountsComponent",
-          "options": { "manifest": true }
+          "viewName": "Accounts",
+          "viewLevel": 1
         },
         "changelogTarget": {
-          "type": "Component",
-          "usage": "changelogComponent",
-          "options": { "manifest": true }
+          "viewName": "Changelog",
+          "viewLevel": 1
         },
         "boardTarget": {
-          "type": "View",
-          "name": "Board",
+          "viewName": "Board",
           "viewLevel": 1
         },
         "dashboardTarget": {
-          "type": "View",
-          "name": "TutorialDashboard",
+          "viewName": "TutorialDashboard",
           "viewLevel": 1
         },
         "statisticsTarget": {
-          "type": "View",
-          "name": "Statistics",
+          "viewName": "Statistics",
           "viewLevel": 1
         },
         "privacyTarget": {
-          "type": "View",
-          "name": "Privacy",
+          "viewName": "Privacy",
           "viewLevel": 1
         }
       },
