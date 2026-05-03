@@ -1,0 +1,70 @@
+<mvc:View
+  controllerName="sap.tutorials.admin.shell.controller.Shell"
+  xmlns:mvc="sap.ui.core.mvc"
+  xmlns="sap.m"
+  xmlns:tnt="sap.tnt"
+  displayBlock="true">
+
+  <tnt:ToolPage id="toolPage" sideExpanded="{viewModel>/sideExpanded}">
+
+    <tnt:header>
+      <tnt:ToolHeader>
+        <Button
+          id="sideNavToggleBtn"
+          icon="sap-icon://menu2"
+          type="Transparent"
+          press=".onToggleSideNav" />
+        <Title text="Tutorial Platform — Admin Console" level="H5">
+          <layoutData>
+            <OverflowToolbarLayoutData priority="NeverOverflow" />
+          </layoutData>
+        </Title>
+        <ToolbarSpacer />
+        <SegmentedButton
+          id="themeSwitch"
+          selectedKey="{theme>/themeMode}"
+          selectionChange=".onThemeChange">
+          <items>
+            <SegmentedButtonItem key="auto" icon="sap-icon://circle-task-2" tooltip="Auto (OS)" />
+            <SegmentedButtonItem key="light" icon="sap-icon://lightbulb" tooltip="Light" />
+            <SegmentedButtonItem key="dark" icon="sap-icon://darkmode" tooltip="Dark" />
+          </items>
+        </SegmentedButton>
+      </tnt:ToolHeader>
+    </tnt:header>
+
+    <tnt:sideContent>
+      <tnt:SideNavigation id="sideNav" selectedKey="{nav>/selectedNavKey}" itemSelect=".onNavItemSelect">
+        <tnt:NavigationList>
+          <tnt:NavigationListItem text="Home" icon="sap-icon://home" key="home" />
+          <tnt:NavigationListItem text="Content" icon="sap-icon://folder-blank" expanded="true">
+            <tnt:NavigationListItem text="Events" icon="sap-icon://calendar" key="events" />
+            <tnt:NavigationListItem text="Missions" icon="sap-icon://target-group" key="missions" />
+            <tnt:NavigationListItem text="Groups" icon="sap-icon://group" key="groups" />
+            <tnt:NavigationListItem text="Tutorials" icon="sap-icon://education" key="tutorials" />
+            <tnt:NavigationListItem text="Tags" icon="sap-icon://tags" key="tags" />
+          </tnt:NavigationListItem>
+          <tnt:NavigationListItem text="Rewards" icon="sap-icon://gift" expanded="true">
+            <tnt:NavigationListItem text="Accomplishments" icon="sap-icon://badge" key="accomplishments" />
+            <tnt:NavigationListItem text="Prizes" icon="sap-icon://gift" key="prizes" />
+          </tnt:NavigationListItem>
+          <tnt:NavigationListItem text="System" icon="sap-icon://action-settings" expanded="true">
+            <tnt:NavigationListItem text="Operations" icon="sap-icon://action-settings" key="operations" />
+            <tnt:NavigationListItem text="Accounts" icon="sap-icon://person-placeholder" key="accounts" />
+            <tnt:NavigationListItem text="Change Log" icon="sap-icon://history" key="changelog" />
+            <tnt:NavigationListItem text="Board" icon="sap-icon://dashboard" key="board" />
+            <tnt:NavigationListItem text="Dashboard" icon="sap-icon://monitor-payments" key="dashboard" />
+            <tnt:NavigationListItem text="Statistics" icon="sap-icon://bar-chart" key="statistics" />
+            <tnt:NavigationListItem text="Privacy" icon="sap-icon://shield" key="privacy" />
+          </tnt:NavigationListItem>
+        </tnt:NavigationList>
+      </tnt:SideNavigation>
+    </tnt:sideContent>
+
+    <tnt:mainContents>
+      <App id="contentArea" />
+    </tnt:mainContents>
+
+  </tnt:ToolPage>
+
+</mvc:View>
