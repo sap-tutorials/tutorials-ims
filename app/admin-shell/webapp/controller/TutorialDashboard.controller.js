@@ -7,10 +7,23 @@ sap.ui.define([
   "sap/m/MessageBox"
 ], function (Controller, JSONModel, Filter, FilterOperator, MessageToast, MessageBox) {
   "use strict";
+
+  var OUTDATED_DAYS = 180;
+
   return Controller.extend("sap.tutorials.admin.shell.controller.TutorialDashboard", {
     onInit: function () {
       this.getView().setModel(new JSONModel({ enabled: false, recipients: "" }), "notifConfig");
       this._loadNotificationConfig();
+      this._loadUserEmail();
+    },
+
+    _loadUserEmail: function () {
+      fetch("/auth/user", { credentials: "include" })
+        .then(function (res) { return res.ok ? res.json() : null; })
+        .then(function (data) {
+          if (data && data.email) { this._sUserEmail = data.email; }
+        }.bind(this))
+        .catch(function () { /* filter will fall back to no-op */ });
     },
 
     _loadNotificationConfig: function () {
@@ -47,16 +60,6 @@ sap.ui.define([
       });
     },
 
-    onToggleMonitored: function (oEvent) {
-      var oContext = oEvent.getSource().getBindingContext("admin");
-      oContext.setProperty("monitored", oEvent.getParameter("selected"));
-    },
-
-    onToggleReviewed: function (oEvent) {
-      var oContext = oEvent.getSource().getBindingContext("admin");
-      oContext.setProperty("reviewed", oEvent.getParameter("selected"));
-    },
-
     onToggleNotifications: function (oEvent) {
       var bEnabled = oEvent.getParameter("state");
       var oModel = this.getOwnerComponent().getModel("admin");
@@ -81,6 +84,21 @@ sap.ui.define([
       });
     },
 
+    formatRowHighlight: function (sReviewedDate) {
+      if (!sReviewedDate) { return "None"; }
+      var iAge = Date.now() - new Date(sReviewedDate).getTime();
+      return iAge > OUTDATED_DAYS * 86400000 ? "Error" : "None";
+    },
+
+    onTutorialLinkPress: function (oEvent) {
+      var oSource = oEvent.getSource();
+      var oContext = oSource.getBindingContext("admin");
+      var sSlug = oContext.getProperty("tutorial/slug");
+      if (sSlug) {
+        window.open("/tutorials/" + encodeURIComponent(sSlug), "_blank");
+      }
+    },
+
     onSearch: function (oEvent) {
       var sQuery = oEvent.getParameter("newValue");
       this._sSearchQuery = sQuery || "";
@@ -99,18 +117,44 @@ sap.ui.define([
 
     _applyFilters: function () {
       var aFilters = [];
+
       if (this._sSearchQuery) {
         aFilters.push(new Filter("tutorial/title", FilterOperator.Contains, this._sSearchQuery));
       }
-      if (this._bFilterMonitored) {
-        aFilters.push(new Filter("monitored", FilterOperator.EQ, true));
+
+      if (this._bFilterMonitored && this._sUserEmail) {
+        aFilters.push(new Filter("owner", FilterOperator.EQ, this._sUserEmail));
       }
+
       if (this._bFilterOutdated) {
-        aFilters.push(new Filter("outdated", FilterOperator.EQ, true));
+        var dCutoff = new Date(Date.now() - OUTDATED_DAYS * 86400000).toISOString();
+        aFilters.push(new Filter("reviewedDate", FilterOperator.LT, dCutoff));
       }
+
       var oTable = this.byId("tutorialMetaTable");
       var oBinding = oTable.getBinding("rows");
       oBinding.filter(aFilters.length ? new Filter({ filters: aFilters, and: true }) : []);
+    },
+
+    onColumnFilter: function (oEvent) {
+      var oColumn = oEvent.getParameter("column");
+      var sValue = oEvent.getParameter("value");
+      var sFilterProperty = oColumn.getFilterProperty();
+      var oTable = this.byId("tutorialMetaTable");
+      var oBinding = oTable.getBinding("rows");
+
+      if (!sFilterProperty) { return; }
+
+      this._mColumnFilters = this._mColumnFilters || {};
+
+      if (sValue) {
+        this._mColumnFilters[sFilterProperty] = new Filter(sFilterProperty, FilterOperator.Contains, sValue);
+      } else {
+        delete this._mColumnFilters[sFilterProperty];
+      }
+
+      var aAllFilters = Object.values(this._mColumnFilters);
+      oBinding.filter(aAllFilters.length ? new Filter({ filters: aAllFilters, and: true }) : []);
     }
   });
 });
