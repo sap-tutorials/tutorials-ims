@@ -312,4 +312,110 @@ describe('content-store', () => {
       expect(res.status).toBe(401);
     });
   });
+
+  describe('Lifecycle sequences', () => {
+    it('create → update → verify: full publish-serve-hash cycle', async () => {
+      const slug = 'lifecycle-tutorial';
+      const v1 = '<h1>Version 1</h1>';
+      const v2 = '<h1>Version 2</h1><p>New step added</p>';
+
+      // Create
+      await project.axios.post('/content/publish', {
+        trigger: 'lifecycle-create',
+        files: makePayload({ [slug]: v1 })
+      }, { headers: { Authorization: `Bearer ${API_KEY}` } });
+
+      // Verify serve
+      const r1 = await project.axios.get(`/content/tutorials/${slug}`);
+      expect(r1.data).toBe(v1);
+      expect(r1.headers['etag']).toBe(`"${hashOf(v1)}"`);
+
+      // Verify hashes
+      const h1 = await project.axios.get('/content/hashes');
+      expect(h1.data[slug]).toBe(hashOf(v1));
+
+      // Update
+      await project.axios.post('/content/publish', {
+        trigger: 'lifecycle-update',
+        files: makePayload({ [slug]: v2 })
+      }, { headers: { Authorization: `Bearer ${API_KEY}` } });
+
+      // Verify serve returns v2
+      const r2 = await project.axios.get(`/content/tutorials/${slug}`);
+      expect(r2.data).toBe(v2);
+      expect(r2.headers['etag']).toBe(`"${hashOf(v2)}"`);
+
+      // Verify hashes updated
+      const h2 = await project.axios.get('/content/hashes');
+      expect(h2.data[slug]).toBe(hashOf(v2));
+    });
+
+    it('create → delete → verify: slug disappears after re-publish without it', async () => {
+      const kept = 'kept-slug';
+      const removed = 'removed-slug';
+
+      // Create both
+      await project.axios.post('/content/publish', {
+        trigger: 'both',
+        files: makePayload({ [kept]: '<p>K</p>', [removed]: '<p>R</p>' })
+      }, { headers: { Authorization: `Bearer ${API_KEY}` } });
+
+      // Both served
+      expect((await project.axios.get(`/content/tutorials/${kept}`)).status).toBe(200);
+      expect((await project.axios.get(`/content/tutorials/${removed}`)).status).toBe(200);
+
+      // Re-publish without removed slug
+      await project.axios.post('/content/publish', {
+        trigger: 'delete',
+        files: makePayload({ [kept]: '<p>K</p>' })
+      }, { headers: { Authorization: `Bearer ${API_KEY}` } });
+
+      // Kept still works
+      expect((await project.axios.get(`/content/tutorials/${kept}`)).status).toBe(200);
+
+      // Removed returns 404
+      const gone = await project.axios.get(`/content/tutorials/${removed}`, {
+        validateStatus: () => true
+      });
+      expect(gone.status).toBe(404);
+
+      // Hashes and nav reflect the removal
+      const h = await project.axios.get('/content/hashes');
+      expect(h.data[kept]).toBeDefined();
+      expect(h.data[removed]).toBeUndefined();
+    });
+
+    it('create → update → rollback → verify: full rollback cycle', async () => {
+      const slug = 'rollback-lifecycle';
+      const v1 = '<p>original</p>';
+      const v2 = '<p>updated</p>';
+
+      await project.axios.post('/content/publish', {
+        trigger: 'v1',
+        files: makePayload({ [slug]: v1 })
+      }, { headers: { Authorization: `Bearer ${API_KEY}` } });
+
+      await project.axios.post('/content/publish', {
+        trigger: 'v2',
+        files: makePayload({ [slug]: v2 })
+      }, { headers: { Authorization: `Bearer ${API_KEY}` } });
+
+      // Confirm v2 active
+      expect((await project.axios.get(`/content/tutorials/${slug}`)).data).toBe(v2);
+
+      // Rollback
+      await project.axios.post('/content/rollback', {}, {
+        headers: { Authorization: `Bearer ${API_KEY}` }
+      });
+
+      // Confirm v1 restored
+      const res = await project.axios.get(`/content/tutorials/${slug}`);
+      expect(res.data).toBe(v1);
+      expect(res.headers['etag']).toBe(`"${hashOf(v1)}"`);
+
+      // Hashes reflect v1
+      const h = await project.axios.get('/content/hashes');
+      expect(h.data[slug]).toBe(hashOf(v1));
+    });
+  });
 });

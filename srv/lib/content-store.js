@@ -217,12 +217,9 @@ export async function serveHandler(req, res) {
       return res.status(503).json({ error: 'No active content version' });
     }
 
-    // Find the latest version of this slug up to the active manifest version
-    // First get metadata (no BLOB) to handle ETag/304 without LOB streaming issues
+    // Serve only from the active version — each publish is a full snapshot
     const [meta] = await SELECT.from(ContentFiles)
-      .where({ slug, version: { '<=': activeVersion } })
-      .orderBy('version desc')
-      .limit(1)
+      .where({ slug, version: activeVersion })
       .columns('contentHash', 'mimeType', 'version');
 
     if (!meta) {
@@ -276,23 +273,14 @@ export async function hashesHandler(req, res) {
       return res.json({});
     }
 
-    // Get the latest hash for each slug up to active version
-    // Use a subquery approach: get all files, group by slug taking max version
+    // Only include slugs from the active version (full snapshot per publish)
     const rows = await SELECT.from(ContentFiles)
-      .where({ version: { '<=': activeVersion } })
-      .columns('slug', 'contentHash', 'version');
-
-    // Reduce to latest version per slug
-    const latest = {};
-    for (const row of rows) {
-      if (!latest[row.slug] || row.version > latest[row.slug].version) {
-        latest[row.slug] = row;
-      }
-    }
+      .where({ version: activeVersion })
+      .columns('slug', 'contentHash');
 
     const map = {};
-    for (const [slug, row] of Object.entries(latest)) {
-      map[slug] = row.contentHash;
+    for (const row of rows) {
+      map[row.slug] = row.contentHash;
     }
 
     res.setHeader('Cache-Control', 'no-cache');
@@ -315,18 +303,10 @@ export async function navHandler(req, res) {
     }
 
     const rows = await SELECT.from(ContentFiles)
-      .where({ version: { '<=': activeVersion } })
-      .columns('slug', 'version', 'sizeBytes');
+      .where({ version: activeVersion })
+      .columns('slug', 'sizeBytes');
 
-    // Reduce to latest version per slug
-    const latest = {};
-    for (const row of rows) {
-      if (!latest[row.slug] || row.version > latest[row.slug].version) {
-        latest[row.slug] = row;
-      }
-    }
-
-    const tutorials = Object.values(latest).map(r => ({
+    const tutorials = rows.map(r => ({
       slug: r.slug,
       sizeBytes: r.sizeBytes
     }));
