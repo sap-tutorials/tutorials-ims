@@ -23,10 +23,28 @@ sap.ui.define([
     privacy: "privacy"
   };
 
+  var NAV_KEY_TO_TITLE = {
+    home: "",
+    events: "Events",
+    missions: "Missions",
+    groups: "Groups",
+    tutorials: "Tutorials",
+    tags: "Tags",
+    accomplishments: "Accomplishments",
+    prizes: "Prizes",
+    operations: "Operations",
+    accounts: "Accounts",
+    changelog: "Change Log",
+    board: "Board",
+    dashboard: "Dashboard",
+    statistics: "Statistics",
+    privacy: "Privacy"
+  };
+
   return Controller.extend("sap.tutorials.admin.shell.controller.Shell", {
     onInit: function () {
       var bExpanded = localStorage.getItem("sap-tutorials-admin-nav-expanded") !== "false";
-      this.setModel(new JSONModel({ sideExpanded: bExpanded }), "viewModel");
+      this.setModel(new JSONModel({ sideExpanded: bExpanded, headerTitle: "Admin Console" }), "viewModel");
 
       this.getOwnerComponent().getRouter().attachRouteMatched(this._onRouteMatched, this);
     },
@@ -83,6 +101,10 @@ sap.ui.define([
       if (oNavModel) {
         oNavModel.setProperty("/selectedNavKey", sRouteName);
       }
+
+      var sPageTitle = NAV_KEY_TO_TITLE[sRouteName] || "";
+      var sHeader = sPageTitle ? "Admin Console — " + sPageTitle : "Admin Console";
+      this.getView().getModel("viewModel").setProperty("/headerTitle", sHeader);
     }
   });
 });

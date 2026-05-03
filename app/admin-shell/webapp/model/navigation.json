@@ -17,11 +17,11 @@
     {
       "key": "rewards",
       "title": "Rewards",
-      "icon": "sap-icon://gift",
+      "icon": "sap-icon://present",
       "expanded": true,
       "items": [
-        { "key": "accomplishments", "title": "Accomplishments", "icon": "sap-icon://badge" },
-        { "key": "prizes", "title": "Prizes", "icon": "sap-icon://gift" }
+        { "key": "accomplishments", "title": "Accomplishments", "icon": "sap-icon://competitor" },
+        { "key": "prizes", "title": "Prizes", "icon": "sap-icon://money-bills" }
       ]
     },
     {
@@ -33,7 +33,7 @@
         { "key": "operations", "title": "Operations", "icon": "sap-icon://action-settings" },
         { "key": "accounts", "title": "Accounts", "icon": "sap-icon://person-placeholder" },
         { "key": "changelog", "title": "Change Log", "icon": "sap-icon://history" },
-        { "key": "board", "title": "Board", "icon": "sap-icon://dashboard" },
+        { "key": "board", "title": "Board", "icon": "sap-icon://overview-chart" },
         { "key": "dashboard", "title": "Dashboard", "icon": "sap-icon://monitor-payments" },
         { "key": "statistics", "title": "Statistics", "icon": "sap-icon://bar-chart" },
         { "key": "privacy", "title": "Privacy", "icon": "sap-icon://shield" }
