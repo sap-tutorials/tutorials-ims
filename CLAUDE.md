@@ -51,6 +51,47 @@ npm run publish-content -- --verbose          # Extra logging
 
 Tutorials must be fetched before `dev` or `build`. Fetched markdown is cached in `.tutorial-cache/` and generated pages go to `hugo/content/tutorials/` — both are gitignored. To force re-fetch from GitHub, delete `.tutorial-cache/`.
 
+### DEV Database Setup (Slug Population)
+
+After a fresh DB deploy or when slugs are missing (missions/groups show numeric IDs instead of text slugs in `/build/catalog`), run:
+
+```bash
+# 1. Ensure you're logged into CF DEV space
+cf login
+
+# 2. Run the setup script against HANA (deletes autotest junk + assigns slugs)
+npx cds bind --exec -- node scripts/setup-dev-data.cjs
+
+# 3. Verify: /build/catalog should return text slugs like "abap-dev-get-started"
+curl -s https://developer-destination-ims-dev-tutorials-srv.cfapps.us30.hana.ondemand.com/build/catalog | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); console.log(d.missions.slice(0,3).map(m=>m.slug))"
+```
+
+The script uses `.migration-data/slug-mapping.json` (87 missions, 66 groups) extracted from ContentFiles. It assigns slugs sequentially to records that don't already have one — the specific legacyId doesn't matter since content serving only requires the slug to exist.
+
+Flags: `--skip-cleanup` (skip autotest deletion), `--skip-slugs` (skip slug assignment), `--dry-run` (preview only).
+
+### Content Publishing
+
+After Hugo builds, publish tutorial HTML to HANA:
+
+```bash
+# Set the API key (must match CONTENT_API_KEY env var on tutorials-srv)
+export CONTENT_API_KEY="tutorials-content-publish-2024"
+
+# Publish to deployed CAP (delta-aware — only changed files uploaded)
+CAP_BASE_URL="https://developer-destination-ims-dev-tutorials-srv.cfapps.us30.hana.ondemand.com" npm run publish-content
+
+# Or publish to local CAP
+npm run publish-content
+```
+
+If CONTENT_API_KEY is not set on the deployed srv app:
+
+```bash
+cf set-env tutorials-srv CONTENT_API_KEY "tutorials-content-publish-2024"
+cf restart tutorials-srv
+```
+
 ## Architecture
 
 ### Build Pipeline

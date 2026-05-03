@@ -1,12 +1,15 @@
-<nav class="tutorial-breadcrumbs fd-breadcrumb" aria-label="Breadcrumb">
-  <ul class="fd-breadcrumb__list">
+<nav class="tutorial-breadcrumbs" aria-label="Breadcrumb">
+  <ul class="fd-breadcrumb">
     <li class="fd-breadcrumb__item"><a class="fd-breadcrumb__link" href="/">Tutorial Navigator</a></li>
     {{ with .Params.missionTitle }}
+    <li class="fd-breadcrumb__separator" aria-hidden="true"></li>
     <li class="fd-breadcrumb__item"><a class="fd-breadcrumb__link" href="{{ $.Params.missionUrl }}">{{ . }}</a></li>
     {{ end }}
     {{ with .Params.groupTitle }}
+    <li class="fd-breadcrumb__separator" aria-hidden="true"></li>
     <li class="fd-breadcrumb__item"><a class="fd-breadcrumb__link" href="{{ $.Params.groupUrl }}">{{ . }}</a></li>
     {{ end }}
+    <li class="fd-breadcrumb__separator" aria-hidden="true"></li>
     <li class="fd-breadcrumb__item fd-breadcrumb__item--current">
       <button type="button" id="nav-dropdown-toggle" class="breadcrumb-dropdown-toggle" aria-expanded="false" aria-haspopup="true">
         {{ .Title }} <span class="breadcrumb-chevron">▾</span>

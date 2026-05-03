@@ -1,2 +1,3 @@
 [params]
-  apiBase = 'http://localhost:4004'
+  apiBase = 'http://localhost:4004/api'
+  capBase = 'http://localhost:4004'

@@ -142,63 +142,64 @@ const { URL } = require('url')
 // Intercept server creation to hijack WebSocket upgrade handling.
 // @sap/approuter handles upgrades at the server level (returns 403 locally without
 // a destination binding). We remove its listener and proxy WebSocket ourselves.
-const _createServer = http.createServer
-http.createServer = function(...args) {
-  const server = _createServer.apply(http, args)
+if (isLocal) {
+  const _createServer = http.createServer
+  http.createServer = function(...args) {
+    const server = _createServer.apply(http, args)
 
-  const origListen = server.listen.bind(server)
-  server.listen = function(...listenArgs) {
-    const result = origListen(...listenArgs)
-    // After approuter has finished setting up, steal the upgrade event
-    process.nextTick(() => {
-      const approuterListeners = server.listeners('upgrade').slice()
-      server.removeAllListeners('upgrade')
-      server.on('upgrade', (req, socket, head) => {
-        if (req.url.startsWith('/socket.io/') || req.url.startsWith('/ws/')) {
-          const target = new URL(req.url, CAP_URL)
-          const opts = {
-            hostname: target.hostname,
-            port: target.port,
-            path: target.pathname + target.search,
-            method: 'GET',
-            headers: { ...req.headers, host: target.host }
+    const origListen = server.listen.bind(server)
+    server.listen = function(...listenArgs) {
+      const result = origListen(...listenArgs)
+      process.nextTick(() => {
+        const approuterListeners = server.listeners('upgrade').slice()
+        server.removeAllListeners('upgrade')
+        server.on('upgrade', (req, socket, head) => {
+          if (req.url.startsWith('/socket.io/') || req.url.startsWith('/ws/')) {
+            const target = new URL(req.url, CAP_URL)
+            const opts = {
+              hostname: target.hostname,
+              port: target.port,
+              path: target.pathname + target.search,
+              method: 'GET',
+              headers: { ...req.headers, host: target.host }
+            }
+            const proxyReq = http.request(opts)
+            proxyReq.on('upgrade', (proxyRes, proxySocket, proxyHead) => {
+              socket.write(
+                'HTTP/1.1 101 Switching Protocols\r\n' +
+                Object.entries(proxyRes.headers).map(([k, v]) => `${k}: ${v}`).join('\r\n') +
+                '\r\n\r\n'
+              )
+              if (proxyHead.length) socket.write(proxyHead)
+              proxySocket.pipe(socket)
+              socket.pipe(proxySocket)
+              proxySocket.on('error', () => socket.destroy())
+              socket.on('error', () => proxySocket.destroy())
+            })
+            proxyReq.on('response', (res) => {
+              const headers = Object.entries(res.headers).map(([k, v]) => `${k}: ${v}`).join('\r\n')
+              socket.write(`HTTP/1.1 ${res.statusCode} ${res.statusMessage}\r\n${headers}\r\n\r\n`)
+              res.pipe(socket)
+            })
+            proxyReq.on('error', () => socket.destroy())
+            proxyReq.end()
+          } else {
+            for (const listener of approuterListeners) {
+              listener.call(server, req, socket, head)
+            }
           }
-          const proxyReq = http.request(opts)
-          proxyReq.on('upgrade', (proxyRes, proxySocket, proxyHead) => {
-            socket.write(
-              'HTTP/1.1 101 Switching Protocols\r\n' +
-              Object.entries(proxyRes.headers).map(([k, v]) => `${k}: ${v}`).join('\r\n') +
-              '\r\n\r\n'
-            )
-            if (proxyHead.length) socket.write(proxyHead)
-            proxySocket.pipe(socket)
-            socket.pipe(proxySocket)
-            proxySocket.on('error', () => socket.destroy())
-            socket.on('error', () => proxySocket.destroy())
-          })
-          proxyReq.on('response', (res) => {
-            // Backend didn't upgrade — forward the error response
-            const headers = Object.entries(res.headers).map(([k, v]) => `${k}: ${v}`).join('\r\n')
-            socket.write(`HTTP/1.1 ${res.statusCode} ${res.statusMessage}\r\n${headers}\r\n\r\n`)
-            res.pipe(socket)
-          })
-          proxyReq.on('error', () => socket.destroy())
-          proxyReq.end()
-        } else {
-          for (const listener of approuterListeners) {
-            listener.call(server, req, socket, head)
-          }
-        }
+        })
       })
-    })
-    return result
-  }
+      return result
+    }
 
-  http.createServer = _createServer
-  return server
+    http.createServer = _createServer
+    return server
+  }
 }
 
 function proxyHandler(req, res, next) {
+  if (!isLocal) return next()
   if (!PROXY_PREFIXES.some(p => req.url.startsWith(p))) return next()
 
   let url = req.url

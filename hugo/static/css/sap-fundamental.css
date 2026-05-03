@@ -1573,6 +1573,9 @@
   position: relative;
 }#user-avatar {
   cursor: pointer;
+  transition: box-shadow 0.2s ease;
+}#user-avatar.fd-avatar--authenticated {
+  box-shadow: 0 0 0 2px var(--sapContent_Illustrative_Color1, #0070f2);
 }#user-popover {
   display: none;
   position: absolute;

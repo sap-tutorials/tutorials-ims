@@ -88,11 +88,13 @@ function switchTab(btn: HTMLButtonElement) {
 }
 
 // --- API Helper ---
-const API_BASE = document.documentElement.dataset.apiBase || '/api'
+const CAP_BASE = document.documentElement.dataset.capBase || ''
+const _apiBase = document.documentElement.dataset.apiBase || '/api'
+const API_BASE = _apiBase.startsWith('http') ? _apiBase : CAP_BASE + _apiBase
 
 async function apiGet<T>(path: string): Promise<T | null> {
   try {
-    const res = await fetch(`${API_BASE}${path}`)
+    const res = await fetch(`${API_BASE}${path}`, { credentials: 'include' })
     return res.ok ? res.json() : null
   } catch { return null }
 }
@@ -101,6 +103,7 @@ async function apiPost(path: string, body?: unknown): Promise<boolean> {
   try {
     const res = await fetch(`${API_BASE}${path}`, {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
     })

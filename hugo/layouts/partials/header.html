@@ -46,6 +46,7 @@
 <script>
 (function() {
   const apiBase = document.documentElement.dataset.apiBase || '';
+  const capBase = document.documentElement.dataset.capBase || '';
   const avatar = document.getElementById('user-avatar');
   const avatarLarge = document.getElementById('user-avatar-large');
   const popover = document.getElementById('user-popover');
@@ -55,13 +56,14 @@
 
   function setAvatarImage(el, url) {
     el.classList.remove('fd-avatar--placeholder');
+    while (el.firstChild) el.removeChild(el.firstChild);
     el.style.backgroundImage = 'url(' + url + ')';
     el.style.backgroundSize = 'cover';
   }
 
   async function checkAuth() {
     try {
-      const res = await fetch(apiBase + '/auth/user', { credentials: 'include' });
+      const res = await fetch(capBase + '/auth/user', { credentials: 'include' });
       if (!res.ok) return;
       const user = await res.json();
       if (!user.authenticated) return;
@@ -70,18 +72,36 @@
       userName.textContent = (user.givenName + ' ' + user.familyName).trim() || user.id;
       userEmail.textContent = user.email || '';
       document.documentElement.dataset.authenticated = 'true';
+      avatar.classList.add('fd-avatar--authenticated');
 
-      if (user.avatarUrl) {
-        setAvatarImage(avatar, user.avatarUrl);
-        setAvatarImage(avatarLarge, user.avatarUrl);
-      } else {
+      function applyFallbackAvatar() {
         var initials = (user.givenName?.[0] || '') + (user.familyName?.[0] || '');
+        if (!initials && user.id) initials = user.id[0];
         if (initials) {
           avatar.classList.remove('fd-avatar--placeholder');
+          avatar.classList.add('fd-avatar--accent-color-6');
           avatar.textContent = initials.toUpperCase();
           avatarLarge.classList.remove('fd-avatar--placeholder');
+          avatarLarge.classList.add('fd-avatar--accent-color-6');
           avatarLarge.textContent = initials.toUpperCase();
         }
+      }
+
+      if (user.avatarUrl) {
+        var avatarSrc = (user.avatarUrl.startsWith('/') ? capBase : '') + user.avatarUrl;
+        var img = new Image();
+        img.onload = function() {
+          if (img.naturalWidth > 1 && img.naturalHeight > 1) {
+            setAvatarImage(avatar, avatarSrc);
+            setAvatarImage(avatarLarge, avatarSrc);
+          } else {
+            applyFallbackAvatar();
+          }
+        };
+        img.onerror = applyFallbackAvatar;
+        img.src = avatarSrc;
+      } else {
+        applyFallbackAvatar();
       }
       avatar.setAttribute('aria-label', userName.textContent);
     } catch {}
