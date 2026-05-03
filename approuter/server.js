@@ -122,8 +122,16 @@ function staticHandler(req, res, next) {
 
 // Workaround: approuter destination proxy fails locally on Windows.
 // Forward API routes directly to CAP backend, applying xs-app.json rewrites.
+// In production (CF), /admin/ and /display/ are routed through xs-app.json with
+// authenticationType: "xsuaa", which enforces OAuth before reaching the CAP backend.
+// Locally we proxy them directly since there's no real XSUAA binding.
 const CAP_URL = process.env.CAP_BASE_URL || 'http://localhost:4004'
-const PROXY_PREFIXES = ['/api/', '/build/', '/content/', '/search/', '/rest/', '/ws/', '/socket.io/', '/health', '/.well-known/', '/ord/', '/auth/', '/tutorials/']
+const isLocal = !process.env.VCAP_APPLICATION
+const PROXY_PREFIXES = [
+  '/api/', '/build/', '/content/', '/search/', '/rest/', '/ws/',
+  '/socket.io/', '/health', '/.well-known/', '/ord/', '/auth/', '/tutorials/',
+  ...(isLocal ? ['/admin/', '/display/'] : [])
+]
 const REWRITES = [
   { match: /^\/tutorials\/(.*)/, replace: '/content/tutorials/$1' }
 ]
