@@ -131,7 +131,7 @@
         "clearControlAggregation": false
       },
       "routes": [
-        { "name": "home", "pattern": "", "target": "homeTarget" },
+        { "name": "home", "pattern": "home", "target": "homeTarget" },
         { "name": "events", "pattern": "events", "target": "eventsTarget" },
         { "name": "missions", "pattern": "missions", "target": "missionsTarget" },
         { "name": "groups", "pattern": "groups", "target": "groupsTarget" },
@@ -143,7 +143,7 @@
         { "name": "accounts", "pattern": "accounts", "target": "accountsTarget" },
         { "name": "changelog", "pattern": "changelog", "target": "changelogTarget" },
         { "name": "board", "pattern": "board", "target": "boardTarget" },
-        { "name": "dashboard", "pattern": "dashboard", "target": "dashboardTarget" },
+        { "name": "dashboard", "pattern": "", "target": "dashboardTarget" },
         { "name": "statistics", "pattern": "statistics", "target": "statisticsTarget" },
         { "name": "privacy", "pattern": "privacy", "target": "privacyTarget" }
       ],
@@ -210,7 +210,7 @@
         }
       },
       "bypassed": {
-        "target": "homeTarget"
+        "target": "dashboardTarget"
       }
     }
   }
