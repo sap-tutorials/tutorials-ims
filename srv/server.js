@@ -65,25 +65,6 @@ cds.on('bootstrap', (app) => {
     res.json(mapping);
   });
 
-  // Avatar proxy (server-side to avoid CORS issues with people-api)
-  app.get('/auth/avatar/:email', async (req, res) => {
-    const email = decodeURIComponent(req.params.email);
-    const upstream = `https://people-api.services.sap.com/rs/avatar/${encodeURIComponent(email)}`;
-    try {
-      const resp = await fetch(upstream);
-      if (!resp.ok || !resp.headers.get('content-type')?.startsWith('image/')) {
-        return res.status(404).end();
-      }
-      res.setHeader('Content-Type', resp.headers.get('content-type'));
-      res.setHeader('Cache-Control', 'public, max-age=3600');
-      const buffer = Buffer.from(await resp.arrayBuffer());
-      if (buffer.length < 100) return res.status(404).end();
-      res.send(buffer);
-    } catch {
-      res.status(502).end();
-    }
-  });
-
   // Content persistence endpoints
   app.get('/content/nav', navHandler);
   app.get('/content/hashes', hashesHandler);
@@ -102,28 +83,12 @@ cds.on('served', () => {
     if (!user?.id || user.id === 'anonymous') {
       return res.status(401).json({ authenticated: false });
     }
-    const email = user.attr?.email || '';
     res.json({
       authenticated: true,
       id: user.id,
-      email,
-      givenName: user.attr?.given_name || '',
-      familyName: user.attr?.family_name || '',
-      avatarUrl: email ? `/auth/avatar/${encodeURIComponent(email)}` : null
-    });
-  });
-
-  // Debug: dump all token claims (remove before production)
-  app.get('/auth/debug', contextMw, authMw, (req, res) => {
-    const user = cds.context?.user;
-    if (!user?.id || user.id === 'anonymous') {
-      return res.status(401).json({ authenticated: false });
-    }
-    res.json({
-      id: user.id,
-      attr: user.attr,
-      roles: [...(user.roles || [])],
-      tokenInfo: user._req?.authInfo?.getPayload?.() || user.tokenInfo?.getPayload?.() || null
+      email: user.attr?.email || '',
+      givenName: user.attr?.given_name || user.attr?.givenName || '',
+      familyName: user.attr?.family_name || user.attr?.familyName || ''
     });
   });
 

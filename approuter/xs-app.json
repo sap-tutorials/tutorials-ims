@@ -23,13 +23,6 @@
       "localDir": "static"
     },
     {
-      "source": "^/auth/avatar/(.*)$",
-      "target": "/auth/avatar/$1",
-      "destination": "srv-api",
-      "authenticationType": "none",
-      "csrfProtection": false
-    },
-    {
       "source": "^/auth/user$",
       "authenticationType": "xsuaa",
       "target": "/auth/user",

@@ -45,7 +45,6 @@
 </div>
 <script>
 (function() {
-  const apiBase = document.documentElement.dataset.apiBase || '';
   const capBase = document.documentElement.dataset.capBase || '';
   const avatar = document.getElementById('user-avatar');
   const avatarLarge = document.getElementById('user-avatar-large');
@@ -54,11 +53,17 @@
   const userEmail = document.getElementById('user-email');
   let isAuthenticated = false;
 
-  function setAvatarImage(el, url) {
-    el.classList.remove('fd-avatar--placeholder');
-    while (el.firstChild) el.removeChild(el.firstChild);
-    el.style.backgroundImage = 'url(' + url + ')';
-    el.style.backgroundSize = 'cover';
+  function applyInitials(givenName, familyName, id) {
+    var initials = (givenName?.[0] || '') + (familyName?.[0] || '');
+    if (!initials && id) initials = id[0];
+    if (initials) {
+      [avatar, avatarLarge].forEach(function(el) {
+        el.classList.remove('fd-avatar--placeholder');
+        el.classList.add('fd-avatar--accent-color-6');
+        while (el.firstChild) el.removeChild(el.firstChild);
+        el.textContent = initials.toUpperCase();
+      });
+    }
   }
 
   async function checkAuth() {
@@ -73,36 +78,7 @@
       userEmail.textContent = user.email || '';
       document.documentElement.dataset.authenticated = 'true';
       avatar.classList.add('fd-avatar--authenticated');
-
-      function applyFallbackAvatar() {
-        var initials = (user.givenName?.[0] || '') + (user.familyName?.[0] || '');
-        if (!initials && user.id) initials = user.id[0];
-        if (initials) {
-          avatar.classList.remove('fd-avatar--placeholder');
-          avatar.classList.add('fd-avatar--accent-color-6');
-          avatar.textContent = initials.toUpperCase();
-          avatarLarge.classList.remove('fd-avatar--placeholder');
-          avatarLarge.classList.add('fd-avatar--accent-color-6');
-          avatarLarge.textContent = initials.toUpperCase();
-        }
-      }
-
-      if (user.avatarUrl) {
-        var avatarSrc = (user.avatarUrl.startsWith('/') ? capBase : '') + user.avatarUrl;
-        var img = new Image();
-        img.onload = function() {
-          if (img.naturalWidth > 1 && img.naturalHeight > 1) {
-            setAvatarImage(avatar, avatarSrc);
-            setAvatarImage(avatarLarge, avatarSrc);
-          } else {
-            applyFallbackAvatar();
-          }
-        };
-        img.onerror = applyFallbackAvatar;
-        img.src = avatarSrc;
-      } else {
-        applyFallbackAvatar();
-      }
+      applyInitials(user.givenName, user.familyName, user.id);
       avatar.setAttribute('aria-label', userName.textContent);
     } catch {}
   }
