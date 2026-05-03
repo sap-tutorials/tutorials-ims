@@ -123,6 +123,7 @@
     "routing": {
       "config": {
         "routerClass": "sap.m.routing.Router",
+        "async": true,
         "viewType": "XML",
         "viewPath": "sap.tutorials.admin.shell.view",
         "controlId": "contentArea",
