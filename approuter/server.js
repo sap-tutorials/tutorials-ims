@@ -21,20 +21,19 @@ const STATIC_DIR = join(__dirname, 'static')
 const TEMP_DIR = join(__dirname, 'static-new')
 const OLD_DIR = join(__dirname, 'static-old')
 
-// Admin UI5 apps served directly by the approuter (replaces cds-plugin-ui5)
+// Admin shell + feature components served directly by approuter
 const APP_MOUNTS = {
-  '/apps/events': join(__dirname, '..', 'app', 'admin', 'events', 'webapp'),
-  '/apps/missions': join(__dirname, '..', 'app', 'admin', 'missions', 'webapp'),
-  '/apps/groups': join(__dirname, '..', 'app', 'admin', 'groups', 'webapp'),
-  '/apps/tutorials': join(__dirname, '..', 'app', 'admin', 'tutorials', 'webapp'),
-  '/apps/tags': join(__dirname, '..', 'app', 'admin', 'tags', 'webapp'),
-  '/apps/accomplishments': join(__dirname, '..', 'app', 'admin', 'accomplishments', 'webapp'),
-  '/apps/prizes': join(__dirname, '..', 'app', 'admin', 'prizes', 'webapp'),
-  '/apps/operations': join(__dirname, '..', 'app', 'admin', 'operations', 'webapp'),
-  '/apps/accounts': join(__dirname, '..', 'app', 'admin', 'accounts', 'webapp'),
-  '/apps/changelog': join(__dirname, '..', 'app', 'admin', 'changelog', 'webapp'),
-  '/admin-custom': join(__dirname, '..', 'app', 'admin-custom', 'webapp'),
-  '/admin-flp': join(__dirname, '..', 'app', 'admin-flp', 'webapp')
+  '/admin-ui/components/events': join(__dirname, '..', 'app', 'admin', 'events', 'webapp'),
+  '/admin-ui/components/missions': join(__dirname, '..', 'app', 'admin', 'missions', 'webapp'),
+  '/admin-ui/components/groups': join(__dirname, '..', 'app', 'admin', 'groups', 'webapp'),
+  '/admin-ui/components/tutorials': join(__dirname, '..', 'app', 'admin', 'tutorials', 'webapp'),
+  '/admin-ui/components/tags': join(__dirname, '..', 'app', 'admin', 'tags', 'webapp'),
+  '/admin-ui/components/accomplishments': join(__dirname, '..', 'app', 'admin', 'accomplishments', 'webapp'),
+  '/admin-ui/components/prizes': join(__dirname, '..', 'app', 'admin', 'prizes', 'webapp'),
+  '/admin-ui/components/operations': join(__dirname, '..', 'app', 'admin', 'operations', 'webapp'),
+  '/admin-ui/components/accounts': join(__dirname, '..', 'app', 'admin', 'accounts', 'webapp'),
+  '/admin-ui/components/changelog': join(__dirname, '..', 'app', 'admin', 'changelog', 'webapp'),
+  '/admin-ui': join(__dirname, '..', 'app', 'admin-shell', 'webapp')
 }
 const appServers = Object.entries(APP_MOUNTS).map(([prefix, dir]) => ({
   prefix,
