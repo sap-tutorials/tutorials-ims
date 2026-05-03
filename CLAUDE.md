@@ -20,7 +20,7 @@ npm run build:hugo                            # Hugo static build only
 npm run build:css                             # PostCSS → hugo/static/css/sap-fundamental.css
 npm run build:apps                            # Vue 3 public-facing apps (apps/)
 npm run build:display                         # Display dashboard app (display-app/)
-npm run build:admin                           # Fiori Elements admin apps (app/admin + app/admin-custom)
+npm run build:admin                           # Admin shell with embedded Fiori Elements components (app/admin-shell)
 npm run generate-dark-theme                   # Generate dark theme CSS variables
 npm run validate-tutorials                    # Validate fetched tutorial structure
 npm run discover-repos                        # List available tutorial repos without fetching

@@ -2,7 +2,7 @@
   controllerName="sap.tutorials.admin.shell.controller.Privacy"
   xmlns:mvc="sap.ui.core.mvc"
   xmlns="sap.m">
-  <Page title="{i18n>privacyTitle}">
+  <Page title="Privacy">
     <content>
       <Wizard id="privacyWizard" complete=".onWizardComplete">
         <WizardStep title="Request Info" id="step1">

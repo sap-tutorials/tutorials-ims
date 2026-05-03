@@ -3,7 +3,7 @@
   xmlns:mvc="sap.ui.core.mvc"
   xmlns="sap.m"
   xmlns:f="sap.ui.layout.form">
-  <Page title="{i18n>statisticsTitle}">
+  <Page title="Statistics">
     <content>
       <f:SimpleForm editable="true" layout="ResponsiveGridLayout" class="sapUiSmallMargin">
         <f:toolbar>
