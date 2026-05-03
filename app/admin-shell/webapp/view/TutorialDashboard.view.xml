@@ -1,0 +1,75 @@
+<mvc:View
+  controllerName="sap.tutorials.admin.shell.controller.TutorialDashboard"
+  xmlns:mvc="sap.ui.core.mvc"
+  xmlns="sap.m"
+  xmlns:t="sap.ui.table"
+  xmlns:core="sap.ui.core"
+  xmlns:f="sap.ui.layout.form">
+  <Page title="{i18n>dashboardTitle}" enableScrolling="false">
+    <headerContent>
+      <Button text="Sync Metadata" icon="sap-icon://synchronize" press=".onSyncMetadata" type="Emphasized"/>
+      <Button text="Send Notifications" icon="sap-icon://email" press=".onSendNotifications"/>
+    </headerContent>
+    <content>
+      <Toolbar class="sapUiSmallMarginTop">
+        <SearchField placeholder="Search tutorials..." liveChange=".onSearch" width="20%"/>
+        <ToolbarSpacer/>
+        <CheckBox text="Monitored by me" select=".onFilterMonitored"/>
+        <CheckBox text="Outdated only" select=".onFilterOutdated"/>
+      </Toolbar>
+
+      <t:Table id="tutorialMetaTable"
+        rows="{admin>/TutorialMeta}"
+        selectionMode="None"
+        visibleRowCount="20"
+        enableBusyIndicator="true">
+        <t:columns>
+          <t:Column label="Tutorial" width="14%">
+            <t:template><Text text="{admin>tutorial/title}"/></t:template>
+          </t:Column>
+          <t:Column label="Owner" width="9%">
+            <t:template><Text text="{admin>owner}"/></t:template>
+          </t:Column>
+          <t:Column label="First Author" width="9%">
+            <t:template><Text text="{admin>firstAuthor}"/></t:template>
+          </t:Column>
+          <t:Column label="Primary Tag" width="9%">
+            <t:template><Text text="{admin>tutorial/primaryTag}"/></t:template>
+          </t:Column>
+          <t:Column label="Last Updated" width="9%">
+            <t:template><Text text="{admin>lastUpdatedDate}"/></t:template>
+          </t:Column>
+          <t:Column label="Last Reviewed" width="9%">
+            <t:template><Text text="{admin>reviewedDate}"/></t:template>
+          </t:Column>
+          <t:Column label="Repo Owner" width="8%">
+            <t:template><Text text="{admin>repositoryOwner}"/></t:template>
+          </t:Column>
+          <t:Column label="Repository" width="8%">
+            <t:template><Text text="{admin>repository}"/></t:template>
+          </t:Column>
+          <t:Column label="Monitored" width="6%">
+            <t:template><CheckBox selected="{admin>monitored}" select=".onToggleMonitored"/></t:template>
+          </t:Column>
+          <t:Column label="Reviewed" width="6%">
+            <t:template><CheckBox selected="{admin>reviewed}" select=".onToggleReviewed"/></t:template>
+          </t:Column>
+          <t:Column label="Last Reminder" width="9%">
+            <t:template><Text text="{admin>lastNotificationDate}"/></t:template>
+          </t:Column>
+        </t:columns>
+      </t:Table>
+
+      <Panel headerText="Notification Settings" expandable="true" expanded="false" class="sapUiSmallMarginTop">
+        <f:SimpleForm editable="true" layout="ResponsiveGridLayout">
+          <Label text="Notifications Enabled"/>
+          <Switch id="notifToggle" state="{notifConfig>/enabled}" change=".onToggleNotifications"/>
+          <Label text="Recipient Emails (comma-separated)"/>
+          <Input id="notifRecipients" value="{notifConfig>/recipients}" placeholder="admin@example.com, ops@example.com"/>
+          <Label text=""/>
+          <Button text="Save Recipients" press=".onSaveRecipients" type="Emphasized"/>
+        </f:SimpleForm>
+      </Panel>
+    </content>
+  </Page>
+</mvc:View>
