@@ -1,13 +1,15 @@
 process.chdir(__dirname)
 
-// Merge VCAP_SERVICES from default-env.json (adds html5-apps-repo-rt binding for local dev)
-try {
-  const _env = require('./default-env.json')
-  if (_env.VCAP_SERVICES) {
-    const existing = process.env.VCAP_SERVICES ? JSON.parse(process.env.VCAP_SERVICES) : {}
-    process.env.VCAP_SERVICES = JSON.stringify({ ...existing, ..._env.VCAP_SERVICES })
-  }
-} catch (_) { /* running in CF with real env */ }
+// Merge VCAP_SERVICES from default-env.json for local dev only
+if (!process.env.VCAP_APPLICATION) {
+  try {
+    const _env = require('./default-env.json')
+    if (_env.VCAP_SERVICES) {
+      const existing = process.env.VCAP_SERVICES ? JSON.parse(process.env.VCAP_SERVICES) : {}
+      process.env.VCAP_SERVICES = JSON.stringify({ ...existing, ..._env.VCAP_SERVICES })
+    }
+  } catch (_) { /* no local env file */ }
+}
 
 const approuter = require('@sap/approuter')
 const { mkdirSync, rmSync, renameSync, existsSync } = require('fs')

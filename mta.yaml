@@ -9,7 +9,7 @@ build-parameters:
         - npm install
         - npx cds build --production
         - npm --prefix apps install
-        - npm run fetch-tutorials -- --target hugo
+        - npm run fetch-tutorials -- --target hugo --regenerate
         - npm run validate-tutorials
         - npm --prefix apps run build
         - curl -fsSL https://github.com/gohugoio/hugo/releases/download/v0.147.7/hugo_extended_0.147.7_linux-amd64.tar.gz | tar -xz -C /tmp hugo
@@ -54,6 +54,10 @@ modules:
   - name: tutorials-approuter
     type: approuter.nodejs
     path: approuter
+    build-parameters:
+      ignore:
+        - default-env.json
+        - default-env-admin.json
     parameters:
       disk-quota: 2048M
       memory: 512M
@@ -128,12 +132,14 @@ resources:
 
   - name: tutorials-audit-log
     type: org.cloudfoundry.managed-service
+    optional: true
     parameters:
       service: auditlog
       service-plan: premium
 
   - name: tutorials-cloud-logging
     type: org.cloudfoundry.managed-service
+    optional: true
     parameters:
       service: cloud-logging
       service-plan: standard
