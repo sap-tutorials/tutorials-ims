@@ -1,0 +1,148 @@
+<mvc:View
+  controllerName="sap.tutorials.admin.shell.controller.Home"
+  xmlns:mvc="sap.ui.core.mvc"
+  xmlns="sap.m"
+  xmlns:f="sap.f">
+
+  <Page showHeader="false">
+    <content>
+      <VBox class="sapUiMediumMargin">
+
+        <Title text="Content Management" level="H5" class="sapUiSmallMarginBottom" />
+        <f:GridContainer>
+          <f:layout>
+            <f:GridContainerSettings rowSize="5.5rem" columnSize="5.5rem" gap="0.75rem" />
+          </f:layout>
+          <GenericTile header="Events" subheader="Create and manage learning events" press=".onTilePress" class="sapUiTinyMarginBegin sapUiTinyMarginTop">
+            <TileContent>
+              <ImageContent src="sap-icon://calendar" />
+            </TileContent>
+            <customData>
+              <core:CustomData xmlns:core="sap.ui.core" key="navKey" value="events" />
+            </customData>
+          </GenericTile>
+          <GenericTile header="Missions" subheader="Define tutorial missions with completion paths" press=".onTilePress" class="sapUiTinyMarginBegin sapUiTinyMarginTop">
+            <TileContent>
+              <ImageContent src="sap-icon://target-group" />
+            </TileContent>
+            <customData>
+              <core:CustomData xmlns:core="sap.ui.core" key="navKey" value="missions" />
+            </customData>
+          </GenericTile>
+          <GenericTile header="Groups" subheader="Organize tutorials into logical groups" press=".onTilePress" class="sapUiTinyMarginBegin sapUiTinyMarginTop">
+            <TileContent>
+              <ImageContent src="sap-icon://group" />
+            </TileContent>
+            <customData>
+              <core:CustomData xmlns:core="sap.ui.core" key="navKey" value="groups" />
+            </customData>
+          </GenericTile>
+          <GenericTile header="Tutorials" subheader="View tutorial catalog and metadata" press=".onTilePress" class="sapUiTinyMarginBegin sapUiTinyMarginTop">
+            <TileContent>
+              <ImageContent src="sap-icon://education" />
+            </TileContent>
+            <customData>
+              <core:CustomData xmlns:core="sap.ui.core" key="navKey" value="tutorials" />
+            </customData>
+          </GenericTile>
+          <GenericTile header="Tags" subheader="Browse and manage classification tags" press=".onTilePress" class="sapUiTinyMarginBegin sapUiTinyMarginTop">
+            <TileContent>
+              <ImageContent src="sap-icon://tags" />
+            </TileContent>
+            <customData>
+              <core:CustomData xmlns:core="sap.ui.core" key="navKey" value="tags" />
+            </customData>
+          </GenericTile>
+        </f:GridContainer>
+
+        <Title text="Rewards &amp; Recognition" level="H5" class="sapUiSmallMarginBottom sapUiMediumMarginTop" />
+        <f:GridContainer>
+          <f:layout>
+            <f:GridContainerSettings rowSize="5.5rem" columnSize="5.5rem" gap="0.75rem" />
+          </f:layout>
+          <GenericTile header="Accomplishments" subheader="Configure badges and achievements" press=".onTilePress" class="sapUiTinyMarginBegin sapUiTinyMarginTop">
+            <TileContent>
+              <ImageContent src="sap-icon://badge" />
+            </TileContent>
+            <customData>
+              <core:CustomData xmlns:core="sap.ui.core" key="navKey" value="accomplishments" />
+            </customData>
+          </GenericTile>
+          <GenericTile header="Prizes" subheader="Set up event prizes and giveaways" press=".onTilePress" class="sapUiTinyMarginBegin sapUiTinyMarginTop">
+            <TileContent>
+              <ImageContent src="sap-icon://gift" />
+            </TileContent>
+            <customData>
+              <core:CustomData xmlns:core="sap.ui.core" key="navKey" value="prizes" />
+            </customData>
+          </GenericTile>
+        </f:GridContainer>
+
+        <Title text="System" level="H5" class="sapUiSmallMarginBottom sapUiMediumMarginTop" />
+        <f:GridContainer>
+          <f:layout>
+            <f:GridContainerSettings rowSize="5.5rem" columnSize="5.5rem" gap="0.75rem" />
+          </f:layout>
+          <GenericTile header="Operations" subheader="Featured tasks, config, and settings" press=".onTilePress" class="sapUiTinyMarginBegin sapUiTinyMarginTop">
+            <TileContent>
+              <ImageContent src="sap-icon://action-settings" />
+            </TileContent>
+            <customData>
+              <core:CustomData xmlns:core="sap.ui.core" key="navKey" value="operations" />
+            </customData>
+          </GenericTile>
+          <GenericTile header="Accounts" subheader="Primary and secondary account management" press=".onTilePress" class="sapUiTinyMarginBegin sapUiTinyMarginTop">
+            <TileContent>
+              <ImageContent src="sap-icon://person-placeholder" />
+            </TileContent>
+            <customData>
+              <core:CustomData xmlns:core="sap.ui.core" key="navKey" value="accounts" />
+            </customData>
+          </GenericTile>
+          <GenericTile header="Change Log" subheader="Audit trail of all changes" press=".onTilePress" class="sapUiTinyMarginBegin sapUiTinyMarginTop">
+            <TileContent>
+              <ImageContent src="sap-icon://history" />
+            </TileContent>
+            <customData>
+              <core:CustomData xmlns:core="sap.ui.core" key="navKey" value="changelog" />
+            </customData>
+          </GenericTile>
+          <GenericTile header="Board" subheader="Tutorial health overview" press=".onTilePress" class="sapUiTinyMarginBegin sapUiTinyMarginTop">
+            <TileContent>
+              <ImageContent src="sap-icon://dashboard" />
+            </TileContent>
+            <customData>
+              <core:CustomData xmlns:core="sap.ui.core" key="navKey" value="board" />
+            </customData>
+          </GenericTile>
+          <GenericTile header="Dashboard" subheader="Tutorial metadata monitoring" press=".onTilePress" class="sapUiTinyMarginBegin sapUiTinyMarginTop">
+            <TileContent>
+              <ImageContent src="sap-icon://monitor-payments" />
+            </TileContent>
+            <customData>
+              <core:CustomData xmlns:core="sap.ui.core" key="navKey" value="dashboard" />
+            </customData>
+          </GenericTile>
+          <GenericTile header="Statistics" subheader="Export task records and analytics" press=".onTilePress" class="sapUiTinyMarginBegin sapUiTinyMarginTop">
+            <TileContent>
+              <ImageContent src="sap-icon://bar-chart" />
+            </TileContent>
+            <customData>
+              <core:CustomData xmlns:core="sap.ui.core" key="navKey" value="statistics" />
+            </customData>
+          </GenericTile>
+          <GenericTile header="Privacy" subheader="DSR requests and anonymization" press=".onTilePress" class="sapUiTinyMarginBegin sapUiTinyMarginTop">
+            <TileContent>
+              <ImageContent src="sap-icon://shield" />
+            </TileContent>
+            <customData>
+              <core:CustomData xmlns:core="sap.ui.core" key="navKey" value="privacy" />
+            </customData>
+          </GenericTile>
+        </f:GridContainer>
+
+      </VBox>
+    </content>
+  </Page>
+
+</mvc:View>
