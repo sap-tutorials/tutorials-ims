@@ -6,13 +6,22 @@
   <script>
     window["sap-ushell-config"] = {
       defaultRenderer: "fiori2",
+      renderers: {
+        fiori2: {
+          componentData: {
+            config: {
+              enableSearch: false
+            }
+          }
+        }
+      },
       applications: {
         "Event-manage": {
           title: "Events",
           description: "Manage Events",
           additionalInformation: "SAPUI5.Component=sap.tutorials.admin.events",
           applicationType: "URL",
-          url: "/admin/events",
+          url: "/apps/events",
           navigationMode: "embedded"
         },
         "Mission-manage": {
@@ -20,7 +29,7 @@
           description: "Manage Missions",
           additionalInformation: "SAPUI5.Component=sap.tutorials.admin.missions",
           applicationType: "URL",
-          url: "/admin/missions",
+          url: "/apps/missions",
           navigationMode: "embedded"
         },
         "Group-manage": {
@@ -28,7 +37,7 @@
           description: "Manage Groups",
           additionalInformation: "SAPUI5.Component=sap.tutorials.admin.groups",
           applicationType: "URL",
-          url: "/admin/groups",
+          url: "/apps/groups",
           navigationMode: "embedded"
         },
         "Tutorial-display": {
@@ -36,7 +45,7 @@
           description: "View Tutorials",
           additionalInformation: "SAPUI5.Component=sap.tutorials.admin.tutorials",
           applicationType: "URL",
-          url: "/admin/tutorials",
+          url: "/apps/tutorials",
           navigationMode: "embedded"
         },
         "Tag-display": {
@@ -44,7 +53,7 @@
           description: "View Tags",
           additionalInformation: "SAPUI5.Component=sap.tutorials.admin.tags",
           applicationType: "URL",
-          url: "/admin/tags",
+          url: "/apps/tags",
           navigationMode: "embedded"
         },
         "Accomplishment-manage": {
@@ -52,7 +61,7 @@
           description: "Manage Accomplishments",
           additionalInformation: "SAPUI5.Component=sap.tutorials.admin.accomplishments",
           applicationType: "URL",
-          url: "/admin/accomplishments",
+          url: "/apps/accomplishments",
           navigationMode: "embedded"
         },
         "Prize-manage": {
@@ -60,7 +69,31 @@
           description: "Manage Prizes",
           additionalInformation: "SAPUI5.Component=sap.tutorials.admin.prizes",
           applicationType: "URL",
-          url: "/admin/prizes",
+          url: "/apps/prizes",
+          navigationMode: "embedded"
+        },
+        "Operations-manage": {
+          title: "Operations",
+          description: "Featured Tasks & Config",
+          additionalInformation: "SAPUI5.Component=sap.tutorials.admin.operations",
+          applicationType: "URL",
+          url: "/apps/operations",
+          navigationMode: "embedded"
+        },
+        "Accounts-manage": {
+          title: "Accounts",
+          description: "Primary & Secondary Accounts",
+          additionalInformation: "SAPUI5.Component=sap.tutorials.admin.accounts",
+          applicationType: "URL",
+          url: "/apps/accounts",
+          navigationMode: "embedded"
+        },
+        "ChangeView-display": {
+          title: "Change Log",
+          description: "View All Changes",
+          additionalInformation: "SAPUI5.Component=sap.tutorials.admin.changelog",
+          applicationType: "URL",
+          url: "/apps/changelog",
           navigationMode: "embedded"
         },
         "Admin-board": {
@@ -70,102 +103,23 @@
           applicationType: "URL",
           url: "/admin-custom",
           navigationMode: "embedded"
-        },
-        "Admin-dashboard": {
-          title: "Tutorial Dashboard",
-          description: "Content Operations",
-          additionalInformation: "SAPUI5.Component=sap.tutorials.admin.custom",
-          applicationType: "URL",
-          url: "/admin-custom#/dashboard",
-          navigationMode: "embedded"
-        },
-        "Admin-statistics": {
-          title: "Statistics",
-          description: "Export & Reports",
-          additionalInformation: "SAPUI5.Component=sap.tutorials.admin.custom",
-          applicationType: "URL",
-          url: "/admin-custom#/statistics",
-          navigationMode: "embedded"
-        },
-        "Admin-privacy": {
-          title: "Privacy",
-          description: "GDPR Tools",
-          additionalInformation: "SAPUI5.Component=sap.tutorials.admin.custom",
-          applicationType: "URL",
-          url: "/admin-custom#/privacy",
-          navigationMode: "embedded"
-        },
-        "Operations-featured": {
-          title: "Featured Tasks",
-          description: "Manage Featured Order",
-          additionalInformation: "SAPUI5.Component=sap.tutorials.admin.operations",
-          applicationType: "URL",
-          url: "/admin/operations",
-          navigationMode: "embedded"
-        },
-        "Operations-config": {
-          title: "IMS Config",
-          description: "Key/Value Settings",
-          additionalInformation: "SAPUI5.Component=sap.tutorials.admin.operations",
-          applicationType: "URL",
-          url: "/admin/operations#/ImsConfig",
-          navigationMode: "embedded"
-        },
-        "Operations-stepfailures": {
-          title: "Step Failures",
-          description: "Error Log",
-          additionalInformation: "SAPUI5.Component=sap.tutorials.admin.operations",
-          applicationType: "URL",
-          url: "/admin/operations#/StepFailures",
-          navigationMode: "embedded"
-        },
-        "Operations-ngds": {
-          title: "NGDS Failures",
-          description: "Retry Failed Messages",
-          additionalInformation: "SAPUI5.Component=sap.tutorials.admin.operations",
-          applicationType: "URL",
-          url: "/admin/operations#/NGDSFailedMessages",
-          navigationMode: "embedded"
-        },
-        "Operations-emails": {
-          title: "Failed Emails",
-          description: "Email Delivery Failures",
-          additionalInformation: "SAPUI5.Component=sap.tutorials.admin.operations",
-          applicationType: "URL",
-          url: "/admin/operations#/FailedEmails",
-          navigationMode: "embedded"
-        },
-        "Accounts-manage": {
-          title: "Accounts",
-          description: "Primary & Secondary Accounts",
-          additionalInformation: "SAPUI5.Component=sap.tutorials.admin.accounts",
-          applicationType: "URL",
-          url: "/admin/accounts",
-          navigationMode: "embedded"
-        },
-        "ChangeView-display": {
-          title: "Change Log",
-          description: "View All Changes",
-          additionalInformation: "SAPUI5.Component=sap.tutorials.admin.changelog",
-          applicationType: "URL",
-          url: "/admin/changelog",
-          navigationMode: "embedded"
         }
       }
     };
   </script>
+  <script id="sap-ushell-bootstrap" src="https://ui5.sap.com/1.136.0/test-resources/sap/ushell/bootstrap/sandbox.js"></script>
   <script id="sap-ui-bootstrap"
     src="https://ui5.sap.com/1.136.0/resources/sap-ui-core.js"
     data-sap-ui-libs="sap.m, sap.ushell, sap.fe.templates"
     data-sap-ui-compatVersion="edge"
+    data-sap-ui-async="true"
     data-sap-ui-theme="sap_horizon"
-    data-sap-ui-frameOptions="allow"
-    data-sap-ui-async="true">
+    data-sap-ui-frameOptions="allow">
   </script>
   <script>
-    sap.ui.require(["sap/ushell/Container"], function (Container) {
-      Container.createRenderer().then(function (renderer) {
-        renderer.placeAt("content");
+    sap.ui.require(["sap/ui/core/Core"], function (Core) {
+      Core.ready().then(function () {
+        sap.ushell.Container.createRenderer().placeAt("content");
       });
     });
   </script>

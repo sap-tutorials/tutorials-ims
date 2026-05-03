@@ -214,7 +214,58 @@ Database-kind detection ensures SQLite (unit tests) still uses CDS QL, while HAN
 
 ---
 
-## 13. Security Review ✅ (2026-05-01)
+## 13. Content Pipeline Lifecycle Tests (TODO)
+
+End-to-end tests verifying that tutorial create/update/delete flows propagate correctly through the entire pipeline: GitHub fetch → parse → Hugo build → publish to HANA → serve from HANA.
+
+### 13.1 New Tutorial Created
+
+- [ ] **Fetch stage** — New repo/file added to `POC_TUTORIALS` array is fetched and cached in `.tutorial-cache/`
+- [ ] **Parse stage** — Parser produces valid Hugo frontmatter + step content from raw markdown (V1 or V2 format detected correctly)
+- [ ] **Hugo build stage** — Generated `hugo/content/tutorials/<slug>.md` produces `hugo/public/tutorials/<slug>/index.html`
+- [ ] **Publish stage** — `publish-content.ts` detects new slug (not in `/content/hashes`), uploads gzip-compressed BLOB to HANA via `POST /content/publish`
+- [ ] **Manifest stage** — New `ContentManifest` version created with status `ACTIVE`, `ContentFiles` row inserted with correct slug, version, contentHash, sizeBytes
+- [ ] **Serve stage** — `GET /content/tutorials/<new-slug>` returns 200 with decompressed HTML, correct `Content-Type`, `ETag`, and `Cache-Control` headers
+- [ ] **Navigation stage** — `GET /content/nav` includes the new tutorial in its response
+- [ ] **Hash registry** — `GET /content/hashes` now includes the new slug with its SHA-256 hash
+
+### 13.2 Existing Tutorial Updated
+
+- [ ] **Fetch stage** — Modified markdown in source repo updates the `.tutorial-cache/` entry (cache invalidation works)
+- [ ] **Parse stage** — Changed content (new step added, text modified, image updated) produces updated Hugo markdown
+- [ ] **Hugo build stage** — Rebuilt `index.html` reflects the content change
+- [ ] **Delta detection** — `publish-content.ts` compares local SHA-256 against `/content/hashes` and identifies only the changed slug(s)
+- [ ] **Publish stage** — Only the changed tutorial is uploaded (not the entire set); `--dry-run` correctly reports the delta without uploading
+- [ ] **Manifest stage** — New manifest version created; previous version marked `SUPERSEDED`; `changedSlugs` field lists only the updated slug
+- [ ] **Serve stage** — `GET /content/tutorials/<slug>` returns updated HTML with a **new ETag** (old ETag returns fresh 200, not stale 304)
+- [ ] **Cache invalidation** — LRU cache evicts stale entry; `X-Content-Source` transitions from `cache` → `db` on first request post-publish
+- [ ] **Rollback** — `POST /content/rollback` reverts to previous manifest version; serving returns the old content
+
+### 13.3 Tutorial Deleted (Removed from Pipeline)
+
+- [ ] **Fetch stage** — Tutorial removed from `POC_TUTORIALS` array is no longer fetched; `.tutorial-cache/` entry can be manually cleared
+- [ ] **Hugo build stage** — No `hugo/content/tutorials/<slug>.md` generated; no corresponding `index.html` in `hugo/public/`
+- [ ] **Publish stage** — `publish-content.ts` publishes remaining tutorials only; the deleted slug is **not** in the new manifest's file set
+- [ ] **Manifest stage** — New manifest version has `fileCount` decremented by 1; deleted slug absent from `ContentFiles` at new version
+- [ ] **Serve stage** — `GET /content/tutorials/<deleted-slug>` returns 404 (latest manifest has no entry for this slug)
+- [ ] **Hash registry** — `GET /content/hashes` no longer includes the deleted slug
+- [ ] **Navigation stage** — `GET /content/nav` no longer lists the deleted tutorial
+- [ ] **Content GC** — Old `ContentFiles` rows for the deleted slug (from prior versions) are eligible for garbage collection after 7 days (3-version retention still applies for rollback)
+
+### Implementation Notes
+
+These tests should be implemented across multiple test tiers:
+
+| Tier | Scope | What to test |
+| ---- | ----- | ------------ |
+| **Unit** (`test/lib/content-store.test.js`) | Publish + serve + manifest logic | Extend existing 22 tests with create/update/delete lifecycle sequences |
+| **Integration** (`test/integration/`) | Full pipeline from parse → publish → serve | New test file: `content-pipeline-lifecycle.test.js` — uses in-memory SQLite, mocks GitHub fetch, runs real parser + publish logic |
+| **Hybrid** (`test/hybrid/`) | Real HANA BLOB storage | Extend with publish → serve → rollback → GC verification against actual HANA |
+| **Smoke** (`test/smoke/content-serve.test.js`) | Deployed system validation | Extend with pre/post publish content verification (requires `CONTENT_API_KEY` in CI) |
+
+---
+
+## 14. Security Review ✅ (2026-05-01)
 
 First comprehensive security audit of the full implementation. Findings ranked by exploitability confidence (≥80%).
 

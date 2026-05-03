@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin Console</title>
+  <style>
+    @font-face {
+      font-family: 'SAP-icons';
+      src: url('https://ui5.sap.com/1.136.0/resources/sap/ui/core/themes/base/fonts/SAP-icons.woff2') format('woff2');
+      font-weight: normal;
+      font-style: normal;
+    }
+    @font-face {
+      font-family: '72';
+      src: url('https://ui5.sap.com/1.136.0/resources/sap/ui/core/themes/sap_horizon/fonts/72-Regular-full.woff2') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+    }
+    @font-face {
+      font-family: '72';
+      src: url('https://ui5.sap.com/1.136.0/resources/sap/ui/core/themes/sap_horizon/fonts/72-Bold-full.woff2') format('woff2');
+      font-weight: 700;
+      font-style: normal;
+    }
+    :root {
+      --shell-bg: #f5f6f7;
+      --shell-header: #354a5f;
+      --tile-hover: #e8f0fe;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: '72', '72full', Arial, Helvetica, sans-serif;
+      background: var(--shell-bg);
+      min-height: 100vh;
+    }
+    .shell-header {
+      background: var(--shell-header);
+      color: #fff;
+      padding: 0.75rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+    }
+    .shell-header h1 {
+      font-size: 1rem;
+      font-weight: 400;
+      letter-spacing: 0.02em;
+    }
+    .shell-header .logo {
+      width: 28px;
+      height: 28px;
+      opacity: 0.9;
+    }
+    .content {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+    .section-title {
+      font-size: 0.875rem;
+      font-weight: 700;
+      color: #556b82;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 1rem;
+      padding-left: 0.25rem;
+    }
+    .tile-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2.5rem;
+    }
+    .tile {
+      background: #fff;
+      border-radius: 0.5rem;
+      padding: 1.25rem;
+      text-decoration: none;
+      color: inherit;
+      border: 1px solid #e4e4e4;
+      transition: box-shadow 0.15s, border-color 0.15s, transform 0.1s;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      min-height: 120px;
+    }
+    .tile:hover {
+      border-color: #0070f2;
+      box-shadow: 0 4px 12px rgba(0, 112, 242, 0.12);
+      transform: translateY(-1px);
+    }
+    .tile:active {
+      transform: translateY(0);
+      box-shadow: 0 2px 6px rgba(0, 112, 242, 0.08);
+    }
+    .tile-icon {
+      font-family: 'SAP-icons';
+      font-size: 1.5rem;
+      color: #0070f2;
+      margin-bottom: 0.25rem;
+    }
+    .tile-title {
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: #1d2d3e;
+    }
+    .tile-subtitle {
+      font-size: 0.8125rem;
+      color: #556b82;
+      line-height: 1.4;
+    }
+    .tile-badge {
+      margin-top: auto;
+      font-size: 0.6875rem;
+      color: #0070f2;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    @media (max-width: 600px) {
+      .tile-grid { grid-template-columns: 1fr; }
+      .content { padding: 1rem; }
+    }
+  </style>
+</head>
+<body>
+  <header class="shell-header">
+    <svg class="logo" viewBox="0 0 92 92" fill="currentColor">
+      <path d="M0 46C0 20.6 20.6 0 46 0s46 20.6 46 46-20.6 46-46 46S0 71.4 0 46zm50.8-11.3c-1 0-1.7.2-2.4.5l-8.7 4.3c-.8.4-1.5.5-2.4.5h-2.1v-5.3h-8.6v23h8.6v-5.4h2.1c.8 0 1.6.2 2.4.5l8.7 4.3c.6.3 1.4.5 2.4.5h7.8V34.7h-7.8z"/>
+    </svg>
+    <h1>Tutorial Platform &mdash; Admin Console</h1>
+  </header>
+
+  <div class="content">
+    <div class="section-title">Content Management</div>
+    <div class="tile-grid">
+      <a href="/apps/events/index.html" class="tile">
+        <div class="tile-icon">&#xe034;</div>
+        <div class="tile-title">Events</div>
+        <div class="tile-subtitle">Create and manage learning events, set dates, and assign tutorials</div>
+        <div class="tile-badge">Manage</div>
+      </a>
+      <a href="/apps/missions/index.html" class="tile">
+        <div class="tile-icon">&#xe10c;</div>
+        <div class="tile-title">Missions</div>
+        <div class="tile-subtitle">Define tutorial missions with completion paths and ordering</div>
+        <div class="tile-badge">Manage</div>
+      </a>
+      <a href="/apps/groups/index.html" class="tile">
+        <div class="tile-icon">&#xe0e5;</div>
+        <div class="tile-title">Groups</div>
+        <div class="tile-subtitle">Organize tutorials into logical groups within missions</div>
+        <div class="tile-badge">Manage</div>
+      </a>
+      <a href="/apps/tutorials/index.html" class="tile">
+        <div class="tile-icon">&#xe1c4;</div>
+        <div class="tile-title">Tutorials</div>
+        <div class="tile-subtitle">View tutorial catalog, metadata, and publication status</div>
+        <div class="tile-badge">View</div>
+      </a>
+      <a href="/apps/tags/index.html" class="tile">
+        <div class="tile-icon">&#xe0e8;</div>
+        <div class="tile-title">Tags</div>
+        <div class="tile-subtitle">Browse and manage tutorial classification tags</div>
+        <div class="tile-badge">View</div>
+      </a>
+    </div>
+
+    <div class="section-title">Rewards &amp; Recognition</div>
+    <div class="tile-grid">
+      <a href="/apps/accomplishments/index.html" class="tile">
+        <div class="tile-icon">&#xe071;</div>
+        <div class="tile-title">Accomplishments</div>
+        <div class="tile-subtitle">Configure badges and achievements for tutorial completion</div>
+        <div class="tile-badge">Manage</div>
+      </a>
+      <a href="/apps/prizes/index.html" class="tile">
+        <div class="tile-icon">&#xe160;</div>
+        <div class="tile-title">Prizes</div>
+        <div class="tile-subtitle">Set up and manage event prizes and giveaways</div>
+        <div class="tile-badge">Manage</div>
+      </a>
+    </div>
+
+    <div class="section-title">System</div>
+    <div class="tile-grid">
+      <a href="/apps/operations/index.html" class="tile">
+        <div class="tile-icon">&#xe024;</div>
+        <div class="tile-title">Operations</div>
+        <div class="tile-subtitle">Featured tasks, IMS configuration, and system settings</div>
+        <div class="tile-badge">Manage</div>
+      </a>
+      <a href="/apps/accounts/index.html" class="tile">
+        <div class="tile-icon">&#xe066;</div>
+        <div class="tile-title">Accounts</div>
+        <div class="tile-subtitle">Primary and secondary account management, merges</div>
+        <div class="tile-badge">Manage</div>
+      </a>
+      <a href="/apps/changelog/index.html" class="tile">
+        <div class="tile-icon">&#xe0b1;</div>
+        <div class="tile-title">Change Log</div>
+        <div class="tile-subtitle">Audit trail of all administrative changes</div>
+        <div class="tile-badge">View</div>
+      </a>
+      <a href="/admin-custom/index.html" class="tile">
+        <div class="tile-icon">&#xe178;</div>
+        <div class="tile-title">Board</div>
+        <div class="tile-subtitle">Analytics dashboard, statistics, and privacy tools</div>
+        <div class="tile-badge">Dashboard</div>
+      </a>
+    </div>
+  </div>
+</body>
+</html>

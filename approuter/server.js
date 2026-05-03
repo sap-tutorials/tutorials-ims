@@ -21,6 +21,38 @@ const STATIC_DIR = join(__dirname, 'static')
 const TEMP_DIR = join(__dirname, 'static-new')
 const OLD_DIR = join(__dirname, 'static-old')
 
+// Admin UI5 apps served directly by the approuter (replaces cds-plugin-ui5)
+const APP_MOUNTS = {
+  '/apps/events': join(__dirname, '..', 'app', 'admin', 'events', 'webapp'),
+  '/apps/missions': join(__dirname, '..', 'app', 'admin', 'missions', 'webapp'),
+  '/apps/groups': join(__dirname, '..', 'app', 'admin', 'groups', 'webapp'),
+  '/apps/tutorials': join(__dirname, '..', 'app', 'admin', 'tutorials', 'webapp'),
+  '/apps/tags': join(__dirname, '..', 'app', 'admin', 'tags', 'webapp'),
+  '/apps/accomplishments': join(__dirname, '..', 'app', 'admin', 'accomplishments', 'webapp'),
+  '/apps/prizes': join(__dirname, '..', 'app', 'admin', 'prizes', 'webapp'),
+  '/apps/operations': join(__dirname, '..', 'app', 'admin', 'operations', 'webapp'),
+  '/apps/accounts': join(__dirname, '..', 'app', 'admin', 'accounts', 'webapp'),
+  '/apps/changelog': join(__dirname, '..', 'app', 'admin', 'changelog', 'webapp'),
+  '/admin-custom': join(__dirname, '..', 'app', 'admin-custom', 'webapp'),
+  '/admin-flp': join(__dirname, '..', 'app', 'admin-flp', 'webapp')
+}
+const appServers = Object.entries(APP_MOUNTS).map(([prefix, dir]) => ({
+  prefix,
+  serve: serveStatic(dir, { fallthrough: true, redirect: false })
+}))
+
+function adminAppsHandler(req, res, next) {
+  for (const { prefix, serve } of appServers) {
+    if (req.url === prefix || req.url.startsWith(prefix + '/')) {
+      const originalUrl = req.url
+      req.url = req.url.slice(prefix.length) || '/'
+      serve(req, res, () => { req.url = originalUrl; next() })
+      return
+    }
+  }
+  next()
+}
+
 async function rebuildHandler(req, res, next) {
   if (req.method !== 'POST') return next()
 
@@ -90,9 +122,6 @@ function staticHandler(req, res, next) {
 
 // Workaround: approuter destination proxy fails locally on Windows.
 // Forward API routes directly to CAP backend, applying xs-app.json rewrites.
-// NOTE: /admin/ and /display/ are NOT here — they use authenticationType:"xsuaa"
-// in xs-app.json so the approuter handles OAuth redirect → IDP login → JWT forward.
-// Requires CAP running with --profile hybrid (real XSUAA validation).
 const CAP_URL = process.env.CAP_BASE_URL || 'http://localhost:4004'
 const PROXY_PREFIXES = ['/api/', '/build/', '/content/', '/search/', '/rest/', '/ws/', '/socket.io/', '/health', '/.well-known/', '/ord/', '/auth/', '/tutorials/']
 const REWRITES = [
@@ -178,13 +207,7 @@ function proxyHandler(req, res, next) {
   }
 
   const proxyReq = http.request(opts, (proxyRes) => {
-    const headers = { ...proxyRes.headers }
-    // Strip WWW-Authenticate from non-navigation requests to prevent unwanted
-    // browser basic-auth prompts on background fetches. Keep it for page navigations
-    // (/admin/, /display/) so mocked-auth login works for local dev.
-    const isNavigation = req.headers['sec-fetch-mode'] === 'navigate'
-    if (!isNavigation) delete headers['www-authenticate']
-    res.writeHead(proxyRes.statusCode, headers)
+    res.writeHead(proxyRes.statusCode, proxyRes.headers)
     proxyRes.pipe(res)
   })
   proxyReq.on('error', (err) => {
@@ -204,6 +227,7 @@ ar.start({
       insertMiddleware: {
         first: [
           { path: '/admin/rebuild', handler: rebuildHandler },
+          { path: '/', handler: adminAppsHandler },
           { path: '/', handler: staticHandler },
           { path: '/', handler: proxyHandler }
         ]
