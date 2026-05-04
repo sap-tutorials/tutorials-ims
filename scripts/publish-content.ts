@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
@@ -166,6 +166,17 @@ async function main() {
   log('Building payload...');
   const startTime = Date.now();
   const payload = buildPayload(changed, tutorials);
+
+  // Include nav metadata so /content/nav can serve it without DB JOINs
+  const navJsonPath = join(opts.hugoDir, 'tutorials', '_nav.json');
+  if (existsSync(navJsonPath)) {
+    const navContent = readFileSync(navJsonPath);
+    const navData = JSON.parse(navContent.toString('utf-8'));
+    const allNavTutorials = navData.tutorials ?? navData;
+    const filteredNav = JSON.stringify({ tutorials: allNavTutorials });
+    payload['__nav__'] = gzipSync(Buffer.from(filteredNav)).toString('base64');
+    log(`Included nav metadata for ${allNavTutorials.length} tutorials`);
+  }
 
   const body = JSON.stringify({
     trigger: opts.trigger,

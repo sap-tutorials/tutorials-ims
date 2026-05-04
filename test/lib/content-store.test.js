@@ -244,6 +244,70 @@ describe('content-store', () => {
       expect(slugs).toEqual(['nav-a', 'nav-b']);
     });
 
+    it('serves stored nav metadata when __nav__ entry exists', async () => {
+      const navData = JSON.stringify({ tutorials: [
+        { slug: 'tut-x', title: 'Tutorial X', description: 'Desc X', time: 20, level: 'Advanced', stepCount: 5, primaryTag: 'HANA', displayTags: ['HANA', 'CAP'] },
+        { slug: 'tut-y', title: 'Tutorial Y', description: 'Desc Y', time: 10, level: 'Beginner', stepCount: 3, primaryTag: 'BTP', displayTags: ['BTP'] },
+      ]});
+      const files = {
+        'tut-x': '<p>X</p>',
+        'tut-y': '<p>Y</p>',
+      };
+      const payload = makePayload(files);
+      payload['__nav__'] = gzipSync(Buffer.from(navData)).toString('base64');
+
+      await project.axios.post('/content/publish', {
+        trigger: 'nav-stored',
+        files: payload,
+      }, { headers: { Authorization: `Bearer ${API_KEY}` } });
+
+      const res = await project.axios.get('/content/nav');
+
+      expect(res.status).toBe(200);
+      expect(res.data.version).toBe(1);
+      expect(res.data.count).toBe(2);
+      expect(res.data.tutorials).toHaveLength(2);
+
+      const tutX = res.data.tutorials.find(t => t.slug === 'tut-x');
+      expect(tutX.title).toBe('Tutorial X');
+      expect(tutX.description).toBe('Desc X');
+      expect(tutX.time).toBe(20);
+      expect(tutX.level).toBe('Advanced');
+      expect(tutX.primaryTag).toBe('HANA');
+      expect(tutX.displayTags).toEqual(['HANA', 'CAP']);
+    });
+
+    it('excludes __nav__ from hashes endpoint', async () => {
+      const navData = JSON.stringify({ tutorials: [{ slug: 'h-tut', title: 'H' }] });
+      const payload = makePayload({ 'h-tut': '<p>H</p>' });
+      payload['__nav__'] = gzipSync(Buffer.from(navData)).toString('base64');
+
+      await project.axios.post('/content/publish', {
+        trigger: 'hash-nav',
+        files: payload,
+      }, { headers: { Authorization: `Bearer ${API_KEY}` } });
+
+      const res = await project.axios.get('/content/hashes');
+      expect(res.data['h-tut']).toBeDefined();
+      expect(res.data['__nav__']).toBeUndefined();
+    });
+
+    it('rejects serving __nav__ as a tutorial', async () => {
+      const navData = JSON.stringify({ tutorials: [] });
+      const payload = makePayload({ 'real-tut': '<p>Real</p>' });
+      payload['__nav__'] = gzipSync(Buffer.from(navData)).toString('base64');
+
+      await project.axios.post('/content/publish', {
+        trigger: 'guard-test',
+        files: payload,
+      }, { headers: { Authorization: `Bearer ${API_KEY}` } });
+
+      const res = await project.axios.get('/content/tutorials/__nav__', {
+        validateStatus: () => true
+      });
+      expect(res.status).toBe(400);
+    });
+
     it('returns empty when no active version', async () => {
       const res = await project.axios.get('/content/nav');
       expect(res.data).toEqual({ version: null, tutorials: [] });
