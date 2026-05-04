@@ -120,7 +120,7 @@ async function markDone(btn: HTMLButtonElement) {
 
   btn.disabled = true
   btn.textContent = 'Saving...'
-  const ok = await apiPost(`/tutorials/${slug}/steps/${stepNum}/complete`)
+  const ok = await apiPost(`/completeStep`, { slug, stepNumber: parseInt(stepNum, 10) })
 
   const step = btn.closest('.tutorial-step')
   if (ok && step) {
@@ -175,7 +175,7 @@ async function loadProgress() {
   const slug = document.querySelector('#progress-bar')?.getAttribute('data-slug')
   if (!slug) return
 
-  const data = await apiGet<{ completedSteps: number[] }>(`/tutorials/${slug}/progress`)
+  const data = await apiGet<{ completedSteps: number[] }>(`/getProgress(slug='${encodeURIComponent(slug)}')`)
   if (!data?.completedSteps) return
 
   for (const stepNum of data.completedSteps) {
