@@ -9,6 +9,10 @@
   "login": {
     "callbackEndpoint": "/login/callback"
   },
+  "logout": {
+    "logoutEndpoint": "/logout",
+    "logoutPage": "/"
+  },
   "routes": [
     {
       "source": "^/scanner-ui/(.*)$",
