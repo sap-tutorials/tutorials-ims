@@ -4,7 +4,8 @@ site/tutorials/
 hugo/content/tutorials/
 hugo/static/tutorials/
 hugo/public/
-approuter/static/
+approuter/static/*
+!approuter/static/login-redirect.html
 .tutorial-cache/
 .comparison-results/
 .migration-data/

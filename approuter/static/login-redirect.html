@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html>
+<head><title>Redirecting...</title></head>
+<body>
+<script>
+var p = new URLSearchParams(window.location.search);
+var r = p.get('returnTo');
+window.location.replace(r && r.startsWith('/') ? r : '/');
+</script>
+</body>
+</html>

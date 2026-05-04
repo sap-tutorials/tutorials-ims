@@ -85,7 +85,7 @@
 
   window.handleProfileClick = function() {
     if (!isAuthenticated) {
-      window.location.href = '/login';
+      window.location.href = '/login?returnTo=' + encodeURIComponent(window.location.pathname + window.location.search);
       return;
     }
     popover.style.display = popover.style.display === 'none' ? 'block' : 'none';
