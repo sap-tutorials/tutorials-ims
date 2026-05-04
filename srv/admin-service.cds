@@ -35,6 +35,7 @@ service AdminService {
   entity CompletionPathItems as projection on ims.CompletionPathItems;
   entity DashboardMonitoredRecords as projection on ims.DashboardMonitoredRecords;
   @readonly entity Tasks as projection on ims.Tasks;
+  @readonly entity PipelineLog as projection on ims.PipelineLog;
 
   // --- Admin actions ---
 

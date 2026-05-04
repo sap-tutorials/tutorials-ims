@@ -1,12 +1,13 @@
 import cron from 'node-cron';
 import { acquireLock, releaseLock } from './job-lock.js';
-import { cleanupStepFailures, cleanupUnusedTags, cleanupContentVersions } from './cleanup.js';
+import { cleanupStepFailures, cleanupUnusedTags, cleanupContentVersions, cleanupPipelineLog } from './cleanup.js';
 import { recordActiveLearners } from './analytics.js';
 import { retryNgds } from './ngds-retry.js';
 import { processAccountMerges } from './account-merge-job.js';
 import { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, isNotificationsEnabled } from '../lib/contributor-notifications.js';
 import { sendNotificationEmail, retryFailedEmails } from '../lib/mail-client.js';
 import { syncTutorialMetadata } from '../lib/tutorial-sync.js';
+import { logPipelineStart, logPipelineEnd } from '../lib/pipeline-log.js';
 import cds from '@sap/cds';
 
 const instanceId = process.env.CF_INSTANCE_INDEX || '0';
@@ -14,10 +15,13 @@ const LOG = cds.log('scheduler');
 
 async function runWithLock(jobName, durationMs, fn) {
   if (await acquireLock(jobName, instanceId, durationMs)) {
+    const logId = await logPipelineStart('SCHEDULED_JOB', 'system', { jobName });
     try {
       await fn();
+      await logPipelineEnd(logId, 'SUCCESS', jobName);
     } catch (err) {
       LOG.error(`Job ${jobName} failed:`, err.message);
+      await logPipelineEnd(logId, 'FAILED', jobName, err.message);
     } finally {
       await releaseLock(jobName, instanceId);
     }
@@ -55,6 +59,11 @@ export function registerJobs() {
   // Daily at 03:00 — prune old content versions (keep last 3, older than 7 days)
   cron.schedule('0 3 * * *', () =>
     runWithLock('content-gc', 600000, () => cleanupContentVersions(3, 7))
+  );
+
+  // Daily at 03:15 — prune pipeline log entries older than 30 days
+  cron.schedule('15 3 * * *', () =>
+    runWithLock('pipeline-log-gc', 600000, () => cleanupPipelineLog(30))
   );
 
   // Weekly Sunday 02:00 — tutorial metadata review

@@ -291,6 +291,30 @@ annotate AdminService.FailedEmails with @(
   Capabilities.UpdateRestrictions.Updatable: false
 );
 
+// --- PipelineLog (read-only, filterable by type/status) ---
+annotate AdminService.PipelineLog with @(
+  UI: {
+    HeaderInfo: {
+      TypeName: 'Pipeline Log', TypeNamePlural: 'Pipeline Logs',
+      Title: { Value: pipelineType },
+      Description: { Value: summary }
+    },
+    SelectionFields: [ pipelineType, status, startedAt ],
+    LineItem: [
+      { Value: startedAt, Label: 'Started' },
+      { Value: pipelineType, Label: 'Type' },
+      { Value: status, Label: 'Status', Criticality: statusCriticality },
+      { Value: durationMs, Label: 'Duration (ms)' },
+      { Value: initiator, Label: 'Initiator' },
+      { Value: summary, Label: 'Summary' }
+    ],
+    Sort: [{ Property: startedAt, Descending: true }]
+  },
+  Capabilities.DeleteRestrictions.Deletable: false,
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable: false
+);
+
 // ChangeView UI annotations are provided by @cap-js/change-tracking plugin (index.cds)
 // ReadRestrictions override is applied at runtime in srv/admin-service.js
 

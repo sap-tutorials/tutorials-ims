@@ -370,6 +370,14 @@ export default class AdminService extends cds.ApplicationService {
       return findMissingSlugs();
     });
 
+    this.after('READ', 'PipelineLog', rows => {
+      for (const row of Array.isArray(rows) ? rows : [rows]) {
+        if (row.status === 'SUCCESS') row.statusCriticality = 3;
+        else if (row.status === 'FAILED') row.statusCriticality = 1;
+        else if (row.status === 'RUNNING') row.statusCriticality = 2;
+      }
+    });
+
     await super.init();
 
     // Allow standalone read access to ChangeView (plugin sets Readable:false by default)

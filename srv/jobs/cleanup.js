@@ -46,3 +46,12 @@ export async function cleanupUnusedTags() {
   LOG.info(`Cleaned up ${unused.length} unused tags`);
   return unused.length;
 }
+
+export async function cleanupPipelineLog(retentionDays = 30) {
+  const { PipelineLog } = cds.entities('com.sap.developers.ims');
+  const LOG = cds.log('jobs/cleanup');
+  const cutoff = new Date(Date.now() - retentionDays * 86400000).toISOString();
+  const result = await DELETE.from(PipelineLog).where({ startedAt: { '<': cutoff } });
+  LOG.info(`Cleaned up pipeline log entries older than ${retentionDays} days: ${result} removed`);
+  return result;
+}

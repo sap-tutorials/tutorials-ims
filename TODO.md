@@ -378,7 +378,7 @@ First comprehensive security audit of the full implementation. Findings ranked b
 
 ## 15. Validation Questions Pipeline
 
-**Priority:** Medium | **Effort:** Medium | **Status:** Not Started
+**Priority:** Medium | **Effort:** Medium | **Status:** Completed
 
 **Task:** Test and document how validation questions (step quizzes) are populated from the content pipeline. Currently the `VALIDATION_DATA` object in `scripts/fetch-tutorials.ts` is hardcoded — verify whether this should be pulled dynamically from tutorial frontmatter or a CAP entity, and ensure the pipeline fills them correctly end-to-end.
 
@@ -388,7 +388,7 @@ First comprehensive security audit of the full implementation. Findings ranked b
 
 **Priority:** Medium | **Effort:** Medium | **Status:** Not Started
 
-**Task:** Create a `PipelineLog` entity to persist pipeline execution records (build triggers, content publishes, MTA deploys, scheduled jobs) and add an admin UI view to browse/filter them. Should capture: timestamp, pipeline type (enum: content-publish, hugo-build, mta-deploy, scheduled-job, github-dispatch), status (success/fail/running), duration, initiator (user or system), and summary/error details. Wire into the existing content-store publish flow and job scheduler. Expose in the admin shell as a "Pipeline Log" tab in the Operations component.
+**Task:** Create a `PipelineLog` entity to persist pipeline execution records (build triggers, content publishes, MTA deploys, scheduled jobs) and add an admin UI view to browse/filter them. Should capture: timestamp, pipeline type (enum: content-publish, hugo-build, mta-deploy, scheduled-job, github-dispatch), status (success/fail/running), duration, initiator (user or system), and summary/error details. Wire into the existing content-store publish flow and job scheduler. Expose in the admin shell as a "Pipeline Log" tab in the Operations component. Only keep records for 30 days.
 
 ---
 

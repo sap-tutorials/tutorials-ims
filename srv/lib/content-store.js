@@ -4,6 +4,7 @@ import { gunzipSync } from 'node:zlib';
 import { timingSafeEqual } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { acquireLock, releaseLock } from '../jobs/job-lock.js';
+import { logPipelineStart, logPipelineEnd } from './pipeline-log.js';
 
 const LOCK_NAME = 'content-publish';
 const LOCK_DURATION_MS = 120_000;
@@ -110,6 +111,9 @@ export async function publishHandler(req, res) {
     return res.status(409).json({ error: 'Another publish is in progress' });
   }
 
+  const initiator = req.headers['x-initiator'] || 'publish-script';
+  const pipelineLogId = await logPipelineStart('CONTENT_PUBLISH', initiator, { trigger, hugoVersion, fileCount: Object.keys(files).length });
+
   const startTime = Date.now();
   const { ContentFiles, ContentManifest } = cds.entities('com.sap.developers.ims');
 
@@ -170,6 +174,8 @@ export async function publishHandler(req, res) {
 
     cache.invalidate();
 
+    await logPipelineEnd(pipelineLogId, 'SUCCESS', `Published v${newVersion}: ${slugs.length} files, ${totalSize} bytes`);
+
     res.status(201).json({
       version: newVersion,
       filesWritten: slugs.length,
@@ -178,6 +184,7 @@ export async function publishHandler(req, res) {
     });
   } catch (err) {
     console.error('[content/publish]', err instanceof Error ? err.message : String(err));
+    await logPipelineEnd(pipelineLogId, 'FAILED', null, err instanceof Error ? err.message : String(err));
     res.status(500).json({ error: 'Publish failed' });
   } finally {
     await releaseLock(LOCK_NAME, INSTANCE_ID);

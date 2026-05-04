@@ -277,3 +277,16 @@ entity ContentManifest : managed {
   hugoVersion               : String(20);
   publishDurationMs         : Integer;
 }
+
+entity PipelineLog : cuid, managed {
+  pipelineType    : String(20) enum { CONTENT_PUBLISH; HUGO_BUILD; MTA_DEPLOY; SCHEDULED_JOB; GITHUB_DISPATCH; };
+  status          : String(10) enum { RUNNING; SUCCESS; FAILED; };
+  startedAt       : Timestamp;
+  finishedAt      : Timestamp;
+  durationMs      : Integer;
+  initiator       : String(255);
+  summary         : String(2000);
+  errorDetails    : LargeString;
+  metadata        : LargeString;
+  statusCriticality : Integer @Core.Computed;
+}

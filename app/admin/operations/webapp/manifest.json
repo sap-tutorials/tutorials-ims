@@ -48,7 +48,8 @@
         { "pattern": "ImsConfig({key}):?query:", "name": "ImsConfigDetail", "target": "ImsConfigDetail" },
         { "pattern": "StepFailures:?query:", "name": "StepFailuresList", "target": "StepFailuresList" },
         { "pattern": "NGDSFailedMessages:?query:", "name": "NGDSFailedMessagesList", "target": "NGDSFailedMessagesList" },
-        { "pattern": "FailedEmails:?query:", "name": "FailedEmailsList", "target": "FailedEmailsList" }
+        { "pattern": "FailedEmails:?query:", "name": "FailedEmailsList", "target": "FailedEmailsList" },
+        { "pattern": "PipelineLog:?query:", "name": "PipelineLogList", "target": "PipelineLogList" }
       ],
       "targets": {
         "FeaturedTasksList": {
@@ -116,6 +117,17 @@
           "options": {
             "settings": {
               "contextPath": "/FailedEmails",
+              "initialLoad": "Enabled"
+            }
+          }
+        },
+        "PipelineLogList": {
+          "type": "Component",
+          "id": "PipelineLogList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/PipelineLog",
               "initialLoad": "Enabled"
             }
           }
