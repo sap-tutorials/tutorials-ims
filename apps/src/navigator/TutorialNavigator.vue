@@ -364,7 +364,7 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
         <div class="hero-text">
           <h1>SAP Tutorials</h1>
           <p>
-            Get hands-on experience with SAP HANA Cloud, CAP, and SAP Business Technology Platform.
+            Get hands-on experience with SAP HANA Cloud, ABAP, CAP, SAP Business AI Platform, and so much more.
             Follow step-by-step tutorials, earn badges, and build real-world applications.
           </p>
         </div>
