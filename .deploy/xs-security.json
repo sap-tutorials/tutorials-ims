@@ -1,0 +1,54 @@
+{
+  "xsappname": "tutorials-poc",
+  "tenant-mode": "dedicated",
+  "description": "Reference documentation only. Deployment binds to existing IMS XSUAA instances (xsuaa-imsdev/imsqa/imsprod) via org.cloudfoundry.existing-service in mta.yaml. These scope and role definitions mirror the IMS XSUAA configuration.",
+  "scopes": [
+    { "name": "$XSAPPNAME.Admin",              "description": "Full admin access" },
+    { "name": "$XSAPPNAME.ContentAuthor",      "description": "Create and edit content" },
+    { "name": "$XSAPPNAME.DeveloperApp",       "description": "Developer operations" },
+    { "name": "$XSAPPNAME.MobileApp",          "description": "Mobile app features" },
+    { "name": "$XSAPPNAME.DisplayApp",         "description": "Read-only UI access" },
+    { "name": "$XSAPPNAME.ConsolidationScope", "description": "Account merge operations (SCI technical user)" },
+    { "name": "$XSAPPNAME.Everyone",           "description": "Baseline access" }
+  ],
+  "role-templates": [
+    {
+      "name": "Admin",
+      "description": "Administrator",
+      "scope-references": ["$XSAPPNAME.Admin", "$XSAPPNAME.Everyone"]
+    },
+    {
+      "name": "ContentAuthor",
+      "description": "Content Author",
+      "scope-references": ["$XSAPPNAME.ContentAuthor", "$XSAPPNAME.DisplayApp", "$XSAPPNAME.Everyone"]
+    },
+    {
+      "name": "DeveloperApp",
+      "description": "Developer",
+      "scope-references": ["$XSAPPNAME.DeveloperApp", "$XSAPPNAME.Everyone"]
+    },
+    {
+      "name": "MobileApp",
+      "description": "Mobile Application User",
+      "scope-references": ["$XSAPPNAME.MobileApp", "$XSAPPNAME.DisplayApp", "$XSAPPNAME.Everyone"]
+    },
+    {
+      "name": "DisplayApp",
+      "description": "Read-only user",
+      "scope-references": ["$XSAPPNAME.DisplayApp", "$XSAPPNAME.Everyone"]
+    },
+    {
+      "name": "ConsolidationScope",
+      "description": "Account consolidation (SCI)",
+      "scope-references": ["$XSAPPNAME.ConsolidationScope"]
+    },
+    {
+      "name": "Everyone",
+      "description": "Baseline",
+      "scope-references": ["$XSAPPNAME.Everyone"]
+    }
+  ],
+  "oauth2-configuration": {
+    "redirect-uris": ["https://*.cfapps.*.hana.ondemand.com/**"]
+  }
+}

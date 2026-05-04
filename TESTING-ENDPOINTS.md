@@ -17,6 +17,17 @@ This page lists all major endpoints exposed by the application for manual testin
 
 ---
 
+## Display App (Vue 3 — Real-time Event Dashboard)
+
+| URL | Description | Auth |
+|-----|-------------|------|
+| `/display-app/` | Standalone event dashboard (rotating views: Board, Statistics, Leaderboard) | XSUAA |
+| `/display-app/index.html` | Direct entry point | XSUAA |
+
+> The display-app is a standalone Vue 3 + Vite application deployed as static files at `approuter/static/display-app/`. It connects to the STOMP WebSocket at `/display/websocket` for real-time updates. Used on big monitors at SAP events.
+
+---
+
 ## Admin UI (SAPUI5 — Fiori Elements)
 
 | URL | Description | Auth |

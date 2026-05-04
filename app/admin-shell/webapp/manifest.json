@@ -1,5 +1,9 @@
 {
   "_version": "1.65.0",
+  "sap.cloud": {
+    "service": "tutorials",
+    "public": true
+  },
   "sap.app": {
     "id": "sap.tutorials.admin.shell",
     "type": "application",

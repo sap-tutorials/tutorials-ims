@@ -43,6 +43,7 @@ const appServers = Object.entries(APP_MOUNTS).map(([prefix, dir]) => ({
 }))
 
 function adminAppsHandler(req, res, next) {
+  if (!isLocal) return next()
   for (const { prefix, serve } of appServers) {
     if (req.url === prefix || req.url.startsWith(prefix + '/')) {
       const originalUrl = req.url
@@ -116,8 +117,10 @@ async function rebuildHandler(req, res, next) {
 // Workaround: @sap/approuter's static-resource-handler uses path.sep to prefix
 // req.url, which produces backslashes on Windows and breaks serve-static lookups.
 // This middleware serves static files correctly on all platforms.
+// On CF, skip /admin-ui/ so the standard approuter enforces XSUAA authentication.
 const staticServe = serveStatic(STATIC_DIR, { fallthrough: true })
 function staticHandler(req, res, next) {
+  if (!isLocal && req.url.startsWith('/admin-ui')) return next()
   staticServe(req, res, next)
 }
 
@@ -134,6 +137,7 @@ const PROXY_PREFIXES = [
   ...(isLocal ? ['/admin/', '/display/'] : [])
 ]
 const REWRITES = [
+  { match: /^\/tutorials\/_nav\.json$/, replace: '/content/nav' },
   { match: /^\/tutorials\/(.*)/, replace: '/content/tutorials/$1' }
 ]
 const http = require('http')

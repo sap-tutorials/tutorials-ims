@@ -373,3 +373,61 @@ First comprehensive security audit of the full implementation. Findings ranked b
 - `@cap-js/audit-logging` with `@PersonalData` annotations provides GDPR-compliant data access logging
 - `@cap-js/change-tracking` provides audit trail for admin entity modifications
 - Vue 3 apps use zero `v-html` directives — all content uses safe `{{ }}` interpolation
+
+---
+
+## 15. Validation Questions Pipeline
+
+**Priority:** Medium | **Effort:** Medium | **Status:** Not Started
+
+**Task:** Test and document how validation questions (step quizzes) are populated from the content pipeline. Currently the `VALIDATION_DATA` object in `scripts/fetch-tutorials.ts` is hardcoded — verify whether this should be pulled dynamically from tutorial frontmatter or a CAP entity, and ensure the pipeline fills them correctly end-to-end.
+
+---
+
+## 16. Pipeline Execution Log (DB + Admin UI)
+
+**Priority:** Medium | **Effort:** Medium | **Status:** Not Started
+
+**Task:** Create a `PipelineLog` entity to persist pipeline execution records (build triggers, content publishes, MTA deploys, scheduled jobs) and add an admin UI view to browse/filter them. Should capture: timestamp, pipeline type (enum: content-publish, hugo-build, mta-deploy, scheduled-job, github-dispatch), status (success/fail/running), duration, initiator (user or system), and summary/error details. Wire into the existing content-store publish flow and job scheduler. Expose in the admin shell as a "Pipeline Log" tab in the Operations component.
+
+---
+
+## 17. Migrate Scanner Application
+
+**Priority:** Medium | **Effort:** Large | **Status:** Not Started
+
+**Task:** Migrate the scanner application into this project. Consolidate it as a module within this MTA so it shares the same XSUAA, destination, and HANA bindings. Determine whether it should be a separate CAP service or integrated into the existing srv module.
+
+---
+
+## 17. Scanner UI — Vue with Fiori Styles
+
+**Priority:** Medium | **Effort:** Medium | **Status:** Not Started
+
+**Task:** Rewrite the scanner UI using Vue 3 with SAP Fundamental Styles (same pattern as `apps/`). Replace the current UI framework with a Vue + Vite build that uses `@aspect/fundamental-styles` or equivalent Horizon-themed components, consistent with the rest of this project's frontend approach.
+
+---
+
+## 18. Reported Bugs (2026-05-04)
+
+- [ ] **Tutorials in Navigator missing details** — Tutorial cards show only the slug as the title, "Beginner" level, and "0 min." duration. No real title, description, actual duration, or tag content is displayed. Likely the `/build/navigator` endpoint or the `NavigatorCatalog` view is not joining/returning tutorial metadata (title, description, time, experience level) from the `Tutorials` or `TutorialMeta` entities.
+- [ ] **SAP logo needs replacing** — The shellbar shows a placeholder "SA H" initials circle instead of the actual SAP logo. Need to replace with the proper SAP logo image/SVG.
+- [ ] **Breadcrumb navigation broken in tutorial pages** — The breadcrumb/navigation in the tutorial detail view is not formatted correctly. Shows raw "Tutorial Navigator • / • Create a Simple ABAP Daemon" with bullet separators and a bare "/" instead of proper styled breadcrumb links (e.g., "Tutorial Navigator > Group Name > Tutorial Title").
+- [ ] **Breadcrumb navigation broken in mission/group pages** — Different issue from tutorials: breadcrumb shows "Tutorial Navigator" link concatenated directly with the slug (e.g., "Tutorial Navigatortest_mission_ims") with no separator or spacing. Also missing proper title — displays raw slug "test_mission_ims" as both the breadcrumb text and the page heading, with placeholder metadata ("Beginner · 0 min. · 0 Tutorials · 1 Groups").
+- [ ] **Login redirects away from current page** — When logging in from a detail page (tutorial, mission, or group), the user is redirected back to the Tutorial Navigator home page instead of remaining on the page they were viewing. The login flow should preserve the current URL and return the user to the same page after authentication.
+- [ ] **Logout button broken (404)** — The logout button navigates to `/logout` but no route exists in `approuter/xs-app.json` to handle it. Need to add a logout route that triggers the AppRouter's XSUAA logout flow (typically `"authenticationType": "xsuaa"` with `"target": "/logout"` or using the AppRouter's built-in `/logout` endpoint which requires explicit route configuration).
+- [ ] **Topic/Software Product filters regressed to search boxes** — The "Topic" and "Software Product" filter fields in the Navigator used to be checkbox lists (auto-populated from available tags) that you could tick to filter results. They have regressed to plain text search inputs. Need to restore the checkbox-list behavior populated from the tag/product taxonomy.
+- [ ] **"Done" button in tutorial steps doesn't work** — Clicking the "Done" button on a tutorial step has no effect. Should mark the step as completed (call `completeStep` or `createTaskRecord` on the DeveloperService) and update the step's visual state (fill the circle indicator, advance progress).
+- [ ] **Event Display WebSocket connection error** — The Event Display page reports a WebSocket connection error. The display app uses Socket.IO to connect to the `EventStreamService` at `/ws/event-stream`. Likely a routing issue in `xs-app.json` (missing WebSocket upgrade route) or the Socket.IO path not matching what the deployed CAP server exposes.
+- [ ] **`/_dev` endpoint returns "Cannot GET"** — The CAP dev tools endpoint (`/_dev`) that exposes the index page and Swagger UI is not working on the deployed instance. May be disabled in production profile, missing route in `xs-app.json`, or the express middleware not registering correctly outside local `cds watch`.
+- [ ] **Display app WebSocket connection error** — The standalone display dashboard (`display-app/`) also fails to establish a WebSocket connection. Same root cause as the Event Display issue — Socket.IO cannot reach the `EventStreamService` or `DisplayService` WebSocket endpoints on the deployed instance.
+- [ ] **Admin UI side nav: child items not indented** — When expanding a folder node (e.g., "Content", "Rewards", "System") in the admin shell's `sap.tnt.ToolPage` side navigation, the child items (Events, Missions, etc.) appear at the same indent level as the parent. Need to add left padding/indent to child navigation items so the hierarchy is visually clear.
+- [ ] **Admin UI: Fiori Elements row navigation broken** — Clicking the chevron (">") on a row in the Events list report (and likely other Fiori Elements apps) does nothing — should navigate to the Object Page detail view for that record. The "Create" button also doesn't work. Likely a routing issue in how the admin shell hosts the Fiori Elements components (component container not wiring the inner router, or `manifestFirst` / hash-based routing conflicts between the shell and the embedded apps).
+- [ ] **Admin UI: No back navigation from detail/object pages** — Once you navigate into a detail screen (e.g., Mission Object Page), there is no "Back" button or breadcrumb to return to the list report. The Fiori Elements Object Page normally shows a back arrow in the page header, but the admin shell likely suppresses or doesn't propagate the shell-back event. Need to wire up back navigation between the shell and the embedded component's inner router.
+- [ ] **Admin UI Missions: field labels missing on Object Page** — The General section of the Mission Object Page shows input fields without labels. Only one field has a red asterisk (required indicator) and one shows "DELETED" as a value, but no field names are visible. Likely missing `@Common.Label` or `@UI.FieldGroup` label annotations in `app/admin-annotations.cds` for the Missions entity fields. **Same issue affects other entities** (Events, Groups, Accomplishments, Prizes, etc.) — field labels missing across all Object Page detail screens.
+- [ ] **Admin UI Dashboard: columns missing data** — The Tutorial Dashboard table shows "Owner", "Status", and "Notifications" populated but "Tutorial", "Primary Tag", "Last Reviewed", and "Last Reminder" columns are empty. The data exists (rows are rendering) but these specific fields aren't being resolved — likely the OData projection or the custom dashboard controller isn't fetching/binding those properties correctly.
+- [ ] **Admin UI Tags: should be read-only** — The Tags app in the admin UI currently allows editing but should be view-only (no Create/Edit/Delete actions). Tags are managed by the system (sync from tutorial metadata), not manually curated by admins.
+- [ ] **Admin UI Tags: missing columns** — The Tags list report is missing the "MD Format" and "Full Path" columns. These fields need to be added to the `@UI.LineItem` annotation for the Tags entity in `app/admin-annotations.cds`.
+- [ ] **Admin UI Board: missing KPIs from legacy** — The Board view in the admin UI is incomplete compared to the legacy IMS system. Legacy had: pie chart (tutorials up-to-date vs. require review), numeric KPI tiles (users, tutorials, groups, missions), and average completion percentages (tutorial/group/mission completion %). Need to replicate these visualizations in the freestyle Board view.
+- [ ] **Admin UI Statistics: missing "Mission completions" export** — The legacy system had a "Mission completions" download with date range picker (Start Date, End Date) and optional Mission ID filter. This export is missing from the Statistics view in the new admin UI. Need to add it alongside the existing CSV export functionality.
+- [ ] **Admin UI Operations: taskType value help empty** — The "taskType" filter field in the Operations (Featured Tasks) list report shows no selectable values. Needs investigation: either the value help annotation is missing/misconfigured (may need a `SELECT DISTINCT` view or enum to supply possible values), or the test dataset has no FeaturedTasks records with taskType populated. This may be a broader issue across Admin UI filter fields that rely on value helps — research whether other entities have the same problem.

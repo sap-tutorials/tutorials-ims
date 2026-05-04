@@ -24,3 +24,9 @@ default-env.json
 # Debug / scratch files
 _check-*.cjs
 cookies.txt
+
+# Build artifacts
+mta_archives/
+saptutorialsadminshell-*/
+app/admin-shell/deploy/
+approuter/static/admin-ui/

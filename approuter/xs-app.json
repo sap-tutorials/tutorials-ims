@@ -13,7 +13,7 @@
     {
       "source": "^/admin-ui/(.*)$",
       "target": "/admin-ui/$1",
-      "service": "html5-apps-repo-rt",
+      "localDir": "static",
       "authenticationType": "xsuaa"
     },
     {
@@ -122,9 +122,10 @@
     },
     {
       "source": "^/tutorials/_nav\\.json$",
-      "localDir": "static",
-      "target": "/tutorials/_nav.json",
-      "authenticationType": "none"
+      "target": "/content/nav",
+      "destination": "srv-api",
+      "authenticationType": "none",
+      "csrfProtection": false
     },
     {
       "source": "^/tutorials/(.*)$",

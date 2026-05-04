@@ -294,7 +294,7 @@ export async function hashesHandler(req, res) {
 // --- GET /content/nav ---
 
 export async function navHandler(req, res) {
-  const { ContentFiles } = cds.entities('com.sap.developers.ims');
+  const { ContentFiles, Tutorials, Steps, TutorialTags, Tags } = cds.entities('com.sap.developers.ims');
 
   try {
     const activeVersion = await getActiveVersion();
@@ -302,14 +302,80 @@ export async function navHandler(req, res) {
       return res.json({ version: null, tutorials: [] });
     }
 
-    const rows = await SELECT.from(ContentFiles)
+    const contentRows = await SELECT.from(ContentFiles)
       .where({ version: activeVersion })
       .columns('slug', 'sizeBytes');
 
-    const tutorials = rows.map(r => ({
-      slug: r.slug,
-      sizeBytes: r.sizeBytes
-    }));
+    const slugs = contentRows.map(r => r.slug);
+    if (slugs.length === 0) {
+      res.setHeader('Cache-Control', 'public, max-age=60');
+      return res.json({ version: activeVersion, count: 0, tutorials: [] });
+    }
+
+    const sizeMap = Object.fromEntries(contentRows.map(r => [r.slug, r.sizeBytes]));
+
+    // Fetch tutorial metadata for published slugs
+    const tutRows = await SELECT.from(Tutorials)
+      .where({ slug: { in: slugs } })
+      .columns('ID', 'slug', 'title', 'description', 'primaryTag', 'experienceTag', 'averageTimeToComplete');
+
+    const tutMap = Object.fromEntries(tutRows.map(t => [t.slug, t]));
+    const tutIds = tutRows.map(t => t.ID).filter(Boolean);
+
+    // Fetch step counts per tutorial via CDS QL
+    let stepMap = {};
+    if (tutIds.length > 0) {
+      const allSteps = await SELECT.from(Steps)
+        .where({ tutorial_ID: { in: tutIds } })
+        .columns('tutorial_ID');
+      const counts = {};
+      for (const s of allSteps) {
+        counts[s.tutorial_ID] = (counts[s.tutorial_ID] || 0) + 1;
+      }
+      // Map tutorial ID back to slug
+      for (const t of tutRows) {
+        if (counts[t.ID]) stepMap[t.slug] = counts[t.ID];
+      }
+    }
+
+    // Fetch display tags per tutorial via CDS QL
+    let tagMap = {};
+    if (tutIds.length > 0) {
+      const ttRows = await SELECT.from(TutorialTags)
+        .where({ tutorial_ID: { in: tutIds } })
+        .columns('tutorial_ID', 'tag_ID');
+
+      const tagIds = [...new Set(ttRows.map(r => r.tag_ID))];
+      if (tagIds.length > 0) {
+        const tagEntities = await SELECT.from(Tags)
+          .where({ ID: { in: tagIds } })
+          .columns('ID', 'name');
+        const tagNameMap = Object.fromEntries(tagEntities.map(t => [t.ID, t.name]));
+
+        for (const tt of ttRows) {
+          const tut = tutRows.find(t => t.ID === tt.tutorial_ID);
+          if (tut && tagNameMap[tt.tag_ID]) {
+            if (!tagMap[tut.slug]) tagMap[tut.slug] = [];
+            tagMap[tut.slug].push(tagNameMap[tt.tag_ID]);
+          }
+        }
+      }
+    }
+
+    const tutorials = contentRows.map(r => {
+      const meta = tutMap[r.slug];
+      return {
+        slug: r.slug,
+        title: meta?.title || r.slug,
+        description: meta?.description || '',
+        time: meta?.averageTimeToComplete || 0,
+        level: meta?.experienceTag || 'Beginner',
+        stepCount: stepMap[r.slug] || 0,
+        primaryTag: meta?.primaryTag || '',
+        displayTags: tagMap[r.slug] || [],
+        sizeBytes: r.sizeBytes
+      };
+    });
 
     res.setHeader('Cache-Control', 'public, max-age=60');
     res.json({ version: activeVersion, count: tutorials.length, tutorials });

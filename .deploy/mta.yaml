@@ -2,32 +2,29 @@ _schema-version: 3.3.0
 ID: tutorials-poc
 version: 1.0.0
 
+# Minimal MTA for deploying CAP srv + approuter (with admin UI as static files).
+# Skips Hugo, tutorials, display-app builds. Admin shell is built into the
+# approuter's static/ directory during the MTA build.
+#
+# Usage:
+#   cd .deploy
+#   mbt build
+#   cf deploy mta_archives/tutorials-poc_1.0.0.mtar
+#
+# Or deploy approuter only (includes admin UI):
+#   cf deploy mta_archives/tutorials-poc_1.0.0.mtar --module tutorials-approuter
+
 build-parameters:
   before-all:
     - builder: custom
       commands:
-        - npm install
-        - npx cds build --production
-        - npm --prefix apps install
-        - npm run fetch-tutorials -- --target hugo --regenerate
-        - npm run validate-tutorials
-        - npm --prefix apps run build
-        - curl -fsSL https://github.com/gohugoio/hugo/releases/download/v0.147.7/hugo_extended_0.147.7_linux-amd64.tar.gz | tar -xz -C /tmp hugo
-        - /tmp/hugo --source hugo --minify
-        - npx tsx scripts/highlight-cds.ts
-        - npm --prefix display-app install
-        - npm --prefix display-app run build
-        - mkdir -p approuter/static
-        - cp -r hugo/public/* approuter/static/
-        - cp hugo/static/tutorials/_nav.json approuter/static/tutorials/_nav.json.bak
-        - rm -rf approuter/static/tutorials
-        - mkdir -p approuter/static/tutorials && mv approuter/static/tutorials/_nav.json.bak approuter/static/tutorials/_nav.json
-        - cp -r display-app/dist approuter/static/display-app
+        - npm --prefix .. install
+        - npx --prefix .. cds build --production
 
 modules:
   - name: tutorials-srv
     type: nodejs
-    path: gen/srv
+    path: ../gen/srv
     parameters:
       memory: 1024M
       disk-quota: 1024M
@@ -45,21 +42,21 @@ modules:
       - name: tutorials-audit-log
       - name: tutorials-cloud-logging
 
-  - name: tutorials-db-deployer
-    type: hdb
-    path: gen/db
-    parameters:
-      buildpack: nodejs_buildpack
-    requires:
-      - name: tutorials-hana
-
   - name: tutorials-approuter
     type: approuter.nodejs
-    path: approuter
+    path: ../approuter
     build-parameters:
+      builder: custom
+      commands:
+        - npm install
+        - npm --prefix ../app/admin-shell install
+        - npm --prefix ../app/admin-shell run build
+        - mkdir -p static/admin-ui
+        - cp -r ../app/admin-shell/dist/. static/admin-ui/
       ignore:
         - default-env.json
         - default-env-admin.json
+        - "static/tutorials/"
     parameters:
       disk-quota: 2048M
       memory: 512M
@@ -74,20 +71,6 @@ modules:
           name: srv-api
           url: ~{srv-url}
           forwardAuthToken: true
-      - name: tutorials-html5-repo-rt
-
-  - name: tutorials-admin-ui-deployer
-    type: com.sap.html5.application-content
-    path: app/admin-shell
-    build-parameters:
-      builder: custom
-      commands:
-        - npm install && npm run build
-      build-result: dist
-    requires:
-      - name: tutorials-html5-repo-host
-        parameters:
-          content-target: true
 
 resources:
   - name: tutorials-hana
@@ -103,7 +86,6 @@ resources:
       service: xsuaa
       service-plan: application
       service-name: tutorials-xsuaa
-      path: ./xs-security.json
 
   - name: tutorials-destination
     type: org.cloudfoundry.managed-service
@@ -118,18 +100,6 @@ resources:
       service-plan: standard
       service-name: tutorials-mail
     optional: true
-
-  - name: tutorials-html5-repo-host
-    type: org.cloudfoundry.managed-service
-    parameters:
-      service: html5-apps-repo
-      service-plan: app-host
-
-  - name: tutorials-html5-repo-rt
-    type: org.cloudfoundry.managed-service
-    parameters:
-      service: html5-apps-repo
-      service-plan: app-runtime
 
   - name: tutorials-audit-log
     type: org.cloudfoundry.managed-service
