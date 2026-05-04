@@ -69,10 +69,179 @@ onMounted(async () => {
 const LEVEL_ORDER: Record<string, number> = { beginner: 0, intermediate: 1, advanced: 2 }
 
 const PRODUCT_TO_TOPICS: Record<string, string[]> = {
-  'SAP HANA': ['Database & Data Management'],
-  'SAP HANA Cloud': ['Cloud', 'Database & Data Management'],
-  'SAP Business Application Studio': ['Development Tools'],
+  // ABAP
+  'ABAP Development': ['ABAP'],
+  'ABAP Extensibility': ['ABAP', 'Extension & Integration'],
+  'ABAP Platform': ['ABAP'],
+  'ABAP Connectivity': ['ABAP', 'Extension & Integration'],
+  'SAP BTP ABAP Environment': ['ABAP', 'Cloud'],
+  'SAP S 4hana Cloud ABAP Environment': ['ABAP', 'SAP S/4HANA'],
+  'S 4hana Cloud ABAP Environment': ['ABAP', 'SAP S/4HANA'],
+
+  // Application Development
   'SAP Cloud Application Programming Model': ['Application Development', 'Cloud'],
+  'SAP Build Code': ['Application Development', 'Development Tools'],
+  'Node Js': ['Application Development'],
+  'Java': ['Application Development'],
+  'Javascript': ['Application Development'],
+  'Python': ['Application Development'],
+  'HTML5': ['Application Development'],
+  'Odata': ['Application Development'],
+
+  // Artificial Intelligence
+  'Artificial Intelligence': ['Artificial Intelligence'],
+  'Machine Learning': ['Artificial Intelligence'],
+  'SAP Ai Core': ['Artificial Intelligence', 'Cloud'],
+  'SAP Ai Launchpad': ['Artificial Intelligence'],
+  'SAP Ai Services': ['Artificial Intelligence'],
+  'SAP Conversational Ai': ['Artificial Intelligence'],
+  'SAP Document Ai': ['Artificial Intelligence'],
+  'Data Attribute Recommendation': ['Artificial Intelligence'],
+  'Business Entity Recognition': ['Artificial Intelligence'],
+  'Service Ticket Intelligence': ['Artificial Intelligence'],
+  'Personalized Recommendation': ['Artificial Intelligence'],
+  'Document Information Extraction': ['Artificial Intelligence'],
+
+  // Analytics
+  'SAP Analytics Cloud': ['Analytics'],
+  'SAP Analytics Cloud Analytics Designer': ['Analytics'],
+  'SAP Analytics Cloud For Planning': ['Analytics'],
+  'SAP Datasphere': ['Analytics', 'Database & Data Management'],
+  'Big Data': ['Analytics', 'Database & Data Management'],
+  'Analytics': ['Analytics'],
+  'SAP Signavio Process Intelligence': ['Analytics', 'Automation'],
+
+  // Automation
+  'SAP Build Process Automation': ['Automation'],
+  'SAP Build': ['Automation', 'Application Development'],
+  'SAP Build Apps': ['Automation', 'Application Development'],
+  'SAP Build Apps Enterprise Edition': ['Automation', 'Application Development'],
+  'SAP Workflow': ['Automation'],
+  'SAP Workflow Management': ['Automation'],
+  'Business Rules': ['Automation'],
+  'SAP Intelligent Robotic Process Automation': ['Automation'],
+  'SAP Automation Pilot': ['Automation', 'Cloud'],
+
+  // Cloud
+  'Cloud': ['Cloud'],
+  'SAP Business Technology Platform': ['Cloud'],
+  'SAP BTP Cloud Foundry Environment': ['Cloud'],
+  'SAP BTP Cloud Foundry Runtime And Environment': ['Cloud'],
+  'SAP BTP Kyma Runtime': ['Cloud'],
+  'SAP Btp, Kyma Runtime': ['Cloud'],
+  'SAP BTP Cockpit': ['Cloud'],
+  'SAP BTP Command Line Interface': ['Cloud', 'Development Tools'],
+  'SAP Cloud Platform': ['Cloud'],
+  'SAP Cloud Platform For The Cloud Foundry Environment': ['Cloud'],
+  'Free Tier': ['Cloud'],
+  'SAP CAP Operator Kubernetes Environment': ['Cloud'],
+  'Cloud Operations': ['Cloud'],
+
+  // Database & Data Management
+  'SAP HANA': ['Database & Data Management'],
+  'SAP HANA Cloud': ['Database & Data Management', 'Cloud'],
+  'SAP HANA Database': ['Database & Data Management'],
+  'SAP HANA Cloud SAP HANA Database': ['Database & Data Management', 'Cloud'],
+  'SAP HANA Cloud, SAP HANA Database': ['Database & Data Management', 'Cloud'],
+  'SAP HANA Cloud Data Lake': ['Database & Data Management', 'Cloud'],
+  'SAP HANA Cloud, Data Lake': ['Database & Data Management', 'Cloud'],
+  'Data Lake': ['Database & Data Management'],
+  'SAP HANA Express Edition': ['Database & Data Management'],
+  'SAP Hana, Express Edition': ['Database & Data Management'],
+  'Express Edition': ['Database & Data Management'],
+  'SAP HANA Dynamic Tiering': ['Database & Data Management'],
+  'SAP HANA Streaming Analytics': ['Database & Data Management'],
+  'SAP HANA Spatial': ['Database & Data Management'],
+  'SAP HANA Multi Model Processing': ['Database & Data Management'],
+  'SAP HANA Graph': ['Database & Data Management'],
+  'SAP HANA Studio': ['Database & Data Management', 'Development Tools'],
+  'SAP HANA Service': ['Database & Data Management', 'Cloud'],
+  'SAP HANA Service For SAP BTP': ['Database & Data Management', 'Cloud'],
+  'SAP Cloud Platform, SAP HANA Service': ['Database & Data Management', 'Cloud'],
+  'Sql': ['Database & Data Management'],
+  'SAP Data Intelligence': ['Database & Data Management'],
+  'SAP Iq': ['Database & Data Management'],
+  'SAP Adaptive Server Enterprise': ['Database & Data Management'],
+
+  // Development Tools
+  'SAP Business Application Studio': ['Development Tools'],
+  'SAP Web Ide': ['Development Tools'],
+  'SAP Fiori Tools': ['Development Tools', 'SAP Fiori'],
+  'SAP Cloud Sdk': ['Development Tools', 'Application Development'],
+  'SAP Cloud Transport Management': ['Development Tools', 'Cloud'],
+  'SAP Content Agent Service': ['Development Tools', 'Cloud'],
+
+  // Extension & Integration
+  'SAP Integration Suite': ['Extension & Integration'],
+  'Cloud Integration': ['Extension & Integration', 'Cloud'],
+  'Integration': ['Extension & Integration'],
+  'SAP Process Integration': ['Extension & Integration'],
+  'SAP Process Orchestration': ['Extension & Integration'],
+  'SAP Application Interface Framework': ['Extension & Integration'],
+  'SAP Event Mesh': ['Extension & Integration', 'Cloud'],
+  'SAP Connectivity Service': ['Extension & Integration', 'Cloud'],
+  'SAP Cloud Platform Connectivity': ['Extension & Integration', 'Cloud'],
+  'SAP Private Link Service': ['Extension & Integration', 'Cloud'],
+  'DirectProcess Adapter': ['Extension & Integration'],
+  'SAP API Management': ['Extension & Integration'],
+  'API Management': ['Extension & Integration'],
+  'SAP API Business Hub': ['Extension & Integration'],
+  'API': ['Extension & Integration'],
+  'SAP Concur': ['Extension & Integration'],
+  'SAP Kafka Connect': ['Extension & Integration'],
+
+  // Mobile
+  'Mobile': ['Mobile'],
+  'SAP Mobile Services': ['Mobile', 'Cloud'],
+  'Mobile Development Kit Client': ['Mobile'],
+  'SAP BTP Sdk For Android': ['Mobile', 'Development Tools'],
+  'SAP BTP Sdk For Ios': ['Mobile', 'Development Tools'],
+  'Ios': ['Mobile'],
+  'Android': ['Mobile'],
+  'Ios Sdk For SAP BTP': ['Mobile', 'Development Tools'],
+
+  // SAP Fiori
+  'SAP Fiori': ['SAP Fiori'],
+  'SAP Fiori Elements': ['SAP Fiori'],
+  'SAPUI5': ['SAP Fiori'],
+  'Sapui5': ['SAP Fiori'],
+  'User Interface': ['SAP Fiori'],
+  'UI SAP Business Client Nwbc': ['SAP Fiori'],
+  'UI Theme Designer': ['SAP Fiori'],
+  'SAP Screen Personas': ['SAP Fiori'],
+  'SAP Launchpad Service': ['SAP Fiori', 'Cloud'],
+  'SAP Build Work Zone Standard Edition': ['SAP Fiori', 'Cloud'],
+  'SAP Build Work Zone Advanced Edition': ['SAP Fiori', 'Cloud'],
+  'SAP Work Zone': ['SAP Fiori', 'Cloud'],
+
+  // SAP S/4HANA
+  'SAP S 4hana': ['SAP S/4HANA'],
+  'SAP S 4hana Cloud': ['SAP S/4HANA', 'Cloud'],
+  'SAP S 4hana Cloud Public Edition': ['SAP S/4HANA', 'Cloud'],
+  'SAP S 4hana Cloud Front End': ['SAP S/4HANA', 'SAP Fiori'],
+  'SAP S/4hana': ['SAP S/4HANA'],
+  'SAP Netweaver': ['SAP S/4HANA'],
+  'SAP Netweaver 7.5': ['SAP S/4HANA'],
+  'SAP Gateway': ['SAP S/4HANA', 'Extension & Integration'],
+
+  // Security
+  'Security': ['Security'],
+  'Identity Authentication': ['Security', 'Cloud'],
+  'SAP Alert Notification Service For SAP BTP': ['Security', 'Cloud'],
+
+  // IoT
+  'Internet Of Things': ['IoT'],
+
+  // HR
+  'SAP Successfactors Hxm Suite': ['SAP SuccessFactors'],
+  'SAP Successfactors Hcm Suite': ['SAP SuccessFactors'],
+
+  // Document Management
+  'SAP Document Management Service': ['Extension & Integration'],
+  'Document Management Service': ['Extension & Integration'],
+
+  // Translation
+  'SAP Translation Hub': ['Development Tools'],
 }
 
 function lowestLevel(levels: string[]): string {
