@@ -129,7 +129,7 @@ function staticHandler(req, res, next) {
 const CAP_URL = process.env.CAP_BASE_URL || 'http://localhost:4004'
 const isLocal = !process.env.VCAP_APPLICATION
 const PROXY_PREFIXES = [
-  '/api/', '/build/', '/content/', '/search/', '/rest/', '/ws/',
+  '/_dev', '/api/', '/build/', '/content/', '/search/', '/rest/', '/ws/',
   '/socket.io/', '/health', '/.well-known/', '/ord/', '/auth/', '/tutorials/',
   ...(isLocal ? ['/admin/', '/display/'] : [])
 ]

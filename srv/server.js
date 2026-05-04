@@ -7,6 +7,11 @@ import { navigatorCatalogHandler } from './lib/navigator-catalog.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
 import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, navHandler, rollbackHandler } from './lib/content-store.js';
 
+// Enable swagger UI in non-development environments when EXPOSE_CAP_UI is set
+if (process.env.EXPOSE_CAP_UI === 'true' && !cds.env.swagger) {
+  cds.env.swagger = { basePath: '/$api-docs', diagram: true };
+}
+
 // Disable serve-static directory redirects globally. CAP serves app/ as static
 // content; on Windows the physical app/admin/tutorials/ directory matches OData
 // path /admin/Tutorials (case-insensitive), causing a 301 → /admin/Tutorials/
@@ -17,6 +22,16 @@ express.static = function(root, options) {
 };
 
 cds.on('bootstrap', (app) => {
+  // Block CAP index page and Swagger UI in production unless explicitly enabled
+  if (process.env.EXPOSE_CAP_UI !== 'true' && process.env.NODE_ENV === 'production') {
+    app.use((req, res, next) => {
+      if (req.path === '/' || req.path.includes('$api-docs')) {
+        return res.status(404).end();
+      }
+      next();
+    });
+  }
+
   // Strip trailing slashes from OData paths. The approuter (or browser)
   // may append a slash after XSUAA redirect; CAP's OData parser interprets
   // /admin/Tutorials/ as Tutorials('') which fails UUID validation.

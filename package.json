@@ -39,7 +39,6 @@
   "devDependencies": {
     "@cap-js/cds-test": "^1.0.0",
     "@sap/cds-dk": "^9.9.0",
-    "cds-swagger-ui-express": "^0.11.0",
     "fundamental-styles": "^0.41.4",
     "gray-matter": "^4.0.3",
     "markdown-it": "^14.1.1",
@@ -75,6 +74,7 @@
     "@sap/cds": "^9.9.0",
     "@sap/xsenv": "^6.2.0",
     "@sap/xssec": "^4.13.0",
+    "cds-swagger-ui-express": "^0.11.0",
     "hdb": "^2.27.1",
     "node-cron": "^4.2.1",
     "nodemailer": "^8.0.7",
