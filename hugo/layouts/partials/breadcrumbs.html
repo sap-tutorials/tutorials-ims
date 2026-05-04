@@ -3,11 +3,11 @@
     <li class="fd-breadcrumb__item"><a class="fd-breadcrumb__link" href="/">Tutorial Navigator</a></li>
     {{ with .Params.missionTitle }}
     <li class="fd-breadcrumb__separator" aria-hidden="true"></li>
-    <li class="fd-breadcrumb__item"><a class="fd-breadcrumb__link" href="{{ $.Params.missionUrl }}">{{ . }}</a></li>
+    <li class="fd-breadcrumb__item"><a class="fd-breadcrumb__link" href="/tutorials/mission-{{ $.Params.missionSlug }}">{{ . }}</a></li>
     {{ end }}
     {{ with .Params.groupTitle }}
     <li class="fd-breadcrumb__separator" aria-hidden="true"></li>
-    <li class="fd-breadcrumb__item"><a class="fd-breadcrumb__link" href="{{ $.Params.groupUrl }}">{{ . }}</a></li>
+    <li class="fd-breadcrumb__item"><a class="fd-breadcrumb__link" href="/tutorials/group-{{ $.Params.groupSlug }}">{{ . }}</a></li>
     {{ end }}
     <li class="fd-breadcrumb__separator" aria-hidden="true"></li>
     <li class="fd-breadcrumb__item fd-breadcrumb__item--current">

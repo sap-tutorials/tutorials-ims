@@ -1,24 +1,6 @@
 {{ define "main" }}
 <div class="group-wrapper">
-  <!-- Breadcrumb -->
-  <nav class="tutorial-breadcrumbs" aria-label="Breadcrumb">
-    <ul class="fd-breadcrumb">
-      <li class="fd-breadcrumb__item"><a class="fd-breadcrumb__link" href="/">Tutorial Navigator</a></li>
-      {{ with .Params.missionTitle }}
-      <li class="fd-breadcrumb__separator" aria-hidden="true"></li>
-      <li class="fd-breadcrumb__item">
-        <a class="fd-breadcrumb__link" href="/tutorials/mission-{{ $.Params.missionSlug }}">{{ . }}</a>
-      </li>
-      {{ end }}
-      <li class="fd-breadcrumb__separator" aria-hidden="true"></li>
-      <li class="fd-breadcrumb__item fd-breadcrumb__item--current">
-        <button type="button" id="nav-dropdown-toggle" class="breadcrumb-dropdown-toggle" aria-expanded="false" aria-haspopup="true">
-          {{ .Title }} <span class="breadcrumb-chevron">▾</span>
-        </button>
-      </li>
-    </ul>
-    <div id="nav-dropdown-mount" data-slug="{{ .Params.slug }}" class="nav-dropdown-container"></div>
-  </nav>
+  {{ partial "breadcrumbs.html" . }}
 
   <!-- Hero -->
   <section class="group-hero">
