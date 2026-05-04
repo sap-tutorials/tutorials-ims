@@ -1,5 +1,8 @@
 import type { TutorialStep } from './types.js'
 
+const VALIDATE_LINE = /^\s*\[VALIDATE_\d+\]\s*$/
+const DONE_LINE = /^\s*\[DONE\]\s*$/
+
 export function parseV2Steps(body: string): TutorialStep[] {
   const lines = body.split('\n')
   const steps: TutorialStep[] = []
@@ -14,7 +17,7 @@ export function parseV2Steps(body: string): TutorialStep[] {
         steps.push({
           number: steps.length + 1,
           title: currentTitle,
-          content: currentLines.join('\n').trim()
+          content: stripMarkers(currentLines).join('\n').trim()
         })
       }
       currentTitle = h3Match[1].trim()
@@ -31,9 +34,13 @@ export function parseV2Steps(body: string): TutorialStep[] {
     steps.push({
       number: steps.length + 1,
       title: currentTitle,
-      content: currentLines.join('\n').trim()
+      content: stripMarkers(currentLines).join('\n').trim()
     })
   }
 
   return steps
+}
+
+function stripMarkers(lines: string[]): string[] {
+  return lines.filter(l => !VALIDATE_LINE.test(l) && !DONE_LINE.test(l))
 }

@@ -8,6 +8,8 @@ const ORG = 'sap-tutorials'
 const GRAPHQL_URL = 'https://api.github.com/graphql'
 const BATCH_SIZE = 20
 
+export const EXCLUDED_REPOS = new Set(['tutorials-ims', 'meta-tutorials'])
+
 export interface GitHubContributor {
   name: string
   login: string
@@ -111,6 +113,7 @@ export async function discoverAllTutorials(): Promise<DiscoveredTutorial[]> {
 
     for (const repo of repos.nodes) {
       if (repo.isArchived || repo.isDisabled || repo.isFork) continue
+      if (EXCLUDED_REPOS.has(repo.name)) continue
       if (!includeContribution && repo.name.endsWith('-Contribution')) continue
       const branch = repo.defaultBranchRef?.name
       if (!branch) continue
@@ -232,4 +235,29 @@ export async function fetchGitHubMeta(slug: string, repo: string, branch: string
 
 function fallback(): GitHubMeta {
   return { lastCommitSha: '', lastUpdated: '', createdAt: '', contributors: [] }
+}
+
+export async function fetchRulesVr(slug: string, repo: string, branch: string): Promise<string | null> {
+  const cacheFile = join(dirname(CACHE_FILE), `${slug}.rules.vr`)
+  if (existsSync(cacheFile)) {
+    return readFileSync(cacheFile, 'utf-8')
+  }
+
+  const contribRepo = repo.endsWith('-Contribution') ? repo : `${repo}-Contribution`
+  const token = process.env.GITHUB_TOKEN
+  if (!token) return null
+
+  const url = `https://raw.githubusercontent.com/${ORG}/${contribRepo}/${branch}/tutorials/${slug}/rules.vr`
+  try {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}`, 'User-Agent': 'tutorials-poc-build' },
+    })
+    if (!res.ok) return null
+    const content = await res.text()
+    mkdirSync(dirname(cacheFile), { recursive: true })
+    writeFileSync(cacheFile, content, 'utf-8')
+    return content
+  } catch {
+    return null
+  }
 }

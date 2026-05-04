@@ -10,8 +10,9 @@ import { resolveImageURLs } from './parsers/images.js'
 import { convertOptionBlocks } from './parsers/options.js'
 import { escapeHugoDelimiters } from './parsers/hugo-delimiters.js'
 import { stripDangerousHtml } from './parsers/sanitize-html.js'
-import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, type DiscoveredTutorial } from './parsers/github.js'
+import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, EXCLUDED_REPOS, type DiscoveredTutorial } from './parsers/github.js'
 import { fetchBuildCatalog, loadCapCache, saveCapCache } from './parsers/cap.js'
+import { parseRulesVr } from './parsers/rules.js'
 import type { Mission, MissionHierarchy, HierarchyGroup, TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } from './parsers/types.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -332,7 +333,11 @@ export function writeHugoPage(
     prerequisites: splitPrerequisites(prerequisites),
     lastUpdated: lastUpdated || null,
     contributors: contributors.slice(0, 10).map(c => ({ login: c.login, name: c.name, avatarUrl: c.avatarUrl })),
-    steps: steps.map(s => ({ number: s.number, title: s.title })),
+    steps: steps.map(s => {
+      const entry: Record<string, unknown> = { number: s.number, title: s.title }
+      if (s.validation?.length) entry.validation = s.validation
+      return entry
+    }),
   }
 
   if (nav.missionId) fm.missionId = nav.missionId
@@ -662,6 +667,16 @@ async function main() {
       processedBody = processedBody.replace(/^<{4,7} .+\n[\s\S]*?^={4,7}\n([\s\S]*?)^>{4,7} .+\n?/gm, '$1')
 
       const steps = isV2 ? parseV2Steps(processedBody) : parseV1Steps(processedBody)
+
+      // Fetch and attach validation questions from rules.vr
+      const rulesContent = await fetchRulesVr(t.slug, t.repo, t.branch)
+      if (rulesContent) {
+        const validationMap = parseRulesVr(rulesContent)
+        for (const step of steps) {
+          const questions = validationMap.get(step.number)
+          if (questions?.length) step.validation = questions
+        }
+      }
 
       const nav: TutorialNavEntry = {
         slug: t.slug,

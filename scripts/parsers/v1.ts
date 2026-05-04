@@ -2,6 +2,8 @@ import type { TutorialStep } from './types.js'
 
 const ACCORDION_BEGIN = /\[ACCORDION-BEGIN \[Step (\d+):\s*\]\((.+?)\)\]/
 const ACCORDION_END = /\[ACCORDION-END\]/
+const VALIDATE_LINE = /^\s*\[VALIDATE_\d+\]\s*$/
+const DONE_LINE = /^\s*\[DONE\]\s*$/
 
 export function parseV1Steps(body: string): TutorialStep[] {
   const lines = body.split('\n')
@@ -26,7 +28,7 @@ export function parseV1Steps(body: string): TutorialStep[] {
         steps.push({
           number: currentNumber,
           title: currentTitle,
-          content: currentLines.join('\n').trim()
+          content: stripMarkers(currentLines).join('\n').trim()
         })
       }
       inStep = false
@@ -39,4 +41,8 @@ export function parseV1Steps(body: string): TutorialStep[] {
   }
 
   return steps
+}
+
+function stripMarkers(lines: string[]): string[] {
+  return lines.filter(l => !VALIDATE_LINE.test(l) && !DONE_LINE.test(l))
 }
