@@ -25,6 +25,7 @@ const OLD_DIR = join(__dirname, 'static-old')
 
 // Admin shell + feature components served directly by approuter
 const APP_MOUNTS = {
+  '/scanner-ui': join(__dirname, '..', 'app', 'scanner', 'webapp'),
   '/admin-ui/components/events': join(__dirname, '..', 'app', 'admin', 'events', 'webapp'),
   '/admin-ui/components/missions': join(__dirname, '..', 'app', 'admin', 'missions', 'webapp'),
   '/admin-ui/components/groups': join(__dirname, '..', 'app', 'admin', 'groups', 'webapp'),

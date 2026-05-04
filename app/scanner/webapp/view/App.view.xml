@@ -1,0 +1,102 @@
+<mvc:View controllerName="sap.tutorials.scanner.controller.App"
+    xmlns:mvc="sap.ui.core.mvc" displayBlock="true"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <App id="app">
+        <Page id="page" title="{i18n>title}">
+
+            <content>
+                <!-- Idle state: shown when no scan result is present -->
+                <VBox id="vboxIdle"
+                    visible="{= !${contestant>loaded} &amp;&amp; !${contestant>loading} }"
+                    class="sapUiLargeMarginTop sapUiMediumMarginBottom">
+                    <VBox id="vboxIdleContent" alignItems="Center" class="sapUiMediumMarginBottom">
+                        <core:Icon
+                            id="idleIcon"
+                            src="sap-icon://bar-code"
+                            size="4rem"
+                            color="Tile"
+                            class="sapUiMediumMarginBottom" />
+                        <Text
+                            id="idleHint"
+                            text="Tap the button below to scan a contestant badge"
+                            textAlign="Center"
+                            class="sapUiSmallMarginBeginEnd" />
+                    </VBox>
+                    <Button
+                        id="btnScan"
+                        text="SCAN BADGE"
+                        icon="sap-icon://camera"
+                        type="Emphasized"
+                        width="100%"
+                        press="onScanPress"
+                        class="sapUiSmallMarginBeginEnd" />
+                </VBox>
+
+                <!-- Data panel: shown while loading and after load -->
+                <Panel
+                    id="contestantCard"
+                    visible="{= ${contestant>loaded} || ${contestant>loading} }"
+                    busy="{contestant>loading}"
+                    class="sapUiTinyMarginTop">
+                    <content>
+                        <!-- Identity header -->
+                        <VBox id="vboxIdentity" class="sapUiSmallMarginBeginEnd sapUiSmallMarginTopBottom">
+                            <Title id="resultUid" text="{contestant>uid}" level="H5"
+                                class="sapUiTinyMarginBottom" />
+                            <Text id="resultIdentitySub"
+                                text="{= ${contestant>recordId} + ' · ' + ${contestant>status} }"
+                                wrapping="false"
+                                class="sapUiTinyMarginBottom" />
+                        </VBox>
+
+                        <!-- Prizes Claimed — highlighted row -->
+                        <HBox id="hboxPrizes"
+                            class="scannerPrizesHighlight"
+                            justifyContent="SpaceBetween"
+                            alignItems="Center">
+                            <Label id="lblPrizesClaimed" text="Prizes Claimed" design="Bold" />
+                            <Text id="prizeRecords" text="{contestant>prizeRecords}" />
+                        </HBox>
+
+                        <!-- Remaining stats as a list -->
+                        <List id="listStats" showSeparators="Inner">
+                            <DisplayListItem
+                                id="statTutorials"
+                                label="Tutorials Completed"
+                                value="{contestant>tutorialsCompleted}" />
+                            <DisplayListItem
+                                id="statGroups"
+                                label="Groups Completed"
+                                value="{contestant>groupsCompleted}" />
+                            <DisplayListItem
+                                id="statMissions"
+                                label="Missions Completed"
+                                value="{contestant>missionsCompleted}" />
+                        </List>
+                    </content>
+                </Panel>
+            </content>
+
+            <footer>
+                <OverflowToolbar id="footerToolbar"
+                    visible="{contestant>loaded}">
+                    <Button
+                        id="btnScanAgain"
+                        text="Scan Again"
+                        icon="sap-icon://undo"
+                        press="onScanAgainPress" />
+                    <ToolbarSpacer id="footerSpacer" />
+                    <Button
+                        id="btnClaimPrize"
+                        text="Claim Prize"
+                        icon="sap-icon://gift"
+                        type="Emphasized"
+                        press="onClaimPrize"
+                        enabled="{contestant>loaded}" />
+                </OverflowToolbar>
+            </footer>
+
+        </Page>
+    </App>
+</mvc:View>

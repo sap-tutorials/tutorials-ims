@@ -1,0 +1,5 @@
+.scannerPrizesHighlight {
+    background-color: var(--sapInformationBackground);
+    border-bottom: 2px solid var(--sapInformationBorderColor);
+    padding: 0.5rem 1rem;
+}

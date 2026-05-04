@@ -386,7 +386,7 @@ First comprehensive security audit of the full implementation. Findings ranked b
 
 ## 16. Pipeline Execution Log (DB + Admin UI)
 
-**Priority:** Medium | **Effort:** Medium | **Status:** Not Started
+**Priority:** Medium | **Effort:** Medium | **Status:** Completed
 
 **Task:** Create a `PipelineLog` entity to persist pipeline execution records (build triggers, content publishes, MTA deploys, scheduled jobs) and add an admin UI view to browse/filter them. Should capture: timestamp, pipeline type (enum: content-publish, hugo-build, mta-deploy, scheduled-job, github-dispatch), status (success/fail/running), duration, initiator (user or system), and summary/error details. Wire into the existing content-store publish flow and job scheduler. Expose in the admin shell as a "Pipeline Log" tab in the Operations component. Only keep records for 30 days.
 
@@ -394,9 +394,11 @@ First comprehensive security audit of the full implementation. Findings ranked b
 
 ## 17. Migrate Scanner Application
 
-**Priority:** Medium | **Effort:** Large | **Status:** Not Started
+**Priority:** Medium | **Effort:** Large | **Status:** Done
 
 **Task:** Migrate the scanner application into this project. Consolidate it as a module within this MTA so it shares the same XSUAA, destination, and HANA bindings. Determine whether it should be a separate CAP service or integrated into the existing srv module.
+
+**Resolution:** Integrated as a separate CDS service (`srv/scanner-service.cds` + `.js`) at `/scanner`. Queries local DB entities directly instead of calling IMS via BTP Destination. UI5 app ported to `app/scanner/webapp/`, served at `/scanner-ui/` via approuter. No new dependencies — uses existing HANA/XSUAA bindings.
 
 ---
 
