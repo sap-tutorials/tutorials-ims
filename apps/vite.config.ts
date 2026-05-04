@@ -20,6 +20,7 @@ export default defineConfig({
         'event-display': resolve(__dirname, 'src/event-display/main.ts'),
         'nav-dropdown': resolve(__dirname, 'src/nav-dropdown/main.ts'),
         'mini-navigator': resolve(__dirname, 'src/mini-navigator/main.ts'),
+        'scanner-vue': resolve(__dirname, 'src/scanner-vue/main.ts'),
       },
       output: {
         entryFileNames: '[name].js',

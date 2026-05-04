@@ -46,6 +46,22 @@ This page lists all major endpoints exposed by the application for manual testin
 
 ---
 
+## Scanner Apps (Badge Scanner — Event Tool)
+
+| URL              | Description                                                         | Auth  |
+|------------------|---------------------------------------------------------------------|-------|
+| `/scanner-ui/`   | Badge Scanner — UI5 implementation (`sap.ndc.BarcodeScanner`)       | XSUAA |
+| `/scanner-vue/`  | Badge Scanner — Vue 3 implementation (native `BarcodeDetector` API) | XSUAA |
+
+> Both scanner apps provide the same functionality: scan a contestant badge QR code, display progress stats, and claim prizes. The Vue version is mobile-optimized with camera-first UX and SAP Fundamental Styles. Falls back to manual JSON input on browsers without `BarcodeDetector` support.
+
+| URL                                            | Method | Description                                    | Auth  |
+|------------------------------------------------|--------|------------------------------------------------|-------|
+| `/scanner/getContestant(accountNumber='...')`  | GET    | OData function — contestant stats + prize info | XSUAA |
+| `/scanner/claimPrize(recordId='...')`          | GET    | OData function — mark prize as CLAIMED         | XSUAA |
+
+---
+
 ## CAP Server Index & Swagger UI
 
 These are only accessible when hitting the CAP backend directly (`http://localhost:4004`), not through the AppRouter.

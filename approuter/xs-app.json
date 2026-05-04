@@ -17,6 +17,12 @@
       "authenticationType": "xsuaa"
     },
     {
+      "source": "^/scanner-vue/(.*)$",
+      "target": "/scanner-vue/$1",
+      "localDir": "static",
+      "authenticationType": "xsuaa"
+    },
+    {
       "source": "^/scanner/(.*)$",
       "target": "/scanner/$1",
       "destination": "srv-api",

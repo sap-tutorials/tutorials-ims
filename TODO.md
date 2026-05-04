@@ -404,9 +404,11 @@ First comprehensive security audit of the full implementation. Findings ranked b
 
 ## 17. Scanner UI — Vue with Fiori Styles
 
-**Priority:** Medium | **Effort:** Medium | **Status:** Not Started
+**Priority:** Medium | **Effort:** Medium | **Status:** Done
 
 **Task:** Rewrite the scanner UI using Vue 3 with SAP Fundamental Styles (same pattern as `apps/`). Replace the current UI framework with a Vue + Vite build that uses `@aspect/fundamental-styles` or equivalent Horizon-themed components, consistent with the rest of this project's frontend approach.
+
+**Resolution:** Created parallel Vue 3 implementation at `/scanner-vue/` alongside existing UI5 app. Files: `apps/src/scanner-vue/` (main.ts, ScannerApp.vue, types.ts, useBarcodeScanner.ts, useScannerApi.ts), `hugo/layouts/scanner-vue/list.html` (standalone layout), `hugo/content/scanner-vue/_index.md`. Uses native BarcodeDetector API with manual JSON fallback. Mobile-first with SAP Fundamental Styles classes, Horizon theme vars, safe-area insets, and touch-optimized targets. Builds as `scanner-vue.js` (13 kB / 4.2 kB gzip). Route in xs-app.json with XSUAA auth.
 
 ---
 

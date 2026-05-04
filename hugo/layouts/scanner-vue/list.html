@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Badge Scanner</title>
+  <link rel="stylesheet" href="https://unpkg.com/fundamental-styles@0.41.4/dist/icon.css">
+  <style>
+    @font-face {
+      font-family: "SAP-icons";
+      src: url("https://unpkg.com/@sap-theming/theming-base-content@11/content/Base/baseLib/baseTheme/fonts/SAP-icons.woff2") format("woff2");
+      font-weight: normal;
+      font-style: normal;
+    }
+  </style>
+  {{ $themeVars := resources.Get "css/sap-theme-vars.css" }}
+  {{ $darkVars := resources.Get "css/sap-horizon-dark.css" }}
+  <link rel="stylesheet" href="{{ $themeVars.RelPermalink }}">
+  <link rel="stylesheet" href="{{ $darkVars.RelPermalink }}">
+  <link rel="stylesheet" href="/css/sap-fundamental.css">
+  <script>
+    const t = localStorage.getItem('theme') ||
+      (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
+    document.documentElement.dataset.theme = t;
+    if (t === 'dark') document.documentElement.classList.add('dark');
+  </script>
+</head>
+<body>
+  <div id="scanner-vue"></div>
+  <script type="module" src="/js/scanner-vue.js?v={{ now.Unix }}"></script>
+</body>
+</html>
