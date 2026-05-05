@@ -53,6 +53,33 @@ sap.ui.define([
         BusyIndicator.hide();
         MessageBox.error("Export failed: " + err.message);
       });
+    },
+
+    onExportMissionCompletions: function () {
+      var oStartDate = this.byId("missionStartDate").getDateValue();
+      var oEndDate = this.byId("missionEndDate").getDateValue();
+      if (!oStartDate || !oEndDate) { MessageBox.warning("Enter both start and end dates"); return; }
+
+      var startDate = oStartDate.toISOString();
+      var endDate = oEndDate.toISOString();
+      var missionId = parseInt(this.byId("missionIdInput").getValue(), 10) || null;
+
+      var oModel = this.getOwnerComponent().getModel("admin");
+      BusyIndicator.show(0);
+      var oFunc = oModel.bindContext("/exportMissionCompletions(...)");
+      oFunc.setParameter("startDate", startDate);
+      oFunc.setParameter("endDate", endDate);
+      if (missionId) { oFunc.setParameter("missionLegacyId", missionId); }
+      oFunc.execute().then(function () {
+        var result = oFunc.getBoundContext().getObject();
+        var sStart = startDate.slice(0, 10);
+        var sEnd = endDate.slice(0, 10);
+        this._downloadContent(result.value, "CONFIDENTIAL_" + sStart + "_" + sEnd + ".csv");
+        BusyIndicator.hide();
+      }.bind(this)).catch(function (err) {
+        BusyIndicator.hide();
+        MessageBox.error("Export failed: " + err.message);
+      });
     }
   });
 });

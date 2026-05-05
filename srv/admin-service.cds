@@ -105,6 +105,7 @@ service AdminService {
 
   function exportTaskRecords(eventLegacyId : Integer, format : String) returns LargeString;
   function exportAwardMissions(eventLegacyId : Integer) returns LargeString;
+  function exportMissionCompletions(startDate : Timestamp, endDate : Timestamp, missionLegacyId : Integer) returns LargeString;
 
   function getAccountMergeStatus(uuid : String) returns {
     primaryUuid     : String;

@@ -135,6 +135,43 @@ export default class AdminService extends cds.ApplicationService {
       return formatAwardMissionsCSV(awards);
     });
 
+    this.on('exportMissionCompletions', async (req) => {
+      const { startDate, endDate, missionLegacyId } = req.data;
+      if (!startDate || !endDate) return req.reject(400, 'startDate and endDate are required');
+
+      const where = { taskType: 'MISSION', status: 'COMPLETED', modifiedAt: { '>=': startDate, '<=': endDate } };
+      if (missionLegacyId) where.taskLegacyId = missionLegacyId;
+
+      const records = await SELECT.from(TaskRecords).where(where);
+
+      const userIds = [...new Set(records.map(r => r.user_ID))];
+      const users = userIds.length > 0
+        ? await SELECT.from(Users).where({ ID: { in: userIds } })
+        : [];
+      const userMap = new Map(users.map(u => [u.ID, u]));
+
+      const missions = await SELECT.from(Missions).columns('legacyId', 'title');
+      const missionMap = new Map(missions.map(m => [m.legacyId, m.title]));
+
+      const header = 'Mission Title,Mission ID,Login,Username,Email,Completion Date,SAP ID';
+      const rows = records.map(r => {
+        const user = userMap.get(r.user_ID);
+        const completionDate = r.completionDate
+          ? new Date(r.completionDate).toISOString().replace('T', ' ').slice(0, 19)
+          : '';
+        return [
+          csvEscape(missionMap.get(r.taskLegacyId) || ''),
+          r.taskLegacyId || '',
+          csvEscape(user?.email || ''),
+          csvEscape(user?.displayName || ''),
+          csvEscape(user?.email || ''),
+          completionDate,
+          csvEscape(user?.sapId || '')
+        ].join(',');
+      });
+      return [header, ...rows].join('\n');
+    });
+
     // --- GDPR / Anonymization ---
 
     this.on('anonymizeUser', async (req) => {
@@ -449,4 +486,12 @@ function titlePathToMdFormat(titlePath) {
   const first = parts[0].trim().replace(/[^A-Za-z\d]/g, '-').toLowerCase();
   const last = parts[parts.length - 1].trim().replace(/[^A-Za-z\d]/g, '-').toLowerCase();
   return `${first}>${last}`;
+}
+
+function csvEscape(value) {
+  const str = String(value);
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return '"' + str.replace(/"/g, '""') + '"';
+  }
+  return str;
 }

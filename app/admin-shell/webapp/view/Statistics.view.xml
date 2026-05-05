@@ -2,27 +2,43 @@
   controllerName="sap.tutorials.admin.shell.controller.Statistics"
   xmlns:mvc="sap.ui.core.mvc"
   xmlns="sap.m"
-  xmlns:f="sap.ui.layout.form">
-  <Page title="Statistics">
+  xmlns:f="sap.ui.layout.form"
+  xmlns:core="sap.ui.core">
+  <Page title="Statistics" enableScrolling="true">
     <content>
-      <f:SimpleForm editable="true" layout="ResponsiveGridLayout" class="sapUiSmallMargin">
-        <f:toolbar>
-          <Toolbar><Title text="Export Parameters"/></Toolbar>
-        </f:toolbar>
-        <Label text="Event Legacy ID"/>
-        <Input id="eventIdInput" type="Number" placeholder="Enter Event ID"/>
-        <Label text="Format"/>
-        <Select id="formatSelect">
-          <items>
-            <core:Item xmlns:core="sap.ui.core" key="csv" text="CSV"/>
-            <core:Item xmlns:core="sap.ui.core" key="json" text="JSON"/>
-          </items>
-        </Select>
-      </f:SimpleForm>
-      <HBox class="sapUiSmallMargin">
-        <Button text="Export Task Records" press=".onExportTaskRecords" type="Emphasized" class="sapUiTinyMarginEnd"/>
-        <Button text="Export Award Missions" press=".onExportAwardMissions"/>
-      </HBox>
+
+      <Panel headerText="Event Exports" class="sapUiSmallMargin">
+        <f:SimpleForm editable="true" layout="ResponsiveGridLayout">
+          <Label text="Event Legacy ID"/>
+          <Input id="eventIdInput" type="Number" placeholder="Enter Event ID"/>
+          <Label text="Format"/>
+          <Select id="formatSelect">
+            <items>
+              <core:Item key="csv" text="CSV"/>
+              <core:Item key="json" text="JSON"/>
+            </items>
+          </Select>
+        </f:SimpleForm>
+        <HBox class="sapUiSmallMarginBegin sapUiSmallMarginBottom">
+          <Button text="Export Task Records" press=".onExportTaskRecords" type="Emphasized" class="sapUiTinyMarginEnd"/>
+          <Button text="Export Award Missions" press=".onExportAwardMissions"/>
+        </HBox>
+      </Panel>
+
+      <Panel headerText="Mission Completions" class="sapUiSmallMargin">
+        <f:SimpleForm editable="true" layout="ResponsiveGridLayout">
+          <Label text="Start Date"/>
+          <DatePicker id="missionStartDate" placeholder="Start date" displayFormat="yyyy-MM-dd"/>
+          <Label text="End Date"/>
+          <DatePicker id="missionEndDate" placeholder="End date" displayFormat="yyyy-MM-dd"/>
+          <Label text="Mission ID (optional)"/>
+          <Input id="missionIdInput" type="Number" placeholder="Leave empty for all missions"/>
+        </f:SimpleForm>
+        <HBox class="sapUiSmallMarginBegin sapUiSmallMarginBottom">
+          <Button text="Export Mission Completions" press=".onExportMissionCompletions" type="Emphasized"/>
+        </HBox>
+      </Panel>
+
     </content>
   </Page>
 </mvc:View>
