@@ -116,9 +116,10 @@ export async function publishHandler(req, res) {
 
   const startTime = Date.now();
   const { ContentFiles, ContentManifest } = cds.entities('com.sap.developers.ims');
+  let newVersion;
 
   try {
-    const newVersion = await getNextVersion();
+    newVersion = await getNextVersion();
     const slugs = Object.keys(files);
 
     await INSERT.into(ContentManifest).entries({
@@ -184,6 +185,15 @@ export async function publishHandler(req, res) {
     });
   } catch (err) {
     console.error('[content/publish]', err instanceof Error ? err.message : String(err));
+    if (newVersion) {
+      try {
+        await UPDATE(ContentManifest)
+          .where({ version: newVersion })
+          .set({ status: 'FAILED' });
+      } catch (updateErr) {
+        console.error('[content/publish] Could not mark manifest FAILED:', updateErr.message);
+      }
+    }
     await logPipelineEnd(pipelineLogId, 'FAILED', null, err instanceof Error ? err.message : String(err));
     res.status(500).json({ error: 'Publish failed' });
   } finally {

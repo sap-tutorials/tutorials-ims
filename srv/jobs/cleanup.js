@@ -55,3 +55,22 @@ export async function cleanupPipelineLog(retentionDays = 30) {
   LOG.info(`Cleaned up pipeline log entries older than ${retentionDays} days: ${result} removed`);
   return result;
 }
+
+export async function cleanupStuckPublishing(olderThanMinutes = 60) {
+  const { ContentManifest } = cds.entities('com.sap.developers.ims');
+  const LOG = cds.log('jobs/cleanup');
+  const cutoff = new Date(Date.now() - olderThanMinutes * 60_000).toISOString();
+  const stuck = await SELECT.from(ContentManifest)
+    .where({ status: 'PUBLISHING', createdAt: { '<': cutoff } })
+    .columns('version');
+  if (stuck.length === 0) {
+    LOG.info('No stuck PUBLISHING manifests found');
+    return 0;
+  }
+  const versions = stuck.map(r => r.version);
+  await UPDATE(ContentManifest)
+    .where({ version: { in: versions } })
+    .set({ status: 'FAILED' });
+  LOG.info(`Marked ${stuck.length} stuck PUBLISHING manifests as FAILED (older than ${olderThanMinutes}m)`);
+  return stuck.length;
+}

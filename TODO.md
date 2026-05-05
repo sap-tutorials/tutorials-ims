@@ -447,14 +447,14 @@ First comprehensive security audit of the full implementation. Findings ranked b
 - [X] **Admin UI** - the new pipeline log view is missing from the side navigation and cannot be accessed.
 - [X] **Admin UI** - Error Sorry, we can't find this page
 HTTP request was not processed because the previous request failed. This happens when navigating back between object level pages.
-- [ ] App Space page needs an event id parameter and a default.
-- [ ] Admin UI - Missions and Groups - add a published flag that only super admin can set
+- [X] App Space page needs an event id parameter and a default.
+- [X] Admin UI - Missions and Groups - add a published flag that only super admin can set
 
 ### Bug Hunt Findings (2026-05-05)
 
 #### CRITICAL
 
-- [ ] **#1 — Dead code: `directSlugs` always empty** (`srv/lib/build-catalog.js:44-46`)
+- [X] **#1 — Dead code: `directSlugs` always empty** (`srv/lib/build-catalog.js:44-46`)
   Both branches of the ternary return `[]`, so missions with direct tutorials (no completion path) get an empty hierarchy in `/build/catalog`. Hugo generates empty mission pages for these.
   ```js
   const directSlugs = missionPaths.length === 0
@@ -463,7 +463,7 @@ HTTP request was not processed because the previous request failed. This happens
   ```
   **Fix:** The truthy branch should query tutorials directly associated with the mission (e.g., via `MissionTutorials` or a direct relationship).
 
-- [ ] **#2 — Orphaned PUBLISHING manifests never recover** (`srv/lib/content-store.js:124-191`)
+- [X] **#2 — Orphaned PUBLISHING manifests never recover** (`srv/lib/content-store.js:124-191`)
   If `publishContent()` throws after INSERT of a manifest with status `PUBLISHING`, the error path releases the lock but never transitions the manifest to `FAILED`. No scheduled job scans for stuck `PUBLISHING` manifests. On subsequent publish, the old PUBLISHING row blocks the flow or gets orphaned forever.
   **Fix:** Add `await UPDATE(ContentManifest, manifestId).set({ status: 'FAILED' })` in the catch block. Optionally add a cleanup sweep in the daily content-gc job for PUBLISHING manifests older than 1 hour.
 

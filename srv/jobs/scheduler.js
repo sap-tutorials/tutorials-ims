@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { acquireLock, releaseLock } from './job-lock.js';
-import { cleanupStepFailures, cleanupUnusedTags, cleanupContentVersions, cleanupPipelineLog } from './cleanup.js';
+import { cleanupStepFailures, cleanupUnusedTags, cleanupContentVersions, cleanupPipelineLog, cleanupStuckPublishing } from './cleanup.js';
 import { recordActiveLearners } from './analytics.js';
 import { retryNgds } from './ngds-retry.js';
 import { processAccountMerges } from './account-merge-job.js';
@@ -59,6 +59,11 @@ export function registerJobs() {
   // Daily at 03:00 — prune old content versions (keep last 3, older than 7 days)
   cron.schedule('0 3 * * *', () =>
     runWithLock('content-gc', 600000, () => cleanupContentVersions(3, 7))
+  );
+
+  // Every hour — mark stuck PUBLISHING manifests as FAILED (older than 60 min)
+  cron.schedule('30 * * * *', () =>
+    runWithLock('content-publishing-sweep', 300000, () => cleanupStuckPublishing(60))
   );
 
   // Daily at 03:15 — prune pipeline log entries older than 30 days
