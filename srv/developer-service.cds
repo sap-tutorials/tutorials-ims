@@ -74,4 +74,28 @@ service DeveloperService {
       };
     };
   };
+
+  // App Space progress by event ID (frontend default: latest event)
+  function getAppSpaceProgress(eventLegacyId : Integer) returns {
+    eventId   : Integer;
+    eventName : String;
+    type      : String;
+    paths     : many {
+      id          : Integer;
+      title       : String;
+      description : String;
+      items       : many {
+        imsId          : Integer;
+        title          : String;
+        type           : String;
+        status         : String;
+        progress       : Integer;
+        experience     : String;
+        timeToComplete : Integer;
+        url            : String;
+        description    : String;
+        recordId       : Integer;
+      };
+    };
+  };
 }

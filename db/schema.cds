@@ -104,6 +104,7 @@ entity Events : cuid, managed, LegacyKeyed {
   startDate                 : Timestamp;
   endDate                   : Timestamp;
   timeZone                  : String(50);
+  mission                   : Association to Missions;
   taskRecords               : Association to many TaskRecords on taskRecords.event = $self;
   prizes                    : Composition of many Prizes on prizes.event = $self;
 }

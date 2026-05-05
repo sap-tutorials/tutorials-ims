@@ -3,14 +3,16 @@ import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useRealtimeProgress } from './useRealtimeProgress'
 import { useConfetti } from '../composables/useConfetti'
 
-// ── Configuration (easily customizable per event) ──────────────────
-const MISSION_ID = 24609
+// ── Configuration ─────────────────────────────────────────────────
+const eventId = ref<number | null>(null)
 
 // ── Theme ─────────────────────────────────────────────────────────
 const isDark = ref(document.documentElement.dataset.theme === 'dark')
 const activeTheme = ref<'joule' | 'sapphire' | null>(null)
+const loadedEventName = ref('')
 
 const eventName = computed(() => {
+  if (loadedEventName.value) return loadedEventName.value
   if (activeTheme.value === 'sapphire') return 'SAP Sapphire 2026'
   return 'SAP TechEd'
 })
@@ -38,6 +40,7 @@ interface AppSpaceTrack {
 
 interface AppSpaceData {
   eventId: number
+  eventName: string
   type: string
   paths: AppSpaceTrack[]
 }
@@ -67,10 +70,13 @@ function showToast(message: string) {
 // ── Data loading ───────────────────────────────────────────────────
 async function loadData(): Promise<AppSpaceData | null> {
   try {
-    const res = await fetch(`/api/getEventProgress(missionLegacyId=${MISSION_ID})`)
+    const param = eventId.value ? `eventLegacyId=${eventId.value}` : `eventLegacyId=0`
+    const res = await fetch(`/api/getAppSpaceProgress(${param})`)
     if (res.ok) {
       isLoggedIn.value = true
-      return await res.json()
+      const data = await res.json()
+      if (data.eventId) eventId.value = data.eventId
+      return data
     }
   } catch {}
   try {
@@ -87,9 +93,13 @@ onMounted(async () => {
     activeTheme.value = theme
   }
 
+  const eidParam = params.get('eventId')
+  if (eidParam) eventId.value = Number(eidParam)
+
   const data = await loadData()
   if (data) {
     tracks.value = data.paths
+    if (data.eventName) loadedEventName.value = data.eventName
   }
   loading.value = false
 })
@@ -97,11 +107,9 @@ onMounted(async () => {
 // ── Real-time progress (requires login + event context) ───────────
 const eventIdForWs = ref<string>('')
 
-watch([() => tracks.value, isLoggedIn], ([t, loggedIn]) => {
+watch([() => tracks.value, isLoggedIn, eventId], ([t, loggedIn, eid]) => {
   if (!loggedIn || !t.length) return
-  const params = new URLSearchParams(window.location.search)
-  const eid = params.get('eventId') || ''
-  if (eid) eventIdForWs.value = eid
+  if (eid) eventIdForWs.value = String(eid)
 }, { immediate: true })
 
 const realtimeActive = computed(() => isLoggedIn.value && eventIdForWs.value !== '')
@@ -219,7 +227,7 @@ function handleItemClick(track: AppSpaceTrack, index: number, item: AppSpaceItem
 }
 
 function qrCodeUrl(item: AppSpaceItem): string {
-  return `/api/qrcode?imsId=${item.imsId}&type=${item.type}&eventId=38&recordId=${item.recordId ?? 0}`
+  return `/api/qrcode?imsId=${item.imsId}&type=${item.type}&eventId=${eventId.value ?? 0}&recordId=${item.recordId ?? 0}`
 }
 
 // ── Computed ───────────────────────────────────────────────────────
