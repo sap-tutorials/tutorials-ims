@@ -32,16 +32,18 @@ The SuperAdmin role subsumes Admin — anyone who can publish can also do all re
 
 A `before` handler on **CREATE, UPDATE, and PATCH** (for draft-enabled entities) of Missions and Groups in AdminService:
 
-1. Check if `req.data.published` is being set or changed
-2. If the user lacks the `SuperAdmin` role, reject with 403 and a clear message
-3. All other fields remain writable by regular Admins
+1. If `req.data.published` is present in the payload AND the user lacks the `SuperAdmin` role → reject with 403
+2. All other fields remain writable by regular Admins
+
+**Event-scoped guard logic** (critical for draft-enabled entities):
+
+- **`PATCH`** — draft field editing. Fiori Elements sends only changed fields as a delta. If `published` appears in `req.data`, the user explicitly toggled it → apply the guard.
+- **`CREATE`** — new record. If `published` is explicitly set in the payload, apply the guard. If absent, the DB default (`true`) applies — no guard needed.
+- **`UPDATE`** — draft activation (Save). Fiori Elements sends the **full entity payload** including unchanged fields. Checking `req.data.published` here would false-positive on every published mission saved by a regular Admin. Therefore: **skip the guard on UPDATE**. The dangerous mutation (toggling the checkbox) is already caught on PATCH. By the time UPDATE fires, the value in the draft is already authorized.
+
+The handler registers on `['CREATE', 'PATCH']` only. The `UPDATE` event (draft activation) is excluded because the PATCH guard already prevents unauthorized changes to the draft, and the activation payload reflects the already-validated draft state.
 
 In CAP Node.js, `req.user.is('SuperAdmin')` checks CDS pseudo-roles which map to XSUAA role templates. With the `SuperAdmin` role template defined in XSUAA, this works correctly. The `@requires: 'Admin'` on the service ensures only admins access the service at all; the handler provides field-level granularity within.
-
-Draft considerations: Both Missions and Groups are `@odata.draft.enabled`. The PATCH event fires when a user edits draft fields. The handler must register on `['CREATE', 'UPDATE', 'PATCH']` to cover:
-- `PATCH` — draft field editing (user toggles the checkbox in edit mode)
-- `UPDATE` — draft activation (Save)
-- `CREATE` — new record creation
 
 ### Dynamic UI Field Control
 
@@ -121,7 +123,7 @@ Add `published` to Missions and Groups list tables and object pages in `app/admi
 | `db/views.cds` | Add `published = true` filter to NavigatorCatalog and SearchableItems views |
 | `xs-security.json` | Add SuperAdmin scope, role template, role collection (reference) |
 | `srv/admin-service.cds` | Virtual field projections for Missions and Groups |
-| `srv/admin-service.js` | `before` handler on CREATE/UPDATE/PATCH (403 guard) + `after READ` handler (field control) |
+| `srv/admin-service.js` | `before` handler on CREATE/PATCH (403 guard, skips UPDATE/activation) + `after READ` handler (field control) |
 | `srv/lib/build-catalog.js` | Filter `published: true` |
 | `app/admin-annotations.cds` | Add published + fieldControl to UI |
 
@@ -135,8 +137,9 @@ Add `published` to Missions and Groups list tables and object pages in `app/admi
 
 - **Unit test**: Verify build catalog excludes unpublished missions
 - **Unit test**: Verify navigator catalog excludes unpublished missions
-- **Unit test**: Verify 403 on published field write without SuperAdmin scope (via UPDATE and PATCH)
-- **Unit test**: Verify SuperAdmin can toggle published
+- **Unit test**: Verify 403 on published field write without SuperAdmin scope (via CREATE and PATCH)
+- **Unit test**: Verify SuperAdmin can toggle published (via PATCH)
+- **Unit test**: Verify regular Admin can activate draft (UPDATE) of a published mission without 403
 - **Unit test**: Verify field control returns 1 for Admin, 7 for SuperAdmin (active and draft reads)
 - **Hybrid test**: Verify HANA deploy adds column with default true
 
