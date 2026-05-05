@@ -139,10 +139,13 @@ export default class AdminService extends cds.ApplicationService {
       const { startDate, endDate, missionLegacyId } = req.data;
       if (!startDate || !endDate) return req.reject(400, 'startDate and endDate are required');
 
-      const where = { taskType: 'MISSION', status: 'COMPLETED', modifiedAt: { '>=': startDate, '<=': endDate } };
-      if (missionLegacyId) where.taskLegacyId = missionLegacyId;
+      let query = SELECT.from(TaskRecords)
+        .where({ taskType: 'MISSION', status: 'COMPLETED' })
+        .and(`completionDate >=`, startDate)
+        .and(`completionDate <=`, endDate);
+      if (missionLegacyId) query = query.and({ taskLegacyId: missionLegacyId });
 
-      const records = await SELECT.from(TaskRecords).where(where);
+      const records = await query;
 
       const userIds = [...new Set(records.map(r => r.user_ID))];
       const users = userIds.length > 0

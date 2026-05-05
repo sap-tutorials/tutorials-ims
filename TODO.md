@@ -492,7 +492,7 @@ HTTP request was not processed because the previous request failed. This happens
   ```
   **Fix:** Reject any slug containing `..`, `/`, or `\`. Validate against a strict pattern like `/^[a-z0-9][a-z0-9-]*$/`.
 
-- [ ] **#5 — `exportMissionCompletions` date filter/export mismatch** (`srv/admin-service.js:142`)
+- [X] **#5 — `exportMissionCompletions` date filter/export mismatch** (`srv/admin-service.js:142`)
   The WHERE clause filters by `modifiedAt` (system timestamp of last DB change) but exports `completionDate` (the business date the user completed the task). A record modified (e.g., status correction) outside the date window won't be found, while a record modified for non-completion reasons will be included.
   ```js
   const where = { taskType: 'MISSION', status: 'COMPLETED',

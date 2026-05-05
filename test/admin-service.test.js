@@ -195,6 +195,51 @@ describe('AdminService', () => {
     });
   });
 
+  describe('exportMissionCompletions', () => {
+    beforeAll(async () => {
+      const { Users, TaskRecords, Missions } = cds.entities('com.sap.developers.ims');
+
+      await INSERT.into(Users).entries({
+        ID: 'cccccccc-0000-0000-0000-000000000001', uuid: 'export-user',
+        legacyId: 5001, displayName: 'Export User', email: 'export@test.com'
+      });
+
+      await INSERT.into(Missions).entries({
+        ID: 'cccccccc-m001', legacyId: 55001, title: 'Export Mission'
+      });
+
+      await INSERT.into(TaskRecords).entries([
+        {
+          user_ID: 'cccccccc-0000-0000-0000-000000000001',
+          taskLegacyId: 55001, taskType: 'MISSION', status: 'COMPLETED',
+          completionDate: '2026-06-15T10:00:00Z',
+          modifiedAt: '2026-07-01T10:00:00Z',
+          legacyId: 5501
+        },
+        {
+          user_ID: 'cccccccc-0000-0000-0000-000000000001',
+          taskLegacyId: 55001, taskType: 'MISSION', status: 'COMPLETED',
+          completionDate: '2026-08-01T10:00:00Z',
+          modifiedAt: '2026-06-15T10:00:00Z',
+          legacyId: 5502
+        },
+      ]);
+    });
+
+    it('filters by completionDate, not modifiedAt', async () => {
+      const { data } = await project.get(
+        `/admin/exportMissionCompletions(startDate=2026-06-01T00:00:00Z,endDate=2026-06-30T23:59:59Z)`,
+        adminAuth
+      );
+      // Record 5501 has completionDate in June (included)
+      // Record 5502 has modifiedAt in June but completionDate in August (excluded)
+      const lines = data.value.split('\n').filter(l => l.length > 0);
+      // Header + exactly 1 data row
+      expect(lines.length).toBe(2);
+      expect(lines[1]).toContain('Export Mission');
+    });
+  });
+
   describe('findMissingSlugs', () => {
     beforeAll(async () => {
       const { Tutorials, Missions, CompletionPaths, CompletionPathItems } = cds.entities('com.sap.developers.ims');
