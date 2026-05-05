@@ -33,6 +33,8 @@ modules:
       disk-quota: 1024M
       buildpack: nodejs_buildpack
       instances: 1
+    properties:
+      EXPOSE_CAP_UI: true
     provides:
       - name: srv-api
         properties:

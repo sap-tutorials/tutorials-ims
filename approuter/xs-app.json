@@ -158,7 +158,7 @@
       "csrfProtection": false
     },
     {
-      "source": "^/_dev(/.*)?$",
+      "source": "^/_dev/?(.*)$",
       "target": "/$1",
       "destination": "srv-api",
       "authenticationType": "xsuaa",

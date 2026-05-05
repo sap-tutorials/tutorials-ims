@@ -139,7 +139,8 @@ const PROXY_PREFIXES = [
 ]
 const REWRITES = [
   { match: /^\/tutorials\/_nav\.json$/, replace: '/content/nav' },
-  { match: /^\/tutorials\/(.*)/, replace: '/content/tutorials/$1' }
+  { match: /^\/tutorials\/(.*)/, replace: '/content/tutorials/$1' },
+  { match: /^\/_dev\/?(.*)$/, replace: '/$1' }
 ]
 const http = require('http')
 const { URL } = require('url')
