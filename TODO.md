@@ -524,7 +524,7 @@ HTTP request was not processed because the previous request failed. This happens
 
 #### LOW
 
-- [ ] **#10 — Publish endpoint accepts unbounded payload** (`srv/lib/content-store.js:124-133`)
+- [X] **#10 — Publish endpoint accepts unbounded payload** (`srv/lib/content-store.js:124-133`)
   `POST /content/publish` has no size limit on the `files` object. A caller (compromised CI or manual mistake) could send hundreds of MB in a single request, exhausting memory.
   **Fix:** Add payload size validation (e.g., reject if total decoded size > 200MB or slug count > 5000).
 

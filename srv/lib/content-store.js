@@ -106,6 +106,17 @@ export async function publishHandler(req, res) {
     return res.status(400).json({ error: 'Missing or empty "files" object' });
   }
 
+  const slugCount = Object.keys(files).length;
+  if (slugCount > 5000) {
+    return res.status(413).json({ error: `Too many slugs: ${slugCount} (max 5000)` });
+  }
+
+  const estimatedBytes = Object.values(files).reduce((sum, v) => sum + (typeof v === 'string' ? v.length : 0), 0);
+  const MAX_PAYLOAD_BYTES = 200 * 1024 * 1024;
+  if (estimatedBytes > MAX_PAYLOAD_BYTES) {
+    return res.status(413).json({ error: `Payload too large: ~${Math.round(estimatedBytes / 1024 / 1024)}MB (max 200MB)` });
+  }
+
   const locked = await acquireLock(LOCK_NAME, INSTANCE_ID, LOCK_DURATION_MS);
   if (!locked) {
     return res.status(409).json({ error: 'Another publish is in progress' });
