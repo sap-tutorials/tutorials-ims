@@ -8,6 +8,14 @@ annotate AdminService.Events with @odata.draft.enabled;
 annotate AdminService.Accomplishments with @odata.draft.enabled;
 
 // --- Events ---
+annotate AdminService.Events with {
+  legacyId  @Common.Label: 'Event ID';
+  name      @Common.Label: 'Name';
+  startDate @Common.Label: 'Start Date';
+  endDate   @Common.Label: 'End Date';
+  timeZone  @Common.Label: 'Time Zone';
+};
+
 annotate AdminService.Events with @UI: {
   HeaderInfo: {
     TypeName: 'Event', TypeNamePlural: 'Events',
@@ -16,13 +24,15 @@ annotate AdminService.Events with @UI: {
   },
   SelectionFields: [ name, startDate, endDate ],
   LineItem: [
-    { Value: legacyId, Label: 'Event ID' },
-    { Value: name, Label: 'Name' },
-    { Value: startDate, Label: 'Start Date' },
-    { Value: endDate, Label: 'End Date' }
+    { Value: legacyId },
+    { Value: name },
+    { Value: startDate },
+    { Value: endDate },
+    { Value: timeZone }
   ],
   Facets: [
     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'General Information' },
+    { $Type: 'UI.ReferenceFacet', Target: 'prizes/@UI.LineItem', Label: 'Prizes' },
     { $Type: 'UI.ReferenceFacet', Target: 'changes/@UI.PresentationVariant', Label: 'Change History', ![@UI.PartOfPreview]: false }
   ],
   FieldGroup#General: { Data: [
@@ -34,6 +44,19 @@ annotate AdminService.Events with @UI: {
 };
 
 // --- Missions ---
+annotate AdminService.Missions with {
+  legacyId           @Common.Label: 'Mission ID';
+  title              @Common.Label: 'Title';
+  description        @Common.Label: 'Description';
+  slug               @Common.Label: 'Slug';
+  communityMissionId @Common.Label: 'Community Mission ID';
+  experienceTag      @Common.Label: 'Experience';
+  primaryTag         @Common.Label: 'Primary Tag (text)';
+  primaryTagRef_ID   @Common.Label: 'Primary Tag';
+  status             @Common.Label: 'Status';
+  averageTimeToComplete @Common.Label: 'Avg Time (min)';
+};
+
 annotate AdminService.Missions with @UI: {
   HeaderInfo: {
     TypeName: 'Mission', TypeNamePlural: 'Missions',
@@ -42,10 +65,12 @@ annotate AdminService.Missions with @UI: {
   },
   SelectionFields: [ title, experienceTag, status ],
   LineItem: [
-    { Value: legacyId, Label: 'Mission ID' },
-    { Value: title, Label: 'Title' },
-    { Value: experienceTag, Label: 'Experience' },
-    { Value: primaryTagRef.name, Label: 'Primary Tag' }
+    { Value: legacyId },
+    { Value: title },
+    { Value: slug },
+    { Value: experienceTag },
+    { Value: primaryTagRef.name, Label: 'Primary Tag' },
+    { Value: status }
   ],
   Facets: [
     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'General' },
@@ -54,11 +79,13 @@ annotate AdminService.Missions with @UI: {
   ],
   FieldGroup#General: { Data: [
     { Value: title },
+    { Value: slug },
     { Value: description },
     { Value: communityMissionId },
     { Value: experienceTag },
     { Value: primaryTagRef_ID },
-    { Value: status }
+    { Value: status },
+    { Value: averageTimeToComplete }
   ]}
 };
 
@@ -73,22 +100,44 @@ annotate AdminService.Missions with {
 };
 
 // CompletionPaths line items
+annotate AdminService.CompletionPaths with {
+  name @Common.Label: 'Path Name';
+  slug @Common.Label: 'Slug';
+};
+
 annotate AdminService.CompletionPaths with @UI: {
   LineItem: [
-    { Value: name, Label: 'Path Name' },
-    { Value: slug, Label: 'Slug' }
+    { Value: name },
+    { Value: slug }
   ]
+};
+
+annotate AdminService.CompletionPathItems with {
+  taskLegacyId @Common.Label: 'Task ID';
+  taskType     @Common.Label: 'Type';
+  itemOrder    @Common.Label: 'Order';
 };
 
 annotate AdminService.CompletionPathItems with @UI: {
   LineItem: [
-    { Value: taskLegacyId, Label: 'Task ID' },
-    { Value: taskType, Label: 'Type' },
-    { Value: itemOrder, Label: 'Order' }
+    { Value: taskLegacyId },
+    { Value: taskType },
+    { Value: itemOrder }
   ]
 };
 
 // --- Groups ---
+annotate AdminService.Groups with {
+  legacyId              @Common.Label: 'Group ID';
+  title                 @Common.Label: 'Title';
+  description           @Common.Label: 'Description';
+  experienceTag         @Common.Label: 'Experience';
+  primaryTag            @Common.Label: 'Primary Tag (text)';
+  primaryTagRef_ID      @Common.Label: 'Primary Tag';
+  averageTimeToComplete @Common.Label: 'Avg Time (min)';
+  status                @Common.Label: 'Status';
+};
+
 annotate AdminService.Groups with @UI: {
   HeaderInfo: {
     TypeName: 'Group', TypeNamePlural: 'Groups',
@@ -97,10 +146,11 @@ annotate AdminService.Groups with @UI: {
   },
   SelectionFields: [ title, experienceTag ],
   LineItem: [
-    { Value: legacyId, Label: 'Group ID' },
-    { Value: title, Label: 'Title' },
-    { Value: averageTimeToComplete, Label: 'Avg Time' },
-    { Value: experienceTag, Label: 'Experience' }
+    { Value: legacyId },
+    { Value: title },
+    { Value: experienceTag },
+    { Value: averageTimeToComplete },
+    { Value: status }
   ],
   Facets: [
     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'General' },
@@ -112,7 +162,8 @@ annotate AdminService.Groups with @UI: {
     { Value: description },
     { Value: experienceTag },
     { Value: averageTimeToComplete },
-    { Value: primaryTagRef_ID }
+    { Value: primaryTagRef_ID },
+    { Value: status }
   ]}
 };
 
@@ -127,16 +178,24 @@ annotate AdminService.Groups with {
 };
 
 // --- Accomplishments ---
+annotate AdminService.Accomplishments with {
+  legacyId    @Common.Label: 'ID';
+  name        @Common.Label: 'Name';
+  description @Common.Label: 'Description';
+  rule        @Common.Label: 'Rule (JSON)';
+};
+
 annotate AdminService.Accomplishments with @UI: {
   HeaderInfo: {
     TypeName: 'Accomplishment', TypeNamePlural: 'Accomplishments',
-    Title: { Value: name }
+    Title: { Value: name },
+    Description: { Value: description }
   },
   SelectionFields: [ name ],
   LineItem: [
-    { Value: legacyId, Label: 'ID' },
-    { Value: name, Label: 'Name' },
-    { Value: description, Label: 'Description' }
+    { Value: legacyId },
+    { Value: name },
+    { Value: description }
   ],
   Facets: [
     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'Details' },
@@ -145,7 +204,7 @@ annotate AdminService.Accomplishments with @UI: {
   FieldGroup#General: { Data: [
     { Value: name },
     { Value: description },
-    { Value: rule, Label: 'Rule' }
+    { Value: rule }
   ]}
 };
 
@@ -154,52 +213,86 @@ annotate AdminService.Accomplishments with {
 };
 
 // --- Prizes ---
+annotate AdminService.Prizes with {
+  legacyId @Common.Label: 'ID';
+  name     @Common.Label: 'Name';
+  event    @Common.Label: 'Event';
+};
+
 annotate AdminService.Prizes with @UI: {
   HeaderInfo: {
     TypeName: 'Prize', TypeNamePlural: 'Prizes',
     Title: { Value: name }
   },
   LineItem: [
-    { Value: legacyId, Label: 'ID' },
-    { Value: name, Label: 'Name' }
+    { Value: legacyId },
+    { Value: name },
+    { Value: event.name, Label: 'Event' }
   ],
   Facets: [
     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'Details' },
     { $Type: 'UI.ReferenceFacet', Target: 'changes/@UI.PresentationVariant', Label: 'Change History', ![@UI.PartOfPreview]: false }
   ],
   FieldGroup#General: { Data: [
-    { Value: name }
+    { Value: name },
+    { Value: event_ID }
   ]}
 };
 
 // --- Tutorials (read-only) ---
+annotate AdminService.Tutorials with {
+  legacyId              @Common.Label: 'Tutorial ID';
+  title                 @Common.Label: 'Title';
+  slug                  @Common.Label: 'Slug';
+  primaryTag            @Common.Label: 'Primary Tag';
+  experienceTag         @Common.Label: 'Experience';
+  averageTimeToComplete @Common.Label: 'Avg Time (min)';
+  status                @Common.Label: 'Status';
+};
+
 annotate AdminService.Tutorials with @UI: {
   HeaderInfo: {
     TypeName: 'Tutorial', TypeNamePlural: 'Tutorials',
-    Title: { Value: title }
+    Title: { Value: title },
+    Description: { Value: slug }
   },
-  SelectionFields: [ title, primaryTag ],
+  SelectionFields: [ title, primaryTag, experienceTag ],
   LineItem: [
-    { Value: title, Label: 'Title' },
-    { Value: primaryTag, Label: 'Primary Tag' },
-    { Value: experienceTag, Label: 'Experience' },
-    { Value: averageTimeToComplete, Label: 'Avg Time' }
+    { Value: legacyId },
+    { Value: title },
+    { Value: slug },
+    { Value: primaryTag },
+    { Value: experienceTag },
+    { Value: averageTimeToComplete },
+    { Value: status }
   ]
 };
 
 // --- Tags (read-only) ---
+annotate AdminService.Tags with {
+  legacyId @Common.Label: 'ID';
+  name     @Common.Label: 'Name';
+};
+
 annotate AdminService.Tags with @UI: {
   HeaderInfo: {
     TypeName: 'Tag', TypeNamePlural: 'Tags',
     Title: { Value: name }
   },
+  SelectionFields: [ name ],
   LineItem: [
-    { Value: legacyId, Label: 'ID' },
-    { Value: name, Label: 'Name' }
+    { Value: legacyId },
+    { Value: name }
   ]
 };
 
 // --- FeaturedTasks (inline editing of featuredOrder) ---
+annotate AdminService.FeaturedTasks with {
+  taskLegacyId  @Common.Label: 'Task ID';
+  taskType      @Common.Label: 'Type';
+  featuredOrder @Common.Label: 'Order';
+};
+
 annotate AdminService.FeaturedTasks with @UI: {
   HeaderInfo: {
     TypeName: 'Featured Task', TypeNamePlural: 'Featured Tasks',
@@ -207,14 +300,18 @@ annotate AdminService.FeaturedTasks with @UI: {
   },
   SelectionFields: [ taskType ],
   LineItem: [
-    { Value: taskLegacyId, Label: 'Task ID' },
-    { Value: taskType, Label: 'Type' },
-    { Value: featuredOrder, Label: 'Order', ![@UI.Importance]: #High }
+    { Value: taskLegacyId },
+    { Value: taskType },
+    { Value: featuredOrder, ![@UI.Importance]: #High }
   ]
 };
 
 // --- ImsConfig (key/value CRUD) ---
-// Note: the schema field is `![key]` (escaped CDS keyword)
+annotate AdminService.ImsConfig with {
+  ![key] @Common.Label: 'Key';
+  value  @Common.Label: 'Value';
+};
+
 annotate AdminService.ImsConfig with @UI: {
   HeaderInfo: {
     TypeName: 'Configuration', TypeNamePlural: 'Configurations',
@@ -222,8 +319,8 @@ annotate AdminService.ImsConfig with @UI: {
   },
   SelectionFields: [ ![key] ],
   LineItem: [
-    { Value: ![key], Label: 'Key' },
-    { Value: value, Label: 'Value' }
+    { Value: ![key] },
+    { Value: value }
   ],
   Facets: [
     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'Configuration' },
@@ -236,6 +333,12 @@ annotate AdminService.ImsConfig with @UI: {
 };
 
 // --- StepFailures (read-only, filterable) ---
+annotate AdminService.StepFailures with {
+  stepNumber   @Common.Label: 'Step #';
+  errorMessage @Common.Label: 'Error';
+  failureDate  @Common.Label: 'Date';
+};
+
 annotate AdminService.StepFailures with @(
   UI: {
     HeaderInfo: {
@@ -244,9 +347,9 @@ annotate AdminService.StepFailures with @(
     },
     SelectionFields: [ failureDate ],
     LineItem: [
-      { Value: stepNumber, Label: 'Step #' },
-      { Value: errorMessage, Label: 'Error' },
-      { Value: failureDate, Label: 'Date' }
+      { Value: stepNumber },
+      { Value: errorMessage },
+      { Value: failureDate }
     ]
   },
   Capabilities.DeleteRestrictions.Deletable: false,
@@ -255,6 +358,13 @@ annotate AdminService.StepFailures with @(
 );
 
 // --- NGDSFailedMessages (read-only, retry action per row) ---
+annotate AdminService.NGDSFailedMessages with {
+  status       @Common.Label: 'Status';
+  errorMessage @Common.Label: 'Error';
+  createdAt    @Common.Label: 'Failed At';
+  retryCount   @Common.Label: 'Retries';
+};
+
 annotate AdminService.NGDSFailedMessages with @(
   UI: {
     HeaderInfo: {
@@ -264,9 +374,10 @@ annotate AdminService.NGDSFailedMessages with @(
     SelectionFields: [ status ],
     LineItem: [
       { Value: ID, Label: 'ID' },
-      { Value: status, Label: 'Status' },
-      { Value: errorMessage, Label: 'Error' },
-      { Value: createdAt, Label: 'Failed At' }
+      { Value: status },
+      { Value: errorMessage },
+      { Value: retryCount },
+      { Value: createdAt }
     ]
   },
   Capabilities.InsertRestrictions.Insertable: false,
@@ -274,17 +385,27 @@ annotate AdminService.NGDSFailedMessages with @(
 );
 
 // --- FailedEmails (read-only, deletable) ---
+annotate AdminService.FailedEmails with {
+  to           @Common.Label: 'Recipient';
+  subject      @Common.Label: 'Subject';
+  createdAt    @Common.Label: 'Failed At';
+  retryCount   @Common.Label: 'Retries';
+  status       @Common.Label: 'Status';
+};
+
 annotate AdminService.FailedEmails with @(
   UI: {
     HeaderInfo: {
       TypeName: 'Failed Email', TypeNamePlural: 'Failed Emails',
       Title: { Value: subject }
     },
-    SelectionFields: [ createdAt ],
+    SelectionFields: [ createdAt, status ],
     LineItem: [
-      { Value: to, Label: 'Recipient' },
-      { Value: subject, Label: 'Subject' },
-      { Value: createdAt, Label: 'Failed At' }
+      { Value: to },
+      { Value: subject },
+      { Value: status },
+      { Value: retryCount },
+      { Value: createdAt }
     ]
   },
   Capabilities.InsertRestrictions.Insertable: false,
@@ -292,6 +413,16 @@ annotate AdminService.FailedEmails with @(
 );
 
 // --- PipelineLog (read-only, filterable by type/status) ---
+annotate AdminService.PipelineLog with {
+  pipelineType  @Common.Label: 'Type';
+  status        @Common.Label: 'Status';
+  startedAt     @Common.Label: 'Started';
+  finishedAt    @Common.Label: 'Finished';
+  durationMs    @Common.Label: 'Duration (ms)';
+  initiator     @Common.Label: 'Initiator';
+  summary       @Common.Label: 'Summary';
+};
+
 annotate AdminService.PipelineLog with @(
   UI: {
     HeaderInfo: {
@@ -301,12 +432,12 @@ annotate AdminService.PipelineLog with @(
     },
     SelectionFields: [ pipelineType, status, startedAt ],
     LineItem: [
-      { Value: startedAt, Label: 'Started' },
-      { Value: pipelineType, Label: 'Type' },
-      { Value: status, Label: 'Status', Criticality: statusCriticality },
-      { Value: durationMs, Label: 'Duration (ms)' },
-      { Value: initiator, Label: 'Initiator' },
-      { Value: summary, Label: 'Summary' }
+      { Value: startedAt },
+      { Value: pipelineType },
+      { Value: status, Criticality: statusCriticality },
+      { Value: durationMs },
+      { Value: initiator },
+      { Value: summary }
     ],
     Sort: [{ Property: startedAt, Descending: true }]
   },
@@ -319,6 +450,11 @@ annotate AdminService.PipelineLog with @(
 // ReadRestrictions override is applied at runtime in srv/admin-service.js
 
 // --- PrimaryAccounts / SecondaryAccounts (read-only) ---
+annotate AdminService.PrimaryAccounts with {
+  uuid   @Common.Label: 'UUID';
+  status @Common.Label: 'Status';
+};
+
 annotate AdminService.PrimaryAccounts with @(
   UI: {
     HeaderInfo: {
@@ -327,14 +463,21 @@ annotate AdminService.PrimaryAccounts with @(
     },
     SelectionFields: [ uuid, status ],
     LineItem: [
-      { Value: uuid, Label: 'UUID' },
-      { Value: status, Label: 'Status' }
+      { Value: uuid },
+      { Value: status }
     ]
   },
   Capabilities.DeleteRestrictions.Deletable: false,
   Capabilities.InsertRestrictions.Insertable: false,
   Capabilities.UpdateRestrictions.Updatable: false
 );
+
+annotate AdminService.SecondaryAccounts with {
+  uuid              @Common.Label: 'UUID';
+  primaryAccount_ID @Common.Label: 'Primary Acct';
+  status            @Common.Label: 'Status';
+  mergedAt          @Common.Label: 'Merged At';
+};
 
 annotate AdminService.SecondaryAccounts with @(
   UI: {
@@ -344,10 +487,10 @@ annotate AdminService.SecondaryAccounts with @(
     },
     SelectionFields: [ uuid, status ],
     LineItem: [
-      { Value: uuid, Label: 'UUID' },
-      { Value: primaryAccount_ID, Label: 'Primary Acct' },
-      { Value: status, Label: 'Status' },
-      { Value: mergedAt, Label: 'Merged At' }
+      { Value: uuid },
+      { Value: primaryAccount_ID },
+      { Value: status },
+      { Value: mergedAt }
     ]
   },
   Capabilities.DeleteRestrictions.Deletable: false,
