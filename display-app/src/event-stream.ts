@@ -128,7 +128,6 @@ export function useEventStream() {
 
     // Connect via Socket.IO to EventStreamService
     socket = io(`${url}/ws/event-stream`, {
-      transports: ['websocket'],
       reconnection: true,
       reconnectionDelay: 2000,
       reconnectionDelayMax: 10000,
@@ -143,9 +142,9 @@ export function useEventStream() {
       connectionState.value = 'reconnecting'
     })
 
-    socket.on('connect_error', () => {
+    socket.on('connect_error', (err) => {
       connectionState.value = 'error'
-      errorMessage.value = 'WebSocket connection error'
+      errorMessage.value = `WebSocket connection error: ${err.message}`
     })
 
     socket.on('tutorialCompleted', (data: { bucketName: string }) => {
