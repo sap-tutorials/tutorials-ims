@@ -510,7 +510,7 @@ HTTP request was not processed because the previous request failed. This happens
   Description says "binds to existing IMS XSUAA instances via `org.cloudfoundry.existing-service`" but `mta.yaml:92-97` defines the XSUAA resource as `org.cloudfoundry.managed-service` — meaning deployment creates a new instance, not reuses IMS's. This confuses operators debugging auth issues.
   **Fix:** Update the description to match reality: "Deployment creates a dedicated XSUAA instance (tutorials-xsuaa) via org.cloudfoundry.managed-service in mta.yaml."
 
-- [ ] **#8 — CDS QL internal query manipulation** (`srv/search-service.js:22-29`)
+- [X] **#8 — CDS QL internal query manipulation** (`srv/search-service.js:22-29`)
   Direct mutation of `req.query.SELECT.where` array relies on internal CDS QL query structure. This pattern can break silently on `@sap/cds` upgrades.
   **Fix:** Use the documented CDS QL API (`cds.ql` query builder or `req.query.where(...)`) instead of array manipulation.
 

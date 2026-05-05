@@ -19,15 +19,9 @@ export default class SearchService extends cds.ApplicationService {
       if (tagMatches.length === 0) return;
 
       const ids = tagMatches.map(r => r.tutorial_ID);
-      if (!req.query.SELECT.where) {
-        req.query.SELECT.where = [{ ref: ['ID'] }, 'in', { val: ids }];
-      } else {
-        req.query.SELECT.where = [
-          '(', ...req.query.SELECT.where, ')',
-          'or',
-          '(', { ref: ['ID'] }, 'in', { val: ids }, ')'
-        ];
-      }
+      const pattern = `%${search}%`;
+      req.query.SELECT.search = [];
+      req.query.where `(title like ${pattern} or description like ${pattern} or primaryTag like ${pattern} or ID in ${ids})`;
     });
 
     this.on('getFacets', async (req) => {
