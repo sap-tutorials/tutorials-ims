@@ -12,7 +12,8 @@ build-parameters:
         - npm run fetch-tutorials -- --target hugo
         - npm run validate-tutorials
         - npm --prefix apps run build
-        - curl -fsSL https://github.com/gohugoio/hugo/releases/download/v0.147.7/hugo_extended_0.147.7_linux-amd64.tar.gz | tar -xz -C /tmp hugo
+        - curl -fsSL https://github.com/gohugoio/hugo/releases/download/v0.147.7/hugo_extended_0.147.7_linux-amd64.tar.gz -o /tmp/hugo.tar.gz
+        - tar -xzf /tmp/hugo.tar.gz -C /tmp hugo
         - /tmp/hugo --source hugo --minify
         - npx tsx scripts/highlight-cds.ts
         - npm --prefix display-app install
