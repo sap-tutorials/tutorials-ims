@@ -193,6 +193,12 @@ export default class AdminService extends cds.ApplicationService {
       return unused.length;
     });
 
+    this.after('READ', 'Tags', (rows) => {
+      for (const row of Array.isArray(rows) ? rows : [rows]) {
+        row.mdFormat = titlePathToMdFormat(row.titlePath);
+      }
+    });
+
     this.on('setFeaturedOrder', async (req) => {
       const { taskLegacyId, taskType, featuredOrder } = req.data;
       const existing = await SELECT.one.from(FeaturedTasks).where({ taskLegacyId, taskType });
@@ -399,4 +405,13 @@ export default class AdminService extends cds.ApplicationService {
       .where({ user_ID: user.ID })
       .set({ createdBy: ops.auditFieldsValue, modifiedBy: ops.auditFieldsValue });
   }
+}
+
+function titlePathToMdFormat(titlePath) {
+  if (!titlePath) return '';
+  const parts = titlePath.split(/[:/]/);
+  if (parts.length === 1) return parts[0].trim().replace(/[^A-Za-z\d]/g, '-').toLowerCase();
+  const first = parts[0].trim().replace(/[^A-Za-z\d]/g, '-').toLowerCase();
+  const last = parts[parts.length - 1].trim().replace(/[^A-Za-z\d]/g, '-').toLowerCase();
+  return `${first}>${last}`;
 }

@@ -270,8 +270,10 @@ annotate AdminService.Tutorials with @UI: {
 
 // --- Tags (read-only) ---
 annotate AdminService.Tags with {
-  legacyId @Common.Label: 'ID';
-  name     @Common.Label: 'Name';
+  legacyId  @Common.Label: 'ID';
+  name      @Common.Label: 'Name';
+  titlePath @Common.Label: 'Full Path';
+  mdFormat  @Common.Label: 'MD Format';
 };
 
 annotate AdminService.Tags with @(
@@ -283,7 +285,9 @@ annotate AdminService.Tags with @(
     SelectionFields: [ name ],
     LineItem: [
       { Value: legacyId },
-      { Value: name }
+      { Value: name },
+      { Value: mdFormat },
+      { Value: titlePath }
     ]
   },
   Capabilities.DeleteRestrictions.Deletable: false,
