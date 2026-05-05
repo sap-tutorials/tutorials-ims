@@ -12,7 +12,7 @@ export default class EventStreamService extends cds.ApplicationService {
       const { eventLegacyId } = req.data;
 
       const event = await SELECT.one.from(Events).where({ legacyId: eventLegacyId });
-      if (!event) return [];
+      if (!event) return req.reject(404, `Event with legacy ID ${eventLegacyId} not found`);
 
       return cached(`es-buckets:${eventLegacyId}`, CACHE_TTL, async () => {
         const records = await SELECT.from(TaskRecords).where({

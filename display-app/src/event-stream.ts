@@ -114,9 +114,19 @@ export function useEventStream() {
     // Fetch initial bucket data from unauthenticated EventStreamService
     try {
       const res = await fetch(`${url}/rest/event-stream/getEventBuckets(eventLegacyId=${eventId})`)
+      if (res.status === 404) {
+        connectionState.value = 'error'
+        errorMessage.value = `Event ID ${eventId} not found. Verify the event exists and has the correct legacy ID.`
+        return
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`)
       const json = await res.json()
       const data: Array<{ bucketName: string; count: number }> = json.value ?? json
+      if (data.length === 0) {
+        connectionState.value = 'error'
+        errorMessage.value = `Event ID ${eventId} not found or has no completed tutorials yet.`
+        return
+      }
       buckets.value = data.map(b => ({ name: b.bucketName, count: b.count, justUpdated: false }))
       sortBuckets()
       recalcTotal()
