@@ -376,6 +376,41 @@ export default class AdminService extends cds.ApplicationService {
       return findMissingSlugs();
     });
 
+    this.on('getBoardStatistics', async () => {
+      const { TutorialMeta } = cds.entities('com.sap.developers.ims');
+
+      const [userCount] = await SELECT.from(Users).columns('count(*) as cnt');
+      const [tutorialCount] = await SELECT.from(Tutorials).columns('count(*) as cnt');
+      const [groupCount] = await SELECT.from(Groups).columns('count(*) as cnt');
+      const [missionCount] = await SELECT.from(Missions).columns('count(*) as cnt');
+
+      const avgByType = await SELECT.from(TaskRecords)
+        .columns('taskType', 'avg(progress) as avgProgress')
+        .where({ status: 'COMPLETED' })
+        .groupBy('taskType');
+      const avgMap = new Map(avgByType.map(r => [r.taskType, Math.round(r.avgProgress || 0)]));
+
+      const now = new Date();
+      const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 6, now.getDate()).toISOString();
+      const [upToDateCount] = await SELECT.from(TutorialMeta)
+        .columns('count(*) as cnt')
+        .where('reviewedDate >=', sixMonthsAgo);
+      const totalMeta = tutorialCount.cnt;
+      const upToDate = upToDateCount.cnt;
+
+      return {
+        totalUsers: userCount.cnt,
+        totalTutorials: tutorialCount.cnt,
+        totalGroups: groupCount.cnt,
+        totalMissions: missionCount.cnt,
+        avgTutorialCompletion: avgMap.get('TUTORIAL') || 0,
+        avgGroupCompletion: avgMap.get('GROUP') || 0,
+        avgMissionCompletion: avgMap.get('MISSION') || 0,
+        tutorialsUpToDate: upToDate,
+        tutorialsNeedReview: totalMeta - upToDate
+      };
+    });
+
     this.after('READ', 'PipelineLog', rows => {
       for (const row of Array.isArray(rows) ? rows : [rows]) {
         if (row.status === 'SUCCESS') row.statusCriticality = 3;

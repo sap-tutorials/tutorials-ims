@@ -2,26 +2,75 @@
   controllerName="sap.tutorials.admin.shell.controller.Board"
   xmlns:mvc="sap.ui.core.mvc"
   xmlns="sap.m"
-  xmlns:l="sap.ui.layout">
+  xmlns:l="sap.ui.layout"
+  xmlns:suite="sap.suite.ui.microchart">
   <Page title="Board" enableScrolling="true">
     <content>
-      <l:VerticalLayout class="sapUiSmallMargin" width="100%">
-        <GenericTile header="Total Tutorials" subheader="All content" class="sapUiTinyMarginEnd">
+      <l:Grid defaultSpan="L3 M4 S6" class="sapUiSmallMargin" width="100%">
+
+        <GenericTile header="Users" subheader="Total registered">
+          <TileContent>
+            <NumericContent value="{board>/totalUsers}" />
+          </TileContent>
+        </GenericTile>
+
+        <GenericTile header="Tutorials" subheader="Total content">
           <TileContent>
             <NumericContent value="{board>/totalTutorials}" />
           </TileContent>
         </GenericTile>
-        <GenericTile header="Up to Date" subheader="Reviewed recently" class="sapUiTinyMarginEnd">
+
+        <GenericTile header="Groups" subheader="Learning groups">
           <TileContent>
-            <NumericContent value="{board>/upToDate}" valueColor="Good" />
+            <NumericContent value="{board>/totalGroups}" />
           </TileContent>
         </GenericTile>
-        <GenericTile header="Needs Review" subheader="Outdated" class="sapUiTinyMarginEnd">
+
+        <GenericTile header="Missions" subheader="Learning missions">
           <TileContent>
-            <NumericContent value="{board>/needsReview}" valueColor="Critical" />
+            <NumericContent value="{board>/totalMissions}" />
           </TileContent>
         </GenericTile>
-      </l:VerticalLayout>
+
+        <GenericTile header="Avg Tutorial %" subheader="Completion rate">
+          <TileContent>
+            <NumericContent value="{board>/avgTutorialCompletion}" scale="%" valueColor="Good" />
+          </TileContent>
+        </GenericTile>
+
+        <GenericTile header="Avg Group %" subheader="Completion rate">
+          <TileContent>
+            <NumericContent value="{board>/avgGroupCompletion}" scale="%" valueColor="Good" />
+          </TileContent>
+        </GenericTile>
+
+        <GenericTile header="Avg Mission %" subheader="Completion rate">
+          <TileContent>
+            <NumericContent value="{board>/avgMissionCompletion}" scale="%" valueColor="Good" />
+          </TileContent>
+        </GenericTile>
+
+        <GenericTile header="Up to Date" subheader="Reviewed &lt; 6 months">
+          <TileContent>
+            <NumericContent value="{board>/tutorialsUpToDate}" valueColor="Good" />
+          </TileContent>
+        </GenericTile>
+
+        <GenericTile header="Needs Review" subheader="Outdated &gt; 6 months">
+          <TileContent>
+            <NumericContent value="{board>/tutorialsNeedReview}" valueColor="Critical" />
+          </TileContent>
+        </GenericTile>
+
+        <GenericTile header="Review Status" subheader="Up to date vs outdated">
+          <TileContent>
+            <suite:RadialMicroChart
+              percentage="{board>/reviewPercentage}"
+              valueColor="{= ${board>/reviewPercentage} >= 70 ? 'Good' : ${board>/reviewPercentage} >= 40 ? 'Critical' : 'Error'}" />
+          </TileContent>
+        </GenericTile>
+
+      </l:Grid>
     </content>
   </Page>
 </mvc:View>

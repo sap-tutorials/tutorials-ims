@@ -121,4 +121,17 @@ service AdminService {
     pathName     : String;
     missionTitle : String;
   };
+
+  // --- Board / overall statistics ---
+  function getBoardStatistics() returns {
+    totalUsers              : Integer;
+    totalTutorials          : Integer;
+    totalGroups             : Integer;
+    totalMissions           : Integer;
+    avgTutorialCompletion   : Decimal;
+    avgGroupCompletion      : Decimal;
+    avgMissionCompletion    : Decimal;
+    tutorialsUpToDate       : Integer;
+    tutorialsNeedReview     : Integer;
+  };
 }

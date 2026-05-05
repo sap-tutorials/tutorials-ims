@@ -31,7 +31,8 @@
         "sap.tnt": {},
         "sap.ui.core": {},
         "sap.ui.layout": {},
-        "sap.ui.table": {}
+        "sap.ui.table": {},
+        "sap.suite.ui.microchart": {}
       }
     },
     "resourceRoots": {
