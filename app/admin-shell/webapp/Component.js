@@ -11,6 +11,7 @@ sap.ui.define([
     },
 
     init: function () {
+      this._oShellViewModel = new JSONModel({ sideExpanded: true, headerTitle: "Admin Console", showBackButton: false });
       this._initMockShellContainer();
 
       UIComponent.prototype.init.apply(this, arguments);
@@ -18,6 +19,10 @@ sap.ui.define([
       this._initTheme();
       this._initNavModel();
       this.getRouter().initialize();
+    },
+
+    getShellViewModel: function () {
+      return this._oShellViewModel;
     },
 
     _initMockShellContainer: function () {
@@ -35,7 +40,9 @@ sap.ui.define([
           if (sServiceName === "Navigation" || sServiceName === "CrossApplicationNavigation") {
             return Promise.resolve({
               toExternal: function () {},
-              backToPreviousApp: function () { window.history.back(); },
+              backToPreviousApp: function () {
+                that._navigateBackToList();
+              },
               hrefForExternal: function () { return "#"; },
               getDistinctSemanticObjects: function () { return Promise.resolve([]); },
               getLinks: function () { return Promise.resolve([]); },
@@ -70,22 +77,24 @@ sap.ui.define([
       };
     },
 
+    _navigateBackToList: function () {
+      var oRouter = this.getRouter();
+      var oHashChanger = oRouter.getHashChanger();
+      var sCurrentHash = oHashChanger.getHash();
+      var sShellRoute = sCurrentHash.split("&")[0];
+      oHashChanger.setHash(sShellRoute);
+    },
+
     _getShellUIServiceInstance: function () {
       if (!this._oShellUIService) {
+        var oViewModel = this._oShellViewModel;
         this._oShellUIService = {
           _fnBackNavigation: null,
           _aHierarchy: [],
           _sTitle: "",
-          _oComponent: this,
           setBackNavigation: function (fnCallback) {
             this._fnBackNavigation = fnCallback || null;
-            var oShell = this._oComponent.getRootControl();
-            if (oShell) {
-              var oController = oShell.getController();
-              if (oController) {
-                oController.getView().getModel("viewModel").setProperty("/showBackButton", !!fnCallback);
-              }
-            }
+            oViewModel.setProperty("/showBackButton", !!fnCallback);
           },
           getBackNavigation: function () {
             return this._fnBackNavigation;

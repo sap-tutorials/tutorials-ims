@@ -1,8 +1,8 @@
 sap.ui.define([
   "sap/ui/core/mvc/Controller",
   "sap/ui/core/Theming",
-  "sap/ui/model/json/JSONModel"
-], function (Controller, Theming, JSONModel) {
+  "sap/ui/core/routing/HashChanger"
+], function (Controller, Theming, HashChanger) {
   "use strict";
 
   var NAV_KEY_TO_ROUTE = {
@@ -41,25 +41,17 @@ sap.ui.define([
 
   return Controller.extend("sap.tutorials.admin.shell.controller.Shell", {
     onInit: function () {
+      var oComponent = this.getOwnerComponent();
+      var oViewModel = oComponent.getShellViewModel();
       var bExpanded = localStorage.getItem("sap-tutorials-admin-nav-expanded") !== "false";
-      this.setModel(new JSONModel({ sideExpanded: bExpanded, headerTitle: "Admin Console", showBackButton: false }), "viewModel");
+      oViewModel.setProperty("/sideExpanded", bExpanded);
+      this.getView().setModel(oViewModel, "viewModel");
 
-      this.getOwnerComponent().getRouter().attachRouteMatched(this._onRouteMatched, this);
-    },
-
-    setModel: function (oModel, sName) {
-      this.getView().setModel(oModel, sName);
+      oComponent.getRouter().attachRouteMatched(this._onRouteMatched, this);
+      this._attachHashChangeDetection();
     },
 
     onNavBack: function () {
-      var oShellService = this.getOwnerComponent()._oShellUIService;
-      if (oShellService) {
-        var fnBack = oShellService.getBackNavigation();
-        if (fnBack) {
-          fnBack();
-          return;
-        }
-      }
       window.history.back();
     },
 
@@ -105,6 +97,18 @@ sap.ui.define([
       this.getOwnerComponent().getModel("theme").setProperty("/themeMode", sKey);
     },
 
+    _attachHashChangeDetection: function () {
+      var oHashChanger = HashChanger.getInstance();
+      oHashChanger.attachEvent("hashChanged", this._onHashChanged, this);
+    },
+
+    _onHashChanged: function (oEvent) {
+      var sNewHash = oEvent.getParameter("newHash") || "";
+      var oViewModel = this.getView().getModel("viewModel");
+      var bHasNestedRoute = sNewHash.indexOf("&/") !== -1;
+      oViewModel.setProperty("/showBackButton", bHasNestedRoute);
+    },
+
     _onRouteMatched: function (oEvent) {
       var sRouteName = oEvent.getParameter("name");
       var oNavModel = this.getOwnerComponent().getModel("nav");
@@ -112,9 +116,10 @@ sap.ui.define([
         oNavModel.setProperty("/selectedNavKey", sRouteName);
       }
 
+      var oViewModel = this.getView().getModel("viewModel");
       var sPageTitle = NAV_KEY_TO_TITLE[sRouteName] || "";
       var sHeader = sPageTitle ? "Admin Console — " + sPageTitle : "Admin Console";
-      this.getView().getModel("viewModel").setProperty("/headerTitle", sHeader);
+      oViewModel.setProperty("/headerTitle", sHeader);
     }
   });
 });

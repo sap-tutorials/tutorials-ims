@@ -10,6 +10,12 @@ sap.ui.define([
       this._fnBackNavigation = null;
       this._aHierarchy = [];
       this._sTitle = "";
+
+      var oComponent = this.getContext().scopeObject;
+      if (oComponent && oComponent.getShellViewModel) {
+        this._oShellViewModel = oComponent.getShellViewModel();
+        oComponent._oFormalShellUIService = this;
+      }
     },
 
     getInterface: function () {
@@ -18,6 +24,9 @@ sap.ui.define([
 
     setBackNavigation: function (fnCallback) {
       this._fnBackNavigation = fnCallback || null;
+      if (this._oShellViewModel) {
+        this._oShellViewModel.setProperty("/showBackButton", !!fnCallback);
+      }
       this.fireEvent("backNavigationChange", { callback: this._fnBackNavigation });
     },
 
