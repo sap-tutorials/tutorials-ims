@@ -41,21 +41,20 @@ export async function buildCatalogHandler(req, res) {
         };
       });
 
-      const directSlugs = missionPaths.length === 0
-        ? []
-        : [];
+      const isFlat = missionPaths.length === 1 && missionPaths[0].name === m.title;
 
       return {
         missionImsId: m.legacyId,
-        groups,
-        tutorialSlugs: directSlugs,
+        groups: isFlat ? [] : groups,
+        tutorialSlugs: isFlat ? (groups[0]?.tutorialSlugs || []) : [],
       };
     });
 
     for (const m of missionList) {
       const h = hierarchies.find(h => h.missionImsId === m.imsId);
       if (h) {
-        m.tasksCount = h.groups.reduce((sum, g) => sum + g.tutorialSlugs.length, 0);
+        m.tasksCount = h.tutorialSlugs.length
+          + h.groups.reduce((sum, g) => sum + g.tutorialSlugs.length, 0);
       }
     }
 
