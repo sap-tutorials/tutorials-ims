@@ -274,17 +274,22 @@ annotate AdminService.Tags with {
   name     @Common.Label: 'Name';
 };
 
-annotate AdminService.Tags with @UI: {
-  HeaderInfo: {
-    TypeName: 'Tag', TypeNamePlural: 'Tags',
-    Title: { Value: name }
+annotate AdminService.Tags with @(
+  UI: {
+    HeaderInfo: {
+      TypeName: 'Tag', TypeNamePlural: 'Tags',
+      Title: { Value: name }
+    },
+    SelectionFields: [ name ],
+    LineItem: [
+      { Value: legacyId },
+      { Value: name }
+    ]
   },
-  SelectionFields: [ name ],
-  LineItem: [
-    { Value: legacyId },
-    { Value: name }
-  ]
-};
+  Capabilities.DeleteRestrictions.Deletable: false,
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable: false
+);
 
 // --- FeaturedTasks (inline editing of featuredOrder) ---
 annotate AdminService.FeaturedTasks with {
