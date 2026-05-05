@@ -7,9 +7,10 @@ import { navigatorCatalogHandler } from './lib/navigator-catalog.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
 import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, navHandler, rollbackHandler } from './lib/content-store.js';
 
-// Enable swagger UI in non-development environments when EXPOSE_CAP_UI is set
-if (process.env.EXPOSE_CAP_UI === 'true' && !cds.env.swagger) {
-  cds.env.swagger = { basePath: '/$api-docs', diagram: true };
+// Enable CAP index page and swagger UI in non-development environments when EXPOSE_CAP_UI is set
+if (process.env.EXPOSE_CAP_UI === 'true') {
+  cds.env.server.index = true;
+  if (!cds.env.swagger) cds.env.swagger = { basePath: '/$api-docs', diagram: true };
 }
 
 // Disable serve-static directory redirects globally. CAP serves app/ as static
