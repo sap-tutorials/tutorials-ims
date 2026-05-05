@@ -38,23 +38,23 @@
         <tnt:NavigationList>
           <tnt:NavigationListItem text="Dashboard" icon="sap-icon://monitor-payments" key="dashboard" />
           <tnt:NavigationListItem text="Content" icon="sap-icon://folder-blank" expanded="true">
-            <tnt:NavigationListItem text="Events" icon="sap-icon://calendar" key="events" />
-            <tnt:NavigationListItem text="Missions" icon="sap-icon://target-group" key="missions" />
-            <tnt:NavigationListItem text="Groups" icon="sap-icon://group" key="groups" />
-            <tnt:NavigationListItem text="Tutorials" icon="sap-icon://education" key="tutorials" />
-            <tnt:NavigationListItem text="Tags" icon="sap-icon://tags" key="tags" />
+            <tnt:NavigationListItem text="Events" key="events" />
+            <tnt:NavigationListItem text="Missions" key="missions" />
+            <tnt:NavigationListItem text="Groups" key="groups" />
+            <tnt:NavigationListItem text="Tutorials" key="tutorials" />
+            <tnt:NavigationListItem text="Tags" key="tags" />
           </tnt:NavigationListItem>
           <tnt:NavigationListItem text="Rewards" icon="sap-icon://present" expanded="true">
-            <tnt:NavigationListItem text="Accomplishments" icon="sap-icon://competitor" key="accomplishments" />
-            <tnt:NavigationListItem text="Prizes" icon="sap-icon://money-bills" key="prizes" />
+            <tnt:NavigationListItem text="Accomplishments" key="accomplishments" />
+            <tnt:NavigationListItem text="Prizes" key="prizes" />
           </tnt:NavigationListItem>
           <tnt:NavigationListItem text="System" icon="sap-icon://action-settings" expanded="true">
-            <tnt:NavigationListItem text="Operations" icon="sap-icon://action-settings" key="operations" />
-            <tnt:NavigationListItem text="Accounts" icon="sap-icon://person-placeholder" key="accounts" />
-            <tnt:NavigationListItem text="Change Log" icon="sap-icon://history" key="changelog" />
-            <tnt:NavigationListItem text="Board" icon="sap-icon://overview-chart" key="board" />
-            <tnt:NavigationListItem text="Statistics" icon="sap-icon://bar-chart" key="statistics" />
-            <tnt:NavigationListItem text="Privacy" icon="sap-icon://shield" key="privacy" />
+            <tnt:NavigationListItem text="Operations" key="operations" />
+            <tnt:NavigationListItem text="Accounts" key="accounts" />
+            <tnt:NavigationListItem text="Change Log" key="changelog" />
+            <tnt:NavigationListItem text="Board" key="board" />
+            <tnt:NavigationListItem text="Statistics" key="statistics" />
+            <tnt:NavigationListItem text="Privacy" key="privacy" />
           </tnt:NavigationListItem>
         </tnt:NavigationList>
       </tnt:SideNavigation>
