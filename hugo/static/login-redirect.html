@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Redirecting...</title>
+  <script>
+    (function() {
+      var params = new URLSearchParams(window.location.search);
+      var returnTo = params.get('returnTo') || '/';
+      // Only allow relative paths (prevent open redirect)
+      if (returnTo.charAt(0) !== '/' || returnTo.startsWith('//')) {
+        returnTo = '/';
+      }
+      window.location.replace(returnTo);
+    })();
+  </script>
+</head>
+<body>
+  <p>Redirecting...</p>
+</body>
+</html>
