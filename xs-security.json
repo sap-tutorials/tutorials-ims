@@ -1,7 +1,7 @@
 {
   "xsappname": "tutorials-poc",
   "tenant-mode": "dedicated",
-  "description": "Reference documentation only. Deployment binds to existing IMS XSUAA instances (xsuaa-imsdev/imsqa/imsprod) via org.cloudfoundry.existing-service in mta.yaml. These scope and role definitions mirror the IMS XSUAA configuration.",
+  "description": "Deployment creates a dedicated XSUAA instance (tutorials-xsuaa) via org.cloudfoundry.managed-service in mta.yaml.",
   "scopes": [
     { "name": "$XSAPPNAME.Admin",              "description": "Full admin access" },
     { "name": "$XSAPPNAME.SuperAdmin",         "description": "Elevated admin access (publish/unpublish)" },
