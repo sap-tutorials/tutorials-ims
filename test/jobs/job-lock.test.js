@@ -43,4 +43,26 @@ describe('job-lock', () => {
     const acquired = await acquireLock('test-job', 'instance-1', 60000);
     expect(acquired).toBe(true);
   });
+
+  it('only one instance wins when both race for an expired lock', async () => {
+    const { JobLocks } = cds.entities('com.sap.developers.ims');
+    const past = new Date(Date.now() - 120000).toISOString();
+    await INSERT.into(JobLocks).entries({
+      jobName: 'test-job', lockedBy: 'instance-old',
+      lockedAt: past, expiresAt: past
+    });
+
+    const [a, b] = await Promise.all([
+      acquireLock('test-job', 'instance-1', 60000),
+      acquireLock('test-job', 'instance-2', 60000),
+    ]);
+
+    // Exactly one must win
+    expect([a, b].filter(Boolean).length).toBe(1);
+
+    // Verify the winner actually holds the lock
+    const [row] = await SELECT.from(JobLocks).where({ jobName: 'test-job' }).columns('lockedBy');
+    const winner = a ? 'instance-1' : 'instance-2';
+    expect(row.lockedBy).toBe(winner);
+  });
 });

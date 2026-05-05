@@ -469,7 +469,7 @@ HTTP request was not processed because the previous request failed. This happens
 
 #### HIGH
 
-- [ ] **#3 — Job lock race condition** (`srv/jobs/job-lock.js:14-28`)
+- [X] **#3 — Job lock race condition** (`srv/jobs/job-lock.js:14-28`)
   Between the INSERT failure (row exists) and the UPDATE for expired locks, another instance can claim the same lock. The UPDATE uses `expiresAt < now` but doesn't include a CAS guard (e.g., `AND lockedBy != <me>`), so two instances with slight clock skew can both UPDATE and both believe they hold the lock.
   ```js
   try {

@@ -18,7 +18,12 @@ export async function acquireLock(jobName, instanceId, durationMs) {
   const result = await UPDATE(JobLocks)
     .where({ jobName, expiresAt: { '<': now.toISOString() } })
     .set({ lockedBy: instanceId, lockedAt: now.toISOString(), expiresAt: expiresAt.toISOString() });
-  return result > 0;
+
+  if (result === 0) return false;
+
+  // Verify we actually hold the lock (guards against concurrent UPDATE race)
+  const [row] = await SELECT.from(JobLocks).where({ jobName }).columns('lockedBy');
+  return row?.lockedBy === instanceId;
 }
 
 export async function releaseLock(jobName, instanceId) {
