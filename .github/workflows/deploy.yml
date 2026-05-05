@@ -93,17 +93,23 @@ jobs:
 
       - name: Configure environment variables
         run: |
-          APP_NAME="tutorials-${{ steps.env.outputs.target }}-approuter"
+          APPROUTER="tutorials-${{ steps.env.outputs.target }}-approuter"
+          SRV="tutorials-srv"
 
-          cf set-env "$APP_NAME" REBUILD_API_KEY "${{ secrets.REBUILD_API_KEY }}"
+          # Approuter env vars
+          cf set-env "$APPROUTER" REBUILD_API_KEY "${{ secrets.REBUILD_API_KEY }}"
 
           case "${{ steps.env.outputs.target }}" in
-            dev)  cf set-env "$APP_NAME" APPROUTER_URL "${{ secrets.APPROUTER_URL_DEV }}" ;;
-            qa)   cf set-env "$APP_NAME" APPROUTER_URL "${{ secrets.APPROUTER_URL_QA }}" ;;
-            prod) cf set-env "$APP_NAME" APPROUTER_URL "${{ secrets.APPROUTER_URL_PROD }}" ;;
+            dev)  cf set-env "$APPROUTER" APPROUTER_URL "${{ secrets.APPROUTER_URL_DEV }}" ;;
+            qa)   cf set-env "$APPROUTER" APPROUTER_URL "${{ secrets.APPROUTER_URL_QA }}" ;;
+            prod) cf set-env "$APPROUTER" APPROUTER_URL "${{ secrets.APPROUTER_URL_PROD }}" ;;
           esac
 
-          cf restart "$APP_NAME"
+          # CAP srv env vars
+          cf set-env "$SRV" CONTENT_API_KEY "${{ secrets.CONTENT_API_KEY }}"
+
+          cf restart "$APPROUTER"
+          cf restart "$SRV"
 
       - name: Create GitHub Release
         env:

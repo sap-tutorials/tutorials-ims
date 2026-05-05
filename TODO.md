@@ -438,9 +438,12 @@ First comprehensive security audit of the full implementation. Findings ranked b
 
 ## 19. Reported Bugs (2026-05-05)
 
-- [ ] **Admin UI — Mission Detail: no back button in object page header** — Navigate to Missions → click a mission. Expected: back arrow button visible in the object page header. Actual: no back button in the header.
-- [ ] **Admin UI — Discard Draft: error page instead of list navigation** — Edit a mission → click "Discard Draft". Expected: navigates cleanly back to the list view. Actual: error page displayed instead of list navigation.
+- [x] **Admin UI — Mission Detail: no back button in object page header** — Navigate to Missions → click a mission. Expected: back arrow button visible in the object page header. Actual: no back button in the header.
+- [X] **Admin UI — Discard Draft: error page instead of list navigation** — Edit a mission → click "Discard Draft". Expected: navigates cleanly back to the list view. Actual: error page displayed instead of list navigation.
 - [ ] **Scanner UI5 app doesn't load** — The `/scanner-ui/` route (UI5 barcode scanner app) fails to load, while `/scanner-vue/` (Vue-based scanner) works correctly. Likely a routing, resource path, or bootstrap issue specific to the UI5 app.
 - [ ] **`/_dev` endpoint not working on DEV** — The CAP dev tools endpoint (`/_dev`) that exposes the index page and Swagger UI is not accessible on the deployed DEV instance. Previously fixed locally but regression on deployed environment.
 - [ ] **Display app WebSocket connection error (recurring)** — The Event Display dashboard still fails to establish a WebSocket connection on the deployed DEV instance. Previously marked as fixed but the issue persists.
 - [ ] **Rework header area consistently across applications** — The header/shell bar area is inconsistent across the different apps (Hugo site, admin shell, display app, scanner). Need a unified header design with consistent branding, navigation, and user menu across all application entry points.
+- [ ] **Admin UI** - the new pipeline log view is missing from the side navigation and cannot be accessed.
+- [ ] **Admin UI** - Error Sorry, we can't find this page
+HTTP request was not processed because the previous request failed. This happens when navigating back between object level pages. 

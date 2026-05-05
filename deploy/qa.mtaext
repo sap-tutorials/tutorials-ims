@@ -6,15 +6,10 @@ modules:
   - name: tutorials-approuter
     parameters:
       app-name: tutorials-qa-approuter
+
+  - name: tutorials-srv
     properties:
-      destinations: >
-        [
-          {
-            "name": "tutorials-api",
-            "url": "https://imsqa.cfapps.us30.hana.ondemand.com",
-            "forwardAuthToken": true
-          }
-        ]
+      EXPOSE_CAP_UI: true
 
 resources:
   - name: tutorials-xsuaa

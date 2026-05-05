@@ -23,6 +23,7 @@ build-parameters:
         - rm -rf approuter/static/tutorials
         - mkdir -p approuter/static/tutorials && mv approuter/static/tutorials/_nav.json.bak approuter/static/tutorials/_nav.json
         - cp -r display-app/dist approuter/static/display-app
+        - cp -r app/scanner/webapp approuter/static/scanner-ui
 
 modules:
   - name: tutorials-srv

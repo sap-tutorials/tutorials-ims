@@ -7,16 +7,12 @@ modules:
     parameters:
       app-name: tutorials-dev-approuter
     properties:
-      destinations: >
-        [
-          {
-            "name": "tutorials-api",
-            "url": "https://imsdev.cfapps.us30.hana.ondemand.com",
-            "forwardAuthToken": true
-          }
-        ]
       XS_APP_LOG_LEVEL: debug
       DEBUG: "xs-approuter:*"
+
+  - name: tutorials-srv
+    properties:
+      EXPOSE_CAP_UI: true
 
 resources:
   - name: tutorials-xsuaa

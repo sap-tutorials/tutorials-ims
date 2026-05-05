@@ -6,15 +6,6 @@ modules:
   - name: tutorials-approuter
     parameters:
       app-name: tutorials-prod-approuter
-    properties:
-      destinations: >
-        [
-          {
-            "name": "tutorials-api",
-            "url": "https://imsprod.cfapps.us30.hana.ondemand.com",
-            "forwardAuthToken": true
-          }
-        ]
 
 resources:
   - name: tutorials-xsuaa
