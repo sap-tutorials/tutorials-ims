@@ -528,7 +528,7 @@ HTTP request was not processed because the previous request failed. This happens
   `POST /content/publish` has no size limit on the `files` object. A caller (compromised CI or manual mistake) could send hundreds of MB in a single request, exhausting memory.
   **Fix:** Add payload size validation (e.g., reject if total decoded size > 200MB or slug count > 5000).
 
-- [ ] **#11 — Dead code: same fix as #1** (`srv/lib/build-catalog.js:44-46`)
+- [X] **#11 — Dead code: same fix as #1** (`srv/lib/build-catalog.js:44-46`)
   The `missionPaths.length === 0` condition evaluates correctly but both branches produce `[]`, making the entire condition dead code. See #1 — same root cause, counted once.
 
 
