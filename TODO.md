@@ -502,7 +502,7 @@ HTTP request was not processed because the previous request failed. This happens
 
 #### MEDIUM
 
-- [ ] **#6 — `getEventProgress` grabs wrong event** (`srv/developer-service.js:262`)
+- [X] **#6 — `getEventProgress` grabs wrong event** (`srv/developer-service.js:262`)
   When querying mission progress, `SELECT.one.from(dbEvents).orderBy('startDate desc')` picks the globally latest event with no WHERE filter tying it to the current user or the mission's context. If multiple events exist, the user sees progress for the wrong event.
   **Fix:** Add a WHERE clause filtering by the relevant event context (e.g., pass eventLegacyId as a parameter or derive from the mission's active event).
 

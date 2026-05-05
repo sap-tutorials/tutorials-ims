@@ -259,7 +259,9 @@ export default class DeveloperService extends cds.ApplicationService {
       const recordMap = new Map();
       for (const r of userRecords) recordMap.set(`${r.taskType}:${r.taskLegacyId}`, r);
 
-      const event = await SELECT.one.from(dbEvents).orderBy('startDate desc');
+      const event = await SELECT.one.from(dbEvents)
+        .where({ mission_ID: mission.ID })
+        .orderBy('startDate desc');
 
       const result = {
         eventId: event?.legacyId ?? 0,

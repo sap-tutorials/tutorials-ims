@@ -220,3 +220,67 @@ describe('getEventProgress slug fallback', () => {
     expect(noSlug.url).toBe('');
   });
 });
+
+describe('getEventProgress event association', () => {
+  const auth = { auth: { username: 'developer', password: 'developer' } };
+
+  beforeAll(async () => {
+    const { Events, Missions, CompletionPaths, CompletionPathItems, Tutorials } = cds.entities('com.sap.developers.ims');
+
+    await INSERT.into(Missions).entries([
+      { ID: 'ev-m1', legacyId: 66001, slug: 'event-assoc-mission-1', title: 'Mission One' },
+      { ID: 'ev-m2', legacyId: 66002, slug: 'event-assoc-mission-2', title: 'Mission Two' },
+    ]);
+    await INSERT.into(CompletionPaths).entries([
+      { ID: 'ev-p1', legacyId: 66101, slug: 'ev-path-1', name: 'Path 1', mission_ID: 'ev-m1' },
+      { ID: 'ev-p2', legacyId: 66102, slug: 'ev-path-2', name: 'Path 2', mission_ID: 'ev-m2' },
+    ]);
+    await INSERT.into(Tutorials).entries([
+      { ID: 'ev-t1', legacyId: 66201, slug: 'ev-tut-1', title: 'Tut 1', status: 'ACTIVE' },
+    ]);
+    await INSERT.into(CompletionPathItems).entries([
+      { ID: 'ev-cpi1', path_ID: 'ev-p1', taskLegacyId: 66201, taskType: 'TUTORIAL', itemOrder: 1 },
+      { ID: 'ev-cpi2', path_ID: 'ev-p2', taskLegacyId: 66201, taskType: 'TUTORIAL', itemOrder: 1 },
+    ]);
+
+    // Event for mission 1 (older)
+    await INSERT.into(Events).entries({
+      ID: 'ev-e1', legacyId: 66301, name: 'Older Event',
+      startDate: '2025-01-01T00:00:00Z', endDate: '2025-01-05T00:00:00Z',
+      timeZone: '+00:00', mission_ID: 'ev-m1'
+    });
+    // Event for mission 2 (newer — would be picked by global orderBy)
+    await INSERT.into(Events).entries({
+      ID: 'ev-e2', legacyId: 66302, name: 'Newer Event',
+      startDate: '2026-06-01T00:00:00Z', endDate: '2026-06-05T00:00:00Z',
+      timeZone: '+00:00', mission_ID: 'ev-m2'
+    });
+  });
+
+  it('returns the event associated with the requested mission, not the globally latest', async () => {
+    const { data } = await project.get(
+      `/api/getEventProgress(missionLegacyId=66001)`, auth
+    );
+    // Should return event 66301 (associated with mission 66001), not 66302 (newer but different mission)
+    expect(data.eventId).toBe(66301);
+  });
+
+  it('returns eventId 0 when no event is associated with the mission', async () => {
+    // Create a mission with no event association
+    const { Missions, CompletionPaths, CompletionPathItems } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Missions).entries({
+      ID: 'ev-m3', legacyId: 66003, slug: 'orphan-mission', title: 'Orphan Mission'
+    });
+    await INSERT.into(CompletionPaths).entries({
+      ID: 'ev-p3', legacyId: 66103, slug: 'ev-path-3', name: 'Path 3', mission_ID: 'ev-m3'
+    });
+    await INSERT.into(CompletionPathItems).entries({
+      ID: 'ev-cpi3', path_ID: 'ev-p3', taskLegacyId: 66201, taskType: 'TUTORIAL', itemOrder: 1
+    });
+
+    const { data } = await project.get(
+      `/api/getEventProgress(missionLegacyId=66003)`, auth
+    );
+    expect(data.eventId).toBe(0);
+  });
+});
