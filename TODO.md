@@ -514,7 +514,7 @@ HTTP request was not processed because the previous request failed. This happens
   Direct mutation of `req.query.SELECT.where` array relies on internal CDS QL query structure. This pattern can break silently on `@sap/cds` upgrades.
   **Fix:** Use the documented CDS QL API (`cds.ql` query builder or `req.query.where(...)`) instead of array manipulation.
 
-- [ ] **#9 — Scanner NaN propagation** (`srv/scanner-service.js:15,64`)
+- [X] **#9 — Scanner NaN propagation** (`srv/scanner-service.js:15,64`)
   `parseInt(accountNumber, 10)` without NaN guard. If a non-numeric string is scanned, `NaN` flows into the DB query. The query returns no results and the 404 error says "User not found" instead of "Invalid account number format."
   ```js
   const legacyId = parseInt(accountNumber, 10);

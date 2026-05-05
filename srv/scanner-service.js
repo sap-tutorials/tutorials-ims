@@ -12,7 +12,10 @@ export default class ScannerService extends cds.ApplicationService {
       const { accountNumber } = req.data;
       if (!accountNumber) return req.reject(400, 'accountNumber is required');
 
-      const user = await SELECT.one.from(Users).where({ legacyId: parseInt(accountNumber, 10) });
+      const legacyId = parseInt(accountNumber, 10);
+      if (Number.isNaN(legacyId)) return req.reject(400, `Invalid account number format: ${accountNumber}`);
+
+      const user = await SELECT.one.from(Users).where({ legacyId });
       if (!user) return req.reject(404, `User not found: ${accountNumber}`);
 
       const taskRecords = await SELECT.from(TaskRecords).where({
@@ -60,8 +63,11 @@ export default class ScannerService extends cds.ApplicationService {
       if (!recordId) return req.reject(400, 'recordId is required');
       log.info(`Claiming prize for record: ${recordId}`);
 
+      const prizeRecordLegacyId = parseInt(recordId, 10);
+      if (Number.isNaN(prizeRecordLegacyId)) return req.reject(400, `Invalid record ID format: ${recordId}`);
+
       const record = await SELECT.one.from(PrizeRecords)
-        .where({ legacyId: parseInt(recordId, 10) });
+        .where({ legacyId: prizeRecordLegacyId });
       if (!record) return req.reject(404, `Prize record not found: ${recordId}`);
 
       if (record.status === 'CLAIMED') {
