@@ -203,13 +203,15 @@ export async function publishHandler(req, res) {
 
 // --- GET /content/tutorials/* ---
 
+const VALID_SLUG = /^[a-z0-9][a-z0-9-]*$/;
+
 export async function serveHandler(req, res) {
   const segments = Array.isArray(req.params.slug) ? req.params.slug : [req.params.slug];
   const pathStr = segments.join('/');
   const slug = pathStr.replace(/\/index\.html$/, '').replace(/\/$/, '');
 
-  if (!slug || slug.startsWith('__')) {
-    return res.status(400).json({ error: 'Missing tutorial slug' });
+  if (!slug || !VALID_SLUG.test(slug)) {
+    return res.status(400).json({ error: 'Invalid tutorial slug' });
   }
 
   // Check cache

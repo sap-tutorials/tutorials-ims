@@ -485,7 +485,7 @@ HTTP request was not processed because the previous request failed. This happens
   ```
   **Fix:** Add the current `lockedBy` or a version/nonce to the WHERE clause so the UPDATE is atomic. Alternatively, use HANA's `FOR UPDATE` row locking.
 
-- [ ] **#4 — No path traversal guard on content slug** (`srv/lib/content-store.js:196-217`)
+- [X] **#4 — No path traversal guard on content slug** (`srv/lib/content-store.js:196-217`)
   The serve handler blocks slugs starting with `__` but doesn't check for `../`, `..%2F`, or other traversal sequences. A crafted slug like `../../db/schema` could escape the content namespace.
   ```js
   if (slug.startsWith('__')) return req.reject(403);
