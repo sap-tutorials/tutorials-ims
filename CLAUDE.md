@@ -114,7 +114,7 @@ Tutorial HTML is NOT served from static files. After Hugo builds, `publish-conte
 
 ### CAP Backend (srv/)
 
-- **Services**: `DeveloperService` (@path: /api), `AdminService` (@path: /admin), `DisplayService` (@path: /display), `ConsolidationService` (@path: /api/v1), `ScannerService` (@path: /scanner)
+- **Services**: `DeveloperService` (@path: /api), `AdminService` (@path: /admin), `DisplayService` (@path: /display), `ConsolidationService` (@path: /api/v1), `ScannerService` (@path: /scanner), `SearchService` (@path: /search), `EventStreamService` (@path: event-stream, WebSocket+REST)
 - **Custom endpoints**: `/api/qrcode` (QR code PNG generation), `/build/catalog` (unauthenticated mission/group data for build pipeline)
 - **Content persistence** (`srv/lib/content-store.js`): Tutorial HTML stored as gzip-compressed BLOBs in HANA (`ContentFiles` + `ContentManifest` entities). Endpoints:
   - `POST /content/publish` — accepts `{ trigger, hugoVersion, files: { slug: base64gzip } }`, creates versioned manifest (bearer token auth via `CONTENT_API_KEY`)
@@ -137,7 +137,7 @@ Tutorial HTML is NOT served from static files. After Hugo builds, `publish-conte
 
 ### Admin UI (app/)
 
-- **`app/admin-shell/`** — Unified admin shell using `sap.tnt.ToolPage` with collapsible side navigation, theme switching (light/dark/auto), and Router-managed content area
+- **`app/admin-shell/`** — Unified admin shell using `sap.tnt.ToolPage` with collapsible side navigation, theme switching (light/dark/auto), and Router-managed content area. Includes custom views: Board (event overview), Statistics (mission completions export), TutorialDashboard, and Privacy policy.
 - **`app/admin/`** — 10 Fiori Elements apps (events, missions, groups, accomplishments, prizes, tutorials, tags, operations, accounts, changelog) — loaded as headless components by the shell via `componentUsages`
 - **`app/admin-annotations.cds`** — All @UI/@Common CDS annotations for admin screens
 - Deployed via HTML5 Application Repository (`tutorials-admin-ui-deployer` module in mta.yaml)
@@ -164,13 +164,27 @@ Migration scripts in `scripts/` support parallel operation during cutover:
 
 Set `IMS_BASE_URL`, `CAP_BASE_URL`, and `IMS_AUTH_TOKEN` env vars. Export files go to `.migration-data/` (gitignored).
 
+### CI/CD (.github/workflows/)
+
+- **`deploy.yml`** — Full MTA build + deploy to BTP Cloud Foundry, followed by smoke tests
+- **`rebuild-content.yml`** — Re-fetches tutorials, rebuilds Hugo, and publishes content to HANA (triggered manually or on tutorial source changes)
+
+### Documentation (docs/)
+
+Architecture docs for reference (not deployed, developer-facing only):
+- `content-pipeline.md` — End-to-end content flow from GitHub to HANA
+- `authentication-primer.md` — XSUAA/IDP auth architecture
+- `ims-api-reference.md` — Legacy IMS Java API surface (for migration parity)
+- `ims-uncovered-features.md` — IMS features not yet ported to CAP
+- `hugo-migration.md` — VitePress → Hugo migration rationale and steps
+
 ### Parsers (scripts/parsers/)
 
 The fetch script (`--target hugo`) detects parser format via frontmatter field `parser: v2`. V2 uses H3 headings to delimit steps; V1 (legacy) uses `[ACCORDION-BEGIN]`/`[ACCORDION-END]` markers. `images.ts` resolves relative image paths to `raw.githubusercontent.com` CDN URLs. `options.ts` converts `[OPTION BEGIN]`/`[OPTION END]` blocks to Hugo shortcodes. `cap.ts` fetches mission/group catalog from the CAP backend at build time. Shared types in `types.ts`.
 
 ### Testing
 
-Three Vitest workspaces defined in `vitest.workspace.ts`:
+Three Vitest workspaces defined in `vitest.config.ts` (inline `projects` array):
 
 - **unit** — In-memory SQLite, fast, no external dependencies. Runs with `npm test`.
 - **hybrid** — Real HANA Cloud via `cds bind --exec`. Runs with `npm run test:hybrid` (requires `cf login` to DEV space).
@@ -185,6 +199,7 @@ Hybrid test files in `test/hybrid/`:
 | `views.test.js` | Tasks UNION view and NavigatorCatalog view |
 | `developer-workflow.test.js` | Task record creation, progress cascade, idempotent inserts |
 | `admin-crud.test.js` | CRUD on Events, Tags, ImsConfig; read validation on Tutorials/Missions |
+| `search-service.test.js` | SearchService full-text search, facets, filtering |
 
 A write-safety guard (`test/hybrid/_guard.js`) checks `ALLOW_HYBRID_WRITES=true` before any INSERT/UPDATE/DELETE tests run. Tests that create data use a `__TEST__` prefix and clean up in `afterAll`.
 
@@ -198,11 +213,13 @@ Smoke test files in `test/smoke/`:
 | `odata-metadata.test.js` | DeveloperService and AdminService `$metadata` return EDMX |
 | `static-content.test.js` | Root serves HTML, security headers present via approuter |
 | `content-serve.test.js` | Tutorial serving via AppRouter → CAP → HANA (ETag, 304, 404) |
+| `search.test.js` | SearchService endpoint responds with faceted results |
+| `websocket-handshake.test.js` | EventStreamService WebSocket upgrade handshake |
 
 ## Gotchas
 
 - **`hugo/content/tutorials/` is entirely generated** — never edit these files directly. They are overwritten by `npm run fetch-tutorials`. Edit the parsers in `scripts/parsers/` or the source tutorials in the `sap-tutorials` GitHub org instead.
-- **POC tutorial list is hardcoded** — The 5 tutorials are defined in the `POC_TUTORIALS` array at the top of `scripts/fetch-tutorials.ts`. Adding tutorials means editing that array.
+- **POC tutorial list is hardcoded** — Tutorials are dynamically discovered from the `sap-tutorials` GitHub org via `discoverAllTutorials()` in `scripts/parsers/github.ts`. Repos in `EXCLUDED_REPOS` (tutorials-ims, meta-tutorials) are skipped. Discovery results are cached in `.tutorial-cache/discovery-map.json`. Use `npm run discover-repos` to list available repos without fetching.
 - **Validation quiz data from `-Contribution` repos** — `fetchRulesVr()` in `scripts/parsers/github.ts` fetches `rules.vr` files from private `-Contribution` repos (e.g., `abap-core-development-Contribution`). Requires `GITHUB_TOKEN`. Cached in `.tutorial-cache/<slug>.rules.vr`. Parsed by `scripts/parsers/rules.ts` and injected into Hugo frontmatter steps.
 - **`GITHUB_TOKEN` env var** — `scripts/parsers/github.ts` optionally uses this to avoid GitHub API rate limits when fetching commit metadata. Without it, unauthenticated requests may hit rate limits on repeated builds.
 - **`CAP_BASE_URL` env var** — Used by `scripts/parsers/cap.ts` and migration scripts. Defaults to `http://localhost:4004`. Set to the deployed CAP srv URL for production builds.
