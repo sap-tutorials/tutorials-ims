@@ -232,6 +232,11 @@ body {
   padding: 0.625rem 2rem;
 }
 
+.fd-breadcrumb__separator {
+  display: inline-flex;
+  align-items: center;
+}
+
 /* ── Action bar (feedback / share / nav pills) ── */
 .action-bar {
   background: var(--sapShellColor, #354a5f);

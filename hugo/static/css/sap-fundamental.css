@@ -1641,6 +1641,9 @@
   max-width: 1280px;
   margin: 0 auto;
   padding: 0.625rem 2rem;
+}.fd-breadcrumb__separator {
+  display: inline-flex;
+  align-items: center;
 }/* ── Action bar (feedback / share / nav pills) ── */.action-bar {
   background: var(--sapShellColor, #354a5f);
   padding: 0.625rem 0;
