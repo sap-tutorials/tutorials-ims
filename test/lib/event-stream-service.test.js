@@ -20,8 +20,9 @@ describe('EventStreamService', () => {
     expect(event.elements.tutorialTitle).toBeDefined();
   });
 
-  it('getEventBuckets returns empty array for non-existent event', async () => {
-    const { data } = await project.get('/rest/event-stream/getEventBuckets(eventLegacyId=99999)');
-    expect(data).toEqual([]);
+  it('getEventBuckets rejects with 404 for non-existent event', async () => {
+    const res = await project.get('/rest/event-stream/getEventBuckets(eventLegacyId=99999)')
+      .catch(e => e);
+    expect(res.response?.status ?? res.status).toBe(404);
   });
 });
