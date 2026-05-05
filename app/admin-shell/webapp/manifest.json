@@ -120,6 +120,11 @@
         "lazy": true
       }
     },
+    "services": {
+      "ShellUIService": {
+        "factoryName": "sap.tutorials.admin.shell.services.ShellUIService"
+      }
+    },
     "rootView": {
       "viewName": "sap.tutorials.admin.shell.view.Shell",
       "type": "XML",
@@ -136,16 +141,16 @@
         "clearControlAggregation": false
       },
       "routes": [
-        { "name": "events", "pattern": "events", "target": "eventsTarget" },
-        { "name": "missions", "pattern": "missions", "target": "missionsTarget" },
-        { "name": "groups", "pattern": "groups", "target": "groupsTarget" },
-        { "name": "tutorials", "pattern": "tutorials", "target": "tutorialsTarget" },
-        { "name": "tags", "pattern": "tags", "target": "tagsTarget" },
-        { "name": "accomplishments", "pattern": "accomplishments", "target": "accomplishmentsTarget" },
-        { "name": "prizes", "pattern": "prizes", "target": "prizesTarget" },
-        { "name": "operations", "pattern": "operations", "target": "operationsTarget" },
-        { "name": "accounts", "pattern": "accounts", "target": "accountsTarget" },
-        { "name": "changelog", "pattern": "changelog", "target": "changelogTarget" },
+        { "name": "events", "pattern": "events", "target": [{"name": "eventsTarget", "prefix": "ev"}] },
+        { "name": "missions", "pattern": "missions", "target": [{"name": "missionsTarget", "prefix": "mi"}] },
+        { "name": "groups", "pattern": "groups", "target": [{"name": "groupsTarget", "prefix": "gr"}] },
+        { "name": "tutorials", "pattern": "tutorials", "target": [{"name": "tutorialsTarget", "prefix": "tu"}] },
+        { "name": "tags", "pattern": "tags", "target": [{"name": "tagsTarget", "prefix": "ta"}] },
+        { "name": "accomplishments", "pattern": "accomplishments", "target": [{"name": "accomplishmentsTarget", "prefix": "ac"}] },
+        { "name": "prizes", "pattern": "prizes", "target": [{"name": "prizesTarget", "prefix": "pr"}] },
+        { "name": "operations", "pattern": "operations", "target": [{"name": "operationsTarget", "prefix": "op"}] },
+        { "name": "accounts", "pattern": "accounts", "target": [{"name": "accountsTarget", "prefix": "au"}] },
+        { "name": "changelog", "pattern": "changelog", "target": [{"name": "changelogTarget", "prefix": "cl"}] },
         { "name": "board", "pattern": "board", "target": "boardTarget" },
         { "name": "dashboard", "pattern": "", "target": "dashboardTarget" },
         { "name": "statistics", "pattern": "statistics", "target": "statisticsTarget" },
@@ -156,61 +161,71 @@
           "type": "Component",
           "usage": "eventsComponent",
           "id": "eventsTarget",
-          "viewLevel": 1
+          "viewLevel": 1,
+          "prefix": "ev"
         },
         "missionsTarget": {
           "type": "Component",
           "usage": "missionsComponent",
           "id": "missionsTarget",
-          "viewLevel": 1
+          "viewLevel": 1,
+          "prefix": "mi"
         },
         "groupsTarget": {
           "type": "Component",
           "usage": "groupsComponent",
           "id": "groupsTarget",
-          "viewLevel": 1
+          "viewLevel": 1,
+          "prefix": "gr"
         },
         "tutorialsTarget": {
           "type": "Component",
           "usage": "tutorialsComponent",
           "id": "tutorialsTarget",
-          "viewLevel": 1
+          "viewLevel": 1,
+          "prefix": "tu"
         },
         "tagsTarget": {
           "type": "Component",
           "usage": "tagsComponent",
           "id": "tagsTarget",
-          "viewLevel": 1
+          "viewLevel": 1,
+          "prefix": "ta"
         },
         "accomplishmentsTarget": {
           "type": "Component",
           "usage": "accomplishmentsComponent",
           "id": "accomplishmentsTarget",
-          "viewLevel": 1
+          "viewLevel": 1,
+          "prefix": "ac"
         },
         "prizesTarget": {
           "type": "Component",
           "usage": "prizesComponent",
           "id": "prizesTarget",
-          "viewLevel": 1
+          "viewLevel": 1,
+          "prefix": "pr"
         },
         "operationsTarget": {
           "type": "Component",
           "usage": "operationsComponent",
           "id": "operationsTarget",
-          "viewLevel": 1
+          "viewLevel": 1,
+          "prefix": "op"
         },
         "accountsTarget": {
           "type": "Component",
           "usage": "accountsComponent",
           "id": "accountsTarget",
-          "viewLevel": 1
+          "viewLevel": 1,
+          "prefix": "au"
         },
         "changelogTarget": {
           "type": "Component",
           "usage": "changelogComponent",
           "id": "changelogTarget",
-          "viewLevel": 1
+          "viewLevel": 1,
+          "prefix": "cl"
         },
         "boardTarget": {
           "viewName": "Board",

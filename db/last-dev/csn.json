@@ -487,6 +487,17 @@
           "type": "cds.String",
           "length": 255,
           "@cds.persistence.name": "NAME"
+        },
+        "titlePath": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "TITLEPATH"
+        },
+        "mdFormat": {
+          "@Core.Computed": true,
+          "virtual": true,
+          "type": "cds.String",
+          "length": 5000
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_TAGS"
@@ -1642,6 +1653,32 @@
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CONTENTMANIFEST"
     }
   },
+  "extensions": [
+    {
+      "annotate": "AdminService.Groups",
+      "elements": {
+        "primaryTagRef_ID": {
+          "@Common.Label": "Primary Tag"
+        }
+      }
+    },
+    {
+      "annotate": "AdminService.Missions",
+      "elements": {
+        "primaryTagRef_ID": {
+          "@Common.Label": "Primary Tag"
+        }
+      }
+    },
+    {
+      "annotate": "AdminService.SecondaryAccounts",
+      "elements": {
+        "primaryAccount_ID": {
+          "@Common.Label": "Primary Acct"
+        }
+      }
+    }
+  ],
   "meta": {
     "creator": "CDS Compiler v6.9.0",
     "compilerVersion": "6.9.0",
@@ -1649,7 +1686,7 @@
     "flavor": "inferred",
     "sap.changelog.enhanced": true,
     "minified": true,
-    "build": "CDS Build v9.9.0"
+    "build": "CDS Build v9.9.1"
   },
   "$version": "2.0"
 }

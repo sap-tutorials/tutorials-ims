@@ -10,6 +10,12 @@
     <tnt:header>
       <tnt:ToolHeader>
         <Button
+          id="navBackBtn"
+          icon="sap-icon://nav-back"
+          type="Transparent"
+          press=".onNavBack"
+          visible="{viewModel>/showBackButton}" />
+        <Button
           id="sideNavToggleBtn"
           icon="sap-icon://menu2"
           type="Transparent"

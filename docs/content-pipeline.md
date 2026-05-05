@@ -664,3 +664,12 @@ Result: 200 OK — user sees tutorial content as normal
 ### Edge case: First deploy (no content in HANA)
 
 If the AppRouter is deployed before any content has been published to HANA, `/tutorials/*` returns 404. This is the expected "empty state." Run `npm run publish-content` against the deployed CAP srv to populate content.
+
+---
+
+## Known Issues
+
+| # | Area                       | Steps to Reproduce                      | Expected                                            | Actual                                            |
+|---|----------------------------|-----------------------------------------|-----------------------------------------------------|---------------------------------------------------|
+| 1 | Admin UI — Mission Detail  | Navigate to Missions → click a mission  | Back arrow button visible in the object page header | No back button in the header                      |
+| 2 | Admin UI — Discard Draft   | Edit a mission → click "Discard Draft"  | Navigates cleanly back to the list view             | Error page displayed instead of list navigation   |

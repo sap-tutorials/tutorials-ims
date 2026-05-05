@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "mcp__plugin_playwright_playwright__browser_network_request",
-      "mcp__plugin_ui5_ui5-mcp-server__get_guidelines"
+      "mcp__plugin_ui5_ui5-mcp-server__get_guidelines",
+      "mcp__plugin_playwright_playwright__browser_run_code_unsafe",
+      "Bash(rm -rf approuter/static/admin-ui/*)",
+      "Bash(cp -r app/admin-shell/dist/* approuter/static/admin-ui/)"
     ]
   }
 }

@@ -18,7 +18,6 @@ sap.ui.define([
     accounts: "accounts",
     changelog: "changelog",
     board: "board",
-    dashboard: "dashboard",
     statistics: "statistics",
     privacy: "privacy"
   };
@@ -36,7 +35,6 @@ sap.ui.define([
     accounts: "Accounts",
     changelog: "Change Log",
     board: "Board",
-    dashboard: "Dashboard",
     statistics: "Statistics",
     privacy: "Privacy"
   };
@@ -44,13 +42,25 @@ sap.ui.define([
   return Controller.extend("sap.tutorials.admin.shell.controller.Shell", {
     onInit: function () {
       var bExpanded = localStorage.getItem("sap-tutorials-admin-nav-expanded") !== "false";
-      this.setModel(new JSONModel({ sideExpanded: bExpanded, headerTitle: "Admin Console" }), "viewModel");
+      this.setModel(new JSONModel({ sideExpanded: bExpanded, headerTitle: "Admin Console", showBackButton: false }), "viewModel");
 
       this.getOwnerComponent().getRouter().attachRouteMatched(this._onRouteMatched, this);
     },
 
     setModel: function (oModel, sName) {
       this.getView().setModel(oModel, sName);
+    },
+
+    onNavBack: function () {
+      var oShellService = this.getOwnerComponent()._oShellUIService;
+      if (oShellService) {
+        var fnBack = oShellService.getBackNavigation();
+        if (fnBack) {
+          fnBack();
+          return;
+        }
+      }
+      window.history.back();
     },
 
     onToggleSideNav: function () {
@@ -83,7 +93,7 @@ sap.ui.define([
           sTheme = "sap_horizon_dark";
           localStorage.setItem("sap-tutorials-admin-theme", sTheme);
           break;
-        default: // auto
+        default:
           localStorage.removeItem("sap-tutorials-admin-theme");
           sTheme = window.matchMedia("(prefers-color-scheme: dark)").matches
             ? "sap_horizon_dark"
