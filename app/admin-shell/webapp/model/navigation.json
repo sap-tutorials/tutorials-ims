@@ -31,6 +31,7 @@
       "expanded": true,
       "items": [
         { "key": "operations", "title": "Operations", "icon": "sap-icon://action-settings" },
+        { "key": "pipelinelog", "title": "Pipeline Log", "icon": "sap-icon://pipeline-analysis" },
         { "key": "accounts", "title": "Accounts", "icon": "sap-icon://person-placeholder" },
         { "key": "changelog", "title": "Change Log", "icon": "sap-icon://history" },
         { "key": "board", "title": "Board", "icon": "sap-icon://overview-chart" },

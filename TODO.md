@@ -416,39 +416,121 @@ First comprehensive security audit of the full implementation. Findings ranked b
 
 - [✔️] **Tutorials in Navigator missing details** — Tutorial cards show only the slug as the title, "Beginner" level, and "0 min." duration. No real title, description, actual duration, or tag content is displayed. Likely the `/build/navigator` endpoint or the `NavigatorCatalog` view is not joining/returning tutorial metadata (title, description, time, experience level) from the `Tutorials` or `TutorialMeta` entities.
 - [✔️] **SAP logo needs replacing** — The shellbar shows a placeholder "SA H" initials circle instead of the actual SAP logo. Need to replace with the proper SAP logo image/SVG.
-- [X] **Breadcrumb navigation broken in tutorial pages** — The breadcrumb/navigation in the tutorial detail view is not formatted correctly. Shows raw "Tutorial Navigator • / • Create a Simple ABAP Daemon" with bullet separators and a bare "/" instead of proper styled breadcrumb links (e.g., "Tutorial Navigator > Group Name > Tutorial Title").
+- [✔️] **Breadcrumb navigation broken in tutorial pages** — The breadcrumb/navigation in the tutorial detail view is not formatted correctly. Shows raw "Tutorial Navigator • / • Create a Simple ABAP Daemon" with bullet separators and a bare "/" instead of proper styled breadcrumb links (e.g., "Tutorial Navigator > Group Name > Tutorial Title").
 - [X] **Breadcrumb navigation broken in mission/group pages** — Different issue from tutorials: breadcrumb shows "Tutorial Navigator" link concatenated directly with the slug (e.g., "Tutorial Navigatortest_mission_ims") with no separator or spacing. Also missing proper title — displays raw slug "test_mission_ims" as both the breadcrumb text and the page heading, with placeholder metadata ("Beginner · 0 min. · 0 Tutorials · 1 Groups").
 - [X] **Login redirects away from current page** — When logging in from a detail page (tutorial, mission, or group), the user is redirected back to the Tutorial Navigator home page instead of remaining on the page they were viewing. The login flow should preserve the current URL and return the user to the same page after authentication.
-- [X] **Logout button broken (404)** — The logout button navigates to `/logout` but no route exists in `approuter/xs-app.json` to handle it. Need to add a logout route that triggers the AppRouter's XSUAA logout flow (typically `"authenticationType": "xsuaa"` with `"target": "/logout"` or using the AppRouter's built-in `/logout` endpoint which requires explicit route configuration).
-- [X] **Topic/Software Product filters regressed to search boxes** — The "Topic" and "Software Product" filter fields in the Navigator used to be checkbox lists (auto-populated from available tags) that you could tick to filter results. They have regressed to plain text search inputs. Need to restore the checkbox-list behavior populated from the tag/product taxonomy.
+- [✔️] **Logout button broken (404)** — The logout button navigates to `/logout` but no route exists in `approuter/xs-app.json` to handle it. Need to add a logout route that triggers the AppRouter's XSUAA logout flow (typically `"authenticationType": "xsuaa"` with `"target": "/logout"` or using the AppRouter's built-in `/logout` endpoint which requires explicit route configuration).
+- [✔️] **Topic/Software Product filters regressed to search boxes** — The "Topic" and "Software Product" filter fields in the Navigator used to be checkbox lists (auto-populated from available tags) that you could tick to filter results. They have regressed to plain text search inputs. Need to restore the checkbox-list behavior populated from the tag/product taxonomy.
 - [X] **"Done" button in tutorial steps doesn't work** — Clicking the "Done" button on a tutorial step has no effect. Should mark the step as completed (call `completeStep` or `createTaskRecord` on the DeveloperService) and update the step's visual state (fill the circle indicator, advance progress).
 - [X] **Event Display WebSocket connection error** — The Event Display page reports a WebSocket connection error. The display app uses Socket.IO to connect to the `EventStreamService` at `/ws/event-stream`. Likely a routing issue in `xs-app.json` (missing WebSocket upgrade route) or the Socket.IO path not matching what the deployed CAP server exposes.
-- [X] **`/_dev` endpoint returns "Cannot GET"** — The CAP dev tools endpoint (`/_dev`) that exposes the index page and Swagger UI is not working on the deployed instance. May be disabled in production profile, missing route in `xs-app.json`, or the express middleware not registering correctly outside local `cds watch`.
+- [✔️] **`/_dev` endpoint returns "Cannot GET"** — The CAP dev tools endpoint (`/_dev`) that exposes the index page and Swagger UI is not working on the deployed instance. May be disabled in production profile, missing route in `xs-app.json`, or the express middleware not registering correctly outside local `cds watch`.
 - [X] **Display app WebSocket connection error** — The standalone display dashboard (`display-app/`) also fails to establish a WebSocket connection. Same root cause as the Event Display issue — Socket.IO cannot reach the `EventStreamService` or `DisplayService` WebSocket endpoints on the deployed instance.
-- [X] **Admin UI side nav: child items not indented** — When expanding a folder node (e.g., "Content", "Rewards", "System") in the admin shell's `sap.tnt.ToolPage` side navigation, the child items (Events, Missions, etc.) appear at the same indent level as the parent. Need to add left padding/indent to child navigation items so the hierarchy is visually clear.
-- [X] **Admin UI: Fiori Elements row navigation broken** — Fixed by switching from manual ComponentContainer+FeComponentHost (which called `oRouter.stop()`) to UI5's native Component Targets routing. The shell router now declares targets with `type:"Component"`, letting the framework create proper sub-hash changers for each nested FE component.
-- [X] **Admin UI: No back navigation from detail/object pages** — Resolved by the Component Targets routing fix. With proper sub-hash changers, the FE ObjectPage's built-in back button navigates correctly within the component's router scope.
-- [x] **Admin UI Missions: field labels missing on Object Page** — Fixed by adding `@Common.Label` annotations to all 17 admin entities in `app/admin-annotations.cds`. Also expanded LineItems and FieldGroups with missing columns (slug, status, retryCount, event.name, etc.).
-- [X] **Admin UI Dashboard: columns missing data** — The Tutorial Dashboard table shows "Owner", "Status", and "Notifications" populated but "Tutorial", "Primary Tag", "Last Reviewed", and "Last Reminder" columns are empty. The data exists (rows are rendering) but these specific fields aren't being resolved — likely the OData projection or the custom dashboard controller isn't fetching/binding those properties correctly.
-- [x] **Admin UI Tags: should be read-only** — Added `Capabilities` restrictions (Insertable/Updatable/Deletable: false) to suppress Create/Edit/Delete actions.
-- [x] **Admin UI Tags: missing columns** — Added `titlePath` (persisted) and `mdFormat` (virtual, computed from titlePath via after-READ handler replicating Java TagUtil logic) to the Tags entity. Both columns now shown in the LineItem.
-- [x] **Admin UI Board: missing KPIs from legacy** — The Board view in the admin UI is incomplete compared to the legacy IMS system. Legacy had: pie chart (tutorials up-to-date vs. require review), numeric KPI tiles (users, tutorials, groups, missions), and average completion percentages (tutorial/group/mission completion %). Need to replicate these visualizations in the freestyle Board view.
-- [x] **Admin UI Statistics: missing "Mission completions" export** — Added `exportMissionCompletions` CDS function (startDate, endDate, optional missionLegacyId), server handler with date-range filtering and CSV generation, and UI with DatePicker controls and Export button in the Statistics view.
-- [x] **Admin UI Operations: taskType value help empty** — Fixed by adding CDS inline enums to schema fields (`FeaturedTasks.taskType`, `CompletionPathItems.taskType`, `NGDSFailedMessages.status`, `FailedEmails.status`) and `@Common.ValueListWithFixedValues` annotations to all filterable fields with fixed values across 8 admin entities (Missions, Groups, Tutorials, FeaturedTasks, CompletionPathItems, NGDSFailedMessages, FailedEmails, PipelineLog).
+- [✔️] **Admin UI side nav: child items not indented** — When expanding a folder node (e.g., "Content", "Rewards", "System") in the admin shell's `sap.tnt.ToolPage` side navigation, the child items (Events, Missions, etc.) appear at the same indent level as the parent. Need to add left padding/indent to child navigation items so the hierarchy is visually clear.
+- [✔️] **Admin UI: Fiori Elements row navigation broken** — Fixed by switching from manual ComponentContainer+FeComponentHost (which called `oRouter.stop()`) to UI5's native Component Targets routing. The shell router now declares targets with `type:"Component"`, letting the framework create proper sub-hash changers for each nested FE component.
+- [✔️] **Admin UI: No back navigation from detail/object pages** — Resolved by the Component Targets routing fix. With proper sub-hash changers, the FE ObjectPage's built-in back button navigates correctly within the component's router scope.
+- [✔️] **Admin UI Missions: field labels missing on Object Page** — Fixed by adding `@Common.Label` annotations to all 17 admin entities in `app/admin-annotations.cds`. Also expanded LineItems and FieldGroups with missing columns (slug, status, retryCount, event.name, etc.).
+- [✔️] **Admin UI Dashboard: columns missing data** — The Tutorial Dashboard table shows "Owner", "Status", and "Notifications" populated but "Tutorial", "Primary Tag", "Last Reviewed", and "Last Reminder" columns are empty. The data exists (rows are rendering) but these specific fields aren't being resolved — likely the OData projection or the custom dashboard controller isn't fetching/binding those properties correctly.
+- [✔️] **Admin UI Tags: should be read-only** — Added `Capabilities` restrictions (Insertable/Updatable/Deletable: false) to suppress Create/Edit/Delete actions.
+- [✔️] **Admin UI Tags: missing columns** — Added `titlePath` (persisted) and `mdFormat` (virtual, computed from titlePath via after-READ handler replicating Java TagUtil logic) to the Tags entity. Both columns now shown in the LineItem.
+- [✔️] **Admin UI Board: missing KPIs from legacy** — The Board view in the admin UI is incomplete compared to the legacy IMS system. Legacy had: pie chart (tutorials up-to-date vs. require review), numeric KPI tiles (users, tutorials, groups, missions), and average completion percentages (tutorial/group/mission completion %). Need to replicate these visualizations in the freestyle Board view.
+- [✔️] **Admin UI Statistics: missing "Mission completions" export** — Added `exportMissionCompletions` CDS function (startDate, endDate, optional missionLegacyId), server handler with date-range filtering and CSV generation, and UI with DatePicker controls and Export button in the Statistics view.
+- [✔️] **Admin UI Operations: taskType value help empty** — Fixed by adding CDS inline enums to schema fields (`FeaturedTasks.taskType`, `CompletionPathItems.taskType`, `NGDSFailedMessages.status`, `FailedEmails.status`) and `@Common.ValueListWithFixedValues` annotations to all filterable fields with fixed values across 8 admin entities (Missions, Groups, Tutorials, FeaturedTasks, CompletionPathItems, NGDSFailedMessages, FailedEmails, PipelineLog).
 
 ## 19. Reported Bugs (2026-05-05)
 
-- [x] **Admin UI — Mission Detail: no back button in object page header** — Navigate to Missions → click a mission. Expected: back arrow button visible in the object page header. Actual: no back button in the header.
+- [✔️] **Admin UI — Mission Detail: no back button in object page header** — Navigate to Missions → click a mission. Expected: back arrow button visible in the object page header. Actual: no back button in the header.
 - [x] **Admin UI — Discard Draft: error page instead of list navigation** — Edit a mission → click "Discard Draft". Expected: navigates cleanly back to the list view. Actual: error page displayed instead of list navigation.
-- [x] **Scanner UI5 app doesn't load** — The `/scanner-ui/` route (UI5 barcode scanner app) fails to load, while `/scanner-vue/` (Vue-based scanner) works correctly. Likely a routing, resource path, or bootstrap issue specific to the UI5 app.
-- [ ] **`/_dev` endpoint not working on DEV** — The CAP dev tools endpoint (`/_dev`) that exposes the index page and Swagger UI is not accessible on the deployed DEV instance. Previously fixed locally but regression on deployed environment.
-- [ ] **Display app WebSocket connection error (recurring)** — The Event Display dashboard still fails to establish a WebSocket connection on the deployed DEV instance. Previously marked as fixed but the issue persists.
+- [✔️] **Scanner UI5 app doesn't load** — The `/scanner-ui/` route (UI5 barcode scanner app) fails to load, while `/scanner-vue/` (Vue-based scanner) works correctly. Likely a routing, resource path, or bootstrap issue specific to the UI5 app.
+- [X] **`/_dev` endpoint not working on DEV** — The CAP dev tools endpoint (`/_dev`) that exposes the index page and Swagger UI is not accessible on the deployed DEV instance. Previously fixed locally but regression on deployed environment.
+- [X] **Display app WebSocket connection error (recurring)** — The Event Display dashboard still fails to establish a WebSocket connection on the deployed DEV instance. Previously marked as fixed but the issue persists.
 - [ ] **Rework header area consistently across applications** — The header/shell bar area is inconsistent across the different apps (Hugo site, admin shell, display app, scanner). Need a unified header design with consistent branding, navigation, and user menu across all application entry points.
-- [ ] **Admin UI** - the new pipeline log view is missing from the side navigation and cannot be accessed.
-- [ ] **Admin UI** - Error Sorry, we can't find this page
+- [X] **Admin UI** - the new pipeline log view is missing from the side navigation and cannot be accessed.
+- [X] **Admin UI** - Error Sorry, we can't find this page
 HTTP request was not processed because the previous request failed. This happens when navigating back between object level pages.
 - [ ] App Space page needs an event id parameter and a default.
 - [ ] Admin UI - Missions and Groups - add a published flag that only super admin can set
+
+### Bug Hunt Findings (2026-05-05)
+
+#### CRITICAL
+
+- [ ] **#1 — Dead code: `directSlugs` always empty** (`srv/lib/build-catalog.js:44-46`)
+  Both branches of the ternary return `[]`, so missions with direct tutorials (no completion path) get an empty hierarchy in `/build/catalog`. Hugo generates empty mission pages for these.
+  ```js
+  const directSlugs = missionPaths.length === 0
+    ? []
+    : [];  // BUG: always empty regardless of condition
+  ```
+  **Fix:** The truthy branch should query tutorials directly associated with the mission (e.g., via `MissionTutorials` or a direct relationship).
+
+- [ ] **#2 — Orphaned PUBLISHING manifests never recover** (`srv/lib/content-store.js:124-191`)
+  If `publishContent()` throws after INSERT of a manifest with status `PUBLISHING`, the error path releases the lock but never transitions the manifest to `FAILED`. No scheduled job scans for stuck `PUBLISHING` manifests. On subsequent publish, the old PUBLISHING row blocks the flow or gets orphaned forever.
+  **Fix:** Add `await UPDATE(ContentManifest, manifestId).set({ status: 'FAILED' })` in the catch block. Optionally add a cleanup sweep in the daily content-gc job for PUBLISHING manifests older than 1 hour.
+
+#### HIGH
+
+- [ ] **#3 — Job lock race condition** (`srv/jobs/job-lock.js:14-28`)
+  Between the INSERT failure (row exists) and the UPDATE for expired locks, another instance can claim the same lock. The UPDATE uses `expiresAt < now` but doesn't include a CAS guard (e.g., `AND lockedBy != <me>`), so two instances with slight clock skew can both UPDATE and both believe they hold the lock.
+  ```js
+  try {
+    await INSERT.into(JobLocks).entries({...});
+    return true;
+  } catch (e) {
+    // Row exists — try to claim expired lock
+  }
+  const result = await UPDATE(JobLocks)
+    .where({ jobName, expiresAt: { '<': now.toISOString() } })
+    .set({...});
+  return result > 0;
+  ```
+  **Fix:** Add the current `lockedBy` or a version/nonce to the WHERE clause so the UPDATE is atomic. Alternatively, use HANA's `FOR UPDATE` row locking.
+
+- [ ] **#4 — No path traversal guard on content slug** (`srv/lib/content-store.js:196-217`)
+  The serve handler blocks slugs starting with `__` but doesn't check for `../`, `..%2F`, or other traversal sequences. A crafted slug like `../../db/schema` could escape the content namespace.
+  ```js
+  if (slug.startsWith('__')) return req.reject(403);
+  ```
+  **Fix:** Reject any slug containing `..`, `/`, or `\`. Validate against a strict pattern like `/^[a-z0-9][a-z0-9-]*$/`.
+
+- [ ] **#5 — `exportMissionCompletions` date filter/export mismatch** (`srv/admin-service.js:142`)
+  The WHERE clause filters by `modifiedAt` (system timestamp of last DB change) but exports `completionDate` (the business date the user completed the task). A record modified (e.g., status correction) outside the date window won't be found, while a record modified for non-completion reasons will be included.
+  ```js
+  const where = { taskType: 'MISSION', status: 'COMPLETED',
+    modifiedAt: { '>=': startDate, '<=': endDate } };
+  ```
+  **Fix:** Filter by `completionDate` instead of `modifiedAt` since the export is about when users completed missions.
+
+#### MEDIUM
+
+- [ ] **#6 — `getEventProgress` grabs wrong event** (`srv/developer-service.js:262`)
+  When querying mission progress, `SELECT.one.from(dbEvents).orderBy('startDate desc')` picks the globally latest event with no WHERE filter tying it to the current user or the mission's context. If multiple events exist, the user sees progress for the wrong event.
+  **Fix:** Add a WHERE clause filtering by the relevant event context (e.g., pass eventLegacyId as a parameter or derive from the mission's active event).
+
+- [ ] **#7 — `xs-security.json` description contradicts `mta.yaml`** (`xs-security.json:4`)
+  Description says "binds to existing IMS XSUAA instances via `org.cloudfoundry.existing-service`" but `mta.yaml:92-97` defines the XSUAA resource as `org.cloudfoundry.managed-service` — meaning deployment creates a new instance, not reuses IMS's. This confuses operators debugging auth issues.
+  **Fix:** Update the description to match reality: "Deployment creates a dedicated XSUAA instance (tutorials-xsuaa) via org.cloudfoundry.managed-service in mta.yaml."
+
+- [ ] **#8 — CDS QL internal query manipulation** (`srv/search-service.js:22-29`)
+  Direct mutation of `req.query.SELECT.where` array relies on internal CDS QL query structure. This pattern can break silently on `@sap/cds` upgrades.
+  **Fix:** Use the documented CDS QL API (`cds.ql` query builder or `req.query.where(...)`) instead of array manipulation.
+
+- [ ] **#9 — Scanner NaN propagation** (`srv/scanner-service.js:15,64`)
+  `parseInt(accountNumber, 10)` without NaN guard. If a non-numeric string is scanned, `NaN` flows into the DB query. The query returns no results and the 404 error says "User not found" instead of "Invalid account number format."
+  ```js
+  const legacyId = parseInt(accountNumber, 10);
+  // If accountNumber = "abc", legacyId = NaN → misleading 404
+  ```
+  **Fix:** Check `Number.isNaN(legacyId)` and reject with 400 + descriptive message.
+
+#### LOW
+
+- [ ] **#10 — Publish endpoint accepts unbounded payload** (`srv/lib/content-store.js:124-133`)
+  `POST /content/publish` has no size limit on the `files` object. A caller (compromised CI or manual mistake) could send hundreds of MB in a single request, exhausting memory.
+  **Fix:** Add payload size validation (e.g., reject if total decoded size > 200MB or slug count > 5000).
+
+- [ ] **#11 — Dead code: same fix as #1** (`srv/lib/build-catalog.js:44-46`)
+  The `missionPaths.length === 0` condition evaluates correctly but both branches produce `[]`, making the entire condition dead code. See #1 — same root cause, counted once.
+
 
 ---
 

@@ -15,6 +15,7 @@ sap.ui.define([
     accomplishments: "accomplishments",
     prizes: "prizes",
     operations: "operations",
+    pipelinelog: "pipelinelog",
     accounts: "accounts",
     changelog: "changelog",
     board: "board",
@@ -32,6 +33,7 @@ sap.ui.define([
     accomplishments: "Accomplishments",
     prizes: "Prizes",
     operations: "Operations",
+    pipelinelog: "Pipeline Log",
     accounts: "Accounts",
     changelog: "Change Log",
     board: "Board",
@@ -69,6 +71,9 @@ sap.ui.define([
       var sRoute = NAV_KEY_TO_ROUTE[sKey];
       if (sRoute) {
         this.getOwnerComponent().getRouter().navTo(sRoute);
+        if (sKey === "pipelinelog") {
+          HashChanger.getInstance().setHash("pipelinelog&/op/PipelineLog");
+        }
       }
     },
 
@@ -112,12 +117,21 @@ sap.ui.define([
     _onRouteMatched: function (oEvent) {
       var sRouteName = oEvent.getParameter("name");
       var oNavModel = this.getOwnerComponent().getModel("nav");
+
+      var sNavKey = sRouteName;
+      if (sRouteName === "operations") {
+        var sHash = HashChanger.getInstance().getHash();
+        if (sHash.indexOf("PipelineLog") !== -1) {
+          sNavKey = "pipelinelog";
+        }
+      }
+
       if (oNavModel) {
-        oNavModel.setProperty("/selectedNavKey", sRouteName);
+        oNavModel.setProperty("/selectedNavKey", sNavKey);
       }
 
       var oViewModel = this.getView().getModel("viewModel");
-      var sPageTitle = NAV_KEY_TO_TITLE[sRouteName] || "";
+      var sPageTitle = NAV_KEY_TO_TITLE[sNavKey] || "";
       var sHeader = sPageTitle ? "Admin Console — " + sPageTitle : "Admin Console";
       oViewModel.setProperty("/headerTitle", sHeader);
     }
