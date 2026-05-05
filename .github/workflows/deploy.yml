@@ -53,7 +53,7 @@ jobs:
       - name: Build MTA archive
         run: mbt build -e deploy/${{ steps.env.outputs.target }}.mtaext
         env:
-          GITHUB_TOKEN: ${{ secrets.TUTORIALS_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.TUTORIALS_GITHUB_TOKEN || github.token }}
 
       - name: Upload MTAR artifact
         uses: actions/upload-artifact@v4
