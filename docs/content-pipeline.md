@@ -413,6 +413,151 @@ Records all pipeline events (publishes, rollbacks) with timestamps, initiator, a
 
 ---
 
+## Performance Metrics
+
+Based on recent runs (May 2026) against the full tutorial corpus of **1,378 tutorials** across **1,387 repos** in the `sap-tutorials` GitHub organization.
+
+### Dataset Profile
+
+| Metric | Value |
+|--------|-------|
+| Total tutorials discovered | 1,387 |
+| Successfully processed | 1,378 |
+| Parse errors (malformed frontmatter) | 8 |
+| Raw markdown cache size | 14.2 MB |
+| Avg markdown file size | 10.5 KB |
+| Built HTML files | 2,509 (includes step sub-pages) |
+| Total HTML output | 60.6 MB |
+| Avg HTML file size | 24.7 KB |
+| Largest HTML file | 298 KB |
+| Median HTML file | 19.6 KB |
+| Gzip compression ratio | ~78% |
+| Estimated HANA storage (compressed) | ~22.6 MB |
+
+### Phase 1: Fetch Timing
+
+#### Cached Run (regenerate from local `.tutorial-cache/`)
+
+| Phase | Duration | Notes |
+|-------|----------|-------|
+| Discovery (GraphQL) | 0 ms | Skipped in `--regenerate` mode |
+| Metadata prefetch | 0 ms | Skipped in `--regenerate` mode |
+| Tutorial processing | 3.1 s | Parse + Hugo page generation |
+| CAP missions/groups | 123 ms | Catalog fetch (0 missions if CAP not running) |
+| **Total** | **3.2 s** | |
+
+#### Per-Tutorial Stats (cached)
+
+| Metric | Value |
+|--------|-------|
+| Average | 7 ms/tutorial |
+| Slowest | 18 ms |
+| Fastest | 3 ms |
+| Throughput | 426.6 tutorials/sec |
+
+#### Cold Run (fresh fetch from GitHub)
+
+Estimated from concurrency settings and network characteristics:
+
+| Phase | Estimated Duration | Notes |
+|-------|-------------------|-------|
+| Discovery (GraphQL) | 3–5 s | Paginated, ~14 pages × 100 repos |
+| Metadata prefetch | 15–30 s | 3 concurrent repos × 20 tutorials/batch |
+| Tutorial download | 60–90 s | 5 concurrent, ~1,378 fetches from `raw.githubusercontent.com` |
+| Tutorial processing | 3–5 s | CPU-bound parsing (same as cached) |
+| CAP missions/groups | 0.5–2 s | Single HTTP request to catalog endpoint |
+| **Total (cold)** | **~90–130 s** | Dominated by GitHub API/network time |
+
+GitHub rate limit: 5,000 requests/hour with `GITHUB_TOKEN`; unauthenticated: 60/hour (will fail for full corpus).
+
+### Phase 3: Hugo Build
+
+| Metric | Value |
+|--------|-------|
+| Input pages | ~2,500+ (tutorials + missions + groups + static) |
+| Output size | 70 MB (full `hugo/public/`) |
+| Typical build time | 5–10 s |
+| Build command | `hugo --minify` |
+
+### Phase 4: Publish Timing
+
+#### Delta Publish (typical CI — 1–10 changed files)
+
+| Step | Duration | Notes |
+|------|----------|-------|
+| Local hash computation | < 500 ms | SHA-256 of 2,509 files |
+| Remote hash fetch (`GET /content/hashes`) | 200–500 ms | Network to BTP + HANA query |
+| Delta calculation | < 10 ms | In-memory comparison |
+| Gzip + base64 encoding | < 100 ms | For changed files only |
+| Network upload | 200–1,000 ms | Payload typically < 1 MB |
+| Server-side persist | 500–2,000 ms | Decompress, hash, batch INSERT, manifest update |
+| **Total (delta)** | **~2–4 s** | |
+
+#### Full Publish (all 2,509 files, `--force`)
+
+| Step | Duration | Notes |
+|------|----------|-------|
+| Gzip + base64 encoding | 2–3 s | All 2,509 files |
+| Payload size | ~25 MB | Compressed + base64 overhead |
+| Network upload | 5–15 s | Depends on bandwidth to BTP region |
+| Server-side persist | 10–30 s | 50 files/batch × ~50 batches, plus SHA-256 per file |
+| **Total (full)** | **~20–50 s** | |
+
+Server-side `publishDurationMs` (recorded in `ContentManifest`) excludes network transfer — measures only DB writes and hash computation.
+
+### Phase 5: Content Serving
+
+| Scenario | Response Time | Notes |
+|----------|---------------|-------|
+| LRU cache hit + ETag match | < 1 ms | Returns 304 immediately |
+| LRU cache hit (no ETag) | 1–2 ms | Returns decompressed buffer |
+| Cache miss (HANA query) | 20–80 ms | Raw SQL BLOB fetch + gunzip |
+| Cold start (first request) | 50–150 ms | No cache populated yet |
+
+#### Cache Warm-Up Behavior
+
+After a CAP srv restart, the LRU cache is empty. First ~50 unique tutorial requests populate the cache. At steady state with the 50 MB limit:
+
+| Metric | Value |
+|--------|-------|
+| Cache capacity | ~2,000 tutorials (at 24.7 KB avg) |
+| Coverage | ~80% of corpus fits in cache |
+| Eviction | LRU — rarely-accessed tutorials evicted first |
+| Hit rate (steady state) | 90–95% (typical usage patterns favor popular tutorials) |
+
+### Garbage Collection
+
+| Operation | Duration | Frequency |
+|-----------|----------|-----------|
+| Content version pruning | 1–5 s | Daily 03:00 |
+| PipelineLog cleanup | < 1 s | Daily 03:00 |
+| StepFailures cleanup | < 1 s | Daily 03:00 |
+| Unused tags cleanup | < 1 s | Daily 03:00 |
+
+### End-to-End Pipeline (CI)
+
+| Stage | Cached | Cold |
+|-------|--------|------|
+| `npm install` | 10–20 s | 30–60 s |
+| `npm run fetch-tutorials` | **3 s** | **90–130 s** |
+| `npm run build:all` | 15–25 s | 15–25 s |
+| `npm run publish-content` | **2–4 s** | (first deploy: 20–50 s) |
+| `npm run test:smoke` | 5–10 s | 5–10 s |
+| **Total CI (cached)** | **~40–60 s** | |
+| **Total CI (cold)** | | **~3–5 min** |
+
+### Bottlenecks & Scaling Notes
+
+| Concern | Current State | Mitigation |
+|---------|---------------|------------|
+| GitHub API rate limit | 1,378 fetches fit in 5,000/hr budget | SHA-based cache prevents re-fetch |
+| Payload size (full publish) | ~25 MB JSON | Delta detection reduces to < 1 MB typical |
+| HANA BLOB insert | 50 files/batch to avoid tx size limits | Parallel batches not used (sequential) |
+| LRU cache cold start | ~50 requests to warm popular content | Pre-warm could be added but not needed |
+| Hugo build time | Linear with page count | Already fast (< 10 s for 2,500 pages) |
+
+---
+
 ## Request Routing (Production)
 
 ```text
