@@ -5,7 +5,7 @@ export async function buildCatalogHandler(req, res) {
     cds.entities('com.sap.developers.ims');
 
   try {
-    const missions = await SELECT.from(Missions);
+    const missions = await SELECT.from(Missions).where({ published: true });
     const paths = await SELECT.from(CompletionPaths).orderBy('legacyId');
     const items = await SELECT.from(CompletionPathItems).orderBy('itemOrder');
     const tutorials = await SELECT.from(Tutorials).columns('legacyId', 'slug');

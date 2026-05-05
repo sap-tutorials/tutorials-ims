@@ -4,6 +4,7 @@
   "description": "Reference documentation only. Deployment binds to existing IMS XSUAA instances (xsuaa-imsdev/imsqa/imsprod) via org.cloudfoundry.existing-service in mta.yaml. These scope and role definitions mirror the IMS XSUAA configuration.",
   "scopes": [
     { "name": "$XSAPPNAME.Admin",              "description": "Full admin access" },
+    { "name": "$XSAPPNAME.SuperAdmin",         "description": "Elevated admin access (publish/unpublish)" },
     { "name": "$XSAPPNAME.ContentAuthor",      "description": "Create and edit content" },
     { "name": "$XSAPPNAME.DeveloperApp",       "description": "Developer operations" },
     { "name": "$XSAPPNAME.MobileApp",          "description": "Mobile app features" },
@@ -16,6 +17,11 @@
       "name": "Admin",
       "description": "Administrator",
       "scope-references": ["$XSAPPNAME.Admin", "$XSAPPNAME.Everyone"]
+    },
+    {
+      "name": "SuperAdmin",
+      "description": "Elevated Administrator (can publish/unpublish)",
+      "scope-references": ["$XSAPPNAME.SuperAdmin", "$XSAPPNAME.Admin", "$XSAPPNAME.Everyone"]
     },
     {
       "name": "ContentAuthor",
@@ -53,6 +59,17 @@
       "name": "Tutorials Admin",
       "description": "Full admin access to tutorials platform",
       "role-template-references": [
+        "$XSAPPNAME.Admin",
+        "$XSAPPNAME.DisplayApp",
+        "$XSAPPNAME.DeveloperApp",
+        "$XSAPPNAME.Everyone"
+      ]
+    },
+    {
+      "name": "Tutorials SuperAdmin",
+      "description": "Elevated admin with publish/unpublish capability",
+      "role-template-references": [
+        "$XSAPPNAME.SuperAdmin",
         "$XSAPPNAME.Admin",
         "$XSAPPNAME.DisplayApp",
         "$XSAPPNAME.DeveloperApp",

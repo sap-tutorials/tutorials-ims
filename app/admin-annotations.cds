@@ -70,6 +70,7 @@ annotate AdminService.Missions with @UI: {
     { Value: slug },
     { Value: experienceTag },
     { Value: primaryTagRef.name, Label: 'Primary Tag' },
+    { Value: published, @UI.Importance: #High },
     { Value: status }
   ],
   Facets: [
@@ -84,6 +85,7 @@ annotate AdminService.Missions with @UI: {
     { Value: communityMissionId },
     { Value: experienceTag },
     { Value: primaryTagRef_ID },
+    { Value: published, @UI.FieldControl: publishedFieldControl },
     { Value: status },
     { Value: averageTimeToComplete }
   ]}
@@ -150,6 +152,7 @@ annotate AdminService.Groups with @UI: {
     { Value: title },
     { Value: experienceTag },
     { Value: averageTimeToComplete },
+    { Value: published, @UI.Importance: #High },
     { Value: status }
   ],
   Facets: [
@@ -163,6 +166,7 @@ annotate AdminService.Groups with @UI: {
     { Value: experienceTag },
     { Value: averageTimeToComplete },
     { Value: primaryTagRef_ID },
+    { Value: published, @UI.FieldControl: publishedFieldControl },
     { Value: status }
   ]}
 };

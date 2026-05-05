@@ -32,11 +32,13 @@ entity Tutorials : TaskBase {
 entity Missions : TaskBase {
   slug                      : String(255);
   communityMissionId        : String(255);
+  published                 : Boolean default true;
   group                     : Association to Groups;
   completionPaths           : Composition of many CompletionPaths on completionPaths.mission = $self;
 }
 
 entity Groups : TaskBase {
+  published                 : Boolean default true;
   missions                  : Association to many Missions on missions.group = $self;
 }
 

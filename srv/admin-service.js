@@ -456,6 +456,26 @@ export default class AdminService extends cds.ApplicationService {
       }
     });
 
+    // Guard: only SuperAdmin can change the published field
+    const _guardPublished = (req) => {
+      if (!('published' in req.data)) return;
+      if (req.event === 'CREATE' && req.data.published !== false) return;
+      if (!req.user.is('SuperAdmin')) {
+        req.reject(403, 'Only SuperAdmin can change the published state');
+      }
+    };
+    this.before(['CREATE', 'PATCH'], ['Missions', 'Groups'], _guardPublished);
+    this.before('PATCH', ['Missions.drafts', 'Groups.drafts'], _guardPublished);
+
+    // Compute dynamic field control for published field
+    this.after('READ', ['Missions', 'Groups'], (data, req) => {
+      const isSuperAdmin = req.user.is('SuperAdmin');
+      const controlValue = isSuperAdmin ? 7 : 1;
+      for (const row of Array.isArray(data) ? data : [data]) {
+        if (row) row.publishedFieldControl = controlValue;
+      }
+    });
+
     await super.init();
 
     // Allow standalone read access to ChangeView (plugin sets Readable:false by default)

@@ -8,8 +8,8 @@ service AdminService {
   // Full CRUD entity projections
   entity Users as projection on ims.Users;
   entity Tutorials as projection on ims.Tutorials;
-  entity Missions as projection on ims.Missions;
-  entity Groups as projection on ims.Groups;
+  entity Missions as projection on ims.Missions { *, virtual null as publishedFieldControl : Integer };
+  entity Groups as projection on ims.Groups { *, virtual null as publishedFieldControl : Integer };
   entity Steps as projection on ims.Steps;
   entity Events as projection on ims.Events;
   entity Prizes as projection on ims.Prizes;
