@@ -152,43 +152,63 @@
       ],
       "targets": {
         "eventsTarget": {
-          "viewName": "Events",
+          "type": "Component",
+          "usage": "eventsComponent",
+          "id": "eventsTarget",
           "viewLevel": 1
         },
         "missionsTarget": {
-          "viewName": "Missions",
+          "type": "Component",
+          "usage": "missionsComponent",
+          "id": "missionsTarget",
           "viewLevel": 1
         },
         "groupsTarget": {
-          "viewName": "Groups",
+          "type": "Component",
+          "usage": "groupsComponent",
+          "id": "groupsTarget",
           "viewLevel": 1
         },
         "tutorialsTarget": {
-          "viewName": "Tutorials",
+          "type": "Component",
+          "usage": "tutorialsComponent",
+          "id": "tutorialsTarget",
           "viewLevel": 1
         },
         "tagsTarget": {
-          "viewName": "Tags",
+          "type": "Component",
+          "usage": "tagsComponent",
+          "id": "tagsTarget",
           "viewLevel": 1
         },
         "accomplishmentsTarget": {
-          "viewName": "Accomplishments",
+          "type": "Component",
+          "usage": "accomplishmentsComponent",
+          "id": "accomplishmentsTarget",
           "viewLevel": 1
         },
         "prizesTarget": {
-          "viewName": "Prizes",
+          "type": "Component",
+          "usage": "prizesComponent",
+          "id": "prizesTarget",
           "viewLevel": 1
         },
         "operationsTarget": {
-          "viewName": "Operations",
+          "type": "Component",
+          "usage": "operationsComponent",
+          "id": "operationsTarget",
           "viewLevel": 1
         },
         "accountsTarget": {
-          "viewName": "Accounts",
+          "type": "Component",
+          "usage": "accountsComponent",
+          "id": "accountsTarget",
           "viewLevel": 1
         },
         "changelogTarget": {
-          "viewName": "Changelog",
+          "type": "Component",
+          "usage": "changelogComponent",
+          "id": "changelogTarget",
           "viewLevel": 1
         },
         "boardTarget": {
