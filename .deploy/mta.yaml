@@ -2,17 +2,15 @@ _schema-version: 3.3.0
 ID: tutorials-poc
 version: 1.0.0
 
-# Minimal MTA for deploying CAP srv + approuter (with admin UI as static files).
-# Skips Hugo, tutorials, display-app builds. Admin shell is built into the
-# approuter's static/ directory during the MTA build.
+# Full MTA for deploying: db-deployer + CAP srv + approuter (with admin UI).
 #
 # Usage:
 #   cd .deploy
 #   mbt build
-#   cf deploy mta_archives/tutorials-poc_1.0.0.mtar
+#   cf deploy mta_archives/tutorials-poc_1.0.0.mtar -e ../deploy/dev.mtaext
 #
-# Or deploy approuter only (includes admin UI):
-#   cf deploy mta_archives/tutorials-poc_1.0.0.mtar --module tutorials-approuter
+# Or deploy a single module:
+#   cf deploy mta_archives/tutorials-poc_1.0.0.mtar --module tutorials-srv
 
 build-parameters:
   before-all:
@@ -20,8 +18,17 @@ build-parameters:
       commands:
         - npm --prefix .. install
         - npx --prefix .. cds build --production
+        - cp ../xs-security.json .
 
 modules:
+  - name: tutorials-db-deployer
+    type: hdb
+    path: ../gen/db
+    parameters:
+      buildpack: nodejs_buildpack
+    requires:
+      - name: tutorials-hana
+
   - name: tutorials-srv
     type: nodejs
     path: ../gen/srv
@@ -53,6 +60,7 @@ modules:
         - npm --prefix ../app/admin-shell run build
         - mkdir -p static/admin-ui
         - cp -r ../app/admin-shell/dist/. static/admin-ui/
+        - cp -r ../app/scanner/webapp static/scanner-ui
       ignore:
         - default-env.json
         - default-env-admin.json
@@ -86,12 +94,14 @@ resources:
       service: xsuaa
       service-plan: application
       service-name: tutorials-xsuaa
+      config-path: xs-security.json
 
   - name: tutorials-destination
     type: org.cloudfoundry.managed-service
     parameters:
       service: destination
       service-plan: lite
+      service-name: tutorials-destination
 
   - name: tutorials-mail
     type: org.cloudfoundry.managed-service
@@ -107,6 +117,7 @@ resources:
     parameters:
       service: auditlog
       service-plan: premium
+      service-name: tutorials-audit-log
 
   - name: tutorials-cloud-logging
     type: org.cloudfoundry.managed-service
@@ -114,6 +125,7 @@ resources:
     parameters:
       service: cloud-logging
       service-plan: standard
+      service-name: tutorials-cloud-logging
       config:
         ingest_otlp:
           enabled: true

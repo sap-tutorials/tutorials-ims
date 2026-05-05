@@ -414,8 +414,8 @@ First comprehensive security audit of the full implementation. Findings ranked b
 
 ## 18. Reported Bugs (2026-05-04)
 
-- [X] **Tutorials in Navigator missing details** — Tutorial cards show only the slug as the title, "Beginner" level, and "0 min." duration. No real title, description, actual duration, or tag content is displayed. Likely the `/build/navigator` endpoint or the `NavigatorCatalog` view is not joining/returning tutorial metadata (title, description, time, experience level) from the `Tutorials` or `TutorialMeta` entities.
-- [X] **SAP logo needs replacing** — The shellbar shows a placeholder "SA H" initials circle instead of the actual SAP logo. Need to replace with the proper SAP logo image/SVG.
+- [✔️] **Tutorials in Navigator missing details** — Tutorial cards show only the slug as the title, "Beginner" level, and "0 min." duration. No real title, description, actual duration, or tag content is displayed. Likely the `/build/navigator` endpoint or the `NavigatorCatalog` view is not joining/returning tutorial metadata (title, description, time, experience level) from the `Tutorials` or `TutorialMeta` entities.
+- [✔️] **SAP logo needs replacing** — The shellbar shows a placeholder "SA H" initials circle instead of the actual SAP logo. Need to replace with the proper SAP logo image/SVG.
 - [X] **Breadcrumb navigation broken in tutorial pages** — The breadcrumb/navigation in the tutorial detail view is not formatted correctly. Shows raw "Tutorial Navigator • / • Create a Simple ABAP Daemon" with bullet separators and a bare "/" instead of proper styled breadcrumb links (e.g., "Tutorial Navigator > Group Name > Tutorial Title").
 - [X] **Breadcrumb navigation broken in mission/group pages** — Different issue from tutorials: breadcrumb shows "Tutorial Navigator" link concatenated directly with the slug (e.g., "Tutorial Navigatortest_mission_ims") with no separator or spacing. Also missing proper title — displays raw slug "test_mission_ims" as both the breadcrumb text and the page heading, with placeholder metadata ("Beginner · 0 min. · 0 Tutorials · 1 Groups").
 - [X] **Login redirects away from current page** — When logging in from a detail page (tutorial, mission, or group), the user is redirected back to the Tutorial Navigator home page instead of remaining on the page they were viewing. The login flow should preserve the current URL and return the user to the same page after authentication.
@@ -439,11 +439,19 @@ First comprehensive security audit of the full implementation. Findings ranked b
 ## 19. Reported Bugs (2026-05-05)
 
 - [x] **Admin UI — Mission Detail: no back button in object page header** — Navigate to Missions → click a mission. Expected: back arrow button visible in the object page header. Actual: no back button in the header.
-- [X] **Admin UI — Discard Draft: error page instead of list navigation** — Edit a mission → click "Discard Draft". Expected: navigates cleanly back to the list view. Actual: error page displayed instead of list navigation.
-- [ ] **Scanner UI5 app doesn't load** — The `/scanner-ui/` route (UI5 barcode scanner app) fails to load, while `/scanner-vue/` (Vue-based scanner) works correctly. Likely a routing, resource path, or bootstrap issue specific to the UI5 app.
+- [x] **Admin UI — Discard Draft: error page instead of list navigation** — Edit a mission → click "Discard Draft". Expected: navigates cleanly back to the list view. Actual: error page displayed instead of list navigation.
+- [x] **Scanner UI5 app doesn't load** — The `/scanner-ui/` route (UI5 barcode scanner app) fails to load, while `/scanner-vue/` (Vue-based scanner) works correctly. Likely a routing, resource path, or bootstrap issue specific to the UI5 app.
 - [ ] **`/_dev` endpoint not working on DEV** — The CAP dev tools endpoint (`/_dev`) that exposes the index page and Swagger UI is not accessible on the deployed DEV instance. Previously fixed locally but regression on deployed environment.
 - [ ] **Display app WebSocket connection error (recurring)** — The Event Display dashboard still fails to establish a WebSocket connection on the deployed DEV instance. Previously marked as fixed but the issue persists.
 - [ ] **Rework header area consistently across applications** — The header/shell bar area is inconsistent across the different apps (Hugo site, admin shell, display app, scanner). Need a unified header design with consistent branding, navigation, and user menu across all application entry points.
 - [ ] **Admin UI** - the new pipeline log view is missing from the side navigation and cannot be accessed.
 - [ ] **Admin UI** - Error Sorry, we can't find this page
-HTTP request was not processed because the previous request failed. This happens when navigating back between object level pages. 
+HTTP request was not processed because the previous request failed. This happens when navigating back between object level pages.
+- [ ] App Space page needs an event id parameter and a default.
+- [ ] Admin UI - Missions and Groups - add a published flag that only super admin can set
+
+---
+
+## 20. MTA Deployment Runbook ✅ (2026-05-05)
+
+**Completed.** Full standalone MTA deployment with its own HANA HDI container and XSUAA instance, running in parallel with legacy IMS services. See [docs/mta-deployment.md](docs/mta-deployment.md) for the complete runbook.

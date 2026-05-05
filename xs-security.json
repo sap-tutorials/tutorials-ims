@@ -48,6 +48,34 @@
       "scope-references": ["$XSAPPNAME.Everyone"]
     }
   ],
+  "role-collections": [
+    {
+      "name": "Tutorials Admin",
+      "description": "Full admin access to tutorials platform",
+      "role-template-references": [
+        "$XSAPPNAME.Admin",
+        "$XSAPPNAME.DisplayApp",
+        "$XSAPPNAME.DeveloperApp",
+        "$XSAPPNAME.Everyone"
+      ]
+    },
+    {
+      "name": "Tutorials Developer",
+      "description": "Developer app access for tutorial progress",
+      "role-template-references": [
+        "$XSAPPNAME.DeveloperApp",
+        "$XSAPPNAME.Everyone"
+      ]
+    },
+    {
+      "name": "Tutorials Display",
+      "description": "Read-only display access for event monitors",
+      "role-template-references": [
+        "$XSAPPNAME.DisplayApp",
+        "$XSAPPNAME.Everyone"
+      ]
+    }
+  ],
   "oauth2-configuration": {
     "redirect-uris": ["https://*.cfapps.*.hana.ondemand.com/**"]
   }

@@ -13,8 +13,3 @@ modules:
   - name: tutorials-srv
     properties:
       EXPOSE_CAP_UI: true
-
-resources:
-  - name: tutorials-xsuaa
-    parameters:
-      service-name: xsuaa-imsdev
