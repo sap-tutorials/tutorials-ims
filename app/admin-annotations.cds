@@ -50,10 +50,10 @@ annotate AdminService.Missions with {
   description        @Common.Label: 'Description';
   slug               @Common.Label: 'Slug';
   communityMissionId @Common.Label: 'Community Mission ID';
-  experienceTag      @Common.Label: 'Experience';
+  experienceTag      @Common.Label: 'Experience'  @Common.ValueListWithFixedValues;
   primaryTag         @Common.Label: 'Primary Tag (text)';
   primaryTagRef_ID   @Common.Label: 'Primary Tag';
-  status             @Common.Label: 'Status';
+  status             @Common.Label: 'Status'  @Common.ValueListWithFixedValues;
   averageTimeToComplete @Common.Label: 'Avg Time (min)';
 };
 
@@ -114,7 +114,7 @@ annotate AdminService.CompletionPaths with @UI: {
 
 annotate AdminService.CompletionPathItems with {
   taskLegacyId @Common.Label: 'Task ID';
-  taskType     @Common.Label: 'Type';
+  taskType     @Common.Label: 'Type'  @Common.ValueListWithFixedValues;
   itemOrder    @Common.Label: 'Order';
 };
 
@@ -131,11 +131,11 @@ annotate AdminService.Groups with {
   legacyId              @Common.Label: 'Group ID';
   title                 @Common.Label: 'Title';
   description           @Common.Label: 'Description';
-  experienceTag         @Common.Label: 'Experience';
+  experienceTag         @Common.Label: 'Experience'  @Common.ValueListWithFixedValues;
   primaryTag            @Common.Label: 'Primary Tag (text)';
   primaryTagRef_ID      @Common.Label: 'Primary Tag';
   averageTimeToComplete @Common.Label: 'Avg Time (min)';
-  status                @Common.Label: 'Status';
+  status                @Common.Label: 'Status'  @Common.ValueListWithFixedValues;
 };
 
 annotate AdminService.Groups with @UI: {
@@ -245,9 +245,9 @@ annotate AdminService.Tutorials with {
   title                 @Common.Label: 'Title';
   slug                  @Common.Label: 'Slug';
   primaryTag            @Common.Label: 'Primary Tag';
-  experienceTag         @Common.Label: 'Experience';
+  experienceTag         @Common.Label: 'Experience'  @Common.ValueListWithFixedValues;
   averageTimeToComplete @Common.Label: 'Avg Time (min)';
-  status                @Common.Label: 'Status';
+  status                @Common.Label: 'Status'  @Common.ValueListWithFixedValues;
 };
 
 annotate AdminService.Tutorials with @UI: {
@@ -298,7 +298,7 @@ annotate AdminService.Tags with @(
 // --- FeaturedTasks (inline editing of featuredOrder) ---
 annotate AdminService.FeaturedTasks with {
   taskLegacyId  @Common.Label: 'Task ID';
-  taskType      @Common.Label: 'Type';
+  taskType      @Common.Label: 'Type'  @Common.ValueListWithFixedValues;
   featuredOrder @Common.Label: 'Order';
 };
 
@@ -368,7 +368,7 @@ annotate AdminService.StepFailures with @(
 
 // --- NGDSFailedMessages (read-only, retry action per row) ---
 annotate AdminService.NGDSFailedMessages with {
-  status       @Common.Label: 'Status';
+  status       @Common.Label: 'Status'  @Common.ValueListWithFixedValues;
   errorMessage @Common.Label: 'Error';
   createdAt    @Common.Label: 'Failed At';
   retryCount   @Common.Label: 'Retries';
@@ -399,7 +399,7 @@ annotate AdminService.FailedEmails with {
   subject      @Common.Label: 'Subject';
   createdAt    @Common.Label: 'Failed At';
   retryCount   @Common.Label: 'Retries';
-  status       @Common.Label: 'Status';
+  status       @Common.Label: 'Status'  @Common.ValueListWithFixedValues;
 };
 
 annotate AdminService.FailedEmails with @(
@@ -423,8 +423,8 @@ annotate AdminService.FailedEmails with @(
 
 // --- PipelineLog (read-only, filterable by type/status) ---
 annotate AdminService.PipelineLog with {
-  pipelineType  @Common.Label: 'Type';
-  status        @Common.Label: 'Status';
+  pipelineType  @Common.Label: 'Type'  @Common.ValueListWithFixedValues;
+  status        @Common.Label: 'Status'  @Common.ValueListWithFixedValues;
   startedAt     @Common.Label: 'Started';
   finishedAt    @Common.Label: 'Finished';
   durationMs    @Common.Label: 'Duration (ms)';

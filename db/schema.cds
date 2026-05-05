@@ -154,7 +154,7 @@ entity CompletionPaths : cuid, LegacyKeyed {
 entity CompletionPathItems : cuid, LegacyKeyed {
   path                      : Association to CompletionPaths;
   taskLegacyId              : Integer;
-  taskType                  : String(20);
+  taskType                  : String(20) enum { TUTORIAL; MISSION; GROUP; };
   itemOrder                 : Integer;
 }
 
@@ -206,7 +206,7 @@ entity NGDSFailedMessages : cuid, LegacyKeyed {
   createdAt                 : Timestamp;
   retryCount                : Integer default 0;
   maxRetries                : Integer default 10;
-  status                    : String(30);
+  status                    : String(30) enum { PENDING; RETRYING; FAILED; SUCCESS; };
 }
 
 entity ImsConfig : cuid, LegacyKeyed {
@@ -243,7 +243,7 @@ entity PrivacyProtectionActions : cuid, LegacyKeyed {
 
 entity FeaturedTasks : cuid, LegacyKeyed {
   taskLegacyId              : Integer;
-  taskType                  : String(20);
+  taskType                  : String(20) enum { TUTORIAL; MISSION; GROUP; };
   featuredOrder             : Integer;
 }
 
@@ -256,7 +256,7 @@ entity FailedEmails : cuid {
   createdAt                 : Timestamp;
   retryCount                : Integer default 0;
   maxRetries                : Integer default 3;
-  status                    : String(20) default 'PENDING';
+  status                    : String(20) enum { PENDING; SENT; FAILED; } default 'PENDING';
 }
 
 entity ContentFiles : managed {
