@@ -21,6 +21,8 @@ npm run build:css                             # PostCSS → hugo/static/css/sap-
 npm run build:apps                            # Vue 3 public-facing apps (apps/)
 npm run build:display                         # Display dashboard app (display-app/)
 npm run build:admin                           # Admin shell with embedded Fiori Elements components (app/admin-shell)
+npm run build:cds                             # CDS production build (cds build --production)
+npm run build:highlight                       # Generate CDS syntax highlighting (scripts/highlight-cds.ts)
 npm run generate-dark-theme                   # Generate dark theme CSS variables
 npm run validate-tutorials                    # Validate fetched tutorial structure
 npm run discover-repos                        # List available tutorial repos without fetching
@@ -34,6 +36,10 @@ npx vitest run scripts/__tests__/v1.test.ts   # Run a single test file
 # CAP backend
 cds watch                                     # Start CAP server (http://localhost:4004)
 npm run dev:hybrid                            # CAP with HANA binding + approuter (parallel)
+npm run watch:hybrid                          # cds watch --profile hybrid (CAP only, no approuter)
+npm run start:approuter                       # Start standalone approuter (cd approuter && npm start)
+npm run bind:setup                            # Setup hybrid env bindings (scripts/setup-hybrid-env.js)
+npm run setup-dev-data                        # Populate slugs + cleanup autotest data (requires cds bind)
 
 # Migration & Comparison
 npm run migrate:reference                     # Export reference data from Java IMS (or import to CAP)
@@ -127,6 +133,7 @@ Tutorial HTML is NOT served from static files. After Hugo builds, `publish-conte
 - **Bootstrap**: `srv/server.js` registers custom express routes on `cds.on('bootstrap')`, attaches STOMP broker and jobs on `cds.on('served')`
 - **Audit Logging**: `@cap-js/audit-logging` with `@PersonalData` annotations on Users/UserMetaData/TaskRecords (see `db/audit-logging.cds`). SecurityEvent emitted on user anonymization.
 - **Change Tracking**: `@cap-js/change-tracking` on admin-managed entities (Events, Missions, Groups, Accomplishments, Prizes, ImsConfig, FeaturedTasks). See `db/change-tracking.cds`.
+- **ORD**: `srv/ord-annotations.cds` registers all services for Open Resource Discovery.
 
 ### Scanner (app/scanner/)
 
@@ -177,10 +184,12 @@ Architecture docs for reference (not deployed, developer-facing only):
 - `ims-api-reference.md` — Legacy IMS Java API surface (for migration parity)
 - `ims-uncovered-features.md` — IMS features not yet ported to CAP
 - `hugo-migration.md` — VitePress → Hugo migration rationale and steps
+- `mta-deployment.md` — MTA build/deploy procedures and troubleshooting
+- `vitepress-2x-upgrade-assessment.md` — Legacy: VitePress 2.x evaluation (historical)
 
 ### Parsers (scripts/parsers/)
 
-The fetch script (`--target hugo`) detects parser format via frontmatter field `parser: v2`. V2 uses H3 headings to delimit steps; V1 (legacy) uses `[ACCORDION-BEGIN]`/`[ACCORDION-END]` markers. `images.ts` resolves relative image paths to `raw.githubusercontent.com` CDN URLs. `options.ts` converts `[OPTION BEGIN]`/`[OPTION END]` blocks to Hugo shortcodes. `cap.ts` fetches mission/group catalog from the CAP backend at build time. Shared types in `types.ts`.
+The fetch script (`--target hugo`) detects parser format via frontmatter field `parser: v2`. V2 uses H3 headings to delimit steps; V1 (legacy) uses `[ACCORDION-BEGIN]`/`[ACCORDION-END]` markers. `images.ts` resolves relative image paths to `raw.githubusercontent.com` CDN URLs. `options.ts` converts `[OPTION BEGIN]`/`[OPTION END]` blocks to Hugo shortcodes. `sanitize-html.ts` cleans unsafe HTML from tutorial source. `hugo-delimiters.ts` handles Hugo-specific delimiter escaping. `cap.ts` fetches mission/group catalog from the CAP backend at build time. Shared types in `types.ts`.
 
 ### Testing
 
