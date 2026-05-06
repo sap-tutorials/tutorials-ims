@@ -117,11 +117,12 @@ async function rebuildHandler(req, res, next) {
 
 // Workaround: @sap/approuter's static-resource-handler uses path.sep to prefix
 // req.url, which produces backslashes on Windows and breaks serve-static lookups.
-// This middleware serves static files correctly on all platforms.
-// On CF, skip /admin-ui/ so the standard approuter enforces XSUAA authentication.
+// Locally (Windows) this middleware serves static files correctly.
+// On CF (Linux), the approuter's built-in handler works fine and must handle
+// XSUAA-protected localDir routes (login, scanner-ui, admin-ui) itself.
 const staticServe = serveStatic(STATIC_DIR, { fallthrough: true })
 function staticHandler(req, res, next) {
-  if (!isLocal && req.url.startsWith('/admin-ui')) return next()
+  if (!isLocal) return next()
   staticServe(req, res, next)
 }
 

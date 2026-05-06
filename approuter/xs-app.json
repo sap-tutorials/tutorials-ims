@@ -40,7 +40,7 @@
       "authenticationType": "xsuaa"
     },
     {
-      "source": "^/login$",
+      "source": "^/login(\\?.*)?$",
       "authenticationType": "xsuaa",
       "target": "/login-redirect.html",
       "localDir": "static"

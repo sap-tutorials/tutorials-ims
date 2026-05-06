@@ -6,13 +6,28 @@
     <span class="fd-shellbar__title">Tutorial Platform</span>
   </div>
   <div class="fd-shellbar__group fd-shellbar__group--actions">
-    <nav>
-      <a href="/" class="fd-shellbar__action">Tutorials</a>
-      <span class="shellbar-separator"></span>
-      <a href="/app-space" class="fd-shellbar__action">App Space</a>
-      <span class="shellbar-separator"></span>
-      <a href="/event-display" class="fd-shellbar__action">Event Display</a>
-    </nav>
+    <div class="shellbar-nav-dropdown" id="nav-dropdown">
+      <button type="button" class="fd-shellbar__button" aria-label="Navigation menu" aria-expanded="false" aria-controls="nav-popover" onclick="toggleNavMenu()">
+        <i class="sap-icon--megamenu"></i>
+        <span class="shellbar-nav-dropdown__label">Navigate</span>
+        <i class="sap-icon--slim-arrow-down shellbar-nav-dropdown__arrow"></i>
+      </button>
+      <div id="nav-popover" class="shellbar-popover">
+        <ul class="fd-menu__list" role="menu">
+          <li class="fd-menu__item" role="menuitem"><a href="/" class="fd-menu__link"><i class="sap-icon--course-book fd-menu__addon-before"></i><span class="fd-menu__title">Tutorials</span></a></li>
+          <li class="fd-menu__item" role="menuitem"><a href="/app-space" class="fd-menu__link"><i class="sap-icon--flight fd-menu__addon-before"></i><span class="fd-menu__title">App Space</span></a></li>
+          <li class="fd-menu__item" role="menuitem"><a href="/event-display" class="fd-menu__link"><i class="sap-icon--screen fd-menu__addon-before"></i><span class="fd-menu__title">Event Display</span></a></li>
+        </ul>
+      </div>
+    </div>
+    <span class="shellbar-separator"></span>
+    <button type="button" class="fd-shellbar__button" aria-label="Help" title="Help" onclick="window.open('https://community.sap.com','_blank')">
+      <i class="sap-icon--question-mark"></i>
+    </button>
+    <button type="button" class="fd-shellbar__button shellbar-notifications" aria-label="Notifications" title="Notifications" id="notifications-btn">
+      <i class="sap-icon--bell"></i>
+      <span class="fd-counter fd-counter--notification" aria-label="unread notifications" id="notification-badge"></span>
+    </button>
     <span class="shellbar-separator"></span>
     <button type="button" class="theme-toggle" data-action="toggle-theme" aria-label="Toggle dark mode" title="Toggle dark/light mode">
       <span class="theme-toggle-track">
@@ -51,6 +66,7 @@
   const popover = document.getElementById('user-popover');
   const userName = document.getElementById('user-name');
   const userEmail = document.getElementById('user-email');
+  const navPopover = document.getElementById('nav-popover');
   let isAuthenticated = false;
 
   function applyInitials(givenName, familyName, id) {
@@ -88,12 +104,25 @@
       window.location.href = '/login?returnTo=' + encodeURIComponent(window.location.pathname + window.location.search);
       return;
     }
+    navPopover.style.display = 'none';
     popover.style.display = popover.style.display === 'none' ? 'block' : 'none';
+  };
+
+  window.toggleNavMenu = function() {
+    popover.style.display = 'none';
+    var btn = document.querySelector('#nav-dropdown .fd-shellbar__button');
+    var open = navPopover.style.display === 'block';
+    navPopover.style.display = open ? 'none' : 'block';
+    btn.setAttribute('aria-expanded', !open);
   };
 
   document.addEventListener('click', function(e) {
     if (!document.getElementById('user-menu').contains(e.target)) {
       popover.style.display = 'none';
+    }
+    if (!document.getElementById('nav-dropdown').contains(e.target)) {
+      navPopover.style.display = 'none';
+      document.querySelector('#nav-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
     }
   });
 

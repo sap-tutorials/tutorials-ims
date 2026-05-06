@@ -1,9 +1,10 @@
 {
   "xsappname": "tutorials-poc",
   "tenant-mode": "dedicated",
-  "description": "Reference documentation only. Deployment binds to existing IMS XSUAA instances (xsuaa-imsdev/imsqa/imsprod) via org.cloudfoundry.existing-service in mta.yaml. These scope and role definitions mirror the IMS XSUAA configuration.",
+  "description": "Deployment creates a dedicated XSUAA instance (tutorials-xsuaa) via org.cloudfoundry.managed-service in mta.yaml.",
   "scopes": [
     { "name": "$XSAPPNAME.Admin",              "description": "Full admin access" },
+    { "name": "$XSAPPNAME.SuperAdmin",         "description": "Elevated admin access (publish/unpublish)" },
     { "name": "$XSAPPNAME.ContentAuthor",      "description": "Create and edit content" },
     { "name": "$XSAPPNAME.DeveloperApp",       "description": "Developer operations" },
     { "name": "$XSAPPNAME.MobileApp",          "description": "Mobile app features" },
@@ -16,6 +17,11 @@
       "name": "Admin",
       "description": "Administrator",
       "scope-references": ["$XSAPPNAME.Admin", "$XSAPPNAME.Everyone"]
+    },
+    {
+      "name": "SuperAdmin",
+      "description": "Elevated Administrator (can publish/unpublish)",
+      "scope-references": ["$XSAPPNAME.SuperAdmin", "$XSAPPNAME.Admin", "$XSAPPNAME.Everyone"]
     },
     {
       "name": "ContentAuthor",
@@ -46,6 +52,45 @@
       "name": "Everyone",
       "description": "Baseline",
       "scope-references": ["$XSAPPNAME.Everyone"]
+    }
+  ],
+  "role-collections": [
+    {
+      "name": "Tutorials Admin",
+      "description": "Full admin access to tutorials platform",
+      "role-template-references": [
+        "$XSAPPNAME.Admin",
+        "$XSAPPNAME.DisplayApp",
+        "$XSAPPNAME.DeveloperApp",
+        "$XSAPPNAME.Everyone"
+      ]
+    },
+    {
+      "name": "Tutorials SuperAdmin",
+      "description": "Elevated admin with publish/unpublish capability",
+      "role-template-references": [
+        "$XSAPPNAME.SuperAdmin",
+        "$XSAPPNAME.Admin",
+        "$XSAPPNAME.DisplayApp",
+        "$XSAPPNAME.DeveloperApp",
+        "$XSAPPNAME.Everyone"
+      ]
+    },
+    {
+      "name": "Tutorials Developer",
+      "description": "Developer app access for tutorial progress",
+      "role-template-references": [
+        "$XSAPPNAME.DeveloperApp",
+        "$XSAPPNAME.Everyone"
+      ]
+    },
+    {
+      "name": "Tutorials Display",
+      "description": "Read-only display access for event monitors",
+      "role-template-references": [
+        "$XSAPPNAME.DisplayApp",
+        "$XSAPPNAME.Everyone"
+      ]
     }
   ],
   "oauth2-configuration": {

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
-import { discoverTutorials, computeLocalHashes, computeDiff, buildPayload } from '../publish-content.js';
+import { discoverTutorials, computeLocalHashes, computeDiff, buildPayload, validateProductionBuild } from '../publish-content.js';
 
 const TEST_DIR = join(tmpdir(), `publish-content-test-${Date.now()}`);
 const HUGO_DIR = join(TEST_DIR, 'public');
@@ -150,5 +150,51 @@ describe('buildPayload', () => {
     const tutorials = discoverTutorials(HUGO_DIR);
     const payload = buildPayload(['non-existent'], tutorials);
     expect(Object.keys(payload)).toHaveLength(0);
+  });
+});
+
+describe('validateProductionBuild', () => {
+  const VAL_DIR = join(TEST_DIR, 'val-public', 'tutorials');
+
+  beforeAll(() => {
+    mkdirSync(join(VAL_DIR, 'clean-tutorial'), { recursive: true });
+    writeFileSync(
+      join(VAL_DIR, 'clean-tutorial', 'index.html'),
+      '<html data-cap-base=""><body>Clean</body></html>'
+    );
+  });
+
+  it('passes for production-built content', () => {
+    const tutorials = discoverTutorials(join(TEST_DIR, 'val-public'));
+    const violations = validateProductionBuild(tutorials);
+    expect(violations).toHaveLength(0);
+  });
+
+  it('catches localhost cap-base (dev build artifact)', () => {
+    const devDir = join(TEST_DIR, 'dev-public', 'tutorials', 'dev-tutorial');
+    mkdirSync(devDir, { recursive: true });
+    writeFileSync(
+      join(devDir, 'index.html'),
+      '<html data-cap-base="http://localhost:4004"><body>Dev</body></html>'
+    );
+
+    const tutorials = discoverTutorials(join(TEST_DIR, 'dev-public'));
+    const violations = validateProductionBuild(tutorials);
+    expect(violations.length).toBeGreaterThan(0);
+    expect(violations[0]).toContain('localhost');
+  });
+
+  it('catches livereload script injection', () => {
+    const lrDir = join(TEST_DIR, 'lr-public', 'tutorials', 'lr-tutorial');
+    mkdirSync(lrDir, { recursive: true });
+    writeFileSync(
+      join(lrDir, 'index.html'),
+      '<html data-cap-base=""><script src="/livereload.js"></script></html>'
+    );
+
+    const tutorials = discoverTutorials(join(TEST_DIR, 'lr-public'));
+    const violations = validateProductionBuild(tutorials);
+    expect(violations.length).toBeGreaterThan(0);
+    expect(violations[0]).toContain('livereload');
   });
 });

@@ -3,6 +3,30 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 
+// --- Build validation ---
+
+const DEV_ARTIFACT_PATTERNS = [
+  { pattern: /data-cap-base="http:\/\/localhost/, label: 'data-cap-base pointing to localhost' },
+  { pattern: /livereload\.js/, label: 'Hugo livereload script injection' },
+  { pattern: /<script>document\.write.*livereload/s, label: 'Hugo dev server livereload' },
+];
+
+export function validateProductionBuild(tutorials: Map<string, string>, sampleSize = 5): string[] {
+  const slugs = [...tutorials.keys()];
+  const sample = slugs.slice(0, Math.min(sampleSize, slugs.length));
+  const violations: string[] = [];
+
+  for (const slug of sample) {
+    const content = readFileSync(tutorials.get(slug)!, 'utf-8');
+    for (const { pattern, label } of DEV_ARTIFACT_PATTERNS) {
+      if (pattern.test(content)) {
+        violations.push(`${slug}: ${label}`);
+      }
+    }
+  }
+  return violations;
+}
+
 // --- Pure functions (exported for testing) ---
 
 export function discoverTutorials(hugoDir: string): Map<string, string> {
@@ -120,6 +144,17 @@ async function main() {
   }
 
   log(`Found ${tutorials.size} tutorials`);
+
+  const violations = validateProductionBuild(tutorials);
+  if (violations.length > 0) {
+    console.error('Error: Hugo output contains dev-build artifacts. Refusing to publish.');
+    console.error('Run `hugo --environment production` before publishing.\n');
+    for (const v of violations) {
+      console.error(`  ✗ ${v}`);
+    }
+    process.exit(1);
+  }
+  log('Production build validation passed');
 
   log('Computing local hashes...');
   const localHashes = computeLocalHashes(tutorials);
