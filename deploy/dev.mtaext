@@ -3,13 +3,16 @@ ID: tutorials-poc-dev
 extends: tutorials-poc
 
 modules:
+  - name: tutorials-srv
+    properties:
+      EXPOSE_CAP_UI: true
+      CONTENT_API_KEY: ${content-api-key}
+
   - name: tutorials-approuter
     parameters:
       app-name: tutorials-dev-approuter
     properties:
       XS_APP_LOG_LEVEL: debug
       DEBUG: "xs-approuter:*"
-
-  - name: tutorials-srv
-    properties:
-      EXPOSE_CAP_UI: true
+      REBUILD_API_KEY: ${rebuild-api-key}
+      APPROUTER_URL: ${approuter-url}

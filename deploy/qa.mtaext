@@ -3,13 +3,17 @@ ID: tutorials-poc-qa
 extends: tutorials-poc
 
 modules:
-  - name: tutorials-approuter
-    parameters:
-      app-name: tutorials-qa-approuter
-
   - name: tutorials-srv
     properties:
       EXPOSE_CAP_UI: true
+      CONTENT_API_KEY: ${content-api-key}
+
+  - name: tutorials-approuter
+    parameters:
+      app-name: tutorials-qa-approuter
+    properties:
+      REBUILD_API_KEY: ${rebuild-api-key}
+      APPROUTER_URL: ${approuter-url}
 
 resources:
   - name: tutorials-xsuaa

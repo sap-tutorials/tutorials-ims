@@ -3,9 +3,20 @@ ID: tutorials-poc-prod
 extends: tutorials-poc
 
 modules:
+  - name: tutorials-srv
+    parameters:
+      instances: 2
+    properties:
+      CONTENT_API_KEY: ${content-api-key}
+
   - name: tutorials-approuter
     parameters:
       app-name: tutorials-prod-approuter
+      instances: 2
+      keep-existing-routes: true
+    properties:
+      REBUILD_API_KEY: ${rebuild-api-key}
+      APPROUTER_URL: ${approuter-url}
 
 resources:
   - name: tutorials-xsuaa

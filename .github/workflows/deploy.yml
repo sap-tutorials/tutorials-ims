@@ -88,28 +88,38 @@ jobs:
             -o "${{ secrets.CF_ORG }}" \
             -s "${{ steps.cf.outputs.space }}"
 
-      - name: Deploy MTA
-        run: cf deploy mta_archives/tutorials-poc_${{ steps.version.outputs.version }}.mtar -e deploy/${{ steps.env.outputs.target }}.mtaext -f
-
-      - name: Configure environment variables
+      - name: Resolve deploy variables
+        id: deploy-vars
         run: |
-          APPROUTER="tutorials-${{ steps.env.outputs.target }}-approuter"
-          SRV="tutorials-srv"
-
-          # Approuter env vars
-          cf set-env "$APPROUTER" REBUILD_API_KEY "${{ secrets.REBUILD_API_KEY }}"
-
           case "${{ steps.env.outputs.target }}" in
-            dev)  cf set-env "$APPROUTER" APPROUTER_URL "${{ secrets.APPROUTER_URL_DEV }}" ;;
-            qa)   cf set-env "$APPROUTER" APPROUTER_URL "${{ secrets.APPROUTER_URL_QA }}" ;;
-            prod) cf set-env "$APPROUTER" APPROUTER_URL "${{ secrets.APPROUTER_URL_PROD }}" ;;
+            dev)  echo "approuter_url=${{ secrets.APPROUTER_URL_DEV }}" >> "$GITHUB_OUTPUT" ;;
+            qa)   echo "approuter_url=${{ secrets.APPROUTER_URL_QA }}" >> "$GITHUB_OUTPUT" ;;
+            prod) echo "approuter_url=${{ secrets.APPROUTER_URL_PROD }}" >> "$GITHUB_OUTPUT" ;;
           esac
 
-          # CAP srv env vars
-          cf set-env "$SRV" CONTENT_API_KEY "${{ secrets.CONTENT_API_KEY }}"
+      - name: Deploy MTA
+        run: |
+          STRATEGY_FLAGS=""
+          if [ "${{ steps.env.outputs.target }}" = "prod" ]; then
+            STRATEGY_FLAGS="--strategy blue-green --skip-testing-phase"
+          fi
 
-          cf restart "$APPROUTER"
-          cf restart "$SRV"
+          cf deploy mta_archives/tutorials-poc_${{ steps.version.outputs.version }}.mtar \
+            -e deploy/${{ steps.env.outputs.target }}.mtaext \
+            --var content-api-key="${{ secrets.CONTENT_API_KEY }}" \
+            --var rebuild-api-key="${{ secrets.REBUILD_API_KEY }}" \
+            --var approuter-url="${{ steps.deploy-vars.outputs.approuter_url }}" \
+            $STRATEGY_FLAGS \
+            -f
+
+      - name: Abort blue-green on failure
+        if: failure() && steps.env.outputs.target == 'prod'
+        run: |
+          OP_ID=$(cf mta-ops | grep "tutorials-poc" | grep -i "error\|abort" | head -1 | awk '{print $1}')
+          if [ -n "$OP_ID" ]; then
+            echo "Aborting failed blue-green operation: $OP_ID"
+            cf deploy -i "$OP_ID" -a abort || true
+          fi
 
       - name: Create GitHub Release
         env:
