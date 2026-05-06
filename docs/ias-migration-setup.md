@@ -39,10 +39,10 @@ Most BTP global accounts include one IAS tenant at no additional cost.
 1. **BTP Cockpit** → Global Account → **Security** → **Trust Configuration**
 2. Check if an IAS tenant is already listed under "Custom Identity Provider for Applications"
 3. If not, go to **Entitlements** → search for "Cloud Identity Services" → add to a subaccount
-4. Create a service instance of plan `default` — this provisions your IAS tenant
-5. Note the IAS tenant URL: `https://<your-tenant-id>.accounts.ondemand.com`
+4. Create a service instance of plan `additional_tenant` — this provisions your IAS tenant
+5. Note the IAS tenant URL: `https://aipkn8bca.accounts.ondemand.com`
 
-The IAS admin console is at: `https://<your-tenant-id>.accounts.ondemand.com/admin`
+The IAS admin console is at: `https://aipkn8bca.accounts.ondemand.com/admin`
 
 ---
 
@@ -51,15 +51,22 @@ The IAS admin console is at: `https://<your-tenant-id>.accounts.ondemand.com/adm
 This makes IAS proxy authentication requests to SAP ID Service, preserving the existing login experience.
 
 1. **IAS Admin Console** → **Identity Providers** → **Corporate Identity Providers**
-2. Click **Create** → select **SAP ID Service** (there's a dedicated type for this)
-3. IAS auto-configures the SAML/OIDC connection to `accounts.sap.com`
-4. No manual metadata exchange needed — SAP ID Service is a preconfigured provider in IAS
+2. Click **Create**
+3. Enter a **Display Name** (e.g., "SAP ID Service")
+4. Select **Identity Provider Type**: **SAML 2.0 Compliant**
+5. Click **Create**
+6. In the newly created IDP entry, go to **SAML 2.0** → **Identity Provider Metadata**
+7. Enter the SAP ID Service metadata URL: `https://accounts.sap.com/saml2/metadata`
+   - Alternatively, download the metadata XML from that URL and upload it manually
+8. Save the configuration — IAS will parse the metadata and establish the SAML trust
+
+> **Note:** The dropdown also shows "SAP Single Sign-On (SAML 2.0)" — that is for SAP SSO (on-premise). For SAP ID Service (accounts.sap.com / Universal ID), use the generic **SAML 2.0 Compliant** type with the metadata URL above.
 
 ### Verify the Connection
 
 1. Go to the newly created corporate IDP entry
 2. Check **Status** = Active
-3. Under **Authentication**, verify "SAP ID Service" is listed as the provider type
+3. Under **SAML 2.0**, verify the metadata was loaded (Issuer should show `https://accounts.sap.com`)
 
 ---
 
