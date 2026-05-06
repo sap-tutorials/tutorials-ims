@@ -3,6 +3,7 @@
   xmlns:mvc="sap.ui.core.mvc"
   xmlns="sap.m"
   xmlns:tnt="sap.tnt"
+  xmlns:core="sap.ui.core"
   displayBlock="true">
 
   <tnt:ToolPage id="toolPage" sideExpanded="{viewModel>/sideExpanded}">
@@ -36,6 +37,28 @@
             <SegmentedButtonItem key="dark" icon="sap-icon://dark-mode" tooltip="Dark" />
           </items>
         </SegmentedButton>
+        <ToolbarSeparator />
+        <Button
+          id="helpBtn"
+          icon="sap-icon://sys-help"
+          type="Transparent"
+          tooltip="Help"
+          press=".onHelpPress" />
+        <Button
+          id="notificationsBtn"
+          icon="sap-icon://bell"
+          type="Transparent"
+          tooltip="Notifications"
+          press=".onNotificationsPress" />
+        <ToolbarSeparator />
+        <Avatar
+          id="userAvatar"
+          displaySize="XS"
+          displayShape="Circle"
+          initials="{viewModel>/userInitials}"
+          fallbackIcon="sap-icon://person-placeholder"
+          backgroundColor="Accent6"
+          press=".onAvatarPress" />
       </tnt:ToolHeader>
     </tnt:header>
 
@@ -70,6 +93,39 @@
     <tnt:mainContents>
       <NavContainer id="contentArea" />
     </tnt:mainContents>
+
+    <tnt:dependents>
+      <Popover
+        id="userPopover"
+        placement="Bottom"
+        showHeader="true"
+        title="{viewModel>/userName}">
+        <VBox class="sapUiSmallMargin">
+          <Avatar
+            displaySize="L"
+            displayShape="Circle"
+            initials="{viewModel>/userInitials}"
+            fallbackIcon="sap-icon://person-placeholder"
+            backgroundColor="Accent6"
+            class="sapUiSmallMarginBottom" />
+          <Label text="{viewModel>/userName}" design="Bold" />
+          <Label text="{viewModel>/userEmail}" class="sapUiSmallMarginBottom" />
+          <Link text="Manage my Account" href="https://account.sap.com" target="_blank" />
+          <Link text="SAP Community" href="https://community.sap.com" target="_blank" />
+          <Link text="SAP Developers" href="https://www.youtube.com/@sapdevs" target="_blank" />
+          <Link text="Learnings" href="https://learning.sap.com" target="_blank" class="sapUiTinyMarginBottom" />
+          <Button text="Logout" type="Reject" press=".onLogout" class="sapUiSmallMarginTop" />
+        </VBox>
+      </Popover>
+      <Popover
+        id="notificationsPopover"
+        placement="Bottom"
+        title="Notifications">
+        <VBox class="sapUiSmallMargin">
+          <Label text="No new notifications" class="sapUiSmallMargin" />
+        </VBox>
+      </Popover>
+    </tnt:dependents>
 
   </tnt:ToolPage>
 

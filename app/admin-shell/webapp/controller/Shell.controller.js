@@ -47,10 +47,14 @@ sap.ui.define([
       var oViewModel = oComponent.getShellViewModel();
       var bExpanded = localStorage.getItem("sap-tutorials-admin-nav-expanded") !== "false";
       oViewModel.setProperty("/sideExpanded", bExpanded);
+      oViewModel.setProperty("/userInitials", "");
+      oViewModel.setProperty("/userName", "");
+      oViewModel.setProperty("/userEmail", "");
       this.getView().setModel(oViewModel, "viewModel");
 
       oComponent.getRouter().attachRouteMatched(this._onRouteMatched, this);
       this._attachHashChangeDetection();
+      this._loadUserProfile();
     },
 
     onNavBack: function () {
@@ -100,6 +104,46 @@ sap.ui.define([
 
       Theming.setTheme(sTheme);
       this.getOwnerComponent().getModel("theme").setProperty("/themeMode", sKey);
+    },
+
+    onHelpPress: function () {
+      window.open("https://community.sap.com", "_blank");
+    },
+
+    onNotificationsPress: function (oEvent) {
+      this.byId("notificationsPopover").openBy(oEvent.getSource());
+    },
+
+    onAvatarPress: function (oEvent) {
+      var oViewModel = this.getView().getModel("viewModel");
+      if (!oViewModel.getProperty("/userName")) {
+        window.location.href = "/login?returnTo=" + encodeURIComponent(window.location.pathname + window.location.hash);
+        return;
+      }
+      this.byId("userPopover").openBy(oEvent.getSource());
+    },
+
+    onLogout: function () {
+      window.location.href = "/logout";
+    },
+
+    _loadUserProfile: function () {
+      var oViewModel = this.getView().getModel("viewModel");
+      fetch("/auth/user", { credentials: "include" })
+        .then(function (res) {
+          if (!res.ok) return null;
+          return res.json();
+        })
+        .then(function (user) {
+          if (!user || !user.authenticated) return;
+          var sName = ((user.givenName || "") + " " + (user.familyName || "")).trim() || user.id || "";
+          var sInitials = ((user.givenName || "")[0] || "") + ((user.familyName || "")[0] || "");
+          if (!sInitials && user.id) sInitials = user.id[0];
+          oViewModel.setProperty("/userName", sName);
+          oViewModel.setProperty("/userEmail", user.email || "");
+          oViewModel.setProperty("/userInitials", sInitials.toUpperCase());
+        })
+        .catch(function () {});
     },
 
     _attachHashChangeDetection: function () {
