@@ -70,15 +70,30 @@ This makes IAS proxy authentication requests to SAP ID Service, preserving the e
 
 ---
 
-## Step 3: Configure Subject Name Identifier (Critical)
+## Step 3: Configure Identity Federation and Subject Name Identifier (Critical)
 
-This is the most important step. It ensures existing user records in your databases continue to match after migration.
+This is the most important step. It ensures existing user records in your databases continue to match after migration. There are **two settings** in two different places.
+
+### 3a: Identity Federation (Corporate IDP Level)
+
+This controls whether IAS uses attributes from the SAP ID Service SAML assertion or from its own user store.
 
 1. **IAS Admin Console** → **Identity Providers** → **Corporate Identity Providers** → **SAP ID Service**
-2. Navigate to **Subject Name Identifier** configuration
-3. Set to: **"Identity Provider User ID"**
+2. Under **Single Sign-On** → click **Identity Federation** (shows "Default")
+3. Set to: **"Use Identity Provider user store"** — this tells IAS to pass through the user identity from SAP ID Service rather than mapping to an IAS-local user record
 
-This tells IAS: "When a user authenticates via SAP ID Service, pass through their original identifier as the subject — don't replace it with an IAS-generated UUID."
+### 3b: Subject Name Identifier (Application Level)
+
+This controls what IAS sends as the `sub` claim to XSUAA for each BTP subaccount application.
+
+1. **IAS Admin Console** → **Applications & Resources** → **Applications**
+2. Select the application representing your BTP subaccount (auto-registered when trust is established — e.g., `tutorials-dev-xsuaa` or similar name based on your subaccount)
+3. Go to **Trust** → **Subject Name Identifier**
+4. Set **Primary Attribute** to: **"Identity Provider User ID"** (or "NameID" depending on IAS version)
+
+This tells IAS: "When issuing the token to XSUAA, use the identifier that came from the corporate IDP (SAP ID Service) — don't replace it with an IAS-generated UUID."
+
+> **Note:** Step 3b can only be completed after Step 4 (establishing trust from BTP), because the application only appears in IAS after the subaccount trusts it. You may need to do Steps 3b and 4 in interleaved order.
 
 ### Why This Matters
 
