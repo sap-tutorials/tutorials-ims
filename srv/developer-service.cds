@@ -1,7 +1,7 @@
 using { com.sap.developers.ims as ims } from '../db/schema';
 
 @path: '/api'
-@requires: 'DeveloperApp'
+@requires: 'authenticated-user'
 service DeveloperService {
 
   // Exposed entities (restricted projections)
