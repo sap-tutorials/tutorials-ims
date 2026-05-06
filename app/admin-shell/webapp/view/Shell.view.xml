@@ -39,6 +39,12 @@
         </SegmentedButton>
         <ToolbarSeparator />
         <Button
+          id="jouleBtn"
+          icon="sap-icon://da"
+          type="Transparent"
+          tooltip="Joule"
+          press=".onJoulePress" />
+        <Button
           id="helpBtn"
           icon="sap-icon://sys-help"
           type="Transparent"

@@ -111,6 +111,10 @@ sap.ui.define([
       this.getOwnerComponent().getModel("theme").setProperty("/themeMode", sKey);
     },
 
+    onJoulePress: function () {
+      window.open("https://sap-samples.github.io/sap-devs-cli/", "_blank");
+    },
+
     onHelpPress: function () {
       window.open("https://community.sap.com", "_blank");
     },
