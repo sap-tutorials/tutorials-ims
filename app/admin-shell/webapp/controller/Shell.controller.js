@@ -16,6 +16,7 @@ sap.ui.define([
     prizes: "prizes",
     operations: "operations",
     pipelinelog: "pipelinelog",
+    joblog: "joblog",
     accounts: "accounts",
     changelog: "changelog",
     board: "board",
@@ -34,6 +35,7 @@ sap.ui.define([
     prizes: "Prizes",
     operations: "Operations",
     pipelinelog: "Pipeline Log",
+    joblog: "Job Log",
     accounts: "Accounts",
     changelog: "Change Log",
     board: "Board",
@@ -77,6 +79,9 @@ sap.ui.define([
         this.getOwnerComponent().getRouter().navTo(sRoute);
         if (sKey === "pipelinelog") {
           HashChanger.getInstance().setHash("pipelinelog&/op/PipelineLog");
+        }
+        if (sKey === "joblog") {
+          HashChanger.getInstance().setHash("joblog&/op/JobExecutionLog");
         }
       }
     },
@@ -167,6 +172,9 @@ sap.ui.define([
         var sHash = HashChanger.getInstance().getHash();
         if (sHash.indexOf("PipelineLog") !== -1) {
           sNavKey = "pipelinelog";
+        }
+        if (sHash.indexOf("JobExecutionLog") !== -1) {
+          sNavKey = "joblog";
         }
       }
 

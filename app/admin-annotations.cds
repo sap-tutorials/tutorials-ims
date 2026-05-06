@@ -425,7 +425,7 @@ annotate AdminService.FailedEmails with @(
   Capabilities.UpdateRestrictions.Updatable: false
 );
 
-// --- PipelineLog (read-only, filterable by type/status) ---
+// --- PipelineLog (content pipeline only — excludes SCHEDULED_JOB) ---
 annotate AdminService.PipelineLog with {
   pipelineType  @Common.Label: 'Type'  @Common.ValueListWithFixedValues;
   status        @Common.Label: 'Status'  @Common.ValueListWithFixedValues;
@@ -451,6 +451,40 @@ annotate AdminService.PipelineLog with @(
       { Value: durationMs },
       { Value: initiator },
       { Value: summary }
+    ],
+    Sort: [{ Property: startedAt, Descending: true }]
+  },
+  Capabilities.DeleteRestrictions.Deletable: false,
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable: false
+);
+
+// --- JobExecutionLog (scheduled jobs only) ---
+annotate AdminService.JobExecutionLog with {
+  status        @Common.Label: 'Status'  @Common.ValueListWithFixedValues;
+  startedAt     @Common.Label: 'Started';
+  finishedAt    @Common.Label: 'Finished';
+  durationMs    @Common.Label: 'Duration (ms)';
+  initiator     @Common.Label: 'Instance';
+  summary       @Common.Label: 'Job Name';
+  errorDetails  @Common.Label: 'Error';
+};
+
+annotate AdminService.JobExecutionLog with @(
+  UI: {
+    HeaderInfo: {
+      TypeName: 'Job Execution', TypeNamePlural: 'Job Executions',
+      Title: { Value: summary },
+      Description: { Value: status }
+    },
+    SelectionFields: [ status, startedAt ],
+    LineItem: [
+      { Value: startedAt },
+      { Value: summary },
+      { Value: status, Criticality: statusCriticality },
+      { Value: durationMs },
+      { Value: initiator },
+      { Value: errorDetails }
     ],
     Sort: [{ Property: startedAt, Descending: true }]
   },

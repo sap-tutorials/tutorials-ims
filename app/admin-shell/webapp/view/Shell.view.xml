@@ -80,6 +80,7 @@
           <tnt:NavigationListItem text="System" icon="sap-icon://action-settings" expanded="true">
             <tnt:NavigationListItem text="Operations" key="operations" />
             <tnt:NavigationListItem text="Pipeline Log" key="pipelinelog" />
+            <tnt:NavigationListItem text="Job Log" key="joblog" />
             <tnt:NavigationListItem text="Accounts" key="accounts" />
             <tnt:NavigationListItem text="Change Log" key="changelog" />
             <tnt:NavigationListItem text="Board" key="board" />

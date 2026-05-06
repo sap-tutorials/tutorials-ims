@@ -150,6 +150,7 @@
         { "name": "prizes", "pattern": "prizes", "target": [{"name": "prizesTarget", "prefix": "pr"}] },
         { "name": "operations", "pattern": "operations", "target": [{"name": "operationsTarget", "prefix": "op"}] },
         { "name": "pipelinelog", "pattern": "pipelinelog", "target": [{"name": "operationsTarget", "prefix": "op"}] },
+        { "name": "joblog", "pattern": "joblog", "target": [{"name": "operationsTarget", "prefix": "op"}] },
         { "name": "accounts", "pattern": "accounts", "target": [{"name": "accountsTarget", "prefix": "au"}] },
         { "name": "changelog", "pattern": "changelog", "target": [{"name": "changelogTarget", "prefix": "cl"}] },
         { "name": "board", "pattern": "board", "target": "boardTarget" },

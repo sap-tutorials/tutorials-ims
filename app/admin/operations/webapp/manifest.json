@@ -49,7 +49,8 @@
         { "pattern": "StepFailures:?query:", "name": "StepFailuresList", "target": "StepFailuresList" },
         { "pattern": "NGDSFailedMessages:?query:", "name": "NGDSFailedMessagesList", "target": "NGDSFailedMessagesList" },
         { "pattern": "FailedEmails:?query:", "name": "FailedEmailsList", "target": "FailedEmailsList" },
-        { "pattern": "PipelineLog:?query:", "name": "PipelineLogList", "target": "PipelineLogList" }
+        { "pattern": "PipelineLog:?query:", "name": "PipelineLogList", "target": "PipelineLogList" },
+        { "pattern": "JobExecutionLog:?query:", "name": "JobExecutionLogList", "target": "JobExecutionLogList" }
       ],
       "targets": {
         "FeaturedTasksList": {
@@ -128,6 +129,17 @@
           "options": {
             "settings": {
               "contextPath": "/PipelineLog",
+              "initialLoad": "Enabled"
+            }
+          }
+        },
+        "JobExecutionLogList": {
+          "type": "Component",
+          "id": "JobExecutionLogList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/JobExecutionLog",
               "initialLoad": "Enabled"
             }
           }
