@@ -10,7 +10,7 @@
  * 4. Output mapping: { publishedSlug → legacyId }
  */
 
-const CAP_URL = process.env.CAP_BASE_URL || 'https://developer-destination-ims-dev-tutorials-srv.cfapps.us30.hana.ondemand.com'
+const CAP_URL = process.env.CAP_BASE_URL || 'https://developer-destination-ims-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com'
 
 async function main() {
   // Step 1: Get published mission/group slugs

@@ -6,7 +6,7 @@ modules:
   - name: tutorials-srv
     properties:
       EXPOSE_CAP_UI: true
-      CONTENT_API_KEY: ${content-api-key}
+      CONTENT_API_KEY: tutorials-content-publish-2024
 
   - name: tutorials-approuter
     parameters:
@@ -14,5 +14,3 @@ modules:
     properties:
       XS_APP_LOG_LEVEL: debug
       DEBUG: "xs-approuter:*"
-      REBUILD_API_KEY: ${rebuild-api-key}
-      APPROUTER_URL: ${approuter-url}

@@ -1,385 +1,236 @@
-# IAS Migration Setup Guide (Option 3: IAS as Sole Trust Point)
+# IAS Setup Guide — BTP Subaccount Authentication Options
 
-This guide covers migrating from the default SAP ID Service trust to SAP Cloud Identity Services (IAS) as the single trust point for all BTP subaccounts. SAP ID Service is proxied through IAS, preserving existing user identities while enabling social logins and centralized identity management.
-
----
-
-## Architecture Overview
-
-```
-Before (current):
-  BTP Subaccount → trusts → SAP ID Service (direct)
-    → XSUAA issues JWT with sub from SAP ID Service
-
-After (Option 3):
-  BTP Subaccount → trusts → IAS (sole trust point)
-    → IAS proxies → SAP ID Service (corporate IDP)
-    → IAS optionally → Google, GitHub (social IDPs)
-    → XSUAA issues JWT with sub from IAS (configured to pass through SAP ID Service identity)
-```
-
-**Key principle:** Applications never talk to IDPs directly. They receive JWTs from XSUAA. The trust change is transparent to application code — no modifications needed to either the CAP tutorials platform or the legacy Java IMS.
+This guide covers authentication configuration for the CAP tutorials platform on a BTP subaccount. It presents two approaches — **Option A** (simple, recommended) and **Option B** (IAS-managed) — and explains when each is appropriate.
 
 ---
 
-## Prerequisites
+## Architecture Options
+
+### Option A: Default SAP ID Service Trust (Recommended for Dev/POC)
+
+```
+BTP Subaccount → trusts → SAP ID Service (default, automatic)
+  → User authenticates at accounts.sap.com (existing browser session = transparent SSO)
+  → XSUAA issues JWT with sub from SAP ID Service
+```
+
+**Pros:** Zero configuration, transparent SSO for anyone with an SAP account, no IAS tenant needed.
+**Cons:** No centralized identity management, no conditional auth, no social logins.
+
+### Option B: IAS as Trust Point (Production with Corporate IDP)
+
+```
+BTP Subaccount → trusts → IAS (custom trust)
+  → IAS authenticates user directly (SAP Universal ID = same credentials)
+  → OR IAS delegates to a Corporate IDP you control (Azure AD, Okta, ADFS)
+  → XSUAA issues JWT with sub from IAS
+```
+
+**Pros:** Centralized identity, MFA, conditional auth, social logins, corporate IDP delegation.
+**Cons:** Requires IAS tenant configuration, identity federation setup for user data migration.
+
+> **Important:** IAS does NOT proxy to SAP ID Service (accounts.sap.com) as a SAML 2.0 corporate IDP. SAP ID Service does not accept arbitrary SP registrations, so the SAML handshake fails. Users authenticate directly against IAS using the same SAP Universal ID credentials — the user store is shared within the global account.
+
+---
+
+## Option A: Default SAP ID Service (Quick Setup)
+
+This is the simplest path. Every new BTP subaccount has SAP ID Service configured as the default trust automatically.
+
+### Verify Trust Configuration
+
+1. **BTP Cockpit** → Navigate to your subaccount
+2. **Security** → **Trust Configuration**
+3. Confirm **SAP ID Service** (Default identity provider) shows **Available for User Logon: Yes**
+
+That's it. Users accessing your application are redirected to accounts.sap.com. If they have an active browser session (most SAP developers do), authentication is transparent — no login form.
+
+### Deploy and Test
+
+1. Deploy the MTA (see `CLAUDE.md` for deploy commands)
+2. Access the approuter URL — you should be silently authenticated
+3. If prompted, log in with your SAP account — subsequent visits will be transparent
+
+### Assign Role Collections
+
+1. **BTP Cockpit** → Subaccount → **Security** → **Role Collections**
+2. Assign "Tutorials Admin" (or other role collections from xs-security.json) to your user
+3. Use the user's email or SAP ID as the identifier
+
+---
+
+## Option B: IAS as Trust Point (Full Setup)
+
+Use this when you need centralized identity management, corporate IDP delegation, conditional authentication, MFA enforcement, or social logins.
+
+### Prerequisites
 
 - BTP Global Account with entitlement to SAP Cloud Identity Services
-- Admin access to BTP Cockpit (Global Account and all target subaccounts)
-- Access to IAS admin console (typically `https://<tenant>.accounts.ondemand.com/admin`)
-- Existing subaccounts: DEV, QA, PROD (and legacy IMS if applicable)
-- Users currently authenticating via SAP ID Service (Universal ID)
+- Admin access to IAS admin console
+- Understanding that users authenticate **directly** against IAS (not proxied through SAP ID Service)
 
----
-
-## Step 1: Obtain Your IAS Tenant
+### Step 1: Obtain Your IAS Tenant
 
 Most BTP global accounts include one IAS tenant at no additional cost.
 
 1. **BTP Cockpit** → Global Account → **Security** → **Trust Configuration**
 2. Check if an IAS tenant is already listed under "Custom Identity Provider for Applications"
 3. If not, go to **Entitlements** → search for "Cloud Identity Services" → add to a subaccount
-4. Create a service instance of plan `additional_tenant` — this provisions your IAS tenant
-5. Note the IAS tenant URL: `https://aipkn8bca.accounts.ondemand.com`
+4. Create a service instance of plan `default` or `additional_tenant`
+5. Note the IAS admin console URL: `https://<tenant-id>.accounts.ondemand.com/admin`
 
-The IAS admin console is at: `https://aipkn8bca.accounts.ondemand.com/admin`
+> **Note:** A single IAS tenant can serve multiple subaccounts.
 
----
+### Step 2: Establish Trust from Subaccount to IAS
 
-## Step 2: Configure SAP ID Service as Corporate Identity Provider in IAS
-
-This makes IAS proxy authentication requests to SAP ID Service, preserving the existing login experience.
-
-1. **IAS Admin Console** → **Identity Providers** → **Corporate Identity Providers**
-2. Click **Create**
-3. Enter a **Display Name** (e.g., "SAP ID Service")
-4. Select **Identity Provider Type**: **SAML 2.0 Compliant**
-5. Click **Create**
-6. In the newly created IDP entry, go to **SAML 2.0** → **Identity Provider Metadata**
-7. Enter the SAP ID Service metadata URL: `https://accounts.sap.com/saml2/metadata`
-   - Alternatively, download the metadata XML from that URL and upload it manually
-8. Save the configuration — IAS will parse the metadata and establish the SAML trust
-
-> **Note:** The dropdown also shows "SAP Single Sign-On (SAML 2.0)" — that is for SAP SSO (on-premise). For SAP ID Service (accounts.sap.com / Universal ID), use the generic **SAML 2.0 Compliant** type with the metadata URL above.
-
-### Verify the Connection
-
-1. Go to the newly created corporate IDP entry
-2. Check **Status** = Active
-3. Under **SAML 2.0**, verify the metadata was loaded (Issuer should show `https://accounts.sap.com`)
-
----
-
-## Step 3: Configure Identity Federation (Critical — Part 1)
-
-This ensures IAS passes through the user identity from SAP ID Service rather than replacing it with an IAS-local identity.
-
-1. **IAS Admin Console** → **Identity Providers** → **Corporate Identity Providers** → **SAP ID Service**
-2. Under **Single Sign-On** → click **Identity Federation** (shows "Default")
-3. Set to: **"Use Identity Provider user store"** — this tells IAS to pass through the user identity from SAP ID Service rather than mapping to an IAS-local user record
-
----
-
-## Step 4: Establish Trust from BTP Subaccounts to IAS
-
-Repeat for each subaccount (DEV, QA, PROD, and legacy IMS subaccount if separate):
-
-1. **BTP Cockpit** → Navigate to the subaccount
+1. **BTP Cockpit** → Navigate to your subaccount
 2. **Security** → **Trust Configuration**
 3. Click **Establish Trust**
-4. Select your IAS tenant from the dropdown (it's auto-discovered within the global account)
-5. Leave the default settings:
-   - **Name**: Will auto-populate (e.g., "Custom IAS tenant")
-   - **Origin Key**: Auto-generated (note this — needed for xs-app.json if specifying IDP per route)
+4. Select your IAS tenant from the dropdown (auto-discovered within the global account)
+5. Leave defaults:
+   - **Name**: Auto-populated
    - **Available for User Logon**: Yes
 6. Click **Save**
 
-At this point, **both** SAP ID Service (direct) and IAS appear as trusted IDPs. This is the side-by-side state — users see an IDP picker on login.
+At this point, both SAP ID Service (default) and IAS (custom) are active. Users will see an IDP picker.
 
----
+### Step 3: Decide on IDP Availability
 
-## Step 5: Configure Subject Name Identifier (Critical — Part 2)
+| Goal | Configuration |
+|------|--------------|
+| IAS only (no picker) | Set Default SAP ID Service → "Available for User Logon: No" |
+| Both active (picker shown) | Leave both enabled |
+| Default SAP ID + IAS as backup | Keep default as primary, IAS as option |
 
-Now that trust is established, your BTP subaccount appears as an application in IAS. Configure it to preserve user identity.
+**Recommendation for production:** Set SAP ID Service to "Not Available for User Logon" so users go directly to IAS without a picker. But only do this after verifying login works through IAS (Step 5).
+
+### Step 4: Configure Corporate IDP in IAS (If Applicable)
+
+> **This step is only for corporate IDPs you control** (Azure AD, Okta, ADFS, PingFederate). Do NOT use this for SAP ID Service — it won't work.
+
+If your users authenticate via a corporate IDP:
+
+1. **IAS Admin Console** → **Identity Providers** → **Corporate Identity Providers**
+2. Click **Create**
+3. Enter a display name (e.g., "Company Azure AD")
+4. Select type: **SAML 2.0 Compliant** or **OpenID Connect**
+5. Upload/enter the corporate IDP's metadata
+6. **On the corporate IDP side:** Register your IAS tenant as a trusted SP/relying party
+   - IAS SP metadata: `https://<tenant-id>.accounts.ondemand.com/saml2/metadata`
+7. Configure Identity Federation:
+   - Set to "Use Identity Provider user store" if you want pass-through identity
+   - Set to "Use Identity Authentication user store" for email-based matching
+
+**Why SAP ID Service doesn't work here:** The "SAML 2.0 Compliant" type requires you to register IAS as a service provider on the remote IDP. SAP ID Service (accounts.sap.com) is a public IDP that does not accept SP registrations from arbitrary tenants. The SAML AuthnRequest from IAS gets rejected.
+
+### Step 5: Verify Login Through IAS
+
+1. Access your application URL
+2. You should be redirected to your IAS tenant's login page
+3. Log in with your SAP Universal ID credentials (same email/password as accounts.sap.com)
+4. Verify you reach the application successfully
+
+> **SAP Universal ID and IAS:** Within the same global account, the IAS user directory includes all users who have SAP Universal ID accounts. The same credentials work — this is not "proxying" to SAP ID Service; it's the same underlying identity directory.
+
+### Step 6: Configure Subject Name Identifier (For User Data Migration)
+
+If migrating user data from a system that used SAP ID Service directly, ensure the `sub` claim matches:
 
 1. **IAS Admin Console** → **Applications & Resources** → **Applications**
-2. Select the application representing your BTP subaccount (auto-registered by Step 4 — name matches your subaccount or XSUAA service instance)
+2. Select the application representing your BTP subaccount (auto-registered by Step 2)
 3. Go to **Trust** → **Subject Name Identifier**
-4. Set **Primary Attribute** to: **"Identity Provider User ID"** (or "NameID" depending on IAS version)
+4. Configure:
+   - **Source**: Identity Directory
+   - **Primary Attribute**: User UUID (or Login Name, depending on what the legacy system used)
 
-This tells IAS: "When issuing the token to XSUAA, use the identifier that came from the corporate IDP (SAP ID Service) — don't replace it with an IAS-generated UUID."
+**Why this matters:**
 
-Repeat for each subaccount's application entry in IAS.
+| Setting | `sub` claim | Impact |
+|---------|-------------|--------|
+| User UUID | IAS-generated UUID | May differ from SAP ID Service `sub` |
+| Login Name | User's email/login | Matches if legacy used email as `sub` |
 
-### Why This Matters
+The CAP platform uses `Users.uuid = JWT sub` for lookups. Test with a known user before migrating data.
 
-| Setting | `sub` claim in JWT | Impact |
-|---------|-------------------|--------|
-| Identity Provider User ID | Same as before migration | Existing `Users.uuid` records match ✓ |
-| IAS User UUID (default for new users) | New UUID generated by IAS | All existing users orphaned ✗ |
-
-**Both the CAP platform and legacy Java IMS use `Users.uuid = JWT sub` for user lookups.** If the `sub` changes, users lose all historical progress.
-
----
-
-## Step 6: Verify Identity Continuity (Before Removing Direct Trust)
-
-**Do not skip this step.** Test that the `sub` claim matches existing database records.
-
-### Test Procedure
-
-1. Log in to a DEV application via the **new IAS trust** (select IAS on the picker)
-2. Decode the resulting JWT (browser DevTools → Application → Cookies → find the session, or use the CAP `/api/$metadata` endpoint and inspect the `Authorization` header)
-3. Compare the `sub` claim to the user's `Users.uuid` in the database:
+### Step 7: Verify Identity Continuity
 
 ```bash
-# Get the sub claim from JWT (decode at jwt.io or similar)
-# Then check the database:
+# Decode the JWT from a login through IAS, then check:
 npx cds bind --exec -- node -e "
   const cds = require('@sap/cds');
   cds.connect.to('db').then(async db => {
     const { Users } = cds.entities('com.sap.developers.ims');
     const user = await SELECT.one.from(Users).where({ uuid: '<sub-from-jwt>' });
-    console.log(user ? 'MATCH: ' + user.email : 'NO MATCH - identity continuity broken!');
+    console.log(user ? 'MATCH: ' + user.email : 'NO MATCH - check Subject Name Identifier config');
     process.exit(0);
   });
 "
 ```
 
-4. **If MATCH**: Safe to proceed to Step 7
-5. **If NO MATCH**: Check Step 5 configuration — the subject name identifier is likely set incorrectly
+### Step 8: Social Identity Providers (Optional)
 
-### Test Multiple Users
+With IAS as trust point, add social logins:
 
-Have at least 2-3 team members verify their identity continuity before proceeding to production cutover.
+#### Google
 
----
+1. Create OAuth credentials at [Google Cloud Console](https://console.cloud.google.com)
+   - Redirect URI: `https://<tenant-id>.accounts.ondemand.com/ui/oauth/googleCallback`
+2. **IAS Admin Console** → **Identity Providers** → **Social Identity Providers** → **Google**
+3. Enter Client ID and Client Secret
+4. Set Status = Active
 
-## Step 7: Remove Direct SAP ID Service Trust
+#### GitHub
 
-Once identity continuity is verified, remove the direct trust to make IAS the sole authentication path:
-
-1. **BTP Cockpit** → Subaccount → **Security** → **Trust Configuration**
-2. Find **"SAP ID Service"** (the direct trust, not your IAS entry)
-3. Click **Edit** → set **Available for User Logon** to **No** (or delete the trust entirely)
-4. Repeat for each subaccount
-
-**After this change:**
-- Users are redirected to IAS automatically (no picker — single trust = silent SSO)
-- IAS proxies them to SAP ID Service (same login page they're used to)
-- Social login options appear if configured (see Step 8)
-
-### Rollback Plan
-
-If something goes wrong, re-enable the direct SAP ID Service trust:
-1. **Trust Configuration** → SAP ID Service → **Edit** → Available for User Logon: **Yes**
-2. Users can authenticate directly again immediately
-
----
-
-## Step 8: Configure Social Identity Providers (Optional)
-
-With IAS as the sole trust point, you can now add social login options.
-
-### Google
-
-1. **IAS Admin Console** → **Identity Providers** → **Social Identity Providers**
-2. Click **Google**
-3. Enter your Google OAuth credentials:
-   - Client ID (from Google Cloud Console → APIs & Services → Credentials)
-   - Client Secret
-4. Configure scopes: `openid`, `email`, `profile`
-5. Set **Status** = Active
-
-### GitHub
-
-GitHub is not a preconfigured social IDP in IAS. Set it up as a custom OIDC provider:
-
-1. **IAS Admin Console** → **Identity Providers** → **Social Identity Providers** → **Custom**
-2. Configure:
-   - **Name**: GitHub
-   - **Discovery URL**: Not available for GitHub (configure manually)
-   - **Authorization Endpoint**: `https://github.com/login/oauth/authorize`
-   - **Token Endpoint**: `https://github.com/login/oauth/access_token`
-   - **User Info Endpoint**: `https://api.github.com/user`
-   - **Client ID**: From GitHub → Settings → Developer Settings → OAuth Apps
-   - **Client Secret**: From the same GitHub OAuth App
-   - **Scopes**: `read:user`, `user:email`
-3. Set **Status** = Active
-
-### Identity Continuity with Social Logins
-
-**Important:** Users who first logged in via SAP ID Service and later log in via Google/GitHub will have a **different identity** unless IAS account linking is configured.
-
-Options:
-- **Account linking by email**: IAS matches the social IDP email to an existing IAS user record. Enable under **Identity Providers** → **Social** → **Account Linking** → **Match by Email**
-- **No linking**: Social login creates a new identity. The user loses access to their SAP ID Service progress. Acceptable if social login is for new users only.
-
-**Recommendation:** Enable email-based account linking so that a user who has both a Universal ID and a Google account with the same email gets the same `sub` claim regardless of which IDP they choose.
-
----
-
-## Step 9: Sharing IAS Across Environments (DEV/QA/PROD)
-
-A single IAS tenant serves all subaccounts. Each subaccount's XSUAA registers as a separate "application" in IAS.
-
-```
-┌─────────────────────────────────────────────────┐
-│              Single IAS Tenant                    │
-│                                                   │
-│  Corporate IDPs:        Social IDPs:             │
-│  • SAP ID Service       • Google                 │
-│                         • GitHub                 │
-│                                                   │
-│  Applications (auto-registered per subaccount):  │
-│  • tutorials-dev-xsuaa                           │
-│  • tutorials-qa-xsuaa                            │
-│  • tutorials-prod-xsuaa                          │
-│  • ims-prod-xsuaa (legacy Java IMS)             │
-└─────────────────────────────────────────────────┘
-```
-
-### Per-Application Configuration
-
-Even with one IAS tenant, you can differentiate behavior per environment:
-
-1. **IAS Admin Console** → **Applications & Resources** → **Applications**
-2. Select the application (e.g., `tutorials-dev-xsuaa`)
-3. Configure per-application settings:
-
-| Setting | DEV | QA | PROD |
-|---------|-----|-----|------|
-| Allowed IDPs | SAP ID only | SAP ID only | SAP ID + Google + GitHub |
-| MFA | Disabled | Disabled | Risk-based |
-| Session timeout | 12 hours | 8 hours | 2 hours |
-| Conditional auth rules | None | None | Block suspicious geolocations |
-
-### SSO Behavior
-
-Since all environments share the same IAS tenant, a user logged into DEV is automatically logged into QA and PROD (single IAS session). This is usually desirable for developer platforms — test in DEV, verify in QA, no extra logins.
-
-If you need environment isolation for testing auth flows:
-- Use IAS **conditional authentication** rules to force re-authentication for specific applications
-- Or use browser incognito/profiles to simulate separate sessions
-
----
-
-## Step 10: Update AppRouter Configuration (Optional)
-
-If you need to specify the IDP at the route level (e.g., force SAP ID Service for a specific route while allowing social for others):
-
-```json
-// xs-app.json
-{
-  "routes": [
-    {
-      "source": "^/admin-ui/(.*)$",
-      "target": "/admin-ui/$1",
-      "authenticationType": "xsuaa",
-      "identityProvider": "sap.custom"
-    },
-    {
-      "source": "^/api/(.*)$",
-      "target": "/api/$1",
-      "authenticationType": "xsuaa"
-    }
-  ]
-}
-```
-
-The `identityProvider` value corresponds to the **origin key** from Step 4 (visible in BTP Cockpit → Trust Configuration). This is only needed if you want different routes to use different IDPs — most deployments don't need this.
-
----
-
-## Step 11: Verify Legacy Java IMS Compatibility
-
-The legacy Java IMS application (Spring Boot + XSUAA) requires no code changes because:
-
-1. **It talks to XSUAA, not to any IDP** — the trust change is invisible to the application
-2. **JWT validation is unchanged** — same XSUAA keys, same token format
-3. **`sub` claim preserved** — Steps 3 and 5 ensure the user identifier doesn't change
-4. **Service bindings unchanged** — `VCAP_SERVICES` still contains the same XSUAA instance
-
-### Verification Checklist for Legacy App
-
-| Check | How | Expected |
-|-------|-----|----------|
-| Login works | Navigate to legacy app, authenticate | Redirect through IAS → SAP ID Service → back to app |
-| User identity matches | Compare JWT `sub` to DB user record | Same UUID as before migration |
-| Role collections work | Log in as admin user | Admin scopes present in JWT |
-| Client credentials work | Run automation script | Token obtained without IDP involvement |
-| API calls succeed | Test authenticated endpoints | 200 responses with valid data |
-
-**Client credentials grant is completely unaffected** — it never involves an IDP. Service keys authenticate directly with XSUAA regardless of trust configuration.
-
----
-
-## Migration Timeline
-
-### Recommended Sequence
-
-```
-Week 1: Setup
-  ├── Obtain/confirm IAS tenant
-  ├── Configure SAP ID Service as corporate IDP in IAS
-  ├── Set subject name identifier to "Identity Provider User ID"
-  └── Establish trust from DEV subaccount to IAS (side-by-side)
-
-Week 2: Validate in DEV
-  ├── Test identity continuity (3+ team members)
-  ├── Test legacy IMS in DEV (if applicable)
-  ├── Verify client credentials still work
-  └── Remove direct SAP ID Service trust from DEV
-
-Week 3: QA + Social IDPs
-  ├── Establish trust from QA subaccount
-  ├── Validate in QA
-  ├── Configure Google/GitHub social IDPs
-  ├── Test account linking by email
-  └── Remove direct trust from QA
-
-Week 4: Production Cutover
-  ├── Establish trust from PROD subaccount (side-by-side)
-  ├── Validate with production users (subset)
-  ├── Schedule maintenance window
-  ├── Remove direct SAP ID Service trust from PROD
-  ├── Enable social IDPs for PROD application
-  └── Monitor for auth failures (BTP Cockpit → Connectivity → Audit Log)
-```
+1. Create OAuth app at [GitHub Developer Settings](https://github.com/settings/developers)
+   - Callback URL: `https://<tenant-id>.accounts.ondemand.com/ui/oauth/customIdpCallback`
+2. **IAS Admin Console** → **Social Identity Providers** → **Custom**
+3. Configure manually:
+   - Authorization: `https://github.com/login/oauth/authorize`
+   - Token: `https://github.com/login/oauth/access_token`
+   - User Info: `https://api.github.com/user`
+   - Scopes: `read:user`, `user:email`
+4. Set Status = Active
 
 ---
 
 ## Troubleshooting
 
-### Users See IDP Picker Instead of Silent Redirect
+### Users See IDP Picker
 
-**Cause:** Multiple trust configurations are active (both direct SAP ID Service and IAS).
-**Fix:** Remove or disable the direct SAP ID Service trust (Step 7).
+**Cause:** Both SAP ID Service and IAS trust are set to "Available for User Logon".
+**Fix:** Disable one — set "Available for User Logon: No" for the one you don't want.
 
-### Users Get New Identity After Migration (Progress Lost)
+### IAS Login Fails with "Identity Provider could not process the authentication request"
 
-**Cause:** Subject name identifier in IAS is not set to "Identity Provider User ID".
-**Fix:** Update IAS application config (Step 5), then have the user log in again.
+**Cause:** IAS is configured to delegate to a "SAML 2.0 Compliant" corporate IDP that doesn't recognize IAS as a trusted SP (e.g., SAP ID Service / accounts.sap.com).
+**Fix:** Remove the corporate IDP configuration. Users should authenticate directly against IAS with their SAP Universal ID credentials. If you need corporate IDP delegation, use an IDP you control (Azure AD, Okta) and register IAS as a trusted SP on that IDP's side.
 
-### Social Login Creates Duplicate Users
+### Transparent SSO Not Working (Login Form Appears)
 
-**Cause:** Account linking is not enabled, or the social IDP email doesn't match the IAS record.
-**Fix:** Enable email-based account linking in IAS (Step 8).
+**Cause:** Unlike SAP ID Service which many developers have persistent sessions for, IAS may not have an active session in the browser.
+**Fix:** This is expected behavior with IAS. After first login, IAS maintains its own session. For truly transparent SSO, either:
+- Use Option A (SAP ID Service default trust) — most SAP developers have active sessions
+- Configure SSO session duration in IAS → Application → Authentication → Session Management
 
-### Client Credentials Token Fetch Fails
+### User Gets New Identity (Progress Data Mismatch)
 
-**Cause:** Unrelated to IDP trust changes — check service key validity and XSUAA endpoint.
-**Fix:** Verify `cf service-keys <xsuaa-instance>`, recreate if expired.
+**Cause:** Subject Name Identifier in IAS doesn't match what the legacy system produced.
+**Fix:** Update IAS application config (Step 6). The `sub` claim format depends on the source system.
 
-### Legacy App Returns 401 After Migration
+### Application Returns 401
 
-**Cause:** Likely a stale session cookie. The old session references the old IDP trust.
-**Fix:** Clear browser cookies and re-authenticate. If persistent, check that XSUAA binding in the legacy app hasn't changed (`cf env <app-name>`).
+**Fix:** Verify:
+1. XSUAA service instance exists and is bound to the app
+2. At least one trust is established and active
+3. `xs-security.json` redirect URIs match: `https://*.cfapps.*.hana.ondemand.com/**`
+4. Role collections are assigned to the user
 
-### Conditional Auth Rules Block Users
+---
 
-**Cause:** IAS conditional authentication is rejecting requests (geo, IP, device).
-**Fix:** Review **IAS Admin** → **Applications** → select app → **Authentication** → **Conditional Authentication** → check rule evaluation logs.
+## Rollback
+
+- **From Option B back to Option A:** Re-enable SAP ID Service default trust ("Available for User Logon: Yes"). Instant fix, no restart needed.
+- **From Option A to Option B:** Establish IAS trust (Step 2), then optionally disable default trust (Step 3).
 
 ---
 
@@ -389,5 +240,4 @@ Week 4: Production Cutover
 - [SAP Help: Configure Corporate Identity Provider in IAS](https://help.sap.com/docs/identity-authentication/identity-authentication/configure-corporate-identity-providers)
 - [SAP Help: Social Identity Providers in IAS](https://help.sap.com/docs/identity-authentication/identity-authentication/configure-social-identity-providers)
 - [SAP Help: Subject Name Identifier Configuration](https://help.sap.com/docs/identity-authentication/identity-authentication/configure-subject-name-identifier)
-- [SAP Note: Migrating from Default IDP to Custom IAS](https://me.sap.com/notes/3location-specific)
 - [BTP Best Practice: Identity and Access Management](https://help.sap.com/docs/btp/best-practices/identity-and-access-management)

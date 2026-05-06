@@ -359,7 +359,7 @@ export default class AdminService extends cds.ApplicationService {
 
       const adminEmails = await getAdminEmailList();
       const notifications = await computeStaleNotifications(180);
-      const dashboardUrl = process.env.DASHBOARD_URL || 'https://tutorials-approuter.cfapps.us30.hana.ondemand.com/ui/tutorialDashboard';
+      const dashboardUrl = process.env.DASHBOARD_URL || 'https://tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/ui/tutorialDashboard';
 
       let sent = 0;
       for (const n of notifications) {

@@ -116,11 +116,7 @@ resources:
       service-plan: lite
 
   - name: tutorials-mail
-    type: org.cloudfoundry.managed-service
-    parameters:
-      service: mail
-      service-plan: standard
-      service-name: tutorials-mail
+    type: org.cloudfoundry.user-provided-service
     optional: true
 
   - name: tutorials-html5-repo-host

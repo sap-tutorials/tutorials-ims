@@ -116,7 +116,7 @@ resources:
     optional: true
     parameters:
       service: auditlog
-      service-plan: premium
+      service-plan: standard
       service-name: tutorials-audit-log
 
   - name: tutorials-cloud-logging

@@ -10,7 +10,7 @@ These services are skipped during MTA deployment if the service instance doesn't
 
 | # | MTA Resource Name | BTP Service | Plan | Purpose |
 |---|-------------------|-------------|------|---------|
-| 1 | `tutorials-mail` | SAP Mail Service (`mail`) | `standard` | Outbound email notifications — prize fulfillment, account merge confirmations, event reminders |
+| 1 | `tutorials-mail` | User-Provided Service | n/a | Outbound email notifications — contributor stale-content alerts, prize fulfillment, account merge confirmations. Provides SMTP credentials (`mail_host`, `mail_port`, `mail_user`, `mail_password`) consumed by `srv/lib/mail-client.js` via `@sap/xsenv`. |
 | 2 | `tutorials-audit-log` | Audit Log Service (`auditlog`) | `premium` | Compliance logging for `@PersonalData`-annotated entities (Users, UserMetaData, TaskRecords). Captures data access and modification events. |
 | 3 | `tutorials-cloud-logging` | SAP Cloud Logging (`cloud-logging`) | `standard` | OpenTelemetry trace/metric export via gRPC. Powers observability dashboards and distributed tracing in production. |
 
@@ -20,11 +20,10 @@ These services are skipped during MTA deployment if the service instance doesn't
 
 Navigate to **BTP Cockpit → Subaccount → Entitlements → Configure Entitlements → Add Service Plans**:
 
-| Service | Plan to Add | Quota |
-|---------|-------------|-------|
-| SAP Mail Service | standard | 1 |
-| Audit Log Service | premium | 1 |
-| SAP Cloud Logging | standard | 1 |
+| Service           | Plan to Add | Quota |
+|-------------------|-------------|-------|
+| Audit Log Service | premium     | 1     |
+| SAP Cloud Logging | standard    | 1     |
 
 > **Note:** The `premium` audit log plan enables the Audit Log Retrieval API. The `oauth2` plan is additionally needed if you want the Audit Log Viewer UI application — that's a separate entitlement.
 
@@ -38,8 +37,8 @@ After entitlements are assigned:
 # Target the production space
 cf target -o <org> -s production
 
-# 1. Mail Service
-cf create-service mail standard tutorials-mail
+# 1. Mail (User-Provided Service — no marketplace entitlement needed)
+cf cups tutorials-mail -p '{"mail_host":"smtp.example.com","mail_port":587,"mail_user":"user@example.com","mail_password":"<password>"}'
 
 # 2. Audit Log (premium = includes retrieval API)
 cf create-service auditlog premium tutorials-audit-log
