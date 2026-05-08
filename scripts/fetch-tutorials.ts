@@ -146,6 +146,7 @@ function writeVitePressPage(
   steps: TutorialStep[],
   nav: TutorialNavEntry,
   lastUpdated: string,
+  createdAt: string,
   contributors: Array<{ name: string; login: string; avatarUrl: string }>,
   outputDir: string,
 ): void {
@@ -171,6 +172,7 @@ function writeVitePressPage(
     youWillLearn,
     prerequisites: splitPrerequisites(prerequisites),
     lastUpdated: lastUpdated || null,
+    createdAt: createdAt || null,
     contributors: contributors.slice(0, 10).map(c => ({ login: c.login, name: c.name, avatarUrl: c.avatarUrl })),
     steps: steps.map(s => ({ number: s.number, title: s.title })),
   }
@@ -307,6 +309,7 @@ export function writeHugoPage(
   steps: TutorialStep[],
   nav: TutorialNavEntry,
   lastUpdated: string,
+  createdAt: string,
   contributors: Array<{ name: string; login: string; avatarUrl: string }>,
   outputDir: string,
 ): void {
@@ -332,6 +335,7 @@ export function writeHugoPage(
     youWillLearn,
     prerequisites: splitPrerequisites(prerequisites),
     lastUpdated: lastUpdated || null,
+    createdAt: createdAt || null,
     contributors: contributors.slice(0, 10).map(c => ({ login: c.login, name: c.name, avatarUrl: c.avatarUrl })),
     steps: steps.map(s => {
       const entry: Record<string, unknown> = { number: s.number, title: s.title }
@@ -637,6 +641,7 @@ async function main() {
     try {
       let rawMd: string
       let lastUpdated = ''
+      let createdAt = ''
       let contributors: Array<{ name: string; login: string; avatarUrl: string }> = []
 
       if (regenerateMode) {
@@ -650,6 +655,7 @@ async function main() {
         const { content, cacheStatus } = await fetchMarkdown(t.slug, t.repo, t.branch, ghMeta.lastCommitSha)
         rawMd = content
         lastUpdated = ghMeta.lastUpdated
+        createdAt = ghMeta.createdAt
         contributors = ghMeta.contributors
 
         if (cacheStatus === 'cached') cacheHits++
@@ -711,6 +717,7 @@ async function main() {
         steps,
         nav,
         lastUpdated,
+        createdAt,
         contributors,
         OUTPUT_DIR,
       )

@@ -1,25 +1,61 @@
-{{ with .Params.author }}
-{{ $profile := $.Params.authorProfile }}
-{{ $username := "" }}
-{{ if $profile }}{{ $username = path.Base $profile }}{{ end }}
-<div class="tutorial-author-row">
-  <div class="author-left">
-    {{ if $username }}
-    <img src="https://github.com/{{ $username }}.png?size=40" alt="{{ . }}" class="author-avatar" />
-    {{ else }}
-    <div class="author-avatar author-avatar-placeholder">{{ substr . 0 1 }}</div>
-    {{ end }}
-    <div class="author-info">
-      <span class="author-role">Created by</span>
-      {{ if $username }}
-      <a href="{{ $profile }}" class="author-name" target="_blank" rel="noopener">{{ . }}</a>
-      {{ else }}
-      <span class="author-name">{{ . }}</span>
-      {{ end }}
+{{ $author := .Params.author }}
+{{ $authorProfile := .Params.authorProfile }}
+{{ $authorUsername := "" }}
+{{ if $authorProfile }}{{ $authorUsername = path.Base $authorProfile }}{{ end }}
+{{ $lastUpdated := .Params.lastUpdated }}
+{{ $createdAt := .Params.createdAt }}
+{{ $contributors := .Params.contributors }}
+
+{{/* Last committer = first contributor (most recent commit author) */}}
+{{ $lastCommitter := "" }}
+{{ $lastCommitterLogin := "" }}
+{{ if $contributors }}
+  {{ $first := index $contributors 0 }}
+  {{ $lastCommitter = $first.name }}
+  {{ $lastCommitterLogin = $first.login }}
+{{ end }}
+
+<div class="tutorial-author-section">
+  {{/* Row 1: Last committer + last updated date */}}
+  {{ if and $lastCommitter $lastUpdated }}
+  <div class="tutorial-author-row">
+    <div class="author-left">
+      <img src="https://github.com/{{ $lastCommitterLogin }}.png?size=40"
+           alt="{{ $lastCommitter }}" class="author-avatar"
+           onerror="this.classList.add('tutorial-hidden');this.nextElementSibling.classList.remove('tutorial-hidden')"
+      />
+      <div class="author-avatar author-avatar-placeholder tutorial-hidden">{{ substr $lastCommitter 0 1 }}</div>
+      <div class="author-info">
+        <a href="https://github.com/{{ $lastCommitterLogin }}" class="author-name" target="_blank" rel="noopener">{{ $lastCommitter }}</a>
+        <span class="author-date">{{ dateFormat "January 2, 2006" $lastUpdated }}</span>
+      </div>
     </div>
   </div>
-  {{ with $.Params.lastUpdated }}
-  <span class="author-date">Last updated: {{ . }}</span>
+  {{ end }}
+
+  {{/* Row 2: Created by + created date */}}
+  {{ if $author }}
+  <div class="tutorial-author-row tutorial-created-row">
+    <div class="author-left">
+      <span class="author-role-label">Created by</span>
+      {{ if $authorUsername }}
+      <img src="https://github.com/{{ $authorUsername }}.png?size=32"
+           alt="{{ $author }}" class="author-avatar author-avatar-sm"
+           onerror="this.classList.add('tutorial-hidden');this.nextElementSibling.classList.remove('tutorial-hidden')"
+      />
+      <div class="author-avatar author-avatar-sm author-avatar-placeholder tutorial-hidden">{{ substr $author 0 1 }}</div>
+      {{ else }}
+      <div class="author-avatar author-avatar-sm author-avatar-placeholder">{{ substr $author 0 1 }}</div>
+      {{ end }}
+      {{ if $authorUsername }}
+      <a href="{{ $authorProfile }}" class="author-name" target="_blank" rel="noopener">{{ $author }}</a>
+      {{ else }}
+      <span class="author-name">{{ $author }}</span>
+      {{ end }}
+    </div>
+    {{ with $createdAt }}
+    <span class="author-date">{{ dateFormat "January 2, 2006" . }}</span>
+    {{ end }}
+  </div>
   {{ end }}
 </div>
-{{ end }}

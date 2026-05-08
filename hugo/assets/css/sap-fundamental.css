@@ -1198,6 +1198,15 @@ blockquote {
   margin: 0 0 1.25rem;
 }
 
+/* Tutorial author section */
+.tutorial-author-section {
+  margin-bottom: 0.5rem;
+}
+
+.tutorial-hidden {
+  display: none !important;
+}
+
 /* Tutorial author row */
 .tutorial-author-row {
   display: flex;
@@ -1210,10 +1219,23 @@ blockquote {
   border-bottom: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
 }
 
+.tutorial-created-row {
+  padding-top: 0;
+  margin-bottom: 0.5rem;
+  border-bottom: none;
+}
+
 .author-left {
   display: flex;
   align-items: center;
   gap: 0.625rem;
+}
+
+.author-role-label {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--sapNeutralTextColor, #6a6d70);
 }
 
 .author-avatar {
@@ -1222,6 +1244,12 @@ blockquote {
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
+}
+
+.author-avatar-sm {
+  width: 28px;
+  height: 28px;
+  font-size: 0.75rem;
 }
 
 .author-avatar-placeholder {
@@ -1274,6 +1302,8 @@ span.author-name {
   gap: 0.625rem;
   font-size: 0.8125rem;
   margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
 }
 
 .contributors-label {
@@ -1281,27 +1311,65 @@ span.author-name {
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--sapNeutralTextColor, #6a6d70);
+  flex-shrink: 0;
 }
 
-.contributors-stack {
+.contributors-list {
   display: flex;
   align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.contributor-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  text-decoration: none;
+  padding: 0.25rem 0.5rem 0.25rem 0.25rem;
+  border-radius: 1rem;
+  background: var(--sapNeutralBackground, #f5f6f7);
+  transition: background 0.15s;
+}
+
+.contributor-chip:hover {
+  background: var(--sapList_Hover_Background, #eaecee);
 }
 
 .contributor-avatar {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
-  border: 2px solid var(--sapBaseColor, #fff);
-  margin-left: -8px;
   object-fit: cover;
+  flex-shrink: 0;
 }
 
-.contributor-avatar:first-child {
-  margin-left: 0;
+.contributor-avatar-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--sapAccentColor6, #286eb4);
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.6875rem;
 }
 
-.contributors-overflow {
+.contributor-name {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--sapLinkColor, #0064d9);
+  white-space: nowrap;
+}
+
+/* Contributors overflow popover */
+.contributors-overflow-wrapper {
+  position: relative;
+}
+
+.contributors-overflow-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1309,11 +1377,77 @@ span.author-name {
   height: 28px;
   border-radius: 50%;
   background: var(--sapNeutralBackground, #f5f6f7);
-  border: 2px solid var(--sapBaseColor, #fff);
-  margin-left: -8px;
-  font-size: 0.625rem;
+  border: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+  font-size: 0.6875rem;
   font-weight: 600;
   color: var(--sapNeutralTextColor, #6a6d70);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.contributors-overflow-btn:hover {
+  background: var(--sapList_Hover_Background, #eaecee);
+  border-color: var(--sapContent_ForegroundBorderColor, #89919a);
+}
+
+.contributors-popover {
+  display: none;
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 180px;
+  background: var(--sapBaseColor, #fff);
+  border: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  padding: 0.375rem;
+  z-index: 100;
+}
+
+.contributors-overflow-wrapper.is-open .contributors-popover {
+  display: block;
+}
+
+.contributor-popover-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.25rem;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+
+.contributor-popover-item:hover {
+  background: var(--sapList_Hover_Background, #eaecee);
+}
+
+.contributor-popover-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.contributor-popover-avatar-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--sapAccentColor6, #286eb4);
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.6875rem;
+}
+
+.contributor-popover-name {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--sapLinkColor, #0064d9);
 }
 
 /* Tutorial prerequisites */
