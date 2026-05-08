@@ -662,6 +662,10 @@ async function main() {
         const cacheFile = join(CACHE_DIR, `${t.slug}.md`)
         if (!existsSync(cacheFile)) throw new Error(`Cache file not found: ${cacheFile}`)
         rawMd = readFileSync(cacheFile, 'utf-8')
+        const ghMeta = await fetchGitHubMeta(t.slug, t.repo, t.branch)
+        lastUpdated = ghMeta.lastUpdated
+        createdAt = ghMeta.createdAt
+        contributors = ghMeta.contributors
         cacheHits++
         console.log(`${label} [cached]`)
       } else {
