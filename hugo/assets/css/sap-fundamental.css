@@ -1056,6 +1056,14 @@ blockquote {
   cursor: not-allowed;
 }
 
+.step-actions button.is-completed {
+  background: var(--sapPositiveColor, #30914c);
+  border-color: var(--sapPositiveColor, #30914c);
+  color: #fff;
+  cursor: default;
+  opacity: 1;
+}
+
 .step-validation-mount:empty {
   display: none;
 }

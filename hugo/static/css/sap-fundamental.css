@@ -1509,10 +1509,6 @@
 
   --vp-c-default-1: var(--sapButton_BorderColor, #0064d9);
   --vp-c-default-soft: var(--sapField_Background, #f5f6f7);
-}/* Sticky shellbar */.fd-shellbar {
-  position: sticky;
-  top: 0;
-  z-index: 100;
 }/* Shellbar text color overrides */.fd-shellbar .fd-shellbar__title {
   color: var(--sapShell_TextColor, #fff);
 }.fd-shellbar .fd-shellbar__action {
@@ -1525,99 +1521,6 @@
 }/* Nav links layout */.fd-shellbar nav {
   display: inline-flex;
   align-items: center;
-}/* Nav dropdown */#nav-dropdown {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-}#nav-dropdown > .fd-shellbar__button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  background: none;
-  border: none;
-  color: var(--sapShell_TextColor, #fff);
-  cursor: pointer;
-  padding: 0.375rem 0.625rem;
-  border-radius: var(--sapButton_BorderCornerRadius, 0.375rem);
-  font-size: 0.875rem;
-  font-family: inherit;
-  transition: background 0.15s;
-  width: auto;
-  height: auto;
-}#nav-dropdown > .fd-shellbar__button:hover {
-  background: var(--sapShell_Hover_Background, rgba(255,255,255,0.1));
-}.shellbar-nav-dropdown__label {
-  font-weight: 600;
-}.shellbar-nav-dropdown__arrow {
-  font-size: 0.625rem;
-  opacity: 0.7;
-}/* Nav popover menu */.shellbar-popover {
-  display: none;
-  position: absolute;
-  left: 0;
-  top: calc(100% + 0.375rem);
-  z-index: 200;
-  background: var(--sapBackgroundColor, #fff);
-  border: 1px solid var(--sapGroup_TitleBorderColor, #d9d9d9);
-  border-radius: var(--sapElement_BorderCornerRadius, 0.5rem);
-  box-shadow: var(--sapContent_Shadow1, 0 0 0.5rem rgba(0,0,0,0.15));
-  min-width: 12rem;
-  padding: 0.25rem 0;
-}.shellbar-popover .fd-menu__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}.shellbar-popover .fd-menu__link {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  color: var(--sapTextColor, #32363a);
-  text-decoration: none;
-  font-size: 0.875rem;
-  transition: background 0.15s;
-}.shellbar-popover .fd-menu__link:hover {
-  background: var(--sapList_Hover_Background, #e8f0fe);
-}.shellbar-popover .fd-menu__addon-before {
-  font-size: 1rem;
-  color: var(--sapContent_IconColor, #0064d9);
-}/* Shellbar icon buttons */.fd-shellbar .fd-shellbar__button {
-  background: none;
-  border: none;
-  color: var(--sapShell_TextColor, #fff);
-  cursor: pointer;
-  width: 2.25rem;
-  height: 2.25rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--sapButton_BorderCornerRadius, 0.375rem);
-  font-size: 1rem;
-  transition: background 0.15s;
-  position: relative;
-}.fd-shellbar .fd-shellbar__button:hover {
-  background: var(--sapShell_Hover_Background, rgba(255,255,255,0.1));
-}.fd-shellbar .fd-shellbar__button:focus-visible {
-  outline: 2px solid var(--sapContent_FocusColor, #000);
-  outline-offset: 1px;
-}/* Notification badge */.shellbar-notifications {
-  position: relative;
-}#notification-badge {
-  display: none;
-  position: absolute;
-  top: 0.125rem;
-  right: 0.125rem;
-  min-width: 1rem;
-  height: 1rem;
-  font-size: 0.625rem;
-  line-height: 1rem;
-  text-align: center;
-  background: var(--sapNegativeColor, #bb0000);
-  color: #fff;
-  border-radius: 0.5rem;
-  padding: 0 0.25rem;
-}#notification-badge.has-notifications {
-  display: block;
 }/* Shellbar separator between nav items and controls */.shellbar-separator {
   display: inline-block;
   vertical-align: middle;
@@ -2323,6 +2226,12 @@
 }.step-actions button.is-auth-disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}.step-actions button.is-completed {
+  background: var(--sapPositiveColor, #30914c);
+  border-color: var(--sapPositiveColor, #30914c);
+  color: #fff;
+  cursor: default;
+  opacity: 1;
 }.step-validation-mount:empty {
   display: none;
 }/* Progress bar segments */.progress-segments {

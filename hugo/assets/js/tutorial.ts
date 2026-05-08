@@ -112,6 +112,12 @@ async function apiPost(path: string, body?: unknown): Promise<boolean> {
 }
 
 // --- Progress tracking ---
+function markButtonCompleted(btn: HTMLButtonElement) {
+  btn.textContent = 'Completed'
+  btn.disabled = true
+  btn.classList.add('is-completed')
+}
+
 async function markDone(btn: HTMLButtonElement) {
   const stepNum = btn.dataset.step
   if (!stepNum || btn.disabled) return
@@ -129,10 +135,12 @@ async function markDone(btn: HTMLButtonElement) {
     if (circle) circle.textContent = '✓'
     const tocItem = document.querySelector(`.step-toc-item[data-toc-step="${stepNum}"]`)
     if (tocItem) tocItem.classList.add('completed')
+    markButtonCompleted(btn)
     updateProgressBar()
+  } else {
+    btn.textContent = 'Done'
+    btn.disabled = false
   }
-  btn.textContent = 'Done'
-  btn.disabled = false
 }
 
 function initProgressBar() {
@@ -186,6 +194,8 @@ async function loadProgress() {
       if (circle) circle.textContent = '✓'
       const tocItem = document.querySelector(`.step-toc-item[data-toc-step="${stepNum}"]`)
       if (tocItem) tocItem.classList.add('completed')
+      const btn = step.querySelector('[data-action="mark-done"]') as HTMLButtonElement | null
+      if (btn) markButtonCompleted(btn)
     }
   }
   updateProgressBar()
