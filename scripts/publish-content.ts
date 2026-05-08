@@ -2,6 +2,7 @@ import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
+import { parse as parseYaml } from 'yaml';
 
 // --- Build validation ---
 
@@ -91,6 +92,64 @@ export function buildPayload(
     payload[slug] = compressed.toString('base64');
   }
   return payload;
+}
+
+// --- Metadata extraction ---
+
+export interface StepMeta {
+  number: number;
+  title: string;
+}
+
+export interface TutorialMeta {
+  slug: string;
+  title: string;
+  description: string;
+  time: number | null;
+  level: string | null;
+  primaryTag: string | null;
+  stepCount: number;
+  steps: StepMeta[];
+}
+
+export function extractMetadata(
+  contentDir: string,
+  slugs: string[]
+): Record<string, TutorialMeta> {
+  const result: Record<string, TutorialMeta> = {};
+
+  for (const slug of slugs) {
+    const mdPath = join(contentDir, `${slug}.md`);
+    if (!existsSync(mdPath)) continue;
+
+    const raw = readFileSync(mdPath, 'utf-8');
+    const fmMatch = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    if (!fmMatch) continue;
+
+    let fm: any;
+    try {
+      fm = parseYaml(fmMatch[1]);
+    } catch {
+      continue;
+    }
+
+    const steps: StepMeta[] = Array.isArray(fm.steps)
+      ? fm.steps.map((s: any) => ({ number: s.number ?? 0, title: s.title ?? '' }))
+      : [];
+
+    result[slug] = {
+      slug,
+      title: fm.title ?? slug,
+      description: fm.description ?? '',
+      time: typeof fm.time === 'number' ? fm.time : null,
+      level: fm.level ?? null,
+      primaryTag: fm.primaryTag ?? null,
+      stepCount: fm.stepCount ?? steps.length,
+      steps,
+    };
+  }
+
+  return result;
 }
 
 // --- CLI ---
@@ -213,10 +272,17 @@ async function main() {
     log(`Included nav metadata for ${allNavTutorials.length} tutorials`);
   }
 
+  // Extract tutorial metadata for DB upsert (self-healing — ensures Tutorials + Steps exist)
+  const hugoContentDir = join(opts.hugoDir, '..', 'content', 'tutorials');
+  const allSlugs = [...tutorials.keys()];
+  const metadata = extractMetadata(hugoContentDir, allSlugs);
+  log(`Extracted metadata for ${Object.keys(metadata).length} tutorials`);
+
   const body = JSON.stringify({
     trigger: opts.trigger,
     hugoVersion: opts.hugoVersion || undefined,
     files: payload,
+    metadata,
   });
 
   const sizeMB = (Buffer.byteLength(body) / 1024 / 1024).toFixed(1);

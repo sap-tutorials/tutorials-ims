@@ -28,10 +28,12 @@ const crypto = require('crypto');
 
 const IMS_BASE_URL = process.env.IMS_BASE_URL || 'https://imsprod-approuter.cfapps.us30.hana.ondemand.com';
 const CACHE_DIR = '.tutorial-cache';
+const HUGO_CONTENT_DIR = path.join('hugo', 'content', 'tutorials');
 
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
 const skipTags = args.includes('--skip-tags');
+const skipSteps = args.includes('--skip-steps');
 
 function uuid() { return crypto.randomUUID(); }
 

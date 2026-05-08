@@ -100,7 +100,7 @@ async function getNextVersion() {
 // --- POST /content/publish ---
 
 export async function publishHandler(req, res) {
-  const { trigger, hugoVersion, files } = req.body || {};
+  const { trigger, hugoVersion, files, metadata } = req.body || {};
 
   if (!files || typeof files !== 'object' || Object.keys(files).length === 0) {
     return res.status(400).json({ error: 'Missing or empty "files" object' });
@@ -186,13 +186,80 @@ export async function publishHandler(req, res) {
 
     cache.invalidate();
 
+    // Upsert Tutorials + Steps metadata (self-healing on every publish)
+    let metaUpserted = 0;
+    if (metadata && typeof metadata === 'object') {
+      const { Tutorials, Steps } = cds.entities('com.sap.developers.ims');
+      for (const [slug, meta] of Object.entries(metadata)) {
+        try {
+          const existing = await SELECT.one.from(Tutorials).where({ slug }).columns('ID');
+          let tutorialId;
+
+          if (existing) {
+            tutorialId = existing.ID;
+            await UPDATE(Tutorials).where({ ID: tutorialId }).set({
+              title: meta.title,
+              description: meta.description || null,
+              averageTimeToComplete: meta.time || null,
+              experienceTag: meta.level || null,
+              primaryTag: meta.primaryTag || null,
+              status: 'ACTIVE'
+            });
+          } else {
+            tutorialId = cds.utils.uuid();
+            await INSERT.into(Tutorials).entries({
+              ID: tutorialId,
+              slug,
+              title: meta.title,
+              description: meta.description || null,
+              averageTimeToComplete: meta.time || null,
+              experienceTag: meta.level || null,
+              primaryTag: meta.primaryTag || null,
+              status: 'ACTIVE'
+            });
+          }
+
+          // Upsert steps
+          if (Array.isArray(meta.steps)) {
+            for (const step of meta.steps) {
+              const existingStep = await SELECT.one.from(Steps)
+                .where({ tutorial_ID: tutorialId, stepOrder: step.number })
+                .columns('ID');
+
+              if (existingStep) {
+                await UPDATE(Steps).where({ ID: existingStep.ID }).set({
+                  title: step.title,
+                  status: 'ACTIVE'
+                });
+              } else {
+                await INSERT.into(Steps).entries({
+                  ID: cds.utils.uuid(),
+                  tutorial_ID: tutorialId,
+                  stepOrder: step.number,
+                  title: step.title,
+                  status: 'ACTIVE'
+                });
+              }
+            }
+          }
+          metaUpserted++;
+        } catch (metaErr) {
+          console.warn(`[content/publish] metadata upsert failed for ${slug}:`, metaErr.message);
+        }
+      }
+      if (metaUpserted > 0) {
+        console.log(`[content/publish] Upserted metadata for ${metaUpserted} tutorials`);
+      }
+    }
+
     await logPipelineEnd(pipelineLogId, 'SUCCESS', `Published v${newVersion}: ${slugs.length} files, ${totalSize} bytes`);
 
     res.status(201).json({
       version: newVersion,
       filesWritten: slugs.length,
       totalSizeBytes: totalSize,
-      durationMs
+      durationMs,
+      metadataUpserted: metaUpserted
     });
   } catch (err) {
     console.error('[content/publish]', err instanceof Error ? err.message : String(err));

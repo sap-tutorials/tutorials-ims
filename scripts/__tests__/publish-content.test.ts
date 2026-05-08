@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
-import { discoverTutorials, computeLocalHashes, computeDiff, buildPayload, validateProductionBuild } from '../publish-content.js';
+import { discoverTutorials, computeLocalHashes, computeDiff, buildPayload, validateProductionBuild, extractMetadata } from '../publish-content.js';
 
 const TEST_DIR = join(tmpdir(), `publish-content-test-${Date.now()}`);
 const HUGO_DIR = join(TEST_DIR, 'public');
@@ -150,6 +150,90 @@ describe('buildPayload', () => {
     const tutorials = discoverTutorials(HUGO_DIR);
     const payload = buildPayload(['non-existent'], tutorials);
     expect(Object.keys(payload)).toHaveLength(0);
+  });
+});
+
+describe('extractMetadata', () => {
+  const META_DIR = join(TEST_DIR, 'content', 'tutorials');
+
+  beforeAll(() => {
+    mkdirSync(META_DIR, { recursive: true });
+
+    writeFileSync(join(META_DIR, 'my-tutorial.md'), [
+      '---',
+      'title: My Tutorial Title',
+      'description: A test tutorial',
+      'time: 15',
+      'level: beginner',
+      'primaryTag: topic>cap',
+      'stepCount: 3',
+      'steps:',
+      '  - number: 1',
+      '    title: First Step',
+      '  - number: 2',
+      '    title: Second Step',
+      '  - number: 3',
+      '    title: Third Step',
+      '---',
+      '',
+      '# My Tutorial Title',
+      'Content here.',
+    ].join('\n'));
+
+    writeFileSync(join(META_DIR, 'minimal.md'), [
+      '---',
+      'title: Minimal',
+      '---',
+      '',
+      'Body.',
+    ].join('\n'));
+
+    writeFileSync(join(META_DIR, 'no-frontmatter.md'), '# Just a heading\nNo YAML here.');
+  });
+
+  it('extracts full metadata from Hugo content markdown', () => {
+    const result = extractMetadata(META_DIR, ['my-tutorial']);
+
+    expect(result['my-tutorial']).toBeDefined();
+    const meta = result['my-tutorial'];
+    expect(meta.title).toBe('My Tutorial Title');
+    expect(meta.description).toBe('A test tutorial');
+    expect(meta.time).toBe(15);
+    expect(meta.level).toBe('beginner');
+    expect(meta.primaryTag).toBe('topic>cap');
+    expect(meta.stepCount).toBe(3);
+    expect(meta.steps).toHaveLength(3);
+    expect(meta.steps[0]).toEqual({ number: 1, title: 'First Step' });
+    expect(meta.steps[2]).toEqual({ number: 3, title: 'Third Step' });
+  });
+
+  it('handles minimal frontmatter with defaults', () => {
+    const result = extractMetadata(META_DIR, ['minimal']);
+
+    expect(result['minimal']).toBeDefined();
+    const meta = result['minimal'];
+    expect(meta.title).toBe('Minimal');
+    expect(meta.description).toBe('');
+    expect(meta.time).toBeNull();
+    expect(meta.level).toBeNull();
+    expect(meta.primaryTag).toBeNull();
+    expect(meta.steps).toHaveLength(0);
+    expect(meta.stepCount).toBe(0);
+  });
+
+  it('skips files without YAML frontmatter', () => {
+    const result = extractMetadata(META_DIR, ['no-frontmatter']);
+    expect(result['no-frontmatter']).toBeUndefined();
+  });
+
+  it('skips slugs whose .md file does not exist', () => {
+    const result = extractMetadata(META_DIR, ['nonexistent-slug']);
+    expect(result['nonexistent-slug']).toBeUndefined();
+  });
+
+  it('processes multiple slugs in one call', () => {
+    const result = extractMetadata(META_DIR, ['my-tutorial', 'minimal', 'nonexistent-slug']);
+    expect(Object.keys(result).sort()).toEqual(['minimal', 'my-tutorial']);
   });
 });
 
