@@ -3,7 +3,7 @@
   "responseHeaders": [
     {
       "name": "Content-Security-Policy",
-      "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://ui5.sap.com https://www.youtube.com; frame-src https://www.youtube.com; img-src 'self' https://raw.githubusercontent.com https://*.sap.com data:; style-src 'self' 'unsafe-inline' https://*.sap.com https://ui5.sap.com https://unpkg.com; font-src 'self' https://*.sap.com https://ui5.sap.com https://unpkg.com; connect-src 'self' https://ui5.sap.com https://*.cfapps.eu10-005.hana.ondemand.com wss://*.cfapps.eu10-005.hana.ondemand.com"
+      "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://ui5.sap.com https://www.youtube.com; frame-src https://www.youtube.com; img-src 'self' https://raw.githubusercontent.com https://avatars.githubusercontent.com https://*.sap.com data:; style-src 'self' 'unsafe-inline' https://*.sap.com https://ui5.sap.com https://unpkg.com; font-src 'self' https://*.sap.com https://ui5.sap.com https://unpkg.com; connect-src 'self' https://ui5.sap.com https://*.cfapps.eu10-005.hana.ondemand.com wss://*.cfapps.eu10-005.hana.ondemand.com"
     }
   ],
   "login": {
