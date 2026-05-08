@@ -17,6 +17,20 @@ import type { Mission, MissionHierarchy, HierarchyGroup, TutorialStep, TutorialN
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
+// Load .env file for local development (TUTORIALS_GITHUB_TOKEN, etc.)
+const envPath = join(__dirname, '..', '.env')
+if (existsSync(envPath)) {
+  for (const line of readFileSync(envPath, 'utf-8').split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const eq = trimmed.indexOf('=')
+    if (eq === -1) continue
+    const key = trimmed.slice(0, eq)
+    const val = trimmed.slice(eq + 1)
+    if (!process.env[key]) process.env[key] = val
+  }
+}
+
 const CACHE_DIR = join(__dirname, '..', '.tutorial-cache')
 const CONCURRENCY = 5
 
@@ -539,8 +553,8 @@ async function main() {
   const DISCOVERY_CACHE = join(CACHE_DIR, '_discovery.json')
 
   if (discoverOnly) {
-    if (!process.env.GITHUB_TOKEN) {
-      console.error('ERROR: GITHUB_TOKEN is required for --discover-only.')
+    if (!process.env.GITHUB_TOKEN && !process.env.TUTORIALS_GITHUB_TOKEN) {
+      console.error('ERROR: GITHUB_TOKEN or TUTORIALS_GITHUB_TOKEN is required for --discover-only.')
       process.exit(1)
     }
     console.log('Running DISCOVERY ONLY mode (builds repo mapping for image URLs)\n')
@@ -575,9 +589,9 @@ async function main() {
     }
     console.log(`Found ${allTutorials.length} cached tutorials\n`)
   } else {
-    if (!process.env.GITHUB_TOKEN) {
-      console.error('ERROR: GITHUB_TOKEN is required for the GraphQL API.')
-      console.error('  Set GITHUB_TOKEN before running this script.')
+    if (!process.env.GITHUB_TOKEN && !process.env.TUTORIALS_GITHUB_TOKEN) {
+      console.error('ERROR: GITHUB_TOKEN or TUTORIALS_GITHUB_TOKEN is required for the GraphQL API.')
+      console.error('  Set the token in .env or as an environment variable.')
       console.error('  Or use --regenerate to rebuild from cache.\n')
       process.exit(1)
     }
@@ -678,9 +692,13 @@ async function main() {
       const rulesContent = await fetchRulesVr(t.slug, t.repo, t.branch)
       if (rulesContent) {
         const validationMap = parseRulesVr(rulesContent)
-        for (const step of steps) {
-          const questions = validationMap.get(step.number)
-          if (questions?.length) step.validation = questions
+        const testSteps = steps.filter(s => /^test yourself$/i.test(s.title))
+        for (const [validateNum, questions] of validationMap) {
+          // Find the first "Test yourself" step at or after position N
+          const target = testSteps.find(s => s.number >= validateNum) ?? testSteps[testSteps.length - 1]
+          if (target && questions.length) {
+            target.validation = [...(target.validation ?? []), ...questions]
+          }
         }
       }
 
