@@ -146,6 +146,78 @@ export async function discoverAllTutorials(): Promise<DiscoveredTutorial[]> {
   return tutorials
 }
 
+function extractContributors(nodes: any[]): GitHubContributor[] {
+  const seen = new Set<string>()
+  const contributors: GitHubContributor[] = []
+  for (const node of nodes) {
+    const login = node.author?.user?.login ?? ''
+    if (!login || seen.has(login)) continue
+    seen.add(login)
+    contributors.push({
+      name: node.author?.name ?? login,
+      login,
+      avatarUrl: node.author?.user?.avatarUrl ?? '',
+    })
+  }
+  return contributors
+}
+
+async function fetchContributorsFromContribRepo(
+  repo: string,
+  slugs: string[],
+): Promise<Map<string, GitHubContributor[]>> {
+  const contribRepo = repo.endsWith('-Contribution') ? repo : `${repo}-Contribution`
+  const results = new Map<string, GitHubContributor[]>()
+
+  for (let i = 0; i < slugs.length; i += BATCH_SIZE) {
+    const batch = slugs.slice(i, i + BATCH_SIZE)
+    const historyFields = batch.map(slug => {
+      const alias = slugToAlias(slug)
+      const path = `tutorials/${slug}`
+      return `${alias}: history(first: 50, path: "${path}") {
+        nodes {
+          author {
+            name
+            user { login avatarUrl }
+          }
+        }
+      }`
+    }).join('\n            ')
+
+    const query = `{
+      repository(owner: "${ORG}", name: "${contribRepo}") {
+        defaultBranchRef {
+          target {
+            ... on Commit {
+              ${historyFields}
+            }
+          }
+        }
+      }
+    }`
+
+    try {
+      const data = await graphqlRequest(query)
+      const commit = data.repository?.defaultBranchRef?.target
+      if (!commit) continue
+
+      for (const [alias, historyData] of Object.entries(commit) as Array<[string, any]>) {
+        if (alias === '__typename') continue
+        const slug = aliasToSlug(alias, batch)
+        if (!slug) continue
+        const nodes = historyData?.nodes ?? []
+        if (nodes.length > 0) {
+          results.set(slug, extractContributors(nodes))
+        }
+      }
+    } catch {
+      // -Contribution repo may not exist or be inaccessible — that's fine
+    }
+  }
+
+  return results
+}
+
 export async function fetchGitHubMetaBatch(
   repo: string,
   branch: string,
@@ -154,12 +226,15 @@ export async function fetchGitHubMetaBatch(
   const cache: CacheData = {}
   const results = new Map<string, GitHubMeta>()
 
+  // Fetch contributor history from -Contribution repo (where real edits happen)
+  const contribMap = await fetchContributorsFromContribRepo(repo, slugs)
+
   for (let i = 0; i < slugs.length; i += BATCH_SIZE) {
     const batch = slugs.slice(i, i + BATCH_SIZE)
     const historyFields = batch.map(slug => {
       const alias = slugToAlias(slug)
       const path = `tutorials/${slug}/${slug}.md`
-      return `${alias}: history(first: 10, path: "${path}") {
+      return `${alias}: history(first: 30, path: "${path}") {
         nodes {
           oid
           authoredDate
@@ -203,18 +278,8 @@ export async function fetchGitHubMetaBatch(
         const lastUpdated = nodes[0].authoredDate ?? ''
         const createdAt = nodes[nodes.length - 1].authoredDate ?? ''
 
-        const seen = new Set<string>()
-        const contributors: GitHubContributor[] = []
-        for (const node of nodes) {
-          const login = node.author?.user?.login ?? ''
-          if (!login || seen.has(login)) continue
-          seen.add(login)
-          contributors.push({
-            name: node.author?.name ?? login,
-            login,
-            avatarUrl: node.author?.user?.avatarUrl ?? '',
-          })
-        }
+        // Prefer contributors from -Contribution repo; fall back to main repo
+        const contributors = contribMap.get(slug) ?? extractContributors(nodes)
 
         const meta: GitHubMeta = { lastCommitSha, lastUpdated, createdAt, contributors }
         results.set(slug, meta)

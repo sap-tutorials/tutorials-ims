@@ -50,7 +50,6 @@
 
   {{/* Contributors */}}
   {{ with $contributors }}
-  {{ if gt (len .) 1 }}
   <div class="author-line-section author-line-contributors">
     <span class="author-line-label">Contributors</span>
     <div class="author-line-avatars">
@@ -64,7 +63,7 @@
       </a>
       {{ end }}
     </div>
-    {{ if gt (len .) 1 }}
+    {{ if gt (len .) 3 }}
     <div class="author-line-expand-wrapper">
       <button type="button" class="author-line-expand-btn" aria-expanded="false" aria-haspopup="menu" aria-label="Show all contributors">
         <svg viewBox="0 0 16 16" width="10" height="10"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -84,7 +83,6 @@
     </div>
     {{ end }}
   </div>
-  {{ end }}
   {{ end }}
 </div>
 <script>

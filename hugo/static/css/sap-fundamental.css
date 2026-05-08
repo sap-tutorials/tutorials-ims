@@ -1511,6 +1511,21 @@
   --vp-c-default-soft: var(--sapField_Background, #f5f6f7);
 }/* Shellbar text color overrides */.fd-shellbar .fd-shellbar__title {
   color: var(--sapShell_TextColor, #fff);
+}.fd-shellbar .fd-shellbar__button {
+  background: transparent;
+  border: none;
+  color: var(--sapShell_TextColor, #fff);
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+}.fd-shellbar .fd-shellbar__button:hover {
+  background: var(--sapShell_Hover_Background, rgba(255,255,255,0.1));
+}.fd-shellbar .fd-shellbar__button i {
+  color: var(--sapShell_InteractiveTextColor, #d1e8ff);
+  font-size: 1rem;
 }.fd-shellbar .fd-shellbar__action {
   color: var(--sapShell_TextColor, #fff);
   text-decoration: none;
@@ -1518,6 +1533,8 @@
   color: var(--sapShell_InteractiveTextColor, #d1e8ff);
 }.fd-shellbar .fd-shellbar__logo img {
   height: 1.5rem;
+}#notification-badge:empty {
+  display: none;
 }/* Nav links layout */.fd-shellbar nav {
   display: inline-flex;
   align-items: center;
