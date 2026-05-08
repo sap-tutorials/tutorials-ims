@@ -1549,10 +1549,14 @@
   min-width: 12rem;
   background: var(--sapList_Background, #fff);
   border: 1px solid var(--sapList_BorderColor, #e4e4e4);
-  border-radius: 0.25rem;
-  box-shadow: 0 0.125rem 0.5rem rgba(0,0,0,0.15);
+  border-radius: 0.5rem;
+  box-shadow: 0 0.25rem 1rem rgba(0,0,0,0.15);
   padding: 0.25rem 0;
   margin-top: 0.25rem;
+}html.dark .shellbar-popover {
+  background: #1e2833;
+  border-color: #2f4763;
+  box-shadow: 0 0.25rem 1rem rgba(0,0,0,0.4);
 }.shellbar-popover .fd-menu__list {
   list-style: none;
   margin: 0;
@@ -1569,11 +1573,17 @@
   color: var(--sapTextColor, #32363a);
   text-decoration: none;
   white-space: nowrap;
+}html.dark .shellbar-popover .fd-menu__link {
+  color: #dee1e4;
 }.shellbar-popover .fd-menu__link:hover {
   background: var(--sapList_Hover_Background, #e8f0fe);
+}html.dark .shellbar-popover .fd-menu__link:hover {
+  background: #29394b;
 }.shellbar-popover .fd-menu__addon-before {
   color: var(--sapContent_IconColor, #556b82);
   font-size: 1rem;
+}html.dark .shellbar-popover .fd-menu__addon-before {
+  color: #778ea6;
 }.shellbar-popover .fd-menu__title {
   font-size: 0.875rem;
 }/* Theme toggle switch */.theme-toggle {
