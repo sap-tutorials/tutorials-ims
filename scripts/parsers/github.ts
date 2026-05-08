@@ -51,31 +51,40 @@ function aliasToSlug(alias: string, slugs: string[]): string | undefined {
   return slugs.find(s => slugToAlias(s) === alias)
 }
 
-async function graphqlRequest(query: string): Promise<any> {
-  const token = process.env.GITHUB_TOKEN
-  if (!token) throw new Error('GITHUB_TOKEN is required for GraphQL API')
+async function graphqlRequest(query: string, retries = 3): Promise<any> {
+  const token = process.env.GITHUB_TOKEN ?? process.env.TUTORIALS_GITHUB_TOKEN
+  if (!token) throw new Error('GITHUB_TOKEN or TUTORIALS_GITHUB_TOKEN is required for GraphQL API')
 
-  const res = await fetch(GRAPHQL_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'User-Agent': 'tutorials-poc-build',
-    },
-    body: JSON.stringify({ query }),
-  })
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const res = await fetch(GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'tutorials-poc-build',
+      },
+      body: JSON.stringify({ query }),
+    })
 
-  if (!res.ok) {
-    const body = await res.text()
-    throw new Error(`GraphQL request failed: ${res.status} ${body}`)
+    if (res.status >= 500 && attempt < retries) {
+      const wait = attempt * 5000
+      console.warn(`  [graphql] ${res.status} on attempt ${attempt}/${retries}, retrying in ${wait / 1000}s...`)
+      await new Promise(r => setTimeout(r, wait))
+      continue
+    }
+
+    if (!res.ok) {
+      const body = await res.text()
+      throw new Error(`GraphQL request failed: ${res.status} ${body}`)
+    }
+
+    const json = await res.json()
+    if (json.errors?.length) {
+      const msgs = json.errors.map((e: any) => e.message).join('; ')
+      console.warn(`  [graphql-warn] ${msgs}`)
+    }
+    return json.data
   }
-
-  const json = await res.json()
-  if (json.errors?.length) {
-    const msgs = json.errors.map((e: any) => e.message).join('; ')
-    console.warn(`  [graphql-warn] ${msgs}`)
-  }
-  return json.data
 }
 
 export async function discoverAllTutorials(): Promise<DiscoveredTutorial[]> {
@@ -244,7 +253,7 @@ export async function fetchRulesVr(slug: string, repo: string, branch: string): 
   }
 
   const contribRepo = repo.endsWith('-Contribution') ? repo : `${repo}-Contribution`
-  const token = process.env.GITHUB_TOKEN
+  const token = process.env.GITHUB_TOKEN ?? process.env.TUTORIALS_GITHUB_TOKEN
   if (!token) return null
 
   const url = `https://raw.githubusercontent.com/${ORG}/${contribRepo}/${branch}/tutorials/${slug}/rules.vr`
