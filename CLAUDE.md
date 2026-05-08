@@ -72,7 +72,7 @@ cf login
 npx cds bind --exec -- node scripts/setup-dev-data.cjs
 
 # 3. Verify: /build/catalog should return text slugs like "abap-dev-get-started"
-curl -s https://developer-destination-ims-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com/build/catalog | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); console.log(d.missions.slice(0,3).map(m=>m.slug))"
+curl -s https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com/build/catalog | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); console.log(d.missions.slice(0,3).map(m=>m.slug))"
 ```
 
 The script uses `.migration-data/slug-mapping.json` (87 missions, 66 groups) extracted from ContentFiles. It assigns slugs sequentially to records that don't already have one — the specific legacyId doesn't matter since content serving only requires the slug to exist.
@@ -88,7 +88,7 @@ After Hugo builds, publish tutorial HTML to HANA:
 export CONTENT_API_KEY="tutorials-content-publish-2024"
 
 # Publish to deployed CAP (delta-aware — only changed files uploaded)
-CAP_BASE_URL="https://developer-destination-ims-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com" npm run publish-content
+CAP_BASE_URL="https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com" npm run publish-content
 
 # Or publish to local CAP
 npm run publish-content

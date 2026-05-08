@@ -63,10 +63,29 @@ export default class DeveloperService extends cds.ApplicationService {
       const tutorial = await SELECT.one.from(dbTutorials).where({ slug });
       if (!tutorial) return req.reject(404, `Tutorial not found: ${slug}`);
 
-      const step = await SELECT.one.from(dbSteps).where({
+      let step = await SELECT.one.from(dbSteps).where({
         tutorial_ID: tutorial.ID, stepOrder: stepNumber
       });
-      if (!step) return req.reject(404, `Step ${stepNumber} not found for ${slug}`);
+
+      if (!step) {
+        const stepId = cds.utils.uuid();
+        const legacyId = await getNextLegacyId('Steps', db);
+        await INSERT.into(dbSteps).entries({
+          ID: stepId,
+          tutorial_ID: tutorial.ID,
+          stepOrder: stepNumber,
+          title: `Step ${stepNumber}`,
+          status: 'ACTIVE',
+          legacyId
+        });
+        step = await SELECT.one.from(dbSteps, stepId);
+      }
+
+      if (!step.legacyId) {
+        const legacyId = await getNextLegacyId('Steps', db);
+        await UPDATE(dbSteps, step.ID).set({ legacyId });
+        step.legacyId = legacyId;
+      }
 
       // Get or create user
       let dbUser = await SELECT.one.from(dbUsers).where({ uuid: user.id });

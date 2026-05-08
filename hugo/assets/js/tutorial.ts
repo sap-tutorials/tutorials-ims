@@ -220,7 +220,11 @@ function initValidation() {
   const dataEl = document.getElementById('tutorial-data')
   if (!dataEl) return
   let steps: StepData[]
-  try { steps = JSON.parse(dataEl.textContent || '[]') } catch { return }
+  try {
+    let parsed = JSON.parse(dataEl.textContent || '[]')
+    if (typeof parsed === 'string') parsed = JSON.parse(parsed)
+    steps = parsed
+  } catch { return }
 
   for (const step of steps) {
     if (!step.validation?.length) continue

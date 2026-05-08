@@ -5,6 +5,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { acquireLock, releaseLock } from '../jobs/job-lock.js';
 import { logPipelineStart, logPipelineEnd } from './pipeline-log.js';
+import { getNextLegacyId } from './legacy-id.js';
 
 const LOCK_NAME = 'content-publish';
 const LOCK_DURATION_MS = 120_000;
@@ -224,20 +225,22 @@ export async function publishHandler(req, res) {
             for (const step of meta.steps) {
               const existingStep = await SELECT.one.from(Steps)
                 .where({ tutorial_ID: tutorialId, stepOrder: step.number })
-                .columns('ID');
+                .columns('ID', 'legacyId');
 
               if (existingStep) {
-                await UPDATE(Steps).where({ ID: existingStep.ID }).set({
-                  title: step.title,
-                  status: 'ACTIVE'
-                });
+                const updates = { title: step.title, status: 'ACTIVE' };
+                if (!existingStep.legacyId) {
+                  updates.legacyId = await getNextLegacyId('Steps', db);
+                }
+                await UPDATE(Steps).where({ ID: existingStep.ID }).set(updates);
               } else {
                 await INSERT.into(Steps).entries({
                   ID: cds.utils.uuid(),
                   tutorial_ID: tutorialId,
                   stepOrder: step.number,
                   title: step.title,
-                  status: 'ACTIVE'
+                  status: 'ACTIVE',
+                  legacyId: await getNextLegacyId('Steps', db)
                 });
               }
             }
