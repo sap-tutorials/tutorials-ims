@@ -536,3 +536,14 @@ HTTP request was not processed because the previous request failed. This happens
 ## 20. MTA Deployment Runbook ✅ (2026-05-05)
 
 **Completed.** Full standalone MTA deployment with its own HANA HDI container and XSUAA instance, running in parallel with legacy IMS services. See [docs/mta-deployment.md](docs/mta-deployment.md) for the complete runbook.
+
+---
+
+## 21. Future Work
+
+- [ ] **Analytics — Author/Management views (PowerBI workflow)** — Build reporting views for tutorial authors and management, with a workflow to export/connect data to PowerBI dashboards.
+- [ ] **Tag Import** — Implement bulk import of tags from an external source (e.g., CSV, API, or taxonomy system) into the Tags entity.
+- [ ] **Author Workflow** — Define and implement the end-to-end authoring workflow: tutorial creation, review, approval, and publication lifecycle.
+- [ ] **VS Code Extension (esp. Preview)** — Build a VS Code extension for tutorial authors with live preview of tutorial markdown as it would render on the platform.
+- [ ] **System QA vs. Author QA** — Distinguish between system-level quality assurance (automated pipeline validation, broken links, schema conformance) and author-level QA (content review, accuracy checks, editorial approval). Define separate workflows and tooling for each.
+- [ ] **Tutorials API missing slug field** — The current Tutorials API does not return the tutorial's slug. This is a critical gap — slugs are required for content serving (`/content/tutorials/:slug`), navigation, and linking. The DeveloperService/AdminService projections need to expose the slug field from TutorialMeta or derive it from the repository name.
