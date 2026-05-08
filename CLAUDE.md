@@ -16,6 +16,7 @@ npm install                                   # Install dependencies
 npm run fetch-tutorials                       # Fetch tutorial markdown from GitHub (required before dev/build)
 npm run dev                                   # Hugo dev server (http://localhost:1313)
 npm run build:all                             # Full production build (fetch + CSS + apps + Hugo + highlight + display)
+npm run fetch-tutorials:hugo                  # Fetch tutorials with Hugo target (alias for fetch-tutorials)
 npm run build:hugo                            # Hugo static build only
 npm run build:css                             # PostCSS → hugo/static/css/sap-fundamental.css
 npm run build:apps                            # Vue 3 public-facing apps (apps/)
@@ -34,6 +35,8 @@ npm run test:all                              # Run all test workspaces (require
 npx vitest run scripts/__tests__/v1.test.ts   # Run a single test file
 
 # CAP backend
+npm run start                                 # Production start (cds-serve)
+npm run watch                                 # Alias for cds watch
 cds watch                                     # Start CAP server (http://localhost:4004)
 npm run dev:hybrid                            # CAP with HANA binding + approuter (parallel)
 npm run watch:hybrid                          # cds watch --profile hybrid (CAP only, no approuter)
@@ -81,7 +84,7 @@ Flags: `--skip-cleanup` (skip autotest deletion), `--skip-slugs` (skip slug assi
 After Hugo builds, publish tutorial HTML to HANA:
 
 ```bash
-# Set the API key (must match CONTENT_API_KEY env var on tutorials-srv)
+# Set the API key (actual DEV key below — must match CONTENT_API_KEY env var on tutorials-srv)
 export CONTENT_API_KEY="tutorials-content-publish-2024"
 
 # Publish to deployed CAP (delta-aware — only changed files uploaded)
@@ -181,10 +184,13 @@ Set `IMS_BASE_URL`, `CAP_BASE_URL`, and `IMS_AUTH_TOKEN` env vars. Export files 
 Architecture docs for reference (not deployed, developer-facing only):
 - `content-pipeline.md` — End-to-end content flow from GitHub to HANA
 - `authentication-primer.md` — XSUAA/IDP auth architecture
+- `authentication-architecture.md` — Detailed auth flow diagrams and component interactions
+- `ias-migration-setup.md` — IAS (Identity Authentication Service) migration configuration
 - `ims-api-reference.md` — Legacy IMS Java API surface (for migration parity)
 - `ims-uncovered-features.md` — IMS features not yet ported to CAP
 - `hugo-migration.md` — VitePress → Hugo migration rationale and steps
 - `mta-deployment.md` — MTA build/deploy procedures and troubleshooting
+- `tutorial-repo-dispatch.yml` — GitHub Actions workflow for tutorial repo change notifications
 - `vitepress-2x-upgrade-assessment.md` — Legacy: VitePress 2.x evaluation (historical)
 
 ### Parsers (scripts/parsers/)

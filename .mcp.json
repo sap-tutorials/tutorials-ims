@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "sap-devs-server": {
+      "args": [
+        "mcp",
+        "serve"
+      ],
+      "command": "C:\\Users\\I809764\\scoop\\apps\\sap-devs\\current\\sap-devs.exe",
+      "type": "stdio"
+    }
+  }
+}
