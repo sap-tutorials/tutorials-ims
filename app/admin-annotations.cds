@@ -146,7 +146,7 @@ annotate AdminService.CompletionPaths with @UI: {
   },
   Facets: [
     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'General' },
-    { $Type: 'UI.ReferenceFacet', Target: 'items/@UI.LineItem', Label: 'Items' }
+    { $Type: 'UI.ReferenceFacet', Target: 'items/@UI.LineItem', Label: 'Path Items' }
   ],
   FieldGroup#General: {
     Data: [
@@ -162,11 +162,14 @@ annotate AdminService.CompletionPaths with @UI: {
 
 annotate AdminService.CompletionPathItems with {
   taskType        @Common.Label: 'Type'  @Common.ValueListWithFixedValues;
-  tutorial        @Common.Label: 'Tutorial';
-  group           @Common.Label: 'Group';
-  checkpointTitle @Common.Label: 'Checkpoint';
+  tutorial        @Common.Label: 'Tutorial'
+                  @UI.Hidden: { $edmJson: { $Ne: [{ $Path: 'taskType' }, 'TUTORIAL'] } };
+  group           @Common.Label: 'Group'
+                  @UI.Hidden: { $edmJson: { $Ne: [{ $Path: 'taskType' }, 'GROUP'] } };
+  checkpointTitle @Common.Label: 'Checkpoint'
+                  @UI.Hidden: { $edmJson: { $Ne: [{ $Path: 'taskType' }, 'CHECKPOINT'] } };
   prize           @Common.Label: 'Prize';
-  itemOrder       @Common.Label: 'Order';
+  itemOrder       @Common.Label: 'Order'  @UI.Hidden;
 };
 
 annotate AdminService.CompletionPathItems with {
@@ -202,8 +205,7 @@ annotate AdminService.CompletionPathItems with @UI: {
     { Value: tutorial_ID, Label: 'Tutorial' },
     { Value: group_ID, Label: 'Group' },
     { Value: checkpointTitle },
-    { Value: prize_ID, Label: 'Prize' },
-    { Value: itemOrder }
+    { Value: prize_ID, Label: 'Prize' }
   ]
 };
 

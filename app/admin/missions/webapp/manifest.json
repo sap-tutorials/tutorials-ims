@@ -145,6 +145,20 @@
             "settings": {
               "contextPath": "/Missions/completionPaths",
               "editableHeaderContent": false,
+              "content": {
+                "body": {
+                  "sections": {
+                    "ItemReorderSection": {
+                      "template": "sap.tutorials.admin.missions.ext.ItemReorder",
+                      "title": "Path Items (Drag to Reorder)",
+                      "position": {
+                        "anchor": "items::LineItem",
+                        "placement": "After"
+                      }
+                    }
+                  }
+                }
+              },
               "controlConfiguration": {
                 "items/@com.sap.vocabularies.UI.v1.LineItem": {
                   "tableSettings": {
