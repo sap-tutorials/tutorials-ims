@@ -53,6 +53,7 @@ annotate AdminService.Missions with {
   experienceTag      @Common.Label: 'Experience'  @Common.ValueListWithFixedValues;
   primaryTag         @Common.Label: 'Primary Tag (text)';
   primaryTagRef_ID   @Common.Label: 'Primary Tag';
+  published          @Common.Label: 'Published';
   status             @Common.Label: 'Status'  @Common.ValueListWithFixedValues;
   averageTimeToComplete @Common.Label: 'Avg Time (min)';
 };
@@ -137,6 +138,7 @@ annotate AdminService.Groups with {
   primaryTag            @Common.Label: 'Primary Tag (text)';
   primaryTagRef_ID      @Common.Label: 'Primary Tag';
   averageTimeToComplete @Common.Label: 'Avg Time (min)';
+  published             @Common.Label: 'Published';
   status                @Common.Label: 'Status'  @Common.ValueListWithFixedValues;
 };
 
@@ -157,15 +159,14 @@ annotate AdminService.Groups with @UI: {
   ],
   Facets: [
     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'General' },
-    { $Type: 'UI.ReferenceFacet', Target: 'missions/@UI.LineItem', Label: 'Missions' },
+    { $Type: 'UI.ReferenceFacet', Target: 'tags/@UI.LineItem', Label: 'Tags' },
     { $Type: 'UI.ReferenceFacet', Target: 'changes/@UI.PresentationVariant', Label: 'Change History', ![@UI.PartOfPreview]: false }
   ],
   FieldGroup#General: { Data: [
     { Value: title },
     { Value: description },
-    { Value: experienceTag },
-    { Value: averageTimeToComplete },
     { Value: primaryTagRef_ID },
+    { Value: experienceTag },
     { Value: published, @UI.FieldControl: publishedFieldControl },
     { Value: status }
   ]}
@@ -179,6 +180,25 @@ annotate AdminService.Groups with {
       { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'name' }
     ]
   };
+};
+
+// GroupTags — inline table with value help for tag selection
+annotate AdminService.GroupTags with {
+  tag @Common.Label: 'Tag'
+      @Common.Text: tag.name  @Common.TextArrangement: #TextOnly
+      @Common.ValueList: {
+        CollectionPath: 'Tags',
+        Parameters: [
+          { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: tag_ID, ValueListProperty: 'ID' },
+          { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'name' }
+        ]
+      };
+};
+
+annotate AdminService.GroupTags with @UI: {
+  LineItem: [
+    { Value: tag_ID, Label: 'Tag' }
+  ]
 };
 
 // --- Accomplishments ---

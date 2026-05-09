@@ -8,13 +8,16 @@ aspect LegacyKeyed {
 }
 
 // Shared fields for all task types
+type ExperienceLevel : String(255) enum { beginner; intermediate; advanced; }
+type TaskStatus      : String(50)  enum { ACTIVE; INACTIVE; }
+
 aspect TaskBase : cuid, managed, LegacyKeyed {
   title                     : String(255) @mandatory;
   description               : LargeString;
-  status                    : String(50);
+  status                    : TaskStatus;
   deletionReason            : String(500);
   primaryTag                : String(255);
-  experienceTag             : String(255);
+  experienceTag             : ExperienceLevel;
   averageTimeToComplete     : Integer;
 }
 
@@ -40,6 +43,7 @@ entity Missions : TaskBase {
 entity Groups : TaskBase {
   published                 : Boolean default true;
   missions                  : Association to many Missions on missions.group = $self;
+  tags                      : Composition of many GroupTags on tags.group = $self;
 }
 
 entity Steps : TaskBase {
@@ -132,6 +136,11 @@ entity Tags : cuid, LegacyKeyed {
 
 entity TutorialTags {
   key tutorial              : Association to Tutorials;
+  key tag                   : Association to Tags;
+}
+
+entity GroupTags {
+  key group                 : Association to Groups;
   key tag                   : Association to Tags;
 }
 

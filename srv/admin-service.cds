@@ -33,6 +33,7 @@ service AdminService {
   entity ActiveLearnerRecords as projection on ims.ActiveLearnerRecords;
   entity CompletionPaths as projection on ims.CompletionPaths;
   entity CompletionPathItems as projection on ims.CompletionPathItems;
+  entity GroupTags as projection on ims.GroupTags;
   entity DashboardMonitoredRecords as projection on ims.DashboardMonitoredRecords;
   @readonly entity Tasks as projection on ims.Tasks;
   @readonly entity PipelineLog as projection on ims.PipelineLog

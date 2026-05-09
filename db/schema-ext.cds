@@ -7,7 +7,6 @@ extend ims.Missions with {
 }
 
 // Association-based tag reference for value help support
-// (retains existing primaryTag:String for backward compat)
 extend ims.TaskBase with {
   primaryTagRef : Association to ims.Tags;
 }
