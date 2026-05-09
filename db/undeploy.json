@@ -32,5 +32,6 @@
     "src/gen/com.sap.developers.ims.TutorialTags.hdbtable",
     "src/gen/com.sap.developers.ims.UserMetaData.hdbtable",
     "src/gen/com.sap.developers.ims.Users.hdbtable",
-    "src/gen/**/*.hdbtrigger"
+    "src/gen/**/*.hdbtrigger",
+    "src/gen/SAP_CHANGELOG_RESTORE_BACKLINKS.hdbprocedure"
 ]
