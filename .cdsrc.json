@@ -8,7 +8,7 @@
     "target": "gen",
     "tasks": [
       { "for": "hana", "src": "db", "dest": "db" },
-      { "for": "nodejs", "src": "srv", "dest": "srv" }
+      { "for": "nodejs", "src": "srv", "dest": "srv", "options": { "model": ["srv", "db", "app"] } }
     ]
   },
   "odata": {
