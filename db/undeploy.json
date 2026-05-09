@@ -33,5 +33,7 @@
     "src/gen/com.sap.developers.ims.UserMetaData.hdbtable",
     "src/gen/com.sap.developers.ims.Users.hdbtable",
     "src/gen/**/*.hdbtrigger",
-    "src/gen/SAP_CHANGELOG_RESTORE_BACKLINKS.hdbprocedure"
+    "src/gen/SAP_CHANGELOG_RESTORE_BACKLINKS.hdbprocedure",
+    "src/gen/sap.changelog.Changes_CT_INDEX.hdbindex",
+    "src/gen/sap.changelog.Changes_CT_parent_INDEX.hdbindex"
 ]
