@@ -11,6 +11,7 @@ aspect LegacyKeyed {
 type ExperienceLevel : String(255) enum { beginner; intermediate; advanced; }
 type TaskStatus      : String(50)  enum { ACTIVE; INACTIVE; }
 type MissionType     : String(20)  enum { SEQUENTIAL; SET; }
+type TaskType        : String(20)  enum { TUTORIAL; GROUP; CHECKPOINT; }
 
 aspect TaskBase : cuid, managed, LegacyKeyed {
   title                     : String(255) @mandatory;
@@ -178,7 +179,7 @@ entity CompletionPaths : cuid, LegacyKeyed {
 entity CompletionPathItems : cuid, LegacyKeyed {
   path                      : Association to CompletionPaths;
   taskLegacyId              : Integer;
-  @assert.range taskType    : String(20) enum { TUTORIAL; GROUP; CHECKPOINT; };
+  taskType                  : TaskType @assert.range;
   tutorial                  : Association to Tutorials;
   group                     : Association to Groups;
   checkpointTitle           : String(255);

@@ -145,26 +145,36 @@
             "settings": {
               "contextPath": "/Missions/completionPaths",
               "editableHeaderContent": false,
-              "content": {
-                "body": {
-                  "sections": {
-                    "ItemReorderSection": {
-                      "template": "sap.tutorials.admin.missions.ext.ItemReorder",
-                      "title": "Path Items (Drag to Reorder)",
-                      "position": {
-                        "anchor": "items::LineItem",
-                        "placement": "After"
-                      }
-                    }
-                  }
-                }
-              },
               "controlConfiguration": {
                 "items/@com.sap.vocabularies.UI.v1.LineItem": {
                   "tableSettings": {
                     "creationMode": {
                       "name": "Inline",
                       "createAtEnd": true
+                    }
+                  },
+                  "columns": {
+                    "TypeColumn": {
+                      "header": "Type",
+                      "width": "10em",
+                      "importance": "High",
+                      "position": {
+                        "placement": "Before",
+                        "anchor": "DataField::prize_ID"
+                      },
+                      "template": "sap.tutorials.admin.missions.ext.TypeColumn",
+                      "availability": "Default"
+                    },
+                    "TaskColumn": {
+                      "header": "Task",
+                      "width": "20em",
+                      "importance": "High",
+                      "position": {
+                        "placement": "After",
+                        "anchor": "TypeColumn"
+                      },
+                      "template": "sap.tutorials.admin.missions.ext.TaskColumn",
+                      "availability": "Default"
                     }
                   }
                 }

@@ -1,0 +1,7 @@
+<core:FragmentDefinition
+  xmlns:core="sap.ui.core"
+  xmlns:macros="sap.fe.macros">
+  <macros:Field
+    readOnly="false"
+    metaPath="taskType"/>
+</core:FragmentDefinition>

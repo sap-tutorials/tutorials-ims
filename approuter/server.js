@@ -152,6 +152,17 @@ const { URL } = require('url')
 if (isLocal) {
   const _createServer = http.createServer
   http.createServer = function(...args) {
+    // Wrap the approuter's request handler to intercept proxy-able routes
+    if (args.length > 0 && typeof args[args.length - 1] === 'function') {
+      const originalHandler = args[args.length - 1]
+      args[args.length - 1] = (req, res) => {
+        if (PROXY_PREFIXES.some(p => req.url.startsWith(p))) {
+          proxyHandler(req, res, () => originalHandler(req, res))
+          return
+        }
+        originalHandler(req, res)
+      }
+    }
     const server = _createServer.apply(http, args)
 
     const origListen = server.listen.bind(server)
@@ -208,6 +219,7 @@ if (isLocal) {
 function proxyHandler(req, res, next) {
   if (!isLocal) return next()
   if (!PROXY_PREFIXES.some(p => req.url.startsWith(p))) return next()
+  console.log('[proxy] intercepting:', req.method, req.url)
 
   let url = req.url
   for (const { match, replace } of REWRITES) {

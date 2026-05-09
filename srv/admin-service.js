@@ -51,15 +51,13 @@ export default class AdminService extends cds.ApplicationService {
 
     // Require at least one tag on Missions and Groups
     this.before('SAVE', 'Missions', async (req) => {
-      const { tags } = await SELECT.one.from(req.target).where({ ID: req.data.ID })
-        .columns(m => { m.tags(t => t.tag_ID) });
+      const tags = req.data.tags;
       if (!tags || tags.length === 0) {
         req.reject(400, 'At least one Tag is required');
       }
     });
     this.before('SAVE', 'Groups', async (req) => {
-      const { tags } = await SELECT.one.from(req.target).where({ ID: req.data.ID })
-        .columns(g => { g.tags(t => t.tag_ID) });
+      const tags = req.data.tags;
       if (!tags || tags.length === 0) {
         req.reject(400, 'At least one Tag is required');
       }
