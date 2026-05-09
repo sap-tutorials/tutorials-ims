@@ -5,12 +5,16 @@
     "type": "application",
     "title": "Missions",
     "description": "Manage Missions",
-    "applicationVersion": { "version": "0.0.1" },
+    "applicationVersion": {
+      "version": "0.0.1"
+    },
     "dataSources": {
       "mainService": {
         "uri": "/admin/",
         "type": "OData",
-        "settings": { "odataVersion": "4.0" }
+        "settings": {
+          "odataVersion": "4.0"
+        }
       }
     },
     "crossNavigation": {
@@ -19,7 +23,10 @@
           "semanticObject": "Mission",
           "action": "manage",
           "title": "Missions",
-          "signature": { "parameters": {}, "additionalParameters": "allowed" }
+          "signature": {
+            "parameters": {},
+            "additionalParameters": "allowed"
+          }
         }
       }
     }
@@ -27,7 +34,10 @@
   "sap.ui5": {
     "dependencies": {
       "minUI5Version": "1.136.0",
-      "libs": { "sap.fe.templates": {} }
+      "libs": {
+        "sap.fe.templates": {},
+        "sap.f": {}
+      }
     },
     "models": {
       "": {
@@ -42,21 +52,37 @@
       }
     },
     "routing": {
+      "config": {
+        "routerClass": "sap.f.routing.Router",
+        "flexibleColumnLayout": {
+          "defaultTwoColumnLayoutType": "TwoColumnsMidExpanded",
+          "defaultThreeColumnLayoutType": "ThreeColumnsMidExpanded"
+        }
+      },
       "routes": [
         {
           "pattern": ":?query:",
           "name": "MissionsList",
-          "target": "MissionsList"
+          "target": [
+            "MissionsList"
+          ]
         },
         {
           "pattern": "Missions({key}):?query:",
           "name": "MissionsObjectPage",
-          "target": "MissionsObjectPage"
+          "target": [
+            "MissionsList",
+            "MissionsObjectPage"
+          ]
         },
         {
           "pattern": "Missions({key})/completionPaths({key2}):?query:",
           "name": "CompletionPathsObjectPage",
-          "target": "CompletionPathsObjectPage"
+          "target": [
+            "MissionsList",
+            "MissionsObjectPage",
+            "CompletionPathsObjectPage"
+          ]
         }
       ],
       "targets": {
@@ -70,10 +96,16 @@
               "variantManagement": "Page",
               "initialLoad": "Enabled",
               "navigation": {
-                "Missions": { "detail": { "route": "MissionsObjectPage" } }
+                "Missions": {
+                  "detail": {
+                    "route": "MissionsObjectPage"
+                  }
+                }
               }
             }
-          }
+          },
+          "controlAggregation": "beginColumnPages",
+          "contextPattern": ""
         },
         "MissionsObjectPage": {
           "type": "Component",
@@ -84,7 +116,11 @@
               "contextPath": "/Missions",
               "editableHeaderContent": false,
               "navigation": {
-                "completionPaths": { "detail": { "route": "CompletionPathsObjectPage" } }
+                "completionPaths": {
+                  "detail": {
+                    "route": "CompletionPathsObjectPage"
+                  }
+                }
               },
               "controlConfiguration": {
                 "completionPaths/@com.sap.vocabularies.UI.v1.LineItem": {
@@ -97,7 +133,9 @@
                 }
               }
             }
-          }
+          },
+          "controlAggregation": "midColumnPages",
+          "contextPattern": "/Missions({key})"
         },
         "CompletionPathsObjectPage": {
           "type": "Component",
@@ -118,9 +156,17 @@
                 }
               }
             }
-          }
+          },
+          "controlAggregation": "endColumnPages",
+          "contextPattern": "/Missions({key})/completionPaths({key2})"
         }
       }
+    },
+    "rootView": {
+      "viewName": "sap.fe.templates.RootContainer.view.Fcl",
+      "type": "XML",
+      "async": true,
+      "id": "appRootView"
     }
   }
 }

@@ -170,6 +170,7 @@ entity AccomplishmentRecords : cuid, LegacyKeyed {
 entity CompletionPaths : cuid, LegacyKeyed {
   mission                   : Association to Missions;
   name                      : String(255);
+  description               : String(1000);
   slug                      : String(255);
   items                     : Composition of many CompletionPathItems on items.path = $self;
 }

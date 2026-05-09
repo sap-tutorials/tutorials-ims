@@ -134,8 +134,9 @@ annotate AdminService.Missions with {
 
 // CompletionPaths line items
 annotate AdminService.CompletionPaths with {
-  name @Common.Label: 'Path Name';
-  slug @Common.Label: 'Slug';
+  name        @Common.Label: 'Title';
+  description @Common.Label: 'Description';
+  slug        @Common.Label: 'Slug';
 };
 
 annotate AdminService.CompletionPaths with @UI: {
@@ -150,7 +151,7 @@ annotate AdminService.CompletionPaths with @UI: {
   FieldGroup#General: {
     Data: [
       { Value: name },
-      { Value: slug }
+      { Value: description }
     ]
   },
   LineItem: [
@@ -161,9 +162,12 @@ annotate AdminService.CompletionPaths with @UI: {
 
 annotate AdminService.CompletionPathItems with {
   taskType        @Common.Label: 'Type'  @Common.ValueListWithFixedValues;
-  tutorial        @Common.Label: 'Tutorial';
-  group           @Common.Label: 'Group';
-  checkpointTitle @Common.Label: 'Checkpoint';
+  tutorial        @Common.Label: 'Tutorial'
+                  @UI.Hidden: {$edmJson: {$Ne: [{$Path: 'taskType'}, 'TUTORIAL']}};
+  group           @Common.Label: 'Group'
+                  @UI.Hidden: {$edmJson: {$Ne: [{$Path: 'taskType'}, 'GROUP']}};
+  checkpointTitle @Common.Label: 'Checkpoint'
+                  @UI.Hidden: {$edmJson: {$Ne: [{$Path: 'taskType'}, 'CHECKPOINT']}};
   prize           @Common.Label: 'Prize';
   itemOrder       @Common.Label: 'Order';
 };

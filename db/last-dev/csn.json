@@ -489,6 +489,11 @@
           "length": 255,
           "@cds.persistence.name": "NAME"
         },
+        "description": {
+          "type": "cds.String",
+          "length": 1000,
+          "@cds.persistence.name": "DESCRIPTION"
+        },
         "slug": {
           "type": "cds.String",
           "length": 255,
