@@ -10,6 +10,7 @@ aspect LegacyKeyed {
 // Shared fields for all task types
 type ExperienceLevel : String(255) enum { beginner; intermediate; advanced; }
 type TaskStatus      : String(50)  enum { ACTIVE; INACTIVE; }
+type MissionType     : String(20)  enum { SEQUENTIAL; SET; }
 
 aspect TaskBase : cuid, managed, LegacyKeyed {
   title                     : String(255) @mandatory;
@@ -35,9 +36,12 @@ entity Tutorials : TaskBase {
 entity Missions : TaskBase {
   slug                      : String(255);
   communityMissionId        : String(255);
+  missionType               : MissionType;
   published                 : Boolean default true;
   group                     : Association to Groups;
+  event                     : Association to Events;
   completionPaths           : Composition of many CompletionPaths on completionPaths.mission = $self;
+  tags                      : Composition of many MissionTags on tags.mission = $self;
 }
 
 entity Groups : TaskBase {
@@ -144,6 +148,11 @@ entity GroupTags {
   key tag                   : Association to Tags;
 }
 
+entity MissionTags {
+  key mission               : Association to Missions;
+  key tag                   : Association to Tags;
+}
+
 entity Accomplishments : cuid, LegacyKeyed {
   name                      : String(255);
   rule                      : String(2000);
@@ -166,7 +175,11 @@ entity CompletionPaths : cuid, LegacyKeyed {
 entity CompletionPathItems : cuid, LegacyKeyed {
   path                      : Association to CompletionPaths;
   taskLegacyId              : Integer;
-  taskType                  : String(20) enum { TUTORIAL; MISSION; GROUP; };
+  taskType                  : String(20) enum { TUTORIAL; GROUP; CHECKPOINT; };
+  tutorial                  : Association to Tutorials;
+  group                     : Association to Groups;
+  checkpointTitle           : String(255);
+  prize                     : Association to Prizes;
   itemOrder                 : Integer;
 }
 
@@ -224,6 +237,13 @@ entity NGDSFailedMessages : cuid, LegacyKeyed {
 entity ImsConfig : cuid, LegacyKeyed {
   ![key]                    : String(255);
   value                     : String(2000);
+}
+
+@cds.autoexpose @readonly
+entity TimeZones {
+  key code      : String(50);
+  name          : String(100);
+  utcOffset     : String(10);
 }
 
 entity JobLocks {

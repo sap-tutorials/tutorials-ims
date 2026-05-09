@@ -1,0 +1,86 @@
+code,name,utcOffset
+UTC,Coordinated Universal Time,+00:00
+Pacific/Midway,Midway Island,-11:00
+Pacific/Honolulu,Hawaii,-10:00
+America/Anchorage,Alaska,-09:00
+America/Los_Angeles,Pacific Time (US),-08:00
+America/Denver,Mountain Time (US),-07:00
+America/Phoenix,Arizona,-07:00
+America/Chicago,Central Time (US),-06:00
+America/New_York,Eastern Time (US),-05:00
+America/Indianapolis,Indiana (East),-05:00
+America/Halifax,Atlantic Time (Canada),-04:00
+America/Caracas,Venezuela,-04:00
+America/Santiago,Chile,-04:00
+America/St_Johns,Newfoundland,-03:30
+America/Sao_Paulo,Brazil,-03:00
+America/Argentina/Buenos_Aires,Argentina,-03:00
+America/Montevideo,Uruguay,-03:00
+Atlantic/South_Georgia,Mid-Atlantic,-02:00
+Atlantic/Azores,Azores,-01:00
+Atlantic/Cape_Verde,Cape Verde,-01:00
+Europe/London,London / GMT,+00:00
+Europe/Dublin,Dublin,+00:00
+Europe/Lisbon,Lisbon,+00:00
+Africa/Casablanca,Casablanca,+01:00
+Europe/Berlin,Berlin / CET,+01:00
+Europe/Paris,Paris,+01:00
+Europe/Madrid,Madrid,+01:00
+Europe/Rome,Rome,+01:00
+Europe/Amsterdam,Amsterdam,+01:00
+Europe/Brussels,Brussels,+01:00
+Europe/Vienna,Vienna,+01:00
+Europe/Zurich,Zurich,+01:00
+Europe/Warsaw,Warsaw,+01:00
+Europe/Stockholm,Stockholm,+01:00
+Europe/Oslo,Oslo,+01:00
+Europe/Copenhagen,Copenhagen,+01:00
+Africa/Lagos,West Africa,+01:00
+Europe/Athens,Athens / EET,+02:00
+Europe/Bucharest,Bucharest,+02:00
+Europe/Helsinki,Helsinki,+02:00
+Europe/Kyiv,Kyiv,+02:00
+Africa/Cairo,Cairo,+02:00
+Africa/Johannesburg,South Africa,+02:00
+Asia/Jerusalem,Jerusalem,+02:00
+Europe/Istanbul,Istanbul,+03:00
+Europe/Moscow,Moscow,+03:00
+Asia/Baghdad,Baghdad,+03:00
+Asia/Riyadh,Saudi Arabia,+03:00
+Africa/Nairobi,East Africa,+03:00
+Asia/Tehran,Tehran,+03:30
+Asia/Dubai,Dubai / Gulf,+04:00
+Asia/Baku,Baku,+04:00
+Asia/Tbilisi,Tbilisi,+04:00
+Indian/Mauritius,Mauritius,+04:00
+Asia/Kabul,Kabul,+04:30
+Asia/Karachi,Pakistan,+05:00
+Asia/Tashkent,Uzbekistan,+05:00
+Asia/Kolkata,India,+05:30
+Asia/Colombo,Sri Lanka,+05:30
+Asia/Kathmandu,Nepal,+05:45
+Asia/Almaty,Kazakhstan,+06:00
+Asia/Dhaka,Bangladesh,+06:00
+Asia/Yangon,Myanmar,+06:30
+Asia/Bangkok,Thailand / Indochina,+07:00
+Asia/Jakarta,Western Indonesia,+07:00
+Asia/Ho_Chi_Minh,Vietnam,+07:00
+Asia/Shanghai,China,+08:00
+Asia/Hong_Kong,Hong Kong,+08:00
+Asia/Singapore,Singapore,+08:00
+Asia/Taipei,Taiwan,+08:00
+Asia/Kuala_Lumpur,Malaysia,+08:00
+Australia/Perth,Western Australia,+08:00
+Asia/Seoul,Korea,+09:00
+Asia/Tokyo,Japan,+09:00
+Australia/Darwin,Northern Territory,+09:30
+Australia/Adelaide,South Australia,+09:30
+Australia/Brisbane,Queensland,+10:00
+Australia/Sydney,New South Wales,+10:00
+Australia/Melbourne,Victoria,+10:00
+Australia/Hobart,Tasmania,+10:00
+Pacific/Guam,Guam,+10:00
+Pacific/Noumea,New Caledonia,+11:00
+Pacific/Auckland,New Zealand,+12:00
+Pacific/Fiji,Fiji,+12:00
+Pacific/Tongatapu,Tonga,+13:00

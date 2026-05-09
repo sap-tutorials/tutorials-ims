@@ -13,7 +13,15 @@ annotate AdminService.Events with {
   name      @Common.Label: 'Name';
   startDate @Common.Label: 'Start Date';
   endDate   @Common.Label: 'End Date';
-  timeZone  @Common.Label: 'Time Zone';
+  timeZone  @Common.Label: 'Time Zone'
+            @Common.ValueList: {
+              CollectionPath: 'TimeZones',
+              Parameters: [
+                { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: timeZone, ValueListProperty: 'code' },
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'name' },
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'utcOffset' }
+              ]
+            };
 };
 
 annotate AdminService.Events with @UI: {
@@ -49,10 +57,12 @@ annotate AdminService.Missions with {
   title              @Common.Label: 'Title';
   description        @Common.Label: 'Description';
   slug               @Common.Label: 'Slug';
-  communityMissionId @Common.Label: 'Community Mission ID';
+  communityMissionId @Common.Label: 'Mission ID in Community';
   experienceTag      @Common.Label: 'Experience'  @Common.ValueListWithFixedValues;
   primaryTag         @Common.Label: 'Primary Tag (text)';
   primaryTagRef_ID   @Common.Label: 'Primary Tag';
+  missionType        @Common.Label: 'Type'  @Common.ValueListWithFixedValues;
+  event_ID           @Common.Label: 'Event';
   published          @Common.Label: 'Published';
   status             @Common.Label: 'Status'  @Common.ValueListWithFixedValues;
   averageTimeToComplete @Common.Label: 'Avg Time (min)';
@@ -76,19 +86,20 @@ annotate AdminService.Missions with @UI: {
   ],
   Facets: [
     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'General' },
+    { $Type: 'UI.ReferenceFacet', Target: 'tags/@UI.LineItem', Label: 'Tags' },
     { $Type: 'UI.ReferenceFacet', Target: 'completionPaths/@UI.LineItem', Label: 'Completion Paths' },
     { $Type: 'UI.ReferenceFacet', Target: 'changes/@UI.PresentationVariant', Label: 'Change History', ![@UI.PartOfPreview]: false }
   ],
   FieldGroup#General: { Data: [
     { Value: title },
-    { Value: slug },
-    { Value: description },
     { Value: communityMissionId },
-    { Value: experienceTag },
+    { Value: description },
     { Value: primaryTagRef_ID },
+    { Value: event_ID },
+    { Value: experienceTag },
+    { Value: missionType },
     { Value: published, @UI.FieldControl: publishedFieldControl },
-    { Value: status },
-    { Value: averageTimeToComplete }
+    { Value: status }
   ]}
 };
 
@@ -97,6 +108,13 @@ annotate AdminService.Missions with {
     CollectionPath: 'Tags',
     Parameters: [
       { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: primaryTagRef_ID, ValueListProperty: 'ID' },
+      { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'name' }
+    ]
+  };
+  event @Common.ValueList: {
+    CollectionPath: 'Events',
+    Parameters: [
+      { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: event_ID, ValueListProperty: 'ID' },
       { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'name' }
     ]
   };
@@ -116,15 +134,48 @@ annotate AdminService.CompletionPaths with @UI: {
 };
 
 annotate AdminService.CompletionPathItems with {
-  taskLegacyId @Common.Label: 'Task ID';
-  taskType     @Common.Label: 'Type'  @Common.ValueListWithFixedValues;
-  itemOrder    @Common.Label: 'Order';
+  taskType        @Common.Label: 'Type'  @Common.ValueListWithFixedValues;
+  tutorial_ID     @Common.Label: 'Tutorial';
+  group_ID        @Common.Label: 'Group';
+  checkpointTitle @Common.Label: 'Checkpoint';
+  prize_ID        @Common.Label: 'Prize';
+  itemOrder       @Common.Label: 'Order';
+};
+
+annotate AdminService.CompletionPathItems with {
+  tutorial @Common.Text: tutorial.title @Common.TextArrangement: #TextOnly
+           @Common.ValueList: {
+             CollectionPath: 'Tutorials',
+             Parameters: [
+               { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: tutorial_ID, ValueListProperty: 'ID' },
+               { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'title' }
+             ]
+           };
+  group @Common.Text: group.title @Common.TextArrangement: #TextOnly
+        @Common.ValueList: {
+          CollectionPath: 'Groups',
+          Parameters: [
+            { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: group_ID, ValueListProperty: 'ID' },
+            { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'title' }
+          ]
+        };
+  prize @Common.Text: prize.name @Common.TextArrangement: #TextOnly
+        @Common.ValueList: {
+          CollectionPath: 'Prizes',
+          Parameters: [
+            { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: prize_ID, ValueListProperty: 'ID' },
+            { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'name' }
+          ]
+        };
 };
 
 annotate AdminService.CompletionPathItems with @UI: {
   LineItem: [
-    { Value: taskLegacyId },
     { Value: taskType },
+    { Value: tutorial_ID },
+    { Value: group_ID },
+    { Value: checkpointTitle },
+    { Value: prize_ID },
     { Value: itemOrder }
   ]
 };
@@ -196,6 +247,25 @@ annotate AdminService.GroupTags with {
 };
 
 annotate AdminService.GroupTags with @UI: {
+  LineItem: [
+    { Value: tag_ID, Label: 'Tag' }
+  ]
+};
+
+// MissionTags — inline table with value help for tag selection
+annotate AdminService.MissionTags with {
+  tag @Common.Label: 'Tag'
+      @Common.Text: tag.name  @Common.TextArrangement: #TextOnly
+      @Common.ValueList: {
+        CollectionPath: 'Tags',
+        Parameters: [
+          { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: tag_ID, ValueListProperty: 'ID' },
+          { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'name' }
+        ]
+      };
+};
+
+annotate AdminService.MissionTags with @UI: {
   LineItem: [
     { Value: tag_ID, Label: 'Tag' }
   ]

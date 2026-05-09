@@ -30,6 +30,14 @@ export default class AdminService extends cds.ApplicationService {
       });
     }
 
+    // Validate Start Date < End Date on Events
+    this.before(['CREATE', 'PATCH'], 'Events', (req) => {
+      const { startDate, endDate } = req.data;
+      if (startDate && endDate && new Date(startDate) >= new Date(endDate)) {
+        req.reject(400, 'Start Date must be earlier than End Date');
+      }
+    });
+
     // Reset notification escalation when reviewedDate is updated via Fiori UI
     this.before('UPDATE', 'TutorialMeta', (req) => {
       if (req.data.reviewedDate) {

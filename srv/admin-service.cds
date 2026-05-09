@@ -34,7 +34,9 @@ service AdminService {
   entity CompletionPaths as projection on ims.CompletionPaths;
   entity CompletionPathItems as projection on ims.CompletionPathItems;
   entity GroupTags as projection on ims.GroupTags;
+  entity MissionTags as projection on ims.MissionTags;
   entity DashboardMonitoredRecords as projection on ims.DashboardMonitoredRecords;
+  @readonly entity TimeZones as projection on ims.TimeZones;
   @readonly entity Tasks as projection on ims.Tasks;
   @readonly entity PipelineLog as projection on ims.PipelineLog
     where pipelineType != 'SCHEDULED_JOB';
