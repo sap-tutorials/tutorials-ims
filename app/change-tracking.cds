@@ -2,14 +2,14 @@ using AdminService from '../srv/admin-service';
 
 // --- Change Tracking: entity identifiers and tracked fields ---
 
-annotate AdminService.Events with @changelog: [name] {
+annotate AdminService.Events with @changelog: [name] @changelog.disable_facet {
   name      @changelog;
   startDate @changelog;
   endDate   @changelog;
   timeZone  @changelog;
 };
 
-annotate AdminService.Missions with @changelog: [title] {
+annotate AdminService.Missions with @changelog: [title] @changelog.disable_facet {
   title              @changelog;
   description        @changelog;
   slug               @changelog;
@@ -18,23 +18,23 @@ annotate AdminService.Missions with @changelog: [title] {
   communityMissionId @changelog;
 };
 
-annotate AdminService.Groups with @changelog: [title] {
+annotate AdminService.Groups with @changelog: [title] @changelog.disable_facet {
   title         @changelog;
   description   @changelog;
   experienceTag @changelog;
 };
 
-annotate AdminService.Accomplishments with @changelog: [name] {
+annotate AdminService.Accomplishments with @changelog: [name] @changelog.disable_facet {
   name        @changelog;
   description @changelog;
   rule        @changelog;
 };
 
-annotate AdminService.Prizes with @changelog: [name] {
+annotate AdminService.Prizes with @changelog: [name] @changelog.disable_facet {
   name @changelog;
 };
 
-annotate AdminService.ImsConfig with @changelog: [value] {
+annotate AdminService.ImsConfig with @changelog: [value] @changelog.disable_facet {
   ![key] @changelog;
   value  @changelog;
 };
