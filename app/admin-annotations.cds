@@ -162,12 +162,9 @@ annotate AdminService.CompletionPaths with @UI: {
 
 annotate AdminService.CompletionPathItems with {
   taskType        @Common.Label: 'Type'  @Common.ValueListWithFixedValues;
-  tutorial        @Common.Label: 'Tutorial'
-                  @UI.Hidden: {$edmJson: {$Ne: [{$Path: 'taskType'}, 'TUTORIAL']}};
-  group           @Common.Label: 'Group'
-                  @UI.Hidden: {$edmJson: {$Ne: [{$Path: 'taskType'}, 'GROUP']}};
-  checkpointTitle @Common.Label: 'Checkpoint'
-                  @UI.Hidden: {$edmJson: {$Ne: [{$Path: 'taskType'}, 'CHECKPOINT']}};
+  tutorial        @Common.Label: 'Tutorial';
+  group           @Common.Label: 'Group';
+  checkpointTitle @Common.Label: 'Checkpoint';
   prize           @Common.Label: 'Prize';
   itemOrder       @Common.Label: 'Order';
 };
