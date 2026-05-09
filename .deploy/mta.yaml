@@ -17,7 +17,7 @@ build-parameters:
     - builder: custom
       commands:
         - npm --prefix .. install
-        - npx --prefix .. cds build --production
+        - bash -c "cd .. && npx cds build --production"
         - cp ../xs-security.json .
 
 modules:

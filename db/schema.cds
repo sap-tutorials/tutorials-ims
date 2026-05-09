@@ -15,10 +15,10 @@ type MissionType     : String(20)  enum { SEQUENTIAL; SET; }
 aspect TaskBase : cuid, managed, LegacyKeyed {
   title                     : String(255) @mandatory;
   description               : LargeString;
-  status                    : TaskStatus;
+  status                    : TaskStatus @assert.range;
   deletionReason            : String(500);
   primaryTag                : String(255);
-  experienceTag             : ExperienceLevel;
+  experienceTag             : ExperienceLevel @assert.range;
   averageTimeToComplete     : Integer;
 }
 
@@ -36,8 +36,9 @@ entity Tutorials : TaskBase {
 entity Missions : TaskBase {
   slug                      : String(255);
   communityMissionId        : String(255);
-  missionType               : MissionType;
+  missionType               : MissionType @assert.range;
   published                 : Boolean default true;
+  primaryTagRef             : Association to Tags;
   group                     : Association to Groups;
   event                     : Association to Events;
   completionPaths           : Composition of many CompletionPaths on completionPaths.mission = $self;
@@ -46,6 +47,7 @@ entity Missions : TaskBase {
 
 entity Groups : TaskBase {
   published                 : Boolean default true;
+  primaryTagRef             : Association to Tags;
   missions                  : Association to many Missions on missions.group = $self;
   tags                      : Composition of many GroupTags on tags.group = $self;
 }
@@ -143,14 +145,14 @@ entity TutorialTags {
   key tag                   : Association to Tags;
 }
 
-entity GroupTags {
-  key group                 : Association to Groups;
-  key tag                   : Association to Tags;
+entity GroupTags : cuid {
+  group                     : Association to Groups;
+  tag                       : Association to Tags;
 }
 
-entity MissionTags {
-  key mission               : Association to Missions;
-  key tag                   : Association to Tags;
+entity MissionTags : cuid {
+  mission                   : Association to Missions;
+  tag                       : Association to Tags;
 }
 
 entity Accomplishments : cuid, LegacyKeyed {
@@ -175,7 +177,7 @@ entity CompletionPaths : cuid, LegacyKeyed {
 entity CompletionPathItems : cuid, LegacyKeyed {
   path                      : Association to CompletionPaths;
   taskLegacyId              : Integer;
-  taskType                  : String(20) enum { TUTORIAL; GROUP; CHECKPOINT; };
+  @assert.range taskType    : String(20) enum { TUTORIAL; GROUP; CHECKPOINT; };
   tutorial                  : Association to Tutorials;
   group                     : Association to Groups;
   checkpointTitle           : String(255);
