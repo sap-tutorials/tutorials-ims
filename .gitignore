@@ -31,3 +31,4 @@ mta_archives/
 saptutorialsadminshell-*/
 app/admin-shell/deploy/
 approuter/static/admin-ui/
+mta-op-*
