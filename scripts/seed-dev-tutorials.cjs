@@ -115,7 +115,27 @@ function loadTagsFromCache() {
 
   const [existing] = await db.run('SELECT COUNT(*) AS "C" FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALS"');
   if (existing.C > 0) {
-    console.log(`  Already have ${existing.C} tutorials — skipping`);
+    console.log(`  Already have ${existing.C} tutorials — checking for missing legacyIds...`);
+    const nullRows = await db.run(
+      'SELECT "ID", "SLUG" FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALS" WHERE "LEGACYID" IS NULL ORDER BY "SLUG"'
+    );
+    if (nullRows.length === 0) {
+      console.log('  All tutorials have legacyId — nothing to backfill');
+    } else {
+      console.log(`  Found ${nullRows.length} tutorials with NULL legacyId — backfilling...`);
+      let backfilled = 0;
+      for (let i = 0; i < nullRows.length; i++) {
+        const legacyId = 20000 + i;
+        if (!dryRun) {
+          await db.run(
+            'UPDATE "COM_SAP_DEVELOPERS_IMS_TUTORIALS" SET "LEGACYID" = ? WHERE "ID" = ?',
+            [legacyId, nullRows[i].ID]
+          );
+        }
+        backfilled++;
+      }
+      console.log(`  ${dryRun ? 'Would backfill' : 'Backfilled'} ${backfilled} tutorials (legacyId 20000–${20000 + backfilled - 1})`);
+    }
   } else {
     const mdFiles = fs.readdirSync(CACHE_DIR).filter(f => f.endsWith('.md'));
     console.log(`  Found ${mdFiles.length} tutorial .md files in cache`);
@@ -125,7 +145,8 @@ function loadTagsFromCache() {
     const BATCH_SIZE = 50;
     let batch = [];
 
-    for (const file of mdFiles) {
+    for (let i = 0; i < mdFiles.length; i++) {
+      const file = mdFiles[i];
       const slug = path.basename(file, '.md');
       const content = fs.readFileSync(path.join(CACHE_DIR, file), 'utf-8');
       const fm = parseFrontmatter(content);
@@ -133,14 +154,15 @@ function loadTagsFromCache() {
       const primaryTag = fm.primary_tag || fm.primaryTag || null;
       const experienceTag = extractExperienceTag(fm.tags) || 'beginner';
       const time = parseInt(fm.time, 10) || null;
+      const legacyId = 20000 + i;
 
-      batch.push([uuid(), slug, title, primaryTag, experienceTag, time, 'ACTIVE']);
+      batch.push([uuid(), legacyId, slug, title, primaryTag, experienceTag, time, 'ACTIVE']);
 
       if (batch.length >= BATCH_SIZE) {
         if (!dryRun) {
           for (const row of batch) {
             await db.run(
-              `INSERT INTO "COM_SAP_DEVELOPERS_IMS_TUTORIALS" ("ID", "SLUG", "TITLE", "PRIMARYTAG", "EXPERIENCETAG", "AVERAGETIMETOCOMPLETE", "STATUS") VALUES (?, ?, ?, ?, ?, ?, ?)`,
+              `INSERT INTO "COM_SAP_DEVELOPERS_IMS_TUTORIALS" ("ID", "LEGACYID", "SLUG", "TITLE", "PRIMARYTAG", "EXPERIENCETAG", "AVERAGETIMETOCOMPLETE", "STATUS") VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
               row
             );
           }
@@ -156,7 +178,7 @@ function loadTagsFromCache() {
       if (!dryRun) {
         for (const row of batch) {
           await db.run(
-            `INSERT INTO "COM_SAP_DEVELOPERS_IMS_TUTORIALS" ("ID", "SLUG", "TITLE", "PRIMARYTAG", "EXPERIENCETAG", "AVERAGETIMETOCOMPLETE", "STATUS") VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO "COM_SAP_DEVELOPERS_IMS_TUTORIALS" ("ID", "LEGACYID", "SLUG", "TITLE", "PRIMARYTAG", "EXPERIENCETAG", "AVERAGETIMETOCOMPLETE", "STATUS") VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
             row
           );
         }
