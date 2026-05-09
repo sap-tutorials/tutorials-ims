@@ -86,13 +86,12 @@
               "navigation": {
                 "completionPaths": { "detail": { "route": "CompletionPathsObjectPage" } }
               },
-              "content": {
-                "body": {
-                  "sections": {
-                    "ItemReorderSection": {
-                      "template": "sap.tutorials.admin.missions.ext.ItemReorder",
-                      "title": "Path Items (Drag to Reorder)",
-                      "position": { "anchor": "CompletionPathsSection", "placement": "After" }
+              "controlConfiguration": {
+                "completionPaths/@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "creationMode": {
+                      "name": "Inline",
+                      "createAtEnd": true
                     }
                   }
                 }
@@ -107,7 +106,17 @@
           "options": {
             "settings": {
               "contextPath": "/Missions/completionPaths",
-              "editableHeaderContent": false
+              "editableHeaderContent": false,
+              "controlConfiguration": {
+                "items/@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "creationMode": {
+                      "name": "Inline",
+                      "createAtEnd": true
+                    }
+                  }
+                }
+              }
             }
           }
         }
