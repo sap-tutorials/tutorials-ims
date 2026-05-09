@@ -1,5 +1,6 @@
 using { com.sap.developers.ims as ims } from '../db/schema';
 using from '../db/views';
+using from '../app/admin-annotations';
 
 @path: '/admin'
 @requires: 'Admin'
@@ -37,6 +38,12 @@ service AdminService {
   entity MissionTags as projection on ims.MissionTags;
   entity DashboardMonitoredRecords as projection on ims.DashboardMonitoredRecords;
   @readonly entity TimeZones as projection on ims.TimeZones;
+
+  // Code list entities for enum dropdowns (no DB table needed)
+  @readonly @cds.persistence.skip entity ExperienceLevels { key code : String(255); }
+  @readonly @cds.persistence.skip entity TaskStatuses     { key code : String(50); }
+  @readonly @cds.persistence.skip entity MissionTypes     { key code : String(20); }
+
   @readonly entity Tasks as projection on ims.Tasks;
   @readonly entity PipelineLog as projection on ims.PipelineLog
     where pipelineType != 'SCHEDULED_JOB';

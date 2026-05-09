@@ -14,6 +14,17 @@ export default class AdminService extends cds.ApplicationService {
     const db = await cds.connect.to('db');
     const audit = await cds.connect.to('audit-log');
 
+    // Serve enum code lists (no DB table — @cds.persistence.skip)
+    this.on('READ', 'ExperienceLevels', () => [
+      { code: 'beginner' }, { code: 'intermediate' }, { code: 'advanced' }
+    ]);
+    this.on('READ', 'TaskStatuses', () => [
+      { code: 'ACTIVE' }, { code: 'INACTIVE' }
+    ]);
+    this.on('READ', 'MissionTypes', () => [
+      { code: 'SEQUENTIAL' }, { code: 'SET' }
+    ]);
+
     // Auto-assign legacyId on creation for entities that need it
     const legacyKeyedEntities = [
       'Users', 'Tutorials', 'Missions', 'Groups', 'Events', 'TaskRecords',
@@ -35,6 +46,22 @@ export default class AdminService extends cds.ApplicationService {
       const { startDate, endDate } = req.data;
       if (startDate && endDate && new Date(startDate) >= new Date(endDate)) {
         req.reject(400, 'Start Date must be earlier than End Date');
+      }
+    });
+
+    // Require at least one tag on Missions and Groups
+    this.before('SAVE', 'Missions', async (req) => {
+      const { tags } = await SELECT.one.from(req.target).where({ ID: req.data.ID })
+        .columns(m => { m.tags(t => t.tag_ID) });
+      if (!tags || tags.length === 0) {
+        req.reject(400, 'At least one Tag is required');
+      }
+    });
+    this.before('SAVE', 'Groups', async (req) => {
+      const { tags } = await SELECT.one.from(req.target).where({ ID: req.data.ID })
+        .columns(g => { g.tags(t => t.tag_ID) });
+      if (!tags || tags.length === 0) {
+        req.reject(400, 'At least one Tag is required');
       }
     });
 
