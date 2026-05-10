@@ -622,8 +622,17 @@ annotate AdminService.JobExecutionLog with @(
   Capabilities.UpdateRestrictions.Updatable: false
 );
 
-// ChangeView UI annotations are provided by @cap-js/change-tracking plugin (index.cds)
-// ReadRestrictions override is applied at runtime in srv/admin-service.js
+// ChangeView: plugin provides LineItem, PresentationVariant, FieldGroups, Hierarchy, Search.
+// ReadRestrictions override is applied at runtime in srv/admin-service.js.
+// We add SelectionFields for the standalone ListReport filter bar.
+// Must target sap.changelog.ChangeView (the base) since AdminService.ChangeView is injected at runtime.
+using { sap.changelog.ChangeView } from '@cap-js/change-tracking';
+annotate ChangeView with @UI.SelectionFields: [
+  entityLabel,
+  modificationLabel,
+  createdBy,
+  createdAt
+];
 
 // --- PrimaryAccounts / SecondaryAccounts (read-only) ---
 annotate AdminService.PrimaryAccounts with {
