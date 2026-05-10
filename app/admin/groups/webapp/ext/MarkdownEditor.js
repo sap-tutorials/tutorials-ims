@@ -93,7 +93,8 @@ sap.ui.define([
         var oEditor = _byId("markdownCodeEditor");
         oEditor.setValue(sDescription);
 
-        var bEditable = _oCurrentContext.getProperty("IsActiveEntity") === false;
+        var vIsActive = _oCurrentContext.getProperty("IsActiveEntity");
+        var bEditable = vIsActive === false || vIsActive === "false";
         oEditor.setEditable(bEditable);
         _byId("markdownSaveBtn").setVisible(bEditable);
 

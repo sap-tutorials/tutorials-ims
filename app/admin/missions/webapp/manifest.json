@@ -120,7 +120,7 @@
                   "actions": {
                     "EditMarkdown": {
                       "press": "sap.tutorials.admin.missions.ext.MarkdownEditor.onEditMarkdown",
-                      "text": "Markdown Editor"
+                      "text": "Edit Description (Markdown)"
                     }
                   }
                 }

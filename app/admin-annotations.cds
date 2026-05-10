@@ -60,7 +60,8 @@ annotate AdminService.Missions with {
   communityMissionId @Common.Label: 'Mission ID in Community';
   experienceTag      @Common.Label: 'Experience'  @Common.ValueListWithFixedValues  @mandatory;
   primaryTag         @Common.Label: 'Primary Tag (text)';
-  primaryTagRef      @Common.Label: 'Primary Tag'  @mandatory;
+  primaryTagRef      @Common.Label: 'Primary Tag'  @mandatory
+                     @Common.Text: primaryTagRef.name  @Common.TextArrangement: #TextOnly;
   missionType        @Common.Label: 'Type'  @Common.ValueListWithFixedValues;
   event              @Common.Label: 'Event';
   published          @Common.Label: 'Published';
@@ -165,9 +166,9 @@ annotate AdminService.CompletionPathItems with {
                     CollectionPath: 'TaskTypes',
                     Parameters: [{ $Type: 'Common.ValueListParameterInOut', LocalDataProperty: taskType, ValueListProperty: 'code' }]
                   };
-  tutorial        @Common.Label: 'Tutorial';
-  group           @Common.Label: 'Group';
-  checkpointTitle @Common.Label: 'Checkpoint';
+  tutorial        @Common.Label: 'Tutorial'    @UI.Hidden: (taskType != 'TUTORIAL');
+  group           @Common.Label: 'Group'       @UI.Hidden: (taskType != 'GROUP');
+  checkpointTitle @Common.Label: 'Checkpoint'  @UI.Hidden: (taskType != 'CHECKPOINT');
   prize           @Common.Label: 'Prize';
   itemOrder       @Common.Label: 'Order'  @UI.Hidden;
 };
@@ -216,7 +217,8 @@ annotate AdminService.Groups with {
   description           @Common.Label: 'Description'  @mandatory  @UI.MultiLineText;
   experienceTag         @Common.Label: 'Experience'  @Common.ValueListWithFixedValues  @mandatory;
   primaryTag            @Common.Label: 'Primary Tag (text)';
-  primaryTagRef         @Common.Label: 'Primary Tag'  @mandatory;
+  primaryTagRef         @Common.Label: 'Primary Tag'  @mandatory
+                        @Common.Text: primaryTagRef.name  @Common.TextArrangement: #TextOnly;
   averageTimeToComplete @Common.Label: 'Avg Time (min)';
   published             @Common.Label: 'Published';
   status                @Common.Label: 'Status'  @Common.ValueListWithFixedValues;

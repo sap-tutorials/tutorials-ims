@@ -83,7 +83,7 @@
                   "actions": {
                     "EditMarkdown": {
                       "press": "sap.tutorials.admin.groups.ext.MarkdownEditor.onEditMarkdown",
-                      "text": "Markdown Editor"
+                      "text": "Edit Description (Markdown)"
                     }
                   }
                 },
