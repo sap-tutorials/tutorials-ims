@@ -1,0 +1,56 @@
+<core:FragmentDefinition
+  xmlns:core="sap.ui.core"
+  xmlns="sap.m"
+  xmlns:l="sap.ui.layout"
+  xmlns:editor="sap.ui.codeeditor">
+  <Dialog
+    id="markdownEditorDialog"
+    title="Markdown Editor"
+    stretch="true"
+    contentHeight="90%"
+    contentWidth="95%">
+    <content>
+      <l:Splitter height="100%">
+        <l:contentAreas>
+          <editor:CodeEditor
+            id="markdownCodeEditor"
+            type="markdown"
+            height="100%"
+            change=".onEditorChange"
+            liveChange=".onEditorChange">
+            <editor:layoutData>
+              <l:SplitterLayoutData size="50%"/>
+            </editor:layoutData>
+          </editor:CodeEditor>
+          <ScrollContainer
+            id="markdownPreviewContainer"
+            height="100%"
+            vertical="true"
+            horizontal="false">
+            <layoutData>
+              <l:SplitterLayoutData size="50%"/>
+            </layoutData>
+            <VBox class="sapUiSmallMargin">
+              <FormattedText
+                id="markdownPreview"
+                htmlText=""/>
+            </VBox>
+          </ScrollContainer>
+        </l:contentAreas>
+      </l:Splitter>
+    </content>
+    <beginButton>
+      <Button
+        id="markdownSaveBtn"
+        text="Save"
+        type="Emphasized"
+        press=".onSaveMarkdown"/>
+    </beginButton>
+    <endButton>
+      <Button
+        id="markdownCancelBtn"
+        text="Cancel"
+        press=".onCancelMarkdown"/>
+    </endButton>
+  </Dialog>
+</core:FragmentDefinition>

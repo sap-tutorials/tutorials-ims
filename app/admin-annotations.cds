@@ -55,7 +55,7 @@ annotate AdminService.Events with @UI: {
 annotate AdminService.Missions with {
   legacyId           @Common.Label: 'Mission ID';
   title              @Common.Label: 'Title'  @mandatory;
-  description        @Common.Label: 'Description'  @mandatory;
+  description        @Common.Label: 'Description'  @mandatory  @UI.MultiLineText;
   slug               @Common.Label: 'Slug';
   communityMissionId @Common.Label: 'Mission ID in Community';
   experienceTag      @Common.Label: 'Experience'  @Common.ValueListWithFixedValues  @mandatory;
@@ -87,8 +87,7 @@ annotate AdminService.Missions with @UI: {
   Facets: [
     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'General' },
     { $Type: 'UI.ReferenceFacet', Target: 'tags/@UI.LineItem', Label: 'Tags' },
-    { $Type: 'UI.ReferenceFacet', Target: 'completionPaths/@UI.LineItem', Label: 'Completion Paths' },
-    { $Type: 'UI.ReferenceFacet', Target: 'changes/@UI.PresentationVariant', Label: 'Change History', ![@UI.PartOfPreview]: false }
+    { $Type: 'UI.ReferenceFacet', Target: 'completionPaths/@UI.LineItem', Label: 'Completion Paths' }
   ],
   FieldGroup#General: { Data: [
     { Value: title },
@@ -135,7 +134,7 @@ annotate AdminService.Missions with {
 // CompletionPaths line items
 annotate AdminService.CompletionPaths with {
   name        @Common.Label: 'Title';
-  description @Common.Label: 'Description';
+  description @Common.Label: 'Description'  @UI.MultiLineText;
   slug        @Common.Label: 'Slug';
 };
 
@@ -161,7 +160,11 @@ annotate AdminService.CompletionPaths with @UI: {
 };
 
 annotate AdminService.CompletionPathItems with {
-  taskType        @Common.Label: 'Type'  @Common.ValueListWithFixedValues;
+  taskType        @Common.Label: 'Type'  @Common.ValueListWithFixedValues
+                  @Common.ValueList: {
+                    CollectionPath: 'TaskTypes',
+                    Parameters: [{ $Type: 'Common.ValueListParameterInOut', LocalDataProperty: taskType, ValueListProperty: 'code' }]
+                  };
   tutorial        @Common.Label: 'Tutorial';
   group           @Common.Label: 'Group';
   checkpointTitle @Common.Label: 'Checkpoint';
@@ -198,6 +201,10 @@ annotate AdminService.CompletionPathItems with {
 
 annotate AdminService.CompletionPathItems with @UI: {
   LineItem: [
+    { Value: taskType, Label: 'Type' },
+    { Value: tutorial_ID, Label: 'Tutorial' },
+    { Value: group_ID, Label: 'Group' },
+    { Value: checkpointTitle, Label: 'Checkpoint' },
     { Value: prize_ID, Label: 'Prize' }
   ]
 };
@@ -206,7 +213,7 @@ annotate AdminService.CompletionPathItems with @UI: {
 annotate AdminService.Groups with {
   legacyId              @Common.Label: 'Group ID';
   title                 @Common.Label: 'Title'  @mandatory;
-  description           @Common.Label: 'Description'  @mandatory;
+  description           @Common.Label: 'Description'  @mandatory  @UI.MultiLineText;
   experienceTag         @Common.Label: 'Experience'  @Common.ValueListWithFixedValues  @mandatory;
   primaryTag            @Common.Label: 'Primary Tag (text)';
   primaryTagRef         @Common.Label: 'Primary Tag'  @mandatory;
@@ -278,7 +285,7 @@ annotate AdminService.GroupTags with {
 
 annotate AdminService.GroupTags with @UI: {
   LineItem: [
-    { Value: tag_ID, Label: 'Tag' }
+    { Value: tag.name, Label: 'Tag' }
   ]
 };
 
@@ -297,7 +304,7 @@ annotate AdminService.MissionTags with {
 
 annotate AdminService.MissionTags with @UI: {
   LineItem: [
-    { Value: tag_ID, Label: 'Tag' }
+    { Value: tag.name, Label: 'Tag' }
   ]
 };
 

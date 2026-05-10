@@ -24,6 +24,9 @@ export default class AdminService extends cds.ApplicationService {
     this.on('READ', 'MissionTypes', () => [
       { code: 'SEQUENTIAL' }, { code: 'SET' }
     ]);
+    this.on('READ', 'TaskTypes', () => [
+      { code: 'TUTORIAL' }, { code: 'GROUP' }, { code: 'CHECKPOINT' }
+    ]);
 
     // Auto-assign legacyId on creation for entities that need it
     const legacyKeyedEntities = [

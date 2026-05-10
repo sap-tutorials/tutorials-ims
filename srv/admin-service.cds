@@ -43,6 +43,7 @@ service AdminService {
   @readonly @cds.persistence.skip entity ExperienceLevels { key code : String(255); }
   @readonly @cds.persistence.skip entity TaskStatuses     { key code : String(50); }
   @readonly @cds.persistence.skip entity MissionTypes     { key code : String(20); }
+  @readonly @cds.persistence.skip entity TaskTypes        { key code : String(20); }
 
   @readonly entity Tasks as projection on ims.Tasks;
   @readonly entity PipelineLog as projection on ims.PipelineLog

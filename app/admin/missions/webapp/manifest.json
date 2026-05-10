@@ -115,6 +115,16 @@
             "settings": {
               "contextPath": "/Missions",
               "editableHeaderContent": false,
+              "content": {
+                "header": {
+                  "actions": {
+                    "EditMarkdown": {
+                      "press": "sap.tutorials.admin.missions.ext.MarkdownEditor.onEditMarkdown",
+                      "text": "Markdown Editor"
+                    }
+                  }
+                }
+              },
               "navigation": {
                 "completionPaths": {
                   "detail": {

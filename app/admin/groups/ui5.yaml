@@ -10,3 +10,4 @@ framework:
     - name: sap.ui.core
     - name: sap.ushell
     - name: sap.fe.templates
+    - name: sap.ui.codeeditor

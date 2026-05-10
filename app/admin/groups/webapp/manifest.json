@@ -79,6 +79,14 @@
               "contextPath": "/Groups",
               "editableHeaderContent": false,
               "content": {
+                "header": {
+                  "actions": {
+                    "EditMarkdown": {
+                      "press": "sap.tutorials.admin.groups.ext.MarkdownEditor.onEditMarkdown",
+                      "text": "Markdown Editor"
+                    }
+                  }
+                },
                 "body": {
                   "sections": {
                     "ItemReorderSection": {
