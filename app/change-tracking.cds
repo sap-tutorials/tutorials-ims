@@ -18,12 +18,6 @@ annotate AdminService.Missions with @changelog: [title] @changelog.disable_facet
   communityMissionId @changelog;
 };
 
-annotate AdminService.Groups with @changelog: [title] @changelog.disable_facet {
-  title         @changelog;
-  description   @changelog;
-  experienceTag @changelog;
-};
-
 annotate AdminService.Accomplishments with @changelog: [name] @changelog.disable_facet {
   name        @changelog;
   description @changelog;

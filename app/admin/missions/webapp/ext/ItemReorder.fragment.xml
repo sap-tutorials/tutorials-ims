@@ -1,0 +1,30 @@
+<core:FragmentDefinition
+  xmlns:core="sap.ui.core"
+  xmlns="sap.m"
+  xmlns:dnd="sap.ui.core.dnd">
+  <Table id="itemReorderTable" items="{items}" mode="None">
+    <dragDropConfig>
+      <dnd:DragDropInfo
+        sourceAggregation="items"
+        targetAggregation="items"
+        dropPosition="Between"
+        drop=".onDrop"/>
+    </dragDropConfig>
+    <columns>
+      <Column width="3rem"><Text text=""/></Column>
+      <Column><Text text="Order"/></Column>
+      <Column><Text text="Task ID"/></Column>
+      <Column><Text text="Type"/></Column>
+    </columns>
+    <items>
+      <ColumnListItem>
+        <cells>
+          <core:Icon src="sap-icon://menu2" class="sapUiSmallMarginBegin"/>
+          <Text text="{items>itemOrder}"/>
+          <Text text="{items>taskLegacyId}"/>
+          <Text text="{items>taskType}"/>
+        </cells>
+      </ColumnListItem>
+    </items>
+  </Table>
+</core:FragmentDefinition>
