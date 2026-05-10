@@ -46,6 +46,10 @@ service AdminService {
   @readonly @cds.persistence.skip entity TaskTypes        { key code : String(20); }
 
   @readonly entity Tasks as projection on ims.Tasks;
+
+  @readonly
+  @Aggregation.ApplySupported.PropertyRestrictions: true
+  entity CompletionAnalytics as projection on ims.CompletionAnalytics;
   @readonly entity PipelineLog as projection on ims.PipelineLog
     where pipelineType != 'SCHEDULED_JOB';
 

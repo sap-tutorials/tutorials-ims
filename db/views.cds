@@ -78,3 +78,24 @@ view SearchableItems as
     primaryTag, experienceTag, averageTimeToComplete, status,
     'GROUP' as taskType : String(20)
   } where (status is null or status = 'ACTIVE') and published = true;
+
+view CompletionAnalytics as
+  SELECT from ims.TaskRecords as tr
+  left join Tasks as task on task.legacyId = tr.taskLegacyId and task.taskType = tr.taskType
+  left join ims.Missions as mis on mis.legacyId = tr.taskLegacyId and tr.taskType = 'MISSION'
+  left join ims.Groups as grp on grp.ID = mis.group.ID
+  left join ims.Events as evt on evt.ID = tr.event.ID
+  {
+    key tr.ID,
+    tr.taskType,
+    tr.completionDate,
+    coalesce(task.title, tr.titleSnapshot) as taskTitle : String(255),
+    task.primaryTag,
+    task.experienceTag,
+    grp.title as groupTitle : String(255),
+    mis.title as missionTitle : String(255),
+    evt.name as eventName : String(255),
+    tr.completionTime as completionTimeMs : Int64,
+    1 as completionCount : Integer
+  }
+  where tr.status = 'COMPLETED';

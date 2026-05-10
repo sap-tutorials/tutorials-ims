@@ -45,7 +45,8 @@
       "sap.tutorials.admin.prizes": "./components/prizes",
       "sap.tutorials.admin.operations": "./components/operations",
       "sap.tutorials.admin.accounts": "./components/accounts",
-      "sap.tutorials.admin.changelog": "./components/changelog"
+      "sap.tutorials.admin.changelog": "./components/changelog",
+      "sap.tutorials.admin.analytics": "./components/analytics"
     },
     "models": {
       "admin": {
@@ -118,6 +119,12 @@
         "settings": {},
         "componentData": {},
         "lazy": true
+      },
+      "analyticsComponent": {
+        "name": "sap.tutorials.admin.analytics",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
       }
     },
     "services": {
@@ -153,6 +160,7 @@
         { "name": "joblog", "pattern": "joblog", "target": [{"name": "operationsTarget", "prefix": "op"}] },
         { "name": "accounts", "pattern": "accounts", "target": [{"name": "accountsTarget", "prefix": "au"}] },
         { "name": "changelog", "pattern": "changelog", "target": [{"name": "changelogTarget", "prefix": "cl"}] },
+        { "name": "analytics", "pattern": "analytics", "target": [{"name": "analyticsTarget", "prefix": "an"}] },
         { "name": "board", "pattern": "board", "target": "boardTarget" },
         { "name": "dashboard", "pattern": "", "target": "dashboardTarget" },
         { "name": "statistics", "pattern": "statistics", "target": "statisticsTarget" },
@@ -228,6 +236,13 @@
           "id": "changelogTarget",
           "viewLevel": 1,
           "prefix": "cl"
+        },
+        "analyticsTarget": {
+          "type": "Component",
+          "usage": "analyticsComponent",
+          "id": "analyticsTarget",
+          "viewLevel": 1,
+          "prefix": "an"
         },
         "boardTarget": {
           "viewName": "Board",

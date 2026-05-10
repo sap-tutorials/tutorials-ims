@@ -683,3 +683,47 @@ annotate AdminService.SecondaryAccounts with @(
   Capabilities.InsertRestrictions.Insertable: false,
   Capabilities.UpdateRestrictions.Updatable: false
 );
+
+// --- Completion Analytics (aggregated report, no user data) ---
+
+annotate AdminService.CompletionAnalytics with @(
+  Analytics.AggregatedProperties: [{
+    Name: 'totalCompletions',
+    AggregationMethod: 'sum',
+    AggregatableProperty: completionCount,
+    ![@Common.Label]: 'Completions'
+  }],
+  UI.Chart: {
+    ChartType: #Line,
+    Dimensions: [completionDate, taskType],
+    DynamicMeasures: ['@Analytics.AggregatedProperty#totalCompletions']
+  },
+  UI.PresentationVariant: {
+    Visualizations: ['@UI.Chart', '@UI.LineItem'],
+    SortOrder: [{ Property: completionDate, Descending: true }]
+  },
+  UI.SelectionFields: [taskType, primaryTag, experienceTag, completionDate, missionTitle, groupTitle, eventName],
+  UI.LineItem: [
+    { Value: completionDate },
+    { Value: taskType },
+    { Value: taskTitle },
+    { Value: primaryTag },
+    { Value: experienceTag },
+    { Value: missionTitle },
+    { Value: groupTitle },
+    { Value: eventName },
+    { Value: completionCount, Label: 'Completions' }
+  ]
+) {
+  ID              @UI.Hidden;
+  taskType        @title: 'Task Type'            @Analytics.Dimension;
+  completionDate  @title: 'Completion Date'      @Analytics.Dimension;
+  taskTitle       @title: 'Task'                 @Analytics.Dimension;
+  primaryTag      @title: 'Primary Tag'          @Analytics.Dimension;
+  experienceTag   @title: 'Level'                @Analytics.Dimension;
+  groupTitle      @title: 'Group'                @Analytics.Dimension;
+  missionTitle    @title: 'Mission'              @Analytics.Dimension;
+  eventName       @title: 'Event'                @Analytics.Dimension;
+  completionTimeMs @title: 'Completion Time (ms)' @Analytics.Measure @Aggregation.default: #SUM;
+  completionCount @title: 'Completions'          @Analytics.Measure @Aggregation.default: #SUM;
+};

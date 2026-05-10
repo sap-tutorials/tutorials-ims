@@ -20,6 +20,7 @@ sap.ui.define([
     accounts: "accounts",
     changelog: "changelog",
     board: "board",
+    analytics: "analytics",
     statistics: "statistics",
     privacy: "privacy"
   };
@@ -39,6 +40,7 @@ sap.ui.define([
     accounts: "Accounts",
     changelog: "Change Log",
     board: "Board",
+    analytics: "Analytics",
     statistics: "Statistics",
     privacy: "Privacy"
   };

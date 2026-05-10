@@ -1,0 +1,68 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.analytics",
+    "type": "application",
+    "title": "Completion Analytics",
+    "description": "Aggregated tutorial completion statistics",
+    "applicationVersion": { "version": "0.0.1" },
+    "dataSources": {
+      "mainService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "CompletionAnalytics-display": {
+          "semanticObject": "CompletionAnalytics",
+          "action": "display",
+          "title": "Completion Analytics",
+          "signature": { "parameters": {}, "additionalParameters": "allowed" }
+        }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": { "sap.fe.templates": {} }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      }
+    },
+    "routing": {
+      "routes": [
+        {
+          "pattern": ":?query:",
+          "name": "CompletionAnalyticsList",
+          "target": "CompletionAnalyticsList"
+        }
+      ],
+      "targets": {
+        "CompletionAnalyticsList": {
+          "type": "Component",
+          "id": "CompletionAnalyticsList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/CompletionAnalytics",
+              "variantManagement": "Page",
+              "initialLoad": "Enabled"
+            }
+          }
+        }
+      }
+    }
+  }
+}
