@@ -33,7 +33,10 @@ service AdminService {
   entity PrivacyProtectionActions as projection on ims.PrivacyProtectionActions;
   entity ActiveLearnerRecords as projection on ims.ActiveLearnerRecords;
   entity CompletionPaths as projection on ims.CompletionPaths;
-  entity CompletionPathItems as projection on ims.CompletionPathItems;
+  entity CompletionPathItems as projection on ims.CompletionPathItems {
+    *,
+    coalesce(tutorial.title, group.title, checkpointTitle) as taskName : String(500)
+  };
   entity GroupTags as projection on ims.GroupTags;
   entity MissionTags as projection on ims.MissionTags;
   entity DashboardMonitoredRecords as projection on ims.DashboardMonitoredRecords;

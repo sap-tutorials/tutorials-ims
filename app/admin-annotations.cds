@@ -167,10 +167,11 @@ annotate AdminService.CompletionPathItems with {
                     CollectionPath: 'TaskTypes',
                     Parameters: [{ $Type: 'Common.ValueListParameterInOut', LocalDataProperty: taskType, ValueListProperty: 'code' }]
                   };
-  tutorial        @Common.Label: 'Tutorial'    @UI.Hidden: (taskType != 'TUTORIAL');
-  group           @Common.Label: 'Group'       @UI.Hidden: (taskType != 'GROUP');
-  checkpointTitle @Common.Label: 'Checkpoint'  @UI.Hidden: (taskType != 'CHECKPOINT');
+  tutorial        @Common.Label: 'Tutorial'    @UI.Hidden: (taskType <> 'TUTORIAL');
+  group           @Common.Label: 'Group'       @UI.Hidden: (taskType <> 'GROUP');
+  checkpointTitle @Common.Label: 'Checkpoint'  @UI.Hidden: (taskType <> 'CHECKPOINT');
   prize           @Common.Label: 'Prize';
+  taskName        @Common.Label: 'Task'  @UI.HiddenFilter;
   itemOrder       @Common.Label: 'Order'  @UI.Hidden;
 };
 
@@ -202,11 +203,26 @@ annotate AdminService.CompletionPathItems with {
 };
 
 annotate AdminService.CompletionPathItems with @UI: {
+  HeaderInfo: {
+    TypeName: 'Path Item', TypeNamePlural: 'Path Items',
+    Title: { Value: taskName },
+    Description: { Value: taskType }
+  },
+  Facets: [
+    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#TaskDetails', Label: 'Task Details' }
+  ],
+  FieldGroup#TaskDetails: {
+    Data: [
+      { Value: taskType },
+      { Value: tutorial_ID },
+      { Value: group_ID },
+      { Value: checkpointTitle },
+      { Value: prize_ID }
+    ]
+  },
   LineItem: [
     { Value: taskType, Label: 'Type' },
-    { Value: tutorial_ID, Label: 'Tutorial' },
-    { Value: group_ID, Label: 'Group' },
-    { Value: checkpointTitle, Label: 'Checkpoint' },
+    { Value: taskName, Label: 'Task' },
     { Value: prize_ID, Label: 'Prize' }
   ]
 };
