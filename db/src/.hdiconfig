@@ -3,6 +3,9 @@
     "hdbmigrationtable": {
       "plugin_name": "com.sap.hana.di.table.migration"
     },
+    "hdbprocedure": {
+      "plugin_name": "com.sap.hana.di.procedure"
+    },
     "hdbsequence": {
       "plugin_name": "com.sap.hana.di.sequence"
     }
