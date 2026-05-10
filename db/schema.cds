@@ -119,7 +119,7 @@ entity Events : cuid, managed, LegacyKeyed {
   timeZone                  : String(50);
   mission                   : Association to Missions;
   taskRecords               : Association to many TaskRecords on taskRecords.event = $self;
-  prizes                    : Composition of many Prizes on prizes.event = $self;
+  prizes                    : Association to many Prizes on prizes.event = $self;
 }
 
 entity Prizes : cuid, LegacyKeyed {
