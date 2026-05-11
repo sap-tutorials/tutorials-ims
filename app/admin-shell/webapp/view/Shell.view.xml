@@ -90,6 +90,7 @@
             <tnt:NavigationListItem text="Accounts" key="accounts" />
             <tnt:NavigationListItem text="Change Log" key="changelog" />
             <tnt:NavigationListItem text="Board" key="board" />
+            <tnt:NavigationListItem text="Analytics" key="analytics" />
             <tnt:NavigationListItem text="Statistics" key="statistics" />
             <tnt:NavigationListItem text="Privacy" key="privacy" />
           </tnt:NavigationListItem>

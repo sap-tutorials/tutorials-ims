@@ -35,7 +35,13 @@ service AdminService {
   entity CompletionPaths as projection on ims.CompletionPaths;
   entity CompletionPathItems as projection on ims.CompletionPathItems {
     *,
-    coalesce(tutorial.title, group.title, checkpointTitle) as taskName : String(500)
+    coalesce(tutorial.title, group.title, checkpointTitle) as taskName : String(500),
+    case when taskType = 'TUTORIAL'   then false else true end as hideTutorial   : Boolean,
+    case when taskType = 'GROUP'      then false else true end as hideGroup      : Boolean,
+    case when taskType = 'CHECKPOINT' then false else true end as hideCheckpoint : Boolean,
+    case when taskType = 'TUTORIAL'   then true else false end as showTutorial   : Boolean,
+    case when taskType = 'GROUP'      then true else false end as showGroup      : Boolean,
+    case when taskType = 'CHECKPOINT' then true else false end as showCheckpoint : Boolean
   };
   entity GroupTags as projection on ims.GroupTags;
   entity MissionTags as projection on ims.MissionTags;

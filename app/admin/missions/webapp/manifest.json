@@ -6,7 +6,7 @@
     "title": "Missions",
     "description": "Manage Missions",
     "applicationVersion": {
-      "version": "0.0.1"
+      "version": "0.0.2"
     },
     "dataSources": {
       "mainService": {
@@ -196,6 +196,15 @@
                       },
                       "template": "sap.tutorials.admin.missions.ext.TaskColumn",
                       "availability": "Default"
+                    },
+                    "DataField::tutorial_ID": {
+                      "availability": "Hidden"
+                    },
+                    "DataField::group_ID": {
+                      "availability": "Hidden"
+                    },
+                    "DataField::checkpointTitle": {
+                      "availability": "Hidden"
                     }
                   }
                 }

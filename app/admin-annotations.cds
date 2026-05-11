@@ -167,12 +167,18 @@ annotate AdminService.CompletionPathItems with {
                     CollectionPath: 'TaskTypes',
                     Parameters: [{ $Type: 'Common.ValueListParameterInOut', LocalDataProperty: taskType, ValueListProperty: 'code' }]
                   };
-  tutorial        @Common.Label: 'Tutorial'    @UI.Hidden: (taskType <> 'TUTORIAL');
-  group           @Common.Label: 'Group'       @UI.Hidden: (taskType <> 'GROUP');
-  checkpointTitle @Common.Label: 'Checkpoint'  @UI.Hidden: (taskType <> 'CHECKPOINT');
+  tutorial        @Common.Label: 'Tutorial';
+  group           @Common.Label: 'Group';
+  checkpointTitle @Common.Label: 'Checkpoint';
   prize           @Common.Label: 'Prize';
   taskName        @Common.Label: 'Task'  @UI.HiddenFilter;
   itemOrder       @Common.Label: 'Order'  @UI.Hidden;
+  hideTutorial    @UI.Hidden;
+  hideGroup       @UI.Hidden;
+  hideCheckpoint  @UI.Hidden;
+  showTutorial    @UI.Hidden;
+  showGroup       @UI.Hidden;
+  showCheckpoint  @UI.Hidden;
 };
 
 annotate AdminService.CompletionPathItems with {
@@ -214,18 +220,17 @@ annotate AdminService.CompletionPathItems with @UI: {
   FieldGroup#TaskDetails: {
     Data: [
       { Value: taskType },
-      { Value: tutorial_ID },
-      { Value: group_ID },
-      { Value: checkpointTitle },
+      { Value: tutorial_ID, ![@UI.Hidden]: { $edmJson: { $Path: 'hideTutorial' }} },
+      { Value: group_ID, ![@UI.Hidden]: { $edmJson: { $Path: 'hideGroup' }} },
+      { Value: checkpointTitle, ![@UI.Hidden]: { $edmJson: { $Path: 'hideCheckpoint' }} },
       { Value: prize_ID }
     ]
   },
   LineItem: [
-    { Value: taskType, Label: 'Type' },
-    { Value: taskName, Label: 'Task' },
     { Value: prize_ID, Label: 'Prize' }
   ]
 };
+
 
 // --- Groups ---
 annotate AdminService.Groups with {

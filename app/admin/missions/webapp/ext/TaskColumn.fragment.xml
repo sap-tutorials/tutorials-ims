@@ -1,19 +1,12 @@
 <core:FragmentDefinition
   xmlns:core="sap.ui.core"
   xmlns="sap.m"
-  xmlns:macros="sap.fe.macros">
-  <VBox>
-    <macros:Field
-      readOnly="false"
-      metaPath="tutorial_ID"
-      visible="{= ${taskType} === 'TUTORIAL'}"/>
-    <macros:Field
-      readOnly="false"
-      metaPath="group_ID"
-      visible="{= ${taskType} === 'GROUP'}"/>
-    <Input
-      value="{checkpointTitle}"
-      visible="{= ${taskType} === 'CHECKPOINT'}"
-      placeholder="Checkpoint title"/>
-  </VBox>
+  core:require="{ handler: 'sap/tutorials/admin/missions/ext/TaskColumnHandler' }">
+  <Input
+    value="{parts: [{path: 'taskType'}, {path: 'tutorial/title'}, {path: 'group/title'}, {path: 'checkpointTitle'}], formatter: 'handler.formatTaskDisplay'}"
+    showValueHelp="{= %{taskType} !== 'CHECKPOINT' }"
+    valueHelpRequest="handler.onTaskValueHelp"
+    editable="{= !%{IsActiveEntity} }"
+    change="handler.onCheckpointChange"
+    placeholder="{path: 'taskType', formatter: 'handler.formatPlaceholder'}"/>
 </core:FragmentDefinition>
