@@ -51,6 +51,7 @@ service AdminService {
     case when taskType = 'CHECKPOINT' then true else false end as showCheckpoint : Boolean
   };
   entity GroupTags as projection on ims.GroupTags;
+  entity GroupPathItems as projection on ims.GroupPathItems;
   entity MissionTags as projection on ims.MissionTags;
   entity DashboardMonitoredRecords as projection on ims.DashboardMonitoredRecords;
   @readonly entity TimeZones as projection on ims.TimeZones;

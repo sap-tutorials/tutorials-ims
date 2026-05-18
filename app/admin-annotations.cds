@@ -263,6 +263,7 @@ annotate AdminService.Groups with @UI: {
   ],
   Facets: [
     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'General' },
+    { $Type: 'UI.ReferenceFacet', Target: 'items/@UI.LineItem', Label: 'Path Items', ID: 'PathItemsSection' },
     { $Type: 'UI.ReferenceFacet', Target: 'tags/@UI.LineItem', Label: 'Tags' },
     { $Type: 'UI.ReferenceFacet', Target: 'changes/@UI.PresentationVariant', Label: 'Change History', ![@UI.PartOfPreview]: false }
   ],
@@ -309,7 +310,29 @@ annotate AdminService.GroupTags with {
 
 annotate AdminService.GroupTags with @UI: {
   LineItem: [
-    { Value: tag.name, Label: 'Tag' }
+    { Value: tag_ID, Label: 'Tag' }
+  ]
+};
+
+// GroupPathItems — ordered tutorials within a Group (tutorial-only path items)
+annotate AdminService.GroupPathItems with {
+  itemOrder @Common.Label: 'Order';
+  tutorial  @Common.Label: 'Tutorial'  @mandatory
+            @Common.Text: tutorial.title  @Common.TextArrangement: #TextOnly
+            @Common.ValueList: {
+              CollectionPath: 'Tutorials',
+              Parameters: [
+                { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: tutorial_ID, ValueListProperty: 'ID' },
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'title' },
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'slug' }
+              ]
+            };
+};
+
+annotate AdminService.GroupPathItems with @UI: {
+  LineItem: [
+    { Value: itemOrder },
+    { Value: tutorial_ID, Label: 'Tutorial' }
   ]
 };
 
@@ -328,7 +351,7 @@ annotate AdminService.MissionTags with {
 
 annotate AdminService.MissionTags with @UI: {
   LineItem: [
-    { Value: tag.name, Label: 'Tag' }
+    { Value: tag_ID, Label: 'Tag' }
   ]
 };
 

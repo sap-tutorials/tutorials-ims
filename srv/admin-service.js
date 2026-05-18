@@ -34,7 +34,8 @@ export default class AdminService extends cds.ApplicationService {
       'StepFailures', 'Tags', 'Accomplishments', 'AccomplishmentRecords',
       'PrizeRecords', 'TutorialMeta', 'TutorialContributors', 'TutorialRepositories',
       'FeaturedTasks', 'PrimaryAccounts', 'SecondaryAccounts', 'PrivacyProtectionActions',
-      'ActiveLearnerRecords', 'DashboardMonitoredRecords', 'CompletionPaths', 'CompletionPathItems'
+      'ActiveLearnerRecords', 'DashboardMonitoredRecords', 'CompletionPaths', 'CompletionPathItems',
+      'GroupPathItems'
     ];
     for (const entity of legacyKeyedEntities) {
       this.before('CREATE', entity, async (req) => {
@@ -43,6 +44,22 @@ export default class AdminService extends cds.ApplicationService {
         }
       });
     }
+
+    // Gap-number itemOrder for new GroupPathItems rows so inline-created items
+    // get a sensible order without the user typing one. NEW fires on draft
+    // inline create (visible immediately); CREATE covers programmatic posts.
+    const setGroupItemOrder = async (req) => {
+      if (req.data.itemOrder != null) return;
+      const groupId = req.data.group_ID
+        || (Array.isArray(req.params) && req.params[0] && req.params[0].ID);
+      if (!groupId) return;
+      const row = await SELECT.one.from(req.target)
+        .columns('max(itemOrder) as maxOrder')
+        .where({ group_ID: groupId });
+      req.data.itemOrder = ((row?.maxOrder ?? 0) + 10);
+    };
+    this.before('NEW', 'GroupPathItems.drafts', setGroupItemOrder);
+    this.before('CREATE', 'GroupPathItems', setGroupItemOrder);
 
     // Validate Start Date < End Date on Events
     this.before(['CREATE', 'PATCH'], 'Events', (req) => {

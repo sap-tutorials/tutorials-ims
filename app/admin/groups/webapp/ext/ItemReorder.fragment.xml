@@ -13,16 +13,14 @@
     <columns>
       <Column width="3rem"><Text text=""/></Column>
       <Column><Text text="Order"/></Column>
-      <Column><Text text="Task ID"/></Column>
-      <Column><Text text="Type"/></Column>
+      <Column><Text text="Tutorial"/></Column>
     </columns>
     <items>
       <ColumnListItem>
         <cells>
           <core:Icon src="sap-icon://menu2" class="sapUiSmallMarginBegin"/>
           <Text text="{items>itemOrder}"/>
-          <Text text="{items>taskLegacyId}"/>
-          <Text text="{items>taskType}"/>
+          <Text text="{items>tutorial/title}"/>
         </cells>
       </ColumnListItem>
     </items>

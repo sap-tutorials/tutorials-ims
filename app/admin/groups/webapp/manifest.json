@@ -92,7 +92,17 @@
                     "ItemReorderSection": {
                       "template": "sap.tutorials.admin.groups.ext.ItemReorder",
                       "title": "Path Items (Drag to Reorder)",
-                      "position": { "anchor": "CompletionPathsSection", "placement": "After" }
+                      "position": { "anchor": "PathItemsSection", "placement": "After" }
+                    }
+                  }
+                }
+              },
+              "controlConfiguration": {
+                "items/@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "creationMode": {
+                      "name": "Inline",
+                      "createAtEnd": true
                     }
                   }
                 }

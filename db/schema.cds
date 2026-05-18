@@ -52,6 +52,7 @@ entity Groups : TaskBase {
   primaryTagRef             : Association to Tags;
   missions                  : Association to many Missions on missions.group = $self;
   tags                      : Composition of many GroupTags on tags.group = $self;
+  items                     : Composition of many GroupPathItems on items.group = $self;
 }
 
 entity Steps : TaskBase {
@@ -185,6 +186,12 @@ entity CompletionPathItems : cuid, LegacyKeyed {
   group                     : Association to Groups;
   checkpointTitle           : String(255);
   prize                     : Association to Prizes;
+  itemOrder                 : Integer;
+}
+
+entity GroupPathItems : cuid, LegacyKeyed {
+  group                     : Association to Groups;
+  tutorial                  : Association to Tutorials @mandatory;
   itemOrder                 : Integer;
 }
 

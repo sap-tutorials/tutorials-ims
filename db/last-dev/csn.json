@@ -464,103 +464,6 @@
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_GROUPS"
     },
-    "com.sap.developers.ims.CompletionPaths": {
-      "kind": "entity",
-      "@cds.persistence.journal": true,
-      "elements": {
-        "ID": {
-          "key": true,
-          "type": "cds.String",
-          "length": 36,
-          "@cds.persistence.name": "ID"
-        },
-        "legacyId": {
-          "type": "cds.Integer",
-          "@cds.persistence.name": "LEGACYID"
-        },
-        "mission_ID": {
-          "type": "cds.String",
-          "length": 36,
-          "@odata.foreignKey4": "mission",
-          "@cds.persistence.name": "MISSION_ID"
-        },
-        "name": {
-          "type": "cds.String",
-          "length": 255,
-          "@cds.persistence.name": "NAME"
-        },
-        "description": {
-          "type": "cds.String",
-          "length": 1000,
-          "@cds.persistence.name": "DESCRIPTION"
-        },
-        "slug": {
-          "type": "cds.String",
-          "length": 255,
-          "@cds.persistence.name": "SLUG"
-        }
-      },
-      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHS"
-    },
-    "com.sap.developers.ims.CompletionPathItems": {
-      "kind": "entity",
-      "@cds.persistence.journal": true,
-      "elements": {
-        "ID": {
-          "key": true,
-          "type": "cds.String",
-          "length": 36,
-          "@cds.persistence.name": "ID"
-        },
-        "legacyId": {
-          "type": "cds.Integer",
-          "@cds.persistence.name": "LEGACYID"
-        },
-        "path_ID": {
-          "type": "cds.String",
-          "length": 36,
-          "@odata.foreignKey4": "path",
-          "@cds.persistence.name": "PATH_ID"
-        },
-        "taskLegacyId": {
-          "type": "cds.Integer",
-          "@cds.persistence.name": "TASKLEGACYID"
-        },
-        "taskType": {
-          "type": "cds.String",
-          "length": 20,
-          "@cds.persistence.name": "TASKTYPE"
-        },
-        "tutorial_ID": {
-          "type": "cds.String",
-          "length": 36,
-          "@odata.foreignKey4": "tutorial",
-          "@cds.persistence.name": "TUTORIAL_ID"
-        },
-        "group_ID": {
-          "type": "cds.String",
-          "length": 36,
-          "@odata.foreignKey4": "group",
-          "@cds.persistence.name": "GROUP_ID"
-        },
-        "checkpointTitle": {
-          "type": "cds.String",
-          "length": 255,
-          "@cds.persistence.name": "CHECKPOINTTITLE"
-        },
-        "prize_ID": {
-          "type": "cds.String",
-          "length": 36,
-          "@odata.foreignKey4": "prize",
-          "@cds.persistence.name": "PRIZE_ID"
-        },
-        "itemOrder": {
-          "type": "cds.Integer",
-          "@cds.persistence.name": "ITEMORDER"
-        }
-      },
-      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHITEMS"
-    },
     "com.sap.developers.ims.Tutorials": {
       "kind": "entity",
       "@cds.persistence.journal": true,
@@ -645,6 +548,12 @@
         "featuredOrder": {
           "type": "cds.Integer",
           "@cds.persistence.name": "FEATUREDORDER"
+        },
+        "redirectTo_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "redirectTo",
+          "@cds.persistence.name": "REDIRECTTO_ID"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_TUTORIALS"
@@ -877,6 +786,103 @@
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_TUTORIALREPOSITORIES"
+    },
+    "com.sap.developers.ims.CompletionPaths": {
+      "kind": "entity",
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "legacyId": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "LEGACYID"
+        },
+        "mission_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "mission",
+          "@cds.persistence.name": "MISSION_ID"
+        },
+        "name": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "NAME"
+        },
+        "description": {
+          "type": "cds.String",
+          "length": 1000,
+          "@cds.persistence.name": "DESCRIPTION"
+        },
+        "slug": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "SLUG"
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHS"
+    },
+    "com.sap.developers.ims.CompletionPathItems": {
+      "kind": "entity",
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "legacyId": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "LEGACYID"
+        },
+        "path_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "path",
+          "@cds.persistence.name": "PATH_ID"
+        },
+        "taskLegacyId": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "TASKLEGACYID"
+        },
+        "taskType": {
+          "type": "cds.String",
+          "length": 20,
+          "@cds.persistence.name": "TASKTYPE"
+        },
+        "tutorial_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "tutorial",
+          "@cds.persistence.name": "TUTORIAL_ID"
+        },
+        "group_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "group",
+          "@cds.persistence.name": "GROUP_ID"
+        },
+        "checkpointTitle": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CHECKPOINTTITLE"
+        },
+        "prize_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "prize",
+          "@cds.persistence.name": "PRIZE_ID"
+        },
+        "itemOrder": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "ITEMORDER"
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHITEMS"
     },
     "com.sap.developers.ims.Prizes": {
       "kind": "entity",
