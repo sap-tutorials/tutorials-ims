@@ -289,6 +289,20 @@ const VALID_SLUG = /^[a-z0-9][a-z0-9-]*$/;
 export async function serveHandler(req, res) {
   const segments = Array.isArray(req.params.slug) ? req.params.slug : [req.params.slug];
   const pathStr = segments.join('/');
+
+  // Legacy AEM-style /tutorials/<slug>.html → 301 to canonical flat /tutorials/<slug>.
+  // Must run before VALID_SLUG validation, which rejects the dot in ".html".
+  if (/\.html$/i.test(pathStr) && !/\/index\.html$/i.test(pathStr)) {
+    const cleanSlug = pathStr.replace(/\.html$/i, '');
+    if (VALID_SLUG.test(cleanSlug)) {
+      const qIdx = req.url.indexOf('?');
+      const query = qIdx >= 0 ? req.url.slice(qIdx) : '';
+      res.setHeader('Location', `/tutorials/${cleanSlug}${query}`);
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      return res.status(301).end();
+    }
+  }
+
   const slug = pathStr.replace(/\/index\.html$/, '').replace(/\/$/, '');
 
   if (!slug || !VALID_SLUG.test(slug)) {

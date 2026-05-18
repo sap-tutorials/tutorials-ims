@@ -178,6 +178,46 @@ describe('content-store', () => {
       expect(res.headers['x-content-source']).toBe('cache');
     });
 
+    it('redirects /tutorials/<slug>.html to canonical /tutorials/<slug> with 301', async () => {
+      const res = await project.axios.get('/content/tutorials/served-tut.html', {
+        maxRedirects: 0,
+        validateStatus: () => true
+      });
+
+      expect(res.status).toBe(301);
+      expect(res.headers['location']).toBe('/tutorials/served-tut');
+      expect(res.headers['cache-control']).toContain('max-age=3600');
+    });
+
+    it('preserves query string when redirecting from .html', async () => {
+      const res = await project.axios.get('/content/tutorials/served-tut.html?step=2&utm=legacy', {
+        maxRedirects: 0,
+        validateStatus: () => true
+      });
+
+      expect(res.status).toBe(301);
+      expect(res.headers['location']).toBe('/tutorials/served-tut?step=2&utm=legacy');
+    });
+
+    it('redirects .html for unpublished slugs too (redirect is content-agnostic)', async () => {
+      const res = await project.axios.get('/content/tutorials/never-published.html', {
+        maxRedirects: 0,
+        validateStatus: () => true
+      });
+
+      expect(res.status).toBe(301);
+      expect(res.headers['location']).toBe('/tutorials/never-published');
+    });
+
+    it('rejects .html with an invalid slug shape rather than redirecting', async () => {
+      const res = await project.axios.get('/content/tutorials/Bad_Slug.html', {
+        maxRedirects: 0,
+        validateStatus: () => true
+      });
+
+      expect(res.status).toBe(400);
+    });
+
     it('serves latest version of a slug across publishes', async () => {
       const htmlV2 = '<h1>Updated Tutorial</h1>';
       await project.axios.post('/content/publish', {
