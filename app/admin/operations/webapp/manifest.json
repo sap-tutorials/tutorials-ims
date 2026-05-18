@@ -50,7 +50,9 @@
         { "pattern": "NGDSFailedMessages:?query:", "name": "NGDSFailedMessagesList", "target": "NGDSFailedMessagesList" },
         { "pattern": "FailedEmails:?query:", "name": "FailedEmailsList", "target": "FailedEmailsList" },
         { "pattern": "PipelineLog:?query:", "name": "PipelineLogList", "target": "PipelineLogList" },
-        { "pattern": "JobExecutionLog:?query:", "name": "JobExecutionLogList", "target": "JobExecutionLogList" }
+        { "pattern": "PipelineLog({key}):?query:", "name": "PipelineLogDetail", "target": "PipelineLogDetail" },
+        { "pattern": "JobExecutionLog:?query:", "name": "JobExecutionLogList", "target": "JobExecutionLogList" },
+        { "pattern": "JobExecutionLog({key}):?query:", "name": "JobExecutionLogDetail", "target": "JobExecutionLogDetail" }
       ],
       "targets": {
         "FeaturedTasksList": {
@@ -129,7 +131,21 @@
           "options": {
             "settings": {
               "contextPath": "/PipelineLog",
-              "initialLoad": "Enabled"
+              "initialLoad": "Enabled",
+              "navigation": {
+                "PipelineLog": { "detail": { "route": "PipelineLogDetail" } }
+              }
+            }
+          }
+        },
+        "PipelineLogDetail": {
+          "type": "Component",
+          "id": "PipelineLogDetail",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/PipelineLog",
+              "editableHeaderContent": false
             }
           }
         },
@@ -140,7 +156,21 @@
           "options": {
             "settings": {
               "contextPath": "/JobExecutionLog",
-              "initialLoad": "Enabled"
+              "initialLoad": "Enabled",
+              "navigation": {
+                "JobExecutionLog": { "detail": { "route": "JobExecutionLogDetail" } }
+              }
+            }
+          }
+        },
+        "JobExecutionLogDetail": {
+          "type": "Component",
+          "id": "JobExecutionLogDetail",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/JobExecutionLog",
+              "editableHeaderContent": false
             }
           }
         }

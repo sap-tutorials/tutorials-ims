@@ -657,6 +657,8 @@ annotate AdminService.PipelineLog with {
   durationMs    @Common.Label: 'Duration (ms)';
   initiator     @Common.Label: 'Initiator';
   summary       @Common.Label: 'Summary';
+  errorDetails  @Common.Label: 'Error Details'  @UI.MultiLineText;
+  metadata      @Common.Label: 'Metadata'       @UI.MultiLineText;
 };
 
 annotate AdminService.PipelineLog with @(
@@ -675,7 +677,27 @@ annotate AdminService.PipelineLog with @(
       { Value: initiator },
       { Value: summary }
     ],
-    Sort: [{ Property: startedAt, Descending: true }]
+    Sort: [{ Property: startedAt, Descending: true }],
+    Facets: [
+      { $Type: 'UI.ReferenceFacet', ID: 'PipelineGeneral', Target: '@UI.FieldGroup#General', Label: 'General' },
+      { $Type: 'UI.ReferenceFacet', ID: 'PipelineTiming',  Target: '@UI.FieldGroup#Timing',  Label: 'Timing' },
+      { $Type: 'UI.ReferenceFacet', ID: 'PipelineSummary', Target: '@UI.FieldGroup#Summary', Label: 'Summary' },
+      { $Type: 'UI.ReferenceFacet', ID: 'PipelineError',   Target: '@UI.FieldGroup#Error',   Label: 'Error Details' },
+      { $Type: 'UI.ReferenceFacet', ID: 'PipelineMeta',    Target: '@UI.FieldGroup#Metadata', Label: 'Metadata' }
+    ],
+    FieldGroup #General: { Data: [
+      { Value: pipelineType },
+      { Value: status, Criticality: statusCriticality },
+      { Value: initiator }
+    ]},
+    FieldGroup #Timing: { Data: [
+      { Value: startedAt },
+      { Value: finishedAt },
+      { Value: durationMs }
+    ]},
+    FieldGroup #Summary:  { Data: [{ Value: summary }] },
+    FieldGroup #Error:    { Data: [{ Value: errorDetails }] },
+    FieldGroup #Metadata: { Data: [{ Value: metadata }] }
   },
   Capabilities.DeleteRestrictions.Deletable: false,
   Capabilities.InsertRestrictions.Insertable: false,
@@ -690,7 +712,8 @@ annotate AdminService.JobExecutionLog with {
   durationMs    @Common.Label: 'Duration (ms)';
   initiator     @Common.Label: 'Instance';
   summary       @Common.Label: 'Job Name';
-  errorDetails  @Common.Label: 'Error';
+  errorDetails  @Common.Label: 'Error'  @UI.MultiLineText;
+  metadata      @Common.Label: 'Metadata'  @UI.MultiLineText;
 };
 
 annotate AdminService.JobExecutionLog with @(
@@ -709,7 +732,25 @@ annotate AdminService.JobExecutionLog with @(
       { Value: initiator },
       { Value: errorDetails }
     ],
-    Sort: [{ Property: startedAt, Descending: true }]
+    Sort: [{ Property: startedAt, Descending: true }],
+    Facets: [
+      { $Type: 'UI.ReferenceFacet', ID: 'JobGeneral', Target: '@UI.FieldGroup#General', Label: 'General' },
+      { $Type: 'UI.ReferenceFacet', ID: 'JobTiming',  Target: '@UI.FieldGroup#Timing',  Label: 'Timing' },
+      { $Type: 'UI.ReferenceFacet', ID: 'JobError',   Target: '@UI.FieldGroup#Error',   Label: 'Error Details' },
+      { $Type: 'UI.ReferenceFacet', ID: 'JobMeta',    Target: '@UI.FieldGroup#Metadata', Label: 'Metadata' }
+    ],
+    FieldGroup #General: { Data: [
+      { Value: summary },
+      { Value: status, Criticality: statusCriticality },
+      { Value: initiator }
+    ]},
+    FieldGroup #Timing: { Data: [
+      { Value: startedAt },
+      { Value: finishedAt },
+      { Value: durationMs }
+    ]},
+    FieldGroup #Error:    { Data: [{ Value: errorDetails }] },
+    FieldGroup #Metadata: { Data: [{ Value: metadata }] }
   },
   Capabilities.DeleteRestrictions.Deletable: false,
   Capabilities.InsertRestrictions.Insertable: false,
