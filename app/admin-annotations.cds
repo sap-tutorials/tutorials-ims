@@ -7,6 +7,7 @@ annotate AdminService.Groups with @odata.draft.enabled;
 annotate AdminService.Events with @odata.draft.enabled;
 annotate AdminService.Accomplishments with @odata.draft.enabled;
 annotate AdminService.Prizes with @odata.draft.enabled;
+annotate AdminService.Tutorials with @odata.draft.enabled;
 
 // --- Events ---
 annotate AdminService.Events with {
