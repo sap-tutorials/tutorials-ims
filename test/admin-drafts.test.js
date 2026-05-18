@@ -1,12 +1,19 @@
 // test/admin-drafts.test.js
-import { describe, it, expect, afterAll } from 'vitest';
+import { describe, it, expect, afterAll, beforeAll } from 'vitest';
 import cds from '@sap/cds';
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
 const adminAuth = { auth: { username: 'admin', password: 'admin' } };
 
+const TAG_ID = 'aaaaaaaa-1111-0000-0000-000000000001';
+
 describe('Draft Enablement', () => {
   const cleanup = [];
+
+  beforeAll(async () => {
+    const { Tags } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Tags).entries({ ID: TAG_ID, legacyId: 99001, name: '__TEST__ Tag' });
+  });
 
   afterAll(async () => {
     for (const url of cleanup) {
@@ -60,9 +67,13 @@ describe('Draft Enablement', () => {
 
   describe('Draft Composition CRUD', () => {
     it('creates a mission with a completion path via draft', async () => {
-      // Create draft mission
+      // Create draft mission with all fields required for activation
       const { data: mission } = await project.post('/admin/Missions', {
-        title: '__TEST__ Comp Mission', slug: 'test-comp'
+        title: '__TEST__ Comp Mission',
+        slug: 'test-comp',
+        description: 'A composition test mission',
+        experienceTag: 'beginner',
+        primaryTagRef_ID: TAG_ID
       }, adminAuth);
 
       // Add completion path to draft
@@ -81,6 +92,13 @@ describe('Draft Enablement', () => {
         adminAuth
       );
       expect(itemStatus).toBe(201);
+
+      // Add a tag to the composition (custom handler requires at least one)
+      await project.post(
+        `/admin/Missions(ID=${mission.ID},IsActiveEntity=false)/tags`,
+        { tag_ID: TAG_ID },
+        adminAuth
+      );
 
       // Activate draft
       const { status: activateStatus } = await project.post(

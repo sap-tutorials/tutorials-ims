@@ -6,6 +6,8 @@ const project = cds.test('serve', '--project', '.', '--in-memory');
 const superAdminAuth = { auth: { username: 'superadmin', password: 'superadmin' } };
 const adminAuth = { auth: { username: 'admin', password: 'admin' } };
 
+const TAG_ID = 'aaaaaaaa-2222-0000-0000-000000000001';
+
 describe('Published Flag', () => {
   const missionId = '11111111-0000-0000-0000-000000000001';
   const unpublishedMissionId = '11111111-0000-0000-0000-000000000002';
@@ -16,17 +18,34 @@ describe('Published Flag', () => {
   const groupForAdminTest = '22222222-0000-0000-0000-000000000003';
 
   beforeAll(async () => {
-    const { Missions, Groups } = cds.entities('com.sap.developers.ims');
+    const { Tags, Missions, MissionTags, Groups, GroupTags } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Tags).entries({ ID: TAG_ID, legacyId: 99002, name: '__TEST__ Published Tag' });
+
+    // Mandatory fields (description, experienceTag, primaryTagRef_ID) must be populated
+    // so that draftActivate after draftEdit doesn't fail ASSERT_MANDATORY.
+    const baseMission = { description: 'Test', experienceTag: 'beginner', primaryTagRef_ID: TAG_ID };
     await INSERT.into(Missions).entries([
-      { ID: missionId, legacyId: 90001, title: '__TEST__ Published Mission', slug: 'test-published', published: true },
-      { ID: unpublishedMissionId, legacyId: 90002, title: '__TEST__ Unpublished Mission', slug: 'test-unpublished', published: false },
-      { ID: missionForAdminTest, legacyId: 90003, title: '__TEST__ Admin Guard Mission', slug: 'test-admin-guard', published: true },
-      { ID: missionForFieldTest, legacyId: 90004, title: '__TEST__ Field Control Mission', slug: 'test-field-control', published: true }
+      { ID: missionId, legacyId: 90001, title: '__TEST__ Published Mission', slug: 'test-published', published: true, ...baseMission },
+      { ID: unpublishedMissionId, legacyId: 90002, title: '__TEST__ Unpublished Mission', slug: 'test-unpublished', published: false, ...baseMission },
+      { ID: missionForAdminTest, legacyId: 90003, title: '__TEST__ Admin Guard Mission', slug: 'test-admin-guard', published: true, ...baseMission },
+      { ID: missionForFieldTest, legacyId: 90004, title: '__TEST__ Field Control Mission', slug: 'test-field-control', published: true, ...baseMission }
     ]);
+    // The "at least one tag" SAVE handler reads the tags composition — seed it.
+    await INSERT.into(MissionTags).entries([
+      { ID: 'mt-90001', mission_ID: missionId, tag_ID: TAG_ID },
+      { ID: 'mt-90003', mission_ID: missionForAdminTest, tag_ID: TAG_ID },
+      { ID: 'mt-90004', mission_ID: missionForFieldTest, tag_ID: TAG_ID }
+    ]);
+
+    const baseGroup = { description: 'Test', experienceTag: 'beginner', primaryTagRef_ID: TAG_ID };
     await INSERT.into(Groups).entries([
-      { ID: groupId, legacyId: 90010, title: '__TEST__ Published Group', published: true },
-      { ID: unpublishedGroupId, legacyId: 90011, title: '__TEST__ Unpublished Group', published: false },
-      { ID: groupForAdminTest, legacyId: 90012, title: '__TEST__ Admin Guard Group', published: true }
+      { ID: groupId, legacyId: 90010, title: '__TEST__ Published Group', published: true, ...baseGroup },
+      { ID: unpublishedGroupId, legacyId: 90011, title: '__TEST__ Unpublished Group', published: false, ...baseGroup },
+      { ID: groupForAdminTest, legacyId: 90012, title: '__TEST__ Admin Guard Group', published: true, ...baseGroup }
+    ]);
+    await INSERT.into(GroupTags).entries([
+      { ID: 'gt-90010', group_ID: groupId, tag_ID: TAG_ID },
+      { ID: 'gt-90012', group_ID: groupForAdminTest, tag_ID: TAG_ID }
     ]);
   });
 
@@ -131,8 +150,18 @@ describe('Published Flag', () => {
 
     it('regular Admin can activate a new draft (published stays default true)', async () => {
       const { data: draft } = await project.post('/admin/Missions', {
-        title: '__TEST__ Admin Activate', slug: 'test-admin-activate'
+        title: '__TEST__ Admin Activate',
+        slug: 'test-admin-activate',
+        description: 'Activation test',
+        experienceTag: 'beginner',
+        primaryTagRef_ID: TAG_ID
       }, adminAuth);
+      // Custom SAVE handler requires at least one tag.
+      await project.post(
+        `/admin/Missions(ID=${draft.ID},IsActiveEntity=false)/tags`,
+        { tag_ID: TAG_ID },
+        adminAuth
+      );
       const { status } = await project.post(
         `/admin/Missions(ID=${draft.ID},IsActiveEntity=false)/AdminService.draftActivate`,
         {},
