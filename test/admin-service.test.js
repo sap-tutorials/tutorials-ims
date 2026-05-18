@@ -285,4 +285,110 @@ describe('AdminService', () => {
       expect(results.find(r => r.taskLegacyId === 88201)).toBeUndefined();
     });
   });
+
+  describe('Tutorials soft-delete and redirect', () => {
+    let activeId, inactiveId;
+
+    beforeAll(async () => {
+      const { Tutorials } = cds.entities('com.sap.developers.ims');
+      activeId = cds.utils.uuid();
+      inactiveId = cds.utils.uuid();
+      await INSERT.into(Tutorials).entries([
+        { ID: activeId, slug: 'sd-active', title: 'SD Active', status: 'ACTIVE' },
+        { ID: inactiveId, slug: 'sd-inactive', title: 'SD Inactive', status: 'INACTIVE' },
+      ]);
+    });
+
+    it('DELETE on Tutorials flips status to INACTIVE instead of removing the row', async () => {
+      const { Tutorials } = cds.entities('com.sap.developers.ims');
+      const tmpId = cds.utils.uuid();
+      await INSERT.into(Tutorials).entries({
+        ID: tmpId, slug: 'sd-target', title: 'SD Target', status: 'ACTIVE'
+      });
+
+      const { status } = await project.delete(
+        `/admin/Tutorials(${tmpId})`,
+        adminAuth
+      );
+      expect([204, 200]).toContain(status);
+
+      const [row] = await SELECT.from(Tutorials).where({ ID: tmpId }).columns('ID', 'status');
+      expect(row).toBeDefined();
+      expect(row.status).toBe('INACTIVE');
+    });
+
+    it('rejects redirectTo on an ACTIVE tutorial', async () => {
+      const { status, data } = await project.patch(
+        `/admin/Tutorials(${activeId})`,
+        { redirectTo_ID: inactiveId },
+        { ...adminAuth, validateStatus: () => true }
+      );
+      expect(status).toBeGreaterThanOrEqual(400);
+      expect(JSON.stringify(data)).toMatch(/INACTIVE/i);
+    });
+
+    it('rejects redirectTo pointing to itself', async () => {
+      const { status, data } = await project.patch(
+        `/admin/Tutorials(${inactiveId})`,
+        { redirectTo_ID: inactiveId },
+        { ...adminAuth, validateStatus: () => true }
+      );
+      expect(status).toBeGreaterThanOrEqual(400);
+      expect(JSON.stringify(data)).toMatch(/itself/i);
+    });
+
+    it('rejects redirectTo pointing to a non-existent tutorial', async () => {
+      const fakeId = '00000000-0000-0000-0000-000000000999';
+      const { status } = await project.patch(
+        `/admin/Tutorials(${inactiveId})`,
+        { redirectTo_ID: fakeId },
+        { ...adminAuth, validateStatus: () => true }
+      );
+      expect(status).toBeGreaterThanOrEqual(400);
+    });
+
+    it('rejects redirectTo pointing to another INACTIVE tutorial', async () => {
+      const { Tutorials } = cds.entities('com.sap.developers.ims');
+      const otherInactiveId = cds.utils.uuid();
+      await INSERT.into(Tutorials).entries({
+        ID: otherInactiveId, slug: 'sd-other-inactive', title: 'Other', status: 'INACTIVE'
+      });
+
+      const { status, data } = await project.patch(
+        `/admin/Tutorials(${inactiveId})`,
+        { redirectTo_ID: otherInactiveId },
+        { ...adminAuth, validateStatus: () => true }
+      );
+      expect(status).toBeGreaterThanOrEqual(400);
+      expect(JSON.stringify(data)).toMatch(/active/i);
+    });
+
+    it('accepts redirectTo on an INACTIVE tutorial pointing to an ACTIVE one', async () => {
+      const { Tutorials } = cds.entities('com.sap.developers.ims');
+      const inactiveTarget = cds.utils.uuid();
+      const activeTarget = cds.utils.uuid();
+      await INSERT.into(Tutorials).entries([
+        { ID: inactiveTarget, slug: 'sd-redir-src', title: 'Src', status: 'INACTIVE' },
+        { ID: activeTarget, slug: 'sd-redir-dst', title: 'Dst', status: 'ACTIVE' },
+      ]);
+
+      const { status } = await project.patch(
+        `/admin/Tutorials(${inactiveTarget})`,
+        { redirectTo_ID: activeTarget },
+        { ...adminAuth, validateStatus: () => true }
+      );
+      expect([200, 204]).toContain(status);
+
+      const [row] = await SELECT.from(Tutorials).where({ ID: inactiveTarget }).columns('redirectTo_ID');
+      expect(row.redirectTo_ID).toBe(activeTarget);
+    });
+
+    it('TutorialPickList exposes only ACTIVE tutorials', async () => {
+      const { status, data } = await project.get('/admin/TutorialPickList', adminAuth);
+      expect(status).toBe(200);
+      const slugs = data.value.map(t => t.slug);
+      expect(slugs).toContain('sd-active');
+      expect(slugs).not.toContain('sd-inactive');
+    });
+  });
 });

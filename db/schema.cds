@@ -27,6 +27,7 @@ entity Tutorials : TaskBase {
   slug                      : String(255) @mandatory;
   mdFileUrl                 : String(1000);
   featuredOrder             : Integer;
+  redirectTo                : Association to Tutorials;
   steps                     : Composition of many Steps on steps.tutorial = $self;
   tags                      : Association to many TutorialTags on tags.tutorial = $self;
   meta                      : Composition of many TutorialMeta on meta.tutorial = $self;

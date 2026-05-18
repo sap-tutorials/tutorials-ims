@@ -1,0 +1,67 @@
+{{ define "main" }}
+<section class="not-found-hero" aria-labelledby="not-found-title">
+  <div class="not-found-inner">
+    <p class="not-found-eyebrow">Tutorial not found</p>
+    <h1 id="not-found-title" class="not-found-title">We couldn't find that tutorial</h1>
+    <p class="not-found-lede">
+      The tutorial you're looking for has been retired, renamed, or never existed at this URL.
+    </p>
+    <div class="not-found-actions">
+      <a class="fd-button fd-button--emphasized" href="/">Browse tutorials</a>
+      <a class="fd-button fd-button--transparent" href="https://developers.sap.com/" rel="noopener">SAP Developers</a>
+    </div>
+    <p class="not-found-help">
+      If you arrived here from a bookmark, the SAP Developers home page is the best starting point
+      to discover current learning paths.
+    </p>
+  </div>
+</section>
+
+<style>
+  .not-found-hero {
+    padding: 4rem 1.5rem;
+    background: var(--sapBackgroundColor, #f5f6f7);
+    min-height: 60vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .not-found-inner {
+    max-width: 640px;
+    text-align: center;
+    background: var(--sapTile_Background, #ffffff);
+    padding: 3rem 2rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.08);
+  }
+  .not-found-eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.85rem;
+    color: var(--sapNeutralTextColor, #5b738b);
+    margin: 0 0 0.5rem;
+  }
+  .not-found-title {
+    font-size: 2rem;
+    margin: 0 0 1rem;
+    color: var(--sapTextColor, #32363a);
+  }
+  .not-found-lede {
+    font-size: 1.125rem;
+    color: var(--sapTextColor, #32363a);
+    margin: 0 0 2rem;
+  }
+  .not-found-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+  }
+  .not-found-help {
+    font-size: 0.9rem;
+    color: var(--sapNeutralTextColor, #5b738b);
+    margin: 0;
+  }
+</style>
+{{ end }}

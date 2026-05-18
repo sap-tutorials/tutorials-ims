@@ -286,6 +286,50 @@ export async function publishHandler(req, res) {
 
 const VALID_SLUG = /^[a-z0-9][a-z0-9-]*$/;
 
+// Render the published __404__ HTML page (or fall back to JSON if not published yet).
+async function serveNotFound(res, slug) {
+  try {
+    const { ContentFiles } = cds.entities('com.sap.developers.ims');
+    const activeVersion = await getActiveVersion();
+    if (activeVersion === null) {
+      return res.status(404).json({ error: `Tutorial not found: ${slug}` });
+    }
+
+    const [meta] = await SELECT.from(ContentFiles)
+      .where({ slug: '__404__', version: activeVersion })
+      .columns('contentHash', 'mimeType', 'version');
+
+    if (!meta) {
+      return res.status(404).json({ error: `Tutorial not found: ${slug}` });
+    }
+
+    const db = await cds.connect.to('db');
+    let contentBuf;
+    if (db.options?.kind === 'hana' || db.constructor?.name === 'HANAService') {
+      const [blobRow] = await db.run(
+        `SELECT TOP 1 "CONTENT" FROM "COM_SAP_DEVELOPERS_IMS_CONTENTFILES" WHERE "SLUG" = '__404__' AND "VERSION" = ?`,
+        [meta.version]
+      );
+      contentBuf = blobRow.CONTENT;
+    } else {
+      const blobRow = await SELECT.one.from(ContentFiles)
+        .where({ slug: '__404__', version: meta.version })
+        .columns('content');
+      contentBuf = await toBuffer(blobRow.content);
+    }
+    const decompressed = gunzipSync(contentBuf);
+
+    res.status(404);
+    res.setHeader('Content-Type', `${meta.mimeType}; charset=utf-8`);
+    res.setHeader('Cache-Control', 'public, max-age=60');
+    res.setHeader('X-Content-Source', 'db');
+    return res.send(decompressed);
+  } catch (err) {
+    console.error('[content/serve:404]', err instanceof Error ? err.message : String(err));
+    return res.status(404).json({ error: `Tutorial not found: ${slug}` });
+  }
+}
+
 export async function serveHandler(req, res) {
   const segments = Array.isArray(req.params.slug) ? req.params.slug : [req.params.slug];
   const pathStr = segments.join('/');
@@ -309,7 +353,31 @@ export async function serveHandler(req, res) {
     return res.status(400).json({ error: 'Invalid tutorial slug' });
   }
 
-  // Check cache
+  const { ContentFiles, Tutorials } = cds.entities('com.sap.developers.ims');
+
+  // Status-aware lookup: a soft-deleted tutorial may either redirect or 404.
+  // We do this before the cache hit so an admin status change takes effect immediately.
+  const [tutMeta] = await SELECT.from(Tutorials)
+    .where({ slug })
+    .columns('status', 'redirectTo_ID');
+
+  if (tutMeta?.status === 'INACTIVE') {
+    if (tutMeta.redirectTo_ID) {
+      const [target] = await SELECT.from(Tutorials)
+        .where({ ID: tutMeta.redirectTo_ID })
+        .columns('slug', 'status');
+      if (target?.slug && target.status !== 'INACTIVE') {
+        const qIdx = req.url.indexOf('?');
+        const query = qIdx >= 0 ? req.url.slice(qIdx) : '';
+        res.setHeader('Location', `/tutorials/${target.slug}${query}`);
+        res.setHeader('Cache-Control', 'public, max-age=300');
+        return res.status(301).end();
+      }
+    }
+    return serveNotFound(res, slug);
+  }
+
+  // Check cache (only for ACTIVE / unknown-but-published slugs)
   const cached = cache.get(slug);
   if (cached) {
     const ifNoneMatch = req.headers['if-none-match'];
@@ -323,8 +391,6 @@ export async function serveHandler(req, res) {
     return res.send(cached.buffer);
   }
 
-  const { ContentFiles } = cds.entities('com.sap.developers.ims');
-
   try {
     const activeVersion = await getActiveVersion();
     if (activeVersion === null) {
@@ -337,7 +403,7 @@ export async function serveHandler(req, res) {
       .columns('contentHash', 'mimeType', 'version');
 
     if (!meta) {
-      return res.status(404).json({ error: `Tutorial not found: ${slug}` });
+      return serveNotFound(res, slug);
     }
 
     const ifNoneMatch = req.headers['if-none-match'];
@@ -394,7 +460,7 @@ export async function hashesHandler(req, res) {
 
     const map = {};
     for (const row of rows) {
-      if (row.slug === '__nav__') continue;
+      if (row.slug === '__nav__' || row.slug === '__404__') continue;
       map[row.slug] = row.contentHash;
     }
 
@@ -459,7 +525,7 @@ async function navHandlerFallback(req, res, activeVersion) {
     .where({ version: activeVersion })
     .columns('slug', 'sizeBytes');
 
-  const slugs = contentRows.filter(r => r.slug !== '__nav__').map(r => r.slug);
+  const slugs = contentRows.filter(r => r.slug !== '__nav__' && r.slug !== '__404__').map(r => r.slug);
   if (slugs.length === 0) {
     res.setHeader('Cache-Control', 'public, max-age=60');
     return res.json({ version: activeVersion, count: 0, tutorials: [] });
@@ -467,9 +533,9 @@ async function navHandlerFallback(req, res, activeVersion) {
 
   const sizeMap = Object.fromEntries(contentRows.map(r => [r.slug, r.sizeBytes]));
 
-  // Fetch tutorial metadata for published slugs
+  // Fetch tutorial metadata for published slugs (excluding INACTIVE — soft-deleted)
   const tutRows = await SELECT.from(Tutorials)
-    .where({ slug: { in: slugs } })
+    .where({ slug: { in: slugs }, status: { '!=': 'INACTIVE' } })
     .columns('ID', 'slug', 'title', 'description', 'primaryTag', 'experienceTag', 'averageTimeToComplete');
 
   const tutMap = Object.fromEntries(tutRows.map(t => [t.slug, t]));
@@ -515,20 +581,30 @@ async function navHandlerFallback(req, res, activeVersion) {
     }
   }
 
-  const tutorials = contentRows.filter(r => r.slug !== '__nav__').map(r => {
-    const meta = tutMap[r.slug];
-    return {
-      slug: r.slug,
-      title: meta?.title || r.slug,
-      description: meta?.description || '',
-      time: meta?.averageTimeToComplete || 0,
-      level: meta?.experienceTag || 'Beginner',
-      stepCount: stepMap[r.slug] || 0,
-      primaryTag: meta?.primaryTag || '',
-      displayTags: tagMap[r.slug] || [],
-      sizeBytes: r.sizeBytes
-    };
-  });
+  // Build set of inactive slugs to exclude from nav
+  const inactiveSlugs = new Set(
+    (await SELECT.from(Tutorials)
+      .where({ slug: { in: slugs }, status: 'INACTIVE' })
+      .columns('slug'))
+      .map(r => r.slug)
+  );
+
+  const tutorials = contentRows
+    .filter(r => r.slug !== '__nav__' && r.slug !== '__404__' && !inactiveSlugs.has(r.slug))
+    .map(r => {
+      const meta = tutMap[r.slug];
+      return {
+        slug: r.slug,
+        title: meta?.title || r.slug,
+        description: meta?.description || '',
+        time: meta?.averageTimeToComplete || 0,
+        level: meta?.experienceTag || 'Beginner',
+        stepCount: stepMap[r.slug] || 0,
+        primaryTag: meta?.primaryTag || '',
+        displayTags: tagMap[r.slug] || [],
+        sizeBytes: r.sizeBytes
+      };
+    });
 
   res.setHeader('Cache-Control', 'public, max-age=60');
   res.json({ version: activeVersion, count: tutorials.length, tutorials });

@@ -403,6 +403,17 @@ annotate AdminService.Tutorials with {
   experienceTag         @Common.Label: 'Experience'  @Common.ValueListWithFixedValues;
   averageTimeToComplete @Common.Label: 'Avg Time (min)';
   status                @Common.Label: 'Status'  @Common.ValueListWithFixedValues;
+  deletionReason        @Common.Label: 'Deletion Reason';
+  redirectTo            @Common.Label: 'Redirect To'
+                        @Common.ValueList: {
+                          CollectionPath: 'TutorialPickList',
+                          Parameters: [
+                            { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: redirectTo_ID, ValueListProperty: 'ID' },
+                            { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'title' },
+                            { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'slug' },
+                            { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'primaryTag' }
+                          ]
+                        };
 };
 
 annotate AdminService.Tutorials with @UI: {
@@ -411,7 +422,7 @@ annotate AdminService.Tutorials with @UI: {
     Title: { Value: title },
     Description: { Value: slug }
   },
-  SelectionFields: [ title, primaryTag, experienceTag ],
+  SelectionFields: [ title, primaryTag, experienceTag, status ],
   LineItem: [
     { Value: legacyId },
     { Value: title },
@@ -419,9 +430,47 @@ annotate AdminService.Tutorials with @UI: {
     { Value: primaryTag },
     { Value: experienceTag },
     { Value: averageTimeToComplete },
-    { Value: status }
-  ]
+    { Value: status },
+    { Value: redirectTo.title, Label: 'Redirect To' }
+  ],
+  Facets: [
+    { $Type: 'UI.ReferenceFacet', ID: 'General',  Label: 'General',  Target: '@UI.FieldGroup#General' },
+    { $Type: 'UI.ReferenceFacet', ID: 'Lifecycle', Label: 'Lifecycle', Target: '@UI.FieldGroup#Lifecycle' }
+  ],
+  FieldGroup#General: { Data: [
+    { Value: title },
+    { Value: slug },
+    { Value: primaryTag },
+    { Value: experienceTag },
+    { Value: averageTimeToComplete }
+  ]},
+  FieldGroup#Lifecycle: { Data: [
+    { Value: status },
+    { Value: deletionReason },
+    { Value: redirectTo_ID, Label: 'Redirect To' }
+  ]}
 };
+
+// --- TutorialPickList (value-help target for redirectTo) ---
+annotate AdminService.TutorialPickList with {
+  legacyId   @Common.Label: 'Tutorial ID';
+  title      @Common.Label: 'Title';
+  slug       @Common.Label: 'Slug';
+  primaryTag @Common.Label: 'Primary Tag';
+};
+
+annotate AdminService.TutorialPickList with @(
+  UI: {
+    HeaderInfo: { TypeName: 'Tutorial', TypeNamePlural: 'Tutorials', Title: { Value: title } },
+    SelectionFields: [ title, primaryTag ],
+    LineItem: [
+      { Value: legacyId },
+      { Value: title },
+      { Value: slug },
+      { Value: primaryTag }
+    ]
+  }
+);
 
 // --- Tags (read-only) ---
 annotate AdminService.Tags with {

@@ -74,6 +74,50 @@ export default class AdminService extends cds.ApplicationService {
       }
     });
 
+    // --- Tutorials soft-delete + redirect validation ---
+    // Delete on Tutorials must NOT remove the row — flip status to INACTIVE so the
+    // public side returns 404 / redirects, while preserving history and the legacyId
+    // so that bookmarked URLs stay redirectable.
+    this.on('DELETE', 'Tutorials', async (req) => {
+      const { ID } = req.data;
+      if (!ID) return req.reject(400, 'Tutorial ID is required');
+      const [existing] = await SELECT.from(Tutorials).where({ ID }).columns('ID', 'status');
+      if (!existing) return req.reject(404, `Tutorial not found: ${ID}`);
+      if (existing.status === 'INACTIVE') return; // already soft-deleted
+      await UPDATE(Tutorials).set({ status: 'INACTIVE' }).where({ ID });
+    });
+
+    // Validate redirectTo on save:
+    //   - only an INACTIVE tutorial may have a redirectTo target
+    //   - cannot point to itself
+    //   - target must exist and be ACTIVE
+    this.before(['CREATE', 'UPDATE'], 'Tutorials', async (req) => {
+      const { ID, status, redirectTo_ID } = req.data;
+      const target = redirectTo_ID ?? req.data.redirectTo?.ID;
+      if (target === undefined) return; // no change to redirectTo
+
+      // Determine effective status (consider current DB value if not in payload)
+      let effectiveStatus = status;
+      if (effectiveStatus === undefined && ID) {
+        const [row] = await SELECT.from(Tutorials).where({ ID }).columns('status');
+        effectiveStatus = row?.status;
+      }
+
+      if (target === null) return; // clearing the redirect is always allowed
+
+      if (effectiveStatus !== 'INACTIVE') {
+        return req.reject(400, 'Redirect target can only be set on a deleted (INACTIVE) tutorial');
+      }
+      if (ID && target === ID) {
+        return req.reject(400, 'Tutorial cannot redirect to itself');
+      }
+      const [tgt] = await SELECT.from(Tutorials).where({ ID: target }).columns('ID', 'status');
+      if (!tgt) return req.reject(400, 'Redirect target tutorial not found');
+      if (tgt.status === 'INACTIVE') {
+        return req.reject(400, 'Redirect target must be an active tutorial');
+      }
+    });
+
     // --- Event Statistics ---
 
     this.on('getEventStatistics', async (req) => {

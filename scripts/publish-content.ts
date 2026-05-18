@@ -272,6 +272,15 @@ async function main() {
     log(`Included nav metadata for ${allNavTutorials.length} tutorials`);
   }
 
+  // Include the 404 page so the serveHandler can render styled "Tutorial not found"
+  // instead of a JSON error. Always sent — small enough that delta detection isn't worth it.
+  const notFoundPath = join(opts.hugoDir, '404.html');
+  if (existsSync(notFoundPath)) {
+    const notFoundContent = readFileSync(notFoundPath);
+    payload['__404__'] = gzipSync(notFoundContent).toString('base64');
+    log(`Included 404 page (${notFoundContent.length} bytes)`);
+  }
+
   // Extract tutorial metadata for DB upsert (self-healing — ensures Tutorials + Steps exist)
   const hugoContentDir = join(opts.hugoDir, '..', 'content', 'tutorials');
   const allSlugs = [...tutorials.keys()];

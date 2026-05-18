@@ -8,7 +8,14 @@ service AdminService {
 
   // Full CRUD entity projections
   entity Users as projection on ims.Users;
+  @cds.redirection.target: true
   entity Tutorials as projection on ims.Tutorials;
+  // Filtered picklist for redirectTo value help — only ACTIVE tutorials can be redirect targets
+  @readonly
+  @cds.redirection.target: false
+  entity TutorialPickList as projection on ims.Tutorials {
+    ID, legacyId, title, slug, primaryTag
+  } where status = 'ACTIVE' or status is null;
   entity Missions as projection on ims.Missions { *, virtual null as publishedFieldControl : Integer };
   entity Groups as projection on ims.Groups { *, virtual null as publishedFieldControl : Integer };
   entity Steps as projection on ims.Steps;

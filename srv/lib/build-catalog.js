@@ -8,7 +8,9 @@ export async function buildCatalogHandler(req, res) {
     const missions = await SELECT.from(Missions).where({ published: true });
     const paths = await SELECT.from(CompletionPaths).orderBy('legacyId');
     const items = await SELECT.from(CompletionPathItems).orderBy('itemOrder');
-    const tutorials = await SELECT.from(Tutorials).columns('legacyId', 'slug');
+    const tutorials = await SELECT.from(Tutorials)
+      .columns('legacyId', 'slug')
+      .where(`status = 'ACTIVE' or status is null`);
 
     const slugByLegacyId = new Map(tutorials.map(t => [t.legacyId, t.slug]));
 

@@ -19,17 +19,18 @@ function hashOf(html) {
 }
 
 describe('content-store', () => {
-  let ContentFiles, ContentManifest;
+  let ContentFiles, ContentManifest, Tutorials;
   const API_KEY = 'test-content-key-12345';
 
   beforeAll(() => {
     process.env.CONTENT_API_KEY = API_KEY;
-    ({ ContentFiles, ContentManifest } = cds.entities('com.sap.developers.ims'));
+    ({ ContentFiles, ContentManifest, Tutorials } = cds.entities('com.sap.developers.ims'));
   });
 
   beforeEach(async () => {
     await DELETE.from(ContentFiles);
     await DELETE.from(ContentManifest);
+    await DELETE.from(Tutorials);
     const { JobLocks } = cds.entities('com.sap.developers.ims');
     await DELETE.from(JobLocks);
   });
@@ -520,6 +521,196 @@ describe('content-store', () => {
       // Hashes reflect v1
       const h = await project.axios.get('/content/hashes');
       expect(h.data[slug]).toBe(hashOf(v1));
+    });
+  });
+
+  describe('Soft-delete, redirect, and 404 page', () => {
+    const notFoundHtml = '<!doctype html><html><body><h1>Tutorial not found</h1></body></html>';
+
+    async function publishWith404(extraFiles = {}) {
+      const payload = makePayload(extraFiles);
+      payload['__404__'] = gzipSync(Buffer.from(notFoundHtml, 'utf-8')).toString('base64');
+      await project.axios.post('/content/publish', {
+        trigger: 'with-404',
+        files: payload,
+      }, { headers: { Authorization: `Bearer ${API_KEY}` } });
+    }
+
+    it('excludes __404__ from /content/hashes', async () => {
+      await publishWith404({ 'real-tut': '<p>Real</p>' });
+
+      const res = await project.axios.get('/content/hashes');
+      expect(res.data['real-tut']).toBeDefined();
+      expect(res.data['__404__']).toBeUndefined();
+    });
+
+    it('excludes __404__ from /content/nav (fallback path)', async () => {
+      // No __nav__ entry, so navHandlerFallback runs
+      await publishWith404({ 'visible-tut': '<p>V</p>' });
+
+      const res = await project.axios.get('/content/nav');
+      expect(res.status).toBe(200);
+      const slugs = res.data.tutorials.map(t => t.slug);
+      expect(slugs).toContain('visible-tut');
+      expect(slugs).not.toContain('__404__');
+    });
+
+    it('rejects serving __404__ as a tutorial slug', async () => {
+      await publishWith404({ 'something': '<p>x</p>' });
+
+      const res = await project.axios.get('/content/tutorials/__404__', {
+        validateStatus: () => true,
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it('serves __404__ HTML body when a slug is not in ContentFiles', async () => {
+      await publishWith404({ 'exists': '<p>here</p>' });
+
+      const res = await project.axios.get('/content/tutorials/totally-missing', {
+        validateStatus: () => true,
+      });
+
+      expect(res.status).toBe(404);
+      expect(res.headers['content-type']).toContain('text/html');
+      expect(res.data).toContain('Tutorial not found');
+      expect(res.headers['cache-control']).toContain('max-age=60');
+    });
+
+    it('falls back to JSON 404 when __404__ has not been published', async () => {
+      await project.axios.post('/content/publish', {
+        trigger: 'no-404',
+        files: makePayload({ 'only-tut': '<p>only</p>' }),
+      }, { headers: { Authorization: `Bearer ${API_KEY}` } });
+
+      const res = await project.axios.get('/content/tutorials/missing', {
+        validateStatus: () => true,
+      });
+
+      expect(res.status).toBe(404);
+      expect(res.headers['content-type']).toContain('application/json');
+      expect(res.data.error).toContain('missing');
+    });
+
+    it('returns __404__ HTML for an INACTIVE tutorial without a redirect target', async () => {
+      await publishWith404({ 'sunset-tut': '<p>old content</p>' });
+
+      // Soft-delete the tutorial (admin DELETE handler does the same UPDATE)
+      const tutId = cds.utils.uuid();
+      await INSERT.into(Tutorials).entries({
+        ID: tutId,
+        slug: 'sunset-tut',
+        title: 'Sunset',
+        status: 'INACTIVE',
+      });
+
+      const res = await project.axios.get('/content/tutorials/sunset-tut', {
+        validateStatus: () => true,
+      });
+
+      expect(res.status).toBe(404);
+      expect(res.data).toContain('Tutorial not found');
+    });
+
+    it('301-redirects an INACTIVE tutorial with a valid redirectTo target', async () => {
+      await publishWith404({
+        'old-slug': '<p>old</p>',
+        'new-slug': '<p>new</p>',
+      });
+
+      const newId = cds.utils.uuid();
+      const oldId = cds.utils.uuid();
+      await INSERT.into(Tutorials).entries({
+        ID: newId,
+        slug: 'new-slug',
+        title: 'New',
+        status: 'ACTIVE',
+      });
+      await INSERT.into(Tutorials).entries({
+        ID: oldId,
+        slug: 'old-slug',
+        title: 'Old',
+        status: 'INACTIVE',
+        redirectTo_ID: newId,
+      });
+
+      const res = await project.axios.get('/content/tutorials/old-slug', {
+        maxRedirects: 0,
+        validateStatus: () => true,
+      });
+
+      expect(res.status).toBe(301);
+      expect(res.headers['location']).toBe('/tutorials/new-slug');
+      expect(res.headers['cache-control']).toContain('max-age=300');
+    });
+
+    it('preserves query string on soft-delete redirect', async () => {
+      await publishWith404({ 'old-slug': '<p>o</p>', 'new-slug': '<p>n</p>' });
+
+      const newId = cds.utils.uuid();
+      const oldId = cds.utils.uuid();
+      await INSERT.into(Tutorials).entries({ ID: newId, slug: 'new-slug', title: 'N', status: 'ACTIVE' });
+      await INSERT.into(Tutorials).entries({ ID: oldId, slug: 'old-slug', title: 'O', status: 'INACTIVE', redirectTo_ID: newId });
+
+      const res = await project.axios.get('/content/tutorials/old-slug?step=2', {
+        maxRedirects: 0,
+        validateStatus: () => true,
+      });
+
+      expect(res.status).toBe(301);
+      expect(res.headers['location']).toBe('/tutorials/new-slug?step=2');
+    });
+
+    it('falls through to 404 when redirect target itself is INACTIVE', async () => {
+      await publishWith404({ 'old-slug': '<p>o</p>', 'gone-slug': '<p>g</p>' });
+
+      const goneId = cds.utils.uuid();
+      const oldId = cds.utils.uuid();
+      await INSERT.into(Tutorials).entries({ ID: goneId, slug: 'gone-slug', title: 'Gone', status: 'INACTIVE' });
+      await INSERT.into(Tutorials).entries({ ID: oldId, slug: 'old-slug', title: 'Old', status: 'INACTIVE', redirectTo_ID: goneId });
+
+      const res = await project.axios.get('/content/tutorials/old-slug', {
+        validateStatus: () => true,
+      });
+
+      expect(res.status).toBe(404);
+      expect(res.data).toContain('Tutorial not found');
+    });
+
+    it('excludes INACTIVE tutorials from /content/nav even when ContentFiles still has them', async () => {
+      await publishWith404({
+        'kept-tut': '<p>kept</p>',
+        'gone-tut': '<p>gone</p>',
+      });
+
+      // Mark gone-tut as INACTIVE in admin
+      await INSERT.into(Tutorials).entries({
+        ID: cds.utils.uuid(),
+        slug: 'gone-tut',
+        title: 'Gone',
+        status: 'INACTIVE',
+      });
+
+      const res = await project.axios.get('/content/nav');
+      const slugs = res.data.tutorials.map(t => t.slug);
+
+      expect(slugs).toContain('kept-tut');
+      expect(slugs).not.toContain('gone-tut');
+    });
+
+    it('still serves an ACTIVE tutorial normally even when its row exists in Tutorials', async () => {
+      await publishWith404({ 'active-tut': '<p>active</p>' });
+
+      await INSERT.into(Tutorials).entries({
+        ID: cds.utils.uuid(),
+        slug: 'active-tut',
+        title: 'Active',
+        status: 'ACTIVE',
+      });
+
+      const res = await project.axios.get('/content/tutorials/active-tut');
+      expect(res.status).toBe(200);
+      expect(res.data).toBe('<p>active</p>');
     });
   });
 });
