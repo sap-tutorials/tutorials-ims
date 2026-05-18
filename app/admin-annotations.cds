@@ -417,14 +417,14 @@ annotate AdminService.Prizes with @UI: {
   ]}
 };
 
-// --- Tutorials (read-only) ---
+// --- Tutorials (source content from GitHub; Lifecycle fields admin-editable) ---
 annotate AdminService.Tutorials with {
-  legacyId              @Common.Label: 'Tutorial ID';
-  title                 @Common.Label: 'Title';
-  slug                  @Common.Label: 'Slug';
-  primaryTag            @Common.Label: 'Primary Tag';
-  experienceTag         @Common.Label: 'Experience'  @Common.ValueListWithFixedValues;
-  averageTimeToComplete @Common.Label: 'Avg Time (min)';
+  legacyId              @Common.Label: 'Tutorial ID' @Common.FieldControl: #ReadOnly;
+  title                 @Common.Label: 'Title'       @Common.FieldControl: #ReadOnly;
+  slug                  @Common.Label: 'Slug'        @Common.FieldControl: #ReadOnly;
+  primaryTag            @Common.Label: 'Primary Tag' @Common.FieldControl: #ReadOnly;
+  experienceTag         @Common.Label: 'Experience'  @Common.ValueListWithFixedValues @Common.FieldControl: #ReadOnly;
+  averageTimeToComplete @Common.Label: 'Avg Time (min)' @Common.FieldControl: #ReadOnly;
   status                @Common.Label: 'Status'  @Common.ValueListWithFixedValues;
   deletionReason        @Common.Label: 'Deletion Reason';
   redirectTo            @Common.Label: 'Redirect To'

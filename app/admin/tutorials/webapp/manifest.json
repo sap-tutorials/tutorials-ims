@@ -47,6 +47,11 @@
           "pattern": ":?query:",
           "name": "TutorialsList",
           "target": "TutorialsList"
+        },
+        {
+          "pattern": "Tutorials({key}):?query:",
+          "name": "TutorialsObjectPage",
+          "target": "TutorialsObjectPage"
         }
       ],
       "targets": {
@@ -58,7 +63,21 @@
             "settings": {
               "contextPath": "/Tutorials",
               "variantManagement": "Page",
-              "initialLoad": "Enabled"
+              "initialLoad": "Enabled",
+              "navigation": {
+                "Tutorials": { "detail": { "route": "TutorialsObjectPage" } }
+              }
+            }
+          }
+        },
+        "TutorialsObjectPage": {
+          "type": "Component",
+          "id": "TutorialsObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/Tutorials",
+              "editableHeaderContent": false
             }
           }
         }
