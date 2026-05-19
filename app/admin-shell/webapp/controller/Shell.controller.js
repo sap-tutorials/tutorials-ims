@@ -27,7 +27,7 @@ sap.ui.define([
   };
 
   var NAV_KEY_TO_TITLE = {
-    dashboard: "Dashboard",
+    dashboard: "Tutorial Health",
     events: "Events",
     missions: "Missions",
     groups: "Groups",
@@ -43,7 +43,7 @@ sap.ui.define([
     board: "Board",
     analytics: "Analytics",
     statistics: "Statistics",
-    joule: "Joule Chat",
+    joule: "Joule Settings",
     privacy: "Privacy"
   };
 
@@ -116,7 +116,7 @@ sap.ui.define([
     },
 
     onJoulePress: function () {
-      window.open("https://sap-samples.github.io/sap-devs-cli/", "_blank");
+      if (window.joule && window.joule.open) window.joule.open();
     },
 
     onHelpPress: function () {
@@ -164,11 +164,46 @@ sap.ui.define([
       oHashChanger.attachEvent("hashChanged", this._onHashChanged, this);
     },
 
+    _parseODataKey: function (sHash) {
+      const m = sHash && sHash.match(/([A-Za-z0-9]+)\(([^)]+)\)/);
+      if (!m) return null;
+      const props = {};
+      const re = /([A-Za-z0-9_]+)\s*=\s*('([^']*)'|"([^"]*)"|([^,)]+))/g;
+      let pair;
+      while ((pair = re.exec(m[2])) !== null) {
+        const key = pair[1];
+        const val = pair[3] != null ? pair[3] : pair[4] != null ? pair[4] : pair[5];
+        if (key) props[key] = (val == null ? '' : String(val).trim());
+      }
+      return { entity: m[1], props };
+    },
+
+    _wireAdminContextToHtml: function (sNavKey, sNavTitle) {
+      const html = document.documentElement;
+      html.dataset.adminTool = sNavKey || '';
+      html.dataset.adminToolTitle = sNavTitle || '';
+      const sHash = HashChanger.getInstance().getHash() || '';
+      const parsed = this._parseODataKey(sHash);
+      if (parsed?.props?.ID) {
+        html.dataset.adminEntityId = parsed.props.ID;
+        html.dataset.adminEntityType = parsed.entity;
+      } else {
+        delete html.dataset.adminEntityId;
+        delete html.dataset.adminEntityType;
+        delete html.dataset.adminEntityTitle;
+        delete html.dataset.adminEntitySlug;
+      }
+    },
+
     _onHashChanged: function (oEvent) {
       var sNewHash = oEvent.getParameter("newHash") || "";
       var oViewModel = this.getView().getModel("viewModel");
       var bHasNestedRoute = sNewHash.indexOf("&/") !== -1;
       oViewModel.setProperty("/showBackButton", bHasNestedRoute);
+      var oNavModel = this.getOwnerComponent().getModel("nav");
+      var sNavKey = oNavModel ? oNavModel.getProperty("/selectedNavKey") : "";
+      var sPageTitle = NAV_KEY_TO_TITLE[sNavKey] || "";
+      this._wireAdminContextToHtml(sNavKey, sPageTitle);
     },
 
     _onRouteMatched: function (oEvent) {
@@ -194,6 +229,7 @@ sap.ui.define([
       var sPageTitle = NAV_KEY_TO_TITLE[sNavKey] || "";
       var sHeader = sPageTitle ? "Admin Console — " + sPageTitle : "Admin Console";
       oViewModel.setProperty("/headerTitle", sHeader);
+      this._wireAdminContextToHtml(sNavKey, sPageTitle);
     }
   });
 });

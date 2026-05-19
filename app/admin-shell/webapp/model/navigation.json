@@ -7,6 +7,7 @@
       "icon": "sap-icon://folder-blank",
       "expanded": true,
       "items": [
+        { "key": "dashboard", "title": "Tutorial Health", "icon": "sap-icon://activities" },
         { "key": "events", "title": "Events", "icon": "sap-icon://calendar" },
         { "key": "missions", "title": "Missions", "icon": "sap-icon://target-group" },
         { "key": "groups", "title": "Groups", "icon": "sap-icon://group" },
@@ -33,7 +34,7 @@
         { "key": "operations", "title": "Operations", "icon": "sap-icon://action-settings" },
         { "key": "pipelinelog", "title": "Pipeline Log", "icon": "sap-icon://pipeline-analysis" },
         { "key": "joblog", "title": "Job Log", "icon": "sap-icon://technical-object" },
-        { "key": "joule", "title": "Joule Chat", "icon": "sap-icon://da" },
+        { "key": "joule", "title": "Joule Settings", "icon": "sap-icon://da" },
         { "key": "accounts", "title": "Accounts", "icon": "sap-icon://person-placeholder" },
         { "key": "changelog", "title": "Change Log", "icon": "sap-icon://history" },
         { "key": "board", "title": "Board", "icon": "sap-icon://overview-chart" },
