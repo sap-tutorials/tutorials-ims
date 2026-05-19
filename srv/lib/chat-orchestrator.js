@@ -75,10 +75,10 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
             filters: [{
               type: 'azure_content_safety',
               config: {
-                hate: 'ALLOW_SAFE_LOW',
-                self_harm: 'ALLOW_SAFE_LOW',
-                sexual: 'ALLOW_SAFE_LOW',
-                violence: 'ALLOW_SAFE_LOW',
+                hate: 2,
+                self_harm: 2,
+                sexual: 2,
+                violence: 2,
                 prompt_shield: true
               }
             }]
@@ -87,10 +87,10 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
             filters: [{
               type: 'azure_content_safety',
               config: {
-                hate: 'ALLOW_SAFE_LOW',
-                self_harm: 'ALLOW_SAFE_LOW',
-                sexual: 'ALLOW_SAFE_LOW',
-                violence: 'ALLOW_SAFE_LOW',
+                hate: 2,
+                self_harm: 2,
+                sexual: 2,
+                violence: 2,
                 protected_material_code: true
               }
             }]
