@@ -29,6 +29,7 @@
     "copy-joule-vendor": "node scripts/copy-joule-vendor.mjs",
     "build:all": "npm run fetch-tutorials -- --regenerate && npm run build:css && npm run build:apps && npm run copy-joule-vendor && npm run build:hugo && npm run build:highlight && npm run build:display",
     "build:admin": "npm --prefix app/admin-shell run build",
+    "predev": "npm run copy-joule-vendor",
     "dev": "hugo server --source hugo",
     "test": "vitest run --project unit",
     "test:watch": "vitest --project unit",

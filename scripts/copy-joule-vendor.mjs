@@ -11,7 +11,12 @@ const files = [
   ['node_modules/dompurify/dist/purify.min.js',         'purify.min.js']
 ];
 
-for (const [src, name] of files) {
-  await copyFile(resolve(root, src), resolve(target, name));
-  console.log(`copied ${name}`);
+try {
+  for (const [src, name] of files) {
+    await copyFile(resolve(root, src), resolve(target, name));
+    console.log(`copied ${name}`);
+  }
+} catch (err) {
+  console.error(`copy-joule-vendor failed: ${err.message}`);
+  process.exit(1);
 }
