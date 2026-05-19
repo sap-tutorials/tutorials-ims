@@ -290,6 +290,31 @@
     overflowBtn.setAttribute('aria-expanded', 'false');
   });
 
+  const aiNoticeEl = panel.querySelector('.joule-panel__ai-notice');
+  const footerEl = panel.querySelector('.joule-panel__footer');
+
+  function showAINotice() {
+    hero.hidden = true;
+    chat.hidden = true;
+    aiNoticeEl.hidden = false;
+    footerEl.hidden = true;
+  }
+
+  function hideAINotice() {
+    aiNoticeEl.hidden = true;
+    footerEl.hidden = false;
+    const hasHistory = (loadHistory() || []).length > 0;
+    if (hasHistory) showChat(); else showHero();
+  }
+
+  overflowMenu.querySelector('[data-overflow="ai-notice"]').addEventListener('click', () => {
+    showAINotice();
+    overflowMenu.hidden = true;
+    overflowBtn.setAttribute('aria-expanded', 'false');
+  });
+
+  panel.querySelector('[data-action="ai-notice-back"]').addEventListener('click', hideAINotice);
+
   loadConfig().then(cfg => {
     if (!cfg.enabled) { trigger.remove(); return; }
     trigger.hidden = false;
