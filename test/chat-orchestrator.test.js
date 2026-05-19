@@ -117,12 +117,18 @@ describe('chat-orchestrator', () => {
 
   it('caps the agent loop to prevent infinite tool recursion', async () => {
     connectMock.mockResolvedValue({ run: vi.fn().mockResolvedValue([]) });
-    streamMock.mockReturnValue(makeStream([
+    streamMock.mockImplementation(() => makeStream([
       { getDeltaContent: () => null, getToolCalls: () => [{ id: 'x', name: 'searchTutorials', args: { query: 'q' } }] }
     ]));
     const res = fakeRes();
     await streamChat({ res, system: 's', messages: [{ role: 'user', content: 'q' }], deploymentId: 'd1' });
-    expect(streamMock.mock.calls.length).toBeLessThanOrEqual(6);
+    expect(streamMock.mock.calls.length).toBe(5);
     expect(res.ended).toBe(true);
+  });
+
+  it('dispatchTool rejects non-string or empty queries before connecting', async () => {
+    const result = await dispatchTool('searchTutorials', { query: { foo: 1 } });
+    expect(result).toEqual({ error: 'invalid_args', hits: [] });
+    expect(connectMock).not.toHaveBeenCalled();
   });
 });

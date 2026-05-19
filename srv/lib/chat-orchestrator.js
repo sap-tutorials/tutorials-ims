@@ -28,6 +28,9 @@ function sse(res, payload) {
 export async function dispatchTool(name, args) {
   if (name !== 'searchTutorials') return { error: 'unknown_tool' };
   try {
+    if (typeof args.query !== 'string' || !args.query.trim()) {
+      return { error: 'invalid_args', hits: [] };
+    }
     const search = await cds.connect.to('SearchService');
     const filters = {};
     if (Array.isArray(args.tags) && args.tags.length) filters.tags = args.tags;
@@ -85,7 +88,7 @@ export async function streamChat({ res, system, messages, deploymentId }) {
         content: assistantText || null,
         tool_calls: collectedToolCalls.map(tc => ({
           id: tc.id, type: 'function',
-          function: { name: tc.name, arguments: JSON.stringify(tc.args ?? {}) }
+          function: { name: tc.name, arguments: typeof tc.args === 'string' ? tc.args : JSON.stringify(tc.args ?? {}) }
         }))
       });
 
@@ -103,6 +106,7 @@ export async function streamChat({ res, system, messages, deploymentId }) {
     sse(res, { type: 'done' });
   } catch (err) {
     const reason = err?.code === 'CONTENT_FILTER' ? 'content_filter' : undefined;
+    // All non-filter errors are treated as retryable for v1 — categorization (timeout, rate limit, etc.) can be added later.
     sse(res, { type: 'error', retryable: !reason, reason });
     LOG.error('chat stream failed', err.message);
   } finally {
