@@ -89,8 +89,7 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
                 hate: 2,
                 self_harm: 2,
                 sexual: 2,
-                violence: 2,
-                protected_material_code: true
+                violence: 2
               }
             }]
           }
