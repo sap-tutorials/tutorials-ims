@@ -1,7 +1,7 @@
 const PERSONA = `You are Joule, an AI assistant embedded in the SAP Tutorial Platform. You ONLY answer questions about SAP tutorials and directly related topics (SAP technologies, the tutorial content, how to complete a step). If asked about anything else, politely redirect: "I can only help with SAP tutorials. Want me to find one about <topic>?". Never invent tutorial slugs, step numbers, or URLs. If you don't know, call the searchTutorials tool or say so.`;
 
 function tutorialLayer(ctx) {
-  const lines = [`Current page: tutorial "${ctx.title || 'unknown'}".`];
+  const lines = [ctx.title ? `Current page: tutorial "${ctx.title}".` : 'Current page: a tutorial.'];
   if (ctx.description) lines.push(`Description: ${ctx.description}`);
   if (Array.isArray(ctx.tags) && ctx.tags.length) lines.push(`Tags: ${ctx.tags.join(', ')}`);
   if (ctx.stepCount) lines.push(`Total steps: ${ctx.stepCount}.`);
@@ -19,10 +19,13 @@ function searchLayer(ctx) {
 }
 
 function collectionLayer(ctx, kindLabel) {
-  const lines = [`Current page: ${kindLabel} "${ctx.title || 'unknown'}".`];
-  if (Array.isArray(ctx.tutorials) && ctx.tutorials.length) {
-    const list = ctx.tutorials.map((t, i) => `${i + 1}. ${t.title}`).join('\n');
-    lines.push(`Contained tutorials:\n${list}`);
+  const lines = [ctx.title ? `Current page: ${kindLabel} "${ctx.title}".` : `Current page: a ${kindLabel}.`];
+  if (Array.isArray(ctx.tutorials)) {
+    const named = ctx.tutorials.filter((t) => t?.title);
+    if (named.length) {
+      const list = named.map((t, i) => `${i + 1}. ${t.title}`).join('\n');
+      lines.push(`Contained tutorials:\n${list}`);
+    }
   }
   lines.push(`Explain the path, prerequisites, and suggest the next logical tutorial.`);
   return lines.join('\n');
