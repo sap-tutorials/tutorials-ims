@@ -8,7 +8,7 @@ import { basicAuthMiddleware } from './lib/tech-user-auth.js';
 import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, navHandler, rollbackHandler } from './lib/content-store.js';
 import { buildSystemPrompt } from './lib/chat-context.js';
 import { createRateLimiter, RateLimitError } from './lib/chat-rate-limit.js';
-import { streamChat } from './lib/chat-orchestrator.js';
+import { streamChat, toolsForContext } from './lib/chat-orchestrator.js';
 
 // Late-bound POST /chat/stream handler. Registered in 'bootstrap' (before CAP
 // mounts ChatService at /chat, which would otherwise swallow /chat/stream as
@@ -179,7 +179,15 @@ cds.on('served', () => {
 
       // 4) System prompt + stream
       const { messages = [], pageContext = { kind: 'generic' } } = req.body || {};
-      const system = buildSystemPrompt(pageContext, {
+
+      const isAdmin = !!(user?.is && user.is('admin'));
+      const effectivePageContext = { ...pageContext };
+      if (effectivePageContext.kind === 'admin' && !isAdmin) {
+        effectivePageContext.kind = 'generic'; // forged context — degrade gracefully
+      }
+
+      const tools = toolsForContext({ pageContext: effectivePageContext, isAdmin });
+      const system = buildSystemPrompt(effectivePageContext, {
         firstName: user.attr?.given_name || user.attr?.givenName || '',
         lastName:  user.attr?.family_name || user.attr?.familyName || ''
       });
@@ -195,7 +203,9 @@ cds.on('served', () => {
         modelName: settings.modelName,
         temperature: settings.temperature,
         maxTokens: settings.maxTokens,
-        signal: abortController.signal
+        signal: abortController.signal,
+        tools,
+        user
       });
   };
 
