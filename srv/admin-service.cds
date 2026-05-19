@@ -56,6 +56,10 @@ service AdminService {
   entity DashboardMonitoredRecords as projection on ims.DashboardMonitoredRecords;
   @readonly entity TimeZones as projection on ims.TimeZones;
 
+  @odata.singleton
+  @requires: 'Admin'
+  entity ChatSettings as projection on ims.ChatSettings;
+
   // Code list entities for enum dropdowns (no DB table needed)
   @readonly @cds.persistence.skip entity ExperienceLevels { key code : String(255); }
   @readonly @cds.persistence.skip entity TaskStatuses     { key code : String(50); }

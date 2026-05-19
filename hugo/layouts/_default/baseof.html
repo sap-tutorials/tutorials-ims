@@ -1,5 +1,10 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light" data-api-base="{{ .Site.Params.apiBase }}" data-cap-base="{{ .Site.Params.capBase }}">
+<html lang="en" data-theme="light" data-api-base="{{ .Site.Params.apiBase }}" data-cap-base="{{ .Site.Params.capBase }}"
+  data-page-kind="{{ if .IsHome }}search{{ else if eq .Type "tutorials" }}tutorial{{ else if eq .Type "missions" }}mission{{ else if eq .Type "groups" }}group{{ else }}generic{{ end }}"
+  data-page-slug="{{ .Params.slug }}"
+  data-page-title="{{ .Title }}"
+  data-page-tags="{{ with .Params.tags }}{{ delimit . "," }}{{ end }}"
+  data-page-step-count="{{ .Params.stepCount }}">
 <head>
   {{ partial "head.html" . }}
 </head>
@@ -7,5 +12,8 @@
   {{ partial "header.html" . }}
   <main>{{ block "main" . }}{{ end }}</main>
   {{ partial "footer.html" . }}
+  {{ partial "joule-panel.html" . }}
+  <link rel="stylesheet" href="/css/joule.css">
+  <script src="/js/joule.js" defer></script>
 </body>
 </html>

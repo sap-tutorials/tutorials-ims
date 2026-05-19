@@ -46,7 +46,8 @@
       "sap.tutorials.admin.operations": "./components/operations",
       "sap.tutorials.admin.accounts": "./components/accounts",
       "sap.tutorials.admin.changelog": "./components/changelog",
-      "sap.tutorials.admin.analytics": "./components/analytics"
+      "sap.tutorials.admin.analytics": "./components/analytics",
+      "sap.tutorials.admin.joule": "./components/joule"
     },
     "models": {
       "admin": {
@@ -125,6 +126,12 @@
         "settings": {},
         "componentData": {},
         "lazy": true
+      },
+      "jouleSettingsComponent": {
+        "name": "sap.tutorials.admin.joule",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
       }
     },
     "services": {
@@ -161,6 +168,7 @@
         { "name": "accounts", "pattern": "accounts", "target": [{"name": "accountsTarget", "prefix": "au"}] },
         { "name": "changelog", "pattern": "changelog", "target": [{"name": "changelogTarget", "prefix": "cl"}] },
         { "name": "analytics", "pattern": "analytics", "target": [{"name": "analyticsTarget", "prefix": "an"}] },
+        { "name": "joule", "pattern": "joule", "target": [{"name": "jouleSettingsTarget", "prefix": "jo"}] },
         { "name": "board", "pattern": "board", "target": "boardTarget" },
         { "name": "dashboard", "pattern": "", "target": "dashboardTarget" },
         { "name": "statistics", "pattern": "statistics", "target": "statisticsTarget" },
@@ -243,6 +251,13 @@
           "id": "analyticsTarget",
           "viewLevel": 1,
           "prefix": "an"
+        },
+        "jouleSettingsTarget": {
+          "type": "Component",
+          "usage": "jouleSettingsComponent",
+          "id": "jouleSettingsTarget",
+          "viewLevel": 1,
+          "prefix": "jo"
         },
         "boardTarget": {
           "viewName": "Board",

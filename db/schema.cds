@@ -336,3 +336,10 @@ entity PipelineLog : cuid, managed {
   metadata        : LargeString;
   statusCriticality : Integer @Core.Computed;
 }
+
+entity ChatSettings : cuid, managed {
+  enabled              : Boolean default false;
+  deploymentId         : String(100);
+  maxRequestsPerUser   : Integer default 100;
+  bannerText           : String(500);
+}

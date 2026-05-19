@@ -28,6 +28,21 @@ export default class AdminService extends cds.ApplicationService {
       { code: 'TUTORIAL' }, { code: 'GROUP' }, { code: 'CHECKPOINT' }
     ]);
 
+    // Ensure singleton row exists for ChatSettings (defensive — seed CSV
+    // populates this on cds deploy; this covers fresh in-memory test DBs).
+    const CHAT_SETTINGS_SINGLETON_ID = '00000000-0000-0000-0000-00000000c8a7';
+    this.before('READ', 'ChatSettings', async () => {
+      const exists = await SELECT.one.from('com.sap.developers.ims.ChatSettings')
+        .where({ ID: CHAT_SETTINGS_SINGLETON_ID });
+      if (!exists) {
+        await INSERT.into('com.sap.developers.ims.ChatSettings').entries({
+          ID: CHAT_SETTINGS_SINGLETON_ID,
+          enabled: false,
+          maxRequestsPerUser: 100
+        });
+      }
+    });
+
     // Auto-assign legacyId on creation for entities that need it
     const legacyKeyedEntities = [
       'Users', 'Tutorials', 'Missions', 'Groups', 'Events', 'TaskRecords',

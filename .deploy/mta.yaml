@@ -49,6 +49,7 @@ modules:
       - name: tutorials-mail
       - name: tutorials-audit-log
       - name: tutorials-cloud-logging
+      - name: tutorials-aicore
 
   - name: tutorials-approuter
     type: approuter.nodejs
@@ -130,3 +131,11 @@ resources:
       config:
         ingest_otlp:
           enabled: true
+
+  - name: tutorials-aicore
+    type: org.cloudfoundry.managed-service
+    optional: true
+    parameters:
+      service: aicore
+      service-plan: extended
+      service-name: tutorials-aicore

@@ -150,8 +150,8 @@ Tutorial HTML is NOT served from static files. After Hugo builds, `publish-conte
 - **`app/admin-shell/`** — Unified admin shell using `sap.tnt.ToolPage` with collapsible side navigation, theme switching (light/dark/auto), and Router-managed content area. Includes custom views: Board (event overview), Statistics (mission completions export), TutorialDashboard, and Privacy policy.
 - **`app/admin/`** — 10 Fiori Elements apps (events, missions, groups, accomplishments, prizes, tutorials, tags, operations, accounts, changelog) — loaded as headless components by the shell via `componentUsages`
 - **`app/admin-annotations.cds`** — All @UI/@Common CDS annotations for admin screens
-- Deployed via HTML5 Application Repository (`tutorials-admin-ui-deployer` module in mta.yaml)
-- **Production access**: `/admin-ui/` route (XSUAA-protected, served from HTML5 App Repository)
+- Deployed as static files inside the approuter (`cp -r ../app/admin-shell/dist/. static/admin-ui/` in `.deploy/mta.yaml`)
+- **Production access**: `/admin-ui/` route (XSUAA-protected, served from approuter `static/admin-ui/`)
 - **Local dev access**: `/admin-ui/` — served by `adminAppsHandler` middleware in `approuter/server.js`; component sub-resources at `/admin-ui/components/<name>/`
 - **Theme**: `sap_horizon` (light) / `sap_horizon_dark` (dark), auto-detects OS preference, persisted to `localStorage` key `sap-tutorials-admin-theme`
 

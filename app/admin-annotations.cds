@@ -7,6 +7,7 @@ annotate AdminService.Groups with @odata.draft.enabled;
 annotate AdminService.Events with @odata.draft.enabled;
 annotate AdminService.Accomplishments with @odata.draft.enabled;
 annotate AdminService.Prizes with @odata.draft.enabled;
+annotate AdminService.Tutorials with @odata.draft.enabled;
 
 // --- Events ---
 annotate AdminService.Events with {
@@ -417,14 +418,14 @@ annotate AdminService.Prizes with @UI: {
   ]}
 };
 
-// --- Tutorials (read-only) ---
+// --- Tutorials (source content from GitHub; Lifecycle fields admin-editable) ---
 annotate AdminService.Tutorials with {
-  legacyId              @Common.Label: 'Tutorial ID';
-  title                 @Common.Label: 'Title';
-  slug                  @Common.Label: 'Slug';
-  primaryTag            @Common.Label: 'Primary Tag';
-  experienceTag         @Common.Label: 'Experience'  @Common.ValueListWithFixedValues;
-  averageTimeToComplete @Common.Label: 'Avg Time (min)';
+  legacyId              @Common.Label: 'Tutorial ID' @Common.FieldControl: #ReadOnly;
+  title                 @Common.Label: 'Title'       @Common.FieldControl: #ReadOnly;
+  slug                  @Common.Label: 'Slug'        @Common.FieldControl: #ReadOnly;
+  primaryTag            @Common.Label: 'Primary Tag' @Common.FieldControl: #ReadOnly;
+  experienceTag         @Common.Label: 'Experience'  @Common.ValueListWithFixedValues @Common.FieldControl: #ReadOnly;
+  averageTimeToComplete @Common.Label: 'Avg Time (min)' @Common.FieldControl: #ReadOnly;
   status                @Common.Label: 'Status'  @Common.ValueListWithFixedValues;
   deletionReason        @Common.Label: 'Deletion Reason';
   redirectTo            @Common.Label: 'Redirect To'
@@ -860,4 +861,35 @@ annotate AdminService.CompletionAnalytics with @(
   eventName       @title: 'Event'                @Analytics.Dimension;
   completionTimeMs @title: 'Completion Time (ms)' @Analytics.Measure @Aggregation.default: #SUM;
   completionCount @title: 'Completions'          @Analytics.Measure @Aggregation.default: #SUM;
+};
+
+// --- Joule Chat Settings (singleton) ---
+annotate AdminService.ChatSettings with @(
+  UI: {
+    HeaderInfo: {
+      TypeName       : 'Joule Chat Settings',
+      TypeNamePlural : 'Joule Chat Settings',
+      Title          : { Value: bannerText }
+    },
+    Facets: [{
+      $Type  : 'UI.ReferenceFacet',
+      Label  : 'General',
+      Target : '@UI.FieldGroup#General'
+    }],
+    FieldGroup #General: {
+      Data: [
+        { Value: enabled },
+        { Value: deploymentId },
+        { Value: maxRequestsPerUser },
+        { Value: bannerText }
+      ]
+    }
+  },
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.DeleteRestrictions.Deletable: false
+) {
+  enabled            @Common.Label: 'Enabled' @description: 'Master kill-switch. When off, the Joule button is hidden and /chat/stream returns 503.';
+  deploymentId       @Common.Label: 'AI Core Deployment ID' @description: 'Orchestration deployment from SAP AI Core Generative AI Hub.';
+  maxRequestsPerUser @Common.Label: 'Max Requests / User / Day' @description: 'In-memory rolling 24h limit, per service instance. Effective ceiling = this × instance count.';
+  bannerText         @Common.Label: 'Banner Text'   @description: 'Optional notice shown above the chat input (e.g. "Joule is in beta").' @UI.MultiLineText;
 };

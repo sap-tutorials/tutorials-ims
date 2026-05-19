@@ -36,3 +36,4 @@ annotate ims.FeaturedTasks with @cds.persistence.journal;
 annotate ims.FailedEmails with @cds.persistence.journal;
 annotate ims.ContentFiles with @cds.persistence.journal;
 annotate ims.ContentManifest with @cds.persistence.journal;
+annotate ims.ChatSettings with @cds.persistence.journal;

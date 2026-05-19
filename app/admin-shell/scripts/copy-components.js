@@ -16,7 +16,8 @@ const COMPONENTS = [
   'operations',
   'accounts',
   'changelog',
-  'analytics'
+  'analytics',
+  'joule'
 ]
 
 mkdirSync(COMPONENTS_DIR, { recursive: true })

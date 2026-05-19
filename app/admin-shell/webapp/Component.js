@@ -13,12 +13,66 @@ sap.ui.define([
     init: function () {
       this._oShellViewModel = new JSONModel({ sideExpanded: true, headerTitle: "Admin Console", showBackButton: false });
       this._initMockShellContainer();
+      this._installAuthInterceptor();
 
       UIComponent.prototype.init.apply(this, arguments);
 
       this._initTheme();
       this._initNavModel();
       this.getRouter().initialize();
+    },
+
+    _installAuthInterceptor: function () {
+      // When the XSUAA session expires, backend OData calls return 401 and the UI silently breaks.
+      // Detect that and force a page reload so the approuter triggers the OAuth flow.
+      var BACKEND_PREFIXES = ["/admin/", "/api/", "/scanner/", "/display/", "/build/", "/content/"];
+      var bRedirecting = false;
+
+      function isBackendUrl(sUrl) {
+        if (!sUrl) return false;
+        try {
+          var oUrl = new URL(sUrl, window.location.origin);
+          if (oUrl.origin !== window.location.origin) return false;
+          return BACKEND_PREFIXES.some(function (p) { return oUrl.pathname.indexOf(p) === 0; });
+        } catch (e) {
+          return false;
+        }
+      }
+
+      function handleUnauthorized() {
+        if (bRedirecting) return;
+        bRedirecting = true;
+        // Reloading the current URL (incl. hash) makes the approuter restart the OAuth flow
+        // and return the user to the same admin-shell route after re-authentication.
+        try { window.location.reload(); } catch (e) { window.location.href = window.location.href; }
+      }
+
+      var fnOriginalFetch = window.fetch;
+      window.fetch = function (input, init) {
+        var sUrl = (typeof input === "string") ? input : (input && input.url);
+        return fnOriginalFetch.apply(this, arguments).then(function (response) {
+          if ((response.status === 401 || response.status === 403) && isBackendUrl(sUrl)) {
+            handleUnauthorized();
+          }
+          return response;
+        });
+      };
+
+      var fnOriginalOpen = XMLHttpRequest.prototype.open;
+      var fnOriginalSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.open = function (method, url) {
+        this.__authUrl = url;
+        return fnOriginalOpen.apply(this, arguments);
+      };
+      XMLHttpRequest.prototype.send = function () {
+        var that = this;
+        this.addEventListener("load", function () {
+          if ((that.status === 401 || that.status === 403) && isBackendUrl(that.__authUrl)) {
+            handleUnauthorized();
+          }
+        });
+        return fnOriginalSend.apply(this, arguments);
+      };
     },
 
     getShellViewModel: function () {

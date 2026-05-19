@@ -4,3 +4,7 @@
 //
 // Annotating at the service level (AdminService) means only admin UI changes
 // are tracked — bulk imports, scheduled jobs, and replication are excluded.
+
+using { com.sap.developers.ims as ims } from './schema';
+
+annotate ims.ChatSettings with @changelog;

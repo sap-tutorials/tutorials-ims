@@ -78,20 +78,6 @@ modules:
           name: srv-api
           url: ~{srv-url}
           forwardAuthToken: true
-      - name: tutorials-html5-repo-rt
-
-  - name: tutorials-admin-ui-deployer
-    type: com.sap.html5.application-content
-    path: app/admin-shell
-    build-parameters:
-      builder: custom
-      commands:
-        - npm install && npm run build
-      build-result: dist
-    requires:
-      - name: tutorials-html5-repo-host
-        parameters:
-          content-target: true
 
 resources:
   - name: tutorials-hana
@@ -118,18 +104,6 @@ resources:
   - name: tutorials-mail
     type: org.cloudfoundry.user-provided-service
     optional: true
-
-  - name: tutorials-html5-repo-host
-    type: org.cloudfoundry.managed-service
-    parameters:
-      service: html5-apps-repo
-      service-plan: app-host
-
-  - name: tutorials-html5-repo-rt
-    type: org.cloudfoundry.managed-service
-    parameters:
-      service: html5-apps-repo
-      service-plan: app-runtime
 
   - name: tutorials-audit-log
     type: org.cloudfoundry.managed-service
