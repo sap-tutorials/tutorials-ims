@@ -16,9 +16,20 @@
     if (force || isNearBottom(el)) el.scrollTop = el.scrollHeight;
   }
 
+  // Sync-attach window.joule so UI5 controllers can call open() before
+  // the async config load resolves.
+  window.joule = {
+    _ready: false,
+    _pendingOpen: null,
+    open(opts) {
+      if (!this._ready) { this._pendingOpen = opts || true; return; }
+      _openImpl(opts);
+    },
+  };
+
   const trigger = document.getElementById('joule-trigger');
   const panel = document.getElementById('joule-panel');
-  if (!trigger || !panel) return;
+  if (!panel) return;
 
   const transcript = panel.querySelector('.joule-panel__transcript');
   const body = panel.querySelector('.joule-panel__body');
@@ -87,6 +98,84 @@
     }
   }
 
+  function renderDocCitations(items) {
+    const wrap = document.createElement('div');
+    wrap.className = 'joule-doc-citations';
+    const heading = document.createElement('p');
+    heading.className = 'joule-doc-citations__heading';
+    heading.textContent = 'Sources';
+    wrap.appendChild(heading);
+    const ul = document.createElement('ul');
+    for (const it of items) {
+      if (!it || typeof it.path !== 'string') continue;
+      const li = document.createElement('li');
+      const path = document.createElement('span');
+      path.className = 'joule-doc-citations__path';
+      path.textContent = it.path;
+      li.appendChild(path);
+      if (it.heading) {
+        const sep = document.createTextNode(' — ');
+        const h = document.createElement('span');
+        h.className = 'joule-doc-citations__head';
+        h.textContent = it.heading;
+        li.appendChild(sep);
+        li.appendChild(h);
+      }
+      ul.appendChild(li);
+    }
+    if (ul.childElementCount > 0) {
+      wrap.appendChild(ul);
+      transcript.appendChild(wrap);
+      scrollToBottom(body);
+    }
+  }
+
+  function renderAnalyticsTable(parsed) {
+    const rows = Array.isArray(parsed?.rows) ? parsed.rows : [];
+    const wrap = document.createElement('div');
+    wrap.className = 'joule-analytics';
+    if (rows.length === 0) {
+      const empty = document.createElement('p');
+      empty.className = 'joule-analytics__empty';
+      empty.textContent = 'No rows returned.';
+      wrap.appendChild(empty);
+    } else {
+      const cols = Object.keys(rows[0]);
+      const table = document.createElement('table');
+      table.className = 'joule-analytics__table';
+      const thead = document.createElement('thead');
+      const headRow = document.createElement('tr');
+      for (const c of cols) {
+        const th = document.createElement('th');
+        th.textContent = c;
+        headRow.appendChild(th);
+      }
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+      const tbody = document.createElement('tbody');
+      for (const r of rows) {
+        const tr = document.createElement('tr');
+        for (const c of cols) {
+          const td = document.createElement('td');
+          const v = r[c];
+          td.textContent = v == null ? '' : String(v);
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody);
+      wrap.appendChild(table);
+    }
+    if (Number(parsed?.suppressedCount) > 0) {
+      const note = document.createElement('p');
+      note.className = 'joule-analytics__suppressed';
+      note.textContent = `${parsed.suppressedCount} row(s) suppressed for privacy.`;
+      wrap.appendChild(note);
+    }
+    transcript.appendChild(wrap);
+    scrollToBottom(body);
+  }
+
   let activeSendId = 0;
 
   function getCachedConfig() {
@@ -141,6 +230,19 @@
 
   function readPageContext() {
     const html = document.documentElement;
+    if (html.dataset.pageKind === 'admin') {
+      return {
+        kind: 'admin',
+        tool: html.dataset.adminTool || null,
+        toolTitle: html.dataset.adminToolTitle || null,
+        entity: html.dataset.adminEntityId ? {
+          id: html.dataset.adminEntityId,
+          type: html.dataset.adminEntityType || null,
+          title: html.dataset.adminEntityTitle || null,
+          slug: html.dataset.adminEntitySlug || null,
+        } : null,
+      };
+    }
     const ctx = {
       kind: html.dataset.pageKind || 'generic',
       slug: html.dataset.pageSlug || undefined,
@@ -319,6 +421,12 @@
             if (Array.isArray(payload.items) && payload.items.length) {
               renderTutorialCards(payload.items);
             }
+          } else if (payload.type === 'doc-citations') {
+            if (Array.isArray(payload.items) && payload.items.length) {
+              renderDocCitations(payload.items);
+            }
+          } else if (payload.type === 'analytics-result') {
+            renderAnalyticsTable(payload);
           } else if (payload.type === 'done') {
             typingEl.remove();
             messages.push({ role: 'assistant', content: assistantText });
@@ -335,7 +443,7 @@
     }
   }
 
-  async function open() {
+  async function _openImpl(opts) {
     const user = await ensureAuth();
     if (!user) {
       const returnTo = location.pathname + location.search + (location.search ? '&' : '?') + 'joule=open';
@@ -356,7 +464,7 @@
   }
   function close() { panel.hidden = true; }
 
-  trigger.addEventListener('click', open);
+  if (trigger) { trigger.addEventListener('click', () => window.joule.open()); }
   closeBtn.addEventListener('click', close);
   form.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -423,18 +531,25 @@
   panel.querySelector('[data-action="ai-notice-back"]').addEventListener('click', hideAINotice);
 
   loadConfig().then(cfg => {
-    if (!cfg.enabled) { trigger.remove(); return; }
-    trigger.hidden = false;
+    if (!cfg.enabled) { if (trigger) trigger.remove(); return; }
+    if (trigger) trigger.hidden = false;
     if (cfg.bannerText) { banner.textContent = cfg.bannerText; banner.hidden = false; }
 
-    // Auto-open after login redirect: open() appends ?joule=open to returnTo,
+    // Auto-open after login redirect: _openImpl() appends ?joule=open to returnTo,
     // so when XSUAA bounces the user back here, we re-enter the panel.
     const params = new URLSearchParams(location.search);
     if (params.get('joule') === 'open') {
       params.delete('joule');
       const cleaned = params.toString();
       history.replaceState(null, '', location.pathname + (cleaned ? '?' + cleaned : '') + location.hash);
-      open();
+      _openImpl();
+    }
+
+    window.joule._ready = true;
+    if (window.joule._pendingOpen) {
+      const pending = window.joule._pendingOpen;
+      window.joule._pendingOpen = null;
+      _openImpl(pending === true ? undefined : pending);
     }
   });
 })();
