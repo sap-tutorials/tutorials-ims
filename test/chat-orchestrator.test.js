@@ -129,6 +129,13 @@ describe('chat-orchestrator', () => {
   it('dispatchTool rejects non-string or empty queries before connecting', async () => {
     const result = await dispatchTool('searchTutorials', { query: { foo: 1 } });
     expect(result).toEqual({ error: 'invalid_args', hits: [] });
+
+    const emptyResult = await dispatchTool('searchTutorials', { query: '' });
+    expect(emptyResult).toEqual({ error: 'invalid_args', hits: [] });
+
+    const whitespaceResult = await dispatchTool('searchTutorials', { query: '   ' });
+    expect(whitespaceResult).toEqual({ error: 'invalid_args', hits: [] });
+
     expect(connectMock).not.toHaveBeenCalled();
   });
 });
