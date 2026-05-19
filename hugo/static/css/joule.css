@@ -119,6 +119,9 @@
 .joule-typing span:nth-child(2) { animation-delay: .2s; }
 .joule-typing span:nth-child(3) { animation-delay: .4s; }
 @keyframes jouleBlink { 0%,80%,100% { opacity:.25 } 40% { opacity:1 } }
+@media (prefers-reduced-motion: reduce) {
+  .joule-typing span { animation: none; opacity: 1; }
+}
 
 .joule-tool-chip {
   align-self: flex-start; font-size: .75rem;
@@ -172,3 +175,11 @@
 .joule-mark--small svg { width: 24px; height: 24px; }
 .joule-mark--large svg { width: 64px; height: 64px;
   filter: drop-shadow(0 4px 12px rgba(0,0,0,.35)); }
+
+.joule-panel__icon-btn:focus-visible,
+.joule-panel__starter:focus-visible,
+.joule-card:focus-visible,
+.joule-panel__send:focus-visible {
+  outline: 2px solid var(--joule-purple-1);
+  outline-offset: 2px;
+}
