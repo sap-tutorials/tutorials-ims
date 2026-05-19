@@ -13,8 +13,11 @@ approuter/static/*
 .env
 .playwright-mcp/
 *.png
-hugo/static/js/
+hugo/static/js/*
 !hugo/static/js/joule.js
+!hugo/static/js/vendor/
+hugo/static/js/vendor/*
+!hugo/static/js/vendor/.gitkeep
 
 # CAP
 gen/
