@@ -37,12 +37,10 @@ export async function dispatchTool(name, args) {
       return { error: 'invalid_args', hits: [] };
     }
     const search = await cds.connect.to('SearchService');
-    const filters = {};
-    if (Array.isArray(args.tags) && args.tags.length) filters.tags = args.tags;
-    if (args.type) filters.type = args.type;
-    const hits = await search.run(SELECT.from('SearchableItems')
-      .where({ search: args.query, ...filters })
-      .limit(5));
+    const { SearchableItems } = search.entities;
+    const hits = await search.run(
+      SELECT.from(SearchableItems).search(args.query).limit(5)
+    );
     return (hits || []).map(h => ({
       slug: h.slug, title: h.title, description: h.description,
       type: h.type, primaryTag: h.primaryTag
