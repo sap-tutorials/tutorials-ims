@@ -12,6 +12,7 @@ vi.mock('@sap/cds', () => {
   const fakeQuery = {
     from() { return this; },
     where() { return this; },
+    search() { return this; },
     limit() { return this; }
   };
   globalThis.SELECT = { from: () => fakeQuery };
@@ -40,6 +41,13 @@ function makeStream(events) {
   })();
 }
 
+function makeResponse(chunks, toolCalls = null) {
+  return {
+    stream: makeStream(chunks),
+    getToolCalls: () => toolCalls
+  };
+}
+
 describe('chat-orchestrator', () => {
   beforeEach(() => {
     streamMock.mockReset();
@@ -47,9 +55,9 @@ describe('chat-orchestrator', () => {
   });
 
   it('emits delta SSE events and a done event for plain text', async () => {
-    streamMock.mockReturnValueOnce(makeStream([
-      { getDeltaContent: () => 'Hel', getToolCalls: () => null },
-      { getDeltaContent: () => 'lo', getToolCalls: () => null }
+    streamMock.mockReturnValueOnce(makeResponse([
+      { getDeltaContent: () => 'Hel' },
+      { getDeltaContent: () => 'lo' }
     ]));
     const res = fakeRes();
     await streamChat({
@@ -64,16 +72,14 @@ describe('chat-orchestrator', () => {
 
   it('runs the searchTutorials tool and re-invokes the model with results', async () => {
     const searchRun = vi.fn().mockResolvedValue([{ slug: 'a', title: 'A', type: 'tutorial' }]);
-    connectMock.mockResolvedValue({ run: searchRun });
+    connectMock.mockResolvedValue({ run: searchRun, entities: {} });
 
-    streamMock.mockReturnValueOnce(makeStream([
-      {
-        getDeltaContent: () => null,
-        getToolCalls: () => [{ id: 't1', name: 'searchTutorials', args: { query: 'cap' } }]
-      }
-    ]));
-    streamMock.mockReturnValueOnce(makeStream([
-      { getDeltaContent: () => 'Found it', getToolCalls: () => null }
+    streamMock.mockReturnValueOnce(makeResponse(
+      [{ getDeltaContent: () => null }],
+      [{ id: 't1', function: { name: 'searchTutorials', arguments: '{"query":"cap"}' } }]
+    ));
+    streamMock.mockReturnValueOnce(makeResponse([
+      { getDeltaContent: () => 'Found it' }
     ]));
 
     const res = fakeRes();
@@ -93,7 +99,7 @@ describe('chat-orchestrator', () => {
     const searchRun = vi.fn().mockResolvedValue([
       { slug: 'a', title: 'A', description: 'd', type: 'tutorial', primaryTag: 'cap' }
     ]);
-    connectMock.mockResolvedValue({ run: searchRun });
+    connectMock.mockResolvedValue({ run: searchRun, entities: {} });
     const result = await dispatchTool('searchTutorials', { query: 'cap', tags: ['cap'] });
     expect(searchRun).toHaveBeenCalled();
     expect(result).toEqual([
@@ -116,10 +122,11 @@ describe('chat-orchestrator', () => {
   });
 
   it('caps the agent loop to prevent infinite tool recursion', async () => {
-    connectMock.mockResolvedValue({ run: vi.fn().mockResolvedValue([]) });
-    streamMock.mockImplementation(() => makeStream([
-      { getDeltaContent: () => null, getToolCalls: () => [{ id: 'x', name: 'searchTutorials', args: { query: 'q' } }] }
-    ]));
+    connectMock.mockResolvedValue({ run: vi.fn().mockResolvedValue([]), entities: {} });
+    streamMock.mockImplementation(() => makeResponse(
+      [{ getDeltaContent: () => null }],
+      [{ id: 'x', function: { name: 'searchTutorials', arguments: '{"query":"q"}' } }]
+    ));
     const res = fakeRes();
     await streamChat({ res, system: 's', messages: [{ role: 'user', content: 'q' }], deploymentId: 'd1' });
     expect(streamMock.mock.calls.length).toBe(5);
@@ -141,11 +148,11 @@ describe('chat-orchestrator', () => {
 
   it('aborts mid-stream when the signal fires and skips the done event', async () => {
     const ac = new AbortController();
-    streamMock.mockReturnValueOnce(makeStream([
-      { getDeltaContent: () => 'first', getToolCalls: () => null },
+    streamMock.mockReturnValueOnce(makeResponse([
+      { getDeltaContent: () => 'first' },
       // Abort between chunks; the loop checks signal at the top of each iteration.
-      { getDeltaContent: () => { ac.abort(); return 'second-should-not-be-emitted'; }, getToolCalls: () => null },
-      { getDeltaContent: () => 'third-also-skipped', getToolCalls: () => null }
+      { getDeltaContent: () => { ac.abort(); return 'second-should-not-be-emitted'; } },
+      { getDeltaContent: () => 'third-also-skipped' }
     ]));
     const res = fakeRes();
     await streamChat({
@@ -161,5 +168,27 @@ describe('chat-orchestrator', () => {
     expect(joined).not.toMatch(/"type":"done"/);
     // res.end() still runs via finally.
     expect(res.ended).toBe(true);
+  });
+
+  it('emits a tutorial-cards SSE event after searchTutorials returns hits', async () => {
+    const searchRun = vi.fn().mockResolvedValue([
+      { slug: 'a', title: 'A', description: 'desc', type: 'tutorial', primaryTag: 'cap' }
+    ]);
+    connectMock.mockResolvedValue({ run: searchRun, entities: {} });
+
+    streamMock.mockReturnValueOnce(makeResponse(
+      [{ getDeltaContent: () => null }],
+      [{ id: 't1', function: { name: 'searchTutorials', arguments: '{"query":"cap"}' } }]
+    ));
+    streamMock.mockReturnValueOnce(makeResponse(
+      [{ getDeltaContent: () => 'ok' }]
+    ));
+
+    const res = fakeRes();
+    await streamChat({ res, system: 's', messages: [{ role: 'user', content: 'find cap' }], deploymentId: 'd1' });
+
+    const joined = res.chunks.join('');
+    expect(joined).toMatch(/"type":"tutorial-cards"/);
+    expect(joined).toMatch(/"slug":"a"/);
   });
 });
