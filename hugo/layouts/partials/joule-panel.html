@@ -1,6 +1,6 @@
 <div id="joule-panel" hidden role="dialog" aria-modal="false" aria-labelledby="joule-panel-title">
   <header class="joule-panel__header">
-    {{ partial "joule-icon.html" . }}
+    {{ partial "joule-icon.html" (dict "size" "small") }}
     <h2 id="joule-panel-title" class="joule-panel__title">Joule</h2>
     <button type="button" class="joule-panel__icon-btn" data-action="expand" aria-label="Expand">
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2h5v2H4v3H2zM9 2h5v5h-2V4H9zM2 9h2v3h3v2H2zM12 9h2v5H9v-2h3z"/></svg>

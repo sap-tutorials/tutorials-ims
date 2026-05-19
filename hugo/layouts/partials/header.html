@@ -21,7 +21,7 @@
     </div>
     <span class="shellbar-separator"></span>
     <button type="button" class="fd-shellbar__button" aria-label="Joule" title="Joule" id="joule-trigger" hidden>
-      <i class="sap-icon--da"></i>
+      {{ partial "joule-icon.html" (dict "size" "small") }}
     </button>
     <button type="button" class="fd-shellbar__button" aria-label="Help" title="Help" onclick="window.open('https://community.sap.com','_blank')">
       <i class="sap-icon--question-mark"></i>
