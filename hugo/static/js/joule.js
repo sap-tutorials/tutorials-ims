@@ -163,6 +163,29 @@
     try { return JSON.parse(document.documentElement.dataset.user || 'null'); } catch { return null; }
   }
 
+  function loadStarters() {
+    try {
+      const el = document.getElementById('joule-starters');
+      return el ? JSON.parse(el.textContent) : {};
+    } catch { return {}; }
+  }
+
+  function renderStarters() {
+    const starters = loadStarters();
+    const ctx = readPageContext();
+    const list = starters[ctx.kind] || starters.generic || [];
+    const wrap = panel.querySelector('.joule-panel__starters');
+    wrap.replaceChildren();
+    for (const text of list) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'joule-panel__starter';
+      btn.textContent = text;
+      btn.addEventListener('click', () => { input.value = text; send(text); });
+      wrap.appendChild(btn);
+    }
+  }
+
   function getCachedUser() {
     try {
       const raw = sessionStorage.getItem(USER_KEY);
@@ -302,6 +325,7 @@
     } else {
       showHero();
       renderGreeting(user.firstName);
+      renderStarters();
     }
     input.focus();
   }
