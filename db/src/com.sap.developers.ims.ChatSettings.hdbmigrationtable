@@ -1,4 +1,4 @@
-== version=2
+== version=3
 COLUMN TABLE com_sap_developers_ims_ChatSettings (
   ID NVARCHAR(36) NOT NULL,
   createdAt TIMESTAMP,
@@ -15,7 +15,5 @@ COLUMN TABLE com_sap_developers_ims_ChatSettings (
   PRIMARY KEY(ID)
 )
 
-== migration=2
-ALTER TABLE com_sap_developers_ims_ChatSettings ADD (modelName NVARCHAR(100));
-ALTER TABLE com_sap_developers_ims_ChatSettings ADD (temperature DECIMAL(3, 2));
-ALTER TABLE com_sap_developers_ims_ChatSettings ADD (maxTokens INTEGER);
+== migration=3
+ALTER TABLE com_sap_developers_ims_ChatSettings ADD (modelName NVARCHAR(100), temperature DECIMAL(3, 2), maxTokens INTEGER);
