@@ -32,6 +32,60 @@
   function showChat() { hero.hidden = true; chat.hidden = false; }
   function showHero() { hero.hidden = false; chat.hidden = true; }
 
+  const SAFE_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,127}$/i;
+
+  function safeNavigate(type, slug) {
+    if (typeof slug !== 'string' || !SAFE_SLUG_RE.test(slug)) {
+      LOG_NOOP();
+      return;
+    }
+    const path = type === 'mission' ? `/missions/${slug}/`
+               : type === 'group'   ? `/groups/${slug}/`
+               :                      `/tutorials/${slug}/`;
+    window.location.href = path;
+  }
+
+  // Inline log helper that won't pollute prod consoles; swap for console.warn during dev.
+  function LOG_NOOP() {}
+
+  function renderTutorialCards(items) {
+    const wrap = document.createElement('div');
+    wrap.className = 'joule-cards';
+    for (const it of items) {
+      if (!it || !SAFE_SLUG_RE.test(String(it.slug || ''))) continue;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'joule-card';
+      btn.dataset.slug = it.slug;
+      btn.dataset.type = it.type || 'tutorial';
+
+      const title = document.createElement('p');
+      title.className = 'joule-card__title';
+      title.textContent = it.title || it.slug;
+      btn.appendChild(title);
+
+      if (it.description) {
+        const desc = document.createElement('p');
+        desc.className = 'joule-card__desc';
+        desc.textContent = it.description;
+        btn.appendChild(desc);
+      }
+      if (it.primaryTag) {
+        const tag = document.createElement('p');
+        tag.className = 'joule-card__tag';
+        tag.textContent = it.primaryTag;
+        btn.appendChild(tag);
+      }
+
+      btn.addEventListener('click', () => safeNavigate(it.type, it.slug));
+      wrap.appendChild(btn);
+    }
+    if (wrap.childElementCount > 0) {
+      transcript.appendChild(wrap);
+      scrollToBottom(transcript);
+    }
+  }
+
   let activeSendId = 0;
 
   function getCachedConfig() {
@@ -213,6 +267,10 @@
             chip.className = 'joule-tool-chip';
             chip.textContent = `Searching for ${payload.args?.query || '…'}`;
             transcript.insertBefore(chip, assistantBubble);
+          } else if (payload.type === 'tutorial-cards') {
+            if (Array.isArray(payload.items) && payload.items.length) {
+              renderTutorialCards(payload.items);
+            }
           } else if (payload.type === 'done') {
             typingEl.remove();
             messages.push({ role: 'assistant', content: assistantText });
