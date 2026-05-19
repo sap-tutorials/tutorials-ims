@@ -16,6 +16,12 @@
   const form = panel.querySelector('.joule-panel__form');
   const input = panel.querySelector('.joule-panel__input');
   const closeBtn = panel.querySelector('.joule-panel__close');
+  const hero = panel.querySelector('.joule-panel__hero');
+  const chat = panel.querySelector('.joule-panel__chat');
+  const heroGreeting = panel.querySelector('.joule-panel__hero-greeting');
+
+  function showChat() { hero.hidden = true; chat.hidden = false; }
+  function showHero() { hero.hidden = false; chat.hidden = true; }
 
   let activeSendId = 0;
 
@@ -51,7 +57,8 @@
   function appendMessage(role, content, opts = {}) {
     const div = document.createElement('div');
     div.className = `joule-msg joule-msg--${role}`;
-    div.textContent = content;
+    if (role === 'assistant') window.__jouleRender.setMarkdown(div, content);
+    else div.textContent = content;
     if (opts.id) div.dataset.id = opts.id;
     transcript.appendChild(div);
     transcript.scrollTop = transcript.scrollHeight;
@@ -59,13 +66,8 @@
   }
 
   function renderGreeting(firstName) {
-    transcript.replaceChildren();
-    const div = document.createElement('div');
-    div.className = 'joule-greeting';
-    div.textContent = firstName
-      ? `Hello ${firstName}, How can I help you?`
-      : 'Hello, How can I help you?';
-    transcript.appendChild(div);
+    const fallback = heroGreeting.dataset.defaultGreeting || 'Hello, How can I help you?';
+    heroGreeting.textContent = firstName ? `Hello ${firstName}, How can I help you?` : fallback;
   }
 
   function renderTranscript(messages) {
@@ -133,6 +135,7 @@
   }
 
   async function send(messageText) {
+    showChat();
     const sendId = ++activeSendId;
     const isStale = () => sendId !== activeSendId;
     const messages = loadHistory();
@@ -179,7 +182,7 @@
           const payload = JSON.parse(line.slice(5).trim());
           if (payload.type === 'delta') {
             assistantText += payload.content;
-            assistantBubble.textContent = assistantText;
+            window.__jouleRender.setMarkdown(assistantBubble, assistantText);
           } else if (payload.type === 'tool') {
             const chip = document.createElement('div');
             chip.className = 'joule-tool-chip';
@@ -208,8 +211,13 @@
     }
     panel.hidden = false;
     const messages = loadHistory();
-    if (messages.length) renderTranscript(messages);
-    else renderGreeting(user.firstName);
+    if (messages.length) {
+      showChat();
+      renderTranscript(messages);
+    } else {
+      showHero();
+      renderGreeting(user.firstName);
+    }
     input.focus();
   }
   function close() { panel.hidden = true; }
