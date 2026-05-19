@@ -1495,6 +1495,61 @@
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_DASHBOARDMONITOREDRECORDS"
     },
+    "com.sap.developers.ims.ChatSettings": {
+      "kind": "entity",
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "enabled": {
+          "type": "cds.Boolean",
+          "default": {
+            "val": false
+          },
+          "@cds.persistence.name": "ENABLED"
+        },
+        "deploymentId": {
+          "type": "cds.String",
+          "length": 100,
+          "@cds.persistence.name": "DEPLOYMENTID"
+        },
+        "maxRequestsPerUser": {
+          "type": "cds.Integer",
+          "default": {
+            "val": 100
+          },
+          "@cds.persistence.name": "MAXREQUESTSPERUSER"
+        },
+        "bannerText": {
+          "type": "cds.String",
+          "length": 500,
+          "@cds.persistence.name": "BANNERTEXT"
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CHATSETTINGS"
+    },
     "com.sap.developers.ims.Checkpoints": {
       "kind": "entity",
       "@cds.persistence.journal": true,

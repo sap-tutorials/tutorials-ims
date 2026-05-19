@@ -10,6 +10,11 @@ import { buildSystemPrompt } from './lib/chat-context.js';
 import { createRateLimiter, RateLimitError } from './lib/chat-rate-limit.js';
 import { streamChat } from './lib/chat-orchestrator.js';
 
+// Late-bound POST /chat/stream handler. Registered in 'bootstrap' (before CAP
+// mounts ChatService at /chat, which would otherwise swallow /chat/stream as
+// an OData resource path). Set in 'served' once cds.middlewares are ready.
+let chatStreamHandler = (req, res) => res.status(503).json({ error: 'service_starting' });
+
 // Enable CAP index page and swagger UI in non-development environments when EXPOSE_CAP_UI is set
 if (process.env.EXPOSE_CAP_UI === 'true') {
   cds.env.server.index = true;
@@ -90,6 +95,12 @@ cds.on('bootstrap', (app) => {
   app.get('/content/tutorials/*slug', serveHandler);
   app.post('/content/publish', express.json({ limit: '100mb' }), contentAuthMiddleware, publishHandler);
   app.post('/content/rollback', express.json(), contentAuthMiddleware, rollbackHandler);
+
+  // Reserve POST /chat/stream BEFORE CAP mounts ChatService at /chat. The
+  // OData router on /chat would otherwise interpret 'stream' as a resource
+  // and return 404. Body parser runs here; auth + business logic are bound
+  // lazily in 'served' via chatStreamHandler.
+  app.post('/chat/stream', express.json({ limit: '64kb' }), (req, res, next) => chatStreamHandler(req, res, next));
 });
 
 cds.on('served', () => {
@@ -117,19 +128,13 @@ cds.on('served', () => {
 });
 
 cds.on('served', () => {
-  const app = cds.app;
   const contextMw = cds.middlewares?.context?.() || ((req, res, next) => next());
   const authMw    = cds.middlewares?.auth?.()    || ((req, res, next) => next());
 
   const rateLimiter = createRateLimiter();
   const SETTINGS_ID = '00000000-0000-0000-0000-00000000c8a7';
 
-  app.post(
-    '/chat/stream',
-    express.json({ limit: '64kb' }),
-    contextMw,
-    authMw,
-    async (req, res) => {
+  const businessHandler = async (req, res) => {
       // 1) Kill switch — read fresh on every request via cds.ql
       const { ChatSettings } = cds.entities('com.sap.developers.ims');
       let settings;
@@ -185,10 +190,24 @@ cds.on('served', () => {
         system,
         messages,
         deploymentId: settings.deploymentId,
+        modelName: settings.modelName,
+        temperature: settings.temperature,
+        maxTokens: settings.maxTokens,
         signal: abortController.signal
       });
-    }
-  );
+  };
+
+  // Compose the chain: contextMw → authMw → businessHandler. The body parser
+  // already ran in 'bootstrap' before this dispatcher.
+  chatStreamHandler = (req, res, next) => {
+    contextMw(req, res, (err) => {
+      if (err) return next(err);
+      authMw(req, res, (err) => {
+        if (err) return next(err);
+        Promise.resolve(businessHandler(req, res)).catch(next);
+      });
+    });
+  };
 
   cds.log('chat').info('POST /chat/stream registered');
 });

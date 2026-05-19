@@ -3,7 +3,9 @@
 
   const CONFIG_KEY = 'joule.config.v1';
   const HISTORY_KEY = 'joule.history';
+  const USER_KEY = 'joule.user.v1';
   const CONFIG_TTL_MS = 60_000;
+  const USER_TTL_MS = 60_000;
 
   const trigger = document.getElementById('joule-trigger');
   const panel = document.getElementById('joule-panel');
@@ -96,6 +98,40 @@
     try { return JSON.parse(document.documentElement.dataset.user || 'null'); } catch { return null; }
   }
 
+  function getCachedUser() {
+    try {
+      const raw = sessionStorage.getItem(USER_KEY);
+      if (!raw) return null;
+      const { ts, value } = JSON.parse(raw);
+      if (Date.now() - ts > USER_TTL_MS) return null;
+      return value;
+    } catch { return null; }
+  }
+
+  async function fetchUser() {
+    try {
+      const r = await fetch('/auth/user', { credentials: 'include', redirect: 'follow' });
+      if (r.redirected || !r.ok) return null;
+      const ct = r.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) return null;
+      const u = await r.json();
+      if (!u.authenticated) return null;
+      const cached = { firstName: u.givenName, familyName: u.familyName, email: u.email, id: u.id };
+      sessionStorage.setItem(USER_KEY, JSON.stringify({ ts: Date.now(), value: cached }));
+      return cached;
+    } catch { return null; }
+  }
+
+  async function ensureAuth() {
+    if (document.documentElement.dataset.authenticated === 'true') {
+      const fromHeader = readUser();
+      if (fromHeader) return fromHeader;
+    }
+    const cached = getCachedUser();
+    if (cached) return cached;
+    return await fetchUser();
+  }
+
   async function send(messageText) {
     const sendId = ++activeSendId;
     const isStale = () => sendId !== activeSendId;
@@ -163,11 +199,17 @@
     }
   }
 
-  function open() {
+  async function open() {
+    const user = await ensureAuth();
+    if (!user) {
+      const returnTo = location.pathname + location.search + (location.search ? '&' : '?') + 'joule=open';
+      window.location.href = '/login?returnTo=' + encodeURIComponent(returnTo);
+      return;
+    }
     panel.hidden = false;
     const messages = loadHistory();
     if (messages.length) renderTranscript(messages);
-    else renderGreeting(readUser()?.firstName);
+    else renderGreeting(user.firstName);
     input.focus();
   }
   function close() { panel.hidden = true; }
@@ -186,5 +228,15 @@
     if (!cfg.enabled) { trigger.remove(); return; }
     trigger.hidden = false;
     if (cfg.bannerText) { banner.textContent = cfg.bannerText; banner.hidden = false; }
+
+    // Auto-open after login redirect: open() appends ?joule=open to returnTo,
+    // so when XSUAA bounces the user back here, we re-enter the panel.
+    const params = new URLSearchParams(location.search);
+    if (params.get('joule') === 'open') {
+      params.delete('joule');
+      const cleaned = params.toString();
+      history.replaceState(null, '', location.pathname + (cleaned ? '?' + cleaned : '') + location.hash);
+      open();
+    }
   });
 })();

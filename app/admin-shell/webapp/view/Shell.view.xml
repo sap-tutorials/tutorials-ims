@@ -92,6 +92,7 @@
             <tnt:NavigationListItem text="Board" key="board" />
             <tnt:NavigationListItem text="Analytics" key="analytics" />
             <tnt:NavigationListItem text="Statistics" key="statistics" />
+            <tnt:NavigationListItem text="Joule Chat" key="joule" />
             <tnt:NavigationListItem text="Privacy" key="privacy" />
           </tnt:NavigationListItem>
         </tnt:NavigationList>

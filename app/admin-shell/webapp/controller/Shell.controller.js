@@ -22,6 +22,7 @@ sap.ui.define([
     board: "board",
     analytics: "analytics",
     statistics: "statistics",
+    joule: "joule",
     privacy: "privacy"
   };
 
@@ -42,6 +43,7 @@ sap.ui.define([
     board: "Board",
     analytics: "Analytics",
     statistics: "Statistics",
+    joule: "Joule Chat",
     privacy: "Privacy"
   };
 

@@ -74,6 +74,20 @@
       "csrfProtection": false
     },
     {
+      "source": "^/api/ChatConfig(.*)$",
+      "target": "/api/ChatConfig$1",
+      "destination": "srv-api",
+      "authenticationType": "none",
+      "csrfProtection": false
+    },
+    {
+      "source": "^/chat/(.*)$",
+      "target": "/chat/$1",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa",
+      "csrfProtection": false
+    },
+    {
       "source": "^/api/(.*)$",
       "target": "/api/$1",
       "destination": "srv-api",

@@ -58,6 +58,8 @@ modules:
       builder: custom
       commands:
         - npm install
+        - cp -r ../hugo/public/. static/
+        - rm -rf static/tutorials
         - npm --prefix ../app/admin-shell install
         - npm --prefix ../app/admin-shell run build
         - mkdir -p static/admin-ui

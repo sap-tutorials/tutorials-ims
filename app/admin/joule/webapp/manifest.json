@@ -3,50 +3,30 @@
   "sap.app": {
     "id": "sap.tutorials.admin.joule",
     "type": "application",
-    "title": "Joule Chat Settings",
-    "dataSources": {
-      "adminService": {
-        "uri": "/admin/",
-        "type": "OData",
-        "settings": { "odataVersion": "4.0" }
-      }
-    }
+    "title": "{{appTitle}}",
+    "i18n": "i18n/i18n.properties"
   },
   "sap.ui5": {
+    "rootView": {
+      "viewName": "sap.tutorials.admin.joule.view.Settings",
+      "type": "XML",
+      "id": "settings",
+      "async": true
+    },
     "dependencies": {
       "minUI5Version": "1.136.0",
-      "libs": { "sap.m": {}, "sap.fe.templates": {} }
+      "libs": {
+        "sap.m": {},
+        "sap.ui.core": {},
+        "sap.ui.layout": {}
+      }
     },
     "models": {
-      "": {
-        "dataSource": "adminService",
-        "preload": true,
-        "settings": {
-          "synchronizationMode": "None",
-          "operationMode": "Server",
-          "autoExpandSelect": true,
-          "earlyRequests": true
-        }
-      },
-      "i18n": { "type": "sap.ui.model.resource.ResourceModel", "settings": { "bundleName": "sap.tutorials.admin.joule.i18n.i18n" } }
-    },
-    "routing": {
-      "routes": [
-        { "pattern": ":?query:", "name": "JouleSettings", "target": "JouleSettings" }
-      ],
-      "targets": {
-        "JouleSettings": {
-          "type": "Component",
-          "id": "JouleSettings",
-          "name": "sap.fe.templates.ObjectPage",
-          "options": {
-            "settings": {
-              "contextPath": "/ChatSettings",
-              "editableHeaderContent": false
-            }
-          }
-        }
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": { "bundleName": "sap.tutorials.admin.joule.i18n.i18n" }
       }
-    }
+    },
+    "contentDensities": { "compact": true, "cozy": true }
   }
 }

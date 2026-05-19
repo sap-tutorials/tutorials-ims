@@ -340,6 +340,9 @@ entity PipelineLog : cuid, managed {
 entity ChatSettings : cuid, managed {
   enabled              : Boolean default false;
   deploymentId         : String(100);
+  modelName            : String(100);
+  temperature          : Decimal(3, 2);
+  maxTokens            : Integer;
   maxRequestsPerUser   : Integer default 100;
   bannerText           : String(500);
 }

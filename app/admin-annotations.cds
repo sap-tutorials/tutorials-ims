@@ -880,6 +880,9 @@ annotate AdminService.ChatSettings with @(
       Data: [
         { Value: enabled },
         { Value: deploymentId },
+        { Value: modelName },
+        { Value: temperature },
+        { Value: maxTokens },
         { Value: maxRequestsPerUser },
         { Value: bannerText }
       ]
@@ -890,6 +893,9 @@ annotate AdminService.ChatSettings with @(
 ) {
   enabled            @Common.Label: 'Enabled' @description: 'Master kill-switch. When off, the Joule button is hidden and /chat/stream returns 503.';
   deploymentId       @Common.Label: 'AI Core Deployment ID' @description: 'Orchestration deployment from SAP AI Core Generative AI Hub.';
+  modelName          @Common.Label: 'Model Name' @description: 'Foundation model name routed by the orchestration deployment (e.g. anthropic--claude-4.6-sonnet, gpt-4.1). Leave blank for server default.';
+  temperature        @Common.Label: 'Temperature' @description: 'Sampling temperature 0.00 (deterministic) to 1.00 (creative). Leave blank for server default (0.51).' @assert.range: [0.00, 1.00];
+  maxTokens          @Common.Label: 'Max Tokens' @description: 'Cap on tokens in a single assistant response. Leave blank for server default (10025).' @assert.range: [1, 100000];
   maxRequestsPerUser @Common.Label: 'Max Requests / User / Day' @description: 'In-memory rolling 24h limit, per service instance. Effective ceiling = this × instance count.';
   bannerText         @Common.Label: 'Banner Text'   @description: 'Optional notice shown above the chat input (e.g. "Joule is in beta").' @UI.MultiLineText;
 };

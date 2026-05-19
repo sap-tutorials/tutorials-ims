@@ -1,0 +1,21 @@
+== version=2
+COLUMN TABLE com_sap_developers_ims_ChatSettings (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  enabled BOOLEAN DEFAULT FALSE,
+  deploymentId NVARCHAR(100),
+  modelName NVARCHAR(100),
+  temperature DECIMAL(3, 2),
+  maxTokens INTEGER,
+  maxRequestsPerUser INTEGER DEFAULT 100,
+  bannerText NVARCHAR(500),
+  PRIMARY KEY(ID)
+)
+
+== migration=2
+ALTER TABLE com_sap_developers_ims_ChatSettings ADD (modelName NVARCHAR(100));
+ALTER TABLE com_sap_developers_ims_ChatSettings ADD (temperature DECIMAL(3, 2));
+ALTER TABLE com_sap_developers_ims_ChatSettings ADD (maxTokens INTEGER);

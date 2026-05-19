@@ -7,7 +7,10 @@
       "Bash(rm -rf approuter/static/admin-ui/*)",
       "Bash(cp -r app/admin-shell/dist/* approuter/static/admin-ui/)",
       "mcp__chrome-devtools__get_network_request",
-      "mcp__chrome-devtools__press_key"
+      "mcp__chrome-devtools__press_key",
+      "mcp__sap-devs-server__cf_target",
+      "mcp__sap-devs-server__cf_apps",
+      "mcp__sap-devs-server__get_known_errors"
     ]
   }
 }
