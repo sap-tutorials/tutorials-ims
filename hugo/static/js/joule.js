@@ -175,8 +175,9 @@
     const ctx = readPageContext();
     const list = starters[ctx.kind] || starters.generic || [];
     const wrap = panel.querySelector('.joule-panel__starters');
+    if (!wrap) return;
     wrap.replaceChildren();
-    for (const text of list) {
+    for (const text of list.slice(0, 3)) {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'joule-panel__starter';
