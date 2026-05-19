@@ -100,14 +100,17 @@ Records every flag flip with who/when, surfaced through the existing changelog a
 
 ```cds
 @odata.singleton
+@requires: 'Admin'
 entity ChatSettings as projection on ims.ChatSettings;
 ```
+
+The explicit `@requires: 'Admin'` guards reads and writes in case the service-level annotation changes — defense in depth.
 
 `srv/admin-service.js` registers a `before READ` for `ChatSettings` that ensures exactly one row exists, inserting the seeded defaults if the table is empty. Subsequent reads always return that row. The seed CSV makes this near-zero-cost — the safeguard is for fresh dev databases.
 
 ### Public Config Projection
 
-`srv/developer-service.cds`:
+Added to `srv/developer-service.cds` (the existing service at `@path: '/api'`) so the resource address is `/api/ChatConfig`:
 
 ```cds
 @requires: 'any'
@@ -136,7 +139,7 @@ Annotated `@requires: 'any'` so it's reachable without auth (header script needs
 
 ### Frontend: Chat Lifecycle
 
-1. **Boot.** `header.html` script `fetch('/api/ChatConfig')`. If `enabled === false`, removes the Joule `<button>` from the DOM. If enabled, attaches the click handler and stores `bannerText` on `document.documentElement.dataset.jouleBanner`. Result is cached in `sessionStorage` for 60 s — flips propagate within a minute without a hard reload.
+1. **Boot.** `header.html` script `fetch('/api/ChatConfig')`. If `enabled === false`, removes the Joule `<button>` from the DOM. If enabled, attaches the click handler and stores `bannerText` on `document.documentElement.dataset.jouleBanner`. Result is cached in `sessionStorage` under a versioned key (`joule.config.v1`) for 60 s — flips propagate within a minute without a hard reload, and a future schema change can bump the key to invalidate stale caches cleanly.
 2. **Open.** Clicking the button reveals the `#joule-panel` partial. If `sessionStorage["joule.history"]` is empty, render the greeting state ("Hello {firstName}, How can I help you?" using the user object already fetched by the existing avatar code). Otherwise render the saved transcript.
 3. **Send.** User types → `joule.js` posts to `/chat/stream` with `{ messages, pageContext }`, reads SSE chunks via `fetch().body.getReader()`, appends `delta` content to the in-progress assistant bubble, surfaces `tool` events as a "Searching for X…" chip, and persists to `sessionStorage` on `done`.
 4. **Errors.** Mapped per the table in §"Error Handling" below; never silent.
@@ -183,16 +186,20 @@ Three layers, assembled by `srv/lib/chat-context.js`:
 
 ### Backend: RAG Tool
 
-Single tool registered with the orchestration client:
+Single tool registered with the orchestration client. Parameters declared as a JSON Schema object so the SDK can pass it through to the model unchanged:
 
 ```js
 {
   name: "searchTutorials",
   description: "Search the SAP tutorial catalog. Use when the user asks to find a tutorial, or when answering a question that needs context from a tutorial other than the current one.",
   parameters: {
-    query: { type: "string", description: "keywords to search" },
-    tags:  { type: "array",  items: { type: "string" }, description: "optional tag filters (e.g. ['hana','cap'])" },
-    type:  { type: "string", enum: ["tutorial","mission","group"], description: "optional kind filter" }
+    type: "object",
+    properties: {
+      query: { type: "string", description: "keywords to search" },
+      tags:  { type: "array",  items: { type: "string" }, description: "optional tag filters (e.g. ['hana','cap'])" },
+      type:  { type: "string", enum: ["tutorial","mission","group"], description: "optional kind filter" }
+    },
+    required: ["query"]
   }
 }
 ```
@@ -233,7 +240,7 @@ The `@cap-js/audit-logging` infrastructure is **not** extended to ChatSettings (
 - On each request: `if count >= settings.maxRequestsPerUser throw RateLimitError`
 - Cleared on srv restart (acceptable: deploys reset budgets)
 
-Per-instance only. If `tutorials-srv` scales beyond 1 instance the effective ceiling becomes `maxRequestsPerUser × instanceCount`. Documented in code; HANA-backed counter is a one-file change later if observed limits need to be tighter.
+Per-instance only. If `tutorials-srv` scales beyond 1 instance the effective ceiling becomes `maxRequestsPerUser × instanceCount`. The admin app's `maxRequestsPerUser` field gets a `@description` annotation noting this multiplication so operators size the limit correctly. HANA-backed counter is a one-file change later if observed limits need to be tighter.
 
 ### Observability
 
