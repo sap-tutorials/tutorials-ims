@@ -1,6 +1,9 @@
 (function () {
   'use strict';
-  if (!window.markdownit || !window.DOMPurify) return;
+  if (!window.markdownit || !window.DOMPurify) {
+    window.__jouleRender = { setMarkdown(t, s) { t.textContent = s || ''; } };
+    return;
+  }
 
   const md = window.markdownit({ html: false, linkify: true, breaks: true });
 
