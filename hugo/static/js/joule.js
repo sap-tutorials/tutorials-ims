@@ -232,6 +232,8 @@
 
     const typingEl = document.createElement('div');
     typingEl.className = 'joule-typing';
+    typingEl.setAttribute('role', 'status');
+    typingEl.setAttribute('aria-label', 'Joule is thinking');
     for (let i = 0; i < 3; i++) typingEl.appendChild(document.createElement('span'));
     transcript.appendChild(typingEl);
     scrollToBottom(transcript, true);
