@@ -1535,6 +1535,21 @@
           "length": 100,
           "@cds.persistence.name": "DEPLOYMENTID"
         },
+        "modelName": {
+          "type": "cds.String",
+          "length": 100,
+          "@cds.persistence.name": "MODELNAME"
+        },
+        "temperature": {
+          "type": "cds.Decimal",
+          "precision": 3,
+          "scale": 2,
+          "@cds.persistence.name": "TEMPERATURE"
+        },
+        "maxTokens": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "MAXTOKENS"
+        },
         "maxRequestsPerUser": {
           "type": "cds.Integer",
           "default": {
