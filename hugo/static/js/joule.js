@@ -6,6 +6,15 @@
   const USER_KEY = 'joule.user.v1';
   const CONFIG_TTL_MS = 60_000;
   const USER_TTL_MS = 60_000;
+  const STICK_THRESHOLD_PX = 80;
+
+  function isNearBottom(el) {
+    return el.scrollHeight - el.scrollTop - el.clientHeight < STICK_THRESHOLD_PX;
+  }
+
+  function scrollToBottom(el, force = false) {
+    if (force || isNearBottom(el)) el.scrollTop = el.scrollHeight;
+  }
 
   const trigger = document.getElementById('joule-trigger');
   const panel = document.getElementById('joule-panel');
@@ -16,6 +25,66 @@
   const form = panel.querySelector('.joule-panel__form');
   const input = panel.querySelector('.joule-panel__input');
   const closeBtn = panel.querySelector('.joule-panel__close');
+  const hero = panel.querySelector('.joule-panel__hero');
+  const chat = panel.querySelector('.joule-panel__chat');
+  const heroGreeting = panel.querySelector('.joule-panel__hero-greeting');
+
+  function showChat() { hero.hidden = true; chat.hidden = false; }
+  function showHero() { hero.hidden = false; chat.hidden = true; }
+
+  const SAFE_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,127}$/i;
+
+  function safeNavigate(type, slug) {
+    if (typeof slug !== 'string' || !SAFE_SLUG_RE.test(slug)) {
+      LOG_NOOP();
+      return;
+    }
+    const path = type === 'mission' ? `/missions/${slug}/`
+               : type === 'group'   ? `/groups/${slug}/`
+               :                      `/tutorials/${slug}/`;
+    window.location.href = path;
+  }
+
+  // Inline log helper that won't pollute prod consoles; swap for console.warn during dev.
+  function LOG_NOOP() {}
+
+  function renderTutorialCards(items) {
+    const wrap = document.createElement('div');
+    wrap.className = 'joule-cards';
+    for (const it of items) {
+      if (!it || !SAFE_SLUG_RE.test(String(it.slug || ''))) continue;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'joule-card';
+      btn.dataset.slug = it.slug;
+      btn.dataset.type = it.type || 'tutorial';
+
+      const title = document.createElement('p');
+      title.className = 'joule-card__title';
+      title.textContent = it.title || it.slug;
+      btn.appendChild(title);
+
+      if (it.description) {
+        const desc = document.createElement('p');
+        desc.className = 'joule-card__desc';
+        desc.textContent = it.description;
+        btn.appendChild(desc);
+      }
+      if (it.primaryTag) {
+        const tag = document.createElement('p');
+        tag.className = 'joule-card__tag';
+        tag.textContent = it.primaryTag;
+        btn.appendChild(tag);
+      }
+
+      btn.addEventListener('click', () => safeNavigate(it.type, it.slug));
+      wrap.appendChild(btn);
+    }
+    if (wrap.childElementCount > 0) {
+      transcript.appendChild(wrap);
+      scrollToBottom(transcript);
+    }
+  }
 
   let activeSendId = 0;
 
@@ -51,21 +120,17 @@
   function appendMessage(role, content, opts = {}) {
     const div = document.createElement('div');
     div.className = `joule-msg joule-msg--${role}`;
-    div.textContent = content;
+    if (role === 'assistant') window.__jouleRender.setMarkdown(div, content);
+    else div.textContent = content;
     if (opts.id) div.dataset.id = opts.id;
     transcript.appendChild(div);
-    transcript.scrollTop = transcript.scrollHeight;
+    scrollToBottom(transcript, true);
     return div;
   }
 
   function renderGreeting(firstName) {
-    transcript.replaceChildren();
-    const div = document.createElement('div');
-    div.className = 'joule-greeting';
-    div.textContent = firstName
-      ? `Hello ${firstName}, How can I help you?`
-      : 'Hello, How can I help you?';
-    transcript.appendChild(div);
+    const fallback = heroGreeting.dataset.defaultGreeting || 'Hello, How can I help you?';
+    heroGreeting.textContent = firstName ? `Hello ${firstName}, How can I help you?` : fallback;
   }
 
   function renderTranscript(messages) {
@@ -96,6 +161,30 @@
 
   function readUser() {
     try { return JSON.parse(document.documentElement.dataset.user || 'null'); } catch { return null; }
+  }
+
+  function loadStarters() {
+    try {
+      const el = document.getElementById('joule-starters');
+      return el ? JSON.parse(el.textContent) : {};
+    } catch { return {}; }
+  }
+
+  function renderStarters() {
+    const starters = loadStarters();
+    const ctx = readPageContext();
+    const list = starters[ctx.kind] || starters.generic || [];
+    const wrap = panel.querySelector('.joule-panel__starters');
+    if (!wrap) return;
+    wrap.replaceChildren();
+    for (const text of list.slice(0, 3)) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'joule-panel__starter';
+      btn.textContent = text;
+      btn.addEventListener('click', () => { input.value = text; send(text); });
+      wrap.appendChild(btn);
+    }
   }
 
   function getCachedUser() {
@@ -133,6 +222,7 @@
   }
 
   async function send(messageText) {
+    showChat();
     const sendId = ++activeSendId;
     const isStale = () => sendId !== activeSendId;
     const messages = loadHistory();
@@ -140,8 +230,23 @@
     renderTranscript(messages);
     saveHistory(messages);
 
-    const assistantBubble = appendMessage('assistant', '');
+    const typingEl = document.createElement('div');
+    typingEl.className = 'joule-typing';
+    typingEl.setAttribute('role', 'status');
+    typingEl.setAttribute('aria-label', 'Joule is thinking');
+    for (let i = 0; i < 3; i++) typingEl.appendChild(document.createElement('span'));
+    transcript.appendChild(typingEl);
+    scrollToBottom(transcript, true);
+
+    let assistantBubble = null;
     let assistantText = '';
+
+    function ensureBubble() {
+      if (assistantBubble) return assistantBubble;
+      typingEl.remove();
+      assistantBubble = appendMessage('assistant', '');
+      return assistantBubble;
+    }
 
     let res;
     try {
@@ -152,14 +257,15 @@
         body: JSON.stringify({ messages, pageContext: readPageContext() })
       });
     } catch {
-      assistantBubble.textContent = 'Network error. Please try again.';
-      assistantBubble.classList.add('joule-msg--error');
+      const bubble = ensureBubble();
+      bubble.textContent = 'Network error. Please try again.';
+      bubble.classList.add('joule-msg--error');
       return;
     }
 
-    if (res.status === 401) { window.location.href = '/login?returnTo=' + encodeURIComponent(location.pathname); return; }
-    if (res.status === 503) { assistantBubble.textContent = 'Joule is currently unavailable.'; assistantBubble.classList.add('joule-msg--error'); return; }
-    if (res.status === 429) { assistantBubble.textContent = "You've reached today's chat limit."; assistantBubble.classList.add('joule-msg--error'); return; }
+    if (res.status === 401) { typingEl.remove(); window.location.href = '/login?returnTo=' + encodeURIComponent(location.pathname); return; }
+    if (res.status === 503) { const bubble = ensureBubble(); bubble.textContent = 'Joule is currently unavailable.'; bubble.classList.add('joule-msg--error'); return; }
+    if (res.status === 429) { const bubble = ensureBubble(); bubble.textContent = "You've reached today's chat limit."; bubble.classList.add('joule-msg--error'); return; }
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
@@ -179,20 +285,28 @@
           const payload = JSON.parse(line.slice(5).trim());
           if (payload.type === 'delta') {
             assistantText += payload.content;
-            assistantBubble.textContent = assistantText;
+            window.__jouleRender.setMarkdown(ensureBubble(), assistantText);
+            scrollToBottom(transcript);
           } else if (payload.type === 'tool') {
+            typingEl.remove();
             const chip = document.createElement('div');
             chip.className = 'joule-tool-chip';
             chip.textContent = `Searching for ${payload.args?.query || '…'}`;
             transcript.insertBefore(chip, assistantBubble);
+          } else if (payload.type === 'tutorial-cards') {
+            if (Array.isArray(payload.items) && payload.items.length) {
+              renderTutorialCards(payload.items);
+            }
           } else if (payload.type === 'done') {
+            typingEl.remove();
             messages.push({ role: 'assistant', content: assistantText });
             saveHistory(messages);
           } else if (payload.type === 'error') {
-            assistantBubble.textContent = payload.reason === 'content_filter'
+            const bubble = ensureBubble();
+            bubble.textContent = payload.reason === 'content_filter'
               ? "I can't help with that. Try asking about SAP tutorials."
               : 'Something went wrong. Please try again.';
-            assistantBubble.classList.add('joule-msg--error');
+            bubble.classList.add('joule-msg--error');
           }
         } catch { /* drop malformed event */ }
       }
@@ -208,8 +322,14 @@
     }
     panel.hidden = false;
     const messages = loadHistory();
-    if (messages.length) renderTranscript(messages);
-    else renderGreeting(user.firstName);
+    if (messages.length) {
+      showChat();
+      renderTranscript(messages);
+    } else {
+      showHero();
+      renderGreeting(user.firstName);
+      renderStarters();
+    }
     input.focus();
   }
   function close() { panel.hidden = true; }
@@ -223,6 +343,62 @@
     input.value = '';
     send(msg);
   });
+
+  const expandBtn = panel.querySelector('[data-action="expand"]');
+  expandBtn.addEventListener('click', () => {
+    const expanded = panel.dataset.expanded === 'true';
+    panel.dataset.expanded = expanded ? 'false' : 'true';
+    expandBtn.setAttribute('aria-label', expanded ? 'Expand' : 'Collapse');
+  });
+
+  const overflowBtn = panel.querySelector('[data-action="overflow"]');
+  const overflowMenu = panel.querySelector('.joule-panel__overflow');
+
+  overflowBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = !overflowMenu.hidden;
+    overflowMenu.hidden = open;
+    overflowBtn.setAttribute('aria-expanded', String(!open));
+  });
+  document.addEventListener('click', (e) => {
+    if (!overflowMenu.hidden && !overflowMenu.contains(e.target) && e.target !== overflowBtn) {
+      overflowMenu.hidden = true;
+      overflowBtn.setAttribute('aria-expanded', 'false');
+    }
+  });
+
+  overflowMenu.querySelector('[data-overflow="clear"]').addEventListener('click', () => {
+    sessionStorage.removeItem(HISTORY_KEY);
+    transcript.replaceChildren();
+    showHero();
+    overflowMenu.hidden = true;
+    overflowBtn.setAttribute('aria-expanded', 'false');
+  });
+
+  const aiNoticeEl = panel.querySelector('.joule-panel__ai-notice');
+  const footerEl = panel.querySelector('.joule-panel__footer');
+
+  function showAINotice() {
+    hero.hidden = true;
+    chat.hidden = true;
+    aiNoticeEl.hidden = false;
+    footerEl.hidden = true;
+  }
+
+  function hideAINotice() {
+    aiNoticeEl.hidden = true;
+    footerEl.hidden = false;
+    const hasHistory = (loadHistory() || []).length > 0;
+    if (hasHistory) showChat(); else showHero();
+  }
+
+  overflowMenu.querySelector('[data-overflow="ai-notice"]').addEventListener('click', () => {
+    showAINotice();
+    overflowMenu.hidden = true;
+    overflowBtn.setAttribute('aria-expanded', 'false');
+  });
+
+  panel.querySelector('[data-action="ai-notice-back"]').addEventListener('click', hideAINotice);
 
   loadConfig().then(cfg => {
     if (!cfg.enabled) { trigger.remove(); return; }

@@ -154,6 +154,9 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
           tool_call_id: tc.id,
           content: JSON.stringify(result)
         });
+        if (tc.name === 'searchTutorials' && Array.isArray(result) && result.length > 0) {
+          sse(res, { type: 'tutorial-cards', items: result });
+        }
       }
 
       if (signal?.aborted) return;
