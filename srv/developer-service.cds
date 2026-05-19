@@ -13,6 +13,8 @@ service DeveloperService {
   @(requires: 'authenticated-user')
   entity TaskRecords as projection on ims.TaskRecords;
 
+  // Singleton sentinel UUID; safe to expose — already in seed CSV, required because CDS projections need a key.
+  @odata.singleton
   @(requires: 'any')
   @readonly
   entity ChatConfig as projection on ims.ChatSettings { ID, enabled, bannerText };
@@ -50,6 +52,7 @@ service DeveloperService {
 
   @(requires: 'authenticated-user')
   function countCompletedMissionsTotal(userLegacyId : Integer) returns Integer;
+
   @(requires: 'authenticated-user')
   function countCompletedMissionsPercent(userLegacyId : Integer) returns Decimal;
 

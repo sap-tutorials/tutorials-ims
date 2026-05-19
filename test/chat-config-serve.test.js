@@ -18,19 +18,26 @@ describe('GET /api/ChatConfig', () => {
     }
   });
 
-  it('returns enabled and bannerText only', async () => {
+  it('returns enabled and bannerText only as a singleton', async () => {
     const res = await project.get('/api/ChatConfig', { validateStatus: () => true });
     const { status, data } = res;
     expect(status).toBe(200);
-    const row = Array.isArray(data?.value) ? data.value[0] : data;
-    expect(row).toHaveProperty('enabled');
-    expect(row).toHaveProperty('bannerText');
-    expect(row).not.toHaveProperty('deploymentId');
-    expect(row).not.toHaveProperty('maxRequestsPerUser');
+    // Singleton shape: object returned directly, not wrapped in a collection envelope.
+    expect(data).not.toHaveProperty('value');
+    expect(data).toHaveProperty('enabled');
+    expect(data).toHaveProperty('bannerText');
+    expect(data).not.toHaveProperty('deploymentId');
+    expect(data).not.toHaveProperty('maxRequestsPerUser');
   });
 
-  it('is reachable without auth', async () => {
-    const { status } = await project.get('/api/ChatConfig', { validateStatus: () => true });
-    expect(status).toBe(200);
+  it('is reachable without auth while protected endpoints stay locked', async () => {
+    // Positive: ChatConfig is public.
+    const chat = await project.get('/api/ChatConfig', { validateStatus: () => true });
+    expect(chat.status).toBe(200);
+
+    // Negative: a known protected endpoint must still require auth.
+    // Proves the service-level @requires:'any' flip didn't open the whole service.
+    const tutorials = await project.get('/api/Tutorials', { validateStatus: () => true });
+    expect(tutorials.status).toBe(401);
   });
 });
