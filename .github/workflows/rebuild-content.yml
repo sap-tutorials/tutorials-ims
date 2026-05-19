@@ -81,6 +81,9 @@ jobs:
       - name: Build Vue apps
         run: npm --prefix apps run build
 
+      - name: Copy Joule vendor bundles
+        run: npm run copy-joule-vendor
+
       - name: Build Hugo site
         run: /tmp/hugo --source hugo --minify
 
