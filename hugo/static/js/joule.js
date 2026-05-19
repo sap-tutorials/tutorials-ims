@@ -6,6 +6,15 @@
   const USER_KEY = 'joule.user.v1';
   const CONFIG_TTL_MS = 60_000;
   const USER_TTL_MS = 60_000;
+  const STICK_THRESHOLD_PX = 80;
+
+  function isNearBottom(el) {
+    return el.scrollHeight - el.scrollTop - el.clientHeight < STICK_THRESHOLD_PX;
+  }
+
+  function scrollToBottom(el, force = false) {
+    if (force || isNearBottom(el)) el.scrollTop = el.scrollHeight;
+  }
 
   const trigger = document.getElementById('joule-trigger');
   const panel = document.getElementById('joule-panel');
@@ -61,7 +70,7 @@
     else div.textContent = content;
     if (opts.id) div.dataset.id = opts.id;
     transcript.appendChild(div);
-    transcript.scrollTop = transcript.scrollHeight;
+    scrollToBottom(transcript, true);
     return div;
   }
 
@@ -183,6 +192,7 @@
           if (payload.type === 'delta') {
             assistantText += payload.content;
             window.__jouleRender.setMarkdown(assistantBubble, assistantText);
+            scrollToBottom(transcript);
           } else if (payload.type === 'tool') {
             const chip = document.createElement('div');
             chip.className = 'joule-tool-chip';
