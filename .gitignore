@@ -37,3 +37,4 @@ saptutorialsadminshell-*/
 app/admin-shell/deploy/
 approuter/static/admin-ui/
 mta-op-*
+srv/data/admin-docs-index.json
