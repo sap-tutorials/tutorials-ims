@@ -167,12 +167,17 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
     const reason = err?.code === 'CONTENT_FILTER' ? 'content_filter' : undefined;
     // All non-filter errors are treated as retryable for v1 — categorization (timeout, rate limit, etc.) can be added later.
     sse(res, { type: 'error', retryable: !reason, reason });
-    const detail = err?.response?.data
-      ? (typeof err.response.data === 'string' ? err.response.data : JSON.stringify(err.response.data))
-      : err?.cause?.response?.data
-        ? JSON.stringify(err.cause.response.data)
-        : null;
-    LOG.error('chat stream failed', err.message, detail ? `| body: ${detail}` : '');
+    const causeChain = [];
+    let cur = err;
+    while (cur && causeChain.length < 5) {
+      causeChain.push({
+        message: cur.message,
+        name: cur.name,
+        body: cur?.response?.data ?? null
+      });
+      cur = cur.cause;
+    }
+    LOG.error('chat stream failed', JSON.stringify(causeChain));
   } finally {
     res.end();
   }
