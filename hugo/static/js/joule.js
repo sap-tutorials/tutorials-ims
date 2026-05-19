@@ -266,6 +266,30 @@
     expandBtn.setAttribute('aria-label', expanded ? 'Expand' : 'Collapse');
   });
 
+  const overflowBtn = panel.querySelector('[data-action="overflow"]');
+  const overflowMenu = panel.querySelector('.joule-panel__overflow');
+
+  overflowBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = !overflowMenu.hidden;
+    overflowMenu.hidden = open;
+    overflowBtn.setAttribute('aria-expanded', String(!open));
+  });
+  document.addEventListener('click', (e) => {
+    if (!overflowMenu.hidden && !overflowMenu.contains(e.target) && e.target !== overflowBtn) {
+      overflowMenu.hidden = true;
+      overflowBtn.setAttribute('aria-expanded', 'false');
+    }
+  });
+
+  overflowMenu.querySelector('[data-overflow="clear"]').addEventListener('click', () => {
+    sessionStorage.removeItem(HISTORY_KEY);
+    transcript.replaceChildren();
+    showHero();
+    overflowMenu.hidden = true;
+    overflowBtn.setAttribute('aria-expanded', 'false');
+  });
+
   loadConfig().then(cfg => {
     if (!cfg.enabled) { trigger.remove(); return; }
     trigger.hidden = false;
