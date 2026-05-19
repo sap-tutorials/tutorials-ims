@@ -21,6 +21,45 @@ const SEARCH_TUTORIALS_TOOL = {
   }
 };
 
+const SEARCH_ADMIN_DOCS_TOOL = {
+  type: 'function',
+  function: {
+    name: 'searchAdminDocs',
+    description: 'Keyword search over the platform repository documentation. Use to answer "how does X work" questions about the tutorial system itself.',
+    parameters: {
+      type: 'object',
+      properties: { query: { type: 'string' }, topN: { type: 'integer', minimum: 1, maximum: 10 } },
+      required: ['query'],
+    },
+  },
+};
+const ANALYTICS_QUERY_TOOL = {
+  type: 'function',
+  function: {
+    name: 'analyticsQuery',
+    description: 'Run a structured analytics query over completion data. Allowed facts: completion, start. Allowed dimensions: taskType, event, tag, mission, tutorial, group, completionMonth, completionWeek. Allowed measures: count, distinctUsers. Cells with distinctUsers < 5 are suppressed.',
+    parameters: {
+      type: 'object',
+      properties: {
+        fact: { type: 'string', enum: ['completion','start'] },
+        dimensions: { type: 'array', items: { type: 'string' } },
+        measures: { type: 'array', items: { type: 'string', enum: ['count','distinctUsers'] } },
+        filter: { type: 'object' },
+        topN: { type: 'integer', minimum: 1, maximum: 50 },
+      },
+      required: ['fact','dimensions','measures'],
+    },
+  },
+};
+
+function toolsForContext({ pageContext, isAdmin }) {
+  const tools = [SEARCH_TUTORIALS_TOOL];
+  if (isAdmin && pageContext?.kind === 'admin') {
+    tools.push(SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL);
+  }
+  return tools;
+}
+
 function sse(res, payload) {
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
   if (typeof res.flush === 'function') res.flush();
@@ -30,31 +69,84 @@ function safeJsonParse(s) {
   try { return JSON.parse(s); } catch { return {}; }
 }
 
-export async function dispatchTool(name, args) {
-  if (name !== 'searchTutorials') return { error: 'unknown_tool' };
-  try {
-    if (typeof args.query !== 'string' || !args.query.trim()) {
-      return { error: 'invalid_args', hits: [] };
+export async function dispatchTool(name, args, user) {
+  if (name === 'searchTutorials') {
+    try {
+      if (typeof args.query !== 'string' || !args.query.trim()) {
+        return { error: 'invalid_args', hits: [] };
+      }
+      const search = await cds.connect.to('SearchService');
+      const { SearchableItems } = search.entities;
+      const hits = await search.run(
+        SELECT.from(SearchableItems).search(args.query).limit(5)
+      );
+      return (hits || []).map(h => ({
+        slug: h.slug, title: h.title, description: h.description,
+        type: h.type, primaryTag: h.primaryTag
+      }));
+    } catch (err) {
+      LOG.warn('searchTutorials failed', err.message);
+      return { error: 'search_failed', hits: [] };
     }
-    const search = await cds.connect.to('SearchService');
-    const { SearchableItems } = search.entities;
-    const hits = await search.run(
-      SELECT.from(SearchableItems).search(args.query).limit(5)
-    );
-    return (hits || []).map(h => ({
-      slug: h.slug, title: h.title, description: h.description,
-      type: h.type, primaryTag: h.primaryTag
-    }));
-  } catch (err) {
-    LOG.warn('searchTutorials failed', err.message);
-    return { error: 'search_failed', hits: [] };
   }
+
+  if (name === 'searchAdminDocs') {
+    try {
+      if (typeof args.query !== 'string' || !args.query.trim()) {
+        return { error: 'invalid_args', items: [] };
+      }
+      const { searchAdminDocs } = await import('./admin-docs-index.js');
+      const topN = typeof args.topN === 'number' ? args.topN : 5;
+      return searchAdminDocs({ query: args.query, topN });
+    } catch (err) {
+      LOG.warn('searchAdminDocs failed', err.message);
+      return { error: 'docs_search_failed', items: [] };
+    }
+  }
+
+  if (name === 'analyticsQuery') {
+    try {
+      const groupBy = Array.isArray(args.dimensions) ? args.dimensions : [];
+      const measures = Array.isArray(args.measures) ? args.measures : ['count'];
+      let filters = [];
+      if (Array.isArray(args.filter)) {
+        filters = args.filter;
+      } else if (args.filter && typeof args.filter === 'object') {
+        for (const [field, spec] of Object.entries(args.filter)) {
+          if (spec && typeof spec === 'object' && 'op' in spec && 'value' in spec) {
+            filters.push({ field, op: spec.op, value: spec.value });
+          } else if (typeof spec === 'string' || typeof spec === 'number') {
+            filters.push({ field, op: 'equals', value: spec });
+          } else {
+            LOG.warn('analyticsQuery: unrecognized filter spec dropped', { field });
+          }
+        }
+      }
+      const limit = typeof args.topN === 'number' ? args.topN : 25;
+      const { runAnalyticsQuery } = await import('./admin-analytics-runner.js');
+      return await runAnalyticsQuery({
+        plan: { fact: args.fact, groupBy, measures, filters, limit },
+        db: cds.db,
+        user,
+        log: LOG
+      });
+    } catch (err) {
+      if (err.code === 'pii_denied') return { error: 'pii_denied', message: err.message };
+      if (err.code === 'unknown_field') return { error: 'unknown_field', message: err.message };
+      if (err.code === 'invalid_value') return { error: 'invalid_value', message: err.message };
+      LOG.warn('analyticsQuery failed', err.message);
+      return { error: 'analytics_failed', message: 'Query execution failed' };
+    }
+  }
+
+  return { error: 'unknown_tool' };
 }
 
-export async function streamChat({ res, system, messages, deploymentId, modelName, temperature, maxTokens, signal }) {
+export async function streamChat({ res, system, messages, deploymentId, modelName, temperature, maxTokens, signal, tools, user }) {
   const effectiveModel = modelName || process.env.CHAT_MODEL_NAME || 'anthropic--claude-4.6-sonnet';
   const effectiveTemperature = temperature != null ? Number(temperature) : 0.51;
   const effectiveMaxTokens = maxTokens != null ? Number(maxTokens) : 10025;
+  const effectiveTools = Array.isArray(tools) && tools.length ? tools : [SEARCH_TUTORIALS_TOOL];
   let client;
   try {
     client = new OrchestrationClient(
@@ -66,7 +158,7 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
           },
           prompt: {
             template: [{ role: 'system', content: system }],
-            tools: [SEARCH_TUTORIALS_TOOL]
+            tools: effectiveTools
           }
         },
         filtering: {
@@ -148,7 +240,7 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
       });
 
       for (const tc of collectedToolCalls) {
-        const result = await dispatchTool(tc.name, tc.args || {});
+        const result = await dispatchTool(tc.name, tc.args || {}, user);
         history.push({
           role: 'tool',
           tool_call_id: tc.id,
@@ -156,6 +248,10 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
         });
         if (tc.name === 'searchTutorials' && Array.isArray(result) && result.length > 0) {
           sse(res, { type: 'tutorial-cards', items: result });
+        } else if (tc.name === 'searchAdminDocs' && Array.isArray(result) && result.length > 0) {
+          sse(res, { type: 'doc-citations', items: result.map(h => ({ path: h.path, heading: h.heading, score: h.score })) });
+        } else if (tc.name === 'analyticsQuery' && result && !result.error && Array.isArray(result.rows)) {
+          sse(res, { type: 'analytics-result', plan: result.plan, rows: result.rows, suppressedCount: result.suppressedCount, totalRows: result.totalRows });
         }
       }
 
@@ -184,4 +280,4 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
   }
 }
 
-export { SEARCH_TUTORIALS_TOOL };
+export { SEARCH_TUTORIALS_TOOL, SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, toolsForContext };
