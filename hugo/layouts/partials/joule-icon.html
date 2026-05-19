@@ -1,10 +1,10 @@
 {{- $size := default "small" .size -}}
 {{- $w := cond (eq $size "large") "64" "24" -}}
 <span class="joule-mark joule-mark--{{ $size }}" aria-hidden="true">
-  <svg width="{{ $w }}" viewBox="0 0 122 120" xmlns="http://www.w3.org/2000/svg" fill="none">
-    <path d="M61 8 L102 60 L61 112 L20 60 Z" fill="var(--dasSplashScreenImageColor, #ffffff)"/>
-    <path d="M101 12 l3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3 z" fill="var(--dasSplashScreenImageColor, #ffffff)"/>
-    <path d="M114 38 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2 z" fill="var(--dasSplashScreenImageColor, #ffffff)"/>
-    <path d="M97 88 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2 z" fill="var(--dasSplashScreenImageColor, #ffffff)"/>
+  <svg width="{{ $w }}" height="{{ $w }}" viewBox="0 0 122 120" xmlns="http://www.w3.org/2000/svg" fill="none">
+    <path d="M61 8 L102 60 L61 112 L20 60 Z" fill="currentColor"/>
+    <path d="M101 12 l3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3 z" fill="currentColor"/>
+    <path d="M114 38 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2 z" fill="currentColor"/>
+    <path d="M97 88 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2 z" fill="currentColor"/>
   </svg>
 </span>
