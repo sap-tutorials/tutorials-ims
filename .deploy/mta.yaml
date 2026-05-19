@@ -134,6 +134,7 @@ resources:
 
   - name: tutorials-aicore
     type: org.cloudfoundry.managed-service
+    optional: true
     parameters:
       service: aicore
       service-plan: extended

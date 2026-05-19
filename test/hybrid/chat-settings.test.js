@@ -1,4 +1,3 @@
-import './_guard.js';
 import { describe, it, expect, beforeAll } from 'vitest';
 import cds from '@sap/cds';
 
