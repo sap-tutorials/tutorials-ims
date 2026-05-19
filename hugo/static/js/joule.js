@@ -152,8 +152,21 @@
     renderTranscript(messages);
     saveHistory(messages);
 
-    const assistantBubble = appendMessage('assistant', '');
+    const typingEl = document.createElement('div');
+    typingEl.className = 'joule-typing';
+    for (let i = 0; i < 3; i++) typingEl.appendChild(document.createElement('span'));
+    transcript.appendChild(typingEl);
+    scrollToBottom(transcript, true);
+
+    let assistantBubble = null;
     let assistantText = '';
+
+    function ensureBubble() {
+      if (assistantBubble) return assistantBubble;
+      typingEl.remove();
+      assistantBubble = appendMessage('assistant', '');
+      return assistantBubble;
+    }
 
     let res;
     try {
@@ -164,14 +177,15 @@
         body: JSON.stringify({ messages, pageContext: readPageContext() })
       });
     } catch {
-      assistantBubble.textContent = 'Network error. Please try again.';
-      assistantBubble.classList.add('joule-msg--error');
+      const bubble = ensureBubble();
+      bubble.textContent = 'Network error. Please try again.';
+      bubble.classList.add('joule-msg--error');
       return;
     }
 
-    if (res.status === 401) { window.location.href = '/login?returnTo=' + encodeURIComponent(location.pathname); return; }
-    if (res.status === 503) { assistantBubble.textContent = 'Joule is currently unavailable.'; assistantBubble.classList.add('joule-msg--error'); return; }
-    if (res.status === 429) { assistantBubble.textContent = "You've reached today's chat limit."; assistantBubble.classList.add('joule-msg--error'); return; }
+    if (res.status === 401) { typingEl.remove(); window.location.href = '/login?returnTo=' + encodeURIComponent(location.pathname); return; }
+    if (res.status === 503) { const bubble = ensureBubble(); bubble.textContent = 'Joule is currently unavailable.'; bubble.classList.add('joule-msg--error'); return; }
+    if (res.status === 429) { const bubble = ensureBubble(); bubble.textContent = "You've reached today's chat limit."; bubble.classList.add('joule-msg--error'); return; }
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
@@ -191,21 +205,24 @@
           const payload = JSON.parse(line.slice(5).trim());
           if (payload.type === 'delta') {
             assistantText += payload.content;
-            window.__jouleRender.setMarkdown(assistantBubble, assistantText);
+            window.__jouleRender.setMarkdown(ensureBubble(), assistantText);
             scrollToBottom(transcript);
           } else if (payload.type === 'tool') {
+            typingEl.remove();
             const chip = document.createElement('div');
             chip.className = 'joule-tool-chip';
             chip.textContent = `Searching for ${payload.args?.query || '…'}`;
             transcript.insertBefore(chip, assistantBubble);
           } else if (payload.type === 'done') {
+            typingEl.remove();
             messages.push({ role: 'assistant', content: assistantText });
             saveHistory(messages);
           } else if (payload.type === 'error') {
-            assistantBubble.textContent = payload.reason === 'content_filter'
+            const bubble = ensureBubble();
+            bubble.textContent = payload.reason === 'content_filter'
               ? "I can't help with that. Try asking about SAP tutorials."
               : 'Something went wrong. Please try again.';
-            assistantBubble.classList.add('joule-msg--error');
+            bubble.classList.add('joule-msg--error');
           }
         } catch { /* drop malformed event */ }
       }
