@@ -172,8 +172,10 @@ cds.on('served', () => {
       // SSE headers — only after all guards have passed so early-exit
       // 503/401/429 responses ship as application/json.
       res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
       res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.flushHeaders();
 
       // 4) System prompt + stream
       const { messages = [], pageContext = { kind: 'generic' } } = req.body || {};
