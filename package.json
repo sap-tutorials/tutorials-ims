@@ -71,6 +71,7 @@
     "@grpc/grpc-js": "^1.14.3",
     "@opentelemetry/exporter-metrics-otlp-grpc": "^0.57.2",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.57.2",
+    "@sap-ai-sdk/orchestration": "^2.10.0",
     "@sap/cds": "^9.9.0",
     "@sap/xsenv": "^6.2.0",
     "@sap/xssec": "^4.13.0",
