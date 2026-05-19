@@ -259,6 +259,13 @@
     send(msg);
   });
 
+  const expandBtn = panel.querySelector('[data-action="expand"]');
+  expandBtn.addEventListener('click', () => {
+    const expanded = panel.dataset.expanded === 'true';
+    panel.dataset.expanded = expanded ? 'false' : 'true';
+    expandBtn.setAttribute('aria-label', expanded ? 'Expand' : 'Collapse');
+  });
+
   loadConfig().then(cfg => {
     if (!cfg.enabled) { trigger.remove(); return; }
     trigger.hidden = false;
