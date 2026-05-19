@@ -15,6 +15,8 @@
   const input = panel.querySelector('.joule-panel__input');
   const closeBtn = panel.querySelector('.joule-panel__close');
 
+  let activeSendId = 0;
+
   function getCachedConfig() {
     try {
       const raw = sessionStorage.getItem(CONFIG_KEY);
@@ -42,12 +44,6 @@
   }
   function saveHistory(messages) {
     sessionStorage.setItem(HISTORY_KEY, JSON.stringify(messages));
-  }
-
-  function escapeText(s) {
-    const div = document.createElement('div');
-    div.textContent = s ?? '';
-    return div.innerHTML;
   }
 
   function appendMessage(role, content, opts = {}) {
@@ -101,6 +97,8 @@
   }
 
   async function send(messageText) {
+    const sendId = ++activeSendId;
+    const isStale = () => sendId !== activeSendId;
     const messages = loadHistory();
     messages.push({ role: 'user', content: messageText });
     renderTranscript(messages);
@@ -133,10 +131,12 @@
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
+      if (isStale()) return;
       buf += decoder.decode(value, { stream: true });
       const events = buf.split('\n\n');
       buf = events.pop();
       for (const evt of events) {
+        if (isStale()) return;
         const line = evt.split('\n').find(l => l.startsWith('data:'));
         if (!line) continue;
         try {

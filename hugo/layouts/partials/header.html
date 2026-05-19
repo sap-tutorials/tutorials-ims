@@ -98,6 +98,7 @@
       avatar.classList.add('fd-avatar--authenticated');
       applyInitials(user.givenName, user.familyName, user.id);
       avatar.setAttribute('aria-label', userName.textContent);
+      document.documentElement.dataset.user = JSON.stringify({ firstName: user.givenName });
     } catch {}
   }
 
