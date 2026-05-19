@@ -6,6 +6,9 @@ import { buildCatalogHandler } from './lib/build-catalog.js';
 import { navigatorCatalogHandler } from './lib/navigator-catalog.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
 import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, navHandler, rollbackHandler } from './lib/content-store.js';
+import { buildSystemPrompt } from './lib/chat-context.js';
+import { createRateLimiter, RateLimitError } from './lib/chat-rate-limit.js';
+import { streamChat } from './lib/chat-orchestrator.js';
 
 // Enable CAP index page and swagger UI in non-development environments when EXPOSE_CAP_UI is set
 if (process.env.EXPOSE_CAP_UI === 'true') {
@@ -111,4 +114,75 @@ cds.on('served', () => {
   if (process.env.NODE_ENV !== 'test') {
     registerJobs();
   }
+});
+
+cds.on('served', () => {
+  const app = cds.app;
+  const contextMw = cds.middlewares?.context?.() || ((req, res, next) => next());
+  const authMw    = cds.middlewares?.auth?.()    || ((req, res, next) => next());
+
+  const rateLimiter = createRateLimiter();
+  const SETTINGS_ID = '00000000-0000-0000-0000-00000000c8a7';
+
+  app.post(
+    '/chat/stream',
+    express.json({ limit: '64kb' }),
+    contextMw,
+    authMw,
+    async (req, res) => {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+
+      // 1) Kill switch — read fresh on every request via cds.ql
+      const { ChatSettings } = cds.entities('com.sap.developers.ims');
+      let settings;
+      try {
+        settings = await SELECT.one.from(ChatSettings).where({ ID: SETTINGS_ID });
+      } catch (err) {
+        cds.log('chat').warn('ChatSettings read failed; treating as disabled', err.message);
+        res.status(503).end(JSON.stringify({ error: 'disabled' }));
+        return;
+      }
+      if (!settings || !settings.enabled || !settings.deploymentId) {
+        res.status(503).end(JSON.stringify({ error: 'disabled' }));
+        return;
+      }
+
+      // 2) Auth — cds.context.user is populated by authMw above. Mirror the
+      // canonical anonymous check at the /auth/user route above.
+      const user = cds.context?.user;
+      if (!user?.id || user.id === 'anonymous') {
+        res.status(401).end(JSON.stringify({ error: 'unauthenticated' }));
+        return;
+      }
+
+      // 3) Rate limit
+      try {
+        rateLimiter.check(user.id, settings.maxRequestsPerUser ?? 100);
+      } catch (err) {
+        if (err instanceof RateLimitError) {
+          res.status(429).end(JSON.stringify({ error: 'rate_limit', retryAfter: err.retryAfterSec }));
+          return;
+        }
+        throw err;
+      }
+
+      // 4) System prompt + stream
+      const { messages = [], pageContext = { kind: 'generic' } } = req.body || {};
+      const system = buildSystemPrompt(pageContext, {
+        firstName: user.attr?.firstName || user.firstName,
+        lastName:  user.attr?.lastName  || user.lastName
+      });
+
+      await streamChat({
+        res,
+        system,
+        messages,
+        deploymentId: settings.deploymentId
+      });
+    }
+  );
+
+  cds.log('chat').info('POST /chat/stream registered');
 });
