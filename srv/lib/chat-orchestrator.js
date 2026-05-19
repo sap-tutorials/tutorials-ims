@@ -48,7 +48,7 @@ export async function dispatchTool(name, args) {
   }
 }
 
-export async function streamChat({ res, system, messages, deploymentId }) {
+export async function streamChat({ res, system, messages, deploymentId, signal }) {
   const client = new OrchestrationClient({
     llm: { deploymentId },
     templating: { template: [{ role: 'system', content: system }] },
@@ -59,11 +59,13 @@ export async function streamChat({ res, system, messages, deploymentId }) {
 
   try {
     for (let turn = 0; turn < MAX_TURNS; turn++) {
+      if (signal?.aborted) return;
       const stream = client.stream({ messagesHistory: history });
       const collectedToolCalls = [];
       let assistantText = '';
 
       for await (const chunk of stream) {
+        if (signal?.aborted) break;
         const delta = typeof chunk.getDeltaContent === 'function' ? chunk.getDeltaContent() : null;
         if (delta) {
           assistantText += delta;
@@ -77,6 +79,8 @@ export async function streamChat({ res, system, messages, deploymentId }) {
           }
         }
       }
+
+      if (signal?.aborted) return;
 
       if (collectedToolCalls.length === 0) {
         sse(res, { type: 'done' });
@@ -100,6 +104,8 @@ export async function streamChat({ res, system, messages, deploymentId }) {
           content: JSON.stringify(result)
         });
       }
+
+      if (signal?.aborted) return;
     }
 
     LOG.warn('chat agent loop hit MAX_TURNS', { turns: MAX_TURNS });

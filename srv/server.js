@@ -130,10 +130,6 @@ cds.on('served', () => {
     contextMw,
     authMw,
     async (req, res) => {
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-
       // 1) Kill switch — read fresh on every request via cds.ql
       const { ChatSettings } = cds.entities('com.sap.developers.ims');
       let settings;
@@ -141,11 +137,11 @@ cds.on('served', () => {
         settings = await SELECT.one.from(ChatSettings).where({ ID: SETTINGS_ID });
       } catch (err) {
         cds.log('chat').warn('ChatSettings read failed; treating as disabled', err.message);
-        res.status(503).end(JSON.stringify({ error: 'disabled' }));
+        res.status(503).json({ error: 'disabled' });
         return;
       }
       if (!settings || !settings.enabled || !settings.deploymentId) {
-        res.status(503).end(JSON.stringify({ error: 'disabled' }));
+        res.status(503).json({ error: 'disabled' });
         return;
       }
 
@@ -153,7 +149,7 @@ cds.on('served', () => {
       // canonical anonymous check at the /auth/user route above.
       const user = cds.context?.user;
       if (!user?.id || user.id === 'anonymous') {
-        res.status(401).end(JSON.stringify({ error: 'unauthenticated' }));
+        res.status(401).json({ error: 'unauthenticated' });
         return;
       }
 
@@ -162,24 +158,34 @@ cds.on('served', () => {
         rateLimiter.check(user.id, settings.maxRequestsPerUser ?? 100);
       } catch (err) {
         if (err instanceof RateLimitError) {
-          res.status(429).end(JSON.stringify({ error: 'rate_limit', retryAfter: err.retryAfterSec }));
+          res.status(429).json({ error: 'rate_limit', retryAfter: err.retryAfterSec });
           return;
         }
         throw err;
       }
 
+      // SSE headers — only after all guards have passed so early-exit
+      // 503/401/429 responses ship as application/json.
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+
       // 4) System prompt + stream
       const { messages = [], pageContext = { kind: 'generic' } } = req.body || {};
       const system = buildSystemPrompt(pageContext, {
-        firstName: user.attr?.firstName || user.firstName,
-        lastName:  user.attr?.lastName  || user.lastName
+        firstName: user.attr?.given_name || user.attr?.givenName || '',
+        lastName:  user.attr?.family_name || user.attr?.familyName || ''
       });
+
+      const abortController = new AbortController();
+      req.on('close', () => abortController.abort());
 
       await streamChat({
         res,
         system,
         messages,
-        deploymentId: settings.deploymentId
+        deploymentId: settings.deploymentId,
+        signal: abortController.signal
       });
     }
   );

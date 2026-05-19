@@ -138,4 +138,28 @@ describe('chat-orchestrator', () => {
 
     expect(connectMock).not.toHaveBeenCalled();
   });
+
+  it('aborts mid-stream when the signal fires and skips the done event', async () => {
+    const ac = new AbortController();
+    streamMock.mockReturnValueOnce(makeStream([
+      { getDeltaContent: () => 'first', getToolCalls: () => null },
+      // Abort between chunks; the loop checks signal at the top of each iteration.
+      { getDeltaContent: () => { ac.abort(); return 'second-should-not-be-emitted'; }, getToolCalls: () => null },
+      { getDeltaContent: () => 'third-also-skipped', getToolCalls: () => null }
+    ]));
+    const res = fakeRes();
+    await streamChat({
+      res, system: 's', messages: [{ role: 'user', content: 'hi' }],
+      deploymentId: 'd1', signal: ac.signal
+    });
+    const joined = res.chunks.join('');
+    // The first delta (emitted before abort) should be present.
+    expect(joined).toMatch(/"type":"delta"[^}]*"content":"first"/);
+    // The third chunk should never be emitted (abort breaks the stream loop).
+    expect(joined).not.toMatch(/third-also-skipped/);
+    // No done frame on abort — client is gone.
+    expect(joined).not.toMatch(/"type":"done"/);
+    // res.end() still runs via finally.
+    expect(res.ended).toBe(true);
+  });
 });
