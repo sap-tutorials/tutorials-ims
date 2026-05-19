@@ -20,15 +20,17 @@
 
   <section class="joule-panel__banner" hidden></section>
 
-  <section class="joule-panel__hero">
-    <div class="joule-panel__hero-mark">{{ partial "joule-icon.html" (dict "size" "large") }}</div>
-    <p class="joule-panel__hero-greeting" data-default-greeting="Hello, How can I help you?"></p>
-    <div class="joule-panel__starters" role="list"></div>
-  </section>
+  <div class="joule-panel__body">
+    <section class="joule-panel__hero">
+      <div class="joule-panel__hero-mark">{{ partial "joule-icon.html" (dict "size" "large") }}</div>
+      <p class="joule-panel__hero-greeting" data-default-greeting="Hello, How can I help you?"></p>
+      <div class="joule-panel__starters" role="list"></div>
+    </section>
 
-  <section class="joule-panel__chat" hidden>
-    <div class="joule-panel__transcript" aria-live="polite"></div>
-  </section>
+    <section class="joule-panel__chat" hidden>
+      <div class="joule-panel__transcript" aria-live="polite"></div>
+    </section>
+  </div>
 
   <section class="joule-panel__ai-notice" hidden aria-labelledby="joule-ai-notice-title">
     <header class="joule-panel__ai-notice-header">

@@ -59,13 +59,20 @@
 .joule-panel__banner { padding: .5rem 1rem; font-size: .85rem; opacity: .85;
   background: rgba(0,0,0,.2); }
 
+.joule-panel__body {
+  flex: 1; min-height: 0; overflow-y: auto;
+  display: flex; flex-direction: column;
+  scroll-behavior: smooth;
+  background: var(--joule-chrome);
+}
+
 .joule-panel__hero {
-  flex: 1; overflow-y: auto;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  display: flex; flex-direction: column; align-items: center;
   padding: 1.5rem 1rem;
   background: linear-gradient(165deg, var(--joule-purple-1) 0%, var(--joule-purple-2) 45%, var(--joule-purple-3) 100%);
   text-align: center;
 }
+.joule-panel__hero[hidden] { display: none; }
 .joule-panel__hero-mark { margin-bottom: 1rem; }
 .joule-panel__hero-greeting { margin: 0 0 1.25rem; font-size: 1.15rem; font-weight: 500; }
 .joule-panel__starters {
@@ -81,13 +88,12 @@
 }
 .joule-panel__starter:hover { background: rgba(255,255,255,.22); }
 
-.joule-panel__chat { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.joule-panel__chat { display: flex; flex-direction: column; }
 .joule-panel__chat[hidden] { display: none; }
 .joule-panel__footer[hidden] { display: none; }
 .joule-panel__transcript {
-  flex: 1; overflow-y: auto; padding: 1rem;
   display: flex; flex-direction: column; gap: .5rem;
-  scroll-behavior: smooth;
+  padding: 1rem;
 }
 
 .joule-msg {
@@ -172,8 +178,8 @@
 .joule-panel__disclaimer { margin: 0; padding: 0 1rem .65rem; font-size: .7rem;
   color: var(--joule-muted); text-align: center; }
 
-.joule-mark--small svg { width: 24px; height: 24px; }
-.joule-mark--large svg { width: 64px; height: 64px;
+.joule-mark--small svg { width: 24px; height: 24px; overflow: visible; }
+.joule-mark--large svg { width: 64px; height: 64px; overflow: visible;
   filter: drop-shadow(0 4px 12px rgba(0,0,0,.35)); }
 
 .joule-panel__icon-btn:focus-visible,

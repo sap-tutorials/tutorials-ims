@@ -50,6 +50,13 @@
   --vp-c-default-soft: var(--sapField_Background, #f5f6f7);
 }
 
+/* Sticky shellbar */
+.fd-shellbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
 /* Shellbar text color overrides */
 .fd-shellbar .fd-shellbar__title {
   color: var(--sapShell_TextColor, #fff);

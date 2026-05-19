@@ -21,6 +21,7 @@
   if (!trigger || !panel) return;
 
   const transcript = panel.querySelector('.joule-panel__transcript');
+  const body = panel.querySelector('.joule-panel__body');
   const banner = panel.querySelector('.joule-panel__banner');
   const form = panel.querySelector('.joule-panel__form');
   const input = panel.querySelector('.joule-panel__input');
@@ -82,7 +83,7 @@
     }
     if (wrap.childElementCount > 0) {
       transcript.appendChild(wrap);
-      scrollToBottom(transcript);
+      scrollToBottom(body);
     }
   }
 
@@ -124,7 +125,7 @@
     else div.textContent = content;
     if (opts.id) div.dataset.id = opts.id;
     transcript.appendChild(div);
-    scrollToBottom(transcript, true);
+    scrollToBottom(body, true);
     return div;
   }
 
@@ -153,8 +154,29 @@
       ctx.filters = Array.from(document.querySelectorAll('input[name="facet"]:checked')).map(el => el.value);
     }
     if (ctx.kind === 'tutorial') {
-      const active = document.querySelector('[data-step-active="true"]');
-      if (active) ctx.currentStep = Number(active.dataset.stepNumber);
+      const expanded = Array.from(document.querySelectorAll('.tutorial-step .step-body:not([hidden])'));
+      if (expanded.length) {
+        const firstStep = expanded[0].closest('.tutorial-step');
+        const stepNum = Number(firstStep?.dataset.step);
+        if (Number.isFinite(stepNum)) ctx.currentStep = stepNum;
+        const titles = [];
+        const textParts = [];
+        let remaining = 4000;
+        for (const body of expanded) {
+          const stepEl = body.closest('.tutorial-step');
+          const num = stepEl?.dataset.step;
+          const heading = stepEl?.querySelector('.step-header-text')?.textContent?.trim();
+          if (num && heading) titles.push(`Step ${num}: ${heading}`);
+          if (remaining > 0) {
+            const t = (body.textContent || '').replace(/\s+/g, ' ').trim();
+            const slice = t.slice(0, remaining);
+            if (slice) textParts.push(`[Step ${num}] ${slice}`);
+            remaining -= slice.length;
+          }
+        }
+        if (titles.length) ctx.expandedSteps = titles;
+        if (textParts.length) ctx.currentStepText = textParts.join('\n\n');
+      }
     }
     return ctx;
   }
@@ -236,7 +258,7 @@
     typingEl.setAttribute('aria-label', 'Joule is thinking');
     for (let i = 0; i < 3; i++) typingEl.appendChild(document.createElement('span'));
     transcript.appendChild(typingEl);
-    scrollToBottom(transcript, true);
+    scrollToBottom(body, true);
 
     let assistantBubble = null;
     let assistantText = '';
@@ -286,7 +308,7 @@
           if (payload.type === 'delta') {
             assistantText += payload.content;
             window.__jouleRender.setMarkdown(ensureBubble(), assistantText);
-            scrollToBottom(transcript);
+            scrollToBottom(body);
           } else if (payload.type === 'tool') {
             typingEl.remove();
             const chip = document.createElement('div');

@@ -17,13 +17,13 @@ describe('joule panel smoke', () => {
   it('home page contains the AI Notice button and disclaimer', async () => {
     const r = await fetch(`${BASE}/`);
     const html = await r.text();
-    expect(html).toMatch(/data-overflow="ai-notice"/);
-    expect(html).toMatch(/Joule uses AI\. Verify results\./);
+    expect(html).toMatch(/data-overflow=["']?ai-notice["']?/);
+    expect(html).toMatch(/Joule uses AI\.\s*Verify results\./);
   });
 
   it('home page embeds starter prompts JSON', async () => {
     const r = await fetch(`${BASE}/`);
     const html = await r.text();
-    expect(html).toMatch(/<script id="joule-starters"/);
+    expect(html).toMatch(/<script id=["']?joule-starters["']?/);
   });
 });

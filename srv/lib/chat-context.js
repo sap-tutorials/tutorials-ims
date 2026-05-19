@@ -1,11 +1,21 @@
 const PERSONA = `You are Joule, an AI assistant embedded in the SAP Tutorial Platform. You ONLY answer questions about SAP tutorials and directly related topics (SAP technologies, the tutorial content, how to complete a step). If asked about anything else, politely redirect: "I can only help with SAP tutorials. Want me to find one about <topic>?". Never invent tutorial slugs, step numbers, or URLs. If you don't know, call the searchTutorials tool or say so.`;
 
+const STEP_TEXT_BUDGET = 4000;
+
 function tutorialLayer(ctx) {
   const lines = [ctx.title ? `Current page: tutorial "${ctx.title}".` : 'Current page: a tutorial.'];
   if (ctx.description) lines.push(`Description: ${ctx.description}`);
   if (Array.isArray(ctx.tags) && ctx.tags.length) lines.push(`Tags: ${ctx.tags.join(', ')}`);
   if (ctx.stepCount) lines.push(`Total steps: ${ctx.stepCount}.`);
   if (ctx.currentStep) lines.push(`User is currently on step ${ctx.currentStep}.`);
+  if (Array.isArray(ctx.expandedSteps) && ctx.expandedSteps.length) {
+    lines.push(`Currently expanded: ${ctx.expandedSteps.join('; ')}`);
+  }
+  if (typeof ctx.currentStepText === 'string' && ctx.currentStepText.trim()) {
+    const excerpt = ctx.currentStepText.slice(0, STEP_TEXT_BUDGET);
+    lines.push(`Visible step content (verbatim, may be truncated):\n"""\n${excerpt}\n"""`);
+    lines.push('When the question is about the step the user is reading, answer from the verbatim content above. Cite the step number.');
+  }
   lines.push('Prefer answering about THIS tutorial; cite step numbers. Only call searchTutorials if the user asks about a different tutorial.');
   return lines.join('\n');
 }
