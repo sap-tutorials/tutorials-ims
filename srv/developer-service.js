@@ -1,6 +1,35 @@
 import cds from '@sap/cds';
 import { calculateTutorialProgress } from './lib/status-calculator.js';
 import { getNextLegacyId } from './lib/legacy-id.js';
+import { hashIp } from './lib/feedback-salt.js';
+
+const RATE_LIMIT = new Map();
+const RATE_WINDOW_MS = 60 * 60 * 1000;
+const RATE_MAX = 5;
+const RATE_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+
+setInterval(() => {
+  const cutoff = Date.now() - RATE_WINDOW_MS;
+  for (const [k, v] of RATE_LIMIT) if (v.windowStart < cutoff) RATE_LIMIT.delete(k);
+}, RATE_SWEEP_INTERVAL_MS).unref();
+
+function rateLimitExceeded(hashedIp) {
+  const now = Date.now();
+  const cur = RATE_LIMIT.get(hashedIp);
+  if (!cur || now - cur.windowStart > RATE_WINDOW_MS) {
+    RATE_LIMIT.set(hashedIp, { count: 1, windowStart: now });
+    return false;
+  }
+  cur.count += 1;
+  return cur.count > RATE_MAX;
+}
+
+function isInt0to10(v) { return v == null || (Number.isInteger(v) && v >= 0 && v <= 10); }
+
+function sanitizeComment(s) {
+  if (!s) return null;
+  return s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').slice(0, 2000);
+}
 
 export default class DeveloperService extends cds.ApplicationService {
 
@@ -469,6 +498,50 @@ export default class DeveloperService extends cds.ApplicationService {
     this.on('getSlugMapping', async () => {
       const { buildSlugMapping } = await import('./lib/slug-mapping.js');
       return buildSlugMapping();
+    });
+
+    this.on('submitTutorialFeedback', async (req) => {
+      const d = req.data;
+
+      // 1. Honeypot — silent success
+      if (d.honeypot && d.honeypot.trim() !== '') {
+        return { submissionId: cds.utils.uuid() };
+      }
+
+      // 2. Validate ratings
+      for (const k of ['ratingUseCase','ratingRelevance','ratingDuration','ratingStructure','ratingInteresting','ratingVisuals','npsScore']) {
+        if (!isInt0to10(d[k])) return req.error(400, `${k} must be an integer 0-10 or null`);
+      }
+      if (!d.tutorialSlug || typeof d.tutorialSlug !== 'string') return req.error(400, 'tutorialSlug required');
+
+      // 3. Slug existence
+      const { ContentFiles, TutorialFeedback } = cds.entities('com.sap.developers.ims');
+      const exists = await SELECT.one.from(ContentFiles).columns('slug').where({ slug: d.tutorialSlug });
+      if (!exists) return req.error(400, 'Unknown tutorial');
+
+      // 4. Rate limit
+      const ip = d._clientIp || 'unknown';
+      const hashedIp = hashIp(ip);
+      if (rateLimitExceeded(hashedIp)) return req.error(429, 'Too many submissions');
+
+      // 5. Persist
+      const id = cds.utils.uuid();
+      await INSERT.into(TutorialFeedback).entries({
+        ID: id,
+        tutorialSlug:      d.tutorialSlug,
+        wasAuthenticated:  !!d.wasAuthenticated,
+        submitterIpHash:   hashedIp,
+        ratingUseCase:     d.ratingUseCase     ?? null,
+        ratingRelevance:   d.ratingRelevance   ?? null,
+        ratingDuration:    d.ratingDuration    ?? null,
+        ratingStructure:   d.ratingStructure   ?? null,
+        ratingInteresting: d.ratingInteresting ?? null,
+        ratingVisuals:     d.ratingVisuals     ?? null,
+        npsScore:          d.npsScore          ?? null,
+        comment:           sanitizeComment(d.comment)
+      });
+
+      return { submissionId: id };
     });
 
     await super.init();
