@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { acquireLock, releaseLock } from './job-lock.js';
-import { cleanupStepFailures, cleanupUnusedTags, cleanupContentVersions, cleanupPipelineLog, cleanupStuckPublishing } from './cleanup.js';
+import { cleanupStepFailures, cleanupUnusedTags, cleanupContentVersions, cleanupPipelineLog, cleanupStuckPublishing, pruneOrphanEmbeddings } from './cleanup.js';
 import { recordActiveLearners } from './analytics.js';
 import { retryNgds } from './ngds-retry.js';
 import { processAccountMerges } from './account-merge-job.js';
@@ -75,6 +75,11 @@ export function registerJobs() {
   // Daily at 03:15 — prune pipeline log entries older than 30 days
   cron.schedule('15 3 * * *', () =>
     runWithLock('pipeline-log-gc', 600000, () => cleanupPipelineLog(30))
+  );
+
+  // Daily at 03:30 — prune embeddings for tutorials no longer in the active manifest
+  cron.schedule('30 3 * * *', () =>
+    runWithLock('embedding-orphan-prune', 300000, pruneOrphanEmbeddings)
   );
 
   // Weekly Sunday 02:00 — tutorial metadata review
