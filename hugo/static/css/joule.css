@@ -135,6 +135,17 @@
   background: rgba(255,255,255,.12);
 }
 
+.joule-step-citations { align-self: stretch; margin: .25rem 0; }
+.joule-step-citations__heading {
+  margin: 0 0 .25rem; font-size: .75rem; color: var(--joule-muted);
+  text-transform: uppercase; letter-spacing: .05em;
+}
+.joule-step-citations ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .2rem; }
+.joule-step-citations li { font-size: .82rem; }
+.joule-step-citations__link { color: inherit; text-decoration: underline; }
+.joule-step-citations__link:hover { color: var(--joule-purple-2); }
+.joule-step-citations__score { font-size: .72rem; color: var(--joule-muted); }
+
 .joule-cards { display: flex; flex-direction: column; gap: .5rem; align-self: stretch; }
 .joule-card {
   background: var(--joule-chrome-2);

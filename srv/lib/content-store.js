@@ -271,16 +271,6 @@ export async function publishHandler(req, res) {
 
     cache.invalidate();
 
-    setImmediate(async () => {
-      try {
-        const { ChatSettings } = cds.entities('com.sap.developers.ims');
-        const settings = await SELECT.one.from(ChatSettings);
-        await triggerPostPublishEmbeddings({ changedSlugs: slugs, settings });
-      } catch (err) {
-        LOG.warn('post-publish embeddings setup failed (non-fatal)', err.message);
-      }
-    });
-
     // Upsert Tutorials + Steps metadata (self-healing on every publish)
     let metaUpserted = 0;
     if (metadata && typeof metadata === 'object') {
@@ -348,6 +338,18 @@ export async function publishHandler(req, res) {
         console.log(`[content/publish] Upserted metadata for ${metaUpserted} tutorials`);
       }
     }
+
+    // Schedule post-publish embeddings AFTER Steps metadata upsert so embedSlugs
+    // can find the Steps rows for fresh slugs without contentHash drift warnings.
+    setImmediate(async () => {
+      try {
+        const { ChatSettings } = cds.entities('com.sap.developers.ims');
+        const settings = await SELECT.one.from(ChatSettings);
+        await triggerPostPublishEmbeddings({ changedSlugs: slugs, settings });
+      } catch (err) {
+        LOG.warn('post-publish embeddings setup failed (non-fatal)', err.message);
+      }
+    });
 
     await logPipelineEnd(pipelineLogId, 'SUCCESS', `Published v${newVersion}: ${slugs.length} uploaded + ${carriedForward} carried = ${mergedFileCount} files, ${mergedTotalSize} bytes`);
 
