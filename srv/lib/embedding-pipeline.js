@@ -20,11 +20,16 @@ async function readContentBuffer(db, slug) {
     const [row] = await db.run(
       `SELECT TOP 1 "CONTENT" FROM "COM_SAP_DEVELOPERS_IMS_CONTENTFILES" cf
          JOIN "COM_SAP_DEVELOPERS_IMS_CONTENTMANIFEST" m ON cf."VERSION" = m."VERSION"
-        WHERE cf."SLUG" = ? AND m."STATUS" = 'ACTIVE'`, [slug]);
+        WHERE cf."SLUG" = ? AND m."STATUS" = 'ACTIVE'
+        ORDER BY m."VERSION" DESC`, [slug]);
     return row?.CONTENT || null;
   }
   const { ContentFiles, ContentManifest } = cds.entities('com.sap.developers.ims');
-  const [active] = await SELECT.from(ContentManifest).where({ status: 'ACTIVE' }).columns('version');
+  const [active] = await SELECT.from(ContentManifest)
+    .where({ status: 'ACTIVE' })
+    .columns('version')
+    .orderBy({ version: 'desc' })
+    .limit(1);
   if (!active) return null;
   const row = await SELECT.one.from(ContentFiles).where({ slug, version: active.version }).columns('content');
   return row ? await toBuffer(row.content) : null;
@@ -59,9 +64,12 @@ export async function embedSlugs(slugs, settings) {
         for (const c of chunks) c.contentHash = hashChunk(c.text);
 
         for (const c of chunks) {
-          await UPDATE(Steps)
+          const affected = await UPDATE(Steps)
             .where({ tutorial_ID: tut.ID, stepOrder: c.stepNumber })
             .set({ contentHash: c.contentHash });
+          if (!affected) {
+            LOG.warn(`no Steps row for tutorial ${tut.ID} stepOrder ${c.stepNumber} — contentHash drift`);
+          }
         }
 
         const existing = await SELECT.from(TutorialEmbedding)
