@@ -48,8 +48,8 @@ Toggle **Enable Vector Grounding** off. The `getRelevantSteps` tool is removed f
 
 1. Change **Embedding Model** to the new model ID.
 2. Click **Seed Embeddings Now** to re-embed every step under the new model.
-3. The query path filters by the current `embeddingModel`, so old-model rows are silently skipped.
-4. The next reconciliation cron will not touch old-model rows; they're cleaned up by the daily orphan prune at 03:30.
+3. The query path filters by the current `embeddingModel`, so old-model rows are silently skipped at query time and don't affect results.
+4. Old-model rows are **not** automatically cleaned up — `pruneOrphanEmbeddings` only deletes rows for tutorials that have left the active manifest, not rows for stale models. If you want to reclaim the space, run a manual `DELETE FROM "com_sap_developers_ims_TutorialEmbedding" WHERE "embeddingModel" != 'text-embedding-3-small'` (substituting the new model name). Until you do, old-model rows are inert: they cost storage but not query latency.
 
 ## Related
 

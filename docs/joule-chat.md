@@ -239,8 +239,7 @@ When enabled, the `getRelevantSteps` tool grounds the chat in per-step embedding
 2. Embeddings are stored in the HANA table `TutorialEmbedding` (1,536-dimensional `Vector` column).
 3. On each chat message, the orchestrator calls `getRelevantSteps(userQuestion)` if `ChatSettings.ragEnabled` is true.
 4. The server runs a **cosine-similarity query** against all embeddings, returning the top `embeddingTopK` matches with `score >= embeddingMinScore`.
-5. Results are emitted as SSE `step-citations` events: `[tutorial-slug #stepNumber]` with the similarity score.
-6. The frontend renders citations as clickable chips above the assistant message.
+5. When `getRelevantSteps` returns matches, the orchestrator emits an SSE `step-citations` event ahead of the assistant's text delta with `{ items: [{ slug, stepNumber, score, excerpt }] }`. The server emits citations in the canonical form `[tutorial-slug #stepNumber]`; the assistant is also instructed to inline-cite using the same notation. Frontend rendering of the dedicated `step-citations` event is not yet wired up — until it is, citations appear only inline in the streamed assistant text.
 
 ### Configuration
 
