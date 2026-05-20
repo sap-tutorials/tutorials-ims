@@ -121,17 +121,29 @@ The three-tier discovery chain is `GitHub → disk cache → HANA RepoCatalog`. 
 
 ### 6. Solr Search Parity
 
-**AEM:** `SolrSearchServlet` proxies to a Solr cluster. Faceted search across tutorials, missions, blog posts, and other developers.sap.com content. Multi-language stemming, typo tolerance, custom relevance weighting.
+**AEM:** `SolrSearchServlet` proxies to a Solr cluster. Faceted search across tutorials, missions, blog posts, and other developers.sap.com content. Stemming, typo tolerance, custom relevance weighting.
 
-**Replacement:** CAP `SearchService` exists. Parity not verified.
+**Replacement:** CAP `SearchService` (`/search/SearchableItems` + `getFacets`) over a UNION ALL view of Tutorials + Missions + Groups (active + published only). HANA full-text fuzzy + ranking declared via `@Search.fuzzinessThreshold: 0.7` and `@Search.ranking: #HIGH/#MEDIUM/#LOW` annotations on the projection.
 
-**Edge cases:**
-- **Cross-content-type search** — AEM search hits blog posts and other non-tutorial content too. Does the replacement search outside tutorials/missions/groups?
-- **Multi-language stemming** — German "Tutorials" vs "Tutorial" vs "tutorielle" should all match. Verify HANA full-text indexes use language-specific analyzers.
-- **Typo tolerance** — "tutotial" → "tutorial". Solr has fuzzy queries OOB; HANA full-text may not.
-- **Relevance weighting** — Solr has boost factors per field (title 5x, body 1x). Verify `SearchService` implements equivalent.
+**Scope decision (2026-05-20):**
 
-**Action:** Sample 20 production search queries from AEM logs, run them against `SearchService`, compare result quality.
+- **Cross-content-type search:** dropped. AEM Solr also serves non-developers.sap.com sites (blogs, community); that's out of our boundary. Our scope is Tutorials + Missions + Groups + their metadata.
+- **Multi-language stemming:** dropped. Site is English-only ([gap #7](#7-multi-language--i18n--not-a-gap)). Language analyzers were never load-bearing here.
+
+**Bug found and fixed (2026-05-20):** `srv/search-service.js` had a `before('READ')` handler that intercepted `$search`, ran a `LIKE` lookup against `TutorialTags`, then **cleared `req.query.SELECT.search` and replaced it with a manual `WHERE title LIKE '%foo%' OR description LIKE '%foo%' OR …'`**. Net effect:
+
+- The `@Search.fuzzinessThreshold` and `@Search.ranking` annotations were dead code — they're applied by CAP only when the search clause survives to the DB layer. The handler erased it.
+- Typo tolerance, English stemming, and field-weighted ranking were all silently disabled in production.
+- `getFacets` had the same `LIKE` pattern, so facet counts were also exact-substring rather than fuzzy.
+
+The handler has been removed and `getFacets` refactored to use `SELECT.from(SearchableItems).search(...)` (the same shape `srv/lib/chat-orchestrator.js:81` uses). CAP now translates `$search` to HANA `CONTAINS(... FUZZY(0.7))` with column ranking on production, and to `LIKE` on SQLite for unit tests — same dev-loop behavior, real fuzzy + ranking in HANA.
+
+**Remaining items:**
+
+- **Tag-name expansion (deferred).** The old handler attempted to widen results when the search term matched a `Tags.name`, returning the linked tutorials. It only joined `TutorialTags` (never `MissionTags`/`GroupTags`) and OR-ing tag matches with a CONTAINS clause requires either (a) adding tag names as a column on `SearchableItems` or (b) a separate `searchByTag` function — both out of scope for the bug fix. Park unless event analytics show users searching for bare tag names.
+- **Body text not indexed.** AEM Solr indexed the full tutorial body. `SearchableItems` indexes only title + description + primaryTag (plus, on the underlying `Tasks` view, step titles — but those aren't in the search projection). Real parity gap, separate from the LIKE bug. Most user queries are short and metadata-driven, but worth measuring before declaring done.
+
+**Action:** Sample 20 representative production search queries (Adobe Analytics or Google Search Console — AEM admin-team request can run in parallel) and replay them against the fixed `SearchService`. The hybrid test `test/hybrid/search-service.test.js` already covers fuzzy + facet structure; extend it with a fixed query list once representative queries are in hand.
 
 ---
 
