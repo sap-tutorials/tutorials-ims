@@ -179,7 +179,7 @@ export async function dispatchTool(name, args, user) {
         tutorialSlug: h.tutorialSlug,
         tutorialTitle: h.tutorialTitle,
         stepNumber: h.stepNumber,
-        excerpt: h.text.slice(0, 600),
+        excerpt: (h.text || '').slice(0, 600),
         score: h.score
       }));
     } catch (err) {
