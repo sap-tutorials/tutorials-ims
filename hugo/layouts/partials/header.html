@@ -39,6 +39,23 @@
       </span>
     </button>
     <span class="shellbar-separator"></span>
+    <div class="shellbar-nav-dropdown" id="trust-dropdown">
+      <button type="button" class="fd-shellbar__button" aria-label="Legal &amp; Trust" title="Legal &amp; Trust" aria-expanded="false" aria-controls="trust-popover" onclick="toggleTrustMenu()">
+        <i class="sap-icon--building"></i>
+      </button>
+      <div id="trust-popover" class="shellbar-popover" style="display:none">
+        <ul class="fd-menu__list" role="menu">
+          <li class="fd-menu__item" role="menuitem"><a href="#" data-trust-todo="disclaimer" class="fd-menu__link"><span class="fd-menu__title">Disclaimer</span></a></li>
+          <li class="fd-menu__item" role="menuitem"><a href="https://www.sap.com/about/legal/privacy.html" target="_blank" rel="noopener noreferrer" class="fd-menu__link"><span class="fd-menu__title">Privacy</span></a></li>
+          <li class="fd-menu__item" role="menuitem"><a href="https://www.sap.com/about/legal/terms-of-use.html" target="_blank" rel="noopener noreferrer" class="fd-menu__link"><span class="fd-menu__title">Terms of Use</span></a></li>
+          <li class="fd-menu__item" role="menuitem"><a href="https://www.sap.com/about/legal/impressum.html" target="_blank" rel="noopener noreferrer" class="fd-menu__link"><span class="fd-menu__title">Legal Disclosure</span></a></li>
+          <li class="fd-menu__item" role="menuitem"><a href="https://www.sap.com/about/legal/copyright.html" target="_blank" rel="noopener noreferrer" class="fd-menu__link"><span class="fd-menu__title">Copyright</span></a></li>
+          <li class="fd-menu__item" role="menuitem"><a href="https://www.sap.com/about/legal/trademark.html" target="_blank" rel="noopener noreferrer" class="fd-menu__link"><span class="fd-menu__title">Trademark</span></a></li>
+          <li class="fd-menu__item" role="menuitem"><a href="https://www.sap.com/about/legal/privacy/cookies.html" target="_blank" rel="noopener noreferrer" class="fd-menu__link"><span class="fd-menu__title">Cookie Statement</span></a></li>
+        </ul>
+      </div>
+    </div>
+    <span class="shellbar-separator"></span>
     <div class="fd-shellbar__action" id="user-menu">
       <span id="user-avatar" class="fd-avatar fd-avatar--xs fd-avatar--circle fd-avatar--placeholder" role="button" tabindex="0" aria-label="User profile" onclick="handleProfileClick()"><i class="sap-icon--person-placeholder"></i></span>
       <div id="user-popover" class="fd-popover__body fd-popover__body--right">
@@ -69,6 +86,7 @@
   const userName = document.getElementById('user-name');
   const userEmail = document.getElementById('user-email');
   const navPopover = document.getElementById('nav-popover');
+  const trustPopover = document.getElementById('trust-popover');
   let isAuthenticated = false;
 
   function applyInitials(givenName, familyName, id) {
@@ -118,14 +136,28 @@
       return;
     }
     navPopover.style.display = 'none';
+    trustPopover.style.display = 'none';
+    document.querySelector('#trust-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
     popover.style.display = popover.style.display === 'none' ? 'block' : 'none';
   };
 
   window.toggleNavMenu = function() {
     popover.style.display = 'none';
+    trustPopover.style.display = 'none';
+    document.querySelector('#trust-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
     var btn = document.querySelector('#nav-dropdown .fd-shellbar__button');
     var open = navPopover.style.display === 'block';
     navPopover.style.display = open ? 'none' : 'block';
+    btn.setAttribute('aria-expanded', !open);
+  };
+
+  window.toggleTrustMenu = function() {
+    popover.style.display = 'none';
+    navPopover.style.display = 'none';
+    document.querySelector('#nav-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
+    var btn = document.querySelector('#trust-dropdown .fd-shellbar__button');
+    var open = trustPopover.style.display === 'block';
+    trustPopover.style.display = open ? 'none' : 'block';
     btn.setAttribute('aria-expanded', !open);
   };
 
@@ -136,6 +168,10 @@
     if (!document.getElementById('nav-dropdown').contains(e.target)) {
       navPopover.style.display = 'none';
       document.querySelector('#nav-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
+    }
+    if (!document.getElementById('trust-dropdown').contains(e.target)) {
+      trustPopover.style.display = 'none';
+      document.querySelector('#trust-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
     }
   });
 

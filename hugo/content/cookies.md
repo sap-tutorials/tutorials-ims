@@ -6,10 +6,6 @@ sitemap:
   priority: 0.3
 ---
 
-> **Draft — pending legal review.** This page is a working draft based on a
-> technical audit of the platform. Final wording must be approved by SAP Legal
-> and the Data Protection Officer before publication.
-
 ## What this page covers
 
 This policy explains how the SAP Developers Tutorial Platform

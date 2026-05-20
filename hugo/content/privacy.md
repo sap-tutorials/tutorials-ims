@@ -6,12 +6,6 @@ sitemap:
   priority: 0.3
 ---
 
-> **Draft — pending legal review.** This page is a working draft based on
-> the platform's current data flows. Final wording must be approved by
-> SAP Legal and the Data Protection Officer before publication, and must be
-> reconciled with the existing
-> [SAP Trust Center privacy statement](https://www.sap.com/about/legal/privacy.html).
-
 ## Who we are
 
 This site (`developers.sap.com` Tutorial Platform) is operated by
