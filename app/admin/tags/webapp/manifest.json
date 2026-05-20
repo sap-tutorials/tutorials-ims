@@ -3,9 +3,10 @@
   "sap.app": {
     "id": "sap.tutorials.admin.tags",
     "type": "application",
-    "title": "Tags",
-    "description": "View Tags",
+    "title": "{{appTitle}}",
+    "description": "{{appSubtitle}}",
     "applicationVersion": { "version": "0.0.1" },
+    "i18n": "i18n/i18n.properties",
     "dataSources": {
       "mainService": {
         "uri": "/admin/",
@@ -18,7 +19,7 @@
         "Tag-display": {
           "semanticObject": "Tag",
           "action": "display",
-          "title": "Tags",
+          "title": "{{appTitle}}",
           "signature": { "parameters": {}, "additionalParameters": "allowed" }
         }
       }
@@ -27,7 +28,7 @@
   "sap.ui5": {
     "dependencies": {
       "minUI5Version": "1.136.0",
-      "libs": { "sap.fe.templates": {} }
+      "libs": { "sap.fe.templates": {}, "sap.m": {}, "sap.ui.unified": {} }
     },
     "models": {
       "": {
@@ -39,15 +40,24 @@
           "autoExpandSelect": true,
           "earlyRequests": true
         }
+      },
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": { "bundleName": "sap.tutorials.admin.tags.i18n.i18n" }
+      }
+    },
+    "extends": {
+      "extensions": {
+        "sap.ui.controllerExtensions": {
+          "sap.fe.templates.ListReport.ListReportController": {
+            "controllerName": "sap.tutorials.admin.tags.ext.TagImportController"
+          }
+        }
       }
     },
     "routing": {
       "routes": [
-        {
-          "pattern": ":?query:",
-          "name": "TagsList",
-          "target": "TagsList"
-        }
+        { "pattern": ":?query:", "name": "TagsList", "target": "TagsList" }
       ],
       "targets": {
         "TagsList": {
@@ -58,7 +68,20 @@
             "settings": {
               "contextPath": "/Tags",
               "variantManagement": "Page",
-              "initialLoad": "Enabled"
+              "initialLoad": "Enabled",
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "actions": {
+                    "TagImportAction": {
+                      "press": "sap.tutorials.admin.tags.ext.TagImportController.openTagImportDialog",
+                      "visible": true,
+                      "enabled": true,
+                      "text": "{i18n>tagImport.action}",
+                      "position": { "placement": "Before", "anchor": "DataFieldForAction::cleanupUnusedTagsAction" }
+                    }
+                  }
+                }
+              }
             }
           }
         }

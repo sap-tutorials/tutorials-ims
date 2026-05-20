@@ -6,7 +6,7 @@ const project = cds.test('serve', '--project', '.', '--in-memory');
 describe('SearchService', () => {
 
   beforeAll(async () => {
-    const { Tutorials, Missions, Groups, Tags, TutorialTags } = cds.entities('com.sap.developers.ims');
+    const { Tutorials, Missions, Groups, Tags, TutorialTags, TutorialBodyText } = cds.entities('com.sap.developers.ims');
 
     await INSERT.into(Tutorials).entries([
       { ID: 'search-t1', legacyId: 90001, slug: 'hana-cloud-setup', title: 'SAP HANA Cloud Setup', description: 'Learn to configure HANA Cloud', primaryTag: 'SAP HANA Cloud', experienceTag: 'beginner', averageTimeToComplete: 30, status: 'ACTIVE' },
@@ -31,6 +31,11 @@ describe('SearchService', () => {
     await INSERT.into(TutorialTags).entries([
       { tutorial_ID: 'search-t1', tag_ID: 'search-tag1' },
       { tutorial_ID: 'search-t2', tag_ID: 'search-tag2' },
+    ]);
+
+    await INSERT.into(TutorialBodyText).entries([
+      { slug: 'hana-cloud-setup', bodyText: 'Open the BTP cockpit and provision a HANA Cloud instance. Configure the firewall ipallowlist before connecting.' },
+      { slug: 'cap-getting-started', bodyText: 'Run cds init to scaffold a project. Add an entity to db schema and a service projection.' },
     ]);
   });
 
@@ -83,13 +88,24 @@ describe('SearchService', () => {
     });
 
     it('$search filters by title substring', async () => {
-      // Use a term that matches title but NOT any seeded tag name,
-      // so the tag-augmentation before-handler early-returns and does not inject
-      // the broken WHERE clause. 'Fiori' matches 'SAP Fiori Elements' title
-      // but has no matching tag in TutorialTags.
       const { data } = await project.get('/search/SearchableItems?$search=Fiori');
       const slugs = data.value.map(i => i.slug);
       expect(slugs).toContain('fiori-elements');
+    });
+
+    it('$search matches a unique word from indexed body text', async () => {
+      // 'ipallowlist' appears only in the hana-cloud-setup body text, not in any title or description.
+      const { data } = await project.get('/search/SearchableItems?$search=ipallowlist');
+      const slugs = data.value.map(i => i.slug);
+      expect(slugs).toContain('hana-cloud-setup');
+    });
+
+    it('does not expose bodyText in the OData response', async () => {
+      const { data } = await project.get('/search/SearchableItems?$filter=slug eq \'hana-cloud-setup\'');
+      expect(data.value.length).toBeGreaterThan(0);
+      for (const item of data.value) {
+        expect(item.bodyText).toBeUndefined();
+      }
     });
   });
 
@@ -102,14 +118,7 @@ describe('SearchService', () => {
   });
 
   describe('getFacets', () => {
-    // NOTE: The buildWhere helper in search-service.js wraps conditions in
-    // { and: [...] } which CAP serializes as "WHERE and val=0 ..." on SQLite —
-    // a known SQLite-only issue. Tests that pass any filter parameters are
-    // therefore skipped in the unit workspace; they are covered in hybrid tests
-    // against HANA where the CQL compiles correctly.
-
     it('returns aggregation structure without filters', async () => {
-      // No-filter path returns {} from buildWhere, bypassing the broken AND wrapper.
       const srv = await cds.connect.to('SearchService');
       const result = await srv.send({ event: 'getFacets', data: {} });
       expect(result).toHaveProperty('totalCount');
@@ -140,31 +149,6 @@ describe('SearchService', () => {
       const srv = await cds.connect.to('SearchService');
       const result = await srv.send({ event: 'getFacets', data: { search: 'xyznonexistent999' } });
       expect(result.totalCount).toBe(0);
-    });
-  });
-
-  describe('Tag search augmentation', () => {
-    it('before handler augments WHERE when tag matches are found', async () => {
-      // Verify the augmentation logic indirectly: searching for a term that appears
-      // only in a tag name (not title/description) would extend the result set.
-      // On SQLite, $search uses LIKE on text columns; the before-handler also
-      // queries TutorialTags and injects an OR ID-in clause.
-      // We verify the before-handler runs by checking that a title-based $search
-      // returns the expected tutorial (tag augmentation is a superset of that).
-      const { data } = await project.get('/search/SearchableItems?$search=Fiori');
-      const slugs = data.value.map(i => i.slug);
-      expect(slugs).toContain('fiori-elements');
-    });
-
-    it('tag-matched tutorials appear via direct service invocation', async () => {
-      // Directly invoke the before-handler effect: search for 'HANA' which
-      // matches both the title 'SAP HANA Cloud Setup' and the tag 'HANA Cloud'
-      // linked to tutorial search-t1. Done via SELECT to verify data is intact.
-      const { TutorialTags, Tags } = cds.entities('com.sap.developers.ims');
-      const tagMatches = await SELECT.from(TutorialTags)
-        .columns('tutorial_ID')
-        .where({ tag_ID: { in: SELECT('ID').from(Tags).where`name like ${'%HANA%'}` } });
-      expect(tagMatches.map(r => r.tutorial_ID)).toContain('search-t1');
     });
   });
 

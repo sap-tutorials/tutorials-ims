@@ -4,6 +4,8 @@ import { formatTaskRecordsCSV, formatAwardMissionsCSV } from './lib/export-helpe
 import { buildAnonymizationOps } from './lib/anonymization.js';
 import { getNextLegacyId } from './lib/legacy-id.js';
 import { embedSlugs } from './lib/embedding-pipeline.js';
+import { randomUUID } from 'node:crypto';
+import { parsePayload, classify, apply, sharedCache, MAX_BYTES } from './lib/tag-import/index.js';
 
 export default class AdminService extends cds.ApplicationService {
 
@@ -345,6 +347,92 @@ export default class AdminService extends cds.ApplicationService {
       const unusedIds = unused.map(t => t.ID);
       await DELETE.from(Tags).where({ ID: { in: unusedIds } });
       return unused.length;
+    });
+
+    this.on('previewTagImport', async (req) => {
+      const log = cds.log('tag-import');
+      const started = Date.now();
+      const { payload, format } = req.data;
+
+      if (!payload) return req.error(400, 'payload is required');
+      if (typeof payload !== 'string') return req.error(400, 'payload must be a string');
+      if (Buffer.byteLength(payload, 'utf8') > MAX_BYTES) {
+        return req.error(413, `Payload exceeds ${MAX_BYTES} bytes`);
+      }
+      if (!['csv', 'json'].includes(format)) {
+        return req.error(400, `format must be 'csv' or 'json'`);
+      }
+
+      let parsed;
+      try {
+        parsed = parsePayload(payload, format);
+      } catch (e) {
+        return req.error(400, e.message);
+      }
+
+      const existingTags = await SELECT.from(Tags).columns('ID', 'name', 'titlePath');
+      const { summary, rows } = classify(parsed.rows, existingTags);
+
+      const token = randomUUID();
+      sharedCache.set(token, { rows, classifiedAt: Date.now() });
+
+      log.info({
+        event: 'tag-import.preview',
+        user: req.user?.id,
+        total: summary.total,
+        summary,
+        durationMs: Date.now() - started
+      });
+
+      return {
+        token,
+        summary,
+        rows,
+        parseWarnings: parsed.parseErrors
+      };
+    });
+
+    this.on('commitTagImport', async (req) => {
+      const log = cds.log('tag-import');
+      const started = Date.now();
+      const { token, strategy } = req.data;
+
+      if (!token) return req.error(400, 'token is required');
+      if (!['upsert', 'skip-duplicates', 'abort-on-duplicate'].includes(strategy)) {
+        return req.error(400, `strategy must be one of upsert, skip-duplicates, abort-on-duplicate`);
+      }
+
+      const cached = sharedCache.get(token);
+      if (!cached) return req.error(410, 'Preview expired or unknown token; please re-upload');
+
+      // Re-classify inside the request to catch races (another admin inserting
+      // between preview and commit). The cached parsed rows stay as-is; only the
+      // classification against existing tags is refreshed.
+      const existingTags = await SELECT.from(Tags).columns('ID', 'name', 'titlePath');
+      const inputRows = cached.rows.map(r => r.status === 'invalid'
+        ? { invalid: true, name: r.name, titlePath: r.titlePath, reason: r.reason }
+        : { name: r.name, titlePath: r.titlePath });
+      const { rows: freshRows } = classify(inputRows, existingTags);
+
+      let result;
+      try {
+        result = await apply(freshRows, strategy, db);
+      } catch (e) {
+        if (/conflict/i.test(e.message) && strategy === 'abort-on-duplicate') {
+          return req.error(409, e.message);
+        }
+        throw e;
+      }
+
+      log.info({
+        event: 'tag-import.commit',
+        user: req.user?.id,
+        strategy,
+        ...result,
+        durationMs: Date.now() - started
+      });
+
+      return result;
     });
 
     this.after('READ', 'Tags', (rows) => {

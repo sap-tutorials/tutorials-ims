@@ -116,7 +116,7 @@ async function getNextVersion() {
 // --- POST /content/publish ---
 
 export async function publishHandler(req, res) {
-  const { trigger, hugoVersion, files, metadata } = req.body || {};
+  const { trigger, hugoVersion, files, metadata, bodyTexts } = req.body || {};
 
   if (!files || typeof files !== 'object' || Object.keys(files).length === 0) {
     return res.status(400).json({ error: 'Missing or empty "files" object' });
@@ -339,8 +339,33 @@ export async function publishHandler(req, res) {
       }
     }
 
-    // Schedule post-publish embeddings AFTER Steps metadata upsert so embedSlugs
-    // can find the Steps rows for fresh slugs without contentHash drift warnings.
+    // Upsert TutorialBodyText (sidecar for SearchableItems full-text search).
+    // Replace-on-publish so search reflects current content; per-slug upsert means
+    // partial publishes (e.g. single-slug rebuild) don't wipe other tutorials' body text.
+    let bodyUpserted = 0;
+    if (bodyTexts && typeof bodyTexts === 'object') {
+      const { TutorialBodyText } = cds.entities('com.sap.developers.ims');
+      for (const [slug, text] of Object.entries(bodyTexts)) {
+        if (typeof text !== 'string') continue;
+        try {
+          const existing = await SELECT.one.from(TutorialBodyText).where({ slug }).columns('slug');
+          if (existing) {
+            await UPDATE(TutorialBodyText).where({ slug }).set({ bodyText: text });
+          } else {
+            await INSERT.into(TutorialBodyText).entries({ slug, bodyText: text });
+          }
+          bodyUpserted++;
+        } catch (bodyErr) {
+          console.warn(`[content/publish] body text upsert failed for ${slug}:`, bodyErr.message);
+        }
+      }
+      if (bodyUpserted > 0) {
+        console.log(`[content/publish] Upserted body text for ${bodyUpserted} tutorials`);
+      }
+    }
+
+    // Schedule post-publish embeddings AFTER Steps metadata + body text upserts so
+    // embedSlugs can find the Steps rows for fresh slugs without contentHash drift warnings.
     setImmediate(async () => {
       try {
         const { ChatSettings } = cds.entities('com.sap.developers.ims');
@@ -360,7 +385,8 @@ export async function publishHandler(req, res) {
       fileCount: mergedFileCount,
       totalSizeBytes: mergedTotalSize,
       durationMs,
-      metadataUpserted: metaUpserted
+      metadataUpserted: metaUpserted,
+      bodyTextUpserted: bodyUpserted
     });
   } catch (err) {
     console.error('[content/publish]', err instanceof Error ? err.message : String(err));

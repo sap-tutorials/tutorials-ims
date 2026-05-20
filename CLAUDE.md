@@ -124,7 +124,7 @@ Tutorial HTML is NOT served from static files. After Hugo builds, `publish-conte
 ### CAP Backend (srv/)
 
 - **Services**: `DeveloperService` (@path: /api), `AdminService` (@path: /admin), `DisplayService` (@path: /display), `ConsolidationService` (@path: /api/v1), `ScannerService` (@path: /scanner), `SearchService` (@path: /search), `EventStreamService` (@path: event-stream, WebSocket+REST)
-- **Custom endpoints**: `/api/qrcode` (QR code PNG generation), `/build/catalog` (unauthenticated mission/group data for build pipeline)
+- **Custom endpoints**: `/api/qrcode` (QR code PNG generation), `/build/catalog` (unauthenticated mission/group data for build pipeline), `/build/navigator`, `/build/slug-mapping`, `/build/repo-catalog` (GET unauthenticated; POST bearer-token-protected via `CONTENT_API_KEY` — slug-keyed `DiscoveredTutorial` map used as the third-tier discovery fallback when GitHub and the local actions cache both miss)
 - **Content persistence** (`srv/lib/content-store.js`): Tutorial HTML stored as gzip-compressed BLOBs in HANA (`ContentFiles` + `ContentManifest` entities). Endpoints:
   - `POST /content/publish` — accepts `{ trigger, hugoVersion, files: { slug: base64gzip } }`, creates versioned manifest (bearer token auth via `CONTENT_API_KEY`)
   - `GET /content/tutorials/:slug` — serves decompressed HTML with ETag, Cache-Control, bounded LRU cache (50MB)
@@ -177,7 +177,7 @@ Set `IMS_BASE_URL`, `CAP_BASE_URL`, and `IMS_AUTH_TOKEN` env vars. Export files 
 ### CI/CD (.github/workflows/)
 
 - **`deploy.yml`** — Full MTA build + deploy to BTP Cloud Foundry, followed by smoke tests
-- **`rebuild-content.yml`** — Re-fetches tutorials, rebuilds Hugo, and publishes content to HANA (triggered manually or on tutorial source changes)
+- **`rebuild-content.yml`** — Re-fetches tutorials, rebuilds Hugo, and publishes content to HANA (triggered manually or on tutorial source changes). Authors can force-refresh a single tutorial by running the workflow with the optional `slug` input filled in — the fetch step honors `TUTORIAL_SLUG` env var, busts that slug's markdown cache, regenerates the rest from cache, and skips the HANA `RepoCatalog` upload so the partial run doesn't overwrite the catalog. Leave `slug` blank for a full rebuild.
 
 ### Documentation (docs/)
 

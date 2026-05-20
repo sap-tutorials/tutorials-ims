@@ -1,7 +1,16 @@
 {{ define "main" }}
 <article class="home">
+  <section aria-labelledby="search-tutorials" id="navigator-section" class="home-navigator">
+    <h1 id="search-tutorials" class="visually-hidden">Search and filter SAP developer tutorials</h1>
+    <div id="tutorial-navigator">
+      <noscript>
+        <p><a href="/tutorials/">View the full tutorial index →</a></p>
+      </noscript>
+    </div>
+  </section>
+
   <section class="home-hero">
-    <h1>Build on SAP — hands-on tutorials for developers</h1>
+    <h2>Build on SAP — hands-on tutorials for developers</h2>
     <p class="lede">{{ .Site.Params.heroDescription }}</p>
     <div class="home-hero__ctas">
       <a class="fd-button fd-button--emphasized" href="/missions/">Browse missions</a>
@@ -41,19 +50,11 @@
   <section aria-labelledby="browse-by-topic">
     <h2 id="browse-by-topic">Browse by topic</h2>
     <ul class="topic-grid">
-      {{ range $tag, $pages := .Site.Taxonomies.primaryTag }}
-      <li><a href="/tags/{{ $tag | urlize }}/">{{ $tag }} ({{ len $pages }})</a></li>
+      {{ range first 24 .Site.Taxonomies.tags.ByCount }}
+      <li><a href="/tags/{{ .Page.Title | urlize }}/">{{ .Page.Title }} ({{ .Count }})</a></li>
       {{ end }}
     </ul>
-  </section>
-
-  <section aria-labelledby="search-tutorials" id="navigator-section">
-    <h2 id="search-tutorials">Search and filter all tutorials</h2>
-    <div id="tutorial-navigator">
-      <noscript>
-        <p><a href="/tutorials/">View the full tutorial index →</a></p>
-      </noscript>
-    </div>
+    <p class="topic-grid__more"><a href="/tags/">See all topics →</a></p>
   </section>
 </article>
 {{ $css := resources.Get "css/home.css" }}

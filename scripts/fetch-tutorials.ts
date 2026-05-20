@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync, existsSync, readFileSync, readdirSync } from 'node:fs'
+import { mkdirSync, writeFileSync, existsSync, readFileSync, readdirSync, unlinkSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { performance } from 'node:perf_hooks'
@@ -10,7 +10,7 @@ import { resolveImageURLs } from './parsers/images.js'
 import { convertOptionBlocks } from './parsers/options.js'
 import { escapeHugoDelimiters } from './parsers/hugo-delimiters.js'
 import { stripDangerousHtml } from './parsers/sanitize-html.js'
-import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, EXCLUDED_REPOS, type DiscoveredTutorial } from './parsers/github.js'
+import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, EXCLUDED_REPOS, type DiscoveredTutorial } from './parsers/github.js'
 import { fetchBuildCatalog, loadCapCache, saveCapCache } from './parsers/cap.js'
 import { parseRulesVr } from './parsers/rules.js'
 import type { Mission, MissionHierarchy, HierarchyGroup, TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } from './parsers/types.js'
@@ -134,7 +134,7 @@ async function fetchMarkdown(slug: string, repo: string, branch: string, current
 
   const hadCache = existsSync(cacheFile)
   const url = `https://raw.githubusercontent.com/sap-tutorials/${repo}/${branch}/tutorials/${slug}/${slug}.md`
-  const res = await fetch(url)
+  const res = await fetchWithRetry(url, { headers: { 'User-Agent': 'tutorials-poc-build' } }, { label: `raw:${slug}` })
   if (!res.ok) throw new Error(`Failed to fetch ${slug}: ${res.status}`)
   const content = await res.text()
 
@@ -542,6 +542,7 @@ async function main() {
   const totalStart = performance.now()
   const regenerateMode = process.argv.includes('--regenerate')
   const discoverOnly = process.argv.includes('--discover-only')
+  const tutorialSlugFilter = (process.env.TUTORIAL_SLUG ?? '').trim() || null
   const target = parseTarget(process.argv)
   const OUTPUT_DIR = getOutputDir(target)
   const NAV_JSON_DIR = getNavJsonDir(target)
@@ -559,7 +560,7 @@ async function main() {
     }
     console.log('Running DISCOVERY ONLY mode (builds repo mapping for image URLs)\n')
     const discoveryStart = performance.now()
-    const discovered = await discoverAllTutorials()
+    const { tutorials: discovered } = await discoverAllTutorials()
     const discoveryMap: Record<string, { slug: string; repo: string; branch: string }> = {}
     for (const t of discovered) discoveryMap[t.slug] = t
     mkdirSync(dirname(DISCOVERY_CACHE), { recursive: true })
@@ -600,7 +601,8 @@ async function main() {
     console.log('Phase 1: Discovering tutorials via GraphQL...\n')
     const discoveryStart = performance.now()
 
-    allTutorials = await discoverAllTutorials()
+    const discovery = await discoverAllTutorials()
+    allTutorials = discovery.tutorials
     discoveryMs = performance.now() - discoveryStart
 
     // Persist discovery mapping so --regenerate can resolve image URLs
@@ -609,7 +611,38 @@ async function main() {
     mkdirSync(dirname(DISCOVERY_CACHE), { recursive: true })
     writeFileSync(DISCOVERY_CACHE, JSON.stringify(discoveryMap, null, 2), 'utf-8')
 
+    // Only refresh HANA RepoCatalog when discovery came from GitHub AND the run
+    // covers all tutorials. Uploading disk/HANA fallback data would advance
+    // lastSyncedAt and falsely signal freshness during a prolonged GitHub outage.
+    // Slug-filtered runs are partial by design — never overwrite the catalog.
+    if (discovery.source === 'github' && !tutorialSlugFilter) {
+      await uploadDiscoveryToHana(allTutorials)
+    } else if (tutorialSlugFilter) {
+      console.log(`  [repo-catalog] skipping HANA upload — single-slug refresh is a partial run`)
+    } else {
+      console.log(`  [repo-catalog] skipping HANA upload — discovery came from ${discovery.source} fallback`)
+    }
+
     console.log(`\nDiscovered ${allTutorials.length} tutorials (${formatDuration(discoveryMs)})\n`)
+
+    // Validate slug filter and bust its markdown cache so it gets re-fetched.
+    // Other tutorials will be regenerated from cached markdown (see Phase 3).
+    if (tutorialSlugFilter) {
+      const match = allTutorials.find(t => t.slug === tutorialSlugFilter)
+      if (!match) {
+        console.error(`ERROR: TUTORIAL_SLUG="${tutorialSlugFilter}" not found in discovered tutorials.`)
+        console.error(`  Discovery returned ${allTutorials.length} slugs from source: ${discovery.source}`)
+        process.exit(1)
+      }
+      const targetCacheFile = join(CACHE_DIR, `${tutorialSlugFilter}.md`)
+      if (existsSync(targetCacheFile)) {
+        unlinkSync(targetCacheFile)
+        console.log(`[slug-filter] busted cache for ${tutorialSlugFilter} (${match.repo}@${match.branch}) — will be re-fetched`)
+      } else {
+        console.log(`[slug-filter] no cache to bust for ${tutorialSlugFilter} — fresh fetch will run`)
+      }
+      console.log(`[slug-filter] ${allTutorials.length - 1} other tutorials will be regenerated from cache\n`)
+    }
 
     // ── Phase 2: Batch prefetch GitHub metadata via GraphQL ──
     console.log('Phase 2: Prefetching GitHub metadata (batched GraphQL)...\n')
@@ -658,7 +691,7 @@ async function main() {
       let createdAt = ''
       let contributors: Array<{ name: string; login: string; avatarUrl: string }> = []
 
-      if (regenerateMode) {
+      if (regenerateMode || (tutorialSlugFilter && t.slug !== tutorialSlugFilter)) {
         const cacheFile = join(CACHE_DIR, `${t.slug}.md`)
         if (!existsSync(cacheFile)) throw new Error(`Cache file not found: ${cacheFile}`)
         rawMd = readFileSync(cacheFile, 'utf-8')

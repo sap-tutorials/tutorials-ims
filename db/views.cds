@@ -61,22 +61,27 @@ view NavigatorCatalog as
   where item.taskType = 'TUTORIAL' and tut.slug is not null and mission.published = true;
 
 view SearchableItems as
-  SELECT from ims.Tutorials {
-    key ID, legacyId, title, description, slug,
-    primaryTag, experienceTag, averageTimeToComplete, status,
-    'TUTORIAL' as taskType : String(20)
-  } where status is null or status = 'ACTIVE'
+  SELECT from ims.Tutorials as t
+    left join ims.TutorialBodyText as bt on bt.slug = t.slug
+  {
+    key t.ID, t.legacyId, t.title, t.description, t.slug,
+    t.primaryTag, t.experienceTag, t.averageTimeToComplete, t.status,
+    'TUTORIAL' as taskType : String(20),
+    bt.bodyText as bodyText : LargeString
+  } where t.status is null or t.status = 'ACTIVE'
   UNION ALL
   SELECT from ims.Missions {
     ID, legacyId, title, description, slug,
     primaryTag, experienceTag, averageTimeToComplete, status,
-    'MISSION' as taskType : String(20)
+    'MISSION' as taskType : String(20),
+    null as bodyText : LargeString
   } where (status is null or status = 'ACTIVE') and published = true
   UNION ALL
   SELECT from ims.Groups {
     ID, legacyId, title, description, null as slug : String(255),
     primaryTag, experienceTag, averageTimeToComplete, status,
-    'GROUP' as taskType : String(20)
+    'GROUP' as taskType : String(20),
+    null as bodyText : LargeString
   } where (status is null or status = 'ACTIVE') and published = true;
 
 view CompletionAnalytics as
