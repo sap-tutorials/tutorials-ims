@@ -21,6 +21,8 @@ async function toBuffer(data) {
   return Buffer.from(data);
 }
 
+export { toBuffer };
+
 // --- Bounded LRU Cache ---
 
 class ContentCache {
