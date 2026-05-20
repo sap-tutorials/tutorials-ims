@@ -81,7 +81,7 @@ if (q) searchQuery.value = q
 
 This is the only change needed for the search-form-redirects-to-home flow. The reactive search effect already fires when `searchQuery` changes.
 
-#### `srv/lib/build-catalog.js` (or wherever `/build/catalog` is implemented)
+#### `srv/lib/build-catalog.js`
 
 Add a `featured` array to the catalog response, derived from `FeaturedTasks` joined with task type (mission/group/tutorial) and slug. Top N by `featuredOrder`. Shape:
 
@@ -144,7 +144,7 @@ Hugo emits site-root files (`hugo/public/404.html`, `500.html`, `maintenance.htm
   - Body contains marker (e.g., `data-error-page="404"` attribute on the root section) and the search input
 - `GET /assets/missing.js`
   - Same 404 expectations (catches the case where errorPage somehow only fires for HTML-accept paths)
-- 500 and 503 pages: tested by direct file fetch (`GET /500.html`, `GET /maintenance.html`) — confirms the file deployed and is fetchable. Triggering a real 500/503 in smoke is not worth the test infrastructure.
+- 500 and 503 pages: smoke fetches `GET /500.html` and `GET /maintenance.html` directly to confirm the file deployed and is fetchable. Each layout includes a `data-error-page="<status>"` marker so the 404 smoke can also assert the served body matches the right page (closes the loop on `errorPage` being correctly mapped). Triggering a real 500/503 in smoke is not worth the test infrastructure.
 
 ### Unit / integration
 
@@ -196,7 +196,7 @@ None blocking. The proxied-404 behavior (EC1) is resolved by a one-line probe du
 | `hugo/layouts/500.html` | New: apologetic copy, retry button, /health links |
 | `hugo/layouts/maintenance.html` | New: maintenance copy, link home, no fetches |
 | `apps/src/navigator/TutorialNavigator.vue` | ~3 lines: read `?q=` on mount, seed `searchQuery` |
-| `srv/<build-catalog handler>` | Add `featured` array from `FeaturedTasks` |
+| `srv/lib/build-catalog.js` | Add `featured` array from `FeaturedTasks` |
 | `approuter/xs-app.json` | Add `errorPage` map for 404/500/503; possibly `errors` override on `/tutorials/(.*)` route after EC1 probe |
 | `test/smoke/error-pages.test.js` | New smoke test |
 
