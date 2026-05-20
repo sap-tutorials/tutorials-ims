@@ -3,6 +3,7 @@ title: "Test Tutorial"
 type: tutorials
 description: "A test tutorial for verifying the Hugo layout"
 slug: "test-tutorial"
+private: true
 stepCount: 2
 time: 15
 experienceLevel: "Beginner"
