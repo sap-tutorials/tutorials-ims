@@ -28,4 +28,16 @@ describe('computeRecommendations', () => {
     expect(result.get('alpha')).toEqual([])
     expect(result.get('beta')).toEqual([])
   })
+
+  it('ranks primaryTag matches above tag-only matches', () => {
+    const entries: TutorialNavEntry[] = [
+      navEntry({ slug: 'target',  primaryTag: 'cap',  displayTags: ['CAP', 'Node'] }),
+      navEntry({ slug: 'tag-only', primaryTag: 'btp', displayTags: ['CAP', 'Node', 'BTP'] }),
+      navEntry({ slug: 'primary-match', primaryTag: 'cap', displayTags: ['CAP'] }),
+    ]
+    const result = computeRecommendations(entries)
+    // primary-match has primaryTag bonus (+10) + 1 tag overlap → 11
+    // tag-only has 2 tag overlaps → 2
+    expect(result.get('target')).toEqual(['primary-match', 'tag-only'])
+  })
 })
