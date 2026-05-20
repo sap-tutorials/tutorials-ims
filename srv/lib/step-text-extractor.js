@@ -22,14 +22,13 @@ export function extractStepText(gzBuffer) {
     return [];
   }
 
-  let $;
-  try {
-    $ = cheerio.load(html);
-  } catch {
-    return [];
-  }
+  // cheerio.load() never throws on string input — it tolerates malformed markup
+  const $ = cheerio.load(html);
 
-  const nodes = $('[data-step]');
+  // Match only root-level data-step containers; nested data-step attributes
+  // (e.g. validation mount, "Done" button inside the wrapper) must not become
+  // independent records. See hugo/layouts/shortcodes/tutorial-step.html.
+  const nodes = $('[data-step]').filter((_, el) => $(el).parents('[data-step]').length === 0);
   if (nodes.length === 0) return [];
 
   const out = [];
