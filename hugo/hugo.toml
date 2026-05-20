@@ -42,7 +42,7 @@ enableRobotsTXT = false  # we ship our own via the robots output format
   protocol = ''
 
 [mediaTypes."text/markdown"]
-  suffixes = ['md', 'txt']
+  suffixes = ['txt', 'md']
 
 [build]
   writeStats = true
