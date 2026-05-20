@@ -1,0 +1,15 @@
+.home { max-width: 1200px; margin: 0 auto; padding: 2rem 1rem; }
+.home-hero { text-align: center; padding: 3rem 1rem; }
+.home-hero h1 { font-size: 2.5rem; margin: 0 0 1rem; }
+.home-hero .lede { font-size: 1.2rem; color: var(--sapTextColor, #333); margin: 0 0 2rem; max-width: 800px; margin-left: auto; margin-right: auto; }
+.home-hero__ctas { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+.home article > section { margin: 3rem 0; }
+.home article > section h2 { font-size: 1.5rem; margin: 0 0 1.5rem; }
+.mission-grid, .tutorial-grid { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+.mission-grid li, .tutorial-grid li { background: var(--sapTile_Background, #fff); border: 1px solid var(--sapTile_BorderColor, #e5e5e5); border-radius: 0.5rem; padding: 1rem; }
+.mission-grid a, .tutorial-grid a { text-decoration: none; color: inherit; display: block; }
+.mission-grid h3, .tutorial-grid h3 { margin: 0 0 0.5rem; font-size: 1.1rem; }
+.mission-grid p, .tutorial-grid p { margin: 0 0 0.5rem; color: var(--sapTextColor, #555); font-size: 0.9rem; }
+.tutorial-grid .meta { color: var(--sapNeutralTextColor, #666); font-size: 0.8rem; }
+.topic-grid { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.topic-grid li a { padding: 0.4rem 0.8rem; background: var(--sapButton_Background, #f0f0f0); border-radius: 1rem; text-decoration: none; color: inherit; }
