@@ -77,4 +77,31 @@ describe('stripDangerousHtml', () => {
     expect(stripDangerousHtml('<svg onload="alert(1)"><circle></circle></svg>')).not.toContain('<svg')
     expect(stripDangerousHtml('<math><mrow></mrow></math>')).not.toContain('<math')
   })
+
+  it('removes style tags (defense-in-depth against author-injected CSS)', () => {
+    expect(stripDangerousHtml('<style>body { color: red }</style>')).toBe('body { color: red }')
+    expect(stripDangerousHtml('<style id="x">@import url("https://evil.example/track.css")</style>')).toBe('@import url("https://evil.example/track.css")')
+  })
+
+  it('removes media tags (video, audio, picture, source, track)', () => {
+    expect(stripDangerousHtml('<video src="https://evil.example/track.mp4"></video>')).toBe('')
+    expect(stripDangerousHtml('<audio src="x.mp3"></audio>')).toBe('')
+    expect(stripDangerousHtml('<picture><source srcset="x.webp"><img src="x.png"></picture>')).toBe('<img src="x.png">')
+    expect(stripDangerousHtml('<track kind="captions" src="x.vtt">')).toBe('')
+  })
+
+  it('removes deprecated frame tags', () => {
+    expect(stripDangerousHtml('<frame src="x.html">')).toBe('')
+    expect(stripDangerousHtml('<frameset><frame></frameset>')).toBe('')
+    expect(stripDangerousHtml('<noframes>fallback</noframes>')).toBe('fallback')
+  })
+
+  it('catches unquoted javascript: URLs', () => {
+    expect(stripDangerousHtml('<a href=javascript:alert(1)>click</a>')).toBe('<a>click</a>')
+  })
+
+  it('catches javascript: in xlink:href and formaction', () => {
+    expect(stripDangerousHtml('<a xlink:href="javascript:alert(1)">click</a>')).toBe('<a>click</a>')
+    expect(stripDangerousHtml('<button formaction="javascript:alert(1)">x</button>')).toBe('x')
+  })
 })

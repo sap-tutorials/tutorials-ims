@@ -54,7 +54,7 @@
           <a href="https://learning.sap.com" class="user-popover__link" target="_blank" rel="noopener">Learnings &#x2197;</a>
           <a href="https://community.sap.com" class="user-popover__link" target="_blank" rel="noopener">Community &#x2197;</a>
           <hr class="user-popover__separator">
-          <button type="button" class="fd-button fd-button--negative" id="logout-btn" onclick="window.location.href='/logout'">Logout</button>
+          <button type="button" class="fd-button fd-button--negative" id="logout-btn" onclick="handleLogout()">Logout</button>
         </div>
       </div>
     </div>
@@ -101,6 +101,16 @@
       document.documentElement.dataset.user = JSON.stringify({ firstName: user.givenName });
     } catch {}
   }
+
+  window.handleLogout = function() {
+    try {
+      for (var i = sessionStorage.length - 1; i >= 0; i--) {
+        var k = sessionStorage.key(i);
+        if (k && k.indexOf('joule.') === 0) sessionStorage.removeItem(k);
+      }
+    } catch {}
+    window.location.href = '/logout';
+  };
 
   window.handleProfileClick = function() {
     if (!isAuthenticated) {
