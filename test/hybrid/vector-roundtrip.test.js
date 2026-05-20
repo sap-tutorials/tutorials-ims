@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import cds from '@sap/cds';
-import './_guard.js';
+import { isSafeForWrites } from './_guard.js';
 
-describe('HANA Vector(1536) round-trip', () => {
-  const TUTORIAL_ID = '__TEST__-vector-roundtrip';
+cds.test('serve', '--project', '.', '--profile', 'hybrid');
+
+describe.runIf(isSafeForWrites())('HANA Vector(1536) round-trip', () => {
+  const TUTORIAL_ID = `__TEST__-vec-${process.pid}`;
 
   beforeAll(async () => {
     await cds.connect.to('db');
