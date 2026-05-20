@@ -1,0 +1,30 @@
+{{ define "main" }}
+<article class="taxonomy-terms">
+  <header class="taxonomy-terms__header">
+    <h1>{{ .Title }}</h1>
+    <p class="lede">Browse SAP developer tutorials by topic. {{ len .Data.Terms }} topics cover everything from ABAP to BTP, CAP, Fiori, HANA Cloud, and integration.</p>
+  </header>
+
+  <ul class="taxonomy-terms__list">
+    {{ range .Data.Terms.Alphabetical }}
+    <li class="taxonomy-terms__item">
+      <a href="{{ .Page.RelPermalink }}">
+        <span class="taxonomy-terms__name">{{ .Page.Title }}</span>
+        <span class="taxonomy-terms__count">{{ .Count }}</span>
+      </a>
+    </li>
+    {{ end }}
+  </ul>
+</article>
+<style>
+  .taxonomy-terms { max-width: 1200px; margin: 0 auto; padding: 2rem 1rem; }
+  .taxonomy-terms__header { margin-bottom: 2rem; }
+  .taxonomy-terms__header h1 { font-size: 2rem; margin: 0 0 0.5rem; }
+  .taxonomy-terms__header .lede { color: var(--sapTextColor, #555); margin: 0; max-width: 800px; }
+  .taxonomy-terms__list { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.5rem; }
+  .taxonomy-terms__item a { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; background: var(--sapTile_Background, #fff); border: 1px solid var(--sapTile_BorderColor, #e5e5e5); border-radius: 0.5rem; text-decoration: none; color: inherit; }
+  .taxonomy-terms__item a:hover { border-color: var(--sapButton_Hover_BorderColor, #0070f3); }
+  .taxonomy-terms__name { font-weight: 500; }
+  .taxonomy-terms__count { color: var(--sapNeutralTextColor, #666); font-size: 0.85rem; background: var(--sapButton_Background, #f0f0f0); padding: 0.15rem 0.5rem; border-radius: 1rem; }
+</style>
+{{ end }}

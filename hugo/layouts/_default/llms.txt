@@ -13,8 +13,8 @@ See https://developers.sap.com/AGENTS.md.
 
 ## Tutorial Categories
 
-{{ range $tag, $pages := .Site.Taxonomies.primaryTag }}
-- [{{ $tag }}](https://developers.sap.com/tags/{{ $tag | urlize }}/) — {{ len $pages }} tutorials
+{{ range first 30 .Site.Taxonomies.tags.ByCount }}
+- [{{ .Page.Title }}](https://developers.sap.com/tags/{{ .Page.Title | urlize }}/) — {{ .Count }} tutorials
 {{ end }}
 
 ## Reference
