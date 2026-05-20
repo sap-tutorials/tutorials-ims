@@ -33,7 +33,7 @@ Tutorial HTML is stored as gzip-compressed BLOBs in HANA `ContentFiles`, and `St
 
 **Embedding model:** `text-embedding-3-small` (1536 dims) via SAP Generative AI Hub through the existing `tutorials-aicore` service binding. The model name is stored on each row, so a model rotation triggers re-embed via the reconciliation job rather than a code change.
 
-**Chunking:** One embedding per step, keyed by `(tutorial_ID, stepNumber)`. Step text is extracted from the published HTML (not the source markdown) to match what readers actually see.
+**Chunking:** One embedding per step, keyed by `(tutorial_ID, stepNumber)`. Step text is extracted from the published HTML (not the source markdown) to match what readers actually see. The extractor handles both Hugo output formats: v1 parser ACCORDION blocks (`<div class="accordion-content" data-step="N">`) and v2 parser H3 sections (`<section data-step="N">`). Extracted text is truncated to **8000 characters** at the nearest sentence boundary before embedding (well below the model's context window, and the typical step is far shorter).
 
 **Trigger:** Belt-and-braces — a server-side post-publish hook embeds changed slugs synchronously after `/content/publish`, AND an hourly reconciliation cron catches anything the hook missed (failures, model rotations, slugs published before RAG was enabled).
 
@@ -67,8 +67,9 @@ fetch-tutorials.ts ──► hugo/content/tutorials/*.md ──► hugo build
                               ┌─── embedding-pipeline.js (NEW) ────┐
                               │  • read ChatSettings.ragEnabled     │
                               │  • decompress changed slugs         │
-                              │  • extract step text from HTML      │
-                              │  • call AI Core embedding endpoint  │
+                              │  • extract step text (v1 + v2)      │
+                              │  • call embedding-client.js         │──► AI Core
+                              │    (Generative AI Hub)              │    (text-embedding-3-small)
                               │  • upsert TutorialEmbedding rows    │
                               └─────────────────────────────────────┘
 
@@ -97,12 +98,13 @@ fetch-tutorials.ts ──► hugo/content/tutorials/*.md ──► hugo build
 
 | File (new) | Responsibility | Inputs | Outputs |
 |---|---|---|---|
-| `srv/lib/step-text-extractor.js` | Decompress BLOB, parse HTML with cheerio, return step records. Pure — no DB, no network. | gzip Buffer | `[{stepNumber, text, charCount}]` |
+| `srv/lib/step-text-extractor.js` | Decompress BLOB, parse HTML with cheerio (handles both v1 ACCORDION and v2 H3 step delimiters), return step records. Pure — no DB, no network. Truncates each chunk to 8000 chars at sentence boundary. | gzip Buffer | `[{stepNumber, text, charCount}]` |
 | `srv/lib/embedding-client.js` | Wraps `@sap-ai-sdk/foundation-models` embedding call. Batches up to 100 inputs, retries with exponential backoff on 429/5xx (max 3). | `string[]`, model | `Float32Array[]` aligned with input order |
-| `srv/lib/embedding-pipeline.js` | Reads `ChatSettings`; if `ragEnabled`, runs extract → embed → upsert for given slugs. Returns summary. Acquires `embedding-pipeline` distributed lock for concurrency. | slug list, options | `{embedded, skipped, failed}` |
+| `srv/lib/embedding-pipeline.js` | Reads `ChatSettings`; if `ragEnabled`, runs extract → embed (via `embedding-client`) → upsert for given slugs. Returns summary. Acquires `embedding-pipeline` distributed lock for concurrency. | slug list, options | `{embedded, skipped, failed}` |
 | `srv/jobs/embedding-reconciliation.js` | Hourly job (cron `0 * * * *` + jitter). Walks `Steps` in batches; finds stale rows; calls pipeline. Distributed lock + on/off honors settings. | none | log line + `PipelineLog` row |
-| `srv/lib/embedding-query.js` | Reads `topK`/`minScore`/`embeddingModel` from `ChatSettings`, embeds query, runs cosine SQL on HANA (or JS cosine on SQLite), returns hits. | query string | hit list |
-| `srv/admin-service.js` (extended) | Implements `seedEmbeddings` action — calls reconciliation routine with `force=true`. Returns `{triggered, message}`. | (admin user) | action result |
+| `srv/lib/embedding-query.js` | Reads `topK`/`minScore`/`embeddingModel` from `ChatSettings`, embeds query (via `embedding-client`), runs cosine SQL on HANA (or JS cosine on SQLite), returns hits. | query string | hit list |
+| `srv/lib/embedding-stats.js` | Computes coverage stats for the admin UI. Returns `{totalRows, byModel, oldestRow, missingFromSteps, lastReconciliationAt}`. Mounted as a custom Express route `GET /admin/embeddings/stats` in `srv/server.js`, gated by the `Admin` scope. | (admin user) | stats JSON |
+| `srv/admin-service.js` (extended) | Implements `seedEmbeddings` action — fire-and-forget: schedules the reconciliation routine via `setImmediate` and returns immediately. Reuses the same `embedding-pipeline` distributed lock as the cron, so concurrent seed + reconciliation runs are safe (the second caller exits early when the lock is held). | (admin user) | `{triggered: true, message}` |
 
 | File (modified) | Change |
 |---|---|
@@ -137,7 +139,7 @@ Composite PK `(tutorial_ID, stepNumber)` matches the natural identity of a step 
 
 ### `Steps.contentHash` (new field)
 
-Tiny denormalization: `Steps` gets `contentHash : String(64)`, populated by the extractor at publish time (sha256 of the extracted chunk text). This is what makes "is this embedding stale?" a simple equality check between `Steps.contentHash` and `TutorialEmbedding.contentHash` — no need to re-extract on every reconciliation pass.
+Tiny denormalization: `Steps` gets `contentHash : String(64)`, populated by the extractor at publish time. The hash is `sha256(extractedText)` where `extractedText` is the **post-truncation, post-whitespace-normalization** chunk that will actually be sent to the embedding model — collapsing runs of whitespace to a single space and trimming. This is what makes "is this embedding stale?" a simple equality check between `Steps.contentHash` and `TutorialEmbedding.contentHash`. Both rows must hash the same input or reconciliation will loop forever.
 
 ### `ChatSettings` additions (4 fields)
 
@@ -208,8 +210,9 @@ entity ChatSettings : cuid, managed {
 
 1. Admin flips `ragEnabled = true` (via admin UI), saves
 2. Admin clicks "Seed now" button → calls `AdminService.seedEmbeddings()`
-3. Action calls reconciliation routine with `force=true` (skips the on/off check, processes all stale rows)
-4. Returns immediately with `{triggered: true, message: '...'}` and runs in background — admin UI polls `/admin/embeddings/stats` for progress
+3. Action handler schedules the reconciliation routine via `setImmediate` (fire-and-forget) and returns `{triggered: true, message: '...'}` immediately
+4. The scheduled routine acquires the same `embedding-pipeline` distributed lock as the hourly cron — if reconciliation is already running, the seed call exits early with a "lock held" log line (the cron will cover the work)
+5. Admin UI polls `GET /admin/embeddings/stats` for progress (totalRows climbing, missingFromSteps shrinking)
 
 ## Error handling
 
@@ -229,7 +232,7 @@ entity ChatSettings : cuid, managed {
 - Structured log per pipeline run: `{event: 'embedding-pipeline', source: 'hook'|'reconciliation'|'seed-action', slugs: N, embedded, skipped, failed, durationMs, model}`
 - `PipelineLog` row of type `EMBEDDING_PIPELINE` (existing pattern via `srv/lib/pipeline-log.js`) — visible in admin operations console alongside content publishes
 - AI Core call latency + token-count logged at `info`
-- New `GET /admin/embeddings/stats` endpoint returns `{totalRows, byModel, oldestRow, missingFromSteps, lastReconciliationAt}` — surfaced in admin UI as a coverage health card
+- New `GET /admin/embeddings/stats` endpoint (custom Express route in `srv/server.js`, gated by `Admin` scope, backed by `srv/lib/embedding-stats.js`) returns `{totalRows, byModel, oldestRow, missingFromSteps, lastReconciliationAt}` — surfaced in admin UI as a coverage health card
 
 ## Testing
 
