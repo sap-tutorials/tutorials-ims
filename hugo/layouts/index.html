@@ -1,4 +1,62 @@
 {{ define "main" }}
-<div id="tutorial-navigator"></div>
+<article class="home">
+  <section class="home-hero">
+    <h1>Build on SAP — hands-on tutorials for developers</h1>
+    <p class="lede">{{ .Site.Params.heroDescription }}</p>
+    <div class="home-hero__ctas">
+      <a class="fd-button fd-button--emphasized" href="/missions/">Browse missions</a>
+      <a class="fd-button" href="/tags/">Browse by topic</a>
+    </div>
+  </section>
+
+  <section aria-labelledby="featured-missions">
+    <h2 id="featured-missions">Featured missions</h2>
+    <ul class="mission-grid">
+      {{ range first 6 (where .Site.RegularPages "Type" "missions") }}
+      <li>
+        <a href="{{ .RelPermalink }}">
+          <h3>{{ .Title }}</h3>
+          <p>{{ .Params.description | truncate 160 }}</p>
+        </a>
+      </li>
+      {{ end }}
+    </ul>
+  </section>
+
+  <section aria-labelledby="recent-tutorials">
+    <h2 id="recent-tutorials">Recently updated tutorials</h2>
+    <ul class="tutorial-grid">
+      {{ range first 12 (where .Site.RegularPages "Type" "tutorials").ByLastmod.Reverse }}
+      <li>
+        <a href="{{ .RelPermalink }}">
+          <h3>{{ .Title }}</h3>
+          <p>{{ .Params.description | truncate 140 }}</p>
+          <p class="meta">{{ .Params.level }} · {{ .Params.time }} min</p>
+        </a>
+      </li>
+      {{ end }}
+    </ul>
+  </section>
+
+  <section aria-labelledby="browse-by-topic">
+    <h2 id="browse-by-topic">Browse by topic</h2>
+    <ul class="topic-grid">
+      {{ range $tag, $pages := .Site.Taxonomies.primaryTag }}
+      <li><a href="/tags/{{ $tag | urlize }}/">{{ $tag }} ({{ len $pages }})</a></li>
+      {{ end }}
+    </ul>
+  </section>
+
+  <section aria-labelledby="search-tutorials" id="navigator-section">
+    <h2 id="search-tutorials">Search and filter all tutorials</h2>
+    <div id="tutorial-navigator">
+      <noscript>
+        <p><a href="/tutorials/">View the full tutorial index →</a></p>
+      </noscript>
+    </div>
+  </section>
+</article>
+{{ $css := resources.Get "css/home.css" }}
+<link rel="stylesheet" href="{{ $css.RelPermalink }}">
 <script type="module" src="/js/navigator.js?v={{ now.Unix }}"></script>
 {{ end }}
