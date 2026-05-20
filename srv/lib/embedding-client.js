@@ -55,10 +55,12 @@ export async function embed(inputs, model) {
   for (let i = 0; i < inputs.length; i += BATCH_SIZE) {
     const batch = inputs.slice(i, i + BATCH_SIZE);
     const resp = await callWithRetry(client, batch);
-    const data = resp?.data || [];
-    for (const item of data) {
-      const idx = i + (item.index ?? 0);
-      out[idx] = new Float32Array(item.embedding);
+    const embeddings = resp.getEmbeddings();
+    if (embeddings.length !== batch.length) {
+      throw new Error(`embedding batch returned ${embeddings.length}/${batch.length} items at offset ${i}`);
+    }
+    for (let j = 0; j < embeddings.length; j++) {
+      out[i + j] = new Float32Array(embeddings[j]);
     }
   }
   return out;
