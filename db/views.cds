@@ -105,3 +105,18 @@ view CompletionAnalytics as
     1 as completionCount : Integer
   }
   where tr.status = 'COMPLETED';
+
+entity TutorialFeedbackAggregate as
+  select from ims.TutorialFeedback {
+    key tutorialSlug,
+    count(*)                                       as responseCount  : Integer,
+    avg(ratingUseCase)                             as avgUseCase     : Decimal(4,2),
+    avg(ratingRelevance)                           as avgRelevance   : Decimal(4,2),
+    avg(ratingDuration)                            as avgDuration    : Decimal(4,2),
+    avg(ratingStructure)                           as avgStructure   : Decimal(4,2),
+    avg(ratingInteresting)                         as avgInteresting : Decimal(4,2),
+    avg(ratingVisuals)                             as avgVisuals     : Decimal(4,2),
+    avg(npsScore)                                  as avgNps         : Decimal(4,2),
+    sum(case when npsScore >= 9 then 1 else 0 end) as promoters      : Integer,
+    sum(case when npsScore <= 6 then 1 else 0 end) as detractors     : Integer
+  } group by tutorialSlug;
