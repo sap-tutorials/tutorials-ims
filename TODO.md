@@ -542,7 +542,7 @@ HTTP request was not processed because the previous request failed. This happens
 ## 21. Future Work
 
 - [ ] **Analytics — Author/Management views (PowerBI workflow)** — Build reporting views for tutorial authors and management, with a workflow to export/connect data to PowerBI dashboards.
-- [ ] **Tag Import** — Implement bulk import of tags from an external source (e.g., CSV, API, or taxonomy system) into the Tags entity.
+- [x] **Tag Import** — Bulk CSV/JSON import via Tags admin app. Two-step preview/commit flow on AdminService with upsert / skip-duplicates / abort-on-duplicate strategies.
 - [X] **Author Workflow** — Define and implement the end-to-end authoring workflow: tutorial creation, review, approval, and publication lifecycle. See [docs/author-instructions.md](docs/author-instructions.md) — documents today's workflow and flags remaining gaps (formal review gate, PR previews, VS Code extension).
 - [ ] **VS Code Extension (esp. Preview)** — Build a VS Code extension for tutorial authors with live preview of tutorial markdown as it would render on the platform.
 - [ ] **System QA vs. Author QA** — Distinguish between system-level quality assurance (automated pipeline validation, broken links, schema conformance) and author-level QA (content review, accuracy checks, editorial approval). Define separate workflows and tooling for each.

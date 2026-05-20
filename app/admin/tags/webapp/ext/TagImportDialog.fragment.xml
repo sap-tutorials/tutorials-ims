@@ -1,0 +1,122 @@
+<core:FragmentDefinition
+  xmlns="sap.m"
+  xmlns:core="sap.ui.core"
+  xmlns:u="sap.ui.unified">
+  <Dialog
+    id="tagImportDialog"
+    title="{i18n>tagImport.dialog.title}"
+    contentWidth="640px"
+    contentHeight="520px"
+    stretch="{device>/system/phone}">
+    <content>
+
+      <!-- UPLOAD STATE -->
+      <VBox visible="{= ${viewState>/state} === 'upload' }" class="sapUiSmallMargin">
+        <IconTabBar selectedKey="{viewState>/uploadTab}" expandable="false">
+          <items>
+            <IconTabFilter key="file" text="{i18n>tagImport.tab.file}">
+              <VBox class="sapUiSmallMargin">
+                <Label text="{i18n>tagImport.upload.help}" />
+                <u:FileUploader
+                  id="tagImportFileUploader"
+                  fileType="csv,json"
+                  maximumFileSize="1"
+                  change=".extension.sap.tutorials.admin.tags.onFileSelected"
+                  buttonText="{i18n>tagImport.tab.file}"
+                  uploadOnChange="false"
+                  width="100%" />
+              </VBox>
+            </IconTabFilter>
+            <IconTabFilter key="paste" text="{i18n>tagImport.tab.paste}">
+              <VBox class="sapUiSmallMargin">
+                <HBox alignItems="Center">
+                  <Label text="{i18n>tagImport.format.label}" labelFor="tagImportFormatSelect" class="sapUiTinyMarginEnd" />
+                  <Select id="tagImportFormatSelect" selectedKey="{viewState>/format}">
+                    <core:Item key="csv" text="{i18n>tagImport.format.csv}" />
+                    <core:Item key="json" text="{i18n>tagImport.format.json}" />
+                  </Select>
+                </HBox>
+                <TextArea
+                  id="tagImportPasteArea"
+                  value="{viewState>/payload}"
+                  rows="14"
+                  growing="false"
+                  width="100%" />
+              </VBox>
+            </IconTabFilter>
+          </items>
+        </IconTabBar>
+        <Button
+          text="{i18n>tagImport.button.preview}"
+          type="Emphasized"
+          press=".extension.sap.tutorials.admin.tags.onPreview"
+          enabled="{= !!${viewState>/payload} }"
+          class="sapUiSmallMarginTop" />
+      </VBox>
+
+      <!-- PREVIEW STATE -->
+      <VBox visible="{= ${viewState>/state} === 'preview' }" class="sapUiSmallMargin">
+        <MessageStrip
+          text="{viewState>/summaryText}"
+          type="{viewState>/summaryStripType}"
+          showIcon="true"
+          class="sapUiSmallMarginBottom" />
+        <Table
+          items="{viewState>/rows}"
+          mode="None"
+          growing="true"
+          growingThreshold="50">
+          <columns>
+            <Column><header><Text text="{i18n>tagImport.col.status}" /></header></Column>
+            <Column><header><Text text="{i18n>tagImport.col.name}" /></header></Column>
+            <Column><header><Text text="{i18n>tagImport.col.titlePath}" /></header></Column>
+            <Column><header><Text text="{i18n>tagImport.col.existingTitlePath}" /></header></Column>
+            <Column><header><Text text="{i18n>tagImport.col.reason}" /></header></Column>
+          </columns>
+          <items>
+            <ColumnListItem>
+              <cells>
+                <ObjectStatus text="{viewState>statusLabel}" state="{viewState>statusState}" />
+                <Text text="{viewState>name}" />
+                <Text text="{viewState>titlePath}" />
+                <Text text="{viewState>existingTitlePath}" />
+                <Text text="{viewState>reason}" />
+              </cells>
+            </ColumnListItem>
+          </items>
+        </Table>
+        <HBox alignItems="Center" class="sapUiSmallMarginTop">
+          <Label text="{i18n>tagImport.strategy.label}" labelFor="tagImportStrategySelect" class="sapUiTinyMarginEnd" />
+          <Select id="tagImportStrategySelect" selectedKey="{viewState>/strategy}">
+            <core:Item key="upsert" text="{i18n>tagImport.strategy.upsert}" />
+            <core:Item key="skip-duplicates" text="{i18n>tagImport.strategy.skip}" />
+            <core:Item key="abort-on-duplicate" text="{i18n>tagImport.strategy.abort}" />
+          </Select>
+        </HBox>
+      </VBox>
+
+      <!-- DONE STATE -->
+      <VBox visible="{= ${viewState>/state} === 'done' }" class="sapUiSmallMargin">
+        <MessageStrip
+          text="{viewState>/resultText}"
+          type="Success"
+          showIcon="true" />
+      </VBox>
+
+    </content>
+    <buttons>
+      <Button
+        text="{i18n>tagImport.button.back}"
+        visible="{= ${viewState>/state} === 'preview' }"
+        press=".extension.sap.tutorials.admin.tags.onBack" />
+      <Button
+        text="{i18n>tagImport.button.import}"
+        type="Emphasized"
+        visible="{= ${viewState>/state} === 'preview' }"
+        press=".extension.sap.tutorials.admin.tags.onCommit" />
+      <Button
+        text="{i18n>tagImport.button.close}"
+        press=".extension.sap.tutorials.admin.tags.onClose" />
+    </buttons>
+  </Dialog>
+</core:FragmentDefinition>
