@@ -115,6 +115,31 @@ describe('pruneOrphanEmbeddings', () => {
     expect(await countEmbeddings('tid-a')).toBe(1); // untouched
   });
 
+  it('(5) does not treat null-slug tutorials as orphans', async () => {
+    // Tutorial A is in the manifest (normal case). Tutorial B has slug=null due to a
+    // direct SQL write that bypassed @mandatory validation (e.g. migration script).
+    // Guard: t.slug != null prevents null from matching activeSlugs.has(null)=false.
+    await insertManifest(1);
+    await insertContentFile('tutorial-a', 1);
+
+    await insertTutorial('tid-null-a', 'tutorial-a');
+
+    // Insert tutorial with null slug via raw SQL to bypass @mandatory enforcement
+    await cds.db.run(
+      `INSERT INTO com_sap_developers_ims_Tutorials (ID, title, slug, status)
+       VALUES ('tid-null-b', 'Tutorial Null Slug', NULL, 'ACTIVE')`
+    );
+
+    await insertEmbedding('tid-null-a', 1, 'hash-a');
+    await insertEmbedding('tid-null-b', 1, 'hash-null');
+
+    const deleted = await pruneOrphanEmbeddings();
+
+    // The null-slug tutorial must NOT be treated as orphan
+    expect(await countEmbeddings('tid-null-b')).toBe(1); // untouched
+    expect(deleted).toBe(0); // A is in manifest, B is skipped — nothing deleted
+  });
+
   it('(4) empty active manifest: all tutorials are orphans → all embeddings deleted', async () => {
     // Active manifest exists but has zero ContentFiles
     await insertManifest(1);

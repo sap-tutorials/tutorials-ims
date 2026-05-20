@@ -90,7 +90,9 @@ export async function pruneOrphanEmbeddings() {
   const activeSlugs = new Set(files.map(f => f.slug));
 
   const tutorials = await SELECT.from(Tutorials).columns('ID', 'slug');
-  const orphanIds = tutorials.filter(t => !activeSlugs.has(t.slug)).map(t => t.ID);
+  const orphanIds = tutorials
+    .filter(t => t.slug != null && !activeSlugs.has(t.slug))
+    .map(t => t.ID);
 
   if (orphanIds.length === 0) {
     LOG.info('pruneOrphanEmbeddings: no orphan tutorial embeddings to prune');
