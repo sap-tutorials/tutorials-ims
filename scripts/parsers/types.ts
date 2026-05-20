@@ -60,6 +60,7 @@ export interface TutorialNavEntry {
   groupSlug?: string
   prev: string | null
   next: string | null
+  recommendations?: string[]
 }
 
 export interface GroupRef {
