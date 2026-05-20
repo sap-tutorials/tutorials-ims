@@ -106,7 +106,7 @@ recent change.
 
 ## Contact
 
-Questions about this policy can be sent to
-[*PLACEHOLDER — legal/privacy contact email pending*]. For SAP-wide
-privacy enquiries, see the
+Questions about this policy can be sent via the
+[SAP Privacy Statement contact form](https://www.sap.com/registration/contact.html?countryOfOrigin=en_us&navTitle=Contact%20Form&pageTitle=SAP%20Privacy%20Statement&refererContentPath=%2Fcontent%2Fsapdx%2Fcountries%2Fen_us%2Fabout%2Flegal%2Fprivacy&refererPagePath=https%3A%2F%2Fwww.sap.com%2Fabout%2Flegal%2Fprivacy.html).
+For SAP-wide privacy enquiries, see the
 [SAP Trust Center](https://www.sap.com/about/trust-center/privacy.html).

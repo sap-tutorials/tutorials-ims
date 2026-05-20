@@ -83,9 +83,9 @@ Depending on where you live, you may have the right to:
 - Object to processing or request portability
 - Lodge a complaint with a data protection authority
 
-To exercise these rights, contact
-[*PLACEHOLDER — privacy contact email pending*]. We will respond within
-the timeframes required by applicable law.
+To exercise these rights, use the
+[SAP Privacy Statement contact form](https://www.sap.com/registration/contact.html?countryOfOrigin=en_us&navTitle=Contact%20Form&pageTitle=SAP%20Privacy%20Statement&refererContentPath=%2Fcontent%2Fsapdx%2Fcountries%2Fen_us%2Fabout%2Flegal%2Fprivacy&refererPagePath=https%3A%2F%2Fwww.sap.com%2Fabout%2Flegal%2Fprivacy.html).
+We will respond within the timeframes required by applicable law.
 
 ## Account deletion
 
@@ -114,7 +114,7 @@ date at the top reflects the most recent change.
 
 ## Contact
 
-For privacy enquiries, contact
-[*PLACEHOLDER — legal/privacy contact email pending*]. For SAP-wide
-privacy questions, see the
+For privacy enquiries, use the
+[SAP Privacy Statement contact form](https://www.sap.com/registration/contact.html?countryOfOrigin=en_us&navTitle=Contact%20Form&pageTitle=SAP%20Privacy%20Statement&refererContentPath=%2Fcontent%2Fsapdx%2Fcountries%2Fen_us%2Fabout%2Flegal%2Fprivacy&refererPagePath=https%3A%2F%2Fwww.sap.com%2Fabout%2Flegal%2Fprivacy.html).
+For SAP-wide privacy questions, see the
 [SAP Trust Center](https://www.sap.com/about/trust-center/privacy.html).
