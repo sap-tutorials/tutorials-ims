@@ -372,7 +372,9 @@ export default class AdminService extends cds.ApplicationService {
       const settings = await SELECT.one.from(ChatSettings);
       if (!settings?.ragEnabled) return req.error(400, 'ragEnabled must be true');
 
-      const manifest = await SELECT.one.from(ContentManifest).where({ status: 'ACTIVE' });
+      const manifest = await SELECT.one.from(ContentManifest)
+        .where({ status: 'ACTIVE' })
+        .orderBy({ version: 'desc' });
       if (!manifest) return req.error(409, 'no active content manifest');
 
       const files = await SELECT.from(ContentFiles).columns('slug').where({ version: manifest.version });

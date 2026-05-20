@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import path from 'node:path';
 import cds from '@sap/cds';
 
@@ -10,6 +10,8 @@ import cds from '@sap/cds';
 vi.mock('../../srv/lib/embedding-pipeline.js', () => ({
   embedSlugs: vi.fn().mockResolvedValue({ embedded: 0, skipped: 0, failed: 0, lockHeld: false })
 }));
+
+import { embedSlugs } from '../../srv/lib/embedding-pipeline.js';
 
 const schemaPath = path.join(process.cwd(), 'db', 'schema.cds');
 const CHAT_ID = '00000000-0000-0000-0000-00000000c8a7';
@@ -52,11 +54,17 @@ async function sendAsAdmin(srv, event) {
 
 describe('AdminService seedEmbeddings action', () => {
   let srv;
+  let origSetImmediate;
 
   beforeEach(async () => {
+    origSetImmediate = globalThis.setImmediate;
     vi.clearAllMocks();
     await cds.deploy(schemaPath).to('sqlite::memory:');
     srv = await cds.serve('AdminService').from('./srv/admin-service');
+  });
+
+  afterEach(() => {
+    globalThis.setImmediate = origSetImmediate;
   });
 
   it('happy path: returns { queued: true, activeSlugs: N } and schedules fire-and-forget', async () => {
@@ -64,18 +72,12 @@ describe('AdminService seedEmbeddings action', () => {
 
     // Spy on setImmediate to confirm the fire-and-forget callback was scheduled
     const immediateCallbacks = [];
-    const origSetImmediate = globalThis.setImmediate;
     globalThis.setImmediate = vi.fn((fn, ...args) => {
       immediateCallbacks.push(fn);
       return origSetImmediate(fn, ...args);
     });
 
-    let result;
-    try {
-      result = await sendAsAdmin(srv, 'seedEmbeddings');
-    } finally {
-      globalThis.setImmediate = origSetImmediate;
-    }
+    const result = await sendAsAdmin(srv, 'seedEmbeddings');
 
     // Verify the return value
     expect(result).toMatchObject({ queued: true, activeSlugs: 3 });
@@ -101,5 +103,32 @@ describe('AdminService seedEmbeddings action', () => {
     await expect(
       sendAsAdmin(srv, 'seedEmbeddings')
     ).rejects.toMatchObject({ code: 409 });
+  });
+
+  it('swallows embedSlugs rejection without unhandled rejection', async () => {
+    await setupDb({ ragEnabled: true, manifestStatus: 'ACTIVE', slugs: ['slug-a', 'slug-b'] });
+
+    embedSlugs.mockRejectedValueOnce(new Error('boom'));
+
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+
+    try {
+      let scheduled;
+      globalThis.setImmediate = (cb) => { scheduled = cb; return 0; };
+
+      const result = await sendAsAdmin(srv, 'seedEmbeddings');
+      expect(result.queued).toBe(true);
+
+      // execute the deferred callback so the rejection actually fires
+      await scheduled?.();
+
+      // give the microtask queue a tick to flush
+      await new Promise(r => origSetImmediate(r));
+
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
   });
 });
