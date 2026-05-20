@@ -86,20 +86,38 @@ export async function embedSlugs(slugs, settings) {
 
         const vectors = await embed(toEmbed.map((c) => c.text), model);
 
+        const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
         for (let i = 0; i < toEmbed.length; i++) {
           const c = toEmbed[i];
           const v = vectors[i];
           if (!v) continue;
           await DELETE.from(TutorialEmbedding).where({ tutorial_ID: tut.ID, stepNumber: c.stepNumber });
-          await INSERT.into(TutorialEmbedding).entries({
-            tutorial_ID: tut.ID,
-            stepNumber: c.stepNumber,
-            contentHash: c.contentHash,
-            embeddingModel: model,
-            embedding: Buffer.from(v.buffer),
-            stepText: c.text,
-            charCount: c.charCount
-          });
+          if (isHana) {
+            // HANA Vector(1536) requires TO_REAL_VECTOR(?) — not expressible in CDS QL.
+            // Mirrors the query path in embedding-query.js.
+            const sql = `INSERT INTO "COM_SAP_DEVELOPERS_IMS_TUTORIALEMBEDDING"
+              ("tutorial_ID", "stepNumber", "contentHash", "embeddingModel", "embedding", "stepText", "charCount", "createdAt")
+              VALUES (?, ?, ?, ?, TO_REAL_VECTOR(?), ?, ?, CURRENT_TIMESTAMP)`;
+            await db.run(sql, [
+              tut.ID,
+              c.stepNumber,
+              c.contentHash,
+              model,
+              JSON.stringify(Array.from(v)),
+              c.text,
+              c.charCount
+            ]);
+          } else {
+            await INSERT.into(TutorialEmbedding).entries({
+              tutorial_ID: tut.ID,
+              stepNumber: c.stepNumber,
+              contentHash: c.contentHash,
+              embeddingModel: model,
+              embedding: Buffer.from(v.buffer),
+              stepText: c.text,
+              charCount: c.charCount
+            });
+          }
         }
         embedded++;
       } catch (err) {
