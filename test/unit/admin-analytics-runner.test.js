@@ -99,3 +99,18 @@ describe('admin-analytics-runner — I-1: tag fanout filter rejection', () => {
     })).not.toThrow();
   });
 });
+
+describe('admin-analytics-runner — I-2: task-lookup CQN column ref shape', () => {
+  it('produces multi-segment ref for mission groupBy', async () => {
+    const capturedCqn = [];
+    const fakeDb = {
+      run: vi.fn(cqn => { capturedCqn.push(cqn); return Promise.resolve([]); }),
+    };
+    await runAnalyticsQuery({
+      plan: { fact: 'completion', groupBy: ['mission'], measures: ['count'] },
+      db: fakeDb, user: { id: 't' },
+    });
+    const col = capturedCqn[0].SELECT.columns.find(c => c.as === 'mission');
+    expect(col.ref).toEqual(['mission', 'slug']);
+  });
+});

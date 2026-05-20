@@ -87,7 +87,7 @@ function _buildCQN(v) {
     else if (dim.kind === 'date-trunc') {
       cqn.SELECT.columns.push({ func: 'series_round', args: [{ ref: [dim.column] }, { val: dim.unit === 'month' ? 'INTERVAL 1 MONTH' : 'INTERVAL 1 WEEK' }], as: g });
     } else if (dim.kind === 'task-lookup') {
-      cqn.SELECT.columns.push({ ref: [`${dim.taskType.toLowerCase()}.${dim.display}`], as: g });
+      cqn.SELECT.columns.push({ ref: [dim.taskType.toLowerCase(), dim.display], as: g });
     }
     cqn.SELECT.groupBy.push({ ref: [g] });
   }
