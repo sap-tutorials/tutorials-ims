@@ -114,13 +114,22 @@ function _buildCQN(v) {
       cqn.SELECT.where.push({ ref: [dim.column] }, '>=', { val: f.value[0] }, 'and', { ref: [dim.column] }, '<=', { val: f.value[1] });
     } else if (f.op === 'equals') {
       if (cqn.SELECT.where.length) cqn.SELECT.where.push('and');
-      cqn.SELECT.where.push({ ref: [dim.column || dim.path.split('.')[0]] }, '=', { val: f.value });
+      const ref = dim.kind === 'assoc'        ? dim.path.split('.')
+                : dim.kind === 'task-lookup'  ? [dim.taskType.toLowerCase(), dim.display]
+                : [dim.column];
+      cqn.SELECT.where.push({ ref }, '=', { val: f.value });
     } else if (f.op === 'in') {
       if (cqn.SELECT.where.length) cqn.SELECT.where.push('and');
-      cqn.SELECT.where.push({ ref: [dim.column] }, 'in', { list: f.value.map(v => ({ val: v })) });
+      const ref = dim.kind === 'assoc'        ? dim.path.split('.')
+                : dim.kind === 'task-lookup'  ? [dim.taskType.toLowerCase(), dim.display]
+                : [dim.column];
+      cqn.SELECT.where.push({ ref }, 'in', { list: f.value.map(v => ({ val: v })) });
     } else if (f.op === 'contains') {
       if (cqn.SELECT.where.length) cqn.SELECT.where.push('and');
-      cqn.SELECT.where.push({ func: 'contains', args: [{ ref: [dim.column] }, { val: String(f.value) }] });
+      const ref = dim.kind === 'assoc'        ? dim.path.split('.')
+                : dim.kind === 'task-lookup'  ? [dim.taskType.toLowerCase(), dim.display]
+                : [dim.column];
+      cqn.SELECT.where.push({ func: 'contains', args: [{ ref }, { val: String(f.value) }] });
     }
   }
 

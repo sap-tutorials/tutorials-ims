@@ -114,3 +114,21 @@ describe('admin-analytics-runner — I-2: task-lookup CQN column ref shape', () 
     expect(col.ref).toEqual(['mission', 'slug']);
   });
 });
+
+describe('admin-analytics-runner — I-3: assoc equals filter uses full path', () => {
+  it('builds CQN where clause with multi-segment ref for assoc equals filter', async () => {
+    const capturedCqn = [];
+    const fakeDb = {
+      run: vi.fn(cqn => { capturedCqn.push(cqn); return Promise.resolve([]); }),
+    };
+    await runAnalyticsQuery({
+      plan: { fact: 'completion', groupBy: ['taskType'], measures: ['count'], filters: [{ field: 'event', op: 'equals', value: 'TechEd' }] },
+      db: fakeDb, user: { id: 't' },
+    });
+    const where = capturedCqn[0].SELECT.where;
+    // The first ref in where is the baseFilter (status='COMPLETED'); find the one with a multi-segment ref.
+    const refNode = where.filter(n => n && typeof n === 'object' && Array.isArray(n.ref))
+      .find(n => n.ref.length > 1);
+    expect(refNode.ref).toEqual(['event', 'name']);
+  });
+});
