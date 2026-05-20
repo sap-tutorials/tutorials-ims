@@ -4,7 +4,7 @@ import { formatTaskRecordsCSV, formatAwardMissionsCSV } from './lib/export-helpe
 import { buildAnonymizationOps } from './lib/anonymization.js';
 import { getNextLegacyId } from './lib/legacy-id.js';
 import { randomUUID } from 'node:crypto';
-import { parsePayload, classify, sharedCache, MAX_BYTES } from './lib/tag-import/index.js';
+import { parsePayload, classify, apply, sharedCache, MAX_BYTES } from './lib/tag-import/index.js';
 
 export default class AdminService extends cds.ApplicationService {
 
@@ -406,12 +406,11 @@ export default class AdminService extends cds.ApplicationService {
       // Re-classify inside the request to catch races (another admin inserting
       // between preview and commit). The cached parsed rows stay as-is; only the
       // classification against existing tags is refreshed.
-      const { apply, classify: reclassify } = await import('./lib/tag-import/index.js');
       const existingTags = await SELECT.from(Tags).columns('ID', 'name', 'titlePath');
       const inputRows = cached.rows.map(r => r.status === 'invalid'
         ? { invalid: true, name: r.name, titlePath: r.titlePath, reason: r.reason }
         : { name: r.name, titlePath: r.titlePath });
-      const { rows: freshRows } = reclassify(inputRows, existingTags);
+      const { rows: freshRows } = classify(inputRows, existingTags);
 
       let result;
       try {
