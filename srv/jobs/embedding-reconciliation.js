@@ -5,8 +5,9 @@ import { logPipelineStart, logPipelineEnd } from '../lib/pipeline-log.js';
 const LOG = cds.log('rag-reconcile');
 
 export async function reconcileAll({ activeSlugs, slugsWithStaleHashes, slugsWithoutEmbeddings, settings }) {
+  const activeSet = activeSlugs instanceof Set ? activeSlugs : new Set(activeSlugs);
   const candidateSet = new Set(
-    [...slugsWithStaleHashes, ...slugsWithoutEmbeddings].filter((s) => activeSlugs.includes(s))
+    [...slugsWithStaleHashes, ...slugsWithoutEmbeddings].filter((s) => activeSet.has(s))
   );
   const candidates = [...candidateSet];
   if (candidates.length === 0) return { candidates: 0, embedded: 0, skipped: 0, failed: 0 };
@@ -28,6 +29,7 @@ export async function runReconciliationJob() {
   try {
     const manifest = await SELECT.one.from(ContentManifest).where({ status: 'ACTIVE' });
     if (!manifest) {
+      LOG.info('no active manifest, skipping reconciliation');
       const summary = JSON.stringify({ skipped: true, reason: 'no active manifest' });
       await logPipelineEnd(pipelineId, 'SUCCESS', summary);
       return { skipped: true, reason: 'no active manifest' };
@@ -35,6 +37,7 @@ export async function runReconciliationJob() {
 
     const activeFiles = await SELECT.from(ContentFiles).columns('slug').where({ version: manifest.version });
     const activeSlugs = activeFiles.map((f) => f.slug);
+    const activeSet = new Set(activeSlugs);
 
     const stepRows = await SELECT.from(Steps).columns('tutorial_ID', 'stepOrder', 'contentHash');
     const embedRows = await SELECT.from(TutorialEmbedding).columns('tutorial_ID', 'stepNumber', 'contentHash', 'embeddingModel');
@@ -48,7 +51,7 @@ export async function runReconciliationJob() {
     const missing = new Set();
     for (const s of stepRows) {
       const slug = tToSlug.get(s.tutorial_ID);
-      if (!slug || !activeSlugs.includes(slug)) continue;
+      if (!slug || !activeSet.has(slug)) continue;
       const e = embedMap.get(embedKey(s.tutorial_ID, s.stepOrder));
       if (!e) { missing.add(slug); continue; }
       if (e.contentHash !== s.contentHash) stale.add(slug);
@@ -56,7 +59,7 @@ export async function runReconciliationJob() {
     }
 
     const result = await reconcileAll({
-      activeSlugs,
+      activeSlugs: activeSet,
       slugsWithStaleHashes: [...stale],
       slugsWithoutEmbeddings: [...missing],
       settings
