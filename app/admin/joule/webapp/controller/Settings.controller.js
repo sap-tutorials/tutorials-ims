@@ -14,10 +14,15 @@ sap.ui.define([
         temperature: null,
         maxTokens: null,
         maxRequestsPerUser: 100,
-        bannerText: ""
+        bannerText: "",
+        ragEnabled: false,
+        embeddingModel: "",
+        embeddingTopK: 5,
+        embeddingMinScore: 0.25
       });
       this.getView().setModel(oJSON, "settings");
       this._loadSettings();
+      this._refreshStats();
     },
 
     onAfterRendering: function () {
@@ -49,7 +54,11 @@ sap.ui.define([
             temperature: data.temperature != null ? data.temperature : null,
             maxTokens: data.maxTokens != null ? data.maxTokens : null,
             maxRequestsPerUser: data.maxRequestsPerUser || 100,
-            bannerText: data.bannerText || ""
+            bannerText: data.bannerText || "",
+            ragEnabled: !!data.ragEnabled,
+            embeddingModel: data.embeddingModel || "",
+            embeddingTopK: data.embeddingTopK != null ? data.embeddingTopK : 5,
+            embeddingMinScore: data.embeddingMinScore != null ? data.embeddingMinScore : 0.25
           });
         })
         .catch(function (err) {
@@ -62,6 +71,7 @@ sap.ui.define([
     },
 
     onSave: function () {
+      var self = this;
       var data = this.getView().getModel("settings").getData();
       var temp = data.temperature === "" || data.temperature == null ? null : Number(data.temperature);
       var tokens = data.maxTokens === "" || data.maxTokens == null ? null : parseInt(data.maxTokens, 10);
@@ -72,7 +82,11 @@ sap.ui.define([
         temperature: temp,
         maxTokens: tokens,
         maxRequestsPerUser: parseInt(data.maxRequestsPerUser, 10) || 100,
-        bannerText: data.bannerText || ""
+        bannerText: data.bannerText || "",
+        ragEnabled: !!data.ragEnabled,
+        embeddingModel: data.embeddingModel || null,
+        embeddingTopK: parseInt(data.embeddingTopK, 10) || 5,
+        embeddingMinScore: data.embeddingMinScore === "" || data.embeddingMinScore == null ? null : Number(data.embeddingMinScore)
       };
 
       fetch("/admin/$metadata", {
@@ -98,9 +112,72 @@ sap.ui.define([
         .then(function (res) {
           if (!res.ok) { throw new Error("HTTP " + res.status); }
           MessageToast.show("Saved");
+          self._refreshStats();
         })
         .catch(function (err) {
           MessageBox.error("Save failed: " + err.message);
+        });
+    },
+
+    onSeedEmbeddings: function () {
+      var self = this;
+      fetch("/admin/$metadata", {
+        method: "HEAD",
+        credentials: "include",
+        headers: { "x-csrf-token": "fetch" }
+      })
+        .then(function (res) {
+          return res.headers.get("x-csrf-token") || "";
+        })
+        .then(function (token) {
+          return fetch("/admin/ChatSettings/AdminService.seedEmbeddings", {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+              "x-csrf-token": token
+            },
+            body: JSON.stringify({})
+          });
+        })
+        .then(function (res) {
+          if (!res.ok) {
+            return res.text().then(function (txt) {
+              throw new Error(txt || "HTTP " + res.status);
+            });
+          }
+          var bundle = self.getView().getModel("i18n").getResourceBundle();
+          MessageToast.show(bundle.getText("seedRunning"));
+          self._refreshStats();
+        })
+        .catch(function (err) {
+          MessageBox.error("Seed failed: " + err.message);
+        });
+    },
+
+    _refreshStats: function () {
+      var self = this;
+      fetch("/admin/embeddings/stats", {
+        credentials: "include",
+        headers: { "Accept": "application/json" }
+      })
+        .then(function (res) {
+          if (!res.ok) { return null; }
+          return res.json();
+        })
+        .then(function (stats) {
+          if (!stats) { return; }
+          var bundle = self.getView().getModel("i18n").getResourceBundle();
+          stats.slugsDisplay = bundle.getText("ragStatsSlugs", [stats.slugsWithEmbeddings != null ? stats.slugsWithEmbeddings : 0, stats.slugs != null ? stats.slugs : 0]);
+          stats.stepsDisplay = bundle.getText("ragStatsSteps", [stats.embeddedSteps != null ? stats.embeddedSteps : 0, stats.totalSteps != null ? stats.totalSteps : 0]);
+          stats.lastRunDisplay = stats.lastRun
+            ? bundle.getText("ragStatsLastRun", [new Date(stats.lastRun.startedAt).toLocaleString(), stats.lastRun.status])
+            : "";
+          self.getView().setModel(new JSONModel(stats), "stats");
+        })
+        .catch(function () {
+          // stats are non-critical; don't disrupt the page
         });
     }
   });

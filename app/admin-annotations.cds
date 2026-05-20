@@ -899,4 +899,8 @@ annotate AdminService.ChatSettings with @(
   maxTokens          @Common.Label: 'Max Tokens' @description: 'Cap on tokens in a single assistant response. Leave blank for server default (10025).' @assert.range: [1, 100000];
   maxRequestsPerUser @Common.Label: 'Max Requests / User / Day' @description: 'In-memory rolling 24h limit, per service instance. Effective ceiling = this × instance count.';
   bannerText         @Common.Label: 'Banner Text'   @description: 'Optional notice shown above the chat input (e.g. "Joule is in beta").' @UI.MultiLineText;
+  ragEnabled         @Common.Label: 'RAG Enabled';
+  embeddingModel     @Common.Label: 'Embedding Model';
+  embeddingTopK      @Common.Label: 'Top K Steps';
+  embeddingMinScore  @Common.Label: 'Min Similarity Score';
 };

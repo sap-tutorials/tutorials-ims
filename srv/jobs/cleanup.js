@@ -74,3 +74,32 @@ export async function cleanupStuckPublishing(olderThanMinutes = 60) {
   LOG.info(`Marked ${stuck.length} stuck PUBLISHING manifests as FAILED (older than ${olderThanMinutes}m)`);
   return stuck.length;
 }
+
+export async function pruneOrphanEmbeddings() {
+  const { ContentManifest, ContentFiles, Tutorials, TutorialEmbedding } =
+    cds.entities('com.sap.developers.ims');
+  const LOG = cds.log('jobs/cleanup');
+
+  const manifest = await SELECT.one.from(ContentManifest).where({ status: 'ACTIVE' });
+  if (!manifest) {
+    LOG.info('pruneOrphanEmbeddings: no active manifest, skipping');
+    return 0;
+  }
+
+  const files = await SELECT.from(ContentFiles).columns('slug').where({ version: manifest.version });
+  const activeSlugs = new Set(files.map(f => f.slug));
+
+  const tutorials = await SELECT.from(Tutorials).columns('ID', 'slug');
+  const orphanIds = tutorials
+    .filter(t => t.slug != null && !activeSlugs.has(t.slug))
+    .map(t => t.ID);
+
+  if (orphanIds.length === 0) {
+    LOG.info('pruneOrphanEmbeddings: no orphan tutorial embeddings to prune');
+    return 0;
+  }
+
+  const result = await DELETE.from(TutorialEmbedding).where({ tutorial_ID: { in: orphanIds } });
+  LOG.info(`pruneOrphanEmbeddings: deleted ${result} orphan embedding rows for ${orphanIds.length} tutorials`);
+  return result;
+}

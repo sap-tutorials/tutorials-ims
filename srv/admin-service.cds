@@ -58,7 +58,12 @@ service AdminService {
 
   @odata.singleton
   @requires: 'Admin'
-  entity ChatSettings as projection on ims.ChatSettings;
+  entity ChatSettings as projection on ims.ChatSettings actions {
+    action seedEmbeddings() returns {
+      queued     : Boolean;
+      activeSlugs: Integer;
+    };
+  };
 
   // Code list entities for enum dropdowns (no DB table needed)
   @readonly @cds.persistence.skip entity ExperienceLevels { key code : String(255); }

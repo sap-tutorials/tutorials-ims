@@ -24,6 +24,8 @@ than guessing.
 
 Never include credentials, API keys, or production URLs in responses.`;
 
+const RAG_GUIDANCE = `When the getRelevantSteps tool returns step excerpts, treat them as authoritative ground truth for the question. Quote them naturally and cite each step inline using the form [tutorial-slug #stepNumber]. If no relevant steps come back (empty hits or all below the threshold), say so explicitly rather than guessing — invite the user to refine the question or use the searchTutorials tool to discover candidates.`;
+
 const STEP_TEXT_BUDGET = 4000;
 
 function tutorialLayer(ctx) {
@@ -100,5 +102,5 @@ function userLayer(user) {
 
 export function buildSystemPrompt(pageContext, user) {
   const persona = pageContext?.kind === 'admin' ? ADMIN_PERSONA : PERSONA;
-  return [persona, pageLayer(pageContext), userLayer(user)].filter(Boolean).join('\n\n');
+  return [persona, RAG_GUIDANCE, pageLayer(pageContext), userLayer(user)].filter(Boolean).join('\n\n');
 }

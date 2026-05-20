@@ -34,6 +34,31 @@
         </f:SimpleForm>
       </Panel>
 
+      <Panel headerText="{i18n>ragSection}" expandable="true" expanded="true" class="sapUiSmallMarginBottom">
+        <f:SimpleForm editable="true" layout="ResponsiveGridLayout">
+          <Label text="{i18n>ragEnabled}" />
+          <Switch state="{settings>/ragEnabled}" />
+
+          <Label text="{i18n>embeddingModel}" />
+          <Input value="{settings>/embeddingModel}" />
+
+          <Label text="{i18n>embeddingTopK}" />
+          <StepInput value="{settings>/embeddingTopK}" min="1" max="10" />
+
+          <Label text="{i18n>embeddingMinScore}" />
+          <Input value="{settings>/embeddingMinScore}" type="Number" />
+        </f:SimpleForm>
+        <Toolbar>
+          <Button text="{i18n>seedButton}" press=".onSeedEmbeddings" type="Emphasized" enabled="{settings>/ragEnabled}" />
+        </Toolbar>
+        <VBox class="sapUiSmallMargin">
+          <Title text="{i18n>ragStatsTitle}" level="H4" />
+          <Text text="{stats>/slugsDisplay}" />
+          <Text text="{stats>/stepsDisplay}" />
+          <Text text="{stats>/lastRunDisplay}" />
+        </VBox>
+      </Panel>
+
       <HBox class="sapUiSmallMarginTop">
         <Button text="{i18n>btnSave}" press=".onSave" type="Emphasized" class="sapUiTinyMarginEnd" />
         <Button text="{i18n>btnReload}" press=".onReload" />

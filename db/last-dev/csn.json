@@ -638,6 +638,11 @@
         "stepOrder": {
           "type": "cds.Integer",
           "@cds.persistence.name": "STEPORDER"
+        },
+        "contentHash": {
+          "type": "cds.String",
+          "length": 64,
+          "@cds.persistence.name": "CONTENTHASH"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_STEPS"
@@ -1561,6 +1566,37 @@
           "type": "cds.String",
           "length": 500,
           "@cds.persistence.name": "BANNERTEXT"
+        },
+        "ragEnabled": {
+          "type": "cds.Boolean",
+          "default": {
+            "val": false
+          },
+          "@cds.persistence.name": "RAGENABLED"
+        },
+        "embeddingModel": {
+          "type": "cds.String",
+          "length": 100,
+          "default": {
+            "val": "text-embedding-3-small"
+          },
+          "@cds.persistence.name": "EMBEDDINGMODEL"
+        },
+        "embeddingTopK": {
+          "type": "cds.Integer",
+          "default": {
+            "val": 5
+          },
+          "@cds.persistence.name": "EMBEDDINGTOPK"
+        },
+        "embeddingMinScore": {
+          "type": "cds.Decimal",
+          "precision": 4,
+          "scale": 3,
+          "default": {
+            "val": 0.25
+          },
+          "@cds.persistence.name": "EMBEDDINGMINSCORE"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CHATSETTINGS"

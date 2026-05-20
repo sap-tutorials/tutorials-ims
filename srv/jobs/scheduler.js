@@ -1,9 +1,10 @@
 import cron from 'node-cron';
 import { acquireLock, releaseLock } from './job-lock.js';
-import { cleanupStepFailures, cleanupUnusedTags, cleanupContentVersions, cleanupPipelineLog, cleanupStuckPublishing } from './cleanup.js';
+import { cleanupStepFailures, cleanupUnusedTags, cleanupContentVersions, cleanupPipelineLog, cleanupStuckPublishing, pruneOrphanEmbeddings } from './cleanup.js';
 import { recordActiveLearners } from './analytics.js';
 import { retryNgds } from './ngds-retry.js';
 import { processAccountMerges } from './account-merge-job.js';
+import { runReconciliationJob } from './embedding-reconciliation.js';
 import { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, isNotificationsEnabled } from '../lib/contributor-notifications.js';
 import { sendNotificationEmail, retryFailedEmails } from '../lib/mail-client.js';
 import { syncTutorialMetadata } from '../lib/tutorial-sync.js';
@@ -66,9 +67,19 @@ export function registerJobs() {
     runWithLock('content-publishing-sweep', 300000, () => cleanupStuckPublishing(60))
   );
 
+  // Hourly at :17 — re-embed tutorial steps whose content drifted (offset to avoid :00 thundering herd; multi-instance safe via lock)
+  cron.schedule('17 * * * *', () =>
+    runWithLock('embedding-reconciliation', 1800000, runReconciliationJob)
+  );
+
   // Daily at 03:15 — prune pipeline log entries older than 30 days
   cron.schedule('15 3 * * *', () =>
     runWithLock('pipeline-log-gc', 600000, () => cleanupPipelineLog(30))
+  );
+
+  // Daily at 03:30 — prune embeddings for tutorials no longer in the active manifest
+  cron.schedule('30 3 * * *', () =>
+    runWithLock('embedding-orphan-prune', 300000, pruneOrphanEmbeddings)
   );
 
   // Weekly Sunday 02:00 — tutorial metadata review

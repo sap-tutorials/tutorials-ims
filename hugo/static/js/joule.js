@@ -130,6 +130,40 @@
     }
   }
 
+  function renderStepCitations(items) {
+    const wrap = document.createElement('div');
+    wrap.className = 'joule-step-citations';
+    const heading = document.createElement('p');
+    heading.className = 'joule-step-citations__heading';
+    heading.textContent = 'Tutorial steps';
+    wrap.appendChild(heading);
+    const ul = document.createElement('ul');
+    for (const it of items) {
+      if (!it || typeof it.tutorialSlug !== 'string' || typeof it.stepNumber !== 'number') continue;
+      if (!SAFE_SLUG_RE.test(it.tutorialSlug)) continue;
+      const li = document.createElement('li');
+      const a = document.createElement('a');
+      a.className = 'joule-step-citations__link';
+      a.href = `/tutorials/${it.tutorialSlug}/#step-${it.stepNumber}`;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.textContent = `${it.tutorialTitle || it.tutorialSlug} — Step ${it.stepNumber}`;
+      li.appendChild(a);
+      if (typeof it.score === 'number') {
+        const score = document.createElement('span');
+        score.className = 'joule-step-citations__score';
+        score.textContent = ` (${(it.score * 100).toFixed(0)}%)`;
+        li.appendChild(score);
+      }
+      ul.appendChild(li);
+    }
+    if (ul.childElementCount > 0) {
+      wrap.appendChild(ul);
+      transcript.appendChild(wrap);
+      scrollToBottom(body);
+    }
+  }
+
   function renderAnalyticsTable(parsed) {
     const rows = Array.isArray(parsed?.rows) ? parsed.rows : [];
     const wrap = document.createElement('div');
@@ -424,6 +458,10 @@
           } else if (payload.type === 'doc-citations') {
             if (Array.isArray(payload.items) && payload.items.length) {
               renderDocCitations(payload.items);
+            }
+          } else if (payload.type === 'step-citations') {
+            if (Array.isArray(payload.items) && payload.items.length) {
+              renderStepCitations(payload.items);
             }
           } else if (payload.type === 'analytics-result') {
             renderAnalyticsTable(payload);

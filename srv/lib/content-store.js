@@ -6,7 +6,9 @@ import { Readable } from 'node:stream';
 import { acquireLock, releaseLock } from '../jobs/job-lock.js';
 import { logPipelineStart, logPipelineEnd } from './pipeline-log.js';
 import { getNextLegacyId } from './legacy-id.js';
+import { embedSlugs } from './embedding-pipeline.js';
 
+const LOG = cds.log('content-store');
 const LOCK_NAME = 'content-publish';
 const LOCK_DURATION_MS = 120_000;
 const INSTANCE_ID = `content-${process.pid}-${Date.now()}`;
@@ -19,6 +21,19 @@ async function toBuffer(data) {
     return Buffer.concat(chunks);
   }
   return Buffer.from(data);
+}
+
+export { toBuffer };
+
+export async function triggerPostPublishEmbeddings({ changedSlugs, settings }) {
+  if (!settings?.ragEnabled) return;
+  if (!Array.isArray(changedSlugs) || changedSlugs.length === 0) return;
+  try {
+    const result = await embedSlugs(changedSlugs, settings);
+    LOG.info('post-publish embeddings', result);
+  } catch (err) {
+    LOG.warn('post-publish embeddings failed (non-fatal)', err.message);
+  }
 }
 
 // --- Bounded LRU Cache ---
@@ -348,6 +363,18 @@ export async function publishHandler(req, res) {
         console.log(`[content/publish] Upserted body text for ${bodyUpserted} tutorials`);
       }
     }
+
+    // Schedule post-publish embeddings AFTER Steps metadata + body text upserts so
+    // embedSlugs can find the Steps rows for fresh slugs without contentHash drift warnings.
+    setImmediate(async () => {
+      try {
+        const { ChatSettings } = cds.entities('com.sap.developers.ims');
+        const settings = await SELECT.one.from(ChatSettings);
+        await triggerPostPublishEmbeddings({ changedSlugs: slugs, settings });
+      } catch (err) {
+        LOG.warn('post-publish embeddings setup failed (non-fatal)', err.message);
+      }
+    });
 
     await logPipelineEnd(pipelineLogId, 'SUCCESS', `Published v${newVersion}: ${slugs.length} uploaded + ${carriedForward} carried = ${mergedFileCount} files, ${mergedTotalSize} bytes`);
 
