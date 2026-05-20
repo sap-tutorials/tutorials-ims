@@ -86,6 +86,35 @@ describe('parsePayload — JSON', () => {
   });
 });
 
+describe('parsePayload — JSON type guards', () => {
+  it('marks row invalid when name is a number', () => {
+    const json = JSON.stringify([{ name: 42, titlePath: 'Languages:ABAP' }]);
+    const { rows } = parsePayload(json, 'json');
+    expect(rows[0]).toMatchObject({ invalid: true, reason: expect.stringMatching(/name must be a string/i) });
+  });
+
+  it('marks row invalid when name is an object (not [object Object] pass-through)', () => {
+    const json = JSON.stringify([{ name: { foo: 'bar' }, titlePath: 'Languages:ABAP' }]);
+    const { rows } = parsePayload(json, 'json');
+    expect(rows[0]).toMatchObject({ invalid: true, reason: expect.stringMatching(/name must be a string/i) });
+    expect(rows[0].name).not.toBe('[object Object]');
+  });
+
+  it('marks row invalid when titlePath is null with type-specific reason', () => {
+    const json = JSON.stringify([{ name: 'ABAP', titlePath: null }]);
+    const { rows } = parsePayload(json, 'json');
+    expect(rows[0]).toMatchObject({ invalid: true, reason: expect.stringMatching(/titlePath must be a string/i) });
+  });
+});
+
+describe('parsePayload — CSV error wrapping', () => {
+  it('wraps csv-parse errors with a controlled message prefix', () => {
+    // 3-column row when only 2 headers declared triggers a record length error
+    const malformed = 'name,titlePath\nABAP,Languages:ABAP,extraColumn';
+    expect(() => parsePayload(malformed, 'csv')).toThrow(/^Malformed CSV:/);
+  });
+});
+
 describe('parsePayload — format guard', () => {
   it('rejects unknown format', () => {
     expect(() => parsePayload('x', 'xml')).toThrow(/format/i);

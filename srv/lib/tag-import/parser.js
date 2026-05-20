@@ -21,17 +21,22 @@ export function parsePayload(payload, format) {
     throw new Error(`Too many rows: ${raw.length} > ${MAX_ROWS}`);
   }
 
-  return classifyRows(raw);
+  return classifyRows(raw, format === 'json');
 }
 
 function parseCsv(payload) {
   const stripped = payload.replace(/^﻿/, '');
-  const records = csvParse(stripped, {
-    columns: true,
-    trim: true,
-    skip_empty_lines: true,
-    relax_column_count: false
-  });
+  let records;
+  try {
+    records = csvParse(stripped, {
+      columns: true,
+      trim: true,
+      skip_empty_lines: true,
+      relax_column_count: false
+    });
+  } catch (err) {
+    throw new Error(`Malformed CSV: ${err.message}`);
+  }
   if (records.length === 0) {
     throw new Error('CSV must contain a header row and at least one data row');
   }
@@ -52,13 +57,25 @@ function parseJson(payload) {
   return parsed;
 }
 
-function classifyRows(raw) {
+function classifyRows(raw, isJson = false) {
   const rows = [];
   const parseErrors = [];
   const seen = new Map();
 
   for (let i = 0; i < raw.length; i++) {
     const r = raw[i];
+
+    if (isJson) {
+      if (typeof r.name !== 'string') {
+        rows.push({ invalid: true, name: r.name, titlePath: r.titlePath, reason: 'name must be a string' });
+        continue;
+      }
+      if (typeof r.titlePath !== 'string') {
+        rows.push({ invalid: true, name: r.name, titlePath: r.titlePath, reason: 'titlePath must be a string' });
+        continue;
+      }
+    }
+
     const name = (r.name ?? '').toString().trim();
     const titlePath = (r.titlePath ?? '').toString().trim();
 
