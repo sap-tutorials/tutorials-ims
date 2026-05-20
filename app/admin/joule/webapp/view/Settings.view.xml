@@ -43,7 +43,7 @@
           <Input value="{settings>/embeddingModel}" />
 
           <Label text="{i18n>embeddingTopK}" />
-          <Input value="{settings>/embeddingTopK}" type="Number" />
+          <StepInput value="{settings>/embeddingTopK}" min="1" max="10" />
 
           <Label text="{i18n>embeddingMinScore}" />
           <Input value="{settings>/embeddingMinScore}" type="Number" />
