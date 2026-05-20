@@ -5,7 +5,7 @@
   xmlns:t="sap.ui.table"
   xmlns:core="sap.ui.core"
   xmlns:f="sap.ui.layout.form">
-  <Page title="Tutorial Dashboard" enableScrolling="false">
+  <Page title="Tutorial Health" enableScrolling="false">
     <headerContent>
       <Button text="Sync Metadata" icon="sap-icon://synchronize" press=".onSyncMetadata" type="Emphasized"/>
       <Button text="Send Notifications" icon="sap-icon://email" press=".onSendNotifications"/>
