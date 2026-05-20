@@ -271,8 +271,15 @@ export async function publishHandler(req, res) {
 
     cache.invalidate();
 
-    const settings = await SELECT.one.from('ims.ChatSettings');
-    setImmediate(() => triggerPostPublishEmbeddings({ changedSlugs: slugs, settings }));
+    setImmediate(async () => {
+      try {
+        const { ChatSettings } = cds.entities('com.sap.developers.ims');
+        const settings = await SELECT.one.from(ChatSettings);
+        await triggerPostPublishEmbeddings({ changedSlugs: slugs, settings });
+      } catch (err) {
+        LOG.warn('post-publish embeddings setup failed (non-fatal)', err.message);
+      }
+    });
 
     // Upsert Tutorials + Steps metadata (self-healing on every publish)
     let metaUpserted = 0;
