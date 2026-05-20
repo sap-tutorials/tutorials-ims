@@ -15,8 +15,14 @@ sitemap:
 ## Who we are
 
 This site (`developers.sap.com` Tutorial Platform) is operated by
-SAP SE. The controller for personal data processed via the site is
-[*PLACEHOLDER — legal entity confirmation pending*].
+SAP SE and its affiliates. The data controller for personal data
+processed via the site depends on your country of residence — see the
+"Who is the controller of your personal data?" section of the
+[SAP Privacy Statement](https://www.sap.com/about/legal/privacy.html)
+for the country-specific controller and contact address.
+
+You can reach the SAP Group's Data Protection Officer at any time at
+[privacy@sap.com](mailto:privacy@sap.com).
 
 ## What we collect and why
 
