@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { BASE_URL, fetchWithRetry } from './smoke.config.js';
 
-describe('Next steps recommendations (related tutorials rail)', () => {
-  it('GET /tutorials/:slug returns HTML with related-tutorials rail card', async () => {
+describe('Next Steps recommendations', () => {
+  it('renders Related Tutorials rail on a known tutorial page', async () => {
     const res = await fetchWithRetry(`${BASE_URL}/tutorials/abap-cloud-ui-from-interface/`);
     expect(res.status).toBe(200);
 
@@ -10,7 +10,6 @@ describe('Next steps recommendations (related tutorials rail)', () => {
     expect(html).toContain('Related Tutorials');
 
     // Rail card element exists in the rendered HTML
-    const railCardRegex = /ui-rail-card[^>]*data-slug="[^"]*"[^>]*>/i;
-    expect(html).toMatch(railCardRegex);
+    expect(html).toMatch(/next-steps-rail-card[\s\S]*?href="\/tutorials\/[a-z0-9-]+/);
   });
 });
