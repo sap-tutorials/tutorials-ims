@@ -33,6 +33,7 @@ test/unit/tag-import/preview-cache.test.js
 test/unit/tag-import/parser.test.js
 test/unit/tag-import/classifier.test.js
 test/unit/tag-import/applier.test.js
+test/unit/tag-import/actions.test.js          handler tests via cds.test('serve', ...)
 test/hybrid/tag-import.test.js               end-to-end against real HANA
 app/admin/tags/webapp/ext/TagImportController.js
 app/admin/tags/webapp/ext/TagImportDialog.fragment.xml
@@ -812,11 +813,17 @@ In `srv/admin-service.cds`, add the following block after `function getBoardStat
     invalid  : Integer;
   }
 
+  type TagImportParseWarning {
+    line   : Integer;
+    name   : String(255);
+    reason : String(500);
+  }
+
   type TagImportPreview {
-    token        : String(64);
-    summary      : TagImportSummary;
-    rows         : many TagImportRow;
-    parseWarnings : many { line : Integer; name : String(255); reason : String(500); };
+    token         : String(64);
+    summary       : TagImportSummary;
+    rows          : many TagImportRow;
+    parseWarnings : many TagImportParseWarning;
   }
 
   type TagImportResult {
@@ -867,6 +874,8 @@ import { parsePayload, classify, sharedCache, MAX_BYTES } from './lib/tag-import
 
 Inside `init()`, after the `cleanupUnusedTags` block (around line 346), add:
 
+> **Scope note:** `Tags` and `db` are already destructured/connected at the top of `init()` (lines 13-14: `const { ..., Tags, ... } = cds.entities('com.sap.developers.ims'); const db = await cds.connect.to('db');`). The handler reuses those — no extra imports needed.
+
 ```js
 this.on('previewTagImport', async (req) => {
   const log = cds.log('tag-import');
@@ -914,64 +923,74 @@ this.on('previewTagImport', async (req) => {
 
 - [ ] **Step 3: Run the in-memory test against the live action**
 
-Add a quick action test to `test/unit/tag-import/applier.test.js` (yes, in the same file — both touch the in-memory db; it avoids a second cds.test bootstrap):
+Action tests use the existing `cds.test('serve', ...)` pattern (same as `test/admin-service.test.js`) — `project.post(...)` from the returned helper, with `axios`-style basic auth. **No new test dependencies.**
+
+Create a new test file `test/unit/tag-import/actions.test.js` (kept separate from the pure `applier.test.js` so the bootstrap server is only used where needed):
 
 ```js
-import supertest from 'supertest';
+import { describe, it, expect, beforeEach } from 'vitest';
+import cds from '@sap/cds';
+import { MAX_BYTES } from '../../../srv/lib/tag-import/parser.js';
+
+const project = cds.test('serve', '--project', '.', '--in-memory');
+const adminAuth = { auth: { username: 'admin', password: 'admin' } };
 
 describe('previewTagImport (action)', () => {
-  let app;
-  beforeEach(() => { app = cds.app; });
+  beforeEach(async () => {
+    const { Tags } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(Tags);
+    await INSERT.into(Tags).entries({
+      ID: 'aaaaaaaa-0000-0000-0000-000000000001',
+      name: 'ABAP',
+      titlePath: 'Languages:ABAP',
+      legacyId: 9001
+    });
+  });
 
   it('returns a token and summary for a valid CSV', async () => {
     const csv = 'name,titlePath\nNEW_TAG_X,Path:X\nABAP,Languages:ABAP';
-    const res = await supertest(app)
-      .post('/admin/previewTagImport')
-      .send({ payload: csv, format: 'csv' })
-      .set('authorization', 'Basic ' + Buffer.from('admin:').toString('base64'))
-      .expect(200);
-    expect(res.body.token).toMatch(/^[0-9a-f-]{36}$/);
-    expect(res.body.summary).toEqual({ total: 2, new_: 1, conflict: 1, invalid: 0 });
+    const { status, data } = await project.post(
+      '/admin/previewTagImport',
+      { payload: csv, format: 'csv' },
+      adminAuth
+    );
+    expect(status).toBe(200);
+    expect(data.token).toMatch(/^[0-9a-f-]{36}$/);
+    expect(data.summary).toEqual({ total: 2, new_: 1, conflict: 1, invalid: 0 });
   });
 
   it('rejects oversized payload with 413', async () => {
     const big = 'x'.repeat(MAX_BYTES + 1);
-    await supertest(app)
-      .post('/admin/previewTagImport')
-      .send({ payload: big, format: 'csv' })
-      .set('authorization', 'Basic ' + Buffer.from('admin:').toString('base64'))
-      .expect(413);
+    const { status } = await project.post(
+      '/admin/previewTagImport',
+      { payload: big, format: 'csv' },
+      { ...adminAuth, validateStatus: () => true }
+    );
+    expect(status).toBe(413);
   });
 
   it('rejects malformed CSV with 400', async () => {
-    await supertest(app)
-      .post('/admin/previewTagImport')
-      .send({ payload: 'wrongheader\nfoo', format: 'csv' })
-      .set('authorization', 'Basic ' + Buffer.from('admin:').toString('base64'))
-      .expect(400);
+    const { status } = await project.post(
+      '/admin/previewTagImport',
+      { payload: 'wrongheader\nfoo', format: 'csv' },
+      { ...adminAuth, validateStatus: () => true }
+    );
+    expect(status).toBe(400);
   });
 });
 ```
 
-Add the import at the top of the same test file:
-
-```js
-import { MAX_BYTES } from '../../../srv/lib/tag-import/parser.js';
-```
-
-(Note: `supertest` and `MAX_BYTES` may already be imported indirectly — keep imports clean.)
-
 - [ ] **Step 4: Run the tests**
 
 ```bash
-npx vitest run test/unit/tag-import/applier.test.js
+npx vitest run test/unit/tag-import/actions.test.js
 ```
-Expected: all `apply` tests pass + 3 new action tests pass.
+Expected: 3 tests pass.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add srv/admin-service.js test/unit/tag-import/applier.test.js
+git add srv/admin-service.js test/unit/tag-import/actions.test.js
 git commit -m "feat(tag-import): implement previewTagImport handler
 
 Validates payload size before parsing (413 path), parses, classifies
@@ -987,6 +1006,8 @@ counts via cds.log('tag-import') — no raw tag names emitted."
 - Modify: `srv/admin-service.js`
 
 - [ ] **Step 1: Wire the handler**
+
+> **Scope note:** Same as Task 8 — `Tags` and `db` are already in scope from lines 13-14 of `srv/admin-service.js`.
 
 After the `previewTagImport` handler in `init()`, add:
 
@@ -1038,47 +1059,58 @@ this.on('commitTagImport', async (req) => {
 
 - [ ] **Step 2: Add commit-action tests**
 
-Append to `test/unit/tag-import/applier.test.js`:
+Append to `test/unit/tag-import/actions.test.js`:
 
 ```js
 describe('commitTagImport (action)', () => {
-  let app;
-  beforeEach(() => { app = cds.app; });
+  beforeEach(async () => {
+    const { Tags } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(Tags);
+    await INSERT.into(Tags).entries({
+      ID: 'aaaaaaaa-0000-0000-0000-000000000001',
+      name: 'ABAP',
+      titlePath: 'Languages:ABAP',
+      legacyId: 9001
+    });
+  });
 
   async function preview(csv) {
-    const res = await supertest(app)
-      .post('/admin/previewTagImport')
-      .send({ payload: csv, format: 'csv' })
-      .set('authorization', 'Basic ' + Buffer.from('admin:').toString('base64'))
-      .expect(200);
-    return res.body.token;
+    const { data } = await project.post(
+      '/admin/previewTagImport',
+      { payload: csv, format: 'csv' },
+      adminAuth
+    );
+    return data.token;
   }
 
   it('upsert path returns counts and applies changes', async () => {
     const token = await preview('name,titlePath\nNEW_TAG_Y,P:Y\nABAP,Languages:ABAP-NEW');
-    const res = await supertest(app)
-      .post('/admin/commitTagImport')
-      .send({ token, strategy: 'upsert' })
-      .set('authorization', 'Basic ' + Buffer.from('admin:').toString('base64'))
-      .expect(200);
-    expect(res.body).toEqual({ inserted: 1, updated: 1, skipped: 0, total: 2 });
+    const { status, data } = await project.post(
+      '/admin/commitTagImport',
+      { token, strategy: 'upsert' },
+      adminAuth
+    );
+    expect(status).toBe(200);
+    expect(data).toEqual({ inserted: 1, updated: 1, skipped: 0, total: 2 });
   });
 
   it('returns 410 when token is unknown', async () => {
-    await supertest(app)
-      .post('/admin/commitTagImport')
-      .send({ token: 'does-not-exist', strategy: 'upsert' })
-      .set('authorization', 'Basic ' + Buffer.from('admin:').toString('base64'))
-      .expect(410);
+    const { status } = await project.post(
+      '/admin/commitTagImport',
+      { token: 'does-not-exist', strategy: 'upsert' },
+      { ...adminAuth, validateStatus: () => true }
+    );
+    expect(status).toBe(410);
   });
 
   it('returns 409 on abort-on-duplicate with conflicts', async () => {
     const token = await preview('name,titlePath\nABAP,Languages:ABAP-NEW');
-    await supertest(app)
-      .post('/admin/commitTagImport')
-      .send({ token, strategy: 'abort-on-duplicate' })
-      .set('authorization', 'Basic ' + Buffer.from('admin:').toString('base64'))
-      .expect(409);
+    const { status } = await project.post(
+      '/admin/commitTagImport',
+      { token, strategy: 'abort-on-duplicate' },
+      { ...adminAuth, validateStatus: () => true }
+    );
+    expect(status).toBe(409);
   });
 });
 ```
@@ -1086,14 +1118,14 @@ describe('commitTagImport (action)', () => {
 - [ ] **Step 3: Run the tests**
 
 ```bash
-npx vitest run test/unit/tag-import/applier.test.js
+npx vitest run test/unit/tag-import/actions.test.js
 ```
-Expected: all earlier tests + 3 new commit-action tests pass.
+Expected: 6 tests pass (3 preview + 3 commit).
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add srv/admin-service.js test/unit/tag-import/applier.test.js
+git add srv/admin-service.js test/unit/tag-import/actions.test.js
 git commit -m "feat(tag-import): implement commitTagImport handler
 
 Re-classifies inside the request to catch races between preview and commit.
@@ -1645,8 +1677,14 @@ sap.ui.define([
         model.setProperty("/resultText", this._fmtResult(r));
         model.setProperty("/state", "done");
         // Refresh the list-report binding so newly-imported rows appear.
-        const lr = view.byId("fe::table::Tags::LineItem-innerTable");
-        if (lr && lr.getBinding("items")) lr.getBinding("items").refresh();
+        // Prefer the FE extensionAPI over reaching for internal table IDs —
+        // the public API is stable across UI5 versions.
+        if (this.base?.extensionAPI?.refresh) {
+          this.base.extensionAPI.refresh();
+        } else {
+          const lr = view.byId("fe::table::Tags::LineItem-innerTable");
+          if (lr && lr.getBinding("items")) lr.getBinding("items").refresh();
+        }
       }).catch((err) => {
         // Token expired → fall back to upload state
         const status = err && err.error && err.error.code;
@@ -1816,7 +1854,7 @@ gh pr create --title "Tag importer: bulk CSV/JSON import via admin Tags app" --b
 
 ## Test plan
 - [x] Unit: parser, classifier, applier, preview-cache (all in test/unit/tag-import/)
-- [x] Action: previewTagImport + commitTagImport via supertest against in-memory CAP
+- [x] Action: previewTagImport + commitTagImport via project.post against in-memory CAP
 - [x] Hybrid: end-to-end against real HANA (test/hybrid/tag-import.test.js, run with ALLOW_HYBRID_WRITES=true npm run test:hybrid)
 - [ ] Manual smoke (per plan task 15) once deployed to DEV
 
