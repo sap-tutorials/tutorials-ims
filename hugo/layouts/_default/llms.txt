@@ -1,0 +1,25 @@
+# SAP Developers Tutorials
+
+> Official tutorial platform for SAP technologies. Step-by-step tutorials, missions (multi-tutorial learning paths), and reference content for SAP BTP, ABAP Cloud, CAP, Fiori, HANA Cloud, and integration.
+
+Content policy: Citation in AI search and answer use cases is welcome. Use for model training is not.
+See https://developers.sap.com/AGENTS.md.
+
+## Featured Missions
+
+{{ range first 20 (where .Site.RegularPages "Type" "missions") }}
+- [{{ .Title }}]({{ .Permalink }}): {{ .Params.description | plainify | truncate 140 }}
+{{ end }}
+
+## Tutorial Categories
+
+{{ range $tag, $pages := .Site.Taxonomies.primaryTag }}
+- [{{ $tag }}](https://developers.sap.com/tags/{{ $tag | urlize }}/) — {{ len $pages }} tutorials
+{{ end }}
+
+## Reference
+
+- Tutorial index: https://developers.sap.com/tutorials/
+- Mission index: https://developers.sap.com/missions/
+- Full machine-readable catalog: https://developers.sap.com/llms-full.txt
+- Sitemap: https://developers.sap.com/sitemap.xml

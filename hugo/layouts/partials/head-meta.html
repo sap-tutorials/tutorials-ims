@@ -1,0 +1,21 @@
+{{- $brand := .Site.Params.brand -}}
+{{- $title := cond .IsHome $brand (printf "%s | %s" .Title $brand) -}}
+{{- $desc := .Params.description | default .Site.Params.defaultDescription -}}
+
+<title>{{ $title }}</title>
+<meta name="description" content="{{ $desc | plainify | truncate 160 }}">
+<link rel="canonical" href="{{ .Permalink }}">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+<meta name="content-signal" content="index=yes, ai-train=no, ai-search=yes">
+
+{{- with .Params.tags }}
+<meta name="keywords" content="{{ delimit . ", " }}">
+{{- end }}
+
+{{- with .Params.author }}
+<meta name="author" content="{{ . }}">
+{{- end }}
+
+{{- range .Aliases }}
+<link rel="alternate" href="{{ . | absURL }}">
+{{- end }}

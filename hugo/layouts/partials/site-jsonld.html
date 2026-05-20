@@ -1,0 +1,32 @@
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://developers.sap.com/#organization",
+      "name": {{ .Site.Params.brand | jsonify }},
+      "url": "https://developers.sap.com/",
+      "logo": "https://developers.sap.com/img/sap-logo.svg",
+      "sameAs": [
+        "https://www.youtube.com/@sapdevs",
+        "https://community.sap.com/",
+        "https://learning.sap.com/",
+        "https://github.com/SAP-samples"
+      ]
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://developers.sap.com/#website",
+      "url": "https://developers.sap.com/",
+      "name": {{ .Site.Params.brand | jsonify }},
+      "publisher": { "@id": "https://developers.sap.com/#organization" },
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": "https://developers.sap.com/?q={search_term_string}",
+        "query-input": "required name=search_term_string"
+      }
+    }
+  ]
+}
+</script>

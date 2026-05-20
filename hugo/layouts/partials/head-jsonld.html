@@ -1,0 +1,85 @@
+{{- $base := "https://developers.sap.com" -}}
+
+{{/* BreadcrumbList for every non-home page */}}
+{{- if not .IsHome -}}
+{{- $crumbs := slice (dict "name" "Home" "item" (printf "%s/" $base)) -}}
+{{- if eq .Type "tutorials" -}}
+  {{- $crumbs = $crumbs | append (dict "name" "Tutorials" "item" (printf "%s/tutorials/" $base)) -}}
+{{- else if eq .Type "missions" -}}
+  {{- $crumbs = $crumbs | append (dict "name" "Missions" "item" (printf "%s/missions/" $base)) -}}
+{{- else if eq .Type "groups" -}}
+  {{- $crumbs = $crumbs | append (dict "name" "Groups" "item" (printf "%s/groups/" $base)) -}}
+{{- end -}}
+{{- $crumbs = $crumbs | append (dict "name" .Title "item" .Permalink) -}}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {{- range $i, $c := $crumbs }}{{ if $i }},{{ end }}
+    { "@type": "ListItem", "position": {{ add $i 1 }}, "name": {{ $c.name | jsonify }}, "item": {{ $c.item | jsonify }} }
+    {{- end }}
+  ]
+}
+</script>
+{{- end -}}
+
+{{/* Tutorials → HowTo + auto-generated FAQPage */}}
+{{- if eq .Type "tutorials" -}}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "HowTo",
+  "name": {{ .Title | jsonify }},
+  "description": {{ (.Params.description | default .Site.Params.defaultDescription) | plainify | jsonify }},
+  {{- with .Params.time }}"totalTime": {{ printf "PT%vM" . | jsonify }},{{ end }}
+  {{- with .Date }}"datePublished": {{ .Format "2006-01-02" | jsonify }},{{ end }}
+  {{- with .Lastmod }}"dateModified": {{ .Format "2006-01-02" | jsonify }},{{ end }}
+  {{- with .Params.level }}"educationalLevel": {{ . | jsonify }},{{ end }}
+  {{- with .Params.author }}"author": { "@type": "Person", "name": {{ . | jsonify }} },{{ end }}
+  "publisher": { "@id": "{{ $base }}/#organization" },
+  "step": [
+    {{- range $i, $s := .Params.steps }}{{ if $i }},{{ end }}
+    { "@type": "HowToStep", "position": {{ add $i 1 }}, "name": {{ $s.title | jsonify }} }
+    {{- end }}
+  ]
+}
+</script>
+
+{{/* Auto-generated FAQPage when frontmatter has youWillLearn AND prerequisites */}}
+{{- if and .Params.youWillLearn .Params.prerequisites -}}
+{{- $faqs := slice -}}
+{{- $faqs = $faqs | append (dict "q" "What will I learn?" "a" (delimit .Params.youWillLearn " ")) -}}
+{{- $faqs = $faqs | append (dict "q" "What do I need before I start?" "a" (delimit .Params.prerequisites " ")) -}}
+{{- with .Params.time }}{{- $faqs = $faqs | append (dict "q" "How long does this take?" "a" (printf "%v minutes" .)) -}}{{- end -}}
+{{- with .Params.level }}{{- $faqs = $faqs | append (dict "q" "What level is this?" "a" .) -}}{{- end -}}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {{- range $i, $f := $faqs }}{{ if $i }},{{ end }}
+    { "@type": "Question", "name": {{ $f.q | jsonify }}, "acceptedAnswer": { "@type": "Answer", "text": {{ $f.a | plainify | jsonify }} } }
+    {{- end }}
+  ]
+}
+</script>
+{{- end -}}
+{{- end -}}
+
+{{/* Missions and Groups → Course */}}
+{{- if or (eq .Type "missions") (eq .Type "groups") -}}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Course",
+  "name": {{ .Title | jsonify }},
+  "description": {{ (.Params.description | default .Site.Params.defaultDescription) | plainify | jsonify }},
+  "url": {{ .Permalink | jsonify }},
+  "provider": { "@id": "{{ $base }}/#organization" }
+  {{- with .Params.totalTime -}}
+  ,"hasCourseInstance": { "@type": "CourseInstance", "courseMode": "online", "courseWorkload": {{ printf "PT%vM" . | jsonify }} }
+  {{- end }}
+}
+</script>
+{{- end -}}
