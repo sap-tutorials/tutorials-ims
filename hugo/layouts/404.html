@@ -1,33 +1,60 @@
 {{ define "main" }}
-<section class="not-found-hero" aria-labelledby="not-found-title">
+<section class="not-found-hero" data-error-page="404" aria-labelledby="not-found-title">
   <div class="not-found-inner">
-    <p class="not-found-eyebrow">Tutorial not found</p>
-    <h1 id="not-found-title" class="not-found-title">We couldn't find that tutorial</h1>
+    <p class="not-found-eyebrow">Page not found</p>
+    <h1 id="not-found-title" class="not-found-title">We couldn't find that page</h1>
     <p class="not-found-lede">
-      The tutorial you're looking for has been retired, renamed, or never existed at this URL.
+      The page you're looking for has been retired, renamed, or never existed at this URL.
+      Try a search, or pick from the popular tutorials below.
     </p>
+
+    <form class="not-found-search" action="/" method="get" role="search">
+      <label for="not-found-q" class="visually-hidden">Search tutorials</label>
+      <div class="fd-input-group">
+        <input id="not-found-q" name="q" type="search" class="fd-input fd-input-group__input"
+               placeholder="Search for a tutorial" autocomplete="off" />
+        <span class="fd-input-group__addon fd-input-group__addon--button">
+          <button class="fd-button fd-button--emphasized fd-input-group__button" type="submit">Search</button>
+        </span>
+      </div>
+    </form>
+
     <div class="not-found-actions">
-      <a class="fd-button fd-button--emphasized" href="/">Browse tutorials</a>
-      <a class="fd-button fd-button--transparent" href="https://developers.sap.com/" rel="noopener">SAP Developers</a>
+      <a class="fd-button fd-button--transparent" href="/">Browse tutorials</a>
+      <a class="fd-button fd-button--transparent" href="/missions/">Browse missions</a>
     </div>
-    <p class="not-found-help">
-      If you arrived here from a bookmark, the SAP Developers home page is the best starting point
-      to discover current learning paths.
-    </p>
   </div>
 </section>
 
+<section class="not-found-popular" aria-labelledby="popular-tutorials">
+  <div class="not-found-popular__inner">
+    <h2 id="popular-tutorials" class="not-found-popular__title">Popular tutorials</h2>
+    <ul class="tutorial-grid" id="popular-rail" data-source="static">
+      {{ range first 6 (where .Site.RegularPages "Type" "tutorials").ByLastmod.Reverse }}
+      <li>
+        <a href="{{ .RelPermalink }}">
+          <h3>{{ .Title }}</h3>
+          <p>{{ .Params.description | truncate 140 }}</p>
+          <p class="meta">{{ .Params.level }} · {{ .Params.time }} min</p>
+        </a>
+      </li>
+      {{ end }}
+    </ul>
+  </div>
+</section>
+
+<script defer src="/js/popular-rail.js"></script>
+
 <style>
   .not-found-hero {
-    padding: 4rem 1.5rem;
+    padding: 4rem 1.5rem 2rem;
     background: var(--sapBackgroundColor, #f5f6f7);
-    min-height: 60vh;
     display: flex;
     align-items: center;
     justify-content: center;
   }
   .not-found-inner {
-    max-width: 640px;
+    max-width: 720px;
     text-align: center;
     background: var(--sapTile_Background, #ffffff);
     padding: 3rem 2rem;
@@ -51,17 +78,37 @@
     color: var(--sapTextColor, #32363a);
     margin: 0 0 2rem;
   }
+  .not-found-search {
+    margin: 0 0 1.5rem;
+  }
   .not-found-actions {
     display: flex;
     gap: 0.75rem;
     justify-content: center;
     flex-wrap: wrap;
-    margin-bottom: 1.5rem;
   }
-  .not-found-help {
-    font-size: 0.9rem;
-    color: var(--sapNeutralTextColor, #5b738b);
-    margin: 0;
+  .not-found-popular {
+    padding: 2rem 1.5rem 4rem;
+    background: var(--sapBackgroundColor, #f5f6f7);
+  }
+  .not-found-popular__inner {
+    max-width: 1080px;
+    margin: 0 auto;
+  }
+  .not-found-popular__title {
+    margin: 0 0 1.5rem;
+    color: var(--sapTextColor, #32363a);
+  }
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 </style>
 {{ end }}
