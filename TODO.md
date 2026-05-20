@@ -443,7 +443,7 @@ First comprehensive security audit of the full implementation. Findings ranked b
 - [✔️] **Scanner UI5 app doesn't load** — The `/scanner-ui/` route (UI5 barcode scanner app) fails to load, while `/scanner-vue/` (Vue-based scanner) works correctly. Likely a routing, resource path, or bootstrap issue specific to the UI5 app.
 - [X] **`/_dev` endpoint not working on DEV** — The CAP dev tools endpoint (`/_dev`) that exposes the index page and Swagger UI is not accessible on the deployed DEV instance. Previously fixed locally but regression on deployed environment.
 - [X] **Display app WebSocket connection error (recurring)** — The Event Display dashboard still fails to establish a WebSocket connection on the deployed DEV instance. Previously marked as fixed but the issue persists.
-- [ ] **Rework header area consistently across applications** — The header/shell bar area is inconsistent across the different apps (Hugo site, admin shell, display app, scanner). Need a unified header design with consistent branding, navigation, and user menu across all application entry points.
+- [X] **Rework header area consistently across applications** — The header/shell bar area is inconsistent across the different apps (Hugo site, admin shell, display app, scanner). Need a unified header design with consistent branding, navigation, and user menu across all application entry points.
 - [X] **Admin UI** - the new pipeline log view is missing from the side navigation and cannot be accessed.
 - [X] **Admin UI** - Error Sorry, we can't find this page
 HTTP request was not processed because the previous request failed. This happens when navigating back between object level pages.
@@ -543,7 +543,7 @@ HTTP request was not processed because the previous request failed. This happens
 
 - [ ] **Analytics — Author/Management views (PowerBI workflow)** — Build reporting views for tutorial authors and management, with a workflow to export/connect data to PowerBI dashboards.
 - [x] **Tag Import** — Bulk CSV/JSON import via Tags admin app. Two-step preview/commit flow on AdminService with upsert / skip-duplicates / abort-on-duplicate strategies.
-- [ ] **Author Workflow** — Define and implement the end-to-end authoring workflow: tutorial creation, review, approval, and publication lifecycle.
+- [X] **Author Workflow** — Define and implement the end-to-end authoring workflow: tutorial creation, review, approval, and publication lifecycle. See [docs/author-instructions.md](docs/author-instructions.md) — documents today's workflow and flags remaining gaps (formal review gate, PR previews, VS Code extension).
 - [ ] **VS Code Extension (esp. Preview)** — Build a VS Code extension for tutorial authors with live preview of tutorial markdown as it would render on the platform.
 - [ ] **System QA vs. Author QA** — Distinguish between system-level quality assurance (automated pipeline validation, broken links, schema conformance) and author-level QA (content review, accuracy checks, editorial approval). Define separate workflows and tooling for each.
-- [ ] **Tutorials API missing slug field** — The current Tutorials API does not return the tutorial's slug. This is a critical gap — slugs are required for content serving (`/content/tutorials/:slug`), navigation, and linking. The DeveloperService/AdminService projections need to expose the slug field from TutorialMeta or derive it from the repository name.
+- [x] **Tutorials API missing slug field** — Resolved: `slug` is a `@mandatory` first-class column on `Tutorials` (db/schema.cds:27), exposed by both `DeveloperService` (projection excludes only `meta, contributors, repositories`) and `AdminService` (full projection + explicit `TutorialPickList`). Handlers already query by slug.

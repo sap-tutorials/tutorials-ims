@@ -79,26 +79,56 @@ async function graphqlRequest(query: string, retries = MAX_RETRIES): Promise<any
   const token = process.env.GITHUB_TOKEN ?? process.env.TUTORIALS_GITHUB_TOKEN
   if (!token) throw new Error('GITHUB_TOKEN or TUTORIALS_GITHUB_TOKEN is required for GraphQL API')
 
+  const res = await fetchWithRetry(GRAPHQL_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'User-Agent': 'tutorials-poc-build',
+    },
+    body: JSON.stringify({ query }),
+  }, { retries, label: 'graphql' })
+
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`GraphQL request failed: ${res.status} ${body}`)
+  }
+
+  const json = await res.json()
+  if (json.errors?.length) {
+    const msgs = json.errors.map((e: any) => e.message).join('; ')
+    console.warn(`  [graphql-warn] ${msgs}`)
+  }
+  return json.data
+}
+
+export interface FetchWithRetryOptions {
+  retries?: number
+  label?: string
+}
+
+// Generic retry wrapper around fetch().
+// Retries on 5xx, 429, and network errors with exponential backoff and jitter.
+// Honors Retry-After. Fails fast on other 4xx (404 should not be retried).
+// Returns the final Response — caller is responsible for reading the body.
+export async function fetchWithRetry(
+  url: string,
+  init: RequestInit = {},
+  opts: FetchWithRetryOptions = {},
+): Promise<Response> {
+  const retries = opts.retries ?? MAX_RETRIES
+  const label = opts.label ?? 'fetch'
   let lastError: Error | null = null
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     let res: Response
     try {
-      res = await fetch(GRAPHQL_URL, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'User-Agent': 'tutorials-poc-build',
-        },
-        body: JSON.stringify({ query }),
-      })
+      res = await fetch(url, init)
     } catch (err) {
-      // Network failure (DNS, connection refused, TLS, etc.) — retry.
       lastError = err instanceof Error ? err : new Error(String(err))
       if (attempt < retries) {
         const wait = backoffDelay(attempt)
-        console.warn(`  [graphql] network error on attempt ${attempt}/${retries}: ${lastError.message}; retrying in ${Math.round(wait / 1000)}s...`)
+        console.warn(`  [${label}] network error on attempt ${attempt}/${retries}: ${lastError.message}; retrying in ${Math.round(wait / 1000)}s...`)
         await new Promise(r => setTimeout(r, wait))
         continue
       }
@@ -109,25 +139,15 @@ async function graphqlRequest(query: string, retries = MAX_RETRIES): Promise<any
     if (retryable && attempt < retries) {
       const retryAfter = parseRetryAfter(res.headers.get('retry-after'))
       const wait = retryAfter ?? backoffDelay(attempt)
-      console.warn(`  [graphql] ${res.status} on attempt ${attempt}/${retries}, retrying in ${Math.round(wait / 1000)}s...`)
+      console.warn(`  [${label}] ${res.status} on attempt ${attempt}/${retries}, retrying in ${Math.round(wait / 1000)}s...`)
       await new Promise(r => setTimeout(r, wait))
       continue
     }
 
-    if (!res.ok) {
-      const body = await res.text()
-      throw new Error(`GraphQL request failed: ${res.status} ${body}`)
-    }
-
-    const json = await res.json()
-    if (json.errors?.length) {
-      const msgs = json.errors.map((e: any) => e.message).join('; ')
-      console.warn(`  [graphql-warn] ${msgs}`)
-    }
-    return json.data
+    return res
   }
 
-  throw new Error(`GraphQL request failed after ${retries} attempts${lastError ? `: ${lastError.message}` : ''}`)
+  throw new Error(`${label} request failed after ${retries} attempts${lastError ? `: ${lastError.message}` : ''}`)
 }
 
 function loadDiscoveryCache(): DiscoveredTutorial[] | null {
@@ -144,18 +164,81 @@ function loadDiscoveryCache(): DiscoveredTutorial[] | null {
   }
 }
 
-export async function discoverAllTutorials(): Promise<DiscoveredTutorial[]> {
+async function loadDiscoveryFromHana(): Promise<DiscoveredTutorial[] | null> {
+  const baseUrl = process.env.CAP_BASE_URL
+  if (!baseUrl) return null
   try {
-    return await discoverFromGitHub()
+    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/build/repo-catalog`, {
+      headers: { 'User-Agent': 'tutorials-poc-build' },
+    })
+    if (!res.ok) return null
+    const map = await res.json() as Record<string, DiscoveredTutorial>
+    const tutorials = Object.values(map).filter(
+      (t): t is DiscoveredTutorial =>
+        !!t && typeof t.slug === 'string' && typeof t.repo === 'string' && typeof t.branch === 'string',
+    )
+    return tutorials.length > 0 ? tutorials : null
+  } catch {
+    return null
+  }
+}
+
+export async function uploadDiscoveryToHana(tutorials: DiscoveredTutorial[]): Promise<void> {
+  const baseUrl = process.env.CAP_BASE_URL
+  const apiKey = process.env.CONTENT_API_KEY
+  if (!baseUrl || !apiKey) return
+  const entries: Record<string, DiscoveredTutorial> = {}
+  for (const t of tutorials) entries[t.slug] = t
+  try {
+    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/build/repo-catalog`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'tutorials-poc-build',
+      },
+      body: JSON.stringify({ entries }),
+    })
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      console.warn(`  [repo-catalog] HANA upload failed: ${res.status} ${body.slice(0, 200)}`)
+      return
+    }
+    console.log(`  [repo-catalog] uploaded ${tutorials.length} entries to HANA`)
   } catch (err) {
+    console.warn(`  [repo-catalog] HANA upload error: ${err instanceof Error ? err.message : err}`)
+  }
+}
+
+export type DiscoverySource = 'github' | 'disk' | 'hana'
+
+export interface DiscoveryResult {
+  tutorials: DiscoveredTutorial[]
+  source: DiscoverySource
+}
+
+export async function discoverAllTutorials(): Promise<DiscoveryResult> {
+  try {
+    const tutorials = await discoverFromGitHub()
+    return { tutorials, source: 'github' }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.warn(`\n  [graphql] Discovery failed (${message})`)
+
     const cached = loadDiscoveryCache()
     if (cached) {
-      const message = err instanceof Error ? err.message : String(err)
-      console.warn(`\n  [graphql] Discovery failed (${message})`)
-      console.warn(`  [graphql] Falling back to cached discovery map (${cached.length} tutorials, ${DISCOVERY_CACHE_FILE})`)
+      console.warn(`  [graphql] Falling back to local disk cache (${cached.length} tutorials, ${DISCOVERY_CACHE_FILE})`)
       console.warn(`  [graphql] Cache may be stale — re-run later when GitHub recovers to refresh.\n`)
-      return cached
+      return { tutorials: cached, source: 'disk' }
     }
+
+    const fromHana = await loadDiscoveryFromHana()
+    if (fromHana) {
+      console.warn(`  [graphql] Local cache empty; falling back to HANA RepoCatalog (${fromHana.length} tutorials)`)
+      console.warn(`  [graphql] Catalog may be stale — re-run later when GitHub recovers to refresh.\n`)
+      return { tutorials: fromHana, source: 'hana' }
+    }
+
     throw err
   }
 }

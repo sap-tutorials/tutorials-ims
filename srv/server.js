@@ -6,6 +6,7 @@ import { buildCatalogHandler } from './lib/build-catalog.js';
 import { navigatorCatalogHandler } from './lib/navigator-catalog.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
 import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, navHandler, rollbackHandler } from './lib/content-store.js';
+import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-catalog.js';
 import { buildSystemPrompt } from './lib/chat-context.js';
 import { createRateLimiter, RateLimitError } from './lib/chat-rate-limit.js';
 import { streamChat, toolsForContext } from './lib/chat-orchestrator.js';
@@ -88,6 +89,8 @@ cds.on('bootstrap', (app) => {
     const mapping = await buildSlugMapping();
     res.json(mapping);
   });
+  app.get('/build/repo-catalog', repoCatalogReadHandler);
+  app.post('/build/repo-catalog', express.json({ limit: '10mb' }), contentAuthMiddleware, repoCatalogWriteHandler);
 
   // Content persistence endpoints
   app.get('/content/nav', navHandler);

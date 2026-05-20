@@ -1,0 +1,38 @@
+{{ define "main" }}
+<article class="taxonomy-list">
+  <header class="taxonomy-list__header">
+    <p class="taxonomy-list__crumb"><a href="/tags/">Topics</a> &rsaquo;</p>
+    <h1>{{ .Title }}</h1>
+    <p class="lede">{{ len .Pages }} tutorial{{ if ne (len .Pages) 1 }}s{{ end }} tagged with <strong>{{ .Title }}</strong>.</p>
+  </header>
+
+  <ul class="tutorial-grid">
+    {{ range .Pages.ByLastmod.Reverse }}
+    <li>
+      <a href="{{ .RelPermalink }}">
+        <h2>{{ .Title }}</h2>
+        <p>{{ .Params.description | truncate 160 }}</p>
+        <p class="meta">
+          {{ with .Params.level }}{{ . }}{{ end }}
+          {{ with .Params.time }} · {{ . }} min{{ end }}
+        </p>
+      </a>
+    </li>
+    {{ end }}
+  </ul>
+</article>
+<style>
+  .taxonomy-list { max-width: 1200px; margin: 0 auto; padding: 2rem 1rem; }
+  .taxonomy-list__header { margin-bottom: 2rem; }
+  .taxonomy-list__crumb { margin: 0 0 0.5rem; font-size: 0.9rem; color: var(--sapNeutralTextColor, #666); }
+  .taxonomy-list__crumb a { color: inherit; }
+  .taxonomy-list__header h1 { font-size: 2rem; margin: 0 0 0.5rem; word-break: break-word; }
+  .taxonomy-list__header .lede { color: var(--sapTextColor, #555); margin: 0; }
+  .tutorial-grid { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+  .tutorial-grid li { background: var(--sapTile_Background, #fff); border: 1px solid var(--sapTile_BorderColor, #e5e5e5); border-radius: 0.5rem; padding: 1rem; }
+  .tutorial-grid a { text-decoration: none; color: inherit; display: block; }
+  .tutorial-grid h2 { margin: 0 0 0.5rem; font-size: 1.05rem; }
+  .tutorial-grid p { margin: 0 0 0.5rem; color: var(--sapTextColor, #555); font-size: 0.9rem; }
+  .tutorial-grid .meta { color: var(--sapNeutralTextColor, #666); font-size: 0.8rem; }
+</style>
+{{ end }}
