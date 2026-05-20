@@ -1,0 +1,381 @@
+# Tutorial Feedback Form — Design
+
+**Date:** 2026-05-20
+**Status:** Draft for review
+**Author:** Tom Jung (with Claude)
+**Replaces:** Qualtrics survey link in `hugo/layouts/partials/feedback-share.html`
+
+## Problem
+
+The existing tutorial feedback path opens a Qualtrics survey in a new tab (`https://sapinsights.eu.qualtrics.com/jfe/form/SV_0im30RgTkbEEHMV`). Tom's assessment: "completely overkill." Drawbacks:
+
+- External dependency on a third-party SaaS
+- Results are not visible from the Admin UI
+- No correlation with the tutorial catalog or with logged-in users
+- Cookie/CMP friction (Qualtrics requires Functional cookies)
+- Heavyweight UI for what amounts to seven Likert ratings + a comment
+
+## Goal
+
+Replace the Qualtrics deeplink with a self-hosted Vue feedback form that:
+
+- Renders inline as a modal on tutorial pages, themed to match the rest of the site (SAP Horizon)
+- Asks the same questions as the current Qualtrics survey
+- Persists submissions to HANA via a CAP endpoint
+- Surfaces results in the Admin UI as both a List Report and a per-tutorial dashboard
+- Does not require login but records whether the submitter was authenticated
+- Stores zero PII (no userLegacyId, no IP, no email)
+- Adds lightweight spam mitigation (honeypot + per-IP rate limit using a hashed, salted, daily-rotated key)
+
+## Non-Goals
+
+- Feedback for missions, groups, or other content types (tutorials only — matches Qualtrics scope)
+- Editing or deleting submissions from the admin UI (read-only reporting)
+- Multi-language form (English-only — see `project_developers_locales.md`)
+- Email notifications on new submissions
+- Sentiment analysis on free-text comments
+- Migrating historical Qualtrics responses
+
+## Architecture Overview
+
+```
+Tutorial page (Hugo HTML)
+  ↓ click "Feedback"
+hugo/layouts/partials/feedback-share.html (modal)
+  ↓ "Take our survey" button
+Vue island (apps/dist/tutorial-feedback.js)
+  ↓ POST /api/submitTutorialFeedback
+AppRouter → DeveloperService.submitTutorialFeedback action
+  ↓ cds.ql INSERT
+HANA: TutorialFeedback entity
+
+Admin shell (/admin-ui/)
+  ├── List Report → AdminService.TutorialFeedback (read-only projection)
+  └── Dashboard view → AdminService.TutorialFeedbackAggregate (read-only view)
+```
+
+Three new pieces:
+1. CDS entity + view in `db/`
+2. CAP endpoint in `srv/`
+3. Vue island in `apps/`
+
+Plus admin annotations and shell wiring.
+
+## Data Model
+
+### Entity (`db/schema.cds`)
+
+```cds
+entity TutorialFeedback : LegacyKeyed, managed {
+  key ID            : UUID;
+  tutorialSlug      : String(200) @mandatory;
+  submittedAt       : Timestamp default $now;
+  wasAuthenticated  : Boolean default false;
+  submitterIpHash   : String(64);    // sha256(ip + daily-rotated-salt)
+  ratingUseCase     : Integer;       // 0-10, nullable
+  ratingRelevance   : Integer;
+  ratingDuration    : Integer;
+  ratingStructure   : Integer;
+  ratingInteresting : Integer;
+  ratingVisuals     : Integer;
+  npsScore          : Integer;       // 0-10 "recommend to friend"
+  comment           : String(2000);
+}
+```
+
+**Field rationale:**
+- `tutorialSlug` is denormalized (not an Association). Tutorials are dynamic — `RepoCatalog` lifecycle is independent. A tutorial may be deprecated or renamed; we keep the historical slug for reporting.
+- `wasAuthenticated` is a boolean only. No user reference is stored, satisfying the constraint "We shouldn't record user info, but just flag if the user was logged in or not."
+- `submitterIpHash` is `sha256(ip + dailySalt)` where `dailySalt = sha256(SUBMISSION_SALT_SECRET + YYYY-MM-DD)`. Rotates at midnight UTC, so the hash is non-reversible after 24 hours and an IP cannot be tracked across days.
+- All seven ratings are `Integer` nullable. The form allows partial completion ("Not applicable" → null).
+- `comment` is bounded at 2000 chars.
+
+### Aggregate view (`db/views.cds`)
+
+```cds
+view TutorialFeedbackAggregate as
+  select from TutorialFeedback {
+    key tutorialSlug,
+    count(*)                                       as responseCount  : Integer,
+    avg(ratingUseCase)                             as avgUseCase     : Decimal(4,2),
+    avg(ratingRelevance)                           as avgRelevance   : Decimal(4,2),
+    avg(ratingDuration)                            as avgDuration    : Decimal(4,2),
+    avg(ratingStructure)                           as avgStructure   : Decimal(4,2),
+    avg(ratingInteresting)                         as avgInteresting : Decimal(4,2),
+    avg(ratingVisuals)                             as avgVisuals     : Decimal(4,2),
+    avg(npsScore)                                  as avgNps         : Decimal(4,2),
+    sum(case when npsScore >= 9 then 1 else 0 end) as promoters      : Integer,
+    sum(case when npsScore <= 6 then 1 else 0 end) as detractors     : Integer
+  } group by tutorialSlug;
+```
+
+NPS = `promoters - detractors` (computed at presentation time, not stored).
+
+### HANA migration
+
+New file: `db/src/com.sap.developers.ims.TutorialFeedback.hdbmigrationtable` generated by `cds build` when the schema is added. Sequence: `TutorialFeedback_legacyId.hdbsequence` if the LegacyKeyed aspect requires one (it does — see existing entities).
+
+## CAP Service Endpoints
+
+### Public submission (`srv/developer-service.cds`)
+
+```cds
+extend service DeveloperService with {
+  @requires: 'any'
+  action submitTutorialFeedback(
+    tutorialSlug      : String,
+    ratingUseCase     : Integer,
+    ratingRelevance   : Integer,
+    ratingDuration    : Integer,
+    ratingStructure   : Integer,
+    ratingInteresting : Integer,
+    ratingVisuals     : Integer,
+    npsScore          : Integer,
+    comment           : String,
+    honeypot          : String
+  ) returns { submissionId : UUID };
+}
+```
+
+`@requires: 'any'` allows anonymous calls. The handler reads `req.user.id` to set `wasAuthenticated` — it is not used for auth.
+
+### Handler (`srv/developer-service.js`)
+
+Pseudo-code:
+
+```js
+const RATE_LIMIT = new Map();           // hashedIp -> { count, windowStart }
+const RATE_WINDOW_MS = 60 * 60 * 1000;  // 1 hour
+const RATE_MAX = 5;                     // 5 submissions per IP per hour
+
+srv.on('submitTutorialFeedback', async (req) => {
+  const { tutorialSlug, honeypot, comment, npsScore, ...ratings } = req.data;
+
+  // 1. Honeypot — silently succeed to confuse bots
+  if (honeypot && honeypot.trim() !== '') {
+    return { submissionId: cds.utils.uuid() };
+  }
+
+  // 2. Validate slug exists in RepoCatalog
+  const exists = await SELECT.one.from(RepoCatalog).where({ slug: tutorialSlug });
+  if (!exists) req.error(400, 'Unknown tutorial');
+
+  // 3. Validate ratings (0-10 or null), npsScore (0-10 or null), comment ≤ 2000 chars
+
+  // 4. Rate limit by hashed IP
+  const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.ip;
+  const hashedIp = sha256(ip + dailySalt());
+  if (rateLimitExceeded(hashedIp)) req.error(429, 'Too many submissions');
+
+  // 5. Persist
+  const id = cds.utils.uuid();
+  await INSERT.into(TutorialFeedback).entries({
+    ID: id,
+    tutorialSlug,
+    wasAuthenticated: !!req.user?.id,
+    submitterIpHash: hashedIp,
+    ratingUseCase:     ratings.ratingUseCase     ?? null,
+    ratingRelevance:   ratings.ratingRelevance   ?? null,
+    ratingDuration:    ratings.ratingDuration    ?? null,
+    ratingStructure:   ratings.ratingStructure   ?? null,
+    ratingInteresting: ratings.ratingInteresting ?? null,
+    ratingVisuals:     ratings.ratingVisuals     ?? null,
+    npsScore:          npsScore                  ?? null,
+    comment:           comment?.slice(0, 2000)   ?? null
+  });
+
+  return { submissionId: id };
+});
+```
+
+`SUBMISSION_SALT_SECRET` is read from environment / service binding (constraint: never hard-code secrets).
+
+### Admin projection (`srv/admin-service.cds`)
+
+```cds
+extend service AdminService with {
+  @readonly entity TutorialFeedback         as projection on db.TutorialFeedback;
+  @readonly entity TutorialFeedbackAggregate as projection on db.TutorialFeedbackAggregate;
+}
+```
+
+Read-only — no admin write/delete from the UI. (If GDPR-driven deletion is ever needed, add a dedicated action with audit logging rather than enabling general delete.)
+
+## Vue Form Component
+
+Location: `apps/src/tutorial-feedback/`
+
+Build target: `apps/dist/tutorial-feedback.js` (~8-12 kB gzip), bundled by Vite into the existing `apps/` workspace.
+
+### Files
+
+| File | Purpose |
+| --- | --- |
+| `main.ts` | Mount entry — finds `<div id="tutorial-feedback-mount" data-slug="...">` and creates the Vue app |
+| `TutorialFeedbackForm.vue` | Single-file component with the form |
+| `api.ts` | `submitTutorialFeedback()` POST wrapper |
+| `types.ts` | `FeedbackSubmission`, `RatingScale` types |
+
+### Form structure
+
+Seven Likert rows (0-10 with "N/A" option), one NPS row, one free-text comment, hidden honeypot field, submit button.
+
+```
+How was this tutorial?
+─────────────────────────────────────────
+Helpful for my use case          [0—10] [N/A]
+Relevant to my work              [0—10] [N/A]
+Right length                     [0—10] [N/A]
+Well structured                  [0—10] [N/A]
+Interesting                      [0—10] [N/A]
+Good visuals & code samples      [0—10] [N/A]
+
+How likely are you to recommend
+this tutorial to a colleague?    [0—10] [N/A]
+
+Anything else?
+[              textarea              ]
+
+[hidden honeypot input]
+                                       [Submit]
+```
+
+States:
+- `idle` → form
+- `submitting` → button disabled, spinner
+- `success` → "Thanks for your feedback!" + auto-close after 2s
+- `error` → inline message + retry
+
+### Theming
+
+Reuses the existing modal pattern in [feedback-share.html](hugo/layouts/partials/feedback-share.html) (`.popup-overlay`, `.popup-card`, `.popup-title`, `.popup-close`). Form controls use SAP Fundamental Styles classes from `hugo/static/css/sap-fundamental.css` so theming matches the host page automatically.
+
+### Modification to feedback-share.html
+
+The existing third option ("Take our survey" → Qualtrics) is replaced with a button that opens a new in-page popup containing the Vue island:
+
+```html
+<div class="feedback-option">
+  <svg class="feedback-icon">...</svg>
+  <span>Send us your thoughts</span>
+  <button type="button" class="feedback-btn" onclick="openTutorialFeedbackPopup()">
+    Give feedback
+  </button>
+</div>
+```
+
+A new popup div `<div id="tutorial-feedback-popup">` hosts `<div id="tutorial-feedback-mount" data-slug="{{ .Params.slug }}">`. The Vue bundle loads on first popup open (lazy `<script type="module">` injection) to avoid bundle weight on every tutorial page load.
+
+## Admin UI
+
+### Fiori Elements List Report (`app/admin/feedback/`)
+
+Matches the pattern of the other 9 Fiori Elements feature components loaded by the admin shell. Annotations live in `app/admin-annotations.cds`:
+
+- `@UI.LineItem` — slug, submittedAt, wasAuthenticated, npsScore, ratingUseCase…ratingVisuals, comment (truncated)
+- `@UI.SelectionFields` — tutorialSlug, wasAuthenticated, submittedAt
+- `@UI.HeaderInfo` — Title: "Feedback for {tutorialSlug}", TypeName: "Submission"
+- `@UI.FieldGroup #Ratings` — all seven ratings as ProgressIndicator on the Object Page
+- `@Capabilities.InsertRestrictions.Insertable: false`
+- `@Capabilities.UpdateRestrictions.Updatable: false`
+- `@Capabilities.DeleteRestrictions.Deletable: false`
+- `@Common.ValueListWithFixedValues` on `tutorialSlug` (sourced from RepoCatalog)
+
+### Dashboard view (`app/admin-shell/webapp/view/TutorialFeedbackDashboard.view.xml`)
+
+Freestyle SAPUI5 view, matches the [Board.view.xml](app/admin-shell/webapp/view/Board.view.xml) pattern. Reads from `AdminService.TutorialFeedbackAggregate`.
+
+Layout:
+1. KPI tile row:
+   - Total Responses (count)
+   - Avg NPS (last 90 days)
+   - Avg Overall Rating (avg of all six ratings)
+   - % Authenticated Submitters
+2. Per-tutorial aggregate table (sortable by responseCount, avgNps, avgOverall) with click-through to the List Report filtered by slug
+3. Recent comments feed (last 10 non-null comments with slug + truncated text + relative time)
+
+### Side nav wiring (`app/admin-shell/webapp/manifest.json`)
+
+New "Feedback" group between "Operations" and "System":
+
+```json
+{
+  "title": "Feedback",
+  "icon": "sap-icon://feedback",
+  "items": [
+    { "key": "feedbackList",      "title": "All Submissions",  "componentUsage": "feedback" },
+    { "key": "feedbackDashboard", "title": "Dashboard",        "viewName": "TutorialFeedbackDashboard" }
+  ]
+}
+```
+
+## Spam Mitigation
+
+Three layers, none requiring an external service:
+
+1. **Honeypot** — hidden `<input name="honeypot">` outside the visible form. Real users never fill it; bots typically auto-fill all inputs. If non-empty, the handler returns success without persisting (bot doesn't learn it was rejected).
+2. **Rate limit** — 5 submissions per `submitterIpHash` per rolling hour, enforced via in-memory `Map` in the handler. Exceeded → 429.
+3. **Validation** — strict shape: ratings must be Integer 0-10 or null, slug must exist in RepoCatalog, comment ≤ 2000 chars.
+
+Not in scope for the initial cut: CAPTCHA, IP reputation lookup, content scanning.
+
+## Testing Strategy
+
+Three Vitest workspaces, matching the project's existing pattern (see [vitest.config.ts](vitest.config.ts)).
+
+### Unit (`npm test`)
+
+| File | Coverage |
+| --- | --- |
+| `srv/__tests__/tutorial-feedback.test.js` | Honeypot rejection, rating range validation, unknown slug rejection, rate-limit increment, IP-hash determinism with rotated salt, `wasAuthenticated` set correctly |
+| `srv/__tests__/tutorial-feedback-aggregate.test.js` | View math: NPS arithmetic, averages ignore null ratings, group-by-slug correctness |
+
+### Hybrid (`npm run test:hybrid`)
+
+`test/hybrid/feedback.test.js`:
+- Insert a `__TEST__`-prefixed slug feedback row, verify it appears in the aggregate view
+- Verify `TutorialFeedback.hdbmigrationtable` deployed (column types, nullability)
+- Cleanup in `afterAll` honors the `__TEST__` prefix guard
+
+### Smoke (`npm run test:smoke`)
+
+`test/smoke/feedback.test.js`:
+- `POST /api/submitTutorialFeedback` valid payload → 200 + UUID
+- `POST` with honeypot filled → 200 (silent reject) + no DB row
+- `POST` with rating outside 0-10 → 400
+- `GET /admin/TutorialFeedback` unauthenticated → 401
+- `GET /admin/TutorialFeedbackAggregate` with admin token → 200
+
+### Manual verification (PR checklist)
+
+1. Open a tutorial in dev, click Feedback → modal renders with SAP Horizon styling
+2. Submit with all fields filled → success toast, modal auto-closes
+3. Submit anonymously vs logged in → admin row shows correct `wasAuthenticated`
+4. Open admin shell → "Feedback" group visible in side nav
+5. Open Feedback Dashboard → KPI tiles populated, per-tutorial table sorts
+6. Open List Report → Object Page drill-down works, comment text wraps
+
+Vue component unit tests are out of scope (form is ~150 lines, no business logic beyond field binding; smoke + manual covers the contract).
+
+## Deployment Considerations
+
+- **No new BTP services required.** Reuses existing CAP srv, AppRouter, HANA HDI container.
+- **HDI migration** runs as part of normal `cds deploy` on the next MTA deploy. The new `hdbmigrationtable` is additive.
+- **Vue bundle** ships with the existing `npm run build:apps` step → `approuter/static/`. No new build pipeline.
+- **Hugo template change** ships with the existing `npm run build:hugo` step → static rebuild.
+- **Environment variable:** `SUBMISSION_SALT_SECRET` must be set on the deployed `tutorials-srv` (matches the existing `CONTENT_API_KEY` pattern). Documented in CLAUDE.md alongside the other env vars.
+- **Rate-limit Map** is per-instance memory. With multiple srv instances, a determined attacker can multiply by instance count — acceptable for the threat model. If this becomes inadequate, switch to a HANA-backed counter table or BTP Redis.
+
+## Open Questions
+
+None. All scope and behavior questions were resolved during brainstorming on 2026-05-20.
+
+## References
+
+- Existing modal pattern: [hugo/layouts/partials/feedback-share.html](hugo/layouts/partials/feedback-share.html)
+- Vue app workspace: [apps/](apps/)
+- Admin shell pattern: [app/admin-shell/webapp/view/Board.view.xml](app/admin-shell/webapp/view/Board.view.xml)
+- Schema location: [db/schema.cds](db/schema.cds)
+- DeveloperService: [srv/developer-service.cds](srv/developer-service.cds)
+- AdminService: [srv/admin-service.cds](srv/admin-service.cds)
+- Gap analysis context: [docs/aem-gap-analysis.md](docs/aem-gap-analysis.md) (Gap 11 — Qualtrics survey)
