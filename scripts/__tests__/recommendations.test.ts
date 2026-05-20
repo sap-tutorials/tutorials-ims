@@ -50,4 +50,16 @@ describe('computeRecommendations', () => {
     const result = computeRecommendations(entries)
     expect(result.get('target')).toEqual(['outsider'])
   })
+
+  it('truncates to top 3 by default and breaks ties by title alphabetically', () => {
+    const entries: TutorialNavEntry[] = [
+      navEntry({ slug: 'target', primaryTag: 'x', displayTags: ['X'] }),
+      navEntry({ slug: 'aa',     title: 'AA', primaryTag: 'x', displayTags: ['X'] }), // primary match → 11
+      navEntry({ slug: 'bb',     title: 'BB', primaryTag: 'x', displayTags: ['X'] }), // primary match → 11
+      navEntry({ slug: 'cc',     title: 'CC', primaryTag: 'x', displayTags: ['X'] }), // primary match → 11
+      navEntry({ slug: 'dd',     title: 'DD', primaryTag: 'x', displayTags: ['X'] }), // primary match → 11
+    ]
+    const result = computeRecommendations(entries)
+    expect(result.get('target')).toEqual(['aa', 'bb', 'cc'])
+  })
 })
