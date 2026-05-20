@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import cds from '@sap/cds';
-import './_guard.js';
+import { isSafeForWrites } from './_guard.js';
 
-describe('tag-import (hybrid HANA)', () => {
+cds.test('serve', '--project', '.', '--profile', 'hybrid');
+
+describe.runIf(isSafeForWrites())('tag-import (hybrid HANA)', () => {
   let db, Tags;
   const SEED_NAME = '__TEST__seed-tag';
   const NEW_NAME_1 = '__TEST__new-tag-1';
