@@ -116,4 +116,19 @@ service DeveloperService {
       };
     };
   };
+
+  @requires: 'any'
+  action submitTutorialFeedback(
+    tutorialSlug      : String,
+    ratingUseCase     : Integer,
+    ratingRelevance   : Integer,
+    ratingDuration    : Integer,
+    ratingStructure   : Integer,
+    ratingInteresting : Integer,
+    ratingVisuals     : Integer,
+    npsScore          : Integer,
+    comment           : String,
+    wasAuthenticated  : Boolean,
+    honeypot          : String
+  ) returns { submissionId : UUID };
 }
