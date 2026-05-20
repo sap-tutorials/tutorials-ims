@@ -13,7 +13,7 @@ function cosine(a, b) {
 export async function findRelevantSteps({ query, settings }) {
   if (!query || !query.trim()) return [];
   const topK = Math.min(Math.max(settings.embeddingTopK ?? 4, 1), 10);
-  const minScore = settings.embeddingMinScore ?? 0.7;
+  const minScore = settings.embeddingMinScore ?? 0.25;
   const model = settings.embeddingModel || 'text-embedding-3-small';
 
   const [qVec] = await embed([query.trim()], model);
