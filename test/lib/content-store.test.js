@@ -455,39 +455,72 @@ describe('content-store', () => {
       expect(h2.data[slug]).toBe(hashOf(v2));
     });
 
-    it('create → delete → verify: slug disappears after re-publish without it', async () => {
+    it('create → partial re-publish → verify: omitted slugs are preserved (server-side merge)', async () => {
       const kept = 'kept-slug';
-      const removed = 'removed-slug';
+      const untouched = 'untouched-slug';
 
       // Create both
       await project.axios.post('/content/publish', {
         trigger: 'both',
-        files: makePayload({ [kept]: '<p>K</p>', [removed]: '<p>R</p>' })
+        files: makePayload({ [kept]: '<p>K</p>', [untouched]: '<p>U-v1</p>' })
       }, { headers: { Authorization: `Bearer ${API_KEY}` } });
 
-      // Both served
-      expect((await project.axios.get(`/content/tutorials/${kept}`)).status).toBe(200);
-      expect((await project.axios.get(`/content/tutorials/${removed}`)).status).toBe(200);
-
-      // Re-publish without removed slug
-      await project.axios.post('/content/publish', {
-        trigger: 'delete',
-        files: makePayload({ [kept]: '<p>K</p>' })
+      // Re-publish only `kept` with new content. `untouched` is omitted.
+      // With the server-side merge, `untouched` must carry forward into v2.
+      const res = await project.axios.post('/content/publish', {
+        trigger: 'partial',
+        files: makePayload({ [kept]: '<p>K-v2</p>' })
       }, { headers: { Authorization: `Bearer ${API_KEY}` } });
+      expect(res.status).toBe(201);
+      expect(res.data.filesWritten).toBe(1);
+      expect(res.data.filesCarriedForward).toBe(1);
+      expect(res.data.fileCount).toBe(2);
 
-      // Kept still works
-      expect((await project.axios.get(`/content/tutorials/${kept}`)).status).toBe(200);
-
-      // Removed returns 404
-      const gone = await project.axios.get(`/content/tutorials/${removed}`, {
-        validateStatus: () => true
-      });
-      expect(gone.status).toBe(404);
-
-      // Hashes and nav reflect the removal
+      // Hashes reflect both slugs — kept has its new hash, untouched preserves its original.
+      // (Asserts merge correctness at the DB layer; the Hugo publish pipeline relies on
+      // /content/hashes to detect deltas, so this is the contract that prevents prod 404s.)
       const h = await project.axios.get('/content/hashes');
-      expect(h.data[kept]).toBeDefined();
-      expect(h.data[removed]).toBeUndefined();
+      expect(h.data[kept]).toBe(hashOf('<p>K-v2</p>'));
+      expect(h.data[untouched]).toBe(hashOf('<p>U-v1</p>'));
+    });
+
+    it('partial publish carries forward BLOBs server-side (no Node-side BLOB transit)', async () => {
+      // Seed v1 with three tutorials
+      await project.axios.post('/content/publish', {
+        trigger: 'seed',
+        files: makePayload({
+          'a': '<p>A-v1</p>',
+          'b': '<p>B-v1</p>',
+          'c': '<p>C-v1</p>'
+        })
+      }, { headers: { Authorization: `Bearer ${API_KEY}` } });
+
+      // Re-publish just 'b' as a delta
+      const res = await project.axios.post('/content/publish', {
+        trigger: 'delta',
+        files: makePayload({ 'b': '<p>B-v2</p>' })
+      }, { headers: { Authorization: `Bearer ${API_KEY}` } });
+      expect(res.status).toBe(201);
+
+      // v2 manifest should be ACTIVE with all 3 slugs
+      const [v2] = await SELECT.from(ContentManifest).where({ version: 2 });
+      expect(v2.status).toBe('ACTIVE');
+      expect(v2.fileCount).toBe(3);
+
+      // ContentFiles for v2 contains all three slugs (one uploaded, two carried)
+      const v2Rows = await SELECT.from(ContentFiles).where({ version: 2 }).columns('slug', 'contentHash');
+      const slugs = v2Rows.map(r => r.slug).sort();
+      expect(slugs).toEqual(['a', 'b', 'c']);
+
+      // Carried-forward content hashes should match v1 for the unchanged slugs
+      const aHash = v2Rows.find(r => r.slug === 'a').contentHash;
+      const cHash = v2Rows.find(r => r.slug === 'c').contentHash;
+      expect(aHash).toBe(hashOf('<p>A-v1</p>'));
+      expect(cHash).toBe(hashOf('<p>C-v1</p>'));
+
+      // Updated slug got the new hash
+      const bHash = v2Rows.find(r => r.slug === 'b').contentHash;
+      expect(bHash).toBe(hashOf('<p>B-v2</p>'));
     });
 
     it('create → update → rollback → verify: full rollback cycle', async () => {

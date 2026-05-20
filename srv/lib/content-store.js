@@ -170,6 +170,74 @@ export async function publishHandler(req, res) {
       await INSERT.into(ContentFiles).entries(batch);
     }
 
+    // Carry forward unchanged slugs from the previous active version.
+    // Each publish payload is a delta from the client (only changed slugs), but
+    // each ACTIVE manifest must be a complete snapshot, otherwise the serve
+    // handler — which reads ContentFiles WHERE version = activeVersion — will
+    // 404 every slug not in the latest delta.
+    const prevVersion = await getActiveVersion();
+    let carriedForward = 0;
+    let carriedSize = 0;
+    if (prevVersion !== null) {
+      const db = await cds.connect.to('db');
+      const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+
+      let carryRows;
+      if (isHana) {
+        // On HANA, BLOBs come back as locator-bound streams when mixed with
+        // metadata. Use raw SQL to materialize content as a buffer up front,
+        // matching the same pattern used in the serve handler.
+        const placeholders = slugs.length ? slugs.map(() => '?').join(',') : "''";
+        carryRows = await db.run(
+          `SELECT "SLUG", "CONTENT", "CONTENTHASH", "SIZEBYTES", "COMPRESSEDBYTES", "MIMETYPE"
+             FROM "COM_SAP_DEVELOPERS_IMS_CONTENTFILES"
+            WHERE "VERSION" = ? AND "SLUG" NOT IN (${placeholders})`,
+          [prevVersion, ...slugs]
+        );
+        carryRows = carryRows.map((r) => ({
+          slug: r.SLUG,
+          content: r.CONTENT,
+          contentHash: r.CONTENTHASH,
+          sizeBytes: r.SIZEBYTES,
+          compressedBytes: r.COMPRESSEDBYTES,
+          mimeType: r.MIMETYPE
+        }));
+      } else {
+        const sel = slugs.length
+          ? SELECT.from(ContentFiles)
+              .columns('slug', 'content', 'contentHash', 'sizeBytes', 'compressedBytes', 'mimeType')
+              .where`version = ${prevVersion} and slug not in ${slugs}`
+          : SELECT.from(ContentFiles)
+              .columns('slug', 'content', 'contentHash', 'sizeBytes', 'compressedBytes', 'mimeType')
+              .where({ version: prevVersion });
+        carryRows = await sel;
+      }
+
+      const carryEntries = [];
+      for (const row of carryRows) {
+        const buf = Buffer.isBuffer(row.content) ? row.content : await toBuffer(row.content);
+        carryEntries.push({
+          slug: row.slug,
+          version: newVersion,
+          content: buf,
+          contentHash: row.contentHash,
+          sizeBytes: row.sizeBytes,
+          compressedBytes: row.compressedBytes,
+          mimeType: row.mimeType
+        });
+        carriedSize += Number(row.sizeBytes) || 0;
+      }
+      carriedForward = carryEntries.length;
+
+      for (let i = 0; i < carryEntries.length; i += 50) {
+        const batch = carryEntries.slice(i, i + 50);
+        await INSERT.into(ContentFiles).entries(batch);
+      }
+    }
+
+    const mergedFileCount = slugs.length + carriedForward;
+    const mergedTotalSize = totalSize + carriedSize;
+
     // Mark previous active as superseded
     await UPDATE(ContentManifest)
       .where({ status: 'ACTIVE' })
@@ -181,7 +249,8 @@ export async function publishHandler(req, res) {
       .where({ version: newVersion })
       .set({
         status: 'ACTIVE',
-        totalSizeBytes: totalSize,
+        fileCount: mergedFileCount,
+        totalSizeBytes: mergedTotalSize,
         publishDurationMs: durationMs
       });
 
@@ -255,12 +324,14 @@ export async function publishHandler(req, res) {
       }
     }
 
-    await logPipelineEnd(pipelineLogId, 'SUCCESS', `Published v${newVersion}: ${slugs.length} files, ${totalSize} bytes`);
+    await logPipelineEnd(pipelineLogId, 'SUCCESS', `Published v${newVersion}: ${slugs.length} uploaded + ${carriedForward} carried = ${mergedFileCount} files, ${mergedTotalSize} bytes`);
 
     res.status(201).json({
       version: newVersion,
       filesWritten: slugs.length,
-      totalSizeBytes: totalSize,
+      filesCarriedForward: carriedForward,
+      fileCount: mergedFileCount,
+      totalSizeBytes: mergedTotalSize,
       durationMs,
       metadataUpserted: metaUpserted
     });
