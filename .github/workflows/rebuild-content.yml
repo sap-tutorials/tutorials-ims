@@ -14,6 +14,10 @@ on:
           - dev
           - qa
           - prod
+      slug:
+        description: Refresh a single tutorial slug only (leave blank for full rebuild)
+        required: false
+        type: string
 
 env:
   NODE_VERSION: '20'
@@ -70,10 +74,22 @@ jobs:
           npm ci
           npm --prefix apps install
 
+      - name: Restore tutorial cache
+        uses: actions/cache@v4
+        with:
+          path: .tutorial-cache
+          key: tutorial-cache-${{ hashFiles('.github/workflows/rebuild-content.yml') }}-${{ github.run_id }}
+          restore-keys: |
+            tutorial-cache-${{ hashFiles('.github/workflows/rebuild-content.yml') }}-
+            tutorial-cache-
+
       - name: Fetch tutorials
         run: npm run fetch-tutorials
         env:
           GITHUB_TOKEN: ${{ secrets.TUTORIALS_GITHUB_TOKEN }}
+          CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
+          CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
+          TUTORIAL_SLUG: ${{ inputs.slug }}
 
       - name: Validate tutorials
         run: npm run validate-tutorials
@@ -141,6 +157,9 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Environment:** ${{ steps.env.outputs.target }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Trigger:** ${{ github.event_name }}" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "${{ inputs.slug }}" ]; then
+            echo "- **Slug filter:** ${{ inputs.slug }} (single-tutorial refresh)" >> "$GITHUB_STEP_SUMMARY"
+          fi
           if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
             echo "- **Source repo:** ${{ github.event.client_payload.repository }}" >> "$GITHUB_STEP_SUMMARY"
           fi

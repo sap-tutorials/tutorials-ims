@@ -324,6 +324,19 @@ entity ContentManifest : managed {
   publishDurationMs         : Integer;
 }
 
+@cds.autoexpose: false
+entity RepoCatalog : managed {
+  key slug                  : String(255);
+  owner                     : String(255);
+  repo                      : String(255);
+  branch                    : String(255);
+  visibility                : String(20);
+  defaultLang               : String(20);
+  topics                    : LargeString;
+  lastSyncedAt              : Timestamp;
+  payload                   : LargeString;
+}
+
 entity PipelineLog : cuid, managed {
   pipelineType    : String(20) enum { CONTENT_PUBLISH; HUGO_BUILD; MTA_DEPLOY; SCHEDULED_JOB; GITHUB_DISPATCH; };
   status          : String(10) enum { RUNNING; SUCCESS; FAILED; };
