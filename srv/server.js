@@ -9,6 +9,7 @@ import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, nav
 import { buildSystemPrompt } from './lib/chat-context.js';
 import { createRateLimiter, RateLimitError } from './lib/chat-rate-limit.js';
 import { streamChat, toolsForContext } from './lib/chat-orchestrator.js';
+import { computeEmbeddingStats } from './lib/embedding-stats.js';
 
 // Late-bound POST /chat/stream handler. Registered in 'bootstrap' (before CAP
 // mounts ChatService at /chat, which would otherwise swallow /chat/stream as
@@ -120,6 +121,23 @@ cds.on('served', () => {
       givenName: user.attr?.given_name || user.attr?.givenName || '',
       familyName: user.attr?.family_name || user.attr?.familyName || ''
     });
+  });
+
+  app.get('/admin/embeddings/stats', contextMw, authMw, async (req, res) => {
+    const user = cds.context?.user;
+    if (!user?.id || user.id === 'anonymous') {
+      return res.status(401).json({ error: 'unauthenticated' });
+    }
+    if (!(user?.is && user.is('admin'))) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    try {
+      const stats = await computeEmbeddingStats();
+      res.json(stats);
+    } catch (err) {
+      cds.log('rag-stats').error(err.message);
+      res.status(500).json({ error: 'stats_failed' });
+    }
   });
 
   if (process.env.NODE_ENV !== 'test') {
