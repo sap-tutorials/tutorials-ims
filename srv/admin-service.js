@@ -3,6 +3,8 @@ import { computeEventStatistics, computeBurnup, computeTrackStats, computeComple
 import { formatTaskRecordsCSV, formatAwardMissionsCSV } from './lib/export-helpers.js';
 import { buildAnonymizationOps } from './lib/anonymization.js';
 import { getNextLegacyId } from './lib/legacy-id.js';
+import { randomUUID } from 'node:crypto';
+import { parsePayload, classify, sharedCache, MAX_BYTES } from './lib/tag-import/index.js';
 
 export default class AdminService extends cds.ApplicationService {
 
@@ -343,6 +345,49 @@ export default class AdminService extends cds.ApplicationService {
       const unusedIds = unused.map(t => t.ID);
       await DELETE.from(Tags).where({ ID: { in: unusedIds } });
       return unused.length;
+    });
+
+    this.on('previewTagImport', async (req) => {
+      const log = cds.log('tag-import');
+      const started = Date.now();
+      const { payload, format } = req.data;
+
+      if (!payload) return req.error(400, 'payload is required');
+      if (typeof payload !== 'string') return req.error(400, 'payload must be a string');
+      if (Buffer.byteLength(payload, 'utf8') > MAX_BYTES) {
+        return req.error(413, `Payload exceeds ${MAX_BYTES} bytes`);
+      }
+      if (!['csv', 'json'].includes(format)) {
+        return req.error(400, `format must be 'csv' or 'json'`);
+      }
+
+      let parsed;
+      try {
+        parsed = parsePayload(payload, format);
+      } catch (e) {
+        return req.error(400, e.message);
+      }
+
+      const existingTags = await SELECT.from(Tags).columns('ID', 'name', 'titlePath');
+      const { summary, rows } = classify(parsed.rows, existingTags);
+
+      const token = randomUUID();
+      sharedCache.set(token, { rows, classifiedAt: Date.now() });
+
+      log.info({
+        event: 'tag-import.preview',
+        user: req.user?.id,
+        total: summary.total,
+        summary,
+        durationMs: Date.now() - started
+      });
+
+      return {
+        token,
+        summary,
+        rows,
+        parseWarnings: parsed.parseErrors
+      };
     });
 
     this.after('READ', 'Tags', (rows) => {
