@@ -3,10 +3,18 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const CACHE_FILE = join(__dirname, '..', '..', '.tutorial-cache', 'github-meta.json')
+const CACHE_DIR = join(__dirname, '..', '..', '.tutorial-cache')
+const CACHE_FILE = join(CACHE_DIR, 'github-meta.json')
+const DISCOVERY_CACHE_FILE = join(CACHE_DIR, '_discovery.json')
 const ORG = 'sap-tutorials'
 const GRAPHQL_URL = 'https://api.github.com/graphql'
 const BATCH_SIZE = 20
+
+// Retry policy: 8 attempts, exponential backoff with jitter, capped at 60s.
+// GitHub incidents are typically <30 min, so total max wait of ~5 min covers most.
+const MAX_RETRIES = 8
+const BASE_DELAY_MS = 1000
+const MAX_DELAY_MS = 60_000
 
 export const EXCLUDED_REPOS = new Set(['tutorials-ims', 'meta-tutorials'])
 
@@ -51,24 +59,57 @@ function aliasToSlug(alias: string, slugs: string[]): string | undefined {
   return slugs.find(s => slugToAlias(s) === alias)
 }
 
-async function graphqlRequest(query: string, retries = 3): Promise<any> {
+function parseRetryAfter(header: string | null): number | null {
+  if (!header) return null
+  const seconds = Number(header)
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1000, MAX_DELAY_MS)
+  const dateMs = Date.parse(header)
+  if (Number.isNaN(dateMs)) return null
+  return Math.min(Math.max(0, dateMs - Date.now()), MAX_DELAY_MS)
+}
+
+function backoffDelay(attempt: number): number {
+  // attempt is 1-indexed; first retry uses BASE_DELAY_MS
+  const exp = Math.min(BASE_DELAY_MS * 2 ** (attempt - 1), MAX_DELAY_MS)
+  const jitter = Math.floor(Math.random() * 500)
+  return exp + jitter
+}
+
+async function graphqlRequest(query: string, retries = MAX_RETRIES): Promise<any> {
   const token = process.env.GITHUB_TOKEN ?? process.env.TUTORIALS_GITHUB_TOKEN
   if (!token) throw new Error('GITHUB_TOKEN or TUTORIALS_GITHUB_TOKEN is required for GraphQL API')
 
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    const res = await fetch(GRAPHQL_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'User-Agent': 'tutorials-poc-build',
-      },
-      body: JSON.stringify({ query }),
-    })
+  let lastError: Error | null = null
 
-    if (res.status >= 500 && attempt < retries) {
-      const wait = attempt * 5000
-      console.warn(`  [graphql] ${res.status} on attempt ${attempt}/${retries}, retrying in ${wait / 1000}s...`)
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    let res: Response
+    try {
+      res = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'User-Agent': 'tutorials-poc-build',
+        },
+        body: JSON.stringify({ query }),
+      })
+    } catch (err) {
+      // Network failure (DNS, connection refused, TLS, etc.) — retry.
+      lastError = err instanceof Error ? err : new Error(String(err))
+      if (attempt < retries) {
+        const wait = backoffDelay(attempt)
+        console.warn(`  [graphql] network error on attempt ${attempt}/${retries}: ${lastError.message}; retrying in ${Math.round(wait / 1000)}s...`)
+        await new Promise(r => setTimeout(r, wait))
+        continue
+      }
+      break
+    }
+
+    const retryable = res.status >= 500 || res.status === 429
+    if (retryable && attempt < retries) {
+      const retryAfter = parseRetryAfter(res.headers.get('retry-after'))
+      const wait = retryAfter ?? backoffDelay(attempt)
+      console.warn(`  [graphql] ${res.status} on attempt ${attempt}/${retries}, retrying in ${Math.round(wait / 1000)}s...`)
       await new Promise(r => setTimeout(r, wait))
       continue
     }
@@ -85,9 +126,41 @@ async function graphqlRequest(query: string, retries = 3): Promise<any> {
     }
     return json.data
   }
+
+  throw new Error(`GraphQL request failed after ${retries} attempts${lastError ? `: ${lastError.message}` : ''}`)
+}
+
+function loadDiscoveryCache(): DiscoveredTutorial[] | null {
+  if (!existsSync(DISCOVERY_CACHE_FILE)) return null
+  try {
+    const map = JSON.parse(readFileSync(DISCOVERY_CACHE_FILE, 'utf-8')) as Record<string, DiscoveredTutorial>
+    const tutorials = Object.values(map).filter(
+      (t): t is DiscoveredTutorial =>
+        !!t && typeof t.slug === 'string' && typeof t.repo === 'string' && typeof t.branch === 'string',
+    )
+    return tutorials.length > 0 ? tutorials : null
+  } catch {
+    return null
+  }
 }
 
 export async function discoverAllTutorials(): Promise<DiscoveredTutorial[]> {
+  try {
+    return await discoverFromGitHub()
+  } catch (err) {
+    const cached = loadDiscoveryCache()
+    if (cached) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.warn(`\n  [graphql] Discovery failed (${message})`)
+      console.warn(`  [graphql] Falling back to cached discovery map (${cached.length} tutorials, ${DISCOVERY_CACHE_FILE})`)
+      console.warn(`  [graphql] Cache may be stale — re-run later when GitHub recovers to refresh.\n`)
+      return cached
+    }
+    throw err
+  }
+}
+
+async function discoverFromGitHub(): Promise<DiscoveredTutorial[]> {
   const includeContribution = process.env.INCLUDE_CONTRIBUTION_REPOS === 'true'
   const tutorials: DiscoveredTutorial[] = []
   let cursor: string | null = null
