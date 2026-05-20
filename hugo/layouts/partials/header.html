@@ -20,6 +20,22 @@
       </div>
     </div>
     <span class="shellbar-separator"></span>
+    <div class="shellbar-nav-dropdown" id="share-dropdown">
+      <button type="button" class="fd-shellbar__button" aria-label="Share link to this page" title="Share link" aria-expanded="false" aria-controls="share-popover" onclick="toggleShareMenu()">
+        <i class="sap-icon--share-2"></i>
+      </button>
+      <div id="share-popover" class="shellbar-popover shellbar-popover--share" style="display:none">
+        <div class="share-popover__body">
+          <label class="share-popover__label" for="share-url-input">Link to this page</label>
+          <div class="share-popover__row">
+            <input type="text" id="share-url-input" class="fd-input share-popover__input" readonly aria-label="Page URL">
+            <button type="button" class="fd-button fd-button--emphasized share-popover__copy" onclick="copyShareUrl(this)">Copy</button>
+          </div>
+          <div class="share-popover__status" id="share-status" aria-live="polite"></div>
+        </div>
+      </div>
+    </div>
+    <span class="shellbar-separator"></span>
     <button type="button" class="fd-shellbar__button" aria-label="Joule" title="Joule" id="joule-trigger" hidden>
       <i class="sap-icon--da"></i>
     </button>
@@ -87,6 +103,9 @@
   const userEmail = document.getElementById('user-email');
   const navPopover = document.getElementById('nav-popover');
   const trustPopover = document.getElementById('trust-popover');
+  const sharePopover = document.getElementById('share-popover');
+  const shareUrlInput = document.getElementById('share-url-input');
+  const shareStatus = document.getElementById('share-status');
   let isAuthenticated = false;
 
   function applyInitials(givenName, familyName, id) {
@@ -137,14 +156,18 @@
     }
     navPopover.style.display = 'none';
     trustPopover.style.display = 'none';
+    sharePopover.style.display = 'none';
     document.querySelector('#trust-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
+    document.querySelector('#share-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
     popover.style.display = popover.style.display === 'none' ? 'block' : 'none';
   };
 
   window.toggleNavMenu = function() {
     popover.style.display = 'none';
     trustPopover.style.display = 'none';
+    sharePopover.style.display = 'none';
     document.querySelector('#trust-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
+    document.querySelector('#share-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
     var btn = document.querySelector('#nav-dropdown .fd-shellbar__button');
     var open = navPopover.style.display === 'block';
     navPopover.style.display = open ? 'none' : 'block';
@@ -154,12 +177,62 @@
   window.toggleTrustMenu = function() {
     popover.style.display = 'none';
     navPopover.style.display = 'none';
+    sharePopover.style.display = 'none';
     document.querySelector('#nav-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
+    document.querySelector('#share-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
     var btn = document.querySelector('#trust-dropdown .fd-shellbar__button');
     var open = trustPopover.style.display === 'block';
     trustPopover.style.display = open ? 'none' : 'block';
     btn.setAttribute('aria-expanded', !open);
   };
+
+  window.toggleShareMenu = function() {
+    popover.style.display = 'none';
+    navPopover.style.display = 'none';
+    trustPopover.style.display = 'none';
+    document.querySelector('#nav-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
+    document.querySelector('#trust-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
+    var btn = document.querySelector('#share-dropdown .fd-shellbar__button');
+    var open = sharePopover.style.display === 'block';
+    if (!open) {
+      shareUrlInput.value = window.location.href;
+      shareStatus.textContent = '';
+    }
+    sharePopover.style.display = open ? 'none' : 'block';
+    btn.setAttribute('aria-expanded', !open);
+    if (!open) {
+      setTimeout(function() { shareUrlInput.select(); }, 0);
+    }
+  };
+
+  window.copyShareUrl = function(button) {
+    var url = shareUrlInput.value || window.location.href;
+    var done = function(ok) {
+      shareStatus.textContent = ok ? 'Copied to clipboard' : 'Press Ctrl+C to copy';
+      if (ok && button) {
+        var orig = button.textContent;
+        button.textContent = 'Copied';
+        setTimeout(function() { button.textContent = orig; }, 1500);
+      }
+    };
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(url).then(function() { done(true); }, function() { fallbackCopy(url, done); });
+    } else {
+      fallbackCopy(url, done);
+    }
+  };
+
+  function fallbackCopy(text, cb) {
+    try {
+      shareUrlInput.value = text;
+      shareUrlInput.select();
+      shareUrlInput.setSelectionRange(0, text.length);
+      var ok = document.execCommand('copy');
+      cb(ok);
+    } catch (e) {
+      cb(false);
+    }
+  }
 
   document.addEventListener('click', function(e) {
     if (!document.getElementById('user-menu').contains(e.target)) {
@@ -172,6 +245,10 @@
     if (!document.getElementById('trust-dropdown').contains(e.target)) {
       trustPopover.style.display = 'none';
       document.querySelector('#trust-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
+    }
+    if (!document.getElementById('share-dropdown').contains(e.target)) {
+      sharePopover.style.display = 'none';
+      document.querySelector('#share-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
     }
   });
 
