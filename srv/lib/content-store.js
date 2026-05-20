@@ -6,7 +6,9 @@ import { Readable } from 'node:stream';
 import { acquireLock, releaseLock } from '../jobs/job-lock.js';
 import { logPipelineStart, logPipelineEnd } from './pipeline-log.js';
 import { getNextLegacyId } from './legacy-id.js';
+import { embedSlugs } from './embedding-pipeline.js';
 
+const LOG = cds.log('content-store');
 const LOCK_NAME = 'content-publish';
 const LOCK_DURATION_MS = 120_000;
 const INSTANCE_ID = `content-${process.pid}-${Date.now()}`;
@@ -22,6 +24,17 @@ async function toBuffer(data) {
 }
 
 export { toBuffer };
+
+export async function triggerPostPublishEmbeddings({ changedSlugs, settings }) {
+  if (!settings?.ragEnabled) return;
+  if (!Array.isArray(changedSlugs) || changedSlugs.length === 0) return;
+  try {
+    const result = await embedSlugs(changedSlugs, settings);
+    LOG.info('post-publish embeddings', result);
+  } catch (err) {
+    LOG.warn('post-publish embeddings failed (non-fatal)', err.message);
+  }
+}
 
 // --- Bounded LRU Cache ---
 
@@ -257,6 +270,9 @@ export async function publishHandler(req, res) {
       });
 
     cache.invalidate();
+
+    const settings = await SELECT.one.from('ims.ChatSettings');
+    setImmediate(() => triggerPostPublishEmbeddings({ changedSlugs: slugs, settings }));
 
     // Upsert Tutorials + Steps metadata (self-healing on every publish)
     let metaUpserted = 0;
