@@ -248,15 +248,15 @@ The handler has been removed and `getFacets` refactored to use `SELECT.from(Sear
 
 ---
 
-### 14. Error Pages (404 / 500)
+### 14. Error Pages (404 / 500) — ✅ Closed 2026-05-20
 
 **AEM:** Custom Handlebars 404 with site search box and "popular tutorials" rail. Generic 500.
 
-**Replacement:** Hugo defaults — minimal or absent.
+**Replacement:** Hugo emits styled `404.html`, `500.html`, `maintenance.html` (503). AppRouter `xs-app.json` maps each status to its file via the top-level `errorPage` config. Tutorial-slug 404s are served by CAP from the published `__404__` slug (`srv/lib/content-store.js` `serveNotFound()`), preserving the styled body with status 404.
 
-**Impact:** A 404 is the user's first impression after a broken link from a search engine. Generic 404 = bounce.
+**Verified:** `test/smoke/error-pages.test.js` covers (a) generic 404 carries the popular-tutorials rail and search form, (b) `/500.html` and `/maintenance.html` serve the styled bodies, (c) missing tutorial slugs return 404, (d) proxied API 404s pass through unmodified — the AppRouter `errorPage` map only fires for middleware `next(err)` paths, not for proxied response bodies (confirmed against `@sap/approuter/lib/middleware/error-handler.js`).
 
-**Action:** Build `hugo/layouts/404.html` mirroring AEM's content with search + popular tutorials. AppRouter `xs-app.json` should serve it on unmatched routes.
+**Note for future work:** The AppRouter schema only allows `errorPage` at the top level — there is no per-route `errors` override. We don't need one because CAP's `__404__` mechanism already returns styled HTML for missing tutorials.
 
 ---
 
