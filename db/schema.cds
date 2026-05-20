@@ -58,6 +58,7 @@ entity Groups : TaskBase {
 entity Steps : TaskBase {
   tutorial                  : Association to Tutorials;
   stepOrder                 : Integer;
+  contentHash               : String(64);
 }
 
 entity Checkpoints : TaskBase { }
@@ -345,4 +346,21 @@ entity ChatSettings : cuid, managed {
   maxTokens            : Integer;
   maxRequestsPerUser   : Integer default 100;
   bannerText           : String(500);
+
+  // RAG / vector grounding (see docs/joule-chat.md "Tutorial Grounding")
+  ragEnabled           : Boolean default false;
+  embeddingModel       : String(100) default 'text-embedding-3-small';
+  embeddingTopK        : Integer default 5;
+  embeddingMinScore    : Decimal(4, 3) default 0.25;
+}
+
+entity TutorialEmbedding {
+  key tutorial_ID  : UUID;
+  key stepNumber   : Integer;
+  contentHash      : String(64);
+  embeddingModel   : String(100);
+  embedding        : Vector(1536);
+  text             : LargeString;
+  charCount        : Integer;
+  createdAt        : Timestamp @cds.on.insert: $now;
 }
