@@ -22,7 +22,7 @@ Title: {{ .Title }}
 Type: Tutorial
 Level: {{ .Params.level }}
 Time: {{ .Params.time }} minutes
-Tags: {{ delimit .Params.tags ", " }}
+Tags: {{ with .Params.tags }}{{ delimit . ", " }}{{ end }}
 Description: {{ .Params.description | plainify }}
 Author: {{ .Params.author }}
 Last updated: {{ with .Lastmod }}{{ .Format "2006-01-02" }}{{ end }}
