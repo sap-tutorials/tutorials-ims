@@ -1,0 +1,32 @@
+{{- $brand := .Site.Params.brand -}}
+{{- $title := cond .IsHome $brand .Title -}}
+{{- $desc := .Params.description | default .Site.Params.defaultDescription -}}
+{{- $ogType := cond .IsPage "article" "website" -}}
+{{- $ogImage := .Params.image | default .Site.Params.defaultOgImage | absURL -}}
+
+<meta property="og:site_name" content="{{ $brand }}">
+<meta property="og:type" content="{{ $ogType }}">
+<meta property="og:title" content="{{ $title }}">
+<meta property="og:description" content="{{ $desc | plainify | truncate 200 }}">
+<meta property="og:url" content="{{ .Permalink }}">
+<meta property="og:image" content="{{ $ogImage }}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="en_US">
+
+{{- if eq .Type "tutorials" }}
+{{- with .Params.author }}<meta property="article:author" content="{{ . }}">{{ end }}
+{{- with .Params.primaryTag }}<meta property="article:section" content="{{ . }}">{{ end }}
+{{- with .Params.tags }}{{ range . }}
+<meta property="article:tag" content="{{ . }}">
+{{- end }}{{ end }}
+{{- with .Lastmod }}
+<meta property="article:modified_time" content="{{ .Format "2006-01-02T15:04:05Z07:00" }}">
+{{- end }}
+{{- end }}
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="{{ .Site.Params.twitterHandle }}">
+<meta name="twitter:title" content="{{ $title }}">
+<meta name="twitter:description" content="{{ $desc | plainify | truncate 200 }}">
+<meta name="twitter:image" content="{{ $ogImage }}">
