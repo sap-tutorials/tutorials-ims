@@ -417,6 +417,24 @@ Test categories:
 - **Legacy ID sequences**: HANA `.hdbsequence` files generate integer IDs for backward compatibility with Java IMS consumers during parallel operation.
 - **Slug fields**: `Missions.slug` and `CompletionPaths.slug` are required for the static build pipeline to generate URL-friendly page paths. Populated via migration script from AEM cache data.
 
+## Documentation
+
+A consolidated documentation site is planned for a later phase. Until then, reference docs live alongside the code in [docs/](docs/):
+
+| Document | For |
+| -------- | --- |
+| [docs/author-instructions.md](docs/author-instructions.md) | Tutorial authors — frontmatter, step structure, local preview, publish flow |
+| [docs/content-pipeline.md](docs/content-pipeline.md) | Engineers — full fetch → parse → Hugo → HANA pipeline with timing data |
+| [docs/authentication-architecture.md](docs/authentication-architecture.md) | Engineers — XSUAA / IDP auth flow and component interactions |
+| [docs/authentication-primer.md](docs/authentication-primer.md) | Engineers — high-level auth model intro |
+| [docs/ias-migration-setup.md](docs/ias-migration-setup.md) | Operators — IAS migration configuration steps |
+| [docs/ims-api-reference.md](docs/ims-api-reference.md) | Migration — legacy IMS Java API surface for parity reference |
+| [docs/ims-uncovered-features.md](docs/ims-uncovered-features.md) | Migration — IMS features not yet ported to CAP |
+| [docs/hugo-migration.md](docs/hugo-migration.md) | History — VitePress → Hugo migration rationale |
+| [docs/mta-deployment.md](docs/mta-deployment.md) | Operators — MTA build/deploy procedures and troubleshooting |
+| [docs/joule-chat.md](docs/joule-chat.md) | Engineers — Joule chat integration |
+| [docs/ai-consumption.md](docs/ai-consumption.md) | Engineers — AI consumption surfaces |
+
 ## License
 
 SAP Internal — Not for redistribution.
