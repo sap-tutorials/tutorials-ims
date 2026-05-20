@@ -4,6 +4,7 @@ import { cleanupStepFailures, cleanupUnusedTags, cleanupContentVersions, cleanup
 import { recordActiveLearners } from './analytics.js';
 import { retryNgds } from './ngds-retry.js';
 import { processAccountMerges } from './account-merge-job.js';
+import { runReconciliationJob } from './embedding-reconciliation.js';
 import { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, isNotificationsEnabled } from '../lib/contributor-notifications.js';
 import { sendNotificationEmail, retryFailedEmails } from '../lib/mail-client.js';
 import { syncTutorialMetadata } from '../lib/tutorial-sync.js';
@@ -64,6 +65,11 @@ export function registerJobs() {
   // Every hour — mark stuck PUBLISHING manifests as FAILED (older than 60 min)
   cron.schedule('30 * * * *', () =>
     runWithLock('content-publishing-sweep', 300000, () => cleanupStuckPublishing(60))
+  );
+
+  // Hourly at :17 — re-embed tutorial steps whose content drifted (offset to avoid :00 thundering herd; multi-instance safe via lock)
+  cron.schedule('17 * * * *', () =>
+    runWithLock('embedding-reconciliation', 1800000, runReconciliationJob)
   );
 
   // Daily at 03:15 — prune pipeline log entries older than 30 days
