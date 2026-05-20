@@ -207,6 +207,26 @@ describe('computeEmbeddingStats', () => {
     expect(result.activeManifest).toBe(42);
   });
 
+  it('(g) embeddedSteps does not count orphan embeddings whose step was deleted', async () => {
+    await insertManifest(1);
+    await insertContentFile('tut-orphan', 1);
+    await insertTutorial('tid-orphan', 'tut-orphan');
+
+    // 2 current steps
+    await insertStep('so-1', 'tid-orphan', 1, 'hash-1');
+    await insertStep('so-2', 'tid-orphan', 2, 'hash-2');
+    // 3 embedding rows: 2 matching current steps + 1 orphan (step 3 no longer exists)
+    await insertEmbedding('tid-orphan', 1, 'hash-1');
+    await insertEmbedding('tid-orphan', 2, 'hash-2');
+    await insertEmbedding('tid-orphan', 3, 'hash-3'); // orphan
+
+    const result = await computeEmbeddingStats();
+    expect(result.totalSteps).toBe(2);
+    expect(result.embeddedSteps).toBe(2); // NOT 3
+    expect(result.missing).toBe(0);
+    expect(result.stale).toBe(0);
+  });
+
   it('(f) tutorials not in manifest slugs are excluded from step counts', async () => {
     await insertManifest(1);
     await insertContentFile('in-manifest', 1);

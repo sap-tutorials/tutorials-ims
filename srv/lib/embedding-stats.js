@@ -48,12 +48,6 @@ export async function computeEmbeddingStats() {
     const embedKey = (tid, stepNum) => `${tid}:${stepNum}`;
     const embedMap = new Map(embedRows.map((e) => [embedKey(e.tutorial_ID, e.stepNumber), e]));
 
-    // Count embedded steps for denominator (active tutorials only)
-    for (const e of embedRows) {
-      const slug = tToSlug.get(e.tutorial_ID);
-      if (slug && activeSlugSet.has(slug)) embeddedSteps++;
-    }
-
     for (const s of stepRows) {
       const slug = tToSlug.get(s.tutorial_ID);
       if (!slug || !activeSlugSet.has(slug)) continue;
@@ -62,6 +56,7 @@ export async function computeEmbeddingStats() {
       if (!e) {
         missing++;
       } else {
+        embeddedSteps++;
         if (e.contentHash !== s.contentHash) stale++;
         slugsWithEmbeddingsSet.add(s.tutorial_ID);
       }
