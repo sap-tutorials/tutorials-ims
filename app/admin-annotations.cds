@@ -830,7 +830,7 @@ annotate AdminService.CompletionAnalytics with @(
   }],
   UI.Chart: {
     ChartType: #Line,
-    Dimensions: [completionDate, taskType],
+    Dimensions: [completionDay, taskType],
     DynamicMeasures: ['@Analytics.AggregatedProperty#totalCompletions']
   },
   UI.PresentationVariant: {
@@ -853,6 +853,7 @@ annotate AdminService.CompletionAnalytics with @(
   ID              @UI.Hidden;
   taskType        @title: 'Task Type'            @Analytics.Dimension;
   completionDate  @title: 'Completion Date'      @Analytics.Dimension;
+  completionDay   @title: 'Completion Day'       @Analytics.Dimension;
   taskTitle       @title: 'Task'                 @Analytics.Dimension;
   primaryTag      @title: 'Primary Tag'          @Analytics.Dimension;
   experienceTag   @title: 'Level'                @Analytics.Dimension;

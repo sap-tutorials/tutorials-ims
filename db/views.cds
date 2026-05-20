@@ -89,6 +89,7 @@ view CompletionAnalytics as
     key tr.ID,
     tr.taskType,
     tr.completionDate,
+    cast(tr.completionDate as Date) as completionDay : Date,
     coalesce(task.title, tr.titleSnapshot) as taskTitle : String(255),
     task.primaryTag,
     task.experienceTag,
