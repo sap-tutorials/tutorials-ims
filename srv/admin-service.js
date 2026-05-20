@@ -3,6 +3,7 @@ import { computeEventStatistics, computeBurnup, computeTrackStats, computeComple
 import { formatTaskRecordsCSV, formatAwardMissionsCSV } from './lib/export-helpers.js';
 import { buildAnonymizationOps } from './lib/anonymization.js';
 import { getNextLegacyId } from './lib/legacy-id.js';
+import { embedSlugs } from './lib/embedding-pipeline.js';
 
 export default class AdminService extends cds.ApplicationService {
 
@@ -10,7 +11,8 @@ export default class AdminService extends cds.ApplicationService {
     const { Users, Tutorials, Missions, Groups, Events, TaskRecords,
             StepFailures, Tags, TutorialTags, UserMetaData,
             PrimaryAccounts, SecondaryAccounts, PrivacyProtectionActions,
-            FeaturedTasks, CompletionPaths, CompletionPathItems } = cds.entities('com.sap.developers.ims');
+            FeaturedTasks, CompletionPaths, CompletionPathItems,
+            ChatSettings, ContentManifest, ContentFiles } = cds.entities('com.sap.developers.ims');
     const db = await cds.connect.to('db');
     const audit = await cds.connect.to('audit-log');
 
@@ -362,6 +364,25 @@ export default class AdminService extends cds.ApplicationService {
           legacyId: await getNextLegacyId('FeaturedTasks', db)
         });
       }
+    });
+
+    // --- RAG / Embeddings ---
+
+    this.on('seedEmbeddings', async (req) => {
+      const settings = await SELECT.one.from(ChatSettings);
+      if (!settings?.ragEnabled) return req.error(400, 'ragEnabled must be true');
+
+      const manifest = await SELECT.one.from(ContentManifest).where({ status: 'ACTIVE' });
+      if (!manifest) return req.error(409, 'no active content manifest');
+
+      const files = await SELECT.from(ContentFiles).columns('slug').where({ version: manifest.version });
+      const slugs = files.map(f => f.slug);
+
+      setImmediate(() => embedSlugs(slugs, settings).catch(err => {
+        cds.log('rag-seed').warn('seed failed', err.message);
+      }));
+
+      return { queued: true, activeSlugs: slugs.length };
     });
 
     // --- Account Merge Status ---
