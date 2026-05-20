@@ -83,10 +83,23 @@ jobs:
             tutorial-cache-${{ hashFiles('.github/workflows/rebuild-content.yml') }}-
             tutorial-cache-
 
+      # GitHub App token (preferred). Activates when repo variable
+      # USE_GITHUB_APP=true and the TUTORIALS_APP_* secrets are populated.
+      # See docs/github-app-setup.md. While the variable is unset/false the step
+      # is skipped and the fetch falls back to the classic PAT below.
+      - name: Generate GitHub App token
+        id: app-token
+        if: ${{ vars.USE_GITHUB_APP == 'true' }}
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.TUTORIALS_APP_ID }}
+          private-key: ${{ secrets.TUTORIALS_APP_PRIVATE_KEY }}
+          owner: sap-tutorials
+
       - name: Fetch tutorials
         run: npm run fetch-tutorials
         env:
-          GITHUB_TOKEN: ${{ secrets.TUTORIALS_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.TUTORIALS_GITHUB_TOKEN }}
           CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
           CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
           TUTORIAL_SLUG: ${{ inputs.slug }}
