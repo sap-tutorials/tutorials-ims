@@ -40,4 +40,14 @@ describe('computeRecommendations', () => {
     // tag-only has 2 tag overlaps → 2
     expect(result.get('target')).toEqual(['primary-match', 'tag-only'])
   })
+
+  it('excludes tutorials in the same mission as the target', () => {
+    const entries: TutorialNavEntry[] = [
+      navEntry({ slug: 'target',     missionId: 1, primaryTag: 'cap', displayTags: ['CAP'] }),
+      navEntry({ slug: 'sibling',    missionId: 1, primaryTag: 'cap', displayTags: ['CAP'] }),
+      navEntry({ slug: 'outsider',   missionId: 2, primaryTag: 'cap', displayTags: ['CAP'] }),
+    ]
+    const result = computeRecommendations(entries)
+    expect(result.get('target')).toEqual(['outsider'])
+  })
 })
