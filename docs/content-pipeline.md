@@ -293,6 +293,33 @@ HANA BLOB columns return `Readable` streams with locators that expire before con
 
 ---
 
+## Phase 5.5: Embedding Hook (post-publish)
+
+After the manifest goes `ACTIVE`, per-step embeddings are generated for RAG (Retrieval-Augmented Generation) in the Joule chat.
+
+### Pipeline
+
+```text
+Hugo build → publish-content → /content/publish → manifest ACTIVE
+                                                         ↓ setImmediate
+                                                    embedSlugs(changed)
+```
+
+### Flow
+
+1. **Immediate embed (non-blocking)** — After `POST /content/publish` completes and the manifest is marked `ACTIVE`, `srv/lib/content-store.js` schedules `embedSlugs(changedSlugs)` via `setImmediate`. The publish HTTP response returns immediately (201) without waiting for embeddings to complete.
+
+2. **Hourly reconciliation** — A cron job at minute `:17` of every hour (`srv/jobs/embedding-reconciliation.js`, orchestrated in `srv/jobs/scheduler.js`) runs `runReconciliationJob`. It:
+   - Re-embeds any step whose `contentHash` no longer matches the embedding row's stored `contentHash` (drift detection).
+   - Embeds any rows in the active manifest that have no embedding yet.
+   - Uses distributed locking via `runWithLock` (key: `embedding-reconciliation`, 30-minute timeout) for multi-instance safety.
+
+3. **Daily orphan cleanup** — At 03:30 UTC, `srv/jobs/embedding-reconciliation.js` prunes embeddings for tutorials no longer in the active `ContentManifest`. This keeps the table bounded after content rollbacks or deletions.
+
+All embeddings use the model specified in `ChatSettings.embeddingModel` (default: `text-embedding-3-small` via the `tutorials-aicore` AI Core destination).
+
+---
+
 ## Phase 6: Rollback (`POST /content/rollback`)
 
 Reverts to a previous content version without re-publishing.

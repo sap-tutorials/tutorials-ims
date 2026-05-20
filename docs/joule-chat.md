@@ -229,6 +229,41 @@ runs a `SELECT.from('SearchableItems').where({ search: query, ...filters })
 .limit(5)` against the `SearchService`, returning up to 5 hits with `slug`,
 `title`, `description`, `type`, `primaryTag`.
 
+## Tutorial Grounding (RAG)
+
+When enabled, the `getRelevantSteps` tool grounds the chat in per-step embeddings from published tutorials, allowing the model to cite specific tutorial steps as evidence for its answers.
+
+### How it works
+
+1. Each tutorial step (from the active content manifest) gets embedded via `text-embedding-3-small` (AI Core).
+2. Embeddings are stored in the HANA table `TutorialEmbedding` (1,536-dimensional `Vector` column).
+3. On each chat message, the orchestrator calls `getRelevantSteps(userQuestion)` if `ChatSettings.ragEnabled` is true.
+4. The server runs a **cosine-similarity query** against all embeddings, returning the top `embeddingTopK` matches with `score >= embeddingMinScore`.
+5. Results are emitted as SSE `step-citations` events: `[tutorial-slug #stepNumber]` with the similarity score.
+6. The frontend renders citations as clickable chips above the assistant message.
+
+### Configuration
+
+Feature flag and tuning knobs live in `ChatSettings` (admin UI):
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `ragEnabled` | `false` | Master toggle. When off, `getRelevantSteps` is not registered; when on, tool is available for the model to invoke. |
+| `embeddingModel` | `text-embedding-3-small` | AI Core model for both indexing and query time. |
+| `embeddingTopK` | `5` | Max number of step matches returned per query. |
+| `embeddingMinScore` | `0.25` | Cosine similarity floor; below this, matches are dropped. |
+
+### Implementation notes
+
+- On HANA, embeddings are queried via raw SQL (`db.run()` with `COSINE_SIMILARITY` operator). Unit tests (SQLite) use JavaScript-side cosine calculation.
+- The embedding pipeline runs automatically after `POST /content/publish` completes. It upserts embeddings for changed slugs via `setImmediate` to avoid blocking the publish response.
+- Hourly reconciliation cron (minute `:17`) re-embeds steps if their `contentHash` has changed, and fills in any missing rows.
+- Daily cleanup at 03:30 removes stale embeddings for tutorials no longer in the active manifest.
+
+### Operations
+
+See [Joule Chat Admin Settings](./joule-chat-admin-settings.md) for the admin runbook: first-time seeding, recovering from drift, reading stats, and rotating the embedding model.
+
 ## Frontend Behaviour
 
 [hugo/static/js/joule.js](../hugo/static/js/joule.js):
