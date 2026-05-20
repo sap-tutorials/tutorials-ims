@@ -80,3 +80,22 @@ describe('admin-analytics-runner — audit', () => {
     expect(e.payload.totalRows).toBe(1);
   });
 });
+
+describe('admin-analytics-runner — I-1: tag fanout filter rejection', () => {
+  it('rejects a plan with tag in groupBy and non-empty filters', () => {
+    expect(() => _validatePlanOnly({
+      fact: 'completion',
+      groupBy: ['tag'],
+      measures: ['count'],
+      filters: [{ field: 'completionMonth', op: 'sinceDays', value: 30 }],
+    })).toThrow(/unknown_field|tag dimension does not support filters/i);
+  });
+  it('accepts a plan with tag in groupBy and no filters', () => {
+    expect(() => _validatePlanOnly({
+      fact: 'completion',
+      groupBy: ['tag'],
+      measures: ['count'],
+      filters: [],
+    })).not.toThrow();
+  });
+});

@@ -36,6 +36,15 @@ export function _validatePlanOnly(plan) {
   }
 
   const filters = Array.isArray(plan.filters) ? plan.filters : [];
+
+  // tag dimension uses a multi-source fanout that cannot apply filters; reject early.
+  const hasTagDim = groupBy.includes('tag') || filters.some(f => f.field === 'tag');
+  if (hasTagDim && filters.length > 0) {
+    const e = new Error('unknown_field: tag dimension does not support filters in this version');
+    e.code = 'unknown_field';
+    throw e;
+  }
+
   for (const f of filters) {
     _piiCheck(f.field);
     const dim = S.dimensions[f.field];
