@@ -360,7 +360,7 @@ entity TutorialEmbedding {
   contentHash      : String(64);
   embeddingModel   : String(100);
   embedding        : Vector(1536);
-  text             : LargeString;
+  stepText         : LargeString;
   charCount        : Integer;
   createdAt        : Timestamp @cds.on.insert: $now;
 }
