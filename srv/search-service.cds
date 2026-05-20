@@ -19,6 +19,7 @@ service SearchService {
 
   @readonly
   @Search.fuzzinessThreshold: 0.7
+  @cds.search: { title, description, primaryTag, bodyText }
   entity SearchableItems as projection on ims.SearchableItems {
     @Search.ranking: #HIGH
     title,
@@ -26,8 +27,10 @@ service SearchService {
     description,
     @Search.ranking: #LOW
     primaryTag,
+    @Search.ranking: #LOW
+    bodyText,
     *
-  };
+  } excluding { bodyText };
 
   @readonly
   entity Tags as projection on ims.Tags;

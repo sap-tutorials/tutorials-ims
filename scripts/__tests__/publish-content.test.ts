@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
-import { discoverTutorials, computeLocalHashes, computeDiff, buildPayload, validateProductionBuild, extractMetadata } from '../publish-content.js';
+import { discoverTutorials, computeLocalHashes, computeDiff, buildPayload, validateProductionBuild, extractMetadata, extractBodyText, extractAllBodyTexts } from '../publish-content.js';
 
 const TEST_DIR = join(tmpdir(), `publish-content-test-${Date.now()}`);
 const HUGO_DIR = join(TEST_DIR, 'public');
@@ -280,5 +280,103 @@ describe('validateProductionBuild', () => {
     const violations = validateProductionBuild(tutorials);
     expect(violations.length).toBeGreaterThan(0);
     expect(violations[0]).toContain('livereload');
+  });
+});
+
+describe('extractBodyText', () => {
+  it('extracts text from <main class="tutorial-main"> when present', () => {
+    const html = `<html><body>
+      <header>Site header noise</header>
+      <main><nav>breadcrumbs</nav>
+        <main class="tutorial-main">
+          <h1>HANA Cloud Setup</h1>
+          <p>Learn to configure HANA Cloud with the BTP cockpit.</p>
+        </main>
+      </main>
+      <footer>Footer noise</footer>
+    </body></html>`;
+
+    const text = extractBodyText(html);
+    expect(text).toContain('HANA Cloud Setup');
+    expect(text).toContain('configure HANA Cloud');
+    expect(text).not.toContain('Site header noise');
+    expect(text).not.toContain('Footer noise');
+    expect(text).not.toContain('breadcrumbs');
+  });
+
+  it('falls back to <body> when tutorial-main is absent', () => {
+    const html = `<html><body><h1>Plain Page</h1><p>Some text content</p></body></html>`;
+    const text = extractBodyText(html);
+    expect(text).toContain('Plain Page');
+    expect(text).toContain('Some text content');
+  });
+
+  it('strips <script> and <style> blocks', () => {
+    const html = `<body><main class="tutorial-main">
+      <script>alert('secret password')</script>
+      <style>.foo { color: red; }</style>
+      <p>Visible text</p>
+    </main></body>`;
+
+    const text = extractBodyText(html);
+    expect(text).toContain('Visible text');
+    expect(text).not.toContain('alert');
+    expect(text).not.toContain('secret password');
+    expect(text).not.toContain('color: red');
+  });
+
+  it('decodes common HTML entities', () => {
+    const html = `<body><main class="tutorial-main">
+      <p>Use &amp; for AND, &lt;tag&gt; for tags, &quot;quoted&quot; strings, and non&nbsp;breaking spaces.</p>
+    </main></body>`;
+
+    const text = extractBodyText(html);
+    expect(text).toContain('Use & for AND');
+    expect(text).toContain('<tag> for tags');
+    expect(text).toContain('"quoted" strings');
+    expect(text).toContain('non breaking');
+  });
+
+  it('normalizes whitespace', () => {
+    const html = `<body><main class="tutorial-main">
+      <p>Multiple
+
+
+       lines</p>
+      <p>and    extra    spaces</p>
+    </main></body>`;
+
+    const text = extractBodyText(html);
+    expect(text).not.toMatch(/\s{2,}/);
+    expect(text).toContain('Multiple lines');
+    expect(text).toContain('and extra spaces');
+  });
+
+  it('handles tutorial-main with single quotes and other class tokens', () => {
+    const html = `<body><main class='content tutorial-main other'>
+      <h1>Found me</h1>
+    </main></body>`;
+    const text = extractBodyText(html);
+    expect(text).toContain('Found me');
+  });
+});
+
+describe('extractAllBodyTexts', () => {
+  it('builds a slug→text map for the discovered tutorials', () => {
+    const tutorials = discoverTutorials(HUGO_DIR);
+    const slugs = [...tutorials.keys()];
+    const result = extractAllBodyTexts(tutorials, slugs);
+
+    for (const slug of slugs) {
+      expect(result[slug]).toBeDefined();
+      expect(typeof result[slug]).toBe('string');
+    }
+  });
+
+  it('skips slugs not present in the tutorials map', () => {
+    const tutorials = discoverTutorials(HUGO_DIR);
+    const result = extractAllBodyTexts(tutorials, ['tutorial-alpha', 'does-not-exist']);
+    expect(result['tutorial-alpha']).toBeDefined();
+    expect(result['does-not-exist']).toBeUndefined();
   });
 });

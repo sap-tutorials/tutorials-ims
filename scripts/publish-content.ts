@@ -94,6 +94,46 @@ export function buildPayload(
   return payload;
 }
 
+// --- Body text extraction (for HANA full-text search) ---
+
+const TUTORIAL_MAIN_RE = /<main\b[^>]*class\s*=\s*["']?[^"'>]*\btutorial-main\b[^"'>]*["']?[^>]*>([\s\S]*?)<\/main>/i;
+const BODY_RE = /<body\b[^>]*>([\s\S]*?)<\/body>/i;
+const STRIP_BLOCKS_RE = /<(script|style|nav|footer|aside)\b[^>]*>[\s\S]*?<\/\1>/gi;
+const TAG_RE = /<[^>]+>/g;
+const WHITESPACE_RE = /\s+/g;
+
+const ENTITY_MAP: Record<string, string> = {
+  '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"',
+  '&#39;': "'", '&apos;': "'", '&nbsp;': ' ',
+};
+
+export function extractBodyText(html: string): string {
+  const mainMatch = html.match(TUTORIAL_MAIN_RE);
+  let zone = mainMatch ? mainMatch[1] : (html.match(BODY_RE)?.[1] ?? html);
+
+  zone = zone.replace(STRIP_BLOCKS_RE, ' ');
+  zone = zone.replace(TAG_RE, ' ');
+  zone = zone.replace(/&[a-z#0-9]+;/gi, m => ENTITY_MAP[m.toLowerCase()] ?? ' ');
+  zone = zone.replace(WHITESPACE_RE, ' ').trim();
+
+  return zone;
+}
+
+export function extractAllBodyTexts(
+  tutorials: Map<string, string>,
+  slugs: string[]
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const slug of slugs) {
+    const filePath = tutorials.get(slug);
+    if (!filePath) continue;
+    const html = readFileSync(filePath, 'utf-8');
+    const text = extractBodyText(html);
+    if (text) result[slug] = text;
+  }
+  return result;
+}
+
 // --- Metadata extraction ---
 
 export interface StepMeta {
@@ -287,11 +327,15 @@ async function main() {
   const metadata = extractMetadata(hugoContentDir, allSlugs);
   log(`Extracted metadata for ${Object.keys(metadata).length} tutorials`);
 
+  const bodyTexts = extractAllBodyTexts(tutorials, allSlugs);
+  log(`Extracted body text for ${Object.keys(bodyTexts).length} tutorials`);
+
   const body = JSON.stringify({
     trigger: opts.trigger,
     hugoVersion: opts.hugoVersion || undefined,
     files: payload,
     metadata,
+    bodyTexts,
   });
 
   const sizeMB = (Buffer.byteLength(body) / 1024 / 1024).toFixed(1);

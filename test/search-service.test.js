@@ -6,7 +6,7 @@ const project = cds.test('serve', '--project', '.', '--in-memory');
 describe('SearchService', () => {
 
   beforeAll(async () => {
-    const { Tutorials, Missions, Groups, Tags, TutorialTags } = cds.entities('com.sap.developers.ims');
+    const { Tutorials, Missions, Groups, Tags, TutorialTags, TutorialBodyText } = cds.entities('com.sap.developers.ims');
 
     await INSERT.into(Tutorials).entries([
       { ID: 'search-t1', legacyId: 90001, slug: 'hana-cloud-setup', title: 'SAP HANA Cloud Setup', description: 'Learn to configure HANA Cloud', primaryTag: 'SAP HANA Cloud', experienceTag: 'beginner', averageTimeToComplete: 30, status: 'ACTIVE' },
@@ -31,6 +31,11 @@ describe('SearchService', () => {
     await INSERT.into(TutorialTags).entries([
       { tutorial_ID: 'search-t1', tag_ID: 'search-tag1' },
       { tutorial_ID: 'search-t2', tag_ID: 'search-tag2' },
+    ]);
+
+    await INSERT.into(TutorialBodyText).entries([
+      { slug: 'hana-cloud-setup', bodyText: 'Open the BTP cockpit and provision a HANA Cloud instance. Configure the firewall ipallowlist before connecting.' },
+      { slug: 'cap-getting-started', bodyText: 'Run cds init to scaffold a project. Add an entity to db schema and a service projection.' },
     ]);
   });
 
@@ -86,6 +91,21 @@ describe('SearchService', () => {
       const { data } = await project.get('/search/SearchableItems?$search=Fiori');
       const slugs = data.value.map(i => i.slug);
       expect(slugs).toContain('fiori-elements');
+    });
+
+    it('$search matches a unique word from indexed body text', async () => {
+      // 'ipallowlist' appears only in the hana-cloud-setup body text, not in any title or description.
+      const { data } = await project.get('/search/SearchableItems?$search=ipallowlist');
+      const slugs = data.value.map(i => i.slug);
+      expect(slugs).toContain('hana-cloud-setup');
+    });
+
+    it('does not expose bodyText in the OData response', async () => {
+      const { data } = await project.get('/search/SearchableItems?$filter=slug eq \'hana-cloud-setup\'');
+      expect(data.value.length).toBeGreaterThan(0);
+      for (const item of data.value) {
+        expect(item.bodyText).toBeUndefined();
+      }
     });
   });
 
