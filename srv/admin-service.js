@@ -390,6 +390,50 @@ export default class AdminService extends cds.ApplicationService {
       };
     });
 
+    this.on('commitTagImport', async (req) => {
+      const log = cds.log('tag-import');
+      const started = Date.now();
+      const { token, strategy } = req.data;
+
+      if (!token) return req.error(400, 'token is required');
+      if (!['upsert', 'skip-duplicates', 'abort-on-duplicate'].includes(strategy)) {
+        return req.error(400, `strategy must be one of upsert, skip-duplicates, abort-on-duplicate`);
+      }
+
+      const cached = sharedCache.get(token);
+      if (!cached) return req.error(410, 'Preview expired or unknown token; please re-upload');
+
+      // Re-classify inside the request to catch races (another admin inserting
+      // between preview and commit). The cached parsed rows stay as-is; only the
+      // classification against existing tags is refreshed.
+      const { apply, classify: reclassify } = await import('./lib/tag-import/index.js');
+      const existingTags = await SELECT.from(Tags).columns('ID', 'name', 'titlePath');
+      const inputRows = cached.rows.map(r => r.status === 'invalid'
+        ? { invalid: true, name: r.name, titlePath: r.titlePath, reason: r.reason }
+        : { name: r.name, titlePath: r.titlePath });
+      const { rows: freshRows } = reclassify(inputRows, existingTags);
+
+      let result;
+      try {
+        result = await apply(freshRows, strategy, db);
+      } catch (e) {
+        if (/conflict/i.test(e.message) && strategy === 'abort-on-duplicate') {
+          return req.error(409, e.message);
+        }
+        throw e;
+      }
+
+      log.info({
+        event: 'tag-import.commit',
+        user: req.user?.id,
+        strategy,
+        ...result,
+        durationMs: Date.now() - started
+      });
+
+      return result;
+    });
+
     this.after('READ', 'Tags', (rows) => {
       for (const row of Array.isArray(rows) ? rows : [rows]) {
         row.mdFormat = titlePathToMdFormat(row.titlePath);
