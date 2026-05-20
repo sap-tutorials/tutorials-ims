@@ -186,7 +186,7 @@ cds.on('served', () => {
         effectivePageContext.kind = 'generic'; // forged context — degrade gracefully
       }
 
-      const tools = toolsForContext({ pageContext: effectivePageContext, isAdmin });
+      const tools = await toolsForContext({ pageContext: effectivePageContext, isAdmin });
       const system = buildSystemPrompt(effectivePageContext, {
         firstName: user.attr?.given_name || user.attr?.givenName || '',
         lastName:  user.attr?.family_name || user.attr?.familyName || ''

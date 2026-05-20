@@ -52,10 +52,34 @@ const ANALYTICS_QUERY_TOOL = {
   },
 };
 
-function toolsForContext({ pageContext, isAdmin }) {
+const GET_RELEVANT_STEPS_TOOL = {
+  type: 'function',
+  function: {
+    name: 'getRelevantSteps',
+    description: 'Retrieve tutorial step excerpts semantically relevant to the user\'s question using vector search. Use when the user asks a how-to or conceptual question that may be answered by tutorial content.',
+    parameters: {
+      type: 'object',
+      properties: {
+        question: { type: 'string', description: 'The user\'s question to match against tutorial step content' }
+      },
+      required: ['question']
+    }
+  }
+};
+
+async function toolsForContext({ pageContext, isAdmin }) {
   const tools = [SEARCH_TUTORIALS_TOOL];
   if (isAdmin && pageContext?.kind === 'admin') {
     tools.push(SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL);
+  }
+  try {
+    const { ChatSettings } = cds.entities('com.sap.developers.ims');
+    const settings = await SELECT.one.from(ChatSettings);
+    if (settings?.ragEnabled) {
+      tools.push(GET_RELEVANT_STEPS_TOOL);
+    }
+  } catch (err) {
+    LOG.warn('toolsForContext: could not read ChatSettings', err.message);
   }
   return tools;
 }
@@ -136,6 +160,31 @@ export async function dispatchTool(name, args, user) {
       if (err.code === 'invalid_value') return { error: 'invalid_value', message: err.message };
       LOG.warn('analyticsQuery failed', err.message);
       return { error: 'analytics_failed', message: 'Query execution failed' };
+    }
+  }
+
+  if (name === 'getRelevantSteps') {
+    try {
+      if (typeof args.question !== 'string' || !args.question.trim()) {
+        return { error: 'invalid_args', hits: [] };
+      }
+      const { ChatSettings } = cds.entities('com.sap.developers.ims');
+      const settings = await SELECT.one.from(ChatSettings);
+      if (!settings?.ragEnabled) {
+        return { error: 'rag_disabled', hits: [] };
+      }
+      const { findRelevantSteps } = await import('./embedding-query.js');
+      const hits = await findRelevantSteps({ query: args.question, settings });
+      return (hits || []).map(h => ({
+        tutorialSlug: h.tutorialSlug,
+        tutorialTitle: h.tutorialTitle,
+        stepNumber: h.stepNumber,
+        excerpt: h.text.slice(0, 600),
+        score: h.score
+      }));
+    } catch (err) {
+      LOG.warn('getRelevantSteps failed', err.message);
+      return { error: 'rag_failed', hits: [] };
     }
   }
 
@@ -252,6 +301,8 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
           sse(res, { type: 'doc-citations', items: result.map(h => ({ path: h.path, heading: h.heading, score: h.score })) });
         } else if (tc.name === 'analyticsQuery' && result && !result.error && Array.isArray(result.rows)) {
           sse(res, { type: 'analytics-result', plan: result.plan, rows: result.rows, suppressedCount: result.suppressedCount, totalRows: result.totalRows });
+        } else if (tc.name === 'getRelevantSteps' && Array.isArray(result) && result.length > 0) {
+          sse(res, { type: 'step-citations', items: result });
         }
       }
 
@@ -280,4 +331,4 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
   }
 }
 
-export { SEARCH_TUTORIALS_TOOL, SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, toolsForContext };
+export { SEARCH_TUTORIALS_TOOL, SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, GET_RELEVANT_STEPS_TOOL, toolsForContext };
