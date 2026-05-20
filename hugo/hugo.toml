@@ -1,6 +1,48 @@
-baseURL = '/'
+baseURL = 'https://developers.sap.com/'
 languageCode = 'en-us'
-title = 'SAP Tutorial Platform'
+title = 'SAP Developers Tutorials'
+enableRobotsTXT = false  # we ship our own via the robots output format
+
+[params]
+  apiBase = '/api'
+  capBase = '/build'
+  brand = 'SAP Developers Tutorials'
+  defaultDescription = 'Hands-on tutorials for SAP technologies — SAP BTP, ABAP Cloud, CAP, Fiori, HANA Cloud, and integration. Build, learn, and ship on SAP.'
+  heroDescription = 'Step-by-step tutorials, multi-tutorial missions, and reference content for every SAP developer technology. Tested, maintained, and free to use.'
+  twitterHandle = '@sapdevs'
+  defaultOgImage = '/img/og-default.png'
+
+[frontmatter]
+  date = ['date', 'createdAt', 'publishDate', ':git', ':fileModTime']
+  lastmod = ['lastmod', 'lastUpdated', ':git', ':fileModTime']
+  publishDate = ['publishDate', 'createdAt', 'date']
+
+[outputs]
+  home = ['HTML', 'RSS', 'sitemap', 'robots', 'llms', 'llmsfull']
+  section = ['HTML', 'RSS']
+  page = ['HTML']
+
+[outputFormats.llms]
+  mediaType = 'text/markdown'
+  baseName = 'llms'
+  isPlainText = true
+  notAlternative = true
+
+[outputFormats.llmsfull]
+  mediaType = 'text/markdown'
+  baseName = 'llms-full'
+  isPlainText = true
+  notAlternative = true
+
+[outputFormats.robots]
+  mediaType = 'text/plain'
+  baseName = 'robots'
+  isPlainText = true
+  notAlternative = true
+  protocol = ''
+
+[mediaTypes."text/markdown"]
+  suffixes = ['md', 'txt']
 
 [build]
   writeStats = true
@@ -15,9 +57,3 @@ title = 'SAP Tutorial Platform'
         [markup.goldmark.extensions.passthrough.delimiters]
           block = [['$$', '$$']]
           inline = [['$', '$']]
-
-[outputs]
-  home = ['HTML']
-
-[params]
-  apiBase = '/api'
