@@ -1,4 +1,4 @@
-import type { TutorialNavEntry } from './types'
+import type { TutorialNavEntry } from './types.js'
 
 export interface RecommendationOptions {
   topN?: number
