@@ -165,7 +165,7 @@ New helper module so the salt logic and helper unit tests have one home:
 
 ```js
 const crypto = require('crypto');
-const SECRET = process.env.SUBMISSION_SALT_SECRET || cds.env.feedback?.saltSecret;
+const SECRET = process.env.SUBMISSION_SALT_SECRET;
 
 function dailySaltFor(date = new Date()) {
   const ymd = date.toISOString().slice(0, 10);   // YYYY-MM-DD UTC
@@ -179,7 +179,38 @@ function hashIp(ip, date = new Date()) {
 module.exports = { dailySaltFor, hashIp };
 ```
 
-If `SECRET` is missing on startup, the handler logs a warning and refuses to persist (returns 503). Documented alongside `CONTENT_API_KEY` in CLAUDE.md.
+If `SUBMISSION_SALT_SECRET` is missing on startup, `srv/server.js` logs a warning and the Express bridge (below) returns `503 Service Unavailable` for any submission. Documented alongside `CONTENT_API_KEY` in CLAUDE.md.
+
+### Express bridge (`srv/server.js`)
+
+The CAP action lives in `DeveloperService` for type-checking and admin reuse, but the public surface is a plain Express POST so we control the URL, response shape, and IP-header propagation. Wired at `cds.on('bootstrap')`:
+
+```js
+const express = require('express');
+const cds = require('@sap/cds');
+
+cds.on('bootstrap', (app) => {
+  app.post('/feedback/submit', express.json({ limit: '8kb' }), async (req, res) => {
+    if (!process.env.SUBMISSION_SALT_SECRET) {
+      return res.status(503).json({ error: 'feedback service unavailable' });
+    }
+    try {
+      const dev = await cds.connect.to('DeveloperService');
+      // Stash IP info on the action input — handler reads it from req.data.
+      const result = await dev.send('submitTutorialFeedback', {
+        ...req.body,
+        _clientIp: (req.headers['x-forwarded-for'] || '').split(',').map(s=>s.trim()).filter(Boolean).pop() || req.ip
+      });
+      res.status(200).json({ submissionId: result.submissionId });
+    } catch (e) {
+      const status = e.code === 400 ? 400 : e.code === 429 ? 429 : 500;
+      res.status(status).json({ error: e.message });
+    }
+  });
+});
+```
+
+The action handler reads `req.data._clientIp` (set by the bridge) instead of touching Express headers, keeping the action testable in isolation. `_clientIp` is **not** declared in the action signature — CAP passes through unknown keys on `req.data` for in-process callers. The action is not exposed via OData (no public path mounted on `DeveloperService`), so external callers cannot inject this field.
 
 ### Handler (`srv/developer-service.js`)
 
@@ -213,9 +244,8 @@ srv.on('submitTutorialFeedback', async (req) => {
   // 3. Validate ratings (Integer 0-10 or null), npsScore (0-10 or null), comment ≤ 2000 chars
   //    Strip control characters from comment.
 
-  // 4. Rate limit by hashed IP — take LAST hop in XFF (closest to trusted AppRouter)
-  const xff = (req.headers['x-forwarded-for'] || '').split(',').map(s => s.trim()).filter(Boolean);
-  const ip = xff.length ? xff[xff.length - 1] : req.ip;
+  // 4. Rate limit by hashed IP — _clientIp is set by the Express bridge in srv/server.js
+  const ip = req.data._clientIp || 'unknown';
   const hashedIp = hashIp(ip);
   if (rateLimitExceeded(hashedIp)) req.error(429, 'Too many submissions');
 
@@ -271,7 +301,7 @@ Add **above** the catch-all route, mirroring the `/build/` and `/content/` patte
 }
 ```
 
-The CAP server bootstrap (`srv/server.js`) registers an Express handler that translates `POST /feedback/submit` into a call to the unbound action `submitTutorialFeedback`. Alternative: leave the action at `/api/submitTutorialFeedback` and add a more-specific xsuaa-bypass route — rejected to keep the namespace clean.
+The `srv/server.js` Express bridge (defined above) handles `POST /feedback/submit`. No OData route is exposed for the action.
 
 ## Vue Form Component
 
@@ -457,7 +487,11 @@ Vue component unit tests are out of scope (form is ~150 lines, no business logic
 
 ## Open Questions
 
-None. All scope and behavior questions were resolved during brainstorming on 2026-05-20 and during the spec review loop.
+None blocking. Minor decisions deferred to implementation, noted here so they don't get lost:
+
+- **`ContentFiles` slug match scope:** the validation `SELECT.one.from(ContentFiles).where({ slug })` matches any historical version (the entity is keyed by `(slug, version)`). Acceptable — inactive slugs rarely receive form submissions, and accepting them does no harm. If false positives become an issue, scope to the active manifest.
+- **`SUBMISSION_SALT_SECRET` rotation:** rotation invalidates in-memory rate-limit keys (acceptable, attacker gets one extra burst). No deduping or analytics relies on cross-day hash equality.
+- **Side-nav heterogeneity:** the proposed Feedback group mixes `componentUsage` (List Report) and `viewName` (freestyle Dashboard). Existing groups are uniform — implementation should verify the admin shell router handles a mixed group, otherwise split into two adjacent groups.
 
 ## References
 
