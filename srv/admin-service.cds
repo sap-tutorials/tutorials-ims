@@ -175,4 +175,45 @@ service AdminService {
     tutorialsUpToDate       : Integer;
     tutorialsNeedReview     : Integer;
   };
+
+  // --- Tag Import ---
+
+  type TagImportRow {
+    name              : String(255);
+    titlePath         : String(255);
+    status            : String(20);    // 'new' | 'conflict' | 'invalid'
+    existingId        : UUID;
+    existingTitlePath : String(255);
+    reason            : String(500);
+  }
+
+  type TagImportSummary {
+    total    : Integer;
+    new_     : Integer;                // 'new' is a CDS reserved word
+    conflict : Integer;
+    invalid  : Integer;
+  }
+
+  type TagImportParseWarning {
+    line   : Integer;
+    name   : String(255);
+    reason : String(500);
+  }
+
+  type TagImportPreview {
+    token         : String(64);
+    summary       : TagImportSummary;
+    rows          : many TagImportRow;
+    parseWarnings : many TagImportParseWarning;
+  }
+
+  type TagImportResult {
+    inserted : Integer;
+    updated  : Integer;
+    skipped  : Integer;
+    total    : Integer;
+  }
+
+  action previewTagImport(payload: LargeString, format: String) returns TagImportPreview;
+  action commitTagImport(token: String, strategy: String) returns TagImportResult;
 }
