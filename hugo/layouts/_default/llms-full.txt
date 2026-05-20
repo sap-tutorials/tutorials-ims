@@ -1,0 +1,30 @@
+# SAP Developers Tutorials — Full Catalog
+
+> Machine-readable catalog of every tutorial and mission. Format: one entry per resource, separated by blank lines.
+
+Content policy: see https://developers.sap.com/AGENTS.md
+
+# Missions
+
+{{ range where .Site.RegularPages "Type" "missions" }}
+URL: {{ .Permalink }}
+Title: {{ .Title }}
+Type: Mission
+Description: {{ .Params.description | plainify }}
+
+{{ end }}
+
+# Tutorials
+
+{{ range where .Site.RegularPages "Type" "tutorials" }}
+URL: {{ .Permalink }}
+Title: {{ .Title }}
+Type: Tutorial
+Level: {{ .Params.level }}
+Time: {{ .Params.time }} minutes
+Tags: {{ delimit .Params.tags ", " }}
+Description: {{ .Params.description | plainify }}
+Author: {{ .Params.author }}
+Last updated: {{ with .Lastmod }}{{ .Format "2006-01-02" }}{{ end }}
+
+{{ end }}
