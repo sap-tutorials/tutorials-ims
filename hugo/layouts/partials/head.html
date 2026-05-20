@@ -1,7 +1,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ .Title }} | {{ .Site.Title }}</title>
 <link rel="icon" type="image/svg+xml" href="/img/sap-logo.svg">
+<link rel="preconnect" href="https://ui5.sap.com" crossorigin>
+
+{{ partial "head-meta.html" . }}
+{{ partial "head-og.html" . }}
+{{ partial "head-jsonld.html" . }}
+
 <link rel="stylesheet" href="https://unpkg.com/fundamental-styles@0.41.4/dist/icon.css">
 <style>
 @font-face {
@@ -9,6 +14,7 @@
   src: url("https://ui5.sap.com/resources/sap/ui/core/themes/sap_horizon/fonts/SAP-icons.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
+  font-display: swap;
 }
 </style>
 {{ $themeVars := resources.Get "css/sap-theme-vars.css" }}
