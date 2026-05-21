@@ -199,6 +199,13 @@
       "csrfProtection": false
     },
     {
+      "source": "^/(\\$api-docs/.*)$",
+      "target": "/$1",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa",
+      "csrfProtection": false
+    },
+    {
       "source": "^(.*)$",
       "localDir": "static",
       "authenticationType": "none"
