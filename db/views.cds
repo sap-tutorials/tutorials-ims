@@ -119,5 +119,5 @@ entity TutorialFeedbackAggregate as
     avg(npsScore)                                  as avgNps         : Decimal(4,2),
     sum(case when npsScore >= 9 then 1 else 0 end)        as promoters         : Integer,
     sum(case when npsScore <= 6 then 1 else 0 end)        as detractors        : Integer,
-    sum(case when wasAuthenticated then 1 else 0 end)     as authenticatedCount : Integer
+    sum(case when wasAuthenticated = true then 1 else 0 end) as authenticatedCount : Integer
   } group by tutorialSlug;
