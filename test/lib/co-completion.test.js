@@ -38,4 +38,18 @@ describe('co-completion aggregator', () => {
     expect(result.beta).toEqual([{ slug: 'alpha', score: 1 }])
     expect(result.gamma).toEqual([{ slug: 'alpha', score: 1 }])
   })
+
+  it('returns cached result on second call within TTL', async () => {
+    const { computeCoCompletions } = await import('../../srv/lib/co-completion.js')
+    const a = await computeCoCompletions()
+    const b = await computeCoCompletions()
+    expect(a).toBe(b) // same reference, not just deep-equal
+  })
+
+  it('bypasses cache when force is true', async () => {
+    const { computeCoCompletions } = await import('../../srv/lib/co-completion.js')
+    const a = await computeCoCompletions()
+    const b = await computeCoCompletions({ force: true })
+    expect(a).not.toBe(b)
+  })
 })
