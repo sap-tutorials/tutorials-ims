@@ -102,6 +102,32 @@ async function imgCdnHandler(req, res, next) {
   }
 }
 
+// Legacy URL redirects preserved at cutover from AEM/Akamai. See
+// docs/aem-gap-analysis.md §15. Each entry matches the *path*; the captured
+// group is the query string (with leading ?), appended verbatim to the target.
+const LEGACY_REDIRECTS = [
+  {
+    match: /^\/trials-downloads\.html(\?.*)?$/,
+    target: 'https://www.sap.com/products/try-sap/trials-downloads.html'
+  }
+]
+
+function redirectsHandler(req, res, next) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next()
+  for (const { match, target } of LEGACY_REDIRECTS) {
+    const m = req.url.match(match)
+    if (m) {
+      res.writeHead(301, {
+        Location: target + (m[1] || ''),
+        'Cache-Control': 'public, max-age=86400'
+      })
+      res.end()
+      return
+    }
+  }
+  next()
+}
+
 const STATIC_DIR = join(__dirname, 'static')
 const TEMP_DIR = join(__dirname, 'static-new')
 const OLD_DIR = join(__dirname, 'static-old')
@@ -348,6 +374,7 @@ ar.start({
         first: [
           { path: '/admin/rebuild', handler: rebuildHandler },
           { path: '/img-cdn', handler: imgCdnHandler },
+          { path: '/', handler: redirectsHandler },
           { path: '/', handler: adminAppsHandler },
           { path: '/', handler: staticHandler },
           { path: '/', handler: proxyHandler }

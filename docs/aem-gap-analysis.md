@@ -249,15 +249,13 @@ Costs avoided: a long-lived GitHub PAT (rotation, expiry, secret hygiene), a new
 
 ---
 
-### 13. Cookie Consent
+### 13. Cookie Consent — ✅ Closed 2026-05-21
 
 **AEM:** Cookie consent banner (likely OneTrust) injected via clientlib.
 
-**Replacement:** Not yet wired.
+**Replacement:** Self-contained consent banner shipped in commit `367a801` (merged 2026-05-21), aligned to the production SAP CMP shape: Required / Functional / Advertising categories, "Understood" (accept all) + "Manage Settings" + close (X) on the banner, modal dialog with toggles and Submit Preferences / Cancel. Public API exposed as `window.consent.has() / show() / onChange()`. Companion Hugo pages added: `hugo/content/cookies.md` (platform-specific inventory) and `hugo/content/privacy.md` (controller info, legal basis, user rights). Footer carries a "Site Information" row linking to Privacy, Cookie Preferences, etc. Designed to be ripped out cleanly when SAP Legal mandates the corporate CMP — no innerHTML, single JS file, embedded CSS.
 
-**Impact:** Compliance issue (GDPR, ePrivacy). Possibly blocking for legal sign-off.
-
-**Action:** Get the OneTrust property ID from compliance, inject into Hugo layout. Verify cookie categories, consent persistence across subdomains.
+**Note for future work:** When SAP Legal hands over the corporate CMP property, swap the self-contained banner for the corporate snippet and retire `window.consent.*`. Footer placeholder hrefs (Terms of Use, Legal Disclosure, Trademark, Newsletter, Text View) still need canonical URLs from the legal team.
 
 ---
 
@@ -273,18 +271,29 @@ Costs avoided: a long-lived GitHub PAT (rotation, expiry, secret hygiene), a new
 
 ---
 
-### 15. Trials & Downloads Checksum Servlet
+### 15. Trials & Downloads Checksum Servlet — ✅ Closed 2026-05-21
 
-**AEM:** Reads a JSON file from DAM (sysadmin-maintained) and serves SHA checksums for downloadable trial software. Used on `/trials/...` pages.
+**AEM:** `ChecksumServlet` at `/bin/sapdxc/trials-and-downloads/checksum.{id}.html` reads `/content/dam/headless/developers/en/trials-and-downloads.json` (DAM-authored by the SAP downloads team) and serves a single line of HTML per row: `<div style="font-family: monospace;">{checksum} *{fileName}</div>`. Used as a lazy drilldown on a searchable, paginated table at the `/trials/...` page (template `trialsAndDownloadsLayoutPage`, model `TrialsAndDownloadsModel` — columns: Name · Release Date · Version · File Size · Comments · Checksum · Trial Button). Cache invalidation handled by `TrialsAndDownloadsListener` which flushes Dispatcher + Akamai when the JSON is replicated.
 
-**Replacement:** Out of scope of `tutorials-poc`? Verify:
-- Are `/trials/...` URLs still under the developers.sap.com domain post-cutover?
-- If yes, who serves them?
-- If they move to a different system, ensure URL continuity (redirect map covers it).
+**Investigation (2026-05-21):**
 
-**Edge case:** This is a touch point with the SAP downloads team — not the tutorial team. Coordination needed.
+- `https://developers.sap.com/trials/` → **404** (already retired upstream).
+- `https://developers.sap.com/trials-downloads.html` → **301** → `https://www.sap.com/products/try-sap/trials-downloads.html`. Tom confirmed the trials index has been moved to `www.sap.com` and the redirect is wired into AEM/Akamai today. Query strings pass through cleanly (verified: `?search=sdk%20for%20android` is preserved end-to-end).
+- `https://developers.sap.com/bin/sapdxc/trials-and-downloads/checksum.{id}.html` → **200** body `<div ...>Checksum was not found</div>` for any `id`. The servlet still resolves but the DAM JSON is empty/depopulated; the SAP downloads team apparently embedded checksums directly into the new sap.com page. **Effectively dead in production.**
+- Tutorial corpus scan (`.tutorial-cache/`, 200+ files): **11 tutorials** link to `https://developers.sap.com/trials-downloads.html?search=<topic>` — all are mobile/SDK/ABAP setup tutorials directing the reader to download an SDK or trial binary. Files: `sdk-android-wizard-app`, `sdk-ios-setup`, `sdk-ios-multi-user`, `abap-env-create-table-type`, `abap-create-project`, plus six `cp-mobile-dev-kit-*` tutorials. **Zero references** to `/trials/` (path), `/bin/sapdxc/trials`, or `trialsAndDownloads`.
 
-**Action:** Out-of-band conversation with the trials/downloads owner.
+**Replacement:** Server-side 301 redirect added to `approuter/server.js` via a new `redirectsHandler` middleware ([approuter/server.js:108-128](approuter/server.js#L108-L128)). Path-keyed regex map (`LEGACY_REDIRECTS`) so we can add more cutover redirects without growing the handler. Behavior:
+
+- `GET /trials-downloads.html` → `301` → `https://www.sap.com/products/try-sap/trials-downloads.html`
+- Query string captured by the regex group and appended verbatim to the target — preserves the `?search=<topic>` deep-links the 11 tutorials rely on
+- `Cache-Control: public, max-age=86400` so the AppRouter doesn't re-emit on every request
+- `HEAD` redirects too (link-checkers, SEO crawlers)
+
+**Verified:** [test/smoke/redirects.test.js](test/smoke/redirects.test.js) covers (a) bare path 301 + correct Location, (b) `?search=...` query-string preservation including URL-encoded space, (c) `HEAD` redirects identically. Runs in CI after deploy via `npm run test:smoke`.
+
+**Out of scope (deliberately):** The `ChecksumServlet` itself is **not** mirrored. It's already returning "not found" upstream, no live page consumes it, and no tutorial links to its path. If the SAP downloads team ever re-introduces the lazy-checksum pattern they'd own a new endpoint on `www.sap.com`, not on developers.sap.com. The page-level UI (search, table, columns) is also out of scope — that's `www.sap.com`'s responsibility now. The cache-invalidation listener has nothing to invalidate.
+
+**Note for future work:** If additional AEM URL paths surface during cutover (e.g., from external bookmarks or stale search results), add them to `LEGACY_REDIRECTS` rather than reinstating per-route entries in `xs-app.json` — the AppRouter schema cannot emit cross-domain 301s, only internal rewrites. The 11 affected tutorial source files in the `sap-tutorials` GitHub org could optionally be patched to link directly at `www.sap.com` to drop the redirect hop, but it's cosmetic since the 301 covers them and externally-cached old links keep working.
 
 ---
 
