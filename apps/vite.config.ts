@@ -21,6 +21,7 @@ export default defineConfig({
         'nav-dropdown': resolve(__dirname, 'src/nav-dropdown/main.ts'),
         'mini-navigator': resolve(__dirname, 'src/mini-navigator/main.ts'),
         'scanner-vue': resolve(__dirname, 'src/scanner-vue/main.ts'),
+        'tutorial-feedback': resolve(__dirname, 'src/tutorial-feedback/main.ts'),
       },
       output: {
         entryFileNames: '[name].js',

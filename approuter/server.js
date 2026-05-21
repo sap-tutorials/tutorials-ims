@@ -36,6 +36,7 @@ const APP_MOUNTS = {
   '/admin-ui/components/operations': join(__dirname, '..', 'app', 'admin', 'operations', 'webapp'),
   '/admin-ui/components/accounts': join(__dirname, '..', 'app', 'admin', 'accounts', 'webapp'),
   '/admin-ui/components/changelog': join(__dirname, '..', 'app', 'admin', 'changelog', 'webapp'),
+  '/admin-ui/components/feedback': join(__dirname, '..', 'app', 'admin', 'feedback', 'webapp'),
   '/admin-ui': join(__dirname, '..', 'app', 'admin-shell', 'webapp')
 }
 const appServers = Object.entries(APP_MOUNTS).map(([prefix, dir]) => ({

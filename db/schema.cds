@@ -385,3 +385,19 @@ entity TutorialEmbedding {
   charCount        : Integer;
   createdAt        : Timestamp @cds.on.insert: $now;
 }
+
+entity TutorialFeedback : managed {
+  key ID            : UUID;
+  tutorialSlug      : String(200) @mandatory;
+  submittedAt       : Timestamp default $now;
+  wasAuthenticated  : Boolean default false;
+  submitterIpHash   : String(64);
+  ratingUseCase     : Integer @assert.range: [0, 10];
+  ratingRelevance   : Integer @assert.range: [0, 10];
+  ratingDuration    : Integer @assert.range: [0, 10];
+  ratingStructure   : Integer @assert.range: [0, 10];
+  ratingInteresting : Integer @assert.range: [0, 10];
+  ratingVisuals     : Integer @assert.range: [0, 10];
+  npsScore          : Integer @assert.range: [0, 10];
+  comment           : String(2000);
+}

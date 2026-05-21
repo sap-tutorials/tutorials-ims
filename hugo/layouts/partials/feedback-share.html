@@ -38,9 +38,14 @@
         <a href="https://github.com/sap-tutorials/Tutorials/issues/new?title={{ .Title }}" target="_blank" rel="noopener" class="feedback-btn">Contribute suggestion</a>
       </div>
       <div class="feedback-option">
-        <svg class="feedback-icon" width="48" height="48" viewBox="0 0 48 48" fill="none"><rect x="10" y="12" width="28" height="20" rx="2" stroke="currentColor" stroke-width="2" fill="none"/><path d="M10 16l14 10 14-10" stroke="currentColor" stroke-width="2" fill="none"/></svg>
+        <svg class="feedback-icon" width="48" height="48" viewBox="0 0 48 48" fill="none">
+          <rect x="10" y="12" width="28" height="20" rx="2" stroke="currentColor" stroke-width="2" fill="none"/>
+          <path d="M10 16l14 10 14-10" stroke="currentColor" stroke-width="2" fill="none"/>
+        </svg>
         <span>Send us your thoughts</span>
-        <a href="https://sapinsights.eu.qualtrics.com/jfe/form/SV_0im30RgTkbEEHMV?TutorialID={{ .Params.slug }}&graphics=true" target="_blank" rel="noopener" class="feedback-btn">Take our survey</a>
+        <button type="button" class="feedback-btn" onclick="openTutorialFeedbackPopup('{{ .Params.slug }}')">
+          Give feedback
+        </button>
       </div>
     </div>
   </div>
@@ -65,6 +70,14 @@
   </div>
 </div>
 
+<!-- Tutorial feedback popup -->
+<div id="tutorial-feedback-popup" class="popup-overlay popup-hidden" onclick="if(event.target===this)closePopups()">
+  <div class="popup-card">
+    <button type="button" class="popup-close" onclick="closePopups()" aria-label="Close">&times;</button>
+    <div id="tutorial-feedback-mount"></div>
+  </div>
+</div>
+
 <script>
 function openFeedbackPopup() {
   closePopups();
@@ -74,8 +87,22 @@ function openSharePopup() {
   closePopups();
   document.getElementById('share-popup').classList.remove('popup-hidden');
 }
+function openTutorialFeedbackPopup(slug) {
+  closePopups();
+  document.getElementById('tutorial-feedback-popup').classList.remove('popup-hidden');
+  if (window.mountTutorialFeedback) {
+    window.mountTutorialFeedback(slug, 'tutorial-feedback-popup');
+    return;
+  }
+  const s = document.createElement('script');
+  s.type = 'module';
+  s.src = '/js/tutorial-feedback.js';
+  s.onload = () => window.mountTutorialFeedback(slug, 'tutorial-feedback-popup');
+  document.head.appendChild(s);
+}
 function closePopups() {
   document.getElementById('feedback-popup').classList.add('popup-hidden');
   document.getElementById('share-popup').classList.add('popup-hidden');
+  document.getElementById('tutorial-feedback-popup').classList.add('popup-hidden');
 }
 </script>

@@ -1,0 +1,83 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.feedback",
+    "type": "application",
+    "title": "{{appTitle}}",
+    "description": "{{appDescription}}",
+    "applicationVersion": { "version": "0.0.1" },
+    "i18n": "i18n/i18n.properties",
+    "dataSources": {
+      "mainService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "Feedback-display": {
+          "semanticObject": "Feedback",
+          "action": "display",
+          "title": "{{appTitle}}",
+          "signature": { "parameters": {}, "additionalParameters": "allowed" }
+        }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": { "sap.fe.templates": {} }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      },
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": { "bundleName": "sap.tutorials.admin.feedback.i18n.i18n" }
+      }
+    },
+    "routing": {
+      "routes": [
+        { "pattern": ":?query:", "name": "FeedbackList", "target": "FeedbackList" },
+        { "pattern": "TutorialFeedback({key}):?query:", "name": "FeedbackObject", "target": "FeedbackObject" }
+      ],
+      "targets": {
+        "FeedbackList": {
+          "type": "Component",
+          "id": "FeedbackList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/TutorialFeedback",
+              "variantManagement": "Page",
+              "initialLoad": "Enabled",
+              "navigation": {
+                "TutorialFeedback": { "detail": { "route": "FeedbackObject" } }
+              }
+            }
+          }
+        },
+        "FeedbackObject": {
+          "type": "Component",
+          "id": "FeedbackObject",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/TutorialFeedback"
+            }
+          }
+        }
+      }
+    }
+  }
+}

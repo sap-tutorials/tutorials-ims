@@ -83,6 +83,10 @@
             <tnt:NavigationListItem text="Accomplishments" key="accomplishments" />
             <tnt:NavigationListItem text="Prizes" key="prizes" />
           </tnt:NavigationListItem>
+          <tnt:NavigationListItem text="Feedback" icon="sap-icon://feedback" expanded="true">
+            <tnt:NavigationListItem text="All Submissions" key="feedbackList" />
+            <tnt:NavigationListItem text="Dashboard" key="feedbackDashboard" />
+          </tnt:NavigationListItem>
           <tnt:NavigationListItem text="System" icon="sap-icon://action-settings" expanded="true">
             <tnt:NavigationListItem text="Operations" key="operations" />
             <tnt:NavigationListItem text="Pipeline Log" key="pipelinelog" />

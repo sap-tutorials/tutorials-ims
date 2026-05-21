@@ -539,7 +539,13 @@ HTTP request was not processed because the previous request failed. This happens
 
 ---
 
-## 21. Future Work
+## 21. Tutorial Feedback Form ✅ (2026-05-20)
+
+**Completed on branch `feat/tutorial-feedback-form`.** Replaces the Qualtrics deeplink card on tutorial pages with a self-hosted Vue feedback form persisted to HANA. Same 7 Likert ratings + NPS + comment as the Qualtrics survey. Anonymous by default — only flags whether the submitter was authenticated, no PII stored. Spam protection via honeypot + IP-hash rate limit (daily-rotated salt from `SUBMISSION_SALT_SECRET`). Admin review surfaces under a new "Feedback" group in the admin shell side nav with a Fiori Elements ListReport→ObjectPage app and a per-tutorial KPI dashboard. Set `SUBMISSION_SALT_SECRET` on `tutorials-srv` via `cf set-env` before enabling in production.
+
+---
+
+## 22. Future Work
 
 - [ ] **Analytics — Author/Management views (PowerBI workflow)** — Build reporting views for tutorial authors and management, with a workflow to export/connect data to PowerBI dashboards.
 - [x] **Tag Import** — Bulk CSV/JSON import via Tags admin app. Two-step preview/commit flow on AdminService with upsert / skip-duplicates / abort-on-duplicate strategies.

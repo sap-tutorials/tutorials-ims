@@ -904,3 +904,42 @@ annotate AdminService.ChatSettings with @(
   embeddingTopK      @Common.Label: 'Top K Steps';
   embeddingMinScore  @Common.Label: 'Min Similarity Score';
 };
+
+annotate AdminService.TutorialFeedback with @(
+  Capabilities.InsertRestrictions: { Insertable: false },
+  Capabilities.UpdateRestrictions: { Updatable: false },
+  Capabilities.DeleteRestrictions: { Deletable: false },
+  UI.HeaderInfo: {
+    TypeName: 'Submission',
+    TypeNamePlural: 'Submissions',
+    Title: { Value: tutorialSlug }
+  },
+  UI.SelectionFields: [tutorialSlug, wasAuthenticated, submittedAt],
+  UI.LineItem: [
+    { Value: tutorialSlug },
+    { Value: submittedAt },
+    { Value: wasAuthenticated },
+    { Value: npsScore },
+    { Value: ratingUseCase },
+    { Value: ratingRelevance },
+    { Value: ratingDuration },
+    { Value: ratingStructure },
+    { Value: ratingInteresting },
+    { Value: ratingVisuals },
+    { Value: comment }
+  ],
+  UI.FieldGroup #Ratings: { Data: [
+    { Value: ratingUseCase },
+    { Value: ratingRelevance },
+    { Value: ratingDuration },
+    { Value: ratingStructure },
+    { Value: ratingInteresting },
+    { Value: ratingVisuals },
+    { Value: npsScore }
+  ]},
+  UI.FieldGroup #CommentGroup: { Data: [{ Value: comment }] },
+  UI.Facets: [
+    { $Type: 'UI.ReferenceFacet', Label: 'Ratings', Target: '@UI.FieldGroup#Ratings' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Comment', Target: '@UI.FieldGroup#CommentGroup' }
+  ]
+);
