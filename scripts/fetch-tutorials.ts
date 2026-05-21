@@ -11,7 +11,7 @@ import { convertOptionBlocks } from './parsers/options.js'
 import { escapeHugoDelimiters } from './parsers/hugo-delimiters.js'
 import { stripDangerousHtml } from './parsers/sanitize-html.js'
 import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, EXCLUDED_REPOS, type DiscoveredTutorial } from './parsers/github.js'
-import { fetchBuildCatalog, loadCapCache, saveCapCache } from './parsers/cap.js'
+import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache } from './parsers/cap.js'
 import { parseRulesVr } from './parsers/rules.js'
 import { computeRecommendations } from './parsers/recommendations.js'
 import type { Mission, MissionHierarchy, HierarchyGroup, TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } from './parsers/types.js'
@@ -812,6 +812,7 @@ async function main() {
   let missions: Mission[] = []
   let hierarchies: MissionHierarchy[] = []
   let capCacheUsed = false
+  let coCompletions: Map<string, Map<string, number>> = new Map()
 
   const forceRefresh = process.argv.includes('--force-cap')
   const cached = forceRefresh ? null : loadCapCache()
@@ -829,6 +830,8 @@ async function main() {
       hierarchies = catalog.hierarchies
       saveCapCache(missions, hierarchies)
       console.log(`  [cap] Fetched ${missions.length} missions with hierarchies`)
+      coCompletions = await fetchCoCompletions(capBaseUrl)
+      console.log(`  [cap] co-completion map: ${coCompletions.size} source slugs`)
     } catch (err) {
       console.warn(`  [cap-warn] CAP fetch failed: ${err instanceof Error ? err.message : err}`)
       console.warn('  [cap-warn] Continuing without missions/groups')
@@ -930,7 +933,7 @@ async function main() {
     writeMissionPage(mission, missionGroups, navBySlug, OUTPUT_DIR, target)
   }
 
-  const recommendations = computeRecommendations(navEntries)
+  const recommendations = computeRecommendations(navEntries, { coCompletions })
   for (const nav of navEntries) {
     const recs = recommendations.get(nav.slug) ?? []
     if (recs.length > 0) nav.recommendations = recs
