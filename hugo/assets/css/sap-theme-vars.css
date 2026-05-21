@@ -103,3 +103,7 @@ html.dark {
   --sapButton_Lite_TextColor: #4db1ff;
   --sapButton_Lite_Hover_Background: rgba(77, 177, 255, 0.08);
 }
+
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}

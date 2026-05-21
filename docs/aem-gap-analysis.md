@@ -363,11 +363,11 @@ Costs avoided: a long-lived GitHub PAT (rotation, expiry, secret hygiene), a new
 
 ---
 
-### 20. Anchor-Link Smooth Scroll
+### 20. Anchor-Link Smooth Scroll ✅
 
 **AEM:** Clientlib JS smoothly scrolls to step anchors.
 
-**Replacement:** CSS `scroll-behavior: smooth` covers most browsers. Verify.
+**Replacement:** CSS `html { scroll-behavior: smooth }` (gated on `prefers-reduced-motion: no-preference`) appended to [hugo/assets/css/sap-theme-vars.css](../hugo/assets/css/sap-theme-vars.css). Plus a small JS handler in [hugo/assets/js/tutorial.ts](../hugo/assets/js/tutorial.ts) that **expands the target step accordion** before/after navigation — without it, anchor links to collapsed steps land on a closed accordion showing only the title. Three pieces: `expandStep(stepNum)` helper, click-delegate hook on `a[href^="#step-"]` (expand before native scroll), and `initStepHashNavigation()` which handles initial-load `location.hash` and `hashchange` events (re-scrolls smoothly because the browser's pre-DOMContentLoaded jump landed on a still-collapsed step).
 
 ---
 

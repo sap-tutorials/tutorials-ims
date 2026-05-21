@@ -17,6 +17,11 @@
 // Event delegation
 document.addEventListener('click', (e) => {
   const target = e.target as HTMLElement
+  const stepLink = target.closest('a[href^="#step-"]') as HTMLAnchorElement | null
+  if (stepLink) {
+    const m = stepLink.getAttribute('href')!.match(/^#step-(\d+)$/)
+    if (m) expandStep(m[1])
+  }
   const stepHeader = target.closest('[data-action="toggle-step"]')
   if (stepHeader) { toggleStep(stepHeader as HTMLElement); return }
   const doneBtn = target.closest('[data-action="mark-done"]')
@@ -76,6 +81,32 @@ function toggleStep(header: HTMLElement) {
   body.hidden = !body.hidden
   if (icon) icon.textContent = body.hidden ? '+' : '—'
   updateActiveTocItem()
+}
+
+function expandStep(stepNum: string): HTMLElement | null {
+  const step = document.querySelector(`.tutorial-step[data-step="${stepNum}"]`) as HTMLElement | null
+  if (!step) return null
+  const body = step.querySelector('.step-body') as HTMLElement | null
+  if (!body) return step
+  if (body.hidden) {
+    body.hidden = false
+    const icon = step.querySelector('.step-toggle-icon')
+    if (icon) icon.textContent = '—'
+    updateActiveTocItem()
+  }
+  return step
+}
+
+function scrollToStepHash() {
+  const m = location.hash.match(/^#step-(\d+)$/)
+  if (!m) return
+  const step = expandStep(m[1])
+  if (step) step.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function initStepHashNavigation() {
+  if (location.hash.startsWith('#step-')) scrollToStepHash()
+  window.addEventListener('hashchange', scrollToStepHash)
 }
 
 function expandAllSteps() {
@@ -442,4 +473,5 @@ document.addEventListener('DOMContentLoaded', () => {
   initMiniNavProgress()
   initAuthAwareButtons()
   initLightbox()
+  initStepHashNavigation()
 })
