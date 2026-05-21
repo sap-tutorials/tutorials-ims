@@ -392,12 +392,12 @@ entity TutorialFeedback : managed {
   submittedAt       : Timestamp default $now;
   wasAuthenticated  : Boolean default false;
   submitterIpHash   : String(64);
-  ratingUseCase     : Integer;
-  ratingRelevance   : Integer;
-  ratingDuration    : Integer;
-  ratingStructure   : Integer;
-  ratingInteresting : Integer;
-  ratingVisuals     : Integer;
-  npsScore          : Integer;
+  ratingUseCase     : Integer @assert.range: [0, 10];
+  ratingRelevance   : Integer @assert.range: [0, 10];
+  ratingDuration    : Integer @assert.range: [0, 10];
+  ratingStructure   : Integer @assert.range: [0, 10];
+  ratingInteresting : Integer @assert.range: [0, 10];
+  ratingVisuals     : Integer @assert.range: [0, 10];
+  npsScore          : Integer @assert.range: [0, 10];
   comment           : String(2000);
 }
