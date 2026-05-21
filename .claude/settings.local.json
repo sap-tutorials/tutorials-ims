@@ -14,7 +14,8 @@
       "Bash(rm -rf approuter/static/*)",
       "Bash(cp -r hugo/public/. approuter/static/)",
       "mcp__sap-devs-server__btp_target",
-      "mcp__sap-devs-server__cf_services"
+      "mcp__sap-devs-server__cf_services",
+      "mcp__sap-devs-server__cf_env"
     ]
   }
 }
