@@ -532,14 +532,32 @@ Closed.
 
 ---
 
-### E15. AppRouter Custom Headers
+### E15. AppRouter Custom Headers — ✅ Closed 2026-05-21
 
-The replacement's AppRouter sets some security headers via `xs-app.json`. AEM's Dispatcher had its own header rules. **Differences may surprise:**
-- Different `Content-Security-Policy` (could break inline analytics).
-- Different `X-Frame-Options` (could break embedding tutorials in SAP partner sites).
-- Different `Referrer-Policy` (could affect outbound link tracking).
+Side-by-side header diff between AEM production (`https://developers.sap.com/tutorials/abap-create-project.html`) and our DEV approuter captured 2026-05-21:
 
-**Action:** Diff the response headers from a production tutorial URL (AEM) vs the dev replacement.
+| Header | AEM | Ours | Disposition |
+| --- | --- | --- | --- |
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` | `max-age=31536000; includeSubDomains; preload` | ✅ Better — preload-eligible |
+| `Content-Security-Policy` | `default-src 'self' blob: https: data: 'unsafe-inline' 'unsafe-eval' [50+ wildcards]` plus `frame-ancestors [partner allow-list]` | Tight allow-list of `'self'` + `ui5.sap.com` + `youtube.com` + `raw.githubusercontent.com` + `*.sap.com` | ✅ Materially tighter (no `'unsafe-eval'`, no `https:` blanket, no Adobe DTM / Demdex / Qualtrics / Liveperson wildcards). Deliberate per "no Adobe Analytics migration" decision. |
+| `Cache-Control` (tutorials) | `max-age=0` | `public, max-age=300` | ✅ Better — origin offload |
+| `Content-Signal` | (not set) | `index=yes, ai-train=no, ai-search=yes` | ✅ Modern AI bot signals |
+| `X-Robots-Tag` | (not set) | `index, follow, max-image-preview:large` | ✅ Explicit indexing hints |
+| `X-XSS-Protection` | `1; mode=block` | (not set) | ✅ Correctly omitted (deprecated; hostile in modern Chrome) |
+| `X-Permitted-Cross-Domain-Policies` | `master-only` | (not set) | ✅ Correctly omitted (Flash/Silverlight legacy) |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` | `strict-origin-when-cross-origin` | ✅ Added — explicit parity for security audits |
+| `X-Content-Type-Options` | (not set) | `nosniff` | ✅ Added on all responses (was framework-default on errors only) |
+| `X-Frame-Options` | (uses CSP `frame-ancestors` with partner allow-list: `hybris.com`, `*.sap.com`, `*.cloud.sap`, `lookbookhq.com`, `gigya.com`, `discovery-center.cloud.sap`) | `SAMEORIGIN` | ⚠️ Documented regression — see below |
+| `Access-Control-Allow-Origin` | `http://global.sap.com` | (not set) | ⚠️ Niche AEM CORS allowance — likely unused; not migrated |
+
+**Changes shipped to close this gap** (commit applies both additions to [approuter/xs-app.json](../approuter/xs-app.json)):
+
+1. `Referrer-Policy: strict-origin-when-cross-origin` — explicit parity with AEM (modern browsers default to this anyway, but explicit headers improve audit posture).
+2. `X-Content-Type-Options: nosniff` — applied uniformly to all responses, not just framework-generated errors.
+
+**Documented regression — cross-origin iframe embeds:** AEM's CSP `frame-ancestors` allow-list permitted partner sites (lookbookhq, gigya, hybris, discovery-center, `*.sap.com`, `*.cloud.sap`) to embed tutorials in iframes. Our `X-Frame-Options: SAMEORIGIN` blocks all cross-origin embedding. **Open question for marketing/partner teams:** does any partner site or marketing landing page (lookbookhq especially) currently iframe-embed a developers.sap.com tutorial? If yes, switch to CSP `frame-ancestors` with the same allow-list. If no, accept the tightening. No code action until we hear back.
+
+Closed.
 
 ---
 
