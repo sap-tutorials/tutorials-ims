@@ -3,6 +3,7 @@ import express from 'express';
 import { registerJobs } from './jobs/scheduler.js';
 import { qrcodeHandler } from './lib/qrcode-handler.js';
 import { buildCatalogHandler } from './lib/build-catalog.js';
+import { coCompletionsHandler } from './lib/co-completion.js';
 import { navigatorCatalogHandler } from './lib/navigator-catalog.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
 import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, navHandler, rollbackHandler } from './lib/content-store.js';
@@ -84,6 +85,7 @@ cds.on('bootstrap', (app) => {
   app.use(basicAuthMiddleware);
   app.get('/api/qrcode', qrcodeHandler);
   app.get('/build/catalog', buildCatalogHandler);
+  app.get('/build/co-completions', coCompletionsHandler);
   app.get('/build/navigator', navigatorCatalogHandler);
   app.get('/build/slug-mapping', async (req, res) => {
     const { buildSlugMapping } = await import('./lib/slug-mapping.js');

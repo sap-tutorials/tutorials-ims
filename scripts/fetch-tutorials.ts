@@ -11,8 +11,9 @@ import { convertOptionBlocks } from './parsers/options.js'
 import { escapeHugoDelimiters } from './parsers/hugo-delimiters.js'
 import { stripDangerousHtml } from './parsers/sanitize-html.js'
 import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, EXCLUDED_REPOS, type DiscoveredTutorial } from './parsers/github.js'
-import { fetchBuildCatalog, loadCapCache, saveCapCache } from './parsers/cap.js'
+import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache } from './parsers/cap.js'
 import { parseRulesVr } from './parsers/rules.js'
+import { computeRecommendations } from './parsers/recommendations.js'
 import type { Mission, MissionHierarchy, HierarchyGroup, TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } from './parsers/types.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -377,6 +378,13 @@ export function writeHugoPage(
   writeFileSync(join(outputDir, `${slug}.md`), content, 'utf-8')
 }
 
+function serializeYamlValue(val: string | number | string[] | null): string {
+  if (val === null) return 'null'
+  if (Array.isArray(val)) return `\n${val.map(s => `  - ${JSON.stringify(s)}`).join('\n')}`
+  if (typeof val === 'string') return JSON.stringify(val)
+  return String(val)
+}
+
 function patchTutorialFrontmatter(slug: string, nav: TutorialNavEntry, outputDir: string, target: BuildTarget = 'vitepress'): void {
   const filePath = join(outputDir, `${slug}.md`)
   if (!existsSync(filePath)) return
@@ -389,7 +397,7 @@ function patchTutorialFrontmatter(slug: string, nav: TutorialNavEntry, outputDir
   const fmBlock = raw.slice(4, endOfFm)
   const lines = fmBlock.split('\n')
 
-  const patchFields: Record<string, string | number | null> = {
+  const patchFields: Record<string, string | number | string[] | null> = {
     prev: nav.prev,
     next: nav.next,
   }
@@ -399,21 +407,23 @@ function patchTutorialFrontmatter(slug: string, nav: TutorialNavEntry, outputDir
   if (nav.groupId) patchFields.groupId = nav.groupId
   if (nav.groupTitle) patchFields.groupTitle = nav.groupTitle
   if (nav.groupSlug) patchFields.groupSlug = nav.groupSlug
+  if (nav.recommendations && nav.recommendations.length > 0) {
+    patchFields.recommendations = nav.recommendations
+  }
 
   const existingKeys = new Set(lines.map(l => l.match(/^(\w+):/)?.[1]).filter(Boolean))
   const updatedLines = lines.map(line => {
     const keyMatch = line.match(/^(\w+):/)
     if (keyMatch && keyMatch[1] in patchFields) {
       const val = patchFields[keyMatch[1]]
-      return `${keyMatch[1]}: ${val === null ? 'null' : typeof val === 'string' ? JSON.stringify(val) : val}`
+      return `${keyMatch[1]}: ${serializeYamlValue(val)}`
     }
     return line
   })
 
   for (const [key, val] of Object.entries(patchFields)) {
     if (!existingKeys.has(key)) {
-      const yamlVal = val === null ? 'null' : typeof val === 'string' ? JSON.stringify(val) : val
-      updatedLines.push(`${key}: ${yamlVal}`)
+      updatedLines.push(`${key}: ${serializeYamlValue(val)}`)
     }
   }
 
@@ -802,6 +812,7 @@ async function main() {
   let missions: Mission[] = []
   let hierarchies: MissionHierarchy[] = []
   let capCacheUsed = false
+  let coCompletions: Map<string, Map<string, number>> = new Map()
 
   const forceRefresh = process.argv.includes('--force-cap')
   const cached = forceRefresh ? null : loadCapCache()
@@ -819,6 +830,8 @@ async function main() {
       hierarchies = catalog.hierarchies
       saveCapCache(missions, hierarchies)
       console.log(`  [cap] Fetched ${missions.length} missions with hierarchies`)
+      coCompletions = await fetchCoCompletions(capBaseUrl)
+      console.log(`  [cap] co-completion map: ${coCompletions.size} source slugs`)
     } catch (err) {
       console.warn(`  [cap-warn] CAP fetch failed: ${err instanceof Error ? err.message : err}`)
       console.warn('  [cap-warn] Continuing without missions/groups')
@@ -920,9 +933,15 @@ async function main() {
     writeMissionPage(mission, missionGroups, navBySlug, OUTPUT_DIR, target)
   }
 
+  const recommendations = computeRecommendations(navEntries, { coCompletions })
+  for (const nav of navEntries) {
+    const recs = recommendations.get(nav.slug) ?? []
+    if (recs.length > 0) nav.recommendations = recs
+  }
+
   let patchedCount = 0
   for (const nav of navEntries) {
-    if (nav.missionId || nav.prev || nav.next) {
+    if (nav.missionId || nav.prev || nav.next || nav.recommendations) {
       patchTutorialFrontmatter(nav.slug, nav, OUTPUT_DIR, target)
       patchedCount++
     }

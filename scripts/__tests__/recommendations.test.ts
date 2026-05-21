@@ -62,4 +62,27 @@ describe('computeRecommendations', () => {
     const result = computeRecommendations(entries)
     expect(result.get('target')).toEqual(['aa', 'bb', 'cc'])
   })
+
+  it('blends co-completion (60%) with tag-overlap (40%) when co-completion data exists', () => {
+    const entries: TutorialNavEntry[] = [
+      navEntry({ slug: 'target',         primaryTag: 'cap', displayTags: ['CAP'] }),
+      navEntry({ slug: 'tag-strong',     primaryTag: 'cap', displayTags: ['CAP'] }),
+      navEntry({ slug: 'co-strong',      primaryTag: 'btp', displayTags: ['BTP'] }),
+    ]
+    const coCompletions = new Map([
+      ['target', new Map([['co-strong', 100]])],
+    ])
+    const result = computeRecommendations(entries, { coCompletions })
+    expect(result.get('target')?.[0]).toBe('co-strong')
+  })
+
+  it('falls back to pure tag scoring for slugs missing from co-completion map', () => {
+    const entries: TutorialNavEntry[] = [
+      navEntry({ slug: 'target',  primaryTag: 'cap', displayTags: ['CAP'] }),
+      navEntry({ slug: 'related', primaryTag: 'cap', displayTags: ['CAP'] }),
+    ]
+    const coCompletions = new Map() // empty
+    const result = computeRecommendations(entries, { coCompletions })
+    expect(result.get('target')).toEqual(['related'])
+  })
 })
