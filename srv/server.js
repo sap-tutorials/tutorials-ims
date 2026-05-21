@@ -1,5 +1,6 @@
 import cds from '@sap/cds';
 import express from 'express';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { registerJobs } from './jobs/scheduler.js';
 import { qrcodeHandler } from './lib/qrcode-handler.js';
 import { buildCatalogHandler } from './lib/build-catalog.js';
@@ -16,6 +17,14 @@ import { computeEmbeddingStats } from './lib/embedding-stats.js';
 // mounts ChatService at /chat, which would otherwise swallow /chat/stream as
 // an OData resource path). Set in 'served' once cds.middlewares are ready.
 let chatStreamHandler = (req, res) => res.status(503).json({ error: 'service_starting' });
+
+// Per-request scope used by POST /feedback/submit to thread the originating
+// client IP from the express handler to a srv.before('submitTutorialFeedback')
+// hook. CAP 9.9.1 strictly validates action arguments and rejects unknown
+// properties, so we cannot pass _clientIp on the action payload directly;
+// AsyncLocalStorage gives us a request-safe sidechannel that survives async
+// boundaries without leaking across concurrent requests.
+const feedbackContext = new AsyncLocalStorage();
 
 // Enable CAP index page and swagger UI in non-development environments when EXPOSE_CAP_UI is set
 if (process.env.EXPOSE_CAP_UI === 'true') {
@@ -100,6 +109,35 @@ cds.on('bootstrap', (app) => {
   app.post('/content/publish', express.json({ limit: '100mb' }), contentAuthMiddleware, publishHandler);
   app.post('/content/rollback', express.json(), contentAuthMiddleware, rollbackHandler);
 
+  // Tutorial feedback bridge. Express handler (rather than letting CAP expose
+  // the action over OData) so we can derive the originating client IP from
+  // X-Forwarded-For and inject it into req.data via AsyncLocalStorage + a
+  // srv.before hook (see the 'served' handler below). CAP 9.9.1 strictly
+  // validates action arguments and rejects unknown properties, so _clientIp
+  // cannot ride on the action payload itself.
+  app.post('/feedback/submit', express.json({ limit: '8kb' }), async (req, res) => {
+    if (!process.env.SUBMISSION_SALT_SECRET) {
+      return res.status(503).json({ error: 'feedback service unavailable' });
+    }
+    // AppRouter appends the originating client IP as the LAST entry of
+    // X-Forwarded-For; everything before it is the upstream proxy chain.
+    const xff = String(req.headers['x-forwarded-for'] || '')
+      .split(',').map(s => s.trim()).filter(Boolean);
+    const clientIp = xff.length ? xff[xff.length - 1] : req.ip;
+
+    await feedbackContext.run({ clientIp }, async () => {
+      try {
+        const dev = await cds.connect.to('DeveloperService');
+        const result = await dev.send('submitTutorialFeedback', req.body || {});
+        res.status(200).json({ submissionId: result.submissionId });
+      } catch (e) {
+        const code = Number(e.code);
+        const status = (code === 400 || code === 429 || code === 503) ? code : 500;
+        res.status(status).json({ error: e.message });
+      }
+    });
+  });
+
   // Reserve POST /chat/stream BEFORE CAP mounts ChatService at /chat. The
   // OData router on /chat would otherwise interpret 'stream' as a resource
   // and return 404. Body parser runs here; auth + business logic are bound
@@ -107,10 +145,20 @@ cds.on('bootstrap', (app) => {
   app.post('/chat/stream', express.json({ limit: '64kb' }), (req, res, next) => chatStreamHandler(req, res, next));
 });
 
-cds.on('served', () => {
+cds.on('served', async () => {
   const app = cds.app;
   const contextMw = cds.middlewares?.context?.() || ((req, res, next) => next());
   const authMw = cds.middlewares?.auth?.() || ((req, res, next) => next());
+
+  // Inject client IP derived by POST /feedback/submit into req.data._clientIp
+  // AFTER CAP's strict argument validation has run. The express bridge stashes
+  // the IP in feedbackContext (AsyncLocalStorage) so the action payload stays
+  // schema-clean while the rate-limit key still binds to the originating IP.
+  const dev = await cds.connect.to('DeveloperService');
+  dev.before('submitTutorialFeedback', (req) => {
+    const ctx = feedbackContext.getStore();
+    if (ctx?.clientIp) req.data._clientIp = ctx.clientIp;
+  });
 
   app.get('/auth/user', contextMw, authMw, (req, res) => {
     const user = cds.context?.user;
