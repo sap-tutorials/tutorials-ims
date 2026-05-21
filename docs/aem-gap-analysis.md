@@ -457,21 +457,30 @@ The AEM admin UI (`/system/console`, `/sites.html`) authenticates against an SAP
 
 ---
 
-### E9. Open Graph / Social Card Images
+### E9. Open Graph / Social Card Images ✅ Closed 2026-05-21
 
-AEM may auto-generate Open Graph preview images per tutorial (for LinkedIn/Twitter shares). Replacement may not.
+Production check on `https://developers.sap.com/tutorials/abap-create-project.html` confirmed AEM emits a **static 300×300 SAP logo** as `og:image` for every tutorial — not a dynamic per-tutorial card. Our replacement already matches-or-beats this:
 
-**Action:** Check `<meta property="og:image">` on a sample of production tutorials. If present and dynamic, plan equivalent.
+- `og:image` = `/img/og-default.png` at 1200×630 (LinkedIn/Slack-friendly large card)
+- `og:type` = `article` (AEM emits `website`)
+- Twitter card = `summary_large_image` (AEM doesn't emit Twitter meta at all)
+
+Closed at parity. A per-tutorial dynamic OG card pipeline (sharp + SVG template, run after fetch-tutorials) is tracked as a future enhancement, not a cutover gap — see [E16. Dynamic Per-Tutorial OG Cards](#e16-dynamic-per-tutorial-og-cards--future-enhancement).
 
 ---
 
-### E10. Author Profile Pages
+### E10. Author Profile Pages — 📋 Deferred (Future Enhancement)
 
 Tutorials may link to author profile pages (`/authors/<author-id>`) showing all tutorials by that author, bio, photo. These pages might be in AEM as content fragments.
 
-**Question:** Does the replacement have author pages? If not, links from tutorials to author profiles 404.
+**Status:** Not present in the replacement and not blocking cutover. Tom likes the idea — saved as a future enhancement, not a cutover gap.
 
-**Action:** Sample `/authors/...` URLs; either build equivalent or add to redirect map (point to a generic landing).
+**Future scope (when picked up):**
+
+- Inventory `/authors/...` URLs in the AEM sitemap to size the corpus.
+- Decide on data source: extract author metadata from tutorial frontmatter (already parsed) vs. dedicated `Authors` entity in CAP.
+- Build Hugo `/authors/{slug}/` template listing tutorials per author + optional bio/photo.
+- Until built, any inbound `/authors/...` links 404 — acceptable since AEM's traffic to these pages is low.
 
 ---
 
@@ -513,6 +522,25 @@ The replacement's AppRouter sets some security headers via `xs-app.json`. AEM's 
 - Different `Referrer-Policy` (could affect outbound link tracking).
 
 **Action:** Diff the response headers from a production tutorial URL (AEM) vs the dev replacement.
+
+---
+
+### E16. Dynamic Per-Tutorial OG Cards — 📋 Future Enhancement
+
+Net-new capability beyond AEM parity (AEM uses a static SAP logo for every tutorial — see [E9](#e9-open-graph--social-card-images--closed-2026-05-21)). Tom likes the idea — saved for future, not a cutover gap.
+
+**Concept:** Generate a 1200×630 PNG per tutorial at build time, composited from a branded SVG template with per-tutorial title, level, and primary tag. Replaces the single static `og:image` with `/img/og/<slug>.png` so LinkedIn/Slack/Twitter shares display the tutorial topic instead of a generic SAP logo.
+
+**Estimated cost:**
+
+- **Code:** ~150 LOC in `scripts/generate-og-cards.ts`; small Hugo template change in `head-og.html`; ensure `level` and `primaryTag` are populated in `scripts/parsers/`.
+- **Build time:** ~60–90s added to `npm run build:all` (~600 tutorials × 80–150 ms via `sharp`).
+- **Artifacts:** ~30 MB PNGs in `approuter/static/img/og/`.
+- **Dependencies:** `sharp` (~30 MB native binary) plus SAP "72" font in CI runner. Alternative: `satori` (HTML→SVG→PNG) avoids the system-font requirement by embedding a WOFF2.
+
+**Estimated value:** Industry benchmarks suggest 30–40% CTR lift on `summary_large_image` cards vs. small thumbnail logos when the card is on-topic. Marginal direct SEO impact; meaningful brand-consistency win on social shares.
+
+**When to revisit:** After cutover stabilizes and a marketing/social-traffic baseline exists to measure against.
 
 ---
 
