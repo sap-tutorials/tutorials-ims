@@ -11,6 +11,7 @@ import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, nav
 import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-catalog.js';
 import { buildSystemPrompt } from './lib/chat-context.js';
 import { createRateLimiter, RateLimitError } from './lib/chat-rate-limit.js';
+import { createIpRateLimiter, ipRateLimitMiddleware } from './lib/ip-rate-limit.js';
 import { streamChat, toolsForContext } from './lib/chat-orchestrator.js';
 import { computeEmbeddingStats } from './lib/embedding-stats.js';
 
@@ -161,6 +162,15 @@ cds.on('bootstrap', (app) => {
   // Same: reserve GET /admin/embeddings/stats BEFORE CAP mounts AdminService
   // at /admin. Auth + business logic bound lazily in 'served'.
   app.get('/admin/embeddings/stats', (req, res, next) => embeddingsStatsHandler(req, res, next));
+
+  // Per-IP rate limit for the public /search endpoint. Mounted in 'bootstrap'
+  // so it runs BEFORE CAP wires SearchService at /search. Defaults: 60 req/min
+  // per IP; tune via SEARCH_RATE_LIMIT_MAX / SEARCH_RATE_LIMIT_WINDOW_MS.
+  const searchLimiter = createIpRateLimiter({
+    windowMs: Number(process.env.SEARCH_RATE_LIMIT_WINDOW_MS) || 60 * 1000,
+    max: Number(process.env.SEARCH_RATE_LIMIT_MAX) || 60
+  });
+  app.use('/search', ipRateLimitMiddleware(searchLimiter, { logName: 'search-rate-limit' }));
 });
 
 cds.on('served', async () => {
@@ -202,7 +212,7 @@ cds.on('served', async () => {
     if (!user?.id || user.id === 'anonymous') {
       return res.status(401).json({ error: 'unauthenticated' });
     }
-    if (!(user?.is && user.is('admin'))) {
+    if (!(user?.is && user.is('Admin'))) {
       return res.status(403).json({ error: 'forbidden' });
     }
     try {
@@ -282,7 +292,7 @@ cds.on('served', () => {
       // 4) System prompt + stream
       const { messages = [], pageContext = { kind: 'generic' } } = req.body || {};
 
-      const isAdmin = !!(user?.is && user.is('admin'));
+      const isAdmin = !!(user?.is && user.is('Admin'));
       const effectivePageContext = { ...pageContext };
       if (effectivePageContext.kind === 'admin' && !isAdmin) {
         effectivePageContext.kind = 'generic'; // forged context — degrade gracefully

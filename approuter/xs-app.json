@@ -31,26 +31,30 @@
       "source": "^/scanner-ui/(.*)$",
       "target": "/scanner-ui/$1",
       "localDir": "static",
-      "authenticationType": "xsuaa"
+      "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.MobileApp"
     },
     {
       "source": "^/scanner-vue/(.*)$",
       "target": "/scanner-vue/$1",
       "localDir": "static",
-      "authenticationType": "xsuaa"
+      "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.MobileApp"
     },
     {
       "source": "^/scanner/(.*)$",
       "target": "/scanner/$1",
       "destination": "srv-api",
       "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.MobileApp",
       "csrfProtection": false
     },
     {
       "source": "^/admin-ui/(.*)$",
       "target": "/admin-ui/$1",
       "localDir": "static",
-      "authenticationType": "xsuaa"
+      "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.Admin"
     },
     {
       "source": "^/login(\\?.*)?$",
@@ -70,6 +74,7 @@
       "target": "/admin/$1",
       "destination": "srv-api",
       "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.Admin",
       "csrfProtection": false
     },
     {
@@ -77,6 +82,7 @@
       "target": "/display/$1",
       "destination": "srv-api",
       "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.DisplayApp",
       "csrfProtection": false
     },
     {
@@ -84,6 +90,7 @@
       "target": "/api/v1/$1",
       "destination": "srv-api",
       "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.ConsolidationScope",
       "csrfProtection": false
     },
     {
@@ -196,6 +203,7 @@
       "target": "/$1",
       "destination": "srv-api",
       "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.Admin",
       "csrfProtection": false
     },
     {
@@ -203,6 +211,7 @@
       "target": "/$1",
       "destination": "srv-api",
       "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.Admin",
       "csrfProtection": false
     },
     {
