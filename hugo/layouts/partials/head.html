@@ -21,11 +21,13 @@
 {{ $darkVars := resources.Get "css/sap-horizon-dark.css" }}
 {{ $chromaLight := resources.Get "css/chroma-light.css" }}
 {{ $chromaDark := resources.Get "css/chroma-dark.css" }}
+{{ $print := resources.Get "css/print.css" }}
 <link rel="stylesheet" href="{{ $themeVars.RelPermalink }}">
 <link rel="stylesheet" href="{{ $darkVars.RelPermalink }}">
 <link rel="stylesheet" href="{{ $chromaLight.RelPermalink }}">
 <link rel="stylesheet" href="{{ $chromaDark.RelPermalink }}">
 <link rel="stylesheet" href="/css/sap-fundamental.css">
+<link rel="stylesheet" href="{{ $print.RelPermalink }}" media="print">
 <script>
   const t = localStorage.getItem('theme') ||
     (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');

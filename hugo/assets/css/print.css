@@ -1,0 +1,135 @@
+@page { margin: 1.5cm; }
+
+html, body {
+  background: #fff !important;
+  color: #000 !important;
+  color-scheme: light !important;
+}
+
+html.dark {
+  color-scheme: light !important;
+  --sapBackgroundColor: #fff !important;
+  --sapBaseColor: #fff !important;
+  --sapShellColor: #fff !important;
+  --sapPageBackgroundColor: #fff !important;
+  --sapTextColor: #000 !important;
+  --sapTitleColor: #000 !important;
+  --sapNeutralTextColor: #555 !important;
+  --sapLinkColor: #0a4cb3 !important;
+  --sapContent_LabelColor: #333 !important;
+  --sapList_Background: #fff !important;
+  --sapGroup_ContentBackground: #fff !important;
+}
+
+html.dark .chroma { background: #f6f8fa !important; }
+
+.fd-shellbar,
+.breadcrumbs,
+.feedback-share,
+.step-controls,
+.tutorial-right-col,
+.tutorial-nav-bottom,
+.next-steps,
+.site-footer,
+#joule-panel,
+.image-lightbox,
+#cookie-consent,
+.consent-banner,
+[data-action="toggle-theme"],
+button[data-action="mark-done"],
+.step-actions,
+.step-validation-mount,
+.step-toggle-icon,
+.step-check-circle,
+script,
+noscript {
+  display: none !important;
+}
+
+.tutorial-page {
+  display: block !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.tutorial-main {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.tutorial-step .step-body[hidden],
+.tutorial-step .step-body {
+  display: block !important;
+}
+
+.tutorial-step {
+  break-inside: avoid-page;
+  page-break-inside: avoid;
+  margin-bottom: 1.25rem;
+}
+
+.tutorial-step .step-header {
+  cursor: auto !important;
+  border-bottom: 1px solid #999;
+  padding: 0 0 0.25rem 0 !important;
+  margin-top: 1rem;
+}
+
+.tutorial-step .step-header-text {
+  font-weight: bold;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  break-after: avoid-page;
+  page-break-after: avoid;
+}
+
+img, svg, figure, table {
+  break-inside: avoid;
+  page-break-inside: avoid;
+  max-width: 100% !important;
+  height: auto !important;
+}
+
+figure { margin: 0.5rem 0 !important; }
+figcaption { font-size: 0.85em; color: #555; }
+
+pre, code, kbd, samp {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+pre {
+  white-space: pre-wrap !important;
+  word-break: break-word;
+  overflow: visible !important;
+  border: 1px solid #ccc;
+  padding: 0.5rem;
+  background: #f6f8fa !important;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+code { word-break: break-word; }
+
+a, a:visited {
+  color: #0a4cb3 !important;
+  text-decoration: underline;
+}
+
+.step-content a[href^="http"]:not([href*="#"])::after {
+  content: " (" attr(href) ")";
+  font-size: 0.85em;
+  color: #555;
+  word-break: break-all;
+}
+
+.tutorial-title {
+  font-size: 1.6rem !important;
+  margin: 0 0 0.5rem 0 !important;
+}
+
+.tutorial-description { font-style: italic; }
+
+#progress-bar { display: none !important; }

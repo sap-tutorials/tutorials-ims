@@ -355,13 +355,11 @@ Costs avoided: a long-lived GitHub PAT (rotation, expiry, secret hygiene), a new
 
 ---
 
-### 19. Print Stylesheet
+### 19. Print Stylesheet ✅
 
 **AEM:** Print CSS in clientlib hides nav/sidebar/footer for clean tutorial printouts.
 
-**Replacement:** Verify Hugo has equivalent.
-
-**Action:** Trivial CSS work. Ship if missing.
+**Replacement:** [hugo/assets/css/print.css](../hugo/assets/css/print.css), loaded via `media="print"` from [hugo/layouts/partials/head.html](../hugo/layouts/partials/head.html). Hides shellbar/breadcrumbs/feedback-share/sidebar/mini-nav/nav-bottom/next-steps/footer/Joule/lightbox/consent banner; force-opens collapsed step accordions (`.step-body[hidden]` → `display: block`); overrides `html.dark` design tokens so dark-mode users print on white; wraps `<pre>` with `white-space: pre-wrap` + a border so code blocks don't clip at the page margin; adds `break-inside: avoid` on steps/images/tables; appends external URLs after content links via `::after`. Verify by toggling Chromium DevTools → Rendering → "Emulate CSS media type: print" in both light and dark themes.
 
 ---
 
