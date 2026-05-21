@@ -465,7 +465,7 @@ Production check on `https://developers.sap.com/tutorials/abap-create-project.ht
 - `og:type` = `article` (AEM emits `website`)
 - Twitter card = `summary_large_image` (AEM doesn't emit Twitter meta at all)
 
-Closed at parity. A per-tutorial dynamic OG card pipeline (sharp + SVG template, run after fetch-tutorials) is tracked as a future enhancement, not a cutover gap — see [E16. Dynamic Per-Tutorial OG Cards](#e16-dynamic-per-tutorial-og-cards--future-enhancement).
+Closed at parity. A per-tutorial dynamic OG card pipeline (sharp + SVG template, run after fetch-tutorials) is tracked as a future enhancement, not a cutover gap — see E16 below.
 
 ---
 
@@ -473,7 +473,7 @@ Closed at parity. A per-tutorial dynamic OG card pipeline (sharp + SVG template,
 
 Tutorials may link to author profile pages (`/authors/<author-id>`) showing all tutorials by that author, bio, photo. These pages might be in AEM as content fragments.
 
-**Status:** Not present in the replacement and not blocking cutover. Tom likes the idea — saved as a future enhancement, not a cutover gap.
+**Status:** Not present in the replacement and not blocking cutover. Tom likes the idea — saved as a future enhancement, not a cutover gap. See E16 below for the dynamic per-tutorial OG card concept this could pair with.
 
 **Future scope (when picked up):**
 
@@ -484,11 +484,11 @@ Tutorials may link to author profile pages (`/authors/<author-id>`) showing all 
 
 ---
 
-### E11. Event Pages Beyond AppSpace
+### E11. Event Pages Beyond AppSpace — ✅ Closed (Out of Scope) 2026-05-21
 
 The team has an event-specific Vue app (AppSpace). AEM may have additional event-themed landing pages (Devtoberfest, TechEd) maintained as content fragments.
 
-**Action:** Inventory `/events/...` URLs in production sitemap.
+**Disposition:** Out of scope for tutorial cutover. Event landing pages are a separate publishing concern handled by SAP marketing/event teams, not by this tutorial platform. Closed without action.
 
 ---
 
@@ -498,11 +498,15 @@ AEM's `robots.txt` likely had carefully-tuned rules. Our replacement (commit `2c
 
 ---
 
-### E13. Print / Preview / Draft URL Variants
+### E13. Print / Preview / Draft URL Variants — ✅ Closed 2026-05-21
 
-AEM templates often expose `?wcmmode=preview`, `?print=true` query-string variants. These are useful for content review and customer service ("send me this tutorial as PDF").
+Production recon on `https://developers.sap.com/tutorials/abap-create-project.html` confirms there is nothing real to migrate:
 
-**Question:** Replacement supports these? If yes, document. If no, accept regression.
+- **`?print=true`** — AEM returns **200 OK** with the **same HTML** as without the query string. The "print variant" was always implemented via client-side `@media print` CSS, identical to our approach. Our [print.css](../hugo/assets/css/print.css) (Gap #19) handles `Ctrl+P` natively, so external links carrying `?print=true` degrade gracefully (query string is ignored; browser print invokes our stylesheet).
+- **`?wcmmode=preview`** — AEM returns **403 Forbidden** at Akamai on production. This was always an internal authoring URL, never publicly accessible. Our authoring model (GitHub PR → `npm run fetch-tutorials` on a feature branch → local `npm run dev` or ephemeral preview deploy) is a fundamentally different — and stronger — preview workflow.
+- **Draft URLs** — N/A. Tutorials are either published to HANA or not. There is no draft URL space to mirror.
+
+Codebase grep confirms zero references to `?print=`, `wcmmode`, or related AEM variants outside this gap doc itself — no inbound dependencies. Closed.
 
 ---
 
@@ -527,7 +531,7 @@ The replacement's AppRouter sets some security headers via `xs-app.json`. AEM's 
 
 ### E16. Dynamic Per-Tutorial OG Cards — 📋 Future Enhancement
 
-Net-new capability beyond AEM parity (AEM uses a static SAP logo for every tutorial — see [E9](#e9-open-graph--social-card-images--closed-2026-05-21)). Tom likes the idea — saved for future, not a cutover gap.
+Net-new capability beyond AEM parity (AEM uses a static SAP logo for every tutorial — see E9 above). Tom likes the idea — saved for future, not a cutover gap.
 
 **Concept:** Generate a 1200×630 PNG per tutorial at build time, composited from a branded SVG template with per-tutorial title, level, and primary tag. Replaces the single static `og:image` with `/img/og/<slug>.png` so LinkedIn/Slack/Twitter shares display the tutorial topic instead of a generic SAP logo.
 
