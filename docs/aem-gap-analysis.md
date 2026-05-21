@@ -510,11 +510,25 @@ Codebase grep confirms zero references to `?print=`, `wcmmode`, or related AEM v
 
 ---
 
-### E14. Crawlable JSON Endpoints
+### E14. Crawlable JSON Endpoints — ✅ Closed 2026-05-21
 
-AEM's `.model.json` outputs at every page (e.g., `/tutorials/foo.model.json`) may be crawled by external integrations (Algolia, internal LLMs, partner aggregators).
+Production recon confirms AEM's `.model.json` outputs are **not publicly accessible** and have not been crawlable for some time:
 
-**Action:** Check access logs (or guess by the fact that the SPA frontend was attempted). If `.model.json` is consumed externally, document deprecation.
+- **Akamai edge blocks all JSON patterns** with HTTP 403, regardless of UA: `<slug>.model.json`, `<slug>.json`, `<slug>.infinity.json`, `/api/tutorials.json`, `/content/developers-sap-com/.../<slug>.json` all return 403.
+- **`robots.txt`** has `User-agent: *` / `Disallow: /` as the default, with explicit `Allow: /` only for a curated bot allow-list (Googlebot, Bingbot, ChatGPT-User, GPTBot, ClaudeBot, etc.). No JSON path is whitelisted; `sitemap_index.xml` only references HTML URLs.
+- **Akamai does reverse-DNS verification** on bot UAs, so spoofed `Googlebot` requests also get 403. Real Googlebot would be admitted but doesn't crawl `.json` URLs in normal mode.
+- **Codebase grep:** zero references to AEM's `.model.json` / `.infinity.json` / `.sling.json` patterns outside this gap doc and `aem-current-state.md` (both descriptive, not consuming).
+
+**Conclusion:** No external crawler-based integration could have been consuming AEM's JSON endpoints. Any internal-network or authenticated consumer (Algolia, partner aggregators, internal LLMs) is an AEM-*decommissioning* concern (notify the integration owner), not a cutover concern.
+
+**Our replacement already provides equivalent (and more) intentional public JSON surface** via [approuter/xs-app.json](../approuter/xs-app.json):
+
+- `/build/catalog` — missions + groups + completion paths
+- `/build/navigator`, `/build/slug-mapping`, `/build/repo-catalog`
+- `/tutorials/_nav.json` → `/content/nav` (navigation metadata for all published tutorials)
+- `/api/ChatConfig*` — public chat configuration
+
+Closed.
 
 ---
 
