@@ -1,0 +1,47 @@
+<mvc:View
+  controllerName="sap.tutorials.admin.shell.controller.TutorialFeedbackDashboard"
+  xmlns="sap.m" xmlns:mvc="sap.ui.core.mvc" xmlns:l="sap.ui.layout">
+  <Page title="Tutorial Feedback Dashboard" showHeader="true">
+    <content>
+      <l:Grid defaultSpan="L3 M6 S12" class="sapUiSmallMargin" width="100%">
+        <GenericTile header="Total Responses" subheader="All time" press=".onOpenList">
+          <TileContent><NumericContent value="{/totalResponses}" /></TileContent>
+        </GenericTile>
+        <GenericTile header="Avg NPS" subheader="Last 90 days">
+          <TileContent><NumericContent value="{/avgNps90d}" /></TileContent>
+        </GenericTile>
+        <GenericTile header="Avg Overall Rating" subheader="All time">
+          <TileContent><NumericContent value="{/avgOverall}" /></TileContent>
+        </GenericTile>
+        <GenericTile header="% Authenticated" subheader="Submitter logged in">
+          <TileContent><NumericContent value="{/pctAuthenticated}" valueColor="Neutral" /></TileContent>
+        </GenericTile>
+      </l:Grid>
+      <Table items="{/aggregates}" growing="true" growingThreshold="50">
+        <columns>
+          <Column><Text text="Tutorial" /></Column>
+          <Column><Text text="Responses" /></Column>
+          <Column><Text text="Avg NPS" /></Column>
+          <Column><Text text="Promoters" /></Column>
+          <Column><Text text="Detractors" /></Column>
+        </columns>
+        <items>
+          <ColumnListItem type="Active" press=".onRowPress">
+            <cells>
+              <Text text="{tutorialSlug}" />
+              <Text text="{responseCount}" />
+              <Text text="{avgNps}" />
+              <Text text="{promoters}" />
+              <Text text="{detractors}" />
+            </cells>
+          </ColumnListItem>
+        </items>
+      </Table>
+      <Panel headerText="Recent comments">
+        <List items="{/recentComments}">
+          <FeedListItem text="{comment}" sender="{tutorialSlug}" timestamp="{submittedAt}" />
+        </List>
+      </Panel>
+    </content>
+  </Page>
+</mvc:View>
