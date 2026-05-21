@@ -4,6 +4,11 @@ import { OrchestrationClient } from '@sap-ai-sdk/orchestration';
 const LOG = cds.log('chat');
 const MAX_TURNS = 5;
 
+// Process-level guard: emit the rich getRelevantSteps failure log only once per
+// (deploymentId, model) combination. Repeats are silenced so a misconfigured
+// embedding deployment doesn't flood cf logs with thousands of identical lines.
+const ragWarnedKeys = new Set();
+
 const SEARCH_TUTORIALS_TOOL = {
   type: 'function',
   function: {
@@ -164,12 +169,13 @@ export async function dispatchTool(name, args, user) {
   }
 
   if (name === 'getRelevantSteps') {
+    let settings = null;
     try {
       if (typeof args.question !== 'string' || !args.question.trim()) {
         return { error: 'invalid_args', hits: [] };
       }
       const { ChatSettings } = cds.entities('com.sap.developers.ims');
-      const settings = await SELECT.one.from(ChatSettings);
+      settings = await SELECT.one.from(ChatSettings);
       if (!settings?.ragEnabled) {
         return { error: 'rag_disabled', hits: [] };
       }
@@ -183,7 +189,33 @@ export async function dispatchTool(name, args, user) {
         score: h.score
       }));
     } catch (err) {
-      LOG.warn('getRelevantSteps failed', err.message);
+      // Rate-limit by (embeddingDeploymentId, embeddingModel) so we log once
+      // per process for each misconfiguration rather than per chat turn.
+      const embeddingDeploymentId = settings?.embeddingDeploymentId || '';
+      const embeddingModel = settings?.embeddingModel || 'text-embedding-3-small';
+      const key = `${embeddingDeploymentId}:${embeddingModel}`;
+      if (!ragWarnedKeys.has(key)) {
+        ragWarnedKeys.add(key);
+        // Build a cause chain so the first occurrence is actionable in cf logs.
+        const causeChain = [];
+        let cur = err;
+        while (cur && causeChain.length < 5) {
+          causeChain.push({
+            message: cur.message,
+            name: cur.name || cur.constructor?.name,
+            responseStatus: cur?.response?.status ?? null,
+            responseData: cur?.response?.data ?? null
+          });
+          cur = cur.cause;
+        }
+        LOG.warn('getRelevantSteps failed (logging once per deployment+model)', {
+          message: err?.message,
+          name: err?.name || err?.constructor?.name,
+          embeddingDeploymentId: embeddingDeploymentId || null,
+          embeddingModel,
+          causeChain
+        });
+      }
       return { error: 'rag_failed', hits: [] };
     }
   }
@@ -191,7 +223,7 @@ export async function dispatchTool(name, args, user) {
   return { error: 'unknown_tool' };
 }
 
-export async function streamChat({ res, system, messages, deploymentId, modelName, temperature, maxTokens, signal, tools, user }) {
+export async function streamChat({ res, system, messages, deploymentId, modelName, temperature, maxTokens, signal, tools, user, pageContext }) {
   const effectiveModel = modelName || process.env.CHAT_MODEL_NAME || 'anthropic--claude-4.6-sonnet';
   const effectiveTemperature = temperature != null ? Number(temperature) : 0.51;
   const effectiveMaxTokens = maxTokens != null ? Number(maxTokens) : 10025;
@@ -245,9 +277,10 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
   }
 
   const history = [...messages];
+  let turn = 0;
 
   try {
-    for (let turn = 0; turn < MAX_TURNS; turn++) {
+    for (; turn < MAX_TURNS; turn++) {
       if (signal?.aborted) return;
       const response = await client.stream({ messagesHistory: history }, signal);
       const collectedToolCalls = [];
@@ -320,12 +353,23 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
     while (cur && causeChain.length < 5) {
       causeChain.push({
         message: cur.message,
-        name: cur.name,
-        body: cur?.response?.data ?? null
+        name: cur.name || cur.constructor?.name,
+        responseStatus: cur?.response?.status ?? null,
+        responseData: cur?.response?.data ?? null
       });
       cur = cur.cause;
     }
-    LOG.error('chat stream failed', JSON.stringify(causeChain));
+    LOG.error('chat stream failed', {
+      message: err?.message,
+      name: err?.name || err?.constructor?.name,
+      responseStatus: err?.response?.status ?? null,
+      responseData: err?.response?.data ?? null,
+      deploymentId,
+      modelName: effectiveModel,
+      pageKind: pageContext?.kind ?? null,
+      turn,
+      causeChain
+    });
   } finally {
     res.end();
   }

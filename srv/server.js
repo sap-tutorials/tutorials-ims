@@ -288,7 +288,8 @@ cds.on('served', () => {
         maxTokens: settings.maxTokens,
         signal: abortController.signal,
         tools,
-        user
+        user,
+        pageContext: effectivePageContext
       });
   };
 
