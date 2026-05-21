@@ -8,6 +8,7 @@ const CACHE_FILE = join(CACHE_DIR, 'github-meta.json')
 const DISCOVERY_CACHE_FILE = join(CACHE_DIR, '_discovery.json')
 const ORG = 'sap-tutorials'
 const GRAPHQL_URL = 'https://api.github.com/graphql'
+const REST_API_BASE = 'https://api.github.com'
 const BATCH_SIZE = 20
 
 // Retry policy: 8 attempts, exponential backoff with jitter, capped at 60s.
@@ -100,6 +101,49 @@ async function graphqlRequest(query: string, retries = MAX_RETRIES): Promise<any
     console.warn(`  [graphql-warn] ${msgs}`)
   }
   return json.data
+}
+
+function restAuthHeaders(): Record<string, string> {
+  const token = process.env.GITHUB_TOKEN ?? process.env.TUTORIALS_GITHUB_TOKEN
+  if (!token) throw new Error('GITHUB_TOKEN or TUTORIALS_GITHUB_TOKEN is required for REST API')
+  return {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+    'User-Agent': 'tutorials-poc-build',
+  }
+}
+
+async function restApiRequest<T = any>(path: string): Promise<T | null> {
+  const url = path.startsWith('http') ? path : `${REST_API_BASE}${path}`
+  const res = await fetchWithRetry(url, { headers: restAuthHeaders() }, { label: 'rest' })
+  if (res.status === 404) return null
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`REST ${path} failed: ${res.status} ${body.slice(0, 200)}`)
+  }
+  return res.json() as Promise<T>
+}
+
+async function restApiPaginated<T = any>(initialPath: string): Promise<T[]> {
+  let next: string | null = initialPath
+  const all: T[] = []
+  while (next) {
+    const url: string = next.startsWith('http') ? next : `${REST_API_BASE}${next}`
+    const res = await fetchWithRetry(url, { headers: restAuthHeaders() }, { label: 'rest' })
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      throw new Error(`REST ${initialPath} failed: ${res.status} ${body.slice(0, 200)}`)
+    }
+    const items = await res.json() as T[]
+    if (Array.isArray(items)) all.push(...items)
+
+    // Parse Link header for rel="next"
+    const linkHeader = res.headers.get('link') ?? ''
+    const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/)
+    next = nextMatch ? nextMatch[1] : null
+  }
+  return all
 }
 
 export interface FetchWithRetryOptions {
@@ -210,7 +254,7 @@ export async function uploadDiscoveryToHana(tutorials: DiscoveredTutorial[]): Pr
   }
 }
 
-export type DiscoverySource = 'github' | 'disk' | 'hana'
+export type DiscoverySource = 'github' | 'rest' | 'disk' | 'hana'
 
 export interface DiscoveryResult {
   tutorials: DiscoveredTutorial[]
@@ -224,6 +268,19 @@ export async function discoverAllTutorials(): Promise<DiscoveryResult> {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.warn(`\n  [graphql] Discovery failed (${message})`)
+
+    try {
+      console.warn(`  [rest] Attempting REST API discovery fallback...`)
+      const tutorials = await discoverFromRest()
+      if (tutorials.length > 0) {
+        console.warn(`  [rest] Discovered ${tutorials.length} tutorials via REST API\n`)
+        return { tutorials, source: 'rest' }
+      }
+      console.warn(`  [rest] REST discovery returned no tutorials; falling through.`)
+    } catch (restErr) {
+      const restMessage = restErr instanceof Error ? restErr.message : String(restErr)
+      console.warn(`  [rest] REST discovery failed (${restMessage}); falling through.`)
+    }
 
     const cached = loadDiscoveryCache()
     if (cached) {
@@ -300,6 +357,124 @@ async function discoverFromGitHub(): Promise<DiscoveredTutorial[]> {
   }
 
   return tutorials
+}
+
+interface RestRepoMeta {
+  name: string
+  archived?: boolean
+  disabled?: boolean
+  fork?: boolean
+  default_branch?: string
+}
+
+interface RestContentEntry {
+  name: string
+  type: string
+}
+
+export async function discoverFromRest(): Promise<DiscoveredTutorial[]> {
+  const includeContribution = process.env.INCLUDE_CONTRIBUTION_REPOS === 'true'
+  console.log(`  [rest] Listing repos in ${ORG}...`)
+  const repos = await restApiPaginated<RestRepoMeta>(`/orgs/${ORG}/repos?per_page=100&type=public`)
+
+  const tutorials: DiscoveredTutorial[] = []
+  for (const repo of repos) {
+    if (repo.archived || repo.disabled || repo.fork) continue
+    if (EXCLUDED_REPOS.has(repo.name)) continue
+    if (!includeContribution && repo.name.endsWith('-Contribution')) continue
+    const branch = repo.default_branch
+    if (!branch) continue
+
+    let entries: RestContentEntry[] | null
+    try {
+      entries = await restApiRequest<RestContentEntry[]>(
+        `/repos/${ORG}/${repo.name}/contents/tutorials?ref=${encodeURIComponent(branch)}`,
+      )
+    } catch (err) {
+      console.warn(`  [rest] ${repo.name}: contents fetch failed (${err instanceof Error ? err.message : err}); skipping`)
+      continue
+    }
+    if (!entries || !Array.isArray(entries)) continue
+
+    const dirs = entries.filter(e => e.type === 'dir')
+    if (dirs.length > 0) {
+      console.log(`  [rest] ${repo.name} (${branch}): ${dirs.length} tutorials`)
+      for (const dir of dirs) {
+        tutorials.push({ slug: dir.name, repo: repo.name, branch })
+      }
+    }
+  }
+
+  return tutorials
+}
+
+interface RestCommit {
+  sha: string
+  commit?: { author?: { name?: string; date?: string } }
+  author?: { login?: string; avatar_url?: string } | null
+}
+
+export async function fetchMetaFromRest(repo: string, slug: string, branch: string): Promise<GitHubMeta | null> {
+  const path = `tutorials/${slug}/${slug}.md`
+  let commits: RestCommit[] | null
+  try {
+    commits = await restApiRequest<RestCommit[]>(
+      `/repos/${ORG}/${repo}/commits?path=${encodeURIComponent(path)}&sha=${encodeURIComponent(branch)}&per_page=30`,
+    )
+  } catch {
+    return null
+  }
+  if (!commits || commits.length === 0) return null
+
+  const lastCommitSha = commits[0].sha ?? ''
+  const lastUpdated = commits[0].commit?.author?.date ?? ''
+  const createdAt = commits[commits.length - 1].commit?.author?.date ?? ''
+
+  const seen = new Set<string>()
+  const contributors: GitHubContributor[] = []
+  for (const c of commits) {
+    const login = c.author?.login ?? ''
+    if (!login || seen.has(login)) continue
+    seen.add(login)
+    contributors.push({
+      name: c.commit?.author?.name ?? login,
+      login,
+      avatarUrl: c.author?.avatar_url ?? '',
+    })
+  }
+
+  return { lastCommitSha, lastUpdated, createdAt, contributors }
+}
+
+export async function fetchContributorsFromRestContrib(
+  repo: string,
+  slug: string,
+  branch: string,
+): Promise<GitHubContributor[] | null> {
+  const contribRepo = repo.endsWith('-Contribution') ? repo : `${repo}-Contribution`
+  let commits: RestCommit[] | null
+  try {
+    commits = await restApiRequest<RestCommit[]>(
+      `/repos/${ORG}/${contribRepo}/commits?path=${encodeURIComponent(`tutorials/${slug}`)}&sha=${encodeURIComponent(branch)}&per_page=50`,
+    )
+  } catch {
+    return null
+  }
+  if (!commits || commits.length === 0) return null
+
+  const seen = new Set<string>()
+  const contributors: GitHubContributor[] = []
+  for (const c of commits) {
+    const login = c.author?.login ?? ''
+    if (!login || seen.has(login)) continue
+    seen.add(login)
+    contributors.push({
+      name: c.commit?.author?.name ?? login,
+      login,
+      avatarUrl: c.author?.avatar_url ?? '',
+    })
+  }
+  return contributors.length > 0 ? contributors : null
 }
 
 function extractContributors(nodes: any[]): GitHubContributor[] {
@@ -442,9 +617,19 @@ export async function fetchGitHubMetaBatch(
         cache[slug] = meta
       }
     } catch (err) {
-      console.warn(`  [warn] GraphQL batch failed for ${repo} batch ${Math.floor(i / BATCH_SIZE) + 1}: ${err instanceof Error ? err.message : err}`)
+      console.warn(`  [warn] GraphQL batch failed for ${repo} batch ${Math.floor(i / BATCH_SIZE) + 1}: ${err instanceof Error ? err.message : err}; trying REST per-slug...`)
       for (const slug of batch) {
-        if (!results.has(slug)) results.set(slug, fallback())
+        if (results.has(slug)) continue
+        const restMeta = await fetchMetaFromRest(repo, slug, branch)
+        if (restMeta) {
+          // Prefer contributors from -Contribution repo (GraphQL or REST), then commit-based
+          const restContrib = contribMap.get(slug) ?? await fetchContributorsFromRestContrib(repo, slug, branch)
+          const meta: GitHubMeta = { ...restMeta, contributors: restContrib ?? restMeta.contributors }
+          results.set(slug, meta)
+          cache[slug] = meta
+        } else {
+          results.set(slug, fallback())
+        }
       }
     }
   }
