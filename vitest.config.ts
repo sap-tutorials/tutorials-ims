@@ -29,6 +29,13 @@ export default defineConfig({
           include: ['test/smoke/**/*.test.{js,ts}'],
           testTimeout: 30000
         }
+      },
+      {
+        test: {
+          name: 'a11y',
+          include: ['test/a11y/**/*.test.{js,ts}'],
+          testTimeout: 60000
+        }
       }
     ]
   }

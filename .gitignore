@@ -43,3 +43,7 @@ app/admin-shell/deploy/
 approuter/static/admin-ui/
 mta-op-*
 srv/data/admin-docs-index.json
+
+# a11y / Lighthouse scan output (regenerated each run)
+.lighthouseci/
+test/a11y/axe-results.md
