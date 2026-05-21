@@ -449,13 +449,11 @@ SAP's internal search aggregator (the global SAP search across help.sap.com, com
 
 ---
 
-### E8. Sysadmin Identity Provider
+### E8. Sysadmin Identity Provider ✅
 
 The AEM admin UI (`/system/console`, `/sites.html`) authenticates against an SAP-internal LDAP or IDP separate from the public SAP IDP used for IMS.
 
-**Question:** Who has admin access today? When AEM is decommissioned, does that group lose access to a tool they rely on (e.g., for Akamai purge, Solr reindex)?
-
-**Action:** Ensure sysadmin tools in CAP admin UI cover all current AEM admin workflows. The CAP admin UI uses XSUAA roles — different identity model.
+**Status:** Not an issue. The AEM admin user group is small and is working directly on this project — no risk of losing access to a tool they rely on at cutover. CAP admin UI access will be coordinated within the same group.
 
 ---
 
