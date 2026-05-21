@@ -43,3 +43,27 @@ export async function fetchBuildCatalog(baseUrl: string): Promise<{ missions: Mi
   const data = await res.json() as { missions: Mission[]; hierarchies: MissionHierarchy[] }
   return data
 }
+
+export async function fetchCoCompletions(
+  baseUrl: string,
+): Promise<Map<string, Map<string, number>>> {
+  const url = `${baseUrl.replace(/\/$/, '')}/build/co-completions`
+  try {
+    const res = await fetch(url)
+    if (!res.ok) {
+      console.warn(`[cap.fetchCoCompletions] ${res.status} ${res.statusText} — falling back to empty`)
+      return new Map()
+    }
+    const json = await res.json() as Record<string, Array<{ slug: string; score: number }>>
+    const result = new Map<string, Map<string, number>>()
+    for (const [slug, peers] of Object.entries(json)) {
+      const inner = new Map<string, number>()
+      for (const p of peers) inner.set(p.slug, p.score)
+      result.set(slug, inner)
+    }
+    return result
+  } catch (err) {
+    console.warn(`[cap.fetchCoCompletions] failed: ${err instanceof Error ? err.message : err} — using empty map`)
+    return new Map()
+  }
+}
