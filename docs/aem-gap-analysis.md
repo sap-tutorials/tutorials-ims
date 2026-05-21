@@ -371,13 +371,11 @@ Costs avoided: a long-lived GitHub PAT (rotation, expiry, secret hygiene), a new
 
 ---
 
-### 21. Handlebars Legacy Components
+### 21. Handlebars Legacy Components ✅
 
 **AEM:** Some product cards and error pages still use Handlebars (pre-HTL migration leftovers).
 
-**Replacement:** Should be reimplemented as Hugo partials or shortcodes. Inventory needed.
-
-**Action:** Inventory + reimplement as needed. Not blocking.
+**Replacement:** Out of scope for the tutorial platform. The AEM Handlebars footprint was on product/topic landing pages and error pages on `developers.sap.com`, neither of which are part of the tutorial scope being rewritten here. Error pages in this project are native Hugo templates ([hugo/layouts/404.html](../hugo/layouts/404.html), [hugo/layouts/500.html](../hugo/layouts/500.html), [hugo/layouts/maintenance.html](../hugo/layouts/maintenance.html)). No `.hbs` files or Handlebars runtime exist anywhere in the tutorial scope (only transitive `.hbs` scaffolding inside `node_modules/@sap/cds-dk/lib/init/template/`, used by `cds init` and never executed at runtime).
 
 ---
 
