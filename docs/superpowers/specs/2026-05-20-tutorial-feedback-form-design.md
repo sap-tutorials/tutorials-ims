@@ -196,21 +196,31 @@ cds.on('bootstrap', (app) => {
     }
     try {
       const dev = await cds.connect.to('DeveloperService');
-      // Stash IP info on the action input — handler reads it from req.data.
-      const result = await dev.send('submitTutorialFeedback', {
-        ...req.body,
-        _clientIp: (req.headers['x-forwarded-for'] || '').split(',').map(s=>s.trim()).filter(Boolean).pop() || req.ip
-      });
+      // X-Forwarded-For is `<original-client>, <proxy1>, <proxy2>` per RFC 7239:
+      // first entry is the originating client. CF Gorouter strips client-supplied
+      // XFF before AppRouter sees it, so the leftmost entry is trustworthy as
+      // long as ingress is constrained to AppRouter.
+      const xff = (req.headers['x-forwarded-for'] || '').split(',').map(s=>s.trim()).filter(Boolean);
+      const clientIp = xff.length ? xff[0] : req.ip;
+      // _clientIp must be threaded via AsyncLocalStorage + a srv.before hook,
+      // not the action payload (CAP 9.9.1 rejects unknown action arguments).
+      // See srv/server.js for the implementation.
+      const result = await dev.send('submitTutorialFeedback', req.body);
       res.status(200).json({ submissionId: result.submissionId });
     } catch (e) {
-      const status = e.code === 400 ? 400 : e.code === 429 ? 429 : 500;
-      res.status(status).json({ error: e.message });
+      const code = Number(e.code);
+      if (code === 400 || code === 429 || code === 503) {
+        res.status(code).json({ error: e.message });
+      } else {
+        cds.log('feedback').error(e);
+        res.status(500).json({ error: 'internal_error' });
+      }
     }
   });
 });
 ```
 
-The action handler reads `req.data._clientIp` (set by the bridge) instead of touching Express headers, keeping the action testable in isolation. `_clientIp` is **not** declared in the action signature — CAP passes through unknown keys on `req.data` for in-process callers. The action is not exposed via OData (no public path mounted on `DeveloperService`), so external callers cannot inject this field.
+The action handler reads `req.data._clientIp` (set by the bridge via an `AsyncLocalStorage`-backed `srv.before` hook) instead of touching Express headers, keeping the action testable in isolation. `_clientIp` is **not** declared in the action signature; @sap/cds 9.9.1 strictly validates action arguments, so the IP is injected post-validation by the before-hook reading from per-request ALS scope. The action is not exposed via OData (no public path mounted on `DeveloperService`), so external callers cannot inject this field.
 
 ### Handler (`srv/developer-service.js`)
 

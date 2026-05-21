@@ -119,11 +119,14 @@ cds.on('bootstrap', (app) => {
     if (!process.env.SUBMISSION_SALT_SECRET) {
       return res.status(503).json({ error: 'feedback service unavailable' });
     }
-    // AppRouter appends the originating client IP as the LAST entry of
-    // X-Forwarded-For; everything before it is the upstream proxy chain.
+    // X-Forwarded-For is `<original-client>, <proxy1>, <proxy2>` per RFC 7239:
+    // the LEFTMOST entry is the originating client, the rightmost is the most
+    // recent hop (AppRouter / CF Gorouter). On SAP BTP CF, Gorouter strips
+    // client-supplied XFF before AppRouter sees it, so the first entry is
+    // trustworthy as long as ingress is constrained to AppRouter.
     const xff = String(req.headers['x-forwarded-for'] || '')
       .split(',').map(s => s.trim()).filter(Boolean);
-    const clientIp = xff.length ? xff[xff.length - 1] : req.ip;
+    const clientIp = xff.length ? xff[0] : req.ip;
 
     await feedbackContext.run({ clientIp }, async () => {
       try {
@@ -132,8 +135,12 @@ cds.on('bootstrap', (app) => {
         res.status(200).json({ submissionId: result.submissionId });
       } catch (e) {
         const code = Number(e.code);
-        const status = (code === 400 || code === 429 || code === 503) ? code : 500;
-        res.status(status).json({ error: e.message });
+        if (code === 400 || code === 429 || code === 503) {
+          res.status(code).json({ error: e.message });
+        } else {
+          cds.log('feedback').error(e);
+          res.status(500).json({ error: 'internal_error' });
+        }
       }
     });
   });
@@ -154,11 +161,16 @@ cds.on('served', async () => {
   // AFTER CAP's strict argument validation has run. The express bridge stashes
   // the IP in feedbackContext (AsyncLocalStorage) so the action payload stays
   // schema-clean while the rate-limit key still binds to the originating IP.
-  const dev = await cds.connect.to('DeveloperService');
-  dev.before('submitTutorialFeedback', (req) => {
-    const ctx = feedbackContext.getStore();
-    if (ctx?.clientIp) req.data._clientIp = ctx.clientIp;
-  });
+  // Idempotency guard: cds.test() can re-fire 'served' across test files; we
+  // only need this hook installed once per process.
+  if (!globalThis.__feedbackBeforeHookRegistered) {
+    const dev = await cds.connect.to('DeveloperService');
+    dev.before('submitTutorialFeedback', (req) => {
+      const ctx = feedbackContext.getStore();
+      if (ctx?.clientIp) req.data._clientIp = ctx.clientIp;
+    });
+    globalThis.__feedbackBeforeHookRegistered = true;
+  }
 
   app.get('/auth/user', contextMw, authMw, (req, res) => {
     const user = cds.context?.user;
