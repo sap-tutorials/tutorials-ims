@@ -81,7 +81,14 @@ function backoffDelay(attempt: number): number {
   return exp + jitter
 }
 
-async function graphqlRequest(query: string, retries = MAX_RETRIES): Promise<any> {
+interface GraphqlRequestOptions {
+  retries?: number
+  // When true, surface 5xx as Transient5xxError so caller can degrade page size.
+  // See FetchWithRetryOptions.failFastOn5xx.
+  failFastOn5xx?: boolean
+}
+
+async function graphqlRequest(query: string, opts: GraphqlRequestOptions = {}): Promise<any> {
   const token = process.env.GITHUB_TOKEN ?? process.env.TUTORIALS_GITHUB_TOKEN
   if (!token) throw new Error('GITHUB_TOKEN or TUTORIALS_GITHUB_TOKEN is required for GraphQL API')
 
@@ -93,7 +100,7 @@ async function graphqlRequest(query: string, retries = MAX_RETRIES): Promise<any
       'User-Agent': 'tutorials-poc-build',
     },
     body: JSON.stringify({ query }),
-  }, { retries, label: 'graphql' })
+  }, { retries: opts.retries ?? MAX_RETRIES, label: 'graphql', failFastOn5xx: opts.failFastOn5xx })
 
   if (!res.ok) {
     const body = await res.text()
@@ -154,6 +161,21 @@ async function restApiPaginated<T = any>(initialPath: string): Promise<T[]> {
 export interface FetchWithRetryOptions {
   retries?: number
   label?: string
+  // When true, 5xx responses throw Transient5xxError immediately with no retry,
+  // so the caller can degrade (e.g., shrink GraphQL page size) instead of burning
+  // the full retry chain on identical heavy payloads. Network errors and 429 still
+  // retry normally — those are network/budget signals, not complexity signals.
+  failFastOn5xx?: boolean
+}
+
+// Thrown by fetchWithRetry when failFastOn5xx is set and the server returns 5xx.
+// Callers catch this to degrade their request shape (smaller page, narrower query)
+// rather than reissuing the same heavy payload that just timed out.
+export class Transient5xxError extends Error {
+  constructor(public status: number, public label: string) {
+    super(`${label} returned ${status}`)
+    this.name = 'Transient5xxError'
+  }
 }
 
 // Generic retry wrapper around fetch().
@@ -167,6 +189,7 @@ export async function fetchWithRetry(
 ): Promise<Response> {
   const retries = opts.retries ?? MAX_RETRIES
   const label = opts.label ?? 'fetch'
+  const failFastOn5xx = opts.failFastOn5xx ?? false
   let lastError: Error | null = null
 
   for (let attempt = 1; attempt <= retries; attempt++) {
@@ -182,6 +205,10 @@ export async function fetchWithRetry(
         continue
       }
       break
+    }
+
+    if (res.status >= 500 && failFastOn5xx) {
+      throw new Transient5xxError(res.status, label)
     }
 
     const retryable = res.status >= 500 || res.status === 429
@@ -345,12 +372,20 @@ async function discoverFromGitHub(): Promise<DiscoveredTutorial[]> {
   let cursor: string | null = null
   let page = 0
 
+  // Adaptive page size: halved on each 5xx, restoring on success after a degrade.
+  // Starts at 50 (half of GitHub's 100 max) — a balance between throughput and
+  // complexity-per-call. Floor of 5 keeps progress possible during prolonged outages
+  // before the chain falls through to REST/disk/HANA tiers.
+  const INITIAL_PAGE_SIZE = 50
+  const MIN_PAGE_SIZE = 5
+  let pageSize = INITIAL_PAGE_SIZE
+
   while (true) {
     page++
     const afterClause = cursor ? `, after: "${cursor}"` : ''
     const query = `{
       organization(login: "${ORG}") {
-        repositories(first: 100${afterClause}, orderBy: {field: NAME, direction: ASC}) {
+        repositories(first: ${pageSize}${afterClause}, orderBy: {field: NAME, direction: ASC}) {
           nodes {
             name
             isArchived
@@ -366,11 +401,29 @@ async function discoverFromGitHub(): Promise<DiscoveredTutorial[]> {
           pageInfo { endCursor hasNextPage }
         }
       }
+      rateLimit { cost remaining limit resetAt }
     }`
 
-    console.log(`  [graphql] Discovering repos (page ${page})...`)
-    const data = await graphqlRequest(query)
+    console.log(`  [graphql] Discovering repos (page ${page}, first:${pageSize})...`)
+    let data: any
+    try {
+      data = await graphqlRequest(query, { failFastOn5xx: true })
+    } catch (err) {
+      if (err instanceof Transient5xxError && pageSize > MIN_PAGE_SIZE) {
+        const next = Math.max(MIN_PAGE_SIZE, Math.floor(pageSize / 2))
+        console.warn(`  [graphql] ${err.status} on page ${page} (first:${pageSize}); halving to first:${next} and resuming from same cursor`)
+        pageSize = next
+        page-- // retry as same page number
+        continue
+      }
+      throw err
+    }
     const repos = data.organization.repositories
+
+    if (data.rateLimit) {
+      const { cost, remaining, limit, resetAt } = data.rateLimit
+      console.log(`  [graphql] page ${page} cost=${cost} remaining=${remaining}/${limit} resetAt=${resetAt}`)
+    }
 
     for (const repo of repos.nodes) {
       if (repo.isArchived || repo.isDisabled || repo.isFork) continue
