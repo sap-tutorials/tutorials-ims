@@ -12,7 +12,9 @@
       "mcp__sap-devs-server__cf_apps",
       "mcp__sap-devs-server__get_known_errors",
       "Bash(rm -rf approuter/static/*)",
-      "Bash(cp -r hugo/public/. approuter/static/)"
+      "Bash(cp -r hugo/public/. approuter/static/)",
+      "mcp__sap-devs-server__btp_target",
+      "mcp__sap-devs-server__cf_services"
     ]
   }
 }
