@@ -3,10 +3,10 @@ import { BASE_URL, fetchWithRetry } from './smoke.config.js';
 
 function extractJsonLd(html) {
   const blocks = [];
-  const re = /<script type="application\/ld\+json">([\s\S]*?)<\/script>/g;
-  let m;
-  while ((m = re.exec(html)) !== null) {
-    try { blocks.push(JSON.parse(m[1])); } catch {}
+  const re = /<script type=["']?application\/ld\+json["']?>([\s\S]*?)<\/script>/g;
+  let match;
+  while ((match = re.exec(html)) !== null) {
+    try { blocks.push(JSON.parse(match[1])); } catch { /* ignore parse errors */ }
   }
   return blocks;
 }
@@ -31,7 +31,7 @@ beforeAll(async () => {
       const m = text.match(/\((https?:\/\/developers\.sap\.com\/tutorials\/[^)]+)\)/);
       if (m) tutorialPath = new URL(m[1]).pathname;
     }
-  } catch {}
+  } catch { /* fall back to default */ }
 });
 
 describe('JSON-LD structured data', () => {

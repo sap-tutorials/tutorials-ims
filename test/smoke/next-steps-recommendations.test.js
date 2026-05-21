@@ -10,7 +10,7 @@ describe('Next Steps recommendations', () => {
     expect(html).toContain('Related Tutorials');
 
     // Rail card element exists in the rendered HTML
-    expect(html).toMatch(/next-steps-rail-card[\s\S]*?href="\/tutorials\/[a-z0-9-]+/);
+    expect(html).toMatch(/next-steps-rail-card[\s\S]*?href=["']?\/tutorials\/[a-z0-9-]+/);
   });
 
   it('renders 1-3 recommendation cards on a popular tutorial', async () => {
@@ -18,7 +18,7 @@ describe('Next Steps recommendations', () => {
     expect(res.status).toBe(200);
 
     const html = await res.text();
-    const matches = html.match(/class="next-steps-rail-card"/g) ?? [];
+    const matches = html.match(/class=["']?next-steps-rail-card["']?/g) ?? [];
     // We always cap at 3, but a sparsely-tagged tutorial may produce fewer.
     // Production tutorials should hit the cap; loosen if a fresh tutorial flakes.
     expect(matches.length).toBeGreaterThanOrEqual(1);
