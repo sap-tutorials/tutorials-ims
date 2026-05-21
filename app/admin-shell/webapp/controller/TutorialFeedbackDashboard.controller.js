@@ -23,17 +23,18 @@ sap.ui.define([
       try {
         var aggRes = await fetch('/admin/TutorialFeedbackAggregate');
         var rawRes90d = await fetch('/admin/TutorialFeedback?$filter=submittedAt ge ' + since + '&$select=npsScore');
-        var rawAuth = await fetch('/admin/TutorialFeedback?$select=wasAuthenticated&$top=10000');
         var recentRes = await fetch('/admin/TutorialFeedback?$orderby=submittedAt desc&$top=10&$filter=comment ne null');
 
         var agg = ((await aggRes.json()).value) || [];
         var npsRows = ((await rawRes90d.json()).value) || [];
-        var authRows = ((await rawAuth.json()).value) || [];
         var recent = ((await recentRes.json()).value) || [];
 
         oModel.setProperty('/aggregates', agg);
         oModel.setProperty('/recentComments', recent);
-        oModel.setProperty('/totalResponses', agg.reduce(function (s, r) { return s + (r.responseCount || 0); }, 0));
+
+        var totalResponses = agg.reduce(function (s, r) { return s + (r.responseCount || 0); }, 0);
+        var totalAuthenticated = agg.reduce(function (s, r) { return s + (r.authenticatedCount || 0); }, 0);
+        oModel.setProperty('/totalResponses', totalResponses);
 
         var npsValid = npsRows.filter(function (r) { return r.npsScore != null; });
         oModel.setProperty('/avgNps90d', npsValid.length
@@ -44,8 +45,8 @@ sap.ui.define([
           ? (agg.reduce(function (s, r) { return s + Number(r.avgUseCase || 0); }, 0) / agg.length).toFixed(1)
           : 0);
 
-        oModel.setProperty('/pctAuthenticated', authRows.length
-          ? Math.round(100 * authRows.filter(function (r) { return r.wasAuthenticated; }).length / authRows.length)
+        oModel.setProperty('/pctAuthenticated', totalResponses
+          ? Math.round(100 * totalAuthenticated / totalResponses)
           : 0);
       } catch (e) {
         // Network or parse error — leave defaults so the view still renders.
@@ -54,8 +55,9 @@ sap.ui.define([
 
     onRowPress: function (oEvent) {
       var slug = oEvent.getSource().getBindingContext().getProperty('tutorialSlug');
+      var escaped = String(slug).replace(/'/g, "''");
       this.getOwnerComponent().getRouter().navTo('feedbackList', {
-        '?query': { '$filter': "tutorialSlug eq '" + slug + "'" }
+        '?query': { '$filter': "tutorialSlug eq '" + escaped + "'" }
       });
     },
 

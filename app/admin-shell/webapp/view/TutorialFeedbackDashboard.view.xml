@@ -39,7 +39,7 @@
       </Table>
       <Panel headerText="Recent comments">
         <List items="{/recentComments}">
-          <FeedListItem text="{comment}" sender="{tutorialSlug}" timestamp="{submittedAt}" />
+          <StandardListItem title="{tutorialSlug}" description="{comment}" info="{submittedAt}" />
         </List>
       </Panel>
     </content>
