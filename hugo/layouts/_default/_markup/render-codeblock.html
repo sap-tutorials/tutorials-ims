@@ -92,19 +92,48 @@
   {{- $displayName = "Code" -}}
 {{- end -}}
 
-<div class="code-block"{{ if eq $lower "cds" }} data-lang="cds"{{ end }}>
+{{/* Read Markdown attributes: ```js {filename="server.js" hl_lines="2-4 7"} */}}
+{{- $attrs := .Attributes | default dict -}}
+{{- $filename := index $attrs "filename" | default "" -}}
+{{- $title := index $attrs "title" | default "" -}}
+{{- if and (eq $filename "") (ne $title "") -}}{{- $filename = $title -}}{{- end -}}
+{{- $hlLines := index $attrs "hl_lines" | default "" -}}
+{{- $linenos := index $attrs "linenos" | default "" -}}
+
+{{/* Build Chroma options string */}}
+{{- $opts := slice -}}
+{{- if ne $hlLines "" -}}{{- $opts = $opts | append (printf "hl_lines=%s" $hlLines) -}}{{- end -}}
+{{- if ne $linenos "" -}}{{- $opts = $opts | append (printf "linenos=%s" $linenos) -}}{{- end -}}
+{{- $optsStr := delimit $opts "," -}}
+
+{{/* Long-block collapse: count lines, threshold 25 */}}
+{{- $lineCount := len (split (trim .Inner "\n") "\n") -}}
+{{- $isLong := gt $lineCount 25 -}}
+
+<div class="code-block{{ if $isLong }} code-block-long{{ end }}"{{ if eq $lower "cds" }} data-lang="cds"{{ end }}>
   <div class="code-block-header">
-    <span class="code-block-lang">{{ $displayName }}</span>
+    {{- if ne $filename "" -}}
+      <span class="code-block-filename">{{ $filename }}</span>
+      <span class="code-block-lang code-block-lang-secondary">{{ $displayName }}</span>
+    {{- else -}}
+      <span class="code-block-lang">{{ $displayName }}</span>
+    {{- end -}}
     <button type="button" class="code-block-copy" onclick="copyCodeBlock(this)" aria-label="Copy code">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4V1.5C4 1.22 4.22 1 4.5 1H13.5C13.78 1 14 1.22 14 1.5V10.5C14 10.78 13.78 11 13.5 11H11" stroke="currentColor" stroke-width="1.2"/><rect x="2" y="5" width="9" height="10" rx=".5" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
       <span class="copy-label">Copy</span>
     </button>
   </div>
-  <div class="code-block-body">
+  <div class="code-block-body"{{ if $isLong }} data-collapsed="true"{{ end }}>
     {{- if eq $lang "text" -}}
       <pre><code>{{ .Inner }}</code></pre>
     {{- else -}}
-      {{ highlight .Inner $lang "" }}
+      {{ highlight .Inner $lang $optsStr }}
     {{- end -}}
   </div>
+  {{- if $isLong -}}
+    <button type="button" class="code-block-toggle" data-action="toggle-code" aria-expanded="false">
+      <span class="toggle-show">Show all {{ $lineCount }} lines</span>
+      <span class="toggle-hide">Show less</span>
+    </button>
+  {{- end -}}
 </div>

@@ -19,6 +19,89 @@ const { createGunzip } = require('zlib')
 const tar = require('tar')
 const serveStatic = require('serve-static')
 
+let _sharp
+function getSharp() {
+  if (_sharp === undefined) {
+    try { _sharp = require('sharp') } catch { _sharp = null }
+  }
+  return _sharp
+}
+
+const IMG_CDN_HOSTS = new Set(['raw.githubusercontent.com'])
+const IMG_CDN_MAX_WIDTH = 2400
+const IMG_CDN_TIMEOUT_MS = 12000
+
+async function imgCdnHandler(req, res, next) {
+  if (!req.url.startsWith('/img-cdn/') && !req.url.startsWith('/img-cdn?')) return next()
+  if (req.method !== 'GET') return next()
+
+  let parsed
+  try { parsed = new URL(req.url, 'http://x') } catch { return next() }
+  const u = parsed.searchParams.get('u')
+  if (!u) {
+    res.writeHead(400, { 'Content-Type': 'text/plain' })
+    res.end('Missing u parameter')
+    return
+  }
+  let target
+  try { target = new URL(u) } catch {
+    res.writeHead(400, { 'Content-Type': 'text/plain' })
+    res.end('Invalid u parameter')
+    return
+  }
+  if (!IMG_CDN_HOSTS.has(target.hostname)) {
+    res.writeHead(403, { 'Content-Type': 'text/plain' })
+    res.end('Forbidden host')
+    return
+  }
+
+  const wantWidth = Math.min(parseInt(parsed.searchParams.get('w') || '0', 10) || 0, IMG_CDN_MAX_WIDTH)
+  const acceptsWebp = /image\/webp/.test(req.headers.accept || '')
+
+  try {
+    const upstream = await fetch(u, { signal: AbortSignal.timeout(IMG_CDN_TIMEOUT_MS) })
+    if (!upstream.ok) {
+      res.writeHead(upstream.status, { 'Content-Type': 'text/plain' })
+      res.end(`Upstream ${upstream.status}`)
+      return
+    }
+    const contentType = upstream.headers.get('content-type') || 'application/octet-stream'
+    const sharp = getSharp()
+    const shouldProcess = sharp && (wantWidth > 0 || acceptsWebp) && /^image\/(png|jpeg|webp|avif|gif)/.test(contentType)
+
+    if (!shouldProcess) {
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Cache-Control': 'public, max-age=86400, s-maxage=604800, immutable',
+        'X-Img-Cdn': 'passthrough'
+      })
+      const buf = Buffer.from(await upstream.arrayBuffer())
+      res.end(buf)
+      return
+    }
+
+    const inputBuf = Buffer.from(await upstream.arrayBuffer())
+    let chain = sharp(inputBuf, { failOn: 'none' })
+    if (wantWidth > 0) chain = chain.resize({ width: wantWidth, withoutEnlargement: true })
+    const outFormat = acceptsWebp ? 'webp' : null
+    if (outFormat === 'webp') chain = chain.webp({ quality: 80 })
+    const out = await chain.toBuffer()
+    res.writeHead(200, {
+      'Content-Type': outFormat === 'webp' ? 'image/webp' : contentType,
+      'Cache-Control': 'public, max-age=86400, s-maxage=604800, immutable',
+      'Vary': 'Accept',
+      'X-Img-Cdn': `${outFormat || 'orig'}${wantWidth ? '/w=' + wantWidth : ''}`
+    })
+    res.end(out)
+  } catch (err) {
+    console.error('[img-cdn]', err.message)
+    if (!res.headersSent) {
+      res.writeHead(502, { 'Content-Type': 'text/plain' })
+      res.end('Upstream error')
+    }
+  }
+}
+
 const STATIC_DIR = join(__dirname, 'static')
 const TEMP_DIR = join(__dirname, 'static-new')
 const OLD_DIR = join(__dirname, 'static-old')
@@ -264,6 +347,7 @@ ar.start({
       insertMiddleware: {
         first: [
           { path: '/admin/rebuild', handler: rebuildHandler },
+          { path: '/img-cdn', handler: imgCdnHandler },
           { path: '/', handler: adminAppsHandler },
           { path: '/', handler: staticHandler },
           { path: '/', handler: proxyHandler }

@@ -51,9 +51,19 @@ enableRobotsTXT = false  # we ship our own via the robots output format
   [markup.goldmark]
     [markup.goldmark.renderer]
       unsafe = true
+    [markup.goldmark.parser]
+      [markup.goldmark.parser.attribute]
+        block = true
+        title = true
     [markup.goldmark.extensions]
       [markup.goldmark.extensions.passthrough]
         enable = true
         [markup.goldmark.extensions.passthrough.delimiters]
           block = [['$$', '$$']]
           inline = [['$', '$']]
+  [markup.highlight]
+    noClasses = false
+    codeFences = true
+    guessSyntax = false
+    lineNos = false
+    tabWidth = 2

@@ -16,6 +16,11 @@
   {{ partial "footer.html" . }}
   {{ partial "joule-panel.html" . }}
   {{ partial "joule-starters.html" . }}
+  <dialog class="image-lightbox" id="image-lightbox" aria-label="Image viewer">
+    <button type="button" class="image-lightbox-close" aria-label="Close">&times;</button>
+    <img alt="">
+    <div class="image-lightbox-caption"></div>
+  </dialog>
   <script defer src="/js/consent.js"></script>
   <script defer src="/js/vendor/markdown-it.min.js"></script>
   <script defer src="/js/vendor/purify.min.js"></script>

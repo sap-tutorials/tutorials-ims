@@ -1,0 +1,30 @@
+{{- $src := .Destination -}}
+{{- $alt := .PlainText -}}
+{{- $title := .Title -}}
+{{- $attrs := .Attributes | default dict -}}
+{{- $width := index $attrs "width" | default "" -}}
+{{- $height := index $attrs "height" | default "" -}}
+{{- $caption := index $attrs "caption" | default "" -}}
+{{- $hasCaption := or (and (ne $alt "") (ne $alt "image")) (ne $caption "") -}}
+{{- $captionText := $caption -}}
+{{- if eq $captionText "" -}}{{- $captionText = $alt -}}{{- end -}}
+{{- $useCdn := and (hasPrefix $src "https://raw.githubusercontent.com/") (eq (printf "%s" $src) $src) -}}
+{{- $finalSrc := $src -}}
+{{- $srcset := "" -}}
+{{- if $useCdn -}}
+  {{- $enc := $src | urlquery -}}
+  {{- $finalSrc = printf "/img-cdn/?u=%s&w=1440" $enc -}}
+  {{- $srcset = printf "/img-cdn/?u=%s&w=480 480w, /img-cdn/?u=%s&w=960 960w, /img-cdn/?u=%s&w=1440 1440w" $enc $enc $enc -}}
+{{- end -}}
+{{- if $hasCaption -}}<figure class="tutorial-figure">{{- end -}}
+<img
+  src="{{ $finalSrc | safeURL }}"
+  {{ with $srcset }}srcset="{{ . | safeURL }}" sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 960px"{{ end }}
+  alt="{{ $alt }}"
+  {{ with $title }}title="{{ . }}"{{ end }}
+  {{ with $width }}width="{{ . }}"{{ end }}
+  {{ with $height }}height="{{ . }}"{{ end }}
+  loading="lazy"
+  decoding="async"
+  data-zoomable="true">
+{{- if $hasCaption -}}<figcaption class="tutorial-figcaption">{{ $captionText }}</figcaption></figure>{{- end -}}

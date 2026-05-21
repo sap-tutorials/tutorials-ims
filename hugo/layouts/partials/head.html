@@ -19,8 +19,12 @@
 </style>
 {{ $themeVars := resources.Get "css/sap-theme-vars.css" }}
 {{ $darkVars := resources.Get "css/sap-horizon-dark.css" }}
+{{ $chromaLight := resources.Get "css/chroma-light.css" }}
+{{ $chromaDark := resources.Get "css/chroma-dark.css" }}
 <link rel="stylesheet" href="{{ $themeVars.RelPermalink }}">
 <link rel="stylesheet" href="{{ $darkVars.RelPermalink }}">
+<link rel="stylesheet" href="{{ $chromaLight.RelPermalink }}">
+<link rel="stylesheet" href="{{ $chromaDark.RelPermalink }}">
 <link rel="stylesheet" href="/css/sap-fundamental.css">
 <script>
   const t = localStorage.getItem('theme') ||

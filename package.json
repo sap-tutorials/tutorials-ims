@@ -51,6 +51,7 @@
     "postcss": "^8.5.12",
     "postcss-cli": "^11.0.1",
     "postcss-import": "^16.1.1",
+    "probe-image-size": "^7.3.0",
     "sap.tutorials.admin.accomplishments": "file:app/admin/accomplishments",
     "sap.tutorials.admin.accounts": "file:app/admin/accounts",
     "sap.tutorials.admin.changelog": "file:app/admin/changelog",
