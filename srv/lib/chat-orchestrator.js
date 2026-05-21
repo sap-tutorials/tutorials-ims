@@ -72,10 +72,28 @@ const GET_RELEVANT_STEPS_TOOL = {
   }
 };
 
+const GET_USER_PROGRESS_TOOL = {
+  type: 'function',
+  function: {
+    name: 'getUserProgress',
+    description: 'Fetch the SIGNED-IN user\'s tutorial progress: in-progress tutorials (started but not finished, ordered by recency) plus slugs of already-completed tutorials, missions, and groups. Use when the user asks to resume, "where did I leave off", "what should I learn next", or any question where you must avoid re-recommending finished content. Anonymous users return empty arrays.',
+    parameters: {
+      type: 'object',
+      properties: {
+        limit: { type: 'integer', minimum: 1, maximum: 25, description: 'Max in-progress tutorials to return (default 10)' }
+      }
+    }
+  }
+};
+
 async function toolsForContext({ pageContext, isAdmin }) {
   const tools = [SEARCH_TUTORIALS_TOOL];
   if (isAdmin && pageContext?.kind === 'admin') {
     tools.push(SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL);
+  } else {
+    // Learner-side only — admins are running the platform, not consuming
+    // tutorials, so progress lookup is irrelevant in the admin persona.
+    tools.push(GET_USER_PROGRESS_TOOL);
   }
   try {
     const { ChatSettings } = cds.entities('com.sap.developers.ims');
@@ -109,13 +127,43 @@ export async function dispatchTool(name, args, user) {
       const hits = await search.run(
         SELECT.from(SearchableItems).search(args.query).limit(5)
       );
-      return (hits || []).map(h => ({
+      const baseHits = (hits || []).map(h => ({
         slug: h.slug, title: h.title, description: h.description,
         type: h.type, primaryTag: h.primaryTag
       }));
+      // Annotate each hit with the user's status so the LLM can avoid
+      // re-suggesting completed items and prioritize in-progress ones.
+      // Failure to enrich must NOT break search — fall back to neutral hits.
+      try {
+        const { getProgressLookup } = await import('./user-progress.js');
+        const lookup = await getProgressLookup(user);
+        if (lookup.size === 0) return baseHits;
+        return baseHits.map(h => {
+          const taskType = (h.type || '').toUpperCase();
+          const key = `${taskType}:${h.slug}`;
+          const entry = lookup.get(key);
+          if (!entry) return { ...h, userStatus: 'new' };
+          if (entry.status === 'COMPLETED') return { ...h, userStatus: 'completed' };
+          return { ...h, userStatus: 'in-progress', progressPercent: entry.progressPercent };
+        });
+      } catch (annotateErr) {
+        LOG.warn('searchTutorials annotation failed; returning unannotated hits', annotateErr.message);
+        return baseHits;
+      }
     } catch (err) {
       LOG.warn('searchTutorials failed', err.message);
       return { error: 'search_failed', hits: [] };
+    }
+  }
+
+  if (name === 'getUserProgress') {
+    try {
+      const { getUserProgress } = await import('./user-progress.js');
+      const limit = typeof args?.limit === 'number' ? args.limit : undefined;
+      return await getUserProgress(user, { limit });
+    } catch (err) {
+      LOG.warn('getUserProgress failed', err.message);
+      return { error: 'progress_failed', inProgress: [], completedSlugs: [], completedMissionSlugs: [], completedGroupSlugs: [] };
     }
   }
 
@@ -375,4 +423,4 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
   }
 }
 
-export { SEARCH_TUTORIALS_TOOL, SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, GET_RELEVANT_STEPS_TOOL, toolsForContext };
+export { SEARCH_TUTORIALS_TOOL, SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, GET_RELEVANT_STEPS_TOOL, GET_USER_PROGRESS_TOOL, toolsForContext };

@@ -26,6 +26,17 @@ Never include credentials, API keys, or production URLs in responses.`;
 
 const RAG_GUIDANCE = `When the getRelevantSteps tool returns step excerpts, treat them as authoritative ground truth for the question. Quote them naturally and cite each step inline using the form [tutorial-slug #stepNumber]. If no relevant steps come back (empty hits or all below the threshold), say so explicitly rather than guessing — invite the user to refine the question or use the searchTutorials tool to discover candidates.`;
 
+const PROGRESS_GUIDANCE = `The signed-in user has tutorial-progress state available via the getUserProgress tool. Call it whenever:
+- the user asks to resume, "where did I leave off", "continue", "what was I working on"
+- the user asks for a recommendation ("what should I learn next", "suggest a tutorial")
+- you are about to recommend tutorials and want to avoid re-suggesting finished ones
+
+Apply these rules to recommendations and search results:
+1. NEVER suggest a tutorial whose slug is in completedSlugs (or a mission/group in their respective lists). If the user explicitly asks for it, acknowledge they already finished it before answering.
+2. PRIORITIZE in-progress tutorials. If the user has any, lead with "You have N tutorials in progress — want to resume <most-recent-title>? You're at <progressPercent>%." before suggesting anything new.
+3. The searchTutorials tool annotates each hit with userStatus ('new' | 'in-progress' | 'completed'). Filter or downrank 'completed', boost 'in-progress', and prefer 'new' for fresh recommendations.
+4. If getUserProgress returns empty arrays the user is anonymous or has no history — suggest beginner content rather than asking them to log in.`;
+
 const STEP_TEXT_BUDGET = 4000;
 
 function tutorialLayer(ctx) {
@@ -101,6 +112,10 @@ function userLayer(user) {
 }
 
 export function buildSystemPrompt(pageContext, user) {
-  const persona = pageContext?.kind === 'admin' ? ADMIN_PERSONA : PERSONA;
-  return [persona, RAG_GUIDANCE, pageLayer(pageContext), userLayer(user)].filter(Boolean).join('\n\n');
+  const isAdmin = pageContext?.kind === 'admin';
+  const persona = isAdmin ? ADMIN_PERSONA : PERSONA;
+  const layers = [persona, RAG_GUIDANCE];
+  if (!isAdmin) layers.push(PROGRESS_GUIDANCE);
+  layers.push(pageLayer(pageContext), userLayer(user));
+  return layers.filter(Boolean).join('\n\n');
 }

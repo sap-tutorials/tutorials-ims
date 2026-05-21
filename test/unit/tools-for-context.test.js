@@ -10,16 +10,22 @@ describe('toolsForContext', () => {
     await cds.deploy(schemaPath).to('sqlite::memory:');
   });
 
-  it('learner pageContext: only searchTutorials', async () => {
+  it('learner pageContext: searchTutorials + getUserProgress, no admin tools', async () => {
     const tools = await toolsForContext({ pageContext: { kind: 'tutorial' }, isAdmin: false });
     const names = tools.map(t => t.function.name);
-    expect(names).toEqual(['searchTutorials']);
+    expect(names).toContain('searchTutorials');
+    expect(names).toContain('getUserProgress');
+    expect(names).not.toContain('searchAdminDocs');
+    expect(names).not.toContain('analyticsQuery');
   });
-  it('admin pageContext + admin scope: includes admin docs and analytics', async () => {
+  it('admin pageContext + admin scope: includes admin docs and analytics, NOT getUserProgress', async () => {
     const tools = await toolsForContext({ pageContext: { kind: 'admin' }, isAdmin: true });
     const names = tools.map(t => t.function.name);
     expect(names).toContain('searchAdminDocs');
     expect(names).toContain('analyticsQuery');
+    // Admins are operating the platform, not consuming tutorials — progress
+    // tool is irrelevant and would muddy the admin persona.
+    expect(names).not.toContain('getUserProgress');
   });
   it('forged admin context from learner: admin tools NOT exposed', async () => {
     const tools = await toolsForContext({ pageContext: { kind: 'admin' }, isAdmin: false });
