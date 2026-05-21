@@ -429,6 +429,8 @@ annotate AdminService.Tutorials with {
   status                @Common.Label: 'Status'  @Common.ValueListWithFixedValues;
   deletionReason        @Common.Label: 'Deletion Reason';
   redirectTo            @Common.Label: 'Redirect To'
+                        @Common.Text: redirectTo.title
+                        @Common.TextArrangement: #TextOnly
                         @Common.ValueList: {
                           CollectionPath: 'TutorialPickList',
                           Parameters: [
