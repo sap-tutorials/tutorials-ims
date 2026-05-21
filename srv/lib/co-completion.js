@@ -13,7 +13,9 @@ export async function computeCoCompletions({ topN = 10, force = false } = {}) {
 
   const work = (async () => {
     const { Tutorials, TaskRecords } = cds.entities('com.sap.developers.ims')
-    const tutorials = await SELECT.from(Tutorials).columns('legacyId', 'slug')
+    const tutorials = await SELECT.from(Tutorials)
+      .columns('legacyId', 'slug')
+      .where(`status = 'ACTIVE' or status is null`)
     const slugById = new Map(tutorials.map(t => [t.legacyId, t.slug]).filter(([, s]) => !!s))
 
     const records = await SELECT.from(TaskRecords)
