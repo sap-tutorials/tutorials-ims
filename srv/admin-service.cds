@@ -82,6 +82,9 @@ service AdminService {
   @readonly entity JobExecutionLog as projection on ims.PipelineLog
     where pipelineType = 'SCHEDULED_JOB';
 
+  @readonly entity TutorialFeedback          as projection on ims.TutorialFeedback;
+  @readonly entity TutorialFeedbackAggregate as projection on ims.TutorialFeedbackAggregate;
+
   // --- Admin actions ---
 
   // GDPR / Privacy
