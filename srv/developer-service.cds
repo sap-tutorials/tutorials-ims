@@ -68,6 +68,17 @@ service DeveloperService {
     keyed   : many { compositeKey : String; slug : String; title : String };
   };
 
+  // Past completions for /me page (signed-in user only)
+  @(requires: 'authenticated-user')
+  function getMyCompletions() returns many {
+    slug                  : String;
+    title                 : String;
+    primaryTag            : String;
+    experienceTag         : String;
+    averageTimeToComplete : Integer;
+    completionDate        : DateTime;
+  };
+
   // App Space progress (replaces AEM /bin/sapdx/tutorials/v3/progress/series)
   @(requires: 'authenticated-user')
   function getEventProgress(missionLegacyId : Integer) returns {

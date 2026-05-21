@@ -2,6 +2,7 @@ import cds from '@sap/cds';
 import { calculateTutorialProgress } from './lib/status-calculator.js';
 import { getNextLegacyId } from './lib/legacy-id.js';
 import { hashIp } from './lib/feedback-salt.js';
+import { getMyCompletedTutorials } from './lib/user-progress.js';
 
 const RATE_LIMIT = new Map();
 const RATE_WINDOW_MS = 60 * 60 * 1000;
@@ -253,6 +254,10 @@ export default class DeveloperService extends cds.ApplicationService {
     });
 
     // --- App Space progress (replaces AEM progress/series) ---
+
+    this.on('getMyCompletions', async (req) => {
+      return getMyCompletedTutorials(req.user);
+    });
 
     this.on('getEventProgress', async (req) => {
       const { missionLegacyId } = req.data;

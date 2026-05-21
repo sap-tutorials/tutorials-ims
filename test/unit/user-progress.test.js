@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import path from 'node:path';
 import cds from '@sap/cds';
-import { getUserProgress, getProgressLookup } from '../../srv/lib/user-progress.js';
+import { getUserProgress, getProgressLookup, getMyCompletedTutorials } from '../../srv/lib/user-progress.js';
 
 const schemaPath = path.join(process.cwd(), 'db', 'schema.cds');
 
@@ -27,11 +27,13 @@ async function seed() {
 
   // 3 tutorials: one completed, one in-progress (recent), one in-progress (older)
   await INSERT.into(Tutorials).entries([
-    { ID: '11111111-0000-0000-0000-000000000001', legacyId: 100, slug: 'cap-getting-started', title: 'CAP Getting Started' },
-    { ID: '11111111-0000-0000-0000-000000000002', legacyId: 101, slug: 'cap-events',          title: 'CAP Events' },
-    { ID: '11111111-0000-0000-0000-000000000003', legacyId: 102, slug: 'cap-cds-modeling',    title: 'CAP CDS Modeling' },
+    { ID: '11111111-0000-0000-0000-000000000001', legacyId: 100, slug: 'cap-getting-started', title: 'CAP Getting Started', primaryTag: 'CAP', experienceTag: 'beginner', averageTimeToComplete: 25 },
+    { ID: '11111111-0000-0000-0000-000000000002', legacyId: 101, slug: 'cap-events',          title: 'CAP Events',          primaryTag: 'CAP', experienceTag: 'intermediate', averageTimeToComplete: 40 },
+    { ID: '11111111-0000-0000-0000-000000000003', legacyId: 102, slug: 'cap-cds-modeling',    title: 'CAP CDS Modeling',    primaryTag: 'CAP', experienceTag: 'intermediate', averageTimeToComplete: 30 },
     // Untouched control — should never appear in any output
-    { ID: '11111111-0000-0000-0000-000000000004', legacyId: 103, slug: 'fiori-elements',      title: 'Fiori Elements' }
+    { ID: '11111111-0000-0000-0000-000000000004', legacyId: 103, slug: 'fiori-elements',      title: 'Fiori Elements',      primaryTag: 'Fiori', experienceTag: 'beginner', averageTimeToComplete: 20 },
+    // Second completed tutorial — used to verify completion-date desc sort
+    { ID: '11111111-0000-0000-0000-000000000005', legacyId: 104, slug: 'btp-trial',           title: 'BTP Trial',           primaryTag: 'BTP', experienceTag: 'beginner', averageTimeToComplete: 15 }
   ]);
 
   await INSERT.into(Missions).entries([
@@ -52,7 +54,20 @@ async function seed() {
       status: 'COMPLETED',
       progress: 100,
       modifiedAt: '2026-04-01T10:00:00Z',
+      completionDate: '2026-04-01T10:00:00Z',
       titleSnapshot: 'CAP Getting Started'
+    },
+    // Second completed tutorial (more recent — for date-desc sort assertion)
+    {
+      ID: 'aaaaaaaa-0000-0000-0000-000000000007',
+      user_ID: USER_ID,
+      taskLegacyId: 104,
+      taskType: 'TUTORIAL',
+      status: 'COMPLETED',
+      progress: 100,
+      modifiedAt: '2026-05-10T08:00:00Z',
+      completionDate: '2026-05-10T08:00:00Z',
+      titleSnapshot: 'BTP Trial'
     },
     // In-progress tutorial (recent)
     {
@@ -143,7 +158,7 @@ describe('user-progress', () => {
 
     it('returns completed tutorial slugs separately from missions and groups', async () => {
       const result = await getUserProgress({ id: USER_UUID });
-      expect(result.completedSlugs).toEqual(['cap-getting-started']);
+      expect(result.completedSlugs.sort()).toEqual(['btp-trial', 'cap-getting-started']);
       expect(result.completedMissionSlugs).toEqual(['cap-mission']);
       expect(result.completedGroupSlugs).toEqual(['beginner-group']);
     });
@@ -191,6 +206,47 @@ describe('user-progress', () => {
     it('does not include the untouched control tutorial', async () => {
       const lookup = await getProgressLookup({ id: USER_UUID });
       expect(lookup.has('TUTORIAL:fiori-elements')).toBe(false);
+    });
+  });
+
+  describe('getMyCompletedTutorials', () => {
+    it('returns an empty array for anonymous users', async () => {
+      const result = await getMyCompletedTutorials({ id: 'anonymous' });
+      expect(result).toEqual([]);
+    });
+
+    it('returns an empty array when user.id maps to no Users row', async () => {
+      const result = await getMyCompletedTutorials({ id: 'unknown-uuid' });
+      expect(result).toEqual([]);
+    });
+
+    it('returns one row per completed TUTORIAL with full metadata', async () => {
+      const result = await getMyCompletedTutorials({ id: USER_UUID });
+      expect(result).toHaveLength(2);
+      const cap = result.find(r => r.slug === 'cap-getting-started');
+      expect(cap).toMatchObject({
+        slug: 'cap-getting-started',
+        title: 'CAP Getting Started',
+        primaryTag: 'CAP',
+        experienceTag: 'beginner',
+        averageTimeToComplete: 25
+      });
+      expect(cap.completionDate).toBeTruthy();
+    });
+
+    it('orders rows by completionDate descending (most recent first)', async () => {
+      const result = await getMyCompletedTutorials({ id: USER_UUID });
+      expect(result.map(r => r.slug)).toEqual(['btp-trial', 'cap-getting-started']);
+    });
+
+    it('does NOT include in-progress tutorials, missions, groups, or steps', async () => {
+      const result = await getMyCompletedTutorials({ id: USER_UUID });
+      const slugs = result.map(r => r.slug);
+      expect(slugs).not.toContain('cap-events');         // in-progress
+      expect(slugs).not.toContain('cap-cds-modeling');   // in-progress
+      expect(slugs).not.toContain('cap-mission');        // mission, not tutorial
+      expect(slugs).not.toContain('beginner-group');     // group, not tutorial
+      expect(slugs).not.toContain('fiori-elements');     // untouched control
     });
   });
 });

@@ -172,6 +172,8 @@ html.dark .shellbar-popover .fd-menu__link {
 html.dark .shellbar-popover .fd-menu__link:hover {
   background: #29394b;
 }
+.shellbar-popover .nav-auth-only { display: none; }
+html[data-authenticated="true"] .shellbar-popover .nav-auth-only { display: list-item; }
 .shellbar-popover .fd-menu__addon-before {
   color: var(--sapContent_IconColor, #556b82);
   font-size: 1rem;

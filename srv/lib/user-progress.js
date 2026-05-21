@@ -109,6 +109,55 @@ export async function getUserProgress(user, opts = {}) {
   };
 }
 
+// Returns the user's completed-tutorial history for the public /me page.
+// Each row is one TUTORIAL TaskRecord with status=COMPLETED, joined with
+// Tutorials by legacyId so we can render slug + title + tag/experience/time.
+// Anonymous users return an empty array. Skips records whose legacyId no
+// longer maps to a current Tutorial slug (legacy/orphaned data).
+export async function getMyCompletedTutorials(user) {
+  const dbUserId = await resolveDbUserId(user);
+  if (!dbUserId) return [];
+
+  const { TaskRecords, Tutorials } = cds.entities('com.sap.developers.ims');
+
+  const records = await SELECT.from(TaskRecords)
+    .columns('taskLegacyId', 'completionDate', 'modifiedAt', 'titleSnapshot')
+    .where({
+      user_ID: dbUserId,
+      taskType: 'TUTORIAL',
+      status: 'COMPLETED'
+    });
+  if (records.length === 0) return [];
+
+  const tutorialIds = records.map(r => r.taskLegacyId);
+  const tutorials = await SELECT.from(Tutorials)
+    .columns('legacyId', 'slug', 'title', 'primaryTag', 'experienceTag', 'averageTimeToComplete')
+    .where({ legacyId: { in: tutorialIds } });
+  const meta = new Map(tutorials.map(t => [t.legacyId, t]));
+
+  const rows = [];
+  for (const r of records) {
+    const t = meta.get(r.taskLegacyId);
+    if (!t?.slug) continue;
+    rows.push({
+      slug: t.slug,
+      title: t.title || r.titleSnapshot || t.slug,
+      primaryTag: t.primaryTag || null,
+      experienceTag: t.experienceTag || null,
+      averageTimeToComplete: typeof t.averageTimeToComplete === 'number' ? t.averageTimeToComplete : null,
+      completionDate: r.completionDate || r.modifiedAt || null
+    });
+  }
+
+  rows.sort((a, b) => {
+    const at = a.completionDate ? new Date(a.completionDate).getTime() : 0;
+    const bt = b.completionDate ? new Date(b.completionDate).getTime() : 0;
+    return bt - at;
+  });
+
+  return rows;
+}
+
 // Lightweight lookup used by searchTutorials annotation. Returns a Map keyed
 // by `${taskType}:${slug}` → { status, progressPercent }. Uses the same
 // resolveDbUserId cache so the second call within a chat turn is cheap.
