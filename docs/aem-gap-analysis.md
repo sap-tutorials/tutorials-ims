@@ -433,21 +433,19 @@ AEM Author → Publish replication has a queue. At any moment there are pending 
 
 ---
 
-### E6. Email / Newsletter Integration
+### E6. Email / Newsletter Integration ✅
 
 If developers.sap.com powers any email newsletter ("here are this week's new tutorials"), there may be an integration that reads from AEM (replication events, sitemap, custom feed) to compose emails.
 
-**Question:** Does such an integration exist? If yes, what does it consume?
-
-**Action:** Ask the marketing/comms team. May be reading the public sitemap, in which case continuity is preserved.
+**Status:** Not relevant to the tutorial scope.
 
 ---
 
-### E7. SAP Internal Search Indexing
+### E7. SAP Internal Search Indexing ✅
 
 SAP's internal search aggregator (the global SAP search across help.sap.com, community, developers.sap.com, etc.) likely crawls developers.sap.com. **Sudden URL pattern changes break this.**
 
-**Action:** Coordinate with the SAP-wide search team before cutover.
+**Status:** Not relevant to the tutorial scope.
 
 ---
 
