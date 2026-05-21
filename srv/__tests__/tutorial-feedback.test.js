@@ -150,4 +150,124 @@ describe('submitTutorialFeedback', () => {
       .where({ ID: data.submissionId });
     expect(row.wasAuthenticated).toBe(true);
   });
+
+  it('rejects missing tutorialSlug with 400', async () => {
+    const { status } = await submit({
+      npsScore: 7,
+      honeypot: '',
+      _clientIp: '10.0.0.6'
+    });
+
+    expect(status).toBe(400);
+  });
+
+  it('accepts null ratings (skipped questions)', async () => {
+    const { status, data } = await submit({
+      tutorialSlug: 'demo-tutorial',
+      ratingUseCase: null,
+      ratingRelevance: null,
+      ratingDuration: null,
+      ratingStructure: null,
+      ratingInteresting: null,
+      ratingVisuals: null,
+      npsScore: 8,
+      honeypot: '',
+      _clientIp: '10.0.0.7'
+    });
+
+    expect(status).toBe(200);
+
+    const { TutorialFeedback } = cds.entities('com.sap.developers.ims');
+    const row = await SELECT.one.from(TutorialFeedback)
+      .where({ ID: data.submissionId });
+    expect(row.ratingUseCase).toBeNull();
+    expect(row.ratingRelevance).toBeNull();
+    expect(row.npsScore).toBe(8);
+  });
+
+  it('truncates comments longer than 2000 chars', async () => {
+    const longComment = 'x'.repeat(2500);
+    const { status, data } = await submit({
+      tutorialSlug: 'demo-tutorial',
+      npsScore: 7,
+      comment: longComment,
+      honeypot: '',
+      _clientIp: '10.0.0.8'
+    });
+
+    expect(status).toBe(200);
+
+    const { TutorialFeedback } = cds.entities('com.sap.developers.ims');
+    const row = await SELECT.one.from(TutorialFeedback)
+      .where({ ID: data.submissionId });
+    expect(row.comment.length).toBe(2000);
+    expect(row.comment).toMatch(/^x+$/);
+  });
+
+  it('strips control characters from comments', async () => {
+    const dirty = 'hello\x00\x01world\x07\x1F\x7Fend';
+    const { status, data } = await submit({
+      tutorialSlug: 'demo-tutorial',
+      npsScore: 7,
+      comment: dirty,
+      honeypot: '',
+      _clientIp: '10.0.0.9'
+    });
+
+    expect(status).toBe(200);
+
+    const { TutorialFeedback } = cds.entities('com.sap.developers.ims');
+    const row = await SELECT.one.from(TutorialFeedback)
+      .where({ ID: data.submissionId });
+    expect(row.comment).toBe('helloworldend');
+  });
+
+  it('preserves newlines and tabs in comments', async () => {
+    const text = 'line1\nline2\tcol2\rline3';
+    const { status, data } = await submit({
+      tutorialSlug: 'demo-tutorial',
+      npsScore: 7,
+      comment: text,
+      honeypot: '',
+      _clientIp: '10.0.0.10'
+    });
+
+    expect(status).toBe(200);
+
+    const { TutorialFeedback } = cds.entities('com.sap.developers.ims');
+    const row = await SELECT.one.from(TutorialFeedback)
+      .where({ ID: data.submissionId });
+    expect(row.comment).toBe(text);
+  });
+
+  it('rate limit is per-IP — different IPs do not share the bucket', async () => {
+    // Exhaust IP A's bucket (5 submissions OK, 6th rejected)
+    const ipA = '10.0.55.1';
+    for (let i = 0; i < 5; i++) {
+      const { status } = await submit({
+        tutorialSlug: 'demo-tutorial',
+        npsScore: 7,
+        honeypot: '',
+        _clientIp: ipA
+      });
+      expect(status).toBe(200);
+    }
+    const { status: limited } = await submit({
+      tutorialSlug: 'demo-tutorial',
+      npsScore: 7,
+      honeypot: '',
+      _clientIp: ipA
+    });
+    expect(limited).toBe(429);
+
+    // IP B starts fresh — first submission must succeed
+    const ipB = '10.0.55.2';
+    const { status: fresh } = await submit({
+      tutorialSlug: 'demo-tutorial',
+      npsScore: 7,
+      honeypot: '',
+      _clientIp: ipB
+    });
+    expect(fresh).toBe(200);
+  });
 });
