@@ -121,22 +121,69 @@
     }
   }
 
+  var USER_KEY = 'joule.user.v1';
+  var USER_TTL_MS = 60000;
+
+  function readCachedUser() {
+    try {
+      var raw = sessionStorage.getItem(USER_KEY);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || !parsed.value) return null;
+      if (Date.now() - parsed.ts > USER_TTL_MS) return null;
+      return parsed.value;
+    } catch (e) { return null; }
+  }
+
+  function applyAuthenticatedUser(u) {
+    if (!u) return;
+    var given = u.givenName || u.firstName || '';
+    var family = u.familyName || '';
+    var id = u.id || '';
+    isAuthenticated = true;
+    userName.textContent = (given + ' ' + family).trim() || id;
+    userEmail.textContent = u.email || '';
+    document.documentElement.dataset.authenticated = 'true';
+    avatar.classList.add('fd-avatar--authenticated');
+    applyInitials(given, family, id);
+    avatar.setAttribute('aria-label', userName.textContent);
+    document.documentElement.dataset.user = JSON.stringify({ firstName: given });
+  }
+
   async function checkAuth() {
     try {
-      const res = await fetch(capBase + '/auth/user', { credentials: 'include' });
-      if (!res.ok) return;
+      const res = await fetch(capBase + '/auth/user', { credentials: 'include', redirect: 'follow' });
+      if (res.redirected) {
+        const cached = readCachedUser();
+        if (cached) applyAuthenticatedUser(cached);
+        return;
+      }
+      if (!res.ok) {
+        const cached = readCachedUser();
+        if (cached) applyAuthenticatedUser(cached);
+        return;
+      }
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) {
+        const cached = readCachedUser();
+        if (cached) applyAuthenticatedUser(cached);
+        return;
+      }
       const user = await res.json();
-      if (!user.authenticated) return;
+      if (!user || !user.authenticated) {
+        const cached = readCachedUser();
+        if (cached) applyAuthenticatedUser(cached);
+        return;
+      }
 
-      isAuthenticated = true;
-      userName.textContent = (user.givenName + ' ' + user.familyName).trim() || user.id;
-      userEmail.textContent = user.email || '';
-      document.documentElement.dataset.authenticated = 'true';
-      avatar.classList.add('fd-avatar--authenticated');
-      applyInitials(user.givenName, user.familyName, user.id);
-      avatar.setAttribute('aria-label', userName.textContent);
-      document.documentElement.dataset.user = JSON.stringify({ firstName: user.givenName });
-    } catch {}
+      const toCache = { firstName: user.givenName, givenName: user.givenName, familyName: user.familyName, email: user.email, id: user.id };
+      try { sessionStorage.setItem(USER_KEY, JSON.stringify({ ts: Date.now(), value: toCache })); } catch (e) {}
+      applyAuthenticatedUser(user);
+    } catch (e) {
+      console.debug('[header/checkAuth] fetch failed, attempting cache fallback', e);
+      const cached = readCachedUser();
+      if (cached) applyAuthenticatedUser(cached);
+    }
   }
 
   window.handleLogout = function() {
