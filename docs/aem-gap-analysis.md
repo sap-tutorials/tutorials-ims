@@ -299,33 +299,59 @@ Costs avoided: a long-lived GitHub PAT (rotation, expiry, secret hygiene), a new
 
 ## P2 — Minor Gaps
 
-### 16. Siteimprove Integration
+### 16. Siteimprove Integration — ✅ Closed 2026-05-21
 
 **AEM:** Accessibility/SEO scoring via Siteimprove SaaS. Sysadmin/content-quality tool.
 
-**Replacement:** Nothing. Site can be re-onboarded to Siteimprove (or replaced with axe-core + Lighthouse in CI) post-cutover.
+**Replacement:** axe-core + Lighthouse CI in the deploy pipeline (warn-only). See [test/a11y/](../test/a11y/) and the `a11y-scan` job in [.github/workflows/deploy.yml](../.github/workflows/deploy.yml).
 
-**Action:** Park. Re-onboard to Siteimprove or wire axe-core into CI after cutover stabilizes.
+- `test/a11y/axe.test.js` — Playwright + `@axe-core/playwright`, scans WCAG 2.1 AA + best-practice rules across 8 pinned public pages (`test/a11y/urls.js`).
+- `test/a11y/lighthouserc.json` — Lighthouse CI with category budgets (perf ≥ 0.80, a11y ≥ 0.95, best-practices ≥ 0.90, SEO ≥ 0.95). Reports uploaded to LHCI temporary public storage; links surface in the workflow run summary.
+- Both run after `smoke-test` on every deploy run; results combined into the GitHub Actions job summary by `test/a11y/summary.js`.
+
+**Status:** Resolved (warn-only). Re-onboarding to Siteimprove is no longer required.
+
+**Follow-ups:**
+
+- Flip to gating (replace `expect(true).toBe(true)` in `axe.test.js`, change Lighthouse `assertions` from `warn` to `error`) once a baseline is established.
+- Authenticated scans for `/admin-ui/` and `/scanner-ui/` need a Playwright login fixture — deferred until the warn-only baseline stabilises.
+- PR-time signal needs either preview deploys per branch or a separate PR workflow scanning the static Hugo build (the latter would miss tutorials since they're served from HANA).
 
 ---
 
-### 17. Robots.txt as Author-Editable Page
+### 17. Robots.txt as Author-Editable Page — ✅ Closed 2026-05-21
 
 **AEM:** `robots-page` template lets sysadmins edit `robots.txt` without code changes.
 
-**Replacement:** Should ship as a static file in `hugo/static/robots.txt`. If sysadmin editability is required, expose as an admin OData entity.
+**Replacement:** Shipped as Hugo template at `hugo/layouts/robots.txt` (commit `2c49420`, 2026-05-20). Disallows `/api/`, `/admin/`, `/admin-ui/`, `/scanner-ui/`, `/event-display/`, `/display/`; explicit allowlist for major search bots (Googlebot, Bingbot, DuckDuckBot) and AI assistants (GPTBot, ChatGPT-User, OAI-SearchBot, ClaudeBot, Claude-Web, anthropic-ai, PerplexityBot, Applebot-Extended, Google-Extended); references `https://developers.sap.com/sitemap.xml`. Companion work: `c6dab41` adds `Content-Signal` and `X-Robots-Tag` response headers in approuter; `2d7e7cb` adds a smoke test that verifies the SEO files (robots, sitemap, llms, AGENTS, og-default) on the deployed approuter.
 
-**Action:** Ship as static file unless someone explicitly needs admin editing.
+**Note for future work:** Sysadmin editability is intentionally not provided — changes go through PR review, which AEM's author-editable page never had.
 
 ---
 
-### 18. Six Responsive Breakpoints + AdaptiveImage Pipeline
+### 18. Six Responsive Breakpoints + AdaptiveImage Pipeline — ✅ Closed 2026-05-21
 
 **AEM:** `AdaptiveImage` component with six breakpoints, art-direction support, lazy loading.
 
-**Replacement:** Hugo has image processing (`{{ .Resize }}`) but specific breakpoint values and srcset behavior not verified.
+**Replacement:** Shipped in commit `94b9bd5` (2026-05-21) as a two-tier pipeline — build-time `srcset` emission + request-time transcoding proxy. Coverage:
 
-**Action:** Compare a sample tutorial page in AEM vs replacement on three viewport sizes. Adjust Hugo image config to match if there's a meaningful regression.
+| AEM AdaptiveImage feature | Status |
+| --- | --- |
+| Lazy loading | ✅ `loading="lazy" decoding="async"` on every `<img>` ([hugo/layouts/_default/_markup/render-image.html:27-28](../hugo/layouts/_default/_markup/render-image.html#L27-L28)) |
+| Responsive `srcset` | ✅ 480w/960w/1440w buckets via `/img-cdn/?u=…&w=…` with `sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 960px"` ([render-image.html:17,22](../hugo/layouts/_default/_markup/render-image.html#L17-L22)) |
+| Width-bucket resize | ✅ `sharp.resize({ width, withoutEnlargement: true })` in approuter `/img-cdn` proxy ([approuter/server.js:22-104](../approuter/server.js#L22-L104)) |
+| Intrinsic dimensions (CLS prevention) | ✅ probed at fetch time via `probe-image-size`, cached in `.tutorial-cache/`, written as `width`/`height` attrs ([scripts/parsers/image-dimensions.ts](../scripts/parsers/image-dimensions.ts)) |
+| Format negotiation | ✅ **Stronger than AEM** — per-request WebP transcoding via `Accept` header, with passthrough for non-image MIME types and origin formats sharp can't process. AEM only had pre-rendered variants. |
+| Caption support | ✅ `<figure>/<figcaption>` when alt is meaningful ([render-image.html:19,30](../hugo/layouts/_default/_markup/render-image.html#L19-L30)) |
+| Click-to-zoom | ✅ Lightbox via `data-zoomable="true"` ([hugo/assets/js/tutorial.ts](../hugo/assets/js/tutorial.ts)) — AEM didn't have this |
+| Dark-mode brightness adjust | ✅ Image filter applied via `html.dark` (commit body, tier 1) — AEM didn't have this |
+
+**Two deliberate deltas from strict AEM parity:**
+
+1. **3 width buckets, not 6.** We ship 480w/960w/1440w. AEM's six likely added 320/720/1920. The SAP Fundamental grid only differentiates at 640px and 1024px, so extra buckets would inflate the proxy cache without changing the variant the browser picks for our `sizes` attribute. Revisit only if the design adds a wider hero or a sub-mobile breakpoint.
+2. **No `<picture>` art-direction support.** AEM let authors specify per-breakpoint crops via the Touch UI dialog. Our markdown source has no shortcode for this and tutorial authors have never had the affordance in the GitHub workflow — capability gap on paper, zero practical impact. Revisit only if a tutorial author asks for it.
+
+**Note for future work:** The `/img-cdn` proxy is allowlisted to `raw.githubusercontent.com` only — if tutorials ever reference images from another host, either extend `IMG_CDN_HOSTS` in [approuter/server.js](../approuter/server.js) or fall back to the upstream URL in `render-image.html` (the template already gates the rewrite on the `raw.githubusercontent.com/` prefix).
 
 ---
 
@@ -465,11 +491,9 @@ The team has an event-specific Vue app (AppSpace). AEM may have additional event
 
 ---
 
-### E12. Bot / Crawler Robots Rules
+### E12. Bot / Crawler Robots Rules — ✅ Closed 2026-05-21
 
-AEM's `robots.txt` likely has carefully-tuned rules (allow Googlebot deeply, restrict aggressive crawlers, sitemap reference). A naive replacement that disallows `/admin-ui/` but allows `/tutorials/*` may be fine, but verify edge cases like `/print/`, `/preview/`, `/draft/` paths.
-
-**Action:** Side-by-side `robots.txt` review.
+AEM's `robots.txt` likely had carefully-tuned rules. Our replacement (commit `2c49420`, 2026-05-20) disallows the operational paths that should never be crawled (`/api/`, `/admin/`, `/admin-ui/`, `/scanner-ui/`, `/event-display/`, `/display/`) and explicitly allows the major search bots and AI assistants on the public surface. Closed without a side-by-side diff against the AEM production file — the rule set we shipped is the intended policy going forward, not a reproduction of AEM's.
 
 ---
 

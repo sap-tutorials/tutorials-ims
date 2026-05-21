@@ -191,3 +191,70 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Target:** ${{ needs.deploy.outputs.environment }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- **URL:** ${{ steps.urls.outputs.base_url }}" >> "$GITHUB_STEP_SUMMARY"
+
+  a11y-scan:
+    needs: [deploy, smoke-test]
+    if: always() && needs.deploy.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Resolve environment URLs
+        id: urls
+        run: |
+          case "${{ needs.deploy.outputs.environment }}" in
+            dev)  echo "base_url=${{ vars.APPROUTER_URL_DEV }}" >> "$GITHUB_OUTPUT" ;;
+            qa)   echo "base_url=${{ vars.APPROUTER_URL_QA }}" >> "$GITHUB_OUTPUT" ;;
+            prod) echo "base_url=${{ vars.APPROUTER_URL_PROD }}" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Run axe-core scan (warn-only)
+        run: npm run test:a11y
+        env:
+          SMOKE_BASE_URL: ${{ steps.urls.outputs.base_url }}
+
+      - name: Build Lighthouse URL list
+        id: lhci-urls
+        run: |
+          URL_FLAGS=$(node --input-type=module -e "
+            import { resolveUrls } from './test/a11y/urls.js';
+            console.log(resolveUrls(process.env.BASE).map(u => '--collect.url=' + u.url).join(' '));
+          ")
+          echo "flags=$URL_FLAGS" >> "$GITHUB_OUTPUT"
+        env:
+          BASE: ${{ steps.urls.outputs.base_url }}
+
+      - name: Run Lighthouse CI (warn-only)
+        run: npx lhci autorun --config=test/a11y/lighthouserc.json ${{ steps.lhci-urls.outputs.flags }}
+        continue-on-error: true
+
+      - name: Write combined summary
+        if: always()
+        run: node test/a11y/summary.js >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload scan artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a11y-scan-${{ needs.deploy.outputs.environment }}-${{ github.run_number }}
+          path: |
+            test/a11y/axe-results.md
+            .lighthouseci/
+          retention-days: 30
+          if-no-files-found: warn
