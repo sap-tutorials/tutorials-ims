@@ -37,6 +37,9 @@ modules:
       memory: 1024M
       disk-quota: 1024M
       buildpack: nodejs_buildpack
+      # DO NOT raise instances without addressing in-process rate limiters in
+      # srv/developer-service.js, srv/lib/ip-rate-limit.js, srv/lib/chat-rate-limit.js.
+      # See docs/mta-deployment.md "Scaling Constraints" and TODO §22.
       instances: 1
     provides:
       - name: srv-api

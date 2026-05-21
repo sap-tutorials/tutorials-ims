@@ -133,6 +133,31 @@ curl -s -o /dev/null -w "%{http_code}" "$APPROUTER/tutorials/abap-dev-get-starte
 
 The MTA creates its own service instances (prefixed `tutorials-*`). Legacy IMS services (`ims-hana-dev-container`, `xsuaa-imsdev`, etc.) remain untouched in the same space. Both systems can run simultaneously until cutover validation is complete, then legacy apps can be stopped/deleted.
 
+## Scaling Constraints
+
+**`tutorials-srv` is pinned to `instances: 1` in both `mta.yaml` and `.deploy/mta.yaml`. Do not raise this without first replacing the in-process rate limiters with a shared store.**
+
+Three rate limiters in `tutorials-srv` keep state in process-local memory:
+
+| Location | Protects | Effect at N>1 instances |
+|---|---|---|
+| [srv/developer-service.js:7](../srv/developer-service.js#L7) (`RATE_LIMIT` Map) | `POST /feedback/submit` — 5 submissions/hr/IP | Effective ceiling becomes 5×N/hr/IP |
+| [srv/lib/ip-rate-limit.js](../srv/lib/ip-rate-limit.js) | `/search` — 60 req/min/IP | Effective ceiling becomes 60×N/min/IP |
+| [srv/lib/chat-rate-limit.js](../srv/lib/chat-rate-limit.js) | Joule chat — per-user request cap | Effective cap becomes N× per user |
+
+Multi-instance does not break correctness — submissions, searches, and chats still work. The limiters simply enforce a softer ceiling than configured. For a feedback-form spam guard the honeypot is the primary defense and a relaxed rate limit is acceptable, but for `/search` and chat this matters more.
+
+If you do need to scale `tutorials-srv` horizontally, the options are (rough effort order):
+
+1. **Lower per-instance limits proportionally** — set an `INSTANCE_COUNT` env var and divide thresholds by it. Crude but zero-code; honeypot still does the heavy lifting on feedback.
+2. **HANA-backed buckets** — add a `RateLimitBuckets` entity, write through it on each request, daily TTL cleanup. No new service binding; reuses HANA. Best fit for this codebase.
+3. **Redis service binding** — bind a `redis-cache` BTP managed service, use atomic `INCR` with TTL. Textbook pattern but adds a new service dependency for one feature.
+
+Cross-references:
+
+- TODO §22 "Feedback rate limit — multi-instance safe store"
+- The chat rate limiter has an env-tunable cap (`SEARCH_RATE_LIMIT_MAX` / `SEARCH_RATE_LIMIT_WINDOW_MS`) — useful for the per-instance-divide workaround above.
+
 ## Troubleshooting
 
 - **Optional services fail**: Expected if mail/audit-log/cloud-logging plans aren't entitled. Marked `optional: true` — deploy continues.
