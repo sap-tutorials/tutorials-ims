@@ -179,60 +179,73 @@ The handler has been removed and `getFacets` refactored to use `SELECT.from(Sear
 
 ---
 
-### 9. NextStepsServlet (Recommendation Engine)
+### 9. NextStepsServlet (Recommendation Engine) — ✅ Resolved (2026-05-20)
 
 **AEM:** Returns "next tutorial" suggestions based on tag overlap, mission membership, and (likely) IMS data on what other users completed after this tutorial.
 
-**Replacement:** Nothing.
+**Replacement:** Build-time recommendations baked into Hugo `nextSteps` frontmatter, rendered as the "Related Tutorials" rail on every tutorial page.
 
-**Impact:** End-of-tutorial "Continue learning" rail loses its recommendations. Users finish a tutorial and have no obvious next action. Engagement drops.
+**Resolution:**
 
-**Remediation:**
-- v1: Tag-overlap recommendations from CAP catalog (no IMS dependency).
-- v2: Combine tag overlap with TaskRecord co-completion data.
-- v3: Feed into Joule (already queued in `project_joule_completion_suggestions.md`).
-
-**Action:** Ship v1 before cutover. v1 is ~40 lines of CAP code over the existing catalog.
+- v1 (tag overlap, shipped at tag `recommendations-v1-shipped` / `561118a`): Pure tag-overlap scoring with primary-tag bonus and same-mission exclusion. Computed in `scripts/parsers/recommendations.ts` during `npm run fetch-tutorials`.
+- v2 (co-completion blend, shipped 2026-05-20): Two-pass blended scorer combines 60% co-completion (from `TaskRecords` aggregator at `/build/co-completions`) with 40% tag overlap; corpus-wide normalization avoids iteration-order bias. Falls back to v1 when CAP catalog is offline. See plan: [docs/superpowers/plans/2026-05-20-next-steps-recommendations.md](superpowers/plans/2026-05-20-next-steps-recommendations.md).
+- v3: Feed into Joule (queued in `project_joule_completion_suggestions.md`).
 
 ---
 
-### 10. GitHub Feedback → Issues
+### 10. GitHub Feedback → Issues — ✅ Resolved by existing implementation
 
-**AEM:** Three feedback servlets (tutorial / group / mission) collect user feedback at the bottom of each page and open GitHub issues against the source repo using a service token. Three issue templates configurable via OSGi config.
+**AEM (claimed):** Three feedback servlets (tutorial / group / mission) collect user feedback at the bottom of each page and open GitHub issues against the source repo using a service token. Three issue templates configurable via OSGi config.
 
-**Replacement:** Nothing.
+**AEM (actual production behavior):** The servlet code exists in `core.tutorial`, but production routing short-circuits to a deeplink against GitHub's `issues/new` form with prefilled query parameters. The "service token + issue creation" code path is not exercised — users authenticate with their own GitHub account and submit the issue under their own identity. Verified against production developers.sap.com on 2026-05-20.
 
-**Impact:** Tutorial authors lose the feedback channel they currently rely on. Feedback either goes to a black hole or moves to a different channel users aren't trained to use.
+**Replacement:** [`hugo/layouts/partials/feedback-share.html`](../hugo/layouts/partials/feedback-share.html) already implements this pattern with two channels:
 
-**Remediation:** A CAP endpoint `POST /api/feedback/{tutorial|group|mission}/:slug` that authenticates with a service token and creates an issue via `octokit`. Reuse the three templates from AEM OSGi config.
+1. **GitHub deeplink** (line 38) — `https://github.com/sap-tutorials/Tutorials/issues/new?title={{ .Title }}` opens the issue form with the tutorial title prefilled. User signs in with their own GitHub account.
+2. **Qualtrics survey** (line 43) — anonymous feedback channel for users who don't have or don't want to use GitHub.
 
-**Action:** Tractable, ~half-day's work. Worth doing.
+This matches (and arguably improves on) what production AEM actually does today.
+
+**Why a server-side `octokit` endpoint is *not* worth building:**
+
+| Argument for the API approach | Reality |
+| --- | --- |
+| Lets non-GitHub users submit feedback | Qualtrics survey already covers this |
+| Adds richer metadata to the issue | Deeplink can prefill `body=` with browser/step/slug too |
+| Server-side spam protection | GitHub already filters per-user abuse; PAT-created issues bypass that and *increase* spam risk |
+| Centralized routing per repo | Hugo template can pick the source repo per tutorial just as easily |
+
+Costs avoided: a long-lived GitHub PAT (rotation, expiry, secret hygiene), a new auth surface that needs captcha/rate-limits, issues created under a bot account with no GitHub identity for follow-up, and ~50–100 lines of code to maintain forever.
+
+**Optional enhancement:** Enrich the deeplink `body=` with slug, step number, permalink, and user agent so authors receive actionable reports without any server code:
+
+```html
+<a href="https://github.com/sap-tutorials/{{ .Params.repository }}/issues/new?title=Feedback: {{ .Title }}&body=**Tutorial:** {{ .Params.slug }}%0A**URL:** {{ .Permalink }}%0A%0A_Describe the issue:_">
+```
+
+**Action:** None required. Gap closed.
 
 ---
 
-### 11. Hero / SubNavigation / Resources Content Fragments
+### 11. ~~Hero / SubNavigation / Resources Content Fragments~~ — **Not in scope**
 
 **AEM:** Content Fragment authoring (out of scope per Tom) but the *rendered output* of these fragments composes the homepage and many landing pages. The hero banner, secondary navigation per topic area, and the "related resources" rail are content-fragment-driven.
 
-**Replacement:** Hugo homepage exists but the composition story is unclear. Are landing pages other than the homepage planned? How does a new topic area get a hero banner without a developer writing HTML?
+**Scope decision (2026-05-20):** The tutorials-poc project replaces **only the `/tutorials/*` section** of developers.sap.com. The homepage, topic landing pages, hero banners, sub-navigation rails, and "related resources" components live outside the tutorials section and will be redirected to the SAP Community site at cutover, not reimplemented here.
 
-**Edge cases:**
-- Sysadmins (or marketing) currently update hero banners and "related resources" rails through AEM dialogs. After cutover, this becomes either a Hugo content edit + rebuild + redeploy, or a CAP-backed CMS surface.
-- Topic-page hierarchies may not be mapped in Hugo at all.
+**Verification:** Grepped `hugo/` for `hero|subnav|relatedResources|content-fragment` — all hits are either (a) CSS class names in the existing Hugo homepage layout (which is itself transitional and will be redirected), or (b) incidental occurrences of the word "hero" inside tutorial code samples. No tutorial-section-internal content fragment was found. If a future requirement surfaces a *tutorial-section* hero or rail (e.g., a "Featured tutorials" component at `/tutorials/`), it would be reopened as a separate gap.
 
-**Action:** Inventory production landing pages with `curl + sitemap.xml`. Decide which are essential for cutover vs deferrable.
+**Action:** None. Composition for non-tutorial pages is handled by the redirect map (gap #3) pointing those URLs at SAP Community equivalents.
 
 ---
 
-### 12. Adobe Analytics
+### 12. ~~Adobe Analytics~~ — **Not in scope**
 
 **AEM:** Adobe Analytics tags injected via clientlib. Tracks page views, tutorial-step views, outbound link clicks, search queries.
 
-**Replacement:** Not yet wired.
+**Scope decision (2026-05-20):** Adobe Analytics for developers.sap.com has been **turned off in production for some time** (confirmed by Tom). There are no live dashboards consuming the data and no marketing/PMM workflow that depends on it. There is nothing to preserve at cutover.
 
-**Impact:** Marketing/PMM loses dashboards on day one of cutover.
-
-**Action:** Get the Adobe Analytics property + s_code (or AEP equivalent) from the marketing team and inject into `hugo/layouts/_default/baseof.html`.
+**Action:** None. If analytics are ever reintroduced, it will be as a net-new decision (likely SAP Analytics Cloud or a current-generation tool, not Adobe Analytics) and tracked as a fresh requirement rather than as AEM parity.
 
 ---
 
@@ -381,13 +394,11 @@ AEM Author → Publish replication has a queue. At any moment there are pending 
 
 ---
 
-### E5. Per-Tutorial Analytics History
+### E5. ~~Per-Tutorial Analytics History~~ — **Moot**
 
-If Adobe Analytics tracks events by tutorial slug or AEM resource ID, and the resource ID is JCR-specific, **the historical analytics for a tutorial may be unreachable post-cutover**. New events will use a new ID space.
+**Scope decision (2026-05-20):** Adobe Analytics for developers.sap.com has been off in production for some time (see [gap #12](#12-adobe-analytics--not-in-scope)). There is no continuous historical series to preserve, so the year-over-year-reporting concern does not apply at cutover.
 
-**Risk:** Year-over-year reporting breaks. PMs lose the ability to say "this tutorial has had 50K views since 2022."
-
-**Action:** Check analytics implementation. If it tracks by slug (likely), no problem. If it tracks by JCR path, coordinate with marketing on backfill.
+**Action:** None. If analytics are reintroduced post-cutover, the new tool will start its own ID space — that's a fresh-start decision, not an AEM continuity gap.
 
 ---
 
