@@ -1681,9 +1681,41 @@ a.author-line-name:hover {
 
 /* Images in tutorials */
 .tutorial-main img {
-  border: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
-  border-radius: 0.25rem;
+  border-radius: 0.375rem;
   max-width: 100%;
+  height: auto;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  cursor: zoom-in;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.tutorial-main img:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+html.dark .tutorial-main img {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
+  filter: brightness(0.9) contrast(1.05);
+}
+
+html.dark .tutorial-main img:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6), 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.tutorial-figure {
+  margin: 1.25rem 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.tutorial-figcaption {
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  font-style: italic;
+  text-align: center;
+  max-width: 90%;
 }
 
 /* Headings in tutorial main area */
@@ -2241,3 +2273,204 @@ a.author-line-name:hover {
     padding: 1rem;
   }
 }
+
+/* ── Code block: filename + collapse + Chroma integration ── */
+.code-block-filename {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--sapTextColor, #32363a);
+  margin-right: 0.75rem;
+}
+
+.code-block-lang-secondary {
+  margin-left: auto;
+  margin-right: 0.5rem;
+  opacity: 0.7;
+}
+
+/* The Chroma <pre> sits inside .code-block-body — strip its own background so the block uses our header/body styling */
+.code-block-body .chroma {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  margin: 0;
+  padding: 1rem;
+  overflow-x: auto;
+}
+
+.code-block-body .chroma pre {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+html.dark .code-block {
+  border-color: var(--sapField_BorderColor, #4a4d52);
+}
+
+html.dark .code-block-header {
+  background: var(--sapList_HeaderBackground, #1a1d21);
+  border-bottom-color: var(--sapField_BorderColor, #4a4d52);
+}
+
+html.dark .code-block-body,
+html.dark .code-block-body .chroma {
+  background: #0d1117;
+}
+
+html.dark pre,
+html.dark :not(pre) > code {
+  background-color: #0d1117;
+  color: #e6edf3;
+}
+
+/* Long-block collapse */
+.code-block-long .code-block-body[data-collapsed="true"] {
+  max-height: 28rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.code-block-long .code-block-body[data-collapsed="true"]::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 4rem;
+  background: linear-gradient(to bottom, transparent, var(--sapField_Background, #f5f6f7));
+  pointer-events: none;
+}
+
+html.dark .code-block-long .code-block-body[data-collapsed="true"]::after {
+  background: linear-gradient(to bottom, transparent, #0d1117);
+}
+
+.code-block-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.5rem;
+  background: var(--sapNeutralBackground, #f5f6f7);
+  border: none;
+  border-top: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+  font-size: 0.8125rem;
+  color: var(--sapLinkColor, #0064d9);
+  cursor: pointer;
+}
+
+.code-block-toggle:hover {
+  background: var(--sapList_Hover_Background, #eaecee);
+}
+
+.code-block-toggle .toggle-hide { display: none; }
+.code-block-toggle[aria-expanded="true"] .toggle-show { display: none; }
+.code-block-toggle[aria-expanded="true"] .toggle-hide { display: inline; }
+
+html.dark .code-block-toggle {
+  background: var(--sapList_HeaderBackground, #1a1d21);
+  border-top-color: var(--sapField_BorderColor, #4a4d52);
+}
+
+/* Diff block colour overrides — work in both themes thanks to Chroma classes */
+.chroma .gd { background-color: rgba(255, 129, 130, 0.15); }
+.chroma .gi { background-color: rgba(63, 185, 80, 0.15); }
+html.dark .chroma .gd { background-color: rgba(248, 81, 73, 0.15); }
+html.dark .chroma .gi { background-color: rgba(46, 160, 67, 0.15); }
+
+/* ── Lightbox dialog ── */
+.image-lightbox {
+  border: none;
+  background: transparent;
+  padding: 0;
+  max-width: 95vw;
+  max-height: 95vh;
+}
+
+.image-lightbox::backdrop {
+  background: rgba(0, 0, 0, 0.85);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.image-lightbox img {
+  display: block;
+  max-width: 95vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 0.5rem;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
+  cursor: zoom-out;
+  /* Override the dark-mode brightness filter applied to .tutorial-main img */
+  filter: none !important;
+}
+
+.image-lightbox-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  border: none;
+  color: #32363a;
+  font-size: 1.25rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+
+.image-lightbox-close:hover {
+  background: #fff;
+}
+
+.image-lightbox-caption {
+  position: absolute;
+  bottom: -2.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #fff;
+  font-size: 0.875rem;
+  text-align: center;
+  max-width: 90vw;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* ── Mobile responsive: code blocks + images ── */
+@media (max-width: 640px) {
+  .code-block-body .chroma,
+  .code-block-body pre {
+    font-size: 0.75rem;
+    padding: 0.625rem;
+  }
+
+  .code-block-header {
+    padding: 0.25rem 0.5rem;
+  }
+
+  .code-block-filename {
+    font-size: 0.6875rem;
+  }
+
+  .code-block-lang {
+    font-size: 0.6875rem;
+  }
+
+  .copy-label {
+    display: none;
+  }
+
+  .tutorial-main img {
+    max-height: 70vh;
+  }
+
+  .tutorial-figcaption {
+    font-size: 0.8125rem;
+  }
+}
+

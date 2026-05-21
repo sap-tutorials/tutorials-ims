@@ -2,6 +2,7 @@
   "name": "tutorials-approuter",
   "dependencies": {
     "@sap/approuter": "^16.0.0",
+    "sharp": "0.34.5",
     "tar": "^7.0.0"
   },
   "scripts": {

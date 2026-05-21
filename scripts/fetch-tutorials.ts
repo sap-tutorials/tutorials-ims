@@ -7,6 +7,7 @@ import { extractFrontmatter } from './parsers/frontmatter.js'
 import { parseV2Steps } from './parsers/v2.js'
 import { parseV1Steps } from './parsers/v1.js'
 import { resolveImageURLs } from './parsers/images.js'
+import { annotateImageDimensions, flushDimensionsCache } from './parsers/image-dimensions.js'
 import { convertOptionBlocks } from './parsers/options.js'
 import { escapeHugoDelimiters } from './parsers/hugo-delimiters.js'
 import { stripDangerousHtml } from './parsers/sanitize-html.js'
@@ -730,6 +731,7 @@ async function main() {
 
       const isV2 = frontmatter.parser === 'v2'
       let processedBody = resolveImageURLs(body, { repo: t.repo, branch: t.branch, slug: t.slug })
+      processedBody = await annotateImageDimensions(processedBody)
       processedBody = convertOptionBlocks(processedBody, target)
       processedBody = processedBody.replace(/^<{4,7} .+\n[\s\S]*?^={4,7}\n([\s\S]*?)^>{4,7} .+\n?/gm, '$1')
 
@@ -1025,8 +1027,11 @@ const isMainModule = process.argv[1] && (
   process.argv[1].endsWith('fetch-tutorials.js')
 )
 if (isMainModule) {
-  main().catch(err => {
-    console.error(err)
-    process.exit(1)
-  })
+  main()
+    .then(() => flushDimensionsCache())
+    .catch(err => {
+      console.error(err)
+      flushDimensionsCache()
+      process.exit(1)
+    })
 }
