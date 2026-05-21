@@ -8,54 +8,38 @@ A tutorial hosting platform that replaces Adobe Experience Manager (AEM) as the 
 
 ## Commands
 
+Full script list: `jq '.scripts' package.json`. Operationally important commands:
+
 ```bash
 # Quick start
 npm install && npm run fetch-tutorials && npm run dev
 
-npm install                                   # Install dependencies
-npm run fetch-tutorials                       # Fetch tutorial markdown from GitHub (required before dev/build)
-npm run dev                                   # Hugo dev server (http://localhost:1313)
-npm run build:all                             # Full production build (fetch + CSS + apps + Hugo + highlight + display)
-npm run fetch-tutorials:hugo                  # Fetch tutorials with Hugo target (alias for fetch-tutorials)
-npm run build:hugo                            # Hugo static build only
-npm run build:css                             # PostCSS → hugo/static/css/sap-fundamental.css
-npm run build:apps                            # Vue 3 public-facing apps (apps/)
-npm run build:display                         # Display dashboard app (display-app/)
-npm run build:admin                           # Admin shell with embedded Fiori Elements components (app/admin-shell)
-npm run build:cds                             # CDS production build (cds build --production)
-npm run build:highlight                       # Generate CDS syntax highlighting (scripts/highlight-cds.ts)
-npm run generate-dark-theme                   # Generate dark theme CSS variables
-npm run validate-tutorials                    # Validate fetched tutorial structure
-npm run discover-repos                        # List available tutorial repos without fetching
-npm run test                                  # Run unit tests (vitest, in-memory SQLite)
-npm run test:watch                            # Run tests in watch mode
-npm run test:hybrid                           # Run hybrid integration tests against real HANA (requires cf login)
-npm run test:smoke                            # Run smoke tests against a deployed URL (set SMOKE_BASE_URL)
-npm run test:all                              # Run all test workspaces (requires cds bind)
-npx vitest run scripts/__tests__/v1.test.ts   # Run a single test file
+# Frontend / build
+npm run fetch-tutorials      # Required before dev/build (caches in .tutorial-cache/)
+npm run dev                  # Hugo dev server (http://localhost:1313)
+npm run build:all            # Full production build (fetch + CSS + apps + Hugo + display)
 
 # CAP backend
-npm run start                                 # Production start (cds-serve)
-npm run watch                                 # Alias for cds watch
-cds watch                                     # Start CAP server (http://localhost:4004)
-npm run dev:hybrid                            # CAP with HANA binding + approuter (parallel)
-npm run watch:hybrid                          # cds watch --profile hybrid (CAP only, no approuter)
-npm run start:approuter                       # Start standalone approuter (cd approuter && npm start)
-npm run bind:setup                            # Setup hybrid env bindings (scripts/setup-hybrid-env.js)
-npm run setup-dev-data                        # Populate slugs + cleanup autotest data (requires cds bind)
+cds watch                    # Local CAP (http://localhost:4004), in-memory SQLite
+npm run dev:hybrid           # CAP + approuter against real HANA (parallel)
+npm run start:approuter      # Standalone approuter (port 5000)
+npm run bind:setup           # First-time hybrid env binding setup
+npm run setup-dev-data       # Populate slugs + clean autotest data (requires cds bind)
 
-# Migration & Comparison
-npm run migrate:reference                     # Export reference data from Java IMS (or import to CAP)
-npm run migrate:users                         # Export user progress from Java IMS (with resume support)
-npm run migrate:hana                          # Direct HANA-to-HANA migration
-npm run compare                               # Compare Java IMS and CAP responses side-by-side
-node scripts/migrate-reference-data.js populate-slugs  # Patch slug fields from CAP catalog cache
+# Tests
+npm test                     # Unit (in-memory SQLite, fast)
+npm run test:hybrid          # Hybrid (real HANA via cds bind --exec; requires cf login)
+npm run test:smoke           # Smoke (HTTP against deployed; set SMOKE_BASE_URL/SMOKE_SRV_URL)
 
-# Content publishing
-npm run publish-content                       # Publish Hugo tutorial HTML to HANA (delta-aware)
-npm run publish-content -- --dry-run          # Show what would change without publishing
-npm run publish-content -- --force            # Skip delta detection, publish all files
-npm run publish-content -- --verbose          # Extra logging
+# Migration (cutover from Java IMS)
+npm run migrate:reference    # Reference data export/import
+npm run migrate:users        # User progress export/import (resumable)
+npm run migrate:hana         # Direct HANA-to-HANA
+node scripts/migrate-reference-data.js populate-slugs  # Patch slug fields
+
+# Content publishing (Hugo HTML → HANA BLOBs)
+npm run publish-content -- --force      # Skip delta detection (use this — see Gotchas)
+npm run publish-content -- --dry-run    # Preview without uploading
 ```
 
 Tutorials must be fetched before `dev` or `build`. Fetched markdown is cached in `.tutorial-cache/` and generated pages go to `hugo/content/tutorials/` — both are gitignored. To force re-fetch from GitHub, delete `.tutorial-cache/`.
@@ -181,17 +165,7 @@ Set `IMS_BASE_URL`, `CAP_BASE_URL`, and `IMS_AUTH_TOKEN` env vars. Export files 
 
 ### Documentation (docs/)
 
-Architecture docs for reference (not deployed, developer-facing only):
-- `content-pipeline.md` — End-to-end content flow from GitHub to HANA
-- `authentication-primer.md` — XSUAA/IDP auth architecture
-- `authentication-architecture.md` — Detailed auth flow diagrams and component interactions
-- `ias-migration-setup.md` — IAS (Identity Authentication Service) migration configuration
-- `ims-api-reference.md` — Legacy IMS Java API surface (for migration parity)
-- `ims-uncovered-features.md` — IMS features not yet ported to CAP
-- `hugo-migration.md` — VitePress → Hugo migration rationale and steps
-- `mta-deployment.md` — MTA build/deploy procedures and troubleshooting
-- `tutorial-repo-dispatch.yml` — GitHub Actions workflow for tutorial repo change notifications
-- `vitepress-2x-upgrade-assessment.md` — Legacy: VitePress 2.x evaluation (historical)
+Architecture references for developers (not deployed). See [docs/](docs/) — content pipeline, auth, IMS migration, MTA deployment, and the VitePress→Hugo migration history.
 
 ### Parsers (scripts/parsers/)
 
@@ -202,34 +176,8 @@ The fetch script (`--target hugo`) detects parser format via frontmatter field `
 Three Vitest workspaces defined in `vitest.config.ts` (inline `projects` array):
 
 - **unit** — In-memory SQLite, fast, no external dependencies. Runs with `npm test`.
-- **hybrid** — Real HANA Cloud via `cds bind --exec`. Runs with `npm run test:hybrid` (requires `cf login` to DEV space).
-- **smoke** — HTTP-based tests against deployed URLs. Runs with `npm run test:smoke`. Set `SMOKE_BASE_URL` (approuter) and `SMOKE_SRV_URL` (srv) env vars. Runs automatically after deploy in CI.
-
-Hybrid test files in `test/hybrid/`:
-
-| File | Coverage |
-| ---- | -------- |
-| `schema-deploy.test.js` | All 35 entities accessible, column structure validation |
-| `hana-sequences.test.js` | Legacy ID generation from 27 `.hdbsequence` files |
-| `views.test.js` | Tasks UNION view and NavigatorCatalog view |
-| `developer-workflow.test.js` | Task record creation, progress cascade, idempotent inserts |
-| `admin-crud.test.js` | CRUD on Events, Tags, ImsConfig; read validation on Tutorials/Missions |
-| `search-service.test.js` | SearchService full-text search, facets, filtering |
-
-A write-safety guard (`test/hybrid/_guard.js`) checks `ALLOW_HYBRID_WRITES=true` before any INSERT/UPDATE/DELETE tests run. Tests that create data use a `__TEST__` prefix and clean up in `afterAll`.
-
-Smoke test files in `test/smoke/`:
-
-| File | Coverage |
-| ---- | -------- |
-| `health.test.js` | `/health` alive check, `/health/db` HANA connectivity |
-| `public-endpoints.test.js` | `/build/catalog` and `/build/navigator` respond with JSON |
-| `auth-enforcement.test.js` | Protected endpoints reject unauthenticated requests |
-| `odata-metadata.test.js` | DeveloperService and AdminService `$metadata` return EDMX |
-| `static-content.test.js` | Root serves HTML, security headers present via approuter |
-| `content-serve.test.js` | Tutorial serving via AppRouter → CAP → HANA (ETag, 304, 404) |
-| `search.test.js` | SearchService endpoint responds with faceted results |
-| `websocket-handshake.test.js` | EventStreamService WebSocket upgrade handshake |
+- **hybrid** — Real HANA Cloud via `cds bind --exec`. Runs with `npm run test:hybrid` (requires `cf login` to DEV space). Files in `test/hybrid/` cover schema deploy, HANA sequences, views, the developer workflow, admin CRUD, and search. A write-safety guard (`test/hybrid/_guard.js`) checks `ALLOW_HYBRID_WRITES=true` before any INSERT/UPDATE/DELETE; tests prefix data with `__TEST__` and clean up in `afterAll`.
+- **smoke** — HTTP-based tests against deployed URLs. Runs with `npm run test:smoke`. Set `SMOKE_BASE_URL` (approuter) and `SMOKE_SRV_URL` (srv) env vars. Files in `test/smoke/` cover health, public endpoints, auth enforcement, OData metadata, static content, content serve, search, and the WebSocket handshake. Runs automatically after deploy in CI.
 
 ## Gotchas
 
