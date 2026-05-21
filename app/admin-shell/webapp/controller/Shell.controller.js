@@ -23,7 +23,9 @@ sap.ui.define([
     analytics: "analytics",
     statistics: "statistics",
     joule: "joule",
-    privacy: "privacy"
+    privacy: "privacy",
+    feedbackList: "feedbackList",
+    feedbackDashboard: "feedbackDashboard"
   };
 
   var NAV_KEY_TO_TITLE = {
@@ -44,7 +46,9 @@ sap.ui.define([
     analytics: "Analytics",
     statistics: "Statistics",
     joule: "Joule Settings",
-    privacy: "Privacy"
+    privacy: "Privacy",
+    feedbackList: "Tutorial Feedback",
+    feedbackDashboard: "Feedback Dashboard"
   };
 
   return Controller.extend("sap.tutorials.admin.shell.controller.Shell", {
