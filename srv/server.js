@@ -19,6 +19,11 @@ import { computeEmbeddingStats } from './lib/embedding-stats.js';
 // an OData resource path). Set in 'served' once cds.middlewares are ready.
 let chatStreamHandler = (req, res) => res.status(503).json({ error: 'service_starting' });
 
+// Same late-bound pattern for GET /admin/embeddings/stats. AdminService mounts
+// at /admin, so its OData router would otherwise parse 'embeddings/stats' as
+// resource AdminService.embeddings and return "Invalid resource path".
+let embeddingsStatsHandler = (req, res) => res.status(503).json({ error: 'service_starting' });
+
 // Per-request scope used by POST /feedback/submit to thread the originating
 // client IP from the express handler to a srv.before('submitTutorialFeedback')
 // hook. CAP 9.9.1 strictly validates action arguments and rejects unknown
@@ -152,6 +157,10 @@ cds.on('bootstrap', (app) => {
   // and return 404. Body parser runs here; auth + business logic are bound
   // lazily in 'served' via chatStreamHandler.
   app.post('/chat/stream', express.json({ limit: '64kb' }), (req, res, next) => chatStreamHandler(req, res, next));
+
+  // Same: reserve GET /admin/embeddings/stats BEFORE CAP mounts AdminService
+  // at /admin. Auth + business logic bound lazily in 'served'.
+  app.get('/admin/embeddings/stats', (req, res, next) => embeddingsStatsHandler(req, res, next));
 });
 
 cds.on('served', async () => {
@@ -188,7 +197,7 @@ cds.on('served', async () => {
     });
   });
 
-  app.get('/admin/embeddings/stats', contextMw, authMw, async (req, res) => {
+  const embeddingsStatsBusiness = async (req, res) => {
     const user = cds.context?.user;
     if (!user?.id || user.id === 'anonymous') {
       return res.status(401).json({ error: 'unauthenticated' });
@@ -203,7 +212,17 @@ cds.on('served', async () => {
       cds.log('rag-stats').error(err.message);
       res.status(500).json({ error: 'stats_failed' });
     }
-  });
+  };
+
+  embeddingsStatsHandler = (req, res, next) => {
+    contextMw(req, res, (err) => {
+      if (err) return next(err);
+      authMw(req, res, (err) => {
+        if (err) return next(err);
+        Promise.resolve(embeddingsStatsBusiness(req, res)).catch(next);
+      });
+    });
+  };
 
   if (process.env.NODE_ENV !== 'test') {
     registerJobs();
