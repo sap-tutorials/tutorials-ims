@@ -6,6 +6,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const CACHE_DIR = join(__dirname, '..', '..', '.tutorial-cache')
 const CACHE_FILE = join(CACHE_DIR, 'github-meta.json')
 const DISCOVERY_CACHE_FILE = join(CACHE_DIR, '_discovery.json')
+// Committed snapshot beside this file. Tier 2 falls back to it when the
+// gitignored runtime cache is wiped (e.g. fresh clone, `rm -rf .tutorial-cache/`)
+// during a GitHub outage. Refreshed by saveDiscoveryBaseline() on successful
+// GraphQL fetches; stale baseline is acceptable — it only loads when GitHub is unreachable.
+const DISCOVERY_BASELINE_FILE = join(__dirname, 'discovery-baseline.json')
 const ORG = 'sap-tutorials'
 const GRAPHQL_URL = 'https://api.github.com/graphql'
 const REST_API_BASE = 'https://api.github.com'
@@ -195,9 +200,21 @@ export async function fetchWithRetry(
 }
 
 function loadDiscoveryCache(): DiscoveredTutorial[] | null {
-  if (!existsSync(DISCOVERY_CACHE_FILE)) return null
+  const fromRuntime = tryLoadDiscoveryFile(DISCOVERY_CACHE_FILE)
+  if (fromRuntime) return fromRuntime
+
+  const fromBaseline = tryLoadDiscoveryFile(DISCOVERY_BASELINE_FILE)
+  if (fromBaseline) {
+    console.warn(`  [baseline] Runtime cache missing; using committed baseline (${fromBaseline.length} tutorials, ${DISCOVERY_BASELINE_FILE})`)
+    console.warn(`  [baseline] Baseline may be stale — re-run when GitHub recovers and commit any diff to refresh.`)
+  }
+  return fromBaseline
+}
+
+function tryLoadDiscoveryFile(path: string): DiscoveredTutorial[] | null {
+  if (!existsSync(path)) return null
   try {
-    const map = JSON.parse(readFileSync(DISCOVERY_CACHE_FILE, 'utf-8')) as Record<string, DiscoveredTutorial>
+    const map = JSON.parse(readFileSync(path, 'utf-8')) as Record<string, DiscoveredTutorial>
     const tutorials = Object.values(map).filter(
       (t): t is DiscoveredTutorial =>
         !!t && typeof t.slug === 'string' && typeof t.repo === 'string' && typeof t.branch === 'string',
@@ -208,9 +225,31 @@ function loadDiscoveryCache(): DiscoveredTutorial[] | null {
   }
 }
 
+// Refreshes the committed baseline snapshot. Idempotent: only writes when
+// content actually differs (sorted by slug to avoid pagination-order churn).
+// Caller is responsible for gating on a fresh source — never call from disk/hana fallbacks.
+export function saveDiscoveryBaseline(tutorials: DiscoveredTutorial[]): void {
+  const sorted: Record<string, DiscoveredTutorial> = {}
+  for (const slug of [...tutorials.map(t => t.slug)].sort()) {
+    const t = tutorials.find(x => x.slug === slug)
+    if (t) sorted[slug] = t
+  }
+  const next = JSON.stringify(sorted, null, 2) + '\n'
+  if (existsSync(DISCOVERY_BASELINE_FILE)) {
+    const current = readFileSync(DISCOVERY_BASELINE_FILE, 'utf-8')
+    if (current === next) return
+  }
+  writeFileSync(DISCOVERY_BASELINE_FILE, next, 'utf-8')
+  console.log(`  [baseline] Updated ${DISCOVERY_BASELINE_FILE} (${tutorials.length} tutorials) — commit this diff to refresh the snapshot`)
+}
+
 async function loadDiscoveryFromHana(): Promise<DiscoveredTutorial[] | null> {
   const baseUrl = process.env.CAP_BASE_URL
-  if (!baseUrl) return null
+  if (!baseUrl) {
+    console.warn(`  [hana] CAP_BASE_URL not set; Tier 3 (HANA RepoCatalog) fallback unavailable.`)
+    console.warn(`  [hana] Export CAP_BASE_URL=<deployed CAP srv URL> to enable this fallback during GitHub outages.`)
+    return null
+  }
   try {
     const res = await fetch(`${baseUrl.replace(/\/$/, '')}/build/repo-catalog`, {
       headers: { 'User-Agent': 'tutorials-poc-build' },

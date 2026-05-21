@@ -10,7 +10,7 @@ import { resolveImageURLs } from './parsers/images.js'
 import { convertOptionBlocks } from './parsers/options.js'
 import { escapeHugoDelimiters } from './parsers/hugo-delimiters.js'
 import { stripDangerousHtml } from './parsers/sanitize-html.js'
-import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, EXCLUDED_REPOS, type DiscoveredTutorial } from './parsers/github.js'
+import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, EXCLUDED_REPOS, type DiscoveredTutorial } from './parsers/github.js'
 import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache } from './parsers/cap.js'
 import { parseRulesVr } from './parsers/rules.js'
 import { computeRecommendations } from './parsers/recommendations.js'
@@ -627,6 +627,9 @@ async function main() {
     // Slug-filtered runs are partial by design — never overwrite the catalog.
     if (discovery.source === 'github' && !tutorialSlugFilter) {
       await uploadDiscoveryToHana(allTutorials)
+      // Same staleness reasoning applies to the committed baseline snapshot:
+      // only refresh from authoritative GraphQL data, never from fallback paths.
+      saveDiscoveryBaseline(allTutorials)
     } else if (tutorialSlugFilter) {
       console.log(`  [repo-catalog] skipping HANA upload — single-slug refresh is a partial run`)
     } else {
