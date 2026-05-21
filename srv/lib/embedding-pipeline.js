@@ -95,8 +95,10 @@ export async function embedSlugs(slugs, settings) {
           if (isHana) {
             // HANA Vector(1536) requires TO_REAL_VECTOR(?) — not expressible in CDS QL.
             // Mirrors the query path in embedding-query.js.
+            // Identifiers must be quoted-uppercase: the .hdbtable declares them unquoted,
+            // so HANA stores them upper-case in the catalog (TUTORIAL_ID, not tutorial_ID).
             const sql = `INSERT INTO "COM_SAP_DEVELOPERS_IMS_TUTORIALEMBEDDING"
-              ("tutorial_ID", "stepNumber", "contentHash", "embeddingModel", "embedding", "stepText", "charCount", "createdAt")
+              ("TUTORIAL_ID", "STEPNUMBER", "CONTENTHASH", "EMBEDDINGMODEL", "EMBEDDING", "STEPTEXT", "CHARCOUNT", "CREATEDAT")
               VALUES (?, ?, ?, ?, TO_REAL_VECTOR(?), ?, ?, CURRENT_TIMESTAMP)`;
             await db.run(sql, [
               tut.ID,

@@ -21,14 +21,16 @@ export async function findRelevantSteps({ query, settings }) {
   const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
 
   if (isHana) {
+    // Identifiers must be quoted-uppercase: the .hdbtable declares them unquoted,
+    // so HANA stores them upper-case in the catalog (TUTORIAL_ID, not tutorial_ID).
     const sql = `
       SELECT TOP ${topK}
-        e."tutorial_ID", e."stepNumber", e."stepText",
-        t."slug" AS "tutorialSlug", t."title" AS "tutorialTitle",
-        COSINE_SIMILARITY(e."embedding", TO_REAL_VECTOR(?)) AS "score"
+        e."TUTORIAL_ID", e."STEPNUMBER", e."STEPTEXT",
+        t."SLUG" AS "tutorialSlug", t."TITLE" AS "tutorialTitle",
+        COSINE_SIMILARITY(e."EMBEDDING", TO_REAL_VECTOR(?)) AS "score"
       FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALEMBEDDING" e
-      JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON t."ID" = e."tutorial_ID"
-      WHERE e."embeddingModel" = ?
+      JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON t."ID" = e."TUTORIAL_ID"
+      WHERE e."EMBEDDINGMODEL" = ?
       ORDER BY "score" DESC`;
     const rows = await db.run(sql, [JSON.stringify(Array.from(qVec)), model]);
     return rows
