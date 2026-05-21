@@ -30,17 +30,17 @@ describe('Meta tags — homepage', () => {
   });
 
   it('has canonical, description, robots, content-signal', () => {
-    expect(html).toMatch(/<link rel="canonical" href="https:\/\/developers\.sap\.com\/"/);
-    expect(html).toMatch(/<meta name="description" content="[^"]+"/);
-    expect(html).toMatch(/<meta name="robots" content="[^"]*max-image-preview:large[^"]*"/);
-    expect(html).toMatch(/<meta name="content-signal" content="index=yes, ai-train=no, ai-search=yes"/);
+    expect(html).toMatch(/<link rel=["']?canonical["']? href=["']?https:\/\/developers\.sap\.com\/["']?/);
+    expect(html).toMatch(/<meta name=["']?description["']? content="[^"]+"/);
+    expect(html).toMatch(/<meta name=["']?robots["']? content="[^"]*max-image-preview:large[^"]*"/);
+    expect(html).toMatch(/<meta name=["']?content-signal["']? content="index=yes, ai-train=no, ai-search=yes"/);
   });
 
   it('has Open Graph + Twitter Card', () => {
-    expect(html).toMatch(/<meta property="og:site_name" content="SAP Developers Tutorials"/);
-    expect(html).toMatch(/<meta property="og:url" content="https:\/\/developers\.sap\.com\/"/);
-    expect(html).toMatch(/<meta name="twitter:card" content="summary_large_image"/);
-    expect(html).toMatch(/<meta name="twitter:site" content="@sapdevs"/);
+    expect(html).toMatch(/<meta property=["']?og:site_name["']? content="SAP Developers Tutorials"/);
+    expect(html).toMatch(/<meta property=["']?og:url["']? content="https:\/\/developers\.sap\.com\/"/);
+    expect(html).toMatch(/<meta name=["']?twitter:card["']? content="summary_large_image"/);
+    expect(html).toMatch(/<meta name=["']?twitter:site["']? content="@sapdevs"/);
   });
 });
 
@@ -57,10 +57,10 @@ describe('Meta tags — tutorial page', () => {
   });
 
   it('has og:type=article and article metadata', () => {
-    expect(html).toMatch(/<meta property="og:type" content="article"/);
+    expect(html).toMatch(/<meta property=["']?og:type["']? content="article"/);
   });
 
   it('has author meta tag', () => {
-    expect(html).toMatch(/<meta name="author" content="[^"]+"/);
+    expect(html).toMatch(/<meta name=["']?author["']? content="[^"]+"/);
   });
 });
