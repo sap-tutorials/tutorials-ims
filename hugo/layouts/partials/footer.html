@@ -1,5 +1,40 @@
-<footer class="site-footer fd-bar fd-bar--footer">
-  <div class="fd-bar__right">
-    <span>&copy; SAP SE</span>
-  </div>
+<style>
+.site-footer { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center;
+  padding: 0.75rem 1.5rem; }
+.site-footer__nav { flex: 1 1 auto; }
+.site-footer__nav-list { list-style: none; margin: 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; align-items: center; }
+.site-footer__nav-list a, .site-footer__nav-list button {
+  color: inherit; text-decoration: none; font-size: 0.875rem;
+  background: none; border: 0; padding: 0; cursor: pointer; font: inherit; }
+.site-footer__nav-list a:hover, .site-footer__nav-list button:hover { text-decoration: underline; }
+.site-footer__copyright { font-size: 0.8125rem; color: var(--sapNeutralTextColor, #666);
+  flex: 0 1 auto; margin-left: auto; white-space: nowrap; }
+@media (max-width: 720px) {
+  .site-footer__copyright { margin-left: 0; flex-basis: 100%; }
+}
+</style>
+<footer class="site-footer fd-bar fd-bar--footer" aria-label="Site information">
+  <nav class="site-footer__nav" aria-label="Site information">
+    <ul class="site-footer__nav-list">
+      <li><a href="/privacy/">Privacy</a></li>
+      <li><a href="https://www.sap.com/about/legal/terms-of-use.html" target="_blank" rel="noopener noreferrer">Terms of Use</a></li>
+      <li><a href="https://www.sap.com/about/legal/impressum.html" target="_blank" rel="noopener noreferrer">Legal Disclosure</a></li>
+      <li><a href="https://www.sap.com/about/legal/copyright.html" target="_blank" rel="noopener noreferrer">Copyright</a></li>
+      <li><a href="https://www.sap.com/about/legal/trademark.html" target="_blank" rel="noopener noreferrer">Trademark</a></li>
+      <li><a href="https://www.sap.com/dashboard/newsletters.html" target="_blank" rel="noopener noreferrer">Newsletter</a></li>
+      <li><button type="button" data-action="manage-cookies">Cookie Preferences</button></li>
+    </ul>
+  </nav>
+  <div class="site-footer__copyright">&copy; 2026 SAP SE or an SAP affiliate company. All rights reserved.</div>
 </footer>
+<script>
+(function () {
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-action="manage-cookies"]');
+    if (!t) return;
+    e.preventDefault();
+    if (window.consent && typeof window.consent.show === 'function') window.consent.show();
+  });
+})();
+</script>

@@ -12,10 +12,13 @@ const DANGEROUS_TAGS = new Set([
   'form', 'input', 'textarea', 'button', 'select',
   'link', 'meta', 'base', 'svg', 'math',
   'foreignObject', 'animate', 'animateTransform', 'set',
+  'style',
+  'video', 'audio', 'picture', 'source', 'track',
+  'frame', 'frameset', 'noframes', 'portal',
 ])
 
 const EVENT_ATTR_RE = /\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi
-const JAVASCRIPT_HREF_RE = /\s+(href|src|action)\s*=\s*(?:"javascript:[^"]*"|'javascript:[^']*')/gi
+const JAVASCRIPT_HREF_RE = /\s+(href|src|action|xlink:href|formaction)\s*=\s*(?:"\s*javascript:[^"]*"|'\s*javascript:[^']*'|javascript:[^\s>]+)/gi
 
 export function stripDangerousHtml(content: string): string {
   const lines = content.split('\n')

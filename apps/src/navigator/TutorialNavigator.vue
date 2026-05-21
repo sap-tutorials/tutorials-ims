@@ -29,6 +29,9 @@ const { searchMode, searchResults, searchFacets, searchTotalCount, isSearching, 
 })
 
 onMounted(async () => {
+  const initialQuery = new URL(window.location.href).searchParams.get('q')
+  if (initialQuery) searchQuery.value = initialQuery
+
   const [navRes, catalogRes] = await Promise.all([
     fetch('/tutorials/_nav.json'),
     fetch('/build/navigator'),

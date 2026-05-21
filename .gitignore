@@ -16,6 +16,8 @@ approuter/static/*
 hugo/static/js/*
 !hugo/static/js/joule.js
 !hugo/static/js/joule-render.js
+!hugo/static/js/consent.js
+!hugo/static/js/popular-rail.js
 !hugo/static/js/vendor/
 hugo/static/js/vendor/*
 !hugo/static/js/vendor/.gitkeep

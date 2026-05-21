@@ -1,0 +1,57 @@
+{{ define "main" }}
+<section class="error-hero" data-error-page="503" aria-labelledby="error-maintenance-title">
+  <div class="error-inner">
+    <p class="error-eyebrow">Scheduled maintenance</p>
+    <h1 id="error-maintenance-title" class="error-title">We'll be back shortly</h1>
+    <p class="error-lede">
+      The tutorials site is temporarily unavailable while we make improvements.
+      Please check back in a few minutes.
+    </p>
+    <div class="error-actions">
+      <a class="fd-button fd-button--transparent" href="/">Try the home page</a>
+    </div>
+  </div>
+</section>
+
+<style>
+  .error-hero {
+    padding: 4rem 1.5rem;
+    background: var(--sapBackgroundColor, #f5f6f7);
+    min-height: 60vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .error-inner {
+    max-width: 640px;
+    text-align: center;
+    background: var(--sapTile_Background, #ffffff);
+    padding: 3rem 2rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.08);
+  }
+  .error-eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.85rem;
+    color: var(--sapNeutralTextColor, #5b738b);
+    margin: 0 0 0.5rem;
+  }
+  .error-title {
+    font-size: 2rem;
+    margin: 0 0 1rem;
+    color: var(--sapTextColor, #32363a);
+  }
+  .error-lede {
+    font-size: 1.125rem;
+    color: var(--sapTextColor, #32363a);
+    margin: 0 0 2rem;
+  }
+  .error-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+</style>
+{{ end }}

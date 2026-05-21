@@ -358,15 +358,22 @@
   async function fetchUser() {
     try {
       const r = await fetch('/auth/user', { credentials: 'include', redirect: 'follow' });
-      if (r.redirected || !r.ok) return null;
+      if (r.redirected || !r.ok) { clearAuthCache(); return null; }
       const ct = r.headers.get('content-type') || '';
-      if (!ct.includes('application/json')) return null;
+      if (!ct.includes('application/json')) { clearAuthCache(); return null; }
       const u = await r.json();
-      if (!u.authenticated) return null;
+      if (!u.authenticated) { clearAuthCache(); return null; }
       const cached = { firstName: u.givenName, familyName: u.familyName, email: u.email, id: u.id };
       sessionStorage.setItem(USER_KEY, JSON.stringify({ ts: Date.now(), value: cached }));
       return cached;
     } catch { return null; }
+  }
+
+  function clearAuthCache() {
+    try {
+      sessionStorage.removeItem(USER_KEY);
+      sessionStorage.removeItem(HISTORY_KEY);
+    } catch {}
   }
 
   async function ensureAuth() {

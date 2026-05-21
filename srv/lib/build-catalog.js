@@ -1,7 +1,9 @@
 import cds from '@sap/cds';
 
+const FEATURED_LIMIT = 6;
+
 export async function buildCatalogHandler(req, res) {
-  const { Missions, CompletionPaths, CompletionPathItems, Tutorials } =
+  const { Missions, CompletionPaths, CompletionPathItems, Tutorials, FeaturedTasks } =
     cds.entities('com.sap.developers.ims');
 
   try {
@@ -9,10 +11,16 @@ export async function buildCatalogHandler(req, res) {
     const paths = await SELECT.from(CompletionPaths).orderBy('legacyId');
     const items = await SELECT.from(CompletionPathItems).orderBy('itemOrder');
     const tutorials = await SELECT.from(Tutorials)
-      .columns('legacyId', 'slug')
+      .columns('legacyId', 'slug', 'title', 'description')
       .where(`status = 'ACTIVE' or status is null`);
+    const featuredRows = await SELECT.from(FeaturedTasks)
+      .orderBy('featuredOrder')
+      .limit(FEATURED_LIMIT);
 
     const slugByLegacyId = new Map(tutorials.map(t => [t.legacyId, t.slug]));
+    const tutorialByLegacyId = new Map(tutorials.map(t => [t.legacyId, t]));
+    const missionByLegacyId = new Map(missions.map(m => [m.legacyId, m]));
+    const pathByLegacyId = new Map(paths.map(p => [p.legacyId, p]));
 
     const missionList = missions.map(m => ({
       imsId: m.legacyId,
@@ -60,9 +68,47 @@ export async function buildCatalogHandler(req, res) {
       }
     }
 
-    res.json({ missions: missionList, hierarchies });
+    const featured = featuredRows
+      .map(f => resolveFeatured(f, { missionByLegacyId, pathByLegacyId, tutorialByLegacyId }))
+      .filter(Boolean);
+
+    res.json({ missions: missionList, hierarchies, featured });
   } catch (err) {
     console.error('[build/catalog]', err instanceof Error ? err.message : String(err));
     res.status(500).json({ error: 'Build catalog query failed' });
   }
+}
+
+function resolveFeatured(f, { missionByLegacyId, pathByLegacyId, tutorialByLegacyId }) {
+  if (f.taskType === 'MISSION') {
+    const m = missionByLegacyId.get(f.taskLegacyId);
+    if (!m) return null;
+    return {
+      type: 'mission',
+      slug: m.slug || String(m.legacyId),
+      title: m.title || '',
+      description: m.description || '',
+    };
+  }
+  if (f.taskType === 'GROUP') {
+    const p = pathByLegacyId.get(f.taskLegacyId);
+    if (!p) return null;
+    return {
+      type: 'group',
+      slug: p.slug || String(p.legacyId),
+      title: p.name || '',
+      description: '',
+    };
+  }
+  if (f.taskType === 'TUTORIAL') {
+    const t = tutorialByLegacyId.get(f.taskLegacyId);
+    if (!t || !t.slug) return null;
+    return {
+      type: 'tutorial',
+      slug: t.slug,
+      title: t.title || '',
+      description: t.description || '',
+    };
+  }
+  return null;
 }
