@@ -17,9 +17,13 @@ type FacetResult {
 @requires: 'any'
 service SearchService {
 
+  // Fuzziness 0.85 (tightened from 0.7) avoids short-query noise like
+  // "CAP" matching "escape"/"capture". bodyText dropped from @cds.search
+  // because LOW-ranked body matches were drowning HIGH-ranked title hits
+  // (HANA ranking is relative-within-row, not a cross-row multiplier).
   @readonly
-  @Search.fuzzinessThreshold: 0.7
-  @cds.search: { title, description, primaryTag, bodyText }
+  @Search.fuzzinessThreshold: 0.85
+  @cds.search: { title, description, primaryTag }
   entity SearchableItems as projection on ims.SearchableItems {
     @Search.ranking: #HIGH
     title,
@@ -27,8 +31,6 @@ service SearchService {
     description,
     @Search.ranking: #LOW
     primaryTag,
-    @Search.ranking: #LOW
-    bodyText,
     *
   } excluding { bodyText };
 

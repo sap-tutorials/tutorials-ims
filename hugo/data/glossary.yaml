@@ -48,3 +48,87 @@ terms:
     term: Open Data Protocol
     definition: REST-based protocol for queryable APIs, used as CAP's default service protocol.
     link: https://www.odata.org/
+  ABAP:
+    term: Advanced Business Application Programming
+    definition: SAP's proprietary language for business logic — modern ABAP Cloud enforces clean-core principles.
+    link: https://help.sap.com/docs/abap-cloud
+  Fiori:
+    term: SAP Fiori
+    definition: SAP's design system and UX framework for consistent, role-based business applications.
+    link: https://experience.sap.com/fiori-design/
+  UI5:
+    term: SAPUI5 / OpenUI5
+    definition: SAP's enterprise JavaScript framework for building Fiori apps; ui5-webcomponents is its successor for embedding.
+    link: https://sapui5.hana.ondemand.com/
+  SAPUI5:
+    term: SAPUI5
+    definition: Licensed enterprise edition of UI5 with additional controls; OpenUI5 is the open-source subset.
+    link: https://sapui5.hana.ondemand.com/
+  BAS:
+    term: SAP Business Application Studio
+    definition: BTP-hosted cloud IDE for SAP development — CAP, Fiori, ABAP, integration, mobile.
+    link: https://help.sap.com/docs/bas
+  ADT:
+    term: ABAP Development Tools
+    definition: Eclipse-based IDE for ABAP and ABAP Cloud development on S/4HANA and BTP ABAP environment.
+    link: https://help.sap.com/docs/abap-cloud/abap-development-tools-user-guide
+  CF:
+    term: Cloud Foundry
+    definition: One of the BTP runtime environments; the platform-as-a-service layer where most CAP apps deploy.
+    link: https://help.sap.com/docs/btp/sap-business-technology-platform/cloud-foundry-environment
+  Kyma:
+    term: SAP BTP Kyma Runtime
+    definition: BTP's managed Kubernetes runtime — Kyma adds serverless, eventing, and service mesh on top of K8s.
+    link: https://help.sap.com/docs/btp/sap-business-technology-platform/kyma-environment
+  S/4HANA:
+    term: SAP S/4HANA
+    definition: SAP's flagship ERP suite running on the HANA database; "Cloud" and "on-premise" editions share core APIs.
+    link: https://www.sap.com/products/erp/s4hana.html
+  OAuth:
+    term: OAuth 2.0
+    definition: Authorization framework for delegated access — XSUAA and IAS issue OAuth bearer tokens (JWTs).
+    link: https://oauth.net/2/
+  OIDC:
+    term: OpenID Connect
+    definition: Identity layer on top of OAuth 2.0 — adds an ID token for authentication on top of access tokens.
+    link: https://openid.net/connect/
+  JWT:
+    term: JSON Web Token
+    definition: Compact, signed token format used by XSUAA and IAS to carry identity and scope claims.
+    link: https://jwt.io/introduction
+  SaaS:
+    term: Software as a Service
+    definition: Multi-tenant cloud delivery model — CAP supports SaaS via the MTX (multi-tenancy extension) layer.
+    link: https://help.sap.com/docs/btp/sap-business-technology-platform/develop-multitenant-saas-applications-in-cloud-foundry-environment
+  PaaS:
+    term: Platform as a Service
+    definition: Cloud model where the platform manages runtimes and services — BTP is SAP's PaaS offering.
+    link: https://www.sap.com/products/technology-platform.html
+  ORD:
+    term: Open Resource Discovery
+    definition: SAP's open standard for describing and discovering APIs, events, and data products across systems.
+    link: https://open-resource-discovery.github.io/specification/
+  CQL:
+    term: Core Data Services Query Language
+    definition: CAP's typed query language — superset of SQL with associations, paths, and projections.
+    link: https://cap.cloud.sap/docs/cds/cql
+  CSN:
+    term: Core Schema Notation
+    definition: JSON representation of a compiled CDS model — what CAP runtimes consume at runtime.
+    link: https://cap.cloud.sap/docs/cds/csn
+  MTX:
+    term: Multitenancy and Extensibility
+    definition: CAP's framework (@sap/cds-mtxs) for SaaS subscription, tenant isolation, and tenant-specific extensions.
+    link: https://cap.cloud.sap/docs/guides/multitenancy/
+  ATC:
+    term: ABAP Test Cockpit
+    definition: ABAP's static analysis and code-quality tool — gates ABAP Cloud transports against clean-core rules.
+    link: https://help.sap.com/docs/abap-cloud/abap-development-tools-user-guide/abap-test-cockpit
+  AppRouter:
+    term: SAP Application Router
+    definition: Edge service that handles XSUAA login, token forwarding, and routing to backend services on BTP.
+    link: https://www.npmjs.com/package/@sap/approuter
+  HDB:
+    term: SAP HANA Database
+    definition: The HANA in-memory database engine itself — `hdb` is also the name of the Node.js driver.
+    link: https://help.sap.com/docs/hana-cloud-database
