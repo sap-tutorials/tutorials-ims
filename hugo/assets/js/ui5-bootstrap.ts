@@ -7,6 +7,9 @@ import { setTheme } from "@ui5/webcomponents-base/dist/config/Theme.js";
 // Selectors are scoped to attributes that only get set on relevant pages.
 import "../css/skeletons.css";
 
+// U15: lightbox dialog styles. Scoped to .lightbox-dialog and descendants.
+import "../css/lightbox.css";
+
 // Register theme assets for both light and dark — without this side-effect import,
 // setTheme("sap_horizon_dark") silently falls back to sap_horizon (only the default is registered).
 import "@ui5/webcomponents/dist/Assets.js";
