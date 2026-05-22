@@ -226,7 +226,11 @@ onUnmounted(() => {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: var(--sapBlockLayer_Background, rgba(0, 0, 0, 0.4));
+  /* Light scrim — keep page legible behind. Slight blur so the panel
+     still reads as foreground without obscuring page context. */
+  background: rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
   display: flex;
   align-items: flex-start;
   justify-content: center;
