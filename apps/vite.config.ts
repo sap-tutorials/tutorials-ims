@@ -19,7 +19,6 @@ export default defineConfig({
         'app-space': resolve(__dirname, 'src/app-space/main.ts'),
         'event-display': resolve(__dirname, 'src/event-display/main.ts'),
         'nav-dropdown': resolve(__dirname, 'src/nav-dropdown/main.ts'),
-        'mini-navigator': resolve(__dirname, 'src/mini-navigator/main.ts'),
         'scanner-vue': resolve(__dirname, 'src/scanner-vue/main.ts'),
         'tutorial-feedback': resolve(__dirname, 'src/tutorial-feedback/main.ts'),
         'tutorial-rating': resolve(__dirname, 'src/tutorial-rating/main.ts'),

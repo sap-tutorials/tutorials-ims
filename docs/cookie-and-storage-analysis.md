@@ -100,7 +100,7 @@ All `sessionStorage` use on the public surface is in the **Joule chat widget** (
 
 ### 3.3 Storage the application does **not** use
 
-- ❌ No `localStorage` use in [`hugo/static/js/app-space.js`](../hugo/static/js/app-space.js), [`navigator.js`](../hugo/static/js/navigator.js), [`mini-navigator.js`](../hugo/static/js/mini-navigator.js), [`nav-dropdown.js`](../hugo/static/js/nav-dropdown.js), [`event-display.js`](../hugo/static/js/event-display.js), [`scanner-vue.js`](../hugo/static/js/scanner-vue.js)
+- ❌ No `localStorage` use in [`hugo/static/js/app-space.js`](../hugo/static/js/app-space.js), [`navigator.js`](../hugo/static/js/navigator.js), [`nav-dropdown.js`](../hugo/static/js/nav-dropdown.js), [`event-display.js`](../hugo/static/js/event-display.js), [`scanner-vue.js`](../hugo/static/js/scanner-vue.js)
 - ❌ No `localStorage`/`sessionStorage` in any [`apps/src/`](../apps/src/) Vue components
 - ❌ No storage in [`display-app/src/`](../display-app/src/)
 - ❌ No storage in [`app/scanner/webapp/`](../app/scanner/webapp/) (UI5 scanner)
