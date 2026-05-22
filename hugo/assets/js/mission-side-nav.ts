@@ -35,7 +35,7 @@ function applyInitialExpansion(nav: HTMLElement, currentSlug: string): void {
       expanded = stored[groupSlug];
     } else {
       // First visit default: expand only the group containing the current tutorial.
-      expanded = !!item.querySelector(`ui5-side-navigation-sub-item[data-tutorial-slug="${currentSlug}"]`);
+      expanded = !!item.querySelector(`ui5-side-navigation-sub-item[data-tutorial-slug="${CSS.escape(currentSlug)}"]`);
     }
     if (expanded) {
       item.setAttribute('expanded', '');
@@ -46,7 +46,7 @@ function applyInitialExpansion(nav: HTMLElement, currentSlug: string): void {
 }
 
 function paintProgress(nav: HTMLElement, slug: string, progress: number): void {
-  const sub = nav.querySelector<HTMLElement>(`ui5-side-navigation-sub-item[data-tutorial-slug="${slug}"]`);
+  const sub = nav.querySelector<HTMLElement>(`ui5-side-navigation-sub-item[data-tutorial-slug="${CSS.escape(slug)}"]`);
   if (!sub) return;
   const clamped = Math.max(0, Math.min(100, Math.round(progress)));
   sub.dataset.progress = String(clamped);
