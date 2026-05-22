@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, reactive, watch } from 'vue'
 import type { TutorialEntry, CardItem, MissionRef, GroupRef } from '@shared/types'
 import { useSearch } from './useSearch'
+import Skeleton from '@shared/Skeleton.vue'
 import type { SearchFacets } from '@shared/types'
 
 const tutorials = ref<TutorialEntry[]>([])
@@ -20,6 +21,8 @@ const filters = reactive({
   products: [] as string[],
   topics: [] as string[],
 })
+
+const loading = computed(() => tutorials.value.length === 0)
 
 const { searchMode, searchResults, searchFacets, searchTotalCount, isSearching, searchError } = useSearch({
   searchTerm: searchQuery,
@@ -659,11 +662,11 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
         </button>
       </section>
 
-      <!-- Section: Card Grid -->
-      <div v-if="isSearching" class="navigator-loading">
-        <div class="fd-busy-indicator fd-busy-indicator--m" aria-label="Loading search results"></div>
-      </div>
-      <section class="navigator-grid">
+      <!-- Section: Card Grid (or skeleton while loading) -->
+      <section v-if="loading" class="navigator-grid navigator-grid--loading" aria-label="Loading tutorials">
+        <Skeleton kind="card" :count="6" />
+      </section>
+      <section v-else class="navigator-grid">
         <a
           v-for="item in displayedItems"
           :key="item.id"
@@ -1151,6 +1154,19 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
 
 .nav-card__tag svg {
   opacity: 0.7;
+}
+
+/* ─── Skeleton loading state ─── */
+.navigator-grid--loading {
+  /* Inherit grid-template-columns from .navigator-grid via the cascade. */
+}
+.navigator-grid--loading .skeleton-group {
+  display: contents; /* let each .skeleton card occupy a grid cell directly */
+}
+.navigator-grid--loading .skeleton--card {
+  min-height: 200px;
+  border-radius: 0.75rem;
+  margin-bottom: 0; /* grid gap handles spacing */
 }
 
 /* ─── Empty State ─── */
