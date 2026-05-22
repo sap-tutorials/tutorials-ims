@@ -32,8 +32,6 @@ document.addEventListener('click', (e) => {
   if (tabBtn) { switchTab(tabBtn as HTMLButtonElement); return }
   const codeToggle = target.closest('[data-action="toggle-code"]')
   if (codeToggle) { toggleCodeBlock(codeToggle as HTMLButtonElement); return }
-  const zoomable = target.closest('img[data-zoomable="true"]') as HTMLImageElement | null
-  if (zoomable) { openLightbox(zoomable); return }
 })
 
 function toggleCodeBlock(btn: HTMLButtonElement) {
@@ -49,29 +47,6 @@ function toggleCodeBlock(btn: HTMLButtonElement) {
     delete body.dataset.collapsed
     btn.setAttribute('aria-expanded', 'true')
   }
-}
-
-// --- Image lightbox ---
-function openLightbox(img: HTMLImageElement) {
-  const dialog = document.getElementById('image-lightbox') as HTMLDialogElement | null
-  if (!dialog || typeof dialog.showModal !== 'function') return
-  const dlgImg = dialog.querySelector('img') as HTMLImageElement
-  const cap = dialog.querySelector('.image-lightbox-caption') as HTMLElement
-  dlgImg.src = img.currentSrc || img.src
-  dlgImg.alt = img.alt
-  cap.textContent = img.alt && img.alt !== 'image' ? img.alt : ''
-  dialog.showModal()
-}
-
-function initLightbox() {
-  const dialog = document.getElementById('image-lightbox') as HTMLDialogElement | null
-  if (!dialog) return
-  dialog.addEventListener('click', (e) => {
-    const target = e.target as HTMLElement
-    if (target === dialog || target.closest('.image-lightbox-close') || target.tagName === 'IMG') {
-      dialog.close()
-    }
-  })
 }
 
 function toggleStep(header: HTMLElement) {
@@ -555,7 +530,6 @@ document.addEventListener('DOMContentLoaded', () => {
   updateActiveTocItem()
   initMiniNavProgress()
   initAuthAwareButtons()
-  initLightbox()
   initStepHashNavigation()
   initMermaid()
 })
