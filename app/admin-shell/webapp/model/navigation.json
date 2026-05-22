@@ -35,7 +35,7 @@
         { "key": "pipelinelog", "title": "Pipeline Log", "icon": "sap-icon://pipeline-analysis" },
         { "key": "joblog", "title": "Job Log", "icon": "sap-icon://technical-object" },
         { "key": "joule", "title": "Joule Settings", "icon": "sap-icon://da" },
-        { "key": "accounts", "title": "Accounts", "icon": "sap-icon://person-placeholder" },
+        { "key": "accounts", "title": "Account Merges", "icon": "sap-icon://family-care" },
         { "key": "changelog", "title": "Change Log", "icon": "sap-icon://history" },
         { "key": "board", "title": "Board", "icon": "sap-icon://overview-chart" },
         { "key": "analytics", "title": "Analytics", "icon": "sap-icon://line-chart" },
