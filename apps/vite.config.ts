@@ -22,6 +22,7 @@ export default defineConfig({
         'mini-navigator': resolve(__dirname, 'src/mini-navigator/main.ts'),
         'scanner-vue': resolve(__dirname, 'src/scanner-vue/main.ts'),
         'tutorial-feedback': resolve(__dirname, 'src/tutorial-feedback/main.ts'),
+        'tutorial-rating': resolve(__dirname, 'src/tutorial-rating/main.ts'),
         'cmd-palette': resolve(__dirname, 'src/cmd-palette/main.ts'),
         me: resolve(__dirname, 'src/me/main.ts'),
       },

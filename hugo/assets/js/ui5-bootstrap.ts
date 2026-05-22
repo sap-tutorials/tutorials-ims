@@ -17,6 +17,7 @@ import "@ui5/webcomponents/dist/List.js";
 import "@ui5/webcomponents/dist/ListItemStandard.js";
 import "@ui5/webcomponents/dist/TabContainer.js";
 import "@ui5/webcomponents/dist/Tab.js";
+import "@ui5/webcomponents/dist/RatingIndicator.js";
 import "@ui5/webcomponents-fiori/dist/ShellBar.js";
 import "@ui5/webcomponents-fiori/dist/ShellBarItem.js";
 import "@ui5/webcomponents-fiori/dist/Wizard.js";
@@ -40,6 +41,8 @@ import "@ui5/webcomponents-icons/dist/write-new-document.js";
 import "@ui5/webcomponents-icons/dist/email.js";
 import "@ui5/webcomponents-icons/dist/post.js";
 import "@ui5/webcomponents-icons/dist/customer-and-contacts.js";
+import "@ui5/webcomponents-icons/dist/favorite.js";
+import "@ui5/webcomponents-icons/dist/unfavorite.js";
 
 const root = document.documentElement;
 
