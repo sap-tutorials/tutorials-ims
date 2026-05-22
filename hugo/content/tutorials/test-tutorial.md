@@ -41,6 +41,29 @@ This is the first step content with **bold** and `code`.
 
 This is the second step.
 
+A flowchart showing build flow:
+
+{{< mermaid >}}
+graph TD
+    A[GitHub markdown] --> B[fetch-tutorials]
+    B --> C[Hugo content]
+    C --> D[publish-content]
+    D --> E[(HANA BLOB)]
+{{< /mermaid >}}
+
+A sequence diagram showing the auth flow:
+
+{{< mermaid >}}
+sequenceDiagram
+    participant U as User
+    participant AR as AppRouter
+    participant CAP as CAP Service
+    U->>AR: GET /tutorials/foo
+    AR->>CAP: /content/tutorials/foo
+    CAP-->>AR: HTML (gzipped BLOB)
+    AR-->>U: 200 OK
+{{< /mermaid >}}
+
 {{% option-tabs tabs="Option A,Option B" %}}
 
 {{% tab index="0" name="Option A" %}}

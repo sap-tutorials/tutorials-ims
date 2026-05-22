@@ -1,3 +1,5 @@
+import { initMermaid } from './mermaid-bootstrap'
+
 // --- Copy code block ---
 ;(window as any).copyCodeBlock = function(btn: HTMLButtonElement) {
   const block = btn.closest('.code-block')
@@ -540,4 +542,5 @@ document.addEventListener('DOMContentLoaded', () => {
   initAuthAwareButtons()
   initLightbox()
   initStepHashNavigation()
+  initMermaid()
 })
