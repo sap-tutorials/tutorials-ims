@@ -103,4 +103,17 @@ describe('writeHugoPage', () => {
     const output = readFileSync(join(TMP_DIR, 'test-tutorial.md'), 'utf-8')
     expect(output).toContain('{{% tutorial-step number="1" title="Say &quot;Hello&quot;" %}}')
   })
+
+  it('serializes contributor email into Hugo frontmatter', () => {
+    writeHugoPage(
+      'test-tutorial', 'Test Tutorial', 'A test', 10, 'beginner',
+      ['sap'], 'sap', 'Author', 'profile', ['Learn X'], 'prereq',
+      makeSteps(), makeNav(), '2025-01-01', '2024-12-01',
+      [{ name: 'Test User', login: 'testuser', email: 'test@sap.com', avatarUrl: 'https://example.com/avatar.png' }],
+      TMP_DIR,
+    )
+
+    const output = readFileSync(join(TMP_DIR, 'test-tutorial.md'), 'utf-8')
+    expect(output).toContain('email: test@sap.com')
+  })
 })
