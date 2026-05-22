@@ -342,6 +342,44 @@ export function initLightbox() {
   document.querySelector(".lightbox-next")
     ?.addEventListener("click", () => goto(1));
 
+  document.querySelector(".lightbox-download")
+    ?.addEventListener("click", () => {
+      const cur = currentImg();
+      if (!cur) return;
+      const src = cur.currentSrc || cur.src;
+      // Filename derivation: prefer slugified alt, fall back to URL pathname,
+      // fall back to "image". The /img-cdn/ proxy URL has the original filename
+      // in the `u` query param, so try that next.
+      let name = "image";
+      if (cur.alt && cur.alt !== "image") {
+        name = cur.alt.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      } else {
+        try {
+          const url = new URL(src, location.href);
+          const u = url.searchParams.get("u");
+          if (u) {
+            const inner = new URL(u);
+            const last = inner.pathname.split("/").pop();
+            if (last) name = last.replace(/\.[a-z]+$/i, "");
+          } else {
+            const last = url.pathname.split("/").pop();
+            if (last) name = last.replace(/\.[a-z]+$/i, "");
+          }
+        } catch { /* keep "image" */ }
+      }
+      // Append extension if missing.
+      if (!/\.[a-z]+$/i.test(name)) {
+        const m = src.match(/\.(png|jpe?g|gif|webp|svg)(?:\?|$)/i);
+        name += m ? `.${m[1].toLowerCase()}` : ".png";
+      }
+      const a = document.createElement("a");
+      a.href = src;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    });
+
   // Keyboard while dialog is open. Esc is owned by ui5-dialog; we stay clear of it.
   // ui5-dialog traps focus inside its shadow DOM, so document-level keydown won't
   // fire for keys pressed while a focused element is inside the dialog. Attach
@@ -438,6 +476,33 @@ export function initLightbox() {
   window.addEventListener("popstate", () => {
     if (state.isOpen) dlg.close();
   });
+
+  // Hash deep-link: open #img-N on page load. Respect document.readyState so
+  // cached/fast loads (where DOMContentLoaded already fired before this script
+  // ran) are still handled.
+  function handleHashOnLoad() {
+    const m = location.hash.match(/^#img-(\d+)$/);
+    if (!m) return;
+    const idx = parseInt(m[1], 10) - 1;
+    customElements.whenDefined("ui5-dialog").then(() => {
+      const all = collectZoomable();
+      if (idx < 0 || idx >= all.length) return;
+      const target = all[idx];
+      // Scroll the source image into view (so on close, focus restore lands
+      // somewhere visible). Block: 'center' prefers vertical centering.
+      // Use behavior: "auto" — "instant" is a CSS scroll-behavior keyword, not
+      // a valid ScrollIntoViewOptions value (TS will reject it; runtime ignores).
+      target.scrollIntoView({ block: "center", behavior: "auto" });
+      open(target);
+      // Suppress pushState — we entered via URL hash, close should replaceState.
+      state.pushedHash = false;
+    });
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", handleHashOnLoad, { once: true });
+  } else {
+    handleHashOnLoad();
+  }
 }
 
 initLightbox();
