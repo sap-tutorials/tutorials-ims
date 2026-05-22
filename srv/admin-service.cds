@@ -75,11 +75,15 @@ service AdminService {
 
   @readonly
   entity CompletionAnalytics as projection on ims.CompletionAnalytics;
-  @readonly entity PipelineLog as projection on ims.PipelineLog
+  @readonly
+  @cds.redirection.target: true
+  entity PipelineLog as projection on ims.PipelineLog
     where pipelineType != 'SCHEDULED_JOB';
 
   @readonly entity JobExecutionLog as projection on ims.PipelineLog
     where pipelineType = 'SCHEDULED_JOB';
+
+  @readonly entity PipelineLogItems as projection on ims.PipelineLogItems;
 
   @readonly entity TutorialFeedback          as projection on ims.TutorialFeedback;
   @readonly entity TutorialFeedbackAggregate as projection on ims.TutorialFeedbackAggregate;

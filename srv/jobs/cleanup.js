@@ -48,9 +48,15 @@ export async function cleanupUnusedTags() {
 }
 
 export async function cleanupPipelineLog(retentionDays = 30) {
-  const { PipelineLog } = cds.entities('com.sap.developers.ims');
+  const { PipelineLog, PipelineLogItems } = cds.entities('com.sap.developers.ims');
   const LOG = cds.log('jobs/cleanup');
   const cutoff = new Date(Date.now() - retentionDays * 86400000).toISOString();
+  // Delete child items first — composition cascade depends on FK enforcement
+  // which is not guaranteed across all DBs / raw SQL paths.
+  const expiredIds = await SELECT.from(PipelineLog).columns('ID').where({ startedAt: { '<': cutoff } });
+  if (expiredIds.length > 0) {
+    await DELETE.from(PipelineLogItems).where({ pipelineLog_ID: { in: expiredIds.map(r => r.ID) } });
+  }
   const result = await DELETE.from(PipelineLog).where({ startedAt: { '<': cutoff } });
   LOG.info(`Cleaned up pipeline log entries older than ${retentionDays} days: ${result} removed`);
   return result;

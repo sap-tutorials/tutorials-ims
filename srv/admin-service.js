@@ -672,6 +672,14 @@ export default class AdminService extends cds.ApplicationService {
       }
     });
 
+    this.after('READ', 'PipelineLogItems', rows => {
+      for (const row of Array.isArray(rows) ? rows : [rows]) {
+        if (row.severity === 'ERROR') row.severityCriticality = 1;
+        else if (row.severity === 'WARN') row.severityCriticality = 2;
+        else row.severityCriticality = 0;
+      }
+    });
+
     // Guard: only SuperAdmin can change the published field
     const _guardPublished = (req) => {
       if (!('published' in req.data)) return;

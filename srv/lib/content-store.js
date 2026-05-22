@@ -4,7 +4,7 @@ import { gunzipSync } from 'node:zlib';
 import { timingSafeEqual } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { acquireLock, releaseLock } from '../jobs/job-lock.js';
-import { logPipelineStart, logPipelineEnd } from './pipeline-log.js';
+import { logPipelineStart, logPipelineEnd, logPipelineItem } from './pipeline-log.js';
 import { getNextLegacyId } from './legacy-id.js';
 import { embedSlugs } from './embedding-pipeline.js';
 
@@ -374,11 +374,23 @@ export async function publishHandler(req, res) {
             }
           } catch (metaInitErr) {
             LOG.error(`TutorialMeta upsert failed for ${slug}`, metaInitErr);
+            await logPipelineItem(pipelineLogId, {
+              slug,
+              phase: 'METADATA',
+              severity: 'WARN',
+              message: `TutorialMeta upsert: ${metaInitErr.message || metaInitErr}`
+            });
           }
 
           metaUpserted++;
         } catch (metaErr) {
           console.warn(`[content/publish] metadata upsert failed for ${slug}:`, metaErr.message);
+          await logPipelineItem(pipelineLogId, {
+            slug,
+            phase: 'METADATA',
+            severity: 'ERROR',
+            message: metaErr.message || String(metaErr)
+          });
         }
       }
       if (metaUpserted > 0) {
@@ -404,6 +416,12 @@ export async function publishHandler(req, res) {
           bodyUpserted++;
         } catch (bodyErr) {
           console.warn(`[content/publish] body text upsert failed for ${slug}:`, bodyErr.message);
+          await logPipelineItem(pipelineLogId, {
+            slug,
+            phase: 'BODYTEXT',
+            severity: 'WARN',
+            message: bodyErr.message || String(bodyErr)
+          });
         }
       }
       if (bodyUpserted > 0) {
