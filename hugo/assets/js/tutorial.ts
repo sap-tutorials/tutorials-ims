@@ -191,6 +191,15 @@ async function apiPost(path: string, body?: unknown): Promise<boolean> {
   } catch { return false }
 }
 
+// U14: flip data-hydrated on the documentElement once the progress fetch is
+// settled (or after a 1.5s race timeout). Idempotent — the head.html tail
+// fallback may have already done this; setting the same value is a no-op.
+function markHydrated() {
+  if (document.documentElement.dataset.hydrated === 'false') {
+    document.documentElement.dataset.hydrated = 'true';
+  }
+}
+
 // --- Progress tracking ---
 function markButtonCompleted(btn: HTMLButtonElement) {
   btn.textContent = 'Completed'
@@ -535,7 +544,13 @@ function enableDoneButtons() {
 // --- Init on DOMContentLoaded ---
 document.addEventListener('DOMContentLoaded', () => {
   initProgressBar()
-  loadProgress()
+  // U14: race the real fetch against a 1.5s timeout so a slow or 401 response
+  // does not strand users on shimmer. Both branches call markHydrated();
+  // markHydrated() is idempotent.
+  Promise.race([
+    loadProgress().then(markHydrated, markHydrated),
+    new Promise<void>((resolve) => setTimeout(() => { markHydrated(); resolve() }, 1500)),
+  ])
   initValidation()
   updateActiveTocItem()
   initMiniNavProgress()

@@ -3,6 +3,10 @@
 // See improvements.md "U0" for scope.
 import { setTheme } from "@ui5/webcomponents-base/dist/config/Theme.js";
 
+// U14: shimmer rules for hydration placeholders + nav-progress-bar overrides.
+// Selectors are scoped to attributes that only get set on relevant pages.
+import "../css/skeletons.css";
+
 // Register theme assets for both light and dark — without this side-effect import,
 // setTheme("sap_horizon_dark") silently falls back to sap_horizon (only the default is registered).
 import "@ui5/webcomponents/dist/Assets.js";
@@ -19,6 +23,7 @@ import "@ui5/webcomponents/dist/ListItemStandard.js";
 import "@ui5/webcomponents/dist/TabContainer.js";
 import "@ui5/webcomponents/dist/Tab.js";
 import "@ui5/webcomponents/dist/RatingIndicator.js";
+import "@ui5/webcomponents/dist/ProgressIndicator.js";
 import "@ui5/webcomponents-fiori/dist/ShellBar.js";
 import "@ui5/webcomponents-fiori/dist/ShellBarItem.js";
 import "@ui5/webcomponents-fiori/dist/Wizard.js";
@@ -63,6 +68,10 @@ import "./glossary";
 // U11: reading-progress bar + step scrollspy. Gated on DOM presence —
 // safely no-ops on pages without .tutorial-steps / .tutorial-step.
 import "./reading-progress";
+
+// U14: full-page navigation progress bar. Self-bootstraps; safe no-op when
+// the #nav-progress element is missing (i.e. partial not rendered).
+import "./nav-progress";
 
 const root = document.documentElement;
 

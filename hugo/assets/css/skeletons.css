@@ -1,0 +1,74 @@
+/* hugo/assets/css/skeletons.css
+ *
+ * U14: shimmer for hydration placeholders + the shared <Skeleton> Vue component.
+ * The hydration selectors are scoped to html[data-hydrated="false"], which is
+ * set ONLY on tutorial layouts by the pre-paint script in head.html. Non-tutorial
+ * pages never carry the attribute, so these rules do not apply there.
+ */
+
+@keyframes skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.skeleton,
+html[data-hydrated="false"] .progress-segment,
+html[data-hydrated="false"] .step-check-circle,
+html[data-hydrated="false"] [data-action="mark-done"] {
+  background: linear-gradient(
+    90deg,
+    var(--sapList_Background) 0%,
+    var(--sapButton_Hover_Background) 50%,
+    var(--sapList_Background) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  color: transparent;
+  pointer-events: none;
+  border-color: transparent;
+}
+
+/* Shared component shapes */
+.skeleton {
+  display: block;
+  border-radius: 0.5rem;
+}
+.skeleton--card {
+  height: 200px;
+  margin-bottom: 1rem;
+}
+.skeleton--text-line {
+  height: 1rem;
+  margin-bottom: 0.5rem;
+}
+.skeleton--rect {
+  height: 240px;
+}
+
+/* Top-of-viewport navigation progress bar overrides for ui5-progress-indicator */
+.nav-progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 9999;
+  border: none;
+  background: transparent;
+  transition: opacity 200ms;
+}
+/* Keep the element mounted so JS can drive `value` without re-mount churn;
+ * the [hidden] attribute is repurposed as a fade flag. */
+.nav-progress-bar[hidden] { display: block !important; opacity: 0; }
+.nav-progress-bar:not([hidden]) { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton,
+  html[data-hydrated="false"] [data-action="mark-done"],
+  html[data-hydrated="false"] .step-check-circle,
+  html[data-hydrated="false"] .progress-segment {
+    animation: none;
+    opacity: 0.6;
+  }
+  .nav-progress-bar { transition: none; }
+}
