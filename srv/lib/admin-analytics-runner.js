@@ -82,14 +82,17 @@ function _buildCQN(v) {
 
   for (const g of v.groupBy) {
     const dim = S.dimensions[g];
-    if (dim.kind === 'column')        cqn.SELECT.columns.push({ ref: [dim.column], as: g });
-    else if (dim.kind === 'assoc')    cqn.SELECT.columns.push({ ref: dim.path.split('.'), as: g });
-    else if (dim.kind === 'date-trunc') {
-      cqn.SELECT.columns.push({ func: 'series_round', args: [{ ref: [dim.column] }, { val: dim.unit === 'month' ? 'INTERVAL 1 MONTH' : 'INTERVAL 1 WEEK' }], as: g });
-    } else if (dim.kind === 'task-lookup') {
-      cqn.SELECT.columns.push({ ref: [dim.taskType.toLowerCase(), dim.display], as: g });
-    }
-    cqn.SELECT.groupBy.push({ ref: [g] });
+    let expr;
+    if (dim.kind === 'column')           expr = { ref: [dim.column] };
+    else if (dim.kind === 'assoc')       expr = { ref: dim.path.split('.') };
+    else if (dim.kind === 'date-trunc')  expr = { func: 'series_round', args: [{ ref: [dim.column] }, { val: dim.unit === 'month' ? 'INTERVAL 1 MONTH' : 'INTERVAL 1 WEEK' }] };
+    else if (dim.kind === 'task-lookup') expr = { ref: [dim.taskType.toLowerCase(), dim.display] };
+    // Push the EXPRESSION into groupBy, not the column alias. CDS resolves
+    // `{ ref: [...] }` against entity elements; an alias like 'completionWeek'
+    // is not an element of TaskRecords and HANA rejects it. SQLite accepts
+    // alias-grouping silently — which is why unit tests pass and prod doesn't.
+    cqn.SELECT.columns.push({ ...expr, as: g });
+    cqn.SELECT.groupBy.push(expr);
   }
 
   cqn.SELECT.columns.push({ func: 'count', args: ['*'], as: 'count' });
