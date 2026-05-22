@@ -150,6 +150,9 @@ export interface TutorialMeta {
   primaryTag: string | null;
   stepCount: number;
   steps: StepMeta[];
+  lastUpdated: string | null;
+  primaryContributorEmail: string | null;
+  primaryContributorLogin: string | null;
 }
 
 export function extractMetadata(
@@ -177,6 +180,15 @@ export function extractMetadata(
       ? fm.steps.map((s: any) => ({ number: s.number ?? 0, title: s.title ?? '' }))
       : [];
 
+    const contributors = Array.isArray(fm.contributors) ? fm.contributors : [];
+    const primary = contributors.length > 0 ? contributors[0] : null;
+    const primaryContributorEmail =
+      primary && typeof primary.email === 'string' && primary.email.length > 0
+        ? primary.email
+        : null;
+    const primaryContributorLogin =
+      primary && typeof primary.login === 'string' ? primary.login : null;
+
     result[slug] = {
       slug,
       title: fm.title ?? slug,
@@ -186,6 +198,9 @@ export function extractMetadata(
       primaryTag: fm.primaryTag ?? null,
       stepCount: fm.stepCount ?? steps.length,
       steps,
+      lastUpdated: typeof fm.lastUpdated === 'string' ? fm.lastUpdated : null,
+      primaryContributorEmail,
+      primaryContributorLogin,
     };
   }
 
