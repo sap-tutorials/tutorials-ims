@@ -52,3 +52,9 @@
 @media (max-width: 960px) {
   .mission-side-nav-wrap { max-height: none; }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .mission-side-nav-wrap ui5-side-navigation-sub-item::after {
+    transition: none;
+  }
+}
