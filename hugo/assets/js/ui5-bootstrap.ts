@@ -27,6 +27,8 @@ import "@ui5/webcomponents/dist/TabContainer.js";
 import "@ui5/webcomponents/dist/Tab.js";
 import "@ui5/webcomponents/dist/RatingIndicator.js";
 import "@ui5/webcomponents/dist/ProgressIndicator.js";
+import "@ui5/webcomponents/dist/Dialog.js";
+import "@ui5/webcomponents/dist/Title.js";
 import "@ui5/webcomponents-fiori/dist/ShellBar.js";
 import "@ui5/webcomponents-fiori/dist/ShellBarItem.js";
 import "@ui5/webcomponents-fiori/dist/Wizard.js";
@@ -60,6 +62,14 @@ import "@ui5/webcomponents-icons/dist/unfavorite.js";
 // U12: reader-mode toggle in shellbar (documents → decline on activation).
 import "@ui5/webcomponents-icons/dist/documents.js";
 import "@ui5/webcomponents-icons/dist/decline.js";
+
+// U15: lightbox toolbar icons.
+import "@ui5/webcomponents-icons/dist/zoom-in.js";
+import "@ui5/webcomponents-icons/dist/zoom-out.js";
+import "@ui5/webcomponents-icons/dist/navigation-left-arrow.js";
+import "@ui5/webcomponents-icons/dist/navigation-right-arrow.js";
+import "@ui5/webcomponents-icons/dist/reset.js";
+import "@ui5/webcomponents-icons/dist/download.js";
 
 // U8: cross-block selection sync for {{< codetabs >}}.
 import "./codetabs";
