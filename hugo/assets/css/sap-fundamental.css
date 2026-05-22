@@ -2406,67 +2406,6 @@ html.dark .chroma .nf,
 html.dark .chroma .fm,
 html.dark .chroma .nd { color: #e2c5ff; font-weight: bold; }
 
-/* ── Lightbox dialog ── */
-.image-lightbox {
-  border: none;
-  background: transparent;
-  padding: 0;
-  max-width: 95vw;
-  max-height: 95vh;
-}
-
-.image-lightbox::backdrop {
-  background: rgba(0, 0, 0, 0.85);
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
-}
-
-.image-lightbox img {
-  display: block;
-  max-width: 95vw;
-  max-height: 90vh;
-  object-fit: contain;
-  border-radius: 0.5rem;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
-  cursor: zoom-out;
-  /* Override the dark-mode brightness filter applied to .tutorial-main img */
-  filter: none !important;
-}
-
-.image-lightbox-close {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.9);
-  border: none;
-  color: #32363a;
-  font-size: 1.25rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1;
-}
-
-.image-lightbox-close:hover {
-  background: #fff;
-}
-
-.image-lightbox-caption {
-  position: absolute;
-  bottom: -2.5rem;
-  left: 50%;
-  transform: translateX(-50%);
-  color: #fff;
-  font-size: 0.875rem;
-  text-align: center;
-  max-width: 90vw;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-}
-
 /* ── Mobile responsive: code blocks + images ── */
 @media (max-width: 640px) {
   .code-block-body .chroma,
