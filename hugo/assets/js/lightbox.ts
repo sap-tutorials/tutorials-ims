@@ -97,6 +97,7 @@ function open(triggerImg: HTMLImageElement) {
     dlg.removeAttribute("stretch");
   }
 
+  preloadNeighbors();
   customElements.whenDefined("ui5-dialog").then(() => {
     state.isOpen = true;
     dlg.show();
@@ -128,6 +129,99 @@ function togglePrevNext() {
   const single = state.imgs.length <= 1;
   prev.toggleAttribute("hidden", single);
   next.toggleAttribute("hidden", single);
+}
+
+const SLIDE_DURATION_MS = 300;
+
+function reducedMotion(): boolean {
+  return matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function rail(): HTMLElement | null {
+  return document.querySelector(".lightbox-rail");
+}
+
+function preloadNeighbors() {
+  const prev = state.imgs[state.index - 1];
+  const next = state.imgs[state.index + 1];
+  if (prev) new Image().src = prev.currentSrc || prev.src;
+  if (next) new Image().src = next.currentSrc || next.src;
+}
+
+function instantSwap(direction: -1 | 1) {
+  const cur = currentImg();
+  const target = state.imgs[state.index + direction];
+  if (!cur || !target) return;
+  cur.src = target.currentSrc || target.src;
+  cur.alt = target.alt || "";
+  state.index += direction;
+  state.scale = 1;
+  state.tx = 0;
+  state.ty = 0;
+  applyTransform(cur);
+  setTitle(target.alt && target.alt !== "image" ? target.alt : "");
+  togglePrevNext();
+  updateZoomLabel();
+  history.replaceState({ lightbox: true }, "", `#img-${state.index + 1}`);
+  preloadNeighbors();
+}
+
+function goto(direction: -1 | 1) {
+  if (state.animating) return;
+  const targetIdx = state.index + direction;
+  if (targetIdx < 0 || targetIdx >= state.imgs.length) return;
+
+  if (reducedMotion()) {
+    instantSwap(direction);
+    return;
+  }
+
+  const cur = currentImg();
+  const inc = incomingImg();
+  const r = rail();
+  const target = state.imgs[targetIdx];
+  if (!cur || !inc || !r || !target) return;
+
+  state.animating = true;
+  // Reset zoom/pan immediately on the outgoing image so the slide doesn't fight scale.
+  state.scale = 1; state.tx = 0; state.ty = 0;
+  applyTransform(cur);
+
+  const sign = direction; // 1 = next (incoming from right), -1 = prev (from left)
+  inc.src = target.currentSrc || target.src;
+  inc.alt = target.alt || "";
+  inc.hidden = false;
+  inc.style.transform = `translateX(${sign * 100}%)`;
+  // Force layout so the next class addition triggers a transition.
+  void inc.offsetWidth;
+
+  r.classList.add("is-sliding");
+  inc.style.transform = "translateX(0)";
+  cur.style.transform = `translateX(${-sign * 100}%) scale(1)`;
+
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    r.classList.remove("is-sliding");
+    // Swap classes: incoming becomes current.
+    cur.classList.remove("lightbox-img--current");
+    cur.classList.add("lightbox-img--incoming");
+    cur.hidden = true;
+    inc.classList.remove("lightbox-img--incoming");
+    inc.classList.add("lightbox-img--current");
+    state.index = targetIdx;
+    state.animating = false;
+    applyTransform(inc);
+    setTitle(target.alt && target.alt !== "image" ? target.alt : "");
+    togglePrevNext();
+    updateZoomLabel();
+    history.replaceState({ lightbox: true }, "", `#img-${state.index + 1}`);
+    preloadNeighbors();
+  };
+
+  inc.addEventListener("transitionend", finish, { once: true });
+  setTimeout(finish, SLIDE_DURATION_MS + 50); // fallback if transitionend is missed
 }
 
 function applyTransform(img: HTMLImageElement) {
@@ -243,6 +337,11 @@ export function initLightbox() {
       updateZoomLabel();
     });
 
+  document.querySelector(".lightbox-prev")
+    ?.addEventListener("click", () => goto(-1));
+  document.querySelector(".lightbox-next")
+    ?.addEventListener("click", () => goto(1));
+
   // Keyboard while dialog is open. Esc is owned by ui5-dialog; we stay clear of it.
   // ui5-dialog traps focus inside its shadow DOM, so document-level keydown won't
   // fire for keys pressed while a focused element is inside the dialog. Attach
@@ -259,6 +358,8 @@ export function initLightbox() {
       updateZoomLabel();
       e.preventDefault();
     }
+    else if (e.key === "ArrowLeft") { goto(-1); e.preventDefault(); }
+    else if (e.key === "ArrowRight") { goto(1); e.preventDefault(); }
   }
   document.addEventListener("keydown", onZoomKey);
   dlg.addEventListener("keydown", onZoomKey);
