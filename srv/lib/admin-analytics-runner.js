@@ -85,12 +85,18 @@ function _buildCQN(v) {
     let expr;
     if (dim.kind === 'column')           expr = { ref: [dim.column] };
     else if (dim.kind === 'assoc')       expr = { ref: dim.path.split('.') };
-    else if (dim.kind === 'date-trunc')  expr = { func: 'series_round', args: [{ ref: [dim.column] }, { val: dim.unit === 'month' ? 'INTERVAL 1 MONTH' : 'INTERVAL 1 WEEK' }] };
+    else if (dim.kind === 'date-trunc')  expr = { func: 'to_varchar', args: [{ ref: [dim.column] }, { val: dim.unit === 'month' ? 'YYYY-MM' : 'IYYY-IW' }] };
     else if (dim.kind === 'task-lookup') expr = { ref: [dim.taskType.toLowerCase(), dim.display] };
     // Push the EXPRESSION into groupBy, not the column alias. CDS resolves
     // `{ ref: [...] }` against entity elements; an alias like 'completionWeek'
     // is not an element of TaskRecords and HANA rejects it. SQLite accepts
     // alias-grouping silently — which is why unit tests pass and prod doesn't.
+    //
+    // For date-trunc we use to_varchar(col, fmt) instead of series_round:
+    //   - series_round only accepts series-typed columns; completionDate isn't
+    //     one, so HANA throws "invalid argument".
+    //   - to_varchar with a sortable format produces stable string buckets
+    //     ('2026-05' for month, '2026-21' for ISO week) that order naturally.
     cqn.SELECT.columns.push({ ...expr, as: g });
     cqn.SELECT.groupBy.push(expr);
   }
