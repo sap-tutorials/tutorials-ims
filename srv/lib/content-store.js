@@ -275,6 +275,7 @@ export async function publishHandler(req, res) {
     let metaUpserted = 0;
     if (metadata && typeof metadata === 'object') {
       const { Tutorials, Steps } = cds.entities('com.sap.developers.ims');
+      const metaLoopDb = await cds.connect.to('db');
       for (const [slug, meta] of Object.entries(metadata)) {
         try {
           const existing = await SELECT.one.from(Tutorials).where({ slug }).columns('ID');
@@ -314,7 +315,7 @@ export async function publishHandler(req, res) {
               if (existingStep) {
                 const updates = { title: step.title, status: 'ACTIVE' };
                 if (!existingStep.legacyId) {
-                  updates.legacyId = await getNextLegacyId('Steps', db);
+                  updates.legacyId = await getNextLegacyId('Steps', metaLoopDb);
                 }
                 await UPDATE(Steps).where({ ID: existingStep.ID }).set(updates);
               } else {
@@ -324,11 +325,49 @@ export async function publishHandler(req, res) {
                   stepOrder: step.number,
                   title: step.title,
                   status: 'ACTIVE',
-                  legacyId: await getNextLegacyId('Steps', db)
+                  legacyId: await getNextLegacyId('Steps', metaLoopDb)
                 });
               }
             }
           }
+          // Auto-init TutorialMeta: new tutorial → INSERT; refreshed tutorial → UPDATE reviewedDate
+          try {
+            const ims = cds.entities('com.sap.developers.ims');
+            const { TutorialMeta } = ims;
+            const ContributorEmails = ims.ContributorEmails;
+            const existingMeta = await SELECT.one.from(TutorialMeta).where({ tutorial_ID: tutorialId });
+            const lastUpdated = meta.lastUpdated || null;
+            const directEmail = meta.primaryContributorEmail || null;
+            const login = meta.primaryContributorLogin || null;
+
+            let resolvedOwner = directEmail;
+            if (!resolvedOwner && login && ContributorEmails) {
+              const mapping = await SELECT.one.from(ContributorEmails).where({ login });
+              if (mapping?.email) resolvedOwner = mapping.email;
+            }
+
+            if (!existingMeta) {
+              await INSERT.into(TutorialMeta).entries({
+                ID: cds.utils.uuid(),
+                tutorial_ID: tutorialId,
+                owner: resolvedOwner,
+                reviewedDate: lastUpdated,
+                monitoredStatus: 'ACTIVE',
+                notificationNumber: 0,
+                lastNotificationDate: null,
+                legacyId: await getNextLegacyId('TutorialMeta', metaLoopDb)
+              });
+            } else if (lastUpdated && (!existingMeta.reviewedDate || new Date(existingMeta.reviewedDate) < new Date(lastUpdated))) {
+              await UPDATE(TutorialMeta).where({ ID: existingMeta.ID }).set({
+                reviewedDate: lastUpdated,
+                notificationNumber: 0,
+                lastNotificationDate: null
+              });
+            }
+          } catch (metaInitErr) {
+            console.warn(`[content/publish] TutorialMeta upsert failed for ${slug}:`, metaInitErr.message);
+          }
+
           metaUpserted++;
         } catch (metaErr) {
           console.warn(`[content/publish] metadata upsert failed for ${slug}:`, metaErr.message);
