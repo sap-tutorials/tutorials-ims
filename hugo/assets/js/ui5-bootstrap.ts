@@ -81,6 +81,9 @@ import "./glossary";
 // safely no-ops on pages without .tutorial-steps / .tutorial-step.
 import "./reading-progress";
 
+// U15: image lightbox. Self-bootstraps; safe no-op when #image-lightbox is missing.
+import "./lightbox";
+
 // U14: full-page navigation progress bar. Self-bootstraps; safe no-op when
 // the #nav-progress element is missing (i.e. partial not rendered).
 import "./nav-progress";
