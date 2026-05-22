@@ -7,7 +7,7 @@ import { processAccountMerges } from './account-merge-job.js';
 import { runReconciliationJob } from './embedding-reconciliation.js';
 import { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, isNotificationsEnabled } from '../lib/contributor-notifications.js';
 import { sendNotificationEmail, retryFailedEmails } from '../lib/mail-client.js';
-import { logPipelineStart, logPipelineEnd } from '../lib/pipeline-log.js';
+import { logPipelineStart, logPipelineEnd, logJobItem } from '../lib/pipeline-log.js';
 import cds from '@sap/cds';
 
 const instanceId = process.env.CF_INSTANCE_INDEX || '0';
@@ -17,8 +17,9 @@ async function runWithLock(jobName, durationMs, fn) {
   if (await acquireLock(jobName, instanceId, durationMs)) {
     const logId = await logPipelineStart('SCHEDULED_JOB', 'system', { jobName });
     try {
-      await fn();
-      await logPipelineEnd(logId, 'SUCCESS', jobName);
+      const result = await fn(logId);
+      const summary = formatJobSummary(jobName, result);
+      await logPipelineEnd(logId, 'SUCCESS', summary);
     } catch (err) {
       LOG.error(`Job ${jobName} failed:`, err.message);
       await logPipelineEnd(logId, 'FAILED', jobName, err.message);
@@ -26,6 +27,24 @@ async function runWithLock(jobName, durationMs, fn) {
       await releaseLock(jobName, instanceId);
     }
   }
+}
+
+/**
+ * Render a job's return value as a single-line summary stored on the
+ * PipelineLog row. Numbers become "processed N", objects become a key=value
+ * list, strings pass through, and null/undefined falls back to the job name.
+ */
+export function formatJobSummary(jobName, result) {
+  if (result == null) return jobName;
+  if (typeof result === 'string') return result.slice(0, 2000);
+  if (typeof result === 'number') return `${jobName}: processed ${result}`;
+  if (typeof result === 'object') {
+    const parts = Object.entries(result)
+      .filter(([, v]) => v != null && (typeof v === 'number' || typeof v === 'string' || typeof v === 'boolean'))
+      .map(([k, v]) => `${k}=${v}`);
+    return parts.length ? `${jobName}: ${parts.join(', ')}` : jobName;
+  }
+  return jobName;
 }
 
 export function registerJobs() {
@@ -43,12 +62,12 @@ export function registerJobs() {
 
   // Every 2 hours — NGDS retry
   cron.schedule('0 */2 * * *', () =>
-    runWithLock('ngds-retry', 1800000, retryNgds)
+    runWithLock('ngds-retry', 1800000, (logId) => retryNgds(logId))
   );
 
   // Daily at 01:00 — account merge batch
   cron.schedule('0 1 * * *', () =>
-    runWithLock('account-merge-batch', 7200000, processAccountMerges)
+    runWithLock('account-merge-batch', 7200000, (logId) => processAccountMerges(logId))
   );
 
   // Jan 2 and Jul 2 at 00:00 — tag cleanup
@@ -68,7 +87,7 @@ export function registerJobs() {
 
   // Hourly at :17 — re-embed tutorial steps whose content drifted (offset to avoid :00 thundering herd; multi-instance safe via lock)
   cron.schedule('17 * * * *', () =>
-    runWithLock('embedding-reconciliation', 1800000, runReconciliationJob)
+    runWithLock('embedding-reconciliation', 1800000, (logId) => runReconciliationJob(logId))
   );
 
   // Daily at 03:15 — prune pipeline log entries older than 30 days
@@ -98,19 +117,28 @@ export function registerJobs() {
 
   // Weekly Monday 09:00 — contributor notifications
   cron.schedule('0 9 * * 1', () =>
-    runWithLock('contributor-notifications', 1800000, async () => {
+    runWithLock('contributor-notifications', 1800000, async (logId) => {
       if (!await isNotificationsEnabled()) {
         LOG.info('Contributor notifications disabled via config');
-        return;
+        return { enabled: false };
       }
       const adminEmails = await getAdminEmailList();
       const notifications = await computeStaleNotifications(180);
       const dashboardUrl = process.env.DASHBOARD_URL || 'https://tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/ui/tutorialDashboard';
 
-      let sent = 0;
+      let sent = 0, skipped = 0, failed = 0;
       for (const n of notifications) {
         const { to, cc } = determineRecipients(n, adminEmails);
-        if (to.length === 0) continue;
+        if (to.length === 0) {
+          skipped++;
+          await logJobItem(logId, {
+            itemKey: n.tutorialSlug || n.tutorialId,
+            itemKind: 'NOTIFICATION',
+            status: 'SKIPPED',
+            message: 'No recipients resolved'
+          });
+          continue;
+        }
         const result = await sendNotificationEmail({
           to, cc,
           subject: n.title,
@@ -120,9 +148,24 @@ export function registerJobs() {
         if (result.success) {
           await markNotificationSent(n.tutorialId);
           sent++;
+          await logJobItem(logId, {
+            itemKey: n.tutorialSlug || n.tutorialId,
+            itemKind: 'NOTIFICATION',
+            status: 'SUCCESS',
+            message: `Sent to ${to.join(', ')}`
+          });
+        } else {
+          failed++;
+          await logJobItem(logId, {
+            itemKey: n.tutorialSlug || n.tutorialId,
+            itemKind: 'NOTIFICATION',
+            status: 'ERROR',
+            message: result.error || 'sendNotificationEmail returned failure'
+          });
         }
       }
       LOG.info(`Processed ${notifications.length} stale tutorials, sent ${sent} emails`);
+      return { stale: notifications.length, sent, skipped, failed };
     })
   );
 
