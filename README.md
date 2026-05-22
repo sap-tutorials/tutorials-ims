@@ -23,7 +23,6 @@ tutorials-ims/
 │   └── src/
 │       ├── app-space/          #   Event-themed tutorial kiosk (Joule/Sapphire themes)
 │       ├── event-display/      #   Event display embed (leaderboard widget)
-│       ├── mini-navigator/     #   Compact tutorial navigator sidebar
 │       ├── nav-dropdown/       #   Navigation dropdown component
 │       ├── navigator/          #   Full tutorial navigator page
 │       └── shared/             #   Shared utilities, API client, types

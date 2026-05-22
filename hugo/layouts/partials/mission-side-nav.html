@@ -1,0 +1,54 @@
+{{/* mission-side-nav.html — U16
+
+Renders <ui5-side-navigation> from the current tutorial's mission frontmatter.
+
+Per Task 0 findings (UI5 v2.x):
+  - sub-items use the default slot (no slot="items")
+  - sub-items expose no slot for additional content; progress bar is rendered
+    as a CSS ::after pseudo on the host with width driven by --msn-progress
+    (set inline by mission-side-nav.ts at runtime)
+
+Inputs (page params expected on tutorial pages):
+  .Params.missionId    — required; if empty, partial renders nothing
+  .Params.missionSlug  — used to look up the mission page and emit links
+  .Params.slug         — current tutorial slug (for `selected` highlight)
+*/}}
+{{ $missionId   := .Params.missionId }}
+{{ $missionSlug := .Params.missionSlug }}
+{{ $current     := .Params.slug }}
+
+{{ if and $missionId $missionSlug }}
+  {{ with site.GetPage (printf "/tutorials/mission-%s" $missionSlug) }}
+    {{ $missionTitle := .Params.missionTitle | default .Title }}
+    <aside class="mission-side-nav-wrap">
+      <div class="msn-header">
+        <a href="/tutorials/mission-{{ $missionSlug }}/">{{ $missionTitle }}</a>
+      </div>
+      <ui5-side-navigation
+        data-mission-nav
+        data-mission-id="{{ $missionId }}"
+        data-mission-slug="{{ $missionSlug }}"
+        data-current-slug="{{ $current }}">
+        {{ range .Params.groups }}
+          {{ $groupSlug  := .slug }}
+          {{ $groupTitle := .title }}
+          {{ if .tutorials }}
+            <ui5-side-navigation-item
+              text="{{ $groupTitle }}"
+              data-group-slug="{{ $groupSlug }}">
+              {{ range .tutorials }}
+                <ui5-side-navigation-sub-item
+                  text="{{ .title }}"
+                  href="/tutorials/{{ .slug }}/"
+                  data-tutorial-slug="{{ .slug }}"
+                  data-progress="0"
+                  {{ if eq .slug $current }}selected{{ end }}>
+                </ui5-side-navigation-sub-item>
+              {{ end }}
+            </ui5-side-navigation-item>
+          {{ end }}
+        {{ end }}
+      </ui5-side-navigation>
+    </aside>
+  {{ end }}
+{{ end }}

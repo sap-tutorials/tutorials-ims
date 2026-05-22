@@ -33,6 +33,9 @@ import "@ui5/webcomponents-fiori/dist/ShellBar.js";
 import "@ui5/webcomponents-fiori/dist/ShellBarItem.js";
 import "@ui5/webcomponents-fiori/dist/Wizard.js";
 import "@ui5/webcomponents-fiori/dist/IllustratedMessage.js";
+import "@ui5/webcomponents-fiori/dist/SideNavigation.js";
+import "@ui5/webcomponents-fiori/dist/SideNavigationItem.js";
+import "@ui5/webcomponents-fiori/dist/SideNavigationSubItem.js";
 
 // U7 illustrations — each is a separate side-effect import (default is BeforeSearch).
 import "@ui5/webcomponents-fiori/dist/illustrations/PageNotFound.js";
@@ -87,6 +90,10 @@ import "./lightbox";
 // U14: full-page navigation progress bar. Self-bootstraps; safe no-op when
 // the #nav-progress element is missing (i.e. partial not rendered).
 import "./nav-progress";
+
+// U16: mission side-nav hydration + group expand persistence. Gated on [data-mission-nav].
+import "./mission-side-nav";
+import "../css/mission-side-nav.css";
 
 const root = document.documentElement;
 

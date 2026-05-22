@@ -1,0 +1,60 @@
+/* mission-side-nav.css — U16 */
+
+.mission-side-nav-wrap {
+  display: flex;
+  flex-direction: column;
+  background: var(--sapBackgroundColor, #fff);
+  border: 1px solid var(--sapGroup_ContentBorderColor, #e5e7eb);
+  border-radius: 4px;
+  max-height: calc(100vh - 200px);
+  overflow: hidden;
+}
+
+.msn-header {
+  padding: 0.5rem 0.75rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  background: var(--sapList_HeaderBackground, #f5f6f7);
+  border-bottom: 1px solid var(--sapGroup_ContentBorderColor, #e5e7eb);
+}
+
+.msn-header a {
+  color: var(--sapLinkColor, #0a6ed1);
+  text-decoration: none;
+}
+
+.msn-header a:hover { text-decoration: underline; }
+
+.mission-side-nav-wrap ui5-side-navigation {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* Per Task 0: sub-items have no slot for child content, so the progress bar
+   is rendered as a ::after pseudo on the host element. Width is driven by
+   the inline custom property --msn-progress, set by mission-side-nav.ts. */
+.mission-side-nav-wrap ui5-side-navigation-sub-item {
+  position: relative;
+}
+
+.mission-side-nav-wrap ui5-side-navigation-sub-item::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: var(--msn-progress, 0%);
+  background: var(--sapButton_Emphasized_Background, #0a6ed1);
+  transition: width 200ms ease-out;
+  pointer-events: none;
+}
+
+@media (max-width: 960px) {
+  .mission-side-nav-wrap { max-height: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mission-side-nav-wrap ui5-side-navigation-sub-item::after {
+    transition: none;
+  }
+}

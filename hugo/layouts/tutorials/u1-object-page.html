@@ -233,7 +233,7 @@
       </div>
 
       <aside class="tutorial-right-col">
-        {{ partial "mini-navigator.html" . }}
+        {{ partial "mission-side-nav.html" . }}
         {{ partial "tutorial-sidebar.html" . }}
       </aside>
     </main>
@@ -247,7 +247,6 @@
 {{ $js := resources.Get "js/tutorial.ts" | js.Build (dict "minify" true) }}
 <script src="{{ $js.RelPermalink }}" defer></script>
 <script type="module" src="/js/nav-dropdown.js"></script>
-<script type="module" src="/js/mini-navigator.js"></script>
 <script type="module" src="/js/tutorial-rating.js" defer></script>
 
 <script type="module">
