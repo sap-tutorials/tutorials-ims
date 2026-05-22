@@ -1,12 +1,16 @@
 {{ define "main" }}
 <section class="not-found-hero" data-error-page="404" aria-labelledby="not-found-title">
   <div class="not-found-inner">
-    <p class="not-found-eyebrow">Page not found</p>
-    <h1 id="not-found-title" class="not-found-title">We couldn't find that page</h1>
-    <p class="not-found-lede">
-      The page you're looking for has been retired, renamed, or never existed at this URL.
-      Try a search, or pick from the popular tutorials below.
-    </p>
+    {{/* U7: ui5-illustrated-message replaces the eyebrow + bare title with the
+         on-brand Fiori "PageNotFound" art. Title/subtitle are slotted so we keep
+         the SAP Developers voice instead of the default illustration copy. */}}
+    <ui5-illustrated-message name="PageNotFound" design="Spot" class="not-found-illus">
+      <h1 slot="title" id="not-found-title" class="not-found-title">We couldn't find that page</h1>
+      <p slot="subtitle" class="not-found-lede">
+        The page you're looking for has been retired, renamed, or never existed at this URL.
+        Try a search, or pick from the popular tutorials below.
+      </p>
+    </ui5-illustrated-message>
 
     <form class="not-found-search" action="/" method="get" role="search">
       <label for="not-found-q" class="visually-hidden">Search tutorials</label>
@@ -60,6 +64,22 @@
     padding: 3rem 2rem;
     border-radius: 0.75rem;
     box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.08);
+  }
+  .not-found-illus {
+    /* Center the illustration in the rounded card; defaults stretch full width. */
+    display: block;
+    margin: 0 auto 1.25rem;
+    max-width: 100%;
+  }
+  .not-found-illus h1 {
+    font-size: 1.625rem;
+    margin: 0 0 0.5rem;
+    color: var(--sapTextColor, #32363a);
+  }
+  .not-found-illus p {
+    font-size: 1rem;
+    color: var(--sapContent_LabelColor, var(--sapTextColor, #32363a));
+    margin: 0;
   }
   .not-found-eyebrow {
     text-transform: uppercase;

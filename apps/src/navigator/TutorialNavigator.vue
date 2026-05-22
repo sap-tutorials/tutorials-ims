@@ -726,8 +726,11 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
 
       <!-- Empty State -->
       <div v-if="displayedItems.length === 0 && !isSearching && (tutorials.length > 0 || searchMode)" class="navigator-empty">
-        <p>No results match your filters.</p>
-        <button class="fd-button fd-button--transparent" @click="clearFilters">Clear all filters</button>
+        <ui5-illustrated-message name="NoFilterResults" design="Spot">
+          <span slot="title">No results match your filters</span>
+          <span slot="subtitle">Try removing a filter or broadening your search.</span>
+          <ui5-button design="Emphasized" @click="clearFilters">Clear all filters</ui5-button>
+        </ui5-illustrated-message>
       </div>
     </div>
   </div>
@@ -1153,13 +1156,11 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
 /* ─── Empty State ─── */
 .navigator-empty {
   text-align: center;
-  padding: 3rem 2rem;
+  padding: 1.5rem 2rem 3rem;
 }
 
-.navigator-empty p {
-  font-size: 1rem;
-  color: var(--sapContent_LabelColor, #556b82);
-  margin-bottom: 1rem;
+.navigator-empty ui5-button {
+  margin-top: 1rem;
 }
 
 /* ─── Pagination ─── */

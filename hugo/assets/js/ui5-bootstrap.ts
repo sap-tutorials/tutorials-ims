@@ -21,6 +21,12 @@ import "@ui5/webcomponents/dist/RatingIndicator.js";
 import "@ui5/webcomponents-fiori/dist/ShellBar.js";
 import "@ui5/webcomponents-fiori/dist/ShellBarItem.js";
 import "@ui5/webcomponents-fiori/dist/Wizard.js";
+import "@ui5/webcomponents-fiori/dist/IllustratedMessage.js";
+
+// U7 illustrations — each is a separate side-effect import (default is BeforeSearch).
+import "@ui5/webcomponents-fiori/dist/illustrations/PageNotFound.js";
+import "@ui5/webcomponents-fiori/dist/illustrations/NoData.js";
+import "@ui5/webcomponents-fiori/dist/illustrations/NoFilterResults.js";
 
 import "@ui5/webcomponents-icons/dist/menu2.js";
 import "@ui5/webcomponents-icons/dist/share-2.js";

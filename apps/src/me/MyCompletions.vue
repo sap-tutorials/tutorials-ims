@@ -140,9 +140,12 @@ onMounted(async () => {
 
     <div v-else-if="errorMsg" class="me-state me-error">{{ errorMsg }}</div>
 
-    <div v-else-if="rows.length === 0" class="me-state">
-      <p>You haven't completed any tutorials yet.</p>
-      <p><a href="/">Browse tutorials →</a></p>
+    <div v-else-if="rows.length === 0" class="me-state me-state--empty">
+      <ui5-illustrated-message name="NoData" design="Spot">
+        <h2 slot="title">No completions yet</h2>
+        <p slot="subtitle">Complete a tutorial step and it'll show up here.</p>
+        <ui5-button design="Emphasized" onclick="window.location.href='/'">Browse tutorials</ui5-button>
+      </ui5-illustrated-message>
     </div>
 
     <template v-else>
@@ -216,6 +219,15 @@ onMounted(async () => {
   text-align: center;
   background: var(--sapList_Background, #f7f7f7);
   border-radius: 8px;
+}
+.me-state--empty {
+  /* Illustration provides its own visual weight; drop the tile background so the
+     art reads as content, not a card-in-a-card. */
+  background: transparent;
+  padding: 1rem;
+}
+.me-state--empty ui5-button {
+  margin-top: 1rem;
 }
 .me-login-prompt h2 {
   margin: 0 0 .5rem;
