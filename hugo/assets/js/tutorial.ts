@@ -130,7 +130,12 @@ function collapseAllSteps() {
 }
 
 // --- Sidebar TOC active highlighting ---
+// U11: when reading-progress.ts initializes scrollspy on a page, it sets
+// documentElement.dataset.scrollspy='active'. We bail here so the two don't
+// fight over .step-toc-item.active. The expand-based fallback below is kept
+// for non-tutorial pages and as a pre-scroll initial paint on cold loads.
 function updateActiveTocItem() {
+  if (document.documentElement.dataset.scrollspy === 'active') return
   document.querySelectorAll('.step-toc-item').forEach(item => item.classList.remove('active'))
   const expandedStep = document.querySelector('.tutorial-step .step-body:not([hidden])')
   if (!expandedStep) return

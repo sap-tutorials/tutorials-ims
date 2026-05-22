@@ -233,3 +233,36 @@ ui5-message-strip.tutorial-completion-cta a {
   font-weight: 600;
   text-decoration: underline;
 }
+
+/* U11: top-of-viewport reading-progress bar. Tracks scroll through
+   .tutorial-steps. Sits above the sticky op-header (z:30) but below modals. */
+.reading-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: transparent;
+  z-index: 100;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+.reading-progress[data-active] { opacity: 1; }
+.reading-progress[hidden] { display: none; }
+.reading-progress::before {
+  content: "";
+  display: block;
+  height: 100%;
+  width: var(--scroll-progress, 0%);
+  background: linear-gradient(90deg,
+    var(--sapBrandColor, #0070f2) 0%,
+    var(--sapList_HighlightColor, #1b90ff) 100%);
+  /* Short transition smooths small scroll deltas without lagging behind
+     fast scrolls (rAF-throttled callers cap update rate to ~60fps). */
+  transition: width 80ms linear;
+}
+@media (prefers-reduced-motion: reduce) {
+  .reading-progress,
+  .reading-progress::before { transition: none; }
+}

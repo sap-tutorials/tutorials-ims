@@ -57,6 +57,10 @@ import "./codetabs";
 // U9: inline glossary tooltips.
 import "./glossary";
 
+// U11: reading-progress bar + step scrollspy. Gated on DOM presence —
+// safely no-ops on pages without .tutorial-steps / .tutorial-step.
+import "./reading-progress";
+
 const root = document.documentElement;
 
 function currentTheme(): "sap_horizon" | "sap_horizon_dark" {
