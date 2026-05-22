@@ -1,0 +1,50 @@
+# U9: inline glossary tooltips. Keys are matched as whole words (\b...\b)
+# in tutorial body text. Only the first occurrence per page is wrapped.
+# Keep `term` as the rendered label; `definition` is one-line max; `link` points
+# to a longer primer (relative for in-site, absolute for external SAP docs).
+
+terms:
+  BTP:
+    term: SAP Business Technology Platform
+    definition: SAP's unified cloud platform for building, extending, and integrating applications.
+    link: https://www.sap.com/products/technology-platform.html
+  CAP:
+    term: SAP Cloud Application Programming Model
+    definition: Framework of languages, libraries, and tools for building enterprise services with CDS.
+    link: https://cap.cloud.sap
+  CDS:
+    term: Core Data Services
+    definition: SAP's modeling language for data, services, and UI annotations — the heart of CAP.
+    link: https://cap.cloud.sap/docs/cds/
+  RAP:
+    term: ABAP RESTful Application Programming Model
+    definition: ABAP-side programming model for building Fiori apps and OData services on S/4HANA and BTP ABAP.
+    link: https://help.sap.com/docs/abap-cloud/abap-rap/abap-restful-application-programming-model
+  MTA:
+    term: Multitarget Application
+    definition: Deployment archive format that bundles BTP modules, services, and resources into one unit.
+    link: https://help.sap.com/docs/btp/sap-business-technology-platform/multitarget-applications-in-cloud-foundry-environment
+  XSUAA:
+    term: Extended Services for User Account and Authentication
+    definition: BTP's identity and authorization service — issues JWTs, manages scopes and role collections.
+    link: https://help.sap.com/docs/btp/sap-business-technology-platform/authorization-and-trust-management-service-in-cloud-foundry-environment
+  HDI:
+    term: HANA Deployment Infrastructure
+    definition: Schema-isolated container model for deploying database artifacts to SAP HANA Cloud.
+    link: https://help.sap.com/docs/hana-cloud-database/sap-hana-cloud-sap-hana-database-developer-guide-for-cloud-foundry-multitarget-applications-sap-business-application-studio/sap-hana-deployment-infrastructure-hdi
+  IAS:
+    term: SAP Cloud Identity Services — Identity Authentication
+    definition: SAP's standalone IdP for SAML/OIDC authentication; replaces or complements the XSUAA tenant IdP.
+    link: https://help.sap.com/docs/identity-authentication
+  IDP:
+    term: Identity Provider
+    definition: A trusted service that authenticates users and issues identity assertions (SAML/OIDC).
+    link: https://en.wikipedia.org/wiki/Identity_provider
+  HANA:
+    term: SAP HANA
+    definition: SAP's columnar in-memory database; "HANA Cloud" is the managed BTP offering.
+    link: https://www.sap.com/products/technology-platform/hana.html
+  OData:
+    term: Open Data Protocol
+    definition: REST-based protocol for queryable APIs, used as CAP's default service protocol.
+    link: https://www.odata.org/

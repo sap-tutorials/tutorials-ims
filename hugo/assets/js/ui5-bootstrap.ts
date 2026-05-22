@@ -53,6 +53,9 @@ import "@ui5/webcomponents-icons/dist/unfavorite.js";
 // U8: cross-block selection sync for {{< codetabs >}}.
 import "./codetabs";
 
+// U9: inline glossary tooltips.
+import "./glossary";
+
 const root = document.documentElement;
 
 function currentTheme(): "sap_horizon" | "sap_horizon_dark" {

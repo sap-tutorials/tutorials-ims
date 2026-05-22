@@ -178,3 +178,47 @@ ui5-tabcontainer.codetabs ui5-tab pre code {
   line-height: 1.55;
   overflow-x: auto;
 }
+
+/* U9: glossary terms — subtle dotted underline so readers know the term is
+   interactive without it shouting like a link. Matches Horizon's "informative"
+   tone (cool teal under-stroke), inherits text color so it never fights body copy. */
+.glossary-term {
+  border-bottom: 1px dotted var(--sapInformativeElementColor, #0a6ed1);
+  cursor: help;
+  /* Slightly larger hit target without changing line height. */
+  padding-bottom: 1px;
+}
+.glossary-term:focus {
+  outline: 2px solid var(--sapContent_FocusColor, #0a6ed1);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+ui5-popover.glossary-popover::part(content) {
+  padding: 0.5rem 0.75rem;
+}
+.glossary-popover__body {
+  max-width: 22rem;
+  font-family: var(--sapFontFamily);
+  color: var(--sapTextColor);
+}
+.glossary-popover__term {
+  font-weight: 600;
+  font-size: 0.9375rem;
+  margin-bottom: 0.25rem;
+  color: var(--sapTitleColor, var(--sapTextColor));
+}
+.glossary-popover__definition {
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--sapContent_LabelColor, var(--sapTextColor));
+}
+.glossary-popover__link {
+  font-size: 0.8125rem;
+  color: var(--sapLinkColor, #0a6ed1);
+  text-decoration: none;
+}
+.glossary-popover__link:hover {
+  text-decoration: underline;
+}

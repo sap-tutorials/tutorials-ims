@@ -17,6 +17,17 @@
   {{ partial "joule-panel.html" . }}
   {{ partial "joule-starters.html" . }}
   <div id="cmd-palette"></div>
+
+  {{/* U9: glossary popover + data. Shared instance, content swapped per opener. */}}
+  <ui5-popover id="glossary-popover" placement="Bottom" hide-arrow class="glossary-popover">
+    <div class="glossary-popover__body">
+      <div class="glossary-popover__term"></div>
+      <p class="glossary-popover__definition"></p>
+      <a class="glossary-popover__link" target="_blank" rel="noopener">Learn more &rarr;</a>
+    </div>
+  </ui5-popover>
+  <script>window.__glossary = {{ site.Data.glossary | jsonify | safeJS }};</script>
+
   <dialog class="image-lightbox" id="image-lightbox" aria-label="Image viewer">
     <button type="button" class="image-lightbox-close" aria-label="Close">&times;</button>
     <img alt="">
