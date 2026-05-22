@@ -7,7 +7,6 @@ import { processAccountMerges } from './account-merge-job.js';
 import { runReconciliationJob } from './embedding-reconciliation.js';
 import { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, isNotificationsEnabled } from '../lib/contributor-notifications.js';
 import { sendNotificationEmail, retryFailedEmails } from '../lib/mail-client.js';
-import { syncTutorialMetadata } from '../lib/tutorial-sync.js';
 import { logPipelineStart, logPipelineEnd } from '../lib/pipeline-log.js';
 import cds from '@sap/cds';
 
@@ -85,13 +84,15 @@ export function registerJobs() {
   // Weekly Sunday 02:00 — tutorial metadata review
   cron.schedule('0 2 * * 0', () =>
     runWithLock('tutorial-metadata-review', 3600000, async () => {
-      const fs = await import('fs');
-      const path = await import('path');
-      const cachePath = path.join(process.cwd(), '.tutorial-cache', 'metadata.json');
+      // Tutorial review sync — self-healing backfill of missing TutorialMeta.
+      // Publish handles the happy path; this catches drift.
       try {
-        const raw = fs.readFileSync(cachePath, 'utf-8');
-        await syncTutorialMetadata(JSON.parse(raw));
-      } catch { LOG.warn('No metadata cache found for tutorial review sync'); }
+        const { backfillMissingTutorialMeta } = await import('../lib/tutorial-meta-init.js');
+        const { created } = await backfillMissingTutorialMeta();
+        if (created > 0) LOG.info(`tutorial-meta scheduler: backfilled ${created} rows`);
+      } catch (e) {
+        LOG.error('tutorial-meta scheduler failed:', e.message);
+      }
     })
   );
 
