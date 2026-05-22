@@ -2380,6 +2380,25 @@ html.dark .code-block-toggle {
 html.dark .chroma .gd { background-color: rgba(248, 81, 73, 0.15); }
 html.dark .chroma .gi { background-color: rgba(46, 160, 67, 0.15); }
 
+/* Chroma readability overrides (dark mode).
+ * Hugo's `gen chromastyles --style=github-dark` emits empty rules for
+ * unstyled tokens (.p, .n, .nx, .x, .na, .nb, .bp), expecting them to
+ * inherit the foreground color from `pre.chroma`. But our `pre code`
+ * rule (color: var(--sapTextColor)) intercepts that cascade, so we lock
+ * in explicit colors here. We also brighten the function-name purple,
+ * which reads dim against the very dark #0d1117 background. */
+html.dark .chroma code { color: #e6edf3; }
+html.dark .chroma .p,
+html.dark .chroma .n,
+html.dark .chroma .nx,
+html.dark .chroma .x,
+html.dark .chroma .na,
+html.dark .chroma .nb,
+html.dark .chroma .bp { color: #e6edf3; }
+html.dark .chroma .nf,
+html.dark .chroma .fm,
+html.dark .chroma .nd { color: #e2c5ff; font-weight: bold; }
+
 /* ── Lightbox dialog ── */
 .image-lightbox {
   border: none;
