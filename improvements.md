@@ -426,8 +426,8 @@ These lean into reusable Fiori constructs (UI5 Web Components + Fiori Elements l
 
 ### UI follow-ups
 
-- **Skeleton loaders** (Horizon-themed) while CAP-served HTML is fetching
-- **Image lightbox / zoom** for tutorial screenshots — themable with Horizon chrome
+- **Skeleton loaders** (Horizon-themed) while CAP-served HTML is fetching — ✅ shipped (U14, merged 2026-05-22)
+- **Image lightbox / zoom** for tutorial screenshots — themable with Horizon chrome — ✅ shipped (U15, PR #23, merged 2026-05-22)
 - **`ui5-side-navigation` drawer** showing all tutorials in the current mission with completion icons
 - **Per-step `ui5-rating-indicator`** ("How confident are you?") feeding spaced repetition + author analytics
 - **`ui5-timeline`** on the user profile showing learning history (completions, accomplishments, prizes)
