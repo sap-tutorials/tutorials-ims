@@ -443,38 +443,6 @@ function handleQuizSubmit(form: HTMLFormElement, stepNum: string, questions: Val
   }
 }
 
-// --- Mini-navigator progress ---
-async function initMiniNavProgress() {
-  const nav = document.getElementById('mini-navigator-static')
-  if (!nav) return
-  const items = nav.querySelectorAll('.mini-nav-item')
-  if (!items.length) return
-
-  const slug = document.querySelector('#progress-bar')?.getAttribute('data-slug')
-  if (!slug) return
-
-  const groupSlug = document.documentElement.dataset.groupSlug
-  if (!groupSlug) return
-
-  const data = await apiGet<{ completedSlugs: string[] }>(`/groups/${groupSlug}/progress`)
-  if (!data?.completedSlugs) return
-
-  let completed = 0
-  items.forEach(item => {
-    const el = item as HTMLElement
-    if (data.completedSlugs.includes(el.dataset.slug || '')) {
-      el.classList.add('is-completed')
-      completed++
-    }
-  })
-
-  const total = items.length
-  const fill = document.getElementById('mini-nav-progress-fill')
-  const label = document.getElementById('mini-nav-progress-label')
-  if (fill) fill.style.width = `${Math.round((completed / total) * 100)}%`
-  if (label) label.textContent = `${completed}/${total} TASKS COMPLETED`
-}
-
 // --- Auth-aware button state ---
 function initAuthAwareButtons() {
   const observer = new MutationObserver(() => {
@@ -528,7 +496,6 @@ document.addEventListener('DOMContentLoaded', () => {
   ])
   initValidation()
   updateActiveTocItem()
-  initMiniNavProgress()
   initAuthAwareButtons()
   initStepHashNavigation()
   initMermaid()
