@@ -342,7 +342,14 @@ body {
   font-size: var(--sapFontSize, 0.875rem);
   color: var(--sapTextColor, #32363a);
   margin: 0;
+  /* Sticky footer: short pages (e.g. home) shouldn't leave a strip of body
+     background showing below the footer. Flex column + main:flex:1 pushes
+     the footer to the bottom of the viewport when content is short. */
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
+body > main { flex: 1 0 auto; }
 
 /* Breadcrumb dropdown toggle */
 .breadcrumb-dropdown-toggle {

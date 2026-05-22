@@ -108,17 +108,12 @@
   .op-discussion__cta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1rem; }
   .op-discussion__hint { color: var(--sapContent_LabelColor); font-size: 0.9375rem; margin: 0 0 0.5rem; }
 
-  /* U2 wizard — nav header only. Empty content slots are suppressed so the wizard
-     reads as a step indicator; the accordion below holds the real content. */
+  /* U2 wizard — nav header only. The step-content parts are suppressed so the
+     wizard reads as a step indicator; the accordion below holds the real content.
+     Without this the wizard's internal layout reserves space for the empty content
+     slots and shows an inner scrollbar. */
   .op-wizard-wrap { margin: 0 0 1rem; }
-  .op-wizard-wrap ui5-wizard {
-    /* Cap the wizard's internal scroll viewport — without this the empty content
-       slots expand to fill available space and push the page footer down. */
-    height: auto;
-    max-height: 88px;
-  }
-  /* Hide the empty step content area entirely — we render content via the accordion. */
-  .op-wizard-wrap ui5-wizard::part(content) { display: none; }
+  .op-wizard-wrap ui5-wizard::part(step-content) { display: none; }
 
   .op-twocol { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 1.5rem; align-items: start; }
   /* Right column tracks the user as they scroll. Top offset clears the sticky op-header.

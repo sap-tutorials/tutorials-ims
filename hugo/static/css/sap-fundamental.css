@@ -54,6 +54,10 @@
   --sapList_HeaderBackground: #f4f4f7;
   --sapList_BorderColor: #e5e5ea;
   --sapField_BorderColor: #ccd;
+  --sapPageFooter_Background: #fff;
+  --sapPageFooter_TextColor: #32363a;
+  --sapPageFooter_BorderColor: #d9d9d9;
+  --sapGroup_TitleBorderWidth: 1px;
 }/* SAP Horizon Dark theme variables */html.dark {
   --sapBackgroundColor: #12171c;
   --sapBaseColor: #1c2228;
@@ -106,6 +110,9 @@
   --sapList_HeaderBackground: #29394b;
   --sapList_BorderColor: #3c4854;
   --sapField_BorderColor: #3c4854;
+  --sapPageFooter_Background: #1c2228;
+  --sapPageFooter_TextColor: #eaecee;
+  --sapPageFooter_BorderColor: #3c4854;
 }@media (prefers-reduced-motion: no-preference) {
   html { scroll-behavior: smooth; }
 }/*!
@@ -1739,7 +1746,13 @@
   font-size: var(--sapFontSize, 0.875rem);
   color: var(--sapTextColor, #32363a);
   margin: 0;
-}/* Breadcrumb dropdown toggle */.breadcrumb-dropdown-toggle {
+  /* Sticky footer: short pages (e.g. home) shouldn't leave a strip of body
+     background showing below the footer. Flex column + main:flex:1 pushes
+     the footer to the bottom of the viewport when content is short. */
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}body > main { flex: 1 0 auto; }/* Breadcrumb dropdown toggle */.breadcrumb-dropdown-toggle {
   background: none;
   border: none;
   color: var(--sapTextColor, #32363a);
