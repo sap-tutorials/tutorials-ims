@@ -149,14 +149,19 @@ If a second goto fires while animating, the in-flight transition is canceled via
 3. If `pushedHash`, call `history.back()` (which fires popstate but our handler ignores when the dialog is already closed).
 4. Else, the page was opened directly with `#img-N`: `history.replaceState(null, "", location.pathname + location.search)` to clean the URL.
 
-**Close event wiring**: bind `dialog.addEventListener("close", close)` on init. ui5-dialog dispatches a native `close` event on Esc-driven dismissal and on programmatic `dialog.close()`. The footer close button calls `dialog.close()` (which then triggers the same `close` event handler). This guarantees a single teardown path — state reset + hash cleanup — regardless of whether the user pressed Esc, clicked the close button, or hit the browser back button (popstate handler also calls `dialog.close()`).
+**Close event wiring (registered once on init)**:
+- `closeBtn.addEventListener("click", () => dialog.close())` — footer close button is the only mouse-close affordance; it calls `dialog.close()` rather than `close()` directly so the close-event path is the single teardown trigger.
+- `dialog.addEventListener("close", close)` — ui5-dialog dispatches a native `close` event on Esc-driven dismissal and on programmatic `dialog.close()`. This handler invokes `close()` (the teardown function above).
+- `window.addEventListener("popstate", ...)` — when the dialog is open and the popped state lacks `lightbox: true`, calls `dialog.close()` (NOT `close()` directly), so teardown still flows through the single `close`-event handler.
+
+This guarantees a single teardown path — state reset + hash cleanup — regardless of whether the user pressed Esc, clicked the close button, or hit the browser back button.
 
 Re-entrancy: `close()` is idempotent. If `close` event fires after `history.back()` already ran (popstate path), the second invocation no-ops because `pushedHash` was reset and state is already at defaults.
 
 #### Hash deep-link
 
 - **Format**: `#img-N` where N is 1-indexed image position. Coexists with `#step-N` from [tutorial.ts:88](hugo/assets/js/tutorial.ts#L88) — different prefix, no collision.
-- **On `DOMContentLoaded`**: if `location.hash.match(/^#img-(\d+)$/)`, wait for `customElements.whenDefined("ui5-dialog")`, find the Nth zoomable image, scroll-into-view its parent step, then call `open(imgs[N-1])`. Set `pushedHash: false` so close uses replaceState.
+- **On init (lightbox.ts top-level, called from `ui5-bootstrap.ts`)**: check `document.readyState`. If `"loading"`, attach a one-shot `DOMContentLoaded` listener that runs the hash-check; otherwise (DOM already parsed — common when the JS bundle is cached or loaded with `defer`) run the hash-check immediately. Hash-check logic: if `location.hash.match(/^#img-(\d+)$/)`, wait for `customElements.whenDefined("ui5-dialog")`, find the Nth zoomable image, scroll-into-view its parent step, then call `open(imgs[N-1])`. Set `pushedHash: false` so close uses `replaceState`. If N is out of range or no zoomable images exist, ignore the hash and leave the dialog closed.
 - **Popstate**: if dialog open and the popped state lacks `lightbox: true`, close the dialog without re-pushing.
 
 #### Download
@@ -200,7 +205,7 @@ ui5-dialog auto-themes via the existing `data-theme` MutationObserver in [ui5-bo
 | User has dialog open and uses browser back button | Popstate handler closes the dialog |
 | User has dialog open and clicks a backdrop (outside dialog content) | ui5-dialog default is non-modal-dismissable; we wire the close button as the only mouse-close affordance. Esc still closes. |
 | Wheel scroll on body when dialog closed | Unaffected; listener is scoped to `.lightbox-viewport` |
-| `data-zoomable` images added to DOM after page load (Vue islands) | `imgs` recomputed on every `open()` so they participate; click delegation in `tutorial.ts` already uses event-delegation on `document`. |
+| `data-zoomable` images added to DOM after page load (Vue islands) | `imgs` recomputed on every `open()` so they participate; click delegation in `lightbox.ts` uses `document.addEventListener('click', ...)` so the listener catches images injected after init. |
 
 ## Verification plan
 
