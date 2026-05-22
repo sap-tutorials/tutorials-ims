@@ -1,0 +1,12 @@
+{{- /*
+  U8: paired-shortcode wrapper for ui5-tabcontainer-driven code blocks.
+  Inner children are individual `codetab` shortcodes. Selection is synced
+  across all codetabs on the page (and persisted in localStorage) by
+  hugo/assets/js/codetabs.ts.
+*/ -}}
+<ui5-tabcontainer
+  class="codetabs"
+  content-background-design="Transparent"
+  header-background-design="Transparent"
+  data-codetabs
+>{{ .Inner }}</ui5-tabcontainer>

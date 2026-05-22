@@ -153,3 +153,28 @@ ui5-shellbar img[slot="logo"] {
 body:has(.tutorial-stepnav) {
   padding-bottom: 4rem;
 }
+
+/* U8: codetabs — render the syntax-highlighted block flush against the tab
+   header so the code reads as the primary content, not a card-in-a-card. */
+ui5-tabcontainer.codetabs {
+  display: block;
+  margin: 1rem 0;
+  border: 1px solid var(--sapGroup_ContentBorderColor, #e5e5ea);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+ui5-tabcontainer.codetabs ui5-tab .highlight,
+ui5-tabcontainer.codetabs ui5-tab pre {
+  margin: 0;
+  border-radius: 0;
+  border: none;
+  background: transparent;
+}
+ui5-tabcontainer.codetabs ui5-tab pre code {
+  display: block;
+  padding: 0.75rem 1rem;
+  font-family: var(--sapFontMonospaceFamily, "Source Code Pro", monospace);
+  font-size: 0.85rem;
+  line-height: 1.55;
+  overflow-x: auto;
+}

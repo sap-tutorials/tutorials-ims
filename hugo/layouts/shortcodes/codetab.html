@@ -1,0 +1,16 @@
+{{- /*
+  U8: a single language option inside `codetabs`.
+
+  Required: name="Node.js"   — display label + sync key
+  Optional: lang="js"        — Chroma highlighter language; default "text"
+
+  The shortcode body is the raw code (no fence). It is rendered through
+  Hugo's `highlight` function so we keep syntax highlighting consistent
+  with regular fenced blocks elsewhere on the page.
+*/ -}}
+{{- $name := .Get "name" -}}
+{{- $lang := default "text" (.Get "lang") -}}
+{{- $code := .Inner | strings.TrimSpace -}}
+<ui5-tab text="{{ $name }}" data-codetabs-name="{{ $name }}" data-codetabs-lang="{{ $lang }}">
+{{ highlight $code $lang "" }}
+</ui5-tab>
