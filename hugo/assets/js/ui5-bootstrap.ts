@@ -19,6 +19,7 @@ import "@ui5/webcomponents/dist/TabContainer.js";
 import "@ui5/webcomponents/dist/Tab.js";
 import "@ui5/webcomponents-fiori/dist/ShellBar.js";
 import "@ui5/webcomponents-fiori/dist/ShellBarItem.js";
+import "@ui5/webcomponents-fiori/dist/Wizard.js";
 
 import "@ui5/webcomponents-icons/dist/menu2.js";
 import "@ui5/webcomponents-icons/dist/share-2.js";

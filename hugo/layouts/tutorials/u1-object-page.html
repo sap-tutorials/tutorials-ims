@@ -108,6 +108,18 @@
   .op-discussion__cta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1rem; }
   .op-discussion__hint { color: var(--sapContent_LabelColor); font-size: 0.9375rem; margin: 0 0 0.5rem; }
 
+  /* U2 wizard — nav header only. Empty content slots are suppressed so the wizard
+     reads as a step indicator; the accordion below holds the real content. */
+  .op-wizard-wrap { margin: 0 0 1rem; }
+  .op-wizard-wrap ui5-wizard {
+    /* Cap the wizard's internal scroll viewport — without this the empty content
+       slots expand to fill available space and push the page footer down. */
+    height: auto;
+    max-height: 88px;
+  }
+  /* Hide the empty step content area entirely — we render content via the accordion. */
+  .op-wizard-wrap ui5-wizard::part(content) { display: none; }
+
   .op-twocol { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 1.5rem; align-items: start; }
   /* Right column tracks the user as they scroll. Top offset clears the sticky op-header.
      No internal overflow — auto-scroll-active inside an overflow box hides the heading. */
@@ -177,6 +189,23 @@
 
         <section id="op-steps" class="op-section" data-op-section>
           <h2 class="op-section__heading">Steps</h2>
+          {{/* U2: Fiori-native wizard step indicator. Renders only for ≥3-step tutorials
+               (per ui5-wizard guidelines). The wizard's content slots stay empty — the
+               accordion below holds the actual content. step-change scrolls to anchor. */}}
+          {{ if and .Params.steps (ge (int .Params.stepCount) 3) }}
+          <div class="op-wizard-wrap">
+            <ui5-wizard id="op-step-wizard">
+              {{ range .Params.steps }}
+              <ui5-wizard-step
+                data-step-target="step-{{ .number }}"
+                title-text="Step {{ .number }}"
+                subtitle-text="{{ .title }}"
+                {{ if eq .number 1 }}selected{{ end }}>
+              </ui5-wizard-step>
+              {{ end }}
+            </ui5-wizard>
+          </div>
+          {{ end }}
           <div id="progress-bar" data-step-count="{{ .Params.stepCount }}" data-slug="{{ .Params.slug }}"></div>
           <div class="step-controls">
             <a href="#" onclick="expandAllSteps(); return false">Open all</a>
@@ -270,5 +299,40 @@
   }
   // Initial paint after tutorial.ts has loaded.
   setTimeout(updateRing, 250);
+
+  // U2 wizard: clicking a step indicator scrolls to the corresponding accordion anchor.
+  // The wizard's empty content slots are visually hidden via ::part(content) — this is
+  // a nav-only use of ui5-wizard.
+  const wizard = document.getElementById('op-step-wizard');
+  if (wizard) {
+    wizard.addEventListener('step-change', (e) => {
+      const step = e.detail?.step;
+      const targetId = step?.dataset?.stepTarget;
+      if (!targetId) return;
+      const anchor = document.getElementById(targetId);
+      if (anchor) anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+
+    // Mirror .tutorial-step.completed → wizard-step icon="complete".
+    // Keeps U2 a pure presentation layer; no edits to tutorial.ts needed.
+    const wizardSteps = new Map();
+    wizard.querySelectorAll('ui5-wizard-step').forEach(ws => {
+      const target = ws.dataset.stepTarget;
+      if (target) wizardSteps.set(target, ws);
+    });
+    function syncCompletion() {
+      wizardSteps.forEach((ws, targetId) => {
+        const stepEl = document.getElementById(targetId);
+        if (stepEl?.classList.contains('completed')) ws.setAttribute('icon', 'complete');
+        else ws.removeAttribute('icon');
+      });
+    }
+    if (stepsRoot) {
+      new MutationObserver(syncCompletion).observe(stepsRoot, {
+        subtree: true, attributes: true, attributeFilter: ['class']
+      });
+    }
+    setTimeout(syncCompletion, 250);
+  }
 </script>
 {{ end }}
