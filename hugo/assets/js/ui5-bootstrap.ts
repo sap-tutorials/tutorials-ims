@@ -3,6 +3,10 @@
 // See improvements.md "U0" for scope.
 import { setTheme } from "@ui5/webcomponents-base/dist/config/Theme.js";
 
+// U14: shimmer rules for hydration placeholders + nav-progress-bar overrides.
+// Selectors are scoped to attributes that only get set on relevant pages.
+import "../css/skeletons.css";
+
 // Register theme assets for both light and dark — without this side-effect import,
 // setTheme("sap_horizon_dark") silently falls back to sap_horizon (only the default is registered).
 import "@ui5/webcomponents/dist/Assets.js";
