@@ -85,18 +85,15 @@ function _buildCQN(v) {
     let expr;
     if (dim.kind === 'column')           expr = { ref: [dim.column] };
     else if (dim.kind === 'assoc')       expr = { ref: dim.path.split('.') };
-    else if (dim.kind === 'date-trunc')  expr = { func: 'to_varchar', args: [{ ref: [dim.column] }, { val: dim.unit === 'month' ? 'YYYY-MM' : 'IYYY-IW' }] };
     else if (dim.kind === 'task-lookup') expr = { ref: [dim.taskType.toLowerCase(), dim.display] };
+    // date-trunc dims are NOT handled here — they go through _runDateTruncAggregation
+    // because HANA strict-SQL rejects to_varchar(col, fmt) wrapped in SELECT/GROUP BY
+    // even when both expressions are textually identical; CDS's CQN compiler emits
+    // the inner column ref at an intermediate stage that HANA flags as ungrouped.
     // Push the EXPRESSION into groupBy, not the column alias. CDS resolves
-    // `{ ref: [...] }` against entity elements; an alias like 'completionWeek'
-    // is not an element of TaskRecords and HANA rejects it. SQLite accepts
-    // alias-grouping silently — which is why unit tests pass and prod doesn't.
-    //
-    // For date-trunc we use to_varchar(col, fmt) instead of series_round:
-    //   - series_round only accepts series-typed columns; completionDate isn't
-    //     one, so HANA throws "invalid argument".
-    //   - to_varchar with a sortable format produces stable string buckets
-    //     ('2026-05' for month, '2026-21' for ISO week) that order naturally.
+    // `{ ref: [...] }` against entity elements; an alias is not an element of
+    // the table and HANA rejects it. SQLite accepts alias-grouping silently —
+    // which is why unit tests pass and prod doesn't.
     cqn.SELECT.columns.push({ ...expr, as: g });
     cqn.SELECT.groupBy.push(expr);
   }
@@ -180,15 +177,129 @@ async function _runTagFanout(v, dbi) {
   return merged;
 }
 
+function _isoWeekKey(d) {
+  // ISO 8601 week: Monday-start, week containing Jan 4 is week 1.
+  // Format 'YYYY-WW' matches HANA's 'IYYY-IW' string format.
+  const u = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const day = u.getUTCDay() || 7;
+  u.setUTCDate(u.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(u.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((u - yearStart) / 86400000 + 1) / 7);
+  return `${u.getUTCFullYear()}-${String(week).padStart(2, '0')}`;
+}
+
+function _bucketDate(value, unit) {
+  if (value == null) return null;
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  if (unit === 'month') {
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  }
+  return _isoWeekKey(d);
+}
+
+// Date-trunc aggregation runs in JS rather than the database. HANA's HEX
+// engine rejects to_varchar(col, fmt) wrapped identically in SELECT and
+// GROUP BY ("$T.COMPLETIONDATE invalid in select list"); SQLite accepts it.
+// Following the _runTagFanout precedent: fetch raw rows + bucket in JS.
+async function _runDateTruncAggregation(v, dbi) {
+  const fact = S.facts[v.fact];
+  const dateColumns = new Set();
+  for (const g of v.groupBy) {
+    const dim = S.dimensions[g];
+    if (dim.kind === 'date-trunc') dateColumns.add(dim.column);
+  }
+
+  const cqn = { SELECT: { from: { ref: [fact.source] }, columns: [], where: [] } };
+  for (const col of dateColumns) cqn.SELECT.columns.push({ ref: [col], as: col });
+  for (const g of v.groupBy) {
+    const dim = S.dimensions[g];
+    if (dim.kind === 'date-trunc') continue;
+    let expr;
+    if (dim.kind === 'column')           expr = { ref: [dim.column] };
+    else if (dim.kind === 'assoc')       expr = { ref: dim.path.split('.') };
+    else if (dim.kind === 'task-lookup') expr = { ref: [dim.taskType.toLowerCase(), dim.display] };
+    cqn.SELECT.columns.push({ ...expr, as: g });
+  }
+  cqn.SELECT.columns.push({ ref: ['user_ID'], as: 'user_ID' });
+
+  const baseFilter = fact.baseFilter || {};
+  for (const [k, val] of Object.entries(baseFilter)) {
+    if (cqn.SELECT.where.length) cqn.SELECT.where.push('and');
+    cqn.SELECT.where.push({ ref: [k] }, '=', { val });
+  }
+  for (const f of v.filters) {
+    const dim = S.dimensions[f.field];
+    if (dim.kind === 'date-trunc' && f.op === 'sinceDays') {
+      if (cqn.SELECT.where.length) cqn.SELECT.where.push('and');
+      cqn.SELECT.where.push(
+        { ref: [dim.column] }, '>=',
+        { func: 'add_days', args: [{ func: 'current_date', args: [] }, { val: -Number(f.value) }] },
+      );
+    } else if (dim.kind === 'date-trunc' && f.op === 'between') {
+      if (cqn.SELECT.where.length) cqn.SELECT.where.push('and');
+      cqn.SELECT.where.push({ ref: [dim.column] }, '>=', { val: f.value[0] }, 'and', { ref: [dim.column] }, '<=', { val: f.value[1] });
+    } else if (f.op === 'equals') {
+      if (cqn.SELECT.where.length) cqn.SELECT.where.push('and');
+      const ref = dim.kind === 'assoc'        ? dim.path.split('.')
+                : dim.kind === 'task-lookup'  ? [dim.taskType.toLowerCase(), dim.display]
+                : [dim.column];
+      cqn.SELECT.where.push({ ref }, '=', { val: f.value });
+    } else if (f.op === 'in') {
+      if (cqn.SELECT.where.length) cqn.SELECT.where.push('and');
+      const ref = dim.kind === 'assoc'        ? dim.path.split('.')
+                : dim.kind === 'task-lookup'  ? [dim.taskType.toLowerCase(), dim.display]
+                : [dim.column];
+      cqn.SELECT.where.push({ ref }, 'in', { list: f.value.map(v => ({ val: v })) });
+    } else if (f.op === 'contains') {
+      if (cqn.SELECT.where.length) cqn.SELECT.where.push('and');
+      const ref = dim.kind === 'assoc'        ? dim.path.split('.')
+                : dim.kind === 'task-lookup'  ? [dim.taskType.toLowerCase(), dim.display]
+                : [dim.column];
+      cqn.SELECT.where.push({ func: 'contains', args: [{ ref }, { val: String(f.value) }] });
+    }
+  }
+  // Cap raw fetch so an unfiltered query can't exhaust memory; 100k rows
+  // is well above any expected per-window completion volume.
+  cqn.SELECT.limit = { rows: { val: 100000 } };
+
+  const rows = await dbi.run(cqn);
+
+  const buckets = new Map();
+  for (const row of rows) {
+    const key = {};
+    for (const g of v.groupBy) {
+      const dim = S.dimensions[g];
+      key[g] = dim.kind === 'date-trunc' ? _bucketDate(row[dim.column], dim.unit) : row[g];
+    }
+    if (Object.values(key).some(x => x == null)) continue;
+    const k = JSON.stringify(key);
+    let cur = buckets.get(k);
+    if (!cur) { cur = { ...key, count: 0, _users: new Set() }; buckets.set(k, cur); }
+    cur.count++;
+    if (row.user_ID != null) cur._users.add(row.user_ID);
+  }
+
+  const out = [...buckets.values()].map(b => {
+    const { _users, ...rest } = b;
+    return { ...rest, distinctUsers: _users.size };
+  });
+  out.sort((a, b) => b.count - a.count);
+  return out.slice(0, v.limit);
+}
+
 export async function runAnalyticsQuery({ plan, db, user, log }) {
   const start = Date.now();
   const v = _validatePlanOnly(plan);
   const dbi = db || cds.db;
   const usesTag = v.groupBy.includes('tag') || v.filters.some(f => f.field === 'tag');
+  const usesDateTrunc = v.groupBy.some(g => S.dimensions[g].kind === 'date-trunc');
 
   let rawRows;
   if (usesTag) {
     rawRows = await _runTagFanout(v, dbi);
+  } else if (usesDateTrunc) {
+    rawRows = await _runDateTruncAggregation(v, dbi);
   } else {
     rawRows = await dbi.run(_buildCQN(v));
   }

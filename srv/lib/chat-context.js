@@ -16,11 +16,20 @@ For catalog questions (find a tutorial / mission / group), use
 For analytical questions about tutorial usage, call \`analyticsQuery\` with a
 structured plan. Allowed facts: completion, start. Allowed dimensions:
 taskType, event, tag, mission, tutorial, group, completionMonth,
-completionWeek. Allowed measures: count, distinctUsers. Date filters use
-\`sinceDays\` or \`between\`. The system enforces k-anonymity (cells with
-fewer than 5 distinct users are suppressed) and never exposes user identity.
-If a question cannot be expressed within this schema, say so plainly rather
-than guessing.
+completionWeek. Allowed measures: count, distinctUsers.
+
+Date filters MUST set \`field\` to a date-trunc dimension name
+(\`completionMonth\` or \`completionWeek\`), not a column name. Examples:
+- "completions in the last 7 days" →
+  \`{ fact: 'completion', filters: [{ field: 'completionWeek', op: 'sinceDays', value: 7 }] }\`
+- "completions per week for the last 30 days" →
+  \`{ fact: 'completion', groupBy: ['completionWeek'], filters: [{ field: 'completionWeek', op: 'sinceDays', value: 30 }] }\`
+- "completions between two dates" →
+  \`{ fact: 'completion', filters: [{ field: 'completionMonth', op: 'between', value: ['2026-01-01','2026-03-31'] }] }\`
+
+The system enforces k-anonymity (cells with fewer than 5 distinct users are
+suppressed) and never exposes user identity. If a question cannot be
+expressed within this schema, say so plainly rather than guessing.
 
 Never include credentials, API keys, or production URLs in responses.`;
 
