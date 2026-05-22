@@ -4,6 +4,7 @@ import {
   fetchMetaFromRest,
   fetchContributorsFromRestContrib,
   discoverAllTutorials,
+  extractContributors,
 } from '../parsers/github.js'
 
 const realFetch = global.fetch
@@ -154,22 +155,22 @@ describe('REST API discovery + fallback', () => {
       const commits = [
         {
           sha: 'sha-newest',
-          commit: { author: { name: 'Alice Author', date: '2026-05-21T10:00:00Z' } },
+          commit: { author: { name: 'Alice Author', date: '2026-05-21T10:00:00Z', email: 'alice@example.com' } },
           author: { login: 'alice', avatar_url: 'https://avatars.test/alice' },
         },
         {
           sha: 'sha-mid',
-          commit: { author: { name: 'Bob B', date: '2026-04-01T09:00:00Z' } },
+          commit: { author: { name: 'Bob B', date: '2026-04-01T09:00:00Z', email: 'bob@example.com' } },
           author: { login: 'bob', avatar_url: 'https://avatars.test/bob' },
         },
         {
           sha: 'sha-mid-dup',
-          commit: { author: { name: 'Alice Author', date: '2026-03-15T08:00:00Z' } },
+          commit: { author: { name: 'Alice Author', date: '2026-03-15T08:00:00Z', email: 'alice@example.com' } },
           author: { login: 'alice', avatar_url: 'https://avatars.test/alice' },
         },
         {
           sha: 'sha-oldest',
-          commit: { author: { name: 'Carol', date: '2025-12-01T07:00:00Z' } },
+          commit: { author: { name: 'Carol', date: '2025-12-01T07:00:00Z', email: '12345+carol@users.noreply.github.com' } },
           author: { login: 'carol', avatar_url: 'https://avatars.test/carol' },
         },
       ]
@@ -188,7 +189,12 @@ describe('REST API discovery + fallback', () => {
       expect(meta!.contributors[0]).toMatchObject({
         login: 'alice',
         name: 'Alice Author',
+        email: 'alice@example.com',
         avatarUrl: 'https://avatars.test/alice',
+      })
+      expect(meta!.contributors[2]).toMatchObject({
+        login: 'carol',
+        email: '12345+carol@users.noreply.github.com',
       })
 
       const calledUrl = String(fetchMock.mock.calls[0][0])
@@ -225,17 +231,17 @@ describe('REST API discovery + fallback', () => {
       const fetchMock = vi.fn().mockResolvedValue(mkResponse(200, [
         {
           sha: 'c1',
-          commit: { author: { name: 'Doris D', date: '2026-05-01T00:00:00Z' } },
+          commit: { author: { name: 'Doris D', date: '2026-05-01T00:00:00Z', email: 'doris@example.com' } },
           author: { login: 'doris', avatar_url: 'https://avatars.test/doris' },
         },
         {
           sha: 'c2',
-          commit: { author: { name: 'Doris D', date: '2026-04-01T00:00:00Z' } },
+          commit: { author: { name: 'Doris D', date: '2026-04-01T00:00:00Z', email: 'doris@example.com' } },
           author: { login: 'doris', avatar_url: 'https://avatars.test/doris' },
         },
         {
           sha: 'c3',
-          commit: { author: { name: 'Eve E', date: '2026-03-01T00:00:00Z' } },
+          commit: { author: { name: 'Eve E', date: '2026-03-01T00:00:00Z', email: '99999+eve@users.noreply.github.com' } },
           author: { login: 'eve', avatar_url: 'https://avatars.test/eve' },
         },
       ]))
@@ -247,6 +253,8 @@ describe('REST API discovery + fallback', () => {
 
       expect(contribs).not.toBeNull()
       expect(contribs!.map(c => c.login)).toEqual(['doris', 'eve'])
+      expect(contribs![0]).toMatchObject({ login: 'doris', email: 'doris@example.com' })
+      expect(contribs![1]).toMatchObject({ login: 'eve', email: '99999+eve@users.noreply.github.com' })
 
       const calledUrl = String(fetchMock.mock.calls[0][0])
       expect(calledUrl).toContain('/repos/sap-tutorials/abap-core-development-Contribution/commits')
@@ -366,5 +374,114 @@ describe('REST API discovery + fallback', () => {
       const restCalls = fetchMock.mock.calls.filter(c => String(c[0]).includes('/orgs/sap-tutorials/repos'))
       expect(restCalls.length).toBeGreaterThanOrEqual(2)
     })
+  })
+})
+
+describe('extractContributors (GraphQL path)', () => {
+  it('maps name, login, email, avatarUrl from GraphQL commit nodes', () => {
+    const nodes = [
+      {
+        author: {
+          name: 'Alice Author',
+          email: 'alice@example.com',
+          user: { login: 'alice', avatarUrl: 'https://avatars.test/alice' },
+        },
+      },
+      {
+        author: {
+          name: 'Bob B',
+          email: 'bob@example.com',
+          user: { login: 'bob', avatarUrl: 'https://avatars.test/bob' },
+        },
+      },
+    ]
+
+    const result = extractContributors(nodes)
+
+    expect(result).toHaveLength(2)
+    expect(result[0]).toEqual({
+      name: 'Alice Author',
+      login: 'alice',
+      email: 'alice@example.com',
+      avatarUrl: 'https://avatars.test/alice',
+    })
+    expect(result[1]).toEqual({
+      name: 'Bob B',
+      login: 'bob',
+      email: 'bob@example.com',
+      avatarUrl: 'https://avatars.test/bob',
+    })
+  })
+
+  it('deduplicates by login and preserves first occurrence', () => {
+    const nodes = [
+      {
+        author: {
+          name: 'Alice Author',
+          email: 'alice@example.com',
+          user: { login: 'alice', avatarUrl: 'https://avatars.test/alice' },
+        },
+      },
+      {
+        author: {
+          name: 'Alice Old Name',
+          email: 'alice-old@example.com',
+          user: { login: 'alice', avatarUrl: 'https://avatars.test/alice' },
+        },
+      },
+    ]
+
+    const result = extractContributors(nodes)
+
+    expect(result).toHaveLength(1)
+    expect(result[0].email).toBe('alice@example.com')
+  })
+
+  it('falls back to empty string when email is missing from GraphQL response', () => {
+    const nodes = [
+      {
+        author: {
+          name: 'Carol',
+          user: { login: 'carol', avatarUrl: '' },
+        },
+      },
+    ]
+
+    const result = extractContributors(nodes)
+
+    expect(result).toHaveLength(1)
+    expect(result[0].email).toBe('')
+  })
+
+  it('passes through noreply GitHub emails without filtering', () => {
+    const nodes = [
+      {
+        author: {
+          name: 'Dave',
+          email: '12345+dave@users.noreply.github.com',
+          user: { login: 'dave', avatarUrl: '' },
+        },
+      },
+    ]
+
+    const result = extractContributors(nodes)
+
+    expect(result[0].email).toBe('12345+dave@users.noreply.github.com')
+  })
+
+  it('skips nodes where login is absent', () => {
+    const nodes = [
+      {
+        author: {
+          name: 'Ghost',
+          email: 'ghost@example.com',
+          user: null,
+        },
+      },
+    ]
+
+    const result = extractContributors(nodes)
+
+    expect(result).toHaveLength(0)
   })
 })

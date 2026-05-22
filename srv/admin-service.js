@@ -533,19 +533,9 @@ export default class AdminService extends cds.ApplicationService {
     });
 
     this.on('syncTutorialMetadata', async (req) => {
-      const { syncTutorialMetadata: sync } = await import('./lib/tutorial-sync.js');
-      const fs = await import('fs');
-      const path = await import('path');
-
-      const cachePath = path.join(process.cwd(), '.tutorial-cache', 'metadata.json');
-      let metadataSource = [];
-      try {
-        const raw = fs.readFileSync(cachePath, 'utf-8');
-        metadataSource = JSON.parse(raw);
-      } catch {
-        return { synced: 0, message: 'No metadata cache found' };
-      }
-      return sync(metadataSource);
+      const { backfillMissingTutorialMeta } = await import('./lib/tutorial-meta-init.js');
+      const { created } = await backfillMissingTutorialMeta();
+      return { synced: created, message: `Backfilled ${created} TutorialMeta rows. Use rebuild-content.yml to refresh review dates.` };
     });
 
     // --- Tutorial Review & Notification Reset ---

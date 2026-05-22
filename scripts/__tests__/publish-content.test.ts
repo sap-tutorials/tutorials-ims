@@ -167,6 +167,11 @@ describe('extractMetadata', () => {
       'level: beginner',
       'primaryTag: topic>cap',
       'stepCount: 3',
+      'lastUpdated: 2026-05-20',
+      'contributors:',
+      '  - login: "thomasjung-sap"',
+      '    name: "Thomas Jung"',
+      '    email: "thomas.jung@sap.com"',
       'steps:',
       '  - number: 1',
       '    title: First Step',
@@ -205,6 +210,9 @@ describe('extractMetadata', () => {
     expect(meta.steps).toHaveLength(3);
     expect(meta.steps[0]).toEqual({ number: 1, title: 'First Step' });
     expect(meta.steps[2]).toEqual({ number: 3, title: 'Third Step' });
+    expect(result['my-tutorial'].lastUpdated).toBe('2026-05-20');
+    expect(result['my-tutorial'].primaryContributorEmail).toBe('thomas.jung@sap.com');
+    expect(result['my-tutorial'].primaryContributorLogin).toBe('thomasjung-sap');
   });
 
   it('handles minimal frontmatter with defaults', () => {
@@ -219,6 +227,9 @@ describe('extractMetadata', () => {
     expect(meta.primaryTag).toBeNull();
     expect(meta.steps).toHaveLength(0);
     expect(meta.stepCount).toBe(0);
+    expect(meta.lastUpdated).toBeNull();
+    expect(meta.primaryContributorEmail).toBeNull();
+    expect(meta.primaryContributorLogin).toBeNull();
   });
 
   it('skips files without YAML frontmatter', () => {

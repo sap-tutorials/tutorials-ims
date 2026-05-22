@@ -275,6 +275,7 @@ export async function publishHandler(req, res) {
     let metaUpserted = 0;
     if (metadata && typeof metadata === 'object') {
       const { Tutorials, Steps } = cds.entities('com.sap.developers.ims');
+      const db = await cds.connect.to('db');
       for (const [slug, meta] of Object.entries(metadata)) {
         try {
           const existing = await SELECT.one.from(Tutorials).where({ slug }).columns('ID');
@@ -329,6 +330,52 @@ export async function publishHandler(req, res) {
               }
             }
           }
+          // Auto-init TutorialMeta: new tutorial → INSERT; refreshed tutorial → UPDATE reviewedDate
+          try {
+            const ims = cds.entities('com.sap.developers.ims');
+            const { TutorialMeta } = ims;
+            const ContributorEmails = ims.ContributorEmails;
+            const existingMeta = await SELECT.one.from(TutorialMeta).where({ tutorial_ID: tutorialId });
+            const lastUpdated = meta.lastUpdated || null;
+            const directEmail = meta.primaryContributorEmail || null;
+            const login = meta.primaryContributorLogin || null;
+
+            let resolvedOwner = directEmail;
+            if (!resolvedOwner && login && ContributorEmails) {
+              const mapping = await SELECT.one.from(ContributorEmails).where({ login });
+              if (mapping?.email) resolvedOwner = mapping.email;
+            }
+
+            if (!existingMeta) {
+              await INSERT.into(TutorialMeta).entries({
+                ID: cds.utils.uuid(),
+                tutorial_ID: tutorialId,
+                owner: resolvedOwner,
+                reviewedDate: lastUpdated,
+                monitoredStatus: 'ACTIVE',
+                notificationNumber: 0,
+                lastNotificationDate: null,
+                legacyId: await getNextLegacyId('TutorialMeta', db)
+              });
+            } else {
+              const newTs = lastUpdated ? Date.parse(lastUpdated) : NaN;
+              const existingTs = existingMeta.reviewedDate ? Date.parse(existingMeta.reviewedDate) : null;
+              if (Number.isFinite(newTs)) {
+                if (existingTs === null || (Number.isFinite(existingTs) && existingTs < newTs)) {
+                  await UPDATE(TutorialMeta).where({ ID: existingMeta.ID }).set({
+                    reviewedDate: lastUpdated,
+                    notificationNumber: 0,
+                    lastNotificationDate: null
+                  });
+                } else if (existingTs !== null && Number.isNaN(existingTs)) {
+                  LOG.warn(`TutorialMeta ${slug} has unparseable reviewedDate; skipping refresh`);
+                }
+              }
+            }
+          } catch (metaInitErr) {
+            LOG.error(`TutorialMeta upsert failed for ${slug}`, metaInitErr);
+          }
+
           metaUpserted++;
         } catch (metaErr) {
           console.warn(`[content/publish] metadata upsert failed for ${slug}:`, metaErr.message);

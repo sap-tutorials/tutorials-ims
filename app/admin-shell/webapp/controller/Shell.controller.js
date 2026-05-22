@@ -40,7 +40,7 @@ sap.ui.define([
     operations: "Operations",
     pipelinelog: "Pipeline Log",
     joblog: "Job Log",
-    accounts: "Accounts",
+    accounts: "Account Merges",
     changelog: "Change Log",
     board: "Board",
     analytics: "Analytics",

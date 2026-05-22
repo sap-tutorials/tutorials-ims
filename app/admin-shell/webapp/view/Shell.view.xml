@@ -91,7 +91,7 @@
             <tnt:NavigationListItem text="Operations" key="operations" />
             <tnt:NavigationListItem text="Pipeline Log" key="pipelinelog" />
             <tnt:NavigationListItem text="Job Log" key="joblog" />
-            <tnt:NavigationListItem text="Accounts" key="accounts" />
+            <tnt:NavigationListItem text="Account Merges" key="accounts" />
             <tnt:NavigationListItem text="Change Log" key="changelog" />
             <tnt:NavigationListItem text="Board" key="board" />
             <tnt:NavigationListItem text="Analytics" key="analytics" />

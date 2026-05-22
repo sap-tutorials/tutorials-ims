@@ -42,11 +42,12 @@ describe('AdminService integrations', () => {
   });
 
   describe('syncTutorialMetadata', () => {
-    it('returns synced count (0 when no cache file exists in test env)', async () => {
+    it('backfills missing TutorialMeta rows for orphan Tutorials', async () => {
       const { status, data } = await project.post('/admin/syncTutorialMetadata', {},
         { auth: { username: 'admin', password: 'admin' } });
       expect(status).toBe(200);
-      expect(data.synced).toBe(0);
+      expect(data.synced).toBeGreaterThanOrEqual(1);
+      expect(data.message).toMatch(/Backfilled/);
     });
   });
 

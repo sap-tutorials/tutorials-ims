@@ -3,13 +3,13 @@
   "sap.app": {
     "id": "sap.tutorials.admin.accounts",
     "type": "application",
-    "title": "Accounts",
+    "title": "Account Merges",
     "crossNavigation": {
       "inbounds": {
         "Accounts-manage": {
           "semanticObject": "Accounts",
           "action": "manage",
-          "title": "Accounts"
+          "title": "Account Merges"
         }
       }
     },

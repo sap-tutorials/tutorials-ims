@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const CACHE_DIR = join(__dirname, '..', '..', '.tutorial-cache')
-const CACHE_FILE = join(CACHE_DIR, 'github-meta.json')
+const CACHE_FILE = join(CACHE_DIR, 'github-meta.v2.json')
 const DISCOVERY_CACHE_FILE = join(CACHE_DIR, '_discovery.json')
 // Committed snapshot beside this file. Tier 2 falls back to it when the
 // gitignored runtime cache is wiped (e.g. fresh clone, `rm -rf .tutorial-cache/`)
@@ -27,6 +27,7 @@ export const EXCLUDED_REPOS = new Set(['tutorials-ims', 'meta-tutorials'])
 export interface GitHubContributor {
   name: string
   login: string
+  email: string
   avatarUrl: string
 }
 
@@ -502,7 +503,7 @@ export async function discoverFromRest(): Promise<DiscoveredTutorial[]> {
 
 interface RestCommit {
   sha: string
-  commit?: { author?: { name?: string; date?: string } }
+  commit?: { author?: { name?: string; date?: string; email?: string } }
   author?: { login?: string; avatar_url?: string } | null
 }
 
@@ -531,6 +532,7 @@ export async function fetchMetaFromRest(repo: string, slug: string, branch: stri
     contributors.push({
       name: c.commit?.author?.name ?? login,
       login,
+      email: c.commit?.author?.email ?? '',
       avatarUrl: c.author?.avatar_url ?? '',
     })
   }
@@ -563,13 +565,14 @@ export async function fetchContributorsFromRestContrib(
     contributors.push({
       name: c.commit?.author?.name ?? login,
       login,
+      email: c.commit?.author?.email ?? '',
       avatarUrl: c.author?.avatar_url ?? '',
     })
   }
   return contributors.length > 0 ? contributors : null
 }
 
-function extractContributors(nodes: any[]): GitHubContributor[] {
+export function extractContributors(nodes: any[]): GitHubContributor[] {
   const seen = new Set<string>()
   const contributors: GitHubContributor[] = []
   for (const node of nodes) {
@@ -579,6 +582,7 @@ function extractContributors(nodes: any[]): GitHubContributor[] {
     contributors.push({
       name: node.author?.name ?? login,
       login,
+      email: node.author?.email ?? '',
       avatarUrl: node.author?.user?.avatarUrl ?? '',
     })
   }
@@ -601,6 +605,7 @@ async function fetchContributorsFromContribRepo(
         nodes {
           author {
             name
+            email
             user { login avatarUrl }
           }
         }
@@ -663,6 +668,7 @@ export async function fetchGitHubMetaBatch(
           authoredDate
           author {
             name
+            email
             user { login avatarUrl }
           }
         }

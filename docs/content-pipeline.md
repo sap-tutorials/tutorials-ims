@@ -39,7 +39,7 @@ Downloads tutorial markdown from the `sap-tutorials` GitHub organization.
 | Step | Action | Concurrency | Output |
 |------|--------|-------------|--------|
 | 1.1 | GraphQL discovery of repos | Sequential (paginated, 100/page) | `.tutorial-cache/_discovery.json` |
-| 1.2 | Batch metadata prefetch | 3 repos × 20 tutorials/batch | `.tutorial-cache/github-meta.json` |
+| 1.2 | Batch metadata prefetch | 3 repos × 20 tutorials/batch | `.tutorial-cache/github-meta.v2.json` |
 | 1.3 | Download markdown | 5 concurrent tutorials | `.tutorial-cache/{slug}.md` + `.sha` |
 | 1.4 | Parse & transform | Inline (per tutorial) | `hugo/content/tutorials/{slug}.md` |
 | 1.5 | Fetch CAP catalog | Single request | `.tutorial-cache/cap-catalog.json` |

@@ -42,8 +42,7 @@ annotate AdminService.Events with @UI: {
   ],
   Facets: [
     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'General Information' },
-    { $Type: 'UI.ReferenceFacet', Target: 'prizes/@UI.LineItem', Label: 'Prizes' },
-    { $Type: 'UI.ReferenceFacet', Target: 'changes/@UI.PresentationVariant', Label: 'Change History', ![@UI.PartOfPreview]: false }
+    { $Type: 'UI.ReferenceFacet', Target: 'prizes/@UI.LineItem', Label: 'Prizes' }
   ],
   FieldGroup#General: { Data: [
     { Value: name },
@@ -772,16 +771,16 @@ annotate ChangeView with @UI.SelectionFields: [
   createdAt
 ];
 
-// --- PrimaryAccounts / SecondaryAccounts (read-only) ---
+// --- PrimaryAccounts / SecondaryAccounts (account-merge audit log, read-only) ---
 annotate AdminService.PrimaryAccounts with {
-  uuid   @Common.Label: 'UUID';
+  uuid   @Common.Label: 'Primary UUID';
   status @Common.Label: 'Status';
 };
 
 annotate AdminService.PrimaryAccounts with @(
   UI: {
     HeaderInfo: {
-      TypeName: 'Primary Account', TypeNamePlural: 'Primary Accounts',
+      TypeName: 'Account Merge', TypeNamePlural: 'Account Merges',
       Title: { Value: uuid }
     },
     SelectionFields: [ uuid, status ],
@@ -796,8 +795,8 @@ annotate AdminService.PrimaryAccounts with @(
 );
 
 annotate AdminService.SecondaryAccounts with {
-  uuid              @Common.Label: 'UUID';
-  primaryAccount_ID @Common.Label: 'Primary Acct';
+  uuid              @Common.Label: 'Secondary UUID';
+  primaryAccount_ID @Common.Label: 'Merged Into';
   status            @Common.Label: 'Status';
   mergedAt          @Common.Label: 'Merged At';
 };
@@ -805,7 +804,7 @@ annotate AdminService.SecondaryAccounts with {
 annotate AdminService.SecondaryAccounts with @(
   UI: {
     HeaderInfo: {
-      TypeName: 'Secondary Account', TypeNamePlural: 'Secondary Accounts',
+      TypeName: 'Merged Secondary', TypeNamePlural: 'Merged Secondaries',
       Title: { Value: uuid }
     },
     SelectionFields: [ uuid, status ],
