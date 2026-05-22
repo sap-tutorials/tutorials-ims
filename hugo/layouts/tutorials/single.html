@@ -5,6 +5,7 @@
 <div class="tutorial-page">
   <main class="tutorial-main">
     <h1 class="tutorial-title">{{ .Title }}</h1>
+    {{ partial "tutorial-banners.html" . }}
     {{ partial "tutorial-meta.html" . }}
     <p class="tutorial-description">{{ .Params.description }}</p>
 

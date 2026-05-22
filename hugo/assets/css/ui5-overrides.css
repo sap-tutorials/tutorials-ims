@@ -1,0 +1,155 @@
+/* UI5 Web Components adoption overrides (U3 pilot) */
+
+/* The ui5-shellbar provides its own layout. */
+ui5-shellbar { display: block; }
+
+/* Logo sizing — the SVG has only a viewBox, no intrinsic width/height,
+   so it collapses to 0 inside the shellbar's flex layout without this. */
+ui5-shellbar img[slot="logo"] {
+  height: 1.5rem;
+  width: auto;
+}
+
+/* User popover (#sb-user-popover) — internal layout */
+#sb-user-popover::part(content) {
+  padding: 0;
+}
+
+#sb-user-popover .user-popover__content {
+  padding: 1rem 1.25rem;
+  min-width: 14rem;
+}
+
+#sb-user-popover .user-popover__header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+
+#sb-user-popover .user-popover__name {
+  font-weight: 600;
+  font-size: 1rem;
+  margin-top: 0.75rem;
+  color: var(--sapTextColor);
+}
+
+#sb-user-popover .user-popover__email {
+  font-size: 0.875rem;
+  color: var(--sapContent_LabelColor);
+  margin-top: 0.25rem;
+}
+
+#sb-user-popover .user-popover__separator {
+  border: none;
+  border-top: 1px solid var(--sapGroup_TitleBorderColor);
+  margin: 0.75rem 0;
+}
+
+#sb-user-popover .user-popover__link {
+  display: block;
+  padding: 0.5rem 0;
+  color: var(--sapTextColor);
+  text-decoration: none;
+  font-size: 0.875rem;
+}
+
+#sb-user-popover .user-popover__link:hover {
+  color: var(--sapLinkColor);
+}
+
+#sb-user-popover #logout-btn {
+  margin-top: 0.75rem;
+  width: 100%;
+}
+
+/* Share popover (#sb-share-popover) — internal layout */
+#sb-share-popover .share-popover__body {
+  padding: 0.75rem 1rem;
+  min-width: 22rem;
+  max-width: 26rem;
+}
+
+#sb-share-popover .share-popover__section + .share-popover__section {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--sapGroup_ContentBorderColor);
+}
+
+#sb-share-popover .share-popover__heading {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sapContent_LabelColor);
+  margin-bottom: 0.25rem;
+}
+
+#sb-share-popover .share-popover__row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+#sb-share-popover #share-url-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#sb-share-popover .share-popover__status {
+  font-size: 0.75rem;
+  color: var(--sapPositiveColor, #107e3e);
+  margin-top: 0.5rem;
+  min-height: 1rem;
+}
+
+#sb-share-popover .share-popover__list {
+  margin: 0 -1rem;
+}
+
+/* Tutorial-page banners (U5) — stack with consistent spacing */
+.tutorial-banners {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0.75rem 0 1rem;
+}
+.tutorial-banners:empty {
+  display: none;
+}
+.tutorial-banners ui5-message-strip {
+  width: 100%;
+}
+
+/* Sticky prev/next footer bar */
+.tutorial-stepnav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  background: var(--sapPageFooter_Background, #fff);
+  border-top: 1px solid var(--sapPageFooter_BorderColor, #d9d9d9);
+  box-shadow: var(--sapContent_Shadow0, 0 -1px 4px rgba(0, 0, 0, 0.06));
+}
+.tutorial-stepnav__inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0.5rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.tutorial-stepnav__slot {
+  flex: 1 1 0;
+  display: flex;
+}
+.tutorial-stepnav__slot--next {
+  justify-content: flex-end;
+}
+
+/* Reserve space for the sticky bar so footer/joule don't sit underneath it */
+body:has(.tutorial-stepnav) {
+  padding-bottom: 4rem;
+}

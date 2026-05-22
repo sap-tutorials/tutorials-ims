@@ -1,0 +1,46 @@
+{{/*
+  Tutorial banners (U5) — declarative ui5-message-strip notifications.
+  Driven by frontmatter:
+    deprecated: true | "string explaining why" | { reason: "...", supersededBy: "/tutorials/foo" }
+    updated: YYYY-MM-DD (within last 30 days surfaces an "updated" strip)
+    notice: "free-form info string"   (info design, always shown)
+    warning: "free-form warning string" (critical design, always shown)
+  The `completed` strip is dynamic — see js/tutorial-banners.ts.
+*/}}
+{{ $hasAny := false }}
+<div class="tutorial-banners" data-slug="{{ .Params.slug }}">
+{{ with .Params.deprecated }}
+  {{ $hasAny = true }}
+  {{ $msg := "" }}
+  {{ $superseded := "" }}
+  {{ if reflect.IsMap . }}
+    {{ $msg = .reason | default "This tutorial is deprecated." }}
+    {{ $superseded = .supersededBy | default "" }}
+  {{ else if eq (printf "%T" .) "bool" }}
+    {{ $msg = "This tutorial is deprecated and may not reflect current SAP product behavior." }}
+  {{ else }}
+    {{ $msg = . }}
+  {{ end }}
+  <ui5-message-strip design="Negative" hide-close-button>
+    {{ $msg }}{{ with $superseded }} See the current version: <a href="{{ . }}">{{ . }}</a>.{{ end }}
+  </ui5-message-strip>
+{{ end }}
+{{ with .Params.updated }}
+  {{ $cutoff := now.AddDate 0 0 -30 }}
+  {{ $updatedDate := time.AsTime . }}
+  {{ if gt $updatedDate $cutoff }}
+    {{ $hasAny = true }}
+    <ui5-message-strip design="Information" hide-close-button>
+      Updated {{ $updatedDate.Format "2006-01-02" }} — content has been refreshed recently.
+    </ui5-message-strip>
+  {{ end }}
+{{ end }}
+{{ with .Params.notice }}
+  {{ $hasAny = true }}
+  <ui5-message-strip design="Information" hide-close-button>{{ . }}</ui5-message-strip>
+{{ end }}
+{{ with .Params.warning }}
+  {{ $hasAny = true }}
+  <ui5-message-strip design="Critical" hide-close-button>{{ . }}</ui5-message-strip>
+{{ end }}
+</div>

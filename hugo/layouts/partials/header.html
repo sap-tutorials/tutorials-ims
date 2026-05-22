@@ -1,165 +1,269 @@
-<div class="fd-shellbar">
-  <div class="fd-shellbar__group fd-shellbar__group--product">
-    <a href="/" class="fd-shellbar__logo">
-      <img src="/img/sap-logo.svg" alt="SAP">
-    </a>
-    <span class="fd-shellbar__title">Tutorial Platform</span>
+<ui5-shellbar id="app-shellbar" primary-title="Tutorial Platform" show-notifications notifications-count="">
+  <img slot="logo" src="/img/sap-logo.svg" alt="SAP" height="24">
+
+  <ui5-shellbar-item id="sb-nav" icon="menu2" text="Navigate"></ui5-shellbar-item>
+  <ui5-shellbar-item id="sb-share" icon="share-2" text="Share link"></ui5-shellbar-item>
+  <ui5-shellbar-item id="sb-help" icon="question-mark" text="Help"></ui5-shellbar-item>
+  <ui5-shellbar-item id="sb-theme" icon="dark-mode" text="Toggle theme"></ui5-shellbar-item>
+  <ui5-shellbar-item id="sb-trust" icon="building" text="Legal & Trust"></ui5-shellbar-item>
+
+  <ui5-avatar slot="profile" id="sb-avatar" icon="person-placeholder" size="XS" interactive></ui5-avatar>
+</ui5-shellbar>
+
+<ui5-popover id="sb-nav-popover" placement="Bottom" horizontal-align="End" hide-arrow>
+  <ui5-list id="nav-list" separators="None">
+    <ui5-li icon="course-book" data-href="/">Tutorials</ui5-li>
+    <ui5-li icon="flight" data-href="/app-space">App Space</ui5-li>
+    <ui5-li icon="sys-monitor" data-href="/event-display">Event Display</ui5-li>
+    <ui5-li class="nav-auth-only" icon="complete" data-href="/me" hidden>My Completions</ui5-li>
+  </ui5-list>
+</ui5-popover>
+
+<ui5-popover id="sb-share-popover" placement="Bottom" horizontal-align="End" hide-arrow header-text="Share & feedback">
+  <div class="share-popover__body">
+    <div class="share-popover__section">
+      <div class="share-popover__heading">Page link</div>
+      <div class="share-popover__row">
+        <ui5-input id="share-url-input" readonly aria-label="Page URL"></ui5-input>
+        <ui5-button id="share-copy-btn" design="Emphasized" icon="copy">Copy</ui5-button>
+      </div>
+      <div class="share-popover__status" id="share-status" aria-live="polite"></div>
+    </div>
+
+    {{ if eq .Type "tutorials" }}
+    <div class="share-popover__section">
+      <div class="share-popover__heading">Feedback</div>
+      <ui5-list separators="None" class="share-popover__list">
+        <ui5-li icon="discussion-2" data-href="https://answers.sap.com/questions/ask.html?topics=tutorial-navigator&topics=tutorials-{{ .Params.slug }}" data-external>Ask the community</ui5-li>
+        <ui5-li icon="write-new-document" data-href="https://github.com/sap-tutorials/Tutorials/issues/new?title={{ .Title }}" data-external>Contribute suggestion</ui5-li>
+        <ui5-li icon="email" data-action="tutorial-feedback" data-slug="{{ .Params.slug }}">Give feedback</ui5-li>
+      </ui5-list>
+    </div>
+
+    <div class="share-popover__section">
+      <div class="share-popover__heading">Share this tutorial</div>
+      <ui5-list separators="None" class="share-popover__list">
+        <ui5-li icon="post" data-href="https://www.facebook.com/sharer/sharer.php?u={{ .Permalink }}" data-external>Facebook</ui5-li>
+        <ui5-li icon="customer-and-contacts" data-href="https://www.linkedin.com/sharing/share-offsite/?url={{ .Permalink }}" data-external>LinkedIn</ui5-li>
+        <ui5-li icon="email" data-href="mailto:?subject={{ .Title }}&body=Check out this SAP tutorial: {{ .Permalink }}">Email</ui5-li>
+      </ui5-list>
+    </div>
+    {{ end }}
   </div>
-  <div class="fd-shellbar__group fd-shellbar__group--actions">
-    <div class="shellbar-nav-dropdown" id="nav-dropdown">
-      <button type="button" class="fd-shellbar__button" aria-label="Navigation menu" aria-expanded="false" aria-controls="nav-popover" onclick="toggleNavMenu()">
-        <span class="shellbar-nav-dropdown__label">Navigate</span>
-        <i class="sap-icon--slim-arrow-down shellbar-nav-dropdown__arrow"></i>
-      </button>
-      <div id="nav-popover" class="shellbar-popover" style="display:none">
-        <ul class="fd-menu__list" role="menu">
-          <li class="fd-menu__item" role="menuitem"><a href="/" class="fd-menu__link"><i class="sap-icon--course-book fd-menu__addon-before"></i><span class="fd-menu__title">Tutorials</span></a></li>
-          <li class="fd-menu__item" role="menuitem"><a href="/app-space" class="fd-menu__link"><i class="sap-icon--flight fd-menu__addon-before"></i><span class="fd-menu__title">App Space</span></a></li>
-          <li class="fd-menu__item" role="menuitem"><a href="/event-display" class="fd-menu__link"><i class="sap-icon--sys-monitor fd-menu__addon-before"></i><span class="fd-menu__title">Event Display</span></a></li>
-          <li class="fd-menu__item nav-auth-only" role="menuitem"><a href="/me" class="fd-menu__link"><i class="sap-icon--accomplished fd-menu__addon-before"></i><span class="fd-menu__title">My Completions</span></a></li>
-        </ul>
-      </div>
+</ui5-popover>
+
+<ui5-popover id="sb-trust-popover" placement="Bottom" horizontal-align="End" hide-arrow>
+  <ui5-list separators="None">
+    <ui5-li data-href="#" data-trust-todo="disclaimer">Disclaimer</ui5-li>
+    <ui5-li data-href="https://www.sap.com/about/legal/privacy.html" data-external>Privacy</ui5-li>
+    <ui5-li data-href="https://www.sap.com/about/legal/terms-of-use.html" data-external>Terms of Use</ui5-li>
+    <ui5-li data-href="https://www.sap.com/about/legal/impressum.html" data-external>Legal Disclosure</ui5-li>
+    <ui5-li data-href="https://www.sap.com/about/legal/copyright.html" data-external>Copyright</ui5-li>
+    <ui5-li data-href="https://www.sap.com/about/legal/trademark.html" data-external>Trademark</ui5-li>
+    <ui5-li data-href="https://www.sap.com/about/legal/privacy/cookies.html" data-external>Cookie Statement</ui5-li>
+  </ui5-list>
+</ui5-popover>
+
+<ui5-popover id="sb-user-popover" placement="Bottom" horizontal-align="End" hide-arrow>
+  <div class="user-popover__content">
+    <div class="user-popover__header">
+      <ui5-avatar id="user-avatar-large" icon="person-placeholder" size="XL"></ui5-avatar>
+      <div id="user-name" class="user-popover__name"></div>
+      <div id="user-email" class="user-popover__email"></div>
     </div>
-    <span class="shellbar-separator"></span>
-    <div class="shellbar-nav-dropdown" id="share-dropdown">
-      <button type="button" class="fd-shellbar__button" aria-label="Share link to this page" title="Share link" aria-expanded="false" aria-controls="share-popover" onclick="toggleShareMenu()">
-        <i class="sap-icon--share-2"></i>
-      </button>
-      <div id="share-popover" class="shellbar-popover shellbar-popover--share" style="display:none">
-        <div class="share-popover__body">
-          <label class="share-popover__label" for="share-url-input">Link to this page</label>
-          <div class="share-popover__row">
-            <input type="text" id="share-url-input" class="fd-input share-popover__input" readonly aria-label="Page URL">
-            <button type="button" class="fd-button fd-button--emphasized share-popover__copy" onclick="copyShareUrl(this)">Copy</button>
-          </div>
-          <div class="share-popover__status" id="share-status" aria-live="polite"></div>
-        </div>
-      </div>
-    </div>
-    <span class="shellbar-separator"></span>
-    <button type="button" class="fd-shellbar__button" aria-label="Joule" title="Joule" id="joule-trigger" hidden>
-      <i class="sap-icon--da"></i>
-    </button>
-    <button type="button" class="fd-shellbar__button" aria-label="Help" title="Help" onclick="window.open('https://community.sap.com','_blank')">
-      <i class="sap-icon--question-mark"></i>
-    </button>
-    <button type="button" class="fd-shellbar__button shellbar-notifications" aria-label="Notifications" title="Notifications" id="notifications-btn">
-      <i class="sap-icon--bell"></i>
-      <span class="fd-counter fd-counter--notification" aria-label="unread notifications" id="notification-badge"></span>
-    </button>
-    <span class="shellbar-separator"></span>
-    <button type="button" class="theme-toggle" data-action="toggle-theme" aria-label="Toggle dark mode" title="Toggle dark/light mode">
-      <span class="theme-toggle-track">
-        <span class="theme-toggle-thumb"></span>
-        <svg class="theme-toggle-icon theme-toggle-sun" viewBox="0 0 16 16" width="12" height="12"><circle cx="8" cy="8" r="3.5" fill="currentColor"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-        <svg class="theme-toggle-icon theme-toggle-moon" viewBox="0 0 16 16" width="12" height="12"><path d="M13.36 10.2a5.5 5.5 0 0 1-7.56-7.56A6 6 0 1 0 13.36 10.2z" fill="currentColor"/></svg>
-      </span>
-    </button>
-    <span class="shellbar-separator"></span>
-    <div class="shellbar-nav-dropdown" id="trust-dropdown">
-      <button type="button" class="fd-shellbar__button" aria-label="Legal &amp; Trust" title="Legal &amp; Trust" aria-expanded="false" aria-controls="trust-popover" onclick="toggleTrustMenu()">
-        <i class="sap-icon--building"></i>
-      </button>
-      <div id="trust-popover" class="shellbar-popover" style="display:none">
-        <ul class="fd-menu__list" role="menu">
-          <li class="fd-menu__item" role="menuitem"><a href="#" data-trust-todo="disclaimer" class="fd-menu__link"><span class="fd-menu__title">Disclaimer</span></a></li>
-          <li class="fd-menu__item" role="menuitem"><a href="https://www.sap.com/about/legal/privacy.html" target="_blank" rel="noopener noreferrer" class="fd-menu__link"><span class="fd-menu__title">Privacy</span></a></li>
-          <li class="fd-menu__item" role="menuitem"><a href="https://www.sap.com/about/legal/terms-of-use.html" target="_blank" rel="noopener noreferrer" class="fd-menu__link"><span class="fd-menu__title">Terms of Use</span></a></li>
-          <li class="fd-menu__item" role="menuitem"><a href="https://www.sap.com/about/legal/impressum.html" target="_blank" rel="noopener noreferrer" class="fd-menu__link"><span class="fd-menu__title">Legal Disclosure</span></a></li>
-          <li class="fd-menu__item" role="menuitem"><a href="https://www.sap.com/about/legal/copyright.html" target="_blank" rel="noopener noreferrer" class="fd-menu__link"><span class="fd-menu__title">Copyright</span></a></li>
-          <li class="fd-menu__item" role="menuitem"><a href="https://www.sap.com/about/legal/trademark.html" target="_blank" rel="noopener noreferrer" class="fd-menu__link"><span class="fd-menu__title">Trademark</span></a></li>
-          <li class="fd-menu__item" role="menuitem"><a href="https://www.sap.com/about/legal/privacy/cookies.html" target="_blank" rel="noopener noreferrer" class="fd-menu__link"><span class="fd-menu__title">Cookie Statement</span></a></li>
-        </ul>
-      </div>
-    </div>
-    <span class="shellbar-separator"></span>
-    <div class="fd-shellbar__action" id="user-menu">
-      <span id="user-avatar" class="fd-avatar fd-avatar--xs fd-avatar--circle fd-avatar--placeholder" role="button" tabindex="0" aria-label="User profile" onclick="handleProfileClick()"><i class="sap-icon--person-placeholder"></i></span>
-      <div id="user-popover" class="fd-popover__body fd-popover__body--right">
-        <div class="user-popover__content">
-          <div class="user-popover__header">
-            <span id="user-avatar-large" class="fd-avatar fd-avatar--xl fd-avatar--circle fd-avatar--placeholder"></span>
-            <div id="user-name" class="user-popover__name"></div>
-            <div id="user-email" class="user-popover__email"></div>
-          </div>
-          <hr class="user-popover__separator">
-          <a href="https://account.sap.com" class="user-popover__link" target="_blank" rel="noopener">Manage my Account</a>
-          <a href="https://www.youtube.com/@sapdevs" class="user-popover__link" target="_blank" rel="noopener">SAP Developers &#x2197;</a>
-          <a href="https://learning.sap.com" class="user-popover__link" target="_blank" rel="noopener">Learnings &#x2197;</a>
-          <a href="https://community.sap.com" class="user-popover__link" target="_blank" rel="noopener">Community &#x2197;</a>
-          <hr class="user-popover__separator">
-          <button type="button" class="fd-button fd-button--negative" id="logout-btn" onclick="handleLogout()">Logout</button>
-        </div>
-      </div>
-    </div>
+    <hr class="user-popover__separator">
+    <a href="https://account.sap.com" class="user-popover__link" target="_blank" rel="noopener">Manage my Account</a>
+    <a href="https://www.youtube.com/@sapdevs" class="user-popover__link" target="_blank" rel="noopener">SAP Developers &#x2197;</a>
+    <a href="https://learning.sap.com" class="user-popover__link" target="_blank" rel="noopener">Learnings &#x2197;</a>
+    <a href="https://community.sap.com" class="user-popover__link" target="_blank" rel="noopener">Community &#x2197;</a>
+    <hr class="user-popover__separator">
+    <ui5-button id="logout-btn" design="Negative">Logout</ui5-button>
   </div>
-</div>
+</ui5-popover>
+
 <script>
 (function() {
-  const capBase = document.documentElement.dataset.capBase || '';
-  const avatar = document.getElementById('user-avatar');
+  const shellbar = document.getElementById('app-shellbar');
+  const avatar = document.getElementById('sb-avatar');
   const avatarLarge = document.getElementById('user-avatar-large');
-  const popover = document.getElementById('user-popover');
   const userName = document.getElementById('user-name');
   const userEmail = document.getElementById('user-email');
-  const navPopover = document.getElementById('nav-popover');
-  const trustPopover = document.getElementById('trust-popover');
-  const sharePopover = document.getElementById('share-popover');
+  const navPopover = document.getElementById('sb-nav-popover');
+  const sharePopover = document.getElementById('sb-share-popover');
+  const trustPopover = document.getElementById('sb-trust-popover');
+  const userPopover = document.getElementById('sb-user-popover');
   const shareUrlInput = document.getElementById('share-url-input');
   const shareStatus = document.getElementById('share-status');
+  const shareCopyBtn = document.getElementById('share-copy-btn');
+  const logoutBtn = document.getElementById('logout-btn');
+  const themeItem = document.getElementById('sb-theme');
   let isAuthenticated = false;
 
+  function closeAllExcept(skip) {
+    [navPopover, sharePopover, trustPopover, userPopover].forEach(p => {
+      if (p !== skip && p.open) p.open = false;
+    });
+  }
+
+  function openAt(popover, opener) {
+    closeAllExcept(popover);
+    if (popover.open) {
+      popover.open = false;
+    } else {
+      popover.opener = opener;
+      popover.open = true;
+    }
+  }
+
+  shellbar.querySelectorAll('ui5-shellbar-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      const id = item.id;
+      const target = e.detail?.targetRef || item;
+      if (id === 'sb-nav') openAt(navPopover, target);
+      else if (id === 'sb-share') {
+        shareUrlInput.value = window.location.href;
+        shareStatus.textContent = '';
+        openAt(sharePopover, target);
+      }
+      else if (id === 'sb-help') window.open('https://community.sap.com', '_blank');
+      else if (id === 'sb-theme') toggleTheme();
+      else if (id === 'sb-trust') openAt(trustPopover, target);
+    });
+  });
+
+  shellbar.addEventListener('profile-click', (e) => {
+    if (!isAuthenticated) {
+      window.location.href = '/login?returnTo=' + encodeURIComponent(window.location.pathname + window.location.search);
+      return;
+    }
+    closeAllExcept(userPopover);
+    if (userPopover.open) {
+      userPopover.open = false;
+    } else {
+      userPopover.opener = e.detail.targetRef;
+      userPopover.open = true;
+    }
+  });
+
+  function navigate(li) {
+    const href = li.getAttribute('data-href');
+    if (!href || href === '#') return;
+    if (li.hasAttribute('data-external')) {
+      window.open(href, '_blank', 'noopener,noreferrer');
+    } else {
+      window.location.href = href;
+    }
+  }
+
+  document.querySelectorAll('#sb-nav-popover ui5-li, #sb-trust-popover ui5-li').forEach(li => {
+    li.addEventListener('click', () => {
+      navigate(li);
+      navPopover.open = false;
+      trustPopover.open = false;
+    });
+  });
+
+  document.querySelectorAll('#sb-share-popover ui5-li').forEach(li => {
+    li.addEventListener('click', () => {
+      const action = li.getAttribute('data-action');
+      if (action === 'tutorial-feedback') {
+        const slug = li.getAttribute('data-slug') || '';
+        sharePopover.open = false;
+        if (typeof window.openTutorialFeedbackPopup === 'function') {
+          window.openTutorialFeedbackPopup(slug);
+        }
+        return;
+      }
+      navigate(li);
+      sharePopover.open = false;
+    });
+  });
+
+  shareCopyBtn.addEventListener('click', () => {
+    const url = shareUrlInput.value || window.location.href;
+    const done = (ok) => {
+      shareStatus.textContent = ok ? 'Copied to clipboard' : 'Press Ctrl+C to copy';
+    };
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(url).then(() => done(true), () => done(false));
+    } else {
+      try {
+        const tmp = document.createElement('input');
+        tmp.value = url;
+        document.body.appendChild(tmp);
+        tmp.select();
+        const ok = document.execCommand('copy');
+        tmp.remove();
+        done(ok);
+      } catch { done(false); }
+    }
+  });
+
+  logoutBtn.addEventListener('click', () => {
+    try {
+      for (let i = sessionStorage.length - 1; i >= 0; i--) {
+        const k = sessionStorage.key(i);
+        if (k && k.indexOf('joule.') === 0) sessionStorage.removeItem(k);
+      }
+    } catch {}
+    window.location.href = '/logout';
+  });
+
+  function toggleTheme() {
+    const html = document.documentElement;
+    const next = html.dataset.theme === 'dark' ? 'light' : 'dark';
+    html.dataset.theme = next;
+    html.classList.toggle('dark', next === 'dark');
+    try { localStorage.setItem('theme', next); } catch {}
+    themeItem.icon = next === 'dark' ? 'light-mode' : 'dark-mode';
+  }
+  themeItem.icon = document.documentElement.dataset.theme === 'dark' ? 'light-mode' : 'dark-mode';
+
   function applyInitials(givenName, familyName, id) {
-    var initials = (givenName?.[0] || '') + (familyName?.[0] || '');
+    let initials = (givenName?.[0] || '') + (familyName?.[0] || '');
     if (!initials && id) initials = id[0];
     if (initials) {
-      [avatar, avatarLarge].forEach(function(el) {
-        el.classList.remove('fd-avatar--placeholder');
-        el.classList.add('fd-avatar--accent-color-6');
-        while (el.firstChild) el.removeChild(el.firstChild);
-        el.textContent = initials.toUpperCase();
+      [avatar, avatarLarge].forEach(el => {
+        el.removeAttribute('icon');
+        el.setAttribute('initials', initials.toUpperCase());
+        el.setAttribute('color-scheme', 'Accent6');
       });
     }
   }
 
-  var USER_KEY = 'joule.user.v1';
-  var USER_TTL_MS = 60000;
+  const USER_KEY = 'joule.user.v1';
+  const USER_TTL_MS = 60000;
 
   function readCachedUser() {
     try {
-      var raw = sessionStorage.getItem(USER_KEY);
+      const raw = sessionStorage.getItem(USER_KEY);
       if (!raw) return null;
-      var parsed = JSON.parse(raw);
+      const parsed = JSON.parse(raw);
       if (!parsed || !parsed.value) return null;
       if (Date.now() - parsed.ts > USER_TTL_MS) return null;
       return parsed.value;
-    } catch (e) { return null; }
+    } catch { return null; }
   }
 
   function applyAuthenticatedUser(u) {
     if (!u) return;
-    var given = u.givenName || u.firstName || '';
-    var family = u.familyName || '';
-    var id = u.id || '';
+    const given = u.givenName || u.firstName || '';
+    const family = u.familyName || '';
+    const id = u.id || '';
     isAuthenticated = true;
     userName.textContent = (given + ' ' + family).trim() || id;
     userEmail.textContent = u.email || '';
     document.documentElement.dataset.authenticated = 'true';
-    avatar.classList.add('fd-avatar--authenticated');
     applyInitials(given, family, id);
-    avatar.setAttribute('aria-label', userName.textContent);
+    avatar.setAttribute('accessible-name', userName.textContent);
     document.documentElement.dataset.user = JSON.stringify({ firstName: given });
+    document.querySelectorAll('.nav-auth-only').forEach(el => el.removeAttribute('hidden'));
   }
 
   async function checkAuth() {
     try {
       const res = await fetch('/auth/user', { credentials: 'include', redirect: 'follow' });
-      if (res.redirected) {
-        const cached = readCachedUser();
-        if (cached) applyAuthenticatedUser(cached);
-        return;
-      }
-      if (!res.ok) {
+      if (res.redirected || !res.ok) {
         const cached = readCachedUser();
         if (cached) applyAuthenticatedUser(cached);
         return;
@@ -176,9 +280,8 @@
         if (cached) applyAuthenticatedUser(cached);
         return;
       }
-
       const toCache = { firstName: user.givenName, givenName: user.givenName, familyName: user.familyName, email: user.email, id: user.id };
-      try { sessionStorage.setItem(USER_KEY, JSON.stringify({ ts: Date.now(), value: toCache })); } catch (e) {}
+      try { sessionStorage.setItem(USER_KEY, JSON.stringify({ ts: Date.now(), value: toCache })); } catch {}
       applyAuthenticatedUser(user);
     } catch (e) {
       console.debug('[header/checkAuth] fetch failed, attempting cache fallback', e);
@@ -187,119 +290,9 @@
     }
   }
 
-  window.handleLogout = function() {
-    try {
-      for (var i = sessionStorage.length - 1; i >= 0; i--) {
-        var k = sessionStorage.key(i);
-        if (k && k.indexOf('joule.') === 0) sessionStorage.removeItem(k);
-      }
-    } catch {}
-    window.location.href = '/logout';
-  };
+  customElements.whenDefined('ui5-shellbar').then(checkAuth);
 
-  window.handleProfileClick = function() {
-    if (!isAuthenticated) {
-      window.location.href = '/login?returnTo=' + encodeURIComponent(window.location.pathname + window.location.search);
-      return;
-    }
-    navPopover.style.display = 'none';
-    trustPopover.style.display = 'none';
-    sharePopover.style.display = 'none';
-    document.querySelector('#trust-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
-    document.querySelector('#share-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
-    popover.style.display = popover.style.display === 'none' ? 'block' : 'none';
-  };
-
-  window.toggleNavMenu = function() {
-    popover.style.display = 'none';
-    trustPopover.style.display = 'none';
-    sharePopover.style.display = 'none';
-    document.querySelector('#trust-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
-    document.querySelector('#share-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
-    var btn = document.querySelector('#nav-dropdown .fd-shellbar__button');
-    var open = navPopover.style.display === 'block';
-    navPopover.style.display = open ? 'none' : 'block';
-    btn.setAttribute('aria-expanded', !open);
-  };
-
-  window.toggleTrustMenu = function() {
-    popover.style.display = 'none';
-    navPopover.style.display = 'none';
-    sharePopover.style.display = 'none';
-    document.querySelector('#nav-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
-    document.querySelector('#share-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
-    var btn = document.querySelector('#trust-dropdown .fd-shellbar__button');
-    var open = trustPopover.style.display === 'block';
-    trustPopover.style.display = open ? 'none' : 'block';
-    btn.setAttribute('aria-expanded', !open);
-  };
-
-  window.toggleShareMenu = function() {
-    popover.style.display = 'none';
-    navPopover.style.display = 'none';
-    trustPopover.style.display = 'none';
-    document.querySelector('#nav-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
-    document.querySelector('#trust-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
-    var btn = document.querySelector('#share-dropdown .fd-shellbar__button');
-    var open = sharePopover.style.display === 'block';
-    if (!open) {
-      shareUrlInput.value = window.location.href;
-      shareStatus.textContent = '';
-    }
-    sharePopover.style.display = open ? 'none' : 'block';
-    btn.setAttribute('aria-expanded', !open);
-    if (!open) {
-      setTimeout(function() { shareUrlInput.select(); }, 0);
-    }
-  };
-
-  window.copyShareUrl = function(button) {
-    var url = shareUrlInput.value || window.location.href;
-    var done = function(ok) {
-      shareStatus.textContent = ok ? 'Copied to clipboard' : 'Press Ctrl+C to copy';
-      if (ok && button) {
-        var orig = button.textContent;
-        button.textContent = 'Copied';
-        setTimeout(function() { button.textContent = orig; }, 1500);
-      }
-    };
-    if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(url).then(function() { done(true); }, function() { fallbackCopy(url, done); });
-    } else {
-      fallbackCopy(url, done);
-    }
-  };
-
-  function fallbackCopy(text, cb) {
-    try {
-      shareUrlInput.value = text;
-      shareUrlInput.select();
-      shareUrlInput.setSelectionRange(0, text.length);
-      var ok = document.execCommand('copy');
-      cb(ok);
-    } catch (e) {
-      cb(false);
-    }
-  }
-
-  document.addEventListener('click', function(e) {
-    if (!document.getElementById('user-menu').contains(e.target)) {
-      popover.style.display = 'none';
-    }
-    if (!document.getElementById('nav-dropdown').contains(e.target)) {
-      navPopover.style.display = 'none';
-      document.querySelector('#nav-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
-    }
-    if (!document.getElementById('trust-dropdown').contains(e.target)) {
-      trustPopover.style.display = 'none';
-      document.querySelector('#trust-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
-    }
-    if (!document.getElementById('share-dropdown').contains(e.target)) {
-      sharePopover.style.display = 'none';
-      document.querySelector('#share-dropdown .fd-shellbar__button').setAttribute('aria-expanded', 'false');
-    }
-  });
-
-  checkAuth();
+  window.handleLogout = () => logoutBtn.click();
+  window.handleProfileClick = () => shellbar.dispatchEvent(new CustomEvent('profile-click', { detail: { targetRef: avatar } }));
 })();
 </script>

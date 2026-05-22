@@ -1,76 +1,22 @@
-<div class="action-bar">
-  <div class="action-bar-inner">
-    <div class="action-bar-nav">
+{{/* Sticky prev/next footer — only renders if at least one neighbour exists */}}
+{{ if or .Params.prev .Params.next }}
+<div class="tutorial-stepnav" role="navigation" aria-label="Tutorial navigation">
+  <div class="tutorial-stepnav__inner">
+    <div class="tutorial-stepnav__slot tutorial-stepnav__slot--prev">
       {{ with .Params.prev }}
-      <a href="/tutorials/{{ . }}" class="nav-pill nav-pill--shell">&larr; Previous</a>
+      <a href="/tutorials/{{ . }}" class="nav-pill">&larr; Previous</a>
       {{ end }}
     </div>
-    <div class="action-bar-actions">
-      <button type="button" class="action-link" onclick="openFeedbackPopup()">
-        <svg width="18" height="18" viewBox="0 0 32 32" fill="none"><path d="M12.06 18.98c-.37 0-.69-.13-.94-.39-.25-.29-.37-.62-.37-.98v-4.06H4.94c-.25 0-.47.1-.66.3-.19.19-.28.44-.28.73v6.8c0 .26.09.49.28.69.19.19.41.29.66.29h1.83c.03.1.05.23.05.39.03.13.03.33 0 .59-.09.55-.27.98-.52 1.27-.22.26-.33.39-.33.39s.28-.03.84-.1c.56-.07 1.06-.31 1.5-.74.31-.26.51-.57.61-.93.12-.36.19-.65.19-.88h7.55c.25 0 .47-.1.66-.29.19-.2.28-.43.28-.69v-2.4h-5.53zm14.77-11.98H12.86c-.31 0-.59.11-.84.34-.25.23-.38.52-.38.88v8.66c0 .33.11.62.33.88.25.23.55.34.89.34h8.86c.03.29.11.67.23 1.13.16.46.42.86.8 1.22.56.52 1.2.83 1.92.93.72.1 1.08.15 1.08.15s-.16-.18-.47-.54c-.28-.36-.48-.91-.61-1.66-.06-.26-.09-.49-.09-.69.03-.2.08-.37.14-.53h2.11c.31 0 .58-.11.8-.34.25-.23.38-.52.38-.88V8.22c0-.33-.11-.6-.33-.83-.22-.26-.5-.39-.84-.39z" fill="currentColor"/></svg>
-        Feedback
-      </button>
-      <button type="button" class="action-link" onclick="openSharePopup()">
-        <svg width="18" height="18" viewBox="0 0 32 32" fill="none"><path d="M22.68 26c.91 0 1.69-.34 2.34-1.02.65-.68.98-1.52.98-2.5 0-.96-.33-1.78-.98-2.46-.65-.68-1.43-1.02-2.34-1.02-.5 0-.96.1-1.41.31-.44.2-.82.5-1.13.88l-7.54-3.77c.03-.05.04-.12.04-.2 0-.08.01-.15.04-.2-.03-.08-.04-.16-.04-.23 0-.07-.01-.14-.04-.21l7.54-3.77c.31.36.69.64 1.13.86.44.22.91.33 1.41.33.91 0 1.69-.34 2.34-1.02.65-.68.98-1.5.98-2.46 0-.98-.33-1.82-.98-2.5C24.37 6.34 23.59 6 22.68 6c-.91 0-1.7.34-2.36 1.02-.67.68-1 1.52-1 2.5 0 .11.01.21.02.31.01.1.03.2.06.31l-7.38 3.77c-.34-.44-.74-.78-1.21-1.03-.47-.25-.96-.37-1.48-.37-.91 0-1.69.34-2.34 1.02-.66.68-.99 1.5-.99 2.46s.33 1.78.99 2.46c.65.68 1.43 1.02 2.34 1.02.52 0 1.01-.12 1.48-.35.47-.23.87-.58 1.21-1.04l7.38 3.77c-.03.11-.05.21-.06.31-.01.1-.02.2-.02.31 0 .98.33 1.82 1 2.5.66.68 1.45 1.02 2.36 1.02z" fill="currentColor"/></svg>
-        Share
-      </button>
+    <div class="tutorial-stepnav__slot tutorial-stepnav__slot--next">
       {{ with .Params.next }}
-      <a href="/tutorials/{{ . }}" class="nav-pill nav-pill--primary-shell">Next &rarr;</a>
+      <a href="/tutorials/{{ . }}" class="nav-pill nav-pill--primary">Next &rarr;</a>
       {{ end }}
     </div>
   </div>
 </div>
+{{ end }}
 
-<!-- Feedback popup -->
-<div id="feedback-popup" class="popup-overlay popup-hidden" onclick="if(event.target===this)closePopups()">
-  <div class="popup-card">
-    <button type="button" class="popup-close" onclick="closePopups()" aria-label="Close">&times;</button>
-    <h3 class="popup-title">Feedback?</h3>
-    <div class="feedback-options">
-      <div class="feedback-option">
-        <svg class="feedback-icon" width="48" height="48" viewBox="0 0 48 48" fill="none"><path d="M18 28.5c-.56 0-1.03-.2-1.41-.59-.38-.44-.56-.93-.56-1.47v-6.09H7.41c-.38 0-.7.15-.98.44-.28.3-.43.67-.43 1.1v10.2c0 .39.14.72.42 1.03.28.29.63.44 1 .44h2.74c.05.15.07.34.07.59.05.2.05.49 0 .85-.14.83-.41 1.47-.79 1.91-.33.39-.5.59-.5.59s.42-.05 1.27-.15c.84-.1 1.59-.47 2.25-1.11.47-.39.72-.86.92-1.4.19-.54.28-1 .28-1.34h11.33c.38 0 .7-.15.98-.44.28-.29.43-.66.43-1.03V28.5H18zm22.15-18H14.29c-.47 0-.89.17-1.27.51-.37.34-.56.78-.56 1.32v12.99c0 .49.16.93.5 1.32.37.34.82.51 1.34.51h13.27c.05.44.17 1 .35 1.69.23.69.63 1.3 1.19 1.83.84.78 1.8 1.24 2.88 1.39 1.08.15 1.62.22 1.62.22s-.23-.27-.7-.81c-.42-.54-.73-1.37-.98-2.49-.09-.39-.14-.74-.14-1.03.05-.29.12-.56.21-.74h3.17c.47 0 .87-.17 1.19-.51.38-.34.56-.78.56-1.32V11.83c0-.49-.16-.91-.49-1.25-.33-.39-.75-.59-1.27-.59z" fill="currentColor"/></svg>
-        <span>Get help doing the tutorial</span>
-        <a href="https://answers.sap.com/questions/ask.html?topics=tutorial-navigator&topics=tutorials-{{ .Params.slug }}" target="_blank" rel="noopener" class="feedback-btn">Ask the community</a>
-      </div>
-      <div class="feedback-option">
-        <svg class="feedback-icon" width="48" height="48" viewBox="0 0 48 48" fill="none"><path d="M24 8c-1.1 0-2 .45-2.7 1.35l-1.3 2c-.3.45-.6.7-1 .8l-2.3.5c-1.1.25-1.85.85-2.25 1.8-.4.95-.3 1.9.3 2.8l1.5 1.9c.3.35.4.75.35 1.15l-.25 2.4c-.1 1.1.2 2 .95 2.65.75.65 1.6.85 2.6.55l2.3-.7c.4-.15.8-.15 1.2 0l2.3.7c1 .3 1.85.1 2.6-.55.75-.65 1.05-1.55.95-2.65l-.25-2.4c-.05-.4.05-.8.35-1.15l1.5-1.9c.6-.9.7-1.85.3-2.8-.4-.95-1.15-1.55-2.25-1.8l-2.3-.5c-.4-.1-.7-.35-1-.8l-1.3-2C26 8.45 25.1 8 24 8z" stroke="currentColor" stroke-width="2" fill="none"/></svg>
-        <span>Help improve the tutorial</span>
-        <a href="https://github.com/sap-tutorials/Tutorials/issues/new?title={{ .Title }}" target="_blank" rel="noopener" class="feedback-btn">Contribute suggestion</a>
-      </div>
-      <div class="feedback-option">
-        <svg class="feedback-icon" width="48" height="48" viewBox="0 0 48 48" fill="none">
-          <rect x="10" y="12" width="28" height="20" rx="2" stroke="currentColor" stroke-width="2" fill="none"/>
-          <path d="M10 16l14 10 14-10" stroke="currentColor" stroke-width="2" fill="none"/>
-        </svg>
-        <span>Send us your thoughts</span>
-        <button type="button" class="feedback-btn" onclick="openTutorialFeedbackPopup('{{ .Params.slug }}')">
-          Give feedback
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Share popup -->
-<div id="share-popup" class="popup-overlay popup-hidden" onclick="if(event.target===this)closePopups()">
-  <div class="popup-card popup-card--share">
-    <button type="button" class="popup-close" onclick="closePopups()" aria-label="Close">&times;</button>
-    <h3 class="popup-title">Share this tutorial</h3>
-    <div class="share-icons">
-      <a href="https://www.facebook.com/sharer/sharer.php?u={{ .Permalink }}" target="_blank" rel="noopener" class="share-icon" title="Share on Facebook">
-        <svg width="32" height="32" viewBox="0 0 32 32"><path d="M18.4 32V17.4h4.9l.7-5.7h-5.6V8.1c0-1.6.5-2.8 2.8-2.8h3V.2C23.5.1 21.8 0 19.8 0c-4.1 0-6.9 2.5-6.9 7.1v4.2H8v5.7h4.9V32h5.5z" fill="#1877F2"/></svg>
-      </a>
-      <a href="https://www.linkedin.com/sharing/share-offsite/?url={{ .Permalink }}" target="_blank" rel="noopener" class="share-icon" title="Share on LinkedIn">
-        <svg width="32" height="32" viewBox="0 0 32 32"><path d="M29.6 0H2.4C1.1 0 0 1 0 2.3v27.4C0 31 1.1 32 2.4 32h27.2c1.3 0 2.4-1 2.4-2.3V2.3C32 1 30.9 0 29.6 0zM9.5 27.3H4.7V12h4.8v15.3zM7.1 9.9c-1.5 0-2.8-1.2-2.8-2.8 0-1.5 1.2-2.8 2.8-2.8 1.5 0 2.8 1.2 2.8 2.8 0 1.6-1.3 2.8-2.8 2.8zm20.2 17.4h-4.8v-7.4c0-1.8 0-4-2.5-4s-2.8 1.9-2.8 3.9v7.6h-4.8V12h4.6v2.1h.1c.6-1.2 2.2-2.5 4.5-2.5 4.8 0 5.7 3.2 5.7 7.3v8.4z" fill="#0A66C2"/></svg>
-      </a>
-      <a href="mailto:?subject={{ .Title }}&body=Check out this SAP tutorial: {{ .Permalink }}" class="share-icon" title="Share via Email">
-        <svg width="32" height="32" viewBox="0 0 32 32"><rect x="2" y="6" width="28" height="20" rx="2" fill="#E8A400"/><path d="M2 8l14 10L30 8" stroke="#fff" stroke-width="2" fill="none"/></svg>
-      </a>
-    </div>
-  </div>
-</div>
-
-<!-- Tutorial feedback popup -->
+<!-- Tutorial feedback popup (form mount; kept as modal because it hosts a Vue widget) -->
 <div id="tutorial-feedback-popup" class="popup-overlay popup-hidden" onclick="if(event.target===this)closePopups()">
   <div class="popup-card">
     <button type="button" class="popup-close" onclick="closePopups()" aria-label="Close">&times;</button>
@@ -79,15 +25,7 @@
 </div>
 
 <script>
-function openFeedbackPopup() {
-  closePopups();
-  document.getElementById('feedback-popup').classList.remove('popup-hidden');
-}
-function openSharePopup() {
-  closePopups();
-  document.getElementById('share-popup').classList.remove('popup-hidden');
-}
-function openTutorialFeedbackPopup(slug) {
+window.openTutorialFeedbackPopup = function(slug) {
   closePopups();
   document.getElementById('tutorial-feedback-popup').classList.remove('popup-hidden');
   if (window.mountTutorialFeedback) {
@@ -99,10 +37,9 @@ function openTutorialFeedbackPopup(slug) {
   s.src = '/js/tutorial-feedback.js';
   s.onload = () => window.mountTutorialFeedback(slug, 'tutorial-feedback-popup');
   document.head.appendChild(s);
-}
+};
 function closePopups() {
-  document.getElementById('feedback-popup').classList.add('popup-hidden');
-  document.getElementById('share-popup').classList.add('popup-hidden');
-  document.getElementById('tutorial-feedback-popup').classList.add('popup-hidden');
+  const el = document.getElementById('tutorial-feedback-popup');
+  if (el) el.classList.add('popup-hidden');
 }
 </script>

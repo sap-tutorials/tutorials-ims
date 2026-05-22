@@ -55,6 +55,10 @@
   --sapList_HeaderBackground: #f4f4f7;
   --sapList_BorderColor: #e5e5ea;
   --sapField_BorderColor: #ccd;
+  --sapPageFooter_Background: #fff;
+  --sapPageFooter_TextColor: #32363a;
+  --sapPageFooter_BorderColor: #d9d9d9;
+  --sapGroup_TitleBorderWidth: 1px;
 }
 
 /* SAP Horizon Dark theme variables */
@@ -110,6 +114,9 @@ html.dark {
   --sapList_HeaderBackground: #29394b;
   --sapList_BorderColor: #3c4854;
   --sapField_BorderColor: #3c4854;
+  --sapPageFooter_Background: #1c2228;
+  --sapPageFooter_TextColor: #eaecee;
+  --sapPageFooter_BorderColor: #3c4854;
 }
 
 @media (prefers-reduced-motion: no-preference) {

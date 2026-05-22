@@ -8,6 +8,19 @@ stepCount: 2
 time: 15
 experienceLevel: "Beginner"
 primaryTag: "Tutorial"
+author: "Thomas Jung"
+authorProfile: "https://github.com/thomasjung-sap"
+createdAt: 2026-04-15
+lastUpdated: 2026-05-20
+contributors:
+  - login: "thomasjung-sap"
+    name: "Thomas Jung"
+  - login: "qmacro"
+    name: "DJ Adams"
+  - login: "vobu"
+    name: "Volker Buzek"
+updated: 2026-05-20
+notice: "Pilot tutorial — used for UI testing only."
 youWillLearn:
   - "How Hugo layouts work"
   - "How shortcodes render"

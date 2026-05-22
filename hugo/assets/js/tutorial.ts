@@ -250,6 +250,8 @@ function updateProgressBar() {
 
   const label = document.querySelector('.progress-label')
   if (label) label.textContent = `${completed} / ${total}`
+
+  if (total > 0 && completed >= total) maybeShowCompletedBanner(completed)
 }
 
 async function loadProgress() {
@@ -272,6 +274,19 @@ async function loadProgress() {
     }
   }
   updateProgressBar()
+  maybeShowCompletedBanner(data.completedSteps.length)
+}
+
+function maybeShowCompletedBanner(completedCount: number) {
+  const total = document.querySelectorAll('.tutorial-step').length
+  if (!total || completedCount < total) return
+  const host = document.querySelector('.tutorial-banners')
+  if (!host || host.querySelector('[data-banner="completed"]')) return
+  const strip = document.createElement('ui5-message-strip')
+  strip.setAttribute('design', 'Positive')
+  strip.setAttribute('data-banner', 'completed')
+  strip.textContent = 'You completed this tutorial. Nice work!'
+  host.appendChild(strip)
 }
 
 // --- Validation quiz ---

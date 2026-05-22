@@ -26,5 +26,7 @@
   <script defer src="/js/vendor/purify.min.js"></script>
   <script defer src="/js/joule-render.js"></script>
   <script src="/js/joule.js" defer></script>
+  {{ $ui5 := resources.Get "js/ui5-bootstrap.ts" | js.Build (dict "minify" true "format" "esm" "target" "es2020") }}
+  <script type="module" src="{{ $ui5.RelPermalink }}"></script>
 </body>
 </html>
