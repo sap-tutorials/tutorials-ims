@@ -1,0 +1,126 @@
+/* hugo/assets/css/lightbox.css
+ *
+ * U15: ui5-dialog-based image lightbox.
+ * Behavior in hugo/assets/js/lightbox.ts. Dialog markup in
+ * hugo/layouts/partials/lightbox-dialog.html.
+ *
+ * The viewport hosts a "rail" containing two img elements:
+ *   .lightbox-img--current  — currently displayed
+ *   .lightbox-img--incoming — staged off-screen during prev/next slide
+ * The slide animation translates both imgs simultaneously; on transitionend
+ * the JS swaps class names so incoming becomes current and resets transforms.
+ */
+
+.lightbox-dialog {
+  --lightbox-bg: var(--sapShell_Background, #2b2b2b);
+}
+
+.lightbox-dialog::part(content) {
+  /* ui5-dialog defaults to padding around content; we want the image edge-to-edge. */
+  padding: 0;
+  background: var(--lightbox-bg);
+  /* Constrain viewport so chrome remains visible. */
+  width: min(95vw, 1600px);
+  height: min(85vh, 1000px);
+  max-height: 85vh;
+}
+
+.lightbox-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 0.5rem;
+  padding: 0 0.5rem;
+}
+
+.lightbox-title {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lightbox-viewport {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--lightbox-bg);
+  cursor: grab;
+  /* Block native pinch/scroll; we own gestures via Pointer Events. */
+  touch-action: none;
+}
+
+.lightbox-viewport.is-panning {
+  cursor: grabbing;
+}
+
+.lightbox-rail {
+  position: absolute;
+  inset: 0;
+}
+
+.lightbox-img {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  transform-origin: 0 0;
+  /* Override the dark-mode brightness filter applied to .tutorial-main img.
+     Without this the lightbox view is dimmed in dark mode. */
+  filter: none !important;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.lightbox-img[hidden] { display: none; }
+
+/* During a slide animation, both imgs animate translateX over 300 ms. */
+.lightbox-rail.is-sliding .lightbox-img {
+  transition: transform 300ms ease;
+}
+
+.lightbox-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  width: 100%;
+  padding: 0 0.5rem;
+  flex-wrap: wrap;
+}
+
+.lightbox-zoom-level {
+  min-width: 3.5rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.875rem;
+  color: var(--sapTextColor);
+}
+
+/* Single-image pages: prev/next get [hidden] from JS; this rule keeps the
+   footer balanced when they're absent. */
+.lightbox-prev[hidden],
+.lightbox-next[hidden] { display: none; }
+
+/* Mobile: stretch dialog to viewport. JS toggles `stretch` attribute on open
+   based on a matchMedia snapshot; no resize listener while open. */
+@media (max-width: 640px) {
+  .lightbox-dialog::part(content) {
+    width: 100vw;
+    height: 100vh;
+    max-height: 100vh;
+  }
+}
+
+/* Reduced motion: skip slide animation entirely; the JS also short-circuits
+   the two-step transition path when matchMedia matches. */
+@media (prefers-reduced-motion: reduce) {
+  .lightbox-rail.is-sliding .lightbox-img {
+    transition: none;
+  }
+}

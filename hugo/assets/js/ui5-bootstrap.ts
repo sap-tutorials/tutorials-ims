@@ -7,6 +7,9 @@ import { setTheme } from "@ui5/webcomponents-base/dist/config/Theme.js";
 // Selectors are scoped to attributes that only get set on relevant pages.
 import "../css/skeletons.css";
 
+// U15: lightbox dialog styles. Scoped to .lightbox-dialog and descendants.
+import "../css/lightbox.css";
+
 // Register theme assets for both light and dark — without this side-effect import,
 // setTheme("sap_horizon_dark") silently falls back to sap_horizon (only the default is registered).
 import "@ui5/webcomponents/dist/Assets.js";
@@ -24,6 +27,8 @@ import "@ui5/webcomponents/dist/TabContainer.js";
 import "@ui5/webcomponents/dist/Tab.js";
 import "@ui5/webcomponents/dist/RatingIndicator.js";
 import "@ui5/webcomponents/dist/ProgressIndicator.js";
+import "@ui5/webcomponents/dist/Dialog.js";
+import "@ui5/webcomponents/dist/Title.js";
 import "@ui5/webcomponents-fiori/dist/ShellBar.js";
 import "@ui5/webcomponents-fiori/dist/ShellBarItem.js";
 import "@ui5/webcomponents-fiori/dist/Wizard.js";
@@ -58,6 +63,14 @@ import "@ui5/webcomponents-icons/dist/unfavorite.js";
 import "@ui5/webcomponents-icons/dist/documents.js";
 import "@ui5/webcomponents-icons/dist/decline.js";
 
+// U15: lightbox toolbar icons.
+import "@ui5/webcomponents-icons/dist/zoom-in.js";
+import "@ui5/webcomponents-icons/dist/zoom-out.js";
+import "@ui5/webcomponents-icons/dist/navigation-left-arrow.js";
+import "@ui5/webcomponents-icons/dist/navigation-right-arrow.js";
+import "@ui5/webcomponents-icons/dist/reset.js";
+import "@ui5/webcomponents-icons/dist/download.js";
+
 // U8: cross-block selection sync for {{< codetabs >}}.
 import "./codetabs";
 
@@ -67,6 +80,9 @@ import "./glossary";
 // U11: reading-progress bar + step scrollspy. Gated on DOM presence —
 // safely no-ops on pages without .tutorial-steps / .tutorial-step.
 import "./reading-progress";
+
+// U15: image lightbox. Self-bootstraps; safe no-op when #image-lightbox is missing.
+import "./lightbox";
 
 // U14: full-page navigation progress bar. Self-bootstraps; safe no-op when
 // the #nav-progress element is missing (i.e. partial not rendered).

@@ -1,0 +1,24 @@
+{{/* U15: image lightbox. Replaces the native <dialog class="image-lightbox">.
+     Behavior is wired by hugo/assets/js/lightbox.ts. The element renders on every
+     markdown page via baseof.html. */}}
+<ui5-dialog id="image-lightbox" accessible-name="Image viewer" class="lightbox-dialog">
+  <div slot="header" class="lightbox-header">
+    <ui5-title level="H4" class="lightbox-title"></ui5-title>
+    <ui5-button icon="decline" design="Transparent" class="lightbox-close" tooltip="Close"></ui5-button>
+  </div>
+  <div class="lightbox-viewport" data-lightbox-viewport>
+    <div class="lightbox-rail">
+      <img class="lightbox-img lightbox-img--current" alt="">
+      <img class="lightbox-img lightbox-img--incoming" alt="" hidden>
+    </div>
+  </div>
+  <div slot="footer" class="lightbox-footer">
+    <ui5-button icon="navigation-left-arrow" design="Transparent" class="lightbox-prev" tooltip="Previous"></ui5-button>
+    <ui5-button icon="zoom-out" design="Transparent" class="lightbox-zoom-out" tooltip="Zoom out"></ui5-button>
+    <span class="lightbox-zoom-level" aria-live="polite">100%</span>
+    <ui5-button icon="zoom-in" design="Transparent" class="lightbox-zoom-in" tooltip="Zoom in"></ui5-button>
+    <ui5-button icon="reset" design="Transparent" class="lightbox-reset" tooltip="Reset zoom"></ui5-button>
+    <ui5-button icon="download" design="Transparent" class="lightbox-download" tooltip="Download image"></ui5-button>
+    <ui5-button icon="navigation-right-arrow" design="Transparent" class="lightbox-next" tooltip="Next"></ui5-button>
+  </div>
+</ui5-dialog>

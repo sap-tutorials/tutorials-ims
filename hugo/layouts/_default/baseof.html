@@ -36,11 +36,7 @@
   {{/* U10: shared step-completion toast. Text + duration set per call. */}}
   <ui5-toast id="step-toast" placement="BottomCenter"></ui5-toast>
 
-  <dialog class="image-lightbox" id="image-lightbox" aria-label="Image viewer">
-    <button type="button" class="image-lightbox-close" aria-label="Close">&times;</button>
-    <img alt="">
-    <div class="image-lightbox-caption"></div>
-  </dialog>
+  {{ partial "lightbox-dialog.html" . }}
   <script defer src="/js/consent.js"></script>
   <script defer src="/js/vendor/markdown-it.min.js"></script>
   <script defer src="/js/vendor/purify.min.js"></script>
