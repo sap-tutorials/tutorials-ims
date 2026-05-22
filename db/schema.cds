@@ -357,6 +357,18 @@ entity PipelineLog : cuid, managed {
   errorDetails    : LargeString;
   metadata        : LargeString;
   statusCriticality : Integer @Core.Computed;
+  items           : Composition of many PipelineLogItems on items.pipelineLog = $self;
+}
+
+// Per-slug failures captured during a pipeline run. Lets admins drill from a
+// PipelineLog row into the specific tutorials that had issues.
+entity PipelineLogItems : cuid {
+  pipelineLog : Association to PipelineLog;
+  slug        : String(255);
+  phase       : String(20) enum { CONTENT; METADATA; BODYTEXT; EMBEDDINGS; };
+  severity    : String(10) enum { ERROR; WARN; };
+  message     : String(2000);
+  severityCriticality : Integer @Core.Computed;
 }
 
 entity ChatSettings : cuid, managed {

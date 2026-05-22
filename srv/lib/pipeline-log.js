@@ -59,3 +59,21 @@ export async function logPipeline(pipelineType, initiator, fn, metadata) {
     throw err;
   }
 }
+
+/**
+ * Record a per-slug failure or warning under an in-flight pipeline log.
+ * Items show up as a sub-table on the PipelineLog Object Page so admins can
+ * drill from a run into the specific tutorials that had issues.
+ */
+export async function logPipelineItem(logId, { slug, phase, severity, message }) {
+  if (!logId) return;
+  const { PipelineLogItems } = cds.entities('com.sap.developers.ims');
+  await INSERT.into(PipelineLogItems).entries({
+    ID: randomUUID(),
+    pipelineLog_ID: logId,
+    slug: (slug || '').slice(0, 255) || null,
+    phase,
+    severity: severity || 'ERROR',
+    message: (message ? String(message) : '').slice(0, 2000) || null
+  });
+}

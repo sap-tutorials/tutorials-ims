@@ -685,6 +685,7 @@ annotate AdminService.PipelineLog with @(
       { $Type: 'UI.ReferenceFacet', ID: 'PipelineTiming',  Target: '@UI.FieldGroup#Timing',  Label: 'Timing' },
       { $Type: 'UI.ReferenceFacet', ID: 'PipelineSummary', Target: '@UI.FieldGroup#Summary', Label: 'Summary' },
       { $Type: 'UI.ReferenceFacet', ID: 'PipelineError',   Target: '@UI.FieldGroup#Error',   Label: 'Error Details' },
+      { $Type: 'UI.ReferenceFacet', ID: 'PipelineItems',   Target: 'items/@UI.LineItem',     Label: 'Affected Tutorials' },
       { $Type: 'UI.ReferenceFacet', ID: 'PipelineMeta',    Target: '@UI.FieldGroup#Metadata', Label: 'Metadata' }
     ],
     FieldGroup #General: { Data: [
@@ -700,6 +701,29 @@ annotate AdminService.PipelineLog with @(
     FieldGroup #Summary:  { Data: [{ Value: summary }] },
     FieldGroup #Error:    { Data: [{ Value: errorDetails }] },
     FieldGroup #Metadata: { Data: [{ Value: metadata }] }
+  },
+  Capabilities.DeleteRestrictions.Deletable: false,
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable: false
+);
+
+// --- PipelineLogItems (per-slug failures captured during a pipeline run) ---
+annotate AdminService.PipelineLogItems with {
+  slug     @Common.Label: 'Tutorial Slug';
+  phase    @Common.Label: 'Phase'    @Common.ValueListWithFixedValues;
+  severity @Common.Label: 'Severity' @Common.ValueListWithFixedValues;
+  message  @Common.Label: 'Message'  @UI.MultiLineText;
+};
+
+annotate AdminService.PipelineLogItems with @(
+  UI: {
+    LineItem: [
+      { Value: severity, Criticality: severityCriticality },
+      { Value: phase },
+      { Value: slug },
+      { Value: message }
+    ],
+    SelectionFields: [ severity, phase ]
   },
   Capabilities.DeleteRestrictions.Deletable: false,
   Capabilities.InsertRestrictions.Insertable: false,
