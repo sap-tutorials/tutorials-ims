@@ -43,11 +43,11 @@ It opens on image click, closes on any click, and shows alt text as caption. The
 | `hugo/layouts/partials/lightbox-dialog.html` | NEW | `<ui5-dialog>` markup with header / viewport / footer slots |
 | `hugo/layouts/_default/baseof.html` | EDIT | Replace native `<dialog class="image-lightbox">` block with `{{ partial "lightbox-dialog.html" . }}` |
 | `hugo/assets/js/lightbox.ts` | NEW | State, open/close, zoom, pan, gallery, slide animation, hash sync, download |
-| `hugo/assets/js/tutorial.ts` | EDIT | Remove `openLightbox`/`initLightbox`; click delegation calls into the new module |
+| `hugo/assets/js/tutorial.ts` | EDIT | Remove `openLightbox`/`initLightbox` and the `data-zoomable` branch of the existing click delegation (currently at [tutorial.ts:35-36](hugo/assets/js/tutorial.ts#L35-L36)). The new `lightbox.ts` attaches its own `document.addEventListener('click', ...)` delegation on init (called from `ui5-bootstrap.ts`), so this file no longer participates in lightbox wiring. |
 | `hugo/assets/js/ui5-bootstrap.ts` | EDIT | Import `Dialog.js`, `Title.js`, new icons (`zoom-in`, `zoom-out`, `navigation-left-arrow`, `navigation-right-arrow`, `reset`, `download`); import `lightbox.ts`; import `lightbox.css` |
 | `hugo/assets/css/lightbox.css` | NEW | Viewport, transform layer, slide rail, mobile stretch, reduced-motion fallback |
-| `hugo/assets/css/sap-fundamental.css` | EDIT | Remove `.image-lightbox*` rules (lines 2410-2468) |
-| `hugo/static/css/sap-fundamental.css` | EDIT | Same removal (static copy of the same file) |
+| `hugo/assets/css/sap-fundamental.css` | EDIT | Remove `.image-lightbox*` rules (lines 2410-2468) — this is the source file for the PostCSS pipeline |
+| `hugo/static/css/sap-fundamental.css` | REGEN | Build artifact produced by `npm run build:css` (postcss → static/). Must be committed alongside the source edit so dev/prod renders match — `npm run dev` does NOT auto-regenerate this file. The git history shows both files committed together for every CSS change. |
 
 Approximate change: ~240 LOC added (TS + CSS + partial), ~60 LOC removed. One commit, one PR.
 
@@ -148,6 +148,10 @@ If a second goto fires while animating, the in-flight transition is canceled via
 2. ui5-dialog handles focus restore to the triggering image.
 3. If `pushedHash`, call `history.back()` (which fires popstate but our handler ignores when the dialog is already closed).
 4. Else, the page was opened directly with `#img-N`: `history.replaceState(null, "", location.pathname + location.search)` to clean the URL.
+
+**Close event wiring**: bind `dialog.addEventListener("close", close)` on init. ui5-dialog dispatches a native `close` event on Esc-driven dismissal and on programmatic `dialog.close()`. The footer close button calls `dialog.close()` (which then triggers the same `close` event handler). This guarantees a single teardown path — state reset + hash cleanup — regardless of whether the user pressed Esc, clicked the close button, or hit the browser back button (popstate handler also calls `dialog.close()`).
+
+Re-entrancy: `close()` is idempotent. If `close` event fires after `history.back()` already ran (popstate path), the second invocation no-ops because `pushedHash` was reset and state is already at defaults.
 
 #### Hash deep-link
 
