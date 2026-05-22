@@ -41,6 +41,12 @@
   if (localStorage.getItem('reader') === 'on') {
     document.documentElement.dataset.reader = 'on';
   }
+  // U14: hydration shimmer pre-paint. Only tutorial layouts mark themselves
+  // unhydrated; loadProgress() in tutorial.ts flips this to "true" after
+  // /getProgress resolves (or 1.5s race timeout, or catch).
+  if (document.documentElement.dataset.pageKind === 'tutorial') {
+    document.documentElement.dataset.hydrated = 'false';
+  }
   document.addEventListener('click', function(e) {
     if (e.target.closest('[data-action="toggle-theme"]')) {
       var html = document.documentElement;
@@ -49,5 +55,15 @@
       html.classList.toggle('dark', next === 'dark');
       localStorage.setItem('theme', next);
     }
+  });
+  // U14: bundle-failure safety net. If tutorial.ts never runs (network error,
+  // CSP block, JS bundle 404), still flip after DOMContentLoaded + 2s so the
+  // user is not stranded on shimmer.
+  document.addEventListener('DOMContentLoaded', function () {
+    setTimeout(function () {
+      if (document.documentElement.dataset.hydrated === 'false') {
+        document.documentElement.dataset.hydrated = 'true';
+      }
+    }, 2000);
   });
 </script>
