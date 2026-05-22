@@ -362,7 +362,10 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
 
       history.push({
         role: 'assistant',
-        content: assistantText || null,
+        // SAP AI Core orchestration rejects null content with
+        // "None is not of type 'string'" — always send a string, even when
+        // the turn has only tool_calls and no prose.
+        content: assistantText,
         tool_calls: collectedToolCalls.map(tc => ({
           id: tc.id, type: 'function',
           function: { name: tc.name, arguments: typeof tc.args === 'string' ? tc.args : JSON.stringify(tc.args ?? {}) }

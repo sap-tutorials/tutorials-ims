@@ -1,8 +1,13 @@
 // srv/lib/admin-analytics-schema.js
+// Source names are fully-qualified CDS entity names so the runner's raw CQN
+// resolves to the correct HANA table (COM_SAP_DEVELOPERS_IMS_TASKRECORDS).
+// Bare names like 'TaskRecords' fall through to a literal table lookup that
+// fails on HANA's HDI schema.
+const NS = 'com.sap.developers.ims.';
 export const ANALYTICS_SCHEMA = {
   facts: {
-    completion: { source: 'TaskRecords', baseFilter: { status: 'COMPLETED' } },
-    start:      { source: 'TaskRecords', baseFilter: {} },
+    completion: { source: NS + 'TaskRecords', baseFilter: { status: 'COMPLETED' } },
+    start:      { source: NS + 'TaskRecords', baseFilter: {} },
   },
   dimensions: {
     taskType:        { kind: 'column',            column: 'taskType' },

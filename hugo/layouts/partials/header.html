@@ -153,7 +153,7 @@
 
   async function checkAuth() {
     try {
-      const res = await fetch(capBase + '/auth/user', { credentials: 'include', redirect: 'follow' });
+      const res = await fetch('/auth/user', { credentials: 'include', redirect: 'follow' });
       if (res.redirected) {
         const cached = readCachedUser();
         if (cached) applyAuthenticatedUser(cached);

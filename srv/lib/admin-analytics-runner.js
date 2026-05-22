@@ -139,7 +139,8 @@ function _buildCQN(v) {
 }
 
 async function _runTagFanout(v, dbi) {
-  const sources = ['TutorialTags', 'MissionTags', 'GroupTags'];
+  const NS = 'com.sap.developers.ims.';
+  const sources = [NS + 'TutorialTags', NS + 'MissionTags', NS + 'GroupTags'];
   const results = [];
   for (const src of sources) {
     const cqn = {

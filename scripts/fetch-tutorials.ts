@@ -7,7 +7,7 @@ import { extractFrontmatter } from './parsers/frontmatter.js'
 import { parseV2Steps } from './parsers/v2.js'
 import { parseV1Steps } from './parsers/v1.js'
 import { resolveImageURLs } from './parsers/images.js'
-import { annotateImageDimensions, flushDimensionsCache } from './parsers/image-dimensions.js'
+import { flushDimensionsCache } from './parsers/image-dimensions.js'
 import { convertOptionBlocks } from './parsers/options.js'
 import { escapeHugoDelimiters } from './parsers/hugo-delimiters.js'
 import { stripDangerousHtml } from './parsers/sanitize-html.js'
@@ -734,7 +734,6 @@ async function main() {
 
       const isV2 = frontmatter.parser === 'v2'
       let processedBody = resolveImageURLs(body, { repo: t.repo, branch: t.branch, slug: t.slug })
-      processedBody = await annotateImageDimensions(processedBody)
       processedBody = convertOptionBlocks(processedBody, target)
       processedBody = processedBody.replace(/^<{4,7} .+\n[\s\S]*?^={4,7}\n([\s\S]*?)^>{4,7} .+\n?/gm, '$1')
 

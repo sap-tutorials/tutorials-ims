@@ -373,7 +373,7 @@ ar.start({
       insertMiddleware: {
         first: [
           { path: '/admin/rebuild', handler: rebuildHandler },
-          { path: '/img-cdn', handler: imgCdnHandler },
+          { path: '/', handler: imgCdnHandler },
           { path: '/', handler: redirectsHandler },
           { path: '/', handler: adminAppsHandler },
           { path: '/', handler: staticHandler },
