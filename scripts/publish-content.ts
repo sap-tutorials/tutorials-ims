@@ -180,14 +180,13 @@ export function extractMetadata(
       ? fm.steps.map((s: any) => ({ number: s.number ?? 0, title: s.title ?? '' }))
       : [];
 
+    const trim = (v: unknown): string | null =>
+      typeof v === 'string' && v.trim().length > 0 ? v.trim() : null;
+
     const contributors = Array.isArray(fm.contributors) ? fm.contributors : [];
     const primary = contributors.length > 0 ? contributors[0] : null;
-    const primaryContributorEmail =
-      primary && typeof primary.email === 'string' && primary.email.length > 0
-        ? primary.email
-        : null;
-    const primaryContributorLogin =
-      primary && typeof primary.login === 'string' ? primary.login : null;
+    const primaryContributorEmail = primary ? trim((primary as any).email) : null;
+    const primaryContributorLogin = primary ? trim((primary as any).login) : null;
 
     result[slug] = {
       slug,
@@ -198,7 +197,7 @@ export function extractMetadata(
       primaryTag: fm.primaryTag ?? null,
       stepCount: fm.stepCount ?? steps.length,
       steps,
-      lastUpdated: typeof fm.lastUpdated === 'string' ? fm.lastUpdated : null,
+      lastUpdated: trim(fm.lastUpdated),
       primaryContributorEmail,
       primaryContributorLogin,
     };

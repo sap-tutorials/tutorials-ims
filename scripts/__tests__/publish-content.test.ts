@@ -227,6 +227,9 @@ describe('extractMetadata', () => {
     expect(meta.primaryTag).toBeNull();
     expect(meta.steps).toHaveLength(0);
     expect(meta.stepCount).toBe(0);
+    expect(meta.lastUpdated).toBeNull();
+    expect(meta.primaryContributorEmail).toBeNull();
+    expect(meta.primaryContributorLogin).toBeNull();
   });
 
   it('skips files without YAML frontmatter', () => {
