@@ -360,6 +360,7 @@ type LightboxState = {
   ty: number;
   pushedHash: boolean;
   animating: boolean;
+  isOpen: boolean;
 };
 
 const state: LightboxState = {
@@ -370,6 +371,7 @@ const state: LightboxState = {
   ty: 0,
   pushedHash: false,
   animating: false,
+  isOpen: false,
 };
 
 function dialog(): LightboxDialog | null {
@@ -424,6 +426,11 @@ function open(triggerImg: HTMLImageElement) {
   if (location.hash !== hashTarget) {
     history.pushState({ lightbox: true }, "", hashTarget);
     state.pushedHash = true;
+  } else {
+    // We're entering via the URL hash (deep-link path) OR re-opening at the
+    // same index after a previous close that ran history.back(). Either way
+    // the hash already matches, so close() must use replaceState.
+    state.pushedHash = false;
   }
 
   // Mobile stretch: matchMedia snapshot on open; we don't re-evaluate on resize.
@@ -433,7 +440,10 @@ function open(triggerImg: HTMLImageElement) {
     dlg.removeAttribute("stretch");
   }
 
-  customElements.whenDefined("ui5-dialog").then(() => dlg.show());
+  customElements.whenDefined("ui5-dialog").then(() => {
+    state.isOpen = true;
+    dlg.show();
+  });
 }
 
 function close() {
@@ -442,6 +452,7 @@ function close() {
   state.tx = 0;
   state.ty = 0;
   state.animating = false;
+  state.isOpen = false;
   if (cur) applyTransform(cur);
   updateZoomLabel();
 
@@ -490,9 +501,11 @@ export function initLightbox() {
   // ui5-dialog dispatches native `close` event on Esc and on .close().
   dlg.addEventListener("close", close);
 
-  // Browser back closes the dialog.
+  // Browser back closes the dialog. Gate on state.isOpen rather than the dialog's
+  // `open` attribute — ui5-dialog reflects open as a property, not a DOM attribute,
+  // so hasAttribute("open") returns false even while the dialog is showing.
   window.addEventListener("popstate", () => {
-    if (dlg.hasAttribute("open")) dlg.close();
+    if (state.isOpen) dlg.close();
   });
 }
 
@@ -614,7 +627,7 @@ Inside `initLightbox()`, after the existing close-button binding and BEFORE the 
   const vp = viewport();
   if (vp) {
     vp.addEventListener("wheel", (e) => {
-      if (!dlg.hasAttribute("open")) return;
+      if (!state.isOpen) return;
       e.preventDefault();
       const delta = -e.deltaY * 0.003;
       zoomBy(delta, e.clientX, e.clientY);
@@ -634,8 +647,12 @@ Inside `initLightbox()`, after the existing close-button binding and BEFORE the 
     });
 
   // Keyboard while dialog is open. Esc is owned by ui5-dialog; we stay clear of it.
-  document.addEventListener("keydown", (e) => {
-    if (!dlg.hasAttribute("open")) return;
+  // ui5-dialog traps focus inside its shadow DOM, so document-level keydown won't
+  // fire for keys pressed while a focused element is inside the dialog. Attach
+  // the same handler to the dialog itself as well so +/-/0 work regardless of
+  // which element has focus.
+  function onZoomKey(e: KeyboardEvent) {
+    if (!state.isOpen) return;
     if (e.key === "+" || e.key === "=") { zoomCenter(0.5); e.preventDefault(); }
     else if (e.key === "-") { zoomCenter(-0.5); e.preventDefault(); }
     else if (e.key === "0") {
@@ -645,7 +662,9 @@ Inside `initLightbox()`, after the existing close-button binding and BEFORE the 
       updateZoomLabel();
       e.preventDefault();
     }
-  });
+  }
+  document.addEventListener("keydown", onZoomKey);
+  dlg.addEventListener("keydown", onZoomKey);
 ```
 
 - [ ] **Step 3: Wire single-pointer drag-pan**
@@ -787,7 +806,9 @@ Locate the `// Single-pointer pan.` block from Task 5. Replace the entire block 
     };
     vp.addEventListener("pointerup", endPointer);
     vp.addEventListener("pointercancel", endPointer);
-    vp.addEventListener("pointerleave", endPointer);
+    // Note: NO pointerleave — it fires when the pointer exits the viewport during
+    // an active drag, which would prematurely cancel the gesture. pointerup +
+    // pointercancel cover legitimate end-of-gesture cases.
   }
 ```
 
@@ -812,7 +833,7 @@ git commit -m "feat(u15): pinch-zoom via two-pointer Pointer Events"
 
 ## Task 7: Gallery prev/next with slide animation
 
-The two-image rail allows the outgoing image to slide off as the incoming slides in. `transitionend` is the primary completion signal; a 300 ms timer is the fallback.
+The two-image rail allows the outgoing image to slide off as the incoming slides in. `transitionend` is the primary completion signal; a 350 ms timer (300 ms transition + 50 ms safety margin) is the fallback when `transitionend` is missed.
 
 **Files:**
 - Modify: `hugo/assets/js/lightbox.ts`
@@ -986,7 +1007,9 @@ In `initLightbox()`, after all other event wiring but before the closing brace, 
       const target = all[idx];
       // Scroll the source image into view (so on close, focus restore lands
       // somewhere visible). Block: 'center' prefers vertical centering.
-      target.scrollIntoView({ block: "center", behavior: "instant" });
+      // Use behavior: "auto" — "instant" is a CSS scroll-behavior keyword, not
+      // a valid ScrollIntoViewOptions value (TS will reject it; runtime ignores).
+      target.scrollIntoView({ block: "center", behavior: "auto" });
       open(target);
       // Suppress pushState — we entered via URL hash, close should replaceState.
       state.pushedHash = false;
@@ -1072,28 +1095,41 @@ Now that the new module fully owns the behavior, delete the dead code in `tutori
 **Files:**
 - Modify: `hugo/assets/js/tutorial.ts`
 
-- [ ] **Step 1: Remove the click-delegation branch**
+- [ ] **Step 1: Locate the old code**
 
-In [hugo/assets/js/tutorial.ts](../../../hugo/assets/js/tutorial.ts), delete lines 35-36:
+Line numbers may have drifted since this plan was written. Confirm exact ranges first:
+
+```bash
+grep -n 'data-zoomable\|openLightbox\|initLightbox\|--- Image lightbox ---' hugo/assets/js/tutorial.ts
+```
+
+Expected matches (3 distinct sites):
+- One line with `target.closest('img[data-zoomable="true"]')` followed by an `openLightbox(zoomable)` call — the click-delegation branch.
+- A `// --- Image lightbox ---` banner followed by `function openLightbox(...)` and `function initLightbox()` definitions — ~22 lines.
+- An `initLightbox()` call inside the bottom `DOMContentLoaded` handler.
+
+- [ ] **Step 2: Remove the click-delegation branch**
+
+Delete the two lines that look like:
 
 ```ts
   const zoomable = target.closest('img[data-zoomable="true"]') as HTMLImageElement | null
   if (zoomable) { openLightbox(zoomable); return }
 ```
 
-- [ ] **Step 2: Remove the `openLightbox` and `initLightbox` functions**
+- [ ] **Step 3: Remove the `openLightbox` and `initLightbox` functions**
 
-Delete lines 54-75 (the entire `// --- Image lightbox ---` section, including the `openLightbox()` and `initLightbox()` function bodies).
+Delete the entire `// --- Image lightbox ---` section, including the `openLightbox()` and `initLightbox()` function bodies. There should be no remaining references to `lightbox` anywhere in this file after this step.
 
-- [ ] **Step 3: Remove the `initLightbox()` call**
+- [ ] **Step 4: Remove the `initLightbox()` call**
 
-Delete line 558 (`initLightbox()`) inside the bottom DOMContentLoaded handler.
+Delete the bare `initLightbox()` call inside the bottom `DOMContentLoaded` handler.
 
-- [ ] **Step 4: Manual verification**
+- [ ] **Step 5: Manual verification**
 
 Refresh a tutorial page. Click an image — dialog opens via the new module only. Confirm in DevTools: only one `click` event handler is registered for `img[data-zoomable]` (you can check via Event Listeners panel on the document). Behavior is unchanged from Task 8 verification.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add hugo/assets/js/tutorial.ts
