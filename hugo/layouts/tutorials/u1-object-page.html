@@ -1,0 +1,274 @@
+{{ define "main" }}
+{{ partial "breadcrumbs.html" . }}
+{{ partial "feedback-share.html" . }}
+
+<style>
+  /* U1 Object Page prototype — scoped to .op-page so it can't leak. */
+  .op-page { max-width: 1200px; margin: 0 auto; padding: 0; }
+
+  .op-header {
+    position: sticky;
+    top: 0; /* shellbar isn't fixed in U3 — it scrolls away */
+    z-index: 30;
+    background: var(--sapObjectHeader_Background, var(--sapBackgroundColor));
+    border-bottom: 1px solid var(--sapObjectHeader_BorderColor, var(--sapList_BorderColor));
+    padding: 1rem 1.5rem 0.5rem;
+  }
+  .op-header__title {
+    font-size: 1.625rem;
+    font-weight: 600;
+    margin: 0 0 0.25rem;
+    color: var(--sapObjectHeader_TitleTextColor, var(--sapTextColor));
+    line-height: 1.25;
+  }
+  .op-header__description {
+    margin: 0 0 0.75rem;
+    color: var(--sapObjectHeader_TextColor, var(--sapContent_LabelColor));
+    font-size: 0.9375rem;
+  }
+  .op-header__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.75rem;
+  }
+  .op-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.125rem 0.625rem;
+    border-radius: 999px;
+    background: var(--sapInfobar_Background, var(--sapList_Background));
+    color: var(--sapTextColor);
+    border: 1px solid var(--sapList_BorderColor);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+  }
+  .op-chip__icon { opacity: 0.7; font-size: 0.875rem; }
+  .op-chip--tag {
+    background: var(--sapButton_Lite_Background, transparent);
+    border-color: var(--sapButton_Lite_BorderColor, var(--sapList_BorderColor));
+  }
+  .op-progress {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: auto;
+    font-size: 0.8125rem;
+    color: var(--sapContent_LabelColor);
+  }
+  .op-progress__ring {
+    --size: 32px;
+    --pct: 0;
+    width: var(--size);
+    height: var(--size);
+    border-radius: 50%;
+    background:
+      conic-gradient(var(--sapBrandColor, #0070f2) calc(var(--pct) * 1%), var(--sapList_BorderColor) 0);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+  .op-progress__ring::after {
+    content: "";
+    width: calc(var(--size) - 6px);
+    height: calc(var(--size) - 6px);
+    border-radius: 50%;
+    background: var(--sapObjectHeader_Background, var(--sapBackgroundColor));
+    position: absolute;
+  }
+  .op-progress__label {
+    position: relative;
+    z-index: 1;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--sapTextColor);
+  }
+
+  /* Anchor bar — ui5-tabcontainer styled to match an Object Page anchor. */
+  .op-anchor { margin: 0 -1.5rem; }
+  .op-anchor ui5-tabcontainer {
+    --_ui5-v2_0_0-rc_3_TabContainer_default_overflow_button_padding: 0;
+  }
+
+  .op-body { padding: 1.5rem; }
+  /* Generous padding-top so heading isn't half-hidden under the sticky header on free-scroll. */
+  .op-section { scroll-margin-top: 180px; padding-top: 2.5rem; }
+  .op-section:first-child { padding-top: 1rem; }
+  .op-section + .op-section { border-top: 1px solid var(--sapList_BorderColor); margin-top: 1.5rem; }
+  .op-section__heading {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin: 0 0 0.75rem;
+    color: var(--sapTextColor);
+  }
+
+  .op-discussion__cta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1rem; }
+  .op-discussion__hint { color: var(--sapContent_LabelColor); font-size: 0.9375rem; margin: 0 0 0.5rem; }
+
+  .op-twocol { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 1.5rem; align-items: start; }
+  /* Right column tracks the user as they scroll. Top offset clears the sticky op-header.
+     No internal overflow — auto-scroll-active inside an overflow box hides the heading. */
+  .op-twocol > .tutorial-right-col {
+    position: sticky;
+    top: 160px;
+    align-self: start;
+  }
+  @media (max-width: 960px) {
+    .op-twocol { grid-template-columns: 1fr; }
+    .op-twocol > .tutorial-right-col { position: static; }
+  }
+</style>
+
+<div class="op-page">
+  <header class="op-header">
+    <h1 class="op-header__title">{{ .Title }}</h1>
+    {{ with .Params.description }}<p class="op-header__description">{{ . }}</p>{{ end }}
+    <div class="op-header__chips">
+      {{ with .Params.level }}<span class="op-chip"><span class="op-chip__icon">🎓</span>{{ . }}</span>{{ end }}
+      {{ with .Params.experienceLevel }}<span class="op-chip"><span class="op-chip__icon">🎓</span>{{ . }}</span>{{ end }}
+      {{ with .Params.time }}<span class="op-chip"><span class="op-chip__icon">⏱</span>{{ . }} min</span>{{ end }}
+      {{/* Prefer human-readable displayTags; fall back to raw primaryTag if none provided. */}}
+      {{ if .Params.displayTags }}
+        {{ range .Params.displayTags }}<span class="op-chip op-chip--tag">{{ . }}</span>{{ end }}
+      {{ else if .Params.primaryTag }}
+        <span class="op-chip op-chip--tag">{{ .Params.primaryTag }}</span>
+      {{ end }}
+      <span class="op-progress" id="op-progress" data-step-count="{{ .Params.stepCount }}">
+        <span class="op-progress__ring" id="op-progress-ring" style="--pct: 0">
+          <span class="op-progress__label" id="op-progress-label">0/{{ .Params.stepCount }}</span>
+        </span>
+      </span>
+    </div>
+
+    <div class="op-anchor">
+      <ui5-tabcontainer id="op-anchor" content-background-design="Transparent" header-background-design="Transparent" no-auto-selection>
+        <ui5-tab data-section="overview" text="Overview" selected></ui5-tab>
+        <ui5-tab data-section="prerequisites" text="Prerequisites"></ui5-tab>
+        <ui5-tab data-section="steps" text="Steps"></ui5-tab>
+        <ui5-tab data-section="resources" text="Resources"></ui5-tab>
+        <ui5-tab data-section="discussion" text="Discussion"></ui5-tab>
+      </ui5-tabcontainer>
+    </div>
+  </header>
+
+  <div class="op-body">
+    <main class="tutorial-main op-twocol">
+      <div>
+        <section id="op-overview" class="op-section" data-op-section>
+          <h2 class="op-section__heading">Overview</h2>
+          {{ partial "tutorial-banners.html" . }}
+          {{ partial "tutorial-meta.html" . }}
+          {{ with .Params.youWillLearn }}
+          <div class="you-will-learn">
+            <h3>You will learn</h3>
+            <ul>{{ range . }}<li><span class="check-icon">✔</span> {{ . | markdownify }}</li>{{ end }}</ul>
+          </div>
+          {{ end }}
+          {{ partial "tutorial-author.html" . }}
+        </section>
+
+        <section id="op-prerequisites" class="op-section" data-op-section>
+          <h2 class="op-section__heading">Prerequisites</h2>
+          {{ partial "tutorial-prerequisites.html" . }}
+        </section>
+
+        <section id="op-steps" class="op-section" data-op-section>
+          <h2 class="op-section__heading">Steps</h2>
+          <div id="progress-bar" data-step-count="{{ .Params.stepCount }}" data-slug="{{ .Params.slug }}"></div>
+          <div class="step-controls">
+            <a href="#" onclick="expandAllSteps(); return false">Open all</a>
+            <a href="#" onclick="collapseAllSteps(); return false">Close all</a>
+          </div>
+          <div class="tutorial-steps">{{ .Content }}</div>
+        </section>
+
+        <section id="op-resources" class="op-section" data-op-section>
+          <h2 class="op-section__heading">Resources</h2>
+          {{ partial "next-steps.html" . }}
+          {{ partial "tutorial-nav-bottom.html" . }}
+        </section>
+
+        <section id="op-discussion" class="op-section" data-op-section>
+          <h2 class="op-section__heading">Discussion</h2>
+          <p class="op-discussion__hint">Share feedback on this tutorial or join the conversation in SAP Community.</p>
+          <div class="op-discussion__cta">
+            <ui5-button design="Emphasized" icon="discussion-2" onclick="openTutorialFeedbackPopup('{{ .Params.slug }}')">Submit feedback</ui5-button>
+            <ui5-button design="Default" icon="post" onclick="window.open('https://community.sap.com/t5/forums/searchpage/tab/message?q={{ .Params.slug }}', '_blank')">Discuss in Community</ui5-button>
+          </div>
+        </section>
+      </div>
+
+      <aside class="tutorial-right-col">
+        {{ partial "mini-navigator.html" . }}
+        {{ partial "tutorial-sidebar.html" . }}
+      </aside>
+    </main>
+  </div>
+</div>
+
+{{ with .Params.steps }}
+<script id="tutorial-data" type="application/json">{{ . | jsonify }}</script>
+{{ end }}
+
+{{ $js := resources.Get "js/tutorial.ts" | js.Build (dict "minify" true) }}
+<script src="{{ $js.RelPermalink }}" defer></script>
+<script type="module" src="/js/nav-dropdown.js"></script>
+<script type="module" src="/js/mini-navigator.js"></script>
+
+<script type="module">
+  // U1 Object Page — anchor-bar tab clicks scroll to sections; scrollspy highlights active tab.
+  const tabs = document.getElementById('op-anchor');
+  const sections = Array.from(document.querySelectorAll('[data-op-section]'));
+  if (tabs && sections.length) {
+    tabs.addEventListener('tab-select', (e) => {
+      const t = e.detail.tab;
+      const id = t?.dataset?.section;
+      if (!id) return;
+      const target = document.getElementById('op-' + id);
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+
+    const tabBySection = new Map();
+    tabs.querySelectorAll('ui5-tab').forEach(t => tabBySection.set(t.dataset.section, t));
+
+    let active = null;
+    const io = new IntersectionObserver((entries) => {
+      // Pick the section closest to the top edge that is at least partly visible.
+      const visible = entries.filter(e => e.isIntersecting)
+        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+      if (!visible.length) return;
+      const id = visible[0].target.id.replace(/^op-/, '');
+      if (id === active) return;
+      active = id;
+      tabBySection.forEach((tab, key) => {
+        if (key === id) tab.setAttribute('selected', '');
+        else tab.removeAttribute('selected');
+      });
+    }, { rootMargin: '-160px 0px -50% 0px', threshold: 0 });
+    sections.forEach(s => io.observe(s));
+  }
+
+  // Mirror existing progress segments into the ring.
+  function updateRing() {
+    const ring = document.getElementById('op-progress-ring');
+    const label = document.getElementById('op-progress-label');
+    const wrap = document.getElementById('op-progress');
+    if (!ring || !label || !wrap) return;
+    const total = parseInt(wrap.dataset.stepCount || '0', 10) || 0;
+    const completed = document.querySelectorAll('.tutorial-step.completed').length;
+    const pct = total ? Math.round((completed / total) * 100) : 0;
+    ring.style.setProperty('--pct', String(pct));
+    label.textContent = `${completed}/${total}`;
+  }
+  // tutorial.ts mutates .tutorial-step.completed; observe and reflect.
+  const stepsRoot = document.querySelector('.tutorial-steps');
+  if (stepsRoot) {
+    new MutationObserver(updateRing).observe(stepsRoot, { subtree: true, attributes: true, attributeFilter: ['class'] });
+  }
+  // Initial paint after tutorial.ts has loaded.
+  setTimeout(updateRing, 250);
+</script>
+{{ end }}

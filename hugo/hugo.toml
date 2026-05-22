@@ -17,6 +17,15 @@ enableRobotsTXT = false  # we ship our own via the robots output format
   lastmod = ['lastmod', 'lastUpdated', ':git', ':fileModTime']
   publishDate = ['publishDate', 'createdAt', 'date']
 
+# U1 Object Page floorplan as the default tutorial layout. Mission/group pages have their
+# own type folders (layouts/missions, layouts/groups) without a u1-object-page.html, so
+# Hugo's lookup chain falls back to their existing single.html for them.
+[[cascade]]
+  layout = 'u1-object-page'
+  [cascade._target]
+    path = '/tutorials/**'
+    kind = 'page'
+
 [outputs]
   home = ['HTML', 'RSS', 'sitemap', 'robots', 'llms', 'llmsfull']
   section = ['HTML', 'RSS']
