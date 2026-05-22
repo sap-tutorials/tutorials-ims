@@ -26,6 +26,7 @@ function clearTimers() {
 }
 
 function show() {
+  clearTimers()
   const bar = el()
   if (!bar) return
   bar.value = 0
