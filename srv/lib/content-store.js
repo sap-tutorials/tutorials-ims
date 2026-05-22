@@ -275,7 +275,7 @@ export async function publishHandler(req, res) {
     let metaUpserted = 0;
     if (metadata && typeof metadata === 'object') {
       const { Tutorials, Steps } = cds.entities('com.sap.developers.ims');
-      const metaLoopDb = await cds.connect.to('db');
+      const db = await cds.connect.to('db');
       for (const [slug, meta] of Object.entries(metadata)) {
         try {
           const existing = await SELECT.one.from(Tutorials).where({ slug }).columns('ID');
@@ -315,7 +315,7 @@ export async function publishHandler(req, res) {
               if (existingStep) {
                 const updates = { title: step.title, status: 'ACTIVE' };
                 if (!existingStep.legacyId) {
-                  updates.legacyId = await getNextLegacyId('Steps', metaLoopDb);
+                  updates.legacyId = await getNextLegacyId('Steps', db);
                 }
                 await UPDATE(Steps).where({ ID: existingStep.ID }).set(updates);
               } else {
@@ -325,7 +325,7 @@ export async function publishHandler(req, res) {
                   stepOrder: step.number,
                   title: step.title,
                   status: 'ACTIVE',
-                  legacyId: await getNextLegacyId('Steps', metaLoopDb)
+                  legacyId: await getNextLegacyId('Steps', db)
                 });
               }
             }
@@ -355,17 +355,25 @@ export async function publishHandler(req, res) {
                 monitoredStatus: 'ACTIVE',
                 notificationNumber: 0,
                 lastNotificationDate: null,
-                legacyId: await getNextLegacyId('TutorialMeta', metaLoopDb)
+                legacyId: await getNextLegacyId('TutorialMeta', db)
               });
-            } else if (lastUpdated && (!existingMeta.reviewedDate || new Date(existingMeta.reviewedDate) < new Date(lastUpdated))) {
-              await UPDATE(TutorialMeta).where({ ID: existingMeta.ID }).set({
-                reviewedDate: lastUpdated,
-                notificationNumber: 0,
-                lastNotificationDate: null
-              });
+            } else {
+              const newTs = lastUpdated ? Date.parse(lastUpdated) : NaN;
+              const existingTs = existingMeta.reviewedDate ? Date.parse(existingMeta.reviewedDate) : null;
+              if (Number.isFinite(newTs)) {
+                if (existingTs === null || (Number.isFinite(existingTs) && existingTs < newTs)) {
+                  await UPDATE(TutorialMeta).where({ ID: existingMeta.ID }).set({
+                    reviewedDate: lastUpdated,
+                    notificationNumber: 0,
+                    lastNotificationDate: null
+                  });
+                } else if (existingTs !== null && Number.isNaN(existingTs)) {
+                  LOG.warn(`TutorialMeta ${slug} has unparseable reviewedDate; skipping refresh`);
+                }
+              }
             }
           } catch (metaInitErr) {
-            console.warn(`[content/publish] TutorialMeta upsert failed for ${slug}:`, metaInitErr.message);
+            LOG.error(`TutorialMeta upsert failed for ${slug}`, metaInitErr);
           }
 
           metaUpserted++;

@@ -11,11 +11,11 @@ function gz(html) {
 }
 
 describe('content-store TutorialMeta auto-init', () => {
-  let Tutorials, TutorialMeta, ContentFiles, ContentManifest, JobLocks;
+  let Tutorials, TutorialMeta, Steps, TutorialBodyText, ContentFiles, ContentManifest, JobLocks;
 
   beforeAll(() => {
     process.env.CONTENT_API_KEY = API_KEY;
-    ({ Tutorials, TutorialMeta, ContentFiles, ContentManifest, JobLocks } =
+    ({ Tutorials, TutorialMeta, Steps, TutorialBodyText, ContentFiles, ContentManifest, JobLocks } =
       cds.entities('com.sap.developers.ims'));
   });
 
@@ -23,6 +23,8 @@ describe('content-store TutorialMeta auto-init', () => {
     await DELETE.from(ContentFiles);
     await DELETE.from(ContentManifest);
     await DELETE.from(TutorialMeta);
+    await DELETE.from(Steps);
+    await DELETE.from(TutorialBodyText);
     await DELETE.from(Tutorials);
     await DELETE.from(JobLocks);
   });
