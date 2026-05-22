@@ -11,6 +11,7 @@ import "@ui5/webcomponents-fiori/dist/Assets.js";
 import "@ui5/webcomponents/dist/Avatar.js";
 import "@ui5/webcomponents/dist/MessageStrip.js";
 import "@ui5/webcomponents/dist/Popover.js";
+import "@ui5/webcomponents/dist/Toast.js";
 import "@ui5/webcomponents/dist/Button.js";
 import "@ui5/webcomponents/dist/Input.js";
 import "@ui5/webcomponents/dist/List.js";

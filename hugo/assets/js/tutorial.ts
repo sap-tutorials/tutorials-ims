@@ -191,6 +191,40 @@ function markButtonCompleted(btn: HTMLButtonElement) {
   btn.classList.add('is-completed')
 }
 
+// U10: shared toast for step-completion feedback. Single instance lives in baseof.html.
+type Ui5Toast = HTMLElement & { duration: number; show?: () => void }
+function showStepToast(text: string, durationMs: number) {
+  const toast = document.getElementById('step-toast') as Ui5Toast | null
+  if (!toast) return
+  toast.textContent = text
+  toast.duration = durationMs
+  // ui5-toast.show() is the upgraded-element API. On the first interaction the
+  // esbuild bundle may not yet have registered the element — fall back to
+  // whenDefined so a synthetic-fast-click (or test) doesn't throw.
+  if (typeof toast.show === 'function') {
+    toast.show()
+  } else {
+    customElements.whenDefined('ui5-toast').then(() => toast.show?.())
+  }
+}
+
+// U10: persistent CTA injected once when all steps are complete.
+// ui5-toast is text-only by design; the CTA lives inline so the link remains
+// reachable after the toast auto-dismisses (~4s).
+function showCompletionCta() {
+  const stepsRoot = document.querySelector('.tutorial-steps')
+  if (!stepsRoot || stepsRoot.querySelector('.tutorial-completion-cta')) return
+  const strip = document.createElement('ui5-message-strip')
+  strip.setAttribute('design', 'Positive')
+  strip.className = 'tutorial-completion-cta'
+  strip.appendChild(document.createTextNode('You’ve finished this tutorial. '))
+  const link = document.createElement('a')
+  link.href = '/tutorials/'
+  link.textContent = 'Browse more tutorials →'
+  strip.appendChild(link)
+  stepsRoot.appendChild(strip)
+}
+
 async function markDone(btn: HTMLButtonElement) {
   const stepNum = btn.dataset.step
   if (!stepNum || btn.disabled) return
@@ -210,6 +244,18 @@ async function markDone(btn: HTMLButtonElement) {
     if (tocItem) tocItem.classList.add('completed')
     markButtonCompleted(btn)
     updateProgressBar()
+
+    // U10: completion feedback. Final-step toast wins over the per-step toast.
+    const total = document.querySelectorAll('.tutorial-step').length
+    const completed = document.querySelectorAll('.tutorial-step.completed').length
+    if (total > 0 && completed >= total) {
+      showStepToast('🎉 Tutorial complete!', 4000)
+      showCompletionCta()
+    } else {
+      const remaining = total - completed
+      const tail = remaining === 1 ? '1 to go!' : `${remaining} to go!`
+      showStepToast(`Step ${stepNum} complete — ${tail}`, 3000)
+    }
   } else {
     btn.textContent = 'Done'
     btn.disabled = false

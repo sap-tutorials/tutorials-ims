@@ -28,6 +28,9 @@
   </ui5-popover>
   <script>window.__glossary = {{ site.Data.glossary | jsonify | safeJS }};</script>
 
+  {{/* U10: shared step-completion toast. Text + duration set per call. */}}
+  <ui5-toast id="step-toast" placement="BottomCenter"></ui5-toast>
+
   <dialog class="image-lightbox" id="image-lightbox" aria-label="Image viewer">
     <button type="button" class="image-lightbox-close" aria-label="Close">&times;</button>
     <img alt="">

@@ -222,3 +222,14 @@ ui5-popover.glossary-popover::part(content) {
 .glossary-popover__link:hover {
   text-decoration: underline;
 }
+
+/* U10: post-completion CTA strip. Sits below the last step. */
+ui5-message-strip.tutorial-completion-cta {
+  display: block;
+  margin-top: 1.5rem;
+}
+ui5-message-strip.tutorial-completion-cta a {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+}
