@@ -263,40 +263,72 @@ export function initLightbox() {
   document.addEventListener("keydown", onZoomKey);
   dlg.addEventListener("keydown", onZoomKey);
 
-  // Single-pointer pan. Two-pointer pinch lands in Task 6.
-  let panActive = false;
-  let panStartX = 0;
-  let panStartY = 0;
+  // Pointer Events: single pointer = pan; two pointers = pinch. We track active
+  // pointers in a Map and route on size.
+  const pointers = new Map<number, { x: number; y: number }>();
+  let pinchPrevDist = 0;
   let panStartTx = 0;
   let panStartTy = 0;
+  let panStartX = 0;
+  let panStartY = 0;
+
+  function distance(a: {x: number; y: number}, b: {x: number; y: number}): number {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+  function midpoint(a: {x: number; y: number}, b: {x: number; y: number}) {
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  }
 
   if (vp) {
     vp.addEventListener("pointerdown", (e) => {
-      if (state.scale <= 1) return;
-      panActive = true;
-      panStartX = e.clientX;
-      panStartY = e.clientY;
-      panStartTx = state.tx;
-      panStartTy = state.ty;
-      vp.classList.add("is-panning");
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       vp.setPointerCapture(e.pointerId);
+      if (pointers.size === 1 && state.scale > 1) {
+        panStartX = e.clientX;
+        panStartY = e.clientY;
+        panStartTx = state.tx;
+        panStartTy = state.ty;
+        vp.classList.add("is-panning");
+      } else if (pointers.size === 2) {
+        const [a, b] = Array.from(pointers.values());
+        pinchPrevDist = distance(a, b);
+        vp.classList.remove("is-panning");
+      }
     });
+
     vp.addEventListener("pointermove", (e) => {
-      if (!panActive) return;
-      state.tx = panStartTx + (e.clientX - panStartX);
-      state.ty = panStartTy + (e.clientY - panStartY);
-      clampPan();
+      if (!pointers.has(e.pointerId)) return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       const cur = currentImg();
-      if (cur) applyTransform(cur);
+      if (!cur) return;
+      if (pointers.size === 1 && state.scale > 1) {
+        state.tx = panStartTx + (e.clientX - panStartX);
+        state.ty = panStartTy + (e.clientY - panStartY);
+        clampPan();
+        applyTransform(cur);
+      } else if (pointers.size === 2) {
+        const [a, b] = Array.from(pointers.values());
+        const dist = distance(a, b);
+        const mid = midpoint(a, b);
+        const delta = (dist - pinchPrevDist) / 200;
+        if (Math.abs(delta) > 0.001) {
+          zoomBy(delta, mid.x, mid.y);
+          pinchPrevDist = dist;
+        }
+      }
     });
-    const endPan = (e: PointerEvent) => {
-      if (!panActive) return;
-      panActive = false;
-      vp.classList.remove("is-panning");
+
+    const endPointer = (e: PointerEvent) => {
+      pointers.delete(e.pointerId);
       try { vp.releasePointerCapture(e.pointerId); } catch { /* already released */ }
+      if (pointers.size < 2) pinchPrevDist = 0;
+      if (pointers.size === 0) vp.classList.remove("is-panning");
     };
-    vp.addEventListener("pointerup", endPan);
-    vp.addEventListener("pointercancel", endPan);
+    vp.addEventListener("pointerup", endPointer);
+    vp.addEventListener("pointercancel", endPointer);
+    // Note: NO pointerleave — it fires when the pointer exits the viewport during
+    // an active drag, which would prematurely cancel the gesture. pointerup +
+    // pointercancel cover legitimate end-of-gesture cases.
   }
 
   // Browser back closes the dialog. Gate on state.isOpen rather than the dialog's
