@@ -663,6 +663,9 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
       </section>
 
       <!-- Section: Card Grid (or skeleton while loading) -->
+      <div v-if="isSearching" class="navigator-loading">
+        <div class="fd-busy-indicator fd-busy-indicator--m" aria-label="Loading search results"></div>
+      </div>
       <section v-if="loading" class="navigator-grid navigator-grid--loading" aria-label="Loading tutorials">
         <Skeleton kind="card" :count="6" />
       </section>
