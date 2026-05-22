@@ -39,7 +39,6 @@ import "@ui5/webcomponents-icons/dist/share-2.js";
 import "@ui5/webcomponents-icons/dist/da.js";
 import "@ui5/webcomponents-icons/dist/question-mark.js";
 import "@ui5/webcomponents-icons/dist/bell.js";
-import "@ui5/webcomponents-icons/dist/building.js";
 import "@ui5/webcomponents-icons/dist/person-placeholder.js";
 import "@ui5/webcomponents-icons/dist/dark-mode.js";
 import "@ui5/webcomponents-icons/dist/light-mode.js";

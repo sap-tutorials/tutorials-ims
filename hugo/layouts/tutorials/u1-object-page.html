@@ -306,14 +306,28 @@
   // U2 wizard: clicking a step indicator scrolls to the corresponding accordion anchor.
   // The wizard's empty content slots are visually hidden via ::part(content) — this is
   // a nav-only use of ui5-wizard.
+  //
+  // Cascade guard: ui5-wizard has a built-in scroll-spy that fires step-change as the
+  // page scrolls. Without this flag, our scrollIntoView triggers further step-change
+  // events mid-scroll, which scroll again — clicking step 4 ended up landing on step 7.
+  // The flag suppresses re-entrant handling until the smooth scroll settles.
   const wizard = document.getElementById('op-step-wizard');
   if (wizard) {
+    let isProgrammaticScroll = false;
+    let scrollTimer = null;
     wizard.addEventListener('step-change', (e) => {
+      if (isProgrammaticScroll) return;
       const step = e.detail?.step;
       const targetId = step?.dataset?.stepTarget;
       if (!targetId) return;
       const anchor = document.getElementById(targetId);
-      if (anchor) anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (!anchor) return;
+      isProgrammaticScroll = true;
+      anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // scrollend would be cleaner but Safari support is recent; a timeout matches the
+      // upper bound of a smooth-scroll on a long page.
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(() => { isProgrammaticScroll = false; }, 800);
     });
 
     // Mirror .tutorial-step.completed → wizard-step icon="complete".

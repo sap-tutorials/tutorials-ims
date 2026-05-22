@@ -1028,9 +1028,9 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
   color: #fff;
 }
 
-.count-mission { background: var(--sapAccentColor6, #046c7a); }
-.count-group { background: var(--sapAccentColor8, #6c32a9); }
-.count-tutorial { background: var(--sapAccentColor10, #5b738b); }
+.count-mission { background: var(--sapInformativeBorderColor, #046c7a); }
+.count-group { background: var(--sapPositiveColor, #6c32a9); }
+.count-tutorial { background: var(--sapNeutralTextColor, #5b738b); }
 
 .toolbar-count.active .toolbar-count-num {
   background: rgba(255, 255, 255, 0.25);

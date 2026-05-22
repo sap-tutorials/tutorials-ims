@@ -2,12 +2,12 @@
   <img slot="logo" src="/img/sap-logo.svg" alt="SAP" height="24">
 
   <ui5-shellbar-item id="sb-search" icon="search" text="Search ⌘K"></ui5-shellbar-item>
+  <ui5-shellbar-item id="joule-trigger" icon="da" text="Joule" hidden></ui5-shellbar-item>
   <ui5-shellbar-item id="sb-nav" icon="menu2" text="Navigate"></ui5-shellbar-item>
   <ui5-shellbar-item id="sb-share" icon="share-2" text="Share link"></ui5-shellbar-item>
   <ui5-shellbar-item id="sb-reader" icon="documents" text="Reader mode (f)"></ui5-shellbar-item>
   <ui5-shellbar-item id="sb-help" icon="question-mark" text="Help"></ui5-shellbar-item>
   <ui5-shellbar-item id="sb-theme" icon="dark-mode" text="Toggle theme"></ui5-shellbar-item>
-  <ui5-shellbar-item id="sb-trust" icon="building" text="Legal & Trust"></ui5-shellbar-item>
 
   <ui5-avatar slot="profile" id="sb-avatar" icon="person-placeholder" size="XS" interactive></ui5-avatar>
 </ui5-shellbar>
@@ -54,18 +54,6 @@
   </div>
 </ui5-popover>
 
-<ui5-popover id="sb-trust-popover" placement="Bottom" horizontal-align="End" hide-arrow>
-  <ui5-list separators="None">
-    <ui5-li data-href="#" data-trust-todo="disclaimer">Disclaimer</ui5-li>
-    <ui5-li data-href="https://www.sap.com/about/legal/privacy.html" data-external>Privacy</ui5-li>
-    <ui5-li data-href="https://www.sap.com/about/legal/terms-of-use.html" data-external>Terms of Use</ui5-li>
-    <ui5-li data-href="https://www.sap.com/about/legal/impressum.html" data-external>Legal Disclosure</ui5-li>
-    <ui5-li data-href="https://www.sap.com/about/legal/copyright.html" data-external>Copyright</ui5-li>
-    <ui5-li data-href="https://www.sap.com/about/legal/trademark.html" data-external>Trademark</ui5-li>
-    <ui5-li data-href="https://www.sap.com/about/legal/privacy/cookies.html" data-external>Cookie Statement</ui5-li>
-  </ui5-list>
-</ui5-popover>
-
 <ui5-popover id="sb-user-popover" placement="Bottom" horizontal-align="End" hide-arrow>
   <div class="user-popover__content">
     <div class="user-popover__header">
@@ -92,7 +80,6 @@
   const userEmail = document.getElementById('user-email');
   const navPopover = document.getElementById('sb-nav-popover');
   const sharePopover = document.getElementById('sb-share-popover');
-  const trustPopover = document.getElementById('sb-trust-popover');
   const userPopover = document.getElementById('sb-user-popover');
   const shareUrlInput = document.getElementById('share-url-input');
   const shareStatus = document.getElementById('share-status');
@@ -103,7 +90,7 @@
   let isAuthenticated = false;
 
   function closeAllExcept(skip) {
-    [navPopover, sharePopover, trustPopover, userPopover].forEach(p => {
+    [navPopover, sharePopover, userPopover].forEach(p => {
       if (p !== skip && p.open) p.open = false;
     });
   }
@@ -125,6 +112,9 @@
       if (id === 'sb-search') {
         if (typeof window.openCommandPalette === 'function') window.openCommandPalette();
       }
+      else if (id === 'joule-trigger') {
+        if (window.joule && typeof window.joule.open === 'function') window.joule.open();
+      }
       else if (id === 'sb-nav') openAt(navPopover, target);
       else if (id === 'sb-share') {
         shareUrlInput.value = window.location.href;
@@ -134,7 +124,6 @@
       else if (id === 'sb-help') window.open('https://community.sap.com', '_blank');
       else if (id === 'sb-theme') toggleTheme();
       else if (id === 'sb-reader') toggleReader();
-      else if (id === 'sb-trust') openAt(trustPopover, target);
     });
   });
 
@@ -162,11 +151,10 @@
     }
   }
 
-  document.querySelectorAll('#sb-nav-popover ui5-li, #sb-trust-popover ui5-li').forEach(li => {
+  document.querySelectorAll('#sb-nav-popover ui5-li').forEach(li => {
     li.addEventListener('click', () => {
       navigate(li);
       navPopover.open = false;
-      trustPopover.open = false;
     });
   });
 

@@ -5,7 +5,7 @@ enableRobotsTXT = false  # we ship our own via the robots output format
 
 [params]
   apiBase = '/api'
-  capBase = '/build'
+  capBase = ''
   brand = 'SAP Developers Tutorials'
   defaultDescription = 'Hands-on tutorials for SAP technologies — SAP BTP, ABAP Cloud, CAP, Fiori, HANA Cloud, and integration. Build, learn, and ship on SAP.'
   heroDescription = 'Step-by-step tutorials, multi-tutorial missions, and reference content for every SAP developer technology. Tested, maintained, and free to use.'
