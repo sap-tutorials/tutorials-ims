@@ -91,7 +91,7 @@ export function registerJobs() {
         const { created } = await backfillMissingTutorialMeta();
         if (created > 0) LOG.info(`tutorial-meta scheduler: backfilled ${created} rows`);
       } catch (e) {
-        LOG.error('tutorial-meta scheduler failed:', e.message);
+        LOG.error('tutorial-meta scheduler failed:', e);
       }
     })
   );

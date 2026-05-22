@@ -46,7 +46,7 @@ describe('AdminService integrations', () => {
       const { status, data } = await project.post('/admin/syncTutorialMetadata', {},
         { auth: { username: 'admin', password: 'admin' } });
       expect(status).toBe(200);
-      expect(data.synced).toBeGreaterThanOrEqual(0);
+      expect(data.synced).toBeGreaterThanOrEqual(1);
       expect(data.message).toMatch(/Backfilled/);
     });
   });
