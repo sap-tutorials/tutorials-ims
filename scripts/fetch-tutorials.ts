@@ -163,7 +163,7 @@ function writeVitePressPage(
   nav: TutorialNavEntry,
   lastUpdated: string,
   createdAt: string,
-  contributors: Array<{ name: string; login: string; avatarUrl: string }>,
+  contributors: Array<{ name: string; login: string; email: string; avatarUrl: string }>,
   outputDir: string,
 ): void {
   const OUTPUT_DIR = outputDir
@@ -189,7 +189,7 @@ function writeVitePressPage(
     prerequisites: splitPrerequisites(prerequisites),
     lastUpdated: lastUpdated || null,
     createdAt: createdAt || null,
-    contributors: contributors.slice(0, 10).map(c => ({ login: c.login, name: c.name, avatarUrl: c.avatarUrl })),
+    contributors: contributors.slice(0, 10).map(c => ({ login: c.login, name: c.name, email: c.email, avatarUrl: c.avatarUrl })),
     steps: steps.map(s => ({ number: s.number, title: s.title })),
   }
 
@@ -326,7 +326,7 @@ export function writeHugoPage(
   nav: TutorialNavEntry,
   lastUpdated: string,
   createdAt: string,
-  contributors: Array<{ name: string; login: string; avatarUrl: string }>,
+  contributors: Array<{ name: string; login: string; email: string; avatarUrl: string }>,
   outputDir: string,
 ): void {
   const cleanTags = tags.map(t => t.replace(/\\/g, ''))
@@ -352,7 +352,7 @@ export function writeHugoPage(
     prerequisites: splitPrerequisites(prerequisites),
     lastUpdated: lastUpdated || null,
     createdAt: createdAt || null,
-    contributors: contributors.slice(0, 10).map(c => ({ login: c.login, name: c.name, avatarUrl: c.avatarUrl })),
+    contributors: contributors.slice(0, 10).map(c => ({ login: c.login, name: c.name, email: c.email, avatarUrl: c.avatarUrl })),
     steps: steps.map(s => {
       const entry: Record<string, unknown> = { number: s.number, title: s.title }
       if (s.validation?.length) entry.validation = s.validation
@@ -703,7 +703,7 @@ async function main() {
       let rawMd: string
       let lastUpdated = ''
       let createdAt = ''
-      let contributors: Array<{ name: string; login: string; avatarUrl: string }> = []
+      let contributors: Array<{ name: string; login: string; email: string; avatarUrl: string }> = []
 
       if (regenerateMode || (tutorialSlugFilter && t.slug !== tutorialSlugFilter)) {
         const cacheFile = join(CACHE_DIR, `${t.slug}.md`)
