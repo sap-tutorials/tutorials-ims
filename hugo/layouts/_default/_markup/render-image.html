@@ -29,7 +29,7 @@
 {{- if $hasCaption -}}<figure class="tutorial-figure">{{- end -}}
 <img
   src="{{ $finalSrc | safeURL }}"
-  {{ with $srcset }}srcset="{{ . | safeURL }}" sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 960px"{{ end }}
+  {{ with $srcset }}srcset="{{ . | safeURL }}" sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 1440px"{{ end }}
   alt="{{ $alt }}"
   {{ with $title }}title="{{ . }}"{{ end }}
   {{ with $width }}width="{{ . }}"{{ end }}

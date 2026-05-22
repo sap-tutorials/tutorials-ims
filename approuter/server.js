@@ -82,9 +82,18 @@ async function imgCdnHandler(req, res, next) {
 
     const inputBuf = Buffer.from(await upstream.arrayBuffer())
     let chain = sharp(inputBuf, { failOn: 'none' })
-    if (wantWidth > 0) chain = chain.resize({ width: wantWidth, withoutEnlargement: true })
+    if (wantWidth > 0) chain = chain.resize({ width: wantWidth, withoutEnlargement: true, kernel: 'lanczos3' })
     const outFormat = acceptsWebp ? 'webp' : null
-    if (outFormat === 'webp') chain = chain.webp({ quality: 80 })
+    if (outFormat === 'webp') {
+      // Screenshots dominate tutorial content — readability beats bandwidth.
+      // PNG sources (typical for screenshots) get nearLossless so text stays
+      // crisp; JPEG photos get q=92 + smart subsampling. q=80 was washing out
+      // UI line art and small text.
+      const isPng = /^image\/png/.test(contentType)
+      chain = chain.webp(isPng
+        ? { nearLossless: true, quality: 90, effort: 4 }
+        : { quality: 92, effort: 4, smartSubsample: true })
+    }
     const out = await chain.toBuffer()
     res.writeHead(200, {
       'Content-Type': outFormat === 'webp' ? 'image/webp' : contentType,

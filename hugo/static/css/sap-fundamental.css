@@ -50,6 +50,10 @@
   --sapButton_Emphasized_Active_BorderColor: #004da5;
   --sapButton_Lite_TextColor: #0064d9;
   --sapButton_Lite_Hover_Background: rgba(0, 100, 217, 0.06);
+  --sapList_Background: #fff;
+  --sapList_HeaderBackground: #f4f4f7;
+  --sapList_BorderColor: #e5e5ea;
+  --sapField_BorderColor: #ccd;
 }/* SAP Horizon Dark theme variables */html.dark {
   --sapBackgroundColor: #12171c;
   --sapBaseColor: #1c2228;
@@ -98,6 +102,10 @@
   --sapButton_Emphasized_Active_BorderColor: #0058c0;
   --sapButton_Lite_TextColor: #4db1ff;
   --sapButton_Lite_Hover_Background: rgba(77, 177, 255, 0.08);
+  --sapList_Background: #1c2228;
+  --sapList_HeaderBackground: #29394b;
+  --sapList_BorderColor: #3c4854;
+  --sapField_BorderColor: #3c4854;
 }@media (prefers-reduced-motion: no-preference) {
   html { scroll-behavior: smooth; }
 }/*!
