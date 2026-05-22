@@ -16,6 +16,7 @@
   {{ partial "footer.html" . }}
   {{ partial "joule-panel.html" . }}
   {{ partial "joule-starters.html" . }}
+  <div id="cmd-palette"></div>
   <dialog class="image-lightbox" id="image-lightbox" aria-label="Image viewer">
     <button type="button" class="image-lightbox-close" aria-label="Close">&times;</button>
     <img alt="">
@@ -26,6 +27,7 @@
   <script defer src="/js/vendor/purify.min.js"></script>
   <script defer src="/js/joule-render.js"></script>
   <script src="/js/joule.js" defer></script>
+  <script src="/js/cmd-palette.js" defer type="module"></script>
   {{ $ui5 := resources.Get "js/ui5-bootstrap.ts" | js.Build (dict "minify" true "format" "esm" "target" "es2020") }}
   <script type="module" src="{{ $ui5.RelPermalink }}"></script>
 </body>
