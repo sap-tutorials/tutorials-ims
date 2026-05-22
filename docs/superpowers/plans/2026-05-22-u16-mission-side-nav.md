@@ -14,31 +14,15 @@
 
 ## Pre-flight
 
-### Task 0: Verify UI5 SideNavigation v2.x API
+### Task 0: Verify UI5 SideNavigation v2.x API ✅ DONE
 
-**Files:** none (research only — record findings inline in this plan as a comment for future tasks)
+Researched via UI5 MCP. Findings (these are baked into Tasks 1, 2, 4 below):
 
-- [ ] **Step 1: Look up `ui5-side-navigation` API**
-
-Use the UI5 MCP server. Run mentally / via tool:
-
-```
-mcp__ui5-webcomponents__get_component_api componentName=ui5-side-navigation
-mcp__ui5-webcomponents__get_component_api componentName=ui5-side-navigation-item
-mcp__ui5-webcomponents__get_component_api componentName=ui5-side-navigation-sub-item
-```
-
-Confirm:
-- The exact attribute used to mark the active sub-item (likely `selected`, possibly `is-selected` in v2.x).
-- The event name fired on group expand/collapse (e.g., `selection-change`, `toggle`).
-- Whether `<ui5-side-navigation-sub-item>` exposes a slot (e.g., `additional-text`, end content) suitable for the progress bar.
-
-- [ ] **Step 2: Decide progress-bar placement**
-
-If a slot exists → use it.
-If no slot → fallback: render `<div class="msn-progress">` as a light-DOM child of `<ui5-side-navigation-sub-item>` and overlay it via CSS absolute positioning inside the item's bounding box.
-
-Document the decision at the top of `mission-side-nav.html` as an HTML comment so future readers know why the structure looks the way it does.
+- **`selected`** is the correct attribute on both `ui5-side-navigation-item` and `ui5-side-navigation-sub-item`.
+- **`expanded`** is the correct attribute on `ui5-side-navigation-item`.
+- **No `slot="items"` exists.** Sub-items go in the *default* slot of the parent item. The plan below does NOT use `slot="items"`.
+- **Sub-items expose no slot for additional content.** Light-DOM children of `<ui5-side-navigation-sub-item>` will be discarded. Progress bar is therefore rendered as a CSS `::after` pseudo on the host element, with width driven by an inline CSS custom property `--msn-progress` set by JS.
+- **`selection-change` event** on `ui5-side-navigation` fires only on selection (not expand/collapse). There is no dedicated group-toggle event — `expanded` is mutated internally when a user clicks a parent item's chevron. Persistence reads `expanded` attributes via a delegated `click` + microtask handler on the nav root.
 
 ### Task 0.5: Set up worktree
 
@@ -76,7 +60,12 @@ Expected: same baseline as main. Park any pre-existing failures (do not block pi
 {{/* mission-side-nav.html — U16
 
 Renders <ui5-side-navigation> from the current tutorial's mission frontmatter.
-Progress bar placement: see Task 0 decision (slot vs light-DOM overlay).
+
+Per Task 0 findings (UI5 v2.x):
+  - sub-items use the default slot (no slot="items")
+  - sub-items expose no slot for additional content; progress bar is rendered
+    as a CSS ::after pseudo on the host with width driven by --msn-progress
+    (set inline by mission-side-nav.ts at runtime)
 
 Inputs (page params expected on tutorial pages):
   .Params.missionId    — required; if empty, partial renders nothing
@@ -108,12 +97,11 @@ Inputs (page params expected on tutorial pages):
               data-group-slug="{{ $groupSlug }}">
               {{ range .tutorials }}
                 <ui5-side-navigation-sub-item
-                  slot="items"
                   text="{{ .title }}"
                   href="/tutorials/{{ .slug }}/"
                   data-tutorial-slug="{{ .slug }}"
+                  data-progress="0"
                   {{ if eq .slug $current }}selected{{ end }}>
-                  <div class="msn-progress" data-progress="0" aria-hidden="true"></div>
                 </ui5-side-navigation-sub-item>
               {{ end }}
             </ui5-side-navigation-item>
@@ -125,7 +113,7 @@ Inputs (page params expected on tutorial pages):
 {{ end }}
 ```
 
-NOTE: The `selected` attribute name and the `slot="items"` attribute on sub-items must be confirmed in Task 0 against the UI5 v2.x API and adjusted if different.
+NOTE: `slot="items"` is intentionally absent — sub-items go in the parent item's default slot per UI5 v2.x.
 
 - [ ] **Step 2: Commit**
 
@@ -176,21 +164,23 @@ git commit -m "feat(u16): add mission side-nav Hugo partial"
   overflow-y: auto;
 }
 
-.msn-progress {
-  width: 32px;
-  height: 4px;
-  background: var(--sapNeutralBackground, #e5e7eb);
-  border-radius: 2px;
-  overflow: hidden;
-  margin-left: auto;
-  flex-shrink: 0;
+/* Per Task 0: sub-items have no slot for child content, so the progress bar
+   is rendered as a ::after pseudo on the host element. Width is driven by
+   the inline custom property --msn-progress, set by mission-side-nav.ts. */
+.mission-side-nav-wrap ui5-side-navigation-sub-item {
+  position: relative;
 }
 
-.msn-progress-fill {
-  height: 100%;
+.mission-side-nav-wrap ui5-side-navigation-sub-item::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: var(--msn-progress, 0%);
   background: var(--sapButton_Emphasized_Background, #0a6ed1);
-  width: 0%;
   transition: width 200ms ease-out;
+  pointer-events: none;
 }
 
 @media (max-width: 960px) {
@@ -319,17 +309,11 @@ function applyInitialExpansion(nav: HTMLElement, currentSlug: string): void {
 function paintProgress(nav: HTMLElement, slug: string, progress: number): void {
   const sub = nav.querySelector<HTMLElement>(`ui5-side-navigation-sub-item[data-tutorial-slug="${slug}"]`);
   if (!sub) return;
-  const bar = sub.querySelector<HTMLElement>('.msn-progress');
-  if (!bar) return;
   const clamped = Math.max(0, Math.min(100, Math.round(progress)));
-  bar.dataset.progress = String(clamped);
-  let fill = bar.querySelector<HTMLElement>('.msn-progress-fill');
-  if (!fill) {
-    fill = document.createElement('div');
-    fill.className = 'msn-progress-fill';
-    bar.appendChild(fill);
-  }
-  fill.style.width = clamped + '%';
+  sub.dataset.progress = String(clamped);
+  // Per Task 0: sub-items expose no slot — paint via inline CSS custom property
+  // consumed by the ::after pseudo defined in mission-side-nav.css.
+  sub.style.setProperty('--msn-progress', clamped + '%');
 }
 
 function isNavResponse(value: unknown): value is NavResponse {
@@ -374,13 +358,11 @@ function wireExpandPersistence(nav: HTMLElement): void {
     });
     writeExpandedState(missionId, state);
   };
-  // UI5 SideNavigation toggle event name to be confirmed in Task 0.
-  // Common candidates: 'selection-change', 'ui5-selection-change'.
-  // Wire both as a defensive measure; harmless if one doesn't fire.
-  nav.addEventListener('selection-change', persist);
-  nav.addEventListener('ui5-selection-change', persist as EventListener);
-  // Toggle on the items themselves bubbles up; click anywhere in nav schedules a microtask write.
+  // Per Task 0: no dedicated group-toggle event exists in UI5 v2.x.
+  // selection-change fires only on selection. Read expanded state via a
+  // delegated click + microtask, so we capture the toggle after UI5 applies it.
   nav.addEventListener('click', () => queueMicrotask(persist));
+  nav.addEventListener('selection-change', persist);
 }
 
 function init(nav: HTMLElement): void {
