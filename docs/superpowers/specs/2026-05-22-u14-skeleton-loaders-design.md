@@ -182,7 +182,8 @@ No new server endpoints. No telemetry.
 | `/getProgress` fails (network) | `loadProgress()` catch flips `data-hydrated="true"` |
 | `/getProgress` returns 401 (anon) | `apiGet` returns `null`; flip via early return path |
 | `loadProgress()` never returns within 1.5 s | `Promise.race` with `setTimeout` flips attribute |
-| `tutorial.ts` bundle fails to load | Inline tail script in `head.html` flips on `DOMContentLoaded + 2 s` |
+| `tutorial.ts` bundle fails to load (or JS disabled) | Inline tail script in `head.html` schedules a `DOMContentLoaded + 2 s` flip independent of the bundle. With JS fully disabled, the pre-paint script also doesn't run, so `data-hydrated` stays unset and CSS selectors don't match — no shimmer, default state painted. |
+| Both the 1.5 s race and the 2 s inline fallback fire | Both flips set the same attribute to the same value; second is a no-op. Order does not matter. |
 | Click delegate fires but navigation aborts | 100 ms grace timer + `visibilitychange` listener hides bar |
 | `pagehide` not fired (rare) | `beforeunload` fallback listener |
 | bfcache restore | `pageshow` with `event.persisted` resets bar to value=0 hidden |
