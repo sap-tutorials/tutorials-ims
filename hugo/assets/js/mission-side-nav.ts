@@ -101,7 +101,7 @@ function wireExpandPersistence(nav: HTMLElement): void {
   // selection-change fires only on selection. Read expanded state via a
   // delegated click + microtask, so we capture the toggle after UI5 applies it.
   nav.addEventListener('click', () => queueMicrotask(persist));
-  nav.addEventListener('selection-change', persist);
+  nav.addEventListener('selection-change', () => queueMicrotask(persist));
 }
 
 function init(nav: HTMLElement): void {
