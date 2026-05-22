@@ -50,6 +50,9 @@ import "@ui5/webcomponents-icons/dist/post.js";
 import "@ui5/webcomponents-icons/dist/customer-and-contacts.js";
 import "@ui5/webcomponents-icons/dist/favorite.js";
 import "@ui5/webcomponents-icons/dist/unfavorite.js";
+// U12: reader-mode toggle in shellbar (documents → decline on activation).
+import "@ui5/webcomponents-icons/dist/documents.js";
+import "@ui5/webcomponents-icons/dist/decline.js";
 
 // U8: cross-block selection sync for {{< codetabs >}}.
 import "./codetabs";

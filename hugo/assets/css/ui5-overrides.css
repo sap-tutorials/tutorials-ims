@@ -266,3 +266,76 @@ ui5-message-strip.tutorial-completion-cta a {
   .reading-progress,
   .reading-progress::before { transition: none; }
 }
+
+/* U12: focus/reader mode. Toggle via shellbar #sb-reader or 'f' shortcut.
+   Pre-paint script in head.html re-applies html[data-reader="on"] before
+   first render to avoid chrome flash on reload. Scoped to tutorial pages
+   per improvements.md U12 tradeoff ("Start with the tutorial reader,
+   expand later"). The toggle is hidden on non-tutorial pages so the button
+   never appears with no visual effect. */
+html:not([data-page-kind="tutorial"]) ui5-shellbar-item#sb-reader {
+  display: none;
+}
+
+/* Hide chrome that fights focus: side rail, anchor tabs, wizard step indicator,
+   header chips, breadcrumbs, share row, sticky prev/next bar, footer, joule. */
+html[data-reader="on"][data-page-kind="tutorial"] .tutorial-right-col,
+html[data-reader="on"][data-page-kind="tutorial"] .op-anchor,
+html[data-reader="on"][data-page-kind="tutorial"] .op-header__chips,
+html[data-reader="on"][data-page-kind="tutorial"] .op-wizard-wrap,
+html[data-reader="on"][data-page-kind="tutorial"] .breadcrumbs,
+html[data-reader="on"][data-page-kind="tutorial"] .feedback-share,
+html[data-reader="on"][data-page-kind="tutorial"] .step-controls,
+html[data-reader="on"][data-page-kind="tutorial"] .tutorial-stepnav,
+html[data-reader="on"][data-page-kind="tutorial"] footer,
+html[data-reader="on"][data-page-kind="tutorial"] #joule-panel,
+html[data-reader="on"][data-page-kind="tutorial"] #joule-starters {
+  display: none !important;
+}
+/* Reserve-space rule for the (now-hidden) sticky stepnav: drop the body padding. */
+html[data-reader="on"][data-page-kind="tutorial"] body:has(.tutorial-stepnav) {
+  padding-bottom: 0;
+}
+
+/* Collapse the two-col grid into a single, reading-width column.
+   ~70ch at 1.0625rem body text; centered via op-page's existing margin: auto. */
+html[data-reader="on"][data-page-kind="tutorial"] .op-twocol {
+  grid-template-columns: 1fr;
+}
+html[data-reader="on"][data-page-kind="tutorial"] .op-page {
+  max-width: 760px;
+}
+html[data-reader="on"][data-page-kind="tutorial"] .op-body {
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+/* Looser, larger type. The step body inherits this via cascade; leaving
+   .step-header at default keeps section anchors at their normal weight. */
+html[data-reader="on"][data-page-kind="tutorial"] .tutorial-step {
+  font-size: 1.0625rem;
+  line-height: 1.65;
+}
+html[data-reader="on"][data-page-kind="tutorial"] .tutorial-step p,
+html[data-reader="on"][data-page-kind="tutorial"] .tutorial-step li {
+  line-height: 1.7;
+}
+
+/* Dim the shellbar + sticky op-header so they stop competing for attention.
+   Hover/focus restores them so the exit toggle and progress ring stay
+   one gesture away — important for keyboard users who tab into the bar. */
+html[data-reader="on"][data-page-kind="tutorial"] ui5-shellbar,
+html[data-reader="on"][data-page-kind="tutorial"] .op-header {
+  opacity: 0.4;
+  transition: opacity 200ms ease;
+}
+html[data-reader="on"][data-page-kind="tutorial"] ui5-shellbar:hover,
+html[data-reader="on"][data-page-kind="tutorial"] ui5-shellbar:focus-within,
+html[data-reader="on"][data-page-kind="tutorial"] .op-header:hover,
+html[data-reader="on"][data-page-kind="tutorial"] .op-header:focus-within {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-reader="on"][data-page-kind="tutorial"] ui5-shellbar,
+  html[data-reader="on"][data-page-kind="tutorial"] .op-header { transition: none; }
+}

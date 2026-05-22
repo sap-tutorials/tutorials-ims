@@ -35,6 +35,12 @@
     (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
   document.documentElement.dataset.theme = t;
   if (t === 'dark') document.documentElement.classList.add('dark');
+  // U12: reader-mode pre-paint. Sets html[data-reader="on"] before first paint
+  // when the user re-opens a tutorial they were last reading in focus mode,
+  // avoiding the chrome-flash that a JS-on-DOMContentLoaded toggle would cause.
+  if (localStorage.getItem('reader') === 'on') {
+    document.documentElement.dataset.reader = 'on';
+  }
   document.addEventListener('click', function(e) {
     if (e.target.closest('[data-action="toggle-theme"]')) {
       var html = document.documentElement;
