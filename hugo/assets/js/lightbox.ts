@@ -7,7 +7,11 @@
 // State is module-scoped. `imgs` is recomputed on every open() so dynamically
 // injected images (e.g., Vue islands) participate.
 
-type LightboxDialog = HTMLElement & { show: () => void; close: () => void };
+// UI5 v2.x ui5-dialog: open is a property (not a DOM attribute, not a method).
+// Setting `dlg.open = true` shows the dialog and dispatches `open`/`opened` events.
+// Setting `dlg.open = false` closes and dispatches `close` event. The legacy
+// `.show()` / `.close()` methods were removed.
+type LightboxDialog = HTMLElement & { open: boolean };
 
 type LightboxState = {
   imgs: HTMLImageElement[];
@@ -100,7 +104,7 @@ function open(triggerImg: HTMLImageElement) {
   preloadNeighbors();
   customElements.whenDefined("ui5-dialog").then(() => {
     state.isOpen = true;
-    dlg.show();
+    dlg.open = true;
   });
 }
 
@@ -307,12 +311,13 @@ export function initLightbox() {
     if (img) open(img);
   });
 
-  // Close button → dialog.close(); the close-event handler does teardown.
+  // Close button → set open=false; the close-event handler does teardown.
   document
     .querySelector(".lightbox-close")
-    ?.addEventListener("click", () => dlg.close());
+    ?.addEventListener("click", () => { dlg.open = false; });
 
-  // ui5-dialog dispatches native `close` event on Esc and on .close().
+  // ui5-dialog dispatches native `close` event when open=false. Esc-driven
+  // dismissal flows through the same path.
   dlg.addEventListener("close", close);
 
   const vp = viewport();
@@ -474,7 +479,7 @@ export function initLightbox() {
   // `open` attribute — ui5-dialog reflects open as a property, not a DOM attribute,
   // so hasAttribute("open") returns false even while the dialog is showing.
   window.addEventListener("popstate", () => {
-    if (state.isOpen) dlg.close();
+    if (state.isOpen) dlg.open = false;
   });
 
   // Hash deep-link: open #img-N on page load. Respect document.readyState so
