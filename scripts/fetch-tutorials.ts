@@ -7,7 +7,7 @@ import { extractFrontmatter } from './parsers/frontmatter.js'
 import { parseV2Steps } from './parsers/v2.js'
 import { parseV1Steps } from './parsers/v1.js'
 import { resolveImageURLs } from './parsers/images.js'
-import { flushDimensionsCache } from './parsers/image-dimensions.js'
+import { flushDimensionsCache, populateImageDimensions, exportDimensionsForHugo } from './parsers/image-dimensions.js'
 import { convertOptionBlocks } from './parsers/options.js'
 import { escapeHugoDelimiters } from './parsers/hugo-delimiters.js'
 import { stripDangerousHtml } from './parsers/sanitize-html.js'
@@ -737,6 +737,14 @@ async function main() {
       processedBody = convertOptionBlocks(processedBody, target)
       processedBody = processedBody.replace(/^<{4,7} .+\n[\s\S]*?^={4,7}\n([\s\S]*?)^>{4,7} .+\n?/gm, '$1')
 
+      // Populate intrinsic-dimension cache for the Hugo render-image hook.
+      // The hook reads site.Data.image_dimensions to emit width/height attrs;
+      // markdown attribute syntax can't be used because goldmark renders it
+      // as literal text for inline images.
+      if (target === 'hugo') {
+        await populateImageDimensions(processedBody)
+      }
+
       const steps = isV2 ? parseV2Steps(processedBody) : parseV1Steps(processedBody)
 
       // Fetch and attach validation questions from rules.vr
@@ -1030,7 +1038,10 @@ const isMainModule = process.argv[1] && (
 )
 if (isMainModule) {
   main()
-    .then(() => flushDimensionsCache())
+    .then(() => {
+      flushDimensionsCache()
+      exportDimensionsForHugo('hugo/data/image_dimensions.json')
+    })
     .catch(err => {
       console.error(err)
       flushDimensionsCache()

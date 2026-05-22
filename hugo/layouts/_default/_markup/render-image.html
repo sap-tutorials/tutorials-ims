@@ -8,6 +8,16 @@
 {{- $hasCaption := or (and (ne $alt "") (ne $alt "image")) (ne $caption "") -}}
 {{- $captionText := $caption -}}
 {{- if eq $captionText "" -}}{{- $captionText = $alt -}}{{- end -}}
+{{- /* Look up intrinsic dimensions from sidecar (populated by fetch-tutorials).
+       Markdown attribute syntax can't be used for inline images — goldmark
+       emits `{width="..."}` as literal text — so we resolve dims by URL here. */ -}}
+{{- if and (eq $width "") (eq $height "") -}}
+  {{- $dims := index site.Data.image_dimensions $src -}}
+  {{- if $dims -}}
+    {{- $width = printf "%v" $dims.w -}}
+    {{- $height = printf "%v" $dims.h -}}
+  {{- end -}}
+{{- end -}}
 {{- $useCdn := and (hasPrefix $src "https://raw.githubusercontent.com/") (eq (printf "%s" $src) $src) -}}
 {{- $finalSrc := $src -}}
 {{- $srcset := "" -}}

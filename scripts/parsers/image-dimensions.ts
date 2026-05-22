@@ -41,6 +41,30 @@ export function flushDimensionsCache(): void {
   cacheDirty = false
 }
 
+export function exportDimensionsForHugo(targetPath: string): void {
+  const c = loadCache()
+  const out: Record<string, { w: number; h: number }> = {}
+  for (const [url, val] of Object.entries(c)) {
+    if (val && !('failed' in val)) out[url] = { w: val.w, h: val.h }
+  }
+  const dir = targetPath.replace(/[\\/][^\\/]+$/, '')
+  if (dir && !existsSync(dir)) mkdirSync(dir, { recursive: true })
+  writeFileSync(targetPath, JSON.stringify(out))
+}
+
+export async function populateImageDimensions(content: string): Promise<void> {
+  const urls = new Set<string>()
+  const re = /!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(content)) !== null) urls.add(m[1])
+  if (urls.size === 0) return
+  const list = [...urls]
+  for (let i = 0; i < list.length; i += MAX_CONCURRENT) {
+    const slice = list.slice(i, i + MAX_CONCURRENT)
+    await Promise.all(slice.map(u => getDimensions(u)))
+  }
+}
+
 async function probe(url: string): Promise<{ w: number; h: number } | null> {
   const mod = await import('probe-image-size')
   const probeImageSize = (mod.default ?? mod) as (
