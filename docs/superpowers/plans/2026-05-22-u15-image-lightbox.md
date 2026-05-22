@@ -1266,7 +1266,19 @@ npm test
 
 Expect: same baseline pass count from pre-flight (no new failures introduced; lightbox is presentational, no unit coverage).
 
-- [ ] **Step 9: Commit any incidental fixes**
+- [ ] **Step 9: Hugo template + JS bundle sanity build**
+
+Catch partial-include or template errors that the dev server's incremental rendering can mask:
+
+```bash
+cd hugo
+hugo --quiet --minify
+cd ..
+```
+
+Expect: clean exit (no template errors, no esbuild errors). Ignore the generated `hugo/public/` directory afterwards (it's gitignored).
+
+- [ ] **Step 10: Commit any incidental fixes**
 
 If verification revealed minor bugs, fix them now and commit with `fix(u15): <description>`. If everything is clean, skip this step.
 
