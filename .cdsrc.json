@@ -22,7 +22,7 @@
       "users": {
         "developer": {
           "password": "developer",
-          "roles": ["DeveloperApp", "authenticated-user"],
+          "roles": ["DeveloperApp", "Tutorial.Author", "authenticated-user"],
           "attr": {
             "email": "dev@test.com",
             "given_name": "Test",
