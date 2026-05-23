@@ -22,8 +22,9 @@
   {{ partial "footer.html" . }}
   {{ partial "joule-panel.html" . }}
   {{ partial "joule-starters.html" . }}
-  <div id="cmd-palette"></div>
+  {{ if not site.Params.previewMode }}<div id="cmd-palette"></div>{{ end }}
 
+  {{ if not site.Params.previewMode }}
   {{/* U9: glossary popover + data. Shared instance, content swapped per opener. */}}
   <ui5-popover id="glossary-popover" placement="Bottom" hide-arrow class="glossary-popover">
     <div class="glossary-popover__body">
@@ -32,10 +33,11 @@
       <a class="glossary-popover__link" target="_blank" rel="noopener">Learn more &rarr;</a>
     </div>
   </ui5-popover>
-  {{ if not site.Params.previewMode }}<script>window.__glossary = {{ site.Data.glossary | jsonify | safeJS }};</script>{{ end }}
+  <script>window.__glossary = {{ site.Data.glossary | jsonify | safeJS }};</script>
+  {{ end }}
 
   {{/* U10: shared step-completion toast. Text + duration set per call. */}}
-  <ui5-toast id="step-toast" placement="BottomCenter"></ui5-toast>
+  {{ if not site.Params.previewMode }}<ui5-toast id="step-toast" placement="BottomCenter"></ui5-toast>{{ end }}
 
   {{ partial "lightbox-dialog.html" . }}
   <script defer src="/js/consent.js"></script>
@@ -45,7 +47,7 @@
   <script defer src="/js/joule-render.js"></script>
   <script src="/js/joule.js" defer></script>
   {{ end }}
-  <script src="/js/cmd-palette.js" defer type="module"></script>
+  {{ if not site.Params.previewMode }}<script src="/js/cmd-palette.js" defer type="module"></script>{{ end }}
   {{ $ui5 := resources.Get "js/ui5-bootstrap.ts" | js.Build (dict "minify" true "format" "esm" "target" "es2020") }}
   <script type="module" src="{{ $ui5.RelPermalink }}"></script>
 </body>
