@@ -1,0 +1,44 @@
+<mvc:View
+  controllerName="sap.tutorials.admin.shell.controller.DataExport"
+  xmlns:mvc="sap.ui.core.mvc"
+  xmlns="sap.m"
+  xmlns:core="sap.ui.core">
+  <Page title="Data Export" enableScrolling="true">
+    <content>
+      <Panel headerText="Legacy IMS Reporting Files" class="sapUiSmallMargin">
+        <content>
+          <Text text="Exports the legacy IMS-equivalent reporting files for use in external tools." class="sapUiSmallMarginBottom"/>
+          <List headerText="Bundle contents" class="sapUiSmallMarginBottom">
+            <StandardListItem title="IMS_TASK"                description="Polymorphic catalog rows: Tutorials, Missions, Groups, Steps, Checkpoints"/>
+            <StandardListItem title="IMS_TASK_RECORD"         description="Per-user attempt and completion rows"/>
+            <StandardListItem title="IMS_TASK_TO_PARENT"      description="Parent edges: Step -> Tutorial, Tutorial -> Group"/>
+            <StandardListItem title="IMS_COMPLETION_PATH"     description="Named paths that tie Tutorials/Groups/Checkpoints into Missions"/>
+            <StandardListItem title="IMS_COMPLETION_PATH_TO_TASK" description="Path-to-task ordered membership rows"/>
+            <StandardListItem title="IMS_STEP_FAILURE"        description="Per-step failure events captured during a TaskRecord"/>
+          </List>
+          <HBox alignItems="Center" class="sapUiSmallMarginBottom">
+            <Label text="Format" labelFor="formatSelect" class="sapUiTinyMarginEnd"/>
+            <SegmentedButton id="formatSelect" selectedKey="csv">
+              <items>
+                <SegmentedButtonItem key="csv" text="CSV (ZIP)"/>
+                <SegmentedButtonItem key="xlsx" text="Excel (XLSX)"/>
+              </items>
+            </SegmentedButton>
+          </HBox>
+          <MessageStrip
+            id="errorStrip"
+            visible="false"
+            type="Error"
+            showIcon="true"
+            class="sapUiSmallMarginBottom"/>
+          <Button
+            text="Download bundle"
+            icon="sap-icon://download"
+            iconFirst="true"
+            type="Emphasized"
+            press=".onDownload"/>
+        </content>
+      </Panel>
+    </content>
+  </Page>
+</mvc:View>
