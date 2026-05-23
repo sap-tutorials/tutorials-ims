@@ -51,7 +51,7 @@ parser: v2
     const result = composeTutorial(raw, {
       repo: 'r', branch: 'b', slug: 's', target: 'hugo', rewriteImages: false,
     });
-    expect(result.steps[0].body).toContain('./images/foo.png');
-    expect(result.steps[0].body).not.toContain('raw.githubusercontent.com');
+    expect(result.steps[0].content).toContain('./images/foo.png');
+    expect(result.steps[0].content).not.toContain('raw.githubusercontent.com');
   });
 });
