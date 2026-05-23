@@ -1,0 +1,15 @@
+{{- $slug := .slug -}}
+{{- $title := .title -}}
+{{- $time := .time -}}
+{{- $page := site.GetPage (printf "/tutorials/%s" $slug) -}}
+{{- if and (not $title) $page -}}{{- $title = $page.Title -}}{{- end -}}
+{{- if and (not $time) $page -}}{{- $time = $page.Params.time -}}{{- end -}}
+<a href="/tutorials/{{ $slug }}" class="next-steps-rail-card" data-recommend-card>
+  <span class="next-steps-label">TUTORIAL</span>
+  <span class="next-steps-title" data-recommend-title>{{ $title | default ($slug | humanize | title) }}</span>
+  {{- with $time }}
+  <span class="next-steps-meta" data-recommend-meta>
+    <span class="next-steps-time-icon">&#9201;</span> {{ . }} min.
+  </span>
+  {{- end }}
+</a>

@@ -5,6 +5,7 @@ import { registerJobs } from './jobs/scheduler.js';
 import { qrcodeHandler } from './lib/qrcode-handler.js';
 import { buildCatalogHandler } from './lib/build-catalog.js';
 import { coCompletionsHandler } from './lib/co-completion.js';
+import { recommendationsHandler } from './handlers/recommendations.js';
 import { navigatorCatalogHandler } from './lib/navigator-catalog.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
 import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, navHandler, rollbackHandler } from './lib/content-store.js';
@@ -99,6 +100,7 @@ cds.on('bootstrap', (app) => {
 
   app.use(basicAuthMiddleware);
   app.get('/api/qrcode', qrcodeHandler);
+  app.get('/api/recommendations', recommendationsHandler);
   app.get('/build/catalog', buildCatalogHandler);
   app.get('/build/co-completions', coCompletionsHandler);
   app.get('/build/navigator', navigatorCatalogHandler);
