@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validateSelect } from '../analytics-sql-validator.js'
+import { validateSelect } from '../analytics-sql-validator.cjs'
 
 const ALLOWED = new Set(['TaskRecords', 'Users', 'Missions',
   'SAP_TUTORIALS_IMS_TASKRECORDS', 'SAP_TUTORIALS_IMS_USERS', 'SAP_TUTORIALS_IMS_MISSIONS'])
