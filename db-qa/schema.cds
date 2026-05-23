@@ -43,3 +43,15 @@ entity RepoCatalog : managed {
   lastSyncedAt              : Timestamp;
   payload                   : LargeString;
 }
+
+// Minimal Tutorials entity required by the content-store serve handler
+// for status-aware lookup (soft-delete / redirect). QA only needs status
+// and redirectTo so we don't replicate the full prod schema here.
+@cds.autoexpose: false
+entity Tutorials : managed {
+  key ID                    : UUID;
+  slug                      : String(255);
+  title                     : String(500);
+  status                    : String(20) default 'ACTIVE';
+  redirectTo                : Association to Tutorials;
+}
