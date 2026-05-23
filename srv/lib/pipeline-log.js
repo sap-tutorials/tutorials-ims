@@ -77,3 +77,21 @@ export async function logPipelineItem(logId, { slug, phase, severity, message })
     message: (message ? String(message) : '').slice(0, 2000) || null
   });
 }
+
+/**
+ * Record a per-record outcome under an in-flight scheduled-job log.
+ * Items show up as a sub-table on the JobExecutionLog Object Page so admins can
+ * drill from a run into the individual records the job processed.
+ */
+export async function logJobItem(logId, { itemKey, itemKind, status, message }) {
+  if (!logId) return;
+  const { JobLogItems } = cds.entities('com.sap.developers.ims');
+  await INSERT.into(JobLogItems).entries({
+    ID: randomUUID(),
+    jobLog_ID: logId,
+    itemKey: (itemKey || '').slice(0, 255) || null,
+    itemKind: itemKind || 'OTHER',
+    status: status || 'SUCCESS',
+    message: (message ? String(message) : '').slice(0, 2000) || null
+  });
+}

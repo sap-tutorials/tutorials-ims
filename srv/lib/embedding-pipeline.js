@@ -35,7 +35,7 @@ async function readContentBuffer(db, slug) {
   return row ? await toBuffer(row.content) : null;
 }
 
-export async function embedSlugs(slugs, settings) {
+export async function embedSlugs(slugs, settings, onSlug) {
   if (!settings?.ragEnabled) return { embedded: 0, skipped: 0, failed: 0, lockHeld: false };
   if (!Array.isArray(slugs) || slugs.length === 0) return { embedded: 0, skipped: 0, failed: 0, lockHeld: false };
 
@@ -44,6 +44,10 @@ export async function embedSlugs(slugs, settings) {
     LOG.info('lock held — another pipeline run is active, skipping');
     return { embedded: 0, skipped: 0, failed: 0, lockHeld: true };
   }
+
+  const report = onSlug
+    ? async (slug, status, message) => { try { await onSlug({ slug, status, message }); } catch { /* never fail the job on logging */ } }
+    : async () => {};
 
   let embedded = 0, skipped = 0, failed = 0;
   try {
@@ -54,12 +58,12 @@ export async function embedSlugs(slugs, settings) {
     for (const slug of slugs) {
       try {
         const tut = await SELECT.one.from(Tutorials).where({ slug }).columns('ID');
-        if (!tut) { skipped++; continue; }
+        if (!tut) { skipped++; await report(slug, 'SKIPPED', 'tutorial not found'); continue; }
         const buf = await readContentBuffer(db, slug);
-        if (!buf) { skipped++; continue; }
+        if (!buf) { skipped++; await report(slug, 'SKIPPED', 'no active content'); continue; }
 
         const chunks = extractStepText(buf);
-        if (chunks.length === 0) { skipped++; continue; }
+        if (chunks.length === 0) { skipped++; await report(slug, 'SKIPPED', 'no step text'); continue; }
 
         for (const c of chunks) c.contentHash = hashChunk(c.text);
 
@@ -82,7 +86,7 @@ export async function embedSlugs(slugs, settings) {
           return !e || e.contentHash !== c.contentHash || e.embeddingModel !== model;
         });
 
-        if (toEmbed.length === 0) { skipped++; continue; }
+        if (toEmbed.length === 0) { skipped++; await report(slug, 'SKIPPED', 'all steps current'); continue; }
 
         const vectors = await embed(toEmbed.map((c) => c.text), model);
 
@@ -122,9 +126,11 @@ export async function embedSlugs(slugs, settings) {
           }
         }
         embedded++;
+        await report(slug, 'SUCCESS', `embedded ${toEmbed.length} step${toEmbed.length === 1 ? '' : 's'}`);
       } catch (err) {
         LOG.warn(`embed failed for ${slug}: ${err.message}`);
         failed++;
+        await report(slug, 'ERROR', err.message);
       }
     }
   } finally {

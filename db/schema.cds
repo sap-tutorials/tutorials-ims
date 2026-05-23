@@ -358,6 +358,7 @@ entity PipelineLog : cuid, managed {
   metadata        : LargeString;
   statusCriticality : Integer @Core.Computed;
   items           : Composition of many PipelineLogItems on items.pipelineLog = $self;
+  jobItems        : Composition of many JobLogItems     on jobItems.jobLog   = $self;
 }
 
 // Per-slug failures captured during a pipeline run. Lets admins drill from a
@@ -369,6 +370,20 @@ entity PipelineLogItems : cuid {
   severity    : String(10) enum { ERROR; WARN; };
   message     : String(2000);
   severityCriticality : Integer @Core.Computed;
+}
+
+// Per-record output captured during a scheduled-job run. Lets admins drill from
+// a JobExecutionLog row into the individual records the job processed
+// (accounts merged, embeddings updated, notifications sent, ...).
+entity JobLogItems : cuid {
+  jobLog    : Association to PipelineLog;
+  itemKey   : String(255);
+  itemKind  : String(30) enum {
+    ACCOUNT_MERGE; TUTORIAL_EMBEDDING; NOTIFICATION; NGDS_RETRY; CONTENT_VERSION; OTHER;
+  };
+  status    : String(10) enum { SUCCESS; SKIPPED; WARN; ERROR; };
+  message   : String(2000);
+  statusCriticality : Integer @Core.Computed;
 }
 
 entity ChatSettings : cuid, managed {

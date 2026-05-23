@@ -84,6 +84,7 @@ service AdminService {
     where pipelineType = 'SCHEDULED_JOB';
 
   @readonly entity PipelineLogItems as projection on ims.PipelineLogItems;
+  @readonly entity JobLogItems      as projection on ims.JobLogItems;
 
   @readonly entity TutorialFeedback          as projection on ims.TutorialFeedback;
   @readonly entity TutorialFeedbackAggregate as projection on ims.TutorialFeedbackAggregate;

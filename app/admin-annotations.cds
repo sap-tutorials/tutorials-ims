@@ -762,6 +762,7 @@ annotate AdminService.JobExecutionLog with @(
     Facets: [
       { $Type: 'UI.ReferenceFacet', ID: 'JobGeneral', Target: '@UI.FieldGroup#General', Label: 'General' },
       { $Type: 'UI.ReferenceFacet', ID: 'JobTiming',  Target: '@UI.FieldGroup#Timing',  Label: 'Timing' },
+      { $Type: 'UI.ReferenceFacet', ID: 'JobItems',   Target: 'jobItems/@UI.LineItem',  Label: 'Job Output' },
       { $Type: 'UI.ReferenceFacet', ID: 'JobError',   Target: '@UI.FieldGroup#Error',   Label: 'Error Details' },
       { $Type: 'UI.ReferenceFacet', ID: 'JobMeta',    Target: '@UI.FieldGroup#Metadata', Label: 'Metadata' }
     ],
@@ -777,6 +778,29 @@ annotate AdminService.JobExecutionLog with @(
     ]},
     FieldGroup #Error:    { Data: [{ Value: errorDetails }] },
     FieldGroup #Metadata: { Data: [{ Value: metadata }] }
+  },
+  Capabilities.DeleteRestrictions.Deletable: false,
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable: false
+);
+
+// --- JobLogItems (per-record output captured during a scheduled-job run) ---
+annotate AdminService.JobLogItems with {
+  itemKey  @Common.Label: 'Item';
+  itemKind @Common.Label: 'Kind'    @Common.ValueListWithFixedValues;
+  status   @Common.Label: 'Status'  @Common.ValueListWithFixedValues;
+  message  @Common.Label: 'Message' @UI.MultiLineText;
+};
+
+annotate AdminService.JobLogItems with @(
+  UI: {
+    LineItem: [
+      { Value: status, Criticality: statusCriticality },
+      { Value: itemKind },
+      { Value: itemKey },
+      { Value: message }
+    ],
+    SelectionFields: [ status, itemKind ]
   },
   Capabilities.DeleteRestrictions.Deletable: false,
   Capabilities.InsertRestrictions.Insertable: false,

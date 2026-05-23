@@ -680,6 +680,15 @@ export default class AdminService extends cds.ApplicationService {
       }
     });
 
+    this.after('READ', 'JobLogItems', rows => {
+      for (const row of Array.isArray(rows) ? rows : [rows]) {
+        if (row.status === 'ERROR') row.statusCriticality = 1;
+        else if (row.status === 'WARN') row.statusCriticality = 2;
+        else if (row.status === 'SUCCESS') row.statusCriticality = 3;
+        else row.statusCriticality = 0;
+      }
+    });
+
     // Guard: only SuperAdmin can change the published field
     const _guardPublished = (req) => {
       if (!('published' in req.data)) return;
