@@ -51,20 +51,52 @@ sap.ui.define([
     feedbackDashboard: "Feedback Dashboard"
   };
 
+  var NAV_GROUPS_STORAGE_KEY = "sap-tutorials-admin-nav-groups";
+  var NAV_GROUP_KEYS = ["content", "rewards", "feedback", "system"];
+
   return Controller.extend("sap.tutorials.admin.shell.controller.Shell", {
     onInit: function () {
       var oComponent = this.getOwnerComponent();
       var oViewModel = oComponent.getShellViewModel();
       var bExpanded = localStorage.getItem("sap-tutorials-admin-nav-expanded") !== "false";
       oViewModel.setProperty("/sideExpanded", bExpanded);
+      oViewModel.setProperty("/groupExpanded", this._loadGroupExpanded());
       oViewModel.setProperty("/userInitials", "");
       oViewModel.setProperty("/userName", "");
       oViewModel.setProperty("/userEmail", "");
       this.getView().setModel(oViewModel, "viewModel");
 
+      oViewModel.attachPropertyChange(this._onViewModelPropertyChange, this);
+
       oComponent.getRouter().attachRouteMatched(this._onRouteMatched, this);
       this._attachHashChangeDetection();
       this._loadUserProfile();
+    },
+
+    _loadGroupExpanded: function () {
+      var oDefault = {};
+      NAV_GROUP_KEYS.forEach(function (sKey) { oDefault[sKey] = true; });
+      try {
+        var sRaw = localStorage.getItem(NAV_GROUPS_STORAGE_KEY);
+        if (!sRaw) return oDefault;
+        var oStored = JSON.parse(sRaw);
+        NAV_GROUP_KEYS.forEach(function (sKey) {
+          if (typeof oStored[sKey] === "boolean") oDefault[sKey] = oStored[sKey];
+        });
+      } catch (e) { /* fall through to defaults */ }
+      return oDefault;
+    },
+
+    _onViewModelPropertyChange: function (oEvent) {
+      var sPath = oEvent.getParameter("path");
+      var sContextPath = oEvent.getParameter("context") ? oEvent.getParameter("context").getPath() : "";
+      var sFullPath = (sContextPath || "") + (sPath || "");
+      if (sFullPath.indexOf("/groupExpanded/") !== 0) return;
+      var oModel = this.getView().getModel("viewModel");
+      var oGroups = oModel.getProperty("/groupExpanded") || {};
+      try {
+        localStorage.setItem(NAV_GROUPS_STORAGE_KEY, JSON.stringify(oGroups));
+      } catch (e) { /* ignore quota errors */ }
     },
 
     onNavBack: function () {
