@@ -430,5 +430,145 @@
     }
     setTimeout(syncCompletion, 250);
   }
+
+  // U18 — Mobile bottom-sheet step navigator
+  const fab = document.getElementById("op-mobile-fab");
+  const sheet = document.getElementById("op-mobile-sheet");
+  const list = document.getElementById("op-mobile-step-list");
+  const busy = document.getElementById("op-mobile-busy");
+  const closeBtn = document.getElementById("op-sheet-close");
+  const prevBtn = document.getElementById("op-sheet-prev");
+  const nextBtn = document.getElementById("op-sheet-next");
+  const markBtn = document.getElementById("op-sheet-mark");
+  const currentLabel = document.getElementById("op-sheet-current");
+  const opWizard = document.getElementById("op-step-wizard");
+
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const SCROLL_DELAY = reduceMotion ? 0 : 400;
+
+  const tutorialSlug =
+    document.querySelector("#progress-bar")?.getAttribute("data-slug") ||
+    document.querySelector("#tutorial-rating-mount")?.getAttribute("data-slug") ||
+    "";
+
+  function getStepCount() {
+    return list?.querySelectorAll("ui5-li").length || 0;
+  }
+
+  function getCurrentStepFromWizard() {
+    if (!opWizard) return 1;
+    const steps = Array.from(opWizard.querySelectorAll("ui5-wizard-step"));
+    const idx = steps.findIndex((s) => s.hasAttribute("selected"));
+    return idx >= 0 ? idx + 1 : 1;
+  }
+
+  function getCurrentStepFromViewport() {
+    const sections = Array.from(document.querySelectorAll(".tutorial-step"));
+    if (!sections.length) return 1;
+    const center = window.innerHeight / 2;
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    sections.forEach((el, i) => {
+      const rect = el.getBoundingClientRect();
+      if (rect.bottom < 0 || rect.top > window.innerHeight) return;
+      const dist = Math.abs(rect.top - center);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = i;
+      }
+    });
+    return bestIdx + 1;
+  }
+
+  function getCurrentStep() {
+    return opWizard ? getCurrentStepFromWizard() : getCurrentStepFromViewport();
+  }
+
+  function setBoundaryDisabled(current, total) {
+    if (prevBtn) prevBtn.disabled = current <= 1;
+    if (nextBtn) nextBtn.disabled = current >= total;
+  }
+
+  function syncListFromDom() {
+    if (!list) return;
+    const total = getStepCount();
+    const current = getCurrentStep();
+    const completed = new Set(
+      Array.from(document.querySelectorAll(".tutorial-step.completed")).map((el) =>
+        Number(el.dataset.step || el.id.replace(/^step-/, "")),
+      ),
+    );
+    list.querySelectorAll("ui5-li").forEach((li) => {
+      const n = Number(li.dataset.stepNumber);
+      li.toggleAttribute("selected", n === current);
+      if (completed.has(n)) li.setAttribute("icon", "accept");
+      else li.removeAttribute("icon");
+    });
+    if (currentLabel) currentLabel.textContent = String(current);
+    setBoundaryDisabled(current, total);
+  }
+
+  function scrollToStep(n) {
+    const el = document.getElementById(`step-${n}`);
+    if (!el) return false;
+    el.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+    return true;
+  }
+
+  function openSheet() {
+    if (!sheet) return;
+    syncListFromDom();
+    sheet.setAttribute("open", "");
+  }
+
+  function closeSheet() {
+    sheet?.removeAttribute("open");
+  }
+
+  fab?.addEventListener("click", openSheet);
+  closeBtn?.addEventListener("click", closeSheet);
+
+  list?.addEventListener("item-click", (e) => {
+    const item = e.detail?.item;
+    const n = Number(item?.dataset?.stepNumber);
+    if (!n || !scrollToStep(n)) return;
+    if (busy) busy.active = true;
+    setTimeout(() => {
+      if (busy) busy.active = false;
+      closeSheet();
+    }, SCROLL_DELAY);
+  });
+
+  prevBtn?.addEventListener("click", () => {
+    const current = getCurrentStep();
+    if (current <= 1) return;
+    if (scrollToStep(current - 1)) {
+      requestAnimationFrame(() => requestAnimationFrame(syncListFromDom));
+    }
+  });
+
+  nextBtn?.addEventListener("click", () => {
+    const current = getCurrentStep();
+    const total = getStepCount();
+    if (current >= total) return;
+    if (scrollToStep(current + 1)) {
+      requestAnimationFrame(() => requestAnimationFrame(syncListFromDom));
+    }
+  });
+
+  markBtn?.addEventListener("click", () => {
+    const current = getCurrentStep();
+    if (typeof window.completeStep === "function" && tutorialSlug) {
+      window.completeStep(tutorialSlug, current);
+      syncListFromDom();
+    }
+  });
+
+  const stepObserver = new MutationObserver(() => {
+    if (sheet?.hasAttribute("open")) syncListFromDom();
+  });
+  const opStepsRoot = document.querySelector(".tutorial-steps");
+  if (opStepsRoot) stepObserver.observe(opStepsRoot, { attributes: true, subtree: true, attributeFilter: ["class"] });
+  if (opWizard) stepObserver.observe(opWizard, { attributes: true, subtree: true, attributeFilter: ["selected"] });
 </script>
 {{ end }}
