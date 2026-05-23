@@ -74,6 +74,12 @@ export default class AnalyticsService extends cds.ApplicationService {
       try {
         validated = validateSelect(sql, getAllowedTableNames())
       } catch (err) {
+        cds.log('analytics-sql').warn({
+          user: req.user.id,
+          sqlLength: typeof sql === 'string' ? sql.length : 0,
+          reason: 'validator',
+          error: err.message,
+        })
         return req.reject(400, err.message)
       }
       const start = Date.now()
