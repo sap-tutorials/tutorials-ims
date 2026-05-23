@@ -8,6 +8,7 @@ build-parameters:
       commands:
         - npm install
         - npx cds build --production
+        - npx cds build --production --for db-qa --output-dir gen/db-qa
         - npm --prefix apps install
         - npm run fetch-tutorials -- --target hugo
         - npm run validate-tutorials
@@ -61,6 +62,14 @@ modules:
     requires:
       - name: tutorials-hana
 
+  - name: tutorials-db-qa-deployer
+    type: hdb
+    path: gen/db-qa
+    parameters:
+      buildpack: nodejs_buildpack
+    requires:
+      - name: tutorials-hana-qa
+
   - name: tutorials-approuter
     type: approuter.nodejs
     path: approuter
@@ -90,6 +99,13 @@ resources:
       service: hana
       service-plan: hdi-shared
       service-name: tutorials-hana
+
+  - name: tutorials-hana-qa
+    type: com.sap.xs.hdi-container
+    parameters:
+      service: hana
+      service-plan: hdi-shared
+      service-name: tutorials-hana-qa
 
   - name: tutorials-xsuaa
     type: org.cloudfoundry.managed-service
