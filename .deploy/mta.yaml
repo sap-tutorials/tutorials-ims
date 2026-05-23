@@ -98,6 +98,10 @@ modules:
         - npm --prefix ../app/admin-shell run build
         - mkdir -p static/admin-ui
         - cp -r ../app/admin-shell/dist/. static/admin-ui/
+        - npm --prefix ../app/analytics-explorer install
+        - npm --prefix ../app/analytics-explorer run build
+        - mkdir -p static/analytics-ui
+        - cp -r ../app/analytics-explorer/dist/. static/analytics-ui/
         - cp -r ../app/scanner/webapp static/scanner-ui
       ignore:
         - default-env.json

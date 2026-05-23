@@ -11,7 +11,7 @@ export default defineConfig({
         test: {
           name: 'unit',
           environment: 'node',
-          include: ['test/**/*.test.{js,ts}', 'scripts/__tests__/**/*.test.ts', 'srv/__tests__/**/*.test.{js,ts}'],
+          include: ['test/**/*.test.{js,ts}', 'scripts/__tests__/**/*.test.ts', 'srv/**/__tests__/**/*.test.{js,ts}', 'app/analytics-explorer/src/**/__tests__/**/*.test.ts'],
           exclude: ['node_modules', 'gen', 'hugo', 'test/hybrid/**', 'test/hybrid-qa/**', 'test/smoke/**'],
           hookTimeout: 60000,
           env: { NO_TELEMETRY: 'true' }

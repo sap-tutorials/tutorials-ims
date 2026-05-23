@@ -113,7 +113,7 @@ Tutorial HTML is NOT served from static files. After Hugo builds, `publish-conte
 
 ### CAP Backend (srv/)
 
-- **Services**: `DeveloperService` (@path: /api), `AdminService` (@path: /admin), `DisplayService` (@path: /display), `ConsolidationService` (@path: /api/v1), `ScannerService` (@path: /scanner), `SearchService` (@path: /search), `EventStreamService` (@path: event-stream, WebSocket+REST)
+- **Services**: `DeveloperService` (@path: /api), `AdminService` (@path: /admin), `AnalyticsService` (@path: /admin/analytics), `DisplayService` (@path: /display), `ConsolidationService` (@path: /api/v1), `ScannerService` (@path: /scanner), `SearchService` (@path: /search), `EventStreamService` (@path: event-stream, WebSocket+REST)
 - **Custom endpoints**: `/api/qrcode` (QR code PNG generation), `/build/catalog` (unauthenticated mission/group data for build pipeline), `/build/navigator`, `/build/slug-mapping`, `/build/repo-catalog` (GET unauthenticated; POST bearer-token-protected via `CONTENT_API_KEY` — slug-keyed `DiscoveredTutorial` map used as the third-tier discovery fallback when GitHub and the local actions cache both miss)
 - **Content persistence** (`srv/lib/content-store.js`): Tutorial HTML stored as gzip-compressed BLOBs in HANA (`ContentFiles` + `ContentManifest` entities). Endpoints:
   - `POST /content/publish` — accepts `{ trigger, hugoVersion, files: { slug: base64gzip } }`, creates versioned manifest (bearer token auth via `CONTENT_API_KEY`)
@@ -127,6 +127,7 @@ Tutorial HTML is NOT served from static files. After Hugo builds, `publish-conte
 - **Audit Logging**: `@cap-js/audit-logging` with `@PersonalData` annotations on Users/UserMetaData/TaskRecords (see `db/audit-logging.cds`). SecurityEvent emitted on user anonymization.
 - **Change Tracking**: `@cap-js/change-tracking` on admin-managed entities (Events, Missions, Groups, Accomplishments, Prizes, ImsConfig, FeaturedTasks). See `db/change-tracking.cds`.
 - **ORD**: `srv/ord-annotations.cds` registers all services for Open Resource Discovery.
+- **Analytics ad-hoc queries** (`srv/analytics-service.js`): `AnalyticsService` exposes a curated subset of CDS views/entities marked with `@analytics.exposed` plus a `runSelectQuery(sql)` action. Queries are parsed via `srv/lib/analytics-sql-validator.cjs` (SELECT-only, allowlisted tables, no DDL/DML/multi-statement) and wrapped with `LIMIT 5001` to cap result size.
 
 ### Scanner (app/scanner/)
 
@@ -144,6 +145,12 @@ Tutorial HTML is NOT served from static files. After Hugo builds, `publish-conte
 - **Production access**: `/admin-ui/` route (XSUAA-protected, served from approuter `static/admin-ui/`)
 - **Local dev access**: `/admin-ui/` — served by `adminAppsHandler` middleware in `approuter/server.js`; component sub-resources at `/admin-ui/components/<name>/`
 - **Theme**: `sap_horizon` (light) / `sap_horizon_dark` (dark), auto-detects OS preference, persisted to `localStorage` key `sap-tutorials-admin-theme`
+
+### Analytics Explorer (app/analytics-explorer/)
+
+- **`app/analytics-explorer/`** — Vue 3 SPA bundled with Vite, peer of admin-shell. Ad-hoc analytics UI over `AnalyticsService` with an entity browser tab and a SQL tab (Monaco lazy-loaded).
+- Built via `npm run build:analytics-explorer` and copied into the approuter at `static/analytics-ui/` (see `.deploy/mta.yaml`).
+- **Production access**: `/analytics-ui/` (XSUAA-protected via xs-app.json route)
 
 ### Frontend (Hugo + Vue 3)
 
