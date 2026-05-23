@@ -58,11 +58,10 @@ describe('Draft Enablement', () => {
     cleanup.push(`/admin/Accomplishments(ID=${data.ID},IsActiveEntity=false)`);
   });
 
-  it('Tutorials does NOT support drafts', async () => {
+  it('Tutorials supports drafts (Edit button on ObjectPage)', async () => {
     const { data } = await project.get('/admin/$metadata', adminAuth);
-    // Tutorials should not have DraftAdministrativeData navigation
     const tutorialsSection = data.split('EntityType Name="Tutorials"')[1]?.split('</EntityType>')[0] ?? '';
-    expect(tutorialsSection).not.toContain('DraftAdministrativeData');
+    expect(tutorialsSection).toContain('DraftAdministrativeData');
   });
 
   describe('Draft Composition CRUD', () => {

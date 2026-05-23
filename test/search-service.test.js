@@ -93,11 +93,14 @@ describe('SearchService', () => {
       expect(slugs).toContain('fiori-elements');
     });
 
-    it('$search matches a unique word from indexed body text', async () => {
+    it('$search does NOT match body text (bodyText excluded from @cds.search)', async () => {
       // 'ipallowlist' appears only in the hana-cloud-setup body text, not in any title or description.
+      // bodyText is deliberately excluded from @cds.search in srv/search-service.cds:21
+      // (comment there: '"CAP" matching "escape"/"capture". bodyText dropped from @cds.search')
+      // to prevent false positives from substring matches in long body text.
       const { data } = await project.get('/search/SearchableItems?$search=ipallowlist');
       const slugs = data.value.map(i => i.slug);
-      expect(slugs).toContain('hana-cloud-setup');
+      expect(slugs).not.toContain('hana-cloud-setup');
     });
 
     it('does not expose bodyText in the OData response', async () => {

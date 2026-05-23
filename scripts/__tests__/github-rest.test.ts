@@ -366,13 +366,35 @@ describe('REST API discovery + fallback', () => {
       })
       global.fetch = fetchMock as any
 
-      const promise = discoverAllTutorials()
-      const expectation = expect(promise).rejects.toThrow(/GraphQL request failed/)
-      await vi.runAllTimersAsync()
-      await expectation
+      // Disable disk-cache and baseline tiers — both files may exist in the
+      // repo (runtime cache + committed baseline), so we rename them out of the
+      // way for the duration of this test to verify the throw-through path.
+      const { existsSync, renameSync } = await import('node:fs')
+      const { join, dirname } = await import('node:path')
+      const { fileURLToPath } = await import('node:url')
+      const here = dirname(fileURLToPath(import.meta.url))
+      const baselinePath = join(here, '..', 'parsers', 'discovery-baseline.json')
+      const runtimePath = join(here, '..', '..', '.tutorial-cache', '_discovery.json')
+      const moved: Array<[string, string]> = []
+      for (const p of [baselinePath, runtimePath]) {
+        if (existsSync(p)) {
+          const tmp = `${p}.test-bak`
+          renameSync(p, tmp)
+          moved.push([p, tmp])
+        }
+      }
 
-      const restCalls = fetchMock.mock.calls.filter(c => String(c[0]).includes('/orgs/sap-tutorials/repos'))
-      expect(restCalls.length).toBeGreaterThanOrEqual(2)
+      try {
+        const promise = discoverAllTutorials()
+        const expectation = expect(promise).rejects.toThrow(/graphql returned/)
+        await vi.runAllTimersAsync()
+        await expectation
+
+        const restCalls = fetchMock.mock.calls.filter(c => String(c[0]).includes('/orgs/sap-tutorials/repos'))
+        expect(restCalls.length).toBeGreaterThanOrEqual(2)
+      } finally {
+        for (const [orig, tmp] of moved) renameSync(tmp, orig)
+      }
     })
   })
 })

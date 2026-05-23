@@ -19,7 +19,7 @@ describe('embedding reconciliation', () => {
       slugsWithoutEmbeddings: ['c'],
       settings
     });
-    expect(embedSlugs).toHaveBeenCalledWith(expect.arrayContaining(['a', 'c']), settings);
+    expect(embedSlugs).toHaveBeenCalledWith(expect.arrayContaining(['a', 'c']), settings, undefined);
     expect(result.candidates).toBe(2);
   });
 
@@ -45,7 +45,7 @@ describe('embedding reconciliation', () => {
       slugsWithoutEmbeddings: ['c'],      // 'c' is inactive
       settings: { ragEnabled: true, embeddingModel: 'm' }
     });
-    expect(embedSlugs).toHaveBeenCalledWith(['a'], expect.any(Object));
+    expect(embedSlugs).toHaveBeenCalledWith(['a'], expect.any(Object), undefined);
   });
 
   it('reconcileAll deduplicates slugs that appear in both stale and missing sets', async () => {
@@ -57,7 +57,7 @@ describe('embedding reconciliation', () => {
       slugsWithoutEmbeddings: ['a'],
       settings: { ragEnabled: true, embeddingModel: 'm' }
     });
-    expect(embedSlugs).toHaveBeenCalledWith(['a'], expect.any(Object));
+    expect(embedSlugs).toHaveBeenCalledWith(['a'], expect.any(Object), undefined);
     expect(result.candidates).toBe(1);
   });
 });
