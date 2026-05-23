@@ -66,6 +66,14 @@ const sorted = computed(() => {
   return list
 })
 
+const recentRows = computed(() => {
+  return rows.value
+    .slice()
+    .filter(r => !!r.completionDate && !Number.isNaN(new Date(r.completionDate).getTime()))
+    .sort((a, b) => new Date(b.completionDate!).getTime() - new Date(a.completionDate!).getTime())
+    .slice(0, 10)
+})
+
 function setSort(key: SortKey) {
   if (sortKey.value === key) {
     sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
