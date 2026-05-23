@@ -81,11 +81,13 @@ service ExportsService @(path : '/admin/exports') {
 
 The action handler in `srv/exports-service.js` is intentionally thin — it validates `format`, sets `req._.res` headers, and delegates to one of two assemblers (`assembleCsvZip(res)` or `assembleXlsx(res)`). The assemblers write directly to the response stream via the express bridge registered in `srv/server.js cds.on('bootstrap')`. We follow the existing bridge pattern used by content-serve and feedback.
 
+**Bridge serves GET; the CDS action exists for metadata.** CAP OData actions are POST-invoked, but the consumer is a browser triggering a download via `window.location.href` — that's a GET. The express bridge registered under `cds.on('bootstrap')` handles `GET /admin/exports/exportLegacyData`, leans on the existing XSUAA passport already wired for `/admin/*` for Admin-scope enforcement, and invokes the same assembler functions the CDS handler would call. The CDS action declaration exists so the OData metadata document advertises the operation and so the `@requires: 'Admin'` annotation reads consistently with the rest of the service surface — no client actually hits the OData action endpoint.
+
 ### Per-table modules
 
 `srv/exports/` — one module per legacy file. Each module exports:
 - `legacyHeader: string[]` — the legacy IMS column names in legacy order
-- `async *rows(db, opts)` — async generator yielding row arrays in `legacyHeader` order, paging via `OFFSET/LIMIT 5000` against the source CDS entities
+- `async *rows(db, opts)` — async generator yielding row arrays in `legacyHeader` order, paging via `ORDER BY <stable-key> ASC LIMIT 5000 OFFSET n` against the source CDS entities. Stable key is `legacyId ASC` everywhere it exists; for `Tasks` (UNION-ALL view) we order by `(taskType ASC, legacyId ASC)` so OFFSET pagination is deterministic across pages.
 
 Six modules:
 
@@ -191,7 +193,7 @@ Headers set before any data is written:
 - CSV: `Content-Type: application/zip`, `Content-Disposition: attachment; filename="ims-export-csv-<yyyymmdd-hhmmss>.zip"`
 - XLSX: `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, `Content-Disposition: attachment; filename="ims-export-<yyyymmdd-hhmmss>.xlsx"`
 
-**Approuter timeout** in `approuter/xs-app.json` for the `^/admin/(.*)$` route: bump `timeout` to `600000` (10 min). Today the route inherits the default 30-second timeout, which is too tight if the dataset grows. Other `/admin/*` traffic won't notice the longer ceiling — it only matters when an upstream actually streams that long.
+**Approuter timeout** in `approuter/xs-app.json`: add a new route `^/admin/exports/(.*)$` *before* the existing `^/admin/(.*)$` entry, with the same XSUAA + Admin-scope settings and `timeout: 600000` (10 min). Placing the bump on a route-specific entry keeps the rest of `/admin/*` traffic on the existing default — only the export endpoint gets the longer ceiling.
 
 **Failure modes:**
 - DB error mid-stream — the response already has 200 + headers; we abort the stream and rely on the client to detect a truncated ZIP/XLSX. We log the error with `cds.log('exports').error({ stage, error })` so it's investigable. Documented in the spec; we do not try to swap status codes mid-stream.
@@ -264,7 +266,7 @@ Modified:
 - `srv/server.js` — register express bridge for `GET /admin/exports/exportLegacyData` under `cds.on('bootstrap')`
 - `app/admin-shell/webapp/view/Shell.view.xml` — new "Data Export" nav item under System
 - `app/admin-shell/webapp/manifest.json` (or router config) — new route to DataExport view
-- `approuter/xs-app.json` — bump timeout to 600000 on `^/admin/(.*)$`
+- `approuter/xs-app.json` — insert new `^/admin/exports/(.*)$` route with `timeout: 600000` *before* the existing `^/admin/(.*)$` route
 - `package.json` — add `archiver`, `exceljs`, `csv-stringify` (exact pinned versions, respecting min-release-age)
 
 Untouched:

@@ -80,7 +80,8 @@
     "shiki": "^4.0.2",
     "tsx": "^4.0.0",
     "vitest": "^4.0.0",
-    "yaml": "^2.7.0"
+    "yaml": "^2.7.0",
+    "yauzl": "3.3.1"
   },
   "dependencies": {
     "@cap-js-community/websocket": "^1.0.0",
@@ -98,9 +99,12 @@
     "@sap/cds": "^9.9.0",
     "@sap/xsenv": "^6.2.0",
     "@sap/xssec": "^4.13.0",
+    "archiver": "8.0.0",
     "cds-swagger-ui-express": "^0.11.0",
     "cheerio": "^1.2.0",
     "csv-parse": "5.6.0",
+    "csv-stringify": "6.7.0",
+    "exceljs": "4.4.0",
     "hdb": "^2.27.1",
     "mermaid": "^11.15.0",
     "node-cron": "^4.2.1",

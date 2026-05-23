@@ -85,6 +85,15 @@
       "csrfProtection": false
     },
     {
+      "source": "^/admin/exports/(.*)$",
+      "target": "/admin/exports/$1",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.Admin",
+      "csrfProtection": false,
+      "timeout": 600000
+    },
+    {
       "source": "^/admin/analytics/(.*)$",
       "target": "/admin/analytics/$1",
       "destination": "srv-api",
