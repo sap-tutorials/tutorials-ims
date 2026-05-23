@@ -183,13 +183,12 @@ jobs:
           SMOKE_SRV_URL: ${{ steps.urls.outputs.srv_url }}
           SMOKE_TECH_USER: ${{ secrets.SMOKE_TECH_USER }}
           SMOKE_TECH_PASSWORD: ${{ secrets.SMOKE_TECH_PASSWORD }}
-
-      - name: Smoke (QA)
-        env:
+          # QA channel smoke vars: qa-routes.test.ts self-skips when absent.
+          # Wired here so QA suite runs alongside prod smoke in the same vitest
+          # invocation. Repo-level vars/secrets must be set as part of QA bootstrap.
           SMOKE_QA_BASE_URL: ${{ vars.APPROUTER_URL_QA }}
           SMOKE_QA_SRV_URL: ${{ vars.SRV_URL_QA }}
           SMOKE_QA_TOKEN: ${{ secrets.SMOKE_QA_TOKEN }}
-        run: npm run test:smoke -- --reporter=verbose qa-routes
 
       - name: Smoke test summary
         if: always()

@@ -200,6 +200,13 @@ gh secret set TUTORIAL_FETCH_TOKEN    -R sap-tutorials/tutorials-poc -b "<value>
 gh secret set SMOKE_QA_TOKEN          -R sap-tutorials/tutorials-poc -b "<value>"
 ```
 
+Also set the QA URL repo-level **variables** (not secrets) so the post-deploy smoke step can resolve QA endpoints. `qa-routes.test.ts` self-skips when these are absent — without them, security regressions on `tutorials-srv-qa` won't be caught in CI.
+
+```bash
+gh variable set APPROUTER_URL_QA -R sap-tutorials/tutorials-poc -b "https://<approuter-host>"
+gh variable set SRV_URL_QA       -R sap-tutorials/tutorials-poc -b "https://tutorial-system-dev-tutorials-srv-qa.cfapps.eu10-005.hana.ondemand.com"
+```
+
 ### Step 2: Generate the dispatch token (`TUTORIALS_POC_DISPATCH_TOKEN`)
 
 Create a fine-grained PAT (or GitHub App installation token) on a maintainer account with the minimum scope:
