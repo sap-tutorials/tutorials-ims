@@ -33,8 +33,30 @@ if (existsSync(envPath)) {
   }
 }
 
-const CACHE_DIR = join(__dirname, '..', '.tutorial-cache')
+let CACHE_DIR = join(__dirname, '..', '.tutorial-cache')
 const CONCURRENCY = 5
+
+export type Channel = 'prod' | 'qa'
+
+export function parseChannel(argv: string[] = process.argv): Channel {
+  const idx = argv.indexOf('--channel')
+  if (idx === -1) return 'prod'
+  const v = argv[idx + 1]
+  if (v !== 'prod' && v !== 'qa') throw new Error(`Unknown channel: ${v}`)
+  return v
+}
+
+export function getQaCacheDir(channel: Channel): string {
+  return channel === 'qa'
+    ? join(__dirname, '..', '.tutorial-cache-qa')
+    : join(__dirname, '..', '.tutorial-cache')
+}
+
+export function getHugoContentDir(channel: Channel): string {
+  return channel === 'qa'
+    ? join(__dirname, '..', 'hugo', 'content-qa')
+    : join(__dirname, '..', 'hugo', 'content')
+}
 
 export type BuildTarget = 'vitepress' | 'hugo'
 
@@ -49,13 +71,16 @@ export function parseTarget(argv: string[]): BuildTarget {
   return 'vitepress'
 }
 
-export function getOutputDir(target: BuildTarget): string {
-  if (target === 'hugo') return join(__dirname, '..', 'hugo', 'content', 'tutorials')
+export function getOutputDir(target: BuildTarget, channel: Channel = 'prod'): string {
+  if (target === 'hugo') return join(getHugoContentDir(channel), 'tutorials')
   return join(__dirname, '..', 'site', 'tutorials')
 }
 
-export function getNavJsonDir(target: BuildTarget): string {
-  if (target === 'hugo') return join(__dirname, '..', 'hugo', 'static', 'tutorials')
+export function getNavJsonDir(target: BuildTarget, channel: Channel = 'prod'): string {
+  if (target === 'hugo') {
+    const staticDir = channel === 'qa' ? 'static-qa' : 'static'
+    return join(__dirname, '..', 'hugo', staticDir, 'tutorials')
+  }
   return join(__dirname, '..', 'site', 'tutorials')
 }
 
@@ -555,8 +580,22 @@ async function main() {
   const discoverOnly = process.argv.includes('--discover-only')
   const tutorialSlugFilter = (process.env.TUTORIAL_SLUG ?? '').trim() || null
   const target = parseTarget(process.argv)
-  const OUTPUT_DIR = getOutputDir(target)
-  const NAV_JSON_DIR = getNavJsonDir(target)
+  const channel = parseChannel(process.argv)
+  // QA channel: discover only -Contribution repos via inverse filter in github.ts.
+  // Set BEFORE discoverAllTutorials() runs so the filter sees the env var.
+  if (channel === 'qa') process.env.ONLY_CONTRIBUTION_REPOS = 'true'
+  // Reassign module-level CACHE_DIR so fetchMarkdown() and helper functions
+  // referencing it transparently use the channel-specific cache.
+  CACHE_DIR = getQaCacheDir(channel)
+  const OUTPUT_DIR = getOutputDir(target, channel)
+  const NAV_JSON_DIR = getNavJsonDir(target, channel)
+
+  // Defense-in-depth: write a .channel marker into the cache dir so an accidental
+  // cross-channel run is detectable post-hoc.
+  mkdirSync(CACHE_DIR, { recursive: true })
+  writeFileSync(join(CACHE_DIR, '.channel'), channel, 'utf-8')
+
+  console.log(`[channel] ${channel} (cache: ${CACHE_DIR}, content: ${OUTPUT_DIR})\n`)
 
   let allTutorials: DiscoveredTutorial[]
   let discoveryMs = 0
@@ -1037,10 +1076,14 @@ const isMainModule = process.argv[1] && (
   process.argv[1].endsWith('fetch-tutorials.js')
 )
 if (isMainModule) {
+  const channelForExport = parseChannel(process.argv)
+  const dimensionsPath = channelForExport === 'qa'
+    ? 'hugo/data-qa/image_dimensions.json'
+    : 'hugo/data/image_dimensions.json'
   main()
     .then(() => {
       flushDimensionsCache()
-      exportDimensionsForHugo('hugo/data/image_dimensions.json')
+      exportDimensionsForHugo(dimensionsPath)
     })
     .catch(err => {
       console.error(err)

@@ -9,7 +9,10 @@ hugo/content-qa/
 approuter/static/*
 !approuter/static/login-redirect.html
 .tutorial-cache/
+.tutorial-cache-qa/
 hugo/data/image_dimensions.json
+hugo/data-qa/
+hugo/static-qa/
 .comparison-results/
 .migration-data/
 *.local
