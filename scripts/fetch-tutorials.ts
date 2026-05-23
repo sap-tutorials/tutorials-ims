@@ -9,12 +9,12 @@ import { parseV1Steps } from './parsers/v1.js'
 import { resolveImageURLs } from './parsers/images.js'
 import { flushDimensionsCache, populateImageDimensions, exportDimensionsForHugo } from './parsers/image-dimensions.js'
 import { convertOptionBlocks } from './parsers/options.js'
-import { escapeHugoDelimiters } from './parsers/hugo-delimiters.js'
-import { stripDangerousHtml } from './parsers/sanitize-html.js'
 import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, EXCLUDED_REPOS, type DiscoveredTutorial } from './parsers/github.js'
 import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache } from './parsers/cap.js'
 import { parseRulesVr } from './parsers/rules.js'
 import { computeRecommendations } from './parsers/recommendations.js'
+import { humanizeTag, splitPrerequisites } from './parsers/frontmatter-utils.js'
+import { renderHugoFrontmatter } from './parsers/render-frontmatter.js'
 import type { Mission, MissionHierarchy, HierarchyGroup, TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } from './parsers/types.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -83,8 +83,6 @@ export function getNavJsonDir(target: BuildTarget, channel: Channel = 'prod'): s
   }
   return join(__dirname, '..', 'site', 'tutorials')
 }
-
-const ACRONYMS = new Set(['SAP', 'HANA', 'CAP', 'BTP', 'CDS', 'UI', 'API', 'MTA', 'XSUAA', 'OData', 'HTML5', 'ABAP'])
 
 interface ErrorEntry {
   slug: string
@@ -354,51 +352,24 @@ export function writeHugoPage(
   contributors: Array<{ name: string; login: string; email: string; avatarUrl: string }>,
   outputDir: string,
 ): void {
-  const cleanTags = tags.map(t => t.replace(/\\/g, ''))
-  const cleanPrimaryTag = primaryTag.replace(/\\/g, '')
-
-  const fm: Record<string, unknown> = {
-    type: 'tutorials',
+  const content = renderHugoFrontmatter({
     slug,
     title,
     description,
     time,
     level,
-    tags: cleanTags,
-    primaryTag: cleanPrimaryTag,
+    tags,
+    primaryTag,
     author,
     authorProfile,
-    stepCount: steps.length,
-    prev: nav.prev,
-    next: nav.next,
-    aliases: [`/tutorials/${slug}.html`],
-    displayTags: [...new Set([cleanPrimaryTag, ...cleanTags])].map(humanizeTag).filter(t => t.length > 0),
     youWillLearn,
-    prerequisites: splitPrerequisites(prerequisites),
-    lastUpdated: lastUpdated || null,
-    createdAt: createdAt || null,
-    contributors: contributors.slice(0, 10).map(c => ({ login: c.login, name: c.name, email: c.email, avatarUrl: c.avatarUrl })),
-    steps: steps.map(s => {
-      const entry: Record<string, unknown> = { number: s.number, title: s.title }
-      if (s.validation?.length) entry.validation = s.validation
-      return entry
-    }),
-  }
-
-  if (nav.missionId) fm.missionId = nav.missionId
-  if (nav.missionTitle) fm.missionTitle = nav.missionTitle
-  if (nav.missionSlug) fm.missionSlug = nav.missionSlug
-  if (nav.groupId) fm.groupId = nav.groupId
-  if (nav.groupTitle) fm.groupTitle = nav.groupTitle
-  if (nav.groupSlug) fm.groupSlug = nav.groupSlug
-
-  const frontmatter = `---\n${yamlStringify(fm).trimEnd()}\n---\n\n`
-
-  const stepsMd = steps.map(step =>
-    `{{% tutorial-step number="${step.number}" title="${step.title.replace(/"/g, '&quot;')}" %}}\n\n${escapeHugoDelimiters(stripDangerousHtml(step.content))}\n\n{{% /tutorial-step %}}`
-  ).join('\n\n')
-
-  const content = `${frontmatter}${stepsMd}\n`
+    prerequisites,
+    steps,
+    nav,
+    lastUpdated,
+    createdAt,
+    contributors,
+  })
 
   mkdirSync(outputDir, { recursive: true })
   writeFileSync(join(outputDir, `${slug}.md`), content, 'utf-8')
