@@ -1,0 +1,16 @@
+{
+  "name": "tutorials-srv-qa",
+  "version": "1.0.0",
+  "main": "server.js",
+  "dependencies": {
+    "@sap/cds": "^9.9.0",
+    "@sap/xssec": "^4",
+    "express": "^4"
+  },
+  "cds": {
+    "requires": {
+      "db": { "kind": "hana" },
+      "auth": { "kind": "xsuaa" }
+    }
+  }
+}
