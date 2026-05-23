@@ -240,6 +240,28 @@
   </div>
 </div>
 
+<ui5-button id="op-mobile-fab" design="Emphasized" icon="menu2" accessible-name="Open step list">Steps</ui5-button>
+{{ if .Params.steps }}
+<ui5-dialog id="op-mobile-sheet" accessible-name="Tutorial step navigator">
+  <header class="op-mobile-sheet__header">
+    <span class="op-mobile-sheet__title">Step <span id="op-mobile-current">1</span> of {{ len .Params.steps }}</span>
+    <ui5-button id="op-mobile-close" icon="decline" design="Transparent" accessible-name="Close step list"></ui5-button>
+  </header>
+  <ui5-busy-indicator id="op-mobile-busy" delay="0">
+    <ui5-list id="op-mobile-step-list" mode="None">
+      {{ range .Params.steps }}
+      <ui5-li data-step-number="{{ .number }}" data-step-target="step-{{ .number }}" icon="" type="Active">{{ .number }}. {{ .title }}</ui5-li>
+      {{ end }}
+    </ui5-list>
+  </ui5-busy-indicator>
+  <footer class="op-mobile-sheet__footer">
+    <ui5-button id="op-mobile-prev" design="Transparent" icon="navigation-left-arrow">Previous</ui5-button>
+    <ui5-button id="op-mobile-mark-done" design="Emphasized">Mark Done</ui5-button>
+    <ui5-button id="op-mobile-next" design="Transparent" icon="navigation-right-arrow" icon-end>Next</ui5-button>
+  </footer>
+</ui5-dialog>
+{{ end }}
+
 {{ with .Params.steps }}
 <script id="tutorial-data" type="application/json">{{ . | jsonify }}</script>
 {{ end }}
