@@ -31,7 +31,7 @@
         },
         "admin": {
           "password": "admin",
-          "roles": ["Admin", "DeveloperApp", "DisplayApp", "ContentAuthor", "ConsolidationScope", "authenticated-user"]
+          "roles": ["Admin", "DeveloperApp", "DisplayApp", "ContentAuthor", "ConsolidationScope", "Tutorial.Author", "authenticated-user"]
         },
         "superadmin": {
           "password": "superadmin",
