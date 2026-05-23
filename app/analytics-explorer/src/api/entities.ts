@@ -8,12 +8,12 @@ export function getCachedEntityMetadata(): Promise<ExposedEntity[]> {
     cache = fetch('/admin/analytics/listExposedEntities()', {
       headers: { Accept: 'application/json' },
     }).then(async (r) => {
-      if (!r.ok) {
-        cache = null
-        throw new Error(`listExposedEntities failed: ${r.status}`)
-      }
+      if (!r.ok) throw new Error(`listExposedEntities failed: ${r.status}`)
       const json = await r.json()
       return json.value as ExposedEntity[]
+    }).catch((e) => {
+      cache = null
+      throw e
     })
   }
   return cache

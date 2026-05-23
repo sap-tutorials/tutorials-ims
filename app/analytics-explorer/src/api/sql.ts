@@ -14,6 +14,9 @@ export async function runSelectQuery(sql: string): Promise<SqlResult> {
     const text = await r.text()
     throw new Error(`runSelectQuery ${r.status}: ${text}`)
   }
-  const json = await r.json()
-  return (json.value || json) as SqlResult
+  const result = await r.json()
+  if (!result || !Array.isArray(result.columns) || !Array.isArray(result.rows)) {
+    throw new Error('runSelectQuery: malformed response')
+  }
+  return result as SqlResult
 }

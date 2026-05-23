@@ -14,7 +14,30 @@ const AGG_TO_ODATA: Record<MeasureConfig['aggregation'], string> = {
   SUM: 'sum', AVG: 'average', MIN: 'min', MAX: 'max', COUNT: 'countdistinct',
 }
 
+const IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
+const ALLOWED_OPERATORS = new Set(['eq', 'ne', 'gt', 'ge', 'lt', 'le', 'contains', 'startswith', 'endswith'])
+
+function assertIdent(name: string, kind: string): void {
+  if (!IDENTIFIER_RE.test(name)) throw new Error(`invalid ${kind}: ${name}`)
+}
+
+function assertOperator(op: string): void {
+  if (!ALLOWED_OPERATORS.has(op)) throw new Error(`invalid operator: ${op}`)
+}
+
 export function buildApplyUrl(cfg: ChartConfigInput): string {
+  assertIdent(cfg.entity, 'entity')
+  for (const d of cfg.dimensions) assertIdent(d.column, 'dimension column')
+  for (const m of cfg.measures) {
+    assertIdent(m.column, 'measure column')
+    assertIdent(m.alias, 'measure alias')
+  }
+  for (const f of cfg.filters) {
+    assertIdent(f.column, 'filter column')
+    assertOperator(f.operator)
+  }
+  if (cfg.orderBy) assertIdent(cfg.orderBy.column, 'orderBy column')
+
   const parts: string[] = []
   if (cfg.filters.length) {
     const fs = cfg.filters.map(f => formatFilter(f)).join(' and ')
@@ -29,7 +52,8 @@ export function buildApplyUrl(cfg: ChartConfigInput): string {
     parts.push(`orderby(${cfg.orderBy.column} ${cfg.orderBy.direction})`)
   }
   if (cfg.topN) {
-    const tcCol = cfg.orderBy?.column ?? cfg.measures[0]?.alias ?? cfg.dimensions[0]?.column ?? ''
+    const tcCol = cfg.orderBy?.column ?? cfg.measures[0]?.alias ?? cfg.dimensions[0]?.column
+    if (!tcCol) throw new Error('topN requires orderBy, a measure, or a dimension')
     parts.push(`topcount(${cfg.topN},${tcCol})`)
   }
   const apply = parts.join('/')
