@@ -49,7 +49,7 @@ function validateSelect(sql, allowedTableNames) {
     ? []
     : ast.columns.map(c => c.as || c.expr?.column).filter(Boolean)
 
-  const reEmitted = parser.sqlify(ast, { database: 'MySQL' })
+  const reEmitted = parser.sqlify(ast, { database: 'Postgresql' })
   return { sql: reEmitted, selectedColumns }
 }
 

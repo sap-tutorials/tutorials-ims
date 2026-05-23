@@ -8,6 +8,7 @@ import FilterBar from './FilterBar.vue'
 import ChartRenderer from './ChartRenderer.vue'
 import ChartTypeSwitcher from './ChartTypeSwitcher.vue'
 import AggregationBadge from './AggregationBadge.vue'
+import '@ui5/webcomponents/dist/MessageStrip.js'
 import type { ChartData } from '../composables/useChartEngine'
 import type { DimensionConfig, MeasureConfig, FilterConfig } from '../composables/useChartConfig'
 import type { ChartConfigInput } from '../api/odata'
@@ -46,6 +47,7 @@ async function fetchData() {
     const result = await dataSource.fetchAggregated(toApplyInput(chartConfig.config.value))
     chartData.value = { columns: result.columns, data: result.data }
   } catch {
+    // dataSource.error is already set by fetchAggregated; surfaced via the message strip in the template
     chartData.value = null
   }
 }
@@ -98,6 +100,11 @@ function onRemoveFilter(index: number) {
             :result-rows="chartData?.data.length"
           />
         </div>
+        <ui5-message-strip
+          v-if="dataSource.error.value"
+          design="Negative"
+          hide-close-button
+        >{{ dataSource.error.value }}</ui5-message-strip>
         <ChartRenderer
           :chart-type="chartConfig.chartType.value"
           :data="chartData"
