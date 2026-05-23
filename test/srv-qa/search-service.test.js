@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import cds from '@sap/cds';
 
+// PARALLEL-SAFETY: this file performs module-level mutations on cds.env
+// (auth.users, folders.srv) and on cds.once. It must run serially — do NOT
+// move to a separate vitest worker without first extracting setup to a shared
+// fixture. If Task 8/9 introduce additional QA service tests, extract to
+// test/srv-qa/_setup.js and import once.
+
 // Neutralise the @cap-js/change-tracking 'served' hook for this isolated test.
 // The plugin's cds.once('served') handler calls deploySQLiteTriggers(), which
 // expects sap.changelog.Changes in the in-memory model. This minimal QA model
@@ -14,6 +20,11 @@ import cds from '@sap/cds';
 // registration during bootstrap.
 const _origOnce = cds.once.bind(cds);
 cds.once = function (event, listener) {
+  // BRITTLE: matches by listener source string. If @cap-js/change-tracking
+  // renames or refactors deploySQLiteTriggers, this filter silently stops
+  // matching and the served hook will run again, failing on missing
+  // sap.changelog.Changes. Verify after any change-tracking version bump:
+  //   grep -r 'deploySQLiteTriggers' node_modules/@cap-js/change-tracking
   if (event === 'served' && listener.toString().includes('deploySQLiteTriggers')) {
     // Replace with a no-op: the once-contract is honoured (consumed on first emit)
     // but no schema DDL is attempted against this minimal in-memory model.
