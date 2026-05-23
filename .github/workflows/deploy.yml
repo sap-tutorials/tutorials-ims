@@ -184,6 +184,13 @@ jobs:
           SMOKE_TECH_USER: ${{ secrets.SMOKE_TECH_USER }}
           SMOKE_TECH_PASSWORD: ${{ secrets.SMOKE_TECH_PASSWORD }}
 
+      - name: Smoke (QA)
+        env:
+          SMOKE_QA_BASE_URL: ${{ secrets.APPROUTER_URL_DEV }}
+          SMOKE_QA_SRV_URL: ${{ secrets.CAP_SRV_URL_QA }}
+          SMOKE_QA_TOKEN: ${{ secrets.SMOKE_QA_TOKEN }}
+        run: npm run test:smoke -- --reporter=verbose qa-routes
+
       - name: Smoke test summary
         if: always()
         run: |
