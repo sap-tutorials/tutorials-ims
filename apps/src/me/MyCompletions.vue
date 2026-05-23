@@ -66,6 +66,14 @@ const sorted = computed(() => {
   return list
 })
 
+const recentRows = computed(() => {
+  return rows.value
+    .slice()
+    .filter(r => !!r.completionDate && !Number.isNaN(new Date(r.completionDate).getTime()))
+    .sort((a, b) => new Date(b.completionDate!).getTime() - new Date(a.completionDate!).getTime())
+    .slice(0, 10)
+})
+
 function setSort(key: SortKey) {
   if (sortKey.value === key) {
     sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
@@ -87,9 +95,31 @@ function formatDate(iso: string | null) {
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
+function formatRelative(iso?: string | null): string {
+  if (!iso) return '—'
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return formatDate(iso)
+  const diffMs = Date.now() - then
+  if (diffMs < 0) return 'Just now'
+  const minutes = Math.floor(diffMs / 60_000)
+  if (minutes < 60) return 'Just now'
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days}d ago`
+  const months = Math.floor(days / 30)
+  if (months < 12) return `${months}mo ago`
+  return formatDate(iso)
+}
+
 function formatLevel(level: string | null) {
   if (!level) return '—'
   return level.charAt(0) + level.slice(1).toLowerCase()
+}
+
+function onTimelineNameClick(slug: string) {
+  if (!slug) return
+  window.location.href = `/tutorials/${slug}/`
 }
 
 function clearFilters() {
@@ -149,6 +179,28 @@ onMounted(async () => {
     </div>
 
     <template v-else>
+      <section
+        v-if="recentRows.length > 0"
+        class="me-recent"
+        aria-labelledby="me-recent-heading"
+      >
+        <h2 id="me-recent-heading" class="me-recent__heading">Recent Activity</h2>
+        <ui5-timeline layout="Vertical" growing="None">
+          <ui5-timeline-item
+            v-for="item in recentRows"
+            :key="item.slug"
+            :name="item.title"
+            :subtitle-text="`${item.primaryTag || 'Tutorial'} · ${formatRelative(item.completionDate)}`"
+            icon="accept"
+            state="Positive"
+            name-clickable
+            @name-click="() => onTimelineNameClick(item.slug)"
+          >
+            <span class="me-recent__level">{{ formatLevel(item.experienceTag) }}</span>
+          </ui5-timeline-item>
+        </ui5-timeline>
+      </section>
+
       <div class="me-toolbar" role="search">
         <label class="me-field">
           <span>Search</span>
@@ -322,4 +374,26 @@ onMounted(async () => {
   text-decoration: none;
 }
 .me-table a:hover { text-decoration: underline; }
+.me-recent {
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.25rem;
+  background: var(--sapList_Background, #fff);
+  border: 1px solid var(--sapList_BorderColor, #e5e5ea);
+  border-radius: 0.5rem;
+}
+.me-recent__heading {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+  color: var(--sapTextColor, #32363a);
+}
+.me-recent__level {
+  font-size: 0.75rem;
+  color: var(--sapContent_LabelColor, #6a6d70);
+}
+@media (max-width: 600px) {
+  .me-recent {
+    padding: 0.75rem;
+  }
+}
 </style>
