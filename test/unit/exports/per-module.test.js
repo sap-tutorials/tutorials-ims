@@ -95,3 +95,51 @@ describe('exports/task-records', () => {
     expect(rows[1][7] ?? '').toBe('');          // COMPLETION_DATE empty for IN_PROGRESS
   });
 });
+
+describe('exports/task-to-parent', () => {
+  let mod;
+  beforeAll(async () => {
+    mod = await import('../../../srv/exports/task-to-parent.js');
+  });
+
+  beforeEach(async () => {
+    const db = await cds.connect.to('db');
+    const { Steps, Tutorials, Groups, GroupPathItems } = cds.entities('com.sap.developers.ims');
+    await db.run(DELETE.from(GroupPathItems));
+    await db.run(DELETE.from(Steps));
+    await db.run(DELETE.from(Tutorials));
+    await db.run(DELETE.from(Groups));
+  });
+
+  it('emits the legacy IMS_TASK_TO_PARENT header', () => {
+    expect(mod.legacyHeader).toEqual(['PARENT_TASK_ID', 'CHILD_TASK_ID', 'ITEM_ORDER']);
+  });
+
+  it('unions Step->Tutorial and Tutorial->Group edges', async () => {
+    const db = await cds.connect.to('db');
+    const { Tutorials, Steps, Groups, GroupPathItems } = cds.entities('com.sap.developers.ims');
+    const tutId = '11111111-1111-1111-1111-111111111111';
+    const grpId = '22222222-2222-2222-2222-222222222222';
+    await db.run(INSERT.into(Tutorials).entries({ ID: tutId, legacyId: 500, title: 'T', slug: 't' }));
+    await db.run(INSERT.into(Groups).entries({ ID: grpId, legacyId: 700, title: 'G' }));
+    await db.run(INSERT.into(Steps).entries({
+      ID: '33333333-3333-3333-3333-333333333333',
+      legacyId: 600, title: 'S1', tutorial_ID: tutId, stepOrder: 1
+    }));
+    await db.run(INSERT.into(GroupPathItems).entries({
+      ID: '44444444-4444-4444-4444-444444444444',
+      legacyId: 800, group_ID: grpId, tutorial_ID: tutId, itemOrder: 2
+    }));
+
+    const rows = [];
+    for await (const row of mod.rows(db, { pageSize: 100 })) rows.push(row);
+
+    // Step->Tutorial: parent=500 (tutorial.legacyId), child=600 (step.legacyId), order=1
+    // GroupPathItem: parent=700 (group.legacyId), child=500 (tutorial.legacyId), order=2
+    expect(rows).toEqual(expect.arrayContaining([
+      [500, 600, 1],
+      [700, 500, 2]
+    ]));
+    expect(rows).toHaveLength(2);
+  });
+});
