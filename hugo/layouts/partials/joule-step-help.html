@@ -3,7 +3,9 @@
   Hidden by default; revealed by joule.js when ChatConfig.enabled is true.
   Click handler in joule.js reads window.opGetCurrentStep() and calls
   window.joule.openWithStepContext({slug, n, heading}).
+  QA preview strips the FAB entirely — no chat assistant on -Contribution drafts.
 */}}
+{{ if not site.Params.qa }}
 <button
   id="joule-step-fab"
   class="joule-step-fab"
@@ -14,3 +16,4 @@
   {{ partial "joule-icon.html" (dict "size" "small") }}
   <span class="joule-step-fab__label">Help with this step</span>
 </button>
+{{ end }}

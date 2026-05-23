@@ -1,4 +1,7 @@
 {{/* U14: full-page navigation progress bar. Driven by hugo/assets/js/nav-progress.ts.
      `hidden` is repurposed as a fade flag — see .nav-progress-bar[hidden] in
-     hugo/assets/css/skeletons.css for the display:block override. */}}
+     hugo/assets/css/skeletons.css for the display:block override.
+     QA preview strips this — read-only preview has no navigation hydration phase. */}}
+{{ if not site.Params.qa }}
 <ui5-progress-indicator id="nav-progress" hide-value value="0" class="nav-progress-bar" hidden></ui5-progress-indicator>
+{{ end }}
