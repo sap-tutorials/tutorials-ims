@@ -94,6 +94,8 @@ import "./nav-progress";
 
 // U16: mission side-nav hydration + group expand persistence. Gated on [data-mission-nav].
 import "./mission-side-nav";
+// Personalized "What's next" rail. Self-bootstraps; safe no-op when [data-recommend-slug] is missing.
+import "./recommend";
 import "../css/mission-side-nav.css";
 
 const root = document.documentElement;
