@@ -94,7 +94,8 @@
             <tnt:NavigationListItem text="Account Merges" key="accounts" />
             <tnt:NavigationListItem text="Change Log" key="changelog" />
             <tnt:NavigationListItem text="Board" key="board" />
-            <tnt:NavigationListItem text="Analytics" key="analytics" />
+            <tnt:NavigationListItem text="Analytics" icon="sap-icon://bar-chart" href="/analytics-ui/" target="_self" />
+            <tnt:NavigationListItem text="Completion analytics (legacy)" icon="sap-icon://line-chart" key="analytics" />
             <tnt:NavigationListItem text="Statistics" key="statistics" />
             <tnt:NavigationListItem text="Joule Settings" key="joule" />
             <tnt:NavigationListItem text="Privacy" key="privacy" />
