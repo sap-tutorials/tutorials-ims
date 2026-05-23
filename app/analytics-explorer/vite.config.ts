@@ -8,10 +8,14 @@ export default defineConfig({
     outDir: 'dist',
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['vue', 'vue-router'],
-          echarts: ['echarts'],
-          ui5: ['@ui5/webcomponents', '@ui5/webcomponents-fiori'],
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('monaco-editor') || id.includes('monaco-sql-languages')) return 'monaco'
+            if (id.includes('echarts')) return 'echarts'
+            if (id.includes('@ui5/webcomponents')) return 'ui5'
+            if (id.includes('vue-router') || id.includes('/vue/') || id.includes('/@vue/')) return 'vendor'
+          }
+          return undefined
         },
       },
     },
