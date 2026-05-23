@@ -5,7 +5,7 @@ import express from 'express';
 import { createContentHandlers } from '../srv/lib/content-store.js';
 import { requireXsuaaScope } from './xsuaa-scope-middleware.js';
 import { createSemaphore } from './preview-semaphore.js';
-import { renderPreview } from './preview-renderer.js';
+import { renderPreview, errorHtml } from './preview-renderer.js';
 
 cds.on('bootstrap', (app) => {
   app.disable('x-powered-by');
@@ -61,9 +61,9 @@ cds.on('bootstrap', (app) => {
         console.log(JSON.stringify({ event: 'preview.render', status, ms: durationMs, bytes, totalMs: Date.now() - t0 }));
         res.set('Content-Type', 'text/html; charset=utf-8').status(200).send(html);
       } catch (err) {
-        console.error('[preview.render]', err.stack ?? err.message);
+        console.error(JSON.stringify({ event: 'preview.render', status: 'server_error', ms: Date.now() - t0, error: err.message }));
         res.set('Content-Type', 'text/html; charset=utf-8').status(200)
-          .send(`<!doctype html><html><body><h1>Preview server error</h1><pre>${String(err.message).replace(/[<>&]/g, '?')}</pre></body></html>`);
+          .send(errorHtml('Preview server error', err.message));
       } finally {
         slot.release();
       }

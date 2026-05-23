@@ -33,7 +33,7 @@ function getHugoArgsPrefix() {
 const HTML_ESC = { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' };
 const escapeHtml = s => String(s ?? '').replace(/[<>&"']/g, c => HTML_ESC[c]);
 
-function errorHtml(title, detail) {
+export function errorHtml(title, detail) {
   const t = escapeHtml(title);
   const d = escapeHtml(detail);
   return `<!doctype html><html><head><title>${t}</title></head><body><section style="padding:2rem"><h1>${t}</h1><pre style="white-space:pre-wrap">${d}</pre></section></body></html>`;
