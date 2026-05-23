@@ -5,10 +5,7 @@ import express from 'express';
 import { createContentHandlers } from '../srv/lib/content-store.js';
 import { requireXsuaaScope } from './xsuaa-scope-middleware.js';
 import { createSemaphore } from './preview-semaphore.js';
-// preview-renderer.js is lazy-imported below: it pulls in parsers.bundle.mjs
-// (esbuild-bundled with CJS deps via __require shim), which loads cleanly only
-// when first invoked at request time. Eager top-level import causes
-// "Dynamic require of fs is not supported" during cds.test() bootstrap.
+import { renderPreview } from './preview-renderer.js';
 
 cds.on('bootstrap', (app) => {
   app.disable('x-powered-by');
@@ -60,7 +57,6 @@ cds.on('bootstrap', (app) => {
           res.status(400).json({ error: 'expected JSON body { markdown: string }' });
           return;
         }
-        const { renderPreview } = await import('./preview-renderer.js');
         const { html, status, durationMs, bytes } = await renderPreview(markdown);
         console.log(JSON.stringify({ event: 'preview.render', status, ms: durationMs, bytes, totalMs: Date.now() - t0 }));
         res.set('Content-Type', 'text/html; charset=utf-8').status(200).send(html);
