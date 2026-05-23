@@ -4,6 +4,11 @@ import express from 'express';
 
 import { createContentHandlers } from '../srv/lib/content-store.js';
 import { requireXsuaaScope } from './xsuaa-scope-middleware.js';
+import { createSemaphore } from './preview-semaphore.js';
+// preview-renderer.js is lazy-imported below: it pulls in parsers.bundle.mjs
+// (esbuild-bundled with CJS deps via __require shim), which loads cleanly only
+// when first invoked at request time. Eager top-level import causes
+// "Dynamic require of fs is not supported" during cds.test() bootstrap.
 
 cds.on('bootstrap', (app) => {
   app.disable('x-powered-by');
@@ -33,6 +38,41 @@ cds.on('bootstrap', (app) => {
   app.get('/content/tutorials/*slug', requireAuthorScope, serveHandler);
   app.post('/content/publish',  express.json({ limit: '100mb' }), contentAuthMiddleware, publishHandler);
   app.post('/content/rollback', express.json(),                    contentAuthMiddleware, rollbackHandler);
+
+  const previewSemaphore = createSemaphore(Number(process.env.PREVIEW_MAX_CONCURRENT ?? 4));
+  const PREVIEW_QUEUE_TIMEOUT_MS = Number(process.env.PREVIEW_QUEUE_TIMEOUT_MS ?? 10_000);
+
+  app.post('/preview/render',
+    requireAuthorScope,
+    express.json({ limit: '1mb' }),
+    async (req, res) => {
+      const t0 = Date.now();
+      let slot;
+      try {
+        slot = await previewSemaphore.acquire(PREVIEW_QUEUE_TIMEOUT_MS);
+      } catch {
+        res.status(503).json({ error: 'busy' });
+        return;
+      }
+      try {
+        const markdown = req.body?.markdown;
+        if (typeof markdown !== 'string') {
+          res.status(400).json({ error: 'expected JSON body { markdown: string }' });
+          return;
+        }
+        const { renderPreview } = await import('./preview-renderer.js');
+        const { html, status, durationMs, bytes } = await renderPreview(markdown);
+        console.log(JSON.stringify({ event: 'preview.render', status, ms: durationMs, bytes, totalMs: Date.now() - t0 }));
+        res.set('Content-Type', 'text/html; charset=utf-8').status(200).send(html);
+      } catch (err) {
+        console.error('[preview.render]', err.stack ?? err.message);
+        res.set('Content-Type', 'text/html; charset=utf-8').status(200)
+          .send(`<!doctype html><html><body><h1>Preview server error</h1><pre>${String(err.message).replace(/[<>&]/g, '?')}</pre></body></html>`);
+      } finally {
+        slot.release();
+      }
+    }
+  );
 });
 
 export default cds.server;

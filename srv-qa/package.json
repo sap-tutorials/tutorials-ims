@@ -2,6 +2,7 @@
   "name": "tutorials-srv-qa",
   "version": "1.0.0",
   "main": "server.js",
+  "type": "module",
   "dependencies": {
     "@sap/cds": "^9.9.0",
     "@sap/xssec": "^4",
