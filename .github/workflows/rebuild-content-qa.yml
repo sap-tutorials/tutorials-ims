@@ -1,0 +1,89 @@
+name: Rebuild Content (QA)
+
+on:
+  repository_dispatch:
+    types: [tutorial-qa-updated]
+  workflow_dispatch:
+    inputs:
+      slug:
+        description: Refresh a single tutorial slug only (leave blank for full QA rebuild)
+        required: false
+        type: string
+
+env:
+  NODE_VERSION: '20'
+  CHANNEL: qa
+
+jobs:
+  rebuild-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install Hugo
+        run: curl -fsSL https://github.com/gohugoio/hugo/releases/download/v0.147.7/hugo_extended_0.147.7_linux-amd64.tar.gz | tar -xz -C /tmp hugo
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Restore QA tutorial cache
+        uses: actions/cache@v4
+        with:
+          path: .tutorial-cache-qa
+          key: tutorial-cache-qa-${{ hashFiles('.github/workflows/rebuild-content-qa.yml') }}-${{ github.run_id }}
+          restore-keys: |
+            tutorial-cache-qa-${{ hashFiles('.github/workflows/rebuild-content-qa.yml') }}-
+            tutorial-cache-qa-
+
+      # GitHub App token (preferred). Activates when repo variable
+      # USE_GITHUB_APP=true and the TUTORIALS_APP_* secrets are populated.
+      # While the variable is unset/false this step is skipped and the fetch
+      # falls back to the classic PAT below.
+      - name: Generate GitHub App token
+        id: app-token
+        if: ${{ vars.USE_GITHUB_APP == 'true' }}
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.TUTORIALS_APP_ID }}
+          private-key: ${{ secrets.TUTORIALS_APP_PRIVATE_KEY }}
+          owner: sap-tutorials
+
+      - name: Fetch QA tutorials (-Contribution repos)
+        run: npm run fetch-tutorials:qa
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.TUTORIAL_FETCH_TOKEN || secrets.TUTORIALS_GITHUB_TOKEN }}
+          TUTORIAL_SLUG: ${{ github.event.client_payload.slug || inputs.slug }}
+
+      - name: Build QA Hugo site
+        run: npm run build:qa
+
+      - name: Publish QA content to HANA
+        run: npm run publish-content:qa
+        env:
+          CAP_QA_BASE_URL: ${{ secrets.CAP_SRV_URL_QA }}
+          CONTENT_API_KEY_QA: ${{ secrets.CONTENT_API_KEY_QA }}
+
+      - name: Summary
+        run: |
+          echo "### QA Content Rebuild Complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Channel:** qa" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Trigger:** ${{ github.event_name }}" >> "$GITHUB_STEP_SUMMARY"
+          SLUG="${{ github.event.client_payload.slug || inputs.slug }}"
+          if [ -n "$SLUG" ]; then
+            echo "- **Slug filter:** $SLUG (single-tutorial refresh)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            echo "- **Source repo:** ${{ github.event.client_payload.repository }}" >> "$GITHUB_STEP_SUMMARY"
+          fi

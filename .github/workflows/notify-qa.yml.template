@@ -1,0 +1,31 @@
+# .github/workflows/notify-qa.yml.template — copied INTO each *-Contribution repo
+name: Notify tutorials-qa
+on:
+  push:
+    paths:
+      - 'tutorials/**'
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Determine changed slug
+        id: slug
+        run: |
+          changed=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} \
+            | awk -F/ '/^tutorials\//{print $2}' | sort -u)
+          count=$(echo "$changed" | wc -l)
+          if [ "$count" = "1" ] && [ -n "$changed" ]; then
+            echo "slug=$changed" >> "$GITHUB_OUTPUT"
+          else
+            echo "slug=" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Fire repository_dispatch
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.TUTORIALS_POC_DISPATCH_TOKEN }}
+          repository: sap-tutorials/tutorials-poc
+          event-type: tutorial-qa-updated
+          client-payload: '{"repo": "${{ github.repository }}", "slug": "${{ steps.slug.outputs.slug }}", "sha": "${{ github.sha }}"}'

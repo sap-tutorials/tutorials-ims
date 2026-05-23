@@ -7,16 +7,17 @@
   data-page-step-count="{{ .Params.stepCount }}">
 <head>
   {{ partial "head.html" . }}
-  <link rel="stylesheet" href="/css/joule.css">
+  {{ if not site.Params.qa }}<link rel="stylesheet" href="/css/joule.css">{{ end }}
   {{ partial "site-jsonld.html" . }}
 </head>
 <body>
+  {{ partial "qa-banner.html" . }}
   {{ partial "header.html" . }}
   {{/* U14: top-of-viewport navigation progress indicator. */}}
   {{ partial "nav-progress.html" . }}
   {{/* U11: top-of-viewport reading-progress bar. Hidden until tutorial.ts
        detects a .tutorial-steps section in the page. Driven by --scroll-progress. */}}
-  <div id="reading-progress" class="reading-progress" hidden></div>
+  {{ if not site.Params.qa }}<div id="reading-progress" class="reading-progress" hidden></div>{{ end }}
   <main>{{ block "main" . }}{{ end }}</main>
   {{ partial "footer.html" . }}
   {{ partial "joule-panel.html" . }}
@@ -40,8 +41,10 @@
   <script defer src="/js/consent.js"></script>
   <script defer src="/js/vendor/markdown-it.min.js"></script>
   <script defer src="/js/vendor/purify.min.js"></script>
+  {{ if not site.Params.qa }}
   <script defer src="/js/joule-render.js"></script>
   <script src="/js/joule.js" defer></script>
+  {{ end }}
   <script src="/js/cmd-palette.js" defer type="module"></script>
   {{ $ui5 := resources.Get "js/ui5-bootstrap.ts" | js.Build (dict "minify" true "format" "esm" "target" "es2020") }}
   <script type="module" src="{{ $ui5.RelPermalink }}"></script>

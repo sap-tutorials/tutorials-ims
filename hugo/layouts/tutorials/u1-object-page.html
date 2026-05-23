@@ -259,7 +259,7 @@
             </ui5-wizard>
           </div>
           {{ end }}
-          <div id="progress-bar" data-step-count="{{ .Params.stepCount }}" data-slug="{{ .Params.slug }}"></div>
+          {{ if not site.Params.qa }}<div id="progress-bar" data-step-count="{{ .Params.stepCount }}" data-slug="{{ .Params.slug }}"></div>{{ end }}
           <div class="step-controls">
             <a href="#" onclick="expandAllSteps(); return false">Open all</a>
             <a href="#" onclick="collapseAllSteps(); return false">Close all</a>
@@ -280,8 +280,9 @@
           {{/* U6: inline rating + optional comment. Hosts ui5-rating-indicator,
                posts to /feedback/submit. Hidden after a successful submit per slug
                (localStorage). The deeper 6-dimension form is still reachable via
-               the "Submit detailed feedback" button below. */}}
-          <div id="tutorial-rating-mount" data-slug="{{ .Params.slug }}"></div>
+               the "Submit detailed feedback" button below.
+               QA preview strips ratings — drafts aren't user-visible. */}}
+          {{ if not site.Params.qa }}<div id="tutorial-rating-mount" data-slug="{{ .Params.slug }}"></div>{{ end }}
 
           <div class="op-discussion__cta">
             <ui5-button design="Default" icon="discussion-2" onclick="openTutorialFeedbackPopup('{{ .Params.slug }}')">Submit detailed feedback</ui5-button>
@@ -314,7 +315,7 @@
   </ui5-busy-indicator>
   <div slot="footer" class="op-sheet__footer">
     <ui5-button id="op-sheet-prev" design="Transparent">Previous</ui5-button>
-    <ui5-button id="op-sheet-mark" design="Emphasized">Mark Done</ui5-button>
+    {{ if not site.Params.qa }}<ui5-button id="op-sheet-mark" design="Emphasized">Mark Done</ui5-button>{{ end }}
     <ui5-button id="op-sheet-next" design="Default">Next</ui5-button>
   </div>
 </ui5-dialog>
@@ -329,7 +330,7 @@
 {{ $js := resources.Get "js/tutorial.ts" | js.Build (dict "minify" true) }}
 <script src="{{ $js.RelPermalink }}" defer></script>
 <script type="module" src="/js/nav-dropdown.js"></script>
-<script type="module" src="/js/tutorial-rating.js" defer></script>
+{{ if not site.Params.qa }}<script type="module" src="/js/tutorial-rating.js" defer></script>{{ end }}
 
 <script type="module">
   // U1 Object Page — anchor-bar tab clicks scroll to sections; scrollspy highlights active tab.

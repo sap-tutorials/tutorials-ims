@@ -19,7 +19,7 @@
     {{ partial "tutorial-author.html" . }}
     {{ partial "tutorial-prerequisites.html" . }}
 
-    <div id="progress-bar" data-step-count="{{ .Params.stepCount }}" data-slug="{{ .Params.slug }}"></div>
+    {{ if not site.Params.qa }}<div id="progress-bar" data-step-count="{{ .Params.stepCount }}" data-slug="{{ .Params.slug }}"></div>{{ end }}
 
     <div class="step-controls">
       <a href="#" onclick="expandAllSteps(); return false">Open all</a>

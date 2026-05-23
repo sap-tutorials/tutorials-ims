@@ -18,6 +18,8 @@ build-parameters:
       commands:
         - npm --prefix .. install
         - bash -c "cd .. && npx cds build --production"
+        - bash -c "cd .. && npx cds build --production --for db-qa --output-dir gen/db-qa"
+        - bash -c "cd .. && npx cds build --production --for srv-qa --output-dir gen/srv-qa"
         - bash -c "cd ../gen/db/src/gen && jq '.file_suffixes.hdbprocedure={\"plugin_name\":\"com.sap.hana.di.procedure\"}' .hdiconfig > .hdiconfig.tmp && mv .hdiconfig.tmp .hdiconfig"
         - cp ../xs-security.json .
 
@@ -29,6 +31,14 @@ modules:
       buildpack: nodejs_buildpack
     requires:
       - name: tutorials-hana
+
+  - name: tutorials-db-qa-deployer
+    type: hdb
+    path: ../gen/db-qa
+    parameters:
+      buildpack: nodejs_buildpack
+    requires:
+      - name: tutorials-hana-qa
 
   - name: tutorials-srv
     type: nodejs
@@ -54,6 +64,24 @@ modules:
       - name: tutorials-cloud-logging
       - name: tutorials-aicore
 
+  - name: tutorials-srv-qa
+    type: nodejs
+    path: ../gen/srv-qa
+    parameters:
+      memory: 512M
+      disk-quota: 1024M
+      buildpack: nodejs_buildpack
+      instances: 1
+    properties:
+      EXPOSE_CAP_UI: false
+    provides:
+      - name: srv-qa-api
+        properties:
+          srv-url: ${default-url}
+    requires:
+      - name: tutorials-hana-qa
+      - name: tutorials-xsuaa
+
   - name: tutorials-approuter
     type: approuter.nodejs
     path: ../approuter
@@ -63,6 +91,9 @@ modules:
         - npm install
         - cp -r ../hugo/public/. static/
         - rm -rf static/tutorials
+        - mkdir -p static/qa
+        - cp -r ../hugo/public-qa/. static/qa/
+        - rm -rf static/qa/tutorials
         - npm --prefix ../app/admin-shell install
         - npm --prefix ../app/admin-shell run build
         - mkdir -p static/admin-ui
@@ -90,6 +121,12 @@ modules:
           name: srv-api
           url: ~{srv-url}
           forwardAuthToken: true
+      - name: srv-qa-api
+        group: destinations
+        properties:
+          name: srv-qa-api
+          url: ~{srv-url}
+          forwardAuthToken: true
 
 resources:
   - name: tutorials-hana
@@ -98,6 +135,13 @@ resources:
       service: hana
       service-plan: hdi-shared
       service-name: tutorials-hana
+
+  - name: tutorials-hana-qa
+    type: com.sap.xs.hdi-container
+    parameters:
+      service: hana
+      service-plan: hdi-shared
+      service-name: tutorials-hana-qa
 
   - name: tutorials-xsuaa
     type: org.cloudfoundry.managed-service

@@ -3,6 +3,33 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { parse as parseYaml } from 'yaml';
+import { parseChannel, type Channel } from './fetch-tutorials.js';
+
+export type { Channel };
+
+export interface PublishConfig {
+  baseUrl: string;
+  apiKey: string | undefined;
+  sourceDir: string;
+  force: boolean;
+}
+
+export function resolvePublishConfig({ channel }: { channel: Channel }): PublishConfig {
+  if (channel === 'qa') {
+    return {
+      baseUrl: process.env.CAP_QA_BASE_URL ?? 'http://localhost:4005',
+      apiKey: process.env.CONTENT_API_KEY_QA,
+      sourceDir: 'hugo/public-qa',
+      force: true,
+    };
+  }
+  return {
+    baseUrl: process.env.CAP_BASE_URL ?? 'http://localhost:4004',
+    apiKey: process.env.CONTENT_API_KEY,
+    sourceDir: 'hugo/public',
+    force: process.argv.includes('--force'),
+  };
+}
 
 // --- Build validation ---
 
@@ -239,10 +266,20 @@ function parseArgs(argv: string[]): PublishOptions {
 }
 
 async function main() {
+  const channel = parseChannel(process.argv);
   const opts = parseArgs(process.argv.slice(2));
 
+  if (channel === 'qa') {
+    const cfg = resolvePublishConfig({ channel });
+    opts.hugoDir = cfg.sourceDir;
+    opts.baseUrl = cfg.baseUrl;
+    opts.apiKey = cfg.apiKey ?? '';
+    opts.force = cfg.force;
+  }
+
   if (!opts.apiKey) {
-    console.error('Error: No API key. Set CONTENT_API_KEY env var or pass --api-key');
+    const envHint = channel === 'qa' ? 'CONTENT_API_KEY_QA' : 'CONTENT_API_KEY';
+    console.error(`Error: No API key. Set ${envHint} env var or pass --api-key`);
     process.exit(1);
   }
 

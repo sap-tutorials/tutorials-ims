@@ -1,3 +1,4 @@
+{{ if not site.Params.qa }}
 <div id="joule-panel" hidden role="dialog" aria-modal="false" aria-labelledby="joule-panel-title">
   <header class="joule-panel__header">
     {{ partial "joule-icon.html" (dict "size" "small") }}
@@ -56,3 +57,4 @@
     <p class="joule-panel__disclaimer">Joule uses AI. Verify results.</p>
   </footer>
 </div>
+{{ end }}

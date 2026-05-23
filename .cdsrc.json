@@ -22,7 +22,7 @@
       "users": {
         "developer": {
           "password": "developer",
-          "roles": ["DeveloperApp", "authenticated-user"],
+          "roles": ["DeveloperApp", "Tutorial.Author", "authenticated-user"],
           "attr": {
             "email": "dev@test.com",
             "given_name": "Test",
@@ -31,7 +31,7 @@
         },
         "admin": {
           "password": "admin",
-          "roles": ["Admin", "DeveloperApp", "DisplayApp", "ContentAuthor", "ConsolidationScope", "authenticated-user"]
+          "roles": ["Admin", "DeveloperApp", "DisplayApp", "ContentAuthor", "ConsolidationScope", "Tutorial.Author", "authenticated-user"]
         },
         "superadmin": {
           "password": "superadmin",

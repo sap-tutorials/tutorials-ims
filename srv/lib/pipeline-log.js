@@ -5,8 +5,8 @@ const { randomUUID } = await import('node:crypto');
 /**
  * Start a pipeline log entry. Returns the log ID for later completion.
  */
-export async function logPipelineStart(pipelineType, initiator, metadata) {
-  const { PipelineLog } = cds.entities('com.sap.developers.ims');
+export async function logPipelineStart(pipelineType, initiator, metadata, namespace = 'com.sap.developers.ims') {
+  const { PipelineLog } = cds.entities(namespace);
   const ID = randomUUID();
   const startedAt = new Date().toISOString();
 
@@ -25,8 +25,8 @@ export async function logPipelineStart(pipelineType, initiator, metadata) {
 /**
  * Complete a pipeline log entry with final status.
  */
-export async function logPipelineEnd(logId, status, summary, errorDetails) {
-  const { PipelineLog } = cds.entities('com.sap.developers.ims');
+export async function logPipelineEnd(logId, status, summary, errorDetails, namespace = 'com.sap.developers.ims') {
+  const { PipelineLog } = cds.entities(namespace);
   const finishedAt = new Date().toISOString();
 
   const entry = await SELECT.one.from(PipelineLog, logId).columns('startedAt');
@@ -47,15 +47,15 @@ export async function logPipelineEnd(logId, status, summary, errorDetails) {
  * Wrap an async function with pipeline logging.
  * Logs start before execution, success/failure after.
  */
-export async function logPipeline(pipelineType, initiator, fn, metadata) {
-  const logId = await logPipelineStart(pipelineType, initiator, metadata);
+export async function logPipeline(pipelineType, initiator, fn, metadata, namespace = 'com.sap.developers.ims') {
+  const logId = await logPipelineStart(pipelineType, initiator, metadata, namespace);
   try {
     const result = await fn();
     const summary = typeof result === 'string' ? result : undefined;
-    await logPipelineEnd(logId, 'SUCCESS', summary);
+    await logPipelineEnd(logId, 'SUCCESS', summary, undefined, namespace);
     return result;
   } catch (err) {
-    await logPipelineEnd(logId, 'FAILED', null, err.message || String(err));
+    await logPipelineEnd(logId, 'FAILED', null, err.message || String(err), namespace);
     throw err;
   }
 }
@@ -65,9 +65,9 @@ export async function logPipeline(pipelineType, initiator, fn, metadata) {
  * Items show up as a sub-table on the PipelineLog Object Page so admins can
  * drill from a run into the specific tutorials that had issues.
  */
-export async function logPipelineItem(logId, { slug, phase, severity, message }) {
+export async function logPipelineItem(logId, { slug, phase, severity, message }, namespace = 'com.sap.developers.ims') {
   if (!logId) return;
-  const { PipelineLogItems } = cds.entities('com.sap.developers.ims');
+  const { PipelineLogItems } = cds.entities(namespace);
   await INSERT.into(PipelineLogItems).entries({
     ID: randomUUID(),
     pipelineLog_ID: logId,
@@ -83,9 +83,9 @@ export async function logPipelineItem(logId, { slug, phase, severity, message })
  * Items show up as a sub-table on the JobExecutionLog Object Page so admins can
  * drill from a run into the individual records the job processed.
  */
-export async function logJobItem(logId, { itemKey, itemKind, status, message }) {
+export async function logJobItem(logId, { itemKey, itemKind, status, message }, namespace = 'com.sap.developers.ims') {
   if (!logId) return;
-  const { JobLogItems } = cds.entities('com.sap.developers.ims');
+  const { JobLogItems } = cds.entities(namespace);
   await INSERT.into(JobLogItems).entries({
     ID: randomUUID(),
     jobLog_ID: logId,

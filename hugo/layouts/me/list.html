@@ -1,4 +1,8 @@
 {{ define "main" }}
+{{/* U17 profile timeline + recent activity. QA preview strips this — read-only
+     preview has no per-user progress data. Also excluded by hugo.qa.toml ignoreFiles. */}}
+{{ if not site.Params.qa }}
 <div id="me-completions"></div>
 <script type="module" src="/js/me.js?v={{ now.Unix }}"></script>
+{{ end }}
 {{ end }}

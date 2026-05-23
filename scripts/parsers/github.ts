@@ -369,6 +369,7 @@ export async function discoverAllTutorials(): Promise<DiscoveryResult> {
 
 async function discoverFromGitHub(): Promise<DiscoveredTutorial[]> {
   const includeContribution = process.env.INCLUDE_CONTRIBUTION_REPOS === 'true'
+  const onlyContribution = process.env.ONLY_CONTRIBUTION_REPOS === 'true'
   const tutorials: DiscoveredTutorial[] = []
   let cursor: string | null = null
   let page = 0
@@ -429,7 +430,12 @@ async function discoverFromGitHub(): Promise<DiscoveredTutorial[]> {
     for (const repo of repos.nodes) {
       if (repo.isArchived || repo.isDisabled || repo.isFork) continue
       if (EXCLUDED_REPOS.has(repo.name)) continue
-      if (!includeContribution && repo.name.endsWith('-Contribution')) continue
+      if (onlyContribution) {
+        // QA channel: only -Contribution repos (inverse of prod filter).
+        if (!repo.name.endsWith('-Contribution')) continue
+      } else if (!includeContribution && repo.name.endsWith('-Contribution')) {
+        continue
+      }
       const branch = repo.defaultBranchRef?.name
       if (!branch) continue
 
@@ -467,6 +473,7 @@ interface RestContentEntry {
 
 export async function discoverFromRest(): Promise<DiscoveredTutorial[]> {
   const includeContribution = process.env.INCLUDE_CONTRIBUTION_REPOS === 'true'
+  const onlyContribution = process.env.ONLY_CONTRIBUTION_REPOS === 'true'
   console.log(`  [rest] Listing repos in ${ORG}...`)
   const repos = await restApiPaginated<RestRepoMeta>(`/orgs/${ORG}/repos?per_page=100&type=public`)
 
@@ -474,7 +481,11 @@ export async function discoverFromRest(): Promise<DiscoveredTutorial[]> {
   for (const repo of repos) {
     if (repo.archived || repo.disabled || repo.fork) continue
     if (EXCLUDED_REPOS.has(repo.name)) continue
-    if (!includeContribution && repo.name.endsWith('-Contribution')) continue
+    if (onlyContribution) {
+      if (!repo.name.endsWith('-Contribution')) continue
+    } else if (!includeContribution && repo.name.endsWith('-Contribution')) {
+      continue
+    }
     const branch = repo.default_branch
     if (!branch) continue
 

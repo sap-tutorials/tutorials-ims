@@ -8,6 +8,8 @@ build-parameters:
       commands:
         - npm install
         - npx cds build --production
+        - npx cds build --production --for db-qa --output-dir gen/db-qa
+        - npx cds build --production --for srv-qa --output-dir gen/srv-qa
         - npm --prefix apps install
         - npm run fetch-tutorials -- --target hugo
         - npm run validate-tutorials
@@ -16,6 +18,12 @@ build-parameters:
         - curl -fsSL https://github.com/gohugoio/hugo/releases/download/v0.147.7/hugo_extended_0.147.7_linux-amd64.tar.gz -o /tmp/hugo.tar.gz
         - tar -xzf /tmp/hugo.tar.gz -C /tmp hugo
         - /tmp/hugo --source hugo --minify
+        - npm run fetch-tutorials -- --target hugo --channel qa
+        - /tmp/hugo --source hugo --config ../hugo.qa.toml --minify
+        - npx tsx scripts/verify-qa-build.ts hugo/public-qa
+        - mkdir -p approuter/static/qa
+        - cp -r hugo/public-qa/* approuter/static/qa/
+        - rm -rf approuter/static/qa/tutorials
         - npx tsx scripts/highlight-cds.ts
         - npm --prefix display-app install
         - npm --prefix display-app run build
@@ -53,6 +61,24 @@ modules:
       - name: tutorials-audit-log
       - name: tutorials-cloud-logging
 
+  - name: tutorials-srv-qa
+    type: nodejs
+    path: gen/srv-qa
+    parameters:
+      memory: 512M
+      disk-quota: 1024M
+      buildpack: nodejs_buildpack
+      instances: 1
+    properties:
+      EXPOSE_CAP_UI: false
+    provides:
+      - name: srv-qa-api
+        properties:
+          srv-url: ${default-url}
+    requires:
+      - name: tutorials-hana-qa
+      - name: tutorials-xsuaa
+
   - name: tutorials-db-deployer
     type: hdb
     path: gen/db
@@ -60,6 +86,14 @@ modules:
       buildpack: nodejs_buildpack
     requires:
       - name: tutorials-hana
+
+  - name: tutorials-db-qa-deployer
+    type: hdb
+    path: gen/db-qa
+    parameters:
+      buildpack: nodejs_buildpack
+    requires:
+      - name: tutorials-hana-qa
 
   - name: tutorials-approuter
     type: approuter.nodejs
@@ -82,6 +116,12 @@ modules:
           name: srv-api
           url: ~{srv-url}
           forwardAuthToken: true
+      - name: srv-qa-api
+        group: destinations
+        properties:
+          name: srv-qa-api
+          url: ~{srv-url}
+          forwardAuthToken: true
 
 resources:
   - name: tutorials-hana
@@ -90,6 +130,13 @@ resources:
       service: hana
       service-plan: hdi-shared
       service-name: tutorials-hana
+
+  - name: tutorials-hana-qa
+    type: com.sap.xs.hdi-container
+    parameters:
+      service: hana
+      service-plan: hdi-shared
+      service-name: tutorials-hana-qa
 
   - name: tutorials-xsuaa
     type: org.cloudfoundry.managed-service

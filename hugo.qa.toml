@@ -1,0 +1,65 @@
+# hugo.qa.toml — sibling of hugo/hugo.toml, used by `npm run build:qa`
+# QA preview Hugo config: reads from hugo/content-qa/, writes to hugo/public-qa/.
+# Stripped of prod-only output formats (RSS, sitemap, robots, llms*) — QA is internal-only.
+# Invocation: cd hugo && hugo --config ../hugo.qa.toml --minify
+
+baseURL = "/tutorials-qa/"
+languageCode = "en-us"
+title = "[QA] SAP Tutorials Preview"
+contentDir = "content-qa"
+dataDir   = "data-qa"
+staticDir = "static-qa"
+publishDir = "public-qa"
+
+# QA is internal-only — suppress sitemap. Taxonomy/term pages stay enabled
+# because the home template references .Site.Taxonomies; we override their
+# outputs below to drop RSS feeds.
+disableKinds = ["sitemap"]
+
+# Defense-in-depth: even if Tasks 15/16 ever generate non-tutorial pages under
+# content-qa/, never render mission/group/me/search shells on QA.
+ignoreFiles = ["^(missions|groups|me|search)/.*$"]
+
+[params]
+  qa = true
+  qaBannerText = "QA preview — content from -Contribution branches. Not user-visible."
+
+[build]
+  writeStats = true
+
+[markup]
+  [markup.goldmark]
+    [markup.goldmark.renderer]
+      unsafe = true
+    [markup.goldmark.parser]
+      [markup.goldmark.parser.attribute]
+        block = true
+        title = true
+    [markup.goldmark.extensions]
+      [markup.goldmark.extensions.passthrough]
+        enable = true
+        [markup.goldmark.extensions.passthrough.delimiters]
+          block = [['$$', '$$']]
+          inline = [['$', '$']]
+  [markup.highlight]
+    noClasses = false
+    codeFences = true
+    guessSyntax = false
+    lineNos = false
+    tabWidth = 2
+
+# U1 Object Page floorplan as the default tutorial layout — mirrors prod cascade
+# so QA pages render with the same visual fidelity. Path matches the content
+# location (content-qa/tutorials/**), which Hugo resolves before applying baseURL.
+[[cascade]]
+  layout = "u1-object-page"
+  [cascade._target]
+    path = "/tutorials/**"
+    kind = "page"
+
+[outputs]
+  home = ["HTML"]
+  section = ["HTML"]
+  page = ["HTML"]
+  taxonomy = ["HTML"]
+  term = ["HTML"]

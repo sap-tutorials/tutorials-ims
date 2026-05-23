@@ -208,6 +208,37 @@
       "csrfProtection": false
     },
     {
+      "source": "^/tutorials-qa/_nav\\.json$",
+      "target": "/content/nav",
+      "destination": "srv-qa-api",
+      "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.Tutorial.Author",
+      "csrfProtection": false
+    },
+    {
+      "source": "^/qa-search/(.*)$",
+      "target": "/search/$1",
+      "destination": "srv-qa-api",
+      "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.Tutorial.Author",
+      "csrfProtection": false
+    },
+    {
+      "source": "^/tutorials-qa/search/?(.*)$",
+      "target": "/qa/search/$1",
+      "localDir": "static",
+      "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.Tutorial.Author"
+    },
+    {
+      "source": "^/tutorials-qa/(.*)$",
+      "target": "/content/tutorials/$1",
+      "destination": "srv-qa-api",
+      "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.Tutorial.Author",
+      "csrfProtection": false
+    },
+    {
       "source": "^/tutorials/_nav\\.json$",
       "target": "/content/nav",
       "destination": "srv-api",
