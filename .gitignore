@@ -53,3 +53,6 @@ srv/data/admin-docs-index.json
 # a11y / Lighthouse scan output (regenerated each run)
 .lighthouseci/
 test/a11y/axe-results.md
+
+# Hugo build locks
+.hugo_build.lock
