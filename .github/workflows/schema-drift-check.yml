@@ -1,0 +1,16 @@
+name: Schema drift check
+on:
+  pull_request:
+    paths:
+      - 'db/**'
+      - 'db-qa/**'
+      - 'scripts/check-qa-schema-drift.ts'
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm ci
+      - run: npx tsx scripts/check-qa-schema-drift.ts
