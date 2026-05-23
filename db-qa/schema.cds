@@ -23,6 +23,8 @@ entity ContentManifest : managed {
   publishDurationMs         : Integer;
 }
 
+// Plain-text projection of published Hugo HTML, indexed for full-text search.
+// Replaced (not versioned) on every publish so search reflects current content.
 @cds.autoexpose: false
 entity TutorialBodyText : managed {
   key slug                  : String(255);
