@@ -99,11 +99,14 @@ features are out of scope and must not be reachable through the QA surface.
   plugin, no `/api/qrcode`, no `/feedback/*`.
 
 #### CDS schema
-- **`db-qa/schema.cds`** — uses `using { ContentFiles, ContentManifest,
-  TutorialBodyText, RepoCatalog } from '../db/schema'` and re-exports them under
-  `sap.tutorials.qa` namespace. Build target lists `db/` and `db-qa/`; the QA
-  module's `cds.build.target` filter limits deploy artifacts to the qa-namespaced
-  entities so only those `*.hdbtable`s ship to `tutorials-db-qa`.
+- **`db-qa/schema.cds`** — re-declares the four content entities (`ContentFiles`,
+  `ContentManifest`, `TutorialBodyText`, `RepoCatalog`) verbatim under the
+  `com.sap.developers.ims.qa` namespace. The actual prod namespace is
+  `com.sap.developers.ims` (see `db/schema.cds:1`); QA gets its own namespace so
+  HDI generates separate physical tables. A schema-drift CI job (below) keeps
+  the two definitions in lockstep. Build target lists `db/` and `db-qa/`; the
+  QA module's `cds.build.target` filter limits deploy artifacts to the
+  qa-namespaced entities so only those `*.hdbtable`s ship to `tutorials-db-qa`.
 
 #### Hugo configuration
 - **`hugo.qa.toml`** — sets `params.qa = true`, `baseURL` for `/tutorials-qa/`
@@ -312,7 +315,11 @@ are deferred to deploy time.
 ## References
 
 - `CLAUDE.md` — project overview, gotchas, commands.
-- `db/schema.cds:307-347` — prod entities being shared via `using` import.
+- `db/schema.cds:1` — prod namespace `com.sap.developers.ims`. QA uses
+  `com.sap.developers.ims.qa` (literal-copy of the four entities, kept in
+  sync via the schema-drift CI job).
+- `db/schema.cds:307-347` — prod entity definitions (ContentFiles,
+  ContentManifest, TutorialBodyText, RepoCatalog) duplicated verbatim in QA.
 - `srv/lib/content-store.js` — gzip + LRU + LOB-locator workaround reused by QA.
 - `.github/workflows/rebuild-content.yml` — prod template the QA workflow
   mirrors.
