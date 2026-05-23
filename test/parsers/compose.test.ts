@@ -37,8 +37,7 @@ Body of step two.
     expect(result.steps[0].content).toContain('images/foo.png');
   });
 
-  // TODO: enable after Task 2 adds rewriteImages support
-  it.skip('passes images through unchanged when rewriteImages: false', () => {
+  it('passes images through unchanged when rewriteImages: false', () => {
     const raw = `---
 title: Hello
 description: x
