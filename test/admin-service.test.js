@@ -299,6 +299,26 @@ describe('AdminService', () => {
       ]);
     });
 
+    // Draft workflow helper: edit-active → patch-draft → activate.
+    // Returns the draftActivate response so callers can assert on rejection or success.
+    async function patchViaDraft(id, body) {
+      await project.post(
+        `/admin/Tutorials(ID=${id},IsActiveEntity=true)/AdminService.draftEdit`,
+        {},
+        { ...adminAuth, validateStatus: () => true }
+      );
+      await project.patch(
+        `/admin/Tutorials(ID=${id},IsActiveEntity=false)`,
+        body,
+        { ...adminAuth, validateStatus: () => true }
+      );
+      return project.post(
+        `/admin/Tutorials(ID=${id},IsActiveEntity=false)/AdminService.draftActivate`,
+        {},
+        { ...adminAuth, validateStatus: () => true }
+      );
+    }
+
     it('DELETE on Tutorials flips status to INACTIVE instead of removing the row', async () => {
       const { Tutorials } = cds.entities('com.sap.developers.ims');
       const tmpId = cds.utils.uuid();
@@ -307,7 +327,7 @@ describe('AdminService', () => {
       });
 
       const { status } = await project.delete(
-        `/admin/Tutorials(${tmpId})`,
+        `/admin/Tutorials(ID=${tmpId},IsActiveEntity=true)`,
         adminAuth
       );
       expect([204, 200]).toContain(status);
@@ -318,32 +338,20 @@ describe('AdminService', () => {
     });
 
     it('rejects redirectTo on an ACTIVE tutorial', async () => {
-      const { status, data } = await project.patch(
-        `/admin/Tutorials(${activeId})`,
-        { redirectTo_ID: inactiveId },
-        { ...adminAuth, validateStatus: () => true }
-      );
+      const { status, data } = await patchViaDraft(activeId, { redirectTo_ID: inactiveId });
       expect(status).toBeGreaterThanOrEqual(400);
       expect(JSON.stringify(data)).toMatch(/INACTIVE/i);
     });
 
     it('rejects redirectTo pointing to itself', async () => {
-      const { status, data } = await project.patch(
-        `/admin/Tutorials(${inactiveId})`,
-        { redirectTo_ID: inactiveId },
-        { ...adminAuth, validateStatus: () => true }
-      );
+      const { status, data } = await patchViaDraft(inactiveId, { redirectTo_ID: inactiveId });
       expect(status).toBeGreaterThanOrEqual(400);
       expect(JSON.stringify(data)).toMatch(/itself/i);
     });
 
     it('rejects redirectTo pointing to a non-existent tutorial', async () => {
       const fakeId = '00000000-0000-0000-0000-000000000999';
-      const { status } = await project.patch(
-        `/admin/Tutorials(${inactiveId})`,
-        { redirectTo_ID: fakeId },
-        { ...adminAuth, validateStatus: () => true }
-      );
+      const { status } = await patchViaDraft(inactiveId, { redirectTo_ID: fakeId });
       expect(status).toBeGreaterThanOrEqual(400);
     });
 
@@ -354,13 +362,9 @@ describe('AdminService', () => {
         ID: otherInactiveId, slug: 'sd-other-inactive', title: 'Other', status: 'INACTIVE'
       });
 
-      const { status, data } = await project.patch(
-        `/admin/Tutorials(${inactiveId})`,
-        { redirectTo_ID: otherInactiveId },
-        { ...adminAuth, validateStatus: () => true }
-      );
+      const { status, data } = await patchViaDraft(inactiveId, { redirectTo_ID: otherInactiveId });
       expect(status).toBeGreaterThanOrEqual(400);
-      expect(JSON.stringify(data)).toMatch(/active/i);
+      expect(JSON.stringify(data)).toMatch(/redirect target must be an active/i);
     });
 
     it('accepts redirectTo on an INACTIVE tutorial pointing to an ACTIVE one', async () => {
@@ -372,12 +376,8 @@ describe('AdminService', () => {
         { ID: activeTarget, slug: 'sd-redir-dst', title: 'Dst', status: 'ACTIVE' },
       ]);
 
-      const { status } = await project.patch(
-        `/admin/Tutorials(${inactiveTarget})`,
-        { redirectTo_ID: activeTarget },
-        { ...adminAuth, validateStatus: () => true }
-      );
-      expect([200, 204]).toContain(status);
+      const { status } = await patchViaDraft(inactiveTarget, { redirectTo_ID: activeTarget });
+      expect([200, 201, 204]).toContain(status);
 
       const [row] = await SELECT.from(Tutorials).where({ ID: inactiveTarget }).columns('redirectTo_ID');
       expect(row.redirectTo_ID).toBe(activeTarget);
