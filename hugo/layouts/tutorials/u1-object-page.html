@@ -127,6 +127,67 @@
     .op-twocol { grid-template-columns: 1fr; }
     .op-twocol > .tutorial-right-col { position: static; }
   }
+
+  /* U18 — Mobile FAB + bottom-sheet dialog */
+  #op-mobile-fab {
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    z-index: 40;
+    display: none;
+  }
+
+  @media (max-width: 960px) {
+    #op-mobile-fab { display: inline-flex; }
+  }
+
+  #op-mobile-sheet::part(content) {
+    padding: 0;
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+
+  #op-mobile-sheet::part(header),
+  #op-mobile-sheet::part(footer) {
+    padding: 0.5rem 1rem;
+  }
+
+  .op-sheet__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    font-weight: 600;
+  }
+
+  .op-sheet__footer {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    /* Used by the wiring script to choose between smooth and instant scroll */
+    :root { --u18-reduce-motion: 1; }
+  }
+
+  #op-mobile-sheet {
+    --_ui5_popup_default_padding: 0;
+  }
+  #op-mobile-sheet::part(root) {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: 100%;
+    max-height: 80vh;
+    border-radius: 0.75rem 0.75rem 0 0;
+    margin: 0;
+    transform: none;
+    top: auto;
+  }
 </style>
 
 <div class="op-page">
