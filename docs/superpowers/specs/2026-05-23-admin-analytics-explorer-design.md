@@ -198,6 +198,13 @@ srv.on('listExposedEntities', () => {
 });
 ```
 
+**Helpers used in the handlers below:**
+
+- `cdsTypeToHanaType(cdsType: string)` — small map (`'cds.String' → 'NVARCHAR'`, `'cds.Integer' → 'INTEGER'`, etc.). One file in `app/analytics-explorer/src/api/cds-types.ts`. Used only by the frontend.
+- `getCachedEntityMetadata()` — frontend memoizes the first `listExposedEntities()` response for the session. Cleared on hard reload.
+- `stringify(value)` — handler-side coercion to JSON-safe strings: `null → null`, `Date → ISO 8601`, `Buffer → base64`, `boolean/number → String(v)`, `string → v`. Decided once, used uniformly.
+- Annotation access: `e['@analytics.exposed']` and `e['@analytics.label']` — CAP flattens nested annotation objects (`@analytics : { exposed, label }`) into dotted keys at compile time, so the dotted form in handler code matches the nested form in `schema-ext.cds`.
+
 ### `runSelectQuery` handler
 
 ```js
@@ -349,6 +356,11 @@ export function useDataSource() {
 | UI primitives | `@ui5/webcomponents`, `@ui5/webcomponents-fiori` | Already in project |
 
 Bundle target: **<800 KB gzipped** for `/analytics-ui/index.html` initial load (excludes Monaco — lazy).
+
+**Lazy-loading strategy:**
+
+- **Monaco** — dynamic `import('monaco-editor')` triggered the first time `SqlTab.vue` is mounted. Vite emits this as a separate chunk; subsequent SQL-tab visits hit the cached chunk. Verifiable by `vite build --mode production` chunk size report.
+- **echarts** — vendor-chunked but eagerly imported (Explore tab is the default and needs it). Revisit if the bundle target slips.
 
 ### Chart types (8 total — ported from reference)
 
