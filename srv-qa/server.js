@@ -4,6 +4,8 @@ import express from 'express';
 
 import { createContentHandlers } from '../srv/lib/content-store.js';
 import { requireXsuaaScope } from './xsuaa-scope-middleware.js';
+import { createSemaphore } from './preview-semaphore.js';
+import { renderPreview, errorHtml } from './preview-renderer.js';
 
 cds.on('bootstrap', (app) => {
   app.disable('x-powered-by');
@@ -33,6 +35,40 @@ cds.on('bootstrap', (app) => {
   app.get('/content/tutorials/*slug', requireAuthorScope, serveHandler);
   app.post('/content/publish',  express.json({ limit: '100mb' }), contentAuthMiddleware, publishHandler);
   app.post('/content/rollback', express.json(),                    contentAuthMiddleware, rollbackHandler);
+
+  const previewSemaphore = createSemaphore(Number(process.env.PREVIEW_MAX_CONCURRENT ?? 4));
+  const PREVIEW_QUEUE_TIMEOUT_MS = Number(process.env.PREVIEW_QUEUE_TIMEOUT_MS ?? 10_000);
+
+  app.post('/preview/render',
+    requireAuthorScope,
+    express.json({ limit: '1mb' }),
+    async (req, res) => {
+      const t0 = Date.now();
+      let slot;
+      try {
+        slot = await previewSemaphore.acquire(PREVIEW_QUEUE_TIMEOUT_MS);
+      } catch {
+        res.status(503).json({ error: 'busy' });
+        return;
+      }
+      try {
+        const markdown = req.body?.markdown;
+        if (typeof markdown !== 'string') {
+          res.status(400).json({ error: 'expected JSON body { markdown: string }' });
+          return;
+        }
+        const { html, status, durationMs, bytes } = await renderPreview(markdown);
+        console.log(JSON.stringify({ event: 'preview.render', status, ms: durationMs, bytes, totalMs: Date.now() - t0 }));
+        res.set('Content-Type', 'text/html; charset=utf-8').status(200).send(html);
+      } catch (err) {
+        console.error(JSON.stringify({ event: 'preview.render', status: 'server_error', ms: Date.now() - t0, error: err.message }));
+        res.set('Content-Type', 'text/html; charset=utf-8').status(200)
+          .send(errorHtml('Preview server error', err.message));
+      } finally {
+        slot.release();
+      }
+    }
+  );
 });
 
 export default cds.server;

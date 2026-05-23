@@ -1,4 +1,4 @@
-{{ if not site.Params.qa }}
+{{ if and (not site.Params.qa) (not site.Params.previewMode) }}
 <script id="joule-starters" type="application/json">
 {
   "tutorial": [

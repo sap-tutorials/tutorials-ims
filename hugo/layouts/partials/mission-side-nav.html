@@ -13,6 +13,7 @@ Inputs (page params expected on tutorial pages):
   .Params.missionSlug  — used to look up the mission page and emit links
   .Params.slug         — current tutorial slug (for `selected` highlight)
 */}}
+{{ if not site.Params.previewMode }}
 {{ $missionId   := .Params.missionId }}
 {{ $missionSlug := .Params.missionSlug }}
 {{ $current     := .Params.slug }}
@@ -51,4 +52,5 @@ Inputs (page params expected on tutorial pages):
       </ui5-side-navigation>
     </aside>
   {{ end }}
+{{ end }}
 {{ end }}

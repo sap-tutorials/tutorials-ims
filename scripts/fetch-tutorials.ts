@@ -3,18 +3,14 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { performance } from 'node:perf_hooks'
 import { stringify as yamlStringify } from 'yaml'
-import { extractFrontmatter } from './parsers/frontmatter.js'
-import { parseV2Steps } from './parsers/v2.js'
-import { parseV1Steps } from './parsers/v1.js'
-import { resolveImageURLs } from './parsers/images.js'
 import { flushDimensionsCache, populateImageDimensions, exportDimensionsForHugo } from './parsers/image-dimensions.js'
-import { convertOptionBlocks } from './parsers/options.js'
-import { escapeHugoDelimiters } from './parsers/hugo-delimiters.js'
-import { stripDangerousHtml } from './parsers/sanitize-html.js'
+import { composeTutorial } from './parsers/compose.js'
 import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, EXCLUDED_REPOS, type DiscoveredTutorial } from './parsers/github.js'
 import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache } from './parsers/cap.js'
 import { parseRulesVr } from './parsers/rules.js'
 import { computeRecommendations } from './parsers/recommendations.js'
+import { humanizeTag, splitPrerequisites } from './parsers/frontmatter-utils.js'
+import { renderHugoFrontmatter } from './parsers/render-frontmatter.js'
 import type { Mission, MissionHierarchy, HierarchyGroup, TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } from './parsers/types.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -84,8 +80,6 @@ export function getNavJsonDir(target: BuildTarget, channel: Channel = 'prod'): s
   return join(__dirname, '..', 'site', 'tutorials')
 }
 
-const ACRONYMS = new Set(['SAP', 'HANA', 'CAP', 'BTP', 'CDS', 'UI', 'API', 'MTA', 'XSUAA', 'OData', 'HTML5', 'ABAP'])
-
 interface ErrorEntry {
   slug: string
   repo: string
@@ -112,38 +106,6 @@ async function runWithConcurrency<T>(tasks: Array<() => Promise<T>>, limit: numb
 
   await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, () => worker()))
   return results
-}
-
-function humanizeTag(raw: string): string {
-  const value = raw.includes('>') ? raw.split('>').pop()! : raw
-  return value
-    .replace(/\\/g, '')
-    .replace(/[-_]/g, ' ')
-    .trim()
-    .split(/\s+/)
-    .filter(w => w.length > 0)
-    .map(word => {
-      const upper = word.toUpperCase()
-      if (ACRONYMS.has(upper)) return upper
-      return word.charAt(0).toUpperCase() + word.slice(1)
-    })
-    .join(' ')
-}
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-}
-
-function splitPrerequisites(prereqText: string): string[] {
-  if (!prereqText) return []
-  return prereqText
-    .split('\n')
-    .map(line => line.replace(/^\s*-\s+/, '').trim())
-    .map(line => escapeHtml(line))
-    .filter(line => line.length > 0)
 }
 
 type CacheStatus = 'cached' | 'refreshed' | 'fetched'
@@ -354,51 +316,24 @@ export function writeHugoPage(
   contributors: Array<{ name: string; login: string; email: string; avatarUrl: string }>,
   outputDir: string,
 ): void {
-  const cleanTags = tags.map(t => t.replace(/\\/g, ''))
-  const cleanPrimaryTag = primaryTag.replace(/\\/g, '')
-
-  const fm: Record<string, unknown> = {
-    type: 'tutorials',
+  const content = renderHugoFrontmatter({
     slug,
     title,
     description,
     time,
     level,
-    tags: cleanTags,
-    primaryTag: cleanPrimaryTag,
+    tags,
+    primaryTag,
     author,
     authorProfile,
-    stepCount: steps.length,
-    prev: nav.prev,
-    next: nav.next,
-    aliases: [`/tutorials/${slug}.html`],
-    displayTags: [...new Set([cleanPrimaryTag, ...cleanTags])].map(humanizeTag).filter(t => t.length > 0),
     youWillLearn,
-    prerequisites: splitPrerequisites(prerequisites),
-    lastUpdated: lastUpdated || null,
-    createdAt: createdAt || null,
-    contributors: contributors.slice(0, 10).map(c => ({ login: c.login, name: c.name, email: c.email, avatarUrl: c.avatarUrl })),
-    steps: steps.map(s => {
-      const entry: Record<string, unknown> = { number: s.number, title: s.title }
-      if (s.validation?.length) entry.validation = s.validation
-      return entry
-    }),
-  }
-
-  if (nav.missionId) fm.missionId = nav.missionId
-  if (nav.missionTitle) fm.missionTitle = nav.missionTitle
-  if (nav.missionSlug) fm.missionSlug = nav.missionSlug
-  if (nav.groupId) fm.groupId = nav.groupId
-  if (nav.groupTitle) fm.groupTitle = nav.groupTitle
-  if (nav.groupSlug) fm.groupSlug = nav.groupSlug
-
-  const frontmatter = `---\n${yamlStringify(fm).trimEnd()}\n---\n\n`
-
-  const stepsMd = steps.map(step =>
-    `{{% tutorial-step number="${step.number}" title="${step.title.replace(/"/g, '&quot;')}" %}}\n\n${escapeHugoDelimiters(stripDangerousHtml(step.content))}\n\n{{% /tutorial-step %}}`
-  ).join('\n\n')
-
-  const content = `${frontmatter}${stepsMd}\n`
+    prerequisites,
+    steps,
+    nav,
+    lastUpdated,
+    createdAt,
+    contributors,
+  })
 
   mkdirSync(outputDir, { recursive: true })
   writeFileSync(join(outputDir, `${slug}.md`), content, 'utf-8')
@@ -773,22 +708,20 @@ async function main() {
         console.log(`${label} [${cacheStatus}]`)
       }
 
-      const { title, description, youWillLearn, prerequisites, level, frontmatter, body } = extractFrontmatter(rawMd)
-
-      const isV2 = frontmatter.parser === 'v2'
-      let processedBody = resolveImageURLs(body, { repo: t.repo, branch: t.branch, slug: t.slug })
-      processedBody = convertOptionBlocks(processedBody, target)
-      processedBody = processedBody.replace(/^<{4,7} .+\n[\s\S]*?^={4,7}\n([\s\S]*?)^>{4,7} .+\n?/gm, '$1')
+      const composed = composeTutorial(rawMd, {
+        repo: t.repo, branch: t.branch, slug: t.slug, target, rewriteImages: true,
+      })
+      const { title, description, youWillLearn, prerequisites, level, frontmatter } = composed
 
       // Populate intrinsic-dimension cache for the Hugo render-image hook.
       // The hook reads site.Data.image_dimensions to emit width/height attrs;
       // markdown attribute syntax can't be used because goldmark renders it
       // as literal text for inline images.
       if (target === 'hugo') {
-        await populateImageDimensions(processedBody)
+        await populateImageDimensions(composed.body)
       }
 
-      const steps = isV2 ? parseV2Steps(processedBody) : parseV1Steps(processedBody)
+      const steps = composed.steps
 
       // Fetch and attach validation questions from rules.vr
       const rulesContent = await fetchRulesVr(t.slug, t.repo, t.branch)

@@ -1,4 +1,4 @@
-{{ if not site.Params.qa }}
+{{ if and (not site.Params.qa) (not site.Params.previewMode) }}
 <div id="joule-panel" hidden role="dialog" aria-modal="false" aria-labelledby="joule-panel-title">
   <header class="joule-panel__header">
     {{ partial "joule-icon.html" (dict "size" "small") }}

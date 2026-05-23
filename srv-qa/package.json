@@ -2,15 +2,24 @@
   "name": "tutorials-srv-qa",
   "version": "1.0.0",
   "main": "server.js",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "@sap/cds": "^9.9.0",
     "@sap/xssec": "^4",
-    "express": "^4"
+    "express": "^4",
+    "hugo-extended": "0.147.8"
   },
   "cds": {
     "requires": {
-      "db": { "kind": "hana" },
-      "auth": { "kind": "xsuaa" }
+      "db": {
+        "kind": "hana"
+      },
+      "auth": {
+        "kind": "xsuaa"
+      }
     }
   }
 }
