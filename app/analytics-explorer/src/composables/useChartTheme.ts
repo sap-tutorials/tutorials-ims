@@ -45,3 +45,15 @@ export function installChartTheme() {
 }
 
 export function getCurrentChartTheme() { return currentThemeName() }
+
+export function disposeChartTheme() {
+  if (observer) {
+    observer.disconnect()
+    observer = null
+  }
+  installed = false
+}
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => disposeChartTheme())
+}

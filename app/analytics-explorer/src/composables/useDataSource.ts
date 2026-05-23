@@ -39,16 +39,25 @@ export function useDataSource() {
   }
 
   async function fetchAggregated(config: ChartConfigInput) {
-    const url = buildApplyUrl(config)
-    const r = await fetch(url, { headers: { Accept: 'application/json' } })
-    if (!r.ok) throw new Error(`OData ${r.status}`)
-    const json = await r.json()
-    const rows = json.value || []
-    const cols = [
-      ...config.dimensions.map(d => d.column),
-      ...config.measures.map(m => m.alias),
-    ]
-    return { columns: cols, data: rows.map((row: any) => cols.map(c => row[c])) }
+    loading.value = true
+    error.value = null
+    try {
+      const url = buildApplyUrl(config)
+      const r = await fetch(url, { headers: { Accept: 'application/json' } })
+      if (!r.ok) throw new Error(`OData ${r.status}`)
+      const json = await r.json()
+      const rows = json.value || []
+      const cols = [
+        ...config.dimensions.map(d => d.column),
+        ...config.measures.map(m => m.alias),
+      ]
+      return { columns: cols, data: rows.map((row: any) => cols.map(c => row[c])) }
+    } catch (e: any) {
+      error.value = e.message
+      throw e
+    } finally {
+      loading.value = false
+    }
   }
 
   function clear() {
