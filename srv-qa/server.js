@@ -3,6 +3,7 @@ import cds from '@sap/cds';
 import express from 'express';
 
 import { createContentHandlers } from '../srv/lib/content-store.js';
+import { requireXsuaaScope } from './xsuaa-scope-middleware.js';
 
 cds.on('bootstrap', (app) => {
   app.disable('x-powered-by');
@@ -21,9 +22,15 @@ cds.on('bootstrap', (app) => {
   const { serveHandler, navHandler, hashesHandler, publishHandler, rollbackHandler, contentAuthMiddleware } =
     createContentHandlers({ namespace: 'com.sap.developers.ims.qa', apiKeyEnv: 'CONTENT_API_KEY_QA', skipMetadataUpsert: true });
 
-  app.get('/content/nav', navHandler);
-  app.get('/content/hashes', hashesHandler);
-  app.get('/content/tutorials/*slug', serveHandler);
+  // GET handlers serve in-flight author content from -Contribution repos. The
+  // approuter route /tutorials-qa/* enforces Tutorial.Author, but the public CF
+  // URL of this srv must independently reject anonymous JWTs to prevent scope
+  // bypass. requireXsuaaScope is a pass-through when no XSUAA binding is
+  // present (unit tests / mocked-auth) — see xsuaa-scope-middleware.js.
+  const requireAuthorScope = requireXsuaaScope('Tutorial.Author');
+  app.get('/content/nav', requireAuthorScope, navHandler);
+  app.get('/content/hashes', requireAuthorScope, hashesHandler);
+  app.get('/content/tutorials/*slug', requireAuthorScope, serveHandler);
   app.post('/content/publish',  express.json({ limit: '100mb' }), contentAuthMiddleware, publishHandler);
   app.post('/content/rollback', express.json(),                    contentAuthMiddleware, rollbackHandler);
 });
