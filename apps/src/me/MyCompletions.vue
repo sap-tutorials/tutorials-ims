@@ -117,6 +117,11 @@ function formatLevel(level: string | null) {
   return level.charAt(0) + level.slice(1).toLowerCase()
 }
 
+function onTimelineNameClick(slug: string) {
+  if (!slug) return
+  window.location.href = `/tutorials/${slug}/`
+}
+
 function clearFilters() {
   filterText.value = ''
   filterTopic.value = ''
@@ -174,6 +179,28 @@ onMounted(async () => {
     </div>
 
     <template v-else>
+      <section
+        v-if="recentRows.length > 0"
+        class="me-recent"
+        aria-labelledby="me-recent-heading"
+      >
+        <h2 id="me-recent-heading" class="me-recent__heading">Recent Activity</h2>
+        <ui5-timeline layout="Vertical" growing="None">
+          <ui5-timeline-item
+            v-for="item in recentRows"
+            :key="item.slug"
+            :name="item.title"
+            :subtitle-text="`${item.primaryTag || 'Tutorial'} · ${formatRelative(item.completionDate)}`"
+            icon="accept"
+            state="Positive"
+            name-clickable
+            @name-click="() => onTimelineNameClick(item.slug)"
+          >
+            <span class="me-recent__level">{{ formatLevel(item.experienceTag) }}</span>
+          </ui5-timeline-item>
+        </ui5-timeline>
+      </section>
+
       <div class="me-toolbar" role="search">
         <label class="me-field">
           <span>Search</span>
