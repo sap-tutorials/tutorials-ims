@@ -25,6 +25,11 @@
       if (!this._ready) { this._pendingOpen = opts || true; return; }
       _openImpl(opts);
     },
+    openWithStepContext(ctx) {
+      const opts = { starterContext: { kind: 'tutorial-step', vars: ctx || {} } };
+      if (!this._ready) { this._pendingOpen = opts; return; }
+      _openImpl(opts);
+    },
   };
 
   const trigger = document.getElementById('joule-trigger');
@@ -328,19 +333,36 @@
     } catch { return {}; }
   }
 
-  function renderStarters() {
+  function substituteStarter(text, vars) {
+    let out = text;
+    if (!vars || !vars.heading) {
+      out = out.replace(/:\s*\{heading\}/g, '');
+    }
+    out = out.replace(/\{n\}/g, vars && vars.n != null ? String(vars.n) : '');
+    out = out.replace(/\{heading\}/g, vars && vars.heading ? String(vars.heading) : '');
+    return out;
+  }
+
+  function renderStarters(starterCtx) {
     const starters = loadStarters();
-    const ctx = readPageContext();
-    const list = starters[ctx.kind] || starters.generic || [];
+    let list;
+    if (starterCtx && starterCtx.kind) {
+      list = starters[starterCtx.kind] || starters.generic || [];
+    } else {
+      const ctx = readPageContext();
+      list = starters[ctx.kind] || starters.generic || [];
+    }
     const wrap = panel.querySelector('.joule-panel__starters');
     if (!wrap) return;
     wrap.replaceChildren();
+    const vars = starterCtx && starterCtx.vars;
     for (const text of list.slice(0, 3)) {
+      const finalText = vars ? substituteStarter(text, vars) : text;
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'joule-panel__starter';
-      btn.textContent = text;
-      btn.addEventListener('click', () => { input.value = text; send(text); });
+      btn.textContent = finalText;
+      btn.addEventListener('click', () => { input.value = finalText; send(finalText); });
       wrap.appendChild(btn);
     }
   }
@@ -503,7 +525,7 @@
     } else {
       showHero();
       renderGreeting(user.firstName);
-      renderStarters();
+      renderStarters(opts && opts.starterContext);
     }
     input.focus();
   }
@@ -576,8 +598,22 @@
   panel.querySelector('[data-action="ai-notice-back"]').addEventListener('click', hideAINotice);
 
   loadConfig().then(cfg => {
-    if (!cfg.enabled) { if (trigger) trigger.remove(); return; }
+    const stepFab = document.getElementById('joule-step-fab');
+    if (!cfg.enabled) {
+      if (trigger) trigger.remove();
+      if (stepFab) stepFab.remove();
+      return;
+    }
     if (trigger) trigger.hidden = false;
+    if (stepFab) {
+      stepFab.hidden = false;
+      stepFab.addEventListener('click', () => {
+        const ctx = (typeof window.opGetCurrentStep === 'function')
+          ? window.opGetCurrentStep()
+          : { slug: '', n: 1, heading: '' };
+        window.joule.openWithStepContext(ctx);
+      });
+    }
     if (cfg.bannerText) { banner.textContent = cfg.bannerText; banner.hidden = false; }
 
     // Auto-open after login redirect: _openImpl() appends ?joule=open to returnTo,

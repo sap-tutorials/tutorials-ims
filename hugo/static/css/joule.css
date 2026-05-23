@@ -200,3 +200,46 @@
   outline: 2px solid var(--joule-purple-1);
   outline-offset: 2px;
 }
+
+/* Step-help FAB — desktop-only, bottom-right floating action button.
+   Hidden by default; revealed by joule.js after ChatConfig.enabled. */
+.joule-step-fab {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .65rem 1rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: linear-gradient(165deg, var(--joule-purple-1) 0%, var(--joule-purple-2) 45%, var(--joule-purple-3) 100%);
+  color: var(--joule-text);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .25), 0 0 0 1px rgba(255, 255, 255, .06);
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+}
+.joule-step-fab[hidden] { display: none; }
+.joule-step-fab:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .3), 0 0 0 1px rgba(255, 255, 255, .1);
+  border-color: rgba(255, 255, 255, .3);
+}
+.joule-step-fab:focus-visible {
+  outline: 2px solid var(--joule-purple-1);
+  outline-offset: 2px;
+}
+.joule-step-fab .joule-mark { color: var(--joule-text); }
+.joule-step-fab__label { white-space: nowrap; }
+
+@media (prefers-reduced-motion: reduce) {
+  .joule-step-fab { transition: none; }
+  .joule-step-fab:hover { transform: none; }
+}
+
+@media (max-width: 960px) {
+  .joule-step-fab { display: none !important; }
+}
