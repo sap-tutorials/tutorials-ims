@@ -374,4 +374,26 @@ onMounted(async () => {
   text-decoration: none;
 }
 .me-table a:hover { text-decoration: underline; }
+.me-recent {
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.25rem;
+  background: var(--sapList_Background);
+  border: 1px solid var(--sapList_BorderColor);
+  border-radius: 0.5rem;
+}
+.me-recent__heading {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+  color: var(--sapTextColor);
+}
+.me-recent__level {
+  font-size: 0.75rem;
+  color: var(--sapContent_LabelColor);
+}
+@media (max-width: 600px) {
+  .me-recent {
+    padding: 0.75rem;
+  }
+}
 </style>
