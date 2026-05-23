@@ -662,10 +662,14 @@ async function main() {
     writeFileSync(DISCOVERY_CACHE, JSON.stringify(discoveryMap, null, 2), 'utf-8')
 
     // Only refresh HANA RepoCatalog when discovery came from GitHub AND the run
-    // covers all tutorials. Uploading disk/HANA fallback data would advance
-    // lastSyncedAt and falsely signal freshness during a prolonged GitHub outage.
-    // Slug-filtered runs are partial by design — never overwrite the catalog.
-    if (discovery.source === 'github' && !tutorialSlugFilter) {
+    // covers all tutorials AND we're on the prod channel. The discovery baseline
+    // (disk + HANA RepoCatalog) is a prod artifact: QA's Contribution-only repo
+    // set must never poison the prod fallback list. Uploading disk/HANA fallback
+    // data would also advance lastSyncedAt and falsely signal freshness during a
+    // prolonged GitHub outage. Slug-filtered runs are partial by design.
+    if (channel !== 'prod') {
+      console.log(`[fetch-tutorials] channel=${channel} — skipping discovery baseline + HANA RepoCatalog upload (prod-only artifact)`)
+    } else if (discovery.source === 'github' && !tutorialSlugFilter) {
       await uploadDiscoveryToHana(allTutorials)
       // Same staleness reasoning applies to the committed baseline snapshot:
       // only refresh from authoritative GraphQL data, never from fallback paths.
