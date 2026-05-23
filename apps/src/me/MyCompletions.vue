@@ -377,19 +377,19 @@ onMounted(async () => {
 .me-recent {
   margin-bottom: 1.5rem;
   padding: 1rem 1.25rem;
-  background: var(--sapList_Background);
-  border: 1px solid var(--sapList_BorderColor);
+  background: var(--sapList_Background, #fff);
+  border: 1px solid var(--sapList_BorderColor, #e5e5ea);
   border-radius: 0.5rem;
 }
 .me-recent__heading {
   font-size: 1rem;
   font-weight: 600;
   margin: 0 0 0.75rem;
-  color: var(--sapTextColor);
+  color: var(--sapTextColor, #32363a);
 }
 .me-recent__level {
   font-size: 0.75rem;
-  color: var(--sapContent_LabelColor);
+  color: var(--sapContent_LabelColor, #6a6d70);
 }
 @media (max-width: 600px) {
   .me-recent {
