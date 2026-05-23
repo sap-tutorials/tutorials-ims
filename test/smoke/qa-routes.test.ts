@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+// @ts-ignore - JS module without types
+import { fetchWithRetry } from './smoke.config.js';
 
 const QA_BASE = process.env.SMOKE_QA_BASE_URL!;
 const SRV_QA = process.env.SMOKE_QA_SRV_URL!;
@@ -6,7 +8,7 @@ const TOKEN = process.env.SMOKE_QA_TOKEN!; // pre-acquired XSUAA bearer
 
 describe.skipIf(!process.env.SMOKE_QA_BASE_URL || !process.env.SMOKE_QA_SRV_URL || !process.env.SMOKE_QA_TOKEN)('QA endpoints', () => {
   it('GET /tutorials-qa/<known-slug> returns 200 with QA banner', async () => {
-    const r = await fetch(`${QA_BASE}/tutorials-qa/__SMOKE__qa`, {
+    const r = await fetchWithRetry(`${QA_BASE}/tutorials-qa/__SMOKE__qa`, {
       headers: { authorization: `Bearer ${TOKEN}` }
     });
     expect(r.status).toBe(200);
@@ -15,12 +17,12 @@ describe.skipIf(!process.env.SMOKE_QA_BASE_URL || !process.env.SMOKE_QA_SRV_URL 
   });
 
   it('GET /tutorials-qa/<slug> without auth returns 401', async () => {
-    const r = await fetch(`${QA_BASE}/tutorials-qa/__SMOKE__qa`);
+    const r = await fetchWithRetry(`${QA_BASE}/tutorials-qa/__SMOKE__qa`);
     expect([401, 302]).toContain(r.status); // approuter may redirect to login
   });
 
   it('GET /qa-search/Tutorials?$search=cap returns search results', async () => {
-    const r = await fetch(`${QA_BASE}/qa-search/Tutorials?$search=cap`, {
+    const r = await fetchWithRetry(`${QA_BASE}/qa-search/Tutorials?$search=cap`, {
       headers: { authorization: `Bearer ${TOKEN}` }
     });
     expect(r.status).toBe(200);
@@ -28,7 +30,7 @@ describe.skipIf(!process.env.SMOKE_QA_BASE_URL || !process.env.SMOKE_QA_SRV_URL 
 
   it('GET /tutorials-qa/<slug>/admin returns 404 (admin not exposed)', async () => {
     // Direct hit to QA srv, not approuter
-    const r = await fetch(`${SRV_QA}/admin/Events`, {
+    const r = await fetchWithRetry(`${SRV_QA}/admin/Events`, {
       headers: { authorization: `Bearer ${TOKEN}` }
     });
     expect(r.status).toBe(404);

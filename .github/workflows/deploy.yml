@@ -186,8 +186,8 @@ jobs:
 
       - name: Smoke (QA)
         env:
-          SMOKE_QA_BASE_URL: ${{ secrets.APPROUTER_URL_DEV }}
-          SMOKE_QA_SRV_URL: ${{ secrets.CAP_SRV_URL_QA }}
+          SMOKE_QA_BASE_URL: ${{ vars.APPROUTER_URL_QA }}
+          SMOKE_QA_SRV_URL: ${{ vars.SRV_URL_QA }}
           SMOKE_QA_TOKEN: ${{ secrets.SMOKE_QA_TOKEN }}
         run: npm run test:smoke -- --reporter=verbose qa-routes
 
