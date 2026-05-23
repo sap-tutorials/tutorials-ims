@@ -25,7 +25,8 @@ sap.ui.define([
     joule: "joule",
     privacy: "privacy",
     feedbackList: "feedbackList",
-    feedbackDashboard: "feedbackDashboard"
+    feedbackDashboard: "feedbackDashboard",
+    dataExport: "dataExport"
   };
 
   var NAV_KEY_TO_TITLE = {
@@ -48,7 +49,8 @@ sap.ui.define([
     joule: "Joule Settings",
     privacy: "Privacy",
     feedbackList: "Tutorial Feedback",
-    feedbackDashboard: "Feedback Dashboard"
+    feedbackDashboard: "Feedback Dashboard",
+    dataExport: "Data Export"
   };
 
   var NAV_GROUPS_STORAGE_KEY = "sap-tutorials-admin-nav-groups";
