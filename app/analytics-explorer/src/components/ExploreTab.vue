@@ -102,7 +102,7 @@ function onRemoveFilter(index: number) {
           :chart-type="chartConfig.chartType.value"
           :data="chartData"
           :dimensions="chartConfig.dimensions.value.map(d => d.column)"
-          :measures="chartConfig.measures.value.map(m => `${m.aggregation}_${m.column}`)"
+          :measures="chartConfig.measures.value.map(m => m.alias)"
         />
       </div>
     </div>

@@ -24,6 +24,7 @@ const newColumn = ref('')
 const newOperator = ref('=')
 const newValue = ref('')
 
+// TODO(filter-operators): FilterBar emits SQL ops; odata.ts assertOperator expects OData ops. Map before shipping.
 const operators = ['=', '!=', '>', '<', '>=', '<=', 'IN', 'LIKE', 'BETWEEN']
 
 function openPopover(event: Event) {
