@@ -19,7 +19,7 @@ cds.on('bootstrap', (app) => {
   });
 
   const { serveHandler, navHandler, hashesHandler, publishHandler, rollbackHandler, contentAuthMiddleware } =
-    createContentHandlers({ namespace: 'com.sap.developers.ims.qa', apiKeyEnv: 'CONTENT_API_KEY_QA' });
+    createContentHandlers({ namespace: 'com.sap.developers.ims.qa', apiKeyEnv: 'CONTENT_API_KEY_QA', skipMetadataUpsert: true });
 
   app.get('/content/nav', navHandler);
   app.get('/content/hashes', hashesHandler);

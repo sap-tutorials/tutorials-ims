@@ -79,7 +79,7 @@ const cache = new ContentCache();
 // Creates a set of content handlers bound to a specific CDS namespace and API key env var.
 // Default invocation (no args) reproduces the original prod-namespace behaviour.
 
-export function createContentHandlers({ namespace = 'com.sap.developers.ims', apiKeyEnv = 'CONTENT_API_KEY' } = {}) {
+export function createContentHandlers({ namespace = 'com.sap.developers.ims', apiKeyEnv = 'CONTENT_API_KEY', skipMetadataUpsert = false } = {}) {
 
   // Derive the HANA table name from the namespace (e.g. "com.sap.developers.ims" →
   // "COM_SAP_DEVELOPERS_IMS_CONTENTFILES").  Keep this lazy so it is only computed
@@ -282,9 +282,11 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
 
       cache.invalidate();
 
+      if (skipMetadataUpsert) LOG.info('[content/publish] skipMetadataUpsert=true; metadata + embeddings skipped');
+
       // Upsert Tutorials + Steps metadata (self-healing on every publish)
       let metaUpserted = 0;
-      if (metadata && typeof metadata === 'object') {
+      if (!skipMetadataUpsert && metadata && typeof metadata === 'object') {
         const { Tutorials, Steps } = cds.entities(namespace);
         const db = await cds.connect.to('db');
         for (const [slug, meta] of Object.entries(metadata)) {
@@ -442,15 +444,17 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
 
       // Schedule post-publish embeddings AFTER Steps metadata + body text upserts so
       // embedSlugs can find the Steps rows for fresh slugs without contentHash drift warnings.
-      setImmediate(async () => {
-        try {
-          const { ChatSettings } = cds.entities(namespace);
-          const settings = await SELECT.one.from(ChatSettings);
-          await triggerPostPublishEmbeddings({ changedSlugs: slugs, settings });
-        } catch (err) {
-          LOG.warn('post-publish embeddings setup failed (non-fatal)', err.message);
-        }
-      });
+      if (!skipMetadataUpsert) {
+        setImmediate(async () => {
+          try {
+            const { ChatSettings } = cds.entities(namespace);
+            const settings = await SELECT.one.from(ChatSettings);
+            await triggerPostPublishEmbeddings({ changedSlugs: slugs, settings });
+          } catch (err) {
+            LOG.warn('post-publish embeddings setup failed (non-fatal)', err.message);
+          }
+        });
+      }
 
       await logPipelineEnd(pipelineLogId, 'SUCCESS', `Published v${newVersion}: ${slugs.length} uploaded + ${carriedForward} carried = ${mergedFileCount} files, ${mergedTotalSize} bytes`, undefined, namespace);
 
