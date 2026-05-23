@@ -58,6 +58,13 @@
       "csrfProtection": false
     },
     {
+      "source": "^/analytics-ui/(.*)$",
+      "target": "/analytics-ui/$1",
+      "localDir": "static",
+      "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.Admin"
+    },
+    {
       "source": "^/admin-ui/(.*)$",
       "target": "/admin-ui/$1",
       "localDir": "static",
@@ -75,6 +82,14 @@
       "authenticationType": "xsuaa",
       "target": "/auth/user",
       "destination": "srv-api",
+      "csrfProtection": false
+    },
+    {
+      "source": "^/admin/analytics/(.*)$",
+      "target": "/admin/analytics/$1",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.Admin",
       "csrfProtection": false
     },
     {

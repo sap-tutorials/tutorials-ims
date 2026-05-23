@@ -1,0 +1,2 @@
+:root { font-family: var(--sapFontFamily, system-ui); }
+html, body, #app { margin: 0; height: 100%; }

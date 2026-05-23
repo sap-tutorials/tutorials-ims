@@ -26,6 +26,15 @@ let chatStreamHandler = (req, res) => res.status(503).json({ error: 'service_sta
 // resource AdminService.embeddings and return "Invalid resource path".
 let embeddingsStatsHandler = (req, res) => res.status(503).json({ error: 'service_starting' });
 
+// Late-bound router for AnalyticsService at /admin/analytics. AdminService's
+// OData adapter is mounted at /admin and would otherwise intercept all
+// /admin/analytics/* requests, returning "Invalid resource path AdminService.analytics".
+// By reserving /admin/analytics/* here (before cds.serve mounts AdminService),
+// express routes the longer prefix to this stub first. In 'served' we wire this
+// variable to the real AnalyticsService OData adapter router so requests are
+// handled correctly rather than falling through to AdminService.
+let analyticsOdataRouter = (req, res, next) => res.status(503).json({ error: 'service_starting' });
+
 // Per-request scope used by POST /feedback/submit to thread the originating
 // client IP from the express handler to a srv.before('submitTutorialFeedback')
 // hook. CAP 9.9.1 strictly validates action arguments and rejects unknown
@@ -165,6 +174,13 @@ cds.on('bootstrap', (app) => {
   // at /admin. Auth + business logic bound lazily in 'served'.
   app.get('/admin/embeddings/stats', (req, res, next) => embeddingsStatsHandler(req, res, next));
 
+  // Reserve ALL /admin/analytics/* requests BEFORE CAP mounts AdminService at /admin.
+  // Without this reservation AdminService's OData router intercepts /admin/analytics/*
+  // and returns "Invalid resource path AdminService.analytics". CDS will also mount
+  // AnalyticsService at /admin/analytics (after this reservation), so calling next()
+  // passes the request through to the AnalyticsService OData layer registered by CDS.
+  app.use('/admin/analytics', (req, res, next) => analyticsOdataRouter(req, res, next));
+
   // Per-IP rate limit for the public /search endpoint. Mounted in 'bootstrap'
   // so it runs BEFORE CAP wires SearchService at /search. Defaults: 60 req/min
   // per IP; tune via SEARCH_RATE_LIMIT_MAX / SEARCH_RATE_LIMIT_WINDOW_MS.
@@ -235,6 +251,26 @@ cds.on('served', async () => {
       });
     });
   };
+
+  // Wire up the real AnalyticsService OData adapter to the stub registered in 'bootstrap'.
+  // In CDS 9.x, cds.services.AnalyticsService._adapters._default IS the express Router/middleware
+  // function (not a wrapper object with a .router property). Assign it directly.
+  // We must also wrap it with context + auth middlewares (the CDS 'before' middlewares that
+  // cds.serve normally prepends) since our bootstrap stub bypassed them.
+  const analyticsAdapter = cds.services.AnalyticsService?._adapters?._default;
+  if (typeof analyticsAdapter === 'function') {
+    analyticsOdataRouter = (req, res, next) => {
+      contextMw(req, res, (err) => {
+        if (err) return next(err);
+        authMw(req, res, (err) => {
+          if (err) return next(err);
+          analyticsAdapter(req, res, next);
+        });
+      });
+    };
+  } else {
+    cds.log('analytics').warn('AnalyticsService OData adapter not found — /admin/analytics may 404');
+  }
 
   if (process.env.NODE_ENV !== 'test') {
     registerJobs();
