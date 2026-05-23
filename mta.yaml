@@ -9,6 +9,7 @@ build-parameters:
         - npm install
         - npx cds build --production
         - npx cds build --production --for db-qa --output-dir gen/db-qa
+        - npx cds build --production --for srv-qa --output-dir gen/srv-qa
         - npm --prefix apps install
         - npm run fetch-tutorials -- --target hugo
         - npm run validate-tutorials
@@ -54,6 +55,24 @@ modules:
       - name: tutorials-audit-log
       - name: tutorials-cloud-logging
 
+  - name: tutorials-srv-qa
+    type: nodejs
+    path: gen/srv-qa
+    parameters:
+      memory: 512M
+      disk-quota: 1024M
+      buildpack: nodejs_buildpack
+      instances: 1
+    properties:
+      EXPOSE_CAP_UI: false
+    provides:
+      - name: srv-qa-api
+        properties:
+          srv-url: ${default-url}
+    requires:
+      - name: tutorials-hana-qa
+      - name: tutorials-xsuaa
+
   - name: tutorials-db-deployer
     type: hdb
     path: gen/db
@@ -89,6 +108,12 @@ modules:
         group: destinations
         properties:
           name: srv-api
+          url: ~{srv-url}
+          forwardAuthToken: true
+      - name: srv-qa-api
+        group: destinations
+        properties:
+          name: srv-qa-api
           url: ~{srv-url}
           forwardAuthToken: true
 
