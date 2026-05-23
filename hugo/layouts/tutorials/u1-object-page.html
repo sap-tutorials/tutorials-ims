@@ -320,6 +320,8 @@
 </ui5-dialog>
 {{ end }}
 
+{{ partial "joule-step-help.html" . }}
+
 {{ with .Params.steps }}
 <script id="tutorial-data" type="application/json">{{ . | jsonify }}</script>
 {{ end }}
@@ -570,5 +572,14 @@
   const opStepsRoot = document.querySelector(".tutorial-steps");
   if (opStepsRoot) stepObserver.observe(opStepsRoot, { attributes: true, subtree: true, attributeFilter: ["class"] });
   if (opWizard) stepObserver.observe(opWizard, { attributes: true, subtree: true, attributeFilter: ["selected"] });
+
+  // Expose step-context getter for the Joule step-help FAB. Returns
+  // {slug, n, heading} for the step closest to viewport center, or step 1.
+  window.opGetCurrentStep = function () {
+    const n = getCurrentStep();
+    const stepEl = document.getElementById("step-" + n);
+    const heading = stepEl?.querySelector(".step-title-text")?.textContent?.trim() || "";
+    return { slug: tutorialSlug, n: n, heading: heading };
+  };
 </script>
 {{ end }}
