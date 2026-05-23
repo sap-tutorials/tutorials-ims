@@ -72,22 +72,22 @@
       <tnt:SideNavigation id="sideNav" selectedKey="{nav>/selectedNavKey}" itemSelect=".onNavItemSelect">
         <tnt:NavigationList>
           <tnt:NavigationListItem text="Dashboard" icon="sap-icon://monitor-payments" key="dashboard" />
-          <tnt:NavigationListItem text="Content" icon="sap-icon://folder-blank" expanded="true">
+          <tnt:NavigationListItem text="Content" icon="sap-icon://folder-blank" expanded="{viewModel>/groupExpanded/content}">
             <tnt:NavigationListItem text="Events" key="events" />
             <tnt:NavigationListItem text="Missions" key="missions" />
             <tnt:NavigationListItem text="Groups" key="groups" />
             <tnt:NavigationListItem text="Tutorials" key="tutorials" />
             <tnt:NavigationListItem text="Tags" key="tags" />
           </tnt:NavigationListItem>
-          <tnt:NavigationListItem text="Rewards" icon="sap-icon://present" expanded="true">
+          <tnt:NavigationListItem text="Rewards" icon="sap-icon://present" expanded="{viewModel>/groupExpanded/rewards}">
             <tnt:NavigationListItem text="Accomplishments" key="accomplishments" />
             <tnt:NavigationListItem text="Prizes" key="prizes" />
           </tnt:NavigationListItem>
-          <tnt:NavigationListItem text="Feedback" icon="sap-icon://feedback" expanded="true">
+          <tnt:NavigationListItem text="Feedback" icon="sap-icon://feedback" expanded="{viewModel>/groupExpanded/feedback}">
             <tnt:NavigationListItem text="All Submissions" key="feedbackList" />
             <tnt:NavigationListItem text="Dashboard" key="feedbackDashboard" />
           </tnt:NavigationListItem>
-          <tnt:NavigationListItem text="System" icon="sap-icon://action-settings" expanded="true">
+          <tnt:NavigationListItem text="System" icon="sap-icon://action-settings" expanded="{viewModel>/groupExpanded/system}">
             <tnt:NavigationListItem text="Operations" key="operations" />
             <tnt:NavigationListItem text="Pipeline Log" key="pipelinelog" />
             <tnt:NavigationListItem text="Job Log" key="joblog" />
