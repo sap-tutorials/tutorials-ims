@@ -4,6 +4,8 @@ site/tutorials/
 hugo/content/tutorials/
 hugo/static/tutorials/
 hugo/public/
+hugo/public-qa/
+hugo/content-qa/
 approuter/static/*
 !approuter/static/login-redirect.html
 .tutorial-cache/
