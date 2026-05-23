@@ -9,17 +9,22 @@ const editorEl = ref<HTMLDivElement>()
 const status = ref<string>('Ready.')
 const lastResult = ref<SqlResult | null>(null)
 let editor: any = null
+let destroyed = false
 
 onMounted(async () => {
   const monaco = await import('monaco-editor')
   await import('monaco-sql-languages/esm/all.contributions')
+  if (destroyed) return
   editor = monaco.editor.create(editorEl.value!, {
     value: '-- SELECT id, status FROM TaskRecords LIMIT 100',
     language: 'sql', theme: 'vs', fontSize: 13, minimap: { enabled: false },
   })
 })
 
-onBeforeUnmount(() => { editor?.dispose() })
+onBeforeUnmount(() => {
+  destroyed = true
+  editor?.dispose()
+})
 
 async function run() {
   if (!editor) return

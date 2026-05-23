@@ -24,8 +24,17 @@ const newColumn = ref('')
 const newOperator = ref('=')
 const newValue = ref('')
 
-// TODO(filter-operators): FilterBar emits SQL ops; odata.ts assertOperator expects OData ops. Map before shipping.
-const operators = ['=', '!=', '>', '<', '>=', '<=', 'IN', 'LIKE', 'BETWEEN']
+const OP_TO_ODATA: Record<string, string> = {
+  '=': 'eq',
+  '!=': 'ne',
+  '>': 'gt',
+  '<': 'lt',
+  '>=': 'ge',
+  '<=': 'le',
+  'LIKE': 'contains',
+}
+
+const operators = ['=', '!=', '>', '<', '>=', '<=', 'LIKE']
 
 function openPopover(event: Event) {
   const popover = popoverRef.value
@@ -39,7 +48,7 @@ function addFilter() {
   if (newColumn.value && newValue.value) {
     emit('addFilter', {
       column: newColumn.value,
-      operator: newOperator.value,
+      operator: OP_TO_ODATA[newOperator.value] ?? newOperator.value,
       value: newValue.value
     })
     newColumn.value = ''
