@@ -350,6 +350,7 @@ function proxyHandler(req, res, next) {
   if (isLocal && !headers.authorization) {
     const mockUser = url.startsWith('/admin/') ? 'admin:admin'
       : url.startsWith('/display/') ? 'display:display'
+      : url.startsWith('/tutorials-qa/') || url.startsWith('/qa-search/') ? 'admin:admin'
       : 'developer:developer'
     headers.authorization = 'Basic ' + Buffer.from(mockUser).toString('base64')
   }
