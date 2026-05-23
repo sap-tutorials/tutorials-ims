@@ -1,6 +1,27 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import cds from '@sap/cds';
 
+// Neutralise the @cap-js/change-tracking 'served' hook for this isolated test.
+// The plugin's cds.once('served') handler calls deploySQLiteTriggers(), which
+// expects sap.changelog.Changes in the in-memory model. This minimal QA model
+// doesn't include those entities.
+//
+// Root cause: the plugin is a CJS module loaded via require() during
+// cds bootstrap — vi.mock() cannot intercept CJS-internal require() calls.
+// Instead, we wrap cds.once() to swallow any 'served' listener whose source
+// mentions the SQLite trigger function name (change-tracking plugin only).
+// The wrapper is installed before cds.test() so it captures the plugin's
+// registration during bootstrap.
+const _origOnce = cds.once.bind(cds);
+cds.once = function (event, listener) {
+  if (event === 'served' && listener.toString().includes('deploySQLiteTriggers')) {
+    // Replace with a no-op: the once-contract is honoured (consumed on first emit)
+    // but no schema DDL is attempted against this minimal in-memory model.
+    return _origOnce.call(this, event, () => {});
+  }
+  return _origOnce.call(this, event, listener);
+};
+
 // Inject a Tutorial.Author mock user before cds.test bootstraps the server.
 // .cdsrc.json only defines developer/admin/display/consolidation users — none
 // carry Tutorial.Author. Adding here avoids modifying shared production config.

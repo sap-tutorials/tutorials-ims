@@ -1,7 +1,4 @@
 using { com.sap.developers.ims.qa as qa } from '../db-qa/schema';
-// Required so the @cap-js/change-tracking plugin's deploySQLiteTriggers()
-// finds sap.changelog.Changes in the in-memory db during unit tests.
-using from '@cap-js/change-tracking';
 
 @path: '/search'
 @requires: 'Tutorial.Author'
