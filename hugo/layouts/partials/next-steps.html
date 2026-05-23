@@ -29,25 +29,20 @@
   {{- end -}}
 
   {{- if $hasRecs }}
-  <div class="next-steps-rail">
+  <div class="next-steps-rail" data-recommend-slug="{{ .Params.slug }}">
     <h4 class="next-steps-rail-heading">Related Tutorials</h4>
-    <div class="next-steps-grid">
+    <div class="next-steps-grid" data-recommend-target>
       {{- range .Params.recommendations -}}
       {{- $recSlug := . -}}
       {{- $recPage := site.GetPage (printf "/tutorials/%s" $recSlug) -}}
-      {{- if $recPage }}
-      <a href="/tutorials/{{ $recSlug }}" class="next-steps-rail-card">
-        <span class="next-steps-label">TUTORIAL</span>
-        <span class="next-steps-title">{{ $recPage.Title }}</span>
-        {{- with $recPage.Params.time }}
-        <span class="next-steps-meta">
-          <span class="next-steps-time-icon">&#9201;</span> {{ . }} min.
-        </span>
-        {{- end }}
-      </a>
+      {{- if $recPage -}}
+      {{ partial "next-steps-card.html" (dict "slug" $recSlug "title" $recPage.Title "time" $recPage.Params.time) }}
       {{- end -}}
       {{- end }}
     </div>
+    <template data-recommend-template>
+      {{ partial "next-steps-card.html" (dict "slug" "__placeholder__" "title" "__placeholder__") }}
+    </template>
   </div>
   {{- end }}
 </div>
