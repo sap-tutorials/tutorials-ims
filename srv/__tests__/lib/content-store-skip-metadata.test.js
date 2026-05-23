@@ -213,6 +213,11 @@ describe('content-store skipMetadataUpsert option', () => {
     // metadataUpserted is 0 because the per-slug catch fired (Steps is undefined on QA schema)
     // This distinguishes skip=false (attempted, caught, 0) from skip=true (never attempted, 0)
     // by checking that a pipeline log error item was written for the METADATA phase
+
+    // Drain pending setImmediate callbacks
+    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setImmediate(resolve));
+
     const { PipelineLogItems } = cds.entities(QA_NS);
     const errorItems = await SELECT.from(PipelineLogItems).where({ phase: 'METADATA', severity: 'ERROR' });
     expect(errorItems.length).toBeGreaterThan(0);
