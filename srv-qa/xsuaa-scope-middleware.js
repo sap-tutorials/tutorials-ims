@@ -10,9 +10,14 @@
 //     CAP itself only validates JWTs when configured for xsuaa, so this
 //     mirrors that contract: enforcement is active in production / hybrid
 //     deployments where xsuaa is the bound auth provider.
-//   - No XSUAA service binding available → no-op (defensive fallback).
+//   - auth.kind == 'xsuaa' but XSUAA binding missing/malformed → fail closed
+//     with 503 { error: 'service_unavailable' }. This is the "configured but
+//     misbehaving" case — defense in depth so a broken binding can never leave
+//     the route open.
 //   - Missing / malformed Authorization header → 401 { error: 'unauthorized' }
 //   - Invalid / expired JWT                    → 401 { error: 'unauthorized' }
+//     (Intentional: bad JWT is the common case; rare upstream UAA errors also
+//     surface as 401 — operationally fine and avoids leaking failure modes.)
 //   - Valid JWT but missing required scope      → 403 { error: 'forbidden' }
 //   - Valid JWT with required scope             → next()
 
@@ -26,10 +31,15 @@ const LOG = cds.log('qa-security');
 
 let xsuaaServiceCache = null;
 let xsuaaInitAttempted = false;
+let xsuaaBindingMissing = false; // true when authKind=xsuaa but binding fetch failed
 
-// Lazily construct the XsuaaService from bound credentials. Returns null when
-// CAP is configured for mocked auth (unit tests / local dev) OR when the
-// xsuaa binding is unavailable.  Cached after first call.
+// Lazily construct the XsuaaService from bound credentials.
+// Returns:
+//   - XsuaaService instance when bound and authKind === 'xsuaa'
+//   - null when authKind !== 'xsuaa' (mocked-auth: pass-through allowed)
+//   - null AND sets xsuaaBindingMissing=true when authKind === 'xsuaa' but the
+//     binding is missing/malformed (caller must fail closed with 503)
+// Cached after first call. Underlying error logged once.
 function getXsuaaService() {
   if (xsuaaInitAttempted) return xsuaaServiceCache;
   xsuaaInitAttempted = true;
@@ -44,11 +54,17 @@ function getXsuaaService() {
   try {
     xsenv.loadEnv();
     const creds = xsenv.serviceCredentials({ label: 'xsuaa' });
+    if (!creds) {
+      throw new Error('xsenv.serviceCredentials returned no credentials');
+    }
     xsuaaServiceCache = new XsuaaService(creds);
     LOG.info('XSUAA service initialised, scope enforcement active');
   } catch (err) {
-    LOG.warn('No XSUAA binding — scope enforcement disabled:', err.message);
+    // authKind === 'xsuaa' but binding unavailable: configured but misbehaving.
+    // Mark so requests fail closed (503), don't silently pass through.
+    LOG.error('XSUAA binding missing/malformed — failing closed:', err.message);
     xsuaaServiceCache = null;
+    xsuaaBindingMissing = true;
   }
   return xsuaaServiceCache;
 }
@@ -61,7 +77,11 @@ function getXsuaaService() {
 export function requireXsuaaScope(requiredScope) {
   return async function xsuaaScopeMiddleware(req, res, next) {
     const service = getXsuaaService();
-    // No binding / mocked auth → unit-test or local dev. Skip enforcement.
+    // authKind === 'xsuaa' but binding missing: fail closed.
+    if (!service && xsuaaBindingMissing) {
+      return res.status(503).json({ error: 'service_unavailable' });
+    }
+    // authKind !== 'xsuaa' (mocked auth, unit tests, local dev) → pass through.
     if (!service) return next();
 
     const auth = req.headers.authorization;
@@ -89,4 +109,5 @@ export function requireXsuaaScope(requiredScope) {
 export function _resetForTests() {
   xsuaaServiceCache = null;
   xsuaaInitAttempted = false;
+  xsuaaBindingMissing = false;
 }

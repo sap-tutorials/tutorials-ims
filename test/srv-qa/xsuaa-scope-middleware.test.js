@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import cds from '@sap/cds';
 import { requireXsuaaScope, _resetForTests } from '../../srv-qa/xsuaa-scope-middleware.js';
 
 // These tests verify the middleware *contract* — its behaviour with and without
@@ -32,5 +33,42 @@ describe('requireXsuaaScope middleware', () => {
     const mw = requireXsuaaScope('Tutorial.Author');
     expect(typeof mw).toBe('function');
     expect(mw.length).toBe(3); // (req, res, next)
+  });
+
+  describe('when authKind === "xsuaa" but XSUAA binding is missing', () => {
+    let originalAuthKind;
+
+    beforeEach(() => {
+      _resetForTests();
+      // Force the "configured but misbehaving" branch: CAP says xsuaa is the
+      // auth provider, but no VCAP_SERVICES → xsenv.serviceCredentials throws.
+      cds.env.requires = cds.env.requires || {};
+      cds.env.requires.auth = cds.env.requires.auth || {};
+      originalAuthKind = cds.env.requires.auth.kind;
+      cds.env.requires.auth.kind = 'xsuaa';
+      delete process.env.VCAP_SERVICES;
+      delete process.env.VCAP_APPLICATION;
+    });
+
+    afterEach(() => {
+      cds.env.requires.auth.kind = originalAuthKind;
+      _resetForTests();
+    });
+
+    it('fails closed with 503 + { error: "service_unavailable" }', async () => {
+      const mw = requireXsuaaScope('Tutorial.Author');
+      const req = { headers: {} };
+      let statusCode = null;
+      let body = null;
+      const res = {
+        status(code) { statusCode = code; return this; },
+        json(payload) { body = payload; return this; }
+      };
+      let nextCalled = false;
+      await mw(req, res, () => { nextCalled = true; });
+      expect(nextCalled).toBe(false);
+      expect(statusCode).toBe(503);
+      expect(body).toEqual({ error: 'service_unavailable' });
+    });
   });
 });
