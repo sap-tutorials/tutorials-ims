@@ -1,0 +1,39 @@
+baseURL = "/"
+title = "Tutorial Preview"
+languageCode = "en-us"
+disableKinds = ["taxonomy", "term", "RSS", "sitemap"]
+
+[params]
+previewMode = true
+
+[[cascade]]
+  layout = 'u1-object-page'
+  [cascade._target]
+    path = '/tutorials/**'
+    kind = 'page'
+
+[security]
+[security.exec]
+allow = ['^$']
+[security.funcs]
+getenv = ['^HUGO_']
+
+[module]
+[[module.mounts]]
+source = "../hugo/layouts"
+target = "layouts"
+[[module.mounts]]
+source = "layouts"
+target = "layouts"
+[[module.mounts]]
+source = "../hugo/static"
+target = "static"
+[[module.mounts]]
+source = "../hugo/assets"
+target = "assets"
+[[module.mounts]]
+source = "../hugo/data"
+target = "data"
+[[module.mounts]]
+source = "../hugo/i18n"
+target = "i18n"

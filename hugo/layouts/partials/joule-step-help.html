@@ -5,7 +5,7 @@
   window.joule.openWithStepContext({slug, n, heading}).
   QA preview strips the FAB entirely — no chat assistant on -Contribution drafts.
 */}}
-{{ if not site.Params.qa }}
+{{ if and (not site.Params.qa) (not site.Params.previewMode) }}
 <button
   id="joule-step-fab"
   class="joule-step-fab"

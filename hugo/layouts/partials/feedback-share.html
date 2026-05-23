@@ -1,3 +1,4 @@
+{{ if not site.Params.previewMode }}
 {{/* Sticky prev/next footer — only renders if at least one neighbour exists */}}
 {{ if or .Params.prev .Params.next }}
 <div class="tutorial-stepnav" role="navigation" aria-label="Tutorial navigation">
@@ -43,3 +44,4 @@ function closePopups() {
   if (el) el.classList.add('popup-hidden');
 }
 </script>
+{{ end }}

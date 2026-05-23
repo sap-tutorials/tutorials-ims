@@ -1,6 +1,7 @@
 {{/* U15: image lightbox. Replaces the native <dialog class="image-lightbox">.
      Behavior is wired by hugo/assets/js/lightbox.ts. The element renders on every
      markdown page via baseof.html. */}}
+{{ if not site.Params.previewMode }}
 <ui5-dialog id="image-lightbox" accessible-name="Image viewer" class="lightbox-dialog">
   <div slot="header" class="lightbox-header">
     <ui5-title level="H4" class="lightbox-title"></ui5-title>
@@ -22,3 +23,4 @@
     <ui5-button icon="navigation-right-arrow" design="Transparent" class="lightbox-next" tooltip="Next"></ui5-button>
   </div>
 </ui5-dialog>
+{{ end }}

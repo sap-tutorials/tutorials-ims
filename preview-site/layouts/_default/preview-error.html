@@ -1,0 +1,6 @@
+{{ define "main" }}
+<section class="op-error" style="padding:2rem">
+  <ui5-message-strip design="Negative" hide-close-button>{{ .Title }}</ui5-message-strip>
+  <pre style="white-space:pre-wrap;font-family:ui-monospace,monospace;background:var(--sapNeutralBackground);padding:1rem;border-radius:.5rem;margin-top:1rem">{{ .Content }}</pre>
+</section>
+{{ end }}
