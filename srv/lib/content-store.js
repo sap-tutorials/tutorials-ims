@@ -144,13 +144,13 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       return res.status(413).json({ error: `Payload too large: ~${Math.round(estimatedBytes / 1024 / 1024)}MB (max 200MB)` });
     }
 
-    const locked = await acquireLock(LOCK_NAME, INSTANCE_ID, LOCK_DURATION_MS);
+    const locked = await acquireLock(LOCK_NAME, INSTANCE_ID, LOCK_DURATION_MS, namespace);
     if (!locked) {
       return res.status(409).json({ error: 'Another publish is in progress' });
     }
 
     const initiator = req.headers['x-initiator'] || 'publish-script';
-    const pipelineLogId = await logPipelineStart('CONTENT_PUBLISH', initiator, { trigger, hugoVersion, fileCount: Object.keys(files).length });
+    const pipelineLogId = await logPipelineStart('CONTENT_PUBLISH', initiator, { trigger, hugoVersion, fileCount: Object.keys(files).length }, namespace);
 
     const startTime = Date.now();
     const { ContentFiles, ContentManifest } = cds.entities(namespace);
@@ -390,7 +390,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
                 phase: 'METADATA',
                 severity: 'WARN',
                 message: `TutorialMeta upsert: ${metaInitErr.message || metaInitErr}`
-              });
+              }, namespace);
             }
 
             metaUpserted++;
@@ -401,7 +401,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
               phase: 'METADATA',
               severity: 'ERROR',
               message: metaErr.message || String(metaErr)
-            });
+            }, namespace);
           }
         }
         if (metaUpserted > 0) {
@@ -432,7 +432,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
               phase: 'BODYTEXT',
               severity: 'WARN',
               message: bodyErr.message || String(bodyErr)
-            });
+            }, namespace);
           }
         }
         if (bodyUpserted > 0) {
@@ -452,7 +452,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         }
       });
 
-      await logPipelineEnd(pipelineLogId, 'SUCCESS', `Published v${newVersion}: ${slugs.length} uploaded + ${carriedForward} carried = ${mergedFileCount} files, ${mergedTotalSize} bytes`);
+      await logPipelineEnd(pipelineLogId, 'SUCCESS', `Published v${newVersion}: ${slugs.length} uploaded + ${carriedForward} carried = ${mergedFileCount} files, ${mergedTotalSize} bytes`, undefined, namespace);
 
       res.status(201).json({
         version: newVersion,
@@ -475,10 +475,10 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
           console.error('[content/publish] Could not mark manifest FAILED:', updateErr.message);
         }
       }
-      await logPipelineEnd(pipelineLogId, 'FAILED', null, err instanceof Error ? err.message : String(err));
+      await logPipelineEnd(pipelineLogId, 'FAILED', null, err instanceof Error ? err.message : String(err), namespace);
       res.status(500).json({ error: 'Publish failed' });
     } finally {
-      await releaseLock(LOCK_NAME, INSTANCE_ID);
+      await releaseLock(LOCK_NAME, INSTANCE_ID, namespace);
     }
   }
 
@@ -816,7 +816,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     const { targetVersion } = req.body || {};
     const { ContentManifest } = cds.entities(namespace);
 
-    const locked = await acquireLock(LOCK_NAME, INSTANCE_ID, LOCK_DURATION_MS);
+    const locked = await acquireLock(LOCK_NAME, INSTANCE_ID, LOCK_DURATION_MS, namespace);
     if (!locked) {
       return res.status(409).json({ error: 'Another operation is in progress' });
     }
@@ -857,7 +857,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       console.error('[content/rollback]', err instanceof Error ? err.message : String(err));
       res.status(500).json({ error: 'Rollback failed' });
     } finally {
-      await releaseLock(LOCK_NAME, INSTANCE_ID);
+      await releaseLock(LOCK_NAME, INSTANCE_ID, namespace);
     }
   }
 

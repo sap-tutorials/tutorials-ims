@@ -53,19 +53,11 @@ process.env.CONTENT_API_KEY_QA = apiKey;
 cds.env.folders ??= {};
 cds.env.folders.srv = 'srv-qa';
 
-// Serve the QA search service alongside the prod DB schema.
-// The content-store express handlers are registered via server.js bootstrap
-// (cds.on('bootstrap')) when cds.test bootstraps the server.
-//
-// Why db/schema.cds is included: job-lock.js and pipeline-log.js reference
-// cds.entities('com.sap.developers.ims') for JobLocks and PipelineLog
-// respectively. Without the prod schema in the model, acquireLock() throws
-// "Expected argument 'target' to be a CSN entity ... but got: undefined".
-// Including db/schema.cds adds those entities to the in-memory SQLite model
-// so the publish handler's distributed-lock + audit-log path succeeds.
-// The QA content entities (ContentFiles, ContentManifest) come from
-// db-qa/schema.cds, pulled in via the srv-qa/search-service.cds import.
-const project = cds.test('serve', 'srv-qa/search-service.cds', 'db/schema.cds', '--in-memory');
+// Serve only the QA search service. The QA namespace now includes its own
+// JobLocks, PipelineLog, PipelineLogItems, and JobLogItems entities
+// (added in db-qa/schema.cds as part of Task 8.5), so there is no longer any
+// need to load db/schema.cds to satisfy the lock/log paths inside publishHandler.
+const project = cds.test('serve', 'srv-qa/search-service.cds', '--in-memory');
 
 // Test slug must pass the VALID_SLUG regex: /^[a-z0-9][a-z0-9-]*$/
 // (underscores are not allowed — __TEST__qa would return 400)
