@@ -357,6 +357,7 @@ entity PipelineLog : cuid, managed {
   errorDetails    : LargeString;
   metadata        : LargeString;
   statusCriticality : Integer @Core.Computed;
+  virtual cfLogsUrl : String @Core.Computed;
   items           : Composition of many PipelineLogItems on items.pipelineLog = $self;
   jobItems        : Composition of many JobLogItems     on jobItems.jobLog   = $self;
 }

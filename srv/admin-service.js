@@ -6,6 +6,7 @@ import { getNextLegacyId } from './lib/legacy-id.js';
 import { embedSlugs } from './lib/embedding-pipeline.js';
 import { randomUUID } from 'node:crypto';
 import { parsePayload, classify, apply, sharedCache, MAX_BYTES } from './lib/tag-import/index.js';
+import { buildCfLogsUrl } from './lib/cf-logs-link.js';
 
 export default class AdminService extends cds.ApplicationService {
 
@@ -669,6 +670,16 @@ export default class AdminService extends cds.ApplicationService {
         if (row.status === 'SUCCESS') row.statusCriticality = 3;
         else if (row.status === 'FAILED') row.statusCriticality = 1;
         else if (row.status === 'RUNNING') row.statusCriticality = 2;
+        row.cfLogsUrl = buildCfLogsUrl(row);
+      }
+    });
+
+    this.after('READ', 'JobExecutionLog', rows => {
+      for (const row of Array.isArray(rows) ? rows : [rows]) {
+        if (row.status === 'SUCCESS') row.statusCriticality = 3;
+        else if (row.status === 'FAILED') row.statusCriticality = 1;
+        else if (row.status === 'RUNNING') row.statusCriticality = 2;
+        row.cfLogsUrl = buildCfLogsUrl(row);
       }
     });
 

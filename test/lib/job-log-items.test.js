@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import cds from '@sap/cds';
 import { logPipelineStart, logPipelineEnd, logJobItem } from '../../srv/lib/pipeline-log.js';
 import { cleanupPipelineLog } from '../../srv/jobs/cleanup.js';
 import { formatJobSummary } from '../../srv/jobs/scheduler.js';
+import { resetConfigCache } from '../../srv/lib/cf-logs-link.js';
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
 
@@ -119,6 +120,71 @@ describe('JobLogItems', () => {
       expect(status).toBe(200);
       expect(data.jobItems).toHaveLength(1);
       expect(data.jobItems[0].itemKey).toBe('a');
+    });
+  });
+
+  describe('cfLogsUrl exposure', () => {
+    let savedServices, savedApp;
+
+    beforeEach(() => {
+      savedServices = process.env.VCAP_SERVICES;
+      savedApp      = process.env.VCAP_APPLICATION;
+      process.env.VCAP_SERVICES = JSON.stringify({
+        'cloud-logging': [{
+          label: 'cloud-logging',
+          credentials: { 'dashboards-endpoint': 'dashboards-test.example.com' }
+        }]
+      });
+      process.env.VCAP_APPLICATION = JSON.stringify({ application_name: 'tutorials-srv' });
+      resetConfigCache();
+    });
+
+    afterEach(() => {
+      if (savedServices === undefined) delete process.env.VCAP_SERVICES;
+      else process.env.VCAP_SERVICES = savedServices;
+      if (savedApp === undefined) delete process.env.VCAP_APPLICATION;
+      else process.env.VCAP_APPLICATION = savedApp;
+      resetConfigCache();
+    });
+
+    it('exposes cfLogsUrl on JobExecutionLog rows when binding present', async () => {
+      const logId = await logPipelineStart('SCHEDULED_JOB', 'system', { jobName: 'cleanup' });
+      await logPipelineEnd(logId, 'SUCCESS', 'cleanup: processed 0');
+
+      const { status, data } = await project.get(
+        `/admin/JobExecutionLog(${logId})`,
+        adminAuth
+      );
+      expect(status).toBe(200);
+      expect(data.cfLogsUrl).toMatch(/^https:\/\/dashboards-test\.example\.com\/app\/discover/);
+      expect(decodeURIComponent(data.cfLogsUrl)).toContain('cf_app_name : "tutorials-srv"');
+    });
+
+    it('exposes cfLogsUrl on PipelineLog (content pipeline) rows', async () => {
+      const logId = await logPipelineStart('CONTENT_PUBLISH', 'ci');
+      await logPipelineEnd(logId, 'SUCCESS', 'published');
+
+      const { status, data } = await project.get(
+        `/admin/PipelineLog(${logId})`,
+        adminAuth
+      );
+      expect(status).toBe(200);
+      expect(data.cfLogsUrl).toMatch(/^https:\/\/dashboards-test\.example\.com\//);
+    });
+
+    it('returns null cfLogsUrl when binding is absent', async () => {
+      delete process.env.VCAP_SERVICES;
+      delete process.env.VCAP_APPLICATION;
+      resetConfigCache();
+
+      const logId = await logPipelineStart('SCHEDULED_JOB', 'system');
+      await logPipelineEnd(logId, 'SUCCESS');
+
+      const { data } = await project.get(
+        `/admin/JobExecutionLog(${logId})`,
+        adminAuth
+      );
+      expect(data.cfLogsUrl).toBeNull();
     });
   });
 

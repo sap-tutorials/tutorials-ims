@@ -661,6 +661,7 @@ annotate AdminService.PipelineLog with {
   summary       @Common.Label: 'Summary';
   errorDetails  @Common.Label: 'Error Details'  @UI.MultiLineText;
   metadata      @Common.Label: 'Metadata'       @UI.MultiLineText;
+  cfLogsUrl     @Common.Label: 'CF Logs';
 };
 
 annotate AdminService.PipelineLog with @(
@@ -691,7 +692,8 @@ annotate AdminService.PipelineLog with @(
     FieldGroup #General: { Data: [
       { Value: pipelineType },
       { Value: status, Criticality: statusCriticality },
-      { Value: initiator }
+      { Value: initiator },
+      { $Type: 'UI.DataFieldWithUrl', Label: 'CF Logs', Value: cfLogsUrl, Url: cfLogsUrl }
     ]},
     FieldGroup #Timing: { Data: [
       { Value: startedAt },
@@ -740,6 +742,7 @@ annotate AdminService.JobExecutionLog with {
   summary       @Common.Label: 'Job Name';
   errorDetails  @Common.Label: 'Error'  @UI.MultiLineText;
   metadata      @Common.Label: 'Metadata'  @UI.MultiLineText;
+  cfLogsUrl     @Common.Label: 'CF Logs';
 };
 
 annotate AdminService.JobExecutionLog with @(
@@ -769,7 +772,8 @@ annotate AdminService.JobExecutionLog with @(
     FieldGroup #General: { Data: [
       { Value: summary },
       { Value: status, Criticality: statusCriticality },
-      { Value: initiator }
+      { Value: initiator },
+      { $Type: 'UI.DataFieldWithUrl', Label: 'CF Logs', Value: cfLogsUrl, Url: cfLogsUrl }
     ]},
     FieldGroup #Timing: { Data: [
       { Value: startedAt },
