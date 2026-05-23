@@ -10,7 +10,8 @@
     { "name": "$XSAPPNAME.MobileApp",          "description": "Mobile app features" },
     { "name": "$XSAPPNAME.DisplayApp",         "description": "Read-only UI access" },
     { "name": "$XSAPPNAME.ConsolidationScope", "description": "Account merge operations (SCI technical user)" },
-    { "name": "$XSAPPNAME.Everyone",           "description": "Baseline access" }
+    { "name": "$XSAPPNAME.Everyone",           "description": "Baseline access" },
+    { "name": "$XSAPPNAME.Tutorial.Author",    "description": "Preview QA tutorial content from -Contribution repos" }
   ],
   "role-templates": [
     {
@@ -52,6 +53,11 @@
       "name": "Everyone",
       "description": "Baseline",
       "scope-references": ["$XSAPPNAME.Everyone"]
+    },
+    {
+      "name": "Tutorial.Author",
+      "description": "Tutorial author (QA preview access)",
+      "scope-references": ["$XSAPPNAME.Tutorial.Author", "$XSAPPNAME.Everyone"]
     }
   ],
   "role-collections": [
@@ -91,6 +97,11 @@
         "$XSAPPNAME.DisplayApp",
         "$XSAPPNAME.Everyone"
       ]
+    },
+    {
+      "name": "Tutorial Author",
+      "description": "Author preview access to /tutorials-qa",
+      "role-template-references": ["$XSAPPNAME.Tutorial.Author", "$XSAPPNAME.Everyone"]
     }
   ],
   "oauth2-configuration": {
