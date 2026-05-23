@@ -7,6 +7,8 @@ baseURL = "/tutorials-qa/"
 languageCode = "en-us"
 title = "[QA] SAP Tutorials Preview"
 contentDir = "content-qa"
+dataDir   = "data-qa"
+staticDir = "static-qa"
 publishDir = "public-qa"
 
 # QA is internal-only — suppress sitemap. Taxonomy/term pages stay enabled
