@@ -221,3 +221,49 @@ describe('exports/completion-path-to-task', () => {
     expect([chk[1], chk[2], chk[3]]).toEqual(['', '', 'Final boss']); // CHECKPOINT row
   });
 });
+
+describe('exports/step-failures', () => {
+  let mod;
+  beforeAll(async () => { mod = await import('../../../srv/exports/step-failures.js'); });
+
+  beforeEach(async () => {
+    const db = await cds.connect.to('db');
+    const { StepFailures, TaskRecords, Users } = cds.entities('com.sap.developers.ims');
+    await db.run(DELETE.from(StepFailures));
+    await db.run(DELETE.from(TaskRecords));
+    await db.run(DELETE.from(Users));
+  });
+
+  it('emits the FULL legacy IMS_STEP_FAILURE header (13 columns)', () => {
+    expect(mod.legacyHeader).toEqual([
+      'ID', 'TASK_RECORD_ID', 'STEP_NUMBER', 'FAILURE_DATE', 'ERROR_MESSAGE',
+      'RULE', 'QUESTION', 'MATCH', 'ANSWER', 'STEP_URL', 'TUTORIAL_ID', 'TITLE',
+      'CREATED_AT'
+    ]);
+  });
+
+  it('emits empty strings for the 7 missing legacy fields on every row', async () => {
+    const db = await cds.connect.to('db');
+    const { Users, TaskRecords, StepFailures } = cds.entities('com.sap.developers.ims');
+    const userId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+    const trId   = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+    await db.run(INSERT.into(Users).entries({ ID: userId, uuid: userId }));
+    await db.run(INSERT.into(TaskRecords).entries({
+      ID: trId, user_ID: userId, taskLegacyId: 100, taskType: 'TUTORIAL', status: 'IN_PROGRESS', legacyId: 1
+    }));
+    await db.run(INSERT.into(StepFailures).entries({
+      ID: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+      legacyId: 2, taskRecord_ID: trId, stepNumber: 3, errorMessage: 'boom'
+    }));
+
+    const rows = [];
+    for await (const row of mod.rows(db, { pageSize: 100 })) rows.push(row);
+    expect(rows).toHaveLength(1);
+    const [r] = rows;
+    expect(r[1]).toBe(trId);    // TASK_RECORD_ID = UUID string
+    expect(r[2]).toBe(3);       // STEP_NUMBER
+    expect(r[4]).toBe('boom');  // ERROR_MESSAGE
+    // 7 missing columns (indices 5..11) are empty strings
+    [5, 6, 7, 8, 9, 10, 11].forEach(i => expect(r[i]).toBe(''));
+  });
+});
