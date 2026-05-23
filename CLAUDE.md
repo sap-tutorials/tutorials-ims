@@ -239,6 +239,15 @@ Any `MISSING:` line is a bootstrap gap that must be resolved before the matching
 
 ### Step 4: Local deploy
 
+**Before `cd .deploy && mbt build`, you must build BOTH prod and QA Hugo:**
+
+```bash
+npm run build:all                                      # prod hugo → hugo/public/
+npm run fetch-tutorials:qa && npm run build:qa         # QA hugo → hugo/public-qa/
+```
+
+Without the QA build, `static/qa/` will be empty after `mbt build` and `/tutorials-qa/*` routes will 404. The `.deploy/mta.yaml` approuter `commands` block copies `hugo/public-qa/.` into `static/qa/` (and strips the static `tutorials/` subfolder so the dynamic HANA-served content route wins).
+
 ```bash
 cd .deploy
 mbt build
