@@ -1078,8 +1078,8 @@ const isMainModule = process.argv[1] && (
 if (isMainModule) {
   const channelForExport = parseChannel(process.argv)
   const dimensionsPath = channelForExport === 'qa'
-    ? 'hugo/data-qa/image_dimensions.json'
-    : 'hugo/data/image_dimensions.json'
+    ? join(__dirname, '..', 'hugo', 'data-qa', 'image_dimensions.json')
+    : join(__dirname, '..', 'hugo', 'data', 'image_dimensions.json')
   main()
     .then(() => {
       flushDimensionsCache()
