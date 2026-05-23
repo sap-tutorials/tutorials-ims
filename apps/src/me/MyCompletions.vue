@@ -87,6 +87,23 @@ function formatDate(iso: string | null) {
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
+function formatRelative(iso?: string | null): string {
+  if (!iso) return '—'
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return formatDate(iso)
+  const diffMs = Date.now() - then
+  if (diffMs < 0) return 'Just now'
+  const minutes = Math.floor(diffMs / 60_000)
+  if (minutes < 60) return 'Just now'
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days}d ago`
+  const months = Math.floor(days / 30)
+  if (months < 12) return `${months}mo ago`
+  return formatDate(iso)
+}
+
 function formatLevel(level: string | null) {
   if (!level) return '—'
   return level.charAt(0) + level.slice(1).toLowerCase()
