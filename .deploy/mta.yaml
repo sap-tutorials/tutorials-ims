@@ -18,9 +18,8 @@ build-parameters:
       commands:
         - npm --prefix .. install
         - bash -c "cd .. && npx cds build --production"
-        - bash -c "cd .. && npx cds build --production --for db-qa --output-dir gen/db-qa"
-        - bash -c "cd .. && npx cds build --production --for srv-qa --output-dir gen/srv-qa"
         - bash -c "cd ../gen/db/src/gen && jq '.file_suffixes.hdbprocedure={\"plugin_name\":\"com.sap.hana.di.procedure\"}' .hdiconfig > .hdiconfig.tmp && mv .hdiconfig.tmp .hdiconfig"
+        - bash -c "cd ../gen/db-qa/src/gen && jq '.file_suffixes.hdbprocedure={\"plugin_name\":\"com.sap.hana.di.procedure\"}' .hdiconfig > .hdiconfig.tmp && mv .hdiconfig.tmp .hdiconfig"
         - cp ../xs-security.json .
 
 modules:
