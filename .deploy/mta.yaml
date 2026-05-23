@@ -17,6 +17,7 @@ build-parameters:
     - builder: custom
       commands:
         - npm --prefix .. install
+        - bash -c "cd .. && npm run prebuild:parsers-bundle"
         - bash -c "cd .. && npx cds build --production"
         - bash -c "cd ../gen/db/src/gen && jq '.file_suffixes.hdbprocedure={\"plugin_name\":\"com.sap.hana.di.procedure\"}' .hdiconfig > .hdiconfig.tmp && mv .hdiconfig.tmp .hdiconfig"
         - bash -c "cd ../gen/db-qa/src/gen && jq '.file_suffixes.hdbprocedure={\"plugin_name\":\"com.sap.hana.di.procedure\"}' .hdiconfig > .hdiconfig.tmp && mv .hdiconfig.tmp .hdiconfig"
@@ -67,10 +68,20 @@ modules:
     type: nodejs
     path: ../gen/srv-qa
     parameters:
-      memory: 512M
+      memory: 768M
       disk-quota: 1024M
       buildpack: nodejs_buildpack
       instances: 1
+    build-parameters:
+      builder: custom
+      commands:
+        - mkdir -p hugo
+        - cp -r ../../preview-site ./preview-site
+        - cp -r ../../hugo/layouts ./hugo/layouts
+        - cp -r ../../hugo/static  ./hugo/static
+        - cp -r ../../hugo/assets  ./hugo/assets
+        - cp -r ../../hugo/data    ./hugo/data
+        - cp -r ../../hugo/i18n    ./hugo/i18n
     properties:
       EXPOSE_CAP_UI: false
     provides:
