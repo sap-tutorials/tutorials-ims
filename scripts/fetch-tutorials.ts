@@ -112,38 +112,6 @@ async function runWithConcurrency<T>(tasks: Array<() => Promise<T>>, limit: numb
   return results
 }
 
-function humanizeTag(raw: string): string {
-  const value = raw.includes('>') ? raw.split('>').pop()! : raw
-  return value
-    .replace(/\\/g, '')
-    .replace(/[-_]/g, ' ')
-    .trim()
-    .split(/\s+/)
-    .filter(w => w.length > 0)
-    .map(word => {
-      const upper = word.toUpperCase()
-      if (ACRONYMS.has(upper)) return upper
-      return word.charAt(0).toUpperCase() + word.slice(1)
-    })
-    .join(' ')
-}
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-}
-
-function splitPrerequisites(prereqText: string): string[] {
-  if (!prereqText) return []
-  return prereqText
-    .split('\n')
-    .map(line => line.replace(/^\s*-\s+/, '').trim())
-    .map(line => escapeHtml(line))
-    .filter(line => line.length > 0)
-}
-
 type CacheStatus = 'cached' | 'refreshed' | 'fetched'
 
 async function fetchMarkdown(slug: string, repo: string, branch: string, currentSha: string): Promise<{ content: string; cacheStatus: CacheStatus }> {
