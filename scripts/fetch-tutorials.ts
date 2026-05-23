@@ -3,12 +3,8 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { performance } from 'node:perf_hooks'
 import { stringify as yamlStringify } from 'yaml'
-import { extractFrontmatter } from './parsers/frontmatter.js'
-import { parseV2Steps } from './parsers/v2.js'
-import { parseV1Steps } from './parsers/v1.js'
-import { resolveImageURLs } from './parsers/images.js'
 import { flushDimensionsCache, populateImageDimensions, exportDimensionsForHugo } from './parsers/image-dimensions.js'
-import { convertOptionBlocks } from './parsers/options.js'
+import { composeTutorial } from './parsers/compose.js'
 import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, EXCLUDED_REPOS, type DiscoveredTutorial } from './parsers/github.js'
 import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache } from './parsers/cap.js'
 import { parseRulesVr } from './parsers/rules.js'
@@ -712,22 +708,20 @@ async function main() {
         console.log(`${label} [${cacheStatus}]`)
       }
 
-      const { title, description, youWillLearn, prerequisites, level, frontmatter, body } = extractFrontmatter(rawMd)
-
-      const isV2 = frontmatter.parser === 'v2'
-      let processedBody = resolveImageURLs(body, { repo: t.repo, branch: t.branch, slug: t.slug })
-      processedBody = convertOptionBlocks(processedBody, target)
-      processedBody = processedBody.replace(/^<{4,7} .+\n[\s\S]*?^={4,7}\n([\s\S]*?)^>{4,7} .+\n?/gm, '$1')
+      const composed = composeTutorial(rawMd, {
+        repo: t.repo, branch: t.branch, slug: t.slug, target, rewriteImages: true,
+      })
+      const { title, description, youWillLearn, prerequisites, level, frontmatter } = composed
 
       // Populate intrinsic-dimension cache for the Hugo render-image hook.
       // The hook reads site.Data.image_dimensions to emit width/height attrs;
       // markdown attribute syntax can't be used because goldmark renders it
       // as literal text for inline images.
       if (target === 'hugo') {
-        await populateImageDimensions(processedBody)
+        await populateImageDimensions(composed.body)
       }
 
-      const steps = isV2 ? parseV2Steps(processedBody) : parseV1Steps(processedBody)
+      const steps = composed.steps
 
       // Fetch and attach validation questions from rules.vr
       const rulesContent = await fetchRulesVr(t.slug, t.repo, t.branch)
