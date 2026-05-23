@@ -1,0 +1,16 @@
+{{/*
+  Step-aware Joule FAB. Desktop-only (CSS hides ≤960px).
+  Hidden by default; revealed by joule.js when ChatConfig.enabled is true.
+  Click handler in joule.js reads window.opGetCurrentStep() and calls
+  window.joule.openWithStepContext({slug, n, heading}).
+*/}}
+<button
+  id="joule-step-fab"
+  class="joule-step-fab"
+  type="button"
+  hidden
+  aria-label="Get help with this step from Joule"
+>
+  {{ partial "joule-icon.html" (dict "size" "small") }}
+  <span class="joule-step-fab__label">Help with this step</span>
+</button>
