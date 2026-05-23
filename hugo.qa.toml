@@ -16,7 +16,7 @@ disableKinds = ["sitemap"]
 
 # Defense-in-depth: even if Tasks 15/16 ever generate non-tutorial pages under
 # content-qa/, never render mission/group/me/search shells on QA.
-ignoreFiles = ["^content-qa/(missions|groups|me|search)/.*$"]
+ignoreFiles = ["^(missions|groups|me|search)/.*$"]
 
 [params]
   qa = true
@@ -24,6 +24,27 @@ ignoreFiles = ["^content-qa/(missions|groups|me|search)/.*$"]
 
 [build]
   writeStats = true
+
+[markup]
+  [markup.goldmark]
+    [markup.goldmark.renderer]
+      unsafe = true
+    [markup.goldmark.parser]
+      [markup.goldmark.parser.attribute]
+        block = true
+        title = true
+    [markup.goldmark.extensions]
+      [markup.goldmark.extensions.passthrough]
+        enable = true
+        [markup.goldmark.extensions.passthrough.delimiters]
+          block = [['$$', '$$']]
+          inline = [['$', '$']]
+  [markup.highlight]
+    noClasses = false
+    codeFences = true
+    guessSyntax = false
+    lineNos = false
+    tabWidth = 2
 
 # U1 Object Page floorplan as the default tutorial layout — mirrors prod cascade
 # so QA pages render with the same visual fidelity. Path matches the content
