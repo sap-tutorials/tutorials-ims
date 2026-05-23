@@ -143,3 +143,37 @@ describe('exports/task-to-parent', () => {
     expect(rows).toHaveLength(2);
   });
 });
+
+describe('exports/completion-path', () => {
+  let mod;
+  beforeAll(async () => { mod = await import('../../../srv/exports/completion-path.js'); });
+
+  beforeEach(async () => {
+    const db = await cds.connect.to('db');
+    const { CompletionPaths, Missions } = cds.entities('com.sap.developers.ims');
+    await db.run(DELETE.from(CompletionPaths));
+    await db.run(DELETE.from(Missions));
+  });
+
+  it('emits the legacy IMS_COMPLETION_PATH header', () => {
+    expect(mod.legacyHeader).toEqual(['ID', 'NAME', 'MISSION_ID', 'ITEM_ORDER']);
+  });
+
+  it('emits legacyId as ID and mission.legacyId as MISSION_ID', async () => {
+    const db = await cds.connect.to('db');
+    const { Missions, CompletionPaths } = cds.entities('com.sap.developers.ims');
+    const misId = '11111111-1111-1111-1111-111111111111';
+    await db.run(INSERT.into(Missions).entries({ ID: misId, legacyId: 900, title: 'M' }));
+    await db.run(INSERT.into(CompletionPaths).entries({
+      ID: '22222222-2222-2222-2222-222222222222',
+      legacyId: 1000, name: 'P1', mission_ID: misId
+    }));
+
+    const rows = [];
+    for await (const row of mod.rows(db, { pageSize: 100 })) rows.push(row);
+    expect(rows).toHaveLength(1);
+    expect(rows[0][0]).toBe(1000); // ID
+    expect(rows[0][1]).toBe('P1'); // NAME
+    expect(rows[0][2]).toBe(900);  // MISSION_ID
+  });
+});
