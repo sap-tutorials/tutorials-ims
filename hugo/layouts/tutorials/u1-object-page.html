@@ -315,7 +315,7 @@
   </ui5-busy-indicator>
   <div slot="footer" class="op-sheet__footer">
     <ui5-button id="op-sheet-prev" design="Transparent">Previous</ui5-button>
-    <ui5-button id="op-sheet-mark" design="Emphasized">Mark Done</ui5-button>
+    {{ if not site.Params.qa }}<ui5-button id="op-sheet-mark" design="Emphasized">Mark Done</ui5-button>{{ end }}
     <ui5-button id="op-sheet-next" design="Default">Next</ui5-button>
   </div>
 </ui5-dialog>
