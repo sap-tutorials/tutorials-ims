@@ -28,6 +28,7 @@ import "@ui5/webcomponents/dist/Tab.js";
 import "@ui5/webcomponents/dist/RatingIndicator.js";
 import "@ui5/webcomponents/dist/ProgressIndicator.js";
 import "@ui5/webcomponents/dist/Dialog.js";
+import "@ui5/webcomponents/dist/BusyIndicator.js";
 import "@ui5/webcomponents/dist/Title.js";
 import "@ui5/webcomponents-fiori/dist/ShellBar.js";
 import "@ui5/webcomponents-fiori/dist/ShellBarItem.js";

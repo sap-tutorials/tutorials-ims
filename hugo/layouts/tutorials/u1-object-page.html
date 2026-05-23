@@ -127,6 +127,64 @@
     .op-twocol { grid-template-columns: 1fr; }
     .op-twocol > .tutorial-right-col { position: static; }
   }
+
+  /* U18 — Mobile FAB + bottom-sheet dialog */
+  #op-mobile-fab {
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    z-index: 40;
+    display: none;
+  }
+
+  @media (max-width: 960px) {
+    #op-mobile-fab { display: inline-flex; }
+  }
+
+  #op-mobile-sheet::part(content) {
+    padding: 0;
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+
+  #op-mobile-sheet::part(header),
+  #op-mobile-sheet::part(footer) {
+    padding: 0.5rem 1rem;
+  }
+
+  .op-sheet__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    font-weight: 600;
+  }
+
+  .op-sheet__footer {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    /* Used by the wiring script to choose between smooth and instant scroll */
+    :root { --u18-reduce-motion: 1; }
+  }
+
+  #op-mobile-sheet::part(root) {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: 100%;
+    max-height: 80vh;
+    border-radius: 0.75rem 0.75rem 0 0;
+    margin: 0;
+    transform: none;
+    top: auto;
+  }
 </style>
 
 <div class="op-page">
@@ -240,6 +298,28 @@
   </div>
 </div>
 
+<ui5-button id="op-mobile-fab" design="Emphasized" icon="menu2" accessible-name="Open step list">Steps</ui5-button>
+{{ if .Params.steps }}
+<ui5-dialog id="op-mobile-sheet" accessible-name="Tutorial step navigator">
+  <div slot="header" class="op-sheet__header">
+    <span id="op-sheet-title">Step <span id="op-sheet-current">1</span> of <span id="op-sheet-total">{{ len .Params.steps }}</span></span>
+    <ui5-button id="op-sheet-close" design="Transparent" icon="decline" accessible-name="Close step list"></ui5-button>
+  </div>
+  <ui5-busy-indicator id="op-mobile-busy" delay="0">
+    <ui5-list id="op-mobile-step-list" mode="None">
+      {{ range .Params.steps }}
+      <ui5-li data-step-number="{{ .number }}" data-step-target="step-{{ .number }}" type="Active" icon="">{{ .number }}. {{ .title }}</ui5-li>
+      {{ end }}
+    </ui5-list>
+  </ui5-busy-indicator>
+  <div slot="footer" class="op-sheet__footer">
+    <ui5-button id="op-sheet-prev" design="Transparent">Previous</ui5-button>
+    <ui5-button id="op-sheet-mark" design="Emphasized">Mark Done</ui5-button>
+    <ui5-button id="op-sheet-next" design="Default">Next</ui5-button>
+  </div>
+</ui5-dialog>
+{{ end }}
+
 {{ with .Params.steps }}
 <script id="tutorial-data" type="application/json">{{ . | jsonify }}</script>
 {{ end }}
@@ -350,5 +430,145 @@
     }
     setTimeout(syncCompletion, 250);
   }
+
+  // U18 — Mobile bottom-sheet step navigator
+  const fab = document.getElementById("op-mobile-fab");
+  const sheet = document.getElementById("op-mobile-sheet");
+  const list = document.getElementById("op-mobile-step-list");
+  const busy = document.getElementById("op-mobile-busy");
+  const closeBtn = document.getElementById("op-sheet-close");
+  const prevBtn = document.getElementById("op-sheet-prev");
+  const nextBtn = document.getElementById("op-sheet-next");
+  const markBtn = document.getElementById("op-sheet-mark");
+  const currentLabel = document.getElementById("op-sheet-current");
+  const opWizard = document.getElementById("op-step-wizard");
+
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const SCROLL_DELAY = reduceMotion ? 0 : 400;
+
+  const tutorialSlug =
+    document.querySelector("#progress-bar")?.getAttribute("data-slug") ||
+    document.querySelector("#tutorial-rating-mount")?.getAttribute("data-slug") ||
+    "";
+
+  function getStepCount() {
+    return list?.querySelectorAll("ui5-li").length || 0;
+  }
+
+  function getCurrentStepFromWizard() {
+    if (!opWizard) return 1;
+    const steps = Array.from(opWizard.querySelectorAll("ui5-wizard-step"));
+    const idx = steps.findIndex((s) => s.hasAttribute("selected"));
+    return idx >= 0 ? idx + 1 : 1;
+  }
+
+  function getCurrentStepFromViewport() {
+    const sections = Array.from(document.querySelectorAll(".tutorial-step"));
+    if (!sections.length) return 1;
+    const center = window.innerHeight / 2;
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    sections.forEach((el, i) => {
+      const rect = el.getBoundingClientRect();
+      if (rect.bottom < 0 || rect.top > window.innerHeight) return;
+      const dist = Math.abs(rect.top - center);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = i;
+      }
+    });
+    return bestIdx + 1;
+  }
+
+  function getCurrentStep() {
+    return opWizard ? getCurrentStepFromWizard() : getCurrentStepFromViewport();
+  }
+
+  function setBoundaryDisabled(current, total) {
+    if (prevBtn) prevBtn.disabled = current <= 1;
+    if (nextBtn) nextBtn.disabled = current >= total;
+  }
+
+  function syncListFromDom() {
+    if (!list) return;
+    const total = getStepCount();
+    const current = getCurrentStep();
+    const completed = new Set(
+      Array.from(document.querySelectorAll(".tutorial-step.completed")).map((el) =>
+        Number(el.dataset.step || el.id.replace(/^step-/, "")),
+      ),
+    );
+    list.querySelectorAll("ui5-li").forEach((li) => {
+      const n = Number(li.dataset.stepNumber);
+      li.toggleAttribute("selected", n === current);
+      if (completed.has(n)) li.setAttribute("icon", "accept");
+      else li.removeAttribute("icon");
+    });
+    if (currentLabel) currentLabel.textContent = String(current);
+    setBoundaryDisabled(current, total);
+  }
+
+  function scrollToStep(n) {
+    const el = document.getElementById(`step-${n}`);
+    if (!el) return false;
+    el.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+    return true;
+  }
+
+  function openSheet() {
+    if (!sheet) return;
+    syncListFromDom();
+    sheet.setAttribute("open", "");
+  }
+
+  function closeSheet() {
+    sheet?.removeAttribute("open");
+  }
+
+  fab?.addEventListener("click", openSheet);
+  closeBtn?.addEventListener("click", closeSheet);
+
+  list?.addEventListener("item-click", (e) => {
+    const item = e.detail?.item;
+    const n = Number(item?.dataset?.stepNumber);
+    if (!n || !scrollToStep(n)) return;
+    if (busy) busy.active = true;
+    setTimeout(() => {
+      if (busy) busy.active = false;
+      closeSheet();
+    }, SCROLL_DELAY);
+  });
+
+  prevBtn?.addEventListener("click", () => {
+    const current = getCurrentStep();
+    if (current <= 1) return;
+    if (scrollToStep(current - 1)) {
+      requestAnimationFrame(() => requestAnimationFrame(syncListFromDom));
+    }
+  });
+
+  nextBtn?.addEventListener("click", () => {
+    const current = getCurrentStep();
+    const total = getStepCount();
+    if (current >= total) return;
+    if (scrollToStep(current + 1)) {
+      requestAnimationFrame(() => requestAnimationFrame(syncListFromDom));
+    }
+  });
+
+  markBtn?.addEventListener("click", () => {
+    const current = getCurrentStep();
+    if (typeof window.completeStep === "function" && tutorialSlug) {
+      window.completeStep(tutorialSlug, current);
+      syncListFromDom();
+    }
+  });
+
+  const stepObserver = new MutationObserver(() => {
+    if (sheet?.hasAttribute("open")) syncListFromDom();
+  });
+  const opStepsRoot = document.querySelector(".tutorial-steps");
+  if (opStepsRoot) stepObserver.observe(opStepsRoot, { attributes: true, subtree: true, attributeFilter: ["class"] });
+  if (opWizard) stepObserver.observe(opWizard, { attributes: true, subtree: true, attributeFilter: ["selected"] });
 </script>
 {{ end }}
