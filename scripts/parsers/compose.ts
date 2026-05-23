@@ -3,7 +3,7 @@ import { resolveImageURLs } from './images.js'
 import { convertOptionBlocks } from './options.js'
 import { parseV1Steps } from './v1.js'
 import { parseV2Steps } from './v2.js'
-import type { TutorialStep } from './types.js'
+import type { TutorialStep, TutorialFrontmatter } from './types.js'
 
 export interface ComposeOpts {
   repo: string
@@ -17,9 +17,9 @@ export interface ComposeResult {
   title: string
   description: string
   youWillLearn: string[]
-  prerequisites: string[]
+  prerequisites: string
   level: string
-  frontmatter: Record<string, unknown>
+  frontmatter: TutorialFrontmatter
   steps: TutorialStep[]
   body: string
 }
