@@ -177,3 +177,47 @@ describe('exports/completion-path', () => {
     expect(rows[0][2]).toBe(900);  // MISSION_ID
   });
 });
+
+describe('exports/completion-path-to-task', () => {
+  let mod;
+  beforeAll(async () => { mod = await import('../../../srv/exports/completion-path-to-task.js'); });
+
+  beforeEach(async () => {
+    const db = await cds.connect.to('db');
+    const { CompletionPathItems, CompletionPaths, Tutorials, Groups, Prizes } = cds.entities('com.sap.developers.ims');
+    await db.run(DELETE.from(CompletionPathItems));
+    await db.run(DELETE.from(CompletionPaths));
+    await db.run(DELETE.from(Tutorials));
+    await db.run(DELETE.from(Groups));
+    await db.run(DELETE.from(Prizes));
+  });
+
+  it('emits the legacy IMS_COMPLETION_PATH_TO_TASK header', () => {
+    expect(mod.legacyHeader).toEqual(['PATH_ID', 'TUTORIAL_ID', 'GROUP_ID', 'CHECKPOINT_TITLE', 'PRIZE_ID', 'ITEM_ORDER']);
+  });
+
+  it('populates exactly one of TUTORIAL_ID/GROUP_ID/CHECKPOINT_TITLE per row', async () => {
+    const db = await cds.connect.to('db');
+    const { CompletionPaths, CompletionPathItems, Tutorials, Groups } = cds.entities('com.sap.developers.ims');
+    const pathId = '11111111-1111-1111-1111-111111111111';
+    const tutId  = '22222222-2222-2222-2222-222222222222';
+    const grpId  = '33333333-3333-3333-3333-333333333333';
+    await db.run(INSERT.into(CompletionPaths).entries({ ID: pathId, legacyId: 1000, name: 'P' }));
+    await db.run(INSERT.into(Tutorials).entries({ ID: tutId, legacyId: 100, title: 'T', slug: 't' }));
+    await db.run(INSERT.into(Groups).entries({ ID: grpId, legacyId: 200, title: 'G' }));
+    await db.run(INSERT.into(CompletionPathItems).entries([
+      { ID: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', legacyId: 1, path_ID: pathId, taskType: 'TUTORIAL', tutorial_ID: tutId, taskLegacyId: 100, itemOrder: 1 },
+      { ID: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', legacyId: 2, path_ID: pathId, taskType: 'GROUP', group_ID: grpId, taskLegacyId: 200, itemOrder: 2 },
+      { ID: 'cccccccc-cccc-cccc-cccc-cccccccccccc', legacyId: 3, path_ID: pathId, taskType: 'CHECKPOINT', checkpointTitle: 'Final boss', itemOrder: 3 }
+    ]));
+
+    const rows = [];
+    for await (const row of mod.rows(db, { pageSize: 100 })) rows.push(row);
+    expect(rows).toHaveLength(3);
+
+    const [tut, grp, chk] = rows;
+    expect([tut[1], tut[2], tut[3]]).toEqual([100, '', '']); // TUTORIAL row: TUTORIAL_ID set
+    expect([grp[1], grp[2], grp[3]]).toEqual(['', 200, '']); // GROUP row: GROUP_ID set
+    expect([chk[1], chk[2], chk[3]]).toEqual(['', '', 'Final boss']); // CHECKPOINT row
+  });
+});
