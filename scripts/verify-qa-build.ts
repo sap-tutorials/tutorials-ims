@@ -8,7 +8,8 @@ const FORBIDDEN = [
   'op-mark-complete',
   'profile-timeline',
   'progress-bar',
-  'leaderboard'
+  'leaderboard',
+  'op-sheet-mark'
 ];
 
 export function findForbiddenMarkers(html: string): string[] {
