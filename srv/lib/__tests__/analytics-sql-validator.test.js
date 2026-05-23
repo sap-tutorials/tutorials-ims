@@ -71,4 +71,16 @@ describe('analytics-sql-validator', () => {
     const r = validateSelect('SELECT * FROM TaskRecords', ALLOWED)
     expect(r.selectedColumns).toEqual([])
   })
+
+  it('rejects scalar subquery in SELECT against a non-allowlisted table', () => {
+    expect(() => validateSelect(
+      'SELECT (SELECT id FROM SecretTable) AS x FROM TaskRecords', ALLOWED))
+      .toThrow(/not.*allow/i)
+  })
+
+  it('rejects subquery in HAVING against a non-allowlisted table', () => {
+    expect(() => validateSelect(
+      'SELECT user_id, count(*) c FROM TaskRecords GROUP BY user_id HAVING c > (SELECT count(*) FROM SecretTable)',
+      ALLOWED)).toThrow(/not.*allow/i)
+  })
 })

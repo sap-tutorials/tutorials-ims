@@ -1,6 +1,7 @@
 const { Parser } = require('node-sql-parser')
 
 const MAX_LEN = 4096
+// node-sql-parser is stateless: a single Parser instance is safe to share across calls.
 const parser = new Parser()
 
 function validateSelect(sql, allowedTableNames) {
@@ -10,6 +11,7 @@ function validateSelect(sql, allowedTableNames) {
   if (sql.length > MAX_LEN) {
     throw new Error(`SQL length ${sql.length} exceeds maximum ${MAX_LEN}`)
   }
+  // Deliberately strict: rejecting a literal '--' is safer than risking a missed comment injection.
   if (sql.includes('--') || sql.includes('/*')) {
     throw new Error('SQL comments are not allowed')
   }
@@ -59,6 +61,10 @@ function collectFromClause(ast, out) {
     }
   }
   if (ast.where) collectSubqueries(ast.where, out)
+  if (ast.having) collectSubqueries(ast.having, out)
+  if (ast.columns && Array.isArray(ast.columns)) {
+    for (const col of ast.columns) collectSubqueries(col, out)
+  }
 }
 
 function collectSubqueries(node, out) {
