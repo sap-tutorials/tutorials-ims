@@ -15,6 +15,7 @@ import { createRateLimiter, RateLimitError } from './lib/chat-rate-limit.js';
 import { createIpRateLimiter, ipRateLimitMiddleware } from './lib/ip-rate-limit.js';
 import { streamChat, toolsForContext } from './lib/chat-orchestrator.js';
 import { computeEmbeddingStats } from './lib/embedding-stats.js';
+import { registerExportsBridge, wireExportsBridge } from './exports/express-bridge.js';
 
 // Late-bound POST /chat/stream handler. Registered in 'bootstrap' (before CAP
 // mounts ChatService at /chat, which would otherwise swallow /chat/stream as
@@ -181,6 +182,12 @@ cds.on('bootstrap', (app) => {
   // passes the request through to the AnalyticsService OData layer registered by CDS.
   app.use('/admin/analytics', (req, res, next) => analyticsOdataRouter(req, res, next));
 
+  // Reserve GET /admin/exports/exportLegacyData BEFORE CAP mounts ExportsService at
+  // /admin/exports. Without this, AdminService's OData adapter (mounted at /admin)
+  // would intercept the path first and return "Invalid resource path". Auth +
+  // streaming logic are bound lazily in 'served' via wireExportsBridge().
+  registerExportsBridge(app);
+
   // Per-IP rate limit for the public /search endpoint. Mounted in 'bootstrap'
   // so it runs BEFORE CAP wires SearchService at /search. Defaults: 60 req/min
   // per IP; tune via SEARCH_RATE_LIMIT_MAX / SEARCH_RATE_LIMIT_WINDOW_MS.
@@ -271,6 +278,10 @@ cds.on('served', async () => {
   } else {
     cds.log('analytics').warn('AnalyticsService OData adapter not found — /admin/analytics may 404');
   }
+
+  // Wire the real streaming handler for GET /admin/exports/exportLegacyData now
+  // that cds.middlewares (context + auth) are available.
+  wireExportsBridge();
 
   if (process.env.NODE_ENV !== 'test') {
     registerJobs();
