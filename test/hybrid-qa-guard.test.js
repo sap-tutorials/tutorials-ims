@@ -48,6 +48,21 @@ describe('hybrid-qa guard — helpers', () => {
       expect(isMutationSql(null)).toBe(false);
       expect(isMutationSql({ SELECT: { from: 'X' } })).toBe(false);
     });
+
+    it('detects mutating SQL hidden behind a leading line comment', () => {
+      expect(isMutationSql('-- noisy comment\nINSERT INTO foo VALUES (1)')).toBe(true);
+      expect(isMutationSql('   -- a\n  -- b\n DELETE FROM foo')).toBe(true);
+    });
+
+    it('detects mutating SQL hidden behind a leading block comment', () => {
+      expect(isMutationSql('/* hi */ INSERT INTO foo VALUES (1)')).toBe(true);
+      expect(isMutationSql('/* a */\n /* b */ UPDATE foo SET x=1')).toBe(true);
+    });
+
+    it('still passes SELECT through when prefixed with comments', () => {
+      expect(isMutationSql('-- header\nSELECT * FROM foo')).toBe(false);
+      expect(isMutationSql('/* hi */ SELECT 1')).toBe(false);
+    });
   });
 
   describe('assertWritesAllowed', () => {
@@ -108,6 +123,33 @@ describe('hybrid-qa guard — helpers', () => {
       expect(() =>
         assertSlugIsTest({ name: 'com.sap.developers.ims.qa.RepoCatalog' }, { slug: 'real' })
       ).toThrow(/slug must start with "__TEST__"/);
+    });
+
+    it('fail-closed: unknown entity name + row with slug + writes allowed throws', () => {
+      process.env.ALLOW_HYBRID_WRITES = 'true';
+      // Entity name doesn't match the hardcoded SLUG_KEYED_ENTITIES set,
+      // but the row carries a slug — must still enforce the prefix.
+      expect(() =>
+        assertSlugIsTest('com.sap.developers.ims.qa.MysteryEntity', { slug: 'real-slug' })
+      ).toThrow(/slug must start with "__TEST__"/);
+      // Empty short-name extraction (target shape weirdness).
+      expect(() =>
+        assertSlugIsTest({}, { slug: 'real-slug' })
+      ).toThrow(/slug must start with "__TEST__"/);
+    });
+
+    it('fail-closed: unknown entity name without slug field is still a no-op', () => {
+      process.env.ALLOW_HYBRID_WRITES = 'true';
+      expect(() =>
+        assertSlugIsTest('com.sap.developers.ims.qa.MysteryEntity', { foo: 'bar' })
+      ).not.toThrow();
+    });
+
+    it('fail-closed: unknown entity name with __TEST__ slug passes', () => {
+      process.env.ALLOW_HYBRID_WRITES = 'true';
+      expect(() =>
+        assertSlugIsTest('com.sap.developers.ims.qa.MysteryEntity', { slug: '__TEST__safe' })
+      ).not.toThrow();
     });
   });
 });
@@ -175,5 +217,21 @@ describe('hybrid-qa guard — wrapServiceRun', () => {
     } catch (err) {
       expect(err.message).toContain('TRUNCATE TABLE');
     }
+  });
+
+  it('rejects mutation hidden behind a leading line comment', async () => {
+    const srv = wrapServiceRun(fakeSrv());
+    await expect(
+      srv.run('-- noisy comment\nINSERT INTO foo VALUES (1)')
+    ).rejects.toThrow('blocked');
+    expect(srv.calls).toHaveLength(0);
+  });
+
+  it('rejects mutation hidden behind a leading block comment', async () => {
+    const srv = wrapServiceRun(fakeSrv());
+    await expect(
+      srv.run('/* hi */ INSERT INTO foo VALUES (1)')
+    ).rejects.toThrow('blocked');
+    expect(srv.calls).toHaveLength(0);
   });
 });

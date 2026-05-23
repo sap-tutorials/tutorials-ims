@@ -41,9 +41,33 @@ function shortStack() {
   return raw.split('\n').slice(2, 6).join('\n');
 }
 
+/**
+ * Strip leading SQL comments (line `-- …\n` and block `/* … *\/`) so the
+ * mutation regex sees the first real keyword. Loops because comments can
+ * stack: e.g. `-- a\n/* b *\/ INSERT …`.
+ */
+function stripLeadingSqlComments(sql) {
+  let s = sql.trimStart();
+  // Loop until no leading comment remains.
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    if (s.startsWith('--')) {
+      const nl = s.indexOf('\n');
+      s = nl >= 0 ? s.slice(nl + 1).trimStart() : '';
+    } else if (s.startsWith('/*')) {
+      const end = s.indexOf('*/');
+      s = end >= 0 ? s.slice(end + 2).trimStart() : '';
+    } else {
+      break;
+    }
+  }
+  return s;
+}
+
 export function isMutationSql(sql) {
   if (typeof sql !== 'string') return false;
-  return MUTATION_RE.test(sql.trim().toUpperCase());
+  const stripped = stripLeadingSqlComments(sql);
+  return MUTATION_RE.test(stripped.toUpperCase());
 }
 
 export function assertWritesAllowed(opLabel) {
@@ -77,17 +101,44 @@ function entityName(target) {
 /**
  * Throws if `target` is a slug-keyed entity and the supplied entries do
  * not all use a `__TEST__` slug. No-op for entities without a `slug` key.
+ *
+ * Fail-closed: if the entity short-name doesn't match the hardcoded set
+ * (e.g. typo, unrecognized CDS target shape, empty extraction), but the
+ * row payload still carries a `slug` field, enforce the prefix anyway.
+ * This keeps a real-prefix slug from sneaking in when env writes are
+ * allowed but the entity name hint is missing.
  */
 export function assertSlugIsTest(target, entries) {
   const name = entityName(target);
-  if (!SLUG_KEYED_ENTITIES.has(name)) return;
+  const known = SLUG_KEYED_ENTITIES.has(name);
   const list = Array.isArray(entries) ? entries : entries ? [entries] : [];
+
+  // Fast path: known slug-keyed entity — always check.
+  if (known) {
+    for (const row of list) {
+      if (!row || typeof row !== 'object') continue;
+      const slug = row.slug;
+      if (typeof slug !== 'string' || !slug.startsWith(TEST_PREFIX)) {
+        throw new Error(
+          `[hybrid-qa guard] write to ${name} rejected — slug must start with "${TEST_PREFIX}", got: ${JSON.stringify(slug)}\n` +
+          shortStack()
+        );
+      }
+    }
+    return;
+  }
+
+  // Fail-closed path: unknown entity name but row carries a slug. Only
+  // enforce when writes are enabled — otherwise assertWritesAllowed will
+  // have already blocked the call before we got here.
+  if (process.env.ALLOW_HYBRID_WRITES !== 'true') return;
   for (const row of list) {
     if (!row || typeof row !== 'object') continue;
+    if (!Object.prototype.hasOwnProperty.call(row, 'slug')) continue;
     const slug = row.slug;
     if (typeof slug !== 'string' || !slug.startsWith(TEST_PREFIX)) {
       throw new Error(
-        `[hybrid-qa guard] write to ${name} rejected — slug must start with "${TEST_PREFIX}", got: ${JSON.stringify(slug)}\n` +
+        `[hybrid-qa guard] write to ${name || '<unknown entity>'} rejected — row carries slug field; slug must start with "${TEST_PREFIX}", got: ${JSON.stringify(slug)}\n` +
         shortStack()
       );
     }
@@ -172,3 +223,17 @@ cds.on('connect', (srv) => {
     wrapServiceRun(srv);
   }
 });
+
+// Cover the case where `cds.db` (or any service) was already connected
+// before this setup file was evaluated — the connect listener above only
+// fires for *future* connects, so we'd otherwise never wrap. wrapServiceRun
+// is idempotent (guarded by __hybridQaGuarded), so it's safe to also call
+// it here for whatever already exists.
+if (cds.db) {
+  wrapServiceRun(cds.db);
+}
+if (cds.services && typeof cds.services === 'object') {
+  for (const srv of Object.values(cds.services)) {
+    wrapServiceRun(srv);
+  }
+}

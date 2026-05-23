@@ -20,7 +20,7 @@
  * the existing content-service tests against the local CAP project.
  */
 
-import cds from '@sap/cds/lib';
+import cds from '@sap/cds';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';

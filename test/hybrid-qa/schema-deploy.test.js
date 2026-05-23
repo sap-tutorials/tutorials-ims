@@ -9,7 +9,7 @@
  * Read-only — no writes, no guard interactions.
  */
 
-import cds from '@sap/cds/lib';
+import cds from '@sap/cds';
 import { describe, it, expect } from 'vitest';
 
 describe('hybrid-qa schema deploy', () => {
