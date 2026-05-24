@@ -118,11 +118,15 @@ view MyTutorialsView as
   };
 ```
 
-**`$user` binding:** `srv/author-service.js` registers a `before('READ', 'MyTutorials')` handler that appends `where ownerEmail = req.user.id`. (XSUAA puts the email in `req.user.id` for SAP IDP users.) Sage's call stays clean: `GET /author/MyTutorials?$top=50`.
+**Identity model:** In this codebase `req.user.id` is the JWT `sub` / `user_uuid` claim and maps to `Users.uuid` — *not* email. (`req.user.attr.email` is where XSUAA exposes the email.) The view (Section 1 above) joins `TutorialMeta.ownerEmail` to `Users.email` to bridge the data layer; auth gating filters on `Users.uuid`. Email is the *data join key*; uuid is the *auth identity*.
 
-**Action ownership check:** The `reviewTutorial` and `snoozeTutorial` handlers validate that `tutorialId` belongs to `req.user.id` via the same view before delegating. The shared action implementation moves to `srv/lib/tutorial-review.js`; AdminService and AuthorService both call it. Admin behavior is unchanged.
+**`$user` binding:** `srv/author-service.js` registers a `before('READ', 'MyTutorials')` handler that appends `where ownerUserId = req.user.id` (matching `Users.uuid`, exposed as `ownerUserId` in the view). Sage's call stays clean: `GET /author/MyTutorials?$top=50`. The added WHERE clause composes transparently with `Prefer: odata.track-changes` — CAP applies both, so delta tracking and per-user filtering coexist.
+
+**Action ownership check:** The `reviewTutorial` and `snoozeTutorial` handlers re-resolve the owner inside the same transaction by reading `MyTutorialsView` filtered to `tutorialId` and `req.user.id`; if zero rows, return 403. Eliminates the cached-value race noted in Risks. The shared action implementation moves to `srv/lib/tutorial-review.js`; AdminService and AuthorService both call it. Admin behavior is unchanged.
 
 **`inner join Users` is intentional:** Tutorials whose `ownerEmail` doesn't resolve to a known `Users` row are orphaned data and shouldn't appear in any author's `MyTutorials`. The backfill CSV surfaces them for human cleanup.
+
+**Inherited fields:** `slug`, `title`, `primaryTag`, `status` on `Tutorials` come from the `TaskBase` aspect (`db/schema.cds:17`). They're real columns on the deployed table — the view selects them as ordinary fields, no special aspect handling needed.
 
 ### Section 3 — Soft gaps
 
@@ -141,7 +145,7 @@ Annotate the high-volume read projections so Sage can opt into incremental sync 
 @readonly entity MyTutorials as projection on ims.MyTutorialsView;
 ```
 
-First response includes a `@odata.deltaLink`; Sage stores it (replacing `sync_status.last_sync_*`) and uses it for the next refresh. Clients that don't ask for `Prefer: odata.track-changes` get normal pagination — zero impact on existing consumers of `/admin/Tutorials`.
+First response includes a `@odata.deltaLink`; Sage stores it (replacing `sync_status.last_sync_*`) and uses it for the next refresh. Clients that don't ask for `Prefer: odata.track-changes` get normal pagination — zero impact on existing consumers of `/admin/Tutorials`. Delta tracking composes with the `before('READ', 'MyTutorials')` filter — both end up as WHERE-clause predicates and CAP applies them together.
 
 #### 3b. `/health/auth`
 
@@ -175,12 +179,14 @@ Recorded as a deliberate non-goal. Sage's `github_issues` / `github_prs` / `tuto
 ### Unit (`test/unit/author-service.test.js`)
 
 In-memory SQLite. Cases:
-- `MyTutorials` filters by `req.user.id` — seed two users, two metas; user A sees only their row.
+
+- `MyTutorials` filters by `req.user.id` against `Users.uuid` — seed two users, two metas; user A sees only their row.
 - `MyTutorials` excludes orphaned data — meta with `ownerEmail` not in `Users` returns zero rows for any caller.
-- `reviewTutorial` succeeds for owner, returns 403 for non-owner.
+- `reviewTutorial` succeeds for owner, returns 403 for non-owner (resolved inside the action via `MyTutorialsView`).
 - `snoozeTutorial` accepts `days ∈ [1, 365]`, rejects out-of-range.
 - `Tags` readable by `Tutorial.Author`, denied for anonymous.
 - `/health/auth` returns 401 anonymous, 200 with scopes authenticated.
+- `MyTutorials` with `$apply=groupby((status))` still scopes to the calling user (covers OData aggregate-bypass).
 
 ### Hybrid (`test/hybrid/author-service.test.js`)
 
@@ -212,6 +218,10 @@ Single PR, single MTA deploy. File order in the PR (so the runtime sees the colu
 `cds build` regenerates HDI artifacts; `mbt build && cf deploy` from `.deploy/` picks them up. The new column is nullable — `cf deploy` won't fail on existing rows.
 
 **Role collection:** `Tutorial.Author` already exists in `xs-security.json` (used by `tutorials-srv-qa`). Authors who already have it for QA preview get `/author/*` access automatically. No xsuaa update needed.
+
+**Deploy verification:** Adding `managed` to `TutorialMeta` causes CAP to emit `createdAt`/`createdBy`/`modifiedAt`/`modifiedBy` on `/admin/TutorialMeta` reads. Extra fields are additive in OData, but the admin UI's TutorialMeta screens should be smoke-checked post-deploy to confirm no field-control or annotation reference breaks.
+
+**Backfill cutover gate:** Run the backfill against DEV first; if more than 10% of `TutorialMeta` rows land in `.migration-data/ownerEmail-unresolved.csv`, hold the production cutover until the resolution list is reviewed. The orphan filter (Section 2's `inner join Users`) means high unresolved counts translate directly to authors seeing empty `MyTutorials`.
 
 ## Rollback
 
