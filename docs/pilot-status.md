@@ -155,7 +155,7 @@ Preserved for traceability. The original pilot validated UI5 Web Components as t
 
 **Original branch:** `ui-pilot/u0-u3-u5` (long-since merged).
 
-**Pilot scope from [../improvements.md](../improvements.md):** adopt UI5 Web Components foundation, replace the header with `ui5-shellbar`, add declarative `ui5-message-strip` banners on tutorial pages.
+**Pilot scope from [improvements.md](improvements.md):** adopt UI5 Web Components foundation, replace the header with `ui5-shellbar`, add declarative `ui5-message-strip` banners on tutorial pages.
 
 **Dependencies added:** `@ui5/webcomponents`, `@ui5/webcomponents-fiori`, `@ui5/webcomponents-icons` (all `^2.22`).
 
@@ -194,5 +194,5 @@ Preserved for traceability. The original pilot validated UI5 Web Components as t
 
 - Per-feature delivery details and validation notes: project memory entries U0 through U18, plus shipped-feature project memories
 - Architecture deep-dives: this folder ([docs/](.))
-- Improvement backlog source: [../improvements.md](../improvements.md)
+- Improvement backlog source: [improvements.md](improvements.md)
 - Project conventions and gotchas: [../CLAUDE.md](../CLAUDE.md)

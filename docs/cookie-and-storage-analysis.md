@@ -133,7 +133,7 @@ The Joule cache writes `{ firstName, familyName, email, id }` to `sessionStorage
 
 **Risk:** A tutorial author can embed:
 - A YouTube `<iframe src="youtube.com/embed/...">` — sets YouTube cookies on first paint
-- A `<script>` tag (CSP currently allows `'unsafe-inline'` — see [TODO.md §14.2](../TODO.md#L289))
+- A `<script>` tag (CSP currently allows `'unsafe-inline'` — see [TODO.md §14.2](TODO.md#L289))
 - An `<img src="https://tracker.example/pixel.gif">` — sets third-party cookies
 
 **Compliance impact:** Any of these would create cookie-setting before consent. This is the **largest unbounded risk** on the public surface — it depends entirely on what authors write in markdown.
@@ -184,7 +184,7 @@ When analytics is added (Adobe Analytics tag, Matomo, or similar):
 
 ## 6. Recommended Next Actions
 
-Ordered by impact and dependency, suitable for the work tracked in [TODO.md §21 — Cookie usage report & consent banner](../TODO.md#L549).
+Ordered by impact and dependency, suitable for the work tracked in [TODO.md §21 — Cookie usage report & consent banner](TODO.md#L549).
 
 1. **Validate this inventory with privacy/legal** — confirm the §2/§3 entries and their proposed consent classifications.
 2. **Publish a cookie policy page** at `/cookies` linked from the footer, listing the entries from §2 and §3.

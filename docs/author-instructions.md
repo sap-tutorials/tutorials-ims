@@ -182,7 +182,7 @@ entity Books : managed {
 
 The notification step (6) is wired by adding a small workflow file to your tutorial repo — see [tutorial-repo-dispatch.yml](tutorial-repo-dispatch.yml). Org admins typically handle this once per repo.
 
-> **TODO (Author Workflow)**: There is no formal editorial review gate today. PRs are reviewed by whoever is around in the source repo. A defined "Author QA" lane (editorial review, accuracy check, sign-off) is planned — see [TODO.md §21](../TODO.md) "System QA vs. Author QA".
+> **TODO (Author Workflow)**: There is no formal editorial review gate today. PRs are reviewed by whoever is around in the source repo. A defined "Author QA" lane (editorial review, accuracy check, sign-off) is planned — see [TODO.md §21](TODO.md) "System QA vs. Author QA".
 
 ---
 
@@ -204,7 +204,7 @@ To force a re-fetch of just-merged content, delete `.tutorial-cache/<your-slug>.
 
 A `GITHUB_TOKEN` environment variable with `repo:read` scope is recommended; without it you may hit GitHub rate limits.
 
-> **TODO (VS Code Extension)**: A VS Code extension that previews a tutorial as you type — without the clone+fetch dance — is on the roadmap. See [TODO.md §21](../TODO.md) "VS Code Extension (esp. Preview)".
+> **TODO (VS Code Extension)**: A VS Code extension that previews a tutorial as you type — without the clone+fetch dance — is on the roadmap. See [TODO.md §21](TODO.md) "VS Code Extension (esp. Preview)".
 
 ---
 
@@ -273,7 +273,7 @@ This reverts the entire content set to the previous manifest version in seconds.
 
 ## 9. Known gaps and near-term improvements
 
-These items are tracked in [TODO.md §21](../TODO.md) and are listed here so authors know what to expect — and what *not* to expect — from the current workflow.
+These items are tracked in [TODO.md §21](TODO.md) and are listed here so authors know what to expect — and what *not* to expect — from the current workflow.
 
 | Gap | Current state | Planned |
 |-----|---------------|---------|
@@ -306,4 +306,4 @@ If any of these items become a blocker for your work, mention it on the tracking
 - [content-pipeline.md](content-pipeline.md) — the full technical pipeline (fetch → parse → Hugo → HANA)
 - [hugo-migration.md](hugo-migration.md) — why Hugo, layout conventions
 - [tutorial-repo-dispatch.yml](tutorial-repo-dispatch.yml) — the GitHub Action your repo needs in order to trigger rebuilds
-- [TODO.md §21 Future Work](../TODO.md) — open items relevant to authors
+- [TODO.md §21 Future Work](TODO.md) — open items relevant to authors
