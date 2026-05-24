@@ -1,6 +1,6 @@
 # Tutorial Improvements
 
-Forward-looking roadmap for tutorial-page enhancements that the new stack (CAP + HANA + embeddings + STOMP + modern UI) makes possible. AEM could not host most of these.
+Forward-looking roadmap for tutorial-page enhancements that the new stack (CAP + HANA + embeddings + Socket.IO + modern UI) makes possible. AEM could not host most of these.
 
 Each item lists: **what**, **why it matters**, **starting point in the code**, **rough effort**, **main tradeoff**. Items are roughly ordered by leverage / cost ratio — not strict priority. Pick one per weekend.
 
@@ -112,18 +112,19 @@ Each item lists: **what**, **why it matters**, **starting point in the code**, *
 
 ## 7. "N people doing this tutorial right now" + cohort presence
 
-**What:** Live counter on each tutorial page showing concurrent readers, fed by the existing STOMP broker. Optional event-mode where a host can broadcast notes.
+**What:** Live counter on each tutorial page showing concurrent readers, fed by the existing Socket.IO transport. Optional event-mode where a host can broadcast notes.
 
-**Why it matters:** STOMP is already running for the dashboard. Social proof on tutorial pages costs almost nothing extra and creates a differentiator vs. static docs.
+**Why it matters:** Socket.IO is already running for the dashboard (`@cap-js-community/websocket`, namespaces `/ws/display` + `/ws/event-stream`). Social proof on tutorial pages costs almost nothing extra and creates a differentiator vs. static docs.
 
 **Starting point:**
-- Broker: `srv/server.js` STOMP setup; add `/topic/tutorial/<slug>/presence`
+
+- Service: add a CDS event (e.g. `event presenceChanged` on a new `PresenceService` with `@protocol: 'websocket'`); subscribers join a per-slug Socket.IO room via the plugin's `contexts:` argument
 - Client: small JS in Hugo layout subscribes on page load, unsubscribes on unload
 - Event mode: gated by an `Events.liveBroadcastEnabled` flag
 
 **Effort:** M
 
-**Tradeoff:** STOMP fan-out cost at scale; need a presence aggregator if usage grows. Privacy: counts only, not identities.
+**Tradeoff:** Socket.IO fan-out cost at scale; need a presence aggregator if usage grows. Privacy: counts only, not identities.
 
 ---
 

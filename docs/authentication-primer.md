@@ -350,10 +350,10 @@ The `/auth/user` route in `xs-app.json` has `authenticationType: "xsuaa"`, so th
 
 Two endpoints bypass XSUAA entirely:
 
-| Endpoint | Why Unauthenticated |
-|----------|---------------------|
-| `GET /build/catalog` | Called by CI/CD pipeline at build time (no user context) |
-| `WS /display/websocket` | STOMP broker for event monitors (display screens, no login) |
+| Endpoint                             | Why Unauthenticated                                                     |
+|--------------------------------------|-------------------------------------------------------------------------|
+| `GET /build/catalog`                 | Called by CI/CD pipeline at build time (no user context)                |
+| `WS /socket.io/`, `/ws/event-stream` | Socket.IO transport + anonymous event stream (kiosk monitors, no login) |
 
 These are registered via `cds.on('bootstrap')` (before CDS auth middleware) so they don't require authentication.
 

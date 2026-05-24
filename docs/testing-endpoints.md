@@ -40,7 +40,7 @@ The QA channel is a separate author-preview surface backed by a dedicated CAP ap
 | `/display-app/` | Standalone event dashboard (rotating views: Board, Statistics, Leaderboard) | XSUAA |
 | `/display-app/index.html` | Direct entry point | XSUAA |
 
-> The display-app is a standalone Vue 3 + Vite application deployed as static files at `approuter/static/display-app/`. It connects to the STOMP WebSocket at `/display/websocket` for real-time updates. Used on big monitors at SAP events.
+> The display-app is a standalone Vue 3 + Vite application deployed as static files at `approuter/static/display-app/`. It connects via Socket.IO on the `/ws/display` namespace for real-time updates. Used on big monitors at SAP events.
 
 ---
 
@@ -193,9 +193,9 @@ When `EXPOSE_CAP_UI=true` is set on the CAP srv app, these are accessible throug
 
 | URL | Protocol | Description | Auth |
 |-----|----------|-------------|------|
-| `/ws/event-stream` | WebSocket | Real-time event stream (REST+WebSocket protocol; backed by `EventStreamService`) | None |
-| `/display/websocket` | WebSocket (STOMP) | Display dashboard live updates | XSUAA |
-| `/socket.io/` | Socket.IO | Socket.IO transport (fallback) | None |
+| `/ws/event-stream` | Socket.IO | Anonymous live tutorial-completion stream (backed by `EventStreamService`) | None |
+| `/ws/display` | Socket.IO | Display dashboard live updates (backed by `DisplayService`) | XSUAA `DisplayApp` (enforced at namespace join, not approuter) |
+| `/socket.io/` | Socket.IO | Underlying transport endpoint for both namespaces (`?EIO=4&transport=websocket`) | None |
 
 ---
 

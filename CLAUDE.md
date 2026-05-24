@@ -121,9 +121,9 @@ Tutorial HTML is NOT served from static files. After Hugo builds, `publish-conte
   - `GET /content/hashes` — returns `{ slug: sha256 }` map of active content (used by delta publish)
   - `GET /content/nav` — navigation metadata for all published tutorials
   - `POST /content/rollback` — reverts to previous manifest version (bearer token auth)
-- **WebSocket**: STOMP broker at `/display/websocket` for real-time event dashboard updates
+- **WebSocket**: Socket.IO transport via `@cap-js-community/websocket` plugin (`"websocket": { "kind": "socket.io" }` in package.json). `DisplayService` (`@protocol: ['odata', 'websocket']`, scope `DisplayApp`) and `EventStreamService` (`@protocol: ['websocket', 'rest']`, anonymous) emit CDS events as Socket.IO messages on the `/ws/display` and `/ws/event-stream` namespaces. Approuter routes `^/socket\.io/` and `^/ws/` are `authenticationType: 'none'`; scope check happens at namespace join.
 - **Jobs**: Scheduled tasks in `srv/jobs/` — scheduler.js orchestrates: account-merge-job, analytics, cleanup (including content GC), ngds-retry (with job-lock.js for distributed locking)
-- **Bootstrap**: `srv/server.js` registers custom express routes on `cds.on('bootstrap')`, attaches STOMP broker and jobs on `cds.on('served')`
+- **Bootstrap**: `srv/server.js` registers custom express routes on `cds.on('bootstrap')`, attaches jobs on `cds.on('served')` (the WebSocket plugin mounts itself on `served` independently)
 - **Audit Logging**: `@cap-js/audit-logging` with `@PersonalData` annotations on Users/UserMetaData/TaskRecords (see `db/audit-logging.cds`). SecurityEvent emitted on user anonymization.
 - **Change Tracking**: `@cap-js/change-tracking` on admin-managed entities (Events, Missions, Groups, Accomplishments, Prizes, ImsConfig, FeaturedTasks). See `db/change-tracking.cds`.
 - **ORD**: `srv/ord-annotations.cds` registers all services for Open Resource Discovery.
@@ -156,7 +156,7 @@ Tutorial HTML is NOT served from static files. After Hugo builds, `publish-conte
 
 - **Hugo site** (`hugo/`): Static site generator. Layouts in `hugo/layouts/`, content generated into `hugo/content/tutorials/`. Styled with SAP Fundamental Styles (PostCSS pipeline). Config in `hugo/hugo.toml`.
 - **Vue apps** (`hugo-apps/`): Public-facing Vue 3 components bundled by Vite, including `AppSpace.vue` (event-themed tutorial space with Joule/Sapphire themes). Fetches progress from `/api/getEventProgress`, displays QR codes via `/api/qrcode`.
-- **Display dashboard** (`app/display-app/`): Standalone Vue+Vite app for event monitors — real-time dashboard with rotating views (Board, Statistics, Leaderboard). Connects via STOMP WebSocket.
+- **Display dashboard** (`app/display-app/`): Standalone Vue+Vite app for event monitors — real-time dashboard with rotating views (Board, Statistics, Leaderboard). Connects via Socket.IO on the `/ws/display` namespace.
 
 ### Deployment (BTP Cloud Foundry)
 

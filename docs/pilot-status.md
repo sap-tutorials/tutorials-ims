@@ -38,7 +38,7 @@ This is the locked scope. Anything not listed is post-launch.
 - 8 services: `DeveloperService`, `AdminService`, `AnalyticsService`, `DisplayService`, `ConsolidationService`, `ScannerService`, `SearchService`, `EventStreamService`
 - Custom endpoints: `/api/qrcode`, `/build/catalog`, `/build/navigator`, `/build/slug-mapping`, `/build/repo-catalog`, `/content/publish`, `/content/tutorials/:slug`, `/content/hashes`, `/content/nav`, `/content/rollback`, `/feedback/submit`
 - Tutorial HTML persistence: gzip-compressed BLOBs in HANA via `ContentFiles` + `ContentManifest` ([../srv/lib/content-store.js](../srv/lib/content-store.js))
-- WebSocket: STOMP broker at `/display/websocket` for real-time event dashboard
+- WebSocket: Socket.IO transport via `@cap-js-community/websocket`, namespaces `/ws/display` (XSUAA `DisplayApp`) and `/ws/event-stream` (anonymous) for real-time event dashboards
 - Scheduled jobs: account-merge, analytics, cleanup, content GC, ngds-retry ([../srv/jobs/](../srv/jobs/))
 - Audit logging (`@cap-js/audit-logging`) + change tracking (`@cap-js/change-tracking`)
 - Embeddings + RAG (`TutorialEmbedding`, `getRelevantSteps` tool, `ChatSettings.ragEnabled`)
