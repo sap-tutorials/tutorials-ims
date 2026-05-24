@@ -17,8 +17,9 @@ describe('Joule step-help FAB smoke', () => {
     const res = await fetchWithRetry(`${BASE_URL}/tutorials/${slug}/`);
     expect(res.status).toBe(200);
     const html = await res.text();
+    // Hugo's HTML minifier may strip attribute quotes; accept both forms.
     expect(html).toMatch(/id=["']?joule-step-fab["']?/);
-    expect(html).toMatch(/class=["'][^"']*joule-step-fab[^"']*["']/);
+    expect(html).toMatch(/class=(["'][^"']*joule-step-fab[^"']*["']|joule-step-fab[\s>])/);
     expect(html).toMatch(/aria-label=["'][^"']*step[^"']*["']/i);
   });
 

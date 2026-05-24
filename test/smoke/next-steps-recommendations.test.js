@@ -18,7 +18,10 @@ describe('Next Steps recommendations', () => {
     expect(res.status).toBe(200);
 
     const html = await res.text();
-    const matches = html.match(/class=["']?next-steps-rail-card["']?/g) ?? [];
+    // Strip inert <template> blocks (the JS clone-target for client-side rail
+    // hydration) so we count only server-rendered visible cards.
+    const visible = html.replace(/<template[\s\S]*?<\/template>/g, '');
+    const matches = visible.match(/class=["']?next-steps-rail-card["']?/g) ?? [];
     // We always cap at 3, but a sparsely-tagged tutorial may produce fewer.
     // Production tutorials should hit the cap; loosen if a fresh tutorial flakes.
     expect(matches.length).toBeGreaterThanOrEqual(1);
