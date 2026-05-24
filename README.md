@@ -9,110 +9,139 @@ A tutorial hosting platform for [developers.sap.com](https://developers.sap.com)
 ## Folder Map
 
 ```
-tutorials-ims/
+tutorials-poc/
 ├── approuter/                  # BTP AppRouter — serves static files + proxies to CAP via XSUAA auth
-│   ├── static/                 #   Pre-built assets deployed to CF (Hugo output + Vue app bundles)
-│   │   ├── app-space/          #     AppSpace SPA bundle (event tutorial kiosk)
+│   ├── server.js               #   Custom AppRouter wrapper (VCAP merge, serve-static, proxy fixes)
+│   ├── static/                 #   Pre-built assets deployed to CF
+│   │   ├── admin-ui/           #     Admin shell (sap.tnt.ToolPage) + 11 Fiori Elements components
+│   │   ├── analytics-ui/       #     Analytics Explorer Vue 3 SPA bundle
+│   │   ├── scanner-ui/         #     UI5 barcode scanner bundle
+│   │   ├── scanner-vue/        #     Vue 3 barcode scanner bundle
 │   │   ├── display-app/        #     Display App SPA bundle (event monitor dashboard)
-│   │   ├── css/                #     Global stylesheets (Fundamental Styles, theme)
-│   │   ├── img/                #     Static images (logos, icons)
-│   │   ├── js/                 #     Shared JavaScript (Vue components injected into Hugo pages)
-│   │   └── tutorials/          #     Generated tutorial HTML pages (Hugo output)
-│   └── xs-app.json             #   Route definitions (static, /api, /admin, /display proxies)
-├── apps/                       # Vue 3 micro-apps (built with Vite, output injected into Hugo/static)
+│   │   ├── qa/                 #     QA-channel Hugo build (gated by Tutorial.Author scope)
+│   │   ├── css/img/js/         #     Global stylesheets, images, shared JS injected into Hugo pages
+│   │   └── (no tutorials/)     #     Tutorials served dynamically from HANA, not static files
+│   └── xs-app.json             #   Route definitions (/admin-ui, /analytics-ui, /scanner-*, /tutorials, /tutorials-qa, /api, /admin, /display, /chat, /search, /build, /content)
+├── app/                        # SAPUI5 admin apps (UI5 Tooling builds, deployed to approuter/static/)
+│   ├── admin-shell/            #   sap.tnt.ToolPage shell with side navigation + theme switching
+│   ├── admin/                  #   11 Fiori Elements feature components (events, missions, groups,
+│   │                           #   accomplishments, prizes, tutorials, tags, operations, accounts,
+│   │                           #   changelog, joule, feedback, analytics) loaded by the shell
+│   ├── analytics-explorer/     #   Vue 3 + Vite + Monaco SQL editor over AnalyticsService
+│   ├── scanner/                #   UI5 barcode scanner (sap.ndc.BarcodeScanner)
+│   ├── admin-annotations.cds   #   @UI/@Common annotations for all admin screens
+│   └── change-tracking.cds     #   @cap-js/change-tracking config for admin entities
+├── apps/                       # Vue 3 micro-apps for the public site (Vite, injected into Hugo)
 │   └── src/
-│       ├── app-space/          #   Event-themed tutorial kiosk (Joule/Sapphire themes)
-│       ├── event-display/      #   Event display embed (leaderboard widget)
-│       ├── nav-dropdown/       #   Navigation dropdown component
-│       ├── navigator/          #   Full tutorial navigator page
-│       └── shared/             #   Shared utilities, API client, types
-├── db/                         # CAP data model — CDS schema + HANA native artifacts
+│       ├── app-space/          #     Event-themed tutorial kiosk (Joule/Sapphire themes)
+│       ├── event-display/      #     Event display embed (leaderboard widget)
+│       ├── nav-dropdown/       #     Navigation dropdown component
+│       ├── navigator/          #     Full tutorial navigator page
+│       └── shared/             #     Shared utilities, API client, types
+├── display-app/                # Standalone event monitor dashboard (Vue 3 + Vite)
+│   └── src/                    #   Components, composables; bundle copied to approuter/static/display-app/
+├── hugo/                       # Hugo static site generator — tutorial pages + layouts
+│   ├── assets/css|js/          #   PostCSS pipeline (Fundamental Styles Horizon) + page-level JS
+│   │                           #   includes ui5-bootstrap.ts (UI5 Web Components shellbar/dialog/etc.)
+│   ├── config/                 #   Hugo configuration (hugo.toml, environment overrides)
+│   ├── content/
+│   │   ├── tutorials/          #     Generated tutorial markdown (gitignored, from fetch-tutorials)
+│   │   ├── missions/           #     Generated mission overview pages
+│   │   └── groups/             #     Generated completion-path pages
+│   ├── data/                   #   Site-level data files (glossary, etc.)
+│   ├── i18n/                   #   en_us only (developers.sap.com is English-only)
+│   └── layouts/                #   _default, tutorials, missions, groups, partials, shortcodes
+├── hugo.qa.toml                # Sibling Hugo config for QA channel (strips Joule FAB, rating, etc.)
+├── preview-site/               # Hugo preview-site renderer (used by srv-qa preview path)
+├── db/                         # Production CAP data model — CDS schema + HANA native artifacts
 │   ├── schema.cds              #   Entity definitions (Users, Tutorials, Missions, Events, etc.)
-│   └── src/                    #   Native HANA artifacts (.hdbsequence files for legacy integer IDs)
-├── deploy/                     # MTA extension descriptors for environment-specific overrides
+│   ├── views.cds               #   CDS views (NavigatorCatalog, SearchableItems, CompletionAnalytics, …)
+│   ├── persistence.cds         #   ContentFiles + ContentManifest (gzip-compressed tutorial BLOBs)
+│   ├── audit-logging.cds       #   @PersonalData annotations (Users, UserMetaData, TaskRecords)
+│   ├── change-tracking.cds     #   @cap-js/change-tracking annotations
+│   ├── schema-ext.cds          #   Service-layer schema extensions
+│   └── src/                    #   Native HANA artifacts (.hdbsequence for legacy integer IDs)
+├── db-qa/                      # QA-channel HDI container schema (peer of db/, deploys to tutorials-hana-qa)
+├── srv/                        # CAP Node.js backend — production services
+│   ├── server.js               #   Bootstrap: registers Express routes + STOMP + jobs on cds.on('served')
+│   ├── *-service.cds + .js     #   9 services: developer, admin, analytics, exports, display,
+│   │                           #     consolidation, scanner, search, chat, event-stream
+│   ├── ord-annotations.cds     #   Open Resource Discovery registration for all services
+│   ├── handlers/               #   Express route handlers (recommendations.js)
+│   ├── exports/                #   ExportsService backends (CSV/zip, XLSX, task records, etc.)
+│   ├── lib/                    #   Shared business logic (~40 modules):
+│   │                           #     content-store (HANA BLOB serve), embedding-* (RAG), chat-* (Joule),
+│   │                           #     accomplishment-evaluator, account-merge, build-catalog,
+│   │                           #     navigator-catalog, recommend, co-completion, status-calculator,
+│   │                           #     mail-client, ngds-client, adobe-analytics, qrcode-handler,
+│   │                           #     analytics-sql-validator (SELECT-only allowlist for runSelectQuery),
+│   │                           #     feedback-salt, ip-rate-limit, ttl-cache, pipeline-log, …
+│   ├── jobs/                   #   Scheduled tasks: scheduler, account-merge, analytics, cleanup,
+│   │                           #     ngds-retry, embedding-reconciliation, job-lock (distributed)
+│   └── templates/notification/ #   Email HTML templates (Handlebars)
+├── srv-qa/                     # QA-channel CAP app (peer of srv/, deploys to tutorials-srv-qa)
+│   ├── server.js               #   Mounts xsuaa-scope-middleware (Tutorial.Author gate) + preview renderer
+│   └── search-service.cds      #   QA-only search projection
+├── scripts/                    # Build-time scripts — fetch, parse, publish, migrate, seed
+│   ├── fetch-tutorials.ts      #   Main entry: fetches markdown from GitHub, generates Hugo pages
+│   ├── publish-content.ts      #   Delta-publish Hugo HTML → HANA BLOBs via /content/publish
+│   ├── parsers/                #   Markdown pipeline: v1 (legacy ACCORDION) + v2 (H3) + images,
+│   │                           #     options, cap, github, rules, sanitize-html, hugo-delimiters, types
+│   ├── grammars/               #   TextMate grammars for syntax highlighting
+│   ├── highlight-cds.ts        #   CDS syntax highlighter
+│   ├── install-qa-workflows.ts #   Distribute notify-qa.yml workflow to all -Contribution repos
+│   ├── verify-qa-build.ts      #   Post-build verification of QA Hugo output
+│   ├── check-qa-schema-drift.ts#   Compare prod vs QA HDI schemas (CI step)
+│   ├── setup-dev-data.cjs      #   Slug population + autotest cleanup against DEV HANA
+│   ├── seed-*.cjs / seed-*.js  #   Various data seeding scripts
+│   ├── migrate-reference-data.js   # Export/import tutorials, missions, events from Java IMS
+│   ├── migrate-user-progress.js    # Export/import user progress (paged, resumable)
+│   ├── migrate-from-hana.js        # Direct HANA-to-HANA migration
+│   └── compare-systems.js      #   Endpoint-by-endpoint diff between Java IMS and CAP
+├── test/                       # Vitest workspaces (unit, hybrid, hybrid-qa, smoke)
+│   ├── unit + integration/     #   In-memory SQLite, fast, no external deps (npm test)
+│   ├── lib/ + jobs/ + parsers/ #   Module-level unit tests
+│   ├── hybrid/                 #   Real HANA Cloud via cds bind --exec (npm run test:hybrid)
+│   ├── hybrid-qa/              #   Hybrid tests against QA HDI
+│   ├── smoke/                  #   HTTP smoke tests against deployed URLs (npm run test:smoke)
+│   ├── srv-qa/                 #   QA-srv-specific tests (preview, scope middleware)
+│   └── a11y/                   #   Accessibility tests
+├── docs/                       # Architecture references and developer documentation
+│   ├── pilot-status.md         #   Pilot completion + locked production scope
+│   ├── testing-endpoints.md    #   Canonical UI + API endpoint reference (auth/scope mapping)
+│   ├── production-ready.md     #   Go-live checklist
+│   ├── theme-variants.md       #   Building event-specific theme variants (Joule, Sapphire, TechEd)
+│   ├── qa-channel-bootstrap.md #   One-time QA author-preview channel setup
+│   ├── author-instructions.md  #   Tutorial-author workflow
+│   ├── content-pipeline.md     #   Fetch → parse → Hugo → HANA pipeline deep-dive
+│   ├── authentication-architecture.md, mta-deployment.md, hugo-migration.md, ai-consumption.md, …
+│   ├── improvements.md, TODO.md#   Feature backlog and gap tracking (largely historic)
+│   └── superpowers/specs/+plans/ # Feature specs and step-by-step implementation plans
+├── .deploy/                    # MTA build + deploy artifacts
+│   ├── mta.yaml                #   MTA descriptor (modules: approuter, srv, srv-qa, db, db-qa, destinations)
+│   ├── xs-security.json        #   XSUAA scopes + role collections (Admin, MobileApp, Tutorial.Author)
+│   ├── deploy-admin.sh         #   Standalone admin UI deploy helper (bypasses MTA build)
+│   └── DEPLOY.md               #   Deploy procedure documentation
+├── deploy/                     # MTA extension descriptors (environment overrides)
 │   ├── dev.mtaext              #   Development overrides (instance counts, memory)
 │   ├── qa.mtaext               #   QA/staging overrides
 │   └── prod.mtaext             #   Production overrides
-├── display-app/                # Event monitor dashboard — standalone Vue 3 SPA (Vite)
-│   ├── src/
-│   │   ├── components/         #   Vue components (leaderboard, burnup chart, track stats)
-│   │   └── composables/        #   Composition API hooks (WebSocket, polling, data fetch)
-│   └── dist/                   #   Built bundle (copied to approuter/static/display-app/)
-├── docs/                       # Design specs and implementation plans
-│   └── superpowers/
-│       ├── specs/              #   Feature specifications (admin UI, notifications, etc.)
-│       └── plans/              #   Step-by-step implementation plans
-├── hugo/                       # Hugo static site generator — tutorial pages + layouts
-│   ├── assets/
-│   │   ├── css/                #   SCSS/CSS source (Fundamental Styles Horizon theme)
-│   │   └── js/                 #   Page-level JavaScript (step navigation, progress sync)
-│   ├── config/                 #   Hugo configuration (hugo.toml, environment overrides)
-│   ├── content/
-│   │   ├── tutorials/          #   Generated tutorial markdown (from fetch-tutorials)
-│   │   ├── app-space/          #   AppSpace single-page wrapper
-│   │   └── event-display/      #   Event display single-page wrapper
-│   ├── layouts/
-│   │   ├── _default/           #   Base templates (baseof.html, list.html)
-│   │   ├── tutorials/          #   Tutorial single-page layout (steps, progress bar)
-│   │   ├── missions/           #   Mission overview layout
-│   │   ├── groups/             #   Completion path group layout
-│   │   ├── partials/           #   Reusable template fragments (header, footer, nav)
-│   │   └── shortcodes/         #   Custom Hugo shortcodes (tabs, options, alerts)
-│   ├── static/                 #   Pass-through static assets (images, pre-built JS/CSS)
-│   └── public/                 #   Build output (gitignored, deployed to approuter/static/)
-├── scripts/                    # Build-time scripts — fetch, parse, migrate
-│   ├── fetch-tutorials.ts      #   Main entry: fetches markdown from GitHub, generates Hugo pages
-│   ├── parsers/                #   Markdown parsing pipeline
-│   │   ├── v1.ts               #     Legacy parser ([ACCORDION-BEGIN] format)
-│   │   ├── v2.ts               #     Current parser (H3-delimited steps)
-│   │   ├── images.ts           #     Resolves relative image paths to GitHub raw CDN
-│   │   ├── options.ts          #     Converts [OPTION] blocks to Vue tab components
-│   │   ├── cap.ts              #     Fetches mission/group catalog from CAP /build/catalog
-│   │   ├── github.ts           #     GitHub API client (commit metadata, rate limiting)
-│   │   └── types.ts            #     Shared TypeScript types
-│   ├── grammars/               #   TextMate grammars for syntax highlighting in tutorials
-│   ├── __tests__/              #   Parser unit tests (Vitest)
-│   ├── migrate-reference-data.js  # Export/import tutorials, missions, events from Java IMS
-│   ├── migrate-user-progress.js   # Export/import user progress (paged, resumable)
-│   └── compare-systems.js      #   Endpoint-by-endpoint diff between Java IMS and CAP
-├── srv/                        # CAP Node.js backend — services, handlers, business logic
-│   ├── server.js               #   Bootstrap: registers Express routes + STOMP + jobs
-│   ├── developer-service.cds   #   DeveloperService definition (/api)
-│   ├── admin-service.cds       #   AdminService definition (/admin)
-│   ├── display-service.cds     #   DisplayService definition (/display)
-│   ├── consolidation-service.cds # ConsolidationService definition (/api/v1)
-│   ├── lib/                    #   Shared libraries (business logic, integrations)
-│   │   ├── accomplishment-evaluator.js  # Badge/prize rule engine
-│   │   ├── contributor-notifications.js # Stale tutorial detection + escalation
-│   │   ├── mail-client.js      #     SMTP transport, template rendering, retry queue
-│   │   ├── stomp-broker.js     #     WebSocket STOMP pub/sub for real-time updates
-│   │   ├── ngds-client.js      #     NGDS analytics outbound integration
-│   │   ├── adobe-analytics.js  #     Adobe Analytics beacon on completion
-│   │   ├── account-merge.js    #     Merge duplicate user accounts
-│   │   ├── build-catalog.js    #     /build/catalog data assembly
-│   │   ├── qrcode-handler.js   #     QR code PNG generation
-│   │   ├── tutorial-sync.js    #     Sync tutorial metadata from cache
-│   │   └── legacy-id.js        #     HANA sequence-backed integer IDs
-│   ├── jobs/                   #   Scheduled background tasks (cron-like)
-│   │   └── scheduler.js        #     Job registration + distributed locking
-│   └── templates/
-│       └── notification/       #   Email HTML templates (Handlebars)
-├── test/                       # Test suites (Vitest)
-│   ├── lib/                    #   Unit tests for srv/lib/ modules
-│   ├── jobs/                   #   Unit tests for scheduled jobs
-│   ├── integration/            #   End-to-end workflow tests (SQLite in-memory)
-│   ├── hybrid/                 #   Integration tests against real HANA Cloud
-│   └── smoke/                  #   HTTP smoke tests against deployed URLs
 ├── .github/workflows/          # CI/CD pipelines (GitHub Actions)
-│   ├── deploy.yml              #   Build MTA + deploy to BTP Cloud Foundry + smoke tests
-│   └── rebuild-content.yml     #   Re-fetch tutorials + rebuild static content
-├── .tutorial-cache/            # Cached GitHub markdown + metadata (gitignored)
+│   ├── deploy.yml              #   Build MTA + deploy to BTP CF + post-deploy smoke tests
+│   ├── rebuild-content.yml     #   Re-fetch tutorials + rebuild Hugo + publish HTML to HANA
+│   ├── rebuild-content-qa.yml  #   QA-channel content rebuild (triggered by repository_dispatch)
+│   ├── schema-drift-check.yml  #   Compare prod vs QA HDI schemas
+│   └── notify-qa.yml.template  #   Template installed into every -Contribution repo
+├── openspec/                   # OpenSpec change proposals + config
+├── .tutorial-cache/            # Cached prod-channel GitHub markdown + metadata (gitignored)
+├── .tutorial-cache-qa/         # Cached QA-channel markdown (gitignored, separate channel marker)
 ├── .migration-data/            # Migration export files from Java IMS (gitignored)
-├── gen/                        # CDS build output (generated, gitignored)
-├── site/                       # Legacy VitePress output directory (deprecated, gitignored)
-├── mta.yaml                    # MTA deployment descriptor (modules, resources, bindings)
-├── package.json                # Root dependencies + npm scripts
-└── vitest.workspace.ts         # Vitest workspace config (unit, hybrid, smoke)
+├── gen/                        # CDS build output (gitignored)
+├── site/                       # Legacy VitePress output (deprecated, gitignored)
+├── CLAUDE.md                   # Project context for Claude Code agents
+├── AGENTS.md                   # Agent-specific instructions (Codex/Gemini parity)
+├── package.json                # Root dependencies + npm scripts (full list: jq '.scripts' package.json)
+└── vitest.config.ts            # Vitest workspace config (inline projects array)
 ```
 
 ## Quick Start
