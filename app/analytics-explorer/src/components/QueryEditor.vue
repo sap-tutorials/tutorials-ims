@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { runSelectQuery, type SqlResult } from '../api/sql'
+import { useTheme } from '../composables/useTheme'
 import '@ui5/webcomponents/dist/Button.js'
 
 const emit = defineEmits<{ (e: 'results', r: { columns: string[]; rows: any[] }): void }>()
@@ -9,16 +10,19 @@ const editorEl = ref<HTMLDivElement>()
 const status = ref<string>('Ready.')
 const lastResult = ref<SqlResult | null>(null)
 let editor: any = null
+let monacoNs: any = null
 let destroyed = false
 let resizeObserver: ResizeObserver | null = null
+const { isDark } = useTheme()
 
 onMounted(async () => {
   const monaco = await import('monaco-editor')
   await import('monaco-sql-languages/esm/all.contributions')
   if (destroyed) return
+  monacoNs = monaco
   editor = monaco.editor.create(editorEl.value!, {
     value: 'SELECT id, status FROM TaskRecords LIMIT 100',
-    language: 'sql', theme: 'vs', fontSize: 13, minimap: { enabled: false },
+    language: 'sql', theme: isDark.value ? 'vs-dark' : 'vs', fontSize: 13, minimap: { enabled: false },
     automaticLayout: false,
   })
   // The SQL tab mounts inside a v-show=false container on first paint, so the
@@ -26,6 +30,13 @@ onMounted(async () => {
   // gains size (tab becomes visible, window resize, split-pane drag).
   resizeObserver = new ResizeObserver(() => editor?.layout())
   resizeObserver.observe(editorEl.value!)
+})
+
+// Monaco's theme is process-global (setTheme applies to every editor on the
+// page), but we still re-set it on every shellbar toggle so a user opening
+// the SQL tab after a theme flip sees the correct palette.
+watch(isDark, (dark) => {
+  monacoNs?.editor.setTheme(dark ? 'vs-dark' : 'vs')
 })
 
 onBeforeUnmount(() => {
