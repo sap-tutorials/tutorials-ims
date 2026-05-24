@@ -38,7 +38,7 @@ service AdminService {
   entity PrimaryAccounts as projection on ims.PrimaryAccounts;
   entity SecondaryAccounts as projection on ims.SecondaryAccounts;
   entity PrivacyProtectionActions as projection on ims.PrivacyProtectionActions;
-  entity ActiveLearnerRecords as projection on ims.ActiveLearnerRecords;
+  @readonly entity ActiveLearnerRecords as projection on ims.ActiveLearnerRecords;
   entity CompletionPaths as projection on ims.CompletionPaths;
   entity CompletionPathItems as projection on ims.CompletionPathItems {
     *,
@@ -53,7 +53,6 @@ service AdminService {
   entity GroupTags as projection on ims.GroupTags;
   entity GroupPathItems as projection on ims.GroupPathItems;
   entity MissionTags as projection on ims.MissionTags;
-  entity DashboardMonitoredRecords as projection on ims.DashboardMonitoredRecords;
   @readonly entity TimeZones as projection on ims.TimeZones;
 
   @odata.singleton

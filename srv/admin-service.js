@@ -54,7 +54,7 @@ export default class AdminService extends cds.ApplicationService {
       'StepFailures', 'Tags', 'Accomplishments', 'AccomplishmentRecords',
       'PrizeRecords', 'TutorialMeta', 'TutorialContributors', 'TutorialRepositories',
       'FeaturedTasks', 'PrimaryAccounts', 'SecondaryAccounts', 'PrivacyProtectionActions',
-      'ActiveLearnerRecords', 'DashboardMonitoredRecords', 'CompletionPaths', 'CompletionPathItems',
+      'CompletionPaths', 'CompletionPathItems',
       'GroupPathItems'
     ];
     for (const entity of legacyKeyedEntities) {

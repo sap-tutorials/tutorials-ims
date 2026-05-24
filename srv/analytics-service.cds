@@ -8,8 +8,9 @@ service AnalyticsService @(path : '/admin/analytics') {
   @readonly entity NavigatorCatalog       as projection on ims.NavigatorCatalog;
   @readonly entity SearchableItems        as projection on ims.SearchableItems;
   @readonly entity CompletionAnalytics    as projection on ims.CompletionAnalytics;
+  @readonly entity ActiveLearnersDaily    as projection on ims.ActiveLearnersDaily;
 
-  @readonly entity TaskRecords            as projection on ims.TaskRecords;
+  @readonly @cds.redirection.target entity TaskRecords as projection on ims.TaskRecords;
   @readonly entity Users                  as projection on ims.Users;
   @readonly entity Missions               as projection on ims.Missions;
   @readonly entity Groups                 as projection on ims.Groups;

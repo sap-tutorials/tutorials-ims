@@ -6,7 +6,6 @@ using { com.sap.developers.ims as ims } from '../db/schema';
 service DisplayService {
 
   @readonly entity Events as projection on ims.Events;
-  @readonly entity DashboardMonitoredRecords as projection on ims.DashboardMonitoredRecords;
 
   function getEventBuckets(eventLegacyId : Integer) returns many {
     bucketName  : String;

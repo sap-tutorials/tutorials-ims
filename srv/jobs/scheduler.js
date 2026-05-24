@@ -1,7 +1,6 @@
 import cron from 'node-cron';
 import { acquireLock, releaseLock } from './job-lock.js';
 import { cleanupStepFailures, cleanupUnusedTags, cleanupContentVersions, cleanupPipelineLog, cleanupStuckPublishing, pruneOrphanEmbeddings } from './cleanup.js';
-import { recordActiveLearners } from './analytics.js';
 import { retryNgds } from './ngds-retry.js';
 import { processAccountMerges } from './account-merge-job.js';
 import { runReconciliationJob } from './embedding-reconciliation.js';
@@ -53,11 +52,6 @@ export function registerJobs() {
   // Daily at 00:00 — cleanup step failures
   cron.schedule('0 0 * * *', () =>
     runWithLock('cleanup-step-failures', 3600000, () => cleanupStepFailures(90))
-  );
-
-  // Daily at 00:15 — active learner analytics
-  cron.schedule('15 0 * * *', () =>
-    runWithLock('active-learner-analytics', 1800000, recordActiveLearners)
   );
 
   // Every 2 hours — NGDS retry
