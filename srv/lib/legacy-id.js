@@ -9,7 +9,6 @@ const VALID_ENTITIES = new Set([
   'CompletionPaths', 'CompletionPathItems',
   'GroupPathItems',
   'TutorialMeta', 'TutorialContributors', 'TutorialRepositories',
-  'ActiveLearnerRecords', 'DashboardMonitoredRecords',
   'StepFailures', 'NGDSFailedMessages', 'ImsConfig',
   'PrimaryAccounts', 'SecondaryAccounts',
   'PrivacyProtectionActions', 'FeaturedTasks'

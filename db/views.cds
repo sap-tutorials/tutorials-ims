@@ -106,6 +106,12 @@ view CompletionAnalytics as
   }
   where tr.status = 'COMPLETED';
 
+view ActiveLearnersDaily as
+  select from ims.TaskRecords {
+    cast(modifiedAt as Date) as recordDate : Date,
+    count(distinct user.ID)  as count      : Integer
+  } group by cast(modifiedAt as Date);
+
 entity TutorialFeedbackAggregate as
   select from ims.TutorialFeedback {
     key tutorialSlug,

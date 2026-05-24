@@ -20,6 +20,7 @@ annotate ims.Tasks                  with @analytics : { exposed: true, label: 'T
 annotate ims.NavigatorCatalog       with @analytics : { exposed: true, label: 'Navigator catalog' };
 annotate ims.SearchableItems        with @analytics : { exposed: true, label: 'Searchable items' };
 annotate ims.CompletionAnalytics    with @analytics : { exposed: true, label: 'Completion analytics' };
+annotate ims.ActiveLearnersDaily    with @analytics : { exposed: true, label: 'Active learners (daily)' };
 annotate ims.TaskRecords            with @analytics : { exposed: true, label: 'Task records' };
 annotate ims.Users                  with @analytics : { exposed: true, label: 'Users' };
 annotate ims.Missions               with @analytics : { exposed: true, label: 'Missions' };
@@ -39,6 +40,7 @@ annotate ims.Tasks                  with @Aggregation.ApplySupported : { Transfo
 annotate ims.NavigatorCatalog       with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
 annotate ims.SearchableItems        with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
 annotate ims.CompletionAnalytics    with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
+annotate ims.ActiveLearnersDaily    with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
 annotate ims.TaskRecords            with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
 annotate ims.Users                  with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
 annotate ims.Missions               with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
