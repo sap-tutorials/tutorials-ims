@@ -167,7 +167,7 @@
       }
     },
     "hana": {
-      "fuzzy": 0.7
+      "fuzzy": false
     },
     "websocket": {
       "kind": "socket.io"

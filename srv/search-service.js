@@ -19,32 +19,39 @@ export default class SearchService extends cds.ApplicationService {
     this.on('getFacets', async (req) => {
       const { search, taskTypes, experience } = req.data;
 
-      function applyFilters(query) {
-        if (search) query.search(search);
-        if (taskTypes?.length) query.where({ taskType: { in: taskTypes } });
-        if (experience?.length) query.where({ experienceTag: { in: experience } });
-        return query;
+      // CAP's .search() composed with .groupBy() over a UNION ALL view emits
+      // SQL that returns empty groups on HANA (chip counts came back as 0
+      // while the same .search() against the entity returned 500+ rows).
+      // Fetch the filtered set once and bucket in Node — the result set is
+      // already capped by the search predicate and we only need three small
+      // dimensions, so this is cheap and avoids the broken composition.
+      let q = SELECT.from(SearchableItems).columns('taskType', 'experienceTag', 'primaryTag');
+      if (search) q.search(search);
+      if (taskTypes?.length) q.where({ taskType: { in: taskTypes } });
+      if (experience?.length) q.where({ experienceTag: { in: experience } });
+      const rows = await q;
+
+      const bump = (map, key) => {
+        if (!key) return;
+        map.set(key, (map.get(key) ?? 0) + 1);
+      };
+      const typeMap = new Map();
+      const expMap = new Map();
+      const tagMap = new Map();
+      for (const r of rows) {
+        bump(typeMap, r.taskType);
+        bump(expMap, r.experienceTag);
+        bump(tagMap, r.primaryTag);
       }
 
-      const [typeCounts, experienceCounts, tagCounts, totalResult] = await Promise.all([
-        applyFilters(SELECT.from(SearchableItems).columns('taskType as name', 'count(*) as count'))
-          .groupBy('taskType'),
-        applyFilters(SELECT.from(SearchableItems).columns('experienceTag as name', 'count(*) as count'))
-          .where({ experienceTag: { '!=': null } })
-          .groupBy('experienceTag'),
-        applyFilters(SELECT.from(SearchableItems).columns('primaryTag as name', 'count(*) as count'))
-          .where({ primaryTag: { '!=': null } })
-          .groupBy('primaryTag')
-          .orderBy('count desc')
-          .limit(20),
-        applyFilters(SELECT.one.from(SearchableItems).columns('count(*) as count')),
-      ]);
+      const toArr = (m) => [...m.entries()].map(([name, count]) => ({ name, count }));
+      const tagCounts = toArr(tagMap).sort((a, b) => b.count - a.count).slice(0, 20);
 
       return {
-        totalCount: totalResult?.count ?? 0,
-        typeCounts: typeCounts ?? [],
-        experienceCounts: experienceCounts ?? [],
-        tagCounts: tagCounts ?? [],
+        totalCount: rows.length,
+        typeCounts: toArr(typeMap),
+        experienceCounts: toArr(expMap),
+        tagCounts,
       };
     });
 
