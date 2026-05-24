@@ -31,16 +31,19 @@ annotate ims.AccomplishmentRecords  with @analytics : { exposed: true, label: 'A
 
 // Declare $apply capability for the analytics-exposed surface so the OData
 // protocol layer accepts groupby+aggregate from the Analytics Explorer SPA.
-// Without this, /admin/analytics/X?$apply=... returns 500.
-annotate ims.Tasks                  with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby', 'concat', 'topcount'] };
-annotate ims.NavigatorCatalog       with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby', 'concat', 'topcount'] };
-annotate ims.SearchableItems        with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby', 'concat', 'topcount'] };
-annotate ims.CompletionAnalytics    with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby', 'concat', 'topcount'] };
-annotate ims.TaskRecords            with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby', 'concat', 'topcount'] };
-annotate ims.Users                  with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby', 'concat', 'topcount'] };
-annotate ims.Missions               with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby', 'concat', 'topcount'] };
-annotate ims.Groups                 with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby', 'concat', 'topcount'] };
-annotate ims.Tutorials              with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby', 'concat', 'topcount'] };
-annotate ims.Events                 with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby', 'concat', 'topcount'] };
-annotate ims.PrizeRecords           with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby', 'concat', 'topcount'] };
-annotate ims.AccomplishmentRecords  with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby', 'concat', 'topcount'] };
+// 'topcount' and 'concat' are intentionally omitted: HANA has no TOPCOUNT
+// SQL function, and CAP's OData→HANA translator emits literal topcount(...)
+// which fails with [SqlError: invalid name of function or procedure: TOPCOUNT].
+// Use orderby(measure desc)/top(N) instead for the same effect.
+annotate ims.Tasks                  with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
+annotate ims.NavigatorCatalog       with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
+annotate ims.SearchableItems        with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
+annotate ims.CompletionAnalytics    with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
+annotate ims.TaskRecords            with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
+annotate ims.Users                  with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
+annotate ims.Missions               with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
+annotate ims.Groups                 with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
+annotate ims.Tutorials              with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
+annotate ims.Events                 with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
+annotate ims.PrizeRecords           with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
+annotate ims.AccomplishmentRecords  with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
