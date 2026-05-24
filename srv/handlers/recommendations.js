@@ -10,7 +10,7 @@ const LOG = cds.log('recommend');
 async function loadAllTutorials() {
   const { Tutorials, ContentManifest } = cds.entities('com.sap.developers.ims');
   const tutorials = await SELECT.from(Tutorials)
-    .columns('ID', 'slug', 'title', 'primaryTag', 'time')
+    .columns('ID', 'slug', 'title', 'primaryTag', 'averageTimeToComplete as time')
     .where(`status = 'ACTIVE' or status is null`);
   // Published = has an ACTIVE manifest entry for the slug.
   let publishedSlugs = new Set();

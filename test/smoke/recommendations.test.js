@@ -37,7 +37,7 @@ describe('Personalized rail wrapper in Hugo HTML', () => {
     const res = await fetchWithRetry(`${BASE_URL}/tutorials/${KNOWN_SLUG}/`);
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toMatch(new RegExp(`data-recommend-slug=["']${KNOWN_SLUG}["']`));
+    expect(html).toMatch(new RegExp(`data-recommend-slug=(["']${KNOWN_SLUG}["']|${KNOWN_SLUG}[\\s>])`));
     expect(html).toContain('data-recommend-target');
   });
 });

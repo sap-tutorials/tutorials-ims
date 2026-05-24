@@ -4,10 +4,20 @@ const APPROUTER = process.env.SMOKE_BASE_URL;
 const SRV       = process.env.SMOKE_SRV_URL;
 
 describe.runIf(APPROUTER && SRV)('admin exports smoke', () => {
-  it('rejects anonymous request to approuter with 401', async () => {
+  it('rejects anonymous request to approuter (401, 302, or JS-redirect to XSUAA)', async () => {
     const res = await fetch(`${APPROUTER}/admin/exports/exportLegacyData?format=csv`, { redirect: 'manual' });
-    // Approuter returns 401 (or 302 to XSUAA login) for unauthenticated; both prove the route is protected
-    expect([401, 302]).toContain(res.status);
+    // Approuter may respond with:
+    //   - 401 (HEAD-style direct rejection)
+    //   - 302 (server-side redirect to /oauth/authorize)
+    //   - 200 with a tiny HTML body that JS-redirects to /oauth/authorize and
+    //     stashes the URL fragment in a cookie (the browser-friendly path).
+    // All three prove the route is XSUAA-protected.
+    if (res.status === 200) {
+      const body = await res.text();
+      expect(body).toMatch(/\/oauth\/authorize/);
+    } else {
+      expect([401, 302]).toContain(res.status);
+    }
   });
 
   // The remaining cases hit srv directly with a tech-user / smoke token
