@@ -1,7 +1,19 @@
 import cds from '@sap/cds';
 import { resolve } from 'node:path';
 
-const ENTITIES = ['ContentFiles', 'ContentManifest', 'TutorialBodyText', 'RepoCatalog'];
+// Entities checked here are ones that MUST stay shape-identical between prod
+// (com.sap.developers.ims) and QA (com.sap.developers.ims.qa) but are NOT
+// declared via shared aspects in db/_content-shape.cds. Aspect-derived
+// entities (ContentFiles, ContentManifest, TutorialBodyText, RepoCatalog)
+// are compiler-enforced and don't need a runtime check.
+//
+// Excluded by design:
+//   - Tutorials: prod uses TaskBase (full shape); QA is a deliberately slim
+//     redirect-lookup subset with different column types.
+//   - PipelineLog / PipelineLogItems / JobLogItems: prod has @Core.Computed
+//     admin-UI-only persisted columns (statusCriticality, severityCriticality,
+//     virtual cfLogsUrl) that QA intentionally omits.
+const ENTITIES = ['JobLocks'];
 
 export interface CompareResult {
   ok: true;
