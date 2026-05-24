@@ -112,9 +112,11 @@
       if (id === 'sb-search') {
         if (typeof window.openCommandPalette === 'function') window.openCommandPalette();
       }
+      {{ if not site.Params.qa }}
       else if (id === 'joule-trigger') {
         if (window.joule && typeof window.joule.open === 'function') window.joule.open();
       }
+      {{ end }}
       else if (id === 'sb-nav') openAt(navPopover, target);
       else if (id === 'sb-share') {
         shareUrlInput.value = window.location.href;

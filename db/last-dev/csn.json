@@ -1829,7 +1829,7 @@
       "annotate": "AdminService.SecondaryAccounts",
       "elements": {
         "primaryAccount_ID": {
-          "@Common.Label": "Primary Acct"
+          "@Common.Label": "Merged Into"
         }
       }
     }

@@ -6,9 +6,15 @@
   "engines": {
     "node": ">=20"
   },
+  "scripts": {
+    "start": "cds-serve"
+  },
   "dependencies": {
+    "@cap-js/hana": "^2.7.1",
+    "@sap-ai-sdk/foundation-models": "^2.10.0",
     "@sap/cds": "^9.9.0",
     "@sap/xssec": "^4",
+    "cheerio": "^1.2.0",
     "express": "^4",
     "hugo-extended": "0.147.8"
   },

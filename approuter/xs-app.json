@@ -90,8 +90,7 @@
       "destination": "srv-api",
       "authenticationType": "xsuaa",
       "scope": "$XSAPPNAME.Admin",
-      "csrfProtection": false,
-      "timeout": 600000
+      "csrfProtection": false
     },
     {
       "source": "^/admin/analytics/(.*)$",

@@ -21,6 +21,7 @@ build-parameters:
         - bash -c "cd .. && npx cds build --production"
         - bash -c "cd ../gen/db/src/gen && jq '.file_suffixes.hdbprocedure={\"plugin_name\":\"com.sap.hana.di.procedure\"}' .hdiconfig > .hdiconfig.tmp && mv .hdiconfig.tmp .hdiconfig"
         - bash -c "cd ../gen/db-qa/src/gen && jq '.file_suffixes.hdbprocedure={\"plugin_name\":\"com.sap.hana.di.procedure\"}' .hdiconfig > .hdiconfig.tmp && mv .hdiconfig.tmp .hdiconfig"
+        - bash -c "rm -f ../gen/db-qa/src/gen/sap.changelog.*.hdbindex"
         - cp ../xs-security.json .
 
 modules:
@@ -82,6 +83,8 @@ modules:
         - cp -r ../../hugo/assets  ./hugo/assets
         - cp -r ../../hugo/data    ./hugo/data
         - cp -r ../../hugo/i18n    ./hugo/i18n
+        - bash -c "mkdir -p srv/jobs && cp ../../srv/lib/content-store.js ../../srv/lib/pipeline-log.js ../../srv/lib/legacy-id.js ../../srv/lib/embedding-pipeline.js ../../srv/lib/step-text-extractor.js ../../srv/lib/embedding-client.js srv/lib/ && cp ../../srv/jobs/job-lock.js srv/jobs/"
+        - bash -c "node -e \"const p=require('./package.json'); p.dependencies=Object.assign(p.dependencies||{},{cheerio:'^1.2.0','@sap-ai-sdk/foundation-models':'^2.10.0'}); require('fs').writeFileSync('./package.json', JSON.stringify(p,null,2));\""
     properties:
       EXPOSE_CAP_UI: false
     provides:
