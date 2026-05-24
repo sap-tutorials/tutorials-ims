@@ -113,8 +113,8 @@ Tutorial HTML is NOT served from static files. After Hugo builds, `publish-conte
 
 ### CAP Backend (srv/)
 
-- **Services**: `DeveloperService` (@path: /api), `AdminService` (@path: /admin), `AnalyticsService` (@path: /admin/analytics), `DisplayService` (@path: /display), `ConsolidationService` (@path: /api/v1), `ScannerService` (@path: /scanner), `SearchService` (@path: /search), `EventStreamService` (@path: event-stream, WebSocket+REST)
-- **Custom endpoints**: `/api/qrcode` (QR code PNG generation), `/build/catalog` (unauthenticated mission/group data for build pipeline), `/build/navigator`, `/build/slug-mapping`, `/build/repo-catalog` (GET unauthenticated; POST bearer-token-protected via `CONTENT_API_KEY` — slug-keyed `DiscoveredTutorial` map used as the third-tier discovery fallback when GitHub and the local actions cache both miss)
+- **Services**: `DeveloperService` (@path: /api), `AdminService` (@path: /admin), `AnalyticsService` (@path: /admin/analytics), `ExportsService` (@path: /admin/exports), `DisplayService` (@path: /display), `ConsolidationService` (@path: /api/v1), `ScannerService` (@path: /scanner), `SearchService` (@path: /search), `ChatService` (@path: /chat, no entities; ORD-symmetric, streams via `/chat/stream`), `EventStreamService` (@path: event-stream, WebSocket+REST)
+- **Custom endpoints** (canonical list with auth + scope in [docs/testing-endpoints.md](docs/testing-endpoints.md)): `/api/qrcode`, `/api/recommendations`, `/build/catalog`, `/build/navigator`, `/build/slug-mapping`, `/build/co-completions`, `/build/repo-catalog` (GET unauth; POST bearer via `CONTENT_API_KEY`), `/feedback/submit` (rate-limited; `SUBMISSION_SALT_SECRET` required), `/chat/stream` (SSE), `/admin/embeddings/stats`, `/health`, `/health/db`, `/auth/user`
 - **Content persistence** (`srv/lib/content-store.js`): Tutorial HTML stored as gzip-compressed BLOBs in HANA (`ContentFiles` + `ContentManifest` entities). Endpoints:
   - `POST /content/publish` — accepts `{ trigger, hugoVersion, files: { slug: base64gzip } }`, creates versioned manifest (bearer token auth via `CONTENT_API_KEY`)
   - `GET /content/tutorials/:slug` — serves decompressed HTML with ETag, Cache-Control, bounded LRU cache (50MB)
@@ -178,7 +178,15 @@ Set `IMS_BASE_URL`, `CAP_BASE_URL`, and `IMS_AUTH_TOKEN` env vars. Export files 
 
 ### Documentation (docs/)
 
-Architecture references for developers (not deployed). See [docs/](docs/) — content pipeline, auth, IMS migration, MTA deployment, and the VitePress→Hugo migration history.
+Architecture and reference docs for developers (not deployed). Key entries:
+
+- [docs/pilot-status.md](docs/pilot-status.md) — pilot completion + locked production scope
+- [docs/testing-endpoints.md](docs/testing-endpoints.md) — canonical UI + API endpoint reference (smoke-test targets, auth/scope mapping)
+- [docs/improvements.md](docs/improvements.md) and [docs/TODO.md](docs/TODO.md) — feature backlog and gap tracking (largely historic; mine for descriptions when extending broader docs)
+- [docs/theme-variants.md](docs/theme-variants.md) — building event-specific theme variants (Joule, Sapphire, TechEd)
+- [docs/author-instructions.md](docs/author-instructions.md) — tutorial-author workflow
+- [docs/qa-channel-bootstrap.md](docs/qa-channel-bootstrap.md) — one-time QA author-preview channel setup procedure
+- [docs/content-pipeline.md](docs/content-pipeline.md), [docs/authentication-architecture.md](docs/authentication-architecture.md), [docs/mta-deployment.md](docs/mta-deployment.md), [docs/hugo-migration.md](docs/hugo-migration.md) — deep-dives
 
 ### Parsers (scripts/parsers/)
 
@@ -194,107 +202,7 @@ Three Vitest workspaces defined in `vitest.config.ts` (inline `projects` array):
 
 ## QA Channel Bootstrap
 
-One-time setup procedure for the QA author-preview channel (`tutorials-srv-qa` + `tutorials-hana-qa` + `/tutorials-qa/*` route).
-
-### Step 1: Set CI secrets in tutorials-poc
-
-In tutorials-poc repo: `CONTENT_API_KEY_QA`, `CAP_SRV_URL_QA`, `TUTORIAL_FETCH_TOKEN`, `SMOKE_QA_TOKEN`.
-
-```bash
-gh secret set CONTENT_API_KEY_QA      -R sap-tutorials/tutorials-poc -b "<value>"
-gh secret set CAP_SRV_URL_QA          -R sap-tutorials/tutorials-poc -b "https://tutorial-system-dev-tutorials-srv-qa.cfapps.eu10-005.hana.ondemand.com"
-gh secret set TUTORIAL_FETCH_TOKEN    -R sap-tutorials/tutorials-poc -b "<value>"
-gh secret set SMOKE_QA_TOKEN          -R sap-tutorials/tutorials-poc -b "<value>"
-```
-
-Also set the QA URL repo-level **variables** (not secrets) so the post-deploy smoke step can resolve QA endpoints. `qa-routes.test.ts` self-skips when these are absent — without them, security regressions on `tutorials-srv-qa` won't be caught in CI.
-
-```bash
-gh variable set APPROUTER_URL_QA -R sap-tutorials/tutorials-poc -b "https://<approuter-host>"
-gh variable set SRV_URL_QA       -R sap-tutorials/tutorials-poc -b "https://tutorial-system-dev-tutorials-srv-qa.cfapps.eu10-005.hana.ondemand.com"
-```
-
-### Step 2: Generate the dispatch token (`TUTORIALS_POC_DISPATCH_TOKEN`)
-
-Create a fine-grained PAT (or GitHub App installation token) on a maintainer account with the minimum scope:
-
-- Repository access: `sap-tutorials/tutorials-poc` only.
-- Permissions: `Contents: read`, `Metadata: read`, `Actions: write` (for `repository_dispatch`).
-
-Save the token value securely; it must be set as a per-repo secret in EACH `*-Contribution` repo (Step 3).
-
-### Step 3: Distribute the dispatch token to every `-Contribution` repo
-
-```bash
-REPOS=$(npx tsx -e "
-  import('./scripts/install-qa-workflows.ts').then(async m => {
-    const repos = await m.listContributionRepos(/* real fetcher */);
-    console.log(repos.join('\n'));
-  });
-")
-
-for r in $REPOS; do
-  echo "Setting TUTORIALS_POC_DISPATCH_TOKEN in sap-tutorials/$r..."
-  gh secret set TUTORIALS_POC_DISPATCH_TOKEN \
-    -R "sap-tutorials/$r" \
-    -b "<dispatch-token-value>"
-done
-```
-
-Verify each repo:
-
-```bash
-for r in $REPOS; do
-  gh secret list -R "sap-tutorials/$r" | grep TUTORIALS_POC_DISPATCH_TOKEN || echo "MISSING: $r"
-done
-```
-
-Any `MISSING:` line is a bootstrap gap that must be resolved before the matching `notify-qa.yml` PR (from Task 22) is merged — without the secret, the dispatch step in that workflow will fail with a 401.
-
-### Step 4: Local deploy
-
-**Before `cd .deploy && mbt build`, you must build BOTH prod and QA Hugo:**
-
-```bash
-npm run build:all                                      # prod hugo → hugo/public/
-npm run fetch-tutorials:qa && npm run build:qa         # QA hugo → hugo/public-qa/
-```
-
-Without the QA build, `static/qa/` will be empty after `mbt build` and `/tutorials-qa/*` routes will 404. The `.deploy/mta.yaml` approuter `commands` block copies `hugo/public-qa/.` into `static/qa/` (and strips the static `tutorials/` subfolder so the dynamic HANA-served content route wins).
-
-```bash
-cd .deploy
-mbt build
-cf deploy mta_archives/tutorials-poc_1.0.0.mtar -e ../deploy/dev.mtaext
-```
-
-Both `tutorials-srv` and `tutorials-srv-qa` apps should be healthy; HDI containers `tutorials-hana` and `tutorials-hana-qa` deployed.
-
-### Step 5: Run `install-qa-workflows.ts` (opens PRs)
-
-```bash
-npm run install-qa-workflows
-```
-
-One PR per `-Contribution` repo. Merge each one once Step 3 has confirmed the token is in place for that repo.
-
-### Step 6: Manually trigger first QA rebuild
-
-```bash
-gh workflow run rebuild-content-qa.yml -f slug=
-```
-
-### Step 7: Sanity check
-
-```bash
-curl -H "Cookie: ${SESSION_COOKIE_QA}" https://${APPROUTER_URL}/tutorials-qa/<known-slug> | grep "QA preview"
-```
-
-Expect: yellow banner present in HTML.
-
-### Step 8: Assign role collection to first authors
-
-Out-of-band via BTP cockpit: assign the **"Tutorials Author"** role collection (declared in `xs-security.json`, granting scope `$XSAPPNAME.Tutorial.Author`) to author user emails. Users must log out and back in for the new scope to appear in their JWT — until then, `/tutorials-qa/*` returns 403 even for assigned users.
+One-time setup for the QA author-preview channel — full procedure (CI secrets, dispatch-token distribution to every `-Contribution` repo, local deploy with both prod and QA Hugo built, sanity check, role-collection assignment) lives in [docs/qa-channel-bootstrap.md](docs/qa-channel-bootstrap.md). Day-to-day QA commands are in the Commands section above; channel-specific gotchas (`.tutorial-cache-qa/` marker, `hugo.qa.toml`, `CONTENT_API_KEY_QA`) are in Gotchas below.
 
 ## Gotchas
 
