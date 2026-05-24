@@ -72,7 +72,7 @@ jobs:
       - name: Install dependencies
         run: |
           npm ci
-          npm --prefix apps install
+          npm --prefix hugo-apps install
 
       - name: Restore tutorial cache
         uses: actions/cache@v4
@@ -108,7 +108,7 @@ jobs:
         run: npm run validate-tutorials
 
       - name: Build Vue apps
-        run: npm --prefix apps run build
+        run: npm --prefix hugo-apps run build
 
       - name: Copy Joule vendor bundles
         run: npm run copy-joule-vendor

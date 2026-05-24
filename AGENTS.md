@@ -5,7 +5,7 @@ This is the AGENTS.md for the SAP Developers Tutorials platform codebase. AI cod
 ## Stack
 - Hugo static site (hugo/) for tutorial pages, missions, groups
 - CAP Node.js backend (srv/) on SAP HANA Cloud
-- Vue 3 public-facing apps (apps/, app/display-app/)
+- Vue 3 public-facing apps (hugo-apps/, app/display-app/)
 - SAPUI5/Fiori Elements admin shell (app/admin-shell/)
 - BTP Cloud Foundry deployment via MTA
 

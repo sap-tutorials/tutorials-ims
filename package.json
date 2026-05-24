@@ -28,7 +28,7 @@
     "migrate:hana": "node scripts/migrate-from-hana.js",
     "compare": "node scripts/compare-systems.js",
     "build:css": "postcss hugo/assets/css/sap-fundamental.css --config hugo/ --no-map -o hugo/static/css/sap-fundamental.css",
-    "build:apps": "npm --prefix apps run build",
+    "build:apps": "npm --prefix hugo-apps run build",
     "build:analytics-explorer": "npm --prefix app/analytics-explorer install && npm --prefix app/analytics-explorer run build",
     "build:hugo": "hugo --source hugo --minify",
     "build:highlight": "tsx scripts/highlight-cds.ts",

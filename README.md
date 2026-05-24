@@ -32,13 +32,10 @@ tutorials-poc/
 │   ├── display-app/            #   Standalone event monitor dashboard (Vue 3 + Vite, STOMP WebSocket)
 │   ├── admin-annotations.cds   #   @UI/@Common annotations for all admin screens
 │   └── change-tracking.cds     #   @cap-js/change-tracking config for admin entities
-├── apps/                       # Vue 3 micro-apps for the public site (Vite, injected into Hugo)
-│   └── src/
-│       ├── app-space/          #     Event-themed tutorial kiosk (Joule/Sapphire themes)
-│       ├── event-display/      #     Event display embed (leaderboard widget)
-│       ├── nav-dropdown/       #     Navigation dropdown component
-│       ├── navigator/          #     Full tutorial navigator page
-│       └── shared/             #     Shared utilities, API client, types
+├── hugo-apps/                  # Vue 3 page-level islands compiled into Hugo's static JS (output: hugo/static/js/)
+│   └── src/                    #   9 entry points: navigator, app-space, event-display, nav-dropdown,
+│       │                       #   scanner-vue, tutorial-feedback, tutorial-rating, cmd-palette, me
+│       └── shared/             #   Shared utilities, API client, types
 ├── hugo/                       # Hugo static site generator — tutorial pages + layouts
 │   ├── assets/css|js/          #   PostCSS pipeline (Fundamental Styles Horizon) + page-level JS
 │   │                           #   includes ui5-bootstrap.ts (UI5 Web Components shellbar/dialog/etc.)
@@ -338,7 +335,7 @@ Delete the directory to force a full re-fetch.
 
 Hugo generates the static tutorial pages with SAP Fundamental Styles. Deployed as static files in `approuter/static/`.
 
-### AppSpace (apps/src/app-space/)
+### AppSpace (hugo-apps/src/app-space/)
 
 Event-themed tutorial space (Vue 3 SPA) used at SAP events. Features:
 - Joule/Sapphire theme overlays

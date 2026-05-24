@@ -1,4 +1,4 @@
-<!-- apps/src/shared/Skeleton.vue
+<!-- hugo-apps/src/shared/Skeleton.vue
      U14: shared skeleton loader for Vue islands. Three modes — `card`, `text-line`,
      `rect`. The CSS lives in hugo/assets/css/skeletons.css and is inlined into
      each island bundle by vite-plugin-css-injected-by-js.
