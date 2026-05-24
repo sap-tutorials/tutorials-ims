@@ -298,9 +298,13 @@ html[data-reader="on"][data-page-kind="tutorial"] body:has(.tutorial-stepnav) {
 }
 
 /* Collapse the two-col grid into a single, reading-width column.
-   ~70ch at 1.0625rem body text; centered via op-page's existing margin: auto. */
+   ~70ch at 1.0625rem body text; centered via op-page's existing margin: auto.
+   minmax(0, 1fr) (not bare 1fr) is critical: without an explicit 0 min-width,
+   the grid track inherits min-content sizing, so wide intrinsic elements
+   inside an expanded step (long <pre> lines, unbroken URLs, tables) push
+   the column past .op-page's max-width and overflow the reading pane. */
 html[data-reader="on"][data-page-kind="tutorial"] .op-twocol {
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
 }
 html[data-reader="on"][data-page-kind="tutorial"] .op-page {
   max-width: 760px;
