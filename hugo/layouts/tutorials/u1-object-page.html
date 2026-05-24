@@ -432,6 +432,29 @@
       });
     }
     setTimeout(syncCompletion, 250);
+
+    // Mirror viewport-detected step → wizard `selected`.
+    // Why: wizard's built-in scroll-spy is bound to its (zero-height, hidden)
+    // .ui5-wiz-content slot, so page scroll never updates `selected` and the
+    // step indicator stays pinned to step 1 — also leaking into Joule's
+    // step-help context and the mobile sheet's prev/next.
+    const wizardStepEls = Array.from(wizard.querySelectorAll('ui5-wizard-step'));
+    let mirrorRaf = null;
+    function mirrorScrollToWizard() {
+      if (isProgrammaticScroll) return;
+      const n = getCurrentStep();
+      const target = wizardStepEls[n - 1];
+      if (!target || target.selected) return;
+      wizardStepEls.forEach((s, i) => { s.selected = (i === n - 1); });
+    }
+    window.addEventListener('scroll', () => {
+      if (mirrorRaf) return;
+      mirrorRaf = requestAnimationFrame(() => {
+        mirrorRaf = null;
+        mirrorScrollToWizard();
+      });
+    }, { passive: true });
+    setTimeout(mirrorScrollToWizard, 250);
   }
 
   // U18 — Mobile bottom-sheet step navigator
@@ -458,14 +481,11 @@
     return list?.querySelectorAll("ui5-li").length || 0;
   }
 
-  function getCurrentStepFromWizard() {
-    if (!opWizard) return 1;
-    const steps = Array.from(opWizard.querySelectorAll("ui5-wizard-step"));
-    const idx = steps.findIndex((s) => s.hasAttribute("selected"));
-    return idx >= 0 ? idx + 1 : 1;
-  }
-
-  function getCurrentStepFromViewport() {
+  // Viewport detection is the source of truth for "current step". The ui5-wizard's
+  // built-in scroll-spy listens on its own .ui5-wiz-content div, but our layout
+  // hides that div (::part(step-content) { display:none }) so page scrolling
+  // never reaches it — its `selected` attribute would stay pinned to step 1.
+  function getCurrentStep() {
     const sections = Array.from(document.querySelectorAll(".tutorial-step"));
     if (!sections.length) return 1;
     const center = window.innerHeight / 2;
@@ -481,10 +501,6 @@
       }
     });
     return bestIdx + 1;
-  }
-
-  function getCurrentStep() {
-    return opWizard ? getCurrentStepFromWizard() : getCurrentStepFromViewport();
   }
 
   function setBoundaryDisabled(current, total) {
