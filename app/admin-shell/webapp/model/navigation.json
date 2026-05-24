@@ -26,6 +26,18 @@
       ]
     },
     {
+      "key": "reporting",
+      "title": "Reporting",
+      "icon": "sap-icon://line-chart-time-axis",
+      "expanded": true,
+      "items": [
+        { "key": "analyticsExternal", "title": "Analytics", "icon": "sap-icon://bar-chart" },
+        { "key": "analytics", "title": "Completion analytics (legacy)", "icon": "sap-icon://line-chart" },
+        { "key": "statistics", "title": "Statistics", "icon": "sap-icon://bar-chart" },
+        { "key": "dataExport", "title": "Data Export", "icon": "sap-icon://download" }
+      ]
+    },
+    {
       "key": "system",
       "title": "System",
       "icon": "sap-icon://action-settings",
@@ -38,8 +50,6 @@
         { "key": "accounts", "title": "Account Merges", "icon": "sap-icon://family-care" },
         { "key": "changelog", "title": "Change Log", "icon": "sap-icon://history" },
         { "key": "board", "title": "Board", "icon": "sap-icon://overview-chart" },
-        { "key": "analytics", "title": "Analytics", "icon": "sap-icon://line-chart" },
-        { "key": "statistics", "title": "Statistics", "icon": "sap-icon://bar-chart" },
         { "key": "privacy", "title": "Privacy", "icon": "sap-icon://shield" }
       ]
     }

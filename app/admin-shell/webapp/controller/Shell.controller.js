@@ -54,7 +54,7 @@ sap.ui.define([
   };
 
   var NAV_GROUPS_STORAGE_KEY = "sap-tutorials-admin-nav-groups";
-  var NAV_GROUP_KEYS = ["content", "rewards", "feedback", "system"];
+  var NAV_GROUP_KEYS = ["content", "rewards", "feedback", "reporting", "system"];
 
   return Controller.extend("sap.tutorials.admin.shell.controller.Shell", {
     onInit: function () {
