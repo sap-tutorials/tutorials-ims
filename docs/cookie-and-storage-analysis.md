@@ -1,7 +1,7 @@
 # Cookie and Browser Storage Analysis — Public-Facing Surface
 
 **Status:** Audit — 2026-05-20
-**Scope:** Public-facing surface only — Hugo site (`/`, `/tutorials/*`, `/missions/*`, `/groups/*`), App Space (`apps/src/app-space`), Tutorial Navigator (`apps/src/navigator`), Mini-Navigator, Nav Dropdown, Joule chat widget, Display app (`display-app/`), Scanner UI (UI5 + Vue variants), and the AppRouter routes that serve them. **The Admin UI shell (`/admin-ui/*`) is explicitly excluded** from this audit.
+**Scope:** Public-facing surface only — Hugo site (`/`, `/tutorials/*`, `/missions/*`, `/groups/*`), App Space (`apps/src/app-space`), Tutorial Navigator (`apps/src/navigator`), Mini-Navigator, Nav Dropdown, Joule chat widget, Display app (`app/display-app/`), Scanner UI (UI5 + Vue variants), and the AppRouter routes that serve them. **The Admin UI shell (`/admin-ui/*`) is explicitly excluded** from this audit.
 **Out of scope:** Admin shell theme persistence, admin Fiori Elements apps, internal CAP service-to-service traffic.
 
 This document is the cookie/storage inventory required by [TODO.md §21 — Cookie usage report & consent banner](../TODO.md#L549). It distinguishes **HTTP cookies** (sent automatically with every request to the matching origin/path) from **`localStorage` / `sessionStorage`** (Web Storage API, never transmitted, cleared by different rules). Both are in scope of GDPR Art. 5(3) / ePrivacy Directive (the "cookie law" applies to **any storage of or access to information on the user's terminal equipment**, regardless of mechanism), but the consent rules and lifetime characteristics differ.
@@ -102,7 +102,7 @@ All `sessionStorage` use on the public surface is in the **Joule chat widget** (
 
 - ❌ No `localStorage` use in [`hugo/static/js/app-space.js`](../hugo/static/js/app-space.js), [`navigator.js`](../hugo/static/js/navigator.js), [`nav-dropdown.js`](../hugo/static/js/nav-dropdown.js), [`event-display.js`](../hugo/static/js/event-display.js), [`scanner-vue.js`](../hugo/static/js/scanner-vue.js)
 - ❌ No `localStorage`/`sessionStorage` in any [`apps/src/`](../apps/src/) Vue components
-- ❌ No storage in [`display-app/src/`](../display-app/src/)
+- ❌ No storage in [`app/display-app/src/`](../app/display-app/src/)
 - ❌ No storage in [`app/scanner/webapp/`](../app/scanner/webapp/) (UI5 scanner)
 - ❌ No IndexedDB use (verified by `Grep -r "indexedDB|openDatabase"` — no matches on public surface)
 - ❌ No Cache Storage / Service Worker registration on the public surface
@@ -200,7 +200,7 @@ Ordered by impact and dependency, suitable for the work tracked in [TODO.md §21
 
 This inventory was produced by:
 
-- `Grep` over [`approuter/`](../approuter/), [`srv/`](../srv/), [`hugo/`](../hugo/), [`apps/src/`](../apps/src/), [`display-app/src/`](../display-app/src/), and [`app/scanner/`](../app/scanner/) for the patterns: `localStorage`, `sessionStorage`, `document.cookie`, `Set-Cookie`, `res.cookie`, `setHeader.*[Cc]ookie`, `cookie-parser`, `express-session`, `iframe`, `embed`, `gtag`, `analytics`, `youtube`
+- `Grep` over [`approuter/`](../approuter/), [`srv/`](../srv/), [`hugo/`](../hugo/), [`apps/src/`](../apps/src/), [`app/display-app/src/`](../app/display-app/src/), and [`app/scanner/`](../app/scanner/) for the patterns: `localStorage`, `sessionStorage`, `document.cookie`, `Set-Cookie`, `res.cookie`, `setHeader.*[Cc]ookie`, `cookie-parser`, `express-session`, `iframe`, `embed`, `gtag`, `analytics`, `youtube`
 - Reading [`approuter/xs-app.json`](../approuter/xs-app.json) and [`approuter/server.js`](../approuter/server.js) for AppRouter route configuration and CSP
 - Reading [`hugo/layouts/partials/head.html`](../hugo/layouts/partials/head.html), [`feedback-share.html`](../hugo/layouts/partials/feedback-share.html), and [`hugo/layouts/scanner-vue/list.html`](../hugo/layouts/scanner-vue/list.html) for inline storage and third-party links
 - Reading [`hugo/static/js/joule.js`](../hugo/static/js/joule.js) for chat-widget storage

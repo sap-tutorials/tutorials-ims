@@ -156,7 +156,7 @@ Tutorial HTML is NOT served from static files. After Hugo builds, `publish-conte
 
 - **Hugo site** (`hugo/`): Static site generator. Layouts in `hugo/layouts/`, content generated into `hugo/content/tutorials/`. Styled with SAP Fundamental Styles (PostCSS pipeline). Config in `hugo/hugo.toml`.
 - **Vue apps** (`apps/`): Public-facing Vue 3 components bundled by Vite, including `AppSpace.vue` (event-themed tutorial space with Joule/Sapphire themes). Fetches progress from `/api/getEventProgress`, displays QR codes via `/api/qrcode`.
-- **Display dashboard** (`display-app/`): Standalone Vue+Vite app for event monitors — real-time dashboard with rotating views (Board, Statistics, Leaderboard). Connects via STOMP WebSocket.
+- **Display dashboard** (`app/display-app/`): Standalone Vue+Vite app for event monitors — real-time dashboard with rotating views (Board, Statistics, Leaderboard). Connects via STOMP WebSocket.
 
 ### Deployment (BTP Cloud Foundry)
 
@@ -214,7 +214,7 @@ One-time setup for the QA author-preview channel — full procedure (CI secrets,
 - **Cache clearing** — `.tutorial-cache/` caches raw markdown, GitHub metadata, and CAP catalog data. Delete it to force a full re-fetch. There is no incremental invalidation.
 - **Node.js >= 20 required** — Build scripts use native `fetch` (no polyfill).
 - **Slug fields** — `Missions.slug` and `CompletionPaths.slug` must be populated for the build pipeline to generate mission/group pages. Run `node scripts/migrate-reference-data.js populate-slugs` after data import.
-- **`app/` vs `apps/` vs `display-app/`** — Three separate directories. `app/` contains SAPUI5 admin apps: `app/admin-shell/` is the unified shell (sap.tnt.ToolPage with side navigation) and `app/admin/` holds 10 Fiori Elements feature components loaded by the shell. In production, deployed via HTML5 App Repository at `/admin-ui/`; locally, the approuter's `adminAppsHandler` middleware mounts them at `/admin-ui/`. `apps/` contains Vue 3 public-facing components bundled by Vite. `display-app/` is a standalone Vue+Vite dashboard app for event monitors. Do not mix them.
+- **`app/` vs `apps/`** — Two separate directories. `app/` contains standalone UI applications (each with its own build): `admin-shell/`, `admin/` (11 Fiori Elements components loaded by the shell), `analytics-explorer/` (Vue 3 SPA), `scanner/` (UI5), and `display-app/` (Vue 3 event-monitor dashboard). `apps/` contains Vue 3 public-facing components bundled by a single Vite build and injected into Hugo pages. Builds from `app/*` are deployed by copying their `dist/`/`webapp/` into `approuter/static/<route>/` (see [mta.yaml](mta.yaml)). Don't mix them.
 - **`/admin/` is OData only** — The AdminService OData endpoint lives at `/admin/`. The admin shell UI is served at `/admin-ui/` to avoid path collisions.
 - **Hugo vs VitePress** — The project migrated from VitePress to Hugo. The `site/.vitepress/` directory still exists (with a built `dist/`) but is legacy. Active frontend work targets `hugo/`.
 - **`CONTENT_API_KEY` env var** — Required for `POST /content/publish` and `POST /content/rollback`. Set in CI secrets and locally when testing publish. Without it, publish requests return 401.

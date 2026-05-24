@@ -51,7 +51,7 @@ This is the locked scope. Anything not listed is post-launch.
 - **Admin shell** ([../app/admin-shell/](../app/admin-shell/)) — `sap.tnt.ToolPage` with 10 Fiori Elements feature components loaded as headless components
 - **Analytics Explorer** ([../app/analytics-explorer/](../app/analytics-explorer/)) — Vue 3 SPA with Monaco SQL editor over `AnalyticsService`
 - **Public Vue apps** ([../apps/](../apps/)) — `AppSpace.vue` event-themed component, QR code rendering
-- **Display dashboard** ([../display-app/](../display-app/)) — Vue+Vite event monitor with rotating views
+- **Display dashboard** ([../app/display-app/](../app/display-app/)) — Vue+Vite event monitor with rotating views
 - **Scanner** ([../app/scanner/](../app/scanner/)) — UI5 barcode scanner using `sap.ndc.BarcodeScanner`
 
 ### Content pipeline

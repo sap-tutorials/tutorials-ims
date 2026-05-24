@@ -135,7 +135,7 @@ jobs:
           mkdir -p approuter/static
           cp -r hugo/public/* approuter/static/
           rm -rf approuter/static/tutorials
-          cp -r display-app/dist approuter/static/display-app
+          cp -r app/display-app/dist approuter/static/display-app
 
       - name: Create content tarball
         run: tar czf content.tar.gz -C approuter/static .

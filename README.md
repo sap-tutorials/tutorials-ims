@@ -22,13 +22,14 @@ tutorials-poc/
 │   │   ├── css/img/js/         #     Global stylesheets, images, shared JS injected into Hugo pages
 │   │   └── (no tutorials/)     #     Tutorials served dynamically from HANA, not static files
 │   └── xs-app.json             #   Route definitions (/admin-ui, /analytics-ui, /scanner-*, /tutorials, /tutorials-qa, /api, /admin, /display, /chat, /search, /build, /content)
-├── app/                        # SAPUI5 admin apps (UI5 Tooling builds, deployed to approuter/static/)
+├── app/                        # Standalone UI applications (UI5 + Vue, deployed to approuter/static/)
 │   ├── admin-shell/            #   sap.tnt.ToolPage shell with side navigation + theme switching
 │   ├── admin/                  #   11 Fiori Elements feature components (events, missions, groups,
 │   │                           #   accomplishments, prizes, tutorials, tags, operations, accounts,
 │   │                           #   changelog, joule, feedback, analytics) loaded by the shell
 │   ├── analytics-explorer/     #   Vue 3 + Vite + Monaco SQL editor over AnalyticsService
 │   ├── scanner/                #   UI5 barcode scanner (sap.ndc.BarcodeScanner)
+│   ├── display-app/            #   Standalone event monitor dashboard (Vue 3 + Vite, STOMP WebSocket)
 │   ├── admin-annotations.cds   #   @UI/@Common annotations for all admin screens
 │   └── change-tracking.cds     #   @cap-js/change-tracking config for admin entities
 ├── apps/                       # Vue 3 micro-apps for the public site (Vite, injected into Hugo)
@@ -38,8 +39,6 @@ tutorials-poc/
 │       ├── nav-dropdown/       #     Navigation dropdown component
 │       ├── navigator/          #     Full tutorial navigator page
 │       └── shared/             #     Shared utilities, API client, types
-├── display-app/                # Standalone event monitor dashboard (Vue 3 + Vite)
-│   └── src/                    #   Components, composables; bundle copied to approuter/static/display-app/
 ├── hugo/                       # Hugo static site generator — tutorial pages + layouts
 │   ├── assets/css|js/          #   PostCSS pipeline (Fundamental Styles Horizon) + page-level JS
 │   │                           #   includes ui5-bootstrap.ts (UI5 Web Components shellbar/dialog/etc.)
@@ -347,7 +346,7 @@ Event-themed tutorial space (Vue 3 SPA) used at SAP events. Features:
 - QR code generation via `/api/qrcode`
 - Real-time updates via STOMP WebSocket
 
-### Display App (display-app/)
+### Display App (app/display-app/)
 
 Event monitor dashboard (Vue 3 SPA) for big screens at SAP events. Shows:
 - Leaderboard, burnup charts, track statistics

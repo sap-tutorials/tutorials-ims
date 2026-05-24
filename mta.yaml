@@ -25,14 +25,14 @@ build-parameters:
         - cp -r hugo/public-qa/* approuter/static/qa/
         - rm -rf approuter/static/qa/tutorials
         - npx tsx scripts/highlight-cds.ts
-        - npm --prefix display-app install
-        - npm --prefix display-app run build
+        - npm --prefix app/display-app install
+        - npm --prefix app/display-app run build
         - mkdir -p approuter/static
         - cp -r hugo/public/* approuter/static/
         - cp hugo/static/tutorials/_nav.json approuter/static/tutorials/_nav.json.bak
         - rm -rf approuter/static/tutorials
         - mkdir -p approuter/static/tutorials && mv approuter/static/tutorials/_nav.json.bak approuter/static/tutorials/_nav.json
-        - cp -r display-app/dist approuter/static/display-app
+        - cp -r app/display-app/dist approuter/static/display-app
         - cp -r app/scanner/webapp approuter/static/scanner-ui
 
 modules:
