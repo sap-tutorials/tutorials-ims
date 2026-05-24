@@ -1,4 +1,5 @@
 @charset "UTF-8";/* SAP Horizon Light theme variables */:root {
+  color-scheme: light;
   --sapBackgroundColor: #f5f6f7;
   --sapBaseColor: #fff;
   --sapBrandColor: #0070f2;
@@ -59,6 +60,7 @@
   --sapPageFooter_BorderColor: #d9d9d9;
   --sapGroup_TitleBorderWidth: 1px;
 }/* SAP Horizon Dark theme variables */html.dark {
+  color-scheme: dark;
   --sapBackgroundColor: #12171c;
   --sapBaseColor: #1c2228;
   --sapBrandColor: #4db1ff;
