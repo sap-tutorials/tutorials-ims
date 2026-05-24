@@ -14,13 +14,22 @@ export default class AnalyticsService extends cds.ApplicationService {
     const srv = this
 
     function getExposedEntries() {
+      // CAP propagates @analytics.exposed from the base ims.X entity to every
+      // projection across all services. Iterating cds.model.definitions and
+      // matching by short name picks up the same projection multiple times
+      // (one per service that exposes it). Restrict to the base ims.* namespace
+      // so each entity surfaces exactly once.
       const out = []
+      const seen = new Set()
       for (const def of Object.values(cds.model.definitions)) {
         if (def.kind !== 'entity') continue
         if (!def['@analytics.exposed']) continue
+        if (!def.name.startsWith('com.sap.developers.ims.')) continue
         const projectionName = def.name.split('.').pop()
+        if (seen.has(projectionName)) continue
         const projection = srv.entities[projectionName]
         if (!projection) continue
+        seen.add(projectionName)
         out.push({ def, projection, projectionName })
       }
       return out

@@ -1,2 +1,7 @@
-:root { font-family: var(--sapFontFamily, system-ui); }
+:root {
+  font-family: var(--sapFontFamily, system-ui);
+  color: var(--sapTextColor, #32363a);
+  background: var(--sapBackgroundColor, #f5f6f7);
+}
 html, body, #app { margin: 0; height: 100%; }
+body { background: var(--sapBackgroundColor, #f5f6f7); }
