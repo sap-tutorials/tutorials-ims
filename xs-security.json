@@ -10,6 +10,7 @@
     { "name": "$XSAPPNAME.MobileApp",          "description": "Mobile app features" },
     { "name": "$XSAPPNAME.DisplayApp",         "description": "Read-only UI access" },
     { "name": "$XSAPPNAME.ConsolidationScope", "description": "Account merge operations (SCI technical user)" },
+    { "name": "$XSAPPNAME.Tutorial.Author",    "description": "QA channel author preview (unpublished tutorials at /tutorials-qa/*)" },
     { "name": "$XSAPPNAME.Everyone",           "description": "Baseline access" }
   ],
   "role-templates": [
@@ -47,6 +48,11 @@
       "name": "ConsolidationScope",
       "description": "Account consolidation (SCI)",
       "scope-references": ["$XSAPPNAME.ConsolidationScope"]
+    },
+    {
+      "name": "TutorialAuthor",
+      "description": "QA channel author (preview unpublished tutorials)",
+      "scope-references": ["$XSAPPNAME.Tutorial.Author", "$XSAPPNAME.Everyone"]
     },
     {
       "name": "Everyone",
@@ -89,6 +95,14 @@
       "description": "Read-only display access for event monitors",
       "role-template-references": [
         "$XSAPPNAME.DisplayApp",
+        "$XSAPPNAME.Everyone"
+      ]
+    },
+    {
+      "name": "Tutorials Author",
+      "description": "Author preview access to tutorials-qa channel (gates /tutorials-qa/*)",
+      "role-template-references": [
+        "$XSAPPNAME.TutorialAuthor",
         "$XSAPPNAME.Everyone"
       ]
     }
