@@ -32,7 +32,7 @@
       "expanded": true,
       "items": [
         { "key": "analyticsExternal", "title": "Analytics", "icon": "sap-icon://bar-chart" },
-        { "key": "analytics", "title": "Completion analytics (legacy)", "icon": "sap-icon://line-chart" },
+        { "key": "analytics", "title": "Completion analytics", "icon": "sap-icon://line-chart" },
         { "key": "statistics", "title": "Statistics", "icon": "sap-icon://bar-chart" },
         { "key": "dataExport", "title": "Data Export", "icon": "sap-icon://download" }
       ]

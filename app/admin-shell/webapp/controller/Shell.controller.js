@@ -44,7 +44,7 @@ sap.ui.define([
     accounts: "Account Merges",
     changelog: "Change Log",
     board: "Board",
-    analytics: "Analytics",
+    analytics: "Completion analytics",
     statistics: "Statistics",
     joule: "Joule Settings",
     privacy: "Privacy",

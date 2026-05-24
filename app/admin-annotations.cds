@@ -875,6 +875,24 @@ annotate AdminService.SecondaryAccounts with @(
 // --- Completion Analytics (aggregated report, no user data) ---
 
 annotate AdminService.CompletionAnalytics with @(
+  Aggregation.ApplySupported: {
+    Transformations: ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby', 'concat'],
+    GroupableProperties: [
+      completionDay,
+      completionDate,
+      taskType,
+      taskTitle,
+      primaryTag,
+      experienceTag,
+      groupTitle,
+      missionTitle,
+      eventName
+    ],
+    AggregatableProperties: [
+      { Property: completionCount },
+      { Property: completionTimeMs }
+    ]
+  },
   Analytics.AggregatedProperties: [{
     Name: 'totalCompletions',
     AggregationMethod: 'sum',

@@ -89,7 +89,7 @@
           </tnt:NavigationListItem>
           <tnt:NavigationListItem text="Reporting" icon="sap-icon://line-chart-time-axis" expanded="{viewModel>/groupExpanded/reporting}">
             <tnt:NavigationListItem text="Analytics" key="analyticsExternal" icon="sap-icon://bar-chart" href="/analytics-ui/" target="_self" />
-            <tnt:NavigationListItem text="Completion analytics (legacy)" icon="sap-icon://line-chart" key="analytics" />
+            <tnt:NavigationListItem text="Completion analytics" icon="sap-icon://line-chart" key="analytics" />
             <tnt:NavigationListItem text="Statistics" key="statistics" />
             <tnt:NavigationListItem text="Data Export" key="dataExport" icon="sap-icon://download" />
           </tnt:NavigationListItem>
