@@ -294,7 +294,7 @@ Expect: yellow banner present in HTML.
 
 ### Step 8: Assign role collection to first authors
 
-Out-of-band via BTP cockpit: assign "Tutorial Author" role collection to author user emails.
+Out-of-band via BTP cockpit: assign the **"Tutorials Author"** role collection (declared in `xs-security.json`, granting scope `$XSAPPNAME.Tutorial.Author`) to author user emails. Users must log out and back in for the new scope to appear in their JWT — until then, `/tutorials-qa/*` returns 403 even for assigned users.
 
 ## Gotchas
 
