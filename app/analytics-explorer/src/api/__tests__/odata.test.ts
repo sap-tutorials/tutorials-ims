@@ -31,7 +31,7 @@ describe('buildApplyUrl', () => {
     expect(decoded).toContain("filter(status eq 'COMPLETED')")
   })
 
-  it('appends orderby + topcount', () => {
+  it('appends orderby + top when both supplied', () => {
     const url = buildApplyUrl({
       entity: 'TaskRecords',
       dimensions: [{ column: 'status', dataType: 'NVARCHAR' }],
@@ -41,7 +41,23 @@ describe('buildApplyUrl', () => {
       topN: 10,
     })
     const decoded = decodeURIComponent(url)
-    expect(decoded).toContain('topcount(10,count_id)')
+    expect(decoded).toContain('orderby(count_id desc)')
+    expect(decoded).toContain('top(10)')
+    expect(decoded).not.toContain('topcount')
+  })
+
+  it('synthesizes orderby desc on the first measure when topN is set without explicit orderby', () => {
+    const url = buildApplyUrl({
+      entity: 'TaskRecords',
+      dimensions: [{ column: 'status', dataType: 'NVARCHAR' }],
+      measures: [{ column: 'id', aggregation: 'COUNT', alias: 'count_id' }],
+      filters: [],
+      orderBy: null,
+      topN: 5,
+    })
+    const decoded = decodeURIComponent(url)
+    expect(decoded).toContain('orderby(count_id desc)')
+    expect(decoded).toContain('top(5)')
   })
 
   it('handles SUM aggregation', () => {
@@ -56,7 +72,7 @@ describe('buildApplyUrl', () => {
     expect(decodeURIComponent(url)).toContain('aggregate(duration with sum as sum_duration)')
   })
 
-  it('topcount throws when no usable column', () => {
+  it('topN throws when no usable column', () => {
     expect(() => buildApplyUrl({
       entity: 'TaskRecords',
       dimensions: [],

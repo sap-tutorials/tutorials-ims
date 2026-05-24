@@ -10,6 +10,7 @@ const status = ref<string>('Ready.')
 const lastResult = ref<SqlResult | null>(null)
 let editor: any = null
 let destroyed = false
+let resizeObserver: ResizeObserver | null = null
 
 onMounted(async () => {
   const monaco = await import('monaco-editor')
@@ -18,11 +19,18 @@ onMounted(async () => {
   editor = monaco.editor.create(editorEl.value!, {
     value: 'SELECT id, status FROM TaskRecords LIMIT 100',
     language: 'sql', theme: 'vs', fontSize: 13, minimap: { enabled: false },
+    automaticLayout: false,
   })
+  // The SQL tab mounts inside a v-show=false container on first paint, so the
+  // editor host is 0x0 at create() time. Relayout whenever the host actually
+  // gains size (tab becomes visible, window resize, split-pane drag).
+  resizeObserver = new ResizeObserver(() => editor?.layout())
+  resizeObserver.observe(editorEl.value!)
 })
 
 onBeforeUnmount(() => {
   destroyed = true
+  resizeObserver?.disconnect()
   editor?.dispose()
 })
 

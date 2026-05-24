@@ -52,9 +52,16 @@ export function buildApplyUrl(cfg: ChartConfigInput): string {
     parts.push(`orderby(${cfg.orderBy.column} ${cfg.orderBy.direction})`)
   }
   if (cfg.topN) {
-    const tcCol = cfg.orderBy?.column ?? cfg.measures[0]?.alias ?? cfg.dimensions[0]?.column
-    if (!tcCol) throw new Error('topN requires orderBy, a measure, or a dimension')
-    parts.push(`topcount(${cfg.topN},${tcCol})`)
+    // HANA has no TOPCOUNT function, so we can't use the OData topcount(N,col)
+    // shortcut. Emit orderby(col desc)/top(N) instead — same effect, primitives
+    // CAP can translate cleanly. If the caller already supplied an explicit
+    // orderby we keep it and just append top(N).
+    if (!cfg.orderBy) {
+      const tcCol = cfg.measures[0]?.alias ?? cfg.dimensions[0]?.column
+      if (!tcCol) throw new Error('topN requires orderBy, a measure, or a dimension')
+      parts.push(`orderby(${tcCol} desc)`)
+    }
+    parts.push(`top(${cfg.topN})`)
   }
   const apply = parts.join('/')
   return `/admin/analytics/${cfg.entity}?$apply=${encodeURIComponent(apply)}`
