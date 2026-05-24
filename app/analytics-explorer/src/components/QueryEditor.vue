@@ -16,7 +16,7 @@ onMounted(async () => {
   await import('monaco-sql-languages/esm/all.contributions')
   if (destroyed) return
   editor = monaco.editor.create(editorEl.value!, {
-    value: '-- SELECT id, status FROM TaskRecords LIMIT 100',
+    value: 'SELECT id, status FROM TaskRecords LIMIT 100',
     language: 'sql', theme: 'vs', fontSize: 13, minimap: { enabled: false },
   })
 })
