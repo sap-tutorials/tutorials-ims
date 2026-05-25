@@ -34,7 +34,7 @@ describe('MyTutorialsView', () => {
     ]);
     await INSERT.into(Tutorials).entries([
       { ID: 't-1', slug: 'tut-1', title: 'Tutorial 1', status: 'ACTIVE' },
-      { ID: 't-2', slug: 'tut-2', title: 'Tutorial 2', status: 'ACTIVE' },
+      { ID: 't-2', slug: 'tut-2', title: 'Tutorial 2', status: 'DRAFT' },
       { ID: 't-3', slug: 'tut-3', title: 'Orphan',     status: 'ACTIVE' }
     ]);
     await INSERT.into(TutorialMeta).entries([
@@ -123,7 +123,7 @@ describe('AuthorService.MyTutorials filtering', () => {
 
   it('still filters when client groups by status (aggregate query)', async () => {
     const srv = await cds.connect.to('AuthorService');
-    const rows = await srv.tx(
+    const aliceRows = await srv.tx(
       { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
       async (tx) => {
         return await tx.run(
@@ -131,7 +131,18 @@ describe('AuthorService.MyTutorials filtering', () => {
         );
       }
     );
-    // alice has 1 distinct status across her single tutorial; never more than 1.
-    expect(rows.length).toBeLessThanOrEqual(1);
+    const bobRows = await srv.tx(
+      { user: { id: 'uuid-B', roles: { 'Tutorial.Author': true } } },
+      async (tx) => {
+        return await tx.run(
+          SELECT.from(srv.entities.MyTutorials).columns('status').groupBy('status')
+        );
+      }
+    );
+    // alice owns only tut-1 (ACTIVE); bob owns only tut-2 (DRAFT).
+    // If req.query.where() AND-merges correctly, each user sees only their own status.
+    // If it replaced the filter, both would see ['ACTIVE','DRAFT'].
+    expect(aliceRows.map((r) => r.status)).toEqual(['ACTIVE']);
+    expect(bobRows.map((r) => r.status)).toEqual(['DRAFT']);
   });
 });
