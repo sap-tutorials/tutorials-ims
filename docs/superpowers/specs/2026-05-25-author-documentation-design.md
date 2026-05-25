@@ -47,7 +47,7 @@ docs/
 
 ### docs/authors/writing-tutorials.md (~310 lines)
 
-Source: `docs/author-instructions.md` carried over with these refinements:
+This is a **move-and-edit**, not a copy: the existing `docs/author-instructions.md` content is relocated to this path and then refined; the original file is replaced by a redirect stub (see below). Refinements applied during the move:
 
 - **Where to ask for help table** — update to point at `repo-group-owners.md` (for PR review questions) and `center-admin.md` (for taxonomy/access questions).
 - **Rollback section** — leave only "ask a Center Admin to roll back; see `center-admin.md`"; move the `curl POST /content/rollback` snippet into `center-admin.md`.
@@ -57,7 +57,7 @@ Source: `docs/author-instructions.md` carried over with these refinements:
 
 ### docs/authors/repo-group-owners.md (~200 lines)
 
-Persona summary block — tools/access required (GitHub admin on owned repos in `sap-tutorials`, optional `Tutorial.Author` scope for QA preview). Tasks (each in the source run-book template: heading, **Interval**, **Status**, **Purpose**, numbered steps, links):
+Persona summary block — tools/access required (GitHub admin on owned repos in `sap-tutorials`, optional `Tutorial.Author` scope for QA preview). The persona summary also names the **canonical owner registry**: `sap-tutorials/tutorial-checker/data/repository.owner.json`. This is a CircleCI-era artifact that survived the decommission because both the new system and human contact-resolution still use it; tasks 6 and the historic mapping reinforce this. Tasks (each in the source run-book template: heading, **Interval**, **Status**, **Purpose**, numbered steps, links):
 
 1. **Wire your repo for auto-publish** — drop `tutorial-repo-dispatch.yml` (link to existing in repo) into `.github/workflows/`, set the `DISPATCH_TOKEN` secret (Center Admin generates), verify the first push triggers a `tutorials-poc` Action run.
 2. **Review and merge pull requests** — checklist: frontmatter valid, parser v2, slug uniqueness, image presence, time estimate sane, `<!-- description -->` line present. Optional local test: `npm run fetch-tutorials && npm run dev`. When to escalate (slug collision across repos, taxonomy questions).
@@ -176,6 +176,8 @@ Where the design references admin-UI screens, CAP services, env vars, or workflo
 - Env vars (`CONTENT_API_KEY`, `SUBMISSION_SALT_SECRET`, etc.) — verify against `srv/server.js` and `package.json`.
 - Role-collection scopes — verify against `xs-security.json`.
 - BTP cockpit URLs — use the production URL pattern from `cf_target` MCP if needed.
+
+**If verification contradicts this spec:** trust the codebase, update the doc to match reality, and note the contradiction in the implementation plan output. Do not modify the system to fit the spec — this work is documentation, not behavior change.
 
 ## Out of scope
 
