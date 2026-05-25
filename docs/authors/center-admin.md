@@ -202,6 +202,11 @@ npx cds bind --exec -- node scripts/setup-dev-data.cjs
 4. The tag is immediately available in the HANA catalog. On the next `npm run fetch-tutorials` (or full rebuild), the fetch script reads the catalog feed and resolves the tag against the database — authors' tutorials referencing it will validate without warnings.
 5. Notify the requesting author that the tag is live.
 
+**Related:**
+
+- [writing-tutorials.md](writing-tutorials.md) — frontmatter field reference for `primary_tag` and `tags`
+- [author-instructions.md](../author-instructions.md) — author-side tutorial authoring and tagging guidance
+
 ---
 
 ### Task: Force-rebuild content
@@ -324,13 +329,18 @@ The pipeline: fetches all tutorials from GitHub → generates Hugo pages → bui
 
 | Symptom | Likely cause | First check | Fix |
 |---|---|---|---|
-| Author's PR merged but content not live after 15 min | `repository_dispatch` from the source repo did not reach `tutorials-poc` | Source repo Actions tab — check whether the dispatch step ran and what HTTP status it received | Verify `DISPATCH_TOKEN` secret on the source repo (e.g., `sap-tutorials/abap-core-development`) is still valid; rotate if expired |
+| Author's PR merged but content not live after 15 min | `repository_dispatch` from the source repo did not reach `tutorials-poc` | Source repo Actions tab — check whether the dispatch step ran and what HTTP status it received | Verify `TUTORIALS_DISPATCH_TOKEN` secret on the source repo (e.g., `sap-tutorials/abap-core-development`) is still valid; rotate if expired |
 | All publishes failing with HANA LOB errors | A recent code change is SELECTing a BLOB column alongside metadata in a single CDS QL query, triggering locator expiry | `cfLogsUrl` on the failing Pipeline Log row — look for `LOB locator expired` or `invalid locator handle` | In `srv/lib/content-store.js` (or whichever handler regressed), split the query: use `db.run()` raw SQL for BLOB retrieval, and a separate CDS QL query for metadata — never mix them in a single `SELECT` on HANA |
 | Manifest stuck in `PUBLISHING` status | Publish job crashed mid-run (network timeout, OOM, pod restart) leaving the manifest in a non-`ACTIVE` state | `GET /content/hashes` returns an error or empty; Pipeline Log shows status `PUBLISHING` with no `ACTIVE` follow-up | Run `POST /content/rollback` (see [Task: Content rollback](#task-content-rollback)) to revert to the previous manifest; then trigger a full rebuild |
 | GitHub rate-limit errors during fetch | Too many cold builds without a valid GitHub token | Actions log — look for `403 rate limit exceeded` from GitHub API calls | Ensure `TUTORIALS_APP_ID` + `TUTORIALS_APP_PRIVATE_KEY` secrets are set on `tutorials-poc` (preferred — generates short-lived app tokens); fallback is `TUTORIALS_GITHUB_TOKEN` PAT |
 | `/tutorials/<slug>` returns 404 after rebuild | Slug not in the active manifest (BLOB never published for it) | `GET /content/hashes` — check whether the slug appears | Run a single-slug rebuild with that slug; if the tutorial source was deleted, the 404 is expected — set up a redirect via the Operations admin app |
 | Smoke tests failing on `/build/catalog` | CAP srv is down or HANA binding is broken | `GET /health/db` — check HANA status | Check CF app status (`cf app tutorials-srv`); restart if crashed; check HANA Cloud instance status in BTP cockpit |
 | Admin UI shows no data / OData 401 | XSUAA token expired or role-collection missing | `/auth/user` endpoint — check `scopes` array | Assign the correct role collection in BTP cockpit; wait for token expiry (or log out and back in) |
+
+**Related:**
+
+- [Monitor the publish pipeline](#task-monitor-the-publish-pipeline) — daily health checks and Pipeline Log access
+- [content-pipeline.md](../content-pipeline.md) — deep-dive on the fetch → Hugo → publish pipeline
 
 ---
 
@@ -375,6 +385,11 @@ Quarterly, perform a restore-test into a dev or sandbox HANA Cloud instance. Ver
 4. A smoke test run passes against the restored environment.
 
 Document the result (date, duration, success/fail) in the team's incident log.
+
+**Related:**
+
+- [mta-deployment.md](../mta-deployment.md) — MTA build and CF deploy reference, including HANA binding setup
+- [analytics-admin.md](analytics-admin.md) — Export data action for logical off-system archiving
 
 ---
 
@@ -447,6 +462,11 @@ Document the result (date, duration, success/fail) in the team's incident log.
 
 > **Do not delete the record.** Deletion removes the completion history. Anonymization is the correct GDPR response — PII is removed but the record structure is preserved for analytics.
 
+**Related:**
+
+- [authentication-architecture.md](../authentication-architecture.md) — XSUAA, BTP identity, and audit-logging setup
+- [Add a user to the system](#task-add-a-user-to-the-system) — role collection assignment reference (Task 11)
+
 ---
 
 ## Author support & coordination
@@ -477,6 +497,11 @@ Document the result (date, duration, success/fail) in the team's incident log.
 - Technical platform issues → open a GitHub Issue on `tutorials-poc` with the `platform` label.
 - Product taxonomy questions → route to the product owner or SAP taxonomy team.
 - GitHub org access → route to SAP OSPO.
+
+**Related:**
+
+- [writing-tutorials.md](writing-tutorials.md) — the primary authoring reference authors should consult first
+- [repo-group-owners.md](repo-group-owners.md) — repo group owner responsibilities and escalation paths
 
 ---
 
@@ -550,6 +575,11 @@ Author Office Hours — <Month YYYY>
 - Record the session if authors in other time zones cannot attend.
 - Post a written summary as a GitHub Discussion or internal Slack message after each session.
 - Track recurring questions — if the same question comes up twice, update [writing-tutorials.md](writing-tutorials.md).
+
+**Related:**
+
+- [Handle author support requests](#task-handle-author-support-requests) — common request types and escalation paths (Task 13)
+- [repo-group-owners.md#task-office-hours-and-author-support-intake](repo-group-owners.md#task-office-hours-and-author-support-intake) — repo group owner perspective on office hours
 
 ---
 
