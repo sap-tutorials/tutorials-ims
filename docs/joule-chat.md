@@ -384,5 +384,5 @@ Manual test plan:
 ## Related Docs
 
 - [authentication-architecture.md](authentication-architecture.md) — XSUAA / IDP flow that wraps `/chat/stream`
-- [content-pipeline.md](content-pipeline.md) — how tutorial content (which the search tool returns) gets into HANA
+- [build.md](developers/architecture/build.md) — how tutorial content (which the search tool returns) gets into HANA
 - [mta-deployment.md](mta-deployment.md) — `tutorials-srv` deploy procedures

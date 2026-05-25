@@ -30,7 +30,7 @@ If you change role, update this file (Task: Designate or change a repository gro
 4. Verify: push a small change (e.g., a typo fix) and watch the `tutorials-poc` repo's Actions tab for a triggered run within ~10 seconds.
 5. If the run does not appear, check the source repo's Actions log for the dispatch step. The most common failure is a stale or missing `DISPATCH_TOKEN`.
 
-**Related:** [Center Admin: Force-rebuild content](center-admin.md), [content-pipeline.md](../content-pipeline.md)
+**Related:** [Center Admin: Force-rebuild content](center-admin.md), [build.md](../developers/architecture/build.md)
 
 ---
 

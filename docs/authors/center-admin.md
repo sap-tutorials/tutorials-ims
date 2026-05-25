@@ -237,7 +237,7 @@ The pipeline: fetches all tutorials from GitHub → generates Hugo pages → bui
 > **Important:** Single-slug runs skip the HANA `RepoCatalog` upload (the discovery baseline is a production artifact). Do **not** use a single-slug run when group or mission metadata has also changed — use a full rebuild in that case.
 
 **Related:**
-- [content-pipeline.md](../content-pipeline.md)
+- [build.md](../developers/architecture/build.md)
 
 ---
 
@@ -281,7 +281,7 @@ The pipeline: fetches all tutorials from GitHub → generates Hugo pages → bui
 > **What rollback does not do:** It does not touch source Markdown. It moves the manifest pointer in HANA — the next full rebuild overwrites it again. If the bad content is in the source, fix the source first.
 
 **Related:**
-- [content-pipeline.md](../content-pipeline.md)
+- [build.md](../developers/architecture/build.md)
 - [testing-endpoints.md](../testing-endpoints.md)
 
 ---
@@ -341,7 +341,7 @@ The pipeline: fetches all tutorials from GitHub → generates Hugo pages → bui
 **Related:**
 
 - [Monitor the publish pipeline](#task-monitor-the-publish-pipeline) — daily health checks and Pipeline Log access
-- [content-pipeline.md](../content-pipeline.md) — deep-dive on the fetch → Hugo → publish pipeline
+- [build.md](../developers/architecture/build.md) — deep-dive on the fetch → Hugo → publish pipeline
 
 ---
 
@@ -588,7 +588,7 @@ Author Office Hours — <Month YYYY>
 
 - [decommissioned-tasks.md](../historic/decommissioned-tasks.md) — tasks from the old run-book that have been replaced or removed
 - [analytics-admin.md](analytics-admin.md) — analytics platform operations (tutorial engagement, query explorer)
-- [content-pipeline.md](../content-pipeline.md) — deep-dive on the fetch → Hugo → publish pipeline
+- [build.md](../developers/architecture/build.md) — deep-dive on the fetch → Hugo → publish pipeline
 - [mta-deployment.md](../mta-deployment.md) — MTA build and CF deploy reference
 - [authentication-architecture.md](../authentication-architecture.md) — XSUAA, BTP identity, AppRouter auth flows
 - [testing-endpoints.md](../testing-endpoints.md) — canonical endpoint reference with auth/scope mapping
