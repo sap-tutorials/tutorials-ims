@@ -108,19 +108,6 @@ cds.on('bootstrap', (app) => {
     }
   });
 
-  app.get('/health/auth', cds.middlewares.before, (req, res) => {
-    if (!req.user || req.user.id === 'anonymous') {
-      return res.status(401).json({ authenticated: false });
-    }
-    const roles = req.user.roles ?? {};
-    res.json({
-      authenticated: true,
-      user: req.user.id,
-      scopes: Object.keys(roles),
-      serverTime: new Date().toISOString()
-    });
-  });
-
   app.use(basicAuthMiddleware);
   app.get('/api/qrcode', qrcodeHandler);
   app.get('/api/recommendations', recommendationsHandler);
@@ -242,6 +229,19 @@ cds.on('served', async () => {
       email: user.attr?.email || '',
       givenName: user.attr?.given_name || user.attr?.givenName || '',
       familyName: user.attr?.family_name || user.attr?.familyName || ''
+    });
+  });
+
+  app.get('/health/auth', contextMw, authMw, (req, res) => {
+    if (!req.user || req.user.id === 'anonymous') {
+      return res.status(401).json({ authenticated: false });
+    }
+    const roles = req.user.roles ?? {};
+    res.json({
+      authenticated: true,
+      user: req.user.id,
+      scopes: Object.keys(roles),
+      serverTime: new Date().toISOString()
     });
   });
 
