@@ -9,6 +9,7 @@ service AdminService {
   // Full CRUD entity projections
   entity Users as projection on ims.Users;
   @cds.redirection.target: true
+  @Capabilities.ChangeTracking : { Supported: true }
   entity Tutorials as projection on ims.Tutorials;
   // Filtered picklist for redirectTo value help — only ACTIVE tutorials can be redirect targets
   @readonly
@@ -22,6 +23,7 @@ service AdminService {
   entity Events as projection on ims.Events;
   entity Prizes as projection on ims.Prizes;
   entity PrizeRecords as projection on ims.PrizeRecords;
+  @Capabilities.ChangeTracking : { Supported: true }
   entity Tags as projection on ims.Tags;
   entity Accomplishments as projection on ims.Accomplishments;
   entity AccomplishmentRecords as projection on ims.AccomplishmentRecords;

@@ -5,12 +5,15 @@ using from '../db/views';
 @requires: 'Tutorial.Author'
 service AuthorService {
 
+  @Capabilities.ChangeTracking : { Supported: true }
   @readonly entity Tutorials as projection on ims.Tutorials {
     ID, slug, title, primaryTag, status
   };
 
+  @Capabilities.ChangeTracking : { Supported: true }
   @readonly entity Tags as projection on ims.Tags;
 
+  @Capabilities.ChangeTracking : { Supported: true }
   @readonly entity MyTutorials as projection on ims.MyTutorialsView;
 
   action reviewTutorial(tutorialId : UUID) returns {
