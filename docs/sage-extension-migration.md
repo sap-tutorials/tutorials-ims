@@ -3,23 +3,25 @@
 **Subject:** [`sage-tutorial-extension`](https://github.com/sap-tutorials/sage-tutorial-extension) (codename "Sage") — VS Code extension for SAP Developer Tutorial authors.
 **Question:** What does Sage need from a backend, what does `tutorials-poc` already provide, and what's the gap to fully retire its local SQLite cache and the legacy IMS dependency?
 **Source repo analyzed:** `D:/projects/sage-tutorial-extension` at the time of writing (Sage v0.10.7+).
-**Last updated:** 2026-05-24.
+**Last updated:** 2026-05-25.
+
+> **Status (2026-05-25):** All backend gaps identified below — both hard (1–3) and soft (6–8) — were closed in [PR #54](https://github.com/sap-tutorials/tutorials-ims/pull/54) on `feature/sage-backend-gaps`. Gaps 4 and 5 were always Sage-side repoint work (no backend change). The remaining work is now entirely in the Sage extension. See each gap section for the implementation pointer.
 
 ---
 
 ## Executive Summary
 
-The CAP backend in `tutorials-poc` is **~80% of the way to replacing IMS for Sage**. The data shapes match, the entities (`Tutorials`, `Tags`, `TutorialMeta`) already exist, and the new `POST /preview/render` endpoint on `tutorials-srv-qa` directly replaces Sage's local markdown renderer.
+The CAP backend in `tutorials-poc` now **fully covers the IMS surface that Sage uses**. The data shapes match, the entities (`Tutorials`, `Tags`, `TutorialMeta`) exist with author-scoped projections, the `POST /preview/render` endpoint on `tutorials-srv-qa` replaces Sage's local markdown renderer, and the new `AuthorService` at `/author` exposes the read/write surface Sage needs without giving it admin scope.
 
-The five remaining gaps are small additions to existing services rather than new infrastructure:
+The remaining work is entirely on the Sage side:
 
-1. Author-scoped variant of `reviewTutorial` / `snoozeTutorial` actions (currently `Admin` only).
-2. A "my tutorials" projection bound to the JWT subject.
-3. A slug-list endpoint for create-time uniqueness checks (or reuse `/content/hashes`).
-4. Sage repointed at `GET /build/repo-catalog` instead of GitHub raw.
-5. Sage repointed at `POST /preview/render` instead of its in-process renderer.
+1. ✅ ~~Author-scoped variant of `reviewTutorial` / `snoozeTutorial`.~~ Shipped — `AuthorService` at `/author` with `Tutorial.Author` scope and same-tx ownership checks.
+2. ✅ ~~A "my tutorials" projection bound to the JWT subject.~~ Shipped — `MyTutorialsView` + `AuthorService.MyTutorials` projection auto-filtered by `req.user.id`.
+3. ✅ ~~A slug-list endpoint for create-time uniqueness checks.~~ Resolved — reuse existing `GET /content/hashes` (returns slug→hash for active content).
+4. Sage repointed at `GET /build/repo-catalog` instead of GitHub raw. *(Sage-side change; backend ready.)*
+5. Sage repointed at `POST /preview/render` instead of its in-process renderer. *(Sage-side change; backend ready.)*
 
-Total backend work: ~1 focused day. The longer pole is the Sage-side rewrite of [`src/lib/sync/imsClient.ts`](https://github.com/sap-tutorials/sage-tutorial-extension/blob/main/src/lib/sync/imsClient.ts) and the strategic decision of what (if anything) the local cache should still hold.
+The longer pole is the Sage-side rewrite of [`src/lib/sync/imsClient.ts`](https://github.com/sap-tutorials/sage-tutorial-extension/blob/main/src/lib/sync/imsClient.ts) and the strategic decision of what (if anything) the local cache should still hold.
 
 ---
 
@@ -92,58 +94,49 @@ The `TutorialMeta` shape in [`db/schema.cds:200`](../db/schema.cds#L200) keeps t
 
 ---
 
-## Gaps — What Would Have to Be Added
+## Gaps — Status
 
-### Hard gaps (no current API)
+All backend gaps are closed. Each subsection below records the original gap and the implementation that resolved it.
 
-#### 1. Author scope for write operations
+### Hard gaps
 
-`reviewTutorial` and `snoozeTutorial` are gated on `@requires: 'Admin'` ([admin-service.cds:6](../srv/admin-service.cds#L6)). Sage's user is an *Author*, not an admin. Two options:
+#### 1. Author scope for write operations ✅ Resolved (PR #54)
 
-- **Widen** these actions to also accept `Tutorial.Author` (the scope already used by `tutorials-srv-qa`); or
-- **Clone** them into a new lightweight `AuthorService` at `@path: '/author'` that exposes only the actions/projections an author needs. This is the cleaner option — it lets the admin UI keep its full-fidelity view while authors get a constrained surface.
+`reviewTutorial` and `snoozeTutorial` were gated on `@requires: 'Admin'` ([admin-service.cds:6](../srv/admin-service.cds#L6)). The Sage user is an *Author*, not an admin.
 
-#### 2. "My tutorials" surface
+**Resolution:** New `AuthorService` at `@path: '/author'` ([srv/author-service.cds](../srv/author-service.cds)), gated on `@requires: 'Tutorial.Author'`. Exposes `reviewTutorial` and `snoozeTutorial` actions backed by the shared handler in [srv/lib/tutorial-review.js](../srv/lib/tutorial-review.js), with same-transaction ownership checks (`ownerEmail` must match `req.user.email`) so an author can only act on their own tutorials. The admin surface keeps its full-fidelity view; authors get a constrained one.
 
-Today Sage calls `tutorialMeta/search` with the user's name as a free-text query, then filters client-side for exact owner-name match (see [`searchTutorialsByOwner`](https://github.com/sap-tutorials/sage-tutorial-extension/blob/main/src/lib/sync/imsClient.ts#L292)). A clean OData approach would be:
+#### 2. "My tutorials" surface ✅ Resolved (PR #54)
 
-```
-GET /author/Tutorials?$expand=meta&$filter=meta/any(m: m/owner eq @me)
-```
+Sage previously called `tutorialMeta/search` with the user's name as a free-text query and filtered client-side.
 
-…but `@me` resolution against the JWT subject doesn't exist yet. Add either:
+**Resolution:** New `MyTutorialsView` ([db/schema.cds](../db/schema.cds)) joins `Tutorials` → `TutorialMeta` → `Users` on `ownerEmail = email` and exposes `ownerUserId` as a UUID. The `AuthorService.MyTutorials` projection adds a `@before('READ')` handler that filters on `req.user.id` (the JWT subject) so OData clients can call `GET /author/MyTutorials` with no filter and get exactly their own tutorials.
 
-- A virtual `myTutorials` projection that auto-filters on `req.user.id` in a `@before('READ')` handler, or
-- An action `getAssignedTutorials() returns array of {…}`.
+#### 3. Slug-uniqueness check on create ✅ Resolved (no new endpoint)
 
-#### 3. Slug-uniqueness check on create
-
-The current `/build/catalog` is unauth and returns missions/groups but not the full slug list. Either:
-
-- Add a `GET /author/slugs` (lightweight `select slug from Tutorials`); or
-- **Reuse `/content/hashes`** — this already returns the slug→hash map for *active* content. If the actual question is "is this slug already in production?", the hash endpoint answers it for free.
+**Resolution:** Reuse the existing `GET /content/hashes` endpoint. It already returns a `{slug: sha256}` map of *active* content, which directly answers "is this slug already in production?" — no `/author/slugs` endpoint needed. Decision recorded in the design spec [docs/superpowers/specs/2026-05-24-sage-backend-gaps-design.md](superpowers/specs/2026-05-24-sage-backend-gaps-design.md).
 
 #### 4. Repo-group catalog from CAP, not GitHub raw
 
-Sage hits `https://raw.githubusercontent.com/sap-tutorials/Tutorials/.../repository-groups.json` directly. `tutorials-poc` already has `RepoCatalog` + `GET /build/repo-catalog` ([repo-catalog.js:5](../srv/lib/repo-catalog.js#L5)). Sage just needs to point at it. **Zero backend work.**
+Always a Sage-side change. Backend already provides `GET /build/repo-catalog` ([srv/lib/repo-catalog.js:5](../srv/lib/repo-catalog.js#L5)). **Sage repoint pending.**
 
 #### 5. Validation rules (`rules.vr`) for tags
 
-Tag-format validation in [`tutorialValidator.ts`](https://github.com/sap-tutorials/sage-tutorial-extension/blob/main/src/lib/validation/tutorialValidator.ts) checks tag *existence* against IMS. Once Sage moves to `GET /admin/Tags` (or `/author/Tags`), this just works. **No new endpoint needed.**
+Always a Sage-side change. Once Sage moves to `GET /admin/Tags` (or `/author/Tags`), tag-existence validation works against the same source the backend uses. **No new endpoint needed.**
 
-### Soft gaps (would improve ergonomics)
+### Soft gaps
 
-#### 6. Etag / Last-Modified support on `/admin/Tutorials` and `/admin/Tags`
+#### 6. OData delta tracking on Tutorials and Tags ✅ Resolved (PR #54)
 
-Sage's whole reason for the SQLite cache is that paging through ~3000 tutorials is slow. CAP/OData supports `$count`, `$top`, `$skip`, `$select` natively, but a delta link (`Prefer: odata.track-changes`) would let Sage do incremental sync without full re-fetch. CAP supports OData delta but the services don't currently advertise it.
+**Resolution:** `@Capabilities.ChangeTracking: { Supported: true }` annotations applied to `Tutorials`, `Tags`, and `AuthorService.MyTutorials`. Combined with the new `managed` aspect on `TutorialMeta` (createdAt/modifiedAt), Sage can now advertise `Prefer: odata.track-changes` and do incremental sync instead of re-fetching ~3000 tutorials each session.
 
-#### 7. A diagnostic ping
+#### 7. Diagnostic ping ✅ Resolved (PR #54)
 
-Sage's `testConnection()` uses `getAllTutorials(0, 1)` which is heavyweight. A `/health/auth` (or reusing the existing `/auth/user` endpoint) would be cheaper and gives a clearer signal.
+**Resolution:** `GET /health/auth` ([srv/server.js:235](../srv/server.js#L235)) returns `{authenticated, user, scopes, serverTime}` for an authenticated caller, `401 {authenticated: false}` for an anonymous one. Cheap, idempotent, and gives Sage a clear signal that "the token still works and these are my scopes" without paging through tutorials.
 
-#### 8. Owner identity bridge
+#### 8. Owner identity bridge ✅ Resolved (PR #54)
 
-`IMSTutorialMeta.ownerName` is a free-text string ("Riley Rainey"). The CAP `Users` entity has `firstName`, `lastName`, `displayName`. Migration scripts populate `TutorialMeta.owner` as a string today, but if we want robust owner filtering, swapping that to `Association to Users` would let `$filter=meta/any(m: m/owner_ID eq <jwt-sub>)` work without name-string fuzziness. **This is a schema change, not just an API addition.**
+**Resolution:** New `ownerEmail` column on `TutorialMeta` (alongside the existing free-text `owner` field) joins to `Users.email`. Backfill script [scripts/backfill-tutorial-meta-email.js](../scripts/backfill-tutorial-meta-email.js) populates the new column from existing data with ambiguous-name detection (multiple users sharing a display name → `null` + CSV report for manual review). Publish handler in [srv/lib/content-store.js](../srv/lib/content-store.js) writes both fields going forward. `MyTutorialsView` exposes `ownerUserId` (UUID) so OData filters work on a stable identifier rather than a display string.
 
 ### Things to keep cached (or stop caching entirely)
 
@@ -156,13 +149,13 @@ Sage's `testConnection()` uses `getAllTutorials(0, 1)` which is heavyweight. A `
 
 ## Suggested Migration Order
 
-Ordered for minimum risk and earliest user-visible payoff:
+Backend work is complete (steps 3–4, 6–8 below shipped in PR #54). Remaining steps are all on the Sage side, ordered for minimum risk and earliest user-visible payoff:
 
-1. **Repoint preview** to `POST /preview/render`. Drops `parseMarkdown.ts`, `tutorialStyles.ts`, `tutorialScripts.ts` from the webview path. Smallest, safest change. No backend work — endpoint already exists.
-2. **Repoint repo-groups** from GitHub raw to `GET /build/repo-catalog`. One-line URL change. No backend work.
-3. **Widen scope** on `reviewTutorial` / `snoozeTutorial` (or create an `AuthorService`) so authors can call them. Backend work.
-4. **Add `myTutorials` projection** (or action) bound to the JWT subject. Backend work.
-5. **Replace IMS calls 1–6** in [`imsClient.ts`](https://github.com/sap-tutorials/sage-tutorial-extension/blob/main/src/lib/sync/imsClient.ts) with OData calls to `/admin/Tutorials`, `/admin/Tags`, `/admin/TutorialMeta` (or their `/author/*` equivalents). Drop `imsAuth.ts` once Sage authenticates against the same XSUAA subaccount it already uses for the preview endpoint.
+1. **Repoint preview** to `POST /preview/render`. Drops `parseMarkdown.ts`, `tutorialStyles.ts`, `tutorialScripts.ts` from the webview path. Smallest, safest change. *Backend ready.*
+2. **Repoint repo-groups** from GitHub raw to `GET /build/repo-catalog`. One-line URL change. *Backend ready.*
+3. ✅ ~~Widen scope on `reviewTutorial` / `snoozeTutorial`~~ → `AuthorService` shipped with `Tutorial.Author` scope.
+4. ✅ ~~Add `myTutorials` projection bound to the JWT subject~~ → `MyTutorialsView` + `AuthorService.MyTutorials` shipped.
+5. **Replace IMS calls 1–6** in [`imsClient.ts`](https://github.com/sap-tutorials/sage-tutorial-extension/blob/main/src/lib/sync/imsClient.ts) with OData calls to `/admin/Tutorials`, `/admin/Tags`, `/admin/TutorialMeta` (or their `/author/*` equivalents). Drop `imsAuth.ts` once Sage authenticates against the same XSUAA subaccount it already uses for the preview endpoint. Sage can now use `Prefer: odata.track-changes` for incremental sync (gap 6 closed).
 6. **Decide on the SQLite cache.** Either:
    - Keep it as a pure read-through cache pointed at CAP — changes nothing user-visible, low effort. Useful if authors work offline.
    - Rip it out — Sage becomes a thin client. Less code, simpler upgrades, no schema migration headaches. The fact that Sage already has an in-memory fallback ([`fallback.ts`](https://github.com/sap-tutorials/sage-tutorial-extension/blob/main/src/lib/db/fallback.ts)) for when SQLite can't load suggests SQLite has been a pain point — that's a vote for "thin Sage."
@@ -171,18 +164,21 @@ Ordered for minimum risk and earliest user-visible payoff:
 
 ## Bottom Line
 
-Sage's IMS surface is small (six calls). The CAP backend already covers the data shapes and most of the operations; the remaining work is mostly **scope + filter** plumbing rather than new functionality. The preview endpoint just shipped on `tutorials-srv-qa` and is the single biggest piece — once Sage repoints at it, half the migration is done.
+The CAP backend now fully covers the IMS surface Sage uses. Hard gaps 1–3 and soft gaps 6–8 are closed in PR #54; gaps 4–5 were always Sage-side repoint work and are unblocked by existing endpoints. The remaining work is entirely in the Sage extension: rewrite [`imsClient.ts`](https://github.com/sap-tutorials/sage-tutorial-extension/blob/main/src/lib/sync/imsClient.ts) against `/author/*`, repoint preview and repo-groups, and decide whether the SQLite cache stays as a read-through layer or gets ripped out for a thin client.
 
-The strategic question worth answering before writing code is whether SQLite stays at all. If it does, Sage's architecture barely changes; if it goes, Sage gets noticeably simpler. Either way, the backend gaps are the same five small items listed above.
+The strategic question worth answering before writing code is whether SQLite stays at all. If it does, Sage's architecture barely changes; if it goes, Sage gets noticeably simpler.
 
 ---
 
 ## References
 
+- Sage backend gaps PR (closes hard gaps 1–3 and soft gaps 6–8): [tutorials-poc PR #54](https://github.com/sap-tutorials/tutorials-ims/pull/54).
+- Design spec: [docs/superpowers/specs/2026-05-24-sage-backend-gaps-design.md](superpowers/specs/2026-05-24-sage-backend-gaps-design.md).
+- Implementation plan: [docs/superpowers/plans/2026-05-24-sage-backend-gaps.md](superpowers/plans/2026-05-24-sage-backend-gaps.md).
 - Sage source: [`D:/projects/sage-tutorial-extension`](https://github.com/sap-tutorials/sage-tutorial-extension) (also available on disk).
 - Sage architecture overview: [`D:/projects/sage-tutorial-extension/CLAUDE.md`](https://github.com/sap-tutorials/sage-tutorial-extension/blob/main/CLAUDE.md).
 - IMS API reference (legacy): [docs/ims-api-reference.md](ims-api-reference.md).
 - Preview endpoint design: [docs/superpowers/specs/2026-05-23-vscode-author-preview-design.md](superpowers/specs/2026-05-23-vscode-author-preview-design.md).
 - QA channel context (where the preview endpoint lives): [docs/qa-channel-bootstrap.md](qa-channel-bootstrap.md).
-- Tutorials-poc CAP services: [`srv/admin-service.cds`](../srv/admin-service.cds), [`srv/server.js`](../srv/server.js).
+- Tutorials-poc CAP services: [`srv/admin-service.cds`](../srv/admin-service.cds), [`srv/author-service.cds`](../srv/author-service.cds), [`srv/server.js`](../srv/server.js).
 - Schema: [`db/schema.cds`](../db/schema.cds).
