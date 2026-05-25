@@ -318,136 +318,7 @@ See [docs/developers/architecture/build.md](docs/developers/architecture/build.m
 
 ## Joule Architecture
 
-The in-page chat assistant on tutorial, mission, and search pages. Backed by SAP AI Core's **Orchestration Service** via [`@sap-ai-sdk/orchestration`](https://www.npmjs.com/package/@sap-ai-sdk/orchestration), with optional retrieval-augmented grounding over per-step tutorial embeddings.
-
-Reference deep-dive: [docs/joule-chat.md](docs/joule-chat.md). Admin runbook: [docs/developers/operations/joule-chat-admin-settings.md](docs/developers/operations/joule-chat-admin-settings.md).
-
-```mermaid
-flowchart LR
-    subgraph browser[Browser - Hugo page]
-        Trigger["joule-trigger button"]
-        Panel["joule-panel<br/>(transcript + form)"]
-        JouleJs["joule.js<br/>readPageContext()<br/>SSE consumer<br/>sessionStorage history"]
-    end
-
-    subgraph approuter["AppRouter (xs-app.json)"]
-        ConfigRoute["/api/ChatConfig<br/>auth: none"]
-        AuthRoute["/auth/user<br/>auth: xsuaa"]
-        ChatRoute["/chat/*<br/>auth: xsuaa"]
-    end
-
-    subgraph cap["tutorials-srv (CAP Node.js)"]
-        subgraph lifecycle["server.js lifecycle"]
-            Bootstrap["bootstrap event<br/>reserves POST /chat/stream<br/>(BEFORE OData /chat router)"]
-            Served["served event<br/>binds real chain:<br/>contextMw → authMw → rateLimit"]
-        end
-
-        Orchestrator["chat-orchestrator.js<br/>multi-turn loop (max 5 turns)"]
-        ContextBuilder["chat-context.js<br/>3-layer system prompt:<br/>PERSONA + page + user"]
-        RateLimit["chat-rate-limit.js<br/>per-user 24h, in-memory"]
-
-        subgraph entities[Data model]
-            ChatSettings[("ims.ChatSettings<br/>singleton<br/>UUID 0...c8a7")]
-            TutorialEmbedding[("ims.TutorialEmbedding<br/>HANA Vector(1536)")]
-            SearchableItems[("ims.SearchableItems<br/>HANA full-text)")]
-        end
-
-        subgraph projections[Service projections]
-            AdminProj["AdminService.ChatSettings<br/>full surface<br/>(scope: Admin)"]
-            DevProj["DeveloperService.ChatConfig<br/>{enabled, bannerText}<br/>only — public"]
-        end
-
-        subgraph tools[Tools registered conditionally]
-            ToolSearch["searchTutorials<br/>→ SearchableItems<br/>(LIMIT 5)"]
-            ToolRag["getRelevantSteps<br/>(only if ragEnabled)<br/>cosine similarity<br/>topK + minScore"]
-        end
-
-        subgraph pipeline[Embedding pipeline]
-            EmbedPub["embedding-pipeline.js<br/>(setImmediate after<br/>/content/publish)"]
-            EmbedReconcile["hourly reconcile :17<br/>contentHash drift"]
-            EmbedCleanup["daily 03:30<br/>orphan cleanup"]
-        end
-    end
-
-    subgraph aicore[SAP AI Core - managed service]
-        Orchestration["Orchestration Service<br/>scenario=orchestration<br/>v2/completion endpoint"]
-        Model["Foundation model<br/>(CHAT_MODEL_NAME or<br/>ChatSettings.modelName)<br/>default: claude-4.6-sonnet"]
-        EmbedModel["text-embedding-3-small<br/>(indexing + query)"]
-    end
-
-    subgraph admin[Admin shell]
-        AdminUi["Joule Settings page<br/>deploymentId, modelName,<br/>temperature, maxTokens,<br/>ragEnabled, bannerText"]
-    end
-
-    Trigger -->|"GET /api/ChatConfig<br/>(60s sessionStorage cache)"| ConfigRoute
-    ConfigRoute --> DevProj
-    DevProj -->|"{enabled, bannerText}"| JouleJs
-    JouleJs -->|"if disabled,<br/>remove trigger"| Trigger
-
-    Panel -->|"GET /auth/user<br/>(60s cache)"| AuthRoute
-    AuthRoute -->|"401 → /login?joule=open"| Panel
-
-    Panel -->|"POST /chat/stream<br/>{messages, pageContext}"| ChatRoute
-    ChatRoute --> Bootstrap
-    Bootstrap -.->|after served| Served
-    Served --> RateLimit
-    RateLimit --> Orchestrator
-
-    Orchestrator --> ContextBuilder
-    ContextBuilder -.->|reads| ChatSettings
-    Orchestrator -.->|registers| ToolSearch
-    Orchestrator -.->|"if ragEnabled"| ToolRag
-
-    Orchestrator -->|"client.stream({messagesHistory})"| Orchestration
-    Orchestration --> Model
-    Model -->|delta chunks| Orchestration
-    Orchestration -->|"response.stream<br/>+ getToolCalls()"| Orchestrator
-
-    ToolSearch --> SearchableItems
-    ToolRag -->|"COSINE_SIMILARITY"| TutorialEmbedding
-
-    Orchestrator -->|"SSE: delta / tool /<br/>step-citations / done /<br/>error"| Panel
-
-    AdminUi -->|"OData CRUD<br/>(scope: Admin)"| AdminProj
-    AdminProj --> ChatSettings
-
-    EmbedPub -.->|upsert| TutorialEmbedding
-    EmbedReconcile -.-> TutorialEmbedding
-    EmbedCleanup -.-> TutorialEmbedding
-    EmbedPub -.->|embed text| EmbedModel
-    EmbedReconcile -.-> EmbedModel
-    ToolRag -.->|embed query| EmbedModel
-    EmbedModel -.->|via AI Core binding| Orchestration
-
-    classDef ext fill:#f4f4f4,stroke:#888,color:#333
-    class Orchestration,Model,EmbedModel ext
-    classDef storage fill:#e7f4ee,stroke:#15803d,color:#14532d
-    class ChatSettings,TutorialEmbedding,SearchableItems storage
-    classDef async fill:#fef3e7,stroke:#d97706,color:#92400e
-    class EmbedPub,EmbedReconcile,EmbedCleanup async
-```
-
-**Notes:**
-
-- **Anonymous gating** — `GET /api/ChatConfig` is the *only* public endpoint in the chat path. It exposes `{ enabled, bannerText }` so the trigger button can decide whether to render without forcing a login on visitors who never click. `deploymentId`, `modelName`, `temperature`, `maxTokens`, and `maxRequestsPerUser` never leave the server.
-- **Lifecycle quirk** — `POST /chat/stream` MUST be reserved on `cds.on('bootstrap')`, before CAP's OData router mounts `ChatService` at `/chat` (which would otherwise try to parse `stream` as a resource path → 404). The handler is a late-bound stub that gets replaced with the real `contextMw → authMw → rateLimit → businessHandler` chain on `served`. Requests arriving in between get `503 service_starting`.
-- **Two-projection trust split** — `AdminService.ChatSettings` (full surface, scope `Admin`) drives the admin UI; `DeveloperService.ChatConfig` (3-field projection) is what the browser sees. Never widen the projection to `{ * }`.
-- **Orchestration scenario, not model-direct** — `deploymentId` must point to a deployment created with **scenario `orchestration` + executable `orchestration`** in AI Launchpad. Model-direct deployments (Anthropic, Azure OpenAI direct) reject `v2/completion` with `400 BadRequest`.
-- **BTP service dependencies** — `tutorials-srv` `requires:` four managed services for Joule (declared in [.deploy/mta.yaml](.deploy/mta.yaml)):
-  - `tutorials-aicore` (`service: aicore`, plan `extended`) — provides the AI Core endpoint URL + OAuth client credentials. Marked `optional: true` so the MTA still deploys without it, but `/chat/stream` returns `503` until the binding exists. The `@sap-ai-sdk/orchestration` SDK reads credentials directly from `VCAP_SERVICES.aicore[0].credentials` — no manual env-var plumbing.
-  - `tutorials-xsuaa` — `Admin` scope gates `AdminService.ChatSettings`; XSUAA `sub` claim is the rate-limiter bucket key.
-  - `tutorials-hana` — persists `ChatSettings` (singleton row) and `TutorialEmbedding` (1,536-dim Vector column).
-  - `tutorials-destination` — not used by Joule directly; required by other srv code paths but listed here for completeness since the Joule binding shares the same app instance.
-- **AI Launchpad setup (one-time per subaccount)** — Joule needs **two** AI Core deployment UUIDs in `ChatSettings`:
-  1. **Entitle + subscribe** — in BTP Cockpit, entitle the subaccount to **AI Core (`extended` plan)** and **AI Launchpad (`standard` plan)**, then subscribe to the AI Launchpad app and assign the `AI_Admin` role collection to yourself.
-  2. **Resource group** — open AI Launchpad → select the AI Core instance bound to `tutorials-srv` → create or reuse a resource group (the default `default` works for single-tenant use).
-  3. **Chat deployment** — *Generative AI Hub → Configurations → + Create* → Scenario `orchestration`, Executable `orchestration`, Version pinned, Save → open the configuration → Deploy → wait for status `RUNNING` → copy the deployment UUID. Paste into admin shell **Joule Settings → Deployment ID**.
-  4. **Embedding deployment (only if `ragEnabled`)** — *Configurations → + Create* → Scenario `foundation-models`, Executable `azure-openai`, Model `text-embedding-3-small`, Save → Deploy → copy UUID. Paste into admin shell **Joule Settings → Embedding Deployment ID** and click **Seed Embeddings Now** for the first build (the hourly reconcile cron at `:17` catches subsequent drift).
-  5. **Verify** — admin shell **Joule Settings → Test Connection** issues a one-shot `client.stream()` against the chat deployment; failure surfaces the upstream orchestration response body for diagnosis. See [docs/joule-chat.md](docs/joule-chat.md) "Diagnostic Recipe" for the canonical `cf logs` grep when this fails post-deploy.
-- **Multi-turn tool loop** — capped at `MAX_TURNS = 5`. The model can invoke `searchTutorials` and (if `ragEnabled`) `getRelevantSteps` in any turn; the orchestrator runs the tool, pushes the result onto the message history, and re-streams.
-- **RAG is conditional and async-fed** — `getRelevantSteps` only registers as a tool when `ChatSettings.ragEnabled` is true. Embeddings are populated by `setImmediate` after `POST /content/publish` (non-blocking), reconciled hourly at minute `:17` on `contentHash` drift, and cleaned daily at 03:30 for orphans. On HANA, queries use raw SQL with the `COSINE_SIMILARITY` operator; SQLite tests fall back to JS-side cosine.
-- **Rate limiter is in-memory** — bucket key is the XSUAA `sub` claim. A `cf restart` resets every user's counter to zero, so the cap is best-effort, not a hard billing guard.
-- **Default state is OFF** — `ChatSettings.enabled` defaults to `false` on first deploy. There is no env-var override; an admin must explicitly enable Joule via the admin shell.
+> See [docs/developers/architecture/joule.md](docs/developers/architecture/joule.md) for the full Joule chat architecture and reference.
 
 ## CAP Backend (srv/)
 
@@ -758,7 +629,7 @@ A consolidated documentation site is planned for a later phase. Until then, refe
 | [docs/historic/ims-uncovered-features.md](docs/historic/ims-uncovered-features.md) | Migration — IMS features not yet ported to CAP |
 | [docs/historic/hugo-migration.md](docs/historic/hugo-migration.md) | History — VitePress → Hugo migration rationale |
 | [docs/developers/operations/mta-deployment.md](docs/developers/operations/mta-deployment.md) | Operators — MTA build/deploy procedures and troubleshooting |
-| [docs/joule-chat.md](docs/joule-chat.md) | Engineers — Joule chat integration |
+| [docs/developers/architecture/joule.md](docs/developers/architecture/joule.md) | Engineers — Joule chat architecture and reference |
 | [docs/developers/reference/ai-consumption.md](docs/developers/reference/ai-consumption.md) | Engineers — AI consumption surfaces |
 
 ## License

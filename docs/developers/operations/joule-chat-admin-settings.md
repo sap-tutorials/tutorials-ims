@@ -53,5 +53,5 @@ Toggle **Enable Vector Grounding** off. The `getRelevantSteps` tool is removed f
 
 ## Related
 
-- [Joule Chat Reference](../../joule-chat.md)
+- [Joule Chat Architecture](../architecture/joule.md)
 - [Build Architecture](../architecture/build.md)

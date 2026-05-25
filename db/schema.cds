@@ -368,7 +368,7 @@ entity ChatSettings : cuid, managed {
   maxRequestsPerUser   : Integer default 100;
   bannerText           : String(500);
 
-  // RAG / vector grounding (see docs/joule-chat.md "Tutorial Grounding")
+  // RAG / vector grounding (see docs/developers/architecture/joule.md "Tutorial Grounding")
   ragEnabled           : Boolean default false;
   embeddingModel       : String(100) default 'text-embedding-3-small';
   embeddingTopK        : Integer default 5;
