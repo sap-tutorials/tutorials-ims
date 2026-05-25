@@ -132,3 +132,48 @@ describe('admin-analytics-runner — I-3: assoc equals filter uses full path', (
     expect(refNode.ref).toEqual(['event', 'name']);
   });
 });
+
+describe('admin-analytics-runner — I-4: task-lookup discriminator filter', () => {
+  it('adds taskType=TUTORIAL to where clause when groupBy=["tutorial"]', async () => {
+    const capturedCqn = [];
+    const fakeDb = {
+      run: vi.fn(cqn => { capturedCqn.push(cqn); return Promise.resolve([]); }),
+    };
+    await runAnalyticsQuery({
+      plan: { fact: 'completion', groupBy: ['tutorial'], measures: ['count'] },
+      db: fakeDb, user: { id: 't' },
+    });
+    const where = capturedCqn[0].SELECT.where;
+    const idx = where.findIndex(n => n && typeof n === 'object' && Array.isArray(n.ref) && n.ref[0] === 'taskType' && n.ref.length === 1);
+    expect(idx).toBeGreaterThanOrEqual(0);
+    expect(where[idx + 1]).toBe('=');
+    expect(where[idx + 2]).toEqual({ val: 'TUTORIAL' });
+  });
+  it('adds taskType=GROUP when filtering by group dimension (no group in groupBy)', async () => {
+    const capturedCqn = [];
+    const fakeDb = {
+      run: vi.fn(cqn => { capturedCqn.push(cqn); return Promise.resolve([]); }),
+    };
+    await runAnalyticsQuery({
+      plan: { fact: 'completion', groupBy: ['taskType'], measures: ['count'], filters: [{ field: 'group', op: 'equals', value: 'Some Group' }] },
+      db: fakeDb, user: { id: 't' },
+    });
+    const where = capturedCqn[0].SELECT.where;
+    const idx = where.findIndex(n => n && typeof n === 'object' && Array.isArray(n.ref) && n.ref[0] === 'taskType' && n.ref.length === 1);
+    expect(idx).toBeGreaterThanOrEqual(0);
+    expect(where[idx + 2]).toEqual({ val: 'GROUP' });
+  });
+  it('omits discriminator when no task-lookup dim is referenced', async () => {
+    const capturedCqn = [];
+    const fakeDb = {
+      run: vi.fn(cqn => { capturedCqn.push(cqn); return Promise.resolve([]); }),
+    };
+    await runAnalyticsQuery({
+      plan: { fact: 'completion', groupBy: ['taskType'], measures: ['count'] },
+      db: fakeDb, user: { id: 't' },
+    });
+    const where = capturedCqn[0].SELECT.where;
+    const taskTypeRefs = where.filter(n => n && typeof n === 'object' && Array.isArray(n.ref) && n.ref[0] === 'taskType' && n.ref.length === 1);
+    expect(taskTypeRefs).toHaveLength(0);
+  });
+});

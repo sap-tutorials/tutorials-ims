@@ -38,18 +38,45 @@ const SEARCH_ADMIN_DOCS_TOOL = {
     },
   },
 };
+const ANALYTICS_DIMENSIONS = ['taskType','event','tag','mission','tutorial','group','completionMonth','completionWeek'];
+const ANALYTICS_FILTER_OPS = ['equals','in','contains','sinceDays','between'];
+
 const ANALYTICS_QUERY_TOOL = {
   type: 'function',
   function: {
     name: 'analyticsQuery',
-    description: 'Run a structured analytics query over completion data. Allowed facts: completion, start. Allowed dimensions: taskType, event, tag, mission, tutorial, group, completionMonth, completionWeek. Allowed measures: count, distinctUsers. Cells with distinctUsers < 5 are suppressed.',
+    description: [
+      'Run a structured analytics query over completion data.',
+      'Allowed facts: completion, start.',
+      'Allowed dimensions: taskType, event, tag, mission, tutorial, group, completionMonth, completionWeek.',
+      'Allowed measures: count, distinctUsers. Cells with distinctUsers < 5 are suppressed.',
+      'Filters MUST be an array of {field, op, value}. Date filters MUST set field to a date-trunc dimension name (completionMonth or completionWeek), not a column name.',
+      'Examples:',
+      '- last 30 days: filter=[{"field":"completionWeek","op":"sinceDays","value":30}]',
+      '- between dates: filter=[{"field":"completionMonth","op":"between","value":["2026-01-01","2026-03-31"]}]',
+      '- specific event: filter=[{"field":"event","op":"equals","value":"TechEd 2025"}]'
+    ].join(' '),
     parameters: {
       type: 'object',
       properties: {
         fact: { type: 'string', enum: ['completion','start'] },
-        dimensions: { type: 'array', items: { type: 'string' } },
+        dimensions: { type: 'array', items: { type: 'string', enum: ANALYTICS_DIMENSIONS } },
         measures: { type: 'array', items: { type: 'string', enum: ['count','distinctUsers'] } },
-        filter: { type: 'object' },
+        filter: {
+          type: 'array',
+          description: 'Array of filter clauses. Each clause names a dimension (the `field`), an operator, and a value.',
+          items: {
+            type: 'object',
+            properties: {
+              field: { type: 'string', enum: ANALYTICS_DIMENSIONS, description: 'Dimension name from the allowed list. Use completionMonth or completionWeek for date filters.' },
+              op:    { type: 'string', enum: ANALYTICS_FILTER_OPS },
+              value: {
+                description: 'sinceDays: integer days. between: [startDate, endDate] as ISO strings. in: array of strings. equals/contains: string.',
+              }
+            },
+            required: ['field','op','value']
+          }
+        },
         topN: { type: 'integer', minimum: 1, maximum: 50 },
       },
       required: ['fact','dimensions','measures'],
@@ -211,8 +238,16 @@ export async function dispatchTool(name, args, user) {
       if (err.code === 'pii_denied') return { error: 'pii_denied', message: err.message };
       if (err.code === 'unknown_field') return { error: 'unknown_field', message: err.message };
       if (err.code === 'invalid_value') return { error: 'invalid_value', message: err.message };
-      LOG.warn('analyticsQuery failed', err.message);
-      return { error: 'analytics_failed', message: 'Query execution failed' };
+      LOG.warn('analyticsQuery failed', {
+        message: err?.message,
+        name: err?.name || err?.constructor?.name,
+        code: err?.code,
+        stack: err?.stack
+      });
+      // Surface the underlying message so the LLM can self-correct (e.g.
+      // "ungrouped column", "unknown association"). The runner only throws
+      // tagged errors above; this branch catches DB-layer failures.
+      return { error: 'analytics_failed', message: err?.message || 'Query execution failed' };
     }
   }
 

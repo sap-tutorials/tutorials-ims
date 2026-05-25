@@ -76,6 +76,35 @@ function _hashUser(id) {
   return createHash('sha256').update(String(id || 'anon')).digest('hex');
 }
 
+// Task-lookup dimensions (tutorial/mission/group) join through unmanaged
+// associations on TaskRecordsAnalytics. The associations' ON clauses include
+// a taskType discriminator, so rows of the wrong taskType produce a single
+// "null" bucket in GROUP BY. Push the discriminator into WHERE as well so
+// the result set is clean (e.g. groupBy=['tutorial'] returns only tutorial
+// completions, not a phantom null row counting missions+groups).
+function _impliedTaskTypes(v) {
+  const types = new Set();
+  for (const g of v.groupBy) {
+    const dim = S.dimensions[g];
+    if (dim?.kind === 'task-lookup') types.add(dim.taskType);
+  }
+  for (const f of v.filters) {
+    const dim = S.dimensions[f.field];
+    if (dim?.kind === 'task-lookup') types.add(dim.taskType);
+  }
+  return [...types];
+}
+
+function _appendTaskTypeFilter(where, taskTypes) {
+  if (!taskTypes.length) return;
+  if (where.length) where.push('and');
+  if (taskTypes.length === 1) {
+    where.push({ ref: ['taskType'] }, '=', { val: taskTypes[0] });
+  } else {
+    where.push({ ref: ['taskType'] }, 'in', { list: taskTypes.map(t => ({ val: t })) });
+  }
+}
+
 function _buildCQN(v) {
   const fact = S.facts[v.fact];
   const cqn = { SELECT: { from: { ref: [fact.source] }, columns: [], where: [], groupBy: [] } };
@@ -106,6 +135,8 @@ function _buildCQN(v) {
     if (cqn.SELECT.where.length) cqn.SELECT.where.push('and');
     cqn.SELECT.where.push({ ref: [k] }, '=', { val });
   }
+
+  _appendTaskTypeFilter(cqn.SELECT.where, _impliedTaskTypes(v));
 
   for (const f of v.filters) {
     const dim = S.dimensions[f.field];
@@ -228,6 +259,7 @@ async function _runDateTruncAggregation(v, dbi) {
     if (cqn.SELECT.where.length) cqn.SELECT.where.push('and');
     cqn.SELECT.where.push({ ref: [k] }, '=', { val });
   }
+  _appendTaskTypeFilter(cqn.SELECT.where, _impliedTaskTypes(v));
   for (const f of v.filters) {
     const dim = S.dimensions[f.field];
     if (dim.kind === 'date-trunc' && f.op === 'sinceDays') {
