@@ -5,6 +5,8 @@ description: GitHub, XSUAA, NGDS, Adobe Analytics, BTP Mail, AI Core, Audit Log,
 
 # External Integrations
 
+> Source: extracted from project README, 2026-05-25.
+
 | System | Direction | Bound via | Purpose |
 | --- | --- | --- | --- |
 | GitHub `sap-tutorials` org (public) | Build-time | `GITHUB_TOKEN` (rate-limit avoidance) | Tutorial markdown source, discovered via `discoverAllTutorials()` |
