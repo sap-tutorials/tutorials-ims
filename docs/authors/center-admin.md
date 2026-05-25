@@ -9,7 +9,8 @@ Operational manual for the developer center administrator — the operator role 
   - BTP subaccount admin (community-tools subaccount)
   - CF Space Developer in the prod space
   - GitHub admin in the `sap-tutorials` organization (granted via SAP OSPO)
-  - `Tutorials Admin` or `Tutorials SuperAdmin` role-collection assigned in BTP cockpit (scopes `Admin`, `SuperAdmin`, `DisplayApp`, `DeveloperApp`, `Everyone`)
+  - "Tutorials Admin" role collection (scopes: `Admin`, `DisplayApp`, `DeveloperApp`, `Everyone`) — sufficient for day-to-day operations.
+  - "Tutorials SuperAdmin" role collection (adds `SuperAdmin` scope) — required for destructive operations such as DB schema changes.
   - `CONTENT_API_KEY` env var value (held by the Center Admin team; required for `POST /content/publish` and `POST /content/rollback`)
   - Local clone of `tutorials-poc` for emergency operations and rebuilds
 
@@ -270,7 +271,7 @@ The pipeline: fetches all tutorials from GitHub → generates Hugo pages → bui
      -d '{}'
    ```
 
-   Expected response: `{ "ok": true, "rolledBackTo": <manifest-id> }`.
+   Expected response: `{ "rolledBackTo": <version>, "status": "ACTIVE" }`.
 
    If the response is `404 No rollback target found`, there is no prior `ACTIVE` or `SUPERSEDED` manifest to revert to — escalate to a full rebuild.
 
@@ -490,8 +491,8 @@ Document the result (date, duration, success/fail) in the team's incident log.
 | "My tag isn't recognized by the validator" | Import the tag: [Task: Import a new tag from the SAP taxonomy](#task-import-a-new-tag-from-the-sap-taxonomy) |
 | "I can't see my tutorial after merge" | Check the rebuild pipeline — did `rebuild-content.yml` fire? Check the source repo's `dispatch` step in Actions. |
 | "I need access to the QA preview channel" | Assign `Tutorials Author` role collection in BTP cockpit: [Task: Add a user to the system](#task-add-a-user-to-the-system) |
-| "I need to move a tutorial to a different repo" | Direct to repo group owners: [repo-group-owners.md#task-move-a-tutorial-to-a-different-repository](repo-group-owners.md#task-move-a-tutorial-to-a-different-repository) |
-| "My tutorial has a broken image after merge" | Confirm image path convention in [writing-tutorials.md](writing-tutorials.md) §3.2; if path is correct, trigger a single-slug rebuild |
+| "I need to move a tutorial to a different repo" | Direct to repo group owners: [repo-group-owners.md#task-migrate-a-tutorial-to-another-repository](repo-group-owners.md#task-migrate-a-tutorial-to-another-repository) |
+| "My tutorial has a broken image after merge" | Confirm image path convention in [writing-tutorials.md](writing-tutorials.md) §3.4; if path is correct, trigger a single-slug rebuild |
 
 **Escalation paths:**
 - Technical platform issues → open a GitHub Issue on `tutorials-poc` with the `platform` label.
