@@ -22,10 +22,14 @@ export async function backfill({ dryRun = false } = {}) {
 
   const byFullName = new Map();
   const byDisplay  = new Map();
+  const setOrFlagAmbiguous = (map, key, email) => {
+    if (map.has(key)) map.set(key, null);   // sentinel: ambiguous
+    else map.set(key, email);
+  };
   for (const u of users) {
     if (!u.email) continue;
-    if (u.firstName && u.lastName) byFullName.set(`${u.firstName} ${u.lastName}`.toLowerCase(), u.email);
-    if (u.displayName) byDisplay.set(u.displayName.toLowerCase(), u.email);
+    if (u.firstName && u.lastName) setOrFlagAmbiguous(byFullName, `${u.firstName} ${u.lastName}`.toLowerCase(), u.email);
+    if (u.displayName) setOrFlagAmbiguous(byDisplay, u.displayName.toLowerCase(), u.email);
   }
 
   let resolved = 0;
@@ -33,15 +37,20 @@ export async function backfill({ dryRun = false } = {}) {
   for (const m of metas) {
     if (!m.owner) { unresolved.push({ id: m.ID, owner: '', reason: 'empty owner' }); continue; }
     const key = m.owner.toLowerCase();
-    const email = byFullName.get(key) || byDisplay.get(key);
-    if (!email) { unresolved.push({ id: m.ID, owner: m.owner, reason: 'no Users match' }); continue; }
+    let email = byFullName.get(key);
+    if (email === undefined) email = byDisplay.get(key);
+    if (email === null)      { unresolved.push({ id: m.ID, owner: m.owner, reason: 'ambiguous name' }); continue; }
+    if (email === undefined) { unresolved.push({ id: m.ID, owner: m.owner, reason: 'no Users match' }); continue; }
     if (!dryRun) await db.run(UPDATE(TutorialMeta, m.ID).set({ ownerEmail: email }));
     resolved++;
   }
 
   const dir = path.resolve(process.cwd(), '.migration-data');
   fs.mkdirSync(dir, { recursive: true });
-  const csv = ['id,owner,reason', ...unresolved.map(r => `${r.id},"${r.owner}",${r.reason}`)].join('\n');
+  const esc = s => `"${String(s).replace(/"/g, '""')}"`;
+  const csv = ['id,owner,reason',
+    ...unresolved.map(r => `${r.id},${esc(r.owner)},${esc(r.reason)}`)
+  ].join('\n');
   fs.writeFileSync(path.join(dir, 'ownerEmail-unresolved.csv'), csv);
 
   console.log(`Resolved: ${resolved}/${metas.length}. Unresolved logged to .migration-data/ownerEmail-unresolved.csv.`);
