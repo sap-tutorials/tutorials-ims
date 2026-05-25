@@ -83,7 +83,8 @@
                   "actions": {
                     "EditMarkdown": {
                       "press": "sap.tutorials.admin.groups.ext.MarkdownEditor.onEditMarkdown",
-                      "text": "Edit Description (Markdown)"
+                      "text": "Edit Description (Markdown)",
+                      "visible": "{= !${IsActiveEntity} }"
                     }
                   }
                 },
