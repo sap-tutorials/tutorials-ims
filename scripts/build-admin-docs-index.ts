@@ -4,8 +4,7 @@ import { dirname, resolve } from 'node:path';
 const SOURCES = [
   'CLAUDE.md',
   'docs/developers/architecture/build.md',
-  'docs/authentication-primer.md',
-  'docs/authentication-architecture.md',
+  'docs/developers/architecture/authentication.md',
   'docs/developers/operations/mta-deployment.md',
   'docs/historic/hugo-migration.md',
   'docs/historic/ims-api-reference.md',

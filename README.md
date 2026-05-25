@@ -430,7 +430,7 @@ The AppRouter (`approuter/xs-app.json`) evaluates routes top-to-bottom on first 
 | `^/ws/(.*)$` | `/ws/display` | `DisplayApp` enforced inside `@cap-js-community/websocket` plugin |
 | `^/ws/(.*)$` | `/ws/event-stream` | anonymous (kiosk monitors) |
 
-The router is intentionally `authenticationType: "none"` for `^/socket\.io/` and `^/ws/` because the WebSocket plugin runs scope checks at namespace-join time — adding XSUAA at the router would force an OAuth dance the Socket.IO client can't complete cleanly. See [docs/authentication-primer.md](docs/authentication-primer.md) for the full token flow.
+The router is intentionally `authenticationType: "none"` for `^/socket\.io/` and `^/ws/` because the WebSocket plugin runs scope checks at namespace-join time — adding XSUAA at the router would force an OAuth dance the Socket.IO client can't complete cleanly. See [docs/developers/architecture/authentication.md](docs/developers/architecture/authentication.md) for the full token flow.
 
 #### Catch-all (last)
 
@@ -537,7 +537,7 @@ The Java IMS calls SCI (SAP Cloud Identity) over HTTPS to enrich user profiles a
 
 ### Data + identity
 
-- **JWT-only identity on CAP** (vs. the Java IMS's SCI lookup). User attributes come from `xs.user.attributes` on the XSUAA JWT — no synchronous network hop for profile enrichment. See [docs/authentication-primer.md](docs/authentication-primer.md).
+- **JWT-only identity on CAP** (vs. the Java IMS's SCI lookup). User attributes come from `xs.user.attributes` on the XSUAA JWT — no synchronous network hop for profile enrichment. See [docs/developers/architecture/authentication.md](docs/developers/architecture/authentication.md).
 - **`@PersonalData` + `@cap-js/audit-logging`** drives audit events on `Users`/`UserMetaData`/`TaskRecords` automatically. Plus a manual `SecurityEvent` on user anonymization. No hand-written audit calls.
 - **`@changelog` + `@cap-js/change-tracking`** on admin-managed entities (Events, Missions, Groups, Accomplishments, Prizes, ImsConfig, FeaturedTasks, ChatSettings) for the changelog UI.
 - **Legacy ID sequences (HANA `.hdbsequence`)** on every entity that exposes an integer ID to legacy IMS consumers. Used during parallel operation; remains a public contract until the cutover deprecation window closes.
@@ -558,8 +558,7 @@ A consolidated documentation site is planned for a later phase. Until then, refe
 | -------- | --- |
 | [docs/author-instructions.md](docs/author-instructions.md) | Tutorial authors — frontmatter, step structure, local preview, publish flow |
 | [docs/developers/architecture/build.md](docs/developers/architecture/build.md) | Engineers — full fetch → parse → Hugo → HANA pipeline with timing data |
-| [docs/authentication-architecture.md](docs/authentication-architecture.md) | Engineers — XSUAA / IDP auth flow and component interactions |
-| [docs/authentication-primer.md](docs/authentication-primer.md) | Engineers — high-level auth model intro |
+| [docs/developers/architecture/authentication.md](docs/developers/architecture/authentication.md) | Engineers — XSUAA / IDP auth flow and component interactions |
 | [docs/developers/operations/ias-setup.md](docs/developers/operations/ias-setup.md) | Operators — IAS migration configuration steps |
 | [docs/historic/ims-api-reference.md](docs/historic/ims-api-reference.md) | Migration — legacy IMS Java API surface for parity reference |
 | [docs/historic/ims-uncovered-features.md](docs/historic/ims-uncovered-features.md) | Migration — IMS features not yet ported to CAP |

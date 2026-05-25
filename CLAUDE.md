@@ -186,7 +186,7 @@ Architecture and reference docs for developers (not deployed). Key entries:
 - [docs/developers/reference/theme-variants.md](docs/developers/reference/theme-variants.md) — building event-specific theme variants (Joule, Sapphire, TechEd)
 - [docs/authors/README.md](docs/authors/README.md) — operational manual for authors, repo group owners, center admins, and analytics admins (replaces `docs/author-instructions.md`)
 - [docs/developers/operations/qa-channel-bootstrap.md](docs/developers/operations/qa-channel-bootstrap.md) — one-time QA author-preview channel setup procedure
-- [docs/developers/architecture/build.md](docs/developers/architecture/build.md), [docs/authentication-architecture.md](docs/authentication-architecture.md), [docs/developers/operations/mta-deployment.md](docs/developers/operations/mta-deployment.md), [docs/historic/hugo-migration.md](docs/historic/hugo-migration.md) — deep-dives
+- [docs/developers/architecture/build.md](docs/developers/architecture/build.md), [docs/developers/architecture/authentication.md](docs/developers/architecture/authentication.md), [docs/developers/operations/mta-deployment.md](docs/developers/operations/mta-deployment.md), [docs/historic/hugo-migration.md](docs/historic/hugo-migration.md) — deep-dives
 
 ### Parsers (scripts/parsers/)
 

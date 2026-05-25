@@ -427,7 +427,7 @@ Document the result (date, duration, success/fail) in the team's incident log.
 > **Note:** Users assigned `Tutorials Author` gain access to the QA preview channel at `/tutorials-qa/*` only. They cannot create or modify catalog records. For repo group owner registration, see [repo-group-owners.md](repo-group-owners.md).
 
 **Related:**
-- [authentication-architecture.md](../authentication-architecture.md)
+- [authentication.md](../developers/architecture/authentication.md)
 - [repo-group-owners.md](repo-group-owners.md)
 
 ---
@@ -465,7 +465,7 @@ Document the result (date, duration, success/fail) in the team's incident log.
 
 **Related:**
 
-- [authentication-architecture.md](../authentication-architecture.md) — XSUAA, BTP identity, and audit-logging setup
+- [authentication.md](../developers/architecture/authentication.md) — XSUAA, BTP identity, and audit-logging setup
 - [Add a user to the system](#task-add-a-user-to-the-system) — role collection assignment reference (Task 11)
 
 ---
@@ -590,5 +590,5 @@ Author Office Hours — <Month YYYY>
 - [analytics-admin.md](analytics-admin.md) — analytics platform operations (tutorial engagement, query explorer)
 - [build.md](../developers/architecture/build.md) — deep-dive on the fetch → Hugo → publish pipeline
 - [mta-deployment.md](../mta-deployment.md) — MTA build and CF deploy reference
-- [authentication-architecture.md](../authentication-architecture.md) — XSUAA, BTP identity, AppRouter auth flows
+- [authentication.md](../developers/architecture/authentication.md) — XSUAA, BTP identity, AppRouter auth flows
 - [testing-endpoints.md](../testing-endpoints.md) — canonical endpoint reference with auth/scope mapping

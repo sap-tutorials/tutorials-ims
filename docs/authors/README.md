@@ -38,7 +38,7 @@ If you find yourself doing something operationally important that isn't document
 
 - [build.md](../developers/architecture/build.md) — fetch → parse → Hugo → HANA in detail
 - [mta-deployment.md](../mta-deployment.md) — how the MTA is structured and deployed
-- [authentication-architecture.md](../authentication-architecture.md) — XSUAA, role collections, IAS
+- [authentication.md](../developers/architecture/authentication.md) — XSUAA, role collections, IAS
 - [testing-endpoints.md](../testing-endpoints.md) — canonical endpoint reference for smoke testing
 
 ## Historic context
