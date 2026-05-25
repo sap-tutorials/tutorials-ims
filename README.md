@@ -318,7 +318,7 @@ See [docs/developers/architecture/build.md](docs/developers/architecture/build.m
 
 ## Joule Architecture
 
-> See [docs/developers/architecture/joule.md](docs/developers/architecture/joule.md) for the full Joule chat architecture and reference.
+See [docs/developers/architecture/joule.md](docs/developers/architecture/joule.md) for full details.
 
 ## CAP Backend (srv/)
 
