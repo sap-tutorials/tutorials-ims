@@ -678,6 +678,24 @@
           "length": 36,
           "@cds.persistence.name": "ID"
         },
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
         "legacyId": {
           "type": "cds.Integer",
           "@cds.persistence.name": "LEGACYID"
@@ -696,6 +714,11 @@
           "type": "cds.String",
           "length": 255,
           "@cds.persistence.name": "OWNER"
+        },
+        "ownerEmail": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "OWNEREMAIL"
         },
         "monitoredStatus": {
           "type": "cds.String",
@@ -1464,42 +1487,6 @@
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_ACTIVELEARNERRECORDS"
     },
-    "com.sap.developers.ims.DashboardMonitoredRecords": {
-      "kind": "entity",
-      "@cds.persistence.journal": true,
-      "elements": {
-        "ID": {
-          "key": true,
-          "type": "cds.String",
-          "length": 36,
-          "@cds.persistence.name": "ID"
-        },
-        "legacyId": {
-          "type": "cds.Integer",
-          "@cds.persistence.name": "LEGACYID"
-        },
-        "event_ID": {
-          "type": "cds.String",
-          "length": 36,
-          "@odata.foreignKey4": "event",
-          "@cds.persistence.name": "EVENT_ID"
-        },
-        "metric": {
-          "type": "cds.String",
-          "length": 255,
-          "@cds.persistence.name": "METRIC"
-        },
-        "value": {
-          "type": "cds.Integer",
-          "@cds.persistence.name": "VALUE"
-        },
-        "recordedAt": {
-          "type": "cds.Timestamp",
-          "@cds.persistence.name": "RECORDEDAT"
-        }
-      },
-      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_DASHBOARDMONITOREDRECORDS"
-    },
     "com.sap.developers.ims.ChatSettings": {
       "kind": "entity",
       "@cds.persistence.journal": true,
@@ -1674,6 +1661,42 @@
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CHECKPOINTS"
+    },
+    "com.sap.developers.ims.DashboardMonitoredRecords": {
+      "kind": "entity",
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "legacyId": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "LEGACYID"
+        },
+        "event_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "event",
+          "@cds.persistence.name": "EVENT_ID"
+        },
+        "metric": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "METRIC"
+        },
+        "value": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "VALUE"
+        },
+        "recordedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "RECORDEDAT"
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_DASHBOARDMONITOREDRECORDS"
     },
     "com.sap.developers.ims.JobLocks": {
       "kind": "entity",
