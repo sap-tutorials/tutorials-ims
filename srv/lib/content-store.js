@@ -364,6 +364,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
                   ID: cds.utils.uuid(),
                   tutorial_ID: tutorialId,
                   owner: resolvedOwner,
+                  ownerEmail: resolvedOwner,
                   reviewedDate: lastUpdated,
                   monitoredStatus: 'ACTIVE',
                   notificationNumber: 0,
@@ -375,11 +376,13 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
                 const existingTs = existingMeta.reviewedDate ? Date.parse(existingMeta.reviewedDate) : null;
                 if (Number.isFinite(newTs)) {
                   if (existingTs === null || (Number.isFinite(existingTs) && existingTs < newTs)) {
-                    await UPDATE(TutorialMeta).where({ ID: existingMeta.ID }).set({
+                    const updates = {
                       reviewedDate: lastUpdated,
                       notificationNumber: 0,
                       lastNotificationDate: null
-                    });
+                    };
+                    if (resolvedOwner && !existingMeta.ownerEmail) updates.ownerEmail = resolvedOwner;
+                    await UPDATE(TutorialMeta).where({ ID: existingMeta.ID }).set(updates);
                   } else if (existingTs !== null && Number.isNaN(existingTs)) {
                     LOG.warn(`TutorialMeta ${slug} has unparseable reviewedDate; skipping refresh`);
                   }
