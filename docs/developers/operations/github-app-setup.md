@@ -2,7 +2,7 @@
 
 > **Audience:** the SAP GitHub org admin who owns `https://github.com/sap-tutorials`, and the `tutorials-poc` repo maintainer who will set the Actions secrets and flip the activation variable. This doc is intentionally short and copy-pasteable.
 
-For the *why* behind this change, see [`github-app-migration.md`](github-app-migration.md). The short version: replace a long-lived classic PAT (which expires under SAP rotation policy and is tied to one human) with a GitHub App that mints a fresh 1-hour token per workflow run.
+For the *why* behind this change, see [`github-app-migration.md`](../../historic/github-app-migration.md). The short version: replace a long-lived classic PAT (which expires under SAP rotation policy and is tied to one human) with a GitHub App that mints a fresh 1-hour token per workflow run.
 
 ## What this changes operationally
 
@@ -144,6 +144,6 @@ No code change needed.
 
 ## References
 
-- [`github-app-migration.md`](github-app-migration.md) — engineering rationale, current state analysis, comparison table
+- [`github-app-migration.md`](../../historic/github-app-migration.md) — engineering rationale, current state analysis, comparison table
 - [`actions/create-github-app-token`](https://github.com/actions/create-github-app-token) — the GitHub-published action used in the workflow
 - [GitHub Apps documentation](https://docs.github.com/en/apps/creating-github-apps)

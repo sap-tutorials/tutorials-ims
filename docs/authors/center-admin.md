@@ -152,7 +152,7 @@ npx cds bind --exec -- node scripts/setup-dev-data.cjs
 5. **Switching the live event:** To change which event is active mid-conference, update the **Active** flag in the admin UI. The display dashboard and AppSpace pick up the change in real-time via WebSocket without a page reload.
 
 **Related:**
-- [docs/theme-variants.md](../theme-variants.md) — detailed palette variables for Joule, Sapphire, and TechEd
+- [docs/developers/reference/theme-variants.md](../developers/reference/theme-variants.md) — detailed palette variables for Joule, Sapphire, and TechEd
 
 ---
 
@@ -206,7 +206,6 @@ npx cds bind --exec -- node scripts/setup-dev-data.cjs
 **Related:**
 
 - [writing-tutorials.md](writing-tutorials.md) — frontmatter field reference for `primary_tag` and `tags`
-- [author-instructions.md](../author-instructions.md) — author-side tutorial authoring and tagging guidance
 
 ---
 
@@ -237,7 +236,7 @@ The pipeline: fetches all tutorials from GitHub → generates Hugo pages → bui
 > **Important:** Single-slug runs skip the HANA `RepoCatalog` upload (the discovery baseline is a production artifact). Do **not** use a single-slug run when group or mission metadata has also changed — use a full rebuild in that case.
 
 **Related:**
-- [content-pipeline.md](../content-pipeline.md)
+- [build.md](../developers/architecture/build.md)
 
 ---
 
@@ -281,7 +280,7 @@ The pipeline: fetches all tutorials from GitHub → generates Hugo pages → bui
 > **What rollback does not do:** It does not touch source Markdown. It moves the manifest pointer in HANA — the next full rebuild overwrites it again. If the bad content is in the source, fix the source first.
 
 **Related:**
-- [content-pipeline.md](../content-pipeline.md)
+- [build.md](../developers/architecture/build.md)
 - [testing-endpoints.md](../testing-endpoints.md)
 
 ---
@@ -341,7 +340,7 @@ The pipeline: fetches all tutorials from GitHub → generates Hugo pages → bui
 **Related:**
 
 - [Monitor the publish pipeline](#task-monitor-the-publish-pipeline) — daily health checks and Pipeline Log access
-- [content-pipeline.md](../content-pipeline.md) — deep-dive on the fetch → Hugo → publish pipeline
+- [build.md](../developers/architecture/build.md) — deep-dive on the fetch → Hugo → publish pipeline
 
 ---
 
@@ -427,7 +426,7 @@ Document the result (date, duration, success/fail) in the team's incident log.
 > **Note:** Users assigned `Tutorials Author` gain access to the QA preview channel at `/tutorials-qa/*` only. They cannot create or modify catalog records. For repo group owner registration, see [repo-group-owners.md](repo-group-owners.md).
 
 **Related:**
-- [authentication-architecture.md](../authentication-architecture.md)
+- [authentication.md](../developers/architecture/authentication.md)
 - [repo-group-owners.md](repo-group-owners.md)
 
 ---
@@ -465,7 +464,7 @@ Document the result (date, duration, success/fail) in the team's incident log.
 
 **Related:**
 
-- [authentication-architecture.md](../authentication-architecture.md) — XSUAA, BTP identity, and audit-logging setup
+- [authentication.md](../developers/architecture/authentication.md) — XSUAA, BTP identity, and audit-logging setup
 - [Add a user to the system](#task-add-a-user-to-the-system) — role collection assignment reference (Task 11)
 
 ---
@@ -588,7 +587,7 @@ Author Office Hours — <Month YYYY>
 
 - [decommissioned-tasks.md](../historic/decommissioned-tasks.md) — tasks from the old run-book that have been replaced or removed
 - [analytics-admin.md](analytics-admin.md) — analytics platform operations (tutorial engagement, query explorer)
-- [content-pipeline.md](../content-pipeline.md) — deep-dive on the fetch → Hugo → publish pipeline
+- [build.md](../developers/architecture/build.md) — deep-dive on the fetch → Hugo → publish pipeline
 - [mta-deployment.md](../mta-deployment.md) — MTA build and CF deploy reference
-- [authentication-architecture.md](../authentication-architecture.md) — XSUAA, BTP identity, AppRouter auth flows
+- [authentication.md](../developers/architecture/authentication.md) — XSUAA, BTP identity, AppRouter auth flows
 - [testing-endpoints.md](../testing-endpoints.md) — canonical endpoint reference with auth/scope mapping

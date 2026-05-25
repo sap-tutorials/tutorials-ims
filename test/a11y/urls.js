@@ -5,7 +5,7 @@
 //
 // Authenticated routes (/admin-ui/, /scanner-ui/) are intentionally
 // excluded — unauthenticated scans only see the IDP redirect.
-// See docs/aem-gap-analysis.md gap #16 for the auth-scan follow-up.
+// See docs/historic/aem-gap-analysis.md gap #16 for the auth-scan follow-up.
 //
 // Update slugs if any of these 404 — pick stable, long-lived ones.
 //

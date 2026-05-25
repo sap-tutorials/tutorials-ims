@@ -112,7 +112,7 @@ async function imgCdnHandler(req, res, next) {
 }
 
 // Legacy URL redirects preserved at cutover from AEM/Akamai. See
-// docs/aem-gap-analysis.md §15. Each entry matches the *path*; the captured
+// docs/historic/aem-gap-analysis.md §15. Each entry matches the *path*; the captured
 // group is the query string (with leading ?), appended verbatim to the target.
 const LEGACY_REDIRECTS = [
   {

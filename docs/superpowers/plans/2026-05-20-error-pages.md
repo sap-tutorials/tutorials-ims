@@ -942,7 +942,7 @@ Start `npm run dev:hybrid` (CAP + approuter on :5000):
 
 - [ ] **Step 5: Update the gap analysis doc**
 
-In `docs/aem-gap-analysis.md`, change the heading for gap #14 from `### 14. Error Pages (404 / 500)` to mark it complete:
+In `docs/historic/aem-gap-analysis.md`, change the heading for gap #14 from `### 14. Error Pages (404 / 500)` to mark it complete:
 
 ```markdown
 ### 14. Error Pages (404 / 500) ✅
@@ -955,7 +955,7 @@ In `docs/aem-gap-analysis.md`, change the heading for gap #14 from `### 14. Erro
 - [ ] **Step 6: Commit and push**
 
 ```bash
-git add docs/aem-gap-analysis.md
+git add docs/historic/aem-gap-analysis.md
 git commit -m "docs: close AEM Gap #14 (error pages)"
 git push
 ```

@@ -98,14 +98,14 @@ import { dirname, resolve } from 'node:path';
 
 const SOURCES = [
   'CLAUDE.md',
-  'docs/content-pipeline.md',
+  'docs/developers/architecture/build.md',
   'docs/authentication-primer.md',
   'docs/authentication-architecture.md',
-  'docs/mta-deployment.md',
-  'docs/hugo-migration.md',
-  'docs/ims-api-reference.md',
-  'docs/ims-uncovered-features.md',
-  'docs/ias-migration-setup.md',
+  'docs/developers/operations/mta-deployment.md',
+  'docs/historic/hugo-migration.md',
+  'docs/historic/ims-api-reference.md',
+  'docs/historic/ims-uncovered-features.md',
+  'docs/developers/operations/ias-setup.md',
 ];
 const OUT = 'srv/data/admin-docs-index.json';
 const STOPWORDS = new Set(['the','and','for','with','this','that','from','are','was','were','use','using','can','will','not','but','have','has','had','its','our','your','their','they','them','its','also','more','than','then','here','there','what','when','where','which','who','whom','how','why','any','all','some','one','two','etc']);
@@ -190,7 +190,7 @@ describe('admin-docs-index', () => {
         readFileSync: (p: string, enc: string) => {
           if (String(p).endsWith('admin-docs-index.json')) {
             return JSON.stringify({ docs: [
-              { id: 'a#0', path: 'docs/content-pipeline.md', heading: 'Content Pipeline Overview', body: 'Hugo builds tutorial markdown into HTML pages then publish-content uploads each slug as gzip BLOBs to HANA.', headingTokens: ['content','pipeline','overview'], bodyTokens: ['hugo','builds','tutorial','markdown','html','pages','then','publish','content','uploads','each','slug','gzip','blobs','hana'] },
+              { id: 'a#0', path: 'docs/developers/architecture/build.md', heading: 'Content Pipeline Overview', body: 'Hugo builds tutorial markdown into HTML pages then publish-content uploads each slug as gzip BLOBs to HANA.', headingTokens: ['content','pipeline','overview'], bodyTokens: ['hugo','builds','tutorial','markdown','html','pages','then','publish','content','uploads','each','slug','gzip','blobs','hana'] },
               { id: 'b#0', path: 'docs/authentication-primer.md', heading: 'XSUAA Auth Flow', body: 'XSUAA mints JWT tokens which the approuter validates before forwarding to the CAP backend.', headingTokens: ['xsuaa','auth','flow'], bodyTokens: ['xsuaa','mints','jwt','tokens','which','approuter','validates','before','forwarding','cap','backend'] },
             ] });
           }

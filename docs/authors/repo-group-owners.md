@@ -24,13 +24,13 @@ If you change role, update this file (Task: Designate or change a repository gro
 - **Purpose and Objective:** When a tutorial PR merges to `main`, trigger a rebuild of the published site so the change goes live within minutes.
 - **Prerequisites:** GitHub admin on the source repo; a `DISPATCH_TOKEN` repo secret obtained from a [Center Admin](center-admin.md).
 
-1. Copy [`docs/tutorial-repo-dispatch.yml`](../tutorial-repo-dispatch.yml) from `tutorials-poc` into your repo at `.github/workflows/tutorial-repo-dispatch.yml`.
+1. Copy [`docs/tutorial-repo-dispatch.yml`](tutorial-repo-dispatch.yml) from `tutorials-poc` into your repo at `.github/workflows/tutorial-repo-dispatch.yml`.
 2. In the source repo's Settings → Secrets and variables → Actions, add a secret named `DISPATCH_TOKEN` with the value supplied by the Center Admin.
 3. Commit the workflow file on `main`.
 4. Verify: push a small change (e.g., a typo fix) and watch the `tutorials-poc` repo's Actions tab for a triggered run within ~10 seconds.
 5. If the run does not appear, check the source repo's Actions log for the dispatch step. The most common failure is a stale or missing `DISPATCH_TOKEN`.
 
-**Related:** [Center Admin: Force-rebuild content](center-admin.md), [content-pipeline.md](../content-pipeline.md)
+**Related:** [Center Admin: Force-rebuild content](center-admin.md), [build.md](../developers/architecture/build.md)
 
 ---
 

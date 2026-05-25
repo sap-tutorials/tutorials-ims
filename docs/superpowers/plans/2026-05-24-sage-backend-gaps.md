@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Close all eight backend gaps identified in [docs/sage-extension-migration.md](../../sage-extension-migration.md) so the Sage VS Code extension can move off legacy IMS — in a single additive PR with no destructive schema migration.
+**Goal:** Close all eight backend gaps identified in [docs/developers/reference/sage-extension-migration.md](../../developers/reference/sage-extension-migration.md) so the Sage VS Code extension can move off legacy IMS — in a single additive PR with no destructive schema migration.
 
 **Architecture:** New `AuthorService` at `@path: '/author'` gated on the existing `Tutorial.Author` scope. A new `MyTutorialsView` joins `TutorialMeta` to `Users` via a new additive `ownerEmail` column (avoiding the destructive `Association to Users` migration). `req.user.id` (= `Users.uuid`) gates auth via a `before('READ')` handler; `ownerEmail` is the data join key. Admin actions get extracted into a shared module that AuthorService also calls, plus `/health/auth`, OData `Prefer: odata.track-changes` annotations, and `managed` on `TutorialMeta` for ETag support.
 

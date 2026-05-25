@@ -180,7 +180,7 @@ entity Books : managed {
 8. Live at developers.sap.com/tutorials/<your-slug> within a few minutes
 ```
 
-The notification step (6) is wired by adding a small workflow file to your tutorial repo — see [tutorial-repo-dispatch.yml](../tutorial-repo-dispatch.yml). Org admins typically handle this once per repo.
+The notification step (6) is wired by adding a small workflow file to your tutorial repo — see [tutorial-repo-dispatch.yml](tutorial-repo-dispatch.yml). Org admins typically handle this once per repo.
 
 ---
 
@@ -247,7 +247,7 @@ Run through this before opening your PR:
 | Delta publish: only changed slugs upload to HANA | CAP backend | 2–4 s |
 | LRU cache invalidates; next request serves new content | Production | immediate |
 
-Total: **typically under a minute** for incremental edits, a few minutes for a full rebuild. See [../content-pipeline.md](../content-pipeline.md) for details.
+Total: **typically under a minute** for incremental edits, a few minutes for a full rebuild. See [build.md](../developers/architecture/build.md) for details.
 
 If the build fails, the dispatch run will be red in the `tutorials-poc` GitHub Actions tab. Common causes:
 
@@ -310,9 +310,9 @@ If any of these items become a blocker for your work, mention it on the tracking
 
 ## Reference: related docs
 
-- [../content-pipeline.md](../content-pipeline.md) — the full technical pipeline (fetch → parse → Hugo → HANA)
+- [build.md](../developers/architecture/build.md) — the full technical pipeline (fetch → parse → Hugo → HANA)
 - [../hugo-migration.md](../hugo-migration.md) — why Hugo, layout conventions
-- [../tutorial-repo-dispatch.yml](../tutorial-repo-dispatch.yml) — the GitHub Action your repo needs in order to trigger rebuilds
+- [../tutorial-repo-dispatch.yml](tutorial-repo-dispatch.yml) — the GitHub Action your repo needs in order to trigger rebuilds
 - [../TODO.md §21 Future Work](../TODO.md) — open items relevant to authors
 - [repo-group-owners.md](repo-group-owners.md) — for repo owners reviewing your PRs
 - [center-admin.md](center-admin.md) — for taxonomy, tag onboarding, and rollback

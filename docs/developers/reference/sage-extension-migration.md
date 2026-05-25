@@ -78,19 +78,19 @@ In addition, Sage hits a public GitHub raw URL for repo-group config:
 
 ## What `tutorials-poc` Already Exposes
 
-The CAP DB schema in [`db/schema.cds`](../db/schema.cds) is a near-complete superset of the IMS shape:
+The CAP DB schema in [`db/schema.cds`](../../../db/schema.cds) is a near-complete superset of the IMS shape:
 
 | IMS field/call | CAP equivalent | Source |
 |---|---|---|
-| `IMSBasicTutorial` (id, title, mdFileUrl, repo, primaryTagName) | `Tutorials` entity (slug, mdFileUrl, primaryTag, repositories) | [db/schema.cds:27](../db/schema.cds#L27) |
-| `IMSTutorialMeta` (reviewedAt, monitored, notification*, ownerName) | `TutorialMeta` entity (reviewedDate, monitoredStatus, notificationNumber, lastNotificationDate, owner) | [db/schema.cds:200](../db/schema.cds#L200) |
-| `IMSTag` (name, semaphoreId, titlePath, mdFormat, actualTag) | `Tags` entity (name, titlePath, virtual mdFormat) | [db/schema.cds:142](../db/schema.cds#L142) |
-| `setReviewedStatus(id, true)` | `action reviewTutorial(tutorialId)` + `snoozeTutorial(tutorialId, days)` | [admin-service.cds:103-110](../srv/admin-service.cds#L103-L110) |
+| `IMSBasicTutorial` (id, title, mdFileUrl, repo, primaryTagName) | `Tutorials` entity (slug, mdFileUrl, primaryTag, repositories) | [db/schema.cds:27](../../../db/schema.cds#L27) |
+| `IMSTutorialMeta` (reviewedAt, monitored, notification*, ownerName) | `TutorialMeta` entity (reviewedDate, monitoredStatus, notificationNumber, lastNotificationDate, owner) | [db/schema.cds:200](../../../db/schema.cds#L200) |
+| `IMSTag` (name, semaphoreId, titlePath, mdFormat, actualTag) | `Tags` entity (name, titlePath, virtual mdFormat) | [db/schema.cds:142](../../../db/schema.cds#L142) |
+| `setReviewedStatus(id, true)` | `action reviewTutorial(tutorialId)` + `snoozeTutorial(tutorialId, days)` | [admin-service.cds:103-110](../../../srv/admin-service.cds#L103-L110) |
 | `searchTutorialsByOwner(name)` | `Tutorials?$filter=meta/any(m: m/owner eq 'Riley Rainey')` (OData query, no custom action needed) | derivable from existing projection |
-| repo-group config (currently fetched from GitHub raw) | `RepoCatalog` entity + `GET /build/repo-catalog` | [db/schema.cds:318](../db/schema.cds#L318), [server.js:122](../srv/server.js#L122) |
-| local markdown render (Sage in-process) | **`POST /preview/render`** on `tutorials-srv-qa` | [srv-qa/preview-renderer.js](../srv-qa/preview-renderer.js), spec at [docs/superpowers/specs/2026-05-23-vscode-author-preview-design.md](superpowers/specs/2026-05-23-vscode-author-preview-design.md) |
+| repo-group config (currently fetched from GitHub raw) | `RepoCatalog` entity + `GET /build/repo-catalog` | [db/schema.cds:318](../../../db/schema.cds#L318), [server.js:122](../../../srv/server.js#L122) |
+| local markdown render (Sage in-process) | **`POST /preview/render`** on `tutorials-srv-qa` | [srv-qa/preview-renderer.js](../../../srv-qa/preview-renderer.js), spec at [docs/superpowers/specs/2026-05-23-vscode-author-preview-design.md](../../superpowers/specs/2026-05-23-vscode-author-preview-design.md) |
 
-The `TutorialMeta` shape in [`db/schema.cds:200`](../db/schema.cds#L200) keeps the same notification-counter / review-date / monitored-status fields as IMS, so the "Needs-Review" / "In Production" status logic in Sage's `assigned_tutorials` table ports directly. Sage computes `status` client-side from `(reviewedAt + 120 days) vs now`; on the CAP side this could either stay client-side or be moved to a calculated element so all three surfaces (Sage, the admin UI, the public site) agree on the rule.
+The `TutorialMeta` shape in [`db/schema.cds:200`](../../../db/schema.cds#L200) keeps the same notification-counter / review-date / monitored-status fields as IMS, so the "Needs-Review" / "In Production" status logic in Sage's `assigned_tutorials` table ports directly. Sage computes `status` client-side from `(reviewedAt + 120 days) vs now`; on the CAP side this could either stay client-side or be moved to a calculated element so all three surfaces (Sage, the admin UI, the public site) agree on the rule.
 
 ---
 
@@ -102,15 +102,15 @@ All backend gaps are closed. Each subsection below records the original gap and 
 
 #### 1. Author scope for write operations ✅ Resolved (PR #54)
 
-`reviewTutorial` and `snoozeTutorial` were gated on `@requires: 'Admin'` ([admin-service.cds:6](../srv/admin-service.cds#L6)). The Sage user is an *Author*, not an admin.
+`reviewTutorial` and `snoozeTutorial` were gated on `@requires: 'Admin'` ([admin-service.cds:6](../../../srv/admin-service.cds#L6)). The Sage user is an *Author*, not an admin.
 
-**Resolution:** New `AuthorService` at `@path: '/author'` ([srv/author-service.cds](../srv/author-service.cds)), gated on `@requires: 'Tutorial.Author'`. Exposes `reviewTutorial` and `snoozeTutorial` actions backed by the shared handler in [srv/lib/tutorial-review.js](../srv/lib/tutorial-review.js), with same-transaction ownership checks (`ownerEmail` must match `req.user.email`) so an author can only act on their own tutorials. The admin surface keeps its full-fidelity view; authors get a constrained one.
+**Resolution:** New `AuthorService` at `@path: '/author'` ([srv/author-service.cds](../../../srv/author-service.cds)), gated on `@requires: 'Tutorial.Author'`. Exposes `reviewTutorial` and `snoozeTutorial` actions backed by the shared handler in [srv/lib/tutorial-review.js](../../../srv/lib/tutorial-review.js), with same-transaction ownership checks (`ownerEmail` must match `req.user.email`) so an author can only act on their own tutorials. The admin surface keeps its full-fidelity view; authors get a constrained one.
 
 #### 2. "My tutorials" surface ✅ Resolved (PR #54)
 
 Sage previously called `tutorialMeta/search` with the user's name as a free-text query and filtered client-side.
 
-**Resolution:** New `MyTutorialsView` ([db/schema.cds](../db/schema.cds)) joins `Tutorials` → `TutorialMeta` → `Users` on `ownerEmail = email` and exposes `ownerUserId` as a UUID. The `AuthorService.MyTutorials` projection adds a `@before('READ')` handler that filters on `req.user.id` (the JWT subject) so OData clients can call `GET /author/MyTutorials` with no filter and get exactly their own tutorials.
+**Resolution:** New `MyTutorialsView` ([db/schema.cds](../../../db/schema.cds)) joins `Tutorials` → `TutorialMeta` → `Users` on `ownerEmail = email` and exposes `ownerUserId` as a UUID. The `AuthorService.MyTutorials` projection adds a `@before('READ')` handler that filters on `req.user.id` (the JWT subject) so OData clients can call `GET /author/MyTutorials` with no filter and get exactly their own tutorials.
 
 #### 3. Slug-uniqueness check on create ✅ Resolved (no new endpoint)
 
@@ -118,7 +118,7 @@ Sage previously called `tutorialMeta/search` with the user's name as a free-text
 
 #### 4. Repo-group catalog from CAP, not GitHub raw
 
-Always a Sage-side change. Backend already provides `GET /build/repo-catalog` ([srv/lib/repo-catalog.js:5](../srv/lib/repo-catalog.js#L5)). **Sage repoint pending.**
+Always a Sage-side change. Backend already provides `GET /build/repo-catalog` ([srv/lib/repo-catalog.js:5](../../../srv/lib/repo-catalog.js#L5)). **Sage repoint pending.**
 
 #### 5. Validation rules (`rules.vr`) for tags
 
@@ -132,11 +132,11 @@ Always a Sage-side change. Once Sage moves to `GET /admin/Tags` (or `/author/Tag
 
 #### 7. Diagnostic ping ✅ Resolved (PR #54)
 
-**Resolution:** `GET /health/auth` ([srv/server.js:235](../srv/server.js#L235)) returns `{authenticated, user, scopes, serverTime}` for an authenticated caller, `401 {authenticated: false}` for an anonymous one. Cheap, idempotent, and gives Sage a clear signal that "the token still works and these are my scopes" without paging through tutorials.
+**Resolution:** `GET /health/auth` ([srv/server.js:235](../../../srv/server.js#L235)) returns `{authenticated, user, scopes, serverTime}` for an authenticated caller, `401 {authenticated: false}` for an anonymous one. Cheap, idempotent, and gives Sage a clear signal that "the token still works and these are my scopes" without paging through tutorials.
 
 #### 8. Owner identity bridge ✅ Resolved (PR #54)
 
-**Resolution:** New `ownerEmail` column on `TutorialMeta` (alongside the existing free-text `owner` field) joins to `Users.email`. Backfill script [scripts/backfill-tutorial-meta-email.js](../scripts/backfill-tutorial-meta-email.js) populates the new column from existing data with ambiguous-name detection (multiple users sharing a display name → `null` + CSV report for manual review). Publish handler in [srv/lib/content-store.js](../srv/lib/content-store.js) writes both fields going forward. `MyTutorialsView` exposes `ownerUserId` (UUID) so OData filters work on a stable identifier rather than a display string.
+**Resolution:** New `ownerEmail` column on `TutorialMeta` (alongside the existing free-text `owner` field) joins to `Users.email`. Backfill script [scripts/backfill-tutorial-meta-email.js](../../../scripts/backfill-tutorial-meta-email.js) populates the new column from existing data with ambiguous-name detection (multiple users sharing a display name → `null` + CSV report for manual review). Publish handler in [srv/lib/content-store.js](../../../srv/lib/content-store.js) writes both fields going forward. `MyTutorialsView` exposes `ownerUserId` (UUID) so OData filters work on a stable identifier rather than a display string.
 
 ### Things to keep cached (or stop caching entirely)
 
@@ -177,8 +177,8 @@ The strategic question worth answering before writing code is whether SQLite sta
 - Implementation plan: [docs/superpowers/plans/2026-05-24-sage-backend-gaps.md](superpowers/plans/2026-05-24-sage-backend-gaps.md).
 - Sage source: [`D:/projects/sage-tutorial-extension`](https://github.com/sap-tutorials/sage-tutorial-extension) (also available on disk).
 - Sage architecture overview: [`D:/projects/sage-tutorial-extension/CLAUDE.md`](https://github.com/sap-tutorials/sage-tutorial-extension/blob/main/CLAUDE.md).
-- IMS API reference (legacy): [docs/ims-api-reference.md](ims-api-reference.md).
-- Preview endpoint design: [docs/superpowers/specs/2026-05-23-vscode-author-preview-design.md](superpowers/specs/2026-05-23-vscode-author-preview-design.md).
-- QA channel context (where the preview endpoint lives): [docs/qa-channel-bootstrap.md](qa-channel-bootstrap.md).
-- Tutorials-poc CAP services: [`srv/admin-service.cds`](../srv/admin-service.cds), [`srv/author-service.cds`](../srv/author-service.cds), [`srv/server.js`](../srv/server.js).
-- Schema: [`db/schema.cds`](../db/schema.cds).
+- IMS API reference (legacy): [docs/historic/ims-api-reference.md](../../historic/ims-api-reference.md).
+- Preview endpoint design: [docs/superpowers/specs/2026-05-23-vscode-author-preview-design.md](../../superpowers/specs/2026-05-23-vscode-author-preview-design.md).
+- QA channel context (where the preview endpoint lives): [docs/developers/operations/qa-channel-bootstrap.md](../operations/qa-channel-bootstrap.md).
+- Tutorials-poc CAP services: [`srv/admin-service.cds`](../../../srv/admin-service.cds), [`srv/author-service.cds`](../../../srv/author-service.cds), [`srv/server.js`](../../../srv/server.js).
+- Schema: [`db/schema.cds`](../../../db/schema.cds).

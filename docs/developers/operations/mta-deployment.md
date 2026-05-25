@@ -141,9 +141,9 @@ Three rate limiters in `tutorials-srv` keep state in process-local memory:
 
 | Location | Protects | Effect at N>1 instances |
 |---|---|---|
-| [srv/developer-service.js:7](../srv/developer-service.js#L7) (`RATE_LIMIT` Map) | `POST /feedback/submit` — 5 submissions/hr/IP | Effective ceiling becomes 5×N/hr/IP |
-| [srv/lib/ip-rate-limit.js](../srv/lib/ip-rate-limit.js) | `/search` — 60 req/min/IP | Effective ceiling becomes 60×N/min/IP |
-| [srv/lib/chat-rate-limit.js](../srv/lib/chat-rate-limit.js) | Joule chat — per-user request cap | Effective cap becomes N× per user |
+| [srv/developer-service.js:7](../../../srv/developer-service.js#L7) (`RATE_LIMIT` Map) | `POST /feedback/submit` — 5 submissions/hr/IP | Effective ceiling becomes 5×N/hr/IP |
+| [srv/lib/ip-rate-limit.js](../../../srv/lib/ip-rate-limit.js) | `/search` — 60 req/min/IP | Effective ceiling becomes 60×N/min/IP |
+| [srv/lib/chat-rate-limit.js](../../../srv/lib/chat-rate-limit.js) | Joule chat — per-user request cap | Effective cap becomes N× per user |
 
 Multi-instance does not break correctness — submissions, searches, and chats still work. The limiters simply enforce a softer ceiling than configured. For a feedback-form spam guard the honeypot is the primary defense and a relaxed rate limit is acceptable, but for `/search` and chat this matters more.
 

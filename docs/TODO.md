@@ -78,9 +78,9 @@ All 8 AEM endpoints have been replaced by CAP and the AEM proxy layer has been d
 
 ## 4. Content Push Pipeline ✅
 
-Dispatch template in `docs/tutorial-repo-dispatch.yml`. Receiving workflow in `.github/workflows/rebuild-content.yml`. AppRouter rebuild handler in `approuter/server.js` (atomic directory swap with rollback).
+Dispatch template in `docs/authors/tutorial-repo-dispatch.yml`. Receiving workflow in `.github/workflows/rebuild-content.yml`. AppRouter rebuild handler in `approuter/server.js` (atomic directory swap with rollback).
 
-- [x] Create dispatch workflow template (`docs/tutorial-repo-dispatch.yml`)
+- [x] Create dispatch workflow template (`docs/authors/tutorial-repo-dispatch.yml`)
 - [x] Create receiving workflow (`.github/workflows/rebuild-content.yml`) — triggers on `repository_dispatch` type `tutorial-updated` + manual `workflow_dispatch`
 - [x] Implement AppRouter rebuild endpoint (`/admin/rebuild`) — receives gzipped tarball, atomic swap
 - [ ] Install dispatch workflow in sap-tutorials repos (or at org level via reusable workflow)
@@ -535,7 +535,7 @@ HTTP request was not processed because the previous request failed. This happens
 
 ## 20. MTA Deployment Runbook ✅ (2026-05-05)
 
-**Completed.** Full standalone MTA deployment with its own HANA HDI container and XSUAA instance, running in parallel with legacy IMS services. See [docs/mta-deployment.md](docs/mta-deployment.md) for the complete runbook.
+**Completed.** Full standalone MTA deployment with its own HANA HDI container and XSUAA instance, running in parallel with legacy IMS services. See [docs/developers/operations/mta-deployment.md](docs/developers/operations/mta-deployment.md) for the complete runbook.
 
 ---
 
@@ -549,7 +549,7 @@ HTTP request was not processed because the previous request failed. This happens
 
 - [ ] **Analytics — Author/Management views (PowerBI workflow)** — Build reporting views for tutorial authors and management, with a workflow to export/connect data to PowerBI dashboards.
 - [x] **Tag Import** — Bulk CSV/JSON import via Tags admin app. Two-step preview/commit flow on AdminService with upsert / skip-duplicates / abort-on-duplicate strategies.
-- [X] **Author Workflow** — Define and implement the end-to-end authoring workflow: tutorial creation, review, approval, and publication lifecycle. See [docs/author-instructions.md](docs/author-instructions.md) — documents today's workflow and flags remaining gaps (formal review gate, PR previews, VS Code extension).
+- [X] **Author Workflow** — Define and implement the end-to-end authoring workflow: tutorial creation, review, approval, and publication lifecycle. See [docs/authors/writing-tutorials.md](authors/writing-tutorials.md) — documents today's workflow and flags remaining gaps (formal review gate, PR previews, VS Code extension).
 - [ ] **VS Code Extension (esp. Preview)** — Build a VS Code extension for tutorial authors with live preview of tutorial markdown as it would render on the platform.
 - [ ] **System QA vs. Author QA** — Distinguish between system-level quality assurance (automated pipeline validation, broken links, schema conformance) and author-level QA (content review, accuracy checks, editorial approval). Define separate workflows and tooling for each.
 - [x] **Cookie usage report & consent banner (EU/global compliance)** — Audit all cookies set across approuter, CAP, Hugo site, admin shell, and Vue apps (XSUAA session, theme persistence, analytics, any third-party). Produce a cookie inventory (name, purpose, duration, first/third party, category: strictly necessary / functional / analytics / marketing). Implement a consent banner that complies with GDPR (EU), ePrivacy Directive, CCPA (California), and similar global standards — granular per-category opt-in for non-essential cookies, "reject all" must be as easy as "accept all", consent persisted and revocable, no non-essential cookies set before consent. Add a public cookie policy page linked from the footer. Coordinate with legal/privacy team before rollout.

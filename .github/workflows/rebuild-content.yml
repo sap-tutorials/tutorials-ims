@@ -85,7 +85,7 @@ jobs:
 
       # GitHub App token (preferred). Activates when repo variable
       # USE_GITHUB_APP=true and the TUTORIALS_APP_* secrets are populated.
-      # See docs/github-app-setup.md. While the variable is unset/false the step
+      # See docs/developers/operations/github-app-setup.md. While the variable is unset/false the step
       # is skipped and the fetch falls back to the classic PAT below.
       - name: Generate GitHub App token
         id: app-token

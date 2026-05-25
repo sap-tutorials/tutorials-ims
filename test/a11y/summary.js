@@ -25,7 +25,7 @@ const LINKS    = join(LHCI_DIR, 'links.json');
 const out = [];
 out.push('## Accessibility & Performance scan');
 out.push('');
-out.push('_Warn-only mode — failures here do not block deploy. See `docs/aem-gap-analysis.md` gap #16._');
+out.push('_Warn-only mode — failures here do not block deploy. See `docs/historic/aem-gap-analysis.md` gap #16._');
 out.push('');
 
 // --- Lighthouse section ----------------------------------------------------
