@@ -33,6 +33,16 @@ export default class AdminService extends cds.ApplicationService {
     this.on('READ', 'TaskTypes', () => [
       { code: 'TUTORIAL' }, { code: 'GROUP' }, { code: 'CHECKPOINT' }
     ]);
+    this.on('READ', 'AnalyticsTaskTypes', () => [
+      { code: 'TUTORIAL', label: 'Tutorial' },
+      { code: 'GROUP',    label: 'Group'    },
+      { code: 'MISSION',  label: 'Mission'  }
+    ]);
+    this.on('READ', 'AnalyticsLevels', () => [
+      { code: 'beginner',     label: 'Beginner'     },
+      { code: 'intermediate', label: 'Intermediate' },
+      { code: 'advanced',     label: 'Advanced'     }
+    ]);
 
     // Ensure singleton row exists for ChatSettings (defensive — seed CSV
     // populates this on cds deploy; this covers fresh in-memory test DBs).

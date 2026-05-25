@@ -72,6 +72,13 @@ service AdminService {
   @readonly @cds.persistence.skip entity MissionTypes     { key code : String(20); }
   @readonly @cds.persistence.skip entity TaskTypes        { key code : String(20); }
 
+  // Analytics-specific code lists (label included for human-readable dropdowns).
+  // taskType differs from TaskTypes above: analytics records carry TUTORIAL,
+  // MISSION, GROUP — never CHECKPOINT — because completion is recorded against
+  // the parent task, not the checkpoint step.
+  @readonly @cds.persistence.skip entity AnalyticsTaskTypes { key code : String(20);  label : String(50); }
+  @readonly @cds.persistence.skip entity AnalyticsLevels    { key code : String(50);  label : String(50); }
+
   @readonly entity Tasks as projection on ims.Tasks;
 
   @readonly

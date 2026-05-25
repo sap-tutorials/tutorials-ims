@@ -935,6 +935,55 @@ annotate AdminService.CompletionAnalytics with @(
   completionCount @title: 'Completions'          @Analytics.Measure @Aggregation.default: #SUM;
 };
 
+// Value help for filter fields. CompletionAnalytics carries denormalized strings
+// (titles/names), not associations — so each LocalDataProperty maps the analytics
+// string column to the matching string on the source entity, and a DisplayOnly
+// parameter provides the readable secondary text (slug, titlePath, dates).
+annotate AdminService.CompletionAnalytics with {
+  taskType @Common.ValueListWithFixedValues @Common.ValueList: {
+    CollectionPath: 'AnalyticsTaskTypes',
+    Parameters: [
+      { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: taskType, ValueListProperty: 'code' },
+      { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'label' }
+    ]
+  };
+  experienceTag @Common.ValueListWithFixedValues @Common.ValueList: {
+    CollectionPath: 'AnalyticsLevels',
+    Parameters: [
+      { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: experienceTag, ValueListProperty: 'code' },
+      { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'label' }
+    ]
+  };
+  primaryTag @Common.ValueList: {
+    CollectionPath: 'Tags',
+    Parameters: [
+      { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: primaryTag, ValueListProperty: 'name' },
+      { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'titlePath' }
+    ]
+  };
+  missionTitle @Common.ValueList: {
+    CollectionPath: 'Missions',
+    Parameters: [
+      { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: missionTitle, ValueListProperty: 'title' },
+      { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'slug' }
+    ]
+  };
+  groupTitle @Common.ValueList: {
+    CollectionPath: 'Groups',
+    Parameters: [
+      { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: groupTitle, ValueListProperty: 'title' },
+      { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'slug' }
+    ]
+  };
+  eventName @Common.ValueList: {
+    CollectionPath: 'Events',
+    Parameters: [
+      { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: eventName, ValueListProperty: 'name' },
+      { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'startDate' }
+    ]
+  };
+};
+
 // --- Joule Chat Settings (singleton) ---
 annotate AdminService.ChatSettings with @(
   UI: {
