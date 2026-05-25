@@ -105,6 +105,14 @@
         "$XSAPPNAME.TutorialAuthor",
         "$XSAPPNAME.Everyone"
       ]
+    },
+    {
+      "name": "Tutorials Scanner",
+      "description": "Mobile scanner UI access for event staff (gates /scanner-ui/*, /scanner-vue/*, /scanner/*)",
+      "role-template-references": [
+        "$XSAPPNAME.MobileApp",
+        "$XSAPPNAME.Everyone"
+      ]
     }
   ],
   "oauth2-configuration": {
