@@ -144,6 +144,8 @@ Publish tutorial HTML to the bound HANA:
 CONTENT_API_KEY=local-dev-key npm run publish-content -- --force
 ```
 
+> **Windows note:** the `KEY=value cmd` inline-prefix syntax is bash/zsh only. In PowerShell use `$env:CONTENT_API_KEY="local-dev-key"; npx cds bind --exec -- npx cds-serve`, in cmd use `set CONTENT_API_KEY=local-dev-key && npx cds bind ...`, or run the command from Git Bash.
+
 ### Why content publishing is required
 
 Tutorial HTML is served exclusively from HANA BLOBs — there is no static fallback. Without a publish, every `/tutorials/*` request returns 404. Always pass `--force` to bypass delta detection; the default delta mode treats publishes as full snapshots and silently drops slugs not in the payload.
