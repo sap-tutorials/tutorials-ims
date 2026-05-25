@@ -226,9 +226,9 @@ Six batches in the implementation plan. Each batch is a focused commit; the full
 |---|---|---|
 | 1 | Move 7 files into `historic/` + write `historic/README.md` + fix referrers | Low |
 | 2 | Create `developers/{architecture,operations,reference}/` + move 11 simple files + fix referrers | Low |
-| 3 | Extract 8 sections from project README into `developers/` pages; merge 3 files; trim README to ~300 lines | High (most content work) |
+| 3 | Extract 8 sections from project README into `developers/` pages; perform 3 merges (`content-pipeline.md` + README §Build Pipeline → `architecture/build.md`; `authentication-primer.md` + `authentication-architecture.md` → `architecture/authentication.md`; `joule-chat.md` + README §Joule Architecture → `architecture/joule.md`); trim README to ~300 lines | High (most content work) |
 | 4 | Write `developers/README.md` and `developers/getting-started.md` | Low |
-| 5 | Write 6 `end-users/` files | Medium (content authoring) |
+| 5 | Write 6 `end-users/` files (5 content pages + landing `README.md`) | Medium (content authoring) |
 | 6 | Root `docs/README.md`, move `tutorial-repo-dispatch.yml` to `authors/`, delete `author-instructions.md`, update `CLAUDE.md`, final cross-link sweep | Low |
 
 Per the worktree-isolation rule from memory `feedback_parallel_agents_worktrees.md`, the entire reorg runs in its own worktree. Per `feedback_pr_over_direct_merge.md`, the result lands as a PR via `gh pr create`, not a direct merge.
