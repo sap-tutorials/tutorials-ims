@@ -128,7 +128,7 @@ view MyTutorialsView as
         m.lastNotificationDate,
         m.owner       as ownerName,
         m.ownerEmail  as ownerEmail,
-        u.ID          as ownerUserId
+        u.uuid        as ownerUserId
   };
 
 entity TutorialFeedbackAggregate as

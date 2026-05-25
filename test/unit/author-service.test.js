@@ -49,7 +49,7 @@ describe('MyTutorialsView', () => {
     const { MyTutorialsView } = cds.entities('com.sap.developers.ims');
     const rows = await db.run(SELECT.from(MyTutorialsView).where({ ownerEmail: 'alice@example.com' }));
     expect(rows).toHaveLength(1);
-    expect(rows[0].ownerUserId).toBe('u-A');
+    expect(rows[0].ownerUserId).toBe('uuid-A');
     expect(rows[0].slug).toBe('tut-1');
   });
 
@@ -93,5 +93,45 @@ describe('AuthorService surface', () => {
       (tx) => tx.run(SELECT.from(srv.entities.Tags))
     );
     expect(Array.isArray(rows)).toBe(true);
+  });
+});
+
+describe('AuthorService.MyTutorials filtering', () => {
+  it('filters MyTutorials to ownerUserId == req.user.id', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    // alice has uuid-A; her MyTutorials should be tut-1 only.
+    const rows = await srv.tx(
+      { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+      async (tx) => {
+        return await tx.run(SELECT.from(srv.entities.MyTutorials));
+      }
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].slug).toBe('tut-1');
+  });
+
+  it('returns empty array when req.user.id matches no Users.uuid', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const rows = await srv.tx(
+      { user: { id: 'unknown-uuid', roles: { 'Tutorial.Author': true } } },
+      async (tx) => {
+        return await tx.run(SELECT.from(srv.entities.MyTutorials));
+      }
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('still filters when client groups by status (aggregate query)', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const rows = await srv.tx(
+      { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+      async (tx) => {
+        return await tx.run(
+          SELECT.from(srv.entities.MyTutorials).columns('status').groupBy('status')
+        );
+      }
+    );
+    // alice has 1 distinct status across her single tutorial; never more than 1.
+    expect(rows.length).toBeLessThanOrEqual(1);
   });
 });
