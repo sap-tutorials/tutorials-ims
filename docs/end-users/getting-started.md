@@ -48,3 +48,4 @@ Diagrams render directly in the page, and code samples are styled and copyable.
 - [Using Joule Chat](using-joule-chat.md) — the assistant that explains steps and recommends what to learn next
 - [Progress and Completions](progress-and-completions.md) — what counts, and how event prizes work
 - [Privacy and Cookies](privacy-and-cookies.md) — what we store about you
+- [Accessibility](accessibility.md) — standards we target and how to report issues

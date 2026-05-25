@@ -19,13 +19,13 @@ Plus a small set of cookies and browser-local settings to remember your theme ch
 
 ## Cookie categories
 
-Three categories are used on developers.sap.com:
+SAP's consent banner offers three categories. The tutorial site currently uses only the first two:
 
 - **Required.** Sign-in session and basic site function. Always on — without these, you can't sign in or stay signed in.
 - **Functional.** Remembers preferences like your theme (light, dark, auto) and minor UI state.
-- **Advertising.** Targeted advertising and cross-site tracking on SAP marketing surfaces.
+- **Advertising.** This category appears in the banner because it's part of SAP's shared consent infrastructure across sap.com properties. The tutorial site does not currently set advertising or cross-site tracking cookies.
 
-You'll see a banner the first time you visit. Your choice is remembered for future visits.
+You'll see the banner the first time you visit. Your choice is remembered for future visits.
 
 ## Revoking consent or clearing data
 
