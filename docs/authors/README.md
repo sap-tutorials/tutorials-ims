@@ -31,15 +31,15 @@ If you find yourself doing something operationally important that isn't document
 
 ## Tools that complement these docs
 
-- [Sage VS Code extension](../sage-extension-migration.md) — author-time linting and preview.
-- [QA channel](../qa-channel-bootstrap.md) — author-preview for `*-Contribution` repo content (`Tutorial.Author` scope required).
+- [Sage VS Code extension](../developers/reference/sage-extension-migration.md) — author-time linting and preview.
+- [QA channel](../developers/operations/qa-channel-bootstrap.md) — author-preview for `*-Contribution` repo content (`Tutorial.Author` scope required).
 
 ## Deeper technical references
 
 - [build.md](../developers/architecture/build.md) — fetch → parse → Hugo → HANA in detail
-- [mta-deployment.md](../mta-deployment.md) — how the MTA is structured and deployed
+- [mta-deployment.md](../developers/operations/mta-deployment.md) — how the MTA is structured and deployed
 - [authentication.md](../developers/architecture/authentication.md) — XSUAA, role collections, IAS
-- [testing-endpoints.md](../testing-endpoints.md) — canonical endpoint reference for smoke testing
+- [testing-endpoints.md](../developers/operations/testing-endpoints.md) — canonical endpoint reference for smoke testing
 
 ## Historic context
 
