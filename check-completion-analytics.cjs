@@ -1,13 +1,30 @@
 const cds = require('@sap/cds');
+process.env.NODE_ENV = 'production'; // mimic deployed runtime
 (async () => {
+  // Load the full model BEFORE connect, so service definitions are present
+  cds.model = await cds.load(['srv', 'db', 'app']);
+
   await cds.connect.to('db');
 
-  const ims = await cds.run("SELECT TABLE_NAME FROM SYS.TABLES WHERE SCHEMA_NAME = CURRENT_SCHEMA AND TABLE_NAME LIKE 'IMS_%' ORDER BY TABLE_NAME");
-  console.log('IMS_ tables:', ims.map(r => r.TABLE_NAME).join(', '));
+  // 1) Direct read via CDS QL on the source view
+  const direct = await SELECT.from('ims.CompletionAnalytics');
+  console.log('1) CDS QL direct read on ims.CompletionAnalytics:', direct.length, 'rows');
+  if (direct.length > 0) console.log('   first:', JSON.stringify(direct[0]));
 
-  const imsViews = await cds.run("SELECT VIEW_NAME FROM SYS.VIEWS WHERE SCHEMA_NAME = CURRENT_SCHEMA AND VIEW_NAME LIKE 'IMS_%' ORDER BY VIEW_NAME");
-  console.log('IMS_ views:', imsViews.map(r => r.VIEW_NAME).join(', '));
+  // 2) Read via AdminService projection
+  const admin = await cds.connect.to('AdminService');
+  const projRows = await admin.run(SELECT.from('AdminService.CompletionAnalytics'));
+  console.log('2) AdminService.CompletionAnalytics via SELECT.from:', projRows.length, 'rows');
 
-  const all = await cds.run("SELECT VIEW_NAME FROM SYS.VIEWS WHERE SCHEMA_NAME = CURRENT_SCHEMA AND (VIEW_NAME LIKE '%COMPLETION%' OR VIEW_NAME LIKE '%ANALYTIC%')");
-  console.log('Any view matching completion/analytic:', JSON.stringify(all, null, 2));
-})().catch(e => { console.error('ERR:', e); process.exit(1); });
+  // 3) Read via .read() helper
+  const readRows = await admin.read('CompletionAnalytics');
+  console.log('3) AdminService.read("CompletionAnalytics"):', readRows.length, 'rows');
+
+  // 4) Aggregate via $apply pattern using cds.ql groupby
+  const agg = await cds.run(
+    SELECT.from('AdminService.CompletionAnalytics')
+      .columns('taskType', { ref: ['completionCount'], func: 'sum', as: 'total' })
+      .groupBy('taskType')
+  );
+  console.log('4) Aggregate by taskType:', JSON.stringify(agg, null, 2));
+})().catch(e => { console.error('ERR:', e.message || e); console.error(e.stack); process.exit(1); });

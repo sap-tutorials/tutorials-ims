@@ -5,12 +5,16 @@
     "type": "application",
     "title": "Groups",
     "description": "Manage Groups",
-    "applicationVersion": { "version": "0.0.1" },
+    "applicationVersion": {
+      "version": "0.0.1"
+    },
     "dataSources": {
       "mainService": {
         "uri": "/admin/",
         "type": "OData",
-        "settings": { "odataVersion": "4.0" }
+        "settings": {
+          "odataVersion": "4.0"
+        }
       }
     },
     "crossNavigation": {
@@ -19,7 +23,10 @@
           "semanticObject": "Group",
           "action": "manage",
           "title": "Groups",
-          "signature": { "parameters": {}, "additionalParameters": "allowed" }
+          "signature": {
+            "parameters": {},
+            "additionalParameters": "allowed"
+          }
         }
       }
     }
@@ -27,7 +34,9 @@
   "sap.ui5": {
     "dependencies": {
       "minUI5Version": "1.136.0",
-      "libs": { "sap.fe.templates": {} }
+      "libs": {
+        "sap.fe.templates": {}
+      }
     },
     "models": {
       "": {
@@ -65,7 +74,11 @@
               "variantManagement": "Page",
               "initialLoad": "Enabled",
               "navigation": {
-                "Groups": { "detail": { "route": "GroupsObjectPage" } }
+                "Groups": {
+                  "detail": {
+                    "route": "GroupsObjectPage"
+                  }
+                }
               }
             }
           }
@@ -83,8 +96,7 @@
                   "actions": {
                     "EditMarkdown": {
                       "press": "sap.tutorials.admin.groups.ext.MarkdownEditor.onEditMarkdown",
-                      "text": "Edit Description (Markdown)",
-                      "visible": "{= !${IsActiveEntity} }"
+                      "text": "Edit Description (Markdown)"
                     }
                   }
                 },
@@ -93,7 +105,10 @@
                     "ItemReorderSection": {
                       "template": "sap.tutorials.admin.groups.ext.ItemReorder",
                       "title": "Path Items (Drag to Reorder)",
-                      "position": { "anchor": "PathItemsSection", "placement": "After" }
+                      "position": {
+                        "anchor": "PathItemsSection",
+                        "placement": "After"
+                      }
                     }
                   }
                 }

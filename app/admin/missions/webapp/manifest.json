@@ -120,8 +120,7 @@
                   "actions": {
                     "EditMarkdown": {
                       "press": "sap.tutorials.admin.missions.ext.MarkdownEditor.onEditMarkdown",
-                      "text": "Edit Description (Markdown)",
-                      "visible": "{= !${IsActiveEntity} }"
+                      "text": "Edit Description (Markdown)"
                     }
                   }
                 }
@@ -162,7 +161,10 @@
                     "ItemReorderSection": {
                       "template": "sap.tutorials.admin.missions.ext.ItemReorder",
                       "title": "Path Items (Drag to Reorder)",
-                      "position": { "anchor": "ItemsSection", "placement": "After" }
+                      "position": {
+                        "anchor": "ItemsSection",
+                        "placement": "After"
+                      }
                     }
                   }
                 }
