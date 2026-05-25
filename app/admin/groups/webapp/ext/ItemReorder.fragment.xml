@@ -2,7 +2,7 @@
   xmlns:core="sap.ui.core"
   xmlns="sap.m"
   xmlns:dnd="sap.ui.core.dnd">
-  <Table id="itemReorderTable" items="{items}" mode="None">
+  <Table id="itemReorderTable" items="{path: 'items', parameters: {$$ownRequest: true, $expand: 'tutorial($select=title,slug)'}, sorter: {path: 'itemOrder'}}" mode="None">
     <dragDropConfig>
       <dnd:DragDropInfo
         sourceAggregation="items"
@@ -11,16 +11,18 @@
         drop=".onDrop"/>
     </dragDropConfig>
     <columns>
-      <Column width="3rem"><Text text=""/></Column>
-      <Column><Text text="Order"/></Column>
+      <Column width="3rem" hAlign="Center"><Text text=""/></Column>
+      <Column width="5rem"><Text text="Order"/></Column>
       <Column><Text text="Tutorial"/></Column>
+      <Column><Text text="Slug"/></Column>
     </columns>
     <items>
       <ColumnListItem>
         <cells>
-          <core:Icon src="sap-icon://menu2" class="sapUiSmallMarginBegin"/>
-          <Text text="{items>itemOrder}"/>
-          <Text text="{items>tutorial/title}"/>
+          <core:Icon src="sap-icon://menu2"/>
+          <ObjectNumber number="{itemOrder}" emphasized="false"/>
+          <Text text="{tutorial/title}"/>
+          <Text text="{tutorial/slug}"/>
         </cells>
       </ColumnListItem>
     </items>

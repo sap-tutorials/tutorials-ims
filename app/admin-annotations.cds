@@ -11,7 +11,7 @@ annotate AdminService.Tutorials with @odata.draft.enabled;
 
 // --- Events ---
 annotate AdminService.Events with {
-  legacyId  @Common.Label: 'Event ID';
+  legacyId  @Common.Label: 'Event ID' @Common.IsDigitSequence: true;
   name      @Common.Label: 'Name'
             // Self-referential value help on the SelectionFields filter so users
             // pick from existing event names instead of typing free-form. The
@@ -66,7 +66,7 @@ annotate AdminService.Events with @UI: {
 
 // --- Missions ---
 annotate AdminService.Missions with {
-  legacyId           @Common.Label: 'Mission ID';
+  legacyId           @Common.Label: 'Mission ID' @Common.IsDigitSequence: true;
   title              @Common.Label: 'Title'  @mandatory;
   description        @Common.Label: 'Description'  @mandatory  @UI.MultiLineText;
   slug               @Common.Label: 'Slug';
@@ -248,6 +248,7 @@ annotate AdminService.CompletionPathItems with @UI: {
       { Value: prize_ID }
     ]
   },
+  PresentationVariant: { SortOrder: [ { Property: itemOrder } ] },
   LineItem: [
     { Value: prize_ID, Label: 'Prize' }
   ]
@@ -256,7 +257,7 @@ annotate AdminService.CompletionPathItems with @UI: {
 
 // --- Groups ---
 annotate AdminService.Groups with {
-  legacyId              @Common.Label: 'Group ID';
+  legacyId              @Common.Label: 'Group ID' @Common.IsDigitSequence: true;
   title                 @Common.Label: 'Title'  @mandatory;
   description           @Common.Label: 'Description'  @mandatory  @UI.MultiLineText;
   experienceTag         @Common.Label: 'Experience'  @Common.ValueListWithFixedValues  @mandatory;
@@ -361,6 +362,7 @@ annotate AdminService.GroupPathItems with {
 };
 
 annotate AdminService.GroupPathItems with @UI: {
+  PresentationVariant: { SortOrder: [ { Property: itemOrder } ] },
   LineItem: [
     { Value: itemOrder },
     { Value: tutorial_ID, Label: 'Tutorial' }
@@ -388,7 +390,7 @@ annotate AdminService.MissionTags with @UI: {
 
 // --- Accomplishments ---
 annotate AdminService.Accomplishments with {
-  legacyId    @Common.Label: 'ID';
+  legacyId    @Common.Label: 'ID' @Common.IsDigitSequence: true;
   name        @Common.Label: 'Name'
               @Common.ValueList: {
                 CollectionPath: 'Accomplishments',
@@ -430,7 +432,7 @@ annotate AdminService.Accomplishments with {
 
 // --- Prizes ---
 annotate AdminService.Prizes with {
-  legacyId @Common.Label: 'ID';
+  legacyId @Common.Label: 'ID' @Common.IsDigitSequence: true;
   name     @Common.Label: 'Name';
   event    @Common.Label: 'Event'
            @Common.ValueList: {
@@ -466,7 +468,7 @@ annotate AdminService.Prizes with @UI: {
 
 // --- Tutorials (source content from GitHub; Lifecycle fields admin-editable) ---
 annotate AdminService.Tutorials with {
-  legacyId              @Common.Label: 'Tutorial ID' @Common.FieldControl: #ReadOnly;
+  legacyId              @Common.Label: 'Tutorial ID' @Common.FieldControl: #ReadOnly @Common.IsDigitSequence: true;
   title                 @Common.Label: 'Title'       @Common.FieldControl: #ReadOnly
                         @Common.ValueList: {
                           CollectionPath: 'Tutorials',
@@ -489,7 +491,11 @@ annotate AdminService.Tutorials with {
                         };
   experienceTag         @Common.Label: 'Experience'  @Common.ValueListWithFixedValues @Common.FieldControl: #ReadOnly;
   averageTimeToComplete @Common.Label: 'Avg Time (min)' @Common.FieldControl: #ReadOnly;
-  status                @Common.Label: 'Status'  @Common.ValueListWithFixedValues;
+  status                @Common.Label: 'Status'  @Common.ValueListWithFixedValues
+                        @Common.ValueList: {
+                          CollectionPath: 'TaskStatuses',
+                          Parameters: [{ $Type: 'Common.ValueListParameterInOut', LocalDataProperty: status, ValueListProperty: 'code' }]
+                        };
   deletionReason        @Common.Label: 'Deletion Reason';
   redirectTo            @Common.Label: 'Redirect To'
                         @Common.Text: redirectTo.title
@@ -542,7 +548,7 @@ annotate AdminService.Tutorials with @UI: {
 
 // --- TutorialPickList (value-help target for redirectTo) ---
 annotate AdminService.TutorialPickList with {
-  legacyId   @Common.Label: 'Tutorial ID';
+  legacyId   @Common.Label: 'Tutorial ID' @Common.IsDigitSequence: true;
   title      @Common.Label: 'Title';
   slug       @Common.Label: 'Slug';
   primaryTag @Common.Label: 'Primary Tag';
@@ -563,7 +569,7 @@ annotate AdminService.TutorialPickList with @(
 
 // --- Tags (read-only) ---
 annotate AdminService.Tags with {
-  legacyId  @Common.Label: 'ID';
+  legacyId  @Common.Label: 'ID' @Common.IsDigitSequence: true;
   name      @Common.Label: 'Name'
             @Common.ValueList: {
               CollectionPath: 'Tags',
