@@ -108,8 +108,8 @@ view CompletionAnalytics as
 
 view ActiveLearnersDaily as
   select from ims.TaskRecords {
-    cast(modifiedAt as Date) as recordDate : Date,
-    count(distinct user.ID)  as count      : Integer
+    key cast(modifiedAt as Date) as recordDate : Date,
+    count(distinct user.ID)      as count      : Integer
   } group by cast(modifiedAt as Date);
 
 view MyTutorialsView as
