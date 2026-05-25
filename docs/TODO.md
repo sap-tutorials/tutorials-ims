@@ -535,7 +535,7 @@ HTTP request was not processed because the previous request failed. This happens
 
 ## 20. MTA Deployment Runbook ✅ (2026-05-05)
 
-**Completed.** Full standalone MTA deployment with its own HANA HDI container and XSUAA instance, running in parallel with legacy IMS services. See [docs/mta-deployment.md](docs/mta-deployment.md) for the complete runbook.
+**Completed.** Full standalone MTA deployment with its own HANA HDI container and XSUAA instance, running in parallel with legacy IMS services. See [docs/developers/operations/mta-deployment.md](docs/developers/operations/mta-deployment.md) for the complete runbook.
 
 ---
 

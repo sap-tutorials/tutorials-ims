@@ -6,11 +6,11 @@ const SOURCES = [
   'docs/content-pipeline.md',
   'docs/authentication-primer.md',
   'docs/authentication-architecture.md',
-  'docs/mta-deployment.md',
+  'docs/developers/operations/mta-deployment.md',
   'docs/historic/hugo-migration.md',
   'docs/historic/ims-api-reference.md',
   'docs/historic/ims-uncovered-features.md',
-  'docs/ias-migration-setup.md',
+  'docs/developers/operations/ias-setup.md',
 ];
 const OUT = 'srv/data/admin-docs-index.json';
 const STOPWORDS = new Set(['the','and','for','with','this','that','from','are','was','were','use','using','can','will','not','but','have','has','had','its','our','your','their','they','them','also','more','than','then','here','there','what','when','where','which','who','whom','how','why','any','all','some','one','two','etc']);

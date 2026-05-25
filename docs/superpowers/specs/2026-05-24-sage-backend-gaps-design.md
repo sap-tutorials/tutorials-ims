@@ -2,11 +2,11 @@
 
 **Date:** 2026-05-24
 **Status:** Draft (pending review)
-**Related:** [docs/sage-extension-migration.md](../../sage-extension-migration.md), [docs/superpowers/specs/2026-05-23-vscode-author-preview-design.md](2026-05-23-vscode-author-preview-design.md)
+**Related:** [docs/developers/reference/sage-extension-migration.md](../../developers/reference/sage-extension-migration.md), [docs/superpowers/specs/2026-05-23-vscode-author-preview-design.md](2026-05-23-vscode-author-preview-design.md)
 
 ## Background
 
-The Sage VS Code extension ([`sap-tutorials/sage-tutorial-extension`](https://github.com/sap-tutorials/sage-tutorial-extension)) currently depends on the legacy IMS backend (`https://imsprod.cfapps.us30.hana.ondemand.com`) and a per-workspace SQLite cache. The migration analysis in [docs/sage-extension-migration.md](../../sage-extension-migration.md) identified five hard gaps and three soft gaps in `tutorials-poc` that block Sage from moving off IMS.
+The Sage VS Code extension ([`sap-tutorials/sage-tutorial-extension`](https://github.com/sap-tutorials/sage-tutorial-extension)) currently depends on the legacy IMS backend (`https://imsprod.cfapps.us30.hana.ondemand.com`) and a per-workspace SQLite cache. The migration analysis in [docs/developers/reference/sage-extension-migration.md](../../developers/reference/sage-extension-migration.md) identified five hard gaps and three soft gaps in `tutorials-poc` that block Sage from moving off IMS.
 
 This spec closes all eight gaps in a single MTA deploy with a minimal, additive schema change. Sage repointing itself at the new endpoints is out of scope for this spec — that work happens in the Sage repo after this lands.
 
@@ -252,7 +252,7 @@ Additive at every layer; rollback is staged:
 
 ## References
 
-- Migration analysis: [docs/sage-extension-migration.md](../../sage-extension-migration.md)
+- Migration analysis: [docs/developers/reference/sage-extension-migration.md](../../developers/reference/sage-extension-migration.md)
 - Preview endpoint design: [docs/superpowers/specs/2026-05-23-vscode-author-preview-design.md](2026-05-23-vscode-author-preview-design.md)
-- QA channel bootstrap: [docs/qa-channel-bootstrap.md](../../qa-channel-bootstrap.md)
+- QA channel bootstrap: [docs/developers/operations/qa-channel-bootstrap.md](../../developers/operations/qa-channel-bootstrap.md)
 - Sage repo: [`sap-tutorials/sage-tutorial-extension`](https://github.com/sap-tutorials/sage-tutorial-extension)

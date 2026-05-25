@@ -38,7 +38,7 @@
 - `app/admin/joule/webapp/i18n/i18n.properties` — labels
 - `app/admin-annotations.cds` — labels for new fields
 - `db/change-tracking.cds` — verify new fields tracked
-- Documentation: `docs/joule-chat.md`, `docs/content-pipeline.md`, new `docs/joule-chat-admin-settings.md`, `CLAUDE.md`
+- Documentation: `docs/joule-chat.md`, `docs/content-pipeline.md`, new `docs/developers/operations/joule-chat-admin-settings.md`, `CLAUDE.md`
 
 ---
 
@@ -1750,7 +1750,7 @@ git commit -m "test(rag): smoke test for embedding stats endpoint"
 **Files:**
 - Modify: `docs/joule-chat.md`
 - Modify: `docs/content-pipeline.md`
-- Create: `docs/joule-chat-admin-settings.md`
+- Create: `docs/developers/operations/joule-chat-admin-settings.md`
 - Modify: `CLAUDE.md`
 
 **Why this task:** Future-Tom and future-Claude both need to find this without spelunking through git log.
@@ -1763,7 +1763,7 @@ Add a new section "Tutorial Grounding (RAG)" describing:
 - model: `text-embedding-3-small` via `tutorials-aicore`
 - topK / minScore tuning knobs
 - citation format: `[tutorial-slug #stepNumber]`
-- link to `docs/joule-chat-admin-settings.md` for operations
+- link to `docs/developers/operations/joule-chat-admin-settings.md` for operations
 
 - [ ] **Step 2: Update `docs/content-pipeline.md`**
 
@@ -1777,7 +1777,7 @@ Hugo build → publish-content → /content/publish → manifest ACTIVE
 
 Mention the hourly reconciliation cron (`17 * * * *`) and orphan pruning during the daily cleanup at 03:00.
 
-- [ ] **Step 3: Create `docs/joule-chat-admin-settings.md`**
+- [ ] **Step 3: Create `docs/developers/operations/joule-chat-admin-settings.md`**
 
 Operational runbook covering:
 - Where the settings live (Admin UI → Joule Chat Settings tile → Tutorial Grounding panel)
@@ -1805,7 +1805,7 @@ Add a "Gotchas" entry:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add docs/joule-chat.md docs/content-pipeline.md docs/joule-chat-admin-settings.md CLAUDE.md
+git add docs/joule-chat.md docs/content-pipeline.md docs/developers/operations/joule-chat-admin-settings.md CLAUDE.md
 git commit -m "docs(rag): document tutorial grounding pipeline + admin settings"
 ```
 

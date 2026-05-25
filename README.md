@@ -523,7 +523,7 @@ flowchart TB
 
 The in-page chat assistant on tutorial, mission, and search pages. Backed by SAP AI Core's **Orchestration Service** via [`@sap-ai-sdk/orchestration`](https://www.npmjs.com/package/@sap-ai-sdk/orchestration), with optional retrieval-augmented grounding over per-step tutorial embeddings.
 
-Reference deep-dive: [docs/joule-chat.md](docs/joule-chat.md). Admin runbook: [docs/joule-chat-admin-settings.md](docs/joule-chat-admin-settings.md).
+Reference deep-dive: [docs/joule-chat.md](docs/joule-chat.md). Admin runbook: [docs/developers/operations/joule-chat-admin-settings.md](docs/developers/operations/joule-chat-admin-settings.md).
 
 ```mermaid
 flowchart LR
@@ -658,7 +658,7 @@ The CAP Node.js service is the complete replacement for the Java IMS Spring Boot
 
 ### Services
 
-CDS `@requires` is the in-process gate; the AppRouter ([approuter/xs-app.json](approuter/xs-app.json)) adds additional XSUAA scope checks per route in front of `/api/*`, `/admin/*`, etc. — see [docs/testing-endpoints.md](docs/testing-endpoints.md) for the canonical route → scope mapping.
+CDS `@requires` is the in-process gate; the AppRouter ([approuter/xs-app.json](approuter/xs-app.json)) adds additional XSUAA scope checks per route in front of `/api/*`, `/admin/*`, etc. — see [docs/developers/operations/testing-endpoints.md](docs/developers/operations/testing-endpoints.md) for the canonical route → scope mapping.
 
 | Service | Path | `@requires` | Purpose |
 |---------|------|-------------|---------|
@@ -673,7 +673,7 @@ CDS `@requires` is the in-process gate; the AppRouter ([approuter/xs-app.json](a
 | ChatService | `/chat` | `authenticated-user` | ORD-symmetric shell with no entities; the streaming work happens at `POST /chat/stream` (Express, registered in `bootstrap`) |
 | EventStreamService | `event-stream` | `any` | WebSocket + REST event-stream feed for live tutorial-completion broadcasts |
 
-The QA channel runs a parallel `tutorials-srv-qa` app (separate HDI container, separate slug-bytes URL) with its own service set focused on author-preview workflows: `ContentService` (preview, publish-to-QA), `SearchService` (QA-scoped), and the `POST /preview/render` endpoint consumed by the VSCode extension. All QA services require XSUAA scope `Tutorial.Author`. See [docs/qa-channel-bootstrap.md](docs/qa-channel-bootstrap.md).
+The QA channel runs a parallel `tutorials-srv-qa` app (separate HDI container, separate slug-bytes URL) with its own service set focused on author-preview workflows: `ContentService` (preview, publish-to-QA), `SearchService` (QA-scoped), and the `POST /preview/render` endpoint consumed by the VSCode extension. All QA services require XSUAA scope `Tutorial.Author`. See [docs/developers/operations/qa-channel-bootstrap.md](docs/developers/operations/qa-channel-bootstrap.md).
 
 ### Built-in CAP Endpoints
 
@@ -729,7 +729,7 @@ A few are registered in `bootstrap` *specifically* to reserve the path before CA
 
 `/search` is a regular CDS service surface but is wrapped in `bootstrap` with a per-IP rate limiter ([srv/lib/ip-rate-limit.js](srv/lib/ip-rate-limit.js); 60 req/min default, tunable via `SEARCH_RATE_LIMIT_MAX` / `SEARCH_RATE_LIMIT_WINDOW_MS`).
 
-For the canonical end-to-end smoke matrix (route → upstream service → expected response), see [docs/testing-endpoints.md](docs/testing-endpoints.md).
+For the canonical end-to-end smoke matrix (route → upstream service → expected response), see [docs/developers/operations/testing-endpoints.md](docs/developers/operations/testing-endpoints.md).
 
 ### WebSocket (Socket.IO)
 
@@ -1190,7 +1190,7 @@ The AppRouter routes `^/tutorials-qa/(.*)`, `^/qa-search/(.*)` to the `srv-qa-ap
 
 ### Route Architecture
 
-The AppRouter (`approuter/xs-app.json`) evaluates routes top-to-bottom on first match — so order matters. There are ~28 active routes; canonical reference for auth/scope per route is [docs/testing-endpoints.md](docs/testing-endpoints.md).
+The AppRouter (`approuter/xs-app.json`) evaluates routes top-to-bottom on first match — so order matters. There are ~28 active routes; canonical reference for auth/scope per route is [docs/developers/operations/testing-endpoints.md](docs/developers/operations/testing-endpoints.md).
 
 #### Static UIs (XSUAA + scope, served from `approuter/static/<route>/`)
 
@@ -1378,13 +1378,13 @@ A consolidated documentation site is planned for a later phase. Until then, refe
 | [docs/content-pipeline.md](docs/content-pipeline.md) | Engineers — full fetch → parse → Hugo → HANA pipeline with timing data |
 | [docs/authentication-architecture.md](docs/authentication-architecture.md) | Engineers — XSUAA / IDP auth flow and component interactions |
 | [docs/authentication-primer.md](docs/authentication-primer.md) | Engineers — high-level auth model intro |
-| [docs/ias-migration-setup.md](docs/ias-migration-setup.md) | Operators — IAS migration configuration steps |
+| [docs/developers/operations/ias-setup.md](docs/developers/operations/ias-setup.md) | Operators — IAS migration configuration steps |
 | [docs/historic/ims-api-reference.md](docs/historic/ims-api-reference.md) | Migration — legacy IMS Java API surface for parity reference |
 | [docs/historic/ims-uncovered-features.md](docs/historic/ims-uncovered-features.md) | Migration — IMS features not yet ported to CAP |
 | [docs/historic/hugo-migration.md](docs/historic/hugo-migration.md) | History — VitePress → Hugo migration rationale |
-| [docs/mta-deployment.md](docs/mta-deployment.md) | Operators — MTA build/deploy procedures and troubleshooting |
+| [docs/developers/operations/mta-deployment.md](docs/developers/operations/mta-deployment.md) | Operators — MTA build/deploy procedures and troubleshooting |
 | [docs/joule-chat.md](docs/joule-chat.md) | Engineers — Joule chat integration |
-| [docs/ai-consumption.md](docs/ai-consumption.md) | Engineers — AI consumption surfaces |
+| [docs/developers/reference/ai-consumption.md](docs/developers/reference/ai-consumption.md) | Engineers — AI consumption surfaces |
 
 ## License
 

@@ -2,7 +2,7 @@
 
 One-time setup procedure for the QA author-preview channel (`tutorials-srv-qa` + `tutorials-hana-qa` + `/tutorials-qa/*` route).
 
-For day-to-day QA commands (`fetch-tutorials:qa`, `build:qa`, `publish-content:qa`, `qa:full`) see the Commands section in [../CLAUDE.md](../CLAUDE.md). For QA-specific gotchas (cache marker, `hugo.qa.toml`, `CONTENT_API_KEY_QA`) see the Gotchas section there.
+For day-to-day QA commands (`fetch-tutorials:qa`, `build:qa`, `publish-content:qa`, `qa:full`) see the Commands section in [../CLAUDE.md](../../../CLAUDE.md). For QA-specific gotchas (cache marker, `hugo.qa.toml`, `CONTENT_API_KEY_QA`) see the Gotchas section there.
 
 ---
 

@@ -114,7 +114,7 @@ Tutorial HTML is NOT served from static files. After Hugo builds, `publish-conte
 ### CAP Backend (srv/)
 
 - **Services**: `DeveloperService` (@path: /api), `AdminService` (@path: /admin), `AnalyticsService` (@path: /admin/analytics), `ExportsService` (@path: /admin/exports), `DisplayService` (@path: /display), `ConsolidationService` (@path: /api/v1), `ScannerService` (@path: /scanner), `SearchService` (@path: /search), `ChatService` (@path: /chat, no entities; ORD-symmetric, streams via `/chat/stream`), `EventStreamService` (@path: event-stream, WebSocket+REST)
-- **Custom endpoints** (canonical list with auth + scope in [docs/testing-endpoints.md](docs/testing-endpoints.md)): `/api/qrcode`, `/api/recommendations`, `/build/catalog`, `/build/navigator`, `/build/slug-mapping`, `/build/co-completions`, `/build/repo-catalog` (GET unauth; POST bearer via `CONTENT_API_KEY`), `/feedback/submit` (rate-limited; `SUBMISSION_SALT_SECRET` required), `/chat/stream` (SSE), `/admin/embeddings/stats`, `/health`, `/health/db`, `/auth/user`
+- **Custom endpoints** (canonical list with auth + scope in [docs/developers/operations/testing-endpoints.md](docs/developers/operations/testing-endpoints.md)): `/api/qrcode`, `/api/recommendations`, `/build/catalog`, `/build/navigator`, `/build/slug-mapping`, `/build/co-completions`, `/build/repo-catalog` (GET unauth; POST bearer via `CONTENT_API_KEY`), `/feedback/submit` (rate-limited; `SUBMISSION_SALT_SECRET` required), `/chat/stream` (SSE), `/admin/embeddings/stats`, `/health`, `/health/db`, `/auth/user`
 - **Content persistence** (`srv/lib/content-store.js`): Tutorial HTML stored as gzip-compressed BLOBs in HANA (`ContentFiles` + `ContentManifest` entities). Endpoints:
   - `POST /content/publish` — accepts `{ trigger, hugoVersion, files: { slug: base64gzip } }`, creates versioned manifest (bearer token auth via `CONTENT_API_KEY`)
   - `GET /content/tutorials/:slug` — serves decompressed HTML with ETag, Cache-Control, bounded LRU cache (50MB)
@@ -181,12 +181,12 @@ Set `IMS_BASE_URL`, `CAP_BASE_URL`, and `IMS_AUTH_TOKEN` env vars. Export files 
 Architecture and reference docs for developers (not deployed). Key entries:
 
 - [docs/pilot-status.md](docs/pilot-status.md) — pilot completion + locked production scope
-- [docs/testing-endpoints.md](docs/testing-endpoints.md) — canonical UI + API endpoint reference (smoke-test targets, auth/scope mapping)
+- [docs/developers/operations/testing-endpoints.md](docs/developers/operations/testing-endpoints.md) — canonical UI + API endpoint reference (smoke-test targets, auth/scope mapping)
 - [docs/improvements.md](docs/improvements.md) and [docs/TODO.md](docs/TODO.md) — feature backlog and gap tracking (largely historic; mine for descriptions when extending broader docs)
-- [docs/theme-variants.md](docs/theme-variants.md) — building event-specific theme variants (Joule, Sapphire, TechEd)
+- [docs/developers/reference/theme-variants.md](docs/developers/reference/theme-variants.md) — building event-specific theme variants (Joule, Sapphire, TechEd)
 - [docs/authors/README.md](docs/authors/README.md) — operational manual for authors, repo group owners, center admins, and analytics admins (replaces `docs/author-instructions.md`)
-- [docs/qa-channel-bootstrap.md](docs/qa-channel-bootstrap.md) — one-time QA author-preview channel setup procedure
-- [docs/content-pipeline.md](docs/content-pipeline.md), [docs/authentication-architecture.md](docs/authentication-architecture.md), [docs/mta-deployment.md](docs/mta-deployment.md), [docs/historic/hugo-migration.md](docs/historic/hugo-migration.md) — deep-dives
+- [docs/developers/operations/qa-channel-bootstrap.md](docs/developers/operations/qa-channel-bootstrap.md) — one-time QA author-preview channel setup procedure
+- [docs/content-pipeline.md](docs/content-pipeline.md), [docs/authentication-architecture.md](docs/authentication-architecture.md), [docs/developers/operations/mta-deployment.md](docs/developers/operations/mta-deployment.md), [docs/historic/hugo-migration.md](docs/historic/hugo-migration.md) — deep-dives
 
 ### Parsers (scripts/parsers/)
 
@@ -202,7 +202,7 @@ Three Vitest workspaces defined in `vitest.config.ts` (inline `projects` array):
 
 ## QA Channel Bootstrap
 
-One-time setup for the QA author-preview channel — full procedure (CI secrets, dispatch-token distribution to every `-Contribution` repo, local deploy with both prod and QA Hugo built, sanity check, role-collection assignment) lives in [docs/qa-channel-bootstrap.md](docs/qa-channel-bootstrap.md). Day-to-day QA commands are in the Commands section above; channel-specific gotchas (`.tutorial-cache-qa/` marker, `hugo.qa.toml`, `CONTENT_API_KEY_QA`) are in Gotchas below.
+One-time setup for the QA author-preview channel — full procedure (CI secrets, dispatch-token distribution to every `-Contribution` repo, local deploy with both prod and QA Hugo built, sanity check, role-collection assignment) lives in [docs/developers/operations/qa-channel-bootstrap.md](docs/developers/operations/qa-channel-bootstrap.md). Day-to-day QA commands are in the Commands section above; channel-specific gotchas (`.tutorial-cache-qa/` marker, `hugo.qa.toml`, `CONTENT_API_KEY_QA`) are in Gotchas below.
 
 ## Gotchas
 

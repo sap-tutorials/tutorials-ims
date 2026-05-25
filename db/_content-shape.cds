@@ -1,7 +1,7 @@
 // Shape aspects shared between prod (db/) and QA (db-qa/) channels.
 // Each consuming entity emits its own HDI table under its own namespace —
 // aspects are compile-time mixins, not entities, so this file produces no
-// hdbtable artifacts of its own. See docs/qa-channel-bootstrap.md for why
+// hdbtable artifacts of its own. See docs/developers/operations/qa-channel-bootstrap.md for why
 // the two HDI containers are kept isolated.
 namespace com.sap.developers.ims.shared;
 

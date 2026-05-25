@@ -152,7 +152,7 @@ npx cds bind --exec -- node scripts/setup-dev-data.cjs
 5. **Switching the live event:** To change which event is active mid-conference, update the **Active** flag in the admin UI. The display dashboard and AppSpace pick up the change in real-time via WebSocket without a page reload.
 
 **Related:**
-- [docs/theme-variants.md](../theme-variants.md) — detailed palette variables for Joule, Sapphire, and TechEd
+- [docs/developers/reference/theme-variants.md](../developers/reference/theme-variants.md) — detailed palette variables for Joule, Sapphire, and TechEd
 
 ---
 

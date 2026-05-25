@@ -28,7 +28,7 @@ There is no separate AI "API." Everything ships in the same HTML and HTTP respon
 
 ### 1. Brand string and title pattern
 
-**File:** [hugo/hugo.toml](../hugo/hugo.toml), [hugo/layouts/partials/head-meta.html](../hugo/layouts/partials/head-meta.html)
+**File:** [hugo/hugo.toml](../../../hugo/hugo.toml), [hugo/layouts/partials/head-meta.html](../../../hugo/layouts/partials/head-meta.html)
 
 Canonical brand: `SAP Developers Tutorials`. Twitter handle: `@sapdevs`. Canonical origin: `https://developers.sap.com`.
 
@@ -41,7 +41,7 @@ The home page deliberately omits the suffix to avoid the awkward `SAP Developers
 
 ### 2. Canonical link, description, robots, keywords, authors
 
-**File:** [hugo/layouts/partials/head-meta.html](../hugo/layouts/partials/head-meta.html)
+**File:** [hugo/layouts/partials/head-meta.html](../../../hugo/layouts/partials/head-meta.html)
 
 Every page emits:
 
@@ -57,7 +57,7 @@ Every page emits:
 
 ### 3. Open Graph + Twitter Card
 
-**File:** [hugo/layouts/partials/head-og.html](../hugo/layouts/partials/head-og.html)
+**File:** [hugo/layouts/partials/head-og.html](../../../hugo/layouts/partials/head-og.html)
 
 Sitewide:
 
@@ -75,11 +75,11 @@ Sitewide:
 
 Tutorials emit `og:type=article` plus `article:published_time`, `article:modified_time`, `article:author`, and `article:tag` for each tag.
 
-The default OG image lives at [hugo/static/img/og-default.png](../hugo/static/img/og-default.png) — 1200×630 PNG, SAP logo on `#0070f2` background. Generated once with `sharp`; checked into the repo.
+The default OG image lives at [hugo/static/img/og-default.png](../../../hugo/static/img/og-default.png) — 1200×630 PNG, SAP logo on `#0070f2` background. Generated once with `sharp`; checked into the repo.
 
 ### 4. Sitewide JSON-LD (Organization + WebSite)
 
-**File:** [hugo/layouts/partials/site-jsonld.html](../hugo/layouts/partials/site-jsonld.html)
+**File:** [hugo/layouts/partials/site-jsonld.html](../../../hugo/layouts/partials/site-jsonld.html)
 
 Every page renders an `@graph` with two objects, addressable by `@id`:
 
@@ -115,7 +115,7 @@ The `@id` URLs are the linking primitive — per-page schemas reference them as 
 
 ### 5. Per-page JSON-LD: HowTo / Course / BreadcrumbList / FAQPage
 
-**File:** [hugo/layouts/partials/head-jsonld.html](../hugo/layouts/partials/head-jsonld.html)
+**File:** [hugo/layouts/partials/head-jsonld.html](../../../hugo/layouts/partials/head-jsonld.html)
 
 Type selection by content:
 
@@ -133,7 +133,7 @@ Type selection by content:
 
 ### 6. robots.txt with AI bot allowlist
 
-**File:** [hugo/layouts/robots.txt](../hugo/layouts/robots.txt)
+**File:** [hugo/layouts/robots.txt](../../../hugo/layouts/robots.txt)
 
 Generated as a Hugo output format (`robots`) so it always reflects the current `baseURL`. Policy:
 
@@ -146,19 +146,19 @@ The header comment states the policy in human language: *"Content licensed for h
 
 ### 7. sitemap.xml with `<lastmod>`
 
-**File:** [hugo/layouts/_default/sitemap.xml](../hugo/layouts/_default/sitemap.xml)
+**File:** [hugo/layouts/_default/sitemap.xml](../../../hugo/layouts/_default/sitemap.xml)
 
 Custom sitemap template overrides Hugo's default. Each URL gets:
 
 - `<loc>` — absolute URL via `.Permalink`
-- `<lastmod>` — derived per [`[frontmatter]`](../hugo/hugo.toml) precedence: `lastmod` → `lastUpdated` → `:git` (commit time) → `:fileModTime`
+- `<lastmod>` — derived per [`[frontmatter]`](../../../hugo/hugo.toml) precedence: `lastmod` → `lastUpdated` → `:git` (commit time) → `:fileModTime`
 - `<changefreq>` and `<priority>` — conditional by Type (tutorials = `weekly`/`0.7`, missions = `monthly`/`0.8`, home = `daily`/`1.0`)
 
 The `:git` fallback is what makes this trustworthy: even if a tutorial author forgets to bump `lastUpdated` in frontmatter, the commit timestamp ensures crawlers get an accurate freshness signal.
 
 ### 8. llms.txt
 
-**File:** [hugo/layouts/_default/llms.txt](../hugo/layouts/_default/llms.txt)
+**File:** [hugo/layouts/_default/llms.txt](../../../hugo/layouts/_default/llms.txt)
 
 Per the [llmstxt.org spec](https://llmstxt.org). Curated index:
 
@@ -181,11 +181,11 @@ See https://developers.sap.com/AGENTS.md.
 ...
 ```
 
-Hugo emits this at `/llms.txt` via the `llms` output format (configured in [hugo.toml](../hugo/hugo.toml) with `mediaType = 'text/markdown'`, `baseName = 'llms'`, `isPlainText = true`). Limited to the first 20 missions to stay under the spec's "concise index" guidance.
+Hugo emits this at `/llms.txt` via the `llms` output format (configured in [hugo.toml](../../../hugo/hugo.toml) with `mediaType = 'text/markdown'`, `baseName = 'llms'`, `isPlainText = true`). Limited to the first 20 missions to stay under the spec's "concise index" guidance.
 
 ### 9. llms-full.txt
 
-**File:** [hugo/layouts/_default/llmsfull.txt](../hugo/layouts/_default/llmsfull.txt)
+**File:** [hugo/layouts/_default/llmsfull.txt](../../../hugo/layouts/_default/llmsfull.txt)
 
 Machine-readable catalog of every tutorial and mission. One entry per resource:
 
@@ -207,7 +207,7 @@ In production with all ~1,200 tutorials, the file is several MB. Smoke test asse
 
 ### 10. AGENTS.md (public)
 
-**File:** [hugo/static/AGENTS.md](../hugo/static/AGENTS.md), served at `/AGENTS.md`
+**File:** [hugo/static/AGENTS.md](../../../hugo/static/AGENTS.md), served at `/AGENTS.md`
 
 The public-facing agent guidance document. Covers:
 
@@ -222,7 +222,7 @@ This is distinct from the **repo-root** `AGENTS.md` (see #15), which targets *co
 
 ### 11. Server-Side Rendered (SSR) homepage
 
-**File:** [hugo/layouts/index.html](../hugo/layouts/index.html), [hugo/assets/css/home.css](../hugo/assets/css/home.css)
+**File:** [hugo/layouts/index.html](../../../hugo/layouts/index.html), [hugo/assets/css/home.css](../../../hugo/assets/css/home.css)
 
 Previously the homepage was a 4-line stub with `<div id="tutorial-navigator"></div>` — a JS-rendered SPA shell. Crawlers and AI agents that don't execute JavaScript saw an empty page.
 
@@ -245,7 +245,7 @@ The JavaScript navigator still works — the SSR content lives *outside* `#tutor
 
 ### 12. Web fonts with `font-display: swap`
 
-**File:** [hugo/assets/css/](../hugo/assets/css/) (theme files)
+**File:** [hugo/assets/css/](../../../hugo/assets/css/) (theme files)
 
 Every `@font-face` declaration includes `font-display: swap`. Without this, browsers block text rendering until fonts load — measured by Lighthouse as *Cumulative Layout Shift* and *First Contentful Paint* penalties that hurt search ranking.
 
@@ -253,7 +253,7 @@ Smoke check: `grep -E 'font-display: swap' hugo/public/tutorials/*/index.html` r
 
 ### 13. Open Graph default image
 
-**File:** [hugo/static/img/og-default.png](../hugo/static/img/og-default.png) (43,673 bytes)
+**File:** [hugo/static/img/og-default.png](../../../hugo/static/img/og-default.png) (43,673 bytes)
 
 1200×630 PNG with the SAP logo on the SAP Joy blue (`#0070f2`) background. Force-added past the `*.png` gitignore rule so it travels with the repo.
 
@@ -261,7 +261,7 @@ Per-page OG images: tutorials and missions use a custom image if provided in fro
 
 ### 14. Content-Signal + X-Robots-Tag headers
 
-**File:** [approuter/xs-app.json](../approuter/xs-app.json) (`responseHeaders` array)
+**File:** [approuter/xs-app.json](../../../approuter/xs-app.json) (`responseHeaders` array)
 
 The AppRouter injects two response headers on every route:
 
@@ -282,9 +282,9 @@ Critically, these headers cover **all** routes — including `/tutorials/*` whic
 
 ### 15. Repo-root AGENTS.md
 
-**File:** [AGENTS.md](../AGENTS.md)
+**File:** [AGENTS.md](../../../AGENTS.md)
 
-Distinct from the **public** AGENTS.md (#10). This one targets coding agents (Claude Code, Cursor, Copilot, Aider) working *inside the repo*. It points them to [CLAUDE.md](../CLAUDE.md) as the canonical project guide and lists the quick conventions:
+Distinct from the **public** AGENTS.md (#10). This one targets coding agents (Claude Code, Cursor, Copilot, Aider) working *inside the repo*. It points them to [CLAUDE.md](../../../CLAUDE.md) as the canonical project guide and lists the quick conventions:
 
 - Hugo content under `hugo/content/tutorials/` is generated — never hand-edit
 - Tutorial HTML is served from HANA BLOBs, not static files
@@ -301,10 +301,10 @@ Four Vitest files under `test/smoke/` validate the live deployment:
 
 | File | What it asserts |
 | --- | --- |
-| [test/smoke/seo-files.test.js](../test/smoke/seo-files.test.js) | robots.txt content, sitemap absolute URLs + `<lastmod>`, llms.txt brand header, llms-full.txt size > 10KB, /AGENTS.md served, og-default.png returns `image/png` |
-| [test/smoke/meta-tags.test.js](../test/smoke/meta-tags.test.js) | Home title has no duplication; canonical, description, robots, content-signal meta tags present; OG + Twitter Card complete; tutorial title has ` \| SAP Developers Tutorials` suffix; `og:type=article` and `author` on tutorials |
-| [test/smoke/jsonld.test.js](../test/smoke/jsonld.test.js) | Home page contains `Organization` + `WebSite` JSON-LD; tutorial pages contain `HowTo` with `step[]` and `BreadcrumbList` |
-| [test/smoke/content-signal.test.js](../test/smoke/content-signal.test.js) | Both AppRouter-served (`/`) and HANA-served (`/tutorials/`) responses carry `Content-Signal` and `X-Robots-Tag` headers |
+| [test/smoke/seo-files.test.js](../../../test/smoke/seo-files.test.js) | robots.txt content, sitemap absolute URLs + `<lastmod>`, llms.txt brand header, llms-full.txt size > 10KB, /AGENTS.md served, og-default.png returns `image/png` |
+| [test/smoke/meta-tags.test.js](../../../test/smoke/meta-tags.test.js) | Home title has no duplication; canonical, description, robots, content-signal meta tags present; OG + Twitter Card complete; tutorial title has ` \| SAP Developers Tutorials` suffix; `og:type=article` and `author` on tutorials |
+| [test/smoke/jsonld.test.js](../../../test/smoke/jsonld.test.js) | Home page contains `Organization` + `WebSite` JSON-LD; tutorial pages contain `HowTo` with `step[]` and `BreadcrumbList` |
+| [test/smoke/content-signal.test.js](../../../test/smoke/content-signal.test.js) | Both AppRouter-served (`/`) and HANA-served (`/tutorials/`) responses carry `Content-Signal` and `X-Robots-Tag` headers |
 
 Run them against any deployment:
 
@@ -326,7 +326,7 @@ SMOKE_BASE_URL=https://developers.sap.com npm run test:smoke
 
 ### Adding a new schema.org type
 
-Edit [hugo/layouts/partials/head-jsonld.html](../hugo/layouts/partials/head-jsonld.html). Use the existing patterns:
+Edit [hugo/layouts/partials/head-jsonld.html](../../../hugo/layouts/partials/head-jsonld.html). Use the existing patterns:
 
 - Wrap in `{{- if eq .Type "your-type" -}}` ... `{{- end -}}` so it only emits on the right pages
 - Reference the Organization with `"publisher": { "@id": "{{ $base }}/#organization" }` instead of duplicating
@@ -334,7 +334,7 @@ Edit [hugo/layouts/partials/head-jsonld.html](../hugo/layouts/partials/head-json
 
 ### Adding a new AI bot to the allowlist
 
-Edit [hugo/layouts/robots.txt](../hugo/layouts/robots.txt). Add a stanza like:
+Edit [hugo/layouts/robots.txt](../../../hugo/layouts/robots.txt). Add a stanza like:
 
 ```
 User-agent: NewBotName
@@ -345,17 +345,17 @@ That's it — the next `npm run build:hugo` regenerates `/robots.txt`.
 
 ### Adding a new metadata field
 
-For a field that should reach all pages: edit [head-meta.html](../hugo/layouts/partials/head-meta.html) or [head-og.html](../hugo/layouts/partials/head-og.html) directly.
+For a field that should reach all pages: edit [head-meta.html](../../../hugo/layouts/partials/head-meta.html) or [head-og.html](../../../hugo/layouts/partials/head-og.html) directly.
 
-For a field that's tutorial-specific: add it to the tutorial frontmatter via a parser change in [scripts/parsers/](../scripts/parsers/), then read it in the relevant partial as `.Params.your_field`.
+For a field that's tutorial-specific: add it to the tutorial frontmatter via a parser change in [scripts/parsers/](../../../scripts/parsers/), then read it in the relevant partial as `.Params.your_field`.
 
 ### Updating the consumption policy
 
 Three places must stay in sync:
 
-1. The `Content-Signal` header in [approuter/xs-app.json](../approuter/xs-app.json)
-2. The header comment in [hugo/layouts/robots.txt](../hugo/layouts/robots.txt)
-3. The "Content policy" section in [hugo/layouts/_default/llms.txt](../hugo/layouts/_default/llms.txt) and [hugo/static/AGENTS.md](../hugo/static/AGENTS.md)
+1. The `Content-Signal` header in [approuter/xs-app.json](../../../approuter/xs-app.json)
+2. The header comment in [hugo/layouts/robots.txt](../../../hugo/layouts/robots.txt)
+3. The "Content policy" section in [hugo/layouts/_default/llms.txt](../../../hugo/layouts/_default/llms.txt) and [hugo/static/AGENTS.md](../../../hugo/static/AGENTS.md)
 
 If any of those three drift apart, the policy a bot picks up depends on which surface it reads first — an outcome we want to avoid.
 
@@ -365,7 +365,7 @@ If any of those three drift apart, the policy a bot picks up depends on which su
 
 ### Tutorial HTML lives in HANA, not in Hugo statics
 
-The AppRouter strips `hugo/public/tutorials/` during build (`rm -rf approuter/static/tutorials` in [.deploy/mta.yaml](../.deploy/mta.yaml)). All `/tutorials/*` requests go to the CAP backend, which decompresses HTML from HANA BLOBs and serves them.
+The AppRouter strips `hugo/public/tutorials/` during build (`rm -rf approuter/static/tutorials` in [.deploy/mta.yaml](../../../.deploy/mta.yaml)). All `/tutorials/*` requests go to the CAP backend, which decompresses HTML from HANA BLOBs and serves them.
 
 **Implication**: any `<head>` change in this initiative requires a content republish to reach production tutorials. After `npm run build:all`:
 
@@ -377,7 +377,7 @@ CAP_BASE_URL="https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ond
 
 Always use `--force`. The default delta-detection mode breaks production for full snapshot rewrites — a known issue tracked in memory.
 
-CI's [.github/workflows/rebuild-content.yml](../.github/workflows/rebuild-content.yml) does this automatically when triggered.
+CI's [.github/workflows/rebuild-content.yml](../../../.github/workflows/rebuild-content.yml) does this automatically when triggered.
 
 ### Content-Signal coverage requires the AppRouter
 

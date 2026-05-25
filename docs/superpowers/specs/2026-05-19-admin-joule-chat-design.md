@@ -402,11 +402,11 @@ const SOURCES = [
   'docs/content-pipeline.md',
   'docs/authentication-primer.md',
   'docs/authentication-architecture.md',
-  'docs/ias-migration-setup.md',
+  'docs/developers/operations/ias-setup.md',
   'docs/historic/ims-api-reference.md',
   'docs/historic/ims-uncovered-features.md',
   'docs/historic/hugo-migration.md',
-  'docs/mta-deployment.md'
+  'docs/developers/operations/mta-deployment.md'
 ];
 
 // For each: read → split by H2 / H3 markdown headings → emit { path, heading, headingPath, content } sections.

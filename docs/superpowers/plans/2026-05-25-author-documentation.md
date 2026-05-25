@@ -832,7 +832,7 @@ This folder (`docs/historic/`) is intended to grow as other historical documents
 
 ```bash
 # All forward references must resolve
-for link in docs/authors/README.md docs/authors/center-admin.md docs/authors/repo-group-owners.md docs/authors/analytics-admin.md docs/qa-channel-bootstrap.md docs/testing-endpoints.md; do
+for link in docs/authors/README.md docs/authors/center-admin.md docs/authors/repo-group-owners.md docs/authors/analytics-admin.md docs/developers/operations/qa-channel-bootstrap.md docs/developers/operations/testing-endpoints.md; do
   test -e "$link" || (echo "REFERENCED FILE MISSING: $link"; exit 1)
 done
 ```
