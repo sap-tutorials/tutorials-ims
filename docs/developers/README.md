@@ -11,7 +11,7 @@ You're in the right place if you're a platform engineer working on the tutorials
 
 - **[Getting Started](getting-started.md)** — local dev setup, folder map, scripts reference, environment variables. Read this first if you're new.
 
-## Architecture — how the system is built
+## Architecture
 
 How the platform fits together. Read these when you need to understand a subsystem before changing it.
 
@@ -22,7 +22,7 @@ How the platform fits together. Read these when you need to understand a subsyst
 - [CAP Backend](architecture/cap-backend.md) — services, entities, jobs, bootstrap
 - [Frontend Apps](architecture/frontend-apps.md) — admin shell, scanner, display
 
-## Operations — how to run it
+## Operations
 
 Runbooks and operational references. Read these when you need to deploy, test, or configure.
 
@@ -36,7 +36,7 @@ Runbooks and operational references. Read these when you need to deploy, test, o
 - [GitHub App Setup](operations/github-app-setup.md) — sap-tutorials-builder App
 - [IAS Setup](operations/ias-setup.md) — Option A/B authentication on a subaccount
 
-## Reference — deep dives and design notes
+## Reference
 
 Topics that aren't on a critical path but matter when you go looking.
 
