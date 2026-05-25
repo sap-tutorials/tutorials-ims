@@ -304,7 +304,7 @@ Two parallel cache directories — one per channel — back the fetch step. Both
 
 Complete flow of tutorial content from GitHub source to end-user delivery, including exception handling, versioning, and tracking.
 
-## Pipeline Overview
+### Pipeline Overview
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -332,7 +332,7 @@ Complete flow of tutorial content from GitHub source to end-user delivery, inclu
 
 ---
 
-## Phase 1: Fetch (`scripts/fetch-tutorials.ts`)
+### Phase 1: Fetch (`scripts/fetch-tutorials.ts`)
 
 Downloads tutorial markdown from the `sap-tutorials` GitHub organization.
 
@@ -389,7 +389,7 @@ Failed tutorials are written to `.tutorial-cache/errors.json`:
 
 ---
 
-## Phase 2: Parse (`scripts/parsers/`)
+### Phase 2: Parse (`scripts/parsers/`)
 
 Transforms raw markdown into Hugo-compatible content pages.
 
@@ -419,7 +419,7 @@ Determined by frontmatter field `parser: v2`:
 
 ---
 
-## Phase 3: Build (Hugo)
+### Phase 3: Build (Hugo)
 
 Standard Hugo static site generation.
 
@@ -431,7 +431,7 @@ Output: One `index.html` per tutorial slug in `hugo/public/tutorials/`.
 
 ---
 
-## Phase 4: Publish (`scripts/publish-content.ts`)
+### Phase 4: Publish (`scripts/publish-content.ts`)
 
 Delta-aware upload of changed tutorial HTML to SAP HANA Cloud.
 
@@ -491,7 +491,7 @@ Content-Type: application/json
 
 ---
 
-## Phase 5: Content Store (`srv/lib/content-store.js`)
+### Phase 5: Content Store (`srv/lib/content-store.js`)
 
 Server-side persistence, versioning, and serving layer.
 
@@ -595,7 +595,7 @@ HANA BLOB columns return `Readable` streams with locators that expire before con
 
 ---
 
-## Phase 5.5: Embedding Hook (post-publish)
+### Phase 5.5: Embedding Hook (post-publish)
 
 After the manifest goes `ACTIVE`, per-step embeddings are generated for RAG (Retrieval-Augmented Generation) in the Joule chat.
 
@@ -622,7 +622,7 @@ All embeddings use the model specified in `ChatSettings.embeddingModel` (default
 
 ---
 
-## Phase 6: Rollback (`POST /content/rollback`)
+### Phase 6: Rollback (`POST /content/rollback`)
 
 Reverts to a previous content version without re-publishing.
 
@@ -643,7 +643,7 @@ Rollback is instantaneous since all version data persists in `ContentFiles`.
 
 ---
 
-## Phase 7: Garbage Collection (`srv/jobs/cleanup.js`)
+### Phase 7: Garbage Collection (`srv/jobs/cleanup.js`)
 
 Scheduled daily at 03:00 UTC by the job scheduler.
 
@@ -676,7 +676,7 @@ For remaining: DELETE ContentFiles + DELETE ContentManifest
 
 ---
 
-## Tracking & Observability
+### Tracking & Observability
 
 ### ContentManifest (Version History)
 
@@ -715,7 +715,7 @@ Records all pipeline events (publishes, rollbacks) with timestamps, initiator, a
 
 ---
 
-## End-to-End Flow (CI/CD)
+### End-to-End Flow (CI/CD)
 
 ```text
 ┌─ CI Pipeline ───────────────────────────────────────────────────────────┐
@@ -742,7 +742,7 @@ Records all pipeline events (publishes, rollbacks) with timestamps, initiator, a
 
 ---
 
-## Performance Metrics
+### Performance Metrics
 
 Based on recent runs (May 2026) against the full tutorial corpus of **1,378 tutorials** across **1,387 repos** in the `sap-tutorials` GitHub organization.
 
@@ -887,7 +887,7 @@ After a CAP srv restart, the LRU cache is empty. First ~50 unique tutorial reque
 
 ---
 
-## Request Routing (Production)
+### Request Routing (Production)
 
 ```text
 Browser → AppRouter (xs-app.json)
@@ -913,7 +913,7 @@ Tutorial HTML is served exclusively from HANA BLOBs. There is no static file fal
 
 ---
 
-## Resilience: AppRouter Restage / Filesystem Loss
+### Resilience: AppRouter Restage / Filesystem Loss
 
 Cloud Foundry containers are ephemeral — a restage, restart, or crash recovery destroys the local filesystem. This section documents the impact on content serving.
 
@@ -993,7 +993,3 @@ Result: 200 OK — user sees tutorial content as normal
 ### Edge case: First deploy (no content in HANA)
 
 If the AppRouter is deployed before any content has been published to HANA, `/tutorials/*` returns 404. This is the expected "empty state." Run `npm run publish-content` against the deployed CAP srv to populate content.
-
----
-
-
