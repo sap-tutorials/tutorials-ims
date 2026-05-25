@@ -403,9 +403,9 @@ const SOURCES = [
   'docs/authentication-primer.md',
   'docs/authentication-architecture.md',
   'docs/ias-migration-setup.md',
-  'docs/ims-api-reference.md',
-  'docs/ims-uncovered-features.md',
-  'docs/hugo-migration.md',
+  'docs/historic/ims-api-reference.md',
+  'docs/historic/ims-uncovered-features.md',
+  'docs/historic/hugo-migration.md',
   'docs/mta-deployment.md'
 ];
 

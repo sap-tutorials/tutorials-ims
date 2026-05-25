@@ -1379,9 +1379,9 @@ A consolidated documentation site is planned for a later phase. Until then, refe
 | [docs/authentication-architecture.md](docs/authentication-architecture.md) | Engineers — XSUAA / IDP auth flow and component interactions |
 | [docs/authentication-primer.md](docs/authentication-primer.md) | Engineers — high-level auth model intro |
 | [docs/ias-migration-setup.md](docs/ias-migration-setup.md) | Operators — IAS migration configuration steps |
-| [docs/ims-api-reference.md](docs/ims-api-reference.md) | Migration — legacy IMS Java API surface for parity reference |
-| [docs/ims-uncovered-features.md](docs/ims-uncovered-features.md) | Migration — IMS features not yet ported to CAP |
-| [docs/hugo-migration.md](docs/hugo-migration.md) | History — VitePress → Hugo migration rationale |
+| [docs/historic/ims-api-reference.md](docs/historic/ims-api-reference.md) | Migration — legacy IMS Java API surface for parity reference |
+| [docs/historic/ims-uncovered-features.md](docs/historic/ims-uncovered-features.md) | Migration — IMS features not yet ported to CAP |
+| [docs/historic/hugo-migration.md](docs/historic/hugo-migration.md) | History — VitePress → Hugo migration rationale |
 | [docs/mta-deployment.md](docs/mta-deployment.md) | Operators — MTA build/deploy procedures and troubleshooting |
 | [docs/joule-chat.md](docs/joule-chat.md) | Engineers — Joule chat integration |
 | [docs/ai-consumption.md](docs/ai-consumption.md) | Engineers — AI consumption surfaces |

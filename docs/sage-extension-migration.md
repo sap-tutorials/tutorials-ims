@@ -177,7 +177,7 @@ The strategic question worth answering before writing code is whether SQLite sta
 - Implementation plan: [docs/superpowers/plans/2026-05-24-sage-backend-gaps.md](superpowers/plans/2026-05-24-sage-backend-gaps.md).
 - Sage source: [`D:/projects/sage-tutorial-extension`](https://github.com/sap-tutorials/sage-tutorial-extension) (also available on disk).
 - Sage architecture overview: [`D:/projects/sage-tutorial-extension/CLAUDE.md`](https://github.com/sap-tutorials/sage-tutorial-extension/blob/main/CLAUDE.md).
-- IMS API reference (legacy): [docs/ims-api-reference.md](ims-api-reference.md).
+- IMS API reference (legacy): [docs/historic/ims-api-reference.md](historic/ims-api-reference.md).
 - Preview endpoint design: [docs/superpowers/specs/2026-05-23-vscode-author-preview-design.md](superpowers/specs/2026-05-23-vscode-author-preview-design.md).
 - QA channel context (where the preview endpoint lives): [docs/qa-channel-bootstrap.md](qa-channel-bootstrap.md).
 - Tutorials-poc CAP services: [`srv/admin-service.cds`](../srv/admin-service.cds), [`srv/author-service.cds`](../srv/author-service.cds), [`srv/server.js`](../srv/server.js).

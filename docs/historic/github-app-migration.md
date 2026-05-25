@@ -3,7 +3,7 @@
 **Status:** Workflow change merged; awaiting org-admin App registration to activate.
 **Driver:** SAP org PAT expiry policies are short, and PAT rotation is manual, error-prone, and tied to a single human account. A GitHub App resolves all three.
 
-> 👉 **For the org-admin and repo-maintainer setup steps**, see [`github-app-setup.md`](github-app-setup.md). This doc covers the engineering rationale, current state, and migration design.
+> 👉 **For the org-admin and repo-maintainer setup steps**, see [`github-app-setup.md`](../github-app-setup.md). This doc covers the engineering rationale, current state, and migration design.
 
 ## Current state
 
@@ -77,7 +77,7 @@ This lets the migration land safely with no behaviour change and no parallel-wor
 
 ## Cutover steps
 
-The detailed admin + repo-maintainer runbook lives in [`github-app-setup.md`](github-app-setup.md). At a glance:
+The detailed admin + repo-maintainer runbook lives in [`github-app-setup.md`](../github-app-setup.md). At a glance:
 
 1. Org admin registers `sap-tutorials-builder` App, generates private key, installs on org.
 2. Repo maintainer adds `TUTORIALS_APP_ID` + `TUTORIALS_APP_PRIVATE_KEY` (and optionally `TUTORIALS_APP_INSTALLATION_ID`) as Actions secrets.

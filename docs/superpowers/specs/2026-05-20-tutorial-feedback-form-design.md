@@ -512,4 +512,4 @@ None blocking. Minor decisions deferred to implementation, noted here so they do
 - Schema location: `db/schema.cds`
 - DeveloperService: `srv/developer-service.cds`
 - AdminService: `srv/admin-service.cds`
-- Gap analysis context: `docs/aem-gap-analysis.md` (Gap 11 — Qualtrics survey)
+- Gap analysis context: `docs/historic/aem-gap-analysis.md` (Gap 11 — Qualtrics survey)

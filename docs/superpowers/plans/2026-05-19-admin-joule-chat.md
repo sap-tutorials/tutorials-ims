@@ -102,9 +102,9 @@ const SOURCES = [
   'docs/authentication-primer.md',
   'docs/authentication-architecture.md',
   'docs/mta-deployment.md',
-  'docs/hugo-migration.md',
-  'docs/ims-api-reference.md',
-  'docs/ims-uncovered-features.md',
+  'docs/historic/hugo-migration.md',
+  'docs/historic/ims-api-reference.md',
+  'docs/historic/ims-uncovered-features.md',
   'docs/ias-migration-setup.md',
 ];
 const OUT = 'srv/data/admin-docs-index.json';
