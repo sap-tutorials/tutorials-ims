@@ -38,7 +38,7 @@
 - `app/admin/joule/webapp/i18n/i18n.properties` — labels
 - `app/admin-annotations.cds` — labels for new fields
 - `db/change-tracking.cds` — verify new fields tracked
-- Documentation: `docs/joule-chat.md`, `docs/content-pipeline.md`, new `docs/developers/operations/joule-chat-admin-settings.md`, `CLAUDE.md`
+- Documentation: `docs/joule-chat.md`, `docs/developers/architecture/build.md`, new `docs/developers/operations/joule-chat-admin-settings.md`, `CLAUDE.md`
 
 ---
 
@@ -1749,7 +1749,7 @@ git commit -m "test(rag): smoke test for embedding stats endpoint"
 
 **Files:**
 - Modify: `docs/joule-chat.md`
-- Modify: `docs/content-pipeline.md`
+- Modify: `docs/developers/architecture/build.md`
 - Create: `docs/developers/operations/joule-chat-admin-settings.md`
 - Modify: `CLAUDE.md`
 
@@ -1765,7 +1765,7 @@ Add a new section "Tutorial Grounding (RAG)" describing:
 - citation format: `[tutorial-slug #stepNumber]`
 - link to `docs/developers/operations/joule-chat-admin-settings.md` for operations
 
-- [ ] **Step 2: Update `docs/content-pipeline.md`**
+- [ ] **Step 2: Update `docs/developers/architecture/build.md`**
 
 Add the post-publish embedding hook to the pipeline diagram:
 
@@ -1805,7 +1805,7 @@ Add a "Gotchas" entry:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add docs/joule-chat.md docs/content-pipeline.md docs/developers/operations/joule-chat-admin-settings.md CLAUDE.md
+git add docs/joule-chat.md docs/developers/architecture/build.md docs/developers/operations/joule-chat-admin-settings.md CLAUDE.md
 git commit -m "docs(rag): document tutorial grounding pipeline + admin settings"
 ```
 

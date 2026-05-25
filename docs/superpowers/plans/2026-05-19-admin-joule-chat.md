@@ -98,7 +98,7 @@ import { dirname, resolve } from 'node:path';
 
 const SOURCES = [
   'CLAUDE.md',
-  'docs/content-pipeline.md',
+  'docs/developers/architecture/build.md',
   'docs/authentication-primer.md',
   'docs/authentication-architecture.md',
   'docs/developers/operations/mta-deployment.md',
@@ -190,7 +190,7 @@ describe('admin-docs-index', () => {
         readFileSync: (p: string, enc: string) => {
           if (String(p).endsWith('admin-docs-index.json')) {
             return JSON.stringify({ docs: [
-              { id: 'a#0', path: 'docs/content-pipeline.md', heading: 'Content Pipeline Overview', body: 'Hugo builds tutorial markdown into HTML pages then publish-content uploads each slug as gzip BLOBs to HANA.', headingTokens: ['content','pipeline','overview'], bodyTokens: ['hugo','builds','tutorial','markdown','html','pages','then','publish','content','uploads','each','slug','gzip','blobs','hana'] },
+              { id: 'a#0', path: 'docs/developers/architecture/build.md', heading: 'Content Pipeline Overview', body: 'Hugo builds tutorial markdown into HTML pages then publish-content uploads each slug as gzip BLOBs to HANA.', headingTokens: ['content','pipeline','overview'], bodyTokens: ['hugo','builds','tutorial','markdown','html','pages','then','publish','content','uploads','each','slug','gzip','blobs','hana'] },
               { id: 'b#0', path: 'docs/authentication-primer.md', heading: 'XSUAA Auth Flow', body: 'XSUAA mints JWT tokens which the approuter validates before forwarding to the CAP backend.', headingTokens: ['xsuaa','auth','flow'], bodyTokens: ['xsuaa','mints','jwt','tokens','which','approuter','validates','before','forwarding','cap','backend'] },
             ] });
           }

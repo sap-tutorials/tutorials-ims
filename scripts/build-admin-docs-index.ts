@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path';
 
 const SOURCES = [
   'CLAUDE.md',
-  'docs/content-pipeline.md',
+  'docs/developers/architecture/build.md',
   'docs/authentication-primer.md',
   'docs/authentication-architecture.md',
   'docs/developers/operations/mta-deployment.md',

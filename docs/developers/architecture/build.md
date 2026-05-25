@@ -1,4 +1,306 @@
-# Content Pipeline
+---
+title: Build Architecture and Content Pipeline
+description: How tutorial markdown becomes Hugo HTML and lands in HANA — fetch, parse, build, publish.
+---
+
+# Build Architecture and Content Pipeline
+
+> Source: extracted from project README and merged with the former docs/content-pipeline.md, 2026-05-25.
+
+## Build Architecture
+
+How tutorial markdown becomes deployed HTML, and how code becomes deployed apps. Three independent trigger paths share the parser pipeline but write to different targets.
+
+```mermaid
+flowchart TB
+    subgraph sources[Source repositories]
+        ProdRepos["sap-tutorials/*<br/>(public tutorial repos)"]
+        ContribRepos["sap-tutorials/*-Contribution<br/>(in-flight authoring)"]
+        ThisRepo["this repo<br/>(db/, srv/, srv-qa/, app/,<br/>hugo/, hugo-apps/, scripts/)"]
+    end
+
+    subgraph triggers[Build triggers]
+        DeployCI["deploy.yml<br/>(push to main / manual)"]
+        RebuildCI["rebuild-content.yml<br/>(schedule / manual / TUTORIAL_SLUG)"]
+        QaCI["rebuild-content-qa.yml<br/>(repository_dispatch from<br/>any -Contribution repo)"]
+        Local["local dev<br/>(npm run dev / cds watch)"]
+    end
+
+    subgraph fetch[Fetch + parse]
+        FetchProd["scripts/fetch-tutorials.ts<br/>--target hugo<br/>cache: .tutorial-cache/"]
+        FetchQa["scripts/fetch-tutorials.ts<br/>--target hugo --channel qa<br/>cache: .tutorial-cache-qa/"]
+        Parsers["scripts/parsers/<br/>(v1 ACCORDION, v2 H3,<br/>images, options, rules,<br/>sanitize-html)"]
+    end
+
+    subgraph hugoBuild[Hugo render]
+        HugoProd["hugo --minify<br/>→ hugo/public/"]
+        HugoQa["hugo --config hugo.qa.toml<br/>→ hugo/public-qa/"]
+    end
+
+    subgraph apps[App bundles]
+        AdminShell["app/admin-shell<br/>(UI5 + 11 Fiori Elements)"]
+        Analytics["app/analytics-explorer<br/>(Vue 3 + Vite + Monaco)"]
+        Scanner["app/scanner<br/>(UI5)"]
+        Display["app/display-app<br/>(Vue 3 + Vite)"]
+        HugoApps["hugo-apps/<br/>(9 Vue 3 islands)"]
+    end
+
+    subgraph mta[MTA assembly]
+        CdsBuild["cds build --production<br/>→ gen/srv, gen/srv-qa,<br/>gen/db, gen/db-qa"]
+        ApprouterBuild["approuter build<br/>(copies hugo/public + qa<br/>+ admin-ui + analytics-ui<br/>+ scanner-ui into static/)"]
+        Mbt["mbt build<br/>→ mta_archives/<br/>tutorials-poc_*.mtar"]
+    end
+
+    subgraph publish[Content publish]
+        PublishProd["publish-content.ts<br/>delta-aware, gzip,<br/>sha256 hash compare"]
+        PublishQa["publish-content.ts<br/>--channel qa<br/>(always --force)"]
+    end
+
+    subgraph deployed[Deployed targets]
+        SrvDeployed["tutorials-srv +<br/>tutorials-approuter"]
+        SrvQaDeployed["tutorials-srv-qa"]
+        HanaProd[("tutorials-hana<br/>(ContentFiles +<br/>ContentManifest BLOBs)")]
+        HanaQa[("tutorials-hana-qa")]
+        LocalSqlite[("local SQLite<br/>or hybrid HANA<br/>via cds bind")]
+    end
+
+    ProdRepos --> FetchProd
+    ContribRepos --> FetchProd
+    ContribRepos --> FetchQa
+
+    Local --> FetchProd
+    DeployCI --> FetchProd
+    RebuildCI --> FetchProd
+    QaCI --> FetchQa
+
+    FetchProd --> Parsers
+    FetchQa --> Parsers
+    Parsers --> HugoProd
+    Parsers --> HugoQa
+
+    Local --> HugoProd
+    Local -.->|cds watch| LocalSqlite
+
+    ThisRepo --> CdsBuild
+    ThisRepo --> AdminShell
+    ThisRepo --> Analytics
+    ThisRepo --> Scanner
+    ThisRepo --> Display
+    ThisRepo --> HugoApps
+    HugoApps --> HugoProd
+
+    DeployCI --> CdsBuild
+    DeployCI --> AdminShell
+    DeployCI --> Analytics
+    DeployCI --> Scanner
+    DeployCI --> Display
+
+    CdsBuild --> Mbt
+    AdminShell --> ApprouterBuild
+    Analytics --> ApprouterBuild
+    Scanner --> ApprouterBuild
+    HugoProd --> ApprouterBuild
+    HugoQa --> ApprouterBuild
+    ApprouterBuild --> Mbt
+    Display --> Mbt
+
+    Mbt -->|cf deploy| SrvDeployed
+    Mbt -->|cf deploy| SrvQaDeployed
+    Mbt -->|hdb deployer| HanaProd
+    Mbt -->|hdb deployer| HanaQa
+
+    HugoProd --> PublishProd
+    HugoQa --> PublishQa
+    RebuildCI --> PublishProd
+    QaCI --> PublishQa
+    PublishProd -->|"POST /content/publish<br/>(bearer)"| SrvDeployed
+    PublishQa -->|"POST /content/publish<br/>(bearer)"| SrvQaDeployed
+    SrvDeployed -.->|gzip BLOBs| HanaProd
+    SrvQaDeployed -.->|gzip BLOBs| HanaQa
+
+    classDef trigger fill:#fef3e7,stroke:#d97706,color:#92400e
+    class DeployCI,RebuildCI,QaCI,Local trigger
+    classDef target fill:#e7f4ee,stroke:#15803d,color:#14532d
+    class SrvDeployed,SrvQaDeployed,HanaProd,HanaQa,LocalSqlite target
+```
+
+**Notes:**
+
+- **Local dev** uses in-memory SQLite by default (`cds watch`); use `npm run dev:hybrid` for the full stack against real HANA via `cds bind`.
+- **`deploy.yml` does NOT publish content** — it deploys the apps and HDI schemas. The post-deploy step triggers `rebuild-content.yml` to populate HANA. This separation lets content rebuilds run independently of code deploys (a single tutorial fix doesn't require redeploying the srv).
+- **`rebuild-content.yml` honors `TUTORIAL_SLUG`** to bust the cache for one slug and skip the `RepoCatalog` upload — used by author-driven force-refresh.
+- **QA channel** is end-to-end isolated: separate fetch cache (`.tutorial-cache-qa/`), separate Hugo config (`hugo.qa.toml`), separate srv (`tutorials-srv-qa`), separate HDI (`tutorials-hana-qa`), separate API key (`CONTENT_API_KEY_QA`). It never touches prod tables.
+- **VSCode extension preview is in-process** — Hugo binary bundled into `tutorials-srv-qa`'s deploy artifact, shells out per request to render markdown into HTML using `preview-site/` layouts. No content is persisted; tmpdir is cleaned per call.
+
+## Build Pipeline
+
+Two parallel content pipelines feed two HDI containers. Both end at `POST /content/publish` on a CAP srv app — there is no static-file fallback for tutorial HTML.
+
+### Prod pipeline → `tutorials-hana`
+
+```
+sap-tutorials GitHub repos (live discovery via discoverAllTutorials)
+  ↓
+scripts/fetch-tutorials.ts --target hugo            (cached in .tutorial-cache/)
+  ├─ scripts/parsers/*                              parse frontmatter, steps, images, options
+  ├─ fetchRulesVr() → .tutorial-cache/*.rules.vr    quiz data from *-Contribution repos
+  └─ writes hugo/content/tutorials/*.md             (gitignored)
+
+CAP_BASE_URL/build/catalog (unauth)
+  ↓
+hugo/content/missions/*.md, groups/*.md             mission + completion-path pages
+
+build:css   → PostCSS Fundamental Styles → hugo/static/css/sap-fundamental.css
+build:apps  → Vite bundles hugo-apps/ Vue 3 islands → hugo/static/js/*.js
+              (navigator, app-space, event-display, nav-dropdown, scanner-vue,
+               tutorial-feedback, tutorial-rating, cmd-palette, me)
+build:highlight → syntax-highlights .cds samples
+
+build:hugo  → hugo --minify → hugo/public/                       (full site, incl. tutorials/)
+  ↓
+scripts/publish-content.ts                          SHA-256 diff vs GET /content/hashes
+  ↓                                                 gzip → base64 → POST /content/publish
+                                                    (CONTENT_API_KEY bearer; --force to bypass delta)
+CAP srv (tutorials-srv) /content/publish
+  ↓
+ContentFiles + ContentManifest BLOBs in tutorials-hana
+  ↓
+GET /tutorials/{slug}  →  approuter rewrites → /content/tutorials/{slug}
+                          → decompress, ETag, bounded LRU cache (50MB)
+```
+
+> Tutorials are **explicitly removed** from `approuter/static/` during build (`rm -rf approuter/static/tutorials`). Hugo `public/tutorials/*` exists only as the source for `publish-content.ts`.
+
+### QA channel pipeline → `tutorials-hana-qa`
+
+Parallel author-preview track. Sources only `*-Contribution` repos, gated by XSUAA scope `Tutorial.Author`, never touches prod tables.
+
+```
+*-Contribution GitHub repos (ONLY_CONTRIBUTION_REPOS=true)
+  ↓
+fetch-tutorials:qa  → .tutorial-cache-qa/  (.channel marker prevents cross-contamination)
+  ↓
+build:qa  → hugo --config ../hugo.qa.toml → hugo/public-qa/
+              (strips Joule FAB, rating, completion buttons, progress UI)
+  ├─ verify-qa-build.ts  fails the build if QA-only stripping didn't apply
+  ↓
+publish-content:qa  (always --force; CONTENT_API_KEY_QA)
+  ↓
+tutorials-srv-qa /content/publish
+  ↓
+ContentFiles + ContentManifest in tutorials-hana-qa
+  ↓
+GET /tutorials-qa/{slug}  (XSUAA + Tutorial.Author at approuter)
+```
+
+QA srv re-renders tutorials at runtime using `srv-qa/lib/parsers.bundle.mjs`, produced by `prebuild:parsers-bundle` (esbuild ESM bundle of `scripts/parsers/`). This lets the QA srv accept author-pushed markdown without rebuilding Hugo per author.
+
+### Standalone app builds
+
+Each lives in its own subtree and copies a `dist/` (or `webapp/`) into the AppRouter's `static/<route>/` during MTA build:
+
+| Source | Built by | Approuter path |
+| --- | --- | --- |
+| `app/admin-shell/` | `build:admin` | `static/admin-ui/` |
+| `app/analytics-explorer/` | `build:analytics-explorer` | `static/analytics-ui/` |
+| `app/display-app/` | `build:display` | `static/display-app/` |
+| `app/scanner/webapp/` | (UI5 — copied directly) | `static/scanner-ui/` |
+| `hugo-apps/scanner-vue` (island) | `build:apps` | `hugo/static/js/scanner-vue.js` (loaded as `<script>` from Hugo) |
+
+### Build orchestration
+
+`build:all` chains the pieces in order:
+
+```
+prebuild (parsers bundle)
+  → fetch-tutorials --regenerate
+  → build:css → build:apps → build:analytics-explorer
+  → copy-joule-vendor → build:hugo → build:highlight → build:display
+```
+
+Admin shell (`build:admin`) and QA pipeline (`fetch-tutorials:qa` → `build:qa` → `publish-content:qa`) are not in `build:all` — they're run independently or via `qa:full` for the QA loop. Tutorials must be fetched at least once before `dev` or `build:hugo` (otherwise `hugo/content/tutorials/` is empty).
+
+### Parsers (scripts/parsers/)
+
+The fetch step (`scripts/fetch-tutorials.ts`) hands raw markdown + repo metadata to `composeTutorial()` (`compose.ts`), which orchestrates format detection, content transforms, and Hugo frontmatter emission. The same module set is bundled into `srv-qa/lib/parsers.bundle.mjs` (via `prebuild:parsers-bundle`) and re-used at runtime by the QA srv to render author-pushed drafts without re-running Hugo.
+
+#### Format detection
+
+| Parser | Detection | Delimiter |
+| --- | --- | --- |
+| `v2.ts` (current) | `parser: v2` in frontmatter | `###` (H3) headings = step titles |
+| `v1.ts` (legacy) | Default | `[ACCORDION-BEGIN]` / `[ACCORDION-END]` markers |
+
+Both produce the same in-memory `Tutorial` shape (`types.ts`) so downstream consumers don't branch on format.
+
+#### Module map
+
+| File | Role |
+| --- | --- |
+| `compose.ts` | Orchestrator — selects v1/v2, runs transforms, returns the rendered tutorial |
+| `v1.ts` / `v2.ts` | Format-specific step splitters |
+| `frontmatter.ts` | gray-matter wrapper, typed against `TutorialFrontmatter` |
+| `frontmatter-utils.ts` | Tag humanization (preserves SAP/HANA/CAP/BTP/etc. acronyms), prerequisite list splitting |
+| `render-frontmatter.ts` | Emits the YAML frontmatter Hugo consumes (escapes Hugo delimiters, formats tags) |
+| `hugo-delimiters.ts` | Escapes `{{` / `}}` in tutorial source so Hugo doesn't interpret them as templates |
+| `images.ts` | Rewrites relative image paths to `raw.githubusercontent.com` CDN URLs |
+| `image-dimensions.ts` | Extracts width/height (cached on disk) so Hugo can emit `<img>` size attrs and avoid layout shift |
+| `options.ts` | Converts `[OPTION BEGIN]` / `[OPTION END]` blocks into Vue/Hugo shortcodes |
+| `sanitize-html.ts` | Strips unsafe HTML embedded in tutorial source |
+| `rules.ts` | Parses `rules.vr` quiz files (fetched from `*-Contribution` repos) into `ValidationQuestion` objects |
+| `cap.ts` | Fetches mission/group catalog from `CAP_BASE_URL/build/catalog` for mission/group page generation |
+| `github.ts` | `discoverAllTutorials()` + commit metadata; honors `EXCLUDED_REPOS` and `TUTORIAL_SLUG` for single-slug rebuilds |
+| `recommendations.ts` | Computes related-tutorial suggestions from the catalog graph |
+| `types.ts` | Shared TS types (`Tutorial`, `TutorialFrontmatter`, `Step`, `ValidationQuestion`, `TutorialNavEntry`) |
+| `index.ts` | Re-exports for the QA-srv runtime bundle |
+| `discovery-baseline.json` | Snapshot of `discoverAllTutorials()` output — third-tier discovery fallback when GitHub is unreachable |
+
+#### Shared transforms (in compose order)
+
+1. `frontmatter.ts` extracts YAML
+2. v1/v2 splits the body into ordered steps
+3. `images.ts` + `image-dimensions.ts` rewrite + size image references
+4. `options.ts` converts option blocks
+5. `sanitize-html.ts` strips unsafe HTML
+6. `hugo-delimiters.ts` escapes `{{` / `}}`
+7. `rules.ts` injects `ValidationQuestion[]` into the matching steps
+8. `render-frontmatter.ts` emits the Hugo `.md` file
+
+### Cache
+
+Two parallel cache directories — one per channel — back the fetch step. Both are gitignored.
+
+| Path | Channel | Source repos |
+| --- | --- | --- |
+| `.tutorial-cache/` | prod | All `sap-tutorials` repos minus `EXCLUDED_REPOS` |
+| `.tutorial-cache-qa/` | QA | `*-Contribution` repos only (`ONLY_CONTRIBUTION_REPOS=true`) |
+
+`.tutorial-cache-qa/` carries a `.channel` marker file. `npm run dev` warns if the cache content channel doesn't match the build target — switching channels without clearing the cache silently mixes prod and draft content.
+
+#### Cache contents
+
+| Artifact | Purpose | Invalidation |
+| --- | --- | --- |
+| `<slug>.md` | Raw tutorial markdown from GitHub | SHA mismatch via `<slug>.sha` |
+| `<slug>.sha` | SHA-256 of the upstream `.md` for change detection | Replaced on each fetch |
+| `<slug>.rules.vr` | Quiz validation rules (from `*-Contribution` repos via `fetchRulesVr()`) | SHA mismatch |
+| `_discovery.json` | Output of `discoverAllTutorials()` — slug → repo + path map | Per-fetch refresh; falls back to `scripts/parsers/discovery-baseline.json` if GitHub unreachable |
+| `cap-catalog.json` | `CAP_BASE_URL/build/catalog` snapshot (missions, completion paths) | 24h TTL (`CACHE_TTL_MS` in `parsers/cap.ts`) |
+| `github-meta.json` / `github-meta.v2.json` | Commit author + timestamp metadata per slug | Per-fetch (rate-limited; honor `GITHUB_TOKEN`) |
+| `image-dimensions.json` | Width/height for every referenced image (avoids layout shift) | Manual delete only — extraction is expensive |
+| `errors.json` | Fetch error log (per slug, last attempt) | Overwritten per run |
+| `_prod-tut.html` | Captured production HTML used for parser-output comparison | Manual |
+| `quarantine/` | Tutorials that failed validation (`scripts/validate-tutorials.ts`) | Created on demand |
+
+#### Invalidation
+
+- Whole-cache reset: `rm -rf .tutorial-cache/` (or `.tutorial-cache-qa/`) — forces a full re-fetch from GitHub.
+- Single slug: delete `<slug>.md` and `<slug>.sha`. The `rebuild-content.yml` workflow does this when an author dispatches the workflow with the optional `slug` input — it busts that one slug, regenerates the rest from cache, and skips the `RepoCatalog` baseline upload so the partial run doesn't overwrite it.
+- Catalog only: delete `cap-catalog.json` to force a fresh CAP fetch before the 24h TTL expires.
+- Images: delete `image-dimensions.json` only when image references change shape (rare).
+
+## Detailed Content Pipeline
+
 
 Complete flow of tutorial content from GitHub source to end-user delivery, including exception handling, versioning, and tracking.
 

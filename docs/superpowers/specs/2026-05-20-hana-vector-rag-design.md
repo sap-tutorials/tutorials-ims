@@ -264,7 +264,7 @@ If quality regresses or AI Core is unavailable, flipping `ragEnabled` to `false`
 | File | Change |
 |---|---|
 | `docs/joule-chat.md` | New section "Tutorial Grounding (RAG)": how `getRelevantSteps` differs from `searchTutorials`, when the LLM picks each, the four `ChatSettings` fields and what they do, how to enable in DEV/PROD, what "stale embedding" means, troubleshooting (no hits / wrong citations / embeddings missing) |
-| `docs/content-pipeline.md` | Add a step to the end-to-end flow diagram for the post-publish embedding hook + reconciliation. Note that publish stays green even when AI Core is down. |
+| `docs/developers/architecture/build.md` | Add a step to the end-to-end flow diagram for the post-publish embedding hook + reconciliation. Note that publish stays green even when AI Core is down. |
 | `docs/developers/operations/joule-chat-admin-settings.md` (new) | Walkthrough of the new admin UI panel including the Seed button and the stats card |
 | `CLAUDE.md` | Add Gotcha: "RAG is gated by `ChatSettings.ragEnabled`. Cold-start requires a publish OR a manual Seed via admin action — the publish hook only embeds *changed* slugs." Add command pointer for `seedEmbeddings` action via curl for ops use. |
 
