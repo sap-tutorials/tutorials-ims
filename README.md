@@ -148,14 +148,11 @@ tutorials-poc/
 npm install
 npm run fetch-tutorials   # Fetch tutorial markdown from GitHub + CAP catalog
 cds watch                 # Start CAP server (http://localhost:4004)
+npm run dev               # Hugo dev server (separate terminal)
+npm run build:all         # Full production build
 ```
 
-For the full static site build:
-
-```bash
-npm run dev               # Hugo dev server (requires fetch-tutorials first)
-npm run build             # Production build → hugo/public/
-```
+For full setup including hybrid HANA development, environment variables, and the script reference, see [docs/developers/getting-started.md](docs/developers/getting-started.md).
 
 ## Scripts
 
@@ -237,76 +234,17 @@ Full list: `jq '.scripts' package.json`. The most operationally important ones:
 
 ## Environment Variables
 
-Deploy-time variables for the MTA modules (CF env, role collections, secrets) are documented in [.deploy/DEPLOY.md](.deploy/DEPLOY.md). The tables below cover variables commonly set during local dev, CI, and migration.
+Deploy-time variables for the MTA modules (CF env, role collections, secrets) are documented in [.deploy/DEPLOY.md](.deploy/DEPLOY.md). The five most commonly set during local dev:
 
-### Build pipeline (fetch + publish)
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `CAP_BASE_URL` | No (default `http://localhost:4004`) | CAP srv URL — used by the build pipeline, `publish-content`, and migration scripts |
+| `GITHUB_TOKEN` | No | Avoids GitHub API rate limits when fetching tutorial markdown + commit metadata |
+| `CONTENT_API_KEY` | Yes (publish + srv) | Bearer token for `POST /content/publish` and `/content/rollback`; required on the srv to accept publish writes |
+| `SUBMISSION_SALT_SECRET` | Yes (feedback) | IP-hash salt for `/feedback/submit`; bridge returns 503 if missing |
+| `IMS_AUTH_TOKEN` | Yes (migrate) | Bearer token for the legacy Java IMS API during cutover |
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `GITHUB_TOKEN` | No | — | Avoids GitHub API rate limits when fetching tutorial markdown + commit metadata |
-| `TUTORIALS_GITHUB_TOKEN` | No | — | CI-side alias for `GITHUB_TOKEN` (used by `deploy.yml`, `rebuild-content*.yml`) |
-| `CAP_BASE_URL` | No | `http://localhost:4004` | CAP srv URL (build pipeline, `publish-content`, migration scripts) |
-| `CAP_QA_BASE_URL` | No | — | QA-channel CAP srv URL for `publish-content:qa` |
-| `CONTENT_API_KEY` | Yes (publish) | — | Bearer token for `POST /content/publish` and `/content/rollback` |
-| `CONTENT_API_KEY_QA` | Yes (QA publish) | — | Bearer token for QA-channel `/content/publish` |
-| `TUTORIAL_SLUG` | No | — | If set, `fetch-tutorials` busts the cache for that single slug; `rebuild-content.yml` skips the `RepoCatalog` upload |
-| `INCLUDE_CONTRIBUTION_REPOS` | No | `false` | Include `*-Contribution` repos in fetch (prod channel only allows on opt-in) |
-| `ONLY_CONTRIBUTION_REPOS` | No | `false` | QA channel: fetch from `*-Contribution` repos exclusively |
-
-### CAP runtime (srv/)
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `CONTENT_API_KEY` | Yes | — | Required to accept content publish writes; without it `/content/publish` returns 401 |
-| `SUBMISSION_SALT_SECRET` | Yes (feedback) | — | IP-hash salt for `/feedback/submit`; bridge returns 503 if missing |
-| `EXPOSE_CAP_UI` | No | `false` | Enables `/_dev` Swagger UI + CAP index page (DEV/QA only — never set in prod) |
-| `CHAT_MODEL_NAME` | No | — | Override the Joule chat completion model |
-| `SEARCH_RATE_LIMIT_MAX` | No | `60` | Per-IP search request limit per window |
-| `SEARCH_RATE_LIMIT_WINDOW_MS` | No | `60000` | Search rate-limit window in ms |
-| `DASHBOARD_URL` | No | Production URL | Tutorial Dashboard URL injected into notification emails |
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | No | — | SMTP transport for local email testing (e.g., MailHog) |
-
-### Approuter (approuter/)
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `REBUILD_API_KEY` | Yes (rebuild) | — | Bearer token for the approuter live-rebuild webhook |
-| `CAP_BASE_URL` | No (CF: VCAP) | — | CAP srv URL for proxy fallback when running standalone |
-
-### Testing
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `SMOKE_BASE_URL` | Yes (smoke) | — | Approuter URL — `npm run test:smoke` target |
-| `SMOKE_SRV_URL` | Yes (smoke) | — | CAP srv URL — `npm run test:smoke` target |
-| `SMOKE_QA_BASE_URL` / `SMOKE_QA_SRV_URL` / `SMOKE_QA_TOKEN` | Yes (QA smoke) | — | QA-channel smoke-test endpoints + bearer |
-| `SMOKE_ADMIN_TOKEN` | No | — | Bearer for admin-only smoke checks |
-| `SMOKE_TECH_USER` / `SMOKE_TECH_PASSWORD` | No | — | Basic-auth credentials for tech-user smoke flow |
-| `TECH_USERS` / `TECH_USERS_MAPPING` | No | — | Backend tech-user auth config consumed by smoke tests |
-| `A11Y_BASE_URL` | Yes (a11y) | — | Target URL for `npm run test:a11y` |
-| `ALLOW_HYBRID_WRITES` | No | `false` | Hybrid-test write guard — must be `true` to permit INSERT/UPDATE/DELETE |
-
-### QA preview rendering (srv-qa/)
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `PREVIEW_SITE_PATH` | No | bundled | Path to preview-site Hugo project |
-| `PREVIEW_HUGO_BIN` | No | `hugo` | Hugo binary to invoke for preview renders |
-| `PREVIEW_HUGO_ARGS_PREFIX` | No | — | Extra args prepended to every Hugo preview call |
-| `PREVIEW_HUGO_TIMEOUT_MS` | No | — | Per-render timeout |
-| `PREVIEW_MAX_CONCURRENT` | No | — | Max concurrent preview renders |
-| `PREVIEW_QUEUE_TIMEOUT_MS` | No | — | Queue wait timeout before 503 |
-| `SRV_URL_QA` | No | — | QA srv URL passed to preview renderer |
-
-### Migration (legacy IMS cutover)
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `IMS_BASE_URL` | Yes (migrate) | — | Legacy Java IMS approuter URL |
-| `IMS_AUTH_TOKEN` | Yes (migrate) | — | Bearer token for Java IMS API |
-| `IMS_DB_URL` / `IMS_DB_USERNAME` / `IMS_DB_PASSWORD` | Yes (HANA migrate) | — | Direct HANA creds for `migrate:hana` (IMSDBUSER schema) |
-| `IMS_HANA_CREDENTIALS` / `CAP_HANA_CREDENTIALS` | No | — | Alternate JSON-form HANA credentials for migration |
-| `MIGRATION_OUTPUT_DIR` | No | `.migration-data/` | Where migration export files are written |
+For the full list, see [docs/developers/getting-started.md#environment-variables](docs/developers/getting-started.md#environment-variables).
 
 ## Runtime Architecture
 
@@ -354,20 +292,14 @@ See [docs/developers/reference/design-decisions.md](docs/developers/reference/de
 
 ## Documentation
 
-A consolidated documentation site is planned for a later phase. Until then, reference docs live alongside the code in [docs/](docs/):
+The full documentation set lives in [docs/](docs/) and is organized by persona:
 
-| Document | For |
-| -------- | --- |
-| [docs/author-instructions.md](docs/author-instructions.md) | Tutorial authors — frontmatter, step structure, local preview, publish flow |
-| [docs/developers/architecture/build.md](docs/developers/architecture/build.md) | Engineers — full fetch → parse → Hugo → HANA pipeline with timing data |
-| [docs/developers/architecture/authentication.md](docs/developers/architecture/authentication.md) | Engineers — XSUAA / IDP auth flow and component interactions |
-| [docs/developers/operations/ias-setup.md](docs/developers/operations/ias-setup.md) | Operators — IAS migration configuration steps |
-| [docs/historic/ims-api-reference.md](docs/historic/ims-api-reference.md) | Migration — legacy IMS Java API surface for parity reference |
-| [docs/historic/ims-uncovered-features.md](docs/historic/ims-uncovered-features.md) | Migration — IMS features not yet ported to CAP |
-| [docs/historic/hugo-migration.md](docs/historic/hugo-migration.md) | History — VitePress → Hugo migration rationale |
-| [docs/developers/operations/mta-deployment.md](docs/developers/operations/mta-deployment.md) | Operators — MTA build/deploy procedures and troubleshooting |
-| [docs/developers/architecture/joule.md](docs/developers/architecture/joule.md) | Engineers — Joule chat architecture and reference |
-| [docs/developers/reference/ai-consumption.md](docs/developers/reference/ai-consumption.md) | Engineers — AI consumption surfaces |
+- [End Users](docs/end-users/README.md) — finding tutorials, using Joule chat, progress and prizes
+- [Authors](docs/authors/README.md) — writing tutorials, owning a repo group, running an event center
+- [Developers](docs/developers/README.md) — architecture, operations, reference (you're probably here)
+- [Historic](docs/historic/README.md) — AEM, IMS, completed migrations
+
+Start at [docs/README.md](docs/README.md) for the full index.
 
 ## License
 
