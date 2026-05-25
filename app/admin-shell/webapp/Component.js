@@ -23,8 +23,15 @@ sap.ui.define([
     },
 
     _installAuthInterceptor: function () {
-      // When the XSUAA session expires, backend OData calls return 401 and the UI silently breaks.
-      // Detect that and force a page reload so the approuter triggers the OAuth flow.
+      // When the XSUAA session expires, backend calls fail in two distinct ways:
+      //   1. The request returns 401/403 directly (approuter detected the AJAX call).
+      //   2. The approuter sends a 302 to the IDP login page; the browser silently
+      //      follows the redirect chain and the eventual response is 200 OK with an
+      //      HTML login document. The OData parser then fails silently and the
+      //      Fiori app just shows empty data — exactly what users perceive as
+      //      "missing data".
+      // Detect both cases and force a page reload so the approuter restarts the
+      // OAuth flow and the user lands back on the same admin-shell route.
       var BACKEND_PREFIXES = ["/admin/", "/api/", "/scanner/", "/display/", "/build/", "/content/"];
       var bRedirecting = false;
 
@@ -39,6 +46,16 @@ sap.ui.define([
         }
       }
 
+      function looksLikeLoginHtml(sContentType, sFinalUrl, bRedirected) {
+        // 200 + text/html on a backend URL means the approuter swapped the JSON
+        // payload for the IDP login page. response.redirected is true when fetch
+        // followed the 302 chain. Either is a reliable session-expiry signal.
+        if (sContentType && sContentType.toLowerCase().indexOf("text/html") === 0) return true;
+        if (bRedirected) return true;
+        if (sFinalUrl && /\/(saml2|oauth2|login)\b/i.test(sFinalUrl)) return true;
+        return false;
+      }
+
       function handleUnauthorized() {
         if (bRedirecting) return;
         bRedirecting = true;
@@ -51,7 +68,14 @@ sap.ui.define([
       window.fetch = function (input, init) {
         var sUrl = (typeof input === "string") ? input : (input && input.url);
         return fnOriginalFetch.apply(this, arguments).then(function (response) {
-          if ((response.status === 401 || response.status === 403) && isBackendUrl(sUrl)) {
+          if (!isBackendUrl(sUrl)) return response;
+          if (response.status === 401 || response.status === 403) {
+            handleUnauthorized();
+          } else if (response.status === 200 && looksLikeLoginHtml(
+            response.headers && response.headers.get && response.headers.get("content-type"),
+            response.url,
+            response.redirected
+          )) {
             handleUnauthorized();
           }
           return response;
@@ -67,8 +91,20 @@ sap.ui.define([
       XMLHttpRequest.prototype.send = function () {
         var that = this;
         this.addEventListener("load", function () {
-          if ((that.status === 401 || that.status === 403) && isBackendUrl(that.__authUrl)) {
+          if (!isBackendUrl(that.__authUrl)) return;
+          if (that.status === 401 || that.status === 403) {
             handleUnauthorized();
+            return;
+          }
+          if (that.status === 200) {
+            var sContentType = "";
+            try { sContentType = that.getResponseHeader("content-type") || ""; } catch (e) { /* swallow */ }
+            // responseURL reflects the final URL after any redirects the browser followed.
+            var sFinalUrl = that.responseURL || "";
+            var bRedirected = !!sFinalUrl && sFinalUrl !== new URL(that.__authUrl, window.location.origin).href;
+            if (looksLikeLoginHtml(sContentType, sFinalUrl, bRedirected)) {
+              handleUnauthorized();
+            }
           }
         });
         return fnOriginalSend.apply(this, arguments);
