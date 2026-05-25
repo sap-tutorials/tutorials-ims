@@ -1,13 +1,15 @@
 // srv/lib/admin-analytics-schema.js
 // Source names are fully-qualified CDS entity names so the runner's raw CQN
-// resolves to the correct HANA table (COM_SAP_DEVELOPERS_IMS_TASKRECORDS).
+// resolves to the correct HANA table (COM_SAP_DEVELOPERS_IMS_TASKRECORDSANALYTICS).
 // Bare names like 'TaskRecords' fall through to a literal table lookup that
-// fails on HANA's HDI schema.
+// fails on HANA's HDI schema. We target TaskRecordsAnalytics (db/views.cds) —
+// a projection over TaskRecords with discriminated unmanaged associations to
+// Tutorials/Missions/Groups so task-lookup dimensions resolve properly.
 const NS = 'com.sap.developers.ims.';
 export const ANALYTICS_SCHEMA = {
   facts: {
-    completion: { source: NS + 'TaskRecords', baseFilter: { status: 'COMPLETED' } },
-    start:      { source: NS + 'TaskRecords', baseFilter: {} },
+    completion: { source: NS + 'TaskRecordsAnalytics', baseFilter: { status: 'COMPLETED' } },
+    start:      { source: NS + 'TaskRecordsAnalytics', baseFilter: {} },
   },
   dimensions: {
     taskType:        { kind: 'column',            column: 'taskType' },

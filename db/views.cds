@@ -131,6 +131,19 @@ view MyTutorialsView as
         u.uuid        as ownerUserId
   };
 
+// Analytics projection over TaskRecords with discriminated soft-link associations
+// to Tutorials/Missions/Groups. TaskRecords stores content references as a
+// (taskType, taskLegacyId) pair instead of a typed FK, so each unmanaged
+// association embeds the taskType discriminator in its ON clause. Used by
+// AdminService analyticsQuery (srv/lib/admin-analytics-runner.js) to group
+// completions by tutorial.slug / mission.slug / group.title.
+entity TaskRecordsAnalytics as projection on ims.TaskRecords {
+  *,
+  tutorial : Association to ims.Tutorials on tutorial.legacyId = taskLegacyId and taskType = 'TUTORIAL',
+  mission  : Association to ims.Missions  on mission.legacyId  = taskLegacyId and taskType = 'MISSION',
+  group    : Association to ims.Groups    on group.legacyId    = taskLegacyId and taskType = 'GROUP',
+};
+
 entity TutorialFeedbackAggregate as
   select from ims.TutorialFeedback {
     key tutorialSlug,
