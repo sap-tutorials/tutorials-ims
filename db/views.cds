@@ -112,6 +112,25 @@ view ActiveLearnersDaily as
     count(distinct user.ID)  as count      : Integer
   } group by cast(modifiedAt as Date);
 
+view MyTutorialsView as
+  select from ims.Tutorials as t
+    inner join ims.TutorialMeta as m on m.tutorial.ID = t.ID
+    inner join ims.Users        as u on u.email       = m.ownerEmail
+  {
+    key t.ID,
+        t.slug,
+        t.title,
+        t.primaryTag,
+        t.status,
+        m.reviewedDate,
+        m.monitoredStatus,
+        m.notificationNumber,
+        m.lastNotificationDate,
+        m.owner       as ownerName,
+        m.ownerEmail  as ownerEmail,
+        u.uuid        as ownerUserId
+  };
+
 entity TutorialFeedbackAggregate as
   select from ims.TutorialFeedback {
     key tutorialSlug,

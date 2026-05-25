@@ -197,10 +197,11 @@ entity GroupPathItems : cuid, LegacyKeyed {
   itemOrder                 : Integer;
 }
 
-entity TutorialMeta : cuid, LegacyKeyed {
+entity TutorialMeta : cuid, managed, LegacyKeyed {
   tutorial                  : Association to Tutorials;
   reviewedDate              : Timestamp;
   owner                     : String(255);
+  ownerEmail                : String(255);
   monitoredStatus           : String(50);
   notificationNumber        : Integer default 0;
   lastNotificationDate      : Timestamp;

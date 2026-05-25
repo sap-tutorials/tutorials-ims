@@ -142,4 +142,59 @@ describe('content-store TutorialMeta auto-init', () => {
     expect(meta.lastNotificationDate).toBe('2026-05-21T00:00:00.000Z');
     expect(meta.owner).toBe('someone@sap.com');
   });
+
+  it('backfills ownerEmail on republish when existing TutorialMeta has it null', async () => {
+    const tutorialId = cds.utils.uuid();
+    await INSERT.into(Tutorials).entries({
+      ID: tutorialId, slug: 'auto-init-backfill', title: 'Old', status: 'ACTIVE'
+    });
+    await INSERT.into(TutorialMeta).entries({
+      ID: cds.utils.uuid(), tutorial_ID: tutorialId,
+      owner: 'admin@sap.com', monitoredStatus: 'ACTIVE',
+      reviewedDate: '2025-01-01T00:00:00.000Z',
+      notificationNumber: 3,
+      lastNotificationDate: '2026-04-01T00:00:00.000Z',
+      legacyId: 7777
+    });
+
+    const slug = 'auto-init-backfill';
+    await project.axios.post('/content/publish', {
+      trigger: 'test',
+      files: { [slug]: gz('<p>new</p>') },
+      metadata: { [slug]: {
+        slug, title: 'Refreshed', description: '', time: 5, level: 'Beginner',
+        primaryTag: 'Test', stepCount: 0, steps: [],
+        lastUpdated: '2026-05-20T10:00:00Z',
+        primaryContributorEmail: 'backfill-test@example.com'
+      }},
+      bodyTexts: { [slug]: 'new' }
+    }, { headers: { Authorization: `Bearer ${API_KEY}` } });
+
+    const meta = await SELECT.one.from(TutorialMeta).where({ tutorial_ID: tutorialId });
+    expect(meta.ownerEmail).toBe('backfill-test@example.com');
+    expect(meta.owner).toBe('admin@sap.com');
+  });
+
+  it('publish writes ownerEmail (not just owner) when primaryContributorEmail is present', async () => {
+    const slug = 'auto-init-email';
+    const res = await project.axios.post('/content/publish', {
+      trigger: 'test',
+      files: { [slug]: gz('<p>hi</p>') },
+      metadata: {
+        [slug]: {
+          slug, title: 'Auto-init Email', description: '', time: 5, level: 'Beginner',
+          primaryTag: 'Test', stepCount: 1, steps: [{ number: 1, title: 'Step' }],
+          lastUpdated: '2026-05-20T10:00:00Z',
+          primaryContributorEmail: 'fp-test@example.com'
+        }
+      },
+      bodyTexts: { [slug]: 'hi' }
+    }, { headers: { Authorization: `Bearer ${API_KEY}` } });
+
+    expect(res.status).toBe(201);
+    const tut = await SELECT.one.from(Tutorials).where({ slug });
+    const meta = await SELECT.one.from(TutorialMeta).where({ tutorial_ID: tut.ID });
+    expect(meta.ownerEmail).toBe('fp-test@example.com');
+    expect(meta.owner).toBe('fp-test@example.com');
+  });
 });

@@ -232,6 +232,19 @@ cds.on('served', async () => {
     });
   });
 
+  app.get('/health/auth', contextMw, authMw, (req, res) => {
+    if (!req.user || req.user.id === 'anonymous') {
+      return res.status(401).json({ authenticated: false });
+    }
+    const roles = req.user.roles ?? {};
+    res.json({
+      authenticated: true,
+      user: req.user.id,
+      scopes: Object.keys(roles),
+      serverTime: new Date().toISOString()
+    });
+  });
+
   const embeddingsStatsBusiness = async (req, res) => {
     const user = cds.context?.user;
     if (!user?.id || user.id === 'anonymous') {

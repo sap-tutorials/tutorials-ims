@@ -7,6 +7,7 @@ import { embedSlugs } from './lib/embedding-pipeline.js';
 import { randomUUID } from 'node:crypto';
 import { parsePayload, classify, apply, sharedCache, MAX_BYTES } from './lib/tag-import/index.js';
 import { buildCfLogsUrl } from './lib/cf-logs-link.js';
+import { reviewTutorial, snoozeTutorial } from './lib/tutorial-review.js';
 
 export default class AdminService extends cds.ApplicationService {
 
@@ -542,29 +543,21 @@ export default class AdminService extends cds.ApplicationService {
     // --- Tutorial Review & Notification Reset ---
 
     this.on('reviewTutorial', async (req) => {
-      const { TutorialMeta } = cds.entities('com.sap.developers.ims');
-      const { tutorialId } = req.data;
-      const meta = await SELECT.one.from(TutorialMeta).where({ tutorial_ID: tutorialId });
-      if (!meta) return req.reject(404, `TutorialMeta not found for tutorial: ${tutorialId}`);
-
-      const now = new Date().toISOString();
-      await UPDATE(TutorialMeta, meta.ID).set({
-        reviewedDate: now,
-        notificationNumber: 0,
-        lastNotificationDate: null
-      });
-      return { reviewedDate: now, notificationNumber: 0 };
+      try {
+        return await reviewTutorial(req.data.tutorialId);
+      } catch (err) {
+        if (err.code === 404) return req.reject(404, err.message);
+        throw err;
+      }
     });
 
     this.on('snoozeTutorial', async (req) => {
-      const { TutorialMeta } = cds.entities('com.sap.developers.ims');
-      const { tutorialId, days } = req.data;
-      const meta = await SELECT.one.from(TutorialMeta).where({ tutorial_ID: tutorialId });
-      if (!meta) return req.reject(404, `TutorialMeta not found for tutorial: ${tutorialId}`);
-
-      const snoozeUntil = new Date(Date.now() + (days || 30) * 86400000).toISOString();
-      await UPDATE(TutorialMeta, meta.ID).set({ lastNotificationDate: snoozeUntil });
-      return { lastNotificationDate: snoozeUntil, notificationNumber: meta.notificationNumber };
+      try {
+        return await snoozeTutorial(req.data.tutorialId, req.data.days);
+      } catch (err) {
+        if (err.code === 404) return req.reject(404, err.message);
+        throw err;
+      }
     });
 
     this.on('sendContributorNotifications', async (req) => {
