@@ -1,14 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import path from 'node:path';
 import cds from '@sap/cds';
 
-const dbDir = path.join(process.cwd(), 'db');
-
-// Deploy once for all describe blocks in this file.
-// cds.deploy(dbDir) loads schema.cds + views.cds + all other db/ CDS files.
-beforeAll(async () => {
-  await cds.deploy(dbDir).to('sqlite::memory:');
-});
+const project = cds.test('serve', '--project', '.', '--in-memory');
 
 describe('TutorialMeta schema', () => {
   it('exposes ownerEmail column on TutorialMeta', () => {
@@ -65,5 +58,40 @@ describe('MyTutorialsView', () => {
     const { MyTutorialsView } = cds.entities('com.sap.developers.ims');
     const rows = await db.run(SELECT.from(MyTutorialsView).where({ ownerEmail: 'nosuch@example.com' }));
     expect(rows).toHaveLength(0);
+  });
+});
+
+describe('AuthorService surface', () => {
+  it('exposes Tutorials, Tags, MyTutorials read entities and review/snooze actions', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    expect(srv.entities.Tutorials).toBeDefined();
+    expect(srv.entities.Tags).toBeDefined();
+    expect(srv.entities.MyTutorials).toBeDefined();
+    expect(srv.operations.reviewTutorial).toBeDefined();
+    expect(srv.operations.snoozeTutorial).toBeDefined();
+  });
+
+  it('AuthorService.Tutorials is read-only', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const tut = srv.entities.Tutorials;
+    expect(tut['@readonly']).toBe(true);
+  });
+
+  it('denies AuthorService.Tags read for anonymous callers', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    await expect(
+      srv.tx({ user: { id: 'anonymous', roles: {} } }, (tx) =>
+        tx.run(SELECT.from(srv.entities.Tags))
+      )
+    ).rejects.toMatchObject({ code: 403 });
+  });
+
+  it('allows AuthorService.Tags read for Tutorial.Author callers', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const rows = await srv.tx(
+      { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.run(SELECT.from(srv.entities.Tags))
+    );
+    expect(Array.isArray(rows)).toBe(true);
   });
 });
