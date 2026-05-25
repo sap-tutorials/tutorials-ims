@@ -35,14 +35,14 @@ This folder (`docs/historic/`) is intended to grow as other historical documents
 | Old task | Status | Replacement |
 | --- | --- | --- |
 | Administer CircleCI (lint pipeline for `sap-tutorials` org) | Replaced | The Sage VS Code extension provides equivalent linting at author time. The `tutorials-poc` test suite runs in CI via [GitHub Actions](../../.github/workflows/). |
-| `tutorial-checker` repository (CircleCI lint script) | Partially retained | The lint script is no longer run, but `data/repository.owner.json` is still the canonical owner registry — see [repo-group-owners.md § Canonical owner registry](../authors/repo-group-owners.md#canonical-owner-registry). |
+| `tutorial-checker` repository (CircleCI lint script) | Partially retained | The lint script is no longer run, but `data/repository.owner.json` in the `sap-tutorials/tutorial-checker` repo is still the canonical owner registry — see [repo-group-owners.md § Canonical owner registry](../authors/repo-group-owners.md#canonical-owner-registry). |
 
 ## Concept changes
 
 | Old concept | What replaced it |
 | --- | --- |
 | AEM as the frontend for `developers.sap.com/tutorials` | Hugo static site behind an XSUAA-protected AppRouter, content stored in HANA BLOBs and served by CAP. |
-| AEM editorial workflow ("Quick Publish") | GitHub PR merge → repo dispatch → `tutorials-poc` CI → Hugo rebuild → HANA upload (under one minute end-to-end). |
+| AEM editorial workflow ("Quick Publish") | GitHub PR merge → repo dispatch → `tutorials-poc` CI → Hugo rebuild → HANA upload, with no manual publish step. |
 | IMS as the progress-tracking backend | CAP Node.js service (`srv/`) backed by HANA Cloud. |
 | Repository Group Curator (separate persona in old run-book) | Collapsed into Repo Group Owner and Center Admin — the new system has no distinct curator role. |
 
