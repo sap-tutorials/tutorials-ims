@@ -178,15 +178,23 @@ Set `IMS_BASE_URL`, `CAP_BASE_URL`, and `IMS_AUTH_TOKEN` env vars. Export files 
 
 ### Documentation (docs/)
 
-Architecture and reference docs for developers (not deployed). Key entries:
+Architecture and reference docs for developers (not deployed). Organized by persona:
 
-- [docs/pilot-status.md](docs/pilot-status.md) — pilot completion + locked production scope
-- [docs/developers/operations/testing-endpoints.md](docs/developers/operations/testing-endpoints.md) — canonical UI + API endpoint reference (smoke-test targets, auth/scope mapping)
-- [docs/improvements.md](docs/improvements.md) and [docs/TODO.md](docs/TODO.md) — feature backlog and gap tracking (largely historic; mine for descriptions when extending broader docs)
-- [docs/developers/reference/theme-variants.md](docs/developers/reference/theme-variants.md) — building event-specific theme variants (Joule, Sapphire, TechEd)
-- [docs/authors/README.md](docs/authors/README.md) — operational manual for authors, repo group owners, center admins, and analytics admins (replaces `docs/author-instructions.md`)
-- [docs/developers/operations/qa-channel-bootstrap.md](docs/developers/operations/qa-channel-bootstrap.md) — one-time QA author-preview channel setup procedure
-- [docs/developers/architecture/build.md](docs/developers/architecture/build.md), [docs/developers/architecture/authentication.md](docs/developers/architecture/authentication.md), [docs/developers/operations/mta-deployment.md](docs/developers/operations/mta-deployment.md), [docs/historic/hugo-migration.md](docs/historic/hugo-migration.md) — deep-dives
+- [docs/README.md](docs/README.md) — persona index, start here
+- [docs/end-users/README.md](docs/end-users/README.md) — for tutorial consumers
+- [docs/authors/README.md](docs/authors/README.md) — for tutorial authors and event operators
+- [docs/developers/README.md](docs/developers/README.md) — for platform engineers (you)
+- [docs/historic/README.md](docs/historic/README.md) — AEM, IMS, completed migrations
+
+Most-referenced developer docs:
+
+- [docs/developers/getting-started.md](docs/developers/getting-started.md) — local dev setup
+- [docs/developers/operations/testing-endpoints.md](docs/developers/operations/testing-endpoints.md) — UI + API endpoint reference
+- [docs/developers/operations/qa-channel-bootstrap.md](docs/developers/operations/qa-channel-bootstrap.md) — QA author-preview setup
+- [docs/developers/architecture/build.md](docs/developers/architecture/build.md) — content pipeline
+- [docs/developers/architecture/authentication.md](docs/developers/architecture/authentication.md) — auth flow
+- [docs/developers/operations/mta-deployment.md](docs/developers/operations/mta-deployment.md) — deploy runbook
+- [docs/developers/reference/theme-variants.md](docs/developers/reference/theme-variants.md) — building event themes
 
 ### Parsers (scripts/parsers/)
 
