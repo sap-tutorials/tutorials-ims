@@ -10,3 +10,5 @@ COLUMN TABLE com_sap_developers_ims_TutorialMeta (
   lastNotificationDate TIMESTAMP,
   PRIMARY KEY(ID)
 )
+== version=2
+ALTER TABLE com_sap_developers_ims_TutorialMeta ADD (ownerEmail NVARCHAR(255));
