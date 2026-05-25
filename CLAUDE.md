@@ -184,7 +184,7 @@ Architecture and reference docs for developers (not deployed). Key entries:
 - [docs/testing-endpoints.md](docs/testing-endpoints.md) — canonical UI + API endpoint reference (smoke-test targets, auth/scope mapping)
 - [docs/improvements.md](docs/improvements.md) and [docs/TODO.md](docs/TODO.md) — feature backlog and gap tracking (largely historic; mine for descriptions when extending broader docs)
 - [docs/theme-variants.md](docs/theme-variants.md) — building event-specific theme variants (Joule, Sapphire, TechEd)
-- [docs/author-instructions.md](docs/author-instructions.md) — tutorial-author workflow
+- [docs/authors/README.md](docs/authors/README.md) — operational manual for authors, repo group owners, center admins, and analytics admins (replaces `docs/author-instructions.md`)
 - [docs/qa-channel-bootstrap.md](docs/qa-channel-bootstrap.md) — one-time QA author-preview channel setup procedure
 - [docs/content-pipeline.md](docs/content-pipeline.md), [docs/authentication-architecture.md](docs/authentication-architecture.md), [docs/mta-deployment.md](docs/mta-deployment.md), [docs/hugo-migration.md](docs/hugo-migration.md) — deep-dives
 
