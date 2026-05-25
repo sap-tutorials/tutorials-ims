@@ -35,7 +35,7 @@ Operational run-book for the analytics administrator — the role responsible fo
    |---|---|---|
    | `CompletionAnalytics` | Completion analytics | Denormalized view of mission completions per user — one row per user per mission with task-level drill-down columns. Good for completion-rate queries. |
    | `ActiveLearnersDaily` | Active learners (daily) | Daily counts of users who completed at least one task — use for trend charts and event-day dashboards. |
-   | `TaskRecords` | Task records | Raw completion log — one row per user per task with `status`, `completedAt`, and `eventId`. Use for participant-level queries; treat as PII-bearing. |
+   | `TaskRecords` | Task records | Raw completion log — one row per user per task with `status`, `completionDate`, and `event_ID`. Use for participant-level queries; treat as PII-bearing. |
 
    Other exposed entities: `Tasks`, `NavigatorCatalog`, `SearchableItems`, `Users`, `Missions`, `Groups`, `Tutorials`, `Events`, `PrizeRecords`, `AccomplishmentRecords`.
 
@@ -78,9 +78,9 @@ Operational run-book for the analytics administrator — the role responsible fo
    curl -s -X POST \
      -H "Authorization: Bearer <token>" \
      -H "Content-Type: application/json" \
-     -d '{"sql":"SELECT missionId, COUNT(*) AS completions FROM TaskRecords WHERE status='"'"'DONE'"'"' GROUP BY missionId ORDER BY completions DESC"}' \
+     -d '{"sql":"SELECT missionId, COUNT(*) AS completions FROM TaskRecords WHERE status='"'"'COMPLETED'"'"' GROUP BY missionId ORDER BY completions DESC"}' \
      "https://<srv-url>/admin/analytics/runSelectQuery" \
-     | jq -r '["missionId","completions"], (.value.rows[] | [.[0], .[1]]) | @csv'
+     | jq -r '["missionId","completions"], (.rows[] | [.[0], .[1]]) | @csv'
    ```
 
 **Related:** [center-admin.md](center-admin.md) § Review analytics views — for pre-built operational queries.
@@ -113,25 +113,25 @@ Operational run-book for the analytics administrator — the role responsible fo
      "https://<approuter-url>/admin/exports/exportLegacyData?format=csv"
    ```
 
-   The server sets `Content-Disposition` automatically with a timestamped filename. The ZIP contains six CSV files:
+   The server sets `Content-Disposition` automatically with a timestamped filename. The ZIP contains six CSV files. Every filename carries a legacy `IMS_` prefix — a holdover from the predecessor system scheduled for removal; until then the actual filenames are:
 
-   | Sheet / file | Contents |
+   | File | Contents |
    |---|---|
-   | `TASK` | Tutorial / task catalog — titles, slugs, metadata |
-   | `TASK_RECORD` | Per-user completion records — **PII-bearing** (user IDs + timestamps) |
-   | `TASK_TO_PARENT` | Tutorial-to-mission membership mapping |
-   | `COMPLETION_PATH` | Mission / completion-path definitions |
-   | `COMPLETION_PATH_TO_TASK` | Mission-to-tutorial membership mapping |
-   | `STEP_FAILURE` | Step-level quiz failure log |
+   | `IMS_TASK.csv` | Tutorial / task catalog — titles, slugs, metadata |
+   | `IMS_TASK_RECORD.csv` | Per-user completion records — **PII-bearing** (user IDs + timestamps) |
+   | `IMS_TASK_TO_PARENT.csv` | Tutorial-to-mission membership mapping |
+   | `IMS_COMPLETION_PATH.csv` | Mission / completion-path definitions |
+   | `IMS_COMPLETION_PATH_TO_TASK.csv` | Mission-to-tutorial membership mapping |
+   | `IMS_STEP_FAILURE.csv` | Step-level quiz failure log |
 
-3. Download as XLSX (single workbook, same six tables as sheets — convenient for manual review):
+3. Download as XLSX (single workbook, same six tables as sheets named `IMS_TASK`, `IMS_TASK_RECORD`, etc. — convenient for manual review):
    ```bash
    curl -o "export-$(date +%Y%m%d).xlsx" \
      -H "Authorization: Bearer $TOKEN" \
      "https://<approuter-url>/admin/exports/exportLegacyData?format=xlsx"
    ```
 
-4. **GDPR / data-handling notice:** The `TASK_RECORD` and `STEP_FAILURE` files contain user identifiers linked to tutorial completion history. Treat the downloaded archive as confidential personal data. Do not store it outside an approved secure channel and delete it once the purpose is served. If a data-subject erasure request arrives, see [center-admin.md](center-admin.md) § Anonymize a user before re-exporting.
+4. **GDPR / data-handling notice:** The `IMS_TASK_RECORD.csv` and `IMS_STEP_FAILURE.csv` files contain user identifiers linked to tutorial completion history. Treat the downloaded archive as confidential personal data. Do not store it outside an approved secure channel and delete it once the purpose is served. If a data-subject erasure request arrives, see [center-admin.md](center-admin.md) § Anonymize a user before re-exporting.
 
 5. The `ExportsService.exportLegacyData` OData action is deliberately disabled (returns HTTP 501). Use the GET bridge shown above — it is the sole supported download path.
 
@@ -156,14 +156,14 @@ Operational run-book for the analytics administrator — the role responsible fo
 
 1. Open `<approuter-url>/analytics-ui/` and navigate to the **Explore** tab.
 2. Select `ActiveLearnersDaily` to see a running count of participants who have completed at least one task today. Switch **Chart type** to **Line** for a trend view.
-3. For completions-per-minute, run the following in the **SQL** tab (replace `<eventId>` with the active event's ID from `/admin-ui/` → Events):
+3. For completions-per-minute, run the following in the **SQL** tab (replace `<eventId>` with the active event's UUID from `/admin-ui/` → Events):
    ```sql
    SELECT
-     strftime('%H:%M', completedAt) AS minute,
+     TO_CHAR(completionDate, 'HH24:MI') AS minute,
      COUNT(*) AS completions
    FROM TaskRecords
-   WHERE eventId = '<eventId>' AND status = 'DONE'
-   GROUP BY minute
+   WHERE event_ID = '<eventId>' AND status = 'COMPLETED'
+   GROUP BY TO_CHAR(completionDate, 'HH24:MI')
    ORDER BY minute DESC
    ```
 4. Key real-time metrics to watch:
@@ -171,12 +171,12 @@ Operational run-book for the analytics administrator — the role responsible fo
    | Metric | Entity / query | Notes |
    |---|---|---|
    | Active users today | `ActiveLearnersDaily` | Increments as each new user completes their first task |
-   | Completions (total) | `TaskRecords WHERE status='DONE'` | All-time; filter by `eventId` for event scope |
+   | Completions (total) | `TaskRecords WHERE status='COMPLETED'` | All-time; filter by `event_ID` for event scope |
    | Prize claim rate | `PrizeRecords WHERE status='CLAIMED'` | Compare to `PrizeRecords` total for unclaimed prizes |
-   | Step failures | `TaskRecords WHERE status='FAILED'` | Spikes may indicate a broken tutorial step |
+   | Step failures | Export → `IMS_STEP_FAILURE.csv` | `StepFailures` is not exposed in `AnalyticsService`; use `exportLegacyData` to download the full failure log, then filter locally |
 
-5. For the dedicated large-monitor display dashboard (rotating Board / Statistics / Leaderboard views), open `<approuter-url>/display-app/`. This app connects via Socket.IO on the `/ws/display` namespace (`DisplayService`) and receives push updates on every completion event. It does not require the `Admin` scope — it uses the `DisplayApp` scope.
-6. The `EventStreamService` WebSocket namespace (`/ws/event-stream`) broadcasts raw CDS events to any subscriber and can be used for custom integrations. Both namespaces are `authenticationType: none` at the AppRouter level; scope enforcement happens at Socket.IO namespace join. See [testing-endpoints.md](../testing-endpoints.md) for the full route table.
+5. For the dedicated large-monitor display dashboard (rotating Board / Statistics / Leaderboard views), open `<approuter-url>/display-app/`. This app connects via Socket.IO on the `/ws/event-stream` namespace (`EventStreamService`) and receives push updates on every completion event. It does not require the `Admin` scope — it uses the `DisplayApp` scope.
+6. The `EventStreamService` WebSocket namespace (`/ws/event-stream`) broadcasts raw CDS events to any subscriber and can be used for custom integrations. The namespace is `authenticationType: none` at the AppRouter level; scope enforcement happens at Socket.IO namespace join. See [testing-endpoints.md](../testing-endpoints.md) for the full route table.
 7. If the display app shows stale data or the WebSocket disconnects, check `cf logs tutorials-srv --recent` for Socket.IO errors. A rolling restart (`cf restart tutorials-srv`) re-establishes the WebSocket bridge without requiring a redeploy.
 
 **Related:** [center-admin.md](center-admin.md) § Create and activate an Event — for pre-event setup and post-event deactivation.
@@ -188,7 +188,7 @@ Operational run-book for the analytics administrator — the role responsible fo
 | Gap | Status | Notes |
 |---|---|---|
 | Author-facing PowerBI / SAC views | Not available | No direct Power BI or SAP Analytics Cloud connector exists. Use `exportLegacyData` + local tooling as a workaround. |
-| Streaming dashboards beyond DisplayService | Not built | `DisplayService` covers the event-monitor use case. General-purpose streaming analytics (e.g., Apache Kafka, live OData delta links) are not implemented. |
+| Streaming dashboards beyond the display app | Not built | The display app (`EventStreamService` / `/ws/event-stream`) covers the event-monitor use case. General-purpose streaming analytics (e.g., Apache Kafka, live OData delta links) are not implemented. |
 | Saved / named queries in the SQL tab | Not built | Queries are not persisted between sessions. Keep a local notepad or a shared team repo of frequently used SQL snippets. |
 
 ---
@@ -197,4 +197,4 @@ Operational run-book for the analytics administrator — the role responsible fo
 
 - [../historic/decommissioned-tasks.md](../historic/decommissioned-tasks.md) — tasks from the previous run-book that have been retired or replaced
 - [center-admin.md](center-admin.md) — operator-side coordination: event lifecycle, user anonymization, catalog management
-- [../testing-endpoints.md](../testing-endpoints.md) — canonical endpoint reference including DisplayService dashboard routes and auth scopes
+- [../testing-endpoints.md](../testing-endpoints.md) — canonical endpoint reference including display-app dashboard routes and auth scopes
