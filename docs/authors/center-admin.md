@@ -206,7 +206,6 @@ npx cds bind --exec -- node scripts/setup-dev-data.cjs
 **Related:**
 
 - [writing-tutorials.md](writing-tutorials.md) — frontmatter field reference for `primary_tag` and `tags`
-- [author-instructions.md](../author-instructions.md) — author-side tutorial authoring and tagging guidance
 
 ---
 

@@ -196,7 +196,7 @@ git commit -m "docs(authors): redirect author-instructions.md to authors/writing
 - Create: `docs/authors/repo-group-owners.md`
 - Read: `D:/projects/meta-tutorials/run-book/run-book.md` lines 230–256 (Repository Owners section + References)
 - Read: [.github/workflows/rebuild-content.yml](../../../.github/workflows/rebuild-content.yml) — to confirm dispatch wiring details
-- Read: [docs/tutorial-repo-dispatch.yml](../../tutorial-repo-dispatch.yml) — the dispatch workflow that owners drop into their repos
+- Read: [docs/tutorial-repo-dispatch.yml](../../authors/tutorial-repo-dispatch.yml) — the dispatch workflow that owners drop into their repos
 - Verify: `grep -n 'sap-tutorials/tutorial-checker' docs/` — confirm any other docs that reference the owner registry
 
 - [ ] **Step 1: Verify facts before writing**
@@ -248,7 +248,7 @@ If you change role, update this file (Task: Designate or change a repository gro
 - **Purpose and Objective:** When a tutorial PR merges to `main`, trigger a rebuild of the published site so the change goes live within minutes.
 - **Prerequisites:** GitHub admin on the source repo; a `DISPATCH_TOKEN` repo secret obtained from a [Center Admin](center-admin.md).
 
-1. Copy [`docs/tutorial-repo-dispatch.yml`](../tutorial-repo-dispatch.yml) from `tutorials-poc` into your repo at `.github/workflows/tutorial-repo-dispatch.yml`.
+1. Copy [`docs/tutorial-repo-dispatch.yml`](../../authors/tutorial-repo-dispatch.yml) from `tutorials-poc` into your repo at `.github/workflows/tutorial-repo-dispatch.yml`.
 2. In the source repo's Settings → Secrets and variables → Actions, add a secret named `DISPATCH_TOKEN` with the value supplied by the Center Admin.
 3. Commit the workflow file on `main`.
 4. Verify: push a small change (e.g., a typo fix) and watch the `tutorials-poc` repo's Actions tab for a triggered run within ~10 seconds.

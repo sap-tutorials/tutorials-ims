@@ -108,7 +108,6 @@ tutorials-poc/
 │   ├── production-ready.md     #   Go-live checklist
 │   ├── theme-variants.md       #   Building event-specific theme variants (Joule, Sapphire, TechEd)
 │   ├── qa-channel-bootstrap.md #   One-time QA author-preview channel setup
-│   ├── author-instructions.md  #   Tutorial-author workflow
 │   ├── content-pipeline.md     #   Fetch → parse → Hugo → HANA pipeline deep-dive
 │   ├── authentication-architecture.md, mta-deployment.md, hugo-migration.md, ai-consumption.md, …
 │   ├── improvements.md, TODO.md#   Feature backlog and gap tracking (largely historic)
