@@ -1,11 +1,11 @@
 import cds from '@sap/cds';
 import { reviewTutorial, snoozeTutorial } from './lib/tutorial-review.js';
 
-async function assertOwnership(tx, tutorialId, userId) {
+async function assertOwnership(tutorialId, userId) {
   const { MyTutorialsView } = cds.entities('com.sap.developers.ims');
-  const row = await tx.run(
-    SELECT.one.from(MyTutorialsView).columns('ID').where({ ID: tutorialId, ownerUserId: userId })
-  );
+  const row = await SELECT.one.from(MyTutorialsView)
+    .columns('ID')
+    .where({ ID: tutorialId, ownerUserId: userId });
   return !!row;
 }
 
@@ -21,8 +21,7 @@ export default cds.service.impl(async function () {
   this.on('reviewTutorial', async (req) => {
     const userId = req.user?.id;
     const { tutorialId } = req.data;
-    const tx = cds.tx(req);
-    if (!(await assertOwnership(tx, tutorialId, userId))) {
+    if (!(await assertOwnership(tutorialId, userId))) {
       return req.reject(403, 'Not the owner of this tutorial');
     }
     try {
@@ -39,8 +38,7 @@ export default cds.service.impl(async function () {
     if (!Number.isInteger(days) || days < 1 || days > 365) {
       return req.reject(400, 'days must be an integer in [1, 365]');
     }
-    const tx = cds.tx(req);
-    if (!(await assertOwnership(tx, tutorialId, userId))) {
+    if (!(await assertOwnership(tutorialId, userId))) {
       return req.reject(403, 'Not the owner of this tutorial');
     }
     try {
