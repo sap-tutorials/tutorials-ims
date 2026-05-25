@@ -1,19 +1,35 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import '@ui5/webcomponents/dist/Button.js'
 import QueryEditor from './QueryEditor.vue'
 import ChartRenderer from './ChartRenderer.vue'
 import ChartTypeSwitcher from './ChartTypeSwitcher.vue'
 import { useChartConfig } from '../composables/useChartConfig'
+import { getCachedEntityMetadata, type ExposedEntity } from '../api/entities'
 import type { ChartData } from '../composables/useChartEngine'
 
 const chartConfig = useChartConfig()
 const chartData = ref<ChartData | null>(null)
 const showChart = ref(false)
 const lastResults = ref<{ columns: string[]; rows: any[] } | null>(null)
+const entities = ref<ExposedEntity[]>([])
+const entitiesError = ref<string | null>(null)
+const editorRef = ref<InstanceType<typeof QueryEditor> | null>(null)
+
+onMounted(async () => {
+  try { entities.value = await getCachedEntityMetadata() }
+  catch (e: any) { entitiesError.value = e.message }
+})
 
 function onResults(data: { columns: string[]; rows: any[] }) {
   lastResults.value = data
+}
+
+function insertEntity(e: ExposedEntity) {
+  // sqlName is the runtime-correct identifier (HANA physical name on prod,
+  // mixed-case physical name in unit tests). Fall back to the short projection
+  // name if the server didn't populate sqlName for some reason.
+  editorRef.value?.insertText(e.sqlName || e.name)
 }
 
 function visualize() {
@@ -34,17 +50,40 @@ function visualize() {
 
 <template>
   <div class="sql-tab">
-    <div class="editor-section" :class="{ 'with-chart': showChart }">
-      <QueryEditor @results="onResults" />
-      <ui5-button
-        v-if="lastResults"
-        class="visualize-btn"
-        design="Emphasized"
-        icon="chart-table-view"
-        @click="visualize"
-      >
-        Visualize
-      </ui5-button>
+    <div class="main-row">
+      <aside class="entity-list" aria-label="Exposed entities">
+        <div class="entity-list-header">
+          <strong>Exposed entities</strong>
+          <span class="hint">Click to insert</span>
+        </div>
+        <div v-if="entitiesError" class="entity-error">{{ entitiesError }}</div>
+        <ul v-else class="entity-items">
+          <li v-for="e in entities" :key="e.name">
+            <button
+              type="button"
+              class="entity-row"
+              :title="e.columns.map(c => `${c.name}: ${c.type}`).join('\n')"
+              @click="insertEntity(e)"
+            >
+              <span class="entity-label">{{ e.label }}</span>
+              <code class="entity-sqlname">{{ e.sqlName || e.name }}</code>
+              <span class="entity-cols">{{ e.columns.length }} cols</span>
+            </button>
+          </li>
+        </ul>
+      </aside>
+      <div class="editor-section" :class="{ 'with-chart': showChart }">
+        <QueryEditor ref="editorRef" @results="onResults" />
+        <ui5-button
+          v-if="lastResults"
+          class="visualize-btn"
+          design="Emphasized"
+          icon="chart-table-view"
+          @click="visualize"
+        >
+          Visualize
+        </ui5-button>
+      </div>
     </div>
     <div v-if="showChart" class="chart-section">
       <ChartTypeSwitcher v-model="chartConfig.chartType.value" :suggested="chartConfig.suggestedChartType.value" />
@@ -63,6 +102,74 @@ function visualize() {
   display: flex;
   flex-direction: column;
   height: 100%;
+}
+.main-row {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.entity-list {
+  width: 18rem;
+  flex-shrink: 0;
+  border-right: 1px solid var(--sapField_BorderColor);
+  overflow-y: auto;
+  padding: 0.5rem;
+  background: var(--sapList_Background);
+}
+.entity-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0.25rem 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--sapField_BorderColor);
+  margin-bottom: 0.25rem;
+}
+.entity-list-header .hint {
+  color: var(--sapNeutralTextColor);
+  font-size: 0.75rem;
+}
+.entity-items {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.entity-row {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 0.4rem 0.5rem;
+  cursor: pointer;
+  border-radius: 4px;
+  color: inherit;
+  font-family: inherit;
+}
+.entity-row:hover {
+  background: var(--sapList_Hover_Background);
+  border-color: var(--sapField_BorderColor);
+}
+.entity-label {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.entity-sqlname {
+  font-family: var(--sapContent_MonospaceFontFamily, monospace);
+  font-size: 0.72rem;
+  color: var(--sapNeutralTextColor);
+  word-break: break-all;
+  margin-top: 0.1rem;
+}
+.entity-cols {
+  font-size: 0.7rem;
+  color: var(--sapNeutralTextColor);
+  margin-top: 0.1rem;
+}
+.entity-error {
+  color: var(--sapErrorColor);
+  font-size: 0.8rem;
+  padding: 0.5rem 0.25rem;
 }
 .editor-section {
   flex: 1;

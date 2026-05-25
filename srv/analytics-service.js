@@ -58,10 +58,18 @@ export default class AnalyticsService extends cds.ApplicationService {
     }
 
     this.on('listExposedEntities', () => {
+      // The SQL tab needs the name that actually executes at runtime. On HANA
+      // the HDI container exposes the upper-case physical name (e.g.
+      // COM_SAP_DEVELOPERS_IMS_TASKRECORDS); the short projection name fails
+      // resolution. SQLite (unit tests) uses the mixed-case physical name.
+      const isHana = cds.db && cds.db.kind === 'hana'
       const out = []
       for (const { def, projection, projectionName } of getExposedEntries()) {
+        const hanaName = def.name.replace(/\./g, '_').toUpperCase()
+        const sqliteName = def.name.replace(/\./g, '_')
         out.push({
           name: projectionName,
+          sqlName: isHana ? hanaName : sqliteName,
           label: def['@analytics.label'] || projectionName,
           description: def.doc || '',
           columns: Object.entries(projection.elements)

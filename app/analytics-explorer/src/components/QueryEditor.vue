@@ -56,6 +56,20 @@ async function run() {
     status.value = `${res.metadata.rowCount} rows in ${res.metadata.durationMs}ms${res.metadata.truncated ? ' (truncated)' : ''}`
   } catch (e: any) { status.value = e.message }
 }
+
+// Imperative insert at the current cursor position. Used by the entity sidebar
+// in SqlTab so clicking an entity drops its SQL name into the editor.
+function insertText(text: string) {
+  if (!editor) return
+  const selection = editor.getSelection()
+  const range = selection
+    ? selection
+    : { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 1 }
+  editor.executeEdits('entity-insert', [{ range, text, forceMoveMarkers: true }])
+  editor.focus()
+}
+
+defineExpose({ insertText })
 </script>
 
 <template>

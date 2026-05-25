@@ -1,5 +1,5 @@
 export interface ExposedColumn { name: string; type: string; nullable: boolean; length: number | null }
-export interface ExposedEntity { name: string; label: string; description: string; columns: ExposedColumn[] }
+export interface ExposedEntity { name: string; sqlName?: string; label: string; description: string; columns: ExposedColumn[] }
 
 let cache: Promise<ExposedEntity[]> | null = null
 

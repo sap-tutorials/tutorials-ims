@@ -21,6 +21,7 @@ service AnalyticsService @(path : '/admin/analytics') {
 
   function listExposedEntities() returns array of {
     name        : String;
+    sqlName     : String;
     label       : String;
     description : String;
     columns     : array of {
