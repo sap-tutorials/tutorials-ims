@@ -146,3 +146,50 @@ describe('AuthorService.MyTutorials filtering', () => {
     expect(bobRows.map((r) => r.status)).toEqual(['DRAFT']);
   });
 });
+
+describe('AuthorService.reviewTutorial/snoozeTutorial', () => {
+  it('reviewTutorial succeeds when caller owns the tutorial', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const result = await srv.tx(
+      { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.send('reviewTutorial', { tutorialId: 't-1' })
+    );
+    expect(result.notificationNumber).toBe(0);
+    expect(result.reviewedDate).toBeDefined();
+  });
+
+  it('reviewTutorial returns 403 when caller does not own the tutorial', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    await expect(
+      srv.tx(
+        { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+        (tx) => tx.send('reviewTutorial', { tutorialId: 't-2' /* bob's */ })
+      )
+    ).rejects.toMatchObject({ code: 403 });
+  });
+
+  it('snoozeTutorial accepts days in [1, 365]', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const ok = await srv.tx(
+      { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.send('snoozeTutorial', { tutorialId: 't-1', days: 30 })
+    );
+    expect(ok.lastNotificationDate).toBeDefined();
+  });
+
+  it('snoozeTutorial rejects out-of-range days', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    await expect(
+      srv.tx(
+        { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+        (tx) => tx.send('snoozeTutorial', { tutorialId: 't-1', days: 999 })
+      )
+    ).rejects.toMatchObject({ code: 400 });
+    await expect(
+      srv.tx(
+        { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+        (tx) => tx.send('snoozeTutorial', { tutorialId: 't-1', days: 0 })
+      )
+    ).rejects.toMatchObject({ code: 400 });
+  });
+});
