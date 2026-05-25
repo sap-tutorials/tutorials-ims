@@ -12,7 +12,19 @@ annotate AdminService.Tutorials with @odata.draft.enabled;
 // --- Events ---
 annotate AdminService.Events with {
   legacyId  @Common.Label: 'Event ID';
-  name      @Common.Label: 'Name';
+  name      @Common.Label: 'Name'
+            // Self-referential value help on the SelectionFields filter so users
+            // pick from existing event names instead of typing free-form. The
+            // legacyId + startDate display-only columns disambiguate events that
+            // share a base name across years (e.g. multiple "TechEd" rows).
+            @Common.ValueList: {
+              CollectionPath: 'Events',
+              Parameters: [
+                { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: name, ValueListProperty: 'name' },
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'legacyId' },
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'startDate' }
+              ]
+            };
   startDate @Common.Label: 'Start Date';
   endDate   @Common.Label: 'End Date';
   timeZone  @Common.Label: 'Time Zone'
@@ -105,6 +117,16 @@ annotate AdminService.Missions with @UI: {
 };
 
 annotate AdminService.Missions with {
+  // Self-VH on the SelectionFields filter so admins pick from existing missions
+  // by title (slug + legacyId disambiguate when titles repeat across years).
+  title @Common.ValueList: {
+    CollectionPath: 'Missions',
+    Parameters: [
+      { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: title, ValueListProperty: 'title' },
+      { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'slug' },
+      { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'legacyId' }
+    ]
+  };
   primaryTagRef @Common.ValueList: {
     CollectionPath: 'Tags',
     Parameters: [
@@ -278,6 +300,15 @@ annotate AdminService.Groups with @UI: {
 };
 
 annotate AdminService.Groups with {
+  // Self-VH on the SelectionFields filter so admins pick from existing groups
+  // by title; legacyId disambiguates duplicates.
+  title @Common.ValueList: {
+    CollectionPath: 'Groups',
+    Parameters: [
+      { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: title, ValueListProperty: 'title' },
+      { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'legacyId' }
+    ]
+  };
   primaryTagRef @Common.ValueList: {
     CollectionPath: 'Tags',
     Parameters: [
@@ -358,7 +389,14 @@ annotate AdminService.MissionTags with @UI: {
 // --- Accomplishments ---
 annotate AdminService.Accomplishments with {
   legacyId    @Common.Label: 'ID';
-  name        @Common.Label: 'Name';
+  name        @Common.Label: 'Name'
+              @Common.ValueList: {
+                CollectionPath: 'Accomplishments',
+                Parameters: [
+                  { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: name, ValueListProperty: 'name' },
+                  { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'legacyId' }
+                ]
+              };
   description @Common.Label: 'Description';
   rule        @Common.Label: 'Rule (JSON)';
 };
@@ -394,7 +432,16 @@ annotate AdminService.Accomplishments with {
 annotate AdminService.Prizes with {
   legacyId @Common.Label: 'ID';
   name     @Common.Label: 'Name';
-  event    @Common.Label: 'Event';
+  event    @Common.Label: 'Event'
+           @Common.ValueList: {
+             CollectionPath: 'Events',
+             Parameters: [
+               { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: event_ID, ValueListProperty: 'ID' },
+               { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'name' },
+               { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'legacyId' },
+               { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'startDate' }
+             ]
+           };
 };
 
 annotate AdminService.Prizes with @UI: {
@@ -420,9 +467,26 @@ annotate AdminService.Prizes with @UI: {
 // --- Tutorials (source content from GitHub; Lifecycle fields admin-editable) ---
 annotate AdminService.Tutorials with {
   legacyId              @Common.Label: 'Tutorial ID' @Common.FieldControl: #ReadOnly;
-  title                 @Common.Label: 'Title'       @Common.FieldControl: #ReadOnly;
+  title                 @Common.Label: 'Title'       @Common.FieldControl: #ReadOnly
+                        @Common.ValueList: {
+                          CollectionPath: 'Tutorials',
+                          Parameters: [
+                            { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: title, ValueListProperty: 'title' },
+                            { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'slug' },
+                            { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'primaryTag' },
+                            { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'legacyId' }
+                          ]
+                        };
   slug                  @Common.Label: 'Slug'        @Common.FieldControl: #ReadOnly;
-  primaryTag            @Common.Label: 'Primary Tag' @Common.FieldControl: #ReadOnly;
+  primaryTag            @Common.Label: 'Primary Tag' @Common.FieldControl: #ReadOnly
+                        @Common.ValueList: {
+                          CollectionPath: 'Tags',
+                          Parameters: [
+                            { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: primaryTag, ValueListProperty: 'name' },
+                            { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'titlePath' },
+                            { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'legacyId' }
+                          ]
+                        };
   experienceTag         @Common.Label: 'Experience'  @Common.ValueListWithFixedValues @Common.FieldControl: #ReadOnly;
   averageTimeToComplete @Common.Label: 'Avg Time (min)' @Common.FieldControl: #ReadOnly;
   status                @Common.Label: 'Status'  @Common.ValueListWithFixedValues;
@@ -500,7 +564,15 @@ annotate AdminService.TutorialPickList with @(
 // --- Tags (read-only) ---
 annotate AdminService.Tags with {
   legacyId  @Common.Label: 'ID';
-  name      @Common.Label: 'Name';
+  name      @Common.Label: 'Name'
+            @Common.ValueList: {
+              CollectionPath: 'Tags',
+              Parameters: [
+                { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: name, ValueListProperty: 'name' },
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'titlePath' },
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'legacyId' }
+              ]
+            };
   titlePath @Common.Label: 'Full Path';
   mdFormat  @Common.Label: 'MD Format';
 };
@@ -1023,6 +1095,18 @@ annotate AdminService.ChatSettings with @(
   embeddingModel     @Common.Label: 'Embedding Model';
   embeddingTopK      @Common.Label: 'Top K Steps';
   embeddingMinScore  @Common.Label: 'Min Similarity Score';
+};
+
+annotate AdminService.TutorialFeedback with {
+  tutorialSlug @Common.Label: 'Tutorial'
+               @Common.ValueList: {
+                 CollectionPath: 'Tutorials',
+                 Parameters: [
+                   { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: tutorialSlug, ValueListProperty: 'slug' },
+                   { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'title' },
+                   { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'primaryTag' }
+                 ]
+               };
 };
 
 annotate AdminService.TutorialFeedback with @(
