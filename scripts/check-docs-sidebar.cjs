@@ -23,9 +23,14 @@ function loadConfig() {
     process.exit(1);
   }
   // Use VitePress's own TS compilation path. tsx is a dev dep already.
-  require('tsx/cjs');
-  const mod = require(ts);
-  return mod.default || mod;
+  try {
+    require('tsx/cjs');
+    const mod = require(ts);
+    return mod.default || mod;
+  } catch (err) {
+    console.error(`Failed to load VitePress config at ${ts}: ${err && err.message ? err.message : err}`);
+    process.exit(1);
+  }
 }
 
 function globMatch(rel, pattern) {
@@ -72,7 +77,7 @@ function pageToLink(rel) {
 function linkToPage(link) {
   // /end-users/ -> end-users/README.md
   // /end-users/getting-started -> end-users/getting-started.md
-  let rel = link.replace(/^\//, '');
+  let rel = link.replace(/^\//, '').replace(/[#?].*$/, '');
   if (rel === '' || rel.endsWith('/')) rel += 'README';
   return rel + '.md';
 }

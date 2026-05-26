@@ -14,6 +14,7 @@ function fixture() {
   mkdirSync(join(docs, '.vitepress'), { recursive: true });
   mkdirSync(join(docs, 'end-users'), { recursive: true });
   mkdirSync(join(docs, 'authors'), { recursive: true });
+  mkdirSync(join(docs, 'developers'), { recursive: true });
   return { root, docs };
 }
 
@@ -51,7 +52,7 @@ describe('scripts/check-docs-sidebar.cjs', () => {
       ]}]
     });
     const out = run(root);
-    expect(out).toMatch(/ok/i);
+    expect(out).toMatch(/check-docs-sidebar: ok/);
   });
 
   it('fails listing unregistered pages', () => {
@@ -84,12 +85,30 @@ describe('scripts/check-docs-sidebar.cjs', () => {
     }
   });
 
-  it('honors srcExclude — excluded pages do not need to be in the sidebar', () => {
+  it('honors srcExclude — excluded pages inside a persona do not need to be in the sidebar', () => {
     writePage(docs, 'end-users/README.md');
-    writePage(docs, 'superpowers/secret.md');
-    const cfg = { themeConfig: { sidebar: { '/end-users/': [{ items: [{ text: 'Overview', link: '/end-users/' }]}] } }, srcExclude: ['superpowers/**'] };
+    writePage(docs, 'developers/private/secret.md');
+    const cfg = {
+      themeConfig: { sidebar: { '/end-users/': [{ items: [{ text: 'Overview', link: '/end-users/' }]}] } },
+      srcExclude: ['developers/private/**']
+    };
     writeFileSync(join(docs, '.vitepress', 'config.cjs'), `module.exports = ${JSON.stringify(cfg)};\n`);
     const out = run(root);
-    expect(out).toMatch(/ok/i);
+    expect(out).toMatch(/check-docs-sidebar: ok/);
+  });
+
+  it('without srcExclude, an unregistered persona page is reported', () => {
+    writePage(docs, 'end-users/README.md');
+    writePage(docs, 'developers/private/secret.md');
+    const cfg = {
+      themeConfig: { sidebar: { '/end-users/': [{ items: [{ text: 'Overview', link: '/end-users/' }]}] } }
+    };
+    writeFileSync(join(docs, '.vitepress', 'config.cjs'), `module.exports = ${JSON.stringify(cfg)};\n`);
+    try {
+      run(root); throw new Error('expected non-zero exit');
+    } catch (err) {
+      expect(err.status).not.toBe(0);
+      expect(String(err.stdout || err.stderr || '')).toMatch(/developers\/private\/secret/);
+    }
   });
 });
