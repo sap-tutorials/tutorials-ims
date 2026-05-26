@@ -266,6 +266,25 @@ Both produce the same in-memory `Tutorial` shape (`types.ts`) so downstream cons
 7. `rules.ts` injects `ValidationQuestion[]` into the matching steps
 8. `render-frontmatter.ts` emits the Hugo `.md` file
 
+### Navigator Catalog (`GET /build/navigator`)
+
+The navigator endpoint exposes tutorial reachability via three independent data paths, allowing front-ends to surface tutorials through missions, groups, or as standalone learnings.
+
+| Data Path | Source | Mapping |
+| --- | --- | --- |
+| **Mission tutorials** | `NavigatorCatalog` SQL view + Mission `CompletionPathItems` where `taskType='TUTORIAL'` | Direct tutorial references inside mission completion paths |
+| **Nested group tutorials** | Mission `CompletionPathItems` where `taskType='GROUP'` (JS-side expansion) | Handler expands nested Groups, pairs each tutorial with its parent mission + group |
+| **Standalone groups** | `Groups.published=true` with no Mission link + `GroupPathItems` (JS-side scan) | Tutorials reachable through published Groups without a mission parent; emitted as `(group, tutorial)` pairs with `missionId=null` |
+
+Response shape (top-level fields):
+
+- **`missions[]`** — mission summary refs (existing)
+- **`groups[]`** — Group refs including standalone published Groups
+- **`tutorialMappings[]`** — array of `{ slug, missionId, missionTitle, missionSlug, groupId, groupTitle, groupSlug, order }` tuples (nullable mission fields for standalone tutorials)
+- **`checkpointMappings[]`** — NEW — array of `{ title, missionId, missionTitle, missionSlug, pathId, pathSlug, itemOrder }` milestone markers from `CompletionPathItems` where `taskType='CHECKPOINT'` (currently consumer-side TODO for rendering)
+
+Handler: [srv/lib/navigator-catalog.js](../../../srv/lib/navigator-catalog.js) — in-memory cache (5-minute TTL, auto-invalidated on AdminService writes to Missions, Groups, or CompletionPath* entities).
+
 ### Cache
 
 Two parallel cache directories — one per channel — back the fetch step. Both are gitignored.
