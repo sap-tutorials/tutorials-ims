@@ -10,22 +10,22 @@ service AdminService {
   entity Users as projection on ims.Users;
   @cds.redirection.target: true
   @Capabilities.ChangeTracking : { Supported: true }
-  entity Tutorials as projection on ims.Tutorials;
+  entity Tutorials as projection on ims.Tutorials { *, cast(legacyId as String) as legacyIdStr : String };
   // Filtered picklist for redirectTo value help — only ACTIVE tutorials can be redirect targets
   @readonly
   @cds.redirection.target: false
   entity TutorialPickList as projection on ims.Tutorials {
-    ID, legacyId, title, slug, primaryTag
+    ID, legacyId, cast(legacyId as String) as legacyIdStr : String, title, slug, primaryTag
   } where status = 'ACTIVE' or status is null;
-  entity Missions as projection on ims.Missions { *, virtual null as publishedFieldControl : Integer };
-  entity Groups as projection on ims.Groups { *, virtual null as publishedFieldControl : Integer };
+  entity Missions as projection on ims.Missions { *, virtual null as publishedFieldControl : Integer, cast(legacyId as String) as legacyIdStr : String };
+  entity Groups as projection on ims.Groups { *, virtual null as publishedFieldControl : Integer, cast(legacyId as String) as legacyIdStr : String };
   entity Steps as projection on ims.Steps;
-  entity Events as projection on ims.Events;
-  entity Prizes as projection on ims.Prizes;
+  entity Events as projection on ims.Events { *, cast(legacyId as String) as legacyIdStr : String };
+  entity Prizes as projection on ims.Prizes { *, cast(legacyId as String) as legacyIdStr : String };
   entity PrizeRecords as projection on ims.PrizeRecords;
   @Capabilities.ChangeTracking : { Supported: true }
-  entity Tags as projection on ims.Tags;
-  entity Accomplishments as projection on ims.Accomplishments;
+  entity Tags as projection on ims.Tags { *, cast(legacyId as String) as legacyIdStr : String };
+  entity Accomplishments as projection on ims.Accomplishments { *, cast(legacyId as String) as legacyIdStr : String };
   entity AccomplishmentRecords as projection on ims.AccomplishmentRecords;
   entity TaskRecords as projection on ims.TaskRecords;
   entity TutorialMeta as projection on ims.TutorialMeta;
