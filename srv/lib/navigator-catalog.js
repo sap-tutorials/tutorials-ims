@@ -12,7 +12,7 @@ export async function navigatorCatalogHandler(req, res) {
     return res.json(cachedResponse);
   }
 
-  const { NavigatorCatalog } = cds.entities('com.sap.developers.ims');
+  const { NavigatorCatalog, Groups, GroupPathItems, Tutorials, CompletionPathItems } = cds.entities('com.sap.developers.ims');
 
   try {
     const rows = await SELECT.from(NavigatorCatalog).orderBy('missionId', 'pathId', 'itemOrder');
@@ -59,6 +59,54 @@ export async function navigatorCatalogHandler(req, res) {
           groupSlug: isFlat ? undefined : pathData.pathSlug,
           prev: i > 0 ? pathData.slugs[i - 1] : null,
           next: i < pathData.slugs.length - 1 ? pathData.slugs[i + 1] : null,
+        });
+      }
+    }
+
+    // Surface standalone published Groups (not nested inside any Mission's CompletionPath)
+    const allGroupRows = await SELECT.from(Groups)
+      .columns('ID', 'legacyId', 'title', 'status')
+      .where({ published: true });
+    const groupRows = allGroupRows.filter(g => g.status === 'ACTIVE' || g.status === null || g.status === undefined);
+
+    const gpiRows = groupRows.length
+      ? await SELECT.from(GroupPathItems)
+          .columns('group_ID', 'itemOrder', 'tutorial_ID')
+          .where({ group_ID: { in: groupRows.map(g => g.ID) } })
+          .orderBy('group_ID', 'itemOrder')
+      : [];
+
+    const tutorialIds = [...new Set(gpiRows.map(r => r.tutorial_ID))];
+    const tuts = tutorialIds.length
+      ? await SELECT.from(Tutorials).columns('ID', 'legacyId', 'slug', 'title').where({ ID: { in: tutorialIds } })
+      : [];
+    const tutById = new Map(tuts.map(t => [t.ID, t]));
+
+    const nestedGroupRefs = await SELECT.from(CompletionPathItems)
+      .columns('group_ID')
+      .where({ taskType: 'GROUP', group_ID: { '!=': null } });
+    const nestedGroupRefIds = new Set();
+    for (const r of nestedGroupRefs) if (r.group_ID) nestedGroupRefIds.add(r.group_ID);
+
+    const standaloneGroups = groupRows.filter(g => !nestedGroupRefIds.has(g.ID));
+
+    for (const g of standaloneGroups) {
+      const groupSlug = String(g.legacyId);
+      groupRefs.push({ id: g.legacyId, title: g.title, slug: groupSlug });
+
+      const items = gpiRows.filter(r => r.group_ID === g.ID);
+      const slugs = items
+        .map(r => tutById.get(r.tutorial_ID)?.slug)
+        .filter(Boolean);
+
+      for (let i = 0; i < slugs.length; i++) {
+        tutorialMappings.push({
+          slug: slugs[i],
+          groupId: g.legacyId,
+          groupTitle: g.title,
+          groupSlug,
+          prev: i > 0 ? slugs[i - 1] : null,
+          next: i < slugs.length - 1 ? slugs[i + 1] : null,
         });
       }
     }
