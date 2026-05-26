@@ -8,9 +8,8 @@ const HYB_GROUP_ID  = 'cccccccc-9999-0000-0000-000000000001';
 const HYB_TUT_ID    = 'cccccccc-9999-0000-0000-000000000011';
 const HYB_GPI_ID    = 'cccccccc-9999-0000-0000-000000000021';
 
-describe('navigator: standalone Group surfaces on HANA', () => {
+describe.skipIf(process.env.ALLOW_HYBRID_WRITES !== 'true')('navigator: standalone Group surfaces on HANA', () => {
   beforeAll(async () => {
-    if (process.env.ALLOW_HYBRID_WRITES !== 'true') return;
     const { Tags, Groups, Tutorials, GroupPathItems } = cds.entities('com.sap.developers.ims');
     // Pre-clean: protect against legacyId collisions from prior aborted runs.
     // __TEST__ prefix protects names but not legacyIds; HANA sequence-backed IDs
@@ -37,7 +36,6 @@ describe('navigator: standalone Group surfaces on HANA', () => {
   });
 
   afterAll(async () => {
-    if (process.env.ALLOW_HYBRID_WRITES !== 'true') return;
     const { Tags, Groups, Tutorials, GroupPathItems } = cds.entities('com.sap.developers.ims');
     await DELETE.from(GroupPathItems).where({ ID: HYB_GPI_ID });
     await DELETE.from(Groups).where({ ID: HYB_GROUP_ID });
@@ -46,9 +44,6 @@ describe('navigator: standalone Group surfaces on HANA', () => {
   });
 
   it('returns the test Group on /build/navigator (HANA)', async () => {
-    if (process.env.ALLOW_HYBRID_WRITES !== 'true') {
-      return;
-    }
     const res = await fetch('http://localhost:4004/build/navigator?nocache=1');
     expect(res.status).toBe(200);
     const data = await res.json();
