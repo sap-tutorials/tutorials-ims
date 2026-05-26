@@ -12,7 +12,7 @@ export async function navigatorCatalogHandler(req, res) {
     return res.json(cachedResponse);
   }
 
-  const { NavigatorCatalog, Groups, GroupPathItems, Tutorials, CompletionPathItems } = cds.entities('com.sap.developers.ims');
+  const { NavigatorCatalog, Groups, GroupPathItems, Tutorials, CompletionPathItems, CompletionPaths, Missions } = cds.entities('com.sap.developers.ims');
 
   try {
     const rows = await SELECT.from(NavigatorCatalog).orderBy('missionId', 'pathId', 'itemOrder');
@@ -104,6 +104,72 @@ export async function navigatorCatalogHandler(req, res) {
           slug: slugs[i],
           groupId: g.legacyId,
           groupTitle: g.title,
+          groupSlug,
+          prev: i > 0 ? slugs[i - 1] : null,
+          next: i < slugs.length - 1 ? slugs[i + 1] : null,
+        });
+      }
+    }
+
+    // Nested Groups: a Mission's CompletionPath can contain a CompletionPathItem with
+    // taskType='GROUP'. The NavigatorCatalog view filters those out (taskType='TUTORIAL'
+    // only), so tutorials reachable through such a Group never receive a groupId tag.
+    // We re-query the GROUP items, resolve their Mission, and emit one tutorialMapping
+    // per (mission, group, tutorial) tuple plus a single groupRefs entry per group.
+    //
+    // Disjointness invariant with standaloneGroups (Task 2): a Group ID appears EITHER
+    // in standaloneGroups (filtered above by `g => !nestedGroupRefIds.has(g.ID)`) OR is
+    // reached via this nested loop — never both. Removing that filter would silently
+    // produce duplicate groups[] entries.
+    const nestedGroupItems = await SELECT.from(CompletionPathItems)
+      .columns('ID', 'path_ID', 'group_ID', 'itemOrder', 'taskType')
+      .where({ taskType: 'GROUP', group_ID: { '!=': null } })
+      .orderBy('path_ID', 'itemOrder');
+
+    const pathIds = [...new Set(nestedGroupItems.map(i => i.path_ID))];
+    const paths = pathIds.length
+      ? await SELECT.from(CompletionPaths).columns('ID', 'legacyId', 'name', 'slug', 'mission_ID').where({ ID: { in: pathIds } })
+      : [];
+    const pathById = new Map(paths.map(p => [p.ID, p]));
+
+    const missionIds = [...new Set(paths.map(p => p.mission_ID).filter(Boolean))];
+    const missions = missionIds.length
+      ? await SELECT.from(Missions).columns('ID', 'legacyId', 'title', 'slug', 'published').where({ ID: { in: missionIds }, published: true })
+      : [];
+    const missionById = new Map(missions.map(m => [m.ID, m]));
+
+    for (const item of nestedGroupItems) {
+      const path = pathById.get(item.path_ID);
+      if (!path) continue;
+      const mission = missionById.get(path.mission_ID);
+      if (!mission) continue;
+      const group = groupRows.find(g => g.ID === item.group_ID);
+      if (!group) continue;
+
+      const groupSlug = String(group.legacyId);
+      // Dedup: same Group nested under multiple Missions — first Mission wins.
+      if (!groupRefs.find(g => g.id === group.legacyId)) {
+        groupRefs.push({
+          id: group.legacyId,
+          title: group.title,
+          slug: groupSlug,
+          missionId: mission.legacyId,
+        });
+      }
+
+      const groupItems = gpiRows.filter(r => r.group_ID === group.ID);
+      const slugs = groupItems
+        .map(r => tutById.get(r.tutorial_ID)?.slug)
+        .filter(Boolean);
+
+      for (let i = 0; i < slugs.length; i++) {
+        tutorialMappings.push({
+          slug: slugs[i],
+          missionId: mission.legacyId,
+          missionTitle: mission.title,
+          missionSlug: mission.slug || String(mission.legacyId),
+          groupId: group.legacyId,
+          groupTitle: group.title,
           groupSlug,
           prev: i > 0 ? slugs[i - 1] : null,
           next: i < slugs.length - 1 ? slugs[i + 1] : null,
