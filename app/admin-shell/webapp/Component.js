@@ -32,7 +32,7 @@ sap.ui.define([
       //      "missing data".
       // Detect both cases and force a page reload so the approuter restarts the
       // OAuth flow and the user lands back on the same admin-shell route.
-      var BACKEND_PREFIXES = ["/admin/", "/api/", "/scanner/", "/display/", "/build/", "/content/"];
+      var BACKEND_PREFIXES = ["/admin/", "/admin-ui/", "/api/", "/scanner/", "/display/", "/build/", "/content/"];
       var bRedirecting = false;
 
       function isBackendUrl(sUrl) {
@@ -109,6 +109,30 @@ sap.ui.define([
         });
         return fnOriginalSend.apply(this, arguments);
       };
+
+      // UI5's async loader fetches lazy components (e.g. components/groups/Component.js)
+      // via injected <script> tags, which bypass both the fetch and XHR hooks above.
+      // When the XSUAA session expires mid-session, AppRouter kicks the OAuth flow on
+      // those script requests and the browser surfaces only a generic resource-load
+      // error event with no auth context — UI5 then logs "ModuleError: ... script
+      // load error" and the UI silently breaks. Catch that error here, then probe
+      // /auth/user with redirect:'manual' to distinguish a session-expiry redirect
+      // (response.type === 'opaqueredirect') from a genuine 404 / syntax error.
+      window.addEventListener("error", function (oEvt) {
+        var el = oEvt && oEvt.target;
+        if (!el || el.tagName !== "SCRIPT" || !el.src) return;
+        if (el.src.indexOf("/admin-ui/") === -1) return;
+        if (bRedirecting) return;
+        fnOriginalFetch("/auth/user", { credentials: "include", redirect: "manual" })
+          .then(function (r) {
+            if (r.type === "opaqueredirect") return handleUnauthorized();
+            if (r.status === 401 || r.status === 403) return handleUnauthorized();
+            var sContentType = "";
+            try { sContentType = (r.headers && r.headers.get && r.headers.get("content-type")) || ""; } catch (e) { /* swallow */ }
+            if (sContentType.toLowerCase().indexOf("text/html") === 0) handleUnauthorized();
+          })
+          .catch(function () { /* network glitch — don't reload */ });
+      }, true);
     },
 
     getShellViewModel: function () {
