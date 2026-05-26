@@ -158,3 +158,52 @@ describe('/build/navigator: nested Group inside a Mission', () => {
     expect(matches[0].groupId).toBe(99002);
   });
 });
+
+describe('/build/navigator: Checkpoint markers', () => {
+  const CP_TAG_ID     = 'aaaaaaaa-9003-0000-0000-000000000001';
+  const CP_MISSION_ID = '11111111-9003-0000-0000-000000000001';
+  const CP_PATH_ID    = '22222222-9003-0000-0000-000000000001';
+  const CP_CPI_ID     = 'cccccccc-9003-0000-0000-000000000031';
+
+  beforeAll(async () => {
+    const { Tags, Missions, CompletionPaths, CompletionPathItems } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Tags).entries({ ID: CP_TAG_ID, legacyId: 99003, name: '__TEST__ Checkpoint Tag' });
+    await INSERT.into(Missions).entries({
+      ID: CP_MISSION_ID, legacyId: 99003, title: '__TEST__ Checkpoint Mission',
+      slug: 'test-checkpoint-mission', description: 'desc', experienceTag: 'beginner',
+      primaryTagRef_ID: CP_TAG_ID, published: true, status: 'ACTIVE',
+    });
+    await INSERT.into(CompletionPaths).entries({
+      ID: CP_PATH_ID, legacyId: 99004,
+      mission_ID: CP_MISSION_ID, name: '__TEST__ Checkpoint Path', slug: 'test-checkpoint-path',
+    });
+    await INSERT.into(CompletionPathItems).entries({
+      ID: CP_CPI_ID, legacyId: 99052,
+      path_ID: CP_PATH_ID, taskType: 'CHECKPOINT',
+      checkpointTitle: 'Win a coffee mug', itemOrder: 5,
+    });
+  });
+
+  afterAll(async () => {
+    const { Tags, Missions, CompletionPaths, CompletionPathItems } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(CompletionPathItems).where({ ID: CP_CPI_ID });
+    await DELETE.from(CompletionPaths).where({ ID: CP_PATH_ID });
+    await DELETE.from(Missions).where({ ID: CP_MISSION_ID });
+    await DELETE.from(Tags).where({ ID: CP_TAG_ID });
+  });
+
+  it('emits a checkpointMappings array with mission + title + itemOrder', async () => {
+    const { data } = await project.get('/build/navigator?nocache=1');
+    expect(Array.isArray(data.checkpointMappings)).toBe(true);
+    const cp = data.checkpointMappings.find(c => c.title === 'Win a coffee mug');
+    expect(cp).toBeDefined();
+    expect(cp.missionId).toBe(99003);
+    expect(cp.itemOrder).toBe(5);
+  });
+
+  it('does not put checkpoints into tutorialMappings', async () => {
+    const { data } = await project.get('/build/navigator?nocache=1');
+    const stray = data.tutorialMappings.find(t => t.slug === 'Win a coffee mug' || t.title === 'Win a coffee mug');
+    expect(stray).toBeUndefined();
+  });
+});
