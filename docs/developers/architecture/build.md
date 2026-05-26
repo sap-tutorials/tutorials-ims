@@ -280,7 +280,7 @@ Response shape (top-level fields):
 
 - **`missions[]`** — mission summary refs (existing)
 - **`groups[]`** — Group refs including standalone published Groups
-- **`tutorialMappings[]`** — array of `{ slug, missionId, missionTitle, missionSlug, groupId, groupTitle, groupSlug, order }` tuples (nullable mission fields for standalone tutorials)
+- **`tutorialMappings[]`** — array of `{ slug, missionId, missionTitle, missionSlug, groupId, groupTitle, groupSlug, prev, next }` tuples (mission fields are null for standalone-Group tutorials; `prev`/`next` are slug strings or null for end-of-path)
 - **`checkpointMappings[]`** — NEW — array of `{ title, missionId, missionTitle, missionSlug, pathId, pathSlug, itemOrder }` milestone markers from `CompletionPathItems` where `taskType='CHECKPOINT'` (currently consumer-side TODO for rendering)
 
 Handler: [srv/lib/navigator-catalog.js](../../../srv/lib/navigator-catalog.js) — in-memory cache (5-minute TTL, auto-invalidated on AdminService writes to Missions, Groups, or CompletionPath* entities).
