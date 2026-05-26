@@ -17,6 +17,7 @@
 - **Worktree.** All work happens in `.worktrees/vitepress-docs-site/` on branch `docs/vitepress-site`. Never run these tasks from the main checkout — see [memory:feedback_parallel_agents_worktrees].
 - **Windows path discipline.** Use forward slashes in shell paths. After multi-section edits, verify line endings with `file <path>` — see [memory:feedback_crlf_regression_on_windows].
 - **VitePress version pin.** Always `npm install vitepress@~1.6.0`, never `vitepress` bare or `@latest`. The 2.x line is still alpha; the spec deferred it.
+- **`tsx` is already a devDependency.** `scripts/check-docs-sidebar.cjs` does `require('tsx/cjs')` to load `config.ts`. Verified before writing this plan: `package.json` already has `"tsx": "^4.0.0"` in devDependencies — do not re-add it.
 - **No bulk dead-link autofix.** When the link sweep finds a hit, decide per match whether to rewrite or remove. Editorial intent matters more than passing the dead-link check.
 - **One commit per task.** Tasks land in order; the tree is clean between tasks. Commit messages follow `docs(vitepress): ...` for content/config changes and `feat(docs): ...` for the workflow.
 - **TDD where the task has logic.** Tasks 2 (font copy) and 3 (sidebar check) are real scripts with branching logic — write the failing test first, watch it fail, implement, watch it pass, commit. The other tasks are config/scaffolding; their "test" is `npm run docs:build` succeeding.
@@ -174,9 +175,12 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, existsSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const SCRIPT = join(process.cwd(), 'scripts', 'copy-sap-fonts.cjs');
+// Resolve from this test file's location so vitest cwd doesn't matter.
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const SCRIPT = join(__dirname, '..', '..', '..', 'scripts', 'copy-sap-fonts.cjs');
 
 function run(targetDir) {
   return execFileSync(process.execPath, [SCRIPT], {
@@ -361,9 +365,11 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const SCRIPT = join(process.cwd(), 'scripts', 'check-docs-sidebar.cjs');
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const SCRIPT = join(__dirname, '..', '..', '..', 'scripts', 'check-docs-sidebar.cjs');
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'sidebar-check-'));
@@ -549,13 +555,14 @@ function flattenSidebar(sidebarConfig) {
   function visit(node) {
     if (!node) return;
     if (Array.isArray(node)) { node.forEach(visit); return; }
-    if (typeof node === 'object') {
-      if (node.link) links.push(node.link);
-      if (node.items) visit(node.items);
-      // VitePress sidebar can be keyed-by-prefix object — recurse into values.
-      for (const k of Object.keys(node)) {
-        if (k !== 'link' && k !== 'items' && k !== 'text' && k !== 'collapsed') visit(node[k]);
-      }
+    if (typeof node !== 'object') return;
+    if (node.link) links.push(node.link);
+    if (node.items) visit(node.items);
+    // VitePress sidebar can be keyed-by-prefix object — recurse only into nested objects/arrays.
+    for (const k of Object.keys(node)) {
+      if (k === 'link' || k === 'items' || k === 'text' || k === 'collapsed') continue;
+      const v = node[k];
+      if (v && typeof v === 'object') visit(v);
     }
   }
   visit(sidebarConfig);
@@ -576,7 +583,7 @@ function main() {
     .filter(l => typeof l === 'string' && l.startsWith('/') && !/^https?:/.test(l));
 
   const onDiskLinks = new Set(onDisk.map(pageToLink));
-  const sidebarSet = new Set(sidebarLinks.map(l => l.replace(/\/$/, '/')));
+  const sidebarSet = new Set(sidebarLinks);
 
   const unregistered = [...onDiskLinks].filter(l => !sidebarSet.has(l));
   const dead = sidebarLinks.filter(l => {
@@ -774,7 +781,7 @@ export default defineConfig({
 npm run docs:dev
 ```
 
-Expected: server starts on `http://localhost:5173/tutorials-poc/`. Open in browser, confirm:
+Expected: server starts and prints a banner like `➜  Local:   http://localhost:5173/tutorials-poc/` (port 5173 is VitePress default; if another Vite server is running it will pick the next free port — read the actual URL from the banner). Open it in a browser, confirm:
 - The four persona landing pages are reachable from the top nav.
 - Light/dark toggle cycles theme; brand color changes between `#0070f2` and `#1b90ff`.
 - DevTools → Network shows `72-Regular.woff2` and `72-Bold.woff2` loading from `/tutorials-poc/fonts/`.
@@ -837,7 +844,7 @@ Create `docs/.vitepress/public/logo-dark.svg`:
 npm run docs:dev
 ```
 
-Open `http://localhost:5173/tutorials-poc/`. Tab favicon should be the SAP rounded square. (Hero logo isn't visible yet — Task 7 wires it via the home layout.)
+Open the URL from the dev-server banner (default `http://localhost:5173/tutorials-poc/`). Tab favicon should be the SAP rounded square. (Hero logo isn't visible yet — Task 7 wires it via the home layout.)
 
 Stop the server.
 
