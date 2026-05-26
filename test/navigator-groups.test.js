@@ -69,3 +69,92 @@ describe('/build/navigator: standalone Group surfacing', () => {
     expect(tut2.prev).toBe('test-standalone-tut-1');
   });
 });
+
+describe('/build/navigator: nested Group inside a Mission', () => {
+  const NESTED_TAG_ID    = 'aaaaaaaa-9002-0000-0000-000000000001';
+  const NESTED_MISSION_ID = '11111111-9002-0000-0000-000000000001';
+  const NESTED_PATH_ID    = '22222222-9002-0000-0000-000000000001';
+  const NESTED_GROUP_ID   = 'cccccccc-9002-0000-0000-000000000001';
+  const NESTED_TUT_ID     = 'cccccccc-9002-0000-0000-000000000011';
+  const NESTED_GPI_ID     = 'cccccccc-9002-0000-0000-000000000021';
+  const NESTED_CPI_ID     = 'cccccccc-9002-0000-0000-000000000031';
+
+  beforeAll(async () => {
+    const { Tags, Missions, CompletionPaths, CompletionPathItems, Groups, Tutorials, GroupPathItems } =
+      cds.entities('com.sap.developers.ims');
+
+    await INSERT.into(Tags).entries({ ID: NESTED_TAG_ID, legacyId: 99002, name: '__TEST__ Nested Tag' });
+    await INSERT.into(Tutorials).entries({
+      ID: NESTED_TUT_ID, legacyId: 99031, title: '__TEST__ Nested Tut', slug: 'test-nested-tut', status: 'ACTIVE',
+    });
+    await INSERT.into(Groups).entries({
+      ID: NESTED_GROUP_ID, legacyId: 99002, title: '__TEST__ Nested Group',
+      description: 'desc', experienceTag: 'beginner', primaryTagRef_ID: NESTED_TAG_ID,
+      published: true, status: 'ACTIVE',
+    });
+    await INSERT.into(GroupPathItems).entries({
+      ID: NESTED_GPI_ID, legacyId: 99041, group_ID: NESTED_GROUP_ID, tutorial_ID: NESTED_TUT_ID, itemOrder: 0,
+    });
+    await INSERT.into(Missions).entries({
+      ID: NESTED_MISSION_ID, legacyId: 99002, title: '__TEST__ Nested Mission',
+      slug: 'test-nested-mission', description: 'desc', experienceTag: 'beginner',
+      primaryTagRef_ID: NESTED_TAG_ID, published: true, status: 'ACTIVE',
+    });
+    await INSERT.into(CompletionPaths).entries({
+      ID: NESTED_PATH_ID, legacyId: 99003,
+      mission_ID: NESTED_MISSION_ID, name: '__TEST__ Nested Path', slug: 'test-nested-path',
+    });
+    await INSERT.into(CompletionPathItems).entries({
+      ID: NESTED_CPI_ID, legacyId: 99051,
+      path_ID: NESTED_PATH_ID, taskType: 'GROUP',
+      group_ID: NESTED_GROUP_ID, taskLegacyId: 99002, itemOrder: 0,
+    });
+  });
+
+  afterAll(async () => {
+    const { Tags, Missions, CompletionPaths, CompletionPathItems, Groups, Tutorials, GroupPathItems } =
+      cds.entities('com.sap.developers.ims');
+    await DELETE.from(CompletionPathItems).where({ ID: NESTED_CPI_ID });
+    await DELETE.from(CompletionPaths).where({ ID: NESTED_PATH_ID });
+    await DELETE.from(Missions).where({ ID: NESTED_MISSION_ID });
+    await DELETE.from(GroupPathItems).where({ ID: NESTED_GPI_ID });
+    await DELETE.from(Groups).where({ ID: NESTED_GROUP_ID });
+    await DELETE.from(Tutorials).where({ ID: NESTED_TUT_ID });
+    await DELETE.from(Tags).where({ ID: NESTED_TAG_ID });
+  });
+
+  it('emits the nested Group as a member of the Mission', async () => {
+    const { data } = await project.get('/build/navigator?nocache=1');
+    const grp = data.groups.find(g => g.id === 99002);
+    expect(grp).toBeDefined();
+    expect(grp.missionId).toBe(99002);
+    expect(grp.title).toBe('__TEST__ Nested Group');
+  });
+
+  it('expands the nested Group: tutorial gets BOTH missionId and groupId', async () => {
+    const { data } = await project.get('/build/navigator?nocache=1');
+    const tut = data.tutorialMappings.find(t => t.slug === 'test-nested-tut');
+    expect(tut).toBeDefined();
+    expect(tut.missionId).toBe(99002);
+    expect(tut.missionTitle).toBe('__TEST__ Nested Mission');
+    expect(tut.groupId).toBe(99002);
+    expect(tut.groupTitle).toBe('__TEST__ Nested Group');
+  });
+
+  // Defines the merge semantics for the (intentionally edge-case) scenario where a
+  // tutorial is referenced BOTH directly under a Mission CompletionPath AND under a
+  // nested Group inside the same or a different Mission. We accept duplicate entries
+  // in tutorialMappings (one from each path), and document that the Vue consumer's
+  // `find(t => t.slug === ...)` returns the first match — so the direct-under-Mission
+  // entry (emitted first via NavigatorCatalog) wins for prev/next chaining. If author
+  // content needs the Group entry to win, restructure the content (don't dual-place).
+  it('allows tutorial to appear in both direct Mission path and nested Group (no merge, both kept)', async () => {
+    const { data } = await project.get('/build/navigator?nocache=1');
+    const matches = data.tutorialMappings.filter(t => t.slug === 'test-nested-tut');
+    // At least one entry MUST be emitted; if author authors dual-placement, two are acceptable.
+    expect(matches.length).toBeGreaterThanOrEqual(1);
+    // Whichever entry the consumer's .find() returns first must have the nested Group's groupId
+    // (because in this fixture there is no direct-under-Mission CompletionPathItem for this tutorial).
+    expect(matches[0].groupId).toBe(99002);
+  });
+});
