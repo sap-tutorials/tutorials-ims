@@ -212,7 +212,7 @@ Key points:
 
 - **What it shows** — only content from your `<repo>-Contribution` repo (the private companion that holds quiz rules and draft tutorial content). It is not a copy of the production channel.
 - **Access requirement** — you must hold the `Tutorial.Author` role collection in the BTP subaccount. Ask a Center Admin ([center-admin.md](center-admin.md)) to assign it.
-- **Setup** — the one-time infrastructure setup (CI secrets, dispatch-token distribution, HDI binding, role-collection creation) is documented in [../qa-channel-bootstrap.md](../qa-channel-bootstrap.md). You do not need to repeat this; it is done once per environment.
+- **Setup** — the one-time infrastructure setup (CI secrets, dispatch-token distribution, HDI binding, role-collection creation) is documented in [../developers/operations/qa-channel-bootstrap.md](../developers/operations/qa-channel-bootstrap.md). You do not need to repeat this; it is done once per environment.
 - **Local dev server** — your local `npm run dev` does **not** use any QA flag. The QA flag (`hugo.qa.toml`) only applies to the deployed QA build. Running locally is always sufficient for layout and step rendering checks.
 - **Triggering a QA rebuild** — push a change to the `*-Contribution` repo. The same repo-dispatch mechanism used for production fires a QA-specific CI workflow that fetches from `-Contribution` repos only, builds with the QA Hugo config, and publishes to the QA HANA instance.
 - **URL pattern** — `https://<approuter>/tutorials-qa/<your-slug>` (requires `Tutorial.Author` scope; access is denied to unauthenticated users).
@@ -283,7 +283,7 @@ _This section number is reserved for future use. See §11 for known gaps._
 | "Is my Markdown structured correctly?" | Open a draft PR; a [repo group owner](repo-group-owners.md) can review a draft PR and flag issues |
 | "Why didn't my change appear on production?" | Check the `tutorials-poc` GitHub Actions runs; look for the failed dispatch |
 | "How do I add a new tag / category?" | See [Center Admin](center-admin.md) § "Import a new tag" — taxonomy is centrally managed |
-| "I need a preview before merging" | Run locally per §5, or request QA channel access (§5.1) — see [../qa-channel-bootstrap.md](../qa-channel-bootstrap.md) (Tutorial.Author scope required) |
+| "I need a preview before merging" | Run locally per §5, or request QA channel access (§5.1) — see [../developers/operations/qa-channel-bootstrap.md](../developers/operations/qa-channel-bootstrap.md) (Tutorial.Author scope required) |
 | Anything else | Platform team channel (internal) |
 
 ---
@@ -311,8 +311,8 @@ If any of these items become a blocker for your work, open an issue on the proje
 ## Reference: related docs
 
 - [build.md](../developers/architecture/build.md) — the full technical pipeline (fetch → parse → Hugo → HANA)
-- [../hugo-migration.md](../hugo-migration.md) — why Hugo, layout conventions
+- [../hugo-migration.md](../historic/hugo-migration.md) — why Hugo, layout conventions
 - [../tutorial-repo-dispatch.yml](tutorial-repo-dispatch.yml) — the GitHub Action your repo needs in order to trigger rebuilds
 - [repo-group-owners.md](repo-group-owners.md) — for repo owners reviewing your PRs
 - [center-admin.md](center-admin.md) — for taxonomy, tag onboarding, and rollback
-- [../qa-channel-bootstrap.md](../qa-channel-bootstrap.md) — author-preview channel
+- [../developers/operations/qa-channel-bootstrap.md](../developers/operations/qa-channel-bootstrap.md) — author-preview channel

@@ -8,7 +8,16 @@ export default defineConfig({
   lastUpdated: true,
   appearance: 'auto',
 
-  ignoreDeadLinks: true,
+  ignoreDeadLinks: [
+    // Project-source files (outside docs/ srcDir) — referenced for context
+    // by developer docs but never resolvable as VitePress pages.
+    // Patterns cover links of the form ./../../../<dir> and ../../../<dir>
+    // used across developers/, historic/, and authors/ pages.
+    /\.\.\/\.\.\/(hugo|hugo-apps|app|srv|db|db-qa|approuter|scripts|test|\.github|AGENTS)/,
+    /\.\.\/\.deploy\//,
+    /\.\.\/(hugo|test)\/(layouts|assets|static|content|hugo\.toml|a11y)/,
+    /\.\.\/(hugo|test)$/,
+  ],
 
   srcExclude: ['improvements.md', 'TODO.md', 'pilot-status.md', 'superpowers/**'],
 

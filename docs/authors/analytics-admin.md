@@ -176,7 +176,7 @@ Operational run-book for the analytics administrator — the role responsible fo
    | Step failures | Export → `IMS_STEP_FAILURE.csv` | `StepFailures` is not exposed in `AnalyticsService`; use `exportLegacyData` to download the full failure log, then filter locally |
 
 5. For the dedicated large-monitor display dashboard (rotating Board / Statistics / Leaderboard views), open `<approuter-url>/display-app/`. This app connects via Socket.IO on the `/ws/event-stream` namespace (`EventStreamService`) and receives push updates on every completion event. It does not require the `Admin` scope — it uses the `DisplayApp` scope.
-6. The `EventStreamService` WebSocket namespace (`/ws/event-stream`) broadcasts raw CDS events to any subscriber and can be used for custom integrations. The namespace is `authenticationType: none` at the AppRouter level; scope enforcement happens at Socket.IO namespace join. See [testing-endpoints.md](../testing-endpoints.md) for the full route table.
+6. The `EventStreamService` WebSocket namespace (`/ws/event-stream`) broadcasts raw CDS events to any subscriber and can be used for custom integrations. The namespace is `authenticationType: none` at the AppRouter level; scope enforcement happens at Socket.IO namespace join. See [testing-endpoints.md](../developers/operations/testing-endpoints.md) for the full route table.
 7. If the display app shows stale data or the WebSocket disconnects, check `cf logs tutorials-srv --recent` for Socket.IO errors. A rolling restart (`cf restart tutorials-srv`) re-establishes the WebSocket bridge without requiring a redeploy.
 
 **Related:** [center-admin.md](center-admin.md) § Create and activate an Event — for pre-event setup and post-event deactivation.
@@ -197,4 +197,4 @@ Operational run-book for the analytics administrator — the role responsible fo
 
 - [../historic/decommissioned-tasks.md](../historic/decommissioned-tasks.md) — tasks from the previous run-book that have been retired or replaced
 - [center-admin.md](center-admin.md) — operator-side coordination: event lifecycle, user anonymization, catalog management
-- [../testing-endpoints.md](../testing-endpoints.md) — canonical endpoint reference including display-app dashboard routes and auth scopes
+- [../testing-endpoints.md](../developers/operations/testing-endpoints.md) — canonical endpoint reference including display-app dashboard routes and auth scopes
