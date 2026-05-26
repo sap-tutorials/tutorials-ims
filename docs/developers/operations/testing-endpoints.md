@@ -165,7 +165,7 @@ When `EXPOSE_CAP_UI=true` is set on the CAP srv app, these are accessible throug
 | `/api/recommendations` | GET | Personalized "what's next" recommendations (embedding centroid + co-completion blend) | XSUAA |
 | `/build/catalog` | GET | Mission/group/tutorial catalog (JSON, for build pipeline) | None |
 | `/build/co-completions` | GET | Co-completion graph data (used by recommendations) | None |
-| `/build/navigator` | GET | Navigator catalog view data | None |
+| `/build/navigator` | GET | Missions, groups (incl. standalone), tutorial→mission/group mappings, and checkpoint milestones | None |
 | `/build/slug-mapping` | GET | Slug→ID mapping for all missions/groups | None |
 | `/build/repo-catalog` | GET | Slug-keyed `DiscoveredTutorial` map (third-tier discovery fallback) | None |
 | `/build/repo-catalog` | POST | Write the discovered-tutorial baseline (CI-as-canonical-writer) | Bearer (`CONTENT_API_KEY`) |
@@ -173,6 +173,8 @@ When `EXPOSE_CAP_UI=true` is set on the CAP srv app, these are accessible throug
 | `/chat/stream` | POST | Joule chat streaming endpoint (Server-Sent Events) | XSUAA |
 | `/admin/embeddings/stats` | GET | Tutorial embedding coverage / drift statistics | XSUAA + `Admin` |
 
+> **`/build/navigator`** returns a shape with `missions[]`, `groups[]` (incl. standalone published Groups), `tutorialMappings[]`, and `checkpointMappings[]` (milestone markers). The 5-minute in-memory cache is automatically invalidated when the Admin UI saves changes to Missions, Groups, or CompletionPath entities — no `?nocache=1` needed. Implementation: [srv/lib/navigator-catalog.js](../../../srv/lib/navigator-catalog.js).
+>
 > **`/feedback/submit`** returns **503** when `SUBMISSION_SALT_SECRET` is missing — set it in CI secrets and locally before testing the form. The request body is capped at 8 KB.
 
 ---
