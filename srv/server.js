@@ -223,7 +223,7 @@ cds.on('served', async () => {
   // mission/group data after CRUD via AdminService.
   if (!globalThis.__navigatorCacheInvalidatorRegistered) {
     const admin = await cds.connect.to('AdminService');
-    const navInvalidatingEntities = ['Missions', 'Groups', 'CompletionPaths', 'CompletionPathItems', 'GroupPathItems'];
+    const navInvalidatingEntities = ['Missions', 'Groups', 'CompletionPaths', 'CompletionPathItems', 'GroupPathItems', 'Tutorials'];
     admin.after(['CREATE', 'UPDATE', 'DELETE'], navInvalidatingEntities, () => {
       try {
         invalidateNavigatorCache();
