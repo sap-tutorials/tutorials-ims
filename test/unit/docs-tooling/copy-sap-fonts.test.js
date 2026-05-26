@@ -29,11 +29,10 @@ describe('scripts/copy-sap-fonts.cjs', () => {
     }
   });
 
-  it('is idempotent: a second run leaves files unchanged', () => {
+  it('is idempotent: a second run leaves files unchanged', async () => {
     run(target);
     const first = statSync(join(target, '72-Regular.woff2')).mtimeMs;
-    // Force a measurable mtime gap on Windows (FAT-style 2s resolution is uncommon on NTFS but be safe)
-    const wait = Date.now() + 50; while (Date.now() < wait);
+    await new Promise(r => setTimeout(r, 50));
     run(target);
     const second = statSync(join(target, '72-Regular.woff2')).mtimeMs;
     expect(second).toBe(first); // skip-when-current branch hit
