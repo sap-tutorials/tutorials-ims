@@ -11,7 +11,7 @@ annotate AdminService.Tutorials with @odata.draft.enabled;
 
 // --- Events ---
 annotate AdminService.Events with {
-  legacyId  @Common.Label: 'Event ID' @Common.IsDigitSequence: true;
+  legacyIdStr  @Common.Label: 'Event ID' @Common.IsDigitSequence: true;
   name      @Common.Label: 'Name'
             // Self-referential value help on the SelectionFields filter so users
             // pick from existing event names instead of typing free-form. The
@@ -21,7 +21,7 @@ annotate AdminService.Events with {
               CollectionPath: 'Events',
               Parameters: [
                 { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: name, ValueListProperty: 'name' },
-                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'legacyId' },
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'legacyIdStr' },
                 { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'startDate' }
               ]
             };
@@ -46,7 +46,7 @@ annotate AdminService.Events with @UI: {
   },
   SelectionFields: [ name, startDate, endDate ],
   LineItem: [
-    { Value: legacyId },
+    { Value: legacyIdStr },
     { Value: name },
     { Value: startDate },
     { Value: endDate },
@@ -66,7 +66,7 @@ annotate AdminService.Events with @UI: {
 
 // --- Missions ---
 annotate AdminService.Missions with {
-  legacyId           @Common.Label: 'Mission ID' @Common.IsDigitSequence: true;
+  legacyIdStr        @Common.Label: 'Mission ID' @Common.IsDigitSequence: true;
   title              @Common.Label: 'Title'  @mandatory;
   description        @Common.Label: 'Description'  @mandatory  @UI.MultiLineText;
   slug               @Common.Label: 'Slug';
@@ -90,7 +90,7 @@ annotate AdminService.Missions with @UI: {
   },
   SelectionFields: [ title, experienceTag, status ],
   LineItem: [
-    { Value: legacyId },
+    { Value: legacyIdStr },
     { Value: title },
     { Value: slug },
     { Value: experienceTag },
@@ -124,7 +124,7 @@ annotate AdminService.Missions with {
     Parameters: [
       { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: title, ValueListProperty: 'title' },
       { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'slug' },
-      { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'legacyId' }
+      { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'legacyIdStr' }
     ]
   };
   primaryTagRef @Common.ValueList: {
@@ -257,7 +257,7 @@ annotate AdminService.CompletionPathItems with @UI: {
 
 // --- Groups ---
 annotate AdminService.Groups with {
-  legacyId              @Common.Label: 'Group ID' @Common.IsDigitSequence: true;
+  legacyIdStr           @Common.Label: 'Group ID' @Common.IsDigitSequence: true;
   title                 @Common.Label: 'Title'  @mandatory;
   description           @Common.Label: 'Description'  @mandatory  @UI.MultiLineText;
   experienceTag         @Common.Label: 'Experience'  @Common.ValueListWithFixedValues  @mandatory;
@@ -277,7 +277,7 @@ annotate AdminService.Groups with @UI: {
   },
   SelectionFields: [ title, experienceTag ],
   LineItem: [
-    { Value: legacyId },
+    { Value: legacyIdStr },
     { Value: title },
     { Value: experienceTag },
     { Value: averageTimeToComplete },
@@ -307,7 +307,7 @@ annotate AdminService.Groups with {
     CollectionPath: 'Groups',
     Parameters: [
       { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: title, ValueListProperty: 'title' },
-      { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'legacyId' }
+      { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'legacyIdStr' }
     ]
   };
   primaryTagRef @Common.ValueList: {
@@ -390,13 +390,13 @@ annotate AdminService.MissionTags with @UI: {
 
 // --- Accomplishments ---
 annotate AdminService.Accomplishments with {
-  legacyId    @Common.Label: 'ID' @Common.IsDigitSequence: true;
+  legacyIdStr @Common.Label: 'ID' @Common.IsDigitSequence: true;
   name        @Common.Label: 'Name'
               @Common.ValueList: {
                 CollectionPath: 'Accomplishments',
                 Parameters: [
                   { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: name, ValueListProperty: 'name' },
-                  { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'legacyId' }
+                  { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'legacyIdStr' }
                 ]
               };
   description @Common.Label: 'Description';
@@ -411,7 +411,7 @@ annotate AdminService.Accomplishments with @UI: {
   },
   SelectionFields: [ name ],
   LineItem: [
-    { Value: legacyId },
+    { Value: legacyIdStr },
     { Value: name },
     { Value: description }
   ],
@@ -432,7 +432,7 @@ annotate AdminService.Accomplishments with {
 
 // --- Prizes ---
 annotate AdminService.Prizes with {
-  legacyId @Common.Label: 'ID' @Common.IsDigitSequence: true;
+  legacyIdStr @Common.Label: 'ID' @Common.IsDigitSequence: true;
   name     @Common.Label: 'Name';
   event    @Common.Label: 'Event'
            @Common.ValueList: {
@@ -440,7 +440,7 @@ annotate AdminService.Prizes with {
              Parameters: [
                { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: event_ID, ValueListProperty: 'ID' },
                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'name' },
-               { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'legacyId' },
+               { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'legacyIdStr' },
                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'startDate' }
              ]
            };
@@ -452,7 +452,7 @@ annotate AdminService.Prizes with @UI: {
     Title: { Value: name }
   },
   LineItem: [
-    { Value: legacyId },
+    { Value: legacyIdStr },
     { Value: name },
     { Value: event.name, Label: 'Event' }
   ],
@@ -468,7 +468,7 @@ annotate AdminService.Prizes with @UI: {
 
 // --- Tutorials (source content from GitHub; Lifecycle fields admin-editable) ---
 annotate AdminService.Tutorials with {
-  legacyId              @Common.Label: 'Tutorial ID' @Common.FieldControl: #ReadOnly @Common.IsDigitSequence: true;
+  legacyIdStr           @Common.Label: 'Tutorial ID' @Common.IsDigitSequence: true;
   title                 @Common.Label: 'Title'       @Common.FieldControl: #ReadOnly
                         @Common.ValueList: {
                           CollectionPath: 'Tutorials',
@@ -476,7 +476,7 @@ annotate AdminService.Tutorials with {
                             { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: title, ValueListProperty: 'title' },
                             { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'slug' },
                             { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'primaryTag' },
-                            { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'legacyId' }
+                            { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'legacyIdStr' }
                           ]
                         };
   slug                  @Common.Label: 'Slug'        @Common.FieldControl: #ReadOnly;
@@ -486,7 +486,7 @@ annotate AdminService.Tutorials with {
                           Parameters: [
                             { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: primaryTag, ValueListProperty: 'name' },
                             { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'titlePath' },
-                            { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'legacyId' }
+                            { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'legacyIdStr' }
                           ]
                         };
   experienceTag         @Common.Label: 'Experience'  @Common.ValueListWithFixedValues @Common.FieldControl: #ReadOnly;
@@ -519,7 +519,7 @@ annotate AdminService.Tutorials with @UI: {
   },
   SelectionFields: [ title, primaryTag, experienceTag, status ],
   LineItem: [
-    { Value: legacyId },
+    { Value: legacyIdStr },
     { Value: title },
     { Value: slug },
     { Value: primaryTag },
@@ -548,7 +548,7 @@ annotate AdminService.Tutorials with @UI: {
 
 // --- TutorialPickList (value-help target for redirectTo) ---
 annotate AdminService.TutorialPickList with {
-  legacyId   @Common.Label: 'Tutorial ID' @Common.IsDigitSequence: true;
+  legacyIdStr   @Common.Label: 'Tutorial ID' @Common.IsDigitSequence: true;
   title      @Common.Label: 'Title';
   slug       @Common.Label: 'Slug';
   primaryTag @Common.Label: 'Primary Tag';
@@ -559,7 +559,7 @@ annotate AdminService.TutorialPickList with @(
     HeaderInfo: { TypeName: 'Tutorial', TypeNamePlural: 'Tutorials', Title: { Value: title } },
     SelectionFields: [ title, primaryTag ],
     LineItem: [
-      { Value: legacyId },
+      { Value: legacyIdStr },
       { Value: title },
       { Value: slug },
       { Value: primaryTag }
@@ -569,14 +569,14 @@ annotate AdminService.TutorialPickList with @(
 
 // --- Tags (read-only) ---
 annotate AdminService.Tags with {
-  legacyId  @Common.Label: 'ID' @Common.IsDigitSequence: true;
+  legacyIdStr  @Common.Label: 'ID' @Common.IsDigitSequence: true;
   name      @Common.Label: 'Name'
             @Common.ValueList: {
               CollectionPath: 'Tags',
               Parameters: [
                 { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: name, ValueListProperty: 'name' },
                 { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'titlePath' },
-                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'legacyId' }
+                { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'legacyIdStr' }
               ]
             };
   titlePath @Common.Label: 'Full Path';
@@ -591,7 +591,7 @@ annotate AdminService.Tags with @(
     },
     SelectionFields: [ name ],
     LineItem: [
-      { Value: legacyId },
+      { Value: legacyIdStr },
       { Value: name },
       { Value: mdFormat },
       { Value: titlePath }
