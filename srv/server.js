@@ -6,7 +6,7 @@ import { qrcodeHandler } from './lib/qrcode-handler.js';
 import { buildCatalogHandler } from './lib/build-catalog.js';
 import { coCompletionsHandler } from './lib/co-completion.js';
 import { recommendationsHandler } from './handlers/recommendations.js';
-import { navigatorCatalogHandler } from './lib/navigator-catalog.js';
+import { navigatorCatalogHandler, invalidateNavigatorCache } from './lib/navigator-catalog.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
 import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, navHandler, rollbackHandler } from './lib/content-store.js';
 import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-catalog.js';
@@ -216,6 +216,22 @@ cds.on('served', async () => {
       if (ctx?.clientIp) req.data._clientIp = ctx.clientIp;
     });
     globalThis.__feedbackBeforeHookRegistered = true;
+  }
+
+  // Bust the /build/navigator in-memory cache when admins write to entities that
+  // shape the navigator response. Without this, the 5-minute TTL serves stale
+  // mission/group data after CRUD via AdminService.
+  if (!globalThis.__navigatorCacheInvalidatorRegistered) {
+    const admin = await cds.connect.to('AdminService');
+    const navInvalidatingEntities = ['Missions', 'Groups', 'CompletionPaths', 'CompletionPathItems', 'GroupPathItems'];
+    admin.after(['CREATE', 'UPDATE', 'DELETE'], navInvalidatingEntities, () => {
+      try {
+        invalidateNavigatorCache();
+      } catch (err) {
+        console.error('[navigator] cache invalidation failed', err);
+      }
+    });
+    globalThis.__navigatorCacheInvalidatorRegistered = true;
   }
 
   app.get('/auth/user', contextMw, authMw, (req, res) => {

@@ -207,3 +207,66 @@ describe('/build/navigator: Checkpoint markers', () => {
     expect(stray).toBeUndefined();
   });
 });
+
+describe('/build/navigator: cache invalidation on admin writes', () => {
+  const adminAuth = { auth: { username: 'admin', password: 'admin' } };
+  const INV_TAG_ID    = 'aaaaaaaa-9004-0000-0000-000000000001';
+  const INV_GROUP_ID  = 'cccccccc-9004-0000-0000-000000000001';
+  const INV_TUT_ID    = 'cccccccc-9004-0000-0000-000000000011';
+  const INV_GPI_ID    = 'cccccccc-9004-0000-0000-000000000021';
+  const INV_GROUP_TAG_ID = 'cccccccc-9004-0000-0000-000000000031';
+
+  beforeAll(async () => {
+    const { Tags, Tutorials } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Tags).entries({ ID: INV_TAG_ID, legacyId: 99004, name: '__TEST__ Invalidation Tag' });
+    await INSERT.into(Tutorials).entries({
+      ID: INV_TUT_ID, legacyId: 99060, title: '__TEST__ Invalidation Tut',
+      slug: 'test-invalidation-tut', status: 'ACTIVE',
+    });
+  });
+
+  afterAll(async () => {
+    const { Tags, Tutorials, Groups, GroupPathItems, GroupTags } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(GroupPathItems).where({ ID: INV_GPI_ID });
+    await DELETE.from(GroupTags).where({ ID: INV_GROUP_TAG_ID });
+    await DELETE.from(Groups).where({ ID: INV_GROUP_ID });
+    await DELETE.from(Tutorials).where({ ID: INV_TUT_ID });
+    await DELETE.from(Tags).where({ ID: INV_TAG_ID });
+  });
+
+  it('reflects newly inserted Group on next call without ?nocache=1', async () => {
+    // First call populates the cache without our group present
+    const a = await project.get('/build/navigator');
+    expect(a.data.groups.find(g => g.title === '__TEST__ Invalidation Group')).toBeUndefined();
+
+    // Insert a Group via the AdminService projection (so the after-hook fires).
+    // AdminService.Groups is draft-enabled, so we POST to create a draft, then
+    // call draftActivate to trigger CREATE on the active projection — that is
+    // what the srv.after hook listens on. We do not pin legacyId here because
+    // the AdminService 'before CREATE' hook auto-assigns one via a sequence
+    // when the active CREATE fires (the draft-supplied value is not preserved).
+    const { status: createStatus } = await project.post('/admin/Groups', {
+      ID: INV_GROUP_ID,
+      title: '__TEST__ Invalidation Group', description: 'desc',
+      experienceTag: 'beginner', primaryTagRef_ID: INV_TAG_ID,
+      published: true, status: 'ACTIVE',
+      tags: [{ ID: INV_GROUP_TAG_ID, tag_ID: INV_TAG_ID }],
+      items: [{
+        ID: INV_GPI_ID,
+        tutorial_ID: INV_TUT_ID, itemOrder: 0,
+      }],
+    }, { ...adminAuth, headers: { Prefer: 'handling=lenient' } });
+    expect(createStatus).toBe(201);
+
+    const { status: activateStatus } = await project.post(
+      `/admin/Groups(ID=${INV_GROUP_ID},IsActiveEntity=false)/AdminService.draftActivate`,
+      {}, adminAuth
+    );
+    expect(activateStatus).toBe(201);
+
+    // Second call (no nocache flag) should reflect the new Group — proving the
+    // srv.after CREATE hook on AdminService called invalidateNavigatorCache().
+    const b = await project.get('/build/navigator');
+    expect(b.data.groups.find(g => g.title === '__TEST__ Invalidation Group')).toBeDefined();
+  });
+});
