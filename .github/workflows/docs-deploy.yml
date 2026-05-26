@@ -1,14 +1,13 @@
 name: Deploy Docs to GitHub Pages
 
 on:
-  # Phase 1: workflow_dispatch only. Tom uncomments the push trigger after the first manual deploy.
-  # push:
-  #   branches: [main]
-  #   paths:
-  #     - 'docs/**'
-  #     - '.github/workflows/docs-deploy.yml'
-  #     - 'package.json'
-  #     - 'package-lock.json'
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/docs-deploy.yml'
+      - 'package.json'
+      - 'package-lock.json'
   workflow_dispatch:
 
 permissions:

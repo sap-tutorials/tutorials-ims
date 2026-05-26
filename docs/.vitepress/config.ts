@@ -3,7 +3,7 @@ import { defineConfig } from 'vitepress';
 export default defineConfig({
   title: 'SAP Tutorials Platform',
   description: 'The platform behind developers.sap.com — for readers, authors, and engineers.',
-  base: '/tutorials-poc/',
+  base: '/',
   cleanUrls: true,
   lastUpdated: true,
   appearance: 'auto',
@@ -32,9 +32,9 @@ export default defineConfig({
   srcExclude: ['improvements.md', 'TODO.md', 'pilot-status.md', 'superpowers/**'],
 
   head: [
-    ['link', { rel: 'icon', href: '/tutorials-poc/favicon.svg', type: 'image/svg+xml' }],
-    ['link', { rel: 'preload', href: '/tutorials-poc/fonts/72-Regular.woff2', as: 'font', type: 'font/woff2', crossorigin: '' }],
-    ['link', { rel: 'preload', href: '/tutorials-poc/fonts/72-Bold.woff2',    as: 'font', type: 'font/woff2', crossorigin: '' }]
+    ['link', { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' }],
+    ['link', { rel: 'preload', href: '/fonts/72-Regular.woff2', as: 'font', type: 'font/woff2', crossorigin: '' }],
+    ['link', { rel: 'preload', href: '/fonts/72-Bold.woff2',    as: 'font', type: 'font/woff2', crossorigin: '' }]
   ],
 
   markdown: {
@@ -136,12 +136,12 @@ export default defineConfig({
     search: { provider: 'local' },
 
     editLink: {
-      pattern: 'https://github.com/sap-tutorials/tutorials-poc/edit/main/docs/:path',
+      pattern: 'https://github.com/sap-tutorials/tutorials-ims/edit/main/docs/:path',
       text: 'Suggest an edit on GitHub'
     },
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/sap-tutorials/tutorials-poc' }
+      { icon: 'github', link: 'https://github.com/sap-tutorials/tutorials-ims' }
     ]
   }
 });
