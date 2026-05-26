@@ -265,6 +265,16 @@ function capitalizeLevel(level: string): string {
   return level.charAt(0).toUpperCase() + level.slice(1)
 }
 
+function missionGroupCount(missionId: number): number {
+  const groupIds = new Set<number>()
+  for (const t of tutorials.value) {
+    if (t.missionId === missionId && t.groupId != null) {
+      groupIds.add(t.groupId)
+    }
+  }
+  return groupIds.size
+}
+
 const TYPE_LABELS: Record<string, string> = {
   mission: 'MISSION',
   group: 'GROUP',
@@ -301,7 +311,7 @@ const allCards = computed<CardItem[]>(() => {
       type: 'mission',
       id: `mission-${missionId}`,
       title: mTuts[0].missionTitle,
-      description: `Complete this mission to build full-stack applications combining CAP with SAP HANA Cloud. Includes ${mTuts.length} tutorials across ${groupMap.size} groups.`,
+      description: `Complete this mission to build full-stack applications combining CAP with SAP HANA Cloud. Includes ${mTuts.length} tutorials across ${missionGroupCount(missionId)} groups.`,
       time: mTuts.reduce((sum, t) => sum + t.time, 0),
       level: lowestLevel(mTuts.map(t => t.level)),
       tutorialCount: mTuts.length,
