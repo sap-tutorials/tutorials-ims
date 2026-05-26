@@ -11,7 +11,7 @@ import { parseRulesVr } from './parsers/rules.js'
 import { computeRecommendations } from './parsers/recommendations.js'
 import { humanizeTag, splitPrerequisites } from './parsers/frontmatter-utils.js'
 import { renderHugoFrontmatter } from './parsers/render-frontmatter.js'
-import type { Mission, MissionHierarchy, HierarchyGroup, TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } from './parsers/types.js'
+import type { Mission, MissionHierarchy, HierarchyGroup, StandaloneGroup, TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } from './parsers/types.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -455,7 +455,7 @@ function writeMissionPage(
 
 function writeGroupPage(
   group: HierarchyGroup,
-  mission: Mission,
+  mission: Mission | null,
   tutorials: Array<{
     slug: string
     title: string
@@ -485,9 +485,6 @@ function writeGroupPage(
     ...(target === 'hugo' ? { type: 'groups', url: `/tutorials/group-${group.slug}` } : { layout: 'group' }),
     slug: group.slug,
     groupId: group.imsId,
-    missionId: mission.imsId,
-    missionSlug: mission.slug,
-    missionTitle: mission.title,
     title: group.title,
     description: group.description,
     level: groupLevel,
@@ -495,6 +492,11 @@ function writeGroupPage(
     tutorialCount: tutorials.length,
     displayTags,
     tutorials,
+  }
+  if (mission) {
+    fm.missionId = mission.imsId
+    fm.missionSlug = mission.slug
+    fm.missionTitle = mission.title
   }
 
   const content = `---\n${yamlStringify(fm).trimEnd()}\n---\n`
@@ -799,6 +801,7 @@ async function main() {
 
   let missions: Mission[] = []
   let hierarchies: MissionHierarchy[] = []
+  let standaloneGroups: StandaloneGroup[] = []
   let capCacheUsed = false
   let coCompletions: Map<string, Map<string, number>> = new Map()
 
@@ -808,16 +811,18 @@ async function main() {
   if (cached) {
     missions = cached.missions
     hierarchies = cached.hierarchies
+    standaloneGroups = cached.standaloneGroups ?? []
     capCacheUsed = true
-    console.log(`  [cap] Using cached data (${missions.length} missions)`)
+    console.log(`  [cap] Using cached data (${missions.length} missions, ${standaloneGroups.length} standalone groups)`)
   } else {
     try {
       const capBaseUrl = process.env.CAP_BASE_URL || 'http://localhost:4004'
       const catalog = await fetchBuildCatalog(capBaseUrl)
       missions = catalog.missions
       hierarchies = catalog.hierarchies
-      saveCapCache(missions, hierarchies)
-      console.log(`  [cap] Fetched ${missions.length} missions with hierarchies`)
+      standaloneGroups = catalog.standaloneGroups
+      saveCapCache(missions, hierarchies, standaloneGroups)
+      console.log(`  [cap] Fetched ${missions.length} missions, ${standaloneGroups.length} standalone groups`)
       coCompletions = await fetchCoCompletions(capBaseUrl)
       console.log(`  [cap] co-completion map: ${coCompletions.size} source slugs`)
     } catch (err) {
@@ -920,6 +925,66 @@ async function main() {
 
     writeMissionPage(mission, missionGroups, navBySlug, OUTPUT_DIR, target)
   }
+
+  for (const sg of standaloneGroups) {
+    const groupRef: GroupRef = {
+      id: sg.imsId,
+      title: sg.title,
+      slug: sg.slug,
+      missionId: 0,  // sentinel: standalone group, no parent mission
+      tutorials: [],
+    }
+
+    const groupTutorialEntries: Array<{
+      slug: string
+      title: string
+      description: string
+      time: number
+      level: string
+      stepCount: number
+      primaryTag: string
+    }> = []
+
+    for (let i = 0; i < sg.tutorialSlugs.length; i++) {
+      const tSlug = sg.tutorialSlugs[i]
+      const nav = navBySlug.get(tSlug)
+      if (!nav) {
+        unmatchedTutorials++
+        continue
+      }
+      matchedTutorials++
+      groupRef.tutorials.push(tSlug)
+
+      nav.groupId = sg.imsId
+      nav.groupTitle = sg.title
+      nav.groupSlug = sg.slug
+
+      const prevSlug = i > 0 ? sg.tutorialSlugs[i - 1] : null
+      const nextSlug = i < sg.tutorialSlugs.length - 1 ? sg.tutorialSlugs[i + 1] : null
+      if (prevSlug && navBySlug.has(prevSlug)) nav.prev = prevSlug
+      if (nextSlug && navBySlug.has(nextSlug)) nav.next = nextSlug
+
+      groupTutorialEntries.push({
+        slug: nav.slug,
+        title: nav.title,
+        description: nav.description,
+        time: nav.time,
+        level: nav.level,
+        stepCount: nav.stepCount,
+        primaryTag: nav.primaryTag,
+      })
+    }
+
+    allGroupRefs.push(groupRef)
+    writeGroupPage(
+      { imsId: sg.imsId, title: sg.title, slug: sg.slug, description: sg.description, tutorialSlugs: sg.tutorialSlugs },
+      null,  // no parent mission
+      groupTutorialEntries,
+      OUTPUT_DIR,
+      target
+    )
+  }
+  console.log(`  [cap] Generated ${standaloneGroups.length} standalone group pages`)
 
   const recommendations = computeRecommendations(navEntries, { coCompletions })
   for (const nav of navEntries) {
