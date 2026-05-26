@@ -8,6 +8,16 @@ export default defineConfig({
   lastUpdated: true,
   appearance: 'auto',
 
+  // Map README.md → index.html so persona landing URLs (/end-users/, /authors/, …)
+  // and the site root (/) resolve. VitePress does not do this rewrite by default.
+  rewrites: {
+    'README.md': 'index.md',
+    'end-users/README.md': 'end-users/index.md',
+    'authors/README.md': 'authors/index.md',
+    'developers/README.md': 'developers/index.md',
+    'historic/README.md': 'historic/index.md'
+  },
+
   ignoreDeadLinks: [
     // Project-source files (outside docs/ srcDir) — referenced for context
     // by developer docs but never resolvable as VitePress pages.

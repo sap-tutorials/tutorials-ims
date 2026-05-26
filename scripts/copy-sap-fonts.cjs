@@ -7,8 +7,11 @@ const path = require('node:path');
 
 const VARIANTS = ['72-Regular', '72-Bold', '72-Italic', '72-Light', '72-BoldItalic'];
 
+// VitePress copies <srcDir>/public/* to the build output root. With the default
+// srcDir of `docs`, that means assets must live in `docs/public/`, NOT
+// `docs/.vitepress/public/` (a common mistake — the latter is silently ignored).
 const targetDir = process.env.COPY_SAP_FONTS_TARGET
-  || path.resolve(__dirname, '..', 'docs', '.vitepress', 'public', 'fonts');
+  || path.resolve(__dirname, '..', 'docs', 'public', 'fonts');
 
 const nodeModulesDir = process.env.COPY_SAP_FONTS_NODE_MODULES;
 
