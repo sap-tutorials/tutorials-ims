@@ -221,11 +221,15 @@ srv.on('runSelectQuery', async (req) => {
   }
   const start = Date.now();
   const wrapped = `SELECT * FROM (${validated.sql}) LIMIT 5001`;
-  const rows = await cds.run({
-    sql: wrapped,
-    // HANA statement-hint for 30s timeout (skipped on SQLite for unit tests)
-    hints: cds.db.kind === 'hana' ? ['STATEMENT_TIMEOUT(30)'] : undefined,
-  });
+  // 30s soft timeout via Promise.race. HANA's WITH HINT clause does NOT
+  // support a STATEMENT_TIMEOUT hint, and the session-level
+  // SET 'STATEMENT_TIMEOUT' would leak across the pooled connection.
+  const rows = await Promise.race([
+    cds.run(wrapped),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Query exceeded 30s timeout')), 30000)
+    ),
+  ]);
   const durationMs = Date.now() - start;
   const truncated = rows.length > 5000;
   const data = truncated ? rows.slice(0, 5000) : rows;
