@@ -8,6 +8,8 @@ export default defineConfig({
   lastUpdated: true,
   appearance: 'auto',
 
+  ignoreDeadLinks: true,
+
   srcExclude: ['improvements.md', 'TODO.md', 'pilot-status.md', 'superpowers/**'],
 
   head: [
@@ -17,7 +19,19 @@ export default defineConfig({
   ],
 
   markdown: {
-    theme: { light: 'github-light', dark: 'github-dark' }
+    theme: { light: 'github-light', dark: 'github-dark' },
+    config(md) {
+      // Escape {{ and }} inside inline code spans so Vue's template compiler
+      // doesn't try to evaluate Hugo/Go template syntax as interpolations.
+      const defaultCodeInline = md.renderer.rules.code_inline!;
+      md.renderer.rules.code_inline = (tokens, idx, options, env, self) => {
+        const token = tokens[idx];
+        token.content = token.content
+          .replace(/\{\{/g, '&#123;&#123;')
+          .replace(/\}\}/g, '&#125;&#125;');
+        return defaultCodeInline(tokens, idx, options, env, self);
+      };
+    }
   },
 
   themeConfig: {
@@ -29,10 +43,75 @@ export default defineConfig({
     ],
 
     sidebar: {
-      '/end-users/':  [{ text: 'End Users',  items: [{ text: 'Overview', link: '/end-users/' }] }],
-      '/authors/':    [{ text: 'Authors',    items: [{ text: 'Overview', link: '/authors/' }] }],
-      '/developers/': [{ text: 'Developers', items: [{ text: 'Overview', link: '/developers/' }] }],
-      '/historic/':   [{ text: 'Historic',   items: [{ text: 'Overview', link: '/historic/' }] }]
+      '/end-users/': [
+        { text: 'End Users', items: [
+          { text: 'Overview',                 link: '/end-users/' },
+          { text: 'Getting started',          link: '/end-users/getting-started' },
+          { text: 'Using Joule chat',         link: '/end-users/using-joule-chat' },
+          { text: 'Progress and completions', link: '/end-users/progress-and-completions' },
+          { text: 'Privacy and cookies',      link: '/end-users/privacy-and-cookies' },
+          { text: 'Accessibility',            link: '/end-users/accessibility' }
+        ]}
+      ],
+
+      '/authors/': [
+        { text: 'Authors', items: [
+          { text: 'Overview',          link: '/authors/' },
+          { text: 'Writing tutorials', link: '/authors/writing-tutorials' },
+          { text: 'Repo / group owners', link: '/authors/repo-group-owners' },
+          { text: 'Center admin',      link: '/authors/center-admin' },
+          { text: 'Analytics admin',   link: '/authors/analytics-admin' }
+        ]}
+      ],
+
+      '/developers/': [
+        { text: 'Overview', items: [
+          { text: 'Persona index',   link: '/developers/' },
+          { text: 'Getting started', link: '/developers/getting-started' }
+        ]},
+        { text: 'Architecture', items: [
+          { text: 'Authentication and authorization', link: '/developers/architecture/authentication' },
+          { text: 'Build pipeline',                   link: '/developers/architecture/build' },
+          { text: 'CAP backend',                      link: '/developers/architecture/cap-backend' },
+          { text: 'Frontend apps',                    link: '/developers/architecture/frontend-apps' },
+          { text: 'Joule chat',                       link: '/developers/architecture/joule' },
+          { text: 'Runtime',                          link: '/developers/architecture/runtime' }
+        ]},
+        { text: 'Operations', items: [
+          { text: 'Deployment',                link: '/developers/operations/deployment' },
+          { text: 'GitHub App setup',          link: '/developers/operations/github-app-setup' },
+          { text: 'IAS setup',                 link: '/developers/operations/ias-setup' },
+          { text: 'Joule chat admin settings', link: '/developers/operations/joule-chat-admin-settings' },
+          { text: 'MTA deployment',            link: '/developers/operations/mta-deployment' },
+          { text: 'Production readiness',      link: '/developers/operations/production-ready' },
+          { text: 'QA channel bootstrap',      link: '/developers/operations/qa-channel-bootstrap' },
+          { text: 'Testing endpoints',         link: '/developers/operations/testing-endpoints' },
+          { text: 'Testing guide',             link: '/developers/operations/testing-guide' }
+        ]},
+        { text: 'Reference', collapsed: true, items: [
+          { text: 'AI-friendly consumption',   link: '/developers/reference/ai-consumption' },
+          { text: 'Cookie and storage analysis', link: '/developers/reference/cookie-and-storage-analysis' },
+          { text: 'Design decisions',          link: '/developers/reference/design-decisions' },
+          { text: 'External integrations',     link: '/developers/reference/external-integrations' },
+          { text: 'Sage extension migration',  link: '/developers/reference/sage-extension-migration' },
+          { text: 'Theme variants',            link: '/developers/reference/theme-variants' }
+        ]}
+      ],
+
+      '/historic/': [
+        { text: 'Historic', items: [
+          { text: 'Overview',                        link: '/historic/' },
+          { text: 'AEM current state',               link: '/historic/aem-current-state' },
+          { text: 'AEM gap analysis',                link: '/historic/aem-gap-analysis' },
+          { text: 'Data migration',                  link: '/historic/data-migration' },
+          { text: 'Decommissioned tasks',            link: '/historic/decommissioned-tasks' },
+          { text: 'GitHub App migration',            link: '/historic/github-app-migration' },
+          { text: 'Hugo migration',                  link: '/historic/hugo-migration' },
+          { text: 'IMS API reference',               link: '/historic/ims-api-reference' },
+          { text: 'IMS uncovered features',          link: '/historic/ims-uncovered-features' },
+          { text: 'VitePress 2.x upgrade assessment', link: '/historic/vitepress-2x-upgrade-assessment' }
+        ]}
+      ]
     },
 
     search: { provider: 'local' },
