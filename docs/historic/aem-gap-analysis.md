@@ -188,7 +188,7 @@ The handler has been removed and `getFacets` refactored to use `SELECT.from(Sear
 **Resolution:**
 
 - v1 (tag overlap, shipped at tag `recommendations-v1-shipped` / `561118a`): Pure tag-overlap scoring with primary-tag bonus and same-mission exclusion. Computed in `scripts/parsers/recommendations.ts` during `npm run fetch-tutorials`.
-- v2 (co-completion blend, shipped 2026-05-20): Two-pass blended scorer combines 60% co-completion (from `TaskRecords` aggregator at `/build/co-completions`) with 40% tag overlap; corpus-wide normalization avoids iteration-order bias. Falls back to v1 when CAP catalog is offline. See plan: [docs/superpowers/plans/2026-05-20-next-steps-recommendations.md](../superpowers/plans/2026-05-20-next-steps-recommendations.md).
+- v2 (co-completion blend, shipped 2026-05-20): Two-pass blended scorer combines 60% co-completion (from `TaskRecords` aggregator at `/build/co-completions`) with 40% tag overlap; corpus-wide normalization avoids iteration-order bias. Falls back to v1 when CAP catalog is offline.
 - v3: Feed into Joule (queued in `project_joule_completion_suggestions.md`).
 
 ---

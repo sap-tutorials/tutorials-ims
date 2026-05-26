@@ -290,19 +290,19 @@ _This section number is reserved for future use. See §11 for known gaps._
 
 ## 11. Known gaps and near-term improvements
 
-These items are tracked in [../TODO.md](../TODO.md) and are listed here so authors know what to expect — and what *not* to expect — from the current workflow.
+These items are listed here so authors know what to expect — and what *not* to expect — from the current workflow.
 
 | Gap | Current state | Tracked in |
 |-----|---------------|------------|
-| Editorial review gate | Informal PR review in source repo; no formal Author QA lane | [../TODO.md](../TODO.md) §21 "System QA vs. Author QA" |
-| Approval / sign-off workflow | None — merge equals publish; no reviewer roles | [../TODO.md](../TODO.md) §21 |
-| PR preview deploys | None — preview requires local clone (§5) or QA channel (§5.1) | [../TODO.md](../TODO.md) §21 "PR preview URL" |
-| VS Code authoring extension | None — live preview, frontmatter validation, link checking are planned | [../TODO.md](../TODO.md) §21 "VS Code Extension (esp. Preview)" |
-| Reporting / analytics for authors | Available to platform admins only; author/management views not yet published | [../TODO.md](../TODO.md) §21 |
-| Tag taxonomy reference | Not yet author-facing; copy tags from a similar existing tutorial for now | [../TODO.md](../TODO.md) §21 |
-| Tag bulk import | Manual via Center Admin; CSV / API import planned | [../TODO.md](../TODO.md) §21 |
-| Per-tutorial rollback | Whole content-set rollback only; per-slug rollback not yet available | [../TODO.md](../TODO.md) §21 |
-| Precommit validation | Build errors land in `.tutorial-cache/errors.json`; author-facing `npm run validate-tutorials` partially in place but not published | [../TODO.md](../TODO.md) §21 |
+| Editorial review gate | Informal PR review in source repo; no formal Author QA lane | §21 "System QA vs. Author QA" |
+| Approval / sign-off workflow | None — merge equals publish; no reviewer roles | §21 |
+| PR preview deploys | None — preview requires local clone (§5) or QA channel (§5.1) | §21 "PR preview URL" |
+| VS Code authoring extension | None — live preview, frontmatter validation, link checking are planned | §21 "VS Code Extension (esp. Preview)" |
+| Reporting / analytics for authors | Available to platform admins only; author/management views not yet published | §21 |
+| Tag taxonomy reference | Not yet author-facing; copy tags from a similar existing tutorial for now | §21 |
+| Tag bulk import | Manual via Center Admin; CSV / API import planned | §21 |
+| Per-tutorial rollback | Whole content-set rollback only; per-slug rollback not yet available | §21 |
+| Precommit validation | Build errors land in `.tutorial-cache/errors.json`; author-facing `npm run validate-tutorials` partially in place but not published | §21 |
 
 If any of these items become a blocker for your work, mention it on the tracking issue rather than working around it.
 
@@ -313,7 +313,6 @@ If any of these items become a blocker for your work, mention it on the tracking
 - [build.md](../developers/architecture/build.md) — the full technical pipeline (fetch → parse → Hugo → HANA)
 - [../hugo-migration.md](../hugo-migration.md) — why Hugo, layout conventions
 - [../tutorial-repo-dispatch.yml](tutorial-repo-dispatch.yml) — the GitHub Action your repo needs in order to trigger rebuilds
-- [../TODO.md §21 Future Work](../TODO.md) — open items relevant to authors
 - [repo-group-owners.md](repo-group-owners.md) — for repo owners reviewing your PRs
 - [center-admin.md](center-admin.md) — for taxonomy, tag onboarding, and rollback
 - [../qa-channel-bootstrap.md](../qa-channel-bootstrap.md) — author-preview channel

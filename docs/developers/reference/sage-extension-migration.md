@@ -88,7 +88,7 @@ The CAP DB schema in [`db/schema.cds`](../../../db/schema.cds) is a near-complet
 | `setReviewedStatus(id, true)` | `action reviewTutorial(tutorialId)` + `snoozeTutorial(tutorialId, days)` | [admin-service.cds:103-110](../../../srv/admin-service.cds#L103-L110) |
 | `searchTutorialsByOwner(name)` | `Tutorials?$filter=meta/any(m: m/owner eq 'Riley Rainey')` (OData query, no custom action needed) | derivable from existing projection |
 | repo-group config (currently fetched from GitHub raw) | `RepoCatalog` entity + `GET /build/repo-catalog` | [db/schema.cds:318](../../../db/schema.cds#L318), [server.js:122](../../../srv/server.js#L122) |
-| local markdown render (Sage in-process) | **`POST /preview/render`** on `tutorials-srv-qa` | [srv-qa/preview-renderer.js](../../../srv-qa/preview-renderer.js), spec at [docs/superpowers/specs/2026-05-23-vscode-author-preview-design.md](../../superpowers/specs/2026-05-23-vscode-author-preview-design.md) |
+| local markdown render (Sage in-process) | **`POST /preview/render`** on `tutorials-srv-qa` | [srv-qa/preview-renderer.js](../../../srv-qa/preview-renderer.js) |
 
 The `TutorialMeta` shape in [`db/schema.cds:200`](../../../db/schema.cds#L200) keeps the same notification-counter / review-date / monitored-status fields as IMS, so the "Needs-Review" / "In Production" status logic in Sage's `assigned_tutorials` table ports directly. Sage computes `status` client-side from `(reviewedAt + 120 days) vs now`; on the CAP side this could either stay client-side or be moved to a calculated element so all three surfaces (Sage, the admin UI, the public site) agree on the rule.
 
@@ -114,7 +114,7 @@ Sage previously called `tutorialMeta/search` with the user's name as a free-text
 
 #### 3. Slug-uniqueness check on create ✅ Resolved (no new endpoint)
 
-**Resolution:** Reuse the existing `GET /content/hashes` endpoint. It already returns a `{slug: sha256}` map of *active* content, which directly answers "is this slug already in production?" — no `/author/slugs` endpoint needed. Decision recorded in the design spec [docs/superpowers/specs/2026-05-24-sage-backend-gaps-design.md](superpowers/specs/2026-05-24-sage-backend-gaps-design.md).
+**Resolution:** Reuse the existing `GET /content/hashes` endpoint. It already returns a `{slug: sha256}` map of *active* content, which directly answers "is this slug already in production?" — no `/author/slugs` endpoint needed.
 
 #### 4. Repo-group catalog from CAP, not GitHub raw
 
@@ -173,12 +173,9 @@ The strategic question worth answering before writing code is whether SQLite sta
 ## References
 
 - Sage backend gaps PR (closes hard gaps 1–3 and soft gaps 6–8): [tutorials-poc PR #54](https://github.com/sap-tutorials/tutorials-ims/pull/54).
-- Design spec: [docs/superpowers/specs/2026-05-24-sage-backend-gaps-design.md](superpowers/specs/2026-05-24-sage-backend-gaps-design.md).
-- Implementation plan: [docs/superpowers/plans/2026-05-24-sage-backend-gaps.md](superpowers/plans/2026-05-24-sage-backend-gaps.md).
 - Sage source: [`D:/projects/sage-tutorial-extension`](https://github.com/sap-tutorials/sage-tutorial-extension) (also available on disk).
 - Sage architecture overview: [`D:/projects/sage-tutorial-extension/CLAUDE.md`](https://github.com/sap-tutorials/sage-tutorial-extension/blob/main/CLAUDE.md).
 - IMS API reference (legacy): [docs/historic/ims-api-reference.md](../../historic/ims-api-reference.md).
-- Preview endpoint design: [docs/superpowers/specs/2026-05-23-vscode-author-preview-design.md](../../superpowers/specs/2026-05-23-vscode-author-preview-design.md).
 - QA channel context (where the preview endpoint lives): [docs/developers/operations/qa-channel-bootstrap.md](../operations/qa-channel-bootstrap.md).
 - Tutorials-poc CAP services: [`srv/admin-service.cds`](../../../srv/admin-service.cds), [`srv/author-service.cds`](../../../srv/author-service.cds), [`srv/server.js`](../../../srv/server.js).
 - Schema: [`db/schema.cds`](../../../db/schema.cds).

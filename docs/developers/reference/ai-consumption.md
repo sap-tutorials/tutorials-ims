@@ -284,7 +284,7 @@ Critically, these headers cover **all** routes — including `/tutorials/*` whic
 
 **File:** [AGENTS.md](../../../AGENTS.md)
 
-Distinct from the **public** AGENTS.md (#10). This one targets coding agents (Claude Code, Cursor, Copilot, Aider) working *inside the repo*. It points them to [CLAUDE.md](../../../CLAUDE.md) as the canonical project guide and lists the quick conventions:
+Distinct from the **public** AGENTS.md (#10). This one targets coding agents (Claude Code, Cursor, Copilot, Aider) working *inside the repo*. It points them to [CLAUDE.md](https://github.com/sap-tutorials/tutorials-poc/blob/main/CLAUDE.md) as the canonical project guide and lists the quick conventions:
 
 - Hugo content under `hugo/content/tutorials/` is generated — never hand-edit
 - Tutorial HTML is served from HANA BLOBs, not static files

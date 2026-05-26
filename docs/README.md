@@ -22,17 +22,3 @@ This is the documentation set for the platform that hosts developers.sap.com. Pi
 ## I'm researching how something used to work
 
 → **[Historic](historic/README.md)** — AEM, Java IMS, completed migrations, decommissioned tasks.
-
----
-
-## Cross-cutting
-
-These topics span personas:
-
-- **[Improvements](improvements.md)** — forward-looking enhancement roadmap
-- **[TODO](TODO.md)** — gap analysis and outstanding work
-- **[Pilot Status](pilot-status.md)** — production scope lock as of 2026-05-24
-
-## Working notes (internal)
-
-- **[Superpowers](superpowers/)** — specs and plans for in-flight engineering work; not user-facing documentation
