@@ -971,12 +971,12 @@ annotate AdminService.CompletionAnalytics with @(
       { Property: completionTimeMs }
     ]
   },
-  Analytics.AggregatedProperties: [{
+  Analytics.AggregatedProperty #totalCompletions: {
     Name: 'totalCompletions',
     AggregationMethod: 'sum',
     AggregatableProperty: completionCount,
     ![@Common.Label]: 'Completions'
-  }],
+  },
   UI.Chart: {
     ChartType: #Line,
     Dimensions: [completionDay, taskType],

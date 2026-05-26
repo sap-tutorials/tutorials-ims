@@ -79,7 +79,13 @@ sap.ui.define([
   }
 
   return {
-    onEditMarkdown: function (oBindingContext) {
+    onEditMarkdown: function (oEvent) {
+      // FE V4 invokes manifest-declared press handlers with (oEvent), not a
+      // binding context. Resolve the OP's binding context off the source
+      // control. Earlier versions of this file took (oBindingContext)
+      // directly and silently no-op'd because the event object had no
+      // .getProperty().
+      var oBindingContext = oEvent && oEvent.getSource && oEvent.getSource().getBindingContext && oEvent.getSource().getBindingContext();
       if (!oBindingContext) return;
       _oCurrentContext = oBindingContext;
 
