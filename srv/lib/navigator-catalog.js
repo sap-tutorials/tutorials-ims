@@ -126,7 +126,18 @@ export async function navigatorCatalogHandler(req, res) {
       .where({ taskType: 'GROUP', group_ID: { '!=': null } })
       .orderBy('path_ID', 'itemOrder');
 
-    const pathIds = [...new Set(nestedGroupItems.map(i => i.path_ID))];
+    // Also query for checkpoint items to pre-populate path/mission maps for Task 6.
+    const checkpointItems = await SELECT.from(CompletionPathItems)
+      .columns('path_ID', 'checkpointTitle', 'itemOrder')
+      .where({ taskType: 'CHECKPOINT' })
+      .orderBy('path_ID', 'itemOrder');
+
+    const pathIds = [
+      ...new Set([
+        ...nestedGroupItems.map(i => i.path_ID),
+        ...checkpointItems.map(i => i.path_ID),
+      ]),
+    ];
     const paths = pathIds.length
       ? await SELECT.from(CompletionPaths).columns('ID', 'legacyId', 'name', 'slug', 'mission_ID').where({ ID: { in: pathIds } })
       : [];
@@ -177,7 +188,30 @@ export async function navigatorCatalogHandler(req, res) {
       }
     }
 
-    const result = { missions: missionRefs, groups: groupRefs, tutorialMappings };
+    // Checkpoints: CompletionPathItems with taskType='CHECKPOINT' are filtered out by the
+    // NavigatorCatalog view (taskType='TUTORIAL' only). We re-query CHECKPOINTs and emit
+    // them as milestone markers in checkpointMappings, indexed by their Mission.
+    // (checkpointItems was already queried earlier to populate pathById and missionById maps.)
+
+    const checkpointMappings = [];
+    for (const item of checkpointItems) {
+      const path = pathById.get(item.path_ID);
+      if (!path) continue;
+      const mission = missionById.get(path.mission_ID);
+      if (!mission) continue;
+      if (!item.checkpointTitle) continue;
+      checkpointMappings.push({
+        title: item.checkpointTitle,
+        missionId: mission.legacyId,
+        missionTitle: mission.title,
+        missionSlug: mission.slug || String(mission.legacyId),
+        pathId: path.legacyId,
+        pathSlug: path.slug || String(path.legacyId),
+        itemOrder: item.itemOrder,
+      });
+    }
+
+    const result = { missions: missionRefs, groups: groupRefs, tutorialMappings, checkpointMappings };
     cachedResponse = result;
     cacheTimestamp = now;
     res.setHeader('X-Cache', 'MISS');
