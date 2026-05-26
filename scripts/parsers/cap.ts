@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { Mission, MissionHierarchy } from './types.js'
+import type { Mission, MissionHierarchy, StandaloneGroup } from './types.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const CACHE_FILE = join(__dirname, '..', '..', '.tutorial-cache', 'cap-catalog.json')
@@ -11,6 +11,7 @@ interface CapCacheData {
   timestamp: number
   missions: Mission[]
   hierarchies: MissionHierarchy[]
+  standaloneGroups?: StandaloneGroup[]  // optional — older caches won't have it
 }
 
 export function loadCapCache(): CapCacheData | null {
@@ -18,19 +19,29 @@ export function loadCapCache(): CapCacheData | null {
   try {
     const data: CapCacheData = JSON.parse(readFileSync(CACHE_FILE, 'utf-8'))
     if (Date.now() - data.timestamp > CACHE_TTL_MS) return null
+    // Treat caches missing the new field as stale to force refetch.
+    if (!Array.isArray(data.standaloneGroups)) return null
     return data
   } catch {
     return null
   }
 }
 
-export function saveCapCache(missions: Mission[], hierarchies: MissionHierarchy[]): void {
+export function saveCapCache(
+  missions: Mission[],
+  hierarchies: MissionHierarchy[],
+  standaloneGroups: StandaloneGroup[]
+): void {
   mkdirSync(dirname(CACHE_FILE), { recursive: true })
-  const data: CapCacheData = { timestamp: Date.now(), missions, hierarchies }
+  const data: CapCacheData = { timestamp: Date.now(), missions, hierarchies, standaloneGroups }
   writeFileSync(CACHE_FILE, JSON.stringify(data, null, 2), 'utf-8')
 }
 
-export async function fetchBuildCatalog(baseUrl: string): Promise<{ missions: Mission[]; hierarchies: MissionHierarchy[] }> {
+export async function fetchBuildCatalog(baseUrl: string): Promise<{
+  missions: Mission[]
+  hierarchies: MissionHierarchy[]
+  standaloneGroups: StandaloneGroup[]
+}> {
   const url = `${baseUrl}/build/catalog`
   const res = await fetch(url, {
     headers: { 'Accept': 'application/json' },
@@ -40,8 +51,16 @@ export async function fetchBuildCatalog(baseUrl: string): Promise<{ missions: Mi
     throw new Error(`CAP build catalog failed: ${res.status} ${res.statusText}`)
   }
 
-  const data = await res.json() as { missions: Mission[]; hierarchies: MissionHierarchy[] }
-  return data
+  const data = await res.json() as {
+    missions: Mission[]
+    hierarchies: MissionHierarchy[]
+    standaloneGroups?: StandaloneGroup[]
+  }
+  return {
+    missions: data.missions,
+    hierarchies: data.hierarchies,
+    standaloneGroups: data.standaloneGroups ?? [],
+  }
 }
 
 export async function fetchCoCompletions(

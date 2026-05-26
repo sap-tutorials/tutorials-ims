@@ -116,3 +116,11 @@ export interface MissionHierarchy {
   groups: HierarchyGroup[]
   tutorialSlugs: string[]
 }
+
+export interface StandaloneGroup {
+  imsId: number
+  title: string
+  slug: string
+  description: string
+  tutorialSlugs: string[]
+}
