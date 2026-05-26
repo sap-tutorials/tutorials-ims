@@ -311,8 +311,8 @@ If any of these items become a blocker for your work, open an issue on the proje
 ## Reference: related docs
 
 - [build.md](../developers/architecture/build.md) — the full technical pipeline (fetch → parse → Hugo → HANA)
-- [../hugo-migration.md](../historic/hugo-migration.md) — why Hugo, layout conventions
-- [../tutorial-repo-dispatch.yml](tutorial-repo-dispatch.yml) — the GitHub Action your repo needs in order to trigger rebuilds
+- [hugo-migration.md](../historic/hugo-migration.md) — why Hugo, layout conventions
+- [tutorial-repo-dispatch.yml](tutorial-repo-dispatch.yml) — the GitHub Action your repo needs in order to trigger rebuilds
 - [repo-group-owners.md](repo-group-owners.md) — for repo owners reviewing your PRs
 - [center-admin.md](center-admin.md) — for taxonomy, tag onboarding, and rollback
 - [../developers/operations/qa-channel-bootstrap.md](../developers/operations/qa-channel-bootstrap.md) — author-preview channel

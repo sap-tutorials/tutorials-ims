@@ -197,4 +197,4 @@ Operational run-book for the analytics administrator — the role responsible fo
 
 - [../historic/decommissioned-tasks.md](../historic/decommissioned-tasks.md) — tasks from the previous run-book that have been retired or replaced
 - [center-admin.md](center-admin.md) — operator-side coordination: event lifecycle, user anonymization, catalog management
-- [../testing-endpoints.md](../developers/operations/testing-endpoints.md) — canonical endpoint reference including display-app dashboard routes and auth scopes
+- [../developers/operations/testing-endpoints.md](../developers/operations/testing-endpoints.md) — canonical endpoint reference including display-app dashboard routes and auth scopes
