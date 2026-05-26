@@ -4,7 +4,7 @@
 **Scope:** Public-facing surface only — Hugo site (`/`, `/tutorials/*`, `/missions/*`, `/groups/*`), App Space (`hugo-apps/src/app-space`), Tutorial Navigator (`hugo-apps/src/navigator`), Mini-Navigator, Nav Dropdown, Joule chat widget, Display app (`app/display-app/`), Scanner UI (UI5 + Vue variants), and the AppRouter routes that serve them. **The Admin UI shell (`/admin-ui/*`) is explicitly excluded** from this audit.
 **Out of scope:** Admin shell theme persistence, admin Fiori Elements apps, internal CAP service-to-service traffic.
 
-This document is the cookie/storage inventory required by [TODO.md §21 — Cookie usage report & consent banner](../../TODO.md#L549). It distinguishes **HTTP cookies** (sent automatically with every request to the matching origin/path) from **`localStorage` / `sessionStorage`** (Web Storage API, never transmitted, cleared by different rules). Both are in scope of GDPR Art. 5(3) / ePrivacy Directive (the "cookie law" applies to **any storage of or access to information on the user's terminal equipment**, regardless of mechanism), but the consent rules and lifetime characteristics differ.
+This document is the cookie/storage inventory for the public-facing surface. It distinguishes **HTTP cookies** (sent automatically with every request to the matching origin/path) from **`localStorage` / `sessionStorage`** (Web Storage API, never transmitted, cleared by different rules). Both are in scope of GDPR Art. 5(3) / ePrivacy Directive (the "cookie law" applies to **any storage of or access to information on the user's terminal equipment**, regardless of mechanism), but the consent rules and lifetime characteristics differ.
 
 ---
 
@@ -133,7 +133,7 @@ The Joule cache writes `{ firstName, familyName, email, id }` to `sessionStorage
 
 **Risk:** A tutorial author can embed:
 - A YouTube `<iframe src="youtube.com/embed/...">` — sets YouTube cookies on first paint
-- A `<script>` tag (CSP currently allows `'unsafe-inline'` — see [TODO.md §14.2](../../TODO.md#L289))
+- A `<script>` tag (CSP currently allows `'unsafe-inline'`)
 - An `<img src="https://tracker.example/pixel.gif">` — sets third-party cookies
 
 **Compliance impact:** Any of these would create cookie-setting before consent. This is the **largest unbounded risk** on the public surface — it depends entirely on what authors write in markdown.
@@ -184,7 +184,7 @@ When analytics is added (Adobe Analytics tag, Matomo, or similar):
 
 ## 6. Recommended Next Actions
 
-Ordered by impact and dependency, suitable for the work tracked in [TODO.md §21 — Cookie usage report & consent banner](../../TODO.md#L549).
+Ordered by impact and dependency, suitable for the cookie usage and consent banner work.
 
 1. **Validate this inventory with privacy/legal** — confirm the §2/§3 entries and their proposed consent classifications.
 2. **Publish a cookie policy page** at `/cookies` linked from the footer, listing the entries from §2 and §3.

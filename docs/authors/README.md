@@ -44,3 +44,13 @@ If you find yourself doing something operationally important that isn't document
 ## Historic context
 
 - [historic/decommissioned-tasks.md](../historic/decommissioned-tasks.md) — historic task mapping
+
+## Updating the docs site sidebar
+
+When you add a new page under `docs/end-users/`, `docs/authors/`, `docs/developers/`, or `docs/historic/`, you must register it in the sidebar at [`docs/.vitepress/config.ts`](../.vitepress/config.ts) under the matching persona block. The build runs `scripts/check-docs-sidebar.cjs` as `predocs:build` — it fails with a clear diff if a page is unregistered or a link is dead.
+
+Run locally to verify:
+
+```bash
+npm run docs:build
+```

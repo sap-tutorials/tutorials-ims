@@ -212,7 +212,7 @@ Key points:
 
 - **What it shows** — only content from your `<repo>-Contribution` repo (the private companion that holds quiz rules and draft tutorial content). It is not a copy of the production channel.
 - **Access requirement** — you must hold the `Tutorial.Author` role collection in the BTP subaccount. Ask a Center Admin ([center-admin.md](center-admin.md)) to assign it.
-- **Setup** — the one-time infrastructure setup (CI secrets, dispatch-token distribution, HDI binding, role-collection creation) is documented in [../qa-channel-bootstrap.md](../qa-channel-bootstrap.md). You do not need to repeat this; it is done once per environment.
+- **Setup** — the one-time infrastructure setup (CI secrets, dispatch-token distribution, HDI binding, role-collection creation) is documented in [../developers/operations/qa-channel-bootstrap.md](../developers/operations/qa-channel-bootstrap.md). You do not need to repeat this; it is done once per environment.
 - **Local dev server** — your local `npm run dev` does **not** use any QA flag. The QA flag (`hugo.qa.toml`) only applies to the deployed QA build. Running locally is always sufficient for layout and step rendering checks.
 - **Triggering a QA rebuild** — push a change to the `*-Contribution` repo. The same repo-dispatch mechanism used for production fires a QA-specific CI workflow that fetches from `-Contribution` repos only, builds with the QA Hugo config, and publishes to the QA HANA instance.
 - **URL pattern** — `https://<approuter>/tutorials-qa/<your-slug>` (requires `Tutorial.Author` scope; access is denied to unauthenticated users).
@@ -283,37 +283,36 @@ _This section number is reserved for future use. See §11 for known gaps._
 | "Is my Markdown structured correctly?" | Open a draft PR; a [repo group owner](repo-group-owners.md) can review a draft PR and flag issues |
 | "Why didn't my change appear on production?" | Check the `tutorials-poc` GitHub Actions runs; look for the failed dispatch |
 | "How do I add a new tag / category?" | See [Center Admin](center-admin.md) § "Import a new tag" — taxonomy is centrally managed |
-| "I need a preview before merging" | Run locally per §5, or request QA channel access (§5.1) — see [../qa-channel-bootstrap.md](../qa-channel-bootstrap.md) (Tutorial.Author scope required) |
+| "I need a preview before merging" | Run locally per §5, or request QA channel access (§5.1) — see [../developers/operations/qa-channel-bootstrap.md](../developers/operations/qa-channel-bootstrap.md) (Tutorial.Author scope required) |
 | Anything else | Platform team channel (internal) |
 
 ---
 
 ## 11. Known gaps and near-term improvements
 
-These items are tracked in [../TODO.md](../TODO.md) and are listed here so authors know what to expect — and what *not* to expect — from the current workflow.
+These items are listed here so authors know what to expect — and what *not* to expect — from the current workflow.
 
-| Gap | Current state | Tracked in |
-|-----|---------------|------------|
-| Editorial review gate | Informal PR review in source repo; no formal Author QA lane | [../TODO.md](../TODO.md) §21 "System QA vs. Author QA" |
-| Approval / sign-off workflow | None — merge equals publish; no reviewer roles | [../TODO.md](../TODO.md) §21 |
-| PR preview deploys | None — preview requires local clone (§5) or QA channel (§5.1) | [../TODO.md](../TODO.md) §21 "PR preview URL" |
-| VS Code authoring extension | None — live preview, frontmatter validation, link checking are planned | [../TODO.md](../TODO.md) §21 "VS Code Extension (esp. Preview)" |
-| Reporting / analytics for authors | Available to platform admins only; author/management views not yet published | [../TODO.md](../TODO.md) §21 |
-| Tag taxonomy reference | Not yet author-facing; copy tags from a similar existing tutorial for now | [../TODO.md](../TODO.md) §21 |
-| Tag bulk import | Manual via Center Admin; CSV / API import planned | [../TODO.md](../TODO.md) §21 |
-| Per-tutorial rollback | Whole content-set rollback only; per-slug rollback not yet available | [../TODO.md](../TODO.md) §21 |
-| Precommit validation | Build errors land in `.tutorial-cache/errors.json`; author-facing `npm run validate-tutorials` partially in place but not published | [../TODO.md](../TODO.md) §21 |
+| Gap | Current state |
+|-----|---------------|
+| Editorial review gate | Informal PR review in source repo; no formal Author QA lane |
+| Approval / sign-off workflow | None — merge equals publish; no reviewer roles |
+| PR preview deploys | None — preview requires local clone (§5) or QA channel (§5.1) |
+| VS Code authoring extension | None — live preview, frontmatter validation, link checking are planned |
+| Reporting / analytics for authors | Available to platform admins only; author/management views not yet published |
+| Tag taxonomy reference | Not yet author-facing; copy tags from a similar existing tutorial for now |
+| Tag bulk import | Manual via Center Admin; CSV / API import planned |
+| Per-tutorial rollback | Whole content-set rollback only; per-slug rollback not yet available |
+| Precommit validation | Build errors land in `.tutorial-cache/errors.json`; author-facing `npm run validate-tutorials` partially in place but not published |
 
-If any of these items become a blocker for your work, mention it on the tracking issue rather than working around it.
+If any of these items become a blocker for your work, open an issue on the project's GitHub repository.
 
 ---
 
 ## Reference: related docs
 
 - [build.md](../developers/architecture/build.md) — the full technical pipeline (fetch → parse → Hugo → HANA)
-- [../hugo-migration.md](../hugo-migration.md) — why Hugo, layout conventions
-- [../tutorial-repo-dispatch.yml](tutorial-repo-dispatch.yml) — the GitHub Action your repo needs in order to trigger rebuilds
-- [../TODO.md §21 Future Work](../TODO.md) — open items relevant to authors
+- [hugo-migration.md](../historic/hugo-migration.md) — why Hugo, layout conventions
+- [tutorial-repo-dispatch.yml](tutorial-repo-dispatch.yml) — the GitHub Action your repo needs in order to trigger rebuilds
 - [repo-group-owners.md](repo-group-owners.md) — for repo owners reviewing your PRs
 - [center-admin.md](center-admin.md) — for taxonomy, tag onboarding, and rollback
-- [../qa-channel-bootstrap.md](../qa-channel-bootstrap.md) — author-preview channel
+- [../developers/operations/qa-channel-bootstrap.md](../developers/operations/qa-channel-bootstrap.md) — author-preview channel

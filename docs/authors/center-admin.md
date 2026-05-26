@@ -281,7 +281,7 @@ The pipeline: fetches all tutorials from GitHub → generates Hugo pages → bui
 
 **Related:**
 - [build.md](../developers/architecture/build.md)
-- [testing-endpoints.md](../testing-endpoints.md)
+- [testing-endpoints.md](../developers/operations/testing-endpoints.md)
 
 ---
 
@@ -312,7 +312,7 @@ The pipeline: fetches all tutorials from GitHub → generates Hugo pages → bui
 4. **Content GC:** A daily cron job at 03:00 prunes `SUPERSEDED` and `ROLLED_BACK` content manifest versions older than 7 days (keeping the three most recent for rollback). No action needed unless the job shows errors in the Pipeline Logs.
 
 **Related:**
-- [testing-endpoints.md](../testing-endpoints.md)
+- [testing-endpoints.md](../developers/operations/testing-endpoints.md)
 
 ---
 
@@ -388,7 +388,7 @@ Document the result (date, duration, success/fail) in the team's incident log.
 
 **Related:**
 
-- [mta-deployment.md](../mta-deployment.md) — MTA build and CF deploy reference, including HANA binding setup
+- [mta-deployment.md](../developers/operations/mta-deployment.md) — MTA build and CF deploy reference, including HANA binding setup
 - [analytics-admin.md](analytics-admin.md) — Export data action for logical off-system archiving
 
 ---
@@ -588,6 +588,6 @@ Author Office Hours — <Month YYYY>
 - [decommissioned-tasks.md](../historic/decommissioned-tasks.md) — tasks from the old run-book that have been replaced or removed
 - [analytics-admin.md](analytics-admin.md) — analytics platform operations (tutorial engagement, query explorer)
 - [build.md](../developers/architecture/build.md) — deep-dive on the fetch → Hugo → publish pipeline
-- [mta-deployment.md](../mta-deployment.md) — MTA build and CF deploy reference
+- [mta-deployment.md](../developers/operations/mta-deployment.md) — MTA build and CF deploy reference
 - [authentication.md](../developers/architecture/authentication.md) — XSUAA, BTP identity, AppRouter auth flows
-- [testing-endpoints.md](../testing-endpoints.md) — canonical endpoint reference with auth/scope mapping
+- [testing-endpoints.md](../developers/operations/testing-endpoints.md) — canonical endpoint reference with auth/scope mapping

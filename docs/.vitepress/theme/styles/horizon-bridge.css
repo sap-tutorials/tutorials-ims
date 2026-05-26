@@ -1,0 +1,43 @@
+:root {
+  --vp-c-brand-1: #0070f2;
+  --vp-c-brand-2: #0056cf;
+  --vp-c-brand-3: #003f9c;
+  --vp-c-brand-soft: rgba(0, 112, 242, 0.14);
+
+  --vp-c-bg: #ffffff;
+  --vp-c-bg-alt: #f5f6f7;
+  --vp-c-bg-elv: #ffffff;
+
+  --vp-c-text-1: #1d2d3e;
+  --vp-c-text-2: #475e75;
+  --vp-c-text-3: #6a7d92;
+
+  --vp-c-divider: #e4e7ea;
+  --vp-c-border: #cbd5dc;
+
+  --vp-code-bg: #f5f6f7;
+  --vp-code-block-bg: #f5f6f7;
+
+  --vp-font-family-base: '72', '72full', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+:root.dark {
+  --vp-c-brand-1: #1b90ff;
+  --vp-c-brand-2: #4dabff;
+  --vp-c-brand-3: #79c0ff;
+  --vp-c-brand-soft: rgba(27, 144, 255, 0.18);
+
+  --vp-c-bg: #1c2228;
+  --vp-c-bg-alt: #232a31;
+  --vp-c-bg-elv: #2a323a;
+
+  --vp-c-text-1: #eaecee;
+  --vp-c-text-2: #b3bcc5;
+  --vp-c-text-3: #8a96a3;
+
+  --vp-c-divider: #2a323a;
+  --vp-c-border: #3a4651;
+
+  --vp-code-bg: #232a31;
+  --vp-code-block-bg: #232a31;
+}

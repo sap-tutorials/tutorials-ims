@@ -1,38 +1,33 @@
 ---
-title: Documentation
-description: Persona-organized documentation for the SAP Tutorial Platform — the system that hosts developers.sap.com.
+layout: home
+hero:
+  name: SAP Tutorials Platform
+  tagline: The platform behind developers.sap.com — for readers, authors, and engineers.
+  image:
+    src: /logo-light.svg
+    alt: SAP Tutorials
+  actions:
+    - theme: brand
+      text: Read the user guide
+      link: /end-users/
+    - theme: alt
+      text: Author a tutorial
+      link: /authors/
+features:
+  - title: For Readers
+    details: How developers.sap.com works, signing in, progress, privacy, and accessibility.
+    link: /end-users/
+    linkText: Read the user guide
+  - title: For Authors
+    details: Writing tutorials, validating with the QA preview channel, and getting them into developers.sap.com.
+    link: /authors/
+    linkText: Author a tutorial
+  - title: For Platform Engineers
+    details: Local dev, architecture, operations, and reference for the team running the platform.
+    link: /developers/
+    linkText: Engineer's guide
+  - title: Historic
+    details: How AEM, IMS, and the legacy migrations worked — for context when reading older code.
+    link: /historic/
+    linkText: How it used to be
 ---
-
-# SAP Tutorial Platform — Documentation
-
-This is the documentation set for the platform that hosts developers.sap.com. Pick the persona that matches what you're doing:
-
-## I'm learning from tutorials
-
-→ **[End Users](end-users/README.md)** — finding tutorials, using Joule chat, progress and completions, privacy, accessibility.
-
-## I'm writing tutorials
-
-→ **[Authors](authors/README.md)** — writing tutorials in markdown, owning a repo group, running an event center, viewing analytics.
-
-## I'm building or operating the platform
-
-→ **[Developers](developers/README.md)** — architecture, operations, reference. Start here if you work on the codebase.
-
-## I'm researching how something used to work
-
-→ **[Historic](historic/README.md)** — AEM, Java IMS, completed migrations, decommissioned tasks.
-
----
-
-## Cross-cutting
-
-These topics span personas:
-
-- **[Improvements](improvements.md)** — forward-looking enhancement roadmap
-- **[TODO](TODO.md)** — gap analysis and outstanding work
-- **[Pilot Status](pilot-status.md)** — production scope lock as of 2026-05-24
-
-## Working notes (internal)
-
-- **[Superpowers](superpowers/)** — specs and plans for in-flight engineering work; not user-facing documentation

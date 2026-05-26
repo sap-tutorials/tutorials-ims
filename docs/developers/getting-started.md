@@ -29,7 +29,7 @@ Tutorials must be fetched before `dev` or `build` — `fetch-tutorials` populate
 
 ## Folder map
 
-The full annotated folder map lives in the [project README](../../README.md#folder-map). The most important entry points for local development:
+The full annotated folder map lives in the [project README](https://github.com/sap-tutorials/tutorials-poc/blob/main/README.md#folder-map). The most important entry points for local development:
 
 - `approuter/` — Express-based AppRouter; serves Hugo static build, proxies to CAP, mounts admin/scanner/analytics SPAs
 - `srv/` — CAP Node.js services (DeveloperService, AdminService, AnalyticsService, ContentStore, ChatService, etc.)
@@ -41,7 +41,7 @@ The full annotated folder map lives in the [project README](../../README.md#fold
 
 ## Scripts reference
 
-The full script tables (Setup / Dev / Build / Test / Content publishing / QA channel / Migration) live in the [project README](../../README.md#scripts). Run `jq '.scripts' package.json` for the complete machine-readable list.
+The full script tables (Setup / Dev / Build / Test / Content publishing / QA channel / Migration) live in the [project README](https://github.com/sap-tutorials/tutorials-poc/blob/main/README.md#scripts). Run `jq '.scripts' package.json` for the complete machine-readable list.
 
 ## Environment variables
 

@@ -86,13 +86,13 @@
 4. **CI cache persistence**: `.github/workflows/rebuild-content.yml` now restores `.tutorial-cache/` between runs via `actions/cache@v4`, making tier 3 effective on fresh runners.
 5. **HANA RepoCatalog fallback**: New `RepoCatalog` entity in `db/schema.cds` with `/build/repo-catalog` endpoints. The fetcher writes the discovery map to HANA on every successful GitHub run (gated on `source === 'github'` so prolonged outages don't refresh `lastSyncedAt` with stale data) and falls back to it when both GitHub and the disk cache miss. Bearer auth on POST reuses `CONTENT_API_KEY` and `contentAuthMiddleware` — no second secret.
 6. **Author self-service single-tutorial refresh**: `rebuild-content.yml` accepts an optional `slug` input on `workflow_dispatch`. The fetch step reads it as `TUTORIAL_SLUG`, busts that slug's markdown cache, regenerates everything else from cache, and skips the HANA `RepoCatalog` upload (a partial run must not overwrite the catalog). Authors trigger refreshes themselves from the GitHub Actions UI — no admin-mediated tooling required.
-7. **GitHub App credential migration (staged)**: The fetch workflow now conditionally generates a short-lived (1h TTL) installation token via `actions/create-github-app-token@v1`, gated on repo variable `USE_GITHUB_APP=true`. Until the org admin completes registration the step is skipped and the existing PAT path is used. See [`github-app-migration.md`](github-app-migration.md) for rationale and [`github-app-setup.md`](../github-app-setup.md) for the org-admin runbook. This eliminates the recurring SAP-PAT-expiry build break and removes the human-account dependency without requiring any code change.
+7. **GitHub App credential migration (staged)**: The fetch workflow now conditionally generates a short-lived (1h TTL) installation token via `actions/create-github-app-token@v1`, gated on repo variable `USE_GITHUB_APP=true`. Until the org admin completes registration the step is skipped and the existing PAT path is used. See [`github-app-migration.md`](github-app-migration.md) for rationale and [`github-app-setup.md`](../developers/operations/github-app-setup.md) for the org-admin runbook. This eliminates the recurring SAP-PAT-expiry build break and removes the human-account dependency without requiring any code change.
 
 The three-tier discovery chain is `GitHub → disk cache → HANA RepoCatalog`. A complete GitHub outage on a fresh runner with empty actions cache now still recovers the last known-good catalog.
 
 **Still queued (not blocking cutover):**
 
-- **GitHub App org registration** — workflow code is in place; activation requires the org admin to register `sap-tutorials-builder`, generate a private key, and install on the `sap-tutorials` org. Tracked in [`github-app-setup.md`](../github-app-setup.md).
+- **GitHub App org registration** — workflow code is in place; activation requires the org admin to register `sap-tutorials-builder`, generate a private key, and install on the `sap-tutorials` org. Tracked in [`github-app-setup.md`](../developers/operations/github-app-setup.md).
 - **Multi-token rotation** — won't do. Single token is sufficient for current build cadence (well under any rate limit). Revisit only if rate-limit incidents recur. AEM's pool addressed an hourly-cadence problem we no longer have.
 - **REST-only discovery fallback** — won't do. Was level 3 of the original 4-level plan; the HANA tier is a strictly stronger replacement (durable, source-tagged, survives runner-cache loss). Adding REST below HANA would only help in the narrow window where GraphQL is down but REST is up *and* HANA is also unreachable — which is implausible enough to not be worth the carry cost.
 
@@ -188,7 +188,7 @@ The handler has been removed and `getFacets` refactored to use `SELECT.from(Sear
 **Resolution:**
 
 - v1 (tag overlap, shipped at tag `recommendations-v1-shipped` / `561118a`): Pure tag-overlap scoring with primary-tag bonus and same-mission exclusion. Computed in `scripts/parsers/recommendations.ts` during `npm run fetch-tutorials`.
-- v2 (co-completion blend, shipped 2026-05-20): Two-pass blended scorer combines 60% co-completion (from `TaskRecords` aggregator at `/build/co-completions`) with 40% tag overlap; corpus-wide normalization avoids iteration-order bias. Falls back to v1 when CAP catalog is offline. See plan: [docs/superpowers/plans/2026-05-20-next-steps-recommendations.md](../superpowers/plans/2026-05-20-next-steps-recommendations.md).
+- v2 (co-completion blend, shipped 2026-05-20): Two-pass blended scorer combines 60% co-completion (from `TaskRecords` aggregator at `/build/co-completions`) with 40% tag overlap; corpus-wide normalization avoids iteration-order bias. Falls back to v1 when CAP catalog is offline.
 - v3: Feed into Joule (queued in `project_joule_completion_suggestions.md`).
 
 ---
