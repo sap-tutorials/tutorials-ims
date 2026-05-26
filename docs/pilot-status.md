@@ -195,4 +195,4 @@ Preserved for traceability. The original pilot validated UI5 Web Components as t
 - Per-feature delivery details and validation notes: project memory entries U0 through U18, plus shipped-feature project memories
 - Architecture deep-dives: this folder ([docs/](.))
 - Improvement backlog source: `improvements.md` (excluded from public site)
-- Project conventions and gotchas: [../CLAUDE.md](../CLAUDE.md)
+- Project conventions and gotchas: [CLAUDE.md](https://github.com/sap-tutorials/tutorials-poc/blob/main/CLAUDE.md)

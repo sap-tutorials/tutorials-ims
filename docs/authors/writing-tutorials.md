@@ -292,19 +292,19 @@ _This section number is reserved for future use. See §11 for known gaps._
 
 These items are listed here so authors know what to expect — and what *not* to expect — from the current workflow.
 
-| Gap | Current state | Tracked in |
-|-----|---------------|------------|
-| Editorial review gate | Informal PR review in source repo; no formal Author QA lane | §21 "System QA vs. Author QA" |
-| Approval / sign-off workflow | None — merge equals publish; no reviewer roles | §21 |
-| PR preview deploys | None — preview requires local clone (§5) or QA channel (§5.1) | §21 "PR preview URL" |
-| VS Code authoring extension | None — live preview, frontmatter validation, link checking are planned | §21 "VS Code Extension (esp. Preview)" |
-| Reporting / analytics for authors | Available to platform admins only; author/management views not yet published | §21 |
-| Tag taxonomy reference | Not yet author-facing; copy tags from a similar existing tutorial for now | §21 |
-| Tag bulk import | Manual via Center Admin; CSV / API import planned | §21 |
-| Per-tutorial rollback | Whole content-set rollback only; per-slug rollback not yet available | §21 |
-| Precommit validation | Build errors land in `.tutorial-cache/errors.json`; author-facing `npm run validate-tutorials` partially in place but not published | §21 |
+| Gap | Current state |
+|-----|---------------|
+| Editorial review gate | Informal PR review in source repo; no formal Author QA lane |
+| Approval / sign-off workflow | None — merge equals publish; no reviewer roles |
+| PR preview deploys | None — preview requires local clone (§5) or QA channel (§5.1) |
+| VS Code authoring extension | None — live preview, frontmatter validation, link checking are planned |
+| Reporting / analytics for authors | Available to platform admins only; author/management views not yet published |
+| Tag taxonomy reference | Not yet author-facing; copy tags from a similar existing tutorial for now |
+| Tag bulk import | Manual via Center Admin; CSV / API import planned |
+| Per-tutorial rollback | Whole content-set rollback only; per-slug rollback not yet available |
+| Precommit validation | Build errors land in `.tutorial-cache/errors.json`; author-facing `npm run validate-tutorials` partially in place but not published |
 
-If any of these items become a blocker for your work, mention it on the tracking issue rather than working around it.
+If any of these items become a blocker for your work, open an issue on the project's GitHub repository.
 
 ---
 
