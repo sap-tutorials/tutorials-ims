@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import '@ui5/webcomponents-fiori/dist/ShellBar.js'
 import '@ui5/webcomponents-fiori/dist/ShellBarItem.js'
 import '@ui5/webcomponents/dist/Avatar.js'
@@ -11,6 +11,44 @@ import '@ui5/webcomponents/dist/ListItemStandard.js'
 import { useTheme, type ThemeMode } from './composables/useTheme'
 
 const { themeMode, cycleThemeMode, setThemeMode } = useTheme()
+
+type AuthUser = {
+  authenticated: boolean
+  id?: string
+  email?: string
+  givenName?: string
+  familyName?: string
+}
+
+const user = ref<AuthUser | null>(null)
+
+const userInitials = computed(() => {
+  const u = user.value
+  if (!u?.authenticated) return ''
+  const first = (u.givenName || '')[0] || ''
+  const last = (u.familyName || '')[0] || ''
+  const combined = (first + last).toUpperCase()
+  if (combined) return combined
+  return (u.id || '')[0]?.toUpperCase() || ''
+})
+
+const userName = computed(() => {
+  const u = user.value
+  if (!u?.authenticated) return ''
+  return [u.givenName, u.familyName].filter(Boolean).join(' ') || u.id || ''
+})
+
+const userEmail = computed(() => user.value?.email || '')
+
+onMounted(async () => {
+  try {
+    const res = await fetch('/auth/user', { credentials: 'include' })
+    if (!res.ok) return
+    user.value = await res.json()
+  } catch {
+    // Local Vite dev or transient error — keep placeholder icon.
+  }
+})
 
 // Single shellbar slot toggling between three modes keeps the bar compact.
 // The icon and tooltip reflect the active mode so the user can read state at
@@ -32,8 +70,6 @@ function onThemeClick() {
   cycleThemeMode()
 }
 
-// Pop-up menu lets users jump straight to a mode instead of cycling. Wired
-// through ui5-popover anchored on the avatar so it doesn't crowd the bar.
 function onProfileClick(e: Event) {
   const popover = document.getElementById('analyticsProfilePopover') as any
   if (!popover) return
@@ -42,7 +78,13 @@ function onProfileClick(e: Event) {
 }
 
 function onModeSelect(e: any) {
-  const mode = e.detail?.selectedItems?.[0]?.dataset?.mode as ThemeMode | undefined
+  const item = e.detail?.selectedItems?.[0]
+  if (!item) return
+  if (item.dataset?.action === 'logout') {
+    window.location.href = '/logout'
+    return
+  }
+  const mode = item.dataset?.mode as ThemeMode | undefined
   if (!mode) return
   setThemeMode(mode)
   const popover = document.getElementById('analyticsProfilePopover') as any
@@ -80,12 +122,17 @@ function onNotificationsClick() { /* TODO: notifications popover */ }
         slot="profile"
         size="XS"
         shape="Circle"
-        icon="person-placeholder"
+        :initials="userInitials"
+        fallback-icon="person-placeholder"
         color-scheme="Accent6"
         @click="onProfileClick" />
     </ui5-shellbar>
 
-    <ui5-popover id="analyticsProfilePopover" placement="Bottom" header-text="Theme">
+    <ui5-popover id="analyticsProfilePopover" placement="Bottom" :header-text="userName || 'Profile'">
+      <div v-if="userName || userEmail" class="profile-block">
+        <div v-if="userName" class="profile-name">{{ userName }}</div>
+        <div v-if="userEmail" class="profile-email">{{ userEmail }}</div>
+      </div>
       <ui5-list selection-mode="Single" @selection-change="onModeSelect">
         <ui5-li
           icon="sys-monitor"
@@ -102,6 +149,11 @@ function onNotificationsClick() { /* TODO: notifications popover */ }
           text="Dark"
           data-mode="dark"
           :selected="themeMode === 'dark'" />
+        <ui5-li
+          v-if="user?.authenticated"
+          icon="log"
+          text="Sign out"
+          data-action="logout" />
       </ui5-list>
     </ui5-popover>
 
@@ -114,4 +166,10 @@ function onNotificationsClick() { /* TODO: notifications popover */ }
 <style scoped>
 .app-shell { display: flex; flex-direction: column; height: 100vh; }
 .content { flex: 1; overflow: hidden; background: var(--sapBackgroundColor); }
+.profile-block {
+  padding: 0.75rem 1rem 0.5rem;
+  border-bottom: 1px solid var(--sapList_BorderColor);
+}
+.profile-name { font-weight: 600; color: var(--sapTextColor); }
+.profile-email { font-size: 0.875rem; color: var(--sapContent_LabelColor); margin-top: 0.125rem; }
 </style>
