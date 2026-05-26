@@ -78,15 +78,29 @@ sap.ui.define([
     oPreview.setHtmlText(convertMarkdown(sDescription));
   }
 
+  // FE V4 invokes manifest-declared press handlers with (oEvent), not a
+  // binding context. The OP's bound entity context lives on the page, but
+  // when the action is rendered as an overflow MenuItem the immediate
+  // source's parent chain leaves the page hierarchy and getBindingContext()
+  // returns undefined. Walk up parents until we find one.
+  function _resolveBindingContext(oEvent) {
+    var oControl = oEvent && oEvent.getSource && oEvent.getSource();
+    var oBC = oControl && oControl.getBindingContext && oControl.getBindingContext();
+    while (!oBC && oControl) {
+      oControl = oControl.getParent && oControl.getParent();
+      oBC = oControl && oControl.getBindingContext && oControl.getBindingContext();
+    }
+    return oBC || null;
+  }
+
   return {
     onEditMarkdown: function (oEvent) {
-      // FE V4 invokes manifest-declared press handlers with (oEvent), not a
-      // binding context. Resolve the OP's binding context off the source
-      // control. Earlier versions of this file took (oBindingContext)
-      // directly and silently no-op'd because the event object had no
-      // .getProperty().
-      var oBindingContext = oEvent && oEvent.getSource && oEvent.getSource().getBindingContext && oEvent.getSource().getBindingContext();
-      if (!oBindingContext) return;
+      var oBindingContext = _resolveBindingContext(oEvent);
+      if (!oBindingContext) {
+        // eslint-disable-next-line no-console
+        console.warn("MarkdownEditor: unable to resolve binding context from press event");
+        return;
+      }
       _oCurrentContext = oBindingContext;
 
       if (!_pDialog) {
