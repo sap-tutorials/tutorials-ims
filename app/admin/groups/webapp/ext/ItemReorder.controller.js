@@ -1,12 +1,18 @@
-sap.ui.define(["sap/ui/core/mvc/Controller"], function (Controller) {
+sap.ui.define([], function () {
   "use strict";
-  return Controller.extend("sap.tutorials.admin.groups.ext.ItemReorder", {
+
+  // FE V4 custom sections instantiate fragments without a wrapping
+  // controller, so a `Controller.extend(...)` module gets loaded but its
+  // methods are never reachable from `drop="..."` in the fragment. Use the
+  // plain-handler + `core:require` pattern instead so the drop event
+  // resolves against this module.
+  return {
     onDrop: function (oEvent) {
       var oDraggedItem = oEvent.getParameter("draggedControl");
       var oDroppedItem = oEvent.getParameter("droppedControl");
       var sDropPosition = oEvent.getParameter("dropPosition");
 
-      var oTable = this.byId("itemReorderTable");
+      var oTable = oDroppedItem.getParent();
       var aItems = oTable.getItems();
       var iDragIndex = aItems.indexOf(oDraggedItem);
       var iDropIndex = aItems.indexOf(oDroppedItem);
@@ -14,12 +20,10 @@ sap.ui.define(["sap/ui/core/mvc/Controller"], function (Controller) {
       if (sDropPosition === "After") { iDropIndex++; }
       if (iDragIndex < iDropIndex) { iDropIndex--; }
 
-      // Reorder contexts
       var oBinding = oTable.getBinding("items");
       var aContexts = oBinding.getCurrentContexts();
       var oDraggedContext = aContexts[iDragIndex];
 
-      // Recalculate itemOrder with gap numbering (10, 20, 30...)
       var aNewOrder = aContexts.filter(function (_, i) { return i !== iDragIndex; });
       aNewOrder.splice(iDropIndex, 0, oDraggedContext);
 
@@ -27,5 +31,5 @@ sap.ui.define(["sap/ui/core/mvc/Controller"], function (Controller) {
         ctx.setProperty("itemOrder", (idx + 1) * 10);
       });
     }
-  });
+  };
 });

@@ -1,12 +1,18 @@
-sap.ui.define(["sap/ui/core/mvc/Controller"], function (Controller) {
+sap.ui.define([], function () {
   "use strict";
-  return Controller.extend("sap.tutorials.admin.missions.ext.ItemReorder", {
+
+  // FE V4 custom sections instantiate fragments without a wrapping
+  // controller, so a `Controller.extend(...)` module gets loaded but its
+  // methods are never reachable from `drop="..."` in the fragment. Use the
+  // same plain-handler + `core:require` pattern as TaskColumnHandler.js so
+  // the drop event resolves against this module.
+  return {
     onDrop: function (oEvent) {
       var oDraggedItem = oEvent.getParameter("draggedControl");
       var oDroppedItem = oEvent.getParameter("droppedControl");
       var sDropPosition = oEvent.getParameter("dropPosition");
 
-      var oTable = this.byId("itemReorderTable");
+      var oTable = oDroppedItem.getParent();
       var aItems = oTable.getItems();
       var iDragIndex = aItems.indexOf(oDraggedItem);
       var iDropIndex = aItems.indexOf(oDroppedItem);
@@ -25,5 +31,5 @@ sap.ui.define(["sap/ui/core/mvc/Controller"], function (Controller) {
         ctx.setProperty("itemOrder", (idx + 1) * 10);
       });
     }
-  });
+  };
 });
