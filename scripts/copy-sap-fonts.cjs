@@ -10,19 +10,22 @@ const VARIANTS = ['72-Regular', '72-Bold', '72-Italic', '72-Light', '72-BoldItal
 const targetDir = process.env.COPY_SAP_FONTS_TARGET
   || path.resolve(__dirname, '..', 'docs', '.vitepress', 'public', 'fonts');
 
-const nodeModulesDir = process.env.COPY_SAP_FONTS_NODE_MODULES
-  || path.resolve(__dirname, '..', 'node_modules');
+const nodeModulesDir = process.env.COPY_SAP_FONTS_NODE_MODULES;
 
 function findPackageRoot() {
-  const pkg = path.join(nodeModulesDir, '@sap-theming', 'theming-base-content', 'package.json');
-  if (!fs.existsSync(pkg)) {
+  let resolved;
+  try {
+    resolved = require.resolve('@sap-theming/theming-base-content/package.json', {
+      paths: nodeModulesDir ? [nodeModulesDir] : undefined,
+    });
+  } catch {
     console.error(
-      `@sap-theming/theming-base-content not found at ${pkg}. ` +
+      `@sap-theming/theming-base-content not found. ` +
       `Run \`npm install\` and re-run this script.`
     );
     process.exit(1);
   }
-  return path.dirname(pkg);
+  return path.dirname(resolved);
 }
 
 function findVariant(packageRoot, variant) {
