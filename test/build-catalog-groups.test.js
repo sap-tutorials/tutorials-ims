@@ -119,3 +119,58 @@ describe('/build/catalog: single-path mission with no nested groups (isFlat)', (
     expect(hier.tutorialSlugs).toEqual(['test-bc-flat-tut']);
   });
 });
+
+describe('/build/catalog: standalone Group surfacing', () => {
+  const SA_TAG_ID     = 'aaaaaaaa-c002-0000-0000-000000000001';
+  const SA_GROUP_ID   = 'cccccccc-c002-0000-0000-000000000001';
+  const SA_TUT1_ID    = 'cccccccc-c002-0000-0000-000000000011';
+  const SA_TUT2_ID    = 'cccccccc-c002-0000-0000-000000000012';
+  const SA_GPI1_ID    = 'cccccccc-c002-0000-0000-000000000021';
+  const SA_GPI2_ID    = 'cccccccc-c002-0000-0000-000000000022';
+
+  beforeAll(async () => {
+    const { Tags, Groups, Tutorials, GroupPathItems } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Tags).entries({ ID: SA_TAG_ID, legacyId: 91002, name: '__TEST__ SA Tag' });
+    await INSERT.into(Tutorials).entries([
+      { ID: SA_TUT1_ID, legacyId: 91012, title: '__TEST__ SA Tut 1', slug: 'test-bc-sa-tut-1', status: 'ACTIVE' },
+      { ID: SA_TUT2_ID, legacyId: 91013, title: '__TEST__ SA Tut 2', slug: 'test-bc-sa-tut-2', status: 'ACTIVE' },
+    ]);
+    await INSERT.into(Groups).entries({
+      ID: SA_GROUP_ID, legacyId: 91002, title: '__TEST__ SA Group',
+      description: 'sa-desc', experienceTag: 'beginner', primaryTagRef_ID: SA_TAG_ID,
+      published: true, status: 'ACTIVE',
+    });
+    await INSERT.into(GroupPathItems).entries([
+      { ID: SA_GPI1_ID, legacyId: 91022, group_ID: SA_GROUP_ID, tutorial_ID: SA_TUT1_ID, itemOrder: 0 },
+      { ID: SA_GPI2_ID, legacyId: 91023, group_ID: SA_GROUP_ID, tutorial_ID: SA_TUT2_ID, itemOrder: 1 },
+    ]);
+  });
+
+  afterAll(async () => {
+    const { Tags, Groups, Tutorials, GroupPathItems } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(GroupPathItems).where({ ID: { in: [SA_GPI1_ID, SA_GPI2_ID] } });
+    await DELETE.from(Groups).where({ ID: SA_GROUP_ID });
+    await DELETE.from(Tutorials).where({ ID: { in: [SA_TUT1_ID, SA_TUT2_ID] } });
+    await DELETE.from(Tags).where({ ID: SA_TAG_ID });
+  });
+
+  it('emits standalone Groups in standaloneGroups[] with ordered tutorialSlugs', async () => {
+    const { status, data } = await project.get('/build/catalog');
+    expect(status).toBe(200);
+    expect(Array.isArray(data.standaloneGroups)).toBe(true);
+
+    const ours = data.standaloneGroups.find(g => g.imsId === 91002);
+    expect(ours).toBeDefined();
+    expect(ours.title).toBe('__TEST__ SA Group');
+    expect(ours.slug).toBe('91002');
+    expect(ours.description).toBe('sa-desc');
+    expect(ours.tutorialSlugs).toEqual(['test-bc-sa-tut-1', 'test-bc-sa-tut-2']);
+  });
+
+  it('does NOT include nested Groups in standaloneGroups[] (disjointness invariant)', async () => {
+    const { data } = await project.get('/build/catalog');
+    // The nested Group from the prior describe block has legacyId 91001 — it must be excluded.
+    const nested = data.standaloneGroups.find(g => g.imsId === 91001);
+    expect(nested).toBeUndefined();
+  });
+});

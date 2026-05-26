@@ -111,11 +111,39 @@ export async function buildCatalogHandler(req, res) {
       }
     }
 
+    // Standalone groups: published Groups whose ID never appears as group_ID on any
+    // taskType='GROUP' CompletionPathItem. Disjointness invariant matches navigator-catalog.js.
+    const nestedGroupIds = new Set(
+      items
+        .filter(i => i.taskType === 'GROUP' && i.group_ID)
+        .map(i => i.group_ID)
+    );
+
+    const standaloneGroups = groups
+      .filter(g => g.published)
+      .filter(g => g.status === 'ACTIVE' || g.status === null || g.status === undefined)
+      .filter(g => !nestedGroupIds.has(g.ID))
+      .map(g => {
+        const gpItems = groupPathItems
+          .filter(gpi => gpi.group_ID === g.ID)
+          .sort((a, b) => a.itemOrder - b.itemOrder);
+        const tutorialSlugs = gpItems
+          .map(gpi => tutorialByUuid.get(gpi.tutorial_ID))
+          .filter(Boolean);
+        return {
+          imsId: g.legacyId,
+          title: g.title || '',
+          slug: g.slug || String(g.legacyId),
+          description: g.description || '',
+          tutorialSlugs,
+        };
+      });
+
     const featured = featuredRows
       .map(f => resolveFeatured(f, { missionByLegacyId, pathByLegacyId, tutorialByLegacyId }))
       .filter(Boolean);
 
-    res.json({ missions: missionList, hierarchies, featured });
+    res.json({ missions: missionList, hierarchies, featured, standaloneGroups });
   } catch (err) {
     console.error('[build/catalog]', err instanceof Error ? err.message : String(err));
     res.status(500).json({ error: 'Build catalog query failed' });
