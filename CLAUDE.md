@@ -186,6 +186,14 @@ Architecture and reference docs for developers (not deployed). Organized by pers
 - [docs/developers/README.md](docs/developers/README.md) — for platform engineers (you)
 - [docs/historic/README.md](docs/historic/README.md) — AEM, IMS, completed migrations
 
+The same persona docs are published as a public VitePress site at <https://sap-tutorials.github.io/tutorials-poc/>. Build commands:
+
+- `npm run docs:dev` — local preview at <http://localhost:5173/tutorials-poc/>
+- `npm run docs:build` — production build (runs sidebar guard + font copy first)
+- `npm run docs:preview` — preview the built site
+
+Sidebar maintenance: `docs/.vitepress/config.ts` `themeConfig.sidebar`. The `predocs:build` check rejects unregistered pages or dead links.
+
 Most-referenced developer docs:
 
 - [docs/developers/getting-started.md](docs/developers/getting-started.md) — local dev setup
