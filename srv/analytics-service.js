@@ -100,15 +100,18 @@ export default class AnalyticsService extends cds.ApplicationService {
         return req.reject(400, err.message)
       }
       const start = Date.now()
-      const isHana = cds.db && cds.db.kind === 'hana'
-      // HANA: runtime via WITH HINT clause (spec §Backend, security).
-      // SQLite (unit tests): omit; the dialect doesn't support it.
-      const wrapped = isHana
-        ? `SELECT * FROM (${validated.sql}) t LIMIT 5001 WITH HINT (STATEMENT_TIMEOUT(30))`
-        : `SELECT * FROM (${validated.sql}) t LIMIT 5001`
+      const wrapped = `SELECT * FROM (${validated.sql}) t LIMIT 5001`
+      // 30s soft timeout via Promise.race. HANA's WITH HINT clause does not
+      // support a STATEMENT_TIMEOUT hint, and the session-level
+      // SET 'STATEMENT_TIMEOUT' would leak across the pooled connection.
       let rows
       try {
-        rows = await cds.run(wrapped)
+        rows = await Promise.race([
+          cds.run(wrapped),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Query exceeded 30s timeout')), 30000)
+          ),
+        ])
       } catch (err) {
         cds.log('analytics-sql').warn({ user: req.user.id, error: err.message })
         return req.reject(400, `Query failed: ${err.message}`)
