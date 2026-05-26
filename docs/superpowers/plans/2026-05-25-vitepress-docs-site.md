@@ -867,13 +867,13 @@ git commit -m "docs(vitepress): add favicon and SAP wordmark logos for hero"
 - [ ] **Step 1: Run the sweep**
 
 ```bash
-grep -rEn '\]\((\.\./)*(?:improvements|TODO|pilot-status|README|CLAUDE)\.md|\]\((\.\./)*superpowers/' docs/
+rg -n '\]\((\.\./){2,}(README|CLAUDE)\.md|\]\((\.\./)*(improvements|TODO|pilot-status)\.md|\]\((\.\./)*superpowers/' docs/
 ```
 
 Save hits to a scratch file:
 
 ```bash
-grep -rEn '\]\((\.\./)*(?:improvements|TODO|pilot-status|README|CLAUDE)\.md|\]\((\.\./)*superpowers/' docs/ > /tmp/dead-link-sweep.txt
+rg -n '\]\((\.\./){2,}(README|CLAUDE)\.md|\]\((\.\./)*(improvements|TODO|pilot-status)\.md|\]\((\.\./)*superpowers/' docs/ > /tmp/dead-link-sweep.txt
 wc -l /tmp/dead-link-sweep.txt
 ```
 
@@ -885,15 +885,15 @@ Open `/tmp/dead-link-sweep.txt` and decide per match:
 |---|---|
 | `improvements.md`, `TODO.md`, `pilot-status.md` | Remove the link or replace with editorial prose. These files are excluded from the public site by `srcExclude`. |
 | `superpowers/**` | Remove the link (planning artifacts are not public). |
-| `../README.md` | Rewrite to absolute GitHub URL: `https://github.com/sap-tutorials/tutorials-poc/blob/main/README.md` |
-| `../CLAUDE.md` | Rewrite to absolute GitHub URL: `https://github.com/sap-tutorials/tutorials-poc/blob/main/CLAUDE.md` |
+| `../../README.md` (or deeper `../../../README.md`) | Rewrite to absolute GitHub URL: `https://github.com/sap-tutorials/tutorials-poc/blob/main/README.md`. Note: a single-level `../README.md` from a persona child page resolves to `docs/README.md` (the home page) and is a valid in-site link — the regex deliberately requires 2+ `../` to skip those. |
+| `../../CLAUDE.md` (or deeper) | Rewrite to absolute GitHub URL: `https://github.com/sap-tutorials/tutorials-poc/blob/main/CLAUDE.md`. Same single-level caveat as README. |
 
 Edit each flagged file with `Edit` (one Edit call per change to keep the diff readable).
 
 - [ ] **Step 3: Re-run the sweep**
 
 ```bash
-grep -rEn '\]\((\.\./)*(?:improvements|TODO|pilot-status|README|CLAUDE)\.md|\]\((\.\./)*superpowers/' docs/
+rg -n '\]\((\.\./){2,}(README|CLAUDE)\.md|\]\((\.\./)*(improvements|TODO|pilot-status)\.md|\]\((\.\./)*superpowers/' docs/
 ```
 
 Expected: zero matches.
@@ -1097,9 +1097,9 @@ git commit -m "docs(vitepress): populate sidebar with all four persona blocks"
 
 - [ ] **Step 1: Append the note**
 
-Open `docs/authors/README.md` and append (above any `---` footer if present):
+Open `docs/authors/README.md` and append the section below (above any `---` footer if present). The outer 4-backtick fence is just this plan's display wrapper — paste only the inner content (starting at `## Updating the docs site sidebar` and ending after the closing 3-backtick fence on the bash example):
 
-```markdown
+````markdown
 ## Updating the docs site sidebar
 
 When you add a new page under `docs/end-users/`, `docs/authors/`, `docs/developers/`, or `docs/historic/`, you must register it in the sidebar at [`docs/.vitepress/config.ts`](../.vitepress/config.ts) under the matching persona block. The build runs `scripts/check-docs-sidebar.cjs` as `predocs:build` — it fails with a clear diff if a page is unregistered or a link is dead.
@@ -1109,7 +1109,7 @@ Run locally to verify:
 ```bash
 npm run docs:build
 ```
-```
+````
 
 - [ ] **Step 2: Commit**
 
