@@ -3,7 +3,7 @@ import cds from '@sap/cds';
 const FEATURED_LIMIT = 6;
 
 export async function buildCatalogHandler(req, res) {
-  const { Missions, CompletionPaths, CompletionPathItems, Tutorials, FeaturedTasks } =
+  const { Missions, CompletionPaths, CompletionPathItems, Tutorials, FeaturedTasks, Groups, GroupPathItems } =
     cds.entities('com.sap.developers.ims');
 
   try {
@@ -11,11 +11,20 @@ export async function buildCatalogHandler(req, res) {
     const paths = await SELECT.from(CompletionPaths).orderBy('legacyId');
     const items = await SELECT.from(CompletionPathItems).orderBy('itemOrder');
     const tutorials = await SELECT.from(Tutorials)
-      .columns('legacyId', 'slug', 'title', 'description')
+      .columns('ID', 'legacyId', 'slug', 'title', 'description')
       .where(`status = 'ACTIVE' or status is null`);
     const featuredRows = await SELECT.from(FeaturedTasks)
       .orderBy('featuredOrder')
       .limit(FEATURED_LIMIT);
+
+    const groups = await SELECT.from(Groups)
+      .columns('ID', 'legacyId', 'title', 'description', 'published', 'status');
+    const groupById = new Map(groups.map(g => [g.ID, g]));
+
+    const groupPathItems = await SELECT.from(GroupPathItems)
+      .columns('group_ID', 'tutorial_ID', 'itemOrder');
+
+    const tutorialByUuid = new Map(tutorials.map(t => [t.ID, t.slug]));
 
     const slugByLegacyId = new Map(tutorials.map(t => [t.legacyId, t.slug]));
     const tutorialByLegacyId = new Map(tutorials.map(t => [t.legacyId, t]));
@@ -35,28 +44,62 @@ export async function buildCatalogHandler(req, res) {
 
     const hierarchies = missions.map(m => {
       const missionPaths = paths.filter(p => p.mission_ID === m.ID);
-      const groups = missionPaths.map(p => {
+      const groupHierarchies = missionPaths.flatMap(p => {
         const pathItems = items.filter(i => i.path_ID === p.ID);
-        const tutorialSlugs = pathItems
+
+        // TUTORIAL items in this path → the path's own slug list
+        const pathTutorialSlugs = pathItems
           .filter(i => i.taskType === 'TUTORIAL')
+          .sort((a, b) => a.itemOrder - b.itemOrder)
           .map(i => slugByLegacyId.get(i.taskLegacyId))
           .filter(Boolean);
 
-        return {
+        // Emit one HierarchyGroup for the path itself (existing behavior)
+        const pathGroup = {
           imsId: p.legacyId,
           title: p.name || '',
           slug: p.slug || String(p.legacyId),
           description: '',
-          tutorialSlugs,
+          tutorialSlugs: pathTutorialSlugs,
         };
+
+        // Plus one HierarchyGroup per nested GROUP item in this path
+        const nestedGroups = pathItems
+          .filter(i => i.taskType === 'GROUP' && i.group_ID)
+          .sort((a, b) => a.itemOrder - b.itemOrder)
+          .map(i => {
+            const g = groupById.get(i.group_ID);
+            if (!g) return null;
+            const gpItems = groupPathItems
+              .filter(gpi => gpi.group_ID === g.ID)
+              .sort((a, b) => a.itemOrder - b.itemOrder);
+            const tutorialSlugs = gpItems
+              .map(gpi => tutorialByUuid.get(gpi.tutorial_ID))
+              .filter(Boolean);
+            return {
+              imsId: g.legacyId,
+              title: g.title || '',
+              slug: g.slug || String(g.legacyId),
+              description: g.description || '',
+              tutorialSlugs,
+            };
+          })
+          .filter(Boolean);
+
+        return [pathGroup, ...nestedGroups];
       });
 
-      const isFlat = missionPaths.length === 1 && missionPaths[0].name === m.title;
+      // isFlat must remain true for single-path no-nested-group missions (existing
+      // behavior). groupHierarchies.length === 1 means: one path AND no nested
+      // groups under it (path → 1 entry; each nested group → +1 entry).
+      const isFlat = missionPaths.length === 1
+        && missionPaths[0].name === m.title
+        && groupHierarchies.length === 1;
 
       return {
         missionImsId: m.legacyId,
-        groups: isFlat ? [] : groups,
-        tutorialSlugs: isFlat ? (groups[0]?.tutorialSlugs || []) : [],
+        groups: isFlat ? [] : groupHierarchies,
+        tutorialSlugs: isFlat ? (groupHierarchies[0]?.tutorialSlugs || []) : [],
       };
     });
 
