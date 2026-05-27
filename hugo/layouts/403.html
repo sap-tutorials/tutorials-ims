@@ -1,0 +1,58 @@
+{{ define "main" }}
+<section class="error-hero" data-error-page="403" aria-labelledby="error-403-title">
+  <div class="error-inner">
+    <ui5-illustrated-message name="tnt/Lock" design="Spot" class="error-illus">
+      <h1 slot="title" id="error-403-title" class="error-title">You don't have access</h1>
+      <p slot="subtitle" class="error-lede">
+        You're signed in, but your account isn't authorised for this area.
+        If you believe this is a mistake, ask your SAP Developers administrator
+        to add you to the appropriate role collection.
+      </p>
+    </ui5-illustrated-message>
+    <div class="error-actions">
+      <a class="fd-button fd-button--emphasized" href="/">Browse tutorials</a>
+      <a class="fd-button fd-button--transparent" href="/logout">Sign out</a>
+    </div>
+  </div>
+</section>
+
+<style>
+  .error-hero {
+    padding: 4rem 1.5rem;
+    background: var(--sapBackgroundColor, #f5f6f7);
+    min-height: 60vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .error-inner {
+    max-width: 640px;
+    text-align: center;
+    background: var(--sapTile_Background, #ffffff);
+    padding: 3rem 2rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.08);
+  }
+  .error-illus {
+    display: block;
+    margin: 0 auto 1.25rem;
+    max-width: 100%;
+  }
+  .error-title {
+    font-size: 1.625rem;
+    margin: 0 0 0.5rem;
+    color: var(--sapTextColor, #32363a);
+  }
+  .error-lede {
+    font-size: 1rem;
+    color: var(--sapContent_LabelColor, var(--sapTextColor, #32363a));
+    margin: 0 0 1.5rem;
+  }
+  .error-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+</style>
+{{ end }}

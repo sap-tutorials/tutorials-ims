@@ -30,8 +30,10 @@
     "logoutPage": "/"
   },
   "errorPage": [
+    { "status": 403, "file": "static/403.html" },
     { "status": 404, "file": "static/404.html" },
     { "status": 500, "file": "static/500.html" },
+    { "status": 502, "file": "static/502.html" },
     { "status": 503, "file": "static/maintenance.html" }
   ],
   "routes": [
