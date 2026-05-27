@@ -210,7 +210,7 @@ function showCompletionCta() {
   strip.className = 'tutorial-completion-cta'
   strip.appendChild(document.createTextNode('You’ve finished this tutorial. '))
   const link = document.createElement('a')
-  link.href = '/tutorials/'
+  link.href = '/'
   link.textContent = 'Browse more tutorials →'
   strip.appendChild(link)
   stepsRoot.appendChild(strip)
