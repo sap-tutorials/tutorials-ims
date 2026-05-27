@@ -731,9 +731,14 @@ async function main() {
         const validationMap = parseRulesVr(rulesContent)
         const testSteps = steps.filter(s => /^test yourself$/i.test(s.title))
         for (const [validateNum, questions] of validationMap) {
-          // Find the first "Test yourself" step at or after position N
-          const target = testSteps.find(s => s.number >= validateNum) ?? testSteps[testSteps.length - 1]
-          if (target && questions.length) {
+          if (!questions.length) continue
+          // Prefer a dedicated "Test yourself" step at or after position N (legacy / aggregated style).
+          // If none exists, attach inline to the step whose number matches validateNum
+          // (V2 sources with auto_validation: false use [VALIDATE_N] markers per step).
+          const target = testSteps.find(s => s.number >= validateNum)
+            ?? testSteps[testSteps.length - 1]
+            ?? steps.find(s => s.number === validateNum)
+          if (target) {
             target.validation = [...(target.validation ?? []), ...questions]
           }
         }
