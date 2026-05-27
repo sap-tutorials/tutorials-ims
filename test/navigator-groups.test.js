@@ -192,15 +192,6 @@ describe('/build/navigator: Checkpoint markers', () => {
     await DELETE.from(Tags).where({ ID: CP_TAG_ID });
   });
 
-  it('emits a checkpointMappings array with mission + title + itemOrder', async () => {
-    const { data } = await project.get('/build/navigator?nocache=1');
-    expect(Array.isArray(data.checkpointMappings)).toBe(true);
-    const cp = data.checkpointMappings.find(c => c.title === 'Win a coffee mug');
-    expect(cp).toBeDefined();
-    expect(cp.missionId).toBe(99003);
-    expect(cp.itemOrder).toBe(5);
-  });
-
   it('does not put checkpoints into tutorialMappings', async () => {
     const { data } = await project.get('/build/navigator?nocache=1');
     const stray = data.tutorialMappings.find(t => t.slug === 'Win a coffee mug' || t.title === 'Win a coffee mug');

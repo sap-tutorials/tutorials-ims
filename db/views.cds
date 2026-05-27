@@ -38,7 +38,19 @@ view Tasks as
     createdAt, modifiedAt
   };
 
-// Pre-joined view for the navigator: only missions/paths/items that reference actual tutorials
+// MissionTutorialItems — a slice, NOT the full navigator catalog.
+//
+// Returns one row per (mission-published, slug-set, taskType='TUTORIAL') item.
+// Excluded by design: nested Groups (taskType='GROUP'), standalone Groups (no
+// parent CompletionPath), and checkpoints (taskType='CHECKPOINT'). The
+// /build/navigator handler at srv/lib/navigator-catalog.js queries those cases
+// directly against CompletionPathItems / Groups / GroupPathItems and unions
+// the results with this view's rows — never assume this view alone produces
+// the navigator response shape.
+//
+// Kept under the legacy name `NavigatorCatalog` because it's @analytics.exposed
+// (see db/schema-ext.cds) and renaming would break saved Analytics Explorer
+// queries. The comment is the source of truth for intent.
 view NavigatorCatalog as
   SELECT from ims.CompletionPathItems as item
   inner join ims.Tutorials as tut on tut.legacyId = item.taskLegacyId

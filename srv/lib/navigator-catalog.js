@@ -131,9 +131,12 @@ export async function navigatorCatalogHandler(req, res) {
       .where({ taskType: 'GROUP', group_ID: { '!=': null } })
       .orderBy('path_ID', 'itemOrder');
 
-    // Also query for checkpoint items to pre-populate path/mission maps for Task 6.
+    // Also query checkpoint items: they're not surfaced in the response (AppSpace
+    // renders checkpoints via getEventProgress), but their path_IDs still need to
+    // be resolved into pathById/missionById so the nested-group loop below can
+    // resolve any nested Groups that share a path with a checkpoint.
     const checkpointItems = await SELECT.from(CompletionPathItems)
-      .columns('path_ID', 'checkpointTitle', 'itemOrder')
+      .columns('path_ID', 'itemOrder')
       .where({ taskType: 'CHECKPOINT' })
       .orderBy('path_ID', 'itemOrder');
 
@@ -193,30 +196,7 @@ export async function navigatorCatalogHandler(req, res) {
       }
     }
 
-    // Checkpoints: CompletionPathItems with taskType='CHECKPOINT' are filtered out by the
-    // NavigatorCatalog view (taskType='TUTORIAL' only). We re-query CHECKPOINTs and emit
-    // them as milestone markers in checkpointMappings, indexed by their Mission.
-    // (checkpointItems was already queried earlier to populate pathById and missionById maps.)
-
-    const checkpointMappings = [];
-    for (const item of checkpointItems) {
-      const path = pathById.get(item.path_ID);
-      if (!path) continue;
-      const mission = missionById.get(path.mission_ID);
-      if (!mission) continue;
-      if (!item.checkpointTitle) continue;
-      checkpointMappings.push({
-        title: item.checkpointTitle,
-        missionId: mission.legacyId,
-        missionTitle: mission.title,
-        missionSlug: mission.slug || String(mission.legacyId),
-        pathId: path.legacyId,
-        pathSlug: path.slug || String(path.legacyId),
-        itemOrder: item.itemOrder,
-      });
-    }
-
-    const result = { missions: missionRefs, groups: groupRefs, tutorialMappings, checkpointMappings };
+    const result = { missions: missionRefs, groups: groupRefs, tutorialMappings };
     cachedResponse = result;
     cacheTimestamp = now;
     res.setHeader('X-Cache', 'MISS');
