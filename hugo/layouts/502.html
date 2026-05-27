@@ -1,0 +1,70 @@
+{{ define "main" }}
+<section class="error-hero" data-error-page="502" aria-labelledby="error-502-title">
+  <div class="error-inner">
+    <ui5-illustrated-message name="UnableToLoad" design="Spot" class="error-illus">
+      <h1 slot="title" id="error-502-title" class="error-title">We can't reach the backend right now</h1>
+      <p slot="subtitle" class="error-lede">
+        The application is up, but the service it depends on isn't responding.
+        This is usually short-lived — try again in a moment.
+      </p>
+    </ui5-illustrated-message>
+    <div class="error-actions">
+      <button class="fd-button fd-button--emphasized" type="button" onclick="window.location.reload()">
+        Try again
+      </button>
+      <a class="fd-button fd-button--transparent" href="/">Browse tutorials</a>
+    </div>
+    <p class="error-help">
+      Status checks:
+      <a href="/health" target="_blank" rel="noopener">/health</a> ·
+      <a href="/health/db" target="_blank" rel="noopener">/health/db</a>
+    </p>
+  </div>
+</section>
+
+<style>
+  .error-hero {
+    padding: 4rem 1.5rem;
+    background: var(--sapBackgroundColor, #f5f6f7);
+    min-height: 60vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .error-inner {
+    max-width: 640px;
+    text-align: center;
+    background: var(--sapTile_Background, #ffffff);
+    padding: 3rem 2rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.08);
+  }
+  .error-illus {
+    display: block;
+    margin: 0 auto 1.25rem;
+    max-width: 100%;
+  }
+  .error-title {
+    font-size: 1.625rem;
+    margin: 0 0 0.5rem;
+    color: var(--sapTextColor, #32363a);
+  }
+  .error-lede {
+    font-size: 1rem;
+    color: var(--sapContent_LabelColor, var(--sapTextColor, #32363a));
+    margin: 0 0 1.5rem;
+  }
+  .error-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+  }
+  .error-help {
+    font-size: 0.9rem;
+    color: var(--sapNeutralTextColor, #5b738b);
+    margin: 0;
+  }
+</style>
+{{ end }}

@@ -42,6 +42,9 @@ import "@ui5/webcomponents-fiori/dist/SideNavigationSubItem.js";
 import "@ui5/webcomponents-fiori/dist/illustrations/PageNotFound.js";
 import "@ui5/webcomponents-fiori/dist/illustrations/NoData.js";
 import "@ui5/webcomponents-fiori/dist/illustrations/NoFilterResults.js";
+// Themed error pages: 403 uses tnt/Lock, 502 uses UnableToLoad.
+import "@ui5/webcomponents-fiori/dist/illustrations/tnt/Lock.js";
+import "@ui5/webcomponents-fiori/dist/illustrations/UnableToLoad.js";
 
 import "@ui5/webcomponents-icons/dist/menu2.js";
 import "@ui5/webcomponents-icons/dist/share-2.js";
