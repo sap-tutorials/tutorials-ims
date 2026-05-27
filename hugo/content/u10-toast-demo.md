@@ -68,7 +68,7 @@ backend; the toast + CTA wiring it exercises is the same contract used by
     strip.className = 'tutorial-completion-cta';
     strip.appendChild(document.createTextNode('You’ve finished this tutorial. '));
     var link = document.createElement('a');
-    link.href = '/tutorials/';
+    link.href = '/';
     link.textContent = 'Browse more tutorials →';
     strip.appendChild(link);
     stepsRoot.appendChild(strip);
