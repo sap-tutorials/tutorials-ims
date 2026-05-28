@@ -1413,6 +1413,8 @@ Part of #91 server-side catalog rendering."
 **Files:**
 - Modify: `srv/server.js` (around line 222 — the existing `admin.after(...)` block)
 
+> **Note — divergence from spec:** the spec located this hook in `srv/admin-service.js`. During planning we found that `srv/server.js` already has an `admin.after(...)` hook at line ~225 invalidating a navigator cache against the **exact same entity list** we need (Missions, Groups, CompletionPaths, CompletionPathItems, GroupPathItems, Tutorials). Piggybacking on it avoids a duplicate hook for the same trigger set. Behavior matches the spec — only the home file changes.
+
 The existing navigator-cache invalidator at [srv/server.js:225-235](../../srv/server.js#L225-L235) already hooks the exact entity list we need. Piggyback on it.
 
 - [ ] **Step 1: Read the current invalidator block**
@@ -1521,7 +1523,7 @@ If `MissionMeta` / `GroupRef` types are now unused, remove their `import type` l
 
 - [ ] **Step 4: Update the function-end summary**
 
-Find the final summary block (around line 1037-1085). Remove or simplify lines that report `missionsMeta.length` / `allGroupRefs.length`. Keep `matchedTutorials` and `patchedCount`.
+Locate the final summary block by searching for the report it prints — `grep -n "missions/groups\|missionsMeta\.length\|allGroupRefs\.length" scripts/fetch-tutorials.ts` rather than relying on line numbers (deletions in earlier steps will shift them). Remove or simplify lines that report `missionsMeta.length` / `allGroupRefs.length`. Keep `matchedTutorials` and `patchedCount`.
 
 If a JSON report is written at the end (search for `writeFileSync` near the file end), drop the `missions` / `groups` keys from the output.
 
