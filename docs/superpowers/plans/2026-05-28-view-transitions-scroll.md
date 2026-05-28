@@ -45,7 +45,7 @@ The spec at `docs/superpowers/specs/2026-05-28-view-transitions-scroll-design.md
 
 - Hugo Pipes / esbuild bundle pipeline (no new build steps).
 - Root `vitest.config.ts` already includes `hugo-apps/src/**/*.test.{js,ts}` in the `unit` project.
-- The `unit` project uses jsdom (verified by existing `cardProgress.test.ts` and `useSearch.test.ts`).
+- The `unit` project runs in `environment: 'node'` ([vitest.config.ts:13](vitest.config.ts#L13)). Existing co-located Vue tests (e.g. `hugo-apps/src/navigator/cardProgress.test.ts`) test pure functions and don't touch `document`. The new tests in this plan DO touch `document` and so each new test file declares `// @vitest-environment happy-dom` at the top. `happy-dom` is already a root devDependency ([package.json:71](package.json#L71)) — no install needed.
 - Smoke tests run against deployed URLs via `SMOKE_BASE_URL` / `SMOKE_SRV_URL` env vars.
 
 ---
@@ -143,10 +143,13 @@ git commit -m "feat(scroll): add scroll-animations.css with shared hero-reveal k
 - Create: `test/unit/view-transitions.test.ts`
 
 > **DOM-setup note:** Per memory `feedback_html_property_blocked_by_hook.md`, the PreToolUse hook blocks file writes that contain the JS string-set DOM property for HTML content. The tests below use `document.createElement` + `textContent` + `appendChild` to build the test fixtures. The same constraint applies to any test code added later.
+>
+> **Test environment:** The `unit` Vitest project runs in `node` mode by default, but `document` is needed here. The first line of the new test file is the `@vitest-environment happy-dom` pragma so this file (and only this file) runs under a DOM. `happy-dom` is already a root devDependency.
 
 - [ ] **Step 1: Write the failing test**
 
 ```ts
+// @vitest-environment happy-dom
 // test/unit/view-transitions.test.ts
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
@@ -346,9 +349,11 @@ import './view-transitions'
 
 ```bash
 npm run dev
-# In another terminal, fetch the compiled JS bundle that ui5-bootstrap.ts produces
-# and grep for the new identifiers:
-curl -s http://localhost:1313/js/ui5-bootstrap.js | grep -c 'hero-title' || echo "MISSING"
+# In another terminal, find the actual ui5-bootstrap script URL (Hugo Pipes
+# emits a hashed filename like /js/ui5-bootstrap.<hash>.js) and grep it:
+SCRIPT_URL=$(curl -s http://localhost:1313/ | grep -oE '"/js/ui5-bootstrap[^"]*\.js"' | head -1 | tr -d '"')
+[ -n "$SCRIPT_URL" ] || { echo "MISSING script tag"; exit 1; }
+curl -s "http://localhost:1313$SCRIPT_URL" | grep -c 'hero-title' || echo "MISSING"
 ```
 
 Expected: count `>= 1` (the literal `'hero-title'` from `HERO_NAME` survives bundling).
@@ -379,9 +384,10 @@ If empty, install at the root: `npm i -D @vue/test-utils`. If present in either,
 
 - [ ] **Step 2: Write a contract test for the marker shape**
 
-Create `hugo-apps/src/navigator/__tests__/` if needed and add the test file:
+Create `hugo-apps/src/navigator/__tests__/` if needed and add the test file. The first line is the `@vitest-environment happy-dom` pragma — `@vue/test-utils mount` needs a DOM:
 
 ```ts
+// @vitest-environment happy-dom
 // hugo-apps/src/navigator/__tests__/vt-card-marker.test.ts
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
@@ -559,59 +565,101 @@ git commit -m "feat(vt): add mission-hero-title class to mission page H1"
 
 **Files:**
 
-- Modify: `hugo/layouts/partials/head.html:55-56`
-- Modify: `hugo/layouts/partials/header.html:211-212`
+- Modify: `hugo/layouts/partials/head.html` (lines ~55-58)
+- Modify: `hugo/layouts/partials/header.html` (lines ~211-214)
+
+> **Why all three lines must be inside `morphTheme`:** Each toggle does three state changes — `dataset.theme = next`, `classList.toggle('dark', …)`, and `localStorage.setItem('theme', next)`. The site's CSS keys off `html.dark` (per memory `project_u13_mermaid`: "the project flips html.dark for dark CSS scope"). If only the `dataset.theme` line is inside the `morphTheme` callback, the `.dark` class flip lands outside the captured frame — visual seam or no crossfade at all on rules keyed off `html.dark`. The `localStorage` write is harmless either way but is included for atomicity.
 
 - [ ] **Step 1: Read both files to confirm exact current contents**
 
 ```bash
-sed -n '50,60p' hugo/layouts/partials/head.html
-sed -n '208,215p' hugo/layouts/partials/header.html
+sed -n '50,62p' hugo/layouts/partials/head.html
+sed -n '208,218p' hugo/layouts/partials/header.html
 ```
 
-Confirm `head.html` lines 55-56 contain `var next = html.dataset.theme === 'dark' ? 'light' : 'dark';` and `html.dataset.theme = next;`. Same shape in `header.html` (using `const next` per modern syntax).
-
-- [ ] **Step 2: Edit `head.html` — wrap the dataset assignment in morphTheme**
-
-In `hugo/layouts/partials/head.html`, locate:
+Confirm `head.html` contains, inside a click delegated handler:
 
 ```html
 var next = html.dataset.theme === 'dark' ? 'light' : 'dark';
 html.dataset.theme = next;
+html.classList.toggle('dark', next === 'dark');
+localStorage.setItem('theme', next);
 ```
 
-Change the second line to:
-
-```html
-var next = html.dataset.theme === 'dark' ? 'light' : 'dark';
-(window.__morphTheme || function (fn) { fn(); })(function () { html.dataset.theme = next; });
-```
-
-- [ ] **Step 3: Edit `header.html` — same wrap**
-
-In `hugo/layouts/partials/header.html`, find the analogous lines (around 211-212):
+And `header.html` contains, inside a `toggleTheme()` function, lines that look like:
 
 ```html
 const next = html.dataset.theme === 'dark' ? 'light' : 'dark';
 html.dataset.theme = next;
+html.classList.toggle('dark', next === 'dark');
+try { localStorage.setItem('theme', next); } catch {}
+themeItem.icon = next === 'dark' ? 'light-mode' : 'dark-mode';
 ```
 
-Change the second line to:
+Note: the line numbers in this plan are approximate; the file may shift by a line or two over time. Match by content.
+
+- [ ] **Step 2: Edit `head.html` — wrap all three state-change lines**
+
+Replace the four-line block:
+
+```html
+var next = html.dataset.theme === 'dark' ? 'light' : 'dark';
+html.dataset.theme = next;
+html.classList.toggle('dark', next === 'dark');
+localStorage.setItem('theme', next);
+```
+
+with:
+
+```html
+var next = html.dataset.theme === 'dark' ? 'light' : 'dark';
+(window.__morphTheme || function (fn) { fn(); })(function () {
+  html.dataset.theme = next;
+  html.classList.toggle('dark', next === 'dark');
+  localStorage.setItem('theme', next);
+});
+```
+
+- [ ] **Step 3: Edit `header.html` — wrap all three state-change lines (icon assignment stays outside)**
+
+Replace the relevant block (the `themeItem.icon` assignment is **not** part of the morph — it's a UI5 internal property that has no effect on the captured frame):
 
 ```html
 const next = html.dataset.theme === 'dark' ? 'light' : 'dark';
-(window.__morphTheme || ((fn) => fn()))(() => { html.dataset.theme = next; });
+html.dataset.theme = next;
+html.classList.toggle('dark', next === 'dark');
+try { localStorage.setItem('theme', next); } catch {}
+themeItem.icon = next === 'dark' ? 'light-mode' : 'dark-mode';
+```
+
+with:
+
+```html
+const next = html.dataset.theme === 'dark' ? 'light' : 'dark';
+(window.__morphTheme || ((fn) => fn()))(() => {
+  html.dataset.theme = next;
+  html.classList.toggle('dark', next === 'dark');
+  try { localStorage.setItem('theme', next); } catch {}
+});
+themeItem.icon = next === 'dark' ? 'light-mode' : 'dark-mode';
 ```
 
 - [ ] **Step 4: Manually verify the toggle still flips the theme**
 
-Start the dev server, open `http://localhost:1313/`, click the theme toggle, confirm the `data-theme` attribute on `<html>` toggles between `light` and `dark` in DevTools and the page colors swap. On Chromium 111+, observe a brief crossfade. On Firefox, observe an instant flip with no errors in the console.
+Start the dev server, open `http://localhost:1313/`, click the theme toggle, confirm:
+
+- `data-theme` on `<html>` toggles between `light` and `dark` in DevTools.
+- `class="dark"` is added/removed on `<html>` in lockstep with `data-theme`.
+- `localStorage.theme` is `light` or `dark` after each click.
+- Page colors swap.
+
+On Chromium 111+: brief crossfade. On Firefox/Safari: instant flip with no console errors.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add hugo/layouts/partials/head.html hugo/layouts/partials/header.html
-git commit -m "feat(vt): wrap theme toggle in morphTheme for crossfade"
+git commit -m "feat(vt): wrap theme toggle (data-theme + dark class + localStorage) in morphTheme"
 ```
 
 ---
