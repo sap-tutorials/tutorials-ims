@@ -20,7 +20,6 @@ withDefaults(defineProps<{ size?: number }>(), { size: 14 })
       <path d="M11.5 8v2.25" />
       <path d="M13.5 8v1.5" />
     </svg>
-    <span class="visually-hidden">Requires a product license</span>
   </span>
 </template>
 
@@ -30,11 +29,5 @@ withDefaults(defineProps<{ size?: number }>(), { size: 14 })
   align-items: center;
   color: var(--sapContent_NonInteractiveIconColor, currentColor);
   margin-inline-start: 0.25rem;
-}
-.visually-hidden {
-  position: absolute;
-  width: 1px; height: 1px;
-  padding: 0; margin: -1px; overflow: hidden;
-  clip: rect(0,0,0,0); white-space: nowrap; border: 0;
 }
 </style>
