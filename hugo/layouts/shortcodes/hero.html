@@ -1,0 +1,15 @@
+{{- /*
+  hero shortcode — wraps a figure or diagram for SD-6 scroll-driven reveal.
+  Usage:
+    {{< hero >}}
+    ![alt](./image.png)
+    {{< /hero >}}
+
+    {{< hero >}}
+    {{< mermaid >}}
+      graph LR
+      A --> B
+    {{< /mermaid >}}
+    {{< /hero >}}
+*/ -}}
+<figure class="hero-figure">{{ .Inner | safeHTML }}</figure>
