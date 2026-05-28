@@ -1,0 +1,233 @@
+<h2>Tutorial card progress indicator</h2>
+<p class="subtitle">Three variants for showing completion state. Each shows the same row: 100% done, 60% in progress, and 0% (no indicator).</p>
+
+<style>
+.nav-card-mock {
+  background: #fff;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  position: relative;
+  font-family: '72', Arial, sans-serif;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+}
+.nav-card-mock__type {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #5b738b;
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.nav-card-mock__type::before {
+  content: '';
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+.nav-card-mock__title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #32363a;
+  margin: 0 0 0.5rem;
+}
+.nav-card-mock__desc {
+  font-size: 0.8125rem;
+  color: #556b82;
+  margin: 0;
+  flex: 1;
+}
+.nav-card-mock__meta {
+  margin-top: 0.75rem;
+  font-size: 0.75rem;
+  color: #556b82;
+}
+
+/* ─── Variant A: corner ring (matches AppSpace + screenshot) ─── */
+.var-a-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.75rem;
+}
+.var-a .ring {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  width: 2.5rem;
+  height: 2.5rem;
+}
+.var-a .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.var-a .ring-bg { fill: none; stroke: #e5e5e5; stroke-width: 3; }
+.var-a .ring-fill { fill: none; stroke: #30914c; stroke-width: 3; stroke-linecap: round; }
+.var-a .ring-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.625rem;
+  font-weight: 700;
+  color: #32363a;
+}
+.var-a .ring--complete .ring-fill { stroke: #30914c; }
+.var-a .ring--complete .ring-text { color: #30914c; }
+.var-a .nav-card-mock__title,
+.var-a .nav-card-mock__desc,
+.var-a .nav-card-mock__type { padding-left: 3rem; }
+
+/* ─── Variant B: top-edge progress bar ─── */
+.var-b .bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 4px;
+  background: #30914c;
+  border-top-left-radius: 0.75rem;
+  border-top-right-radius: 0.75rem;
+}
+.var-b .bar--complete { background: #30914c; }
+.var-b .check {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  background: #30914c;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+/* ─── Variant C: pill chip in meta row ─── */
+.var-c .progress-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 1rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  background: rgba(48, 145, 76, 0.12);
+  color: #30914c;
+  margin-left: 0.5rem;
+}
+.var-c .progress-chip--complete::before { content: '✓'; }
+</style>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-body">
+      <h3>A — Corner ring with %</h3>
+      <p>Mirrors the screenshot and the existing AppSpace ring. SVG circle in the top-left, % label inside. Title indents to clear it.</p>
+      <div class="var-a-grid var-a" style="margin-top:1rem">
+        <div class="nav-card-mock">
+          <div class="ring ring--complete">
+            <svg viewBox="0 0 36 36">
+              <circle class="ring-bg" cx="18" cy="18" r="15.9155"/>
+              <circle class="ring-fill" cx="18" cy="18" r="15.9155" stroke-dasharray="100,100"/>
+            </svg>
+            <span class="ring-text">100%</span>
+          </div>
+          <div class="nav-card-mock__type">TUTORIAL</div>
+          <h4 class="nav-card-mock__title">Build a CAP App with Joule</h4>
+          <p class="nav-card-mock__desc">Generative AI with Joule.</p>
+          <div class="nav-card-mock__meta">Beginner · 30 min</div>
+        </div>
+        <div class="nav-card-mock">
+          <div class="ring">
+            <svg viewBox="0 0 36 36">
+              <circle class="ring-bg" cx="18" cy="18" r="15.9155"/>
+              <circle class="ring-fill" cx="18" cy="18" r="15.9155" stroke-dasharray="60,100"/>
+            </svg>
+            <span class="ring-text">60%</span>
+          </div>
+          <div class="nav-card-mock__type">TUTORIAL</div>
+          <h4 class="nav-card-mock__title">Use SAP HANA Cloud</h4>
+          <p class="nav-card-mock__desc">Provision and connect.</p>
+          <div class="nav-card-mock__meta">Beginner · 45 min</div>
+        </div>
+        <div class="nav-card-mock">
+          <div class="nav-card-mock__type">TUTORIAL</div>
+          <h4 class="nav-card-mock__title">Deploy to Cloud Foundry</h4>
+          <p class="nav-card-mock__desc">Push your first MTA.</p>
+          <div class="nav-card-mock__meta">Intermediate · 60 min</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-body">
+      <h3>B — Top-edge bar + green check on complete</h3>
+      <p>Thin progress bar across the top edge of the card. On 100%, replaces with a check badge in the corner. Subtler — no title indent needed.</p>
+      <div class="var-a-grid var-b" style="margin-top:1rem">
+        <div class="nav-card-mock">
+          <div class="bar bar--complete" style="width:100%"></div>
+          <div class="check">✓</div>
+          <div class="nav-card-mock__type">TUTORIAL</div>
+          <h4 class="nav-card-mock__title">Build a CAP App with Joule</h4>
+          <p class="nav-card-mock__desc">Generative AI with Joule.</p>
+          <div class="nav-card-mock__meta">Beginner · 30 min</div>
+        </div>
+        <div class="nav-card-mock">
+          <div class="bar" style="width:60%"></div>
+          <div class="nav-card-mock__type">TUTORIAL</div>
+          <h4 class="nav-card-mock__title">Use SAP HANA Cloud</h4>
+          <p class="nav-card-mock__desc">Provision and connect.</p>
+          <div class="nav-card-mock__meta">Beginner · 45 min</div>
+        </div>
+        <div class="nav-card-mock">
+          <div class="nav-card-mock__type">TUTORIAL</div>
+          <h4 class="nav-card-mock__title">Deploy to Cloud Foundry</h4>
+          <p class="nav-card-mock__desc">Push your first MTA.</p>
+          <div class="nav-card-mock__meta">Intermediate · 60 min</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-body">
+      <h3>C — Inline chip in meta row</h3>
+      <p>Compact green pill ("60%" or "✓ Done") tucked into the existing meta line next to level/time. Minimal visual change, but easy to miss at a glance.</p>
+      <div class="var-a-grid var-c" style="margin-top:1rem">
+        <div class="nav-card-mock">
+          <div class="nav-card-mock__type">TUTORIAL</div>
+          <h4 class="nav-card-mock__title">Build a CAP App with Joule</h4>
+          <p class="nav-card-mock__desc">Generative AI with Joule.</p>
+          <div class="nav-card-mock__meta">
+            Beginner · 30 min
+            <span class="progress-chip progress-chip--complete">Done</span>
+          </div>
+        </div>
+        <div class="nav-card-mock">
+          <div class="nav-card-mock__type">TUTORIAL</div>
+          <h4 class="nav-card-mock__title">Use SAP HANA Cloud</h4>
+          <p class="nav-card-mock__desc">Provision and connect.</p>
+          <div class="nav-card-mock__meta">
+            Beginner · 45 min
+            <span class="progress-chip">60%</span>
+          </div>
+        </div>
+        <div class="nav-card-mock">
+          <div class="nav-card-mock__type">TUTORIAL</div>
+          <h4 class="nav-card-mock__title">Deploy to Cloud Foundry</h4>
+          <p class="nav-card-mock__desc">Push your first MTA.</p>
+          <div class="nav-card-mock__meta">Beginner · 60 min</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
