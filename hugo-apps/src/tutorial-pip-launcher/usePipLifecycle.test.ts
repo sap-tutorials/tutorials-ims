@@ -21,7 +21,7 @@ describe('cloneStylesIntoDocument', () => {
   it('clones <link rel="stylesheet"> nodes into the target head', () => {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = 'https://example.invalid/test.css';
+    link.href = 'data:text/css,';
     document.head.appendChild(link);
 
     const target = document.implementation.createHTMLDocument('pip');
@@ -29,7 +29,7 @@ describe('cloneStylesIntoDocument', () => {
 
     const cloned = target.head.querySelectorAll('link[rel="stylesheet"]');
     expect(cloned.length).toBe(1);
-    expect(cloned[0].getAttribute('href')).toBe('https://example.invalid/test.css');
+    expect(cloned[0].getAttribute('href')).toBe('data:text/css,');
 
     link.remove();
   });
