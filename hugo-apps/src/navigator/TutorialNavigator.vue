@@ -36,6 +36,7 @@ const { searchMode, searchResults, searchFacets, searchTotalCount, isSearching, 
   filterTypes: computed(() => filters.types.map(t => t.toUpperCase())),
   filterLevels: computed(() => filters.levels),
   filterProducts: computed(() => filters.products),
+  tutorials,
 })
 
 onMounted(async () => {
