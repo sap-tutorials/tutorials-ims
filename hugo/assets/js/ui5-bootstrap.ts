@@ -99,6 +99,8 @@ import "./nav-progress";
 import "./mission-side-nav";
 // Personalized "What's next" rail. Self-bootstraps; safe no-op when [data-recommend-slug] is missing.
 import "./recommend";
+// View Transitions + scroll-driven animations. Self-bootstraps; safe no-op when APIs missing.
+import "./view-transitions";
 import "../css/mission-side-nav.css";
 
 const root = document.documentElement;
