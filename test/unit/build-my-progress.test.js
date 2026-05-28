@@ -2,6 +2,16 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import path from 'node:path';
 import cds from '@sap/cds';
+
+vi.mock('../../srv/lib/user-progress.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    getUserProgress: vi.fn(actual.getUserProgress)
+  };
+});
+
+import { getUserProgress } from '../../srv/lib/user-progress.js';
 import { myProgressHandler } from '../../srv/lib/my-progress-handler.js';
 
 const schemaPath = path.join(process.cwd(), 'db', 'schema.cds');
@@ -95,12 +105,10 @@ describe('GET /build/my-progress handler', () => {
   });
 
   it('returns empty-shape payload with 200 when getUserProgress throws', async () => {
-    const { Users } = cds.entities('com.sap.developers.ims');
-    const spy = vi.spyOn(cds.db, 'run').mockImplementationOnce(() => { throw new Error('db down'); });
+    vi.mocked(getUserProgress).mockImplementationOnce(async () => { throw new Error('db down'); });
     const req = { user: { id: USER_UUID } };
     const res = fakeRes();
     await myProgressHandler(req, res);
-    spy.mockRestore();
     expect(res.statusCode).toBe(200);
     expect(res.body).toEqual({
       authenticated: false,
@@ -108,6 +116,5 @@ describe('GET /build/my-progress handler', () => {
       missionSlugs: [],
       groupSlugs: []
     });
-    void Users;
   });
 });
