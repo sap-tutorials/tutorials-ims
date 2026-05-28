@@ -36,7 +36,9 @@
       "minUI5Version": "1.136.0",
       "libs": {
         "sap.fe.templates": {},
-        "sap.f": {}
+        "sap.f": {},
+        "sap.ui.codeeditor": {},
+        "sap.ui.layout": {}
       }
     },
     "models": {
