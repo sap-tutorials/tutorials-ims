@@ -14,7 +14,10 @@
   {{ with .Params.displayTags }}
   <span class="meta-tags">
     <svg class="meta-icon-svg" viewBox="0 0 16 16" width="14" height="14"><path d="M2 2h5.5l6.5 6.5-5.5 5.5L2 7.5V2zm3 1.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z" fill="currentColor" opacity="0.6"/></svg>
-    {{ range . }}<span class="tutorial-tag">{{ . }}</span>{{ end }}
+    {{ range . }}{{ if ne . "License" }}<span class="tutorial-tag">{{ . }}</span>{{ end }}{{ end }}
   </span>
+  {{ end }}
+  {{ if in .Params.tags "tutorial>license" }}
+  <span class="meta-item">{{ partial "license-icon.html" . }}</span>
   {{ end }}
 </div>
