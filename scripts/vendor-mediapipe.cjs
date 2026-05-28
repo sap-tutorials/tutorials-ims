@@ -26,15 +26,43 @@ async function downloadIfMissing(name, url) {
   console.log(`  downloaded ${name} (${buf.length} bytes)`);
 }
 
+// Explicit allowlist of @mediapipe/tasks-vision@0.10.35 runtime files.
+// If a package upgrade adds or removes .js/.wasm files, the guard below throws
+// so a human can evaluate before they ship to browsers.
+const RUNTIME_FILES = [
+  'vision_wasm_internal.js',
+  'vision_wasm_internal.wasm',
+  'vision_wasm_nosimd_internal.js',
+  'vision_wasm_nosimd_internal.wasm',
+  'vision_wasm_module_internal.js',
+  'vision_wasm_module_internal.wasm'
+];
+
 async function main() {
   fs.mkdirSync(DEST_DIR, { recursive: true });
   if (!fs.existsSync(SRC_DIR)) {
     throw new Error(`Missing ${SRC_DIR}. Run "cd hugo-apps && npm install" first.`);
   }
 
-  // Copy all WASM runtime files from the package
-  const wasmFiles = fs.readdirSync(SRC_DIR).filter(f => f.endsWith('.js') || f.endsWith('.wasm'));
-  for (const f of wasmFiles) {
+  // Guard: verify package contents exactly match RUNTIME_FILES
+  const present = fs.readdirSync(SRC_DIR).filter(f => f.endsWith('.js') || f.endsWith('.wasm'));
+  const unexpected = present.filter(f => !RUNTIME_FILES.includes(f));
+  const missing = RUNTIME_FILES.filter(f => !present.includes(f));
+  if (unexpected.length > 0) {
+    throw new Error(
+      `Unexpected file(s) in ${SRC_DIR}: ${unexpected.join(', ')}.\n` +
+      `Add them to RUNTIME_FILES if legitimate, or update the @mediapipe/tasks-vision version.`
+    );
+  }
+  if (missing.length > 0) {
+    throw new Error(
+      `Missing expected file(s) in ${SRC_DIR}: ${missing.join(', ')}.\n` +
+      `The @mediapipe/tasks-vision package may have removed them; update RUNTIME_FILES.`
+    );
+  }
+
+  // Copy runtime files from the explicit allowlist
+  for (const f of RUNTIME_FILES) {
     const src = path.join(SRC_DIR, f);
     fs.copyFileSync(src, path.join(DEST_DIR, f));
     console.log(`  copied ${f}`);
