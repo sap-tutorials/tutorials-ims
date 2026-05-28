@@ -29,7 +29,9 @@ All three Navigator card types (tutorial, mission, group) display the indicator 
 
 ### D2 — Anonymous users see no indicator
 
-For an anonymous visitor, the Navigator looks pixel-identical to today. No ring, no reserved corner space, no sign-in nudge, no extra requests that 401. Anonymous browsing is the dominant traffic pattern on `/tutorials/` and adding noise there is the wrong tradeoff.
+For an anonymous visitor, the Navigator looks pixel-identical to today. No ring, no reserved corner space, no sign-in nudge. Anonymous browsing is the dominant traffic pattern on `/tutorials/` and adding noise there is the wrong tradeoff.
+
+The `/build/my-progress` fetch still runs unconditionally on mount — anonymous clients receive an HTTP 200 with an empty-shape payload, so there's no auth-driven branch on the client. No requests 401.
 
 ### D3 — Indicator only appears when progress > 0%
 
@@ -104,7 +106,7 @@ Pure presentational Vue component. Props: `percent: number` (0–100), `complete
 
 - New refs: `progress` (initially `{ tutorials: { completedSlugs: new Set(), inProgress: new Map() }, missionSlugs: new Set(), groupSlugs: new Set() }`), `progressLoaded` (boolean).
 - `onMounted`: third parallel `fetch('/build/my-progress', { credentials: 'include' })`. On success, populate `progress` with sets/maps for O(1) lookup; flip `progressLoaded` true. On failure, log and leave `progress` at its empty default.
-- `cardProgress(item: CardItem): { percent, complete } | null` helper returns the per-card state or null. For tutorial cards: completion check first, then in-progress map, then null. For mission/group cards: slug-set membership → `{ percent: 100, complete: true }` or null. Slugs are extracted from `item.href` using the existing `/tutorials/(?:mission|group)-?` prefix conventions.
+- `cardProgress(item: CardItem): { percent, complete } | null` helper returns the per-card state or null. For tutorial cards: completion check first, then in-progress map, then null. For mission/group cards: slug-set membership → `{ percent: 100, complete: true }` or null. Slugs are extracted from `item.href` by stripping the type prefix — e.g., `/tutorials/mission-abap-dev-get-started` → `abap-dev-get-started`, `/tutorials/group-cap-essentials` → `cap-essentials`, `/tutorials/build-cap-app-with-joule` → `build-cap-app-with-joule`.
 - Template: each `<a class="nav-card">` gets `<ProgressRing v-if="cardProgress(item)" v-bind="cardProgress(item)" />` and a `nav-card--has-progress` class when a ring is present, applying the ~3rem indent to title/description/type label.
 - Fade-in: `data-progress-loaded` attribute on the navigator root toggles when the fetch resolves; CSS rule `[data-progress-loaded] .progress-ring { opacity: 1 }` with a 150ms transition from the initial `opacity: 0`.
 
