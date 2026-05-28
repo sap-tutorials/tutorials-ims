@@ -8,6 +8,9 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import cds from '@sap/cds';
 import { gzipSync } from 'node:zlib';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { SHELL_STYLESHEETS } from '../srv/lib/render-catalog-page.js';
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
 
@@ -144,6 +147,30 @@ describe('GET /content/tutorials/group-* and mission-* synthesis fallback', () =
       expect(res.status).toBe(200);
       expect(res.headers['x-content-source']).toBe('db');
       expect(res.data).toBe(html);
+    });
+
+    // Regression for #91: synthesizer linked to /css/main.css which doesn't
+    // exist, leaving newly-renamed groups/missions unstyled until the next
+    // CI publish. Pin the contract to the actual Hugo asset set.
+    it('emits stylesheet refs that all exist in the Hugo asset pipeline', async () => {
+      const res = await project.axios.get('/content/tutorials/group-render-group');
+      expect(res.status).toBe(200);
+
+      const linkedHrefs = [...res.data.matchAll(/<link\b[^>]*\bhref="([^"]+)"/g)]
+        .map(m => m[1])
+        .filter(h => h.startsWith('/css/'));
+
+      expect(linkedHrefs).toEqual(SHELL_STYLESHEETS);
+
+      // Every linked file must exist in hugo/assets/css/ — that's the source
+      // Hugo bundles into the deployed approuter at the same /css/ path.
+      const assetsDir = join(process.cwd(), 'hugo', 'assets', 'css');
+      for (const href of linkedHrefs) {
+        const filename = href.replace(/^\/css\//, '');
+        expect(existsSync(join(assetsDir, filename)),
+          `${href} referenced by synthesizer but missing from hugo/assets/css/`)
+          .toBe(true);
+      }
     });
   });
 

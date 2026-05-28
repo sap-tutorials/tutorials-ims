@@ -24,12 +24,26 @@ const escapeHtml = (s) => String(s ?? '')
 
 const NAMESPACE = 'com.sap.developers.ims';
 
-// Minimal HTML shell — references the same /css/ and /js/ assets the Hugo
-// build emits, so the AppRouter serves them and the page picks up site
-// styling without duplicating the chrome here.
+// Minimal HTML shell — references the same /css/ assets the Hugo build emits
+// (see hugo/layouts/partials/head.html), so the AppRouter serves them and the
+// page picks up site styling without duplicating the chrome here. Keep this
+// list in sync with Hugo's head partial; the smoke test in
+// test/smoke/synthesized-page-assets.test.js asserts every <link> resolves.
+export const SHELL_STYLESHEETS = [
+  '/css/sap-theme-vars.css',
+  '/css/sap-horizon-dark.css',
+  '/css/chroma-light.css',
+  '/css/chroma-dark.css',
+  '/css/sap-fundamental.css',
+  '/css/ui5-overrides.css',
+];
+
 function shell({ title, description, kind, slug, body }) {
   const safeTitle = escapeHtml(title);
   const safeDesc  = escapeHtml(description ?? '');
+  const links = SHELL_STYLESHEETS
+    .map(href => `<link rel="stylesheet" href="${href}">`)
+    .join('\n');
   return `<!DOCTYPE html>
 <html lang="en" data-theme="light"
   data-page-kind="${kind}"
@@ -40,7 +54,7 @@ function shell({ title, description, kind, slug, body }) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${safeTitle}</title>
 <meta name="description" content="${safeDesc}">
-<link rel="stylesheet" href="/css/main.css">
+${links}
 </head>
 <body>
 <main>
