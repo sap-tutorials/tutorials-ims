@@ -21,6 +21,11 @@ service AdminService {
   entity TutorialPickList as projection on ims.Tutorials {
     ID, legacyId, cast(legacyId as String) as legacyIdStr : String, title, slug, primaryTag
   } where status = 'ACTIVE' or status is null;
+  // Distinct non-null Owner picklist for Tutorials filter value-help (#95)
+  @readonly
+  @cds.redirection.target: false
+  entity TutorialOwnerPickList as
+    select distinct key owner from ims.TutorialMeta where owner is not null;
   entity Missions as projection on ims.Missions { *, virtual null as publishedFieldControl : Integer, cast(legacyId as String) as legacyIdStr : String };
   entity Groups as projection on ims.Groups { *, virtual null as publishedFieldControl : Integer, cast(legacyId as String) as legacyIdStr : String };
   entity Steps as projection on ims.Steps;

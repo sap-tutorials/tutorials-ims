@@ -418,5 +418,30 @@ describe('AdminService', () => {
       expect(data.meta.owner).toBe(owner);
       expect(data.meta.ownerEmail).toBe('acme@example.com');
     });
+
+    it('TutorialOwnerPickList returns distinct non-null owners', async () => {
+      const { TutorialMeta, Tutorials } = cds.entities('com.sap.developers.ims');
+      const tut2 = cds.utils.uuid();
+      const tut3 = cds.utils.uuid();
+      await INSERT.into(Tutorials).entries([
+        { ID: tut2, slug: 'tut95-pl-2', title: 'PL2', status: 'ACTIVE' },
+        { ID: tut3, slug: 'tut95-pl-3', title: 'PL3', status: 'ACTIVE' },
+      ]);
+      await INSERT.into(TutorialMeta).entries([
+        { ID: cds.utils.uuid(), tutorial_ID: tut2, owner: 'Acme Owner' }, // duplicate of seed in beforeAll
+        { ID: cds.utils.uuid(), tutorial_ID: tut3, owner: 'Beta Team' },
+      ]);
+
+      const { status, data } = await project.get(
+        '/admin/TutorialOwnerPickList?$orderby=owner',
+        adminAuth
+      );
+      expect(status).toBe(200);
+      const owners = data.value.map((r) => r.owner);
+      expect(owners).toContain('Acme Owner');
+      expect(owners).toContain('Beta Team');
+      // distinctness: 'Acme Owner' must appear exactly once even though we seeded 2 rows
+      expect(owners.filter((o) => o === 'Acme Owner').length).toBe(1);
+    });
   });
 });
