@@ -8,7 +8,7 @@
       <div class="hero-top">
         <div class="hero-text">
           <span class="type-badge type-badge--mission">MISSION</span>
-          <h1>{{ .Title }}{{ if in .Params.displayTags "License" }} {{ partial "license-icon.html" . }}{{ end }}</h1>
+          <h1 class="mission-hero-title">{{ .Title }}{{ if in .Params.displayTags "License" }} {{ partial "license-icon.html" . }}{{ end }}</h1>
           <p class="mission-description">{{ .Params.description }}</p>
           <div class="mission-meta">
             <span class="meta-item">{{ .Params.level | title }}</span>
