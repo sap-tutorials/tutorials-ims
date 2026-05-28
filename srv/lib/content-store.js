@@ -26,6 +26,50 @@ async function toBuffer(data) {
 
 export { toBuffer };
 
+// Re-evaluate every TUTORIAL TaskRecord for `tutorialId` against the
+// authoritative step count (`stepCount`) and the user's actual completed STEP
+// records. Flips stale `progress=100/COMPLETED` rows back to IN_PROGRESS when
+// the denominator has grown beyond what the user has actually completed.
+// Skips when stepCount is 0 (nothing to compare against) or when the existing
+// row is already consistent. Logs any user whose status changed.
+export async function recomputeTutorialProgress(db, namespace, tutorialId, stepCount) {
+  if (!Number.isInteger(stepCount) || stepCount <= 0) return { rechecked: 0, updated: 0 };
+  const { Tutorials, Steps, TaskRecords } = cds.entities(namespace);
+  const tutorial = await SELECT.one.from(Tutorials).where({ ID: tutorialId }).columns('ID', 'legacyId');
+  if (!tutorial?.legacyId) return { rechecked: 0, updated: 0 };
+
+  const steps = await SELECT.from(Steps).where({ tutorial_ID: tutorialId }).columns('legacyId');
+  const stepLegacyIds = steps.map(s => s.legacyId).filter(Boolean);
+  if (stepLegacyIds.length === 0) return { rechecked: 0, updated: 0 };
+
+  const tutorialRecs = await SELECT.from(TaskRecords).where({
+    taskLegacyId: tutorial.legacyId,
+    taskType: 'TUTORIAL'
+  });
+  if (tutorialRecs.length === 0) return { rechecked: 0, updated: 0 };
+
+  let updated = 0;
+  for (const rec of tutorialRecs) {
+    const completed = await SELECT.from(TaskRecords).where({
+      user_ID: rec.user_ID,
+      taskType: 'STEP',
+      status: 'COMPLETED',
+      taskLegacyId: { in: stepLegacyIds }
+    }).columns('ID');
+    const newProgress = Math.round((completed.length / stepCount) * 100);
+    const newStatus = newProgress >= 100 ? 'COMPLETED' : 'IN_PROGRESS';
+    if (rec.progress === newProgress && rec.status === newStatus) continue;
+    const set = { progress: newProgress, status: newStatus };
+    if (newStatus !== 'COMPLETED') set.completionDate = null;
+    await UPDATE(TaskRecords).where({ ID: rec.ID }).set(set);
+    updated += 1;
+  }
+  if (updated > 0) {
+    LOG.info(`recomputeTutorialProgress: tutorialId=${tutorialId} stepCount=${stepCount} updated=${updated}/${tutorialRecs.length}`);
+  }
+  return { rechecked: tutorialRecs.length, updated };
+}
+
 export async function triggerPostPublishEmbeddings({ changedSlugs, settings }) {
   if (!settings?.ragEnabled) return;
   if (!Array.isArray(changedSlugs) || changedSlugs.length === 0) return;
@@ -303,6 +347,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
                 averageTimeToComplete: meta.time || null,
                 experienceTag: meta.level || null,
                 primaryTag: meta.primaryTag || null,
+                stepCount: Array.isArray(meta.steps) ? meta.steps.length : null,
                 status: 'ACTIVE'
               });
             } else {
@@ -315,6 +360,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
                 averageTimeToComplete: meta.time || null,
                 experienceTag: meta.level || null,
                 primaryTag: meta.primaryTag || null,
+                stepCount: Array.isArray(meta.steps) ? meta.steps.length : null,
                 status: 'ACTIVE'
               });
             }
@@ -343,6 +389,14 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
                   });
                 }
               }
+
+              // Recompute progress for any existing TUTORIAL TaskRecords on
+              // this tutorial. Without this, users who marked steps complete
+              // before the authoritative stepCount was set (or before steps
+              // beyond their last completion existed in the DB) keep a stale
+              // progress=100/COMPLETED row even after the true denominator
+              // grows. See issue #89.
+              await recomputeTutorialProgress(db, namespace, tutorialId, meta.steps.length);
             }
             // Auto-init TutorialMeta: new tutorial → INSERT; refreshed tutorial → UPDATE reviewedDate
             try {

@@ -567,8 +567,19 @@ export default class DeveloperService extends cds.ApplicationService {
       taskLegacyId: { in: stepLegacyIds }
     });
 
+    // Prefer the authoritative stepCount from the parsed tutorial frontmatter
+    // (set by publish-content). The DB Step row count is unreliable as a
+    // denominator because completeStep lazily inserts Step rows, so the count
+    // grows with each user click and a partially-completed tutorial can flip
+    // to 100% before publish-content has populated the rest of the steps.
+    // Fallback to DB count only when stepCount is null (e.g. tests, or
+    // tutorials published before this column existed). See issue #89.
+    const totalSteps = (typeof tutorial.stepCount === 'number' && tutorial.stepCount > 0)
+      ? tutorial.stepCount
+      : steps.length;
+
     const { progress, status } = calculateTutorialProgress(
-      completedStepRecords, steps.length
+      completedStepRecords, totalSteps
     );
 
     // Upsert tutorial-level task record
