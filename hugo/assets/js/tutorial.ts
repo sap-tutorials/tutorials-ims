@@ -234,6 +234,9 @@ async function markDone(btn: HTMLButtonElement) {
     const tocItem = document.querySelector(`.step-toc-item[data-toc-step="${stepNum}"]`)
     if (tocItem) tocItem.classList.add('completed')
     markButtonCompleted(btn)
+    document.dispatchEvent(new CustomEvent('tutorial:step-completed', {
+      detail: { stepIndex: parseInt(stepNum, 10) }
+    }))
     updateProgressBar()
 
     // U10: completion feedback. Final-step toast wins over the per-step toast.
