@@ -1,6 +1,6 @@
 // hugo-apps/src/navigator/cardProgress.test.ts
 import { describe, it, expect } from 'vitest';
-import { cardProgress, type ProgressPayload } from './cardProgress';
+import { cardProgress, toLookup, type ProgressPayload } from './cardProgress';
 import type { CardItem } from '../shared/types';
 
 function makeProgress(overrides: Partial<ProgressPayload> = {}): ProgressPayload {
@@ -82,5 +82,46 @@ describe('cardProgress', () => {
     expect(cardProgress(tutorialCard('any'),  empty)).toBeNull();
     expect(cardProgress(missionCard('any'),   empty)).toBeNull();
     expect(cardProgress(groupCard('any'),     empty)).toBeNull();
+  });
+});
+
+describe('toLookup', () => {
+  it('round-trips the wire-format payload', () => {
+    const wire = {
+      authenticated: true,
+      tutorials: {
+        completedSlugs: ['done-tut'],
+        inProgress: [{ slug: 'inprog-tut', progressPercent: 60 }]
+      },
+      missionSlugs: ['done-mission'],
+      groupSlugs:   ['done-group']
+    };
+    const p = toLookup(wire);
+    expect(p.tutorials.completedSlugs.has('done-tut')).toBe(true);
+    expect(p.tutorials.inProgress.get('inprog-tut')).toBe(60);
+    expect(p.missionSlugs.has('done-mission')).toBe(true);
+    expect(p.groupSlugs.has('done-group')).toBe(true);
+  });
+
+  it('client-side filters 0% entries even if server includes them', () => {
+    const wire = {
+      authenticated: true,
+      tutorials: {
+        completedSlugs: [],
+        inProgress: [{ slug: 'zero-tut', progressPercent: 0 }, { slug: 'real', progressPercent: 30 }]
+      },
+      missionSlugs: [],
+      groupSlugs: []
+    };
+    const p = toLookup(wire);
+    expect(p.tutorials.inProgress.has('zero-tut')).toBe(false);
+    expect(p.tutorials.inProgress.get('real')).toBe(30);
+  });
+
+  it('returns empty-shape on garbage input', () => {
+    const p = toLookup(null);
+    expect(p.authenticated).toBe(false);
+    expect(p.tutorials.completedSlugs.size).toBe(0);
+    expect(p.tutorials.inProgress.size).toBe(0);
   });
 });
