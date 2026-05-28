@@ -3,6 +3,8 @@ import { ref, computed, onMounted, reactive, watch } from 'vue'
 import type { TutorialEntry, CardItem, MissionRef, GroupRef } from '@shared/types'
 import { useSearch } from './useSearch'
 import Skeleton from '@shared/Skeleton.vue'
+import ProgressRing from '@shared/ProgressRing.vue'
+import { cardProgress, toLookup, emptyProgress, type ProgressPayload } from './cardProgress'
 import type { SearchFacets } from '@shared/types'
 
 const tutorials = ref<TutorialEntry[]>([])
@@ -14,6 +16,9 @@ const productSearch = ref('')
 const topicSearch = ref('')
 const currentPage = ref(1)
 const pageSize = 48
+
+const progress = ref<ProgressPayload>(emptyProgress())
+const progressLoaded = ref(false)
 
 const filters = reactive({
   levels: [] as string[],
@@ -35,9 +40,10 @@ onMounted(async () => {
   const initialQuery = new URL(window.location.href).searchParams.get('q')
   if (initialQuery) searchQuery.value = initialQuery
 
-  const [navRes, catalogRes] = await Promise.all([
+  const [navRes, catalogRes, progRes] = await Promise.all([
     fetch('/tutorials/_nav.json'),
     fetch('/build/navigator'),
+    fetch('/build/my-progress', { credentials: 'include' }).catch(() => null),
   ])
 
   if (navRes.ok) {
@@ -70,6 +76,16 @@ onMounted(async () => {
       })
     }
   }
+
+  if (progRes && progRes.ok) {
+    try {
+      const json = await progRes.json()
+      progress.value = toLookup(json)
+    } catch {
+      // leave progress at emptyProgress default
+    }
+  }
+  progressLoaded.value = true
 })
 
 const LEVEL_ORDER: Record<string, number> = { beginner: 0, intermediate: 1, advanced: 2 }
@@ -559,7 +575,7 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
 </script>
 
 <template>
-  <div class="tutorial-navigator">
+  <div class="tutorial-navigator" :data-progress-loaded="progressLoaded">
     <!-- Section: Hero Banner -->
     <section class="navigator-hero">
       <div class="hero-inner">
@@ -702,8 +718,16 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
           :key="item.id"
           :href="item.href"
           class="nav-card"
-          :class="{ 'nav-card--new': item.isNew }"
+          :class="{
+            'nav-card--new': item.isNew,
+            'nav-card--has-progress': !!cardProgress(item, progress),
+          }"
         >
+          <ProgressRing
+            v-if="cardProgress(item, progress)"
+            class="nav-card__progress"
+            v-bind="cardProgress(item, progress)!"
+          />
           <span v-if="item.isNew" class="nav-card__new-badge" aria-label="New tutorial">NEW</span>
           <div class="nav-card__type" :class="`nav-card__type--${item.type}`">
             {{ TYPE_LABELS[item.type] }}
@@ -1349,5 +1373,21 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
   display: flex;
   justify-content: center;
   padding: 2rem;
+}
+
+.nav-card__progress {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  opacity: 0;
+  transition: opacity 0.15s ease-out;
+}
+.tutorial-navigator[data-progress-loaded="true"] .nav-card__progress {
+  opacity: 1;
+}
+.nav-card--has-progress .nav-card__type,
+.nav-card--has-progress .nav-card__title,
+.nav-card--has-progress .nav-card__desc {
+  padding-left: 3rem;
 }
 </style>

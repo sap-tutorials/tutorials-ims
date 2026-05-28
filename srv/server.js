@@ -7,6 +7,7 @@ import { buildCatalogHandler } from './lib/build-catalog.js';
 import { coCompletionsHandler } from './lib/co-completion.js';
 import { recommendationsHandler } from './handlers/recommendations.js';
 import { navigatorCatalogHandler, invalidateNavigatorCache } from './lib/navigator-catalog.js';
+import { myProgressHandler } from './lib/my-progress-handler.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
 import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, navHandler, rollbackHandler } from './lib/content-store.js';
 import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-catalog.js';
@@ -259,6 +260,10 @@ cds.on('served', async () => {
       scopes: Object.keys(roles),
       serverTime: new Date().toISOString()
     });
+  });
+
+  app.get('/build/my-progress', contextMw, authMw, (req, res, next) => {
+    Promise.resolve(myProgressHandler(req, res)).catch(next);
   });
 
   const embeddingsStatsBusiness = async (req, res) => {

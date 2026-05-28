@@ -23,6 +23,19 @@ describe('Public endpoints', () => {
     expect(typeof body).toBe('object');
   });
 
+  it('GET /build/my-progress returns empty payload for anonymous client', async () => {
+    const res = await fetchWithRetry(`${SRV_URL}/build/my-progress`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toMatch(/private/);
+    expect(res.headers.get('content-type')).toMatch(/application\/json/);
+
+    const body = await res.json();
+    expect(body.authenticated).toBe(false);
+    expect(body.tutorials).toEqual({ completedSlugs: [], inProgress: [] });
+    expect(body.missionSlugs).toEqual([]);
+    expect(body.groupSlugs).toEqual([]);
+  });
+
   // TODO: @cap-js/ord 1.6.0 routes are not active in production CSN —
   // requires plugin wiring investigation. Skipping until that's resolved.
   it.skip('GET /.well-known/open-resource-discovery returns ORD configuration', async () => {
