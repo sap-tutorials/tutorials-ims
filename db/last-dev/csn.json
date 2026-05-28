@@ -454,6 +454,11 @@
           "@odata.foreignKey4": "primaryTagRef",
           "@cds.persistence.name": "PRIMARYTAGREF_ID"
         },
+        "slug": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "SLUG"
+        },
         "published": {
           "type": "cds.Boolean",
           "default": {
