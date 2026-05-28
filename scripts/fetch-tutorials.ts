@@ -831,8 +831,23 @@ async function main() {
       coCompletions = await fetchCoCompletions(capBaseUrl)
       console.log(`  [cap] co-completion map: ${coCompletions.size} source slugs`)
     } catch (err) {
-      console.warn(`  [cap-warn] CAP fetch failed: ${err instanceof Error ? err.message : err}`)
-      console.warn('  [cap-warn] Continuing without missions/groups')
+      // Fail loudly. A silent fall-through to "0 missions" produced builds
+      // where every Group/Mission page was missing — every navigator link
+      // then hit the runtime DB-render fallback (issue #77). The script must
+      // fail so CI doesn't ship a half-built site. Set ALLOW_EMPTY_CAP=1
+      // only for the rare smoke test that genuinely wants no mission/group
+      // pages.
+      const msg = err instanceof Error ? err.message : String(err)
+      if (process.env.ALLOW_EMPTY_CAP === '1') {
+        console.warn(`  [cap-warn] CAP fetch failed: ${msg}`)
+        console.warn('  [cap-warn] ALLOW_EMPTY_CAP=1 — continuing without missions/groups')
+      } else {
+        console.error(`\n  [cap-error] CAP fetch failed: ${msg}`)
+        console.error(`  [cap-error] CAP_BASE_URL=${process.env.CAP_BASE_URL || 'http://localhost:4004'}`)
+        console.error('  [cap-error] Hugo build would emit 0 mission/group pages — refusing to continue.')
+        console.error('  [cap-error] Set CAP_BASE_URL to a reachable srv, or pass ALLOW_EMPTY_CAP=1 to opt out.\n')
+        throw err
+      }
     }
   }
 
