@@ -87,13 +87,11 @@
             "settings": {
               "contextPath": "/Tutorials",
               "editableHeaderContent": false,
-              "controlConfiguration": {
-                "@com.sap.vocabularies.UI.v1.Identification": {
+              "content": {
+                "header": {
                   "actions": {
                     "AskJouleAction": {
                       "press": "sap.tutorials.admin.tutorials.ext.AskJoule.onAskJoule",
-                      "visible": true,
-                      "enabled": true,
                       "text": "Ask Joule for tutorial improvement suggestions"
                     }
                   }
