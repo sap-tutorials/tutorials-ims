@@ -109,6 +109,13 @@ The `"License"` token continues to appear in the navigator's tag-filter facet si
 
 None at design-approval time. Final icon class name (sap-icon font vs UI5 web-component) and exact CSS positioning will be chosen during implementation.
 
+## Implementation pins (locked at planning time, not now)
+
+These were left flexible above so the design wasn't over-specified. The implementation plan must commit to one choice each before coding starts:
+
+- **Icon source per surface.** Pick one consistent class name / element across every surface so the smoke test's selector has a single target. Default leaning: sap-icon font (`<i class="sap-icon--key">`) for Hugo templates, mirrored to a same-class `<i>` inside the Vue card so a single CSS rule covers both. Alternative: `<ui5-icon name="key">` web component — only if the project already loads `@ui5/webcomponents-icons` on every page where the icon must render (it does on the Object Page; verify for navigator and group/mission pages before choosing).
+- **Smoke-test selector specificity.** The "no `>License<` chip" assertion must scope to the chip strip's CSS class (e.g., `op-chip--tag` on the Object Page, `tutorial-tag` in the meta partial) — not the whole document — so a step body that legitimately discusses licensing doesn't cause a false negative.
+
 ## References
 
 - Issue: <https://github.com/sap-tutorials/tutorials-ims/issues/81>
