@@ -57,6 +57,25 @@ entity Groups : TaskBase {
   items                     : Composition of many GroupPathItems on items.group = $self;
 }
 
+// Historic slugs preserved when an admin renames a Group/Mission. Used by the
+// content-store fallback to emit a 301 to the entity's current slug, so old
+// URLs and bookmarks survive renames. Append-only; on slug-reuse the row for
+// the reclaimed slug is dropped (whoever owns the slug now wins).
+//
+// Stored as standalone entities with plain Associations (NOT Compositions),
+// because draft-activation rebuilds composition children from the draft side,
+// which would wipe rows written by a `before('UPDATE')` hook on the parent.
+// See #91 follow-up.
+entity GroupSlugRedirects : cuid, managed {
+  group                     : Association to Groups;
+  slug                      : String(255) @mandatory;
+}
+
+entity MissionSlugRedirects : cuid, managed {
+  mission                   : Association to Missions;
+  slug                      : String(255) @mandatory;
+}
+
 entity Steps : TaskBase {
   tutorial                  : Association to Tutorials;
   stepOrder                 : Integer;

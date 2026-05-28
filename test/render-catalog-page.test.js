@@ -225,3 +225,162 @@ describe('GET /content/tutorials/group-* and mission-* synthesis fallback', () =
     });
   });
 });
+
+// Regression for #91 follow-up: when an admin renames a Group/Mission, the slug
+// auto-derives from the new title and the old slug is recorded in the
+// {Group,Mission}SlugRedirects table. The content-store must 301 the old URL
+// to the entity's current slug.
+describe('GET /content/tutorials/{group,mission}-* slug-history redirect', () => {
+  beforeAll(() => {
+    process.env.CONTENT_API_KEY = API_KEY;
+  });
+
+  beforeEach(async () => {
+    const { ContentFiles, ContentManifest, Groups, Missions, Tutorials,
+            GroupPathItems, CompletionPaths, CompletionPathItems, Tags, JobLocks,
+            GroupSlugRedirects, MissionSlugRedirects } =
+      cds.entities('com.sap.developers.ims');
+
+    await DELETE.from(GroupSlugRedirects);
+    await DELETE.from(MissionSlugRedirects);
+    await DELETE.from(ContentFiles);
+    await DELETE.from(ContentManifest);
+    await DELETE.from(GroupPathItems);
+    await DELETE.from(CompletionPathItems);
+    await DELETE.from(CompletionPaths);
+    await DELETE.from(Groups);
+    await DELETE.from(Missions);
+    await DELETE.from(Tutorials);
+    await DELETE.from(Tags);
+    await DELETE.from(JobLocks);
+
+    await project.axios.post('/content/publish', {
+      trigger: 'redirect-test',
+      hugoVersion: '0.147.0',
+      files: makePayload({ '__seed__': '<p>seed</p>' }),
+    }, { headers: { Authorization: `Bearer ${API_KEY}` } });
+
+    await INSERT.into(Tags).entries({ ID: TAG_ID, legacyId: 80001, name: '__TEST__ Redirect Tag' });
+  });
+
+  it('301-redirects an old group slug to the current slug', async () => {
+    const { Groups, GroupSlugRedirects } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Groups).entries({
+      ID: GROUP_ID, legacyId: 80021,
+      slug: 'test-two', // current
+      title: '__TEST__ Test Two', published: true, status: 'ACTIVE',
+    });
+    await INSERT.into(GroupSlugRedirects).entries({
+      ID: 'aaaaaaaa-redr-0000-0000-000000000001',
+      group_ID: GROUP_ID, slug: 'test-tow', // historic
+    });
+
+    const res = await project.axios.get('/content/tutorials/group-test-tow', {
+      maxRedirects: 0, validateStatus: () => true,
+    });
+    expect(res.status).toBe(301);
+    expect(res.headers.location).toBe('/tutorials/group-test-two');
+    expect(res.headers['cache-control']).toBe('public, max-age=300');
+  });
+
+  it('301-redirects an old mission slug to the current slug', async () => {
+    const { Missions, MissionSlugRedirects } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Missions).entries({
+      ID: MISSION_ID, legacyId: 80031,
+      slug: 'cap-app',
+      title: '__TEST__ Build a CAP App',
+      published: true, status: 'ACTIVE', primaryTagRef_ID: TAG_ID,
+    });
+    await INSERT.into(MissionSlugRedirects).entries({
+      ID: 'aaaaaaaa-redr-0000-0000-000000000002',
+      mission_ID: MISSION_ID, slug: 'cap-tutorial',
+    });
+
+    const res = await project.axios.get('/content/tutorials/mission-cap-tutorial', {
+      maxRedirects: 0, validateStatus: () => true,
+    });
+    expect(res.status).toBe(301);
+    expect(res.headers.location).toBe('/tutorials/mission-cap-app');
+  });
+
+  it('preserves query string on redirect', async () => {
+    const { Groups, GroupSlugRedirects } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Groups).entries({
+      ID: GROUP_ID, legacyId: 80021,
+      slug: 'new', title: '__TEST__ New', published: true, status: 'ACTIVE',
+    });
+    await INSERT.into(GroupSlugRedirects).entries({
+      ID: 'aaaaaaaa-redr-0000-0000-000000000003',
+      group_ID: GROUP_ID, slug: 'old',
+    });
+
+    const res = await project.axios.get('/content/tutorials/group-old?utm=x&ref=y', {
+      maxRedirects: 0, validateStatus: () => true,
+    });
+    expect(res.status).toBe(301);
+    expect(res.headers.location).toBe('/tutorials/group-new?utm=x&ref=y');
+  });
+
+  it('redirect wins over stale Hugo HTML carried forward in ContentFiles', async () => {
+    // The defining test for #91. The old slug had Hugo HTML published when
+    // the group was titled "Test Tow"; after rename the publish carries that
+    // HTML forward, but the redirect must take precedence.
+    const { Groups, GroupSlugRedirects } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Groups).entries({
+      ID: GROUP_ID, legacyId: 80021,
+      slug: 'test-two', title: '__TEST__ Test Two', published: true, status: 'ACTIVE',
+    });
+    await INSERT.into(GroupSlugRedirects).entries({
+      ID: 'aaaaaaaa-redr-0000-0000-000000000004',
+      group_ID: GROUP_ID, slug: 'test-tow',
+    });
+    // Publish stale HTML at the old slug.
+    await project.axios.post('/content/publish', {
+      trigger: 'redirect-test',
+      hugoVersion: '0.147.0',
+      files: makePayload({ 'group-test-tow': '<p>stale Hugo HTML titled Test Tow</p>' }),
+    }, { headers: { Authorization: `Bearer ${API_KEY}` } });
+
+    const res = await project.axios.get('/content/tutorials/group-test-tow', {
+      maxRedirects: 0, validateStatus: () => true,
+    });
+    expect(res.status).toBe(301);
+    expect(res.headers.location).toBe('/tutorials/group-test-two');
+  });
+
+  it('falls through to synthesizer when redirect slug equals current slug (self-loop guard)', async () => {
+    // Pathological data drift: a redirect row's slug matches the entity's
+    // current slug. Don't ping-pong — fall through to normal serving.
+    const { Groups, GroupSlugRedirects, GroupPathItems, Tutorials } =
+      cds.entities('com.sap.developers.ims');
+    await INSERT.into(Tutorials).entries({
+      ID: TUT1_ID, legacyId: 80011, slug: 'render-tut-1',
+      title: 'Render Tut 1', status: 'ACTIVE',
+    });
+    await INSERT.into(Groups).entries({
+      ID: GROUP_ID, legacyId: 80021,
+      slug: 'same', title: '__TEST__ Same', published: true, status: 'ACTIVE',
+    });
+    await INSERT.into(GroupPathItems).entries({
+      ID: 'eeeeeeee-r000-0000-0000-000000000099',
+      group_ID: GROUP_ID, tutorial_ID: TUT1_ID, itemOrder: 0,
+    });
+    await INSERT.into(GroupSlugRedirects).entries({
+      ID: 'aaaaaaaa-redr-0000-0000-000000000005',
+      group_ID: GROUP_ID, slug: 'same', // matches current — corrupt state
+    });
+
+    const res = await project.axios.get('/content/tutorials/group-same', {
+      maxRedirects: 0, validateStatus: () => true,
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers['x-content-source']).toBe('synthesized');
+  });
+
+  it('returns 404 when no redirect, no entity, no published HTML', async () => {
+    const res = await project.axios.get('/content/tutorials/group-never-existed', {
+      validateStatus: () => true,
+    });
+    expect(res.status).toBe(404);
+  });
+});

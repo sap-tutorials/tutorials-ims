@@ -17,7 +17,8 @@ export default class AdminService extends cds.ApplicationService {
             StepFailures, Tags, TutorialTags, UserMetaData,
             PrimaryAccounts, SecondaryAccounts, PrivacyProtectionActions,
             FeaturedTasks, CompletionPaths, CompletionPathItems,
-            ChatSettings, ContentManifest, ContentFiles } = cds.entities('com.sap.developers.ims');
+            ChatSettings, ContentManifest, ContentFiles,
+            GroupSlugRedirects, MissionSlugRedirects } = cds.entities('com.sap.developers.ims');
     const db = await cds.connect.to('db');
     const audit = await cds.connect.to('audit-log');
 
@@ -123,7 +124,9 @@ export default class AdminService extends cds.ApplicationService {
     //   - NEW (draft create) and PATCH (draft autosave): keep slug visible
     //     and current as the title evolves in the draft.
     //   - SAVE (activation): final reconciliation against active table for
-    //     uniqueness, since other drafts may have activated meanwhile.
+    //     uniqueness, since other drafts may have activated meanwhile. Also
+    //     records the prior slug into the redirect history so old URLs
+    //     302-survive renames (issue #91).
     //   - CREATE: programmatic non-draft POST (tests, scripts).
     //
     // Collisions resolved by appending -2, -3, ... within the entity's table.
@@ -159,7 +162,44 @@ export default class AdminService extends cds.ApplicationService {
         rows.filter(r => r.ID !== ID).map(r => r.slug).filter(Boolean)
       );
 
-      req.data.slug = ensureUniqueSlug(base, taken, prior?.slug ?? null);
+      const newSlug = ensureUniqueSlug(base, taken, prior?.slug ?? null);
+      req.data.slug = newSlug;
+
+      // Record the prior slug into redirect history. Only on SAVE (active-row
+      // activation) and CREATE (programmatic non-draft) — draft autosaves
+      // (NEW / PATCH) shouldn't accumulate redirect rows for in-progress
+      // titles the admin is still typing. See #91 follow-up.
+      // Record the prior slug into redirect history. Only when the active
+      // entity is being written (not drafts) — draft autosaves shouldn't
+      // accumulate redirect rows for in-progress titles. Two paths reach the
+      // active entity:
+      //   - Initial draftActivate: req.event === 'CREATE' (no prior slug, so
+      //     the prior?.slug guard below skips harmlessly).
+      //   - Re-edit + draftActivate: req.event === 'UPDATE' on the active row,
+      //     prior holds the active row's pre-update slug.
+      // Programmatic non-draft writes also reach here as CREATE/UPDATE.
+      // SAVE fires too on some handler chains, so accept it as well.
+      // See #91 follow-up.
+      const targetName = String(req.target?.name ?? '');
+      const writingActive = !targetName.endsWith('.drafts')
+        && (req.event === 'SAVE' || req.event === 'CREATE' || req.event === 'UPDATE');
+      if (writingActive && prior?.slug && prior.slug !== newSlug) {
+        const Redirect = entityName === 'Missions' ? MissionSlugRedirects : GroupSlugRedirects;
+        const fk = entityName === 'Missions' ? 'mission_ID' : 'group_ID';
+
+        // Slug-reuse: if newSlug was previously held by some other entity in
+        // this table, drop that historic record so the redirect points at the
+        // current owner (whoever owns the slug now wins). Also drop any prior
+        // record for the just-vacated slug under THIS entity so we don't
+        // accumulate dupes when a title bounces A → B → A.
+        await DELETE.from(Redirect).where({ slug: { in: [newSlug, prior.slug] } });
+
+        await INSERT.into(Redirect).entries({
+          ID: randomUUID(),
+          [fk]: ID,
+          slug: prior.slug,
+        });
+      }
     };
 
     for (const entityName of ['Missions', 'Groups']) {

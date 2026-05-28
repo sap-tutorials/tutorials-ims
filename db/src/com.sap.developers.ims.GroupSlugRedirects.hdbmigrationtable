@@ -1,0 +1,11 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_GroupSlugRedirects (
+  ID NVARCHAR(36) NOT NULL,
+  createdAt TIMESTAMP,
+  createdBy NVARCHAR(255),
+  modifiedAt TIMESTAMP,
+  modifiedBy NVARCHAR(255),
+  group_ID NVARCHAR(36),
+  slug NVARCHAR(255) NOT NULL,
+  PRIMARY KEY(ID)
+)
