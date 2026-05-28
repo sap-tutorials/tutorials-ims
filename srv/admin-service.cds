@@ -10,13 +10,24 @@ service AdminService {
   entity Users as projection on ims.Users;
   @cds.redirection.target: true
   @Capabilities.ChangeTracking : { Supported: true }
-  entity Tutorials as projection on ims.Tutorials { *, cast(legacyId as String) as legacyIdStr : String };
+  entity Tutorials as projection on ims.Tutorials {
+    *,
+    cast(legacyId as String) as legacyIdStr : String,
+    meta            : Association to TutorialMeta             on meta.tutorial.ID           = ID,
+    feedbackSummary : Association to TutorialFeedbackAggregate on feedbackSummary.tutorialSlug = slug,
+    feedbackItems   : Association to many TutorialFeedback     on feedbackItems.tutorialSlug   = slug
+  };
   // Filtered picklist for redirectTo value help — only ACTIVE tutorials can be redirect targets
   @readonly
   @cds.redirection.target: false
   entity TutorialPickList as projection on ims.Tutorials {
     ID, legacyId, cast(legacyId as String) as legacyIdStr : String, title, slug, primaryTag
   } where status = 'ACTIVE' or status is null;
+  // Distinct non-null Owner picklist for Tutorials filter value-help (#95)
+  @readonly
+  @cds.redirection.target: false
+  entity TutorialOwnerPickList as
+    select distinct key owner from ims.TutorialMeta where owner is not null;
   entity Missions as projection on ims.Missions { *, virtual null as publishedFieldControl : Integer, cast(legacyId as String) as legacyIdStr : String };
   entity Groups as projection on ims.Groups { *, virtual null as publishedFieldControl : Integer, cast(legacyId as String) as legacyIdStr : String };
   entity Steps as projection on ims.Steps;

@@ -391,4 +391,91 @@ describe('AdminService', () => {
       expect(slugs).not.toContain('sd-inactive');
     });
   });
+
+  describe('Tutorials enhancements (#95)', () => {
+    let tutId;
+    const slug = 'tut95-owner';
+    const owner = 'Acme Owner';
+
+    beforeAll(async () => {
+      const { Tutorials, TutorialMeta } = cds.entities('com.sap.developers.ims');
+      tutId = cds.utils.uuid();
+      await INSERT.into(Tutorials).entries([
+        { ID: tutId, slug, title: 'Tut 95', status: 'ACTIVE' },
+      ]);
+      await INSERT.into(TutorialMeta).entries([
+        { ID: cds.utils.uuid(), tutorial_ID: tutId, owner, ownerEmail: 'acme@example.com' },
+      ]);
+    });
+
+    it('exposes meta.owner via $expand on Tutorials', async () => {
+      const { status, data } = await project.get(
+        `/admin/Tutorials(ID=${tutId},IsActiveEntity=true)?$expand=meta($select=owner,ownerEmail)`,
+        adminAuth
+      );
+      expect(status).toBe(200);
+      expect(data.meta).toBeTruthy();
+      expect(data.meta.owner).toBe(owner);
+      expect(data.meta.ownerEmail).toBe('acme@example.com');
+    });
+
+    it('TutorialOwnerPickList returns distinct non-null owners', async () => {
+      const { TutorialMeta, Tutorials } = cds.entities('com.sap.developers.ims');
+      const tut2 = cds.utils.uuid();
+      const tut3 = cds.utils.uuid();
+      await INSERT.into(Tutorials).entries([
+        { ID: tut2, slug: 'tut95-pl-2', title: 'PL2', status: 'ACTIVE' },
+        { ID: tut3, slug: 'tut95-pl-3', title: 'PL3', status: 'ACTIVE' },
+      ]);
+      await INSERT.into(TutorialMeta).entries([
+        { ID: cds.utils.uuid(), tutorial_ID: tut2, owner: 'Acme Owner' }, // duplicate of seed in beforeAll
+        { ID: cds.utils.uuid(), tutorial_ID: tut3, owner: 'Beta Team' },
+      ]);
+
+      const { status, data } = await project.get(
+        '/admin/TutorialOwnerPickList?$orderby=owner',
+        adminAuth
+      );
+      expect(status).toBe(200);
+      const owners = data.value.map((r) => r.owner);
+      expect(owners).toContain('Acme Owner');
+      expect(owners).toContain('Beta Team');
+      // distinctness: 'Acme Owner' must appear exactly once even though we seeded 2 rows
+      expect(owners.filter((o) => o === 'Acme Owner').length).toBe(1);
+    });
+
+    it('exposes feedbackSummary aggregate via $expand', async () => {
+      const { TutorialFeedback } = cds.entities('com.sap.developers.ims');
+      await INSERT.into(TutorialFeedback).entries([
+        { ID: cds.utils.uuid(), tutorialSlug: slug, npsScore: 9, ratingUseCase: 8,
+          ratingRelevance: 9, ratingDuration: 7, ratingStructure: 8,
+          ratingInteresting: 9, ratingVisuals: 8, comment: 'Great', wasAuthenticated: true },
+        { ID: cds.utils.uuid(), tutorialSlug: slug, npsScore: 4, ratingUseCase: 5,
+          ratingRelevance: 6, ratingDuration: 5, ratingStructure: 6,
+          ratingInteresting: 5, ratingVisuals: 6, comment: 'Meh', wasAuthenticated: false },
+      ]);
+
+      const { status, data } = await project.get(
+        `/admin/Tutorials(ID=${tutId},IsActiveEntity=true)?$expand=feedbackSummary`,
+        adminAuth
+      );
+      expect(status).toBe(200);
+      expect(data.feedbackSummary).toBeTruthy();
+      expect(data.feedbackSummary.responseCount).toBe(2);
+      expect(Number(data.feedbackSummary.avgNps)).toBeCloseTo(6.5, 1);
+      expect(data.feedbackSummary.promoters).toBe(1);
+      expect(data.feedbackSummary.detractors).toBe(1);
+    });
+
+    it('exposes feedbackItems via $expand, scoped to slug', async () => {
+      const { status, data } = await project.get(
+        `/admin/Tutorials(ID=${tutId},IsActiveEntity=true)?$expand=feedbackItems($orderby=submittedAt desc)`,
+        adminAuth
+      );
+      expect(status).toBe(200);
+      expect(data.feedbackItems).toBeTruthy();
+      expect(data.feedbackItems.length).toBe(2);
+      for (const fb of data.feedbackItems) expect(fb.tutorialSlug).toBe(slug);
+    });
+  });
 });
