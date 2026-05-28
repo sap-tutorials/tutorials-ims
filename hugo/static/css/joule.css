@@ -220,7 +220,15 @@
   font-weight: 500;
   cursor: pointer;
   box-shadow: 0 6px 18px rgba(0, 0, 0, .25), 0 0 0 1px rgba(255, 255, 255, .06);
-  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, bottom 200ms ease;
+}
+/* Issue #102: when the in-flow Previous/Next nav row scrolls into view,
+   joule.js sets data-near-nav-bottom on the FAB. Lift it enough to clear
+   the row (~3.75rem covers the row's padding-top + button height + a gap).
+   On <=960px the FAB is display:none (mobile rule below) so this is a no-op
+   there. The transition:bottom on .joule-step-fab makes the slide smooth. */
+.joule-step-fab[data-near-nav-bottom] {
+  bottom: 5rem;
 }
 .joule-step-fab[hidden] { display: none; }
 .joule-step-fab:hover {
