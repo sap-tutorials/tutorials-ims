@@ -1,14 +1,16 @@
 import { ref, computed, watch, type Ref } from 'vue'
-import type { CardItem, SearchableItem, SearchFacets } from '@shared/types'
+import type { CardItem, SearchableItem, SearchFacets, TutorialEntry } from '@shared/types'
 
 interface UseSearchOptions {
   searchTerm: Ref<string>
   filterTypes: Ref<string[]>
   filterLevels: Ref<string[]>
   filterProducts: Ref<string[]>
+  tutorials?: Ref<TutorialEntry[]>
 }
 
-function mapToCardItem(item: SearchableItem): CardItem {
+export function mapToCardItem(item: SearchableItem, tutorialsBySlug?: Map<string, TutorialEntry>): CardItem {
+  const enriched = item.slug && tutorialsBySlug ? tutorialsBySlug.get(item.slug) : undefined
   return {
     type: item.taskType.toLowerCase() as 'mission' | 'group' | 'tutorial',
     id: item.ID,
@@ -18,7 +20,9 @@ function mapToCardItem(item: SearchableItem): CardItem {
     level: item.experienceTag ?? 'beginner',
     tutorialCount: 1,
     primaryTag: item.primaryTag ?? '',
-    displayTags: [item.primaryTag].filter(Boolean) as string[],
+    displayTags: enriched?.displayTags?.length
+      ? enriched.displayTags
+      : ([item.primaryTag].filter(Boolean) as string[]),
     href: item.slug ? `/tutorials/${item.slug}` : '',
     stepCount: 0,
   }
@@ -48,13 +52,19 @@ function buildFilter(types: string[], levels: string[], products: string[]): str
 }
 
 export function useSearch(options: UseSearchOptions) {
-  const { searchTerm, filterTypes, filterLevels, filterProducts } = options
+  const { searchTerm, filterTypes, filterLevels, filterProducts, tutorials } = options
 
   const searchResults = ref<CardItem[]>([])
   const searchFacets = ref<SearchFacets | null>(null)
   const isSearching = ref(false)
   const searchError = ref<string | null>(null)
   const searchTotalCount = ref(0)
+
+  const tutorialsBySlug = computed(() => {
+    const m = new Map<string, TutorialEntry>()
+    if (tutorials) for (const t of tutorials.value) if (t.slug) m.set(t.slug, t)
+    return m
+  })
 
   const searchMode = computed(() => searchTerm.value.length >= 2)
 
@@ -89,7 +99,9 @@ export function useSearch(options: UseSearchOptions) {
       const itemsData = await itemsRes.json()
       const facetsData = await facetsRes.json()
 
-      searchResults.value = (itemsData.value ?? []).map(mapToCardItem)
+      searchResults.value = (itemsData.value ?? []).map((it: SearchableItem) =>
+        mapToCardItem(it, tutorialsBySlug.value)
+      )
       searchTotalCount.value = itemsData['@odata.count'] ?? 0
       searchFacets.value = facetsData
     } catch (e) {
