@@ -53,9 +53,11 @@
     if (e.target.closest('[data-action="toggle-theme"]')) {
       var html = document.documentElement;
       var next = html.dataset.theme === 'dark' ? 'light' : 'dark';
-      html.dataset.theme = next;
-      html.classList.toggle('dark', next === 'dark');
-      localStorage.setItem('theme', next);
+      (window.__morphTheme || function (fn) { fn(); })(function () {
+        html.dataset.theme = next;
+        html.classList.toggle('dark', next === 'dark');
+        localStorage.setItem('theme', next);
+      });
     }
   });
   // U14: bundle-failure safety net. If tutorial.ts never runs (network error,

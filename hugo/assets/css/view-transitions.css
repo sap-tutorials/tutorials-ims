@@ -1,0 +1,14 @@
+/* View Transitions — cross-document morph for navigator card → detail page.
+   Wrapped in @supports so non-supporting browsers parse none of this.
+   Wrapped in prefers-reduced-motion: no-preference so reduce users get nothing. */
+@supports (view-transition-name: none) {
+  @media (prefers-reduced-motion: no-preference) {
+    @view-transition {
+      navigation: auto;
+    }
+    .tutorial-hero-title,
+    .mission-hero-title {
+      view-transition-name: hero-title;
+    }
+  }
+}

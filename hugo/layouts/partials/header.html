@@ -209,9 +209,11 @@
   function toggleTheme() {
     const html = document.documentElement;
     const next = html.dataset.theme === 'dark' ? 'light' : 'dark';
-    html.dataset.theme = next;
-    html.classList.toggle('dark', next === 'dark');
-    try { localStorage.setItem('theme', next); } catch {}
+    (window.__morphTheme || ((fn) => fn()))(() => {
+      html.dataset.theme = next;
+      html.classList.toggle('dark', next === 'dark');
+      try { localStorage.setItem('theme', next); } catch {}
+    });
     themeItem.icon = next === 'dark' ? 'light-mode' : 'dark-mode';
   }
   themeItem.icon = document.documentElement.dataset.theme === 'dark' ? 'light-mode' : 'dark-mode';

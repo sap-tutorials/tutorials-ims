@@ -721,6 +721,7 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
           :key="item.id"
           :href="item.href"
           class="nav-card"
+          data-vt-card="navigator"
           :class="{
             'nav-card--new': item.isNew,
             'nav-card--has-progress': !!cardProgress(item, progress),
