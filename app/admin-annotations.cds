@@ -541,7 +541,15 @@ annotate AdminService.Tutorials with @UI: {
   ],
   Facets: [
     { $Type: 'UI.ReferenceFacet', ID: 'General',  Label: 'General',  Target: '@UI.FieldGroup#General' },
-    { $Type: 'UI.ReferenceFacet', ID: 'Lifecycle', Label: 'Lifecycle', Target: '@UI.FieldGroup#Lifecycle' }
+    { $Type: 'UI.ReferenceFacet', ID: 'Lifecycle', Label: 'Lifecycle', Target: '@UI.FieldGroup#Lifecycle' },
+    { $Type: 'UI.CollectionFacet', ID: 'Feedback', Label: 'Feedback', Facets: [
+      { $Type: 'UI.ReferenceFacet', ID: 'FeedbackSummary',
+        Target: 'feedbackSummary/@UI.FieldGroup#FeedbackSummary',
+        Label:  'Summary' },
+      { $Type: 'UI.ReferenceFacet', ID: 'FeedbackItems',
+        Target: 'feedbackItems/@UI.LineItem#TutorialFeedback',
+        Label:  'Recent Submissions' }
+    ]}
   ],
   FieldGroup#General: { Data: [
     { Value: title },
@@ -556,6 +564,17 @@ annotate AdminService.Tutorials with @UI: {
     { Value: deletionReason },
     { Value: redirectTo_ID, Label: 'Redirect To' }
   ]}
+};
+
+annotate AdminService.Tutorials with {
+  feedbackItems @(
+    Capabilities.TopSupported: true,
+    UI.PresentationVariant: {
+      MaxItems: 50,
+      SortOrder: [ { Property: submittedAt, Descending: true } ],
+      Visualizations: [ '@UI.LineItem#TutorialFeedback' ]
+    }
+  );
 };
 
 // --- TutorialPickList (value-help target for redirectTo) ---
@@ -1165,3 +1184,34 @@ annotate AdminService.TutorialFeedback with @(
     { $Type: 'UI.ReferenceFacet', Label: 'Comment', Target: '@UI.FieldGroup#CommentGroup' }
   ]
 );
+
+// --- Tutorials feedback (#95): aggregate summary + per-row line item ---
+annotate AdminService.TutorialFeedbackAggregate with @UI: {
+  FieldGroup #FeedbackSummary: { Data: [
+    { Value: responseCount,  Label: 'Responses' },
+    { Value: avgNps,         Label: 'Avg NPS' },
+    { Value: promoters,      Label: 'Promoters' },
+    { Value: detractors,     Label: 'Detractors' },
+    { Value: avgUseCase,     Label: 'Avg Use Case' },
+    { Value: avgRelevance,   Label: 'Avg Relevance' },
+    { Value: avgDuration,    Label: 'Avg Duration' },
+    { Value: avgStructure,   Label: 'Avg Structure' },
+    { Value: avgInteresting, Label: 'Avg Interesting' },
+    { Value: avgVisuals,     Label: 'Avg Visuals' }
+  ]}
+};
+
+annotate AdminService.TutorialFeedback with @UI: {
+  LineItem #TutorialFeedback: [
+    { Value: submittedAt,      Label: 'Submitted' },
+    { Value: npsScore,         Label: 'NPS' },
+    { Value: wasAuthenticated, Label: 'Authenticated' },
+    { Value: comment,          Label: 'Comment' },
+    { Value: ratingUseCase,    Label: 'Use Case' },
+    { Value: ratingRelevance,  Label: 'Relevance' },
+    { Value: ratingDuration,   Label: 'Duration' },
+    { Value: ratingStructure,  Label: 'Structure' },
+    { Value: ratingInteresting,Label: 'Interesting' },
+    { Value: ratingVisuals,    Label: 'Visuals' }
+  ]
+};
