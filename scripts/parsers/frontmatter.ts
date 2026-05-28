@@ -30,9 +30,30 @@ function sanitizeRawMarkdown(md: string): string {
   return md
 }
 
+/**
+ * Coerce frontmatter `time` to a number. Source tutorials are inconsistent:
+ * authors write `time: 15`, `time: "30 mins"`, `time: 120 minutes`, etc.
+ * Without this, string values flow through `reduce((s,t) => s+t.time, 0)`
+ * and concatenate ("030 mins45") or produce NaN on the navigator cards.
+ */
+function coerceTime(raw: unknown): number | undefined {
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw
+  if (typeof raw === 'string') {
+    const match = raw.match(/-?\d+/)
+    if (match) {
+      const n = parseInt(match[0], 10)
+      if (Number.isFinite(n)) return n
+    }
+  }
+  return undefined
+}
+
 export function extractFrontmatter(md: string): FrontmatterResult {
   const { data, content } = matter(sanitizeRawMarkdown(md))
   const fm = data as TutorialFrontmatter
+  const coerced = coerceTime(fm.time)
+  if (coerced !== undefined) fm.time = coerced
+  else delete (fm as { time?: number }).time
 
   const titleMatch = content.match(/^# (.+)$/m)
   const title = fm.title ?? titleMatch?.[1]?.trim() ?? ''

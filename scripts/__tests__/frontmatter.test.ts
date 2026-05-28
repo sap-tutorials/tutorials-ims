@@ -63,4 +63,24 @@ describe('extractFrontmatter', () => {
     const result = extractFrontmatter(SAMPLE_MD)
     expect(result.level).toBe('beginner')
   })
+
+  describe('time coercion (issue #88)', () => {
+    const make = (timeLine: string) => `---\n${timeLine}\nauthor_name: x\nauthor_profile: x\ntags: []\nprimary_tag: x\n---\n\n# T\n`
+
+    it('passes through numeric time', () => {
+      expect(extractFrontmatter(make('time: 30')).frontmatter.time).toBe(30)
+    })
+
+    it('strips trailing unit words like "30 mins"', () => {
+      expect(extractFrontmatter(make('time: 30 mins')).frontmatter.time).toBe(30)
+    })
+
+    it('strips trailing unit words like "120 minutes"', () => {
+      expect(extractFrontmatter(make('time: 120 minutes')).frontmatter.time).toBe(120)
+    })
+
+    it('drops unparseable strings so downstream defaults apply', () => {
+      expect(extractFrontmatter(make('time: tbd')).frontmatter.time).toBeUndefined()
+    })
+  })
 })
