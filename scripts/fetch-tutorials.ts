@@ -464,6 +464,7 @@ function writeGroupPage(
     level: string
     stepCount: number
     primaryTag: string
+    createdAt?: string
   }>,
   outputDir: string,
   target: BuildTarget = 'vitepress',
@@ -759,6 +760,7 @@ async function main() {
         branch: t.branch,
         prev: null,
         next: null,
+        createdAt: createdAt || undefined,
       }
 
       const writePage = target === 'hugo' ? writeHugoPage : writeVitePressPage
@@ -891,6 +893,7 @@ async function main() {
         level: string
         stepCount: number
         primaryTag: string
+        createdAt?: string
       }> = []
 
       for (let i = 0; i < group.tutorialSlugs.length; i++) {
@@ -926,6 +929,7 @@ async function main() {
           level: nav.level,
           stepCount: nav.stepCount,
           primaryTag: nav.primaryTag,
+          createdAt: nav.createdAt,
         })
       }
 
@@ -963,6 +967,7 @@ async function main() {
       level: string
       stepCount: number
       primaryTag: string
+      createdAt?: string
     }> = []
 
     for (let i = 0; i < sg.tutorialSlugs.length; i++) {
@@ -992,6 +997,7 @@ async function main() {
         level: nav.level,
         stepCount: nav.stepCount,
         primaryTag: nav.primaryTag,
+        createdAt: nav.createdAt,
       })
     }
 

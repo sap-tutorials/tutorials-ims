@@ -2011,9 +2011,23 @@ html.dark .tutorial-main img:hover {
   margin-bottom: 0.75rem;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
   transition: box-shadow 0.15s;
+  position: relative;
 }
 .timeline-card:hover {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+.timeline-card__new-badge {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  background: var(--sapAccentColor8, #6c32a9);
+  color: #fff;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  line-height: 1;
 }
 .timeline-card-header h3 {
   font-size: 1rem;

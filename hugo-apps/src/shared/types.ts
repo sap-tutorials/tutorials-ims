@@ -13,6 +13,7 @@ export interface TutorialEntry {
   groupTitle?: string
   prev: string | null
   next: string | null
+  createdAt?: string
 }
 
 export interface CardItem {
@@ -27,6 +28,7 @@ export interface CardItem {
   displayTags: string[]
   href: string
   stepCount: number
+  isNew?: boolean
 }
 
 export interface MissionRef {

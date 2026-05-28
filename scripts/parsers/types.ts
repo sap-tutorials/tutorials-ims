@@ -61,6 +61,9 @@ export interface TutorialNavEntry {
   prev: string | null
   next: string | null
   recommendations?: string[]
+  // ISO timestamp of the oldest commit on the tutorial markdown file —
+  // used by the navigator to render a "NEW" badge for tutorials authored in the last 31 days.
+  createdAt?: string
 }
 
 export interface GroupRef {
