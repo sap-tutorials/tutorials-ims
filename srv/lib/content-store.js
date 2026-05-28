@@ -581,6 +581,42 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
 
     const { ContentFiles, Tutorials } = cds.entities(namespace);
 
+    // Group/Mission rename redirect: if a slug is in the historic-slugs table
+    // for a Group or Mission (admin renamed the title), 301 to the entity's
+    // current slug. Fires BEFORE the cache + ContentFiles lookup so stale
+    // Hugo HTML carried forward by `publish-content` doesn't shadow the
+    // redirect. Mirrors the Tutorials soft-delete redirect pattern below.
+    // See #91 follow-up.
+    if (slug.startsWith('group-') || slug.startsWith('mission-')) {
+      const isGroup = slug.startsWith('group-');
+      const stripped = slug.slice(isGroup ? 'group-'.length : 'mission-'.length);
+      const RedirectEntity = cds.entities(namespace)[isGroup ? 'GroupSlugRedirects' : 'MissionSlugRedirects'];
+      const Entity = cds.entities(namespace)[isGroup ? 'Groups' : 'Missions'];
+      // Some non-prod namespaces (QA) don't define these entities; skip silently.
+      if (RedirectEntity && Entity) {
+        const fk = isGroup ? 'group_ID' : 'mission_ID';
+        const [redirect] = await SELECT.from(RedirectEntity)
+          .where({ slug: stripped })
+          .columns(fk);
+        if (redirect?.[fk]) {
+          const [parent] = await SELECT.from(Entity)
+            .where({ ID: redirect[fk] })
+            .columns('slug');
+          // Guard against self-loop: if the redirect record's slug matches
+          // the entity's current slug (data drift), fall through rather than
+          // 301 to ourselves.
+          if (parent?.slug && parent.slug !== stripped) {
+            const qIdx = req.url.indexOf('?');
+            const query = qIdx >= 0 ? req.url.slice(qIdx) : '';
+            const prefix = isGroup ? 'group-' : 'mission-';
+            res.setHeader('Location', `/tutorials/${prefix}${parent.slug}${query}`);
+            res.setHeader('Cache-Control', 'public, max-age=300');
+            return res.status(301).end();
+          }
+        }
+      }
+    }
+
     // Status-aware lookup: a soft-deleted tutorial may either redirect or 404.
     // We do this before the cache hit so an admin status change takes effect immediately.
     const [tutMeta] = await SELECT.from(Tutorials)
