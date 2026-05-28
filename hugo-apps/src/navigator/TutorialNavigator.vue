@@ -281,6 +281,15 @@ const TYPE_LABELS: Record<string, string> = {
   tutorial: 'TUTORIAL',
 }
 
+const NEW_BADGE_WINDOW_MS = 31 * 24 * 60 * 60 * 1000
+
+function isWithinNewWindow(createdAt: string | undefined): boolean {
+  if (!createdAt) return false
+  const t = Date.parse(createdAt)
+  if (!Number.isFinite(t)) return false
+  return Date.now() - t <= NEW_BADGE_WINDOW_MS
+}
+
 const allCards = computed<CardItem[]>(() => {
   const tuts = tutorials.value
   if (!tuts.length) return []
@@ -353,6 +362,7 @@ const allCards = computed<CardItem[]>(() => {
       displayTags: t.displayTags,
       href: `/tutorials/${t.slug}`,
       stepCount: t.stepCount,
+      isNew: isWithinNewWindow(t.createdAt),
     })
   }
 
@@ -473,7 +483,14 @@ const paginatedItems = computed(() => {
 })
 
 const displayedItems = computed(() => {
-  if (searchMode.value) return searchResults.value
+  if (searchMode.value) {
+    const bySlug = new Map(tutorials.value.map(t => [t.slug, t.createdAt]))
+    return searchResults.value.map(item => {
+      if (item.type !== 'tutorial') return item
+      const slug = item.href.replace(/^\/tutorials\//, '')
+      return { ...item, isNew: isWithinNewWindow(bySlug.get(slug)) }
+    })
+  }
   return paginatedItems.value
 })
 
@@ -685,7 +702,9 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
           :key="item.id"
           :href="item.href"
           class="nav-card"
+          :class="{ 'nav-card--new': item.isNew }"
         >
+          <span v-if="item.isNew" class="nav-card__new-badge" aria-label="New tutorial">NEW</span>
           <div class="nav-card__type" :class="`nav-card__type--${item.type}`">
             {{ TYPE_LABELS[item.type] }}
           </div>
@@ -1069,6 +1088,23 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
   transition: box-shadow 0.15s ease, transform 0.15s ease;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
   min-height: 200px;
+  position: relative;
+}
+
+/* ─── NEW badge (tutorials authored within the last 31 days) ─── */
+.nav-card__new-badge {
+  position: absolute;
+  bottom: 0.75rem;
+  right: 0.75rem;
+  background: var(--sapAccentColor8, #6c32a9);
+  color: #fff;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  line-height: 1;
+  z-index: 1;
 }
 
 .nav-card:hover {
