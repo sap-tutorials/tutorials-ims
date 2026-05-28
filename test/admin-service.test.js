@@ -443,5 +443,39 @@ describe('AdminService', () => {
       // distinctness: 'Acme Owner' must appear exactly once even though we seeded 2 rows
       expect(owners.filter((o) => o === 'Acme Owner').length).toBe(1);
     });
+
+    it('exposes feedbackSummary aggregate via $expand', async () => {
+      const { TutorialFeedback } = cds.entities('com.sap.developers.ims');
+      await INSERT.into(TutorialFeedback).entries([
+        { ID: cds.utils.uuid(), tutorialSlug: slug, npsScore: 9, ratingUseCase: 8,
+          ratingRelevance: 9, ratingDuration: 7, ratingStructure: 8,
+          ratingInteresting: 9, ratingVisuals: 8, comment: 'Great', wasAuthenticated: true },
+        { ID: cds.utils.uuid(), tutorialSlug: slug, npsScore: 4, ratingUseCase: 5,
+          ratingRelevance: 6, ratingDuration: 5, ratingStructure: 6,
+          ratingInteresting: 5, ratingVisuals: 6, comment: 'Meh', wasAuthenticated: false },
+      ]);
+
+      const { status, data } = await project.get(
+        `/admin/Tutorials(ID=${tutId},IsActiveEntity=true)?$expand=feedbackSummary`,
+        adminAuth
+      );
+      expect(status).toBe(200);
+      expect(data.feedbackSummary).toBeTruthy();
+      expect(data.feedbackSummary.responseCount).toBe(2);
+      expect(Number(data.feedbackSummary.avgNps)).toBeCloseTo(6.5, 1);
+      expect(data.feedbackSummary.promoters).toBe(1);
+      expect(data.feedbackSummary.detractors).toBe(1);
+    });
+
+    it('exposes feedbackItems via $expand, scoped to slug', async () => {
+      const { status, data } = await project.get(
+        `/admin/Tutorials(ID=${tutId},IsActiveEntity=true)?$expand=feedbackItems($orderby=submittedAt desc)`,
+        adminAuth
+      );
+      expect(status).toBe(200);
+      expect(data.feedbackItems).toBeTruthy();
+      expect(data.feedbackItems.length).toBe(2);
+      for (const fb of data.feedbackItems) expect(fb.tutorialSlug).toBe(slug);
+    });
   });
 });

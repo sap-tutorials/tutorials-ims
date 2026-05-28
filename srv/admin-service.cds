@@ -13,7 +13,9 @@ service AdminService {
   entity Tutorials as projection on ims.Tutorials {
     *,
     cast(legacyId as String) as legacyIdStr : String,
-    meta : Association to TutorialMeta on meta.tutorial.ID = ID
+    meta            : Association to TutorialMeta             on meta.tutorial.ID           = ID,
+    feedbackSummary : Association to TutorialFeedbackAggregate on feedbackSummary.tutorialSlug = slug,
+    feedbackItems   : Association to many TutorialFeedback     on feedbackItems.tutorialSlug   = slug
   };
   // Filtered picklist for redirectTo value help — only ACTIVE tutorials can be redirect targets
   @readonly
