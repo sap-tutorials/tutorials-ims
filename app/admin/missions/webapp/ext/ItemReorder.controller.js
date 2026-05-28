@@ -1,4 +1,4 @@
-sap.ui.define(["sap/ui/model/Sorter"], function (Sorter) {
+sap.ui.define([], function () {
   "use strict";
 
   // FE V4 custom sections instantiate fragments without a wrapping
@@ -11,7 +11,7 @@ sap.ui.define(["sap/ui/model/Sorter"], function (Sorter) {
   // so this handler only fires in draft mode — setProperty would silently
   // reject on an active (non-draft) entity in a draft-enabled service.
   return {
-    onDrop: function (oEvent) {
+    onDrop: async function (oEvent) {
       var oDraggedItem = oEvent.getParameter("draggedControl");
       var oDroppedItem = oEvent.getParameter("droppedControl");
       var sDropPosition = oEvent.getParameter("dropPosition");
@@ -31,16 +31,22 @@ sap.ui.define(["sap/ui/model/Sorter"], function (Sorter) {
       var aNewOrder = aContexts.filter(function (_, i) { return i !== iDragIndex; });
       aNewOrder.splice(iDropIndex, 0, oDraggedContext);
 
-      aNewOrder.forEach(function (ctx, idx) {
-        ctx.setProperty("itemOrder", (idx + 1) * 10);
-      });
+      // Context#setProperty returns a Promise that resolves when the PATCH
+      // against the draft completes. Await ALL of them before refreshing —
+      // V4 ODataListBinding#refresh() throws if any pending changes exist,
+      // and we need the server-side draft to hold the new itemOrder values
+      // before the re-fetch so $orderby returns the rows in the right order.
+      await Promise.all(aNewOrder.map(function (ctx, idx) {
+        return ctx.setProperty("itemOrder", (idx + 1) * 10);
+      }));
 
-      // Re-apply the sorter so the table reflects the new itemOrder values.
-      // V4 ListBinding does not auto-resort when individual context
-      // properties change locally — the sorter only applies on bind/refresh
-      // unless re-set explicitly. sort() preserves pending draft changes;
-      // refresh() would discard them.
-      oBinding.sort([new Sorter("itemOrder")]);
+      // Force a re-fetch of the items aggregation so the existing
+      // sorter:{path:'itemOrder'} on the binding applies against the just-
+      // PATCHed values. We can't use oBinding.sort([new Sorter("itemOrder")])
+      // here: V4 treats same-path sorters as unchanged (since 1.97.0) and
+      // the call becomes a silent no-op, leaving the cached row order
+      // intact — that's the "rows snap back" symptom from issue #70.
+      oBinding.refresh();
     }
   };
 });
