@@ -554,6 +554,10 @@
           "type": "cds.Integer",
           "@cds.persistence.name": "FEATUREDORDER"
         },
+        "stepCount": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "STEPCOUNT"
+        },
         "redirectTo_ID": {
           "type": "cds.String",
           "length": 36,

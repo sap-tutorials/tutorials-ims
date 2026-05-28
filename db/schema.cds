@@ -28,6 +28,11 @@ entity Tutorials : TaskBase {
   slug                      : String(255) @mandatory;
   mdFileUrl                 : String(1000);
   featuredOrder             : Integer;
+  // Authoritative step count from the parsed tutorial frontmatter, set by
+  // publish-content. Used as the denominator in completion-progress math so
+  // that step-progress doesn't depend on whichever Step rows happen to exist
+  // in the DB at the moment a user clicks "mark complete" (issue #89).
+  stepCount                 : Integer;
   redirectTo                : Association to Tutorials;
   steps                     : Composition of many Steps on steps.tutorial = $self;
   tags                      : Association to many TutorialTags on tags.tutorial = $self;
