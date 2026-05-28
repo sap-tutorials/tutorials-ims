@@ -5,7 +5,7 @@
   {{ if not site.Params.qa }}<ui5-shellbar-item id="joule-trigger" icon="da" text="Joule" hidden></ui5-shellbar-item>{{ end }}
   <ui5-shellbar-item id="sb-nav" icon="menu2" text="Navigate"></ui5-shellbar-item>
   <ui5-shellbar-item id="sb-share" icon="share-2" text="Share link"></ui5-shellbar-item>
-  <ui5-shellbar-item id="sb-prefs" icon="action-settings" text="Tutorial preferences"></ui5-shellbar-item>
+  {{ if not site.Params.qa }}<ui5-shellbar-item id="sb-prefs" icon="action-settings" text="Tutorial preferences"></ui5-shellbar-item>{{ end }}
   <ui5-shellbar-item id="sb-help" icon="question-mark" text="Help"></ui5-shellbar-item>
   <ui5-shellbar-item id="sb-theme" icon="dark-mode" text="Toggle theme"></ui5-shellbar-item>
 
@@ -324,4 +324,4 @@
   window.handleProfileClick = () => shellbar.dispatchEvent(new CustomEvent('profile-click', { detail: { targetRef: avatar } }));
 })();
 </script>
-<script type="module" src="/js/tutorial-prefs.js"></script>
+{{ if not site.Params.qa }}<script type="module" src="/js/tutorial-prefs.js"></script>{{ end }}
