@@ -16,10 +16,11 @@
             id="markdownCodeEditor"
             type="markdown"
             height="100%"
+            width="100%"
             change=".onEditorChange"
             liveChange=".onEditorChange">
             <editor:layoutData>
-              <l:SplitterLayoutData size="50%"/>
+              <l:SplitterLayoutData size="50%" minSize="200"/>
             </editor:layoutData>
           </editor:CodeEditor>
           <ScrollContainer
