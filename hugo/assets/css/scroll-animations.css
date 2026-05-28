@@ -1,0 +1,26 @@
+/* Scroll-driven subtle reveals — opacity .7 → 1, scale .97 → 1.
+   Single canonical effect applied to four surfaces. Pure CSS, no JS. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes hero-reveal {
+      from {
+        opacity: 0.7;
+        transform: scale(0.97);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    .hero-figure,
+    .tutorial-step,
+    .mission-hero,
+    :where(figure):not(.hero-figure):not(.hero-figure *),
+    pre.chroma {
+      animation: hero-reveal linear;
+      animation-timeline: view();
+      animation-range: entry 0% cover 30%;
+    }
+  }
+}
