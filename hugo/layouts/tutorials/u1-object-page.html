@@ -189,7 +189,7 @@
 
 <div class="op-page">
   <header class="op-header">
-    <h1 class="op-header__title">{{ .Title }}{{ if in .Params.tags "tutorial>license" }} {{ partial "license-icon.html" . }}{{ end }}</h1>
+    <h1 class="op-header__title tutorial-hero-title">{{ .Title }}{{ if in .Params.tags "tutorial>license" }} {{ partial "license-icon.html" . }}{{ end }}</h1>
     {{ with .Params.description }}<p class="op-header__description">{{ . }}</p>{{ end }}
     <div class="op-header__chips">
       {{ with .Params.level }}<span class="op-chip"><span class="op-chip__icon">🎓</span>{{ . }}</span>{{ end }}
