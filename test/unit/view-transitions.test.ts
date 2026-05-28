@@ -51,7 +51,7 @@ describe('view-transitions: bindCardClick', () => {
     const title = document.querySelector('.other-title') as HTMLElement
     title.click()
 
-    expect(title.style.viewTransitionName).toBe('')
+    expect(title.style.viewTransitionName || '').toBe('')
   })
 })
 
