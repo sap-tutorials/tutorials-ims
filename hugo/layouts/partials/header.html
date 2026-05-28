@@ -5,7 +5,7 @@
   {{ if not site.Params.qa }}<ui5-shellbar-item id="joule-trigger" icon="da" text="Joule" hidden></ui5-shellbar-item>{{ end }}
   <ui5-shellbar-item id="sb-nav" icon="menu2" text="Navigate"></ui5-shellbar-item>
   <ui5-shellbar-item id="sb-share" icon="share-2" text="Share link"></ui5-shellbar-item>
-  <ui5-shellbar-item id="sb-reader" icon="documents" text="Reader mode (f)"></ui5-shellbar-item>
+  {{ if not site.Params.qa }}<ui5-shellbar-item id="sb-prefs" icon="action-settings" text="Tutorial preferences"></ui5-shellbar-item>{{ end }}
   <ui5-shellbar-item id="sb-help" icon="question-mark" text="Help"></ui5-shellbar-item>
   <ui5-shellbar-item id="sb-theme" icon="dark-mode" text="Toggle theme"></ui5-shellbar-item>
 
@@ -86,7 +86,6 @@
   const shareCopyBtn = document.getElementById('share-copy-btn');
   const logoutBtn = document.getElementById('logout-btn');
   const themeItem = document.getElementById('sb-theme');
-  const readerItem = document.getElementById('sb-reader');
   let isAuthenticated = false;
 
   function closeAllExcept(skip) {
@@ -125,7 +124,6 @@
       }
       else if (id === 'sb-help') window.open('https://community.sap.com', '_blank');
       else if (id === 'sb-theme') toggleTheme();
-      else if (id === 'sb-reader') toggleReader();
     });
   });
 
@@ -227,15 +225,7 @@
     if (on) delete html.dataset.reader;
     else html.dataset.reader = 'on';
     try { localStorage.setItem('reader', on ? 'off' : 'on'); } catch {}
-    syncReaderItem();
   }
-  function syncReaderItem() {
-    if (!readerItem) return;
-    const on = document.documentElement.dataset.reader === 'on';
-    readerItem.icon = on ? 'decline' : 'documents';
-    readerItem.text = on ? 'Exit reader (f)' : 'Reader mode (f)';
-  }
-  syncReaderItem();
 
   // 'f' to toggle reader from anywhere on the page. Modifier-free, and skipped
   // when the user is typing in an input/textarea/contenteditable so it doesn't
@@ -334,3 +324,4 @@
   window.handleProfileClick = () => shellbar.dispatchEvent(new CustomEvent('profile-click', { detail: { targetRef: avatar } }));
 })();
 </script>
+{{ if not site.Params.qa }}<script type="module" src="/js/tutorial-prefs.js"></script>{{ end }}

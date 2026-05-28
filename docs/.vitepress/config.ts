@@ -69,7 +69,8 @@ export default defineConfig({
           { text: 'Using Joule chat',         link: '/end-users/using-joule-chat' },
           { text: 'Progress and completions', link: '/end-users/progress-and-completions' },
           { text: 'Privacy and cookies',      link: '/end-users/privacy-and-cookies' },
-          { text: 'Accessibility',            link: '/end-users/accessibility' }
+          { text: 'Accessibility',            link: '/end-users/accessibility' },
+          { text: 'Experimental features',   link: '/end-users/experimental-features' }
         ]}
       ],
 
