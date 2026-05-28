@@ -511,13 +511,23 @@ annotate AdminService.Tutorials with {
                         };
 };
 
+annotate AdminService.TutorialMeta with {
+  owner @Common.Label: 'Owner' @Common.FieldControl: #ReadOnly
+        @Common.ValueList: {
+          CollectionPath: 'TutorialOwnerPickList',
+          Parameters: [
+            { $Type: 'Common.ValueListParameterInOut', LocalDataProperty: owner, ValueListProperty: 'owner' }
+          ]
+        };
+};
+
 annotate AdminService.Tutorials with @UI: {
   HeaderInfo: {
     TypeName: 'Tutorial', TypeNamePlural: 'Tutorials',
     Title: { Value: title },
     Description: { Value: slug }
   },
-  SelectionFields: [ title, primaryTag, experienceTag, status ],
+  SelectionFields: [ title, primaryTag, experienceTag, status, meta.owner ],
   LineItem: [
     { Value: legacyIdStr },
     { Value: title },
@@ -526,6 +536,7 @@ annotate AdminService.Tutorials with @UI: {
     { Value: experienceTag },
     { Value: averageTimeToComplete },
     { Value: status },
+    { Value: meta.owner, Label: 'Owner' },
     { Value: redirectTo.title, Label: 'Redirect To' }
   ],
   Facets: [
@@ -537,7 +548,8 @@ annotate AdminService.Tutorials with @UI: {
     { Value: slug },
     { Value: primaryTag },
     { Value: experienceTag },
-    { Value: averageTimeToComplete }
+    { Value: averageTimeToComplete },
+    { Value: meta.owner, Label: 'Owner' }
   ]},
   FieldGroup#Lifecycle: { Data: [
     { Value: status },
