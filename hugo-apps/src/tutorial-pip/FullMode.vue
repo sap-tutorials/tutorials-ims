@@ -20,6 +20,7 @@ defineEmits<{
       <h2>{{ step.heading }}</h2>
       <button type="button" class="pip-mode-toggle" @click="$emit('toggle-mode')" aria-label="Switch to controller mode">⌃</button>
     </header>
+    <!-- step.html is sanitized at Hugo build time by scripts/parsers/sanitize-html.ts -->
     <div class="pip-full__body" v-html="step.html" />
     <footer class="pip-full__footer">
       <ui5-button @click="$emit('prev')" icon="navigation-left-arrow" tooltip="Previous step" />

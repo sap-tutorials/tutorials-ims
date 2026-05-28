@@ -1,6 +1,6 @@
 <!-- hugo-apps/src/tutorial-pip/PipShell.vue -->
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import FullMode from './FullMode.vue';
 import ControllerMode from './ControllerMode.vue';
 import { useStepNavigation } from './useStepNavigation';
@@ -18,6 +18,8 @@ const props = defineProps<{
 const activeStep = ref(props.initialStepIndex);
 const mode = ref<PipMode>(props.initialMode);
 const errorMessage = ref<string | null>(null);
+const tutorialComplete = ref(false);
+const completing = ref(false);
 
 const channel = createPipChannel(props.slug, 'pip');
 const nav = useStepNavigation(props.slug, props.steps, activeStep);
@@ -44,15 +46,31 @@ function handleGoto(idx: number) {
   broadcastStep();
 }
 async function handleComplete(stepIndex: number) {
-  errorMessage.value = null;
-  const ok = await nav.completeStep(stepIndex);
-  if (!ok) {
-    errorMessage.value = 'Could not save completion. Please try again.';
-    return;
+  if (completing.value) return;
+  completing.value = true;
+  try {
+    errorMessage.value = null;
+    const ok = await nav.completeStep(stepIndex);
+    if (!ok) {
+      errorMessage.value = 'Could not save completion. Please try again.';
+      return;
+    }
+    channel.send({ type: 'pip:complete', stepIndex });
+    const wasLast = isLastStep.value;
+    const prevStep = activeStep.value;
+    nav.next();
+    if (activeStep.value !== prevStep) {
+      channel.send({ type: 'pip:stepChange', stepIndex: activeStep.value });
+    }
+    if (wasLast) {
+      tutorialComplete.value = true;
+    }
+  } finally {
+    completing.value = false;
   }
-  channel.send({ type: 'pip:complete', stepIndex });
-  nav.next();
-  channel.send({ type: 'pip:stepChange', stepIndex: activeStep.value });
+}
+function closePip() {
+  window.close();
 }
 function handleToggleMode() {
   mode.value = mode.value === 'full' ? 'controller' : 'full';
@@ -113,8 +131,13 @@ onBeforeUnmount(() => {
     <ui5-message-strip v-if="errorMessage" design="Negative" hide-close-button>
       {{ errorMessage }}
     </ui5-message-strip>
+    <div v-if="tutorialComplete" class="pip-completion">
+      <h2>Tutorial complete <span aria-hidden="true">🎉</span></h2>
+      <p>Nice work. You can close this window when you're ready.</p>
+      <ui5-button design="Emphasized" @click="closePip">Close</ui5-button>
+    </div>
     <FullMode
-      v-if="mode === 'full'"
+      v-else-if="mode === 'full'"
       :step="currentStep"
       :step-count="steps.length"
       :is-last="isLastStep"
