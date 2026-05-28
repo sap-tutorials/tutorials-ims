@@ -546,19 +546,37 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     // Must run before VALID_SLUG validation, which rejects the dot in ".html".
     if (/\.html$/i.test(pathStr) && !/\/index\.html$/i.test(pathStr)) {
       const cleanSlug = pathStr.replace(/\.html$/i, '');
-      if (VALID_SLUG.test(cleanSlug)) {
+      if (VALID_SLUG.test(cleanSlug.toLowerCase())) {
         const qIdx = req.url.indexOf('?');
         const query = qIdx >= 0 ? req.url.slice(qIdx) : '';
-        res.setHeader('Location', `/tutorials/${cleanSlug}${query}`);
+        res.setHeader('Location', `/tutorials/${cleanSlug.toLowerCase()}${query}`);
         res.setHeader('Cache-Control', 'public, max-age=3600');
         return res.status(301).end();
       }
     }
 
-    const slug = pathStr.replace(/\/index\.html$/, '').replace(/\/$/, '');
+    const rawSlug = pathStr.replace(/\/index\.html$/, '').replace(/\/$/, '');
+
+    // Tutorial folder names in source repos sometimes ship with capitals
+    // (e.g. abap-environment-sbpa-workflow-extend-RAP-App). Hugo emits
+    // lowercase paths and ContentFiles is keyed lowercase, so 301 to the
+    // canonical lowercase form before lookup. Bookmarks and outbound links
+    // that captured the mixed-case form keep working. Only redirect when
+    // the lowercased form is itself valid — otherwise we'd ping-pong to a
+    // slug that still 404s.
+    const lower = rawSlug.toLowerCase();
+    if (rawSlug && rawSlug !== lower && VALID_SLUG.test(lower)) {
+      const qIdx = req.url.indexOf('?');
+      const query = qIdx >= 0 ? req.url.slice(qIdx) : '';
+      res.setHeader('Location', `/tutorials/${lower}${query}`);
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      return res.status(301).end();
+    }
+
+    const slug = rawSlug;
 
     if (!slug || !VALID_SLUG.test(slug)) {
-      return res.status(400).json({ error: 'Invalid tutorial slug' });
+      return serveNotFound(res, slug || '(empty)');
     }
 
     const { ContentFiles, Tutorials } = cds.entities(namespace);

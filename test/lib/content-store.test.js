@@ -210,13 +210,34 @@ describe('content-store', () => {
       expect(res.headers['location']).toBe('/tutorials/never-published');
     });
 
-    it('rejects .html with an invalid slug shape rather than redirecting', async () => {
+    it('serves the styled 404 for a malformed slug rather than raw JSON', async () => {
       const res = await project.axios.get('/content/tutorials/Bad_Slug.html', {
         maxRedirects: 0,
         validateStatus: () => true
       });
 
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(404);
+    });
+
+    it('redirects mixed-case slug to canonical lowercase with 301', async () => {
+      const res = await project.axios.get('/content/tutorials/Served-Tut', {
+        maxRedirects: 0,
+        validateStatus: () => true
+      });
+
+      expect(res.status).toBe(301);
+      expect(res.headers['location']).toBe('/tutorials/served-tut');
+      expect(res.headers['cache-control']).toContain('max-age=3600');
+    });
+
+    it('preserves query string when redirecting mixed-case slug', async () => {
+      const res = await project.axios.get('/content/tutorials/Served-TUT?step=3', {
+        maxRedirects: 0,
+        validateStatus: () => true
+      });
+
+      expect(res.status).toBe(301);
+      expect(res.headers['location']).toBe('/tutorials/served-tut?step=3');
     });
 
     it('serves latest version of a slug across publishes', async () => {
@@ -346,7 +367,7 @@ describe('content-store', () => {
       const res = await project.axios.get('/content/tutorials/__nav__', {
         validateStatus: () => true
       });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(404);
     });
 
     it('returns empty when no active version', async () => {
@@ -594,7 +615,7 @@ describe('content-store', () => {
       const res = await project.axios.get('/content/tutorials/__404__', {
         validateStatus: () => true,
       });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(404);
     });
 
     it('serves __404__ HTML body when a slug is not in ContentFiles', async () => {
