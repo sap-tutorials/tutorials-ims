@@ -20,6 +20,7 @@
     {{ partial "tutorial-prerequisites.html" . }}
 
     {{ if not site.Params.qa }}<div id="progress-bar" data-step-count="{{ .Params.stepCount }}" data-slug="{{ .Params.slug }}"></div>{{ end }}
+    {{ if not site.Params.qa }}<div id="tutorial-pip-launcher" data-slug="{{ .Params.slug }}" data-active-step="1"></div>{{ end }}
 
     <div class="step-controls">
       <a href="#" onclick="expandAllSteps(); return false">Open all</a>
@@ -44,4 +45,6 @@
 {{ $js := resources.Get "js/tutorial.ts" | js.Build (dict "minify" true) }}
 <script src="{{ $js.RelPermalink }}" defer></script>
 <script type="module" src="/js/nav-dropdown.js"></script>
+{{ if not site.Params.qa }}<script type="module" src="/js/tutorial-pip-launcher.js"></script>{{ end }}
+{{ if not site.Params.qa }}<script type="module" src="/js/tutorial-pip.js"></script>{{ end }}
 {{ end }}
