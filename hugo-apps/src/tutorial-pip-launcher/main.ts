@@ -20,7 +20,8 @@ function readStepsFromDom(): StepPayload[] {
 const el = document.getElementById('tutorial-pip-launcher');
 if (el && isPipSupported()) {
   const slug = el.dataset.slug || '';
-  const initialActiveStep = parseInt(el.dataset.activeStep || '1', 10);
+  const parsedActiveStep = parseInt(el.dataset.activeStep || '1', 10);
+  const initialActiveStep = Number.isFinite(parsedActiveStep) ? parsedActiveStep : 1;
   const steps = readStepsFromDom();
   if (slug && steps.length > 0) {
     createApp(Launcher, { slug, steps, initialActiveStep }).mount(el);
