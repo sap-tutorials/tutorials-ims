@@ -18,7 +18,7 @@ export async function buildCatalogHandler(req, res) {
       .limit(FEATURED_LIMIT);
 
     const groups = await SELECT.from(Groups)
-      .columns('ID', 'legacyId', 'title', 'description', 'published', 'status');
+      .columns('ID', 'legacyId', 'slug', 'title', 'description', 'published', 'status');
     const groupById = new Map(groups.map(g => [g.ID, g]));
 
     const groupPathItems = await SELECT.from(GroupPathItems)

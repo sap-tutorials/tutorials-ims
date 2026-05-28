@@ -70,7 +70,7 @@ export async function navigatorCatalogHandler(req, res) {
 
     // Surface standalone published Groups (not nested inside any Mission's CompletionPath)
     const allGroupRows = await SELECT.from(Groups)
-      .columns('ID', 'legacyId', 'title', 'status')
+      .columns('ID', 'legacyId', 'slug', 'title', 'status')
       .where({ published: true });
     const groupRows = allGroupRows.filter(g => g.status === 'ACTIVE' || g.status === null || g.status === undefined);
 
@@ -96,7 +96,7 @@ export async function navigatorCatalogHandler(req, res) {
     const standaloneGroups = groupRows.filter(g => !nestedGroupRefIds.has(g.ID));
 
     for (const g of standaloneGroups) {
-      const groupSlug = String(g.legacyId);
+      const groupSlug = g.slug || String(g.legacyId);
       groupRefs.push({ id: g.legacyId, title: g.title, slug: groupSlug });
 
       const items = gpiRows.filter(r => r.group_ID === g.ID);
@@ -165,7 +165,7 @@ export async function navigatorCatalogHandler(req, res) {
       const group = groupRows.find(g => g.ID === item.group_ID);
       if (!group) continue;
 
-      const groupSlug = String(group.legacyId);
+      const groupSlug = group.slug || String(group.legacyId);
       // Dedup: same Group nested under multiple Missions — first Mission wins.
       if (!groupRefs.find(g => g.id === group.legacyId)) {
         groupRefs.push({
