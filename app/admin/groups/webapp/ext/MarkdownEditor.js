@@ -78,13 +78,19 @@ sap.ui.define([
     oPreview.setHtmlText(convertMarkdown(sDescription));
   }
 
-  // FE V4 invokes manifest-declared press handlers with (oEvent), not a
-  // binding context. The OP's bound entity context lives on the page, but
-  // when the action is rendered as an overflow MenuItem the immediate
-  // source's parent chain leaves the page hierarchy and getBindingContext()
-  // returns undefined. Walk up parents until we find one.
-  function _resolveBindingContext(oEvent) {
-    var oControl = oEvent && oEvent.getSource && oEvent.getSource();
+  // FE V4 manifest-declared press handlers are invoked with
+  // (oBindingContext, aSelectedContexts) — a binding context as the first
+  // argument, NOT an event. (See sap.fe docs: "Adding Custom Actions Using
+  // Extension Points", OData V4 section.) An earlier version of this file
+  // assumed an event arg and called .getSource() on the binding context,
+  // which silently no-op'd because BCs don't have that method. Detect the
+  // shape of the argument and fall back to an event-style walk only if a
+  // future framework path passes us an event.
+  function _resolveBindingContext(arg) {
+    if (arg && typeof arg.getProperty === "function") {
+      return arg;
+    }
+    var oControl = arg && typeof arg.getSource === "function" && arg.getSource();
     var oBC = oControl && oControl.getBindingContext && oControl.getBindingContext();
     while (!oBC && oControl) {
       oControl = oControl.getParent && oControl.getParent();
@@ -94,11 +100,11 @@ sap.ui.define([
   }
 
   return {
-    onEditMarkdown: function (oEvent) {
-      var oBindingContext = _resolveBindingContext(oEvent);
+    onEditMarkdown: function (arg) {
+      var oBindingContext = _resolveBindingContext(arg);
       if (!oBindingContext) {
         // eslint-disable-next-line no-console
-        console.warn("MarkdownEditor: unable to resolve binding context from press event");
+        console.warn("MarkdownEditor: unable to resolve binding context from press argument");
         return;
       }
       _oCurrentContext = oBindingContext;
