@@ -2135,7 +2135,18 @@
   color: var(--sapBrandColor, #0070f2);
   font-size: 0.6875rem;
   font-weight: 600;
-}/* Step progress bar */#progress-bar {
+}
+.license-key {
+  display: inline-flex;
+  align-items: center;
+  color: var(--sapContent_NonInteractiveIconColor, currentColor);
+  margin-inline-start: 0.25rem;
+  vertical-align: middle;
+}
+.license-key svg {
+  display: block;
+}
+/* Step progress bar */#progress-bar {
   display: flex;
   align-items: center;
   gap: 0.5rem;
