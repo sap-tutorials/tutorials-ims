@@ -15,12 +15,13 @@ export type PipSource = 'main' | 'pip';
 type Envelope = { senderId: string; source: PipSource };
 
 export type PipMessage = Envelope & (
-  | { type: 'pip:init';        steps: StepPayload[]; activeStep: number; mode: PipMode }
-  | { type: 'pip:hello' }
-  | { type: 'pip:reattach' }
+  // Bootstrap data (steps, activeStep, mode) is passed synchronously to
+  // mountPip() inside the PiP window — not over the channel. The orphan-window
+  // recovery flow (pip:hello / pip:reattach / pip:init over channel) was cut
+  // from scope; see spec §9 "Main tab reloads while PiP is open".
   | { type: 'pip:stepChange';  stepIndex: number }
   | { type: 'pip:complete';    stepIndex: number }
-  | { type: 'pip:modeChange';  mode: PipMode }
+  | { type: 'pip:modeChange';  mode: PipMode }   // informational only — sent by PiP on manual toggle, no current receiver
   | { type: 'pip:themeChange'; theme: 'light' | 'dark' }
   | { type: 'pip:closed' }
 );
