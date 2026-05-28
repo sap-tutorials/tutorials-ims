@@ -67,6 +67,11 @@ function initStepScrollspy() {
     const stepNum = active?.dataset.step ?? null
     if (stepNum === lastActive) return
     lastActive = stepNum
+    if (stepNum) {
+      document.dispatchEvent(new CustomEvent('tutorial:step-change', {
+        detail: { stepIndex: parseInt(stepNum, 10) }
+      }))
+    }
     document.querySelectorAll('.step-toc-item').forEach(item => item.classList.remove('active'))
     if (stepNum) {
       const tocItem = document.querySelector(`.step-toc-item[data-toc-step="${stepNum}"]`)

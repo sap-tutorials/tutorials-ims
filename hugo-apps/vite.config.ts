@@ -21,6 +21,8 @@ export default defineConfig({
         'nav-dropdown': resolve(__dirname, 'src/nav-dropdown/main.ts'),
         'scanner-vue': resolve(__dirname, 'src/scanner-vue/main.ts'),
         'tutorial-feedback': resolve(__dirname, 'src/tutorial-feedback/main.ts'),
+        'tutorial-pip': resolve(__dirname, 'src/tutorial-pip/main.ts'),
+        'tutorial-pip-launcher': resolve(__dirname, 'src/tutorial-pip-launcher/main.ts'),
         'tutorial-rating': resolve(__dirname, 'src/tutorial-rating/main.ts'),
         'cmd-palette': resolve(__dirname, 'src/cmd-palette/main.ts'),
         me: resolve(__dirname, 'src/me/main.ts'),

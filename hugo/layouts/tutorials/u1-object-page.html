@@ -260,6 +260,7 @@
           </div>
           {{ end }}
           {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<div id="progress-bar" data-step-count="{{ .Params.stepCount }}" data-slug="{{ .Params.slug }}"></div>{{ end }}
+          {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<div id="tutorial-pip-launcher" data-slug="{{ .Params.slug }}" data-active-step="1"></div>{{ end }}
           <div class="step-controls">
             <a href="#" onclick="expandAllSteps(); return false">Open all</a>
             <a href="#" onclick="collapseAllSteps(); return false">Close all</a>
@@ -330,6 +331,8 @@
 {{ $js := resources.Get "js/tutorial.ts" | js.Build (dict "minify" true) }}
 <script src="{{ $js.RelPermalink }}" defer></script>
 <script type="module" src="/js/nav-dropdown.js"></script>
+{{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="/js/tutorial-pip-launcher.js"></script>{{ end }}
+{{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="/js/tutorial-pip.js"></script>{{ end }}
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="/js/tutorial-rating.js" defer></script>{{ end }}
 
 <script type="module">
