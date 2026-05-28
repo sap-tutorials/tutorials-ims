@@ -30,6 +30,12 @@
       if (!this._ready) { this._pendingOpen = opts; return; }
       _openImpl(opts);
     },
+    openWithMessage(arg) {
+      const text = typeof arg === 'string' ? arg : (arg && typeof arg.text === 'string' ? arg.text : '');
+      const opts = { autoSendText: text };
+      if (!this._ready) { this._pendingOpen = opts; return; }
+      _openImpl(opts);
+    },
   };
 
   const trigger = document.getElementById('joule-trigger');
@@ -519,6 +525,11 @@
     }
     panel.hidden = false;
     const messages = loadHistory();
+    if (opts && typeof opts.autoSendText === 'string' && opts.autoSendText.length > 0) {
+      // Skip hero/starters and send the seeded prompt immediately.
+      send(opts.autoSendText);
+      return;
+    }
     if (messages.length) {
       showChat();
       renderTranscript(messages);
