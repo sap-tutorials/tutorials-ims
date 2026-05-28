@@ -41,6 +41,15 @@
         }
       }
     },
+    "extends": {
+      "extensions": {
+        "sap.ui.controllerExtensions": {
+          "sap.fe.templates.ObjectPage.ObjectPageController": {
+            "controllerName": "sap.tutorials.admin.tutorials.ext.AskJoule"
+          }
+        }
+      }
+    },
     "routing": {
       "routes": [
         {
@@ -77,7 +86,19 @@
           "options": {
             "settings": {
               "contextPath": "/Tutorials",
-              "editableHeaderContent": false
+              "editableHeaderContent": false,
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.Identification": {
+                  "actions": {
+                    "AskJouleAction": {
+                      "press": "sap.tutorials.admin.tutorials.ext.AskJoule.onAskJoule",
+                      "visible": true,
+                      "enabled": true,
+                      "text": "Ask Joule for tutorial improvement suggestions"
+                    }
+                  }
+                }
+              }
             }
           }
         }
