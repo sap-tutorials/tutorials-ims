@@ -7,6 +7,7 @@ import { acquireLock, releaseLock } from '../jobs/job-lock.js';
 import { logPipelineStart, logPipelineEnd, logPipelineItem } from './pipeline-log.js';
 import { getNextLegacyId } from './legacy-id.js';
 import { embedSlugs } from './embedding-pipeline.js';
+import { renderCatalogPage } from './render-catalog-page.js';
 
 const LOG = cds.log('content-store');
 const LOCK_NAME = 'content-publish';
@@ -610,6 +611,19 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         .columns('contentHash', 'mimeType', 'version');
 
       if (!meta) {
+        // Group/Mission catalog pages: if no published HTML exists, synthesize
+        // a page from DB so newly created Groups/Missions don't 404 between
+        // admin save and the next `rebuild-content.yml` run (issue #74).
+        if (slug.startsWith('group-') || slug.startsWith('mission-')) {
+          const synthesized = await renderCatalogPage(slug);
+          if (synthesized) {
+            res.setHeader('Content-Type', synthesized.contentType);
+            // Short cache: a CI publish should replace this within minutes.
+            res.setHeader('Cache-Control', 'public, max-age=60');
+            res.setHeader('X-Content-Source', 'synthesized');
+            return res.status(synthesized.status).send(synthesized.body);
+          }
+        }
         return serveNotFound(res, slug);
       }
 

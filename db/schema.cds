@@ -49,6 +49,7 @@ entity Missions : TaskBase {
 }
 
 entity Groups : TaskBase {
+  slug                      : String(255);
   published                 : Boolean default true;
   primaryTagRef             : Association to Tags;
   missions                  : Association to many Missions on missions.group = $self;

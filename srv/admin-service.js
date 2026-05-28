@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { parsePayload, classify, apply, sharedCache, MAX_BYTES } from './lib/tag-import/index.js';
 import { buildCfLogsUrl } from './lib/cf-logs-link.js';
 import { reviewTutorial, snoozeTutorial } from './lib/tutorial-review.js';
+import { slugify, ensureUniqueSlug } from './lib/slug-utils.js';
 
 export default class AdminService extends cds.ApplicationService {
 
@@ -113,6 +114,61 @@ export default class AdminService extends cds.ApplicationService {
         req.reject(400, 'At least one Tag is required');
       }
     });
+
+    // Auto-derive slug from title for Missions and Groups so admin-created
+    // records have stable URL fragments (/tutorials/group-<slug>,
+    // /tutorials/mission-<slug>) without authors typing them.
+    //
+    // Fires on the full draft lifecycle:
+    //   - NEW (draft create) and PATCH (draft autosave): keep slug visible
+    //     and current as the title evolves in the draft.
+    //   - SAVE (activation): final reconciliation against active table for
+    //     uniqueness, since other drafts may have activated meanwhile.
+    //   - CREATE: programmatic non-draft POST (tests, scripts).
+    //
+    // Collisions resolved by appending -2, -3, ... within the entity's table.
+    const deriveSlugForEntity = (entityName) => async (req) => {
+      const isCreate = req.event === 'CREATE' || req.event === 'NEW';
+      const ID = req.data.ID;
+      const title = req.data.title;
+
+      // Pull current persisted state so we can compare title→slug. For NEW the
+      // row doesn't exist yet; for PATCH/SAVE it's the active or draft row.
+      let prior = null;
+      if (!isCreate && ID) {
+        [prior] = await SELECT.from(req.target)
+          .where({ ID })
+          .columns('title', 'slug');
+      }
+
+      const effectiveTitle = title ?? prior?.title;
+      if (!effectiveTitle) return; // tag/save validation handles missing title
+
+      const base = slugify(effectiveTitle);
+
+      // Skip when nothing relevant changed: title untouched and slug already set.
+      if (!isCreate && prior?.slug && (title === undefined || title === prior.title)) {
+        return;
+      }
+
+      const Entity = entityName === 'Missions' ? Missions : Groups;
+      const rows = await SELECT.from(Entity)
+        .columns('ID', 'slug')
+        .where({ slug: { '!=': null } });
+      const taken = new Set(
+        rows.filter(r => r.ID !== ID).map(r => r.slug).filter(Boolean)
+      );
+
+      req.data.slug = ensureUniqueSlug(base, taken, prior?.slug ?? null);
+    };
+
+    for (const entityName of ['Missions', 'Groups']) {
+      const handler = deriveSlugForEntity(entityName);
+      this.before('CREATE', entityName, handler);
+      this.before('NEW',    `${entityName}.drafts`, handler);
+      this.before('PATCH',  `${entityName}.drafts`, handler);
+      this.before('SAVE',   entityName, handler);
+    }
 
     // Reset notification escalation when reviewedDate is updated via Fiori UI
     this.before('UPDATE', 'TutorialMeta', (req) => {
