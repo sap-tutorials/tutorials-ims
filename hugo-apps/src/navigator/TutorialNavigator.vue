@@ -5,6 +5,8 @@ import { useSearch } from './useSearch'
 import Skeleton from '@shared/Skeleton.vue'
 import ProgressRing from '@shared/ProgressRing.vue'
 import { cardProgress, toLookup, emptyProgress, type ProgressPayload } from './cardProgress'
+import LicenseIcon from '../shared/LicenseIcon.vue'
+import { requiresLicense } from '../shared/license'
 import type { SearchFacets } from '@shared/types'
 
 const tutorials = ref<TutorialEntry[]>([])
@@ -729,6 +731,7 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
             v-bind="cardProgress(item, progress)!"
           />
           <span v-if="item.isNew" class="nav-card__new-badge" aria-label="New tutorial">NEW</span>
+          <LicenseIcon v-if="requiresLicense(item.displayTags)" class="nav-card__license" />
           <div class="nav-card__type" :class="`nav-card__type--${item.type}`">
             {{ TYPE_LABELS[item.type] }}
           </div>
@@ -1128,6 +1131,14 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
   padding: 0.25rem 0.5rem;
   border-radius: 0.25rem;
   line-height: 1;
+  z-index: 1;
+}
+
+.nav-card__license {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  color: var(--sapContent_NonInteractiveIconColor, var(--sapTextColor, #32363a));
   z-index: 1;
 }
 
