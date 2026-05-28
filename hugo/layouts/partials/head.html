@@ -23,6 +23,8 @@
 {{ $chromaDark := resources.Get "css/chroma-dark.css" }}
 {{ $print := resources.Get "css/print.css" }}
 {{ $ui5overrides := resources.Get "css/ui5-overrides.css" }}
+{{ $viewTransitions := resources.Get "css/view-transitions.css" }}
+{{ $scrollAnimations := resources.Get "css/scroll-animations.css" }}
 <link rel="stylesheet" href="{{ $themeVars.RelPermalink }}">
 <link rel="stylesheet" href="{{ $darkVars.RelPermalink }}">
 <link rel="stylesheet" href="{{ $chromaLight.RelPermalink }}">
@@ -30,6 +32,8 @@
 <link rel="stylesheet" href="/css/sap-fundamental.css">
 <link rel="stylesheet" href="{{ $ui5overrides.RelPermalink }}">
 <link rel="stylesheet" href="{{ $print.RelPermalink }}" media="print">
+<link rel="stylesheet" href="{{ $viewTransitions.RelPermalink }}">
+<link rel="stylesheet" href="{{ $scrollAnimations.RelPermalink }}">
 <script>
   const t = localStorage.getItem('theme') ||
     (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');

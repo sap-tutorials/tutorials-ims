@@ -49,17 +49,26 @@ describe('view-transitions smoke', () => {
 
   it('the compiled JS bundle includes the view-transitions module strings', async () => {
     const html = await fetchText('/')
-    const jsMatch = html.match(/src=["']([^"']*ui5-bootstrap[^"']*\.js)["']/)
+    // Hugo's prod minifier strips quotes from safe attribute values, so accept
+    // both quoted and unquoted src= forms.
+    const jsMatch = html.match(/src=(?:"([^"]*ui5-bootstrap[^"]*\.js)"|'([^']*ui5-bootstrap[^']*\.js)'|([^ >]*ui5-bootstrap[^ >]*\.js))/)
     expect(jsMatch, 'ui5-bootstrap.js script tag not found').toBeTruthy()
-    const js = await fetchText(jsMatch![1])
+    const jsHref = jsMatch![1] || jsMatch![2] || jsMatch![3]
+    const js = await fetchText(jsHref)
     expect(js).toContain('hero-title')
   })
 
   it('the compiled CSS contains @view-transition and animation-timeline strings', async () => {
     const html = await fetchText('/')
-    const cssRefs = Array.from(html.matchAll(/href=["']([^"']*\.css)["']/g)).map((m) => m[1])
-    expect(cssRefs.length).toBeGreaterThan(0)
-    const allCss = (await Promise.all(cssRefs.map((p) => fetchText(p)))).join('\n')
+    // Hugo's prod minifier strips quotes from safe attribute values, so accept
+    // both quoted (href="…") and unquoted (href=…) forms.
+    const cssRefs = Array.from(
+      html.matchAll(/href=(?:"([^"]*\.css)"|'([^']*\.css)'|([^ >]+\.css))/g)
+    ).map((m) => m[1] || m[2] || m[3])
+    // Drop external stylesheets (e.g. unpkg) — the smoke targets our own bundle.
+    const localCssRefs = cssRefs.filter((p) => p.startsWith('/'))
+    expect(localCssRefs.length).toBeGreaterThan(0)
+    const allCss = (await Promise.all(localCssRefs.map((p) => fetchText(p)))).join('\n')
     expect(allCss).toMatch(/@view-transition/)
     expect(allCss).toMatch(/view-transition-name\s*:\s*hero-title/)
     expect(allCss).toMatch(/animation-timeline\s*:\s*view\(\)/)
