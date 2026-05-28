@@ -1,7 +1,8 @@
 // hugo-apps/src/shared/pip-channel.ts
 import type { PipMessage, PipSource } from './pip-types';
 
-type OutgoingMessage = Omit<PipMessage, 'senderId' | 'source'>;
+type DistributiveOmit<T, K extends keyof any> = T extends unknown ? Omit<T, K> : never;
+type OutgoingMessage = DistributiveOmit<PipMessage, 'senderId' | 'source'>;
 
 export type PipChannel = {
   send(msg: OutgoingMessage): void;

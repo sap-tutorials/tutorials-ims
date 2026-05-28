@@ -81,26 +81,10 @@ export function usePipLifecycle(ctx: LauncherCtx) {
     pipWindow.value = win;
     channel = createPipChannel(ctx.slug, 'main');
 
-    // Local send helper. The shared `OutgoingMessage` type is
-    // `Omit<Envelope & DiscriminatedUnion, 'senderId' | 'source'>`, which TS
-    // collapses into the intersection's common keys and rejects variant-
-    // specific fields like `theme`/`stepIndex`. PipShell.vue dodges this
-    // because .vue SFCs aren't checked by `tsc --noEmit`. Cast at the
-    // boundary here so the launcher's plain .ts files compile cleanly.
-    type Variant =
-      | { type: 'pip:stepChange'; stepIndex: number }
-      | { type: 'pip:complete'; stepIndex: number }
-      | { type: 'pip:themeChange'; theme: 'light' | 'dark' }
-      | { type: 'pip:closed' };
-    const send = (msg: Variant): void => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      channel?.send(msg as any);
-    };
-
     // Theme MutationObserver.
     themeObserver = new MutationObserver(() => {
       const t = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
-      send({ type: 'pip:themeChange', theme: t });
+      channel?.send({ type: 'pip:themeChange', theme: t });
     });
     themeObserver.observe(document.documentElement, {
       attributes: true,
@@ -137,7 +121,7 @@ export function usePipLifecycle(ctx: LauncherCtx) {
     stepListener = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail && typeof detail.stepIndex === 'number') {
-        send({ type: 'pip:stepChange', stepIndex: detail.stepIndex });
+        channel?.send({ type: 'pip:stepChange', stepIndex: detail.stepIndex });
       }
     };
     document.addEventListener('tutorial:step-change', stepListener);
@@ -146,7 +130,7 @@ export function usePipLifecycle(ctx: LauncherCtx) {
     completeListener = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail && typeof detail.stepIndex === 'number') {
-        send({ type: 'pip:complete', stepIndex: detail.stepIndex });
+        channel?.send({ type: 'pip:complete', stepIndex: detail.stepIndex });
       }
     };
     document.addEventListener('tutorial:step-completed', completeListener);
