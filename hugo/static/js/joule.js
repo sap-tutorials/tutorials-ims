@@ -624,6 +624,26 @@
           : { slug: '', n: 1, heading: '' };
         window.joule.openWithStepContext(ctx);
       });
+      // Issue #102: tutorials reached via mission/group ordering render an
+      // in-flow Previous/Next nav row at the bottom of the page that overlaps
+      // the fixed-positioned FAB at viewport bottom. When the row scrolls into
+      // view, set [data-near-nav-bottom] on the FAB so the matching CSS rule
+      // can lift it clear. IntersectionObserver is scoped to the row's
+      // existence — pages without it (single tutorials, no prev/next) skip
+      // the observer entirely.
+      const navBottom = document.querySelector('.tutorial-nav-bottom');
+      if (navBottom && 'IntersectionObserver' in window) {
+        const navObserver = new IntersectionObserver((entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) {
+              stepFab.dataset.nearNavBottom = 'true';
+            } else {
+              delete stepFab.dataset.nearNavBottom;
+            }
+          }
+        }, { rootMargin: '0px 0px 80px 0px' });
+        navObserver.observe(navBottom);
+      }
     }
     if (cfg.bannerText) { banner.textContent = cfg.bannerText; banner.hidden = false; }
 
