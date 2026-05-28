@@ -391,4 +391,32 @@ describe('AdminService', () => {
       expect(slugs).not.toContain('sd-inactive');
     });
   });
+
+  describe('Tutorials enhancements (#95)', () => {
+    let tutId;
+    const slug = 'tut95-owner';
+    const owner = 'Acme Owner';
+
+    beforeAll(async () => {
+      const { Tutorials, TutorialMeta } = cds.entities('com.sap.developers.ims');
+      tutId = cds.utils.uuid();
+      await INSERT.into(Tutorials).entries([
+        { ID: tutId, slug, title: 'Tut 95', status: 'ACTIVE' },
+      ]);
+      await INSERT.into(TutorialMeta).entries([
+        { ID: cds.utils.uuid(), tutorial_ID: tutId, owner, ownerEmail: 'acme@example.com' },
+      ]);
+    });
+
+    it('exposes meta.owner via $expand on Tutorials', async () => {
+      const { status, data } = await project.get(
+        `/admin/Tutorials(ID=${tutId},IsActiveEntity=true)?$expand=meta($select=owner,ownerEmail)`,
+        adminAuth
+      );
+      expect(status).toBe(200);
+      expect(data.meta).toBeTruthy();
+      expect(data.meta.owner).toBe(owner);
+      expect(data.meta.ownerEmail).toBe('acme@example.com');
+    });
+  });
 });

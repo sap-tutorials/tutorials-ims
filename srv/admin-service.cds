@@ -10,7 +10,11 @@ service AdminService {
   entity Users as projection on ims.Users;
   @cds.redirection.target: true
   @Capabilities.ChangeTracking : { Supported: true }
-  entity Tutorials as projection on ims.Tutorials { *, cast(legacyId as String) as legacyIdStr : String };
+  entity Tutorials as projection on ims.Tutorials {
+    *,
+    cast(legacyId as String) as legacyIdStr : String,
+    meta : Association to TutorialMeta on meta.tutorial.ID = ID
+  };
   // Filtered picklist for redirectTo value help — only ACTIVE tutorials can be redirect targets
   @readonly
   @cds.redirection.target: false
