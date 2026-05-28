@@ -1,8 +1,14 @@
 # View Transitions + Scroll-driven Animations — Design
 
-**Status:** In review 2026-05-28
+**Status:** Approved (with amendments) 2026-05-28
 **Author:** Tom (with Claude as collaborator)
 **Feature shortlist entry:** Daily-use polish · "View Transitions API for step navigation" + "Scroll-driven animations"
+
+> **Amendments after spec-review and pre-plan reconnaissance (2026-05-28):**
+>
+> 1. **VT-3 dropped from scope.** The Object Page accordion (`hugo/layouts/shortcodes/tutorial-step.html`) has no between-steps navigation event — bodies are toggled in-place via `[hidden]` on `.step-body`, no `.is-active` class exists, the heading is `.step-title-text` (a `<span>`, not `<h2>`), and there is no Next/Prev step control. The shortlist line was written before U1 Object Page; no real event exists for VT-3 to enhance. SD-8 (per-step subtle reveal on first scroll) covers the per-step polish.
+> 2. **VT-1 and VT-2 unified.** The site has no `tutorial-card.html` or `mission-tile.html` partial — both surfaces are rendered by one Vue component, `hugo-apps/src/navigator/TutorialNavigator.vue`, where the link is `<a class="nav-card">` with title at `.nav-card__title`. The marker is added inside the Vue component; the canonical title selector is `.nav-card__title`. The single feature is "navigator nav-card → detail page (tutorial or mission Object Page)."
+> 3. **Safari version floor confirmed** at Safari 26+ for `animation-timeline: view()`. No change to Section 6.
 
 ## 1. Summary
 
