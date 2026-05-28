@@ -36,7 +36,7 @@ export async function myProgressHandler(req, res) {
       groupSlugs: progress.completedGroupSlugs
     });
   } catch (err) {
-    LOG.warn('my-progress handler failed', err.message);
+    LOG.warn('my-progress handler failed', err);
     return res.status(200).json(EMPTY_PAYLOAD);
   }
 }
