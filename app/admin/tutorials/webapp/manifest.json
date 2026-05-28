@@ -41,15 +41,6 @@
         }
       }
     },
-    "extends": {
-      "extensions": {
-        "sap.ui.controllerExtensions": {
-          "sap.fe.templates.ObjectPage.ObjectPageController": {
-            "controllerName": "sap.tutorials.admin.tutorials.ext.AskJoule"
-          }
-        }
-      }
-    },
     "routing": {
       "routes": [
         {
