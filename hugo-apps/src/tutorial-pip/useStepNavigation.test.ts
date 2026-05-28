@@ -48,7 +48,18 @@ describe('useStepNavigation', () => {
     expect(active.value).toBe(2);
   });
 
-  it('completeStep returns true on 2xx, advances, no exception', async () => {
+  it('goto() rejects non-finite indexes (NaN, Infinity)', () => {
+    const active = ref(1);
+    const nav = useStepNavigation('demo', steps, active);
+    nav.goto(NaN);
+    expect(active.value).toBe(1);
+    nav.goto(Infinity);
+    expect(active.value).toBe(1);
+    nav.goto(-Infinity);
+    expect(active.value).toBe(1);
+  });
+
+  it('completeStep returns true on 2xx, does not throw', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response('{"ok":true}', { status: 200 })
     );
@@ -58,6 +69,8 @@ describe('useStepNavigation', () => {
     expect(ok).toBe(true);
     expect(fetchSpy).toHaveBeenCalledOnce();
     expect(fetchSpy.mock.calls[0][0]).toMatch(/\/completeStep/);
+    // Composable does NOT auto-advance; that's PipShell.vue's job.
+    expect(active.value).toBe(1);
   });
 
   it('completeStep returns false on non-2xx, does not throw', async () => {
