@@ -102,6 +102,8 @@ HTML escaping helper applied to all DB-sourced strings. ~250 lines.
 
 Loads the chrome shell from `ContentFiles` slug `__shell__` lazily on first use, caches parsed `{before, after}` halves keyed by current `ContentManifest.version`. Reloads when version changes.
 
+The active version is read via the existing `getActiveVersion()` helper in `content-store.js` (the same one `serveHandler` already calls for tutorial blob lookups). Cache validity check is a single integer compare, no extra DB round-trip on cache hit.
+
 - `get()` → `{ before, after, version }` — splits on `<!-- MAIN -->` marker once
 - `compose(before, after, body, pageMeta)` → full HTML, with attribute substitution for `data-page-kind`, `data-page-slug`, `data-page-title`, `<title>`, `<meta name="description">`
 - Throws typed error if marker is missing or duplicated; caller catches and degrades to a minimal stripped shell (today's fallback shell) so a broken publish never 500s catalog requests
@@ -267,7 +269,7 @@ The hierarchy is **fail-soft on chrome, fail-hard on data**.
 
 ### Parity guard (one-time, manual)
 
-`scripts/parity-check.js`: snapshot current DEV `/tutorials/group-test-two` HTML, deploy PR, snapshot again, structural diff (drop comments, normalize whitespace, ignore `data-cap-base`). Not a recurring test — used as a verification artifact attached to the PR description.
+`scripts/parity-check.js`: snapshot current DEV `/tutorials/group-test-two` HTML, deploy PR, snapshot again, structural diff (drop comments, normalize whitespace, ignore `data-cap-base`). Not a recurring test, not committed long-term — used as a verification artifact attached to the PR description, then deleted along with the PR's other temporary scaffolding before merge.
 
 ## Migration
 
