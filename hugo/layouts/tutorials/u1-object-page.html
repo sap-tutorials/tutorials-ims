@@ -189,7 +189,7 @@
 
 <div class="op-page">
   <header class="op-header">
-    <h1 class="op-header__title">{{ .Title }}</h1>
+    <h1 class="op-header__title">{{ .Title }}{{ if in .Params.tags "tutorial>license" }} {{ partial "license-icon.html" . }}{{ end }}</h1>
     {{ with .Params.description }}<p class="op-header__description">{{ . }}</p>{{ end }}
     <div class="op-header__chips">
       {{ with .Params.level }}<span class="op-chip"><span class="op-chip__icon">🎓</span>{{ . }}</span>{{ end }}
@@ -197,7 +197,7 @@
       {{ with .Params.time }}<span class="op-chip"><span class="op-chip__icon">⏱</span>{{ . }} min</span>{{ end }}
       {{/* Prefer human-readable displayTags; fall back to raw primaryTag if none provided. */}}
       {{ if .Params.displayTags }}
-        {{ range .Params.displayTags }}<span class="op-chip op-chip--tag">{{ . }}</span>{{ end }}
+        {{ range .Params.displayTags }}{{ if ne . "License" }}<span class="op-chip op-chip--tag">{{ . }}</span>{{ end }}{{ end }}
       {{ else if .Params.primaryTag }}
         <span class="op-chip op-chip--tag">{{ .Params.primaryTag }}</span>
       {{ end }}
