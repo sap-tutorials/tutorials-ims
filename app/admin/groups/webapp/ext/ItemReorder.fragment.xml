@@ -2,7 +2,7 @@
   xmlns:core="sap.ui.core"
   xmlns="sap.m"
   xmlns:dnd="sap.ui.core.dnd"
-  core:require="{ handler: 'sap/tutorials/admin/groups/ext/ItemReorder.controller' }">
+  core:require="{ handler: 'sap/tutorials/admin/groups/ext/ItemReorderHandler' }">
   <Table id="itemReorderTable" items="{path: 'items', parameters: {$$ownRequest: true, $expand: 'tutorial($select=title,slug)'}, sorter: {path: 'itemOrder'}}" mode="None">
     <dragDropConfig>
       <dnd:DragDropInfo

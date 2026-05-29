@@ -7,13 +7,18 @@ sap.ui.define([], function () {
   // plain-handler + `core:require` pattern instead so the drop event
   // resolves against this module.
   //
+  // The file is named `*Handler.js`, NOT `*.controller.js` — that suffix is
+  // the actual root cause of issue #70 across three earlier fix attempts.
+  // FE V4 reserves `*.controller.js` paths for its controller-extension
+  // machinery; a `core:require` for that module ID resolves to undefined
+  // silently (no console error, no network request in DevTools), so
+  // `drop="handler.onDrop"` becomes a no-op and the row-rebind on activation
+  // looks like a snap-back. The working sibling is `TaskColumnHandler.js`
+  // next door — same naming convention.
+  //
   // Drag is gated by `enabled="{= !%{IsActiveEntity} }"` on DragDropInfo
-  // (note `%{...}` — context-property syntax that walks up to the parent OP
-  // context. `${...}` would resolve against the row binding, where
-  // IsActiveEntity does not exist; that resolves to undefined, making the
-  // expression `!undefined === true` so drag was allowed in active mode too,
-  // which fed the "snap back" symptom: setProperty on read-only active rows
-  // silently no-ops).
+  // so this handler only fires in draft mode — setProperty would silently
+  // no-op on an active (non-draft) entity in a draft-enabled service.
   return {
     onDrop: async function (oEvent) {
       var oDraggedItem = oEvent.getParameter("draggedControl");
@@ -67,7 +72,7 @@ sap.ui.define([], function () {
       // PATCHed values. We can't use oBinding.sort([new Sorter("itemOrder")])
       // here: V4 treats same-path sorters as unchanged (since 1.97.0) and
       // the call becomes a silent no-op, leaving the cached row order
-      // intact — that's the "rows snap back" symptom from issue #70.
+      // intact — that's the original "rows snap back" symptom.
       try {
         oBinding.refresh();
       } catch (oErr) {
