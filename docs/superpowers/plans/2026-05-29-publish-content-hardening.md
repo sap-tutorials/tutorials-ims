@@ -19,7 +19,7 @@
 - "Run tests" tasks use Vitest's filter form (`-t "<title>"`) so each step exercises only the test it just wrote.
 - Each task ends with a commit. Commit messages follow the project's existing convention (lowercase imperative, scope prefix).
 - TDD discipline: every code task starts by writing a failing test and running it to confirm the failure mode, before writing implementation. Watch for the expected failure message — if it fails differently, stop and investigate.
-- **Project is ESM** (`"type": "module"`). The `__dirname` shorthand does not exist; the canonical `cds.test` invocation in this repo is `cds.test('serve', '--project', '.', '--in-memory');` (see `srv/__tests__/tutorial-feedback.test.js`). If a code snippet in this plan shows `cds.test(__dirname + '/../..')`, substitute the project pattern.
+- **Project is ESM** (`"type": "module"`). The `__dirname` shorthand does not exist; the canonical `cds.test` invocation in this repo is `cds.test('serve', '--project', '.', '--in-memory');` placed at **module scope** (not inside `beforeAll`) — `cds.entities()` returns `undefined` if the test harness is initialized inside `beforeAll`. See `srv/__tests__/lib/content-publish-session.test.js` for the canonical example. If a code snippet in this plan shows `cds.test(__dirname + '/../..')`, substitute the project pattern.
 - **Vitest 4.1.5** in this repo does not support `--reporter=basic`. Use the default reporter (omit the flag).
 
 ---
