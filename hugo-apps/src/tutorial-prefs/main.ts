@@ -21,6 +21,21 @@ interface State {
   slow: boolean;
 }
 
+// Lazy-loaded overlay handle (only when ?debug-cam is present). Held at
+// module scope so eye + hand share one overlay instead of mounting twice.
+let debugReporter: ((r: any) => void) | null = null;
+async function ensureDebugReporter(): Promise<((r: any) => void) | null> {
+  if (debugReporter) return debugReporter;
+  if (typeof location === 'undefined' || !new URLSearchParams(location.search).has('debug-cam')) {
+    return null;
+  }
+  const { createDebugOverlay } = await import('./cam-debug');
+  const overlay = createDebugOverlay(true);
+  if (!overlay) return null;
+  debugReporter = overlay.report.bind(overlay);
+  return debugReporter;
+}
+
 function unsupportedText(reasons: string[]): string {
   if (reasons.includes('mobile')) return 'Available on desktop browsers only.';
   if (reasons.length > 0) return "Your browser doesn't support this feature.";
@@ -31,6 +46,7 @@ async function startEye(state: State): Promise<void> {
   state.eyeError = '';
   try {
     const { runEyeTracking } = await import('./eye-tracking');
+    const onDebug = (await ensureDebugReporter()) ?? undefined;
     state.eyeRuntime = await runEyeTracking({
       reducedMotion: detectSupport().prefersReducedMotion,
       onError: (e) => {
@@ -38,7 +54,8 @@ async function startEye(state: State): Promise<void> {
         console.error('[tutorial-prefs] eye-tracking', e);
         stopEye(state);
       },
-      onSlow: () => { state.slow = true; }
+      onSlow: () => { state.slow = true; },
+      onDebug
     });
     consumeFirstRun('eye');
     setPref('eye', 'on');
@@ -57,13 +74,15 @@ async function startHand(state: State): Promise<void> {
   state.handError = '';
   try {
     const { runHandGestures } = await import('./hand-gestures');
+    const onDebug = (await ensureDebugReporter()) ?? undefined;
     state.handRuntime = await runHandGestures({
       onError: (e) => {
         state.handError = 'Detection stopped unexpectedly. Try again later.';
         console.error('[tutorial-prefs] hand-gestures', e);
         stopHand(state);
       },
-      onSlow: () => { state.slow = true; }
+      onSlow: () => { state.slow = true; },
+      onDebug
     });
     consumeFirstRun('hand');
     setPref('hand', 'on');

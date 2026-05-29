@@ -4,8 +4,9 @@ import {
   MEDIAPIPE_WASM_BASE, MODEL_FACE, SLOW_FRAME_MS, SLOW_FRAME_RUN
 } from './constants';
 import { acquire, release } from './camera-session';
+import type { CamReport } from './cam-debug';
 
-export interface GazeFrame { gazeY: number; headForward: boolean; }
+export interface GazeFrame { gazeY: number; headForward: boolean; pitch?: number; }
 
 export interface GazeDetectorOpts {
   now: () => number;
@@ -31,10 +32,20 @@ export class GazeDetector {
   }
 
   observeNoFace(): void { this.dwellStart = null; }
+
+  // For the debug overlay only — read-only snapshot, no behaviour change.
+  dwellMs(): number {
+    return this.dwellStart === null ? 0 : Math.max(0, this.opts.now() - this.dwellStart);
+  }
 }
 
 interface EyeRuntime { stop: () => void; }
-interface RunOpts { reducedMotion: boolean; onError: (e: Error) => void; onSlow: () => void; }
+interface RunOpts {
+  reducedMotion: boolean;
+  onError: (e: Error) => void;
+  onSlow: () => void;
+  onDebug?: (r: CamReport) => void;
+}
 
 export async function runEyeTracking(opts: RunOpts): Promise<EyeRuntime> {
   const { FaceLandmarker, FilesetResolver } = await import('@mediapipe/tasks-vision');
@@ -77,9 +88,18 @@ export async function runEyeTracking(opts: RunOpts): Promise<EyeRuntime> {
       const lm = res.faceLandmarks?.[0];
       if (!lm) {
         if (performance.now() - lastFace > NO_FACE_TIMEOUT_MS) det.observeNoFace();
+        if (opts.onDebug) opts.onDebug({
+          kind: 'eye', gazeY: 0, pitch: 0, headForward: false,
+          dwellMs: det.dwellMs(), faceSeen: false
+        });
       } else {
         lastFace = performance.now();
-        det.observe(computeGazeFrame(lm));
+        const frame = computeGazeFrame(lm);
+        det.observe(frame);
+        if (opts.onDebug) opts.onDebug({
+          kind: 'eye', gazeY: frame.gazeY, pitch: frame.pitch ?? 0,
+          headForward: frame.headForward, dwellMs: det.dwellMs(), faceSeen: true
+        });
       }
     } catch (err) {
       opts.onError(err as Error); stop(); return;
@@ -115,5 +135,5 @@ function computeGazeFrame(lm: Array<{ x: number; y: number; z: number }>): GazeF
   const pitch = nose.y - eyeMidY;
   const headForward = pitch < 0.06;
 
-  return { gazeY, headForward };
+  return { gazeY, headForward, pitch };
 }

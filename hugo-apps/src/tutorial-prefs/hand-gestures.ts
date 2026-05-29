@@ -6,6 +6,7 @@ import {
 } from './constants';
 import { acquire, release } from './camera-session';
 import { dispatchNav } from './nav-dispatch';
+import type { CamReport } from './cam-debug';
 
 export interface HandFrame { palmOpen: boolean; x: number; }
 export type SwipeDir = 'left' | 'right';
@@ -52,10 +53,20 @@ export class SwipeDetector {
       this.state = 'COOLDOWN';
     }
   }
+
+  // Read-only state for the debug overlay — no behaviour change.
+  // Caller computes dx/velocity by combining startX/startT with the live frame.
+  inspect(): { state: State; startX: number; startT: number } {
+    return { state: this.state, startX: this.startX, startT: this.startT };
+  }
 }
 
 interface HandRuntime { stop: () => void; }
-interface RunOpts { onError: (e: Error) => void; onSlow: () => void; }
+interface RunOpts {
+  onError: (e: Error) => void;
+  onSlow: () => void;
+  onDebug?: (r: CamReport) => void;
+}
 
 export async function runHandGestures(opts: RunOpts): Promise<HandRuntime> {
   const { HandLandmarker, FilesetResolver } = await import('@mediapipe/tasks-vision');
@@ -89,8 +100,28 @@ export async function runHandGestures(opts: RunOpts): Promise<HandRuntime> {
     try {
       const res = landmarker.detectForVideo(video, performance.now());
       const lm = res.landmarks?.[0];
-      if (!lm) det.observe({ palmOpen: false, x: 0 });
-      else det.observe(computeHandFrame(lm));
+      let frame: HandFrame;
+      if (!lm) { frame = { palmOpen: false, x: 0 }; det.observe(frame); }
+      else { frame = computeHandFrame(lm); det.observe(frame); }
+
+      if (opts.onDebug) {
+        const now = performance.now();
+        const insp = det.inspect();
+        const armed = insp.state === 'ARMED';
+        const dx = armed ? frame.x - insp.startX : 0;
+        const dtMs = armed ? Math.max(0, now - insp.startT) : 0;
+        const velocity = armed && dtMs > 0 ? Math.abs(dx) / (dtMs / 1000) : 0;
+        opts.onDebug({
+          kind: 'hand',
+          palmSeen: !!lm,
+          palmOpen: frame.palmOpen,
+          x: frame.x,
+          dxFromArmed: dx,
+          dtMs,
+          velocity,
+          state: insp.state
+        });
+      }
     } catch (err) {
       opts.onError(err as Error); stop(); return;
     }
