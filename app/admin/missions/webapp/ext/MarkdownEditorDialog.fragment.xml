@@ -7,7 +7,9 @@
     title="Markdown Editor"
     stretch="true"
     contentHeight="90%"
-    contentWidth="95%">
+    contentWidth="95%"
+    verticalScrolling="false"
+    horizontalScrolling="false">
     <content>
       <l:Splitter height="100%">
         <l:contentAreas>
