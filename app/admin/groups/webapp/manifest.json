@@ -100,18 +100,6 @@
                       "text": "Edit Description (Markdown)"
                     }
                   }
-                },
-                "body": {
-                  "sections": {
-                    "ItemReorderSection": {
-                      "template": "sap.tutorials.admin.groups.ext.ItemReorder",
-                      "title": "Path Items (Drag to Reorder)",
-                      "position": {
-                        "anchor": "PathItemsSection",
-                        "placement": "After"
-                      }
-                    }
-                  }
                 }
               },
               "controlConfiguration": {
