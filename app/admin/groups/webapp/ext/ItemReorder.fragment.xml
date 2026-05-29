@@ -9,7 +9,7 @@
         sourceAggregation="items"
         targetAggregation="items"
         dropPosition="Between"
-        enabled="{= !${IsActiveEntity} }"
+        enabled="{= !%{IsActiveEntity} }"
         drop="handler.onDrop"/>
     </dragDropConfig>
     <columns>
