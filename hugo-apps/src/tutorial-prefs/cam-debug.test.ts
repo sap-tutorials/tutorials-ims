@@ -34,7 +34,7 @@ describe('createDebugOverlay', () => {
     expect(text).toContain('gazeY      0.85');
     expect(text).toContain('pitch      0.040');
     expect(text).toContain('dwell      300');
-    // gazeY 0.85 > 0.7 and headForward true → eligible should be ✓
+    // gazeY 0.85 > 0.55 and headForward true → eligible should be ✓
     expect(text).toContain('eligible   ✓');
   });
 
@@ -59,7 +59,7 @@ describe('createDebugOverlay', () => {
     expect(text).toContain('HAND');
     expect(text).toContain('state      ARMED');
     expect(text).toContain('dx         0.40  >= 0.3  ✓');
-    expect(text).toContain('v          2.00  >= 1.5  ✓');
+    expect(text).toContain('v          2.00  >= 0.4  ✓');
   });
 
   it('destroy() removes the overlay node', () => {

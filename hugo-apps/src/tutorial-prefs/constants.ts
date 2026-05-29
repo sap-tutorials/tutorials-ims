@@ -1,14 +1,20 @@
 export const TARGET_FPS = 15;
 export const FRAME_INTERVAL_MS = 1000 / TARGET_FPS;
 
-export const GAZE_BOTTOM_THRESHOLD = 0.7;
+// Tuned 2026-05-29 against live cam-debug telemetry. The original synthetic-
+// frame defaults (gazeY > 0.7, pitch < 0.06, swipe v >= 1.5) required an
+// exaggerated chin-up + iris-hard-down posture and a TikTok-speed flick;
+// natural reading + a controlled wave never crossed either. See cam-debug
+// overlay (?debug-cam) to revisit if behaviour drifts.
+export const GAZE_BOTTOM_THRESHOLD = 0.55;   // iris in bottom ~45% of eye opening (was 0.7)
+export const GAZE_HEAD_PITCH_MAX = 0.12;     // head roughly level — slight tilt OK (was 0.06)
 export const GAZE_DWELL_MS = 600;
 export const GAZE_FIRE_COOLDOWN_MS = 1200;
 export const NO_FACE_TIMEOUT_MS = 1000;
 export const SCROLL_VIEWPORT_FRACTION = 0.85;
 
 export const SWIPE_MIN_DX_FRACTION = 0.30;
-export const SWIPE_MIN_VELOCITY = 1.5;
+export const SWIPE_MIN_VELOCITY = 0.4;       // viewport-fractions/sec — slow deliberate wave (was 1.5)
 export const SWIPE_COOLDOWN_MS = 800;
 export const PALM_LOST_RESET_MS = 200;
 
