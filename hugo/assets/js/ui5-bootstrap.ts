@@ -30,6 +30,11 @@ import "@ui5/webcomponents/dist/ProgressIndicator.js";
 import "@ui5/webcomponents/dist/Dialog.js";
 import "@ui5/webcomponents/dist/BusyIndicator.js";
 import "@ui5/webcomponents/dist/Title.js";
+// Tutorial preferences popover (header.html) — uses ui5-switch for toggles.
+// Without this, the switches render as empty <ui5-switch> with no visible
+// control, which is why the popover looked unresponsive. Issue: header
+// "Tutorial preferences" with no way to flip anything.
+import "@ui5/webcomponents/dist/Switch.js";
 import "@ui5/webcomponents-fiori/dist/ShellBar.js";
 import "@ui5/webcomponents-fiori/dist/ShellBarItem.js";
 import "@ui5/webcomponents-fiori/dist/Wizard.js";
@@ -87,6 +92,13 @@ import "@ui5/webcomponents-icons/dist/navigation-left-arrow.js";
 import "@ui5/webcomponents-icons/dist/navigation-right-arrow.js";
 import "@ui5/webcomponents-icons/dist/reset.js";
 import "@ui5/webcomponents-icons/dist/download.js";
+
+// ui5-popover placement arrows. Even with `hide-arrow`, the component
+// still resolves these by name on first render — without them, console
+// shows "Required icon is not registered" + "No loader registered for
+// the SAP-icons-v5 icons collection". Issue: tutorial-prefs popover.
+import "@ui5/webcomponents-icons/dist/navigation-up-arrow.js";
+import "@ui5/webcomponents-icons/dist/navigation-down-arrow.js";
 
 // U8: cross-block selection sync for {{< codetabs >}}.
 import "./codetabs";
