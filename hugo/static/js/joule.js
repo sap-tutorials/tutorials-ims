@@ -630,7 +630,8 @@
       // view, set [data-near-nav-bottom] on the FAB so the matching CSS rule
       // can lift it clear. IntersectionObserver is scoped to the row's
       // existence — pages without it (single tutorials, no prev/next) skip
-      // the observer entirely.
+      // the observer entirely. rootMargin pushes the trigger up by 160px so
+      // the lift completes before the row visually meets the FAB.
       const navBottom = document.querySelector('.tutorial-nav-bottom');
       if (navBottom && 'IntersectionObserver' in window) {
         const navObserver = new IntersectionObserver((entries) => {
@@ -641,7 +642,7 @@
               delete stepFab.dataset.nearNavBottom;
             }
           }
-        }, { rootMargin: '0px 0px 80px 0px' });
+        }, { rootMargin: '0px 0px 160px 0px' });
         navObserver.observe(navBottom);
       }
     }
