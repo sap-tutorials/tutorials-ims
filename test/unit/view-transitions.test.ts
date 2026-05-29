@@ -65,6 +65,38 @@ describe('view-transitions: bindCardClick', () => {
 
     expect(title.style.viewTransitionName || '').toBe('')
   })
+
+  it('clears the previously-tagged title before tagging a new one (regression: duplicate VT name)', async () => {
+    // Cross-doc nav + Back leaves the previously-clicked title with its inline
+    // view-transition-name still set. Clicking another card without clearing
+    // would put two elements with name `hero-title` in one snapshot, and the
+    // browser refuses to morph. The fix sweeps the .nav-card__title selector
+    // before tagging the new one.
+    const { bindCardClick } = await import('../../hugo/assets/js/view-transitions')
+    const cardA = buildNavCard()
+    cardA.href = '/tutorials/a'
+    const titleA = cardA.querySelector('.nav-card__title') as HTMLElement
+    titleA.textContent = 'A'
+
+    const cardB = buildNavCard()
+    cardB.href = '/tutorials/b'
+    const titleB = cardB.querySelector('.nav-card__title') as HTMLElement
+    titleB.textContent = 'B'
+
+    root.appendChild(cardA)
+    root.appendChild(cardB)
+    bindCardClick(root)
+
+    titleA.click()
+    expect(titleA.style.viewTransitionName).toBe('hero-title')
+    expect(titleB.style.viewTransitionName || '').toBe('')
+
+    // Simulate the user hitting Back: titleA's inline name is still set.
+    // Now click card B. The handler must clear A before tagging B.
+    titleB.click()
+    expect(titleA.style.viewTransitionName || '').toBe('')
+    expect(titleB.style.viewTransitionName).toBe('hero-title')
+  })
 })
 
 // morphTheme reads document.startViewTransition at call time. Each test sets
