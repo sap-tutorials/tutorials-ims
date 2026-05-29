@@ -399,118 +399,6 @@ function patchTutorialFrontmatter(slug: string, nav: TutorialNavEntry, outputDir
   writeFileSync(filePath, content, 'utf-8')
 }
 
-function writeMissionPage(
-  mission: Mission,
-  groups: GroupRef[],
-  navBySlug: Map<string, TutorialNavEntry>,
-  outputDir: string,
-  target: BuildTarget = 'vitepress',
-): void {
-  const groupsData = groups.map(g => {
-    const tutorials = g.tutorials
-      .map(slug => navBySlug.get(slug))
-      .filter((n): n is TutorialNavEntry => !!n)
-      .map(n => ({
-        slug: n.slug,
-        title: n.title,
-        description: n.description,
-        time: n.time,
-        level: n.level,
-        stepCount: n.stepCount,
-      }))
-
-    return {
-      id: g.id,
-      title: g.title,
-      slug: g.slug,
-      tutorials,
-    }
-  })
-
-  const allTutorials = groupsData.flatMap(g => g.tutorials)
-  const totalTime = allTutorials.reduce((s, t) => s + t.time, 0)
-  const levels = allTutorials.map(t => t.level)
-  const missionLevel = levels.includes('advanced') ? 'advanced'
-    : levels.includes('intermediate') ? 'intermediate'
-    : mission.level || 'beginner'
-
-  const displayTags = allTutorials
-    .flatMap(t => {
-      const nav = navBySlug.get(t.slug)
-      return nav?.displayTags ?? []
-    })
-    .filter((tag, i, arr) => arr.indexOf(tag) === i)
-    .slice(0, 6)
-
-  const fm: Record<string, unknown> = {
-    ...(target === 'hugo' ? { type: 'missions', url: `/tutorials/mission-${mission.slug}` } : { layout: 'mission' }),
-    slug: mission.slug,
-    missionId: mission.imsId,
-    title: mission.title,
-    description: mission.description,
-    level: missionLevel,
-    totalTime,
-    tutorialCount: allTutorials.length,
-    groupCount: groupsData.length,
-    displayTags,
-    groups: groupsData,
-  }
-
-  const content = `---\n${yamlStringify(fm).trimEnd()}\n---\n`
-  writeFileSync(join(outputDir, `mission-${mission.slug}.md`), content, 'utf-8')
-}
-
-function writeGroupPage(
-  group: HierarchyGroup,
-  mission: Mission | null,
-  tutorials: Array<{
-    slug: string
-    title: string
-    description: string
-    time: number
-    level: string
-    stepCount: number
-    primaryTag: string
-    createdAt?: string
-  }>,
-  outputDir: string,
-  target: BuildTarget = 'vitepress',
-): void {
-  const totalTime = tutorials.reduce((s, t) => s + t.time, 0)
-  const levels = tutorials.map(t => t.level)
-  const groupLevel = levels.includes('advanced') ? 'advanced'
-    : levels.includes('intermediate') ? 'intermediate'
-    : 'beginner'
-
-  const displayTags = tutorials
-    .map(t => t.primaryTag)
-    .filter(t => t.length > 0)
-    .map(humanizeTag)
-    .filter((tag, i, arr) => arr.indexOf(tag) === i)
-    .slice(0, 6)
-
-  const fm: Record<string, unknown> = {
-    ...(target === 'hugo' ? { type: 'groups', url: `/tutorials/group-${group.slug}` } : { layout: 'group' }),
-    slug: group.slug,
-    groupId: group.imsId,
-    title: group.title,
-    description: group.description,
-    level: groupLevel,
-    totalTime,
-    tutorialCount: tutorials.length,
-    displayTags,
-    tutorials,
-  }
-  if (mission) {
-    fm.missionId = mission.imsId
-    fm.missionSlug = mission.slug
-    fm.missionTitle = mission.title
-  }
-
-  const content = `---\n${yamlStringify(fm).trimEnd()}\n---\n`
-  writeFileSync(join(outputDir, `group-${group.slug}.md`), content, 'utf-8')
-}
-
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms.toFixed(0)}ms`
   if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`
@@ -892,17 +780,6 @@ async function main() {
         tutorials: [],
       }
 
-      const groupTutorialEntries: Array<{
-        slug: string
-        title: string
-        description: string
-        time: number
-        level: string
-        stepCount: number
-        primaryTag: string
-        createdAt?: string
-      }> = []
-
       for (let i = 0; i < group.tutorialSlugs.length; i++) {
         const tSlug = group.tutorialSlugs[i]
         const nav = navBySlug.get(tSlug)
@@ -927,23 +804,11 @@ async function main() {
         const nextSlug = i < group.tutorialSlugs.length - 1 ? group.tutorialSlugs[i + 1] : null
         if (prevSlug && navBySlug.has(prevSlug)) nav.prev = prevSlug
         if (nextSlug && navBySlug.has(nextSlug)) nav.next = nextSlug
-
-        groupTutorialEntries.push({
-          slug: nav.slug,
-          title: nav.title,
-          description: nav.description,
-          time: nav.time,
-          level: nav.level,
-          stepCount: nav.stepCount,
-          primaryTag: nav.primaryTag,
-          createdAt: nav.createdAt,
-        })
       }
 
       missionGroups.push(groupRef)
       if (!isFlat) {
         allGroupRefs.push(groupRef)
-        writeGroupPage(group, mission, groupTutorialEntries, OUTPUT_DIR, target)
       }
     }
 
@@ -953,8 +818,6 @@ async function main() {
       slug: mission.slug,
       groups: missionGroups,
     })
-
-    writeMissionPage(mission, missionGroups, navBySlug, OUTPUT_DIR, target)
   }
 
   for (const sg of standaloneGroups) {
@@ -965,17 +828,6 @@ async function main() {
       missionId: 0,  // sentinel: standalone group, no parent mission
       tutorials: [],
     }
-
-    const groupTutorialEntries: Array<{
-      slug: string
-      title: string
-      description: string
-      time: number
-      level: string
-      stepCount: number
-      primaryTag: string
-      createdAt?: string
-    }> = []
 
     for (let i = 0; i < sg.tutorialSlugs.length; i++) {
       const tSlug = sg.tutorialSlugs[i]
@@ -995,29 +847,10 @@ async function main() {
       const nextSlug = i < sg.tutorialSlugs.length - 1 ? sg.tutorialSlugs[i + 1] : null
       if (prevSlug && navBySlug.has(prevSlug)) nav.prev = prevSlug
       if (nextSlug && navBySlug.has(nextSlug)) nav.next = nextSlug
-
-      groupTutorialEntries.push({
-        slug: nav.slug,
-        title: nav.title,
-        description: nav.description,
-        time: nav.time,
-        level: nav.level,
-        stepCount: nav.stepCount,
-        primaryTag: nav.primaryTag,
-        createdAt: nav.createdAt,
-      })
     }
 
     allGroupRefs.push(groupRef)
-    writeGroupPage(
-      { imsId: sg.imsId, title: sg.title, slug: sg.slug, description: sg.description, tutorialSlugs: sg.tutorialSlugs },
-      null,  // no parent mission
-      groupTutorialEntries,
-      OUTPUT_DIR,
-      target
-    )
   }
-  console.log(`  [cap] Generated ${standaloneGroups.length} standalone group pages`)
 
   const recommendations = computeRecommendations(navEntries, { coCompletions })
   for (const nav of navEntries) {
