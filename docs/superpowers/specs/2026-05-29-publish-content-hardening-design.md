@@ -106,13 +106,24 @@ Client (publish-content.ts)              Server (srv/lib/content-store.js)
 | Endpoint | Request body | Server action | Response |
 |---|---|---|---|
 | `POST /content/publish/begin` | `{ trigger, hugoVersion, expectedSlugCount }` | Acquire `content-publish` lock; allocate next version; INSERT `ContentManifest { version, status: 'PUBLISHING', sessionId, lastAppendAt: now }` | `201 { sessionId, version, expiresAt }` |
-| `POST /content/publish/append` | `{ sessionId, files, metadata, bodyTexts }` | Verify session is `PUBLISHING` and not expired; per-slug: decompress, hash, INSERT `ContentFiles`; upsert `Tutorials` + `Steps`; upsert body text. Update `lastAppendAt`. | `202 { batchHash, slugsAccepted, totalSizeBytes }` |
+| `POST /content/publish/append` | `{ sessionId, files: { slug: base64gzip }, metadata: { slug: TutorialMeta }, bodyTexts: { slug: text } }` | Verify session is `PUBLISHING` and not expired; per-slug: decompress, hash, INSERT `ContentFiles`; upsert `Tutorials` + `Steps`; upsert body text. Update `lastAppendAt`. | `202 { batchHash, slugsAccepted, totalSizeBytes }` |
 | `POST /content/publish/commit` | `{ sessionId }` | Verify session is `PUBLISHING`; carry forward unchanged slugs from previous `ACTIVE`; recompute `TaskRecords` progress for affected tutorials; flip new manifest to `ACTIVE`; flip previous to `SUPERSEDED`; release lock; invalidate cache; trigger embedding job. | `200 { version, fileCount, totalSizeBytes, durationMs }` |
 | `POST /content/publish/abort` | `{ sessionId, reason? }` | Mark manifest `FAILED`; release lock. ContentFiles rows orphaned and reaped by GC. | `200 { aborted: true }` |
 | `POST /content/publish` | (existing) | Existing single-shot logic. Logs deprecation warning. **Frozen — no behavior changes.** | `200 { ... }` |
 
 All four new endpoints require the bearer token (`CONTENT_API_KEY` /
 `CONTENT_API_KEY_QA` for QA), same auth model as the legacy endpoint.
+
+The wire shape of `files` matches the existing legacy endpoint exactly —
+`{ slug: base64gzip }` where the value is a gzip-compressed HTML buffer
+encoded as base64. `metadata` and `bodyTexts` follow the same shape as
+the existing legacy payload's same-named fields.
+
+`--heal` mode uses the same `begin → append → commit` flow as a normal
+publish — the only difference is the input slug list (just the diff
+against `/content/hashes`, not the full set). It does **not** patch the
+active manifest in place; carry-forward at commit time picks up the rest
+of the slugs from the previous `ACTIVE` version, same as any other publish.
 
 ### State Machine
 
@@ -270,8 +281,8 @@ Extends the existing `PipelineLog` table (already used by
 | `scripts/publish-content.ts` | Orchestrates new flow. Adds `--verify-only`, `--heal`, `--concurrency`, `--batch-size` flags. Mutex on `--force` vs `--heal`. New exit codes. |
 | `srv/lib/content-store.js` | Adds `beginHandler`, `appendHandler`, `commitHandler`, `abortHandler`. Existing `publishHandler` left in place; logs deprecation warning. Metadata-upsert + body-text-upsert logic moved into session helpers so it can run per-batch. |
 | `srv/server.js` | Registers `POST /content/publish/begin`, `/append`, `/commit`, `/abort` routes with `contentAuthMiddleware`. |
-| `srv/jobs/cleanup.js` | Extends content-GC to reap `PUBLISHING` manifests older than 30 min, marking them `FAILED` and releasing any lingering job lock. |
-| `db/schema.cds` | Adds nullable `sessionId : String(36)` and `lastAppendAt : Timestamp` columns to `ContentManifest`. |
+| `srv/jobs/cleanup.js` | Extends content-GC to reap `PUBLISHING` manifests. **A new high-frequency reaper runs every 5 minutes** (separate from the existing daily 03:00 SUPERSEDED-pruning job, which keeps its schedule). The 5-minute reaper marks any `PUBLISHING` manifest with `lastAppendAt` older than 30 minutes as `FAILED` and releases its job lock. This frequency is required to honor acceptance criterion #5 ("reaped within 30 min"); the daily cron alone cannot. |
+| `db/schema.cds` | Adds nullable `sessionId : String(36)` and `lastAppendAt : Timestamp` columns to `ContentManifest`. Legacy single-shot publishes during the deprecation window leave both columns NULL — the new reaper ignores rows with `sessionId IS NULL`, so there's no chance of misclassifying a legacy publish as a stale session. |
 | `docs/developers/operations/testing-endpoints.md` | Documents new endpoints; marks legacy deprecated. |
 | `CLAUDE.md` | Updates Content Publishing section. Removes the `--force` recommendation from the npm reminder. Updates the "publish-content.ts delta detection" Gotcha. |
 
