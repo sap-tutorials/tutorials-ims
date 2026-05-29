@@ -21,13 +21,17 @@ aspect ContentFilesAspect : managed {
 
 aspect ContentManifestAspect : managed {
   key version               : Integer;
-  status                    : String(20) enum { PUBLISHING; ACTIVE; SUPERSEDED; ROLLED_BACK; };
+  status                    : String(20) enum { PUBLISHING; ACTIVE; SUPERSEDED; ROLLED_BACK; FAILED; };
   trigger                   : String(500);
   fileCount                 : Integer;
   totalSizeBytes            : Int64;
   changedSlugs              : LargeString;
   hugoVersion               : String(20);
   publishDurationMs         : Integer;
+  // Set on /content/publish/begin; remains NULL for legacy single-shot publishes.
+  // The 5-min reaper ignores rows where sessionId IS NULL — keeps legacy publishes safe.
+  sessionId                 : String(36);
+  lastAppendAt              : Timestamp;
 }
 
 aspect TutorialBodyTextAspect : managed {
