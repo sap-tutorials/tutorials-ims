@@ -1,5 +1,9 @@
 /* Scroll-driven subtle reveals — opacity .7 → 1, scale .97 → 1.
-   Single canonical effect applied to four surfaces. Pure CSS, no JS. */
+   Single canonical effect applied to figures, mission hero, and code
+   blocks. .tutorial-step is intentionally excluded: the U1 Object Page
+   layout swaps steps in/out via display rather than scroll, so an
+   `animation-timeline: view()` rule on .tutorial-step would never have
+   a scroll-into-viewport gesture to trigger. */
 @supports (animation-timeline: view()) {
   @media (prefers-reduced-motion: no-preference) {
     @keyframes hero-reveal {
@@ -14,7 +18,6 @@
     }
 
     .hero-figure,
-    .tutorial-step,
     .mission-hero,
     :where(figure):not(.hero-figure):not(.hero-figure *),
     pre.chroma {
