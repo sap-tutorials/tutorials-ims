@@ -26,6 +26,14 @@ function tutorialPrefsBudget() {
 
 export default defineConfig({
   plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget()],
+  // Approuter serves these bundles at /js/. Without `base`, Vite emits
+  // dynamic-import paths as `./chunks/x.js` which the browser resolves
+  // against the *document URL* (e.g. `/` → `/chunks/x.js` → 404). Setting
+  // base makes those imports absolute, e.g. `/js/chunks/x.js`. Currently
+  // only tutorial-prefs.js code-splits — but anything that adds dynamic
+  // imports later will silently break in prod without this. Issue: eye/hand
+  // tracking 404s on chunks/* 2026-05-29.
+  base: '/js/',
   resolve: {
     alias: {
       '@shared': resolve(__dirname, 'src/shared'),
