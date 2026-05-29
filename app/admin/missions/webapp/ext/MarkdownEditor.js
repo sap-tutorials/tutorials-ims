@@ -62,9 +62,7 @@ sap.ui.define([
   }
 
   // Populate editor + preview from the current binding context.
-  // Run on dialog `afterOpen` so the underlying Ace editor has its DOM
-  // before setValue — without this, the first open shows an empty editor
-  // even though the value was set programmatically.
+  // Run on dialog `afterOpen` so the TextArea has its DOM before setValue.
   function _applyContent() {
     if (!_oCurrentContext) return;
     var sDescription = _oCurrentContext.getProperty("description") || "";
@@ -76,19 +74,6 @@ sap.ui.define([
     oEditor.setEditable(bEditable);
     _byId("markdownSaveBtn").setVisible(bEditable);
     oPreview.setHtmlText(convertMarkdown(sDescription));
-
-    // Ace mounts into a Splitter pane that may resolve to 0px on the first
-    // paint inside a stretched Dialog; without an explicit resize the gutter
-    // and text layer never get drawn (the dialog appears blank on the left).
-    // Defer to next frame so the Dialog's real size is in the DOM, then poke
-    // the underlying Ace instance.
-    setTimeout(function () {
-      var oAce = oEditor._oEditor;
-      if (oAce && typeof oAce.resize === "function") {
-        oAce.resize(true);
-        oAce.renderer.updateFull();
-      }
-    }, 0);
   }
 
   // FE V4 manifest-declared press handlers are invoked with

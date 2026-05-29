@@ -1,8 +1,7 @@
 <core:FragmentDefinition
   xmlns:core="sap.ui.core"
   xmlns="sap.m"
-  xmlns:l="sap.ui.layout"
-  xmlns:editor="sap.ui.codeeditor">
+  xmlns:l="sap.ui.layout">
   <Dialog
     id="markdownEditorDialog"
     title="Markdown Editor"
@@ -12,17 +11,18 @@
     <content>
       <l:Splitter height="100%">
         <l:contentAreas>
-          <editor:CodeEditor
+          <TextArea
             id="markdownCodeEditor"
-            type="markdown"
             height="100%"
             width="100%"
-            change=".onEditorChange"
-            liveChange=".onEditorChange">
-            <editor:layoutData>
+            growing="false"
+            wrapping="Off"
+            liveChange=".onEditorChange"
+            class="sapTutorialsMarkdownTextArea">
+            <layoutData>
               <l:SplitterLayoutData size="50%" minSize="200"/>
-            </editor:layoutData>
-          </editor:CodeEditor>
+            </layoutData>
+          </TextArea>
           <ScrollContainer
             id="markdownPreviewContainer"
             height="100%"
