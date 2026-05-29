@@ -63,6 +63,39 @@ describe('renderGroupBody', () => {
     expect(html).toContain('&lt;script&gt;');
   });
 
+  it('renders Markdown in group description (issue #121)', () => {
+    const md = {
+      ...fxGroup,
+      group: {
+        ...fxGroup.group,
+        description: 'Line 1\n\nLine 2 has **bold** and a [link](https://example.com).',
+      },
+    };
+    const html = renderGroupBody(md, { now: TODAY });
+    // Wrapper class still present so existing CSS targets the block.
+    expect(html).toContain('class="group-description"');
+    // Paragraph break and bold from Markdown.
+    expect(html).toMatch(/<p>Line 1<\/p>/);
+    expect(html).toContain('<strong>bold</strong>');
+    // Link rendered as anchor, not as raw markdown text.
+    expect(html).toContain('<a href="https://example.com">link</a>');
+    // Raw markdown markers must NOT survive into the output.
+    expect(html).not.toContain('**bold**');
+  });
+
+  it('does not allow raw HTML in group description', () => {
+    const evil = {
+      ...fxGroup,
+      group: {
+        ...fxGroup.group,
+        description: 'Hi <script>alert(1)</script> there',
+      },
+    };
+    const html = renderGroupBody(evil, { now: TODAY });
+    expect(html).not.toContain('<script>alert(1)</script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
   it('renders an empty timeline when tutorials list is empty', () => {
     const empty = { ...fxGroup, tutorials: [], tutorialCount: 0, totalTime: 0 };
     const html = renderGroupBody(empty, { now: TODAY });
@@ -121,5 +154,35 @@ describe('renderMissionBody', () => {
     expect(html).toContain('class="tutorial-item"');
     expect(html).toContain('href="/tutorials/t1"');
     expect(html).toContain('href="/tutorials/t2"');
+  });
+
+  it('renders Markdown in mission description (issue #121)', () => {
+    const md = {
+      ...fxMission,
+      mission: {
+        ...fxMission.mission,
+        description: 'First line.\n\nSecond *line* with `code`.',
+      },
+    };
+    const html = renderMissionBody(md);
+    expect(html).toContain('class="mission-description"');
+    expect(html).toMatch(/<p>First line\.<\/p>/);
+    expect(html).toContain('<em>line</em>');
+    expect(html).toContain('<code>code</code>');
+    expect(html).not.toContain('*line*');
+  });
+
+  it('does not allow raw HTML in mission description', () => {
+    const evil = {
+      ...fxMission,
+      mission: {
+        ...fxMission.mission,
+        description: '<img src=x onerror=alert(1)>',
+      },
+    };
+    const html = renderMissionBody(evil);
+    expect(html).not.toContain('<img src=x onerror=alert(1)>');
+    // markdown-it with html:false escapes the literal HTML.
+    expect(html).toContain('&lt;img');
   });
 });
