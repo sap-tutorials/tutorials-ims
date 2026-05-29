@@ -64,23 +64,44 @@ export async function cleanupPipelineLog(retentionDays = 30) {
   return result;
 }
 
-export async function cleanupStuckPublishing(olderThanMinutes = 60) {
+export async function cleanupStuckPublishing(olderThanMinutes = 30, legacyOlderThanMinutes = 60) {
   const { ContentManifest } = cds.entities('com.sap.developers.ims');
   const LOG = cds.log('jobs/cleanup');
-  const cutoff = new Date(Date.now() - olderThanMinutes * 60_000).toISOString();
+  const sessionCutoff = new Date(Date.now() - olderThanMinutes * 60_000).toISOString();
+  const legacyCutoff  = new Date(Date.now() - legacyOlderThanMinutes * 60_000).toISOString();
+
+  // Two cohorts:
+  //  - Chunked sessions (sessionId IS NOT NULL): reap on lastAppendAt > olderThanMinutes
+  //  - Legacy single-shot publishes (sessionId IS NULL): reap on createdAt > legacyOlderThanMinutes
+  // Different thresholds because the chunked protocol heartbeats every append (so a
+  // tight 30-min bound is safe) while the legacy single-shot has no heartbeat at all.
   const stuck = await SELECT.from(ContentManifest)
-    .where({ status: 'PUBLISHING', createdAt: { '<': cutoff } })
-    .columns('version');
+    .columns('version', 'sessionId', 'lastAppendAt', 'createdAt')
+    .where`status = 'PUBLISHING' and (
+        (sessionId is not null and lastAppendAt < ${sessionCutoff})
+        or (sessionId is null and createdAt < ${legacyCutoff})
+      )`;
+
   if (stuck.length === 0) {
     LOG.info('No stuck PUBLISHING manifests found');
-    return 0;
+    return { reaped: 0 };
   }
-  const versions = stuck.map(r => r.version);
+
   await UPDATE(ContentManifest)
-    .where({ version: { in: versions } })
+    .where({ version: { in: stuck.map(r => r.version) } })
     .set({ status: 'FAILED' });
-  LOG.info(`Marked ${stuck.length} stuck PUBLISHING manifests as FAILED (older than ${olderThanMinutes}m)`);
-  return stuck.length;
+
+  // Best-effort lock release — chunked sessions hold the content-publish lock
+  // and we want a fresh begin to be able to acquire it without waiting for TTL.
+  try {
+    const { releaseLock } = await import('./job-lock.js');
+    await releaseLock('content-publish', process.env.CF_INSTANCE_GUID || `local-${process.pid}`, 'com.sap.developers.ims').catch(() => {});
+  } catch { /* job-lock unavailable in test contexts is fine */ }
+
+  const chunked = stuck.filter(r => r.sessionId).length;
+  const legacy  = stuck.length - chunked;
+  LOG.info(`Marked ${stuck.length} stuck PUBLISHING manifests as FAILED (chunked: ${chunked} > ${olderThanMinutes}m, legacy: ${legacy} > ${legacyOlderThanMinutes}m)`);
+  return { reaped: stuck.length, sessionIds: stuck.filter(r => r.sessionId).map(r => r.sessionId) };
 }
 
 export async function pruneOrphanEmbeddings() {
