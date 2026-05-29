@@ -7,7 +7,9 @@ import { acquireLock, releaseLock } from '../jobs/job-lock.js';
 import { logPipelineStart, logPipelineEnd, logPipelineItem } from './pipeline-log.js';
 import { getNextLegacyId } from './legacy-id.js';
 import { embedSlugs } from './embedding-pipeline.js';
-import { renderCatalogPage } from './render-catalog-page.js';
+import { renderCatalogPage } from './catalog-renderer.js';
+import { loadGroupContext, loadMissionContext } from './catalog-data.js';
+import { createShellLoader, ShellMarkerError, composeShell } from './chrome-shell.js';
 
 const LOG = cds.log('content-store');
 const LOCK_NAME = 'content-publish';
@@ -116,9 +118,28 @@ class ContentCache {
     this.map.clear();
     this.totalBytes = 0;
   }
+
+  invalidateByPrefix(prefix) {
+    let removed = 0;
+    for (const key of [...this.map.keys()]) {
+      if (key.startsWith(prefix)) {
+        const entry = this.map.get(key);
+        this.totalBytes -= entry.buffer.length;
+        this.map.delete(key);
+        removed++;
+      }
+    }
+    return removed;
+  }
 }
 
 const cache = new ContentCache();
+
+// Exported so AdminService write hooks can invalidate render: entries when
+// catalog data changes between publishes. See srv/server.js > 'served'.
+export function invalidateRenderCache() {
+  return cache.invalidateByPrefix('render:');
+}
 
 // --- Factory ---
 // Creates a set of content handlers bound to a specific CDS namespace and API key env var.
@@ -159,6 +180,8 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       .columns('version');
     return row?.version ?? null;
   }
+
+  const shellLoader = createShellLoader({ namespace, hanaTableName, getActiveVersion });
 
   async function getNextVersion() {
     const { ContentManifest } = cds.entities(namespace);
@@ -671,6 +694,72 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       }
     }
 
+    // Catalog branch: groups/missions are server-rendered from DB content
+    // (no ContentFiles row exists for them after the #91 migration). Falls
+    // through to the regular ContentFiles path for any non-prefixed slug.
+    if (slug.startsWith('group-') || slug.startsWith('mission-')) {
+      const cacheKey = `render:${slug}`;
+      const cachedRender = cache.get(cacheKey);
+      if (cachedRender) {
+        const ifNoneMatch = req.headers['if-none-match'];
+        if (ifNoneMatch && ifNoneMatch === `"${cachedRender.hash}"`) {
+          return res.status(304).end();
+        }
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('ETag', `"${cachedRender.hash}"`);
+        res.setHeader('Cache-Control', 'public, max-age=300');
+        res.setHeader('X-Content-Source', 'render-cache');
+        return res.send(cachedRender.buffer);
+      }
+
+      try {
+        const rendered = await renderCatalogPage(slug, {
+          loadGroupContext,
+          loadMissionContext,
+          shellLoader,
+        });
+        if (!rendered) return serveNotFound(res, slug);
+
+        // Compose body into chrome shell. If shell load/parse fails, fall
+        // back to a minimal stripped shell so the page still renders.
+        let html;
+        try {
+          const shell = await shellLoader.get();
+          if (!shell) throw new ShellMarkerError('shell unavailable');
+          html = composeShell(shell, rendered.body, rendered.pageMeta);
+        } catch (err) {
+          console.warn(
+            '[content/serve:catalog] chrome shell missing — degraded rendering until next publish:',
+            err.message,
+          );
+          const m = rendered.pageMeta;
+          const safe = (s) => String(s).replace(/[<&"]/g, c =>
+            ({ '<': '&lt;', '&': '&amp;', '"': '&quot;' }[c]));
+          html =
+            `<!DOCTYPE html><html lang="en" data-page-kind="${m.kind}" ` +
+            `data-page-slug="${safe(m.slug)}" data-page-title="${safe(m.title)}">` +
+            `<head><meta charset="utf-8"><title>${safe(m.title)}</title>` +
+            `<link rel="stylesheet" href="/css/sap-theme-vars.css">` +
+            `<link rel="stylesheet" href="/css/sap-fundamental.css">` +
+            `</head><body><main>${rendered.body}</main></body></html>`;
+        }
+
+        const buffer = Buffer.from(html, 'utf-8');
+        const hash = createHash('sha256').update(buffer).digest('hex');
+        cache.set(cacheKey, buffer, hash);
+
+        res.setHeader('Content-Type', rendered.contentType);
+        res.setHeader('ETag', `"${hash}"`);
+        res.setHeader('Cache-Control', 'public, max-age=300');
+        res.setHeader('X-Content-Source', 'rendered');
+        return res.status(200).send(buffer);
+      } catch (err) {
+        console.error('[content/serve:catalog]',
+          err instanceof Error ? err.message : String(err));
+        return res.status(500).json({ error: 'Catalog page render failed' });
+      }
+    }
+
     // Status-aware lookup: a soft-deleted tutorial may either redirect or 404.
     // We do this before the cache hit so an admin status change takes effect immediately.
     const [tutMeta] = await SELECT.from(Tutorials)
@@ -719,19 +808,6 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         .columns('contentHash', 'mimeType', 'version');
 
       if (!meta) {
-        // Group/Mission catalog pages: if no published HTML exists, synthesize
-        // a page from DB so newly created Groups/Missions don't 404 between
-        // admin save and the next `rebuild-content.yml` run (issue #74).
-        if (slug.startsWith('group-') || slug.startsWith('mission-')) {
-          const synthesized = await renderCatalogPage(slug);
-          if (synthesized) {
-            res.setHeader('Content-Type', synthesized.contentType);
-            // Short cache: a CI publish should replace this within minutes.
-            res.setHeader('Cache-Control', 'public, max-age=60');
-            res.setHeader('X-Content-Source', 'synthesized');
-            return res.status(synthesized.status).send(synthesized.body);
-          }
-        }
         return serveNotFound(res, slug);
       }
 
@@ -789,7 +865,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
 
       const map = {};
       for (const row of rows) {
-        if (row.slug === '__nav__' || row.slug === '__404__') continue;
+        if (row.slug === '__nav__' || row.slug === '__404__' || row.slug === '__shell__') continue;
         map[row.slug] = row.contentHash;
       }
 
@@ -810,7 +886,9 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       .where({ version: activeVersion })
       .columns('slug', 'sizeBytes');
 
-    const slugs = contentRows.filter(r => r.slug !== '__nav__' && r.slug !== '__404__').map(r => r.slug);
+    const slugs = contentRows.filter(r =>
+      r.slug !== '__nav__' && r.slug !== '__404__' && r.slug !== '__shell__'
+    ).map(r => r.slug);
     if (slugs.length === 0) {
       res.setHeader('Cache-Control', 'public, max-age=60');
       return res.json({ version: activeVersion, count: 0, tutorials: [] });
@@ -875,7 +953,10 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     );
 
     const tutorials = contentRows
-      .filter(r => r.slug !== '__nav__' && r.slug !== '__404__' && !inactiveSlugs.has(r.slug))
+      .filter(r =>
+        r.slug !== '__nav__' && r.slug !== '__404__' &&
+        r.slug !== '__shell__' && !inactiveSlugs.has(r.slug)
+      )
       .map(r => {
         const meta = tutMap[r.slug];
         return {
