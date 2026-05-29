@@ -37,7 +37,6 @@
       "libs": {
         "sap.fe.templates": {},
         "sap.f": {},
-        "sap.ui.codeeditor": {},
         "sap.ui.layout": {}
       }
     },
