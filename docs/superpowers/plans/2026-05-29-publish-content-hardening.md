@@ -233,6 +233,8 @@ the lock at the same time they are marked FAILED."
 
 This task adds `appendToSession` and folds in the metadata and body-text upsert logic from the legacy `publishHandler` ([srv/lib/content-store.js:405-571](../../srv/lib/content-store.js#L405)). Per the spec, that work runs per batch in the new flow, not at commit time.
 
+**Before you start:** Read [srv/lib/content-store.js:405-571](../../srv/lib/content-store.js#L405) end-to-end. The metadata loop has subtle behavior that took prior PRs to get right — `recomputeTutorialProgress` after step upsert, `legacyId` allocation order, and the `reviewedDate` skip-if-newer logic in TutorialMeta. The plan asks you to lift this verbatim; do not rewrite it.
+
 **Files:**
 - Modify: `srv/lib/content-publish-session.js`
 - Modify: `srv/__tests__/lib/content-publish-session.test.js`
@@ -416,6 +418,8 @@ phase stays in commit (next task)."
 ## Task 2c: Server-side session helper — commitSession and abortSession
 
 `commitSession` runs the carry-forward, recomputes `TaskRecords` progress for affected tutorials, flips the new manifest to `ACTIVE`, supersedes the previous, releases the lock, and invalidates the cache. It is **idempotent** — calling it on a manifest that is already `ACTIVE` returns the same result without re-running the carry-forward. This is what makes the new protocol robust against the gorouter timeout drop that motivated the spec.
+
+**Before you start:** Read [srv/lib/content-store.js:320-378](../../srv/lib/content-store.js#L320) — the carry-forward block. There is a HANA-vs-SQLite split (raw SQL on HANA to dodge LOB locator expiry; CDS QL on SQLite for unit tests — see the `feedback_hana_lob_locator_expiry` memory). Lift the entire branching block verbatim into your new `carryForwardUnchanged` helper. Also read the surrounding `recomputeTutorialProgress` call (around line 470) — it must run inside `commit`, not append, because it depends on the merged file set.
 
 **Files:**
 - Modify: `srv/lib/content-publish-session.js`
@@ -905,18 +909,25 @@ Expected: FAIL — likely "v2.status to be PUBLISHING but got FAILED" because to
 
 - [ ] **Step 3: Update cleanupStuckPublishing**
 
-Open `srv/jobs/cleanup.js`. Replace the body of `cleanupStuckPublishing` (around line 67) with logic that filters on `sessionId IS NOT NULL` and uses `lastAppendAt` rather than `createdAt`:
+Open `srv/jobs/cleanup.js`. Replace the body of `cleanupStuckPublishing` (around line 67) with logic that filters chunked sessions on `lastAppendAt` and keeps the legacy `createdAt`-based fallback for rows where `sessionId IS NULL`:
 
 ```js
-export async function cleanupStuckPublishing(olderThanMinutes = 30) {
+export async function cleanupStuckPublishing(olderThanMinutes = 30, legacyOlderThanMinutes = 60) {
   const { ContentManifest } = cds.entities('com.sap.developers.ims');
-  const cutoff = new Date(Date.now() - olderThanMinutes * 60 * 1000).toISOString();
+  const sessionCutoff = new Date(Date.now() - olderThanMinutes * 60 * 1000).toISOString();
+  const legacyCutoff  = new Date(Date.now() - legacyOlderThanMinutes * 60 * 1000).toISOString();
 
-  // Only reap chunked sessions (sessionId IS NOT NULL). Legacy single-shot
-  // publishes are protected: they have NULL sessionId and lastAppendAt.
+  // Two cohorts:
+  //  - Chunked sessions (sessionId IS NOT NULL): reap on lastAppendAt > 30 min
+  //  - Legacy single-shot publishes (sessionId IS NULL): reap on createdAt > 60 min
+  // Different thresholds because the chunked protocol heartbeats every append (so 30
+  // min is a tight bound) while the legacy single-shot has no heartbeat at all.
   const stuck = await SELECT.from(ContentManifest)
-    .columns('version', 'sessionId', 'lastAppendAt')
-    .where`status = 'PUBLISHING' and sessionId is not null and lastAppendAt < ${cutoff}`;
+    .columns('version', 'sessionId', 'lastAppendAt', 'createdAt')
+    .where`status = 'PUBLISHING' and (
+        (sessionId is not null and lastAppendAt < ${sessionCutoff})
+        or (sessionId is null and createdAt < ${legacyCutoff})
+      )`;
 
   if (stuck.length === 0) {
     return { reaped: 0 };
@@ -926,16 +937,38 @@ export async function cleanupStuckPublishing(olderThanMinutes = 30) {
     .where({ version: { in: stuck.map(r => r.version) } })
     .set({ status: 'FAILED' });
 
-  // Best-effort lock release — if the lock has already expired in the lock
-  // table this is a no-op. We do NOT touch other namespaces.
+  // Best-effort lock release.
   try {
     const { releaseLock } = await import('../lib/job-lock.js');
     await releaseLock('content-publish', process.env.CF_INSTANCE_GUID || `local-${process.pid}`, 'com.sap.developers.ims').catch(() => {});
   } catch { /* job-lock unavailable in test contexts is fine */ }
 
-  LOG.info(`Marked ${stuck.length} stuck PUBLISHING manifests as FAILED (threshold ${olderThanMinutes}m)`);
-  return { reaped: stuck.length, sessionIds: stuck.map(r => r.sessionId) };
+  const chunked = stuck.filter(r => r.sessionId).length;
+  const legacy  = stuck.length - chunked;
+  LOG.info(`Marked ${stuck.length} stuck PUBLISHING manifests as FAILED (chunked: ${chunked} > ${olderThanMinutes}m, legacy: ${legacy} > ${legacyOlderThanMinutes}m)`);
+  return { reaped: stuck.length, sessionIds: stuck.filter(r => r.sessionId).map(r => r.sessionId) };
 }
+```
+
+The test from Step 1 still passes because the legacy row's `createdAt` (set via `oldDate` 31 minutes back) is younger than the legacy 60-min threshold, so it stays PUBLISHING. **Update the test to assert this explicitly** — extend the test from Step 1:
+
+```js
+  it('reaps legacy single-shot publishes (sessionId NULL) using createdAt and a longer threshold', async () => {
+    const { ContentManifest } = cds.entities(NS);
+    const veryOld = new Date(Date.now() - 61 * 60 * 1000).toISOString();
+
+    await INSERT.into(ContentManifest).entries({
+      version: 3, status: 'PUBLISHING', sessionId: null,
+      lastAppendAt: null, createdAt: veryOld,
+      fileCount: 0, totalSizeBytes: 0,
+      changedSlugs: '[]', trigger: 'legacy-very-old'
+    });
+
+    await cleanupStuckPublishing(30, 60);
+
+    const v3 = await SELECT.one.from(ContentManifest).where({ version: 3 });
+    expect(v3.status).toBe('FAILED');
+  });
 ```
 
 - [ ] **Step 4: Update the cron schedule**
@@ -1593,7 +1626,9 @@ export function computePublishPlan(opts: {
 
 - [ ] **Step 4: Replace the single-shot publish path with the chunked flow**
 
-In `scripts/publish-content.ts`, locate the block that runs from `Building payload...` (around line 387) through the end of `main()`. Replace from `log('Building payload...');` onwards with:
+In `scripts/publish-content.ts`, locate the block that runs from `Building payload...` (around line 387) through the end of `main()`. **Keep the existing pure-function definitions intact** — `discoverTutorials`, `validateProductionBuild`, `computeLocalHashes`, `computeDiff`, `buildPayload`, `extractMetadata`, `extractAllBodyTexts`, `extractBodyText` and the `DEV_ARTIFACT_PATTERNS` constants are all called by the new code. Do not delete any pure helper.
+
+Replace from `log('Building payload...');` onwards with:
 
 ```ts
   validateFlagCombo({ force: opts.force, heal: opts.heal, verifyOnly: opts.verifyOnly });
@@ -2176,7 +2211,10 @@ Expected: Existing hybrid tests pass + new content-publish-chunked test passes.
 
 ```bash
 git push -u origin harden/publish-content-chunked
-gh pr create --base main --title "feat(content-publish): chunked publish protocol with auto-verify" --body "$(cat <<'EOF'
+
+# Write the PR body to a temp file. On Windows Git Bash, nested heredocs inside
+# `"$(...)"` substitution can mangle newlines — using --body-file is more robust.
+cat > /tmp/pr-body.md <<'EOF'
 Closes the 2026-05-29 false-negative deploy bug. Replaces the single-shot
 53MB POST with begin/append/commit chunking, parallel appends, per-batch
 retry, and post-publish auto-verification.
@@ -2191,7 +2229,7 @@ Plan: docs/superpowers/plans/2026-05-29-publish-content-hardening.md
 - Per-batch retry 3× (1s/3s/9s) with err.cause walking
 - Idempotent commit + auto-verify after every publish — closes the false-negative at the protocol level
 - New flags: --verify-only, --heal, --concurrency, --batch-size
-- GC reaper tightened to 5-min cadence, 30-min threshold
+- GC reaper tightened to 5-min cadence, 30-min threshold (chunked) / 60-min (legacy)
 - Legacy /content/publish frozen-deprecated for one release cycle
 
 ## Tests
@@ -2200,7 +2238,10 @@ Plan: docs/superpowers/plans/2026-05-29-publish-content-hardening.md
 - Hybrid: full begin/append/commit + abort + idempotent commit on real HANA
 - Manual: see plan §10 step 6/7
 EOF
-)"
+
+gh pr create --base main \
+  --title "feat(content-publish): chunked publish protocol with auto-verify" \
+  --body-file /tmp/pr-body.md
 ```
 
 ---
