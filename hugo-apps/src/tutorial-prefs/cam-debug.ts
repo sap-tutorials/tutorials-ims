@@ -8,7 +8,7 @@
 // the model is producing values the detectors would ever fire on.
 
 import {
-  GAZE_BOTTOM_THRESHOLD, GAZE_DWELL_MS,
+  GAZE_BOTTOM_THRESHOLD, GAZE_HEAD_PITCH_MAX, GAZE_DWELL_MS,
   SWIPE_MIN_DX_FRACTION, SWIPE_MIN_VELOCITY,
   type FeatureId
 } from './constants';
@@ -16,7 +16,7 @@ import {
 interface EyeReport {
   kind: 'eye';
   gazeY: number;
-  pitch: number;        // raw pitch value (headForward = pitch < 0.06)
+  pitch: number;        // raw pitch value (headForward = pitch < GAZE_HEAD_PITCH_MAX)
   headForward: boolean;
   dwellMs: number;      // 0 if not currently dwelling
   faceSeen: boolean;
@@ -95,7 +95,7 @@ export function createDebugOverlay(enabled: boolean): OverlayHandle | null {
       'EYE',
       `face       ${tick(r.faceSeen)}`,
       `gazeY      ${fmt(r.gazeY)}  > ${GAZE_BOTTOM_THRESHOLD}  ${tick(r.gazeY > GAZE_BOTTOM_THRESHOLD)}`,
-      `pitch      ${fmt(r.pitch, 3)}  < 0.06  ${tick(r.headForward)}`,
+      `pitch      ${fmt(r.pitch, 3)}  < ${GAZE_HEAD_PITCH_MAX}  ${tick(r.headForward)}`,
       `dwell      ${r.dwellMs} / ${GAZE_DWELL_MS} ms`,
       `eligible   ${tick(eligible)}`
     ];

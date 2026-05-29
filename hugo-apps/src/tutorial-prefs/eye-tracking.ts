@@ -1,5 +1,5 @@
 import {
-  GAZE_BOTTOM_THRESHOLD, GAZE_DWELL_MS, GAZE_FIRE_COOLDOWN_MS,
+  GAZE_BOTTOM_THRESHOLD, GAZE_HEAD_PITCH_MAX, GAZE_DWELL_MS, GAZE_FIRE_COOLDOWN_MS,
   FRAME_INTERVAL_MS, NO_FACE_TIMEOUT_MS, SCROLL_VIEWPORT_FRACTION,
   MEDIAPIPE_WASM_BASE, MODEL_FACE, SLOW_FRAME_MS, SLOW_FRAME_RUN
 } from './constants';
@@ -133,7 +133,7 @@ function computeGazeFrame(lm: Array<{ x: number; y: number; z: number }>): GazeF
   const nose = lm[1];
   const eyeMidY = (lm[33].y + lm[263].y) / 2;
   const pitch = nose.y - eyeMidY;
-  const headForward = pitch < 0.06;
+  const headForward = pitch < GAZE_HEAD_PITCH_MAX;
 
   return { gazeY, headForward, pitch };
 }
