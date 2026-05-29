@@ -48,6 +48,7 @@
   <script src="/js/joule.js" defer></script>
   {{ end }}
   {{ if not site.Params.previewMode }}<script src="/js/cmd-palette.js" defer type="module"></script>{{ end }}
+  {{ if eq .Type "tutorials" }}{{ if not site.Params.qa }}<script type="module" src="/js/tutorial-breadcrumbs.js" defer></script>{{ end }}{{ end }}
   {{ $ui5 := resources.Get "js/ui5-bootstrap.ts" | js.Build (dict "minify" true "format" "esm" "target" "es2020") }}
   <script type="module" src="{{ $ui5.RelPermalink }}"></script>
 </body>

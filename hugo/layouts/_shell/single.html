@@ -1,0 +1,6 @@
+{{/* Empty <main> is the splice anchor for publish-content.ts. The Hugo
+     minifier strips ALL HTML comments, so we cannot embed a textual
+     marker — instead the publisher targets `<main>...</main>` literally
+     and substitutes the `<!-- MAIN -->` marker into the BLOB at upload
+     time. See scripts/publish-content.ts and srv/lib/chrome-shell.js. */}}
+{{ define "main" }}{{ end }}

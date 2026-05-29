@@ -7,9 +7,10 @@ import { buildCatalogHandler } from './lib/build-catalog.js';
 import { coCompletionsHandler } from './lib/co-completion.js';
 import { recommendationsHandler } from './handlers/recommendations.js';
 import { navigatorCatalogHandler, invalidateNavigatorCache } from './lib/navigator-catalog.js';
+import { breadcrumbContextHandler } from './lib/breadcrumb-context.js';
 import { myProgressHandler } from './lib/my-progress-handler.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
-import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, navHandler, rollbackHandler } from './lib/content-store.js';
+import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, navHandler, rollbackHandler, invalidateRenderCache } from './lib/content-store.js';
 import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-catalog.js';
 import { buildSystemPrompt } from './lib/chat-context.js';
 import { createRateLimiter, RateLimitError } from './lib/chat-rate-limit.js';
@@ -115,6 +116,7 @@ cds.on('bootstrap', (app) => {
   app.get('/build/catalog', buildCatalogHandler);
   app.get('/build/co-completions', coCompletionsHandler);
   app.get('/build/navigator', navigatorCatalogHandler);
+  app.get('/build/breadcrumb-context', breadcrumbContextHandler);
   app.get('/build/slug-mapping', async (req, res) => {
     const { buildSlugMapping } = await import('./lib/slug-mapping.js');
     const mapping = await buildSlugMapping();
@@ -230,6 +232,14 @@ cds.on('served', async () => {
         invalidateNavigatorCache();
       } catch (err) {
         console.error('[navigator] cache invalidation failed', err);
+      }
+      try {
+        const removed = invalidateRenderCache();
+        if (removed > 0) {
+          console.log(`[render-cache] invalidated ${removed} entries after admin write`);
+        }
+      } catch (err) {
+        console.error('[render-cache] cache invalidation failed', err);
       }
     });
     globalThis.__navigatorCacheInvalidatorRegistered = true;
