@@ -18,6 +18,21 @@ describe('Content serving (tutorials from HANA)', () => {
     }
   });
 
+  // Issue #114: catalog pages (group-/mission-) have been runtime-SSR'd from
+  // the DB since PR #115. They must NEVER appear in /content/hashes, which
+  // would mean a phantom ContentFiles row plus a phantom Tutorials row that
+  // leaks into the Admin UI. The publish handler now drops them on the way
+  // in; this smoke test guards against regressions or stale snapshots.
+  it('GET /content/hashes contains no group-/mission- slugs', async () => {
+    const res = await fetchWithRetry(`${SRV_URL}/content/hashes`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const polluted = Object.keys(body).filter(
+      s => s.startsWith('group-') || s.startsWith('mission-')
+    );
+    expect(polluted, `catalog slug pollution: ${polluted.join(', ')}`).toEqual([]);
+  });
+
   it('GET /tutorials/<slug>/ returns HTML with ETag', async () => {
     if (!knownSlug) return; // skip if no content published yet
 

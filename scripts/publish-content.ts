@@ -83,6 +83,27 @@ export function discoverTutorials(hugoDir: string): Map<string, string> {
   return result;
 }
 
+// A slug points at a runtime-SSR'd catalog page (groups/missions) since PR
+// #115 (#91). Such slugs must NEVER reach the publish endpoint; the server
+// rejects them too, but we strip locally as well so payload size and CI
+// logs stay clean. See issue #114.
+export function isCatalogSlug(slug: string): boolean {
+  return slug.startsWith('group-') || slug.startsWith('mission-');
+}
+
+// Strips catalog slugs from the discovery map in place, returning the
+// removed slugs in deterministic (sorted) order so callers can log them.
+export function stripCatalogSlugs(tutorials: Map<string, string>): string[] {
+  const dropped: string[] = [];
+  for (const slug of tutorials.keys()) {
+    if (isCatalogSlug(slug)) {
+      dropped.push(slug);
+      tutorials.delete(slug);
+    }
+  }
+  return dropped.sort();
+}
+
 export function computeLocalHashes(tutorials: Map<string, string>): Map<string, string> {
   const hashes = new Map<string, string>();
   for (const [slug, filePath] of tutorials) {
@@ -287,6 +308,21 @@ async function main() {
 
   log(`Discovering tutorials in ${opts.hugoDir}...`);
   const tutorials = discoverTutorials(opts.hugoDir);
+
+  // Drop any stale group-*/mission-* directories left in hugo/public/tutorials
+  // by older builds. Catalog pages have been runtime-SSR'd from the DB since
+  // PR #115 (#91); shipping them would create phantom Tutorials rows in HANA
+  // and leak into the Admin UI Tutorials list (#114). The server enforces the
+  // same filter, this is just a nicety so we don't waste a few KB of payload.
+  const droppedCatalogSlugs = stripCatalogSlugs(tutorials);
+  if (droppedCatalogSlugs.length) {
+    console.warn(
+      `[publish-content] dropping ${droppedCatalogSlugs.length} stale catalog ` +
+      `slug(s) from Hugo output (these are SSR'd from DB, not published): ` +
+      droppedCatalogSlugs.slice(0, 10).join(', ') +
+      (droppedCatalogSlugs.length > 10 ? ` (+${droppedCatalogSlugs.length - 10} more)` : '')
+    );
+  }
 
   if (tutorials.size === 0) {
     console.error('Error: No tutorials found. Did you run the Hugo build?');

@@ -26,7 +26,32 @@ async function toBuffer(data) {
   return Buffer.from(data);
 }
 
-export { toBuffer };
+// Catalog pages (/tutorials/group-* and /tutorials/mission-*) are SSR'd from
+// the Groups/Missions tables via catalog-data.js + catalog-renderer.js since
+// PR #115 (#91). They must NEVER be persisted into ContentFiles or Tutorials,
+// or they leak as phantom rows into the Admin UI Tutorials list (issue #114).
+// Defense lives here so any caller — CI, ad-hoc local publish, future
+// scripts — gets the same safety net regardless of what their hugo/public
+// directory happens to contain.
+function isCatalogSlug(slug) {
+  return typeof slug === 'string'
+    && (slug.startsWith('group-') || slug.startsWith('mission-'));
+}
+
+// Filter a slug-keyed object in place, returning the dropped keys for logging.
+function dropCatalogSlugs(obj) {
+  if (!obj || typeof obj !== 'object') return [];
+  const dropped = [];
+  for (const key of Object.keys(obj)) {
+    if (isCatalogSlug(key)) {
+      dropped.push(key);
+      delete obj[key];
+    }
+  }
+  return dropped;
+}
+
+export { toBuffer, isCatalogSlug, dropCatalogSlugs };
 
 // Re-evaluate every TUTORIAL TaskRecord for `tutorialId` against the
 // authoritative step count (`stepCount`) and the user's actual completed STEP
@@ -199,6 +224,29 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
 
     if (!files || typeof files !== 'object' || Object.keys(files).length === 0) {
       return res.status(400).json({ error: 'Missing or empty "files" object' });
+    }
+
+    // Drop catalog slugs (group-*/mission-*) from every payload section
+    // before any DB write. These are runtime-SSR'd, never persisted (#114).
+    const droppedFiles    = dropCatalogSlugs(files);
+    const droppedMetadata = dropCatalogSlugs(metadata);
+    const droppedBodies   = dropCatalogSlugs(bodyTexts);
+    const droppedAll      = [...new Set([...droppedFiles, ...droppedMetadata, ...droppedBodies])];
+    if (droppedAll.length) {
+      console.warn(
+        `[content/publish] dropped ${droppedAll.length} catalog slug(s) — ` +
+        `these are SSR'd from Groups/Missions tables, not ContentFiles. ` +
+        `Slugs: ${droppedAll.slice(0, 10).join(', ')}` +
+        (droppedAll.length > 10 ? ` (+${droppedAll.length - 10} more)` : '')
+      );
+    }
+
+    if (Object.keys(files).length === 0) {
+      // Whole publish was catalog slugs — nothing legitimate to write.
+      return res.status(400).json({
+        error: 'Publish payload contained only catalog slugs (group-*/mission-*); ' +
+          'these are runtime-SSR\'d and cannot be published.'
+      });
     }
 
     const slugCount = Object.keys(files).length;
