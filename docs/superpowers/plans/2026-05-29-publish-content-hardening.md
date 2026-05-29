@@ -74,7 +74,7 @@ If compile fails with a message about FAILED already existing or string-length e
 
 - [ ] **Step 3: Run the existing unit tests to make sure schema changes don't break anything**
 
-Run: `npm test -- --reporter=basic --project=unit content-store`
+Run: `npm test -- --project=unit content-store`
 Expected: All existing content-store tests pass. Any failure here is a regression — investigate before continuing.
 
 - [ ] **Step 4: Commit**
@@ -2194,7 +2194,7 @@ Memory updates are not committed (memory lives outside the repo).
 - [ ] **Step 6: Final verification — full unit run**
 
 ```bash
-npm test -- --reporter=basic
+npm test
 ```
 
 Expected: All unit tests pass. New tests added: publish-retry, publish-batcher, publish-client, publish-content-cli, content-publish-session, content-publish-routes, cleanup (extended).
