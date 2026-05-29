@@ -372,6 +372,41 @@ async function main() {
     log(`Included 404 page (${notFoundContent.length} bytes)`);
   }
 
+  // Include the chrome shell for catalog pages (groups/missions). The CAP
+  // serveHandler splits this on the <!-- MAIN --> marker and splices a
+  // server-rendered body into it. Failing to ship this aborts the whole
+  // publish — a half-broken publish would 500 every catalog page until the
+  // next CI run. (#91)
+  const shellPath = join(opts.hugoDir, '_shell', 'index.html');
+  if (!existsSync(shellPath)) {
+    throw new Error(
+      `[publish-content] _shell/index.html missing — Hugo build did not emit ` +
+      `the chrome shell. Did the _shell layout get deleted? Path: ${shellPath}`
+    );
+  }
+  const shellRaw = readFileSync(shellPath, 'utf-8');
+  // Slice <main>...</main> out of the rendered shell and replace with the
+  // marker the chrome-shell loader splits on. The minifier collapses the
+  // <main> tag to a single line so a single regex suffices.
+  const mainMatch = shellRaw.match(/<main\b[^>]*>[\s\S]*?<\/main>/);
+  if (!mainMatch) {
+    throw new Error(
+      `[publish-content] _shell/index.html does not contain <main>...</main> — ` +
+      `cannot extract chrome shell. Inspect the file to debug.`
+    );
+  }
+  const shellHtml = shellRaw.replace(mainMatch[0], '<!-- MAIN -->');
+  if (shellHtml.length < 1000) {
+    // Sanity check: the shell should include header, footer, glossary popover,
+    // toast, and lightbox. If it's tiny, something stripped the chrome.
+    throw new Error(
+      `[publish-content] chrome shell suspiciously small ` +
+      `(${shellHtml.length} bytes). Refusing to publish.`
+    );
+  }
+  payload['__shell__'] = gzipSync(Buffer.from(shellHtml, 'utf-8')).toString('base64');
+  log(`Included chrome shell (${shellHtml.length} bytes raw, ${payload['__shell__'].length} bytes b64-gz)`);
+
   // Extract tutorial metadata for DB upsert (self-healing — ensures Tutorials + Steps exist)
   const hugoContentDir = join(opts.hugoDir, '..', 'content', 'tutorials');
   const allSlugs = [...tutorials.keys()];
