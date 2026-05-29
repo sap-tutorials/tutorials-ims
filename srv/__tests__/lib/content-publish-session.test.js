@@ -86,4 +86,51 @@ describe('content-publish-session', () => {
     const after = (await SELECT.one.from(ContentManifest).where({ sessionId })).lastAppendAt;
     expect(new Date(after).getTime()).toBeGreaterThan(new Date(before).getTime());
   });
+
+  it('commitSession flips manifest to ACTIVE and supersedes the previous version', async () => {
+    const { ContentManifest } = cds.entities(NS);
+
+    // Seed a previous ACTIVE so we can verify carry-forward and supersede.
+    const prev = await helpers.beginPublishSession({ trigger: 'prev', hugoVersion: 'v1', expectedSlugCount: 0 });
+    await helpers.commitSession({ sessionId: prev.sessionId });
+
+    const next = await helpers.beginPublishSession({ trigger: 'next', hugoVersion: 'v1', expectedSlugCount: 0 });
+    const result = await helpers.commitSession({ sessionId: next.sessionId });
+
+    expect(result.version).toBe(next.version);
+    expect(result.durationMs).toBeGreaterThanOrEqual(0);
+
+    const newRow = await SELECT.one.from(ContentManifest).where({ version: next.version });
+    const oldRow = await SELECT.one.from(ContentManifest).where({ version: prev.version });
+    expect(newRow.status).toBe('ACTIVE');
+    expect(oldRow.status).toBe('SUPERSEDED');
+  });
+
+  it('commitSession is idempotent when called on an already-ACTIVE manifest', async () => {
+    const { sessionId } = await helpers.beginPublishSession({ trigger: 't', hugoVersion: 'v1', expectedSlugCount: 0 });
+    const first = await helpers.commitSession({ sessionId });
+    const second = await helpers.commitSession({ sessionId });
+    expect(second.version).toBe(first.version);
+    expect(second.alreadyActive).toBe(true);
+  });
+
+  it('abortSession marks the manifest FAILED and releases the lock', async () => {
+    const { ContentManifest } = cds.entities(NS);
+    const { sessionId, version } = await helpers.beginPublishSession({ trigger: 't', hugoVersion: 'v1', expectedSlugCount: 0 });
+
+    await helpers.abortSession({ sessionId, reason: 'test' });
+
+    const row = await SELECT.one.from(ContentManifest).where({ version });
+    expect(row.status).toBe('FAILED');
+
+    // Lock released — a fresh begin should succeed.
+    const next = await helpers.beginPublishSession({ trigger: 't2', hugoVersion: 'v1', expectedSlugCount: 0 });
+    expect(next.sessionId).not.toBe(sessionId);
+  });
+
+  it('abortSession is idempotent when the manifest is already FAILED', async () => {
+    const { sessionId } = await helpers.beginPublishSession({ trigger: 't', hugoVersion: 'v1', expectedSlugCount: 0 });
+    await helpers.abortSession({ sessionId, reason: 'first' });
+    await expect(helpers.abortSession({ sessionId, reason: 'second' })).resolves.toMatchObject({ aborted: true });
+  });
 });

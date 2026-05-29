@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 import { acquireLock, releaseLock } from '../jobs/job-lock.js';
 import { getNextLegacyId } from './legacy-id.js';
-import { recomputeTutorialProgress } from './content-store.js';
+import { recomputeTutorialProgress, toBuffer } from './content-store.js';
 
 const LOG = cds.log('content-publish');
 const LOCK_NAME = 'content-publish';
@@ -112,7 +112,107 @@ export function createSessionHelpers({ namespace }) {
     };
   }
 
-  return { beginPublishSession, appendToSession };
+  // Derive the HANA table name from the namespace, matching content-store.js.
+  const hanaTableName = () => `${namespace.replace(/\./g, '_').toUpperCase()}_CONTENTFILES`;
+
+  async function getActiveVersion() {
+    const { ContentManifest } = cds.entities(namespace);
+    const [row] = await SELECT.from(ContentManifest)
+      .where({ status: 'ACTIVE' })
+      .columns('version');
+    return row?.version ?? null;
+  }
+
+  async function commitSession({ sessionId }) {
+    const { ContentManifest } = cds.entities(namespace);
+
+    const existing = await SELECT.one.from(ContentManifest).where({ sessionId });
+    if (!existing) {
+      const err = new Error(`No manifest for sessionId ${sessionId}`);
+      err.statusCode = 404;
+      throw err;
+    }
+    if (existing.status === 'ACTIVE') {
+      return {
+        version: existing.version,
+        fileCount: existing.fileCount,
+        totalSizeBytes: existing.totalSizeBytes,
+        durationMs: existing.publishDurationMs || 0,
+        alreadyActive: true
+      };
+    }
+    if (existing.status !== 'PUBLISHING') {
+      const err = new Error(`Cannot commit session in status ${existing.status}`);
+      err.statusCode = 409;
+      throw err;
+    }
+
+    const startTime = Date.now();
+    const newVersion = existing.version;
+
+    // Carry forward unchanged slugs from the previously-ACTIVE manifest.
+    // This logic is lifted verbatim from the legacy publishHandler at
+    // srv/lib/content-store.js:320-378 so prod/SQLite parity is preserved.
+    const { carriedForward, carriedSize } = await carryForwardUnchanged(namespace, newVersion, hanaTableName, getActiveVersion);
+
+    // Count how many slugs were actually written by /append for this version
+    // so the manifest fileCount + totalSizeBytes reflect both fresh + carried.
+    const { ContentFiles } = cds.entities(namespace);
+    const freshAgg = await SELECT.one.from(ContentFiles)
+      .columns('count(*) as c', 'sum(sizeBytes) as s')
+      .where({ version: newVersion });
+    const freshCount = (freshAgg?.c || 0) - carriedForward;
+    const freshSize  = (Number(freshAgg?.s) || 0) - carriedSize;
+
+    // Recompute TaskRecords progress for any tutorials whose stepCount changed.
+    await recomputeProgressForChangedTutorials(namespace, newVersion);
+
+    // Mark previous ACTIVE as SUPERSEDED, flip new to ACTIVE.
+    await UPDATE(ContentManifest)
+      .where({ status: 'ACTIVE' })
+      .and({ version: { '!=': newVersion } })
+      .set({ status: 'SUPERSEDED' });
+
+    const durationMs = Date.now() - startTime;
+    await UPDATE(ContentManifest)
+      .where({ sessionId })
+      .set({
+        status: 'ACTIVE',
+        fileCount: freshCount + carriedForward,
+        totalSizeBytes: freshSize + carriedSize,
+        publishDurationMs: durationMs
+      });
+
+    await releaseLock(LOCK_NAME, INSTANCE_ID, namespace).catch(() => {});
+
+    return {
+      version: newVersion,
+      fileCount: freshCount + carriedForward,
+      totalSizeBytes: freshSize + carriedSize,
+      durationMs,
+      carriedForward,
+      alreadyActive: false
+    };
+  }
+
+  async function abortSession({ sessionId, reason }) {
+    const { ContentManifest } = cds.entities(namespace);
+    const existing = await SELECT.one.from(ContentManifest).where({ sessionId });
+    if (!existing) {
+      // Idempotent: nothing to abort.
+      return { aborted: true };
+    }
+    if (existing.status === 'PUBLISHING') {
+      await UPDATE(ContentManifest)
+        .where({ sessionId })
+        .set({ status: 'FAILED', trigger: ((existing.trigger || '') + ` [aborted: ${reason || 'unknown'}]`).slice(0, 500) });
+      await releaseLock(LOCK_NAME, INSTANCE_ID, namespace).catch(() => {});
+    }
+    // FAILED, ACTIVE, SUPERSEDED → no-op, idempotent.
+    return { aborted: true };
+  }
+
+  return { beginPublishSession, appendToSession, commitSession, abortSession };
 }
 
 // ---------------------------------------------------------------------------
@@ -277,5 +377,116 @@ async function upsertBodyTexts(namespace, bodyTexts) {
 
   if (bodyUpserted > 0) {
     console.log(`[content/publish] Upserted body text for ${bodyUpserted} tutorials`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Carry forward unchanged slugs from the previously-ACTIVE manifest.
+// Lifted verbatim from srv/lib/content-store.js:320-378 with one adaptation:
+// the "currently-being-published" slug list is determined by SELECTing distinct
+// `slug` from ContentFiles WHERE version = newVersion (since /append has already
+// written them) instead of being passed in as a function arg from a single-shot
+// publish payload. Preserves the HANA-vs-SQLite branching exactly.
+// ---------------------------------------------------------------------------
+async function carryForwardUnchanged(namespace, newVersion, hanaTableName, getActiveVersion) {
+  const { ContentFiles } = cds.entities(namespace);
+  const prevVersion = await getActiveVersion();
+  if (prevVersion === null) {
+    return { carriedForward: 0, carriedSize: 0 };
+  }
+
+  // Discover the set of slugs already appended for `newVersion`. These are the
+  // "fresh" slugs we must NOT carry forward (they would duplicate-key on insert).
+  const freshRows = await SELECT.from(ContentFiles)
+    .columns('slug')
+    .where({ version: newVersion });
+  const slugs = freshRows.map(r => r.slug);
+
+  const db = await cds.connect.to('db');
+  const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+
+  let carryRows;
+  if (isHana) {
+    // On HANA, BLOBs come back as locator-bound streams when mixed with
+    // metadata. Use raw SQL to materialize content as a buffer up front,
+    // matching the same pattern used in the serve handler.
+    const placeholders = slugs.length ? slugs.map(() => '?').join(',') : "''";
+    carryRows = await db.run(
+      `SELECT "SLUG", "CONTENT", "CONTENTHASH", "SIZEBYTES", "COMPRESSEDBYTES", "MIMETYPE"
+         FROM "${hanaTableName()}"
+        WHERE "VERSION" = ? AND "SLUG" NOT IN (${placeholders})`,
+      [prevVersion, ...slugs]
+    );
+    carryRows = carryRows.map((r) => ({
+      slug: r.SLUG,
+      content: r.CONTENT,
+      contentHash: r.CONTENTHASH,
+      sizeBytes: r.SIZEBYTES,
+      compressedBytes: r.COMPRESSEDBYTES,
+      mimeType: r.MIMETYPE
+    }));
+  } else {
+    const sel = slugs.length
+      ? SELECT.from(ContentFiles)
+          .columns('slug', 'content', 'contentHash', 'sizeBytes', 'compressedBytes', 'mimeType')
+          .where`version = ${prevVersion} and slug not in ${slugs}`
+      : SELECT.from(ContentFiles)
+          .columns('slug', 'content', 'contentHash', 'sizeBytes', 'compressedBytes', 'mimeType')
+          .where({ version: prevVersion });
+    carryRows = await sel;
+  }
+
+  const carryEntries = [];
+  let carriedSize = 0;
+  for (const row of carryRows) {
+    const buf = Buffer.isBuffer(row.content) ? row.content : await toBuffer(row.content);
+    carryEntries.push({
+      slug: row.slug,
+      version: newVersion,
+      content: buf,
+      contentHash: row.contentHash,
+      sizeBytes: row.sizeBytes,
+      compressedBytes: row.compressedBytes,
+      mimeType: row.mimeType
+    });
+    carriedSize += Number(row.sizeBytes) || 0;
+  }
+  const carriedForward = carryEntries.length;
+
+  for (let i = 0; i < carryEntries.length; i += 50) {
+    const batch = carryEntries.slice(i, i + 50);
+    await INSERT.into(ContentFiles).entries(batch);
+  }
+
+  return { carriedForward, carriedSize };
+}
+
+// ---------------------------------------------------------------------------
+// Recompute TUTORIAL TaskRecords progress for any tutorial whose body content
+// was published in this version. appendToSession already calls
+// recomputeTutorialProgress when metadata is provided, but if a chunk arrived
+// with body text only (no metadata payload), the recompute would be skipped.
+// Re-running here is a safety net — recomputeTutorialProgress is idempotent.
+// ---------------------------------------------------------------------------
+async function recomputeProgressForChangedTutorials(namespace, newVersion) {
+  const { ContentFiles, Tutorials } = cds.entities(namespace);
+  const db = await cds.connect.to('db');
+
+  const rows = await SELECT.from(ContentFiles)
+    .columns('slug')
+    .where({ version: newVersion });
+  const slugs = [...new Set(rows.map(r => r.slug))];
+  if (slugs.length === 0) return;
+
+  for (const slug of slugs) {
+    try {
+      const tut = await SELECT.one.from(Tutorials)
+        .where({ slug })
+        .columns('ID', 'stepCount');
+      if (!tut?.ID || !Number.isInteger(tut.stepCount) || tut.stepCount <= 0) continue;
+      await recomputeTutorialProgress(db, namespace, tut.ID, tut.stepCount);
+    } catch (e) {
+      LOG.warn(`recomputeProgressForChangedTutorials: ${slug} failed`, e.message);
+    }
   }
 }
