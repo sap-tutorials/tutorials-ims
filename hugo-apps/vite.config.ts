@@ -45,6 +45,7 @@ export default defineConfig({
         'tutorial-pip': resolve(__dirname, 'src/tutorial-pip/main.ts'),
         'tutorial-pip-launcher': resolve(__dirname, 'src/tutorial-pip-launcher/main.ts'),
         'tutorial-rating': resolve(__dirname, 'src/tutorial-rating/main.ts'),
+        'tutorial-breadcrumbs': resolve(__dirname, 'src/tutorial-breadcrumbs/main.ts'),
         'cmd-palette': resolve(__dirname, 'src/cmd-palette/main.ts'),
         me: resolve(__dirname, 'src/me/main.ts'),
         'tutorial-prefs': resolve(__dirname, 'src/tutorial-prefs/main.ts'),
