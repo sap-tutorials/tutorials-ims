@@ -10,12 +10,29 @@
 // auto-expand) are reproduced verbatim — they are tiny, scoped, and removing
 // them would require parallel CSS work outside this change's scope.
 
+import MarkdownIt from 'markdown-it';
+
 const escapeHtml = (s) => String(s ?? '')
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
   .replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
+
+// Group/Mission descriptions are admin-authored Markdown (issue #121).
+// Authors edit them via the admin MarkdownEditor (app/admin/{missions,groups}/
+// webapp/ext/MarkdownEditor.js), so we render with the same flavor here.
+// `html: false` blocks raw HTML embeds (we never want a description to ship a
+// <script>); markdown-it always escapes literal HTML when html is off. `breaks`
+// turns single newlines into <br> so soft line breaks survive — authors expect
+// this from the live preview. `linkify` auto-links bare URLs.
+const md = new MarkdownIt({ html: false, breaks: true, linkify: true });
+
+// Render Markdown safely. With html:false, markdown-it escapes raw HTML and
+// emits only its own tag set, so the result is safe to drop into the page.
+function renderMarkdown(s) {
+  return md.render(String(s ?? '')).trim();
+}
 
 const NEW_WINDOW_DAYS = 31;
 
@@ -83,7 +100,7 @@ export function renderGroupBody(ctx, opts = {}) {
     <div class="hero-inner">
       <span class="type-badge type-badge--group">GROUP</span>
       <h1>${escapeHtml(group.title)}</h1>
-      ${group.description ? `<p class="group-description">${escapeHtml(group.description)}</p>` : ''}
+      ${group.description ? `<div class="group-description">${renderMarkdown(group.description)}</div>` : ''}
       <div class="group-meta">
         <span class="meta-item">${escapeHtml(titleCase(level))}</span>
         <span class="meta-sep">&middot;</span>
@@ -146,7 +163,7 @@ ${tuts}
       <div class="hero-top"><div class="hero-text">
         <span class="type-badge type-badge--mission">MISSION</span>
         <h1 class="mission-hero-title">${escapeHtml(mission.title)}</h1>
-        ${mission.description ? `<p class="mission-description">${escapeHtml(mission.description)}</p>` : ''}
+        ${mission.description ? `<div class="mission-description">${renderMarkdown(mission.description)}</div>` : ''}
         <div class="mission-meta">
           <span class="meta-item">${escapeHtml(titleCase(level))}</span>
           <span class="meta-sep">&middot;</span>
