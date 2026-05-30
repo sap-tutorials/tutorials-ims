@@ -194,7 +194,7 @@ annotate AdminService.CompletionPathItems with {
   checkpointTitle @Common.Label: 'Checkpoint';
   prize           @Common.Label: 'Prize';
   taskName        @Common.Label: 'Task'  @UI.HiddenFilter;
-  itemOrder       @Common.Label: 'Order'  @UI.Hidden;
+  itemOrder       @Common.Label: 'Order';
   hideTutorial    @UI.Hidden;
   hideGroup       @UI.Hidden;
   hideCheckpoint  @UI.Hidden;
@@ -250,6 +250,11 @@ annotate AdminService.CompletionPathItems with @UI: {
   },
   PresentationVariant: { SortOrder: [ { Property: itemOrder } ] },
   LineItem: [
+    // Editable Order column — admins type a new order number to reorder rows.
+    // The PresentationVariant.SortOrder above re-sorts on next page load.
+    { Value: itemOrder, Label: 'Order' },
+    // Type + Task columns are added via manifest.json controlConfiguration
+    // (TypeColumn + TaskColumn templates with their working inline-edit handler).
     { Value: prize_ID, Label: 'Prize' }
   ]
 };
@@ -365,7 +370,12 @@ annotate AdminService.GroupPathItems with @UI: {
   PresentationVariant: { SortOrder: [ { Property: itemOrder } ] },
   LineItem: [
     { Value: itemOrder },
-    { Value: tutorial_ID, Label: 'Tutorial' }
+    { Value: tutorial_ID, Label: 'Tutorial' },
+    // Slug as a read-only confirmation column. Pulls from the tutorial association
+    // via the V4 model's autoExpandSelect; admins can confirm they picked the right
+    // tutorial after editing the Tutorial column (titles can collide; slugs are
+    // unique by design).
+    { Value: tutorial.slug, Label: 'Slug' }
   ]
 };
 
