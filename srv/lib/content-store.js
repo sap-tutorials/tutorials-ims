@@ -10,6 +10,7 @@ import { embedSlugs } from './embedding-pipeline.js';
 import { renderCatalogPage } from './catalog-renderer.js';
 import { loadGroupContext, loadMissionContext } from './catalog-data.js';
 import { createShellLoader, ShellMarkerError, composeShell } from './chrome-shell.js';
+import { createSessionHelpers } from './content-publish-session.js';
 
 const LOG = cds.log('content-store');
 const LOCK_NAME = 'content-publish';
@@ -220,6 +221,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
   // --- POST /content/publish ---
 
   async function publishHandler(req, res) {
+    LOG.warn('[content/publish] DEPRECATED single-shot endpoint — clients should migrate to /content/publish/begin|append|commit (spec: 2026-05-29-publish-content-hardening-design.md)');
     const { trigger, hugoVersion, files, metadata, bodyTexts } = req.body || {};
 
     if (!files || typeof files !== 'object' || Object.keys(files).length === 0) {
@@ -1119,13 +1121,84 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     }
   }
 
+  // --- Chunked publish session handlers (begin/append/commit/abort) ---
+  // Thin Express wrappers around the session helpers. Catalog slugs are
+  // dropped at the route layer for parity with publishHandler.
+
+  const sessionHelpers = createSessionHelpers({ namespace });
+
+  async function beginHandler(req, res) {
+    try {
+      const { trigger, hugoVersion, expectedSlugCount } = req.body || {};
+      const result = await sessionHelpers.beginPublishSession({ trigger, hugoVersion, expectedSlugCount });
+      LOG.info(`[content/publish/begin] sessionId=${result.sessionId} version=${result.version}`);
+      res.status(201).json({ ...result, expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString() });
+    } catch (err) {
+      const code = err.statusCode || 500;
+      LOG.error(`[content/publish/begin] ${err.message}`);
+      res.status(code).json({ error: err.message });
+    }
+  }
+
+  async function appendHandler(req, res) {
+    try {
+      const { sessionId, files, metadata, bodyTexts } = req.body || {};
+      if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
+      const droppedFiles = dropCatalogSlugs(files);
+      dropCatalogSlugs(metadata);
+      dropCatalogSlugs(bodyTexts);
+      if (droppedFiles.length) {
+        LOG.warn(`[content/publish/append] dropped ${droppedFiles.length} catalog slug(s)`);
+      }
+      const result = await sessionHelpers.appendToSession({ sessionId, files, metadata, bodyTexts });
+      res.status(202).json(result);
+    } catch (err) {
+      const code = err.statusCode || 500;
+      LOG.error(`[content/publish/append] ${err.message}`);
+      res.status(code).json({ error: err.message });
+    }
+  }
+
+  async function commitHandler(req, res) {
+    try {
+      const { sessionId } = req.body || {};
+      if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
+      const result = await sessionHelpers.commitSession({ sessionId });
+      cache.invalidate();
+      LOG.info(`[content/publish/commit] sessionId=${sessionId} version=${result.version} duration=${result.durationMs}ms alreadyActive=${result.alreadyActive}`);
+      res.status(200).json(result);
+    } catch (err) {
+      const code = err.statusCode || 500;
+      LOG.error(`[content/publish/commit] ${err.message}`);
+      res.status(code).json({ error: err.message });
+    }
+  }
+
+  async function abortHandler(req, res) {
+    try {
+      const { sessionId, reason } = req.body || {};
+      if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
+      const result = await sessionHelpers.abortSession({ sessionId, reason });
+      LOG.info(`[content/publish/abort] sessionId=${sessionId} reason=${reason || 'unknown'}`);
+      res.status(200).json(result);
+    } catch (err) {
+      const code = err.statusCode || 500;
+      LOG.error(`[content/publish/abort] ${err.message}`);
+      res.status(code).json({ error: err.message });
+    }
+  }
+
   return {
     contentAuthMiddleware,
     publishHandler,
     serveHandler,
     hashesHandler,
     navHandler,
-    rollbackHandler
+    rollbackHandler,
+    beginHandler,
+    appendHandler,
+    commitHandler,
+    abortHandler
   };
 }
 
@@ -1140,3 +1213,7 @@ export const serveHandler = _defaults.serveHandler;
 export const hashesHandler = _defaults.hashesHandler;
 export const navHandler = _defaults.navHandler;
 export const rollbackHandler = _defaults.rollbackHandler;
+export const beginHandler = _defaults.beginHandler;
+export const appendHandler = _defaults.appendHandler;
+export const commitHandler = _defaults.commitHandler;
+export const abortHandler = _defaults.abortHandler;

@@ -10,7 +10,7 @@ import { navigatorCatalogHandler, invalidateNavigatorCache } from './lib/navigat
 import { breadcrumbContextHandler } from './lib/breadcrumb-context.js';
 import { myProgressHandler } from './lib/my-progress-handler.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
-import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, navHandler, rollbackHandler, invalidateRenderCache } from './lib/content-store.js';
+import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, navHandler, rollbackHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler } from './lib/content-store.js';
 import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-catalog.js';
 import { buildSystemPrompt } from './lib/chat-context.js';
 import { createRateLimiter, RateLimitError } from './lib/chat-rate-limit.js';
@@ -130,6 +130,10 @@ cds.on('bootstrap', (app) => {
   app.get('/content/hashes', hashesHandler);
   app.get('/content/tutorials/*slug', serveHandler);
   app.post('/content/publish', express.json({ limit: '100mb' }), contentAuthMiddleware, publishHandler);
+  app.post('/content/publish/begin',  express.json({ limit: '1mb' }),   contentAuthMiddleware, beginHandler);
+  app.post('/content/publish/append', express.json({ limit: '100mb' }), contentAuthMiddleware, appendHandler);
+  app.post('/content/publish/commit', express.json({ limit: '1mb' }),   contentAuthMiddleware, commitHandler);
+  app.post('/content/publish/abort',  express.json({ limit: '1mb' }),   contentAuthMiddleware, abortHandler);
   app.post('/content/rollback', express.json(), contentAuthMiddleware, rollbackHandler);
 
   // Tutorial feedback bridge. Express handler (rather than letting CAP expose

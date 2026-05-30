@@ -74,9 +74,13 @@ export function registerJobs() {
     runWithLock('content-gc', 600000, () => cleanupContentVersions(3, 7))
   );
 
-  // Every hour — mark stuck PUBLISHING manifests as FAILED (older than 60 min)
-  cron.schedule('30 * * * *', () =>
-    runWithLock('content-publishing-sweep', 300000, () => cleanupStuckPublishing(60))
+  // Every 5 minutes — mark stuck PUBLISHING manifests as FAILED. Chunked-session
+  // threshold 30 min matches the begin/append/commit lock duration; legacy
+  // single-shot publishes still reaped on the original 60-min threshold via
+  // createdAt. Off-minute (every 5m starting at :03) to avoid the :00/:30
+  // thundering herd. Spec: 2026-05-29-publish-content-hardening.
+  cron.schedule('3-58/5 * * * *', () =>
+    runWithLock('content-publishing-sweep', 300000, () => cleanupStuckPublishing(30, 60))
   );
 
   // Hourly at :17 — re-embed tutorial steps whose content drifted (offset to avoid :00 thundering herd; multi-instance safe via lock)

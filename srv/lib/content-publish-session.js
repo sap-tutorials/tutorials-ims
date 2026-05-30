@@ -88,6 +88,14 @@ export function createSessionHelpers({ namespace }) {
     }
 
     if (entries.length > 0) {
+      // Make append idempotent for (sessionId, slug): DELETE any existing rows
+      // for these (version, slug) tuples before INSERT. A client retry after a
+      // transient failure would otherwise hit a PK violation on (slug, version),
+      // misclassify as transient, retry to exhaustion, and abort the session.
+      // DELETE-before-INSERT is correct on both HANA and SQLite and keeps the
+      // INSERT path simple.
+      await DELETE.from(ContentFiles).where({ version: session.version, slug: { in: slugs } });
+
       // Insert in groups of 50 — same batch size publishHandler uses.
       for (let i = 0; i < entries.length; i += 50) {
         await INSERT.into(ContentFiles).entries(entries.slice(i, i + 50));
@@ -150,14 +158,21 @@ export function createSessionHelpers({ namespace }) {
     const startTime = Date.now();
     const newVersion = existing.version;
 
+    // Capture the set of slugs freshly written by /append BEFORE carry-forward
+    // runs (carry-forward INSERTs more rows for this version, which would
+    // otherwise inflate the "fresh" set used for embedding triggering).
+    const { ContentFiles } = cds.entities(namespace);
+    const freshRows = await SELECT.from(ContentFiles)
+      .columns('slug')
+      .where({ version: newVersion });
+    const freshSlugs = freshRows.map((r) => r.slug);
+
     // Carry forward unchanged slugs from the previously-ACTIVE manifest.
     // This logic is lifted verbatim from the legacy publishHandler at
     // srv/lib/content-store.js:320-378 so prod/SQLite parity is preserved.
     const { carriedForward, carriedSize } = await carryForwardUnchanged(namespace, newVersion, hanaTableName, getActiveVersion);
 
-    // Count how many slugs were actually written by /append for this version
-    // so the manifest fileCount + totalSizeBytes reflect both fresh + carried.
-    const { ContentFiles } = cds.entities(namespace);
+    // Compute aggregated size after carry-forward for the manifest stats.
     const freshAgg = await SELECT.one.from(ContentFiles)
       .columns('count(*) as c', 'sum(sizeBytes) as s')
       .where({ version: newVersion });
@@ -184,6 +199,24 @@ export function createSessionHelpers({ namespace }) {
       });
 
     await releaseLock(LOCK_NAME, INSTANCE_ID, namespace).catch(() => {});
+
+    // Trigger post-publish embeddings for fresh slugs (parity with the legacy
+    // publishHandler at srv/lib/content-store.js:578-588). Scheduled via
+    // setImmediate so the commit response returns immediately and the embedding
+    // job runs in the background. Without this, RAG freshness would lag behind
+    // every chunked publish until the hourly reconciliation job catches up.
+    if (freshSlugs.length > 0) {
+      setImmediate(async () => {
+        try {
+          const { ChatSettings } = cds.entities(namespace);
+          const settings = await SELECT.one.from(ChatSettings);
+          const { triggerPostPublishEmbeddings } = await import('./content-store.js');
+          await triggerPostPublishEmbeddings({ changedSlugs: freshSlugs, settings });
+        } catch (err) {
+          LOG.warn('post-publish embeddings setup failed (non-fatal)', err.message);
+        }
+      });
+    }
 
     return {
       version: newVersion,

@@ -38,7 +38,10 @@ npm run migrate:hana         # Direct HANA-to-HANA
 node scripts/migrate-reference-data.js populate-slugs  # Patch slug fields
 
 # Content publishing (Hugo HTML → HANA BLOBs)
-npm run publish-content -- --force      # Skip delta detection (use this — see Gotchas)
+npm run publish-content                 # Default: delta + chunked, auto-verifies after commit
+npm run publish-content -- --force      # Performance shortcut: skip /content/hashes round-trip
+npm run publish-content -- --verify-only  # Compare local hashes to server; exit 2 on mismatch
+npm run publish-content -- --heal       # Upload only slugs missing or hash-mismatched on the server
 npm run publish-content -- --dry-run    # Preview without uploading
 
 # QA channel (author preview)
@@ -71,18 +74,32 @@ Flags: `--skip-cleanup` (skip autotest deletion), `--skip-slugs` (skip slug assi
 
 ### Content Publishing
 
-After Hugo builds, publish tutorial HTML to HANA:
+After Hugo builds, publish tutorial HTML to HANA. The publisher uses a chunked protocol (begin → append batches → commit) so a flaky TCP connection or a 53 MB JSON body no longer kills the run, and the server's commit step does carry-forward of unchanged slugs.
 
 ```bash
 # Set the API key (actual DEV key below — must match CONTENT_API_KEY env var on tutorials-srv)
 export CONTENT_API_KEY="tutorials-content-publish-2024"
 
-# Publish to deployed CAP (delta-aware — only changed files uploaded)
+# Publish to deployed CAP — default mode is correctness-equivalent to --force
+# (server's commit carries forward unchanged slugs, so a delta payload no longer drops the rest of the catalog)
 CAP_BASE_URL="https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com" npm run publish-content
 
 # Or publish to local CAP
 npm run publish-content
 ```
+
+After every successful publish the CLI auto-verifies by comparing local SHA-256 hashes to the server's `/content/hashes`. **On mismatch the process exits with code 2** so CI can flag the build as broken.
+
+Flags:
+
+- `--force` — skip the `/content/hashes` round-trip and upload every slug. **Performance/CI-convenience only** now (default delta mode is already correctness-equivalent). Use it when you don't want to pay for one extra HTTP request, e.g. in a known-cold CI run.
+- `--verify-only` — fetch `/content/hashes`, compare to local, exit 0 on match / 2 on mismatch. Doesn't upload anything.
+- `--heal` — fetch `/content/hashes`, upload only the slugs that are missing or hash-mismatched. Use after a failed publish to mop up.
+- `--concurrency N` — number of append batches in flight at once (default `6`).
+- `--batch-size N` — slugs per append batch (default `50`).
+- `--dry-run` — preview without uploading.
+
+`--force`, `--heal`, and `--verify-only` are mutually exclusive. The default targets ~90 s wall-clock for a full 1398-slug publish.
 
 If CONTENT_API_KEY is not set on the deployed srv app:
 
@@ -237,7 +254,7 @@ One-time setup for the QA author-preview channel — full procedure (CI secrets,
 - **`SUBMISSION_SALT_SECRET` env var** — Required by `srv/lib/feedback-salt.js` for hashing submitter IPs on `POST /feedback/submit`. The Express bridge returns 503 if missing. Set in CI secrets and locally when testing the feedback form. Rotation invalidates in-memory rate-limit keys (acceptable).
 - **Tutorials are DB-only** — Tutorial HTML is served exclusively from HANA BLOBs. There is no static file fallback. If no content has been published to HANA, `/tutorials/*` returns 404.
 - **Content garbage collection** — A daily cron job (03:00) prunes `SUPERSEDED`/`ROLLED_BACK` content versions older than 7 days, keeping the 3 most recent for rollback. Never touches `ACTIVE` or `PUBLISHING` manifests.
-- **`publish-content.ts` delta detection** — The script fetches `/content/hashes` to compute which slugs changed. Use `--force` to bypass delta detection and republish everything. Use `--dry-run` to preview changes without uploading.
+- **`publish-content.ts` flags** — Default mode is now correctness-equivalent to `--force`: the server's commit step carries forward unchanged slugs, so a delta-only payload no longer drops the rest of the catalog. `--force` is purely a performance/CI-convenience flag (skips the `/content/hashes` round-trip). After every successful publish the CLI auto-verifies against `/content/hashes` and **exits 2 on hash mismatch**. Use `--verify-only` to check without uploading, `--heal` to repair only the slugs that drifted, and `--dry-run` to preview. `--force`/`--heal`/`--verify-only` are mutually exclusive.
 - **QA channel content** — `/tutorials-qa/*` is gated by XSUAA scope `Tutorial.Author`. Content sourced only from `*-Contribution` repos via `ONLY_CONTRIBUTION_REPOS=true`. Lives in `tutorials-db-qa` HDI; never queries prod tables.
 - **`.tutorial-cache-qa/` vs `.tutorial-cache/`** — separate caches per channel. Running `fetch-tutorials` for a different channel writes a `.channel` marker; `dev` warns if the cache content channel doesn't match.
 - **`CONTENT_API_KEY_QA` env var** — required for `POST /content/publish` and `/content/rollback` on QA srv.

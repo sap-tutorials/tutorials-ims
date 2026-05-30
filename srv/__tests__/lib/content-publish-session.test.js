@@ -87,6 +87,35 @@ describe('content-publish-session', () => {
     expect(new Date(after).getTime()).toBeGreaterThan(new Date(before).getTime());
   });
 
+  it('appendToSession is idempotent for (sessionId, slug): a second append with the same slugs replaces, not duplicates', async () => {
+    const { ContentFiles } = cds.entities(NS);
+    const { sessionId, version } = await helpers.beginPublishSession({
+      trigger: 't', hugoVersion: 'v1', expectedSlugCount: 1
+    });
+
+    const { gzipSync } = await import('node:zlib');
+    const html1 = '<html><body><main class="tutorial-main">v1</main></body></html>';
+    const html2 = '<html><body><main class="tutorial-main">v2</main></body></html>';
+
+    await helpers.appendToSession({
+      sessionId,
+      files: { 'idem-slug': gzipSync(Buffer.from(html1)).toString('base64') },
+      metadata: {}, bodyTexts: {}
+    });
+
+    // Second call with the same slug (simulating a client retry after a transient error)
+    // must succeed without a PK violation, and the row must reflect the second payload.
+    await helpers.appendToSession({
+      sessionId,
+      files: { 'idem-slug': gzipSync(Buffer.from(html2)).toString('base64') },
+      metadata: {}, bodyTexts: {}
+    });
+
+    const rows = await SELECT.from(ContentFiles).where({ slug: 'idem-slug', version });
+    expect(rows.length).toBe(1);
+    expect(rows[0].sizeBytes).toBe(html2.length);
+  });
+
   it('commitSession flips manifest to ACTIVE and supersedes the previous version', async () => {
     const { ContentManifest } = cds.entities(NS);
 

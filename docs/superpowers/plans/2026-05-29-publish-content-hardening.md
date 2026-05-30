@@ -19,7 +19,7 @@
 - "Run tests" tasks use Vitest's filter form (`-t "<title>"`) so each step exercises only the test it just wrote.
 - Each task ends with a commit. Commit messages follow the project's existing convention (lowercase imperative, scope prefix).
 - TDD discipline: every code task starts by writing a failing test and running it to confirm the failure mode, before writing implementation. Watch for the expected failure message — if it fails differently, stop and investigate.
-- **Project is ESM** (`"type": "module"`). The `__dirname` shorthand does not exist; the canonical `cds.test` invocation in this repo is `cds.test('serve', '--project', '.', '--in-memory');` (see `srv/__tests__/tutorial-feedback.test.js`). If a code snippet in this plan shows `cds.test(__dirname + '/../..')`, substitute the project pattern.
+- **Project is ESM** (`"type": "module"`). The `__dirname` shorthand does not exist; the canonical `cds.test` invocation in this repo is `cds.test('serve', '--project', '.', '--in-memory');` placed at **module scope** (not inside `beforeAll`) — `cds.entities()` returns `undefined` if the test harness is initialized inside `beforeAll`. See `srv/__tests__/lib/content-publish-session.test.js` for the canonical example. If a code snippet in this plan shows `cds.test(__dirname + '/../..')`, substitute the project pattern.
 - **Vitest 4.1.5** in this repo does not support `--reporter=basic`. Use the default reporter (omit the flag).
 
 ---
@@ -621,73 +621,117 @@ The session helpers are now standalone. This task adds thin Express handlers tha
 
 - [ ] **Step 1: Write failing route-level test**
 
+This test follows the same pattern as the existing `srv/__tests__/lib/content-store-skip-metadata.test.js` — hand-rolled `makeReq`/`makeRes` mocks calling handlers directly. The repo does NOT have supertest installed; do not add it.
+
 Create `srv/__tests__/lib/content-publish-routes.test.js`:
 
 ```js
 import cds from '@sap/cds';
-import express from 'express';
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { gzipSync } from 'node:zlib';
 import {
   beginHandler, appendHandler, commitHandler, abortHandler, contentAuthMiddleware
 } from '../../lib/content-store.js';
 
+const NS = 'com.sap.developers.ims';
+
+function makeReq(body = {}, headers = {}) {
+  return { body, headers, get(k) { return this.headers[k.toLowerCase()]; } };
+}
+function makeRes() {
+  const res = {
+    _status: null, _body: null, _headers: {},
+    status(code) { this._status = code; return this; },
+    json(body)   { this._body = body; return this; },
+    setHeader(k, v) { this._headers[k] = v; }
+  };
+  return res;
+}
+
 describe('content publish routes', () => {
-  let app;
   beforeAll(async () => {
-    cds.test(__dirname + '/../..').in(__dirname + '/../..');
+    cds.test('serve', '--project', '.', '--in-memory');
     await cds.connect.to('db');
     process.env.CONTENT_API_KEY = 'test-key';
+  });
 
-    app = express();
-    app.use(express.json({ limit: '100mb' }));
-    app.post('/content/publish/begin',  contentAuthMiddleware, beginHandler);
-    app.post('/content/publish/append', contentAuthMiddleware, appendHandler);
-    app.post('/content/publish/commit', contentAuthMiddleware, commitHandler);
-    app.post('/content/publish/abort',  contentAuthMiddleware, abortHandler);
+  beforeEach(async () => {
+    const { ContentManifest, ContentFiles, JobLocks } = cds.entities(NS);
+    await DELETE.from(ContentFiles);
+    await DELETE.from(ContentManifest);
+    await DELETE.from(JobLocks);
   });
 
   it('begin → append → commit produces an ACTIVE manifest', async () => {
-    const supertest = (await import('supertest')).default;
-    const agent = supertest(app).set ? supertest(app) : supertest(app);
-
-    const begin = await supertest(app)
-      .post('/content/publish/begin')
-      .set('Authorization', 'Bearer test-key')
-      .send({ trigger: 'route-test', hugoVersion: 'v1', expectedSlugCount: 1 });
-    expect(begin.status).toBe(201);
-    expect(begin.body.sessionId).toMatch(/^[0-9a-f-]{36}$/);
+    const beginReq = makeReq(
+      { trigger: 'route-test', hugoVersion: 'v1', expectedSlugCount: 1 },
+      { authorization: 'Bearer test-key' }
+    );
+    const beginRes = makeRes();
+    await beginHandler(beginReq, beginRes);
+    expect(beginRes._status).toBe(201);
+    expect(beginRes._body.sessionId).toMatch(/^[0-9a-f-]{36}$/);
 
     const html = '<html><body><main class="tutorial-main">x</main></body></html>';
-    const append = await supertest(app)
-      .post('/content/publish/append')
-      .set('Authorization', 'Bearer test-key')
-      .send({
-        sessionId: begin.body.sessionId,
+    const appendReq = makeReq(
+      {
+        sessionId: beginRes._body.sessionId,
         files: { 'route-demo': gzipSync(Buffer.from(html)).toString('base64') },
-        metadata: {},
-        bodyTexts: {}
-      });
-    expect(append.status).toBe(202);
-    expect(append.body.slugsAccepted).toBe(1);
+        metadata: {}, bodyTexts: {}
+      },
+      { authorization: 'Bearer test-key' }
+    );
+    const appendRes = makeRes();
+    await appendHandler(appendReq, appendRes);
+    expect(appendRes._status).toBe(202);
+    expect(appendRes._body.slugsAccepted).toBe(1);
 
-    const commit = await supertest(app)
-      .post('/content/publish/commit')
-      .set('Authorization', 'Bearer test-key')
-      .send({ sessionId: begin.body.sessionId });
-    expect(commit.status).toBe(200);
-    expect(commit.body.version).toBe(begin.body.version);
+    const commitReq = makeReq(
+      { sessionId: beginRes._body.sessionId },
+      { authorization: 'Bearer test-key' }
+    );
+    const commitRes = makeRes();
+    await commitHandler(commitReq, commitRes);
+    expect(commitRes._status).toBe(200);
+    expect(commitRes._body.version).toBe(beginRes._body.version);
+
+    const { ContentManifest } = cds.entities(NS);
+    const row = await SELECT.one.from(ContentManifest).where({ version: beginRes._body.version });
+    expect(row.status).toBe('ACTIVE');
   });
 
-  it('begin returns 401 without bearer token', async () => {
-    const supertest = (await import('supertest')).default;
-    const res = await supertest(app)
-      .post('/content/publish/begin')
-      .send({ trigger: 'no-auth' });
-    expect(res.status).toBe(401);
+  it('begin missing sessionId in append returns 400', async () => {
+    const req = makeReq({}, { authorization: 'Bearer test-key' });
+    const res = makeRes();
+    await appendHandler(req, res);
+    expect(res._status).toBe(400);
+  });
+
+  it('abort marks the manifest FAILED', async () => {
+    const beginReq = makeReq(
+      { trigger: 'abort-test', hugoVersion: 'v1', expectedSlugCount: 0 },
+      { authorization: 'Bearer test-key' }
+    );
+    const beginRes = makeRes();
+    await beginHandler(beginReq, beginRes);
+
+    const abortReq = makeReq(
+      { sessionId: beginRes._body.sessionId, reason: 'test' },
+      { authorization: 'Bearer test-key' }
+    );
+    const abortRes = makeRes();
+    await abortHandler(abortReq, abortRes);
+    expect(abortRes._status).toBe(200);
+    expect(abortRes._body.aborted).toBe(true);
+
+    const { ContentManifest } = cds.entities(NS);
+    const row = await SELECT.one.from(ContentManifest).where({ version: beginRes._body.version });
+    expect(row.status).toBe('FAILED');
   });
 });
 ```
+
+Note on auth: `contentAuthMiddleware` is registered at the Express layer in `srv/server.js`; the handlers themselves do not enforce auth. Testing the auth-required behavior would require integrating express, which adds complexity for low value here. The middleware is already covered by existing tests — we just verify the new handlers work when called past it.
 
 - [ ] **Step 2: Run the test to confirm it fails**
 

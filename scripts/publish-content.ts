@@ -4,6 +4,9 @@ import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { parse as parseYaml } from 'yaml';
 import { parseChannel, type Channel } from './fetch-tutorials.js';
+import { beginSession, appendBatch, commitSession, abortSession, fetchRemoteHashes } from './lib/publish-client.js';
+import { withRetry, formatErrorChain } from './lib/publish-retry.js';
+import { chunk, runConcurrent } from './lib/publish-batcher.js';
 
 export type { Channel };
 
@@ -256,6 +259,24 @@ export function extractMetadata(
 
 // --- CLI ---
 
+export function validateFlagCombo(flags: { force: boolean; heal: boolean; verifyOnly: boolean }) {
+  const modes = [flags.force && 'force', flags.heal && 'heal', flags.verifyOnly && 'verify-only'].filter(Boolean);
+  if (modes.length > 1) {
+    throw new Error(`Flags ${modes.join(', ')} are mutually exclusive`);
+  }
+}
+
+export type PublishMode = 'force' | 'heal' | 'delta';
+
+export function computePublishPlan(opts: {
+  local: Map<string, string>;
+  remote: Record<string, string>;
+  mode: PublishMode;
+}): { targetSlugs: string[] } {
+  if (opts.mode === 'force') return { targetSlugs: [...opts.local.keys()] };
+  return { targetSlugs: computeDiff(opts.local, opts.remote) };
+}
+
 interface PublishOptions {
   hugoDir: string;
   baseUrl: string;
@@ -264,7 +285,11 @@ interface PublishOptions {
   hugoVersion: string;
   dryRun: boolean;
   force: boolean;
+  heal: boolean;
+  verifyOnly: boolean;
   verbose: boolean;
+  concurrency: number;
+  batchSize: number;
 }
 
 function parseArgs(argv: string[]): PublishOptions {
@@ -277,13 +302,54 @@ function parseArgs(argv: string[]): PublishOptions {
   return {
     hugoDir: get('--hugo-dir', 'hugo/public'),
     baseUrl: get('--base-url', process.env.CAP_BASE_URL || 'http://localhost:4004'),
-    apiKey: get('--api-key', process.env.CONTENT_API_KEY || ''),
-    trigger: get('--trigger', `manual@${process.env.GITHUB_SHA?.slice(0, 7) || 'local'}`),
+    apiKey:  get('--api-key',  process.env.CONTENT_API_KEY || ''),
+    trigger: get('--trigger',  `manual@${process.env.GITHUB_SHA?.slice(0, 7) || 'local'}`),
     hugoVersion: get('--hugo-version', ''),
-    dryRun: has('--dry-run'),
-    force: has('--force'),
-    verbose: has('--verbose'),
+    dryRun:    has('--dry-run'),
+    force:     has('--force'),
+    heal:      has('--heal'),
+    verifyOnly: has('--verify-only'),
+    verbose:   has('--verbose'),
+    concurrency: parseInt(get('--concurrency', '6'), 10),
+    batchSize:   parseInt(get('--batch-size', '50'), 10),
   };
+}
+
+function pickEntries<T>(src: Record<string, T>, keys: string[]): Record<string, T> {
+  const out: Record<string, T> = {};
+  for (const k of keys) if (k in src) out[k] = src[k];
+  return out;
+}
+
+async function collectSidecars(hugoDir: string, payload: Record<string, string>, log: (s: string) => void): Promise<string[]> {
+  const keys: string[] = [];
+  const navJsonPath = join(hugoDir, 'tutorials', '_nav.json');
+  if (existsSync(navJsonPath)) {
+    const navContent = readFileSync(navJsonPath);
+    const navData = JSON.parse(navContent.toString('utf-8'));
+    const allNavTutorials = navData.tutorials ?? navData;
+    payload['__nav__'] = gzipSync(Buffer.from(JSON.stringify({ tutorials: allNavTutorials }))).toString('base64');
+    keys.push('__nav__');
+    log(`Included nav metadata for ${allNavTutorials.length} tutorials`);
+  }
+  const notFoundPath = join(hugoDir, '404.html');
+  if (existsSync(notFoundPath)) {
+    const notFoundContent = readFileSync(notFoundPath);
+    payload['__404__'] = gzipSync(notFoundContent).toString('base64');
+    keys.push('__404__');
+  }
+  const shellPath = join(hugoDir, '_shell', 'index.html');
+  if (!existsSync(shellPath)) {
+    throw new Error(`[publish-content] _shell/index.html missing — Hugo build did not emit chrome shell. Path: ${shellPath}`);
+  }
+  const shellRaw = readFileSync(shellPath, 'utf-8');
+  const mainMatch = shellRaw.match(/<main\b[^>]*>[\s\S]*?<\/main>/);
+  if (!mainMatch) throw new Error('[publish-content] _shell/index.html does not contain <main>...</main>');
+  const shellHtml = shellRaw.replace(mainMatch[0], '<!-- MAIN -->');
+  if (shellHtml.length < 1000) throw new Error(`[publish-content] chrome shell suspiciously small (${shellHtml.length} bytes)`);
+  payload['__shell__'] = gzipSync(Buffer.from(shellHtml, 'utf-8')).toString('base64');
+  keys.push('__shell__');
+  return keys;
 }
 
 async function main() {
@@ -342,157 +408,149 @@ async function main() {
   }
   log('Production build validation passed');
 
+  validateFlagCombo({ force: opts.force, heal: opts.heal, verifyOnly: opts.verifyOnly });
+
   log('Computing local hashes...');
   const localHashes = computeLocalHashes(tutorials);
 
-  let changed: string[];
-
-  if (opts.force) {
-    log('Force mode: publishing all tutorials');
-    changed = [...localHashes.keys()];
-  } else {
-    log(`Fetching remote hashes from ${opts.baseUrl}/content/hashes...`);
-    let remoteHashes: Record<string, string> = {};
+  // --- verify-only short-circuit ---
+  if (opts.verifyOnly) {
+    let remote: Record<string, string>;
     try {
-      const res = await fetch(`${opts.baseUrl}/content/hashes`);
-      if (res.ok) {
-        remoteHashes = await res.json() as Record<string, string>;
-      } else if (res.status === 503) {
-        log('No active content version — will publish all');
-      } else {
-        console.error(`Warning: Failed to fetch remote hashes (HTTP ${res.status}), publishing all`);
-      }
+      remote = await fetchRemoteHashes({ baseUrl: opts.baseUrl });
     } catch (err) {
-      console.error(`Warning: Cannot reach ${opts.baseUrl}/content/hashes, publishing all`);
+      console.error('Verify failed: cannot reach /content/hashes:', formatErrorChain(err));
+      process.exit(1);
     }
-
-    changed = computeDiff(localHashes, remoteHashes);
+    const diff = computeDiff(localHashes, remote);
+    if (diff.length === 0) {
+      console.log(`Verify OK: ${localHashes.size} slugs match server.`);
+      process.exit(0);
+    }
+    console.error(`Verify FAILED: ${diff.length} slugs differ:`);
+    for (const s of diff.slice(0, 50).sort()) console.error(`  - ${s}`);
+    if (diff.length > 50) console.error(`  ... (+${diff.length - 50} more)`);
+    process.exit(2);
   }
 
-  if (changed.length === 0) {
+  // --- decide what to publish ---
+  let mode: PublishMode = 'delta';
+  if (opts.force) mode = 'force';
+  else if (opts.heal) mode = 'heal';
+
+  let remoteHashes: Record<string, string> = {};
+  if (mode !== 'force') {
+    log(`Fetching remote hashes from ${opts.baseUrl}/content/hashes...`);
+    try { remoteHashes = await fetchRemoteHashes({ baseUrl: opts.baseUrl }); }
+    catch (err) {
+      console.error(`Cannot reach ${opts.baseUrl}/content/hashes: ${formatErrorChain(err)}`);
+      process.exit(1);
+    }
+  }
+
+  const { targetSlugs } = computePublishPlan({ local: localHashes, remote: remoteHashes, mode });
+  if (targetSlugs.length === 0) {
     console.log('No changes detected. Nothing to publish.');
     process.exit(0);
   }
-
-  console.log(`${changed.length} of ${tutorials.size} tutorials changed`);
+  console.log(`${targetSlugs.length} of ${tutorials.size} tutorials to publish (${mode} mode)`);
 
   if (opts.dryRun) {
     console.log('Dry run — would publish:');
-    for (const slug of changed.sort()) {
-      console.log(`  ${slug}`);
-    }
+    for (const slug of targetSlugs.slice().sort()) console.log(`  ${slug}`);
     process.exit(0);
   }
 
-  log('Building payload...');
+  // --- begin / append / commit ---
+  log('Building payload + extracting metadata...');
   const startTime = Date.now();
-  const payload = buildPayload(changed, tutorials);
-
-  // Include nav metadata so /content/nav can serve it without DB JOINs
-  const navJsonPath = join(opts.hugoDir, 'tutorials', '_nav.json');
-  if (existsSync(navJsonPath)) {
-    const navContent = readFileSync(navJsonPath);
-    const navData = JSON.parse(navContent.toString('utf-8'));
-    const allNavTutorials = navData.tutorials ?? navData;
-    const filteredNav = JSON.stringify({ tutorials: allNavTutorials });
-    payload['__nav__'] = gzipSync(Buffer.from(filteredNav)).toString('base64');
-    log(`Included nav metadata for ${allNavTutorials.length} tutorials`);
-  }
-
-  // Include the 404 page so the serveHandler can render styled "Tutorial not found"
-  // instead of a JSON error. Always sent — small enough that delta detection isn't worth it.
-  const notFoundPath = join(opts.hugoDir, '404.html');
-  if (existsSync(notFoundPath)) {
-    const notFoundContent = readFileSync(notFoundPath);
-    payload['__404__'] = gzipSync(notFoundContent).toString('base64');
-    log(`Included 404 page (${notFoundContent.length} bytes)`);
-  }
-
-  // Include the chrome shell for catalog pages (groups/missions). The CAP
-  // serveHandler splits this on the <!-- MAIN --> marker and splices a
-  // server-rendered body into it. Failing to ship this aborts the whole
-  // publish — a half-broken publish would 500 every catalog page until the
-  // next CI run. (#91)
-  const shellPath = join(opts.hugoDir, '_shell', 'index.html');
-  if (!existsSync(shellPath)) {
-    throw new Error(
-      `[publish-content] _shell/index.html missing — Hugo build did not emit ` +
-      `the chrome shell. Did the _shell layout get deleted? Path: ${shellPath}`
-    );
-  }
-  const shellRaw = readFileSync(shellPath, 'utf-8');
-  // Slice <main>...</main> out of the rendered shell and replace with the
-  // marker the chrome-shell loader splits on. The minifier collapses the
-  // <main> tag to a single line so a single regex suffices.
-  const mainMatch = shellRaw.match(/<main\b[^>]*>[\s\S]*?<\/main>/);
-  if (!mainMatch) {
-    throw new Error(
-      `[publish-content] _shell/index.html does not contain <main>...</main> — ` +
-      `cannot extract chrome shell. Inspect the file to debug.`
-    );
-  }
-  const shellHtml = shellRaw.replace(mainMatch[0], '<!-- MAIN -->');
-  if (shellHtml.length < 1000) {
-    // Sanity check: the shell should include header, footer, glossary popover,
-    // toast, and lightbox. If it's tiny, something stripped the chrome.
-    throw new Error(
-      `[publish-content] chrome shell suspiciously small ` +
-      `(${shellHtml.length} bytes). Refusing to publish.`
-    );
-  }
-  payload['__shell__'] = gzipSync(Buffer.from(shellHtml, 'utf-8')).toString('base64');
-  log(`Included chrome shell (${shellHtml.length} bytes raw, ${payload['__shell__'].length} bytes b64-gz)`);
-
-  // Extract tutorial metadata for DB upsert (self-healing — ensures Tutorials + Steps exist)
+  const payload    = buildPayload(targetSlugs, tutorials);
   const hugoContentDir = join(opts.hugoDir, '..', 'content', 'tutorials');
-  const allSlugs = [...tutorials.keys()];
-  const metadata = extractMetadata(hugoContentDir, allSlugs);
-  log(`Extracted metadata for ${Object.keys(metadata).length} tutorials`);
+  const metadataAll = extractMetadata(hugoContentDir, targetSlugs);
+  const bodyTextsAll = extractAllBodyTexts(tutorials, targetSlugs);
 
-  const bodyTexts = extractAllBodyTexts(tutorials, allSlugs);
-  log(`Extracted body text for ${Object.keys(bodyTexts).length} tutorials`);
+  // __nav__ / __404__ / __shell__ ride along on the first batch (these are
+  // small and the server happily accepts them mixed with regular slugs).
+  const sidecarKeys = await collectSidecars(opts.hugoDir, payload, log);
 
-  const body = JSON.stringify({
-    trigger: opts.trigger,
-    hugoVersion: opts.hugoVersion || undefined,
-    files: payload,
-    metadata,
-    bodyTexts,
+  const begin = await beginSession({
+    baseUrl: opts.baseUrl, apiKey: opts.apiKey,
+    trigger: opts.trigger, hugoVersion: opts.hugoVersion, expectedSlugCount: targetSlugs.length,
   });
+  log(`Session ${begin.sessionId} version ${begin.version} (expires ${begin.expiresAt})`);
 
-  const sizeMB = (Buffer.byteLength(body) / 1024 / 1024).toFixed(1);
-  log(`Payload size: ${sizeMB} MB`);
+  const allKeys = [...targetSlugs, ...sidecarKeys];
+  const batches = chunk(allKeys, opts.batchSize);
+  log(`${batches.length} batches × up to ${opts.batchSize} slugs, concurrency=${opts.concurrency}`);
 
-  log(`Publishing to ${opts.baseUrl}/content/publish...`);
-  const res = await fetch(`${opts.baseUrl}/content/publish`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${opts.apiKey}`,
-    },
-    body,
-  });
-
-  if (!res.ok) {
-    const errBody = await res.text();
-    console.error(`Publish failed (HTTP ${res.status}): ${errBody}`);
+  try {
+    await runConcurrent(
+      batches.map((batch, idx) => () => withRetry(
+        () => appendBatch({
+          baseUrl: opts.baseUrl, apiKey: opts.apiKey,
+          sessionId: begin.sessionId,
+          files:     pickEntries(payload,        batch),
+          metadata:  pickEntries(metadataAll,    batch),
+          bodyTexts: pickEntries(bodyTextsAll,   batch),
+        }),
+        {
+          attempts: 3, backoffMs: [1000, 3000, 9000],
+          onAttemptFail: (attempt, err, willRetry) => {
+            console.error(
+              `[publish-content] append batch ${idx + 1}/${batches.length} failed (attempt ${attempt}/3)\n  ${formatErrorChain(err)}\n  ${willRetry ? 'retrying...' : 'giving up'}`
+            );
+          },
+        }
+      )),
+      opts.concurrency
+    );
+  } catch (err) {
+    console.error(`[publish-content] append failed permanently: ${formatErrorChain(err)}`);
+    await abortSession({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId, reason: 'append failed' });
     process.exit(1);
   }
 
-  const result = await res.json() as {
-    version: number;
-    filesWritten: number;
-    totalSizeBytes: number;
-    durationMs: number;
-  };
-  const totalMs = Date.now() - startTime;
+  let commit;
+  try {
+    commit = await withRetry(
+      () => commitSession({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, sessionId: begin.sessionId }),
+      {
+        attempts: 3, backoffMs: [1000, 3000, 9000],
+        onAttemptFail: (attempt, err, willRetry) => {
+          console.error(`[publish-content] commit failed (attempt ${attempt}/3): ${formatErrorChain(err)}${willRetry ? ' — retrying' : ''}`);
+        },
+      }
+    );
+  } catch (err) {
+    console.error(`[publish-content] commit failed permanently — manifest left for GC reaper: ${formatErrorChain(err)}`);
+    process.exit(1);
+  }
 
-  console.log(`Published successfully:`);
-  console.log(`  Version:    ${result.version}`);
-  console.log(`  Files:      ${result.filesWritten}`);
-  console.log(`  Size:       ${(result.totalSizeBytes / 1024 / 1024).toFixed(1)} MB (decompressed)`);
-  console.log(`  Server:     ${result.durationMs} ms`);
-  console.log(`  Total:      ${totalMs} ms`);
+  const totalMs = Date.now() - startTime;
+  console.log(`Published successfully:
+  Version:    ${commit.version}
+  Files:      ${commit.fileCount}
+  Size:       ${(commit.totalSizeBytes / 1024 / 1024).toFixed(1)} MB
+  Server:     ${commit.durationMs} ms
+  Total:      ${totalMs} ms
+  Idempotent retry hit?  ${commit.alreadyActive}`);
+
+  // --- auto-verify ---
+  log('Verifying server state matches local...');
+  let postRemote: Record<string, string>;
+  try { postRemote = await fetchRemoteHashes({ baseUrl: opts.baseUrl }); }
+  catch (err) {
+    console.error(`Auto-verify warning: cannot reach /content/hashes after commit: ${formatErrorChain(err)}`);
+    process.exit(0); // commit was successful; don't punish for a transient verify-fetch error
+  }
+  const verifyDiff = computeDiff(localHashes, postRemote);
+  if (verifyDiff.length === 0) {
+    console.log(`Verify OK: ${localHashes.size} slugs match server.`);
+    process.exit(0);
+  }
+  console.error(`Verify FAILED: commit reported success but ${verifyDiff.length} slugs still differ:`);
+  for (const s of verifyDiff.slice(0, 50).sort()) console.error(`  - ${s}`);
+  process.exit(2);
 }
 
 // Run CLI when executed directly

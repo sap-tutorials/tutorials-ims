@@ -186,8 +186,47 @@ When `EXPOSE_CAP_UI=true` is set on the CAP srv app, these are accessible throug
 | `/content/tutorials/{slug}` | GET | Serve tutorial HTML from HANA (ETag, Cache-Control) | None |
 | `/content/hashes` | GET | SHA-256 map of active content (`{ slug: hash }`) | None |
 | `/content/nav` | GET | Navigation metadata for published tutorials | None |
-| `/content/publish` | POST | Publish new content (base64-gzipped files) | Bearer (`CONTENT_API_KEY`) |
+| `/content/publish` | POST | **Deprecated** — single-shot publish (base64-gzipped files). Kept for one release cycle; new clients use the chunked protocol below. | Bearer (`CONTENT_API_KEY`) |
+| `/content/publish/begin` | POST | Open a chunked publish session. Returns `{ sessionId, version, expiresAt }` (201) or 409 if a publish is already in progress. | Bearer (`CONTENT_API_KEY`) |
+| `/content/publish/append` | POST | Append a batch of files to an open session. Files shape: `{ slug: base64gzip }`. Idempotent for `(sessionId, slug)`. | Bearer (`CONTENT_API_KEY`) |
+| `/content/publish/commit` | POST | Activate the session's manifest. Idempotent (returns `alreadyActive: true` on repeat). | Bearer (`CONTENT_API_KEY`) |
+| `/content/publish/abort` | POST | Discard an open session. Idempotent. | Bearer (`CONTENT_API_KEY`) |
 | `/content/rollback` | POST | Revert to previous manifest version | Bearer (`CONTENT_API_KEY`) |
+
+### Chunked publish protocol
+
+The chunked endpoints replace single-shot `POST /content/publish`. They split a publish across many small batches so a flaky TCP connection or a 53 MB JSON body doesn't kill the whole run, and the server's commit step does carry-forward of unchanged slugs (so a partial payload no longer drops the rest of the catalog).
+
+Typical client flow:
+
+```bash
+# 1. Begin a session — server returns sessionId + version
+curl -sX POST http://localhost:4004/content/publish/begin \
+  -H "Authorization: Bearer $CONTENT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "trigger": "manual", "hugoVersion": "0.x" }'
+# → 201 { "sessionId": "...", "version": 42, "expiresAt": "..." }
+
+# 2. Append batches (50 slugs at a time by default; idempotent per (sessionId, slug))
+curl -sX POST http://localhost:4004/content/publish/append \
+  -H "Authorization: Bearer $CONTENT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "sessionId": "...", "files": { "slug-a": "<base64gzip>", "slug-b": "<base64gzip>" } }'
+
+# 3. Commit — activates the manifest; idempotent (returns alreadyActive: true on repeat)
+curl -sX POST http://localhost:4004/content/publish/commit \
+  -H "Authorization: Bearer $CONTENT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "sessionId": "..." }'
+
+# Or, abandon the session:
+curl -sX POST http://localhost:4004/content/publish/abort \
+  -H "Authorization: Bearer $CONTENT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "sessionId": "..." }'
+```
+
+`begin` returns 409 if another publish session is already in progress; abort it (or wait for the reaper, which sweeps stale sessions every 5 minutes after a 30-minute idle threshold) before retrying.
 
 ---
 
