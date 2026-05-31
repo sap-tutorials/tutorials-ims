@@ -1,5 +1,6 @@
 import { defineConfig } from 'vitest/config';
 import { fileURLToPath } from 'node:url';
+import vue from '@vitejs/plugin-vue';
 
 export default defineConfig({
   test: {
@@ -9,6 +10,10 @@ export default defineConfig({
     exclude: ['node_modules', 'gen', 'hugo'],
     projects: [
       {
+        // Vue plugin needed for component tests under app/analytics-explorer/.
+        // Cheap when no .vue file is imported, so safe to apply to the whole
+        // unit project.
+        plugins: [vue()],
         test: {
           name: 'unit',
           environment: 'node',
