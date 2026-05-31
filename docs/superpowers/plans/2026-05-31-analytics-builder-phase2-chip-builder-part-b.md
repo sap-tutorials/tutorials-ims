@@ -297,9 +297,11 @@ function onResults(r: any) {
 }
 
 function onEntityClicked(name: string) {
-  // EntitySidebar emits the logical entity name. setSpec to a fresh single-entity spec
-  // when the user clicks an entity from an empty builder.
-  // (Detailed flow handled in subsequent tasks.)
+  // EntitySidebar emits the logical entity name. Task 11 lands the actual
+  // setSpec call: when the builder is empty and the user clicks an entity,
+  // FromChip's "Create" path constructs a fresh single-entity spec via
+  // useQuerySpec().setSpec({ from: { entity: name, alias: aliasFromName(name) }, ... }).
+  // For now this is a no-op so the build compiles.
 }
 
 // Toggle chart panel — same logic as the existing visualize() function,
@@ -496,6 +498,8 @@ The Vitest unit project at `vitest.config.ts` runs with `environment: 'node'` by
 
 - **Per-file pragma (chosen):** prefix each component test file with `// @vitest-environment happy-dom` on the first line. Lightweight, no global config change, only the files that need DOM get the cost. Example shown in the FromChip test below.
 - (Alternative — not chosen for Phase 2: a separate `dom-unit` Vitest project. Defer until enough component tests exist to justify it.)
+
+**Fail-fast smoke step (do this BEFORE writing any chip implementation):** after creating the FromChip test file but before implementing FromChip itself, run `npm test -- --project=unit FromChip` and verify the failure mode is "Cannot find module '../FromChip.vue'" — NOT "Cannot find package '@vue/test-utils'" or "happy-dom is not defined". A `@vue/test-utils` import failure at this point means the per-file pragma isn't taking; stop and check the test file's first line is exactly `// @vitest-environment happy-dom` (no leading whitespace, no surrounding markdown).
 
 If the Vitest unit project needs explicit access to `@vue/test-utils` (it shouldn't — Node module resolution walks up to root), confirm by running the FromChip test in Task 11 below. If the test fails to resolve `@vue/test-utils`, escalate.
 
