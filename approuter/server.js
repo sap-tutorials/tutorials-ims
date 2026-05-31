@@ -18,6 +18,7 @@ const { pipeline } = require('stream/promises')
 const { createGunzip } = require('zlib')
 const tar = require('tar')
 const serveStatic = require('serve-static')
+const { isAuthorizedBearer } = require('./lib/bearer-auth')
 
 let _sharp
 function getSharp() {
@@ -186,8 +187,9 @@ async function rebuildHandler(req, res, next) {
     return
   }
 
-  const auth = req.headers['authorization']
-  if (auth !== `Bearer ${apiKey}`) {
+  // Constant-time bearer compare (#134). Mirrors the pattern at
+  // srv/lib/content-store.js for the CONTENT_API_KEY check.
+  if (!isAuthorizedBearer(req.headers['authorization'], apiKey)) {
     res.writeHead(401, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ error: 'Unauthorized' }))
     return
