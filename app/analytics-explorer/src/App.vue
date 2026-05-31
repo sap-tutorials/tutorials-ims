@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import '@ui5/webcomponents-fiori/dist/ShellBar.js'
 import '@ui5/webcomponents-fiori/dist/ShellBarItem.js'
 import '@ui5/webcomponents/dist/Avatar.js'
@@ -9,6 +9,8 @@ import '@ui5/webcomponents/dist/Popover.js'
 import '@ui5/webcomponents/dist/List.js'
 import '@ui5/webcomponents/dist/ListItemStandard.js'
 import { useTheme, type ThemeMode } from './composables/useTheme'
+import JoulePanel from './components/joule/JoulePanel.vue'
+import { useQuerySpec } from './composables/useQuerySpec'
 
 const { themeMode, cycleThemeMode, setThemeMode } = useTheme()
 
@@ -91,10 +93,20 @@ function onModeSelect(e: any) {
   if (popover) popover.open = false
 }
 
-// Stubs — wired through to admin-shell endpoints once they exist outside
-// SAPUI5. Keeping no-op handlers so the shellbar layout matches admin-shell
-// visually and the buttons can be filled in incrementally.
-function onJouleClick() { /* TODO: open Joule chat */ }
+// Joule right-rail panel — persistent, persisted via localStorage so it
+// stays open across reloads if the admin had it open.
+const STORAGE_KEY = 'analytics.joule.open'
+const panelOpen = ref(typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY) === '1')
+const querySpec = useQuerySpec()
+
+function onJouleClick() { panelOpen.value = !panelOpen.value }
+function onJouleClose() { panelOpen.value = false }
+function onViewInBuilder(spec: any) {
+  // useQuerySpec is a module-level singleton — setSpec flows through to SqlTab.
+  querySpec.setSpec(spec)
+}
+watch(panelOpen, v => { try { localStorage.setItem(STORAGE_KEY, v ? '1' : '0') } catch { /* ignore */ } })
+
 function onHelpClick() { /* TODO: help center */ }
 function onNotificationsClick() { /* TODO: notifications popover */ }
 </script>
@@ -109,6 +121,7 @@ function onNotificationsClick() { /* TODO: notifications popover */ }
       <ui5-shellbar-item
         icon="da"
         text="Joule"
+        data-test="shellbar-joule"
         @click="onJouleClick" />
       <ui5-shellbar-item
         icon="sys-help"
@@ -158,14 +171,22 @@ function onNotificationsClick() { /* TODO: notifications popover */ }
     </ui5-popover>
 
     <main class="content">
-      <router-view />
+      <div class="content-col">
+        <router-view />
+      </div>
+      <JoulePanel
+        v-if="panelOpen"
+        @close="onJouleClose"
+        @view-in-builder="onViewInBuilder"
+      />
     </main>
   </div>
 </template>
 
 <style scoped>
 .app-shell { display: flex; flex-direction: column; height: 100vh; }
-.content { flex: 1; overflow: hidden; background: var(--sapBackgroundColor); }
+.content { flex: 1; overflow: hidden; background: var(--sapBackgroundColor); display: flex; }
+.content-col { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
 .profile-block {
   padding: 0.75rem 1rem 0.5rem;
   border-bottom: 1px solid var(--sapList_BorderColor);
