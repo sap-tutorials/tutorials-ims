@@ -508,6 +508,34 @@ Content-Type: application/json
 | 401 Unauthorized | Missing/wrong `CONTENT_API_KEY` |
 | 409 Conflict | Another publish in progress (retry later) |
 
+### Slug canonicalization
+
+Tutorial slugs are case-sensitive identifiers in the database (`Tutorials.slug`,
+`ContentFiles.slug`, etc.) and the canonical form is **lowercase**. This is
+enforced at:
+
+- **Read path:** `serveHandler` in [srv/lib/content-store.js](../../../srv/lib/content-store.js)
+  301-redirects any inbound mixed-case slug to its lowercase form before lookup.
+- **Write path:** `upsertTutorialMetadata` in
+  [srv/lib/content-publish-session.js](../../../srv/lib/content-publish-session.js)
+  (and the legacy duplicate in [srv/lib/content-store.js](../../../srv/lib/content-store.js))
+  lowercases every publish-payload key before `SELECT/INSERT/UPDATE`. The
+  case-insensitive lookup uses raw SQL `LOWER("SLUG") = ?` via the
+  [srv/lib/_tutorials-table.js](../../../srv/lib/_tutorials-table.js) helper so it
+  matches legacy mixed-case rows that were seeded before the canonical
+  rule was adopted.
+
+Source markdown filenames in the `sap-tutorials` GitHub org are not policed
+for case (some ship with uppercase, e.g. `abap-environment-sbpa-workflow-extend-RAP-App`).
+Both surfaces must therefore canonicalize independently.
+
+If you ever see a tutorial display "0 steps" on the group/mission catalog page
+while the tutorial itself renders correctly, suspect a case mismatch between
+`Tutorials.slug` (catalog FK target) and the slug the publisher wrote
+metadata under. The one-shot repair is
+[scripts/repair-mixed-case-tutorial-duplicates.cjs](../../../scripts/repair-mixed-case-tutorial-duplicates.cjs)
+(dry-run by default; pass `--apply` to mutate).
+
 ---
 
 ### Phase 5: Content Store (`srv/lib/content-store.js`)

@@ -4,6 +4,7 @@ import { gunzipSync } from 'node:zlib';
 import { acquireLock, releaseLock } from '../jobs/job-lock.js';
 import { getNextLegacyId } from './legacy-id.js';
 import { recomputeTutorialProgress, toBuffer } from './content-store.js';
+import { tutorialsTableInfo } from './_tutorials-table.js';
 
 const LOG = cds.log('content-publish');
 const LOCK_NAME = 'content-publish';
@@ -261,13 +262,29 @@ async function upsertTutorialMetadata(namespace, metadata) {
   const db = await cds.connect.to('db');
   let metaUpserted = 0;
 
-  for (const [slug, meta] of Object.entries(metadata)) {
-    try {
-      const existing = await SELECT.one.from(Tutorials).where({ slug }).columns('ID');
-      let tutorialId;
+  for (const [rawSlug, meta] of Object.entries(metadata)) {
+    // Canonical slug is lowercase. Source repos sometimes ship folder names with
+    // uppercase (e.g. .../extend-RAP-App/) but Hugo emits lowercase URLs and the
+    // read path 301-redirects to the lowercase form (see content-store.js
+    // serveHandler). Lowercasing here keeps the write path consistent with reads
+    // and prevents duplicate Tutorials rows when reference data was originally
+    // seeded with mixed case. See plan 2026-05-31-mixed-case-slug-stepcount.md.
+    const slug = rawSlug.toLowerCase();
 
-      if (existing) {
-        tutorialId = existing.ID;
+    try {
+      // Case-insensitive lookup via LOWER() — catches legacy mixed-case rows (e.g.
+      // slug seeded from GitHub repo names) as well as the normal already-lowercase
+      // case. See serveHandler in content-store.js for the read-side mirror.
+      // We do NOT rewrite the row's slug here; that is deferred to the repair
+      // script (scripts/repair-mixed-case-tutorial-duplicates.cjs).
+      const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+      const { table, idCol, slugCol } = tutorialsTableInfo(namespace, isHana);
+      const hits = await db.run(`SELECT ${idCol} FROM ${table} WHERE LOWER(${slugCol}) = ?`, [slug]);
+      // HANA returns uppercase column name "ID"; SQLite returns lowercase "ID" via CDS.
+      // Both are accessible as hits[0].ID — the fallback to .id covers any edge case.
+      let tutorialId = hits?.[0]?.ID ?? hits?.[0]?.id ?? null;
+
+      if (tutorialId) {
         await UPDATE(Tutorials).where({ ID: tutorialId }).set({
           title: meta.title,
           description: meta.description || null,
@@ -502,7 +519,7 @@ async function carryForwardUnchanged(namespace, newVersion, hanaTableName, getAc
 // Re-running here is a safety net — recomputeTutorialProgress is idempotent.
 // ---------------------------------------------------------------------------
 async function recomputeProgressForChangedTutorials(namespace, newVersion) {
-  const { ContentFiles, Tutorials } = cds.entities(namespace);
+  const { ContentFiles } = cds.entities(namespace);
   const db = await cds.connect.to('db');
 
   const rows = await SELECT.from(ContentFiles)
@@ -511,13 +528,20 @@ async function recomputeProgressForChangedTutorials(namespace, newVersion) {
   const slugs = [...new Set(rows.map(r => r.slug))];
   if (slugs.length === 0) return;
 
+  const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+  const { table, idCol, slugCol, stepCountCol } = tutorialsTableInfo(namespace, isHana);
+
   for (const slug of slugs) {
     try {
-      const tut = await SELECT.one.from(Tutorials)
-        .where({ slug })
-        .columns('ID', 'stepCount');
-      if (!tut?.ID || !Number.isInteger(tut.stepCount) || tut.stepCount <= 0) continue;
-      await recomputeTutorialProgress(db, namespace, tut.ID, tut.stepCount);
+      const hits = await db.run(
+        `SELECT ${idCol}, ${stepCountCol} FROM ${table} WHERE LOWER(${slugCol}) = ?`,
+        [slug.toLowerCase()]
+      );
+      const row = hits?.[0];
+      const tutorialId = row?.ID ?? row?.id ?? null;
+      const stepCount = row?.stepCount ?? row?.STEPCOUNT ?? null;
+      if (!tutorialId || !Number.isInteger(stepCount) || stepCount <= 0) continue;
+      await recomputeTutorialProgress(db, namespace, tutorialId, stepCount);
     } catch (e) {
       LOG.warn(`recomputeProgressForChangedTutorials: ${slug} failed`, e.message);
     }
