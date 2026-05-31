@@ -67,16 +67,9 @@ Expected: `feat/analytics-builder-phase4-history-saved`.
 
 - [ ] **Step 2: Write the failing test**
 
-Create `srv/__tests__/run-select-query-spec.test.js`:
+Append a new `describe` block to `srv/__tests__/analytics-service-run-envelope.test.js` (the existing file already has the cds.test bootstrap + admin-tx pattern; reusing it saves ~3-5s on every test run). Add at the bottom of that file, inside the same module scope:
 
 ```javascript
-import { describe, it, expect } from 'vitest'
-import cds from '@sap/cds'
-
-cds.test('serve', '--project', '.', '--in-memory')
-
-const { default: AnalyticsService } = await import('../analytics-service.js')  // for type-check; not strictly needed
-
 describe('runSelectQuery — spec parameter (Phase 4)', () => {
   const asAdmin = (srv, fn) =>
     srv.tx({ user: new cds.User.Privileged() }, fn)
@@ -113,13 +106,15 @@ describe('runSelectQuery — spec parameter (Phase 4)', () => {
 })
 ```
 
+The existing file already has `cds.test('serve', '--project', '.', '--in-memory')` at module scope — no extra bootstrap needed.
+
 - [ ] **Step 3: Run to confirm failure**
 
 ```bash
-npm test -- --project=unit run-select-query-spec
+npm test -- --project=unit -t "spec parameter"
 ```
 
-Expected: FAIL — first test fails because `spec` is not persisted (handler ignores it; writer always writes null).
+Expected: 2 FAIL (handler ignores spec; writer always writes null).
 
 - [ ] **Step 4: Update `srv/lib/analytics-history-writer.js`**
 
@@ -185,27 +180,38 @@ const historyId = await writeHistoryRow({
 
 - [ ] **Step 6: Update `srv/analytics-service.cds` action signature**
 
-Find the `runSelectQuery` action declaration. Phase 1's signature is `action runSelectQuery(sql : String, source : String) returns ...`. Add `spec`:
+Find the `runSelectQuery` action declaration. Phase 1's signature is `action runSelectQuery(sql : String, source : String null) returns ...` (the trailing `null` keyword makes `source` nullable so callers can omit it). Add `spec` with the same nullable marker:
 
 ```cds
-action runSelectQuery(sql : String, source : String, spec : String) returns ...
+action runSelectQuery(sql : String, source : String null, spec : String null) returns ...
 ```
+
+**The `null` marker on BOTH `source` and `spec` is load-bearing.** Removing it from `source` breaks the existing back-compat test (`analytics-service-run-envelope.test.js` "does not break when source is missing"). Adding it to `spec` lets new callers omit the param without CAP rejecting the request.
 
 (No return-shape changes; just the input.)
 
 - [ ] **Step 7: Run the tests to confirm they pass**
 
 ```bash
-npm test -- --project=unit run-select-query-spec
+npm test -- --project=unit -t "spec parameter"
+npm test -- --project=unit -t "Phase 1 envelope"
 ```
 
-Expected: 2 PASS.
+Expected: 2 PASS for the new spec-parameter tests; 4 PASS for the existing envelope tests (same file, separate `describe` block — verifies back-compat on the source-omitted case still works).
 
 - [ ] **Step 8: Update the frontend `runSelectQuery` wrapper**
 
-Edit `app/analytics-explorer/src/api/sql.ts`. Update the function signature:
+The current `app/analytics-explorer/src/api/sql.ts` (post-Phase-3) declares only `runSelectQuery(sql: string)` — the existing `SqlTab` callsite `runSelectQuery(sql, 'builder')` works at runtime (JS ignores extra args) but is type-incorrect today. **Replace the file in full** to add the missing `source` param, the new `spec` param, AND the missing `historyId` / `privacy` fields on `SqlResult` (the handler returns these from Phase 1; the canonical type was never updated):
 
 ```typescript
+export interface SqlResult {
+  columns: string[]
+  rows: Array<Array<string | null>>
+  metadata: { rowCount: number; truncated: boolean; durationMs: number }
+  privacy?: { mode: 'raw' | 'k-anon'; suppressedCells: number }
+  historyId?: string
+}
+
 export async function runSelectQuery(
   sql: string,
   source: 'builder' | 'editor' | 'joule' | 'replay' = 'editor',
@@ -216,7 +222,15 @@ export async function runSelectQuery(
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ sql, source, ...(spec ? { spec } : {}) }),
   })
-  // ... rest unchanged
+  if (!r.ok) {
+    const text = await r.text()
+    throw new Error(`runSelectQuery ${r.status}: ${text}`)
+  }
+  const result = await r.json()
+  if (!result || !Array.isArray(result.columns) || !Array.isArray(result.rows)) {
+    throw new Error('runSelectQuery: malformed response')
+  }
+  return result as SqlResult
 }
 ```
 
@@ -241,16 +255,16 @@ async function runFromChips() {
 
 ```bash
 cd app/analytics-explorer && npm run build 2>&1 | tail -3 && cd ../..
-npm test -- --project=unit run-select-query-spec
-npm test -- --project=unit run-envelope
+npm test -- --project=unit -t "spec parameter"
+npm test -- --project=unit -t "Phase 1 envelope"
 ```
 
-Expected: build green; spec test green; existing envelope test green.
+Expected: build green; 2 spec-parameter tests pass; 4 existing envelope tests pass (back-compat on `source: missing` still works thanks to the preserved `null` marker).
 
 - [ ] **Step 11: Commit**
 
 ```bash
-git add srv/lib/analytics-history-writer.js srv/analytics-service.js srv/analytics-service.cds srv/__tests__/run-select-query-spec.test.js app/analytics-explorer/src/api/sql.ts app/analytics-explorer/src/components/SqlTab.vue
+git add srv/lib/analytics-history-writer.js srv/analytics-service.js srv/analytics-service.cds srv/__tests__/analytics-service-run-envelope.test.js app/analytics-explorer/src/api/sql.ts app/analytics-explorer/src/components/SqlTab.vue
 git commit -m "feat(analytics): persist QuerySpec on history rows (Phase 4 prep)
 
 Phase 1's analytics-history-writer always wrote spec=null because the
@@ -506,7 +520,7 @@ describe('useSavedQueries', () => {
     const sq = useSavedQueries()
     await sq.rename('s1', 'Renamed', 'desc')
     const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toContain("/admin/analytics/SavedQueries(ID=")
+    expect(url).toContain("/admin/analytics/SavedQueries(ID='")
     expect(url).toContain('/AnalyticsService.rename')
     expect(init.method).toBe('POST')
     expect(JSON.parse(init.body)).toEqual({ name: 'Renamed', description: 'desc' })
@@ -534,7 +548,7 @@ describe('useSavedQueries', () => {
     await sq.remove('s1')
     const [url, init] = fetchMock.mock.calls[0]
     expect(init.method).toBe('DELETE')
-    expect(url).toContain("/admin/analytics/SavedQueries(ID=")
+    expect(url).toContain("/admin/analytics/SavedQueries(ID='")
   })
 
   it('parseSpec returns parsed when valid v1 JSON', () => {
@@ -589,8 +603,11 @@ export interface SaveAsInput {
 const COLLECTION = '/admin/analytics/SavedQueries'
 
 function entityKeyUrl(id: string): string {
-  // OData v4 single-key URL. CAP accepts the key=value form.
-  return `${COLLECTION}(ID=${encodeURIComponent(id)})`
+  // OData v4 single-key URL. CAP accepts the quoted-string form for UUIDs:
+  //   /admin/analytics/SavedQueries(ID='abc-123')
+  // The unquoted form (ID=abc-123) works with some clients but not reliably
+  // with CAP's OData router for typed Edm.Guid; always quote the value.
+  return `${COLLECTION}(ID='${encodeURIComponent(id)}')`
 }
 
 async function jsonFetch(url: string, init: RequestInit = {}): Promise<any> {
@@ -1902,21 +1919,34 @@ History load forwarding, Saved load forwarding."
 
 Replace the direct `<ResultsTab>` mount with `<BottomTabs>` and add `<BuilderHeader>` above the chip bar. Wire the `load-row` event to a function that decides between `setSpec` and SQL-only-paste.
 
+**Existing behavior to preserve UNCHANGED:** `onResults`, `runFromChips`, `onTakeOverFromBuilder`, `onReturnToBuilder`, `canDrill`, `onDrilldown`, `onBackToGrouped`, `insertEntity`, `startBuilderFromEntity`, the entire `<aside class="entity-list">` block, the `<QueryEditor ref="editorRef">` mount, and every CSS class. This task adds two new mounts and one event handler — nothing else changes.
+
 - [ ] **Step 1: Update imports + add load handlers**
 
 In `SqlTab.vue`'s `<script setup>`:
+
+**Add** these imports near the top (alongside the existing `ClauseChipBar` / `SqlPreview` / `AutoGroupByBanner` lines):
 
 ```typescript
 import BuilderHeader from './builder/BuilderHeader.vue'
 import BottomTabs from './results/BottomTabs.vue'
 import { useHistory } from '../composables/useHistory'
-import { useSavedQueries } from '../composables/useSavedQueries'
 import type { HistoryRow } from '../composables/useHistory'
 import type { SavedRow } from '../composables/useSavedQueries'
+```
 
-// (Drop the `import ResultsTab from './results/ResultsTab.vue'` line — BottomTabs owns it now.)
+**Remove** this existing line — `BottomTabs` owns the `ResultsTab` mount now:
 
-// Reuse the parseSpec helper from useHistory (also exposed by useSavedQueries).
+```typescript
+import ResultsTab from './results/ResultsTab.vue'
+```
+
+(Verify the line exists before deleting; the rest of the file's imports stay untouched.)
+
+**Add** the parseSpec helper:
+
+```typescript
+// Reuse the parseSpec helper from useHistory.
 const { parseSpec: parseHistorySpec } = useHistory()
 ```
 
