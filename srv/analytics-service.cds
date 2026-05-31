@@ -1,5 +1,6 @@
 using { com.sap.developers.ims as ims } from '../db/schema';
 using from '../db/views';
+using from '../db/analytics-builder';
 
 @requires : 'Admin'
 service AnalyticsService @(path : '/admin/analytics') {
@@ -25,16 +26,62 @@ service AnalyticsService @(path : '/admin/analytics') {
     label       : String;
     description : String;
     columns     : array of {
-      name     : String;
-      type     : String;
-      nullable : Boolean;
-      length   : Integer null;
+      name        : String;
+      type        : String;
+      hanaType    : String;
+      nullable    : Boolean;
+      length      : Integer null;
+      filterMode  : String;
+      filterSample: Boolean;
+      pii         : Boolean;
+    };
+    associations : array of {
+      name         : String;
+      targetEntity : String;
+      cardinality  : String;
+      onLocal      : array of String;
+      onTarget     : array of String;
     };
   };
 
-  action runSelectQuery(sql : String) returns {
+  // The handler returns additional fields not declared here (privacy, historyId).
+  // CAP/OData passes the extra JSON fields through unchanged. The optional
+  // 'source' parameter records which surface drove the query in the history row.
+  action runSelectQuery(sql : String, source : String) returns {
     columns  : array of String;
     rows     : array of String;  // each element is a JSON-stringified row array
     metadata : { rowCount : Integer; truncated : Boolean; durationMs : Integer; };
   };
+
+  // ─── Phase 1 additions (2026-05-31) ──────────────────────────────────────
+
+  /** Sample distinct values for an enum-mode column. Annotation-gated. */
+  function sampleDistinct(table : String, column : String, limit : Integer) returns {
+    values    : array of String;
+    truncated : Boolean;
+  };
+
+  /** Stream a query result as CSV. Bypasses 5k row cap; capped at 100k rows / 60s. */
+  action exportSelectQuery(sql : String) returns LargeBinary;
+
+  // History (read-only, scoped to current user via @restrict below)
+  @readonly entity QueryHistory as projection on ims.AnalyticsQueryHistory;
+
+  // Saved queries — admin-creatable, with rename/visibility/duplicate/recordRun actions
+  entity SavedQueries as projection on ims.AnalyticsSavedQuery actions {
+    action rename(name : String, description : String) returns SavedQueries;
+    action setVisibility(visibility : String) returns SavedQueries;
+    action duplicate() returns SavedQueries;
+    action recordRun(rowCount : Integer, durationMs : Integer) returns SavedQueries;
+  };
 }
+
+annotate AnalyticsService.SavedQueries with @restrict : [
+  { grant : 'READ',                  where : 'visibility = ''shared-admins'' or createdBy = $user' },
+  { grant : ['CREATE'] },
+  { grant : ['UPDATE','DELETE'],     where : 'createdBy = $user' }
+];
+
+annotate AnalyticsService.QueryHistory with @restrict : [
+  { grant : 'READ', where : 'createdBy = $user' }
+];

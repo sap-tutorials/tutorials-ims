@@ -26,6 +26,11 @@ export default class AnalyticsService extends cds.ApplicationService {
         if (def.kind !== 'entity') continue
         if (!def['@analytics.exposed']) continue
         if (!def.name.startsWith('com.sap.developers.ims.')) continue
+        // Phase 1: defensively exclude admin-only history/saved tables — they
+        // share the namespace but should never surface in the user-facing
+        // builder. They don't carry @analytics.exposed today, but this guard
+        // prevents future drift if someone copies the annotation pattern.
+        if (/^com\.sap\.developers\.ims\.Analytics(QueryHistory|SavedQuery)$/.test(def.name)) continue
         const projectionName = def.name.split('.').pop()
         if (seen.has(projectionName)) continue
         const projection = srv.entities[projectionName]
