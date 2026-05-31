@@ -72,6 +72,25 @@ function startBuilderFromEntity(e: ExposedEntity) {
   })
 }
 
+function onTakeOverFromBuilder() {
+  // Pre-populate the Monaco editor with the chip-built SQL so the user has
+  // a starting point. Mode flip greys out the chip bar.
+  if (spec.value) {
+    try {
+      const sql = specToSql(spec.value, entityGraph.sqlNames.value)
+      editorRef.value?.setValue?.(sql)
+    } catch { /* no-op — chip-bar validation should have caught this */ }
+  }
+  querySpec.takeOverFromBuilder()
+}
+
+function onReturnToBuilder() {
+  // Confirm: any edits to the SQL editor will be discarded since we don't
+  // parse arbitrary SQL back into QuerySpec.
+  if (!window.confirm('Any edits to the SQL editor will be discarded. Return to chip-builder mode?')) return
+  querySpec.returnToBuilder()
+}
+
 async function runFromChips() {
   if (!spec.value) return
   try {
@@ -107,17 +126,35 @@ function visualize() {
 </script>
 
 <template>
-  <div class="sql-tab">
+  <div class="sql-tab" :class="{ 'editor-mode': mode === 'editor' }">
     <ClauseChipBar />
     <SqlPreview />
     <div v-if="spec" class="builder-run-row">
       <ui5-button
+        v-if="mode === 'builder'"
         design="Emphasized"
         icon="play"
         :disabled="!canRunFromChips"
         @click="runFromChips"
       >Run from chips</ui5-button>
-      <span v-if="!canRunFromChips" class="run-hint">Validation errors — see chip highlights</span>
+      <span v-if="mode === 'builder' && !canRunFromChips" class="run-hint">Validation errors — see chip highlights</span>
+
+      <ui5-button
+        v-if="mode === 'builder'"
+        design="Transparent"
+        icon="edit"
+        @click="onTakeOverFromBuilder"
+        title="Switch to SQL Editor mode (chip bar will be greyed out)"
+      >Take over from builder</ui5-button>
+
+      <ui5-button
+        v-if="mode === 'editor'"
+        design="Attention"
+        icon="undo"
+        @click="onReturnToBuilder"
+        title="Return to chip-builder mode (any SQL edits will be discarded)"
+      >Return to builder</ui5-button>
+      <span v-if="mode === 'editor'" class="editor-mode-hint">SQL Editor mode — chip bar disabled. Edit SQL below.</span>
     </div>
     <div class="main-row">
       <aside class="entity-list" aria-label="Exposed entities">
@@ -189,6 +226,18 @@ function visualize() {
 .run-hint {
   font-size: 0.75rem;
   color: var(--sapErrorColor);
+}
+.editor-mode-hint {
+  font-size: 0.75rem;
+  color: var(--sapInformationColor);
+  font-style: italic;
+}
+.sql-tab.editor-mode :deep(.clause-chip-bar) {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.sql-tab.editor-mode :deep(.sql-preview) {
+  opacity: 0.55;
 }
 .main-row {
   flex: 1;
