@@ -1,5 +1,3 @@
-'use strict'
-
 // Pure-function validator for QuerySpec (the canonical state shape produced
 // by the chip builder and by Joule's generateAnalyticsQuery tool). Returns
 // { errors: [{ chipId, message }] } — empty array means valid. Does not call
@@ -193,4 +191,4 @@ function validateQuerySpec(spec, entityMap) {
   return { errors }
 }
 
-module.exports = { validateQuerySpec }
+export { validateQuerySpec }

@@ -1,7 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createRequire } from 'node:module'
-const require = createRequire(import.meta.url)
-const { validateQuerySpec } = require('../query-spec-validator.cjs')
+import { validateQuerySpec } from '../query-spec-validator.mjs'
 
 // Schema-faithful fixture (verified against db/schema.cds + db/views.cds at write time):
 //   - TaskRecords carries the FK columns user_ID, event_ID + status enum COMPLETED/IN_PROGRESS
