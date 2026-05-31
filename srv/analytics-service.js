@@ -219,6 +219,56 @@ export default class AnalyticsService extends cds.ApplicationService {
     })
 
     // Startup warning: projection without annotation
+    // ─── SavedQueries actions (Phase 1) ───────────────────────────────────
+    this.on('rename', 'SavedQueries', async (req) => {
+      const ID = req.params[0]?.ID
+      const { name, description } = req.data
+      if (typeof name !== 'string' || !name.trim()) return req.reject(400, 'name is required')
+      await UPDATE(srv.entities.SavedQueries).set({ name, description }).where({ ID })
+      return SELECT.one.from(srv.entities.SavedQueries).where({ ID })
+    })
+
+    this.on('setVisibility', 'SavedQueries', async (req) => {
+      const ID = req.params[0]?.ID
+      const { visibility } = req.data
+      if (!['private', 'shared-admins'].includes(visibility)) {
+        return req.reject(400, `visibility must be 'private' or 'shared-admins'`)
+      }
+      await UPDATE(srv.entities.SavedQueries).set({ visibility }).where({ ID })
+      return SELECT.one.from(srv.entities.SavedQueries).where({ ID })
+    })
+
+    this.on('duplicate', 'SavedQueries', async (req) => {
+      const ID = req.params[0]?.ID
+      const original = await SELECT.one.from(srv.entities.SavedQueries).where({ ID })
+      if (!original) return req.reject(404, 'saved query not found')
+      const newID = cds.utils.uuid()
+      await INSERT.into(srv.entities.SavedQueries).entries({
+        ID: newID,
+        name: `${original.name} (copy)`,
+        description: original.description,
+        sql: original.sql,
+        spec: original.spec,
+        rowCount: original.rowCount,
+        durationMs: original.durationMs,
+        truncated: original.truncated,
+        privacyMode: original.privacyMode,
+        visibility: 'private', // copies start private
+      })
+      return SELECT.one.from(srv.entities.SavedQueries).where({ ID: newID })
+    })
+
+    this.on('recordRun', 'SavedQueries', async (req) => {
+      const ID = req.params[0]?.ID
+      const { rowCount, durationMs } = req.data
+      await UPDATE(srv.entities.SavedQueries).set({
+        rowCount: Number(rowCount) || 0,
+        durationMs: Number(durationMs) || 0,
+        lastRunAt: new Date().toISOString(),
+      }).where({ ID })
+      return SELECT.one.from(srv.entities.SavedQueries).where({ ID })
+    })
+
     this.on('served', () => {
       const annotated = new Set(getExposedEntries().map(e => e.projectionName))
       for (const e of Object.values(srv.entities)) {
