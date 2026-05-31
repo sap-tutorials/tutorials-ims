@@ -12,6 +12,7 @@ import type { HistoryRow } from '../composables/useHistory'
 import type { SavedRow } from '../composables/useSavedQueries'
 import { useQuerySpec } from '../composables/useQuerySpec'
 import { useEntityGraph } from '../composables/useEntityGraph'
+import { useJouleContext } from '../composables/useJouleContext'
 import { runSelectQuery, type SqlResult } from '../api/sql'
 import { specToSql } from '@srv-lib/spec-to-sql.mjs'
 import { validateQuerySpec } from '@srv-lib/query-spec-validator.mjs'
@@ -21,11 +22,25 @@ import { getCachedEntityMetadata, type ExposedEntity } from '../api/entities'
 const querySpec = useQuerySpec()
 const { spec, mode, isDrilldown } = querySpec
 const entityGraph = useEntityGraph()
+const jouleCtx = useJouleContext()
 
 const lastResults = ref<SqlResult | null>(null)
 const entities = ref<ExposedEntity[]>([])
 const entitiesError = ref<string | null>(null)
 const editorRef = ref<InstanceType<typeof QueryEditor> | null>(null)
+
+// Push the result sample into the Joule page-context store. Capped at 50 rows
+// here too; redactPii caps and strips PII columns before send.
+function feedJouleContext(r: SqlResult | null) {
+  if (!r || !spec.value) { jouleCtx.setLastResult(null); return }
+  jouleCtx.setLastResult({
+    entityName: spec.value.from.entity,
+    columns: r.columns,
+    rows: r.rows.slice(0, 50),
+    rowCount: r.metadata?.rowCount ?? r.rows.length,
+    truncated: r.metadata?.truncated ?? false,
+  })
+}
 
 // Generated SQL: from chips when builder mode, empty when editor mode
 // (the editor's value is the source of truth there).
@@ -53,6 +68,7 @@ async function runFromChips() {
     const sql = specToSql(spec.value, entityGraph.sqlNames.value)
     const r = await runSelectQuery(sql, 'builder', JSON.stringify(spec.value))
     lastResults.value = r
+    feedJouleContext(r)
   } catch (e: any) {
     // eslint-disable-next-line no-console
     console.warn('[SqlTab] runFromChips failed:', e.message)
@@ -65,11 +81,13 @@ function onResults(data: { columns: string[]; rows: any[] }) {
   const arrayRows = Array.isArray(data.rows[0])
     ? (data.rows as Array<Array<string | number | null>>)
     : (data.rows as Array<Record<string, any>>).map(r => data.columns.map(c => r[c]))
-  lastResults.value = {
+  const r: SqlResult = {
     columns: data.columns,
     rows: arrayRows,
     metadata: { rowCount: arrayRows.length, truncated: false, durationMs: 0 },
   }
+  lastResults.value = r
+  feedJouleContext(r)
 }
 
 function insertEntity(e: ExposedEntity) {

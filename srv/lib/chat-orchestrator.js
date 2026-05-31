@@ -1,5 +1,8 @@
 import cds from '@sap/cds';
 import { OrchestrationClient } from '@sap-ai-sdk/orchestration';
+import { validateQuerySpec } from './query-spec-validator.mjs';
+import { specToSql } from './spec-to-sql.mjs';
+import { getAnalyticsContext } from './analytics-llm-context.js';
 
 const LOG = cds.log('chat');
 const MAX_TURNS = 5;
@@ -84,6 +87,45 @@ const ANALYTICS_QUERY_TOOL = {
   },
 };
 
+const GENERATE_ANALYTICS_QUERY_TOOL = {
+  type: 'function',
+  function: {
+    name: 'generateAnalyticsQuery',
+    description: 'Translate a natural-language analytics request into a structured QuerySpec that the user can review in the chip builder. The QuerySpec is validated and SQL is re-derived server-side; do NOT emit raw SQL. Use this when the user wants to construct or refine a query that they will run themselves.',
+    parameters: {
+      type: 'object',
+      properties: {
+        spec: {
+          type: 'object',
+          description: 'A QuerySpec v1 object: { version: 1, from: { entity, alias }, joins: [], filterTree: null|{op,operands}, groupBy: [], select: [{kind:"column"|"agg", id, ref:{alias,column}, fn?}], orderBy: [], limit: null|number }.',
+        },
+        explanation: {
+          type: 'string',
+          description: 'A short (1-2 sentence) plain-language explanation of what the query does.',
+        },
+      },
+      required: ['spec'],
+    },
+  },
+};
+
+const EXPLAIN_ANALYTICS_RESULT_TOOL = {
+  type: 'function',
+  function: {
+    name: 'explainAnalyticsResult',
+    description: 'Produce a 1-3 sentence plain-language summary of an analytics result sample. The user has just run a query and wants context. The columns + rows are already PII-redacted client-side; do NOT echo cell values verbatim if they look sensitive. Highlight totals, outliers, trends.',
+    parameters: {
+      type: 'object',
+      properties: {
+        columns: { type: 'array', items: { type: 'string' } },
+        rows: { type: 'array', items: { type: 'array' } },
+        summary: { type: 'string', description: 'Your 1-3 sentence summary.' },
+      },
+      required: ['columns', 'rows', 'summary'],
+    },
+  },
+};
+
 const GET_RELEVANT_STEPS_TOOL = {
   type: 'function',
   function: {
@@ -116,7 +158,7 @@ const GET_USER_PROGRESS_TOOL = {
 async function toolsForContext({ pageContext, isAdmin }) {
   const tools = [SEARCH_TUTORIALS_TOOL];
   if (isAdmin && pageContext?.kind === 'admin') {
-    tools.push(SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL);
+    tools.push(SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, GENERATE_ANALYTICS_QUERY_TOOL, EXPLAIN_ANALYTICS_RESULT_TOOL);
   } else {
     // Learner-side only — admins are running the platform, not consuming
     // tutorials, so progress lookup is irrelevant in the admin persona.
@@ -249,6 +291,43 @@ export async function dispatchTool(name, args, user) {
       // tagged errors above; this branch catches DB-layer failures.
       return { error: 'analytics_failed', message: err?.message || 'Query execution failed' };
     }
+  }
+
+  if (name === 'generateAnalyticsQuery') {
+    const spec = args?.spec;
+    if (!spec || typeof spec !== 'object') {
+      return { error: 'spec is required (QuerySpec v1 object)' };
+    }
+    const { entityMap, sqlNames } = getAnalyticsContext();
+    const { errors } = validateQuerySpec(spec, entityMap);
+    if (errors.length > 0) return { errors, spec };
+    let sql;
+    try { sql = specToSql(spec, sqlNames); }
+    catch (e) { return { errors: [{ chipId: null, message: `spec-to-sql failed: ${e.message}` }], spec }; }
+    const wrapped = `SELECT * FROM (${sql}) t LIMIT 11`;
+    let rows = [];
+    try { rows = await cds.db.run(wrapped); }
+    catch (e) { return { errors: [{ chipId: null, message: `query execution failed: ${e.message}` }], spec, sql }; }
+    const truncated = rows.length > 10;
+    const preview = {
+      columns: rows.length ? Object.keys(rows[0]) : [],
+      rows: (truncated ? rows.slice(0, 10) : rows).map(r => Object.values(r).map(v => v === null ? null : String(v))),
+      truncated,
+    };
+    return { errors: [], spec, sql, explanation: args?.explanation || '', preview };
+  }
+
+  if (name === 'explainAnalyticsResult') {
+    const cols = Array.isArray(args?.columns) ? args.columns : [];
+    const allRows = Array.isArray(args?.rows) ? args.rows : [];
+    const truncated = allRows.length > 50;
+    const rows = truncated ? allRows.slice(0, 50) : allRows;
+    return {
+      columns: cols,
+      rows,
+      truncated: !!truncated,
+      summary: typeof args?.summary === 'string' ? args.summary : '',
+    };
   }
 
   if (name === 'getRelevantSteps') {
@@ -420,6 +499,10 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
           sse(res, { type: 'doc-citations', items: result.map(h => ({ path: h.path, heading: h.heading, score: h.score })) });
         } else if (tc.name === 'analyticsQuery' && result && !result.error && Array.isArray(result.rows)) {
           sse(res, { type: 'analytics-result', plan: result.plan, rows: result.rows, suppressedCount: result.suppressedCount, totalRows: result.totalRows });
+        } else if (tc.name === 'generateAnalyticsQuery' && result && Array.isArray(result.errors)) {
+          sse(res, { type: 'generated-query', spec: result.spec, sql: result.sql, errors: result.errors, explanation: result.explanation, preview: result.preview });
+        } else if (tc.name === 'explainAnalyticsResult' && result && typeof result.summary === 'string') {
+          sse(res, { type: 'explanation', summary: result.summary, columns: result.columns, rows: result.rows, truncated: result.truncated });
         } else if (tc.name === 'getRelevantSteps' && Array.isArray(result) && result.length > 0) {
           sse(res, { type: 'step-citations', items: result });
         }
