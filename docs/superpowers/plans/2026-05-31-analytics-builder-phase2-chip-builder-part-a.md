@@ -83,108 +83,46 @@ git commit -m "chore(srv/lib): note upcoming dual-format conversion of isomorphi
 
 ---
 
-## Task 2: Convert `query-spec-validator` to ESM + CJS wrapper
+## Task 2: Convert `query-spec-validator` to ESM
 
 **Files:**
-- Create: `srv/lib/query-spec-validator.mjs`
-- Modify: `srv/lib/query-spec-validator.cjs` (becomes a thin re-export)
-- Existing tests: `srv/lib/__tests__/query-spec-validator.test.js` (no test changes — same surface)
+- Rename: `srv/lib/query-spec-validator.cjs` → `srv/lib/query-spec-validator.mjs`
+- Modify: `srv/lib/__tests__/query-spec-validator.test.js`
 
-- [ ] **Step 1: Verify the existing test passes against the unchanged module**
+The Phase 1 module has zero non-test consumers (verified in Step 1 below), so the migration is a clean rename + a two-line export change. No CJS wrapper needed.
+
+- [ ] **Step 1: Verify the existing tests pass**
 
 ```bash
 npm test -- --project=unit query-spec-validator
 ```
 
-Expected: 12 PASS. This is the baseline we must preserve.
+Expected: 12 PASS. This is the baseline we must preserve through the rename.
 
-- [ ] **Step 2: Create the ESM source as `query-spec-validator.mjs`**
-
-Copy the entire contents of `srv/lib/query-spec-validator.cjs` to a new file `srv/lib/query-spec-validator.mjs`. Then replace the CJS export at the bottom with an ESM export. The body of the file is unchanged.
-
-Specifically:
-
-- Drop the `'use strict'` directive at the top (ESM is strict by default).
-- Drop `module.exports = { validateQuerySpec }` at the bottom.
-- Add `export { validateQuerySpec }` (or change `function validateQuerySpec(...)` to `export function validateQuerySpec(...)` — pick the latter for symmetry).
-
-The resulting `query-spec-validator.mjs` should look like the original, with `export` decorating `validateQuerySpec` and no `module.exports` line.
-
-- [ ] **Step 3: Replace the `.cjs` body with a thin wrapper that re-exports from the `.mjs`**
-
-Replace the entire contents of `srv/lib/query-spec-validator.cjs` with:
-
-```javascript
-'use strict'
-
-// Thin CJS wrapper around the ESM source. Node consumers (e.g. analytics-service.js
-// runSelectQuery handler in Phase 3+) `require` this file; the browser imports
-// the .mjs directly via the @srv-lib Vite alias. Single source of truth lives in
-// the .mjs to prevent drift.
-//
-// The dynamic-import + sync-cache trick is needed because Node's require()
-// is synchronous but ESM imports are async. Since this module is loaded once
-// during module init, the one-time async cost is negligible.
-
-let _cached
-async function _load() {
-  if (!_cached) _cached = await import('./query-spec-validator.mjs')
-  return _cached
-}
-
-module.exports = {
-  validateQuerySpec(...args) {
-    if (!_cached) {
-      throw new Error(
-        "query-spec-validator.cjs: ESM module not yet loaded. Call await require('./query-spec-validator.cjs').load() once at startup before using validateQuerySpec()."
-      )
-    }
-    return _cached.validateQuerySpec(...args)
-  },
-  async load() { return _load() },
-}
-```
-
-Wait — that's awkward for synchronous Node consumers. **Reconsider.** Since the existing CJS test calls `validateQuerySpec` synchronously, the wrapper must be sync. Two options:
-
-**Option A (recommended for Phase 2): keep the `.cjs` as the source of truth for Node, and write the `.mjs` as a re-export that imports the CJS via Node's `module.createRequire`.** Browsers can't use `createRequire`, so the `.mjs` would need to be a separate copy. That defeats single-source-of-truth.
-
-**Option B (better): make the source pure ESM (`.mjs`), and have the `.cjs` use Node's [synchronous require for ESM via `import.meta.url`-emulation pattern].** This doesn't exist synchronously in Node.
-
-**Option C (cleanest): make the source pure ESM (`.mjs`), and convert the existing Node consumer (`analytics-service.js` in Phase 1) to use `import` instead of `require` for this module.** `analytics-service.js` is already ESM (`import cds from '@sap/cds'`), so it can `import { validateQuerySpec } from './lib/query-spec-validator.mjs'` directly.
-
-**Choose Option C.** Replace the entire `.cjs` body with a deprecation shim and update the one Node caller in Phase 1.
-
-Actually — the existing `srv/lib/query-spec-validator.cjs` has **no Node consumers in Phase 1**. It's only consumed by its unit tests today. So we can just **delete the `.cjs` and use `.mjs` as the single source**. Easier.
-
-Let me restate the task:
-
-**Revised Task 2: Replace `.cjs` with `.mjs`, no wrapper needed.**
-
-- [ ] **Step 3 (revised): Verify there are no Node consumers of the .cjs**
+- [ ] **Step 2: Verify there are no Node consumers of the .cjs**
 
 ```bash
 grep -rn "query-spec-validator" srv/ app/ --include="*.js" --include="*.ts" --include="*.cjs" --include="*.mjs" --include="*.vue" 2>&1 | grep -v __tests__ | head
 ```
 
-Expected: zero matches (or only matches in test files). If any non-test consumer exists, escalate as BLOCKED — Option C-style migration is needed.
+Expected: zero matches (only test-file matches, which we excluded). If any non-test consumer exists, escalate as BLOCKED — a CJS wrapper migration would be needed.
 
-- [ ] **Step 4: Rename the module**
+- [ ] **Step 3: Rename the module**
 
 ```bash
 git mv srv/lib/query-spec-validator.cjs srv/lib/query-spec-validator.mjs
 ```
 
-- [ ] **Step 5: Convert to ESM**
+- [ ] **Step 4: Convert to ESM**
 
 Edit `srv/lib/query-spec-validator.mjs`:
 
-- Remove the `'use strict'` line at the top.
+- Remove the `'use strict'` line at the top (ESM is strict by default).
 - Change `module.exports = { validateQuerySpec }` at the bottom to `export { validateQuerySpec }`.
 
 (Internal helper functions stay as-is — they're already module-scoped.)
 
-- [ ] **Step 6: Update the test to import the .mjs**
+- [ ] **Step 5: Update the test to import the .mjs**
 
 Edit `srv/lib/__tests__/query-spec-validator.test.js`. Replace:
 
@@ -200,15 +138,15 @@ with:
 import { validateQuerySpec } from '../query-spec-validator.mjs'
 ```
 
-- [ ] **Step 7: Run the test**
+- [ ] **Step 6: Run the test**
 
 ```bash
 npm test -- --project=unit query-spec-validator
 ```
 
-Expected: 12 PASS. If any test fails, the conversion broke something — most likely cause is a CJS-only API used inside the module body (e.g. `__dirname`, `require`). Inspect and fix.
+Expected: 12 PASS. If anything fails, the conversion broke something — most likely cause is a CJS-only API used inside the module body (e.g. `__dirname`, `require`). Inspect and fix.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add srv/lib/query-spec-validator.mjs srv/lib/__tests__/query-spec-validator.test.js
@@ -302,6 +240,9 @@ the @srv-lib Vite alias added in Phase 2 Task 4)."
 **Files:**
 - Modify: `app/analytics-explorer/vite.config.ts`
 - Modify: `app/analytics-explorer/tsconfig.json`
+- Modify: `vitest.config.ts` (repo root) — **also add `resolve.alias`** to the `unit` project; the project does not import `vite.config.ts`, so the SPA-side alias does not propagate to Vitest runs
+
+> **Note on spec retraction:** The spec at one point retracted the "Vite alias" approach in favor of generated artifacts under `app/analytics-explorer/src/shared/__generated__/`. The retraction's concern was transitive Node imports (e.g. `@sap/cds`, `node:*`) leaking into the browser. The Phase 1 modules are leaf-pure JS — they import nothing — so the alias path is safe for these two specific files. If we ever need to share modules with Node imports, we'd switch to the generated-artifact pattern then.
 
 - [ ] **Step 1: Add resolve.alias to vite.config.ts**
 
@@ -340,23 +281,55 @@ Edit `app/analytics-explorer/tsconfig.json`. Add `paths` to `compilerOptions`:
 
 Also confirm `baseUrl` is set; if not, add `"baseUrl": "."`. The file already has `"moduleResolution": "bundler"` which honors `paths`.
 
-- [ ] **Step 3: Smoke-test the alias**
+- [ ] **Step 3: Add the SAME alias to the Vitest unit project**
 
-Create a temporary test file `app/analytics-explorer/src/__alias-smoke.ts`:
+The Vitest unit project at `vitest.config.ts` does NOT import `vite.config.ts` — projects are flat. Without this step, `@srv-lib` will resolve in `npm run build` but FAIL in `npm test`.
+
+Edit `vitest.config.ts` (repo root). At the top, add the import:
+
+```typescript
+import { fileURLToPath } from 'node:url'
+```
+
+Inside the `unit` project block, add `resolve.alias`:
+
+```typescript
+{
+  test: {
+    name: 'unit',
+    environment: 'node',
+    include: [...],  // unchanged
+    exclude: [...],  // unchanged
+    hookTimeout: 60000,
+    env: { NO_TELEMETRY: 'true' }
+  },
+  resolve: {
+    alias: {
+      '@srv-lib': fileURLToPath(new URL('./srv/lib', import.meta.url)),
+    },
+  },
+},
+```
+
+Note the path is relative to the **repo root** (where vitest.config.ts lives), so `./srv/lib` — not `../../srv/lib` like in the SPA's vite.config.
+
+- [ ] **Step 4: Smoke-test the alias from both sides**
+
+Create `app/analytics-explorer/src/lib/srv-lib-imports.ts`:
 
 ```typescript
 import { validateQuerySpec } from '@srv-lib/query-spec-validator.mjs'
 import { specToSql } from '@srv-lib/spec-to-sql.mjs'
 
-// Will be referenced by the smoke test below.
+// Re-export for the regression smoke test below.
 export { validateQuerySpec, specToSql }
 ```
 
-Then create `app/analytics-explorer/src/__tests__/alias-smoke.test.ts`:
+Create `app/analytics-explorer/src/lib/__tests__/srv-lib-imports.test.ts`:
 
 ```typescript
 import { describe, it, expect } from 'vitest'
-import { validateQuerySpec, specToSql } from '../__alias-smoke'
+import { validateQuerySpec, specToSql } from '../srv-lib-imports'
 
 describe('@srv-lib alias', () => {
   it('imports validateQuerySpec from srv/lib', () => {
@@ -369,54 +342,37 @@ describe('@srv-lib alias', () => {
 })
 ```
 
-- [ ] **Step 4: Verify the project's vitest workspace picks up `app/analytics-explorer/src/__tests__/`**
-
 Run:
-
-```bash
-npm test -- --project=unit alias-smoke
-```
-
-Expected: 2 PASS.
-
-If the test isn't discovered, the Vitest project config doesn't include `app/analytics-explorer/src/**/__tests__/**/*.test.ts`. Check `vitest.config.ts` at the repo root — Phase 1's Task 3 confirmed it does include this glob, so it should work.
-
-If the alias fails to resolve, the most likely cause is the Vitest project running with its own (non-Vite) config. Check `vitest.config.ts` for whether project unit imports `app/analytics-explorer/vite.config.ts`. If not, you may need to add the same alias to the unit project's `resolve.alias`.
-
-- [ ] **Step 5: Delete the smoke files (alias is verified; tests stay)**
-
-Actually — **keep** both files. The smoke test is a permanent regression guard against the alias breaking in a future Vitest/Vite upgrade. Move them out of "smoke" naming:
-
-```bash
-git mv app/analytics-explorer/src/__alias-smoke.ts app/analytics-explorer/src/lib/srv-lib-imports.ts
-mkdir -p app/analytics-explorer/src/lib/__tests__
-git mv app/analytics-explorer/src/__tests__/alias-smoke.test.ts app/analytics-explorer/src/lib/__tests__/srv-lib-imports.test.ts
-```
-
-Edit the test to update the import path:
-
-```typescript
-import { validateQuerySpec, specToSql } from '../srv-lib-imports'
-```
-
-Re-run:
 
 ```bash
 npm test -- --project=unit srv-lib-imports
 ```
 
-Expected: 2 PASS.
+Expected: 2 PASS. If the test fails with `Cannot find module '@srv-lib/...'`, the Vitest alias from Step 3 is missing or wrong. Confirm `vitest.config.ts` has both the `import { fileURLToPath } from 'node:url'` line and the `resolve.alias` block inside the `unit` project.
 
-- [ ] **Step 6: Commit**
+Then verify the build side:
 
 ```bash
-git add app/analytics-explorer/vite.config.ts app/analytics-explorer/tsconfig.json app/analytics-explorer/src/lib/srv-lib-imports.ts app/analytics-explorer/src/lib/__tests__/srv-lib-imports.test.ts
+cd app/analytics-explorer && npm run build 2>&1 | tail -5 && cd ../..
+```
+
+Expected: build succeeds. If it fails, the SPA-side Vite alias from Step 1 is missing or wrong.
+
+The two paths (Step 1 + Step 3) are deliberately **separate** configs — there's no DRY-up here without restructuring the project. The smoke test is a permanent regression guard against either side breaking.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add app/analytics-explorer/vite.config.ts app/analytics-explorer/tsconfig.json vitest.config.ts app/analytics-explorer/src/lib/srv-lib-imports.ts app/analytics-explorer/src/lib/__tests__/srv-lib-imports.test.ts
 git commit -m "feat(analytics-explorer): wire @srv-lib alias for isomorphic modules
 
-Vite resolve.alias + tsconfig paths so the browser can import the
-Phase 1 isomorphic modules (query-spec-validator.mjs, spec-to-sql.mjs)
-directly from srv/lib. Smoke test guards against the alias breaking
-in future Vite/Vitest upgrades."
+Vite resolve.alias (SPA build) + tsconfig paths (TS resolution) +
+Vitest unit-project resolve.alias (test runs). All three are needed —
+the Vitest unit project doesn't import vite.config.ts, so the SPA-side
+alias is invisible to test runs.
+
+Smoke test in app/analytics-explorer/src/lib/__tests__/ guards against
+the alias breaking in future Vite/Vitest upgrades."
 ```
 
 ---
