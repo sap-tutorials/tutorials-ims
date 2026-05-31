@@ -6,6 +6,7 @@ import path from 'node:path'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const require = createRequire(import.meta.url)
 const { validateSelect } = require('./lib/analytics-sql-validator.cjs')
+const { cdsTypeToHana } = require('./lib/cds-type-to-hana.cjs')
 
 export default class AnalyticsService extends cds.ApplicationService {
   async init() {
@@ -77,9 +78,25 @@ export default class AnalyticsService extends cds.ApplicationService {
             .map(([n, c]) => ({
               name: n,
               type: c.type,
+              hanaType: cdsTypeToHana(c.type, c.length, c.precision, c.scale),
               nullable: c.notNull !== true,
               length: c.length || null,
+              filterMode: c['@analytics.filter.mode'] || 'free',
+              filterSample: !!c['@analytics.filter.sample'],
+              pii: !!c['@analytics.pii'],
             })),
+          associations: Object.entries(projection.elements)
+            .filter(([, c]) => c.target)
+            .map(([n, c]) => {
+              const targetDef = cds.model.definitions[c.target]
+              if (!targetDef || !targetDef['@analytics.exposed']) return null
+              const targetShortName = c.target.split('.').pop()
+              const onLocal  = (c.keys || []).map(k => k.$generatedFieldName || k.ref?.[0]).filter(Boolean)
+              const onTarget = (c.keys || []).map(k => k.ref?.[0] || 'ID').filter(Boolean)
+              const cardinality = (c.cardinality?.max === '*' || c.cardinality === '*') ? 'to-many' : 'to-one'
+              return { name: n, targetEntity: targetShortName, cardinality, onLocal, onTarget }
+            })
+            .filter(Boolean),
         })
       }
       return out.sort((a, b) => a.label.localeCompare(b.label))
