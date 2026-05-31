@@ -47,7 +47,7 @@ async function runFromChips() {
   if (!spec.value) return
   try {
     const sql = specToSql(spec.value, entityGraph.sqlNames.value)
-    const r = await runSelectQuery(sql, 'builder')
+    const r = await runSelectQuery(sql, 'builder', JSON.stringify(spec.value))
     lastResults.value = r
   } catch (e: any) {
     // eslint-disable-next-line no-console
