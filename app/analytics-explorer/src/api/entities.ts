@@ -1,4 +1,4 @@
-export interface ExposedColumn { name: string; type: string; nullable: boolean; length: number | null }
+export interface ExposedColumn { name: string; type: string; nullable: boolean; length: number | null; pii?: boolean }
 export interface ExposedEntity { name: string; sqlName?: string; label: string; description: string; columns: ExposedColumn[] }
 
 let cache: Promise<ExposedEntity[]> | null = null
