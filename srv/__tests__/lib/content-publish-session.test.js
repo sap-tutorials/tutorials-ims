@@ -212,5 +212,9 @@ describe('content-publish-session', () => {
     expect(rows[0].ID).toBe(seedId);
     expect(rows[0].stepCount).toBe(4);
     expect(rows[0].title).toBe('Updated title');
+    // Regression net: the publisher must NOT rename the slug to lowercase.
+    // Mixed-case canonical rows are kept as-is so the repair script can resolve
+    // duplicate pairs. See plan 2026-05-31-mixed-case-slug-stepcount.md.
+    expect(rows[0].slug).toBe('abap-environment-sbpa-workflow-extend-RAP-App');
   });
 });
