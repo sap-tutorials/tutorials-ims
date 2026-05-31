@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
-const { specToSql } = require('../spec-to-sql.cjs')
+import { specToSql } from '../spec-to-sql.mjs'
 
 // Tests use TaskRecords (which carries user_ID, event_ID, status COMPLETED/IN_PROGRESS,
 // completionDate). Tasks is a UNION view with no FK columns and a different status enum;
