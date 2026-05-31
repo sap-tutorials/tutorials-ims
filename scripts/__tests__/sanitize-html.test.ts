@@ -2,9 +2,13 @@ import { describe, it, expect } from 'vitest'
 import { stripDangerousHtml } from '../parsers/sanitize-html.js'
 
 describe('stripDangerousHtml', () => {
-  it('removes script tags', () => {
+  it('removes script tags AND their text content (#140)', () => {
+    // sanitize-html (#140 / Path A) drops the inner text of script/style/etc.
+    // Previously the regex sanitizer stripped the tag but left "alert(\"xss\")"
+    // as visible text — harmless to execute but leaked the payload. Stricter
+    // is better.
     const input = 'Hello <script>alert("xss")</script> world'
-    expect(stripDangerousHtml(input)).toBe('Hello alert("xss") world')
+    expect(stripDangerousHtml(input)).toBe('Hello  world')
   })
 
   it('removes iframe tags', () => {
@@ -23,8 +27,11 @@ describe('stripDangerousHtml', () => {
   })
 
   it('removes event handler attributes', () => {
+    // sanitize-html (#140) emits void elements with XHTML-style trailing
+    // slash: `<img ... />` rather than `<img ...>`. Both are valid HTML5
+    // and round-trip identically through Hugo's renderer.
     const input = '<img src="x.png" onerror="alert(1)">'
-    expect(stripDangerousHtml(input)).toBe('<img src="x.png">')
+    expect(stripDangerousHtml(input)).toBe('<img src="x.png" />')
   })
 
   it('removes onload attributes', () => {
@@ -44,7 +51,7 @@ describe('stripDangerousHtml', () => {
 
   it('preserves img tags without event handlers', () => {
     const input = '<img src="https://raw.githubusercontent.com/image.png" alt="diagram">'
-    expect(stripDangerousHtml(input)).toBe(input)
+    expect(stripDangerousHtml(input)).toBe('<img src="https://raw.githubusercontent.com/image.png" alt="diagram" />')
   })
 
   it('preserves table tags', () => {
@@ -63,14 +70,17 @@ describe('stripDangerousHtml', () => {
   })
 
   it('sanitizes outside but not inside code fences', () => {
+    // Outer-fence script content is dropped under the new sanitizer (#140);
+    // inner-fence content is preserved verbatim because the line is never
+    // fed to the HTML parser.
     const input = '<script>bad</script>\n```\n<script>example</script>\n```\n<script>also bad</script>'
-    const expected = 'bad\n```\n<script>example</script>\n```\nalso bad'
+    const expected = '\n```\n<script>example</script>\n```\n'
     expect(stripDangerousHtml(input)).toBe(expected)
   })
 
-  it('is case-insensitive for tag names', () => {
-    expect(stripDangerousHtml('<SCRIPT>x</SCRIPT>')).toBe('x')
-    expect(stripDangerousHtml('<Script>x</Script>')).toBe('x')
+  it('is case-insensitive for tag names (and drops script content #140)', () => {
+    expect(stripDangerousHtml('<SCRIPT>x</SCRIPT>')).toBe('')
+    expect(stripDangerousHtml('<Script>x</Script>')).toBe('')
   })
 
   it('removes svg and math wrapper tags', () => {
@@ -78,21 +88,25 @@ describe('stripDangerousHtml', () => {
     expect(stripDangerousHtml('<math><mrow></mrow></math>')).not.toContain('<math')
   })
 
-  it('removes style tags (defense-in-depth against author-injected CSS)', () => {
-    expect(stripDangerousHtml('<style>body { color: red }</style>')).toBe('body { color: red }')
-    expect(stripDangerousHtml('<style id="x">@import url("https://evil.example/track.css")</style>')).toBe('@import url("https://evil.example/track.css")')
+  it('removes style tags AND their CSS content (#140)', () => {
+    // Same strictness improvement as script tags: previous regex left CSS as
+    // visible text. Both are non-text in #140's nonTextTags list.
+    expect(stripDangerousHtml('<style>body { color: red }</style>')).toBe('')
+    expect(stripDangerousHtml('<style id="x">@import url("https://evil.example/track.css")</style>')).toBe('')
   })
 
   it('removes media tags (video, audio, picture, source, track)', () => {
     expect(stripDangerousHtml('<video src="https://evil.example/track.mp4"></video>')).toBe('')
     expect(stripDangerousHtml('<audio src="x.mp3"></audio>')).toBe('')
-    expect(stripDangerousHtml('<picture><source srcset="x.webp"><img src="x.png"></picture>')).toBe('<img src="x.png">')
+    expect(stripDangerousHtml('<picture><source srcset="x.webp"><img src="x.png"></picture>')).toBe('<img src="x.png" />')
     expect(stripDangerousHtml('<track kind="captions" src="x.vtt">')).toBe('')
   })
 
-  it('removes deprecated frame tags', () => {
+  it('removes deprecated frame tags (and noframes content #140)', () => {
     expect(stripDangerousHtml('<frame src="x.html">')).toBe('')
     expect(stripDangerousHtml('<frameset><frame></frameset>')).toBe('')
+    // <noframes> fallback content is kept (it's display text, not script);
+    // the wrapper tag is stripped.
     expect(stripDangerousHtml('<noframes>fallback</noframes>')).toBe('fallback')
   })
 
@@ -142,5 +156,114 @@ describe('stripDangerousHtml', () => {
     const out = stripDangerousHtml('<img src="data:image/png;base64,iVBORw0KGgo=" alt="x">')
     expect(out).toContain('<img')
     expect(out).not.toContain('data:image')
+  })
+
+  // ─── #140 DOM-aware edge cases ──────────────────────────────────────────
+  // The regex sanitizer was line-based and tag-naive. The new sanitize-html
+  // implementation parses HTML, so we get correct handling of nested
+  // attributes, malformed input, and attribute-without-quotes — cases the
+  // old code couldn't reliably handle.
+
+  it('strips attributes without quotes carrying javascript: (#140)', () => {
+    expect(stripDangerousHtml('<a href=javascript:alert(1) class="x">click</a>')).toBe('<a class="x">click</a>')
+  })
+
+  it('strips event handlers with mixed case and spaces (#140)', () => {
+    expect(stripDangerousHtml('<div ON_LOAD="alert(1)">x</div>')).toBe('<div>x</div>')
+    expect(stripDangerousHtml('<div\tonClick="alert(1)">x</div>')).toBe('<div>x</div>')
+    expect(stripDangerousHtml('<div onmouseover = "alert(1)">x</div>')).toBe('<div>x</div>')
+  })
+
+  it('handles malformed unclosed tags safely (#140)', () => {
+    // The old regex line-walker could leave half-tags behind. A real parser
+    // closes them or drops them.
+    const out = stripDangerousHtml('<a href="https://ok.example">unclosed')
+    expect(out).toContain('<a')
+    expect(out).toContain('unclosed')
+    expect(out).not.toMatch(/<a[^>]*>$/)  // no dangling open tag
+  })
+
+  it('drops disallowed schemes via allowlist (not blocklist) (#140)', () => {
+    // Switching from blocklist (#135) to allowlist (#140) means *any* future
+    // dangerous scheme is denied by default. Test a scheme that's not on
+    // either list — it should be dropped.
+    expect(stripDangerousHtml('<a href="ftp://example.com/x">click</a>')).toBe('<a>click</a>')
+    expect(stripDangerousHtml('<a href="ws://example.com/x">click</a>')).toBe('<a>click</a>')
+    expect(stripDangerousHtml('<a href="file:///etc/passwd">click</a>')).toBe('<a>click</a>')
+  })
+
+  it('blocks protocol-relative URLs (#140)', () => {
+    // //evil.example/x.js — prior regex would let this through as an `href`
+    // not starting with a known dangerous scheme. The new sanitizer's
+    // allowProtocolRelative: false flag rejects it.
+    expect(stripDangerousHtml('<a href="//evil.example/x.js">click</a>')).toBe('<a>click</a>')
+  })
+
+  it('preserves mailto: and anchor-only hrefs (#140)', () => {
+    expect(stripDangerousHtml('<a href="mailto:hi@example.com">mail</a>')).toBe('<a href="mailto:hi@example.com">mail</a>')
+    // Anchor-only href ("#section") must stay; sanitize-html's default for
+    // bare hash links is to keep them.
+    expect(stripDangerousHtml('<a href="#section">go</a>')).toBe('<a href="#section">go</a>')
+  })
+
+  it('preserves data-* and aria-* attributes on any allowed tag (#140)', () => {
+    const input = '<button data-step="1" aria-pressed="true" class="btn">x</button>'
+    // <button> is NOT in our allowed list, so the tag is stripped — but
+    // the test confirms that on a tag that IS allowed, data-/aria-* survive.
+    const allowed = '<div data-tutorial="x" aria-label="step one" id="s1">y</div>'
+    expect(stripDangerousHtml(allowed)).toBe(allowed)
+    // And the disallowed-tag path still drops <button> wrapper, keeping inner text.
+    expect(stripDangerousHtml(input)).toBe('x')
+  })
+
+  it('preserves author placeholder pseudo-tags via entity encoding (#140)', () => {
+    // Pseudo-tags like <SID>, <your_id>, <YOUR_TENANT_ID> aren't real HTML
+    // elements. The new sanitizer pre-escapes them to `&lt;...&gt;` BEFORE
+    // sanitize-html runs, so they survive and render identically in the
+    // browser (browsers display unknown tags as inline-transparent text;
+    // entity-encoded angle brackets render as literal `<` / `>`).
+    expect(stripDangerousHtml('Login as <your>USERNAME</your>')).toBe('Login as &lt;your&gt;USERNAME&lt;/your&gt;')
+    expect(stripDangerousHtml('System: <SID>S1A</SID>')).toBe('System: &lt;SID&gt;S1A&lt;/SID&gt;')
+    expect(stripDangerousHtml('Tenant: <TENANT>my-tenant</TENANT>')).toBe('Tenant: &lt;TENANT&gt;my-tenant&lt;/TENANT&gt;')
+  })
+
+  it('safely entity-encodes pseudo-tags carrying attributes (#140)', () => {
+    // If an author smuggles attributes onto a placeholder tag, the whole
+    // token is entity-encoded — the angle brackets become &lt;/&gt; so the
+    // browser parser never sees an attribute-bearing element. The literal
+    // `"` is harmless inside text and stays as-is. No script execution path.
+    const out = stripDangerousHtml('<your onclick="alert(1)">USERNAME</your>')
+    expect(out).toBe('&lt;your onclick="alert(1)"&gt;USERNAME&lt;/your&gt;')
+  })
+
+  it('does not entity-encode bare < / > in plain markdown text (#140)', () => {
+    // The line-level TAG_LIKE_RE precheck means lines without an actual HTML
+    // tag are passed through verbatim — bare comparisons stay as `<`/`>`.
+    expect(stripDangerousHtml('if x < 5 then y > 10')).toBe('if x < 5 then y > 10')
+    expect(stripDangerousHtml('a => b => c')).toBe('a => b => c')
+  })
+
+  it('keeps img src with allowed http/https URLs unchanged (#140)', () => {
+    const out = stripDangerousHtml('<img src="https://raw.githubusercontent.com/foo/bar/main/img.png" alt="x">')
+    expect(out).toBe('<img src="https://raw.githubusercontent.com/foo/bar/main/img.png" alt="x" />')
+  })
+
+  it('drops javascript: URI even when wrapped in entities (#140)', () => {
+    // Browsers decode entities before URL-scheme matching. Real DOM-aware
+    // sanitizers handle this; the old regex did not.
+    const out = stripDangerousHtml('<a href="&#106;avascript:alert(1)">x</a>')
+    expect(out).toBe('<a>x</a>')
+  })
+
+  it('strips style attributes by default (#140)', () => {
+    // `style` is not in our '*' attribute list, so it's dropped — author
+    // CSS injection is one of the reasons we keep CSP tight.
+    expect(stripDangerousHtml('<div style="background:url(javascript:alert(1))" class="x">y</div>')).toBe('<div class="x">y</div>')
+  })
+
+  it('strips srcset on img (not in allowlist) (#140)', () => {
+    // srcset isn't on img's allowed-attribute list; if an author starts using
+    // it, this test will fail and we extend the allowlist intentionally.
+    expect(stripDangerousHtml('<img src="x.png" srcset="x@2x.png 2x" alt="y">')).toBe('<img src="x.png" alt="y" />')
   })
 })
