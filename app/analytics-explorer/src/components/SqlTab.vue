@@ -23,7 +23,8 @@ const entities = ref<ExposedEntity[]>([])
 const entitiesError = ref<string | null>(null)
 const editorRef = ref<InstanceType<typeof QueryEditor> | null>(null)
 
-const { spec, mode } = useQuerySpec()
+const querySpec = useQuerySpec()
+const { spec, mode } = querySpec
 const entityGraph = useEntityGraph()
 
 // Run-from-chips: enabled only when a spec is loaded and the validator finds
@@ -50,6 +51,25 @@ function insertEntity(e: ExposedEntity) {
   // mixed-case physical name in unit tests). Fall back to the short projection
   // name if the server didn't populate sqlName for some reason.
   editorRef.value?.insertText(e.sqlName || e.name)
+}
+
+function startBuilderFromEntity(e: ExposedEntity) {
+  // Bootstrap a fresh QuerySpec from the clicked entity. The user gets a
+  // single-column SELECT (first non-virtual column) so the spec validates
+  // immediately and Run-from-chips becomes clickable.
+  const firstCol = e.columns?.[0]?.name
+  if (!firstCol) return
+  const alias = (e.name[0] || 't').toLowerCase()
+  querySpec.setSpec({
+    version: 1,
+    from: { entity: e.name, alias },
+    joins: [],
+    filterTree: null,
+    groupBy: [],
+    select: [{ kind: 'column', id: 's1', ref: { alias, column: firstCol } }],
+    orderBy: [],
+    limit: null,
+  })
 }
 
 async function runFromChips() {
@@ -107,7 +127,7 @@ function visualize() {
         </div>
         <div v-if="entitiesError" class="entity-error">{{ entitiesError }}</div>
         <ul v-else class="entity-items">
-          <li v-for="e in entities" :key="e.name">
+          <li v-for="e in entities" :key="e.name" class="entity-li">
             <button
               type="button"
               class="entity-row"
@@ -118,6 +138,12 @@ function visualize() {
               <code class="entity-sqlname">{{ e.sqlName || e.name }}</code>
               <span class="entity-cols">{{ e.columns.length }} cols</span>
             </button>
+            <button
+              type="button"
+              class="entity-build"
+              @click="startBuilderFromEntity(e)"
+              title="Build a chip query from this entity"
+            >🧱</button>
           </li>
         </ul>
       </aside>
@@ -193,6 +219,24 @@ function visualize() {
   list-style: none;
   padding: 0;
   margin: 0;
+}
+.entity-li {
+  display: flex;
+  gap: 0.25rem;
+  align-items: stretch;
+  margin-bottom: 0.15rem;
+}
+.entity-build {
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  padding: 0 0.4rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+.entity-build:hover {
+  background: var(--sapList_Hover_Background);
+  border-color: var(--sapField_BorderColor);
 }
 .entity-row {
   display: flex;
