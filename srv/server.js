@@ -18,6 +18,7 @@ import { createIpRateLimiter, ipRateLimitMiddleware } from './lib/ip-rate-limit.
 import { streamChat, toolsForContext } from './lib/chat-orchestrator.js';
 import { computeEmbeddingStats } from './lib/embedding-stats.js';
 import { registerExportsBridge, wireExportsBridge } from './exports/express-bridge.js';
+import { exportSelectQueryHandler } from './lib/analytics-export-handler.js';
 
 // Late-bound POST /chat/stream handler. Registered in 'bootstrap' (before CAP
 // mounts ChatService at /chat, which would otherwise swallow /chat/stream as
@@ -145,6 +146,10 @@ cds.on('bootstrap', (app) => {
   app.post('/content/publish/append', express.json({ limit: '100mb' }), contentAuthMiddleware, appendHandler);
   app.post('/content/publish/commit', express.json({ limit: '1mb' }),   contentAuthMiddleware, commitHandler);
   app.post('/content/publish/abort',  express.json({ limit: '1mb' }),   contentAuthMiddleware, abortHandler);
+
+  // Analytics Builder Phase 1 — streaming CSV export. Mounted later in this
+  // bootstrap block (after contextMw/authMw are defined) so req.user is
+  // populated by CAP's auth chain before the handler runs.
   app.post('/content/rollback', express.json(), contentAuthMiddleware, rollbackHandler);
 
   // Tutorial feedback bridge. Express handler (rather than letting CAP expose
@@ -196,6 +201,19 @@ cds.on('bootstrap', (app) => {
   // Reserve ALL /admin/analytics/* requests BEFORE CAP mounts AdminService at /admin.
   // Without this reservation AdminService's OData router intercepts /admin/analytics/*
   // and returns "Invalid resource path AdminService.analytics". CDS will also mount
+  // Analytics Builder Phase 1 — streaming CSV export. Mounted BEFORE the
+  // /admin/analytics OData router (line below) so the POST .../export path
+  // reaches our handler instead of being claimed by the OData layer (which
+  // would 404 on unknown action paths). Same allowlist + admin scope as
+  // runSelectQuery (handler enforces Admin via req.user.is). Bypasses
+  // runSelectQuery's 5k row cap (capped at 100k / 60s wall-clock).
+  const _exportContextMw = cds.middlewares?.context?.() || ((req, res, next) => next());
+  const _exportAuthMw    = cds.middlewares?.auth?.()    || ((req, res, next) => next());
+  app.post('/admin/analytics/export',
+    _exportContextMw, _exportAuthMw,
+    express.json({ limit: '100kb' }),
+    (req, res, next) => Promise.resolve(exportSelectQueryHandler(req, res)).catch(next));
+
   // AnalyticsService at /admin/analytics (after this reservation), so calling next()
   // passes the request through to the AnalyticsService OData layer registered by CDS.
   app.use('/admin/analytics', (req, res, next) => analyticsOdataRouter(req, res, next));

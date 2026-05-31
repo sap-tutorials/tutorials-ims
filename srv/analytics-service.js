@@ -69,6 +69,10 @@ export default class AnalyticsService extends cds.ApplicationService {
       return String(value)
     }
 
+    // Expose for the express bridge (analytics-export-handler.js).
+    // Single-underscore prefix is the project's "internal but reachable" convention.
+    this._getAllowedTableNames = getAllowedTableNames
+
     this.on('listExposedEntities', () => {
       // The SQL tab needs the name that actually executes at runtime. On HANA
       // the HDI container exposes the upper-case physical name (e.g.
