@@ -13,7 +13,10 @@
     "jsx": "preserve",
     "strict": true,
     "esModuleInterop": true,
-    "types": ["vite/client"]
+    "types": ["vite/client"],
+    "paths": {
+      "@srv-lib/*": ["../../srv/lib/*"]
+    }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"]
 }

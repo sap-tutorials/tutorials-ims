@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import { fileURLToPath } from 'node:url';
 
 export default defineConfig({
   test: {
@@ -15,7 +16,16 @@ export default defineConfig({
           exclude: ['node_modules', 'gen', 'hugo', 'test/hybrid/**', 'test/hybrid-qa/**', 'test/smoke/**'],
           hookTimeout: 60000,
           env: { NO_TELEMETRY: 'true' }
-        }
+        },
+        resolve: {
+          alias: {
+            // Phase 2: same alias as app/analytics-explorer/vite.config.ts so the
+            // analytics-explorer SPA's tests can import the isomorphic Phase 1
+            // modules. The Vitest unit project does NOT import vite.config.ts, so
+            // this alias has to be declared here independently.
+            '@srv-lib': fileURLToPath(new URL('./srv/lib', import.meta.url)),
+          },
+        },
       },
       {
         test: {
