@@ -68,7 +68,7 @@ The SQL tab becomes a chip-driven query builder + Monaco escape hatch + Joule co
 | `src/lib/spec-to-sql.ts` | Pure function `QuerySpec → string` (HANA-flavoured SQL) |
 | `src/lib/spec-validator.ts` | In-browser validation via node-sql-parser (catches "ambiguous column not in GROUP BY" before Run) |
 | `src/composables/useQuerySpec.ts` | Single source-of-truth state store; one `setSpec(spec)` mutation surface used by builder, Joule, history, saved queries, drilldown |
-| `src/composables/useEntityGraph.ts` | Loads enriched entity metadata (columns + types + associations + filter modes) once; exposes derived "joinable to" lookups |
+| `src/composables/useEntityGraph.ts` | Loads enriched entity metadata (columns + types + associations + filter modes) once; exposes derived "joinable to" lookups. **Caches `sampleDistinct(table, column)` results in-memory keyed by `${table}.${column}`, session-scoped (no TTL — reset on page reload).** |
 | `src/components/builder/ClauseChipBar.vue` | The chip bar (FROM, JOINs, filter tree, GROUP BYs, SELECTs, ORDER BYs, LIMIT) |
 | `src/components/builder/chips/*.vue` | One file per chip kind: FromChip, JoinChip, FilterChip, FilterGroupChip, GroupByChip, SelectChip, OrderByChip, LimitChip |
 | `src/components/builder/SqlPreview.vue` | Read-only Monaco showing live-generated SQL |
@@ -171,6 +171,14 @@ export type FilterValue =
   | { kind: 'relative', value: number, unit?: 'days' | 'months' | 'years' }
   | { kind: 'period',   value: 'day' | 'week' | 'month' | 'quarter' | 'year' }
 
+// Valid (op, value.kind) pairs — enforced by query-spec-validator:
+//   eq | neq | gt | gte | lt | lte | contains | startsWith | endsWith → 'literal'
+//   in                                                                 → 'list'
+//   between                                                            → 'range'
+//   isNull                                                             → 'literal' with value === null
+//   sinceDays | inLastDays                                             → 'relative'
+//   inCurrent                                                          → 'period'
+
 export interface GroupKey {
   id: string
   ref: ColumnRef
@@ -230,6 +238,8 @@ aspect AnalyticsQueryShape {
 entity AnalyticsQueryHistory : cuid, managed, AnalyticsQueryShape {
   source      : String(16);              // 'builder' | 'editor' | 'joule' | 'replay'
 }
+// History cap: existing daily cleanup cron (srv/jobs/cleanup.js) extended with
+// a sweep that keeps the most recent 200 rows per createdBy; older rows hard-deleted.
 
 @PersonalData    : { EntitySemantics: 'Other' }
 @cds.changelog   : true
@@ -348,6 +358,8 @@ annotate AnalyticsService.SavedQueries with @restrict: [
 1. After validation + execution + serialization, INSERT a row into `AnalyticsQueryHistory` in the same transaction; capture `historyId`.
 2. Return new envelope: existing `columns`/`rows`/`metadata` plus `privacy: { mode: 'raw', suppressedCells: 0 }` and `historyId`.
 3. `source` parameter (`'builder' | 'editor' | 'joule' | 'replay'`) recorded on the history row. Drilldowns use `source: 'replay'`.
+
+**`runSelectQuery` always returns `privacy.mode = 'raw'`.** Builder/editor paths never produce `'k-anon'` — only the chat orchestrator's `analyticsQuery` tool does, because k-anonymity is enforced at the structured-aggregate layer, not on raw SQL execution. The two modes are mutually exclusive in v1.
 
 **`sampleDistinct(table, column, limit)`** — annotation-gated:
 
@@ -600,7 +612,7 @@ First time the user clicks `View in builder` with a non-empty current spec, a on
 
 ### Tool surface
 
-Three tools (Q9-B+C). Schemas in `srv/lib/chat-orchestrator.js`; spec validation shared via isomorphic `srv/lib/query-spec-validator.cjs`.
+Three tools (Q9-B+C). Schemas defined inline in **Backend changes → Chat-orchestrator additions** (`generateAnalyticsQuery` input/output, `analyticsQuery` extended envelope, `explainAnalyticsResult`); spec validation shared via isomorphic `srv/lib/query-spec-validator.cjs`. Implementation lives in `srv/lib/chat-orchestrator.js`.
 
 ### SSE message protocol
 
