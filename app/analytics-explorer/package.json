@@ -19,6 +19,7 @@
     "vue": "^3.4.0",
     "vue-grid-layout-v3": "^3.1.2",
     "vue-router": "^4.3.0",
+    "vue-virtual-scroller": "2.0.1",
     "vuedraggable": "^4.1.0"
   },
   "devDependencies": {
