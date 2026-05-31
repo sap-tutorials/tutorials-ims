@@ -6,7 +6,14 @@ import { specToSql } from '../spec-to-sql.mjs'
 // Tests use TaskRecords (which carries user_ID, event_ID, status COMPLETED/IN_PROGRESS,
 // completionDate). Tasks is a UNION view with no FK columns and a different status enum;
 // see srv/lib/__tests__/query-spec-validator.test.js for the schema rationale.
+//
+// Most tests use HANA-style SQL_NAMES (all-uppercase table names). The
+// dialect detector reads the table-name casing — uppercase => HANA — and
+// folds CDS column names to upper case to match HANA's physical storage
+// (e.g. legacyId -> LEGACYID). A SQLite-dialect block at the bottom pins
+// the inverse case for the test path.
 const SQL_NAMES = { TaskRecords: 'TASKRECORDS', Users: 'USERS' }
+const SQL_NAMES_SQLITE = { TaskRecords: 'com_sap_developers_ims_TaskRecords', Users: 'com_sap_developers_ims_Users' }
 
 describe('spec-to-sql', () => {
   it('emits a minimal single-table SELECT', () => {
@@ -34,7 +41,7 @@ describe('spec-to-sql', () => {
       orderBy: [], limit: null,
     }
     const sql = specToSql(spec, SQL_NAMES)
-    expect(sql).toContain("WHERE (tr.status = 'COMPLETED')")
+    expect(sql).toContain("WHERE (tr.STATUS = 'COMPLETED')")
   })
 
   it('escapes single quotes in string literals', () => {
@@ -92,7 +99,7 @@ describe('spec-to-sql', () => {
       orderBy: [], limit: null,
     }
     const sql = specToSql(spec, SQL_NAMES)
-    expect(sql).toMatch(/WHERE \(tr\.status = 'COMPLETED' AND \(tr\.taskType = 'TUTORIAL' OR tr\.taskType = 'MISSION'\)\)/)
+    expect(sql).toMatch(/WHERE \(tr\.STATUS = 'COMPLETED' AND \(tr\.TASKTYPE = 'TUTORIAL' OR tr\.TASKTYPE = 'MISSION'\)\)/)
   })
 
   it('emits INNER JOIN with ON', () => {
@@ -106,7 +113,7 @@ describe('spec-to-sql', () => {
       orderBy: [], limit: null,
     }
     const sql = specToSql(spec, SQL_NAMES)
-    expect(sql).toContain('INNER JOIN USERS u ON tr.user_ID = u.ID')
+    expect(sql).toContain('INNER JOIN USERS u ON tr.USER_ID = u.ID')
   })
 
   it('auto-derives GROUP BY from non-aggregation SELECT chips when an aggregation is present', () => {
@@ -120,8 +127,8 @@ describe('spec-to-sql', () => {
       orderBy: [], limit: null,
     }
     const sql = specToSql(spec, SQL_NAMES)
-    expect(sql).toContain('GROUP BY tr.status')
-    expect(sql).toMatch(/SELECT tr\.status, COUNT\(\*\) AS cnt/)
+    expect(sql).toContain('GROUP BY tr.STATUS')
+    expect(sql).toMatch(/SELECT tr\.STATUS, COUNT\(\*\) AS cnt/)
   })
 
   it('does not emit GROUP BY when no aggregation present', () => {
@@ -166,7 +173,7 @@ describe('spec-to-sql', () => {
       orderBy: [], limit: null,
     }
     const sql = specToSql(spec, SQL_NAMES)
-    expect(sql).toMatch(/tr\.createdAt >= ADD_DAYS\(CURRENT_DATE,\s*-30\)/)
+    expect(sql).toMatch(/tr\.CREATEDAT >= ADD_DAYS\(CURRENT_DATE,\s*-30\)/)
   })
 
   it('produces SQL that passes analytics-sql-validator', () => {
@@ -190,5 +197,35 @@ describe('spec-to-sql', () => {
     }
     const sql = specToSql(spec, SQL_NAMES)
     expect(() => validateSelect(sql, ALLOWED)).not.toThrow()
+  })
+
+  describe('SQLite dialect', () => {
+    it('preserves CDS-form column names when sqlNames are mixed-case (sqlite)', () => {
+      const spec = {
+        version: 1,
+        from: { entity: 'TaskRecords', alias: 'tr' }, joins: [], filterTree: null, groupBy: [],
+        select: [
+          { kind: 'column', id: 's1', ref: { alias: 'tr', column: 'createdAt' } },
+          { kind: 'column', id: 's2', ref: { alias: 'tr', column: 'legacyId' } },
+        ],
+        orderBy: [], limit: null,
+      }
+      const sql = specToSql(spec, SQL_NAMES_SQLITE)
+      expect(sql).toContain('tr.createdAt')
+      expect(sql).toContain('tr.legacyId')
+      expect(sql).toContain('FROM com_sap_developers_ims_TaskRecords tr')
+    })
+
+    it('honors explicit dialect override even when sqlNames look HANA-like', () => {
+      const spec = {
+        version: 1,
+        from: { entity: 'TaskRecords', alias: 'tr' }, joins: [], filterTree: null, groupBy: [],
+        select: [{ kind: 'column', id: 's1', ref: { alias: 'tr', column: 'createdAt' } }],
+        orderBy: [], limit: null,
+      }
+      const sql = specToSql(spec, SQL_NAMES, { dialect: 'sqlite' })
+      expect(sql).toContain('tr.createdAt')
+      expect(sql).not.toContain('tr.CREATEDAT')
+    })
   })
 })
