@@ -1,4 +1,5 @@
 {
+  "namespace": "com.sap.developers.ims",
   "definitions": {
     "com.sap.developers.ims.Users": {
       "kind": "entity",
