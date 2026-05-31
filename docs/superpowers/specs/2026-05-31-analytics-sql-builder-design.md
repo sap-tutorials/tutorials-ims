@@ -11,7 +11,7 @@ Replace the current bare-Monaco "SQL" tab in the Analytics Explorer with a **chi
 
 ## Context
 
-The Analytics Explorer ([PR #37, 2026-05-23](https://github.com/sap-tutorials/tutorials-ims/pull/37)) shipped three tabs: **Explore** (drag-drop OData `$apply` chart builder, single-entity), **SQL** (bare Monaco editor + entity sidebar + flat HTML result table), **Dashboard** (localStorage-persisted grids). The SQL tab fills a real gap — joins, subqueries, raw row access — but it requires the user to write HANA SQL by hand.
+The Analytics Explorer (built on [the 2026-05-23 design](2026-05-23-admin-analytics-explorer-design.md), shipped in [PR #37](https://github.com/sap-tutorials/tutorials-ims/pull/37)) has three tabs: **Explore** (drag-drop OData `$apply` chart builder, single-entity), **SQL** (bare Monaco editor + entity sidebar + flat HTML result table), **Dashboard** (localStorage-persisted grids). The SQL tab fills a real gap — joins, subqueries, raw row access — but it requires the user to write HANA SQL by hand.
 
 Today's SQL tab is brittle in five ways: (1) no query history, (2) no result pagination beyond the inline 200-row cap, (3) errors surface only as a status-bar string, (4) no Joule integration despite chat infrastructure being live elsewhere, (5) no metadata beyond column names — no FK relationships for joins, no distinct-value sampling for filter values.
 
@@ -40,7 +40,7 @@ This design closes those gaps while preserving the existing security model: same
 
 ## Architecture & component map
 
-The SQL tab becomes a chip-driven query builder + Monaco escape hatch + Joule conversational panel, all reading and writing the same canonical state shape (**QuerySpec**). Existing `runSelectQuery` validator/handler stay unchanged in their security contract; everything new is additive.
+The SQL tab becomes a chip-driven query builder + Monaco escape hatch + Joule conversational panel. Existing `runSelectQuery` validator/handler stay unchanged in their security contract; everything new is additive. (See **Key architectural property** below for how the surfaces stay in sync.)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐

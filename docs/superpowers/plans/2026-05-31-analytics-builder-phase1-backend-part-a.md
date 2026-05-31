@@ -1183,13 +1183,7 @@ git commit -m "feat(srv/lib): add spec-to-sql (isomorphic, deterministic)"
 
 Tasks 1–7 land the **foundation**: the new branch, the schema additions (entities + annotations), and the three pure-function modules (validator bump + query-spec-validator + spec-to-sql) all backed by TDD. At this point the new modules are covered by ~30 unit tests and the existing 620-test baseline still passes.
 
-The plan continues with **Tasks 8–19** (handler integration, action implementations, hybrid tests, srv-qa verification, PR). Those tasks depend on the foundation landing cleanly first — if any of Tasks 1–7 has an unexpected failure mode, we'd want to address it before writing more plan against it.
-
-To keep the plan reviewable and avoid the output-token overflow we just hit, I'll write **Part B (Tasks 8–19)** in a follow-up file:
-
-- `docs/superpowers/plans/2026-05-31-analytics-builder-phase1-backend-part-b.md`
-
-That file will pick up at Task 8 (`listExposedEntities` enrichment) and run through the PR. The two parts are sequential — execute Part A first, get clean test runs, then move to Part B.
+Continue with **Tasks 8–19** (handler integration, action implementations, hybrid tests, srv-qa verification, PR) in [`2026-05-31-analytics-builder-phase1-backend-part-b.md`](2026-05-31-analytics-builder-phase1-backend-part-b.md). Execute Part A first, get clean test runs, then move to Part B.
 
 ---
 

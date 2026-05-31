@@ -461,12 +461,16 @@ Expected: FAIL with "Action sampleDistinct is not registered" or similar.
 
 - [ ] **Step 3: Wire the handler**
 
-In `srv/analytics-service.js`, near the existing `this.on('runSelectQuery', ...)` block, add:
+Add a top-level import at the top of `srv/analytics-service.js`, alongside the other imports:
 
 ```javascript
-const { validateSampleDistinctRequest, buildSampleDistinctSql, runSampleDistinct } =
-  await import('./lib/analytics-distinct-sample.js')
+import { validateSampleDistinctRequest, buildSampleDistinctSql, runSampleDistinct }
+  from './lib/analytics-distinct-sample.js'
+```
 
+Then, near the existing `this.on('runSelectQuery', ...)` block, add the handler:
+
+```javascript
 this.on('sampleDistinct', async (req) => {
   const { table, column, limit } = req.data || {}
 
@@ -507,15 +511,6 @@ this.on('sampleDistinct', async (req) => {
   }
 })
 ```
-
-The `await import(...)` inside the handler is needed because the rest of `analytics-service.js` already uses `import` at the top — but `analytics-distinct-sample.js` is ESM, so a top-level `import { ... } from './lib/...'` works. **Prefer the top-level import**: move the require/import to the top of the file alongside the other imports:
-
-```javascript
-import { validateSampleDistinctRequest, buildSampleDistinctSql, runSampleDistinct }
-  from './lib/analytics-distinct-sample.js'
-```
-
-…and drop the `await import` line.
 
 - [ ] **Step 4: Run the tests to confirm they pass**
 
@@ -1356,56 +1351,26 @@ git commit -m "test(hybrid): Phase 1 E2E — listEntities + run + sampleDistinct
 **Files:**
 - Inspect: `.deploy/mta.yaml` (do NOT modify unless verification fails)
 
-Per [feedback_srv_qa_cp_list_recurring], every change to `srv/lib/*` must be checked against the QA srv's hand-curated cp list.
+Per [feedback_srv_qa_cp_list_recurring], every change to `srv/lib/*` must be checked against the QA srv's hand-curated cp list. AnalyticsService is admin-only and is not part of the QA srv, so no entries should be needed.
 
-- [ ] **Step 1: List the new and modified files in srv/lib**
-
-```bash
-git diff --name-only spec/analytics-sql-builder..HEAD -- srv/lib
-```
-
-Expected output (5 new files plus the validator change):
-
-```
-srv/lib/analytics-distinct-sample.js
-srv/lib/analytics-export-stream.js
-srv/lib/analytics-history-writer.js
-srv/lib/analytics-sql-validator.cjs
-srv/lib/cds-type-to-hana.cjs
-srv/lib/query-spec-validator.cjs
-srv/lib/spec-to-sql.cjs
-```
-
-- [ ] **Step 2: Check each file's transitive consumers in srv-qa**
+- [ ] **Step 1: Verify no QA cross-imports of the new lib files**
 
 ```bash
-grep -rn "analytics-distinct-sample\|analytics-export-stream\|analytics-history-writer\|cds-type-to-hana\|query-spec-validator\|spec-to-sql" srv-qa/ 2>&1 | head -20
+git diff --name-only spec/analytics-sql-builder..HEAD -- srv/lib \
+  | xargs -I{} basename {} \
+  | sed 's/\.[cm]\?js$//' \
+  | xargs -I{} grep -rn "{}" srv-qa/ 2>/dev/null
 ```
 
-Expected: **no matches**. AnalyticsService is admin-only and is not part of the QA srv (`grep -n "analytics" srv-qa/*.cds 2>&1` should also return nothing).
+Expected: **no matches**. If anything matches, stop and surface to Tom — it conflicts with the admin-only stance.
 
-- [ ] **Step 3: Confirm `.deploy/mta.yaml` srv-qa cp list does not need updating**
-
-```bash
-grep -A 30 "srv-qa:" .deploy/mta.yaml | grep -E "analytics|cp-list|build-parameters" | head -20
-```
-
-If `.deploy/mta.yaml` has any analytics-related cp entry, that's a sign the QA srv was meant to ship analytics — that conflicts with the spec's admin-only stance and needs investigation. Stop and surface to Tom.
-
-If no analytics entries exist (expected), commit an empty marker:
-
-- [ ] **Step 4: Document the verification in commit history**
+- [ ] **Step 2 (optional): Audit-trail commit**
 
 ```bash
 git commit --allow-empty -m "chore(srv-qa): verify Phase 1 srv/lib additions don't affect QA cp list
 
-Checked: analytics-distinct-sample, analytics-export-stream, analytics-history-writer,
-cds-type-to-hana, query-spec-validator, spec-to-sql, plus the validator update.
-No transitive imports from srv-qa; .deploy/mta.yaml unchanged. AnalyticsService
-remains admin-only and absent from QA srv. Per [feedback_srv_qa_cp_list_recurring]."
+Per [feedback_srv_qa_cp_list_recurring]."
 ```
-
-The empty commit creates an audit trail for the verification step without modifying any file.
 
 ---
 
@@ -1513,13 +1478,7 @@ Add the pointer line to `MEMORY.md`:
 
 ## Phase 1 complete
 
-After Task 19 lands and the PR merges:
-
-1. Phase 2 (chip builder UX) gets its own plan, branched from this work.
-2. Phase 1 deploys to DEV via the existing `mbt build && cf deploy` pipeline.
-3. Smoke tests run as the post-deploy gate.
-
-Phases 2–5 are written as separate plans when their predecessor is in DEV — that way each plan reflects what was actually shipped, not what was specced.
+After Task 19 lands and the PR merges, deploy to DEV via the existing `mbt build && cf deploy` pipeline; smoke tests run as the post-deploy gate. Phases 2–5 (chip builder UX, charts, drilldown, Joule integration) get their own plans branched from this work — each authored once its predecessor is in DEV, so plans reflect what shipped rather than what was specced.
 
 ---
 
