@@ -46,8 +46,9 @@ service AnalyticsService @(path : '/admin/analytics') {
 
   // The handler returns additional fields not declared here (privacy, historyId).
   // CAP/OData passes the extra JSON fields through unchanged. The optional
-  // 'source' parameter records which surface drove the query in the history row.
-  action runSelectQuery(sql : String, source : String) returns {
+  // 'source' parameter records which surface drove the query in the history row;
+  // omitted by old clients (additive ship), normalized to 'editor' in the handler.
+  action runSelectQuery(sql : String, source : String null) returns {
     columns  : array of String;
     rows     : array of String;  // each element is a JSON-stringified row array
     metadata : { rowCount : Integer; truncated : Boolean; durationMs : Integer; };
@@ -67,7 +68,11 @@ service AnalyticsService @(path : '/admin/analytics') {
   // History (read-only, scoped to current user via @restrict below)
   @readonly entity QueryHistory as projection on ims.AnalyticsQueryHistory;
 
-  // Saved queries — admin-creatable, with rename/visibility/duplicate/recordRun actions
+  // Saved queries — admin-creatable, with rename/visibility/duplicate/recordRun actions.
+  // @Capabilities.ChangeTracking surfaces edits in the existing changelog Fiori app
+  // (db/analytics-builder.cds carries the @cds.changelog flag on the underlying entity);
+  // the projection-side capability is what makes the rows show up in /admin/changelog.
+  @Capabilities.ChangeTracking : { Supported: true }
   entity SavedQueries as projection on ims.AnalyticsSavedQuery actions {
     action rename(name : String, description : String) returns SavedQueries;
     action setVisibility(visibility : String) returns SavedQueries;

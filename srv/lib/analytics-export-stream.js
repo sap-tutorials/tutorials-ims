@@ -34,28 +34,57 @@ export function formatTruncationComment({ cap, rowCount }) {
  *
  * Hard caps:
  *   - 100,000 rows (enforced by SQL wrapper, double-checked here)
- *   - 60 seconds wall-clock (checked every 1000 rows)
+ *   - 60 seconds wall-clock (checked between pages)
  *
- * Phase 1 uses db.run() which materializes the result. For very large exports
- * a Phase 1.1 follow-up would switch to a HANA cursor-based stream.
+ * Streams in pages of `pageSize` rows so memory stays bounded regardless of
+ * result-set size, and the wall-clock guard can preempt mid-export. Mirrors
+ * the established project pattern used by srv/exports/assemble-csv-zip.js +
+ * srv/exports/*.js (paginated db.run with LIMIT/OFFSET in an async iterator).
+ *
+ * The caller's `sql` is wrapped as `SELECT * FROM (...) t` so we can apply
+ * a stable LIMIT/OFFSET on top — that requires the inner SQL to be a single
+ * SELECT, which is what analytics-sql-validator already enforces.
  */
-export async function streamCsv({ db, sql, res, log, user, sqlLength }) {
+const DEFAULT_PAGE_SIZE = 5000
+
+export async function streamCsv({ db, sql, res, log, user, sqlLength, pageSize = DEFAULT_PAGE_SIZE }) {
   const startedAt = Date.now()
   let rowCount = 0
   let header = false
   let cap = null
+  let offset = 0
 
-  const rows = await db.run(sql)
-  for (const row of rows) {
-    if (!header) {
-      res.write(csvHeader(Object.keys(row)))
-      header = true
+  // Strip a trailing LIMIT N from the wrapper before paginating, then re-cap
+  // total emitted rows at min(N, 100000). The express bridge already wraps
+  // user SQL as "SELECT * FROM (validated) t LIMIT 100000", so the M we see
+  // here is the export cap.
+  const wrapMatch = /^\s*([\s\S]*?)\s+LIMIT\s+(\d+)\s*$/i.exec(sql)
+  const baseQuery = wrapMatch ? wrapMatch[1] : sql
+  const totalCap  = wrapMatch ? Math.min(Number(wrapMatch[2]) || 100000, 100000) : 100000
+
+  outer: while (rowCount < totalCap) {
+    const remaining = totalCap - rowCount
+    const limit = Math.min(pageSize, remaining)
+    const pageQuery = baseQuery + ' LIMIT ' + limit + ' OFFSET ' + offset
+
+    const page = await db.run(pageQuery)
+    if (!page.length) break
+
+    for (const row of page) {
+      if (!header) {
+        res.write(csvHeader(Object.keys(row)))
+        header = true
+      }
+      res.write(csvRow(Object.values(row)))
+      rowCount++
+      if (rowCount >= totalCap) { cap = 'rowCount'; break outer }
     }
-    res.write(csvRow(Object.values(row)))
-    rowCount++
-    if (rowCount >= 100000) { cap = 'rowCount'; break }
-    if (rowCount % 1000 === 0 && Date.now() - startedAt > 60000) { cap = 'wallClock'; break }
+
+    if (Date.now() - startedAt > 60000) { cap = 'wallClock'; break }
+    if (page.length < limit) break // last page
+    offset += limit
   }
+
   if (cap) res.write(formatTruncationComment({ cap, rowCount }))
   res.end()
 
