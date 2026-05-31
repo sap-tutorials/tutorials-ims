@@ -6,6 +6,7 @@ import ChartRenderer from './ChartRenderer.vue'
 import ChartTypeSwitcher from './ChartTypeSwitcher.vue'
 import ClauseChipBar from './builder/ClauseChipBar.vue'
 import SqlPreview from './builder/SqlPreview.vue'
+import AutoGroupByBanner from './builder/AutoGroupByBanner.vue'
 import { useChartConfig } from '../composables/useChartConfig'
 import { useQuerySpec } from '../composables/useQuerySpec'
 import { useEntityGraph } from '../composables/useEntityGraph'
@@ -127,6 +128,7 @@ function visualize() {
 
 <template>
   <div class="sql-tab" :class="{ 'editor-mode': mode === 'editor' }">
+    <AutoGroupByBanner />
     <ClauseChipBar />
     <SqlPreview />
     <div v-if="spec" class="builder-run-row">
