@@ -162,4 +162,55 @@ describe('content-publish-session', () => {
     await helpers.abortSession({ sessionId, reason: 'first' });
     await expect(helpers.abortSession({ sessionId, reason: 'second' })).resolves.toMatchObject({ aborted: true });
   });
+
+  it('appendToSession metadata upsert matches existing Tutorials row case-insensitively', async () => {
+    const { Tutorials } = cds.entities(NS);
+
+    // Seed: a Tutorials row already exists with a MIXED-CASE slug (legacy/seed data
+    // shape — the row was created when reference data was imported with the original
+    // repo casing, before the lowercase-canonical rule was adopted).
+    const seedId = cds.utils.uuid();
+    await INSERT.into(Tutorials).entries({
+      ID: seedId,
+      slug: 'abap-environment-sbpa-workflow-extend-RAP-App',
+      title: 'Original mixed-case row',
+      stepCount: null,
+      status: 'ACTIVE',
+    });
+
+    // Begin/append a publish session that includes metadata for the SAME tutorial
+    // keyed by the lowercase slug Hugo produces.
+    const begin = await helpers.beginPublishSession({
+      trigger: 'test', hugoVersion: 'v1', expectedSlugCount: 1,
+    });
+    await helpers.appendToSession({
+      sessionId: begin.sessionId,
+      metadata: {
+        'abap-environment-sbpa-workflow-extend-rap-app': {
+          title: 'Updated title',
+          steps: [
+            { number: 1, title: 'Step 1' },
+            { number: 2, title: 'Step 2' },
+            { number: 3, title: 'Step 3' },
+            { number: 4, title: 'Step 4' },
+          ],
+        },
+      },
+    });
+
+    // Assertion: still exactly ONE Tutorials row for this tutorial, and the original
+    // mixed-case row's stepCount is now 4 (not null/0). The publisher must NOT have
+    // inserted a second lowercase row.
+    const rows = await SELECT.from(Tutorials).where({
+      slug: { in: [
+        'abap-environment-sbpa-workflow-extend-RAP-App',
+        'abap-environment-sbpa-workflow-extend-rap-app',
+      ]}
+    }).columns('ID', 'slug', 'stepCount', 'title');
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].ID).toBe(seedId);
+    expect(rows[0].stepCount).toBe(4);
+    expect(rows[0].title).toBe('Updated title');
+  });
 });
