@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { gzipSync } from 'node:zlib';
 import {
   beginHandler, appendHandler, commitHandler, abortHandler,
-  publishHandler
+  publishHandler, serveHandler
 } from '../../lib/content-store.js';
 
 const NS = 'com.sap.developers.ims';
@@ -165,5 +165,107 @@ describe('content publish routes', () => {
     // Mixed-case canonical rows are kept as-is so the repair script can resolve
     // duplicate pairs. See plan 2026-05-31-mixed-case-slug-stepcount.md.
     expect(rows[0].slug).toBe('abap-environment-sbpa-workflow-extend-RAP-App');
+  });
+
+  // ---------------------------------------------------------------------------
+  // serveHandler case-mismatch tests
+  //
+  // Background: Tutorials.slug may be stored with mixed case (e.g. RAP-App)
+  // while Hugo emits lowercase URLs and ContentFiles keys are always lowercase.
+  // serveHandler does a case-sensitive WHERE slug = ? to detect soft-deletes.
+  // When the URL slug and the Tutorials row differ in case, the status query
+  // misses the row → INACTIVE check is skipped → handler falls through and
+  // serves the content regardless of admin intent.
+  //
+  // These two tests pin the CURRENT (broken) behaviour for Test 1 and the
+  // desired (also current on SQLite) behaviour for Test 2, so that the fix
+  // in Task 2 makes both pass.
+  // ---------------------------------------------------------------------------
+
+  function makeServeReq(slug) {
+    return {
+      url: `/content/tutorials/${slug}`,
+      params: { slug: [slug] },
+      headers: {},
+      get(k) { return this.headers[k.toLowerCase()]; },
+    };
+  }
+
+  function makeServeRes() {
+    const res = {
+      _status: 200, _headers: {}, _body: null,
+      status(code) { this._status = code; return this; },
+      setHeader(k, v) { this._headers[k] = v; },
+      send(b) { this._body = b; return this; },
+      json(b) { this._body = b; return this; },
+      end() { return this; },
+    };
+    return res;
+  }
+
+  it('serveHandler 404s when canonical Tutorials row is INACTIVE even if slug case differs', async () => {
+    const { Tutorials, ContentFiles, ContentManifest } = cds.entities(NS);
+    const seedId = cds.utils.uuid();
+
+    // Seed: mixed-case Tutorials.slug, INACTIVE (admin soft-delete shape).
+    await INSERT.into(Tutorials).entries({
+      ID: seedId,
+      slug: 'abap-environment-sbpa-workflow-extend-RAP-App',
+      title: 'Soft-deleted',
+      status: 'INACTIVE',
+    });
+
+    // Seed: an active manifest with the lowercase content (Hugo emits lowercase).
+    const version = 1;
+    await INSERT.into(ContentManifest).entries({
+      version, status: 'ACTIVE', activatedAt: new Date().toISOString(),
+    });
+    const html = '<html><body>real content</body></html>';
+    await INSERT.into(ContentFiles).entries({
+      slug: 'abap-environment-sbpa-workflow-extend-rap-app',
+      version,
+      content: gzipSync(Buffer.from(html)),
+      contentHash: 'h',
+      mimeType: 'text/html',
+      sizeBytes: html.length,
+    });
+
+    const req = makeServeReq('abap-environment-sbpa-workflow-extend-rap-app');
+    const res = makeServeRes();
+    await serveHandler(req, res);
+
+    expect(res._status).toBe(404);
+  });
+
+  it('serveHandler serves content when canonical Tutorials row is ACTIVE even if slug case differs', async () => {
+    const { Tutorials, ContentFiles, ContentManifest } = cds.entities(NS);
+    const seedId = cds.utils.uuid();
+
+    await INSERT.into(Tutorials).entries({
+      ID: seedId,
+      slug: 'abap-environment-sbpa-workflow-extend-RAP-App',
+      title: 'Active',
+      status: 'ACTIVE',
+    });
+    const version = 1;
+    await INSERT.into(ContentManifest).entries({
+      version, status: 'ACTIVE', activatedAt: new Date().toISOString(),
+    });
+    const html = '<html><body>real content</body></html>';
+    await INSERT.into(ContentFiles).entries({
+      slug: 'abap-environment-sbpa-workflow-extend-rap-app',
+      version,
+      content: gzipSync(Buffer.from(html)),
+      contentHash: 'h',
+      mimeType: 'text/html',
+      sizeBytes: html.length,
+    });
+
+    const req = makeServeReq('abap-environment-sbpa-workflow-extend-rap-app');
+    const res = makeServeRes();
+    await serveHandler(req, res);
+
+    expect(res._status).toBe(200);
+    expect(res._body?.toString?.() ?? '').toContain('real content');
   });
 });
