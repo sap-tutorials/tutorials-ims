@@ -7,6 +7,7 @@ import {
   buildSampleDistinctSql,
   runSampleDistinct,
 } from './lib/analytics-distinct-sample.js'
+import { writeHistoryRow } from './lib/analytics-history-writer.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const require = createRequire(import.meta.url)
@@ -151,10 +152,20 @@ export default class AnalyticsService extends cds.ApplicationService {
         user: req.user.id, sqlLength: sql.length, durationMs,
         rowCount: data.length, truncated,
       })
+      const historyId = await writeHistoryRow({
+        user: req.user.id,
+        sql,
+        rowCount: data.length,
+        durationMs,
+        truncated,
+        source: req.data.source,
+      })
       return {
         columns,
         rows: data.map(r => columns.map(c => stringify(r[c]))),
         metadata: { rowCount: data.length, truncated, durationMs },
+        privacy: { mode: 'raw', suppressedCells: 0 },
+        historyId,
       }
     })
 
