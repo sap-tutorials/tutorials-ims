@@ -69,7 +69,14 @@ function insertText(text: string) {
   editor.focus()
 }
 
-defineExpose({ insertText })
+// Imperative full-buffer replace. Used by SqlTab's "Take over from builder"
+// flow so the SQL Editor starts populated with the chip-built SQL.
+function setValue(text: string) {
+  if (!editor) return
+  editor.setValue(text)
+}
+
+defineExpose({ insertText, setValue })
 </script>
 
 <template>

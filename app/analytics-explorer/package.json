@@ -15,6 +15,7 @@
     "echarts": "^5.5.0",
     "monaco-editor": "^0.45.0",
     "monaco-sql-languages": "^0.13.0",
+    "node-sql-parser": "5.4.0",
     "vue": "^3.4.0",
     "vue-grid-layout-v3": "^3.1.2",
     "vue-router": "^4.3.0",

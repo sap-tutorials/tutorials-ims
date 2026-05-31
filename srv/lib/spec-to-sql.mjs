@@ -1,5 +1,3 @@
-'use strict'
-
 // Pure function: validated QuerySpec → HANA SQL.
 // Output is deterministic and intentionally un-parenthesized at the top level
 // so it composes with `runSelectQuery`'s wrapper: SELECT * FROM (...) t LIMIT N.
@@ -162,4 +160,4 @@ function specToSql(spec, sqlNames) {
   return parts.join(' ')
 }
 
-module.exports = { specToSql }
+export { specToSql }

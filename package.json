@@ -66,6 +66,7 @@
     "@ui5/webcomponents": "^2.22.0",
     "@ui5/webcomponents-fiori": "^2.22.0",
     "@ui5/webcomponents-icons": "^2.22.0",
+    "@vitejs/plugin-vue": "6.0.7",
     "@vue/test-utils": "2.4.10",
     "dompurify": "3.4.5",
     "esbuild": "0.28.0",
