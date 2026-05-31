@@ -536,6 +536,23 @@ metadata under. The one-shot repair is
 [scripts/repair-mixed-case-tutorial-duplicates.cjs](../../../scripts/repair-mixed-case-tutorial-duplicates.cjs)
 (dry-run by default; pass `--apply` to mutate).
 
+The same case-insensitive pattern is applied to `serveHandler`'s
+soft-delete status check around the `SELECT.from(Tutorials).where({ slug })`
+lookup (the lookup that detects whether a Tutorials row has been soft-deleted
+via `status='INACTIVE'`). Without the case-insensitive lookup, an admin
+soft-delete via AdminService would silently fail to 404 the URL when the
+canonical slug shipped mixed-case — the exact-match `where({ slug })`
+would miss the row. A defensive multi-row preference picks the ACTIVE
+row when both an INACTIVE legacy row and an ACTIVE legacy row coexist
+for the same lowercased slug.
+
+The repair script `scripts/repair-mixed-case-tutorial-duplicates.cjs`
+hard-deletes orphan rows that have zero FK references and INACTIVE-flags
+only when references survive (Steps, GroupPathItems, CompletionPathItems,
+NgdsResults, TaskRecords). This avoids leaving INACTIVE landmines that
+exact-match `where({ slug })` lookups might find as the soft-delete row
+instead of the canonical ACTIVE row.
+
 ---
 
 ### Phase 5: Content Store (`srv/lib/content-store.js`)
