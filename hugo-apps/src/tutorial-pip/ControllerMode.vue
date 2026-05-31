@@ -38,3 +38,57 @@ defineEmits<{
     <button type="button" class="pip-mode-toggle" @click="$emit('toggle-mode')" aria-label="Expand to full mode">⌄</button>
   </div>
 </template>
+
+<style>
+.pip-controller {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--sapBaseColor, #fff);
+  border-top: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+  min-height: 0;
+}
+
+.pip-controller__title {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--sapTextColor, #32363a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pip-controller__dots {
+  flex: 0 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 8rem;
+  overflow: hidden;
+}
+
+.pip-controller__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  border: none;
+  padding: 0;
+  background: var(--sapNeutralBorderColor, #d9d9d9);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.pip-controller__dot:hover {
+  background: var(--sapContent_LabelColor, #556b82);
+}
+.pip-controller__dot.active {
+  background: var(--sapBrandColor, #0070f2);
+}
+.pip-controller__dot:focus-visible {
+  outline: 2px solid var(--sapBrandColor, #0070f2);
+  outline-offset: 1px;
+}
+</style>

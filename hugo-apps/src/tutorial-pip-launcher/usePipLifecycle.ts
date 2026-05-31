@@ -14,6 +14,23 @@ export function cloneStylesIntoDocument(src: Document, dest: Document): void {
   links.forEach(node => dest.head.appendChild(node.cloneNode(true)));
   const styles = src.head.querySelectorAll('style');
   styles.forEach(node => dest.head.appendChild(node.cloneNode(true)));
+  injectPipBaseStyles(dest);
+}
+
+// Base reset applied to the PiP document itself — the host <html>/<body> are
+// outside any Vue component, so scoped styles can't reach them. Keeps the PiP
+// window flush with no scrollbars on the chrome and lets PipShell's flex column
+// fill the viewport. Idempotent: skip if already injected.
+export function injectPipBaseStyles(dest: Document): void {
+  if (dest.getElementById('pip-base-styles')) return;
+  const style = dest.createElement('style');
+  style.id = 'pip-base-styles';
+  style.textContent = `
+    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+    body { font-family: var(--sapFontFamily, '72', '72full', Arial, Helvetica, sans-serif); background: var(--sapBaseColor, #fff); color: var(--sapTextColor, #32363a); }
+    #tutorial-pip-mount { height: 100%; display: flex; flex-direction: column; }
+  `;
+  dest.head.appendChild(style);
 }
 
 export type LauncherCtx = {
