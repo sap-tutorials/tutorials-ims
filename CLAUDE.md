@@ -130,7 +130,7 @@ Tutorial HTML is NOT served from static files. After Hugo builds, `publish-conte
 
 ### CAP Backend (srv/)
 
-- **Services**: `DeveloperService` (@path: /api), `AdminService` (@path: /admin), `AnalyticsService` (@path: /admin/analytics), `ExportsService` (@path: /admin/exports), `DisplayService` (@path: /display), `ConsolidationService` (@path: /api/v1), `ScannerService` (@path: /scanner), `SearchService` (@path: /search), `ChatService` (@path: /chat, no entities; ORD-symmetric, streams via `/chat/stream`), `EventStreamService` (@path: event-stream, WebSocket+REST)
+- **Services**: `DeveloperService` (@path: /api), `AdminService` (@path: /admin), `AnalyticsService` (@path: /admin/analytics), `ExportsService` (@path: /admin/exports), `AuthorService` (`srv/author-service.cds`), `DisplayService` (@path: /display), `ConsolidationService` (@path: /api/v1), `ScannerService` (@path: /scanner), `SearchService` (@path: /search), `ChatService` (@path: /chat, no entities; ORD-symmetric, streams via `/chat/stream`), `EventStreamService` (@path: event-stream, WebSocket+REST)
 - **Custom endpoints** (canonical list with auth + scope in [docs/developers/operations/testing-endpoints.md](docs/developers/operations/testing-endpoints.md)): `/api/qrcode`, `/api/recommendations`, `/build/catalog`, `/build/navigator`, `/build/slug-mapping`, `/build/co-completions`, `/build/repo-catalog` (GET unauth; POST bearer via `CONTENT_API_KEY`), `/feedback/submit` (rate-limited; `SUBMISSION_SALT_SECRET` required), `/chat/stream` (SSE), `/admin/embeddings/stats`, `/health`, `/health/db`, `/auth/user`
 - **Content persistence** (`srv/lib/content-store.js`): Tutorial HTML stored as gzip-compressed BLOBs in HANA (`ContentFiles` + `ContentManifest` entities). Endpoints:
   - `POST /content/publish` — accepts `{ trigger, hugoVersion, files: { slug: base64gzip } }`, creates versioned manifest (bearer token auth via `CONTENT_API_KEY`)
@@ -156,7 +156,7 @@ Tutorial HTML is NOT served from static files. After Hugo builds, `publish-conte
 ### Admin UI (app/)
 
 - **`app/admin-shell/`** — Unified admin shell using `sap.tnt.ToolPage` with collapsible side navigation, theme switching (light/dark/auto), and Router-managed content area. Includes custom views: Board (event overview), Statistics (mission completions export), TutorialDashboard, and Privacy policy.
-- **`app/admin/`** — 10 Fiori Elements apps (events, missions, groups, accomplishments, prizes, tutorials, tags, operations, accounts, changelog) — loaded as headless components by the shell via `componentUsages`
+- **`app/admin/`** — 13 Fiori Elements apps (accomplishments, accounts, analytics, changelog, events, feedback, groups, joule, missions, operations, prizes, tags, tutorials) — loaded as headless components by the shell via `componentUsages`
 - **`app/admin-annotations.cds`** — All @UI/@Common CDS annotations for admin screens
 - Deployed as static files inside the approuter (`cp -r ../app/admin-shell/dist/. static/admin-ui/` in `.deploy/mta.yaml`)
 - **Production access**: `/admin-ui/` route (XSUAA-protected, served from approuter `static/admin-ui/`)
@@ -192,6 +192,9 @@ Set `IMS_BASE_URL`, `CAP_BASE_URL`, and `IMS_AUTH_TOKEN` env vars. Export files 
 
 - **`deploy.yml`** — Full MTA build + deploy to BTP Cloud Foundry, followed by smoke tests
 - **`rebuild-content.yml`** — Re-fetches tutorials, rebuilds Hugo, and publishes content to HANA (triggered manually or on tutorial source changes). Authors can force-refresh a single tutorial by running the workflow with the optional `slug` input filled in — the fetch step honors `TUTORIAL_SLUG` env var, busts that slug's markdown cache, regenerates the rest from cache, and skips the HANA `RepoCatalog` upload so the partial run doesn't overwrite the catalog. Leave `slug` blank for a full rebuild.
+- **`rebuild-content-qa.yml`** — QA-channel sibling of `rebuild-content.yml`; sources only `*-Contribution` repos and publishes to the `tutorials-srv-qa` srv via `CONTENT_API_KEY_QA`.
+- **`docs-deploy.yml`** — Builds the VitePress docs site (`npm run docs:build`) and deploys to GitHub Pages at <https://sap-tutorials.github.io/tutorials-poc/>.
+- **`schema-drift-check.yml`** — Compares the prod and QA HDI artefacts to catch unintended schema divergence; narrowed to `JobLocks` after the shared-aspects refactor (PR #52).
 
 ### Documentation (docs/)
 
@@ -237,6 +240,20 @@ Three Vitest workspaces defined in `vitest.config.ts` (inline `projects` array):
 
 One-time setup for the QA author-preview channel — full procedure (CI secrets, dispatch-token distribution to every `-Contribution` repo, local deploy with both prod and QA Hugo built, sanity check, role-collection assignment) lives in [docs/developers/operations/qa-channel-bootstrap.md](docs/developers/operations/qa-channel-bootstrap.md). Day-to-day QA commands are in the Commands section above; channel-specific gotchas (`.tutorial-cache-qa/` marker, `hugo.qa.toml`, `CONTENT_API_KEY_QA`) are in Gotchas below.
 
+## Local Deploy & Conventions
+
+- **Canonical local deploy** (CI is bypassed for most ad-hoc deploys):
+
+  ```bash
+  npm run build:all                       # Hugo MUST finish before mbt build
+  cd .deploy && mbt build && cf deploy mta_archives/*.mtar -e ../deploy/dev.mtaext -f
+  ```
+
+  `mbt build` only `cp`'s `hugo/public/` into the approuter — it does **not** run Hugo. Skipping `build:all` ships a stale approuter (missing NEW badges, license icons, progress UI). Always confirm deploy scope with the maintainer before kicking off (backend-only / +content / +QA).
+- **PR over direct merge** — Default to `gh pr create` from a feature branch; subagent code review is not a substitute for PR review. Only fast-merge to `main` if explicitly told to skip the PR.
+- **`srv-qa` cp list audit** — When changing anything under `srv/lib/`, re-walk transitive `./` imports from `srv/lib/content-store.js` and confirm every dependency is in `.deploy/mta.yaml`'s `srv-qa` `cp` list. Missing transitive deps crash QA boot at MTA deploy time.
+- **CAP 10 readiness (June 2026)** — Node minimum becomes 22 (recommend 24 LTS); `compat_srv_getters`, `compat_texts_entities`, `legacyLocking`, `service_level_restrictions`, `consistent_params`, `compat_save_drafts`, `compat_assert_not_null`, `calc_elements` flags are removed or flipped. Audit before upgrading: `grep -rnE "ieee754compatible|compat_srv_getters|compat_texts_entities|legacyLocking|service_level_restrictions|consistent_params|compat_save_drafts|compat_assert_not_null|calc_elements" package.json .cdsrc*.* .env`.
+
 ## Gotchas
 
 - **`hugo/content/tutorials/` is entirely generated** — never edit these files directly. They are overwritten by `npm run fetch-tutorials`. Edit the parsers in `scripts/parsers/` or the source tutorials in the `sap-tutorials` GitHub org instead.
@@ -247,7 +264,7 @@ One-time setup for the QA author-preview channel — full procedure (CI secrets,
 - **Cache clearing** — `.tutorial-cache/` caches raw markdown, GitHub metadata, and CAP catalog data. Delete it to force a full re-fetch. There is no incremental invalidation.
 - **Node.js >= 20 required** — Build scripts use native `fetch` (no polyfill).
 - **Slug fields** — `Missions.slug` and `CompletionPaths.slug` must be populated for the build pipeline to generate mission/group pages. Run `node scripts/migrate-reference-data.js populate-slugs` after data import.
-- **`app/` vs `hugo-apps/`** — Two separate directories. `app/` contains standalone UI applications (each with its own build): `admin-shell/`, `admin/` (11 Fiori Elements components loaded by the shell), `analytics-explorer/` (Vue 3 SPA), `scanner/` (UI5), and `display-app/` (Vue 3 event-monitor dashboard). Builds from `app/*` deploy by copying their `dist/`/`webapp/` into `approuter/static/<route>/`. `hugo-apps/` is a single Vite project that compiles 9 Vue 3 page-level islands (navigator, app-space, event-display, nav-dropdown, scanner-vue, tutorial-feedback, tutorial-rating, cmd-palette, me) into `hugo/static/js/` — these are loaded by Hugo templates as `<script>` tags, not deployed as routes. See [mta.yaml](mta.yaml) for the build sequence.
+- **`app/` vs `hugo-apps/`** — Two separate directories. `app/` contains standalone UI applications (each with its own build): `admin-shell/`, `admin/` (13 Fiori Elements components loaded by the shell), `analytics-explorer/` (Vue 3 SPA), `scanner/` (UI5), and `display-app/` (Vue 3 event-monitor dashboard). Builds from `app/*` deploy by copying their `dist/`/`webapp/` into `approuter/static/<route>/`. `hugo-apps/` is a single Vite project that compiles ~13 Vue 3 page-level islands (navigator, app-space, event-display, nav-dropdown, scanner-vue, tutorial-feedback, tutorial-rating, tutorial-breadcrumbs, tutorial-pip, tutorial-pip-launcher, tutorial-prefs, cmd-palette, me) into `hugo/static/js/` — loaded by Hugo templates as `<script>` tags, not deployed as routes. `hugo-apps/src/{shared,composables}/` are utility modules, not islands. See [mta.yaml](mta.yaml) for the build sequence.
 - **`/admin/` is OData only** — The AdminService OData endpoint lives at `/admin/`. The admin shell UI is served at `/admin-ui/` to avoid path collisions.
 - **Hugo vs VitePress** — The project migrated from VitePress to Hugo. The `site/.vitepress/` directory still exists (with a built `dist/`) but is legacy. Active frontend work targets `hugo/`.
 - **`CONTENT_API_KEY` env var** — Required for `POST /content/publish` and `POST /content/rollback`. Set in CI secrets and locally when testing publish. Without it, publish requests return 401.
