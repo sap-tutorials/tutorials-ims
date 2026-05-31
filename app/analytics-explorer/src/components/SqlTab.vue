@@ -1,11 +1,17 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import '@ui5/webcomponents/dist/Button.js'
 import QueryEditor from './QueryEditor.vue'
 import ChartRenderer from './ChartRenderer.vue'
 import ChartTypeSwitcher from './ChartTypeSwitcher.vue'
 import ClauseChipBar from './builder/ClauseChipBar.vue'
+import SqlPreview from './builder/SqlPreview.vue'
 import { useChartConfig } from '../composables/useChartConfig'
+import { useQuerySpec } from '../composables/useQuerySpec'
+import { useEntityGraph } from '../composables/useEntityGraph'
+import { runSelectQuery } from '../api/sql'
+import { specToSql } from '@srv-lib/spec-to-sql.mjs'
+import { validateQuerySpec } from '@srv-lib/query-spec-validator.mjs'
 import { getCachedEntityMetadata, type ExposedEntity } from '../api/entities'
 import type { ChartData } from '../composables/useChartEngine'
 
@@ -17,6 +23,18 @@ const entities = ref<ExposedEntity[]>([])
 const entitiesError = ref<string | null>(null)
 const editorRef = ref<InstanceType<typeof QueryEditor> | null>(null)
 
+const { spec, mode } = useQuerySpec()
+const entityGraph = useEntityGraph()
+
+// Run-from-chips: enabled only when a spec is loaded and the validator finds
+// no errors. The Run button below routes between editor and chip-built SQL
+// based on `mode` from useQuerySpec.
+const canRunFromChips = computed(() => {
+  if (!spec.value) return false
+  const v = validateQuerySpec(spec.value, entityGraph.entityMap.value as any)
+  return v.errors.length === 0
+})
+
 onMounted(async () => {
   try { entities.value = await getCachedEntityMetadata() }
   catch (e: any) { entitiesError.value = e.message }
@@ -24,6 +42,7 @@ onMounted(async () => {
 
 function onResults(data: { columns: string[]; rows: any[] }) {
   lastResults.value = data
+  showChart.value = false
 }
 
 function insertEntity(e: ExposedEntity) {
@@ -31,6 +50,24 @@ function insertEntity(e: ExposedEntity) {
   // mixed-case physical name in unit tests). Fall back to the short projection
   // name if the server didn't populate sqlName for some reason.
   editorRef.value?.insertText(e.sqlName || e.name)
+}
+
+async function runFromChips() {
+  if (!spec.value) return
+  try {
+    const sql = specToSql(spec.value, entityGraph.sqlNames.value)
+    const r = await runSelectQuery(sql, 'builder')
+    // Convert array-of-arrays envelope to objects for the chart-config path,
+    // matching how QueryEditor.run already projects.
+    const rowsObj = r.rows.map(row => Object.fromEntries(r.columns.map((c, i) => [c, row[i]])))
+    lastResults.value = { columns: r.columns, rows: rowsObj }
+    showChart.value = false
+  } catch (e: any) {
+    // Surface as a temporary lastResults shape; Phase 2 Part B Task 18 adds
+    // a structured error card.
+    // eslint-disable-next-line no-console
+    console.warn('[SqlTab] runFromChips failed:', e.message)
+  }
 }
 
 function visualize() {
@@ -52,6 +89,16 @@ function visualize() {
 <template>
   <div class="sql-tab">
     <ClauseChipBar />
+    <SqlPreview />
+    <div v-if="spec" class="builder-run-row">
+      <ui5-button
+        design="Emphasized"
+        icon="play"
+        :disabled="!canRunFromChips"
+        @click="runFromChips"
+      >Run from chips</ui5-button>
+      <span v-if="!canRunFromChips" class="run-hint">Validation errors — see chip highlights</span>
+    </div>
     <div class="main-row">
       <aside class="entity-list" aria-label="Exposed entities">
         <div class="entity-list-header">
@@ -104,6 +151,18 @@ function visualize() {
   display: flex;
   flex-direction: column;
   height: 100%;
+}
+.builder-run-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--sapList_BorderColor);
+  background: var(--sapList_HeaderBackground);
+}
+.run-hint {
+  font-size: 0.75rem;
+  color: var(--sapErrorColor);
 }
 .main-row {
   flex: 1;
