@@ -882,11 +882,22 @@ describe('ResultsTab', () => {
     expect((w.emitted('drilldown')![0][0] as any).event_ID).toBe('evt1')
   })
 
-  it('emits export when Export CSV button is clicked', async () => {
-    const w = mount(ResultsTab, { props: baseProps })
+  it('calls exportCsv when Export CSV button is clicked', async () => {
+    const exportSpy = vi.fn(async () => {})
+    // Re-mock useExport for this test to capture the call.
+    vi.doMock('../../../composables/useExport', () => ({
+      useExport: () => ({
+        exportCsv: exportSpy,
+        isExporting: { value: false },
+        lastError: { value: null },
+      }),
+    }))
+    // Need a fresh import to pick up the new mock.
+    const { default: ResultsTabFresh } = await import('../ResultsTab.vue')
+    const w = mount(ResultsTabFresh, { props: baseProps })
     await w.find('[data-test="export-csv"]').trigger('click')
     await flushPromises()
-    expect(w.emitted('export-requested') || true).toBeTruthy()
+    expect(exportSpy).toHaveBeenCalledWith(baseProps.generatedSql)
   })
 })
 ```
@@ -974,6 +985,7 @@ function confirmDrilldown() {
 const drillEnabled = computed(() => menuRow.value ? props.canDrillDown(menuRow.value) : false)
 
 function toggleView(v: 'table' | 'chart') {
+  if (v === 'chart' && !chartEnabled.value) return  // gated; user can't toggle when disabled
   view.value = v
   if (v === 'chart' && chartConfig.dimensions.value.length === 0) {
     // Bootstrap chart config from the result columns the first time the
@@ -986,6 +998,36 @@ function toggleView(v: 'table' | 'chart') {
     }
   }
 }
+
+// Spec §4: chart toggle disabled when result rows > 10,000 OR when there's
+// no numeric/temporal column to plot. Server caps at 5,000 so the row-cap
+// clause is mostly defensive; the no-numeric clause is the real gate
+// (e.g. SELECT DISTINCT name FROM Users → no chart-able column).
+const chartEnabled = computed<boolean>(() => {
+  if (!props.results || props.results.rows.length === 0) return false
+  if (props.results.rows.length > 10000) return false
+  // Heuristic: a result column is chart-eligible if at least one of its
+  // values parses as a number or as a Date. This is best-effort — the
+  // backend hands rows back as stringified scalars; we can't see the
+  // original CDS type from this end.
+  const firstFew = props.results.rows.slice(0, Math.min(20, props.results.rows.length))
+  return props.results.columns.some((_, idx) =>
+    firstFew.some(row => {
+      const v = row[idx]
+      if (v === null || v === undefined) return false
+      if (typeof v === 'number') return true
+      const s = String(v)
+      // Numeric (incl. decimals/negatives) OR ISO-ish date.
+      return /^-?\d+(\.\d+)?$/.test(s) || /^\d{4}-\d{2}-\d{2}/.test(s)
+    })
+  )
+})
+
+const chartDisabledReason = computed<string>(() => {
+  if (!props.results || props.results.rows.length === 0) return 'Run a query first.'
+  if (props.results.rows.length > 10000) return 'Charting requires ≤10,000 rows.'
+  return 'Charting requires at least one numeric or temporal column.'
+})
 
 async function onExportClick() {
   if (!props.generatedSql) return
@@ -1013,6 +1055,8 @@ defineExpose({ onRowContextMenu, confirmDrilldown })
         <button
           data-test="results-view-chart"
           :class="{ active: view === 'chart' }"
+          :disabled="!chartEnabled"
+          :title="chartEnabled ? 'Show as chart' : chartDisabledReason"
           @click="toggleView('chart')"
         >Chart</button>
       </div>
@@ -1519,6 +1563,19 @@ Append:
     const drillBtn = w.find('.context-menu button:first-child')
     expect(drillBtn.attributes('disabled')).toBeDefined()
   })
+
+  it('disables the chart toggle when no numeric/temporal column exists', () => {
+    const stringOnlyResults = {
+      ...baseProps.results,
+      columns: ['name'],
+      rows: [['Alice'], ['Bob']],
+    }
+    const w = mount(ResultsTab, {
+      props: { ...baseProps, results: stringOnlyResults as any },
+    })
+    const chartBtn = w.find('[data-test="results-view-chart"]')
+    expect(chartBtn.attributes('disabled')).toBeDefined()
+  })
 ```
 
 - [ ] **Step 2: Run tests**
@@ -1691,7 +1748,7 @@ EOF
 
 - [ ] **Step 2: Save a memory entry once the PR is open**
 
-Save to `C:\Users\I809764\.claude\projects\d--projects-tutorials-poc\memory\project_analytics_builder_phase3.md`:
+Save to `~/.claude/projects/d--projects-tutorials-poc/memory/project_analytics_builder_phase3.md`:
 
 ```markdown
 ---
