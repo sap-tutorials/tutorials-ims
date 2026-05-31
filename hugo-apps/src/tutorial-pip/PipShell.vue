@@ -128,7 +128,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="pip-shell" :data-mode="mode">
-    <ui5-message-strip v-if="errorMessage" design="Negative" hide-close-button>
+    <ui5-message-strip v-if="errorMessage" class="pip-error" design="Negative" hide-close-button>
       {{ errorMessage }}
     </ui5-message-strip>
     <div v-if="tutorialComplete" class="pip-completion">
@@ -160,3 +160,45 @@ onBeforeUnmount(() => {
     />
   </div>
 </template>
+
+<style>
+/* Unscoped on purpose — PipShell is the root component inside #tutorial-pip-mount
+   and these rules also need to reach FullMode / ControllerMode children whose
+   templates use the same .pip-* classes. The PiP document is its own isolated
+   <html>, so global selectors can't bleed back into the main tab. */
+.pip-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: var(--sapBaseColor, #fff);
+  color: var(--sapTextColor, #32363a);
+}
+.pip-shell[data-mode='controller'] { overflow: hidden; }
+
+.pip-error {
+  flex: 0 0 auto;
+  margin: 0.5rem 0.75rem;
+}
+
+.pip-completion {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  text-align: center;
+}
+.pip-completion h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: var(--sapTextColor, #32363a);
+}
+.pip-completion p {
+  margin: 0;
+  color: var(--sapNeutralTextColor, #6a6d70);
+  max-width: 28ch;
+}
+</style>
