@@ -93,6 +93,17 @@ function validateQuerySpec(spec, entityMap) {
   }
 
   const checkColumnRef = (ref, chipId, label) => {
+    // Guard against malformed refs from LLM-emitted specs (e.g. ref: undefined,
+    // ref: { column: 'x' } missing alias). Without this the validator throws
+    // 'Cannot read properties of undefined' instead of returning a clean error.
+    if (!ref || typeof ref !== 'object') {
+      push(chipId, `${label}: ref is required ({ alias, column })`)
+      return null
+    }
+    if (!ref.alias) {
+      push(chipId, `${label}: ref.alias is required`)
+      return null
+    }
     if (!aliasMap.has(ref.alias)) {
       push(chipId, `${label}: unknown alias '${ref.alias}'`)
       return null

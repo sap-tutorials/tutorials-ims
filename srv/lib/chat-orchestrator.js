@@ -294,12 +294,22 @@ export async function dispatchTool(name, args, user) {
   }
 
   if (name === 'generateAnalyticsQuery') {
-    const spec = args?.spec;
+    let spec = args?.spec;
+    // Some LLM outputs serialize `spec` as a JSON string instead of an object.
+    if (typeof spec === 'string') {
+      try { spec = JSON.parse(spec); } catch { /* leave as-is, type guard below catches it */ }
+    }
     if (!spec || typeof spec !== 'object') {
       return { error: 'spec is required (QuerySpec v1 object)' };
     }
     const { entityMap, sqlNames } = getAnalyticsContext();
-    const { errors } = validateQuerySpec(spec, entityMap);
+    // Wrap the validator + SQL gen in a try/catch defense-in-depth — the LLM
+    // can emit shapes the validator's individual guards don't anticipate
+    // (missing nested fields, wrong types). Returning structured errors keeps
+    // the chat alive instead of bubbling up to the streamChat catch handler.
+    let errors;
+    try { ({ errors } = validateQuerySpec(spec, entityMap)); }
+    catch (e) { return { errors: [{ chipId: null, message: `spec validation crashed: ${e.message}` }], spec }; }
     if (errors.length > 0) return { errors, spec };
     let sql;
     try { sql = specToSql(spec, sqlNames); }
