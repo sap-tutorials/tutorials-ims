@@ -828,9 +828,24 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
 
     // Status-aware lookup: a soft-deleted tutorial may either redirect or 404.
     // We do this before the cache hit so an admin status change takes effect immediately.
-    const [tutMeta] = await SELECT.from(Tutorials)
-      .where({ slug })
-      .columns('status', 'redirectTo_ID');
+    //
+    // Case-insensitive: legacy Tutorials.slug rows may be mixed-case (seeded
+    // from GitHub repo names before the lowercase-canonical rule was adopted).
+    // Inbound URLs are always lowercase (Hugo emits lowercase + the
+    // upstream rawSlug-canonicalization 301 redirects mixed-case bookmarks).
+    // Same pattern as upsertTutorialMetadata in content-publish-session.js.
+    const db = await cds.connect.to('db');
+    const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+    const tut = tutorialsTableInfo(namespace, isHana);
+    const tutHits = await db.run(
+      `SELECT ${tut.statusCol} AS "status", ${tut.redirectCol} AS "redirectTo_ID" FROM ${tut.table} WHERE LOWER(${tut.slugCol}) = ?`,
+      [slug]
+    );
+    // Defensive: if multiple rows match (shouldn't happen post-canonicalization
+    // but legacy data drift is possible), prefer ACTIVE.
+    const tutMeta = tutHits.find(r => (r.status ?? r.STATUS) !== 'INACTIVE')
+                 ?? tutHits[0]
+                 ?? null;
 
     if (tutMeta?.status === 'INACTIVE') {
       if (tutMeta.redirectTo_ID) {
