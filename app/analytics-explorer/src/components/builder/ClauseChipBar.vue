@@ -41,6 +41,22 @@ const aliasesInSpec = computed<string[]>(() => {
   return [spec.value.from.alias, ...spec.value.joins.map(j => j.target.alias)]
 })
 
+// Map FROM-and-JOIN aliases to their entity metadata. Chip popovers select
+// columns BY ALIAS (not by entity name) — without this remap, the chips
+// were storing the entity name as ref.alias and the generated SQL came
+// out as `AccomplishmentRecords.ID FROM ... a` (issue surfaced 2026-05-31).
+const chipAliasMap = computed(() => {
+  const out = new Map<string, { columns: Map<string, any> }>()
+  if (!spec.value) return out
+  const fromMeta = entityGraph.entityMap.value.get(spec.value.from.entity)
+  if (fromMeta) out.set(spec.value.from.alias, fromMeta)
+  for (const j of spec.value.joins) {
+    const meta = entityGraph.entityMap.value.get(j.target.entity)
+    if (meta) out.set(j.target.alias, meta)
+  }
+  return out
+})
+
 // Auto-derived GROUP BY chips (matches deriveAutoGroupBy in spec-to-sql.mjs)
 const allGroupByChips = computed<Array<GroupKey & { auto: boolean }>>(() => {
   if (!spec.value) return []
@@ -309,7 +325,7 @@ function suggestionsForJoin(join: Join) {
       <FilterGroupChip
         v-if="spec.filterTree && spec.filterTree.kind === 'group'"
         :group="spec.filterTree"
-        :alias-map="entityGraph.entityMap.value as any"
+        :alias-map="chipAliasMap as any"
         :sample-distinct-cached="entityGraph.sampleDistinctCached"
         :depth="1"
         @change="changeFilterTree"
@@ -321,7 +337,7 @@ function suggestionsForJoin(join: Join) {
         v-for="(g, idx) in allGroupByChips"
         :key="g.id"
         :chip-key="g"
-        :alias-map="entityGraph.entityMap.value as any"
+        :alias-map="chipAliasMap as any"
         @change="(next) => changeGroupByAt(idx - allGroupByChips.filter(x => x.auto).length, next)"
         @remove="removeGroupByAt(idx - allGroupByChips.filter(x => x.auto).length)"
       />
@@ -331,7 +347,7 @@ function suggestionsForJoin(join: Join) {
         v-for="(s, idx) in spec.select"
         :key="s.id"
         :item="s"
-        :alias-map="entityGraph.entityMap.value as any"
+        :alias-map="chipAliasMap as any"
         @change="(next) => changeSelectAt(idx, next)"
         @remove="removeSelectAt(idx)"
       />
@@ -342,7 +358,7 @@ function suggestionsForJoin(join: Join) {
         :key="o.id"
         :order="o"
         :select-items="spec.select"
-        :alias-map="entityGraph.entityMap.value as any"
+        :alias-map="chipAliasMap as any"
         @change="(next) => changeOrderByAt(idx, next)"
         @remove="removeOrderByAt(idx)"
       />

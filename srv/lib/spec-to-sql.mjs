@@ -34,12 +34,17 @@ function renderValue(value) {
   }
 }
 
-function renderRef(ref) {
-  return `${ref.alias}.${ref.column}`
+function renderRef(ref, dialect) {
+  // HANA folds unquoted identifiers to upper case at parse time. CDS column
+  // names like `legacyId` are physically stored as `LEGACYID`, so we must
+  // emit them upper-cased to match. SQLite is case-insensitive on identifier
+  // lookup against table metadata, so leaving the CDS form is fine there.
+  const col = dialect === 'hana' ? ref.column.toUpperCase() : ref.column
+  return `${ref.alias}.${col}`
 }
 
-function renderLeaf(leaf) {
-  const ref = renderRef(leaf.ref)
+function renderLeaf(leaf, dialect) {
+  const ref = renderRef(leaf.ref, dialect)
   switch (leaf.op) {
     case 'eq':         return `${ref} = ${renderValue(leaf.value)}`
     case 'neq':        return `${ref} <> ${renderValue(leaf.value)}`
@@ -67,27 +72,27 @@ function renderLeaf(leaf) {
   }
 }
 
-function renderFilterTree(node) {
+function renderFilterTree(node, dialect) {
   if (!node) return null
   if (node.kind === 'group') {
-    const inner = node.children.map(renderFilterTree).filter(Boolean)
+    const inner = node.children.map(c => renderFilterTree(c, dialect)).filter(Boolean)
     if (!inner.length) return null
     const joined = inner.join(node.conjunction === 'or' ? ' OR ' : ' AND ')
     const wrapped = `(${joined})`
     return node.negated ? `NOT ${wrapped}` : wrapped
   }
-  const rendered = renderLeaf(node)
+  const rendered = renderLeaf(node, dialect)
   return node.negated ? `NOT (${rendered})` : rendered
 }
 
-function renderSelectItem(item) {
+function renderSelectItem(item, dialect) {
   if (item.kind === 'column') {
-    const ref = renderRef(item.ref)
+    const ref = renderRef(item.ref, dialect)
     return item.alias ? `${ref} AS ${item.alias}` : ref
   }
   if (item.kind === 'aggregation') {
     const fn = AGG_FN[item.fn]
-    const inner = item.ref === '*' ? '*' : renderRef(item.ref)
+    const inner = item.ref === '*' ? '*' : renderRef(item.ref, dialect)
     const distinct = item.distinct ? 'DISTINCT ' : ''
     const expr = `${fn}(${distinct}${inner})`
     return item.alias ? `${expr} AS ${item.alias}` : expr
@@ -98,27 +103,36 @@ function renderSelectItem(item) {
   throw new Error(`spec-to-sql: unsupported select.kind '${item.kind}'`)
 }
 
-function deriveAutoGroupBy(select) {
+function deriveAutoGroupBy(select, dialect) {
   const hasAgg = select.some(s => s.kind === 'aggregation')
   if (!hasAgg) return []
   return select
     .filter(s => s.kind !== 'aggregation')
     .map(s => {
-      if (s.kind === 'column')     return renderRef(s.ref)
+      if (s.kind === 'column')     return renderRef(s.ref, dialect)
       if (s.kind === 'expression') return s.sql
       return null
     })
     .filter(Boolean)
 }
 
-function specToSql(spec, sqlNames) {
+// Detect the dialect from sqlNames. If every entity's SQL name is uppercase,
+// we're targeting HANA (CAP's hana builder folds names). Otherwise SQLite.
+function detectDialect(sqlNames) {
+  const values = Object.values(sqlNames || {})
+  if (values.length === 0) return 'sqlite'
+  return values.every(v => v === v.toUpperCase()) ? 'hana' : 'sqlite'
+}
+
+function specToSql(spec, sqlNames, opts) {
   if (!spec || spec.version !== 1) throw new Error('spec-to-sql: unsupported spec version')
 
+  const dialect = opts?.dialect || detectDialect(sqlNames)
   const fromTable = sqlNames[spec.from.entity]
   if (!fromTable) throw new Error(`spec-to-sql: no SQL name for entity '${spec.from.entity}'`)
 
   const parts = []
-  const selectClause = spec.select.map(renderSelectItem).join(', ')
+  const selectClause = spec.select.map(s => renderSelectItem(s, dialect)).join(', ')
   parts.push(`SELECT ${selectClause}`)
   parts.push(`FROM ${fromTable} ${spec.from.alias}`)
 
@@ -126,16 +140,16 @@ function specToSql(spec, sqlNames) {
     const jTable = sqlNames[j.target.entity]
     if (!jTable) throw new Error(`spec-to-sql: no SQL name for joined entity '${j.target.entity}'`)
     const jKind = j.kind === 'left' ? 'LEFT JOIN' : 'INNER JOIN'
-    const onLeft  = renderRef(j.on.leftRef)
-    const onRight = renderRef(j.on.rightRef)
+    const onLeft  = renderRef(j.on.leftRef, dialect)
+    const onRight = renderRef(j.on.rightRef, dialect)
     parts.push(`${jKind} ${jTable} ${j.target.alias} ON ${onLeft} = ${onRight}`)
   }
 
-  const where = renderFilterTree(spec.filterTree)
+  const where = renderFilterTree(spec.filterTree, dialect)
   if (where) parts.push(`WHERE ${where}`)
 
-  const autoGroup = deriveAutoGroupBy(spec.select)
-  const explicitGroup = (spec.groupBy || []).map(g => renderRef(g.ref))
+  const autoGroup = deriveAutoGroupBy(spec.select, dialect)
+  const explicitGroup = (spec.groupBy || []).map(g => renderRef(g.ref, dialect))
   const allGroup = [...autoGroup, ...explicitGroup]
   if (allGroup.length) parts.push(`GROUP BY ${allGroup.join(', ')}`)
 
@@ -145,10 +159,10 @@ function specToSql(spec, sqlNames) {
       if (o.by.kind === 'selectId') {
         const target = spec.select.find(s => s.id === o.by.id)
         if (!target) throw new Error(`spec-to-sql: orderBy references unknown selectId '${o.by.id}'`)
-        ref = target.alias || (target.kind === 'column' ? renderRef(target.ref) : null)
+        ref = target.alias || (target.kind === 'column' ? renderRef(target.ref, dialect) : null)
         if (!ref) throw new Error(`spec-to-sql: orderBy.selectId target has no alias`)
       } else {
-        ref = renderRef(o.by.ref)
+        ref = renderRef(o.by.ref, dialect)
       }
       return `${ref} ${o.direction === 'desc' ? 'DESC' : 'ASC'}`
     })
