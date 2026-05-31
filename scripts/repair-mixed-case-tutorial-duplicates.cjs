@@ -15,8 +15,16 @@
 //   2. Re-point any Steps rows that reference the orphan back to the canonical row
 //      (only when the canonical row has zero Steps — otherwise leave alone to avoid
 //      unique-constraint pain on (tutorial_ID, stepOrder)).
-//   3. Mark the orphan lowercase row status='INACTIVE' so it stops appearing in
-//      /build/slug-mapping and any catalog reads.
+//   3a. Check FK references to the orphan in Steps, GroupPathItems, CompletionPathItems,
+//       NgdsResults (if present), and TaskRecords (if present).
+//       If TOTAL refs == 0: hard-DELETE the orphan row. This is the safe path —
+//       orphans were never wired into FK chains in practice (Steps are re-parented
+//       above; GPI/CPI always referenced the mixed-case canonical row).
+//   3b. If TOTAL refs > 0: log a WARN with per-table counts and mark the orphan
+//       status='INACTIVE' so admins can reconcile manually.
+//
+// Hard-deleting safe orphans avoids leaving INACTIVE landmines that exact-match
+// `where({ slug })` read paths might find.
 //
 // The script is IDEMPOTENT: running twice is a no-op. It is DRY-RUN by default
 // (logs the proposed mutations to stdout). Pass --apply to actually write.
@@ -47,7 +55,10 @@ async function main() {
   cds.model = cds.compile.for.nodejs(csn);
   await cds.connect.to('db');
 
-  const { Tutorials, Steps } = cds.entities(NS);
+  const entities = cds.entities(NS);
+  const { Tutorials, Steps, GroupPathItems, CompletionPathItems } = entities;
+  const NgdsResults = entities.NgdsResults ?? null;
+  const TaskRecords = entities.TaskRecords ?? null;
 
   console.log(`mode: ${APPLY ? 'APPLY (writing)' : 'DRY-RUN (no writes)'}`);
 
@@ -82,7 +93,7 @@ async function main() {
     console.log(`    └─ orphan ${orphan.slug} (ID=${orphan.ID.slice(0,8)} stepCount=${orphan.stepCount ?? 'null'} status=${orphan.status})`);
   }
 
-  let copied = 0, reparented = 0, deactivated = 0;
+  let copied = 0, reparented = 0, deactivated = 0, deleted = 0;
 
   for (const { canonical, orphan } of pairs) {
     // 1. Field copy
@@ -111,15 +122,52 @@ async function main() {
       console.log(`  WARN ${canonical.slug}: canonical has ${canonicalSteps.length} Steps and orphan has ${orphanSteps.length} — leaving Steps alone`);
     }
 
-    // 3. INACTIVE the orphan
-    if (orphan.status !== 'INACTIVE') {
-      console.log(`  mark orphan INACTIVE`);
-      if (APPLY) await UPDATE(Tutorials).where({ ID: orphan.ID }).set({ status: 'INACTIVE' });
-      deactivated++;
+    // 3. Hard-delete orphan if no FK refs remain; INACTIVE-flag only when refs exist.
+    let refCounts = { Steps: 0, GroupPathItems: 0, CompletionPathItems: 0, NgdsResults: 0, TaskRecords: 0 };
+    try {
+      const [stepsRef, gpiRef, cpiRef] = await Promise.all([
+        SELECT.one.from(Steps).where({ tutorial_ID: orphan.ID }).columns('count(*) as n'),
+        SELECT.one.from(GroupPathItems).where({ tutorial_ID: orphan.ID }).columns('count(*) as n'),
+        SELECT.one.from(CompletionPathItems).where({ tutorial_ID: orphan.ID }).columns('count(*) as n'),
+      ]);
+      refCounts.Steps = Number(stepsRef?.n ?? 0);
+      refCounts.GroupPathItems = Number(gpiRef?.n ?? 0);
+      refCounts.CompletionPathItems = Number(cpiRef?.n ?? 0);
+
+      if (NgdsResults) {
+        const r = await SELECT.one.from(NgdsResults).where({ tutorial_ID: orphan.ID }).columns('count(*) as n');
+        refCounts.NgdsResults = Number(r?.n ?? 0);
+      }
+      if (TaskRecords) {
+        const r = await SELECT.one.from(TaskRecords).where({ tutorial_ID: orphan.ID }).columns('count(*) as n');
+        refCounts.TaskRecords = Number(r?.n ?? 0);
+      }
+    } catch (err) {
+      console.log(`  WARN ${orphan.slug}: FK ref check failed (${err.message}) — falling back to INACTIVE`);
+      refCounts = null; // sentinel: unknown refs → safe default is INACTIVE-flag
+    }
+
+    const totalRefs = refCounts
+      ? Object.values(refCounts).reduce((a, b) => a + b, 0)
+      : 1; // unknown → treat as > 0
+
+    if (totalRefs === 0) {
+      console.log(`  hard-delete orphan (0 FK refs across all tables)`);
+      if (APPLY) await DELETE.from(Tutorials).where({ ID: orphan.ID });
+      deleted++;
+    } else {
+      const detail = refCounts
+        ? Object.entries(refCounts).filter(([, n]) => n > 0).map(([t, n]) => `${t}=${n}`).join(', ')
+        : 'ref-check-failed';
+      console.log(`  WARN ${orphan.slug}: ${totalRefs} FK ref(s) found (${detail}) — marking INACTIVE instead of deleting`);
+      if (orphan.status !== 'INACTIVE') {
+        if (APPLY) await UPDATE(Tutorials).where({ ID: orphan.ID }).set({ status: 'INACTIVE' });
+        deactivated++;
+      }
     }
   }
 
-  console.log(`\nsummary: copied=${copied} reparented=${reparented} deactivated=${deactivated}  ${APPLY ? '(applied)' : '(dry-run)'}`);
+  console.log(`\nsummary: copied=${copied} reparented=${reparented} deleted=${deleted} deactivated=${deactivated}  ${APPLY ? '(applied)' : '(dry-run)'}`);
 }
 
 main().then(() => process.exit(0)).catch(err => {
