@@ -80,6 +80,37 @@ describe('slug-mapping', () => {
       expect(result.flat).toHaveLength(3);
       expect(result.flat.find(r => r.slug === 'has-slug-no-legacy')).toBeUndefined();
     });
+
+    it('excludes INACTIVE rows from flat, grouped, and keyed', async () => {
+      const { Tutorials, Missions } = cds.entities('com.sap.developers.ims');
+
+      await INSERT.into(Tutorials).entries([
+        { ID: 'slug-t4', legacyId: 5010, slug: 'active-tutorial-slug', title: 'Active Tutorial', status: 'ACTIVE' },
+        { ID: 'slug-t5', legacyId: 5011, slug: 'inactive-tutorial-slug', title: 'Inactive Tutorial', status: 'INACTIVE' },
+      ]);
+
+      await INSERT.into(Missions).entries([
+        { ID: 'slug-m3', legacyId: 24620, slug: 'active-mission-slug', title: 'Active Mission', status: 'ACTIVE' },
+        { ID: 'slug-m4', legacyId: 24621, slug: 'inactive-mission-slug', title: 'Inactive Mission', status: 'INACTIVE' },
+      ]);
+
+      const { buildSlugMapping } = await import('../../srv/lib/slug-mapping.js');
+      const result = await buildSlugMapping();
+
+      // INACTIVE Tutorials and Missions must not appear in any output shape
+      expect(result.flat.find(r => r.slug === 'inactive-tutorial-slug')).toBeUndefined();
+      expect(result.flat.find(r => r.slug === 'inactive-mission-slug')).toBeUndefined();
+
+      expect(result.grouped.tutorials.find(r => r.slug === 'inactive-tutorial-slug')).toBeUndefined();
+      expect(result.grouped.missions.find(r => r.slug === 'inactive-mission-slug')).toBeUndefined();
+
+      expect(result.keyed.find(r => r.slug === 'inactive-tutorial-slug')).toBeUndefined();
+      expect(result.keyed.find(r => r.slug === 'inactive-mission-slug')).toBeUndefined();
+
+      // ACTIVE rows must still appear
+      expect(result.flat.find(r => r.slug === 'active-tutorial-slug')).toBeDefined();
+      expect(result.flat.find(r => r.slug === 'active-mission-slug')).toBeDefined();
+    });
   });
 
   describe('findMissingSlugs', () => {

@@ -5,9 +5,9 @@ export async function buildSlugMapping() {
 
   const [tutorials, missions, paths] = await Promise.all([
     SELECT.from(Tutorials).columns('legacyId', 'slug', 'title')
-      .where('legacyId is not null and slug is not null'),
+      .where(`legacyId is not null and slug is not null and (status is null or status != 'INACTIVE')`),
     SELECT.from(Missions).columns('legacyId', 'slug', 'title')
-      .where('legacyId is not null and slug is not null'),
+      .where(`legacyId is not null and slug is not null and (status is null or status != 'INACTIVE')`),
     SELECT.from(CompletionPaths).columns('legacyId', 'slug', 'name')
       .where('legacyId is not null and slug is not null'),
   ]);
