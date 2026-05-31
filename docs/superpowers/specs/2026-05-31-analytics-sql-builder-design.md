@@ -90,13 +90,21 @@ The SQL tab becomes a chip-driven query builder + Monaco escape hatch + Joule co
 |---|---|
 | `srv/analytics-service.cds` | Adds `AnalyticsQueryHistory`/`AnalyticsSavedQuery` projections; `exportSelectQuery`, `sampleDistinct`; extends `listExposedEntities` with `hanaType`, `filterMode`, `associations` |
 | `srv/analytics-service.js` | Handlers for new actions; `runSelectQuery` updated to write to history and return `{ privacy, historyId }` envelope |
-| `srv/lib/spec-to-sql.cjs` | **Isomorphic** — same module re-exported via Vite alias for browser; deterministic spec → SQL |
-| `srv/lib/query-spec-validator.cjs` | **Isomorphic** — referential integrity, op-vs-type compatibility, OR-group depth cap |
+| `srv/lib/spec-to-sql.cjs` | Server-side spec → SQL emitter (deterministic; CJS so the existing `createRequire` pattern in `analytics-service.js` can load it). See **Isomorphic-module strategy** below for how the browser builder reuses the same logic. |
+| `srv/lib/query-spec-validator.cjs` | Server-side referential integrity, op-vs-type compatibility, OR-group depth cap. Also reused via the strategy below. |
 | `srv/lib/analytics-export-stream.js` | HANA cursor-based CSV streaming (constant memory; 100k-row / 60s caps) |
 | `srv/lib/analytics-distinct-sample.js` | Annotation-gated distinct-value sampling |
 | `srv/lib/chat-orchestrator.js` | Adds `generateAnalyticsQuery` and `explainAnalyticsResult` tools; `analyticsQuery` envelope extended with `privacy` |
 | `srv/lib/chat-context.js` | Plumbs `pageContext.tool === 'analytics-builder'` and `pageContext.currentSpec` into the system prompt with QuerySpec schema as a few-shot |
-| `db/schema-ext.cds` | Adds `@analytics.filter` annotations to ~15 columns; `@analytics.pii` on Users PII columns; declares `AnalyticsQueryHistory`/`AnalyticsSavedQuery` with `@PersonalData` + `@cds.changelog` |
+| `db/schema-analytics.cds` | New file declaring `AnalyticsQueryHistory`/`AnalyticsSavedQuery` with `@PersonalData` + `@cds.changelog` (sibling to `db/schema.cds`; uses its own `namespace` line). Schema-level filter annotations stay in `db/schema-ext.cds`. |
+
+#### Isomorphic-module strategy
+
+The "shared between server and browser" pattern is **not** "Vite alias re-exports `srv/lib/*.cjs` into the bundle." That fails: `srv/lib/spec-to-sql.cjs` lives next to modules that import `@sap/cds` and `node:*` (e.g. `srv/lib/analytics-history-writer.js`), and Vite/Rollup will pull those into the browser graph through transitive resolution; `app/analytics-explorer/vite.config.ts` has no `resolve.alias` block today either, so there is no precedent to lean on.
+
+Phase 1 ships **server-only** `srv/lib/{spec-to-sql,query-spec-validator}.cjs`. Phase 2 (frontend chip builder) introduces the browser-side equivalents under `app/analytics-explorer/src/shared/`, mirroring the existing `@shared` alias precedent in `hugo-apps/vite.config.ts:37-41`. The contract is "byte-for-byte identical SQL output and identical validator verdicts" — guarded by a shared-fixture test suite that runs in both the Node unit project and the browser project, importing each side's local copy with the same fixture JSON. When Phase 2 lands, the fixture suite is the integrity check; if the two implementations drift, that suite fails.
+
+Reasonable alternative if Phase 2 prefers it: compile the CJS modules to `.mjs` artifacts published to `app/analytics-explorer/src/shared/__generated__/` via a small build step. Either path is fine; the spec's earlier "re-exported via Vite alias" framing is wrong for this codebase and is hereby retracted.
 
 ### Auth model (unchanged contract)
 
@@ -252,38 +260,49 @@ entity AnalyticsSavedQuery : cuid, managed, AnalyticsQueryShape {
 }
 ```
 
-`@PersonalData` enables `@cap-js/audit-logging` to log read/write/anonymize automatically. `@cds.changelog: true` on saved queries surfaces edits in the existing changelog Fiori app.
+`@PersonalData` enables `@cap-js/audit-logging` to log read/write/anonymize automatically. `@cds.changelog: true` on `AnalyticsSavedQuery` creates the change-tracking row machinery, but **the existing changelog Fiori app surfaces only services registered with `@Capabilities.ChangeTracking : { Supported: true }`** (currently `AdminService` and `AuthorService` — see `db/change-tracking.cds`, `srv/admin-service.cds:12,37`, `srv/author-service.cds:8,13,16`). `AnalyticsService` is not a registered surface in Phase 1, so audit rows are written but not displayed in the existing tile. Either accept the gap for Phase 1 ("captured, not surfaced") or add `@Capabilities.ChangeTracking : { Supported: true }` to the `SavedQueries` projection in `srv/analytics-service.cds`. Plan-a Task 2 spells out this trade-off in the PR notes.
 
 **Filter-mode annotations** (~15 columns):
 
 ```cds
 annotate Tasks with {
-  status     @analytics.filter: { mode: 'enum', sample: true };
-  taskType   @analytics.filter: { mode: 'enum', sample: true };
-  event_ID   @analytics.filter: { mode: 'enum', sample: true };
-  createdAt  @analytics.filter: { mode: 'date' };
-  modifiedAt @analytics.filter: { mode: 'date' };
+  status        @analytics.filter: { mode: 'enum', sample: true };  // TaskStatus: ACTIVE/INACTIVE
+  taskType      @analytics.filter: { mode: 'enum', sample: true };  // TUTORIAL/MISSION/GROUP/STEP/CHECKPOINT
+  experienceTag @analytics.filter: { mode: 'enum', sample: true };
+  createdAt     @analytics.filter: { mode: 'date' };
+  modifiedAt    @analytics.filter: { mode: 'date' };
 };
 annotate TaskRecords with {
-  status      @analytics.filter: { mode: 'enum', sample: true };
-  completedAt @analytics.filter: { mode: 'date' };
+  status         @analytics.filter: { mode: 'enum', sample: true };  // COMPLETED/IN_PROGRESS
+  taskType       @analytics.filter: { mode: 'enum', sample: true };
+  event_ID       @analytics.filter: { mode: 'enum', sample: true };  // FK to Events
+  user_ID        @analytics.filter: { mode: 'enum', sample: false }; // FK to Users; not sampled (high cardinality)
+  completionDate @analytics.filter: { mode: 'date' };
+  createdAt      @analytics.filter: { mode: 'date' };
 };
 annotate Missions with {
   slug @analytics.filter: { mode: 'enum', sample: true };
 };
+annotate Groups with {
+  slug @analytics.filter: { mode: 'enum', sample: true };
+};
 annotate Events with {
-  slug     @analytics.filter: { mode: 'enum', sample: true };
-  startsAt @analytics.filter: { mode: 'date' };
+  name      @analytics.filter: { mode: 'enum', sample: true };
+  startDate @analytics.filter: { mode: 'date' };
+  endDate   @analytics.filter: { mode: 'date' };
 };
 // All other columns: no annotation = default 'free' = text input, no DB sampling.
 ```
 
-**PII annotations** (for client-side redaction before send to Joule):
+**PII annotations** (for client-side redaction before send to Joule). Mirrors the existing `@PersonalData` block on Users in `db/audit-logging.cds`:
 
 ```cds
 annotate Users with {
-  email    @analytics.pii: true;
-  fullName @analytics.pii: true;
+  firstName   @analytics.pii: true;
+  lastName    @analytics.pii: true;
+  displayName @analytics.pii: true;
+  email       @analytics.pii: true;
+  avatarUrl   @analytics.pii: true;
 };
 ```
 
@@ -439,8 +458,8 @@ The MySQL-parse / Postgresql-emit pattern (per `feedback_node_sql_parser_dialect
 // output
 { "querySpec": { /* QuerySpec, version: 1 */ },
   "sql": "SELECT … FROM …",
-  "explanation": "Filters tasks completed in the last 90 days, groups by completedAt month, counts.",
-  "warnings": [ "Joins via Tasks.user_ID = Users.ID — confirm this is the right link table" ] }
+  "explanation": "Filters task records completed in the last 90 days, groups by completionDate month, counts.",
+  "warnings": [ "Joins via TaskRecords.user_ID = Users.ID — confirm this is the right link table" ] }
 ```
 
 Server-side wrapper:
@@ -796,30 +815,32 @@ QA-channel docs unchanged — analytics-explorer is admin-only and not exposed v
 
 ## Worked example
 
-User clicks: From `Tasks`, Join `Users` ON `Tasks.user_ID = Users.ID`, filter `Tasks.status` IN (`PENDING`, `IN_PROGRESS`), group by `Tasks.event_ID`, select `Tasks.event_ID` and `count(*)`, order by `count(*) desc`, limit 10.
+User clicks: From `TaskRecords`, Join `Users` ON `TaskRecords.user_ID = Users.ID`, filter `TaskRecords.status` IN (`COMPLETED`, `IN_PROGRESS`), group by `TaskRecords.event_ID`, select `TaskRecords.event_ID` and `count(*)`, order by `count(*) desc`, limit 10.
+
+(Note: the user/event FKs and the `COMPLETED`/`IN_PROGRESS` enum values live on `TaskRecords` — the durable per-user attempt log. `Tasks` is a UNION view over the catalog entities (Tutorials/Missions/Groups/Steps/Checkpoints) and intentionally has no user or event linkage.)
 
 ```json
 {
   "version": 1,
-  "from":   { "entity": "Tasks", "alias": "t" },
+  "from":   { "entity": "TaskRecords", "alias": "tr" },
   "joins": [{
     "id": "j1", "kind": "inner",
     "target": { "entity": "Users", "alias": "u" },
-    "on": { "leftRef": {"alias":"t","column":"user_ID"}, "rightRef": {"alias":"u","column":"ID"} }
+    "on": { "leftRef": {"alias":"tr","column":"user_ID"}, "rightRef": {"alias":"u","column":"ID"} }
   }],
   "filterTree": {
     "id": "fg0", "kind": "group", "conjunction": "and",
     "children": [{
       "id": "f1",
-      "ref": {"alias":"t","column":"status"},
+      "ref": {"alias":"tr","column":"status"},
       "op": "in",
-      "value": { "kind":"list", "value":["PENDING","IN_PROGRESS"] }
+      "value": { "kind":"list", "value":["COMPLETED","IN_PROGRESS"] }
     }]
   },
   "groupBy": [],
   "select": [
-    { "kind":"column",      "id":"s1", "ref":{"alias":"t","column":"event_ID"} },
-    { "kind":"aggregation", "id":"s2", "fn":"count", "ref":"*", "alias":"task_count" }
+    { "kind":"column",      "id":"s1", "ref":{"alias":"tr","column":"event_ID"} },
+    { "kind":"aggregation", "id":"s2", "fn":"count", "ref":"*", "alias":"record_count" }
   ],
   "orderBy": [{ "id":"o1", "by":{"kind":"selectId","id":"s2"}, "direction":"desc" }],
   "limit": 10
@@ -829,12 +850,12 @@ User clicks: From `Tasks`, Join `Users` ON `Tasks.user_ID = Users.ID`, filter `T
 Generated SQL:
 
 ```sql
-SELECT t.event_ID, COUNT(*) AS task_count
-FROM   COM_SAP_DEVELOPERS_IMS_TASKS t
-INNER JOIN COM_SAP_DEVELOPERS_IMS_USERS u ON t.user_ID = u.ID
-WHERE  t.status IN ('PENDING','IN_PROGRESS')
-GROUP BY t.event_ID
-ORDER BY task_count DESC
+SELECT tr.event_ID, COUNT(*) AS record_count
+FROM   COM_SAP_DEVELOPERS_IMS_TASKRECORDS tr
+INNER JOIN COM_SAP_DEVELOPERS_IMS_USERS u ON tr.user_ID = u.ID
+WHERE  tr.status IN ('COMPLETED','IN_PROGRESS')
+GROUP BY tr.event_ID
+ORDER BY record_count DESC
 LIMIT 10
 ```
 

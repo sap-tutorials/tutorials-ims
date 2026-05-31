@@ -100,13 +100,19 @@ git commit -m "chore(srv/lib): add module index README ahead of Phase 1"
 ## Task 2: Add history + saved-query entities to schema
 
 **Files:**
-- Modify: `db/schema-ext.cds` (append new aspect + entities at end of file)
 
-- [ ] **Step 1: Append the new aspect and entities**
+- Create: `db/schema-analytics.cds` (new file for the two analytics entities + shared aspect)
+- Modify: `db/schema-ext.cds` (no change to entity declarations; only the `@analytics : { exposed }` allowlist, kept as-is)
 
-Open `db/schema-ext.cds` and add at the end:
+- [ ] **Step 1: Create the new schema file**
+
+Why a new file rather than appending to `db/schema-ext.cds`? The existing `schema-ext.cds` uses `using { com.sap.developers.ims as ims }` and contains `extend`/`annotate` only — it has no `namespace` declaration, so `entity` declarations land in the file's default (root) namespace, not `com.sap.developers.ims`. The project precedent for new entities is `db/schema.cds` itself (see `entity ChatSettings`, `entity GroupSlugRedirects`); we mirror that with a sibling file dedicated to analytics so the diff is isolated.
+
+Create `db/schema-analytics.cds`:
 
 ```cds
+namespace com.sap.developers.ims;
+
 // ─── Analytics Builder (Phase 1, 2026-05-31) ──────────────────────────────
 // Two entities sharing one shape via aspect. AnalyticsQueryHistory is auto-
 // written on every runSelectQuery; AnalyticsSavedQuery is created via the
@@ -122,15 +128,15 @@ aspect AnalyticsQueryShape {
 }
 
 @PersonalData : { EntitySemantics: 'Other' }
-extend ims with entity AnalyticsQueryHistory : managed, AnalyticsQueryShape {
-  key ID      : UUID;
-  source      : String(16);              // 'builder' | 'editor' | 'joule' | 'replay'
+entity AnalyticsQueryHistory : cuid, managed, AnalyticsQueryShape {
+  source      : String(16);              // 'builder' | 'editor' | 'replay'
+                                          // ('joule' value reserved for Phase 5;
+                                          //  Phase 1 handler never writes it)
 }
 
 @PersonalData    : { EntitySemantics: 'Other' }
 @cds.changelog   : true
-extend ims with entity AnalyticsSavedQuery : managed, AnalyticsQueryShape {
-  key ID      : UUID;
+entity AnalyticsSavedQuery : cuid, managed, AnalyticsQueryShape {
   name        : String(120) not null;
   description : String(500);
   visibility  : String(16) default 'private';   // 'private' | 'shared-admins'
@@ -138,24 +144,24 @@ extend ims with entity AnalyticsSavedQuery : managed, AnalyticsQueryShape {
 }
 ```
 
-Note the `extend ims with entity` pattern — `ims` is the shorthand alias from the existing `using { com.sap.developers.ims as ims }` line at the top of the file. The CUID `key ID : UUID` pattern matches existing entities in `db/schema.cds`.
+The `cuid` aspect (defined in `@sap/cds/common`) provides `key ID : UUID` automatically — no need to declare it explicitly. This matches the spec and every other entity in the schema.
+
+CAP picks up `db/schema-analytics.cds` automatically because `cds.requires.db` includes `db/` by default; verify with the compile step below.
 
 - [ ] **Step 2: Verify the model compiles**
-
-Run:
 
 ```bash
 npx cds compile db/schema.cds --to sql 2>/dev/null | grep -E "ANALYTICSQUERYHISTORY|ANALYTICSSAVEDQUERY" | head -10
 ```
 
-Expected: Two `CREATE TABLE` lines for `COM_SAP_DEVELOPERS_IMS_ANALYTICSQUERYHISTORY` and `COM_SAP_DEVELOPERS_IMS_ANALYTICSSAVEDQUERY`.
+Expected: two `CREATE TABLE` lines for `COM_SAP_DEVELOPERS_IMS_ANALYTICSQUERYHISTORY` and `COM_SAP_DEVELOPERS_IMS_ANALYTICSSAVEDQUERY`. If it errors with "namespace already declared" or "duplicate entity", make sure `db/schema-analytics.cds` has its own `namespace` line and that nothing else in `db/` declares these entities. The `@cds.changelog` annotation needs `@cap-js/change-tracking` (already a project dep) — `npm ls @cap-js/change-tracking` should show it.
 
-If compile fails, the most likely culprits are: (a) `extend ims` requires the alias to be in scope — if you accidentally placed the block above the `using` line, move it; (b) `@cds.changelog` requires the `@cap-js/change-tracking` plugin which is already a project dep — if it errors, run `npm ls @cap-js/change-tracking` to confirm.
+> **Heads-up on changelog visibility:** the existing changelog Fiori app surfaces edits made through `AdminService` / `AuthorService` (the only services registered with `@Capabilities.ChangeTracking : { Supported: true }` — see `db/change-tracking.cds` and `srv/admin-service.cds`). `AnalyticsService` is *not* a registered surface, so `@cds.changelog: true` on `AnalyticsSavedQuery` will create the change-table machinery but the existing changelog tile won't display the rows until `AnalyticsService.SavedQueries` is also added to a `@Capabilities.ChangeTracking : { Supported: true }` projection (out of scope for Phase 1). Document this in the PR; either accept "audit rows captured but not surfaced in admin UI" for Phase 1, or fold the projection-side annotation in.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add db/schema-ext.cds
+git add db/schema-analytics.cds
 git commit -m "feat(db): add AnalyticsQueryHistory + AnalyticsSavedQuery entities"
 ```
 
@@ -211,49 +217,63 @@ Append the following block to `db/schema-ext.cds` (after the existing `@analytic
 // Default for unannotated columns: 'free' (text input, no DB sampling).
 
 annotate ims.Tasks with {
-  status     @analytics.filter: { mode: 'enum', sample: true };
-  taskType   @analytics.filter: { mode: 'enum', sample: true };
-  event_ID   @analytics.filter: { mode: 'enum', sample: true };
-  createdAt  @analytics.filter: { mode: 'date' };
-  modifiedAt @analytics.filter: { mode: 'date' };
+  status        @analytics.filter: { mode: 'enum', sample: true };  // TaskStatus: ACTIVE/INACTIVE
+  taskType      @analytics.filter: { mode: 'enum', sample: true };  // TUTORIAL/MISSION/GROUP/STEP/CHECKPOINT
+  experienceTag @analytics.filter: { mode: 'enum', sample: true };
+  createdAt     @analytics.filter: { mode: 'date' };
+  modifiedAt    @analytics.filter: { mode: 'date' };
 };
 
 annotate ims.TaskRecords with {
-  status      @analytics.filter: { mode: 'enum', sample: true };
-  completedAt @analytics.filter: { mode: 'date' };
+  status         @analytics.filter: { mode: 'enum', sample: true };  // COMPLETED/IN_PROGRESS
+  taskType       @analytics.filter: { mode: 'enum', sample: true };
+  event_ID       @analytics.filter: { mode: 'enum', sample: true };
+  user_ID        @analytics.filter: { mode: 'enum', sample: false }; // high-cardinality FK; chip but no enum sample
+  completionDate @analytics.filter: { mode: 'date' };
+  createdAt      @analytics.filter: { mode: 'date' };
 };
 
 annotate ims.Missions with {
   slug @analytics.filter: { mode: 'enum', sample: true };
 };
 
+annotate ims.Groups with {
+  slug @analytics.filter: { mode: 'enum', sample: true };
+};
+
 annotate ims.Events with {
-  slug     @analytics.filter: { mode: 'enum', sample: true };
-  startsAt @analytics.filter: { mode: 'date' };
+  name      @analytics.filter: { mode: 'enum', sample: true };
+  startDate @analytics.filter: { mode: 'date' };
+  endDate   @analytics.filter: { mode: 'date' };
 };
 
 // PII flags: client-side redaction in Joule sampleRows before send to LLM.
+// Mirrors the existing @PersonalData block on Users in db/audit-logging.cds.
 annotate ims.Users with {
-  email    @analytics.pii: true;
-  fullName @analytics.pii: true;
+  firstName   @analytics.pii: true;
+  lastName    @analytics.pii: true;
+  displayName @analytics.pii: true;
+  email       @analytics.pii: true;
+  avatarUrl   @analytics.pii: true;
 };
 ```
 
-Verify the column names exist on each entity before committing — `Tasks.event_ID` vs `Tasks.event` is a known footgun. Run:
+The column names above were verified against `db/schema.cds` and `db/views.cds` at plan-write time:
+
+- `Tasks` is a UNION view (`db/views.cds:5-39`) with no FK columns — never annotate `event_ID` or `user_ID` on it.
+- `TaskRecords` carries `completionDate` (not `completedAt`), `event_ID`, `user_ID`, and the COMPLETED/IN_PROGRESS enum.
+- `Events` carries `startDate`/`endDate` (not `startsAt`); has no `slug` field.
+- `Users` has no `fullName` — the discrete name fields match `db/audit-logging.cds`.
+
+If the schema drifts before this Phase ships, re-run the verify step below to catch the mismatch — `cds compile` is the source of truth.
+
+- [ ] **Step 2: Verify the annotations resolve against the compiled model**
 
 ```bash
-grep -E "event_ID|event :" db/schema.cds | head -5
+npx cds compile db/schema.cds --to json 2>&1 | grep -E '"@analytics.filter"|"@analytics.pii"' | head -20
 ```
 
-If the column is named differently (e.g. `event : Association to Events`), adjust the annotation to use the actual element name. The CDS compiler will catch typos in Step 2 anyway.
-
-- [ ] **Step 2: Verify the annotations resolve**
-
-```bash
-npx cds compile db/schema.cds --to json 2>/dev/null | grep -E "@analytics.filter|@analytics.pii" | head -10
-```
-
-Expected: at least 10 lines showing the annotations attached to the right elements.
+Expected: at least 20 lines showing the annotations attached to the right elements. The compiler errors with `unknown element` if any annotation targets a column that doesn't exist — treat any compile error here as a hard stop.
 
 If the count is suspicious, run:
 
@@ -431,19 +451,41 @@ Create `srv/lib/__tests__/query-spec-validator.test.js`:
 import { describe, it, expect } from 'vitest'
 const { validateQuerySpec } = require('../query-spec-validator.cjs')
 
+// Schema facts (verified against db/schema.cds + db/views.cds):
+//   - TaskRecords has FK columns user_ID, event_ID + status (COMPLETED/IN_PROGRESS) + completionDate
+//   - Tasks is a UNION view: { ID, status (ACTIVE/INACTIVE), taskType, createdAt, modifiedAt, ... } — no FKs
+//   - Users has ID, email, displayName
 const VALID_ENTITIES = new Map([
-  ['Tasks',    { columns: new Map([['id',{type:'cds.UUID'}],['status',{type:'cds.String'}],['createdAt',{type:'cds.Timestamp'}],['user_ID',{type:'cds.UUID'}]]) }],
-  ['Users',    { columns: new Map([['ID',{type:'cds.UUID'}],['email',{type:'cds.String'}]]) }],
+  ['TaskRecords', { columns: new Map([
+    ['ID',             { type: 'cds.UUID' }],
+    ['status',         { type: 'cds.String' }],
+    ['completionDate', { type: 'cds.Timestamp' }],
+    ['createdAt',      { type: 'cds.Timestamp' }],
+    ['user_ID',        { type: 'cds.UUID' }],
+    ['event_ID',       { type: 'cds.UUID' }],
+  ]) }],
+  ['Tasks',    { columns: new Map([
+    ['ID',         { type: 'cds.UUID' }],
+    ['status',     { type: 'cds.String' }],
+    ['taskType',   { type: 'cds.String' }],
+    ['createdAt',  { type: 'cds.Timestamp' }],
+    ['modifiedAt', { type: 'cds.Timestamp' }],
+  ]) }],
+  ['Users',    { columns: new Map([
+    ['ID',          { type: 'cds.UUID' }],
+    ['email',       { type: 'cds.String' }],
+    ['displayName', { type: 'cds.String' }],
+  ]) }],
 ])
 
 describe('query-spec-validator', () => {
   const baseSpec = () => ({
     version: 1,
-    from: { entity: 'Tasks', alias: 't' },
+    from: { entity: 'TaskRecords', alias: 'tr' },
     joins: [],
     filterTree: null,
     groupBy: [],
-    select: [{ kind: 'column', id: 's1', ref: { alias: 't', column: 'id' } }],
+    select: [{ kind: 'column', id: 's1', ref: { alias: 'tr', column: 'ID' } }],
     orderBy: [],
     limit: null,
   })
@@ -474,7 +516,7 @@ describe('query-spec-validator', () => {
   it('rejects "between" with non-range value', () => {
     const s = baseSpec()
     s.filterTree = { id: 'fg0', kind: 'group', conjunction: 'and', children: [
-      { id: 'f1', ref: { alias: 't', column: 'createdAt' }, op: 'between',
+      { id: 'f1', ref: { alias: 'tr', column: 'createdAt' }, op: 'between',
         value: { kind: 'literal', value: '2026-01-01' } }
     ] }
     const r = validateQuerySpec(s, VALID_ENTITIES)
@@ -484,15 +526,15 @@ describe('query-spec-validator', () => {
   it('rejects "in" with non-list value', () => {
     const s = baseSpec()
     s.filterTree = { id: 'fg0', kind: 'group', conjunction: 'and', children: [
-      { id: 'f1', ref: { alias: 't', column: 'status' }, op: 'in',
-        value: { kind: 'literal', value: 'PENDING' } }
+      { id: 'f1', ref: { alias: 'tr', column: 'status' }, op: 'in',
+        value: { kind: 'literal', value: 'COMPLETED' } }
     ] }
     const r = validateQuerySpec(s, VALID_ENTITIES)
     expect(r.errors.some(e => e.chipId === 'f1' && e.message.match(/in.*list/i))).toBe(true)
   })
 
   it('rejects OR-group nested deeper than 4', () => {
-    let inner = { id: 'leaf', ref: { alias: 't', column: 'id' }, op: 'eq',
+    let inner = { id: 'leaf', ref: { alias: 'tr', column: 'ID' }, op: 'eq',
       value: { kind: 'literal', value: 'x' } }
     for (let i = 0; i < 5; i++) {
       inner = { id: `g${i}`, kind: 'group', conjunction: 'or', children: [inner] }
@@ -506,7 +548,7 @@ describe('query-spec-validator', () => {
     const s = baseSpec()
     s.joins = [{ id: 'j1', kind: 'inner',
       target: { entity: 'Users', alias: 'u' },
-      on: { leftRef: {alias:'t',column:'user_ID'}, rightRef: {alias:'u',column:'ID'} } }]
+      on: { leftRef: {alias:'tr',column:'user_ID'}, rightRef: {alias:'u',column:'ID'} } }]
     const r = validateQuerySpec(s, VALID_ENTITIES)
     expect(r.errors).toEqual([])
   })
@@ -536,7 +578,7 @@ describe('query-spec-validator', () => {
   it('rejects unsupported FilterOp for column type (between on String)', () => {
     const s = baseSpec()
     s.filterTree = { id: 'fg0', kind: 'group', conjunction: 'and', children: [
-      { id: 'f1', ref: { alias: 't', column: 'status' }, op: 'between',
+      { id: 'f1', ref: { alias: 'tr', column: 'status' }, op: 'between',
         value: { kind: 'range', value: ['A', 'Z'] } }
     ] }
     const r = validateQuerySpec(s, VALID_ENTITIES)
@@ -791,46 +833,48 @@ Create `srv/lib/__tests__/spec-to-sql.test.js`:
 import { describe, it, expect } from 'vitest'
 const { specToSql } = require('../spec-to-sql.cjs')
 
-const SQL_NAMES = { Tasks: 'TASKS', Users: 'USERS' } // logical → physical (test uses uppercase)
+// Tests use TaskRecords (which carries user_ID, event_ID, status COMPLETED/IN_PROGRESS,
+// completionDate) — Tasks is a UNION view with no FK columns and a different status enum.
+const SQL_NAMES = { TaskRecords: 'TASKRECORDS', Users: 'USERS' } // logical → physical (uppercase HANA)
 
 describe('spec-to-sql', () => {
   it('emits a minimal single-table SELECT', () => {
     const spec = {
       version: 1,
-      from: { entity: 'Tasks', alias: 't' },
+      from: { entity: 'TaskRecords', alias: 'tr' },
       joins: [], filterTree: null, groupBy: [],
-      select: [{ kind: 'column', id: 's1', ref: { alias: 't', column: 'id' } }],
+      select: [{ kind: 'column', id: 's1', ref: { alias: 'tr', column: 'ID' } }],
       orderBy: [], limit: null,
     }
     const sql = specToSql(spec, SQL_NAMES)
-    expect(sql).toMatch(/^SELECT\s+t\.id\s+FROM\s+TASKS\s+t\s*$/)
+    expect(sql).toMatch(/^SELECT\s+tr\.ID\s+FROM\s+TASKRECORDS\s+tr\s*$/)
   })
 
   it('quotes string literals in eq filters and uses parens around tree', () => {
     const spec = {
       version: 1,
-      from: { entity: 'Tasks', alias: 't' },
+      from: { entity: 'TaskRecords', alias: 'tr' },
       joins: [],
       filterTree: { id: 'fg', kind: 'group', conjunction: 'and', children: [
-        { id: 'f1', ref: { alias: 't', column: 'status' }, op: 'eq',
-          value: { kind: 'literal', value: 'PENDING' } } ] },
+        { id: 'f1', ref: { alias: 'tr', column: 'status' }, op: 'eq',
+          value: { kind: 'literal', value: 'COMPLETED' } } ] },
       groupBy: [],
-      select: [{ kind: 'column', id: 's1', ref: { alias: 't', column: 'id' } }],
+      select: [{ kind: 'column', id: 's1', ref: { alias: 'tr', column: 'ID' } }],
       orderBy: [], limit: null,
     }
     const sql = specToSql(spec, SQL_NAMES)
-    expect(sql).toContain("WHERE (t.status = 'PENDING')")
+    expect(sql).toContain("WHERE (tr.status = 'COMPLETED')")
   })
 
   it('escapes single quotes in string literals', () => {
     const spec = {
       version: 1,
-      from: { entity: 'Tasks', alias: 't' }, joins: [],
+      from: { entity: 'TaskRecords', alias: 'tr' }, joins: [],
       filterTree: { id: 'fg', kind: 'group', conjunction: 'and', children: [
-        { id: 'f1', ref: { alias: 't', column: 'status' }, op: 'eq',
+        { id: 'f1', ref: { alias: 'tr', column: 'status' }, op: 'eq',
           value: { kind: 'literal', value: "O'Brien" } } ] },
       groupBy: [],
-      select: [{ kind: 'column', id: 's1', ref: { alias: 't', column: 'id' } }],
+      select: [{ kind: 'column', id: 's1', ref: { alias: 'tr', column: 'ID' } }],
       orderBy: [], limit: null,
     }
     const sql = specToSql(spec, SQL_NAMES)
@@ -840,77 +884,77 @@ describe('spec-to-sql', () => {
   it('rejects raw single-quote injection attempts via list values', () => {
     const spec = {
       version: 1,
-      from: { entity: 'Tasks', alias: 't' }, joins: [],
+      from: { entity: 'TaskRecords', alias: 'tr' }, joins: [],
       filterTree: { id: 'fg', kind: 'group', conjunction: 'and', children: [
-        { id: 'f1', ref: { alias: 't', column: 'status' }, op: 'in',
-          value: { kind: 'list', value: ["x'; DROP TABLE Tasks; --"] } } ] },
+        { id: 'f1', ref: { alias: 'tr', column: 'status' }, op: 'in',
+          value: { kind: 'list', value: ["x'; DROP TABLE TaskRecords; --"] } } ] },
       groupBy: [],
-      select: [{ kind: 'column', id: 's1', ref: { alias: 't', column: 'id' } }],
+      select: [{ kind: 'column', id: 's1', ref: { alias: 'tr', column: 'ID' } }],
       orderBy: [], limit: null,
     }
     const sql = specToSql(spec, SQL_NAMES)
-    expect(sql).toContain("''; DROP TABLE Tasks; --")  // properly escaped
-    expect(sql).not.toMatch(/; DROP TABLE Tasks; --'\)/)  // not unterminated
+    expect(sql).toContain("''; DROP TABLE TaskRecords; --")  // properly escaped
+    expect(sql).not.toMatch(/; DROP TABLE TaskRecords; --'\)/)  // not unterminated
   })
 
   it('emits OR group with proper parens and AND default at top', () => {
     const spec = {
       version: 1,
-      from: { entity: 'Tasks', alias: 't' }, joins: [],
+      from: { entity: 'TaskRecords', alias: 'tr' }, joins: [],
       filterTree: { id: 'fg', kind: 'group', conjunction: 'and', children: [
-        { id: 'f1', ref: { alias: 't', column: 'status' }, op: 'eq',
-          value: { kind: 'literal', value: 'PENDING' } },
+        { id: 'f1', ref: { alias: 'tr', column: 'status' }, op: 'eq',
+          value: { kind: 'literal', value: 'COMPLETED' } },
         { id: 'fg2', kind: 'group', conjunction: 'or', children: [
-          { id: 'f2', ref: { alias: 't', column: 'taskType' }, op: 'eq',
-            value: { kind: 'literal', value: 'A' } },
-          { id: 'f3', ref: { alias: 't', column: 'taskType' }, op: 'eq',
-            value: { kind: 'literal', value: 'B' } },
+          { id: 'f2', ref: { alias: 'tr', column: 'taskType' }, op: 'eq',
+            value: { kind: 'literal', value: 'TUTORIAL' } },
+          { id: 'f3', ref: { alias: 'tr', column: 'taskType' }, op: 'eq',
+            value: { kind: 'literal', value: 'MISSION' } },
         ] }
       ] },
       groupBy: [],
-      select: [{ kind: 'column', id: 's1', ref: { alias: 't', column: 'id' } }],
+      select: [{ kind: 'column', id: 's1', ref: { alias: 'tr', column: 'ID' } }],
       orderBy: [], limit: null,
     }
     const sql = specToSql(spec, SQL_NAMES)
-    expect(sql).toMatch(/WHERE \(t\.status = 'PENDING' AND \(t\.taskType = 'A' OR t\.taskType = 'B'\)\)/)
+    expect(sql).toMatch(/WHERE \(tr\.status = 'COMPLETED' AND \(tr\.taskType = 'TUTORIAL' OR tr\.taskType = 'MISSION'\)\)/)
   })
 
   it('emits INNER JOIN with ON', () => {
     const spec = {
       version: 1,
-      from: { entity: 'Tasks', alias: 't' },
+      from: { entity: 'TaskRecords', alias: 'tr' },
       joins: [{ id: 'j1', kind: 'inner', target: { entity: 'Users', alias: 'u' },
-        on: { leftRef: {alias:'t',column:'user_ID'}, rightRef: {alias:'u',column:'ID'} } }],
+        on: { leftRef: {alias:'tr',column:'user_ID'}, rightRef: {alias:'u',column:'ID'} } }],
       filterTree: null, groupBy: [],
-      select: [{ kind: 'column', id: 's1', ref: { alias: 't', column: 'id' } }],
+      select: [{ kind: 'column', id: 's1', ref: { alias: 'tr', column: 'ID' } }],
       orderBy: [], limit: null,
     }
     const sql = specToSql(spec, SQL_NAMES)
-    expect(sql).toContain('INNER JOIN USERS u ON t.user_ID = u.ID')
+    expect(sql).toContain('INNER JOIN USERS u ON tr.user_ID = u.ID')
   })
 
   it('auto-derives GROUP BY from non-aggregation SELECT chips when an aggregation is present', () => {
     const spec = {
       version: 1,
-      from: { entity: 'Tasks', alias: 't' }, joins: [], filterTree: null, groupBy: [],
+      from: { entity: 'TaskRecords', alias: 'tr' }, joins: [], filterTree: null, groupBy: [],
       select: [
-        { kind: 'column',      id: 's1', ref: { alias: 't', column: 'status' } },
+        { kind: 'column',      id: 's1', ref: { alias: 'tr', column: 'status' } },
         { kind: 'aggregation', id: 's2', fn: 'count', ref: '*', alias: 'cnt' },
       ],
       orderBy: [], limit: null,
     }
     const sql = specToSql(spec, SQL_NAMES)
-    expect(sql).toContain('GROUP BY t.status')
-    expect(sql).toMatch(/SELECT t\.status, COUNT\(\*\) AS cnt/)
+    expect(sql).toContain('GROUP BY tr.status')
+    expect(sql).toMatch(/SELECT tr\.status, COUNT\(\*\) AS cnt/)
   })
 
   it('does not emit GROUP BY when no aggregation present', () => {
     const spec = {
       version: 1,
-      from: { entity: 'Tasks', alias: 't' }, joins: [], filterTree: null, groupBy: [],
+      from: { entity: 'TaskRecords', alias: 'tr' }, joins: [], filterTree: null, groupBy: [],
       select: [
-        { kind: 'column', id: 's1', ref: { alias: 't', column: 'status' } },
-        { kind: 'column', id: 's2', ref: { alias: 't', column: 'id' } },
+        { kind: 'column', id: 's1', ref: { alias: 'tr', column: 'status' } },
+        { kind: 'column', id: 's2', ref: { alias: 'tr', column: 'ID' } },
       ],
       orderBy: [], limit: null,
     }
@@ -921,9 +965,9 @@ describe('spec-to-sql', () => {
   it('orders by selectId alias and supports asc/desc', () => {
     const spec = {
       version: 1,
-      from: { entity: 'Tasks', alias: 't' }, joins: [], filterTree: null, groupBy: [],
+      from: { entity: 'TaskRecords', alias: 'tr' }, joins: [], filterTree: null, groupBy: [],
       select: [
-        { kind: 'column',      id: 's1', ref: { alias: 't', column: 'status' } },
+        { kind: 'column',      id: 's1', ref: { alias: 'tr', column: 'status' } },
         { kind: 'aggregation', id: 's2', fn: 'count', ref: '*', alias: 'cnt' },
       ],
       orderBy: [{ id:'o1', by: { kind: 'selectId', id: 's2' }, direction: 'desc' }],
@@ -937,33 +981,33 @@ describe('spec-to-sql', () => {
   it('emits sinceDays as ADD_DAYS expression', () => {
     const spec = {
       version: 1,
-      from: { entity: 'Tasks', alias: 't' }, joins: [],
+      from: { entity: 'TaskRecords', alias: 'tr' }, joins: [],
       filterTree: { id: 'fg', kind: 'group', conjunction: 'and', children: [
-        { id: 'f1', ref: { alias: 't', column: 'createdAt' }, op: 'sinceDays',
+        { id: 'f1', ref: { alias: 'tr', column: 'createdAt' }, op: 'sinceDays',
           value: { kind: 'relative', value: 30 } } ] },
       groupBy: [],
-      select: [{ kind: 'column', id: 's1', ref: { alias: 't', column: 'id' } }],
+      select: [{ kind: 'column', id: 's1', ref: { alias: 'tr', column: 'ID' } }],
       orderBy: [], limit: null,
     }
     const sql = specToSql(spec, SQL_NAMES)
-    expect(sql).toMatch(/t\.createdAt >= ADD_DAYS\(CURRENT_DATE,\s*-30\)/)
+    expect(sql).toMatch(/tr\.createdAt >= ADD_DAYS\(CURRENT_DATE,\s*-30\)/)
   })
 
   it('produces SQL that passes analytics-sql-validator', () => {
     const { validateSelect } = require('../analytics-sql-validator.cjs')
-    const ALLOWED = new Set(['TASKS', 'USERS', 'Tasks', 'Users'])
+    const ALLOWED = new Set(['TASKRECORDS', 'USERS', 'TaskRecords', 'Users'])
     const spec = {
       version: 1,
-      from: { entity: 'Tasks', alias: 't' },
+      from: { entity: 'TaskRecords', alias: 'tr' },
       joins: [{ id: 'j1', kind: 'inner', target: { entity: 'Users', alias: 'u' },
-        on: { leftRef: {alias:'t',column:'user_ID'}, rightRef: {alias:'u',column:'ID'} } }],
+        on: { leftRef: {alias:'tr',column:'user_ID'}, rightRef: {alias:'u',column:'ID'} } }],
       filterTree: { id: 'fg', kind: 'group', conjunction: 'and', children: [
-        { id: 'f1', ref: { alias: 't', column: 'status' }, op: 'in',
-          value: { kind: 'list', value: ['PENDING', 'IN_PROGRESS'] } } ] },
+        { id: 'f1', ref: { alias: 'tr', column: 'status' }, op: 'in',
+          value: { kind: 'list', value: ['COMPLETED', 'IN_PROGRESS'] } } ] },
       groupBy: [],
       select: [
-        { kind: 'column',      id: 's1', ref: { alias: 't', column: 'event_ID' } },
-        { kind: 'aggregation', id: 's2', fn: 'count', ref: '*', alias: 'task_count' },
+        { kind: 'column',      id: 's1', ref: { alias: 'tr', column: 'event_ID' } },
+        { kind: 'aggregation', id: 's2', fn: 'count', ref: '*', alias: 'record_count' },
       ],
       orderBy: [{ id:'o1', by: { kind: 'selectId', id: 's2' }, direction: 'desc' }],
       limit: 10,
