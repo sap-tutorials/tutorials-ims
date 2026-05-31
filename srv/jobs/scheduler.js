@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { acquireLock, releaseLock } from './job-lock.js';
-import { cleanupStepFailures, cleanupUnusedTags, cleanupContentVersions, cleanupPipelineLog, cleanupStuckPublishing, pruneOrphanEmbeddings } from './cleanup.js';
+import { cleanupStepFailures, cleanupUnusedTags, cleanupContentVersions, cleanupPipelineLog, cleanupStuckPublishing, pruneOrphanEmbeddings, pruneAnalyticsHistory } from './cleanup.js';
 import { retryNgds } from './ngds-retry.js';
 import { processAccountMerges } from './account-merge-job.js';
 import { runReconciliationJob } from './embedding-reconciliation.js';
@@ -96,6 +96,13 @@ export function registerJobs() {
   // Daily at 03:30 — prune embeddings for tutorials no longer in the active manifest
   cron.schedule('30 3 * * *', () =>
     runWithLock('embedding-orphan-prune', 300000, pruneOrphanEmbeddings)
+  );
+
+  // Daily at 03:45 — prune analytics history to last 200 entries per user.
+  // Off-minute (:45) to keep cleanup window staggered; admin-only feature
+  // with low write volume so single daily pass is plenty.
+  cron.schedule('45 3 * * *', () =>
+    runWithLock('analytics-history-prune', 600000, () => pruneAnalyticsHistory(200))
   );
 
   // Weekly Sunday 02:00 — tutorial metadata review

@@ -132,3 +132,24 @@ export async function pruneOrphanEmbeddings() {
   LOG.info(`pruneOrphanEmbeddings: deleted ${result} orphan embedding rows for ${orphanIds.length} tutorials`);
   return result;
 }
+
+export async function pruneAnalyticsHistory(keepLatest = 200) {
+  const { AnalyticsQueryHistory } = cds.entities('com.sap.developers.ims');
+  const LOG = cds.log('jobs/cleanup');
+  const users = await SELECT.distinct.from(AnalyticsQueryHistory).columns('createdBy');
+  let totalDeleted = 0;
+  for (const u of users) {
+    if (!u.createdBy) continue;
+    const rows = await SELECT.from(AnalyticsQueryHistory)
+      .columns('ID', 'createdAt')
+      .where({ createdBy: u.createdBy })
+      .orderBy({ createdAt: 'desc' });
+    const toDelete = rows.slice(keepLatest).map(r => r.ID);
+    if (toDelete.length) {
+      await DELETE.from(AnalyticsQueryHistory).where({ ID: { in: toDelete } });
+      totalDeleted += toDelete.length;
+    }
+  }
+  LOG.info(`pruneAnalyticsHistory: kept ${keepLatest} per user; deleted ${totalDeleted} rows total`);
+  return totalDeleted;
+}

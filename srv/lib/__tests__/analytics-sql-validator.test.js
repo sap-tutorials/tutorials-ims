@@ -42,9 +42,12 @@ describe('analytics-sql-validator', () => {
       .toThrow(/not.*allow/i)
   })
 
-  it('rejects SQL > 4096 chars', () => {
-    const big = 'SELECT * FROM TaskRecords WHERE 1=1 ' + 'AND id IS NOT NULL '.repeat(500)
-    expect(() => validateSelect(big, ALLOWED)).toThrow(/4096|length/i)
+  it('rejects SQL > 16384 chars', () => {
+    // Limit bumped from 4096 to 16384 in Phase 1 to accommodate verbose
+    // qualified SQL emitted by the chip builder.
+    const big = 'SELECT * FROM TaskRecords WHERE 1=1 ' + 'AND id IS NOT NULL '.repeat(900)
+    expect(big.length).toBeGreaterThan(16384)
+    expect(() => validateSelect(big, ALLOWED)).toThrow(/16384|exceeds maximum|length/i)
   })
 
   it('rejects line-comment markers', () => {
@@ -82,5 +85,35 @@ describe('analytics-sql-validator', () => {
     expect(() => validateSelect(
       'SELECT user_id, count(*) c FROM TaskRecords GROUP BY user_id HAVING c > (SELECT count(*) FROM SecretTable)',
       ALLOWED)).toThrow(/not.*allow/i)
+  })
+})
+
+describe('analytics-sql-validator — Phase 1 additions', () => {
+  it('accepts SQL up to 16384 chars', () => {
+    const filler = Array.from({ length: 800 }, (_, i) => `id = '${i}'`).join(' OR ')
+    const longSql = `SELECT id FROM TaskRecords WHERE ${filler}`
+    expect(longSql.length).toBeGreaterThan(4096)
+    expect(longSql.length).toBeLessThan(16384)
+    const r = validateSelect(longSql, ALLOWED)
+    expect(r.sql).toMatch(/SELECT/i)
+  })
+
+  it('rejects SQL above 16384 chars', () => {
+    const filler = Array.from({ length: 1500 }, (_, i) => `id = '${i.toString().padStart(8,'0')}'`).join(' OR ')
+    const tooLong = `SELECT id FROM TaskRecords WHERE ${filler}`
+    expect(tooLong.length).toBeGreaterThan(16384)
+    expect(() => validateSelect(tooLong, ALLOWED)).toThrow(/exceeds maximum/)
+  })
+
+  it('accepts whitelisted scalar functions YEAR/MONTH', () => {
+    const r = validateSelect(
+      'SELECT YEAR(createdAt) AS y, MONTH(createdAt) AS m FROM TaskRecords', ALLOWED)
+    expect(r.sql.toUpperCase()).toContain('YEAR')
+  })
+
+  it('rejects suspicious functions (os_command)', () => {
+    expect(() =>
+      validateSelect("SELECT os_command('ls') FROM TaskRecords", ALLOWED)
+    ).toThrow(/function|allowlist|not allowed/i)
   })
 })

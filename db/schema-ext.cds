@@ -49,3 +49,43 @@ annotate ims.Tutorials              with @Aggregation.ApplySupported : { Transfo
 annotate ims.Events                 with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
 annotate ims.PrizeRecords           with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
 annotate ims.AccomplishmentRecords  with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
+
+// Analytics Builder Phase 1 entities (AnalyticsQueryHistory, AnalyticsSavedQuery)
+// live in db/analytics-builder.cds — kept separate so this annotation file
+// stays focused on extending existing entities.
+
+// ─── Analytics filter modes (Phase 1, 2026-05-31) ────────────────────────
+// Schema-driven UI hints for the analytics builder filter chip popover.
+// Default for unannotated columns: 'free' (text input, no DB sampling).
+// Column names verified against db/schema.cds + db/views.cds at write time.
+
+annotate ims.Tasks with {
+  status     @analytics.filter: { mode: 'enum', sample: true };
+  taskType   @analytics.filter: { mode: 'enum', sample: true };
+  createdAt  @analytics.filter: { mode: 'date' };
+  modifiedAt @analytics.filter: { mode: 'date' };
+};
+
+annotate ims.TaskRecords with {
+  status         @analytics.filter: { mode: 'enum', sample: true };
+  taskType       @analytics.filter: { mode: 'enum', sample: true };
+  completionDate @analytics.filter: { mode: 'date' };
+};
+
+annotate ims.Missions with {
+  slug @analytics.filter: { mode: 'enum', sample: true };
+};
+
+annotate ims.Events with {
+  name      @analytics.filter: { mode: 'enum', sample: true };
+  startDate @analytics.filter: { mode: 'date' };
+  endDate   @analytics.filter: { mode: 'date' };
+};
+
+// PII flags: client-side redaction in Joule sampleRows before send to LLM.
+annotate ims.Users with {
+  email       @analytics.pii: true;
+  firstName   @analytics.pii: true;
+  lastName    @analytics.pii: true;
+  displayName @analytics.pii: true;
+};
