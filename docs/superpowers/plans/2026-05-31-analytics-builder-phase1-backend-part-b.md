@@ -206,8 +206,11 @@ Append to `srv/analytics-service.cds` (after the existing `listExposedEntities` 
   /** Stream a query result as CSV. Bypasses 5k row cap; capped at 100k rows / 60s. */
   action exportSelectQuery(sql: String) returns LargeBinary;
 
-  // History (read-only, scoped to current user via @restrict)
-  @readonly entity QueryHistory as projection on ims.AnalyticsQueryHistory;
+  // History (read-only). Per-user scoping via the `where` clause matches the spec
+  // contract — admins MUST NOT see each other's query history. Backed up by an
+  // explicit @restrict below in case the projection is ever flattened or replaced.
+  @readonly entity QueryHistory as projection on ims.AnalyticsQueryHistory
+    where createdBy = $user;
 
   // Saved queries with rename/visibility/duplicate/recordRun actions
   entity SavedQueries as projection on ims.AnalyticsSavedQuery actions {
@@ -217,7 +220,7 @@ Append to `srv/analytics-service.cds` (after the existing `listExposedEntities` 
     action recordRun(rowCount: Integer, durationMs: Integer) returns SavedQueries;
   };
 
-  // Extend runSelectQuery with the source parameter and richer return shape.
+  // Extend runSelectQuery with an OPTIONAL source parameter and richer return shape.
   // (CAP allows action-shape evolution as long as it's additive.)
 ```
 
@@ -226,12 +229,12 @@ Note: CAP doesn't let you redeclare an existing action; the existing `runSelectQ
 Locate the existing `runSelectQuery` declaration in the same file (it currently looks like `action runSelectQuery(sql: String) returns { ... };`). Change its parameter list to:
 
 ```cds
-action runSelectQuery(sql: String, source: String) returns { ... };
+action runSelectQuery(sql: String, source: String null) returns { ... };
 ```
 
-(Leave the existing return-type declaration intact — the handler change in Task 12 returns the additional `privacy` and `historyId` fields, which OData simply forwards.)
+The `null` modifier marks `source` as optional (CAP/OData treats an unmodified parameter as required, which would reject every old-client request that omits `source` and break the spec's "old clients work against new server" promise). The handler in Task 12 normalizes `undefined`/`null`/unrecognized values to `'editor'`, so callers can omit it entirely. (Leave the existing return-type declaration intact — the handler change in Task 12 returns the additional `privacy` and `historyId` fields, which OData simply forwards.)
 
-- [ ] **Step 2: Add the `@restrict` rules for `SavedQueries`**
+- [ ] **Step 2: Add the `@restrict` rules for `SavedQueries` and a belt-and-suspenders rule for `QueryHistory`**
 
 Append at the very end of the file (outside the service block):
 
@@ -240,6 +243,13 @@ annotate AnalyticsService.SavedQueries with @restrict: [
   { grant: 'READ',              where: 'visibility = ''shared-admins'' or createdBy = $user' },
   { grant: ['CREATE'] },
   { grant: ['UPDATE','DELETE'], where: 'createdBy = $user' }
+];
+
+// Belt-and-suspenders for QueryHistory: the projection's `where` clause already
+// scopes to the current user, but a future refactor that replaces the projection
+// with a plain entity would silently lose that filter. The @restrict locks it in.
+annotate AnalyticsService.QueryHistory with @restrict: [
+  { grant: 'READ', where: 'createdBy = $user' }
 ];
 ```
 
@@ -777,27 +787,61 @@ export function formatTruncationComment({ cap, rowCount }) {
  * Hard caps:
  *   - 100,000 rows (enforced by SQL wrapper, double-checked here)
  *   - 60 seconds wall-clock (checked every 1000 rows)
+ *
+ * Uses a HANA cursor (constant memory) per spec §exportSelectQuery. The hdb
+ * driver exposes `prepare()` + `execute()` returning a result set we can iterate
+ * row-by-row via async iteration; we acquire/release the connection via the
+ * cds.db connection pool to play nicely with concurrent admin requests.
+ *
+ * On SQLite (unit tests) `dbc.acquire` may not exist — caller passes `useCursor:false`
+ * to fall back to materialized `db.run()`. Test fixtures set this; production path
+ * never does.
  */
-export async function streamCsv({ db, sql, res, log, user, sqlLength }) {
+export async function streamCsv({ db, sql, res, log, user, sqlLength, useCursor = true }) {
   const startedAt = Date.now()
   let rowCount = 0
   let header = false
   let cap = null
 
-  // cds.run returns an array on the in-memory driver but supports streaming on HANA
-  // via the underlying hdb cursor. We use the high-level db.run path for simplicity;
-  // for very large result sets the HANA driver chunks behind the scenes.
-  const rows = await db.run(sql)
-  for (const row of rows) {
+  const writeRow = (row) => {
     if (!header) {
       res.write(csvHeader(Object.keys(row)))
       header = true
     }
     res.write(csvRow(Object.values(row)))
     rowCount++
-    if (rowCount >= 100000) { cap = 'rowCount'; break }
-    if (rowCount % 1000 === 0 && Date.now() - startedAt > 60000) { cap = 'wallClock'; break }
+    if (rowCount >= 100000) { cap = 'rowCount'; return false }
+    if (rowCount % 1000 === 0 && Date.now() - startedAt > 60000) { cap = 'wallClock'; return false }
+    return true
   }
+
+  if (useCursor && typeof db.acquire === 'function') {
+    // Production path: HANA cursor, constant memory regardless of result size.
+    const conn = await db.acquire()
+    try {
+      const stmt = await conn.prepare(sql)
+      const cursor = await stmt.execute([])
+      try {
+        for await (const row of cursor) {
+          if (!writeRow(row)) break
+        }
+      } finally {
+        if (typeof cursor.close === 'function') await cursor.close()
+        if (typeof stmt.drop === 'function') await stmt.drop()
+      }
+    } finally {
+      await db.release(conn)
+    }
+  } else {
+    // Fallback path (unit tests / SQLite): materialize and iterate.
+    // NEVER use this in production — a 100k-row export would buffer ~10MB+ in V8
+    // before any byte streams to the client and the wall-clock guard can't preempt it.
+    const rows = await db.run(sql)
+    for (const row of rows) {
+      if (!writeRow(row)) break
+    }
+  }
+
   if (cap) res.write(formatTruncationComment({ cap, rowCount }))
   res.end()
 
@@ -811,7 +855,7 @@ export async function streamCsv({ db, sql, res, log, user, sqlLength }) {
 }
 ```
 
-Note: The "streaming via HANA cursor" pattern in the spec assumes a future enhancement using `dbc.acquire()` + raw cursor iteration. The Phase 1 implementation uses `db.run()` for simplicity — it materializes the result, but with a 100k-row LIMIT and large columns truncated by HANA, memory pressure stays bounded. We leave the cursor-based version as a Phase 1.1 follow-up if perf tests reveal a problem.
+The cursor path matches the spec's constant-memory promise (spec §`exportSelectQuery`). The materialized fallback is unit-test-only — the express bridge in Task 14 calls with `useCursor: true` (the default) so production always cursors. If the hdb driver shape (`db.acquire` / `stmt.prepare` / `cursor` async iteration) differs from what's available at runtime, surface the mismatch as a hard test failure rather than silently falling back, and adjust the helper to match. Don't quietly regress to materialization — see [feedback_audit_all_callers_of_buggy_primitive] for why "Phase 1.1 follow-up" promises tend to outlive their phase.
 
 - [ ] **Step 4: Run tests to confirm pass**
 
@@ -891,21 +935,33 @@ npm test -- --project=unit analytics-service-export
 
 Expected: FAIL with 404 — route not registered.
 
-- [ ] **Step 3: Wire the express route**
+- [ ] **Step 3: Wire the express route using the project's 503-stub-then-wire pattern**
 
-In `srv/server.js`, locate the `cds.on('bootstrap', app => { ... })` block (search for `app.use` or `app.post` near the top to find the right region). The project is ESM (`"type": "module"`), so `require` is unavailable; use `createRequire` once at the top of the file (the existing `srv/analytics-service.js` does this — copy the pattern):
+The existing express bridges in `srv/server.js` (`chatStreamHandler`, `embeddingsStatsHandler`, `analyticsOdataRouter` — see lines 25-39, 190, 194, 201, 311, 328) all follow the same shape: a top-of-file `let handler = (req, res) => res.status(503).json({ error: 'service_starting' })`, the `bootstrap` block registers an indirect-dispatch wrapper that calls `handler(...)`, and `cds.on('served')` overwrites `handler` with the real implementation once the service is fully initialised. Adopt that pattern here so a cold-start race or interleaved `cds.test` serve order can't hit `srv._getAllowedTableNames` before AnalyticsService.init() has set it.
+
+In `srv/server.js`, near the existing 503 stubs at the top of the file, add:
 
 ```javascript
-import { createRequire } from 'node:module'
-const require = createRequire(import.meta.url)
+let analyticsExportHandler = (req, res) => res.status(503).json({ error: 'service_starting' })
 ```
 
-Then inside the bootstrap block, add:
+The project is ESM (`"type": "module"`); the existing `srv/server.js` already imports its CJS deps via `createRequire`. If a `createRequire`/`require` declaration is already present at the top of `server.js`, **do not** declare it again — `SyntaxError: Identifier 'require' has already been declared` is irrecoverable. If `server.js` does not yet have one, the existing `srv/analytics-service.js` shows the canonical form; copy it once.
+
+Inside the existing `cds.on('bootstrap', (app) => { ... })` block, register the indirect-dispatch wrapper:
 
 ```javascript
 // Phase 1: streaming CSV export for the analytics builder.
-// Same validator + allowlist as runSelectQuery; bypasses 5k row cap.
-app.post('/admin/analytics/export', async (req, res) => {
+// The real handler is wired in cds.on('served') below; this dispatch keeps
+// route order deterministic and lets bootstrap finish even if AnalyticsService
+// initialisation is still in flight.
+app.post('/admin/analytics/export', express.json({ limit: '64kb' }),
+  (req, res) => analyticsExportHandler(req, res))
+```
+
+Then in the existing `cds.on('served', async () => { ... })` block (the same one that wires `chatStreamHandler` etc.), replace the stub with the real handler:
+
+```javascript
+analyticsExportHandler = async (req, res) => {
   try {
     // Auth: same Admin scope as the rest of /admin/analytics. CAP middleware
     // populates req.user; reject if not Admin.
@@ -942,7 +998,7 @@ app.post('/admin/analytics/export', async (req, res) => {
     cds.log('analytics-sql').error({ user: req.user?.id, error: err.message })
     if (!res.headersSent) res.status(500).json({ error: 'Export failed' })
   }
-})
+}
 ```
 
 - [ ] **Step 4: Expose `getAllowedTableNames` from the service**
@@ -1145,11 +1201,15 @@ git commit -m "feat(analytics): SavedQueries actions (rename, setVisibility, dup
 
 ---
 
-## Task 16: Extend cleanup cron with history-row pruning
+## Task 16: Extend cleanup with history-row pruning
 
 **Files:**
-- Modify: `srv/jobs/cleanup.js` (add a new sweep)
+
+- Modify: `srv/jobs/cleanup.js` (export the new pure function)
+- Modify: `srv/jobs/scheduler.js` (register a daily cron entry)
 - Create: `srv/__tests__/jobs-cleanup-analytics-history.test.js`
+
+Pattern (per [the existing scheduler split](../../../srv/jobs/scheduler.js)): pure async functions live in `cleanup.js`; `scheduler.js` registers them via `cron.schedule` + `runWithLock`. Don't add `cron.schedule` calls to `cleanup.js` — that file has none today and breaks the file's pure-function contract.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1204,7 +1264,7 @@ npm test -- --project=unit jobs-cleanup-analytics-history
 
 Expected: FAIL — `pruneAnalyticsHistory` is not exported.
 
-- [ ] **Step 3: Implement and export the pruner**
+- [ ] **Step 3: Implement and export the pruner; register the cron entry**
 
 In `srv/jobs/cleanup.js`, add:
 
@@ -1227,7 +1287,19 @@ export async function pruneAnalyticsHistory(keepLatest = 200) {
 }
 ```
 
-Find the existing daily cron registration in `srv/jobs/cleanup.js` (search for `cron.schedule` or `scheduler`) and add a call to `pruneAnalyticsHistory(200)` alongside the existing sweeps. Keep the existing sweeps intact.
+Then in `srv/jobs/scheduler.js`:
+
+1. Add `pruneAnalyticsHistory` to the existing import from `./cleanup.js` at the top of the file.
+2. Inside `registerJobs()`, alongside the other `cron.schedule(...)` registrations, add a daily entry — pick a minute that's NOT 0 or 30 to avoid pile-up with the existing sweeps:
+
+   ```javascript
+   // Daily at 03:23 — prune analytics query history to last 200 rows per user
+   cron.schedule('23 3 * * *', () =>
+     runWithLock('analytics-history-prune', 600000, () => pruneAnalyticsHistory(200))
+   )
+   ```
+
+The `runWithLock` distributed-lock wrapper is the same one the existing `cleanup-step-failures`, `tag-cleanup`, `content-gc`, etc. registrations use — see [project_qa_shared_aspects] for the lock-acquisition contract. Don't add `cron.schedule` to `cleanup.js`; that file has zero `cron.schedule` calls today and the implementer following Step 3 literally would either silently fail to wire the cron or break the file's pure-function contract.
 
 - [ ] **Step 4: Run tests**
 
@@ -1240,7 +1312,7 @@ Expected: 1 PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add srv/jobs/cleanup.js srv/__tests__/jobs-cleanup-analytics-history.test.js
+git add srv/jobs/cleanup.js srv/jobs/scheduler.js srv/__tests__/jobs-cleanup-analytics-history.test.js
 git commit -m "feat(jobs): prune AnalyticsQueryHistory to last 200 rows per user"
 ```
 
@@ -1407,8 +1479,8 @@ Implements the backend half of the analytics SQL Builder design ([spec](docs/sup
 ## What's in
 
 - **Two new entities:** `AnalyticsQueryHistory` (auto-written on every runSelectQuery) and `AnalyticsSavedQuery` (named/shared admin queries with `@cds.changelog` + `@PersonalData`).
-- **Schema annotations:** `@analytics.filter` on ~15 columns (status/taskType/dates), `@analytics.pii` on Users.email and Users.fullName.
-- **Two new isomorphic modules** (`srv/lib/query-spec-validator.cjs`, `srv/lib/spec-to-sql.cjs`) — pure functions, ready for browser re-export in Phase 2.
+- **Schema annotations:** `@analytics.filter` on ~20 columns across Tasks/TaskRecords/Missions/Groups/Events (status/taskType/dates/FKs), `@analytics.pii` on Users firstName/lastName/displayName/email/avatarUrl (matches `db/audit-logging.cds`).
+- **Two new server-side pure modules** (`srv/lib/query-spec-validator.cjs`, `srv/lib/spec-to-sql.cjs`) — ready for Phase 2 to mirror under `app/analytics-explorer/src/shared/` (see spec §Isomorphic-module strategy; **not** a Vite alias re-export of the server CJS).
 - **Enriched `listExposedEntities`** — returns `hanaType`, `filterMode`, `filterSample`, `pii`, and `associations[]`.
 - **Extended `runSelectQuery` envelope** — `privacy: { mode: 'raw', suppressedCells: 0 }` + `historyId`. Optional `source` parameter (builder/editor/joule/replay).
 - **New action `sampleDistinct`** — annotation-gated DISTINCT sampling for filter chip dropdowns. Refuses `Users.email` even for admins.
