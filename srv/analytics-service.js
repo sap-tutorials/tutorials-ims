@@ -159,6 +159,7 @@ export default class AnalyticsService extends cds.ApplicationService {
       const historyId = await writeHistoryRow({
         user: req.user.id,
         sql,
+        spec: req.data.spec,  // optional JSON-stringified QuerySpec; null if omitted
         rowCount: data.length,
         durationMs,
         truncated,

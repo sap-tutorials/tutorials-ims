@@ -56,3 +56,38 @@ describe('AnalyticsService.runSelectQuery — Phase 1 envelope', () => {
     expect(r.historyId).toBeTruthy()
   })
 })
+
+describe('runSelectQuery — spec parameter (Phase 4)', () => {
+  const asAdmin = (srv, fn) =>
+    srv.tx({ user: new cds.User.Privileged() }, fn)
+
+  it('writes spec verbatim to AnalyticsQueryHistory when provided', async () => {
+    const srv = await cds.connect.to('AnalyticsService')
+    const db = await cds.connect.to('db')
+    const specJson = JSON.stringify({ version: 1, hint: 'phase4-test' })
+
+    const r = await asAdmin(srv, tx => tx.send('runSelectQuery', {
+      sql: 'SELECT ID FROM com_sap_developers_ims_TaskRecords LIMIT 1',
+      source: 'builder',
+      spec: specJson,
+    }))
+
+    const { AnalyticsQueryHistory } = db.entities('com.sap.developers.ims')
+    const row = await SELECT.one.from(AnalyticsQueryHistory).where({ ID: r.historyId })
+    expect(row.spec).toBe(specJson)
+  })
+
+  it('writes spec=null when omitted (back-compat)', async () => {
+    const srv = await cds.connect.to('AnalyticsService')
+    const db = await cds.connect.to('db')
+
+    const r = await asAdmin(srv, tx => tx.send('runSelectQuery', {
+      sql: 'SELECT ID FROM com_sap_developers_ims_TaskRecords LIMIT 1',
+      source: 'editor',
+    }))
+
+    const { AnalyticsQueryHistory } = db.entities('com.sap.developers.ims')
+    const row = await SELECT.one.from(AnalyticsQueryHistory).where({ ID: r.historyId })
+    expect(row.spec).toBe(null)
+  })
+})

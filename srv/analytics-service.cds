@@ -48,7 +48,8 @@ service AnalyticsService @(path : '/admin/analytics') {
   // CAP/OData passes the extra JSON fields through unchanged. The optional
   // 'source' parameter records which surface drove the query in the history row;
   // omitted by old clients (additive ship), normalized to 'editor' in the handler.
-  action runSelectQuery(sql : String, source : String null) returns {
+  // 'spec' is the JSON-stringified QuerySpec (Phase 4); null for editor/legacy paths.
+  action runSelectQuery(sql : String, source : String null, spec : String null) returns {
     columns  : array of String;
     rows     : array of String;  // each element is a JSON-stringified row array
     metadata : { rowCount : Integer; truncated : Boolean; durationMs : Integer; };

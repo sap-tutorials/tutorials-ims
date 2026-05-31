@@ -7,12 +7,14 @@ export function normalizeSource(s) {
   return VALID_SOURCES.has(s) ? s : 'editor'
 }
 
-export async function writeHistoryRow({ user, sql, rowCount, durationMs, truncated, source }) {
+export async function writeHistoryRow({
+  user, sql, spec = null, rowCount, durationMs, truncated, source,
+}) {
   const { AnalyticsQueryHistory } = cds.entities('com.sap.developers.ims')
   const ID = cds.utils.uuid()
   await INSERT.into(AnalyticsQueryHistory).entries({
     ID,
-    spec: null,                    // Phase 1: builder not yet wired — Phase 2 will populate
+    spec: typeof spec === 'string' ? spec : null,  // accept stringified JSON; null otherwise
     sql,
     rowCount,
     durationMs,
