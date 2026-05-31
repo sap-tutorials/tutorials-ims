@@ -5,6 +5,7 @@ import '@ui5/webcomponents/dist/Assets.js'
 import '@ui5/webcomponents-fiori/dist/Assets.js'
 import '@ui5/webcomponents-icons/dist/AllIcons.js'
 import { initTheme } from './composables/useTheme'
+import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import './styles.css'
 
 // Tab/button icons (chart-table-view, syntax, business-objects-experience, etc.)
