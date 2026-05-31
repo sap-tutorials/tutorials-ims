@@ -87,6 +87,14 @@ Expected: FAIL — `status.hanaType` is `undefined`, `filterMode` is `undefined`
 
 - [ ] **Step 3: Add a CDS-type-to-HANA-type helper**
 
+**Pre-flight check:** before editing, confirm `getExposedEntries()` yields `{ def, projection, projectionName }` — Tasks 8 and 11 both destructure all three. Run:
+
+```bash
+grep -n "out.push" srv/analytics-service.js | head -5
+```
+
+If your local copy yields fewer fields (e.g. just `{ def, projection }`), update the iterator first.
+
 Create `srv/lib/cds-type-to-hana.cjs`:
 
 ```javascript
@@ -890,7 +898,14 @@ Expected: FAIL with 404 — route not registered.
 
 - [ ] **Step 3: Wire the express route**
 
-In `srv/server.js`, locate the `cds.on('bootstrap', app => { ... })` block (search for `app.use` or `app.post` near the top to find the right region). Inside that block, add:
+In `srv/server.js`, locate the `cds.on('bootstrap', app => { ... })` block (search for `app.use` or `app.post` near the top to find the right region). The project is ESM (`"type": "module"`), so `require` is unavailable; use `createRequire` once at the top of the file (the existing `srv/analytics-service.js` does this — copy the pattern):
+
+```javascript
+import { createRequire } from 'node:module'
+const require = createRequire(import.meta.url)
+```
+
+Then inside the bootstrap block, add:
 
 ```javascript
 // Phase 1: streaming CSV export for the analytics builder.
@@ -1269,9 +1284,10 @@ describe('analytics-builder Phase 1 — hybrid HANA E2E', () => {
       const { AnalyticsSavedQuery } = cds.entities('com.sap.developers.ims')
       await DELETE.from(AnalyticsSavedQuery).where({ ID: { in: createdSavedIDs } })
     }
-    // Prune any Phase 1 history rows left by this run.
+    // Prune ONLY rows written by this test run. The marker string literal
+    // in the test SQL gives us a precise filter (validator rejects /* */ comments).
     const { AnalyticsQueryHistory } = cds.entities('com.sap.developers.ims')
-    await DELETE.from(AnalyticsQueryHistory).where({ source: 'replay' })
+    await DELETE.from(AnalyticsQueryHistory).where({ sql: { like: '%PHASE1_E2E_MARKER%' } })
   })
 
   it('listExposedEntities returns enriched fields against HANA', async () => {
@@ -1283,7 +1299,8 @@ describe('analytics-builder Phase 1 — hybrid HANA E2E', () => {
 
   it('runSelectQuery returns privacy + historyId on HANA', async () => {
     const r = await srv.send('runSelectQuery', {
-      sql: 'SELECT id FROM Tasks LIMIT 1',
+      // Validator forbids comments — use a string-literal marker the cleanup can grep.
+      sql: "SELECT id, 'PHASE1_E2E_MARKER' AS m FROM Tasks LIMIT 1",
       source: 'replay',
     })
     expect(r.privacy).toEqual({ mode: 'raw', suppressedCells: 0 })
