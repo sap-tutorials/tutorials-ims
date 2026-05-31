@@ -49,3 +49,7 @@ annotate ims.Tutorials              with @Aggregation.ApplySupported : { Transfo
 annotate ims.Events                 with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
 annotate ims.PrizeRecords           with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
 annotate ims.AccomplishmentRecords  with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
+
+// Analytics Builder Phase 1 entities (AnalyticsQueryHistory, AnalyticsSavedQuery)
+// live in db/analytics-builder.cds — kept separate so this annotation file
+// stays focused on extending existing entities.
