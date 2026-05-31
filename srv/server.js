@@ -82,19 +82,30 @@ cds.on('bootstrap', (app) => {
     next();
   });
 
-  if (process.env.NODE_ENV !== 'production') {
-    app.use((req, res, next) => {
-      const origin = req.headers.origin;
-      if (origin) {
-        res.setHeader('Access-Control-Allow-Origin', origin);
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-      }
-      if (req.method === 'OPTIONS') return res.status(204).end();
-      next();
-    });
-  }
+  // CORS: strict allowlist (issue #133). Previously this reflected any Origin
+  // header with credentials when NODE_ENV !== 'production', but NODE_ENV is not
+  // set in any deployment manifest, so the reflect-all branch was always live
+  // in CF. Now driven by ALLOWED_CORS_ORIGINS (comma-separated), defaulting to
+  // localhost-only origins for hugo/approuter/CAP dev. Set the env var on a
+  // deployed environment if you need to whitelist a specific external origin.
+  const ALLOWED_CORS_ORIGINS = new Set(
+    (process.env.ALLOWED_CORS_ORIGINS || 'http://localhost:1313,http://localhost:5000,http://localhost:4004')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin && ALLOWED_CORS_ORIGINS.has(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+      res.setHeader('Vary', 'Origin');
+    }
+    if (req.method === 'OPTIONS') return res.status(204).end();
+    next();
+  });
 
   app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });

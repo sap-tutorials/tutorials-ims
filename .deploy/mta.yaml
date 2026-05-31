@@ -52,6 +52,8 @@ modules:
       # srv/developer-service.js, srv/lib/ip-rate-limit.js, srv/lib/chat-rate-limit.js.
       # See docs/developers/operations/mta-deployment.md "Scaling Constraints" and TODO §22.
       instances: 1
+    properties:
+      NODE_ENV: production
     provides:
       - name: srv-api
         properties:
@@ -87,6 +89,7 @@ modules:
         - bash -c "node -e \"const p=require('./package.json'); p.dependencies=Object.assign(p.dependencies||{},{cheerio:'^1.2.0','@sap-ai-sdk/foundation-models':'^2.10.0'}); require('fs').writeFileSync('./package.json', JSON.stringify(p,null,2));\""
     properties:
       EXPOSE_CAP_UI: false
+      NODE_ENV: production
     provides:
       - name: srv-qa-api
         properties:

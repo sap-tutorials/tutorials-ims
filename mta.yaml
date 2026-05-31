@@ -49,6 +49,7 @@ modules:
       instances: 1
     properties:
       EXPOSE_CAP_UI: true
+      NODE_ENV: production
     provides:
       - name: srv-api
         properties:
@@ -71,6 +72,7 @@ modules:
       instances: 1
     properties:
       EXPOSE_CAP_UI: false
+      NODE_ENV: production
     provides:
       - name: srv-qa-api
         properties:
