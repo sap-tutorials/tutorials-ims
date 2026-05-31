@@ -18,7 +18,13 @@ const DANGEROUS_TAGS = new Set([
 ])
 
 const EVENT_ATTR_RE = /\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi
-const JAVASCRIPT_HREF_RE = /\s+(href|src|action|xlink:href|formaction)\s*=\s*(?:"\s*javascript:[^"]*"|'\s*javascript:[^']*'|javascript:[^\s>]+)/gi
+// Issue #135: extend the dangerous-URL-scheme list beyond `javascript:`.
+// Modern browsers and the existing CSP defang most of these, but a sanitizer
+// that strips one scheme and lets three through is a brittle invariant.
+// `data:` URIs in href produce phishing-grade redirects, `vbscript:` matters
+// for legacy IE, and `blob:` URLs can carry malicious HTML created by other
+// tabs that share the origin.
+const DANGEROUS_HREF_RE = /\s+(href|src|action|xlink:href|formaction)\s*=\s*(?:"\s*(?:javascript|data|vbscript|blob):[^"]*"|'\s*(?:javascript|data|vbscript|blob):[^']*'|(?:javascript|data|vbscript|blob):[^\s>]+)/gi
 
 export function stripDangerousHtml(content: string): string {
   const lines = content.split('\n')
@@ -57,7 +63,7 @@ function sanitizeLine(line: string): string {
     })
 
   result = result.replace(EVENT_ATTR_RE, '')
-  result = result.replace(JAVASCRIPT_HREF_RE, '')
+  result = result.replace(DANGEROUS_HREF_RE, '')
 
   return result
 }

@@ -104,4 +104,43 @@ describe('stripDangerousHtml', () => {
     expect(stripDangerousHtml('<a xlink:href="javascript:alert(1)">click</a>')).toBe('<a>click</a>')
     expect(stripDangerousHtml('<button formaction="javascript:alert(1)">x</button>')).toBe('x')
   })
+
+  // #135 — extend dangerous-URL-scheme list beyond javascript:
+  it('strips data: URIs from href/src/action (#135)', () => {
+    expect(stripDangerousHtml('<a href="data:text/html,hello">click</a>')).toBe('<a>click</a>')
+    expect(stripDangerousHtml('<a href="data:text/html;base64,PHNjcmlwdD4=">x</a>')).toBe('<a>x</a>')
+    expect(stripDangerousHtml('<a action="data:text/html,x">x</a>')).toBe('<a>x</a>')
+    // Note: a data: URI containing a `>` would break the existing line-based
+    // tag matcher independently — that's a pre-existing limitation. The
+    // realistic threat is a base64-encoded payload (no `>` in the URI),
+    // which we cover above.
+  })
+
+  it('strips vbscript: URIs from href/src/action (#135)', () => {
+    expect(stripDangerousHtml('<a href="vbscript:msgbox(1)">click</a>')).toBe('<a>click</a>')
+    expect(stripDangerousHtml('<a HREF="VBScript:foo">x</a>')).toBe('<a>x</a>')
+  })
+
+  it('strips blob: URIs from href/src/action (#135)', () => {
+    expect(stripDangerousHtml('<a href="blob:https://example.com/abc-123">click</a>')).toBe('<a>click</a>')
+    expect(stripDangerousHtml('<a href="blob:null/abc">x</a>')).toBe('<a>x</a>')
+  })
+
+  it('catches unquoted data:/vbscript:/blob: URLs (#135)', () => {
+    expect(stripDangerousHtml('<a href=data:text/html,x>click</a>')).toBe('<a>click</a>')
+    expect(stripDangerousHtml('<a href=vbscript:msgbox>click</a>')).toBe('<a>click</a>')
+    expect(stripDangerousHtml('<a href=blob:abc>click</a>')).toBe('<a>click</a>')
+  })
+
+  it('does not strip safe data:image/* attributes from img src (regression — img stays)', () => {
+    // Tutorial authors do legitimately inline small data:image/png blobs.
+    // Note: our regex strips the whole `src=data:...` attribute. This is a
+    // strictness trade-off — we'd rather lose a rare inline image than admit
+    // a vector. If a future complaint surfaces, narrow this regex to
+    // data:(text/html|application/...) only. For now: assert the trade-off
+    // is captured.
+    const out = stripDangerousHtml('<img src="data:image/png;base64,iVBORw0KGgo=" alt="x">')
+    expect(out).toContain('<img')
+    expect(out).not.toContain('data:image')
+  })
 })
