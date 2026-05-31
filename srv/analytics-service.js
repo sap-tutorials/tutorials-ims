@@ -2,6 +2,11 @@ import cds from '@sap/cds'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import {
+  validateSampleDistinctRequest,
+  buildSampleDistinctSql,
+  runSampleDistinct,
+} from './lib/analytics-distinct-sample.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const require = createRequire(import.meta.url)
@@ -150,6 +155,51 @@ export default class AnalyticsService extends cds.ApplicationService {
         columns,
         rows: data.map(r => columns.map(c => stringify(r[c]))),
         metadata: { rowCount: data.length, truncated, durationMs },
+      }
+    })
+
+    this.on('sampleDistinct', async (req) => {
+      const { table, column, limit } = req.data || {}
+
+      // Look up column annotation by walking the exposed entries.
+      // Also resolve the user-supplied table to the runtime-physical name.
+      let columnAnnotation = null
+      let physicalTable = null
+      const isHana = cds.db && cds.db.kind === 'hana'
+      for (const { def, projection, projectionName } of getExposedEntries()) {
+        const hanaName = def.name.replace(/\./g, '_').toUpperCase()
+        const sqliteName = def.name.replace(/\./g, '_')
+        if ([projectionName, hanaName, sqliteName].includes(table)) {
+          physicalTable = isHana ? hanaName : sqliteName
+          const elem = projection.elements[column]
+          if (elem) {
+            columnAnnotation = {
+              filterMode: elem['@analytics.filter.mode'] || 'free',
+              filterSample: !!elem['@analytics.filter.sample'],
+            }
+          }
+          break
+        }
+      }
+
+      try {
+        validateSampleDistinctRequest({
+          table, column,
+          allowedTables: getAllowedTableNames(),
+          columnAnnotation,
+        })
+      } catch (err) {
+        return req.reject(err.status || 400, err.message)
+      }
+
+      const sql = buildSampleDistinctSql({ table: physicalTable, column, cap: limit })
+      try {
+        return await runSampleDistinct({ db: cds.db, sql, cap: limit })
+      } catch (err) {
+        cds.log('analytics-sql').warn({
+          user: req.user.id, action: 'sampleDistinct', error: err.message,
+        })
+        return req.reject(400, `sampleDistinct failed: ${err.message}`)
       }
     })
 
