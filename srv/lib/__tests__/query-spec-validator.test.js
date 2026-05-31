@@ -3,19 +3,44 @@ import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
 const { validateQuerySpec } = require('../query-spec-validator.cjs')
 
+// Schema-faithful fixture (verified against db/schema.cds + db/views.cds at write time):
+//   - TaskRecords carries the FK columns user_ID, event_ID + status enum COMPLETED/IN_PROGRESS
+//     + completionDate. This is what the chip builder joins through for any user-attribution query.
+//   - Tasks is a UNION view (db/views.cds:5-39) over Tutorials/Missions/Groups/Steps/Checkpoints —
+//     no FK columns and a different status enum (TaskStatus = ACTIVE/INACTIVE).
+//   - Users has discrete name fields (firstName/lastName/displayName), not a fullName.
 const VALID_ENTITIES = new Map([
-  ['Tasks',    { columns: new Map([['id',{type:'cds.UUID'}],['status',{type:'cds.String'}],['createdAt',{type:'cds.Timestamp'}],['user_ID',{type:'cds.UUID'}]]) }],
-  ['Users',    { columns: new Map([['ID',{type:'cds.UUID'}],['email',{type:'cds.String'}]]) }],
+  ['TaskRecords', { columns: new Map([
+    ['ID',             { type: 'cds.UUID' }],
+    ['status',         { type: 'cds.String' }],   // COMPLETED | IN_PROGRESS
+    ['taskType',       { type: 'cds.String' }],
+    ['completionDate', { type: 'cds.Timestamp' }],
+    ['createdAt',      { type: 'cds.Timestamp' }],
+    ['user_ID',        { type: 'cds.UUID' }],
+    ['event_ID',       { type: 'cds.UUID' }],
+  ]) }],
+  ['Tasks',       { columns: new Map([
+    ['ID',         { type: 'cds.UUID' }],
+    ['status',     { type: 'cds.String' }],       // ACTIVE | INACTIVE
+    ['taskType',   { type: 'cds.String' }],
+    ['createdAt',  { type: 'cds.Timestamp' }],
+    ['modifiedAt', { type: 'cds.Timestamp' }],
+  ]) }],
+  ['Users',       { columns: new Map([
+    ['ID',          { type: 'cds.UUID' }],
+    ['email',       { type: 'cds.String' }],
+    ['displayName', { type: 'cds.String' }],
+  ]) }],
 ])
 
 describe('query-spec-validator', () => {
   const baseSpec = () => ({
     version: 1,
-    from: { entity: 'Tasks', alias: 't' },
+    from: { entity: 'TaskRecords', alias: 'tr' },
     joins: [],
     filterTree: null,
     groupBy: [],
-    select: [{ kind: 'column', id: 's1', ref: { alias: 't', column: 'id' } }],
+    select: [{ kind: 'column', id: 's1', ref: { alias: 'tr', column: 'ID' } }],
     orderBy: [],
     limit: null,
   })
@@ -46,7 +71,7 @@ describe('query-spec-validator', () => {
   it('rejects "between" with non-range value', () => {
     const s = baseSpec()
     s.filterTree = { id: 'fg0', kind: 'group', conjunction: 'and', children: [
-      { id: 'f1', ref: { alias: 't', column: 'createdAt' }, op: 'between',
+      { id: 'f1', ref: { alias: 'tr', column: 'createdAt' }, op: 'between',
         value: { kind: 'literal', value: '2026-01-01' } }
     ] }
     const r = validateQuerySpec(s, VALID_ENTITIES)
@@ -56,18 +81,18 @@ describe('query-spec-validator', () => {
   it('rejects "in" with non-list value', () => {
     const s = baseSpec()
     s.filterTree = { id: 'fg0', kind: 'group', conjunction: 'and', children: [
-      { id: 'f1', ref: { alias: 't', column: 'status' }, op: 'in',
-        value: { kind: 'literal', value: 'PENDING' } }
+      { id: 'f1', ref: { alias: 'tr', column: 'status' }, op: 'in',
+        value: { kind: 'literal', value: 'COMPLETED' } }
     ] }
     const r = validateQuerySpec(s, VALID_ENTITIES)
     expect(r.errors.some(e => e.chipId === 'f1' && e.message.match(/in.*list/i))).toBe(true)
   })
 
   it('rejects OR-group nested deeper than 4', () => {
-    let inner = { id: 'leaf', ref: { alias: 't', column: 'id' }, op: 'eq',
+    let inner = { id: 'leaf', ref: { alias: 'tr', column: 'ID' }, op: 'eq',
       value: { kind: 'literal', value: 'x' } }
     for (let i = 0; i < 5; i++) {
-      inner = { id: `g${i}`, kind: 'group', conjunction: 'or', children: [inner] }
+      inner = { id: 'g' + i, kind: 'group', conjunction: 'or', children: [inner] }
     }
     const s = baseSpec(); s.filterTree = inner
     const r = validateQuerySpec(s, VALID_ENTITIES)
@@ -78,7 +103,7 @@ describe('query-spec-validator', () => {
     const s = baseSpec()
     s.joins = [{ id: 'j1', kind: 'inner',
       target: { entity: 'Users', alias: 'u' },
-      on: { leftRef: {alias:'t',column:'user_ID'}, rightRef: {alias:'u',column:'ID'} } }]
+      on: { leftRef: {alias:'tr',column:'user_ID'}, rightRef: {alias:'u',column:'ID'} } }]
     const r = validateQuerySpec(s, VALID_ENTITIES)
     expect(r.errors).toEqual([])
   })
@@ -108,7 +133,7 @@ describe('query-spec-validator', () => {
   it('rejects unsupported FilterOp for column type (between on String)', () => {
     const s = baseSpec()
     s.filterTree = { id: 'fg0', kind: 'group', conjunction: 'and', children: [
-      { id: 'f1', ref: { alias: 't', column: 'status' }, op: 'between',
+      { id: 'f1', ref: { alias: 'tr', column: 'status' }, op: 'between',
         value: { kind: 'range', value: ['A', 'Z'] } }
     ] }
     const r = validateQuerySpec(s, VALID_ENTITIES)
