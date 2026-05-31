@@ -99,7 +99,27 @@ function adminLayer(ctx) {
     const e = ctx.entity;
     lines.push(`Currently selected ${e.type || 'entity'}: ${JSON.stringify({ id: e.id, title: e.title, slug: e.slug }).slice(0, 240)}.`);
   }
-  lines.push('You may call searchAdminDocs, searchTutorials, or analyticsQuery. Never expose user identity, email, or request IP.');
+  if (ctx.tool === 'analytics-builder') {
+    if (ctx.currentSpec && typeof ctx.currentSpec === 'object') {
+      const s = ctx.currentSpec;
+      const fromLine = s.from ? `${s.from.entity} ${s.from.alias}` : '(no entity)';
+      const cols = Array.isArray(s.select) ? s.select.length : 0;
+      const filt = s.filterTree ? 'filters: yes' : 'filters: none';
+      const grp = Array.isArray(s.groupBy) && s.groupBy.length ? `groupBy: ${s.groupBy.length}` : 'groupBy: none';
+      lines.push(`Current spec: FROM ${fromLine}, ${cols} select chips, ${filt}, ${grp}, limit ${s.limit ?? 'unset'}.`);
+    } else {
+      lines.push('User is starting from a blank query.');
+    }
+    if (ctx.lastResult && typeof ctx.lastResult === 'object') {
+      const r = ctx.lastResult;
+      const colList = Array.isArray(r.columns) ? r.columns.join(', ') : '(no columns)';
+      lines.push(`Last result: ${r.rowCount ?? 0} rows${r.truncated ? ' (truncated)' : ''}, columns: ${colList}.`);
+    }
+    lines.push('Use the `generateAnalyticsQuery` tool to translate natural-language requests into a QuerySpec. Use the `explainAnalyticsResult` tool to summarize a result the user has just run. When refining, copy the user\'s current spec and modify only what changed.');
+    lines.push('You may call searchAdminDocs, searchTutorials, analyticsQuery, generateAnalyticsQuery, or explainAnalyticsResult. Never expose user identity, email, or request IP.');
+  } else {
+    lines.push('You may call searchAdminDocs, searchTutorials, or analyticsQuery. Never expose user identity, email, or request IP.');
+  }
   return lines.join('\n');
 }
 
