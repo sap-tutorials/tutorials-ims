@@ -7,6 +7,7 @@ import SqlPreview from './builder/SqlPreview.vue'
 import AutoGroupByBanner from './builder/AutoGroupByBanner.vue'
 import BuilderHeader from './builder/BuilderHeader.vue'
 import BottomTabs from './results/BottomTabs.vue'
+import SplitHandle from './common/SplitHandle.vue'
 import { useHistory } from '../composables/useHistory'
 import type { HistoryRow } from '../composables/useHistory'
 import type { SavedRow } from '../composables/useSavedQueries'
@@ -28,6 +29,10 @@ const lastResults = ref<SqlResult | null>(null)
 const entities = ref<ExposedEntity[]>([])
 const entitiesError = ref<string | null>(null)
 const editorRef = ref<InstanceType<typeof QueryEditor> | null>(null)
+
+// Vertical split between the editor + sidebar (top) and the results
+// tabs (bottom). Persists per-user via localStorage.
+const splitRatio = ref(0.5)
 
 // Push the result sample into the Joule page-context store. Capped at 50 rows
 // here too; redactPii caps and strips PII columns before send.
@@ -207,47 +212,61 @@ function onLoadRow(payload: { source: 'history' | 'saved'; row: HistoryRow | Sav
       >↩ Back to grouped query</ui5-button>
     </div>
 
-    <div class="main-row">
-      <aside class="entity-list" aria-label="Exposed entities">
-        <div class="entity-list-header">
-          <strong>Exposed entities</strong>
-          <span class="hint">Click to insert</span>
+    <div class="split-pane">
+      <div
+        class="main-row"
+        :style="{ flex: `${splitRatio} 1 0`, minHeight: '4rem' }"
+      >
+        <aside class="entity-list" aria-label="Exposed entities">
+          <div class="entity-list-header">
+            <strong>Exposed entities</strong>
+            <span class="hint">Click to insert</span>
+          </div>
+          <div v-if="entitiesError" class="entity-error">{{ entitiesError }}</div>
+          <ul v-else class="entity-items">
+            <li v-for="e in entities" :key="e.name" class="entity-li">
+              <button
+                type="button"
+                class="entity-row"
+                :title="e.columns.map(c => `${c.name}: ${c.type}`).join('\n')"
+                @click="insertEntity(e)"
+              >
+                <span class="entity-label">{{ e.label }}</span>
+                <code class="entity-sqlname">{{ e.sqlName || e.name }}</code>
+                <span class="entity-cols">{{ e.columns.length }} cols</span>
+              </button>
+              <button
+                type="button"
+                class="entity-build"
+                @click="startBuilderFromEntity(e)"
+                title="Build a chip query from this entity"
+              >🧱</button>
+            </li>
+          </ul>
+        </aside>
+        <div class="editor-section">
+          <QueryEditor ref="editorRef" @results="onResults" />
         </div>
-        <div v-if="entitiesError" class="entity-error">{{ entitiesError }}</div>
-        <ul v-else class="entity-items">
-          <li v-for="e in entities" :key="e.name" class="entity-li">
-            <button
-              type="button"
-              class="entity-row"
-              :title="e.columns.map(c => `${c.name}: ${c.type}`).join('\n')"
-              @click="insertEntity(e)"
-            >
-              <span class="entity-label">{{ e.label }}</span>
-              <code class="entity-sqlname">{{ e.sqlName || e.name }}</code>
-              <span class="entity-cols">{{ e.columns.length }} cols</span>
-            </button>
-            <button
-              type="button"
-              class="entity-build"
-              @click="startBuilderFromEntity(e)"
-              title="Build a chip query from this entity"
-            >🧱</button>
-          </li>
-        </ul>
-      </aside>
-      <div class="editor-section">
-        <QueryEditor ref="editorRef" @results="onResults" />
       </div>
-    </div>
 
-    <div class="results-section">
-      <BottomTabs
-        :results="lastResults"
-        :generated-sql="generatedSql"
-        :can-drill-down="canDrill"
-        @drilldown="onDrilldown"
-        @load-row="onLoadRow"
+      <SplitHandle
+        :initial="0.5"
+        storage-key="analytics.sqltab.split"
+        @update:ratio="splitRatio = $event"
       />
+
+      <div
+        class="results-section"
+        :style="{ flex: `${1 - splitRatio} 1 0`, minHeight: '4rem' }"
+      >
+        <BottomTabs
+          :results="lastResults"
+          :generated-sql="generatedSql"
+          :can-drill-down="canDrill"
+          @drilldown="onDrilldown"
+          @load-row="onLoadRow"
+        />
+      </div>
     </div>
   </div>
 </template>
@@ -283,10 +302,16 @@ function onLoadRow(payload: { source: 'history' | 'saved'; row: HistoryRow | Sav
 .sql-tab.editor-mode :deep(.sql-preview) {
   opacity: 0.55;
 }
-.main-row {
+.split-pane {
   flex: 1;
   display: flex;
+  flex-direction: column;
   min-height: 0;
+}
+.main-row {
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
 }
 .entity-list {
   width: 18rem;
@@ -376,9 +401,9 @@ function onLoadRow(payload: { source: 'history' | 'saved'; row: HistoryRow | Sav
   overflow: hidden;
 }
 .results-section {
-  flex: 0 0 50%;
   min-height: 0;
   border-top: 1px solid var(--sapField_BorderColor);
   background: var(--sapBaseColor, white);
+  overflow: hidden;
 }
 </style>

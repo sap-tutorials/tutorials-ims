@@ -42,6 +42,24 @@ describe('generateAnalyticsQuery (Phase 5)', () => {
     expect(result.sql).toBeUndefined();
   });
 
+  it('returns errors (not throws) when spec.select[].ref is undefined', async () => {
+    const user = new cds.User.Privileged();
+    // Real-world malformed spec emitted by the LLM on Joule's first turn —
+    // before the fix this threw "Cannot read properties of undefined (reading
+    // 'alias')" inside checkColumnRef and crashed the chat stream.
+    const malformed = {
+      version: 1,
+      from: { entity: 'TaskRecords', alias: 'tr' },
+      joins: [], filterTree: null, groupBy: [],
+      select: [{ kind: 'column', id: 's1', ref: undefined }],
+      orderBy: [], limit: null,
+    };
+    const result = await dispatchTool('generateAnalyticsQuery', { spec: malformed }, user);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors[0].message).toMatch(/ref/i);
+    expect(result.sql).toBeUndefined();
+  });
+
   it('returns friendly error when spec missing', async () => {
     const user = new cds.User.Privileged();
     const result = await dispatchTool('generateAnalyticsQuery', {}, user);
