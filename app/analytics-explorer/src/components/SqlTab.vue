@@ -5,7 +5,11 @@ import QueryEditor from './QueryEditor.vue'
 import ClauseChipBar from './builder/ClauseChipBar.vue'
 import SqlPreview from './builder/SqlPreview.vue'
 import AutoGroupByBanner from './builder/AutoGroupByBanner.vue'
-import ResultsTab from './results/ResultsTab.vue'
+import BuilderHeader from './builder/BuilderHeader.vue'
+import BottomTabs from './results/BottomTabs.vue'
+import { useHistory } from '../composables/useHistory'
+import type { HistoryRow } from '../composables/useHistory'
+import type { SavedRow } from '../composables/useSavedQueries'
 import { useQuerySpec } from '../composables/useQuerySpec'
 import { useEntityGraph } from '../composables/useEntityGraph'
 import { runSelectQuery, type SqlResult } from '../api/sql'
@@ -120,11 +124,29 @@ function onBackToGrouped() {
   querySpec.popDrilldown()
   runFromChips()
 }
+
+// Phase 4: load-row from History or Saved tab. If the row's spec is non-null
+// v1 JSON, restore chip state via setSpec; otherwise paste SQL into Monaco
+// and flip to editor mode (Phase 1-3 history rows have spec=null).
+const { parseSpec: parseHistorySpec } = useHistory()
+
+function onLoadRow(payload: { source: 'history' | 'saved'; row: HistoryRow | SavedRow }) {
+  const row = payload.row
+  const parsed = parseHistorySpec(row.spec)
+  if (parsed) {
+    querySpec.setSpec(parsed)
+    if (mode.value === 'editor') querySpec.returnToBuilder()
+  } else {
+    editorRef.value?.setValue?.(row.sql)
+    querySpec.takeOverFromBuilder()
+  }
+}
 </script>
 
 <template>
   <div class="sql-tab" :class="{ 'editor-mode': mode === 'editor' }">
     <AutoGroupByBanner />
+    <BuilderHeader />
     <ClauseChipBar />
     <SqlPreview />
 
@@ -201,11 +223,12 @@ function onBackToGrouped() {
     </div>
 
     <div class="results-section">
-      <ResultsTab
+      <BottomTabs
         :results="lastResults"
         :generated-sql="generatedSql"
         :can-drill-down="canDrill"
         @drilldown="onDrilldown"
+        @load-row="onLoadRow"
       />
     </div>
   </div>
