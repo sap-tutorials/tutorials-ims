@@ -4,6 +4,7 @@ import '@ui5/webcomponents/dist/Button.js'
 import QueryEditor from './QueryEditor.vue'
 import ChartRenderer from './ChartRenderer.vue'
 import ChartTypeSwitcher from './ChartTypeSwitcher.vue'
+import ClauseChipBar from './builder/ClauseChipBar.vue'
 import { useChartConfig } from '../composables/useChartConfig'
 import { getCachedEntityMetadata, type ExposedEntity } from '../api/entities'
 import type { ChartData } from '../composables/useChartEngine'
@@ -50,6 +51,7 @@ function visualize() {
 
 <template>
   <div class="sql-tab">
+    <ClauseChipBar />
     <div class="main-row">
       <aside class="entity-list" aria-label="Exposed entities">
         <div class="entity-list-header">
