@@ -13,6 +13,13 @@ describe('SearchService', () => {
       { ID: 'search-t2', legacyId: 90002, slug: 'cap-getting-started', title: 'Getting Started with CAP', description: 'Build your first CAP app', primaryTag: 'SAP Cloud Application Programming Model', experienceTag: 'beginner', averageTimeToComplete: 45, status: 'ACTIVE' },
       { ID: 'search-t3', legacyId: 90003, slug: 'fiori-elements', title: 'SAP Fiori Elements', description: 'Create Fiori apps', primaryTag: 'SAP Fiori', experienceTag: 'intermediate', averageTimeToComplete: 60, status: 'ACTIVE' },
       { ID: 'search-t4', legacyId: 90004, slug: 'inactive-tutorial', title: 'Old Tutorial', description: 'Should not appear', primaryTag: 'Legacy', experienceTag: 'beginner', averageTimeToComplete: 10, status: 'INACTIVE' },
+      // 5 tag-only-match rows + 1 title-match row, used to prove ranking arithmetic.
+      { ID: 'search-tag-only-1', legacyId: 90011, slug: 'tag-only-1', title: 'Unrelated Title One',   description: 'No matching word.', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 10, status: 'ACTIVE' },
+      { ID: 'search-tag-only-2', legacyId: 90012, slug: 'tag-only-2', title: 'Unrelated Title Two',   description: 'No matching word.', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 10, status: 'ACTIVE' },
+      { ID: 'search-tag-only-3', legacyId: 90013, slug: 'tag-only-3', title: 'Unrelated Title Three', description: 'No matching word.', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 10, status: 'ACTIVE' },
+      { ID: 'search-tag-only-4', legacyId: 90014, slug: 'tag-only-4', title: 'Unrelated Title Four',  description: 'No matching word.', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 10, status: 'ACTIVE' },
+      { ID: 'search-tag-only-5', legacyId: 90015, slug: 'tag-only-5', title: 'Unrelated Title Five',  description: 'No matching word.', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 10, status: 'ACTIVE' },
+      { ID: 'search-trank',      legacyId: 90020, slug: 'rankprobe-tutorial', title: 'Rankprobe Tutorial', description: 'A tutorial whose title contains the rank-probe token.', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 10, status: 'ACTIVE' },
     ]);
 
     await INSERT.into(Missions).entries([
@@ -24,13 +31,26 @@ describe('SearchService', () => {
     ]);
 
     await INSERT.into(Tags).entries([
-      { ID: 'search-tag1', name: 'HANA Cloud', legacyId: 80001 },
-      { ID: 'search-tag2', name: 'CAP Node.js', legacyId: 80002 },
+      { ID: 'search-tag1', name: 'HANA Cloud',     label: 'SAP HANA Cloud',         legacyId: 80001 },
+      { ID: 'search-tag2', name: 'CAP Node.js',    label: 'CAP Node.js',            legacyId: 80002 },
+      { ID: 'search-tag3', name: 'sap-s-4hana',    label: 'SAP S/4HANA',            legacyId: 80003 },
+      { ID: 'search-tag4', name: 'btp-development', label: 'SAP BTP Development',   legacyId: 80004 },
+      { ID: 'search-tag5', name: 'fiori-elements', label: 'SAP Fiori Elements',     legacyId: 80005 },
+      { ID: 'search-rankprobe-tag', name: 'rankprobe', label: 'Rankprobe',          legacyId: 80999 },
     ]);
 
     await INSERT.into(TutorialTags).entries([
-      { tutorial_ID: 'search-t1', tag_ID: 'search-tag1' },
-      { tutorial_ID: 'search-t2', tag_ID: 'search-tag2' },
+      { tutorial_ID: 'search-t1', tag_ID: 'search-tag1' },  // HANA Cloud Setup -> "SAP HANA Cloud"
+      { tutorial_ID: 'search-t2', tag_ID: 'search-tag2' },  // CAP Getting Started -> "CAP Node.js"
+      { tutorial_ID: 'search-t3', tag_ID: 'search-tag3' },  // Fiori Elements -> "SAP S/4HANA" (tag-only signal)
+      { tutorial_ID: 'search-t3', tag_ID: 'search-tag5' },  // Fiori Elements -> "SAP Fiori Elements"
+      { tutorial_ID: 'search-t1', tag_ID: 'search-tag4' },  // HANA Cloud Setup -> "SAP BTP Development" (multi-token)
+      // Ranking distractors — 5 tutorials whose only "rankprobe" connection is via tag.
+      { tutorial_ID: 'search-tag-only-1', tag_ID: 'search-rankprobe-tag' },
+      { tutorial_ID: 'search-tag-only-2', tag_ID: 'search-rankprobe-tag' },
+      { tutorial_ID: 'search-tag-only-3', tag_ID: 'search-rankprobe-tag' },
+      { tutorial_ID: 'search-tag-only-4', tag_ID: 'search-rankprobe-tag' },
+      { tutorial_ID: 'search-tag-only-5', tag_ID: 'search-rankprobe-tag' },
     ]);
 
     await INSERT.into(TutorialBodyText).entries([
