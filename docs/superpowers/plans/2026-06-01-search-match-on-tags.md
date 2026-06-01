@@ -4,9 +4,9 @@
 
 **Goal:** Make `/search/$search=…` match against tutorial/mission/group tags (display labels and slugs) in addition to title/description, with title hits ranking above tag-only hits.
 
-**Architecture:** Add a denormalized `tagBag` column to the `SearchableItems` UNION-ALL view via correlated subqueries against `TutorialTags`/`MissionTags`/`GroupTags`. Extend the existing `applyWordBoundarySearch` predicate to OR over `tagBag`. Compute a `_searchRank` (title=+3, description=+2, primaryTag-or-tagBag=+1) **in Node** within the existing `after('READ')` hook, sort the page by rank-descending, then strip the field. Joule's `searchTutorials` chat tool inherits the change automatically — same predicate, same hooks.
+**Architecture:** Add a denormalized `tagBag` column to the `SearchableItems` UNION-ALL view via correlated subqueries against `TutorialTags`/`MissionTags`/`GroupTags`. Extend the existing `applyWordBoundarySearch` predicate to OR over `tagBag`. Add a `_searchRank` SQL column (CASE WHEN sum: title=+3, description=+2, primaryTag-or-tagBag=+1) to the SELECT via `cds.ql.expr` template literal in `before('READ')`, and prepend `ORDER BY _searchRank DESC`. Strip the field in the existing `after('READ')` hook. Joule's `searchTutorials` chat tool inherits the change automatically — same predicate, same hooks.
 
-**Why Node-side rank instead of SQL CASE-WHEN:** the codebase has no precedent for injecting arbitrary CASE-WHEN ranking expressions through CDS QL, and dropping to raw `db.run()` would bypass the OData runtime ($top/$skip/$count). Sorting a bounded ≤48-row page in Node is sub-millisecond; ranking lives entirely in `srv/search-service.js`. See spec section "Risks" for the page-skew caveat (acceptable trade-off).
+**Why SQL-side rank (not Node post-sort):** ranking must happen *before* page selection, otherwise paginated `$top=48` queries that hit a tag-only-match row cluster will leave title-matches stranded on page 2 — silently breaking acceptance criterion #2 in production. The right idiom in this codebase is `cds.ql.expr\`case when ... then 3 else 0 end\`` injected into `req.query.SELECT.columns`. This routes through CAP's CQN normalizer so HANA + SQLite both get correct SQL with parameterized literals.
 
 **Tech Stack:** CAP Node.js (cds), CDS view (UNION ALL with correlated subqueries), HANA Cloud (production) + SQLite (unit tests), Vitest, `string_agg` aggregate.
 
@@ -375,23 +375,157 @@ test "$(git rev-parse --abbrev-ref HEAD)" = "issue-154-search-tags" && \
 
 ---
 
-## Task 5: Add `_searchRank` virtual column and ORDER BY (green phase)
+## Task 5: Add `_searchRank` SQL column and ORDER BY (green phase)
 
 **Files:**
 - Modify: `srv/search-service.js`
 
-**Approach:** CDS QL has no native CASE-WHEN sum builder for an arbitrary projection; raw SQL via `db.run()` (the project's documented escape hatch — used in `srv/exports/*.js`, `srv/lib/*.js`, `srv/handlers/recommendations.js`) is also off-table because we need ranking inside the OData $top/$skip pipeline, not in a separate query. The pragmatic solution: **bypass CDS QL ranking entirely and post-rank in Node.** The `before('READ')` hook fetches the matching IDs at the per-page slice but pre-sorts in JS by recomputing the rank from the row's own columns. This sounds slow but the page is bounded at 48 — JS sort over 48 items is sub-millisecond.
+**Approach:** Add the rank as a real SQL column in the SELECT projection so HANA's optimizer ranks **before** page selection. The CDS QL idiom is `cds.ql.expr\`case when ... then 3 else 0 end\`` — these template literals route through CAP's CQN normalizer which both HANA + SQLite accept.
 
-This dodges the CDS-QL/raw-SQL impedance mismatch entirely. No `_searchRank` column ever leaves the DB; we add it in Node, sort, and deliver.
+The rank SQL must use the **same word-boundary `replace()` chain as the predicate** (otherwise rank can disagree with match — a row that matched at the predicate could rank 0 if the rank used plain LIKE). We extract a helper `_padCol(col)` to keep the chain DRY between predicate and rank.
 
-**Trade-off:** sort happens after the DB returns the page, so DB-side ordering (alphabetical by title etc.) determines which 48 rows arrive — not which 48 are highest-rank. For acceptance criterion #2 ("title hits don't get drowned"), this is sufficient: any row that matched will have its rank computed in Node, and title-rank-3 rows always sort above tag-rank-1 rows in JS regardless of how the DB ordered them. **The only failure mode is if the DB returns 48 tag-only rows on page 1 while title-match rows live on page 2.** Mitigation: query without paging (use a higher hard cap like 200) when `$search` is present, sort in Node, then slice to the requested $top/$skip.
+- [ ] **Step 5.1: Sanity-check `cds.ql.expr` template-literal availability**
 
-- [ ] **Step 5.1: Update `before('READ')` to fetch unpaged-then-rank-then-slice for search queries**
+```bash
+node -e "const cds = require('@sap/cds'); console.log(typeof cds.ql, typeof cds.ql.expr);"
+```
 
-In `srv/search-service.js`, replace the existing `before('READ', SearchableItems, ...)` block (around lines 54–62) with:
+Expected: `function function`. If `cds.ql.expr` is undefined, the project is on a CAP version older than December 2024 — fall back to building the CQN object manually (see Step 5.3 alternative form). Verify CAP version:
+
+```bash
+node -e "console.log(require('@sap/cds/package.json').version)"
+```
+
+If < 7.9.0, use the CQN-object alternative below.
+
+- [ ] **Step 5.2: Extract `_padCol` helper at the top of `srv/search-service.js`**
+
+Above the existing `applyWordBoundarySearch` function (line 11), add:
 
 ```js
-this.before('READ', SearchableItems, async (req) => {
+// Word-boundary normalizer used by both the search predicate and the rank
+// CASE-WHEN. Keeping rank in lock-step with match — a row that matches
+// ALWAYS gets rank ≥ 1.
+//
+// SQL fragment, embedded into template literals via `${cds.ql.expr.literal(...)}`
+// or directly inlined. The replace() chain pads common separators with spaces
+// so " % term % " word-boundary LIKE works on hyphenated tags, namespaced tags,
+// and prose punctuation.
+function _padCol(col) {
+  return `(' '||replace(replace(replace(replace(replace(replace(replace(replace(replace(`
+    + `lower(coalesce(${col},'')),'-',' '),'.',' '),',',' '),'/',' '),'>',' '),`
+    + `'(',' '),')',' '),':',' '),';',' ')||' ')`;
+}
+```
+
+- [ ] **Step 5.3: Refactor `applyWordBoundarySearch` to use `_padCol` and return tokens**
+
+Replace the body of `applyWordBoundarySearch` (lines 11-32) with:
+
+```js
+function applyWordBoundarySearch(query, term) {
+  const tokens = String(term ?? '')
+    .toLowerCase()
+    .trim()
+    .split(/\s+/)
+    .filter((t) => t.length >= 2);
+  if (!tokens.length) return tokens;
+
+  for (const tok of tokens) {
+    const safe = tok.replace(/[%_]/g, '');
+    if (!safe) continue;
+    const padded = `% ${safe} %`;
+    // Each token must match somewhere across title/description/primaryTag/tagBag;
+    // tokens AND together because each iteration adds another query.where clause.
+    query.where`(
+      ${cds.ql.expr.literal(_padCol('title'))} like ${padded}
+      or ${cds.ql.expr.literal(_padCol('description'))} like ${padded}
+      or ${cds.ql.expr.literal(_padCol('primaryTag'))} like ${padded}
+      or ${cds.ql.expr.literal(_padCol('tagBag'))} like ${padded}
+    )`;
+  }
+  return tokens;
+}
+```
+
+**If `cds.ql.expr.literal` is not available** (CAP < 7.9), keep the original four-OR template literal as today's code — just adding the fourth `or ${_padCol expanded inline}` clause. The literal embedding is just for readability; the verbose inline form is functionally identical and what's already in the file. Either way: this function returns `tokens`.
+
+- [ ] **Step 5.4: Add `attachSearchRank` helper**
+
+Above `export default class SearchService`, add:
+
+```js
+// Build OR-of-tokens fragment for one column, using the same _padCol normalize
+// as the predicate. Returns an SQL string with `?` placeholders + the param array.
+function _columnAnyTokenSQL(col, tokens) {
+  const parts = [];
+  const params = [];
+  for (const tok of tokens) {
+    const safe = tok.replace(/[%_]/g, '');
+    if (!safe) continue;
+    parts.push(`${_padCol(col)} like ?`);
+    params.push(`% ${safe} %`);
+  }
+  return { sql: parts.join(' or '), params };
+}
+
+// Append a `_searchRank` SQL column (CASE-WHEN sum) to req.query.SELECT.columns
+// and prepend `_searchRank DESC` to req.query.SELECT.orderBy. Rank arithmetic:
+//   +3 if any token matches title
+//   +2 if any token matches description
+//   +1 if any token matches primaryTag OR tagBag (single +1, not +2 if both)
+// Tag-only rows still surface (rank ≥ 1); they sort below title hits.
+//
+// Crucially: this runs INSIDE the SELECT, so HANA orders by rank BEFORE
+// applying $top/$skip. Title hits never get stranded on page 2.
+function attachSearchRank(query, tokens) {
+  if (!Array.isArray(tokens) || tokens.length === 0) return;
+  const t = _columnAnyTokenSQL('title', tokens);
+  const d = _columnAnyTokenSQL('description', tokens);
+  const p = _columnAnyTokenSQL('primaryTag', tokens);
+  const b = _columnAnyTokenSQL('tagBag', tokens);
+
+  const rankSQL = `(case when (${t.sql}) then 3 else 0 end`
+    + ` + case when (${d.sql}) then 2 else 0 end`
+    + ` + case when (${p.sql} or ${b.sql}) then 1 else 0 end)`;
+  const params = [...t.params, ...d.params, ...p.params, ...b.params];
+
+  const sel = query.SELECT;
+  // Ensure SELECT.columns is materialized before we push (`undefined` means "*").
+  if (!sel.columns) sel.columns = [{ ref: ['*'] }];
+
+  // CDS QL accepts xpr columns. The `func` form below is the documented escape
+  // hatch for SQL fragments — it preserves parameter binding for SQLite + HANA.
+  // Reference: https://cap.cloud.sap/docs/cds/cqn (column = expr; expr supports
+  // { func: name, args: [...] } and { xpr: [...] } shapes).
+  sel.columns.push({
+    as: '_searchRank',
+    xpr: [{ val: rankSQL, '=': 'literal' }, ...params.map((p) => ({ val: p }))]
+  });
+
+  // Prepend rank-DESC so any preexisting orderBy becomes the tiebreaker.
+  sel.orderBy = [{ ref: ['_searchRank'], sort: 'desc' }, ...(sel.orderBy ?? [])];
+}
+```
+
+**If the `xpr: [{ val, '=': 'literal' }, ...params]` shape doesn't bind params correctly** (look for empty result sets or "no parameters" errors), use the simpler raw-SQL form via `SELECT.columns(...)` template literal:
+
+```js
+// Alternative: use cds.ql tagged template directly — runtime composes SQL.
+// Less explicit about params, but matches what the predicate uses.
+sel.columns.push(cds.ql.expr`(case when (${cds.ql.expr.literal(t.sql)}) then 3 else 0 end
+  + case when (${cds.ql.expr.literal(d.sql)}) then 2 else 0 end
+  + case when (${cds.ql.expr.literal(p.sql)} or ${cds.ql.expr.literal(b.sql)}) then 1 else 0 end) as _searchRank`);
+```
+
+If neither form works on the project's CAP version, the documented escape hatch is to **monkey-patch the SQL builder** — but don't do that. Instead surface the issue back to the spec and consider Option B (un-page-then-slice) from the architectural review.
+
+- [ ] **Step 5.5: Wire `attachSearchRank` into `before('READ')`**
+
+Find the existing `before('READ', SearchableItems, ...)` block (around line 54-62). Replace with:
+
+```js
+this.before('READ', SearchableItems, (req) => {
   const sel = req.query?.SELECT;
   const search = sel?.search;
   if (!Array.isArray(search) || !search.length) return;
@@ -399,89 +533,47 @@ this.before('READ', SearchableItems, async (req) => {
   if (!phrase) return;
   delete sel.search;
   const tokens = applyWordBoundarySearch(req.query, phrase);
-  // Stash tokens on the request so the after('READ') hook can rank in Node.
-  // We deliberately do NOT push the rank into SQL — CAP/CDS QL has no portable
-  // way to inject an arbitrary CASE-WHEN expression into the SELECT, and
-  // dropping to db.run() raw SQL would bypass the OData runtime ($top/$expand
-  // /$count). Ranking in Node over the bounded result page is cheap.
-  req._searchTokens = tokens;
+  attachSearchRank(req.query, tokens);
 });
 ```
 
-Note the change to `async` — the hook is read-only-mutable so async is harmless. **Tokens are passed via `req._searchTokens`** because CDS doesn't have a built-in scratchpad on the request beyond `req.context`. Underscore prefix signals it's an internal handoff between hooks.
-
-- [ ] **Step 5.2: Update `after('READ')` to compute rank, sort, and strip**
-
-Replace the existing `after('READ', SearchableItems, ...)` block (lines 42–48) with:
+**Important — `$count=true` exemption.** When CAP issues a count round-trip, `req.query.SELECT.count` is set and `columns` may be replaced with a COUNT(*) projection. `attachSearchRank` adds a column unconditionally — but on a count query, that column gets discarded by the runtime (count queries select only count). Verify: add a temp `console.log(JSON.stringify(req.query.SELECT))` and request `?$search=cap&$count=true` — confirm two SELECTs hit the hook, one with `columns: [{ func: 'count' }]` and one with the full projection. If the count query crashes due to `_searchRank`, guard with:
 
 ```js
-this.after('READ', SearchableItems, (results, req) => {
+if (sel.count) return;  // Skip rank for count-only queries
+```
+
+- [ ] **Step 5.6: Update `after('READ')` to strip `_searchRank`**
+
+Replace the existing `after('READ')` hook (lines 42-48):
+
+```js
+this.after('READ', SearchableItems, (results) => {
   if (!results) return;
   const rows = Array.isArray(results) ? results : [results];
-
-  // Strip bodyText unconditionally (existing behavior).
-  for (const r of rows) {
-    if (r && 'bodyText' in r) delete r.bodyText;
-  }
-
-  // If this READ came through the $search predicate, compute rank in Node
-  // and sort in place. Tokens are stashed by before('READ') above.
-  const tokens = req?._searchTokens;
-  if (!Array.isArray(tokens) || tokens.length === 0) return;
-
   for (const r of rows) {
     if (!r) continue;
-    r._searchRank = computeRank(r, tokens);
-  }
-  rows.sort((a, b) => (b._searchRank ?? 0) - (a._searchRank ?? 0));
-
-  // Strip the rank field before the runtime serializes the response.
-  for (const r of rows) {
-    if (r && '_searchRank' in r) delete r._searchRank;
+    if ('bodyText' in r) delete r.bodyText;
+    if ('_searchRank' in r) delete r._searchRank;
   }
 });
 ```
 
-- [ ] **Step 5.3: Add the `computeRank` helper above the class**
-
-Above `export default class SearchService` in `srv/search-service.js`, add:
+`Array.isArray(results)` is false on count round-trips (results is a Number) — the existing `if (!results) return;` doesn't catch `0`. Add a guard:
 
 ```js
-// Per-column word-boundary normalize: same separator-replacement rules as the
-// SQL predicate, applied in JS. Keeping rank in lock-step with match — a row
-// that matched ALWAYS gets rank ≥ 1.
-function normalizeForMatch(s) {
-  if (s == null) return ' ';
-  return ' ' + String(s)
-    .toLowerCase()
-    .replace(/[-./,>():;]/g, ' ')
-    .replace(/\s+/g, ' ') + ' ';
-}
-
-function colMatchesAnyToken(value, tokens) {
-  const norm = normalizeForMatch(value);
-  for (const tok of tokens) {
-    if (tok.length < 2) continue;
-    if (norm.includes(' ' + tok + ' ')) return true;
+this.after('READ', SearchableItems, (results) => {
+  if (results == null || typeof results === 'number') return;
+  const rows = Array.isArray(results) ? results : [results];
+  for (const r of rows) {
+    if (!r) continue;
+    if ('bodyText' in r) delete r.bodyText;
+    if ('_searchRank' in r) delete r._searchRank;
   }
-  return false;
-}
-
-// Per-row rank: title=+3, description=+2, primaryTag-or-tagBag=+1.
-// Single +1 if either tag column matches (not +2 if both).
-function computeRank(row, tokens) {
-  let rank = 0;
-  if (colMatchesAnyToken(row.title, tokens)) rank += 3;
-  if (colMatchesAnyToken(row.description, tokens)) rank += 2;
-  if (colMatchesAnyToken(row.primaryTag, tokens)
-   || colMatchesAnyToken(row.tagBag, tokens)) rank += 1;
-  return rank;
-}
+});
 ```
 
-**Important:** the `replace(/[-./,>():;]/g, ' ')` JS regex must produce the same word boundaries as the SQL `replace(replace(...))` chain in `applyWordBoundarySearch`. The character set `-./,>():;` covers the same separators (hyphen, dot, comma, slash, angle-bracket, parens, colon, semicolon). Verified by reading the existing SQL chain in `srv/search-service.js`.
-
-- [ ] **Step 5.4: Run all tag-matching tests — all 5 must PASS**
+- [ ] **Step 5.7: Run all tag-matching tests — all 5 must PASS**
 
 ```bash
 timeout 120 npx vitest run test/search-service.test.js -t "tag matching" --reporter=verbose 2>&1 | tail -50
@@ -489,17 +581,14 @@ timeout 120 npx vitest run test/search-service.test.js -t "tag matching" --repor
 
 Expected: all 5 PASS, including the previously-failing ranking test.
 
-Troubleshooting:
+Troubleshooting — most failure modes here trace to CDS QL silent rejection (empty result sets, no error):
 
-- Ranking test fails with title row not first → check that `req._searchTokens` is being set (add a `console.log` in `before('READ')` after the assignment).
-- Ranking test fails because `computeRank` returns 0 for known-matching row → the JS normalize doesn't match what the SQL normalize did. Add a temporary `console.log({title: r.title, normalized: normalizeForMatch(r.title), tokens})` to verify token-vs-row alignment.
-- `_searchRank` shows up in response → strip-loop didn't run AFTER sort. Check the sort happens before the strip in the same `after('READ')` body.
+- Empty results on `$search=rankprobe` → the `xpr` shape didn't bind params. Switch to the alternative form in Step 5.4.
+- Ranking test fails because all rows have rank 0 → the SQL fragment is being string-escaped instead of injected. Confirm `cds.ql.expr.literal(...)` is wrapping the SQL fragment, not the run-time value.
+- `_searchRank` shows up in response → strip-loop didn't fire. Check `after('READ')` registration is on `SearchableItems` (not stale entity ref).
+- Count query crashes → add the `if (sel.count) return;` guard from Step 5.5.
 
-**Why this works on a 48-row page:** the DB returns rows in whatever order it picks (likely insertion order on SQLite, undefined on HANA). All 6 matching rows for `$search=rankprobe` come back in the page (since the matching set is small in tests); we then sort in Node by rank-DESC. In production with `$top=48`, even if the DB orders by some default, the rank sort guarantees title hits float to the top of the slice.
-
-**Caveat about pagination skew (production-only):** if a user paginates past `$skip=48` on a query where DB-default-ordering interleaves title and tag rows, page 2 may contain unranked-rendering tag-only rows that WOULD have outranked some page-1 tag-only rows. This is acceptable: paging on $search is not a strong contract, and the alternative (rank in SQL) is materially more complex. Documented as out-of-scope.
-
-- [ ] **Step 5.5: Run full unit test file**
+- [ ] **Step 5.8: Run full unit test file**
 
 ```bash
 timeout 120 npx vitest run test/search-service.test.js --reporter=verbose 2>&1 | tail -30
@@ -507,12 +596,12 @@ timeout 120 npx vitest run test/search-service.test.js --reporter=verbose 2>&1 |
 
 Expected: all PASS.
 
-- [ ] **Step 5.6: Commit**
+- [ ] **Step 5.9: Commit**
 
 ```bash
 test "$(git rev-parse --abbrev-ref HEAD)" = "issue-154-search-tags" && \
   git add srv/search-service.js && \
-  git commit -m "feat(search): rank title hits above tag hits via Node post-sort (#154)"
+  git commit -m "feat(search): rank title hits above tag hits via SQL CASE-WHEN (#154)"
 ```
 
 ---
@@ -613,20 +702,45 @@ describe.runIf(isSafeForWrites())('SearchService tag matching (#154, hybrid)', (
     const { Tutorials, Tags, TutorialTags } = cds.entities('com.sap.developers.ims');
     await INSERT.into(Tags).entries([
       { ID: '__TEST__-tag-154', name: '__test__-tag-154', label: '__TEST__ Searchable Label', legacyId: 99154 },
+      // Used by the rank-on-real-HANA test below: 5 distractors carry this tag,
+      // 1 control tutorial carries it in the title only. If rank ordering
+      // regresses on HANA, the title row no longer comes first.
+      { ID: '__TEST__-rank-tag', name: '__test__-rank-tag', label: '__TEST__ HanaRankProbe Label', legacyId: 99156 },
     ]);
     await INSERT.into(Tutorials).entries([
       { ID: '__TEST__-tut-154', legacyId: 99155, slug: '__test__-tagged-tutorial', title: '__TEST__ Tutorial', description: '_t_', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 1, status: 'ACTIVE' },
+      // Title-match row — token "HanaRankProbe" appears ONLY in this title.
+      { ID: '__TEST__-rank-title', legacyId: 99160, slug: '__test__-rank-title-tutorial', title: '__TEST__ HanaRankProbe Title Tutorial', description: '_r_', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 1, status: 'ACTIVE' },
+      // 5 tag-only-match rows — title contains no probe token.
+      { ID: '__TEST__-rank-d1', legacyId: 99161, slug: '__test__-rank-distractor-1', title: '__TEST__ Distractor One', description: '_d_', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 1, status: 'ACTIVE' },
+      { ID: '__TEST__-rank-d2', legacyId: 99162, slug: '__test__-rank-distractor-2', title: '__TEST__ Distractor Two', description: '_d_', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 1, status: 'ACTIVE' },
+      { ID: '__TEST__-rank-d3', legacyId: 99163, slug: '__test__-rank-distractor-3', title: '__TEST__ Distractor Three', description: '_d_', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 1, status: 'ACTIVE' },
+      { ID: '__TEST__-rank-d4', legacyId: 99164, slug: '__test__-rank-distractor-4', title: '__TEST__ Distractor Four', description: '_d_', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 1, status: 'ACTIVE' },
+      { ID: '__TEST__-rank-d5', legacyId: 99165, slug: '__test__-rank-distractor-5', title: '__TEST__ Distractor Five', description: '_d_', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 1, status: 'ACTIVE' },
     ]);
     await INSERT.into(TutorialTags).entries([
       { tutorial_ID: '__TEST__-tut-154', tag_ID: '__TEST__-tag-154' },
+      // Tag-only distractors:
+      { tutorial_ID: '__TEST__-rank-d1', tag_ID: '__TEST__-rank-tag' },
+      { tutorial_ID: '__TEST__-rank-d2', tag_ID: '__TEST__-rank-tag' },
+      { tutorial_ID: '__TEST__-rank-d3', tag_ID: '__TEST__-rank-tag' },
+      { tutorial_ID: '__TEST__-rank-d4', tag_ID: '__TEST__-rank-tag' },
+      { tutorial_ID: '__TEST__-rank-d5', tag_ID: '__TEST__-rank-tag' },
+      // The title-match row deliberately has NO tag — it matches via title only.
     ]);
   });
 
   afterAll(async () => {
     const { Tutorials, Tags, TutorialTags } = cds.entities('com.sap.developers.ims');
-    await DELETE.from(TutorialTags).where({ tutorial_ID: '__TEST__-tut-154' });
-    await DELETE.from(Tutorials).where({ ID: '__TEST__-tut-154' });
+    const tutorialIds = ['__TEST__-tut-154', '__TEST__-rank-title',
+      '__TEST__-rank-d1', '__TEST__-rank-d2', '__TEST__-rank-d3',
+      '__TEST__-rank-d4', '__TEST__-rank-d5'];
+    for (const id of tutorialIds) {
+      await DELETE.from(TutorialTags).where({ tutorial_ID: id });
+      await DELETE.from(Tutorials).where({ ID: id });
+    }
     await DELETE.from(Tags).where({ ID: '__TEST__-tag-154' });
+    await DELETE.from(Tags).where({ ID: '__TEST__-rank-tag' });
   });
 
   it('matches a tutorial by tag label only on real HANA', async () => {
@@ -638,6 +752,23 @@ describe.runIf(isSafeForWrites())('SearchService tag matching (#154, hybrid)', (
     );
     const slugs = results.map(r => r.slug);
     expect(slugs).toContain('__test__-tagged-tutorial');
+  });
+
+  it('SQL rank: title hit comes first even with 5 tag-only distractors on HANA', async () => {
+    // Acceptance criterion #2 — this is THE production-shape rank test.
+    // SQLite (unit) can't catch HANA ORDER BY divergence; this one does.
+    const srv = await cds.connect.to('SearchService');
+    const results = await srv.run(
+      SELECT.from('SearchService.SearchableItems').search('HanaRankProbe').limit(20)
+    );
+    const slugs = results.map(r => r.slug);
+    expect(slugs[0]).toBe('__test__-rank-title-tutorial');
+    // All 5 distractors must follow.
+    for (const s of ['__test__-rank-distractor-1', '__test__-rank-distractor-2',
+      '__test__-rank-distractor-3', '__test__-rank-distractor-4', '__test__-rank-distractor-5']) {
+      expect(slugs).toContain(s);
+      expect(slugs.indexOf(s)).toBeGreaterThan(0);
+    }
   });
 
   it('LOB-locator regression: select title and tagBag together returns both populated', async () => {
