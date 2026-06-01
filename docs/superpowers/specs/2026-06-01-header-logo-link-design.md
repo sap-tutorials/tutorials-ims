@@ -64,6 +64,8 @@ In the existing IIFE inside `header.html` (around line 75-326), add two things:
 
    Setting it once at script execution time is sufficient — the property is read by UI5 on each render. We do not need to re-apply it later.
 
+   **Implementation note:** the property name inside `accessibilityAttributes.logo` is `name` (not `accessibleName`) — confirmed against the UI5 ShellBar v2 API in this session. Implementer should re-confirm via the UI5 MCP at edit time, since UI5 occasionally renames sub-properties between minor versions.
+
 2. **Listen for the logo-click event** on the shellbar. Register both the prefixed and unprefixed event names — UI5 v2 emits `ui5-logo-click` officially, but the unprefixed `logo-click` is also documented in older release notes and a one-line dual registration costs nothing while protecting against any version skew between the bootstrap and the runtime:
 
    ```js
@@ -93,7 +95,7 @@ No backend changes — no unit or hybrid tests added.
 
 Existing smoke test [test/smoke/static-content.test.js](../../../test/smoke/static-content.test.js) loads `/` and pages that embed `header.html`. We extend it with two assertions over the rendered HTML for `/` (the navigator):
 
-- Response contains the literal substring `logo: { role: 'link'` — confirms the JS hook is shipped *and* it is wiring the **logo** slot specifically (not some other slot's accessibility attributes).
+- Response matches the regex `/logo:\s*\{\s*role:\s*['"]link['"]/` — confirms the JS hook is shipped *and* it is wiring the **logo** slot specifically (not some other slot's accessibility attributes). Whitespace-tolerant so it survives any future JS minifier pass over the inline script.
 - Response contains the literal string `SAP Tutorial Platform — home` — confirming the aria name is in the bundle.
 
 Both checks are string-presence over the served HTML. They survive Hugo's HTML minifier ([memory: hugo-minifier-strips-quotes](../../../C:/Users/I809764/.claude/projects/d--projects-tutorials-poc/memory/feedback_hugo_minifier_strips_quotes.md)) because we look for substrings inside the inline `<script>` block, which is preserved verbatim.
