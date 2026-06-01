@@ -262,10 +262,10 @@ The chat orchestrator at [srv/lib/chat-orchestrator.js:189-225](srv/lib/chat-orc
 | Layer | File | What it asserts |
 |---|---|---|
 | **Unit** (in-memory SQLite) | `test/search-tag.test.js` (new) | (a) Seed 4 tutorials with overlapping tags; search for a label only present in `Tags.label` returns the matching tutorial. (b) Searching for the slug also matches. (c) **Ordering with distractors:** seed 5 tag-only matching rows + 1 title-matching row for the same query; assert the title row is `value[0]` and all 5 tag rows follow (proves rank arithmetic, not just first-row ordering). (d) `_searchRank` is not present in any returned row (after-hook strips it). (e) Multi-token query "sap btp" matches a row whose title has "sap" and whose tagBag has "btp" — confirms AND-across-tokens still spans the new column. |
-| **Hybrid** (real HANA) | `test/hybrid/search-hana.test.js` (extend) | Three additions: (1) Search for a tag label whose row data is real HANA test data; expect ≥ 1 hit, no `_searchRank` field. (2) **LOB-locator regression check:** select `_searchRank, title, tagBag` together in one round-trip and assert all three populate (confirms `String(5000)` typing keeps the read on the metadata path, not the LOB-locator path). (3) Timing assertion: 50-row page over `$search=cap` completes < 2 s. |
+| **Hybrid** (real HANA) | `test/hybrid/search-service.test.js` (extend) | Three additions: (1) Search for a tag label whose row data is real HANA test data; expect ≥ 1 hit, no `_searchRank` field. (2) **LOB-locator regression check:** select `_searchRank, title, tagBag` together in one round-trip and assert all three populate (confirms `String(5000)` typing keeps the read on the metadata path, not the LOB-locator path). (3) Timing assertion: 50-row page over `$search=cap` completes < 2 s. |
 | **Smoke** (deployed) | `test/smoke/search.test.js` (extend) | `GET /search/SearchableItems?$search=BTP&$top=10` returns ≥ 1 hit; assert no row has `_searchRank`. |
 
-The unit test pattern follows [test/hybrid/search-hana.test.js](test/hybrid/search-hana.test.js) (existing) for setup/teardown shape; SQLite is fine for the predicate logic since the only HANA-specific construct (`string_agg`) is also supported by SQLite ≥ 3.44.
+The unit test pattern follows [test/hybrid/search-service.test.js](test/hybrid/search-service.test.js) (existing) for setup/teardown shape; SQLite is fine for the predicate logic since the only HANA-specific construct (`string_agg`) is also supported by SQLite ≥ 3.44.
 
 ## Migration & rollout
 
@@ -311,5 +311,5 @@ None.
 - [db/schema.cds](db/schema.cds) — `Tags`, `TutorialTags`, `MissionTags`, `GroupTags`
 - [srv/lib/chat-orchestrator.js:189-225](srv/lib/chat-orchestrator.js#L189-L225) — Joule `searchTutorials` tool
 - [hugo-apps/src/navigator/useSearch.ts](hugo-apps/src/navigator/useSearch.ts) — frontend consumer (unchanged)
-- [test/hybrid/search-hana.test.js](test/hybrid/search-hana.test.js) — existing hybrid test
+- [test/hybrid/search-service.test.js](test/hybrid/search-service.test.js) — existing hybrid test
 - [test/smoke/search.test.js](test/smoke/search.test.js) — existing smoke test
