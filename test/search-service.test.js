@@ -19,7 +19,10 @@ describe('SearchService', () => {
       { ID: 'search-tag-only-3', legacyId: 90013, slug: 'tag-only-3', title: 'Unrelated Title Three', description: 'No matching word.', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 10, status: 'ACTIVE' },
       { ID: 'search-tag-only-4', legacyId: 90014, slug: 'tag-only-4', title: 'Unrelated Title Four',  description: 'No matching word.', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 10, status: 'ACTIVE' },
       { ID: 'search-tag-only-5', legacyId: 90015, slug: 'tag-only-5', title: 'Unrelated Title Five',  description: 'No matching word.', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 10, status: 'ACTIVE' },
-      { ID: 'search-trank',      legacyId: 90020, slug: 'rankprobe-tutorial', title: 'Rankprobe Tutorial', description: 'A tutorial whose title contains the rank-probe token.', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 10, status: 'ACTIVE' },
+      { ID: 'search-trank',      legacyId: 90020, slug: 'rankprobe-tutorial', title: 'Rankprobe Tutorial', description: 'A tutorial whose title contains the rankprobe token.', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 10, status: 'ACTIVE' },
+      // Description-only match (rank=2): proves the 3-tier rank arithmetic
+      // (title=3 > description=2 > tag-only=1) instead of just "title row first".
+      { ID: 'search-tdesc',      legacyId: 90021, slug: 'rankprobe-desc-tutorial', title: 'Generic Tutorial Title', description: 'Body mentions rankprobe in passing.', primaryTag: '', experienceTag: 'beginner', averageTimeToComplete: 10, status: 'ACTIVE' },
     ]);
 
     await INSERT.into(Missions).entries([
@@ -209,6 +212,72 @@ describe('SearchService', () => {
       const { status } = await project.get('/search/SearchableItems',
         { validateStatus: () => true });
       expect(status).toBe(200);
+    });
+  });
+
+  describe('tag matching (#154)', () => {
+    it('matches tutorials by tag label only present in Tags.label', async () => {
+      // search-t3 (Fiori Elements) has tag label "SAP S/4HANA". The title
+      // contains neither "S/4HANA" nor "S 4hana" — only the tag label does.
+      const { data } = await project.get('/search/SearchableItems?$search=S 4hana');
+      const slugs = data.value.map(i => i.slug);
+      expect(slugs).toContain('fiori-elements');
+    });
+
+    it('matches tutorials by tag slug', async () => {
+      // search-t3 also carries slug "sap-s-4hana". Searching for the slug
+      // word should match the same row.
+      const { data } = await project.get('/search/SearchableItems?$search=sap s 4hana');
+      const slugs = data.value.map(i => i.slug);
+      expect(slugs).toContain('fiori-elements');
+    });
+
+    it('orders title-match above description-match above tag-only matches', async () => {
+      // search-trank matches via title (rank=3 - "Rankprobe Tutorial");
+      // search-tdesc matches via description only (rank=2 - "rankprobe in passing");
+      // search-tag-only-1..5 match only via the "Rankprobe" tag (rank=1).
+      // Acceptance criterion #2: strict 3-tier ordering, NOT just "title first".
+      const { data } = await project.get('/search/SearchableItems?$search=rankprobe');
+      const slugs = data.value.map(i => i.slug);
+      expect(slugs[0]).toBe('rankprobe-tutorial');
+      // Description-only hit must follow title hit AND precede tag-only hits.
+      expect(slugs.indexOf('rankprobe-desc-tutorial')).toBeGreaterThan(0);
+      const tagOnly = ['tag-only-1', 'tag-only-2', 'tag-only-3', 'tag-only-4', 'tag-only-5'];
+      for (const s of tagOnly) {
+        expect(slugs).toContain(s);
+        expect(slugs.indexOf(s)).toBeGreaterThan(slugs.indexOf('rankprobe-desc-tutorial'));
+      }
+    });
+
+    it('does not leak _searchRank via OData response', async () => {
+      const { data } = await project.get('/search/SearchableItems?$search=hana');
+      expect(data.value.length).toBeGreaterThan(0);
+      for (const row of data.value) {
+        expect(row).not.toHaveProperty('_searchRank');
+      }
+    });
+
+    it('does not leak _searchRank via internal srv.run calls (Joule path)', async () => {
+      // Joule's searchTutorials chat tool calls SearchService.SearchableItems
+      // via cds.connect.to(...).run(SELECT...). The before/after('READ') hooks
+      // fire on this path too — verify the strip works for internal callers,
+      // not just the OData serializer.
+      const srv = await cds.connect.to('SearchService');
+      const rows = await srv.run(
+        SELECT.from('SearchService.SearchableItems').search('hana')
+      );
+      expect(rows.length).toBeGreaterThan(0);
+      for (const r of rows) {
+        expect(r).not.toHaveProperty('_searchRank');
+      }
+    });
+
+    it('multi-token query AND-matches across columns including tagBag', async () => {
+      // search-t1 has title "SAP HANA Cloud Setup" + tag "SAP BTP Development".
+      // Token "hana" matches title; token "btp" matches tagBag. Both AND.
+      const { data } = await project.get('/search/SearchableItems?$search=hana btp');
+      const slugs = data.value.map(i => i.slug);
+      expect(slugs).toContain('hana-cloud-setup');
     });
   });
 });
