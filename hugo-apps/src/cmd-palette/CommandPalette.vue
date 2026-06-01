@@ -45,21 +45,24 @@
 
         <template v-if="tutorialResults.length">
           <div class="cmdk__group-label">Tutorials</div>
-          <button
+          <a
             v-for="(item, i) in tutorialResults"
             :key="`t-${item.id}`"
-            :class="['cmdk__item', { 'cmdk__item--active': activeIndex === actionResults.length + i }]"
+            :ref="(el) => { if (el) tutorialRefs[i] = el as HTMLAnchorElement }"
+            :href="`/tutorials/${item.slug}`"
+            :class="['cmdk__item', 'cmdk__item--link', { 'cmdk__item--active': activeIndex === actionResults.length + i }]"
+            data-vt-card="navigator"
             role="option"
             :aria-selected="activeIndex === actionResults.length + i"
             @mouseenter="activeIndex = actionResults.length + i"
-            @click="runItem(item)"
+            @click="close()"
           >
             <span class="cmdk__item-icon" data-icon="course-book" aria-hidden="true"></span>
             <span class="cmdk__item-content">
-              <span class="cmdk__item-label">{{ item.label }}</span>
+              <span class="cmdk__item-label nav-card__title">{{ item.label }}</span>
               <span v-if="item.hint" class="cmdk__item-hint">{{ item.hint }}</span>
             </span>
-          </button>
+          </a>
         </template>
 
         <div v-if="!actionResults.length && !tutorialResults.length" class="cmdk__empty">
@@ -90,6 +93,7 @@ const inputRef = ref<HTMLInputElement | null>(null)
 const listRef = ref<HTMLElement | null>(null)
 const searching = ref(false)
 const tutorialResults = ref<PaletteAction[]>([])
+const tutorialRefs = ref<HTMLAnchorElement[]>([])
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let pageActions: PaletteAction[] = []
@@ -136,8 +140,19 @@ function scrollActiveIntoView() {
 
 function runActive() {
   const i = activeIndex.value
-  if (i < actionResults.value.length) runItem(actionResults.value[i])
-  else runItem(tutorialResults.value[i - actionResults.value.length])
+  if (i < actionResults.value.length) {
+    runItem(actionResults.value[i])
+    return
+  }
+  const tIndex = i - actionResults.value.length
+  const anchor = tutorialRefs.value[tIndex]
+  if (anchor) {
+    close()
+    anchor.click() // fires native click → cross-doc VT
+  } else {
+    // Fallback to the action's run closure (window.location.href)
+    runItem(tutorialResults.value[tIndex])
+  }
 }
 
 function runItem(item: PaletteAction | undefined) {
@@ -160,6 +175,7 @@ function onGlobalKeydown(e: KeyboardEvent) {
 }
 
 async function searchTutorials(term: string) {
+  tutorialRefs.value = []
   if (term.length < 2) {
     tutorialResults.value = []
     searching.value = false
@@ -186,6 +202,7 @@ async function searchTutorials(term: string) {
           label: row.title,
           hint: meta || undefined,
           icon: 'course-book',
+          slug: row.slug,
           run: (close: () => void) => {
             close()
             window.location.href = `/tutorials/${row.slug}`
@@ -319,6 +336,19 @@ onUnmounted(() => {
 .cmdk__item--active {
   background: var(--sapList_SelectionBackgroundColor, var(--sapList_Hover_Background));
   color: var(--sapList_Active_TextColor, var(--sapTextColor));
+}
+.cmdk__item--link {
+  /* Tutorial-result rows are rendered as <a> for cross-document View
+     Transitions. Reset anchor defaults so they render identically to
+     the <button> action rows. */
+  color: inherit;
+  text-decoration: none;
+}
+.cmdk__item--link:hover,
+.cmdk__item--link:focus,
+.cmdk__item--link:visited {
+  color: inherit;
+  text-decoration: none;
 }
 .cmdk__item-icon {
   width: 1rem;

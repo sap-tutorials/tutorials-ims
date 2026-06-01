@@ -10,6 +10,17 @@
 .mission-grid li, .tutorial-grid li { background: var(--sapTile_Background, #fff); border: 1px solid var(--sapTile_BorderColor, #e5e5e5); border-radius: 0.5rem; padding: 1rem; }
 .mission-grid a, .tutorial-grid a { text-decoration: none; color: inherit; display: block; }
 .mission-grid h3, .tutorial-grid h3 { margin: 0 0 0.5rem; font-size: 1.1rem; }
+.tutorial-grid .nav-card__title {
+  /* Mirror the navigator card-title typography so the cross-document
+     view-transition (data-vt-card="navigator" → hero-title) starts and
+     ends at visually equivalent text styling. Source of truth:
+     hugo-apps/src/navigator/TutorialNavigator.vue .nav-card__title. */
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--sapTextColor, #32363a);
+  margin: 0 0 0.5rem;
+  line-height: 1.4;
+}
 .mission-grid p, .tutorial-grid p { margin: 0 0 0.5rem; color: var(--sapTextColor, #555); font-size: 0.9rem; }
 .tutorial-grid .meta { color: var(--sapNeutralTextColor, #666); font-size: 0.8rem; }
 .topic-grid { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 0.5rem; }

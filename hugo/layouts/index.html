@@ -37,8 +37,8 @@
     <ul class="tutorial-grid">
       {{ range first 12 (where .Site.RegularPages "Type" "tutorials").ByLastmod.Reverse }}
       <li>
-        <a href="{{ .RelPermalink }}">
-          <h3>{{ .Title }}</h3>
+        <a href="{{ .RelPermalink }}" data-vt-card="navigator">
+          <h3 class="nav-card__title">{{ .Title }}</h3>
           <p>{{ .Params.description | truncate 140 }}</p>
           <p class="meta">{{ .Params.level }} · {{ .Params.time }} min</p>
         </a>
