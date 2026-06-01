@@ -21,11 +21,15 @@
   {{/* Author avatar + name + last updated */}}
   <div class="author-line-section">
     {{ if $displayLogin }}
-    <img src="https://github.com/{{ $displayLogin }}.png?size=40"
-         alt="{{ $displayName }}" class="author-line-avatar"
-         onerror="this.classList.add('tutorial-hidden');this.nextElementSibling.classList.remove('tutorial-hidden')"
-    />
-    <span class="author-line-avatar author-line-avatar-placeholder tutorial-hidden">{{ substr $displayName 0 1 }}</span>
+    <a href="https://github.com/{{ $displayLogin }}" class="author-line-avatar-link" target="_blank" rel="noopener" aria-label="{{ $displayName }} on GitHub">
+      <img src="https://github.com/{{ $displayLogin }}.png?size=32"
+           srcset="https://github.com/{{ $displayLogin }}.png?size=32 1x, https://github.com/{{ $displayLogin }}.png?size=64 2x"
+           width="32" height="32"
+           alt="{{ $displayName }}" class="author-line-avatar"
+           onerror="this.classList.add('tutorial-hidden');this.nextElementSibling.classList.remove('tutorial-hidden')"
+      />
+      <span class="author-line-avatar author-line-avatar-placeholder tutorial-hidden">{{ substr $displayName 0 1 }}</span>
+    </a>
     {{ else }}
     <span class="author-line-avatar author-line-avatar-placeholder">{{ substr $displayName 0 1 }}</span>
     {{ end }}
@@ -56,6 +60,8 @@
       {{ range first 3 . }}
       <a href="https://github.com/{{ .login }}" class="author-line-contrib-avatar-link" target="_blank" rel="noopener" title="{{ .name }}">
         <img src="https://github.com/{{ .login }}.png?size=28"
+             srcset="https://github.com/{{ .login }}.png?size=28 1x, https://github.com/{{ .login }}.png?size=56 2x"
+             width="26" height="26"
              alt="{{ .name }}" class="author-line-contrib-avatar"
              onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
         />
@@ -72,6 +78,8 @@
         {{ range . }}
         <a href="https://github.com/{{ .login }}" class="author-line-dropdown-item" role="menuitem" target="_blank" rel="noopener">
           <img src="https://github.com/{{ .login }}.png?size=24"
+               srcset="https://github.com/{{ .login }}.png?size=24 1x, https://github.com/{{ .login }}.png?size=48 2x"
+               width="24" height="24"
                alt="{{ .name }}" class="author-line-dropdown-avatar"
                onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
           />

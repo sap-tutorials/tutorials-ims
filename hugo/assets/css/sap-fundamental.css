@@ -1286,6 +1286,14 @@ blockquote {
   flex-shrink: 0;
 }
 
+.author-line-avatar-link {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  text-decoration: none;
+  border-radius: 50%;
+}
+
 .author-line-avatar-placeholder {
   display: flex;
   align-items: center;
@@ -1341,6 +1349,9 @@ a.author-line-name:hover {
 .author-line-contrib-avatar-link {
   display: flex;
   margin-left: -4px;
+  cursor: pointer;
+  text-decoration: none;
+  border-radius: 50%;
 }
 
 .author-line-contrib-avatar-link:first-child {
