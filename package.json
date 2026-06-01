@@ -23,6 +23,7 @@
     "publish-content:qa": "tsx scripts/publish-content.ts --channel qa",
     "qa:full": "npm run fetch-tutorials:qa && npm run build:qa && npm run publish-content:qa",
     "setup-dev-data": "cds bind --exec -- node scripts/setup-dev-data.cjs",
+    "seed-tag-labels": "tsx scripts/seed-tag-labels.ts",
     "migrate:reference": "node scripts/migrate-reference-data.js",
     "migrate:users": "node scripts/migrate-user-progress.js",
     "migrate:hana": "node scripts/migrate-from-hana.js",
