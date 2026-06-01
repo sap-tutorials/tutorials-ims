@@ -229,7 +229,11 @@
           {{ with .Params.youWillLearn }}
           <div class="you-will-learn">
             <h3>You will learn</h3>
-            <ul>{{ range . }}<li><span class="check-icon">✔</span> {{ . | markdownify }}</li>{{ end }}</ul>
+            {{/* Wrap markdownify output in a span so the <li> flex container has exactly two
+                 flex items (icon + text) — otherwise inline <a>/<code> from markdownify become
+                 separate "anonymous flex items" and gap:0.5rem visually splits them into columns.
+                 See issue #163. */}}
+            <ul>{{ range . }}<li><span class="check-icon">✔</span><span class="check-text">{{ . | markdownify }}</span></li>{{ end }}</ul>
           </div>
           {{ end }}
           {{ partial "tutorial-author.html" . }}

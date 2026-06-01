@@ -12,7 +12,8 @@
     {{ with .Params.youWillLearn }}
     <div class="you-will-learn">
       <h3>You will learn</h3>
-      <ul>{{ range . }}<li><span class="check-icon">✔</span> {{ . | markdownify }}</li>{{ end }}</ul>
+      {{/* Wrap markdownify output in a span — see issue #163 / u1-object-page.html for rationale. */}}
+      <ul>{{ range . }}<li><span class="check-icon">✔</span><span class="check-text">{{ . | markdownify }}</span></li>{{ end }}</ul>
     </div>
     {{ end }}
 
