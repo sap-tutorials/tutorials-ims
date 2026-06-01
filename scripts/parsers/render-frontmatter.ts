@@ -1,5 +1,6 @@
 import { stringify as yamlStringify } from 'yaml'
 import { humanizeTag, splitPrerequisites } from './frontmatter-utils.js'
+import type { TagLabelRegistry } from './frontmatter-utils.js'
 import { escapeHugoDelimiters } from './hugo-delimiters.js'
 import { stripDangerousHtml } from './sanitize-html.js'
 import type { TutorialStep, TutorialNavEntry } from './types.js'
@@ -21,6 +22,7 @@ export interface RenderHugoFrontmatterArgs {
   lastUpdated: string
   createdAt: string
   contributors: Array<{ name: string; login: string; email: string; avatarUrl: string }>
+  registry?: TagLabelRegistry
 }
 
 export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
@@ -41,10 +43,13 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
     lastUpdated,
     createdAt,
     contributors,
+    registry,
   } = args
 
   const cleanTags = tags.map(t => t.replace(/\\/g, ''))
   const cleanPrimaryTag = primaryTag.replace(/\\/g, '')
+
+  const dedupedRawSlugs = [...new Set([cleanPrimaryTag, ...cleanTags])].filter(s => s.length > 0)
 
   const fm: Record<string, unknown> = {
     type: 'tutorials',
@@ -61,7 +66,8 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
     prev: nav.prev,
     next: nav.next,
     aliases: [`/tutorials/${slug}.html`],
-    displayTags: [...new Set([cleanPrimaryTag, ...cleanTags])].map(humanizeTag).filter(t => t.length > 0),
+    displayTags: dedupedRawSlugs.map(s => humanizeTag(s, registry)).filter(t => t.length > 0),
+    displayTagSlugs: dedupedRawSlugs,
     youWillLearn,
     prerequisites: splitPrerequisites(prerequisites),
     lastUpdated: lastUpdated || null,
