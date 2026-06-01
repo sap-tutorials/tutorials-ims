@@ -193,12 +193,19 @@ export async function dispatchTool(name, args, user) {
       }
       const search = await cds.connect.to('SearchService');
       const { SearchableItems } = search.entities;
+      // Explicit projection lets SearchService.before('READ') attach the
+      // _searchRank column so title hits are ordered above tag-only hits
+      // (issue #154). Without explicit columns the rank fallback early-exits
+      // and Joule sees results in DB-natural order.
       const hits = await search.run(
-        SELECT.from(SearchableItems).search(args.query).limit(5)
+        SELECT.from(SearchableItems)
+          .columns('slug', 'title', 'description', 'taskType', 'primaryTag')
+          .search(args.query)
+          .limit(5)
       );
       const baseHits = (hits || []).map(h => ({
         slug: h.slug, title: h.title, description: h.description,
-        type: h.type, primaryTag: h.primaryTag
+        type: h.taskType, primaryTag: h.primaryTag
       }));
       // Annotate each hit with the user's status so the LLM can avoid
       // re-suggesting completed items and prioritize in-progress ones.

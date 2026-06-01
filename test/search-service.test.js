@@ -272,6 +272,30 @@ describe('SearchService', () => {
       }
     });
 
+    it('orders ranked results when internal callers project columns explicitly (Joule path)', async () => {
+      // The Joule path passes explicit columns (slug/title/description/taskType/
+      // primaryTag) so the rank column gets attached before $top truncates
+      // results. Without ranking on this path, .limit(5) could strand title
+      // hits behind tag-only matches — see plan-review iteration 3 issue I-2.
+      const srv = await cds.connect.to('SearchService');
+      const rows = await srv.run(
+        SELECT.from('SearchService.SearchableItems')
+          .columns('slug', 'title', 'description', 'taskType', 'primaryTag')
+          .search('rankprobe')
+          .limit(5)
+      );
+      const slugs = rows.map(r => r.slug);
+      // Title hit must be first; tag-only-match rows fill the remaining slots.
+      // Description-match (rankprobe-desc-tutorial) is rank=2 → should also
+      // outrank tag-only rows (rank=1).
+      expect(slugs[0]).toBe('rankprobe-tutorial');
+      expect(slugs.indexOf('rankprobe-desc-tutorial')).toBeGreaterThan(0);
+      // No leak even on this explicit-projection path.
+      for (const r of rows) {
+        expect(r).not.toHaveProperty('_searchRank');
+      }
+    });
+
     it('multi-token query AND-matches across columns including tagBag', async () => {
       // search-t1 has title "SAP HANA Cloud Setup" + tag "SAP BTP Development".
       // Token "hana" matches title; token "btp" matches tagBag. Both AND.

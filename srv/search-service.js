@@ -1,5 +1,16 @@
 import cds from '@sap/cds';
 
+// Word-boundary normalizer used by both the search predicate AND the rank
+// CASE-WHEN. Returns an SQL fragment string that pads separator characters
+// with spaces so " % term % " word-boundary LIKE works on hyphenated tags
+// (sap-btp--abap-...), namespaced tags (products>sap-hana), and prose
+// punctuation. Single source of truth — keeps rank in lock-step with match.
+function _padCol(col) {
+  return `(' '||replace(replace(replace(replace(replace(replace(replace(replace(replace(`
+    + `lower(coalesce(${col},'')),'-',' '),'.',' '),',',' '),'/',' '),'>',' '),`
+    + `'(',' '),')',' '),':',' '),';',' ')||' ')`;
+}
+
 // Word-boundary search across @cds.search columns (title, description, primaryTag, tagBag).
 //
 // Substring LIKE matches "CAP" inside "Capture/Capability"; HANA fuzzy matches
@@ -33,6 +44,68 @@ function applyWordBoundarySearch(query, term) {
   return tokens;
 }
 
+// Build the per-column "any token matches" OR fragment using the same
+// _padCol() normalize as the predicate. Tokens are sanitized to remove %
+// and _ wildcards plus quote chars, then inlined as SQL string literals.
+// Inlining (not parameter binding) is safe here because:
+//   1. Tokens come from a tokenized search string with whitespace as the
+//      only separator (post-toLowerCase, post-split, post-length-filter).
+//   2. We strip %/_/'/\\ before quoting.
+//   3. The values appear inside ' % literal % ' — they cannot break out
+//      of the quoted form to inject SQL.
+function _safeQuotedLiteral(tok) {
+  const safe = String(tok).replace(/[%_'\\]/g, '');
+  return `'% ${safe} %'`;
+}
+
+function _columnAnyTokenSQL(col, tokens) {
+  return tokens
+    .map((tok) => `${_padCol(col)} like ${_safeQuotedLiteral(tok)}`)
+    .join(' or ');
+}
+
+// Append a `_searchRank` SQL column (CASE-WHEN sum) to req.query.SELECT.columns
+// and prepend `_searchRank DESC` to req.query.SELECT.orderBy. Rank arithmetic:
+//   +3 if any token matches title
+//   +2 if any token matches description
+//   +1 if any token matches primaryTag OR tagBag (single +1, not +2 if both)
+// Tag-only rows still surface (rank ≥ 1); they sort below title hits.
+//
+// Crucial: this runs INSIDE the SELECT, so the DB orders by rank BEFORE
+// applying $top/$skip. Title hits never get stranded on later pages.
+function attachSearchRank(query, tokens) {
+  if (!Array.isArray(tokens) || tokens.length === 0) return;
+
+  const titleOr = _columnAnyTokenSQL('title', tokens);
+  const descOr  = _columnAnyTokenSQL('description', tokens);
+  const primOr  = _columnAnyTokenSQL('primaryTag', tokens);
+  const tagOr   = _columnAnyTokenSQL('tagBag', tokens);
+
+  const rankSQL =
+    `(case when (${titleOr}) then 3 else 0 end ` +
+    `+ case when (${descOr}) then 2 else 0 end ` +
+    `+ case when (${primOr} or ${tagOr}) then 1 else 0 end)`;
+
+  // cds.parse.expr is the documented public API for parsing an SQL expression
+  // string into a CSN xpr node. Replaces an earlier synthetic-template-literal
+  // trick (cds.ql.expr with a hand-rolled `raw` array) which depended on an
+  // undocumented internal contract.
+  const rankExpr = cds.parse.expr(rankSQL);
+
+  const sel = query.SELECT;
+  // No explicit projection (e.g. internal srv.run(SELECT.from(...).search(...))
+  // hands us a SELECT with no .columns) → CAP will auto-expand to all view
+  // elements. Adding our own column entry here breaks that auto-expansion on
+  // a UNION-ALL view (cqn4sql can't resolve a literal '*' ref against
+  // SearchableItems' element set). Internal callers don't need ranking, so
+  // skip — the after('READ') hook's _searchRank-strip becomes a no-op.
+  if (!sel.columns) return;
+  sel.columns.push({ ...rankExpr, as: '_searchRank' });
+
+  // Prepend rank-DESC so any preexisting orderBy becomes the tiebreaker.
+  sel.orderBy = [{ ref: ['_searchRank'], sort: 'desc' }, ...(sel.orderBy ?? [])];
+}
+
 export default class SearchService extends cds.ApplicationService {
   init() {
     const { SearchableItems } = this.entities;
@@ -41,11 +114,16 @@ export default class SearchService extends cds.ApplicationService {
     // but we strip it from responses to keep OData payloads small and avoid
     // exposing the raw indexed text. (Using @cds.api.ignore would also hide
     // it from the runtime $search element list, defeating the purpose.)
+    // _searchRank is the ranking column appended in before('READ'); it must
+    // never leak to OData consumers or to internal srv.run callers (Joule).
     this.after('READ', SearchableItems, (results) => {
-      if (!results) return;
+      // Count round-trips return a Number, not an array — return early.
+      if (results == null || typeof results === 'number') return;
       const rows = Array.isArray(results) ? results : [results];
       for (const r of rows) {
-        if (r && 'bodyText' in r) delete r.bodyText;
+        if (!r) continue;
+        if ('bodyText' in r) delete r.bodyText;
+        if ('_searchRank' in r) delete r._searchRank;
       }
     });
 
@@ -55,12 +133,16 @@ export default class SearchService extends cds.ApplicationService {
     // noise on short acronyms (CAP/ABAP/HANA).
     this.before('READ', SearchableItems, (req) => {
       const sel = req.query?.SELECT;
-      const search = sel?.search;
+      // MANDATORY count guard — ranking is meaningless on COUNT(*) round-trips,
+      // and adding _searchRank to a count projection can change semantics.
+      if (!sel || sel.count) return;
+      const search = sel.search;
       if (!Array.isArray(search) || !search.length) return;
       const phrase = search.map((e) => e?.val ?? '').join(' ').trim();
       if (!phrase) return;
       delete sel.search;
       const tokens = applyWordBoundarySearch(req.query, phrase);
+      attachSearchRank(req.query, tokens);
     });
 
     this.on('getFacets', async (req) => {
