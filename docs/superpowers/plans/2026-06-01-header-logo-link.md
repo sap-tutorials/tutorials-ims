@@ -244,9 +244,9 @@ git log --oneline main..HEAD
 
 Expected:
 - Branch: `fix/header-logo-link-160`
-- Three commits on top of main: spec + spec-revisions + feature commit (the test commit and the implementation commit).
+- Five commits on top of `main`: three docs commits already on the branch (spec + two spec-review folds + this plan), plus the test commit (Task 2) and the implementation commit (Task 3) added during execution.
 
-If you see only one commit because `git commit --amend` was used somewhere, that's fine — the spec commits are already on the branch from earlier.
+If the count is off, inspect with `git log --oneline main..HEAD` and reconcile. Squash on merge is fine; do not rewrite history on the branch unless Tom asks.
 
 - [ ] **Step 2: Push**
 
