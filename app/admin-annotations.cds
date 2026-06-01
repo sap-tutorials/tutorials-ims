@@ -608,7 +608,7 @@ annotate AdminService.TutorialPickList with @(
   }
 );
 
-// --- Tags (read-only) ---
+// --- Tags (Display Label inline-editable; rest read-only) ---
 annotate AdminService.Tags with {
   legacyIdStr  @Common.Label: 'ID' @Common.IsDigitSequence: true;
   name      @Common.Label: 'Internal Name'
