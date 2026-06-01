@@ -17,6 +17,10 @@ The "SAP" logo plus the "Tutorial Platform" wordmark in the top-left of the glob
 
 - Single Hugo partial: [hugo/layouts/partials/header.html](../../../hugo/layouts/partials/header.html). Used by every Hugo page in both prod and QA channels.
 
+### QA-channel reuse confirmation
+
+The QA channel ships static-frontend assets via `static-qa/` ([memory: qa-gate-frontend-script-tags](../../../C:/Users/I809764/.claude/projects/d--projects-tutorials-poc/memory/feedback_qa_gate_frontend_script_tags.md)). However, `hugo/layouts/partials/header.html` is a Hugo *template* — both the prod and QA Hugo builds render it from the same source file, parameterized by `site.Params.qa`. The change in this spec lives entirely inside the QA-flagged-or-shared regions of the partial (the IIFE itself is shared). Implementation MUST verify before completion that the change does not require any sibling JS to be copied into `static-qa/` (none should — the change is entirely inside `header.html`'s inline script).
+
 ## Out of scope (YAGNI)
 
 - No new keyboard shortcut. UI5 ShellBar already activates the logo on Enter/Space when its role is `link`.
@@ -60,15 +64,13 @@ In the existing IIFE inside `header.html` (around line 75-326), add two things:
 
    Setting it once at script execution time is sufficient — the property is read by UI5 on each render. We do not need to re-apply it later.
 
-2. **Listen for `logo-click`** on the shellbar:
+2. **Listen for the logo-click event** on the shellbar. Register both the prefixed and unprefixed event names — UI5 v2 emits `ui5-logo-click` officially, but the unprefixed `logo-click` is also documented in older release notes and a one-line dual registration costs nothing while protecting against any version skew between the bootstrap and the runtime:
 
    ```js
-   shellbar.addEventListener('ui5-logo-click', () => {
-     window.location.href = '/';
-   });
+   const goHome = () => { window.location.href = '/'; };
+   shellbar.addEventListener('ui5-logo-click', goHome);
+   shellbar.addEventListener('logo-click', goHome);
    ```
-
-   Use the prefixed `ui5-logo-click` (UI5's emitted name) — `logo-click` also works historically but the prefixed form is the documented one as of v2 and avoids any future collision with a native `logo-click` event.
 
    We use `window.location.href = '/'` rather than History API navigation. The site is Hugo-rendered, multi-page, with View Transitions handling the morph; full navigation is the established pattern (see existing nav-popover handler at line 144-152).
 
@@ -91,7 +93,7 @@ No backend changes — no unit or hybrid tests added.
 
 Existing smoke test [test/smoke/static-content.test.js](../../../test/smoke/static-content.test.js) loads `/` and pages that embed `header.html`. We extend it with two assertions over the rendered HTML for `/` (the navigator):
 
-- Response contains the literal string `accessibilityAttributes` *or* an `accessibility-attributes` attribute — confirming the JS hook is shipped.
+- Response contains the literal substring `logo: { role: 'link'` — confirms the JS hook is shipped *and* it is wiring the **logo** slot specifically (not some other slot's accessibility attributes).
 - Response contains the literal string `SAP Tutorial Platform — home` — confirming the aria name is in the bundle.
 
 Both checks are string-presence over the served HTML. They survive Hugo's HTML minifier ([memory: hugo-minifier-strips-quotes](../../../C:/Users/I809764/.claude/projects/d--projects-tutorials-poc/memory/feedback_hugo_minifier_strips_quotes.md)) because we look for substrings inside the inline `<script>` block, which is preserved verbatim.
@@ -108,7 +110,7 @@ Both checks are string-presence over the served HTML. They survive Hugo's HTML m
 ## Risks
 
 - **Low.** Single partial, single IIFE scope, two small additions. No data-flow or schema changes. No new dependencies.
-- The `ui5-` event prefix could be wrong on some UI5 versions; mitigated by registering both `logo-click` and `ui5-logo-click`. (One safe fallback line in the implementation plan.)
+- The `ui5-` event prefix could differ across UI5 versions; mitigated by registering both `logo-click` and `ui5-logo-click` (see JS change above).
 
 ## Files touched
 
