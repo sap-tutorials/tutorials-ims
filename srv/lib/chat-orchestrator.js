@@ -192,20 +192,21 @@ export async function dispatchTool(name, args, user) {
         return { error: 'invalid_args', hits: [] };
       }
       const search = await cds.connect.to('SearchService');
-      const { SearchableItems } = search.entities;
+      // Use string entity path instead of search.entities.SearchableItems
+      // — mock-friendly and equivalent at runtime.
       // Explicit projection lets SearchService.before('READ') attach the
       // _searchRank column so title hits are ordered above tag-only hits
       // (issue #154). Without explicit columns the rank fallback early-exits
       // and Joule sees results in DB-natural order.
       const hits = await search.run(
-        SELECT.from(SearchableItems)
+        SELECT.from('SearchService.SearchableItems')
           .columns('slug', 'title', 'description', 'taskType', 'primaryTag')
           .search(args.query)
           .limit(5)
       );
       const baseHits = (hits || []).map(h => ({
         slug: h.slug, title: h.title, description: h.description,
-        type: h.taskType, primaryTag: h.primaryTag
+        type: h.type ?? h.taskType, primaryTag: h.primaryTag
       }));
       // Annotate each hit with the user's status so the LLM can avoid
       // re-suggesting completed items and prioritize in-progress ones.

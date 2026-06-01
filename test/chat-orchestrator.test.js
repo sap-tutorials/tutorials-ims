@@ -12,6 +12,7 @@ vi.mock('@sap/cds', () => {
   const fakeQuery = {
     from() { return this; },
     where() { return this; },
+    columns() { return this; },
     search() { return this; },
     limit() { return this; }
   };
