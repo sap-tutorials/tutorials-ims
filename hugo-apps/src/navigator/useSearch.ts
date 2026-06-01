@@ -23,6 +23,9 @@ export function mapToCardItem(item: SearchableItem, tutorialsBySlug?: Map<string
     displayTags: enriched?.displayTags?.length
       ? enriched.displayTags
       : ([item.primaryTag].filter(Boolean) as string[]),
+    displayTagSlugs: enriched?.displayTagSlugs?.length
+      ? enriched.displayTagSlugs
+      : ([item.primaryTag].filter(Boolean) as string[]),
     href: item.slug ? `/tutorials/${item.slug}` : '',
     stepCount: 0,
   }
