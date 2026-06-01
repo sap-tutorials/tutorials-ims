@@ -161,64 +161,135 @@ behavior change.
    </ul>
 ```
 
-The `nav-card__title` class is **also** styled by
-`hugo-apps/src/navigator/style.css` (or the navigator's scoped styles).
-Verify on implementation that adding it to the home `<h3>` doesn't
-inherit unexpected typography — if it does, scope the existing rule to
-`.nav-card .nav-card__title` instead of bare `.nav-card__title`. The
-`bindCardClick` selector
+The `nav-card__title` class on TutorialNavigator.vue is defined inside
+`<style scoped>`, so it compiles to `.nav-card__title[data-v-XXXX]` and
+will **not** apply to the Hugo-rendered `<h3>` on the home page. That
+removes any over-styling concern, but means the home `<h3>` keeps its
+own typography — the VT morph could animate between visually mismatched
+text sizes/weights. Implementer must verify the home-card `<h3>`
+matches the navigator card title at the morph endpoints (font-size,
+font-weight, line-height). If they don't match, add a small rule to
+[hugo/assets/css/home.css](../../../hugo/assets/css/home.css) targeting
+`.tutorial-grid .nav-card__title` that mirrors the navigator's title
+typography (the navigator's scoped rule is the source of truth — copy
+those declarations). The `bindCardClick` selector
 ([view-transitions.ts:22](../../../hugo/assets/js/view-transitions.ts#L22))
 queries `.nav-card__title` regardless of ancestor — so the class on the
 home `<h3>` is sufficient for the binder to find it.
 
 ### 2. `hugo-apps/src/cmd-palette/CommandPalette.vue`
 
-Replace the tutorial-results `<button>` with an `<a>`:
+`PaletteAction` in
+[hugo-apps/src/cmd-palette/actions.ts](../../../hugo-apps/src/cmd-palette/actions.ts)
+has no `slug` field today. The existing `searchTutorials` map at
+[CommandPalette.vue:180-194](../../../hugo-apps/src/cmd-palette/CommandPalette.vue#L180-L194)
+captures the slug only inside the `run` closure
+(`window.location.href` is set to a `/tutorials/${row.slug}` template
+string). To bind `:href` declaratively, the slug must be lifted onto
+the action object:
 
-```vue
-<a
-  v-for="(item, i) in tutorialResults"
-  :key="`t-${item.id}`"
-  :href="`/tutorials/${tutorialSlugFromAction(item)}`"
-  :class="['cmdk__item', 'cmdk__item--link', { 'cmdk__item--active': activeIndex === actionResults.length + i }]"
-  data-vt-card="navigator"
-  role="option"
-  :aria-selected="activeIndex === actionResults.length + i"
-  @mouseenter="activeIndex = actionResults.length + i"
-  @click="onTutorialClick($event, item)"
->
-  <span class="cmdk__item-icon" data-icon="course-book" aria-hidden="true"></span>
-  <span class="cmdk__item-content">
-    <span class="cmdk__item-label nav-card__title">{{ item.label }}</span>
-    <span v-if="item.hint" class="cmdk__item-hint">{{ item.hint }}</span>
-  </span>
-</a>
-```
+1. **Extend the interface** in `actions.ts`:
 
-Where:
+   ```ts
+   export interface PaletteAction {
+     id: string
+     label: string
+     hint?: string
+     icon?: string
+     keywords?: string[]
+     /** Tutorial slug — present only on rows produced by searchTutorials. */
+     slug?: string
+     run: (close: () => void) => void
+   }
+   ```
 
-- `tutorialSlugFromAction(item)` — small helper that extracts the slug
-  the existing `runItem` was already deriving from `item.id` /
-  `item.run`. The current handler in
-  [CommandPalette.vue:189-192](../../../hugo-apps/src/cmd-palette/CommandPalette.vue#L189-L192)
-  has `window.location.href = \`/tutorials/${row.slug}\`` inline — pull
-  the slug onto the `PaletteAction` shape (or compute it where the
-  result is built in `searchTutorials`) so it's available declaratively
-  for `:href`.
-- `onTutorialClick($event, item)` — closes the palette overlay
-  (`close()`) and lets the default link navigation proceed (no
-  `preventDefault`). The browser handles VT.
-- Keyboard `Enter` already calls `runItem`; update `runItem` for
-  tutorial rows to **programmatically click the anchor** (via a `ref`
-  or by querying the active row) so the cross-doc VT fires for keyboard
-  navigation too. Avoid `window.location.href` for tutorial rows —
-  programmatic location changes don't trigger cross-doc VT.
+2. **Set it** in the searchTutorials map (CommandPalette.vue:180):
 
-The CSS selector `.cmdk__item` likely styles a `<button>` — ensure
-`<a class="cmdk__item">` renders identically (no underline, inherited
-color, no default visited state). Add a defensive
-`.cmdk__item--link { color: inherit; text-decoration: none; }` if
-needed.
+   ```ts
+   tutorialResults.value = (data.value || [])
+     .map((row: SearchableItem) => ({
+       id: `tutorial-${row.slug}`,
+       label: row.title,
+       hint: row.primaryTag,
+       slug: row.slug,
+       run: (close: () => void) => {
+         close()
+         // Fallback only — Enter handler clicks the anchor; this path
+         // is reached only if the anchor lookup fails.
+         window.location.href = `/tutorials/${row.slug}`
+       },
+     }))
+   ```
+
+3. **Replace the `<button>` row with an `<a>`** in the template (lines 48–62):
+
+   ```vue
+   <a
+     v-for="(item, i) in tutorialResults"
+     :key="`t-${item.id}`"
+     :ref="(el) => { if (el) tutorialRefs[i] = el as HTMLAnchorElement }"
+     :href="`/tutorials/${item.slug}`"
+     :class="['cmdk__item', 'cmdk__item--link', { 'cmdk__item--active': activeIndex === actionResults.length + i }]"
+     data-vt-card="navigator"
+     role="option"
+     :aria-selected="activeIndex === actionResults.length + i"
+     @mouseenter="activeIndex = actionResults.length + i"
+     @click="close()"
+   >
+     <span class="cmdk__item-icon" data-icon="course-book" aria-hidden="true"></span>
+     <span class="cmdk__item-content">
+       <span class="cmdk__item-label nav-card__title">{{ item.label }}</span>
+       <span v-if="item.hint" class="cmdk__item-hint">{{ item.hint }}</span>
+     </span>
+   </a>
+   ```
+
+   - `@click="close()"` runs first; the default anchor navigation
+     proceeds. We do not call `event.preventDefault()`. The browser
+     fires the cross-doc View Transition because the navigation is a
+     real `<a>` click, not `window.location.href`.
+   - The `:ref` callback populates a `tutorialRefs: HTMLAnchorElement[]`
+     ref array (declared via `const tutorialRefs = ref<HTMLAnchorElement[]>([])`
+     in the script setup, cleared at the top of `searchTutorials` to
+     stay aligned with `tutorialResults` re-creation).
+
+4. **Update the keyboard Enter path** in `runActive`:
+
+   The current `runActive` (line 137 area) calls
+   `runItem(tutorialResults.value[i - actionResults.value.length])`,
+   which invokes the action's `run` closure — and the new `run` would
+   do `window.location.href`, which **does not** trigger cross-doc VT.
+
+   Change `runActive` so that when the active row is a tutorial result,
+   it programmatically clicks the matching anchor instead:
+
+   ```ts
+   function runActive() {
+     const i = activeIndex.value
+     if (i < actionResults.value.length) {
+       runItem(actionResults.value[i])
+       return
+     }
+     const tIndex = i - actionResults.value.length
+     const anchor = tutorialRefs.value[tIndex]
+     if (anchor) {
+       close()
+       anchor.click() // fires native click → cross-doc VT
+     } else {
+       // Fallback to the action's run closure (window.location.href)
+       runItem(tutorialResults.value[tIndex])
+     }
+   }
+   ```
+
+   Action rows (commands, not tutorial navigation) keep the
+   `runItem` path — their `run` closures don't need cross-doc VT.
+
+The CSS selector `.cmdk__item` currently styles a `<button>`. Verify
+during implementation that `<a class="cmdk__item">` renders identically
+(no underline, inherited color, no default visited state). Add a
+defensive `.cmdk__item--link { color: inherit; text-decoration: none; }`
+if the existing rule doesn't cover anchor defaults.
 
 ### 3. `hugo/layouts/partials/head.html`
 
