@@ -26,7 +26,7 @@ service SearchService {
   // were drowning HIGH-ranked title hits (HANA ranking is relative-within-row,
   // not a cross-row multiplier).
   @readonly
-  @cds.search: { title, description, primaryTag }
+  @cds.search: { title, description, primaryTag, tagBag }
   entity SearchableItems as projection on ims.SearchableItems {
     @Search.fuzzinessThreshold: 0.85
     @Search.ranking: #HIGH
@@ -37,6 +37,9 @@ service SearchService {
     @Search.fuzzinessThreshold: 0.85
     @Search.ranking: #LOW
     primaryTag,
+    @Search.fuzzinessThreshold: 0.85
+    @Search.ranking: #LOW
+    tagBag,
     *
   } excluding { bodyText };
 
