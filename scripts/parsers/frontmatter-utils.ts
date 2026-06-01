@@ -1,6 +1,19 @@
 const ACRONYMS = new Set(['SAP', 'HANA', 'CAP', 'BTP', 'CDS', 'UI', 'API', 'MTA', 'XSUAA', 'OData', 'HTML5', 'ABAP'])
 
-export function humanizeTag(raw: string): string {
+export type TagLabelRegistry = Record<string, string>
+
+/**
+ * Resolve a raw tag slug into a human label.
+ *
+ * If a `registry` is provided AND contains an entry for the raw slug, that
+ * label is returned verbatim — this is the only way to recover information
+ * the slug threw away (slashes, mid-word capitals, punctuation).
+ *
+ * Otherwise falls back to a lossy heuristic: take the segment after `>`,
+ * split on `-`/`_`, title-case each word, promote known acronyms to all-caps.
+ */
+export function humanizeTag(raw: string, registry?: TagLabelRegistry): string {
+  if (registry && registry[raw]) return registry[raw]
   const value = raw.includes('>') ? raw.split('>').pop()! : raw
   return value
     .replace(/\\/g, '')
