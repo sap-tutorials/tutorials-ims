@@ -1,20 +1,20 @@
 import cds from '@sap/cds';
 
-// Word-boundary search across @cds.search columns (title, description, primaryTag).
+// Word-boundary search across @cds.search columns (title, description, primaryTag, tagBag).
 //
 // Substring LIKE matches "CAP" inside "Capture/Capability"; HANA fuzzy matches
 // "fortran" against 635 unrelated rows. The middle ground: pad each column with
 // spaces, replace common separators with spaces too, then LIKE '% term %'.
 // "Capture" stays "capture" → no match. "abap-connectivity" becomes
 // "abap connectivity" → matches `% abap %`. Tokens AND together (multi-word
-// search requires every token to match somewhere across the three columns).
+// search requires every token to match somewhere across the four columns).
 function applyWordBoundarySearch(query, term) {
   const tokens = String(term ?? '')
     .toLowerCase()
     .trim()
     .split(/\s+/)
     .filter((t) => t.length >= 2);
-  if (!tokens.length) return;
+  if (!tokens.length) return tokens;
 
   for (const tok of tokens) {
     const safe = tok.replace(/[%_]/g, '');
@@ -27,8 +27,10 @@ function applyWordBoundarySearch(query, term) {
       (' '||replace(replace(replace(replace(replace(replace(replace(replace(replace(lower(coalesce(title,'')),'-',' '),'.',' '),',',' '),'/',' '),'>',' '),'(',' '),')',' '),':',' '),';',' ')||' ') like ${padded}
       or (' '||replace(replace(replace(replace(replace(replace(replace(replace(replace(lower(coalesce(description,'')),'-',' '),'.',' '),',',' '),'/',' '),'>',' '),'(',' '),')',' '),':',' '),';',' ')||' ') like ${padded}
       or (' '||replace(replace(replace(replace(replace(replace(replace(replace(replace(lower(coalesce(primaryTag,'')),'-',' '),'.',' '),',',' '),'/',' '),'>',' '),'(',' '),')',' '),':',' '),';',' ')||' ') like ${padded}
+      or (' '||replace(replace(replace(replace(replace(replace(replace(replace(replace(lower(coalesce(tagBag,'')),'-',' '),'.',' '),',',' '),'/',' '),'>',' '),'(',' '),')',' '),':',' '),';',' ')||' ') like ${padded}
     )`;
   }
+  return tokens;
 }
 
 export default class SearchService extends cds.ApplicationService {
@@ -58,7 +60,7 @@ export default class SearchService extends cds.ApplicationService {
       const phrase = search.map((e) => e?.val ?? '').join(' ').trim();
       if (!phrase) return;
       delete sel.search;
-      applyWordBoundarySearch(req.query, phrase);
+      const tokens = applyWordBoundarySearch(req.query, phrase);
     });
 
     this.on('getFacets', async (req) => {
@@ -71,7 +73,7 @@ export default class SearchService extends cds.ApplicationService {
       // already capped by the search predicate and we only need three small
       // dimensions, so this is cheap and avoids the broken composition.
       let q = SELECT.from(SearchableItems).columns('taskType', 'experienceTag', 'primaryTag');
-      if (search) applyWordBoundarySearch(q, search);
+      const tokens = search ? applyWordBoundarySearch(q, search) : [];
       if (taskTypes?.length) q.where({ taskType: { in: taskTypes } });
       if (experience?.length) q.where({ experienceTag: { in: experience } });
       const rows = await q;
