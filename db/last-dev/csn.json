@@ -370,6 +370,11 @@
           "length": 255,
           "@cds.persistence.name": "NAME"
         },
+        "label": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "LABEL"
+        },
         "titlePath": {
           "type": "cds.String",
           "length": 255,

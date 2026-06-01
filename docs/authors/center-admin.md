@@ -194,14 +194,17 @@ npx cds bind --exec -- node scripts/setup-dev-data.cjs
 
 1. Obtain the tag details from the product owner making the request:
    - **ID** — machine-readable identifier (e.g., `software-product>sap-btp-build-code`).
-   - **Name** — display label (e.g., `SAP BTP Build Code`).
+   - **Internal Name** — slug-derived legacy field (e.g., `sap btp build code`); kept for migration compatibility, not user-facing.
+   - **Display Label** — the human-readable label shown to users on the navigator filter and tutorial cards (e.g., `SAP BTP Build Code`). This is the field that recovers slug information lossy formats can't preserve, like `S/4HANA` instead of `S 4hana`. Inline-editable in the admin Tags app.
    - **Parent tag** — the parent in the taxonomy hierarchy (e.g., `software-product`).
    - **Taxonomy URL** — link to the tag definition in the SAP taxonomy system (for reference).
 
 2. Navigate to `/admin-ui/` → **Tags** tile → **+** (Create).
-3. Enter the ID, name, parent, and taxonomy URL. Save.
-4. The tag is immediately available in the HANA catalog. On the next `npm run fetch-tutorials` (or full rebuild), the fetch script reads the catalog feed and resolves the tag against the database — authors' tutorials referencing it will validate without warnings.
+3. Enter the ID, internal name, display label, parent, and taxonomy URL. Save.
+4. The tag is immediately available in the HANA catalog. On the next `npm run fetch-tutorials` (or full rebuild), the fetch script reads `/build/tag-labels` from CAP and resolves the slug against the registered Display Label — authors' tutorials referencing it will render with the correct label everywhere.
 5. Notify the requesting author that the tag is live.
+
+> **Bulk seeding from AEM:** at cutover, `npm run seed-tag-labels` harvests `(slug → label)` pairs from the legacy developers.sap.com AEM Solr endpoint and PATCHes them into `Tags.label` in HANA. Re-run only if AEM ships new tags before going dark; for tags AEM doesn't know about, edit the Display Label column manually here.
 
 **Related:**
 
