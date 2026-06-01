@@ -98,7 +98,7 @@ Create `hugo-apps/src/navigator/TutorialNavigator.test.ts` with this content:
 
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { defineComponent, ref, nextTick, h } from 'vue'
+import { defineComponent, ref, nextTick } from 'vue'
 
 // Mirrors TutorialNavigator.vue post-fix `.navigator-result-area` block.
 // Persistent siblings gated by v-show; aria-busy on the wrapper; busy
