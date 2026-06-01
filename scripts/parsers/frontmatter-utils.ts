@@ -42,5 +42,10 @@ export function splitPrerequisites(prereqText: string): string[] {
     .split('\n')
     .map(line => line.replace(/^\s*-\s+/, '').trim())
     .map(line => escapeHtml(line))
-    .filter(line => line.length > 0)
+    // Drop empty lines AND markdown thematic-break tokens. Source tutorials
+    // commonly close the Prerequisites section with a `---` horizontal rule
+    // before the first step, and `extractSection`'s lookahead (next `## ` /
+    // `### ` / EOF) captures it. Without this filter the `---` survives as a
+    // bullet and renders as a stray <hr> inside the prereq list (issue #163).
+    .filter(line => line.length > 0 && !/^-{3,}$/.test(line))
 }
