@@ -63,10 +63,8 @@ there is no flash.
 - **Modified:** `hugo-apps/src/navigator/TutorialNavigator.vue`
   - `.navigator-result-area` template restructured (see below).
   - One CSS rule added for the absolute-positioned busy indicator.
-- **Modified:** `hugo-apps/src/navigator/__tests__/TutorialNavigator.test.ts`
-  *(new test file; existing folder convention TBD during implementation —
-  may end up at `hugo-apps/src/navigator/TutorialNavigator.test.ts` if that's
-  closer to existing patterns)*
+- **New:** `hugo-apps/src/navigator/TutorialNavigator.test.ts` — sibling-style
+  test, matching existing `useSearch.test.ts` and `cardProgress.test.ts`.
 - **Unchanged:** `hugo-apps/src/navigator/useSearch.ts` — current behavior is correct.
 
 ## Template restructure
@@ -160,6 +158,12 @@ trigger no visible spinner. Only genuinely slow searches (uncached, large
 result set) show one — and it overlays the previous content rather than
 replacing it.
 
+This replaces the existing `fd-busy-indicator` div used in the current
+template's `key="searching"` branch. `ui5-busy-indicator` is part of the UI5
+web components already loaded site-wide via the `ui5-bootstrap` shared
+module — the planner should confirm the bootstrap is on the navigator entry
+chunk, but no new dependency is expected.
+
 ## CSS
 
 Additive only:
@@ -252,10 +256,17 @@ which is the user-facing guarantee we want.
 - Pure UI change in one Vue island.
 - No schema / API / auth / persistence changes.
 - One added CSS rule, additive only.
-- Rollout via the normal Hugo + approuter path:
-  `npm run build:hugo-apps && npm run hugo:build` then standard MTA deploy
-  (or, since this is a static-asset-only change, a `cf push tutorials-approuter`
-  fast path can ship it without `mbt build`).
+- Rollout via the normal Hugo + approuter path. Hugo **must** finish before
+  any approuter packaging step (see [[feedback-hugo-before-mbt]]):
+  1. `npm run build:hugo-apps` — Vite re-bundles the navigator island into
+     `hugo/static/js/`.
+  2. `npm run build:hugo` (or full `npm run build:all`) — Hugo emits
+     `hugo/public/` referencing the new bundle.
+  3. Either `cd .deploy && mbt build && cf deploy …` (full MTA) or, since this
+     is approuter-static-only, `cf push tutorials-approuter -p approuter`
+     after copying `hugo/public/` into `approuter/static/` per
+     `mta.yaml`'s build-result step. The fast path skips `mbt build`
+     (~10 min) but **only** works if Hugo has just been rebuilt.
 
 ## Out of scope (deferred)
 
