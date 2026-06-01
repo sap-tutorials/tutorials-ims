@@ -201,7 +201,12 @@ function buildColumnClause(col, tokens) {
 function attachSearchRank(query, tokens) {
   const titleClause = buildColumnClause('title', tokens);
   const descClause  = buildColumnClause('description', tokens);
-  const tagClause   = buildColumnClause('primaryTag', tokens) /* OR */ + buildColumnClause('tagBag', tokens);
+  // primaryTag and tagBag share a single CASE-WHEN that ORs both columns
+  // together, so a row matching either gets +1 (not +2 if it matches both).
+  const tagClauseOred = orFragments([
+    buildColumnClause('primaryTag', tokens),
+    buildColumnClause('tagBag', tokens),
+  ]);
   // Compose CASE WHEN sum as a CDS QL xpr or as cds.ql`...` raw-SQL fragment.
   const sel = query.SELECT;
   sel.columns = [...(sel.columns ?? [{ ref: ['*'] }]),
