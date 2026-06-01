@@ -7,6 +7,7 @@ export interface TutorialEntry {
   stepCount: number
   primaryTag: string
   displayTags: string[]
+  displayTagSlugs: string[]
   missionId?: number
   missionTitle?: string
   groupId?: number
@@ -26,6 +27,7 @@ export interface CardItem {
   tutorialCount: number
   primaryTag: string
   displayTags: string[]
+  displayTagSlugs: string[]
   href: string
   stepCount: number
   isNew?: boolean
