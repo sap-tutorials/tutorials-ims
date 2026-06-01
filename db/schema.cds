@@ -166,6 +166,7 @@ entity PrizeRecords : cuid, LegacyKeyed {
 
 entity Tags : cuid, LegacyKeyed {
   name                      : String(255);
+  label                     : String(255);
   titlePath                 : String(255);
   virtual mdFormat           : String;
 }

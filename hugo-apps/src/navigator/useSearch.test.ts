@@ -24,6 +24,7 @@ const baseTutorial: TutorialEntry = {
   stepCount: 5,
   primaryTag: 'ABAP Development',
   displayTags: ['ABAP Development', 'Beginner', 'License', 'SAP BTP'],
+  displayTagSlugs: ['software-product>abap-development', 'tutorial>beginner', 'tutorial>license', 'software-product>sap-business-technology-platform'],
   prev: null,
   next: null,
 }
@@ -36,19 +37,28 @@ describe('mapToCardItem', () => {
     expect(card.displayTags).toEqual(baseTutorial.displayTags)
   })
 
+  it('propagates displayTagSlugs from enriched entry', () => {
+    const lookup = new Map([[baseTutorial.slug, baseTutorial]])
+    const card = mapToCardItem(baseItem, lookup)
+    expect(card.displayTagSlugs).toEqual(baseTutorial.displayTagSlugs)
+  })
+
   it('falls back to [primaryTag] when no lookup is provided', () => {
     const card = mapToCardItem(baseItem)
     expect(card.displayTags).toEqual(['ABAP Development'])
+    expect(card.displayTagSlugs).toEqual(['ABAP Development'])
   })
 
   it('falls back to [primaryTag] when slug is missing from lookup', () => {
     const card = mapToCardItem(baseItem, new Map())
     expect(card.displayTags).toEqual(['ABAP Development'])
+    expect(card.displayTagSlugs).toEqual(['ABAP Development'])
   })
 
   it('falls back to [primaryTag] when lookup entry has empty displayTags', () => {
-    const lookup = new Map([[baseTutorial.slug, { ...baseTutorial, displayTags: [] }]])
+    const lookup = new Map([[baseTutorial.slug, { ...baseTutorial, displayTags: [], displayTagSlugs: [] }]])
     const card = mapToCardItem(baseItem, lookup)
     expect(card.displayTags).toEqual(['ABAP Development'])
+    expect(card.displayTagSlugs).toEqual(['ABAP Development'])
   })
 })

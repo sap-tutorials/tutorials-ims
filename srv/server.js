@@ -8,6 +8,7 @@ import { coCompletionsHandler } from './lib/co-completion.js';
 import { recommendationsHandler } from './handlers/recommendations.js';
 import { navigatorCatalogHandler, invalidateNavigatorCache } from './lib/navigator-catalog.js';
 import { breadcrumbContextHandler } from './lib/breadcrumb-context.js';
+import { getTagLabelMap } from './lib/tag-label-map.js';
 import { myProgressHandler } from './lib/my-progress-handler.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
 import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, navHandler, rollbackHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler } from './lib/content-store.js';
@@ -128,6 +129,16 @@ cds.on('bootstrap', (app) => {
   app.get('/build/catalog', buildCatalogHandler);
   app.get('/build/co-completions', coCompletionsHandler);
   app.get('/build/navigator', navigatorCatalogHandler);
+  app.get('/build/tag-labels', async (_req, res) => {
+    try {
+      const map = await getTagLabelMap();
+      res.setHeader('Cache-Control', 'public, max-age=300');
+      res.json(map);
+    } catch (e) {
+      console.error('[build/tag-labels]', e.message);
+      res.status(500).json({ error: e.message });
+    }
+  });
   app.get('/build/breadcrumb-context', breadcrumbContextHandler);
   app.get('/build/slug-mapping', async (req, res) => {
     const { buildSlugMapping } = await import('./lib/slug-mapping.js');

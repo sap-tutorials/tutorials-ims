@@ -608,10 +608,10 @@ annotate AdminService.TutorialPickList with @(
   }
 );
 
-// --- Tags (read-only) ---
+// --- Tags (Display Label inline-editable; rest read-only) ---
 annotate AdminService.Tags with {
   legacyIdStr  @Common.Label: 'ID' @Common.IsDigitSequence: true;
-  name      @Common.Label: 'Name'
+  name      @Common.Label: 'Internal Name'
             @Common.ValueList: {
               CollectionPath: 'Tags',
               Parameters: [
@@ -620,6 +620,7 @@ annotate AdminService.Tags with {
                 { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'legacyIdStr' }
               ]
             };
+  label     @Common.Label: 'Display Label';
   titlePath @Common.Label: 'Full Path';
   mdFormat  @Common.Label: 'MD Format';
 };
@@ -634,13 +635,14 @@ annotate AdminService.Tags with @(
     LineItem: [
       { Value: legacyIdStr },
       { Value: name },
+      { Value: label },
       { Value: mdFormat },
       { Value: titlePath }
     ]
   },
   Capabilities.DeleteRestrictions.Deletable: false,
   Capabilities.InsertRestrictions.Insertable: false,
-  Capabilities.UpdateRestrictions.Updatable: false
+  Capabilities.UpdateRestrictions.Updatable: true
 );
 
 // --- FeaturedTasks (inline editing of featuredOrder) ---

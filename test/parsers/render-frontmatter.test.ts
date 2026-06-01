@@ -19,6 +19,7 @@ const stubNav: TutorialNavEntry = {
   prev: null,
   next: null,
   displayTags: [],
+  displayTagSlugs: [],
 } as unknown as TutorialNavEntry;
 
 describe('renderHugoFrontmatter', () => {
@@ -60,5 +61,67 @@ describe('renderHugoFrontmatter', () => {
       lastUpdated: '', createdAt: '', contributors: [],
     });
     expect(out).toContain('title="A &quot;fancy&quot; step"');
+  });
+
+  it('emits displayTagSlugs (raw) alongside displayTags (resolved via registry)', () => {
+    const registry = {
+      'software-product>sap-cap': 'SAP CAP',
+      'software-product>sap-s-4hana': 'SAP S/4HANA',
+    }
+    const out = renderHugoFrontmatter({
+      slug: 's', title: 't', description: 'd', time: 5, level: 'beginner',
+      tags: ['software-product>sap-s-4hana'],
+      primaryTag: 'software-product>sap-cap',
+      author: '', authorProfile: '',
+      youWillLearn: [], prerequisites: '',
+      steps: [stubStep(1)], nav: stubNav,
+      lastUpdated: '', createdAt: '', contributors: [],
+      registry,
+    });
+    expect(out).toContain('- SAP CAP');
+    expect(out).toContain('- SAP S/4HANA');
+    expect(out).toContain('- software-product>sap-cap');
+    expect(out).toContain('- software-product>sap-s-4hana');
+    // Both arrays should be present
+    expect(out).toContain('displayTags:');
+    expect(out).toContain('displayTagSlugs:');
+  });
+
+  it('falls back to heuristic for slugs missing from the registry', () => {
+    const registry = { 'software-product>sap-cap': 'SAP CAP' }
+    const out = renderHugoFrontmatter({
+      slug: 's', title: 't', description: 'd', time: 5, level: 'beginner',
+      tags: ['software-product>my-unknown'],
+      primaryTag: 'software-product>sap-cap',
+      author: '', authorProfile: '',
+      youWillLearn: [], prerequisites: '',
+      steps: [stubStep(1)], nav: stubNav,
+      lastUpdated: '', createdAt: '', contributors: [],
+      registry,
+    });
+    expect(out).toContain('- SAP CAP');
+    expect(out).toContain('- My Unknown');
+    expect(out).toContain('- software-product>my-unknown');
+  });
+
+  it('omits empty slugs from displayTagSlugs as well as displayTags', () => {
+    const out = renderHugoFrontmatter({
+      slug: 's', title: 't', description: 'd', time: 5, level: 'beginner',
+      tags: ['software-product>sap-cap'],
+      primaryTag: '',
+      author: '', authorProfile: '',
+      youWillLearn: [], prerequisites: '',
+      steps: [stubStep(1)], nav: stubNav,
+      lastUpdated: '', createdAt: '', contributors: [],
+    });
+    // Empty primaryTag must not produce an empty string entry in either array
+    // Only 'software-product>sap-cap' should appear
+    const fmEnd = out.indexOf('\n---\n\n')
+    const fm = out.slice(0, fmEnd)
+    // displayTagSlugs should not contain empty string entries
+    expect(fm).not.toContain("- ''");
+    expect(fm).not.toContain('- ""');
+    // SAP CAP should appear from the heuristic (no registry passed)
+    expect(fm).toContain('- SAP CAP');
   });
 });

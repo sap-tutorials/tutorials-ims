@@ -10,6 +10,7 @@ import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache } fro
 import { parseRulesVr } from './parsers/rules.js'
 import { computeRecommendations } from './parsers/recommendations.js'
 import { humanizeTag, splitPrerequisites } from './parsers/frontmatter-utils.js'
+import type { TagLabelRegistry } from './parsers/frontmatter-utils.js'
 import { renderHugoFrontmatter } from './parsers/render-frontmatter.js'
 import type { Mission, MissionHierarchy, HierarchyGroup, StandaloneGroup, TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } from './parsers/types.js'
 
@@ -159,10 +160,13 @@ function writeVitePressPage(
   createdAt: string,
   contributors: Array<{ name: string; login: string; email: string; avatarUrl: string }>,
   outputDir: string,
+  registry: TagLabelRegistry = {},
 ): void {
   const OUTPUT_DIR = outputDir
   const cleanTags = tags.map(t => t.replace(/\\/g, ''))
   const cleanPrimaryTag = primaryTag.replace(/\\/g, '')
+
+  const dedupedRawSlugs = [...new Set([cleanPrimaryTag, ...cleanTags])].filter(s => s.length > 0)
 
   const fm: Record<string, unknown> = {
     layout: 'tutorial',
@@ -178,7 +182,8 @@ function writeVitePressPage(
     stepCount: steps.length,
     prev: nav.prev,
     next: nav.next,
-    displayTags: [...new Set([cleanPrimaryTag, ...cleanTags])].map(humanizeTag).filter(t => t.length > 0),
+    displayTags: dedupedRawSlugs.map(s => humanizeTag(s, registry)).filter(t => t.length > 0),
+    displayTagSlugs: dedupedRawSlugs,
     youWillLearn,
     prerequisites: splitPrerequisites(prerequisites),
     lastUpdated: lastUpdated || null,
@@ -322,6 +327,7 @@ export function writeHugoPage(
   createdAt: string,
   contributors: Array<{ name: string; login: string; email: string; avatarUrl: string }>,
   outputDir: string,
+  registry: TagLabelRegistry = {},
 ): void {
   const content = renderHugoFrontmatter({
     slug,
@@ -340,6 +346,7 @@ export function writeHugoPage(
     lastUpdated,
     createdAt,
     contributors,
+    registry,
   })
 
   mkdirSync(outputDir, { recursive: true })
@@ -405,6 +412,24 @@ function formatDuration(ms: number): string {
   const mins = Math.floor(ms / 60_000)
   const secs = ((ms % 60_000) / 1000).toFixed(1)
   return `${mins}m ${secs}s`
+}
+
+async function fetchTagLabelRegistry(): Promise<TagLabelRegistry> {
+  const capBaseUrl = process.env.CAP_BASE_URL ?? 'http://localhost:4004'
+  const url = `${capBaseUrl}/build/tag-labels`
+  try {
+    const res = await fetch(url)
+    if (!res.ok) {
+      console.warn(`[tag-labels] ${url} returned ${res.status} — falling back to heuristic for all tags`)
+      return {}
+    }
+    const map = await res.json() as TagLabelRegistry
+    console.log(`[tag-labels] loaded ${Object.keys(map).length} (slug, label) pairs from ${url}`)
+    return map
+  } catch (e) {
+    console.warn(`[tag-labels] fetch failed (${(e as Error).message}) — falling back to heuristic for all tags`)
+    return {}
+  }
 }
 
 async function main() {
@@ -562,6 +587,10 @@ async function main() {
   console.log('Phase 3: Processing tutorials...\n')
   const processStart = performance.now()
 
+  // Fetch tag label registry once before the tutorial loop.
+  // An empty map is returned on failure; all tags fall back to the heuristic.
+  const tagRegistry = await fetchTagLabelRegistry()
+
   mkdirSync(OUTPUT_DIR, { recursive: true })
 
   const navEntries: TutorialNavEntry[] = []
@@ -640,6 +669,9 @@ async function main() {
         }
       }
 
+      const rawNavSlugs = [...new Set([frontmatter.primary_tag ?? '', ...(frontmatter.tags ?? [])])]
+        .map(s => s.replace(/\\/g, '')).filter(s => s.length > 0)
+
       const nav: TutorialNavEntry = {
         slug: t.slug,
         title,
@@ -647,10 +679,9 @@ async function main() {
         time: frontmatter.time ?? 15,
         level,
         stepCount: steps.length,
-        primaryTag: humanizeTag(frontmatter.primary_tag ?? ''),
-        displayTags: [...new Set([frontmatter.primary_tag ?? '', ...(frontmatter.tags ?? [])])]
-          .map(t => t.replace(/\\/g, ''))
-          .map(humanizeTag).filter(tag => tag.length > 0),
+        primaryTag: humanizeTag(frontmatter.primary_tag ?? '', tagRegistry),
+        displayTags: rawNavSlugs.map(s => humanizeTag(s, tagRegistry)).filter(tag => tag.length > 0),
+        displayTagSlugs: rawNavSlugs,
         repo: t.repo,
         branch: t.branch,
         prev: null,
@@ -677,6 +708,7 @@ async function main() {
         createdAt,
         contributors,
         OUTPUT_DIR,
+        tagRegistry,
       )
 
       navEntries.push(nav)

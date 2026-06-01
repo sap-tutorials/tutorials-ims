@@ -19,18 +19,21 @@ function makeProgress(overrides: Partial<ProgressPayload> = {}): ProgressPayload
 const tutorialCard = (slug: string): CardItem => ({
   type: 'tutorial', id: slug, title: 't', description: '', time: 5,
   level: 'beginner', tutorialCount: 1, primaryTag: 'CAP', displayTags: [],
+  displayTagSlugs: [],
   href: `/tutorials/${slug}`, stepCount: 3
 } as unknown as CardItem);
 
 const missionCard = (slug: string): CardItem => ({
   type: 'mission', id: `mission-${slug}`, title: 'm', description: '', time: 10,
   level: 'beginner', tutorialCount: 3, primaryTag: 'CAP', displayTags: [],
+  displayTagSlugs: [],
   href: `/tutorials/mission-${slug}`, stepCount: 9
 } as unknown as CardItem);
 
 const groupCard = (slug: string): CardItem => ({
   type: 'group', id: `group-${slug}`, title: 'g', description: '', time: 8,
   level: 'beginner', tutorialCount: 2, primaryTag: 'CAP', displayTags: [],
+  displayTagSlugs: [],
   href: `/tutorials/group-${slug}`, stepCount: 6
 } as unknown as CardItem);
 
