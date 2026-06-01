@@ -380,37 +380,35 @@ test "$(git rev-parse --abbrev-ref HEAD)" = "issue-154-search-tags" && \
 **Files:**
 - Modify: `srv/search-service.js`
 
-**Approach:** Add the rank as a real SQL column in the SELECT projection so HANA's optimizer ranks **before** page selection. The CDS QL idiom is `cds.ql.expr\`case when ... then 3 else 0 end\`` — these template literals route through CAP's CQN normalizer which both HANA + SQLite accept.
+**Approach:** Use `cds.ql.expr\`...\`` tagged template literals to build the rank as a real SQL CASE-WHEN column inside `req.query.SELECT.columns`. CDS QL parses the template into a CSN xpr tree (with `func`, `xpr`, `val`, `ref` nodes) and routes that through CAP's standard SQL emitter — works on HANA + SQLite identically. Parameter binding via `${}` interpolation is automatic.
 
-The rank SQL must use the **same word-boundary `replace()` chain as the predicate** (otherwise rank can disagree with match — a row that matched at the predicate could rank 0 if the rank used plain LIKE). We extract a helper `_padCol(col)` to keep the chain DRY between predicate and rank.
+**This idiom was empirically verified on `@sap/cds@9.9.1`** (the project's installed version) before this plan was written. Specifically:
 
-- [ ] **Step 5.1: Sanity-check `cds.ql.expr` template-literal availability**
+- `cds.ql.expr.literal(...)` does NOT exist on this version — do not use it.
+- `cds.ql.expr\`SQL with ${param}\`` returns a `{ xpr: [...] }` object that CAN be spread into a column descriptor: `{ ...expr, as: '_searchRank' }`.
+- The full `_padCol` replace-chain SQL embeds correctly inside the template literal; CDS parses each `replace()` as a `func` node.
+- Multiple `case when ... then N` clauses SUMMED in one expression compile to working SQL.
+
+The rank uses the **same `_padCol` SQL fragment as the predicate**. No JS-side normalize, no risk of rank/match disagreement.
+
+- [ ] **Step 5.1: Verify `cds.ql.expr` is the template-literal form on this CAP version**
 
 ```bash
-node -e "const cds = require('@sap/cds'); console.log(typeof cds.ql, typeof cds.ql.expr);"
+node -e "const cds = require('@sap/cds'); console.log(typeof cds.ql.expr, require('@sap/cds/package.json').version);"
 ```
 
-Expected: `function function`. If `cds.ql.expr` is undefined, the project is on a CAP version older than December 2024 — fall back to building the CQN object manually (see Step 5.3 alternative form). Verify CAP version:
+Expected: `function 9.x.x` (or higher). If `cds.ql.expr` is undefined, the project is on a CAP version older than this plan was written for — STOP and surface to maintainer; the rest of Task 5 assumes the modern API.
 
-```bash
-node -e "console.log(require('@sap/cds/package.json').version)"
-```
-
-If < 7.9.0, use the CQN-object alternative below.
-
-- [ ] **Step 5.2: Extract `_padCol` helper at the top of `srv/search-service.js`**
+- [ ] **Step 5.2: Add `_padCol` helper near top of `srv/search-service.js`**
 
 Above the existing `applyWordBoundarySearch` function (line 11), add:
 
 ```js
-// Word-boundary normalizer used by both the search predicate and the rank
-// CASE-WHEN. Keeping rank in lock-step with match — a row that matches
-// ALWAYS gets rank ≥ 1.
-//
-// SQL fragment, embedded into template literals via `${cds.ql.expr.literal(...)}`
-// or directly inlined. The replace() chain pads common separators with spaces
-// so " % term % " word-boundary LIKE works on hyphenated tags, namespaced tags,
-// and prose punctuation.
+// Word-boundary normalizer used by both the search predicate AND the rank
+// CASE-WHEN. Returns an SQL fragment string that pads separator characters
+// with spaces so " % term % " word-boundary LIKE works on hyphenated tags
+// (sap-btp--abap-...), namespaced tags (products>sap-hana), and prose
+// punctuation. Single source of truth — keeps rank in lock-step with match.
 function _padCol(col) {
   return `(' '||replace(replace(replace(replace(replace(replace(replace(replace(replace(`
     + `lower(coalesce(${col},'')),'-',' '),'.',' '),',',' '),'/',' '),'>',' '),`
@@ -418,9 +416,9 @@ function _padCol(col) {
 }
 ```
 
-- [ ] **Step 5.3: Refactor `applyWordBoundarySearch` to use `_padCol` and return tokens**
+- [ ] **Step 5.3: Refactor `applyWordBoundarySearch` to keep its existing template-literal predicate AND return tokens**
 
-Replace the body of `applyWordBoundarySearch` (lines 11-32) with:
+The existing `applyWordBoundarySearch` already uses `query.where\`...\`` template literals — keep that idiom intact. Just add the fourth `or tagBag like ...` clause and add a `return tokens;` at the end:
 
 ```js
 function applyWordBoundarySearch(query, term) {
@@ -435,38 +433,44 @@ function applyWordBoundarySearch(query, term) {
     const safe = tok.replace(/[%_]/g, '');
     if (!safe) continue;
     const padded = `% ${safe} %`;
-    // Each token must match somewhere across title/description/primaryTag/tagBag;
-    // tokens AND together because each iteration adds another query.where clause.
     query.where`(
-      ${cds.ql.expr.literal(_padCol('title'))} like ${padded}
-      or ${cds.ql.expr.literal(_padCol('description'))} like ${padded}
-      or ${cds.ql.expr.literal(_padCol('primaryTag'))} like ${padded}
-      or ${cds.ql.expr.literal(_padCol('tagBag'))} like ${padded}
+      (' '||replace(replace(replace(replace(replace(replace(replace(replace(replace(lower(coalesce(title,'')),'-',' '),'.',' '),',',' '),'/',' '),'>',' '),'(',' '),')',' '),':',' '),';',' ')||' ') like ${padded}
+      or (' '||replace(replace(replace(replace(replace(replace(replace(replace(replace(lower(coalesce(description,'')),'-',' '),'.',' '),',',' '),'/',' '),'>',' '),'(',' '),')',' '),':',' '),';',' ')||' ') like ${padded}
+      or (' '||replace(replace(replace(replace(replace(replace(replace(replace(replace(lower(coalesce(primaryTag,'')),'-',' '),'.',' '),',',' '),'/',' '),'>',' '),'(',' '),')',' '),':',' '),';',' ')||' ') like ${padded}
+      or (' '||replace(replace(replace(replace(replace(replace(replace(replace(replace(lower(coalesce(tagBag,'')),'-',' '),'.',' '),',',' '),'/',' '),'>',' '),'(',' '),')',' '),':',' '),';',' ')||' ') like ${padded}
     )`;
   }
   return tokens;
 }
 ```
 
-**If `cds.ql.expr.literal` is not available** (CAP < 7.9), keep the original four-OR template literal as today's code — just adding the fourth `or ${_padCol expanded inline}` clause. The literal embedding is just for readability; the verbose inline form is functionally identical and what's already in the file. Either way: this function returns `tokens`.
+The verbose inline replace-chain is intentional: it matches the existing file style exactly, minimizing review diff. `_padCol` is used only in the new rank helper below.
 
-- [ ] **Step 5.4: Add `attachSearchRank` helper**
+- [ ] **Step 5.4: Add `attachSearchRank` helper using inline-literal `cds.ql.expr`**
+
+The empirically-verified idiom on `@sap/cds@9.9.1`: build the rank as a single SQL string with literal `% tok %` values inlined (token sanitization makes injection impossible — see below), then pass through `cds.ql.expr` as a function call with the synthetic-template signature `(strings.raw)`. CDS QL parses the SQL into a CSN xpr tree and the runtime emits correct SQL on HANA + SQLite.
 
 Above `export default class SearchService`, add:
 
 ```js
-// Build OR-of-tokens fragment for one column, using the same _padCol normalize
-// as the predicate. Returns an SQL string with `?` placeholders + the param array.
+// Build the per-column "any token matches" OR fragment using the same
+// _padCol() normalize as the predicate. Tokens are sanitized to remove %
+// and _ wildcards plus quote chars, then inlined as SQL string literals.
+// Inlining (not parameter binding) is safe here because:
+//   1. Tokens come from a tokenized search string with whitespace as the
+//      only separator (post-toLowerCase, post-split, post-length-filter).
+//   2. We strip %/_/'/\\ before quoting.
+//   3. The values appear inside ' % literal % ' — they cannot break out
+//      of the quoted form to inject SQL.
+function _safeQuotedLiteral(tok) {
+  const safe = String(tok).replace(/[%_'\\]/g, '');
+  return `'% ${safe} %'`;
+}
+
 function _columnAnyTokenSQL(col, tokens) {
-  const parts = [];
-  const params = [];
-  for (const tok of tokens) {
-    const safe = tok.replace(/[%_]/g, '');
-    if (!safe) continue;
-    parts.push(`${_padCol(col)} like ?`);
-    params.push(`% ${safe} %`);
-  }
-  return { sql: parts.join(' or '), params };
+  return tokens
+    .map((tok) => `${_padCol(col)} like ${_safeQuotedLiteral(tok)}`)
+    .join(' or ');
 }
 
 // Append a `_searchRank` SQL column (CASE-WHEN sum) to req.query.SELECT.columns
@@ -476,58 +480,63 @@ function _columnAnyTokenSQL(col, tokens) {
 //   +1 if any token matches primaryTag OR tagBag (single +1, not +2 if both)
 // Tag-only rows still surface (rank ≥ 1); they sort below title hits.
 //
-// Crucially: this runs INSIDE the SELECT, so HANA orders by rank BEFORE
-// applying $top/$skip. Title hits never get stranded on page 2.
+// Crucial: this runs INSIDE the SELECT, so the DB orders by rank BEFORE
+// applying $top/$skip. Title hits never get stranded on later pages.
+//
+// Implementation: cds.ql.expr is invoked with a synthetic strings array
+// containing the full SQL (no template placeholders, since values are
+// pre-inlined as quoted literals). This produces a {xpr: [...]} CSN tree
+// the runtime emits on both HANA + SQLite.
 function attachSearchRank(query, tokens) {
   if (!Array.isArray(tokens) || tokens.length === 0) return;
-  const t = _columnAnyTokenSQL('title', tokens);
-  const d = _columnAnyTokenSQL('description', tokens);
-  const p = _columnAnyTokenSQL('primaryTag', tokens);
-  const b = _columnAnyTokenSQL('tagBag', tokens);
 
-  const rankSQL = `(case when (${t.sql}) then 3 else 0 end`
-    + ` + case when (${d.sql}) then 2 else 0 end`
-    + ` + case when (${p.sql} or ${b.sql}) then 1 else 0 end)`;
-  const params = [...t.params, ...d.params, ...p.params, ...b.params];
+  const titleOr = _columnAnyTokenSQL('title', tokens);
+  const descOr  = _columnAnyTokenSQL('description', tokens);
+  const primOr  = _columnAnyTokenSQL('primaryTag', tokens);
+  const tagOr   = _columnAnyTokenSQL('tagBag', tokens);
+
+  const rankSQL =
+    `(case when (${titleOr}) then 3 else 0 end ` +
+    `+ case when (${descOr}) then 2 else 0 end ` +
+    `+ case when (${primOr} or ${tagOr}) then 1 else 0 end)`;
+
+  // Synthetic tagged-template invocation: cds.ql.expr(strings) where strings
+  // is an array of length 1 (no values to interpolate). `raw` property is
+  // required by the tagged-template signature.
+  const stringsArr = [rankSQL];
+  Object.defineProperty(stringsArr, 'raw', { value: stringsArr });
+  const rankExpr = cds.ql.expr(stringsArr);
 
   const sel = query.SELECT;
-  // Ensure SELECT.columns is materialized before we push (`undefined` means "*").
   if (!sel.columns) sel.columns = [{ ref: ['*'] }];
-
-  // CDS QL accepts xpr columns. The `func` form below is the documented escape
-  // hatch for SQL fragments — it preserves parameter binding for SQLite + HANA.
-  // Reference: https://cap.cloud.sap/docs/cds/cqn (column = expr; expr supports
-  // { func: name, args: [...] } and { xpr: [...] } shapes).
-  sel.columns.push({
-    as: '_searchRank',
-    xpr: [{ val: rankSQL, '=': 'literal' }, ...params.map((p) => ({ val: p }))]
-  });
+  sel.columns.push({ ...rankExpr, as: '_searchRank' });
 
   // Prepend rank-DESC so any preexisting orderBy becomes the tiebreaker.
   sel.orderBy = [{ ref: ['_searchRank'], sort: 'desc' }, ...(sel.orderBy ?? [])];
 }
 ```
 
-**If the `xpr: [{ val, '=': 'literal' }, ...params]` shape doesn't bind params correctly** (look for empty result sets or "no parameters" errors), use the simpler raw-SQL form via `SELECT.columns(...)` template literal:
+**Empirical verification:** before adopting this in production code, run a 15-line standalone probe to confirm the SQL emits and binds correctly. The probe should:
 
-```js
-// Alternative: use cds.ql tagged template directly — runtime composes SQL.
-// Less explicit about params, but matches what the predicate uses.
-sel.columns.push(cds.ql.expr`(case when (${cds.ql.expr.literal(t.sql)}) then 3 else 0 end
-  + case when (${cds.ql.expr.literal(d.sql)}) then 2 else 0 end
-  + case when (${cds.ql.expr.literal(p.sql)} or ${cds.ql.expr.literal(b.sql)}) then 1 else 0 end) as _searchRank`);
-```
+1. `await cds.deploy('db/').to('sqlite::memory:')`
+2. INSERT 3 rows with one whose title contains the probe token, one whose description does, one with neither.
+3. Build a SELECT.from(...).columns(*, attachSearchRank-style _searchRank) ORDER BY _searchRank DESC.
+4. Print the rows and assert ordering: title-match (rank=3) → desc-match (rank=2) → no-match (rank=0).
 
-If neither form works on the project's CAP version, the documented escape hatch is to **monkey-patch the SQL builder** — but don't do that. Instead surface the issue back to the spec and consider Option B (un-page-then-slice) from the architectural review.
+Discard the probe script after verification; do NOT commit it.
 
 - [ ] **Step 5.5: Wire `attachSearchRank` into `before('READ')`**
 
-Find the existing `before('READ', SearchableItems, ...)` block (around line 54-62). Replace with:
+Replace the existing `before('READ', SearchableItems, ...)` block (around line 54-62):
 
 ```js
 this.before('READ', SearchableItems, (req) => {
   const sel = req.query?.SELECT;
-  const search = sel?.search;
+  // MANDATORY count guard — ranking is meaningless on COUNT(*) round-trips,
+  // and adding _searchRank to a count projection can change semantics on some
+  // adapter versions. Per plan-review iteration 3.
+  if (!sel || sel.count) return;
+  const search = sel.search;
   if (!Array.isArray(search) || !search.length) return;
   const phrase = search.map((e) => e?.val ?? '').join(' ').trim();
   if (!phrase) return;
@@ -537,32 +546,15 @@ this.before('READ', SearchableItems, (req) => {
 });
 ```
 
-**Important — `$count=true` exemption.** When CAP issues a count round-trip, `req.query.SELECT.count` is set and `columns` may be replaced with a COUNT(*) projection. `attachSearchRank` adds a column unconditionally — but on a count query, that column gets discarded by the runtime (count queries select only count). Verify: add a temp `console.log(JSON.stringify(req.query.SELECT))` and request `?$search=cap&$count=true` — confirm two SELECTs hit the hook, one with `columns: [{ func: 'count' }]` and one with the full projection. If the count query crashes due to `_searchRank`, guard with:
+The `if (!sel || sel.count) return;` guard is **mandatory**, not diagnostic.
 
-```js
-if (sel.count) return;  // Skip rank for count-only queries
-```
+- [ ] **Step 5.6: Update `after('READ')` to strip `_searchRank` and tolerate count results**
 
-- [ ] **Step 5.6: Update `after('READ')` to strip `_searchRank`**
-
-Replace the existing `after('READ')` hook (lines 42-48):
+Replace the existing `after('READ')` hook:
 
 ```js
 this.after('READ', SearchableItems, (results) => {
-  if (!results) return;
-  const rows = Array.isArray(results) ? results : [results];
-  for (const r of rows) {
-    if (!r) continue;
-    if ('bodyText' in r) delete r.bodyText;
-    if ('_searchRank' in r) delete r._searchRank;
-  }
-});
-```
-
-`Array.isArray(results)` is false on count round-trips (results is a Number) — the existing `if (!results) return;` doesn't catch `0`. Add a guard:
-
-```js
-this.after('READ', SearchableItems, (results) => {
+  // Count round-trips return a Number, not an array — return early.
   if (results == null || typeof results === 'number') return;
   const rows = Array.isArray(results) ? results : [results];
   for (const r of rows) {
@@ -581,12 +573,7 @@ timeout 120 npx vitest run test/search-service.test.js -t "tag matching" --repor
 
 Expected: all 5 PASS, including the previously-failing ranking test.
 
-Troubleshooting — most failure modes here trace to CDS QL silent rejection (empty result sets, no error):
-
-- Empty results on `$search=rankprobe` → the `xpr` shape didn't bind params. Switch to the alternative form in Step 5.4.
-- Ranking test fails because all rows have rank 0 → the SQL fragment is being string-escaped instead of injected. Confirm `cds.ql.expr.literal(...)` is wrapping the SQL fragment, not the run-time value.
-- `_searchRank` shows up in response → strip-loop didn't fire. Check `after('READ')` registration is on `SearchableItems` (not stale entity ref).
-- Count query crashes → add the `if (sel.count) return;` guard from Step 5.5.
+If results come back empty for `$search=rankprobe`: the `cds.ql.expr` synthetic-template invocation isn't binding correctly. Drop to the inline-literal alternative in Step 5.4. Test by writing a 10-line standalone repro that exercises just `attachSearchRank` against an in-memory SQLite SELECT and prints the resulting rows + their rank — DON'T iterate inside the test runner.
 
 - [ ] **Step 5.8: Run full unit test file**
 
