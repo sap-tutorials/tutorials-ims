@@ -79,22 +79,37 @@ view SearchableItems as
     key t.ID, t.legacyId, t.title, t.description, t.slug,
     t.primaryTag, t.experienceTag, t.averageTimeToComplete, t.status,
     'TUTORIAL' as taskType : String(20),
-    bt.bodyText as bodyText : LargeString
+    bt.bodyText as bodyText : LargeString,
+    (select string_agg(lower(coalesce(tg.label,'') || ' ' || coalesce(tg.name,'')), ' ')
+       from ims.TutorialTags as tt
+       inner join ims.Tags as tg on tg.ID = tt.tag.ID
+       where tt.tutorial.ID = t.ID
+    ) as tagBag : String(5000)
   } where t.status is null or t.status = 'ACTIVE'
   UNION ALL
-  SELECT from ims.Missions {
-    ID, legacyId, title, description, slug,
-    primaryTag, experienceTag, averageTimeToComplete, status,
+  SELECT from ims.Missions as m {
+    m.ID, m.legacyId, m.title, m.description, m.slug,
+    m.primaryTag, m.experienceTag, m.averageTimeToComplete, m.status,
     'MISSION' as taskType : String(20),
-    null as bodyText : LargeString
-  } where (status is null or status = 'ACTIVE') and published = true
+    null as bodyText : LargeString,
+    (select string_agg(lower(coalesce(tg.label,'') || ' ' || coalesce(tg.name,'')), ' ')
+       from ims.MissionTags as mt
+       inner join ims.Tags as tg on tg.ID = mt.tag.ID
+       where mt.mission.ID = m.ID
+    ) as tagBag : String(5000)
+  } where (m.status is null or m.status = 'ACTIVE') and m.published = true
   UNION ALL
-  SELECT from ims.Groups {
-    ID, legacyId, title, description, null as slug : String(255),
-    primaryTag, experienceTag, averageTimeToComplete, status,
+  SELECT from ims.Groups as g {
+    g.ID, g.legacyId, g.title, g.description, null as slug : String(255),
+    g.primaryTag, g.experienceTag, g.averageTimeToComplete, g.status,
     'GROUP' as taskType : String(20),
-    null as bodyText : LargeString
-  } where (status is null or status = 'ACTIVE') and published = true;
+    null as bodyText : LargeString,
+    (select string_agg(lower(coalesce(tg.label,'') || ' ' || coalesce(tg.name,'')), ' ')
+       from ims.GroupTags as gt
+       inner join ims.Tags as tg on tg.ID = gt.tag.ID
+       where gt.group.ID = g.ID
+    ) as tagBag : String(5000)
+  } where (g.status is null or g.status = 'ACTIVE') and g.published = true;
 
 view CompletionAnalytics as
   SELECT from ims.TaskRecords as tr

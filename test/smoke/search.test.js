@@ -48,4 +48,16 @@ describe('Search Service (smoke)', () => {
     const elapsed = Date.now() - start;
     expect(elapsed).toBeLessThan(500);
   });
+
+  it('does not leak _searchRank field on deployed srv (#154)', async () => {
+    const res = await fetch(`${BASE_URL}/search/SearchableItems?$search=BTP&$top=10`);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(Array.isArray(data.value)).toBe(true);
+    // Don't assert >0 hits — content shape varies by environment (DEV/QA/cold).
+    // Only assert: if there are hits, none of them leak _searchRank.
+    for (const row of data.value) {
+      expect(row).not.toHaveProperty('_searchRank');
+    }
+  });
 });
