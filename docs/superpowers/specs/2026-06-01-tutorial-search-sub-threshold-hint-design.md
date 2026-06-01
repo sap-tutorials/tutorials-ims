@@ -187,6 +187,12 @@ defines the transition properties for them).
 - Adding a Vue Test Utils unit test — there is no existing test infra for
   navigator UI in this project; the change is small enough to validate
   manually.
+- Differentiating the `NoFilterResults` copy between browse-mode filter
+  collapse and search-mode zero-hits. Both currently show the same "No
+  results match your filters" message — a pre-existing conflation. The
+  sub-threshold fix here addresses the 1-character "search broke" reading
+  but leaves the genuine-search-zero-hits copy untouched. A follow-up issue
+  should split that copy if it's worth doing.
 
 ## Verification
 
@@ -216,6 +222,6 @@ No automated test added; smoke (`test/smoke/`) covers
 ## Files touched
 
 - [hugo-apps/src/navigator/useSearch.ts](../../../hugo-apps/src/navigator/useSearch.ts) — `MIN_SEARCH_CHARS` constant, `isSubThreshold` computed, return-object additions.
-- [hugo-apps/src/navigator/TutorialNavigator.vue](../../../hugo-apps/src/navigator/TutorialNavigator.vue) — `<Transition>` wrapper around five mutually-exclusive branches; replaces lines 712–718 and line 792; new `navigator-result-area` wrapper; new `navigator-hint` and `.navigator-fade-*` scoped CSS.
+- [hugo-apps/src/navigator/TutorialNavigator.vue](../../../hugo-apps/src/navigator/TutorialNavigator.vue) — `<Transition>` wrapper around five mutually-exclusive branches; replaces lines 712–718 and line 792; new `navigator-result-area` wrapper; new `navigator-hint` and `.navigator-fade-*` scoped CSS. Also: add `isSubThreshold` to the `useSearch()` destructure at line 34.
 
 No backend, schema, route, or build-pipeline changes.
