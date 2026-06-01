@@ -88,6 +88,19 @@
   const themeItem = document.getElementById('sb-theme');
   let isAuthenticated = false;
 
+  // Issue #160: announce the logo region as a link to home and route clicks
+  // there. UI5 ShellBar v2 documents both `accessibilityAttributes.logo` and
+  // the `logo-click` event for exactly this case — markup wrapping is not an
+  // option because the logo is a slotted child and the wordmark comes from
+  // primary-title. Register both event-name spellings (prefixed/unprefixed)
+  // for version-skew safety across UI5 minor releases.
+  shellbar.accessibilityAttributes = {
+    logo: { role: 'link', name: 'SAP Tutorial Platform — home' }
+  };
+  const goHome = () => { window.location.href = '/'; };
+  shellbar.addEventListener('ui5-logo-click', goHome);
+  shellbar.addEventListener('logo-click', goHome);
+
   function closeAllExcept(skip) {
     [navPopover, sharePopover, userPopover].forEach(p => {
       if (p !== skip && p.open) p.open = false;
