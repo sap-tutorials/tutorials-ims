@@ -736,8 +736,16 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
         </button>
       </section>
 
-      <!-- Section: Card Grid (or skeleton while loading) -->
-      <div class="navigator-result-area">
+      <!-- Section: Card Grid (or skeleton while loading)
+           Issue #159: Result-region children are persistent siblings gated by
+           v-show, NOT v-if branches inside a <Transition>. Keeping the heavy
+           ui5-illustrated-message empty-state mounted prevents the visible
+           "no results" flash on every keystroke when the query has no matches.
+           <Transition> is reserved for the initial-load skeleton (which only
+           appears once per page load). Busy state is signalled via aria-busy
+           on the wrapper plus a delayed ui5-busy-indicator that overlays
+           rather than displaces. -->
+      <div class="navigator-result-area" :aria-busy="isSearching">
         <Transition name="navigator-fade" mode="out-in">
           <section
             v-if="loading"
@@ -747,76 +755,86 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
           >
             <Skeleton kind="card" :count="6" />
           </section>
-
-          <div v-else-if="isSearching" key="searching" class="navigator-loading">
-            <div class="fd-busy-indicator fd-busy-indicator--m" aria-label="Loading search results"></div>
-          </div>
-
-          <div v-else-if="isSubThreshold" key="subthreshold" class="navigator-hint">
-            <ui5-illustrated-message name="BeforeSearch" design="Spot">
-              <span slot="title">Keep typing&hellip;</span>
-              <span slot="subtitle">Search starts at 2 characters.</span>
-            </ui5-illustrated-message>
-          </div>
-
-          <section v-else-if="displayedItems.length > 0" key="results" class="navigator-grid">
-        <a
-          v-for="item in displayedItems"
-          :key="item.id"
-          :href="item.href"
-          class="nav-card"
-          data-vt-card="navigator"
-          :class="{
-            'nav-card--new': item.isNew,
-            'nav-card--has-progress': !!cardProgress(item, progress),
-          }"
-        >
-          <ProgressRing
-            v-if="cardProgress(item, progress)"
-            class="nav-card__progress"
-            v-bind="cardProgress(item, progress)!"
-          />
-          <span v-if="item.isNew" class="nav-card__new-badge" aria-label="New tutorial">NEW</span>
-          <LicenseIcon v-if="requiresLicense(item)" class="nav-card__license" />
-          <div class="nav-card__type" :class="`nav-card__type--${item.type}`">
-            {{ TYPE_LABELS[item.type] }}
-          </div>
-
-          <h3 class="nav-card__title">{{ item.title }}</h3>
-
-          <p class="nav-card__desc">{{ item.description }}</p>
-
-          <div class="nav-card__meta">
-            <span class="nav-card__meta-item">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 13V3h4l2 2h6v8H2z"/></svg>
-              {{ capitalizeLevel(item.level) }}
-            </span>
-            <span class="nav-card__meta-sep">&middot;</span>
-            <span class="nav-card__meta-item">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8l2.5 1.5"/></svg>
-              {{ formatTime(item.time) }}
-            </span>
-            <template v-if="item.type !== 'tutorial'">
-              <span class="nav-card__meta-sep">&middot;</span>
-              <span class="nav-card__meta-item">{{ item.tutorialCount }} Tutorials</span>
-            </template>
-          </div>
-
-          <div class="nav-card__tag">
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h5l7 7-5 5-7-7V3zm3 2a1 1 0 100 2 1 1 0 000-2z"/></svg>
-            {{ item.primaryTag }}
-          </div>
-        </a>
-      </section>
-
-          <div v-else key="empty" class="navigator-empty">
-            <ui5-illustrated-message name="NoFilterResults" design="Spot">
-              <span slot="title">No results match your filters</span>
-              <span slot="subtitle">Try removing a filter or broadening your search.</span>
-              <ui5-button design="Emphasized" @click="clearFilters">Clear all filters</ui5-button>
-            </ui5-illustrated-message>
-          </div>
         </Transition>
+
+        <ui5-busy-indicator
+          v-if="!loading"
+          data-region-busy
+          size="Medium"
+          :active="isSearching"
+          delay="400"
+        ></ui5-busy-indicator>
+
+        <div v-show="!loading && isSubThreshold" class="navigator-hint">
+          <ui5-illustrated-message name="BeforeSearch" design="Spot">
+            <span slot="title">Keep typing&hellip;</span>
+            <span slot="subtitle">Search starts at 2 characters.</span>
+          </ui5-illustrated-message>
+        </div>
+
+        <section
+          v-show="!loading && !isSubThreshold && displayedItems.length > 0"
+          class="navigator-grid"
+        >
+          <a
+            v-for="item in displayedItems"
+            :key="item.id"
+            :href="item.href"
+            class="nav-card"
+            data-vt-card="navigator"
+            :class="{
+              'nav-card--new': item.isNew,
+              'nav-card--has-progress': !!cardProgress(item, progress),
+            }"
+          >
+            <ProgressRing
+              v-if="cardProgress(item, progress)"
+              class="nav-card__progress"
+              v-bind="cardProgress(item, progress)!"
+            />
+            <span v-if="item.isNew" class="nav-card__new-badge" aria-label="New tutorial">NEW</span>
+            <LicenseIcon v-if="requiresLicense(item)" class="nav-card__license" />
+            <div class="nav-card__type" :class="`nav-card__type--${item.type}`">
+              {{ TYPE_LABELS[item.type] }}
+            </div>
+
+            <h3 class="nav-card__title">{{ item.title }}</h3>
+
+            <p class="nav-card__desc">{{ item.description }}</p>
+
+            <div class="nav-card__meta">
+              <span class="nav-card__meta-item">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 13V3h4l2 2h6v8H2z"/></svg>
+                {{ capitalizeLevel(item.level) }}
+              </span>
+              <span class="nav-card__meta-sep">&middot;</span>
+              <span class="nav-card__meta-item">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8l2.5 1.5"/></svg>
+                {{ formatTime(item.time) }}
+              </span>
+              <template v-if="item.type !== 'tutorial'">
+                <span class="nav-card__meta-sep">&middot;</span>
+                <span class="nav-card__meta-item">{{ item.tutorialCount }} Tutorials</span>
+              </template>
+            </div>
+
+            <div class="nav-card__tag">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h5l7 7-5 5-7-7V3zm3 2a1 1 0 100 2 1 1 0 000-2z"/></svg>
+              {{ item.primaryTag }}
+            </div>
+          </a>
+        </section>
+
+        <div
+          v-show="!loading && !isSubThreshold && displayedItems.length === 0"
+          class="navigator-empty"
+        >
+          <ui5-illustrated-message name="NoFilterResults" design="Spot">
+            <span slot="title">No results match your filters</span>
+            <span slot="subtitle">Try removing a filter or broadening your search.</span>
+            <ui5-button design="Emphasized" @click="clearFilters">Clear all filters</ui5-button>
+          </ui5-illustrated-message>
+        </div>
       </div>
 
       <!-- Section: Pagination -->
@@ -1315,6 +1333,18 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
      illustrated message renders ~220-240px tall; 320px gives headroom for
      the title + subtitle slots without dictating browse-grid height. */
   min-height: 320px;
+  /* #159: anchors the absolutely-positioned ui5-busy-indicator overlay so
+     it floats above the persistent-sibling result region without
+     displacing the empty-state. */
+  position: relative;
+}
+
+.navigator-result-area > [data-region-busy] {
+  position: absolute;
+  top: 0.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
 }
 
 .navigator-hint {
@@ -1448,12 +1478,6 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
   .navigator-grid {
     grid-template-columns: 1fr;
   }
-}
-
-.navigator-loading {
-  display: flex;
-  justify-content: center;
-  padding: 2rem;
 }
 
 .nav-card__progress {
