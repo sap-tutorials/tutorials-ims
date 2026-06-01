@@ -6,7 +6,7 @@ import Skeleton from '@shared/Skeleton.vue'
 import ProgressRing from '@shared/ProgressRing.vue'
 import { cardProgress, toLookup, emptyProgress, type ProgressPayload } from './cardProgress'
 import LicenseIcon from '../shared/LicenseIcon.vue'
-import { requiresLicense } from '../shared/license'
+import { requiresLicense, LICENSE_SLUG } from '../shared/license'
 import type { SearchFacets } from '@shared/types'
 
 const tutorials = ref<TutorialEntry[]>([])
@@ -94,7 +94,155 @@ onMounted(async () => {
 const LEVEL_ORDER: Record<string, number> = { beginner: 0, intermediate: 1, advanced: 2 }
 
 const PRODUCT_TO_TOPICS: Record<string, string[]> = {
-  // ABAP
+  // Slug-keyed entries (from HANA tag data):
+  'software-product-function>sap-cloud-application-programming-model': ['Application Development', 'Cloud'],
+  'software-product>sap-cloud-application-programming-model': ['Application Development', 'Cloud'],
+  'software-product>sap-build-code': ['Application Development', 'Development Tools'],
+  'programming-tool>node-js': ['Application Development'],
+  'programming-tool>java': ['Application Development'],
+  'topic>java': ['Application Development'],
+  'programming-tool>javascript': ['Application Development'],
+  'topic>javascript': ['Application Development'],
+  'programming-tool>python': ['Application Development'],
+  'topic>python': ['Application Development'],
+  'programming-tool>odata': ['Application Development'],
+  'topic>odata': ['Application Development'],
+  'topic>artificial-intelligence': ['Artificial Intelligence'],
+  'topic>machine-learning': ['Artificial Intelligence'],
+  'software-product>sap-ai-core': ['Artificial Intelligence', 'Cloud'],
+  'software-product>sap-ai-launchpad': ['Artificial Intelligence'],
+  'software-product>sap-ai-services': ['Artificial Intelligence'],
+  'products>sap-conversational-ai': ['Artificial Intelligence'],
+  'software-product>sap-conversational-ai': ['Artificial Intelligence'],
+  'software-product>sap-document-ai': ['Artificial Intelligence'],
+  'software-product>data-attribute-recommendation': ['Artificial Intelligence'],
+  'software-product>business-entity-recognition': ['Artificial Intelligence'],
+  'software-product>service-ticket-intelligence': ['Artificial Intelligence'],
+  'software-product>personalized-recommendation': ['Artificial Intelligence'],
+  'software-product>document-information-extraction': ['Artificial Intelligence'],
+  'products>sap-analytics-cloud': ['Analytics'],
+  'software-product>sap-analytics-cloud': ['Analytics'],
+  'software-product-function>sap-analytics-cloud-for-planning': ['Analytics'],
+  'software-product>sap-datasphere': ['Analytics', 'Database & Data Management'],
+  'topic>big-data': ['Analytics', 'Database & Data Management'],
+  'software-product>analytics': ['Analytics'],
+  'software-product>sap-signavio-process-intelligence': ['Analytics', 'Automation'],
+  'software-product>sap-build-process-automation': ['Automation'],
+  'software-product>sap-build': ['Automation', 'Application Development'],
+  'software-product>sap-build-apps': ['Automation', 'Application Development'],
+  'products>sap-workflow': ['Automation'],
+  'products>sap-workflow-management': ['Automation'],
+  'products>business-rules': ['Automation'],
+  'software-product>sap-intelligent-robotic-process-automation': ['Automation'],
+  'software-product-function>sap-automation-pilot': ['Automation', 'Cloud'],
+  'software-product>sap-automation-pilot': ['Automation', 'Cloud'],
+  'topic>cloud': ['Cloud'],
+  'products>sap-business-technology-platform': ['Cloud'],
+  'sap-conversational-ai>sap-business-technology-platform': ['Cloud'],
+  'sbpa workflows software-product>sap-business-technology-platform': ['Cloud'],
+  'software-product-function>sap-business-technology-platform': ['Cloud'],
+  'software-product>sap-business-technology-platform': ['Cloud'],
+  'software-product>technology-platform>sap-business-technology-platform': ['Cloud'],
+  'topic>cloud; software-product>sap-business-technology-platform': ['Cloud'],
+  'products>sap-btp-cloud-foundry-environment': ['Cloud'],
+  'software-product>sap-btp-cloud-foundry-environment': ['Cloud'],
+  'software-product-function>sap-btp-cockpit': ['Cloud'],
+  'software-product-function>sap-btp-command-line-interface': ['Cloud', 'Development Tools'],
+  'products>sap-cloud-platform': ['Cloud'],
+  'products>sap-cloud-platform-for-the-cloud-foundry-environment': ['Cloud'],
+  'topic>cloud-operations': ['Cloud'],
+  'products>sap-hana': ['Database & Data Management'],
+  'sap-conversational-ai>sap-hana': ['Database & Data Management'],
+  'software-product>sap-hana': ['Database & Data Management'],
+  'products>sap-hana-cloud': ['Database & Data Management', 'Cloud'],
+  'software-product>sap-hana-cloud': ['Database & Data Management', 'Cloud'],
+  'software-product>technology-platform>sap-hana-cloud': ['Database & Data Management', 'Cloud'],
+  'products>sap-hana-cloud-data-lake': ['Database & Data Management', 'Cloud'],
+  'products>sap-hana-dynamic-tiering': ['Database & Data Management'],
+  'products>sap-hana-streaming-analytics': ['Database & Data Management'],
+  'software-product-function>sap-hana-spatial': ['Database & Data Management'],
+  'software-product-function>sap-hana-multi-model-processing': ['Database & Data Management'],
+  'software-product-function>sap-hana-graph': ['Database & Data Management'],
+  'products>sap-hana-studio': ['Database & Data Management', 'Development Tools'],
+  'products>sap-hana-service-for-sap-btp': ['Database & Data Management', 'Cloud'],
+  'software-product>sap-hana-service-for-sap-btp': ['Database & Data Management', 'Cloud'],
+  'programming-tool>sql': ['Database & Data Management'],
+  'topic>sql': ['Database & Data Management'],
+  'products>sap-data-intelligence': ['Database & Data Management'],
+  'software-product>sap-iq': ['Database & Data Management'],
+  'software-product-function>sap-adaptive-server-enterprise': ['Database & Data Management'],
+  'products>sap-business-application-studio': ['Development Tools'],
+  'software-product-function>sap-business-application-studio': ['Development Tools'],
+  'software-product>sap-business-application-studio': ['Development Tools'],
+  'software-products>sap-business-application-studio': ['Development Tools'],
+  'products>sap-web-ide': ['Development Tools'],
+  'software-product>sap-web-ide': ['Development Tools'],
+  'products>sap-fiori-tools': ['Development Tools', 'SAP Fiori'],
+  'software-product-function>sap-fiori-tools': ['Development Tools', 'SAP Fiori'],
+  'software-product>sap-fiori-tools': ['Development Tools', 'SAP Fiori'],
+  'software-product>sap-cloud-transport-management': ['Development Tools', 'Cloud'],
+  'software-product>sap-content-agent-service': ['Development Tools', 'Cloud'],
+  'products>sap-integration-suite': ['Extension & Integration'],
+  'sap-conversational-ai>sap-integration-suite': ['Extension & Integration'],
+  'software-product>sap-integration-suite': ['Extension & Integration'],
+  'software-product>cloud-integration': ['Extension & Integration', 'Cloud'],
+  'topic>integration': ['Extension & Integration'],
+  'software-product>sap-process-integration': ['Extension & Integration'],
+  'software-product>sap-process-orchestration': ['Extension & Integration'],
+  'products>sap-application-interface-framework': ['Extension & Integration'],
+  'software-product>sap-application-interface-framework': ['Extension & Integration'],
+  'software-product>sap-event-mesh': ['Extension & Integration', 'Cloud'],
+  'software-product>sap-connectivity-service': ['Extension & Integration', 'Cloud'],
+  'software-product>sap-cloud-platform-connectivity': ['Extension & Integration', 'Cloud'],
+  'software-product-function>sap-private-link-service': ['Extension & Integration', 'Cloud'],
+  'products>sap-api-management': ['Extension & Integration'],
+  'software-product>sap-api-management': ['Extension & Integration'],
+  'products>api-management': ['Extension & Integration'],
+  'topic>sap-api-business-hub': ['Extension & Integration'],
+  'topic>api': ['Extension & Integration'],
+  'software-product>sap-concur': ['Extension & Integration'],
+  'topic>mobile': ['Mobile'],
+  'products>sap-mobile-services': ['Mobile', 'Cloud'],
+  'software-product>sap-mobile-services': ['Mobile', 'Cloud'],
+  'products>mobile-development-kit-client': ['Mobile'],
+  'software-product>mobile-development-kit-client': ['Mobile'],
+  'operating-system>android': ['Mobile'],
+  'products>sap-fiori': ['SAP Fiori'],
+  'software-product-function>sap-fiori': ['SAP Fiori'],
+  'software-product>sap-fiori': ['SAP Fiori'],
+  'products>sap-fiori-elements': ['SAP Fiori'],
+  'software-product-function>sap-fiori-elements': ['SAP Fiori'],
+  'programming-tool>sapui5': ['SAP Fiori'],
+  'software-product>sap-s-4hana; topic>google workspace; topic>sapui5': ['SAP Fiori'],
+  'software-product>sapui5': ['SAP Fiori'],
+  'topic>sapui5': ['SAP Fiori'],
+  'topic>user-interface': ['SAP Fiori'],
+  'software-product>ui-theme-designer': ['SAP Fiori'],
+  'products>sap-screen-personas': ['SAP Fiori'],
+  'software-product>sap-screen-personas': ['SAP Fiori'],
+  'software-product>sap-launchpad-service': ['SAP Fiori', 'Cloud'],
+  'software-product>sap-work-zone': ['SAP Fiori', 'Cloud'],
+  'products>sap-s-4hana': ['SAP S/4HANA'],
+  'software-product>sap-s-4hana': ['SAP S/4HANA'],
+  'software-product>sap-s-4hana-cloud': ['SAP S/4HANA', 'Cloud'],
+  'software-product>sap-s-4hana-cloud-public-edition': ['SAP S/4HANA', 'Cloud'],
+  'software-product>sap-s-4hana-cloud-front-end': ['SAP S/4HANA', 'SAP Fiori'],
+  'software-product>sap-s/4hana': ['SAP S/4HANA'],
+  'software-product>sap-netweaver': ['SAP S/4HANA'],
+  'software-product>sap-netweaver-7.5': ['SAP S/4HANA'],
+  'products>sap-gateway': ['SAP S/4HANA', 'Extension & Integration'],
+  'topic>security': ['Security'],
+  'products>identity-authentication': ['Security', 'Cloud'],
+  'software-product>identity-authentication': ['Security', 'Cloud'],
+  'software-product>sap-alert-notification-service-for-sap-btp': ['Security', 'Cloud'],
+  'topic>internet-of-things': ['IoT'],
+  'software-product>sap-successfactors-hxm-suite': ['SAP SuccessFactors'],
+  'software-product>sap-successfactors-hcm-suite': ['SAP SuccessFactors'],
+  'software-product>sap-document-management-service': ['Extension & Integration'],
+  'products>sap-translation-hub': ['Development Tools'],
+  'software-product>sap-translation-hub': ['Development Tools'],
+
+  // Legacy label-keyed entries (no matching HANA slug found, kept for safety):
   'ABAP Development': ['ABAP'],
   'ABAP Extensibility': ['ABAP', 'Extension & Integration'],
   'ABAP Platform': ['ABAP'],
@@ -102,171 +250,36 @@ const PRODUCT_TO_TOPICS: Record<string, string[]> = {
   'SAP BTP ABAP Environment': ['ABAP', 'Cloud'],
   'SAP S 4hana Cloud ABAP Environment': ['ABAP', 'SAP S/4HANA'],
   'S 4hana Cloud ABAP Environment': ['ABAP', 'SAP S/4HANA'],
-
-  // Application Development
-  'SAP Cloud Application Programming Model': ['Application Development', 'Cloud'],
-  'SAP Build Code': ['Application Development', 'Development Tools'],
-  'Node Js': ['Application Development'],
-  'Java': ['Application Development'],
-  'Javascript': ['Application Development'],
-  'Python': ['Application Development'],
   'HTML5': ['Application Development'],
-  'Odata': ['Application Development'],
-
-  // Artificial Intelligence
-  'Artificial Intelligence': ['Artificial Intelligence'],
-  'Machine Learning': ['Artificial Intelligence'],
-  'SAP Ai Core': ['Artificial Intelligence', 'Cloud'],
-  'SAP Ai Launchpad': ['Artificial Intelligence'],
-  'SAP Ai Services': ['Artificial Intelligence'],
-  'SAP Conversational Ai': ['Artificial Intelligence'],
-  'SAP Document Ai': ['Artificial Intelligence'],
-  'Data Attribute Recommendation': ['Artificial Intelligence'],
-  'Business Entity Recognition': ['Artificial Intelligence'],
-  'Service Ticket Intelligence': ['Artificial Intelligence'],
-  'Personalized Recommendation': ['Artificial Intelligence'],
-  'Document Information Extraction': ['Artificial Intelligence'],
-
-  // Analytics
-  'SAP Analytics Cloud': ['Analytics'],
   'SAP Analytics Cloud Analytics Designer': ['Analytics'],
-  'SAP Analytics Cloud For Planning': ['Analytics'],
-  'SAP Datasphere': ['Analytics', 'Database & Data Management'],
-  'Big Data': ['Analytics', 'Database & Data Management'],
-  'Analytics': ['Analytics'],
-  'SAP Signavio Process Intelligence': ['Analytics', 'Automation'],
-
-  // Automation
-  'SAP Build Process Automation': ['Automation'],
-  'SAP Build': ['Automation', 'Application Development'],
-  'SAP Build Apps': ['Automation', 'Application Development'],
   'SAP Build Apps Enterprise Edition': ['Automation', 'Application Development'],
-  'SAP Workflow': ['Automation'],
-  'SAP Workflow Management': ['Automation'],
-  'Business Rules': ['Automation'],
-  'SAP Intelligent Robotic Process Automation': ['Automation'],
-  'SAP Automation Pilot': ['Automation', 'Cloud'],
-
-  // Cloud
-  'Cloud': ['Cloud'],
-  'SAP Business Technology Platform': ['Cloud'],
-  'SAP BTP Cloud Foundry Environment': ['Cloud'],
   'SAP BTP Cloud Foundry Runtime And Environment': ['Cloud'],
   'SAP BTP Kyma Runtime': ['Cloud'],
   'SAP Btp, Kyma Runtime': ['Cloud'],
-  'SAP BTP Cockpit': ['Cloud'],
-  'SAP BTP Command Line Interface': ['Cloud', 'Development Tools'],
-  'SAP Cloud Platform': ['Cloud'],
-  'SAP Cloud Platform For The Cloud Foundry Environment': ['Cloud'],
   'Free Tier': ['Cloud'],
   'SAP CAP Operator Kubernetes Environment': ['Cloud'],
-  'Cloud Operations': ['Cloud'],
-
-  // Database & Data Management
-  'SAP HANA': ['Database & Data Management'],
-  'SAP HANA Cloud': ['Database & Data Management', 'Cloud'],
   'SAP HANA Database': ['Database & Data Management'],
   'SAP HANA Cloud SAP HANA Database': ['Database & Data Management', 'Cloud'],
   'SAP HANA Cloud, SAP HANA Database': ['Database & Data Management', 'Cloud'],
-  'SAP HANA Cloud Data Lake': ['Database & Data Management', 'Cloud'],
   'SAP HANA Cloud, Data Lake': ['Database & Data Management', 'Cloud'],
   'Data Lake': ['Database & Data Management'],
   'SAP HANA Express Edition': ['Database & Data Management'],
   'SAP Hana, Express Edition': ['Database & Data Management'],
   'Express Edition': ['Database & Data Management'],
-  'SAP HANA Dynamic Tiering': ['Database & Data Management'],
-  'SAP HANA Streaming Analytics': ['Database & Data Management'],
-  'SAP HANA Spatial': ['Database & Data Management'],
-  'SAP HANA Multi Model Processing': ['Database & Data Management'],
-  'SAP HANA Graph': ['Database & Data Management'],
-  'SAP HANA Studio': ['Database & Data Management', 'Development Tools'],
   'SAP HANA Service': ['Database & Data Management', 'Cloud'],
-  'SAP HANA Service For SAP BTP': ['Database & Data Management', 'Cloud'],
   'SAP Cloud Platform, SAP HANA Service': ['Database & Data Management', 'Cloud'],
-  'Sql': ['Database & Data Management'],
-  'SAP Data Intelligence': ['Database & Data Management'],
-  'SAP Iq': ['Database & Data Management'],
-  'SAP Adaptive Server Enterprise': ['Database & Data Management'],
-
-  // Development Tools
-  'SAP Business Application Studio': ['Development Tools'],
-  'SAP Web Ide': ['Development Tools'],
-  'SAP Fiori Tools': ['Development Tools', 'SAP Fiori'],
   'SAP Cloud Sdk': ['Development Tools', 'Application Development'],
-  'SAP Cloud Transport Management': ['Development Tools', 'Cloud'],
-  'SAP Content Agent Service': ['Development Tools', 'Cloud'],
-
-  // Extension & Integration
-  'SAP Integration Suite': ['Extension & Integration'],
-  'Cloud Integration': ['Extension & Integration', 'Cloud'],
-  'Integration': ['Extension & Integration'],
-  'SAP Process Integration': ['Extension & Integration'],
-  'SAP Process Orchestration': ['Extension & Integration'],
-  'SAP Application Interface Framework': ['Extension & Integration'],
-  'SAP Event Mesh': ['Extension & Integration', 'Cloud'],
-  'SAP Connectivity Service': ['Extension & Integration', 'Cloud'],
-  'SAP Cloud Platform Connectivity': ['Extension & Integration', 'Cloud'],
-  'SAP Private Link Service': ['Extension & Integration', 'Cloud'],
   'DirectProcess Adapter': ['Extension & Integration'],
-  'SAP API Management': ['Extension & Integration'],
-  'API Management': ['Extension & Integration'],
-  'SAP API Business Hub': ['Extension & Integration'],
-  'API': ['Extension & Integration'],
-  'SAP Concur': ['Extension & Integration'],
   'SAP Kafka Connect': ['Extension & Integration'],
-
-  // Mobile
-  'Mobile': ['Mobile'],
-  'SAP Mobile Services': ['Mobile', 'Cloud'],
-  'Mobile Development Kit Client': ['Mobile'],
   'SAP BTP Sdk For Android': ['Mobile', 'Development Tools'],
-  'SAP BTP Sdk For Ios': ['Mobile', 'Development Tools'],
+  'SAP BTP Sdk For iOS': ['Mobile', 'Development Tools'],
   'Ios': ['Mobile'],
-  'Android': ['Mobile'],
   'Ios Sdk For SAP BTP': ['Mobile', 'Development Tools'],
-
-  // SAP Fiori
-  'SAP Fiori': ['SAP Fiori'],
-  'SAP Fiori Elements': ['SAP Fiori'],
   'SAPUI5': ['SAP Fiori'],
-  'Sapui5': ['SAP Fiori'],
-  'User Interface': ['SAP Fiori'],
   'UI SAP Business Client Nwbc': ['SAP Fiori'],
-  'UI Theme Designer': ['SAP Fiori'],
-  'SAP Screen Personas': ['SAP Fiori'],
-  'SAP Launchpad Service': ['SAP Fiori', 'Cloud'],
   'SAP Build Work Zone Standard Edition': ['SAP Fiori', 'Cloud'],
   'SAP Build Work Zone Advanced Edition': ['SAP Fiori', 'Cloud'],
-  'SAP Work Zone': ['SAP Fiori', 'Cloud'],
-
-  // SAP S/4HANA
-  'SAP S 4hana': ['SAP S/4HANA'],
-  'SAP S 4hana Cloud': ['SAP S/4HANA', 'Cloud'],
-  'SAP S 4hana Cloud Public Edition': ['SAP S/4HANA', 'Cloud'],
-  'SAP S 4hana Cloud Front End': ['SAP S/4HANA', 'SAP Fiori'],
-  'SAP S/4hana': ['SAP S/4HANA'],
-  'SAP Netweaver': ['SAP S/4HANA'],
-  'SAP Netweaver 7.5': ['SAP S/4HANA'],
-  'SAP Gateway': ['SAP S/4HANA', 'Extension & Integration'],
-
-  // Security
-  'Security': ['Security'],
-  'Identity Authentication': ['Security', 'Cloud'],
-  'SAP Alert Notification Service For SAP BTP': ['Security', 'Cloud'],
-
-  // IoT
-  'Internet Of Things': ['IoT'],
-
-  // HR
-  'SAP Successfactors Hxm Suite': ['SAP SuccessFactors'],
-  'SAP Successfactors Hcm Suite': ['SAP SuccessFactors'],
-
-  // Document Management
-  'SAP Document Management Service': ['Extension & Integration'],
   'Document Management Service': ['Extension & Integration'],
-
-  // Translation
-  'SAP Translation Hub': ['Development Tools'],
 }
 
 function lowestLevel(levels: string[]): string {
@@ -334,6 +347,7 @@ const allCards = computed<CardItem[]>(() => {
 
   for (const [missionId, mTuts] of missionGroups) {
     const allTags = [...new Set(mTuts.flatMap(t => t.displayTags))]
+    const allTagSlugs = [...new Set(mTuts.flatMap(t => t.displayTagSlugs))]
     const mMeta = missionsMeta.value.find(m => m.id === missionId)
     items.push({
       type: 'mission',
@@ -345,6 +359,7 @@ const allCards = computed<CardItem[]>(() => {
       tutorialCount: mTuts.length,
       primaryTag: mTuts[0].primaryTag,
       displayTags: allTags,
+      displayTagSlugs: allTagSlugs,
       href: mMeta ? `/tutorials/mission-${mMeta.slug}` : `/tutorials/${mTuts[0].slug}`,
       stepCount: mTuts.reduce((sum, t) => sum + t.stepCount, 0),
     })
@@ -352,6 +367,7 @@ const allCards = computed<CardItem[]>(() => {
 
   for (const [groupId, gTuts] of groupMap) {
     const allTags = [...new Set(gTuts.flatMap(t => t.displayTags))]
+    const allTagSlugs = [...new Set(gTuts.flatMap(t => t.displayTagSlugs))]
     const gMeta = groupsMeta.value.find(g => g.id === groupId)
     items.push({
       type: 'group',
@@ -363,6 +379,7 @@ const allCards = computed<CardItem[]>(() => {
       tutorialCount: gTuts.length,
       primaryTag: gTuts[0].primaryTag,
       displayTags: allTags,
+      displayTagSlugs: allTagSlugs,
       href: gMeta ? `/tutorials/group-${gMeta.slug}` : `/tutorials/${gTuts[0].slug}`,
       stepCount: gTuts.reduce((sum, t) => sum + t.stepCount, 0),
     })
@@ -379,6 +396,7 @@ const allCards = computed<CardItem[]>(() => {
       tutorialCount: 1,
       primaryTag: t.primaryTag,
       displayTags: t.displayTags,
+      displayTagSlugs: t.displayTagSlugs,
       href: `/tutorials/${t.slug}`,
       stepCount: t.stepCount,
       isNew: isWithinNewWindow(t.createdAt),
@@ -389,28 +407,35 @@ const allCards = computed<CardItem[]>(() => {
 })
 
 const availableProducts = computed(() => {
-  const tagSet = new Set<string>()
+  // Each entry is { slug, label }, deduped by slug, sorted by label.
+  const map = new Map<string, string>()
   for (const t of tutorials.value) {
-    for (const tag of t.displayTags) {
-      if (tag !== 'Beginner' && tag !== 'Intermediate' && tag !== 'Advanced') {
-        tagSet.add(tag)
-      }
+    for (let i = 0; i < t.displayTagSlugs.length; i++) {
+      const slug = t.displayTagSlugs[i]
+      const label = t.displayTags[i]
+      // Skip experience-level tags (those go in the Experience filter, not Software Product)
+      // and the license chip (handled separately).
+      if (slug === 'tutorial>beginner' || slug === 'tutorial>intermediate' || slug === 'tutorial>advanced') continue
+      if (slug === LICENSE_SLUG) continue
+      if (!map.has(slug)) map.set(slug, label)
     }
   }
-  return [...tagSet].sort()
+  return [...map.entries()]
+    .map(([slug, label]) => ({ slug, label }))
+    .sort((a, b) => a.label.localeCompare(b.label))
 })
 
 const filteredProducts = computed(() => {
   if (!productSearch.value) return availableProducts.value
   const q = productSearch.value.toLowerCase()
-  return availableProducts.value.filter(t => t.toLowerCase().includes(q))
+  return availableProducts.value.filter(t => t.label.toLowerCase().includes(q))
 })
 
 const availableTopics = computed(() => {
   const topicSet = new Set<string>()
   for (const t of tutorials.value) {
-    for (const tag of t.displayTags) {
-      const topics = PRODUCT_TO_TOPICS[tag]
+    for (const slug of t.displayTagSlugs) {
+      const topics = PRODUCT_TO_TOPICS[slug]
       if (topics) {
         for (const topic of topics) topicSet.add(topic)
       }
@@ -426,7 +451,7 @@ const filteredTopics = computed(() => {
 })
 
 function tutorialMatchesTopic(item: CardItem, topic: string): boolean {
-  return item.displayTags.some(tag => (PRODUCT_TO_TOPICS[tag] ?? []).includes(topic))
+  return item.displayTagSlugs.some(slug => (PRODUCT_TO_TOPICS[slug] ?? []).includes(topic))
 }
 
 const filteredItems = computed(() => {
@@ -448,7 +473,7 @@ const filteredItems = computed(() => {
     }
 
     if (filters.products.length > 0) {
-      const hasProduct = item.displayTags.some(t => filters.products.includes(t))
+      const hasProduct = item.displayTagSlugs.some(s => filters.products.includes(s))
       if (!hasProduct) return false
     }
 
@@ -659,9 +684,12 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
               />
             </div>
             <div class="filter-list">
-              <label v-for="product in filteredProducts" :key="product" class="filter-option">
-                <input type="checkbox" :checked="filters.products.includes(product)" @change="toggleFilter(filters.products, product)" class="filter-checkbox" />
-                <span class="filter-label">{{ product }}</span>
+              <label v-for="product in filteredProducts" :key="product.slug" class="filter-option">
+                <input type="checkbox"
+                       :checked="filters.products.includes(product.slug)"
+                       @change="toggleFilter(filters.products, product.slug)"
+                       class="filter-checkbox" />
+                <span class="filter-label">{{ product.label }}</span>
               </label>
             </div>
           </div>
@@ -733,7 +761,7 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
             v-bind="cardProgress(item, progress)!"
           />
           <span v-if="item.isNew" class="nav-card__new-badge" aria-label="New tutorial">NEW</span>
-          <LicenseIcon v-if="requiresLicense(item.displayTags)" class="nav-card__license" />
+          <LicenseIcon v-if="requiresLicense(item)" class="nav-card__license" />
           <div class="nav-card__type" :class="`nav-card__type--${item.type}`">
             {{ TYPE_LABELS[item.type] }}
           </div>
