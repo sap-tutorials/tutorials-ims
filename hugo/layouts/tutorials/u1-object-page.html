@@ -116,11 +116,16 @@
   .op-wizard-wrap ui5-wizard::part(step-content) { display: none; }
 
   .op-twocol { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 1.5rem; align-items: start; }
-  /* Right column tracks the user as they scroll. Top offset clears the sticky op-header.
+  /* Right column tracks the user as they scroll. Top offset is driven by --op-header-h,
+     a CSS custom property kept in sync with the rendered .op-header height by a
+     ResizeObserver below — that way the side-nav's top edge sits flush against the
+     bottom of the sticky header regardless of header content (description present/absent,
+     chip-row wrapping at narrow viewports, anchor-bar height). The fallback covers the
+     no-JS case. See issue #165.
      No internal overflow — auto-scroll-active inside an overflow box hides the heading. */
   .op-twocol > .tutorial-right-col {
     position: sticky;
-    top: 160px;
+    top: var(--op-header-h, 110px);
     align-self: start;
   }
   @media (max-width: 960px) {
@@ -340,6 +345,25 @@
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="/js/tutorial-rating.js" defer></script>{{ end }}
 
 <script type="module">
+  // U1 Object Page — keep --op-header-h in sync with the rendered .op-header height
+  // so the sticky right column tucks flush under the header bottom edge. Issue #165:
+  // the previous fixed top: 160px was larger than the actual header in many configurations
+  // (description absent, narrow viewport, chip-row wrap), leaving a visible gap above
+  // the side-nav. ResizeObserver covers content reflow + viewport-width changes.
+  const opHeaderEl = document.querySelector('.op-page > .op-header');
+  if (opHeaderEl) {
+    const setHeaderHeight = () => {
+      const h = Math.round(opHeaderEl.getBoundingClientRect().height);
+      if (h > 0) document.documentElement.style.setProperty('--op-header-h', h + 'px');
+    };
+    setHeaderHeight();
+    if (typeof ResizeObserver === 'function') {
+      new ResizeObserver(setHeaderHeight).observe(opHeaderEl);
+    }
+    // Fonts loading later can shift header height; re-measure once they settle.
+    if (document.fonts?.ready) document.fonts.ready.then(setHeaderHeight);
+  }
+
   // U1 Object Page — anchor-bar tab clicks scroll to sections; scrollspy highlights active tab.
   const tabs = document.getElementById('op-anchor');
   const sections = Array.from(document.querySelectorAll('[data-op-section]'));
