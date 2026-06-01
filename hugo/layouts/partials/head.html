@@ -75,3 +75,16 @@
     }, 2000);
   });
 </script>
+{{ if not (eq .Type "tutorials") }}
+<script type="speculationrules">
+{
+  "prerender": [{
+    "where": { "and": [
+      { "href_matches": "/tutorials/*" },
+      { "not": { "selector_matches": ".no-prerender, .no-prerender a" } }
+    ]},
+    "eagerness": "moderate"
+  }]
+}
+</script>
+{{ end }}

@@ -15,6 +15,8 @@ export interface PaletteAction {
   hint?: string
   icon?: string
   keywords?: string[]
+  /** Tutorial slug — present only on rows produced by searchTutorials. */
+  slug?: string
   run: (close: () => void) => void
 }
 
