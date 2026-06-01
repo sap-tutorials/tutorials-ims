@@ -31,7 +31,7 @@ const filters = reactive({
 
 const loading = computed(() => tutorials.value.length === 0)
 
-const { searchMode, searchResults, searchFacets, searchTotalCount, isSearching, searchError } = useSearch({
+const { searchMode, isSubThreshold, searchResults, searchFacets, searchTotalCount, isSearching, searchError } = useSearch({
   searchTerm: searchQuery,
   filterTypes: computed(() => filters.types.map(t => t.toUpperCase())),
   filterLevels: computed(() => filters.levels),
@@ -709,13 +709,29 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
       </section>
 
       <!-- Section: Card Grid (or skeleton while loading) -->
-      <div v-if="isSearching" class="navigator-loading">
-        <div class="fd-busy-indicator fd-busy-indicator--m" aria-label="Loading search results"></div>
-      </div>
-      <section v-if="loading" class="navigator-grid navigator-grid--loading" aria-label="Loading tutorials">
-        <Skeleton kind="card" :count="6" />
-      </section>
-      <section v-else class="navigator-grid">
+      <div class="navigator-result-area">
+        <Transition name="navigator-fade" mode="out-in">
+          <section
+            v-if="loading"
+            key="skeleton"
+            class="navigator-grid navigator-grid--loading"
+            aria-label="Loading tutorials"
+          >
+            <Skeleton kind="card" :count="6" />
+          </section>
+
+          <div v-else-if="isSearching" key="searching" class="navigator-loading">
+            <div class="fd-busy-indicator fd-busy-indicator--m" aria-label="Loading search results"></div>
+          </div>
+
+          <div v-else-if="isSubThreshold" key="subthreshold" class="navigator-hint">
+            <ui5-illustrated-message name="BeforeSearch" design="Spot">
+              <span slot="title">Keep typing&hellip;</span>
+              <span slot="subtitle">Search starts at 2 characters.</span>
+            </ui5-illustrated-message>
+          </div>
+
+          <section v-else-if="displayedItems.length > 0" key="results" class="navigator-grid">
         <a
           v-for="item in displayedItems"
           :key="item.id"
@@ -765,6 +781,16 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
         </a>
       </section>
 
+          <div v-else key="empty" class="navigator-empty">
+            <ui5-illustrated-message name="NoFilterResults" design="Spot">
+              <span slot="title">No results match your filters</span>
+              <span slot="subtitle">Try removing a filter or broadening your search.</span>
+              <ui5-button design="Emphasized" @click="clearFilters">Clear all filters</ui5-button>
+            </ui5-illustrated-message>
+          </div>
+        </Transition>
+      </div>
+
       <!-- Section: Pagination -->
       <nav v-if="totalPages > 1 && !searchMode" class="navigator-pagination" aria-label="Page navigation">
         <button
@@ -787,15 +813,6 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
           aria-label="Next page"
         >&rsaquo;</button>
       </nav>
-
-      <!-- Empty State -->
-      <div v-if="displayedItems.length === 0 && !isSearching && (tutorials.length > 0 || searchMode)" class="navigator-empty">
-        <ui5-illustrated-message name="NoFilterResults" design="Spot">
-          <span slot="title">No results match your filters</span>
-          <span slot="subtitle">Try removing a filter or broadening your search.</span>
-          <ui5-button design="Emphasized" @click="clearFilters">Clear all filters</ui5-button>
-        </ui5-illustrated-message>
-      </div>
     </div>
   </div>
 </template>
@@ -1263,6 +1280,29 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
 
 .navigator-empty ui5-button {
   margin-top: 1rem;
+}
+
+.navigator-result-area {
+  /* Prevents collapse-to-zero during out-in fade. The Spot-design
+     illustrated message renders ~220-240px tall; 320px gives headroom for
+     the title + subtitle slots without dictating browse-grid height. */
+  min-height: 320px;
+}
+
+.navigator-hint {
+  text-align: center;
+  padding: 1.5rem 2rem 3rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .navigator-fade-enter-active,
+  .navigator-fade-leave-active {
+    transition: opacity 150ms ease-out;
+  }
+  .navigator-fade-enter-from,
+  .navigator-fade-leave-to {
+    opacity: 0;
+  }
 }
 
 /* ─── Pagination ─── */

@@ -28,6 +28,8 @@ export function mapToCardItem(item: SearchableItem, tutorialsBySlug?: Map<string
   }
 }
 
+export const MIN_SEARCH_CHARS = 2
+
 const escOData = (v: string) => v.replace(/'/g, "''")
 
 function buildFilter(types: string[], levels: string[], products: string[]): string {
@@ -66,13 +68,16 @@ export function useSearch(options: UseSearchOptions) {
     return m
   })
 
-  const searchMode = computed(() => searchTerm.value.length >= 2)
+  const searchMode = computed(() => searchTerm.value.length >= MIN_SEARCH_CHARS)
+  const isSubThreshold = computed(() =>
+    searchTerm.value.length > 0 && searchTerm.value.length < MIN_SEARCH_CHARS
+  )
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
   async function executeSearch(page = 0, pageSize = 48) {
     const term = searchTerm.value
-    if (term.length < 2) return
+    if (term.length < MIN_SEARCH_CHARS) return
 
     isSearching.value = true
     searchError.value = null
@@ -128,6 +133,7 @@ export function useSearch(options: UseSearchOptions) {
 
   return {
     searchMode,
+    isSubThreshold,
     searchResults,
     searchFacets,
     searchTotalCount,
