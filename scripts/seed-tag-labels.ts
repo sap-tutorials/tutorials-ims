@@ -7,8 +7,9 @@
  * Run once at cutover; re-run if AEM ships new tags before going dark.
  *
  * Auth (pick one):
- *   ADMIN_BEARER_TOKEN — Bearer JWT for deployed CAP (XSUAA). For deployed environments,
- *     get a valid XSUAA token from Tom's browser session or via TECH_USERS basic auth setup.
+ *   ADMIN_BEARER_TOKEN — Bearer JWT for deployed CAP. Must be an XSUAA-issued user token
+ *     with the `Admin` scope (a `cf oauth-token` will NOT work — that's a CF UAA token,
+ *     different issuer). Easiest source: copy from your browser session at /admin-ui/.
  *   ADMIN_BASIC_AUTH  — "user:password" for local CAP with mocked auth (e.g. "admin:admin").
  *     Use with CAP_BASE_URL=http://localhost:4004 (default) when running locally via cds bind.
  *
