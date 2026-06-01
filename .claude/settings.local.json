@@ -17,7 +17,11 @@
       "mcp__sap-devs-server__cf_services",
       "mcp__sap-devs-server__cf_env",
       "mcp__sap-devs-server__cf_routes",
-      "mcp__plugin_ui5_ui5-mcp-server__run_ui5_linter"
+      "mcp__plugin_ui5_ui5-mcp-server__run_ui5_linter",
+      "Bash(git commit *)",
+      "Bash(rm .git/COMMIT_MSG_TMP.txt)",
+      "Bash(gh pr *)",
+      "Bash(rm .git/PR_BODY.md)"
     ]
   }
 }
