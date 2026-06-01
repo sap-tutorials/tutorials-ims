@@ -374,6 +374,53 @@ describe('content-store', () => {
       const res = await project.axios.get('/content/nav');
       expect(res.data).toEqual({ version: null, tutorials: [] });
     });
+
+    it('emits displayTagSlugs alongside displayTags resolved via Tags.label (fallback path)', async () => {
+      // Publish without a __nav__ entry so navHandlerFallback runs (builds from DB)
+      await project.axios.post('/content/publish', {
+        trigger: 'tag-slugs-test',
+        files: makePayload({ 'tag-tut': '<p>Tutorial</p>' })
+      }, { headers: { Authorization: `Bearer ${API_KEY}` } });
+
+      // Seed Tags: one with a label, one without (forces humanizeFallback)
+      const { Tags, TutorialTags } = cds.entities('com.sap.developers.ims');
+      const T_ID = '00000000-0000-0000-0000-000000000b01';
+      const T_ID2 = '00000000-0000-0000-0000-000000000b02';
+      await DELETE.from(TutorialTags);
+      await DELETE.from(Tags);
+      await INSERT.into(Tags).entries([
+        { ID: T_ID,  legacyId: 801, titlePath: 'software-product>sap-s-4hana', label: 'SAP S/4HANA', name: 'sap s 4hana' },
+        { ID: T_ID2, legacyId: 802, titlePath: 'tutorial>beginner',            label: null,           name: 'beginner' },
+      ]);
+
+      // Seed Tutorial row so navHandlerFallback finds it
+      const TUT_ID = '00000000-0000-0000-0000-000000000c01';
+      await INSERT.into(Tutorials).entries({
+        ID: TUT_ID, legacyId: 999, slug: 'tag-tut', title: 'Tag Tutorial',
+        status: 'ACTIVE', experienceTag: 'Beginner', averageTimeToComplete: 15,
+      });
+
+      // Associate both tags to the tutorial via TutorialTags
+      await INSERT.into(TutorialTags).entries([
+        { tutorial_ID: TUT_ID, tag_ID: T_ID },
+        { tutorial_ID: TUT_ID, tag_ID: T_ID2 },
+      ]);
+
+      const res = await project.axios.get('/content/nav');
+      expect(res.status).toBe(200);
+
+      const tut = res.data.tutorials.find(t => t.slug === 'tag-tut');
+      expect(tut).toBeDefined();
+
+      // displayTagSlugs should list titlePath values for both tags
+      expect(tut.displayTagSlugs).toEqual(
+        expect.arrayContaining(['software-product>sap-s-4hana', 'tutorial>beginner'])
+      );
+
+      // displayTags: label for first tag, humanizeFallback for second (null label)
+      expect(tut.displayTags).toEqual(expect.arrayContaining(['SAP S/4HANA']));
+      expect(tut.displayTags).toEqual(expect.arrayContaining(['Beginner']));
+    });
   });
 
   describe('POST /content/rollback', () => {

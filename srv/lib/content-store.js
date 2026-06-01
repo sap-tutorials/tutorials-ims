@@ -18,6 +18,27 @@ const LOCK_NAME = 'content-publish';
 const LOCK_DURATION_MS = 120_000;
 const INSTANCE_ID = `content-${process.pid}-${Date.now()}`;
 
+// Lossy fallback when Tag.label is missing. Mirrors scripts/parsers/frontmatter-utils.ts
+// `humanizeTag` so the SQL-served path produces the same labels as the build-time path
+// when the registry is incomplete.
+const TAG_ACRONYMS = new Set(['SAP', 'HANA', 'CAP', 'BTP', 'CDS', 'UI', 'API', 'MTA', 'XSUAA', 'OData', 'HTML5', 'ABAP']);
+function humanizeFallback(slug) {
+  if (!slug) return '';
+  const value = slug.includes('>') ? slug.split('>').pop() : slug;
+  return value
+    .replace(/\\/g, '')
+    .replace(/[-_]/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(w => {
+      const u = w.toUpperCase();
+      if (TAG_ACRONYMS.has(u)) return u;
+      return w.charAt(0).toUpperCase() + w.slice(1);
+    })
+    .join(' ');
+}
+
 async function toBuffer(data) {
   if (Buffer.isBuffer(data)) return data;
   if (data instanceof Readable) {
@@ -1002,7 +1023,8 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     }
 
     // Fetch display tags per tutorial via CDS QL
-    let tagMap = {};
+    let tagMap = {};       // tutSlug -> labels[]   (for displayTags, presentation)
+    let tagSlugMap = {};   // tutSlug -> titlePath[] (for displayTagSlugs, equality joins)
     if (tutIds.length > 0) {
       const ttRows = await SELECT.from(TutorialTags)
         .where({ tutorial_ID: { in: tutIds } })
@@ -1012,14 +1034,19 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       if (tagIds.length > 0) {
         const tagEntities = await SELECT.from(Tags)
           .where({ ID: { in: tagIds } })
-          .columns('ID', 'name');
-        const tagNameMap = Object.fromEntries(tagEntities.map(t => [t.ID, t.name]));
+          .columns('ID', 'titlePath', 'label', 'name');
+        const tagMetaMap = Object.fromEntries(tagEntities.map(t => [t.ID, {
+          slug: t.titlePath,
+          label: t.label || humanizeFallback(t.titlePath || t.name),
+        }]));
 
         for (const tt of ttRows) {
           const tut = tutRows.find(t => t.ID === tt.tutorial_ID);
-          if (tut && tagNameMap[tt.tag_ID]) {
-            if (!tagMap[tut.slug]) tagMap[tut.slug] = [];
-            tagMap[tut.slug].push(tagNameMap[tt.tag_ID]);
+          const meta = tagMetaMap[tt.tag_ID];
+          if (tut && meta) {
+            if (!tagMap[tut.slug]) { tagMap[tut.slug] = []; tagSlugMap[tut.slug] = []; }
+            tagMap[tut.slug].push(meta.label);
+            tagSlugMap[tut.slug].push(meta.slug);
           }
         }
       }
@@ -1049,6 +1076,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
           stepCount: stepMap[r.slug] || 0,
           primaryTag: meta?.primaryTag || '',
           displayTags: tagMap[r.slug] || [],
+          displayTagSlugs: tagSlugMap[r.slug] || [],
           sizeBytes: r.sizeBytes
         };
       });
