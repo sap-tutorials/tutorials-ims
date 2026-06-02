@@ -639,7 +639,7 @@ function goToPage(page: number) {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-watch([searchQuery, () => filters.levels, () => filters.types, () => filters.products, () => filters.topics], () => {
+watch([searchQuery, () => filters.levels, () => filters.types, () => filters.products, () => filters.topics, () => filters.isNew, () => filters.noLicense], () => {
   currentPage.value = 1
 }, { deep: true })
 </script>
