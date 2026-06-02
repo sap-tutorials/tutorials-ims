@@ -128,3 +128,23 @@ export interface StandaloneGroup {
   description: string
   tutorialSlugs: string[]
 }
+
+// Full CodeCheckSpec — used by the publish pipeline. NEVER ship to the
+// client; the referenceSolution field is author-only.
+export interface CodeCheckSpec {
+  stepNumber: number
+  goal: string             // required
+  language?: string
+  hints?: string[]
+  referenceSolution?: string
+}
+
+// Trimmed shape that ships in Hugo frontmatter / data-* attributes.
+// Includes hasReference flag so the grader can know one exists without
+// the spec having to ship it.
+export interface PublicCodeCheckSpec {
+  goal: string
+  language?: string
+  hints?: string[]
+  hasReference: boolean
+}

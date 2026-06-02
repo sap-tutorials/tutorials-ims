@@ -95,3 +95,5 @@ function parseChoiceOptions(content: string): { options: string[]; correctAnswer
 
   return { options, correctAnswer }
 }
+
+export { parseCodeCheckBlocks } from './codecheck.js'
