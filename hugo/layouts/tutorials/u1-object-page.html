@@ -203,8 +203,8 @@
     <h1 class="op-header__title tutorial-hero-title">{{ .Title }}{{ if in .Params.tags "tutorial>license" }} {{ partial "license-icon.html" . }}{{ end }}</h1>
     {{ with .Params.description }}<p class="op-header__description">{{ . }}</p>{{ end }}
     <div class="op-header__chips">
-      {{ with .Params.level }}<span class="op-chip"><span class="op-chip__icon">🎓</span>{{ . }}</span>{{ end }}
-      {{ with .Params.experienceLevel }}<span class="op-chip"><span class="op-chip__icon">🎓</span>{{ . }}</span>{{ end }}
+      {{ with .Params.level }}<a class="op-chip op-chip--link" href="{{ "/tutorials/" | relURL }}?level={{ . | lower | urlquery }}" aria-label="Filter tutorials by experience: {{ . }}"><span class="op-chip__icon">🎓</span>{{ . }}</a>{{ end }}
+      {{ with .Params.experienceLevel }}<a class="op-chip op-chip--link" href="{{ "/tutorials/" | relURL }}?level={{ . | lower | urlquery }}" aria-label="Filter tutorials by experience: {{ . }}"><span class="op-chip__icon">🎓</span>{{ . }}</a>{{ end }}
       {{ with .Params.time }}<span class="op-chip"><span class="op-chip__icon">⏱</span>{{ . }} min</span>{{ end }}
       {{/* Prefer human-readable displayTags; fall back to raw primaryTag if none provided. */}}
       {{ if .Params.displayTags }}
