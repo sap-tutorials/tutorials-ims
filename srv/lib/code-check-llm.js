@@ -1,8 +1,7 @@
 // srv/lib/code-check-llm.js
 // Real LLM call for the AI code-check feature (issue #171).
 //
-// Structured output is delivered via FORCED tool-call — same pattern as
-// generateAnalyticsQuery in srv/lib/chat-orchestrator.js.
+// Structured output is delivered via FORCED tool-call.
 // A single tool whose `parameters` IS the verdict schema is registered, then
 // the model is forced to call it via `tool_choice` in LlmModelParams (which
 // accepts arbitrary extra keys via `& Record<string, any>`).
@@ -68,9 +67,12 @@ export async function defaultCallModel({ system, user, schema }) {
   };
 
   // 3. Construct OrchestrationClient
-  //    tool_choice is passed inside model.params because LlmModelParams is
-  //    typed as `& Record<string, any>` (open for extra provider params).
-  //    This mirrors how generateAnalyticsQuery forces tool calls in chat-orchestrator.js.
+  //    The SAP AI SDK's Template type does not expose tool_choice — only tools[].
+  //    Passing tool_choice inside model.params works because LLMModelDetails.params
+  //    is typed as Record<string, any> at the underlying schema level.
+  //    This is the only available escape hatch in this SDK version. Note: this
+  //    is the FIRST forced-tool-call usage in the codebase — chat-orchestrator.js
+  //    offers tools without forcing one.
   const client = new OrchestrationClient(
     {
       promptTemplating: {
