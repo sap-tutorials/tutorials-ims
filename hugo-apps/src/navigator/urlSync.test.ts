@@ -78,3 +78,9 @@ describe('serializeNavState', () => {
     expect(sp.get('type')).toBe('group')
   })
 })
+
+describe('parseNavState — URL only', () => {
+  it('empty URL with no localStorage returns EMPTY_STATE', () => {
+    expect(parseNavState(HOST)).toEqual(EMPTY_STATE)
+  })
+})

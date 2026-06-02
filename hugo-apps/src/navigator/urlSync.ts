@@ -49,8 +49,41 @@ export const EMPTY_STATE: NavState = Object.freeze({
 }) as NavState
 
 // Implementation in subsequent tasks.
-export function parseNavState(_href: string, _ls?: Storage | null): NavState {
-  throw new Error('not implemented')
+function asArray(raw: string | null, lower = false): string[] | undefined {
+  if (raw === null) return undefined        // param absent — fall through
+  if (raw === '') return []                 // explicit-empty — URL wins
+  const parts = raw.split(',').map(s => s.trim()).filter(Boolean)
+  return lower ? parts.map(s => s.toLowerCase()) : parts
+}
+
+function asBool(raw: string | null): boolean | undefined {
+  if (raw === null) return undefined
+  return raw === '1'                        // strict — anything else is false
+}
+
+function asPage(raw: string | null): number {
+  if (raw === null) return 1
+  const n = Number.parseInt(raw, 10)
+  return Number.isFinite(n) && n >= 2 ? n : 1
+}
+
+export function parseNavState(href: string, ls: Storage | null = null): NavState {
+  const sp = new URL(href).searchParams
+
+  const persisted = ls ? readPersistedFilters(ls) : {}
+
+  const types     = asArray(sp.get(PARAM.types), true)    ?? persisted.types     ?? []
+  const levels    = asArray(sp.get(PARAM.levels))         ?? persisted.levels    ?? []
+  const products  = asArray(sp.get(PARAM.products))       ?? persisted.products  ?? []
+  const topics    = asArray(sp.get(PARAM.topics))         ?? persisted.topics    ?? []
+  const isNew     = asBool(sp.get(PARAM.isNew))           ?? persisted.isNew     ?? false
+  const noLicense = asBool(sp.get(PARAM.noLicense))       ?? persisted.noLicense ?? false
+
+  return {
+    q: sp.get(PARAM.q) ?? '',                              // q is URL-only, never persisted
+    types, levels, products, topics, isNew, noLicense,
+    page: asPage(sp.get(PARAM.page)),
+  }
 }
 
 function setOrDelete(sp: URLSearchParams, key: string, values: string[]): void {
