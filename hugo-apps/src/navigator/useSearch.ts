@@ -8,8 +8,8 @@ interface UseSearchOptions {
   filterTypes: Ref<string[]>
   filterLevels: Ref<string[]>
   filterProducts: Ref<string[]>
-  filterIsNew: Ref<boolean>
-  filterNoLicense: Ref<boolean>
+  filterIsNew?: Ref<boolean>
+  filterNoLicense?: Ref<boolean>
   tutorials?: Ref<TutorialEntry[]>
 }
 
@@ -112,14 +112,16 @@ export function useSearch(options: UseSearchOptions) {
     searchError.value = null
 
     try {
-      const isNewCutoffISO = filterIsNew.value
+      const isNewFlag = filterIsNew?.value ?? false
+      const noLicenseFlag = filterNoLicense?.value ?? false
+      const isNewCutoffISO = isNewFlag
         ? new Date(Date.now() - NEW_WINDOW_MS).toISOString()
         : ''
       const filter = buildFilter(
         filterTypes.value,
         filterLevels.value,
         filterProducts.value,
-        { isNew: filterIsNew.value, isNewCutoffISO },
+        { isNew: isNewFlag, isNewCutoffISO },
       )
       const params = new URLSearchParams()
       params.set('$search', term)
@@ -148,7 +150,7 @@ export function useSearch(options: UseSearchOptions) {
       // page of $top=48 — at most 48 rows pruned. Avoids a HANA fuzzy-search
       // anti-pattern (`tagBag NOT LIKE '%tutorial>license%'` would defeat
       // the indexed search column).
-      searchResults.value = postFilterNoLicense(cards, filterNoLicense.value)
+      searchResults.value = postFilterNoLicense(cards, noLicenseFlag)
       // searchTotalCount comes from the unfiltered server-side $count. When
       // No license is on, the count is a slight over-count (legacy AEM had
       // the same behavior — facet counts ignored the Options toggles).
@@ -166,7 +168,11 @@ export function useSearch(options: UseSearchOptions) {
     debounceTimer = setTimeout(() => executeSearch(), 300)
   }
 
-  watch([searchTerm, filterTypes, filterLevels, filterProducts, filterIsNew, filterNoLicense], () => {
+  watch(
+    [searchTerm, filterTypes, filterLevels, filterProducts,
+     computed(() => filterIsNew?.value ?? false),
+     computed(() => filterNoLicense?.value ?? false)],
+    () => {
     if (searchMode.value) {
       debouncedSearch()
     } else {

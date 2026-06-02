@@ -85,6 +85,14 @@ describe('buildFilter', () => {
     // Order: types, levels, products, then createdAt.
     expect(out).toBe("taskType eq 'TUTORIAL' and experienceTag eq 'beginner' and createdAt gt 2026-05-01T00:00:00.000Z")
   })
+
+  it('does not append createdAt clause when isNewCutoffISO is empty', () => {
+    // Defensive contract: the gate is `flags.isNew && flags.isNewCutoffISO`
+    // — both must be truthy. The .ts callsite always provides a non-empty
+    // ISO when isNew is true, but the helper guards against misuse.
+    const out = buildFilter([], [], [], { isNew: true, isNewCutoffISO: '' })
+    expect(out).toBe('')
+  })
 })
 
 describe('postFilterNoLicense', () => {
