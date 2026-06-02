@@ -83,4 +83,49 @@ describe('parseNavState — URL only', () => {
   it('empty URL with no localStorage returns EMPTY_STATE', () => {
     expect(parseNavState(HOST)).toEqual(EMPTY_STATE)
   })
+
+  it('parses ?q=', () => {
+    expect(parseNavState(HOST + '?q=hello').q).toBe('hello')
+  })
+
+  it('parses ?type= as comma-split lowercased array', () => {
+    expect(parseNavState(HOST + '?type=mission,group').types).toEqual(['mission', 'group'])
+    expect(parseNavState(HOST + '?type=Mission').types).toEqual(['mission'])  // case tolerance
+  })
+
+  it('parses ?level=, ?product=, ?topic= preserving case', () => {
+    const s = parseNavState(HOST + '?level=beginner&product=sap-btp&topic=cap')
+    expect(s.levels).toEqual(['beginner'])
+    expect(s.products).toEqual(['sap-btp'])
+    expect(s.topics).toEqual(['cap'])
+  })
+
+  it('parses ?new=1 and ?noLicense=1 as true; only literal "1" is true', () => {
+    const t = parseNavState(HOST + '?new=1&noLicense=1')
+    expect(t.isNew).toBe(true)
+    expect(t.noLicense).toBe(true)
+
+    const f = parseNavState(HOST + '?new=0&noLicense=true')
+    expect(f.isNew).toBe(false)
+    expect(f.noLicense).toBe(false)
+  })
+
+  it('parses ?page= as integer >= 2, else 1', () => {
+    expect(parseNavState(HOST + '?page=3').page).toBe(3)
+    expect(parseNavState(HOST + '?page=1').page).toBe(1)
+    expect(parseNavState(HOST + '?page=0').page).toBe(1)
+    expect(parseNavState(HOST + '?page=-2').page).toBe(1)
+    expect(parseNavState(HOST + '?page=foo').page).toBe(1)
+    expect(parseNavState(HOST + '?page=').page).toBe(1)
+  })
+
+  it('treats explicit-empty ?type= as URL-wins-empty (not fall-through)', () => {
+    // Even with no localStorage, an explicit empty param sticks as []
+    // (regression guard against future "if (!raw) fall-through" mistake).
+    expect(parseNavState(HOST + '?type=').types).toEqual([])
+  })
+
+  it('filters empty splits in ?type=,,mission,,', () => {
+    expect(parseNavState(HOST + '?type=,,mission,,').types).toEqual(['mission'])
+  })
 })
