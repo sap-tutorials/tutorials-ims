@@ -162,7 +162,7 @@ parseNavState(href, ls)
 2. If absent, fall back to reading `navigator.options.new` and `navigator.options.noLicense`, returning a partial state with `isNew` / `noLicense` populated.
 3. The first subsequent `persistFilters` call writes the consolidated v1 key. The legacy keys are NOT deleted (low cost; keeps one rollback window if we ever need it).
 
-This keeps existing users' Options-toggle preferences intact through the migration without an explicit one-shot upgrade step.
+This keeps existing users' Options-toggle preferences intact through the migration without an explicit one-shot upgrade step. `readPersistedFilters` wraps the `JSON.parse` of the v1 value in `try/catch` so a hand-edited or truncated entry falls through to the legacy-key path rather than throwing.
 
 ### Write path
 
