@@ -179,8 +179,8 @@ Navigator mount (Vue, client)
 
 ## Acceptance (from issue #161)
 
-- [ ] Each tag links to `/tutorials/?tag=<slug>` (or `?level=<value>` for the experience chip) with the right facet pre-applied on the navigator.
-- [ ] Hover and `:focus-visible` styles on linked chips clearly read as interactive; static chips keep their current look (no anchor styling leakage onto `.op-chip` elements that aren't `.op-chip--link`).
-- [ ] Duration (`15 min`) and progress ring stay static (purely informational chips not clickable).
-- [ ] Inbound `?tag=…` / `?level=…` URLs apply to navigator filter state on mount; multi-value via repeated keys works (`?tag=a&tag=b`).
-- [ ] Existing `License` label skip preserved.
+- [x] Each tag links to `/tutorials/?tag=<slug>` (or `?level=<value>` for the experience chip) with the right facet pre-applied on the navigator.
+- [x] Hover and `:focus-visible` styles on linked chips clearly read as interactive; static chips keep their current look (no anchor styling leakage onto `.op-chip` elements that aren't `.op-chip--link`).
+- [x] Duration (`15 min`) and progress ring stay static (purely informational chips not clickable).
+- [x] Inbound `?tag=…` / `?level=…` URLs apply to navigator filter state on mount; multi-value via repeated keys works (`?tag=a&tag=b`).
+- [x] Existing `License` label skip preserved.
