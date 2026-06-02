@@ -78,9 +78,18 @@ const { searchMode, isSubThreshold, searchResults, searchFacets, searchTotalCoun
 })
 
 onMounted(async () => {
-  loadOptionsFromURL()
-  const initialQuery = new URL(window.location.href).searchParams.get('q')
-  if (initialQuery) searchQuery.value = initialQuery
+  const initial = parseNavState(
+    window.location.href,
+    typeof localStorage !== 'undefined' ? localStorage : null,
+  )
+  searchQuery.value = initial.q
+  filters.types     = initial.types
+  filters.levels    = initial.levels
+  filters.products  = initial.products
+  filters.topics    = initial.topics
+  filters.isNew     = initial.isNew
+  filters.noLicense = initial.noLicense
+  currentPage.value = initial.page
 
   const [navRes, catalogRes, progRes] = await Promise.all([
     fetch('/tutorials/_nav.json'),
