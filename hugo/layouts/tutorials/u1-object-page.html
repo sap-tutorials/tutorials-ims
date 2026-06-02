@@ -50,6 +50,21 @@
     background: var(--sapButton_Lite_Background, transparent);
     border-color: var(--sapButton_Lite_BorderColor, var(--sapList_BorderColor));
   }
+  .op-chip--link {
+    color: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 120ms ease-out, border-color 120ms ease-out;
+  }
+  .op-chip--link:hover {
+    background-color: var(--sapList_Hover_Background, rgba(0, 0, 0, 0.04));
+    /* No paired hover-border token in Horizon for list rows; keep rest border on hover. */
+    border-color: var(--sapList_BorderColor);
+  }
+  .op-chip--link:focus-visible {
+    outline: 2px solid var(--sapContent_FocusColor, #0070f2);
+    outline-offset: 2px;
+  }
   .op-progress {
     display: inline-flex;
     align-items: center;
