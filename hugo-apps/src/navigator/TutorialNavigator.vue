@@ -7,6 +7,7 @@ import ProgressRing from '@shared/ProgressRing.vue'
 import { cardProgress, toLookup, emptyProgress, type ProgressPayload } from './cardProgress'
 import LicenseIcon from '../shared/LicenseIcon.vue'
 import { requiresLicense, LICENSE_SLUG } from '../shared/license'
+import { isWithinNewWindow } from '../shared/freshness'
 import type { SearchFacets } from '@shared/types'
 
 const tutorials = ref<TutorialEntry[]>([])
@@ -311,15 +312,6 @@ const TYPE_LABELS: Record<string, string> = {
   mission: 'MISSION',
   group: 'GROUP',
   tutorial: 'TUTORIAL',
-}
-
-const NEW_BADGE_WINDOW_MS = 31 * 24 * 60 * 60 * 1000
-
-function isWithinNewWindow(createdAt: string | undefined): boolean {
-  if (!createdAt) return false
-  const t = Date.parse(createdAt)
-  if (!Number.isFinite(t)) return false
-  return Date.now() - t <= NEW_BADGE_WINDOW_MS
 }
 
 const allCards = computed<CardItem[]>(() => {
