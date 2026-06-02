@@ -77,6 +77,29 @@ describe('serializeNavState', () => {
     expect(sp.get('utm_source')).toBe('docs')
     expect(sp.get('type')).toBe('group')
   })
+
+  it('strips ?tag (issue #161 deep-link entry param) on every write', () => {
+    // After mount, the chip-deep-link `?tag=` slugs have been seeded into
+    // filters.products. The watcher's first write must strip `?tag` so it
+    // doesn't survive a subsequent "Clear all filters" + reload (which
+    // would re-seed the cleared filter).
+    const out = serializeNavState(
+      HOST + '?tag=topic%3Eabap-development&tag=software-product%3Esap-hana',
+      EMPTY_STATE,
+    )
+    expect(new URL(out).searchParams.has('tag')).toBe(false)
+  })
+
+  it('strips ?tag even when other state is present', () => {
+    const out = serializeNavState(
+      HOST + '?tag=topic%3Eabap-development&q=cap',
+      { ...EMPTY_STATE, q: 'cap', products: ['topic>abap-development'] },
+    )
+    const sp = new URL(out).searchParams
+    expect(sp.has('tag')).toBe(false)
+    expect(sp.get('q')).toBe('cap')
+    expect(sp.get('product')).toBe('topic>abap-development')
+  })
 })
 
 describe('parseNavState — URL only', () => {
@@ -93,11 +116,21 @@ describe('parseNavState — URL only', () => {
     expect(parseNavState(HOST + '?type=Mission').types).toEqual(['mission'])  // case tolerance
   })
 
-  it('parses ?level=, ?product=, ?topic= preserving case', () => {
+  it('parses ?level= (lowercased) and ?product=, ?topic= preserving case', () => {
     const s = parseNavState(HOST + '?level=beginner&product=sap-btp&topic=cap')
     expect(s.levels).toEqual(['beginner'])
     expect(s.products).toEqual(['sap-btp'])
     expect(s.topics).toEqual(['cap'])
+  })
+
+  it('lowercases ?level= for chip-deep-link compatibility (#161)', () => {
+    // PR #161's experience-chip URL is `?level=Beginner` (capitalised
+    // first letter). urlSync's onMounted seeder uses parseLevelParams
+    // (which lowercases) for dedup; parseNavState must produce the same
+    // canonical form to avoid `levels: ['Beginner', 'beginner']` after
+    // chip-click + watcher write.
+    expect(parseNavState(HOST + '?level=Beginner').levels).toEqual(['beginner'])
+    expect(parseNavState(HOST + '?level=ADVANCED').levels).toEqual(['advanced'])
   })
 
   it('parses ?new=1 and ?noLicense=1 as true; only literal "1" is true', () => {

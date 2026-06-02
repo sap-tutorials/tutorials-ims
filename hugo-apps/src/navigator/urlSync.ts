@@ -72,7 +72,12 @@ export function parseNavState(href: string, ls: Storage | null = null): NavState
   const persisted = ls ? readPersistedFilters(ls) : {}
 
   const types     = asArray(sp.get(PARAM.types), true)    ?? persisted.types     ?? []
-  const levels    = asArray(sp.get(PARAM.levels))         ?? persisted.levels    ?? []
+  // Levels are also lowercased on read because PR #161's chip-deep-link
+  // emits `?level=Beginner` (capitalised) and we want a single canonical
+  // form to share with parseLevelParams' dedup check in onMounted. The
+  // domain values (`beginner` / `intermediate` / `advanced`) are lowercase
+  // already; this is purely defensive against hand-edited / chip URLs.
+  const levels    = asArray(sp.get(PARAM.levels), true)   ?? persisted.levels    ?? []
   const products  = asArray(sp.get(PARAM.products))       ?? persisted.products  ?? []
   const topics    = asArray(sp.get(PARAM.topics))         ?? persisted.topics    ?? []
   const isNew     = asBool(sp.get(PARAM.isNew))           ?? persisted.isNew     ?? false
@@ -103,6 +108,17 @@ export function serializeNavState(href: string, state: NavState): string {
   setOrDelete(sp, PARAM.levels,   state.levels)
   setOrDelete(sp, PARAM.products, state.products)
   setOrDelete(sp, PARAM.topics,   state.topics)
+
+  // Issue #161 deep-link entry params (`?tag`, multi-value). They are
+  // consumed once by TutorialNavigator's onMounted seeder and aliased into
+  // `filters.products`. Stripping them here means `?product=...` is the
+  // only canonical surface the user sees in the URL post-mount, AND
+  // "Clear all filters" actually clears them (otherwise unknown-param
+  // preservation would keep `?tag=` alive across a wipe and re-seed on
+  // reload). `?level` is shared between PR #161 and urlSync — same param
+  // name, same field, so no separate handling needed; setOrDelete above
+  // already canonicalises it.
+  sp.delete('tag')
 
   return url.toString()
 }

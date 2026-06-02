@@ -12,6 +12,7 @@ import LicenseIcon from '../shared/LicenseIcon.vue'
 import { requiresLicense, LICENSE_SLUG } from '../shared/license'
 import { isWithinNewWindow } from '../shared/freshness'
 import type { SearchFacets } from '@shared/types'
+import { parseTagParams, parseLevelParams } from './url-params'
 
 const tutorials = ref<TutorialEntry[]>([])
 const missionsMeta = ref<MissionRef[]>([])
@@ -83,6 +84,7 @@ onMounted(async () => {
   // the navigator from booting. Fall back to defaults — same behaviour the
   // pre-urlSync code had when localStorage was unreadable.
   let initial: NavState
+  const params = new URL(window.location.href).searchParams
   try {
     initial = parseNavState(
       window.location.href,
@@ -98,6 +100,20 @@ onMounted(async () => {
   filters.topics    = initial.topics
   filters.isNew     = initial.isNew
   filters.noLicense = initial.noLicense
+
+  // Issue #161: deep-link from clickable tutorial-page chips uses `?tag=` /
+  // `?level=` (multi-value) instead of urlSync's `?product=` / `?level=`.
+  // Seed those into the already-restored filter state; the urlSync watcher
+  // (300ms after this block) writes the canonical `?product=` URL and the
+  // serializer strips `?tag` / chip-`?level` so they don't survive a
+  // subsequent "Clear all filters" + reload.
+  for (const slug of parseTagParams(params)) {
+    if (!filters.products.includes(slug)) filters.products.push(slug)
+  }
+  for (const lvl of parseLevelParams(params)) {
+    if (!filters.levels.includes(lvl)) filters.levels.push(lvl)
+  }
+
   // Page must be set AFTER the pagination-reset watcher (line ~656 below)
   // has flushed in response to the filter assignments above — otherwise
   // it clobbers our restored page back to 1. `nextTick` defers past the
