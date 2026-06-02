@@ -28,7 +28,42 @@ const filters = reactive({
   types: [] as string[],
   products: [] as string[],
   topics: [] as string[],
+  isNew: false,
+  noLicense: false,
 })
+
+// Read Options toggles from the URL (?new=1, ?noLicense=1) on initial
+// load, falling back to localStorage. URL is the source of truth so
+// shared filtered links work; localStorage backstops for revisits.
+function loadOptionsFromURL() {
+  const sp = new URL(window.location.href).searchParams
+  if (sp.has('new') || sp.has('noLicense')) {
+    filters.isNew = sp.get('new') === '1'
+    filters.noLicense = sp.get('noLicense') === '1'
+    return
+  }
+  try {
+    filters.isNew = localStorage.getItem('navigator.options.new') === '1'
+    filters.noLicense = localStorage.getItem('navigator.options.noLicense') === '1'
+  } catch {
+    // localStorage unavailable (private mode, SSR) — leave defaults.
+  }
+}
+
+function syncOptionsToURL() {
+  const url = new URL(window.location.href)
+  if (filters.isNew) url.searchParams.set('new', '1'); else url.searchParams.delete('new')
+  if (filters.noLicense) url.searchParams.set('noLicense', '1'); else url.searchParams.delete('noLicense')
+  window.history.replaceState({}, '', url.toString())
+  try {
+    localStorage.setItem('navigator.options.new', filters.isNew ? '1' : '0')
+    localStorage.setItem('navigator.options.noLicense', filters.noLicense ? '1' : '0')
+  } catch {
+    // localStorage unavailable — URL is canonical anyway.
+  }
+}
+
+watch(() => [filters.isNew, filters.noLicense], syncOptionsToURL)
 
 const loading = computed(() => tutorials.value.length === 0)
 
@@ -37,10 +72,13 @@ const { searchMode, isSubThreshold, searchResults, searchFacets, searchTotalCoun
   filterTypes: computed(() => filters.types.map(t => t.toUpperCase())),
   filterLevels: computed(() => filters.levels),
   filterProducts: computed(() => filters.products),
+  filterIsNew: computed(() => filters.isNew),
+  filterNoLicense: computed(() => filters.noLicense),
   tutorials,
 })
 
 onMounted(async () => {
+  loadOptionsFromURL()
   const initialQuery = new URL(window.location.href).searchParams.get('q')
   if (initialQuery) searchQuery.value = initialQuery
 
@@ -474,6 +512,14 @@ const filteredItems = computed(() => {
       if (!hasTopic) return false
     }
 
+    if (filters.isNew && !item.isNew) {
+      return false
+    }
+
+    if (filters.noLicense && requiresLicense(item)) {
+      return false
+    }
+
     return true
   })
 })
@@ -499,6 +545,8 @@ function clearFilters() {
   filters.types = []
   filters.products = []
   filters.topics = []
+  filters.isNew = false
+  filters.noLicense = false
   productSearch.value = ''
   topicSearch.value = ''
 }
@@ -508,7 +556,9 @@ const hasActiveFilters = computed(() => {
     filters.levels.length > 0 ||
     filters.types.length > 0 ||
     filters.products.length > 0 ||
-    filters.topics.length > 0
+    filters.topics.length > 0 ||
+    filters.isNew ||
+    filters.noLicense
 })
 
 const totalPages = computed(() => Math.ceil(filteredItems.value.length / pageSize))
@@ -702,6 +752,15 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
               <label v-for="type in ['mission', 'group', 'tutorial']" :key="type" class="filter-option">
                 <input type="checkbox" :checked="filters.types.includes(type)" @change="toggleFilter(filters.types, type)" class="filter-checkbox" />
                 <span class="filter-label">{{ type.charAt(0).toUpperCase() + type.slice(1) }}</span>
+              </label>
+              <hr class="filter-divider" aria-hidden="true" />
+              <label class="filter-option">
+                <input type="checkbox" v-model="filters.isNew" class="filter-checkbox" />
+                <span class="filter-label">New tutorials</span>
+              </label>
+              <label class="filter-option">
+                <input type="checkbox" v-model="filters.noLicense" class="filter-checkbox" />
+                <span class="filter-label">No license</span>
               </label>
             </div>
           </div>
@@ -1083,6 +1142,12 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
 
 .filter-option .filter-label {
   cursor: pointer;
+}
+
+.filter-divider {
+  border: none;
+  border-top: 1px solid var(--sapList_BorderColor, #d9d9d9);
+  margin: 0.5rem 0;
 }
 
 /* ─── Toolbar / Result Bar ─── */

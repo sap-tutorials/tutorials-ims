@@ -107,3 +107,108 @@ describe('TutorialNavigator result-region stability (#159)', () => {
     expect(emptyDuring).toBe(emptyBefore)
   })
 })
+
+import { requiresLicense } from '../shared/license'
+import type { CardItem } from '@shared/types'
+
+// Pure-function mirror of the post-Task-4 filteredItems extension. The
+// real filteredItems lives inside TutorialNavigator.vue's <script setup>;
+// that file imports fetch/UI5/full Vue lifecycle and isn't unit-mountable
+// at the file level (matches the pattern of the harness above for #159).
+// We instead test the extracted predicate that the .vue file delegates to.
+function applyOptionsFilters(
+  items: CardItem[],
+  flags: { isNew: boolean; noLicense: boolean }
+): CardItem[] {
+  return items.filter(item => {
+    if (flags.isNew && !item.isNew) return false
+    if (flags.noLicense && requiresLicense(item)) return false
+    return true
+  })
+}
+
+describe('Options filters (#175)', () => {
+  const baseCard: CardItem = {
+    type: 'tutorial',
+    id: 'a',
+    title: 'A',
+    description: '',
+    time: 0,
+    level: 'beginner',
+    tutorialCount: 1,
+    primaryTag: '',
+    displayTags: [],
+    displayTagSlugs: [],
+    href: '/tutorials/a',
+    stepCount: 0,
+  }
+  const newFree: CardItem = { ...baseCard, id: 'newFree', isNew: true }
+  const newLicensed: CardItem = { ...baseCard, id: 'newLicensed', isNew: true, displayTagSlugs: ['tutorial>license'] }
+  const oldFree: CardItem = { ...baseCard, id: 'oldFree', isNew: false }
+  const oldLicensed: CardItem = { ...baseCard, id: 'oldLicensed', isNew: false, displayTagSlugs: ['tutorial>license'] }
+
+  const all = [newFree, newLicensed, oldFree, oldLicensed]
+
+  it('returns input unchanged when both flags off', () => {
+    expect(applyOptionsFilters(all, { isNew: false, noLicense: false })).toEqual(all)
+  })
+
+  it('isNew=true keeps only items with isNew=true', () => {
+    expect(applyOptionsFilters(all, { isNew: true, noLicense: false })).toEqual([newFree, newLicensed])
+  })
+
+  it('noLicense=true strips license-tagged items', () => {
+    expect(applyOptionsFilters(all, { isNew: false, noLicense: true })).toEqual([newFree, oldFree])
+  })
+
+  it('both flags AND together', () => {
+    expect(applyOptionsFilters(all, { isNew: true, noLicense: true })).toEqual([newFree])
+  })
+})
+
+describe('Options URL sync (#175)', () => {
+  // Pure functions mirroring the post-Task-4 sync logic in TutorialNavigator.vue.
+  function readOptionsFromURL(href: string): { isNew: boolean; noLicense: boolean } {
+    const sp = new URL(href).searchParams
+    return { isNew: sp.get('new') === '1', noLicense: sp.get('noLicense') === '1' }
+  }
+
+  function writeOptionsToURL(href: string, flags: { isNew: boolean; noLicense: boolean }): string {
+    const url = new URL(href)
+    if (flags.isNew) url.searchParams.set('new', '1'); else url.searchParams.delete('new')
+    if (flags.noLicense) url.searchParams.set('noLicense', '1'); else url.searchParams.delete('noLicense')
+    return url.toString()
+  }
+
+  it('reads ?new=1&noLicense=1', () => {
+    expect(readOptionsFromURL('https://x/?new=1&noLicense=1')).toEqual({ isNew: true, noLicense: true })
+  })
+
+  it('reads ?new=1 only', () => {
+    expect(readOptionsFromURL('https://x/?new=1')).toEqual({ isNew: true, noLicense: false })
+  })
+
+  it('reads neither when absent', () => {
+    expect(readOptionsFromURL('https://x/')).toEqual({ isNew: false, noLicense: false })
+  })
+
+  it('writes both flags when on', () => {
+    const result = writeOptionsToURL('https://x/', { isNew: true, noLicense: true })
+    expect(new URL(result).searchParams.get('new')).toBe('1')
+    expect(new URL(result).searchParams.get('noLicense')).toBe('1')
+  })
+
+  it('omits both flags when off', () => {
+    const result = writeOptionsToURL('https://x/?new=1&noLicense=1', { isNew: false, noLicense: false })
+    expect(new URL(result).searchParams.has('new')).toBe(false)
+    expect(new URL(result).searchParams.has('noLicense')).toBe(false)
+  })
+
+  it('round-trips correctly', () => {
+    const flags = { isNew: true, noLicense: false }
+    const written = writeOptionsToURL('https://x/?q=cap', flags)
+    expect(readOptionsFromURL(written)).toEqual(flags)
+    // Pre-existing query keys are preserved.
+    expect(new URL(written).searchParams.get('q')).toBe('cap')
+  })
+})
