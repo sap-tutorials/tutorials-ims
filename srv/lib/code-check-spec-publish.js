@@ -28,35 +28,44 @@ export async function codeCheckSpecPublishHandler(req, res) {
   const skipped = [];
   let upserted = 0;
 
-  for (const s of body.specs) {
-    const slug = s.slug.toLowerCase();
+  try {
+    for (const s of body.specs) {
+      const slug = s.slug.toLowerCase();
 
-    // SELECT.one returns the row directly (not an array) or undefined.
-    const tut = await SELECT.one.from(Tutorials).where({ slug });
-    if (!tut) { skipped.push(s.slug); continue; }
+      // SELECT.one returns the row directly (not an array) or undefined.
+      const tut = await SELECT.one.from(Tutorials).where({ slug });
+      if (!tut) { skipped.push(slug); continue; }
 
-    const existing = await SELECT.one.from(CodeCheckSpecs).where({
-      tutorial_ID: tut.ID, stepNumber: s.stepNumber
-    });
-
-    const row = {
-      tutorial_ID: tut.ID,
-      stepNumber: s.stepNumber,
-      goal: s.goal,
-      language: s.language || null,
-      hints: s.hints ? JSON.stringify(s.hints) : null,
-      referenceSolution: s.referenceSolution || null,
-      hasReference: Boolean(s.referenceSolution),
-    };
-
-    if (existing) {
-      await UPDATE(CodeCheckSpecs).set(row).where({
+      const existing = await SELECT.one.from(CodeCheckSpecs).where({
         tutorial_ID: tut.ID, stepNumber: s.stepNumber
       });
-    } else {
-      await INSERT.into(CodeCheckSpecs).entries(row);
+
+      const fields = {
+        goal: s.goal,
+        language: s.language || null,
+        hints: Array.isArray(s.hints) ? JSON.stringify(s.hints) : null,
+        referenceSolution: s.referenceSolution || null,
+        hasReference: Boolean(s.referenceSolution),
+      };
+
+      // No DELETE in this loop or anywhere else in this handler — carry-forward
+      // semantics: specs absent from a payload are RETAINED, matching RepoCatalog.
+      if (existing) {
+        await UPDATE(CodeCheckSpecs).set(fields).where({
+          tutorial_ID: tut.ID, stepNumber: s.stepNumber
+        });
+      } else {
+        await INSERT.into(CodeCheckSpecs).entries({
+          tutorial_ID: tut.ID,
+          stepNumber: s.stepNumber,
+          ...fields
+        });
+      }
+      upserted++;
     }
-    upserted++;
+  } catch (err) {
+    LOG.error('code-check-spec-publish failed', err.message);
+    return res.status(500).json({ error: 'persist_failed', message: err.message });
   }
 
   LOG.info('code-check-spec-publish', { upserted, skipped: skipped.length });

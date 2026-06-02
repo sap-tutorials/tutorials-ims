@@ -173,6 +173,25 @@ describe('hints serialization', () => {
     expect(typeof row.hints).toBe('string');
     expect(row.hints).toBe('["a","b"]');
   });
+
+  it('hints stored as null when not an array (string)', async () => {
+    const req = mockReq({
+      specs: [
+        { slug: 'tutorial-alpha', stepNumber: 6, goal: 'Use hints', language: 'javascript', hints: 'not an array' },
+      ],
+    });
+    const res = mockRes();
+    await codeCheckSpecPublishHandler(req, res);
+    expect(res.statusCode).toBe(200);
+
+    const { CodeCheckSpecs } = cds.entities('com.sap.developers.ims');
+    const row = await SELECT.one.from(CodeCheckSpecs).where({
+      tutorial_ID: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+      stepNumber: 6,
+    });
+    expect(row).toBeTruthy();
+    expect(row.hints).toBeNull();
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
