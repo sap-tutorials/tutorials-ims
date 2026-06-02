@@ -8,6 +8,7 @@ import { composeTutorial } from './parsers/compose.js'
 import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, EXCLUDED_REPOS, type DiscoveredTutorial } from './parsers/github.js'
 import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache } from './parsers/cap.js'
 import { parseRulesVr } from './parsers/rules.js'
+import { parseCodeCheckBlocks, attachCodeCheckSpecs } from './parsers/codecheck.js'
 import { computeRecommendations } from './parsers/recommendations.js'
 import { humanizeTag, splitPrerequisites } from './parsers/frontmatter-utils.js'
 import type { TagLabelRegistry } from './parsers/frontmatter-utils.js'
@@ -665,6 +666,15 @@ async function main() {
             ?? steps.find(s => s.number === validateNum)
           if (target) {
             target.validation = [...(target.validation ?? []), ...questions]
+          }
+        }
+
+        const codeCheckMap = parseCodeCheckBlocks(rulesContent)
+        if (codeCheckMap.size) {
+          const sidecar = attachCodeCheckSpecs(steps, codeCheckMap)
+          if (sidecar.length) {
+            const sidecarPath = join(CACHE_DIR, `${t.slug}.codecheck.json`)
+            writeFileSync(sidecarPath, JSON.stringify({ slug: t.slug, specs: sidecar }, null, 2))
           }
         }
       }

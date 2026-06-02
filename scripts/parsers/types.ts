@@ -22,6 +22,7 @@ export interface TutorialStep {
   title: string
   content: string
   validation?: ValidationQuestion[]
+  codeCheck?: PublicCodeCheckSpec
 }
 
 export interface ParsedTutorial {

@@ -1,4 +1,4 @@
-import type { CodeCheckSpec } from './types.js'
+import type { CodeCheckSpec, PublicCodeCheckSpec } from './types.js'
 
 const CODECHECK_MARKER = /^\[CODECHECK_(\d+)\]\s*$/
 const ANY_MARKER = /^\[(VALIDATE|CODECHECK)_\d+\]\s*$/
@@ -46,4 +46,30 @@ function section(raw: string, name: string): string {
   const re = new RegExp(`###${name}[^\n]*\n([\\s\\S]*?)(?=\n###|$)`)
   const m = raw.match(re)
   return m ? m[1].trim() : ''
+}
+
+interface StepLike { number: number; codeCheck?: PublicCodeCheckSpec }
+
+/**
+ * Mutates each step in place: attaches a trimmed PublicCodeCheckSpec when
+ * the step number matches a parsed spec. Returns the full sidecar array
+ * (server-only) for writing to .tutorial-cache/<slug>.codecheck.json.
+ */
+export function attachCodeCheckSpecs<T extends StepLike>(
+  steps: T[],
+  specs: Map<number, CodeCheckSpec>
+): CodeCheckSpec[] {
+  const sidecar: CodeCheckSpec[] = []
+  for (const [stepNumber, spec] of specs) {
+    const target = steps.find(s => s.number === stepNumber)
+    if (!target) continue
+    target.codeCheck = {
+      goal: spec.goal,
+      language: spec.language,
+      hints: spec.hints,
+      hasReference: Boolean(spec.referenceSolution)
+    }
+    sidecar.push(spec)
+  }
+  return sidecar
 }
