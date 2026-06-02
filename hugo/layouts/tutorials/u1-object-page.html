@@ -206,11 +206,25 @@
       {{ with .Params.level }}<a class="op-chip op-chip--link" href="{{ "/tutorials/" | relURL }}?level={{ . | lower | urlquery }}" aria-label="Filter tutorials by experience: {{ . }}"><span class="op-chip__icon">🎓</span>{{ . }}</a>{{ end }}
       {{ with .Params.experienceLevel }}<a class="op-chip op-chip--link" href="{{ "/tutorials/" | relURL }}?level={{ . | lower | urlquery }}" aria-label="Filter tutorials by experience: {{ . }}"><span class="op-chip__icon">🎓</span>{{ . }}</a>{{ end }}
       {{ with .Params.time }}<span class="op-chip"><span class="op-chip__icon">⏱</span>{{ . }} min</span>{{ end }}
-      {{/* Prefer human-readable displayTags; fall back to raw primaryTag if none provided. */}}
+      {{/* Prefer human-readable displayTags zipped with displayTagSlugs; fall back to raw primaryTag.
+           #161 — chips are <a> anchors that deep-link to /tutorials/?tag=<slug>. The "License" label
+           is intentionally label-matched (not slug-matched) to preserve existing chip-strip behaviour;
+           see docs/superpowers/specs/2026-06-01-clickable-tutorial-tags-design.md. */}}
       {{ if .Params.displayTags }}
-        {{ range .Params.displayTags }}{{ if ne . "License" }}<span class="op-chip op-chip--tag">{{ . }}</span>{{ end }}{{ end }}
+        {{ $slugs := .Params.displayTagSlugs }}
+        {{ range $i, $label := .Params.displayTags }}
+          {{ if ne $label "License" }}
+            {{ $slug := "" }}
+            {{ if and $slugs (lt $i (len $slugs)) }}{{ $slug = index $slugs $i }}{{ end }}
+            {{ if $slug }}
+              <a class="op-chip op-chip--tag op-chip--link" href="{{ "/tutorials/" | relURL }}?tag={{ $slug | urlquery }}" aria-label="Filter tutorials by {{ $label }}">{{ $label }}</a>
+            {{ else }}
+              <span class="op-chip op-chip--tag">{{ $label }}</span>
+            {{ end }}
+          {{ end }}
+        {{ end }}
       {{ else if .Params.primaryTag }}
-        <span class="op-chip op-chip--tag">{{ .Params.primaryTag }}</span>
+        <a class="op-chip op-chip--tag op-chip--link" href="{{ "/tutorials/" | relURL }}?tag={{ .Params.primaryTag | urlquery }}" aria-label="Filter tutorials by {{ .Params.primaryTag }}">{{ .Params.primaryTag }}</a>
       {{ end }}
       <span class="op-progress" id="op-progress" data-step-count="{{ .Params.stepCount }}">
         <span class="op-progress__ring" id="op-progress-ring" style="--pct: 0">
