@@ -131,6 +131,24 @@ srv/
 
 The single rule: **if it comes from the catalog, SSR it. If it comes from the user, CSR it. No exceptions.**
 
+#### `<ClientOnly>` implementation note
+
+Vanilla Vue 3 does not ship a `<ClientOnly>` component (it's a Nuxt/VitePress convention). The implementation will provide a small local wrapper at `hugo-apps/src/shared/ClientOnly.vue` (~10 lines) using an `onMounted`-gated `v-if`:
+
+```vue
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+const mounted = ref(false)
+onMounted(() => { mounted.value = true })
+</script>
+
+<template>
+  <slot v-if="mounted" />
+</template>
+```
+
+This component is reused by `ProgressOverlay` and any other CSR-only subtree. It's intentionally trivial so the hydration test (`BrowsePage.hydration.test.ts`) can reason about it: the SSR pass renders nothing inside the slot, and the post-mount paint adds it without a hydration mismatch warning.
+
 | Bit | Origin | SSR? | Hydration behavior |
 |---|---|---|---|
 | Card chrome (title, desc, type lozenge, level, time) | catalog (`hugo/data/browse.json`) | yes | hydrates in place |
@@ -409,7 +427,7 @@ The Q9 refactor (extract from `TutorialNavigator.vue`) is the highest-risk piece
 
 - **Pre-refactor snapshot lock** — capture `displayedItems` outputs for ~10 filter+search combos *before* the extraction, lock them in `useNavigatorFilters.test.ts`.
 - **Refactor lands as its own PR** that doesn't introduce `/browse/` at all. CI must show snapshots green before merge.
-- **Cypress/Playwright run-once test** of `/` covering filter-by-type, search "cap", clear-all (one-time addition).
+- **Vitest + happy-dom DOM-level smoke test** of `/` covering filter-by-type, search "cap", clear-all (one-time addition under `hugo-apps/src/navigator/__tests__/navigator-regression.test.ts`). The project does not use Cypress or Playwright; happy-dom is sufficient for asserting DOM state changes after user-event simulation.
 
 ### Coverage of locked decisions
 
@@ -475,7 +493,7 @@ PR 1 must go first — it's the foundation for PR 2's shared components, and car
 |---|---|---|---|
 | PR 1 (refactor) | net +200 | ~12 in `hugo-apps/src/` + `shared/cards/` + `shared/composables/` | Medium — touches production navigator. Snapshot tests gate regression risk. |
 | PR 2 (SSR + browse) | ~2,500 added | `hugo/layouts/browse/`, `hugo-apps/src/browse/`, `browse.css`, `fetch-tutorials.ts`, header partial, pill on `/` | High — biggest piece, new code paths, SSR/hydration. Mitigated by parity test. |
-| PR 3 (rebuild trigger) | ~250 added | `srv/lib/rebuild-trigger.js`, `srv/server.js` hook, `rebuild-content.yml` workflow_dispatch input, tests, env doc | Low — backend-only, gated by env var, falls back gracefully |
+| PR 3 (rebuild trigger) | ~250 added | `srv/lib/rebuild-trigger.js`, `srv/server.js` hook, `rebuild-content.yml` workflow_dispatch input, tests, env doc, **`docs/developers/operations/github-dispatch-pat-rotation.md` rotation runbook** | Low — backend-only, gated by env var, falls back gracefully |
 
 ## Risks and mitigations
 
@@ -486,7 +504,7 @@ PR 1 must go first — it's the foundation for PR 2's shared components, and car
 | `hugo/data/browse.json` size grows unboundedly | Low | Medium | If catalog grows past ~5K cards, revisit pagination strategy (followup) |
 | `rebuild-trigger.js` storms Actions minutes during admin bulk edits | Medium | Medium | 60s JobLock-guarded debounce; PAT scoped to `actions:write` so worst case is bounded |
 | `srv-qa` cp list misses `rebuild-trigger.js` ([[feedback-srv-qa-cp-list-recurring]]) | High | High | PR 3 description includes checklist to walk transitive `srv/lib/` imports; reviewer enforces |
-| GitHub PAT for rebuild trigger leaks | Low | High | Fine-grained, scoped to `actions:write` on a single repo, expires every 90 days, stored in CF env not in code; revocation runbook documented |
+| GitHub PAT for rebuild trigger leaks | Low | High | Fine-grained, scoped to `actions:write` on a single repo, expires every 90 days, stored in CF env not in code; PR 3 includes a `docs/developers/operations/github-dispatch-pat-rotation.md` runbook covering generation, env-var update, and revocation |
 | `<dialog>` behavior differs across browsers | Low | Low | Smoke-tested on Tom's checklist; fallback to plain `<aside>` + JS focus-trap if needed |
 | A/B test runs but no analytics to read it | High | High | Filed as followup #6 (analytics instrumentation) — blocks the eventual cutover decision |
 
