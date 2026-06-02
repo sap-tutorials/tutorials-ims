@@ -21,10 +21,14 @@ service SearchService {
   // is silently ignored — HANA falls back to global cds.hana.fuzzy (0.7),
   // which let "CAP" match 1042 unrelated rows and "fortran" match 635.
   // Description gets a tighter 0.9 because long-text fuzzy matches generate
-  // disproportionate noise; title/primaryTag use 0.85.
+  // disproportionate noise; title/primaryTag/tagBag use 0.85.
   // bodyText stays out of @cds.search because LOW-ranked body matches
   // were drowning HIGH-ranked title hits (HANA ranking is relative-within-row,
   // not a cross-row multiplier).
+  // bodyText AND tagBag are excluded from the projection so they don't bloat
+  // OData payloads — both are ~LargeString-shaped, scanned by predicate only.
+  // @cds.search references both because the runtime hook builds the predicate
+  // against the underlying view, not the projection element list.
   @readonly
   @cds.search: { title, description, primaryTag, tagBag }
   entity SearchableItems as projection on ims.SearchableItems {
@@ -41,7 +45,7 @@ service SearchService {
     @Search.ranking: #LOW
     tagBag,
     *
-  } excluding { bodyText };
+  } excluding { bodyText, tagBag };
 
   @readonly
   entity Tags as projection on ims.Tags;
