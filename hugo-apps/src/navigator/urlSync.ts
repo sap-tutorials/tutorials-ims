@@ -108,12 +108,54 @@ export function serializeNavState(href: string, state: NavState): string {
   return url.toString()
 }
 
-export function persistFilters(_state: NavState, _ls: Storage): void {
-  throw new Error('not implemented')
+interface PersistedShape {
+  types?: string[]
+  levels?: string[]
+  products?: string[]
+  topics?: string[]
+  isNew?: boolean
+  noLicense?: boolean
 }
 
-export function readPersistedFilters(_ls: Storage): Partial<NavState> {
-  throw new Error('not implemented')
+export function persistFilters(state: NavState, ls: Storage): void {
+  const payload: PersistedShape = {
+    types:     state.types,
+    levels:    state.levels,
+    products:  state.products,
+    topics:    state.topics,
+    isNew:     state.isNew,
+    noLicense: state.noLicense,
+  }
+  ls.setItem(LS_KEY_V1, JSON.stringify(payload))
+}
+
+export function readPersistedFilters(ls: Storage): Partial<NavState> {
+  // 1. Try the v1 consolidated key first.
+  const v1 = ls.getItem(LS_KEY_V1)
+  if (v1 !== null) {
+    try {
+      const parsed = JSON.parse(v1) as PersistedShape
+      const out: Partial<NavState> = {}
+      if (Array.isArray(parsed.types))     out.types     = parsed.types.filter(s => typeof s === 'string')
+      if (Array.isArray(parsed.levels))    out.levels    = parsed.levels.filter(s => typeof s === 'string')
+      if (Array.isArray(parsed.products))  out.products  = parsed.products.filter(s => typeof s === 'string')
+      if (Array.isArray(parsed.topics))    out.topics    = parsed.topics.filter(s => typeof s === 'string')
+      if (typeof parsed.isNew === 'boolean')     out.isNew     = parsed.isNew
+      if (typeof parsed.noLicense === 'boolean') out.noLicense = parsed.noLicense
+      return out
+    } catch {
+      // Truncated / hand-edited JSON — fall through to legacy keys.
+    }
+  }
+
+  // 2. Migration ladder: legacy `navigator.options.{new,noLicense}` keys.
+  //    These were strings '1' / '0' under the old SFC code.
+  const out: Partial<NavState> = {}
+  const legacyNew = ls.getItem(LS_KEY_LEGACY_NEW)
+  const legacyNoLicense = ls.getItem(LS_KEY_LEGACY_NO_LICENSE)
+  if (legacyNew !== null) out.isNew = legacyNew === '1'
+  if (legacyNoLicense !== null) out.noLicense = legacyNoLicense === '1'
+  return out
 }
 
 export function readNavStateFromWindow(): NavState {

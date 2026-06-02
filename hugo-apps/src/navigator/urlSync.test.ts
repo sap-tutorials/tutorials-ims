@@ -129,3 +129,45 @@ describe('parseNavState — URL only', () => {
     expect(parseNavState(HOST + '?type=,,mission,,').types).toEqual(['mission'])
   })
 })
+
+describe('persistFilters / readPersistedFilters', () => {
+  let ls: FakeStorage
+  beforeEach(() => { ls = new FakeStorage() })
+
+  it('writes filter arrays + booleans under navigator.filters.v1; never writes q or page', () => {
+    persistFilters({
+      ...EMPTY_STATE,
+      q: 'should-not-persist',
+      types: ['mission'],
+      levels: ['beginner'],
+      products: ['sap-btp'],
+      topics: ['cap'],
+      isNew: true,
+      noLicense: false,
+      page: 5,
+    }, ls)
+
+    const raw = ls.getItem(LS_KEY_V1)
+    expect(raw).not.toBeNull()
+    const parsed = JSON.parse(raw!)
+    expect(parsed.types).toEqual(['mission'])
+    expect(parsed.isNew).toBe(true)
+    expect('q' in parsed).toBe(false)
+    expect('page' in parsed).toBe(false)
+  })
+
+  it('round-trips via readPersistedFilters', () => {
+    const state: NavState = {
+      ...EMPTY_STATE,
+      types: ['mission', 'group'],
+      products: ['sap-btp'],
+      isNew: true,
+    }
+    persistFilters(state, ls)
+    const read = readPersistedFilters(ls)
+    expect(read.types).toEqual(['mission', 'group'])
+    expect(read.products).toEqual(['sap-btp'])
+    expect(read.isNew).toBe(true)
+    expect(read.noLicense).toBe(false)
+  })
+})
