@@ -558,6 +558,7 @@ function clearFilters() {
   filters.noLicense = false
   productSearch.value = ''
   topicSearch.value = ''
+  currentPage.value = 1   // also reset page so URL drops `?page=` cleanly
 }
 
 const hasActiveFilters = computed(() => {
