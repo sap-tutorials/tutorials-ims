@@ -2,7 +2,7 @@
 // Tests for the checkCode tool registration in chat-orchestrator.js.
 // Uses the same in-memory SQLite + entity-fixture pattern as Tasks 1.5/1.6.
 
-import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import path from 'node:path';
 import cds from '@sap/cds';
 import { toolsForContext, dispatchTool } from '../../srv/lib/chat-orchestrator.js';
@@ -135,29 +135,16 @@ describe('dispatchTool — checkCode dispatch', () => {
     expect(result).toEqual({ error: 'unknown_tool' });
   });
 
-  it('dispatchTool("checkCode") delegates to dispatchCheckCode and returns a verdict object', async () => {
-    // dispatchCheckCode will attempt dynamic imports of code-check-llm.js and
-    // code-check-step-loader.js. We need to intercept those.
-    // Strategy: vi.mock the two modules. The project memory note warns that
-    // vitest+CDS on Windows may load the same ESM twice, causing one instance to
-    // be the mock and another not. We work around this by also mocking
-    // code-check-tool.js itself so we can verify the orchestrator routes the call
-    // correctly without relying on the real dispatchCheckCode implementation.
+  it('checkCode dispatch case is reachable (routing smoke — not a happy-path verdict test)', async () => {
+    // Routing smoke: confirms the `if (name === 'checkCode')` branch in dispatchTool
+    // runs and does NOT fall through to { error: 'unknown_tool' }. Happy-path verdict
+    // correctness is covered exhaustively by test/unit/code-check-tool.test.js (7 cases).
     //
-    // However: vi.mock() is hoisted to module scope, which means this inline
-    // describe-level setup runs too late for dynamic registration. We instead use
-    // a lightweight integration test here: we let the real dispatchCheckCode run
-    // but mock only the two injected dependencies (callModel, loadStepText) via
-    // the dynamic import chain. Because dispatchCheckCode obtains callModel via
-    // `await import('./code-check-llm.js')` the mock must be registered at module
-    // scope. We resolve this by vi.mock()ing code-check-llm.js and
-    // code-check-step-loader.js at the top of the module (see hoisted mocks below)
-    // and verifying that the result carries a verdict shape.
-    //
-    // If the vi.mock singleton issue strikes (Windows), the test still exercises
-    // the router path — it will surface an error verdict from dispatchCheckCode
-    // (e.g. spec_missing or upstream) but the key assertion is that the result
-    // does NOT equal { error: 'unknown_tool' }, proving the dispatch case ran.
+    // The real dispatchCheckCode is invoked here. Because no LLM credentials exist in the
+    // test environment, callModel will fail and the dispatch try/catch returns
+    // { verdict: 'error', errorReason: 'upstream' }. That is fine — what matters is:
+    //   1. result !== { error: 'unknown_tool' }  (the dispatch branch fired)
+    //   2. result has a `verdict` key             (typed error shape, not a raw throw)
     const result = await dispatchTool(
       'checkCode',
       { tutorialSlug: 'orch-test', stepNumber: 1, submittedCode: 'console.log("hello")' },
@@ -166,7 +153,7 @@ describe('dispatchTool — checkCode dispatch', () => {
 
     // The result MUST NOT be the unknown_tool sentinel — the dispatch case ran.
     expect(result).not.toEqual({ error: 'unknown_tool' });
-    // All paths from dispatchCheckCode return an object with a `verdict` key.
+    // All paths from dispatchCheckCode (and the try/catch wrapper) return a `verdict` key.
     expect(result).toHaveProperty('verdict');
   });
 
