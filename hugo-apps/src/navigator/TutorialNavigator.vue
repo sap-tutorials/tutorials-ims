@@ -35,38 +35,35 @@ const filters = reactive({
   noLicense: false,
 })
 
-// Read Options toggles from the URL (?new=1, ?noLicense=1) on initial
-// load, falling back to localStorage. URL is the source of truth so
-// shared filtered links work; localStorage backstops for revisits.
-function loadOptionsFromURL() {
-  const sp = new URL(window.location.href).searchParams
-  if (sp.has('new') || sp.has('noLicense')) {
-    filters.isNew = sp.get('new') === '1'
-    filters.noLicense = sp.get('noLicense') === '1'
-    return
-  }
-  try {
-    filters.isNew = localStorage.getItem('navigator.options.new') === '1'
-    filters.noLicense = localStorage.getItem('navigator.options.noLicense') === '1'
-  } catch {
-    // localStorage unavailable (private mode, SSR) — leave defaults.
+function currentNavState(): NavState {
+  return {
+    q: searchQuery.value,
+    types: [...filters.types],
+    levels: [...filters.levels],
+    products: [...filters.products],
+    topics: [...filters.topics],
+    isNew: filters.isNew,
+    noLicense: filters.noLicense,
+    page: currentPage.value,
   }
 }
 
-function syncOptionsToURL() {
-  const url = new URL(window.location.href)
-  if (filters.isNew) url.searchParams.set('new', '1'); else url.searchParams.delete('new')
-  if (filters.noLicense) url.searchParams.set('noLicense', '1'); else url.searchParams.delete('noLicense')
-  window.history.replaceState({}, '', url.toString())
-  try {
-    localStorage.setItem('navigator.options.new', filters.isNew ? '1' : '0')
-    localStorage.setItem('navigator.options.noLicense', filters.noLicense ? '1' : '0')
-  } catch {
-    // localStorage unavailable — URL is canonical anyway.
-  }
+let urlSyncTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleURLSync() {
+  if (urlSyncTimer) clearTimeout(urlSyncTimer)
+  urlSyncTimer = setTimeout(() => writeNavStateToWindow(currentNavState()), 300)
 }
-
-watch(() => [filters.isNew, filters.noLicense], syncOptionsToURL)
+// `deep: true` is meaningful for the `() => filters.X` array getters; it's
+// a no-op on the bare `searchQuery` and `currentPage` refs but lets us keep
+// a single watcher instead of two.
+watch(
+  [searchQuery, () => filters.levels, () => filters.types,
+   () => filters.products, () => filters.topics,
+   () => filters.isNew, () => filters.noLicense, currentPage],
+  scheduleURLSync,
+  { deep: true },
+)
+onScopeDispose(() => { if (urlSyncTimer) clearTimeout(urlSyncTimer) })
 
 const loading = computed(() => tutorials.value.length === 0)
 
