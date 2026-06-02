@@ -77,6 +77,23 @@ Implement the handler.
     expect(out.get(3).goal).toBe('Implement the handler.');
   });
 
+  it('CODECHECK block is closed by a subsequent [VALIDATE_N] marker', () => {
+    const input = `[CODECHECK_1]
+###Goal
+Implement the handler.
+[VALIDATE_2]
+###Rule
+multiple-choice
+###Question
+Which is true?
+###Match
+[x] A
+[ ] B`;
+    const out = parseCodeCheckBlocks(input);
+    expect(out.size).toBe(1);
+    expect(out.get(1).goal).toBe('Implement the handler.');
+  });
+
   it('strips bullet markers from hints', () => {
     const input = `[CODECHECK_1]
 ###Goal
