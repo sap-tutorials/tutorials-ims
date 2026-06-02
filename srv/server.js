@@ -23,6 +23,7 @@ import { exportSelectQueryHandler } from './lib/analytics-export-handler.js';
 import { makeCodeCheckHandler } from './lib/code-check-handler.js';
 import { defaultCallModel } from './lib/code-check-llm.js';
 import { defaultLoadStepText } from './lib/code-check-step-loader.js';
+import { codeCheckSpecPublishHandler } from './lib/code-check-spec-publish.js';
 
 // Late-bound POST /chat/stream handler. Registered in 'bootstrap' (before CAP
 // mounts ChatService at /chat, which would otherwise swallow /chat/stream as
@@ -165,6 +166,7 @@ cds.on('bootstrap', (app) => {
   // bootstrap block (after contextMw/authMw are defined) so req.user is
   // populated by CAP's auth chain before the handler runs.
   app.post('/content/rollback', express.json(), contentAuthMiddleware, rollbackHandler);
+  app.post('/content/code-check-specs', express.json({ limit: '5mb' }), contentAuthMiddleware, codeCheckSpecPublishHandler);
 
   // Tutorial feedback bridge. Express handler (rather than letting CAP expose
   // the action over OData) so we can derive the originating client IP from
