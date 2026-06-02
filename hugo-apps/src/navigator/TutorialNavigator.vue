@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, reactive, watch } from 'vue'
+import { ref, computed, onMounted, onScopeDispose, reactive, watch } from 'vue'
+import {
+  parseNavState, writeNavStateToWindow, type NavState,
+} from './urlSync'
 import type { TutorialEntry, CardItem, MissionRef, GroupRef } from '@shared/types'
 import { useSearch } from './useSearch'
 import Skeleton from '@shared/Skeleton.vue'
