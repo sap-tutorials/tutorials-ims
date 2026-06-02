@@ -179,6 +179,8 @@ Navigator mount (Vue, client)
 
 ## Acceptance (from issue #161)
 
-- [x] Each tag links to `/search?tag=…` (or equivalent — we use `/tutorials/?tag=…` because the navigator lives at `/tutorials/`) with the right facet pre-applied.
-- [x] Hover/focus styles indicate interactivity.
-- [x] Excludes purely informational chips (`15 min`, progress ring) — only topic/product tags and experience are clickable; duration and progress are static.
+- [ ] Each tag links to `/tutorials/?tag=<slug>` (or `?level=<value>` for the experience chip) with the right facet pre-applied on the navigator.
+- [ ] Hover and `:focus-visible` styles on linked chips clearly read as interactive; static chips keep their current look (no anchor styling leakage onto `.op-chip` elements that aren't `.op-chip--link`).
+- [ ] Duration (`15 min`) and progress ring stay static (purely informational chips not clickable).
+- [ ] Inbound `?tag=…` / `?level=…` URLs apply to navigator filter state on mount; multi-value via repeated keys works (`?tag=a&tag=b`).
+- [ ] Existing `License` label skip preserved.
