@@ -31,7 +31,7 @@ You will receive:
 
 Return ONLY a JSON object matching the supplied schema. Rules:
 
-1. Verdict scale (pass / partial / fail):
+1. Verdict scale:
    - "pass": the code accomplishes the goal. Style differences from the
      reference are FINE. The reference is a valid solution, not the only one.
    - "partial": the code is on the right track but misses something

@@ -9,7 +9,9 @@ import {
 describe('code-check prompt builder', () => {
   it('system prompt mentions verdict scale and never-quote rule', () => {
     const sys = buildSystemPrompt();
-    expect(sys).toMatch(/pass.*partial.*fail/i);
+    expect(sys).toMatch(/\bpass\b/i);
+    expect(sys).toMatch(/\bpartial\b/i);
+    expect(sys).toMatch(/\bfail\b/i);
     expect(sys).toMatch(/NEVER QUOTE/i);
     expect(sys).toMatch(/JSON/i);
   });
@@ -36,6 +38,7 @@ describe('code-check prompt builder', () => {
     expect(msg).not.toMatch(/Step text/);
     expect(msg).not.toMatch(/Tutorial's example/);
     expect(msg).not.toMatch(/Reference solution/);
+    expect(msg).not.toMatch(/Language hint/);
     expect(msg).toMatch(/Goal:/);
     expect(msg).toMatch(/Learner's submission/);
   });
