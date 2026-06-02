@@ -79,7 +79,7 @@ Server-side via `SearchService` in [`srv/search-service.cds`](../../../srv/searc
 
 ### Shared constant
 
-The 31-day window must match between the badge logic in `TutorialNavigator.vue` and the OData filter in `useSearch.ts`. Today the constant is private to the Vue file. We move it to a shared module — for example a `NEW_WINDOW_MS` export from [`hugo-apps/src/shared/license.ts`](../../../hugo-apps/src/shared/license.ts) (renamed conceptually) or a new `hugo-apps/src/shared/freshness.ts`. Both call sites import the same value.
+The 31-day window must match between the badge logic in `TutorialNavigator.vue` and the OData filter in `useSearch.ts`. Today the constant is private to the Vue file. We extract it into a new `hugo-apps/src/shared/freshness.ts` exporting `NEW_WINDOW_MS` and `isWithinNewWindow()`; both `TutorialNavigator.vue` and `useSearch.ts` import from there. Keeping freshness logic separate from `license.ts` avoids overloading that module with semantically unrelated concerns.
 
 ## Components touched
 
@@ -126,6 +126,11 @@ Three workspaces, matching `vitest.config.ts`:
 - No data migration. No content republish needed.
 - Backward-compatible URLs: existing share links without `new`/`noLicense` params keep working.
 - After deploy, smoke test passes → done. No feature flag.
+
+## Notes for the planner
+
+- During implementation, explicitly verify the `after READ` strip-list at [`srv/search-service.js:119-128`](../../../srv/search-service.js#L119-L128) does not strip `createdAt`. If it does, add an exception. Either decision should be made deliberately and called out in the plan, not deferred.
+- The hybrid test is read-only; do not set `ALLOW_HYBRID_WRITES=true` for it. The guard in [`test/hybrid/_guard.js`](../../../test/hybrid/_guard.js) only needs to gate INSERT/UPDATE/DELETE, which this test won't perform.
 
 ## Open questions
 
