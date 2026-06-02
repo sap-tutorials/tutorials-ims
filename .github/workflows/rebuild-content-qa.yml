@@ -65,6 +65,22 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.TUTORIAL_FETCH_TOKEN || secrets.TUTORIALS_GITHUB_TOKEN }}
           TUTORIAL_SLUG: ${{ github.event.client_payload.slug || inputs.slug }}
 
+      # Author-side smell detector. See rebuild-content.yml for rationale.
+      # Runs against the QA cache (-Contribution repos) where author-side
+      # smells originate before they're merged to the public sources.
+      - name: Lint tutorial markdown (QA channel)
+        run: npm run lint:tutorial-markdown -- --channel qa
+        continue-on-error: true
+
+      - name: Upload tutorial-markdown lint report (QA)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tutorial-markdown-lint-qa-${{ github.run_number }}
+          path: .tutorial-cache-qa/lint-report.json
+          retention-days: 30
+          if-no-files-found: ignore
+
       - name: Build QA Hugo site
         run: npm run build:qa
 
