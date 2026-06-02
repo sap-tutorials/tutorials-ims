@@ -139,6 +139,31 @@ parseNavState(href, ls)
 
 **"URL is present"** means `searchParams.has(key)`, not "value non-empty". An explicit `?type=` (user manually clearing) overrides a non-empty localStorage entry — otherwise the bookmarked-empty state wouldn't reproduce. This mirrors the existing `?new=0` behavior.
 
+### Persistence (localStorage shape and migration)
+
+`persistFilters(state, ls)` writes a single JSON-serialized object under the key **`navigator.filters.v1`**:
+
+```json
+{
+  "types": ["mission"],
+  "levels": [],
+  "products": ["sap-business-technology-platform"],
+  "topics": [],
+  "isNew": true,
+  "noLicense": false
+}
+```
+
+`q` and `page` are NOT persisted (search query is transient per the locked decisions; page lives only in the URL).
+
+**Migration from the legacy keys.** Today the SFC stores Options toggles under `navigator.options.new` and `navigator.options.noLicense` (separate keys, string `'1'` / `'0'`). `readPersistedFilters(ls)` MUST:
+
+1. Read `navigator.filters.v1` if present and parse it.
+2. If absent, fall back to reading `navigator.options.new` and `navigator.options.noLicense`, returning a partial state with `isNew` / `noLicense` populated.
+3. The first subsequent `persistFilters` call writes the consolidated v1 key. The legacy keys are NOT deleted (low cost; keeps one rollback window if we ever need it).
+
+This keeps existing users' Options-toggle preferences intact through the migration without an explicit one-shot upgrade step.
+
 ### Write path
 
 ```
@@ -191,6 +216,9 @@ function scheduleURLSync() {
   if (urlSyncTimer) clearTimeout(urlSyncTimer)
   urlSyncTimer = setTimeout(() => writeNavStateToWindow(currentNavState()), 300)
 }
+// `deep: true` is meaningful for the `() => filters.X` array getters; it's
+// a no-op on the bare `searchQuery` and `currentPage` refs but lets us keep
+// a single watcher instead of two.
 watch(
   [searchQuery, () => filters.levels, () => filters.types,
    () => filters.products, () => filters.topics,
@@ -261,7 +289,7 @@ function clearFilters() {
 
 **Round-trip:** parse ∘ serialize on 5 representative states deep-equals; canonicalization stable.
 
-**`persistFilters` / `readPersistedFilters`:** filter arrays + booleans round-trip; `q` is NOT persisted; empty array `''` round-trip; `Partial<NavState>` shape.
+**`persistFilters` / `readPersistedFilters`:** filter arrays + booleans round-trip under the `navigator.filters.v1` key; `q` is NOT persisted; `page` is NOT persisted; empty array `''` round-trip; `Partial<NavState>` shape; **legacy-key migration** — when `navigator.filters.v1` is absent but `navigator.options.new` / `navigator.options.noLicense` are present, `readPersistedFilters` returns the booleans correctly.
 
 **Defensive:** malformed `?type=,,mission,,` filters empty splits → `['mission']`.
 
@@ -288,7 +316,7 @@ function clearFilters() {
 6. `localStorage` backstops filter selections (not `q`) when no URL params are present.
 7. `clearFilters()` wipes URL params AND resets `currentPage` to 1.
 8. Unknown params (`utm_source` etc.) are preserved across writes.
-9. Existing Options-toggle behavior (`?new`, `?noLicense`) is byte-identical to pre-change behavior.
+9. URL behavior for the existing `?new` / `?noLicense` Options toggles is byte-identical to pre-change behavior. Existing users with `navigator.options.new` / `navigator.options.noLicense` localStorage entries from the old code retain their preferences after the migration (see Persistence below).
 10. `urlSync.test.ts` passes; all existing tests stay green.
 11. `npm run build` (hugo-apps) succeeds with no new warnings.
 12. Smoke check on deployed DEV: pasting `https://…/?q=cap&type=mission&level=beginner` opens the navigator with the expected filter chips lit and matching results.
