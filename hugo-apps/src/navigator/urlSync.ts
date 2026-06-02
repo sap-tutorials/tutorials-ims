@@ -159,9 +159,22 @@ export function readPersistedFilters(ls: Storage): Partial<NavState> {
 }
 
 export function readNavStateFromWindow(): NavState {
-  throw new Error('not implemented')
+  const ls = (() => { try { return window.localStorage } catch { return null } })()
+  try {
+    return parseNavState(window.location.href, ls)
+  } catch {
+    return { ...EMPTY_STATE }
+  }
 }
 
-export function writeNavStateToWindow(_state: NavState): void {
-  throw new Error('not implemented')
+export function writeNavStateToWindow(state: NavState): void {
+  const next = serializeNavState(window.location.href, state)
+  if (next !== window.location.href) {
+    try { window.history.replaceState({}, '', next) } catch { /* defensive */ }
+  }
+  try {
+    persistFilters(state, window.localStorage)
+  } catch {
+    // localStorage unavailable / quota exceeded — URL is canonical
+  }
 }

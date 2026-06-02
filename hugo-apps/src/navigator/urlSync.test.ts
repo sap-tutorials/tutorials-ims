@@ -235,3 +235,24 @@ describe('parseNavState — URL + localStorage precedence', () => {
     expect(parseNavState(HOST, ls).isNew).toBe(true)
   })
 })
+
+describe('round-trip', () => {
+  const fixtures: NavState[] = [
+    EMPTY_STATE,
+    { ...EMPTY_STATE, q: 'cap' },
+    { ...EMPTY_STATE, types: ['group', 'mission'], levels: ['beginner'] },
+    { ...EMPTY_STATE, products: ['sap-btp'], topics: ['cap'], isNew: true },
+    { ...EMPTY_STATE, q: 'auth', types: ['tutorial'], page: 4 },
+  ]
+
+  it.each(fixtures)('parse(serialize(state)) deep-equals state %#', (state) => {
+    const href = serializeNavState(HOST, state)
+    expect(parseNavState(href)).toEqual(state)
+  })
+
+  it('serialize is canonicalization-stable (sorted regardless of input order)', () => {
+    const a = serializeNavState(HOST, { ...EMPTY_STATE, types: ['tutorial', 'mission'] })
+    const b = serializeNavState(HOST, { ...EMPTY_STATE, types: ['mission', 'tutorial'] })
+    expect(a).toBe(b)
+  })
+})
