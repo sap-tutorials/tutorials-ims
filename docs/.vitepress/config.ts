@@ -106,7 +106,8 @@ export default defineConfig({
           { text: 'Production readiness',      link: '/developers/operations/production-ready' },
           { text: 'QA channel bootstrap',      link: '/developers/operations/qa-channel-bootstrap' },
           { text: 'Testing endpoints',         link: '/developers/operations/testing-endpoints' },
-          { text: 'Testing guide',             link: '/developers/operations/testing-guide' }
+          { text: 'Testing guide',             link: '/developers/operations/testing-guide' },
+          { text: 'Tutorial markdown lint',    link: '/developers/operations/tutorial-markdown-lint' }
         ]},
         { text: 'Reference', collapsed: true, items: [
           { text: 'AI-friendly consumption',   link: '/developers/reference/ai-consumption' },

@@ -15,6 +15,7 @@
     "discover-repos": "tsx scripts/fetch-tutorials.ts --discover-only",
     "generate-dark-theme": "tsx scripts/generate-dark-theme.ts",
     "validate-tutorials": "tsx scripts/validate-tutorials.ts",
+    "lint:tutorial-markdown": "tsx scripts/lint-tutorial-markdown.ts",
     "publish-content": "tsx scripts/publish-content.ts",
     "prebuild:parsers-bundle": "esbuild scripts/parsers/index.ts --bundle --platform=node --format=esm --outfile=srv-qa/lib/parsers.bundle.mjs --external:node:* --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
     "prebuild": "npm run prebuild:parsers-bundle",
