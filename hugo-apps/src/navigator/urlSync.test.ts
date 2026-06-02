@@ -243,6 +243,7 @@ describe('round-trip', () => {
     { ...EMPTY_STATE, types: ['group', 'mission'], levels: ['beginner'] },
     { ...EMPTY_STATE, products: ['sap-btp'], topics: ['cap'], isNew: true },
     { ...EMPTY_STATE, q: 'auth', types: ['tutorial'], page: 4 },
+    { ...EMPTY_STATE, noLicense: true, levels: ['intermediate'] },
   ]
 
   it.each(fixtures)('parse(serialize(state)) deep-equals state %#', (state) => {

@@ -48,7 +48,6 @@ export const EMPTY_STATE: NavState = Object.freeze({
   page: 1,
 }) as NavState
 
-// Implementation in subsequent tasks.
 function asArray(raw: string | null, lower = false): string[] | undefined {
   if (raw === null) return undefined        // param absent — fall through
   if (raw === '') return []                 // explicit-empty — URL wins
