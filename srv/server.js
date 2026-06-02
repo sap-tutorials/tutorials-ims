@@ -21,6 +21,8 @@ import { computeEmbeddingStats } from './lib/embedding-stats.js';
 import { registerExportsBridge, wireExportsBridge } from './exports/express-bridge.js';
 import { exportSelectQueryHandler } from './lib/analytics-export-handler.js';
 import { makeCodeCheckHandler } from './lib/code-check-handler.js';
+import { defaultCallModel } from './lib/code-check-llm.js';
+import { defaultLoadStepText } from './lib/code-check-step-loader.js';
 
 // Late-bound POST /chat/stream handler. Registered in 'bootstrap' (before CAP
 // mounts ChatService at /chat, which would otherwise swallow /chat/stream as
@@ -324,14 +326,9 @@ cds.on('served', async () => {
   // AI code-check endpoint. Uses contextMw + authMw so req.user is populated.
   // Rate limits are enforced inside the handler (30/hour per user, 5/5min per step).
   // Body limit is conservative (64 KB) — the handler itself enforces the 20 KB code cap.
-  // TODO(#171 Task 1.7): replace these placeholder callbacks with the real
-  // defaultCallModel + defaultLoadStepText from srv/lib/code-check-llm.js
-  // + srv/lib/code-check-step-loader.js when those modules ship.
   const codeCheckHandler = makeCodeCheckHandler({
-    callModel: async () => {
-      throw new Error('LLM not yet wired (Task 1.7 not deployed)');
-    },
-    loadStepText: async () => null,
+    callModel: defaultCallModel,
+    loadStepText: defaultLoadStepText,
   });
   app.post('/api/codecheck',
     express.json({ limit: '64kb' }),
