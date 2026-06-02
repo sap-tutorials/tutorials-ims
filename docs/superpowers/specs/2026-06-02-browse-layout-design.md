@@ -125,7 +125,7 @@ srv/
 | `browseUrl.ts` | `?sort=` read/write only | URLSearchParams | `readSort(href)`, `writeSort(href, sort)`; default `'relevance'` |
 | Hugo `browse/list.html` | SSR rails + first page of grid | `hugo/data/browse.json` | renders DOM that `BrowsePage.vue` hydrates over |
 | `BrowsePage.vue` | hydrate SSR DOM, fetch user progress, manage layout state (drawer open) | `useNavigatorFilters`, `shared/cards/*` | mounts on `#browse-root` via `createSSRApp().mount()` |
-| `rebuild-trigger.js` | debounced `workflow_dispatch` to `rebuild-content.yml` | `@octokit/rest` (existing dep), `GITHUB_DISPATCH_TOKEN` env | `triggerRebuild(reason)` — dedupes within 60s window |
+| `rebuild-trigger.js` | debounced `workflow_dispatch` to `rebuild-content.yml` | Node ≥20 native `fetch`, `GITHUB_DISPATCH_TOKEN` env | `triggerRebuild(reason)` — dedupes within 60s window |
 
 ### Hydration boundary
 
@@ -225,9 +225,9 @@ JS: createSSRApp(BrowsePage).mount('#browse-root')
 ### Admin-write rebuild trigger (CAP backend)
 
 ```
-Admin clicks "Save" on Mission/Group/Featured-flag in admin UI
+Admin clicks "Save" on Mission/Group/FeaturedTasks in admin UI
     ↓
-CAP after('UPDATE'|'CREATE'|'DELETE') hook on Missions/Groups/FeaturedTasks
+CAP after('UPDATE'|'CREATE'|'DELETE') hook on Missions/Groups/FeaturedTasks/Tutorials
     ├── invalidateNavigatorCache()                  (existing — busts /build/navigator memo)
     └── rebuildTrigger.scheduleRebuild('admin-write')
             ↓
@@ -244,6 +244,8 @@ CAP after('UPDATE'|'CREATE'|'DELETE') hook on Missions/Groups/FeaturedTasks
             ├── npm run build:all          → re-renders /browse/ SSR
             └── npm run publish-content    → publishes tutorial HTML to HANA
 ```
+
+**Implementation note:** the existing `navInvalidatingEntities` allowlist at [srv/server.js:273](srv/server.js#L273) covers `['Missions', 'Groups', 'CompletionPaths', 'CompletionPathItems', 'GroupPathItems', 'Tutorials']` — it does NOT include `FeaturedTasks` today (a pre-existing gap that means admin-edits to featured flags don't currently bust the navigator cache either). PR 3 of this work extends the allowlist to include `FeaturedTasks` so both cache invalidation and rebuild triggering match the spec's intent.
 
 ### Failure modes and bounded errors
 

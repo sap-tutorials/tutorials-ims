@@ -6,7 +6,7 @@
 
 **Architecture:** Three independent PRs in order. PR 1 refactors `TutorialNavigator.vue` to extract a `useNavigatorFilters()` composable + shared card components, with no behavior change. PR 2 adds the `/browse/` Hugo route with Hugo SSR for catalog data and a Vue island that hydrates over it (per-user data CSR). PR 3 wires admin writes to debounced GitHub workflow_dispatch so `/browse/` content stays fresh. Reuses `urlSync.ts` from #195 verbatim; `?sort=` is `/browse/`-only and lives in a small `browseUrl.ts`.
 
-**Tech Stack:** Hugo (static SSR), Vue 3 SFC + Vite (hugo-apps), TypeScript, Vitest + happy-dom + @vue/test-utils, CAP Node.js (srv), GitHub Actions (workflow_dispatch), `@octokit/rest` (already in deps).
+**Tech Stack:** Hugo (static SSR), Vue 3 SFC + Vite (hugo-apps), TypeScript, Vitest + happy-dom + @vue/test-utils, CAP Node.js (srv), GitHub Actions (workflow_dispatch), Node ≥20 native `fetch` (no new HTTP-client dependency needed).
 
 **Spec:** [docs/superpowers/specs/2026-06-02-browse-layout-design.md](../specs/2026-06-02-browse-layout-design.md)
 
@@ -500,6 +500,8 @@ Extract the reactive filter state, the URL-sync watcher, the `currentNavState()`
 - Create: `hugo-apps/src/shared/composables/useNavigatorFilters.ts`
 - Create: `hugo-apps/src/shared/composables/useNavigatorFilters.test.ts`
 
+- [ ] **Step 0: Extend `CardItem` in `@shared/types`.** Open `hugo-apps/src/shared/types.ts` and add two optional fields to the `CardItem` interface: `createdAt?: string` (already may exist — verify) and `updatedAt?: string` (new). The `recent` and `updated` sort comparators in Step 3 below depend on these. Without this step, TypeScript will fail to compile the comparators.
+
 - [ ] **Step 1: Write the failing test for the composable's contract.**
 
 ```ts
@@ -899,6 +901,31 @@ function writeBrowseData(
 
 // buildAllCards: lifted-and-shifted from TutorialNavigator.vue:394-476.
 // Functionally identical so the SSR'd grid matches what / would render.
+//
+// Field-mapping reference (the Vue computed reads these from runtime
+// fetches; we read them from the build-time `catalog` payload):
+//
+//   Vue source                    →  Build-time source (this fn)
+//   ─────────────────────────     ─────────────────────────────────
+//   tutorials.value (entries)     →  navEntries arg (the same shape;
+//                                     written into hugo/public/tutorials/_nav.json
+//                                     by fetch-tutorials, also passed in here)
+//   t.missionId / missionTitle    →  enriched onto navEntries by the
+//   t.groupId / groupTitle           preceding navEntries-enrichment loop
+//   t.prev / t.next / t.createdAt    in fetch-tutorials.ts:783-840
+//
+//   missionsMeta.value            →  derive from `missions` arg + the
+//                                     `missionsMeta` already built by the
+//                                     existing loop in fetch-tutorials
+//                                     (look up by mission.imsId)
+//   groupsMeta.value              →  derive from `hierarchies` + `standaloneGroups`
+//                                     args; same shape as MissionRef/GroupRef
+//                                     types in @shared/types
+//
+// Concretely, the simplest path is to pass into writeBrowseData() the
+// already-built missionsMeta + allGroupRefs that the navigator-catalog.js
+// /build/navigator handler already builds — see srv/lib/navigator-catalog.js
+// for the canonical shape, then mirror that builder here at build time.
 function buildAllCards(
   tuts: TutorialEntry[],
   missions: Mission[],
@@ -906,7 +933,8 @@ function buildAllCards(
   standaloneGroups: StandaloneGroup[],
 ): BrowseCardItem[] {
   // …exact translation of the Vue `allCards` computed, minus the .value
-  // unwrapping. See the SFC for the canonical implementation.
+  // unwrapping. See hugo-apps/src/navigator/TutorialNavigator.vue:394-476
+  // and srv/lib/navigator-catalog.js for the canonical implementation.
 }
 ```
 
@@ -1276,13 +1304,19 @@ Refs #174"
 
 - [ ] **Step 3: Run the test, verify PASS.**
 
-- [ ] **Step 4: Write `card-template-parity.test.ts`.** For each card type: render Vue card via `renderToString()` with a fixture, render Hugo partial with the same fixture (via `hugo --renderToMemory ...` or a small shell-out), normalize whitespace + attribute order, assert equivalent DOM. Pattern:
+- [ ] **Step 4: Write `card-template-parity.test.ts`.** For each card type: render Vue card via `renderToString()` with a fixture, compare to a captured Hugo render of the same partial against the same fixture. **Primary path: fixture-string comparison** (Windows-first per [[crlf-regression-on-windows]] — running Hugo from inside Vitest is brittle on Windows so we don't try). Pattern:
 
-  - Vue side: `renderToString(createSSRApp({ render: () => h(TutorialCard, { item: tutFixture, progress: emptyProgress() }) }))` returns an HTML string.
-  - Hugo side: spawn a one-off Hugo build via `execFileSync('hugo', ['--source', tmpdir, ...])` with a temp config + a single layout that renders the partial under test. Read the rendered HTML string from disk.
-  - Normalize both: collapse whitespace runs, strip Vue scoped-id attributes (`data-v-*`), strip any non-meaningful attribute-order differences. Assert string equality.
+  - At fixture-prep time (a one-shot manual step, documented in `__tests__/fixtures/README.md`), the developer runs Hugo against a dedicated `card-parity-fixtures/` Hugo site that emits each partial with a known fixture, captures the stdout per partial, and writes:
+    - `__tests__/fixtures/card-tutorial.expected.html` — Hugo's rendered output for the tutorial fixture.
+    - `__tests__/fixtures/card-mission.expected.html` — same, mission.
+    - `__tests__/fixtures/card-group.expected.html` — same, group.
+    - `__tests__/fixtures/cards.fixtures.json` — the input objects passed to both Vue and Hugo.
+  - The test reads each `.expected.html` via `readFileSync`, calls Vue's `renderToString(createSSRApp({ render: () => h(TutorialCard, { item: fixture, progress: emptyProgress() }) }))`, normalizes both (collapse whitespace, strip Vue scoped-id attrs `data-v-*`, strip `data-server-rendered`), asserts string equality.
+  - When card markup intentionally changes (e.g. PR adds a new field), the developer regenerates the `.expected.html` files via the documented one-shot script and commits the updated fixtures alongside the markup change. The diff in the fixture file is the *visible* surface area of the markup change.
 
-  **Windows caveat:** running Hugo from inside Vitest may be brittle on Windows. If the in-test Hugo invocation flakes, pivot to: pre-compute the Hugo render output at test-fixture-prep time, commit the captured strings as static fixture files (`fixtures/card-tutorial.html.txt` etc.), and assert Vue's `renderToString` matches the captured fixture. Document the fixture-regen step. **The pivot is acceptable for v1** — the test still catches drift; it just requires manual fixture regeneration when card markup intentionally changes.
+  Document the regen step prominently: a `package.json` script `update-card-parity-fixtures` (or a `tools/regen-card-parity-fixtures.sh`) that runs the Hugo build + copies the output files. The `__tests__/fixtures/README.md` explains when to re-run it.
+
+  **Why fixture-string instead of in-test Hugo invocation:** Hugo from inside Vitest is brittle on Windows (path-separator and env-inheritance issues) — see [[crlf-regression-on-windows]] and the project's all-Vitest test posture. Static fixtures sidestep the brittleness and make drift visible as a fixture-file diff in the PR. The cost is one manual regen step when card markup changes; the benefit is a test that runs identically on every platform without flakiness.
 
 - [ ] **Step 5: Run, verify PASS.**
 
@@ -1399,7 +1433,7 @@ describe('rebuild-trigger', () => {
     expect(dispatch).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(60_001)
     expect(dispatch).toHaveBeenCalledTimes(1)
-    expect(dispatch).toHaveBeenCalledWith({ trigger_source: 'admin-write' })
+    expect(dispatch).toHaveBeenCalledWith({ 'trigger-source': 'admin-write', environment: 'dev' })
   })
 
   it('coalesces multiple triggers within the window into one dispatch', async () => {
@@ -1448,27 +1482,27 @@ describe('rebuild-trigger', () => {
 
 - [ ] **Step 2: Run, verify FAIL** (`srv/lib/rebuild-trigger.js` doesn't exist).
 
-- [ ] **Step 3: Implement `rebuild-trigger.js`.**
+- [ ] **Step 3: Implement `rebuild-trigger.js`.** Uses Node ≥20's native `fetch` — no new dep.
 
 ```js
 // srv/lib/rebuild-trigger.js
 //
 // Debounced GitHub workflow_dispatch trigger for admin writes.
-// When admins save a Mission/Group/Featured-flag, /browse/ SSR's catalog
-// goes stale until the next Hugo rebuild. This module collapses bulk
-// edits into one rebuild dispatch within a 60s window.
+// When admins save a Mission/Group/FeaturedTasks entity, /browse/ SSR's
+// catalog goes stale until the next Hugo rebuild. This module collapses
+// bulk edits into one rebuild dispatch within a 60s window.
 //
 // Behind a feature flag: if GITHUB_DISPATCH_TOKEN is unset, this is a
 // no-op. Local dev never tries to dispatch.
 //
 // Spec: docs/superpowers/specs/2026-06-02-browse-layout-design.md (Q11)
-
-import { Octokit } from '@octokit/rest'
+// Uses native fetch (Node >= 20) — no octokit dependency.
 
 const REPO_OWNER = 'sap-tutorials'
 const REPO_NAME = 'tutorials-ims'
 const WORKFLOW_FILE = 'rebuild-content.yml'
 const DEFAULT_DEBOUNCE_MS = 60_000
+const GITHUB_API = 'https://api.github.com'
 
 let _state = {
   token: process.env.GITHUB_DISPATCH_TOKEN ?? null,
@@ -1480,14 +1514,22 @@ let _state = {
 
 async function defaultDispatch(inputs) {
   if (!_state.token) return { status: 0, skipped: true }
-  const octokit = new Octokit({ auth: _state.token })
-  return octokit.actions.createWorkflowDispatch({
-    owner: REPO_OWNER,
-    repo: REPO_NAME,
-    workflow_id: WORKFLOW_FILE,
-    ref: 'main',
-    inputs,
+  const url = `${GITHUB_API}/repos/${REPO_OWNER}/${REPO_NAME}/actions/workflows/${WORKFLOW_FILE}/dispatches`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Accept': 'application/vnd.github+json',
+      'Authorization': `Bearer ${_state.token}`,
+      'X-GitHub-Api-Version': '2022-11-28',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ ref: 'main', inputs }),
   })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`GitHub dispatch ${res.status} ${res.statusText}: ${body.slice(0, 200)}`)
+  }
+  return { status: res.status }
 }
 
 export function scheduleRebuild(reason) {
@@ -1505,7 +1547,7 @@ export function scheduleRebuild(reason) {
     const reasonAtFire = _state.pendingReason
     _state.pendingTimer = null
     _state.pendingReason = null
-    _state.dispatchFn({ trigger_source: reasonAtFire }).catch((err) => {
+    _state.dispatchFn({ 'trigger-source': reasonAtFire, environment: 'dev' }).catch((err) => {
       console.error('[rebuild-trigger] dispatch failed:', err.message ?? err)
       // Do NOT rethrow. Admin save already succeeded; the next trigger
       // picks up the missed change.
@@ -1535,6 +1577,8 @@ export function _resetForTests({ dispatchFn, debounceMs, token }) {
   _bootWarned = false
 }
 ```
+
+**Note on `inputs` shape**: `rebuild-content.yml` requires an `environment` input (existing) and gets a new `trigger-source` input from this PR (Task 3.3). The dispatch sends both. We hardcode `environment: 'dev'` for the auto-trigger because admin writes only target the DEV-deployed catalog; if PROD ever gets its own debounced trigger, that's a follow-on env-aware version.
 
 - [ ] **Step 4: Run the test, verify PASS** (6 cases).
 
@@ -1566,7 +1610,17 @@ import { scheduleRebuild, checkFeatureFlag as checkRebuildTriggerFeatureFlag } f
 
 In the `cds.on('served', ...)` block, near where other startup checks live, add `checkRebuildTriggerFeatureFlag()` so the boot warning surfaces once if the token isn't set.
 
-- [ ] **Step 2: Extend the existing `invalidateNavigatorCache` callsite.** [srv/server.js:268-292](srv/server.js#L268-L292) already runs after admin writes to mission/group/featured entities. Add the rebuild trigger to the same callback:
+- [ ] **Step 2: Extend the existing `invalidateNavigatorCache` callsite.** [srv/server.js:268-292](srv/server.js#L268-L292) already runs after admin writes to mission/group entities. **First, extend the allowlist** to include `FeaturedTasks` (per spec decision #11; the existing list is `['Missions', 'Groups', 'CompletionPaths', 'CompletionPathItems', 'GroupPathItems', 'Tutorials']` — does NOT include `FeaturedTasks`, so admin edits to featured flags currently don't bust the navigator cache either). Then add the rebuild trigger to the same callback:
+
+```js
+// Before (existing — line ~273 of srv/server.js):
+const navInvalidatingEntities = ['Missions', 'Groups', 'CompletionPaths', 'CompletionPathItems', 'GroupPathItems', 'Tutorials']
+
+// After (this PR):
+const navInvalidatingEntities = ['Missions', 'Groups', 'CompletionPaths', 'CompletionPathItems', 'GroupPathItems', 'Tutorials', 'FeaturedTasks']
+```
+
+Then in the after-hook callback, after the existing `invalidateNavigatorCache()` and `invalidateRenderCache()` calls:
 
 ```js
 admin.after(['CREATE', 'UPDATE', 'DELETE'], navInvalidatingEntities, () => {
@@ -1594,6 +1648,8 @@ admin.after(['CREATE', 'UPDATE', 'DELETE'], navInvalidatingEntities, () => {
 })
 ```
 
+**Why extending the allowlist is in scope:** the spec's decision #11 explicitly names FeaturedTasks among the trigger entities. The existing allowlist is a pre-existing gap; extending it here keeps cache-invalidation and rebuild-triggering symmetric, which is also the correct behavior for the navigator on `/`.
+
 - [ ] **Step 3: Manual smoke (hybrid mode).** Run CAP locally with `cds bind --exec -- cds watch` against DEV. Make a small admin edit to a Mission via the admin UI (e.g. update a description). Watch the CAP logs: expect one `[rebuild-trigger]` line ~60s after the save, OR the boot warning if `GITHUB_DISPATCH_TOKEN` isn't set locally (which is the expected dev-mode default — local CAP shouldn't fire workflows).
 
 - [ ] **Step 4: Commit.**
@@ -1616,28 +1672,53 @@ Refs #174"
 **Files:**
 - Modify: `.github/workflows/rebuild-content.yml`
 
-- [ ] **Step 1: Read the current workflow.** Confirm it already has a `workflow_dispatch:` trigger. If yes, just add the new input. If no, add the trigger.
-
-- [ ] **Step 2: Add the `trigger-source` input.** In the `on:` block:
+- [ ] **Step 1: Read the current workflow.** Confirm shape. As of plan-write time it has:
 
 ```yaml
 on:
+  repository_dispatch:
+    types: [tutorial-updated]
   workflow_dispatch:
     inputs:
-      slug:
-        description: 'Tutorial slug to force-refresh (optional — leave blank for full rebuild)'
-        required: false
-        type: string
-      trigger-source:                                 # NEW for #174
+      environment: { description: ..., required: true, default: dev, type: choice, options: [dev, qa, prod] }
+      slug:        { description: ..., required: false, type: string }
+```
+
+If shape has drifted by the time you implement, adapt — keep the existing inputs intact and only add the new one.
+
+- [ ] **Step 2: Add the `trigger-source` input — additive only.** Inside the existing `workflow_dispatch.inputs:` block, append (do NOT remove or rewrite the `environment` or `slug` inputs):
+
+```yaml
+      trigger-source:
         description: 'Where the rebuild was triggered from (admin-write | manual | scheduled)'
         required: false
         default: 'manual'
         type: string
-  repository_dispatch:
-    types: [tutorial-content-changed]
 ```
 
-The input is informational only — it surfaces in the Actions UI so ops can tell admin-triggered rebuilds apart from manual/scheduled ones. No job-step gating on it; the existing job runs the same regardless.
+After your edit, the full `inputs:` block should look like:
+
+```yaml
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        default: dev
+        type: choice
+        options: [dev, qa, prod]
+      slug:
+        description: Refresh a single tutorial slug only (leave blank for full rebuild)
+        required: false
+        type: string
+      trigger-source:                     # NEW for #174
+        description: 'Where the rebuild was triggered from (admin-write | manual | scheduled)'
+        required: false
+        default: 'manual'
+        type: string
+```
+
+The new input is informational — it surfaces in the Actions UI so ops can tell admin-triggered rebuilds apart from manual/scheduled ones. No job-step gating on it; the existing job runs the same regardless. (`environment` continues to drive deploy targeting; `rebuild-trigger.js` hardcodes `environment: 'dev'` since admin writes only target the DEV-deployed catalog.)
 
 - [ ] **Step 3: Commit.**
 
@@ -1659,12 +1740,20 @@ Refs #174"
 
 This step exists because of [[srv-qa-cp-list-recurring]] — the project's hand-curated `srv-qa` `cp` list has crashed QA boot twice in 4 days when new transitive `srv/lib/*` imports were added. **Do not skip.**
 
-- [ ] **Step 1: Walk transitive imports.** Starting from `srv/lib/content-store.js` (the QA srv's entry-point dependency tree) and any other QA-srv-imported file, list every `./` relative import. Add `srv/lib/rebuild-trigger.js` if any QA-loaded file imports it. The current PR 3 only imports it from `srv/server.js`, but the QA srv has its own `server-qa.js` or similar — verify which file QA loads.
+- [ ] **Step 1: Walk transitive imports AND check the cp-list against the importing file.** Two checks; both required.
 
-```bash
-cd d:/projects/tutorials-poc
-grep -lE "from\s+['\"]\\./rebuild-trigger" srv/ -r 2>&1
-```
+  **Check A — does anything in srv-qa import the new file?**
+
+  ```bash
+  cd d:/projects/tutorials-poc
+  grep -rE "from\s+['\"]\\./rebuild-trigger" srv/ 2>&1
+  ```
+
+  Expect: only `srv/server.js` (the prod admin-write hook). The QA srv has its own `server-qa.js` (or similar entry) that does NOT register the admin after-hook because QA isn't bound to the prod admin service. So `rebuild-trigger.js` is prod-srv-only and does NOT need to ship in QA's `cp` list.
+
+  **Check B — confirm by inspecting the cp-list directly.** Open `.deploy/mta.yaml` and find the `srv-qa` module's `build-parameters.builder: custom` section, the `commands:` block. The `cp` calls there hand-curate which `srv/lib/*.js` files are copied into the QA build. Look for the file's transitive importers (`server.js`, `server-qa.js`, anything reachable from QA's entry). If the importer chain reaches `rebuild-trigger.js` and the file is NOT listed in the `cp` calls, **add it**. If the chain doesn't reach it, **leave the cp-list alone**.
+
+  Per [[srv-qa-cp-list-recurring]], this list has crashed QA boot twice in 4 days from missed imports — never assume "if QA doesn't error locally it's fine." Confirm in writing in the PR description what was checked and the outcome.
 
 - [ ] **Step 2: Update `srv-qa` cp-list in `.deploy/mta.yaml`** if QA boots `rebuild-trigger.js`. If QA doesn't import it (admin writes go through the prod admin service only), the file is prod-srv-only and QA's `cp` list is fine.
 
