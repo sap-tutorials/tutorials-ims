@@ -203,3 +203,35 @@ describe('persistFilters / readPersistedFilters', () => {
     expect(ls.getItem(LS_KEY_LEGACY_NEW)).toBe('1')  // intentionally preserved
   })
 })
+
+describe('parseNavState — URL + localStorage precedence', () => {
+  let ls: FakeStorage
+  beforeEach(() => { ls = new FakeStorage() })
+
+  it('falls through to localStorage when URL param is absent', () => {
+    persistFilters({ ...EMPTY_STATE, types: ['mission'] }, ls)
+    expect(parseNavState(HOST, ls).types).toEqual(['mission'])
+  })
+
+  it('URL wins when both URL and localStorage have the param', () => {
+    persistFilters({ ...EMPTY_STATE, types: ['mission'] }, ls)
+    expect(parseNavState(HOST + '?type=group', ls).types).toEqual(['group'])
+  })
+
+  it('explicit-empty URL wins over non-empty localStorage', () => {
+    persistFilters({ ...EMPTY_STATE, types: ['mission'] }, ls)
+    expect(parseNavState(HOST + '?type=', ls).types).toEqual([])
+  })
+
+  it('q is NEVER read from localStorage', () => {
+    // Hand-craft a v1 entry that contains a stale q (defensive — persistFilters
+    // would never write this, but a malicious or future-version write could).
+    ls.setItem(LS_KEY_V1, JSON.stringify({ q: 'stale-search' }))
+    expect(parseNavState(HOST, ls).q).toBe('')
+  })
+
+  it('migrates legacy options.* into parsed state when URL is absent', () => {
+    ls.setItem(LS_KEY_LEGACY_NEW, '1')
+    expect(parseNavState(HOST, ls).isNew).toBe(true)
+  })
+})
