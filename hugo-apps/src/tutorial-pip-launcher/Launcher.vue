@@ -13,7 +13,15 @@ const props = defineProps<{
 const { pipWindow, open, close } = usePipLifecycle({
   slug: props.slug,
   getActiveStep: () => {
-    // Read current step from DOM (U11 maintains data-toc-item.active).
+    // Prefer U1's `window.opGetCurrentStep()` (viewport-based; the source of
+    // truth on the Object Page) — it survived the issue #170 removal of the
+    // legacy step-TOC partial. Fall back to .step-toc-item.active for the
+    // legacy `single.html` layout which still renders the step-TOC.
+    const op = (window as any).opGetCurrentStep;
+    if (typeof op === 'function') {
+      const got = op();
+      if (got && Number.isFinite(got.n)) return got.n;
+    }
     const active = document.querySelector<HTMLElement>('.step-toc-item.active');
     const idx = active ? parseInt(active.dataset.tocStep || '', 10) : props.initialActiveStep;
     return Number.isFinite(idx) ? idx : props.initialActiveStep;

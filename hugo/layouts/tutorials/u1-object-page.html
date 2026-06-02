@@ -308,8 +308,14 @@
       </div>
 
       <aside class="tutorial-right-col">
+        {{/* Step navigation lives in the U1 Steps section (wizard indicator +
+             inline accordion + op-mobile-sheet) — the legacy step-TOC partial
+             `tutorial-sidebar.html` is intentionally NOT rendered here; otherwise
+             the same step list appears twice on the page (issue #170). At narrow
+             widths the right column collapses to `position: static` and the TOC
+             dropped literally below Discussion. Keep only mission-side-nav,
+             which offers cross-tutorial navigation U1 doesn't otherwise provide. */}}
         {{ partial "mission-side-nav.html" . }}
-        {{ partial "tutorial-sidebar.html" . }}
       </aside>
     </main>
   </div>
