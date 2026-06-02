@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onScopeDispose, reactive, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, onScopeDispose, reactive, watch } from 'vue'
 import {
-  parseNavState, writeNavStateToWindow, type NavState,
+  parseNavState, writeNavStateToWindow, EMPTY_STATE, type NavState,
 } from './urlSync'
 import type { TutorialEntry, CardItem, MissionRef, GroupRef } from '@shared/types'
 import { useSearch } from './useSearch'
@@ -78,10 +78,19 @@ const { searchMode, isSubThreshold, searchResults, searchFacets, searchTotalCoun
 })
 
 onMounted(async () => {
-  const initial = parseNavState(
-    window.location.href,
-    typeof localStorage !== 'undefined' ? localStorage : null,
-  )
+  // Defensive: a malformed window.location.href or a Storage that throws
+  // (e.g. older Safari private mode, enterprise policy) shouldn't prevent
+  // the navigator from booting. Fall back to defaults — same behaviour the
+  // pre-urlSync code had when localStorage was unreadable.
+  let initial: NavState
+  try {
+    initial = parseNavState(
+      window.location.href,
+      typeof localStorage !== 'undefined' ? localStorage : null,
+    )
+  } catch {
+    initial = { ...EMPTY_STATE }
+  }
   searchQuery.value = initial.q
   filters.types     = initial.types
   filters.levels    = initial.levels
@@ -89,6 +98,11 @@ onMounted(async () => {
   filters.topics    = initial.topics
   filters.isNew     = initial.isNew
   filters.noLicense = initial.noLicense
+  // Page must be set AFTER the pagination-reset watcher (line ~656 below)
+  // has flushed in response to the filter assignments above — otherwise
+  // it clobbers our restored page back to 1. `nextTick` defers past the
+  // pre-flush queue.
+  await nextTick()
   currentPage.value = initial.page
 
   const [navRes, catalogRes, progRes] = await Promise.all([

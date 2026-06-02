@@ -223,6 +223,15 @@ describe('parseNavState — URL + localStorage precedence', () => {
     expect(parseNavState(HOST + '?type=', ls).types).toEqual([])
   })
 
+  it('explicit-false ?new=0 wins over localStorage isNew=true', () => {
+    // Regression guard: the implementation distinguishes "param absent"
+    // (asBool returns undefined → fall through) from "param present but
+    // not '1'" (asBool returns false → URL wins). If asBool ever changes
+    // shape, this test catches the silent precedence regression.
+    persistFilters({ ...EMPTY_STATE, isNew: true }, ls)
+    expect(parseNavState(HOST + '?new=0', ls).isNew).toBe(false)
+  })
+
   it('q is NEVER read from localStorage', () => {
     // Hand-craft a v1 entry that contains a stale q (defensive — persistFilters
     // would never write this, but a malicious or future-version write could).
