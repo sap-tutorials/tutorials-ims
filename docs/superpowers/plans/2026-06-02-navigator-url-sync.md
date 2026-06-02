@@ -775,7 +775,7 @@ git commit -m "refactor(navigator): import urlSync (#195)"
 ### Task 5.2: Replace `loadOptionsFromURL` / `syncOptionsToURL` with the new sync
 
 **Files:**
-- Modify: `hugo-apps/src/navigator/TutorialNavigator.vue:35-66`
+- Modify: `hugo-apps/src/navigator/TutorialNavigator.vue` — the block beginning with the comment `// Read Options toggles from the URL …` and ending with `watch(() => [filters.isNew, filters.noLicense], syncOptionsToURL)` (was lines 35-66 before Task 5.1; locate by content since Task 5.1 added an import line that shifts line numbers).
 
 - [ ] **Step 1: Delete lines 35-66**
 
@@ -833,7 +833,7 @@ git commit -m "refactor(navigator): swap in urlSync watcher; delete inline helpe
 ### Task 5.3: Rewrite `onMounted` URL parse
 
 **Files:**
-- Modify: `hugo-apps/src/navigator/TutorialNavigator.vue` — first 4 lines of `onMounted`
+- Modify: `hugo-apps/src/navigator/TutorialNavigator.vue` — first lines inside `onMounted(async () => {` (locate by content, not line numbers, since the previous tasks have shifted them).
 
 - [ ] **Step 1: Edit the `onMounted` head**
 
@@ -884,6 +884,8 @@ git commit -m "refactor(navigator): parseNavState in onMounted (#195)"
 
 - [ ] **Step 1: Add one line to `clearFilters`**
 
+Add the line `currentPage.value = 1` immediately after `topicSearch.value = ''`. The full function should look like this after the edit (do **not** include the `// added` comment text — that's just an annotation here for the implementer):
+
 ```ts
 function clearFilters() {
   searchQuery.value = ''
@@ -895,7 +897,7 @@ function clearFilters() {
   filters.noLicense = false
   productSearch.value = ''
   topicSearch.value = ''
-+ currentPage.value = 1   // also reset page so URL drops `?page=` cleanly
+  currentPage.value = 1   // also reset page so URL drops `?page=` cleanly
 }
 ```
 
