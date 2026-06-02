@@ -1,26 +1,11 @@
 // srv/lib/code-check-handler.js
 // Express handler factory for POST /api/codecheck.
 // Rate-limits per user (30/hour) and per (user, slug, step) (5/5 min).
-// LLM caller and step-loader are injected so unit tests run without
-// network or HANA — defaults are wired in Task 1.7 via _setDefaults().
+// LLM caller and step-loader are injected at the call site (srv/server.js)
+// so unit tests run without network or HANA, and the closure can never
+// capture a stale null from a module-level variable.
 
 import { dispatchCheckCode } from './code-check-tool.js';
-
-// ---------------------------------------------------------------------------
-// Late-binding defaults (Task 1.7 wires these)
-// ---------------------------------------------------------------------------
-
-let _defaultCallModel = null;
-let _defaultLoadStepText = null;
-
-/**
- * Called by Task 1.7 once the real LLM client is ready.
- * @param {{ callModel: Function, loadStepText: Function }} defaults
- */
-export function _setDefaults({ callModel, loadStepText }) {
-  _defaultCallModel = callModel;
-  _defaultLoadStepText = loadStepText;
-}
 
 // ---------------------------------------------------------------------------
 // Rate-limit configuration + state
@@ -88,14 +73,24 @@ function rateLimitResponse(res, arr, now, limit) {
 /**
  * Create the POST /api/codecheck Express handler.
  *
- * @param {object} [deps]
- * @param {Function} [deps.callModel]     - Injected LLM caller (tests).
- * @param {Function} [deps.loadStepText]  - Injected step-text loader (tests).
+ * Both deps MUST be provided — there are no module-level defaults.
+ * Production wires real implementations at the call site (srv/server.js);
+ * tests inject mocks.  Passing neither throws at factory time so the
+ * misconfiguration is caught at boot rather than on first request.
+ *
+ * @param {object} deps
+ * @param {Function} deps.callModel     - LLM caller.
+ * @param {Function} deps.loadStepText  - Step-text loader.
  * @returns {import('express').RequestHandler}
  */
 export function makeCodeCheckHandler(deps = {}) {
-  const callModel    = deps.callModel    ?? _defaultCallModel;
-  const loadStepText = deps.loadStepText ?? _defaultLoadStepText;
+  const { callModel, loadStepText } = deps;
+  if (typeof callModel !== 'function') {
+    throw new Error('makeCodeCheckHandler requires deps.callModel to be a function');
+  }
+  if (typeof loadStepText !== 'function') {
+    throw new Error('makeCodeCheckHandler requires deps.loadStepText to be a function');
+  }
 
   return async function codeCheckHandler(req, res) {
     // ── 1. Auth guard (BEFORE body validation: don't reveal field names) ──

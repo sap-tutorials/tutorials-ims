@@ -324,7 +324,15 @@ cds.on('served', async () => {
   // AI code-check endpoint. Uses contextMw + authMw so req.user is populated.
   // Rate limits are enforced inside the handler (30/hour per user, 5/5min per step).
   // Body limit is conservative (64 KB) — the handler itself enforces the 20 KB code cap.
-  const codeCheckHandler = makeCodeCheckHandler();
+  // TODO(#171 Task 1.7): replace these placeholder callbacks with the real
+  // defaultCallModel + defaultLoadStepText from srv/lib/code-check-llm.js
+  // + srv/lib/code-check-step-loader.js when those modules ship.
+  const codeCheckHandler = makeCodeCheckHandler({
+    callModel: async () => {
+      throw new Error('LLM not yet wired (Task 1.7 not deployed)');
+    },
+    loadStepText: async () => null,
+  });
   app.post('/api/codecheck',
     express.json({ limit: '64kb' }),
     contextMw, authMw,
