@@ -37,6 +37,7 @@ default-env.json
 
 # Worktrees
 .worktrees/
+.claude/worktrees/
 
 # Debug / scratch files
 _check-*.cjs
