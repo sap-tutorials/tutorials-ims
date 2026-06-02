@@ -1187,10 +1187,15 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
   background: var(--sapList_Hover_Background, #eaeff5);
 }
 
+/* Selected state: subtle tinted background + colored border, mirroring the
+   .fd-button--toggled convention used elsewhere in this file. The inner
+   .toolbar-count-num keeps its native semantic Horizon color (teal / purple /
+   grey) so type-color encoding survives selection and contrast stays WCAG-safe
+   in both Horizon light and dark. See issue #152. */
 .toolbar-count.active {
-  border-color: var(--sapSelectedColor, #0070f2);
-  background: var(--sapSelectedColor, #0070f2);
-  color: #fff;
+  border-color: var(--sapButton_Selected_BorderColor, #0064d9);
+  background: var(--sapButton_Selected_Background, rgba(0, 100, 217, 0.08));
+  color: var(--sapButton_Selected_TextColor, #0064d9);
 }
 
 .toolbar-count-num {
@@ -1209,10 +1214,6 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
 .count-mission { background: var(--sapInformativeBorderColor, #046c7a); }
 .count-group { background: var(--sapPositiveColor, #6c32a9); }
 .count-tutorial { background: var(--sapNeutralTextColor, #5b738b); }
-
-.toolbar-count.active .toolbar-count-num {
-  background: rgba(255, 255, 255, 0.25);
-}
 
 .toolbar-sep {
   color: var(--sapNeutralBorderColor, #d9d9d9);
