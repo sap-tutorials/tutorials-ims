@@ -9,6 +9,7 @@ import LicenseIcon from '../shared/LicenseIcon.vue'
 import { requiresLicense, LICENSE_SLUG } from '../shared/license'
 import { isWithinNewWindow } from '../shared/freshness'
 import type { SearchFacets } from '@shared/types'
+import { parseTagParams, parseLevelParams } from './url-params'
 
 const tutorials = ref<TutorialEntry[]>([])
 const missionsMeta = ref<MissionRef[]>([])
@@ -79,8 +80,20 @@ const { searchMode, isSubThreshold, searchResults, searchFacets, searchTotalCoun
 
 onMounted(async () => {
   loadOptionsFromURL()
-  const initialQuery = new URL(window.location.href).searchParams.get('q')
+  const params = new URL(window.location.href).searchParams
+
+  const initialQuery = params.get('q')
   if (initialQuery) searchQuery.value = initialQuery
+
+  // Issue #161: deep-link from clickable tutorial-page chips. We push into
+  // the existing reactive filter state; the watcher in useSearch re-runs
+  // the OData query for free.
+  for (const slug of parseTagParams(params)) {
+    if (!filters.products.includes(slug)) filters.products.push(slug)
+  }
+  for (const lvl of parseLevelParams(params)) {
+    if (!filters.levels.includes(lvl)) filters.levels.push(lvl)
+  }
 
   const [navRes, catalogRes, progRes] = await Promise.all([
     fetch('/tutorials/_nav.json'),
