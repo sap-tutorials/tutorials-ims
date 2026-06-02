@@ -182,18 +182,22 @@ entity CodeCheckSubmissions : managed {
 
 - [ ] **Step 4: Add @PersonalData annotations**
 
-In [`db/audit-logging.cds`](../../../db/audit-logging.cds), follow the existing pattern for `Users`/`UserMetaData`/`TaskRecords` and append:
+In [`db/audit-logging.cds`](../../../db/audit-logging.cds), follow the existing combined-block pattern for `Users`/`UserMetaData`/`TaskRecords` and append:
 
 ```cds
-annotate CodeCheckSubmissions with @PersonalData : {
-  EntitySemantics: 'DataSubject',
-  DataSubjectRole: 'Learner'
-};
-annotate CodeCheckSubmissions {
-  user @PersonalData.FieldSemantics: 'DataSubjectID';
+annotate ims.CodeCheckSubmissions with @PersonalData: {
+  EntitySemantics: 'Other'
+} {
+  user          @PersonalData.FieldSemantics: 'DataSubjectID';
   submittedCode @PersonalData.IsPotentiallyPersonal;
 }
 ```
+
+Note: `EntitySemantics` is `'Other'` — NOT `'DataSubject'`. `CodeCheckSubmissions` is a telemetry record that *references* a data subject via `user : Association to Users`, but is not itself a subject record. Use:
+- `'DataSubject'` only for the entity that IS the subject (e.g. `Users`).
+- `'DataSubjectDetails'` for entities containing subject details (e.g. `UserMetaData`, `TaskRecords`).
+- `'Other'` for telemetry/transaction entities that merely reference a subject (e.g. `CodeCheckSubmissions`).
+`DataSubjectRole` must be omitted — it is only meaningful on `DataSubject` entities.
 
 - [ ] **Step 5: Run test, verify pass**
 
