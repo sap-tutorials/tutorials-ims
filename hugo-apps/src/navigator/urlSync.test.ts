@@ -170,4 +170,36 @@ describe('persistFilters / readPersistedFilters', () => {
     expect(read.isNew).toBe(true)
     expect(read.noLicense).toBe(false)
   })
+
+  it('migrates legacy navigator.options.* keys when v1 is absent', () => {
+    ls.setItem(LS_KEY_LEGACY_NEW, '1')
+    ls.setItem(LS_KEY_LEGACY_NO_LICENSE, '0')
+    const read = readPersistedFilters(ls)
+    expect(read.isNew).toBe(true)
+    expect(read.noLicense).toBe(false)
+  })
+
+  it('v1 takes precedence over legacy keys when both exist', () => {
+    ls.setItem(LS_KEY_LEGACY_NEW, '1')
+    ls.setItem(LS_KEY_V1, JSON.stringify({ isNew: false }))
+    const read = readPersistedFilters(ls)
+    expect(read.isNew).toBe(false)  // v1 wins
+  })
+
+  it('falls through to legacy keys when v1 JSON is malformed', () => {
+    ls.setItem(LS_KEY_V1, '{this is not json')
+    ls.setItem(LS_KEY_LEGACY_NEW, '1')
+    const read = readPersistedFilters(ls)
+    expect(read.isNew).toBe(true)   // didn't throw, used legacy fallback
+  })
+
+  it('returns empty object when nothing is stored', () => {
+    expect(readPersistedFilters(ls)).toEqual({})
+  })
+
+  it('does NOT delete legacy keys when persistFilters writes v1', () => {
+    ls.setItem(LS_KEY_LEGACY_NEW, '1')
+    persistFilters({ ...EMPTY_STATE, isNew: false }, ls)
+    expect(ls.getItem(LS_KEY_LEGACY_NEW)).toBe('1')  // intentionally preserved
+  })
 })
