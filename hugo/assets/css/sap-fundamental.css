@@ -1100,6 +1100,62 @@ blockquote {
   margin-bottom: 0.375rem;
 }
 
+/*
+ * Issue #168 — tighten malformed-nesting visuals.
+ *
+ * Tutorial markdown sometimes ships with item `2.` indented 4 spaces under `1.`,
+ * which CommonMark turns into a nested <ol start="N"> inside the parent <li>.
+ * Without these rules the nested list reads as a separate sub-block with full
+ * top/bottom margins and a deep indent, fragmenting the step.
+ *
+ * These rules don't fix the source markdown — they make the rendered output
+ * more forgiving across the catalogue. The same fragmentation appears on the
+ * legacy AEM site but is masked by tighter list CSS there.
+ */
+
+/* Nested list inside a list item: collapse vertical rhythm + reduce indent. */
+.step-content li > ol,
+.step-content li > ul {
+  margin-top: 0.125rem;
+  margin-bottom: 0.125rem;
+  padding-left: 1.25rem;
+}
+
+/* Empty paragraphs between figures and adjacent prose are an artefact of the
+ * markdown -> HTML pipeline (an empty line between `<!-- border -->` and the
+ * next image becomes `<p></p>`). They render as an extra blank line. */
+.step-content p:empty {
+  display: none;
+}
+
+/* A figure dropped inside a list item should sit flush with the surrounding
+ * prose instead of opening a centred, full-width block with extra rhythm. */
+.step-content li .tutorial-figure {
+  margin: 0.5rem 0;
+  align-items: flex-start;
+}
+
+/* Figcaption that is identical to the alt text adds noise without information.
+ * The pipeline emits `<figcaption>step1a-new-package</figcaption>` for every
+ * image that has no explicit caption -- collapse those to a smaller inline
+ * label so they stop reading as a content row of their own. */
+.step-content .tutorial-figcaption {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  line-height: 1.2;
+}
+
+/* When CommonMark sees `2.` indented under `1.`, it emits a NESTED
+ * <ol start="2"> inside the parent <li>. Visually un-nest those by removing
+ * indentation, so the items read as siblings of the parent list rather than
+ * a sub-block. The `:not([start="1"])` discriminator ensures legitimate
+ * nested numbered outlines (which always start at 1) are untouched. */
+.step-content li > ol[start]:not([start="1"]) {
+  padding-left: 0;
+  margin-left: -1.5rem;
+  list-style-position: inside;
+}
+
 .step-actions {
   margin-top: 1.5rem;
   padding-top: 1rem;
