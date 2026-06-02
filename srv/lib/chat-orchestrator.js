@@ -155,6 +155,24 @@ const GET_USER_PROGRESS_TOOL = {
   }
 };
 
+const CHECK_CODE_TOOL = {
+  type: 'function',
+  function: {
+    name: 'checkCode',
+    description: 'Grade a learner-submitted code snippet against a tutorial step\'s author-defined goal. Returns a structured verdict with pass/partial/fail, a summary, suggestions, and what the learner got right. Use ONLY when the user has pasted code AND named a tutorial slug + step number.',
+    parameters: {
+      type: 'object',
+      required: ['tutorialSlug', 'stepNumber', 'submittedCode'],
+      properties: {
+        tutorialSlug:  { type: 'string' },
+        stepNumber:    { type: 'integer' },
+        submittedCode: { type: 'string', maxLength: 20000 },
+        language:      { type: 'string' }
+      }
+    }
+  }
+};
+
 async function toolsForContext({ pageContext, isAdmin }) {
   const tools = [SEARCH_TUTORIALS_TOOL];
   if (isAdmin && pageContext?.kind === 'admin') {
@@ -169,6 +187,9 @@ async function toolsForContext({ pageContext, isAdmin }) {
     const settings = await SELECT.one.from(ChatSettings);
     if (settings?.ragEnabled) {
       tools.push(GET_RELEVANT_STEPS_TOOL);
+    }
+    if (settings?.codeCheckEnabled) {
+      tools.push(CHECK_CODE_TOOL);
     }
   } catch (err) {
     LOG.warn('toolsForContext: could not read ChatSettings', err.message);
@@ -400,6 +421,13 @@ export async function dispatchTool(name, args, user) {
     }
   }
 
+  if (name === 'checkCode') {
+    const { dispatchCheckCode } = await import('./code-check-tool.js');
+    const { defaultCallModel }     = await import('./code-check-llm.js');
+    const { defaultLoadStepText }  = await import('./code-check-step-loader.js');
+    return dispatchCheckCode(args, { user, callModel: defaultCallModel, loadStepText: defaultLoadStepText });
+  }
+
   return { error: 'unknown_tool' };
 }
 
@@ -562,4 +590,4 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
   }
 }
 
-export { SEARCH_TUTORIALS_TOOL, SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, GET_RELEVANT_STEPS_TOOL, GET_USER_PROGRESS_TOOL, toolsForContext };
+export { SEARCH_TUTORIALS_TOOL, SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, GET_RELEVANT_STEPS_TOOL, GET_USER_PROGRESS_TOOL, CHECK_CODE_TOOL, toolsForContext };
