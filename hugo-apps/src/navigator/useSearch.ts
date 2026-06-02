@@ -1,11 +1,15 @@
 import { ref, computed, watch, type Ref } from 'vue'
 import type { CardItem, SearchableItem, SearchFacets, TutorialEntry } from '@shared/types'
+import { requiresLicense } from '../shared/license'
+import { NEW_WINDOW_MS } from '../shared/freshness'
 
 interface UseSearchOptions {
   searchTerm: Ref<string>
   filterTypes: Ref<string[]>
   filterLevels: Ref<string[]>
   filterProducts: Ref<string[]>
+  filterIsNew?: Ref<boolean>
+  filterNoLicense?: Ref<boolean>
   tutorials?: Ref<TutorialEntry[]>
 }
 
@@ -35,7 +39,17 @@ export const MIN_SEARCH_CHARS = 2
 
 const escOData = (v: string) => v.replace(/'/g, "''")
 
-function buildFilter(types: string[], levels: string[], products: string[]): string {
+export interface BuildFilterFlags {
+  isNew: boolean
+  isNewCutoffISO: string
+}
+
+export function buildFilter(
+  types: string[],
+  levels: string[],
+  products: string[],
+  flags: BuildFilterFlags = { isNew: false, isNewCutoffISO: '' }
+): string {
   const parts: string[] = []
 
   if (types.length) {
@@ -53,11 +67,23 @@ function buildFilter(types: string[], levels: string[], products: string[]): str
     parts.push(products.length > 1 ? `(${prodFilter})` : prodFilter)
   }
 
+  if (flags.isNew && flags.isNewCutoffISO) {
+    // OData v4 datetime literal — no quotes, no `datetime'…'` wrapper.
+    parts.push(`createdAt gt ${flags.isNewCutoffISO}`)
+  }
+
   return parts.join(' and ')
 }
 
+// Exported for unit testing. Strips license-tagged items from a CardItem
+// page when the noLicense toggle is on. Pure function; no side effects.
+export function postFilterNoLicense(items: CardItem[], noLicense: boolean): CardItem[] {
+  if (!noLicense) return items
+  return items.filter(item => !requiresLicense(item))
+}
+
 export function useSearch(options: UseSearchOptions) {
-  const { searchTerm, filterTypes, filterLevels, filterProducts, tutorials } = options
+  const { searchTerm, filterTypes, filterLevels, filterProducts, filterIsNew, filterNoLicense, tutorials } = options
 
   const searchResults = ref<CardItem[]>([])
   const searchFacets = ref<SearchFacets | null>(null)
@@ -86,7 +112,17 @@ export function useSearch(options: UseSearchOptions) {
     searchError.value = null
 
     try {
-      const filter = buildFilter(filterTypes.value, filterLevels.value, filterProducts.value)
+      const isNewFlag = filterIsNew?.value ?? false
+      const noLicenseFlag = filterNoLicense?.value ?? false
+      const isNewCutoffISO = isNewFlag
+        ? new Date(Date.now() - NEW_WINDOW_MS).toISOString()
+        : ''
+      const filter = buildFilter(
+        filterTypes.value,
+        filterLevels.value,
+        filterProducts.value,
+        { isNew: isNewFlag, isNewCutoffISO },
+      )
       const params = new URLSearchParams()
       params.set('$search', term)
       params.set('$top', String(pageSize))
@@ -107,9 +143,17 @@ export function useSearch(options: UseSearchOptions) {
       const itemsData = await itemsRes.json()
       const facetsData = await facetsRes.json()
 
-      searchResults.value = (itemsData.value ?? []).map((it: SearchableItem) =>
+      const cards = (itemsData.value ?? []).map((it: SearchableItem) =>
         mapToCardItem(it, tutorialsBySlug.value)
       )
+      // Client-side post-filter for the No license toggle. Cheap on a
+      // page of $top=48 — at most 48 rows pruned. Avoids a HANA fuzzy-search
+      // anti-pattern (`tagBag NOT LIKE '%tutorial>license%'` would defeat
+      // the indexed search column).
+      searchResults.value = postFilterNoLicense(cards, noLicenseFlag)
+      // searchTotalCount comes from the unfiltered server-side $count. When
+      // No license is on, the count is a slight over-count (legacy AEM had
+      // the same behavior — facet counts ignored the Options toggles).
       searchTotalCount.value = itemsData['@odata.count'] ?? 0
       searchFacets.value = facetsData
     } catch (e) {
@@ -124,7 +168,11 @@ export function useSearch(options: UseSearchOptions) {
     debounceTimer = setTimeout(() => executeSearch(), 300)
   }
 
-  watch([searchTerm, filterTypes, filterLevels, filterProducts], () => {
+  watch(
+    [searchTerm, filterTypes, filterLevels, filterProducts,
+     computed(() => filterIsNew?.value ?? false),
+     computed(() => filterNoLicense?.value ?? false)],
+    () => {
     if (searchMode.value) {
       debouncedSearch()
     } else {
