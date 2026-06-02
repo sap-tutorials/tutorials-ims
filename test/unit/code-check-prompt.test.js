@@ -49,6 +49,14 @@ describe('code-check prompt builder', () => {
     expect(CHECK_CODE_OUTPUT_SCHEMA.additionalProperties).toBe(false);
   });
 
+  it('output schema has spec §6 length/count constraints', () => {
+    expect(CHECK_CODE_OUTPUT_SCHEMA.properties.summary.maxLength).toBe(400);
+    expect(CHECK_CODE_OUTPUT_SCHEMA.properties.suggestions.maxItems).toBe(3);
+    expect(CHECK_CODE_OUTPUT_SCHEMA.properties.suggestions.items.maxLength).toBe(300);
+    expect(CHECK_CODE_OUTPUT_SCHEMA.properties.correctAspects.maxItems).toBe(3);
+    expect(CHECK_CODE_OUTPUT_SCHEMA.properties.correctAspects.items.maxLength).toBe(200);
+  });
+
   it('redacts 30+ char overlap with reference solution', () => {
     const ref = "this.before('READ', 'Books', req => req.query.where('stock >', 0));";
     const verdict = {

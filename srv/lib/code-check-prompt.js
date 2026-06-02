@@ -94,7 +94,7 @@ export function buildUserMessage({
   parts.push(`Goal:\n${goal}`);
 
   if (stepText) {
-    parts.push(`Step text:\n${stepText}`);
+    parts.push(`Step text (for context):\n${stepText}`);
   }
 
   if (tutorialSamples) {
@@ -102,7 +102,7 @@ export function buildUserMessage({
   }
 
   if (referenceSolution) {
-    parts.push(`Reference solution (DO NOT QUOTE from this in your response):\n${fence(referenceSolution)}`);
+    parts.push(`Reference solution (DO NOT QUOTE — for your judgment only):\n${fence(referenceSolution)}`);
   }
 
   if (lang) {
@@ -143,16 +143,19 @@ export const CHECK_CODE_OUTPUT_SCHEMA = {
     },
     summary: {
       type: 'string',
+      maxLength: 400,
       description: 'One sentence stating the verdict in plain language.',
     },
     correctAspects: {
       type: 'array',
-      items: { type: 'string' },
+      maxItems: 3,
+      items: { type: 'string', maxLength: 200 },
       description: '1-3 specific things the learner did right. Empty array on fail.',
     },
     suggestions: {
       type: 'array',
-      items: { type: 'string' },
+      maxItems: 3,
+      items: { type: 'string', maxLength: 300 },
       description: '1-3 specific, actionable next steps. Empty array on pass.',
     },
   },
