@@ -674,7 +674,12 @@ async function main() {
           const sidecar = attachCodeCheckSpecs(steps, codeCheckMap)
           if (sidecar.length) {
             const sidecarPath = join(CACHE_DIR, `${t.slug}.codecheck.json`)
-            writeFileSync(sidecarPath, JSON.stringify({ slug: t.slug, specs: sidecar }, null, 2))
+            // Lowercase the slug in the JSON payload: Tutorials.slug in HANA is lowercase
+            // canonical (see CLAUDE.md gotcha "Tutorial slugs are lowercase canonical").
+            // Source directories like extend-RAP-App produce mixed-case t.slug; the
+            // Task 2.1 publish path matches against the lowercase HANA row, so a
+            // mixed-case slug here would cause spec_missing at runtime.
+            writeFileSync(sidecarPath, JSON.stringify({ slug: t.slug.toLowerCase(), specs: sidecar }, null, 2))
           }
         }
       }
