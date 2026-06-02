@@ -96,6 +96,12 @@
   .op-body { padding: 1.5rem; }
   /* Generous padding-top so heading isn't half-hidden under the sticky header on free-scroll. */
   .op-section { scroll-margin-top: 180px; padding-top: 2.5rem; }
+  /* Issue #166: side-menu / wizard / mobile-sheet all scroll to #step-N (a .tutorial-step
+     accordion). Without scroll-margin-top the heading lands tucked under the sticky
+     .op-header. Track the live header height via --op-header-h (set by the ResizeObserver
+     below — see PR #165) and add a small buffer so the heading sits flush just below it.
+     Scoped to .op-page so the legacy single.html layout (no sticky header) is untouched. */
+  .op-page .tutorial-step { scroll-margin-top: calc(var(--op-header-h, 110px) + 1rem); }
   .op-section:first-child { padding-top: 1rem; }
   .op-section + .op-section { border-top: 1px solid var(--sapList_BorderColor); margin-top: 1.5rem; }
   .op-section__heading {
