@@ -22,14 +22,17 @@ const FENCED = /```([a-z0-9]*)\n([\s\S]*?)```/gi;
 // Helpers
 // ---------------------------------------------------------------------------
 
+// All DB access in this module uses global CQL (INSERT.into, SELECT.one.from).
+// To redirect to a named binding, use cds.connect's named-binding mechanism
+// rather than passing a handle through the call chain.
+
 /**
  * Persist an error row to CodeCheckSubmissions.
  * Called on every non-happy-path so we never lose telemetry.
  *
- * @param {object} db          - CDS db handle
- * @param {object} ctx         - { tutorialSlug, stepNumber, submittedCode, language, user, startedAt, extra }
+ * @param {object} ctx - { tutorialSlug, stepNumber, submittedCode, language, user, startedAt, extra }
  */
-async function persistError(db, ctx) {
+async function persistError(ctx) {
   const { CodeCheckSubmissions } = cds.entities('com.sap.developers.ims');
   const {
     tutorialSlug, stepNumber, submittedCode, language,
@@ -88,7 +91,6 @@ async function safeCall(fn, ...args) {
  *
  * @param {object}   deps
  * @param {object}  [deps.user]          - Authenticated user object `{ id }`.
- * @param {object}  [deps.db]            - CDS db handle (optional; resolved via cds.connect.to).
  * @param {Function} deps.callModel      - `async ({ system, user, schema, language? }) => { verdict, promptTokens, completionTokens, modelName }`.
  * @param {Function} deps.loadStepText   - `async (slug, stepNumber) => string`.
  *
@@ -107,19 +109,16 @@ export async function dispatchCheckCode(input, deps) {
   // Base persistence context (reused across all error paths)
   const baseCtx = { tutorialSlug, stepNumber, submittedCode, language, user, startedAt };
 
-  // 2. Resolve db handle
-  const db = deps.db || (await cds.connect.to('db'));
-
-  // 3. Read ChatSettings singleton (first row; there should only ever be one)
+  // 2. Read ChatSettings singleton (first row; there should only ever be one)
   const { ChatSettings } = cds.entities('com.sap.developers.ims');
   const settings = await SELECT.one.from(ChatSettings);
 
   if (!settings?.codeCheckEnabled) {
-    await persistError(db, { ...baseCtx, extra: { errorReason: 'disabled' } });
+    await persistError({ ...baseCtx, extra: { errorReason: 'disabled' } });
     return { verdict: 'error', errorReason: 'disabled' };
   }
 
-  // 4. Look up Tutorial by slug, then CodeCheckSpecs by (tutorial_ID, stepNumber)
+  // 3. Look up Tutorial by slug, then CodeCheckSpecs by (tutorial_ID, stepNumber)
   const { Tutorials, CodeCheckSpecs } = cds.entities('com.sap.developers.ims');
   const tutorial = await SELECT.one.from(Tutorials).where({ slug: tutorialSlug });
 
@@ -132,14 +131,14 @@ export async function dispatchCheckCode(input, deps) {
   }
 
   if (!spec) {
-    await persistError(db, { ...baseCtx, extra: { errorReason: 'spec_missing' } });
+    await persistError({ ...baseCtx, extra: { errorReason: 'spec_missing' } });
     return { verdict: 'error', errorReason: 'spec_missing' };
   }
 
-  // 5. Load step text (null is acceptable if loader fails)
+  // 4. Load step text (null is acceptable if loader fails)
   const stepText = await safeCall(loadStepText, tutorialSlug, stepNumber);
 
-  // 6. Extract fenced code blocks from step text to use as tutorial samples
+  // 5. Extract fenced code blocks from step text to use as tutorial samples
   let tutorialSamples;
   if (stepText) {
     const blocks = [];
@@ -149,7 +148,7 @@ export async function dispatchCheckCode(input, deps) {
     tutorialSamples = blocks.length > 0 ? blocks.join('\n\n') : undefined;
   }
 
-  // 7. Build prompts
+  // 6. Build prompts
   const system = buildSystemPrompt();
   const userMessage = buildUserMessage({
     goal: spec.goal,
@@ -160,7 +159,7 @@ export async function dispatchCheckCode(input, deps) {
     submittedCode,
   });
 
-  // 8. Call the LLM
+  // 7. Call the LLM
   let llmResult;
   try {
     llmResult = await callModel({
@@ -171,11 +170,11 @@ export async function dispatchCheckCode(input, deps) {
     });
   } catch (e) {
     LOG.error('LLM call failed', e?.message);
-    await persistError(db, { ...baseCtx, extra: { errorReason: 'upstream' } });
+    await persistError({ ...baseCtx, extra: { errorReason: 'upstream' } });
     return { verdict: 'error', errorReason: 'upstream' };
   }
 
-  // 9. Validate verdict shape
+  // 8. Validate verdict shape
   const v = llmResult?.verdict;
   const validVerdicts = new Set(['pass', 'partial', 'fail']);
   const isValid =
@@ -188,7 +187,7 @@ export async function dispatchCheckCode(input, deps) {
   if (!isValid) {
     LOG.warn('LLM returned malformed verdict', { tutorialSlug, stepNumber });
     // Token telemetry must still be recorded — those tokens were spent.
-    await persistError(db, {
+    await persistError({
       ...baseCtx,
       extra: {
         errorReason: 'schema',
@@ -200,15 +199,19 @@ export async function dispatchCheckCode(input, deps) {
     return { verdict: 'error', errorReason: 'schema' };
   }
 
-  // 10. Apply reference-leak redaction
+  // 9. Apply reference-leak redaction
   const safe = redactReferenceLeaks(v, spec.referenceSolution || null);
+  // redactReferenceLeaks() guarantees: same reference when nothing was redacted,
+  // new object when redaction occurred (see srv/lib/code-check-prompt.js
+  // `redactReferenceLeaks` JSDoc + the no-op fast-return path in that function).
+  // If that contract ever changes, this identity check loses the warn signal —
+  // switch to a field-by-field compare at that point.
   if (safe !== v) {
-    // redactReferenceLeaks returns the same reference when nothing changed;
     // a new object means redaction happened.
     LOG.warn('Reference leak detected and redacted', { slug: tutorialSlug, stepNumber });
   }
 
-  // 11. Persist the full row
+  // 10. Persist the full row
   const { CodeCheckSubmissions } = cds.entities('com.sap.developers.ims');
   const userId = (user && user.id && user.id !== 'anonymous') ? user.id : null;
 
@@ -230,6 +233,6 @@ export async function dispatchCheckCode(input, deps) {
     errorReason: null,
   });
 
-  // 12. Return the (possibly redacted) verdict
+  // 11. Return the (possibly redacted) verdict
   return safe;
 }

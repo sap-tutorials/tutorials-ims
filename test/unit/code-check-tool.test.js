@@ -207,4 +207,34 @@ describe('dispatchCheckCode', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].errorReason).toBe('disabled');
   });
+
+  // ─── Test 7: Anonymous user ────────────────────────────────────────────
+
+  it('anonymous user: persists row with user_ID null for both anonymous id and undefined user', async () => {
+    const callModel = vi.fn().mockResolvedValue({
+      verdict: { verdict: 'pass', summary: 'OK', correctAspects: [], suggestions: [] },
+      promptTokens: 100,
+      completionTokens: 50,
+      modelName: 'gpt-4o',
+    });
+
+    // Sub-case A: user.id === 'anonymous'
+    const out1 = await dispatchCheckCode(
+      { tutorialSlug: 'sample', stepNumber: 2, submittedCode: 'console.log(1)' },
+      { user: { id: 'anonymous' }, callModel, loadStepText: async () => null },
+    );
+    expect(out1.verdict).toBe('pass');
+
+    // Sub-case B: user === undefined
+    const out2 = await dispatchCheckCode(
+      { tutorialSlug: 'sample', stepNumber: 2, submittedCode: 'console.log(2)' },
+      { user: undefined, callModel, loadStepText: async () => null },
+    );
+    expect(out2.verdict).toBe('pass');
+
+    const { CodeCheckSubmissions } = cds.entities('com.sap.developers.ims');
+    const rows = await SELECT.from(CodeCheckSubmissions);
+    expect(rows).toHaveLength(2);
+    expect(rows.every(r => r.user_ID === null || r.user_ID === undefined)).toBe(true);
+  });
 });
