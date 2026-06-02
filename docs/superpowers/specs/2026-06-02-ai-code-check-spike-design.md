@@ -113,8 +113,8 @@ export interface CodeCheckSpec {
 
 Reference solutions are author-only secrets — they must never reach the client.
 
-1. **Public (Hugo frontmatter)** — trimmed: `codeCheck: { goal, language, hints, hasReference: boolean }`. No `referenceSolution`. This is what Hugo bakes into HTML attributes.
-2. **Server-only (HANA)** — full spec including `referenceSolution` is uploaded by the publish pipeline to a new `CodeCheckSpecs` entity. The runtime tool reads from HANA, never from client-shipped frontmatter.
+1. **Public (Hugo frontmatter)** — trimmed: `codeCheck: { goal, language, hints, hasReference: boolean }`. No `referenceSolution`. This is what Hugo bakes into HTML attributes. `hints` is rendered as a JSON-encoded string in the `data-hints` attribute and `JSON.parse`d by the island.
+2. **Server-only (HANA)** — full spec including `referenceSolution` is uploaded by the publish pipeline to a new `CodeCheckSpecs` entity. `hints` lands in HANA as a `LargeString` containing the JSON string; the runtime tool `JSON.parse`s it on read. The runtime tool reads from HANA, never from client-shipped frontmatter.
 
 ### CDS entities
 
@@ -140,7 +140,7 @@ entity CodeCheckSubmissions : managed {
   stepNumber           : Integer not null;
   submittedCode        : LargeString not null;          // @PersonalData.IsPotentiallyPersonal
   language             : String(40);
-  verdict              : String(10);                    // 'pass' | 'partial' | 'fail' | 'error'
+  verdict              : String(10);                    // 'pass' | 'partial' | 'fail' | 'error' (the LLM's JSON schema only emits the first three; 'error' is server-side written when the call itself failed)
   summary              : LargeString;
   suggestions          : LargeString;                   // JSON array
   correctAspects       : LargeString;                   // JSON array
@@ -447,7 +447,7 @@ Reads `submissions.jsonl` (author-curated 30 sample submissions per pilot tutori
 - `checkCode` tool + `/api/codecheck` endpoint.
 - `codeCheckEnabled = false` (default off).
 - Unit + hybrid tests green.
-- **Verifiable by:** flag enabled, curl with sample inputs against DEV → JSON verdict.
+- **Verifiable by:** flag enabled in DEV `ChatSettings`; authenticated request through the deployed approuter (or a curl with a fresh XSUAA token from `cf-bearer-token`) returns a structured JSON verdict. Same auth shape as other admin/learner endpoints — see `docs/developers/operations/testing-endpoints.md`.
 
 ### Phase 2 — Author content + frontend island
 
