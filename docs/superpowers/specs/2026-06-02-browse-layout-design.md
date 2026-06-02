@@ -499,7 +499,7 @@ PR 1 must go first — it's the foundation for PR 2's shared components, and car
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| Refactor introduces subtle behavior change on `/` | Medium | High | Pre-refactor snapshot tests + Cypress smoke + refactor lands alone before `/browse/` |
+| Refactor introduces subtle behavior change on `/` | Medium | High | Pre-refactor snapshot tests + Vitest + happy-dom regression smoke + refactor lands alone before `/browse/` |
 | Hydration mismatch on `/browse/` reaches prod silently | Medium | Medium | `card-template-parity.test.ts` + `BrowsePage.hydration.test.ts` in CI; flicker on Tom's checklist |
 | `hugo/data/browse.json` size grows unboundedly | Low | Medium | If catalog grows past ~5K cards, revisit pagination strategy (followup) |
 | `rebuild-trigger.js` storms Actions minutes during admin bulk edits | Medium | Medium | 60s JobLock-guarded debounce; PAT scoped to `actions:write` so worst case is bounded |
