@@ -53,8 +53,26 @@ export function parseNavState(_href: string, _ls?: Storage | null): NavState {
   throw new Error('not implemented')
 }
 
-export function serializeNavState(_href: string, _state: NavState): string {
-  throw new Error('not implemented')
+function setOrDelete(sp: URLSearchParams, key: string, values: string[]): void {
+  if (values.length === 0) sp.delete(key)
+  else sp.set(key, [...values].sort().join(','))
+}
+
+export function serializeNavState(href: string, state: NavState): string {
+  const url = new URL(href)
+  const sp = url.searchParams
+
+  if (state.q) sp.set(PARAM.q, state.q); else sp.delete(PARAM.q)
+  if (state.isNew) sp.set(PARAM.isNew, '1'); else sp.delete(PARAM.isNew)
+  if (state.noLicense) sp.set(PARAM.noLicense, '1'); else sp.delete(PARAM.noLicense)
+  if (state.page > 1) sp.set(PARAM.page, String(state.page)); else sp.delete(PARAM.page)
+
+  setOrDelete(sp, PARAM.types,    state.types)
+  setOrDelete(sp, PARAM.levels,   state.levels)
+  setOrDelete(sp, PARAM.products, state.products)
+  setOrDelete(sp, PARAM.topics,   state.topics)
+
+  return url.toString()
 }
 
 export function persistFilters(_state: NavState, _ls: Storage): void {
