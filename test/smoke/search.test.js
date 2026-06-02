@@ -60,4 +60,27 @@ describe('Search Service (smoke)', () => {
       expect(row).not.toHaveProperty('_searchRank');
     }
   });
+
+  it('SearchableItems projects createdAt', async () => {
+    const res = await fetch(`${BASE_URL}/search/SearchableItems?$top=10`);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(Array.isArray(data.value)).toBe(true);
+    if (data.value.length === 0) return; // empty deployments — skip
+    const withCreatedAt = data.value.filter(r => r.createdAt);
+    // Don't insist all rows have it — legacy IMS imports may have null
+    // createdAt — but require at least one to confirm the field is exposed.
+    expect(withCreatedAt.length).toBeGreaterThan(0);
+    expect(typeof withCreatedAt[0].createdAt).toBe('string');
+  });
+
+  it('OData $filter on createdAt is honored', async () => {
+    const farFuture = '2999-01-01T00:00:00.000Z';
+    const url = `${BASE_URL}/search/SearchableItems?$filter=createdAt gt ${farFuture}&$top=5&$count=true`;
+    const res = await fetch(url);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.value).toEqual([]);
+    expect(data['@odata.count']).toBe(0);
+  });
 });

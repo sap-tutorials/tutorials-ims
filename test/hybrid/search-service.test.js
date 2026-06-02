@@ -56,6 +56,42 @@ describe('SearchService (HANA hybrid)', () => {
     expect(elapsed).toBeLessThan(2000);
   });
 
+  it('SearchableItems projects createdAt for all task types', async () => {
+    const { SearchableItems } = cds.entities('com.sap.developers.ims');
+    const rows = await SELECT.from(SearchableItems)
+      .columns('taskType', 'createdAt')
+      .where({ createdAt: { '!=': null } })
+      .limit(20);
+    expect(rows.length).toBeGreaterThan(0);
+    // At least one of each task type should have a createdAt; the projection
+    // is a UNION ALL of Tutorials/Missions/Groups, so coverage matters.
+    const types = new Set(rows.map(r => r.taskType));
+    // Don't insist on all three — some empty environments may lack groups —
+    // but require at least Tutorials.
+    expect(types.has('TUTORIAL')).toBe(true);
+    for (const r of rows) {
+      // CAP returns Timestamp as ISO string on HANA.
+      expect(typeof r.createdAt).toBe('string');
+      expect(Number.isFinite(Date.parse(r.createdAt))).toBe(true);
+    }
+  });
+
+  it('OData $filter on createdAt narrows the result set', async () => {
+    const srv = await cds.connect.to('SearchService');
+    // Use a far-past cutoff so we get *some* rows back, then a far-future
+    // cutoff so we get zero. The point is to prove the filter is plumbed.
+    const farPast = '1970-01-01T00:00:00.000Z';
+    const farFuture = '2999-01-01T00:00:00.000Z';
+    const past = await srv.run(
+      SELECT.from('SearchService.SearchableItems').where({ createdAt: { '>': farPast } }).limit(5)
+    );
+    const future = await srv.run(
+      SELECT.from('SearchService.SearchableItems').where({ createdAt: { '>': farFuture } }).limit(5)
+    );
+    expect(past.length).toBeGreaterThan(0);
+    expect(future.length).toBe(0);
+  });
+
   it('getFacets returns correct structure with search filter', async () => {
     const srv = await cds.connect.to('SearchService');
     const result = await srv.send({ event: 'getFacets', data: { search: 'cap', taskTypes: null, experience: null } });

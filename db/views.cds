@@ -78,6 +78,7 @@ view SearchableItems as
   {
     key t.ID, t.legacyId, t.title, t.description, t.slug,
     t.primaryTag, t.experienceTag, t.averageTimeToComplete, t.status,
+    t.createdAt,
     'TUTORIAL' as taskType : String(20),
     bt.bodyText as bodyText : LargeString,
     (select string_agg(lower(coalesce(tg.label,'') || ' ' || coalesce(tg.name,'')), ' ')
@@ -90,6 +91,7 @@ view SearchableItems as
   SELECT from ims.Missions as m {
     m.ID, m.legacyId, m.title, m.description, m.slug,
     m.primaryTag, m.experienceTag, m.averageTimeToComplete, m.status,
+    m.createdAt,
     'MISSION' as taskType : String(20),
     null as bodyText : LargeString,
     (select string_agg(lower(coalesce(tg.label,'') || ' ' || coalesce(tg.name,'')), ' ')
@@ -102,6 +104,7 @@ view SearchableItems as
   SELECT from ims.Groups as g {
     g.ID, g.legacyId, g.title, g.description, null as slug : String(255),
     g.primaryTag, g.experienceTag, g.averageTimeToComplete, g.status,
+    g.createdAt,
     'GROUP' as taskType : String(20),
     null as bodyText : LargeString,
     (select string_agg(lower(coalesce(tg.label,'') || ' ' || coalesce(tg.name,'')), ' ')
