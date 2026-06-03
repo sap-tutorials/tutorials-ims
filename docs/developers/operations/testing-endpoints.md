@@ -171,6 +171,7 @@ When `EXPOSE_CAP_UI=true` is set on the CAP srv app, these are accessible throug
 | `/build/repo-catalog` | POST | Write the discovered-tutorial baseline (CI-as-canonical-writer) | Bearer (`CONTENT_API_KEY`) |
 | `/feedback/submit` | POST | Tutorial feedback form (rate-limited; submitter IP hashed via `SUBMISSION_SALT_SECRET`) | None |
 | `/chat/stream` | POST | Joule chat streaming endpoint (Server-Sent Events) | XSUAA |
+| `/api/codecheck` | POST | AI code-check spike (issue #171, gated on `ChatSettings.codeCheckEnabled`). Body: `{ tutorialSlug, stepNumber, submittedCode, language? }`. Returns `{ verdict: 'pass'\|'partial'\|'fail', summary, suggestions[], correctAspects[] }`. 503 when flag off; 429 with `Retry-After` on per-user 30/hr or per-(user,slug,step) 5/5min cap. | XSUAA |
 | `/admin/embeddings/stats` | GET | Tutorial embedding coverage / drift statistics | XSUAA + `Admin` |
 
 > **`/build/navigator`** returns a shape with `missions[]`, `groups[]` (incl. standalone published Groups), `tutorialMappings[]`, and `checkpointMappings[]` (milestone markers). The 5-minute in-memory cache is automatically invalidated when the Admin UI saves changes to Missions, Groups, or CompletionPath entities — no `?nocache=1` needed. Implementation: [srv/lib/navigator-catalog.js](../../../srv/lib/navigator-catalog.js).
@@ -191,6 +192,7 @@ When `EXPOSE_CAP_UI=true` is set on the CAP srv app, these are accessible throug
 | `/content/publish/append` | POST | Append a batch of files to an open session. Files shape: `{ slug: base64gzip }`. Idempotent for `(sessionId, slug)`. | Bearer (`CONTENT_API_KEY`) |
 | `/content/publish/commit` | POST | Activate the session's manifest. Idempotent (returns `alreadyActive: true` on repeat). | Bearer (`CONTENT_API_KEY`) |
 | `/content/publish/abort` | POST | Discard an open session. Idempotent. | Bearer (`CONTENT_API_KEY`) |
+| `/content/code-check-specs` | POST | AI code-check spike (issue #171). Upserts `CodeCheckSpecs` rows from `*.codecheck.json` sidecars produced by `fetch-tutorials`. Body: `{ specs: [{ slug, stepNumber, goal, language?, hints?, referenceSolution? }] }`. Carry-forward semantics (no DELETE on absent specs). Server-only — `referenceSolution` never reaches the client. | Bearer (`CONTENT_API_KEY`) |
 | `/content/rollback` | POST | Revert to previous manifest version | Bearer (`CONTENT_API_KEY`) |
 
 ### Chunked publish protocol
