@@ -31,6 +31,8 @@ export interface CardItem {
   href: string
   stepCount: number
   isNew?: boolean
+  createdAt?: string
+  updatedAt?: string
 }
 
 export interface MissionRef {

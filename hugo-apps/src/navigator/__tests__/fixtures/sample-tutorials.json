@@ -1,0 +1,704 @@
+[
+  {
+    "slug": "add-authorization",
+    "title": "Add Authorization",
+    "description": "This tutorial shows you how to enable authentication and authorization for your CAP application.",
+    "time": 20,
+    "level": "beginner",
+    "stepCount": 3,
+    "primaryTag": "SAP Cloud Application Programming Model",
+    "displayTags": [
+      "SAP Cloud Application Programming Model",
+      "Beginner",
+      "Node.js",
+      "Java",
+      "SAP Business Technology Platform",
+      "SAP Fiori"
+    ],
+    "displayTagSlugs": [
+      "software-product-function>sap-cloud-application-programming-model",
+      "tutorial>beginner",
+      "programming-tool>node-js",
+      "programming-tool>java",
+      "software-product>sap-business-technology-platform",
+      "software-product>sap-fiori"
+    ],
+    "missionId": 1,
+    "missionTitle": "CAP Quickstart",
+    "groupId": 1,
+    "groupTitle": "CAP Setup",
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "slug": "add-custom-logic",
+    "title": "Add Custom Logic",
+    "description": "This tutorial shows you how to add custom logic to the source code of the SAP Fiori elements application you have already created.",
+    "time": 10,
+    "level": "beginner",
+    "stepCount": 2,
+    "primaryTag": "SAP Cloud Application Programming Model",
+    "displayTags": [
+      "SAP Cloud Application Programming Model",
+      "Beginner",
+      "Node.js",
+      "Java",
+      "SAP Business Technology Platform",
+      "SAP Fiori"
+    ],
+    "displayTagSlugs": [
+      "software-product-function>sap-cloud-application-programming-model",
+      "tutorial>beginner",
+      "programming-tool>node-js",
+      "programming-tool>java",
+      "software-product>sap-business-technology-platform",
+      "software-product>sap-fiori"
+    ],
+    "missionId": 1,
+    "missionTitle": "CAP Quickstart",
+    "groupId": 1,
+    "groupTitle": "CAP Setup",
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "slug": "add-fiori-elements-uis",
+    "title": "Add SAP Fiori Elements UIs",
+    "description": "This tutorial shows you how to create an SAP Fiori elements application on top of your previously created CAP application.",
+    "time": 30,
+    "level": "beginner",
+    "stepCount": 6,
+    "primaryTag": "SAP Cloud Application Programming Model",
+    "displayTags": [
+      "SAP Cloud Application Programming Model",
+      "Beginner",
+      "Node.js",
+      "Java",
+      "SAP Business Technology Platform",
+      "SAP Fiori"
+    ],
+    "displayTagSlugs": [
+      "software-product-function>sap-cloud-application-programming-model",
+      "tutorial>beginner",
+      "programming-tool>node-js",
+      "programming-tool>java",
+      "software-product>sap-business-technology-platform",
+      "software-product>sap-fiori"
+    ],
+    "missionId": 1,
+    "missionTitle": "CAP Quickstart",
+    "groupId": 1,
+    "groupTitle": "CAP Setup",
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "slug": "appgyver-configure-camera",
+    "title": "Configure SAP Build Application to Open Device Camera",
+    "description": "Configure the logic flow in your application to enable your device to open your camera on demand, whenever the user clicks the Scan button.",
+    "time": 10,
+    "level": "beginner",
+    "stepCount": 5,
+    "primaryTag": "SAP Build Apps",
+    "displayTags": [
+      "SAP Build Apps",
+      "Beginner",
+      "Mobile",
+      "SAP Business Technology Platform"
+    ],
+    "displayTagSlugs": [
+      "software-product>sap-build-apps",
+      "tutorial>beginner",
+      "topic>mobile",
+      "software-product>sap-business-technology-platform"
+    ],
+    "missionId": 2,
+    "missionTitle": "Build Apps Hands-on",
+    "groupId": 2,
+    "groupTitle": "Build Apps Mobile",
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "slug": "appgyver-connect-publicapi",
+    "title": "Connect Your SAP Build Application to a Public API",
+    "description": "Connect your application to a public API and then test that it's pulling the right information.",
+    "time": 10,
+    "level": "beginner",
+    "stepCount": 4,
+    "primaryTag": "SAP Build Apps",
+    "displayTags": [
+      "SAP Build Apps",
+      "Beginner",
+      "Mobile",
+      "SAP Business Technology Platform"
+    ],
+    "displayTagSlugs": [
+      "software-product>sap-build-apps",
+      "tutorial>beginner",
+      "topic>mobile",
+      "software-product>sap-business-technology-platform"
+    ],
+    "missionId": 2,
+    "missionTitle": "Build Apps Hands-on",
+    "groupId": 2,
+    "groupTitle": "Build Apps Mobile",
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "slug": "appgyver-create-application",
+    "title": "Create an Application with SAP Build Apps",
+    "description": "Create an application with SAP Build Apps on SAP BTP. The application, created in a browser, can be used with the mobile preview app to scan physical barcodes on food packaging to display calorific information.",
+    "time": 10,
+    "level": "beginner",
+    "stepCount": 6,
+    "primaryTag": "SAP Build Apps",
+    "displayTags": [
+      "SAP Build Apps",
+      "Beginner",
+      "Mobile",
+      "SAP Business Technology Platform"
+    ],
+    "displayTagSlugs": [
+      "software-product>sap-build-apps",
+      "tutorial>beginner",
+      "topic>mobile",
+      "software-product>sap-business-technology-platform"
+    ],
+    "missionId": 2,
+    "missionTitle": "Build Apps Hands-on",
+    "groupId": 2,
+    "groupTitle": "Build Apps Mobile",
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "slug": "abap-islm-orchestration-service-consumption",
+    "title": "Implement a Custom ABAP AI Scenario Consuming SAP AI Core Orchestration Service in Your SAP S/4HANA System",
+    "description": "Learn how to implement an intelligent scenario including SAP AI Core's Orchestration Service features using the ABAP AI SDK powered by Intelligent Scenario Lifecycle Management (ISLM).",
+    "time": 30,
+    "level": "beginner",
+    "stepCount": 5,
+    "primaryTag": "ABAP Development",
+    "displayTags": [
+      "ABAP Development",
+      "Beginner",
+      "SAP AI Core",
+      "Artificial Intelligence",
+      "SAP S/4HANA"
+    ],
+    "displayTagSlugs": [
+      "programming-tool>abap-development",
+      "tutorial>beginner",
+      "software-product>sap-ai-core",
+      "topic>artificial-intelligence",
+      "software-product>sap-s-4hana"
+    ],
+    "groupId": 3,
+    "groupTitle": "AI Foundations",
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "slug": "abap-islm-setup-mtls",
+    "title": "Enhance ISLM Connectivity to SAP AI Core with mTLS",
+    "description": "Enable certificate-based authentication for Intelligent Scenario Lifecycle Management (ISLM) to communicate with SAP AI Core.",
+    "time": 25,
+    "level": "intermediate",
+    "stepCount": 12,
+    "primaryTag": "SAP S/4HANA",
+    "displayTags": [
+      "SAP S/4HANA",
+      "Intermediate",
+      "Artificial Intelligence",
+      "SAP AI Core"
+    ],
+    "displayTagSlugs": [
+      "software-product>sap-s-4hana",
+      "tutorial>intermediate",
+      "topic>artificial-intelligence",
+      "software-product>sap-ai-core"
+    ],
+    "groupId": 3,
+    "groupTitle": "AI Foundations",
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "slug": "abap-custom-ui-bas-connect-s4hc",
+    "title": "Connect SAP Business Application Studio and SAP S/4HANA Cloud System",
+    "description": "For key user extensibility connect SAP Business Application Studio and an SAP S/4HANA Cloud system using SAML assertion authentication to develop custom UIs.",
+    "time": 20,
+    "level": "beginner",
+    "stepCount": 5,
+    "primaryTag": "ABAP Extensibility",
+    "displayTags": [
+      "ABAP Extensibility",
+      "Beginner",
+      "Cloud",
+      "License",
+      "SAP Business Technology Platform",
+      "SAP Business Application Studio"
+    ],
+    "displayTagSlugs": [
+      "programming-tool>abap-extensibility",
+      "tutorial>beginner",
+      "topic>cloud",
+      "tutorial>license",
+      "software-product>sap-business-technology-platform",
+      "software-product>sap-business-application-studio"
+    ],
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "slug": "abap-environment-booking-supplements-analytics",
+    "title": "Develop Queries Based on Booking Supplement and Consume on SAP Analytics Cloud",
+    "description": "Develop analytical queries based on booking supplements from ABAP system as data sources and consume them in the SAP Analytics Cloud to create analytical models, stories and multi-dimensional reports.",
+    "time": 60,
+    "level": "advanced",
+    "stepCount": 27,
+    "primaryTag": "SAP BTP ABAP environment",
+    "displayTags": [
+      "SAP BTP ABAP environment",
+      "Advanced",
+      "ABAP Connectivity",
+      "SAP Business Technology Platform",
+      "SAP Analytics Cloud",
+      "License"
+    ],
+    "displayTagSlugs": [
+      "products>sap-btp--abap-environment",
+      "tutorial>advanced",
+      "programming-tool>abap-connectivity",
+      "products>sap-business-technology-platform",
+      "software-product>sap-analytics-cloud",
+      "tutorial>license"
+    ],
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "slug": "abap-environment-custom-entity-debug",
+    "title": "Inspect Your Class in the ABAP Debugger",
+    "description": "Work with ABAP classes in the ABAP Debugger in (ADT) for both a console application and SAP Fiori application.",
+    "time": 20,
+    "level": "advanced",
+    "stepCount": 13,
+    "primaryTag": "ABAP Development",
+    "displayTags": [
+      "ABAP Development",
+      "Advanced",
+      "SAP BTP ABAP environment",
+      "SAP Business Technology Platform",
+      "License"
+    ],
+    "displayTagSlugs": [
+      "programming-tool>abap-development",
+      "tutorial>advanced",
+      "software-product>sap-btp--abap-environment",
+      "software-product>sap-business-technology-platform",
+      "tutorial>license"
+    ],
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "slug": "abap-connectivity-daemon-mqtt-bridge",
+    "title": "Forward MQTT and AMC Messages Using an ABAP Daemon",
+    "description": "Forward MQTT and AMC Messages using an ABAP Daemon.",
+    "time": 15,
+    "level": "intermediate",
+    "stepCount": 9,
+    "primaryTag": "ABAP Development",
+    "displayTags": [
+      "ABAP Development",
+      "Intermediate"
+    ],
+    "displayTagSlugs": [
+      "topic>abap-development",
+      "tutorial>intermediate"
+    ],
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "slug": "abap-connectivity-daemon-simple",
+    "title": "Create a Simple ABAP Daemon",
+    "description": "Learn how to create ABAP Daemons and interact with them using PCP messages.",
+    "time": 15,
+    "level": "intermediate",
+    "stepCount": 11,
+    "primaryTag": "ABAP Development",
+    "displayTags": [
+      "ABAP Development",
+      "Intermediate"
+    ],
+    "displayTagSlugs": [
+      "topic>abap-development",
+      "tutorial>intermediate"
+    ],
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "slug": "cap-soap-service",
+    "title": "Consume SOAP Web Services in SAP Cloud Application Programming Model (CAP)",
+    "description": "This tutorial explains how to consume legacy SOAP Web Services in a SAP Cloud Application Programming Model (CAP) backend service application.",
+    "time": 15,
+    "level": "advanced",
+    "stepCount": 13,
+    "primaryTag": "SAP Cloud Application Programming Model",
+    "displayTags": [
+      "SAP Cloud Application Programming Model",
+      "Advanced",
+      "Node.js"
+    ],
+    "displayTagSlugs": [
+      "software-product-function>sap-cloud-application-programming-model",
+      "tutorial>advanced",
+      "programming-tool>node-js"
+    ],
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "slug": "cap-simple-nodejs-service",
+    "title": "Create simple CAP Service with Node.js using the SAP Business Application Studio",
+    "description": "Use SAP Business Application Studio to develop a basic CAP Node.js service for Cloud Foundry. You will use only simple JavaScript functions (no database) and learn some basics from the SAP Cloud Application Programming Model (CAP).",
+    "time": 20,
+    "level": "intermediate",
+    "stepCount": 5,
+    "primaryTag": "SAP Build Process Automation",
+    "displayTags": [
+      "SAP Build Process Automation",
+      "Intermediate",
+      "SAP Business Technology Platform",
+      "SAP Cloud Application Programming Model"
+    ],
+    "displayTagSlugs": [
+      "software-product>sap-build-process-automation",
+      "tutorial>intermediate",
+      "software-product>sap-business-technology-platform",
+      "software-product-function>sap-cloud-application-programming-model"
+    ],
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "slug": "abap-cloud-ui-from-interface",
+    "title": "Generate your own custom UI Service based on a Business Object Interface",
+    "description": "Business Object Interfaces are provided by SAP in order to release business objects such as the business objects SalesOrder or PurchaseRequistion so that these business objects can used or extended by customers using the ABAP Cloud development model. By defining so called stability contracts it is thus possible to use such C1-released Business object interfaces within other software components. Also customers and partners can use this approach if they want to allow the usage of their business objects within other software components.",
+    "time": 15,
+    "level": "beginner",
+    "stepCount": 5,
+    "primaryTag": "ABAP Development",
+    "displayTags": [
+      "ABAP Development",
+      "Beginner",
+      "SAP Business Technology Platform"
+    ],
+    "displayTagSlugs": [
+      "programming-tool>abap-development",
+      "tutorial>beginner",
+      "software-product>sap-business-technology-platform"
+    ],
+    "prev": null,
+    "next": null,
+    "createdAt": "2026-06-01T00:00:00Z"
+  },
+  {
+    "slug": "abap-create-basic-app",
+    "title": "Create and Run an ABAP Application",
+    "description": "Create and run an ABAP application based on tables from the sample EPM data model.",
+    "time": 15,
+    "level": "beginner",
+    "stepCount": 11,
+    "primaryTag": "ABAP Development",
+    "displayTags": [
+      "ABAP Development",
+      "Beginner",
+      "SAP NetWeaver"
+    ],
+    "displayTagSlugs": [
+      "topic>abap-development",
+      "tutorial>beginner",
+      "software-product>sap-netweaver"
+    ],
+    "prev": null,
+    "next": null,
+    "createdAt": "2026-06-01T00:00:00Z"
+  },
+  {
+    "slug": "abap-create-project",
+    "title": "Create an ABAP Project in ABAP Development Tools (ADT)",
+    "description": "Configure the Eclipse IDE with the ABAP Development Tools for SAP NetWeaver (ADT) and create an ABAP project.",
+    "time": 15,
+    "level": "beginner",
+    "stepCount": 5,
+    "primaryTag": "ABAP Development",
+    "displayTags": [
+      "ABAP Development",
+      "Beginner",
+      "SAP NetWeaver"
+    ],
+    "displayTagSlugs": [
+      "topic>abap-development",
+      "tutorial>beginner",
+      "software-product>sap-netweaver"
+    ],
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "slug": "abap-custom-analytical-queries",
+    "title": "Create Custom Analytical Queries",
+    "description": "Setup custom analytical queries for use.",
+    "time": 15,
+    "level": "beginner",
+    "stepCount": 16,
+    "primaryTag": "ABAP Development",
+    "displayTags": [
+      "ABAP Development",
+      "Beginner",
+      "ABAP Extensibility"
+    ],
+    "displayTagSlugs": [
+      "programming-tool>abap-development",
+      "tutorial>beginner",
+      "programming-tool>abap-extensibility"
+    ],
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "slug": "abap-custom-analytical-queries-measures",
+    "title": "Create Custom Analytical Queries With Calculated Measures",
+    "description": "Create a Custom Analytical Queries with Calculated Measures.",
+    "time": 15,
+    "level": "beginner",
+    "stepCount": 12,
+    "primaryTag": "ABAP Development",
+    "displayTags": [
+      "ABAP Development",
+      "Beginner",
+      "ABAP Extensibility"
+    ],
+    "displayTagSlugs": [
+      "programming-tool>abap-development",
+      "tutorial>beginner",
+      "programming-tool>abap-extensibility"
+    ],
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "slug": "abap-custom-reporting",
+    "title": "Custom Reporting",
+    "description": "Create a custom CDS view to create an access to you data.",
+    "time": 15,
+    "level": "beginner",
+    "stepCount": 10,
+    "primaryTag": "ABAP Development",
+    "displayTags": [
+      "ABAP Development",
+      "Beginner"
+    ],
+    "displayTagSlugs": [
+      "topic>abap-development",
+      "tutorial>beginner"
+    ],
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "slug": "abap-custom-reporting-analytical-query",
+    "title": "Custom Reporting Analytical Query",
+    "description": "Create a Custom Query CDS View based on another Custom CDS View.",
+    "time": 15,
+    "level": "beginner",
+    "stepCount": 7,
+    "primaryTag": "ABAP Development",
+    "displayTags": [
+      "ABAP Development",
+      "Beginner"
+    ],
+    "displayTagSlugs": [
+      "topic>abap-development",
+      "tutorial>beginner"
+    ],
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "slug": "abap-custom-reporting-design",
+    "title": "Custom Reporting Design",
+    "description": "Using the Report Evaluation and Report Drill-Down to create basis for your report tile.",
+    "time": 15,
+    "level": "beginner",
+    "stepCount": 12,
+    "primaryTag": "ABAP Development",
+    "displayTags": [
+      "ABAP Development",
+      "Beginner"
+    ],
+    "displayTagSlugs": [
+      "topic>abap-development",
+      "tutorial>beginner"
+    ],
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "slug": "abap-custom-reporting-kpi-creation",
+    "title": "Custom Reporting KPI Creation",
+    "description": "Create a new key performance indicator (`KPI`), evaluation and tile.",
+    "time": 15,
+    "level": "beginner",
+    "stepCount": 13,
+    "primaryTag": "ABAP Development",
+    "displayTags": [
+      "ABAP Development",
+      "Beginner"
+    ],
+    "displayTagSlugs": [
+      "topic>abap-development",
+      "tutorial>beginner"
+    ],
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "slug": "abap-custom-ui-business-object",
+    "title": "Expose Custom Business Object as External Web Service",
+    "description": "Expose a custom business object as OAuth 2.0 web service for integration of your solution with other systems.",
+    "time": 15,
+    "level": "beginner",
+    "stepCount": 9,
+    "primaryTag": "ABAP Development",
+    "displayTags": [
+      "ABAP Development",
+      "Beginner",
+      "ABAP Extensibility"
+    ],
+    "displayTagSlugs": [
+      "topic>abap-development",
+      "tutorial>beginner",
+      "topic>abap-extensibility"
+    ],
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "slug": "abap-connectivity-mqtt",
+    "title": "Publish and Receive MQTT Messages",
+    "description": "Publish and receive MQTT messages in ABAP using the ABAP MQTT Client.",
+    "time": 20,
+    "level": "intermediate",
+    "stepCount": 8,
+    "primaryTag": "ABAP Development",
+    "displayTags": [
+      "ABAP Development",
+      "Intermediate",
+      "Internet of Things"
+    ],
+    "displayTagSlugs": [
+      "topic>abap-development",
+      "tutorial>intermediate",
+      "topic>internet-of-things"
+    ],
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "slug": "abap-env-ddls-extend",
+    "title": "Extend Released Data Sources by Database Fields That Are Not Exposed",
+    "description": "Find out what to do if a C1-released SAP data source (aka CDS view) does not expose a required database table field that you want to read in Cloud Development (ABAP Cloud Development). For example, data source I_SalesOrder only exposes roughly half of the fields of database table vbak.",
+    "time": 30,
+    "level": "intermediate",
+    "stepCount": 14,
+    "primaryTag": "SAP S/4HANA",
+    "displayTags": [
+      "SAP S/4HANA",
+      "Intermediate",
+      "ABAP Development"
+    ],
+    "displayTagSlugs": [
+      "software-product>sap-s-4hana",
+      "tutorial>intermediate",
+      "programming-tool>abap-development"
+    ],
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "slug": "abap-flp-setup-content",
+    "title": "Set up Catalogs for the Launchpad",
+    "description": "Set up catalogs for the launchpad using the launchpad content manager",
+    "time": 20,
+    "level": "advanced",
+    "stepCount": 25,
+    "primaryTag": "User Interface",
+    "displayTags": [
+      "User Interface",
+      "Advanced"
+    ],
+    "displayTagSlugs": [
+      "topic>user-interface",
+      "tutorial>advanced"
+    ],
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  },
+  {
+    "slug": "add-cross-origin-preview-page",
+    "title": "Add a Cross Origin Preview for the UI Theme Designer",
+    "description": "Add a custom cross origin preview page for the UI theme designer to see the changes directly in your own application UIs.",
+    "time": 20,
+    "level": "advanced",
+    "stepCount": 4,
+    "primaryTag": "UI theme designer",
+    "displayTags": [
+      "UI theme designer",
+      "Advanced",
+      "Tutorial:how To",
+      "SAP Business Technology Platform"
+    ],
+    "displayTagSlugs": [
+      "software-product>ui-theme-designer",
+      "tutorial>advanced",
+      "tutorial:how-to",
+      "software-product>sap-business-technology-platform"
+    ],
+    "prev": null,
+    "next": null,
+    "createdAt": "2024-01-01T00:00:00Z"
+  }
+]

@@ -1,374 +1,32 @@
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted, onScopeDispose, reactive, watch } from 'vue'
-import {
-  parseNavState, writeNavStateToWindow, EMPTY_STATE, type NavState,
-} from './urlSync'
+import { ref, computed, onMounted } from 'vue'
 import type { TutorialEntry, CardItem, MissionRef, GroupRef } from '@shared/types'
-import { useSearch } from './useSearch'
 import Skeleton from '@shared/Skeleton.vue'
-import ProgressRing from '@shared/ProgressRing.vue'
-import { cardProgress, toLookup, emptyProgress, type ProgressPayload } from './cardProgress'
-import LicenseIcon from '../shared/LicenseIcon.vue'
-import { requiresLicense, LICENSE_SLUG } from '../shared/license'
+import { toLookup, emptyProgress, type ProgressPayload } from './cardProgress'
 import { isWithinNewWindow } from '../shared/freshness'
-import type { SearchFacets } from '@shared/types'
-import { parseTagParams, parseLevelParams } from './url-params'
+import { useNavigatorFilters } from '@shared/composables/useNavigatorFilters'
+import MissionCard from '@shared/cards/MissionCard.vue'
+import GroupCard from '@shared/cards/GroupCard.vue'
+import TutorialCard from '@shared/cards/TutorialCard.vue'
 
+// `/`-specific data shapes — fetched in onMounted below.
 const tutorials = ref<TutorialEntry[]>([])
 const missionsMeta = ref<MissionRef[]>([])
 const groupsMeta = ref<GroupRef[]>([])
-const searchQuery = ref('')
-const filtersOpen = ref(true)
-const productSearch = ref('')
-const topicSearch = ref('')
-const currentPage = ref(1)
-const pageSize = 48
 
+// User progress is `/`-only (the `/browse/` build will fetch its own).
 const progress = ref<ProgressPayload>(emptyProgress())
 const progressLoaded = ref(false)
 
-const filters = reactive({
-  levels: [] as string[],
-  types: [] as string[],
-  products: [] as string[],
-  topics: [] as string[],
-  isNew: false,
-  noLicense: false,
-})
-
-function currentNavState(): NavState {
-  return {
-    q: searchQuery.value,
-    types: [...filters.types],
-    levels: [...filters.levels],
-    products: [...filters.products],
-    topics: [...filters.topics],
-    isNew: filters.isNew,
-    noLicense: filters.noLicense,
-    page: currentPage.value,
-  }
-}
-
-let urlSyncTimer: ReturnType<typeof setTimeout> | null = null
-function scheduleURLSync() {
-  if (urlSyncTimer) clearTimeout(urlSyncTimer)
-  urlSyncTimer = setTimeout(() => writeNavStateToWindow(currentNavState()), 300)
-}
-// `deep: true` is meaningful for the `() => filters.X` array getters; it's
-// a no-op on the bare `searchQuery` and `currentPage` refs but lets us keep
-// a single watcher instead of two.
-watch(
-  [searchQuery, () => filters.levels, () => filters.types,
-   () => filters.products, () => filters.topics,
-   () => filters.isNew, () => filters.noLicense, currentPage],
-  scheduleURLSync,
-  { deep: true },
-)
-onScopeDispose(() => { if (urlSyncTimer) clearTimeout(urlSyncTimer) })
+// Template UI toggle for the filter rail visibility.
+const filtersOpen = ref(true)
 
 const loading = computed(() => tutorials.value.length === 0)
 
-const { searchMode, isSubThreshold, searchResults, searchFacets, searchTotalCount, isSearching, searchError } = useSearch({
-  searchTerm: searchQuery,
-  filterTypes: computed(() => filters.types.map(t => t.toUpperCase())),
-  filterLevels: computed(() => filters.levels),
-  filterProducts: computed(() => filters.products),
-  filterIsNew: computed(() => filters.isNew),
-  filterNoLicense: computed(() => filters.noLicense),
-  tutorials,
-})
-
-onMounted(async () => {
-  // Defensive: a malformed window.location.href or a Storage that throws
-  // (e.g. older Safari private mode, enterprise policy) shouldn't prevent
-  // the navigator from booting. Fall back to defaults — same behaviour the
-  // pre-urlSync code had when localStorage was unreadable.
-  let initial: NavState
-  const params = new URL(window.location.href).searchParams
-  try {
-    initial = parseNavState(
-      window.location.href,
-      typeof localStorage !== 'undefined' ? localStorage : null,
-    )
-  } catch {
-    initial = { ...EMPTY_STATE }
-  }
-  searchQuery.value = initial.q
-  filters.types     = initial.types
-  filters.levels    = initial.levels
-  filters.products  = initial.products
-  filters.topics    = initial.topics
-  filters.isNew     = initial.isNew
-  filters.noLicense = initial.noLicense
-
-  // Issue #161: deep-link from clickable tutorial-page chips uses `?tag=` /
-  // `?level=` (multi-value) instead of urlSync's `?product=` / `?level=`.
-  // Seed those into the already-restored filter state; the urlSync watcher
-  // (300ms after this block) writes the canonical `?product=` URL and the
-  // serializer strips `?tag` / chip-`?level` so they don't survive a
-  // subsequent "Clear all filters" + reload.
-  for (const slug of parseTagParams(params)) {
-    if (!filters.products.includes(slug)) filters.products.push(slug)
-  }
-  for (const lvl of parseLevelParams(params)) {
-    if (!filters.levels.includes(lvl)) filters.levels.push(lvl)
-  }
-
-  // Page must be set AFTER the pagination-reset watcher (line ~656 below)
-  // has flushed in response to the filter assignments above — otherwise
-  // it clobbers our restored page back to 1. `nextTick` defers past the
-  // pre-flush queue.
-  await nextTick()
-  currentPage.value = initial.page
-
-  const [navRes, catalogRes, progRes] = await Promise.all([
-    fetch('/tutorials/_nav.json'),
-    fetch('/build/navigator'),
-    fetch('/build/my-progress', { credentials: 'include' }).catch(() => null),
-  ])
-
-  if (navRes.ok) {
-    const navData = await navRes.json()
-    const tuts: TutorialEntry[] = navData.tutorials ?? navData
-    tutorials.value = tuts
-  }
-
-  if (catalogRes.ok) {
-    const catalog = await catalogRes.json()
-    missionsMeta.value = catalog.missions ?? []
-    groupsMeta.value = catalog.groups ?? []
-
-    if (catalog.tutorialMappings && tutorials.value.length) {
-      const mappingBySlug = new Map(catalog.tutorialMappings.map((m: any) => [m.slug, m]))
-      tutorials.value = tutorials.value.map(t => {
-        const mapping = mappingBySlug.get(t.slug)
-        if (mapping) {
-          return {
-            ...t,
-            missionId: mapping.missionId,
-            missionTitle: mapping.missionTitle,
-            groupId: mapping.groupId,
-            groupTitle: mapping.groupTitle,
-            prev: mapping.prev ?? t.prev,
-            next: mapping.next ?? t.next,
-          }
-        }
-        return t
-      })
-    }
-  }
-
-  if (progRes && progRes.ok) {
-    try {
-      const json = await progRes.json()
-      progress.value = toLookup(json)
-    } catch {
-      // leave progress at emptyProgress default
-    }
-  }
-  progressLoaded.value = true
-})
-
 const LEVEL_ORDER: Record<string, number> = { beginner: 0, intermediate: 1, advanced: 2 }
-
-const PRODUCT_TO_TOPICS: Record<string, string[]> = {
-  // Slug-keyed entries (from HANA tag data):
-  'software-product-function>sap-cloud-application-programming-model': ['Application Development', 'Cloud'],
-  'software-product>sap-cloud-application-programming-model': ['Application Development', 'Cloud'],
-  'software-product>sap-build-code': ['Application Development', 'Development Tools'],
-  'programming-tool>node-js': ['Application Development'],
-  'programming-tool>java': ['Application Development'],
-  'topic>java': ['Application Development'],
-  'programming-tool>javascript': ['Application Development'],
-  'topic>javascript': ['Application Development'],
-  'programming-tool>python': ['Application Development'],
-  'topic>python': ['Application Development'],
-  'programming-tool>odata': ['Application Development'],
-  'topic>odata': ['Application Development'],
-  'topic>artificial-intelligence': ['Artificial Intelligence'],
-  'topic>machine-learning': ['Artificial Intelligence'],
-  'software-product>sap-ai-core': ['Artificial Intelligence', 'Cloud'],
-  'software-product>sap-ai-launchpad': ['Artificial Intelligence'],
-  'software-product>sap-ai-services': ['Artificial Intelligence'],
-  'products>sap-conversational-ai': ['Artificial Intelligence'],
-  'software-product>sap-conversational-ai': ['Artificial Intelligence'],
-  'software-product>sap-document-ai': ['Artificial Intelligence'],
-  'software-product>data-attribute-recommendation': ['Artificial Intelligence'],
-  'software-product>business-entity-recognition': ['Artificial Intelligence'],
-  'software-product>service-ticket-intelligence': ['Artificial Intelligence'],
-  'software-product>personalized-recommendation': ['Artificial Intelligence'],
-  'software-product>document-information-extraction': ['Artificial Intelligence'],
-  'products>sap-analytics-cloud': ['Analytics'],
-  'software-product>sap-analytics-cloud': ['Analytics'],
-  'software-product-function>sap-analytics-cloud-for-planning': ['Analytics'],
-  'software-product>sap-datasphere': ['Analytics', 'Database & Data Management'],
-  'topic>big-data': ['Analytics', 'Database & Data Management'],
-  'software-product>analytics': ['Analytics'],
-  'software-product>sap-signavio-process-intelligence': ['Analytics', 'Automation'],
-  'software-product>sap-build-process-automation': ['Automation'],
-  'software-product>sap-build': ['Automation', 'Application Development'],
-  'software-product>sap-build-apps': ['Automation', 'Application Development'],
-  'products>sap-workflow': ['Automation'],
-  'products>sap-workflow-management': ['Automation'],
-  'products>business-rules': ['Automation'],
-  'software-product>sap-intelligent-robotic-process-automation': ['Automation'],
-  'software-product-function>sap-automation-pilot': ['Automation', 'Cloud'],
-  'software-product>sap-automation-pilot': ['Automation', 'Cloud'],
-  'topic>cloud': ['Cloud'],
-  'products>sap-business-technology-platform': ['Cloud'],
-  'sap-conversational-ai>sap-business-technology-platform': ['Cloud'],
-  'sbpa workflows software-product>sap-business-technology-platform': ['Cloud'],
-  'software-product-function>sap-business-technology-platform': ['Cloud'],
-  'software-product>sap-business-technology-platform': ['Cloud'],
-  'software-product>technology-platform>sap-business-technology-platform': ['Cloud'],
-  'topic>cloud; software-product>sap-business-technology-platform': ['Cloud'],
-  'products>sap-btp-cloud-foundry-environment': ['Cloud'],
-  'software-product>sap-btp-cloud-foundry-environment': ['Cloud'],
-  'software-product-function>sap-btp-cockpit': ['Cloud'],
-  'software-product-function>sap-btp-command-line-interface': ['Cloud', 'Development Tools'],
-  'products>sap-cloud-platform': ['Cloud'],
-  'products>sap-cloud-platform-for-the-cloud-foundry-environment': ['Cloud'],
-  'topic>cloud-operations': ['Cloud'],
-  'products>sap-hana': ['Database & Data Management'],
-  'sap-conversational-ai>sap-hana': ['Database & Data Management'],
-  'software-product>sap-hana': ['Database & Data Management'],
-  'products>sap-hana-cloud': ['Database & Data Management', 'Cloud'],
-  'software-product>sap-hana-cloud': ['Database & Data Management', 'Cloud'],
-  'software-product>technology-platform>sap-hana-cloud': ['Database & Data Management', 'Cloud'],
-  'products>sap-hana-cloud-data-lake': ['Database & Data Management', 'Cloud'],
-  'products>sap-hana-dynamic-tiering': ['Database & Data Management'],
-  'products>sap-hana-streaming-analytics': ['Database & Data Management'],
-  'software-product-function>sap-hana-spatial': ['Database & Data Management'],
-  'software-product-function>sap-hana-multi-model-processing': ['Database & Data Management'],
-  'software-product-function>sap-hana-graph': ['Database & Data Management'],
-  'products>sap-hana-studio': ['Database & Data Management', 'Development Tools'],
-  'products>sap-hana-service-for-sap-btp': ['Database & Data Management', 'Cloud'],
-  'software-product>sap-hana-service-for-sap-btp': ['Database & Data Management', 'Cloud'],
-  'programming-tool>sql': ['Database & Data Management'],
-  'topic>sql': ['Database & Data Management'],
-  'products>sap-data-intelligence': ['Database & Data Management'],
-  'software-product>sap-iq': ['Database & Data Management'],
-  'software-product-function>sap-adaptive-server-enterprise': ['Database & Data Management'],
-  'products>sap-business-application-studio': ['Development Tools'],
-  'software-product-function>sap-business-application-studio': ['Development Tools'],
-  'software-product>sap-business-application-studio': ['Development Tools'],
-  'software-products>sap-business-application-studio': ['Development Tools'],
-  'products>sap-web-ide': ['Development Tools'],
-  'software-product>sap-web-ide': ['Development Tools'],
-  'products>sap-fiori-tools': ['Development Tools', 'SAP Fiori'],
-  'software-product-function>sap-fiori-tools': ['Development Tools', 'SAP Fiori'],
-  'software-product>sap-fiori-tools': ['Development Tools', 'SAP Fiori'],
-  'software-product>sap-cloud-transport-management': ['Development Tools', 'Cloud'],
-  'software-product>sap-content-agent-service': ['Development Tools', 'Cloud'],
-  'products>sap-integration-suite': ['Extension & Integration'],
-  'sap-conversational-ai>sap-integration-suite': ['Extension & Integration'],
-  'software-product>sap-integration-suite': ['Extension & Integration'],
-  'software-product>cloud-integration': ['Extension & Integration', 'Cloud'],
-  'topic>integration': ['Extension & Integration'],
-  'software-product>sap-process-integration': ['Extension & Integration'],
-  'software-product>sap-process-orchestration': ['Extension & Integration'],
-  'products>sap-application-interface-framework': ['Extension & Integration'],
-  'software-product>sap-application-interface-framework': ['Extension & Integration'],
-  'software-product>sap-event-mesh': ['Extension & Integration', 'Cloud'],
-  'software-product>sap-connectivity-service': ['Extension & Integration', 'Cloud'],
-  'software-product>sap-cloud-platform-connectivity': ['Extension & Integration', 'Cloud'],
-  'software-product-function>sap-private-link-service': ['Extension & Integration', 'Cloud'],
-  'products>sap-api-management': ['Extension & Integration'],
-  'software-product>sap-api-management': ['Extension & Integration'],
-  'products>api-management': ['Extension & Integration'],
-  'topic>sap-api-business-hub': ['Extension & Integration'],
-  'topic>api': ['Extension & Integration'],
-  'software-product>sap-concur': ['Extension & Integration'],
-  'topic>mobile': ['Mobile'],
-  'products>sap-mobile-services': ['Mobile', 'Cloud'],
-  'software-product>sap-mobile-services': ['Mobile', 'Cloud'],
-  'products>mobile-development-kit-client': ['Mobile'],
-  'software-product>mobile-development-kit-client': ['Mobile'],
-  'operating-system>android': ['Mobile'],
-  'products>sap-fiori': ['SAP Fiori'],
-  'software-product-function>sap-fiori': ['SAP Fiori'],
-  'software-product>sap-fiori': ['SAP Fiori'],
-  'products>sap-fiori-elements': ['SAP Fiori'],
-  'software-product-function>sap-fiori-elements': ['SAP Fiori'],
-  'programming-tool>sapui5': ['SAP Fiori'],
-  'software-product>sap-s-4hana; topic>google workspace; topic>sapui5': ['SAP Fiori'],
-  'software-product>sapui5': ['SAP Fiori'],
-  'topic>sapui5': ['SAP Fiori'],
-  'topic>user-interface': ['SAP Fiori'],
-  'software-product>ui-theme-designer': ['SAP Fiori'],
-  'products>sap-screen-personas': ['SAP Fiori'],
-  'software-product>sap-screen-personas': ['SAP Fiori'],
-  'software-product>sap-launchpad-service': ['SAP Fiori', 'Cloud'],
-  'software-product>sap-work-zone': ['SAP Fiori', 'Cloud'],
-  'products>sap-s-4hana': ['SAP S/4HANA'],
-  'software-product>sap-s-4hana': ['SAP S/4HANA'],
-  'software-product>sap-s-4hana-cloud': ['SAP S/4HANA', 'Cloud'],
-  'software-product>sap-s-4hana-cloud-public-edition': ['SAP S/4HANA', 'Cloud'],
-  'software-product>sap-s-4hana-cloud-front-end': ['SAP S/4HANA', 'SAP Fiori'],
-  'software-product>sap-s/4hana': ['SAP S/4HANA'],
-  'software-product>sap-netweaver': ['SAP S/4HANA'],
-  'software-product>sap-netweaver-7.5': ['SAP S/4HANA'],
-  'products>sap-gateway': ['SAP S/4HANA', 'Extension & Integration'],
-  'topic>security': ['Security'],
-  'products>identity-authentication': ['Security', 'Cloud'],
-  'software-product>identity-authentication': ['Security', 'Cloud'],
-  'software-product>sap-alert-notification-service-for-sap-btp': ['Security', 'Cloud'],
-  'topic>internet-of-things': ['IoT'],
-  'software-product>sap-successfactors-hxm-suite': ['SAP SuccessFactors'],
-  'software-product>sap-successfactors-hcm-suite': ['SAP SuccessFactors'],
-  'software-product>sap-document-management-service': ['Extension & Integration'],
-  'products>sap-translation-hub': ['Development Tools'],
-  'software-product>sap-translation-hub': ['Development Tools'],
-
-  // Legacy label-keyed entries (no matching HANA slug found, kept for safety):
-  'ABAP Development': ['ABAP'],
-  'ABAP Extensibility': ['ABAP', 'Extension & Integration'],
-  'ABAP Platform': ['ABAP'],
-  'ABAP Connectivity': ['ABAP', 'Extension & Integration'],
-  'SAP BTP ABAP Environment': ['ABAP', 'Cloud'],
-  'SAP S 4hana Cloud ABAP Environment': ['ABAP', 'SAP S/4HANA'],
-  'S 4hana Cloud ABAP Environment': ['ABAP', 'SAP S/4HANA'],
-  'HTML5': ['Application Development'],
-  'SAP Analytics Cloud Analytics Designer': ['Analytics'],
-  'SAP Build Apps Enterprise Edition': ['Automation', 'Application Development'],
-  'SAP BTP Cloud Foundry Runtime And Environment': ['Cloud'],
-  'SAP BTP Kyma Runtime': ['Cloud'],
-  'SAP Btp, Kyma Runtime': ['Cloud'],
-  'Free Tier': ['Cloud'],
-  'SAP CAP Operator Kubernetes Environment': ['Cloud'],
-  'SAP HANA Database': ['Database & Data Management'],
-  'SAP HANA Cloud SAP HANA Database': ['Database & Data Management', 'Cloud'],
-  'SAP HANA Cloud, SAP HANA Database': ['Database & Data Management', 'Cloud'],
-  'SAP HANA Cloud, Data Lake': ['Database & Data Management', 'Cloud'],
-  'Data Lake': ['Database & Data Management'],
-  'SAP HANA Express Edition': ['Database & Data Management'],
-  'SAP Hana, Express Edition': ['Database & Data Management'],
-  'Express Edition': ['Database & Data Management'],
-  'SAP HANA Service': ['Database & Data Management', 'Cloud'],
-  'SAP Cloud Platform, SAP HANA Service': ['Database & Data Management', 'Cloud'],
-  'SAP Cloud Sdk': ['Development Tools', 'Application Development'],
-  'DirectProcess Adapter': ['Extension & Integration'],
-  'SAP Kafka Connect': ['Extension & Integration'],
-  'SAP BTP Sdk For Android': ['Mobile', 'Development Tools'],
-  'SAP BTP Sdk For iOS': ['Mobile', 'Development Tools'],
-  'Ios': ['Mobile'],
-  'Ios Sdk For SAP BTP': ['Mobile', 'Development Tools'],
-  'SAPUI5': ['SAP Fiori'],
-  'UI SAP Business Client Nwbc': ['SAP Fiori'],
-  'SAP Build Work Zone Standard Edition': ['SAP Fiori', 'Cloud'],
-  'SAP Build Work Zone Advanced Edition': ['SAP Fiori', 'Cloud'],
-  'Document Management Service': ['Extension & Integration'],
-}
 
 function lowestLevel(levels: string[]): string {
   return levels.sort((a, b) => (LEVEL_ORDER[a] ?? 9) - (LEVEL_ORDER[b] ?? 9))[0] || 'beginner'
-}
-
-function formatTime(minutes: number): string {
-  if (minutes < 60) return `${minutes} min.`
-  const hrs = Math.floor(minutes / 60)
-  const mins = minutes % 60
-  return mins > 0 ? `${hrs} hr. ${mins} min.` : `${hrs} hr.`
 }
 
 function capitalizeLevel(level: string): string {
@@ -383,12 +41,6 @@ function missionGroupCount(missionId: number): number {
     }
   }
   return groupIds.size
-}
-
-const TYPE_LABELS: Record<string, string> = {
-  mission: 'MISSION',
-  group: 'GROUP',
-  tutorial: 'TUTORIAL',
 }
 
 const allCards = computed<CardItem[]>(() => {
@@ -475,213 +127,70 @@ const allCards = computed<CardItem[]>(() => {
   return items
 })
 
-const availableProducts = computed(() => {
-  // Each entry is { slug, label }, deduped by slug, sorted by label.
-  const map = new Map<string, string>()
-  for (const t of tutorials.value) {
-    for (let i = 0; i < t.displayTagSlugs.length; i++) {
-      const slug = t.displayTagSlugs[i]
-      const label = t.displayTags[i]
-      // Skip experience-level tags (those go in the Experience filter, not Software Product)
-      // and the license chip (handled separately).
-      if (slug === 'tutorial>beginner' || slug === 'tutorial>intermediate' || slug === 'tutorial>advanced') continue
-      if (slug === LICENSE_SLUG) continue
-      if (!map.has(slug)) map.set(slug, label)
-    }
-  }
-  return [...map.entries()]
-    .map(([slug, label]) => ({ slug, label }))
-    .sort((a, b) => a.label.localeCompare(b.label))
+// All filter state, URL sync, filtering pipeline, pagination, available
+// facet lists, and useSearch wiring live in the composable. `tutorials`
+// is provided so the composable's server-search path can enrich results
+// with isNew via slug→createdAt lookup.
+const {
+  searchQuery, filters, currentPage, productSearch, topicSearch,
+  totalPages, displayedItems, displayedCounts,
+  hasActiveFilters, paginatorPages, goToPage, clearFilters, toggleFilter,
+  filteredProducts, filteredTopics,
+  searchMode, isSubThreshold, isSearching,
+} = useNavigatorFilters({
+  allCards,
+  tutorials,
+  // enableSort omitted — / has no sort UI today.
 })
 
-const filteredProducts = computed(() => {
-  if (!productSearch.value) return availableProducts.value
-  const q = productSearch.value.toLowerCase()
-  return availableProducts.value.filter(t => t.label.toLowerCase().includes(q))
-})
+onMounted(async () => {
+  const [navRes, catalogRes, progRes] = await Promise.all([
+    fetch('/tutorials/_nav.json'),
+    fetch('/build/navigator'),
+    fetch('/build/my-progress', { credentials: 'include' }).catch(() => null),
+  ])
 
-const availableTopics = computed(() => {
-  const topicSet = new Set<string>()
-  for (const t of tutorials.value) {
-    for (const slug of t.displayTagSlugs) {
-      const topics = PRODUCT_TO_TOPICS[slug]
-      if (topics) {
-        for (const topic of topics) topicSet.add(topic)
-      }
-    }
-  }
-  return [...topicSet].sort()
-})
-
-const filteredTopics = computed(() => {
-  if (!topicSearch.value) return availableTopics.value
-  const q = topicSearch.value.toLowerCase()
-  return availableTopics.value.filter(t => t.toLowerCase().includes(q))
-})
-
-function tutorialMatchesTopic(item: CardItem, topic: string): boolean {
-  return item.displayTagSlugs.some(slug => (PRODUCT_TO_TOPICS[slug] ?? []).includes(topic))
-}
-
-const filteredItems = computed(() => {
-  return allCards.value.filter(item => {
-    if (searchQuery.value) {
-      const q = searchQuery.value.toLowerCase()
-      const matches = (item.title ?? '').toLowerCase().includes(q) ||
-        (item.description ?? '').toLowerCase().includes(q) ||
-        item.displayTags.some(t => t.toLowerCase().includes(q))
-      if (!matches) return false
-    }
-
-    if (filters.types.length > 0 && !filters.types.includes(item.type)) {
-      return false
-    }
-
-    if (filters.levels.length > 0 && !filters.levels.includes(item.level)) {
-      return false
-    }
-
-    if (filters.products.length > 0) {
-      const hasProduct = item.displayTagSlugs.some(s => filters.products.includes(s))
-      if (!hasProduct) return false
-    }
-
-    if (filters.topics.length > 0) {
-      const hasTopic = filters.topics.some(topic => tutorialMatchesTopic(item, topic))
-      if (!hasTopic) return false
-    }
-
-    if (filters.isNew && !item.isNew) {
-      return false
-    }
-
-    if (filters.noLicense && requiresLicense(item)) {
-      return false
-    }
-
-    return true
-  })
-})
-
-const counts = computed(() => {
-  const all = filteredItems.value
-  return {
-    missions: all.filter(i => i.type === 'mission').length,
-    groups: all.filter(i => i.type === 'group').length,
-    tutorials: all.filter(i => i.type === 'tutorial').length,
-  }
-})
-
-function toggleFilter(arr: string[], value: string) {
-  const idx = arr.indexOf(value)
-  if (idx >= 0) arr.splice(idx, 1)
-  else arr.push(value)
-}
-
-function clearFilters() {
-  searchQuery.value = ''
-  filters.levels = []
-  filters.types = []
-  filters.products = []
-  filters.topics = []
-  filters.isNew = false
-  filters.noLicense = false
-  productSearch.value = ''
-  topicSearch.value = ''
-  currentPage.value = 1   // also reset page so URL drops `?page=` cleanly
-}
-
-const hasActiveFilters = computed(() => {
-  return searchQuery.value.length > 0 ||
-    filters.levels.length > 0 ||
-    filters.types.length > 0 ||
-    filters.products.length > 0 ||
-    filters.topics.length > 0 ||
-    filters.isNew ||
-    filters.noLicense
-})
-
-const totalPages = computed(() => Math.ceil(filteredItems.value.length / pageSize))
-
-const paginatedItems = computed(() => {
-  const start = (currentPage.value - 1) * pageSize
-  return filteredItems.value.slice(start, start + pageSize)
-})
-
-const displayedItems = computed(() => {
-  if (searchMode.value) {
-    const bySlug = new Map(tutorials.value.map(t => [t.slug, t.createdAt]))
-    return searchResults.value.map(item => {
-      if (item.type !== 'tutorial') return item
-      const slug = item.href.replace(/^\/tutorials\//, '')
-      return { ...item, isNew: isWithinNewWindow(bySlug.get(slug)) }
-    })
-  }
-  return paginatedItems.value
-})
-
-const displayedTotalCount = computed(() => {
-  if (searchMode.value) return searchTotalCount.value
-  return filteredItems.value.length
-})
-
-const displayedCounts = computed(() => {
-  if (searchMode.value && searchFacets.value) {
-    const facets = searchFacets.value
-    return {
-      missions: facets.typeCounts.find(t => t.name === 'MISSION')?.count ?? 0,
-      groups: facets.typeCounts.find(t => t.name === 'GROUP')?.count ?? 0,
-      tutorials: facets.typeCounts.find(t => t.name === 'TUTORIAL')?.count ?? 0,
-    }
-  }
-  return counts.value
-})
-
-const paginatorPages = computed(() => {
-  const total = totalPages.value
-  if (total <= 1) return []
-  const current = currentPage.value
-  const pages: Array<{ label: string; page: number; isCurrent: boolean; isRange: boolean }> = []
-
-  if (total <= 9) {
-    for (let i = 1; i <= total; i++) {
-      pages.push({ label: String(i), page: i, isCurrent: i === current, isRange: false })
-    }
-    return pages
+  if (navRes.ok) {
+    const navData = await navRes.json()
+    const tuts: TutorialEntry[] = navData.tutorials ?? navData
+    tutorials.value = tuts
   }
 
-  const nearby: number[] = []
-  for (let i = Math.max(1, current - 3); i <= Math.min(total, current + 5); i++) {
-    nearby.push(i)
-  }
-  if (nearby.length > 9) nearby.length = 9
+  if (catalogRes.ok) {
+    const catalog = await catalogRes.json()
+    missionsMeta.value = catalog.missions ?? []
+    groupsMeta.value = catalog.groups ?? []
 
-  for (const p of nearby) {
-    pages.push({ label: String(p), page: p, isCurrent: p === current, isRange: false })
-  }
-
-  const lastNearby = nearby[nearby.length - 1]
-  if (lastNearby < total) {
-    const rangeSize = 9
-    let rangeStart = lastNearby + 1
-    while (rangeStart <= total) {
-      const rangeEnd = Math.min(rangeStart + rangeSize - 1, total)
-      pages.push({ label: `${rangeStart}-${rangeEnd}`, page: rangeStart, isCurrent: false, isRange: true })
-      rangeStart = rangeEnd + 1
+    if (catalog.tutorialMappings && tutorials.value.length) {
+      const mappingBySlug = new Map(catalog.tutorialMappings.map((m: any) => [m.slug, m]))
+      tutorials.value = tutorials.value.map(t => {
+        const mapping = mappingBySlug.get(t.slug)
+        if (mapping) {
+          return {
+            ...t,
+            missionId: mapping.missionId,
+            missionTitle: mapping.missionTitle,
+            groupId: mapping.groupId,
+            groupTitle: mapping.groupTitle,
+            prev: mapping.prev ?? t.prev,
+            next: mapping.next ?? t.next,
+          }
+        }
+        return t
+      })
     }
   }
 
-  return pages
+  if (progRes && progRes.ok) {
+    try {
+      const json = await progRes.json()
+      progress.value = toLookup(json)
+    } catch {
+      // leave progress at emptyProgress default
+    }
+  }
+  progressLoaded.value = true
 })
-
-function goToPage(page: number) {
-  currentPage.value = Math.max(1, Math.min(page, totalPages.value))
-  window.scrollTo({ top: 0, behavior: 'smooth' })
-}
-
-watch([searchQuery, () => filters.levels, () => filters.types, () => filters.products, () => filters.topics, () => filters.isNew, () => filters.noLicense], () => {
-  currentPage.value = 1
-}, { deep: true })
 </script>
 
 <template>
@@ -867,53 +376,11 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
           v-show="!loading && !isSubThreshold && displayedItems.length > 0"
           class="navigator-grid"
         >
-          <a
-            v-for="item in displayedItems"
-            :key="item.id"
-            :href="item.href"
-            class="nav-card"
-            data-vt-card="navigator"
-            :class="{
-              'nav-card--new': item.isNew,
-              'nav-card--has-progress': !!cardProgress(item, progress),
-            }"
-          >
-            <ProgressRing
-              v-if="cardProgress(item, progress)"
-              class="nav-card__progress"
-              v-bind="cardProgress(item, progress)!"
-            />
-            <span v-if="item.isNew" class="nav-card__new-badge" aria-label="New tutorial">NEW</span>
-            <LicenseIcon v-if="requiresLicense(item)" class="nav-card__license" />
-            <div class="nav-card__type" :class="`nav-card__type--${item.type}`">
-              {{ TYPE_LABELS[item.type] }}
-            </div>
-
-            <h3 class="nav-card__title">{{ item.title }}</h3>
-
-            <p class="nav-card__desc">{{ item.description }}</p>
-
-            <div class="nav-card__meta">
-              <span class="nav-card__meta-item">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 13V3h4l2 2h6v8H2z"/></svg>
-                {{ capitalizeLevel(item.level) }}
-              </span>
-              <span class="nav-card__meta-sep">&middot;</span>
-              <span class="nav-card__meta-item">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8l2.5 1.5"/></svg>
-                {{ formatTime(item.time) }}
-              </span>
-              <template v-if="item.type !== 'tutorial'">
-                <span class="nav-card__meta-sep">&middot;</span>
-                <span class="nav-card__meta-item">{{ item.tutorialCount }} Tutorials</span>
-              </template>
-            </div>
-
-            <div class="nav-card__tag">
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h5l7 7-5 5-7-7V3zm3 2a1 1 0 100 2 1 1 0 000-2z"/></svg>
-              {{ item.primaryTag }}
-            </div>
-          </a>
+          <template v-for="item in displayedItems" :key="item.id">
+            <MissionCard  v-if="item.type === 'mission'"      :item="item" :progress="progress" />
+            <GroupCard    v-else-if="item.type === 'group'"   :item="item" :progress="progress" />
+            <TutorialCard v-else-if="item.type === 'tutorial'" :item="item" :progress="progress" />
+          </template>
         </section>
 
         <div
@@ -1267,142 +734,6 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
   gap: 1rem;
 }
 
-.nav-card {
-  display: flex;
-  flex-direction: column;
-  background: var(--sapBaseColor, #fff);
-  border-radius: 0.75rem;
-  padding: 1.5rem;
-  text-decoration: none;
-  color: inherit;
-  transition: box-shadow 0.15s ease, transform 0.15s ease;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-  min-height: 200px;
-  position: relative;
-}
-
-/* ─── NEW badge (tutorials authored within the last 31 days) ─── */
-.nav-card__new-badge {
-  position: absolute;
-  bottom: 0.75rem;
-  right: 0.75rem;
-  background: var(--sapAccentColor8, #6c32a9);
-  color: #fff;
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
-  line-height: 1;
-  z-index: 1;
-}
-
-.nav-card__license {
-  position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
-  color: var(--sapContent_NonInteractiveIconColor, var(--sapTextColor, #32363a));
-  z-index: 1;
-}
-
-.nav-card:hover {
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-  transform: translateY(-1px);
-}
-
-/* ─── Card Type Label ─── */
-.nav-card__type {
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  margin-bottom: 0.75rem;
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-}
-
-.nav-card__type--mission { color: var(--sapAccentColor6, #046c7a); }
-.nav-card__type--group { color: var(--sapAccentColor8, #6c32a9); }
-.nav-card__type--tutorial { color: var(--sapAccentColor10, #5b738b); }
-
-.nav-card__type::before {
-  content: '';
-  display: inline-block;
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-/* ─── Card Title ─── */
-.nav-card__title {
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--sapTextColor, #32363a);
-  margin: 0 0 0.5rem;
-  line-height: 1.4;
-}
-
-.nav-card:hover .nav-card__title {
-  color: var(--sapBrandColor, #0070f2);
-}
-
-/* ─── Card Description ─── */
-.nav-card__desc {
-  font-size: 0.8125rem;
-  line-height: 1.6;
-  color: var(--sapContent_LabelColor, #556b82);
-  margin: 0;
-  flex: 1;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-/* ─── Card Meta ─── */
-.nav-card__meta {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  margin-top: 1rem;
-  font-size: 0.75rem;
-  color: var(--sapContent_LabelColor, #556b82);
-  flex-wrap: wrap;
-}
-
-.nav-card__meta-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.nav-card__meta-item svg {
-  opacity: 0.6;
-}
-
-.nav-card__meta-sep {
-  color: var(--sapNeutralBorderColor, #d9d9d9);
-}
-
-/* ─── Card Tag ─── */
-.nav-card__tag {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--sapGroup_ContentBorderColor, #e5e5e5);
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--sapBrandColor, #0070f2);
-}
-
-.nav-card__tag svg {
-  opacity: 0.7;
-}
-
 /* ─── Skeleton loading state ─── */
 .navigator-grid--loading {
   /* Inherit grid-template-columns from .navigator-grid via the cascade. */
@@ -1576,21 +907,5 @@ watch([searchQuery, () => filters.levels, () => filters.types, () => filters.pro
   .navigator-grid {
     grid-template-columns: 1fr;
   }
-}
-
-.nav-card__progress {
-  position: absolute;
-  top: 0.75rem;
-  left: 0.75rem;
-  opacity: 0;
-  transition: opacity 0.15s ease-out;
-}
-.tutorial-navigator[data-progress-loaded="true"] .nav-card__progress {
-  opacity: 1;
-}
-.nav-card--has-progress .nav-card__type,
-.nav-card--has-progress .nav-card__title,
-.nav-card--has-progress .nav-card__desc {
-  padding-left: 3rem;
 }
 </style>
