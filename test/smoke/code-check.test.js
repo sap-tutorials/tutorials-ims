@@ -10,7 +10,11 @@ describe('Code check endpoint smoke', () => {
     const res = await fetchWithRetry(`${SRV_URL}/api/codecheck`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slug: 'any-tutorial', stepIndex: 0, code: 'print("hi")' }),
+      body: JSON.stringify({
+        tutorialSlug: 'sap-cloud-application-programming-getting-started',
+        stepNumber: 1,
+        submittedCode: 'const x = 1;',
+      }),
     });
     expect(res.status).toBe(401);
   });
@@ -23,7 +27,11 @@ describe('Code check endpoint smoke', () => {
         'Content-Type': 'application/json',
         Authorization: 'Bearer this-is-a-fake-token-and-not-valid',
       },
-      body: JSON.stringify({ slug: 'any-tutorial', stepIndex: 0, code: 'print("hi")' }),
+      body: JSON.stringify({
+        tutorialSlug: 'sap-cloud-application-programming-getting-started',
+        stepNumber: 1,
+        submittedCode: 'const x = 1;',
+      }),
     });
     expect(res.status).toBe(401);
   });
@@ -57,6 +65,8 @@ describe('Code check endpoint smoke', () => {
   it.skipIf(!CODECHECK_TOKEN)(
     'POST /api/codecheck with valid auth returns 200 with a verdict',
     async () => {
+      const slug = PILOT_SLUG || 'sap-cloud-application-programming-getting-started';
+      const stepNumber = Number(process.env.SMOKE_CODECHECK_PILOT_STEP) || 1;
       const res = await fetchWithRetry(`${SRV_URL}/api/codecheck`, {
         method: 'POST',
         headers: {
@@ -64,9 +74,9 @@ describe('Code check endpoint smoke', () => {
           Authorization: `Bearer ${CODECHECK_TOKEN}`,
         },
         body: JSON.stringify({
-          slug: PILOT_SLUG ?? 'placeholder-tutorial',
-          stepIndex: 0,
-          code: 'print("hello")',
+          tutorialSlug: slug,
+          stepNumber,
+          submittedCode: 'const srv = await cds.connect.to("CatalogService");',
         }),
       });
       expect(res.status).toBe(200);

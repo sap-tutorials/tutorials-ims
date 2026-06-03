@@ -426,7 +426,7 @@ export async function dispatchTool(name, args, user) {
       const { dispatchCheckCode } = await import('./code-check-tool.js');
       const { defaultCallModel }     = await import('./code-check-llm.js');
       const { defaultLoadStepText }  = await import('./code-check-step-loader.js');
-      return dispatchCheckCode(args, { user, callModel: defaultCallModel, loadStepText: defaultLoadStepText });
+      return await dispatchCheckCode(args, { user, callModel: defaultCallModel, loadStepText: defaultLoadStepText });
     } catch (err) {
       LOG.warn('checkCode dispatch failed', err.message);
       return { verdict: 'error', errorReason: 'upstream' };
