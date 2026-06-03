@@ -916,6 +916,21 @@ async function main() {
   const capMs = performance.now() - capStart
   console.log(`\nCAP phase complete: ${missions.length} missions, ${allGroupRefs.length} groups, ${matchedTutorials} tutorials matched, ${unmatchedTutorials} unmatched, ${patchedCount} pages patched (${formatDuration(capMs)})`)
 
+  // Task 2.1: emit hugo/data/browse.json for /browse/ SSR (issue #174 PR 2).
+  // Skip when catalog data is empty (ALLOW_EMPTY_CAP=1 path) — /browse/
+  // degrades gracefully if browse.json is missing, and we don't want to
+  // ship an empty rail file from a deliberately-degraded build.
+  if (missions.length > 0) {
+    try {
+      writeBrowseData(navEntries, missions, hierarchies, standaloneGroups)
+    } catch (err) {
+      // Non-fatal — don't block the existing build pipeline on this.
+      console.warn(`  [browse] writeBrowseData failed: ${err instanceof Error ? err.message : err}`)
+    }
+  } else {
+    console.log('  [browse] skipped (no missions loaded — ALLOW_EMPTY_CAP path)')
+  }
+
   // ── Phase 5: Write outputs ──
   navEntries.sort((a, b) => a.slug.localeCompare(b.slug))
 
@@ -983,6 +998,218 @@ async function main() {
   }
 
   console.log('═'.repeat(60))
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+//  /browse/ SSR data dump (issue #174 PR 2 — Task 2.1)
+//
+//  writeBrowseData() emits hugo/data/browse.json so Hugo's /browse/ template
+//  can render rails + grid statically at build time. The data shape mirrors
+//  what TutorialNavigator.vue's allCards computed produces at runtime, so the
+//  same MissionCard/GroupCard/TutorialCard SFCs render byte-identically in
+//  both contexts (verified by the card-template-parity test in Task 2.5).
+// ──────────────────────────────────────────────────────────────────────────
+
+const HUGO_DATA_DIR = join(__dirname, '..', 'hugo', 'data')
+const BROWSE_DATA_FILE = join(HUGO_DATA_DIR, 'browse.json')
+
+const FEATURED_MAX = 10
+const RECENT_MAX = 10
+const BROWSE_NEW_WINDOW_MS = 31 * 24 * 60 * 60 * 1000
+const BROWSE_LEVEL_ORDER: Record<string, number> = { beginner: 0, intermediate: 1, advanced: 2 }
+
+interface BrowseCardItem {
+  type: 'mission' | 'group' | 'tutorial'
+  id: string
+  title: string
+  description: string
+  time: number
+  level: string
+  tutorialCount: number
+  primaryTag: string
+  displayTags: string[]
+  displayTagSlugs: string[]
+  href: string
+  stepCount: number
+  isNew?: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+interface BrowseData {
+  all: BrowseCardItem[]
+  featured: string[]
+  recent: string[]
+  buildAt: string
+}
+
+function browseLowestLevel(levels: string[]): string {
+  return levels.sort((a, b) => (BROWSE_LEVEL_ORDER[a] ?? 9) - (BROWSE_LEVEL_ORDER[b] ?? 9))[0] || 'beginner'
+}
+
+function browseIsWithinNewWindow(createdAt: string | undefined): boolean {
+  if (!createdAt) return false
+  const t = Date.parse(createdAt)
+  if (!Number.isFinite(t)) return false
+  return Date.now() - t <= BROWSE_NEW_WINDOW_MS
+}
+
+function browseMissionGroupCount(missionId: number, tuts: TutorialNavEntry[]): number {
+  const groupIds = new Set<number>()
+  for (const t of tuts) {
+    if (t.missionId === missionId && t.groupId != null) {
+      groupIds.add(t.groupId)
+    }
+  }
+  return groupIds.size
+}
+
+/**
+ * Build-time mirror of TutorialNavigator.vue's allCards computed. MUST stay
+ * in sync with that computed — the card-template-parity test in Task 2.5
+ * verifies byte-equivalence of the rendered output.
+ */
+function buildAllCards(
+  tuts: TutorialNavEntry[],
+  missions: Mission[],
+  hierarchies: MissionHierarchy[],
+  standaloneGroups: StandaloneGroup[],
+): BrowseCardItem[] {
+  if (!tuts.length) return []
+
+  const items: BrowseCardItem[] = []
+
+  // Build mission/group → MissionRef/GroupRef lookups so we can resolve href slugs
+  // (matches missionsMeta.value / groupsMeta.value lookups in the Vue computed).
+  const missionsBySlugLookup = new Map<number, { slug: string }>()
+  for (const m of missions) {
+    missionsBySlugLookup.set(m.imsId, { slug: m.slug })
+  }
+
+  const groupsBySlugLookup = new Map<number, { slug: string }>()
+  for (const h of hierarchies) {
+    for (const g of h.groups) {
+      groupsBySlugLookup.set(g.imsId, { slug: g.slug })
+    }
+  }
+  for (const sg of standaloneGroups) {
+    groupsBySlugLookup.set(sg.imsId, { slug: sg.slug })
+  }
+
+  // Phase 1: bucket tutorials by missionId / groupId.
+  const missionGroups = new Map<number, TutorialNavEntry[]>()
+  const groupMap = new Map<number, TutorialNavEntry[]>()
+
+  for (const t of tuts) {
+    if (t.missionId) {
+      const mList = missionGroups.get(t.missionId) ?? []
+      mList.push(t)
+      missionGroups.set(t.missionId, mList)
+    }
+
+    if (t.groupId) {
+      const gList = groupMap.get(t.groupId) ?? []
+      gList.push(t)
+      groupMap.set(t.groupId, gList)
+    }
+  }
+
+  // Phase 2: mission cards.
+  for (const [missionId, mTuts] of missionGroups) {
+    const allTags = [...new Set(mTuts.flatMap(t => t.displayTags))]
+    const allTagSlugs = [...new Set(mTuts.flatMap(t => t.displayTagSlugs))]
+    const mMeta = missionsBySlugLookup.get(missionId)
+    items.push({
+      type: 'mission',
+      id: `mission-${missionId}`,
+      title: mTuts[0].missionTitle ?? '',
+      description: `Complete this mission to build full-stack applications combining CAP with SAP HANA Cloud. Includes ${mTuts.length} tutorials across ${browseMissionGroupCount(missionId, tuts)} groups.`,
+      time: mTuts.reduce((sum, t) => sum + t.time, 0),
+      level: browseLowestLevel(mTuts.map(t => t.level)),
+      tutorialCount: mTuts.length,
+      primaryTag: mTuts[0].primaryTag,
+      displayTags: allTags,
+      displayTagSlugs: allTagSlugs,
+      href: mMeta ? `/tutorials/mission-${mMeta.slug}` : `/tutorials/${mTuts[0].slug}`,
+      stepCount: mTuts.reduce((sum, t) => sum + t.stepCount, 0),
+    })
+  }
+
+  // Phase 3: group cards.
+  for (const [groupId, gTuts] of groupMap) {
+    const allTags = [...new Set(gTuts.flatMap(t => t.displayTags))]
+    const allTagSlugs = [...new Set(gTuts.flatMap(t => t.displayTagSlugs))]
+    const gMeta = groupsBySlugLookup.get(groupId)
+    items.push({
+      type: 'group',
+      id: `group-${groupId}`,
+      title: gTuts[0].groupTitle ?? '',
+      description: `${gTuts.length} tutorials covering ${gTuts.map(t => t.title).join(', ')}.`,
+      time: gTuts.reduce((sum, t) => sum + t.time, 0),
+      level: browseLowestLevel(gTuts.map(t => t.level)),
+      tutorialCount: gTuts.length,
+      primaryTag: gTuts[0].primaryTag,
+      displayTags: allTags,
+      displayTagSlugs: allTagSlugs,
+      href: gMeta ? `/tutorials/group-${gMeta.slug}` : `/tutorials/${gTuts[0].slug}`,
+      stepCount: gTuts.reduce((sum, t) => sum + t.stepCount, 0),
+    })
+  }
+
+  // Phase 4: tutorial cards.
+  for (const t of tuts) {
+    items.push({
+      type: 'tutorial',
+      id: t.slug,
+      title: t.title,
+      description: t.description,
+      time: t.time,
+      level: t.level,
+      tutorialCount: 1,
+      primaryTag: t.primaryTag,
+      displayTags: t.displayTags,
+      displayTagSlugs: t.displayTagSlugs,
+      href: `/tutorials/${t.slug}`,
+      stepCount: t.stepCount,
+      isNew: browseIsWithinNewWindow(t.createdAt),
+      createdAt: t.createdAt,
+    })
+  }
+
+  return items
+}
+
+function writeBrowseData(
+  tuts: TutorialNavEntry[],
+  missions: Mission[],
+  hierarchies: MissionHierarchy[],
+  standaloneGroups: StandaloneGroup[],
+): void {
+  const all: BrowseCardItem[] = buildAllCards(tuts, missions, hierarchies, standaloneGroups)
+
+  // Featured: first FEATURED_MAX mission cards, in catalog order.
+  const featured = all
+    .filter(c => c.type === 'mission')
+    .slice(0, FEATURED_MAX)
+    .map(c => c.id)
+
+  // Recent: top RECENT_MAX tutorial cards by createdAt desc.
+  const recent = all
+    .filter(c => c.type === 'tutorial' && c.createdAt)
+    .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
+    .slice(0, RECENT_MAX)
+    .map(c => c.id)
+
+  const data: BrowseData = {
+    all,
+    featured,
+    recent,
+    buildAt: new Date().toISOString(),
+  }
+
+  mkdirSync(HUGO_DATA_DIR, { recursive: true })
+  writeFileSync(BROWSE_DATA_FILE, JSON.stringify(data, null, 2), 'utf-8')
+  console.log(`  [browse] wrote ${all.length} cards (${featured.length} featured, ${recent.length} recent) → hugo/data/browse.json`)
 }
 
 // Only run main() when this file is executed directly (not when imported)
