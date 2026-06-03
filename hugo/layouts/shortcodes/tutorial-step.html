@@ -15,6 +15,15 @@
     <hr class="step-divider" />
     <div class="step-content">{{ .Inner }}</div>
     <div class="step-validation-mount" data-step="{{ $number }}"></div>
+    {{- $codeCheck := false -}}
+    {{- range $.Page.Params.steps -}}
+      {{- if eq (print .number) $number -}}{{- $codeCheck = .codeCheck -}}{{- end -}}
+    {{- end -}}
+    {{ partial "codecheck-mount.html" (dict
+      "slug"       $.Page.Params.slug
+      "stepNumber" $number
+      "codeCheck"  $codeCheck
+    ) }}
     <div class="step-actions">
       <button class="fd-button fd-button--emphasized" data-action="mark-done" data-step="{{ $number }}">Done</button>
     </div>
