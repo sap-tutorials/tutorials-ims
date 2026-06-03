@@ -12,6 +12,7 @@ import { cardProgress } from '../../navigator/cardProgress'
 import { requiresLicense } from '../license'
 import LicenseIcon from '../LicenseIcon.vue'
 import ProgressOverlay from './ProgressOverlay.vue'
+import './card.css'
 
 defineProps<{
   item: CardItem

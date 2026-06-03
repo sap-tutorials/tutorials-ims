@@ -1,0 +1,167 @@
+/*
+  hugo-apps/src/shared/cards/card.css
+  Shared card styles for MissionCard / GroupCard / TutorialCard.
+
+  Migrated verbatim from TutorialNavigator.vue's <style scoped> block.
+  Lives outside any SFC so the rules survive Vue 3's scoped-style
+  attribute injection: when these cards are rendered inside the
+  navigator (or /browse/), the parent's [data-v-*] attribute is only
+  applied to the child's *root* element — descendants like
+  .nav-card__title would otherwise become dead rules.
+
+  Imported by each card SFC's <script setup>; Vite dedupes across
+  multiple imports automatically.
+*/
+
+.nav-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--sapBaseColor, #fff);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  text-decoration: none;
+  color: inherit;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  min-height: 200px;
+  position: relative;
+}
+
+/* ─── NEW badge (tutorials authored within the last 31 days) ─── */
+.nav-card__new-badge {
+  position: absolute;
+  bottom: 0.75rem;
+  right: 0.75rem;
+  background: var(--sapAccentColor8, #6c32a9);
+  color: #fff;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  line-height: 1;
+  z-index: 1;
+}
+
+.nav-card__license {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  color: var(--sapContent_NonInteractiveIconColor, var(--sapTextColor, #32363a));
+  z-index: 1;
+}
+
+.nav-card:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+/* ─── Card Type Label ─── */
+.nav-card__type {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.nav-card__type--mission { color: var(--sapAccentColor6, #046c7a); }
+.nav-card__type--group { color: var(--sapAccentColor8, #6c32a9); }
+.nav-card__type--tutorial { color: var(--sapAccentColor10, #5b738b); }
+
+.nav-card__type::before {
+  content: '';
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* ─── Card Title ─── */
+.nav-card__title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--sapTextColor, #32363a);
+  margin: 0 0 0.5rem;
+  line-height: 1.4;
+}
+
+.nav-card:hover .nav-card__title {
+  color: var(--sapBrandColor, #0070f2);
+}
+
+/* ─── Card Description ─── */
+.nav-card__desc {
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--sapContent_LabelColor, #556b82);
+  margin: 0;
+  flex: 1;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ─── Card Meta ─── */
+.nav-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 1rem;
+  font-size: 0.75rem;
+  color: var(--sapContent_LabelColor, #556b82);
+  flex-wrap: wrap;
+}
+
+.nav-card__meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.nav-card__meta-item svg {
+  opacity: 0.6;
+}
+
+.nav-card__meta-sep {
+  color: var(--sapNeutralBorderColor, #d9d9d9);
+}
+
+/* ─── Card Tag ─── */
+.nav-card__tag {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--sapGroup_ContentBorderColor, #e5e5e5);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--sapBrandColor, #0070f2);
+}
+
+.nav-card__tag svg {
+  opacity: 0.7;
+}
+
+/* ─── ProgressOverlay (CSR-only, gated on hydration) ─── */
+.nav-card__progress {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  opacity: 0;
+  transition: opacity 0.15s ease-out;
+}
+.tutorial-navigator[data-progress-loaded="true"] .nav-card__progress {
+  opacity: 1;
+}
+.nav-card--has-progress .nav-card__type,
+.nav-card--has-progress .nav-card__title,
+.nav-card--has-progress .nav-card__desc {
+  padding-left: 3rem;
+}

@@ -12,6 +12,7 @@ import type { CardItem } from '@shared/types'
 import type { ProgressPayload } from '../../navigator/cardProgress'
 import { cardProgress } from '../../navigator/cardProgress'
 import ProgressOverlay from './ProgressOverlay.vue'
+import './card.css'
 
 defineProps<{
   item: CardItem
