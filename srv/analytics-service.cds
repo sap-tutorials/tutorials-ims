@@ -19,6 +19,7 @@ service AnalyticsService @(path : '/admin/analytics') {
   @readonly entity Events                 as projection on ims.Events;
   @readonly entity PrizeRecords           as projection on ims.PrizeRecords;
   @readonly entity AccomplishmentRecords  as projection on ims.AccomplishmentRecords;
+  @readonly entity CodeCheckSubmissions   as projection on ims.CodeCheckSubmissions;
 
   function listExposedEntities() returns array of {
     name        : String;
