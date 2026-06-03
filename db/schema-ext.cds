@@ -95,6 +95,6 @@ annotate ims.Users with {
 annotate ims.CodeCheckSubmissions with {
   verdict      @analytics.filter: { mode: 'enum', sample: true };
   language     @analytics.filter: { mode: 'enum', sample: true };
-  tutorialSlug @analytics.filter: { mode: 'enum', sample: true };
+  tutorialSlug @analytics.filter: { mode: 'free' };
   createdAt    @analytics.filter: { mode: 'date' };
 };
