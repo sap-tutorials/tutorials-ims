@@ -4,7 +4,7 @@
   Wrapped in QA-gate so it is omitted from /tutorials-qa/ where
   ChatSettings/codeCheckEnabled does not apply.
 */ -}}
-{{- if not site.Params.qa -}}
+{{- if and (not site.Params.qa) (not site.Params.previewMode) -}}
 {{- $cc := .codeCheck -}}
 {{- if $cc -}}
 <div class="step-codecheck-mount"
