@@ -72,12 +72,11 @@ describe('Code check endpoint smoke', () => {
       expect(res.status).toBe(200);
 
       const body = await res.json();
-      // The verdict object must carry a pass/fail indicator.
-      // Accept either { verdict: 'pass'|'fail' } or { passed: true|false }.
-      const hasVerdict =
-        ('verdict' in body && (body.verdict === 'pass' || body.verdict === 'fail')) ||
-        ('passed' in body && typeof body.passed === 'boolean');
-      expect(hasVerdict, `Expected a verdict shape, got: ${JSON.stringify(body)}`).toBe(true);
+      // Verify the real API contract from CHECK_CODE_OUTPUT_SCHEMA.
+      expect(['pass', 'partial', 'fail'], `Expected verdict in ['pass','partial','fail'], got: ${JSON.stringify(body)}`).toContain(body.verdict);
+      expect(typeof body.summary, `Expected summary string, got: ${JSON.stringify(body)}`).toBe('string');
+      expect(Array.isArray(body.correctAspects), `Expected correctAspects array, got: ${JSON.stringify(body)}`).toBe(true);
+      expect(Array.isArray(body.suggestions), `Expected suggestions array, got: ${JSON.stringify(body)}`).toBe(true);
     }
   );
 });
