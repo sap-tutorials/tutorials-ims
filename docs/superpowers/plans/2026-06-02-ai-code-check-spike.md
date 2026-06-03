@@ -1628,15 +1628,15 @@ The island follows the existing `tutorial-rating` shape: a `main.ts` that mounts
 
 Add `'code-check': resolve(__dirname, 'src/code-check/main.ts')` to the `rollupOptions.input` map. Also add a gzip budget guard following the existing `tutorialPrefsBudget()` pattern but for `code-check.js` with `MAX_CODE_CHECK_GZIP = 8 * 1024`.
 
-- [ ] **Step 2: Lazy-load in `ui5-bootstrap.ts`**
+- [ ] **Step 2: Wire the bundle into the Hugo layout**
 
-Find the existing pattern for conditionally importing islands (look for similar `if (document.querySelector(...)) import(...)` blocks). Add:
+The project loads islands via `<script type="module">` tags in Hugo layouts (NOT via dynamic-imports — that pattern doesn't compose across the Hugo esbuild → Vite pipeline boundary). Find the existing `tutorial-rating.js` line in `hugo/layouts/tutorials/u1-object-page.html` (around line 386) and add an adjacent line for `code-check.js`:
 
-```ts
-if (document.querySelector('.step-codecheck-mount')) {
-  import('./code-check/main.js')
-}
+```html
+{{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="/js/code-check.js" defer></script>{{ end }}
 ```
+
+Also add to any other layout that loads `tutorial-rating.js` (search to confirm).
 
 - [ ] **Step 3: Implement `main.ts`**
 
@@ -1697,7 +1697,7 @@ Build and serve locally with hybrid (`npm run dev:hybrid`). Navigate to a pilot 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add hugo-apps/src/code-check hugo-apps/src/ui5-bootstrap.ts hugo-apps/vite.config.ts
+git add hugo-apps/src/code-check hugo/layouts/tutorials/u1-object-page.html hugo-apps/vite.config.ts
 git commit -m "feat(codecheck): inline paste-box island with verdict UI (#171)
 
 UI5 panel with goal, hints, textarea, structured pass/partial/fail
