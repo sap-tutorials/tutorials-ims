@@ -5,6 +5,8 @@ import { renderToString } from 'vue/server-renderer'
 import { createSSRApp, h } from 'vue'
 import ProgressOverlay from './ProgressOverlay.vue'
 import TutorialCard from './TutorialCard.vue'
+import MissionCard from './MissionCard.vue'
+import GroupCard from './GroupCard.vue'
 import { emptyProgress, type ProgressPayload } from '../../navigator/cardProgress'
 import type { CardItem } from '@shared/types'
 
@@ -117,5 +119,48 @@ describe('<TutorialCard>', () => {
   it('href maps to /tutorials/<slug>', () => {
     const w = mount(TutorialCard, { props: { item: tut, progress: emptyProgress() } })
     expect(w.attributes('href')).toBe('/tutorials/cap-getting-started')
+  })
+})
+
+describe('<MissionCard>', () => {
+  const m: CardItem = {
+    type: 'mission', id: 'mission-1', title: 'Build with CAP',
+    description: 'Full-stack mission', time: 240, level: 'intermediate',
+    tutorialCount: 8, primaryTag: 'cap', displayTags: ['CAP'],
+    displayTagSlugs: ['software-product>sap-cloud-application-programming-model'],
+    href: '/tutorials/mission-build-with-cap', stepCount: 40,
+  }
+  it('renders type label "MISSION"', () => {
+    const w = mount(MissionCard, { props: { item: m, progress: emptyProgress() } })
+    expect(w.find('.nav-card__type').text()).toBe('MISSION')
+  })
+  it('shows tutorial count in meta', () => {
+    const w = mount(MissionCard, { props: { item: m, progress: emptyProgress() } })
+    expect(w.text()).toContain('8 Tutorials')
+  })
+  it('href maps to /tutorials/mission-...', () => {
+    const w = mount(MissionCard, { props: { item: m, progress: emptyProgress() } })
+    expect(w.attributes('href')).toBe('/tutorials/mission-build-with-cap')
+  })
+})
+
+describe('<GroupCard>', () => {
+  const g: CardItem = {
+    type: 'group', id: 'group-1', title: 'CAP Basics',
+    description: 'Three tutorials', time: 90, level: 'beginner',
+    tutorialCount: 3, primaryTag: 'cap', displayTags: [], displayTagSlugs: [],
+    href: '/tutorials/group-cap-basics', stepCount: 12,
+  }
+  it('renders type label "GROUP"', () => {
+    const w = mount(GroupCard, { props: { item: g, progress: emptyProgress() } })
+    expect(w.find('.nav-card__type').text()).toBe('GROUP')
+  })
+  it('shows tutorial count in meta', () => {
+    const w = mount(GroupCard, { props: { item: g, progress: emptyProgress() } })
+    expect(w.text()).toContain('3 Tutorials')
+  })
+  it('href maps to /tutorials/group-...', () => {
+    const w = mount(GroupCard, { props: { item: g, progress: emptyProgress() } })
+    expect(w.attributes('href')).toBe('/tutorials/group-cap-basics')
   })
 })
