@@ -67,10 +67,11 @@ Return ONLY a JSON object matching the supplied schema. Rules:
  * Optional sections are omitted entirely when absent (no placeholder headers).
  *
  * Section order (fixed):
- *   Goal → Step text → Tutorial's example code → Reference solution → Language hint → Learner's submission
+ *   Goal → Hints → Step text → Tutorial's example code → Reference solution → Language hint → Learner's submission
  *
  * @param {object} opts
  * @param {string}  opts.goal             - What the code must accomplish (required).
+ * @param {string[]} [opts.hints]         - Author-supplied hints (additional context for the grader).
  * @param {string} [opts.stepText]        - Tutorial step prose for context.
  * @param {string} [opts.tutorialSamples] - Example code shown in the tutorial step.
  * @param {string} [opts.referenceSolution] - Author's reference solution (NEVER QUOTE).
@@ -80,6 +81,7 @@ Return ONLY a JSON object matching the supplied schema. Rules:
  */
 export function buildUserMessage({
   goal,
+  hints,
   stepText,
   tutorialSamples,
   referenceSolution,
@@ -92,6 +94,11 @@ export function buildUserMessage({
   const parts = [];
 
   parts.push(`Goal:\n${goal}`);
+
+  if (hints && hints.length > 0) {
+    const bulletList = hints.map(h => `- ${h}`).join('\n');
+    parts.push(`Hints (author-supplied, additional context):\n${bulletList}`);
+  }
 
   if (stepText) {
     parts.push(`Step text (for context):\n${stepText}`);

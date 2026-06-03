@@ -33,6 +33,32 @@ describe('code-check prompt builder', () => {
     expect(idx('Reference solution')).toBeLessThan(idx("Learner's submission"));
   });
 
+  it('hints are emitted between Goal and Step text when present', () => {
+    const msg = buildUserMessage({
+      goal: 'G',
+      hints: ['use cds.ql', 'see srv/cat-service.js'],
+      stepText: 'STEP',
+      submittedCode: 'U',
+    });
+    const idx = (s) => msg.indexOf(s);
+    expect(msg).toContain('Hints (author-supplied, additional context):');
+    expect(msg).toContain('- use cds.ql');
+    expect(msg).toContain('- see srv/cat-service.js');
+    // Ordering: Goal → Hints → Step text
+    expect(idx('Goal:')).toBeLessThan(idx('Hints'));
+    expect(idx('Hints')).toBeLessThan(idx('Step text'));
+  });
+
+  it('hints section is omitted when hints is absent', () => {
+    const msg = buildUserMessage({ goal: 'G', submittedCode: 'U' });
+    expect(msg).not.toContain('Hints');
+  });
+
+  it('hints section is omitted when hints is an empty array', () => {
+    const msg = buildUserMessage({ goal: 'G', hints: [], submittedCode: 'U' });
+    expect(msg).not.toContain('Hints');
+  });
+
   it('omits absent sections cleanly', () => {
     const msg = buildUserMessage({ goal: 'G', submittedCode: 'U' });
     expect(msg).not.toMatch(/Step text/);

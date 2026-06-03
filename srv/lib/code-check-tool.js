@@ -150,8 +150,13 @@ export async function dispatchCheckCode(input, deps) {
 
   // 6. Build prompts
   const system = buildSystemPrompt();
+  let parsedHints;
+  try {
+    parsedHints = spec.hints ? JSON.parse(spec.hints) : undefined;
+  } catch { parsedHints = undefined; }
   const userMessage = buildUserMessage({
     goal: spec.goal,
+    hints: parsedHints,
     stepText: stepText || undefined,
     tutorialSamples,
     referenceSolution: spec.referenceSolution || undefined,

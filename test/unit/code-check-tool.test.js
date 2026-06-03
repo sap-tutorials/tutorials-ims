@@ -237,4 +237,36 @@ describe('dispatchCheckCode', () => {
     expect(rows).toHaveLength(2);
     expect(rows.every(r => r.user_ID === null || r.user_ID === undefined)).toBe(true);
   });
+
+  // ─── Test 8: Hints are passed to callModel ────────────────────────────────
+
+  it('hints in spec are JSON-parsed and forwarded to callModel user message', async () => {
+    // Patch the spec to include hints
+    const { CodeCheckSpecs } = cds.entities('com.sap.developers.ims');
+    await UPDATE(CodeCheckSpecs, {
+      tutorial_ID: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+      stepNumber: 2,
+    }).with({ hints: JSON.stringify(['use cds.ql', 'see srv/cat-service.js']) });
+
+    let capturedUserMsg;
+    const callModel = vi.fn().mockImplementation(async ({ user }) => {
+      capturedUserMsg = user;
+      return {
+        verdict: { verdict: 'pass', summary: 'Good', correctAspects: ['used cds.ql'], suggestions: [] },
+        promptTokens: 300,
+        completionTokens: 60,
+        modelName: 'gpt-4o',
+      };
+    });
+
+    await dispatchCheckCode(
+      { tutorialSlug: 'sample', stepNumber: 2, submittedCode: 'cds.ql.SELECT.from(Books)' },
+      { user: { id: 'u1' }, callModel, loadStepText: async () => null },
+    );
+
+    expect(callModel).toHaveBeenCalledOnce();
+    expect(capturedUserMsg).toContain('Hints (author-supplied, additional context):');
+    expect(capturedUserMsg).toContain('- use cds.ql');
+    expect(capturedUserMsg).toContain('- see srv/cat-service.js');
+  });
 });
