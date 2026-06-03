@@ -74,6 +74,14 @@ describe('collectCodeCheckSpecs', () => {
     expect(out).toEqual([]);
   });
 
+  it('sidecar with empty specs array yields no rows', () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'cc-'));
+    writeFileSync(path.join(dir, 'a.codecheck.json'),
+      JSON.stringify({ slug: 'a', specs: [] }));
+    const out = collectCodeCheckSpecs(dir);
+    expect(out).toEqual([]);
+  });
+
   it('skips sidecar files that are missing slug or specs fields', () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'cc-missing-fields-'));
     // missing slug

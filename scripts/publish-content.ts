@@ -544,7 +544,15 @@ async function main() {
     const specs = collectCodeCheckSpecs(cacheDir);
     if (specs.length) {
       log(`Publishing ${specs.length} code-check spec(s) to /content/code-check-specs`);
-      const result = await publishCodeCheckSpecs(opts.baseUrl, opts.apiKey, specs);
+      const result = await withRetry(
+        () => publishCodeCheckSpecs(opts.baseUrl, opts.apiKey, specs),
+        {
+          attempts: 3, backoffMs: [1000, 3000],
+          onAttemptFail: (attempt, err, willRetry) => {
+            console.error(`[publish-content] code-check spec publish failed (attempt ${attempt}/3): ${formatErrorChain(err)}${willRetry ? ' — retrying' : ''}`);
+          },
+        }
+      );
       log(`code-check specs upserted=${result.upserted} skipped=${result.skipped.length}`);
     }
   } catch (err) {
