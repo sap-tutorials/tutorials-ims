@@ -29,6 +29,12 @@ export default defineConfig({
             // modules. The Vitest unit project does NOT import vite.config.ts, so
             // this alias has to be declared here independently.
             '@srv-lib': fileURLToPath(new URL('./srv/lib', import.meta.url)),
+            // Mirror of hugo-apps/vite.config.ts and hugo-apps/tsconfig.json
+            // `@shared/*` path. Required by hugo-apps unit tests that mount
+            // .vue components which transitively import @shared/Skeleton.vue,
+            // @shared/ProgressRing.vue, etc. The unit project doesn't load
+            // hugo-apps/vite.config.ts so the alias is redeclared here.
+            '@shared': fileURLToPath(new URL('./hugo-apps/src/shared', import.meta.url)),
           },
         },
       },
