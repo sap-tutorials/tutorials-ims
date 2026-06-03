@@ -76,6 +76,7 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
     steps: steps.map(s => {
       const entry: Record<string, unknown> = { number: s.number, title: s.title }
       if (s.validation?.length) entry.validation = s.validation
+      if (s.codeCheck) entry.codeCheck = s.codeCheck
       return entry
     }),
   }

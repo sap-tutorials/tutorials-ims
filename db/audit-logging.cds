@@ -25,3 +25,10 @@ annotate ims.TaskRecords with @PersonalData: {
 } {
   user @PersonalData.FieldSemantics: 'DataSubjectID';
 }
+
+annotate ims.CodeCheckSubmissions with @PersonalData: {
+  EntitySemantics: 'Other'
+} {
+  user          @PersonalData.FieldSemantics: 'DataSubjectID';
+  submittedCode @PersonalData.IsPotentiallyPersonal;
+}

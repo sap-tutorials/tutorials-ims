@@ -399,6 +399,10 @@ entity ChatSettings : cuid, managed {
   embeddingModel       : String(100) default 'text-embedding-3-small';
   embeddingTopK        : Integer default 5;
   embeddingMinScore    : Decimal(4, 3) default 0.25;
+
+  // AI code-check spike (issue #171). When false, /api/codecheck → 503
+  // and the checkCode tool is omitted from toolsForContext().
+  codeCheckEnabled     : Boolean default false;
 }
 
 entity TutorialEmbedding {
@@ -426,4 +430,38 @@ entity TutorialFeedback : managed {
   ratingVisuals     : Integer @assert.range: [0, 10];
   npsScore          : Integer @assert.range: [0, 10];
   comment           : String(2000);
+}
+
+// Author-supplied code-check material per (tutorial, step). Server-only:
+// the referenceSolution column NEVER reaches the client. Populated by
+// the publish-content pipeline; read by srv/lib/code-check-tool.js.
+entity CodeCheckSpecs : managed {
+  key tutorial         : Association to Tutorials;
+  key stepNumber       : Integer;
+  goal                 : LargeString @mandatory;
+  language             : String(40);
+  hints                : LargeString;        // JSON-encoded string[]
+  referenceSolution    : LargeString;        // server-only
+  hasReference         : Boolean default false;
+}
+
+// Every learner submission. Drives offline grader-quality evaluation.
+// 'verdict' allows 'error' as a server-side outcome value (the LLM JSON
+// schema only emits 'pass' | 'partial' | 'fail').
+entity CodeCheckSubmissions : managed {
+  key ID               : UUID;
+  user                 : Association to Users;
+  tutorialSlug         : String(200) @mandatory;
+  stepNumber           : Integer @mandatory;
+  submittedCode        : LargeString @mandatory;
+  language             : String(40);
+  verdict              : String(10);
+  summary              : LargeString;
+  suggestions          : LargeString;        // JSON-encoded string[]
+  correctAspects       : LargeString;        // JSON-encoded string[]
+  modelName            : String(80);
+  promptTokens         : Integer;
+  completionTokens     : Integer;
+  latencyMs            : Integer;
+  errorReason          : String(200);
 }

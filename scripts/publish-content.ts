@@ -7,6 +7,7 @@ import { parseChannel, type Channel } from './fetch-tutorials.js';
 import { beginSession, appendBatch, commitSession, abortSession, fetchRemoteHashes } from './lib/publish-client.js';
 import { withRetry, formatErrorChain } from './lib/publish-retry.js';
 import { chunk, runConcurrent } from './lib/publish-batcher.js';
+import { collectCodeCheckSpecs, publishCodeCheckSpecs } from './lib/publish-codecheck.js';
 
 export type { Channel };
 
@@ -534,6 +535,30 @@ async function main() {
   Server:     ${commit.durationMs} ms
   Total:      ${totalMs} ms
   Idempotent retry hit?  ${commit.alreadyActive}`);
+
+  // --- code-check spec publish (non-fatal auxiliary step) ---
+  try {
+    const cacheDir = channel === 'qa'
+      ? join(process.cwd(), '.tutorial-cache-qa')
+      : join(process.cwd(), '.tutorial-cache');
+    const specs = collectCodeCheckSpecs(cacheDir);
+    if (specs.length) {
+      log(`Publishing ${specs.length} code-check spec(s) to /content/code-check-specs`);
+      const result = await withRetry(
+        () => publishCodeCheckSpecs(opts.baseUrl, opts.apiKey, specs),
+        {
+          attempts: 3, backoffMs: [1000, 3000],
+          onAttemptFail: (attempt, err, willRetry) => {
+            console.error(`[publish-content] code-check spec publish failed (attempt ${attempt}/3): ${formatErrorChain(err)}${willRetry ? ' — retrying' : ''}`);
+          },
+        }
+      );
+      log(`code-check specs upserted=${result.upserted} skipped=${result.skipped.length}`);
+    }
+  } catch (err) {
+    console.error('[publish-content] code-check spec publish failed (non-fatal):', formatErrorChain(err));
+    // Do NOT exit non-zero — content publish is the critical path; specs are auxiliary.
+  }
 
   // --- auto-verify ---
   log('Verifying server state matches local...');

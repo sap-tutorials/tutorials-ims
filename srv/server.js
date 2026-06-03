@@ -20,6 +20,10 @@ import { streamChat, toolsForContext } from './lib/chat-orchestrator.js';
 import { computeEmbeddingStats } from './lib/embedding-stats.js';
 import { registerExportsBridge, wireExportsBridge } from './exports/express-bridge.js';
 import { exportSelectQueryHandler } from './lib/analytics-export-handler.js';
+import { makeCodeCheckHandler } from './lib/code-check-handler.js';
+import { defaultCallModel } from './lib/code-check-llm.js';
+import { defaultLoadStepText } from './lib/code-check-step-loader.js';
+import { codeCheckSpecPublishHandler } from './lib/code-check-spec-publish.js';
 
 // Late-bound POST /chat/stream handler. Registered in 'bootstrap' (before CAP
 // mounts ChatService at /chat, which would otherwise swallow /chat/stream as
@@ -162,6 +166,7 @@ cds.on('bootstrap', (app) => {
   // bootstrap block (after contextMw/authMw are defined) so req.user is
   // populated by CAP's auth chain before the handler runs.
   app.post('/content/rollback', express.json(), contentAuthMiddleware, rollbackHandler);
+  app.post('/content/code-check-specs', express.json({ limit: '5mb' }), contentAuthMiddleware, codeCheckSpecPublishHandler);
 
   // Tutorial feedback bridge. Express handler (rather than letting CAP expose
   // the action over OData) so we can derive the originating client IP from
@@ -319,6 +324,19 @@ cds.on('served', async () => {
   app.get('/build/my-progress', contextMw, authMw, (req, res, next) => {
     Promise.resolve(myProgressHandler(req, res)).catch(next);
   });
+
+  // AI code-check endpoint. Uses contextMw + authMw so req.user is populated.
+  // Rate limits are enforced inside the handler (30/hour per user, 5/5min per step).
+  // Body limit is conservative (64 KB) — the handler itself enforces the 20 KB code cap.
+  const codeCheckHandler = makeCodeCheckHandler({
+    callModel: defaultCallModel,
+    loadStepText: defaultLoadStepText,
+  });
+  app.post('/api/codecheck',
+    express.json({ limit: '64kb' }),
+    contextMw, authMw,
+    (req, res, next) => Promise.resolve(codeCheckHandler(req, res)).catch(next)
+  );
 
   const embeddingsStatsBusiness = async (req, res) => {
     const user = cds.context?.user;

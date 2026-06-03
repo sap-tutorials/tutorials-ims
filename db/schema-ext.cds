@@ -29,6 +29,7 @@ annotate ims.Tutorials              with @analytics : { exposed: true, label: 'T
 annotate ims.Events                 with @analytics : { exposed: true, label: 'Events' };
 annotate ims.PrizeRecords           with @analytics : { exposed: true, label: 'Prize records' };
 annotate ims.AccomplishmentRecords  with @analytics : { exposed: true, label: 'Accomplishment records' };
+annotate ims.CodeCheckSubmissions   with @analytics : { exposed: true, label: 'Code check submissions' };
 
 // Declare $apply capability for the analytics-exposed surface so the OData
 // protocol layer accepts groupby+aggregate from the Analytics Explorer SPA.
@@ -49,6 +50,7 @@ annotate ims.Tutorials              with @Aggregation.ApplySupported : { Transfo
 annotate ims.Events                 with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
 annotate ims.PrizeRecords           with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
 annotate ims.AccomplishmentRecords  with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
+annotate ims.CodeCheckSubmissions   with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
 
 // Analytics Builder Phase 1 entities (AnalyticsQueryHistory, AnalyticsSavedQuery)
 // live in db/analytics-builder.cds — kept separate so this annotation file
@@ -88,4 +90,11 @@ annotate ims.Users with {
   firstName   @analytics.pii: true;
   lastName    @analytics.pii: true;
   displayName @analytics.pii: true;
+};
+
+annotate ims.CodeCheckSubmissions with {
+  verdict      @analytics.filter: { mode: 'enum', sample: true };
+  language     @analytics.filter: { mode: 'enum', sample: true };
+  tutorialSlug @analytics.filter: { mode: 'free' };
+  createdAt    @analytics.filter: { mode: 'date' };
 };

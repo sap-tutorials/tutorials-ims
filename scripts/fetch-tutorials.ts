@@ -8,6 +8,7 @@ import { composeTutorial } from './parsers/compose.js'
 import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, EXCLUDED_REPOS, type DiscoveredTutorial } from './parsers/github.js'
 import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache } from './parsers/cap.js'
 import { parseRulesVr } from './parsers/rules.js'
+import { parseCodeCheckBlocks, attachCodeCheckSpecs } from './parsers/codecheck.js'
 import { computeRecommendations } from './parsers/recommendations.js'
 import { humanizeTag, splitPrerequisites } from './parsers/frontmatter-utils.js'
 import type { TagLabelRegistry } from './parsers/frontmatter-utils.js'
@@ -665,6 +666,20 @@ async function main() {
             ?? steps.find(s => s.number === validateNum)
           if (target) {
             target.validation = [...(target.validation ?? []), ...questions]
+          }
+        }
+
+        const codeCheckMap = parseCodeCheckBlocks(rulesContent)
+        if (codeCheckMap.size) {
+          const sidecar = attachCodeCheckSpecs(steps, codeCheckMap)
+          if (sidecar.length) {
+            const sidecarPath = join(CACHE_DIR, `${t.slug}.codecheck.json`)
+            // Lowercase the slug in the JSON payload: Tutorials.slug in HANA is lowercase
+            // canonical (see CLAUDE.md gotcha "Tutorial slugs are lowercase canonical").
+            // Source directories like extend-RAP-App produce mixed-case t.slug; the
+            // Task 2.1 publish path matches against the lowercase HANA row, so a
+            // mixed-case slug here would cause spec_missing at runtime.
+            writeFileSync(sidecarPath, JSON.stringify({ slug: t.slug.toLowerCase(), specs: sidecar }, null, 2))
           }
         }
       }
