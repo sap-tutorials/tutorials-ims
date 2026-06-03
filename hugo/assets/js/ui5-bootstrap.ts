@@ -59,7 +59,7 @@ import "@ui5/webcomponents-icons/dist/question-mark.js";
 // UI5 logs "No loader registered for the SAP-icons-v5 icons collection". Issue #104.
 import "@ui5/webcomponents-icons/dist/search.js";
 import "@ui5/webcomponents-icons/dist/action-settings.js";
-// Icons referenced from Vue islands (cmd-palette, MyCompletions). Imported here so
+// Icons referenced from Vue islands (cmd-palette, MyCompletions, code-check). Imported here so
 // they share the main bootstrap's icon registry rather than each island re-registering.
 import "@ui5/webcomponents-icons/dist/accept.js";
 import "@ui5/webcomponents-icons/dist/home.js";

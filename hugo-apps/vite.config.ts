@@ -5,6 +5,25 @@ import { resolve } from 'path'
 import { gzipSync } from 'node:zlib'
 
 const MAX_TUTORIAL_PREFS_GZIP = 8 * 1024;
+const MAX_CODE_CHECK_GZIP = 8 * 1024;
+
+function codeCheckBudget() {
+  return {
+    name: 'code-check-budget',
+    generateBundle(_opts: unknown, bundle: Record<string, any>) {
+      const chunk = bundle['code-check.js'];
+      if (!chunk || chunk.type !== 'chunk') return;
+      const gz = gzipSync(chunk.code).length;
+      if (gz > MAX_CODE_CHECK_GZIP) {
+        // @ts-ignore — Rollup plugin context
+        this.error(`code-check.js is ${gz} bytes gzipped (> ${MAX_CODE_CHECK_GZIP}). Move code to a lazy chunk.`);
+      } else {
+        // @ts-ignore
+        this.warn(`code-check.js: ${gz} bytes gzipped (budget ${MAX_CODE_CHECK_GZIP}).`);
+      }
+    }
+  };
+}
 
 function tutorialPrefsBudget() {
   return {
@@ -25,7 +44,7 @@ function tutorialPrefsBudget() {
 }
 
 export default defineConfig({
-  plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget()],
+  plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget(), codeCheckBudget()],
   // Approuter serves these bundles at /js/. Without `base`, Vite emits
   // dynamic-import paths as `./chunks/x.js` which the browser resolves
   // against the *document URL* (e.g. `/` → `/chunks/x.js` → 404). Setting
@@ -57,6 +76,7 @@ export default defineConfig({
         'cmd-palette': resolve(__dirname, 'src/cmd-palette/main.ts'),
         me: resolve(__dirname, 'src/me/main.ts'),
         'tutorial-prefs': resolve(__dirname, 'src/tutorial-prefs/main.ts'),
+        'code-check': resolve(__dirname, 'src/code-check/main.ts'),
       },
       output: {
         entryFileNames: '[name].js',
