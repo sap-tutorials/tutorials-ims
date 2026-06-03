@@ -1620,7 +1620,8 @@ Reference solution is never rendered here — server-only via HANA."
 - Create: `hugo-apps/src/code-check/main.ts`
 - Create: `hugo-apps/src/code-check/CodeCheck.vue`
 - Modify: `hugo-apps/vite.config.ts` (register entry; add gzip budget guard, target 8 KB)
-- Modify: `hugo-apps/src/ui5-bootstrap.ts` (lazy-load when mount div present)
+- Modify: `hugo/layouts/tutorials/u1-object-page.html` (add code-check.js script tag)
+- Update comment: `hugo/assets/js/ui5-bootstrap.ts` (mention code-check in registry comment)
 
 The island follows the existing `tutorial-rating` shape: a `main.ts` that mounts on `[id|class]` selector when present, and a `<Component>.vue` with the UI.
 

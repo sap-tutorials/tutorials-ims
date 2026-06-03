@@ -186,8 +186,18 @@ async function submit() {
     })
 
     if (res.ok) {
-      // 200: structured verdict
+      // 200: structured verdict — but error-shaped bodies also arrive as 200
+      // (e.g. { verdict: 'error', errorReason: 'spec_missing' }). Guard before
+      // casting so we never render an empty strip with 'summary' undefined.
       const body = await res.json()
+      if (!body || !['pass', 'partial', 'fail'].includes(body.verdict)) {
+        // Server returned an error-shaped verdict (spec_missing, upstream, schema).
+        // Map to the internal-error UI rather than rendering an empty strip.
+        // (A backend fix returning 5xx instead would also work but reshapes
+        // the Task 1.5/1.6 contracts — deferred to a future cleanup.)
+        error.value = 'internal'
+        return
+      }
       verdict.value = body as VerdictShape
       error.value = null
     } else if (res.status === 401) {
@@ -198,7 +208,8 @@ async function submit() {
     } else if (res.status === 429) {
       error.value = 'rate_limited'
       const header = res.headers.get('Retry-After')
-      retryAfter.value = header ? parseInt(header, 10) : 3600
+      const n = parseInt(header ?? '', 10)
+      retryAfter.value = Number.isFinite(n) && n > 0 ? n : 3600
     } else if (res.status === 503) {
       error.value = 'disabled'
     } else {
