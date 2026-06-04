@@ -630,6 +630,38 @@ npx vitest run test/unit/validation-grading.test.js
 
 Expected: 15 passing.
 
+- [ ] **Step 3.5: Verify `<ui5-message-strip slot="action">` exists**
+
+The plan's `Validation.vue` template wraps a Try Again button as `<ui5-button slot="action" ...>` inside `<ui5-message-strip>`. Verify the `action` slot exists on `ui5-message-strip` before relying on it. Use the UI5 MCP if available:
+
+```
+mcp__ui5-webcomponents__get_component_api { componentName: 'ui5-message-strip' }
+```
+
+If the MCP isn't available, check the UI5 docs site directly. If the `action` slot doesn't exist on `ui5-message-strip` in the project's UI5 version, the button will silently not render.
+
+Fallback if the slot isn't available: move the Try Again button to a sibling element below the strip (still works the same; just different DOM structure):
+
+```html
+<ui5-message-strip
+  v-if="submitted && result === 'incorrect'"
+  design="Negative"
+  hide-close-button
+>
+  Not quite — give it another try.
+</ui5-message-strip>
+<ui5-button
+  v-if="submitted && result === 'incorrect'"
+  design="Default"
+  @click="onTryAgain"
+  style="margin-top: 0.5rem;"
+>
+  Try Again
+</ui5-button>
+```
+
+This adjustment doesn't change Task 3's commit; just the template detail.
+
 - [ ] **Step 4: Verify the bundle builds with budget guard fires**
 
 ```bash

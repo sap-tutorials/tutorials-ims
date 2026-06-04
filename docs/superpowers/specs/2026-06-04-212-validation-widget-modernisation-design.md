@@ -385,7 +385,7 @@ A code comment in `Validation.vue` and in `grading.ts` notes the trade-off, link
 - [ ] `hugo/assets/js/tutorial.ts:333-447` deleted; `initValidation()` call removed.
 - [ ] Legacy CSS classes (`.step-validation`, `.option-card`, `.validation-feedback`, etc.) removed if unused elsewhere.
 - [ ] `<ui5-radio-button>` registered in `hugo/assets/js/ui5-bootstrap.ts`.
-- [ ] All 12 unit-test cases in `test/unit/validation-grading.test.js` pass.
+- [ ] All 15 unit-test cases in `test/unit/validation-grading.test.js` pass (8 gradeAnswers + 1 persistKey + 3 readPersisted + 3 writePersisted).
 - [ ] Manual smoke against a real tutorial: multiple-choice + text questions render correctly; pass + fail feedback render; reload after pass shows success state.
 - [ ] No regression on tutorials without validation rules (the island is a no-op when no `.step-validation-mount` element exists).
 - [ ] `docs/developers/architecture/validation-widget.md` shipped + sidebar registration.
