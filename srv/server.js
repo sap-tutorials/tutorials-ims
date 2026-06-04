@@ -24,6 +24,7 @@ import { makeCodeCheckHandler } from './lib/code-check-handler.js';
 import { defaultCallModel } from './lib/code-check-llm.js';
 import { defaultLoadStepText } from './lib/code-check-step-loader.js';
 import { codeCheckSpecPublishHandler } from './lib/code-check-spec-publish.js';
+import { scheduleRebuild, checkFeatureFlag as checkRebuildTriggerFeatureFlag } from './lib/rebuild-trigger.js';
 
 // Late-bound POST /chat/stream handler. Registered in 'bootstrap' (before CAP
 // mounts ChatService at /chat, which would otherwise swallow /chat/stream as
@@ -275,7 +276,7 @@ cds.on('served', async () => {
   // mission/group data after CRUD via AdminService.
   if (!globalThis.__navigatorCacheInvalidatorRegistered) {
     const admin = await cds.connect.to('AdminService');
-    const navInvalidatingEntities = ['Missions', 'Groups', 'CompletionPaths', 'CompletionPathItems', 'GroupPathItems', 'Tutorials'];
+    const navInvalidatingEntities = ['Missions', 'Groups', 'CompletionPaths', 'CompletionPathItems', 'GroupPathItems', 'Tutorials', 'FeaturedTasks'];
     admin.after(['CREATE', 'UPDATE', 'DELETE'], navInvalidatingEntities, () => {
       try {
         invalidateNavigatorCache();
@@ -290,9 +291,20 @@ cds.on('served', async () => {
       } catch (err) {
         console.error('[render-cache] cache invalidation failed', err);
       }
+      // [#174 PR 3] Also schedule a /browse/ SSR rebuild. Debounced 60s so a
+      // single admin bulk-edit (rename tag → 50 tutorials updated) collapses
+      // into one workflow_dispatch instead of 50.
+      try {
+        scheduleRebuild('admin-write');
+      } catch (err) {
+        console.error('[rebuild-trigger] scheduling failed', err);
+      }
     });
     globalThis.__navigatorCacheInvalidatorRegistered = true;
   }
+
+  // [#174 PR 3] Boot warning: check if rebuild-trigger feature flag is enabled.
+  checkRebuildTriggerFeatureFlag();
 
   app.get('/auth/user', contextMw, authMw, (req, res) => {
     const user = cds.context?.user;
