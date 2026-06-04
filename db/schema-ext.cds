@@ -98,3 +98,10 @@ annotate ims.CodeCheckSubmissions with {
   tutorialSlug @analytics.filter: { mode: 'free' };
   createdAt    @analytics.filter: { mode: 'date' };
 };
+
+// UIEvent indexes for canonical A/B comparison queries (#204, PR 4)
+annotate ims.UIEvent with @cds.persistence.index : [
+  { name: 'IDX_UIEVENT_SESSION', columns: [ 'sessionId' ] },
+  { name: 'IDX_UIEVENT_SURFACE_TS', columns: [ 'surface', 'timestamp' ] },
+  { name: 'IDX_UIEVENT_TYPE_TS', columns: [ 'eventType', 'timestamp' ] }
+];
