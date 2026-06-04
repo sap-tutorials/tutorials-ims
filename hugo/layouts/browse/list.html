@@ -1,0 +1,78 @@
+{{ define "main" }}
+{{- $browse := .Site.Data.browse -}}
+{{- $pageSize := 24 -}}
+{{- $firstPageItems := first $pageSize $browse.all -}}
+
+<header class="browse-banner" role="banner">
+  <h1>Browse SAP developer tutorials</h1>
+  <input class="browse-banner__search" type="search"
+         placeholder="Search tutorials, missions, and groups…"
+         aria-label="Search tutorials, missions, and groups">
+</header>
+
+<a class="skip-link" href="#browse-results">Skip to results</a>
+
+<div class="browse-shell">
+  {{ partial "browse/_partials/filter-rail.html" . }}
+
+  <main id="browse-results" tabindex="-1">
+    <div data-rails-container>
+      {{ partial "browse/_partials/rail.html" (dict "title" "Featured missions"
+                                                    "idList" $browse.featured
+                                                    "showAllHref" "/missions/"
+                                                    "all" $browse.all) }}
+      {{ partial "browse/_partials/rail.html" (dict "title" "Recently added"
+                                                    "idList" $browse.recent
+                                                    "showAllHref" "/?new=1"
+                                                    "all" $browse.all) }}
+    </div>
+
+    <section class="browse-grid-section" aria-label="All tutorials">
+      <header class="browse-grid-header">
+        <h2 class="browse-grid-title">All {{ len $browse.all }} items</h2>
+        <label class="browse-sort">
+          Sort:
+          <select name="sort" class="browse-sort__select">
+            <option value="relevance">Relevance</option>
+            <option value="updated">Recently updated</option>
+            <option value="recent">Recently added</option>
+            <option value="title">Title A→Z</option>
+            <option value="time">Time-to-complete</option>
+          </select>
+        </label>
+      </header>
+
+      <div class="browse-grid" id="browse-root">
+        {{- range $item := $firstPageItems -}}
+          {{- if eq $item.type "mission" -}}{{ partial "browse/_partials/card-mission.html" $item }}{{- end -}}
+          {{- if eq $item.type "group" -}}{{ partial "browse/_partials/card-group.html" $item }}{{- end -}}
+          {{- if eq $item.type "tutorial" -}}{{ partial "browse/_partials/card-tutorial.html" $item }}{{- end -}}
+        {{- end -}}
+      </div>
+
+      <nav class="browse-pagination" aria-label="Pagination">
+        {{- $totalPages := math.Ceil (div (len $browse.all) $pageSize) -}}
+        {{- if gt $totalPages 1 -}}
+          <a href="?page=2" rel="next">Next →</a>
+        {{- end -}}
+      </nav>
+    </section>
+  </main>
+</div>
+
+<script>window.__BROWSE_BUILD_AT = "{{ $browse.buildAt }}";</script>
+{{- /* Inlined catalog payload — read by BrowsePage.vue on mount.
+       Avoids a /browse/data.json round-trip; ~1500 KB JSON gzipped at
+       full catalog size, fine for a homepage. `safeJS` is required so
+       Go's html/template doesn't wrap the JSON object in a JS-string
+       literal (the default behaviour inside <script>). With type=
+       "application/json" the browser parses contents as data, not JS,
+       so safeJS-marked output ships verbatim. */ -}}
+<script id="browse-data" type="application/json">{{ $browse | jsonify | safeJS }}</script>
+<script type="module" src="/js/browse.js?v={{ $browse.buildAt | replaceRE `[^0-9]` `` }}"></script>
+
+{{ $css := resources.Get "css/browse.css" }}
+{{- if $css -}}
+  <link rel="stylesheet" href="{{ $css.RelPermalink }}">
+{{- end -}}
+{{ end }}

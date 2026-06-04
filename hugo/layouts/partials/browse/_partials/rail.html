@@ -1,0 +1,27 @@
+{{- /* Curation rail. Receives a dict { title, idList, showAllHref, all }.
+       The Vue island toggles a [hidden]/data-rails-hidden flag post-hydration
+       when the user activates filters or sort.
+*/ -}}
+{{- $title := .title -}}
+{{- $ids := .idList -}}
+{{- $showAll := .showAllHref -}}
+{{- $all := .all -}}
+<section class="browse-rail" aria-label="{{ $title }}" data-rail>
+  <header class="browse-rail__header">
+    <h2 class="browse-rail__title">{{ $title }}</h2>
+    {{- if $showAll -}}
+      <a class="browse-rail__show-all" href="{{ $showAll }}">Show all →</a>
+    {{- end -}}
+  </header>
+  <div class="browse-rail-curation">
+    {{- range $id := $ids -}}
+      {{- range $item := $all -}}
+        {{- if eq $item.id $id -}}
+          {{- if eq $item.type "mission" -}}{{ partial "browse/_partials/card-mission.html" $item }}{{- end -}}
+          {{- if eq $item.type "group" -}}{{ partial "browse/_partials/card-group.html" $item }}{{- end -}}
+          {{- if eq $item.type "tutorial" -}}{{ partial "browse/_partials/card-tutorial.html" $item }}{{- end -}}
+        {{- end -}}
+      {{- end -}}
+    {{- end -}}
+  </div>
+</section>

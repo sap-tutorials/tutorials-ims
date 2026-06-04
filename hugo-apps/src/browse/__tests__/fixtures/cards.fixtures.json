@@ -1,0 +1,45 @@
+{
+  "tutorial": {
+    "type": "tutorial",
+    "id": "cap-getting-started",
+    "title": "CAP Getting Started",
+    "description": "Build a CAP service in 30 min",
+    "time": 30,
+    "level": "beginner",
+    "tutorialCount": 1,
+    "primaryTag": "cap",
+    "displayTags": ["CAP"],
+    "displayTagSlugs": ["software-product>sap-cloud-application-programming-model"],
+    "href": "/tutorials/cap-getting-started",
+    "stepCount": 3,
+    "isNew": true
+  },
+  "mission": {
+    "type": "mission",
+    "id": "mission-1",
+    "title": "Build with CAP",
+    "description": "Full-stack mission",
+    "time": 240,
+    "level": "intermediate",
+    "tutorialCount": 8,
+    "primaryTag": "cap",
+    "displayTags": ["CAP"],
+    "displayTagSlugs": ["software-product>sap-cloud-application-programming-model"],
+    "href": "/tutorials/mission-build-with-cap",
+    "stepCount": 40
+  },
+  "group": {
+    "type": "group",
+    "id": "group-1",
+    "title": "CAP Basics",
+    "description": "Three tutorials",
+    "time": 90,
+    "level": "beginner",
+    "tutorialCount": 3,
+    "primaryTag": "cap",
+    "displayTags": [],
+    "displayTagSlugs": [],
+    "href": "/tutorials/group-cap-basics",
+    "stepCount": 12
+  }
+}

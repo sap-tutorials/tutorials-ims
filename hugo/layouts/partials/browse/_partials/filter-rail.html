@@ -1,0 +1,28 @@
+{{- /* Static filter rail. The Vue island reads existing checkbox state on
+       hydration and replaces the empty Products/Topics fieldsets with real
+       options. Empty fieldsets reserve layout space to prevent CLS.
+*/ -}}
+<aside class="browse-rail" role="complementary" aria-label="Filters" id="browse-filter-rail">
+  <form role="search" class="browse-filter-form">
+    <fieldset class="browse-filter-group">
+      <legend>Type</legend>
+      <label><input type="checkbox" name="type" value="mission"> Mission</label>
+      <label><input type="checkbox" name="type" value="group"> Group</label>
+      <label><input type="checkbox" name="type" value="tutorial"> Tutorial</label>
+    </fieldset>
+    <fieldset class="browse-filter-group">
+      <legend>Level</legend>
+      <label><input type="checkbox" name="level" value="beginner"> Beginner</label>
+      <label><input type="checkbox" name="level" value="intermediate"> Intermediate</label>
+      <label><input type="checkbox" name="level" value="advanced"> Advanced</label>
+    </fieldset>
+    <fieldset class="browse-filter-group" data-products-mount></fieldset>
+    <fieldset class="browse-filter-group" data-topics-mount></fieldset>
+    <fieldset class="browse-filter-group">
+      <legend>Quick filters</legend>
+      <label><input type="checkbox" name="new" value="1"> New only</label>
+      <label><input type="checkbox" name="noLicense" value="1"> No license</label>
+    </fieldset>
+    <button type="button" class="browse-filter-clear" data-action="clear-filters">Clear all</button>
+  </form>
+</aside>

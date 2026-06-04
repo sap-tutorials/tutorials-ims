@@ -3,6 +3,7 @@
 
   <ui5-shellbar-item id="sb-search" icon="search" text="Search ⌘K"></ui5-shellbar-item>
   {{ if not site.Params.qa }}<ui5-shellbar-item id="joule-trigger" icon="da" text="Joule" hidden></ui5-shellbar-item>{{ end }}
+  {{ if not site.Params.qa }}<ui5-shellbar-item id="sb-browse" icon="bbyd-active-sales" text="Browse" data-href="/browse/"></ui5-shellbar-item>{{ end }}
   <ui5-shellbar-item id="sb-nav" icon="menu2" text="Navigate"></ui5-shellbar-item>
   <ui5-shellbar-item id="sb-share" icon="share-2" text="Share link"></ui5-shellbar-item>
   {{ if not site.Params.qa }}<ui5-shellbar-item id="sb-prefs" icon="action-settings" text="Tutorial preferences"></ui5-shellbar-item>{{ end }}
@@ -127,6 +128,9 @@
       {{ if not site.Params.qa }}
       else if (id === 'joule-trigger') {
         if (window.joule && typeof window.joule.open === 'function') window.joule.open();
+      }
+      else if (id === 'sb-browse') {
+        window.location.href = '/browse/';
       }
       {{ end }}
       else if (id === 'sb-nav') openAt(navPopover, target);
