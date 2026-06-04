@@ -78,13 +78,18 @@ describe.runIf(isSafeForWrites())('code-check hybrid — real HANA + mock LLM', 
   // ── Cleanup ───────────────────────────────────────────────────────────────
 
   afterAll(async () => {
-    const { CodeCheckSubmissions, CodeCheckSpecs, Tutorials } =
+    const { CodeCheckSubmissions, CodeCheckSpecs, Tutorials, Users } =
       cds.entities('com.sap.developers.ims');
 
     // Delete child rows first to avoid FK violations on HANA.
     await DELETE.from(CodeCheckSubmissions).where({ tutorialSlug: { like: `${TEST_PREFIX}%` } });
     await DELETE.from(CodeCheckSpecs).where({ tutorial_ID: { in: [tutAId, tutBId].filter(Boolean) } });
     await DELETE.from(Tutorials).where({ slug: { like: `${TEST_PREFIX}%` } });
+
+    // Cleanup for cc-211-prefixed test rows from the @PersonalData cascade test (#211).
+    // Users.sapId is nulled by anonymizeUser, so we clean up by ID (the stable PK).
+    await DELETE.from(CodeCheckSubmissions).where({ tutorialSlug: { like: '__TEST__cc-211-%' } });
+    await DELETE.from(Users).where({ ID: '__TEST__cc-211-cascade-user' });
   });
 
   // ─── Test 1: Publish flow ─────────────────────────────────────────────────
@@ -208,27 +213,50 @@ describe.runIf(isSafeForWrites())('code-check hybrid — real HANA + mock LLM', 
 
   // ─── Test 4: @PersonalData cascade ────────────────────────────────────────
   //
-  // SKIPPED — the current _executeAnonymization implementation (admin-service.js:829)
-  // only nulls Users fields, deletes UserMetaData, and updates TaskRecords audit
-  // fields. It does NOT null CodeCheckSubmissions.user_ID or
-  // CodeCheckSubmissions.submittedCode, even though db/audit-logging.cds annotates
-  // that entity with @PersonalData: { EntitySemantics: 'Other' } and
-  // submittedCode with @PersonalData.IsPotentiallyPersonal.
-  //
-  // When the anonymization handler is extended to cover CodeCheckSubmissions
-  // (a natural follow-up to this PR), this skip should become a real test:
-  //
-  //   1. Seed a Users row and a CodeCheckSubmissions row linked via user_ID.
-  //   2. Call AdminService.anonymizeUser({ sapId }) via srv.send(...).
-  //   3. Re-read the submission; assert user_ID is null and submittedCode is null.
-  //
-  // Tracking: the @PersonalData annotation is already in place on the entity.
-  // The gap is purely in the _executeAnonymization method body.
+  // Verifies that AdminService.anonymizeUser triggers the cascade walker
+  // (srv/lib/anonymization-cascade.js) and that CodeCheckSubmissions rows
+  // for the anonymized user have user_ID nulled and submittedCode nulled,
+  // while analytical columns (verdict) survive. This is the 'null-personal'
+  // default cascade action — see the architecture reference at
+  // docs/developers/architecture/anonymization-cascade.md.
 
-  it.skip('@PersonalData cascade: anonymizeUser nulls user_ID + submittedCode on CodeCheckSubmissions', async () => {
-    // Implementation deferred — see comment above.
-    // This test case will be enabled in the follow-up that extends
-    // _executeAnonymization to cover CodeCheckSubmissions.
+  it('@PersonalData cascade: anonymizeUser nulls user_ID + submittedCode on CodeCheckSubmissions', async () => {
+    const { Users, CodeCheckSubmissions } = cds.entities('com.sap.developers.ims');
+    const TEST_USER_ID = '__TEST__cc-211-cascade-user';
+    const TEST_SAP_ID = '__TEST__cc-211-cascade-sapid';
+    const TEST_SUB_ID = '__TEST__cc-211-cascade-sub';
+
+    // Seed a user + a submission linked via FK
+    await INSERT.into(Users).entries({
+      ID: TEST_USER_ID,
+      sapId: TEST_SAP_ID,
+      firstName: '__TEST__cc-211-Alice',
+      email: '__TEST__cc-211-alice@example.com'
+    });
+    await INSERT.into(CodeCheckSubmissions).entries({
+      ID: TEST_SUB_ID,
+      user_ID: TEST_USER_ID,
+      tutorialSlug: '__TEST__cc-211-tutorial',
+      stepNumber: 1,
+      submittedCode: 'console.log("personal");',
+      verdict: 'pass'
+    });
+
+    // Sanity: row exists with FK and personal data
+    const before = await SELECT.one.from(CodeCheckSubmissions).where({ ID: TEST_SUB_ID });
+    expect(before.user_ID).toBe(TEST_USER_ID);
+    expect(before.submittedCode).toBe('console.log("personal");');
+
+    // Trigger anonymization via the AdminService action
+    const admin = await cds.connect.to('AdminService');
+    await admin.send('anonymizeUser', { sapId: TEST_SAP_ID });
+
+    // Assert: FK nulled, personal field nulled, row preserved with telemetry intact
+    const after = await SELECT.one.from(CodeCheckSubmissions).where({ ID: TEST_SUB_ID });
+    expect(after).toBeDefined();
+    expect(after.user_ID).toBeNull();
+    expect(after.submittedCode).toBeNull();
+    expect(after.verdict).toBe('pass'); // analytical column intact
   });
 
   // ─── Test 5: @analytics.exposed query works ──────────────────────────────

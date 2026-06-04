@@ -2,7 +2,8 @@ using { com.sap.developers.ims as ims } from './schema';
 
 annotate ims.Users with @PersonalData: {
   DataSubjectRole: 'Developer',
-  EntitySemantics: 'DataSubject'
+  EntitySemantics: 'DataSubject',
+  cascade: 'identity-replace'
 } {
   ID          @PersonalData.FieldSemantics: 'DataSubjectID';
   uuid        @PersonalData.IsPotentiallyPersonal;
@@ -15,13 +16,15 @@ annotate ims.Users with @PersonalData: {
 }
 
 annotate ims.UserMetaData with @PersonalData: {
-  EntitySemantics: 'DataSubjectDetails'
+  EntitySemantics: 'DataSubjectDetails',
+  cascade: 'delete'
 } {
   user @PersonalData.FieldSemantics: 'DataSubjectID';
 }
 
 annotate ims.TaskRecords with @PersonalData: {
-  EntitySemantics: 'DataSubjectDetails'
+  EntitySemantics: 'DataSubjectDetails',
+  cascade: 'audit-only'
 } {
   user @PersonalData.FieldSemantics: 'DataSubjectID';
 }

@@ -1,7 +1,6 @@
 import cds from '@sap/cds';
 import { computeEventStatistics, computeBurnup, computeTrackStats, computeCompletionSpeed } from './lib/event-statistics.js';
 import { formatTaskRecordsCSV, formatAwardMissionsCSV } from './lib/export-helpers.js';
-import { buildAnonymizationOps } from './lib/anonymization.js';
 import { getNextLegacyId } from './lib/legacy-id.js';
 import { embedSlugs } from './lib/embedding-pipeline.js';
 import { randomUUID } from 'node:crypto';
@@ -20,7 +19,6 @@ export default class AdminService extends cds.ApplicationService {
             ChatSettings, ContentManifest, ContentFiles,
             GroupSlugRedirects, MissionSlugRedirects } = cds.entities('com.sap.developers.ims');
     const db = await cds.connect.to('db');
-    const audit = await cds.connect.to('audit-log');
 
     // Serve enum code lists (no DB table — @cds.persistence.skip)
     this.on('READ', 'ExperienceLevels', () => [
@@ -405,36 +403,14 @@ export default class AdminService extends cds.ApplicationService {
       const { sapId } = req.data;
       const user = await SELECT.one.from(Users).where({ sapId });
       if (!user) return req.reject(404, `User not found with sapId: ${sapId}`);
-
       await this._executeAnonymization(user);
-
-      await audit.log('SecurityEvent', {
-        data: { action: 'AnonymizeUser', sapId, dsrRequestNumber: null }
-      });
     });
 
     this.on('anonymizeByDsrRequest', async (req) => {
       const { sapId, dsrRequestNumber } = req.data;
       const user = await SELECT.one.from(Users).where({ sapId });
       if (!user) return req.reject(404, `User not found with sapId: ${sapId}`);
-
-      await INSERT.into(PrivacyProtectionActions).entries({
-        userUuid: user.uuid,
-        actionType: 'ANONYMIZE',
-        requestedAt: new Date().toISOString(),
-        status: 'PROCESSING',
-        legacyId: await getNextLegacyId('PrivacyProtectionActions', db)
-      });
-
-      await this._executeAnonymization(user);
-
-      await UPDATE(PrivacyProtectionActions)
-        .where({ userUuid: user.uuid, actionType: 'ANONYMIZE', status: 'PROCESSING' })
-        .set({ status: 'COMPLETED', completedAt: new Date().toISOString() });
-
-      await audit.log('SecurityEvent', {
-        data: { action: 'AnonymizeUser', sapId, dsrRequestNumber }
-      });
+      await this._executeAnonymization(user, { dsrRequestNumber });
     });
 
     // --- Cleanup & Maintenance ---
@@ -826,19 +802,47 @@ export default class AdminService extends cds.ApplicationService {
     if (changeView) changeView['@Capabilities.ReadRestrictions.Readable'] = true;
   }
 
-  async _executeAnonymization(user) {
-    const { Users, UserMetaData, TaskRecords } = cds.entities('com.sap.developers.ims');
-    const ops = buildAnonymizationOps(user);
+  async _executeAnonymization(user, opts = {}) {
+    const db = await cds.connect.to('db');
+    const { PrivacyProtectionActions } = cds.entities('com.sap.developers.ims');
+    const { dsrRequestNumber } = opts;
 
-    await UPDATE(Users, user.ID).set(ops.userUpdate);
-
-    if (ops.deleteMetadata) {
-      await DELETE.from(UserMetaData).where({ user_ID: user.ID });
+    // 1. DSR-only: open the action row (idempotent — guard if it already exists).
+    if (dsrRequestNumber) {
+      const existing = await SELECT.one.from(PrivacyProtectionActions).where({
+        userUuid: user.uuid, actionType: 'ANONYMIZE'
+      });
+      if (!existing) {
+        await INSERT.into(PrivacyProtectionActions).entries({
+          userUuid: user.uuid,
+          actionType: 'ANONYMIZE',
+          requestedAt: new Date().toISOString(),
+          status: 'PROCESSING',
+          legacyId: await getNextLegacyId('PrivacyProtectionActions', db)
+        });
+      }
     }
 
-    await UPDATE(TaskRecords)
-      .where({ user_ID: user.ID })
-      .set({ createdBy: ops.auditFieldsValue, modifiedBy: ops.auditFieldsValue });
+    // 2. Cascade — handles ALL @PersonalData entities by annotation.
+    // Dynamic import keeps this dependency lazy: the cascade module
+    // only loads when an anonymization is actually triggered, and the
+    // pattern matches the project's other ad-hoc-handler imports
+    // (chat-orchestrator.js, content-store.js, etc.).
+    const { executeAnonymizationCascade } = await import('./lib/anonymization-cascade.js');
+    await executeAnonymizationCascade(user, db);
+
+    // 3. DSR-only: close the action row.
+    if (dsrRequestNumber) {
+      await UPDATE(PrivacyProtectionActions)
+        .where({ userUuid: user.uuid, actionType: 'ANONYMIZE', status: 'PROCESSING' })
+        .set({ status: 'COMPLETED', completedAt: new Date().toISOString() });
+    }
+
+    // 4. Audit log (always — both action handlers want this).
+    const audit = await cds.connect.to('audit-log');
+    await audit.log('SecurityEvent', {
+      data: { action: 'AnonymizeUser', sapId: user.sapId, dsrRequestNumber: dsrRequestNumber ?? null }
+    });
   }
 }
 
