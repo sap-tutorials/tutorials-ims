@@ -39,3 +39,4 @@ annotate ims.ContentManifest with @cds.persistence.journal;
 annotate ims.ChatSettings with @cds.persistence.journal;
 annotate ims.GroupSlugRedirects with @cds.persistence.journal;
 annotate ims.MissionSlugRedirects with @cds.persistence.journal;
+annotate ims.UIEvent with @cds.persistence.journal;

@@ -465,3 +465,23 @@ entity CodeCheckSubmissions : managed {
   latencyMs            : Integer;
   errorReason          : String(200);
 }
+
+/**
+ * UIEvent — anonymous client-side telemetry for the / vs /browse/ A/B test (#204).
+ *
+ * Deliberately NOT @PersonalData: sessionId is per-tab anonymous (browser-generated
+ * UUID v4 in sessionStorage, cleared on tab close). userAgent is truncated. No
+ * userId, IP, or fingerprint. Stays outside the anonymization cascade. See
+ * docs/superpowers/specs/2026-06-04-ab-instrumentation-design.md.
+ */
+entity UIEvent {
+  key ID            : UUID;
+      sessionId     : String(36) @mandatory;           // browser-generated UUID v4
+      surface       : String(32) @mandatory;           // '/', '/browse/', '/tutorials/'
+      eventType     : String(32) @mandatory;           // page_view | filter_change | card_click | pagination_change | rail_show_all_click | scroll_depth | page_leave | referred_view
+      timestamp     : Timestamp @mandatory;            // browser-side (ms precision)
+      receivedAt    : Timestamp default $now;          // server-side
+      payload       : LargeString;                     // JSON-serialized type-specific fields
+      userAgent     : String(512);                     // truncated to first 512 chars
+      buildAt       : String(32);                      // hugo build hash for diff-attribution
+}

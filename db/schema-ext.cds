@@ -98,3 +98,24 @@ annotate ims.CodeCheckSubmissions with {
   tutorialSlug @analytics.filter: { mode: 'free' };
   createdAt    @analytics.filter: { mode: 'date' };
 };
+
+// UIEvent indexes for canonical A/B comparison queries (#204, PR 4).
+//
+// KNOWN GAP: @cds.persistence.index is NOT a CAP-compiler-recognized
+// annotation — it survives into CSN but never generates CREATE INDEX
+// DDL in the HDI deployment. Only @cds.persistence.{skip,exists,table,
+// journal} are emitted to .hdb* files. Verified by inspecting
+// gen/db/src/com.sap.developers.ims.UIEvent.hdbmigrationtable post-build:
+// only PRIMARY KEY(ID), no other indexes.
+//
+// Left in for documentation of intent. PR 4 will add real indexes via
+// separate .hdbindex files (or @sql.append) before the table has enough
+// rows to make full-scans noticeable. Empty table until UI_EVENTS_ENABLED
+// flips, so no production impact.
+//
+// Follow-up: see issue filed alongside PR 1.
+annotate ims.UIEvent with @cds.persistence.index : [
+  { name: 'IDX_UIEVENT_SESSION', columns: [ 'sessionId' ] },
+  { name: 'IDX_UIEVENT_SURFACE_TS', columns: [ 'surface', 'timestamp' ] },
+  { name: 'IDX_UIEVENT_TYPE_TS', columns: [ 'eventType', 'timestamp' ] }
+];
