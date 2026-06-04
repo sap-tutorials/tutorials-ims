@@ -2,13 +2,20 @@
 //
 // @vitest-environment happy-dom
 //
-// Verifies that BrowsePage.vue mounts on the SSR'd #browse-root without
-// emitting Vue hydration mismatch warnings, and that URL state (filter
-// chip, sort dropdown) survives hydration via the controller.
+// Verifies that BrowsePage.vue mounts on the SSR'd #browse-root cleanly
+// (no Vue warnings of any kind), and that URL state (filter chip, sort
+// dropdown) is reflected in the SSR'd DOM after mount via the controller.
 //
-// This is the load-bearing hydration test for PR 2: it catches drift
-// between the Hugo SSR output (browse-page-1.html fixture) and the Vue
-// island's runtime expectations.
+// PR 2 mounts via createApp (not createSSRApp) — see main.ts +
+// BrowsePage.vue for the architectural rationale. createApp re-renders
+// #browse-root's contents from scratch on mount rather than hydrating
+// the SSR'd cards, side-stepping the fragment-marker mismatch that
+// <template v-for> in BrowseGrid.vue would otherwise trigger.
+//
+// This test is named "hydration" for historical reasons (PR 2 was
+// originally going to use createSSRApp). It still exercises the same
+// load-bearing properties: the app boots without errors, the controller
+// wires the SSR'd controls, and URL state survives the mount cycle.
 //
 // The test mounts only BrowsePage on #browse-root (matching production
 // behaviour). The rest of the SSR'd DOM (banner, filter rail, sort
@@ -20,7 +27,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createSSRApp } from 'vue'
+import { createApp } from 'vue'
 import BrowsePage from '../BrowsePage.vue'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -82,7 +89,7 @@ function loadFixtureIntoDocument() {
   document.body.appendChild(browseData.cloneNode(true))
 }
 
-describe('BrowsePage hydration', () => {
+describe('BrowsePage mount', () => {
   let warnings: string[] = []
   let warnSpy: ReturnType<typeof vi.spyOn> | undefined
   let errorSpy: ReturnType<typeof vi.spyOn> | undefined
@@ -113,7 +120,7 @@ describe('BrowsePage hydration', () => {
     history.replaceState({}, '', '/browse/')
   })
 
-  it('hydrates without [Vue warn] mismatch warnings', async () => {
+  it('mounts without [Vue warn] of any kind', async () => {
     loadFixtureIntoDocument()
     // happy-dom's getElementById doesn't always re-index after appendChild
     // of a parsed-elsewhere subtree; querySelector walks the live tree and
@@ -122,23 +129,24 @@ describe('BrowsePage hydration', () => {
     expect(root).toBeTruthy()
     if (!root) return
 
-    createSSRApp(BrowsePage).mount(root)
+    createApp(BrowsePage).mount(root)
     // Allow onMounted + the (stubbed) progress fetch + watchers to settle.
     await new Promise(r => setTimeout(r, 50))
 
-    const hydrationWarnings = warnings.filter(w =>
-      /\[Vue warn\]|hydration node mismatch|hydrate the static slot/i.test(w)
-    )
-    expect(hydrationWarnings).toEqual([])
+    // createApp doesn't emit hydration-specific warnings, but any
+    // [Vue warn] of any kind (component lifecycle, prop validation,
+    // missing key, etc.) still indicates a real bug. Catch all of them.
+    const vueWarnings = warnings.filter(w => /\[Vue warn\]/i.test(w))
+    expect(vueWarnings).toEqual([])
   })
 
-  it('preserves URL filter chip checked state through hydration', async () => {
+  it('preserves URL filter chip checked state through mount', async () => {
     history.replaceState({}, '', '/browse/?type=mission')
     loadFixtureIntoDocument()
     const root = document.body.querySelector('#browse-root') as HTMLElement | null
     if (!root) throw new Error('no #browse-root in fixture')
 
-    createSSRApp(BrowsePage).mount(root)
+    createApp(BrowsePage).mount(root)
     // Wait long enough for useNavigatorFilters' onMounted (which calls
     // parseNavState + nextTick) and controller.ts's immediate watch to
     // sync the SSR'd checkbox to the restored state.
@@ -151,13 +159,13 @@ describe('BrowsePage hydration', () => {
     expect(checkbox?.checked).toBe(true)
   })
 
-  it('preserves sort dropdown selected value through hydration', async () => {
+  it('preserves sort dropdown selected value through mount', async () => {
     history.replaceState({}, '', '/browse/?sort=recent')
     loadFixtureIntoDocument()
     const root = document.body.querySelector('#browse-root') as HTMLElement | null
     if (!root) throw new Error('no #browse-root in fixture')
 
-    createSSRApp(BrowsePage).mount(root)
+    createApp(BrowsePage).mount(root)
     await new Promise(r => setTimeout(r, 100))
 
     const select = document.body.querySelector(
