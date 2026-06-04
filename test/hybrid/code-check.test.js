@@ -225,10 +225,43 @@ describe.runIf(isSafeForWrites())('code-check hybrid — real HANA + mock LLM', 
   // Tracking: the @PersonalData annotation is already in place on the entity.
   // The gap is purely in the _executeAnonymization method body.
 
-  it.skip('@PersonalData cascade: anonymizeUser nulls user_ID + submittedCode on CodeCheckSubmissions', async () => {
-    // Implementation deferred — see comment above.
-    // This test case will be enabled in the follow-up that extends
-    // _executeAnonymization to cover CodeCheckSubmissions.
+  it('@PersonalData cascade: anonymizeUser nulls user_ID + submittedCode on CodeCheckSubmissions', async () => {
+    const { Users, CodeCheckSubmissions } = cds.entities('com.sap.developers.ims');
+    const TEST_USER_ID = '__TEST__cc-211-cascade-user';
+    const TEST_SAP_ID = '__TEST__cc-211-cascade-sapid';
+    const TEST_SUB_ID = '__TEST__cc-211-cascade-sub';
+
+    // Seed a user + a submission linked via FK
+    await INSERT.into(Users).entries({
+      ID: TEST_USER_ID,
+      sapId: TEST_SAP_ID,
+      firstName: '__TEST__cc-211-Alice',
+      email: '__TEST__cc-211-alice@example.com'
+    });
+    await INSERT.into(CodeCheckSubmissions).entries({
+      ID: TEST_SUB_ID,
+      user_ID: TEST_USER_ID,
+      tutorialSlug: '__TEST__cc-211-tutorial',
+      stepNumber: 1,
+      submittedCode: 'console.log("personal");',
+      verdict: 'pass'
+    });
+
+    // Sanity: row exists with FK and personal data
+    const before = await SELECT.one.from(CodeCheckSubmissions).where({ ID: TEST_SUB_ID });
+    expect(before.user_ID).toBe(TEST_USER_ID);
+    expect(before.submittedCode).toBe('console.log("personal");');
+
+    // Trigger anonymization via the AdminService action
+    const admin = await cds.connect.to('AdminService');
+    await admin.send('anonymizeUser', { sapId: TEST_SAP_ID });
+
+    // Assert: FK nulled, personal field nulled, row preserved with telemetry intact
+    const after = await SELECT.one.from(CodeCheckSubmissions).where({ ID: TEST_SUB_ID });
+    expect(after).toBeDefined();
+    expect(after.user_ID).toBeNull();
+    expect(after.submittedCode).toBeNull();
+    expect(after.verdict).toBe('pass'); // analytical column intact
   });
 
   // ─── Test 5: @analytics.exposed query works ──────────────────────────────
