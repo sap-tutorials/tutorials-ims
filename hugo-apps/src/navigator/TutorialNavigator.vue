@@ -70,11 +70,15 @@ const allCards = computed<CardItem[]>(() => {
     const allTags = [...new Set(mTuts.flatMap(t => t.displayTags))]
     const allTagSlugs = [...new Set(mTuts.flatMap(t => t.displayTagSlugs))]
     const mMeta = missionsMeta.value.find(m => m.id === missionId)
+    const groupCount = missionGroupCount(missionId)
     items.push({
       type: 'mission',
       id: `mission-${missionId}`,
       title: mTuts[0].missionTitle,
-      description: `Complete this mission to build full-stack applications combining CAP with SAP HANA Cloud. Includes ${mTuts.length} tutorials across ${missionGroupCount(missionId)} groups.`,
+      // Topic-neutral description (issue #218). Was hardcoded to a CAP-specific
+      // string that mis-texted every non-CAP mission. Build-time mirror in
+      // scripts/fetch-tutorials.ts buildAllCards() uses the same template.
+      description: `${mTuts.length} tutorials across ${groupCount} ${groupCount === 1 ? 'group' : 'groups'}.`,
       time: mTuts.reduce((sum, t) => sum + t.time, 0),
       level: lowestLevel(mTuts.map(t => t.level)),
       tutorialCount: mTuts.length,
