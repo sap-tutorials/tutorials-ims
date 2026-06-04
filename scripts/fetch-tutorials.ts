@@ -1119,11 +1119,17 @@ function buildAllCards(
     const allTags = [...new Set(mTuts.flatMap(t => t.displayTags))]
     const allTagSlugs = [...new Set(mTuts.flatMap(t => t.displayTagSlugs))]
     const mMeta = missionsBySlugLookup.get(missionId)
+    const groupCount = browseMissionGroupCount(missionId, tuts)
     items.push({
       type: 'mission',
       id: `mission-${missionId}`,
       title: mTuts[0].missionTitle ?? '',
-      description: `Complete this mission to build full-stack applications combining CAP with SAP HANA Cloud. Includes ${mTuts.length} tutorials across ${browseMissionGroupCount(missionId, tuts)} groups.`,
+      // Topic-neutral description — the runtime allCards in TutorialNavigator.vue
+      // hard-codes a CAP-specific string that mis-texts non-CAP missions on /;
+      // the build-time mirror here intentionally diverges with a generic
+      // template until that bug is fixed at the runtime callsite too.
+      // See follow-up tracked in the PR description.
+      description: `${mTuts.length} tutorials across ${groupCount} ${groupCount === 1 ? 'group' : 'groups'}.`,
       time: mTuts.reduce((sum, t) => sum + t.time, 0),
       level: browseLowestLevel(mTuts.map(t => t.level)),
       tutorialCount: mTuts.length,
