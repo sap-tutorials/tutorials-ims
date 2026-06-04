@@ -231,6 +231,16 @@ const PRODUCT_TO_TOPICS: Record<string, string[]> = {
   'Document Management Service': ['Extension & Integration'],
 }
 
+/**
+ * Pure topic-membership predicate. Hoisted to module scope (#213) — closes
+ * over PRODUCT_TO_TOPICS only, so re-creating it per useNavigatorFilters()
+ * call was wasted work. Reachable via the test suite by calling the
+ * composable's `displayedItems` with a topic filter active.
+ */
+function tutorialMatchesTopic(item: CardItem, topic: string): boolean {
+  return item.displayTagSlugs.some(slug => (PRODUCT_TO_TOPICS[slug] ?? []).includes(topic))
+}
+
 export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
   const {
     allCards,
@@ -401,10 +411,6 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
     const q = topicSearch.value.toLowerCase()
     return availableTopics.value.filter(t => t.toLowerCase().includes(q))
   })
-
-  function tutorialMatchesTopic(item: CardItem, topic: string): boolean {
-    return item.displayTagSlugs.some(slug => (PRODUCT_TO_TOPICS[slug] ?? []).includes(topic))
-  }
 
   // ─── Client-side filtering pipeline ───
   const filteredItems = computed(() => {

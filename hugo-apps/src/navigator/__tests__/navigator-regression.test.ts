@@ -27,7 +27,7 @@
 //   on every filter change) cannot leak between tests.
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest'
-import { mount, type VueWrapper } from '@vue/test-utils'
+import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import sample from './fixtures/sample-tutorials.json'
 import TutorialNavigator from '../TutorialNavigator.vue'
@@ -122,11 +122,12 @@ async function mountAndWait(): Promise<VueWrapper> {
   const wrapper = mount(TutorialNavigator)
   activeWrappers.push(wrapper)
   // Drain the onMounted async chain (Promise.all of three fetches +
-  // a deferred currentPage assignment via nextTick).
-  for (let i = 0; i < 8; i++) {
-    await Promise.resolve()
-    await nextTick()
-  }
+  // a deferred currentPage assignment via nextTick). flushPromises()
+  // awaits all queued microtasks; nextTick flushes any reactive
+  // watchers Vue queued from those Promise resolutions. Replaces a
+  // magic 8-iteration loop (#213).
+  await flushPromises()
+  await nextTick()
   return wrapper
 }
 
