@@ -1,0 +1,89 @@
+# `GITHUB_DISPATCH_TOKEN` Rotation Runbook
+
+## What
+
+Fine-grained GitHub Personal Access Token used by [`srv/lib/rebuild-trigger.js`](../../../srv/lib/rebuild-trigger.js) to fire `workflow_dispatch` on [`rebuild-content.yml`](../../../.github/workflows/rebuild-content.yml) after admin writes. Keeps `/browse/` SSR'd content fresh within minutes of admin saves to mission/group/featured-flag entities.
+
+Set on the deployed `tutorials-srv` app as the env var `GITHUB_DISPATCH_TOKEN`. When unset, `rebuild-trigger.js` no-ops gracefully (logs one boot warning, falls back to the existing push-trigger cadence on the `rebuild-content.yml` workflow).
+
+## When to rotate
+
+- **Every 90 days** (token expiry default).
+- **Immediately** if the token is suspected leaked (see "Emergency revocation" below).
+- When the PAT-owning user leaves SAP or changes role.
+
+## How to rotate
+
+1. **Generate the new token.** GitHub → Settings → Developer settings → Personal access tokens → **Fine-grained tokens** → Generate new token.
+   - **Resource owner:** `sap-tutorials`
+   - **Repository access:** Only select repositories → `tutorials-ims` only
+   - **Repository permissions:** Actions → **Read and write** (sole permission needed)
+   - **Expiration:** 90 days
+
+2. **Test the new token** before deploying it:
+
+   ```bash
+   curl -X POST -H "Accept: application/vnd.github+json" \
+     -H "Authorization: Bearer <NEW_TOKEN>" \
+     -H "X-GitHub-Api-Version: 2022-11-28" \
+     https://api.github.com/repos/sap-tutorials/tutorials-ims/actions/workflows/rebuild-content.yml/dispatches \
+     -d '{"ref":"main","inputs":{"trigger-source":"manual","environment":"dev","slug":""}}'
+   ```
+
+   Expect: HTTP 204 (no body). A new run should appear in the [Actions tab](https://github.com/sap-tutorials/tutorials-ims/actions/workflows/rebuild-content.yml) within seconds.
+
+3. **Update CF env on each environment** (DEV, then QA, then PROD):
+
+   ```bash
+   cf target -s dev
+   cf set-env tutorials-srv GITHUB_DISPATCH_TOKEN "<NEW_TOKEN>"
+   cf restart tutorials-srv
+   ```
+
+   Repeat for `qa` and `prod` spaces. Validate via deployed log line on boot — the line `[rebuild-trigger] GITHUB_DISPATCH_TOKEN unset — admin writes will not trigger /browse/ rebuilds.` should **NOT** appear after restart.
+
+4. **Revoke the old token.** GitHub → Settings → Developer settings → Personal access tokens → click old token → Revoke.
+
+5. **Update the rotation calendar reminder** for +90 days.
+
+## Emergency revocation
+
+If the token is suspected leaked (committed to a repo, posted in a chat, posted in a screenshot, etc.):
+
+1. **Revoke immediately** via the GitHub UI. This stops further dispatches even before CF env is updated.
+2. Generate a replacement and update CF env per "How to rotate" above.
+3. **Audit** the `tutorials-ims` [Actions tab](https://github.com/sap-tutorials/tutorials-ims/actions/workflows/rebuild-content.yml) for unexpected workflow runs in the leak window. Any unauthorized dispatch is a possible incident — file per the project's security incident process.
+
+## Failure modes
+
+| Mode | Symptom | Action |
+|---|---|---|
+| **Token unset** | `[rebuild-trigger]` boot warning; admin writes don't trigger rebuilds | Acceptable degraded mode — content stays fresh via the existing push trigger only. Set the env var when ready. |
+| **Token expired / revoked** | GitHub returns 401; admin save logs `[rebuild-trigger] dispatch failed: GitHub dispatch 401 ...` | Rotate per the steps above. Admin saves still succeed; only the auto-rebuild dispatch is broken. |
+| **Token over-permissioned** | Token has scopes beyond `actions:write` (e.g. `contents:write`, `metadata:read`, etc.) | Defense-in-depth violation, not an outage. Re-issue with `actions:write` only on next rotation cycle. |
+| **GitHub rate-limited** | Sporadic 429 in logs | The 60s debounce already collapses bulk admin edits. If 429 recurs, investigate whether some other CI workflow is sharing this PAT — fine-grained PATs should not be shared across services. |
+
+## Why fine-grained PAT (not GITHUB_APP / OIDC)
+
+The simpler alternatives were considered and rejected for this scope:
+
+- **GitHub App** — overkill for a single workflow_dispatch trigger; requires app installation + private-key secret rotation.
+- **OIDC from CF** — Cloud Foundry doesn't expose OIDC tokens to apps in a way GitHub's `actions:write` API consumes. Would need a token-broker.
+- **Repository secret + workflow** — works for CI-triggered rebuilds but doesn't help the admin-write hook (which fires from a deployed CAP, not from CI).
+
+The fine-grained PAT is the simplest fit: scoped, expirable, revocable, and the failure mode (no rebuild dispatch) is graceful.
+
+## Where this is documented
+
+- This runbook (you are here).
+- [`srv/lib/rebuild-trigger.js`](../../../srv/lib/rebuild-trigger.js) — module that consumes the token; module-level comment explains the feature flag.
+- [`srv/server.js`](../../../srv/server.js) — admin-write hook that calls `scheduleRebuild('admin-write')` after entity writes.
+- [`.github/workflows/rebuild-content.yml`](../../../.github/workflows/rebuild-content.yml) — the workflow being dispatched.
+
+There is currently no `.env.example` file in this repo's root. If one is added in the future, include `GITHUB_DISPATCH_TOKEN=` (empty) with a pointer to this runbook.
+
+## References
+
+- Issue: [#174](https://github.com/sap-tutorials/tutorials-ims/issues/174) (alternative `/browse/` homepage)
+- PR: [#? — admin-write rebuild trigger](https://github.com/sap-tutorials/tutorials-ims/pulls?q=is%3Apr+is%3Aopen+head%3Afeat%2Fissue-174-admin-write-rebuild-trigger)
+- Spec: [docs/superpowers/specs/2026-06-02-browse-layout-design.md](../../superpowers/specs/2026-06-02-browse-layout-design.md) (decision Q11)

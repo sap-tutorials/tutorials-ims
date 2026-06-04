@@ -100,6 +100,7 @@ export default defineConfig({
         { text: 'Operations', items: [
           { text: 'Deployment',                link: '/developers/operations/deployment' },
           { text: 'GitHub App setup',          link: '/developers/operations/github-app-setup' },
+          { text: 'GitHub dispatch PAT rotation', link: '/developers/operations/github-dispatch-pat-rotation' },
           { text: 'IAS setup',                 link: '/developers/operations/ias-setup' },
           { text: 'Joule chat admin settings', link: '/developers/operations/joule-chat-admin-settings' },
           { text: 'MTA deployment',            link: '/developers/operations/mta-deployment' },
