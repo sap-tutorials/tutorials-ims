@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light" data-api-base="/api" data-cap-base=""
+  data-page-kind="generic"
+  data-page-slug=""
+  data-page-title="Browse SAP developer tutorials"
+  data-page-tags=""
+  data-page-step-count="">
+<head>
+  <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="/img/sap-logo.svg">
+<link rel="preconnect" href="https://ui5.sap.com" crossorigin>
+
+<title>Browse SAP developer tutorials | SAP Developers Tutorials</title>
+<meta name="description" content="Hands-on tutorials for SAP technologies — SAP BTP, ABAP Cloud, CAP, Fiori, HANA Cloud, and integration. Build, learn, and ship on SAP.">
+<link rel="canonical" href="https://developers.sap.com/browse/">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+<meta name="content-signal" content="index=yes, ai-train=no, ai-search=yes">
+
+<meta property="og:site_name" content="SAP Developers Tutorials">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Browse SAP developer tutorials">
+<meta property="og:description" content="Hands-on tutorials for SAP technologies — SAP BTP, ABAP Cloud, CAP, Fiori, HANA Cloud, and integration. Build, learn, and ship on SAP.">
+<meta property="og:url" content="https://developers.sap.com/browse/">
+<meta property="og:image" content="https://developers.sap.com/img/og-default.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="en_US">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@sapdevs">
+<meta name="twitter:title" content="Browse SAP developer tutorials">
+<meta name="twitter:description" content="Hands-on tutorials for SAP technologies — SAP BTP, ABAP Cloud, CAP, Fiori, HANA Cloud, and integration. Build, learn, and ship on SAP.">
+<meta name="twitter:image" content="https://developers.sap.com/img/og-default.png">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    { "@type": "ListItem", "position":  1 , "name": "\"Home\"", "item": "\"https://developers.sap.com/\"" },
+    { "@type": "ListItem", "position":  2 , "name": "\"Browse SAP developer tutorials\"", "item": "\"https://developers.sap.com/browse/\"" }
+  ]
+}
+</script>
+
+<link rel="stylesheet" href="https://unpkg.com/fundamental-styles@0.41.4/dist/icon.css">
+<style>
+@font-face {
+  font-family: "SAP-icons";
+  src: url("https://ui5.sap.com/resources/sap/ui/core/themes/sap_horizon/fonts/SAP-icons.woff2") format("woff2");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+</style>
+
+
+
+
+
+
+
+
+<link rel="stylesheet" href="/css/sap-theme-vars.css">
+<link rel="stylesheet" href="/css/sap-horizon-dark.css">
+<link rel="stylesheet" href="/css/chroma-light.css">
+<link rel="stylesheet" href="/css/chroma-dark.css">
+<link rel="stylesheet" href="/css/sap-fundamental.css">
+<link rel="stylesheet" href="/css/ui5-overrides.css">
+<link rel="stylesheet" href="/css/print.css" media="print">
+<link rel="stylesheet" href="/css/view-transitions.css">
+<link rel="stylesheet" href="/css/scroll-animations.css">
+<script>
+  const t = localStorage.getItem('theme') ||
+    (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
+  document.documentElement.dataset.theme = t;
+  if (t === 'dark') document.documentElement.classList.add('dark');
+  
+  
+  
+  
+  if (localStorage.getItem('reader') === 'on') {
+    document.documentElement.dataset.reader = 'on';
+  }
+  
+  
+  
+  
+  if (document.documentElement.dataset.pageKind === 'tutorial') {
+    document.documentElement.dataset.hydrated = 'false';
+  }
+  document.addEventListener('click', function(e) {
+    if (e.target.closest('[data-action="toggle-theme"]')) {
+      var html = document.documentElement;
+      var next = html.dataset.theme === 'dark' ? 'light' : 'dark';
+      (window.__morphTheme || function (fn) { fn(); })(function () {
+        html.dataset.theme = next;
+        html.classList.toggle('dark', next === 'dark');
+        localStorage.setItem('theme', next);
+      });
+    }
+  });
+  
+  
+  
+  document.addEventListener('DOMContentLoaded', function () {
+    setTimeout(function () {
+      if (document.documentElement.dataset.hydrated === 'false') {
+        document.documentElement.dataset.hydrated = 'true';
+      }
+    }, 2000);
+  });
+</script>
+
+<script type="speculationrules">
+{
+  "prerender": [{
+    "where": { "and": [
+      { "href_matches": "/tutorials/*" },
+      { "not": { "selector_matches": ".no-prerender, .no-prerender a" } }
+    ]},
+    "eagerness": "moderate"
+  }]
+}
+</script>
+
+
+  <link rel="stylesheet" href="/css/joule.css">
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://developers.sap.com/#organization",
+      "name": "\"SAP Developers Tutorials\"",
+      "url": "https://developers.sap.com/",
+      "logo": "https://developers.sap.com/img/sap-logo.svg",
+      "sameAs": [
+        "https://www.youtube.com/@sapdevs",
+        "https://community.sap.com/",
+        "https://learning.sap.com/",
+        "https://github.com/SAP-samples"
+      ]
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://developers.sap.com/#website",
+      "url": "https://developers.sap.com/",
+      "name": "\"SAP Developers Tutorials\"",
+      "publisher": { "@id": "https://developers.sap.com/#organization" },
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": "https://developers.sap.com/?q={search_term_string}",
+        "query-input": "required name=search_term_string"
+      }
+    }
+  ]
+}
+</script>
+
+</head>
+<body>
+  
+
+  <ui5-shellbar id="app-shellbar" primary-title="Tutorial Platform" show-notifications notifications-count="">
+  <img slot="logo" src="/img/sap-logo.svg" alt="SAP" height="24">
+
+  <ui5-shellbar-item id="sb-search" icon="search" text="Search ⌘K"></ui5-shellbar-item>
+  <ui5-shellbar-item id="joule-trigger" icon="da" text="Joule" hidden></ui5-shellbar-item>
+  <ui5-shellbar-item id="sb-nav" icon="menu2" text="Navigate"></ui5-shellbar-item>
+  <ui5-shellbar-item id="sb-share" icon="share-2" text="Share link"></ui5-shellbar-item>
+  <ui5-shellbar-item id="sb-prefs" icon="action-settings" text="Tutorial preferences"></ui5-shellbar-item>
+  <ui5-shellbar-item id="sb-help" icon="question-mark" text="Help"></ui5-shellbar-item>
+  <ui5-shellbar-item id="sb-theme" icon="dark-mode" text="Toggle theme"></ui5-shellbar-item>
+
+  <ui5-avatar slot="profile" id="sb-avatar" icon="person-placeholder" size="XS" interactive></ui5-avatar>
+</ui5-shellbar>
+
+<ui5-popover id="sb-nav-popover" placement="Bottom" horizontal-align="End" hide-arrow>
+  <ui5-list id="nav-list" separators="None">
+    <ui5-li icon="course-book" data-href="/">Tutorials</ui5-li>
+    <ui5-li icon="flight" data-href="/app-space">App Space</ui5-li>
+    <ui5-li icon="sys-monitor" data-href="/event-display">Event Display</ui5-li>
+    <ui5-li class="nav-auth-only" icon="complete" data-href="/me" hidden>My Completions</ui5-li>
+  </ui5-list>
+</ui5-popover>
+
+<ui5-popover id="sb-share-popover" placement="Bottom" horizontal-align="End" hide-arrow header-text="Share & feedback">
+  <div class="share-popover__body">
+    <div class="share-popover__section">
+      <div class="share-popover__heading">Page link</div>
+      <div class="share-popover__row">
+        <ui5-input id="share-url-input" readonly aria-label="Page URL"></ui5-input>
+        <ui5-button id="share-copy-btn" design="Emphasized" icon="copy">Copy</ui5-button>
+      </div>
+      <div class="share-popover__status" id="share-status" aria-live="polite"></div>
+    </div>
+
+    
+  </div>
+</ui5-popover>
+
+<ui5-popover id="sb-user-popover" placement="Bottom" horizontal-align="End" hide-arrow>
+  <div class="user-popover__content">
+    <div class="user-popover__header">
+      <ui5-avatar id="user-avatar-large" icon="person-placeholder" size="XL"></ui5-avatar>
+      <div id="user-name" class="user-popover__name"></div>
+      <div id="user-email" class="user-popover__email"></div>
+    </div>
+    <hr class="user-popover__separator">
+    <a href="https://account.sap.com" class="user-popover__link" target="_blank" rel="noopener">Manage my Account</a>
+    <a href="https://www.youtube.com/@sapdevs" class="user-popover__link" target="_blank" rel="noopener">SAP Developers &#x2197;</a>
+    <a href="https://learning.sap.com" class="user-popover__link" target="_blank" rel="noopener">Learnings &#x2197;</a>
+    <a href="https://community.sap.com" class="user-popover__link" target="_blank" rel="noopener">Community &#x2197;</a>
+    <hr class="user-popover__separator">
+    <ui5-button id="logout-btn" design="Negative">Logout</ui5-button>
+  </div>
+</ui5-popover>
+
+<script>
+(function() {
+  const shellbar = document.getElementById('app-shellbar');
+  const avatar = document.getElementById('sb-avatar');
+  const avatarLarge = document.getElementById('user-avatar-large');
+  const userName = document.getElementById('user-name');
+  const userEmail = document.getElementById('user-email');
+  const navPopover = document.getElementById('sb-nav-popover');
+  const sharePopover = document.getElementById('sb-share-popover');
+  const userPopover = document.getElementById('sb-user-popover');
+  const shareUrlInput = document.getElementById('share-url-input');
+  const shareStatus = document.getElementById('share-status');
+  const shareCopyBtn = document.getElementById('share-copy-btn');
+  const logoutBtn = document.getElementById('logout-btn');
+  const themeItem = document.getElementById('sb-theme');
+  let isAuthenticated = false;
+
+  
+  
+  
+  
+  
+  
+  shellbar.accessibilityAttributes = {
+    logo: { role: 'link', name: 'SAP Tutorial Platform — home' }
+  };
+  const goHome = () => { window.location.href = '/'; };
+  shellbar.addEventListener('ui5-logo-click', goHome);
+  shellbar.addEventListener('logo-click', goHome);
+
+  function closeAllExcept(skip) {
+    [navPopover, sharePopover, userPopover].forEach(p => {
+      if (p !== skip && p.open) p.open = false;
+    });
+  }
+
+  function openAt(popover, opener) {
+    closeAllExcept(popover);
+    if (popover.open) {
+      popover.open = false;
+    } else {
+      popover.opener = opener;
+      popover.open = true;
+    }
+  }
+
+  shellbar.querySelectorAll('ui5-shellbar-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      const id = item.id;
+      const target = e.detail?.targetRef || item;
+      if (id === 'sb-search') {
+        if (typeof window.openCommandPalette === 'function') window.openCommandPalette();
+      }
+      
+      else if (id === 'joule-trigger') {
+        if (window.joule && typeof window.joule.open === 'function') window.joule.open();
+      }
+      
+      else if (id === 'sb-nav') openAt(navPopover, target);
+      else if (id === 'sb-share') {
+        shareUrlInput.value = window.location.href;
+        shareStatus.textContent = '';
+        openAt(sharePopover, target);
+      }
+      else if (id === 'sb-help') window.open('https://community.sap.com', '_blank');
+      else if (id === 'sb-theme') toggleTheme();
+    });
+  });
+
+  shellbar.addEventListener('profile-click', (e) => {
+    if (!isAuthenticated) {
+      window.location.href = '/login?returnTo=' + encodeURIComponent(window.location.pathname + window.location.search);
+      return;
+    }
+    closeAllExcept(userPopover);
+    if (userPopover.open) {
+      userPopover.open = false;
+    } else {
+      userPopover.opener = e.detail.targetRef;
+      userPopover.open = true;
+    }
+  });
+
+  function navigate(li) {
+    const href = li.getAttribute('data-href');
+    if (!href || href === '#') return;
+    if (li.hasAttribute('data-external')) {
+      window.open(href, '_blank', 'noopener,noreferrer');
+    } else {
+      window.location.href = href;
+    }
+  }
+
+  document.querySelectorAll('#sb-nav-popover ui5-li').forEach(li => {
+    li.addEventListener('click', () => {
+      navigate(li);
+      navPopover.open = false;
+    });
+  });
+
+  document.querySelectorAll('#sb-share-popover ui5-li').forEach(li => {
+    li.addEventListener('click', () => {
+      const action = li.getAttribute('data-action');
+      if (action === 'tutorial-feedback') {
+        const slug = li.getAttribute('data-slug') || '';
+        sharePopover.open = false;
+        if (typeof window.openTutorialFeedbackPopup === 'function') {
+          window.openTutorialFeedbackPopup(slug);
+        }
+        return;
+      }
+      navigate(li);
+      sharePopover.open = false;
+    });
+  });
+
+  shareCopyBtn.addEventListener('click', () => {
+    const url = shareUrlInput.value || window.location.href;
+    const done = (ok) => {
+      shareStatus.textContent = ok ? 'Copied to clipboard' : 'Press Ctrl+C to copy';
+    };
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(url).then(() => done(true), () => done(false));
+    } else {
+      try {
+        const tmp = document.createElement('input');
+        tmp.value = url;
+        document.body.appendChild(tmp);
+        tmp.select();
+        const ok = document.execCommand('copy');
+        tmp.remove();
+        done(ok);
+      } catch { done(false); }
+    }
+  });
+
+  logoutBtn.addEventListener('click', () => {
+    try {
+      for (let i = sessionStorage.length - 1; i >= 0; i--) {
+        const k = sessionStorage.key(i);
+        if (k && k.indexOf('joule.') === 0) sessionStorage.removeItem(k);
+      }
+    } catch {}
+    window.location.href = '/logout';
+  });
+
+  function toggleTheme() {
+    const html = document.documentElement;
+    const next = html.dataset.theme === 'dark' ? 'light' : 'dark';
+    (window.__morphTheme || ((fn) => fn()))(() => {
+      html.dataset.theme = next;
+      html.classList.toggle('dark', next === 'dark');
+      try { localStorage.setItem('theme', next); } catch {}
+    });
+    themeItem.icon = next === 'dark' ? 'light-mode' : 'dark-mode';
+  }
+  themeItem.icon = document.documentElement.dataset.theme === 'dark' ? 'light-mode' : 'dark-mode';
+
+  
+  
+  
+  function toggleReader() {
+    const html = document.documentElement;
+    const on = html.dataset.reader === 'on';
+    if (on) delete html.dataset.reader;
+    else html.dataset.reader = 'on';
+    try { localStorage.setItem('reader', on ? 'off' : 'on'); } catch {}
+  }
+
+  
+  
+  
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'f' && e.key !== 'F') return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    
+    
+    const active = document.activeElement;
+    if (active && active.tagName && active.tagName.toLowerCase().startsWith('ui5-')) {
+      const tag = active.tagName.toLowerCase();
+      if (tag === 'ui5-input' || tag === 'ui5-textarea' || tag === 'ui5-multi-input' ||
+          tag === 'ui5-combobox' || tag === 'ui5-multi-combobox') return;
+    }
+    e.preventDefault();
+    toggleReader();
+  });
+
+  function applyInitials(givenName, familyName, id) {
+    let initials = (givenName?.[0] || '') + (familyName?.[0] || '');
+    if (!initials && id) initials = id[0];
+    if (initials) {
+      [avatar, avatarLarge].forEach(el => {
+        el.removeAttribute('icon');
+        el.setAttribute('initials', initials.toUpperCase());
+        el.setAttribute('color-scheme', 'Accent6');
+      });
+    }
+  }
+
+  const USER_KEY = 'joule.user.v1';
+  const USER_TTL_MS = 60000;
+
+  function readCachedUser() {
+    try {
+      const raw = sessionStorage.getItem(USER_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || !parsed.value) return null;
+      if (Date.now() - parsed.ts > USER_TTL_MS) return null;
+      return parsed.value;
+    } catch { return null; }
+  }
+
+  function applyAuthenticatedUser(u) {
+    if (!u) return;
+    const given = u.givenName || u.firstName || '';
+    const family = u.familyName || '';
+    const id = u.id || '';
+    isAuthenticated = true;
+    userName.textContent = (given + ' ' + family).trim() || id;
+    userEmail.textContent = u.email || '';
+    document.documentElement.dataset.authenticated = 'true';
+    applyInitials(given, family, id);
+    avatar.setAttribute('accessible-name', userName.textContent);
+    document.documentElement.dataset.user = JSON.stringify({ firstName: given });
+    document.querySelectorAll('.nav-auth-only').forEach(el => el.removeAttribute('hidden'));
+  }
+
+  async function checkAuth() {
+    try {
+      const res = await fetch('/auth/user', { credentials: 'include', redirect: 'follow' });
+      if (res.redirected || !res.ok) {
+        const cached = readCachedUser();
+        if (cached) applyAuthenticatedUser(cached);
+        return;
+      }
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) {
+        const cached = readCachedUser();
+        if (cached) applyAuthenticatedUser(cached);
+        return;
+      }
+      const user = await res.json();
+      if (!user || !user.authenticated) {
+        const cached = readCachedUser();
+        if (cached) applyAuthenticatedUser(cached);
+        return;
+      }
+      const toCache = { firstName: user.givenName, givenName: user.givenName, familyName: user.familyName, email: user.email, id: user.id };
+      try { sessionStorage.setItem(USER_KEY, JSON.stringify({ ts: Date.now(), value: toCache })); } catch {}
+      applyAuthenticatedUser(user);
+    } catch (e) {
+      console.debug('[header/checkAuth] fetch failed, attempting cache fallback', e);
+      const cached = readCachedUser();
+      if (cached) applyAuthenticatedUser(cached);
+    }
+  }
+
+  customElements.whenDefined('ui5-shellbar').then(checkAuth);
+
+  window.handleLogout = () => logoutBtn.click();
+  window.handleProfileClick = () => shellbar.dispatchEvent(new CustomEvent('profile-click', { detail: { targetRef: avatar } }));
+})();
+</script>
+<script type="module" src="/js/tutorial-prefs.js"></script>
+
+  
+  
+
+<ui5-progress-indicator id="nav-progress" hide-value value="0" class="nav-progress-bar" hidden></ui5-progress-indicator>
+
+
+  
+  <div id="reading-progress" class="reading-progress" hidden></div>
+  <main><header class="browse-banner" role="banner">
+  <h1>Browse SAP developer tutorials</h1>
+  <input class="browse-banner__search" type="search"
+         placeholder="Search tutorials, missions, and groups…"
+         aria-label="Search tutorials, missions, and groups">
+</header>
+
+<a class="skip-link" href="#browse-results">Skip to results</a>
+
+<div class="browse-shell">
+  <aside class="browse-rail" role="complementary" aria-label="Filters" id="browse-filter-rail">
+  <form role="search" class="browse-filter-form">
+    <fieldset class="browse-filter-group">
+      <legend>Type</legend>
+      <label><input type="checkbox" name="type" value="mission"> Mission</label>
+      <label><input type="checkbox" name="type" value="group"> Group</label>
+      <label><input type="checkbox" name="type" value="tutorial"> Tutorial</label>
+    </fieldset>
+    <fieldset class="browse-filter-group">
+      <legend>Level</legend>
+      <label><input type="checkbox" name="level" value="beginner"> Beginner</label>
+      <label><input type="checkbox" name="level" value="intermediate"> Intermediate</label>
+      <label><input type="checkbox" name="level" value="advanced"> Advanced</label>
+    </fieldset>
+    <fieldset class="browse-filter-group" data-products-mount></fieldset>
+    <fieldset class="browse-filter-group" data-topics-mount></fieldset>
+    <fieldset class="browse-filter-group">
+      <legend>Quick filters</legend>
+      <label><input type="checkbox" name="new" value="1"> New only</label>
+      <label><input type="checkbox" name="noLicense" value="1"> No license</label>
+    </fieldset>
+    <button type="button" class="browse-filter-clear" data-action="clear-filters">Clear all</button>
+  </form>
+</aside>
+
+
+  <main id="browse-results" tabindex="-1">
+    <div data-rails-container>
+      <section class="browse-rail" aria-label="Featured missions" data-rail>
+  <header class="browse-rail__header">
+    <h2 class="browse-rail__title">Featured missions</h2><a class="browse-rail__show-all" href="/missions/">Show all →</a></header>
+  <div class="browse-rail-curation"><a href="/tutorials/mission-build-with-cap" class="nav-card" data-vt-card="navigator">
+<div class="nav-card__type nav-card__type--mission">MISSION</div>
+<h3 class="nav-card__title">Build with CAP</h3>
+<p class="nav-card__desc">Full-stack mission</p>
+<div class="nav-card__meta">
+<span class="nav-card__meta-item"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 13V3h4l2 2h6v8H2z"></path></svg> Intermediate</span>
+<span class="nav-card__meta-sep">&middot;</span>
+<span class="nav-card__meta-item"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"></circle><path d="M8 4.5V8l2.5 1.5"></path></svg> 4 hr.</span>
+<span class="nav-card__meta-sep">&middot;</span>
+<span class="nav-card__meta-item">8 Tutorials</span>
+</div>
+<div class="nav-card__tag"><svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h5l7 7-5 5-7-7V3zm3 2a1 1 0 100 2 1 1 0 000-2z"></path></svg> cap</div>
+</a>
+</div>
+</section>
+
+      <section class="browse-rail" aria-label="Recently added" data-rail>
+  <header class="browse-rail__header">
+    <h2 class="browse-rail__title">Recently added</h2><a class="browse-rail__show-all" href="/?new=1">Show all →</a></header>
+  <div class="browse-rail-curation"><a href="/tutorials/cap-getting-started" class="nav-card nav-card--new" data-vt-card="navigator"><span class="nav-card__new-badge" aria-label="New tutorial">NEW</span><div class="nav-card__type nav-card__type--tutorial">TUTORIAL</div>
+<h3 class="nav-card__title">CAP Getting Started</h3>
+<p class="nav-card__desc">Build a CAP service in 30 min</p>
+<div class="nav-card__meta">
+<span class="nav-card__meta-item"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 13V3h4l2 2h6v8H2z"></path></svg> Beginner</span>
+<span class="nav-card__meta-sep">&middot;</span>
+<span class="nav-card__meta-item"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"></circle><path d="M8 4.5V8l2.5 1.5"></path></svg> 30 min.</span>
+</div>
+<div class="nav-card__tag"><svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h5l7 7-5 5-7-7V3zm3 2a1 1 0 100 2 1 1 0 000-2z"></path></svg> cap</div>
+</a>
+</div>
+</section>
+
+    </div>
+
+    <section class="browse-grid-section" aria-label="All tutorials">
+      <header class="browse-grid-header">
+        <h2 class="browse-grid-title">All 3 items</h2>
+        <label class="browse-sort">
+          Sort:
+          <select name="sort" class="browse-sort__select">
+            <option value="relevance">Relevance</option>
+            <option value="updated">Recently updated</option>
+            <option value="recent">Recently added</option>
+            <option value="title">Title A→Z</option>
+            <option value="time">Time-to-complete</option>
+          </select>
+        </label>
+      </header>
+
+      <div class="browse-grid" id="browse-root"><a href="/tutorials/mission-build-with-cap" class="nav-card" data-vt-card="navigator">
+<div class="nav-card__type nav-card__type--mission">MISSION</div>
+<h3 class="nav-card__title">Build with CAP</h3>
+<p class="nav-card__desc">Full-stack mission</p>
+<div class="nav-card__meta">
+<span class="nav-card__meta-item"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 13V3h4l2 2h6v8H2z"></path></svg> Intermediate</span>
+<span class="nav-card__meta-sep">&middot;</span>
+<span class="nav-card__meta-item"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"></circle><path d="M8 4.5V8l2.5 1.5"></path></svg> 4 hr.</span>
+<span class="nav-card__meta-sep">&middot;</span>
+<span class="nav-card__meta-item">8 Tutorials</span>
+</div>
+<div class="nav-card__tag"><svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h5l7 7-5 5-7-7V3zm3 2a1 1 0 100 2 1 1 0 000-2z"></path></svg> cap</div>
+</a>
+<a href="/tutorials/group-cap-basics" class="nav-card" data-vt-card="navigator">
+<div class="nav-card__type nav-card__type--group">GROUP</div>
+<h3 class="nav-card__title">CAP Basics</h3>
+<p class="nav-card__desc">Three tutorials</p>
+<div class="nav-card__meta">
+<span class="nav-card__meta-item"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 13V3h4l2 2h6v8H2z"></path></svg> Beginner</span>
+<span class="nav-card__meta-sep">&middot;</span>
+<span class="nav-card__meta-item"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"></circle><path d="M8 4.5V8l2.5 1.5"></path></svg> 1 hr. 30 min.</span>
+<span class="nav-card__meta-sep">&middot;</span>
+<span class="nav-card__meta-item">3 Tutorials</span>
+</div>
+<div class="nav-card__tag"><svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h5l7 7-5 5-7-7V3zm3 2a1 1 0 100 2 1 1 0 000-2z"></path></svg> cap</div>
+</a>
+<a href="/tutorials/cap-getting-started" class="nav-card nav-card--new" data-vt-card="navigator"><span class="nav-card__new-badge" aria-label="New tutorial">NEW</span><div class="nav-card__type nav-card__type--tutorial">TUTORIAL</div>
+<h3 class="nav-card__title">CAP Getting Started</h3>
+<p class="nav-card__desc">Build a CAP service in 30 min</p>
+<div class="nav-card__meta">
+<span class="nav-card__meta-item"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 13V3h4l2 2h6v8H2z"></path></svg> Beginner</span>
+<span class="nav-card__meta-sep">&middot;</span>
+<span class="nav-card__meta-item"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"></circle><path d="M8 4.5V8l2.5 1.5"></path></svg> 30 min.</span>
+</div>
+<div class="nav-card__tag"><svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h5l7 7-5 5-7-7V3zm3 2a1 1 0 100 2 1 1 0 000-2z"></path></svg> cap</div>
+</a>
+</div>
+
+      <nav class="browse-pagination" aria-label="Pagination"></nav>
+    </section>
+  </main>
+</div>
+
+<script>window.__BROWSE_BUILD_AT = "2026-06-03T17:00:00Z";</script><script id="browse-data" type="application/json">{"all":[{"description":"Full-stack mission","displayTagSlugs":["software-product\u003esap-cloud-application-programming-model"],"displayTags":["CAP"],"href":"/tutorials/mission-build-with-cap","id":"mission-1","level":"intermediate","primaryTag":"cap","stepCount":40,"time":240,"title":"Build with CAP","tutorialCount":8,"type":"mission"},{"description":"Three tutorials","displayTagSlugs":[],"displayTags":[],"href":"/tutorials/group-cap-basics","id":"group-1","level":"beginner","primaryTag":"cap","stepCount":12,"time":90,"title":"CAP Basics","tutorialCount":3,"type":"group"},{"createdAt":"2026-06-01T00:00:00Z","description":"Build a CAP service in 30 min","displayTagSlugs":["software-product\u003esap-cloud-application-programming-model"],"displayTags":["CAP"],"href":"/tutorials/cap-getting-started","id":"cap-getting-started","isNew":true,"level":"beginner","primaryTag":"cap","stepCount":3,"time":30,"title":"CAP Getting Started","tutorialCount":1,"type":"tutorial"}],"buildAt":"2026-06-03T17:00:00Z","featured":["mission-1"],"recent":["cap-getting-started"]}</script>
+<script type="module" src="/js/browse.js?v=20260603170000"></script>
+
+<link rel="stylesheet" href="/css/browse.css"></main>
+  <style>
+.site-footer { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center;
+  padding: 0.75rem 1.5rem; }
+.site-footer__nav { flex: 1 1 auto; }
+.site-footer__nav-list { list-style: none; margin: 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; align-items: center; }
+.site-footer__nav-list a, .site-footer__nav-list button {
+  color: inherit; text-decoration: none; font-size: 0.875rem;
+  background: none; border: 0; padding: 0; cursor: pointer; font: inherit; }
+.site-footer__nav-list a:hover, .site-footer__nav-list button:hover { text-decoration: underline; }
+.site-footer__copyright { font-size: 0.8125rem; color: var(--sapNeutralTextColor, #666);
+  flex: 0 1 auto; margin-left: auto; white-space: nowrap; }
+@media (max-width: 720px) {
+  .site-footer__copyright { margin-left: 0; flex-basis: 100%; }
+}
+</style>
+<footer class="site-footer fd-bar fd-bar--footer" aria-label="Site information">
+  <nav class="site-footer__nav" aria-label="Site information">
+    <ul class="site-footer__nav-list">
+      <li><a href="/privacy/">Privacy</a></li>
+      <li><a href="https://www.sap.com/about/legal/terms-of-use.html" target="_blank" rel="noopener noreferrer">Terms of Use</a></li>
+      <li><a href="https://www.sap.com/about/legal/impressum.html" target="_blank" rel="noopener noreferrer">Legal Disclosure</a></li>
+      <li><a href="https://www.sap.com/about/legal/copyright.html" target="_blank" rel="noopener noreferrer">Copyright</a></li>
+      <li><a href="https://www.sap.com/about/legal/trademark.html" target="_blank" rel="noopener noreferrer">Trademark</a></li>
+      <li><a href="https://www.sap.com/dashboard/newsletters.html" target="_blank" rel="noopener noreferrer">Newsletter</a></li>
+      <li><button type="button" data-action="manage-cookies">Cookie Preferences</button></li>
+    </ul>
+  </nav>
+  <div class="site-footer__copyright">&copy; 2026 SAP SE or an SAP affiliate company. All rights reserved.</div>
+</footer>
+<script>
+(function () {
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-action="manage-cookies"]');
+    if (!t) return;
+    e.preventDefault();
+    if (window.consent && typeof window.consent.show === 'function') window.consent.show();
+  });
+})();
+</script>
+
+  
+<div id="joule-panel" hidden role="dialog" aria-modal="false" aria-labelledby="joule-panel-title">
+  <header class="joule-panel__header">
+    <span class="joule-mark joule-mark--small" aria-hidden="true">
+  <svg width="24" height="24" viewBox="0 0 122 120" xmlns="http://www.w3.org/2000/svg" fill="none">
+    <path fill-rule="evenodd" clip-rule="evenodd" d="M46.6026 37C45.3357 37 44.1364 37.5715 43.3379 38.5556L24.9405 61.23C23.7324 62.7189 23.6834 64.8368 24.8211 66.3802L61.616 116.29C62.4087 117.365 63.6647 118 65 118C66.3353 118 67.5913 117.365 68.384 116.29L105.179 66.3802C106.317 64.8368 106.268 62.7189 105.06 61.23L86.6621 38.5556C85.8636 37.5715 84.6643 37 83.3974 37H46.6026ZM88.3249 63.5392C79.643 62.0748 76.8647 55.2489 75.9469 50.9797C75.8477 50.5577 75.302 50.5825 75.2276 51.0045C73.764 59.6919 66.9425 62.4719 62.6759 63.3903C62.2543 63.4896 62.2791 64.0357 62.7008 64.1101C71.3827 65.5746 74.1609 72.4004 75.0787 76.6697C75.178 77.0917 75.7237 77.0668 75.7981 76.6449C77.2616 67.9574 84.0832 65.1774 88.3497 64.259C88.7714 64.1598 88.7466 63.6137 88.3249 63.5392Z" fill="currentColor"/>
+    <path d="M101.542 20.3013C102.16 23.126 104.031 27.6422 109.878 28.6111C110.162 28.6604 110.179 29.0217 109.895 29.0874C107.022 29.695 102.428 31.5343 101.442 37.2822C101.392 37.5614 101.024 37.5778 100.958 37.2986C100.34 34.4739 98.4685 29.9578 92.6215 28.9888C92.3375 28.9396 92.3208 28.5783 92.6048 28.5126C95.4782 27.9049 100.072 26.0656 101.058 20.3178C101.108 20.0386 101.476 20.0222 101.542 20.3013Z" fill="currentColor"/>
+    <path d="M42.2811 0.302036C43.1925 4.53904 45.9515 11.3133 54.5733 12.7667C54.9921 12.8406 55.0167 13.3826 54.598 13.4811C50.361 14.3925 43.5867 17.1515 42.1333 25.7733C42.0594 26.1921 41.5174 26.2167 41.4189 25.798C40.5075 21.561 37.7485 14.7867 29.1267 13.3333C28.7079 13.2594 28.6833 12.7174 29.102 12.6189C33.339 11.7075 40.1133 8.94848 41.5667 0.326668C41.6406 -0.0921059 42.1826 -0.116738 42.2811 0.302036Z" fill="currentColor"/>
+    <path d="M16.7874 26.3048C17.395 29.1782 19.2344 33.7722 24.9822 34.7579C25.2614 34.808 25.2778 35.1755 24.9986 35.2423C22.174 35.8604 17.6578 37.7315 16.6889 43.5784C16.6396 43.8624 16.2783 43.8791 16.2126 43.5951C15.605 40.7218 13.7657 36.1277 8.01778 35.1421C7.7386 35.092 7.72218 34.7244 8.00136 34.6576C10.826 34.0395 15.3422 32.1685 16.3111 26.3215C16.3604 26.0375 16.7217 26.0208 16.7874 26.3048Z" fill="currentColor"/>
+  </svg>
+</span>
+
+
+    <h2 id="joule-panel-title" class="joule-panel__title">Joule</h2>
+    <button type="button" class="joule-panel__icon-btn" data-action="expand" aria-label="Expand">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2h5v2H4v3H2zM9 2h5v5h-2V4H9zM2 9h2v3h3v2H2zM12 9h2v5H9v-2h3z"/></svg>
+    </button>
+    <button type="button" class="joule-panel__icon-btn" data-action="overflow" aria-label="More options" aria-haspopup="menu" aria-expanded="false" aria-controls="joule-panel-overflow">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg>
+    </button>
+    <button type="button" class="joule-panel__icon-btn joule-panel__close" aria-label="Close">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+    </button>
+  </header>
+
+  <div class="joule-panel__overflow" id="joule-panel-overflow" hidden role="menu">
+    <button type="button" role="menuitem" data-overflow="clear">Clear chat</button>
+    <button type="button" role="menuitem" data-overflow="ai-notice">AI Notice</button>
+  </div>
+
+  <section class="joule-panel__banner" hidden></section>
+
+  <div class="joule-panel__body">
+    <section class="joule-panel__hero">
+      <div class="joule-panel__hero-mark"><span class="joule-mark joule-mark--large" aria-hidden="true">
+  <svg width="64" height="64" viewBox="0 0 122 120" xmlns="http://www.w3.org/2000/svg" fill="none">
+    <path fill-rule="evenodd" clip-rule="evenodd" d="M46.6026 37C45.3357 37 44.1364 37.5715 43.3379 38.5556L24.9405 61.23C23.7324 62.7189 23.6834 64.8368 24.8211 66.3802L61.616 116.29C62.4087 117.365 63.6647 118 65 118C66.3353 118 67.5913 117.365 68.384 116.29L105.179 66.3802C106.317 64.8368 106.268 62.7189 105.06 61.23L86.6621 38.5556C85.8636 37.5715 84.6643 37 83.3974 37H46.6026ZM88.3249 63.5392C79.643 62.0748 76.8647 55.2489 75.9469 50.9797C75.8477 50.5577 75.302 50.5825 75.2276 51.0045C73.764 59.6919 66.9425 62.4719 62.6759 63.3903C62.2543 63.4896 62.2791 64.0357 62.7008 64.1101C71.3827 65.5746 74.1609 72.4004 75.0787 76.6697C75.178 77.0917 75.7237 77.0668 75.7981 76.6449C77.2616 67.9574 84.0832 65.1774 88.3497 64.259C88.7714 64.1598 88.7466 63.6137 88.3249 63.5392Z" fill="currentColor"/>
+    <path d="M101.542 20.3013C102.16 23.126 104.031 27.6422 109.878 28.6111C110.162 28.6604 110.179 29.0217 109.895 29.0874C107.022 29.695 102.428 31.5343 101.442 37.2822C101.392 37.5614 101.024 37.5778 100.958 37.2986C100.34 34.4739 98.4685 29.9578 92.6215 28.9888C92.3375 28.9396 92.3208 28.5783 92.6048 28.5126C95.4782 27.9049 100.072 26.0656 101.058 20.3178C101.108 20.0386 101.476 20.0222 101.542 20.3013Z" fill="currentColor"/>
+    <path d="M42.2811 0.302036C43.1925 4.53904 45.9515 11.3133 54.5733 12.7667C54.9921 12.8406 55.0167 13.3826 54.598 13.4811C50.361 14.3925 43.5867 17.1515 42.1333 25.7733C42.0594 26.1921 41.5174 26.2167 41.4189 25.798C40.5075 21.561 37.7485 14.7867 29.1267 13.3333C28.7079 13.2594 28.6833 12.7174 29.102 12.6189C33.339 11.7075 40.1133 8.94848 41.5667 0.326668C41.6406 -0.0921059 42.1826 -0.116738 42.2811 0.302036Z" fill="currentColor"/>
+    <path d="M16.7874 26.3048C17.395 29.1782 19.2344 33.7722 24.9822 34.7579C25.2614 34.808 25.2778 35.1755 24.9986 35.2423C22.174 35.8604 17.6578 37.7315 16.6889 43.5784C16.6396 43.8624 16.2783 43.8791 16.2126 43.5951C15.605 40.7218 13.7657 36.1277 8.01778 35.1421C7.7386 35.092 7.72218 34.7244 8.00136 34.6576C10.826 34.0395 15.3422 32.1685 16.3111 26.3215C16.3604 26.0375 16.7217 26.0208 16.7874 26.3048Z" fill="currentColor"/>
+  </svg>
+</span>
+
+</div>
+      <p class="joule-panel__hero-greeting" data-default-greeting="Hello, How can I help you?"></p>
+      <div class="joule-panel__starters" role="list"></div>
+    </section>
+
+    <section class="joule-panel__chat" hidden>
+      <div class="joule-panel__transcript" aria-live="polite"></div>
+    </section>
+  </div>
+
+  <section class="joule-panel__ai-notice" hidden aria-labelledby="joule-ai-notice-title">
+    <header class="joule-panel__ai-notice-header">
+      <button type="button" class="joule-panel__icon-btn" data-action="ai-notice-back" aria-label="Back">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 2L4 8l6 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <h3 id="joule-ai-notice-title">AI Notice</h3>
+    </header>
+    <div class="joule-panel__ai-notice-body">
+      <p>Joule is an AI assistant. Generative AI may produce inaccurate, incomplete, or biased information. Always verify important details before acting on them.</p>
+      <p>Conversations are sent to SAP-hosted large language models for processing. Do not include personal data, credentials, or confidential information in your messages.</p>
+      <p>Joule's responses are based on the SAP tutorial catalog and may not reflect the latest product changes. For authoritative guidance, consult the linked tutorials and official SAP documentation.</p>
+    </div>
+  </section>
+
+  <footer class="joule-panel__footer">
+    <form class="joule-panel__form" autocomplete="off">
+      <input class="joule-panel__input" name="message" type="text" placeholder="Message Joule" aria-label="Message Joule" />
+      <button type="submit" class="joule-panel__send" aria-label="Send">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5L21 3l-8.5 18-2.5-8z" fill="currentColor"/></svg>
+      </button>
+    </form>
+    <p class="joule-panel__disclaimer">Joule uses AI. Verify results.</p>
+  </footer>
+</div>
+
+
+  
+<script id="joule-starters" type="application/json">
+{
+  "tutorial": [
+    "Summarize this tutorial in 3 bullets.",
+    "What do I need before I start?",
+    "I'm stuck on the current step — help me debug."
+  ],
+  "tutorial-step": [
+    "I'm stuck on Step {n}: {heading}.",
+    "Explain Step {n} in simpler terms.",
+    "What should I check before moving to the next step?"
+  ],
+  "search": [
+    "Find me a CAP getting-started tutorial.",
+    "Show me ABAP Cloud tutorials for beginners.",
+    "What missions cover SAP BTP?"
+  ],
+  "mission": [
+    "Explain this mission's path.",
+    "Which tutorial should I do first?",
+    "What skills will I have after completing this?"
+  ],
+  "group": [
+    "What's in this group?",
+    "Suggest a learning order.",
+    "What's the next group after this one?"
+  ],
+  "generic": [
+    "What's new in SAP BTP?",
+    "Help me find a tutorial.",
+    "Explain CAP in 30 seconds."
+  ]
+}
+</script>
+
+
+  <div id="cmd-palette"></div>
+
+  
+  
+  <ui5-popover id="glossary-popover" placement="Bottom" hide-arrow class="glossary-popover">
+    <div class="glossary-popover__body">
+      <div class="glossary-popover__term"></div>
+      <p class="glossary-popover__definition"></p>
+      <a class="glossary-popover__link" target="_blank" rel="noopener">Learn more &rarr;</a>
+    </div>
+  </ui5-popover>
+  <script>window.__glossary = {"terms":{"ABAP":{"definition":"SAP's proprietary language for business logic — modern ABAP Cloud enforces clean-core principles.","link":"https://help.sap.com/docs/abap-cloud","term":"Advanced Business Application Programming"},"ADT":{"definition":"Eclipse-based IDE for ABAP and ABAP Cloud development on S/4HANA and BTP ABAP environment.","link":"https://help.sap.com/docs/abap-cloud/abap-development-tools-user-guide","term":"ABAP Development Tools"},"ATC":{"definition":"ABAP's static analysis and code-quality tool — gates ABAP Cloud transports against clean-core rules.","link":"https://help.sap.com/docs/abap-cloud/abap-development-tools-user-guide/abap-test-cockpit","term":"ABAP Test Cockpit"},"AppRouter":{"definition":"Edge service that handles XSUAA login, token forwarding, and routing to backend services on BTP.","link":"https://www.npmjs.com/package/@sap/approuter","term":"SAP Application Router"},"BAS":{"definition":"BTP-hosted cloud IDE for SAP development — CAP, Fiori, ABAP, integration, mobile.","link":"https://help.sap.com/docs/bas","term":"SAP Business Application Studio"},"BTP":{"definition":"SAP's unified cloud platform for building, extending, and integrating applications.","link":"https://www.sap.com/products/technology-platform.html","term":"SAP Business Technology Platform"},"CAP":{"definition":"Framework of languages, libraries, and tools for building enterprise services with CDS.","link":"https://cap.cloud.sap","term":"SAP Cloud Application Programming Model"},"CDS":{"definition":"SAP's modeling language for data, services, and UI annotations — the heart of CAP.","link":"https://cap.cloud.sap/docs/cds/","term":"Core Data Services"},"CF":{"definition":"One of the BTP runtime environments; the platform-as-a-service layer where most CAP apps deploy.","link":"https://help.sap.com/docs/btp/sap-business-technology-platform/cloud-foundry-environment","term":"Cloud Foundry"},"CQL":{"definition":"CAP's typed query language — superset of SQL with associations, paths, and projections.","link":"https://cap.cloud.sap/docs/cds/cql","term":"Core Data Services Query Language"},"CSN":{"definition":"JSON representation of a compiled CDS model — what CAP runtimes consume at runtime.","link":"https://cap.cloud.sap/docs/cds/csn","term":"Core Schema Notation"},"Fiori":{"definition":"SAP's design system and UX framework for consistent, role-based business applications.","link":"https://experience.sap.com/fiori-design/","term":"SAP Fiori"},"HANA":{"definition":"SAP's columnar in-memory database; \"HANA Cloud\" is the managed BTP offering.","link":"https://www.sap.com/products/technology-platform/hana.html","term":"SAP HANA"},"HDB":{"definition":"The HANA in-memory database engine itself — `hdb` is also the name of the Node.js driver.","link":"https://help.sap.com/docs/hana-cloud-database","term":"SAP HANA Database"},"HDI":{"definition":"Schema-isolated container model for deploying database artifacts to SAP HANA Cloud.","link":"https://help.sap.com/docs/hana-cloud-database/sap-hana-cloud-sap-hana-database-developer-guide-for-cloud-foundry-multitarget-applications-sap-business-application-studio/sap-hana-deployment-infrastructure-hdi","term":"HANA Deployment Infrastructure"},"IAS":{"definition":"SAP's standalone IdP for SAML/OIDC authentication; replaces or complements the XSUAA tenant IdP.","link":"https://help.sap.com/docs/identity-authentication","term":"SAP Cloud Identity Services — Identity Authentication"},"IDP":{"definition":"A trusted service that authenticates users and issues identity assertions (SAML/OIDC).","link":"https://en.wikipedia.org/wiki/Identity_provider","term":"Identity Provider"},"JWT":{"definition":"Compact, signed token format used by XSUAA and IAS to carry identity and scope claims.","link":"https://jwt.io/introduction","term":"JSON Web Token"},"Kyma":{"definition":"BTP's managed Kubernetes runtime — Kyma adds serverless, eventing, and service mesh on top of K8s.","link":"https://help.sap.com/docs/btp/sap-business-technology-platform/kyma-environment","term":"SAP BTP Kyma Runtime"},"MTA":{"definition":"Deployment archive format that bundles BTP modules, services, and resources into one unit.","link":"https://help.sap.com/docs/btp/sap-business-technology-platform/multitarget-applications-in-cloud-foundry-environment","term":"Multitarget Application"},"MTX":{"definition":"CAP's framework (@sap/cds-mtxs) for SaaS subscription, tenant isolation, and tenant-specific extensions.","link":"https://cap.cloud.sap/docs/guides/multitenancy/","term":"Multitenancy and Extensibility"},"OAuth":{"definition":"Authorization framework for delegated access — XSUAA and IAS issue OAuth bearer tokens (JWTs).","link":"https://oauth.net/2/","term":"OAuth 2.0"},"OData":{"definition":"REST-based protocol for queryable APIs, used as CAP's default service protocol.","link":"https://www.odata.org/","term":"Open Data Protocol"},"OIDC":{"definition":"Identity layer on top of OAuth 2.0 — adds an ID token for authentication on top of access tokens.","link":"https://openid.net/connect/","term":"OpenID Connect"},"ORD":{"definition":"SAP's open standard for describing and discovering APIs, events, and data products across systems.","link":"https://open-resource-discovery.github.io/specification/","term":"Open Resource Discovery"},"PaaS":{"definition":"Cloud model where the platform manages runtimes and services — BTP is SAP's PaaS offering.","link":"https://www.sap.com/products/technology-platform.html","term":"Platform as a Service"},"RAP":{"definition":"ABAP-side programming model for building Fiori apps and OData services on S/4HANA and BTP ABAP.","link":"https://help.sap.com/docs/abap-cloud/abap-rap/abap-restful-application-programming-model","term":"ABAP RESTful Application Programming Model"},"S/4HANA":{"definition":"SAP's flagship ERP suite running on the HANA database; \"Cloud\" and \"on-premise\" editions share core APIs.","link":"https://www.sap.com/products/erp/s4hana.html","term":"SAP S/4HANA"},"SAPUI5":{"definition":"Licensed enterprise edition of UI5 with additional controls; OpenUI5 is the open-source subset.","link":"https://sapui5.hana.ondemand.com/","term":"SAPUI5"},"SaaS":{"definition":"Multi-tenant cloud delivery model — CAP supports SaaS via the MTX (multi-tenancy extension) layer.","link":"https://help.sap.com/docs/btp/sap-business-technology-platform/develop-multitenant-saas-applications-in-cloud-foundry-environment","term":"Software as a Service"},"UI5":{"definition":"SAP's enterprise JavaScript framework for building Fiori apps; ui5-webcomponents is its successor for embedding.","link":"https://sapui5.hana.ondemand.com/","term":"SAPUI5 / OpenUI5"},"XSUAA":{"definition":"BTP's identity and authorization service — issues JWTs, manages scopes and role collections.","link":"https://help.sap.com/docs/btp/sap-business-technology-platform/authorization-and-trust-management-service-in-cloud-foundry-environment","term":"Extended Services for User Account and Authentication"}}};</script>
+  
+
+  
+  <ui5-toast id="step-toast" placement="BottomCenter"></ui5-toast>
+
+  
+
+<ui5-dialog id="image-lightbox" accessible-name="Image viewer" class="lightbox-dialog">
+  <div slot="header" class="lightbox-header">
+    <ui5-title level="H4" class="lightbox-title"></ui5-title>
+    <ui5-button icon="decline" design="Transparent" class="lightbox-close" tooltip="Close"></ui5-button>
+  </div>
+  <div class="lightbox-viewport" data-lightbox-viewport>
+    <div class="lightbox-rail">
+      <img class="lightbox-img lightbox-img--current" alt="">
+      <img class="lightbox-img lightbox-img--incoming" alt="" hidden>
+    </div>
+  </div>
+  <div slot="footer" class="lightbox-footer">
+    <ui5-button icon="navigation-left-arrow" design="Transparent" class="lightbox-prev" tooltip="Previous"></ui5-button>
+    <ui5-button icon="zoom-out" design="Transparent" class="lightbox-zoom-out" tooltip="Zoom out"></ui5-button>
+    <span class="lightbox-zoom-level" aria-live="polite">100%</span>
+    <ui5-button icon="zoom-in" design="Transparent" class="lightbox-zoom-in" tooltip="Zoom in"></ui5-button>
+    <ui5-button icon="reset" design="Transparent" class="lightbox-reset" tooltip="Reset zoom"></ui5-button>
+    <ui5-button icon="download" design="Transparent" class="lightbox-download" tooltip="Download image"></ui5-button>
+    <ui5-button icon="navigation-right-arrow" design="Transparent" class="lightbox-next" tooltip="Next"></ui5-button>
+  </div>
+</ui5-dialog>
+
+
+  <script defer src="/js/consent.js"></script>
+  <script defer src="/js/vendor/markdown-it.min.js"></script>
+  <script defer src="/js/vendor/purify.min.js"></script>
+  
+  <script defer src="/js/joule-render.js"></script>
+  <script src="/js/joule.js" defer></script>
+  
+  <script src="/js/cmd-palette.js" defer type="module"></script>
+  
+  
+  <script type="module" src="/js/ui5-bootstrap.js"></script>
+</body>
+</html>
