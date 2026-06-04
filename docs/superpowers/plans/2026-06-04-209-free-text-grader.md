@@ -149,11 +149,10 @@ After `entity CodeCheckSubmissions { … }` (or wherever the code-check entities
 ```cds
 // Author-supplied free-text-grader specs per (tutorial, step, questionId).
 // Populated by the publish-content pipeline; read by srv/lib/validate-answer-tool.js.
-// Server-only — `correctAnswer` is sent to the LLM but never returned to the
-// client (the existing <script id="tutorial-data"> JSON already carries
-// correctAnswer for client-side grading; this is a separate write path so
-// the AI grader has authoritative server-side state independent of what
-// the client might tamper with).
+// Server-only — `correctAnswer` lives ONLY here for AI-graded questions.
+// The parser (Task 2) strips correctAnswer from the public Hugo frontmatter
+// when aiGrading: true, so the LLM grader's reference answer never enters
+// the <script id="tutorial-data"> JSON shipped to clients.
 entity ValidateAnswerSpecs : managed {
   key tutorial      : Association to Tutorials;
   key stepNumber    : Integer;
