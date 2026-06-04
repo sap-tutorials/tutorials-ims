@@ -6,6 +6,7 @@ import { gzipSync } from 'node:zlib'
 
 const MAX_TUTORIAL_PREFS_GZIP = 8 * 1024;
 const MAX_CODE_CHECK_GZIP = 8 * 1024;
+const MAX_VALIDATION_GZIP = 8 * 1024;
 
 function codeCheckBudget() {
   return {
@@ -20,6 +21,24 @@ function codeCheckBudget() {
       } else {
         // @ts-ignore
         this.warn(`code-check.js: ${gz} bytes gzipped (budget ${MAX_CODE_CHECK_GZIP}).`);
+      }
+    }
+  };
+}
+
+function validationBudget() {
+  return {
+    name: 'validation-budget',
+    generateBundle(_opts: unknown, bundle: Record<string, any>) {
+      const chunk = bundle['validation.js'];
+      if (!chunk || chunk.type !== 'chunk') return;
+      const gz = gzipSync(chunk.code).length;
+      if (gz > MAX_VALIDATION_GZIP) {
+        // @ts-ignore — Rollup plugin context
+        this.error(`validation.js is ${gz} bytes gzipped (> ${MAX_VALIDATION_GZIP}). Move code to a lazy chunk.`);
+      } else {
+        // @ts-ignore
+        this.warn(`validation.js: ${gz} bytes gzipped (budget ${MAX_VALIDATION_GZIP}).`);
       }
     }
   };
@@ -44,7 +63,7 @@ function tutorialPrefsBudget() {
 }
 
 export default defineConfig({
-  plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget(), codeCheckBudget()],
+  plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget(), codeCheckBudget(), validationBudget()],
   // Approuter serves these bundles at /js/. Without `base`, Vite emits
   // dynamic-import paths as `./chunks/x.js` which the browser resolves
   // against the *document URL* (e.g. `/` → `/chunks/x.js` → 404). Setting
@@ -78,6 +97,7 @@ export default defineConfig({
         'tutorial-prefs': resolve(__dirname, 'src/tutorial-prefs/main.ts'),
         'code-check': resolve(__dirname, 'src/code-check/main.ts'),
         browse: resolve(__dirname, 'src/browse/main.ts'),
+        'validation': resolve(__dirname, 'src/validation/main.ts'),
       },
       output: {
         entryFileNames: '[name].js',
