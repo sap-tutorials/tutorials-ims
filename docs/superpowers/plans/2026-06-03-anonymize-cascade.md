@@ -628,6 +628,10 @@ async _executeAnonymization(user, opts = {}) {
   }
 
   // 2. Cascade — handles ALL @PersonalData entities by annotation.
+  // Dynamic import keeps this dependency lazy: the cascade module
+  // only loads when an anonymization is actually triggered, and the
+  // pattern matches the project's other ad-hoc-handler imports
+  // (chat-orchestrator.js, content-store.js, etc.).
   const { executeAnonymizationCascade } = await import('./lib/anonymization-cascade.js');
   await executeAnonymizationCascade(user, db);
 
