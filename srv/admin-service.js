@@ -20,7 +20,6 @@ export default class AdminService extends cds.ApplicationService {
             ChatSettings, ContentManifest, ContentFiles,
             GroupSlugRedirects, MissionSlugRedirects } = cds.entities('com.sap.developers.ims');
     const db = await cds.connect.to('db');
-    const audit = await cds.connect.to('audit-log');
 
     // Serve enum code lists (no DB table — @cds.persistence.skip)
     this.on('READ', 'ExperienceLevels', () => [
