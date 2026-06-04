@@ -21,10 +21,23 @@ JSON on each tutorial page. The Vue island reads from there.
   previewing their `[VALIDATE_N]` blocks see them rendered.
 - **Done-button gate:** `hugo/assets/js/tutorial.ts` defines
   `initDoneButtonGate()`. It disables Done buttons for validation-gated
-  steps at module init, and listens for `step-validated` `CustomEvent`
-  dispatched by the Vue island when validation passes. The event payload
-  is `{ stepNumber: number }`. The island also sets
-  `data-validated="true"` on the matching `.tutorial-step` element.
+  steps at module init, and re-enables them via two paths:
+  - **Initial-load (persisted-correct) path:** `validation.js` is a
+    `defer`-loaded ES module that runs in document order, *before*
+    `DOMContentLoaded`. Its `onMounted` sets `data-validated="true"`
+    **synchronously** on the `.tutorial-step` element and then dispatches
+    `step-validated`. Because the `step-validated` listener is only
+    attached inside `DOMContentLoaded`, that event is lost. The DOM
+    attribute is not lost. `initDoneButtonGate` therefore does a second
+    pass after the disable loop: it iterates the validation-gated steps
+    and re-enables the Done button for any step where
+    `data-validated="true"` is already set. This covers returning
+    learners whose correct answer was persisted in `localStorage`.
+  - **Live-submit path:** the `step-validated` `CustomEvent` listener
+    (attached after both passes) handles new correct submissions during
+    the same page visit. The event payload is `{ stepNumber: number }`.
+  The `data-validated="true"` attribute is therefore the **source of
+  truth for initial load**; the event handles live submits.
 
 ## Question types
 

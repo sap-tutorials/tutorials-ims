@@ -30,6 +30,7 @@ import "@ui5/webcomponents/dist/RatingIndicator.js";
 import "@ui5/webcomponents/dist/ProgressIndicator.js";
 import "@ui5/webcomponents/dist/Dialog.js";
 import "@ui5/webcomponents/dist/BusyIndicator.js";
+import "@ui5/webcomponents/dist/TextArea.js";
 import "@ui5/webcomponents/dist/Title.js";
 // Tutorial preferences popover (header.html) — uses ui5-switch for toggles.
 // Without this, the switches render as empty <ui5-switch> with no visible

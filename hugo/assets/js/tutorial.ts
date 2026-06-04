@@ -396,6 +396,23 @@ function initDoneButtonGate() {
     if (doneBtn) doneBtn.disabled = true
   }
 
+  // Persisted-correct restore: the Vue island (validation.js, deferred module)
+  // runs in document order BEFORE DOMContentLoaded, so its onMounted dispatch of
+  // 'step-validated' fires before this listener is attached. However the island
+  // also sets data-validated="true" on the step element synchronously in
+  // onMounted — that attribute IS in the DOM when DOMContentLoaded runs.
+  // Read it here to re-enable Done buttons for already-correct steps so
+  // returning learners are not left with a permanently-disabled Done button.
+  for (const stepNum of validatedSteps) {
+    const stepEl = document.querySelector(`.tutorial-step[data-step="${stepNum}"]`)
+    if (stepEl?.getAttribute('data-validated') === 'true') {
+      const btn = document.querySelector(
+        `button[data-action="mark-done"][data-step="${stepNum}"]`
+      ) as HTMLButtonElement | null
+      if (btn) btn.disabled = false
+    }
+  }
+
   document.addEventListener('step-validated', (e) => {
     const stepNum = (e as CustomEvent<{ stepNumber: number }>).detail?.stepNumber
     if (typeof stepNum !== 'number' || !validatedSteps.has(stepNum)) return
