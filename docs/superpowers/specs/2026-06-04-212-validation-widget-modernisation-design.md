@@ -64,6 +64,14 @@ The island reads questions from the existing `<script id="tutorial-data">` JSON 
 // hugo-apps/src/validation/main.ts
 import { createApp } from 'vue';
 import Validation from './Validation.vue';
+import type { ValidationQuestion } from './grading';
+
+// Local type — matches the Hugo-emitted shape, declared here because the
+// equivalent in tutorial.ts is being deleted as part of this PR.
+interface StepData {
+  number: number;
+  validation?: ValidationQuestion[];
+}
 
 const dataEl = document.getElementById('tutorial-data');
 if (dataEl) {
@@ -117,6 +125,16 @@ const answers = ref<Record<string, string>>({});  // answers per question id
 const submitted = ref(false);                      // has the learner clicked submit?
 const result = ref<'correct' | 'incorrect' | null>(null);
 ```
+
+### Multi-question per-step UX
+
+A step can have multiple questions in its `validation` array (the parser returns an array per step). The current legacy `tutorial.ts` widget renders ALL questions in one form and grades them as one block: any incorrect → step is incorrect. This spec preserves that behavior:
+
+- All questions for a step render together inside one Vue island instance.
+- One `<ui5-button>` submits all answers at once.
+- Grading is all-or-nothing: ALL questions must be correct for the step to pass.
+- ONE `<ui5-message-strip>` shows the result for the whole step. Per-question incorrect highlighting is OUT OF SCOPE for this spike — a planner should NOT add inline error indicators per question. Adding them is a follow-up enhancement, not a regression if absent.
+- localStorage persistence is per-step (one key per `(slug, stepNumber)`), not per-question.
 
 Persistence:
 - On mount: `readPersisted(slug, stepNumber)` — if returns `{ correct: true }`, set `submitted.value = true; result.value = 'correct'`. Renders the success state immediately (no form).
@@ -267,13 +285,15 @@ export function writePersisted(slug: string, stepNumber: number, correct: boolea
 
 ## Hugo template change
 
-Single line added to `hugo/layouts/tutorials/u1-object-page.html` near the existing `code-check.js` script tag (around line 387, in the same `{{ if and (not site.Params.qa) (not site.Params.previewMode) }}` block):
+Single line added to `hugo/layouts/tutorials/u1-object-page.html` near the existing `code-check.js` script tag (around line 387). **Use a separate `{{ if not site.Params.previewMode }}` guard — NOT the same `qa AND previewMode` block as `code-check.js`.**
+
+The validation widget is purely client-side with no backend dependency or feature flag. It MUST run in QA mode so authors previewing their own `[VALIDATE_N]` blocks on `tutorials-srv-qa` can verify their questions render correctly. It must NOT run in preview mode because preview mode renders generic samples that aren't real tutorial content. So the guard is `previewMode` only:
 
 ```html
-<script type="module" src="/js/validation.js" defer></script>
+{{ if not site.Params.previewMode }}<script type="module" src="/js/validation.js" defer></script>{{ end }}
 ```
 
-The mount div in `tutorial-step.html:17` stays unchanged.
+`code-check.js` adds the QA exclusion because its endpoint is gated on `ChatSettings.codeCheckEnabled` (a runtime flag) — the QA srv may not have that flag set, so the script would only show a confusing 503. The validation widget has no such gate; it just renders questions from the same frontmatter QA mode already builds.
 
 ## Removal of legacy code
 
