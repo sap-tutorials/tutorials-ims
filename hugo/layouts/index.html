@@ -1,5 +1,14 @@
 {{ define "main" }}
 <article class="home">
+  {{ if not site.Params.qa }}
+  <div class="browse-pill-wrapper">
+    <a class="browse-pill" href="/browse/">
+      <span class="browse-pill__icon" aria-hidden="true">✨</span>
+      Try the new browse layout →
+    </a>
+  </div>
+  {{ end }}
+
   <section aria-labelledby="search-tutorials" id="navigator-section" class="home-navigator">
     <h1 id="search-tutorials" class="visually-hidden">Search and filter SAP developer tutorials</h1>
     <div id="tutorial-navigator">

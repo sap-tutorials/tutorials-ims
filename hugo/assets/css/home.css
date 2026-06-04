@@ -28,3 +28,28 @@
 .topic-grid__more { margin: 1rem 0 0; }
 .topic-grid__more a { color: var(--sapLink_Color, #0070f3); text-decoration: none; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+/* /browse/ A/B trial pill (issue #174 PR 2). Subtle, easy to remove post-A/B. */
+.browse-pill-wrapper { text-align: center; padding: 0.5rem 0; }
+.browse-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.9rem;
+  background: var(--sapButton_Lite_Background, #f0f4f7);
+  color: var(--sapLink_Color, #0070f0);
+  border: 1px solid var(--sapButton_BorderColor, #cdd6e0);
+  border-radius: 999px;
+  text-decoration: none;
+  font-size: 0.875rem;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+.browse-pill:hover {
+  background: var(--sapButton_Hover_Background, #e2eaf0);
+  border-color: var(--sapButton_Hover_BorderColor, #a0afc0);
+}
+.browse-pill__icon { font-size: 1rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .browse-pill { transition: none; }
+}
