@@ -1,0 +1,96 @@
+/* hugo/assets/css/browse.css — /browse/ page styles (issue #174 PR 2).
+   Page-level layout (banner, shell grid, rails, mobile drawer breakpoint,
+   animations). Card-internal styles live in hugo-apps/src/shared/cards/card.css
+   (PR 1) and load via the Vue card components.
+*/
+
+/* ── Desktop layout ──────────────────────────────────────────── */
+
+.browse-shell {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 1.5rem;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.browse-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.browse-rail-curation {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(220px, 1fr));
+  gap: 1rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+}
+.browse-rail-curation > * { scroll-snap-align: start; }
+
+/* ── Banner ──────────────────────────────────────────────────── */
+
+.browse-banner {
+  background: var(--sapShellColor);
+  padding: 1.5rem 1rem;
+  text-align: center;
+}
+.browse-banner h1 { margin: 0 0 1rem; }
+.browse-banner__search {
+  width: 100%;
+  max-width: 480px;
+  padding: 0.5rem 0.75rem;
+}
+
+/* ── Skip-link (a11y) ────────────────────────────────────────── */
+
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  padding: 0.5rem 1rem;
+  background: var(--sapShellColor);
+}
+.skip-link:focus { top: 0; }
+
+/* ── Mobile (<1024px): single-column, hide rail (Vue toggles to <dialog>) ── */
+
+@media (max-width: 1023px) {
+  .browse-shell { grid-template-columns: 1fr; }
+  #browse-filter-rail { display: none; }
+  .browse-rail-curation {
+    grid-template-columns: repeat(3, minmax(200px, 80vw));
+  }
+}
+
+/* ── Progress-ring draw-in (decision #13) ────────────────────── */
+/* The Vue island adds nav-card__progress--animate-in to the ring on
+   hydration; this keyframe sweeps the stroke-dashoffset from full
+   (empty ring) to its target value (actual progress). The marker
+   class is rendered by ProgressOverlay.vue (PR 1); the keyframes
+   live here so /browse/ owns the visual layer.
+*/
+.nav-card__progress--animate-in circle.ring__indicator {
+  animation: ring-draw-in 250ms ease forwards;
+}
+@keyframes ring-draw-in {
+  from { stroke-dashoffset: var(--ring-circumference); }
+  to   { stroke-dashoffset: var(--ring-target); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-card__progress--animate-in circle.ring__indicator { animation: none; }
+}
+
+/* ── Rails fade-out on filter/search (decision Q4) ───────────── */
+/* Vue island sets [data-rails-hidden] on the data-rails-container div
+   when any filter is active or a search query is present. */
+[data-rails-container][data-rails-hidden] {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-rails-container][data-rails-hidden] { transition: none; }
+}
