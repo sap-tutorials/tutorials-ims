@@ -18,6 +18,11 @@ on:
         description: Refresh a single tutorial slug only (leave blank for full rebuild)
         required: false
         type: string
+      trigger-source:
+        description: 'Where the rebuild was triggered from (admin-write | manual | scheduled)'
+        required: false
+        default: 'manual'
+        type: string
 
 env:
   NODE_VERSION: '20'
