@@ -128,7 +128,13 @@ annotate ims.CodeCheckSubmissions with @PersonalData: {
 
 ### Analytics-builder entities
 
-`db/analytics-builder.cds` has two entities annotated `@PersonalData : { EntitySemantics: 'Other' }` (admin-saved query state). The refactor adds explicit `cascade: 'null-personal'` annotations there too — making them walker-visible by intent rather than relying on the default. The actual cascade behaviour is identical to the default, but the explicit annotation lets a maintainer see at a glance that the entity is participating.
+`db/analytics-builder.cds` has two entities annotated `@PersonalData : { EntitySemantics: 'Other' }` (admin-saved query state). Reading the file: **neither entity has a field annotated `@PersonalData.FieldSemantics: 'DataSubjectID'`** — the rows have `createdBy`/`modifiedBy` strings (managed metadata), but no FK association to `Users`. The annotations were added without the per-field semantic.
+
+**Decision: leave the analytics-builder entities un-cascade-annotated.** The walker will encounter them, find no `DataSubjectID` field, log a warning, and emit `action: 'skip'` — exactly what we want. The data is admin-state owned by the AnalyticsService rather than per-user, and the audit-log fields (`createdBy`/`modifiedBy`) carry only the user's `sapId` string at write time, which is opaque after `Users` is anonymized (the user row itself goes through `'identity-replace'` which nulls `sapId`).
+
+**Follow-up tracked separately**: if a future requirement decides these entities should participate in the cascade (e.g. nulling `createdBy`/`modifiedBy` to `'ANONYMIZED'`), add the appropriate `cascade: 'audit-only'` annotation AND a `FieldSemantics: 'DataSubjectID'` source-of-truth — but the underlying entity needs an actual FK or a derived join, neither of which exists today. Out of scope for this PR.
+
+**This means after the refactor, the cascade plan covers exactly four entities:** `Users`, `UserMetaData`, `TaskRecords`, `CodeCheckSubmissions`. The walker's "warn + skip" path is exercised by the analytics-builder entities at boot, providing useful regression coverage on the validation rule.
 
 ## Module: `srv/lib/anonymization-cascade.js`
 
@@ -148,11 +154,17 @@ Pure function. Walks `cds.model.definitions` (or whatever the caller passes), fi
 ]
 ```
 
+**`dataSubjectField` resolution:** the field name returned is the **resolved column name** as used in CDS QL `where` clauses by the existing codebase. For an association like `user : Association to Users` annotated with `FieldSemantics: 'DataSubjectID'`, the resolved column name is `user_ID` — the existing `_executeAnonymization` and other handlers (e.g. `srv/admin-service.js:619, 629, 836, 840`) all use `user_ID` directly. The walker's plan-builder must produce the same form so the cascade helpers' `where({ [step.dataSubjectField]: user.ID })` calls match what the rest of the codebase does.
+
+For `Users` itself, the annotation lives on the `ID` field (which is the row's own primary key, not an FK), so `dataSubjectField: 'ID'` is correct.
+
+Implementation: when walking the field annotations, for each field with `FieldSemantics: 'DataSubjectID'`, check whether the field is an Association. If yes, the resolved column is `<fieldName>_ID`. If no (e.g. `Users.ID`), use the field name as-is. This mirrors how `cds.entities` reflects keys at runtime.
+
 **Cached** in module-private `let cachedPlan = null`. First call computes; subsequent calls reuse. CDS model is immutable per process. A `_resetPlanForTest()` export lets tests force re-computation.
 
 **Validation during plan build:**
 
-- Entity has `@PersonalData` but NO field with `FieldSemantics: 'DataSubjectID'` → log warn (`cds.log('anonymization')`) AND emit plan entry with `action: 'skip'`. Walker skips at execute time.
+- Entity has `@PersonalData` but NO field with `FieldSemantics: 'DataSubjectID'` → log warn (`cds.log('anonymization')`) AND emit plan entry with `action: 'skip'`. Walker skips at execute time. (Triggered by the two analytics-builder entities at boot — see "Analytics-builder entities" above.)
 - `Users` is special: its DataSubjectID is `ID` (the row's own primary key), not a separate FK. The plan resolver handles this — the annotation lives on `Users.ID` itself per `db/audit-logging.cds:7`.
 - Unknown `cascade` value (e.g. typo) → log warn AND fall back to `action: 'skip'`. We don't auto-correct; the deploy log signals the bug.
 
