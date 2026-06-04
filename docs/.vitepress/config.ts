@@ -96,7 +96,8 @@ export default defineConfig({
           { text: 'Frontend apps',                    link: '/developers/architecture/frontend-apps' },
           { text: 'Joule chat',                       link: '/developers/architecture/joule' },
           { text: '@PersonalData cascade',            link: '/developers/architecture/anonymization-cascade' },
-          { text: 'Runtime',                          link: '/developers/architecture/runtime' }
+          { text: 'Runtime',                          link: '/developers/architecture/runtime' },
+          { text: 'Validation widget',                link: '/developers/architecture/validation-widget' }
         ]},
         { text: 'Operations', items: [
           { text: 'Deployment',                link: '/developers/operations/deployment' },
