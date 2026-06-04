@@ -40,6 +40,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useNavigatorFilters } from '@shared/composables/useNavigatorFilters'
 import { readSort, writeSort, DEFAULT_SORT, type Sort } from './browseUrl'
 import { wireBrowseController } from './controller'
+import { wireTracker } from '@shared/analytics/wire-tracker'
 import BrowseGrid from './BrowseGrid.vue'
 import { emptyProgress, toLookup, type ProgressPayload } from '../navigator/cardProgress'
 import type { CardItem } from '@shared/types'
@@ -112,6 +113,11 @@ onMounted(async () => {
   // sort dropdown, search input, pagination, clear-all, rails fade,
   // grid title count).
   wireBrowseController({ filters, sort, railsHidden })
+
+  // Analytics tracker (#204) — fires page_view, filter_change, card_click,
+  // pagination_change, rail_show_all_click, scroll_depth, page_leave.
+  // Tracker self-disables on 503 (default until UI_EVENTS_ENABLED is set).
+  wireTracker({ surface: '/browse/', filters })
 })
 </script>
 

@@ -30,6 +30,13 @@ import { fileURLToPath } from 'node:url'
 import { createApp } from 'vue'
 import BrowsePage from '../BrowsePage.vue'
 
+// Stub the analytics tracker so SFC mount doesn't fire init/page-view side
+// effects (timers, fetch to /api/ui-event) under happy-dom. Tracker itself
+// has its own unit coverage in hugo-apps/src/shared/analytics/.
+vi.mock('@shared/analytics/wire-tracker', () => ({
+  wireTracker: vi.fn(),
+}))
+
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const FIXTURE_HTML = readFileSync(
   join(__dirname, 'fixtures', 'browse-page-1.html'),

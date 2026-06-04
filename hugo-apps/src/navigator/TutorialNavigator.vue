@@ -5,6 +5,7 @@ import Skeleton from '@shared/Skeleton.vue'
 import { toLookup, emptyProgress, type ProgressPayload } from './cardProgress'
 import { isWithinNewWindow } from '../shared/freshness'
 import { useNavigatorFilters } from '@shared/composables/useNavigatorFilters'
+import { wireTracker } from '@shared/analytics/wire-tracker'
 import MissionCard from '@shared/cards/MissionCard.vue'
 import GroupCard from '@shared/cards/GroupCard.vue'
 import TutorialCard from '@shared/cards/TutorialCard.vue'
@@ -194,6 +195,14 @@ onMounted(async () => {
     }
   }
   progressLoaded.value = true
+
+  // Analytics tracker (#204) — fires page_view, filter_change, card_click,
+  // pagination_change, rail_show_all_click, scroll_depth, page_leave.
+  // Tracker self-disables on 503 (default until UI_EVENTS_ENABLED is set).
+  wireTracker({
+    surface: '/',
+    filters: { searchQuery, filters, sort: undefined },
+  })
 })
 </script>
 

@@ -32,6 +32,13 @@ import { nextTick } from 'vue'
 import sample from './fixtures/sample-tutorials.json'
 import TutorialNavigator from '../TutorialNavigator.vue'
 
+// Stub the analytics tracker so SFC mount doesn't fire init/page-view side
+// effects (timers, fetch to /api/ui-event) under happy-dom. Tracker itself
+// has its own unit coverage in hugo-apps/src/shared/analytics/.
+vi.mock('@shared/analytics/wire-tracker', () => ({
+  wireTracker: vi.fn(),
+}))
+
 // ─── Fake clock so the isNew window is deterministic ─────────────────────
 // Fixture entries with createdAt = '2026-06-01T00:00:00Z' fall inside the
 // 31-day NEW_WINDOW relative to this clock; everything else is "old".
