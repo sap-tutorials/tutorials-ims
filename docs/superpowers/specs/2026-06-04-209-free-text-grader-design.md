@@ -126,6 +126,7 @@ entity ValidateAnswerSubmissions : managed {
   summary           : LargeString;             // AI feedback (one sentence)
   hint              : LargeString;             // null on pass/fail; populated on partial
   modelName         : String(80);
+  promptVersion     : String(10);              // matches PROMPT_VERSION at the time of grading; e.g. 'v1'
   promptTokens      : Integer;
   completionTokens  : Integer;
   latencyMs         : Integer;
@@ -260,16 +261,20 @@ export async function dispatchValidateAnswer(input, deps) {
     return persistError({ ...input, slug, question }, 'upstream', startedAt);
   }
 
-  // 5. Validate verdict shape
-  const verdict = modelResp.verdict;
-  if (!verdict || !['pass', 'partial', 'fail'].includes(verdict.verdict)
-      || typeof verdict.summary !== 'string') {
+  // 5. Validate verdict shape.
+  // Note: modelResp.verdict is the parsed object from the forced-tool-call
+  // response — i.e. the LLM's structured output. Its inner `.verdict` field
+  // is the enum string ('pass'|'partial'|'fail'). Renaming the local for
+  // clarity to avoid the double-`.verdict` confusion.
+  const parsed = modelResp.verdict;
+  if (!parsed || !['pass', 'partial', 'fail'].includes(parsed.verdict)
+      || typeof parsed.summary !== 'string') {
     return persistError({ ...input, slug, question }, 'schema', startedAt, modelResp);
   }
 
   // 6. Reference-leak redaction
-  const safe = redactReferenceLeaks(verdict, question.correctAnswer);
-  if (safe !== verdict) {
+  const safe = redactReferenceLeaks(parsed, question.correctAnswer);
+  if (safe !== parsed) {
     LOG.warn('validate-answer reference leak redacted', { slug, stepNumber: input.stepNumber, questionId: input.questionId });
   }
 
@@ -287,6 +292,7 @@ export async function dispatchValidateAnswer(input, deps) {
     summary: safe.summary,
     hint: safe.hint || null,
     modelName: modelResp.modelName,
+    promptVersion: PROMPT_VERSION,
     promptTokens: modelResp.promptTokens,
     completionTokens: modelResp.completionTokens,
     latencyMs: Date.now() - startedAt
@@ -296,7 +302,30 @@ export async function dispatchValidateAnswer(input, deps) {
 }
 ```
 
-`loadQuestion(slug, stepNumber, questionId)` is the injected callback that resolves a `ValidationQuestion`. The default implementation (production wiring) reads the parsed validation array from the same source as Hugo's `#tutorial-data` — the `Tutorials` entity's parsed-content blob OR a new lightweight DB cache table. The exact mechanism is plan-time detail; the contract is: returns `ValidationQuestion | null`.
+`loadQuestion(slug, stepNumber, questionId)` is the injected callback that resolves a `ValidationQuestion`. The default implementation `defaultLoadQuestion` lives in a new `srv/lib/validate-answer-question-loader.js` module — analogous to `srv/lib/code-check-step-loader.js` from PR #205 — and reads from a **new DB entity `ValidateAnswerSpecs`** populated by the publish pipeline (mirroring how `CodeCheckSpecs` works). The publish pipeline (Task plan-time detail) extends `scripts/publish-content.ts` to upsert `ValidateAnswerSpecs` rows alongside the existing `CodeCheckSpecs` upsert path.
+
+The new entity:
+
+```cds
+// db/schema.cds (additional)
+entity ValidateAnswerSpecs : managed {
+  key tutorial    : Association to Tutorials;
+  key stepNumber  : Integer;
+  key questionId  : String(40);
+  questionText    : LargeString @mandatory;
+  correctAnswer   : LargeString @mandatory;
+  ruleType        : String(40);    // e.g. 'exact-match', 'regex', 'regex-begins-with'
+  aiGrading       : Boolean default false;
+}
+```
+
+**Why this matters:** without server-side storage, `loadQuestion` would have to either (a) trust client-submitted correctAnswer (integrity gap — attackers can manipulate their own grading), or (b) re-parse rules.vr at runtime (requires shipping rules.vr to the srv container, which it doesn't have today). Server-side storage is the same answer PR #205 reached for `CodeCheckSpecs` and for the same reasons.
+
+**Publish-pipeline change (additional plan-time detail):** `scripts/publish-content.ts` reads each tutorial's parsed `validation` array from the build cache and emits a `ValidateAnswerSpecs` upsert for any question whose `aiGrading: true`. Non-AI-graded questions don't need server-side storage (the local widget grades them client-side from the same JSON it's reading today).
+
+**Bearer-auth via existing `CONTENT_API_KEY`** for the publish endpoint. Carry-forward semantics: specs absent from a payload are NOT deleted (matches `CodeCheckSpecs` and `RepoCatalog` behavior).
+
+`@PersonalData` is NOT added to `ValidateAnswerSpecs` — the data is author-content, not learner-content. (`ValidateAnswerSubmissions` is the entity that gets `@PersonalData`.)
 
 `redactReferenceLeaks` is reused as-is from `srv/lib/code-check-prompt.js`. The 30-char window guard handles short answers (like 5-character crossword answers) by being a no-op when the reference is shorter than the window — that's the intended behavior.
 
@@ -361,6 +390,11 @@ async function onSubmit() {
   const anyAiPartial = aiQuestions.some(q => aiResults[q.id]?.verdict === 'partial');
   const anyAiFail = aiQuestions.some(q => aiResults[q.id]?.verdict === 'fail' || aiResults[q.id]?.verdict === 'error');
 
+  // Priority order is intentional and matters:
+  //   1. all-pass → 'correct' (only path that persists; gives the learner credit)
+  //   2. any-fail OR any-local-incorrect → 'incorrect' (do NOT show partial hints
+  //      when there's at least one outright wrong answer — would be confusing)
+  //   3. else, any-partial → 'partial' (only when nothing is outright wrong)
   if (allLocalCorrect && allAiPass) {
     result.value = 'correct';
     writePersisted(props.slug, props.stepNumber, true);
@@ -400,6 +434,8 @@ Per-question feedback for AI-graded questions: render the `summary` string in a 
 - 401 on unauthenticated POST.
 - 503 when flag is off.
 - 200 + verdict shape on a known seeded question (skip-gated on `SMOKE_VALIDATE_ANSWER_TOKEN` env var).
+
+**Smoke test seeding:** the 200-path test requires a `ValidateAnswerSpecs` row to exist for a known `(slug, step, questionId)` AND `validateAnswerEnabled = true` on DEV's `ChatSettings`. Both conditions are post-deploy operator concerns. The smoke run itself does NOT seed — the test skips when `SMOKE_VALIDATE_ANSWER_TOKEN` is unset, leaving the 200 path as a manual post-deploy verification (Tom or operator runs `npx cds bind --exec -- node scripts/seed-test-validate-answer.js` to drop a `__TEST__cc-209-` row before flipping the smoke env var). The 401 + 503 paths always run in CI.
 
 ## Migration / Risk
 
