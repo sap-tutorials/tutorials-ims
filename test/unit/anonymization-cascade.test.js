@@ -192,7 +192,7 @@ describe('cascade action helpers (in-memory SQLite)', () => {
     expect(rows[0].user_ID).toBe('22222222-2222-2222-2222-222222222222');
   });
 
-  it('cascadeAuditOnly: nulls TaskRecords createdBy/modifiedBy, keeps row + FK', async () => {
+  it('cascadeAuditOnly: sets TaskRecords createdBy/modifiedBy to ANONYMIZED, keeps row + FK', async () => {
     const { Users, TaskRecords } = cds.entities('com.sap.developers.ims');
     await INSERT.into(Users).entries({ ID: '11111111-1111-1111-1111-111111111111', sapId: 'u1', firstName: 'Alice' });
     await INSERT.into(TaskRecords).entries({

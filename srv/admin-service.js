@@ -1,7 +1,6 @@
 import cds from '@sap/cds';
 import { computeEventStatistics, computeBurnup, computeTrackStats, computeCompletionSpeed } from './lib/event-statistics.js';
 import { formatTaskRecordsCSV, formatAwardMissionsCSV } from './lib/export-helpers.js';
-import { buildAnonymizationOps } from './lib/anonymization.js';
 import { getNextLegacyId } from './lib/legacy-id.js';
 import { embedSlugs } from './lib/embedding-pipeline.js';
 import { randomUUID } from 'node:crypto';
