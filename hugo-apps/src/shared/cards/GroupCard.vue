@@ -12,6 +12,7 @@ import type { CardItem } from '@shared/types'
 import type { ProgressPayload } from '../../navigator/cardProgress'
 import { cardProgress } from '../../navigator/cardProgress'
 import ProgressOverlay from './ProgressOverlay.vue'
+import { capitalizeLevel, formatTime } from './format'
 import './card.css'
 
 defineProps<{
@@ -20,17 +21,6 @@ defineProps<{
 }>()
 
 const TYPE_LABEL = 'GROUP'
-
-function capitalizeLevel(l: string): string {
-  return l.charAt(0).toUpperCase() + l.slice(1)
-}
-
-function formatTime(minutes: number): string {
-  if (minutes < 60) return `${minutes} min.`
-  const hrs = Math.floor(minutes / 60)
-  const mins = minutes % 60
-  return mins > 0 ? `${hrs} hr. ${mins} min.` : `${hrs} hr.`
-}
 </script>
 
 <template>
