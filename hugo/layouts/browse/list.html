@@ -61,6 +61,14 @@
 </div>
 
 <script>window.__BROWSE_BUILD_AT = "{{ $browse.buildAt }}";</script>
+{{- /* Inlined catalog payload — read by BrowsePage.vue on mount.
+       Avoids a /browse/data.json round-trip; ~1500 KB JSON gzipped at
+       full catalog size, fine for a homepage. `safeJS` is required so
+       Go's html/template doesn't wrap the JSON object in a JS-string
+       literal (the default behaviour inside <script>). With type=
+       "application/json" the browser parses contents as data, not JS,
+       so safeJS-marked output ships verbatim. */ -}}
+<script id="browse-data" type="application/json">{{ $browse | jsonify | safeJS }}</script>
 <script type="module" src="/js/browse.js?v={{ $browse.buildAt | replaceRE `[^0-9]` `` }}"></script>
 
 {{ $css := resources.Get "css/browse.css" }}

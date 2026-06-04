@@ -77,6 +77,7 @@ export default defineConfig({
         me: resolve(__dirname, 'src/me/main.ts'),
         'tutorial-prefs': resolve(__dirname, 'src/tutorial-prefs/main.ts'),
         'code-check': resolve(__dirname, 'src/code-check/main.ts'),
+        browse: resolve(__dirname, 'src/browse/main.ts'),
       },
       output: {
         entryFileNames: '[name].js',
