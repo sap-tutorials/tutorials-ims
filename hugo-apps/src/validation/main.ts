@@ -21,7 +21,7 @@ if (dataEl) {
     steps = [];
   }
 
-  const slug = (document.body.dataset.slug ?? '').toLowerCase();
+  const slug = (document.documentElement.dataset.pageSlug ?? '').toLowerCase();
   const stepByNum = new Map(steps.map(s => [s.number, s]));
 
   document.querySelectorAll('.step-validation-mount').forEach(el => {

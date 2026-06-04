@@ -82,7 +82,7 @@ if (dataEl) {
     steps = parsed;
   } catch { steps = []; }
 
-  const slug = (document.body.dataset.slug ?? '').toLowerCase();
+  const slug = (document.documentElement.dataset.pageSlug ?? '').toLowerCase();
   const stepByNum = new Map(steps.map(s => [s.number, s]));
 
   document.querySelectorAll('.step-validation-mount').forEach(el => {
@@ -98,7 +98,7 @@ if (dataEl) {
 }
 ```
 
-Slug source: `document.body.dataset.slug` (existing convention, used by `tutorial-rating` and `code-check`). The Hugo template at `hugo/layouts/tutorials/u1-object-page.html` already sets this attribute.
+Slug source: `document.documentElement.dataset.pageSlug` — the project convention used by `cmd-palette` (`actions.ts:121`) and `tutorial-breadcrumbs` (`main.ts:36`). Note: `tutorial-rating` and `code-check` read slug from their Vue mount element's `data-*` attributes, not from `<html>` — they are NOT the source of this convention.
 
 ## The Vue component
 

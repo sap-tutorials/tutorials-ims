@@ -25,23 +25,41 @@ onMounted(() => {
   if (persisted?.correct) {
     submitted.value = true;
     result.value = 'correct';
+    emitStepValidated();
   }
 });
+
+function emitStepValidated() {
+  // Notify tutorial.ts that this step's validation passed.
+  // Reuses the legacy contract: dispatch a 'step-validated' CustomEvent
+  // on the document, with detail.stepNumber so listeners can route.
+  document.dispatchEvent(new CustomEvent('step-validated', {
+    detail: { stepNumber: props.stepNumber }
+  }));
+
+  // Also set the data-validated attribute on the step container —
+  // legacy tutorial.ts:440-442 did this, and other CSS/JS may key off it.
+  const stepEl = document.querySelector(`.tutorial-step[data-step="${props.stepNumber}"]`);
+  if (stepEl) stepEl.setAttribute('data-validated', 'true');
+}
 
 function onRadioChange(qid: string, value: string) {
   answers.value[qid] = value;
 }
 
 function onTextInput(qid: string, event: Event) {
-  const target = event.target as HTMLInputElement | null;
-  answers.value[qid] = target?.value ?? '';
+  const ce = event as CustomEvent<{ value?: string }>;
+  answers.value[qid] = ce.detail?.value ?? (event.target as { value?: string } | null)?.value ?? '';
 }
 
 function onSubmit() {
   submitted.value = true;
   const { correct } = gradeAnswers(props.questions, answers.value);
   result.value = correct ? 'correct' : 'incorrect';
-  if (correct) writePersisted(props.slug, props.stepNumber, true);
+  if (correct) {
+    writePersisted(props.slug, props.stepNumber, true);
+    emitStepValidated();
+  }
 }
 
 function onTryAgain() {
