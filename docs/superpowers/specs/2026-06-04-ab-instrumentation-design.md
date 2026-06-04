@@ -118,6 +118,8 @@ entity UIEvent {
 
 Indexes: `(sessionId)`, `(surface, timestamp)`, `(eventType, timestamp)`. Ready for the canonical queries.
 
+**Source of `buildAt`:** the tracker reads `window.__BROWSE_BUILD_AT` client-side. This global is already emitted by `hugo/layouts/browse/list.html` (per #174 PR 2). PR 2 of #204 extends the same `<script>window.__BROWSE_BUILD_AT = "{{ $browse.buildAt }}";</script>` snippet into a shared partial so `/` and `/tutorials/*` also expose it. Tracker contract: read the global, fall back to empty string if undefined, ship as-is to the server.
+
 **Why no `@PersonalData`:** sessionId alone is not personal data (anonymous, per-tab, cleared on close, not joined to identity). `userAgent` is truncated; even at 512 chars it's not unique enough for fingerprinting in a way that joins to identity. Not joining the anonymization cascade ([[feedback-cap-anonymize-hardcoded-entities]]) is a deliberate design choice.
 
 ### Event payload shapes
