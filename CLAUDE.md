@@ -12,9 +12,10 @@ Full script list: `jq '.scripts' package.json`. Operationally important commands
 
 ```bash
 # Quick start
-npm install && npm run fetch-tutorials && npm run dev
+npm install && npm run setup && npm run fetch-tutorials && npm run dev
 
 # Frontend / build
+npm run setup                # Fresh-worktree only: hugo-apps install + better-sqlite3 native rebuild
 npm run fetch-tutorials      # Required before dev/build (caches in .tutorial-cache/)
 npm run dev                  # Hugo dev server (http://localhost:1313)
 npm run build:all            # Full production build (fetch + CSS + apps + Hugo + display)
@@ -256,6 +257,7 @@ One-time setup for the QA author-preview channel — full procedure (CI secrets,
 
 ## Gotchas
 
+- **Fresh worktree setup needs `npm run setup` after `npm install`** — the global npmrc has `ignore-scripts=true` (security policy: blocks supply-chain attacks via auto-postinstall). That means: (a) `hugo-apps/node_modules` is NOT auto-populated by root `npm install` (postinstall hook silently skipped), and (b) `better-sqlite3`'s native binding is NOT auto-built. The `npm run setup` script handles both: it runs `npm --prefix hugo-apps install` (no postinstall hooks needed in hugo-apps deps) and `npm rebuild --ignore-scripts=false better-sqlite3` (explicit, scoped opt-in for one trusted native module). Without it, fresh worktrees see hugo-apps tests fail (e.g. `tutorial-prefs/{eye-tracking,hand-gestures}.test.ts` can't resolve `@mediapipe/tasks-vision`) and `npm test` hangs (silent missing native binding). Issue #214.
 - **`hugo/content/tutorials/` is entirely generated** — never edit these files directly. They are overwritten by `npm run fetch-tutorials`. Edit the parsers in `scripts/parsers/` or the source tutorials in the `sap-tutorials` GitHub org instead.
 - **POC tutorial list is hardcoded** — Tutorials are dynamically discovered from the `sap-tutorials` GitHub org via `discoverAllTutorials()` in `scripts/parsers/github.ts`. Repos in `EXCLUDED_REPOS` (tutorials-ims, meta-tutorials) are skipped. Discovery results are cached in `.tutorial-cache/discovery-map.json`. Use `npm run discover-repos` to list available repos without fetching.
 - **Validation quiz data from `-Contribution` repos** — `fetchRulesVr()` in `scripts/parsers/github.ts` fetches `rules.vr` files from private `-Contribution` repos (e.g., `abap-core-development-Contribution`). Requires `GITHUB_TOKEN`. Cached in `.tutorial-cache/<slug>.rules.vr`. Parsed by `scripts/parsers/rules.ts` and injected into Hugo frontmatter steps.
