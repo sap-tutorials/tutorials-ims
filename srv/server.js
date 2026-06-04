@@ -25,6 +25,7 @@ import { defaultCallModel } from './lib/code-check-llm.js';
 import { defaultLoadStepText } from './lib/code-check-step-loader.js';
 import { codeCheckSpecPublishHandler } from './lib/code-check-spec-publish.js';
 import { scheduleRebuild, checkFeatureFlag as checkRebuildTriggerFeatureFlag } from './lib/rebuild-trigger.js';
+import { handleUIEvent, checkFeatureFlag as checkUIEventFeatureFlag } from './lib/ui-event-handler.js';
 
 // Late-bound POST /chat/stream handler. Registered in 'bootstrap' (before CAP
 // mounts ChatService at /chat, which would otherwise swallow /chat/stream as
@@ -127,6 +128,14 @@ cds.on('bootstrap', (app) => {
       res.status(503).json({ status: 'degraded', db: 'error' });
     }
   });
+
+  // [#204] POST /api/ui-event — anonymous A/B telemetry batch endpoint.
+  // Registered BEFORE basicAuthMiddleware because the tracker fires from
+  // anonymous browser sessions (no XSUAA token, no basic auth). Behind
+  // UI_EVENTS_ENABLED env flag (dormant by default = 503; tracker
+  // self-disables on 503). 64 KB express limit matches sendBeacon's hard cap.
+  // See srv/lib/ui-event-handler.js + docs/superpowers/specs/2026-06-04-ab-instrumentation-design.md.
+  app.post('/api/ui-event', express.json({ limit: '64kb' }), handleUIEvent);
 
   app.use(basicAuthMiddleware);
   app.get('/api/qrcode', qrcodeHandler);
@@ -305,6 +314,9 @@ cds.on('served', async () => {
 
   // [#174 PR 3] Boot warning: check if rebuild-trigger feature flag is enabled.
   checkRebuildTriggerFeatureFlag();
+
+  // [#204 PR 1] Boot warning: check if UI-event A/B telemetry flag is enabled.
+  checkUIEventFeatureFlag();
 
   app.get('/auth/user', contextMw, authMw, (req, res) => {
     const user = cds.context?.user;
