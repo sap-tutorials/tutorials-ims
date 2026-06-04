@@ -95,6 +95,7 @@ export default defineConfig({
           { text: 'CAP backend',                      link: '/developers/architecture/cap-backend' },
           { text: 'Frontend apps',                    link: '/developers/architecture/frontend-apps' },
           { text: 'Joule chat',                       link: '/developers/architecture/joule' },
+          { text: '@PersonalData cascade',            link: '/developers/architecture/anonymization-cascade' },
           { text: 'Runtime',                          link: '/developers/architecture/runtime' }
         ]},
         { text: 'Operations', items: [
