@@ -508,18 +508,26 @@ Append to `scripts/parsers/rules.ts`:
  */
 export function collectAiGradedSpecs(
   validationByStep: Map<number, ValidationQuestion[]>,
-  ruleTypeByStepAndId: Map<string, string>
+  ruleTypeByStepAndId: Map<string, string>,
+  correctAnswerByStepAndId: Map<string, string>
 ): Array<{ stepNumber: number; questionId: string; questionText: string; correctAnswer: string; ruleType: string | undefined; aiGrading: boolean }> {
   const specs: Array<{ stepNumber: number; questionId: string; questionText: string; correctAnswer: string; ruleType: string | undefined; aiGrading: boolean }> = [];
   for (const [stepNumber, questions] of validationByStep) {
     for (const q of questions) {
       if (!q.aiGrading) continue;
+      const key = `${stepNumber}:${q.id}`;
+      const correctAnswer = correctAnswerByStepAndId.get(key);
+      if (correctAnswer === undefined) {
+        // Should never happen: parseBlock populates this map for every
+        // question it emits, AI-graded or not. Defensive log + skip.
+        continue;
+      }
       specs.push({
         stepNumber,
         questionId: q.id,
         questionText: q.question,
-        correctAnswer: q.correctAnswer,
-        ruleType: ruleTypeByStepAndId.get(`${stepNumber}:${q.id}`),
+        correctAnswer,                    // <-- from sibling map, NOT q.correctAnswer
+        ruleType: ruleTypeByStepAndId.get(key),
         aiGrading: true
       });
     }
@@ -528,11 +536,9 @@ export function collectAiGradedSpecs(
 }
 ```
 
-The `ruleTypeByStepAndId` map is built by `parseBlock` — it captures the original rule type string from the `rules.vr` so we can store it in `ValidateAnswerSpecs` for offline analysis (e.g. "what was the original rule type for questions that AI-graded as 'fail'?"). Update `parseBlock` to also populate this map. (Read the existing function first to find the right place to thread this through; if it's awkward, the simpler alternative is to add a `ruleType` field to `ValidationQuestion` itself — but that exposes the rule type to the public Hugo frontmatter, which we don't want. Keep it server-side via the map.)
+**Why two sibling maps instead of `q.correctAnswer`:** Task 2 strips `correctAnswer` from the public `ValidationQuestion` shape when `aiGrading: true` (anti-leak). The collector therefore CANNOT read it from `q` for AI-graded questions — the field will be `undefined`. The `correctAnswerByStepAndId` map carries the reference answer privately within the parser/build pipeline; it never enters the public Hugo frontmatter or `<script id="tutorial-data">` JSON.
 
-**Simpler alternative if the map threading is awkward:** add a new exported function `parseRulesVrWithRuleType(content)` that returns BOTH the existing `Map<number, ValidationQuestion[]>` AND a `Map<string, string>` of `${stepNumber}:${questionId} → ruleType`. Then callers can choose which they need. This keeps the existing `parseRulesVr` API stable.
-
-Pick whichever shape is simpler given the actual code; verify against the unit tests in Task 2.
+Update `parseBlock` (or the wrapper API per the alternative below) to populate BOTH maps as it processes each block. Both maps use the same key format: `${stepNumber}:${questionId}`.
 
 - [ ] **Step 2: Author the failing test**
 
@@ -544,20 +550,27 @@ import { collectAiGradedSpecs } from '../../scripts/parsers/rules.js';
 
 describe('collectAiGradedSpecs (#209)', () => {
   it('returns one spec per AI-graded question across multiple steps', () => {
+    // Note: q.correctAnswer is OMITTED for AI-graded questions in the
+    // public ValidationQuestion shape (anti-leak); the collector reads
+    // the reference answer from the sibling correctAnswerByStepAndId map.
     const validation = new Map([
       [2, [
-        { id: 'validate-2', question: 'Q2', type: 'text', correctAnswer: 'A2', aiGrading: true }
+        { id: 'validate-2', question: 'Q2', type: 'text', aiGrading: true }
       ]],
       [4, [
-        { id: 'validate-4', question: 'Q4', type: 'text', correctAnswer: 'A4', aiGrading: true }
+        { id: 'validate-4', question: 'Q4', type: 'text', aiGrading: true }
       ]]
     ]);
     const ruleTypes = new Map([
       ['2:validate-2', 'regex'],
       ['4:validate-4', 'exact-match']
     ]);
+    const correctAnswers = new Map([
+      ['2:validate-2', 'A2'],
+      ['4:validate-4', 'A4']
+    ]);
 
-    const specs = collectAiGradedSpecs(validation, ruleTypes);
+    const specs = collectAiGradedSpecs(validation, ruleTypes, correctAnswers);
 
     expect(specs).toHaveLength(2);
     expect(specs[0]).toMatchObject({
@@ -578,22 +591,37 @@ describe('collectAiGradedSpecs (#209)', () => {
   it('skips non-AI-graded questions', () => {
     const validation = new Map([
       [1, [
-        { id: 'validate-1', question: 'Q', type: 'text', correctAnswer: 'A' }, // no aiGrading
-        { id: 'validate-1b', question: 'Qb', type: 'text', correctAnswer: 'Ab', aiGrading: true }
+        // Non-AI: correctAnswer remains in the public shape
+        { id: 'validate-1', question: 'Q', type: 'text', correctAnswer: 'A' },
+        // AI: correctAnswer stripped from public shape; lives in sibling map
+        { id: 'validate-1b', question: 'Qb', type: 'text', aiGrading: true }
       ]]
     ]);
     const ruleTypes = new Map([['1:validate-1b', 'exact-match']]);
+    const correctAnswers = new Map([['1:validate-1b', 'Ab']]);
 
-    const specs = collectAiGradedSpecs(validation, ruleTypes);
+    const specs = collectAiGradedSpecs(validation, ruleTypes, correctAnswers);
     expect(specs).toHaveLength(1);
     expect(specs[0].questionId).toBe('validate-1b');
+    expect(specs[0].correctAnswer).toBe('Ab');
+  });
+
+  it('skips AI-graded question when correctAnswer map missing entry (defensive)', () => {
+    const validation = new Map([
+      [1, [{ id: 'validate-1', question: 'Q', type: 'text', aiGrading: true }]]
+    ]);
+    const ruleTypes = new Map();
+    const correctAnswers = new Map();  // empty — should not crash
+
+    const specs = collectAiGradedSpecs(validation, ruleTypes, correctAnswers);
+    expect(specs).toHaveLength(0);
   });
 
   it('returns empty array when no AI-graded questions exist', () => {
     const validation = new Map([
       [1, [{ id: 'validate-1', question: 'Q', type: 'text', correctAnswer: 'A' }]]
     ]);
-    expect(collectAiGradedSpecs(validation, new Map())).toEqual([]);
+    expect(collectAiGradedSpecs(validation, new Map(), new Map())).toEqual([]);
   });
 });
 ```
@@ -605,9 +633,9 @@ Expected: fail — `collectAiGradedSpecs` not exported.
 
 - [ ] **Step 4: Implement, run tests, verify pass**
 
-Implement `collectAiGradedSpecs` per Step 1. Run again, expect 3 passing.
+Implement `collectAiGradedSpecs` per Step 1. Run again, expect 4 passing.
 
-If you went with the "alternative" approach (separate `parseRulesVrWithRuleType`), thread the rule-type map through `parseBlock` — read the existing function carefully, decide where to capture the `ruleType` string before normalisation, and emit it via the map.
+If you went with the "alternative" approach (separate `parseRulesVrEnriched`), thread BOTH sibling maps (`ruleTypeByStepAndId` and `correctAnswerByStepAndId`) through `parseBlock` — read the existing function carefully, decide where to capture the `ruleType` string before normalisation + the `matchContent` string, and emit them via the maps.
 
 - [ ] **Step 5: Wire into `scripts/fetch-tutorials.ts`**
 
