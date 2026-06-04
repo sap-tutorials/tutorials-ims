@@ -1210,60 +1210,6 @@ blockquote {
   white-space: nowrap;
 }
 
-/* Validation quiz styles */
-.step-validation {
-  margin-top: 1rem;
-  padding: 1rem;
-  background: var(--sapInformationBackground, #e1f4ff);
-  border-radius: 0.5rem;
-  border: 1px solid var(--sapInformationBorderColor, #0070f2);
-}
-
-.step-validation fieldset {
-  border: none;
-  padding: 0;
-  margin: 0 0 0.75rem;
-}
-
-.step-validation legend {
-  font-weight: 600;
-  font-size: 0.875rem;
-  margin-bottom: 0.5rem;
-  color: var(--sapTextColor, #32363a);
-}
-
-.step-validation .option-card {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
-  border-radius: 0.375rem;
-  margin-bottom: 0.375rem;
-  cursor: pointer;
-  background: var(--sapBaseColor, #fff);
-  font-size: 0.875rem;
-  transition: border-color 0.15s;
-}
-
-.step-validation .option-card:hover {
-  border-color: var(--sapBrandColor, #0070f2);
-}
-
-.validation-feedback {
-  margin-top: 0.5rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-}
-
-.validation-success {
-  color: var(--sapPositiveColor, #30914c);
-}
-
-.validation-error {
-  color: var(--sapNegativeColor, #bb0000);
-}
-
 /* You will learn section */
 .you-will-learn {
   margin: 0 0 1.5rem;

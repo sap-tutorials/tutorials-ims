@@ -329,123 +329,6 @@ function maybeShowCompletedBanner(completedCount: number) {
   host.appendChild(strip)
 }
 
-// --- Validation quiz ---
-interface ValidationQuestion {
-  id: string
-  question: string
-  type: 'multiple-choice' | 'text'
-  options?: string[]
-  correctAnswer: string
-}
-
-interface StepData {
-  number: number
-  title: string
-  validation?: ValidationQuestion[]
-}
-
-function initValidation() {
-  const dataEl = document.getElementById('tutorial-data')
-  if (!dataEl) return
-  let steps: StepData[]
-  try {
-    let parsed = JSON.parse(dataEl.textContent || '[]')
-    if (typeof parsed === 'string') parsed = JSON.parse(parsed)
-    steps = parsed
-  } catch { return }
-
-  for (const step of steps) {
-    if (!step.validation?.length) continue
-    const mount = document.querySelector(`.step-validation-mount[data-step="${step.number}"]`)
-    if (!mount) continue
-    const doneBtn = document.querySelector(`button[data-action="mark-done"][data-step="${step.number}"]`) as HTMLButtonElement
-    if (doneBtn) doneBtn.disabled = true
-    renderQuiz(mount as HTMLElement, String(step.number), step.validation)
-  }
-}
-
-function renderQuiz(mount: HTMLElement, stepNum: string, questions: ValidationQuestion[]) {
-  const form = document.createElement('form')
-  form.className = 'step-validation'
-  form.dataset.step = stepNum
-
-  questions.forEach((q, qi) => {
-    const fieldset = document.createElement('fieldset')
-    const legend = document.createElement('legend')
-    legend.textContent = q.question
-    fieldset.appendChild(legend)
-
-    if (q.type === 'multiple-choice' && q.options) {
-      q.options.forEach((opt) => {
-        const label = document.createElement('label')
-        label.className = 'option-card'
-        const radio = document.createElement('input')
-        radio.type = 'radio'
-        radio.name = `q-${stepNum}-${qi}`
-        radio.value = opt
-        label.appendChild(radio)
-        const span = document.createElement('span')
-        span.textContent = opt
-        label.appendChild(span)
-        fieldset.appendChild(label)
-      })
-    } else {
-      const input = document.createElement('input')
-      input.type = 'text'
-      input.className = 'fd-input'
-      input.name = `q-${stepNum}-${qi}`
-      input.placeholder = 'Type your answer...'
-      fieldset.appendChild(input)
-    }
-    form.appendChild(fieldset)
-  })
-
-  const submitBtn = document.createElement('button')
-  submitBtn.type = 'submit'
-  submitBtn.className = 'fd-button'
-  submitBtn.textContent = 'Submit Answer'
-  form.appendChild(submitBtn)
-
-  const feedback = document.createElement('div')
-  feedback.className = 'validation-feedback'
-  form.appendChild(feedback)
-
-  form.addEventListener('submit', (e) => {
-    e.preventDefault()
-    handleQuizSubmit(form, stepNum, questions)
-  })
-
-  mount.appendChild(form)
-}
-
-function handleQuizSubmit(form: HTMLFormElement, stepNum: string, questions: ValidationQuestion[]) {
-  const feedback = form.querySelector('.validation-feedback') as HTMLElement
-  let allCorrect = true
-
-  questions.forEach((q, qi) => {
-    const name = `q-${stepNum}-${qi}`
-    if (q.type === 'multiple-choice') {
-      const selected = form.querySelector(`input[name="${name}"]:checked`) as HTMLInputElement | null
-      if (!selected || selected.value !== q.correctAnswer) allCorrect = false
-    } else {
-      const input = form.querySelector(`input[name="${name}"]`) as HTMLInputElement | null
-      if (!input || input.value.trim().toLowerCase() !== q.correctAnswer.toLowerCase()) allCorrect = false
-    }
-  })
-
-  if (allCorrect) {
-    feedback.textContent = 'Correct!'
-    feedback.className = 'validation-feedback validation-success'
-    const step = document.querySelector(`.tutorial-step[data-step="${stepNum}"]`)
-    if (step) step.setAttribute('data-validated', 'true')
-    const doneBtn = step?.querySelector('[data-action="mark-done"]') as HTMLButtonElement | null
-    if (doneBtn) doneBtn.disabled = false
-  } else {
-    feedback.textContent = 'Not quite. Try again!'
-    feedback.className = 'validation-feedback validation-error'
-  }
-}
-
 // --- Auth-aware button state ---
 function initAuthAwareButtons() {
   const observer = new MutationObserver(() => {
@@ -487,6 +370,59 @@ function enableDoneButtons() {
   })
 }
 
+// --- Done-button validation gate ---
+// Read tutorial-data, find steps with validation, disable their Done buttons.
+// Listen for 'step-validated' events from the validation Vue island
+// (hugo-apps/src/validation) to re-enable the button when validation passes.
+// NOTE: This function is NEW in the Task 3 commit and must survive Task 4's
+// legacy delete (which removes initValidation/renderQuiz/handleQuizSubmit).
+function initDoneButtonGate() {
+  const dataEl = document.getElementById('tutorial-data')
+  if (!dataEl) return
+  let steps: Array<{ number: number; validation?: unknown[] }>
+  try {
+    let parsed = JSON.parse(dataEl.textContent || '[]')
+    if (typeof parsed === 'string') parsed = JSON.parse(parsed)
+    steps = parsed
+  } catch { return }
+
+  const validatedSteps = new Set<number>()
+  for (const step of steps) {
+    if (!step.validation?.length) continue
+    validatedSteps.add(step.number)
+    const doneBtn = document.querySelector(
+      `button[data-action="mark-done"][data-step="${step.number}"]`
+    ) as HTMLButtonElement | null
+    if (doneBtn) doneBtn.disabled = true
+  }
+
+  // Persisted-correct restore: the Vue island (validation.js, deferred module)
+  // runs in document order BEFORE DOMContentLoaded, so its onMounted dispatch of
+  // 'step-validated' fires before this listener is attached. However the island
+  // also sets data-validated="true" on the step element synchronously in
+  // onMounted — that attribute IS in the DOM when DOMContentLoaded runs.
+  // Read it here to re-enable Done buttons for already-correct steps so
+  // returning learners are not left with a permanently-disabled Done button.
+  for (const stepNum of validatedSteps) {
+    const stepEl = document.querySelector(`.tutorial-step[data-step="${stepNum}"]`)
+    if (stepEl?.getAttribute('data-validated') === 'true') {
+      const btn = document.querySelector(
+        `button[data-action="mark-done"][data-step="${stepNum}"]`
+      ) as HTMLButtonElement | null
+      if (btn) btn.disabled = false
+    }
+  }
+
+  document.addEventListener('step-validated', (e) => {
+    const stepNum = (e as CustomEvent<{ stepNumber: number }>).detail?.stepNumber
+    if (typeof stepNum !== 'number' || !validatedSteps.has(stepNum)) return
+    const doneBtn = document.querySelector(
+      `button[data-action="mark-done"][data-step="${stepNum}"]`
+    ) as HTMLButtonElement | null
+    if (doneBtn) doneBtn.disabled = false
+  })
+}
+
 // --- Init on DOMContentLoaded ---
 document.addEventListener('DOMContentLoaded', () => {
   initProgressBar()
@@ -497,7 +433,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadProgress().then(markHydrated, markHydrated),
     new Promise<void>((resolve) => setTimeout(() => { markHydrated(); resolve() }, 1500)),
   ])
-  initValidation()
+  initDoneButtonGate()
   updateActiveTocItem()
   initAuthAwareButtons()
   initStepHashNavigation()
