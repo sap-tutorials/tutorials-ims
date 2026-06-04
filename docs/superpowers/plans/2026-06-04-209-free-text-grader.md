@@ -340,6 +340,41 @@ Q?
     expect(map.get(6)?.[0].aiGrading).toBe(true);
     expect(map.get(6)?.[0].type).toBe('multiple-choice');
   });
+
+  it('ANTI-LEAK: AI-graded question OMITS correctAnswer from public shape', () => {
+    const content = `[VALIDATE_7]
+###Rule
+exact-match
+###Grading
+ai-judged
+###Question
+What is X?
+###Match
+The reference answer that must NOT ship to clients.
+`;
+    const map = parseRulesVr(content);
+    const q = map.get(7)?.[0];
+    expect(q).toBeDefined();
+    expect(q?.aiGrading).toBe(true);
+    expect(q?.correctAnswer).toBeUndefined();
+    // Defense-in-depth: belt-and-braces grep for the literal string.
+    expect(JSON.stringify(q)).not.toContain('reference answer that must NOT');
+  });
+
+  it('non-AI question STILL includes correctAnswer (backward compat)', () => {
+    const content = `[VALIDATE_8]
+###Rule
+exact-match
+###Question
+What is Y?
+###Match
+The Y answer.
+`;
+    const map = parseRulesVr(content);
+    const q = map.get(8)?.[0];
+    expect(q?.aiGrading).toBeUndefined();
+    expect(q?.correctAnswer).toBe('The Y answer.');
+  });
 });
 ```
 
@@ -350,7 +385,7 @@ Expected: fail — `aiGrading` property not on the returned questions.
 
 - [ ] **Step 3: Update the type definition**
 
-In `scripts/parsers/types.ts`, find the `ValidationQuestion` interface. Add:
+In `scripts/parsers/types.ts`, find the `ValidationQuestion` interface. Update:
 
 ```ts
 export interface ValidationQuestion {
@@ -358,10 +393,20 @@ export interface ValidationQuestion {
   question: string;
   type: 'multiple-choice' | 'text';
   options?: string[];
-  correctAnswer: string;
+  // CHANGED: correctAnswer is now optional. Omitted for AI-graded
+  // questions (issue #209) — the reference answer ships server-side
+  // via ValidateAnswerSpecs and never enters the public Hugo
+  // frontmatter or <script id="tutorial-data"> JSON.
+  correctAnswer?: string;
   aiGrading?: boolean; // NEW — opted in via ###Grading: ai-judged OR via regex rule types (issue #209)
 }
 ```
+
+The `correctAnswer?: string` change ripples to two consumers:
+- `hugo-apps/src/validation/grading.ts` (defined in PR #226). The `gradeAnswers` function reads `q.correctAnswer` — for non-AI questions it's still defined; for AI questions `gradeAnswers` should treat them as "skip" (Task 10 separates AI Qs from local Qs before calling `gradeAnswers` anyway, so this is naturally safe).
+- `scripts/parsers/rules.ts` parseBlock (this same task) — already updated to omit it conditionally.
+
+Verify by grepping `q.correctAnswer` and `correctAnswer:` across `scripts/parsers/`, `hugo/assets/js/`, `hugo-apps/src/`, and `srv/lib/` to confirm no consumer dereferences it without a guard. If a consumer does, update Task 10 to handle it.
 
 - [ ] **Step 4: Extend `parseBlock` in `scripts/parsers/rules.ts`**
 
@@ -388,14 +433,22 @@ function parseBlock(content: string, stepNum: number): ValidationQuestion[] {
 
   // Existing return: emit ValidationQuestion. Add aiGrading conditionally
   // so the JSON output stays clean (no aiGrading: undefined fields).
-  return [{
+  //
+  // ANTI-LEAK: when aiGrading is true, OMIT correctAnswer from the public
+  // shape. The reference answer ships server-side via ValidateAnswerSpecs
+  // (Task 3 sidecar + Task 8 publish endpoint). The Vue island handles a
+  // missing correctAnswer for AI-graded questions as "server-only grading
+  // required" — see Task 10's 503/disabled fallback for behavior.
+  const publicQuestion: ValidationQuestion = {
     id: `validate-${stepNum}`,
     question,
     type,
-    correctAnswer: matchContent,
     ...(options ? { options } : {}),
-    ...(aiGrading ? { aiGrading: true } : {})
-  }];
+    ...(aiGrading ? { aiGrading: true } : {}),
+    // correctAnswer omitted for AI-graded; included otherwise.
+    ...(aiGrading ? {} : { correctAnswer: matchContent })
+  };
+  return [publicQuestion];
 }
 ```
 
@@ -404,7 +457,7 @@ function parseBlock(content: string, stepNum: number): ValidationQuestion[] {
 - [ ] **Step 5: Run test, verify pass**
 
 Run: `npx vitest run test/unit/rules-parser-grading.test.js`
-Expected: 6 passing.
+Expected: 8 passing (6 directive/auto-route cases + 2 anti-leak cases).
 
 Also run the existing parser tests to make sure no regression: `npx vitest run test/unit/rules-parser.test.js` (if it exists; otherwise grep for parser tests).
 
@@ -415,14 +468,19 @@ BR=$(git branch --show-current) && [ "$BR" = "feature/209-free-text-grader" ] &&
   git add scripts/parsers/rules.ts scripts/parsers/types.ts test/unit/rules-parser-grading.test.js && \
   git commit -m "feat(codecheck): rules.vr parser extension for ###Grading directive (#209)
 
-- ValidationQuestion gains aiGrading?: boolean.
+- ValidationQuestion gains aiGrading?: boolean; correctAnswer
+  becomes optional.
 - Explicit ###Grading: ai-judged → aiGrading: true.
 - Implicit auto-route: regex / regex-begins-with rule types
   → aiGrading: true (fixes pre-existing silent bug where these
   rule types were treated as plain string equality).
 - Case-insensitive directive value.
 - Multiple-choice + ai-judged is allowed at parse time; dispatch
-  enforces text-only at runtime."
+  enforces text-only at runtime.
+- ANTI-LEAK: correctAnswer is OMITTED from the public emit when
+  aiGrading=true. Reference answer ships server-side via
+  ValidateAnswerSpecs (Task 3 sidecar) and never enters the public
+  Hugo frontmatter or <script id='tutorial-data'> JSON."
 ```
 
 ---
@@ -1886,16 +1944,16 @@ Expected: assertion failure — `@analytics.exposed` not set.
 
 - [ ] **Step 3: Add the annotation**
 
-Edit `db/schema.cds`. Find the `ValidateAnswerSubmissions` entity defined in Task 1. Add the annotation:
+Edit `db/schema.cds`. Find the `ValidateAnswerSubmissions` entity defined in Task 1. Add **only** the `@analytics.exposed` annotation as a single-line annotation directly above the entity declaration (do NOT redefine the entity body, do NOT add `@PersonalData` here — that already lives in `db/audit-logging.cds` per Task 1 Step 4, and the default `null-personal` cascade from PR #221 handles user-ID nulling automatically):
 
 ```cds
 @analytics.exposed: true
-@PersonalData.EntitySemantics: 'Other'
-@PersonalData.cascade: { anonymize: ['user_ID'] }
-entity ValidateAnswerSubmissions : cuid, managed {
-  // ... existing fields
+entity ValidateAnswerSubmissions : managed {
+  // existing fields from Task 1 — DO NOT MODIFY THE BODY
 }
 ```
+
+The other `@PersonalData.*` annotations live in `db/audit-logging.cds` (already added in Task 1 Step 4 via the `annotate ims.ValidateAnswerSubmissions with @PersonalData : { ... }` block). PR #221's annotation walker reads from the merged CSN at compile time, so wherever the annotation is declared, the cascade picks it up.
 
 - [ ] **Step 4: Run, verify pass**
 
