@@ -440,7 +440,29 @@ at startup.
 Refs #204"
 ```
 
-### Task 1.5: Open PR 1
+### Task 1.5: Audit srv-qa cp-list
+
+Per [[srv-qa-cp-list-recurring]], every new file under `srv/lib/` triggers a cp-list audit because the project's hand-curated cp list at `.deploy/mta.yaml:88` has crashed QA boot twice when missed. **Don't skip — even if the answer is "no change needed."**
+
+**Files to inspect:**
+- `srv-qa/server.js`
+- `.deploy/mta.yaml` (`tutorials-srv-qa` build commands)
+
+- [ ] **Step 1: Check whether QA imports the new module.**
+
+```bash
+grep -rE "ui-event-handler|/api/ui-event" srv-qa/ 2>&1
+```
+
+Expected: empty. The QA srv is for the author-preview channel and doesn't run admin services or the A/B endpoint.
+
+- [ ] **Step 2: Check the cp-list at `.deploy/mta.yaml`.** Find the `tutorials-srv-qa` module (around line 70+) and the `bash -c "mkdir -p srv/jobs && cp ../../srv/lib/...` line. Confirm `ui-event-handler.js` is NOT in that list. (It shouldn't be — QA doesn't need it.)
+
+- [ ] **Step 3: Document the explicit decision.** No code change needed; the audit conclusion goes in the PR description (Section "srv-qa cp-list audit"): "Verified: srv-qa/server.js does not import ui-event-handler.js. The /api/ui-event endpoint is not exposed on QA channel. No cp-list change required."
+
+- [ ] **Step 4: If the audit reveals QA needs the file** (unlikely, but possible if A/B testing extends to QA author-preview later), add `../../srv/lib/ui-event-handler.js` to the `cp` line in `.deploy/mta.yaml` and commit.
+
+### Task 1.6: Open PR 1
 
 - [ ] **Step 1: Verify branch + tests.**
 
@@ -884,7 +906,7 @@ export interface ReferredViewPayload {
 
 **`filter-events.ts`:** `wireFilterEvents({ filters, sort, searchQuery, surface })` — receives the `useNavigatorFilters` reactive state, sets up Vue `watch()` calls that fire `filter_change` on each mutation. Uses `useNavigatorFilters` from `@shared/composables/useNavigatorFilters`.
 
-**`card-events.ts`:** `wireCardEvents(surface)` — uses `document.addEventListener('click', ...)` with delegation — checks if the click target is inside `.nav-card` and reads `data-vt-card`, classes, and the card's index in its parent for `position`. Determines `source` from the closest ancestor (`[data-rails-container]` for rails, otherwise `grid`).
+**`card-events.ts`:** `wireCardEvents(surface)` — uses `document.addEventListener('click', ...)` with delegation — checks if the click target is inside `.nav-card` and reads `data-vt-card`, classes, and the card's index in its parent for `position`. Determines `source` from the closest ancestor (`[data-rails-container]` for rails, otherwise `grid`). **Also writes `{ fromSurface, fromCardId }` to `sessionStorage['analytics.lastClick']` on every `card_click`** — this is the cross-PR signal that PR 3's `referred-view.ts` reads when a tutorial page mounts in the same tab. Without this write in PR 2, PR 3's `fromSurface` and `fromCardId` fields are always empty.
 
 **`wire-tracker.ts`:**
 
