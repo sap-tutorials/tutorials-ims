@@ -1606,6 +1606,13 @@
             "val": false
           },
           "@cds.persistence.name": "CODECHECKENABLED"
+        },
+        "validateAnswerEnabled": {
+          "type": "cds.Boolean",
+          "default": {
+            "val": false
+          },
+          "@cds.persistence.name": "VALIDATEANSWERENABLED"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CHATSETTINGS"

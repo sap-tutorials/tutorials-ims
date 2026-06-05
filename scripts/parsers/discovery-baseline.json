@@ -1264,31 +1264,6 @@
     "repo": "Tutorials",
     "branch": "master"
   },
-  "appgyver-configure-camera": {
-    "slug": "appgyver-configure-camera",
-    "repo": "sap-build-apps",
-    "branch": "main"
-  },
-  "appgyver-connect-publicapi": {
-    "slug": "appgyver-connect-publicapi",
-    "repo": "sap-build-apps",
-    "branch": "main"
-  },
-  "appgyver-create-application": {
-    "slug": "appgyver-create-application",
-    "repo": "sap-build-apps",
-    "branch": "main"
-  },
-  "appgyver-display-information": {
-    "slug": "appgyver-display-information",
-    "repo": "sap-build-apps",
-    "branch": "main"
-  },
-  "appgyver-fetch-data": {
-    "slug": "appgyver-fetch-data",
-    "repo": "sap-build-apps",
-    "branch": "main"
-  },
   "appgyver-subscribe-service": {
     "slug": "appgyver-subscribe-service",
     "repo": "Tutorials",
@@ -2103,86 +2078,6 @@
     "slug": "cloudsdk-virtual-data-model-odata",
     "repo": "Tutorials",
     "branch": "master"
-  },
-  "codejam-0-prerequisites": {
-    "slug": "codejam-0-prerequisites",
-    "repo": "sap-build-apps",
-    "branch": "main"
-  },
-  "codejam-01-homepage": {
-    "slug": "codejam-01-homepage",
-    "repo": "sap-build-apps",
-    "branch": "main"
-  },
-  "codejam-02-product-detail-page": {
-    "slug": "codejam-02-product-detail-page",
-    "repo": "sap-build-apps",
-    "branch": "main"
-  },
-  "codejam-03-cart-page": {
-    "slug": "codejam-03-cart-page",
-    "repo": "sap-build-apps",
-    "branch": "main"
-  },
-  "codejam-04-spa-empty-process": {
-    "slug": "codejam-04-spa-empty-process",
-    "repo": "sap-build-apps",
-    "branch": "main"
-  },
-  "codejam-05-spa-approval-flow": {
-    "slug": "codejam-05-spa-approval-flow",
-    "repo": "sap-build-apps",
-    "branch": "main"
-  },
-  "codejam-06-connect-app-process": {
-    "slug": "codejam-06-connect-app-process",
-    "repo": "sap-build-apps",
-    "branch": "main"
-  },
-  "codejam-07-build-deploy-app": {
-    "slug": "codejam-07-build-deploy-app",
-    "repo": "sap-build-apps",
-    "branch": "main"
-  },
-  "codejam-08-work-zone-app": {
-    "slug": "codejam-08-work-zone-app",
-    "repo": "sap-build-apps",
-    "branch": "main"
-  },
-  "codejam-09-action-get": {
-    "slug": "codejam-09-action-get",
-    "repo": "sap-build-apps",
-    "branch": "main"
-  },
-  "codejam-10-action-post": {
-    "slug": "codejam-10-action-post",
-    "repo": "sap-build-apps",
-    "branch": "main"
-  },
-  "codejam-11-spa-rework": {
-    "slug": "codejam-11-spa-rework",
-    "repo": "sap-build-apps",
-    "branch": "main"
-  },
-  "codejam-12-scan-barcode": {
-    "slug": "codejam-12-scan-barcode",
-    "repo": "sap-build-apps",
-    "branch": "main"
-  },
-  "codejam-13-filtering": {
-    "slug": "codejam-13-filtering",
-    "repo": "sap-build-apps",
-    "branch": "main"
-  },
-  "codejam-14-spinner": {
-    "slug": "codejam-14-spinner",
-    "repo": "sap-build-apps",
-    "branch": "main"
-  },
-  "codejam-15-conditional-formatting": {
-    "slug": "codejam-15-conditional-formatting",
-    "repo": "sap-build-apps",
-    "branch": "main"
   },
   "codejam-events-process-0-prerequisites": {
     "slug": "codejam-events-process-0-prerequisites",
@@ -3006,6 +2901,11 @@
   },
   "cp-kyma-api-postgres-golang": {
     "slug": "cp-kyma-api-postgres-golang",
+    "repo": "btp-foundation",
+    "branch": "main"
+  },
+  "cp-kyma-app-push": {
+    "slug": "cp-kyma-app-push",
     "repo": "btp-foundation",
     "branch": "main"
   },
