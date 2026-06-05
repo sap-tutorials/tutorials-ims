@@ -77,7 +77,10 @@ export async function defaultLoadStepText(slug, _stepNumber) {
 
     const activeVersion = await getActiveVersion();
     if (activeVersion === null) {
-      LOG.warn('code-check-step-loader: no active content version');
+      // debug-level: a totally empty content publish is unusual but recoverable;
+      // it's not an error. The fact that no version is active is captured by
+      // /content/hashes anyway.
+      LOG.debug('code-check-step-loader: no active content version');
       return null;
     }
 
@@ -87,7 +90,9 @@ export async function defaultLoadStepText(slug, _stepNumber) {
       .columns('contentHash', 'mimeType', 'version');
 
     if (!meta) {
-      LOG.warn('code-check-step-loader: no ContentFiles row for slug', slug);
+      // debug-level: routine miss for unpublished slugs (typos, stale chat
+      // history, etc). Real DB errors land in the catch block at warn.
+      LOG.debug('code-check-step-loader: no ContentFiles row for slug', slug);
       return null;
     }
 

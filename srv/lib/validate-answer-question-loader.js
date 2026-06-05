@@ -29,7 +29,9 @@ export async function defaultLoadQuestion(slug, stepNumber, questionId) {
     // Same pattern as srv/lib/code-check-step-loader.js.
     const tut = await SELECT.one.from(Tutorials).where({ slug: lcSlug });
     if (!tut) {
-      LOG.warn('defaultLoadQuestion: no Tutorials row for slug', slug);
+      // debug-level: misses are routine in production (typo'd questionId,
+      // stale frontmatter, deferred publish). Real DB errors stay at warn.
+      LOG.debug('defaultLoadQuestion: no Tutorials row for slug', slug);
       return null;
     }
 
@@ -39,7 +41,7 @@ export async function defaultLoadQuestion(slug, stepNumber, questionId) {
       questionId,
     });
     if (!spec) {
-      LOG.warn('defaultLoadQuestion: no ValidateAnswerSpecs row', { slug, stepNumber, questionId });
+      LOG.debug('defaultLoadQuestion: no ValidateAnswerSpecs row', { slug, stepNumber, questionId });
       return null;
     }
 
@@ -50,6 +52,7 @@ export async function defaultLoadQuestion(slug, stepNumber, questionId) {
       aiGrading: Boolean(spec.aiGrading),
     };
   } catch (err) {
+    // Real DB error — keep at warn so it surfaces in production logs.
     LOG.warn('defaultLoadQuestion error', err instanceof Error ? err.message : String(err));
     return null;
   }
