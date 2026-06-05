@@ -35,3 +35,10 @@ annotate ims.CodeCheckSubmissions with @PersonalData: {
   user          @PersonalData.FieldSemantics: 'DataSubjectID';
   submittedCode @PersonalData.IsPotentiallyPersonal;
 }
+
+annotate ims.ValidateAnswerSubmissions with @PersonalData: {
+  EntitySemantics: 'Other'
+} {
+  user            @PersonalData.FieldSemantics: 'DataSubjectID';
+  submittedAnswer @PersonalData.IsPotentiallyPersonal;
+}

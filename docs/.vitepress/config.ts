@@ -100,7 +100,8 @@ export default defineConfig({
           { text: 'Joule chat',                       link: '/developers/architecture/joule' },
           { text: '@PersonalData cascade',            link: '/developers/architecture/anonymization-cascade' },
           { text: 'Runtime',                          link: '/developers/architecture/runtime' },
-          { text: 'Validation widget',                link: '/developers/architecture/validation-widget' }
+          { text: 'Validation widget',                link: '/developers/architecture/validation-widget' },
+          { text: 'Free-text grader',                 link: '/developers/architecture/free-text-grader' }
         ]},
         { text: 'Operations', items: [
           { text: 'A/B comparison runbook',    link: '/developers/operations/ab-comparison-runbook' },

@@ -13,12 +13,24 @@ export interface ValidationQuestion {
   type: 'multiple-choice' | 'text';
   options?: string[];
   correctAnswer: string;
-  aiGrading?: boolean; // reserved for #209
+  // When `true`, the question is graded server-side via /api/validate-answer
+  // (AI grader, #209). Local-grading helpers in this module skip these.
+  aiGrading?: boolean;
 }
 
 export interface GradingResult {
   correct: boolean;
   perQuestion: Array<{ id: string; correct: boolean }>;
+}
+
+/**
+ * Returns true iff the question is flagged for server-side AI grading.
+ * Strict-true equality: HANA can return integers (0/1) for booleans, so
+ * the loader must coerce to a real JS boolean before reaching this helper.
+ * That keeps a stray `1` from accidentally routing through the AI grader.
+ */
+export function isAiGraded(q: ValidationQuestion): boolean {
+  return q.aiGrading === true;
 }
 
 /**
