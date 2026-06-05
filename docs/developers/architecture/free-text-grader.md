@@ -19,7 +19,7 @@ rate-limit pattern, and the same admin-driven feature flag wiring.
 Author writes [VALIDATE_N] block in a -Contribution rules.vr
   → ###Grading: ai-judged directive (or rule type === 'regex')
     → scripts/parsers/rules.ts strips correctAnswer from public frontmatter
-      → Hugo emits hugo/public/tutorials/<slug>/<slug>.validate-answer.json sidecar
+      → fetch-tutorials writes .tutorial-cache/<slug>.validate-answer.json sidecar
         → scripts/lib/publish-validate-answer.js POSTs sidecars to
           /content/validate-answer-specs (bearer-auth via CONTENT_API_KEY)
             → ValidateAnswerSpecs HANA entity (correctAnswer + question + slug + step + qi)
@@ -46,7 +46,7 @@ Settings tile in `/admin-ui/`. Per-environment rollout is the
 expected pattern: flip on in dev, then QA, then prod after smoke.
 
 When the flag is `false`, `/api/validate-answer` returns **HTTP 503
-with `{ status: 'disabled' }`**. The widget treats 503-disabled as a
+with `{ error: 'disabled' }`**. The widget treats 503-disabled as a
 fourth UI state — "Answer checking is temporarily unavailable" — and
 specifically does **not** mark the question wrong, so a learner whose
 admin has the flag off can still proceed (the Done-button gate falls
@@ -117,9 +117,13 @@ To opt a `[VALIDATE_N]` text question into AI grading, either:
    recognizes that the question can't be exact-matched client-side
    and routes it to the AI path.
 
-Multiple-choice questions and plain-text equality questions stay on
-the local-first path even with `###Grading: ai-judged` — the parser
-ignores the directive on those types.
+Multiple-choice questions can be marked `###Grading: ai-judged` and the
+parser will accept the directive (setting `aiGrading: true` on the emitted
+question), but routing them through the LLM grader is not recommended:
+the prompt is structured for free-text answers and option-letter
+submissions produce low-quality verdicts. Author guidance: only use
+`###Grading: ai-judged` on text-typed questions. The runtime does not
+enforce this — the safeguard is at authoring time.
 
 See the [tutorial authoring guide](../../authors/writing-tutorials.md) for the
 complete `[VALIDATE_N]` syntax. The author preview at `/tutorials-qa/`

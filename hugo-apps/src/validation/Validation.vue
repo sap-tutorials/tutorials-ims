@@ -61,7 +61,7 @@ function onTextInput(qid: string, event: Event) {
  * pattern-matches on. The endpoint contract is documented in the plan:
  *   200 OK     → { verdict, summary?, hint?, errorReason? }
  *   429        → rate limited (per-user 30/hr OR per-step 5/5min)
- *   503        → ChatSettings.codeCheckEnabled is false (graceful degradation)
+ *   503        → ChatSettings.validateAnswerEnabled is false (graceful degradation)
  *   other 4xx/5xx → generic http_<status> error
  */
 async function gradeAi(slug: string, stepNumber: number, questionId: string, submittedAnswer: string) {
@@ -243,7 +243,7 @@ function onTryAgain() {
       </template>
 
       <!-- Disabled state: AI grader is feature-flagged off (503 from
-           /api/validate-answer when ChatSettings.codeCheckEnabled=false).
+           /api/validate-answer when ChatSettings.validateAnswerEnabled=false).
            This is a 4th UX state distinct from incorrect — Task 2's
            anti-leak strip removed `correctAnswer` from the public payload
            for AI questions, so we can't fall back to client-side equality
