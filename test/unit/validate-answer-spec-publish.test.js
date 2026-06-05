@@ -298,3 +298,50 @@ describe('slug lowercased on lookup', () => {
     expect(rows[0].tutorial_ID).toBe('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Test 8: Canonical (post-#242) export shape
+// ─────────────────────────────────────────────────────────────────────────────
+// The deprecated factory wrapper inlines a 401 auth check for back-compat;
+// the canonical handler delegates auth to contentAuthMiddleware in
+// srv/server.js. These tests exercise the unauth'd handler directly to
+// confirm the body-validation + DB logic is identical.
+
+import { publishValidateAnswerSpecs } from '../../srv/lib/validate-answer-spec-publish.js';
+
+describe('publishValidateAnswerSpecs direct export (#242)', () => {
+  it('writes specs successfully when auth has already passed (no auth check inside)', async () => {
+    const res = mockRes();
+    // Note: NO authHeaders — auth is contentAuthMiddleware's job, not the handler's
+    await publishValidateAnswerSpecs(mockReq({
+      slug: 'tutorial-alpha',
+      specs: [
+        { stepNumber: 1, questionId: 'q1', questionText: 'Q1?', correctAnswer: 'A1', ruleType: 'exact-match' },
+      ],
+    }), res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.jsonBody).toEqual({ ok: true, count: 1 });
+  });
+
+  it('returns 400 invalid_body on missing slug regardless of auth state', async () => {
+    const res = mockRes();
+    await publishValidateAnswerSpecs(mockReq({ specs: [] }), res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.jsonBody).toEqual({ error: 'invalid_body' });
+  });
+
+  it('returns 404 tutorial_not_found for unknown slug regardless of auth state', async () => {
+    const res = mockRes();
+    await publishValidateAnswerSpecs(mockReq({
+      slug: 'nonexistent-slug',
+      specs: [
+        { stepNumber: 1, questionId: 'q1', questionText: 'Q?', correctAnswer: 'A', ruleType: 'exact-match' },
+      ],
+    }), res);
+
+    expect(res.statusCode).toBe(404);
+    expect(res.jsonBody).toEqual({ error: 'tutorial_not_found' });
+  });
+});
