@@ -1,4 +1,4 @@
-// hugo-apps/src/tutorial/__tests__/referred-view.test.ts
+// hugo-apps/src/tutorial-referred/__tests__/referred-view.test.ts
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
