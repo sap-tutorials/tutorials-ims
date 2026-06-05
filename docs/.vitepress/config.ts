@@ -30,6 +30,9 @@ export default defineConfig({
     // superpowers/** is excluded from srcExclude (build), so links into it
     // from developer docs are not resolvable as VitePress pages.
     /\.\.\/\.\.\/superpowers\//,
+    // TODO(#258 follow-up): docs/developers/architecture/analytics-builder.md
+    // is referenced from free-text-grader.md but doesn't exist yet.
+    /\.\/analytics-builder/,
   ],
 
   srcExclude: ['improvements.md', 'TODO.md', 'pilot-status.md', 'superpowers/**'],
@@ -108,6 +111,7 @@ export default defineConfig({
           { text: 'Deployment',                link: '/developers/operations/deployment' },
           { text: 'GitHub App setup',          link: '/developers/operations/github-app-setup' },
           { text: 'GitHub dispatch PAT rotation', link: '/developers/operations/github-dispatch-pat-rotation' },
+          { text: 'HDI deploy checklist',      link: '/developers/operations/hdi-deploy-checklist' },
           { text: 'IAS setup',                 link: '/developers/operations/ias-setup' },
           { text: 'Joule chat admin settings', link: '/developers/operations/joule-chat-admin-settings' },
           { text: 'MTA deployment',            link: '/developers/operations/mta-deployment' },
