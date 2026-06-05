@@ -1,1 +1,0 @@
-CREATE INDEX "IDX_UIEVENT_SURFACE_TS" ON "com_sap_developers_ims_UIEvent" ("surface", "TIMESTAMP")
