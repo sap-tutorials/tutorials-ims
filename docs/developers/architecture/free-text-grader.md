@@ -139,6 +139,39 @@ is the recommended way to verify a new question type before
 publishing — the QA srv has its own `validateAnswerEnabled` flag and
 its own `ValidateAnswerSpecs` table.
 
+## Token-spend monitoring
+
+5 canonical SavedQueries are seeded into `AnalyticsSavedQuery` on boot
+(see `srv/lib/ai-grading-saved-queries.js`) and surface in the
+[Analytics Builder](./analytics-builder.md) under "shared-admins"
+visibility:
+
+- **AI grading — Daily token spend (validate-answer)** — sum prompt + completion
+  tokens per day, grouped by `modelName`. Multiply by your model's ¢/1K-token
+  rate in your runbook for USD.
+- **AI grading — Daily token spend (code-check)** — sibling rollup for
+  `/api/codecheck` (PR #205).
+- **AI grading — Verdict outcome distribution (validate-answer)** — last 7
+  days; useful for prompt tuning and detecting operator-mistakes (e.g. spike
+  in `errorReason: 'wrong_question_type'` means an author marked a
+  multiple-choice question `ai-judged`).
+- **AI grading — Top tutorials by token spend, last 7 days
+  (validate-answer)** — hot-spot detector. Surfaces tutorials with
+  too-many AI-graded questions or too-long answers.
+- **AI grading — Combined daily spend (both features)** — UNION ALL across
+  both submissions tables. Useful for daily-spend dashboards where the
+  per-feature split is less interesting than total burn.
+
+All queries exclude `errorReason = 'disabled'` from token totals (the
+flag-off path short-circuits before any LLM call, but the row still
+counts as a submission and would inflate the count if not filtered).
+The verdict-distribution query intentionally INCLUDES disabled to
+surface "how often did this happen?".
+
+A scheduled-aggregate cron job (Layer 2 of #240) is deferred until
+Layer 1 reveals real burn. If spend grows non-trivially, see #240 for
+the design sketch.
+
 ## Reference
 
 - Tool dispatcher: [`srv/lib/validate-answer-tool.js`](../../../srv/lib/validate-answer-tool.js)

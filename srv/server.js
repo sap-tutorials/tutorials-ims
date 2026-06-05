@@ -350,6 +350,22 @@ cds.on('served', async () => {
     }
   }
 
+  // [#240] Seed canonical SavedQueries for AI-grading token-spend monitoring
+  // (covers both /api/codecheck and /api/validate-answer). Idempotent;
+  // non-fatal on seed failure (admins can hand-author these queries).
+  if (!globalThis.__aiGradingSavedQueriesSeeded) {
+    globalThis.__aiGradingSavedQueriesSeeded = true;
+    try {
+      const { seedAiGradingSavedQueries } = await import('./lib/ai-grading-saved-queries.js');
+      const result = await seedAiGradingSavedQueries(cds.db);
+      if (result.inserted > 0) {
+        console.log(`[ai-grading-saved-queries] seeded ${result.inserted}/${result.total} canonical queries`);
+      }
+    } catch (err) {
+      console.warn('[ai-grading-saved-queries] seed failed (non-fatal):', err.message);
+    }
+  }
+
   app.get('/auth/user', contextMw, authMw, (req, res) => {
     const user = cds.context?.user;
     if (!user?.id || user.id === 'anonymous') {
