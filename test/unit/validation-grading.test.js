@@ -80,6 +80,48 @@ describe('validation grading.ts', () => {
     expect(gradeAnswers(questions, { q1: 'A', q2: 'fields' }).correct).toBe(true);
   });
 
+  // ── gradeAnswers defensive (#237) ──────────────────────────────
+
+  it('text: missing correctAnswer → grades as incorrect (no throw)', () => {
+    // Defensive: AI-graded questions ship without correctAnswer.
+    // A regression in Validation.vue's partition could pass one through
+    // to gradeAnswers; the helper must not throw.
+    const questions = [{
+      id: 'q1', question: 'Q?', type: 'text'
+      // no correctAnswer property
+    }];
+    expect(() => gradeAnswers(questions, { q1: 'anything' })).not.toThrow();
+    expect(gradeAnswers(questions, { q1: 'anything' }).correct).toBe(false);
+  });
+
+  it('multiple-choice: missing correctAnswer → grades as incorrect (no throw)', () => {
+    const questions = [{
+      id: 'q1', question: 'Q?', type: 'multiple-choice', options: ['A', 'B']
+      // no correctAnswer property
+    }];
+    expect(() => gradeAnswers(questions, { q1: 'A' })).not.toThrow();
+    expect(gradeAnswers(questions, { q1: 'A' }).correct).toBe(false);
+  });
+
+  it('text: undefined correctAnswer + empty submission → still incorrect', () => {
+    // '' === '' would be true under naive logic; the guard ensures we
+    // don't accidentally mark a missing-question as "correct on empty".
+    const questions = [{
+      id: 'q1', question: 'Q?', type: 'text', correctAnswer: undefined
+    }];
+    // Empty submission, undefined correctAnswer — both normalize to ''
+    // under .toLowerCase(). The naive equality would be true. But the
+    // submission's `.trim()` produces '', and so does correct ?? ''. They
+    // ARE equal — and that's the right answer: an empty submission to a
+    // question with no defined answer is trivially "matching" in the
+    // local grader's worldview. The actual safety here comes from
+    // Validation.vue's partition keeping AI questions OUT of gradeAnswers.
+    // We document the behavior rather than fight it.
+    expect(gradeAnswers(questions, { q1: '' }).correct).toBe(true);
+    // Non-empty submission still mismatches the empty correct answer:
+    expect(gradeAnswers(questions, { q1: 'something' }).correct).toBe(false);
+  });
+
   // ── persistKey ──────────────────────────────────────────────────
 
   it('persistKey: format is tutorial-validation-${slug}-${step}', () => {

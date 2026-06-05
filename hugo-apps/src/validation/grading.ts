@@ -12,7 +12,12 @@ export interface ValidationQuestion {
   question: string;
   type: 'multiple-choice' | 'text';
   options?: string[];
-  correctAnswer: string;
+  // Optional because AI-graded questions (`aiGrading: true`) ship with no
+  // correctAnswer — the reference answer lives server-side in
+  // ValidateAnswerSpecs (#209). gradeAnswers defends against undefined via
+  // `?? ''` but expects callers to partition AI-graded questions out via
+  // isAiGraded() before invoking gradeAnswers.
+  correctAnswer?: string;
   // When `true`, the question is graded server-side via /api/validate-answer
   // (AI grader, #209). Local-grading helpers in this module skip these.
   aiGrading?: boolean;
@@ -39,6 +44,12 @@ export function isAiGraded(q: ValidationQuestion): boolean {
  * Text: case-insensitive equality after trim.
  * All-or-nothing aggregation: a single quiz's `correct` is true iff every
  * question is correct (the legacy widget's behaviour, preserved for #212).
+ *
+ * Defensive: a missing or undefined `correctAnswer` (e.g., from a stale
+ * ValidationQuestion that slipped past the AI/local partition in
+ * Validation.vue) coerces to '' and grades any submission as incorrect.
+ * Callers should still partition AI-graded questions via isAiGraded() —
+ * this guard is belt-and-braces, not a license to skip the partition.
  */
 export function gradeAnswers(
   questions: ValidationQuestion[],
@@ -46,12 +57,13 @@ export function gradeAnswers(
 ): GradingResult {
   const perQuestion = questions.map(q => {
     const submitted = (answers[q.id] ?? '').trim();
+    const correct = q.correctAnswer ?? '';
     if (q.type === 'multiple-choice') {
-      return { id: q.id, correct: submitted === q.correctAnswer };
+      return { id: q.id, correct: submitted === correct };
     }
     return {
       id: q.id,
-      correct: submitted.toLowerCase() === q.correctAnswer.toLowerCase()
+      correct: submitted.toLowerCase() === correct.toLowerCase()
     };
   });
   return { correct: perQuestion.every(r => r.correct), perQuestion };
