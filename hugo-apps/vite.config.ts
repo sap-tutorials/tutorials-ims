@@ -98,6 +98,7 @@ export default defineConfig({
         'code-check': resolve(__dirname, 'src/code-check/main.ts'),
         browse: resolve(__dirname, 'src/browse/main.ts'),
         'validation': resolve(__dirname, 'src/validation/main.ts'),
+        tutorial: resolve(__dirname, 'src/tutorial/main.ts'),
       },
       output: {
         entryFileNames: '[name].js',
