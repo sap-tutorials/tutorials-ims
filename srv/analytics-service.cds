@@ -35,6 +35,25 @@ service AnalyticsService @(path : '/admin/analytics') {
     user
   };
 
+  // [#240] Mirror of CodeCheckSubmissions for AI free-text grading (#209).
+  // Excludes question/answer text (PII risk; CodeCheckSubmissions does the same).
+  @readonly entity ValidateAnswerSubmissions as projection on ims.ValidateAnswerSubmissions {
+    ID,
+    tutorialSlug,
+    stepNumber,
+    questionId,
+    verdict,
+    modelName,
+    promptVersion,
+    promptTokens,
+    completionTokens,
+    latencyMs,
+    errorReason,
+    createdAt,
+    modifiedAt,
+    user
+  };
+
   @readonly entity UIEvents               as projection on ims.UIEvent;
 
   function listExposedEntities() returns array of {
