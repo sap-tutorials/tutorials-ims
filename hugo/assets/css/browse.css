@@ -55,14 +55,82 @@
 }
 .skip-link:focus { top: 0; }
 
-/* ── Mobile (<1024px): single-column, hide rail (Vue toggles to <dialog>) ── */
+/* ── Mobile filter drawer (#216) ─────────────────────────────────────
+   - Filters button is hidden on desktop, sticky-bar above the grid on mobile.
+   - Below 1024px: keep the SSR'd #browse-filter-rail hidden in its original
+     parent (controller.ts moves it into <ui5-dialog> on first open). The
+     rail is unconditionally visible *inside* the dialog so it renders
+     correctly when the drawer opens.
+*/
+
+/* Default desktop: hide the toggle button entirely. */
+.browse-filter-toggle { display: none; }
+
+/* Active-filter count badge inside the toggle button. */
+.browse-filter-toggle__count {
+  display: inline-block;
+  margin-inline-start: 0.25rem;
+  min-width: 1.5em;
+  padding: 0 0.4em;
+  border-radius: 999px;
+  background: var(--sapButton_Selected_Background, #0a6ed1);
+  color: var(--sapButton_Selected_TextColor, #fff);
+  font-size: 0.85em;
+  font-weight: 600;
+  text-align: center;
+}
+.browse-filter-toggle__count[hidden] { display: none; }
 
 @media (max-width: 1023px) {
   .browse-shell { grid-template-columns: 1fr; }
+  /* Hide the rail in its original DOM position; the dialog re-shows it. */
   #browse-filter-rail { display: none; }
   .browse-rail-curation {
     grid-template-columns: repeat(3, minmax(200px, 80vw));
   }
+
+  /* Sticky bar above the grid: button + title + sort, single row. */
+  .browse-grid-header {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--sapBackgroundColor, #fff);
+    padding-block: 0.5rem;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .browse-filter-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 0.85rem;
+    border: 1px solid var(--sapButton_BorderColor, #b3b3b3);
+    background: var(--sapButton_Background, #fff);
+    color: var(--sapButton_TextColor, inherit);
+    border-radius: 0.5rem;
+    cursor: pointer;
+    font: inherit;
+    line-height: 1;
+  }
+  .browse-filter-toggle:hover { background: var(--sapButton_Hover_Background, #ebf5fe); }
+  .browse-filter-toggle:focus-visible {
+    outline: 2px solid var(--sapButton_Focus_BorderColor, #0a6ed1);
+    outline-offset: 2px;
+  }
+  /* Title shrinks but stays visible; sort sits at the end. */
+  .browse-grid-title { font-size: 1rem; margin: 0; }
+  .browse-sort { margin-inline-start: auto; }
+}
+
+/* Inside the dialog the rail is always visible regardless of viewport
+   (the dialog is only opened on mobile, but we don't want the @media
+   rule above to keep #browse-filter-rail { display: none } when it's a
+   dialog descendant). The descendant selector wins on specificity. */
+ui5-dialog#browse-filter-drawer #browse-filter-rail {
+  display: block;
 }
 
 /* ── Progress-ring draw-in (decision #13) ────────────────────── */
