@@ -183,6 +183,11 @@ export const CHECK_CODE_OUTPUT_SCHEMA = {
  * Returns the original verdict object UNCHANGED (same reference) when no
  * redaction is necessary.
  *
+ * Shape-tolerant: handles both the code-check verdict shape
+ * ({ summary, suggestions[], correctAspects[] }) and the validate-answer
+ * verdict shape ({ summary, hint }). Missing fields are skipped, not
+ * required — so this single function can guard both PR #205 and #209.
+ *
  * @param {object} verdict            - The parsed LLM output.
  * @param {string|null} referenceSolution
  * @returns {object} verdict (possibly mutated copy)
@@ -208,21 +213,31 @@ export function redactReferenceLeaks(verdict, referenceSolution) {
 
   // Check whether any redaction is needed before copying.
   const summaryLeaks = hasLeak(verdict.summary);
-  const suggestionLeaks = verdict.suggestions.map(hasLeak);
-  const aspectLeaks = verdict.correctAspects.map(hasLeak);
+  const hintLeaks = hasLeak(verdict.hint);
+  const suggestions = Array.isArray(verdict.suggestions) ? verdict.suggestions : null;
+  const correctAspects = Array.isArray(verdict.correctAspects) ? verdict.correctAspects : null;
+  const suggestionLeaks = suggestions ? suggestions.map(hasLeak) : null;
+  const aspectLeaks = correctAspects ? correctAspects.map(hasLeak) : null;
 
   const needsRedaction =
     summaryLeaks ||
-    suggestionLeaks.some(Boolean) ||
-    aspectLeaks.some(Boolean);
+    hintLeaks ||
+    (suggestionLeaks && suggestionLeaks.some(Boolean)) ||
+    (aspectLeaks && aspectLeaks.some(Boolean));
 
   if (!needsRedaction) return verdict;
 
-  // Shallow copy so we don't mutate the caller's object.
-  return {
-    ...verdict,
-    summary: summaryLeaks ? '[redacted]' : verdict.summary,
-    suggestions: verdict.suggestions.map((s, i) => suggestionLeaks[i] ? '[redacted]' : s),
-    correctAspects: verdict.correctAspects.map((a, i) => aspectLeaks[i] ? '[redacted]' : a),
-  };
+  // Shallow copy so we don't mutate the caller's object. Only re-emit
+  // array fields that were present on the input — don't fabricate
+  // suggestions/correctAspects when the caller didn't supply them.
+  const out = { ...verdict };
+  if (summaryLeaks) out.summary = '[redacted]';
+  if (hintLeaks) out.hint = '[redacted]';
+  if (suggestions) {
+    out.suggestions = suggestions.map((s, i) => suggestionLeaks[i] ? '[redacted]' : s);
+  }
+  if (correctAspects) {
+    out.correctAspects = correctAspects.map((a, i) => aspectLeaks[i] ? '[redacted]' : a);
+  }
+  return out;
 }
