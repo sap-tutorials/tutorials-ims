@@ -59,4 +59,25 @@ describe('rebuild-trigger', () => {
     await vi.advanceTimersByTimeAsync(60_001)
     expect(dispatch).toHaveBeenCalledTimes(2)
   })
+
+  it('defaults environment to "dev" when REBUILD_TARGET_ENV is unset', async () => {
+    _resetForTests({ dispatchFn: dispatch, debounceMs: 60_000, token: 'fake-token' })
+    scheduleRebuild('admin-write')
+    await vi.advanceTimersByTimeAsync(60_001)
+    expect(dispatch).toHaveBeenCalledWith({ 'trigger-source': 'admin-write', environment: 'dev' })
+  })
+
+  it('uses REBUILD_TARGET_ENV value when set (qa)', async () => {
+    _resetForTests({ dispatchFn: dispatch, debounceMs: 60_000, token: 'fake-token', environment: 'qa' })
+    scheduleRebuild('admin-write')
+    await vi.advanceTimersByTimeAsync(60_001)
+    expect(dispatch).toHaveBeenCalledWith({ 'trigger-source': 'admin-write', environment: 'qa' })
+  })
+
+  it('uses REBUILD_TARGET_ENV value when set (prod)', async () => {
+    _resetForTests({ dispatchFn: dispatch, debounceMs: 60_000, token: 'fake-token', environment: 'prod' })
+    scheduleRebuild('admin-write')
+    await vi.advanceTimersByTimeAsync(60_001)
+    expect(dispatch).toHaveBeenCalledWith({ 'trigger-source': 'admin-write', environment: 'prod' })
+  })
 })
