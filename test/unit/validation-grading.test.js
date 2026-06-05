@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   gradeAnswers,
+  isAiGraded,
   persistKey,
   readPersisted,
   writePersisted
@@ -137,5 +138,37 @@ describe('validation grading.ts', () => {
     vi.stubGlobal('localStorage', ls);
     expect(() => writePersisted('foo', 1, true)).not.toThrow();
     vi.unstubAllGlobals();
+  });
+
+  // ── isAiGraded ──────────────────────────────────────────────────
+
+  it('isAiGraded: returns true when aiGrading=true', () => {
+    expect(isAiGraded({
+      id: 'q1', question: 'Q?', type: 'text', correctAnswer: '', aiGrading: true
+    })).toBe(true);
+  });
+
+  it('isAiGraded: returns false when aiGrading=false', () => {
+    expect(isAiGraded({
+      id: 'q1', question: 'Q?', type: 'text', correctAnswer: 'X', aiGrading: false
+    })).toBe(false);
+  });
+
+  it('isAiGraded: returns false when aiGrading is undefined', () => {
+    expect(isAiGraded({
+      id: 'q1', question: 'Q?', type: 'text', correctAnswer: 'X'
+    })).toBe(false);
+  });
+
+  it('isAiGraded: returns false for truthy non-boolean values (strict equality)', () => {
+    // Defensive: HANA can return integers (0/1) for boolean columns. The loader
+    // is responsible for coercing those before they reach the client; isAiGraded
+    // itself does strict-true equality so a non-coerced 1 won't accidentally
+    // route through the AI grader.
+    expect(isAiGraded({
+      id: 'q1', question: 'Q?', type: 'text', correctAnswer: 'X',
+      // @ts-expect-error — deliberate type-violation for defensive check
+      aiGrading: 1
+    })).toBe(false);
   });
 });

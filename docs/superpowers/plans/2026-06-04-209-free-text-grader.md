@@ -1854,7 +1854,15 @@ async function gradeAi(slug: string, stepNumber: number, questionId: string, sub
 | `partial` | `<ui5-message-strip design="Information">` `{{ hint }}` (the model-authored partial-credit hint, NOT canned text) |
 | `incorrect` | `<ui5-message-strip design="Negative">` "Not quite — try again." |
 
-When the AI endpoint returns `disabled` (503), the component falls back to **rendering the form as if no AI grading were configured** — the question stays gradable client-side via `correctAnswer` equality (#212 path). The user sees no error message; just the standard pass/fail flow. This mirrors the spec's graceful-degradation behavior.
+**503 disabled handling:** when the AI grader is feature-flagged off,
+the endpoint returns 503. The component surfaces this as a 4th result
+state with an Information `<ui5-message-strip>` ("Answer checking is
+temporarily unavailable") + Try-Again button. Reasoning: with Task 2's
+anti-leak strip, AI questions don't carry `correctAnswer` in the
+public payload, so client-side equality grading isn't possible. A
+separate "disabled" state is the only honest UX — telling the learner
+"your answer is wrong" when actually the system is off would punish
+them for an operator decision.
 
 When `pending.value === true` show `<ui5-busy-indicator delay="0" active>` overlaying the submit button. Use `<ui5-button :disabled="pending">` to prevent double-click.
 
@@ -1917,11 +1925,15 @@ BR=$(git branch --show-current) && [ "$BR" = "feature/209-free-text-grader" ] &&
 - Local-first grading: synchronous gradeAnswers() runs first;
   AI questions only POST'd if local Qs all pass (fail-fast saves
   upstream calls + token spend).
-- 3-state UI: pass / partial-with-model-hint / fail.
+- 4-state UI: pass / partial-with-model-hint / fail / disabled.
   Partial is gated on the model returning a non-empty hint;
   otherwise the result is treated as incorrect (no canned hint).
-- 503 (disabled) falls through to client-side correctAnswer
-  equality grading — feature flag off behaves like #212 only.
+- 503 (disabled) renders a 4th 'Information' UI state ("Answer
+  checking is temporarily unavailable") rather than punishing
+  the learner with 'incorrect'. The earlier "fall through to
+  correctAnswer equality" prose was obsoleted by Task 2's
+  anti-leak strip — AI questions don't carry correctAnswer in
+  the public payload.
 - ui5-busy-indicator overlay during async grading; double-click
   prevented via :disabled.
 - step-validated CustomEvent fires on full pass (preserves the
