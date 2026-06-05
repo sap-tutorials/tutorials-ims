@@ -18,7 +18,7 @@ The deciding metric is **card click-through rate (CTR)**. Secondary metrics (fil
 ## How to run a comparison (5 minutes)
 
 1. Confirm `UI_EVENTS_ENABLED=true` is set on `tutorials-srv` (and on `tutorials-srv-qa` if you also want QA traffic). Without it, the write endpoint silently drops batches and `UIEvents` stays empty.
-2. Open the analytics explorer at `/analytics-ui/` (XSUAA-protected; needs the `Tutorials.AdminFull` scope — see [Testing endpoints](./testing-endpoints.md)).
+2. Open the analytics explorer at `/analytics-ui/` (XSUAA-protected; route requires the `Admin` scope from `xs-app.json` — see [Testing endpoints](./testing-endpoints.md)).
 3. Switch to the **Saved Queries** tab. Filter by name prefix `A/B —`. The 6 canonical queries are seeded by `srv/lib/ui-event-saved-queries.js` on every `cds.served` and are visible to every admin (`visibility: 'shared-admins'`).
 4. Run each query. They are read-only and validator-safe; results stream back via the standard `runSelectQuery` envelope (capped at 5,001 rows).
 5. Read the rows side by side: each query returns one row per surface (`/` and `/browse/`). Apply the **threshold rule** below to decide whether you have enough data to call a winner.
