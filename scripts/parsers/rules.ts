@@ -117,6 +117,22 @@ function parseBlock(
   if (type === 'multiple-choice') {
     const { options, correctAnswer } = parseChoiceOptions(matchContent)
     if (!options.length || !correctAnswer) return []
+
+    // [#238] AI-graded multiple-choice is a footgun: the LLM prompt is
+    // structured for free-text answers and option-letter "submissions"
+    // produce nonsensical verdicts. We accept the directive at parse time
+    // (so authors don't get a build break) but warn loudly so the typo
+    // surfaces during fetch-tutorials. The dispatch (#238 runtime guard)
+    // also rejects with errorReason: 'wrong_question_type'.
+    if (aiGrading) {
+      // Use console.warn rather than throw — partial-fetch resiliency matters.
+      console.warn(
+        `[#238] step ${stepNum}: multiple-choice question marked "###Grading: ai-judged" — ` +
+        `the AI grader is text-only by design. Either remove the directive or change ` +
+        `the rule type to a text/regex variant. ` +
+        `Letting it pass parses with aiGrading: true; runtime will reject with errorReason: 'wrong_question_type'.`
+      )
+    }
     // ANTI-LEAK: when aiGrading is true, OMIT correctAnswer from the public
     // shape. The reference answer ships server-side via ValidateAnswerSpecs
     // and never enters the public Hugo frontmatter / <script id="tutorial-data">.

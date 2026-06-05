@@ -136,6 +136,78 @@ describe('dispatchValidateAnswer', () => {
     expect(rows[0].correctAnswer).toBe('Y');
   });
 
+  // ─── Test 3b: Wrong question type (#238) ─────────────────────────────
+
+  it('wrong_question_type: AI-graded MCQ → returns error + persists row, no LLM call', async () => {
+    // [#238] Authors who set ###Grading: ai-judged on a multiple-choice
+    // question burn LLM tokens for nonsense verdicts. The dispatch rejects
+    // these at runtime via the captured ruleType from ValidateAnswerSpecs.
+    const callModel = vi.fn();
+    const loadQuestion = vi.fn().mockResolvedValue({
+      questionId: 'q1',
+      question: 'Pick one',
+      correctAnswer: 'A',
+      aiGrading: true,
+      ruleType: 'multiple-choice',
+    });
+
+    const out = await dispatchValidateAnswer(
+      { tutorialSlug: 'sample', stepNumber: 1, questionId: 'q1', submittedAnswer: 'A' },
+      { user: { id: 'u1' }, callModel, loadQuestion },
+    );
+
+    expect(out.verdict).toBe('error');
+    expect(out.errorReason).toBe('wrong_question_type');
+    expect(callModel).not.toHaveBeenCalled();
+
+    const { ValidateAnswerSubmissions } = cds.entities('com.sap.developers.ims');
+    const rows = await SELECT.from(ValidateAnswerSubmissions);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].errorReason).toBe('wrong_question_type');
+  });
+
+  it('wrong_question_type: single-choice rule type also rejected', async () => {
+    const callModel = vi.fn();
+    const loadQuestion = vi.fn().mockResolvedValue({
+      questionId: 'q1',
+      question: 'Pick one',
+      correctAnswer: 'A',
+      aiGrading: true,
+      ruleType: 'single-choice',
+    });
+
+    const out = await dispatchValidateAnswer(
+      { tutorialSlug: 'sample', stepNumber: 1, questionId: 'q1', submittedAnswer: 'A' },
+      { user: { id: 'u1' }, callModel, loadQuestion },
+    );
+
+    expect(out.errorReason).toBe('wrong_question_type');
+    expect(callModel).not.toHaveBeenCalled();
+  });
+
+  it('text-typed AI-graded question still passes through (regression guard)', async () => {
+    // Defensive: the MCQ guard MUST NOT block legitimate AI-graded text Qs.
+    const callModel = vi.fn().mockResolvedValue({
+      verdict: { verdict: 'pass', summary: 'Looks good' },
+      promptTokens: 100, completionTokens: 50, modelName: 'gpt-test',
+    });
+    const loadQuestion = vi.fn().mockResolvedValue({
+      questionId: 'q1',
+      question: 'Explain',
+      correctAnswer: 'Reference text',
+      aiGrading: true,
+      ruleType: 'exact-match',
+    });
+
+    const out = await dispatchValidateAnswer(
+      { tutorialSlug: 'sample', stepNumber: 1, questionId: 'q1', submittedAnswer: 'My answer' },
+      { user: { id: 'u1' }, callModel, loadQuestion },
+    );
+
+    expect(out.verdict).toBe('pass');
+    expect(callModel).toHaveBeenCalled();
+  });
+
   // ─── Test 4: Upstream LLM error ────────────────────────────────────────
 
   it('upstream LLM error: callModel throws → returns error + persists row', async () => {

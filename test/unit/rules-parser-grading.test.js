@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { parseRulesVr } from '../../scripts/parsers/rules.js';
 
 describe('parseRulesVr — Grading directive + regex auto-route (#209)', () => {
@@ -155,3 +155,61 @@ A2
     expect(map.get(2)?.[0].correctAnswer).toBe('A2');  // <-- this is the bug-fix assertion
   });
 });
+
+describe('parseRulesVr — MCQ + ai-judged warning (#238)', () => {
+  it('warns to console.warn when single-choice + ai-judged, but still parses', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const content = `[VALIDATE_5]
+###Rule
+single-choice
+###Grading
+ai-judged
+###Question
+Pick one
+###Match
+[x] A
+[ ] B
+`
+    const map = parseRulesVr(content)
+    const q = map.get(5)?.[0]
+    expect(q?.aiGrading).toBe(true)
+    expect(q?.type).toBe('multiple-choice')
+    // Verify the warning fired
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn.mock.calls[0][0]).toMatch(/#238.*step 5.*multiple-choice.*ai-judged/i)
+    warn.mockRestore()
+  })
+
+  it('does NOT warn when MCQ has no ###Grading directive', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const content = `[VALIDATE_6]
+###Rule
+single-choice
+###Question
+Pick one
+###Match
+[x] A
+[ ] B
+`
+    parseRulesVr(content)
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
+  it('does NOT warn when text question + ai-judged (the legitimate case)', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const content = `[VALIDATE_7]
+###Rule
+exact-match
+###Grading
+ai-judged
+###Question
+Explain X
+###Match
+Reference text
+`
+    parseRulesVr(content)
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+})

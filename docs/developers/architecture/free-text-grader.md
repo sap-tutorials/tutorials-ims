@@ -122,8 +122,16 @@ parser will accept the directive (setting `aiGrading: true` on the emitted
 question), but routing them through the LLM grader is not recommended:
 the prompt is structured for free-text answers and option-letter
 submissions produce low-quality verdicts. Author guidance: only use
-`###Grading: ai-judged` on text-typed questions. The runtime does not
-enforce this — the safeguard is at authoring time.
+`###Grading: ai-judged` on text-typed questions.
+
+**Two-layer guard (#238):**
+
+- Build-time: the parser emits a `console.warn` for any AI-graded MCQ,
+  surfacing the typo during `npm run fetch-tutorials`.
+- Runtime: `dispatchValidateAnswer` rejects AI-graded MCQs with
+  `errorReason: 'wrong_question_type'` based on the original `ruleType`
+  captured in `ValidateAnswerSpecs`. The submission row is persisted
+  (for offline analysis) but no LLM call is made — no token spend.
 
 See the [tutorial authoring guide](../../authors/writing-tutorials.md) for the
 complete `[VALIDATE_N]` syntax. The author preview at `/tutorials-qa/`

@@ -16,8 +16,11 @@ const LOG = cds.log('validate-answer-loader');
  * @param {string} slug          - Tutorial slug; will be lowercased internally.
  * @param {number} stepNumber    - 1-based step index.
  * @param {string} questionId    - Stable question id from rules.vr (e.g. 'validate-3').
- * @returns {Promise<{ questionId: string, question: string, correctAnswer: string, aiGrading: boolean } | null>}
- *          Dispatch-shaped object on hit, null on miss or any error.
+ * @returns {Promise<{ questionId: string, question: string, correctAnswer: string, aiGrading: boolean, ruleType: string | null } | null>}
+ *          Dispatch-shaped object on hit, null on miss or any error. `ruleType`
+ *          is the original rules.vr rule string (e.g. 'exact-match', 'regex',
+ *          'multiple-choice'); used by the dispatch to reject AI-graded MCQs
+ *          (#238).
  */
 export async function defaultLoadQuestion(slug, stepNumber, questionId) {
   try {
@@ -50,6 +53,9 @@ export async function defaultLoadQuestion(slug, stepNumber, questionId) {
       question: spec.questionText,
       correctAnswer: spec.correctAnswer,
       aiGrading: Boolean(spec.aiGrading),
+      // Original rules.vr rule type (e.g. 'exact-match', 'regex', 'multiple-choice').
+      // Used by the dispatch to reject AI-graded MCQs (#238).
+      ruleType: spec.ruleType ?? null,
     };
   } catch (err) {
     // Real DB error — keep at warn so it surfaces in production logs.
