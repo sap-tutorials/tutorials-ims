@@ -101,6 +101,7 @@ annotate ims.CodeCheckSubmissions with {
   createdAt    @analytics.filter: { mode: 'date' };
 };
 
-// UIEvent indexes (#204): see db/src/IDX_UIEVENT_*.hdbindex for the
-// hand-authored DDL that the CAP compiler couldn't generate via
-// @cds.persistence.index. PR 4 / closes #227.
+// UIEvent indexes (#204): hand-authored .hdbindex files in db/src/ proved
+// incompatible with HDI design-time syntax (closes #227 reverted; see PR
+// to be filed). Index DDL to be re-introduced via @sql.append on the
+// UIEvent entity in db/schema.cds the CAP-native way.
