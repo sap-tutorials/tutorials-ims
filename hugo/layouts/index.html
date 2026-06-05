@@ -68,5 +68,6 @@
 </article>
 {{ $css := resources.Get "css/home.css" }}
 <link rel="stylesheet" href="{{ $css.RelPermalink }}">
+<script>window.__BROWSE_BUILD_AT = "{{ .Site.Data.browse.buildAt }}";</script>
 <script type="module" src="/js/navigator.js?v={{ now.Unix }}"></script>
 {{ end }}
