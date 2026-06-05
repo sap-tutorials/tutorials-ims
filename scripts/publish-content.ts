@@ -8,6 +8,7 @@ import { beginSession, appendBatch, commitSession, abortSession, fetchRemoteHash
 import { withRetry, formatErrorChain } from './lib/publish-retry.js';
 import { chunk, runConcurrent } from './lib/publish-batcher.js';
 import { collectCodeCheckSpecs, publishCodeCheckSpecs } from './lib/publish-codecheck.js';
+import { publishValidateAnswerSpecs } from './lib/publish-validate-answer.js';
 
 export type { Channel };
 
@@ -558,6 +559,25 @@ async function main() {
   } catch (err) {
     console.error('[publish-content] code-check spec publish failed (non-fatal):', formatErrorChain(err));
     // Do NOT exit non-zero — content publish is the critical path; specs are auxiliary.
+  }
+
+  // --- validate-answer spec publish (non-fatal auxiliary step, issue #209 Task 9) ---
+  try {
+    const cacheDir = channel === 'qa'
+      ? join(process.cwd(), '.tutorial-cache-qa')
+      : join(process.cwd(), '.tutorial-cache');
+    const veResult = await publishValidateAnswerSpecs({
+      cacheDir,
+      baseUrl: opts.baseUrl,
+      apiKey: opts.apiKey,
+    });
+    log(`[validate-answer] published ${veResult.published} specs, ${veResult.failures.length} failures`);
+    for (const f of veResult.failures) {
+      console.warn(`[validate-answer]   - ${f.slug}: ${f.status} ${f.body.slice(0, 200)}`);
+    }
+    // Don't process.exit(1) on failures — non-fatal per spec.
+  } catch (err) {
+    console.error('[publish-content] validate-answer spec publish failed (non-fatal):', formatErrorChain(err));
   }
 
   // --- auto-verify ---
