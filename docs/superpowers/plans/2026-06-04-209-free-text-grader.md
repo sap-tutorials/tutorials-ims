@@ -2004,12 +2004,19 @@ distribution, retry counts, prompt-version drift)."
 
 ## Phase 3 — Tests + verification
 
-### Task 12: Hybrid test for `@PersonalData.cascade` anonymization
+### Task 12: Hybrid test for `@PersonalData.cascade` anonymization + loader HANA quirks
 
 **Files:**
 - Test: `test/hybrid/validate-answer-anonymize.test.js` (new)
+- Test: `test/hybrid/validate-answer-loader.test.js` (new — added during Task 7 review)
 
 The PR #221 anonymize cascade walks `@PersonalData.cascade.anonymize` annotations across all entities. `ValidateAnswerSubmissions.user_ID` declared in Task 1 should be NULLed for the target user during anonymization. This test verifies the real HANA pipeline.
+
+**Loader HANA quirks (added per Task 7 quality review):** when running on real HANA, `defaultLoadQuestion` must (a) coerce `aiGrading` to a real JS boolean even when HANA returns `0/1` integers, and (b) find rows when `Tutorials.slug` is stored mixed-case (the publish-write path lowercases per [[feedback_audit_all_callers_of_buggy_primitive]], but a defense-in-depth hybrid test pins the contract). Add a second hybrid test file alongside the cascade test that asserts:
+
+1. Insert a Tutorial with a known-lowercase slug + a ValidateAnswerSpec with `aiGrading: true` → loader returns `aiGrading === true` (typeof === 'boolean').
+2. Insert a Tutorial with a known-lowercase slug + a ValidateAnswerSpec with `aiGrading: false` → loader returns `aiGrading === false`.
+3. Loader called with mixed-case slug input → finds the lowercase-stored row (verifies `slug.toLowerCase()` defense).
 
 - [ ] **Step 1: Write the test**
 
