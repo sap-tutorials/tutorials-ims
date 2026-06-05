@@ -403,6 +403,10 @@ entity ChatSettings : cuid, managed {
   // AI code-check spike (issue #171). When false, /api/codecheck → 503
   // and the checkCode tool is omitted from toolsForContext().
   codeCheckEnabled     : Boolean default false;
+
+  // AI free-text grader (issue #209). When false, /api/validate-answer → 503
+  // and the dispatch short-circuits without calling the LLM.
+  validateAnswerEnabled : Boolean default false;
 }
 
 entity TutorialEmbedding {
@@ -464,6 +468,45 @@ entity CodeCheckSubmissions : managed {
   completionTokens     : Integer;
   latencyMs            : Integer;
   errorReason          : String(200);
+}
+
+// Author-supplied free-text-grader specs per (tutorial, step, questionId).
+// Populated by the publish-content pipeline; read by srv/lib/validate-answer-tool.js.
+// Server-only — `correctAnswer` lives ONLY here for AI-graded questions.
+// The parser (Task 2) strips correctAnswer from the public Hugo frontmatter
+// when aiGrading: true, so the LLM grader's reference answer never enters
+// the <script id="tutorial-data"> JSON shipped to clients.
+entity ValidateAnswerSpecs : managed {
+  key tutorial      : Association to Tutorials;
+  key stepNumber    : Integer;
+  key questionId    : String(40);
+  questionText      : LargeString @mandatory;
+  correctAnswer     : LargeString @mandatory;
+  ruleType          : String(40);          // e.g. 'exact-match', 'regex', 'regex-begins-with'
+  aiGrading         : Boolean default false;
+}
+
+// Every learner submission. Drives offline grader-quality evaluation.
+// 'verdict' allows 'error' as a server-side outcome value (the LLM JSON
+// schema only emits 'pass' | 'partial' | 'fail').
+entity ValidateAnswerSubmissions : managed {
+  key ID            : UUID;
+  user              : Association to Users;
+  tutorialSlug      : String(200) @mandatory;
+  stepNumber        : Integer @mandatory;
+  questionId        : String(40) @mandatory;
+  questionText      : LargeString;         // captured for offline eval
+  correctAnswer     : LargeString;         // captured for offline eval
+  submittedAnswer   : LargeString @mandatory;
+  verdict           : String(10);          // 'pass'|'partial'|'fail'|'error'
+  summary           : LargeString;
+  hint              : LargeString;         // null on pass/fail; populated on partial
+  modelName         : String(80);
+  promptVersion     : String(10);
+  promptTokens      : Integer;
+  completionTokens  : Integer;
+  latencyMs         : Integer;
+  errorReason       : String(200);
 }
 
 /**
