@@ -1,7 +1,15 @@
 {{ define "main" }}
-{{- $browse := .Site.Data.browse -}}
+{{- /* Defensive default: fetch-tutorials.ts skips writing hugo/data/browse.json
+       when the upstream /build/catalog returns no missions (ALLOW_EMPTY_CAP path),
+       so .Site.Data.browse can be nil. Treat missing or partial data as "empty
+       catalog" and render a graceful empty-state instead of crashing. See #243. */ -}}
+{{- $browse := .Site.Data.browse | default (dict "all" slice "featured" slice "recent" slice "buildAt" "") -}}
+{{- $all := $browse.all | default slice -}}
+{{- $featured := $browse.featured | default slice -}}
+{{- $recent := $browse.recent | default slice -}}
+{{- $buildAt := $browse.buildAt | default "" -}}
 {{- $pageSize := 24 -}}
-{{- $firstPageItems := first $pageSize $browse.all -}}
+{{- $firstPageItems := first $pageSize $all -}}
 
 <header class="browse-banner" role="banner">
   <h1>Browse SAP developer tutorials</h1>
@@ -16,15 +24,24 @@
   {{ partial "browse/_partials/filter-rail.html" . }}
 
   <main id="browse-results" tabindex="-1">
+    {{- if eq (len $all) 0 -}}
+      {{- /* Empty-state: no catalog data on this server. Page-chrome stays so users
+             can still reach the search box and filter rail; the rails+grid+pagination
+             are replaced with a single illustrated message. ui5-illustrated-message
+             degrades to its slot text if the web component fails to load. */ -}}
+      <section class="browse-empty-state" aria-label="No tutorials available">
+        <ui5-illustrated-message name="NoData" subtitle-text="The tutorial catalog is being prepared. Please check back shortly."></ui5-illustrated-message>
+      </section>
+    {{- else -}}
     <div data-rails-container>
       {{ partial "browse/_partials/rail.html" (dict "title" "Featured missions"
-                                                    "idList" $browse.featured
+                                                    "idList" $featured
                                                     "showAllHref" "/missions/"
-                                                    "all" $browse.all) }}
+                                                    "all" $all) }}
       {{ partial "browse/_partials/rail.html" (dict "title" "Recently added"
-                                                    "idList" $browse.recent
+                                                    "idList" $recent
                                                     "showAllHref" "/?new=1"
-                                                    "all" $browse.all) }}
+                                                    "all" $all) }}
     </div>
 
     <section class="browse-grid-section" aria-label="All tutorials">
@@ -34,7 +51,7 @@
           Filters
           <span class="browse-filter-toggle__count" hidden></span>
         </button>
-        <h2 class="browse-grid-title">All {{ len $browse.all }} items</h2>
+        <h2 class="browse-grid-title">All {{ len $all }} items</h2>
         <label class="browse-sort">
           Sort:
           <select name="sort" class="browse-sort__select">
@@ -56,12 +73,13 @@
       </div>
 
       <nav class="browse-pagination" aria-label="Pagination">
-        {{- $totalPages := math.Ceil (div (len $browse.all) $pageSize) -}}
+        {{- $totalPages := math.Ceil (div (len $all) $pageSize) -}}
         {{- if gt $totalPages 1 -}}
           <a href="?page=2" rel="next">Next →</a>
         {{- end -}}
       </nav>
     </section>
+    {{- end -}}
   </main>
 </div>
 
@@ -73,16 +91,21 @@
        checkbox/clear-all wiring continues to function unchanged. */ -}}
 <ui5-dialog id="browse-filter-drawer" stretch accessible-name="Filters"></ui5-dialog>
 
-<script>window.__BROWSE_BUILD_AT = "{{ $browse.buildAt }}";</script>
+<script>window.__BROWSE_BUILD_AT = "{{ $buildAt }}";</script>
 {{- /* Inlined catalog payload — read by BrowsePage.vue on mount.
        Avoids a /browse/data.json round-trip; ~1500 KB JSON gzipped at
        full catalog size, fine for a homepage. `safeJS` is required so
        Go's html/template doesn't wrap the JSON object in a JS-string
        literal (the default behaviour inside <script>). With type=
        "application/json" the browser parses contents as data, not JS,
-       so safeJS-marked output ships verbatim. */ -}}
+       so safeJS-marked output ships verbatim.
+
+       When the catalog is empty the JSON ships as { all: [], featured: [],
+       recent: [], buildAt: "" } — the Vue island sees zero items and
+       renders nothing, so the SSR empty-state above is the user-visible
+       result. */ -}}
 <script id="browse-data" type="application/json">{{ $browse | jsonify | safeJS }}</script>
-<script type="module" src="/js/browse.js?v={{ $browse.buildAt | replaceRE `[^0-9]` `` }}"></script>
+<script type="module" src="/js/browse.js?v={{ $buildAt | replaceRE `[^0-9]` `` }}"></script>
 
 {{ $css := resources.Get "css/browse.css" }}
 {{- if $css -}}
