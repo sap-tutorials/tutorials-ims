@@ -98,7 +98,11 @@ export default defineConfig({
         'code-check': resolve(__dirname, 'src/code-check/main.ts'),
         browse: resolve(__dirname, 'src/browse/main.ts'),
         'validation': resolve(__dirname, 'src/validation/main.ts'),
-        tutorial: resolve(__dirname, 'src/tutorial/main.ts'),
+        // [#251] Renamed from `tutorial` → `tutorial-referred` to avoid a path
+        // collision with Hugo's `js.Build` output for `hugo/assets/js/tutorial.ts`,
+        // which writes to the same /js/tutorial.js URL and would clobber (or be
+        // clobbered by) this Vite entry depending on build order.
+        'tutorial-referred': resolve(__dirname, 'src/tutorial-referred/main.ts'),
       },
       output: {
         entryFileNames: '[name].js',
