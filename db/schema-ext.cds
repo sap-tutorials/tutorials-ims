@@ -102,19 +102,12 @@ annotate ims.CodeCheckSubmissions with {
 };
 
 // UIEvent indexes (#204): three secondary indexes on the UIEvent telemetry
-// table to keep the A/B-test queries cheap as event volume grows. Original
-// .hdbindex attempt closed-#227 was reverted in PR #249 because it used
-// invalid HDI design-time syntax. This rework uses @sql.append, which CAP
-// injects verbatim into the generated DDL after the table CREATE — the
-// CAP-native path for native database clauses (see CAP March 2022 release
-// notes on @sql.append).
+// table to keep the A/B-test queries cheap as event volume grows. The index
+// DDL lives in db/src/IDX_UIEVENT_*.hdbindex with HDI design-time syntax
+// (no CREATE keyword; physical table name; bare identifiers). The plugin
+// for the .hdbindex suffix is registered in db/src/.hdiconfig (PR #249).
 //
-// Validation: cds build --production emits the appended SQL into the
-// .hdbmigrationtable file as separate CREATE INDEX statements (verified
-// against gen/db/src/...UIEvent.hdbmigrationtable on this branch).
-annotate ims.UIEvent with @sql.append: ```sql
-  ;
-  CREATE INDEX "IDX_UIEVENT_SESSION" ON "com_sap_developers_ims_UIEvent" ("sessionId");
-  CREATE INDEX "IDX_UIEVENT_SURFACE_TS" ON "com_sap_developers_ims_UIEvent" ("surface", "TIMESTAMP");
-  CREATE INDEX "IDX_UIEVENT_TYPE_TS" ON "com_sap_developers_ims_UIEvent" ("eventType", "TIMESTAMP")
-```;
+// Why .hdbindex and not @sql.append: the CDS compiler rejects semicolons
+// inside @sql.append values, and a CREATE INDEX statement cannot live as
+// a CREATE TABLE clause on HANA. .hdbindex files are HANA's design-time
+// artifact for separate CREATE INDEX statements.
