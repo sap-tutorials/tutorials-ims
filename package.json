@@ -33,6 +33,7 @@
     "build:css": "postcss hugo/assets/css/sap-fundamental.css --config hugo/ --no-map -o hugo/static/css/sap-fundamental.css",
     "vendor:mediapipe": "node scripts/vendor-mediapipe.cjs",
     "build:apps": "npm run vendor:mediapipe && npm --prefix hugo-apps run build",
+    "postbuild:apps": "tsx scripts/check-build-collisions.ts",
     "build:analytics-explorer": "npm --prefix app/analytics-explorer install && npm --prefix app/analytics-explorer run build",
     "build:hugo": "hugo --source hugo --minify",
     "build:highlight": "tsx scripts/highlight-cds.ts",
