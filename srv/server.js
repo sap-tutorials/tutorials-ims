@@ -24,6 +24,7 @@ import { makeCodeCheckHandler } from './lib/code-check-handler.js';
 import { defaultCallModel } from './lib/code-check-llm.js';
 import { defaultLoadStepText } from './lib/code-check-step-loader.js';
 import { codeCheckSpecPublishHandler } from './lib/code-check-spec-publish.js';
+import { makeValidateAnswerSpecPublishHandler } from './lib/validate-answer-spec-publish.js';
 import { makeValidateAnswerHandler } from './lib/validate-answer-handler.js';
 import { defaultLoadQuestion } from './lib/validate-answer-question-loader.js';
 import { scheduleRebuild, checkFeatureFlag as checkRebuildTriggerFeatureFlag } from './lib/rebuild-trigger.js';
@@ -179,6 +180,24 @@ cds.on('bootstrap', (app) => {
   // populated by CAP's auth chain before the handler runs.
   app.post('/content/rollback', express.json(), contentAuthMiddleware, rollbackHandler);
   app.post('/content/code-check-specs', express.json({ limit: '5mb' }), contentAuthMiddleware, codeCheckSpecPublishHandler);
+
+  // Validate-answer specs publish endpoint (issue #209). Bearer auth happens
+  // INSIDE the handler (not via contentAuthMiddleware) so the factory owns
+  // the apiKey dependency — see srv/lib/validate-answer-spec-publish.js.
+  // REPLACE-per-slug semantics: each call clears and re-inserts the slug's
+  // ValidateAnswerSpecs rows in one transaction.  The factory throws if
+  // apiKey is empty, so skip wiring entirely when CONTENT_API_KEY is unset
+  // (matches contentAuthMiddleware's "503 when not configured" spirit at
+  // boot time — the route just won't exist).
+  if (process.env.CONTENT_API_KEY) {
+    const validateAnswerSpecPublishHandler = makeValidateAnswerSpecPublishHandler({
+      apiKey: process.env.CONTENT_API_KEY,
+    });
+    app.post('/content/validate-answer-specs',
+      express.json({ limit: '5mb' }),
+      validateAnswerSpecPublishHandler
+    );
+  }
 
   // Tutorial feedback bridge. Express handler (rather than letting CAP expose
   // the action over OData) so we can derive the originating client IP from
