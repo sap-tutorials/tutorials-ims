@@ -23,6 +23,14 @@ const result = ref<'correct' | 'incorrect' | 'partial' | 'disabled' | null>(null
 const pending = ref(false);
 const hint = ref('');
 
+// Abort controller for the in-flight AI-grading loop.
+// Held at module scope (per Vue component instance) so a new submit can
+// cancel the previous one's pending fetches. Today's Try-Again button is
+// only rendered AFTER the loop completes (so this is theoretically
+// unreachable), but a future refactor that exposes Try-Again mid-grade
+// would expose a stale-result race without this guard. Belt-and-braces.
+let inFlight: AbortController | null = null;
+
 onMounted(() => {
   const persisted = readPersisted(props.slug, props.stepNumber);
   if (persisted?.correct) {
@@ -64,19 +72,26 @@ function onTextInput(qid: string, event: Event) {
  *   503        → ChatSettings.validateAnswerEnabled is false (graceful degradation)
  *   other 4xx/5xx → generic http_<status> error
  */
-async function gradeAi(slug: string, stepNumber: number, questionId: string, submittedAnswer: string) {
+async function gradeAi(slug: string, stepNumber: number, questionId: string, submittedAnswer: string, signal?: AbortSignal) {
   try {
     const res = await fetch('/api/validate-answer', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ tutorialSlug: slug, stepNumber, questionId, submittedAnswer })
+      body: JSON.stringify({ tutorialSlug: slug, stepNumber, questionId, submittedAnswer }),
+      signal
     });
     if (res.status === 503) return { verdict: 'disabled' as const };
     if (res.status === 429) return { verdict: 'error' as const, errorReason: 'rate_limited' };
     if (!res.ok)            return { verdict: 'error' as const, errorReason: 'http_' + res.status };
     return await res.json();
-  } catch {
+  } catch (err) {
+    // AbortError when the controller was aborted (a newer submit started or
+    // the user clicked Try Again). Caller checks signal.aborted to decide
+    // whether to ignore the result.
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      return { verdict: 'error' as const, errorReason: 'aborted' };
+    }
     return { verdict: 'error' as const, errorReason: 'network' };
   }
 }
@@ -87,6 +102,14 @@ async function onSubmit() {
   // attribute on the submit button covers the common click path; this
   // guards everything else.
   if (pending.value) return;
+
+  // Abort any in-flight grading from a prior submit. Today only matters
+  // if a refactor exposes Try-Again mid-grade — current UI gates Try-Again
+  // behind submitted+result so the loop has already exited. Belt-and-braces.
+  inFlight?.abort();
+  const controller = new AbortController();
+  inFlight = controller;
+  const { signal } = controller;
 
   submitted.value = true;
   pending.value = true;
@@ -112,9 +135,16 @@ async function onSubmit() {
     let firstHint = '';
     let sawDisabled = false;
     for (const q of aiQs) {
+      // If a newer submit started (or Try-Again was clicked), abandon this
+      // loop without touching `result.value` — the new submit will write it.
+      if (signal.aborted) return;
       const submittedAnswer = (answers.value[q.id] ?? '').trim();
       if (!submittedAnswer) { allPass = false; break; }
-      const r = await gradeAi(props.slug, props.stepNumber, q.id, submittedAnswer);
+      const r = await gradeAi(props.slug, props.stepNumber, q.id, submittedAnswer, signal);
+      // Re-check after the await: the controller may have been aborted while
+      // the fetch was in flight. Drop the response — never mutate state on
+      // behalf of a stale submit.
+      if (signal.aborted) return;
       if (r.verdict === 'pass') continue;
       allPass = false;
       // Disabled = operator turned off the AI grader (ChatSettings flag);
@@ -151,17 +181,57 @@ async function onSubmit() {
       result.value = 'incorrect';
     }
   } finally {
-    pending.value = false;
+    // Clear pending only if THIS submit's controller is still the active one;
+    // if a newer submit replaced it (signal.aborted), let the newer one own
+    // the lifecycle. Same for inFlight.
+    if (inFlight === controller) {
+      inFlight = null;
+      pending.value = false;
+    }
   }
 }
 
 function onTryAgain() {
+  // Cancel any in-flight grading (defensive — currently only fires if the
+  // try-again button is clicked while pending=true, which the :disabled
+  // attribute prevents on the click path but not via keyboard or programmatic).
+  inFlight?.abort();
+  inFlight = null;
+  pending.value = false;
   // Allow re-submit on incorrect/partial: clear submitted state, keep answers
   // so the learner can adjust without re-typing. The form re-renders below.
   submitted.value = false;
   result.value = null;
   hint.value = '';
 }
+
+// [#235] Expose internals for component-level tests in Validation.test.ts.
+// Production callers don't reach into the component instance — these refs +
+// methods are normally only manipulated through the template. Keeping the
+// expose explicit (rather than turning off `<script setup>`'s default
+// privacy) makes it clear what the tests rely on.
+//
+// Note: Vue auto-unwraps refs when accessed through the public proxy. So
+// `wrapper.vm.result` is `string | null` (not `Ref<string | null>`).
+// Tests that need to write to refs must use the exposed setters below
+// rather than `wrapper.vm.answers = {...}` (which would replace the proxy
+// property, not the underlying ref).
+function _testSetAnswers(next: Record<string, string>) {
+  answers.value = { ...next };
+}
+
+defineExpose({
+  // Reactive state (auto-unwrapped on read via vm proxy)
+  result,
+  pending,
+  hint,
+  submitted,
+  // Methods
+  onSubmit,
+  onTryAgain,
+  // Test setter — preserves reactivity that direct vm.answers = ... would lose
+  _testSetAnswers,
+});
 </script>
 
 <template>
