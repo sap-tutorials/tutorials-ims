@@ -489,6 +489,7 @@ entity ValidateAnswerSpecs : managed {
 // Every learner submission. Drives offline grader-quality evaluation.
 // 'verdict' allows 'error' as a server-side outcome value (the LLM JSON
 // schema only emits 'pass' | 'partial' | 'fail').
+@analytics.exposed: true
 entity ValidateAnswerSubmissions : managed {
   key ID            : UUID;
   user              : Association to Users;
