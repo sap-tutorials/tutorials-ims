@@ -19,6 +19,11 @@ const GITHUB_API = 'https://api.github.com'
 
 let _state = {
   token: process.env.GITHUB_DISPATCH_TOKEN ?? null,
+  // REBUILD_TARGET_ENV controls which Cloud Foundry approuter the rebuild
+  // workflow_dispatch targets. Default 'dev' matches the original DEV-only
+  // rollout; set per CF env (qa/prod) when GITHUB_DISPATCH_TOKEN rolls
+  // forward to those environments. See docs/developers/operations/github-dispatch-pat-rotation.md.
+  environment: process.env.REBUILD_TARGET_ENV ?? 'dev',
   debounceMs: DEFAULT_DEBOUNCE_MS,
   pendingTimer: null,
   pendingReason: null,
@@ -60,7 +65,7 @@ export function scheduleRebuild(reason) {
     const reasonAtFire = _state.pendingReason
     _state.pendingTimer = null
     _state.pendingReason = null
-    _state.dispatchFn({ 'trigger-source': reasonAtFire, environment: 'dev' }).catch((err) => {
+    _state.dispatchFn({ 'trigger-source': reasonAtFire, environment: _state.environment }).catch((err) => {
       console.error('[rebuild-trigger] dispatch failed:', err.message ?? err)
       // Do NOT rethrow. Admin save already succeeded; the next trigger
       // picks up the missed change.
@@ -74,14 +79,18 @@ export function checkFeatureFlag() {
   if (!_state.token && !_bootWarned) {
     _bootWarned = true
     console.warn('[rebuild-trigger] GITHUB_DISPATCH_TOKEN unset — admin writes will not trigger /browse/ rebuilds. Falls back to next-push cadence.')
+  } else if (_state.token && !_bootWarned) {
+    _bootWarned = true
+    console.log(`[rebuild-trigger] active — admin writes will dispatch with environment='${_state.environment}'.`)
   }
 }
 
 // Test-only escape hatch.
-export function _resetForTests({ dispatchFn, debounceMs, token }) {
+export function _resetForTests({ dispatchFn, debounceMs, token, environment }) {
   if (_state.pendingTimer) clearTimeout(_state.pendingTimer)
   _state = {
     token: token ?? null,
+    environment: environment ?? 'dev',
     debounceMs: debounceMs ?? DEFAULT_DEBOUNCE_MS,
     pendingTimer: null,
     pendingReason: null,

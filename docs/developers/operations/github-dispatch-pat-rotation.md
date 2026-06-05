@@ -6,6 +6,18 @@ Fine-grained GitHub Personal Access Token used by [`srv/lib/rebuild-trigger.js`]
 
 Set on the deployed `tutorials-srv` app as the env var `GITHUB_DISPATCH_TOKEN`. When unset, `rebuild-trigger.js` no-ops gracefully (logs one boot warning, falls back to the existing push-trigger cadence on the `rebuild-content.yml` workflow).
 
+## Environment-aware dispatch (`REBUILD_TARGET_ENV`)
+
+The dispatch payload includes an `environment` input (`dev` / `qa` / `prod`) that the `rebuild-content.yml` workflow uses to target the right Cloud Foundry approuter. Set this env var alongside `GITHUB_DISPATCH_TOKEN` on each CF environment so admin writes on QA dispatch a QA rebuild (not a DEV one):
+
+| CF space | `REBUILD_TARGET_ENV` |
+|---|---|
+| `dev` | `dev` (or unset — defaults to `dev`) |
+| `qa` | `qa` |
+| `prod` | `prod` |
+
+Validate via the boot log line: `[rebuild-trigger] active — admin writes will dispatch with environment='<env>'`. If the line shows the wrong env, fix the CF env var and restart.
+
 ## When to rotate
 
 - **Every 90 days** (token expiry default).
@@ -37,10 +49,11 @@ Set on the deployed `tutorials-srv` app as the env var `GITHUB_DISPATCH_TOKEN`. 
    ```bash
    cf target -s dev
    cf set-env tutorials-srv GITHUB_DISPATCH_TOKEN "<NEW_TOKEN>"
+   cf set-env tutorials-srv REBUILD_TARGET_ENV "dev"   # or unset; defaults to 'dev'
    cf restart tutorials-srv
    ```
 
-   Repeat for `qa` and `prod` spaces. Validate via deployed log line on boot — the line `[rebuild-trigger] GITHUB_DISPATCH_TOKEN unset — admin writes will not trigger /browse/ rebuilds.` should **NOT** appear after restart.
+   Repeat for `qa` (with `REBUILD_TARGET_ENV=qa`) and `prod` (with `REBUILD_TARGET_ENV=prod`) spaces. Validate via the deployed log line on boot — the line `[rebuild-trigger] active — admin writes will dispatch with environment='<env>'` should appear with the right env, and the unset-token warning should **NOT** appear.
 
 4. **Revoke the old token.** GitHub → Settings → Developer settings → Personal access tokens → click old token → Revoke.
 
@@ -60,6 +73,7 @@ If the token is suspected leaked (committed to a repo, posted in a chat, posted 
 |---|---|---|
 | **Token unset** | `[rebuild-trigger]` boot warning; admin writes don't trigger rebuilds | Acceptable degraded mode — content stays fresh via the existing push trigger only. Set the env var when ready. |
 | **Token expired / revoked** | GitHub returns 401; admin save logs `[rebuild-trigger] dispatch failed: GitHub dispatch 401 ...` | Rotate per the steps above. Admin saves still succeed; only the auto-rebuild dispatch is broken. |
+| **`REBUILD_TARGET_ENV` mismatch** | Admin save on QA srv triggers a DEV rebuild (or vice versa); boot log shows `environment='dev'` on a non-DEV space | Set `REBUILD_TARGET_ENV` to match the space (`qa`/`prod`) and `cf restart`. Until then content stays fresh on the wrong env. |
 | **Token over-permissioned** | Token has scopes beyond `actions:write` (e.g. `contents:write`, `metadata:read`, etc.) | Defense-in-depth violation, not an outage. Re-issue with `actions:write` only on next rotation cycle. |
 | **GitHub rate-limited** | Sporadic 429 in logs | The 60s debounce already collapses bulk admin edits. If 429 recurs, investigate whether some other CI workflow is sharing this PAT — fine-grained PATs should not be shared across services. |
 
