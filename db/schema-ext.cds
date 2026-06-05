@@ -101,7 +101,13 @@ annotate ims.CodeCheckSubmissions with {
   createdAt    @analytics.filter: { mode: 'date' };
 };
 
-// UIEvent indexes (#204): hand-authored .hdbindex files in db/src/ proved
-// incompatible with HDI design-time syntax (closes #227 reverted; see PR
-// to be filed). Index DDL to be re-introduced via @sql.append on the
-// UIEvent entity in db/schema.cds the CAP-native way.
+// UIEvent indexes (#204): three secondary indexes on the UIEvent telemetry
+// table to keep the A/B-test queries cheap as event volume grows. The index
+// DDL lives in db/src/IDX_UIEVENT_*.hdbindex with HDI design-time syntax
+// (no CREATE keyword; physical table name; bare identifiers). The plugin
+// for the .hdbindex suffix is registered in db/src/.hdiconfig (PR #249).
+//
+// Why .hdbindex and not @sql.append: the CDS compiler rejects semicolons
+// inside @sql.append values, and a CREATE INDEX statement cannot live as
+// a CREATE TABLE clause on HANA. .hdbindex files are HANA's design-time
+// artifact for separate CREATE INDEX statements.
