@@ -7,7 +7,7 @@ import { flushDimensionsCache, populateImageDimensions, exportDimensionsForHugo 
 import { composeTutorial } from './parsers/compose.js'
 import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, EXCLUDED_REPOS, type DiscoveredTutorial } from './parsers/github.js'
 import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache } from './parsers/cap.js'
-import { parseRulesVr } from './parsers/rules.js'
+import { parseRulesVrEnriched, collectAiGradedSpecs } from './parsers/rules.js'
 import { parseCodeCheckBlocks, attachCodeCheckSpecs } from './parsers/codecheck.js'
 import { computeRecommendations } from './parsers/recommendations.js'
 import { humanizeTag, splitPrerequisites } from './parsers/frontmatter-utils.js'
@@ -654,7 +654,7 @@ async function main() {
       // Fetch and attach validation questions from rules.vr
       const rulesContent = await fetchRulesVr(t.slug, t.repo, t.branch)
       if (rulesContent) {
-        const validationMap = parseRulesVr(rulesContent)
+        const { map: validationMap, ruleTypeByStepAndId, correctAnswerByStepAndId } = parseRulesVrEnriched(rulesContent)
         const testSteps = steps.filter(s => /^test yourself$/i.test(s.title))
         for (const [validateNum, questions] of validationMap) {
           if (!questions.length) continue
@@ -669,11 +669,25 @@ async function main() {
           }
         }
 
+        // Collect AI-graded specs (issue #209) and write sibling sidecar.
+        // The sidecar carries the reference answer + ruleType server-side
+        // (publish pipeline, Task 8); the public Hugo frontmatter never
+        // includes correctAnswer for AI-graded questions (anti-leak).
+        const aiGradedSpecs = collectAiGradedSpecs(validationMap, ruleTypeByStepAndId, correctAnswerByStepAndId)
+        if (aiGradedSpecs.length > 0) {
+          const validateSidecarPath = join(CACHE_DIR, `${t.slug.toLowerCase()}.validate-answer.json`)
+          // Lowercase the slug in the JSON payload + filename: Tutorials.slug
+          // in HANA is lowercase canonical. Source directories like extend-RAP-App
+          // produce mixed-case t.slug; the publish path matches against the
+          // lowercase HANA row.
+          writeFileSync(validateSidecarPath, JSON.stringify({ slug: t.slug.toLowerCase(), specs: aiGradedSpecs }, null, 2))
+        }
+
         const codeCheckMap = parseCodeCheckBlocks(rulesContent)
         if (codeCheckMap.size) {
           const sidecar = attachCodeCheckSpecs(steps, codeCheckMap)
           if (sidecar.length) {
-            const sidecarPath = join(CACHE_DIR, `${t.slug}.codecheck.json`)
+            const sidecarPath = join(CACHE_DIR, `${t.slug.toLowerCase()}.codecheck.json`)
             // Lowercase the slug in the JSON payload: Tutorials.slug in HANA is lowercase
             // canonical (see CLAUDE.md gotcha "Tutorial slugs are lowercase canonical").
             // Source directories like extend-RAP-App produce mixed-case t.slug; the

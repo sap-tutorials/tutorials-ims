@@ -10,7 +10,34 @@ const VALIDATE_MARKER = /^\[VALIDATE_(\d+)\]\s*$/
 const REGEX_RULE_TYPES = new Set(['regex', 'regex-begins-with'])
 
 export function parseRulesVr(content: string): Map<number, ValidationQuestion[]> {
+  return parseRulesVrEnriched(content).map
+}
+
+/**
+ * Enriched variant of parseRulesVr that also returns two sibling maps —
+ * keyed by `${stepNumber}:${questionId}` — capturing per-question metadata
+ * that is INTENTIONALLY excluded from the public ValidationQuestion shape
+ * for AI-graded questions (anti-leak, issue #209):
+ *
+ *   - ruleTypeByStepAndId: original ###Rule string (lowercased), e.g. "regex"
+ *   - correctAnswerByStepAndId: the reference answer (matchContent for text,
+ *     selected option for multiple-choice). For AI-graded questions this is
+ *     the only place the answer survives — the public q.correctAnswer field
+ *     is omitted.
+ *
+ * Both sibling maps are populated for EVERY emitted question (AI-graded or
+ * not), so they remain a complete index of build-time metadata for any
+ * downstream consumer. Filtering to AI-graded specs happens inside
+ * collectAiGradedSpecs.
+ */
+export function parseRulesVrEnriched(content: string): {
+  map: Map<number, ValidationQuestion[]>
+  ruleTypeByStepAndId: Map<string, string>
+  correctAnswerByStepAndId: Map<string, string>
+} {
   const result = new Map<number, ValidationQuestion[]>()
+  const ruleTypeByStepAndId = new Map<string, string>()
+  const correctAnswerByStepAndId = new Map<string, string>()
   const lines = content.split('\n')
 
   let currentNum: number | null = null
@@ -20,7 +47,7 @@ export function parseRulesVr(content: string): Map<number, ValidationQuestion[]>
   // Idempotent — safe to call when no block is in progress (returns early on currentNum === null).
   const flush = () => {
     if (currentNum === null) return
-    const questions = parseBlock(blockLines, currentNum)
+    const questions = parseBlock(blockLines, currentNum, ruleTypeByStepAndId, correctAnswerByStepAndId)
     if (questions.length) {
       const existing = result.get(currentNum) ?? []
       existing.push(...questions)
@@ -55,10 +82,15 @@ export function parseRulesVr(content: string): Map<number, ValidationQuestion[]>
   // EOF flush — captures the final block when there's no closing marker.
   flush()
 
-  return result
+  return { map: result, ruleTypeByStepAndId, correctAnswerByStepAndId }
 }
 
-function parseBlock(lines: string[], stepNum: number): ValidationQuestion[] {
+function parseBlock(
+  lines: string[],
+  stepNum: number,
+  ruleTypeByStepAndId: Map<string, string>,
+  correctAnswerByStepAndId: Map<string, string>
+): ValidationQuestion[] {
   const raw = lines.join('\n')
 
   const ruleMatch = raw.match(/###Rule\s*\n([\s\S]*?)(?=###|$)/)
@@ -95,6 +127,12 @@ function parseBlock(lines: string[], stepNum: number): ValidationQuestion[] {
       options,
       ...(aiGrading ? { aiGrading: true } : { correctAnswer }),
     }
+    // Populate sibling maps for EVERY emitted question (AI-graded or not),
+    // so downstream consumers have a complete index. AI-graded filtering
+    // happens in collectAiGradedSpecs.
+    const key = `${stepNum}:${q.id}`
+    if (ruleType) ruleTypeByStepAndId.set(key, ruleType)
+    correctAnswerByStepAndId.set(key, correctAnswer)
     return [q]
   }
 
@@ -105,6 +143,9 @@ function parseBlock(lines: string[], stepNum: number): ValidationQuestion[] {
     type,
     ...(aiGrading ? { aiGrading: true } : { correctAnswer: matchContent }),
   }
+  const key = `${stepNum}:${q.id}`
+  if (ruleType) ruleTypeByStepAndId.set(key, ruleType)
+  correctAnswerByStepAndId.set(key, matchContent)
   return [q]
 }
 
@@ -131,3 +172,47 @@ function parseChoiceOptions(content: string): { options: string[]; correctAnswer
 }
 
 export { parseCodeCheckBlocks } from './codecheck.js'
+
+export interface AiGradedSpec {
+  stepNumber: number
+  questionId: string
+  questionText: string
+  correctAnswer: string
+  ruleType: string | undefined
+  aiGrading: boolean
+}
+
+/**
+ * Collect AI-graded questions across all steps for a tutorial.
+ * Returns the spec entries that should be persisted server-side via
+ * the publish pipeline (issue #209). Mirrors attachCodeCheckSpecs from
+ * PR #205.
+ */
+export function collectAiGradedSpecs(
+  validationByStep: Map<number, ValidationQuestion[]>,
+  ruleTypeByStepAndId: Map<string, string>,
+  correctAnswerByStepAndId: Map<string, string>
+): AiGradedSpec[] {
+  const specs: AiGradedSpec[] = []
+  for (const [stepNumber, questions] of validationByStep) {
+    for (const q of questions) {
+      if (!q.aiGrading) continue
+      const key = `${stepNumber}:${q.id}`
+      const correctAnswer = correctAnswerByStepAndId.get(key)
+      if (correctAnswer === undefined) {
+        // Should never happen: parseBlock populates this map for every
+        // question it emits, AI-graded or not. Defensive log + skip.
+        continue
+      }
+      specs.push({
+        stepNumber,
+        questionId: q.id,
+        questionText: q.question,
+        correctAnswer,                    // <-- from sibling map, NOT q.correctAnswer
+        ruleType: ruleTypeByStepAndId.get(key),
+        aiGrading: true
+      })
+    }
+  }
+  return specs
+}
