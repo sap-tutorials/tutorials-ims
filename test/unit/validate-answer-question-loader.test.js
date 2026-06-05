@@ -35,7 +35,8 @@ describe('defaultLoadQuestion', () => {
       questionId: 'validate-3',
       question: 'What is X?',
       correctAnswer: 'X is Y.',
-      aiGrading: true
+      aiGrading: true,
+      ruleType: 'exact-match',  // [#238] surface ruleType for MCQ guard
     });
   });
 

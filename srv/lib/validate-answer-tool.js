@@ -127,6 +127,15 @@ export async function dispatchValidateAnswer(input, deps) {
   if (!question.aiGrading) {
     return persistError({ ...baseCtx, question }, 'not_ai_graded', startedAt, deps);
   }
+  // [#238] AI-graded multiple-choice is a footgun: the LLM prompt is
+  // structured for free-text answers and option-letter "submissions"
+  // produce nonsensical verdicts. Reject at runtime so a misconfigured
+  // tutorial that slipped past the parser warning doesn't burn LLM tokens.
+  // Detected via the original rules.vr ruleType captured in ValidateAnswerSpecs.
+  const MCQ_RULE_TYPES = new Set(['single-choice', 'multiple-choice']);
+  if (MCQ_RULE_TYPES.has((question.ruleType ?? '').toLowerCase())) {
+    return persistError({ ...baseCtx, question }, 'wrong_question_type', startedAt, deps);
+  }
 
   // 3. Build prompt
   const system = buildSystemPrompt();
