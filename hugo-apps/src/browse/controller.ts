@@ -147,4 +147,74 @@ export function wireBrowseController(opts: ControllerOpts) {
       titleEl.textContent = `All ${n} items`
     })
   }
+
+  // ── Mobile filter drawer (#216) ─────────────────────────────────────
+  // Below 1024px the SSR'd #browse-filter-rail is hidden by browse.css.
+  // The Filters button (#browse-filter-toggle) moves the rail into
+  // <ui5-dialog#browse-filter-drawer> as a Light-DOM child on first open;
+  // because ui5-dialog uses Light DOM slot content, the rail's checkboxes
+  // remain document descendants and the existing wiring above continues
+  // to work unchanged. Close (Esc / backdrop / dialog 'close' event)
+  // moves the rail back to its original parent so desktop view at >=1024px
+  // is unaffected when the viewport is later resized.
+  const filterToggle = document.querySelector<HTMLButtonElement>('#browse-filter-toggle')
+  const filterDrawer = document.querySelector<HTMLElement>('#browse-filter-drawer')
+  const filterRail = document.querySelector<HTMLElement>('#browse-filter-rail')
+  if (filterToggle && filterDrawer && filterRail) {
+    const originalParent = filterRail.parentElement
+    const originalNextSibling = filterRail.nextSibling
+
+    function openDrawer() {
+      if (filterRail!.parentElement !== filterDrawer) {
+        filterDrawer!.appendChild(filterRail!)
+      }
+      ;(filterDrawer as any).open = true
+      filterToggle!.setAttribute('aria-expanded', 'true')
+    }
+
+    function restoreRail() {
+      if (filterRail!.parentElement === filterDrawer && originalParent) {
+        // insertBefore handles the null-nextSibling case (appendChild equivalent).
+        originalParent.insertBefore(filterRail!, originalNextSibling)
+      }
+      filterToggle!.setAttribute('aria-expanded', 'false')
+    }
+
+    filterToggle.addEventListener('click', openDrawer)
+    // ui5-dialog 'close' event fires after Esc, backdrop click, or open=false.
+    filterDrawer.addEventListener('close', restoreRail)
+
+    // Active-filter count badge on the toggle button. Hidden when zero.
+    const countBadge = filterToggle.querySelector<HTMLElement>('.browse-filter-toggle__count')
+    if (countBadge) {
+      function updateCount() {
+        const f = filters.filters
+        const n =
+          f.types.length + f.levels.length +
+          f.products.length + f.topics.length +
+          (f.isNew ? 1 : 0) + (f.noLicense ? 1 : 0) +
+          (filters.searchQuery.value ? 1 : 0)
+        if (n === 0) {
+          countBadge!.hidden = true
+          countBadge!.textContent = ''
+        } else {
+          countBadge!.hidden = false
+          countBadge!.textContent = String(n)
+        }
+      }
+      watch(
+        [
+          () => filters.filters.types,
+          () => filters.filters.levels,
+          () => filters.filters.products,
+          () => filters.filters.topics,
+          () => filters.filters.isNew,
+          () => filters.filters.noLicense,
+          filters.searchQuery,
+        ],
+        updateCount,
+        { immediate: true, deep: true }
+      )
+    }
+  }
 }

@@ -29,6 +29,11 @@
 
     <section class="browse-grid-section" aria-label="All tutorials">
       <header class="browse-grid-header">
+        <button type="button" class="browse-filter-toggle" id="browse-filter-toggle" aria-expanded="false" aria-controls="browse-filter-drawer">
+          <span aria-hidden="true">⚲</span>
+          Filters
+          <span class="browse-filter-toggle__count" hidden></span>
+        </button>
         <h2 class="browse-grid-title">All {{ len $browse.all }} items</h2>
         <label class="browse-sort">
           Sort:
@@ -59,6 +64,14 @@
     </section>
   </main>
 </div>
+
+{{- /* Mobile filter drawer (#216). The dialog stays empty on desktop;
+       below 1024px controller.ts moves #browse-filter-rail into this
+       dialog (light-DOM child) on first Filters-button click and
+       returns it to its original parent on close. ui5-dialog Light DOM
+       children remain document descendants, so the existing controller
+       checkbox/clear-all wiring continues to function unchanged. */ -}}
+<ui5-dialog id="browse-filter-drawer" stretch accessible-name="Filters"></ui5-dialog>
 
 <script>window.__BROWSE_BUILD_AT = "{{ $browse.buildAt }}";</script>
 {{- /* Inlined catalog payload — read by BrowsePage.vue on mount.
