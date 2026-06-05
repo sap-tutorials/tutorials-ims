@@ -101,7 +101,20 @@ annotate ims.CodeCheckSubmissions with {
   createdAt    @analytics.filter: { mode: 'date' };
 };
 
-// UIEvent indexes (#204): hand-authored .hdbindex files in db/src/ proved
-// incompatible with HDI design-time syntax (closes #227 reverted; see PR
-// to be filed). Index DDL to be re-introduced via @sql.append on the
-// UIEvent entity in db/schema.cds the CAP-native way.
+// UIEvent indexes (#204): three secondary indexes on the UIEvent telemetry
+// table to keep the A/B-test queries cheap as event volume grows. Original
+// .hdbindex attempt closed-#227 was reverted in PR #249 because it used
+// invalid HDI design-time syntax. This rework uses @sql.append, which CAP
+// injects verbatim into the generated DDL after the table CREATE — the
+// CAP-native path for native database clauses (see CAP March 2022 release
+// notes on @sql.append).
+//
+// Validation: cds build --production emits the appended SQL into the
+// .hdbmigrationtable file as separate CREATE INDEX statements (verified
+// against gen/db/src/...UIEvent.hdbmigrationtable on this branch).
+annotate ims.UIEvent with @sql.append: ```sql
+  ;
+  CREATE INDEX "IDX_UIEVENT_SESSION" ON "com_sap_developers_ims_UIEvent" ("sessionId");
+  CREATE INDEX "IDX_UIEVENT_SURFACE_TS" ON "com_sap_developers_ims_UIEvent" ("surface", "TIMESTAMP");
+  CREATE INDEX "IDX_UIEVENT_TYPE_TS" ON "com_sap_developers_ims_UIEvent" ("eventType", "TIMESTAMP")
+```;
