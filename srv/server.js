@@ -24,6 +24,8 @@ import { makeCodeCheckHandler } from './lib/code-check-handler.js';
 import { defaultCallModel } from './lib/code-check-llm.js';
 import { defaultLoadStepText } from './lib/code-check-step-loader.js';
 import { codeCheckSpecPublishHandler } from './lib/code-check-spec-publish.js';
+import { makeValidateAnswerHandler } from './lib/validate-answer-handler.js';
+import { defaultLoadQuestion } from './lib/validate-answer-question-loader.js';
 import { scheduleRebuild, checkFeatureFlag as checkRebuildTriggerFeatureFlag } from './lib/rebuild-trigger.js';
 import { handleUIEvent, checkFeatureFlag as checkUIEventFeatureFlag } from './lib/ui-event-handler.js';
 
@@ -360,6 +362,20 @@ cds.on('served', async () => {
     express.json({ limit: '64kb' }),
     contextMw, authMw,
     (req, res, next) => Promise.resolve(codeCheckHandler(req, res)).catch(next)
+  );
+
+  // AI free-text answer grader (issue #209). Same auth + rate-limit shape as
+  // /api/codecheck. Body cap is smaller (5 KB inside the handler) — text
+  // answers are smaller than code. defaultCallModel is reused as-is from
+  // code-check-llm.js; only the schema differs (passed via dispatch).
+  const validateAnswerHandler = makeValidateAnswerHandler({
+    callModel: defaultCallModel,
+    loadQuestion: defaultLoadQuestion,
+  });
+  app.post('/api/validate-answer',
+    express.json({ limit: '64kb' }),
+    contextMw, authMw,
+    (req, res, next) => Promise.resolve(validateAnswerHandler(req, res)).catch(next)
   );
 
   const embeddingsStatsBusiness = async (req, res) => {
