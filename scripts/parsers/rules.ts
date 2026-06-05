@@ -2,12 +2,33 @@ import type { ValidationQuestion } from './types.js'
 
 const VALIDATE_MARKER = /^\[VALIDATE_(\d+)\]\s*$/
 
+// Rule types whose semantics are "match a regex/prefix pattern" — these are
+// auto-routed to AI grading (issue #209). Historically the loader treated
+// them as plain string equality, so authors who chose them never got the
+// pattern semantics they wanted. AI grading gives them the spirit-of-the-
+// answer evaluation that matches their original intent.
+const REGEX_RULE_TYPES = new Set(['regex', 'regex-begins-with'])
+
 export function parseRulesVr(content: string): Map<number, ValidationQuestion[]> {
   const result = new Map<number, ValidationQuestion[]>()
   const lines = content.split('\n')
 
   let currentNum: number | null = null
   let blockLines: string[] = []
+
+  // Emits the in-progress block to the result map, then resets state.
+  // Idempotent — safe to call when no block is in progress (returns early on currentNum === null).
+  const flush = () => {
+    if (currentNum === null) return
+    const questions = parseBlock(blockLines, currentNum)
+    if (questions.length) {
+      const existing = result.get(currentNum) ?? []
+      existing.push(...questions)
+      result.set(currentNum, existing)
+    }
+    currentNum = null
+    blockLines = []
+  }
 
   for (const line of lines) {
     const match = line.match(VALIDATE_MARKER)
@@ -17,13 +38,11 @@ export function parseRulesVr(content: string): Map<number, ValidationQuestion[]>
         currentNum = num
         blockLines = []
       } else {
-        const questions = parseBlock(blockLines, currentNum)
-        if (questions.length) {
-          const existing = result.get(currentNum) ?? []
-          existing.push(...questions)
-          result.set(currentNum, existing)
-        }
-        currentNum = null
+        // Consecutive [VALIDATE_*] markers (no intervening close marker):
+        // flush the previous block, then re-enter start-of-block state for
+        // this marker so its number isn't lost.
+        flush()
+        currentNum = num
         blockLines = []
       }
       continue
@@ -33,6 +52,9 @@ export function parseRulesVr(content: string): Map<number, ValidationQuestion[]>
     }
   }
 
+  // EOF flush — captures the final block when there's no closing marker.
+  flush()
+
   return result
 }
 
@@ -41,13 +63,20 @@ function parseBlock(lines: string[], stepNum: number): ValidationQuestion[] {
 
   const ruleMatch = raw.match(/###Rule\s*\n([\s\S]*?)(?=###|$)/)
   const questionMatch = raw.match(/###Question\s*\n([\s\S]*?)(?=###|$)/)
-  const matchSection = raw.match(/###Match\s*\n([\s\S]*?)$/)
+  const matchSection = raw.match(/###Match\s*\n([\s\S]*?)(?=###|$)/)
+  // NEW: parse ###Grading directive (case-insensitive value).
+  const gradingMatch = raw.match(/###Grading\s*\n([\s\S]*?)(?=###|$)/)
 
   if (!questionMatch) return []
 
   const ruleType = (ruleMatch?.[1] ?? '').trim().toLowerCase()
   const question = questionMatch[1].trim()
   const matchContent = (matchSection?.[1] ?? '').trim()
+
+  const gradingValue = gradingMatch?.[1]?.trim().toLowerCase()
+  const explicitlyAiGraded = gradingValue === 'ai-judged'
+  const autoAiGraded = REGEX_RULE_TYPES.has(ruleType)
+  const aiGrading = explicitlyAiGraded || autoAiGraded
 
   const type = ruleType === 'single-choice' || ruleType === 'multiple-choice'
     ? 'multiple-choice' as const
@@ -56,22 +85,27 @@ function parseBlock(lines: string[], stepNum: number): ValidationQuestion[] {
   if (type === 'multiple-choice') {
     const { options, correctAnswer } = parseChoiceOptions(matchContent)
     if (!options.length || !correctAnswer) return []
-    return [{
+    // ANTI-LEAK: when aiGrading is true, OMIT correctAnswer from the public
+    // shape. The reference answer ships server-side via ValidateAnswerSpecs
+    // and never enters the public Hugo frontmatter / <script id="tutorial-data">.
+    const q: ValidationQuestion = {
       id: `validate-${stepNum}`,
       question,
       type,
       options,
-      correctAnswer,
-    }]
+      ...(aiGrading ? { aiGrading: true } : { correctAnswer }),
+    }
+    return [q]
   }
 
   if (!matchContent) return []
-  return [{
+  const q: ValidationQuestion = {
     id: `validate-${stepNum}`,
     question,
     type,
-    correctAnswer: matchContent,
-  }]
+    ...(aiGrading ? { aiGrading: true } : { correctAnswer: matchContent }),
+  }
+  return [q]
 }
 
 function parseChoiceOptions(content: string): { options: string[]; correctAnswer: string } {

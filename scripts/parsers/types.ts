@@ -14,7 +14,16 @@ export interface ValidationQuestion {
   question: string
   type: 'multiple-choice' | 'text'
   options?: string[]
-  correctAnswer: string
+  // CHANGED: correctAnswer is now optional. Omitted for AI-graded
+  // questions (issue #209) — the reference answer ships server-side
+  // via ValidateAnswerSpecs and never enters the public Hugo
+  // frontmatter or <script id="tutorial-data"> JSON.
+  // The hugo-apps consumer (`hugo-apps/src/validation/grading.ts`) defines its own local
+  // interface that keeps correctAnswer: string required; AI-graded questions are routed
+  // away from gradeAnswers() at the call site (Task 10).
+  correctAnswer?: string
+  // NEW — opted in via ###Grading: ai-judged OR via regex rule types (issue #209).
+  aiGrading?: boolean
 }
 
 export interface TutorialStep {
