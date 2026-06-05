@@ -318,6 +318,23 @@ cds.on('served', async () => {
   // [#204 PR 1] Boot warning: check if UI-event A/B telemetry flag is enabled.
   checkUIEventFeatureFlag();
 
+  // [#204 PR 4] Seed canonical SavedQueries for the / vs /browse/ A/B
+  // comparison runbook. Idempotent — safe to re-fire across cds.test() runs.
+  // Wrapped in a try/catch so a seed failure can't crash boot; the surface
+  // can still publish telemetry and admins can hand-author queries.
+  if (!globalThis.__uiEventSavedQueriesSeeded) {
+    globalThis.__uiEventSavedQueriesSeeded = true;
+    try {
+      const { seedUIEventSavedQueries } = await import('./lib/ui-event-saved-queries.js');
+      const result = await seedUIEventSavedQueries(cds.db);
+      if (result.inserted > 0) {
+        console.log(`[ui-event-saved-queries] seeded ${result.inserted}/${result.total} canonical queries`);
+      }
+    } catch (err) {
+      console.warn('[ui-event-saved-queries] seed failed (non-fatal):', err.message);
+    }
+  }
+
   app.get('/auth/user', contextMw, authMw, (req, res) => {
     const user = cds.context?.user;
     if (!user?.id || user.id === 'anonymous') {
