@@ -1,0 +1,13 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_UIEvent (
+  ID NVARCHAR(36) NOT NULL,
+  sessionId NVARCHAR(36),
+  surface NVARCHAR(32),
+  eventType NVARCHAR(32),
+  "TIMESTAMP" TIMESTAMP,
+  receivedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  payload NCLOB,
+  userAgent NVARCHAR(512),
+  buildAt NVARCHAR(32),
+  PRIMARY KEY(ID)
+)

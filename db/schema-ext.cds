@@ -30,6 +30,7 @@ annotate ims.Events                 with @analytics : { exposed: true, label: 'E
 annotate ims.PrizeRecords           with @analytics : { exposed: true, label: 'Prize records' };
 annotate ims.AccomplishmentRecords  with @analytics : { exposed: true, label: 'Accomplishment records' };
 annotate ims.CodeCheckSubmissions   with @analytics : { exposed: true, label: 'Code check submissions' };
+annotate ims.UIEvent                with @analytics : { exposed: true, label: 'UI events (A/B telemetry)' };
 
 // Declare $apply capability for the analytics-exposed surface so the OData
 // protocol layer accepts groupby+aggregate from the Analytics Explorer SPA.
@@ -51,6 +52,7 @@ annotate ims.Events                 with @Aggregation.ApplySupported : { Transfo
 annotate ims.PrizeRecords           with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
 annotate ims.AccomplishmentRecords  with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
 annotate ims.CodeCheckSubmissions   with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
+annotate ims.UIEvent                with @Aggregation.ApplySupported : { Transformations : ['aggregate', 'groupby', 'filter', 'top', 'skip', 'orderby'] };
 
 // Analytics Builder Phase 1 entities (AnalyticsQueryHistory, AnalyticsSavedQuery)
 // live in db/analytics-builder.cds — kept separate so this annotation file
@@ -99,23 +101,6 @@ annotate ims.CodeCheckSubmissions with {
   createdAt    @analytics.filter: { mode: 'date' };
 };
 
-// UIEvent indexes for canonical A/B comparison queries (#204, PR 4).
-//
-// KNOWN GAP: @cds.persistence.index is NOT a CAP-compiler-recognized
-// annotation — it survives into CSN but never generates CREATE INDEX
-// DDL in the HDI deployment. Only @cds.persistence.{skip,exists,table,
-// journal} are emitted to .hdb* files. Verified by inspecting
-// gen/db/src/com.sap.developers.ims.UIEvent.hdbmigrationtable post-build:
-// only PRIMARY KEY(ID), no other indexes.
-//
-// Left in for documentation of intent. PR 4 will add real indexes via
-// separate .hdbindex files (or @sql.append) before the table has enough
-// rows to make full-scans noticeable. Empty table until UI_EVENTS_ENABLED
-// flips, so no production impact.
-//
-// Follow-up: see issue filed alongside PR 1.
-annotate ims.UIEvent with @cds.persistence.index : [
-  { name: 'IDX_UIEVENT_SESSION', columns: [ 'sessionId' ] },
-  { name: 'IDX_UIEVENT_SURFACE_TS', columns: [ 'surface', 'timestamp' ] },
-  { name: 'IDX_UIEVENT_TYPE_TS', columns: [ 'eventType', 'timestamp' ] }
-];
+// UIEvent indexes (#204): see db/src/IDX_UIEVENT_*.hdbindex for the
+// hand-authored DDL that the CAP compiler couldn't generate via
+// @cds.persistence.index. PR 4 / closes #227.

@@ -27,6 +27,9 @@ export default defineConfig({
     /\.\.\/\.deploy\//,
     /\.\.\/(hugo|test)\/(layouts|assets|static|content|hugo\.toml|a11y)/,
     /\.\.\/(hugo|test)$/,
+    // superpowers/** is excluded from srcExclude (build), so links into it
+    // from developer docs are not resolvable as VitePress pages.
+    /\.\.\/\.\.\/superpowers\//,
   ],
 
   srcExclude: ['improvements.md', 'TODO.md', 'pilot-status.md', 'superpowers/**'],
@@ -100,6 +103,7 @@ export default defineConfig({
           { text: 'Validation widget',                link: '/developers/architecture/validation-widget' }
         ]},
         { text: 'Operations', items: [
+          { text: 'A/B comparison runbook',    link: '/developers/operations/ab-comparison-runbook' },
           { text: 'Deployment',                link: '/developers/operations/deployment' },
           { text: 'GitHub App setup',          link: '/developers/operations/github-app-setup' },
           { text: 'GitHub dispatch PAT rotation', link: '/developers/operations/github-dispatch-pat-rotation' },

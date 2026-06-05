@@ -1599,6 +1599,13 @@
             "val": 0.25
           },
           "@cds.persistence.name": "EMBEDDINGMINSCORE"
+        },
+        "codeCheckEnabled": {
+          "type": "cds.Boolean",
+          "default": {
+            "val": false
+          },
+          "@cds.persistence.name": "CODECHECKENABLED"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CHATSETTINGS"
@@ -1676,6 +1683,61 @@
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CHECKPOINTS"
+    },
+    "com.sap.developers.ims.UIEvent": {
+      "kind": "entity",
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "sessionId": {
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "SESSIONID"
+        },
+        "surface": {
+          "type": "cds.String",
+          "length": 32,
+          "@cds.persistence.name": "SURFACE"
+        },
+        "eventType": {
+          "type": "cds.String",
+          "length": 32,
+          "@cds.persistence.name": "EVENTTYPE"
+        },
+        "timestamp": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "TIMESTAMP"
+        },
+        "receivedAt": {
+          "type": "cds.Timestamp",
+          "default": {
+            "ref": [
+              "$now"
+            ]
+          },
+          "@cds.persistence.name": "RECEIVEDAT"
+        },
+        "payload": {
+          "type": "cds.LargeString",
+          "@cds.persistence.name": "PAYLOAD"
+        },
+        "userAgent": {
+          "type": "cds.String",
+          "length": 512,
+          "@cds.persistence.name": "USERAGENT"
+        },
+        "buildAt": {
+          "type": "cds.String",
+          "length": 32,
+          "@cds.persistence.name": "BUILDAT"
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_UIEVENT"
     },
     "com.sap.developers.ims.GroupSlugRedirects": {
       "kind": "entity",

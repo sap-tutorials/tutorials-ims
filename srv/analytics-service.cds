@@ -35,6 +35,8 @@ service AnalyticsService @(path : '/admin/analytics') {
     user
   };
 
+  @readonly entity UIEvents               as projection on ims.UIEvent;
+
   function listExposedEntities() returns array of {
     name        : String;
     sqlName     : String;
