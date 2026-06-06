@@ -81,4 +81,44 @@ const f = await SELECT.from(T).where({ slug: { in: list } });
     expect(r.stderr).toMatch(/srv\/lib\/oops\.js:1/);
     expect(r.stderr).toMatch(/where\(\{ slug \}\)/);
   });
+
+  it('rule 1: sentinel __slug__ literal auto-passes without marker', () => {
+    writeFile(root, 'srv/lib/sentinel.js',
+      `await SELECT.one.from(T).where({ slug: '__nav__' });\n`);
+    const r = run(root);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/1 sentinel/);
+  });
+
+  it('rule 2: ALL_CAPS constant auto-passes without marker', () => {
+    writeFile(root, 'srv/lib/caps.js',
+      `await SELECT.one.from(T).where({ slug: SHELL_SLUG });\n`);
+    const r = run(root);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/1 auto-pass via ALL_CAPS/);
+  });
+
+  it('rule 3: .toLowerCase() auto-passes without marker', () => {
+    writeFile(root, 'srv/lib/lower.js',
+      `await SELECT.one.from(T).where({ slug: input.toLowerCase() });\n`);
+    const r = run(root);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/1 pre-canonicalized/);
+  });
+
+  it('rule 4: lc<*> variable name auto-passes without marker', () => {
+    writeFile(root, 'srv/lib/lcvar.js',
+      `await SELECT.one.from(T).where({ slug: lcSlug });\n`);
+    const r = run(root);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/1 auto-pass via lc-prefix/);
+  });
+
+  it('rule 5: operator form { in: slugs } auto-passes without marker', () => {
+    writeFile(root, 'srv/lib/op.js',
+      `await SELECT.from(T).where({ slug: { in: list } });\n`);
+    const r = run(root);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/1 operator-form/);
+  });
 });
