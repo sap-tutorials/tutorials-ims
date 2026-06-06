@@ -161,4 +161,23 @@ await SELECT.one.from(T).where({ slug });
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(/unmarked/);
   });
+
+  it('does NOT scan __tests__/ or node_modules/ directories', () => {
+    // Files under either dir would otherwise produce unmarked findings;
+    // we expect the check to skip them entirely. Add a real, marked
+    // call-site outside both dirs so the parser-drift sentinel doesn't
+    // false-fire (filesScanned > 0 AND lookups > 0).
+    writeFile(root, 'srv/__tests__/should-be-skipped.js',
+      `await SELECT.one.from(T).where({ slug });\n`);
+    writeFile(root, 'srv-qa/node_modules/some-pkg/lib/should-be-skipped.js',
+      `await SELECT.one.from(T).where({ slug });\n`);
+    writeFile(root, 'srv/lib/real.js', `
+// slug-canonical: caller-canonicalizes
+await SELECT.one.from(T).where({ slug });
+`);
+    const r = run(root);
+    expect(r.status).toBe(0);
+    // Only the real.js lookup should be counted.
+    expect(r.stdout).toMatch(/1 lookup\(s\) inspected/);
+  });
 });
