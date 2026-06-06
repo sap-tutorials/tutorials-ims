@@ -15,6 +15,7 @@ hugo/data-qa/
 hugo/static-qa/
 .comparison-results/
 .migration-data/
+.hana-snapshots/
 *.local
 .env
 .playwright-mcp/

@@ -30,6 +30,8 @@
     "migrate:users": "node scripts/migrate-user-progress.js",
     "migrate:hana": "node scripts/migrate-from-hana.js",
     "compare": "node scripts/compare-systems.js",
+    "hana:rowcounts": "cds bind --exec -- node scripts/check-hana-rowcounts.cjs",
+    "hana:scrape-deployer-log": "node scripts/scrape-deployer-log.cjs",
     "build:css": "postcss hugo/assets/css/sap-fundamental.css --config hugo/ --no-map -o hugo/static/css/sap-fundamental.css",
     "vendor:mediapipe": "node scripts/vendor-mediapipe.cjs",
     "build:apps": "npm run vendor:mediapipe && npm --prefix hugo-apps run build",
