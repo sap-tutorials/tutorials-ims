@@ -15,6 +15,28 @@ const tutorials = ref<TutorialEntry[]>([])
 const missionsMeta = ref<MissionRef[]>([])
 const groupsMeta = ref<GroupRef[]>([])
 
+// SSR-pre-seeded card list (#200). Read synchronously at script-init from
+// the <script id="browse-data" type="application/json"> element emitted by
+// hugo/layouts/index.html. Lets us render the grid in the first paint after
+// Vue mount instead of waiting for /tutorials/_nav.json + /build/navigator
+// (~200-400ms on a cold connection). The fetches still run in onMounted to
+// enrich tutorials/missionsMeta/groupsMeta refs for facet computation
+// (filteredTopics, filteredProducts) — at which point allCards switches to
+// the live computation. Empty array when SSR data is missing (fresh deploy,
+// recovery, or if Hugo couldn't read .Site.Data.browse).
+function readSsrPreseededCards(): CardItem[] {
+  if (typeof document === 'undefined') return []
+  const el = document.getElementById('browse-data')
+  if (!el?.textContent) return []
+  try {
+    const parsed = JSON.parse(el.textContent) as { all?: CardItem[] }
+    return parsed.all ?? []
+  } catch {
+    return []
+  }
+}
+const ssrPreseededCards = ref<CardItem[]>(readSsrPreseededCards())
+
 // User progress is `/`-only (the `/browse/` build will fetch its own).
 const progress = ref<ProgressPayload>(emptyProgress())
 const progressLoaded = ref(false)
@@ -22,7 +44,13 @@ const progressLoaded = ref(false)
 // Template UI toggle for the filter rail visibility.
 const filtersOpen = ref(true)
 
-const loading = computed(() => tutorials.value.length === 0)
+// Loading is false when EITHER the live fetches have resolved (tutorials
+// populated) OR SSR pre-seed data is present. The SSR preview should NOT
+// be replaced by the loading skeleton — that would re-introduce the
+// flash-of-empty-grid the SSR pass is meant to eliminate.
+const loading = computed(() =>
+  tutorials.value.length === 0 && ssrPreseededCards.value.length === 0
+)
 
 const LEVEL_ORDER: Record<string, number> = { beginner: 0, intermediate: 1, advanced: 2 }
 
@@ -46,7 +74,13 @@ function missionGroupCount(missionId: number): number {
 
 const allCards = computed<CardItem[]>(() => {
   const tuts = tutorials.value
-  if (!tuts.length) return []
+  // SSR pre-seed path (#200): when fetches haven't resolved yet but Hugo
+  // emitted the inlined browse-data JSON, render those cards immediately
+  // instead of an empty grid. Fetches will replace this with the
+  // tutorials-derived computation as soon as they land.
+  if (!tuts.length) {
+    return ssrPreseededCards.value
+  }
 
   const items: CardItem[] = []
 
