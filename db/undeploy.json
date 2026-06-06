@@ -1,4 +1,10 @@
 [
+    "src/gen/**/*.hdbtrigger",
+    "src/gen/AdminService.DashboardMonitoredRecords.hdbview",
+    "src/gen/AdminService.TutorialMeta_drafts.hdbtable",
+    "src/gen/DisplayService.DashboardMonitoredRecords.hdbview",
+    "src/gen/DisplayService.Prizes.hdbview",
+    "src/gen/SAP_CHANGELOG_RESTORE_BACKLINKS.hdbprocedure",
     "src/gen/com.sap.developers.ims.AccomplishmentRecords.hdbtable",
     "src/gen/com.sap.developers.ims.Accomplishments.hdbtable",
     "src/gen/com.sap.developers.ims.ActiveLearnerRecords.hdbtable",
@@ -28,10 +34,9 @@
     "src/gen/com.sap.developers.ims.TutorialContributors.hdbtable",
     "src/gen/com.sap.developers.ims.TutorialMeta.hdbtable",
     "src/gen/com.sap.developers.ims.TutorialRepositories.hdbtable",
-    "src/gen/com.sap.developers.ims.Tutorials.hdbtable",
     "src/gen/com.sap.developers.ims.TutorialTags.hdbtable",
+    "src/gen/com.sap.developers.ims.Tutorials.hdbtable",
     "src/gen/com.sap.developers.ims.UserMetaData.hdbtable",
     "src/gen/com.sap.developers.ims.Users.hdbtable",
-    "src/gen/**/*.hdbtrigger",
-    "src/gen/SAP_CHANGELOG_RESTORE_BACKLINKS.hdbprocedure"
+    "src/gen/sap.changelog.ChangeLog.hdbtable"
 ]
