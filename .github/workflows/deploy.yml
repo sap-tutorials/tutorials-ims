@@ -88,6 +88,27 @@ jobs:
             -o "${{ secrets.CF_ORG }}" \
             -s "${{ steps.cf.outputs.space }}"
 
+      - name: Install npm deps for HDI guard
+        # check-hana-rowcounts.cjs needs `hdb` from package.json. mbt build
+        # only installs deps inside MTA modules, not the project root, so a
+        # plain `npm ci` is needed before the guard scripts can run.
+        run: npm ci --ignore-scripts
+
+      - name: HDI pre-deploy row-count snapshot
+        # Captures all COM_SAP_DEVELOPERS_IMS_* row counts BEFORE the deploy.
+        # Uploaded as artifact so the post-deploy step can diff against it.
+        # See docs/developers/operations/hdi-deploy-checklist.md for context.
+        run: |
+          mkdir -p .hana-snapshots
+          node scripts/check-hana-rowcounts.cjs --snapshot .hana-snapshots/pre-deploy.json
+
+      - name: Upload pre-deploy snapshot artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hana-snapshot-${{ steps.env.outputs.target }}-${{ github.run_number }}
+          path: .hana-snapshots/pre-deploy.json
+          retention-days: 90
+
       - name: Resolve deploy variables
         id: deploy-vars
         run: |
@@ -119,6 +140,66 @@ jobs:
           if [ -n "$OP_ID" ]; then
             echo "Aborting failed blue-green operation: $OP_ID"
             cf deploy -i "$OP_ID" -a abort || true
+          fi
+
+      - name: Capture deployer log post-deploy
+        # cf logs --recent is a ring buffer; capture immediately so the
+        # scrape step (and any future forensic work) has a stable copy.
+        # See docs/developers/operations/hdi-deploy-checklist.md.
+        if: always()
+        run: |
+          mkdir -p .hana-snapshots
+          cf logs tutorials-db-deployer --recent > .hana-snapshots/db-deployer-post.log 2>&1 || true
+
+      - name: Upload deployer log artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-deployer-log-${{ steps.env.outputs.target }}-${{ github.run_number }}
+          path: .hana-snapshots/db-deployer-post.log
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Scrape deployer log for danger patterns
+        # Catches Rolled back / TABLE_REPLACE / DROP TABLE / non-empty
+        # 'Files to undeploy' — the patterns that triggered the
+        # 2026-06-05 data-loss incident (issue #257). Exits 2 on critical
+        # findings; we report them as a warning so we don't block the
+        # deploy on a legitimate planned rollback or schema migration,
+        # but the failures are visible in the workflow summary.
+        if: success()
+        continue-on-error: true
+        run: |
+          if node scripts/scrape-deployer-log.cjs --file .hana-snapshots/db-deployer-post.log; then
+            echo "::notice title=HDI scrape::Deployer log clean — no danger patterns"
+          else
+            echo "::warning title=HDI scrape::Deployer log shows critical patterns — review"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "### ⚠️ HDI deployer log scrape found critical patterns" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "Review the deployer log artifact for this run. Patterns like \`Rolled back\`, \`TABLE_REPLACE\`, or \`DROP TABLE\` triggered the 2026-06-05 data-loss incident." >> "$GITHUB_STEP_SUMMARY"
+            echo "Run \`npm run hana:scrape-deployer-log -- --file <log>\` locally for full output." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: HDI post-deploy row-count diff
+        # Compares post-deploy table row counts against the pre-deploy
+        # snapshot from earlier in this job. Exits 2 if any table dropped
+        # >5% of its rows; reports as a warning rather than blocking the
+        # deploy (some deploys legitimately delete data, e.g. cleanup
+        # migrations). Failures are visible in the workflow summary.
+        if: success()
+        continue-on-error: true
+        run: |
+          if node scripts/check-hana-rowcounts.cjs --diff .hana-snapshots/pre-deploy.json; then
+            echo "::notice title=HDI rowcount diff::All tables within threshold"
+          else
+            echo "::warning title=HDI rowcount diff::Table row counts dropped beyond threshold"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "### ⚠️ HDI row-count diff fired tripwire" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "Some tables lost >5% of their rows during this deploy. If unexpected, review the deployer log artifact (\`db-deployer-log-${{ steps.env.outputs.target }}-${{ github.run_number }}\`) and the pre-deploy snapshot artifact (\`hana-snapshot-${{ steps.env.outputs.target }}-${{ github.run_number }}\`)." >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "If this is a known cleanup migration, no action needed. Otherwise, see [the recovery cookbook](../blob/main/docs/developers/operations/hdi-deploy-checklist.md)." >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Create GitHub Release
