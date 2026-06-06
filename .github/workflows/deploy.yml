@@ -23,6 +23,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: write
+      pull-requests: write   # gh pr comment from 'Comment HDI tripwire on PR' step (#257 follow-up)
     outputs:
       environment: ${{ steps.env.outputs.target }}
 
@@ -161,19 +162,25 @@ jobs:
           if-no-files-found: warn
 
       - name: Scrape deployer log for danger patterns
+        id: hdi-scrape
         # Catches Rolled back / TABLE_REPLACE / DROP TABLE / non-empty
         # 'Files to undeploy' — the patterns that triggered the
         # 2026-06-05 data-loss incident (issue #257). Exits 2 on critical
         # findings; we report them as a warning so we don't block the
         # deploy on a legitimate planned rollback or schema migration,
-        # but the failures are visible in the workflow summary.
+        # but the failures are visible in the workflow summary AND
+        # surface as a comment on the merge PR via the 'Comment HDI
+        # tripwire' step below.
         if: success()
         continue-on-error: true
         run: |
-          if node scripts/scrape-deployer-log.cjs --file .hana-snapshots/db-deployer-post.log; then
+          mkdir -p .hana-snapshots
+          if node scripts/scrape-deployer-log.cjs --file .hana-snapshots/db-deployer-post.log --json > .hana-snapshots/scrape-result.json; then
             echo "::notice title=HDI scrape::Deployer log clean — no danger patterns"
+            echo "tripwire=false" >> "$GITHUB_OUTPUT"
           else
             echo "::warning title=HDI scrape::Deployer log shows critical patterns — review"
+            echo "tripwire=true" >> "$GITHUB_OUTPUT"
             echo "" >> "$GITHUB_STEP_SUMMARY"
             echo "### ⚠️ HDI deployer log scrape found critical patterns" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -182,18 +189,24 @@ jobs:
           fi
 
       - name: HDI post-deploy row-count diff
+        id: hdi-diff
         # Compares post-deploy table row counts against the pre-deploy
         # snapshot from earlier in this job. Exits 2 if any table dropped
         # >5% of its rows; reports as a warning rather than blocking the
         # deploy (some deploys legitimately delete data, e.g. cleanup
-        # migrations). Failures are visible in the workflow summary.
+        # migrations). Failures are visible in the workflow summary AND
+        # surface as a comment on the merge PR via the 'Comment HDI
+        # tripwire' step below.
         if: success()
         continue-on-error: true
         run: |
-          if node scripts/check-hana-rowcounts.cjs --diff .hana-snapshots/pre-deploy.json; then
+          mkdir -p .hana-snapshots
+          if node scripts/check-hana-rowcounts.cjs --diff .hana-snapshots/pre-deploy.json --json > .hana-snapshots/diff-result.json; then
             echo "::notice title=HDI rowcount diff::All tables within threshold"
+            echo "tripwire=false" >> "$GITHUB_OUTPUT"
           else
             echo "::warning title=HDI rowcount diff::Table row counts dropped beyond threshold"
+            echo "tripwire=true" >> "$GITHUB_OUTPUT"
             echo "" >> "$GITHUB_STEP_SUMMARY"
             echo "### ⚠️ HDI row-count diff fired tripwire" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -201,6 +214,76 @@ jobs:
             echo "" >> "$GITHUB_STEP_SUMMARY"
             echo "If this is a known cleanup migration, no action needed. Otherwise, see [the recovery cookbook](../blob/main/docs/developers/operations/hdi-deploy-checklist.md)." >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: Comment HDI tripwire on PR
+        # If either HDI guard fired (scrape OR diff), surface it as a
+        # comment on the PR that introduced the merged commit. Reviewers
+        # see the comment in their PR notification stream even if they
+        # never look at the workflow summary.
+        #
+        # Uses gh CLI (already installed for `gh release create` below)
+        # to look up the PR by merge commit SHA. Fails closed: if no PR
+        # is found (e.g., direct push to main, force push), the step
+        # is a no-op rather than a hard error.
+        #
+        # Filed as #257 prevention follow-up.
+        if: |
+          always() &&
+          (steps.hdi-scrape.outputs.tripwire == 'true' || steps.hdi-diff.outputs.tripwire == 'true')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Look up the PR that contained this commit. gh pr list returns
+          # JSON; jq extracts the PR number. Empty result = no PR -> no-op.
+          PR_NUMBER=$(gh pr list --search "${{ github.sha }}" --state merged --json number --jq '.[0].number // empty')
+          if [ -z "$PR_NUMBER" ]; then
+            echo "::notice title=HDI tripwire::No PR found for commit ${{ github.sha }} — skipping comment"
+            exit 0
+          fi
+          echo "::notice title=HDI tripwire::Posting comment to PR #$PR_NUMBER"
+
+          # Build the comment body. Compose findings into one Markdown blob.
+          {
+            echo "## ⚠️ HDI deploy tripwire fired (${{ steps.env.outputs.target }})"
+            echo ""
+            echo "The post-deploy HDI guards detected one or more critical patterns during the v${{ steps.version.outputs.version }} deploy of this PR. **Review before further deploys.**"
+            echo ""
+            echo "**Workflow run:** [${{ github.workflow }} #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+            echo ""
+            if [ "${{ steps.hdi-scrape.outputs.tripwire }}" = "true" ]; then
+              echo "### Deployer log scrape — CRITICAL pattern(s) detected"
+              echo ""
+              echo "Patterns matched: \`Rolled back\` / \`TABLE_REPLACE\` / \`DROP TABLE\` / non-empty \`Files to undeploy\`. These are the patterns that triggered the [2026-06-05 data-loss incident](${{ github.server_url }}/${{ github.repository }}/issues/257)."
+              echo ""
+              echo "**Findings:**"
+              echo ""
+              echo '```json'
+              jq '.findings // []' .hana-snapshots/scrape-result.json 2>/dev/null || echo '(no JSON output captured)'
+              echo '```'
+              echo ""
+            fi
+            if [ "${{ steps.hdi-diff.outputs.tripwire }}" = "true" ]; then
+              echo "### Row-count diff — table(s) lost rows beyond 5% threshold"
+              echo ""
+              echo "**Failures:**"
+              echo ""
+              echo '```json'
+              jq '.failures // []' .hana-snapshots/diff-result.json 2>/dev/null || echo '(no JSON output captured)'
+              echo '```'
+              echo ""
+            fi
+            echo "### Next steps"
+            echo ""
+            echo "- If this is a known cleanup migration, document it in the PR description and dismiss this comment."
+            echo "- Otherwise, follow the [HDI deploy checklist recovery cookbook](${{ github.server_url }}/${{ github.repository }}/blob/main/docs/developers/operations/hdi-deploy-checklist.md)."
+            echo "- Review artifacts: \`db-deployer-log-${{ steps.env.outputs.target }}-${{ github.run_number }}\`, \`hana-snapshot-${{ steps.env.outputs.target }}-${{ github.run_number }}\`."
+            echo ""
+            echo "---"
+            echo "<sub>Auto-generated by \`deploy.yml\` HDI tripwire (#258 / #259 prevention scripts; this step shipped via #257 follow-up).</sub>"
+          } > .hana-snapshots/pr-comment.md
+
+          gh pr comment "$PR_NUMBER" --body-file .hana-snapshots/pr-comment.md
+          echo "Posted comment to PR #$PR_NUMBER"
 
       - name: Create GitHub Release
         env:
