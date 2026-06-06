@@ -10,7 +10,7 @@ import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache } fro
 import { parseRulesVrEnriched, collectAiGradedSpecs } from './parsers/rules.js'
 import { expandAiAuthoredQuestions, populateAiAuthoredSiblingMaps, type ExpandStats } from './lib/expand-ai-authored.js'
 import { loadAiQuizCache, saveAiQuizCache } from './lib/ai-quiz-cache.js'
-import { defaultCallModel } from '../srv/lib/code-check-llm.js'
+import { callQuizModel } from '../srv/lib/ai-quiz-llm.js'
 import { parseCodeCheckBlocks, attachCodeCheckSpecs } from './parsers/codecheck.js'
 import { computeRecommendations } from './parsers/recommendations.js'
 import { humanizeTag, splitPrerequisites } from './parsers/frontmatter-utils.js'
@@ -678,7 +678,7 @@ async function main() {
           const aiCache = loadAiQuizCache(t.slug)
           await expandAiAuthoredQuestions(validationMap, stepBodies, {
             cache: aiCache,
-            callModel: defaultCallModel,
+            callModel: callQuizModel,
             onCallStats: globalCallStats,
             allDirective,
           })
