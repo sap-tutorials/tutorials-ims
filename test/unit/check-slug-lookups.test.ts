@@ -71,4 +71,14 @@ const f = await SELECT.from(T).where({ slug: { in: list } });
     expect(r.status).toBe(0);
     expect(r.stdout).toMatch(/OK — 6 lookup\(s\) inspected/);
   });
+
+  it('fails on a bare where({ slug }) with no marker, listing file:line', () => {
+    writeFile(root, 'srv/lib/oops.js',
+      `const t = await SELECT.one.from(Tutorials).where({ slug });\n`);
+    const r = run(root);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/FAILED — 1 unmarked direct slug lookup/);
+    expect(r.stderr).toMatch(/srv\/lib\/oops\.js:1/);
+    expect(r.stderr).toMatch(/where\(\{ slug \}\)/);
+  });
 });
