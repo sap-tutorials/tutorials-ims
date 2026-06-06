@@ -61,6 +61,10 @@ import "@ui5/webcomponents-icons/dist/question-mark.js";
 // UI5 logs "No loader registered for the SAP-icons-v5 icons collection". Issue #104.
 import "@ui5/webcomponents-icons/dist/search.js";
 import "@ui5/webcomponents-icons/dist/action-settings.js";
+// Browse shellbar item (PR #174). Without this, the item renders an empty
+// slot in the header — the button container is allocated but the icon glyph
+// fails to paint and UI5 logs "Required icon is not registered".
+import "@ui5/webcomponents-icons/dist/bbyd-active-sales.js";
 // Icons referenced from Vue islands (cmd-palette, MyCompletions, code-check). Imported here so
 // they share the main bootstrap's icon registry rather than each island re-registering.
 import "@ui5/webcomponents-icons/dist/accept.js";
