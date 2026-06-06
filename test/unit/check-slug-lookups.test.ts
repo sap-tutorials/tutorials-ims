@@ -151,4 +151,14 @@ await SELECT.one.from(T).where({ slug });
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(/unmarked/);
   });
+
+  it('marker with empty reason (// slug-canonical:) is rejected as unmarked', () => {
+    writeFile(root, 'srv/lib/empty.js', `
+// slug-canonical:
+await SELECT.one.from(T).where({ slug });
+`);
+    const r = run(root);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/unmarked/);
+  });
 });
