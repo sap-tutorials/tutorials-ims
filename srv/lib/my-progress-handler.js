@@ -6,7 +6,7 @@ const LOG = cds.log('navigator');
 
 const EMPTY_PAYLOAD = Object.freeze({
   authenticated: false,
-  tutorials: { completedSlugs: [], inProgress: [] },
+  tutorials: { completedSlugs: [], inProgress: [], lastCompletedSlug: null },
   missionSlugs: [],
   groupSlugs: []
 });
@@ -30,7 +30,8 @@ export async function myProgressHandler(req, res) {
       authenticated: true,
       tutorials: {
         completedSlugs: progress.completedSlugs,
-        inProgress
+        inProgress,
+        lastCompletedSlug: progress.lastCompletedSlug || null
       },
       missionSlugs: progress.completedMissionSlugs,
       groupSlugs: progress.completedGroupSlugs

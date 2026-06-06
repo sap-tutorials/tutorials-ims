@@ -41,6 +41,7 @@ import { useNavigatorFilters } from '@shared/composables/useNavigatorFilters'
 import { readSort, writeSort, DEFAULT_SORT, type Sort } from './browseUrl'
 import { wireBrowseController } from './controller'
 import { wireTracker } from '@shared/analytics/wire-tracker'
+import { activateForYouRail, type MyProgressResponse, type RecommendationsResponse } from './foryou'
 import BrowseGrid from './BrowseGrid.vue'
 import { emptyProgress, toLookup, type ProgressPayload } from '../navigator/cardProgress'
 import type { CardItem } from '@shared/types'
@@ -99,11 +100,15 @@ const railsHidden = computed(() => filters.hasActiveFilters.value)
 
 onMounted(async () => {
   // Best-effort progress fetch. 401 OK = anonymous user → empty progress.
+  // We hold onto the parsed JSON so the for-you rail can re-use it without
+  // a second round-trip (the same payload carries `tutorials.lastCompletedSlug`
+  // for the recommendation anchor).
+  let progressJson: MyProgressResponse | null = null
   try {
     const res = await fetch('/build/my-progress', { credentials: 'include' })
     if (res.ok) {
-      const json = await res.json()
-      progress.value = toLookup(json)
+      progressJson = await res.json()
+      progress.value = toLookup(progressJson)
     }
   } catch {
     // Network error — leave progress empty.
@@ -118,6 +123,25 @@ onMounted(async () => {
   // pagination_change, rail_show_all_click, scroll_depth, page_leave.
   // Tracker self-disables on 503 (default until UI_EVENTS_ENABLED is set).
   wireTracker({ surface: '/browse/', filters })
+
+  // "Recommended for you" rail (#202). Anonymous, zero-completion, or
+  // empty-recommendations users see no rail — the helper bails early and
+  // leaves the SSR'd placeholder hidden. Errors are swallowed silently;
+  // the rail is non-essential and must never break the page. The card
+  // events wired above already fire card_click for any anchor inside the
+  // rail (no extra hook needed); a dedicated impression event can be
+  // added later via #204 if usage data needs it.
+  void activateForYouRail({
+    fetchProgress: async () => progressJson,
+    fetchRecommendations: async (slug, limit) => {
+      const res = await fetch(`/api/recommendations?slug=${encodeURIComponent(slug)}&limit=${limit}`, { credentials: 'include' })
+      if (!res.ok) return null
+      return (await res.json()) as RecommendationsResponse
+    },
+    catalog: allCards.value,
+    railEl: document.querySelector<HTMLElement>('[data-rail-for-you]'),
+    cardsEl: document.querySelector<HTMLElement>('[data-rail-for-you-cards]'),
+  })
 })
 </script>
 
