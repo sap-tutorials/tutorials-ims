@@ -11,7 +11,7 @@ import cds from '@sap/cds';
 const NAMESPACE = 'com.sap.developers.ims';
 
 export async function breadcrumbContextHandler(req, res) {
-  const slug = String(req.query.tutorial || '').trim();
+  const slug = String(req.query.tutorial || '').trim().toLowerCase();
   if (!slug) {
     return res.status(400).json({ error: 'missing tutorial parameter' });
   }
@@ -24,6 +24,7 @@ export async function breadcrumbContextHandler(req, res) {
             CompletionPaths, Missions } = cds.entities(NAMESPACE);
 
     const [tut] = await SELECT.from(Tutorials)
+      // slug-canonical: pre-canonicalized
       .where({ slug })
       .columns('ID');
     if (!tut) {

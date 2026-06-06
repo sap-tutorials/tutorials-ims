@@ -413,8 +413,10 @@ async function upsertBodyTexts(namespace, bodyTexts) {
   for (const [slug, text] of Object.entries(bodyTexts)) {
     if (typeof text !== 'string') continue;
     try {
+      // slug-canonical: write-path-canonicalizes
       const existing = await SELECT.one.from(TutorialBodyText).where({ slug }).columns('slug');
       if (existing) {
+        // slug-canonical: write-path-canonicalizes
         await UPDATE(TutorialBodyText).where({ slug }).set({ bodyText: text });
       } else {
         await INSERT.into(TutorialBodyText).entries({ slug, bodyText: text });

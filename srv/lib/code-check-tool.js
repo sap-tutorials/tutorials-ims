@@ -120,6 +120,7 @@ export async function dispatchCheckCode(input, deps) {
 
   // 3. Look up Tutorial by slug, then CodeCheckSpecs by (tutorial_ID, stepNumber)
   const { Tutorials, CodeCheckSpecs } = cds.entities('com.sap.developers.ims');
+  // slug-canonical: pre-canonicalized
   const tutorial = await SELECT.one.from(Tutorials).where({ slug: tutorialSlug });
 
   let spec = null;

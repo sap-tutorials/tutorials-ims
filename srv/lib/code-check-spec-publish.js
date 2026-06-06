@@ -33,6 +33,7 @@ export async function codeCheckSpecPublishHandler(req, res) {
       const slug = s.slug.toLowerCase();
 
       // SELECT.one returns the row directly (not an array) or undefined.
+      // slug-canonical: pre-canonicalized
       const tut = await SELECT.one.from(Tutorials).where({ slug });
       if (!tut) { skipped.push(slug); continue; }
 

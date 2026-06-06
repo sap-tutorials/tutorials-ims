@@ -14,6 +14,11 @@ function hashChunk(text) {
   return createHash('sha256').update(text).digest('hex');
 }
 
+/**
+ * Read content buffer for a slug from active manifest.
+ * @param {string} slug - MUST be lowercase (caller-canonicalizes — embedSlugs
+ *   only accepts lowercase slugs from DB rows or the publish payload).
+ */
 async function readContentBuffer(db, slug) {
   const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
   if (isHana) {
@@ -31,10 +36,18 @@ async function readContentBuffer(db, slug) {
     .orderBy({ version: 'desc' })
     .limit(1);
   if (!active) return null;
+  // slug-canonical: caller-canonicalizes
   const row = await SELECT.one.from(ContentFiles).where({ slug, version: active.version }).columns('content');
   return row ? await toBuffer(row.content) : null;
 }
 
+/**
+ * Embed a list of tutorial slugs into TutorialEmbedding.
+ * @param {string[]} slugs - MUST be lowercase. Callers (admin-service.js,
+ *   triggerPostPublishEmbeddings, embedding-reconciliation.js) source slugs
+ *   from ContentFiles.slug (DB row, canonicalized at write) or from the
+ *   publish payload (canonicalized by publish-content.ts / upsertTutorialMetadata).
+ */
 export async function embedSlugs(slugs, settings, onSlug) {
   if (!settings?.ragEnabled) return { embedded: 0, skipped: 0, failed: 0, lockHeld: false };
   if (!Array.isArray(slugs) || slugs.length === 0) return { embedded: 0, skipped: 0, failed: 0, lockHeld: false };
@@ -57,6 +70,7 @@ export async function embedSlugs(slugs, settings, onSlug) {
 
     for (const slug of slugs) {
       try {
+        // slug-canonical: caller-canonicalizes
         const tut = await SELECT.one.from(Tutorials).where({ slug }).columns('ID');
         if (!tut) { skipped++; await report(slug, 'SKIPPED', 'tutorial not found'); continue; }
         const buf = await readContentBuffer(db, slug);

@@ -588,8 +588,10 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         for (const [slug, text] of Object.entries(bodyTexts)) {
           if (typeof text !== 'string') continue;
           try {
+            // slug-canonical: write-path-canonicalizes
             const existing = await SELECT.one.from(TutorialBodyText).where({ slug }).columns('slug');
             if (existing) {
+              // slug-canonical: write-path-canonicalizes
               await UPDATE(TutorialBodyText).where({ slug }).set({ bodyText: text });
             } else {
               await INSERT.into(TutorialBodyText).entries({ slug, bodyText: text });
@@ -760,6 +762,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
       if (RedirectEntity && Entity) {
         const fk = isGroup ? 'group_ID' : 'mission_ID';
         const [redirect] = await SELECT.from(RedirectEntity)
+          // slug-canonical: caller-canonicalizes
           .where({ slug: stripped })
           .columns(fk);
         if (redirect?.[fk]) {
@@ -906,6 +909,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
 
       // Serve only from the active version — each publish is a full snapshot
       const [meta] = await SELECT.from(ContentFiles)
+        // slug-canonical: caller-canonicalizes
         .where({ slug, version: activeVersion })
         .columns('contentHash', 'mimeType', 'version');
 
@@ -931,6 +935,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         contentBuf = blobRow.CONTENT;
       } else {
         const blobRow = await SELECT.one.from(ContentFiles)
+          // slug-canonical: caller-canonicalizes
           .where({ slug, version: meta.version })
           .columns('content');
         contentBuf = await toBuffer(blobRow.content);
