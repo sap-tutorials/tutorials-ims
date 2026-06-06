@@ -104,7 +104,8 @@ export default defineConfig({
           { text: '@PersonalData cascade',            link: '/developers/architecture/anonymization-cascade' },
           { text: 'Runtime',                          link: '/developers/architecture/runtime' },
           { text: 'Validation widget',                link: '/developers/architecture/validation-widget' },
-          { text: 'Free-text grader',                 link: '/developers/architecture/free-text-grader' }
+          { text: 'Free-text grader',                 link: '/developers/architecture/free-text-grader' },
+          { text: 'AI-authored quizzes',              link: '/developers/architecture/ai-authored-quizzes' }
         ]},
         { text: 'Operations', items: [
           { text: 'A/B comparison runbook',    link: '/developers/operations/ab-comparison-runbook' },
