@@ -34,6 +34,7 @@
       </section>
     {{- else -}}
     <div data-rails-container>
+      {{ partial "browse/_partials/for-you-rail.html" . }}
       {{ partial "browse/_partials/rail.html" (dict "title" "Featured missions"
                                                     "idList" $featured
                                                     "showAllHref" "/missions/"

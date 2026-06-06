@@ -1,4 +1,5 @@
 import type { ValidationQuestion } from './types.js'
+import { QUESTION_TYPE_TEXT, QUESTION_TYPE_MCQ } from './types.js'
 
 const VALIDATE_MARKER = /^\[VALIDATE_(\d+)\]\s*$/
 
@@ -135,7 +136,7 @@ export function parseRulesVrEnriched(content: string): {
     result.set(num, [{
       id: `autoauthor-${num}`,
       question: '__autoauthor_placeholder__',
-      type: 'text',
+      type: QUESTION_TYPE_TEXT,
       __autoauthor: true,
       __directiveTypes: types,
     } as any]) // sentinel fields not on ValidationQuestion's exported type
@@ -170,10 +171,10 @@ function parseBlock(
   const aiGrading = explicitlyAiGraded || autoAiGraded
 
   const type = ruleType === 'single-choice' || ruleType === 'multiple-choice'
-    ? 'multiple-choice' as const
-    : 'text' as const
+    ? QUESTION_TYPE_MCQ
+    : QUESTION_TYPE_TEXT
 
-  if (type === 'multiple-choice') {
+  if (type === QUESTION_TYPE_MCQ) {
     const { options, correctAnswer } = parseChoiceOptions(matchContent)
     if (!options.length || !correctAnswer) return []
 

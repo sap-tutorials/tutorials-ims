@@ -11,6 +11,7 @@
 import { generateQuiz } from '../../srv/lib/ai-quiz-generator.js'
 import { hashKey, type AiQuizCache, type AiQuizCacheEntry } from './ai-quiz-cache.js'
 import type { ValidationQuestion } from '../parsers/types.js'
+import { QUESTION_TYPE_TEXT } from '../parsers/types.js'
 
 export interface ExpandStats {
   calls: number    // cache miss → LLM call
@@ -71,7 +72,7 @@ export async function expandAiAuthoredQuestions(
       parsedMap.set(stepNum, [{
         id: `autoauthor-${stepNum}`,
         question: '__autoauthor_placeholder__',
-        type: 'text',
+        type: QUESTION_TYPE_TEXT,
         __autoauthor: true,
         __directiveTypes: deps.allDirective.types,
       } as PlaceholderQuestion])
@@ -190,8 +191,8 @@ export function populateAiAuthoredSiblingMaps(
 ): void {
   for (const [stepNumber, questions] of validationMap) {
     for (const q of questions) {
-      if (q.aiAuthored && q.type === 'text') {
-        const correctAnswer = (q as any).correctAnswer
+      if (q.aiAuthored && q.type === QUESTION_TYPE_TEXT) {
+        const correctAnswer = q.correctAnswer
         if (typeof correctAnswer !== 'string' || correctAnswer.length === 0) continue
         const key = `${stepNumber}:${q.id}`
         correctAnswerByStepAndId.set(key, correctAnswer)
@@ -227,8 +228,8 @@ function materializeForPipeline(q: ValidationQuestion): ValidationQuestion {
   const clean: any = { ...q }
   delete clean.__autoauthor
   delete clean.__directiveTypes
-  if (q.type === 'text' && (q as any).__aiCorrectAnswer != null) {
-    clean.correctAnswer = (q as any).__aiCorrectAnswer
+  if (q.type === QUESTION_TYPE_TEXT && q.__aiCorrectAnswer != null) {
+    clean.correctAnswer = q.__aiCorrectAnswer
     delete clean.__aiCorrectAnswer
   }
   return clean

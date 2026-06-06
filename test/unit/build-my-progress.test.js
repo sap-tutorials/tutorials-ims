@@ -76,7 +76,7 @@ describe('GET /build/my-progress handler', () => {
     expect(res.headers['cache-control']).toBe('private, no-store');
     expect(res.body).toEqual({
       authenticated: false,
-      tutorials: { completedSlugs: [], inProgress: [] },
+      tutorials: { completedSlugs: [], inProgress: [], lastCompletedSlug: null },
       missionSlugs: [],
       groupSlugs: []
     });
@@ -89,6 +89,7 @@ describe('GET /build/my-progress handler', () => {
     expect(res.statusCode).toBe(200);
     expect(res.body.authenticated).toBe(true);
     expect(res.body.tutorials.completedSlugs).toEqual(['done-tut']);
+    expect(res.body.tutorials.lastCompletedSlug).toBe('done-tut');
     expect(res.body.tutorials.inProgress).toEqual([
       { slug: 'inprog-tut', progressPercent: 60 }
     ]);
@@ -112,7 +113,7 @@ describe('GET /build/my-progress handler', () => {
     expect(res.statusCode).toBe(200);
     expect(res.body).toEqual({
       authenticated: false,
-      tutorials: { completedSlugs: [], inProgress: [] },
+      tutorials: { completedSlugs: [], inProgress: [], lastCompletedSlug: null },
       missionSlugs: [],
       groupSlugs: []
     });

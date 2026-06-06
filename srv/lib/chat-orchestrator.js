@@ -261,7 +261,7 @@ export async function dispatchTool(name, args, user) {
       return await getUserProgress(user, { limit });
     } catch (err) {
       LOG.warn('getUserProgress failed', err.message);
-      return { error: 'progress_failed', inProgress: [], completedSlugs: [], completedMissionSlugs: [], completedGroupSlugs: [] };
+      return { error: 'progress_failed', inProgress: [], completedSlugs: [], lastCompletedSlug: null, completedMissionSlugs: [], completedGroupSlugs: [] };
     }
   }
 

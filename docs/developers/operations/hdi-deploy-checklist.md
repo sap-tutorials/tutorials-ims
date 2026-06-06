@@ -77,6 +77,8 @@ Exit codes: 0 = no critical findings, 2 = critical pattern detected.
 
 3. **Save the deployer log immediately after each deploy.** `cf logs --recent` is a ring buffer — it loses old entries as the app emits new ones. The 2026-06-05 forensics gap was caused by waiting too long to read the log.
 
+   *Update (#257 follow-up):* `tutorials-db-deployer` and `tutorials-db-qa-deployer` are now bound to `tutorials-cloud-logging` (mta.yaml). Their stdout is forwarded by the CF loggregator and persisted in **SAP Cloud Logging with ~30-day retention** — multi-day forensics no longer require local capture. The CI step still captures `cf logs --recent` to `.hana-snapshots/` for immediate scraping, but the canonical multi-day source is now Cloud Logging. Open the dashboard via the **Operations → Pipeline Logs** tile in `/admin-ui/` or directly via `cf service-key tutorials-cloud-logging tutorials-cloud-logging-key` → `dashboards.kibana.endpoint`.
+
 4. **Read the warning section of every deploy log.** The "WARNING: deleted files not in undeploy.json" output today flagged 5 stale `.hdbview` / `.hdbtable` artifacts. This warning has been present for a while and was ignored — but it indicates `undeploy.json` is out of date and CF is doing more delete work than expected. **Fix it: add the listed files to `undeploy.json`** so future deploys are explicit about what they're removing.
 
 5. **Run `npm run test:smoke` after deploy.** It hits `/build/catalog`, `/build/navigator`, `/api/Tutorials/$count` — basic data presence checks. The smoke tests are not currently row-count-aware (filed as a follow-up — see [#257](https://github.com/sap-tutorials/tutorials-ims/issues/257) preventive measure 5), but presence is the first line of defense.
@@ -137,7 +139,7 @@ This is required for the user-visible recovery to surface, regardless of whether
 ## What this doesn't fix
 
 - **PITR enablement on `tutorials-hana`**. This is a service-instance-level config change in BTP, not a code change. Verify with the BTP admin team. Until PITR is enabled, every HDI mishap risks data loss again.
-- **Forensic log retention**. CF retains `cf logs --recent` only briefly. For real post-mortems we need either: (a) a CI step that always saves the deployer log to `.hana-snapshots/` after every deploy, or (b) integrate with SAP Cloud Logging which has multi-day retention. Filed as a follow-up.
+- **Forensic log retention** (DONE 2026-06-06): the deployer apps are now bound to `tutorials-cloud-logging` so their stdout persists with ~30-day retention. CF's ring buffer is still the immediate source for the CI scrape step, but multi-day post-mortems can now query Cloud Logging directly.
 
 ## See also
 

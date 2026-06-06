@@ -86,4 +86,82 @@ describe('useNavigatorFilters', () => {
     await nextTick()
     expect(f.displayedItems.value.map(c => c.id)).toEqual(['new', 'old'])
   })
+
+  it('sort=updated orders by updatedAt desc', async () => {
+    const dated: CardItem[] = [
+      { ...cards[0], id: 'old', updatedAt: '2024-06-01T00:00:00Z' },
+      { ...cards[1], id: 'new', updatedAt: '2026-06-01T00:00:00Z' },
+      { ...cards[2], id: 'mid', updatedAt: '2025-06-01T00:00:00Z' },
+    ]
+    const allCards = ref(dated)
+    const f = useNavigatorFilters({ allCards, syncURL: false, enableSort: true })
+    f.sort!.value = 'updated'
+    await nextTick()
+    expect(f.displayedItems.value.map(c => c.id)).toEqual(['new', 'mid', 'old'])
+  })
+
+  it('sort=title orders alphabetically', async () => {
+    const titled: CardItem[] = [
+      { ...cards[0], id: 'c', title: 'Charlie' },
+      { ...cards[1], id: 'a', title: 'Alpha' },
+      { ...cards[2], id: 'b', title: 'Bravo' },
+    ]
+    const allCards = ref(titled)
+    const f = useNavigatorFilters({ allCards, syncURL: false, enableSort: true })
+    f.sort!.value = 'title'
+    await nextTick()
+    expect(f.displayedItems.value.map(c => c.id)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('sort=time orders by time-to-complete ascending (short first)', async () => {
+    const timed: CardItem[] = [
+      { ...cards[0], id: 'long', time: 240 },
+      { ...cards[1], id: 'short', time: 30 },
+      { ...cards[2], id: 'medium', time: 90 },
+    ]
+    const allCards = ref(timed)
+    const f = useNavigatorFilters({ allCards, syncURL: false, enableSort: true })
+    f.sort!.value = 'time'
+    await nextTick()
+    expect(f.displayedItems.value.map(c => c.id)).toEqual(['short', 'medium', 'long'])
+  })
+
+  it('sort=relevance is a no-op (preserves filteredItems order)', async () => {
+    // Default 'relevance' uses comparator () => 0, so the input order
+    // (filteredItems pipeline output) survives untouched. Important: changing
+    // this contract would silently break any consumer that relies on
+    // cap-search's relevance ordering being preserved.
+    const allCards = ref(cards)
+    const f = useNavigatorFilters({ allCards, syncURL: false, enableSort: true })
+    // sort defaults to 'relevance'; without setting it, the items should
+    // be in the same order as `cards`.
+    await nextTick()
+    expect(f.displayedItems.value.map(c => c.id)).toEqual(['m1', 't1', 't2'])
+    // Explicit relevance after a change should also be identity.
+    f.sort!.value = 'title'
+    await nextTick()
+    f.sort!.value = 'relevance'
+    await nextTick()
+    expect(f.displayedItems.value.map(c => c.id)).toEqual(['m1', 't1', 't2'])
+  })
+
+  it('sort works alongside filters (sort applied to filtered subset)', async () => {
+    const both: CardItem[] = [
+      { ...cards[0], id: 'm1', title: 'Mission Bravo' },
+      { ...cards[1], id: 't1', title: 'Tutorial Alpha' },
+      { ...cards[2], id: 't2', title: 'Tutorial Charlie' },
+    ]
+    const allCards = ref(both)
+    const f = useNavigatorFilters({ allCards, syncURL: false, enableSort: true })
+    f.filters.types = ['tutorial']    // narrow to t1, t2
+    f.sort!.value = 'title'
+    await nextTick()
+    expect(f.displayedItems.value.map(c => c.id)).toEqual(['t1', 't2'])  // Alpha, Charlie
+  })
+
+  it('sort is undefined when enableSort=false (default)', () => {
+    const allCards = ref(cards)
+    const f = useNavigatorFilters({ allCards, syncURL: false })
+    expect(f.sort).toBeUndefined()
+  })
 })

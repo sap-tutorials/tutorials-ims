@@ -53,3 +53,49 @@ describe('buildEvalRows (#208 eval harness)', () => {
     expect(rows).toHaveLength(2)  // 1 hand + 1 AI for step 2
   })
 })
+
+describe('buildEvalRows in ai-only mode', () => {
+  it('emits all AI questions, regardless of hand-authored presence', () => {
+    const inputs: EvalInputs = {
+      slug: 'gap-filling',
+      handAuthored: new Map([
+        [1, [{ id: 'validate-1', type: 'text', question: 'Hand Q1?', correctAnswer: 'A1' }]],  // hand
+      ]),
+      aiAuthored: new Map([
+        [1, [{ id: 'validate-1-ai', type: 'multiple-choice', question: 'AI Q1?', options: ['a','b'], correctAnswer: 'a', aiAuthored: true }]],
+        [2, [{ id: 'validate-2-ai', type: 'text', question: 'AI Q2?', __aiCorrectAnswer: 'A2', aiGrading: true, aiAuthored: true }]],
+      ]),
+    }
+    const rows = buildEvalRows(inputs, 'ai-only')
+    expect(rows).toHaveLength(2)
+    expect(rows.every(r => r.source === 'ai-authored')).toBe(true)
+    expect(rows.map(r => r.stepNumber).sort()).toEqual([1, 2])
+  })
+
+  it('returns empty when no AI questions exist', () => {
+    const inputs: EvalInputs = {
+      slug: 's',
+      handAuthored: new Map([[1, [{ id: 'validate-1', type: 'text', question: 'Q?', correctAnswer: 'A' }]]]),
+      aiAuthored: new Map(),
+    }
+    expect(buildEvalRows(inputs, 'ai-only')).toEqual([])
+  })
+})
+
+describe('buildEvalRows in all mode', () => {
+  it('emits both hand and AI rows, regardless of pairing', () => {
+    const inputs: EvalInputs = {
+      slug: 'mixed',
+      handAuthored: new Map([
+        [1, [{ id: 'validate-1', type: 'text', question: 'Hand only Q?', correctAnswer: 'A' }]],  // hand-only step
+      ]),
+      aiAuthored: new Map([
+        [2, [{ id: 'validate-2-ai', type: 'multiple-choice', question: 'AI only Q?', options: ['a','b'], correctAnswer: 'a', aiAuthored: true }]],  // ai-only step
+      ]),
+    }
+    const rows = buildEvalRows(inputs, 'all')
+    expect(rows).toHaveLength(2)
+    expect(rows.find(r => r.source === 'hand-authored')?.stepNumber).toBe(1)
+    expect(rows.find(r => r.source === 'ai-authored')?.stepNumber).toBe(2)
+  })
+})

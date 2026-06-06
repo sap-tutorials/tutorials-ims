@@ -1,0 +1,25 @@
+{{- /* "Recommended for you" rail (issue #202).
+
+       Per the /browse/ SSR/CSR boundary: catalog data is identical for every
+       visitor (SSR-cacheable, anonymous-safe), per-user data is CSR-only.
+       This rail therefore ships as an empty hidden placeholder. After mount,
+       BrowsePage.vue calls /build/my-progress to find the most-recently-
+       completed tutorial slug, then /api/recommendations?slug=<that>, and
+       populates the curation div + removes the [hidden] attribute when
+       there's at least one card to show.
+
+       Anonymous users, users with zero completions, or users for whom the
+       recommendation engine returns no candidates never see this rail —
+       the placeholder stays hidden.
+*/ -}}
+<section
+  class="browse-rail browse-rail--for-you"
+  aria-label="Recommended for you"
+  data-rail
+  data-rail-for-you
+  hidden>
+  <header class="browse-rail__header">
+    <h2 class="browse-rail__title">Recommended for you</h2>
+  </header>
+  <div class="browse-rail-curation" data-rail-for-you-cards></div>
+</section>

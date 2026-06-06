@@ -9,6 +9,20 @@ export interface TutorialFrontmatter {
   description?: string
 }
 
+/**
+ * Canonical question-type discriminators. Source of truth for the
+ * `ValidationQuestion.type` union — import these instead of writing the
+ * string literals so a future schema drift (`'free-text'`, `'long-text'`)
+ * surfaces at the type-check level rather than as silently-broken
+ * anti-leak filters.
+ *
+ * Test fixtures intentionally use the literals as inputs and don't
+ * import these constants.
+ */
+export const QUESTION_TYPE_TEXT = 'text' as const
+export const QUESTION_TYPE_MCQ = 'multiple-choice' as const
+export type QuestionType = typeof QUESTION_TYPE_TEXT | typeof QUESTION_TYPE_MCQ
+
 export interface ValidationQuestion {
   id: string
   question: string
@@ -29,6 +43,25 @@ export interface ValidationQuestion {
   // for MCQ + sidecar for text. Indistinguishable from hand-authored
   // questions to the validation widget.
   aiAuthored?: boolean
+  /**
+   * [#208] Build-time sentinel set by the AI quiz generator (`srv/lib/ai-quiz-generator.js`)
+   * for AI-authored text questions. Carries the reference answer through
+   * the cache + eval harness; ALWAYS stripped before public Hugo
+   * frontmatter emission (`materializeForPipeline` in
+   * `scripts/lib/expand-ai-authored.ts` moves it to `correctAnswer` for
+   * the pipeline shape, and the bridge strip in `scripts/fetch-tutorials.ts`
+   * deletes `correctAnswer` again before frontmatter emit).
+   *
+   * Should NEVER appear in:
+   *  - Hugo frontmatter / `<script id="tutorial-data">` JSON
+   *  - Network responses
+   *  - Logs
+   *
+   * Only legitimate readers: `materializeForPipeline`, the eval CSV emitter
+   * (`scripts/evaluate-ai-quizzes.ts`), and the cache JSON file at
+   * `.tutorial-cache/<slug>.ai-quiz-cache.json`.
+   */
+  __aiCorrectAnswer?: string
 }
 
 export interface TutorialStep {

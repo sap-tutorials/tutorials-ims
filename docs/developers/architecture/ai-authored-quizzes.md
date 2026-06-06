@@ -107,28 +107,14 @@ as skipped.
 
 ## Operator runbook
 
-Tom is the operator. The npm script `seed-ai-quizzes` uses POSIX
-env-prefix syntax which doesn't work on cmd / PowerShell, so the
-Windows incantations are listed alongside.
+Tom is the operator. The `seed-ai-quizzes` script uses `cross-env` so
+the same invocation works on Linux, macOS, and Windows (cmd /
+PowerShell).
 
 ### Bulk seed pass
 
-**POSIX (Linux / macOS / Git Bash):**
-
 ```bash
 npm run seed-ai-quizzes
-```
-
-**Windows PowerShell:**
-
-```powershell
-$env:AI_AUTHOR_ENABLED='true'; $env:AI_AUTHOR_BUILD_CAP='10000'; npm run fetch-tutorials
-```
-
-**Windows cmd.exe:**
-
-```cmd
-set AI_AUTHOR_ENABLED=true&& set AI_AUTHOR_BUILD_CAP=10000&& npm run fetch-tutorials
 ```
 
 ### Spike workflow

@@ -1,0 +1,218 @@
+name: Content drift check
+
+# Daily verification that Hugo's freshly-built content hashes match what
+# HANA actually serves. Catches the "tutorial X looks stale on prod"
+# bug class — drift can be introduced by a partial publish that died
+# halfway through, a manual HANA patch, or a `--force` from a stale
+# local cache. None of those produce errors at the time; the only
+# detection until now was an author noticing days/weeks later.
+#
+# scripts/publish-content.ts already supports `--verify-only`: it
+# fetches /content/hashes from the live srv, compares to local
+# SHA-256s, and exits 2 on mismatch (1 on connectivity error). This
+# workflow runs that mode against each environment on a daily schedule.
+#
+# IMPORTANT: this does NOT publish — it only verifies. To repair, run
+# `npm run publish-content -- --heal` against the affected env.
+
+on:
+  schedule:
+    # 04:13 UTC daily. Off the :00/:30 marks so we don't coalesce with
+    # every other CI job in the world that picks "4am UTC sharp".
+    - cron: '13 4 * * *'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to verify'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - qa
+          - prod
+          - all
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      # On a manual dispatch with a specific env, the matrix collapses
+      # to that one. On schedule or `all`, we verify dev + qa + prod.
+      # Whether we include prod here is a judgement call — verify-only
+      # is read-only on the server so it's safe; but a 5-minute window
+      # of API load three times a day matters, so we keep prod off
+      # the schedule by default and only run it via dispatch.
+      matrix:
+        environment: ${{ fromJSON((github.event_name == 'workflow_dispatch' && inputs.environment != 'all') && format('["{0}"]', inputs.environment) || (github.event_name == 'workflow_dispatch' && inputs.environment == 'all') && '["dev", "qa", "prod"]' || '["dev", "qa"]') }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install Hugo
+        run: curl -fsSL https://github.com/gohugoio/hugo/releases/download/v0.147.7/hugo_extended_0.147.7_linux-amd64.tar.gz | tar -xz -C /tmp hugo
+
+      - name: Resolve env-specific URLs + secrets
+        id: env
+        run: |
+          case "${{ matrix.environment }}" in
+            dev)
+              echo "srv_url=${{ secrets.CAP_SRV_URL_DEV }}" >> "$GITHUB_OUTPUT"
+              echo "api_key_secret=CONTENT_API_KEY"        >> "$GITHUB_OUTPUT"
+              echo "channel=prod"                          >> "$GITHUB_OUTPUT"
+              ;;
+            qa)
+              echo "srv_url=${{ secrets.CAP_SRV_URL_QA }}" >> "$GITHUB_OUTPUT"
+              echo "api_key_secret=CONTENT_API_KEY_QA"     >> "$GITHUB_OUTPUT"
+              echo "channel=qa"                            >> "$GITHUB_OUTPUT"
+              ;;
+            prod)
+              echo "srv_url=${{ secrets.CAP_SRV_URL_PROD }}" >> "$GITHUB_OUTPUT"
+              echo "api_key_secret=CONTENT_API_KEY"          >> "$GITHUB_OUTPUT"
+              echo "channel=prod"                            >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm --prefix hugo-apps install
+
+      - name: Generate GitHub App token
+        id: app-token
+        if: ${{ vars.USE_GITHUB_APP == 'true' }}
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.TUTORIALS_APP_ID }}
+          private-key: ${{ secrets.TUTORIALS_APP_PRIVATE_KEY }}
+          owner: sap-tutorials
+
+      # Re-fetch tutorials so verify operates on what fetch-tutorials
+      # would publish today, not on a cached snapshot from days ago.
+      # Drift is an outcome of source vs server, not local cache vs
+      # server, so the source-of-truth must be re-derived.
+      - name: Fetch tutorials
+        run: |
+          if [ "${{ steps.env.outputs.channel }}" = "qa" ]; then
+            npm run fetch-tutorials:qa
+          else
+            npm run fetch-tutorials
+          fi
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.TUTORIALS_GITHUB_TOKEN }}
+          CAP_BASE_URL: ${{ steps.env.outputs.srv_url }}
+
+      - name: Build Vue apps
+        run: npm --prefix hugo-apps run build
+
+      - name: Copy Joule vendor bundles
+        run: npm run copy-joule-vendor
+
+      - name: Build Hugo site
+        run: |
+          if [ "${{ steps.env.outputs.channel }}" = "qa" ]; then
+            /tmp/hugo --source hugo --config ../hugo.qa.toml --minify
+            echo "hugo_dir=hugo/public-qa" >> "$GITHUB_OUTPUT"
+          else
+            /tmp/hugo --source hugo --minify
+          fi
+        id: build
+      # publish-content.ts uses --hugo-dir to find the built HTML +
+      # compute SHA-256s. For QA the dir is hugo/public-qa; for the
+      # default channel it's hugo/public. Default in the script is
+      # already hugo/public, so we only override for QA.
+      - name: Verify content hashes against ${{ matrix.environment }}
+        id: verify
+        run: |
+          set +e
+          HUGO_DIR="hugo/public"
+          if [ "${{ steps.env.outputs.channel }}" = "qa" ]; then
+            HUGO_DIR="hugo/public-qa"
+          fi
+          npx tsx scripts/publish-content.ts \
+            --hugo-dir "$HUGO_DIR" \
+            --base-url "${{ steps.env.outputs.srv_url }}" \
+            --verify-only \
+            --verbose 2>&1 | tee verify.log
+          EXIT=${PIPESTATUS[0]}
+          set -e
+          echo "exit_code=$EXIT" >> "$GITHUB_OUTPUT"
+          # Three meaningful exit codes from publish-content.ts:
+          #   0 = match
+          #   1 = connectivity / unexpected failure
+          #   2 = drift detected (slug list in stderr)
+          # We let the workflow fail in both 1 and 2 cases — both
+          # mean someone needs to look — but distinguish them in
+          # the run summary below.
+        env:
+          # verify-only does NOT need the API key (server endpoint is
+          # public-read), but the script still expects the env var to
+          # be set so it can short-circuit politely. Pass an empty
+          # string rather than leaving it unset.
+          CONTENT_API_KEY: ''
+
+      - name: Upload verify log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: content-drift-${{ matrix.environment }}-${{ github.run_number }}
+          path: verify.log
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Summarize
+        if: always()
+        run: |
+          {
+            echo "### Content drift check — ${{ matrix.environment }}"
+            echo ""
+            EXIT="${{ steps.verify.outputs.exit_code }}"
+            case "$EXIT" in
+              0)
+                echo "✅ **Match** — every Hugo-built slug hashes identically to what the srv serves."
+                ;;
+              2)
+                echo "⚠ **Drift detected** — at least one slug on the server does not match Hugo."
+                echo ""
+                echo "**Repair:** \`CAP_BASE_URL=\"${{ steps.env.outputs.srv_url }}\" npm run publish-content -- --heal\`"
+                echo ""
+                echo "Drift list (first 50, see full \`verify.log\` artifact):"
+                echo ""
+                echo "\`\`\`"
+                grep '^  - ' verify.log || echo "(empty)"
+                echo "\`\`\`"
+                ;;
+              *)
+                echo "❌ **Verification failed** — could not reach the server or unexpected error."
+                echo ""
+                echo "Tail of \`verify.log\`:"
+                echo ""
+                echo "\`\`\`"
+                tail -n 30 verify.log
+                echo "\`\`\`"
+                ;;
+            esac
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail the run if drift or error
+        if: always()
+        run: |
+          EXIT="${{ steps.verify.outputs.exit_code }}"
+          if [ "$EXIT" != "0" ]; then
+            echo "::error::Content drift check failed for ${{ matrix.environment }} (exit $EXIT)"
+            exit "$EXIT"
+          fi

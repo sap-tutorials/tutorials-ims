@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import type { TutorialEntry, CardItem, MissionRef, GroupRef } from '@shared/types'
 import Skeleton from '@shared/Skeleton.vue'
 import { toLookup, emptyProgress, type ProgressPayload } from './cardProgress'
 import { isWithinNewWindow } from '../shared/freshness'
 import { useNavigatorFilters } from '@shared/composables/useNavigatorFilters'
 import { wireTracker } from '@shared/analytics/wire-tracker'
+// /browse/ ships ?sort= via browseUrl.ts. Reusing that module here (#199)
+// keeps the URL contract identical across both surfaces — no new param
+// shape to maintain. The module's behaviour is fully covered by
+// hugo-apps/src/browse/__tests__/browseUrl.test.ts.
+import { readSort, writeSort, DEFAULT_SORT, type Sort } from '../browse/browseUrl'
 import MissionCard from '@shared/cards/MissionCard.vue'
 import GroupCard from '@shared/cards/GroupCard.vue'
 import TutorialCard from '@shared/cards/TutorialCard.vue'
@@ -15,6 +20,28 @@ const tutorials = ref<TutorialEntry[]>([])
 const missionsMeta = ref<MissionRef[]>([])
 const groupsMeta = ref<GroupRef[]>([])
 
+// SSR-pre-seeded card list (#200). Read synchronously at script-init from
+// the <script id="browse-data" type="application/json"> element emitted by
+// hugo/layouts/index.html. Lets us render the grid in the first paint after
+// Vue mount instead of waiting for /tutorials/_nav.json + /build/navigator
+// (~200-400ms on a cold connection). The fetches still run in onMounted to
+// enrich tutorials/missionsMeta/groupsMeta refs for facet computation
+// (filteredTopics, filteredProducts) — at which point allCards switches to
+// the live computation. Empty array when SSR data is missing (fresh deploy,
+// recovery, or if Hugo couldn't read .Site.Data.browse).
+function readSsrPreseededCards(): CardItem[] {
+  if (typeof document === 'undefined') return []
+  const el = document.getElementById('browse-data')
+  if (!el?.textContent) return []
+  try {
+    const parsed = JSON.parse(el.textContent) as { all?: CardItem[] }
+    return parsed.all ?? []
+  } catch {
+    return []
+  }
+}
+const ssrPreseededCards = ref<CardItem[]>(readSsrPreseededCards())
+
 // User progress is `/`-only (the `/browse/` build will fetch its own).
 const progress = ref<ProgressPayload>(emptyProgress())
 const progressLoaded = ref(false)
@@ -22,7 +49,13 @@ const progressLoaded = ref(false)
 // Template UI toggle for the filter rail visibility.
 const filtersOpen = ref(true)
 
-const loading = computed(() => tutorials.value.length === 0)
+// Loading is false when EITHER the live fetches have resolved (tutorials
+// populated) OR SSR pre-seed data is present. The SSR preview should NOT
+// be replaced by the loading skeleton — that would re-introduce the
+// flash-of-empty-grid the SSR pass is meant to eliminate.
+const loading = computed(() =>
+  tutorials.value.length === 0 && ssrPreseededCards.value.length === 0
+)
 
 const LEVEL_ORDER: Record<string, number> = { beginner: 0, intermediate: 1, advanced: 2 }
 
@@ -46,7 +79,13 @@ function missionGroupCount(missionId: number): number {
 
 const allCards = computed<CardItem[]>(() => {
   const tuts = tutorials.value
-  if (!tuts.length) return []
+  // SSR pre-seed path (#200): when fetches haven't resolved yet but Hugo
+  // emitted the inlined browse-data JSON, render those cards immediately
+  // instead of an empty grid. Fetches will replace this with the
+  // tutorials-derived computation as soon as they land.
+  if (!tuts.length) {
+    return ssrPreseededCards.value
+  }
 
   const items: CardItem[] = []
 
@@ -142,10 +181,30 @@ const {
   hasActiveFilters, paginatorPages, goToPage, clearFilters, toggleFilter,
   filteredProducts, filteredTopics,
   searchMode, isSubThreshold, isSearching,
+  sort: composableSort,
 } = useNavigatorFilters({
   allCards,
   tutorials,
-  // enableSort omitted — / has no sort UI today.
+  enableSort: true,
+})
+
+// Sort UI (#199): reuse /browse/'s ?sort= URL contract via browseUrl.ts —
+// keeps the URL behavior identical across both surfaces. The composable
+// also exposes its own `sort` ref (composableSort above); we mirror this
+// local ref's value into it so the comparator pipeline picks up changes.
+// Pattern matches BrowsePage.vue:80-94.
+const sort = ref<Sort>(
+  typeof window !== 'undefined' ? readSort(window.location.href) : DEFAULT_SORT
+)
+if (composableSort) composableSort.value = sort.value
+watch(sort, (next) => {
+  if (composableSort) composableSort.value = next
+  if (typeof window !== 'undefined') {
+    const newHref = writeSort(window.location.href, next)
+    if (newHref !== window.location.href) {
+      history.replaceState({}, '', newHref)
+    }
+  }
 })
 
 onMounted(async () => {
@@ -199,9 +258,11 @@ onMounted(async () => {
   // Analytics tracker (#204) — fires page_view, filter_change, card_click,
   // pagination_change, rail_show_all_click, scroll_depth, page_leave.
   // Tracker self-disables on 503 (default until UI_EVENTS_ENABLED is set).
+  // Sort ref passed in via filters (#199) so filter_change(kind=sort)
+  // events fire on dropdown change, matching /browse/'s telemetry.
   wireTracker({
     surface: '/',
-    filters: { searchQuery, filters, sort: undefined },
+    filters: { searchQuery, filters, sort },
   })
 })
 </script>
@@ -347,6 +408,21 @@ onMounted(async () => {
         <button v-if="hasActiveFilters" class="fd-button fd-button--transparent" @click="clearFilters">
           Clear all filters
         </button>
+        <!-- Sort dropdown (#199): same five options as /browse/, same
+             ?sort= URL contract via browseUrl.ts. The native <select>
+             matches /browse/'s `.browse-sort__select` styling pattern;
+             reusing the same .browse-sort* classes (rather than
+             /-specific ones) lets shared CSS govern both. -->
+        <label class="navigator-sort browse-sort">
+          Sort:
+          <select name="sort" class="browse-sort__select" v-model="sort">
+            <option value="relevance">Relevance</option>
+            <option value="updated">Recently updated</option>
+            <option value="recent">Recently added</option>
+            <option value="title">Title A→Z</option>
+            <option value="time">Time-to-complete</option>
+          </select>
+        </label>
       </section>
 
       <!-- Section: Card Grid (or skeleton while loading)
@@ -738,6 +814,26 @@ onMounted(async () => {
 .toolbar-sep {
   color: var(--sapNeutralBorderColor, #d9d9d9);
   font-size: 1rem;
+}
+
+/* Sort dropdown (#199): pin to the right of the toolbar; matches /browse/'s
+   visual where the sort dropdown sits at the end of the grid header. */
+.navigator-sort {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--sapContent_LabelColor, #556b82);
+}
+.navigator-sort .browse-sort__select {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--sapNeutralBorderColor, #d9d9d9);
+  border-radius: 4px;
+  background: var(--sapField_Background, #fff);
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
 }
 
 /* ─── Card Grid ─── */
