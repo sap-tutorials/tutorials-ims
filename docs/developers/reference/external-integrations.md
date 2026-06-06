@@ -17,7 +17,7 @@ description: GitHub, XSUAA, NGDS, Adobe Analytics, BTP Mail, AI Core, Audit Log,
 | BTP Mail | Outbound | `tutorials-mail` (`mail/standard`) | Contributor + author notifications via `srv/lib/mail-client.js`; failed sends queued in `FailedEmails` |
 | SAP AI Core | Outbound | `tutorials-aicore` (`aicore/extended`, optional) | Chat completions for `ChatService` + RAG; embedding generation for `TutorialEmbedding`. Degrades to 503 when unbound |
 | SAP Audit Log | Outbound | `tutorials-audit-log` (`auditlog/standard`, optional) | `@PersonalData`-driven access/modification events on `Users`/`UserMetaData`/`TaskRecords`; falls back to console sink when unbound |
-| SAP Cloud Logging | Outbound | `tutorials-cloud-logging` (`cloud-logging/standard`, optional, `ingest_otlp.enabled=true`) | OTLP export; backs `cfLogsUrl` virtual on `PipelineLog`/`JobExecutionLog`. No-ops when unbound |
+| SAP Cloud Logging | Outbound | `tutorials-cloud-logging` (`cloud-logging/standard`, optional, `ingest_otlp.enabled=true`) | OTLP export from `tutorials-srv` backs `cfLogsUrl` virtual on `PipelineLog`/`JobExecutionLog`. Bound to `tutorials-db-deployer`/`tutorials-db-qa-deployer` (#257) so HDI deploy stdout is forwarded by the CF loggregator and persisted ~30 days. No-ops when unbound |
 | SAP Cloud Foundry API | Outbound | `cf` CLI inside `migrate-from-hana.js` | Resolves `cf service-key` for cross-instance HANA migration (cutover only) |
 
 #### Identity is JWT-only on CAP

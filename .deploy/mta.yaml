@@ -32,6 +32,7 @@ modules:
       buildpack: nodejs_buildpack
     requires:
       - name: tutorials-hana
+      - name: tutorials-cloud-logging   # forwards deployer stdout to Cloud Logging (~30 days), not just cf logs ring buffer (~30 min). Closes the forensic gap from #257.
 
   - name: tutorials-db-qa-deployer
     type: hdb
@@ -40,6 +41,7 @@ modules:
       buildpack: nodejs_buildpack
     requires:
       - name: tutorials-hana-qa
+      - name: tutorials-cloud-logging   # same as tutorials-db-deployer; mirrors the prod binding for QA forensic parity.
 
   - name: tutorials-srv
     type: nodejs
