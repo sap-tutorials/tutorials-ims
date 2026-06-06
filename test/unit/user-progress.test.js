@@ -137,6 +137,7 @@ describe('user-progress', () => {
       expect(result).toEqual({
         inProgress: [],
         completedSlugs: [],
+        lastCompletedSlug: null,
         completedMissionSlugs: [],
         completedGroupSlugs: []
       });
@@ -161,6 +162,26 @@ describe('user-progress', () => {
       expect(result.completedSlugs.sort()).toEqual(['btp-trial', 'cap-getting-started']);
       expect(result.completedMissionSlugs).toEqual(['cap-mission']);
       expect(result.completedGroupSlugs).toEqual(['beginner-group']);
+    });
+
+    it('orders completedSlugs by completionDate descending', async () => {
+      const result = await getUserProgress({ id: USER_UUID });
+      // btp-trial completed 2026-05-10 is more recent than cap-getting-started 2026-04-01
+      expect(result.completedSlugs).toEqual(['btp-trial', 'cap-getting-started']);
+    });
+
+    it('exposes lastCompletedSlug as the most-recently-completed tutorial', async () => {
+      const result = await getUserProgress({ id: USER_UUID });
+      expect(result.lastCompletedSlug).toBe('btp-trial');
+    });
+
+    it('returns lastCompletedSlug=null for users with no completed tutorials', async () => {
+      const { TaskRecords } = cds.entities('com.sap.developers.ims');
+      // Wipe the COMPLETED tutorial rows; in-progress + mission/group rows survive.
+      await DELETE.from(TaskRecords).where({ taskType: 'TUTORIAL', status: 'COMPLETED' });
+      const result = await getUserProgress({ id: USER_UUID });
+      expect(result.completedSlugs).toEqual([]);
+      expect(result.lastCompletedSlug).toBeNull();
     });
 
     it('does NOT include the untouched control tutorial', async () => {

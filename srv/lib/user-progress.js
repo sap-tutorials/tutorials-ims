@@ -29,7 +29,7 @@ async function resolveDbUserId(user) {
 export async function getUserProgress(user, opts = {}) {
   const dbUserId = await resolveDbUserId(user);
   if (!dbUserId) {
-    return { inProgress: [], completedSlugs: [], completedMissionSlugs: [], completedGroupSlugs: [] };
+    return { inProgress: [], completedSlugs: [], lastCompletedSlug: null, completedMissionSlugs: [], completedGroupSlugs: [] };
   }
 
   const limit = Math.min(Math.max(1, opts.limit || DEFAULT_LIMIT), MAX_LIMIT);
@@ -82,7 +82,13 @@ export async function getUserProgress(user, opts = {}) {
     if (!meta?.slug) continue; // legacyId without a current slug → skip
 
     if (r.status === 'COMPLETED') {
-      if (r.taskType === 'TUTORIAL') completedSlugs.push(meta.slug);
+      if (r.taskType === 'TUTORIAL') {
+        // Capture completionDate so we can pick the most-recently-completed
+        // tutorial slug downstream (recommendations rail anchor, issue #202).
+        // Falls back to modifiedAt when completionDate is null on legacy rows.
+        const completedAt = r.completionDate || r.modifiedAt || null;
+        completedSlugs.push({ slug: meta.slug, completedAt });
+      }
       else if (r.taskType === 'MISSION') completedMissionSlugs.push(meta.slug);
       else if (r.taskType === 'GROUP') completedGroupSlugs.push(meta.slug);
     } else if (r.status === 'IN_PROGRESS' && r.taskType === 'TUTORIAL') {
@@ -101,9 +107,21 @@ export async function getUserProgress(user, opts = {}) {
     return bt - at;
   });
 
+  // Order completed tutorials newest-first then collapse to plain slug array
+  // for backward compatibility. The newest slug is also surfaced separately as
+  // lastCompletedSlug for the /browse/ recommendations rail (issue #202).
+  completedSlugs.sort((a, b) => {
+    const at = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+    const bt = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+    return bt - at;
+  });
+  const lastCompletedSlug = completedSlugs.length > 0 ? completedSlugs[0].slug : null;
+  const completedSlugList = completedSlugs.map(c => c.slug);
+
   return {
     inProgress: inProgress.slice(0, limit),
-    completedSlugs,
+    completedSlugs: completedSlugList,
+    lastCompletedSlug,
     completedMissionSlugs,
     completedGroupSlugs
   };
