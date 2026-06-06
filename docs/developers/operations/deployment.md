@@ -20,8 +20,8 @@ The deployment in [.deploy/mta.yaml](../../../.deploy/mta.yaml) defines five mod
 
 | Module | Type | Source | Requires | Purpose |
 | --- | --- | --- | --- | --- |
-| `tutorials-db-deployer` | `hdb` | `gen/db` | `tutorials-hana` | Prod HANA schema + indexes (one-shot HDI deploy) |
-| `tutorials-db-qa-deployer` | `hdb` | `gen/db-qa` | `tutorials-hana-qa` | QA HANA schema (peer of `db/`, namespace `com.sap.developers.ims.qa`) |
+| `tutorials-db-deployer` | `hdb` | `gen/db` | `tutorials-hana`, `tutorials-cloud-logging` | Prod HANA schema + indexes (one-shot HDI deploy). Cloud Logging binding forwards deployer stdout for ~30-day forensic retention (#257). |
+| `tutorials-db-qa-deployer` | `hdb` | `gen/db-qa` | `tutorials-hana-qa`, `tutorials-cloud-logging` | QA HANA schema (peer of `db/`, namespace `com.sap.developers.ims.qa`). Cloud Logging binding mirrors prod for QA forensic parity. |
 | `tutorials-srv` | `nodejs` | `gen/srv` | hana, xsuaa, destination, mail, audit-log, cloud-logging, aicore | CAP backend (9 services + jobs + Socket.IO + content store + RAG) |
 | `tutorials-srv-qa` | `nodejs` | `gen/srv-qa` | hana-qa, xsuaa | QA-channel CAP srv (re-renders author drafts via `srv-qa/lib/parsers.bundle.mjs`) |
 | `tutorials-approuter` | `approuter.nodejs` | `approuter/` | xsuaa, `srv-api` (destination), `srv-qa-api` (destination) | XSUAA login + static delivery + reverse proxy to both srv apps |
@@ -38,7 +38,7 @@ The AppRouter routes `^/tutorials-qa/(.*)`, `^/qa-search/(.*)` to the `srv-qa-ap
 | `tutorials-destination` | `destination` / `lite` | `tutorials-srv` | NGDS + SCI remote endpoints |
 | `tutorials-mail` | `mail` / `standard` | `tutorials-srv` | SMTP for notification escalation emails |
 | `tutorials-audit-log` | `auditlog` / `standard` (optional) | `tutorials-srv` | `@cap-js/audit-logging` sink for `@PersonalData` events |
-| `tutorials-cloud-logging` | `cloud-logging` / `standard` (optional) | `tutorials-srv` | OTLP ingest enabled; backs the `cfLogsUrl` virtual on `PipelineLog` / `JobExecutionLog` |
+| `tutorials-cloud-logging` | `cloud-logging` / `standard` (optional) | `tutorials-srv`, `tutorials-db-deployer`, `tutorials-db-qa-deployer` | OTLP ingest enabled; backs the `cfLogsUrl` virtual on `PipelineLog` / `JobExecutionLog`. Deployer bindings (#257) capture HDI deploy stdout for ~30-day forensic retention. |
 | `tutorials-aicore` | `aicore` / `extended` (optional) | `tutorials-srv` | Backs `ChatService` + embeddings + RAG (`getRelevantSteps` tool) |
 
 `optional: true` resources let `mbt build && cf deploy` succeed in a subaccount that hasn't entitled them yet (e.g., a fresh sandbox without AI Core). The srv app degrades gracefully when bindings are missing — chat returns 503, audit logging falls through to the console sink, OTLP export is no-op.
