@@ -173,6 +173,35 @@ export async function expandAiAuthoredQuestions(
 }
 
 /**
+ * For AI-authored text questions in the validation map, populate the
+ * sibling maps that collectAiGradedSpecs uses to emit the
+ * validate-answer-spec sidecar. Hand-authored questions are populated
+ * by parseBlock; AI-authored questions arrive after parseRulesVrEnriched
+ * returns and need this catch-up step.
+ *
+ * #208 final-review fix: without this, AI-authored text questions are
+ * silently dropped from aiGradedSpecs and /api/validate-answer returns
+ * spec_missing at runtime.
+ */
+export function populateAiAuthoredSiblingMaps(
+  validationMap: Map<number, ValidationQuestion[]>,
+  ruleTypeByStepAndId: Map<string, string>,
+  correctAnswerByStepAndId: Map<string, string>,
+): void {
+  for (const [stepNumber, questions] of validationMap) {
+    for (const q of questions) {
+      if (q.aiAuthored && q.type === 'text') {
+        const correctAnswer = (q as any).correctAnswer
+        if (typeof correctAnswer !== 'string' || correctAnswer.length === 0) continue
+        const key = `${stepNumber}:${q.id}`
+        correctAnswerByStepAndId.set(key, correctAnswer)
+        ruleTypeByStepAndId.set(key, 'ai-authored')
+      }
+    }
+  }
+}
+
+/**
  * Cache-snapshot transform. Strips parser sentinels (__autoauthor,
  * __directiveTypes) but KEEPS __aiCorrectAnswer for the eval harness.
  *

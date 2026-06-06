@@ -8,7 +8,7 @@ import { composeTutorial } from './parsers/compose.js'
 import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, EXCLUDED_REPOS, type DiscoveredTutorial } from './parsers/github.js'
 import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache } from './parsers/cap.js'
 import { parseRulesVrEnriched, collectAiGradedSpecs } from './parsers/rules.js'
-import { expandAiAuthoredQuestions, type ExpandStats } from './lib/expand-ai-authored.js'
+import { expandAiAuthoredQuestions, populateAiAuthoredSiblingMaps, type ExpandStats } from './lib/expand-ai-authored.js'
 import { loadAiQuizCache, saveAiQuizCache } from './lib/ai-quiz-cache.js'
 import { defaultCallModel } from '../srv/lib/code-check-llm.js'
 import { parseCodeCheckBlocks, attachCodeCheckSpecs } from './parsers/codecheck.js'
@@ -684,6 +684,14 @@ async function main() {
           saveAiQuizCache(t.slug, aiCache)
         }
 
+        // [#208] Populate sibling maps for AI-authored text questions so
+        // collectAiGradedSpecs (below) emits the validate-answer-spec
+        // sidecar. parseBlock populates these for hand-authored questions;
+        // AI-authored ones arrive after parseRulesVrEnriched returns.
+        // No-op when no AI-authored questions exist (flag off, or no
+        // [AUTOAUTHOR_*] directives in rules.vr).
+        populateAiAuthoredSiblingMaps(validationMap, ruleTypeByStepAndId, correctAnswerByStepAndId)
+
         const testSteps = steps.filter(s => /^test yourself$/i.test(s.title))
         for (const [validateNum, questions] of validationMap) {
           if (!questions.length) continue
@@ -713,10 +721,11 @@ async function main() {
         }
 
         // [#208] Anti-leak strip: AI-authored text questions had correctAnswer
-        // restored on validationMap so collectAiGradedSpecs (above) could emit
-        // the validate-answer-spec sidecar. The reference is now in HANA via
-        // that sidecar; the public Hugo frontmatter must NOT carry it. Strip
-        // correctAnswer from any text question with aiAuthored: true.
+        // restored on validationMap so populateAiAuthoredSiblingMaps (above)
+        // could mirror it into correctAnswerByStepAndId, which collectAiGradedSpecs
+        // reads. The reference is now in HANA via the validate-answer sidecar;
+        // the public Hugo frontmatter must NOT carry it. Strip correctAnswer
+        // from any text question with aiAuthored: true.
         //
         // (Hand-authored aiGrading: true text questions are already stripped
         // upstream by parseRulesVrEnriched per #209's existing anti-leak path —

@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { parseRulesVrEnriched } from '../../scripts/parsers/rules.js'
-import { expandAiAuthoredQuestions } from '../../scripts/lib/expand-ai-authored.js'
+import { parseRulesVrEnriched, collectAiGradedSpecs } from '../../scripts/parsers/rules.js'
+import { expandAiAuthoredQuestions, populateAiAuthoredSiblingMaps } from '../../scripts/lib/expand-ai-authored.js'
 import { loadAiQuizCache, saveAiQuizCache } from '../../scripts/lib/ai-quiz-cache.js'
 
 let testCacheDir: string
@@ -24,6 +24,19 @@ const MOCK_RESP = {
       questions: [{
         type: 'multiple-choice',
         question: 'Q?', options: ['a','b','c','d'], correctAnswer: 'a',
+      }],
+    }),
+  }],
+  modelName: 'gpt-test', promptTokens: 1, completionTokens: 1,
+}
+
+const MOCK_RESP_TEXT = {
+  toolCalls: [{
+    name: 'submitQuiz',
+    arguments: JSON.stringify({
+      questions: [{
+        type: 'text',
+        question: 'Q?', correctAnswer: 'reference answer for the step',
       }],
     }),
   }],
@@ -65,5 +78,37 @@ describe('AI quiz flow — end to end (#208)', () => {
     })
     expect(callModel2).not.toHaveBeenCalled()
     expect(stats2).toMatchObject({ calls: 0, hits: 3, errors: 0 })
+  })
+
+  it('AI-authored text questions flow into aiGradedSpecs (#208 anti-leak chain)', async () => {
+    const rulesContent = `[AUTOAUTHOR_ALL:text]\n`
+    const stepBodies = new Map<number, string>([
+      [1, 'body of step 1'],
+      [2, 'body of step 2'],
+      [3, 'body of step 3'],
+    ])
+
+    const callModel = vi.fn().mockResolvedValue(MOCK_RESP_TEXT)
+    const cache = loadAiQuizCache('synthetic-text-slug', { cacheDir: testCacheDir })
+    const { map: validationMap, ruleTypeByStepAndId, correctAnswerByStepAndId, allDirective } = parseRulesVrEnriched(rulesContent)
+    const stats = { calls: 0, hits: 0, errors: 0 }
+    await expandAiAuthoredQuestions(validationMap, stepBodies, {
+      cache, callModel, onCallStats: stats, allDirective,
+    })
+
+    // Production-equivalent wiring: populate the sibling maps for AI-authored
+    // text questions so collectAiGradedSpecs emits them. Without this, the
+    // questions are silently dropped from the validate-answer-spec sidecar
+    // and /api/validate-answer returns spec_missing at runtime.
+    populateAiAuthoredSiblingMaps(validationMap, ruleTypeByStepAndId, correctAnswerByStepAndId)
+
+    const specs = collectAiGradedSpecs(validationMap, ruleTypeByStepAndId, correctAnswerByStepAndId)
+    expect(specs).toHaveLength(3)
+    for (const spec of specs) {
+      expect(spec.aiGrading).toBe(true)
+      expect(spec.ruleType).toBe('ai-authored')
+      expect(spec.correctAnswer).toBe('reference answer for the step')
+      expect(spec.questionText).toBe('Q?')
+    }
   })
 })
