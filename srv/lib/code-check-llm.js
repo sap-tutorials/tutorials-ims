@@ -46,15 +46,38 @@ const CODE_CHECK_MAX_TOKENS = 800;
 export async function defaultCallModel({ system, user, schema }) {
   const effectiveSchema = schema ?? CHECK_CODE_OUTPUT_SCHEMA;
 
-  // 1. Read ChatSettings
-  const { ChatSettings } = cds.entities('com.sap.developers.ims');
-  const settings = await SELECT.one.from(ChatSettings);
+  // 1. Read ChatSettings — tolerant of build-pipeline contexts where
+  //    cds.entities is undefined (CAP hasn't booted via cds.serve).
+  //    See feedback_cds_entities_runtime_only in project memory.
+  let settings = null;
+  try {
+    if (typeof cds.entities === 'function') {
+      const { ChatSettings } = cds.entities('com.sap.developers.ims');
+      settings = await SELECT.one.from(ChatSettings);
+    } else {
+      // Build-pipeline path: CAP model loader hasn't initialized cds.entities,
+      // but a `cds.connect.to('db')` may have succeeded. Try raw SQL.
+      const db = await cds.connect.to('db');
+      const rows = await db.run(
+        'SELECT modelName, deploymentId FROM COM_SAP_DEVELOPERS_IMS_CHATSETTINGS LIMIT 1'
+      );
+      settings = rows?.[0] ?? null;
+    }
+  } catch (err) {
+    // ChatSettings read failed (e.g. no DB binding, table doesn't exist).
+    // Fall through to env-var defaults below.
+    LOG.warn('ChatSettings read failed; using env-var defaults', err.message);
+  }
 
   const modelName = settings?.modelName
+    || settings?.MODELNAME      // raw-SQL path returns UPPERCASE column names on HANA
     || process.env.CHAT_MODEL_NAME
     || 'anthropic--claude-4.6-sonnet';
 
-  const deploymentId = settings?.deploymentId;
+  const deploymentId = settings?.deploymentId
+    || settings?.DEPLOYMENTID
+    || process.env.CHAT_DEPLOYMENT_ID
+    || null;
 
   // 2. Build the single forced-verdict tool
   const verdictTool = {

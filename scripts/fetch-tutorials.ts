@@ -10,13 +10,14 @@ import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache } fro
 import { parseRulesVrEnriched, collectAiGradedSpecs } from './parsers/rules.js'
 import { expandAiAuthoredQuestions, populateAiAuthoredSiblingMaps, type ExpandStats } from './lib/expand-ai-authored.js'
 import { loadAiQuizCache, saveAiQuizCache } from './lib/ai-quiz-cache.js'
-import { defaultCallModel } from '../srv/lib/code-check-llm.js'
+import { callQuizModel } from '../srv/lib/ai-quiz-llm.js'
 import { parseCodeCheckBlocks, attachCodeCheckSpecs } from './parsers/codecheck.js'
 import { computeRecommendations } from './parsers/recommendations.js'
 import { humanizeTag, splitPrerequisites } from './parsers/frontmatter-utils.js'
 import type { TagLabelRegistry } from './parsers/frontmatter-utils.js'
 import { renderHugoFrontmatter } from './parsers/render-frontmatter.js'
 import type { Mission, MissionHierarchy, HierarchyGroup, StandaloneGroup, TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } from './parsers/types.js'
+import { QUESTION_TYPE_TEXT } from './parsers/types.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -677,7 +678,7 @@ async function main() {
           const aiCache = loadAiQuizCache(t.slug)
           await expandAiAuthoredQuestions(validationMap, stepBodies, {
             cache: aiCache,
-            callModel: defaultCallModel,
+            callModel: callQuizModel,
             onCallStats: globalCallStats,
             allDirective,
           })
@@ -733,8 +734,8 @@ async function main() {
         // scenic route to support both consumers.)
         for (const [, questions] of validationMap) {
           for (const q of questions) {
-            if (q.aiAuthored && q.type === 'text') {
-              delete (q as any).correctAnswer
+            if (q.aiAuthored && q.type === QUESTION_TYPE_TEXT) {
+              delete q.correctAnswer
             }
           }
         }
