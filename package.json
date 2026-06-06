@@ -13,6 +13,7 @@
     "build:cds": "cds build --production",
     "fetch-tutorials": "tsx scripts/fetch-tutorials.ts --target hugo",
     "fetch-tutorials:hugo": "tsx scripts/fetch-tutorials.ts --target hugo",
+    "seed-ai-quizzes": "AI_AUTHOR_ENABLED=true AI_AUTHOR_BUILD_CAP=10000 npm run fetch-tutorials",
     "discover-repos": "tsx scripts/fetch-tutorials.ts --discover-only",
     "generate-dark-theme": "tsx scripts/generate-dark-theme.ts",
     "validate-tutorials": "tsx scripts/validate-tutorials.ts",

@@ -8,6 +8,9 @@ import { composeTutorial } from './parsers/compose.js'
 import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, EXCLUDED_REPOS, type DiscoveredTutorial } from './parsers/github.js'
 import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache } from './parsers/cap.js'
 import { parseRulesVrEnriched, collectAiGradedSpecs } from './parsers/rules.js'
+import { expandAiAuthoredQuestions, type ExpandStats } from './lib/expand-ai-authored.js'
+import { loadAiQuizCache, saveAiQuizCache } from './lib/ai-quiz-cache.js'
+import { defaultCallModel } from '../srv/lib/code-check-llm.js'
 import { parseCodeCheckBlocks, attachCodeCheckSpecs } from './parsers/codecheck.js'
 import { computeRecommendations } from './parsers/recommendations.js'
 import { humanizeTag, splitPrerequisites } from './parsers/frontmatter-utils.js'
@@ -33,6 +36,10 @@ if (existsSync(envPath)) {
 
 let CACHE_DIR = join(__dirname, '..', '.tutorial-cache')
 const CONCURRENCY = 5
+
+// [#208] Build-wide AI quiz generation stats. Accumulates across all
+// tutorials in one fetch run; logged at the end as a one-line summary.
+const globalCallStats: ExpandStats = { calls: 0, hits: 0, errors: 0 }
 
 export type Channel = 'prod' | 'qa'
 
@@ -654,7 +661,29 @@ async function main() {
       // Fetch and attach validation questions from rules.vr
       const rulesContent = await fetchRulesVr(t.slug, t.repo, t.branch)
       if (rulesContent) {
-        const { map: validationMap, ruleTypeByStepAndId, correctAnswerByStepAndId } = parseRulesVrEnriched(rulesContent)
+        const { map: validationMap, ruleTypeByStepAndId, correctAnswerByStepAndId, allDirective } = parseRulesVrEnriched(rulesContent)
+
+        // [#208] AI-authored quiz expansion. Behind AI_AUTHOR_ENABLED env flag;
+        // hard-capped at AI_AUTHOR_BUILD_CAP per build. Cache lives at
+        // .tutorial-cache/<slug>.ai-quiz-cache.json. See:
+        // docs/superpowers/specs/2026-06-05-208-ai-authored-quizzes-design.md
+        if (process.env.AI_AUTHOR_ENABLED === 'true') {
+          // TutorialStep type has `.number` + `.content` fields (per
+          // scripts/parsers/types.ts — verified during plan review). Use
+          // `s.content`, NOT `s.body`.
+          const stepBodies = new Map<number, string>(
+            steps.map(s => [s.number, s.content ?? '']),
+          )
+          const aiCache = loadAiQuizCache(t.slug)
+          await expandAiAuthoredQuestions(validationMap, stepBodies, {
+            cache: aiCache,
+            callModel: defaultCallModel,
+            onCallStats: globalCallStats,
+            allDirective,
+          })
+          saveAiQuizCache(t.slug, aiCache)
+        }
+
         const testSteps = steps.filter(s => /^test yourself$/i.test(s.title))
         for (const [validateNum, questions] of validationMap) {
           if (!questions.length) continue
@@ -681,6 +710,24 @@ async function main() {
           // produce mixed-case t.slug; the publish path matches against the
           // lowercase HANA row.
           writeFileSync(validateSidecarPath, JSON.stringify({ slug: t.slug.toLowerCase(), specs: aiGradedSpecs }, null, 2))
+        }
+
+        // [#208] Anti-leak strip: AI-authored text questions had correctAnswer
+        // restored on validationMap so collectAiGradedSpecs (above) could emit
+        // the validate-answer-spec sidecar. The reference is now in HANA via
+        // that sidecar; the public Hugo frontmatter must NOT carry it. Strip
+        // correctAnswer from any text question with aiAuthored: true.
+        //
+        // (Hand-authored aiGrading: true text questions are already stripped
+        // upstream by parseRulesVrEnriched per #209's existing anti-leak path —
+        // only the AI-authored ones need this extra strip because they took the
+        // scenic route to support both consumers.)
+        for (const [, questions] of validationMap) {
+          for (const q of questions) {
+            if (q.aiAuthored && q.type === 'text') {
+              delete (q as any).correctAnswer
+            }
+          }
         }
 
         const codeCheckMap = parseCodeCheckBlocks(rulesContent)
@@ -1009,6 +1056,16 @@ async function main() {
       console.log(`    ✗ ${e.repo}/${e.slug}: ${e.error}`)
     }
     console.log('─'.repeat(60))
+  }
+
+  if (process.env.AI_AUTHOR_ENABLED === 'true') {
+    console.log(
+      `[ai-author] expanded directives across all tutorials: ` +
+      `${globalCallStats.calls} cache miss (LLM call), ` +
+      `${globalCallStats.hits} cache hit, ` +
+      `${globalCallStats.errors} errors. ` +
+      `Build cap: ${process.env.AI_AUTHOR_BUILD_CAP ?? '200'}.`,
+    )
   }
 
   console.log('═'.repeat(60))
