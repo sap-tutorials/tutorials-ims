@@ -2,6 +2,23 @@ import type { ValidationQuestion } from './types.js'
 
 const VALIDATE_MARKER = /^\[VALIDATE_(\d+)\]\s*$/
 
+// [#208] Per-step `[AUTOAUTHOR_N]` / `[AUTOAUTHOR_N:mcq]` / `[AUTOAUTHOR_N:text]`
+// directive — instructs Phase 3 (`expandAiAuthoredQuestions`) to synthesize a
+// validation question for step N. The optional suffix selects question type
+// (default: `mcq-and-text`).
+const AUTOAUTHOR_PER_STEP_MARKER = /^\[AUTOAUTHOR_(\d+)(?::(mcq|text))?\]\s*$/
+// [#208] Tutorial-wide `[AUTOAUTHOR_ALL]` / `[AUTOAUTHOR_ALL:mcq|text]` directive.
+// The parser doesn't know the step list, so it just records the directive on
+// the result and lets Phase 3 expand against the actual step count.
+const AUTOAUTHOR_ALL_MARKER = /^\[AUTOAUTHOR_ALL(?::(mcq|text))?\]\s*$/
+
+type AutoAuthorTypes = 'mcq-and-text' | 'mcq-only' | 'text-only'
+function suffixToTypes(suffix: 'mcq' | 'text' | undefined): AutoAuthorTypes {
+  if (suffix === 'mcq') return 'mcq-only'
+  if (suffix === 'text') return 'text-only'
+  return 'mcq-and-text'
+}
+
 // Rule types whose semantics are "match a regex/prefix pattern" — these are
 // auto-routed to AI grading (issue #209). Historically the loader treated
 // them as plain string equality, so authors who chose them never got the
@@ -34,10 +51,18 @@ export function parseRulesVrEnriched(content: string): {
   map: Map<number, ValidationQuestion[]>
   ruleTypeByStepAndId: Map<string, string>
   correctAnswerByStepAndId: Map<string, string>
+  // [#208] tutorial-wide [AUTOAUTHOR_ALL] / [AUTOAUTHOR_ALL:mcq|text] directive,
+  // captured for the post-parse expansion step (it doesn't know the step list
+  // until fetch-tutorials.ts iterates `steps`).
+  allDirective?: { types: 'mcq-and-text' | 'mcq-only' | 'text-only'; present: true }
 } {
   const result = new Map<number, ValidationQuestion[]>()
   const ruleTypeByStepAndId = new Map<string, string>()
   const correctAnswerByStepAndId = new Map<string, string>()
+  // [#208] per-step AUTOAUTHOR directives — materialized into placeholders
+  // AFTER the main loop so hand-authored [VALIDATE_N] content always wins.
+  const perStepAutoAuthor = new Map<number, AutoAuthorTypes>()
+  let allDirective: { types: AutoAuthorTypes; present: true } | undefined
   const lines = content.split('\n')
 
   let currentNum: number | null = null
@@ -58,6 +83,24 @@ export function parseRulesVrEnriched(content: string): {
   }
 
   for (const line of lines) {
+    // [#208] AUTOAUTHOR directive recognition. These are top-level markers
+    // (sibling to [VALIDATE_N]) and must terminate any in-progress VALIDATE
+    // block before being recorded — otherwise the directive line would leak
+    // into the previous block's content. flush() handles the terminate.
+    const allMatch = line.match(AUTOAUTHOR_ALL_MARKER)
+    if (allMatch) {
+      flush()
+      allDirective = { types: suffixToTypes(allMatch[1] as 'mcq' | 'text' | undefined), present: true }
+      continue
+    }
+    const perStepMatch = line.match(AUTOAUTHOR_PER_STEP_MARKER)
+    if (perStepMatch) {
+      flush()
+      const num = Number(perStepMatch[1])
+      const types = suffixToTypes(perStepMatch[2] as 'mcq' | 'text' | undefined)
+      perStepAutoAuthor.set(num, types)
+      continue
+    }
     const match = line.match(VALIDATE_MARKER)
     if (match) {
       const num = parseInt(match[1], 10)
@@ -82,7 +125,23 @@ export function parseRulesVrEnriched(content: string): {
   // EOF flush — captures the final block when there's no closing marker.
   flush()
 
-  return { map: result, ruleTypeByStepAndId, correctAnswerByStepAndId }
+  // [#208] Materialize per-step AUTOAUTHOR placeholders for steps that don't
+  // already have hand-authored [VALIDATE_N] content. The sentinel fields
+  // (`__autoauthor`, `__directiveTypes`) are NOT on the exported
+  // ValidationQuestion type — they're an internal contract with Phase 3's
+  // `expandAiAuthoredQuestions`, which swaps them for real questions.
+  for (const [num, types] of perStepAutoAuthor) {
+    if ((result.get(num) ?? []).length > 0) continue // hand-authored wins
+    result.set(num, [{
+      id: `autoauthor-${num}`,
+      question: '__autoauthor_placeholder__',
+      type: 'text',
+      __autoauthor: true,
+      __directiveTypes: types,
+    } as any]) // sentinel fields not on ValidationQuestion's exported type
+  }
+
+  return { map: result, ruleTypeByStepAndId, correctAnswerByStepAndId, allDirective }
 }
 
 function parseBlock(
