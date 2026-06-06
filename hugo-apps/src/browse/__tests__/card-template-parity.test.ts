@@ -5,6 +5,13 @@
 // dual-edit tax: when card markup changes, the Vue SFC and the Hugo
 // partial must update in lockstep — otherwise this test fails.
 //
+// Coverage extends to BOTH /browse/ AND / (#200). Both surfaces use the
+// same Hugo partials (hugo/layouts/partials/browse/_partials/card-*.html)
+// and the same Vue components (hugo-apps/src/shared/cards/*.vue), so a
+// single parity test covers both. The fixtures here are the canonical
+// shape; if either surface drifts the partial or the SFC, this test
+// catches it for both.
+//
 // Why post-canonicalization rather than byte-strict: Vue SSR and Hugo
 // emit different rendering artefacts that aren't content drift —
 // scoped-CSS data-v-* attributes (Vue), HTML comments, &middot; vs
