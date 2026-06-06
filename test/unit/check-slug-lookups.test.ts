@@ -121,4 +121,34 @@ const f = await SELECT.from(T).where({ slug: { in: list } });
     expect(r.status).toBe(0);
     expect(r.stdout).toMatch(/1 operator-form/);
   });
+
+  it('marker on the line above the where() counts', () => {
+    writeFile(root, 'srv/lib/above.js', `
+// slug-canonical: caller-canonicalizes
+await SELECT.one.from(T).where({ slug });
+`);
+    const r = run(root);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/1 marked/);
+  });
+
+  it('marker on the same line as the where() counts', () => {
+    writeFile(root, 'srv/lib/same.js',
+      `await SELECT.one.from(T).where({ slug }); // slug-canonical: caller-canonicalizes\n`);
+    const r = run(root);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/1 marked/);
+  });
+
+  it('marker 3 lines above does NOT count (window is 2 lines)', () => {
+    writeFile(root, 'srv/lib/far.js', `
+// slug-canonical: caller-canonicalizes
+
+
+await SELECT.one.from(T).where({ slug });
+`);
+    const r = run(root);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/unmarked/);
+  });
 });
