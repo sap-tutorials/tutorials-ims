@@ -183,7 +183,7 @@ Append to `postbuild:apps`:
 
 - [ ] `npx tsx scripts/check-slug-lookups.ts` exits 0 on `main` after the audit pass commit lands. (Both commits — script + audit — must ship in the same PR so CI sees a green build at merge time.)
 - [ ] Removing any marker locally produces a failure with file:line, the matched line, and the two copy-pasteable fixes.
-- [ ] All 9 unit tests pass.
+- [ ] All 12 unit tests pass.
 - [ ] An empty marker reason (`// slug-canonical:` with nothing after the colon) is rejected as if no marker were present.
 - [ ] Wired into `postbuild:apps` so `npm run build:apps` (and CI) fails on a PR that adds an unmarked bare lookup.
 - [ ] `srv-qa/node_modules/` is NOT scanned (verified by adding a synthetic third-party slug pattern there in a test fixture).
