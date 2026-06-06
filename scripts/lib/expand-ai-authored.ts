@@ -95,13 +95,15 @@ export async function expandAiAuthoredQuestions(
     const types = placeholder.__directiveTypes ?? 'mcq-and-text'
 
     const entryKey = String(stepNum)
-    const stepHash = hk({
-      stepBody,
-      directive,
-      types,
-      promptVersion: deps.cache.promptVersion,
-      modelName: deps.cache.modelName,
-    })
+    const computeHash = () =>
+      hk({
+        stepBody,
+        directive,
+        types,
+        promptVersion: deps.cache.promptVersion,
+        modelName: deps.cache.modelName,
+      })
+    const stepHash = computeHash()
 
     const cached = deps.cache.entries[entryKey]
     if (cached && cached.stepHash === stepHash) {
@@ -148,17 +150,24 @@ export async function expandAiAuthoredQuestions(
     const forCache = result.questions.map(stripParserSentinels)
     const forParsedMap = result.questions.map(materializeForPipeline)
 
+    // Adopt the response's modelName before snapshotting the entry's
+    // stepHash. Otherwise the first-pass hash uses cache.modelName='' and
+    // the second-pass hash uses cache.modelName=<result.modelName>,
+    // causing a guaranteed cache miss on the second pass for the very
+    // first step expanded in the first pass.
+    if (!deps.cache.modelName && result.modelName) {
+      deps.cache.modelName = result.modelName
+    }
+    const finalStepHash = computeHash()
+
     const newEntry: AiQuizCacheEntry = {
-      stepHash,
+      stepHash: finalStepHash,
       directive,
       types,
       generatedAt: new Date().toISOString(),
       questions: forCache,
     }
     deps.cache.entries[entryKey] = newEntry
-    if (!deps.cache.modelName && result.modelName) {
-      deps.cache.modelName = result.modelName
-    }
     parsedMap.set(stepNum, forParsedMap)
   }
 }
