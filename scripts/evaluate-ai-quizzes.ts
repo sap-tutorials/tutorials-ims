@@ -6,7 +6,11 @@
 // side-by-side CSV the author hand-grades.
 //
 // Usage:
-//   npx tsx scripts/evaluate-ai-quizzes.ts --slugs slug-a,slug-b --output verdicts/eval.csv [--types both]
+//   npx tsx scripts/evaluate-ai-quizzes.ts --slugs slug-a,slug-b --output verdicts/eval.csv [--mode paired|ai-only|all] [--types mcq|text|both]
+//
+// --mode paired  (default) — emit pairs only for steps with BOTH hand and AI questions (apples-to-apples comparison).
+// --mode ai-only           — emit all AI questions; skip hand. Use for gap-filling pilots.
+// --mode all               — emit everything: hand + AI rows regardless of pairing.
 //
 // Outputs CSV with columns:
 //   slug, stepNumber, source, questionType, question, correctAnswer,
@@ -43,18 +47,39 @@ export interface EvalRow {
   authorNotes: ''      // filled by reviewer
 }
 
+export type EvalMode = 'paired' | 'ai-only' | 'all'
+
 /**
- * Pure helper — emits one row per question for steps that have BOTH
- * hand-authored AND AI-authored questions (the comparison case).
+ * Pure helper — emits one row per question per step, controlled by `mode`:
+ *   - 'paired' (default): only emit steps that have BOTH hand AND AI questions
+ *     (apples-to-apples comparison case).
+ *   - 'ai-only': emit every AI-authored question; ignore hand-authored entirely
+ *     (gap-filling pilot case where AI fills steps that lack hand validates).
+ *   - 'all': emit everything — hand + AI — regardless of pairing.
  */
-export function buildEvalRows(inputs: EvalInputs): EvalRow[] {
+export function buildEvalRows(inputs: EvalInputs, mode: EvalMode = 'paired'): EvalRow[] {
   const rows: EvalRow[] = []
-  for (const [stepNum, hand] of inputs.handAuthored) {
-    if (hand.length === 0) continue
+  const allStepNums = new Set<number>([
+    ...inputs.handAuthored.keys(),
+    ...inputs.aiAuthored.keys(),
+  ])
+  for (const stepNum of [...allStepNums].sort((a, b) => a - b)) {
+    const hand = inputs.handAuthored.get(stepNum) ?? []
     const ai = inputs.aiAuthored.get(stepNum) ?? []
-    if (ai.length === 0) continue  // only emit steps that have BOTH
-    for (const q of hand) rows.push(toRow(inputs.slug, stepNum, 'hand-authored', q))
-    for (const q of ai) rows.push(toRow(inputs.slug, stepNum, 'ai-authored', q))
+
+    if (mode === 'paired') {
+      // Existing behavior: only emit when both hand AND AI exist for this step.
+      if (hand.length === 0 || ai.length === 0) continue
+      for (const q of hand) rows.push(toRow(inputs.slug, stepNum, 'hand-authored', q))
+      for (const q of ai) rows.push(toRow(inputs.slug, stepNum, 'ai-authored', q))
+    } else if (mode === 'ai-only') {
+      // Gap-filling use case: emit only AI rows; ignore hand.
+      for (const q of ai) rows.push(toRow(inputs.slug, stepNum, 'ai-authored', q))
+    } else if (mode === 'all') {
+      // Emit everything, regardless of pairing.
+      for (const q of hand) rows.push(toRow(inputs.slug, stepNum, 'hand-authored', q))
+      for (const q of ai) rows.push(toRow(inputs.slug, stepNum, 'ai-authored', q))
+    }
   }
   return rows
 }
@@ -107,7 +132,7 @@ export function rowsToCSV(rows: EvalRow[]): string {
 
 // ─── CLI ─────────────────────────────────────────────────────────────
 
-function parseArgs(argv: string[]): { slugs: string[]; output: string; types: 'mcq' | 'text' | 'both' } {
+function parseArgs(argv: string[]): { slugs: string[]; output: string; types: 'mcq' | 'text' | 'both'; mode: EvalMode } {
   const args = new Map<string, string>()
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
@@ -120,15 +145,20 @@ function parseArgs(argv: string[]): { slugs: string[]; output: string; types: 'm
   const slugs = (args.get('slugs') ?? '').split(',').map(s => s.trim()).filter(Boolean)
   const output = args.get('output') ?? ''
   const types = (args.get('types') ?? 'both') as 'mcq' | 'text' | 'both'
-  if (!slugs.length || !output) {
-    console.error('Usage: tsx scripts/evaluate-ai-quizzes.ts --slugs <comma-list> --output <path> [--types mcq|text|both]')
+  const modeArg = (args.get('mode') ?? 'paired') as EvalMode
+  if (!['paired', 'ai-only', 'all'].includes(modeArg)) {
+    console.error(`Invalid --mode: ${modeArg} (expected paired|ai-only|all)`)
     process.exit(2)
   }
-  return { slugs, output, types }
+  if (!slugs.length || !output) {
+    console.error('Usage: tsx scripts/evaluate-ai-quizzes.ts --slugs <comma-list> --output <path> [--types mcq|text|both] [--mode paired|ai-only|all]')
+    process.exit(2)
+  }
+  return { slugs, output, types, mode: modeArg }
 }
 
 async function main() {
-  const { slugs, output, types } = parseArgs(process.argv.slice(2))
+  const { slugs, output, types, mode } = parseArgs(process.argv.slice(2))
   const allRows: EvalRow[] = []
 
   for (const slug of slugs) {
@@ -158,7 +188,7 @@ async function main() {
     for (const [stepNum, qs] of handAuthored) handAuthored.set(stepNum, qs.filter(filterFn))
     for (const [stepNum, qs] of aiAuthored) aiAuthored.set(stepNum, qs.filter(filterFn))
 
-    allRows.push(...buildEvalRows({ slug, handAuthored, aiAuthored }))
+    allRows.push(...buildEvalRows({ slug, handAuthored, aiAuthored }, mode))
   }
 
   mkdirSync(dirname(output), { recursive: true })
