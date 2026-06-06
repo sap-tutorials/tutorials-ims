@@ -57,11 +57,13 @@ hugo-apps/src/validation/Validation.vue (existing — handles MCQ + text + AI gr
 
 ### New modules
 
+File extensions follow existing project conventions: `srv/lib/*.js` for runtime modules (matches `srv/lib/validate-answer-prompt.js`, `srv/lib/code-check-prompt.js`, etc); `scripts/lib/*.ts` for build-pipeline modules (matches `scripts/lib/publish-validate-answer.js` is `.js` but the broader pattern in `scripts/` is `.ts` for new TypeScript-first work). The mix is intentional, not a typo.
+
 | File | Responsibility |
 |------|---------------|
-| `srv/lib/ai-quiz-generator.js` | Pure LLM-call module: `generateQuiz({ stepBody, stepNumber, slug, types, deps })` → `{ questions, errorReason?, modelName, promptTokens, completionTokens, latencyMs }`. Builds the system prompt, builds the user message, calls the forced-tool-call SDK, validates the response, applies anti-leak guards. Mirrors `srv/lib/validate-answer-prompt.js` shape. Pure (no I/O beyond the injected `callModel`); unit-testable with mock `callModel`. |
-| `scripts/lib/ai-quiz-cache.ts` | Content-hash cache over per-tutorial sidecar files at `.tutorial-cache/<slug>.ai-quiz-cache.json`. Functions: `loadAiQuizCache(slug)`, `saveAiQuizCache(slug, cache)`, plus `cache.get(stepHash)` / `cache.put(stepHash, entry)`. Hash key is `sha256(stepBody + directive + types + PROMPT_VERSION + modelName)`. |
-| `scripts/lib/expand-ai-authored.ts` | The post-parse expansion step. `expandAiAuthoredQuestions(parsedMap, stepBodies, deps)` walks placeholders in the parsed map, consults cache, calls generator on miss, mutates parsedMap to replace placeholders with real questions. Honors hard cap. Emits one-line build summary. |
+| `srv/lib/ai-quiz-generator.js` | Pure LLM-call module: `generateQuiz({ stepBody, stepNumber, slug, types, deps })` → `{ questions, errorReason?, modelName, promptTokens, completionTokens, latencyMs }`. Builds the system prompt, builds the user message, calls the forced-tool-call SDK, validates the response, applies anti-leak guards. Mirrors `srv/lib/validate-answer-prompt.js` shape. Pure (no I/O beyond the injected `callModel`); unit-testable with mock `callModel`. The injected `callModel` is the same `defaultCallModel` from `srv/lib/code-check-llm.js` that #205 and #234 reuse — same `@sap-ai-sdk/orchestration` forced-tool-call wrapper, just a different schema. |
+| `scripts/lib/ai-quiz-cache.ts` | Content-hash cache over per-tutorial sidecar files at `.tutorial-cache/<slug>.ai-quiz-cache.json`. Functions: `loadAiQuizCache(slug)`, `saveAiQuizCache(slug, cache)`, plus `cache.get(stepHash)` / `cache.put(stepHash, entry)`. Hash key is `sha256(...)` of step body + directive + types + PROMPT_VERSION + modelName (see Cache section for the exact concatenation). |
+| `scripts/lib/expand-ai-authored.ts` | The post-parse expansion step. `expandAiAuthoredQuestions(parsedMap, stepBodies, deps)` walks placeholders in the parsed map, consults cache, calls generator on miss, mutates parsedMap to replace placeholders with real questions. Honors hard cap. Emits one-line build summary. `parsedMap` is the `Map<number, ValidationQuestion[]>` returned by `parseRulesVrEnriched`. `stepBodies` is a `Map<number, string>` of stepNumber → markdown body, sourced from the same `steps` array `fetch-tutorials.ts` already builds for Hugo frontmatter emission (each step's `body` field, before any `[VALIDATE_N]` block stripping). |
 
 ### Existing modules touched
 
@@ -252,7 +254,7 @@ The `id` shape `validate-<step>-ai-<index>` distinguishes from hand-authored `va
 | AI-authored MCQ | Public Hugo frontmatter (same as hand-authored MCQ) | MCQ grading is client-side equality (PR #226). Reference must be on the wire for the widget to grade. Consistent with existing `[VALIDATE_N]` MCQ posture. |
 | AI-authored text | Stripped from public emission; stored in `.tutorial-cache/<slug>.ai-quiz-cache.json` (build-time only) and uploaded to `ValidateAnswerSpecs` HANA entity (per existing `validate-answer-spec-publish` route) | Server-side AI grading per #234. Same anti-leak as hand-authored text questions with `###Grading: ai-judged`. |
 
-The publish path for AI-authored text questions reuses #234's existing `expandAiAuthoredQuestions` runs BEFORE the existing `collectAiGradedSpecs` step, so AI-authored text questions naturally flow into the same `<slug>.validate-answer.json` sidecar that already gets published to `ValidateAnswerSpecs`. No new publish endpoint needed.
+The publish flow for AI-authored text questions chains naturally through #234's existing infrastructure: `expandAiAuthoredQuestions` (new, this spec) runs BEFORE `collectAiGradedSpecs` (existing, from PR #234) inside `scripts/fetch-tutorials.ts`. Once expansion completes, AI-authored text questions look identical to hand-authored `[VALIDATE_N]` text questions with `aiGrading: true`, so they flow into the same `<slug>.validate-answer.json` sidecar that already gets uploaded to `ValidateAnswerSpecs`. No new publish endpoint or HANA entity is needed.
 
 ## Cache
 
@@ -284,10 +286,18 @@ Per-tutorial sidecar — sibling to existing `<slug>.codecheck.json`, `<slug>.va
 ### Hash key
 
 ```ts
-sha256(`${stepBody} ${directive} ${types} ${PROMPT_VERSION} ${modelName}`)
+import { createHash } from 'node:crypto';
+
+// NUL byte separators avoid concatenation collisions (e.g. a step body
+// ending with `[AUTOAUTHOR_3]`-like text could otherwise hash-collide
+// with a different step body + a directive boundary).
+const SEP = '\x00';
+const hashKey = createHash('sha256')
+  .update([stepBody, directive, types, PROMPT_VERSION, modelName].join(SEP))
+  .digest('hex');
 ```
 
-NUL separators avoid concatenation collisions (e.g. step body ending with `[AUTOAUTHOR_3]`-like text). Any change to step content, directive, type suffix, prompt vintage, or model invalidates the entry → cache miss → LLM call → new entry written.
+Any change to step content, directive, type suffix, prompt vintage, or model invalidates the entry → cache miss → LLM call → new entry written.
 
 ### Cache hit/miss summary line
 
@@ -533,7 +543,7 @@ None outstanding. All decisions answered during brainstorming:
 ## Acceptance criteria
 
 - [ ] `[AUTOAUTHOR_*]` parser support in `scripts/parsers/rules.ts` + per-step + tutorial-wide + type-suffix variants.
-- [ ] `srv/lib/ai-quiz-generator.js` with the schema + 3 anti-leak guards + 10+ unit tests.
+- [ ] `srv/lib/ai-quiz-generator.js` with the schema + 3 anti-leak guards + unit tests covering all 10 cases listed in the Test plan section.
 - [ ] `scripts/lib/ai-quiz-cache.ts` with content-hash invalidation + 4 unit tests.
 - [ ] `scripts/lib/expand-ai-authored.ts` with cap enforcement + 6 unit tests.
 - [ ] `fetch-tutorials.ts` wired with `AI_AUTHOR_ENABLED` gate.
