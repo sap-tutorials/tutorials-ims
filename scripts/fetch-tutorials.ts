@@ -735,7 +735,7 @@ async function main() {
         for (const [, questions] of validationMap) {
           for (const q of questions) {
             if (q.aiAuthored && q.type === QUESTION_TYPE_TEXT) {
-              delete (q as any).correctAnswer
+              delete q.correctAnswer
             }
           }
         }

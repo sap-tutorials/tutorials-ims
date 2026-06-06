@@ -67,7 +67,7 @@ function toRow(
 ): EvalRow {
   // For AI-authored text questions, the correctAnswer is in __aiCorrectAnswer
   // (the public ValidationQuestion shape strips correctAnswer per #209 anti-leak).
-  const correctAnswer = (q as any).__aiCorrectAnswer ?? q.correctAnswer ?? ''
+  const correctAnswer = q.__aiCorrectAnswer ?? q.correctAnswer ?? ''
   return {
     slug,
     stepNumber,

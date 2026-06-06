@@ -192,7 +192,7 @@ export function populateAiAuthoredSiblingMaps(
   for (const [stepNumber, questions] of validationMap) {
     for (const q of questions) {
       if (q.aiAuthored && q.type === QUESTION_TYPE_TEXT) {
-        const correctAnswer = (q as any).correctAnswer
+        const correctAnswer = q.correctAnswer
         if (typeof correctAnswer !== 'string' || correctAnswer.length === 0) continue
         const key = `${stepNumber}:${q.id}`
         correctAnswerByStepAndId.set(key, correctAnswer)
@@ -228,8 +228,8 @@ function materializeForPipeline(q: ValidationQuestion): ValidationQuestion {
   const clean: any = { ...q }
   delete clean.__autoauthor
   delete clean.__directiveTypes
-  if (q.type === QUESTION_TYPE_TEXT && (q as any).__aiCorrectAnswer != null) {
-    clean.correctAnswer = (q as any).__aiCorrectAnswer
+  if (q.type === QUESTION_TYPE_TEXT && q.__aiCorrectAnswer != null) {
+    clean.correctAnswer = q.__aiCorrectAnswer
     delete clean.__aiCorrectAnswer
   }
   return clean
