@@ -11,6 +11,7 @@
 // Spec: docs/superpowers/specs/2026-06-05-208-ai-authored-quizzes-design.md
 
 import { readFileSync } from 'node:fs'
+import { QUESTION_TYPE_TEXT } from './parsers/types.js'
 
 // Node 20 (project minimum per CLAUDE.md) has no built-in glob; we accept
 // literal CSV paths instead. Authors typically have a small number of
@@ -51,7 +52,7 @@ export function aggregateRows(rows: FilledRow[]): Aggregate {
     tutorialsEvaluated: tutorials.size,
     stepsWithBoth: stepKeys.size,
     mcq: buckets(aiRows.filter(r => r.questionType === 'multiple-choice')),
-    text: buckets(aiRows.filter(r => r.questionType === 'text')),
+    text: buckets(aiRows.filter(r => r.questionType === QUESTION_TYPE_TEXT)),
     overall: buckets(aiRows),
   }
 }

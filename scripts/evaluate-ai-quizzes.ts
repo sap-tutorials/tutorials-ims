@@ -23,6 +23,7 @@ import { dirname, join } from 'node:path'
 import { parseRulesVrEnriched } from './parsers/rules.js'
 import { loadAiQuizCache } from './lib/ai-quiz-cache.js'
 import type { ValidationQuestion } from './parsers/types.js'
+import { QUESTION_TYPE_TEXT } from './parsers/types.js'
 
 export interface EvalInputs {
   slug: string
@@ -151,7 +152,7 @@ async function main() {
     const filterFn = (q: ValidationQuestion) => {
       if (types === 'both') return true
       if (types === 'mcq') return q.type === 'multiple-choice'
-      if (types === 'text') return q.type === 'text'
+      if (types === 'text') return q.type === QUESTION_TYPE_TEXT
       return true
     }
     for (const [stepNum, qs] of handAuthored) handAuthored.set(stepNum, qs.filter(filterFn))

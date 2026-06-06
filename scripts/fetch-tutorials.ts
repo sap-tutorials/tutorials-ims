@@ -17,6 +17,7 @@ import { humanizeTag, splitPrerequisites } from './parsers/frontmatter-utils.js'
 import type { TagLabelRegistry } from './parsers/frontmatter-utils.js'
 import { renderHugoFrontmatter } from './parsers/render-frontmatter.js'
 import type { Mission, MissionHierarchy, HierarchyGroup, StandaloneGroup, TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } from './parsers/types.js'
+import { QUESTION_TYPE_TEXT } from './parsers/types.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -733,7 +734,7 @@ async function main() {
         // scenic route to support both consumers.)
         for (const [, questions] of validationMap) {
           for (const q of questions) {
-            if (q.aiAuthored && q.type === 'text') {
+            if (q.aiAuthored && q.type === QUESTION_TYPE_TEXT) {
               delete (q as any).correctAnswer
             }
           }

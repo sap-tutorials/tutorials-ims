@@ -9,6 +9,20 @@ export interface TutorialFrontmatter {
   description?: string
 }
 
+/**
+ * Canonical question-type discriminators. Source of truth for the
+ * `ValidationQuestion.type` union — import these instead of writing the
+ * string literals so a future schema drift (`'free-text'`, `'long-text'`)
+ * surfaces at the type-check level rather than as silently-broken
+ * anti-leak filters.
+ *
+ * Test fixtures intentionally use the literals as inputs and don't
+ * import these constants.
+ */
+export const QUESTION_TYPE_TEXT = 'text' as const
+export const QUESTION_TYPE_MCQ = 'multiple-choice' as const
+export type QuestionType = typeof QUESTION_TYPE_TEXT | typeof QUESTION_TYPE_MCQ
+
 export interface ValidationQuestion {
   id: string
   question: string

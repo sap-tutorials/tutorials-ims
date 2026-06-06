@@ -10,6 +10,7 @@
 // Spec: docs/superpowers/specs/2026-06-05-208-ai-authored-quizzes-design.md
 
 import cds from '@sap/cds';
+import { QUESTION_TYPE_TEXT } from '../../scripts/parsers/types.js';
 
 const LOG = cds.log('ai-quiz-generator');
 
@@ -185,7 +186,7 @@ export async function generateQuiz({ stepBody, stepNumber, slug, types, deps }) 
       out.push({
         id: `validate-${stepNumber}-ai-${idx}`,
         question: q.question,
-        type: 'text',
+        type: QUESTION_TYPE_TEXT,
         // Stash correctAnswer on a sentinel field so expand-ai-authored.ts
         // can hand it off to the validate-answer sidecar emitter without
         // shipping it in public frontmatter. Mirrors the [VALIDATE_N] +
