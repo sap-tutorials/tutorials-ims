@@ -236,8 +236,8 @@ export function classifyLookup(line: string, prevLine: string): { classification
 
   const after = line.slice(slugFieldMatch.index! + slugFieldMatch[0].length - 1);
 
-  // Rule 1: sentinel literal '__...__' (matches '__foo__', "__bar__").
-  if (/^[:,]\s*['"]__/.test(slugFieldMatch[0] + after.slice(0, 5))) {
+  // Rule 1: sentinel literal '__...__' (both quote styles).
+  if (/^:\s*['"]__/.test(after)) {
     return { classification: 'sentinel' };
   }
 
@@ -251,10 +251,12 @@ export function classifyLookup(line: string, prevLine: string): { classification
     return { classification: 'tolowercase' };
   }
 
-  // Rule 4: lc<*> variable name (lc followed by upper-case letter or
-  // immediately by other chars — but require the value to be a bare
-  // identifier, not a member access or call).
-  const lcVarMatch = after.match(/^:\s*(lc[A-Z][\w]*|lc[A-Z])\s*[,}]/);
+  // Rule 4: lc<*> variable name. The convention is `lc` prefix means
+  // "already called .toLowerCase()" (Hungarian-notation contract). The
+  // spec doesn't constrain the rest of the name, so accept any \w+ that
+  // begins with `lc`. Require the value to be a bare identifier
+  // (not a member access or call), enforced by the trailing `[,}]`.
+  const lcVarMatch = after.match(/^:\s*(lc\w+)\s*[,}]/);
   if (lcVarMatch) {
     return { classification: 'lc-var' };
   }
@@ -406,7 +408,9 @@ Subsequent tasks add the failure-mode tests and edge cases."
 **Files:**
 - Modify: `test/unit/check-slug-lookups.test.ts`
 
-- [ ] **Step 2.1: Add the failing test**
+- [ ] **Step 2.1: Add the new test case**
+
+(Note: the unmarked-detection logic was already implemented in Task 1, so this test should pass on first run — there is no separate "fail first" cycle for this step. The point of Task 2 is to lock in the failure-mode behavior before we expand the rule table.)
 
 Append (inside the existing `describe`) before the closing `})`:
 
@@ -737,9 +741,11 @@ For EACH file in the list, do this loop:
 |---|---|
 | `for (const [slug, body] of Object.entries(payload))` then `where({ slug })` | `write-path-canonicalizes` |
 | `where({ slug, version: activeVersion })` inside a function whose JSDoc says "@param slug — already lowercased" | `caller-canonicalizes` |
-| `where({ slug: row.slug })` where `row` came from a prior SELECT | `caller-canonicalizes` (DB rows are canonical by construction) |
+| `where({ slug: row.slug })` where `row` came from a prior SELECT | `caller-canonicalizes` (DB rows are canonical by construction; the write path lowercases — see `srv/lib/_tutorials-table.js` and the `tutorialsTableInfo` helper used by `srv/lib/content-publish-session.js`) |
 | `where({ slug: '__404__' })` etc. | This shouldn't reach you — it's auto-pass via sentinel rule. If it does, the regex needs a fix. |
 | Anything in a `scripts/` migration tool that takes mixed-case input | Probably `canonicalize inline` — migration scripts are exactly the case where Tom wants the canonicalization explicit. |
+
+**To independently verify the "DB rows are canonical" claim,** read `srv/lib/content-publish-session.js` around the `upsertTutorialMetadata` function and `srv/lib/_tutorials-table.js`'s `tutorialsTableInfo` — both lowercase the slug at the write path. CLAUDE.md's "Tutorial slugs are lowercase canonical" gotcha at the bottom of the file references the same modules.
 
 - [ ] **Step 8.3: After every file is touched, run the check; iterate until it passes**
 
