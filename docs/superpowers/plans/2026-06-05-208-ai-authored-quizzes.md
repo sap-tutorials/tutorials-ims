@@ -1116,6 +1116,36 @@ describe('expandAiAuthoredQuestions (#208)', () => {
     expect((out as any).__directiveTypes).toBeUndefined()
   })
 
+  it('text questions get correctAnswer RESTORED on parsedMap (for collectAiGradedSpecs); cache keeps __aiCorrectAnswer', async () => {
+    // The generator strips correctAnswer + stashes it on __aiCorrectAnswer (anti-leak).
+    // The existing collectAiGradedSpecs (#234) reads correctAnswer; without
+    // restoration, AI-authored text reference answers would silently fail
+    // to upload to ValidateAnswerSpecs.
+    const callModel = vi.fn().mockResolvedValue({
+      toolCalls: [{ name: 'submitQuiz', arguments: JSON.stringify({
+        questions: [{ type: 'text', question: 'Explain X', correctAnswer: 'X is the answer.' }],
+      })}],
+      modelName: 'gpt-test', promptTokens: 1, completionTokens: 1,
+    })
+    const parsedMap = new Map<number, any[]>([[1, [PLACEHOLDER(1, 'text-only')]]])
+    const stepBodies = new Map<number, string>([[1, 'body']])
+
+    await expandAiAuthoredQuestions(parsedMap, stepBodies, {
+      cache, callModel, onCallStats: { calls: 0, hits: 0, errors: 0 },
+    })
+
+    // parsedMap (consumed by collectAiGradedSpecs): correctAnswer restored, __aiCorrectAnswer stripped.
+    const onMap = parsedMap.get(1)?.[0] as any
+    expect(onMap.correctAnswer).toBe('X is the answer.')
+    expect(onMap.__aiCorrectAnswer).toBeUndefined()
+    expect(onMap.aiGrading).toBe(true)
+
+    // Cache (consumed by eval harness): __aiCorrectAnswer kept, correctAnswer absent.
+    const inCache = cache.entries['1'].questions[0] as any
+    expect(inCache.__aiCorrectAnswer).toBe('X is the answer.')
+    expect(inCache.correctAnswer).toBeUndefined()
+  })
+
   it('all-directive expands against the step list when no per-step placeholders are present', async () => {
     // Tutorial-wide [AUTOAUTHOR_ALL] applies to every step in stepBodies that
     // doesn't already have content in parsedMap.
@@ -1262,7 +1292,10 @@ export async function expandAiAuthoredQuestions(
     const cached = deps.cache.entries[entryKey]
     if (cached && cached.stepHash === stepHash) {
       deps.onCallStats.hits++
-      parsedMap.set(stepNum, cached.questions.map(stripSentinelFields))
+      // Cache stored the cache-snapshot shape (correctAnswer absent on
+      // text); restore correctAnswer on the parsedMap pass-through so
+      // collectAiGradedSpecs sees what it expects.
+      parsedMap.set(stepNum, cached.questions.map(materializeForPipeline))
       continue
     }
 
@@ -1283,32 +1316,69 @@ export async function expandAiAuthoredQuestions(
       continue
     }
 
-    const cleanQuestions = result.questions.map(stripSentinelFields)
+    // Two transforms — same questions, different shape per consumer:
+    //
+    //   forCache       — cache snapshot. Keeps __aiCorrectAnswer for the
+    //                    eval harness (Task 8/9). correctAnswer absent on
+    //                    text questions per the generator's anti-leak strip.
+    //
+    //   forParsedMap   — what fetch-tutorials.ts uses downstream. Restores
+    //                    correctAnswer on text questions from
+    //                    __aiCorrectAnswer so the existing collectAiGradedSpecs
+    //                    (PR #234) sees what it expects. fetch-tutorials.ts
+    //                    runs a final strip before emitting to public Hugo
+    //                    frontmatter (the strip lives in fetch-tutorials.ts
+    //                    Task 6 Step 5b, NOT here, because
+    //                    collectAiGradedSpecs runs in fetch-tutorials between
+    //                    expansion and frontmatter emission).
+    const forCache = result.questions.map(stripParserSentinels)
+    const forParsedMap = result.questions.map(materializeForPipeline)
+
     const newEntry: AiQuizCacheEntry = {
       stepHash,
       directive,
       types,
       generatedAt: new Date().toISOString(),
-      questions: cleanQuestions,
+      questions: forCache,
     }
     deps.cache.entries[entryKey] = newEntry
     if (!deps.cache.modelName && result.modelName) {
       deps.cache.modelName = result.modelName
     }
-    parsedMap.set(stepNum, cleanQuestions)
+    parsedMap.set(stepNum, forParsedMap)
   }
 }
 
-/** Remove the parser/generator sentinel fields before public emission. */
-function stripSentinelFields(q: ValidationQuestion): ValidationQuestion {
+/**
+ * Cache-snapshot transform. Strips parser sentinels (__autoauthor,
+ * __directiveTypes) but KEEPS __aiCorrectAnswer for the eval harness.
+ *
+ * For text questions: correctAnswer is absent (generator stripped it),
+ * __aiCorrectAnswer carries the reference answer.
+ */
+function stripParserSentinels(q: ValidationQuestion): ValidationQuestion {
   const clean: any = { ...q }
   delete clean.__autoauthor
   delete clean.__directiveTypes
-  // __aiCorrectAnswer is the generator's hand-off field for text questions —
-  // it stays in the cache (so eval harness can read it), but downstream
-  // emission strips it before public frontmatter. We keep it here in the
-  // cache snapshot. The fetch-tutorials.ts wiring strips it before emitting
-  // to validation widget; the validate-answer-spec sidecar reads it.
+  return clean
+}
+
+/**
+ * Pipeline-pass-through transform. Strips parser sentinels AND
+ * restores correctAnswer on text questions from __aiCorrectAnswer
+ * so the downstream collectAiGradedSpecs (PR #234) sees what it
+ * expects. fetch-tutorials.ts will strip correctAnswer again from
+ * the public emission for AI-graded text questions — that strip
+ * happens AFTER collectAiGradedSpecs runs.
+ */
+function materializeForPipeline(q: ValidationQuestion): ValidationQuestion {
+  const clean: any = { ...q }
+  delete clean.__autoauthor
+  delete clean.__directiveTypes
+  if (q.type === 'text' && (q as any).__aiCorrectAnswer != null) {
+    clean.correctAnswer = (q as any).__aiCorrectAnswer
+    delete clean.__aiCorrectAnswer
+  }
   return clean
 }
 ```
@@ -1398,8 +1468,11 @@ const { map: validationMap, ruleTypeByStepAndId, correctAnswerByStepAndId, allDi
 // .tutorial-cache/<slug>.ai-quiz-cache.json. See:
 // docs/superpowers/specs/2026-06-05-208-ai-authored-quizzes-design.md
 if (process.env.AI_AUTHOR_ENABLED === 'true') {
+  // TutorialStep type has `.number` + `.content` fields (per
+  // scripts/parsers/types.ts — verified during plan review). Use
+  // `s.content`, NOT `s.body`.
   const stepBodies = new Map<number, string>(
-    steps.map(s => [s.number, s.body ?? '']),
+    steps.map(s => [s.number, s.content ?? '']),
   )
   const aiCache = loadAiQuizCache(t.slug)
   await expandAiAuthoredQuestions(validationMap, stepBodies, {
@@ -1416,9 +1489,42 @@ const testSteps = steps.filter(s => /^test yourself$/i.test(s.title))
 // ...
 ```
 
-- [ ] **Step 4: Add the build-summary log line**
+- [ ] **Step 4: Strip AI-graded text correctAnswer AFTER collectAiGradedSpecs**
 
-Find the end of `fetchAndWriteAll()` (or whichever function is the top-level fetch driver). Add at the end:
+This is the bridge step that satisfies the anti-leak invariant for AI-authored text questions. The flow is:
+
+1. `expandAiAuthoredQuestions` (Task 5) puts text questions into `validationMap` WITH `correctAnswer` populated (restored from `__aiCorrectAnswer` so the existing `collectAiGradedSpecs` reads what it expects).
+2. The existing attach loop puts those questions onto `target.validation` (still with `correctAnswer`).
+3. `collectAiGradedSpecs(validationMap, ...)` runs (existing, line 678) and emits the `<slug>.validate-answer.json` sidecar — including AI-authored text questions, since they now look identical to hand-authored `aiGrading: true` questions.
+4. **NEW (this step):** strip `correctAnswer` from all AI-authored text questions BEFORE Hugo frontmatter emission. The reference answer is now in HANA (`ValidateAnswerSpecs`) via the sidecar; the public emission must NOT carry it (anti-leak per #209).
+
+Find the existing `collectAiGradedSpecs(...)` call (around line 678 in current main). After the existing sidecar write completes, add:
+
+```ts
+// [#208] Anti-leak strip: AI-authored text questions had correctAnswer
+// restored on validationMap so collectAiGradedSpecs (above) could emit
+// the validate-answer-spec sidecar. The reference is now in HANA via
+// that sidecar; the public Hugo frontmatter must NOT carry it. Strip
+// correctAnswer from any text question with aiAuthored: true.
+//
+// (Hand-authored aiGrading: true text questions are already stripped
+// upstream by parseRulesVrEnriched per #209's existing anti-leak path —
+// only the AI-authored ones need this extra strip because they took the
+// scenic route to support both consumers.)
+for (const [, questions] of validationMap) {
+  for (const q of questions) {
+    if (q.aiAuthored && q.type === 'text') {
+      delete (q as any).correctAnswer
+    }
+  }
+}
+```
+
+This loop runs unconditionally (not behind `AI_AUTHOR_ENABLED`) because if the flag is off, no AI-authored questions exist in `validationMap` and the loop is a no-op.
+
+- [ ] **Step 5: Add the build-summary log line**
+
+Find the end of the top-level fetch driver function (e.g. `main()`, `fetchAll()`, or wherever the per-tutorial loop terminates). Use `grep -n 'console.log|^async function|^function' scripts/fetch-tutorials.ts | tail -20` to locate it. Add at the end:
 
 ```ts
 if (process.env.AI_AUTHOR_ENABLED === 'true') {
@@ -1432,7 +1538,7 @@ if (process.env.AI_AUTHOR_ENABLED === 'true') {
 }
 ```
 
-- [ ] **Step 5: Add the npm script**
+- [ ] **Step 6: Add the npm script**
 
 Edit `package.json`. Find the existing `fetch-tutorials` script. Add a sibling:
 
@@ -1440,22 +1546,22 @@ Edit `package.json`. Find the existing `fetch-tutorials` script. Add a sibling:
 "seed-ai-quizzes": "AI_AUTHOR_ENABLED=true AI_AUTHOR_BUILD_CAP=10000 npm run fetch-tutorials"
 ```
 
-- [ ] **Step 6: Type-check**
+- [ ] **Step 7: Type-check**
 
 Run: `cd d:/projects/tutorials-poc/.worktrees/spec-208 && npx tsc --noEmit -p . 2>&1 | tail -20`
 Expected: no new errors.
 
-- [ ] **Step 7: Smoke-test the flag-off path**
+- [ ] **Step 8: Smoke-test the flag-off path**
 
 Run: `cd d:/projects/tutorials-poc/.worktrees/spec-208 && AI_AUTHOR_ENABLED= node -e "const m = require('./scripts/parsers/rules.js'); console.log(m.parseRulesVrEnriched.toString().length > 100 ? 'imports cleanly' : 'FAIL')" 2>&1 | tail -3`
 Expected: `imports cleanly`. (Just verifies the module wiring doesn't crash on import.)
 
-- [ ] **Step 8: Run all targeted tests, verify no regression**
+- [ ] **Step 9: Run all targeted tests, verify no regression**
 
 Run: `cd d:/projects/tutorials-poc/.worktrees/spec-208 && npx vitest run scripts/parsers/__tests__/ scripts/__tests__/ai-quiz-cache.test.ts scripts/__tests__/expand-ai-authored.test.ts srv/lib/__tests__/ai-quiz-generator.test.js`
 Expected: all green (Phase 1-3 tests + this task added no new tests but should not regress prior phases).
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 BR=$(git branch --show-current) && [ "$BR" = "feature/208-ai-authored-quizzes" ] && \
@@ -1962,7 +2068,11 @@ Create `scripts/aggregate-ai-quiz-eval.ts`:
 // Spec: docs/superpowers/specs/2026-06-05-208-ai-authored-quizzes-design.md
 
 import { readFileSync } from 'node:fs'
-import { globSync } from 'node:fs'
+
+// Node 20 (project minimum per CLAUDE.md) has no built-in glob; we accept
+// literal CSV paths instead. Authors typically have a small number of
+// per-pilot CSVs; aggregating across many is fine via shell-side wildcards
+// the user passes through (the shell expands them before invocation).
 
 export interface FilledRow {
   slug: string
@@ -2064,14 +2174,14 @@ function main() {
     process.exit(2)
   }
   const allRows: FilledRow[] = []
-  for (const pattern of args) {
-    const paths = globSync(pattern, { absolute: false })
-    for (const path of paths.length > 0 ? paths : [pattern]) {
-      try {
-        allRows.push(...parseCSV(readFileSync(path, 'utf8')))
-      } catch (err) {
-        console.warn(`[aggregate] skip ${path}:`, (err as Error).message)
-      }
+  // Each arg is a literal CSV path. Shell-side wildcards (e.g.
+  // `verdicts/*.csv`) expand before this script sees them — this is
+  // standard Unix behavior and avoids requiring globSync (Node 22+).
+  for (const csvPath of args) {
+    try {
+      allRows.push(...parseCSV(readFileSync(csvPath, 'utf8')))
+    } catch (err) {
+      console.warn(`[aggregate] skip ${csvPath}:`, (err as Error).message)
     }
   }
   const agg = aggregateRows(allRows)
