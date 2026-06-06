@@ -2314,12 +2314,12 @@ Expected: all green. Specifically:
 - 6 in `rules-autoauthor.test.ts` (Task 2)
 - 10 in `ai-quiz-generator.test.js` (Task 3)
 - 4 in `ai-quiz-cache.test.ts` (Task 4)
-- 6 in `expand-ai-authored.test.ts` (Task 5)
+- 7 in `expand-ai-authored.test.ts` (Task 5)
 - 1 in `ai-quiz-flow.test.ts` (Task 7)
 - 3 in `evaluate-ai-quizzes.test.ts` (Task 8)
 - 3 in `aggregate-ai-quiz-eval.test.ts` (Task 9)
 
-= 33 new unit/integration tests.
+= 34 new unit/integration tests.
 
 - [ ] **Step 2: Run lint / type-check**
 
@@ -2414,13 +2414,13 @@ Per-call ~0.005-0.012 USD. Default cap 200 calls/build → ~$2.40 first-time bul
 
 ## Tests
 
-33 new unit + integration tests:
+34 new unit + integration tests:
 
 ```
 6  in scripts/parsers/__tests__/rules-autoauthor.test.ts
 10 in srv/lib/__tests__/ai-quiz-generator.test.js
 4  in scripts/__tests__/ai-quiz-cache.test.ts
-6  in scripts/__tests__/expand-ai-authored.test.ts
+7  in scripts/__tests__/expand-ai-authored.test.ts
 1  in test/integration/ai-quiz-flow.test.ts
 3  in scripts/__tests__/evaluate-ai-quizzes.test.ts
 3  in scripts/__tests__/aggregate-ai-quiz-eval.test.ts
