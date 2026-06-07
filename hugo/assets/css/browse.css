@@ -225,3 +225,77 @@ ui5-dialog#browse-filter-drawer #browse-filter-rail {
 [data-rails-container][data-rails-hidden] {
   display: none;
 }
+
+/* ── Per-rail collapse + Customize popover (#285) ─────────────────────── */
+/* Each <section data-rail data-rail-id="..."> gets a chevron toggle in its
+   header. When [data-collapsed], the cards strip is hidden but the header
+   stays visible so the user can expand again. When [data-rail-hidden]
+   (set from the Customize popover), the whole rail is removed from layout
+   — same idiom as data-rails-hidden above but per-rail. */
+
+.browse-rail__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: start;
+}
+.browse-rail__toggle:hover .browse-rail__title { text-decoration: underline; }
+.browse-rail__toggle:focus-visible {
+  outline: 2px solid var(--sapButton_Focus_BorderColor, #0a6ed1);
+  outline-offset: 2px;
+  border-radius: 0.25rem;
+}
+
+.browse-rail__chevron {
+  display: inline-block;
+  transition: transform 150ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .browse-rail__chevron { transition: none; }
+}
+[data-rail][data-collapsed] .browse-rail__chevron {
+  transform: rotate(-90deg);   /* ▾ → ▸ */
+}
+
+[data-rail][data-collapsed] .browse-rail-curation { display: none; }
+[data-rail][data-rail-hidden] { display: none; }
+
+/* Customize button reuses the Filters-toggle vocabulary (button styling
+   shared via CSS so the two buttons look like a coherent toolbar group). */
+.browse-customize-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--sapButton_BorderColor, #b3b3b3);
+  background: var(--sapButton_Background, #fff);
+  color: var(--sapButton_TextColor, inherit);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+}
+.browse-customize-toggle:hover { background: var(--sapButton_Hover_Background, #ebf5fe); }
+.browse-customize-toggle:focus-visible {
+  outline: 2px solid var(--sapButton_Focus_BorderColor, #0a6ed1);
+  outline-offset: 2px;
+}
+
+.browse-customize-popover__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+}
+.browse-customize-popover__body label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}

@@ -531,10 +531,10 @@
 
   <main id="browse-results" tabindex="-1">
     <div data-rails-container>
-      <section class="browse-rail" aria-label="Featured missions" data-rail>
+      <section class="browse-rail" aria-labelledby="browse-rail-header-featured" data-rail data-rail-id="featured">
   <header class="browse-rail__header">
-    <h2 class="browse-rail__title">Featured missions</h2><a class="browse-rail__show-all" href="/missions/">Show all →</a></header>
-  <div class="browse-rail-curation"><a href="/tutorials/mission-build-with-cap" class="nav-card" data-vt-card="navigator">
+    <button type="button" class="browse-rail__toggle" aria-expanded="true" aria-controls="browse-rail-content-featured" data-action="toggle-rail"><span class="browse-rail__chevron" aria-hidden="true">▾</span><h2 class="browse-rail__title" id="browse-rail-header-featured">Featured missions</h2></button><a class="browse-rail__show-all" href="/missions/">Show all →</a></header>
+  <div class="browse-rail-curation" id="browse-rail-content-featured"><a href="/tutorials/mission-build-with-cap" class="nav-card" data-vt-card="navigator">
 <div class="nav-card__type nav-card__type--mission">MISSION</div>
 <h3 class="nav-card__title">Build with CAP</h3>
 <p class="nav-card__desc">Full-stack mission</p>
@@ -550,10 +550,10 @@
 </div>
 </section>
 
-      <section class="browse-rail" aria-label="Recently added" data-rail>
+      <section class="browse-rail" aria-labelledby="browse-rail-header-recent" data-rail data-rail-id="recent">
   <header class="browse-rail__header">
-    <h2 class="browse-rail__title">Recently added</h2><a class="browse-rail__show-all" href="/?new=1">Show all →</a></header>
-  <div class="browse-rail-curation"><a href="/tutorials/cap-getting-started" class="nav-card nav-card--new" data-vt-card="navigator"><span class="nav-card__new-badge" aria-label="New tutorial">NEW</span><div class="nav-card__type nav-card__type--tutorial">TUTORIAL</div>
+    <button type="button" class="browse-rail__toggle" aria-expanded="true" aria-controls="browse-rail-content-recent" data-action="toggle-rail"><span class="browse-rail__chevron" aria-hidden="true">▾</span><h2 class="browse-rail__title" id="browse-rail-header-recent">Recently added</h2></button><a class="browse-rail__show-all" href="/?new=1">Show all →</a></header>
+  <div class="browse-rail-curation" id="browse-rail-content-recent"><a href="/tutorials/cap-getting-started" class="nav-card nav-card--new" data-vt-card="navigator"><span class="nav-card__new-badge" aria-label="New tutorial">NEW</span><div class="nav-card__type nav-card__type--tutorial">TUTORIAL</div>
 <h3 class="nav-card__title">CAP Getting Started</h3>
 <p class="nav-card__desc">Build a CAP service in 30 min</p>
 <div class="nav-card__meta">
