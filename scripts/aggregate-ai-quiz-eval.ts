@@ -84,39 +84,71 @@ export function tokenizeNotes(notes: string[]): Map<string, number> {
   return phrases
 }
 
-function parseCSV(content: string): FilledRow[] {
-  const lines = content.split(/\r?\n/).filter(l => l.length > 0)
-  if (lines.length === 0) return []
-  const headers = parseCsvLine(lines[0])
+/**
+ * Parse a complete CSV file content into FilledRow records. Handles:
+ * - quoted fields with embedded commas, newlines, and escaped quotes ("")
+ * - both LF and CRLF line endings
+ * - normalizes authorWouldShip to canonical lowercase + trimmed at parse time
+ *
+ * Tier-2 hardening: the previous implementation split on /\r?\n/ before
+ * parsing, so quoted fields with embedded newlines corrupted the row stream.
+ */
+export function parseCSV(content: string): FilledRow[] {
+  const records = parseCsvAll(content)
+  if (records.length === 0) return []
+
+  const headers = records[0]
   const rows: FilledRow[] = []
-  for (let i = 1; i < lines.length; i++) {
-    const fields = parseCsvLine(lines[i])
+  for (let i = 1; i < records.length; i++) {
+    const fields = records[i]
+    if (fields.length === 1 && fields[0] === '') continue  // skip pure-empty trailing record
     const row: any = {}
     headers.forEach((h, j) => row[h] = fields[j] ?? '')
     row.stepNumber = parseInt(row.stepNumber, 10) || 0
+    if (typeof row.authorWouldShip === 'string') {
+      row.authorWouldShip = row.authorWouldShip.trim().toLowerCase()
+    }
     rows.push(row as FilledRow)
   }
   return rows
 }
 
-function parseCsvLine(line: string): string[] {
-  // Minimal CSV parser — handles quoted fields with embedded commas + escaped quotes.
-  const out: string[] = []
-  let cur = '', inQuotes = false, i = 0
-  while (i < line.length) {
-    const c = line[i]
+/**
+ * Streaming CSV record parser. Reads `content` once, tracks quote state across
+ * line boundaries, emits one string[] per record. RFC-4180-ish: handles quoted
+ * commas, escaped quotes (""), embedded newlines inside quoted fields, and
+ * both LF + CRLF line endings.
+ */
+function parseCsvAll(content: string): string[][] {
+  const records: string[][] = []
+  let cur = ''
+  let row: string[] = []
+  let inQuotes = false
+  let i = 0
+  while (i < content.length) {
+    const c = content[i]
     if (inQuotes) {
-      if (c === '"' && line[i + 1] === '"') { cur += '"'; i += 2; continue }
+      if (c === '"' && content[i + 1] === '"') { cur += '"'; i += 2; continue }
       if (c === '"') { inQuotes = false; i++; continue }
       cur += c; i++
     } else {
       if (c === '"') { inQuotes = true; i++; continue }
-      if (c === ',') { out.push(cur); cur = ''; i++; continue }
+      if (c === ',') { row.push(cur); cur = ''; i++; continue }
+      if (c === '\r' && content[i + 1] === '\n') {
+        row.push(cur); records.push(row); cur = ''; row = []; i += 2; continue
+      }
+      if (c === '\n' || c === '\r') {
+        row.push(cur); records.push(row); cur = ''; row = []; i++; continue
+      }
       cur += c; i++
     }
   }
-  out.push(cur)
-  return out
+  // Flush the final field + record (if non-empty content not terminated by newline).
+  if (cur.length > 0 || row.length > 0) {
+    row.push(cur)
+    records.push(row)
+  }
+  return records
 }
 
 function main() {

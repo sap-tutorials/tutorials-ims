@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { aggregateRows, tokenizeNotes, type FilledRow } from '../aggregate-ai-quiz-eval.js'
+import { aggregateRows, parseCSV, tokenizeNotes, type FilledRow } from '../aggregate-ai-quiz-eval.js'
 
 const ROW = (overrides: Partial<FilledRow> = {}): FilledRow => ({
   slug: 's', stepNumber: 1, source: 'ai-authored', questionType: 'multiple-choice',
@@ -49,5 +49,67 @@ describe('aggregateRows (#208 eval aggregation)', () => {
     expect(counts.get('too vague')).toBe(3)
     expect(counts.get('wrong on a fact')).toBe(2)
     expect(counts.get('duplicates earlier question')).toBe(1)
+  })
+})
+
+describe('parseCSV — Tier-2 hardening', () => {
+  it('normalizes authorWouldShip case + trims whitespace', () => {
+    const csv = [
+      'slug,stepNumber,source,questionType,question,correctAnswer,options,authorWouldShip,authorNotes',
+      's,1,ai-authored,text,Q,A,,Yes,',
+      's,2,ai-authored,text,Q,A,,YES,',
+      's,3,ai-authored,text,Q,A,, yes ,',
+      's,4,ai-authored,text,Q,A,,no,',
+      's,5,ai-authored,text,Q,A,,Maybe,',
+    ].join('\n')
+    const rows = parseCSV(csv)
+    expect(rows).toHaveLength(5)
+    expect(rows[0].authorWouldShip).toBe('yes')   // 'Yes' -> 'yes'
+    expect(rows[1].authorWouldShip).toBe('yes')   // 'YES' -> 'yes'
+    expect(rows[2].authorWouldShip).toBe('yes')   // ' yes ' -> 'yes'
+    expect(rows[3].authorWouldShip).toBe('no')
+    expect(rows[4].authorWouldShip).toBe('maybe')
+  })
+
+  it('handles quoted fields with embedded newlines (multi-line authorNotes)', () => {
+    // A quoted authorNotes field carrying a 2-line critique. Per RFC-4180, embedded
+    // newlines are valid inside quoted fields.
+    const csv = [
+      'slug,stepNumber,source,questionType,question,correctAnswer,options,authorWouldShip,authorNotes',
+      's,1,ai-authored,text,Q,A,,no,"first line of critique\nsecond line of critique"',
+      's,2,ai-authored,text,Q2,A2,,yes,short note',
+    ].join('\n')
+    const rows = parseCSV(csv)
+    expect(rows).toHaveLength(2)
+    expect(rows[0].authorNotes).toBe('first line of critique\nsecond line of critique')
+    expect(rows[0].authorWouldShip).toBe('no')
+    expect(rows[1].authorNotes).toBe('short note')
+    expect(rows[1].stepNumber).toBe(2)
+  })
+
+  it('handles quoted commas + escaped quotes (existing parseCsvLine behavior preserved)', () => {
+    const csv = [
+      'slug,stepNumber,source,questionType,question,correctAnswer,options,authorWouldShip,authorNotes',
+      's,1,ai-authored,text,"What does ""hello, world"" mean?",A,,yes,',
+    ].join('\n')
+    const rows = parseCSV(csv)
+    expect(rows).toHaveLength(1)
+    expect(rows[0].question).toBe('What does "hello, world" mean?')
+  })
+
+  it('round-trips the existing pilot CSV format (header + 45 rows) without dropping fields', () => {
+    // Reduced repro of the pilot-final.csv shape to confirm no regression on the actual harness output.
+    const csv = [
+      'slug,stepNumber,source,questionType,question,correctAnswer,options,authorWouldShip,authorNotes',
+      'abap-cloud-ui-from-interface,1,ai-authored,multiple-choice,"Q with, a comma",A,a | b | c | d,,',
+      'abap-cloud-ui-from-interface,2,ai-authored,text,Plain Q,Plain A,,,',
+    ].join('\n')
+    const rows = parseCSV(csv)
+    expect(rows).toHaveLength(2)
+    expect(rows[0].source).toBe('ai-authored')
+    expect(rows[0].questionType).toBe('multiple-choice')
+    expect(rows[0].options).toBe('a | b | c | d')
+    expect(rows[0].authorWouldShip).toBe('')   // empty stays empty
+    expect(rows[1].questionType).toBe('text')
   })
 })
