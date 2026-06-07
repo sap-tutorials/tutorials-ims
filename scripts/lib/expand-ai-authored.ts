@@ -57,6 +57,11 @@ export async function expandAiAuthoredQuestions(
     onCallStats: ExpandStats
     hardCap?: number
     allDirective?: AllDirective
+    // [#208 precedence-fix] Set of step numbers that have ANY hand-authored
+    // [VALIDATE_N] block, including those whose parseBlock returned [] (e.g.
+    // regex-substring without ###Question). Phase 3 must NOT fire AI on top
+    // of these regardless of whether parsedMap has an entry.
+    handAuthoredSteps?: Set<number>
     hashKeyOverride?: (input: any) => string
   },
 ): Promise<void> {
@@ -68,6 +73,10 @@ export async function expandAiAuthoredQuestions(
   //    been materialized by the parser.)
   if (deps.allDirective?.present) {
     for (const [stepNum] of stepBodies) {
+      // [#208 precedence-fix] hand-authored wins over [AUTOAUTHOR_ALL],
+      // even when parseBlock didn't emit a ValidationQuestion (e.g.
+      // regex-substring blocks without ###Question).
+      if (deps.handAuthoredSteps?.has(stepNum)) continue
       if ((parsedMap.get(stepNum) ?? []).length > 0) continue
       parsedMap.set(stepNum, [{
         id: `autoauthor-${stepNum}`,

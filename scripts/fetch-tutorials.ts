@@ -662,7 +662,7 @@ async function main() {
       // Fetch and attach validation questions from rules.vr
       const rulesContent = await fetchRulesVr(t.slug, t.repo, t.branch)
       if (rulesContent) {
-        const { map: validationMap, ruleTypeByStepAndId, correctAnswerByStepAndId, allDirective } = parseRulesVrEnriched(rulesContent)
+        const { map: validationMap, ruleTypeByStepAndId, correctAnswerByStepAndId, allDirective, handAuthoredSteps } = parseRulesVrEnriched(rulesContent)
 
         // [#208] AI-authored quiz expansion. Behind AI_AUTHOR_ENABLED env flag;
         // hard-capped at AI_AUTHOR_BUILD_CAP per build. Cache lives at
@@ -681,6 +681,10 @@ async function main() {
             callModel: callQuizModel,
             onCallStats: globalCallStats,
             allDirective,
+            // [#208 precedence-fix] forward the set of hand-authored steps
+            // so AI never fires on top of regex-substring or other [VALIDATE_N]
+            // blocks where parseBlock returned [].
+            handAuthoredSteps,
           })
           saveAiQuizCache(t.slug, aiCache)
         }
