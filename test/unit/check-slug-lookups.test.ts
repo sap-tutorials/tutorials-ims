@@ -1,0 +1,183 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// Spawn-based test for scripts/check-slug-lookups.ts.
+// Mirrors the test pattern of check-icon-imports / check-xs-app-mta /
+// check-srv-qa-cp-list — drop a synthetic repo into a tmp root, point
+// the script at it via env var, assert on the spawn result.
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const SCRIPT = join(__dirname, '..', '..', 'scripts', 'check-slug-lookups.ts');
+
+interface RunResult {
+  stdout: string;
+  stderr: string;
+  status: number;
+}
+
+function fixture() {
+  const root = mkdtempSync(join(tmpdir(), 'slug-lookups-'));
+  mkdirSync(join(root, 'srv', 'lib'), { recursive: true });
+  mkdirSync(join(root, 'srv-qa'), { recursive: true });
+  mkdirSync(join(root, 'scripts'), { recursive: true });
+  return root;
+}
+
+function writeFile(root: string, rel: string, body: string): void {
+  const full = join(root, rel);
+  mkdirSync(dirname(full), { recursive: true });
+  writeFileSync(full, body);
+}
+
+function run(root: string): RunResult {
+  try {
+    const stdout = execFileSync('npx', ['tsx', SCRIPT], {
+      env: { ...process.env, CHECK_SLUG_LOOKUPS_ROOT: root },
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: process.platform === 'win32',
+    });
+    return { stdout, stderr: '', status: 0 };
+  } catch (err: unknown) {
+    const e = err as { stdout?: Buffer | string; stderr?: Buffer | string; status?: number };
+    return {
+      stdout: e.stdout?.toString() ?? '',
+      stderr: e.stderr?.toString() ?? '',
+      status: e.status ?? 1,
+    };
+  }
+}
+
+describe('scripts/check-slug-lookups.ts', () => {
+  let root: string;
+  beforeEach(() => { root = fixture(); });
+  afterEach(() => { rmSync(root, { recursive: true, force: true }); });
+
+  it('passes when every call-site is auto-pass or marked', () => {
+    writeFile(root, 'srv/lib/sample.js', `
+// slug-canonical: caller-canonicalizes
+const a = await SELECT.one.from(T).where({ slug });
+const b = await SELECT.one.from(T).where({ slug: '__nav__' });
+const c = await SELECT.one.from(T).where({ slug: SHELL_SLUG });
+const d = await SELECT.one.from(T).where({ slug: input.toLowerCase() });
+const e = await SELECT.one.from(T).where({ slug: lcSlug });
+const f = await SELECT.from(T).where({ slug: { in: list } });
+`);
+    const r = run(root);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/OK — 6 lookup\(s\) inspected/);
+  });
+
+  it('fails on a bare where({ slug }) with no marker, listing file:line', () => {
+    writeFile(root, 'srv/lib/oops.js',
+      `const t = await SELECT.one.from(Tutorials).where({ slug });\n`);
+    const r = run(root);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/FAILED — 1 unmarked direct slug lookup/);
+    expect(r.stderr).toMatch(/srv\/lib\/oops\.js:1/);
+    expect(r.stderr).toMatch(/where\(\{ slug \}\)/);
+  });
+
+  it('rule 1: sentinel __slug__ literal auto-passes without marker', () => {
+    writeFile(root, 'srv/lib/sentinel.js',
+      `await SELECT.one.from(T).where({ slug: '__nav__' });\n`);
+    const r = run(root);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/1 sentinel/);
+  });
+
+  it('rule 2: ALL_CAPS constant auto-passes without marker', () => {
+    writeFile(root, 'srv/lib/caps.js',
+      `await SELECT.one.from(T).where({ slug: SHELL_SLUG });\n`);
+    const r = run(root);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/1 auto-pass via ALL_CAPS/);
+  });
+
+  it('rule 3: .toLowerCase() auto-passes without marker', () => {
+    writeFile(root, 'srv/lib/lower.js',
+      `await SELECT.one.from(T).where({ slug: input.toLowerCase() });\n`);
+    const r = run(root);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/1 pre-canonicalized/);
+  });
+
+  it('rule 4: lc<*> variable name auto-passes without marker', () => {
+    writeFile(root, 'srv/lib/lcvar.js',
+      `await SELECT.one.from(T).where({ slug: lcSlug });\n`);
+    const r = run(root);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/1 auto-pass via lc-prefix/);
+  });
+
+  it('rule 5: operator form { in: slugs } auto-passes without marker', () => {
+    writeFile(root, 'srv/lib/op.js',
+      `await SELECT.from(T).where({ slug: { in: list } });\n`);
+    const r = run(root);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/1 operator-form/);
+  });
+
+  it('marker on the line above the where() counts', () => {
+    writeFile(root, 'srv/lib/above.js', `
+// slug-canonical: caller-canonicalizes
+await SELECT.one.from(T).where({ slug });
+`);
+    const r = run(root);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/1 marked/);
+  });
+
+  it('marker on the same line as the where() counts', () => {
+    writeFile(root, 'srv/lib/same.js',
+      `await SELECT.one.from(T).where({ slug }); // slug-canonical: caller-canonicalizes\n`);
+    const r = run(root);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/1 marked/);
+  });
+
+  it('marker 3 lines above does NOT count (window is 2 lines)', () => {
+    writeFile(root, 'srv/lib/far.js', `
+// slug-canonical: caller-canonicalizes
+
+
+await SELECT.one.from(T).where({ slug });
+`);
+    const r = run(root);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/unmarked/);
+  });
+
+  it('marker with empty reason (// slug-canonical:) is rejected as unmarked', () => {
+    writeFile(root, 'srv/lib/empty.js', `
+// slug-canonical:
+await SELECT.one.from(T).where({ slug });
+`);
+    const r = run(root);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/unmarked/);
+  });
+
+  it('does NOT scan __tests__/ or node_modules/ directories', () => {
+    // Files under either dir would otherwise produce unmarked findings;
+    // we expect the check to skip them entirely. Add a real, marked
+    // call-site outside both dirs so the parser-drift sentinel doesn't
+    // false-fire (filesScanned > 0 AND lookups > 0).
+    writeFile(root, 'srv/__tests__/should-be-skipped.js',
+      `await SELECT.one.from(T).where({ slug });\n`);
+    writeFile(root, 'srv-qa/node_modules/some-pkg/lib/should-be-skipped.js',
+      `await SELECT.one.from(T).where({ slug });\n`);
+    writeFile(root, 'srv/lib/real.js', `
+// slug-canonical: caller-canonicalizes
+await SELECT.one.from(T).where({ slug });
+`);
+    const r = run(root);
+    expect(r.status).toBe(0);
+    // Only the real.js lookup should be counted.
+    expect(r.stdout).toMatch(/1 lookup\(s\) inspected/);
+  });
+});

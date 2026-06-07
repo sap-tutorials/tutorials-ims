@@ -44,10 +44,17 @@ function projectTutorial(t) {
   };
 }
 
+/**
+ * Load full group context for SSR.
+ * @param {string} slug - Group slug (without `group-` prefix). MUST be
+ *   lowercase (caller-canonicalizes — serveHandler in content-store.js
+ *   lowercases inbound paths before reaching this function).
+ */
 export async function loadGroupContext(slug) {
   const { Groups, GroupPathItems, Tutorials } = cds.entities(NAMESPACE);
 
   const [group] = await SELECT.from(Groups)
+    // slug-canonical: caller-canonicalizes
     .where({ slug })
     .columns('ID', 'legacyId', 'slug', 'title', 'description', 'published', 'status');
   if (!group) return null;
@@ -85,11 +92,18 @@ export async function loadGroupContext(slug) {
   };
 }
 
+/**
+ * Load full mission context for SSR.
+ * @param {string} slug - Mission slug (without `mission-` prefix). MUST be
+ *   lowercase (caller-canonicalizes — serveHandler in content-store.js
+ *   lowercases inbound paths before reaching this function).
+ */
 export async function loadMissionContext(slug) {
   const { Missions, CompletionPaths, CompletionPathItems, Tutorials,
           Groups, GroupPathItems } = cds.entities(NAMESPACE);
 
   const [mission] = await SELECT.from(Missions)
+    // slug-canonical: caller-canonicalizes
     .where({ slug })
     .columns('ID', 'legacyId', 'slug', 'title', 'description', 'published', 'status');
   if (!mission) return null;

@@ -51,9 +51,10 @@ export default class DeveloperService extends cds.ApplicationService {
     // --- Frontend slug-based endpoints ---
 
     this.on('getProgress', async (req) => {
-      const { slug } = req.data;
+      const slug = String(req.data.slug || '').toLowerCase();
       const user = req.user;
 
+      // slug-canonical: pre-canonicalized
       const tutorial = await SELECT.one.from(dbTutorials).where({ slug });
       if (!tutorial) return req.reject(404, `Tutorial not found: ${slug}`);
 
@@ -87,9 +88,11 @@ export default class DeveloperService extends cds.ApplicationService {
     });
 
     this.on('completeStep', async (req) => {
-      const { slug, stepNumber } = req.data;
+      const slug = String(req.data.slug || '').toLowerCase();
+      const { stepNumber } = req.data;
       const user = req.user;
 
+      // slug-canonical: pre-canonicalized
       const tutorial = await SELECT.one.from(dbTutorials).where({ slug });
       if (!tutorial) return req.reject(404, `Tutorial not found: ${slug}`);
 
@@ -518,6 +521,7 @@ export default class DeveloperService extends cds.ApplicationService {
         if (!isInt0to10(d[k])) return req.error(400, `${k} must be an integer 0-10 or null`);
       }
       if (!d.tutorialSlug || typeof d.tutorialSlug !== 'string') return req.error(400, 'tutorialSlug required');
+      const tutorialSlug = d.tutorialSlug.toLowerCase();
 
       // 3. Rate limit (before any DB I/O so unknown-slug floods don't hammer the DB)
       if (!d._clientIp) cds.log('feedback').warn('submitTutorialFeedback: _clientIp missing — rate limiting will share one bucket. Express bridge must inject it.');
@@ -527,14 +531,15 @@ export default class DeveloperService extends cds.ApplicationService {
 
       // 4. Slug existence
       const { ContentFiles, TutorialFeedback } = cds.entities('com.sap.developers.ims');
-      const exists = await SELECT.one.from(ContentFiles).columns('slug').where({ slug: d.tutorialSlug });
+      // slug-canonical: pre-canonicalized
+      const exists = await SELECT.one.from(ContentFiles).columns('slug').where({ slug: tutorialSlug });
       if (!exists) return req.error(400, 'Unknown tutorial');
 
       // 5. Persist
       const id = cds.utils.uuid();
       await INSERT.into(TutorialFeedback).entries({
         ID: id,
-        tutorialSlug:      d.tutorialSlug,
+        tutorialSlug:      tutorialSlug,
         wasAuthenticated:  !!d.wasAuthenticated,
         submitterIpHash:   hashedIp,
         ratingUseCase:     d.ratingUseCase     ?? null,
