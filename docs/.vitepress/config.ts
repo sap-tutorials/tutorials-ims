@@ -117,8 +117,10 @@ export default defineConfig({
           { text: 'IAS setup',                 link: '/developers/operations/ias-setup' },
           { text: 'Joule chat admin settings', link: '/developers/operations/joule-chat-admin-settings' },
           { text: 'MTA deployment',            link: '/developers/operations/mta-deployment' },
-          { text: 'Postmortem index',          link: '/postmortems/' },
-          { text: '  2026-06-05 HDI Data Loss', link: '/postmortems/2026-06-05-hdi-data-loss' },
+          { text: 'Postmortems', collapsed: true, items: [
+            { text: 'Overview',                  link: '/postmortems/' },
+            { text: '2026-06-05 HDI Data Loss',  link: '/postmortems/2026-06-05-hdi-data-loss' }
+          ]},
           { text: 'Production readiness',      link: '/developers/operations/production-ready' },
           { text: 'QA channel bootstrap',      link: '/developers/operations/qa-channel-bootstrap' },
           { text: 'Testing endpoints',         link: '/developers/operations/testing-endpoints' },
