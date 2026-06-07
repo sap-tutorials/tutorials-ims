@@ -35,11 +35,13 @@
     {{- else -}}
     <div data-rails-container>
       {{ partial "browse/_partials/for-you-rail.html" . }}
-      {{ partial "browse/_partials/rail.html" (dict "title" "Featured missions"
+      {{ partial "browse/_partials/rail.html" (dict "id" "featured"
+                                                    "title" "Featured missions"
                                                     "idList" $featured
                                                     "showAllHref" "/missions/"
                                                     "all" $all) }}
-      {{ partial "browse/_partials/rail.html" (dict "title" "Recently added"
+      {{ partial "browse/_partials/rail.html" (dict "id" "recent"
+                                                    "title" "Recently added"
                                                     "idList" $recent
                                                     "showAllHref" "/?new=1"
                                                     "all" $all) }}
@@ -53,6 +55,10 @@
           <span class="browse-filter-toggle__count" hidden></span>
         </button>
         <h2 class="browse-grid-title">All {{ len $all }} items</h2>
+        <button type="button" class="browse-customize-toggle" id="browse-customize-toggle" aria-expanded="false" aria-controls="browse-customize-popover" aria-label="Customize layout">
+          <span aria-hidden="true">⚙</span>
+          Customize
+        </button>
         <label class="browse-sort">
           Sort:
           <select name="sort" class="browse-sort__select">
@@ -91,6 +97,18 @@
        children remain document descendants, so the existing controller
        checkbox/clear-all wiring continues to function unchanged. */ -}}
 <ui5-dialog id="browse-filter-drawer" stretch accessible-name="Filters"></ui5-dialog>
+
+{{- /* Customize popover (#285): per-rail visibility toggles. The popover
+       opens from the Customize button in the grid header; checkboxes inside
+       set [data-rail-hidden] on each <section data-rail> via controller.ts.
+       Per-rail collapse (chevron) is independent and lives on the rails
+       themselves. */ -}}
+<ui5-popover id="browse-customize-popover" placement="Bottom" horizontal-align="End" header-text="Show curated rails">
+  <div class="browse-customize-popover__body">
+    <label><input type="checkbox" name="rail-visible" value="featured" checked> Featured missions</label>
+    <label><input type="checkbox" name="rail-visible" value="recent" checked> Recently added</label>
+  </div>
+</ui5-popover>
 
 <script>window.__BROWSE_BUILD_AT = "{{ $buildAt }}";</script>
 {{- /* Inlined catalog payload — read by BrowsePage.vue on mount.

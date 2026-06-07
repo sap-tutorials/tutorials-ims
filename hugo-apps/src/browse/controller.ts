@@ -217,4 +217,127 @@ export function wireBrowseController(opts: ControllerOpts) {
       )
     }
   }
+
+  // ── Per-rail collapse + Customize popover (#285) ────────────────────
+  // Each <section data-rail data-rail-id="featured|recent"> has:
+  //   - a chevron toggle in .browse-rail__header (collapse)
+  //   - an entry in the Customize popover (visibility)
+  //
+  // State persists in localStorage['browse.rails.v1'] = {
+  //   collapsed: { featured: bool, recent: bool },
+  //   visible:   { featured: bool, recent: bool }
+  // }
+  // Defaults (no key, parse error, or missing field): expanded + visible.
+  wireRailControls()
+}
+
+/* ── Rail-controls helper (#285) ───────────────────────────────────────
+   Pulled into its own function so the wireBrowseController body stays
+   readable. No closure over wireBrowseController's state — these controls
+   are purely DOM-driven and have no hook into the Vue filter state. */
+
+interface RailsPrefs {
+  collapsed: Record<string, boolean>
+  visible: Record<string, boolean>
+}
+
+const RAILS_LS_KEY = 'browse.rails.v1'
+
+function loadRailsPrefs(): RailsPrefs {
+  const fallback: RailsPrefs = { collapsed: {}, visible: {} }
+  try {
+    const raw = localStorage.getItem(RAILS_LS_KEY)
+    if (!raw) return fallback
+    const parsed = JSON.parse(raw)
+    return {
+      collapsed: typeof parsed?.collapsed === 'object' && parsed.collapsed !== null ? parsed.collapsed : {},
+      visible: typeof parsed?.visible === 'object' && parsed.visible !== null ? parsed.visible : {},
+    }
+  } catch {
+    return fallback
+  }
+}
+
+function saveRailsPrefs(prefs: RailsPrefs): void {
+  try {
+    localStorage.setItem(RAILS_LS_KEY, JSON.stringify(prefs))
+  } catch {
+    // localStorage unavailable / quota — silently no-op; prefs are best-effort.
+  }
+}
+
+function wireRailControls(): void {
+  const prefs = loadRailsPrefs()
+
+  // Apply persisted state on first paint, before any user click.
+  document.querySelectorAll<HTMLElement>('[data-rail][data-rail-id]').forEach(rail => {
+    const id = rail.dataset.railId!
+    if (prefs.collapsed[id]) {
+      rail.setAttribute('data-collapsed', '')
+      const btn = rail.querySelector<HTMLButtonElement>('.browse-rail__toggle')
+      if (btn) btn.setAttribute('aria-expanded', 'false')
+    }
+    // Default visibility = true unless explicitly stored as false.
+    if (prefs.visible[id] === false) {
+      rail.setAttribute('data-rail-hidden', '')
+    }
+  })
+
+  // Chevron click: toggle [data-collapsed] and persist.
+  document.querySelectorAll<HTMLButtonElement>('[data-rail] [data-action="toggle-rail"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const rail = btn.closest<HTMLElement>('[data-rail][data-rail-id]')
+      if (!rail) return
+      const id = rail.dataset.railId!
+      const wasCollapsed = rail.hasAttribute('data-collapsed')
+      if (wasCollapsed) {
+        rail.removeAttribute('data-collapsed')
+        btn.setAttribute('aria-expanded', 'true')
+        prefs.collapsed[id] = false
+      } else {
+        rail.setAttribute('data-collapsed', '')
+        btn.setAttribute('aria-expanded', 'false')
+        prefs.collapsed[id] = true
+      }
+      saveRailsPrefs(prefs)
+    })
+  })
+
+  // Customize popover: opens on Customize button click; checkboxes set
+  // [data-rail-hidden] on the matching <section data-rail-id>.
+  const customizeBtn = document.querySelector<HTMLButtonElement>('#browse-customize-toggle')
+  const customizePopover = document.querySelector<HTMLElement>('#browse-customize-popover')
+  if (customizeBtn && customizePopover) {
+    // Sync popover checkboxes to current visibility state on first paint.
+    customizePopover.querySelectorAll<HTMLInputElement>('input[name="rail-visible"]').forEach(cb => {
+      cb.checked = prefs.visible[cb.value] !== false  // default true
+    })
+
+    customizeBtn.addEventListener('click', () => {
+      // ui5-popover's `open` API: set the `opener` ref then `open = true`.
+      // The web-component reads opener as either an element ref or its id.
+      ;(customizePopover as any).opener = customizeBtn
+      ;(customizePopover as any).open = true
+      customizeBtn.setAttribute('aria-expanded', 'true')
+    })
+    customizePopover.addEventListener('close', () => {
+      customizeBtn.setAttribute('aria-expanded', 'false')
+    })
+
+    customizePopover.querySelectorAll<HTMLInputElement>('input[name="rail-visible"]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const id = cb.value
+        const rail = document.querySelector<HTMLElement>(`[data-rail][data-rail-id="${id}"]`)
+        if (!rail) return
+        if (cb.checked) {
+          rail.removeAttribute('data-rail-hidden')
+          prefs.visible[id] = true
+        } else {
+          rail.setAttribute('data-rail-hidden', '')
+          prefs.visible[id] = false
+        }
+        saveRailsPrefs(prefs)
+      })
+    })
+  }
 }

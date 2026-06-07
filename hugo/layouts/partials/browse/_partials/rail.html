@@ -1,22 +1,43 @@
-{{- /* Curation rail. Receives a dict { title, idList, showAllHref, all }.
-       The Vue island toggles a [hidden]/data-rails-hidden flag post-hydration
-       when the user activates filters or sort.
+{{- /* Curation rail. Receives a dict { id, title, idList, showAllHref, all }.
+
+       The Vue island toggles a [data-rails-hidden] flag on the surrounding
+       <div data-rails-container> when the user activates filters or sort
+       (this fades all rails together).
+
+       Per-rail controls (issue #285):
+         - Chevron button collapses just this rail; controller.ts toggles
+           [data-collapsed] on the <section> and persists to localStorage.
+         - The Customize popover in the .browse-grid-header sets
+           [data-rail-hidden] on this <section> when the user un-checks the
+           rail in the popover; same persistence key.
+
+       The id passed in is the localStorage key segment ('featured' /
+       'recent') so the controller can persist per-rail state without
+       hard-coding titles.
 */ -}}
+{{- $id := .id -}}
 {{- $title := .title -}}
 {{- $ids := .idList -}}
 {{- $showAll := .showAllHref -}}
 {{- $all := .all -}}
-<section class="browse-rail" aria-label="{{ $title }}" data-rail>
+{{- $headerId := printf "browse-rail-header-%s" $id -}}
+{{- $contentId := printf "browse-rail-content-%s" $id -}}
+<section class="browse-rail" aria-labelledby="{{ $headerId }}" data-rail data-rail-id="{{ $id }}">
   <header class="browse-rail__header">
-    <h2 class="browse-rail__title">{{ $title }}</h2>
+    <button type="button" class="browse-rail__toggle"
+            aria-expanded="true" aria-controls="{{ $contentId }}"
+            data-action="toggle-rail">
+      <span class="browse-rail__chevron" aria-hidden="true">▾</span>
+      <h2 class="browse-rail__title" id="{{ $headerId }}">{{ $title }}</h2>
+    </button>
     {{- if $showAll -}}
       <a class="browse-rail__show-all" href="{{ $showAll }}">Show all →</a>
     {{- end -}}
   </header>
-  <div class="browse-rail-curation">
-    {{- range $id := $ids -}}
+  <div class="browse-rail-curation" id="{{ $contentId }}">
+    {{- range $rid := $ids -}}
       {{- range $item := $all -}}
-        {{- if eq $item.id $id -}}
+        {{- if eq $item.id $rid -}}
           {{- if eq $item.type "mission" -}}{{ partial "browse/_partials/card-mission.html" $item }}{{- end -}}
           {{- if eq $item.type "group" -}}{{ partial "browse/_partials/card-group.html" $item }}{{- end -}}
           {{- if eq $item.type "tutorial" -}}{{ partial "browse/_partials/card-tutorial.html" $item }}{{- end -}}
