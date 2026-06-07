@@ -1,6 +1,10 @@
-{{- /* Static filter rail. The Vue island reads existing checkbox state on
-       hydration and replaces the empty Products/Topics fieldsets with real
-       options. Empty fieldsets reserve layout space to prevent CLS.
+{{- /* Static filter rail. Type / Level / Quick filter checkboxes drive the
+       shared useNavigatorFilters state via controller.ts.
+
+       Products and Topics filters from the design (collapsible sections)
+       were never wired and were shipping as empty fieldsets above the Quick
+       filters group; removed pending the deferred feature. The composable
+       still computes availableProducts / availableTopics for the / SFC.
 */ -}}
 <aside class="browse-rail" role="complementary" aria-label="Filters" id="browse-filter-rail">
   <form role="search" class="browse-filter-form">
@@ -16,8 +20,6 @@
       <label><input type="checkbox" name="level" value="intermediate"> Intermediate</label>
       <label><input type="checkbox" name="level" value="advanced"> Advanced</label>
     </fieldset>
-    <fieldset class="browse-filter-group" data-products-mount></fieldset>
-    <fieldset class="browse-filter-group" data-topics-mount></fieldset>
     <fieldset class="browse-filter-group">
       <legend>Quick filters</legend>
       <label><input type="checkbox" name="new" value="1"> New only</label>
