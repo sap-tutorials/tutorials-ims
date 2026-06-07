@@ -149,9 +149,14 @@
     top: var(--op-header-h, 110px);
     align-self: start;
   }
+  /* At narrow widths the right column would un-stick and drop below the main
+     content — that's how the step-TOC originally reappeared at the bottom of
+     the page (issue #170). Hide it entirely at narrow widths instead of just
+     un-sticking it; users get step navigation via the wizard indicator +
+     inline accordion + mobile FAB inside the Steps section. */
   @media (max-width: 960px) {
     .op-twocol { grid-template-columns: 1fr; }
-    .op-twocol > .tutorial-right-col { position: static; }
+    .op-twocol > .tutorial-right-col { display: none; }
   }
 
   /* U18 — Mobile FAB + bottom-sheet dialog */
@@ -337,13 +342,20 @@
       </div>
 
       <aside class="tutorial-right-col">
-        {{/* Step navigation lives in the U1 Steps section (wizard indicator +
-             inline accordion + op-mobile-sheet) — the legacy step-TOC partial
-             `tutorial-sidebar.html` is intentionally NOT rendered here; otherwise
-             the same step list appears twice on the page (issue #170). At narrow
-             widths the right column collapses to `position: static` and the TOC
-             dropped literally below Discussion. Keep only mission-side-nav,
-             which offers cross-tutorial navigation U1 doesn't otherwise provide. */}}
+        {{/* Sticky right-column step-TOC for wide-viewport navigation. The
+             inline accordion + wizard indicator inside the Steps section also
+             render the steps, but they scroll with the body — the right-column
+             TOC is the persistent wayfinder. At narrow widths the right column
+             is hidden via CSS (max-width: 960px → display: none) so the step
+             list does NOT reappear at the bottom of the page (issue #170 —
+             which originally over-corrected by deleting this partial entirely;
+             restored 2026-06-07). The mobile FAB + op-mobile-sheet cover step
+             navigation at narrow widths.
+
+             mission-side-nav (U16) renders below the step-TOC when the tutorial
+             is assigned to a mission — cross-tutorial navigation. Renders
+             nothing for standalone tutorials. */}}
+        {{ partial "tutorial-sidebar.html" . }}
         {{ partial "mission-side-nav.html" . }}
       </aside>
     </main>
