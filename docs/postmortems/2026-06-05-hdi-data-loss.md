@@ -4,7 +4,7 @@ date: 2026-06-05
 status: Resolved (Option E accepted)
 severity: P0
 environment: DEV
-related: [#257, #263, #258, #259, #264, #266, #268]
+related: ["#257", "#263", "#258", "#259", "#264", "#266", "#268"]
 ---
 
 # HDI Data-Loss Incident — 2026-06-05
