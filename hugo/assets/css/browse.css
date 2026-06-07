@@ -151,14 +151,16 @@ ui5-dialog#browse-filter-drawer #browse-filter-rail {
   .nav-card__progress--animate-in circle.ring__indicator { animation: none; }
 }
 
-/* ── Rails fade-out on filter/search (decision Q4) ───────────── */
+/* ── Rails hidden when filter/search active (decision Q4, issue #281) ──── */
 /* Vue island sets [data-rails-hidden] on the data-rails-container div
-   when any filter is active or a search query is present. */
+   when any filter is active or a search query is present. The container
+   must collapse from layout — not just fade — so the card grid moves up
+   to fill the space. The original implementation used `opacity: 0` only,
+   which left a ~1400px-tall invisible block above the grid and made the
+   page appear empty after any filter click (#281).
+   If a smooth fade-then-collapse animation is needed later, follow up
+   with a JS hook that toggles `display: none` on `transitionend`; for
+   now layout integrity beats a 150ms transition. */
 [data-rails-container][data-rails-hidden] {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 150ms ease;
-}
-@media (prefers-reduced-motion: reduce) {
-  [data-rails-container][data-rails-hidden] { transition: none; }
+  display: none;
 }
