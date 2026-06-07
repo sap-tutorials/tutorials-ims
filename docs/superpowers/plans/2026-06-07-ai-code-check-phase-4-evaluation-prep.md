@@ -1094,6 +1094,10 @@ const dryRun = args.includes('--dry-run');
 (async () => {
   await cds.load('*');
   const db = await cds.connect.to('db');
+  // Per [[feedback_cds_entities_runtime_only]], cds.entities(...) can be
+  // undefined in plain CJS even after cds.load('*'). If this fails on first
+  // run, fall back to raw SQL like setup-dev-data.cjs does:
+  //   await db.run(`SELECT * FROM COM_SAP_DEVELOPERS_IMS_ANALYTICSSAVEDQUERY WHERE NAME = ?`, [row.name])
   const { AnalyticsSavedQuery } = cds.entities('com.sap.developers.ims');
 
   const seedPath = 'scripts/sample-submissions/seed-saved-queries.json';
@@ -1439,10 +1443,10 @@ Expected: completes without sidebar-guard or dead-link errors.
 - [ ] **Step 10.3: Inspect the staged changes**
 
 Run: `git log --oneline main..HEAD`
-Expected: 8 commits + the spec doc commit (0567649). Branch ahead of main by 9.
+Expected: 10 commits + the spec/plan doc commits already on the branch from prep. Branch ahead of main accordingly.
 
 Run: `git diff --stat main..HEAD`
-Expected: ~13 files changed. No unintended files.
+Expected: ~14 files changed. No unintended files.
 
 - [ ] **Step 10.4: Open the PR**
 

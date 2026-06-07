@@ -61,7 +61,7 @@ touched; no CDS schema changes.
 docs/developers/operations/phase-4-codecheck-eval.md            (runbook)
                                 │ §3 invokes
                                 ▼
-scripts/generate-codecheck-eval-skeleton.js                     (skeleton gen)
+scripts/generate-codecheck-eval-skeleton.cjs                    (skeleton gen)
         ─ reads CodeCheckSpecs via cds bind --exec
         ─ writes scripts/sample-submissions/<slug>-step-<n>.jsonl
 
@@ -81,7 +81,7 @@ scripts/score-codecheck-eval.js                                 (scorer)
 
                                 │ §7 invokes
                                 ▼
-scripts/pull-codecheck-telemetry.js                             (telemetry)
+scripts/pull-codecheck-telemetry.cjs                            (telemetry)
         ─ reads CodeCheckSubmissions via cds bind --exec
         ─ writes verdicts/telemetry-summary.json + Markdown to stdout
 
@@ -101,9 +101,9 @@ scripts/seed-codecheck-saved-queries.cjs                        (one-time import
 |---|---|---|
 | `docs/developers/operations/phase-4-codecheck-eval.md` | runbook | Step-by-step Phase 4 procedure |
 | `docs/.vitepress/config.ts` | edit | Register runbook in sidebar (predocs:build guard) |
-| `scripts/generate-codecheck-eval-skeleton.js` | script | Emit a 30-row JSONL skeleton with coverage hints |
+| `scripts/generate-codecheck-eval-skeleton.cjs` | script | Emit a 30-row JSONL skeleton with coverage hints |
 | `scripts/score-codecheck-eval.js` | script | Compute agreement % from a hand-rated CSV |
-| `scripts/pull-codecheck-telemetry.js` | script | Aggregate cost/latency/verdict telemetry |
+| `scripts/pull-codecheck-telemetry.cjs` | script | Aggregate cost/latency/verdict telemetry |
 | `scripts/sample-submissions/seed-saved-queries.json` | seed data | 3 AnalyticsSavedQuery rows for ad-hoc poking |
 | `scripts/seed-codecheck-saved-queries.cjs` | importer | INSERTs the seed JSON into AnalyticsSavedQuery via cds bind (idempotent on `name`) |
 | `docs/superpowers/specs/phase-4-codecheck-evaluation.md` | template | Pre-stubbed decision doc Tom fills in (date-less filename so it stays accurate when filled in weeks later) |
