@@ -188,3 +188,34 @@ describe('expandAiAuthoredQuestions (#208)', () => {
     }
   })
 })
+
+describe('expandAiAuthoredQuestions handAuthoredSteps precedence (#208)', () => {
+  it('skips a step listed in handAuthoredSteps even when parsedMap has no entry for it', async () => {
+    const parsedMap = new Map<number, ValidationQuestion[]>()
+    // step 1 has no entry in parsedMap (e.g. regex-substring case); step 2 also empty.
+    const stepBodies = new Map([[1, 'body of step 1'], [2, 'body of step 2']])
+    const handAuthoredSteps = new Set([1])  // step 1 IS hand-authored (e.g. regex-substring); step 2 is NOT.
+
+    const callModel = vi.fn().mockResolvedValue({
+      toolCalls: [{ name: 'submitQuiz', arguments: JSON.stringify({
+        questions: [{ type: 'multiple-choice', question: 'Q', options: ['a','b','c','d'], correctAnswer: 'a' }],
+      })}],
+      modelName: 'gpt-test', promptTokens: 1, completionTokens: 1,
+    })
+    const stats = { calls: 0, hits: 0, errors: 0 }
+    const allDirective = { types: 'mcq-and-text' as const, present: true as const }
+
+    await expandAiAuthoredQuestions(parsedMap, stepBodies, {
+      cache, callModel, onCallStats: stats,
+      allDirective,
+      handAuthoredSteps,
+    })
+
+    // Step 1 should NOT have an AI placeholder (skipped due to handAuthoredSteps)
+    expect((parsedMap.get(1) ?? []).length).toBe(0)
+    // Step 2 SHOULD have AI questions
+    expect((parsedMap.get(2) ?? []).length).toBeGreaterThan(0)
+    expect(callModel).toHaveBeenCalledTimes(1)
+    expect(stats.calls).toBe(1)
+  })
+})

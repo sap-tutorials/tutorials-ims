@@ -56,10 +56,19 @@ export function parseRulesVrEnriched(content: string): {
   // captured for the post-parse expansion step (it doesn't know the step list
   // until fetch-tutorials.ts iterates `steps`).
   allDirective?: { types: 'mcq-and-text' | 'mcq-only' | 'text-only'; present: true }
+  // [#208 precedence-fix] Set of step numbers that have ANY hand-authored
+  // [VALIDATE_N] block, regardless of whether parseBlock emitted a
+  // ValidationQuestion (e.g. regex-substring blocks without ###Question
+  // intentionally return []). Phase 3 (`expandAiAuthoredQuestions`) and the
+  // per-step AUTOAUTHOR materialization both consult this set so AI never
+  // fires on top of a hand-authored step.
+  handAuthoredSteps: Set<number>
 } {
   const result = new Map<number, ValidationQuestion[]>()
   const ruleTypeByStepAndId = new Map<string, string>()
   const correctAnswerByStepAndId = new Map<string, string>()
+  // [#208 precedence-fix] populated on every [VALIDATE_N] marker seen.
+  const handAuthoredSteps = new Set<number>()
   // [#208] per-step AUTOAUTHOR directives — materialized into placeholders
   // AFTER the main loop so hand-authored [VALIDATE_N] content always wins.
   const perStepAutoAuthor = new Map<number, AutoAuthorTypes>()
@@ -105,6 +114,11 @@ export function parseRulesVrEnriched(content: string): {
     const match = line.match(VALIDATE_MARKER)
     if (match) {
       const num = parseInt(match[1], 10)
+      // [#208 precedence-fix] Record presence regardless of whether
+      // parseBlock will emit a ValidationQuestion. This covers regex-substring
+      // blocks (no ###Question), case-only-mismatched [X]/[x] markers, and
+      // any other malformed-but-present hand-authored content.
+      handAuthoredSteps.add(num)
       if (currentNum === null) {
         currentNum = num
         blockLines = []
@@ -132,7 +146,7 @@ export function parseRulesVrEnriched(content: string): {
   // ValidationQuestion type — they're an internal contract with Phase 3's
   // `expandAiAuthoredQuestions`, which swaps them for real questions.
   for (const [num, types] of perStepAutoAuthor) {
-    if ((result.get(num) ?? []).length > 0) continue // hand-authored wins
+    if (handAuthoredSteps.has(num)) continue // hand-authored wins (regardless of whether parseBlock emitted a ValidationQuestion — see #208 precedence fix)
     result.set(num, [{
       id: `autoauthor-${num}`,
       question: '__autoauthor_placeholder__',
@@ -142,7 +156,7 @@ export function parseRulesVrEnriched(content: string): {
     } as any]) // sentinel fields not on ValidationQuestion's exported type
   }
 
-  return { map: result, ruleTypeByStepAndId, correctAnswerByStepAndId, allDirective }
+  return { map: result, ruleTypeByStepAndId, correctAnswerByStepAndId, allDirective, handAuthoredSteps }
 }
 
 function parseBlock(
@@ -231,7 +245,7 @@ function parseChoiceOptions(content: string): { options: string[]; correctAnswer
 
   for (const line of content.split('\n')) {
     const trimmed = line.trim()
-    const correctMatch = trimmed.match(/^\[x\]\s*(.+)$/)
+    const correctMatch = trimmed.match(/^\[x\]\s*(.+)$/i)
     if (correctMatch) {
       const opt = correctMatch[1].trim()
       options.push(opt)

@@ -66,3 +66,90 @@ The answer.
     expect(step3[0].correctAnswer).toBe('The answer.')
   })
 })
+
+describe('parseRulesVrEnriched precedence rule fixes (#208)', () => {
+  it('Bug A: parseChoiceOptions accepts uppercase [X] for correct answer', () => {
+    const content = `[VALIDATE_3]
+###Rule
+single-choice
+
+###Question
+Which option is correct?
+
+###Match
+[ ] Wrong
+[X] Correct
+[ ] Also wrong
+
+[VALIDATE_3]
+`
+    const { map, handAuthoredSteps } = parseRulesVrEnriched(content)
+    const qs = map.get(3) ?? []
+    expect(qs).toHaveLength(1)
+    expect(qs[0].correctAnswer).toBe('Correct')
+    expect(handAuthoredSteps?.has(3)).toBe(true)
+  })
+
+  it('Bug B: regex-substring [VALIDATE_N] without ###Question is recorded in handAuthoredSteps', () => {
+    const content = `[VALIDATE_5]
+###Rule
+regex-substring
+
+###Match
+some-pattern
+
+[VALIDATE_5]
+`
+    const { map, handAuthoredSteps } = parseRulesVrEnriched(content)
+    // map.get(5) is empty (parseBlock returns [] without ###Question — that's intended)
+    expect((map.get(5) ?? []).length).toBe(0)
+    // BUT the step IS hand-authored for precedence purposes
+    expect(handAuthoredSteps?.has(5)).toBe(true)
+  })
+
+  it('handAuthoredSteps is populated for every [VALIDATE_N] block, even when parseBlock returns []', () => {
+    const content = `[VALIDATE_2]
+###Rule
+single-choice
+
+###Question
+Q?
+
+###Match
+[ ] A
+[X] B
+[ ] C
+
+[VALIDATE_2]
+
+[VALIDATE_4]
+###Rule
+regex-substring
+
+###Match
+foo
+
+[VALIDATE_4]
+
+[VALIDATE_7]
+###Rule
+multiple-choice
+
+###Question
+Q?
+
+###Match
+[x] A
+[ ] B
+
+[VALIDATE_7]
+`
+    const { map, handAuthoredSteps } = parseRulesVrEnriched(content)
+    expect(handAuthoredSteps).toBeDefined()
+    expect([...handAuthoredSteps!].sort((a, b) => a - b)).toEqual([2, 4, 7])
+    // map has 2 (single-choice) and 7 (multiple-choice); 4 is regex-substring (correctly absent from map)
+    expect(map.has(2)).toBe(true)
+    expect(map.has(4)).toBe(false)
+    expect(map.has(7)).toBe(true)
+  })
+})
