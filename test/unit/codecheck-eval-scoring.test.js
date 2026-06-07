@@ -74,9 +74,9 @@ describe('scoreRows', () => {
 });
 
 describe('formatMarkdown', () => {
-  it('emits a Markdown block with both percentages and a confusion table', () => {
+  it('emits a Markdown block with both percentages, n, and a confusion table', () => {
     const md = formatMarkdown(
-      { headlinePct: 0.8, strictPct: 0.7, exceptionCount: 0, confusion: {
+      { total: 30, headlinePct: 0.8, strictPct: 0.7, exceptionCount: 0, confusion: {
         pass: { pass: 8, partial: 1, fail: 1 },
         partial: { pass: 0, partial: 7, fail: 3 },
         fail:    { pass: 0, partial: 1, fail: 9 },
@@ -84,6 +84,7 @@ describe('formatMarkdown', () => {
       'demo-slug', 3
     );
     expect(md).toMatch(/demo-slug.*step.*3/i);
+    expect(md).toMatch(/n:\*\*\s*30/);
     expect(md).toMatch(/Headline.*80\.0%/);
     expect(md).toMatch(/Strict.*70\.0%/);
     expect(md).toMatch(/Confusion/);
