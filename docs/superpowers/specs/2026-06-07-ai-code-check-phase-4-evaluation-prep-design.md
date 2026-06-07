@@ -17,7 +17,7 @@ telemetry, graduate/iterate/shelve decision) all need humans in the loop.
 
 This spec scopes the **operator-side scaffolding** that an agent can productively
 ship now to unblock that human work without speculating on outcomes. Net change:
-6 new files plus 1 sidebar entry; ~200-300 lines total; no production code paths
+8 new files plus 1 sidebar entry; ~250-350 lines total; no production code paths
 touched; no CDS schema changes.
 
 ## Goals
@@ -89,9 +89,10 @@ scripts/pull-codecheck-telemetry.js                             (telemetry)
                                 ▼
 docs/superpowers/specs/phase-4-codecheck-evaluation.md          (decision template)
 
-scripts/sample-submissions/seed-saved-queries.json              (seeded SQL)
-        ─ imported once via /analytics-ui/ Saved Queries tab
-        ─ ad-hoc poking complement to pull-codecheck-telemetry.js
+scripts/sample-submissions/seed-saved-queries.json              (seed data)
+scripts/seed-codecheck-saved-queries.cjs                        (one-time importer)
+        ─ INSERTs the 3 rows via cds bind --exec
+        ─ idempotent on `name` (use --force to replace existing)
 ```
 
 ## File Inventory
@@ -104,6 +105,7 @@ scripts/sample-submissions/seed-saved-queries.json              (seeded SQL)
 | `scripts/score-codecheck-eval.js` | script | Compute agreement % from a hand-rated CSV |
 | `scripts/pull-codecheck-telemetry.js` | script | Aggregate cost/latency/verdict telemetry |
 | `scripts/sample-submissions/seed-saved-queries.json` | seed data | 3 AnalyticsSavedQuery rows for ad-hoc poking |
+| `scripts/seed-codecheck-saved-queries.cjs` | importer | INSERTs the seed JSON into AnalyticsSavedQuery via cds bind (idempotent on `name`) |
 | `docs/superpowers/specs/phase-4-codecheck-evaluation.md` | template | Pre-stubbed decision doc Tom fills in (date-less filename so it stays accurate when filled in weeks later) |
 
 ## Components
@@ -241,10 +243,14 @@ option; see component 4.
 }
 ```
 
-### 4. `scripts/sample-submissions/seed-saved-queries.json`
+### 4. `scripts/sample-submissions/seed-saved-queries.json` + `scripts/seed-codecheck-saved-queries.cjs`
 
-Three rows for the operator to import once via `/analytics-ui/` → Saved Queries
-→ Import. All validator-safe (avg/min/max/count, no percentiles):
+Three rows that get INSERTed into `AnalyticsSavedQuery` once per environment
+via a small CJS importer. The Analytics Builder UI has no "Import" affordance
+— `SavedTab.vue` exposes only list/rename/setVisibility/duplicate/recordRun/remove
+— so we seed via `cds bind --exec -- node scripts/seed-codecheck-saved-queries.cjs`.
+
+The three rows (validator-safe aggregates only — no `PERCENTILE_CONT`):
 
 1. **Code-check: verdict distribution by slug+step** —
    `SELECT tutorialSlug, stepNumber, verdict, COUNT(*) AS n FROM CodeCheckSubmissions GROUP BY tutorialSlug, stepNumber, verdict`.
@@ -253,12 +259,16 @@ Three rows for the operator to import once via `/analytics-ui/` → Saved Querie
 3. **Code-check: token cost by verdict** —
    `SELECT verdict, AVG(promptTokens) AS avg_prompt, AVG(completionTokens) AS avg_completion, SUM(promptTokens + completionTokens) AS total FROM CodeCheckSubmissions GROUP BY verdict`.
 
-The seed JSON shape mirrors the `AnalyticsService.SavedQueries` projection:
-`{ name, description, sqlText, visibility: "public", layoutHints: {} }`. Rows
-land in `AnalyticsSavedQuery` after import. They complement the standalone
-script — same data, different access pattern.
+Seed JSON shape mirrors the actual `AnalyticsSavedQuery` columns from
+[db/analytics-builder.cds:28](../../db/analytics-builder.cds): `{ name,
+description, sql, spec, visibility }`. `spec` is `null` for SQL-tab saves
+(per the comment at [srv/analytics-service.cds:87](../../srv/analytics-service.cds)
+"null for editor/legacy paths"); `visibility` is `'shared-admins'` (NOT `'public'` —
+the legal values are `'private' | 'shared-admins'`). The importer uses
+`SELECT.one ... where({ name })` for idempotency on name, with `--force` for
+delete-then-insert.
 
-**Real percentile latency stays exclusively in `pull-codecheck-telemetry.js`.**
+**Real percentile latency stays exclusive to `pull-codecheck-telemetry.cjs`.**
 
 ### 5. `docs/developers/operations/phase-4-codecheck-eval.md` (runbook)
 

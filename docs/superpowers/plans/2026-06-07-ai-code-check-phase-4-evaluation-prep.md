@@ -30,6 +30,7 @@
 | `test/unit/codecheck-eval-telemetry.test.js` | unit test | T5 |
 | `scripts/pull-codecheck-telemetry.cjs` | CLI entry (cds-bind) | T6 |
 | `scripts/sample-submissions/seed-saved-queries.json` | seed data | T7 |
+| `scripts/seed-codecheck-saved-queries.cjs` | CLI importer (cds-bind) | T7 |
 | `docs/developers/operations/phase-4-codecheck-eval.md` | runbook | T8 |
 | `docs/superpowers/specs/phase-4-codecheck-evaluation.md` | decision template | T9 |
 | `docs/.vitepress/config.ts` | edit (1 line) | T8 |
@@ -249,8 +250,15 @@ const outputPath = arg('output', `scripts/sample-submissions/${slug}-step-${step
   // Confirm a CodeCheckSpec exists. We don't need its contents in the JSONL —
   // the hints are template-driven. This is a sanity check so the operator
   // doesn't run the harness against a slug+step the publish step skipped.
+  //
+  // The `Association to Tutorials` flattens to `tutorial_ID` because Tutorials
+  // keys on `ID : UUID` (TaskBase → cuid aspect, db/schema.cds:17). HANA
+  // upper-cases unquoted identifiers, so the column is `TUTORIAL_ID`. Join
+  // through Tutorials.slug to keep the CLI taking a slug instead of a UUID.
   const rows = await db.run(
-    'SELECT GOAL FROM COM_SAP_DEVELOPERS_IMS_CODECHECKSPECS WHERE TUTORIAL_SLUG = ? AND STEPNUMBER = ?',
+    `SELECT s.GOAL FROM COM_SAP_DEVELOPERS_IMS_CODECHECKSPECS s
+       JOIN COM_SAP_DEVELOPERS_IMS_TUTORIALS t ON t.ID = s.TUTORIAL_ID
+      WHERE LOWER(t.SLUG) = ? AND s.STEPNUMBER = ?`,
     [slug, stepNumber]
   );
   if (!rows || rows.length === 0) {
@@ -279,7 +287,7 @@ const outputPath = arg('output', `scripts/sample-submissions/${slug}-step-${step
 
 Notes for the implementer:
 - The CJS file uses dynamic `import()` to reach the ESM `lib/`. `setup-dev-data.cjs` does the same for `slug-utils.js`.
-- HANA table name is `COM_SAP_DEVELOPERS_IMS_CODECHECKSPECS`; foreign-key column `TUTORIAL_SLUG` (the underscore-prefixed `Association to Tutorials` flattens to `TUTORIAL_<KEY>`). Confirm by running once against DEV; if the column is `TUTORIAL_ID` you'll need to JOIN to `COM_SAP_DEVELOPERS_IMS_TUTORIALS`. Keep the SQL in one place so the fix is one-line.
+- `Tutorials` keys on `ID : UUID` ([db/schema.cds:17](../../db/schema.cds) — `TaskBase` → `cuid` aspect), so `Association to Tutorials` flattens to `TUTORIAL_ID` in HANA. The script joins through `Tutorials.SLUG` so the CLI takes the slug the author actually knows. `LOWER(t.SLUG)` matches the lowercased input.
 - The script can't be unit-tested headlessly without mocking `@sap/cds`, so it has no test of its own. The lib in T1 covers the deterministic part. The script is exercised the first time Tom runs it for real.
 
 - [ ] **Step 2.2: Sanity check (no test to run; lint + node syntax check)**
@@ -981,14 +989,33 @@ git commit -m "feat(codecheck): telemetry CLI (#210)"
 
 ---
 
-## Task 7: SavedQueries seed
+## Task 7: SavedQueries seed + importer
 
 **Files:**
 - Create: `scripts/sample-submissions/seed-saved-queries.json`
+- Create: `scripts/seed-codecheck-saved-queries.cjs`
 
-Three rows the operator imports once via `/analytics-ui/` → Saved Queries → Import. All validator-safe (avg/min/max/count, no `PERCENTILE_CONT`).
+The Analytics Builder UI has no "Import Saved Queries" affordance — `SavedTab.vue`
+exposes only list/rename/setVisibility/duplicate/recordRun/remove. Saving from the
+Builder calls `POST /admin/analytics/SavedQueries` with body `{ name, description,
+sql, spec, visibility }` (see `app/analytics-explorer/src/composables/useSavedQueries.ts:71`).
+Tom seeds the canned queries via a small CJS script that POSTs each row through
+`AnalyticsService.SavedQueries`.
 
-The exact import shape mirrors `AnalyticsService.SavedQueries` projection. Look up the projection at [srv/analytics-service.cds:113](../../srv/analytics-service.cds) — the projection is on `ims.AnalyticsSavedQuery`. The minimum fields the import flow expects are `name`, `description`, `sqlText`, `visibility`. Other fields default-fill on insert.
+Field shapes from `db/analytics-builder.cds:28` and `srv/analytics-service.cds:113`:
+
+- `name : String(120) not null`
+- `description : String(500)` (optional)
+- `sql : LargeString` (the SELECT)
+- `spec : LargeString` (JSON-stringified QuerySpec OR `null` for SQL-tab saves —
+  see comment at `srv/analytics-service.cds:87` "null for editor/legacy paths")
+- `visibility : String(16) default 'private'` — values are `'private' | 'shared-admins'`
+  (NOT `'public'`)
+
+The seed JSON is a plain array of `{ name, description, sql, spec, visibility }`
+objects. The CJS script reads it, connects via `cds bind`, and INSERTs each row
+through CDS QL so admin auth is bypassed (the script runs locally, same trust model
+as `setup-dev-data.cjs`).
 
 - [ ] **Step 7.1: Write the seed file**
 
@@ -997,34 +1024,142 @@ The exact import shape mirrors `AnalyticsService.SavedQueries` projection. Look 
   {
     "name": "Code-check: verdict distribution by slug+step",
     "description": "Phase 4 (#210) — count of verdicts per pilot tutorial step. Populates the per-step coverage section of the decision doc. (See pull-codecheck-telemetry.cjs for the full picture including latency percentiles.)",
-    "sqlText": "SELECT tutorialSlug, stepNumber, verdict, COUNT(*) AS n FROM com_sap_developers_ims_CodeCheckSubmissions GROUP BY tutorialSlug, stepNumber, verdict ORDER BY tutorialSlug, stepNumber, verdict",
-    "visibility": "public"
+    "sql": "SELECT tutorialSlug, stepNumber, verdict, COUNT(*) AS n FROM com_sap_developers_ims_CodeCheckSubmissions GROUP BY tutorialSlug, stepNumber, verdict ORDER BY tutorialSlug, stepNumber, verdict",
+    "spec": null,
+    "visibility": "shared-admins"
   },
   {
     "name": "Code-check: latency summary by verdict (avg/min/max)",
     "description": "Phase 4 (#210) — validator-safe latency aggregates. Real percentiles (p50/p95/p99) come from pull-codecheck-telemetry.cjs which bypasses the analytics validator. Use this for ad-hoc poking only.",
-    "sqlText": "SELECT verdict, COUNT(*) AS n, MIN(latencyMs) AS lat_min, AVG(latencyMs) AS lat_avg, MAX(latencyMs) AS lat_max FROM com_sap_developers_ims_CodeCheckSubmissions GROUP BY verdict ORDER BY verdict",
-    "visibility": "public"
+    "sql": "SELECT verdict, COUNT(*) AS n, MIN(latencyMs) AS lat_min, AVG(latencyMs) AS lat_avg, MAX(latencyMs) AS lat_max FROM com_sap_developers_ims_CodeCheckSubmissions GROUP BY verdict ORDER BY verdict",
+    "spec": null,
+    "visibility": "shared-admins"
   },
   {
     "name": "Code-check: token cost by verdict",
     "description": "Phase 4 (#210) — average prompt/completion tokens and grand total per verdict bucket. Use for cost-per-check estimates.",
-    "sqlText": "SELECT verdict, AVG(promptTokens) AS avg_prompt, AVG(completionTokens) AS avg_completion, SUM(promptTokens + completionTokens) AS total FROM com_sap_developers_ims_CodeCheckSubmissions GROUP BY verdict ORDER BY verdict",
-    "visibility": "public"
+    "sql": "SELECT verdict, AVG(promptTokens) AS avg_prompt, AVG(completionTokens) AS avg_completion, SUM(promptTokens + completionTokens) AS total FROM com_sap_developers_ims_CodeCheckSubmissions GROUP BY verdict ORDER BY verdict",
+    "spec": null,
+    "visibility": "shared-admins"
   }
 ]
 ```
 
 - [ ] **Step 7.2: Sanity-check JSON validity**
 
-Run: `node -e "JSON.parse(require('fs').readFileSync('scripts/sample-submissions/seed-saved-queries.json'))" && echo OK`
+```bash
+node -e "JSON.parse(require('fs').readFileSync('scripts/sample-submissions/seed-saved-queries.json'))" && echo OK
+```
+
 Expected: prints `OK`.
 
-- [ ] **Step 7.3: Commit**
+- [ ] **Step 7.3: Write the importer CJS script**
+
+Create `scripts/seed-codecheck-saved-queries.cjs`:
+
+```js
+/**
+ * seed-codecheck-saved-queries.cjs — INSERT three canned AnalyticsSavedQuery
+ * rows for Phase 4 (#210). Reads scripts/sample-submissions/seed-saved-queries.json
+ * and creates each row via CDS QL against the bound HANA database.
+ *
+ * Runs once per environment. Idempotent on `name` — if a row with the same
+ * name already exists, the script skips it and prints SKIPPED. Use --force
+ * to overwrite (delete-then-insert).
+ *
+ * Why a script instead of UI import: app/analytics-explorer/'s SavedTab.vue
+ * has no Import button. The only programmatic save path is `useSavedQueries.saveAs`
+ * which POSTs through admin auth. Locally with `cds bind`, INSERTing via
+ * CDS QL is the simplest route.
+ *
+ * Prerequisites:
+ *   - `cf login` to the target space
+ *   - `npx cds bind --to <hana-binding>`
+ *
+ * Usage:
+ *   npx cds bind --exec -- node scripts/seed-codecheck-saved-queries.cjs
+ *
+ * Flags:
+ *   --force           Delete existing rows by name before re-inserting.
+ *   --dry-run         Print the rows that would be inserted; do not write.
+ */
+
+const cds = require('@sap/cds');
+const { readFileSync } = require('node:fs');
+
+const args = process.argv.slice(2);
+const force = args.includes('--force');
+const dryRun = args.includes('--dry-run');
+
+(async () => {
+  await cds.load('*');
+  const db = await cds.connect.to('db');
+  const { AnalyticsSavedQuery } = cds.entities('com.sap.developers.ims');
+
+  const seedPath = 'scripts/sample-submissions/seed-saved-queries.json';
+  const seed = JSON.parse(readFileSync(seedPath, 'utf8'));
+
+  if (!Array.isArray(seed)) {
+    console.error(`Expected ${seedPath} to be a JSON array.`);
+    process.exit(1);
+  }
+
+  console.log(`Seeding ${seed.length} SavedQuery rows from ${seedPath} (dry-run=${dryRun}, force=${force})\n`);
+
+  let inserted = 0, skipped = 0, replaced = 0;
+
+  for (const row of seed) {
+    if (!row.name) {
+      console.error('Row missing required `name` field — skipping.');
+      continue;
+    }
+    const existing = await SELECT.one.from(AnalyticsSavedQuery).where({ name: row.name });
+
+    if (existing && !force) {
+      console.log(`  SKIPPED  ${row.name} — already exists (use --force to replace)`);
+      skipped++;
+      continue;
+    }
+
+    if (existing && force) {
+      if (!dryRun) await DELETE.from(AnalyticsSavedQuery).where({ ID: existing.ID });
+      console.log(`  REPLACED ${row.name}`);
+      replaced++;
+    } else {
+      console.log(`  INSERTED ${row.name}`);
+      inserted++;
+    }
+
+    if (!dryRun) {
+      await INSERT.into(AnalyticsSavedQuery).entries({
+        name: row.name,
+        description: row.description || null,
+        sql: row.sql,
+        spec: row.spec || null,
+        visibility: row.visibility || 'private',
+      });
+    }
+  }
+
+  console.log(`\nDone. inserted=${inserted}  skipped=${skipped}  replaced=${replaced}`);
+  if (dryRun) console.log('(dry-run — no writes performed)');
+  process.exit(0);
+})().catch(err => {
+  console.error(err.message || err);
+  process.exit(1);
+});
+```
+
+- [ ] **Step 7.4: Sanity check**
+
+Run: `node --check scripts/seed-codecheck-saved-queries.cjs`
+Expected: clean exit.
+
+- [ ] **Step 7.5: Commit**
 
 ```bash
-git add scripts/sample-submissions/seed-saved-queries.json
-git commit -m "feat(codecheck): SavedQueries seed for Phase 4 (#210)"
+git add scripts/sample-submissions/seed-saved-queries.json scripts/seed-codecheck-saved-queries.cjs
+git commit -m "feat(codecheck): SavedQueries seed + importer for Phase 4 (#210)"
 ```
 
 ---
@@ -1116,9 +1251,16 @@ npx cds bind --exec -- node scripts/pull-codecheck-telemetry.cjs \
   --output verdicts/telemetry-summary.json
 ```
 
-Optionally import `scripts/sample-submissions/seed-saved-queries.json` via
-`/analytics-ui/` → Saved Queries → Import for ad-hoc re-runs (validator-safe
-aggregates only; the script's percentile latency stays exclusive).
+(One-time, optional) Seed the three canned `AnalyticsSavedQuery` rows so
+ad-hoc poking in `/analytics-ui/` reuses the same shape:
+
+```bash
+npx cds bind --exec -- node scripts/seed-codecheck-saved-queries.cjs
+```
+
+The seed script is idempotent on `name` — re-running it skips existing rows
+unless you pass `--force`. It uses validator-safe aggregates only; real
+percentile latency stays exclusive to `pull-codecheck-telemetry.cjs`.
 
 ## 8. Fill the decision doc
 
