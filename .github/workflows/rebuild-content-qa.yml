@@ -9,6 +9,16 @@ on:
         description: Refresh a single tutorial slug only (leave blank for full QA rebuild)
         required: false
         type: string
+      ai-author-enabled:
+        description: 'Enable AI-quiz generation for this run (#208 spike). Requires AI_AUTHOR_AICORE_SERVICE_KEY + CHAT_DEPLOYMENT_ID secrets. See docs/developers/operations/ai-author-ci-setup.md.'
+        required: false
+        default: false
+        type: boolean
+      ai-author-build-cap:
+        description: 'Hard cap on AI-quiz LLM calls per build (overrides default 200). Use 10000 for first-time bulk seed.'
+        required: false
+        default: '200'
+        type: string
 
 env:
   NODE_VERSION: '20'
@@ -59,11 +69,36 @@ jobs:
           private-key: ${{ secrets.TUTORIALS_APP_PRIVATE_KEY }}
           owner: sap-tutorials
 
+      # [#208] Construct VCAP_SERVICES for the AI-quiz fetch path. The
+      # @sap-ai-sdk/orchestration SDK reads aicore credentials from
+      # VCAP_SERVICES.aicore[0].credentials when no cds bind is in effect.
+      # See docs/developers/operations/ai-author-ci-setup.md.
+      - name: Set up VCAP_SERVICES for AI authoring
+        if: ${{ inputs.ai-author-enabled == true }}
+        env:
+          AICORE_CREDENTIALS_JSON: ${{ secrets.AI_AUTHOR_AICORE_SERVICE_KEY }}
+        run: |
+          if [ -z "${AICORE_CREDENTIALS_JSON}" ]; then
+            echo "::error::ai-author-enabled=true requires AI_AUTHOR_AICORE_SERVICE_KEY secret. See docs/developers/operations/ai-author-ci-setup.md."
+            exit 1
+          fi
+          echo "${AICORE_CREDENTIALS_JSON}" | jq empty || { echo "::error::AI_AUTHOR_AICORE_SERVICE_KEY is not valid JSON"; exit 1; }
+          VCAP=$(jq -nc --argjson creds "${AICORE_CREDENTIALS_JSON}" '{aicore: [{label: "aicore", name: "tutorials-aicore", instance_name: "tutorials-aicore", credentials: $creds, plan: "extended"}]}')
+          echo "::add-mask::${VCAP}"
+          echo "VCAP_SERVICES=${VCAP}" >> "$GITHUB_ENV"
+
       - name: Fetch QA tutorials (-Contribution repos)
         run: npm run fetch-tutorials:qa
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.TUTORIAL_FETCH_TOKEN || secrets.TUTORIALS_GITHUB_TOKEN }}
           TUTORIAL_SLUG: ${{ github.event.client_payload.slug || inputs.slug }}
+          # [#208] AI-quiz authoring on the QA channel. Default OFF; flip via
+          # workflow_dispatch input. The QA channel is gated by Tutorial.Author
+          # XSUAA scope so AI questions land somewhere safe to preview before
+          # they reach the public site.
+          AI_AUTHOR_ENABLED: ${{ inputs.ai-author-enabled == true && 'true' || '' }}
+          AI_AUTHOR_BUILD_CAP: ${{ inputs.ai-author-build-cap }}
+          CHAT_DEPLOYMENT_ID: ${{ secrets.CHAT_DEPLOYMENT_ID }}
 
       # Author-side smell detector. See rebuild-content.yml for rationale.
       # Runs against the QA cache (-Contribution repos) where author-side
@@ -102,4 +137,7 @@ jobs:
           fi
           if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
             echo "- **Source repo:** ${{ github.event.client_payload.repository }}" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "${{ inputs.ai-author-enabled }}" = "true" ]; then
+            echo "- **AI authoring:** enabled (cap=${{ inputs.ai-author-build-cap }})" >> "$GITHUB_STEP_SUMMARY"
           fi

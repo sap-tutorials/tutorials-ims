@@ -23,6 +23,16 @@ on:
         required: false
         default: 'manual'
         type: string
+      ai-author-enabled:
+        description: 'Enable AI-quiz generation for this run (#208 spike). Requires AI_AUTHOR_AICORE_SERVICE_KEY + CHAT_DEPLOYMENT_ID secrets. See docs/developers/operations/ai-author-ci-setup.md.'
+        required: false
+        default: false
+        type: boolean
+      ai-author-build-cap:
+        description: 'Hard cap on AI-quiz LLM calls per build (overrides default 200). Use 10000 for first-time bulk seed.'
+        required: false
+        default: '200'
+        type: string
 
 env:
   NODE_VERSION: '20'
@@ -101,6 +111,32 @@ jobs:
           private-key: ${{ secrets.TUTORIALS_APP_PRIVATE_KEY }}
           owner: sap-tutorials
 
+      # [#208] Construct VCAP_SERVICES for the AI-quiz fetch path. The
+      # @sap-ai-sdk/orchestration SDK reads aicore credentials from
+      # VCAP_SERVICES.aicore[0].credentials when no cds bind is in effect.
+      # The secret holds ONLY the inner `credentials` JSON (rotated via
+      # `cf delete-service-key tutorials-aicore <key> &&
+      #  cf create-service-key tutorials-aicore <key>`).
+      # Skipped when ai-author-enabled is false — keeps the env clean for
+      # normal rebuilds.
+      - name: Set up VCAP_SERVICES for AI authoring
+        if: ${{ inputs.ai-author-enabled == true }}
+        env:
+          AICORE_CREDENTIALS_JSON: ${{ secrets.AI_AUTHOR_AICORE_SERVICE_KEY }}
+        run: |
+          if [ -z "${AICORE_CREDENTIALS_JSON}" ]; then
+            echo "::error::ai-author-enabled=true requires AI_AUTHOR_AICORE_SERVICE_KEY secret. See docs/developers/operations/ai-author-ci-setup.md."
+            exit 1
+          fi
+          # Wrap the credentials JSON in the outer aicore[] structure the SDK expects.
+          # Use jq so a malformed credentials value fails loudly here, not 5 min into
+          # fetch-tutorials.ts when an LLM call attempts.
+          echo "${AICORE_CREDENTIALS_JSON}" | jq empty || { echo "::error::AI_AUTHOR_AICORE_SERVICE_KEY is not valid JSON"; exit 1; }
+          VCAP=$(jq -nc --argjson creds "${AICORE_CREDENTIALS_JSON}" '{aicore: [{label: "aicore", name: "tutorials-aicore", instance_name: "tutorials-aicore", credentials: $creds, plan: "extended"}]}')
+          # Mask the constructed VCAP so it doesn't leak in subsequent logs.
+          echo "::add-mask::${VCAP}"
+          echo "VCAP_SERVICES=${VCAP}" >> "$GITHUB_ENV"
+
       - name: Fetch tutorials
         run: npm run fetch-tutorials
         env:
@@ -108,6 +144,14 @@ jobs:
           CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
           CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
           TUTORIAL_SLUG: ${{ inputs.slug }}
+          # [#208] AI-quiz authoring (default OFF). When ai-author-enabled is
+          # true, fetch-tutorials.ts wakes up the AI generator on tutorials
+          # carrying [AUTOAUTHOR_*] directives in their rules.vr. The
+          # VCAP_SERVICES env (set by the prior step) carries the aicore
+          # binding the orchestration SDK needs.
+          AI_AUTHOR_ENABLED: ${{ inputs.ai-author-enabled == true && 'true' || '' }}
+          AI_AUTHOR_BUILD_CAP: ${{ inputs.ai-author-build-cap }}
+          CHAT_DEPLOYMENT_ID: ${{ secrets.CHAT_DEPLOYMENT_ID }}
 
       # Author-side smell detector. Runs against raw tutorial markdown in
       # .tutorial-cache/ and warns on patterns that produce malformed DOM
@@ -198,4 +242,7 @@ jobs:
           fi
           if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
             echo "- **Source repo:** ${{ github.event.client_payload.repository }}" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "${{ inputs.ai-author-enabled }}" = "true" ]; then
+            echo "- **AI authoring:** enabled (cap=${{ inputs.ai-author-build-cap }})" >> "$GITHUB_STEP_SUMMARY"
           fi
