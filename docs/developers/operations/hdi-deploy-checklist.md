@@ -2,6 +2,8 @@
 
 Procedure for safe HDI deploys to `tutorials-hana` (DEV) and `tutorials-hana-qa` (QA). Filed after the 2026-06-05 data-loss incident (issue [#257](https://github.com/sap-tutorials/tutorials-ims/issues/257)).
 
+> **See also:** [2026-06-05 HDI Data Loss postmortem](../../postmortems/2026-06-05-hdi-data-loss.md) — the incident this checklist responds to.
+
 ## Why this exists
 
 On 2026-06-05 a series of HDI deploys (4+ iterations of the `.hdbindex` saga, [PRs around #227 / #249 / #253](https://github.com/sap-tutorials/tutorials-ims/issues/257)) wiped relational catalog data: `Missions`, `Groups`, `CompletionPaths`, `Events`, `TutorialTags`, `MissionTags`, `Accomplishments`, plus ~20 other tables — while preserving `Tutorials`, `TutorialMeta`, `ContentFiles`, `Steps`, `Users`, `TaskRecords`. The smoking gun was two `Rolled back` deploys in the deployer log; older logs aged out before forensic capture.
