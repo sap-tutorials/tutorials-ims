@@ -151,6 +151,67 @@ ui5-dialog#browse-filter-drawer #browse-filter-rail {
   .nav-card__progress--animate-in circle.ring__indicator { animation: none; }
 }
 
+/* ── Filter rail (aside, fieldset, label) ───────────────────────────
+   The rail is a static SSR'd <aside> with <fieldset> groups. Without
+   block layout on the labels the checkbox + text wrap independently
+   when the column is narrow — e.g. 'Advanced' wraps to its own line
+   while its checkbox stays at the end of the prior line. Block-style
+   labels (display: flex) keep checkbox and text together, one filter
+   per row. */
+
+.browse-rail {
+  /* The .browse-shell grid column is 280px on desktop; the rail just
+     needs vertical stacking and a comfortable type scale. */
+  font-size: 0.875rem;
+}
+
+.browse-filter-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.browse-filter-group {
+  border: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+  border-radius: 0.25rem;
+  padding: 0.5rem 0.75rem 0.75rem;
+  margin: 0;
+}
+
+.browse-filter-group legend {
+  padding: 0 0.25rem;
+  font-weight: 600;
+  color: var(--sapGroup_TitleTextColor, inherit);
+}
+
+.browse-filter-group label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  cursor: pointer;
+}
+
+.browse-filter-group label input[type="checkbox"] {
+  flex: 0 0 auto;   /* checkbox keeps its native size; text fills remainder */
+}
+
+.browse-filter-clear {
+  align-self: flex-start;
+  padding: 0.4rem 0.85rem;
+  border: 1px solid var(--sapButton_BorderColor, #b3b3b3);
+  border-radius: 0.5rem;
+  background: var(--sapButton_Background, #fff);
+  color: var(--sapButton_TextColor, inherit);
+  cursor: pointer;
+  font: inherit;
+}
+.browse-filter-clear:hover { background: var(--sapButton_Hover_Background, #ebf5fe); }
+.browse-filter-clear:focus-visible {
+  outline: 2px solid var(--sapButton_Focus_BorderColor, #0a6ed1);
+  outline-offset: 2px;
+}
+
 /* ── Rails hidden when filter/search active (decision Q4, issue #281) ──── */
 /* Vue island sets [data-rails-hidden] on the data-rails-container div
    when any filter is active or a search query is present. The container
