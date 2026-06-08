@@ -153,6 +153,7 @@ export interface Mission {
   time: number
   icon: string
   tasksCount: number
+  categorySlugs?: string[]
 }
 
 export interface HierarchyGroup {
@@ -161,6 +162,7 @@ export interface HierarchyGroup {
   slug: string
   description: string
   tutorialSlugs: string[]
+  categorySlugs?: string[]
 }
 
 export interface MissionHierarchy {
@@ -175,6 +177,21 @@ export interface StandaloneGroup {
   slug: string
   description: string
   tutorialSlugs: string[]
+  categorySlugs?: string[]
+}
+
+/** A single entry from the top-level categories[] array in /build/catalog. */
+export interface CategoryMeta {
+  slug: string
+  label: string
+  sortOrder: number
+  activeCount: number
+}
+
+/** Slim per-tutorial metadata from /build/catalog (categorySlugs only — nav data lives in TutorialNavEntry). */
+export interface CatalogTutorialMeta {
+  slug: string
+  categorySlugs: string[]
 }
 
 // Full CodeCheckSpec — used by the publish pipeline. NEVER ship to the

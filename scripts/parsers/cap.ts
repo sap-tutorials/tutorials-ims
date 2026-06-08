@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { Mission, MissionHierarchy, StandaloneGroup } from './types.js'
+import type { CatalogTutorialMeta, CategoryMeta, Mission, MissionHierarchy, StandaloneGroup } from './types.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const CACHE_FILE = join(__dirname, '..', '..', '.tutorial-cache', 'cap-catalog.json')
@@ -11,7 +11,9 @@ interface CapCacheData {
   timestamp: number
   missions: Mission[]
   hierarchies: MissionHierarchy[]
-  standaloneGroups?: StandaloneGroup[]  // optional — older caches won't have it
+  standaloneGroups?: StandaloneGroup[]     // optional — older caches won't have it
+  categories?: CategoryMeta[]              // optional — older caches won't have it
+  tutorialMetas?: CatalogTutorialMeta[]    // optional — older caches won't have it
 }
 
 export function loadCapCache(): CapCacheData | null {
@@ -30,10 +32,12 @@ export function loadCapCache(): CapCacheData | null {
 export function saveCapCache(
   missions: Mission[],
   hierarchies: MissionHierarchy[],
-  standaloneGroups: StandaloneGroup[]
+  standaloneGroups: StandaloneGroup[],
+  categories: CategoryMeta[] = [],
+  tutorialMetas: CatalogTutorialMeta[] = [],
 ): void {
   mkdirSync(dirname(CACHE_FILE), { recursive: true })
-  const data: CapCacheData = { timestamp: Date.now(), missions, hierarchies, standaloneGroups }
+  const data: CapCacheData = { timestamp: Date.now(), missions, hierarchies, standaloneGroups, categories, tutorialMetas }
   writeFileSync(CACHE_FILE, JSON.stringify(data, null, 2), 'utf-8')
 }
 
@@ -41,6 +45,8 @@ export async function fetchBuildCatalog(baseUrl: string): Promise<{
   missions: Mission[]
   hierarchies: MissionHierarchy[]
   standaloneGroups: StandaloneGroup[]
+  categories: CategoryMeta[]
+  tutorialMetas: CatalogTutorialMeta[]
 }> {
   const url = `${baseUrl}/build/catalog`
   const res = await fetch(url, {
@@ -55,11 +61,19 @@ export async function fetchBuildCatalog(baseUrl: string): Promise<{
     missions: Mission[]
     hierarchies: MissionHierarchy[]
     standaloneGroups?: StandaloneGroup[]
+    categories?: CategoryMeta[]
+    tutorials?: Array<{ slug: string; categorySlugs?: string[] }>
   }
+  const tutorialMetas: CatalogTutorialMeta[] = (data.tutorials ?? []).map(t => ({
+    slug: t.slug,
+    categorySlugs: t.categorySlugs ?? [],
+  }))
   return {
     missions: data.missions,
     hierarchies: data.hierarchies,
     standaloneGroups: data.standaloneGroups ?? [],
+    categories: data.categories ?? [],
+    tutorialMetas,
   }
 }
 

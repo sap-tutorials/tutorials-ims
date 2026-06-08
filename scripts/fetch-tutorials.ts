@@ -16,7 +16,7 @@ import { computeRecommendations } from './parsers/recommendations.js'
 import { humanizeTag, splitPrerequisites } from './parsers/frontmatter-utils.js'
 import type { TagLabelRegistry } from './parsers/frontmatter-utils.js'
 import { renderHugoFrontmatter } from './parsers/render-frontmatter.js'
-import type { Mission, MissionHierarchy, HierarchyGroup, StandaloneGroup, TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } from './parsers/types.js'
+import type { CatalogTutorialMeta, CategoryMeta, Mission, MissionHierarchy, HierarchyGroup, StandaloneGroup, TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } from './parsers/types.js'
 import { QUESTION_TYPE_TEXT } from './parsers/types.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -826,6 +826,8 @@ async function main() {
   let missions: Mission[] = []
   let hierarchies: MissionHierarchy[] = []
   let standaloneGroups: StandaloneGroup[] = []
+  let categories: CategoryMeta[] = []
+  let tutorialMetas: CatalogTutorialMeta[] = []
   let capCacheUsed = false
   let coCompletions: Map<string, Map<string, number>> = new Map()
 
@@ -836,6 +838,8 @@ async function main() {
     missions = cached.missions
     hierarchies = cached.hierarchies
     standaloneGroups = cached.standaloneGroups ?? []
+    categories = cached.categories ?? []
+    tutorialMetas = cached.tutorialMetas ?? []
     capCacheUsed = true
     console.log(`  [cap] Using cached data (${missions.length} missions, ${standaloneGroups.length} standalone groups)`)
   } else {
@@ -845,7 +849,9 @@ async function main() {
       missions = catalog.missions
       hierarchies = catalog.hierarchies
       standaloneGroups = catalog.standaloneGroups
-      saveCapCache(missions, hierarchies, standaloneGroups)
+      categories = catalog.categories
+      tutorialMetas = catalog.tutorialMetas
+      saveCapCache(missions, hierarchies, standaloneGroups, categories, tutorialMetas)
       console.log(`  [cap] Fetched ${missions.length} missions, ${standaloneGroups.length} standalone groups`)
       coCompletions = await fetchCoCompletions(capBaseUrl)
       console.log(`  [cap] co-completion map: ${coCompletions.size} source slugs`)
@@ -997,7 +1003,7 @@ async function main() {
   // ship an empty rail file from a deliberately-degraded build.
   if (missions.length > 0) {
     try {
-      writeBrowseData(navEntries, missions, hierarchies, standaloneGroups)
+      writeBrowseData(navEntries, missions, hierarchies, standaloneGroups, categories, tutorialMetas)
     } catch (err) {
       // Non-fatal — don't block the existing build pipeline on this.
       console.warn(`  [browse] writeBrowseData failed: ${err instanceof Error ? err.message : err}`)
@@ -1116,6 +1122,7 @@ interface BrowseCardItem {
   displayTagSlugs: string[]
   href: string
   stepCount: number
+  categorySlugs: string[]
   isNew?: boolean
   createdAt?: string
   updatedAt?: string
@@ -1125,6 +1132,7 @@ interface BrowseData {
   all: BrowseCardItem[]
   featured: string[]
   recent: string[]
+  categories: CategoryMeta[]
   buildAt: string
 }
 
@@ -1159,6 +1167,7 @@ function buildAllCards(
   missions: Mission[],
   hierarchies: MissionHierarchy[],
   standaloneGroups: StandaloneGroup[],
+  tutorialMetaMap: Map<string, CatalogTutorialMeta>,
 ): BrowseCardItem[] {
   if (!tuts.length) return []
 
@@ -1166,19 +1175,19 @@ function buildAllCards(
 
   // Build mission/group → MissionRef/GroupRef lookups so we can resolve href slugs
   // (matches missionsMeta.value / groupsMeta.value lookups in the Vue computed).
-  const missionsBySlugLookup = new Map<number, { slug: string }>()
+  const missionsByIdLookup = new Map<number, Mission>()
   for (const m of missions) {
-    missionsBySlugLookup.set(m.imsId, { slug: m.slug })
+    missionsByIdLookup.set(m.imsId, m)
   }
 
-  const groupsBySlugLookup = new Map<number, { slug: string }>()
+  const groupsByIdLookup = new Map<number, HierarchyGroup | StandaloneGroup>()
   for (const h of hierarchies) {
     for (const g of h.groups) {
-      groupsBySlugLookup.set(g.imsId, { slug: g.slug })
+      groupsByIdLookup.set(g.imsId, g)
     }
   }
   for (const sg of standaloneGroups) {
-    groupsBySlugLookup.set(sg.imsId, { slug: sg.slug })
+    groupsByIdLookup.set(sg.imsId, sg)
   }
 
   // Phase 1: bucket tutorials by missionId / groupId.
@@ -1203,7 +1212,7 @@ function buildAllCards(
   for (const [missionId, mTuts] of missionGroups) {
     const allTags = [...new Set(mTuts.flatMap(t => t.displayTags))]
     const allTagSlugs = [...new Set(mTuts.flatMap(t => t.displayTagSlugs))]
-    const mMeta = missionsBySlugLookup.get(missionId)
+    const mMeta = missionsByIdLookup.get(missionId)
     const groupCount = browseMissionGroupCount(missionId, tuts)
     items.push({
       type: 'mission',
@@ -1223,6 +1232,7 @@ function buildAllCards(
       displayTagSlugs: allTagSlugs,
       href: mMeta ? `/tutorials/mission-${mMeta.slug}` : `/tutorials/${mTuts[0].slug}`,
       stepCount: mTuts.reduce((sum, t) => sum + t.stepCount, 0),
+      categorySlugs: mMeta?.categorySlugs ?? [],
     })
   }
 
@@ -1230,7 +1240,7 @@ function buildAllCards(
   for (const [groupId, gTuts] of groupMap) {
     const allTags = [...new Set(gTuts.flatMap(t => t.displayTags))]
     const allTagSlugs = [...new Set(gTuts.flatMap(t => t.displayTagSlugs))]
-    const gMeta = groupsBySlugLookup.get(groupId)
+    const gMeta = groupsByIdLookup.get(groupId)
     items.push({
       type: 'group',
       id: `group-${groupId}`,
@@ -1244,6 +1254,7 @@ function buildAllCards(
       displayTagSlugs: allTagSlugs,
       href: gMeta ? `/tutorials/group-${gMeta.slug}` : `/tutorials/${gTuts[0].slug}`,
       stepCount: gTuts.reduce((sum, t) => sum + t.stepCount, 0),
+      categorySlugs: gMeta?.categorySlugs ?? [],
     })
   }
 
@@ -1262,6 +1273,7 @@ function buildAllCards(
       displayTagSlugs: t.displayTagSlugs,
       href: `/tutorials/${t.slug}`,
       stepCount: t.stepCount,
+      categorySlugs: tutorialMetaMap.get(t.slug)?.categorySlugs ?? [],
       isNew: browseIsWithinNewWindow(t.createdAt),
       createdAt: t.createdAt,
     })
@@ -1275,8 +1287,13 @@ function writeBrowseData(
   missions: Mission[],
   hierarchies: MissionHierarchy[],
   standaloneGroups: StandaloneGroup[],
+  categories: CategoryMeta[],
+  tutorialMetas: CatalogTutorialMeta[],
 ): void {
-  const all: BrowseCardItem[] = buildAllCards(tuts, missions, hierarchies, standaloneGroups)
+  const tutorialMetaMap = new Map<string, CatalogTutorialMeta>(
+    tutorialMetas.map(m => [m.slug, m]),
+  )
+  const all: BrowseCardItem[] = buildAllCards(tuts, missions, hierarchies, standaloneGroups, tutorialMetaMap)
 
   // Featured: first FEATURED_MAX mission cards, in catalog order.
   const featured = all
@@ -1295,6 +1312,7 @@ function writeBrowseData(
     all,
     featured,
     recent,
+    categories,
     buildAt: new Date().toISOString(),
   }
 
