@@ -28,6 +28,7 @@ export interface CardItem {
   primaryTag: string
   displayTags: string[]
   displayTagSlugs: string[]
+  categorySlugs?: string[]
   href: string
   stepCount: number
   isNew?: boolean
