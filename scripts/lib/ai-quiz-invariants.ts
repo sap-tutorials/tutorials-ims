@@ -61,3 +61,34 @@ export function invariantNoUpstreamErrors(summaryLine: string | null): Invariant
   }
   return { name, passed: true, details: { errors: 0, miss: Number(match[1]), hit: Number(match[2]) } }
 }
+
+// ---------------------------------------------------------------------------
+// Invariant 2: precedence
+//   For every step number in `handAuthoredSteps`, the cache MUST NOT contain
+//   an entry. AI must never fire on top of hand-authored content. Catches
+//   the PR #277 bug shapes (regex-substring blocks without ###Question, and
+//   the case-sensitive [X]/[ ] asymmetry that silently dropped uppercase
+//   correct answers).
+// ---------------------------------------------------------------------------
+
+export function invariantPrecedence(cache: AiQuizCache, handAuthoredSteps: Set<number>): InvariantResult {
+  const name: InvariantName = 'precedence'
+  const violating: number[] = []
+  for (const stepKey of Object.keys(cache.entries)) {
+    const stepNum = Number(stepKey)
+    if (Number.isFinite(stepNum) && handAuthoredSteps.has(stepNum)) {
+      violating.push(stepNum)
+    }
+  }
+  violating.sort((a, b) => a - b)
+  if (violating.length > 0) {
+    const label = violating.length === 1 ? 'step' : 'steps'
+    return {
+      name,
+      passed: false,
+      reason: `AI questions cached for hand-authored ${label} ${violating.join(', ')}`,
+      details: { violatingSteps: violating },
+    }
+  }
+  return { name, passed: true }
+}
