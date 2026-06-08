@@ -171,6 +171,16 @@ entity Tags : cuid, LegacyKeyed {
   virtual mdFormat           : String;
 }
 
+// Master taxonomy for the /browse/ Categories facet (#201). Seeded once
+// via db/data/com.sap.developers.ims-Categories.csv; v1 admins edit only
+// label/sortOrder/seedDescription. Add/remove categories is a v2 follow-up.
+entity Categories : cuid, managed {
+  slug             : String(64) @mandatory;
+  label            : String(255) @mandatory;
+  sortOrder        : Integer default 100;
+  seedDescription  : LargeString;  // editable; tunes classifier accuracy
+}
+
 entity TutorialTags {
   key tutorial              : Association to Tutorials;
   key tag                   : Association to Tags;
