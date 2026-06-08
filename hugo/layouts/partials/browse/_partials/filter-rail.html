@@ -5,9 +5,30 @@
        were never wired and were shipping as empty fieldsets above the Quick
        filters group; removed pending the deferred feature. The composable
        still computes availableProducts / availableTopics for the / SFC.
+
+       Categories (issue #201): rendered from site.Data.browse.categories
+       (written by fetch-tutorials.ts → writeBrowseData). Checkboxes use
+       name="category" and are wired by controller.ts into
+       useNavigatorFilters.categories. Guarded by {{ with }} so the group
+       is silently omitted when browse.json has no categories array (e.g.
+       empty-catalog fast path or old cache).
 */ -}}
 <aside class="browse-rail" role="complementary" aria-label="Filters" id="browse-filter-rail">
   <form role="search" class="browse-filter-form">
+    {{ with site.Data.browse.categories }}
+    {{ if . }}
+    <fieldset class="browse-filter-group" data-group="categories">
+      <legend>Categories</legend>
+      {{ range . }}
+      <label class="cat-row">
+        <input type="checkbox" name="category" value="{{ .slug }}">
+        <span class="label">{{ .label }}</span>
+        <span class="count">({{ .activeCount }})</span>
+      </label>
+      {{ end }}
+    </fieldset>
+    {{ end }}
+    {{ end }}
     <fieldset class="browse-filter-group">
       <legend>Type</legend>
       <label><input type="checkbox" name="type" value="mission"> Mission</label>

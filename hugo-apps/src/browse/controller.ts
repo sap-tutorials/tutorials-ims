@@ -42,9 +42,10 @@ export function wireBrowseController(opts: ControllerOpts) {
     cb.addEventListener('change', () => {
       const name = cb.name
       const value = cb.value
-      if (name === 'type')        toggleArr(filters.filters.types, value, cb.checked)
-      else if (name === 'level')  toggleArr(filters.filters.levels, value, cb.checked)
-      else if (name === 'new')    filters.filters.isNew = cb.checked
+      if (name === 'type')           toggleArr(filters.filters.types, value, cb.checked)
+      else if (name === 'level')     toggleArr(filters.filters.levels, value, cb.checked)
+      else if (name === 'category')  toggleArr(filters.filters.categories, value, cb.checked)
+      else if (name === 'new')       filters.filters.isNew = cb.checked
       else if (name === 'noLicense') filters.filters.noLicense = cb.checked
     })
   })
@@ -62,6 +63,7 @@ export function wireBrowseController(opts: ControllerOpts) {
       const value = cb.value
       if (name === 'type')           cb.checked = filters.filters.types.includes(value)
       else if (name === 'level')     cb.checked = filters.filters.levels.includes(value)
+      else if (name === 'category')  cb.checked = filters.filters.categories.includes(value)
       else if (name === 'new')       cb.checked = filters.filters.isNew
       else if (name === 'noLicense') cb.checked = filters.filters.noLicense
     })
@@ -70,6 +72,7 @@ export function wireBrowseController(opts: ControllerOpts) {
     [
       () => filters.filters.types,
       () => filters.filters.levels,
+      () => filters.filters.categories,
       () => filters.filters.isNew,
       () => filters.filters.noLicense,
     ],
@@ -191,7 +194,7 @@ export function wireBrowseController(opts: ControllerOpts) {
         const f = filters.filters
         const n =
           f.types.length + f.levels.length +
-          f.products.length + f.topics.length +
+          f.products.length + f.topics.length + f.categories.length +
           (f.isNew ? 1 : 0) + (f.noLicense ? 1 : 0) +
           (filters.searchQuery.value ? 1 : 0)
         if (n === 0) {
@@ -208,6 +211,7 @@ export function wireBrowseController(opts: ControllerOpts) {
           () => filters.filters.levels,
           () => filters.filters.products,
           () => filters.filters.topics,
+          () => filters.filters.categories,
           () => filters.filters.isNew,
           () => filters.filters.noLicense,
           filters.searchQuery,
