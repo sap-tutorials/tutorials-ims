@@ -92,3 +92,36 @@ export function invariantPrecedence(cache: AiQuizCache, handAuthoredSteps: Set<n
   }
   return { name, passed: true }
 }
+
+// ---------------------------------------------------------------------------
+// Invariant 3: anti-leak
+//   AI-graded text questions MUST have `__aiCorrectAnswer` set (the build-time
+//   sentinel) and MUST NOT have `correctAnswer` set (which would leak the
+//   reference answer through the public Hugo frontmatter — issue #209).
+//   Skips MCQ questions, which legitimately ship `correctAnswer`.
+// ---------------------------------------------------------------------------
+
+export function invariantAntiLeak(cache: AiQuizCache): InvariantResult {
+  const name: InvariantName = 'anti-leak'
+  const violations: Array<{ step: string; questionId: string; reason: string }> = []
+  for (const [step, entry] of Object.entries(cache.entries)) {
+    for (const q of entry.questions) {
+      if (q.type !== 'text') continue
+      if (q.correctAnswer !== undefined) {
+        violations.push({ step, questionId: q.id, reason: 'correctAnswer set on AI text question (leak)' })
+      }
+      if (q.__aiCorrectAnswer === undefined || q.__aiCorrectAnswer === '') {
+        violations.push({ step, questionId: q.id, reason: '__aiCorrectAnswer missing on AI text question' })
+      }
+    }
+  }
+  if (violations.length > 0) {
+    return {
+      name,
+      passed: false,
+      reason: violations.map(v => `step ${v.step} q=${v.questionId}: ${v.reason}`).join('; '),
+      details: { violations },
+    }
+  }
+  return { name, passed: true }
+}

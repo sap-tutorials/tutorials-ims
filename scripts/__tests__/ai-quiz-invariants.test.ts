@@ -3,8 +3,10 @@ import { describe, it, expect } from 'vitest'
 import {
   invariantNoUpstreamErrors,
   invariantPrecedence,
+  invariantAntiLeak,
 } from '../lib/ai-quiz-invariants'
 import type { AiQuizCache } from '../lib/ai-quiz-cache'
+import type { ValidationQuestion } from '../parsers/types'
 
 describe('invariantNoUpstreamErrors', () => {
   it('passes when summary line shows 0 errors', () => {
@@ -84,5 +86,63 @@ describe('invariantPrecedence', () => {
     cache.entries['4'] = { ...cache.entries['2'] }
     const result = invariantPrecedence(cache, new Set([2, 4]))
     expect(result.details?.violatingSteps).toEqual([2, 4])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Invariant 3: anti-leak
+// ---------------------------------------------------------------------------
+
+const aiTextQuestion = (overrides: Partial<ValidationQuestion> = {}): ValidationQuestion => ({
+  id: 'validate-3-ai-1',
+  question: 'Why does X work?',
+  type: 'text',
+  aiAuthored: true,
+  aiGrading: true,
+  __aiCorrectAnswer: 'Because of Y.',
+  ...overrides,
+})
+
+const wrapInCache = (qs: ValidationQuestion[]): AiQuizCache => ({
+  promptVersion: 'v1',
+  modelName: 'fake',
+  entries: {
+    '3': { stepHash: 'h', directive: '[AUTOAUTHOR_3]', types: 'text-only', generatedAt: 'now', questions: qs },
+  },
+})
+
+describe('invariantAntiLeak', () => {
+  it('passes for a clean text question', () => {
+    expect(invariantAntiLeak(wrapInCache([aiTextQuestion()])).passed).toBe(true)
+  })
+
+  it('passes when no text questions exist', () => {
+    expect(invariantAntiLeak(wrapInCache([])).passed).toBe(true)
+  })
+
+  it('fails when text question has correctAnswer set (leak)', () => {
+    const leaky = aiTextQuestion({ correctAnswer: 'Because of Y.' })
+    const result = invariantAntiLeak(wrapInCache([leaky]))
+    expect(result.passed).toBe(false)
+    expect(result.reason).toMatch(/leak|correctAnswer/i)
+  })
+
+  it('fails when text question is missing __aiCorrectAnswer', () => {
+    const stripped = { ...aiTextQuestion(), __aiCorrectAnswer: undefined }
+    const result = invariantAntiLeak(wrapInCache([stripped]))
+    expect(result.passed).toBe(false)
+    expect(result.reason).toMatch(/__aiCorrectAnswer/)
+  })
+
+  it('skips MCQ questions (they DO have correctAnswer)', () => {
+    const mcq: ValidationQuestion = {
+      id: 'validate-3-ai-1',
+      question: 'Pick one',
+      type: 'multiple-choice',
+      options: ['a', 'b'],
+      correctAnswer: 'a',
+      aiAuthored: true,
+    }
+    expect(invariantAntiLeak(wrapInCache([mcq])).passed).toBe(true)
   })
 })
