@@ -36,6 +36,10 @@ service AdminService {
   entity PrizeRecords as projection on ims.PrizeRecords;
   @Capabilities.ChangeTracking : { Supported: true }
   entity Tags as projection on ims.Tags { *, cast(legacyId as String) as legacyIdStr : String };
+  entity Categories         as projection on ims.Categories;
+  entity MissionCategories  as projection on ims.MissionCategories;
+  entity GroupCategories    as projection on ims.GroupCategories;
+  entity TutorialCategories as projection on ims.TutorialCategories;
   entity Accomplishments as projection on ims.Accomplishments { *, cast(legacyId as String) as legacyIdStr : String };
   entity AccomplishmentRecords as projection on ims.AccomplishmentRecords;
   entity TaskRecords as projection on ims.TaskRecords;
@@ -247,4 +251,16 @@ service AdminService {
 
   action previewTagImport(payload: LargeString, format: String) returns TagImportPreview;
   action commitTagImport(token: String, strategy: String) returns TagImportResult;
+
+  // --- Categories ---
+  action classifyCategories(
+    kind   : String enum { ![all]; mission; group; tutorial },
+    ids    : array of String,
+    force  : Boolean
+  ) returns {
+    processed : Integer;
+    succeeded : Integer;
+    failed    : Integer;
+    skipped   : Integer;
+  };
 }
