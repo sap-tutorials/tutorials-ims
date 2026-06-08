@@ -57,7 +57,9 @@ srv/data/admin-docs-index.json
 test/a11y/axe-results.md
 
 # Code-check spike (issue #171) — author-rated CSVs are local artefacts.
-/verdicts/
+# Preflight smoke (issue #278) — verdict JSON also lives here.
+/verdicts/*
+!/verdicts/.gitkeep
 
 # Hugo build locks
 .hugo_build.lock

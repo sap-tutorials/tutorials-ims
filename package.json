@@ -19,6 +19,7 @@
     "validate-tutorials": "tsx scripts/validate-tutorials.ts",
     "lint:tutorial-markdown": "tsx scripts/lint-tutorial-markdown.ts",
     "publish-content": "tsx scripts/publish-content.ts",
+    "preflight:ai-quiz-smoke": "tsx scripts/preflight-ai-quiz-smoke.ts",
     "prebuild:parsers-bundle": "esbuild scripts/parsers/index.ts --bundle --platform=node --format=esm --outfile=srv-qa/lib/parsers.bundle.mjs --external:node:* --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
     "prebuild": "npm run prebuild:parsers-bundle",
     "fetch-tutorials:qa": "tsx scripts/fetch-tutorials.ts --target hugo --channel qa",
