@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { renderToString } from 'vue/server-renderer'
 import { createSSRApp, h } from 'vue'
@@ -9,6 +9,7 @@ import MissionCard from './MissionCard.vue'
 import GroupCard from './GroupCard.vue'
 import { emptyProgress, type ProgressPayload } from '../../navigator/cardProgress'
 import type { CardItem } from '@shared/types'
+import { _resetCategoryLabelCache } from './categoryLabel'
 
 const tutorialItem: CardItem = {
   type: 'tutorial',
@@ -24,6 +25,29 @@ const tutorialItem: CardItem = {
   href: '/tutorials/a',
   stepCount: 3,
 }
+
+// Seed inline browse-data JSON before every test so categoryLabel() can
+// resolve slugs from the DOM, and bust the module-level cache so tests
+// don't bleed into each other.
+function seedBrowseData() {
+  const existing = document.getElementById('browse-data')
+  if (existing) existing.remove()
+  const s = document.createElement('script')
+  s.id = 'browse-data'
+  s.type = 'application/json'
+  s.textContent = JSON.stringify({
+    categories: [
+      { slug: 'artificial-intelligence', label: 'Artificial Intelligence' },
+      { slug: 'app-dev-automation', label: 'Application Development & Automation' },
+    ],
+  })
+  document.head.appendChild(s)
+}
+
+beforeEach(() => {
+  _resetCategoryLabelCache()
+  seedBrowseData()
+})
 
 describe('<ProgressOverlay>', () => {
   it('renders nothing during SSR even when progress is set', async () => {
@@ -162,5 +186,81 @@ describe('<GroupCard>', () => {
   it('href maps to /tutorials/group-...', () => {
     const w = mount(GroupCard, { props: { item: g, progress: emptyProgress() } })
     expect(w.attributes('href')).toBe('/tutorials/group-cap-basics')
+  })
+})
+
+// ── Category chip tests ───────────────────────────────────────────────────────
+
+describe('<MissionCard> category chip', () => {
+  const base: CardItem = {
+    type: 'mission', id: 'mission-1', title: 'Build with CAP',
+    description: 'Full-stack mission', time: 240, level: 'intermediate',
+    tutorialCount: 8, primaryTag: 'cap', displayTags: ['CAP'],
+    displayTagSlugs: ['software-product>sap-cloud-application-programming-model'],
+    href: '/tutorials/mission-build-with-cap', stepCount: 40,
+  }
+
+  it('renders chip with resolved label when categorySlugs has entries', () => {
+    const w = mount(MissionCard, {
+      props: { item: { ...base, categorySlugs: ['artificial-intelligence'] }, progress: emptyProgress() },
+    })
+    expect(w.find('ui5-tag.card-category-chip').exists()).toBe(true)
+    expect(w.find('ui5-tag.card-category-chip').text()).toContain('Artificial Intelligence')
+  })
+
+  it('renders no chip when categorySlugs is empty', () => {
+    const w = mount(MissionCard, {
+      props: { item: { ...base, categorySlugs: [] }, progress: emptyProgress() },
+    })
+    expect(w.find('ui5-tag.card-category-chip').exists()).toBe(false)
+  })
+})
+
+describe('<GroupCard> category chip', () => {
+  const base: CardItem = {
+    type: 'group', id: 'group-1', title: 'CAP Basics',
+    description: 'Three tutorials', time: 90, level: 'beginner',
+    tutorialCount: 3, primaryTag: 'cap', displayTags: [], displayTagSlugs: [],
+    href: '/tutorials/group-cap-basics', stepCount: 12,
+  }
+
+  it('renders chip with resolved label when categorySlugs has entries', () => {
+    const w = mount(GroupCard, {
+      props: { item: { ...base, categorySlugs: ['app-dev-automation'] }, progress: emptyProgress() },
+    })
+    expect(w.find('ui5-tag.card-category-chip').exists()).toBe(true)
+    expect(w.find('ui5-tag.card-category-chip').text()).toContain('Application Development & Automation')
+  })
+
+  it('renders no chip when categorySlugs is empty', () => {
+    const w = mount(GroupCard, {
+      props: { item: { ...base, categorySlugs: [] }, progress: emptyProgress() },
+    })
+    expect(w.find('ui5-tag.card-category-chip').exists()).toBe(false)
+  })
+})
+
+describe('<TutorialCard> category chip', () => {
+  const base: CardItem = {
+    type: 'tutorial', id: 'cap-getting-started', title: 'CAP Getting Started',
+    description: 'Build a CAP service in 30 min', time: 30, level: 'beginner',
+    tutorialCount: 1, primaryTag: 'cap', displayTags: ['CAP'],
+    displayTagSlugs: ['software-product>sap-cloud-application-programming-model'],
+    href: '/tutorials/cap-getting-started', stepCount: 5, isNew: true,
+  }
+
+  it('renders chip with resolved label when categorySlugs has entries', () => {
+    const w = mount(TutorialCard, {
+      props: { item: { ...base, categorySlugs: ['artificial-intelligence'] }, progress: emptyProgress() },
+    })
+    expect(w.find('ui5-tag.card-category-chip').exists()).toBe(true)
+    expect(w.find('ui5-tag.card-category-chip').text()).toContain('Artificial Intelligence')
+  })
+
+  it('renders no chip when categorySlugs is empty', () => {
+    const w = mount(TutorialCard, {
+      props: { item: { ...base, categorySlugs: [] }, progress: emptyProgress() },
+    })
+    expect(w.find('ui5-tag.card-category-chip').exists()).toBe(false)
   })
 })
