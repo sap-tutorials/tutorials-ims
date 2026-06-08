@@ -6,6 +6,8 @@ import {
   invariantAntiLeak,
   invariantMcqShape,
   invariantGeneratorSanity,
+  runAllInvariants,
+  CURRENT_PROMPT_VERSION,
 } from '../lib/ai-quiz-invariants'
 import type { AiQuizCache } from '../lib/ai-quiz-cache'
 import type { ValidationQuestion } from '../parsers/types'
@@ -256,5 +258,32 @@ describe('invariantGeneratorSanity', () => {
     const r = invariantGeneratorSanity(c, 'v1')
     expect(r.passed).toBe(false)
     expect(r.reason).toMatch(/0 questions/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// runAllInvariants aggregator
+// ---------------------------------------------------------------------------
+
+describe('runAllInvariants', () => {
+  it('returns 5 results in stable name order', () => {
+    const results = runAllInvariants({
+      slug: 'fake',
+      cache: { promptVersion: 'v1', modelName: 'm', entries: {} },
+      handAuthoredSteps: new Set(),
+      summaryLine: '[ai-author] expanded directives across all tutorials: 0 cache miss (LLM call), 0 cache hit, 0 errors. Build cap: 200.',
+    })
+    expect(results.map(r => r.name)).toEqual([
+      'no-upstream-errors',
+      'precedence',
+      'anti-leak',
+      'mcq-shape',
+      'generator-sanity',
+    ])
+    expect(results.every(r => r.passed)).toBe(true)
+  })
+
+  it('uses CURRENT_PROMPT_VERSION when expectedPromptVersion omitted', () => {
+    expect(CURRENT_PROMPT_VERSION).toBe('v1')
   })
 })

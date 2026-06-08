@@ -192,3 +192,26 @@ export function invariantGeneratorSanity(cache: AiQuizCache, expectedPromptVersi
   }
   return { name, passed: true }
 }
+
+// ---------------------------------------------------------------------------
+// Aggregator
+// ---------------------------------------------------------------------------
+
+/**
+ * The current prompt version emitted by the AI-quiz generator.
+ * Mirrors `PROMPT_VERSION` in `srv/lib/ai-quiz-generator.js`. When the
+ * generator's prompt is rev'd, bump this to match — the generator-sanity
+ * invariant uses this as the default expected value.
+ */
+export const CURRENT_PROMPT_VERSION = 'v1'
+
+export function runAllInvariants(input: InvariantInput): InvariantResult[] {
+  const expected = input.expectedPromptVersion ?? CURRENT_PROMPT_VERSION
+  return [
+    invariantNoUpstreamErrors(input.summaryLine),
+    invariantPrecedence(input.cache, input.handAuthoredSteps),
+    invariantAntiLeak(input.cache),
+    invariantMcqShape(input.cache),
+    invariantGeneratorSanity(input.cache, expected),
+  ]
+}
