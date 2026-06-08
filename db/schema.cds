@@ -39,6 +39,7 @@ entity Tutorials : TaskBase {
   meta                      : Composition of many TutorialMeta on meta.tutorial = $self;
   contributors              : Composition of many TutorialContributors on contributors.tutorial = $self;
   repositories              : Composition of many TutorialRepositories on repositories.tutorial = $self;
+  categories                : Composition of many TutorialCategories on categories.tutorial = $self;
 }
 
 entity Missions : TaskBase {
@@ -51,6 +52,7 @@ entity Missions : TaskBase {
   event                     : Association to Events;
   completionPaths           : Composition of many CompletionPaths on completionPaths.mission = $self;
   tags                      : Composition of many MissionTags on tags.mission = $self;
+  categories                : Composition of many MissionCategories on categories.mission = $self;
 }
 
 entity Groups : TaskBase {
@@ -60,6 +62,7 @@ entity Groups : TaskBase {
   missions                  : Association to many Missions on missions.group = $self;
   tags                      : Composition of many GroupTags on tags.group = $self;
   items                     : Composition of many GroupPathItems on items.group = $self;
+  categories                : Composition of many GroupCategories on categories.group = $self;
 }
 
 // Historic slugs preserved when an admin renames a Group/Mission. Used by the
@@ -179,6 +182,24 @@ entity Categories : cuid, managed {
   label            : String(255) @mandatory;
   sortOrder        : Integer default 100;
   seedDescription  : LargeString;  // editable; tunes classifier accuracy
+}
+
+entity MissionCategories : cuid {
+  mission   : Association to Missions;
+  category  : Association to Categories;
+  score     : Decimal(5, 4) default 1.0;  // cosine score; manual writes = 1.0
+}
+
+entity GroupCategories : cuid {
+  group     : Association to Groups;
+  category  : Association to Categories;
+  score     : Decimal(5, 4) default 1.0;
+}
+
+entity TutorialCategories : cuid {
+  tutorial  : Association to Tutorials;
+  category  : Association to Categories;
+  score     : Decimal(5, 4) default 1.0;
 }
 
 entity TutorialTags {
