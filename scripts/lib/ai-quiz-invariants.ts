@@ -125,3 +125,70 @@ export function invariantAntiLeak(cache: AiQuizCache): InvariantResult {
   }
   return { name, passed: true }
 }
+
+// ---------------------------------------------------------------------------
+// Invariant 4: mcq-shape
+//   MCQs MUST have 2-4 options and a `correctAnswer` that appears verbatim
+//   (case-sensitive, no whitespace trim) in `options`. Catches generator
+//   shape regressions before they break the validation widget at runtime.
+// ---------------------------------------------------------------------------
+
+export function invariantMcqShape(cache: AiQuizCache): InvariantResult {
+  const name: InvariantName = 'mcq-shape'
+  const violations: Array<{ step: string; questionId: string; reason: string }> = []
+  for (const [step, entry] of Object.entries(cache.entries)) {
+    for (const q of entry.questions) {
+      if (q.type !== 'multiple-choice') continue
+      const options = q.options
+      if (!Array.isArray(options) || options.length < 2 || options.length > 4) {
+        violations.push({ step, questionId: q.id, reason: `${options?.length ?? 0} options (expected 2–4)` })
+        continue
+      }
+      if (q.correctAnswer === undefined || q.correctAnswer === '') {
+        violations.push({ step, questionId: q.id, reason: 'correctAnswer missing' })
+        continue
+      }
+      if (!options.includes(q.correctAnswer)) {
+        violations.push({ step, questionId: q.id, reason: `correctAnswer not in options (verbatim)` })
+      }
+    }
+  }
+  if (violations.length > 0) {
+    return {
+      name,
+      passed: false,
+      reason: violations.map(v => `step ${v.step} q=${v.questionId}: ${v.reason}`).join('; '),
+      details: { violations },
+    }
+  }
+  return { name, passed: true }
+}
+
+// ---------------------------------------------------------------------------
+// Invariant 5: generator-sanity
+//   When the cache has any entries: `promptVersion` must match the expected
+//   value and `modelName` must be non-empty. Every entry (regardless of
+//   cache size) must contain at least one question. Catches generator
+//   regressions where the LLM round-trips empty payloads or stale prompts.
+// ---------------------------------------------------------------------------
+
+export function invariantGeneratorSanity(cache: AiQuizCache, expectedPromptVersion: string): InvariantResult {
+  const name: InvariantName = 'generator-sanity'
+  const hasEntries = Object.keys(cache.entries).length > 0
+  if (hasEntries) {
+    if (cache.promptVersion !== expectedPromptVersion) {
+      return { name, passed: false, reason: `promptVersion ${cache.promptVersion} != expected ${expectedPromptVersion}` }
+    }
+    if (!cache.modelName || cache.modelName.length === 0) {
+      return { name, passed: false, reason: 'modelName empty on non-empty cache' }
+    }
+  }
+  const empties: string[] = []
+  for (const [step, entry] of Object.entries(cache.entries)) {
+    if (entry.questions.length === 0) empties.push(step)
+  }
+  if (empties.length > 0) {
+    return { name, passed: false, reason: `entries with 0 questions: ${empties.join(', ')}`, details: { emptySteps: empties } }
+  }
+  return { name, passed: true }
+}

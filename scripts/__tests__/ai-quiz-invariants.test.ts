@@ -4,6 +4,8 @@ import {
   invariantNoUpstreamErrors,
   invariantPrecedence,
   invariantAntiLeak,
+  invariantMcqShape,
+  invariantGeneratorSanity,
 } from '../lib/ai-quiz-invariants'
 import type { AiQuizCache } from '../lib/ai-quiz-cache'
 import type { ValidationQuestion } from '../parsers/types'
@@ -144,5 +146,115 @@ describe('invariantAntiLeak', () => {
       aiAuthored: true,
     }
     expect(invariantAntiLeak(wrapInCache([mcq])).passed).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Invariant 4: mcq-shape
+// ---------------------------------------------------------------------------
+
+const mcq = (overrides: Partial<ValidationQuestion> = {}): ValidationQuestion => ({
+  id: 'validate-3-ai-1',
+  question: 'Pick',
+  type: 'multiple-choice',
+  options: ['alpha', 'beta', 'gamma'],
+  correctAnswer: 'alpha',
+  aiAuthored: true,
+  ...overrides,
+})
+
+describe('invariantMcqShape', () => {
+  it('passes for 3-option MCQ with valid answer', () => {
+    expect(invariantMcqShape(wrapInCache([mcq()])).passed).toBe(true)
+  })
+
+  it('passes for 2 and 4 option MCQ', () => {
+    expect(invariantMcqShape(wrapInCache([mcq({ options: ['a', 'b'], correctAnswer: 'a' })])).passed).toBe(true)
+    expect(invariantMcqShape(wrapInCache([mcq({ options: ['a', 'b', 'c', 'd'], correctAnswer: 'd' })])).passed).toBe(true)
+  })
+
+  it('fails for 1 option', () => {
+    const r = invariantMcqShape(wrapInCache([mcq({ options: ['only'], correctAnswer: 'only' })]))
+    expect(r.passed).toBe(false)
+    expect(r.reason).toMatch(/1 option/)
+  })
+
+  it('fails for 5 options', () => {
+    const r = invariantMcqShape(wrapInCache([mcq({ options: ['a', 'b', 'c', 'd', 'e'] })]))
+    expect(r.passed).toBe(false)
+    expect(r.reason).toMatch(/5 option/)
+  })
+
+  it('fails when options missing entirely', () => {
+    const r = invariantMcqShape(wrapInCache([mcq({ options: undefined })]))
+    expect(r.passed).toBe(false)
+  })
+
+  it('fails when correctAnswer missing', () => {
+    const r = invariantMcqShape(wrapInCache([mcq({ correctAnswer: undefined })]))
+    expect(r.passed).toBe(false)
+    expect(r.reason).toMatch(/correctAnswer/)
+  })
+
+  it('fails when correctAnswer is not in options (verbatim)', () => {
+    const r = invariantMcqShape(wrapInCache([mcq({ correctAnswer: 'Alpha' /* capital A */ })]))
+    expect(r.passed).toBe(false)
+    expect(r.reason).toMatch(/not in options/i)
+  })
+
+  it('skips text questions', () => {
+    const text: ValidationQuestion = { id: 't', question: 'Why', type: 'text', aiAuthored: true, __aiCorrectAnswer: 'because' }
+    expect(invariantMcqShape(wrapInCache([text])).passed).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Invariant 5: generator-sanity
+// ---------------------------------------------------------------------------
+
+describe('invariantGeneratorSanity', () => {
+  const goodCache = (): AiQuizCache => ({
+    promptVersion: 'v1',
+    modelName: 'anthropic--claude-4.6-sonnet',
+    entries: {
+      '3': {
+        stepHash: 'h',
+        directive: '[AUTOAUTHOR_3]',
+        types: 'mcq-only',
+        generatedAt: 'now',
+        questions: [{ id: 'q', question: 'Pick', type: 'multiple-choice', options: ['a', 'b'], correctAnswer: 'a' }],
+      },
+    },
+  })
+
+  it('passes a fully-formed cache', () => {
+    expect(invariantGeneratorSanity(goodCache(), 'v1').passed).toBe(true)
+  })
+
+  it('passes an empty entries map (no AI ran on this tutorial)', () => {
+    const c: AiQuizCache = { promptVersion: 'v1', modelName: 'm', entries: {} }
+    expect(invariantGeneratorSanity(c, 'v1').passed).toBe(true)
+  })
+
+  it('fails when promptVersion mismatches expected', () => {
+    const c = goodCache()
+    c.promptVersion = 'v0'
+    const r = invariantGeneratorSanity(c, 'v1')
+    expect(r.passed).toBe(false)
+    expect(r.reason).toMatch(/promptVersion/)
+  })
+
+  it('fails when modelName is empty (entries non-empty)', () => {
+    const c = goodCache()
+    c.modelName = ''
+    expect(invariantGeneratorSanity(c, 'v1').passed).toBe(false)
+  })
+
+  it('fails when an entry has zero questions', () => {
+    const c = goodCache()
+    c.entries['3'].questions = []
+    const r = invariantGeneratorSanity(c, 'v1')
+    expect(r.passed).toBe(false)
+    expect(r.reason).toMatch(/0 questions/)
   })
 })
