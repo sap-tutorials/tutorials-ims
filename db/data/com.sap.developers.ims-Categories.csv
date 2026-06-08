@@ -1,0 +1,9 @@
+ID;slug;label;sortOrder;seedDescription
+c0a7e9f1-1101-4001-8001-000000000001;app-dev-automation;Application Development & Automation;10;Building business applications with SAP CAP, ABAP RAP, BTP runtimes (Cloud Foundry, Kyma), and low-code tooling like SAP Build Apps. Core programming model and developer productivity.
+c0a7e9f1-1101-4001-8001-000000000002;data-analytics;Data & Analytics;20;SAP HANA Cloud, Datasphere, analytical models, calculation views, embedded analytics, BI integration, and data pipeline patterns.
+c0a7e9f1-1101-4001-8001-000000000003;extended-planning;Extended Planning & Analysis;30;SAP Analytics Cloud planning, data actions, predictive forecasting, allocation models, and integrated business planning workflows.
+c0a7e9f1-1101-4001-8001-000000000004;integration;Integration;40;SAP Integration Suite, Cloud Integration (CPI), event-driven architecture, APIs, destinations, OData services, and connectivity patterns.
+c0a7e9f1-1101-4001-8001-000000000005;artificial-intelligence;Artificial Intelligence;50;SAP AI Core, AI Foundation, embeddings, LLMs, Joule integration, generative AI agents, RAG, and machine learning workflows.
+c0a7e9f1-1101-4001-8001-000000000006;frontend-ux;Frontend & UX;60;SAP Fiori, UI5, Fiori Elements, freestyle UIs, mobile development, accessibility, and design-system patterns.
+c0a7e9f1-1101-4001-8001-000000000007;cloud-operations;Cloud & Operations;70;BTP cockpit, Cloud Foundry, Kyma, security operations, identity & authorization (XSUAA, IAS), monitoring, and cost management.
+c0a7e9f1-1101-4001-8001-000000000008;abap-core;ABAP & Core;80;ABAP Cloud, RAP, CDS views, ATC, transports, ABAP Development Tools (ADT), and S/4HANA extension patterns.
