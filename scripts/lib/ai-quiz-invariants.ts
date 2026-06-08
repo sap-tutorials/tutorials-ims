@@ -39,3 +39,25 @@ export interface InvariantInput {
 // Re-export the referenced types so invariant-helper files can import
 // AiQuizCacheEntry and ValidationQuestion from a single location if needed.
 export type { AiQuizCache, AiQuizCacheEntry, ValidationQuestion }
+
+// ---------------------------------------------------------------------------
+// Invariant 1: no-upstream-errors
+// ---------------------------------------------------------------------------
+
+const SUMMARY_REGEX = /^\[ai-author\] expanded directives across all tutorials: (\d+) cache miss \(LLM call\), (\d+) cache hit, (\d+) errors\. Build cap: \d+\.$/
+
+export function invariantNoUpstreamErrors(summaryLine: string | null): InvariantResult {
+  const name: InvariantName = 'no-upstream-errors'
+  if (summaryLine === null) {
+    return { name, passed: false, reason: 'no [ai-author] summary line captured (subprocess may have crashed before emit)' }
+  }
+  const match = summaryLine.match(SUMMARY_REGEX)
+  if (!match) {
+    return { name, passed: false, reason: `could not parse summary line: ${summaryLine}` }
+  }
+  const errors = Number(match[3])
+  if (errors > 0) {
+    return { name, passed: false, reason: `${errors} errors reported in summary`, details: { errors, miss: Number(match[1]), hit: Number(match[2]) } }
+  }
+  return { name, passed: true, details: { errors: 0, miss: Number(match[1]), hit: Number(match[2]) } }
+}
