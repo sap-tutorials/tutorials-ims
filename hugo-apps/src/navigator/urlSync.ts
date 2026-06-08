@@ -16,6 +16,7 @@ export const PARAM = {
   isNew: 'new',
   noLicense: 'noLicense',
   page: 'page',
+  categories: 'category',
 } as const
 
 /** localStorage key for the consolidated v1 filter persistence object. */
@@ -31,6 +32,7 @@ export interface NavState {
   levels: string[]
   products: string[]
   topics: string[]
+  categories: string[]
   isNew: boolean
   noLicense: boolean
   /** 1-indexed; 1 means "no page param emitted". */
@@ -43,6 +45,7 @@ export const EMPTY_STATE: NavState = Object.freeze({
   levels: [],
   products: [],
   topics: [],
+  categories: [],
   isNew: false,
   noLicense: false,
   page: 1,
@@ -80,12 +83,14 @@ export function parseNavState(href: string, ls: Storage | null = null): NavState
   const levels    = asArray(sp.get(PARAM.levels), true)   ?? persisted.levels    ?? []
   const products  = asArray(sp.get(PARAM.products))       ?? persisted.products  ?? []
   const topics    = asArray(sp.get(PARAM.topics))         ?? persisted.topics    ?? []
+  const categoriesRaw = asArray(sp.get(PARAM.categories), false)
+  const categories = categoriesRaw === undefined ? [...EMPTY_STATE.categories] : categoriesRaw
   const isNew     = asBool(sp.get(PARAM.isNew))           ?? persisted.isNew     ?? false
   const noLicense = asBool(sp.get(PARAM.noLicense))       ?? persisted.noLicense ?? false
 
   return {
     q: sp.get(PARAM.q) ?? '',                              // q is URL-only, never persisted
-    types, levels, products, topics, isNew, noLicense,
+    types, levels, products, topics, categories, isNew, noLicense,
     page: asPage(sp.get(PARAM.page)),
   }
 }
@@ -104,10 +109,11 @@ export function serializeNavState(href: string, state: NavState): string {
   if (state.noLicense) sp.set(PARAM.noLicense, '1'); else sp.delete(PARAM.noLicense)
   if (state.page > 1) sp.set(PARAM.page, String(state.page)); else sp.delete(PARAM.page)
 
-  setOrDelete(sp, PARAM.types,    state.types)
-  setOrDelete(sp, PARAM.levels,   state.levels)
-  setOrDelete(sp, PARAM.products, state.products)
-  setOrDelete(sp, PARAM.topics,   state.topics)
+  setOrDelete(sp, PARAM.types,      state.types)
+  setOrDelete(sp, PARAM.levels,     state.levels)
+  setOrDelete(sp, PARAM.products,   state.products)
+  setOrDelete(sp, PARAM.topics,     state.topics)
+  setOrDelete(sp, PARAM.categories, state.categories)
 
   // Issue #161 deep-link entry params (`?tag`, multi-value). They are
   // consumed once by TutorialNavigator's onMounted seeder and aliased into
