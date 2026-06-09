@@ -72,15 +72,48 @@ function detectDefaultOs(): OS {
     ?? 'Windows';
 }
 
+const FALLBACK_CHAIN: Record<OS, OS[]> = {
+  Linux:   ['Linux',   'macOS',   'Windows', 'BAS'],
+  macOS:   ['macOS',   'Linux',   'Windows', 'BAS'],
+  BAS:     ['BAS',     'Linux',   'macOS',   'Windows'],
+  Windows: ['Windows', 'macOS',   'Linux',   'BAS'],
+};
+
+function pickPanel(wrapper: Element, os: OS): { panel: HTMLElement | null; usedFallback: OS | null } {
+  for (const candidate of FALLBACK_CHAIN[os]) {
+    const found = wrapper.querySelector<HTMLElement>(`.os-panel[data-os="${candidate}"]`);
+    if (found) return { panel: found, usedFallback: candidate === os ? null : candidate };
+  }
+  // Last-resort: first panel in the wrapper, regardless of OS.
+  // Defense-in-depth — only reachable if the wrapper contains panels with
+  // non-canonical data-os values (which the build pipeline never emits).
+  const first = wrapper.querySelector<HTMLElement>('.os-panel[data-os]');
+  return { panel: first, usedFallback: first ? (first.dataset.os as OS) : null };
+}
+
+function clearStrip(wrapper: Element) {
+  wrapper.querySelectorAll('ui5-message-strip[data-os-fallback-strip]').forEach((s) => s.remove());
+}
+
+function renderStrip(wrapper: Element, requested: OS, used: OS) {
+  const strip = document.createElement('ui5-message-strip');
+  strip.setAttribute('design', 'Information');
+  strip.setAttribute('data-os-fallback-strip', '');
+  strip.textContent = `No ${requested} instructions for this step — showing ${used}.`;
+  wrapper.insertBefore(strip, wrapper.firstChild);
+}
+
 function activate(os: OS): void {
   document.querySelectorAll<HTMLElement>('[data-os-options]').forEach((wrapper) => {
     wrapper.setAttribute('data-os-options-hydrated', '');
     wrapper.querySelectorAll<HTMLElement>('.os-panel[data-os]').forEach((p) => {
       p.removeAttribute('data-os-active');
     });
-    // Task 7 layers on the fallback chain. For now, exact match only.
-    const target = wrapper.querySelector<HTMLElement>(`.os-panel[data-os="${os}"]`);
-    if (target) target.setAttribute('data-os-active', '');
+    clearStrip(wrapper);
+    const { panel, usedFallback } = pickPanel(wrapper, os);
+    if (!panel) return;
+    panel.setAttribute('data-os-active', '');
+    if (usedFallback) renderStrip(wrapper, os, usedFallback);
   });
 }
 

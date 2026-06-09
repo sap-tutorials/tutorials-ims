@@ -147,3 +147,56 @@ describe('selectPickerItem (cross-tab sync helper)', () => {
     expect((selectedAfterSwitch[0] as HTMLElement).dataset.os).toBe('Linux');
   });
 });
+
+describe('activate — fallback chain', () => {
+  beforeEach(() => {
+    resetBody();
+    document.body.appendChild(buildOsOptions([
+      { os: 'Windows', body: 'W' },
+      { os: 'macOS',   body: 'M' },
+    ]));
+  });
+
+  it('falls back from Linux -> macOS when no Linux panel exists', async () => {
+    const { __test__ } = await import('../../hugo/assets/js/os-toggle');
+    __test__.activate('Linux');
+    const active = document.querySelector('[data-os-active]') as HTMLElement;
+    expect(active?.dataset.os).toBe('macOS');
+  });
+
+  it('renders a ui5-message-strip when fallback fires', async () => {
+    const { __test__ } = await import('../../hugo/assets/js/os-toggle');
+    __test__.activate('Linux');
+    const strip = document.querySelector('ui5-message-strip');
+    expect(strip).not.toBeNull();
+    // Exact-format assertion locks down the spec phrasing (em-dash, "instructions for this step", "showing").
+    expect(strip?.textContent).toBe('No Linux instructions for this step — showing macOS.');
+    // data-os-fallback-strip is load-bearing for clearStrip's selector.
+    expect(strip?.hasAttribute('data-os-fallback-strip')).toBe(true);
+  });
+
+  it('does NOT render a message strip on exact match', async () => {
+    const { __test__ } = await import('../../hugo/assets/js/os-toggle');
+    __test__.activate('Windows');
+    expect(document.querySelector('ui5-message-strip')).toBeNull();
+  });
+
+  it('clears prior message strip on reactivation', async () => {
+    const { __test__ } = await import('../../hugo/assets/js/os-toggle');
+    __test__.activate('Linux');         // creates a strip
+    __test__.activate('Windows');       // exact match — strip should be removed
+    expect(document.querySelector('ui5-message-strip')).toBeNull();
+  });
+
+  it('falls back through chain when only BAS is present', async () => {
+    resetBody();
+    document.body.appendChild(buildOsOptions([{ os: 'BAS', body: 'B' }]));
+    const { __test__ } = await import('../../hugo/assets/js/os-toggle');
+    __test__.activate('Windows');
+    const active = document.querySelector('[data-os-active]') as HTMLElement;
+    expect(active?.dataset.os).toBe('BAS');
+    // Strip must announce the deep-chain fallback, not just the active-panel state.
+    const strip = document.querySelector('ui5-message-strip');
+    expect(strip?.textContent).toBe('No Windows instructions for this step — showing BAS.');
+  });
+});
