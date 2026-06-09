@@ -266,6 +266,16 @@ Both produce the same in-memory `Tutorial` shape (`types.ts`) so downstream cons
 7. `rules.ts` injects `ValidationQuestion[]` into the matching steps
 8. `render-frontmatter.ts` emits the Hugo `.md` file
 
+For OS-conditional content (Windows / macOS / Linux / BAS variants), the parser consults
+`scripts/parsers/os-classifier.ts`, a fuzzy-match dictionary that canonicalizes the messy
+real-world OS labels in OPTION blocks. OS-flavored groups emit a new `{{< os-options >}}`
+shortcode (one panel per canonical OS, with combined labels like "Mac and Linux" duplicating
+their body across multiple panels). The page-level `hasOsOptions: true` frontmatter flag is
+auto-injected when any group on the page is classified OS — the OP layout uses it to
+conditionally render the global OS picker. Author override via the `osOverrides:` frontmatter
+key when the heuristic misclassifies. See the spec at
+[docs/superpowers/specs/2026-06-09-173-os-conditional-content-design.md](../../superpowers/specs/2026-06-09-173-os-conditional-content-design.md).
+
 ### Navigator Catalog (`GET /build/navigator`)
 
 The navigator endpoint exposes tutorial reachability via three independent data paths, allowing front-ends to surface tutorials through missions, groups, or as standalone learnings.
