@@ -25,4 +25,30 @@ service AuthorService {
     lastNotificationDate : Timestamp;
     notificationNumber   : Integer;
   };
+
+  // Issue #173 — AI-assisted OS variant generation. VS Code authoring plugin posts here.
+  type OsValue : String enum { Windows; macOS; Linux; BAS };
+
+  type OsVariantContext : {
+    tutorialSlug        : String;
+    stepHeading         : String;
+    surroundingMarkdown : String;
+  };
+
+  type OsVariant : {
+    os       : OsValue;
+    markdown : LargeString;
+  };
+
+  action generateOsVariants(
+    sourceMarkdown : LargeString,
+    sourceOS       : OsValue,
+    targetOSes     : array of OsValue,
+    context        : OsVariantContext
+  ) returns {
+    variants    : array of OsVariant;
+    model       : String;
+    tokensUsed  : Integer;
+    requestId   : String;
+  };
 }
