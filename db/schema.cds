@@ -589,7 +589,6 @@ type BranchSource : String(20) enum {
   jouleTool;
 }
 
-@PersonalData : { EntitySemantics: 'Other' }
 @analytics.exposed
 entity BranchDecisions : managed {
   key ID                 : UUID;
