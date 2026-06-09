@@ -106,7 +106,8 @@ export default defineConfig({
           { text: 'Runtime',                          link: '/developers/architecture/runtime' },
           { text: 'Validation widget',                link: '/developers/architecture/validation-widget' },
           { text: 'Free-text grader',                 link: '/developers/architecture/free-text-grader' },
-          { text: 'AI-authored quizzes',              link: '/developers/architecture/ai-authored-quizzes' }
+          { text: 'AI-authored quizzes',              link: '/developers/architecture/ai-authored-quizzes' },
+          { text: 'Categories classifier',            link: '/developers/architecture/categories-classifier' }
         ]},
         { text: 'Operations', items: [
           { text: 'A/B comparison runbook',    link: '/developers/operations/ab-comparison-runbook' },

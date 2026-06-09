@@ -327,6 +327,15 @@ cds.on('served', async () => {
     globalThis.__navigatorCacheInvalidatorRegistered = true;
   }
 
+  // [#201] Register after-hooks that keep the categories facet cache warm
+  // after admin writes to Missions, Groups, and Tutorials.
+  if (!globalThis.__categoryHooksRegistered) {
+    const { register: registerCategoryHooks } = await import('./handlers/categories-after-hooks.js');
+    const adminSrv = await cds.connect.to('AdminService');
+    registerCategoryHooks(adminSrv);
+    globalThis.__categoryHooksRegistered = true;
+  }
+
   // [#174 PR 3] Boot warning: check if rebuild-trigger feature flag is enabled.
   checkRebuildTriggerFeatureFlag();
 

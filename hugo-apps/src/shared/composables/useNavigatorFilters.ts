@@ -262,6 +262,7 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
     types: [] as string[],
     products: [] as string[],
     topics: [] as string[],
+    categories: [] as string[],
     isNew: false,
     noLicense: false,
   })
@@ -273,6 +274,7 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
       levels: [...filters.levels],
       products: [...filters.products],
       topics: [...filters.topics],
+      categories: [...filters.categories],
       isNew: filters.isNew,
       noLicense: filters.noLicense,
       page: currentPage.value,
@@ -292,7 +294,7 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
     // a single watcher instead of two.
     watch(
       [searchQuery, () => filters.levels, () => filters.types,
-       () => filters.products, () => filters.topics,
+       () => filters.products, () => filters.topics, () => filters.categories,
        () => filters.isNew, () => filters.noLicense, currentPage],
       scheduleURLSync,
       { deep: true },
@@ -341,6 +343,7 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
       filters.levels    = initial.levels
       filters.products  = initial.products
       filters.topics    = initial.topics
+      filters.categories = initial.categories
       filters.isNew     = initial.isNew
       filters.noLicense = initial.noLicense
 
@@ -441,6 +444,13 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
         if (!hasTopic) return false
       }
 
+      const selCats = filters.categories ?? []
+      if (selCats.length > 0) {
+        if (!Array.isArray(item.categorySlugs) || !item.categorySlugs.some(s => selCats.includes(s))) {
+          return false
+        }
+      }
+
       if (filters.isNew && !item.isNew) {
         return false
       }
@@ -474,6 +484,7 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
     filters.types = []
     filters.products = []
     filters.topics = []
+    filters.categories = []
     filters.isNew = false
     filters.noLicense = false
     productSearch.value = ''
@@ -487,6 +498,7 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
       filters.types.length > 0 ||
       filters.products.length > 0 ||
       filters.topics.length > 0 ||
+      filters.categories.length > 0 ||
       filters.isNew ||
       filters.noLicense
   })
@@ -583,7 +595,7 @@ export function useNavigatorFilters(opts: UseNavigatorFiltersOptions) {
   // an empty page after narrowing their filters.
   watch(
     [searchQuery, () => filters.levels, () => filters.types,
-     () => filters.products, () => filters.topics,
+     () => filters.products, () => filters.topics, () => filters.categories,
      () => filters.isNew, () => filters.noLicense],
     () => { currentPage.value = 1 },
     { deep: true },

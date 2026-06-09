@@ -8,6 +8,7 @@ import { parsePayload, classify, apply, sharedCache, MAX_BYTES } from './lib/tag
 import { buildCfLogsUrl } from './lib/cf-logs-link.js';
 import { reviewTutorial, snoozeTutorial } from './lib/tutorial-review.js';
 import { slugify, ensureUniqueSlug } from './lib/slug-utils.js';
+import { classifyAndPersist } from './lib/category-classifier.js';
 
 export default class AdminService extends cds.ApplicationService {
 
@@ -795,11 +796,62 @@ export default class AdminService extends cds.ApplicationService {
       }
     });
 
+    // --- classifyCategories: bulk AI category assignment with job-lock ---
+    this.on('classifyCategories', async (req) => {
+      const { kind, ids, force } = req.data;
+      const { acquireLock, releaseLock } = await import('./jobs/job-lock.js');
+      const LOCK_NAME = 'categories-classify';
+      const INSTANCE_ID = process.env.CF_INSTANCE_INDEX || 'local';
+      const LOCK_DURATION_MS = 30 * 60 * 1000;
+      const acquired = await acquireLock(LOCK_NAME, INSTANCE_ID, LOCK_DURATION_MS);
+      if (!acquired) {
+        return { processed: 0, succeeded: 0, failed: 0, skipped: 1 };
+      }
+      try {
+        const targets = await this._collectClassifyTargets(kind, ids);
+        let succeeded = 0, failed = 0, skipped = 0;
+        const CONCURRENCY = 4;
+        for (let i = 0; i < targets.length; i += CONCURRENCY) {
+          const batch = targets.slice(i, i + CONCURRENCY);
+          const results = await Promise.allSettled(
+            batch.map(t => classifyAndPersist(t.kind, t.id, { force }))
+          );
+          for (const r of results) {
+            if (r.status === 'rejected') failed++;
+            else if (r.value.kept === 1) succeeded++;
+            else skipped++;
+          }
+        }
+        return { processed: targets.length, succeeded, failed, skipped };
+      } finally {
+        await releaseLock(LOCK_NAME, INSTANCE_ID);
+      }
+    });
+
+    this.on('embedAllSeeds', async () => {
+      const { _resetCache, getSeedEmbeddings } = await import('./lib/category-seed-embeddings.js');
+      _resetCache(); // force re-embed of all seeds on next call
+      const map = await getSeedEmbeddings();
+      return { processed: map.size };
+    });
+
     await super.init();
 
     // Allow standalone read access to ChangeView (plugin sets Readable:false by default)
     const changeView = this.model.definitions['AdminService.ChangeView'];
     if (changeView) changeView['@Capabilities.ReadRestrictions.Readable'] = true;
+  }
+
+  async _collectClassifyTargets(kind, ids) {
+    const out = [];
+    const kinds = kind === 'all' ? ['mission', 'group', 'tutorial'] : [kind];
+    for (const k of kinds) {
+      const entityName = { mission: 'Missions', group: 'Groups', tutorial: 'Tutorials' }[k];
+      const where = (Array.isArray(ids) && ids.length > 0) ? { ID: { in: ids } } : {};
+      const rows = await SELECT.from(entityName).columns('ID').where(where);
+      for (const r of rows) out.push({ kind: k, id: r.ID });
+    }
+    return out;
   }
 
   async _executeAnonymization(user, opts = {}) {

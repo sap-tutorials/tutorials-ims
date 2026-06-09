@@ -41,6 +41,7 @@
       "sap.tutorials.admin.groups": "./components/groups",
       "sap.tutorials.admin.tutorials": "./components/tutorials",
       "sap.tutorials.admin.tags": "./components/tags",
+      "sap.tutorials.admin.categories": "./components/categories",
       "sap.tutorials.admin.accomplishments": "./components/accomplishments",
       "sap.tutorials.admin.prizes": "./components/prizes",
       "sap.tutorials.admin.operations": "./components/operations",
@@ -88,6 +89,12 @@
       },
       "tagsComponent": {
         "name": "sap.tutorials.admin.tags",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "categoriesComponent": {
+        "name": "sap.tutorials.admin.categories",
         "settings": {},
         "componentData": {},
         "lazy": true
@@ -167,6 +174,7 @@
         { "name": "groups", "pattern": "groups", "target": [{"name": "groupsTarget", "prefix": "gr"}] },
         { "name": "tutorials", "pattern": "tutorials", "target": [{"name": "tutorialsTarget", "prefix": "tu"}] },
         { "name": "tags", "pattern": "tags", "target": [{"name": "tagsTarget", "prefix": "ta"}] },
+        { "name": "categories", "pattern": "categories", "target": [{"name": "categoriesTarget", "prefix": "ca"}] },
         { "name": "accomplishments", "pattern": "accomplishments", "target": [{"name": "accomplishmentsTarget", "prefix": "ac"}] },
         { "name": "prizes", "pattern": "prizes", "target": [{"name": "prizesTarget", "prefix": "pr"}] },
         { "name": "operations", "pattern": "operations", "target": [{"name": "operationsTarget", "prefix": "op"}] },
@@ -219,6 +227,13 @@
           "id": "tagsTarget",
           "viewLevel": 1,
           "prefix": "ta"
+        },
+        "categoriesTarget": {
+          "type": "Component",
+          "usage": "categoriesComponent",
+          "id": "categoriesTarget",
+          "viewLevel": 1,
+          "prefix": "ca"
         },
         "accomplishmentsTarget": {
           "type": "Component",

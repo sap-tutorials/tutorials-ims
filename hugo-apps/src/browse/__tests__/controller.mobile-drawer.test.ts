@@ -104,6 +104,7 @@ interface MinimalFiltersApi {
     types: string[]
     products: string[]
     topics: string[]
+    categories: string[]
     isNew: boolean
     noLicense: boolean
   }>>
@@ -120,6 +121,7 @@ function makeFiltersApi(): MinimalFiltersApi {
     types: [] as string[],
     products: [] as string[],
     topics: [] as string[],
+    categories: [] as string[],
     isNew: false,
     noLicense: false,
   })
@@ -136,6 +138,7 @@ function makeFiltersApi(): MinimalFiltersApi {
       filters.types.splice(0)
       filters.products.splice(0)
       filters.topics.splice(0)
+      filters.categories.splice(0)
       filters.isNew = false
       filters.noLicense = false
       searchQuery.value = ''

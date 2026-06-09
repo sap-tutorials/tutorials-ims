@@ -1,9 +1,11 @@
 import cds from '@sap/cds';
+import { categorySlugsFor, buildCategoriesPayload } from './build-catalog-categories.js';
 
 const FEATURED_LIMIT = 6;
 
 export async function buildCatalogHandler(req, res) {
-  const { Missions, CompletionPaths, CompletionPathItems, Tutorials, FeaturedTasks, Groups, GroupPathItems } =
+  const { Missions, CompletionPaths, CompletionPathItems, Tutorials, FeaturedTasks, Groups, GroupPathItems,
+          Categories, MissionCategories, GroupCategories, TutorialCategories } =
     cds.entities('com.sap.developers.ims');
 
   try {
@@ -24,6 +26,13 @@ export async function buildCatalogHandler(req, res) {
     const groupPathItems = await SELECT.from(GroupPathItems)
       .columns('group_ID', 'tutorial_ID', 'itemOrder');
 
+    const categories    = await SELECT.from(Categories).columns('ID', 'slug', 'label', 'sortOrder');
+    const missionAssign = await SELECT.from(MissionCategories).columns('mission_ID', 'category_ID', 'score');
+    const groupAssign   = await SELECT.from(GroupCategories).columns('group_ID', 'category_ID', 'score');
+    const tutorialAssign = await SELECT.from(TutorialCategories).columns('tutorial_ID', 'category_ID', 'score');
+
+    const catByID = new Map(categories.map(c => [c.ID, c]));
+
     const tutorialByUuid = new Map(tutorials.map(t => [t.ID, t.slug]));
 
     const slugByLegacyId = new Map(tutorials.map(t => [t.legacyId, t.slug]));
@@ -40,6 +49,7 @@ export async function buildCatalogHandler(req, res) {
       time: Math.round((m.averageTimeToComplete || 0) / 60),
       icon: '',
       tasksCount: 0,
+      categorySlugs: categorySlugsFor(m.ID, missionAssign, 'mission_ID', catByID),
     }));
 
     const hierarchies = missions.map(m => {
@@ -136,6 +146,7 @@ export async function buildCatalogHandler(req, res) {
           slug: g.slug || String(g.legacyId),
           description: g.description || '',
           tutorialSlugs,
+          categorySlugs: categorySlugsFor(g.ID, groupAssign, 'group_ID', catByID),
         };
       });
 
@@ -143,7 +154,16 @@ export async function buildCatalogHandler(req, res) {
       .map(f => resolveFeatured(f, { missionByLegacyId, pathByLegacyId, tutorialByLegacyId }))
       .filter(Boolean);
 
-    res.json({ missions: missionList, hierarchies, featured, standaloneGroups });
+    const tutorialList = tutorials.map(t => ({
+      slug: t.slug,
+      title: t.title || '',
+      description: t.description || '',
+      categorySlugs: categorySlugsFor(t.ID, tutorialAssign, 'tutorial_ID', catByID),
+    }));
+
+    const categoriesPayload = buildCategoriesPayload(categories, missionAssign, groupAssign, tutorialAssign);
+
+    res.json({ missions: missionList, hierarchies, featured, standaloneGroups, tutorials: tutorialList, categories: categoriesPayload });
   } catch (err) {
     console.error('[build/catalog]', err instanceof Error ? err.message : String(err));
     res.status(500).json({ error: 'Build catalog query failed' });

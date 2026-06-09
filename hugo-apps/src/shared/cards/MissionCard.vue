@@ -13,14 +13,21 @@ import type { ProgressPayload } from '../../navigator/cardProgress'
 import { cardProgress } from '../../navigator/cardProgress'
 import ProgressOverlay from './ProgressOverlay.vue'
 import { capitalizeLevel, formatTime } from './format'
+import { categoryLabel } from './categoryLabel'
+import { computed } from 'vue'
 import './card.css'
 
-defineProps<{
+const props = defineProps<{
   item: CardItem
   progress: ProgressPayload
 }>()
 
 const TYPE_LABEL = 'MISSION'
+
+const primaryCategoryLabel = computed(() => {
+  const slug = props.item.categorySlugs?.[0]
+  return slug ? categoryLabel(slug) : ''
+})
 </script>
 
 <template>
@@ -59,5 +66,10 @@ const TYPE_LABEL = 'MISSION'
       <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h5l7 7-5 5-7-7V3zm3 2a1 1 0 100 2 1 1 0 000-2z"/></svg>
       {{ item.primaryTag }}
     </div>
+    <ui5-tag
+      v-if="primaryCategoryLabel"
+      design="Set2"
+      class="card-category-chip"
+    >{{ primaryCategoryLabel }}</ui5-tag>
   </a>
 </template>
