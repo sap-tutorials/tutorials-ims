@@ -37,6 +37,11 @@ import "@ui5/webcomponents/dist/Title.js";
 // control, which is why the popover looked unresponsive. Issue: header
 // "Tutorial preferences" with no way to flip anything.
 import "@ui5/webcomponents/dist/Switch.js";
+
+// Issue #173: registers <ui5-segmented-button> + <ui5-segmented-button-item>
+// for the global OS picker on tutorials with OS-conditional content.
+import "@ui5/webcomponents/dist/SegmentedButton.js";
+import "@ui5/webcomponents/dist/SegmentedButtonItem.js";
 import "@ui5/webcomponents-fiori/dist/ShellBar.js";
 import "@ui5/webcomponents-fiori/dist/ShellBarItem.js";
 import "@ui5/webcomponents-fiori/dist/Wizard.js";
@@ -108,6 +113,12 @@ import "@ui5/webcomponents-icons/dist/navigation-down-arrow.js";
 
 // U8: cross-block selection sync for {{< codetabs >}}.
 import "./codetabs";
+
+// Issue #173: global OS picker for tutorials with OS-conditional content.
+// Self-bootstraps; init() short-circuits when neither [data-os-picker] nor
+// [data-os-options] is present, so the cost on non-OS pages is just one
+// bundled import.
+import "./os-toggle";
 
 // U9: inline glossary tooltips.
 import "./glossary";
