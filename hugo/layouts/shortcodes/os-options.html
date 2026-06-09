@@ -1,0 +1,8 @@
+{{/*
+  OS-conditional group wrapper. Renders all panels by default (no-JS fallback).
+  os-toggle.ts adds [data-os-options-hydrated] on mount; CSS scoped to the
+  hydrated wrapper hides non-active panels via the data-os-active attribute.
+*/}}
+<div class="os-options" data-os-options>
+  {{ .Inner }}
+</div>
