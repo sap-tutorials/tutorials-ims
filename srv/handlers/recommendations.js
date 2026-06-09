@@ -4,6 +4,7 @@ import { recommend } from '../lib/recommend.js';
 import { computeCoCompletions } from '../lib/co-completion.js';
 import { getUserProgress } from '../lib/user-progress.js';
 import { getCentroid } from '../lib/tutorial-centroid.js';
+import { loadStepVectors } from '../lib/step-vectors.js';
 
 const LOG = cds.log('recommend');
 
@@ -25,29 +26,6 @@ async function loadAllTutorials() {
   return tutorials
     .filter(t => !!t.slug)
     .map(t => ({ ...t, published: publishedSlugs.size === 0 ? true : publishedSlugs.has(t.slug) }));
-}
-
-async function loadStepVectors(tutorialId) {
-  const db = cds.db;
-  const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
-  if (isHana) {
-    const sql = `
-      SELECT "EMBEDDING"
-      FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALEMBEDDING"
-      WHERE "TUTORIAL_ID" = ?`;
-    const rows = await db.run(sql, [tutorialId]);
-    return rows.map(r => bufToFloat32(r.EMBEDDING ?? r.embedding)).filter(Boolean);
-  }
-  const { TutorialEmbedding } = cds.entities('com.sap.developers.ims');
-  const rows = await SELECT.from(TutorialEmbedding).columns('embedding').where({ tutorial_ID: tutorialId });
-  return rows.map(r => bufToFloat32(r.embedding)).filter(Boolean);
-}
-
-function bufToFloat32(blob) {
-  if (!blob) return null;
-  const buf = Buffer.isBuffer(blob) ? blob : Buffer.from(blob);
-  if (buf.byteLength % 4 !== 0) return null;
-  return new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
 }
 
 const DEPS = {
