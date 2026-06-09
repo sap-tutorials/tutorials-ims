@@ -101,6 +101,7 @@ annotate AdminService.Missions with @UI: {
   Facets: [
     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'General' },
     { $Type: 'UI.ReferenceFacet', Target: 'tags/@UI.LineItem', Label: 'Tags' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Categories', ID: 'CategoriesFacet', Target: 'categories/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Target: 'completionPaths/@UI.LineItem', Label: 'Completion Paths' }
   ],
   FieldGroup#General: { Data: [
@@ -293,6 +294,7 @@ annotate AdminService.Groups with @UI: {
     { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'General' },
     { $Type: 'UI.ReferenceFacet', Target: 'items/@UI.LineItem', Label: 'Path Items', ID: 'PathItemsSection' },
     { $Type: 'UI.ReferenceFacet', Target: 'tags/@UI.LineItem', Label: 'Tags' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Categories', ID: 'CategoriesFacet', Target: 'categories/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Target: 'changes/@UI.PresentationVariant', Label: 'Change History', ![@UI.PartOfPreview]: false }
   ],
   FieldGroup#General: { Data: [
@@ -552,6 +554,7 @@ annotate AdminService.Tutorials with @UI: {
   Facets: [
     { $Type: 'UI.ReferenceFacet', ID: 'General',  Label: 'General',  Target: '@UI.FieldGroup#General' },
     { $Type: 'UI.ReferenceFacet', ID: 'Lifecycle', Label: 'Lifecycle', Target: '@UI.FieldGroup#Lifecycle' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Categories', ID: 'CategoriesFacet', Target: 'categories/@UI.LineItem' },
     { $Type: 'UI.CollectionFacet', ID: 'Feedback', Label: 'Feedback', Facets: [
       { $Type: 'UI.ReferenceFacet', ID: 'FeedbackSummary',
         Target: 'feedbackSummary/@UI.FieldGroup#FeedbackSummary',
@@ -1225,5 +1228,106 @@ annotate AdminService.TutorialFeedback with @UI: {
     { Value: ratingStructure,  Label: 'Structure' },
     { Value: ratingInteresting,Label: 'Interesting' },
     { Value: ratingVisuals,    Label: 'Visuals' }
+  ]
+};
+
+// --- Categories (#201) ---
+annotate AdminService.Categories with {
+  slug            @Common.Label: 'Slug';
+  label           @Common.Label: 'Label';
+  sortOrder       @Common.Label: 'Sort Order';
+  seedDescription @Common.Label: 'Seed Description'  @Common.MultiLineText;
+};
+
+annotate AdminService.Categories with @(
+  UI.HeaderInfo: {
+    TypeName: 'Category',
+    TypeNamePlural: 'Categories',
+    Title: { Value: label }
+  },
+  UI.SelectionFields: [ label, slug ],
+  UI.LineItem: [
+    { $Type: 'UI.DataField', Value: slug,            Label: 'Slug' },
+    { $Type: 'UI.DataField', Value: label,           Label: 'Label' },
+    { $Type: 'UI.DataField', Value: sortOrder,       Label: 'Sort Order' },
+    { $Type: 'UI.DataField', Value: seedDescription, Label: 'Seed Description' }
+  ],
+  UI.FieldGroup #Main: {
+    Data: [
+      { $Type: 'UI.DataField', Value: slug,            Label: 'Slug' },
+      { $Type: 'UI.DataField', Value: label,           Label: 'Label' },
+      { $Type: 'UI.DataField', Value: sortOrder,       Label: 'Sort Order' },
+      { $Type: 'UI.DataField', Value: seedDescription, Label: 'Seed Description' }
+    ]
+  },
+  UI.Facets: [
+    { $Type: 'UI.ReferenceFacet', Label: 'Main', Target: '@UI.FieldGroup#Main' }
+  ]
+);
+
+annotate AdminService.Categories with {
+  slug @UI.HiddenFilter;
+};
+
+// --- MissionCategories — inline table + value help for category selection ---
+annotate AdminService.MissionCategories with {
+  category @Common.Label: 'Category'
+           @Common.Text: category.label  @Common.TextArrangement: #TextOnly
+           @Common.ValueList: {
+             CollectionPath: 'Categories',
+             Parameters: [
+               { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: category_ID, ValueListProperty: 'ID' },
+               { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'label' }
+             ]
+           };
+  score    @Common.Label: 'Score';
+};
+
+annotate AdminService.MissionCategories with @UI: {
+  LineItem: [
+    { $Type: 'UI.DataField', Value: category_ID, Label: 'Category' },
+    { $Type: 'UI.DataField', Value: score,        Label: 'Score' }
+  ]
+};
+
+// --- GroupCategories — inline table + value help for category selection ---
+annotate AdminService.GroupCategories with {
+  category @Common.Label: 'Category'
+           @Common.Text: category.label  @Common.TextArrangement: #TextOnly
+           @Common.ValueList: {
+             CollectionPath: 'Categories',
+             Parameters: [
+               { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: category_ID, ValueListProperty: 'ID' },
+               { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'label' }
+             ]
+           };
+  score    @Common.Label: 'Score';
+};
+
+annotate AdminService.GroupCategories with @UI: {
+  LineItem: [
+    { $Type: 'UI.DataField', Value: category_ID, Label: 'Category' },
+    { $Type: 'UI.DataField', Value: score,        Label: 'Score' }
+  ]
+};
+
+// --- TutorialCategories — inline table + value help for category selection ---
+annotate AdminService.TutorialCategories with {
+  category @Common.Label: 'Category'
+           @Common.Text: category.label  @Common.TextArrangement: #TextOnly
+           @Common.ValueList: {
+             CollectionPath: 'Categories',
+             Parameters: [
+               { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: category_ID, ValueListProperty: 'ID' },
+               { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'label' }
+             ]
+           };
+  score    @Common.Label: 'Score';
+};
+
+annotate AdminService.TutorialCategories with @UI: {
+  LineItem: [
+    { $Type: 'UI.DataField', Value: category_ID, Label: 'Category' },
+    { $Type: 'UI.DataField', Value: score,        Label: 'Score' }
   ]
 };
