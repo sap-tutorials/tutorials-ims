@@ -42,3 +42,9 @@ annotate ims.ValidateAnswerSubmissions with @PersonalData: {
   user            @PersonalData.FieldSemantics: 'DataSubjectID';
   submittedAnswer @PersonalData.IsPotentiallyPersonal;
 }
+
+annotate ims.BranchDecisions with @PersonalData: {
+  EntitySemantics: 'Other'
+} {
+  user @PersonalData.FieldSemantics: 'DataSubjectID';
+}
