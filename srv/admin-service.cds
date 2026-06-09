@@ -263,4 +263,8 @@ service AdminService {
     failed    : Integer;
     skipped   : Integer;
   };
+
+  action embedAllSeeds() returns {
+    processed : Integer;
+  };
 }

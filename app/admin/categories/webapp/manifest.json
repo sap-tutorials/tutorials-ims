@@ -68,7 +68,31 @@
             "settings": {
               "contextPath": "/Categories",
               "variantManagement": "Page",
-              "initialLoad": "Enabled"
+              "initialLoad": "Enabled",
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "actions": {
+                    "classifyUncategorized": {
+                      "press": "sap.tutorials.admin.categories.ext.CategoryActionsController.onClassifyUncategorized",
+                      "visible": true,
+                      "enabled": true,
+                      "text": "Classify uncategorized"
+                    },
+                    "reclassifyAll": {
+                      "press": "sap.tutorials.admin.categories.ext.CategoryActionsController.onReclassifyAll",
+                      "visible": true,
+                      "enabled": true,
+                      "text": "Re-classify everything (force)"
+                    },
+                    "embedSeeds": {
+                      "press": "sap.tutorials.admin.categories.ext.CategoryActionsController.onEmbedSeeds",
+                      "visible": true,
+                      "enabled": true,
+                      "text": "Embed seeds"
+                    }
+                  }
+                }
+              }
             }
           }
         }

@@ -828,6 +828,13 @@ export default class AdminService extends cds.ApplicationService {
       }
     });
 
+    this.on('embedAllSeeds', async () => {
+      const { _resetCache, getSeedEmbeddings } = await import('./lib/category-seed-embeddings.js');
+      _resetCache(); // force re-embed of all seeds on next call
+      const map = await getSeedEmbeddings();
+      return { processed: map.size };
+    });
+
     await super.init();
 
     // Allow standalone read access to ChangeView (plugin sets Readable:false by default)
