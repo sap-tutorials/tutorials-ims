@@ -50,3 +50,9 @@ annotate ims.AuthorAiRequests with @PersonalData: {
   sourceMarkdown @PersonalData.IsPotentiallyPersonal;
   variants       @PersonalData.IsPotentiallyPersonal;
 }
+
+annotate ims.BranchDecisions with @PersonalData: {
+  EntitySemantics: 'Other'
+} {
+  user @PersonalData.FieldSemantics: 'DataSubjectID';
+}

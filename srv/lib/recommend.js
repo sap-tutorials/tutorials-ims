@@ -87,3 +87,7 @@ function storeCache(key, value, at) {
     cache.delete(oldest);
   }
 }
+
+// Internal: re-export cosine helper for srv/lib/branch/ranker.js (issue #172).
+// Underscore prefix marks it as a stable internal contract, not a public API.
+export { cosineNorm as __cosineNorm };
