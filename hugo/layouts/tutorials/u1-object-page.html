@@ -291,6 +291,19 @@
 
         <section id="op-steps" class="op-section" data-op-section>
           <h2 class="op-section__heading">Steps</h2>
+          {{/* Issue #173: global OS picker — only rendered when the page contains
+               OS-flavored option blocks (hasOsOptions=true). os-toggle.ts (Task 6)
+               listens for selection-change and activates panels via data-os-active. */}}
+          {{ if .Params.hasOsOptions }}
+          <div class="os-picker" data-os-picker>
+            <ui5-segmented-button accessible-name="Operating system">
+              <ui5-segmented-button-item data-os="Windows">Windows</ui5-segmented-button-item>
+              <ui5-segmented-button-item data-os="macOS">macOS</ui5-segmented-button-item>
+              <ui5-segmented-button-item data-os="Linux">Linux</ui5-segmented-button-item>
+              <ui5-segmented-button-item data-os="BAS">BAS</ui5-segmented-button-item>
+            </ui5-segmented-button>
+          </div>
+          {{ end }}
           {{/* U2: Fiori-native wizard step indicator. Renders only for ≥3-step tutorials
                (per ui5-wizard guidelines). The wizard's content slots stay empty — the
                accordion below holds the actual content. step-change scrolls to anchor. */}}
