@@ -438,6 +438,13 @@ entity ChatSettings : cuid, managed {
   // AI free-text grader (issue #209). When false, /api/validate-answer → 503
   // and the dispatch short-circuits without calling the LLM.
   validateAnswerEnabled : Boolean default false;
+
+  // Branching paths runtime master flag (issue #172). When false:
+  //   - /api/branches/decide → 404
+  //   - /build/mission/<slug> omits `recommendation`
+  //   - getBranchRecommendation chat tool not registered
+  //   - Renderers degrade to "show all branches, no recommendation"
+  branchingEnabled     : Boolean default false;
 }
 
 entity TutorialEmbedding {
@@ -560,4 +567,41 @@ entity UIEvent {
       payload       : LargeString;                     // JSON-serialized type-specific fields
       userAgent     : String(512);                     // truncated to first 512 chars
       buildAt       : String(32);                      // hugo build hash for diff-attribution
+}
+
+// ── Issue #172: branching paths telemetry ───────────────────────────────────
+
+type BranchSurface : String(20) enum {
+  missionAltGroup;
+  tutorialBranch;
+  tutorialSkip;
+}
+
+type BranchReasonKind : String(20) enum {
+  condition;
+  ranker;
+  default;
+}
+
+type BranchSource : String(20) enum {
+  pageLoad;
+  click;
+  jouleTool;
+}
+
+@PersonalData : { EntitySemantics: 'Other' }
+@analytics.exposed
+entity BranchDecisions : managed {
+  key ID                 : UUID;
+  user                   : Association to Users;        // null for anonymous
+  surface                : BranchSurface;
+  missionSlug            : String(255);
+  tutorialSlug           : String(255);
+  branchPointId          : String(120);
+  recommendedKey         : String(40);
+  chosenKey              : String(40);                  // null = recommendation log only
+  recommendationKind     : BranchReasonKind;
+  confidence             : Decimal(5, 4);               // 0..1
+  source                 : BranchSource;
+  followedRecommendation : Boolean;
 }
