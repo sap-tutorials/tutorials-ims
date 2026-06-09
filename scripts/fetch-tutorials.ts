@@ -965,11 +965,20 @@ async function main() {
       }
     }
 
+    // [#172] Surface alt-groups so PR 3's hydration island and Task 7's
+    // mission-side-nav partial can read them from `_nav.json`. isFlat
+    // missions carry altGroups on the hierarchy itself; non-flat missions
+    // carry them on inner HierarchyGroup entries.
+    const collectedAltGroups = hierarchy.altGroups?.length
+      ? hierarchy.altGroups
+      : hierarchy.groups.flatMap(g => g.altGroups ?? [])
+
     missionsMeta.push({
       id: mission.imsId,
       title: mission.title,
       slug: mission.slug,
       groups: missionGroups,
+      ...(collectedAltGroups.length ? { altGroups: collectedAltGroups } : {}),
     })
   }
 

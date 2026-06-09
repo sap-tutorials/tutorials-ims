@@ -3,6 +3,21 @@ import { categorySlugsFor, buildCategoriesPayload } from './build-catalog-catego
 
 const FEATURED_LIMIT = 6;
 
+/**
+ * Slugify a label into a branch key. Stable + URL-safe.
+ *
+ * NOTE: kept identical to `slugifyKey` in `srv/lib/branch/mission-detail.js`
+ * so /build/catalog and /build/mission/:slug emit the same branch keys.
+ * Follow-up (PR 3): consolidate to a shared `srv/lib/branch/slug-key.js`
+ * once we're sure both call sites need to evolve together.
+ */
+function slugifyKey(label) {
+  return String(label).toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 40);
+}
+
 export async function buildCatalogHandler(req, res) {
   const { Missions, CompletionPaths, CompletionPathItems, Tutorials, FeaturedTasks, Groups, GroupPathItems,
           Categories, MissionCategories, GroupCategories, TutorialCategories } =
@@ -64,6 +79,28 @@ export async function buildCatalogHandler(req, res) {
           .map(i => slugByLegacyId.get(i.taskLegacyId))
           .filter(Boolean);
 
+        // Collect alt-group branches on the path-level group. Items sharing
+        // (itemOrder, altGroupKey) are branches of the same fork. Linear
+        // backbone items (no altGroupKey) are unaffected.
+        const altGroups = [];
+        const seenAltKeys = new Map();
+        for (const it of pathItems) {
+          if (it.taskType !== 'TUTORIAL' || !it.altGroupKey) continue;
+          const k = `${it.itemOrder}:${it.altGroupKey}`;
+          const branch = {
+            key: slugifyKey(it.altGroupLabel || ''),
+            label: it.altGroupLabel || '',
+            tutorialSlug: slugByLegacyId.get(it.taskLegacyId) || '',
+            condition: it.altCondition || null,
+          };
+          if (seenAltKeys.has(k)) {
+            altGroups[seenAltKeys.get(k)].branches.push(branch);
+          } else {
+            seenAltKeys.set(k, altGroups.length);
+            altGroups.push({ groupKey: it.altGroupKey, branches: [branch] });
+          }
+        }
+
         // Emit one HierarchyGroup for the path itself (existing behavior)
         const pathGroup = {
           imsId: p.legacyId,
@@ -71,6 +108,7 @@ export async function buildCatalogHandler(req, res) {
           slug: p.slug || String(p.legacyId),
           description: '',
           tutorialSlugs: pathTutorialSlugs,
+          ...(altGroups.length ? { altGroups } : {}),
         };
 
         // Plus one HierarchyGroup per nested GROUP item in this path
@@ -106,10 +144,17 @@ export async function buildCatalogHandler(req, res) {
         && missionPaths[0].name === m.title
         && groupHierarchies.length === 1;
 
+      // When isFlat we hide the synthetic single-path group and lift its
+      // tutorialSlugs to the hierarchy itself. Lift altGroups too so consumers
+      // (PR 3 hydration island, Task 7 mission-side-nav) can find them
+      // regardless of mission shape.
+      const flatAltGroups = isFlat ? (groupHierarchies[0]?.altGroups || []) : [];
+
       return {
         missionImsId: m.legacyId,
         groups: isFlat ? [] : groupHierarchies,
         tutorialSlugs: isFlat ? (groupHierarchies[0]?.tutorialSlugs || []) : [],
+        ...(flatAltGroups.length ? { altGroups: flatAltGroups } : {}),
       };
     });
 
