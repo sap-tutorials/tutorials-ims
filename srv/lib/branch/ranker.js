@@ -37,10 +37,11 @@ export async function rankBranches(branchPoint, userState, context, deps) {
     const sim = (userCentroid && branchCentroid) ? cosineNorm(userCentroid, branchCentroid) : 0;
 
     let co = 0;
-    if (context.tutorialSlug && coAll[context.tutorialSlug]) {
-      const pair = coAll[context.tutorialSlug].find(p => p.slug === b.embeddingHint);
+    const coForCurrent = context.tutorialSlug ? coAll[context.tutorialSlug] : null;
+    if (coForCurrent) {
+      const pair = coForCurrent.find(p => p.slug === b.embeddingHint);
       if (pair) {
-        const max = coAll[context.tutorialSlug][0]?.score || 1;
+        const max = coForCurrent.reduce((m, x) => Math.max(m, x.score), 0) || 1;
         co = pair.score / max;
       }
     }
