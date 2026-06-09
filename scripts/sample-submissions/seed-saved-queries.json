@@ -1,0 +1,23 @@
+[
+  {
+    "name": "Code-check: verdict distribution by slug+step",
+    "description": "Phase 4 (#210) — count of verdicts per pilot tutorial step. Populates the per-step coverage section of the decision doc. (See pull-codecheck-telemetry.cjs for the full picture including latency percentiles.)",
+    "sql": "SELECT tutorialSlug, stepNumber, verdict, COUNT(*) AS n FROM com_sap_developers_ims_CodeCheckSubmissions GROUP BY tutorialSlug, stepNumber, verdict ORDER BY tutorialSlug, stepNumber, verdict",
+    "spec": null,
+    "visibility": "shared-admins"
+  },
+  {
+    "name": "Code-check: latency summary by verdict (avg/min/max)",
+    "description": "Phase 4 (#210) — validator-safe latency aggregates. Real percentiles (p50/p95/p99) come from pull-codecheck-telemetry.cjs which bypasses the analytics validator. Use this for ad-hoc poking only.",
+    "sql": "SELECT verdict, COUNT(*) AS n, MIN(latencyMs) AS lat_min, AVG(latencyMs) AS lat_avg, MAX(latencyMs) AS lat_max FROM com_sap_developers_ims_CodeCheckSubmissions GROUP BY verdict ORDER BY verdict",
+    "spec": null,
+    "visibility": "shared-admins"
+  },
+  {
+    "name": "Code-check: token cost by verdict",
+    "description": "Phase 4 (#210) — average prompt/completion tokens and grand total per verdict bucket. Use for cost-per-check estimates.",
+    "sql": "SELECT verdict, AVG(promptTokens) AS avg_prompt, AVG(completionTokens) AS avg_completion, SUM(promptTokens + completionTokens) AS total FROM com_sap_developers_ims_CodeCheckSubmissions GROUP BY verdict ORDER BY verdict",
+    "spec": null,
+    "visibility": "shared-admins"
+  }
+]
