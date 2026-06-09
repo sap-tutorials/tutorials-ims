@@ -22,6 +22,7 @@ export interface ComposeResult {
   frontmatter: TutorialFrontmatter
   steps: TutorialStep[]
   body: string
+  hasOsOptions: boolean
 }
 
 export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult {
@@ -33,10 +34,38 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
     repo: opts.repo, branch: opts.branch, slug: opts.slug,
     rewriteImages: opts.rewriteImages,
   })
-  processedBody = convertOptionBlocks(processedBody, opts.target)
+
+  const hasOsOptionsFlag = { value: false }
+  const resolvedStepSlugs = new Set<string>()
+  processedBody = convertOptionBlocks(processedBody, opts.target, {
+    osOverrides: frontmatter.osOverrides,
+    hasOsOptionsOut: hasOsOptionsFlag,
+    resolvedStepSlugsOut: resolvedStepSlugs,
+  })
+
+  // Warn on osOverrides keys that never matched any step heading on the page.
+  if (frontmatter.osOverrides && opts.target === 'hugo') {
+    const unmatched = Object.keys(frontmatter.osOverrides).filter((k) => !resolvedStepSlugs.has(k))
+    if (unmatched.length) {
+      console.warn(
+        `[compose] osOverrides on tutorial "${opts.slug}" has unmatched step slug(s): ${unmatched.join(', ')}`
+      )
+    }
+  }
+
   processedBody = processedBody.replace(/^<{4,7} .+\n[\s\S]*?^={4,7}\n([\s\S]*?)^>{4,7} .+\n?/gm, '$1')
 
   const steps = isV2 ? parseV2Steps(processedBody) : parseV1Steps(processedBody)
 
-  return { title, description, youWillLearn, prerequisites, level, frontmatter, steps, body: processedBody }
+  return {
+    title,
+    description,
+    youWillLearn,
+    prerequisites,
+    level,
+    frontmatter,
+    steps,
+    body: processedBody,
+    hasOsOptions: hasOsOptionsFlag.value,
+  }
 }

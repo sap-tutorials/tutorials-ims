@@ -1,4 +1,5 @@
 import { classifyGroup, forceClassify, type OS, type ClassifyResult } from './os-classifier';
+import { slugify } from '../../srv/lib/slug-utils.js';
 
 interface OptionEntry {
   matchIndex: number
@@ -10,13 +11,13 @@ export type OptionsTarget = 'vitepress' | 'hugo'
 
 /**
  * Optional override map: { stepSlug: 'os' | 'regular' }.
- * Caller (fetch-tutorials.ts) is responsible for slugifying the step heading
- * and passing the matching key when present. Task 3 wires this through.
+ * The step slug for each option group is resolved internally by scanning
+ * back to the most-recent `### ` H3 heading preceding the group's match
+ * index in `content` (compose.ts runs OPTION-block conversion BEFORE step
+ * parsing, so we cannot rely on the parsed step list).
  */
 export interface ConvertOptions {
-  /** Step slug for the current step being processed. */
-  stepSlug?: string;
-  /** Per-step overrides keyed by step slug. */
+  /** Per-step overrides keyed by slugified step heading. */
   osOverrides?: Record<string, 'os' | 'regular'>;
   /**
    * Out-param: function sets `value` to `true` if any OS group is emitted.
@@ -25,6 +26,23 @@ export interface ConvertOptions {
    * across multiple `convertOptionBlocks` calls within one tutorial.
    */
   hasOsOptionsOut?: { value: boolean };
+  /**
+   * Out-param: function populates with the set of step slugs that were
+   * actually resolved by `priorStepSlug` while processing this body. Caller
+   * compares against the keys of `osOverrides` to detect typo'd keys that
+   * never matched any group. Caller MUST initialize to a fresh `Set<string>()`.
+   */
+  resolvedStepSlugsOut?: Set<string>;
+}
+
+/** Find the slugified ### heading immediately preceding `index` in `content`. */
+function priorStepSlug(content: string, index: number): string | undefined {
+  const before = content.slice(0, index);
+  const re = /^###\s+(.+?)\s*$/gm;
+  let last: RegExpExecArray | null = null;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(before)) !== null) last = m;
+  return last ? slugify(last[1]) : undefined;
 }
 
 export function convertOptionBlocks(
@@ -70,16 +88,20 @@ export function convertOptionBlocks(
 
     if (target === 'hugo') {
       const labels = group.map(g => g.tabName);
-      const override = opts.stepSlug ? opts.osOverrides?.[opts.stepSlug] : undefined;
+      const stepSlug = priorStepSlug(content, firstMatch.index!);
+      if (stepSlug && opts.resolvedStepSlugsOut) {
+        opts.resolvedStepSlugsOut.add(stepSlug);
+      }
+      const override = stepSlug ? opts.osOverrides?.[stepSlug] : undefined;
 
       const decision: ClassifyResult =
         override === 'regular' ? { kind: 'regular', assignments: new Map() } :
         override === 'os'      ? forceClassify(labels) :
                                   classifyGroup(labels);
 
-      if (override === 'os' && decision.kind === 'regular' && opts.stepSlug) {
+      if (override === 'os' && decision.kind === 'regular' && stepSlug) {
         console.warn(
-          `[options] osOverrides: 'os' on step "${opts.stepSlug}" fell back to regular — ` +
+          `[options] osOverrides: 'os' on step "${stepSlug}" fell back to regular — ` +
           `no classifier rule matched: ${group.map(e => e.tabName).join(', ')}`
         );
       }

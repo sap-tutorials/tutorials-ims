@@ -166,7 +166,6 @@ windows
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const out = convertOptionBlocks(input, 'hugo', {
-        stepSlug: 'step-one',
         osOverrides: { 'step-one': 'os' },
       });
       expect(out).toContain('option-tabs');
@@ -191,5 +190,97 @@ only windows
     } finally {
       warnSpy.mockRestore();
     }
+  });
+})
+
+describe('convertOptionBlocks (hugo) — osOverrides', () => {
+  it('respects osOverrides: regular to demote a heuristic-OS group', () => {
+    const input = `### My Step
+
+[OPTION BEGIN [Windows]]
+W
+[OPTION END]
+
+[OPTION BEGIN [Mac and Linux]]
+ML
+[OPTION END]
+`;
+    const out = convertOptionBlocks(input, 'hugo', {
+      osOverrides: { 'my-step': 'regular' },
+    });
+    expect(out).toContain('option-tabs');
+    expect(out).not.toContain('os-options');
+  });
+
+  it('respects osOverrides: os to promote an unrecognized-as-OS group', () => {
+    const input = `### Solo Step
+
+[OPTION BEGIN [Windows]]
+W
+[OPTION END]
+`;
+    const out = convertOptionBlocks(input, 'hugo', {
+      osOverrides: { 'solo-step': 'os' },
+    });
+    expect(out).toContain('os-options');
+    expect(out).toContain('os-panel os="Windows"');
+  });
+
+  it('hasOsOptionsOut out-param flips when any OS group is emitted', () => {
+    const input = `[OPTION BEGIN [Windows]]
+W
+[OPTION END]
+
+[OPTION BEGIN [Mac and Linux]]
+ML
+[OPTION END]
+`;
+    const flag = { value: false };
+    convertOptionBlocks(input, 'hugo', { hasOsOptionsOut: flag });
+    expect(flag.value).toBe(true);
+  });
+
+  it('hasOsOptionsOut stays false when only non-OS groups are emitted', () => {
+    const input = `[OPTION BEGIN [JSON]]
+J
+[OPTION END]
+
+[OPTION BEGIN [XML]]
+X
+[OPTION END]
+`;
+    const flag = { value: false };
+    convertOptionBlocks(input, 'hugo', { hasOsOptionsOut: flag });
+    expect(flag.value).toBe(false);
+  });
+
+  it('routes overrides to the correct step when multiple groups exist', () => {
+    const input = `### Step One
+
+[OPTION BEGIN [Windows]]
+W1
+[OPTION END]
+
+[OPTION BEGIN [Mac and Linux]]
+ML1
+[OPTION END]
+
+### Step Two
+
+[OPTION BEGIN [Windows]]
+W2
+[OPTION END]
+
+[OPTION BEGIN [Mac and Linux]]
+ML2
+[OPTION END]
+`;
+    const out = convertOptionBlocks(input, 'hugo', {
+      osOverrides: { 'step-one': 'regular', 'step-two': 'os' },
+    });
+    // Step One was demoted to legacy option-tabs
+    expect(out).toMatch(/option-tabs[\s\S]*W1[\s\S]*ML1/);
+    // Step Two stays os-options
+    expect(out).toMatch(/os-options[\s\S]*W2[\s\S]*ML2/);
   });
 })
