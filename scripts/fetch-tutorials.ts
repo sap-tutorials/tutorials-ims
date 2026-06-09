@@ -337,6 +337,7 @@ export function writeHugoPage(
   contributors: Array<{ name: string; login: string; email: string; avatarUrl: string }>,
   outputDir: string,
   registry: TagLabelRegistry = {},
+  hasOsOptions: boolean = false,
 ): void {
   const content = renderHugoFrontmatter({
     slug,
@@ -356,6 +357,7 @@ export function writeHugoPage(
     createdAt,
     contributors,
     registry,
+    hasOsOptions,
   })
 
   mkdirSync(outputDir, { recursive: true })
@@ -779,27 +781,50 @@ async function main() {
         createdAt: createdAt || undefined,
       }
 
-      const writePage = target === 'hugo' ? writeHugoPage : writeVitePressPage
-      writePage(
-        t.slug,
-        title,
-        description,
-        frontmatter.time ?? 15,
-        level,
-        frontmatter.tags ?? [],
-        frontmatter.primary_tag ?? '',
-        frontmatter.author_name ?? 'Unknown',
-        frontmatter.author_profile ?? '',
-        youWillLearn,
-        prerequisites,
-        steps,
-        nav,
-        lastUpdated,
-        createdAt,
-        contributors,
-        OUTPUT_DIR,
-        tagRegistry,
-      )
+      if (target === 'hugo') {
+        writeHugoPage(
+          t.slug,
+          title,
+          description,
+          frontmatter.time ?? 15,
+          level,
+          frontmatter.tags ?? [],
+          frontmatter.primary_tag ?? '',
+          frontmatter.author_name ?? 'Unknown',
+          frontmatter.author_profile ?? '',
+          youWillLearn,
+          prerequisites,
+          steps,
+          nav,
+          lastUpdated,
+          createdAt,
+          contributors,
+          OUTPUT_DIR,
+          tagRegistry,
+          composed.hasOsOptions,
+        )
+      } else {
+        writeVitePressPage(
+          t.slug,
+          title,
+          description,
+          frontmatter.time ?? 15,
+          level,
+          frontmatter.tags ?? [],
+          frontmatter.primary_tag ?? '',
+          frontmatter.author_name ?? 'Unknown',
+          frontmatter.author_profile ?? '',
+          youWillLearn,
+          prerequisites,
+          steps,
+          nav,
+          lastUpdated,
+          createdAt,
+          contributors,
+          OUTPUT_DIR,
+          tagRegistry,
+        )
+      }
 
       navEntries.push(nav)
       successCount++

@@ -79,6 +79,7 @@ export async function renderPreview(markdown) {
       lastUpdated: '',
       createdAt: '',
       contributors: [],
+      hasOsOptions: composed.hasOsOptions,
     });
     const contentDir = join(tmpDirPath, 'content', 'tutorials', '__preview__');
     mkdirSync(contentDir, { recursive: true });

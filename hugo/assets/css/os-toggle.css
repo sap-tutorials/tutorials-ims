@@ -1,0 +1,22 @@
+/* hugo/assets/css/os-toggle.css
+   Issue #173 — OS-conditional content.
+   Scoped to [data-os-options-hydrated] so the no-JS fallback (all panels
+   visible) survives if os-toggle.ts fails to mount. */
+.os-picker {
+  margin: 1rem 0 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.os-options[data-os-options-hydrated] .os-panel[data-os] {
+  display: none;
+}
+
+.os-options[data-os-options-hydrated] .os-panel[data-os][data-os-active] {
+  display: block;
+}
+
+.os-options[data-os-options-hydrated] ui5-message-strip {
+  margin-bottom: 0.75rem;
+}

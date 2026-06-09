@@ -23,6 +23,8 @@ export interface RenderHugoFrontmatterArgs {
   createdAt: string
   contributors: Array<{ name: string; login: string; email: string; avatarUrl: string }>
   registry?: TagLabelRegistry
+  /** [#173] When true, page body contains at least one os-options shortcode. */
+  hasOsOptions?: boolean
 }
 
 export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
@@ -44,6 +46,7 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
     createdAt,
     contributors,
     registry,
+    hasOsOptions,
   } = args
 
   const cleanTags = tags.map(t => t.replace(/\\/g, ''))
@@ -87,6 +90,8 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
   if (nav.groupId) fm.groupId = nav.groupId
   if (nav.groupTitle) fm.groupTitle = nav.groupTitle
   if (nav.groupSlug) fm.groupSlug = nav.groupSlug
+
+  if (hasOsOptions) fm.hasOsOptions = true
 
   const frontmatter = `---\n${yamlStringify(fm).trimEnd()}\n---\n\n`
 

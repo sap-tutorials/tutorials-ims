@@ -7,6 +7,14 @@ export interface TutorialFrontmatter {
   parser?: string
   title?: string
   description?: string
+  /**
+   * [#173] Per-step overrides for the OS-classifier in
+   * `scripts/parsers/options.ts`. Keyed by slugified step heading.
+   * `'os'` forces the OS picker (lookup label via classifier rules);
+   * `'regular'` keeps the legacy option-tabs shortcode even if labels
+   * heuristically look OS-shaped.
+   */
+  osOverrides?: Record<string, 'os' | 'regular'>
 }
 
 /**

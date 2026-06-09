@@ -47,3 +47,44 @@ describe.skipIf(!process.env.SMOKE_AUTHOR_TOKEN)('AuthorService with Tutorial.Au
     expect(body.scopes).toContain('Tutorial.Author');
   });
 });
+
+// Auth-gate smoke for issue #173 /author/generateOsVariants action.
+// Pure auth gating — no LLM call, no body validation beyond what the gate sees.
+describe('POST /author/generateOsVariants — auth gate', () => {
+  const PAYLOAD = JSON.stringify({
+    sourceMarkdown: 'x',
+    sourceOS: 'Windows',
+    targetOSes: ['macOS'],
+    context: {},
+  });
+
+  it('returns 401 (or 403) without a bearer token', async () => {
+    const res = await fetchWithRetry(`${SRV_URL}/author/generateOsVariants`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: PAYLOAD,
+    });
+    // approuter/XSUAA can return either 401 (no bearer) or 403 (substituted
+    // redirect at the proxy level). Match the existing smoke convention.
+    expect([401, 403]).toContain(res.status);
+  });
+});
+
+describe.skipIf(!process.env.SMOKE_NON_AUTHOR_TOKEN)('POST /author/generateOsVariants — non-author scope', () => {
+  it('returns 403 with an authenticated token that lacks Tutorial.Author scope', async () => {
+    const res = await fetchWithRetry(`${SRV_URL}/author/generateOsVariants`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.SMOKE_NON_AUTHOR_TOKEN}`,
+      },
+      body: JSON.stringify({
+        sourceMarkdown: 'x',
+        sourceOS: 'Windows',
+        targetOSes: ['macOS'],
+        context: {},
+      }),
+    });
+    expect(res.status).toBe(403);
+  });
+});

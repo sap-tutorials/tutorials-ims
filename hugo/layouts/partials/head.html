@@ -25,6 +25,7 @@
 {{ $ui5overrides := resources.Get "css/ui5-overrides.css" }}
 {{ $viewTransitions := resources.Get "css/view-transitions.css" }}
 {{ $scrollAnimations := resources.Get "css/scroll-animations.css" }}
+{{ $osToggle := resources.Get "css/os-toggle.css" }}
 <link rel="stylesheet" href="{{ $themeVars.RelPermalink }}">
 <link rel="stylesheet" href="{{ $darkVars.RelPermalink }}">
 <link rel="stylesheet" href="{{ $chromaLight.RelPermalink }}">
@@ -34,6 +35,7 @@
 <link rel="stylesheet" href="{{ $print.RelPermalink }}" media="print">
 <link rel="stylesheet" href="{{ $viewTransitions.RelPermalink }}">
 <link rel="stylesheet" href="{{ $scrollAnimations.RelPermalink }}">
+<link rel="stylesheet" href="{{ $osToggle.RelPermalink }}">
 <script>
   const t = localStorage.getItem('theme') ||
     (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');

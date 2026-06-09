@@ -43,6 +43,14 @@ annotate ims.ValidateAnswerSubmissions with @PersonalData: {
   submittedAnswer @PersonalData.IsPotentiallyPersonal;
 }
 
+annotate ims.AuthorAiRequests with @PersonalData: {
+  EntitySemantics: 'Other'
+} {
+  authorId       @PersonalData.FieldSemantics: 'DataSubjectID';
+  sourceMarkdown @PersonalData.IsPotentiallyPersonal;
+  variants       @PersonalData.IsPotentiallyPersonal;
+}
+
 annotate ims.BranchDecisions with @PersonalData: {
   EntitySemantics: 'Other'
 } {

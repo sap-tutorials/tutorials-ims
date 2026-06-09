@@ -549,6 +549,28 @@ entity ValidateAnswerSubmissions : managed {
   errorReason       : String(200);
 }
 
+// Issue #173 — author-side AI assist requests (initially OS-variant generation
+// for the VS Code authoring plugin, but the `feature` column makes it forward-
+// compatible for future authoring-AI flows). v1 persists sourceMarkdown and
+// variants verbatim — no PII concern since this is author-supplied content,
+// not end-user input. Future eval harnesses consume these rows directly.
+@analytics.exposed: true
+entity AuthorAiRequests : managed {
+  key ID            : UUID;
+  authorId          : String(80);          // XSUAA user ID, plain (SAP-employee authors only)
+  feature           : String(40) @mandatory;  // 'os-variants' (initial); future flows extend this
+  sourceOS          : String(20);
+  targetOSes        : String(80);          // comma-joined list, e.g. 'macOS,Linux'
+  sourceMarkdown    : LargeString;
+  variants          : LargeString;         // JSON-stringified array of {os, markdown}
+  sourceLength      : Integer;
+  variantsLength    : Integer;
+  model             : String(80);
+  tokensUsed        : Integer;
+  durationMs        : Integer;
+  errorCode         : String(200);         // null on success
+}
+
 /**
  * UIEvent — anonymous client-side telemetry for the / vs /browse/ A/B test (#204).
  *

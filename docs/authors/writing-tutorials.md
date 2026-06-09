@@ -138,7 +138,10 @@ The platform automatically resolves these to `raw.githubusercontent.com` URLs at
 
 ### 3.5 Option blocks
 
-When a step has variants (e.g. JSON vs XML, Java vs Node), wrap each variant in an `OPTION` block:
+When a step has variants, wrap each variant in an `OPTION` block. There are two flavors —
+generic (per-step tabs) and OS-conditional (driven by a global picker at the top of the tutorial).
+
+#### 3.5.1 Generic option blocks (Java vs Node, JSON vs XML, Cloud vs On-premise)
 
 ```markdown
 [OPTION BEGIN [JSON]]
@@ -150,7 +153,65 @@ When a step has variants (e.g. JSON vs XML, Java vs Node), wrap each variant in 
 [OPTION END]
 ```
 
-The platform renders these as tabs.
+The platform renders these as a tab strip inside the step. Each step's tabs are independent.
+
+#### 3.5.2 OS-conditional content (Windows vs macOS vs Linux vs BAS) ★ NEW
+
+When the variants are about the *operating system*, the platform automatically detects this and
+wires every OS block on the page to a single global picker at the top of the tutorial. The reader
+picks their OS once; their choice persists across tutorials.
+
+Use any of these labels — they're all recognized:
+
+| Canonical OS | Recognized labels                                        |
+|--------------|----------------------------------------------------------|
+| Windows      | `Windows`, `Win`, `Win32`, `Win64`                       |
+| macOS        | `macOS`, `MacOS`, `Mac OS`, `Mac`, `OS X`, `Darwin`      |
+| Linux        | `Linux`, `Ubuntu`, `Debian`, `Fedora`, `Unix`            |
+| BAS          | `BAS`, `Business Application Studio`, `SAP BAS`          |
+
+**Combined labels are fine** — `Mac and Linux` matches both, `Mac & Linux` likewise.
+
+```markdown
+[OPTION BEGIN [Windows]]
+Open PowerShell and run `cd $HOME\projects`
+[OPTION END]
+
+[OPTION BEGIN [Mac and Linux]]
+Open a terminal and run `cd ~/projects`
+[OPTION END]
+```
+
+The reader sees only the variant matching their OS. Their choice persists across tutorials.
+
+**Defaults & detection.** First-time visitors get auto-detected (Windows / macOS / Linux from
+the browser; BAS detected when the tutorial is opened from inside Business Application Studio).
+After they pick an OS, that choice is remembered.
+
+**Missing variants.** When a step doesn't cover the reader's chosen OS, the platform shows the
+closest match and a small banner: "No Linux instructions for this step — showing macOS." Use
+this when one OS path is genuinely identical to another.
+
+**Existing OS-tabbed tutorials get the picker for free.** No author migration required — the
+heuristic detects OS-flavored OPTION blocks automatically.
+
+**Author override.** If the auto-detection mis-classifies your tabs (e.g. you have a tab named
+`Linux` that's actually about a Linux container product, not the OS), add to your frontmatter:
+
+```yaml
+osOverrides:
+  step-3-deploy-the-app: regular   # force this step's group to NOT be OS-conditional
+  step-5-install-cli:    os        # force this step's group to BE OS-conditional
+```
+
+The key is the slugified step heading.
+
+#### 3.5.3 AI-assisted OS variants (VS Code) ★ NEW
+
+The Tutorials VS Code extension can generate the missing OS variants for you. Write your step
+for one OS, then ask the extension to "generate OS variants" — it returns translated Windows /
+macOS / Linux / BAS blocks you can review and accept inline. See the
+[VS Code extension docs](TODO: link added when plugin ships) for the workflow.
 
 ### 3.6 Code blocks
 
