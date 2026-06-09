@@ -1,4 +1,4 @@
-const WINDOW_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export class RateLimitError extends Error {
   constructor(retryAfterSec) {
@@ -9,7 +9,7 @@ export class RateLimitError extends Error {
   }
 }
 
-export function createRateLimiter({ now = () => Date.now() } = {}) {
+export function createRateLimiter({ now = () => Date.now(), windowMs = DEFAULT_WINDOW_MS } = {}) {
   const counters = new Map();
 
   return {
@@ -17,12 +17,12 @@ export function createRateLimiter({ now = () => Date.now() } = {}) {
       const t = now();
       let entry = counters.get(userId);
       // Reset before checking so an expired window never triggers the limit.
-      if (!entry || t - entry.windowStart >= WINDOW_MS) {
+      if (!entry || t - entry.windowStart >= windowMs) {
         entry = { count: 0, windowStart: t };
         counters.set(userId, entry);
       }
       if (entry.count >= limit) {
-        const retryAfterSec = Math.ceil((entry.windowStart + WINDOW_MS - t) / 1000);
+        const retryAfterSec = Math.ceil((entry.windowStart + windowMs - t) / 1000);
         throw new RateLimitError(retryAfterSec);
       }
       entry.count += 1;
