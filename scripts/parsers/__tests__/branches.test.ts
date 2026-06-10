@@ -80,3 +80,84 @@ describe('single branch group', () => {
     expect(rewrittenBody).not.toContain('Configure PostgreSQL');
   });
 });
+
+describe('build-time validation errors', () => {
+  it('rejects unbalanced [BRANCH_BEGIN]', () => {
+    const body = '### Step 1\n\n[BRANCH_BEGIN group="g" key="a" label="A"]\n### sub\n';
+    expect(() => extractBranchGroups(body, 'slug')).toThrow(/unbalanced/);
+  });
+
+  it('rejects stray [BRANCH_END]', () => {
+    const body = '### Step 1\n\n[BRANCH_END]\n';
+    expect(() => extractBranchGroups(body, 'slug')).toThrow(/without matching/);
+  });
+
+  it('rejects nested [BRANCH_BEGIN]', () => {
+    const body = [
+      '### Step 1',
+      '[BRANCH_BEGIN group="g" key="a" label="A"]',
+      '### sub-a',
+      '[BRANCH_BEGIN group="g" key="b" label="B"]',
+      '### sub-b',
+      '[BRANCH_END]',
+      '[BRANCH_END]',
+    ].join('\n');
+    expect(() => extractBranchGroups(body, 'slug')).toThrow(/nested/);
+  });
+
+  it('rejects mismatched group= within sibling block', () => {
+    const body = [
+      '### Step 1',
+      '[BRANCH_BEGIN group="deployment" key="a" label="A"]',
+      '### sub-a',
+      '[BRANCH_END]',
+      '[BRANCH_BEGIN group="deploy" key="b" label="B"]',
+      '### sub-b',
+      '[BRANCH_END]',
+    ].join('\n');
+    expect(() => extractBranchGroups(body, 'slug')).toThrow(/sibling has group=/);
+  });
+
+  it('rejects duplicate key within a group', () => {
+    const body = [
+      '### Step 1',
+      '[BRANCH_BEGIN group="g" key="a" label="A"]',
+      '### sub-a-1',
+      '[BRANCH_END]',
+      '[BRANCH_BEGIN group="g" key="a" label="A again"]',
+      '### sub-a-2',
+      '[BRANCH_END]',
+    ].join('\n');
+    expect(() => extractBranchGroups(body, 'slug')).toThrow(/duplicate key/);
+  });
+
+  it('rejects empty branch (no H3 sub-steps)', () => {
+    const body = [
+      '### Step 1',
+      '[BRANCH_BEGIN group="g" key="a" label="A"]',
+      '',
+      '[BRANCH_END]',
+    ].join('\n');
+    expect(() => extractBranchGroups(body, 'slug')).toThrow(/no H3 sub-steps/);
+  });
+
+  it('rejects unparseable condition', () => {
+    const body = [
+      '### Step 1',
+      '[BRANCH_BEGIN group="g" key="a" label="A" condition="profile.deployment == cloud"]',
+      '### sub',
+      '[BRANCH_END]',
+    ].join('\n');
+    expect(() => extractBranchGroups(body, 'slug')).toThrow(/condition.*does not parse/);
+  });
+
+  it('rejects [BRANCH_BEGIN] missing required attribute', () => {
+    const body = [
+      '### Step 1',
+      '[BRANCH_BEGIN group="g" key="a"]',
+      '### sub',
+      '[BRANCH_END]',
+    ].join('\n');
+    expect(() => extractBranchGroups(body, 'slug')).toThrow(/missing label/);
+  });
+});

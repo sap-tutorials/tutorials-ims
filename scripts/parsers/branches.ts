@@ -140,7 +140,7 @@ interface PendingGroup {
 }
 
 export function extractBranchGroups(body: string, slug: string): ExtractResult {
-  if (!body.includes('[BRANCH_BEGIN')) {
+  if (!body.includes('[BRANCH_BEGIN') && !body.includes('[BRANCH_END')) {
     return { rewrittenBody: body, branchGroups: [] };
   }
 
