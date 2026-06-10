@@ -9,6 +9,7 @@ import { recommendationsHandler } from './handlers/recommendations.js';
 import { navigatorCatalogHandler, invalidateNavigatorCache } from './lib/navigator-catalog.js';
 import { breadcrumbContextHandler } from './lib/breadcrumb-context.js';
 import { missionDetailHandler } from './lib/branch/mission-detail.js';
+import { decideHandler } from './lib/branch/decide.js';
 import { getTagLabelMap } from './lib/tag-label-map.js';
 import { myProgressHandler } from './lib/my-progress-handler.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
@@ -144,6 +145,7 @@ cds.on('bootstrap', (app) => {
   app.use(basicAuthMiddleware);
   app.get('/api/qrcode', qrcodeHandler);
   app.get('/api/recommendations', recommendationsHandler);
+  app.get('/api/branches/decide', decideHandler);
   app.get('/build/catalog', buildCatalogHandler);
   app.get('/build/co-completions', coCompletionsHandler);
   app.get('/build/mission/:slug', missionDetailHandler);
