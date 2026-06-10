@@ -28,7 +28,7 @@ function slugifyKey(label) {
 }
 
 export async function missionDetailHandler(req, res) {
-  const slug = req.params.slug;
+  const slug = (req.params.slug || '').toLowerCase();
   const noCache = req.query?.nocache === '1' || req.query?.nocache === 'true';
   const user = req.user?.id && req.user.id !== 'anonymous' ? req.user : null;
 

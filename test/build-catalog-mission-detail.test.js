@@ -83,4 +83,13 @@ describe('/build/mission/:slug — alt-group grouping', () => {
     const altGroup = data.items.find(i => i.type === 'altGroup');
     expect(altGroup.recommendation.reason.kind).toBe('default');
   });
+
+  it('handles mixed-case URL slug by canonicalizing to lowercase', async () => {
+    const { ChatSettings } = cds.entities('com.sap.developers.ims');
+    await UPSERT.into(ChatSettings).entries({ ID: CHAT_SETTINGS_ID, branchingEnabled: false });
+
+    const { status, data } = await project.get('/build/mission/__TEST__-MISSION?nocache=1');
+    expect(status).toBe(200);
+    expect(data.missionSlug).toBe('__test__-mission');
+  });
 });

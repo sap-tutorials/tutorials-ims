@@ -378,6 +378,13 @@ annotate AdminService.GroupPathItems with {
                 { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'slug' }
               ]
             };
+  altGroupKey     @Common.Label: 'Alt-group key'
+                  @Common.QuickInfo: 'Items in this group with the same (key, order) form a pick-one alt-group. Leave blank for linear backbone.';
+  altGroupLabel   @Common.Label: 'Alt-group label'
+                  @Common.QuickInfo: 'Display text on the alt-group chip (e.g. "HANA Cloud", "On-prem"). Required when key is set.';
+  altCondition    @Common.Label: 'Alt-group condition'
+                  @Common.QuickInfo: 'Optional predicate (e.g. profile.deployment == ''cloud''). When set, runtime evaluates deterministically; when null, the heuristic ranker decides.'
+                  @UI.MultiLineText;
 };
 
 annotate AdminService.GroupPathItems with @UI: {
@@ -389,7 +396,9 @@ annotate AdminService.GroupPathItems with @UI: {
     // via the V4 model's autoExpandSelect; admins can confirm they picked the right
     // tutorial after editing the Tutorial column (titles can collide; slugs are
     // unique by design).
-    { Value: tutorial.slug, Label: 'Slug' }
+    { Value: tutorial.slug, Label: 'Slug' },
+    { Value: altGroupKey, Label: 'Alt key' },
+    { Value: altGroupLabel, Label: 'Alt label' }
   ]
 };
 
