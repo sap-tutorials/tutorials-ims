@@ -8,6 +8,7 @@ import { pickBranch } from './engine.js';
 import { rankBranches } from './ranker.js';
 import { buildUserState, fingerprintUserState } from './user-state.js';
 import { makeBranchLoaders } from './loaders.js';
+import { slugifyKey } from './slug-key.js';
 
 const LOG = cds.log('build-mission-detail');
 
@@ -16,16 +17,6 @@ const CACHE_MAX = 1024;
 const cache = new Map(); // key → { value, at }
 
 export function __resetCacheForTest() { cache.clear(); }
-
-/**
- * Slugify a label into a branch key. Stable + URL-safe.
- */
-function slugifyKey(label) {
-  return String(label).toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 40);
-}
 
 export async function missionDetailHandler(req, res) {
   const slug = (req.params.slug || '').toLowerCase();
