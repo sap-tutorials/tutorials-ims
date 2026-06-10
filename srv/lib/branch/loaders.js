@@ -8,10 +8,12 @@
 import cds from '@sap/cds';
 import { getUserProgress } from '../user-progress.js';
 import { computeCoCompletions } from '../co-completion.js';
-import { getCentroid } from '../tutorial-centroid.js';
-import { loadStepVectors } from '../step-vectors.js';
+import { getCentroid, getCentroidBulk, averageVectors } from '../tutorial-centroid.js';
+import { loadStepVectors, loadStepVectorsBulk } from '../step-vectors.js';
 
 const LOG = cds.log('branch-loaders');
+
+const USER_CENTROID_SLUG_CAP = 50;
 
 /**
  * Build the deps object pickBranch + rankBranches consume.
@@ -73,19 +75,34 @@ export function makeBranchLoaders() {
     },
 
     async loadUserCentroid(state) {
-      const slugs = [...(state?.completedSlugs || [])];
+      const slugs = [...(state?.completedSlugs || [])].slice(0, USER_CENTROID_SLUG_CAP);
       if (slugs.length === 0) return null;
-      const centroids = [];
-      for (const slug of slugs.slice(0, 50)) {
-        const c = await self.loadCentroidBySlug(slug);
-        if (c) centroids.push(c);
+      try {
+        // Single round-trip: slug → tutorial ID for all completed slugs.
+        // Replaces N sequential `SELECT.one ... WHERE slug = ?` queries
+        // (issue #294). On HANA the slug column is unique-indexed.
+        const { Tutorials } = cds.entities('com.sap.developers.ims');
+        const idRows = await SELECT.from(Tutorials)
+          .columns('ID')
+          .where({ slug: { in: slugs } });
+        const ids = idRows.map(r => r.ID).filter(Boolean);
+        if (ids.length === 0) return null;
+
+        // Single round-trip for embeddings (cache-aware: warm IDs bypass the DB).
+        // Replaces another N sequential queries against TutorialEmbedding.
+        const centroidByTid = await getCentroidBulk(ids, loadStepVectorsBulk);
+        const centroids = [];
+        for (const id of ids) {
+          const c = centroidByTid.get(id);
+          if (c) centroids.push(c);
+        }
+        // Reuse averageVectors for dim-mismatch tolerance + Float32Array output,
+        // matching loadCentroidBySlug behaviour.
+        return averageVectors(centroids);
+      } catch (err) {
+        LOG.warn(`loadUserCentroid: ${err.message} — degrading to null centroid`);
+        return null;
       }
-      if (centroids.length === 0) return null;
-      const dim = centroids[0].length;
-      const avg = new Array(dim).fill(0);
-      for (const c of centroids) for (let i = 0; i < dim; i++) avg[i] += c[i];
-      for (let i = 0; i < dim; i++) avg[i] /= centroids.length;
-      return avg;
     },
 
     async loadCoCompletions() {
