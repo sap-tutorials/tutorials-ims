@@ -187,6 +187,80 @@ export function extractAllBodyTexts(
   return result;
 }
 
+// --- Branch spec extraction (issue #172 PR 3) ---
+// Reads branchPoints / skipPoints out of each tutorial's parsed Hugo
+// frontmatter so they ride along in the publish payload and land in the
+// BranchSpecs sidecar entity. Tutorials with no branches/skips are skipped
+// entirely (no row written) — the decide handler treats absence as "linear".
+
+export interface BranchSpec {
+  branchPoints: Array<{
+    id: string;
+    parentStepNumber: number;
+    groupKey: string;
+    branches: Array<{
+      key: string;
+      label: string;
+      condition: string | null;
+      embeddingHint: string | null;
+    }>;
+  }>;
+  skipPoints: Array<{
+    stepNumber: number;
+    skipIf: string;
+    skipLabel?: string;
+    skipReason?: string;
+  }>;
+}
+
+export function extractAllBranchSpecs(
+  contentDir: string,
+  slugs: string[]
+): Record<string, BranchSpec> {
+  const out: Record<string, BranchSpec> = {};
+  for (const slug of slugs) {
+    const fmPath = join(contentDir, `${slug}.md`);
+    if (!existsSync(fmPath)) continue;
+    const raw = readFileSync(fmPath, 'utf-8');
+    const fmMatch = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    if (!fmMatch) continue;
+    let fm: any;
+    try { fm = parseYaml(fmMatch[1]); } catch { continue; }
+
+    const branchPoints: BranchSpec['branchPoints'] = [];
+    const skipPoints: BranchSpec['skipPoints'] = [];
+
+    for (const step of (fm.steps ?? [])) {
+      if (step.branchPointId && Array.isArray(step.branches)) {
+        branchPoints.push({
+          id: step.branchPointId,
+          parentStepNumber: step.number,
+          groupKey: step.branchGroup,
+          branches: step.branches.map((b: any) => ({
+            key: b.key,
+            label: b.label,
+            condition: b.condition ?? null,
+            embeddingHint: b.embeddingHint ?? null,
+          })),
+        });
+      }
+      if (step.skipIf) {
+        skipPoints.push({
+          stepNumber: step.number,
+          skipIf: step.skipIf,
+          skipLabel: step.skipLabel,
+          skipReason: step.skipReason,
+        });
+      }
+    }
+
+    if (branchPoints.length || skipPoints.length) {
+      out[slug] = { branchPoints, skipPoints };
+    }
+  }
+  return out;
+}
+
 // --- Metadata extraction ---
 
 export interface StepMeta {
@@ -470,6 +544,7 @@ async function main() {
   const hugoContentDir = join(opts.hugoDir, '..', 'content', 'tutorials');
   const metadataAll = extractMetadata(hugoContentDir, targetSlugs);
   const bodyTextsAll = extractAllBodyTexts(tutorials, targetSlugs);
+  const branchSpecsAll = extractAllBranchSpecs(hugoContentDir, targetSlugs);
 
   // __nav__ / __404__ / __shell__ ride along on the first batch (these are
   // small and the server happily accepts them mixed with regular slugs).
@@ -494,6 +569,7 @@ async function main() {
           files:     pickEntries(payload,        batch),
           metadata:  pickEntries(metadataAll,    batch),
           bodyTexts: pickEntries(bodyTextsAll,   batch),
+          branchSpecs: pickEntries(branchSpecsAll, batch),
         }),
         {
           attempts: 3, backoffMs: [1000, 3000, 9000],

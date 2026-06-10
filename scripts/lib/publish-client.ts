@@ -10,6 +10,7 @@ export interface AppendInput {
   files: Record<string, string>;
   metadata: Record<string, any>;
   bodyTexts: Record<string, string>;
+  branchSpecs?: Record<string, any>;
 }
 export interface AppendResult { slugsAccepted: number; batchHash: string; totalSizeBytes: number }
 
@@ -45,6 +46,7 @@ export async function beginSession(i: BeginInput): Promise<BeginResult> {
 export async function appendBatch(i: AppendInput): Promise<AppendResult> {
   return postJson(`${i.baseUrl}/content/publish/append`, i.apiKey, {
     sessionId: i.sessionId, files: i.files, metadata: i.metadata, bodyTexts: i.bodyTexts,
+    branchSpecs: i.branchSpecs,
   });
 }
 
