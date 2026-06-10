@@ -39,6 +39,22 @@ aspect TutorialBodyTextAspect : managed {
   bodyText                  : LargeString;
 }
 
+// Issue #172 PR 3 — sidecar JSON for the branch decision engine. One row per
+// published tutorial slug. Populated by the publisher (scripts/publish-content.ts)
+// alongside `bodyTexts`; read at runtime by srv/lib/branch/decide.js to feed
+// pickBranch/evaluateSkip without re-parsing the gzipped HTML BLOB.
+//
+// branchPoints is a JSON array of:
+//   { id, parentStepNumber, groupKey, branches: [{key, label, condition, embeddingHint}] }
+// skipPoints is a JSON array of:
+//   { stepNumber, skipIf, skipLabel?, skipReason? }
+// Both default to "[]" when the tutorial has no branching/skips.
+aspect BranchSpecsAspect : managed {
+  key slug                  : String(255);
+  branchPoints              : LargeString;
+  skipPoints                : LargeString;
+}
+
 aspect RepoCatalogAspect : managed {
   key slug                  : String(255);
   owner                     : String(255);
