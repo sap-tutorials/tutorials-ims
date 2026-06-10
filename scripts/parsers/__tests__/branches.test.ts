@@ -160,4 +160,67 @@ describe('build-time validation errors', () => {
     ].join('\n');
     expect(() => extractBranchGroups(body, 'slug')).toThrow(/missing label/);
   });
+
+  it('reports the duplicate-key line context', () => {
+    const body = [
+      '### Step 1',
+      '[BRANCH_BEGIN group="g" key="a" label="A"]',     // line 2
+      '### sub-a-1',
+      '[BRANCH_END]',
+      '[BRANCH_BEGIN group="g" key="a" label="A again"]', // line 5
+      '### sub-a-2',
+      '[BRANCH_END]',
+    ].join('\n');
+    try {
+      extractBranchGroups(body, 'slug');
+      expect.fail('expected throw');
+    } catch (err: any) {
+      expect(err).toBeInstanceOf(BranchParseError);
+      // The reported line should be the second [BRANCH_BEGIN]'s line (5), not 0.
+      expect(err.line).toBeGreaterThan(0);
+      expect(err.message).toMatch(/duplicate key/);
+    }
+  });
+});
+
+describe('code-fence awareness', () => {
+  it('ignores [BRANCH_END] inside a fenced code block (meta-tutorial scenario)', () => {
+    const body = [
+      '### Step 1 — Authoring branches',
+      '',
+      'You write markers like this:',
+      '',
+      '```markdown',
+      '[BRANCH_BEGIN group="g" key="a" label="A"]',
+      '### sub',
+      '[BRANCH_END]',
+      '```',
+      '',
+      '### Step 2 — Continue',
+    ].join('\n');
+    // Should NOT throw; the markers are inside a code block.
+    const { branchGroups, rewrittenBody } = extractBranchGroups(body, 'slug');
+    expect(branchGroups).toEqual([]);
+    expect(rewrittenBody).toBe(body);
+  });
+
+  it('ignores H3 inside a fenced code block when slicing sub-steps', () => {
+    const body = [
+      '### Step 1',
+      '[BRANCH_BEGIN group="g" key="a" label="A"]',
+      '### Real sub-step',
+      '',
+      'Example markdown:',
+      '```markdown',
+      '### This H3 is inside a code block, not a real sub-step',
+      '```',
+      '',
+      '[BRANCH_END]',
+    ].join('\n');
+    // Should parse cleanly; the branch has 1 sub-step, not 2.
+    const { branchGroups } = extractBranchGroups(body, 'slug');
+    expect(branchGroups).toHaveLength(1);
+    expect(branchGroups[0].branches[0].steps).toHaveLength(1);
+    expect(branchGroups[0].branches[0].steps[0].title).toBe('Real sub-step');
+  });
 });

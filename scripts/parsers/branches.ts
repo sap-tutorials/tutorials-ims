@@ -34,6 +34,8 @@ export interface Branch {
   condition: string | null;
   embeddingHint: string | null;
   steps: BranchSubStep[];
+  /** Internal: 1-based source line where this branch's [BRANCH_BEGIN] appeared. Used for error reporting. */
+  _beginLine?: number;
 }
 
 export interface BranchGroup {
@@ -87,8 +89,16 @@ function parseMarkerAttrs(raw: string, line: number, slug: string): MarkerAttrs 
 function sliceSubSteps(lines: string[], slug: string, baseLine: number): BranchSubStep[] {
   const steps: BranchSubStep[] = [];
   let current: BranchSubStep | null = null;
+  let inCodeFence = false;
   for (const line of lines) {
-    const h3 = line.match(H3_RE);
+    if (/^```/.test(line)) {
+      inCodeFence = !inCodeFence;
+      if (current) {
+        current.body += (current.body ? '\n' : '') + line;
+      }
+      continue;
+    }
+    const h3 = inCodeFence ? null : line.match(H3_RE);
     if (h3) {
       if (current) {
         current.body = current.body.replace(/^\n+|\n+$/g, '');
@@ -117,6 +127,7 @@ function countParentStepBefore(
   consumedRanges: Array<[number, number]>,
 ): number {
   let n = 0;
+  let inCodeFence = false;
   for (let i = 0; i < beginIdx; i++) {
     // Skip lines inside any previously-consumed [BRANCH_BEGIN]…[BRANCH_END]
     // block — their H3s belong to a sub-step, not the parent stream.
@@ -128,6 +139,11 @@ function countParentStepBefore(
       }
     }
     if (inside) continue;
+    if (/^```/.test(lines[i])) {
+      inCodeFence = !inCodeFence;
+      continue;
+    }
+    if (inCodeFence) continue;
     if (H3_RE.test(lines[i])) n++;
   }
   return n;
@@ -157,7 +173,7 @@ export function extractBranchGroups(body: string, slug: string): ExtractResult {
       if (seen.has(b.key)) {
         throw new BranchParseError(
           `duplicate key "${b.key}" within group "${pendingGroup.groupKey}"`,
-          0,
+          b._beginLine ?? 0,
           slug,
         );
       }
@@ -167,14 +183,38 @@ export function extractBranchGroups(body: string, slug: string): ExtractResult {
       id: `${pendingGroup.parentStepNumber}-${pendingGroup.groupKey}`,
       parentStepNumber: pendingGroup.parentStepNumber,
       groupKey: pendingGroup.groupKey,
-      branches: pendingGroup.branches,
+      branches: pendingGroup.branches.map(({ _beginLine, ...rest }) => rest),
     });
     pendingGroup = null;
   }
 
   let i = 0;
+  let inCodeFence = false;
   while (i < lines.length) {
     const line = lines[i];
+
+    // Toggle code-fence state on any line starting with ``` (with or without a language tag).
+    // Inside a code fence, skip ALL marker detection so meta-tutorials documenting the
+    // [BRANCH_BEGIN]/[BRANCH_END] syntax don't false-trigger.
+    if (/^```/.test(line)) {
+      inCodeFence = !inCodeFence;
+      if (pendingGroup && line.trim() !== '') {
+        flushGroup();
+      }
+      out.push(line);
+      i++;
+      continue;
+    }
+
+    if (inCodeFence) {
+      if (pendingGroup && line.trim() !== '') {
+        flushGroup();
+      }
+      out.push(line);
+      i++;
+      continue;
+    }
+
     const beginMatch = line.match(BRANCH_BEGIN_RE);
 
     if (!beginMatch) {
@@ -245,6 +285,7 @@ export function extractBranchGroups(body: string, slug: string): ExtractResult {
       condition: attrs.condition,
       embeddingHint: steps[0]?.title ?? null,
       steps,
+      _beginLine: beginLine,
     };
 
     const parentStepNumber = countParentStepBefore(lines, beginIdx, consumedRanges);
