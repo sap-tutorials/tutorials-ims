@@ -109,10 +109,14 @@ export async function missionDetailHandler(req, res) {
           reason: decision.reason,
           confidence: decision.confidence,
         };
-        await writeBranchDecision({
-          user, slug, branchPointId: branchPoint.id, decision,
-          surface: 'missionAltGroup', source: 'pageLoad',
-        });
+        // ?nocache=1 is a debug/test signal — skip telemetry to avoid
+        // polluting BranchDecisions with synthetic rows (issue #296).
+        if (!noCache) {
+          await writeBranchDecision({
+            user, slug, branchPointId: branchPoint.id, decision,
+            surface: 'missionAltGroup', source: 'pageLoad',
+          });
+        }
       }
 
       out.items.push(altGroupRecord);
