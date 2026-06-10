@@ -45,7 +45,8 @@ page's frontmatter, not the (non-existent) mission page.
       data-mission-nav
       data-mission-id="{{ $missionId }}"
       data-mission-slug="{{ $missionSlug }}"
-      data-current-slug="{{ $current }}">
+      data-current-slug="{{ $current }}"
+      data-altgroup-needs-hydration="true">
       {{ range $groups }}
         {{ $groupSlug  := .slug }}
         {{ $groupTitle := .title }}
