@@ -88,6 +88,9 @@ export default defineConfig({
           { text: 'Repo / group owners', link: '/authors/repo-group-owners' },
           { text: 'Center admin',      link: '/authors/center-admin' },
           { text: 'Analytics admin',   link: '/authors/analytics-admin' }
+        ]},
+        { text: 'Branching paths', items: [
+          { text: 'Branched missions', link: '/authors/branched-missions' }
         ]}
       ],
 

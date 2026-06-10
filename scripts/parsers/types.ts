@@ -121,6 +121,14 @@ export interface TutorialNavEntry {
   // ISO timestamp of the oldest commit on the tutorial markdown file —
   // used by the navigator to render a "NEW" badge for tutorials authored in the last 31 days.
   createdAt?: string
+  /**
+   * [#172] PR 2 Task 7. Mission-level alt-groups copied from the mission's
+   * MissionMeta.altGroups so the tutorial page's frontmatter (and thus the
+   * `mission-side-nav.html` partial rendering on this tutorial page) can
+   * render branch chips without round-tripping to the mission page (which
+   * doesn't exist as a static `.md` — it's SSR'd by catalog-renderer).
+   */
+  missionAltGroups?: AltGroup[]
 }
 
 export interface GroupRef {
@@ -136,6 +144,12 @@ export interface MissionMeta {
   title: string
   slug: string
   groups: GroupRef[]
+  /**
+   * [#172] Branched-mission alt-groups. Set when a mission's CompletionPathItems
+   * carry altGroupKey/altGroupLabel/altCondition. PR 3's hydration island reads
+   * these from `_nav.json` to render branch tabs.
+   */
+  altGroups?: AltGroup[]
 }
 
 export interface NavData {
@@ -171,12 +185,39 @@ export interface HierarchyGroup {
   description: string
   tutorialSlugs: string[]
   categorySlugs?: string[]
+  /**
+   * [#172] Alt-group branches collected from CompletionPathItems on the
+   * underlying CompletionPath. Optional — only present when the path has at
+   * least one alt-group fork.
+   */
+  altGroups?: AltGroup[]
 }
 
 export interface MissionHierarchy {
   missionImsId: number
   groups: HierarchyGroup[]
   tutorialSlugs: string[]
+  /**
+   * [#172] Lifted from the synthetic single-path group when /build/catalog
+   * collapses an isFlat mission. Consumers should look here AND on
+   * `groups[*].altGroups` (only one of the two will be populated for a given
+   * mission).
+   */
+  altGroups?: AltGroup[]
+}
+
+/** [#172] One branch within an alt-group (e.g. "HANA Cloud" alongside "PostgreSQL"). */
+export interface AltGroupBranch {
+  key: string
+  label: string
+  tutorialSlug: string
+  condition: string | null
+}
+
+/** [#172] An alt-group is a single fork-point in a mission with N branches. */
+export interface AltGroup {
+  groupKey: string
+  branches: AltGroupBranch[]
 }
 
 export interface StandaloneGroup {

@@ -246,12 +246,21 @@ entity CompletionPathItems : cuid, LegacyKeyed {
   checkpointTitle           : String(255);
   prize                     : Association to Prizes;
   itemOrder                 : Integer;
+  // Issue #172 — branching paths. Items in the same path with the same
+  // (altGroupKey, itemOrder) form one alt-group; null on linear backbone items.
+  altGroupKey               : String(40);
+  altGroupLabel             : String(120);
+  altCondition              : String(500);
 }
 
 entity GroupPathItems : cuid, LegacyKeyed {
   group                     : Association to Groups;
   tutorial                  : Association to Tutorials @mandatory;
   itemOrder                 : Integer;
+  // Issue #172 — branching paths inside a Group's tutorial list.
+  altGroupKey               : String(40);
+  altGroupLabel             : String(120);
+  altCondition              : String(500);
 }
 
 entity TutorialMeta : cuid, managed, LegacyKeyed {

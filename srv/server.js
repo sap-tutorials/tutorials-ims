@@ -8,6 +8,7 @@ import { coCompletionsHandler } from './lib/co-completion.js';
 import { recommendationsHandler } from './handlers/recommendations.js';
 import { navigatorCatalogHandler, invalidateNavigatorCache } from './lib/navigator-catalog.js';
 import { breadcrumbContextHandler } from './lib/breadcrumb-context.js';
+import { missionDetailHandler } from './lib/branch/mission-detail.js';
 import { getTagLabelMap } from './lib/tag-label-map.js';
 import { myProgressHandler } from './lib/my-progress-handler.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
@@ -145,6 +146,7 @@ cds.on('bootstrap', (app) => {
   app.get('/api/recommendations', recommendationsHandler);
   app.get('/build/catalog', buildCatalogHandler);
   app.get('/build/co-completions', coCompletionsHandler);
+  app.get('/build/mission/:slug', missionDetailHandler);
   app.get('/build/navigator', navigatorCatalogHandler);
   app.get('/build/tag-labels', async (_req, res) => {
     try {

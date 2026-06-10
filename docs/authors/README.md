@@ -11,6 +11,10 @@ This folder is the operational manual for everyone working with the SAP Develope
 | **Center admin** running the platform | [center-admin.md](center-admin.md) | Catalog, taxonomy, pipeline, access, support |
 | **Analytics admin** exploring usage | [analytics-admin.md](analytics-admin.md) | Run queries, monitor events, export data |
 
+## Branching paths (issue #172)
+
+- [Authoring branched missions](./branched-missions.md) — pick-one alternatives within a mission
+
 ## System landmarks
 
 - **Source repos** — [`sap-tutorials`](https://github.com/sap-tutorials) GitHub organization (one repo per topical group)

@@ -90,6 +90,11 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
   if (nav.groupId) fm.groupId = nav.groupId
   if (nav.groupTitle) fm.groupTitle = nav.groupTitle
   if (nav.groupSlug) fm.groupSlug = nav.groupSlug
+  // [#172] Task 7: mirror missionAltGroups so the mission-side-nav partial can
+  // render branch chips. Normally populated only by patchTutorialFrontmatter
+  // (CAP phase runs after the first page write), but emit here too if the
+  // navEntry already has them — defensive against future call-order changes.
+  if (nav.missionAltGroups?.length) fm.missionAltGroups = nav.missionAltGroups
 
   if (hasOsOptions) fm.hasOsOptions = true
 

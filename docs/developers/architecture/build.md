@@ -1067,3 +1067,16 @@ Result: 200 OK — user sees tutorial content as normal
 ### Edge case: First deploy (no content in HANA)
 
 If the AppRouter is deployed before any content has been published to HANA, `/tutorials/*` returns 404. This is the expected "empty state." Run `npm run publish-content` against the deployed CAP srv to populate content.
+
+## Branching paths (issue #172)
+
+Mission curators can declare **alt-groups** on `CompletionPathItems` / `GroupPathItems`. At build time, `scripts/parsers/cap.ts` and `srv/lib/build-catalog.js` emit an optional `altGroups` array on mission frontmatter alongside `groups`. At runtime, the auth-aware endpoint `GET /build/mission/:slug`:
+
+1. groups items by `(altGroupKey, itemOrder)` within each path
+2. for each alt-group, calls `srv/lib/branch/engine.js#pickBranch` with the user's frozen `userState`
+3. caches the response per `(slug, userId, fingerprint)` for 5 min (honours `?nocache=1`)
+4. writes one `BranchDecisions` row per recommendation (telemetry; surface=`missionAltGroup`, source=`pageLoad`)
+
+The whole runtime is gated by `ChatSettings.branchingEnabled` — when false, the endpoint returns the catalog without the `recommendation` field. PR 1 (`srv/lib/branch/{condition,engine,ranker,user-state}.js`, `BranchDecisions`, `branchingEnabled`) provides the engine; PR 2 wires the endpoint, the AdminService validator, and the side-nav rendering. PR 3 ships the hydration island + tutorial-level branches.
+
+See the design doc at `docs/superpowers/specs/2026-06-09-172-branching-paths-design.md` §5.2.1, §5.6.

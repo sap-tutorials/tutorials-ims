@@ -9,6 +9,7 @@ import { buildCfLogsUrl } from './lib/cf-logs-link.js';
 import { reviewTutorial, snoozeTutorial } from './lib/tutorial-review.js';
 import { slugify, ensureUniqueSlug } from './lib/slug-utils.js';
 import { classifyAndPersist } from './lib/category-classifier.js';
+import { makeAltGroupHandler } from './handlers/completion-path-items-altgroup.js';
 
 export default class AdminService extends cds.ApplicationService {
 
@@ -92,6 +93,14 @@ export default class AdminService extends cds.ApplicationService {
     };
     this.before('NEW', 'GroupPathItems.drafts', setGroupItemOrder);
     this.before('CREATE', 'GroupPathItems', setGroupItemOrder);
+
+    // Issue #172 — refuse incoherent alt-group shapes.
+    // Per PR 2 reviewer addendum item G: enforceMultiMember=false on CREATE
+    // (authors create members one at a time in Fiori draft).
+    this.before('CREATE', 'CompletionPathItems', makeAltGroupHandler('CompletionPathItems', 'path_ID', 'CREATE'));
+    this.before('UPDATE', 'CompletionPathItems', makeAltGroupHandler('CompletionPathItems', 'path_ID', 'UPDATE'));
+    this.before('CREATE', 'GroupPathItems',      makeAltGroupHandler('GroupPathItems',      'group_ID', 'CREATE'));
+    this.before('UPDATE', 'GroupPathItems',      makeAltGroupHandler('GroupPathItems',      'group_ID', 'UPDATE'));
 
     // Validate Start Date < End Date on Events
     this.before(['CREATE', 'PATCH'], 'Events', (req) => {
