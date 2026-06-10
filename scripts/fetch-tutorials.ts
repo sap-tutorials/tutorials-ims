@@ -364,9 +364,20 @@ export function writeHugoPage(
   writeFileSync(join(outputDir, `${slug}.md`), content, 'utf-8')
 }
 
-function serializeYamlValue(val: string | number | string[] | null): string {
-  if (val === null) return 'null'
-  if (Array.isArray(val)) return `\n${val.map(s => `  - ${JSON.stringify(s)}`).join('\n')}`
+function serializeYamlValue(val: unknown): string {
+  if (val === null || val === undefined) return 'null'
+  if (Array.isArray(val)) {
+    // String arrays — keep the original simple inline-friendly emission so
+    // existing patched fields (recommendations, etc.) read identically.
+    if (val.every(v => typeof v === 'string')) {
+      return `\n${(val as string[]).map(s => `  - ${JSON.stringify(s)}`).join('\n')}`
+    }
+    // Rich arrays (e.g. [#172] missionAltGroups). Render via YAML and indent
+    // so the value lands as a block sequence under the key.
+    const yaml = yamlStringify(val).trimEnd()
+    const indented = yaml.split('\n').map(l => `  ${l}`).join('\n')
+    return `\n${indented}`
+  }
   if (typeof val === 'string') return JSON.stringify(val)
   return String(val)
 }
@@ -383,7 +394,10 @@ function patchTutorialFrontmatter(slug: string, nav: TutorialNavEntry, outputDir
   const fmBlock = raw.slice(4, endOfFm)
   const lines = fmBlock.split('\n')
 
-  const patchFields: Record<string, string | number | string[] | null> = {
+  // Widened from `string | number | string[] | null` to `unknown` so this map
+  // can carry [#172] missionAltGroups (an `AltGroup[]` of objects).
+  // serializeYamlValue handles each shape.
+  const patchFields: Record<string, unknown> = {
     prev: nav.prev,
     next: nav.next,
   }
@@ -395,6 +409,9 @@ function patchTutorialFrontmatter(slug: string, nav: TutorialNavEntry, outputDir
   if (nav.groupSlug) patchFields.groupSlug = nav.groupSlug
   if (nav.recommendations && nav.recommendations.length > 0) {
     patchFields.recommendations = nav.recommendations
+  }
+  if (nav.missionAltGroups && nav.missionAltGroups.length > 0) {
+    patchFields.missionAltGroups = nav.missionAltGroups
   }
 
   const existingKeys = new Set(lines.map(l => l.match(/^(\w+):/)?.[1]).filter(Boolean))
@@ -914,6 +931,14 @@ async function main() {
     const missionGroups: GroupRef[] = []
     const isFlat = hierarchy.groups.length === 0 && hierarchy.tutorialSlugs.length > 0
 
+    // [#172] Task 7: hoist alt-group collection above the per-tutorial loop so
+    // every tutorial in this mission can stamp `missionAltGroups` onto its
+    // navEntry. isFlat missions carry altGroups on the hierarchy itself;
+    // non-flat missions carry them on inner HierarchyGroup entries.
+    const collectedAltGroups = hierarchy.altGroups?.length
+      ? hierarchy.altGroups
+      : hierarchy.groups.flatMap(g => g.altGroups ?? [])
+
     const groupsToProcess: HierarchyGroup[] = isFlat
       ? [{
           imsId: mission.imsId,
@@ -947,6 +972,9 @@ async function main() {
         nav.missionId = mission.imsId
         nav.missionTitle = mission.title
         nav.missionSlug = mission.slug
+        if (collectedAltGroups.length) {
+          nav.missionAltGroups = collectedAltGroups
+        }
         if (!isFlat) {
           nav.groupId = group.imsId
           nav.groupTitle = group.title
@@ -966,13 +994,9 @@ async function main() {
     }
 
     // [#172] Surface alt-groups so PR 3's hydration island and Task 7's
-    // mission-side-nav partial can read them from `_nav.json`. isFlat
-    // missions carry altGroups on the hierarchy itself; non-flat missions
-    // carry them on inner HierarchyGroup entries.
-    const collectedAltGroups = hierarchy.altGroups?.length
-      ? hierarchy.altGroups
-      : hierarchy.groups.flatMap(g => g.altGroups ?? [])
-
+    // mission-side-nav partial can read them from `_nav.json`. `collectedAltGroups`
+    // was computed above (hoisted for navEntry stamping); reuse it here for
+    // the missionsMeta payload.
     missionsMeta.push({
       id: mission.imsId,
       title: mission.title,
@@ -1022,7 +1046,7 @@ async function main() {
 
   let patchedCount = 0
   for (const nav of navEntries) {
-    if (nav.missionId || nav.prev || nav.next || nav.recommendations) {
+    if (nav.missionId || nav.prev || nav.next || nav.recommendations || nav.missionAltGroups?.length) {
       patchTutorialFrontmatter(nav.slug, nav, OUTPUT_DIR, target)
       patchedCount++
     }

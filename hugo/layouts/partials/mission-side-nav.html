@@ -1,4 +1,4 @@
-{{/* mission-side-nav.html — U16
+{{/* mission-side-nav.html — U16 (+ #172 Task 7)
 
 Renders <ui5-side-navigation> from the current tutorial's mission frontmatter.
 
@@ -9,48 +9,87 @@ Per Task 0 findings (UI5 v2.x):
     (set inline by mission-side-nav.ts at runtime)
 
 Inputs (page params expected on tutorial pages):
-  .Params.missionId    — required; if empty, partial renders nothing
-  .Params.missionSlug  — used to look up the mission page and emit links
-  .Params.slug         — current tutorial slug (for `selected` highlight)
+  .Params.missionId         — required; if empty, partial renders nothing
+  .Params.missionSlug       — used to emit the mission link header
+  .Params.slug              — current tutorial slug (for `selected` highlight)
+  .Params.missionAltGroups  — [#172] optional alt-group branches surfaced via
+                              fetch-tutorials.ts patchTutorialFrontmatter
+
+Note (#172 Task 7): mission pages are SSR'd at request-time by
+catalog-renderer.js — they do NOT exist as static `.md` files. So
+`site.GetPage "/tutorials/mission-<slug>"` returns nil and the previous
+implementation silently emitted nothing. This rewrite hoists $missionTitle
+and $groups outside the `with` block so the side-nav still renders even
+when the mission page lookup fails. altGroups are read from THIS tutorial
+page's frontmatter, not the (non-existent) mission page.
 */}}
 {{ if not site.Params.previewMode }}
-{{ $missionId   := .Params.missionId }}
-{{ $missionSlug := .Params.missionSlug }}
-{{ $current     := .Params.slug }}
+{{ $missionId        := .Params.missionId }}
+{{ $missionSlug      := .Params.missionSlug }}
+{{ $current          := .Params.slug }}
+{{ $missionAltGroups := .Params.missionAltGroups }}
 
 {{ if and $missionId $missionSlug }}
-  {{ with site.GetPage (printf "/tutorials/mission-%s" $missionSlug) }}
-    {{ $missionTitle := .Params.missionTitle | default .Title }}
-    <aside class="mission-side-nav-wrap">
-      <div class="msn-header">
-        <a href="/tutorials/mission-{{ $missionSlug }}/">{{ $missionTitle }}</a>
-      </div>
-      <ui5-side-navigation
-        data-mission-nav
-        data-mission-id="{{ $missionId }}"
-        data-mission-slug="{{ $missionSlug }}"
-        data-current-slug="{{ $current }}">
-        {{ range .Params.groups }}
-          {{ $groupSlug  := .slug }}
-          {{ $groupTitle := .title }}
-          {{ if .tutorials }}
-            <ui5-side-navigation-item
-              text="{{ $groupTitle }}"
-              data-group-slug="{{ $groupSlug }}">
-              {{ range .tutorials }}
-                <ui5-side-navigation-sub-item
-                  text="{{ .title }}"
-                  href="/tutorials/{{ .slug }}/"
-                  data-tutorial-slug="{{ .slug }}"
-                  data-progress="0"
-                  {{ if eq .slug $current }}selected{{ end }}>
-                </ui5-side-navigation-sub-item>
-              {{ end }}
-            </ui5-side-navigation-item>
-          {{ end }}
-        {{ end }}
-      </ui5-side-navigation>
-    </aside>
+  {{ $missionPage := site.GetPage (printf "/tutorials/mission-%s" $missionSlug) }}
+  {{ $missionTitle := $missionSlug }}
+  {{ $groups := slice }}
+  {{ with $missionPage }}
+    {{ $missionTitle = .Params.missionTitle | default .Title }}
+    {{ $groups = .Params.groups }}
   {{ end }}
+  <aside class="mission-side-nav-wrap">
+    <div class="msn-header">
+      <a href="/tutorials/mission-{{ $missionSlug }}/">{{ $missionTitle }}</a>
+    </div>
+    <ui5-side-navigation
+      data-mission-nav
+      data-mission-id="{{ $missionId }}"
+      data-mission-slug="{{ $missionSlug }}"
+      data-current-slug="{{ $current }}">
+      {{ range $groups }}
+        {{ $groupSlug  := .slug }}
+        {{ $groupTitle := .title }}
+        {{ if .tutorials }}
+          <ui5-side-navigation-item
+            text="{{ $groupTitle }}"
+            data-group-slug="{{ $groupSlug }}">
+            {{ range .tutorials }}
+              <ui5-side-navigation-sub-item
+                text="{{ .title }}"
+                href="/tutorials/{{ .slug }}/"
+                data-tutorial-slug="{{ .slug }}"
+                data-progress="0"
+                {{ if eq .slug $current }}selected{{ end }}>
+              </ui5-side-navigation-sub-item>
+            {{ end }}
+          </ui5-side-navigation-item>
+        {{ end }}
+      {{ end }}
+      {{/* [#172] Task 7: alt-group branches. Each AltGroup contains
+           branches[]; render as a parent ui5-side-navigation-item with one
+           sub-item per branch. PR 3's hydration island will replace static
+           markers with AI-driven branch-highlight UI. */}}
+      {{ if $missionAltGroups }}
+        {{ range $missionAltGroups }}
+          {{ $groupKey := .groupKey }}
+          <ui5-side-navigation-item
+            text="{{ $groupKey | humanize }}"
+            data-altgroup-parent="{{ $groupKey }}">
+            {{ range .branches }}
+              <ui5-side-navigation-sub-item
+                text="{{ .label }}"
+                href="/tutorials/{{ .tutorialSlug }}/"
+                data-tutorial-slug="{{ .tutorialSlug }}"
+                data-altgroup-key="{{ $groupKey }}"
+                data-altgroup-branch-key="{{ .key }}"
+                data-progress="0"
+                {{ if eq .tutorialSlug $current }}selected{{ end }}>
+              </ui5-side-navigation-sub-item>
+            {{ end }}
+          </ui5-side-navigation-item>
+        {{ end }}
+      {{ end }}
+    </ui5-side-navigation>
+  </aside>
 {{ end }}
 {{ end }}

@@ -121,6 +121,14 @@ export interface TutorialNavEntry {
   // ISO timestamp of the oldest commit on the tutorial markdown file —
   // used by the navigator to render a "NEW" badge for tutorials authored in the last 31 days.
   createdAt?: string
+  /**
+   * [#172] PR 2 Task 7. Mission-level alt-groups copied from the mission's
+   * MissionMeta.altGroups so the tutorial page's frontmatter (and thus the
+   * `mission-side-nav.html` partial rendering on this tutorial page) can
+   * render branch chips without round-tripping to the mission page (which
+   * doesn't exist as a static `.md` — it's SSR'd by catalog-renderer).
+   */
+  missionAltGroups?: AltGroup[]
 }
 
 export interface GroupRef {
