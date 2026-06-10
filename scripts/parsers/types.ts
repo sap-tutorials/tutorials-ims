@@ -78,6 +78,25 @@ export interface TutorialStep {
   content: string
   validation?: ValidationQuestion[]
   codeCheck?: PublicCodeCheckSpec
+
+  // Issue #172 PR 3 — step-level branches (populated by branches.ts pre-pass
+  // before parseV2Steps walks the rewritten body; merged onto the parent step
+  // entry by index in scripts/fetch-tutorials.ts).
+  branchGroup?: string          // e.g. "deployment"
+  branchPointId?: string        // e.g. "1-deployment"
+  branches?: Array<{
+    key: string
+    label: string
+    condition: string | null
+    embeddingHint: string | null
+    steps: Array<{ title: string; body: string }>
+  }>
+
+  // Issue #172 PR 3 — skip-runs (per-step frontmatter, no parser changes;
+  // /api/branches/decide reads these at runtime to compute skip recommendations).
+  skipIf?: string               // condition expression
+  skipLabel?: string            // optional override for the [Skip] button text
+  skipReason?: string           // optional human-readable reason string
 }
 
 export interface ParsedTutorial {
