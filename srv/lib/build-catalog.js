@@ -18,6 +18,38 @@ function slugifyKey(label) {
     .slice(0, 40);
 }
 
+/**
+ * Collect alt-group branches from a list of items that share a parent
+ * (CompletionPath or Group). Items with the same (itemOrder, altGroupKey)
+ * fork the parent's linear backbone into branches; items without altGroupKey
+ * are unaffected.
+ *
+ * `resolveSlug(item)` adapts the item-shape difference between
+ * `CompletionPathItems` (taskType + taskLegacyId) and `GroupPathItems`
+ * (tutorial_ID).
+ */
+function collectAltGroups(items, resolveSlug) {
+  const altGroups = [];
+  const seenAltKeys = new Map();
+  for (const it of items) {
+    if (!it.altGroupKey) continue;
+    const k = `${it.itemOrder}:${it.altGroupKey}`;
+    const branch = {
+      key: slugifyKey(it.altGroupLabel || ''),
+      label: it.altGroupLabel || '',
+      tutorialSlug: resolveSlug(it) || '',
+      condition: it.altCondition || null,
+    };
+    if (seenAltKeys.has(k)) {
+      altGroups[seenAltKeys.get(k)].branches.push(branch);
+    } else {
+      seenAltKeys.set(k, altGroups.length);
+      altGroups.push({ groupKey: it.altGroupKey, branches: [branch] });
+    }
+  }
+  return altGroups;
+}
+
 export async function buildCatalogHandler(req, res) {
   const { Missions, CompletionPaths, CompletionPathItems, Tutorials, FeaturedTasks, Groups, GroupPathItems,
           Categories, MissionCategories, GroupCategories, TutorialCategories } =
@@ -39,7 +71,8 @@ export async function buildCatalogHandler(req, res) {
     const groupById = new Map(groups.map(g => [g.ID, g]));
 
     const groupPathItems = await SELECT.from(GroupPathItems)
-      .columns('group_ID', 'tutorial_ID', 'itemOrder');
+      .columns('group_ID', 'tutorial_ID', 'itemOrder',
+               'altGroupKey', 'altGroupLabel', 'altCondition');
 
     const categories    = await SELECT.from(Categories).columns('ID', 'slug', 'label', 'sortOrder');
     const missionAssign = await SELECT.from(MissionCategories).columns('mission_ID', 'category_ID', 'score');
@@ -82,24 +115,10 @@ export async function buildCatalogHandler(req, res) {
         // Collect alt-group branches on the path-level group. Items sharing
         // (itemOrder, altGroupKey) are branches of the same fork. Linear
         // backbone items (no altGroupKey) are unaffected.
-        const altGroups = [];
-        const seenAltKeys = new Map();
-        for (const it of pathItems) {
-          if (it.taskType !== 'TUTORIAL' || !it.altGroupKey) continue;
-          const k = `${it.itemOrder}:${it.altGroupKey}`;
-          const branch = {
-            key: slugifyKey(it.altGroupLabel || ''),
-            label: it.altGroupLabel || '',
-            tutorialSlug: slugByLegacyId.get(it.taskLegacyId) || '',
-            condition: it.altCondition || null,
-          };
-          if (seenAltKeys.has(k)) {
-            altGroups[seenAltKeys.get(k)].branches.push(branch);
-          } else {
-            seenAltKeys.set(k, altGroups.length);
-            altGroups.push({ groupKey: it.altGroupKey, branches: [branch] });
-          }
-        }
+        const altGroups = collectAltGroups(
+          pathItems.filter(it => it.taskType === 'TUTORIAL'),
+          it => slugByLegacyId.get(it.taskLegacyId),
+        );
 
         // Emit one HierarchyGroup for the path itself (existing behavior)
         const pathGroup = {
@@ -124,12 +143,17 @@ export async function buildCatalogHandler(req, res) {
             const tutorialSlugs = gpItems
               .map(gpi => tutorialByUuid.get(gpi.tutorial_ID))
               .filter(Boolean);
+            const groupAltGroups = collectAltGroups(
+              gpItems,
+              gpi => tutorialByUuid.get(gpi.tutorial_ID),
+            );
             return {
               imsId: g.legacyId,
               title: g.title || '',
               slug: g.slug || String(g.legacyId),
               description: g.description || '',
               tutorialSlugs,
+              ...(groupAltGroups.length ? { altGroups: groupAltGroups } : {}),
             };
           })
           .filter(Boolean);
@@ -185,12 +209,17 @@ export async function buildCatalogHandler(req, res) {
         const tutorialSlugs = gpItems
           .map(gpi => tutorialByUuid.get(gpi.tutorial_ID))
           .filter(Boolean);
+        const groupAltGroups = collectAltGroups(
+          gpItems,
+          gpi => tutorialByUuid.get(gpi.tutorial_ID),
+        );
         return {
           imsId: g.legacyId,
           title: g.title || '',
           slug: g.slug || String(g.legacyId),
           description: g.description || '',
           tutorialSlugs,
+          ...(groupAltGroups.length ? { altGroups: groupAltGroups } : {}),
           categorySlugs: categorySlugsFor(g.ID, groupAssign, 'group_ID', catByID),
         };
       });
