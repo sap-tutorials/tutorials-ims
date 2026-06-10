@@ -1080,3 +1080,15 @@ Mission curators can declare **alt-groups** on `CompletionPathItems` / `GroupPat
 The whole runtime is gated by `ChatSettings.branchingEnabled` — when false, the endpoint returns the catalog without the `recommendation` field. PR 1 (`srv/lib/branch/{condition,engine,ranker,user-state}.js`, `BranchDecisions`, `branchingEnabled`) provides the engine; PR 2 wires the endpoint, the AdminService validator, and the side-nav rendering. PR 3 ships the hydration island + tutorial-level branches.
 
 See the design doc at `docs/superpowers/specs/2026-06-09-172-branching-paths-design.md` §5.2.1, §5.6.
+
+### Step-level branches and skip-runs (PR 3)
+
+Authors mark alternative step-runs with `[BRANCH_BEGIN ...]…[BRANCH_END]` and skippable steps with `skipIf:` step frontmatter. Build pipeline:
+
+1. `scripts/parsers/branches.ts` runs BEFORE `scripts/parsers/v2.ts` (`compose.ts` orchestrates). It rewrites the markdown to a linear stream and stashes branchGroups on parent step entries.
+2. `scripts/publish-content.ts#extractAllBranchSpecs` walks parsed YAML frontmatter and POSTs `branchSpecs` alongside `bodyTexts` to `/content/publish`.
+3. CAP persists into `BranchSpecs` (sidecar; one row per slug; mirrors `TutorialBodyText`).
+4. At runtime, `GET /api/branches/decide?slug=X` reads `BranchSpecs`, builds `userState`, calls `pickBranch` per branchPoint and `evaluateSkip` per skipPoint, returns recommendations + skip decisions. Cached per `(slug, userId, fingerprint)` for 5 min; honours `?nocache=1`.
+5. The `tutorial-branches` Vue island mounts on `tutorial-branch-mount` / `tutorial-skip-mount` markers + the mission-side-nav `data-altgroup-needs-hydration="true"` wrapper, and hydrates with the API response.
+
+Gated by `ChatSettings.branchingEnabled`. When false: the endpoint returns 404 and the island degrades to "render all branches statically, no recommendation."
