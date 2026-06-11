@@ -14,6 +14,7 @@ import { pickBranch, evaluateSkip } from './engine.js';
 import { rankBranches } from './ranker.js';
 import { buildUserState } from './user-state.js';
 import { makeBranchLoaders } from './loaders.js';
+import { slugifyKey } from './slug-key.js';
 
 const LOG = cds.log('branch-joule-tool');
 
@@ -62,6 +63,11 @@ export async function getBranchRecommendationHandler({ args, user }) {
     }
 
     // Mission scope (Task 3) lands here.
+    if (missionSlug) {
+      const missionResult = await resolveMissionScope({ missionSlug, user, userState, loaders });
+      if (missionResult.altGroups) out.altGroups = missionResult.altGroups;
+      if (missionResult.note && !out.note) out.note = missionResult.note;
+    }
 
     return out;
   } catch (err) {
@@ -193,4 +199,79 @@ async function writeSkipDecision({ user, tutorialSlug, stepNumber, reason }) {
   } catch (err) {
     LOG.warn(`BranchDecisions skip write failed: ${err.message}`);
   }
+}
+
+async function resolveMissionScope({ missionSlug, user, userState, loaders }) {
+  const { Missions, CompletionPaths, CompletionPathItems } = cds.entities('com.sap.developers.ims');
+
+  const mission = await SELECT.one.from(Missions).where({ slug: missionSlug });
+  if (!mission) {
+    return { altGroups: [], note: 'mission_not_found' };
+  }
+
+  const paths = await SELECT.from(CompletionPaths).where({ mission_ID: mission.ID });
+  if (!paths.length) {
+    return { altGroups: [], note: 'mission_has_no_alt_groups' };
+  }
+
+  const items = await SELECT.from(CompletionPathItems)
+    .where({ path_ID: { in: paths.map(p => p.ID) } })
+    .orderBy('itemOrder');
+
+  // Group items by (itemOrder, altGroupKey) — mirrors mission-detail.js groupByAlt.
+  const groups = new Map();
+  for (const it of items) {
+    if (!it.altGroupKey) continue;
+    const key = `${it.itemOrder}:${it.altGroupKey}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        itemOrder: it.itemOrder,
+        groupKey: it.altGroupKey,
+        items: [],
+      });
+    }
+    groups.get(key).items.push(it);
+  }
+
+  if (groups.size === 0) {
+    return { altGroups: [], note: 'mission_has_no_alt_groups' };
+  }
+
+  const outAltGroups = [];
+  for (const g of groups.values()) {
+    const branches = g.items.map(it => ({
+      key: slugifyKey(it.altGroupLabel),
+      label: it.altGroupLabel,
+      condition: it.altCondition ?? null,
+      embeddingHint: null,
+    }));
+    const branchPoint = {
+      id: `${g.itemOrder}-${g.groupKey}`,
+      surface: 'missionAltGroup',
+      branches,
+    };
+    let decision;
+    try {
+      decision = await pickBranch(branchPoint, userState, { missionSlug }, {
+        rankBranches: (b, s, c) => rankBranches(b, s, c, loaders),
+      });
+    } catch (err) {
+      LOG.warn(`pickBranch failed for mission ${missionSlug}/${branchPoint.id}: ${err.message}`);
+      decision = { picked: branches[0]?.key ?? null, reason: { kind: 'default' }, confidence: 0 };
+    }
+    outAltGroups.push({
+      id: branchPoint.id,
+      groupKey: g.groupKey,
+      picked: decision.picked,
+      reason: decision.reason,
+      confidence: decision.confidence,
+      allBranches: branches.map(b => ({ key: b.key, label: b.label })),
+    });
+    await writeBranchDecision({
+      user, surface: 'missionAltGroup', missionSlug, tutorialSlug: null,
+      branchPointId: branchPoint.id, decision,
+    });
+  }
+
+  return { altGroups: outAltGroups };
 }
