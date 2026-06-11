@@ -690,13 +690,39 @@
   if (opStepsRoot) stepObserver.observe(opStepsRoot, { attributes: true, subtree: true, attributeFilter: ["class"] });
   if (opWizard) stepObserver.observe(opWizard, { attributes: true, subtree: true, attributeFilter: ["selected"] });
 
+  // [#172 PR 4] Branch state bus reader. The Vue island fires
+  // `branch:state-change` CustomEvents whenever a BranchPicker's selected
+  // or recommended branch changes; we maintain the latest state per
+  // branchPointId in this Map for opGetCurrentStep + readPageContext.
+  const latestBranchState = new Map();
+  document.addEventListener('branch:state-change', (e) => {
+    if (e.detail && e.detail.branchPointId) {
+      latestBranchState.set(e.detail.branchPointId, e.detail);
+    }
+  });
+
+  function getStepBranchContext(stepNum) {
+    const stepEl = document.getElementById('step-' + stepNum);
+    if (!stepEl) return null;
+    const mount = stepEl.querySelector('.tutorial-branch-mount[data-branch-point-id]');
+    if (!mount) return null;
+    return latestBranchState.get(mount.dataset.branchPointId) || null;
+  }
+
   // Expose step-context getter for the Joule step-help FAB. Returns
-  // {slug, n, heading} for the step closest to viewport center, or step 1.
+  // {slug, n, heading, branchContext?} for the step closest to viewport
+  // center, or step 1.
   window.opGetCurrentStep = function () {
     const n = getCurrentStep();
     const stepEl = document.getElementById("step-" + n);
     const heading = stepEl?.querySelector(".step-title-text")?.textContent?.trim() || "";
-    return { slug: tutorialSlug, n: n, heading: heading };
+    const ctx = { slug: tutorialSlug, n: n, heading: heading };
+    const branchContext = getStepBranchContext(n);
+    if (branchContext) ctx.branchContext = branchContext;
+    return ctx;
   };
+
+  // Expose for joule.js#readPageContext.
+  window.opGetCurrentStepBranchContext = getStepBranchContext;
 </script>
 {{ end }}
