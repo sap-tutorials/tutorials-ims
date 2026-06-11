@@ -243,6 +243,50 @@ curl -sX POST http://localhost:4004/content/publish/abort \
 
 ---
 
+## Joule Chat Tools
+
+Tools registered with the Joule chat runtime (LLM tool-calling surface, not standalone HTTP endpoints). Reachable via `POST /chat/stream`. Each tool's registration is gated on a `ChatSettings` flag so the LLM only sees the tool when the feature is enabled.
+
+### `getBranchRecommendation`
+
+Author-aware branch + skip recommender for tutorials and missions (issue #172 PR 4).
+
+- **Registration gate** — registered when `ChatSettings.enabled = true && ChatSettings.branchingEnabled = true`. When `branchingEnabled = false`, the tool is not registered and the LLM falls back to general guidance.
+- **Params** — `missionSlug?` (string), `tutorialSlug?` (string), `branchPointId?` (string). At least one of `missionSlug` / `tutorialSlug` is required. `branchPointId` requires `tutorialSlug`.
+- **Return shape**:
+
+  ```jsonc
+  {
+    "branchPoints": [
+      { "id": "...", "picked": "...", "reason": "...", "confidence": 0.0,
+        "allBranches": [{ "key": "...", "label": "..." }] }
+    ],
+    "altGroups": [
+      { "id": "...", "groupKey": "...", "picked": "...", "reason": "...", "confidence": 0.0,
+        "allBranches": [{ "key": "...", "label": "..." }] }
+    ],
+    "skipPoints": [
+      { "stepNumber": 4, "skip": true, "reason": "...", "skipLabel": "...", "skipReason": "..." }
+    ],
+    "note": "...",   // empty-shape signal (see below)
+    "error": "..."   // validation failure (see below)
+  }
+  ```
+
+- **Telemetry** — writes one `BranchDecisions` row per branch / alt-group / skip recommendation with `source: 'jouleTool'`. Skip-point telemetry is only emitted when `skip === true`.
+- **Error envelopes** (validation failures, no telemetry):
+  - `error: 'requires_at_least_one_of: missionSlug, tutorialSlug, branchPointId'`
+  - `error: 'branchPointId requires tutorialSlug'`
+  - `error: 'unknown_branch_point: <id>'`
+- **Empty-shape envelopes** (not errors, no recommendation possible):
+  - `note: 'tutorial_has_no_branches'`
+  - `note: 'mission_not_found'`
+  - `note: 'mission_has_no_alt_groups'`
+
+Implementation: [srv/lib/branch/joule-tool.js](../../../srv/lib/branch/joule-tool.js). Telemetry helper: [srv/lib/branch/branch-telemetry.js](../../../srv/lib/branch/branch-telemetry.js).
+
+---
+
 ## Approuter-only Endpoints
 
 | URL | Method | Description | Auth |
