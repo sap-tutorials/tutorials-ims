@@ -8,6 +8,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import type { DecideResponse } from './decide';
+import { publishBranchState } from './branch-state-bus.js';
 
 interface BranchStep { title: string; body: string; }
 interface BranchEntry {
@@ -118,12 +119,23 @@ onMounted(async () => {
   if (!props.override && !hasPersisted && selectedKey.value === props.branches[0]?.key) {
     selectedKey.value = bp.recommendation.picked;
   }
+  publishCurrent();  // [#172 PR 4] always publish initial state
 });
+
+function publishCurrent() {
+  publishBranchState({
+    branchPointId: props.branchPointId,
+    groupKey: props.groupKey,
+    currentBranch: selectedKey.value,
+    recommendedBranch: recommendedKey.value,
+  });
+}
 
 function onItemClick(key: string) {
   if (key === selectedKey.value) return;
   selectedKey.value = key;
   try { localStorage.setItem(storageKey, key); } catch { /* ignore */ }
+  publishCurrent();  // [#172 PR 4]
 }
 </script>
 
