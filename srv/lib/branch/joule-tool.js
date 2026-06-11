@@ -15,6 +15,8 @@ import { rankBranches } from './ranker.js';
 import { buildUserState } from './user-state.js';
 import { makeBranchLoaders } from './loaders.js';
 import { slugifyKey } from './slug-key.js';
+import { writeBranchDecision, writeSkipDecision } from './branch-telemetry.js';
+import { groupByAlt } from './group-by-alt.js';
 
 const LOG = cds.log('branch-joule-tool');
 
@@ -122,7 +124,7 @@ async function resolveTutorialScope({ tutorialSlug, branchPointId, user, userSta
     });
     await writeBranchDecision({
       user, surface: 'tutorialBranch', tutorialSlug, missionSlug: null,
-      branchPointId: bp.id, decision,
+      branchPointId: bp.id, decision, source: 'jouleTool',
     });
   }
 
@@ -142,63 +144,13 @@ async function resolveTutorialScope({ tutorialSlug, branchPointId, user, userSta
       ...(sp.skipReason ? { skipReason: sp.skipReason } : {}),
     });
     if (result.skip) {
-      await writeSkipDecision({ user, tutorialSlug, stepNumber: sp.stepNumber, reason: result.reason });
+      await writeSkipDecision({
+        user, tutorialSlug, stepNumber: sp.stepNumber, reason: result.reason, source: 'jouleTool',
+      });
     }
   }
 
   return { branchPoints: outBranchPoints, skipPoints: outSkipPoints };
-}
-
-async function writeBranchDecision({ user, surface, missionSlug, tutorialSlug, branchPointId, decision }) {
-  try {
-    const { BranchDecisions, Users } = cds.entities('com.sap.developers.ims');
-    let userIdInternal = null;
-    if (user?.id) {
-      const u = await SELECT.one.from(Users).columns('ID').where({ uuid: user.id });
-      userIdInternal = u?.ID || null;
-    }
-    await INSERT.into(BranchDecisions).entries({
-      user_ID: userIdInternal,
-      surface,
-      missionSlug: missionSlug ?? null,
-      tutorialSlug: tutorialSlug ?? null,
-      branchPointId,
-      recommendedKey: decision.picked,
-      chosenKey: null,
-      recommendationKind: decision.reason.kind,
-      confidence: decision.confidence,
-      source: 'jouleTool',
-      followedRecommendation: null,
-    });
-  } catch (err) {
-    LOG.warn(`BranchDecisions write failed: ${err.message}`);
-  }
-}
-
-async function writeSkipDecision({ user, tutorialSlug, stepNumber, reason }) {
-  try {
-    const { BranchDecisions, Users } = cds.entities('com.sap.developers.ims');
-    let userIdInternal = null;
-    if (user?.id) {
-      const u = await SELECT.one.from(Users).columns('ID').where({ uuid: user.id });
-      userIdInternal = u?.ID || null;
-    }
-    await INSERT.into(BranchDecisions).entries({
-      user_ID: userIdInternal,
-      surface: 'tutorialSkip',
-      missionSlug: null,
-      tutorialSlug,
-      branchPointId: `step-${stepNumber}`,
-      recommendedKey: 'skip',
-      chosenKey: null,
-      recommendationKind: reason.kind,
-      confidence: 1.0,
-      source: 'jouleTool',
-      followedRecommendation: null,
-    });
-  } catch (err) {
-    LOG.warn(`BranchDecisions skip write failed: ${err.message}`);
-  }
 }
 
 async function resolveMissionScope({ missionSlug, user, userState, loaders }) {
@@ -218,27 +170,15 @@ async function resolveMissionScope({ missionSlug, user, userState, loaders }) {
     .where({ path_ID: { in: paths.map(p => p.ID) } })
     .orderBy('itemOrder');
 
-  // Group items by (itemOrder, altGroupKey) — mirrors mission-detail.js groupByAlt.
-  const groups = new Map();
-  for (const it of items) {
-    if (!it.altGroupKey) continue;
-    const key = `${it.itemOrder}:${it.altGroupKey}`;
-    if (!groups.has(key)) {
-      groups.set(key, {
-        itemOrder: it.itemOrder,
-        groupKey: it.altGroupKey,
-        items: [],
-      });
-    }
-    groups.get(key).items.push(it);
-  }
+  // Group items by (itemOrder, altGroupKey) — uses shared groupByAlt helper.
+  const groups = groupByAlt(items);
 
-  if (groups.size === 0) {
+  if (groups.length === 0) {
     return { altGroups: [], note: 'mission_has_no_alt_groups' };
   }
 
   const outAltGroups = [];
-  for (const g of groups.values()) {
+  for (const g of groups) {
     const branches = g.items.map(it => ({
       key: slugifyKey(it.altGroupLabel),
       label: it.altGroupLabel,
@@ -269,7 +209,7 @@ async function resolveMissionScope({ missionSlug, user, userState, loaders }) {
     });
     await writeBranchDecision({
       user, surface: 'missionAltGroup', missionSlug, tutorialSlug: null,
-      branchPointId: branchPoint.id, decision,
+      branchPointId: branchPoint.id, decision, source: 'jouleTool',
     });
   }
 

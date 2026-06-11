@@ -14,6 +14,7 @@ import { pickBranch, evaluateSkip } from './engine.js';
 import { rankBranches } from './ranker.js';
 import { buildUserState, fingerprintUserState } from './user-state.js';
 import { makeBranchLoaders } from './loaders.js';
+import { writeBranchDecision, writeSkipDecision } from './branch-telemetry.js';
 
 const LOG = cds.log('branches-decide');
 
@@ -70,7 +71,10 @@ export async function decideHandler(req, res) {
         recommendation: { picked: decision.picked, reason: decision.reason, confidence: decision.confidence },
       });
       if (!noCache) {
-        await writeBranchDecision({ user, slug, branchPointId: bp.id, decision, surface: 'tutorialBranch', source: 'pageLoad' });
+        await writeBranchDecision({
+          user, surface: 'tutorialBranch', tutorialSlug: slug, missionSlug: null,
+          branchPointId: bp.id, decision, source: 'pageLoad',
+        });
       }
     }
 
@@ -84,7 +88,9 @@ export async function decideHandler(req, res) {
         ...(sp.skipReason ? { skipReason: sp.skipReason } : {}),
       });
       if (!noCache && result.skip) {
-        await writeSkipDecision({ user, slug, stepNumber: sp.stepNumber, reason: result.reason });
+        await writeSkipDecision({
+          user, tutorialSlug: slug, stepNumber: sp.stepNumber, reason: result.reason, source: 'pageLoad',
+        });
       }
     }
 
@@ -94,58 +100,6 @@ export async function decideHandler(req, res) {
   } catch (err) {
     LOG.error('decideHandler', err);
     res.status(500).json({ error: 'decide_failed' });
-  }
-}
-
-async function writeBranchDecision({ user, slug, branchPointId, decision, surface, source }) {
-  try {
-    const { BranchDecisions, Users } = cds.entities('com.sap.developers.ims');
-    let userIdInternal = null;
-    if (user?.id) {
-      const u = await SELECT.one.from(Users).columns('ID').where({ uuid: user.id });
-      userIdInternal = u?.ID || null;
-    }
-    await INSERT.into(BranchDecisions).entries({
-      user_ID: userIdInternal,
-      surface,
-      missionSlug: null,
-      tutorialSlug: slug,
-      branchPointId,
-      recommendedKey: decision.picked,
-      chosenKey: null,
-      recommendationKind: decision.reason.kind,
-      confidence: decision.confidence,
-      source,
-      followedRecommendation: null,
-    });
-  } catch (err) {
-    LOG.warn(`BranchDecisions write failed: ${err.message}`);
-  }
-}
-
-async function writeSkipDecision({ user, slug, stepNumber, reason }) {
-  try {
-    const { BranchDecisions, Users } = cds.entities('com.sap.developers.ims');
-    let userIdInternal = null;
-    if (user?.id) {
-      const u = await SELECT.one.from(Users).columns('ID').where({ uuid: user.id });
-      userIdInternal = u?.ID || null;
-    }
-    await INSERT.into(BranchDecisions).entries({
-      user_ID: userIdInternal,
-      surface: 'tutorialSkip',
-      missionSlug: null,
-      tutorialSlug: slug,
-      branchPointId: `step-${stepNumber}`,
-      recommendedKey: 'skip',
-      chosenKey: null,
-      recommendationKind: reason.kind,
-      confidence: 1.0,
-      source: 'pageLoad',
-      followedRecommendation: null,
-    });
-  } catch (err) {
-    LOG.warn(`BranchDecisions skip write failed: ${err.message}`);
   }
 }
 

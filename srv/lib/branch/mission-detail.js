@@ -9,6 +9,8 @@ import { rankBranches } from './ranker.js';
 import { buildUserState, fingerprintUserState } from './user-state.js';
 import { makeBranchLoaders } from './loaders.js';
 import { slugifyKey } from './slug-key.js';
+import { writeBranchDecision } from './branch-telemetry.js';
+import { groupByAlt } from './group-by-alt.js';
 
 const LOG = cds.log('build-mission-detail');
 
@@ -60,16 +62,27 @@ export async function missionDetailHandler(req, res) {
 
     const out = { missionSlug: slug, items: [] };
 
-    // Group items by (altGroupKey, itemOrder). Linear backbone items have key=null.
-    const grouped = groupByAlt(items);
+    // Walk items in order. Emit linear backbone items inline; for alt-group items,
+    // dedupe by (itemOrder, altGroupKey) using the shared groupByAlt helper so each
+    // alt-group is rendered exactly once at its first occurrence.
+    const altGroups = groupByAlt(items);
+    const altGroupByKey = new Map(
+      altGroups.map(g => [`${g.itemOrder}:${g.groupKey}`, g])
+    );
+    const emittedAltKeys = new Set();
 
-    for (const g of grouped) {
-      if (g.altGroupKey == null) {
-        const item = g.items[0];
+    for (const item of items) {
+      if (!item.altGroupKey) {
         const tut = tutorialById.get(item.tutorial_ID);
         out.items.push({ type: 'tutorial', slug: tut?.slug || null, title: tut?.title || null });
         continue;
       }
+
+      const groupCacheKey = `${item.itemOrder}:${item.altGroupKey}`;
+      if (emittedAltKeys.has(groupCacheKey)) continue;
+      emittedAltKeys.add(groupCacheKey);
+      const g = altGroupByKey.get(groupCacheKey);
+      if (!g) continue;
 
       const branches = g.items.map(i => {
         const tut = tutorialById.get(i.tutorial_ID);
@@ -85,13 +98,13 @@ export async function missionDetailHandler(req, res) {
 
       const altGroupRecord = {
         type: 'altGroup',
-        groupKey: g.altGroupKey,
+        groupKey: g.groupKey,
         // Don't leak embeddingHint downstream
         branches: branches.map(({ embeddingHint, ...keep }) => keep),
       };
 
       if (flagOn) {
-        const branchPoint = { id: `${slug}:${g.altGroupKey}:${g.items[0].itemOrder}`, surface: 'missionAltGroup', branches };
+        const branchPoint = { id: `${slug}:${g.groupKey}:${g.itemOrder}`, surface: 'missionAltGroup', branches };
         const decision = await pickBranch(branchPoint, userState, { missionSlug: slug }, {
           rankBranches: (bp, st, ctx) => rankBranches(bp, st, ctx, loaders),
         });
@@ -104,8 +117,8 @@ export async function missionDetailHandler(req, res) {
         // polluting BranchDecisions with synthetic rows (issue #296).
         if (!noCache) {
           await writeBranchDecision({
-            user, slug, branchPointId: branchPoint.id, decision,
-            surface: 'missionAltGroup', source: 'pageLoad',
+            user, surface: 'missionAltGroup', missionSlug: slug, tutorialSlug: null,
+            branchPointId: branchPoint.id, decision, source: 'pageLoad',
           });
         }
       }
@@ -127,51 +140,6 @@ async function loadTutorialMap(Tutorials, items) {
   if (!ids.length) return new Map();
   const rows = await SELECT.from(Tutorials).columns('ID', 'slug', 'title').where({ ID: { in: ids } });
   return new Map(rows.map(t => [t.ID, t]));
-}
-
-function groupByAlt(items) {
-  const out = [];
-  const seenKey = new Map(); // `${order}:${altKey}` → groupIndex
-  for (const it of items) {
-    if (!it.altGroupKey) {
-      out.push({ altGroupKey: null, itemOrder: it.itemOrder, items: [it] });
-      continue;
-    }
-    const k = `${it.itemOrder}:${it.altGroupKey}`;
-    if (seenKey.has(k)) {
-      out[seenKey.get(k)].items.push(it);
-    } else {
-      seenKey.set(k, out.length);
-      out.push({ altGroupKey: it.altGroupKey, itemOrder: it.itemOrder, items: [it] });
-    }
-  }
-  return out;
-}
-
-async function writeBranchDecision({ user, slug, branchPointId, decision, surface, source }) {
-  try {
-    const { BranchDecisions, Users } = cds.entities('com.sap.developers.ims');
-    let userIdInternal = null;
-    if (user?.id) {
-      const u = await SELECT.one.from(Users).columns('ID').where({ uuid: user.id });
-      userIdInternal = u?.ID || null;
-    }
-    await INSERT.into(BranchDecisions).entries({
-      user_ID: userIdInternal,
-      surface,
-      missionSlug: slug,
-      tutorialSlug: null,
-      branchPointId,
-      recommendedKey: decision.picked,
-      chosenKey: null,
-      recommendationKind: decision.reason.kind,
-      confidence: decision.confidence,
-      source,
-      followedRecommendation: null,
-    });
-  } catch (err) {
-    LOG.warn(`BranchDecisions write failed: ${err.message}`);
-  }
 }
 
 function storeCache(key, value) {

@@ -127,6 +127,35 @@ describe('getBranchRecommendationHandler — tutorial scope', () => {
 
     await DELETE.from(BranchDecisions).where({ tutorialSlug: TUT_SLUG });
   });
+
+  it('writes a skip-telemetry row with source=jouleTool when skip:true', async () => {
+    // Seed a tutorial whose skipIf is always-true so we exercise the write path.
+    const ALWAYS_SKIP_SLUG = '__test__-always-skip-pr4';
+    const { BranchSpecs, BranchDecisions } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(BranchSpecs).entries({
+      slug: ALWAYS_SKIP_SLUG,
+      branchPoints: JSON.stringify([]),
+      skipPoints: JSON.stringify([
+        { stepNumber: 7, skipIf: 'true', skipLabel: 'Skip', skipReason: 'Always skip' },
+      ]),
+    });
+    await DELETE.from(BranchDecisions).where({ tutorialSlug: ALWAYS_SKIP_SLUG });
+
+    const result = await getBranchRecommendationHandler({
+      args: { tutorialSlug: ALWAYS_SKIP_SLUG }, user: null
+    });
+    expect(result.skipPoints[0].skip).toBe(true);
+
+    const rows = await SELECT.from(BranchDecisions).where({ tutorialSlug: ALWAYS_SKIP_SLUG });
+    expect(rows.length).toBe(1);
+    expect(rows[0].source).toBe('jouleTool');
+    expect(rows[0].surface).toBe('tutorialSkip');
+    expect(rows[0].branchPointId).toBe('step-7');
+    expect(rows[0].recommendedKey).toBe('skip');
+
+    await DELETE.from(BranchDecisions).where({ tutorialSlug: ALWAYS_SKIP_SLUG });
+    await DELETE.from(BranchSpecs).where({ slug: ALWAYS_SKIP_SLUG });
+  });
 });
 
 const MISSION_SLUG = '__test__-mission-pr4';
