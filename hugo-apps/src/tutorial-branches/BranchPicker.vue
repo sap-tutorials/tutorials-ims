@@ -60,6 +60,46 @@ const recommendationReason = computed<string | null>(() => {
   return null;
 });
 
+// [#303] When the user lands with `?branch=<groupKey>:<key>` AND the system
+// recommends a different branch, render a transparent transcript chip instead
+// of the plain "Recommended because…" text. The user can see what the system
+// would have picked AND why, without losing their explicit override.
+//
+// Spec §5.3.4 says "highlighted, not enforced" — hiding the chip silently
+// would lose information. Chip text falls back to the bare reason when
+// `recommendationReason` itself is null (no kind / low confidence).
+const recommendedBranchLabel = computed<string | null>(() => {
+  if (!recommendedKey.value) return null;
+  return props.branches.find(b => b.key === recommendedKey.value)?.label ?? null;
+});
+
+const showOverrideChip = computed<boolean>(() => {
+  return !!props.override
+    && !!recommendedKey.value
+    && recommendedKey.value !== props.override;
+});
+
+const showRecommendationChip = computed<boolean>(() => {
+  // Standard chip: no override, system pick differs from current selection,
+  // and we have a reason string to render.
+  return !props.override
+    && !!recommendedKey.value
+    && recommendedKey.value !== selectedKey.value
+    && !!recommendationReason.value;
+});
+
+const overrideChipText = computed<string | null>(() => {
+  if (!showOverrideChip.value) return null;
+  const label = recommendedBranchLabel.value ?? recommendedKey.value;
+  if (recommendationReason.value) {
+    // "The system suggested HANA Cloud — Recommended because profile.deployment == 'cloud'"
+    // Strip the leading "Recommended " so the suggestion reads naturally.
+    const suffix = recommendationReason.value.replace(/^Recommended\s+/, '');
+    return `You're on this branch by override. The system suggested ${label} ${suffix}.`;
+  }
+  return `You're on this branch by override. The system suggested ${label}.`;
+});
+
 onMounted(async () => {
   const decisions = await props.decisionsPromise;
   if (!decisions) return;
@@ -107,10 +147,18 @@ function onItemClick(key: string) {
     </ui5-segmented-button>
 
     <div
-      v-if="recommendedKey && recommendedKey !== selectedKey && recommendationReason"
+      v-if="showRecommendationChip"
       class="branch-recommendation"
     >
       {{ recommendationReason }}
+    </div>
+
+    <div
+      v-else-if="showOverrideChip"
+      class="branch-recommendation branch-recommendation--override"
+      data-override-chip="true"
+    >
+      {{ overrideChipText }}
     </div>
 
     <div
@@ -133,6 +181,11 @@ function onItemClick(key: string) {
   margin-top: 0.5rem;
   font-size: 0.875rem;
   color: var(--sapContent_LabelColor, #556b82);
+}
+.branch-recommendation--override {
+  /* Subtle visual distinction so the user reads it as informational about
+     the system's pick rather than as a call to action on the active branch. */
+  font-style: italic;
 }
 .branch-content { margin-top: 1rem; }
 </style>
