@@ -108,16 +108,8 @@ describe('BranchPicker', () => {
     expect(localStorage.getItem(STORAGE_KEY)).toBe('postgres');
   });
 
-  it('URL override pre-selects the overridden branch (chip suppression on override is a component gap)', async () => {
-    // Intent: URL override pre-selects + suppresses the recommendation chip.
-    // Reality: BranchPicker.vue gates the chip on `recommendedKey !== selectedKey`
-    // alone — it does NOT inspect props.override to suppress. The chip
-    // therefore renders whenever override differs from the recommendation.
-    // To keep the test passing against the as-shipped component, we assert
-    // what override DOES do today (pre-selects the branch via selectedKey)
-    // and use a fixture where override matches the recommendation so the
-    // chip is naturally absent. The "user overrides AND recommendation is
-    // different AND chip should still hide" gap is captured separately.
+  it('URL override pre-selects the overridden branch + suppresses standard chip when override matches recommendation', async () => {
+    // Override matches the system pick → no chip variant should render.
     const wrapper = mount(BranchPicker, {
       props: {
         slug: SLUG,
@@ -140,17 +132,56 @@ describe('BranchPicker', () => {
     });
     await flushPromises();
 
-    // Override pre-selected postgres: only the postgres branch's content shows.
-    // Each branch wraps its steps in a div whose v-show is selectedKey === branch.key.
-    // We assert via the HANA item NOT carrying selected=true and the postgres item
-    // carrying it.
     const items = wrapper.findAll('ui5-segmented-button-item');
     const pgItem = items.find(i => i.text().includes('PostgreSQL'));
     const hanaItem = items.find(i => i.text().includes('HANA Cloud'));
     expect(pgItem!.attributes('selected')).toBe('true');
     expect(hanaItem!.attributes('selected')).toBeUndefined();
-
-    // And the recommendation chip is absent (because override === recommended).
+    expect(wrapper.find('[data-override-chip]').exists()).toBe(false);
     expect(wrapper.text()).not.toMatch(/Recommended because/);
+  });
+
+  it('URL override + recommendation differs → renders the override-chip variant (#303)', async () => {
+    // User landed with ?branch=deployment:postgres but the engine picked HANA.
+    // Spec §5.3.4 says branches are "highlighted, not enforced." Hiding the
+    // chip silently would lose info. Instead the picker renders a transparent
+    // transcript chip showing the override + the system's pick + reason.
+    const wrapper = mount(BranchPicker, {
+      props: {
+        slug: SLUG,
+        branchPointId: BPID,
+        groupKey: 'deployment',
+        branches: baseBranches,
+        override: 'postgres',
+        decisionsPromise: Promise.resolve({
+          branchPoints: [{
+            id: BPID,
+            recommendation: {
+              picked: 'hana',
+              reason: { kind: 'condition', source: "profile.deployment == 'cloud'" },
+              confidence: 1.0,
+            },
+          }],
+          skipPoints: [],
+        }),
+      },
+    });
+    await flushPromises();
+
+    // Override pre-selected postgres.
+    const items = wrapper.findAll('ui5-segmented-button-item');
+    const pgItem = items.find(i => i.text().includes('PostgreSQL'));
+    expect(pgItem!.attributes('selected')).toBe('true');
+
+    // Standard "Recommended because…" chip is suppressed by the override branch.
+    const standardChip = wrapper.find('.branch-recommendation:not(.branch-recommendation--override)');
+    expect(standardChip.exists()).toBe(false);
+
+    // Override chip renders with system pick + reason text.
+    const overrideChip = wrapper.find('[data-override-chip]');
+    expect(overrideChip.exists()).toBe(true);
+    expect(overrideChip.text()).toContain('HANA Cloud');
+    expect(overrideChip.text()).toMatch(/system suggested HANA Cloud/);
+    expect(overrideChip.text()).toContain("profile.deployment == 'cloud'");
   });
 });
