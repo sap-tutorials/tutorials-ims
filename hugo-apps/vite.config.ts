@@ -7,6 +7,7 @@ import { gzipSync } from 'node:zlib'
 const MAX_TUTORIAL_PREFS_GZIP = 8 * 1024;
 const MAX_CODE_CHECK_GZIP = 8 * 1024;
 const MAX_VALIDATION_GZIP = 8 * 1024;
+const MAX_TUTORIAL_BRANCHES_GZIP = 12 * 1024;
 
 function codeCheckBudget() {
   return {
@@ -44,6 +45,24 @@ function validationBudget() {
   };
 }
 
+function tutorialBranchesBudget() {
+  return {
+    name: 'tutorial-branches-budget',
+    generateBundle(_opts: unknown, bundle: Record<string, any>) {
+      const chunk = bundle['tutorial-branches.js'];
+      if (!chunk || chunk.type !== 'chunk') return;
+      const gz = gzipSync(chunk.code).length;
+      if (gz > MAX_TUTORIAL_BRANCHES_GZIP) {
+        // @ts-ignore — Rollup plugin context
+        this.error(`tutorial-branches.js is ${gz} bytes gzipped (> ${MAX_TUTORIAL_BRANCHES_GZIP}). Move code to a lazy chunk.`);
+      } else {
+        // @ts-ignore
+        this.warn(`tutorial-branches.js: ${gz} bytes gzipped (budget ${MAX_TUTORIAL_BRANCHES_GZIP}).`);
+      }
+    }
+  };
+}
+
 function tutorialPrefsBudget() {
   return {
     name: 'tutorial-prefs-budget',
@@ -63,7 +82,7 @@ function tutorialPrefsBudget() {
 }
 
 export default defineConfig({
-  plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget(), codeCheckBudget(), validationBudget()],
+  plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget(), codeCheckBudget(), validationBudget(), tutorialBranchesBudget()],
   // Approuter serves these bundles at /js/. Without `base`, Vite emits
   // dynamic-import paths as `./chunks/x.js` which the browser resolves
   // against the *document URL* (e.g. `/` → `/chunks/x.js` → 404). Setting
@@ -98,6 +117,7 @@ export default defineConfig({
         'code-check': resolve(__dirname, 'src/code-check/main.ts'),
         browse: resolve(__dirname, 'src/browse/main.ts'),
         'validation': resolve(__dirname, 'src/validation/main.ts'),
+        'tutorial-branches': resolve(__dirname, 'src/tutorial-branches/main.ts'),
         // [#251] Renamed from `tutorial` → `tutorial-referred` to avoid a path
         // collision with Hugo's `js.Build` output for `hugo/assets/js/tutorial.ts`,
         // which writes to the same /js/tutorial.js URL and would clobber (or be

@@ -61,7 +61,7 @@ export function createSessionHelpers({ namespace }) {
     return row;
   }
 
-  async function appendToSession({ sessionId, files = {}, metadata = {}, bodyTexts = {} }) {
+  async function appendToSession({ sessionId, files = {}, metadata = {}, bodyTexts = {}, branchSpecs = {} }) {
     const session = await findActiveSession(sessionId);
     const { ContentFiles, ContentManifest } = cds.entities(namespace);
 
@@ -108,6 +108,9 @@ export function createSessionHelpers({ namespace }) {
     }
     if (Object.keys(bodyTexts).length > 0) {
       await upsertBodyTexts(namespace, bodyTexts);
+    }
+    if (branchSpecs && Object.keys(branchSpecs).length > 0) {
+      await upsertBranchSpecs(namespace, branchSpecs);
     }
 
     await UPDATE(ContentManifest)
@@ -429,6 +432,44 @@ async function upsertBodyTexts(namespace, bodyTexts) {
 
   if (bodyUpserted > 0) {
     console.log(`[content/publish] Upserted body text for ${bodyUpserted} tutorials`);
+  }
+}
+
+async function upsertBranchSpecs(namespace, branchSpecs) {
+  // Upsert BranchSpecs (sidecar for issue #172 PR 3 — branchPoints / skipPoints
+  // JSON per slug). The decide handler reads from this rather than re-parsing
+  // the gzipped HTML BLOB. Tutorials without branches/skips never appear in
+  // the payload, so absence implicitly means "linear" — no row write needed.
+  const { BranchSpecs } = cds.entities(namespace);
+  let bsUpserted = 0;
+
+  for (const [slug, spec] of Object.entries(branchSpecs)) {
+    if (!spec || typeof spec !== 'object') continue;
+    const branchPointsJson = JSON.stringify(spec.branchPoints ?? []);
+    const skipPointsJson   = JSON.stringify(spec.skipPoints   ?? []);
+    try {
+      // slug-canonical: write-path-canonicalizes
+      const existing = await SELECT.one.from(BranchSpecs).where({ slug }).columns('slug');
+      if (existing) {
+        await UPDATE(BranchSpecs).where({ slug }).set({
+          branchPoints: branchPointsJson,
+          skipPoints:   skipPointsJson,
+        });
+      } else {
+        await INSERT.into(BranchSpecs).entries({
+          slug,
+          branchPoints: branchPointsJson,
+          skipPoints:   skipPointsJson,
+        });
+      }
+      bsUpserted++;
+    } catch (bsErr) {
+      console.warn(`[content/publish] branch specs upsert failed for ${slug}:`, bsErr.message);
+    }
+  }
+
+  if (bsUpserted > 0) {
+    console.log(`[content/publish] Upserted branch specs for ${bsUpserted} tutorials`);
   }
 }
 

@@ -381,6 +381,10 @@ entity ContentManifest : shared.ContentManifestAspect {}
 @cds.autoexpose: false
 entity TutorialBodyText : shared.TutorialBodyTextAspect {}
 
+// Issue #172 PR 3 — branch/skip spec sidecar; see db/_content-shape.cds.
+@cds.autoexpose: false
+entity BranchSpecs : shared.BranchSpecsAspect {}
+
 @cds.autoexpose: false
 entity RepoCatalog : shared.RepoCatalogAspect {}
 

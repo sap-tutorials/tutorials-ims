@@ -1,22 +1,8 @@
 import cds from '@sap/cds';
 import { categorySlugsFor, buildCategoriesPayload } from './build-catalog-categories.js';
+import { slugifyKey } from './branch/slug-key.js';
 
 const FEATURED_LIMIT = 6;
-
-/**
- * Slugify a label into a branch key. Stable + URL-safe.
- *
- * NOTE: kept identical to `slugifyKey` in `srv/lib/branch/mission-detail.js`
- * so /build/catalog and /build/mission/:slug emit the same branch keys.
- * Follow-up (PR 3): consolidate to a shared `srv/lib/branch/slug-key.js`
- * once we're sure both call sites need to evolve together.
- */
-function slugifyKey(label) {
-  return String(label).toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 40);
-}
 
 /**
  * Collect alt-group branches from a list of items that share a parent

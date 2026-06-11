@@ -117,4 +117,68 @@ describe('lint-tutorial-markdown', () => {
       })
     })
   })
+
+  describe('branch syntax rule (#172 PR 3)', () => {
+    it('flags unbalanced [BRANCH_BEGIN]', () => {
+      const md = [
+        '### Step 1',
+        '',
+        '[BRANCH_BEGIN group="g" key="a" label="A"]',
+        '### sub',
+      ].join('\n')
+      const findings = lintTutorial('slug', md)
+      const branchFinding = findings.find(f => /unbalanced/.test(f.message))
+      expect(branchFinding).toBeDefined()
+      expect(branchFinding.severity).toBe('error')
+      expect(branchFinding.rule).toBe('branch-syntax')
+    })
+
+    it('flags duplicate key', () => {
+      const md = [
+        '### Step 1',
+        '',
+        '[BRANCH_BEGIN group="g" key="a" label="A"]',
+        '### sub-1',
+        '[BRANCH_END]',
+        '[BRANCH_BEGIN group="g" key="a" label="A2"]',
+        '### sub-2',
+        '[BRANCH_END]',
+      ].join('\n')
+      const findings = lintTutorial('slug', md)
+      const branchFinding = findings.find(f => /duplicate key/.test(f.message))
+      expect(branchFinding).toBeDefined()
+      expect(branchFinding.severity).toBe('error')
+    })
+
+    it('flags nested [BRANCH_BEGIN]', () => {
+      const md = [
+        '### Step 1',
+        '',
+        '[BRANCH_BEGIN group="g" key="a" label="A"]',
+        '### sub-a',
+        '[BRANCH_BEGIN group="g" key="b" label="B"]',
+        '### sub-b',
+        '[BRANCH_END]',
+        '[BRANCH_END]',
+      ].join('\n')
+      const findings = lintTutorial('slug', md)
+      const branchFinding = findings.find(f => /nested/.test(f.message))
+      expect(branchFinding).toBeDefined()
+      expect(branchFinding.severity).toBe('error')
+    })
+
+    it('flags unparseable condition', () => {
+      const md = [
+        '### Step 1',
+        '',
+        '[BRANCH_BEGIN group="g" key="a" label="A" condition="profile.deployment == cloud"]',
+        '### sub',
+        '[BRANCH_END]',
+      ].join('\n')
+      const findings = lintTutorial('slug', md)
+      const branchFinding = findings.find(f => /does not parse/.test(f.message))
+      expect(branchFinding).toBeDefined()
+      expect(branchFinding.severity).toBe('error')
+    })
+  })
 })

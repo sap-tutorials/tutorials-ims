@@ -25,8 +25,12 @@ import { readdirSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { extractBranchGroups, BranchParseError } from './parsers/branches.ts'
+
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '..')
+
+export type LintSeverity = 'error' | 'warning'
 
 export type LintFinding = {
   rule: string
@@ -35,6 +39,8 @@ export type LintFinding = {
   line: number
   message: string
   excerpt: string
+  /** Optional. Branch-syntax rule emits 'error'; legacy rules omit (treated as 'warning'). */
+  severity?: LintSeverity
 }
 
 type Rule = {
@@ -158,6 +164,44 @@ const indentedNumberedListItem: Rule = {
 
 const RULES: Rule[] = [indentedNumberedListItem]
 
+/**
+ * Rule: branch-syntax (issue #172 PR 3).
+ *
+ * Runs the strict branch-marker pre-pass parser (`extractBranchGroups`) and
+ * surfaces any `BranchParseError` it throws as a single error-severity
+ * finding. Catches:
+ *   - unbalanced [BRANCH_BEGIN] / [BRANCH_END]
+ *   - nested [BRANCH_BEGIN] inside another branch
+ *   - duplicate `key=` within the same group
+ *   - unparseable `condition=` expressions
+ *
+ * Operates on the raw markdown (not code-fence-redacted) because the parser
+ * has its own opinions about what constitutes a marker. Hard-error severity:
+ * downstream tooling (CI) should treat any branch-syntax finding as a build
+ * blocker — a malformed branch group corrupts the rest of the parse.
+ */
+export function branchSyntaxRule(slug: string, source: string): LintFinding[] {
+  try {
+    extractBranchGroups(source, slug)
+    return []
+  } catch (err) {
+    if (err instanceof BranchParseError) {
+      const lineIdx = Math.max(0, err.line - 1)
+      const excerpt = source.split('\n')[lineIdx] ?? ''
+      return [{
+        rule: 'branch-syntax',
+        slug,
+        file: `${slug}.md`,
+        line: err.line,
+        message: err.message,
+        excerpt: excerpt.slice(0, 100),
+        severity: 'error',
+      }]
+    }
+    throw err
+  }
+}
+
 export function lintTutorial(slug: string, source: string): LintFinding[] {
   const rawLines = source.split('\n')
   const lines = redactCodeFences(rawLines)
@@ -165,6 +209,7 @@ export function lintTutorial(slug: string, source: string): LintFinding[] {
   for (const rule of RULES) {
     findings.push(...rule.scan(slug, lines, rawLines))
   }
+  findings.push(...branchSyntaxRule(slug, source))
   return findings
 }
 

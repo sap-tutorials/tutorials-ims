@@ -90,7 +90,9 @@ export default defineConfig({
           { text: 'Analytics admin',   link: '/authors/analytics-admin' }
         ]},
         { text: 'Branching paths', items: [
-          { text: 'Branched missions', link: '/authors/branched-missions' }
+          { text: 'Branched missions',  link: '/authors/branched-missions' },
+          { text: 'Branched tutorials', link: '/authors/branched-tutorials' },
+          { text: 'Branching cookbook', link: '/authors/branching-cookbook' }
         ]}
       ],
 
