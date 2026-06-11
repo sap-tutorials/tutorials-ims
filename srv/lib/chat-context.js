@@ -35,6 +35,8 @@ Never include credentials, API keys, or production URLs in responses.`;
 
 const RAG_GUIDANCE = `When the getRelevantSteps tool returns step excerpts, treat them as authoritative ground truth for the question. Quote them naturally and cite each step inline using the form [tutorial-slug #stepNumber]. If no relevant steps come back (empty hits or all below the threshold), say so explicitly rather than guessing — invite the user to refine the question or use the searchTutorials tool to discover candidates.`;
 
+const BRANCHING_GUIDANCE = "When the user asks about branch choices, recommendations, or 'why this branch', call `getBranchRecommendation` rather than guessing — it returns the engine's recommendation with reason. Cite the recommended branch's label (not its key).";
+
 const PROGRESS_GUIDANCE = `The signed-in user has tutorial-progress state available via the getUserProgress tool. Call it whenever:
 - the user asks to resume, "where did I leave off", "continue", "what was I working on"
 - the user asks for a recommendation ("what should I learn next", "suggest a tutorial")
@@ -63,6 +65,9 @@ function tutorialLayer(ctx) {
     lines.push('When the question is about the step the user is reading, answer from the verbatim content above. Cite the step number.');
   }
   lines.push('Prefer answering about THIS tutorial; cite step numbers. Only call searchTutorials if the user asks about a different tutorial.');
+  if (ctx.branchContext) {
+    lines.push(BRANCHING_GUIDANCE);
+  }
   return lines.join('\n');
 }
 
@@ -84,6 +89,9 @@ function collectionLayer(ctx, kindLabel) {
     }
   }
   lines.push(`Explain the path, prerequisites, and suggest the next logical tutorial.`);
+  if (ctx.altGroupsCount > 0) {
+    lines.push(BRANCHING_GUIDANCE);
+  }
   return lines.join('\n');
 }
 
