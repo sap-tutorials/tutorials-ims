@@ -12,7 +12,7 @@ build-time pipeline. The deployed `tutorials-srv` app does NOT run
 fetch-tutorials, so a `cf set-env tutorials-srv AI_AUTHOR_ENABLED=true`
 would have no effect. The only places fetch-tutorials runs are:
 
-1. **Locally** under `cds bind --exec` (the pilot-1 path used by [project_208_spike_pilot_1.md](../../../tutorials-poc/docs/superpowers/specs/2026-06-05-208-ai-authored-quizzes-design.md) — see PR #261 + #277).
+1. **Locally** under `cds bind --exec` (the pilot-1 path used by [project_208_spike_pilot_1.md](../../superpowers/specs/2026-06-05-208-ai-authored-quizzes-design.md) — see PR #261 + #277).
 2. **In CI** via `rebuild-content.yml` / `rebuild-content-qa.yml`, the workflows authors trigger to rebuild
    tutorial content end-to-end.
 

@@ -92,4 +92,23 @@ describe('/build/mission/:slug — alt-group grouping', () => {
     expect(status).toBe(200);
     expect(data.missionSlug).toBe('__test__-mission');
   });
+
+  it('skips BranchDecisions write when ?nocache=1 is set (issue #296)', async () => {
+    const { ChatSettings, BranchDecisions } = cds.entities('com.sap.developers.ims');
+    await UPSERT.into(ChatSettings).entries({ ID: CHAT_SETTINGS_ID, branchingEnabled: true });
+    await DELETE.from(BranchDecisions).where({ missionSlug: '__test__-mission' });
+
+    // With ?nocache=1: telemetry row must NOT be written
+    await project.get('/build/mission/__test__-mission?nocache=1');
+    let rows = await SELECT.from(BranchDecisions).where({ missionSlug: '__test__-mission' });
+    expect(rows).toHaveLength(0);
+
+    // Without ?nocache=1: telemetry row IS written (proves the gate is conditional)
+    __resetCacheForTest();
+    await project.get('/build/mission/__test__-mission');
+    rows = await SELECT.from(BranchDecisions).where({ missionSlug: '__test__-mission' });
+    expect(rows.length).toBeGreaterThanOrEqual(1);
+
+    await DELETE.from(BranchDecisions).where({ missionSlug: '__test__-mission' });
+  });
 });
