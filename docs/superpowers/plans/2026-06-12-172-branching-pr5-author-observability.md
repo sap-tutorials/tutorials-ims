@@ -12,6 +12,16 @@
 
 **Depends on:** PR 1 + PR 2 + PR 3 merged. PR 4 in flight (PR #305 OPEN) — does NOT block PR 5; the `BranchDecisions.source = 'jouleTool'` count is just zero until PR 4 lands. Reuses `BranchDecisions` entity, `@analytics.exposed` annotation, existing `Tutorial.Author` scope (PR 3's QA channel scope; widening is additive).
 
+## Spec deviations
+
+The following intentional divergences from the spec are baked into this plan. All other behaviour matches spec verbatim.
+
+- **Auth surface (B1):** Spec §4.2 projected the views into AnalyticsService and gated `Tutorial.Author` via entity-level `@restrict`. CAP combines service-level `@requires` and entity-level `@restrict` via AND — a `Tutorial.Author`-only token gets 403 from AnalyticsService's `@requires: 'Admin'` before the entity-level grant is evaluated. **Plan instead projects each view into BOTH `AnalyticsService` (Admin path, used by the Mission ObjectPage) AND `AuthorService` (`Tutorial.Author` path, used by the lint rule).** Same underlying view in `db/views.cds`; two service surfaces. Role-collections (`Tutorials Admin` vs `Tutorials Author`) stay disjoint per `xs-security.json`.
+- **Env var naming (I4):** Plan uses `ANALYTICS_BASE_URL` instead of spec §4.4.1's `CAP_BASE_URL`. The narrower name is more precise — the lint rule talks only to the analytics surface, not the whole CAP service.
+- **File names (B4):** Plan now matches spec exactly — `BranchAnalyticsSection.fragment.xml`, `BranchAnalyticsHandler.js`, `merge-branch-perf-amd.js` directly under `app/admin/missions/webapp/ext/` (no `sections/` or `lib/` subfolders).
+- **Section key + anchor (I1, I2):** Manifest section key is `BranchAnalytics`; placement anchor is `completionPaths` (both per spec).
+- **Fragment table type (B5):** Plan uses `sap.m.Table` with `<IllustratedMessage>` empty state per spec, not `sap.ui.table.Table`.
+
 ---
 
 ## File Structure
@@ -19,8 +29,9 @@
 **Create (10 files):**
 
 - `db/views.cds` — extended (NOT new file): two new CDS views appended.
-- `srv/analytics-service.cds` — extended: two new `@readonly entity` projections + `@restrict` annotation gating them on `Tutorial.Author` scope.
-- `app/admin-annotations.cds` — extended: `@UI.LineItem` for `AdminService.AnalyticsBranchPerformance` (consumed shape).
+- `srv/analytics-service.cds` — extended: two new `@readonly entity` projections (Admin path; service-level `@requires: 'Admin'` is the only gate — no entity-level `@restrict` needed).
+- `srv/author-service.cds` — extended: two new `@readonly entity` projections of the same views (`Tutorial.Author` path; service-level `@requires: 'Tutorial.Author'` is the only gate). The lint rule reads via this surface.
+- `app/admin-annotations.cds` — extended: `@UI.LineItem` for `AnalyticsService.AnalyticsBranchPerformance` (consumed shape, Admin/Mission ObjectPage).
 - `scripts/lib/merge-branch-perf.ts` — new isomorphic ESM module.
 - `app/admin/missions/webapp/ext/BranchAnalyticsSection.fragment.xml` — Fiori Elements v4 custom section.
 - `app/admin/missions/webapp/ext/BranchAnalyticsHandler.js` — companion controller extension.
@@ -31,14 +42,14 @@
 - `docs/authors/reading-branch-telemetry.md` — author guide.
 - `docs/authors/README.md` — extended: link to new guide.
 - `docs/.vitepress/config.ts` — extended: sidebar entry under "Branching paths".
-- `.env.example` — extended: new `CAP_BASE_URL` + `TUTORIAL_AUTHOR_TOKEN` entries.
+- `.env.example` — extended: new `ANALYTICS_BASE_URL` + `TUTORIAL_AUTHOR_TOKEN` entries.
 
 **Test files:**
 
-- `test/analytics-branch-performance.test.js` — 5 unit cases (view aggregation against in-memory CDS test serve).
-- `test/hybrid/analytics-branch-performance.test.js` — 1 hybrid case (`ALLOW_HYBRID_WRITES=true` gated).
-- `test/merge-branch-perf.test.ts` — 3 unit cases for the shared helper (empty / two branches / null clickedTotal).
-- `scripts/__tests__/lint-tutorial-markdown.test.js` — extended: 4 new staleness-rule cases + 1 console-leak audit case.
+- `test/analytics-branch-performance.test.js` — 6 unit cases (view aggregation against in-memory CDS test serve).
+- `test/hybrid/analytics-branch-performance.test.js` — 3 hybrid cases (`ALLOW_HYBRID_WRITES=true` gated).
+- `scripts/lib/__tests__/merge-branch-perf.test.ts` — 7 unit cases for the shared helper.
+- `scripts/lint-rules/__tests__/branch-staleness.test.ts` — 7 unit cases (6 behavioural + 1 console-leak audit).
 - Manual checklist in PR body: 6-step walkthrough.
 
 **No new npm dependencies.**
@@ -138,7 +149,7 @@ describe('BranchGroup.beginLine', () => {
 - [ ] **Step 3: Run failing test**
 
 ```bash
-cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 60 npx vitest run --project unit scripts/parsers/__tests__/branches.test.ts 2>&1 | tail -10
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 60 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit scripts/parsers/__tests__/branches.test.ts 2>&1 | tail -10
 ```
 Expected: FAIL — `branchGroups[0].beginLine` is `undefined`.
 
@@ -154,7 +165,7 @@ The existing happy-path tests (15 from PR 3) should continue to pass — `beginL
 - [ ] **Step 5: Run all parser tests**
 
 ```bash
-cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 60 npx vitest run --project unit scripts/parsers/__tests__/branches.test.ts 2>&1 | tail -10
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 60 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit scripts/parsers/__tests__/branches.test.ts 2>&1 | tail -10
 ```
 Expected: all 16 tests pass (15 from PR 3 + 1 new).
 
@@ -309,7 +320,7 @@ describe('AnalyticsBranchTopPick view', () => {
 - [ ] **Step 3: Run failing tests**
 
 ```bash
-cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 60 npx vitest run --project unit test/analytics-branch-performance.test.js 2>&1 | tail -10
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 60 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit test/analytics-branch-performance.test.js 2>&1 | tail -10
 ```
 Expected: FAIL — view entities not in CDS model.
 
@@ -366,7 +377,7 @@ Note `ims.BranchDecisions` (qualified) per existing precedent.
 - [ ] **Step 5: Run tests**
 
 ```bash
-cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 60 npx vitest run --project unit test/analytics-branch-performance.test.js 2>&1 | tail -10
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 60 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit test/analytics-branch-performance.test.js 2>&1 | tail -10
 ```
 Expected: 6 tests pass.
 
@@ -380,70 +391,99 @@ git commit -m "feat(172): AnalyticsBranchPerformance + AnalyticsBranchTopPick vi
 
 ---
 
-## Task 3: AnalyticsService projection + Tutorial.Author scope gating
+## Task 3: Project views into BOTH AnalyticsService AND AuthorService
 
 **Files:**
 - Modify: `srv/analytics-service.cds`
+- Modify: `srv/author-service.cds`
 
-Project both views as `@readonly` entities. Add `@restrict` granting `Tutorial.Author` scope read access on JUST these two new entities (the rest of AnalyticsService remains Admin-only via the service-level `@requires: 'Admin'`).
+CAP combines service-level `@requires` + entity-level `@restrict` via AND, not OR. A `Tutorial.Author`-only token would 403 from AnalyticsService's service-level `@requires: 'Admin'` before any entity-level `@restrict` is checked. The fix is two surfaces, one shape:
 
-- [ ] **Step 1: Inspect existing analytics-service surface**
+- `AnalyticsService.AnalyticsBranchPerformance` / `AnalyticsBranchTopPick` — Admin-only (service-level `@requires: 'Admin'` is the only gate; the Mission ObjectPage runs as Admin and consumes this).
+- `AuthorService.AnalyticsBranchPerformance` / `AnalyticsBranchTopPick` — Tutorial.Author-only (service-level `@requires: 'Tutorial.Author'` is the only gate; the lint rule consumes this).
+
+Both services project the SAME underlying view in `db/views.cds`. No `@restrict` is added to either projection.
+
+- [ ] **Step 1: Inspect existing service surfaces**
 
 ```bash
-cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && grep -n "@readonly entity\|@restrict\|@requires" srv/analytics-service.cds | head -20
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && grep -n "@readonly entity\|@requires" srv/analytics-service.cds srv/author-service.cds | head -20
 ```
 
-Confirm: service-level `@requires: 'Admin'` (line 5), existing `@restrict` patterns on `SavedQueries` / `QueryHistory` (around line 121).
+Confirm: `analytics-service.cds` has service-level `@requires: 'Admin'`; `author-service.cds` has service-level `@requires: 'Tutorial.Author'` (PR 3 shipped this).
 
-- [ ] **Step 2: Add projections + restrict annotations**
+- [ ] **Step 2: Add projections on AnalyticsService (Admin path)**
 
 In `srv/analytics-service.cds`, after the existing `@readonly entity UIEvents...` line (around line 57), add:
 
 ```cds
-  // Issue #172 PR 5 — branch analytics views.
-  // Default service gate is `@requires: 'Admin'` (line 5). The two analytics views
-  // open up an additional grant to `Tutorial.Author` so the lint staleness rule
-  // can run with a non-admin token. Underlying BranchDecisions raw entity stays
-  // Admin-only (it's not exposed via this service at all). Authors see ONLY the
-  // aggregated views — no row-level user data.
+  // Issue #172 PR 5 — branch analytics views (Admin path).
+  // Service-level `@requires: 'Admin'` (line 5) is the only gate on these
+  // entities — no entity-level @restrict. The Mission ObjectPage's custom
+  // section consumes this surface (the OP runs as Admin).
+  //
+  // The same underlying ims.AnalyticsBranchPerformance view is ALSO projected
+  // on AuthorService (see srv/author-service.cds) for the lint rule, which
+  // runs with a Tutorial.Author-scoped token. CAP combines service @requires
+  // + entity @restrict via AND, so a single service surface cannot cover
+  // both audiences.
   @readonly entity AnalyticsBranchPerformance as projection on ims.AnalyticsBranchPerformance;
   @readonly entity AnalyticsBranchTopPick     as projection on ims.AnalyticsBranchTopPick;
 ```
 
-Then, near the existing `@restrict` annotations (around line 121-127), add two more:
+**Do NOT add `@restrict` to either projection.** The service-level `@requires: 'Admin'` is the only gate.
+
+- [ ] **Step 3: Add projections on AuthorService (Tutorial.Author path)**
+
+In `srv/author-service.cds`, after the existing entities, add:
 
 ```cds
-annotate AnalyticsService.AnalyticsBranchPerformance with @restrict : [
-  { grant: 'READ', to: ['Admin', 'Tutorial.Author'] }
-];
-
-annotate AnalyticsService.AnalyticsBranchTopPick with @restrict : [
-  { grant: 'READ', to: ['Admin', 'Tutorial.Author'] }
-];
+  // Issue #172 PR 5 — branch analytics views (Author path).
+  // Service-level `@requires: 'Tutorial.Author'` is the only gate. Authors
+  // see ONLY the aggregated views — raw BranchDecisions is never projected
+  // on AuthorService. Used by the branch-staleness lint rule
+  // (scripts/lint-rules/branch-staleness.ts).
+  //
+  // Same underlying view as AnalyticsService.AnalyticsBranchPerformance
+  // (see srv/analytics-service.cds). Two surfaces, one shape.
+  @readonly entity AnalyticsBranchPerformance as projection on ims.AnalyticsBranchPerformance;
+  @readonly entity AnalyticsBranchTopPick     as projection on ims.AnalyticsBranchTopPick;
 ```
 
-(The `@(restrict: ...)` inline syntax is also valid; the standalone `annotate` form matches the file's existing style.)
-
-- [ ] **Step 3: Run schema deploy + smoke**
+- [ ] **Step 4: Assert no `@restrict` widened to `Tutorial.Author` on AnalyticsService**
 
 ```bash
-cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 60 npx vitest run --project unit test/analytics-branch-performance.test.js 2>&1 | tail -8
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && grep -nE "@restrict.*Tutorial\.Author|to:\s*\['Admin',\s*'Tutorial\.Author'\]" srv/analytics-service.cds
 ```
-Expected: 6 tests still pass (the views deploy through the service projection cleanly).
 
-Also smoke `srv-qa` to ensure no compile drift:
+Expected: zero matches. If any hit comes back, remove it — the dual-projection pattern replaces the entity-level grant entirely.
+
+- [ ] **Step 5: Assert BranchDecisions raw entity is NOT projected on AnalyticsService**
 
 ```bash
-cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 90 npx cds compile srv/analytics-service.cds --to sql 2>&1 | tail -10
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && grep -nE "entity\s+BranchDecisions\b|projection on .*BranchDecisions\b" srv/analytics-service.cds
+```
+
+Expected: zero matches. Authors must see only the aggregated views; raw rows stay private.
+
+- [ ] **Step 6: Run schema deploy + smoke**
+
+```bash
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 60 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit test/analytics-branch-performance.test.js 2>&1 | tail -8
+```
+Expected: 6 tests still pass.
+
+```bash
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 90 npx cds compile srv/analytics-service.cds srv/author-service.cds --to sql 2>&1 | tail -10
 ```
 Expected: clean compile (no errors).
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && git branch --show-current
-git add srv/analytics-service.cds
-git commit -m "feat(172): project + Tutorial.Author-scope-gate analytics branch views"
+git add srv/analytics-service.cds srv/author-service.cds
+git commit -m "feat(172): project analytics branch views to AnalyticsService + AuthorService"
 ```
 
 ---
@@ -511,7 +551,7 @@ Expected: clean EDMX emission (no errors). Look for `<Annotations Target="Analyt
 - [ ] **Step 4: Re-run unit tests**
 
 ```bash
-cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 60 npx vitest run --project unit test/analytics-branch-performance.test.js 2>&1 | tail -8
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 60 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit test/analytics-branch-performance.test.js 2>&1 | tail -8
 ```
 Expected: 6 tests still pass.
 
@@ -769,14 +809,14 @@ git commit -m "feat(172): mergeBranchPerf isomorphic ESM helper"
 ## Task 6: Fiori v4 custom section — fragment + controller extension + manifest
 
 **Files:**
-- Create: `app/admin/missions/webapp/ext/sections/BranchPerformance.fragment.xml`
-- Create: `app/admin/missions/webapp/ext/sections/BranchPerformance.controller.js`
+- Create: `app/admin/missions/webapp/ext/BranchAnalyticsSection.fragment.xml`
+- Create: `app/admin/missions/webapp/ext/BranchAnalyticsHandler.js`
 - Modify: `app/admin/missions/webapp/manifest.json`
 - Smoke: `npm run build:admin` (build the Missions FE component)
 
-The Missions ObjectPage gets a new section "Branch Performance" rendering a `sap.ui.table.Table` filtered by the current mission's slug. The section uses the **Fiori v4 `targets.<X>.options.settings.content.body.sections.<KEY>`** manifest schema (verified in spec review B4) and the **`onInit` + `getExtensionAPI().attachPageReady()`** lifecycle (verified in spec review B5).
+The Missions ObjectPage gets a new section "Branch Performance" rendering a `sap.m.Table` filtered by the current mission's slug. The section uses the **Fiori v4 `targets.<X>.options.settings.content.body.sections.<KEY>`** manifest schema (verified in spec review B4) and the **`onInit` + `getExtensionAPI().attachPageReady()`** lifecycle (verified in spec review B5).
 
-The table data binds to `/admin/analytics/AnalyticsBranchPerformance?$filter=missionSlug eq '<currentSlug>'` via an OData V4 model defined in the manifest's `dataSources`.
+The table data binds to `/admin/analytics/AnalyticsBranchPerformance?$filter=missionSlug eq '<currentSlug>'` via an OData V4 model defined in the manifest's `dataSources`. The Mission ObjectPage runs as Admin, so it consumes the `AnalyticsService` surface (Task 3, Step 2).
 
 - [ ] **Step 1: Locate the Missions FE app entry**
 
@@ -792,72 +832,78 @@ cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && grep -nE '"target
 
 Note the actual target name and use it consistently in the changes below (substitute `<MISSIONS_OP_TARGET>` in the snippets).
 
-- [ ] **Step 2: Create the fragment**
+- [ ] **Step 2: Create the fragment (sap.m.Table + IllustratedMessage + Link)**
 
-Create `app/admin/missions/webapp/ext/sections/BranchPerformance.fragment.xml`:
+Create `app/admin/missions/webapp/ext/BranchAnalyticsSection.fragment.xml`:
 
 ```xml
 <core:FragmentDefinition
   xmlns="sap.m"
-  xmlns:core="sap.ui.core"
-  xmlns:t="sap.ui.table">
-  <VBox class="sapUiSmallMargin" id="branchPerfWrap">
-    <Title text="Branch Performance" level="H3" class="sapUiSmallMarginBottom"/>
-    <Text text="No data yet. Once learners encounter a branch in this mission, decision counts will appear here."
-          visible="{= !${branchPerf>/length} }"
-          id="emptyHint"/>
-    <t:Table
-      id="branchPerfTable"
-      visible="{= !!${branchPerf>/length} }"
-      rows="{branchPerf>/}"
-      selectionMode="None"
-      visibleRowCountMode="Auto"
-      minAutoRowCount="1"
-      ariaLabelledBy="branchPerfTitle">
-      <t:columns>
-        <t:Column width="9rem"><m:Label text="Branch Point" xmlns:m="sap.m"/><t:template><Text text="{branchPerf>branchPointId}"/></t:template></t:Column>
-        <t:Column width="14rem"><m:Label text="Tutorial" xmlns:m="sap.m"/><t:template><Text text="{branchPerf>tutorialSlug}"/></t:template></t:Column>
-        <t:Column width="6rem"><m:Label text="Surface" xmlns:m="sap.m"/><t:template><Text text="{branchPerf>surface}"/></t:template></t:Column>
-        <t:Column width="6rem" hAlign="End"><m:Label text="Total" xmlns:m="sap.m"/><t:template><Text text="{branchPerf>total}"/></t:template></t:Column>
-        <t:Column width="6rem" hAlign="End"><m:Label text="Click Rate" xmlns:m="sap.m"/>
-          <t:template>
+  xmlns:core="sap.ui.core">
+  <VBox class="sapUiSmallMargin" id="branchAnalyticsWrap">
+    <Title text="Branch Performance" level="H3" class="sapUiSmallMarginBottom" id="branchAnalyticsTitle"/>
+    <Table
+      id="branchAnalyticsTable"
+      growing="true"
+      growingThreshold="20"
+      items="{branchPerf>/}"
+      ariaLabelledBy="branchAnalyticsTitle">
+      <noData>
+        <IllustratedMessage
+          illustrationType="sapIllus-NoEntries"
+          title="No data yet"
+          description="Once learners encounter a branch in this mission, decision counts will appear here."/>
+      </noData>
+      <columns>
+        <Column width="9rem"><Text text="Branch Point"/></Column>
+        <Column width="14rem"><Text text="Tutorial"/></Column>
+        <Column width="6rem"><Text text="Surface"/></Column>
+        <Column width="6rem" hAlign="End"><Text text="Total"/></Column>
+        <Column width="6rem" hAlign="End"><Text text="Click Rate"/></Column>
+        <Column width="6rem" hAlign="End"><Text text="Follow Rate"/></Column>
+        <Column width="9rem"><Text text="Top Pick"/></Column>
+      </columns>
+      <items>
+        <ColumnListItem>
+          <cells>
+            <Text text="{branchPerf>branchPointId}"/>
+            <Text text="{branchPerf>tutorialSlug}"/>
+            <Text text="{branchPerf>surface}"/>
+            <Text text="{branchPerf>total}"/>
             <Text text="{= ${branchPerf>clickRate} === null ? '—' : (${branchPerf>clickRate} * 100).toFixed(1) + '%' }"/>
-          </t:template>
-        </t:Column>
-        <t:Column width="6rem" hAlign="End"><m:Label text="Follow Rate" xmlns:m="sap.m"/>
-          <t:template>
             <Text text="{= ${branchPerf>followRate} === null ? '—' : (${branchPerf>followRate} * 100).toFixed(1) + '%' }"/>
-          </t:template>
-        </t:Column>
-        <t:Column width="9rem"><m:Label text="Top Pick" xmlns:m="sap.m"/>
-          <t:template>
             <Text text="{= ${branchPerf>pickedKeyTop} ? ${branchPerf>pickedKeyTop} + ' (' + (${branchPerf>pickedKeyTopShare} * 100).toFixed(0) + '%)' : '—' }"/>
-          </t:template>
-        </t:Column>
-      </t:columns>
-    </t:Table>
+          </cells>
+        </ColumnListItem>
+      </items>
+    </Table>
+    <Link
+      text="View in Analytics Explorer"
+      href="/analytics-ui/"
+      target="_blank"
+      class="sapUiSmallMarginTop"/>
   </VBox>
 </core:FragmentDefinition>
 ```
 
-Note: text-formatter expressions use `=` syntax (UI5 expression binding). Numeric percent uses `toFixed(1)` for click/follow and `toFixed(0)` for top-pick share to match design.
+Note: `sap.m.Table` with `growing="true"` is the spec-mandated shape; `<IllustratedMessage illustrationType="sapIllus-NoEntries"/>` is the empty state per spec; `<Link target="_blank"/>` lives outside the table, wrapper-level.
 
 - [ ] **Step 3: Create the controller extension**
 
-Create `app/admin/missions/webapp/ext/sections/BranchPerformance.controller.js`:
+Create `app/admin/missions/webapp/ext/BranchAnalyticsHandler.js`:
 
 ```javascript
 sap.ui.define([
   "sap/ui/core/mvc/ControllerExtension",
   "sap/ui/model/json/JSONModel",
   // AMD shim from Task 7 — isomorphic ESM merge helper exposed as a UI5 module.
-  "sap/tutorials/admin/missions/lib/mergeBranchPerf"
+  "sap/tutorials/admin/missions/ext/merge-branch-perf-amd"
 ], function (ControllerExtension, JSONModel, mergeBranchPerfMod) {
   "use strict";
 
   var mergeBranchPerf = mergeBranchPerfMod.mergeBranchPerf;
 
-  return ControllerExtension.extend("sap.tutorials.admin.missions.ext.sections.BranchPerformance", {
+  return ControllerExtension.extend("sap.tutorials.admin.missions.ext.BranchAnalyticsHandler", {
     override: {
       onInit: function () {
         // Empty model up front so the visible-binding doesn't crash on first paint.
@@ -867,18 +913,25 @@ sap.ui.define([
         // Wait for the OP page to bind its context, then load.
         var oExt = this.base.getExtensionAPI();
         if (oExt && typeof oExt.attachPageReady === "function") {
-          oExt.attachPageReady(this._onPageReady.bind(this));
+          oExt.attachPageReady(this._loadBranchPerformance.bind(this));
+        }
+
+        // Also re-load on every dataReceived from the primary OP binding —
+        // covers the case where the user navigates between missions without
+        // a full page-ready re-fire.
+        var oBinding = oView.getObjectBinding && oView.getObjectBinding();
+        if (oBinding && typeof oBinding.attachDataReceived === "function") {
+          oBinding.attachDataReceived(this._loadBranchPerformance.bind(this));
         }
       }
     },
 
-    _onPageReady: function () {
+    _loadBranchPerformance: function () {
       var oCtx = this.base.getView().getBindingContext();
       if (!oCtx) return;
       var sSlug = oCtx.getProperty("slug");
       if (!sSlug) return;  // mission has no slug yet — section stays empty.
 
-      var oOData = this.base.getView().getModel();  // primary OData v4 model on the page
       var sUrl =
         "/admin/analytics/AnalyticsBranchPerformance?$filter=" +
           encodeURIComponent("missionSlug eq '" + sSlug.replace(/'/g, "''") + "'") +
@@ -898,7 +951,7 @@ sap.ui.define([
         var merged = mergeBranchPerf(perf, top);
         this.base.getView().getModel("branchPerf").setData(merged);
       }.bind(this)).catch(function () {
-        // Silent on failure — section just shows the "no data" hint.
+        // Silent on failure — section just shows the IllustratedMessage no-data state.
       });
     }
   });
@@ -909,27 +962,37 @@ The single quotes in `$filter` use OData V4 escaping (`''`) for safety. `$top=20
 
 - [ ] **Step 4: Wire the section in `manifest.json`**
 
+Per spec §4.3 line 326, build the path top-down: `sap.ui5.routing.targets.<MISSIONS_OP_TARGET>.options.settings.content.body.sections.BranchAnalytics`. Create each level if missing.
+
 In `app/admin/missions/webapp/manifest.json`, locate `targets.<MISSIONS_OP_TARGET>.options.settings.content.body.sections` (create the path if missing) and add:
 
 ```json
-"BranchPerformanceSection": {
-  "template": "sap.tutorials.admin.missions.ext.sections.BranchPerformance",
-  "position": { "placement": "After", "anchor": "GeneralInfoSection" },
+"BranchAnalytics": {
+  "template": "sap.tutorials.admin.missions.ext.BranchAnalyticsSection",
+  "position": { "placement": "After", "anchor": "completionPaths" },
   "title": "Branch Performance"
 }
 ```
 
-If `GeneralInfoSection` does not exist, use the actual section that should precede this one — `grep -n '"sections"' app/admin/missions/webapp/manifest.json` to locate.
+If `completionPaths` does not exist as a section anchor, fall back to whichever section currently sits where this should land (`grep -n '"sections"' app/admin/missions/webapp/manifest.json`). Spec line 336 mandates `completionPaths`.
 
-In the same manifest, in `sap.ui5.routing.targets.<MISSIONS_OP_TARGET>.options.settings.controlConfiguration` (or extend `sap.ui5.extends.extensions`), register the controller extension:
+In the same manifest, register the controller extension via `sap.ui5.extends.extensions.sap.ui.controllerExtensions` — this is the spec-mandated shape. **Do NOT use the `controlConfiguration` alternative** (deprecated for FE v4 custom sections, ambiguous wiring).
 
 ```json
-"sap.fe.templates.ObjectPage.ObjectPageController": {
-  "controllerName": "sap.tutorials.admin.missions.ext.sections.BranchPerformance"
+"sap.ui5": {
+  "extends": {
+    "extensions": {
+      "sap.ui.controllerExtensions": {
+        "sap.fe.templates.ObjectPage.ObjectPageController": {
+          "controllerName": "sap.tutorials.admin.missions.ext.BranchAnalyticsHandler"
+        }
+      }
+    }
+  }
 }
 ```
 
-(Use whichever extension-registration shape the existing manifest already uses — check `grep -nE "extends|controllerName" app/admin/missions/webapp/manifest.json`.)
+If `sap.ui5.extends.extensions` already exists, merge the new key in — don't overwrite.
 
 Add the OData service to `sap.app.dataSources` if not already present:
 
@@ -952,8 +1015,8 @@ Expected: build succeeds (writes `dist/` or equivalent). If a controller-typo er
 
 ```bash
 cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && git branch --show-current
-git add app/admin/missions/webapp/ext/sections/BranchPerformance.fragment.xml \
-        app/admin/missions/webapp/ext/sections/BranchPerformance.controller.js \
+git add app/admin/missions/webapp/ext/BranchAnalyticsSection.fragment.xml \
+        app/admin/missions/webapp/ext/BranchAnalyticsHandler.js \
         app/admin/missions/webapp/manifest.json
 git commit -m "feat(172): Branch Performance section in Missions ObjectPage"
 ```
@@ -963,24 +1026,24 @@ git commit -m "feat(172): Branch Performance section in Missions ObjectPage"
 ## Task 7: AMD shim for `mergeBranchPerf` so UI5 can load the ESM helper
 
 **Files:**
-- Create: `app/admin/missions/webapp/lib/mergeBranchPerf.js`
+- Create: `app/admin/missions/webapp/ext/merge-branch-perf-amd.js`
 - Modify: `app/admin/missions/webapp/manifest.json` (resourceRoots, if needed)
 
-UI5's classic AMD loader cannot consume native ESM directly. The shim re-exports `mergeBranchPerf` so the controller extension's `sap.ui.define([...])` call can resolve it.
+UI5's classic AMD loader cannot consume native ESM directly. The shim re-exports `mergeBranchPerf` so the controller extension's `sap.ui.define([...])` call can resolve it. The shim lives at `ext/merge-branch-perf-amd.js` (per spec §3.1, alongside the fragment + handler) so the whole feature is colocated in one folder.
 
 **Why a shim and not bundle-time inclusion?** The spec calls for the same code (one source of truth) to run in Node.js (lint, tests) AND UI5 (Fiori). A handwritten shim is ~20 lines and avoids the bundler-pipeline coupling that bit us in PR 3 (#251).
 
 - [ ] **Step 1: Inspect existing UI5 AMD shim patterns**
 
 ```bash
-cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && fd -e js . app/admin/missions/webapp/lib 2>/dev/null
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && fd -e js . app/admin/missions/webapp/ext 2>/dev/null
 ```
 
 If empty, this is the first such shim — fine; spec covers convention.
 
 - [ ] **Step 2: Write the shim**
 
-Create `app/admin/missions/webapp/lib/mergeBranchPerf.js`:
+Create `app/admin/missions/webapp/ext/merge-branch-perf-amd.js`:
 
 ```javascript
 // Issue #172 PR 5 — UI5 AMD shim for the isomorphic ESM merge helper at
@@ -1039,29 +1102,29 @@ sap.ui.define([], function () {
 });
 ```
 
-- [ ] **Step 3: Wire `lib/` into `resourceRoots` if needed**
+- [ ] **Step 3: Wire `ext/` resourceRoot if needed**
 
 ```bash
-cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && grep -n "resourceRoots\|webapp/lib" app/admin/missions/webapp/manifest.json
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && grep -n "resourceRoots\|webapp/ext" app/admin/missions/webapp/manifest.json
 ```
 
-Default UI5 build emits `lib/` under the namespace root automatically; only add `resourceRoots` if the build uses a non-default layout. Most likely no change needed.
+Default UI5 build emits `ext/` under the namespace root automatically; only add `resourceRoots` if the build uses a non-default layout. Most likely no change needed.
 
 - [ ] **Step 4: Re-run the build smoke**
 
 ```bash
 cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5/app/admin/missions && timeout 120 npm run build 2>&1 | tail -15
 ```
-Expected: clean build, `dist/lib/mergeBranchPerf.js` present.
+Expected: clean build, `dist/ext/merge-branch-perf-amd.js` present.
 
 ```bash
-cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && fd mergeBranchPerf app/admin/missions/dist 2>/dev/null
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && fd merge-branch-perf-amd app/admin/missions/dist 2>/dev/null
 ```
 
 - [ ] **Step 5: Sanity diff against the source ESM**
 
 ```bash
-cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && difft scripts/lib/merge-branch-perf.ts app/admin/missions/webapp/lib/mergeBranchPerf.js | head -40
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && difft scripts/lib/merge-branch-perf.ts app/admin/missions/webapp/ext/merge-branch-perf-amd.js | head -40
 ```
 The diff should show only TypeScript syntax / module-system differences. If logic differs, fix the shim — the ESM is authoritative.
 
@@ -1069,7 +1132,7 @@ The diff should show only TypeScript syntax / module-system differences. If logi
 
 ```bash
 cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && git branch --show-current
-git add app/admin/missions/webapp/lib/mergeBranchPerf.js
+git add app/admin/missions/webapp/ext/merge-branch-perf-amd.js
 git commit -m "feat(172): UI5 AMD shim for mergeBranchPerf"
 ```
 
@@ -1084,7 +1147,7 @@ git commit -m "feat(172): UI5 AMD shim for mergeBranchPerf"
 
 Per spec §4.4 / §9.5: when a branch has been live ≥30 days AND one branch has been picked >95% of the time AND `total ≥ 50` (denominator floor), emit a `notice` finding pointing at the markdown line where the `[BRANCH BEGIN]` directive opens.
 
-This rule is **read-only over the AnalyticsService** (`Tutorial.Author` scope, see §4.4.1). Network-disabled environments (offline CI runs) skip the rule with a graceful skip message — the lint exits clean.
+This rule is **read-only over the AuthorService** (`Tutorial.Author` scope, see §4.4.1, and the dual-projection note in Task 3). Network-disabled environments (offline CI runs) skip the rule with a graceful skip message — the lint exits clean.
 
 - [ ] **Step 1: Inspect existing lint runner**
 
@@ -1113,13 +1176,15 @@ describe('branchStalenessRule', () => {
   }
 
   it('skips silently when no token is set (offline CI)', async () => {
+    const fetchMock = mockFetch({ perf: [], top: [] });
     const findings = await branchStalenessRule({
       slug: 't1',
       branches: [{ tutorialSlug: 't1', branchPointId: 'b1', beginLine: 12 }],
       env: { TUTORIAL_AUTHOR_TOKEN: undefined, ANALYTICS_BASE_URL: 'https://example' },
-      fetch: mockFetch({ perf: [], top: [] }),
+      fetch: fetchMock,
     });
     expect(findings).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();  // offline guard short-circuits before any I/O
   });
 
   it('emits no findings when total < 50', async () => {
@@ -1210,6 +1275,40 @@ describe('branchStalenessRule', () => {
     });
     expect(findings).toEqual([]);
   });
+
+  it('never logs the bearer token via console (regardless of fetch outcome)', async () => {
+    const SECRET = 'SECRET-TOKEN-XYZ';
+    const logSpy   = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const warnSpy  = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    // Run twice: once with success, once with throw — neither path may surface the secret.
+    await branchStalenessRule({
+      slug: 't1',
+      branches: [{ tutorialSlug: 't1', branchPointId: 'b1', beginLine: 12 }],
+      env: { TUTORIAL_AUTHOR_TOKEN: SECRET, ANALYTICS_BASE_URL: 'https://example' },
+      fetch: vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) } as any)),
+    });
+    await branchStalenessRule({
+      slug: 't1',
+      branches: [{ tutorialSlug: 't1', branchPointId: 'b1', beginLine: 12 }],
+      env: { TUTORIAL_AUTHOR_TOKEN: SECRET, ANALYTICS_BASE_URL: 'https://example' },
+      fetch: vi.fn(async () => { throw new Error('boom'); }),
+    });
+
+    const allCalls = [
+      ...logSpy.mock.calls,
+      ...warnSpy.mock.calls,
+      ...errorSpy.mock.calls,
+    ].map(args => args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ')).join('\n');
+
+    expect(allCalls).not.toContain(SECRET);
+    expect(allCalls).not.toMatch(/Bearer/);
+
+    logSpy.mockRestore();
+    warnSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
 });
 ```
 
@@ -1226,7 +1325,8 @@ Create `scripts/lint-rules/branch-staleness.ts`:
 
 ```typescript
 // Issue #172 PR 5 — branch staleness lint rule.
-// Read-only over AnalyticsService with Tutorial.Author scope.
+// Read-only over AuthorService with Tutorial.Author scope (see srv/author-service.cds).
+// AnalyticsService is Admin-only and unsuitable for this consumer.
 // Spec: §4.4 (rule), §4.4.1 (auth), §9.5 (master-spec hook).
 //
 // Triggers when:
@@ -1279,6 +1379,9 @@ export async function branchStalenessRule(opts: BranchStalenessOpts): Promise<Li
   const filter = encodeURIComponent(`tutorialSlug eq '${slug.replace(/'/g, "''")}' and surface eq 'tutorialBranch'`);
   const perfUrl = `${env.ANALYTICS_BASE_URL}/AnalyticsBranchPerformance?$filter=${filter}&$top=200`;
   const topUrl  = `${env.ANALYTICS_BASE_URL}/AnalyticsBranchTopPick?$filter=${filter}&$top=400`;
+  // ANALYTICS_BASE_URL is the AuthorService base (e.g. https://.../author). DO NOT
+  // point this at /admin/analytics — that surface is Admin-only and a Tutorial.Author
+  // token will 403.
 
   let perf: BranchPerfRow[] = [];
   let top: BranchTopPickRow[] = [];
@@ -1325,7 +1428,7 @@ export async function branchStalenessRule(opts: BranchStalenessOpts): Promise<Li
 ```bash
 cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 30 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit scripts/lint-rules/__tests__/branch-staleness.test.ts 2>&1 | tail -10
 ```
-Expected: 6 tests pass.
+Expected: 7 tests pass (6 behavioural + 1 console-leak audit).
 
 - [ ] **Step 6: Register the rule in `scripts/lint-tutorial-markdown.ts`**
 
@@ -1390,10 +1493,13 @@ git commit -m "feat(172): branch-staleness lint rule (Tutorial.Author-gated)"
 
 **Files:**
 - Modify: `.env.example`
-- Modify: `.github/workflows/rebuild-content.yml` (or the lint workflow file)
+- Modify: `.github/workflows/rebuild-content.yml` (add `env` block to lint step)
+- Modify: `.github/workflows/rebuild-content-qa.yml` (add `env` block to lint step)
 - Modify: `docs/developers/operations/qa-channel-bootstrap.md` (or a new auth doc — see Task 11)
 
 The rule needs a Bearer token holding the `Tutorial.Author` scope. The CI workflow obtains one via the existing XSUAA client-credentials grant flow already used by the smoke tests (the QA bootstrap doc covers the pattern).
+
+> **Spec divergence (I4):** This plan uses `ANALYTICS_BASE_URL` pointing at `/author` (post-B1 fix) instead of spec §4.4.1's `CAP_BASE_URL`. The narrower naming is more precise — the lint rule talks only to the analytics surface on AuthorService, not the whole CAP service.
 
 - [ ] **Step 1: Add the env var to `.env.example`**
 
@@ -1404,65 +1510,104 @@ Append to `.env.example`:
 # Bearer token with the Tutorial.Author XSUAA scope. Used by the
 # branch-staleness lint rule (scripts/lint-rules/branch-staleness.ts) to
 # read AnalyticsBranchPerformance + AnalyticsBranchTopPick on the
-# deployed AnalyticsService. Leave blank for offline runs (rule skips).
+# deployed AuthorService. Leave blank for offline runs (rule skips).
 TUTORIAL_AUTHOR_TOKEN=
-ANALYTICS_BASE_URL=https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com/admin/analytics
+ANALYTICS_BASE_URL=https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com/author
 ```
 
-- [ ] **Step 2: Wire the CI step**
+- [ ] **Step 2: Wire the CI step in BOTH workflow files**
 
-Find the lint job in `.github/workflows/rebuild-content.yml` (or wherever `lint:tutorial-markdown` runs in CI):
+The lint step in both workflow files currently has NO `env` block. Add one. Use the literal before/after below.
 
-```bash
-cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && grep -lnE "lint:tutorial-markdown|tutorial-markdown" .github/workflows/*.yml
-```
+**File: `.github/workflows/rebuild-content.yml`** (around line 161-163, "Lint tutorial markdown" step):
 
-In the matching step, add to the env block:
+Before:
 
 ```yaml
-env:
-  TUTORIAL_AUTHOR_TOKEN: ${{ secrets.TUTORIAL_AUTHOR_TOKEN }}
-  ANALYTICS_BASE_URL: ${{ vars.ANALYTICS_BASE_URL || 'https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com/admin/analytics' }}
+      - name: Lint tutorial markdown
+        run: npm run lint:tutorial-markdown
+        continue-on-error: true
 ```
 
-`secrets.TUTORIAL_AUTHOR_TOKEN` must be set in the repo settings; `vars.ANALYTICS_BASE_URL` falls back to the DEV URL if unset.
+After:
 
-- [ ] **Step 3: Note the role-collection assignment in the QA bootstrap doc**
+```yaml
+      - name: Lint tutorial markdown
+        env:
+          TUTORIAL_AUTHOR_TOKEN: ${{ secrets.TUTORIAL_AUTHOR_TOKEN }}
+          ANALYTICS_BASE_URL: ${{ vars.ANALYTICS_BASE_URL || 'https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com/author' }}
+        # XSUAA client-credentials tokens expire ~12h. v1 path is
+        # workflow_dispatch only; cron-triggered runs may find the token
+        # expired, in which case the staleness rule silently skips. This is
+        # acceptable because the rule emits non-blocking notices.
+        run: npm run lint:tutorial-markdown
+        continue-on-error: true
+```
+
+**File: `.github/workflows/rebuild-content-qa.yml`** (around line 106-108, same step):
+
+Before:
+
+```yaml
+      - name: Lint tutorial markdown
+        run: npm run lint:tutorial-markdown
+        continue-on-error: true
+```
+
+After:
+
+```yaml
+      - name: Lint tutorial markdown
+        env:
+          TUTORIAL_AUTHOR_TOKEN: ${{ secrets.TUTORIAL_AUTHOR_TOKEN }}
+          ANALYTICS_BASE_URL: ${{ vars.ANALYTICS_BASE_URL || 'https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com/author' }}
+        # XSUAA client-credentials tokens expire ~12h. v1 path is
+        # workflow_dispatch only; cron-triggered runs may find the token
+        # expired, in which case the staleness rule silently skips.
+        run: npm run lint:tutorial-markdown
+        continue-on-error: true
+```
+
+`secrets.TUTORIAL_AUTHOR_TOKEN` must be set in the repo settings; `vars.ANALYTICS_BASE_URL` falls back to the DEV `/author` URL if unset.
+
+- [ ] **Step 3: Note the role-collection assignment + token rotation in the QA bootstrap doc**
 
 In `docs/developers/operations/qa-channel-bootstrap.md`, append a sub-section:
 
 ```markdown
 ## Lint-Token Setup (PR 5 author observability)
 
-The `branch-staleness` lint rule reads from AnalyticsService with the `Tutorial.Author` scope:
+The `branch-staleness` lint rule reads from AuthorService with the `Tutorial.Author` scope:
 
 1. **Create a CI service-user** in the BTP cockpit's User Management (or reuse the existing CI client).
-2. **Grant the `Tutorial Authors` role collection** (the same one used for QA channel access).
+2. **Grant the `Tutorials Author` role collection** (the same one used for QA channel access).
 3. **Generate a client-credentials grant**:
    ```bash
-   cf service-key tutorials-uaa author-token-key
+   cf create-service-key tutorials-uaa author-token-key
    ```
 4. **Exchange for a token** via the XSUAA `/oauth/token` endpoint with `grant_type=client_credentials`.
 5. **Store as the GitHub Actions secret** `TUTORIAL_AUTHOR_TOKEN`.
 
-The rule skips silently when the token is missing, so this is a soft-deploy step — the lint stays green throughout rollout.
+**Token rotation note (v1):** XSUAA client-credentials tokens typically expire after ~12 hours. The v1 release path is `workflow_dispatch` only — when the operator manually kicks off the workflow, they refresh the token first. Cron-triggered runs may find the token expired; in that case the staleness rule silently skips, which is fine because findings are non-blocking notices. A v2 follow-up could add a token-refresh step to the workflow.
+
+The rule skips silently when the token is missing or expired, so this is a soft-deploy step — the lint stays green throughout rollout.
 ```
 
-- [ ] **Step 4: Confirm scope-widening on AnalyticsService is complete**
+- [ ] **Step 4: Confirm the dual-projection pattern is in place (Task 3 sanity)**
 
-Re-check Task 3's `@restrict` annotations grant `Tutorial.Author` on JUST the two new entities. Run:
+The lint rule reads via AuthorService (Tutorial.Author path); the Mission ObjectPage reads via AnalyticsService (Admin path). Confirm both surfaces exist:
 
 ```bash
-cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && grep -nE "Tutorial.Author" srv/analytics-service.cds
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && grep -nE "AnalyticsBranchPerformance|AnalyticsBranchTopPick" srv/analytics-service.cds srv/author-service.cds
 ```
 
-Expected: matches inside `AnalyticsBranchPerformance` and `AnalyticsBranchTopPick` blocks only.
+Expected: hits in both files. No `@restrict` widening on AnalyticsService (re-confirm Task 3 Step 4).
 
 - [ ] **Step 5: Commit**
 
 ```bash
 cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && git branch --show-current
-git add .env.example .github/workflows/rebuild-content.yml docs/developers/operations/qa-channel-bootstrap.md
+git add .env.example .github/workflows/rebuild-content.yml .github/workflows/rebuild-content-qa.yml docs/developers/operations/qa-channel-bootstrap.md
 git commit -m "feat(172): wire TUTORIAL_AUTHOR_TOKEN for branch-staleness lint"
 ```
 
@@ -1493,22 +1638,24 @@ Create `test/hybrid/analytics-branch-performance.test.js`:
 ```javascript
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import cds from '@sap/cds';
-import './_guard.js';
+import { isSafeForWrites } from './_guard.js';
 
 cds.test('serve', '--profile', 'hybrid', '--in-memory=false');
 
 const SLUG_BRANCH = '__test__-pr5-hybrid-branch';
 const SLUG_TOP    = '__test__-pr5-hybrid-top';
+const writesEnabled = process.env.ALLOW_HYBRID_WRITES === 'true';
 
 describe('AnalyticsBranchPerformance + TopPick (hybrid HANA)', () => {
   beforeAll(async () => {
-    if (process.env.ALLOW_HYBRID_WRITES !== 'true') return;
+    if (!writesEnabled) return;
+    if (!isSafeForWrites()) throw new Error('refusing to write to a prod-shaped target');
     const { BranchDecisions } = cds.entities('com.sap.developers.ims');
     await DELETE.from(BranchDecisions).where({ tutorialSlug: { like: '__test__-pr5-hybrid-%' } });
   });
 
   afterAll(async () => {
-    if (process.env.ALLOW_HYBRID_WRITES !== 'true') return;
+    if (!writesEnabled) return;
     const { BranchDecisions } = cds.entities('com.sap.developers.ims');
     await DELETE.from(BranchDecisions).where({ tutorialSlug: { like: '__test__-pr5-hybrid-%' } });
   });
@@ -1577,7 +1724,13 @@ cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 240 ALLOW
 ```
 Expected: 3 tests pass against real HANA.
 
-If `ALLOW_HYBRID_WRITES` isn't set, the suite skips silently — that's the correct dry-mode behaviour.
+If `ALLOW_HYBRID_WRITES` is not set, surface that to the operator with an explicit skip notice rather than silently passing:
+
+```bash
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && [ "${ALLOW_HYBRID_WRITES}" = "true" ] || echo "SKIP: hybrid analytics-branch-performance test (set ALLOW_HYBRID_WRITES=true to run)"
+```
+
+This matches PR 3's pattern — the suite skips silently inside vitest, but the wrapper shell echo makes the skip visible in CI logs and reviewer transcripts.
 
 - [ ] **Step 4: Run unit tests once more (regression)**
 
@@ -1625,6 +1778,8 @@ When you author a `[BRANCH BEGIN]` block (see [branched-tutorials.md](./branched
 Open the **Missions Fiori app** → pick a mission → **Branch Performance** section near the bottom of the ObjectPage. The section is empty until learners have actually encountered a branch in your mission.
 
 The same data is queryable via the **Analytics Explorer** (`/analytics-ui/`) — pick `AnalyticsBranchPerformance` or `AnalyticsBranchTopPick` from the entity list.
+
+> **Two service surfaces, same data.** Admin users (Tutorials Admin role-collection) read these views via `/admin/analytics/AnalyticsBranchPerformance`. Authors (Tutorials Author role-collection) read the same views via `/author/AnalyticsBranchPerformance`. CAP cannot grant a single service to both audiences (`@requires` AND-combines with entity `@restrict`), so the platform projects each view into both services. The Mission ObjectPage uses the admin path; the `branch-staleness` lint rule uses the author path.
 
 ## What the columns mean
 
@@ -1764,10 +1919,12 @@ Plan: docs/superpowers/plans/2026-06-12-172-branching-pr5-author-observability.m
 Focus areas:
 1. CDS view shape vs spec §4.1 (no `cast(null as ...)` placeholder columns; no `where` clause on the views)
 2. AMD shim ↔ ESM helper byte-equivalence (both must compute identical pickedKeyTop on the same input)
-3. Auth scope correctness — Tutorial.Author grants ONLY on the two new entities, raw BranchDecisions stays Admin-only
-4. Lint rule offline behaviour — empty token must skip silently, never fail the build
-5. Hybrid test guard — must respect ALLOW_HYBRID_WRITES=true gate
+3. Auth scope correctness — `AnalyticsService` projections are Admin-only (no `@restrict` widening to `Tutorial.Author`); `AuthorService` projections are `Tutorial.Author`-only; raw `BranchDecisions` is NOT projected on `AuthorService`
+4. Lint rule offline behaviour — empty token must skip silently, never fail the build; lint rule URL points at `/author`, NOT `/admin/analytics`
+5. Hybrid test guard — must respect `ALLOW_HYBRID_WRITES=true` AND `isSafeForWrites()` checks
 6. No regressions to PR 3/PR 4 telemetry helpers (branch-telemetry.js, group-by-alt.js, branch/decide.js)
+7. **HANA boolean shape** — every `case when ...` in `db/views.cds` for the new views uses lowercase `= true` (not bare `case when col`). SQLite (unit tests) silently accepts the bare form; HANA (hybrid + prod) rejects. ([[feedback_hana_boolean_case_when]])
+8. **`LintFinding` consumer audit** — the new `severity: 'notice'` value must be a recognised case across every consumer of the `LintFinding` type in `scripts/lint-tutorial-markdown.ts` (formatter, exit-code computation, JSON-report serializer). Grep `severity ===` and `severity:` over the lint runner; any switch/if-else without a `notice` arm is a defect.
 
 Return findings classified Critical / Important / Minor / Nit.
 ```
@@ -1789,7 +1946,7 @@ gh pr create \
 Closes the author-observability piece of issue #172 (branching paths). This is PR 5 of 6.
 
 - **AnalyticsBranchPerformance** + **AnalyticsBranchTopPick** CDS views aggregate `BranchDecisions`
-- Projected on AnalyticsService with `Tutorial.Author` scope grant (the rest stays Admin-only)
+- Each view is projected on BOTH `AnalyticsService` (Admin path, used by the Mission ObjectPage) AND `AuthorService` (`Tutorial.Author` path, used by the lint rule). Same underlying view; two surfaces.
 - Branch Performance section in the Missions ObjectPage (Fiori v4 custom section)
 - Isomorphic ESM merge helper (`scripts/lib/merge-branch-perf.ts`) + UI5 AMD shim mirror
 - `branch-staleness` lint rule (severity: notice) — fires when a branch is ≥30d old, has ≥50 decisions, and >95% pick one option
@@ -1797,15 +1954,15 @@ Closes the author-observability piece of issue #172 (branching paths). This is P
 
 ## Auth model
 
-- AnalyticsService is `@requires: 'Admin'` at the service level (unchanged).
-- The two new analytics views grant `READ` to `Tutorial.Author` via `@restrict` — narrow widening, not a service-wide change.
-- Raw `BranchDecisions` stays Admin-only (it's not even projected).
-- Authors see aggregate counts only — no row-level user data.
+- `AnalyticsService` is `@requires: 'Admin'` at the service level (unchanged); the two new analytics projections inherit that gate. The Mission ObjectPage runs as Admin and reads via this surface.
+- `AuthorService` is `@requires: 'Tutorial.Author'` at the service level (PR 3); the same two views are projected here. The `branch-staleness` lint rule reads via this surface with a `Tutorial.Author`-scoped token.
+- The dual-projection pattern is intentional: CAP combines service-level `@requires` and entity-level `@restrict` via AND, so a single service surface cannot satisfy both audiences without widening one of the role-collections (which `xs-security.json` keeps disjoint).
+- Raw `BranchDecisions` stays Admin-only (it is NOT projected on `AuthorService`). Authors see aggregate counts only — no row-level user data.
 
 ## Test plan
 
-- [x] Unit (in-memory SQLite): 6 view tests + 7 merge tests + 6 lint tests
-- [x] Hybrid (HANA Cloud): 3 view tests, opt-in via `ALLOW_HYBRID_WRITES=true`
+- [x] Unit (in-memory SQLite): 6 view tests + 7 merge tests + 7 lint tests (6 behavioural + 1 console-leak audit)
+- [ ] Hybrid (HANA Cloud): test file written; runs opt-in via `ALLOW_HYBRID_WRITES=true` (Tom must run before merging — 3 view tests)
 - [x] Lint script smoke: silently skips when `TUTORIAL_AUTHOR_TOKEN` unset
 - [x] Fiori build: Missions FE component compiles cleanly
 - [x] Docs sidebar guard: passes
@@ -1818,8 +1975,8 @@ Closes the author-observability piece of issue #172 (branching paths). This is P
 ## Operator action items
 
 1. Set GitHub Actions secret `TUTORIAL_AUTHOR_TOKEN` (see QA bootstrap doc) — until set, the staleness lint silently skips, which is fine.
-2. (Optional) set GitHub Actions var `ANALYTICS_BASE_URL` — defaults to DEV if unset.
-3. Grant the CI service-user the `Tutorial Authors` role collection.
+2. (Optional) set GitHub Actions var `ANALYTICS_BASE_URL` — defaults to the DEV `/author` URL if unset.
+3. Grant the CI service-user the **Tutorials Author** role-collection (existing collection; same one used for QA channel access). Do NOT widen the **Tutorials Admin** role-collection to include `Tutorial.Author`, and do NOT widen **Tutorials Author** to include `Admin` — the dual-projection pattern depends on these staying disjoint.
 
 EOF
 )"
@@ -1842,6 +1999,7 @@ Expected: `state: OPEN`, eventually `statusCheckRollup` all-green. If anything f
 3. [ ] Run `npm run lint:tutorial-markdown` locally with `TUTORIAL_AUTHOR_TOKEN` set — confirm staleness notice appears for any branch matching the criteria.
 4. [ ] Run `gh secret set TUTORIAL_AUTHOR_TOKEN` against the repo before next CI run, then re-run the lint workflow.
 5. [ ] Confirm a non-`Tutorial.Author` non-`Admin` user cannot read `/admin/analytics/AnalyticsBranchPerformance` (should 403).
+5b. [ ] **Positive auth check**: confirm a `Tutorial.Author`-only user (Tutorials Author role-collection, no Admin) CAN read `/author/AnalyticsBranchPerformance` — should 200 with rows. This is the path the lint rule uses; if it 403s the dual-projection wiring is broken.
 6. [ ] Smoke `/admin/analytics/AnalyticsBranchTopPick` against DEV — returns rows for at least one mission.
 ```
 
@@ -1878,4 +2036,8 @@ H. **No new npm dependencies** — use what's already in `package.json`.
 
 I. **CRLF on Windows** — after multi-section edits, run `file <path>` and normalize line endings before committing ([[feedback_crlf_regression_on_windows]]).
 
-J. **AMD shim drift guard** — any change to `scripts/lib/merge-branch-perf.ts` MUST be mirrored in `app/admin/missions/webapp/lib/mergeBranchPerf.js`. The hybrid test (Task 10) re-runs the same merge logic against real data; if shim drifts, hybrid breaks loudly.
+J. **AMD shim drift guard** — any change to `scripts/lib/merge-branch-perf.ts` MUST be mirrored in `app/admin/missions/webapp/ext/merge-branch-perf-amd.js` (per spec §3.1; no `lib/` subfolder). The hybrid test (Task 10) re-runs the same merge logic against real data; if the shim drifts, hybrid breaks loudly.
+
+K. **Two services, one shape.** `AnalyticsService.AnalyticsBranchPerformance` and `AuthorService.AnalyticsBranchPerformance` MUST be pure projections of the same underlying view in `db/views.cds`. The schema lives in `db/views.cds` (Task 2); the two service files are projection-only (Task 3). If the projections drift, the Mission ObjectPage and the lint rule see different numbers — debug-from-hell.
+
+L. **Role-collection scope check.** Confirm `xs-security.json`: the **Tutorials Admin** role-collection does NOT include the `Tutorial.Author` scope, and **Tutorials Author** does NOT include `Admin`. Implementer MUST NOT widen these collections — the dual-projection pattern is intentional (see B1 in the review-synthesis findings). If a future task wants to "simplify" by collapsing into one service, it must propose the role-collection change first; do not silently widen.
