@@ -108,17 +108,31 @@ Out-of-band via BTP cockpit: assign the **"Tutorials Author"** role collection (
 
 ## Lint-Token Setup (PR 5 author observability)
 
-The `branch-staleness` lint rule reads from AuthorService with the `Tutorial.Author` scope:
+The `branch-staleness` lint rule reads from AuthorService with the `Tutorial.Author` scope. The XSUAA service-broker client gets `Tutorial.Author` automatically via `xs-security.json`'s `oauth2-configuration.authorities` block, so the token mint is a single CF + curl pair:
 
-1. **Create a CI service-user** in the BTP cockpit's User Management (or reuse the existing CI client).
-2. **Grant the `Tutorials Author` role collection** (the same one used for QA channel access).
-3. **Generate a client-credentials grant**:
+1. **Read the deployed XSUAA service-broker key:**
 
    ```bash
-   cf create-service-key tutorials-uaa author-token-key
+   cf service-key tutorials-xsuaa tutorials-xsuaa-key
    ```
-4. **Exchange for a token** via the XSUAA `/oauth/token` endpoint with `grant_type=client_credentials`.
-5. **Store as the GitHub Actions secret** `TUTORIAL_AUTHOR_TOKEN`.
+   Reuse the existing key, or create a fresh one with `cf create-service-key tutorials-xsuaa <key-name>`. Read the `clientid`, `clientsecret`, and `url` fields from the output.
+2. **Exchange for a bearer token** via the XSUAA `/oauth/token` endpoint with `grant_type=client_credentials`:
+
+   ```bash
+   curl -s -X POST "$XSUAA_URL/oauth/token" \
+     -u "$CLIENTID:$CLIENTSECRET" \
+     -d 'grant_type=client_credentials' \
+     -H 'Content-Type: application/x-www-form-urlencoded' \
+     | jq -r '.access_token'
+   ```
+   The token's `scope` array must include `<xsappname>.Tutorial.Author` — verify by base64-decoding the JWT payload (the `.` separator's middle segment).
+3. **Store as the GitHub Actions secret** `TUTORIAL_AUTHOR_TOKEN`:
+
+   ```bash
+   gh secret set TUTORIAL_AUTHOR_TOKEN --repo sap-tutorials/tutorials-ims --body "$TOKEN"
+   ```
+
+No separate CI service-user / role-collection grant is required — the SB client gets `Tutorial.Author` directly from the XSUAA `authorities` declaration. (The "Tutorials Author" role collection is still needed for human authors who preview QA tutorials at `/tutorials-qa/*`; that flow is unchanged.)
 
 **Token rotation note (v1):** XSUAA client-credentials tokens typically expire after ~12 hours. The v1 release path is `workflow_dispatch` only — when the operator manually kicks off the workflow, they refresh the token first. Cron-triggered runs may find the token expired; in that case the staleness rule silently skips, which is fine because findings are non-blocking notices. A v2 follow-up could add a token-refresh step to the workflow.
 
