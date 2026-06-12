@@ -68,3 +68,48 @@ describe('buildSystemPrompt', () => {
     expect(out).toMatch(/\n\n/);
   });
 });
+
+describe('buildSystemPrompt — BRANCHING_GUIDANCE', () => {
+  it('appends BRANCHING_GUIDANCE on tutorial pages with branchContext', () => {
+    const prompt = buildSystemPrompt({
+      kind: 'tutorial',
+      title: 'Configure database',
+      slug: 'configure-database',
+      currentStep: 3,
+      branchContext: {
+        branchPointId: '3-deployment',
+        groupKey: 'deployment',
+        currentBranch: 'hana',
+        recommendedBranch: 'hana',
+      },
+    }, null);
+    expect(prompt).toMatch(/getBranchRecommendation/);
+  });
+
+  it('does NOT append BRANCHING_GUIDANCE on tutorial pages WITHOUT branchContext', () => {
+    const prompt = buildSystemPrompt({
+      kind: 'tutorial',
+      title: 'Plain tutorial',
+      slug: 'plain',
+      currentStep: 1,
+    }, null);
+    expect(prompt).not.toMatch(/getBranchRecommendation/);
+  });
+
+  it('appends BRANCHING_GUIDANCE on mission pages with altGroupsCount > 0', () => {
+    const prompt = buildSystemPrompt({
+      kind: 'mission',
+      title: 'BTP CAP onboarding',
+      altGroupsCount: 1,
+    }, null);
+    expect(prompt).toMatch(/getBranchRecommendation/);
+  });
+
+  it('does NOT append BRANCHING_GUIDANCE on mission pages with altGroupsCount: 0 or absent', () => {
+    const prompt = buildSystemPrompt({
+      kind: 'mission',
+      title: 'No-branches mission',
+    }, null);
+    expect(prompt).not.toMatch(/getBranchRecommendation/);
+  });
+});

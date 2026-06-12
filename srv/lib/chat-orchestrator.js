@@ -3,6 +3,7 @@ import { OrchestrationClient } from '@sap-ai-sdk/orchestration';
 import { validateQuerySpec } from './query-spec-validator.mjs';
 import { specToSql } from './spec-to-sql.mjs';
 import { getAnalyticsContext } from './analytics-llm-context.js';
+import { GET_BRANCH_RECOMMENDATION_TOOL, getBranchRecommendationHandler } from './branch/joule-tool.js';
 
 const LOG = cds.log('chat');
 const MAX_TURNS = 5;
@@ -190,6 +191,9 @@ async function toolsForContext({ pageContext, isAdmin }) {
     }
     if (settings?.codeCheckEnabled) {
       tools.push(CHECK_CODE_TOOL);
+    }
+    if (settings?.branchingEnabled) {
+      tools.push(GET_BRANCH_RECOMMENDATION_TOOL);
     }
   } catch (err) {
     LOG.warn('toolsForContext: could not read ChatSettings', err.message);
@@ -433,6 +437,10 @@ export async function dispatchTool(name, args, user) {
     }
   }
 
+  if (name === 'getBranchRecommendation') {
+    return await getBranchRecommendationHandler({ args, user });
+  }
+
   return { error: 'unknown_tool' };
 }
 
@@ -595,4 +603,4 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
   }
 }
 
-export { SEARCH_TUTORIALS_TOOL, SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, GET_RELEVANT_STEPS_TOOL, GET_USER_PROGRESS_TOOL, CHECK_CODE_TOOL, toolsForContext };
+export { SEARCH_TUTORIALS_TOOL, SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, GET_RELEVANT_STEPS_TOOL, GET_USER_PROGRESS_TOOL, CHECK_CODE_TOOL, GET_BRANCH_RECOMMENDATION_TOOL, toolsForContext };

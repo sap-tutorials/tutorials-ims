@@ -4,7 +4,8 @@
   data-page-slug="{{ .Params.slug }}"
   data-page-title="{{ .Title }}"
   data-page-tags="{{ with .Params.tags }}{{ delimit . "," }}{{ end }}"
-  data-page-step-count="{{ .Params.stepCount }}">
+  data-page-step-count="{{ .Params.stepCount }}"
+  data-altgroups-count="{{ if eq .Type "tutorials" }}{{ with .Params.missionAltGroups }}{{ len . }}{{ else }}0{{ end }}{{ else if or (eq .Type "missions") (eq .Type "groups") }}{{ with .Params.altGroups }}{{ len . }}{{ else }}0{{ end }}{{ else }}0{{ end }}">
 <head>
   {{ partial "head.html" . }}
   {{ if not site.Params.qa }}<link rel="stylesheet" href="/css/joule.css">{{ end }}

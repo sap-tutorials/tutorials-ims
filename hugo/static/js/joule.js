@@ -26,7 +26,8 @@
       _openImpl(opts);
     },
     openWithStepContext(ctx) {
-      const opts = { starterContext: { kind: 'tutorial-step', vars: ctx || {} } };
+      const kind = ctx && ctx.branchContext ? 'tutorial-step-with-branch' : 'tutorial-step';
+      const opts = { starterContext: { kind: kind, vars: ctx || {} } };
       if (!this._ready) { this._pendingOpen = opts; return; }
       _openImpl(opts);
     },
@@ -324,6 +325,17 @@
         if (titles.length) ctx.expandedSteps = titles;
         if (textParts.length) ctx.currentStepText = textParts.join('\n\n');
       }
+      // [#172 PR 4] Attach branchContext for the current step so the chat
+      // orchestrator's tutorialLayer can append BRANCHING_GUIDANCE.
+      if (ctx.currentStep && typeof window.opGetCurrentStepBranchContext === 'function') {
+        const bc = window.opGetCurrentStepBranchContext(ctx.currentStep);
+        if (bc) ctx.branchContext = bc;
+      }
+    }
+    // [#172 PR 4] Attach altGroupsCount for collectionLayer to append BRANCHING_GUIDANCE.
+    if (ctx.kind === 'mission' || ctx.kind === 'group') {
+      const n = Number(html.dataset.altgroupsCount || '0');
+      if (n > 0) ctx.altGroupsCount = n;
     }
     return ctx;
   }
@@ -346,7 +358,37 @@
     }
     out = out.replace(/\{n\}/g, vars && vars.n != null ? String(vars.n) : '');
     out = out.replace(/\{heading\}/g, vars && vars.heading ? String(vars.heading) : '');
+
+    // [#172 PR 4] Branch label substitutions. Lookup via tutorial-data JSON.
+    if (vars && vars.branchContext) {
+      const labels = lookupBranchLabels(vars.branchContext);
+      out = out.replace(/\{currentLabel\}/g, labels.currentLabel || '');
+      out = out.replace(/\{recommendedLabel\}/g, labels.recommendedLabel || '');
+      out = out.replace(/\{branchLabel\}/g, labels.recommendedLabel || labels.currentLabel || '');
+    } else {
+      out = out.replace(/\{currentLabel\}|\{recommendedLabel\}|\{branchLabel\}/g, '');
+    }
     return out;
+  }
+
+  function lookupBranchLabels(branchContext) {
+    try {
+      const dataEl = document.getElementById('tutorial-data');
+      if (!dataEl) return {};
+      let steps = JSON.parse(dataEl.textContent || '[]');
+      if (typeof steps === 'string') steps = JSON.parse(steps);
+      for (const step of steps) {
+        if (step.branchPointId !== branchContext.branchPointId) continue;
+        const branches = step.branches || [];
+        const current = branches.find(b => b.key === branchContext.currentBranch);
+        const recommended = branches.find(b => b.key === branchContext.recommendedBranch);
+        return {
+          currentLabel: current ? current.label : null,
+          recommendedLabel: recommended ? recommended.label : null,
+        };
+      }
+    } catch { /* ignore */ }
+    return {};
   }
 
   function renderStarters(starterCtx) {
@@ -362,6 +404,10 @@
     if (!wrap) return;
     wrap.replaceChildren();
     const vars = starterCtx && starterCtx.vars;
+    if (vars && vars.branchContext &&
+        vars.branchContext.currentBranch === vars.branchContext.recommendedBranch) {
+      list = list.filter(t => !(t.includes('{currentLabel}') && t.includes('{recommendedLabel}')));
+    }
     for (const text of list.slice(0, 3)) {
       const finalText = vars ? substituteStarter(text, vars) : text;
       const btn = document.createElement('button');
