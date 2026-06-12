@@ -56,6 +56,19 @@ service AnalyticsService @(path : '/admin/analytics') {
 
   @readonly entity UIEvents               as projection on ims.UIEvent;
 
+  // Issue #172 PR 5 — branch analytics views (Admin path).
+  // Service-level `@requires: 'Admin'` (line 5) is the only gate on these
+  // entities — no entity-level @restrict. The Mission ObjectPage's custom
+  // section consumes this surface (the OP runs as Admin).
+  //
+  // The same underlying ims.AnalyticsBranchPerformance view is ALSO projected
+  // on AuthorService (see srv/author-service.cds) for the lint rule, which
+  // runs with a Tutorial.Author-scoped token. CAP combines service @requires
+  // + entity @restrict via AND, so a single service surface cannot cover
+  // both audiences.
+  @readonly entity AnalyticsBranchPerformance as projection on ims.AnalyticsBranchPerformance;
+  @readonly entity AnalyticsBranchTopPick     as projection on ims.AnalyticsBranchTopPick;
+
   function listExposedEntities() returns array of {
     name        : String;
     sqlName     : String;
