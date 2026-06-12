@@ -104,6 +104,12 @@ jobs:
       # Runs against the QA cache (-Contribution repos) where author-side
       # smells originate before they're merged to the public sources.
       - name: Lint tutorial markdown (QA channel)
+        env:
+          TUTORIAL_AUTHOR_TOKEN: ${{ secrets.TUTORIAL_AUTHOR_TOKEN }}
+          ANALYTICS_BASE_URL: ${{ vars.ANALYTICS_BASE_URL_QA || 'https://tutorial-system-dev-tutorials-srv-qa.cfapps.eu10-005.hana.ondemand.com/author' }}
+        # XSUAA client-credentials tokens expire ~12h. v1 path is
+        # workflow_dispatch only; cron-triggered runs may find the token
+        # expired, in which case the staleness rule silently skips.
         run: npm run lint:tutorial-markdown -- --channel qa
         continue-on-error: true
 
