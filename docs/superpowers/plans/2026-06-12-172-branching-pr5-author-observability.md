@@ -21,12 +21,15 @@ The following intentional divergences from the spec are baked into this plan. Al
 - **File names (B4):** Plan now matches spec exactly — `BranchAnalyticsSection.fragment.xml`, `BranchAnalyticsHandler.js`, `merge-branch-perf-amd.js` directly under `app/admin/missions/webapp/ext/` (no `sections/` or `lib/` subfolders).
 - **Section key + anchor (I1, I2):** Manifest section key is `BranchAnalytics`; placement anchor is `completionPaths` (both per spec).
 - **Fragment table type (B5):** Plan uses `sap.m.Table` with `<IllustratedMessage>` empty state per spec, not `sap.ui.table.Table`.
+- **Lint runner refactor:** Lint runner gains async support; `LintFinding` severity union widened with `notice`; new rule conforms to existing `rule`/`file`/`line`/`excerpt`/`severity` shape (per recon). `lintTutorial` extracts branch groups once and shares them between `branchSyntaxRule` and the new `branchStalenessRule`.
 
 ---
 
 ## File Structure
 
-**Create (10 files):**
+**Create (~7 new files):**
+
+(Plus extensions to ~8 existing files — see "Modify" below.)
 
 - `db/views.cds` — extended (NOT new file): two new CDS views appended.
 - `srv/analytics-service.cds` — extended: two new `@readonly entity` projections (Admin path; service-level `@requires: 'Admin'` is the only gate — no entity-level `@restrict` needed).
@@ -49,7 +52,7 @@ The following intentional divergences from the spec are baked into this plan. Al
 - `test/analytics-branch-performance.test.js` — 6 unit cases (view aggregation against in-memory CDS test serve).
 - `test/hybrid/analytics-branch-performance.test.js` — 3 hybrid cases (`ALLOW_HYBRID_WRITES=true` gated).
 - `scripts/lib/__tests__/merge-branch-perf.test.ts` — 7 unit cases for the shared helper.
-- `scripts/lint-rules/__tests__/branch-staleness.test.ts` — 7 unit cases (6 behavioural + 1 console-leak audit).
+- `scripts/lint-rules/__tests__/branch-staleness.test.ts` — 8 unit cases (6 behavioural + 1 console-leak audit + 1 runner-integration smoke test).
 - Manual checklist in PR body: 6-step walkthrough.
 
 **No new npm dependencies.**
@@ -458,10 +461,10 @@ cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && grep -nE "@restri
 
 Expected: zero matches. If any hit comes back, remove it — the dual-projection pattern replaces the entity-level grant entirely.
 
-- [ ] **Step 5: Assert BranchDecisions raw entity is NOT projected on AnalyticsService**
+- [ ] **Step 5: Assert BranchDecisions raw entity is NOT projected on AuthorService**
 
 ```bash
-cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && grep -nE "entity\s+BranchDecisions\b|projection on .*BranchDecisions\b" srv/analytics-service.cds
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && grep -nE "entity\s+BranchDecisions\b|projection on .*BranchDecisions\b" srv/author-service.cds
 ```
 
 Expected: zero matches. Authors must see only the aggregated views; raw rows stay private.
@@ -910,18 +913,31 @@ sap.ui.define([
         var oView = this.base.getView();
         oView.setModel(new JSONModel([]), "branchPerf");
 
-        // Wait for the OP page to bind its context, then load.
+        // The OP context binding does NOT exist at onInit time on Fiori v4 —
+        // the framework binds the view AFTER the route's patternMatched
+        // resolves the context path. So `attachDataReceived` must wait for
+        // the FIRST attachPageReady callback. Per round-2 reviewer guidance:
+        // "the canonical v4 pattern is to call attachDataReceived from
+        // inside the FIRST attachPageReady callback, with a once-only guard".
         var oExt = this.base.getExtensionAPI();
         if (oExt && typeof oExt.attachPageReady === "function") {
-          oExt.attachPageReady(this._loadBranchPerformance.bind(this));
+          oExt.attachPageReady(this._onPageReady.bind(this));
         }
+      }
+    },
 
-        // Also re-load on every dataReceived from the primary OP binding —
-        // covers the case where the user navigates between missions without
-        // a full page-ready re-fire.
-        var oBinding = oView.getObjectBinding && oView.getObjectBinding();
+    _onPageReady: function () {
+      this._loadBranchPerformance();
+      // Re-load on every dataReceived so cross-mission navigation stays fresh
+      // without a full page-ready re-fire. Once-only guard: at onInit the
+      // binding doesn't exist yet, so we hook it the first time pageReady
+      // fires (binding is now bound). Subsequent pageReady fires would
+      // double-attach without this flag.
+      if (!this._dataReceivedAttached) {
+        var oBinding = this.base.getView().getObjectBinding && this.base.getView().getObjectBinding();
         if (oBinding && typeof oBinding.attachDataReceived === "function") {
           oBinding.attachDataReceived(this._loadBranchPerformance.bind(this));
+          this._dataReceivedAttached = true;
         }
       }
     },
@@ -1238,13 +1254,16 @@ describe('branchStalenessRule', () => {
       }),
     });
     expect(findings).toHaveLength(1);
+    // Must conform to existing LintFinding shape (per recon: rule/slug/file/line/message/excerpt/severity).
     expect(findings[0]).toMatchObject({
       severity: 'notice',
-      ruleId: 'branch-staleness',
+      rule: 'branch-staleness',
       slug: 't1',
+      file: 't1.md',
       line: 42,
     });
     expect(findings[0].message).toMatch(/96%|hana/);
+    expect(typeof findings[0].excerpt).toBe('string');
   });
 
   it('emits no findings when share is exactly 95% (strict > threshold)', async () => {
@@ -1309,6 +1328,57 @@ describe('branchStalenessRule', () => {
     warnSpy.mockRestore();
     errorSpy.mockRestore();
   });
+
+  // Runner-integration smoke test (subtask 6f). Catches drift between
+  // BranchGroup field names (parser output) and BranchInput field names
+  // (rule input) — the original v1 of this rule consumed `g.branchPointId`
+  // which doesn't exist on BranchGroup (the field is `g.id`). This test
+  // builds a synthetic markdown body, runs the REAL parser, and feeds the
+  // REAL parser output into the rule. If the integration mapping drifts,
+  // this test fails loudly.
+  it('integrates with extractBranchGroups (real parser output → rule input)', async () => {
+    const { extractBranchGroups } = await import('../../parsers/branches');
+    const body = [
+      '### Step 1',                                        // line 1
+      '',
+      '[BRANCH_BEGIN group="deployment" key="hana" label="HANA"]',  // line 3
+      '### sub-a',
+      '[BRANCH_END]',
+      '[BRANCH_BEGIN group="deployment" key="postgres" label="PostgreSQL"]',
+      '### sub-b',
+      '[BRANCH_END]',
+    ].join('\n');
+    const { branchGroups } = extractBranchGroups(body, 't1');
+    expect(branchGroups).toHaveLength(1);
+    // The integration MUST map g.id (the BranchGroup field) → branchPointId
+    // (the BranchInput field). NOT g.branchPointId (which doesn't exist).
+    const branches = branchGroups.map(g => ({
+      tutorialSlug: 't1',
+      branchPointId: g.id,
+      beginLine: g.beginLine,
+    }));
+    expect(branches[0].branchPointId).toBe('1-deployment');  // ${parentStepNumber}-${groupKey}
+    expect(branches[0].beginLine).toBe(3);
+
+    const findings = await branchStalenessRule({
+      slug: 't1',
+      branches,
+      env: { TUTORIAL_AUTHOR_TOKEN: 'tok', ANALYTICS_BASE_URL: 'https://example' },
+      fetch: mockFetch({
+        perf: [{ missionSlug: null, tutorialSlug: 't1', branchPointId: '1-deployment', surface: 'tutorialBranch',
+                 total: 100, byCondition: 100, byRanker: 0, byDefault: 0, clickedTotal: 50, followed: 50,
+                 avgConfidence: 1, bySrcJouleTool: 0, bySrcPageLoad: 100, bySrcClick: 0,
+                 firstSeenAt: new Date(Date.now() - 60 * 86400000).toISOString() }],
+        top:  [{ missionSlug: null, tutorialSlug: 't1', branchPointId: '1-deployment', surface: 'tutorialBranch',
+                 recommendedKey: 'hana',     pickedCount: 96 },
+               { missionSlug: null, tutorialSlug: 't1', branchPointId: '1-deployment', surface: 'tutorialBranch',
+                 recommendedKey: 'postgres', pickedCount: 4 }],
+      }),
+    });
+    expect(findings).toHaveLength(1);
+    expect(findings[0].line).toBe(3);  // citation lands on the [BRANCH_BEGIN] line, not the # heading
+    expect(findings[0].rule).toBe('branch-staleness');
+  });
 });
 ```
 
@@ -1335,6 +1405,13 @@ Create `scripts/lint-rules/branch-staleness.ts`:
 //   - one recommendedKey share strictly > 95%
 //
 // Severity: notice (non-blocking — author judgment, not a build failure).
+//
+// Finding shape conforms to the existing LintFinding type in
+// scripts/lint-tutorial-markdown.ts (per recon: rule/slug/file/line/
+// message/excerpt/severity). The new `notice` value widens the existing
+// LintSeverity union from `'error' | 'warning'` to
+// `'error' | 'warning' | 'notice'` — see Task 8 Step 6d for the runner-
+// side audit that confirms every consumer handles it.
 
 import { mergeBranchPerf, BranchPerfRow, BranchTopPickRow } from '../lib/merge-branch-perf';
 
@@ -1344,12 +1421,17 @@ export interface BranchInput {
   beginLine: number;
 }
 
+// Conforms to scripts/lint-tutorial-markdown.ts `LintFinding` (per recon).
+// Severity is widened from `'error' | 'warning'` to include `'notice'`;
+// the new value is added to the `LintSeverity` union in the runner.
 export interface LintFinding {
-  severity: 'error' | 'warning' | 'notice';
-  ruleId: string;
+  rule: string;
   slug: string;
+  file: string;
   line: number;
   message: string;
+  excerpt: string;
+  severity: 'error' | 'warning' | 'notice';
 }
 
 export interface BranchStalenessOpts {
@@ -1412,11 +1494,13 @@ export async function branchStalenessRule(opts: BranchStalenessOpts): Promise<Li
 
     const sharePct = (row.pickedKeyTopShare * 100).toFixed(0);
     findings.push({
-      severity: 'notice',
-      ruleId: 'branch-staleness',
+      rule: 'branch-staleness',
       slug,
+      file: `${slug}.md`,
       line: branch.beginLine,
       message: `Branch "${row.branchPointId}" has been live ≥${MIN_AGE_DAYS}d with "${row.pickedKeyTop}" picked ${sharePct}% of ${row.total} decisions. Consider whether the branch still earns its keep.`,
+      excerpt: `[BRANCH_BEGIN group="${row.branchPointId}" ...]`,
+      severity: 'notice',
     });
   }
   return findings;
@@ -1428,34 +1512,181 @@ export async function branchStalenessRule(opts: BranchStalenessOpts): Promise<Li
 ```bash
 cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 30 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit scripts/lint-rules/__tests__/branch-staleness.test.ts 2>&1 | tail -10
 ```
-Expected: 7 tests pass (6 behavioural + 1 console-leak audit).
+Expected: 8 tests pass (6 behavioural + 1 console-leak audit + 1 runner-integration smoke test).
 
 - [ ] **Step 6: Register the rule in `scripts/lint-tutorial-markdown.ts`**
 
-Find the rule-registration site (Step 1 above showed the shape) and add:
+The runner currently is fully synchronous (`lintTutorial: (slug, source) => LintFinding[]`, `main: () => void`, no `await` anywhere). The new staleness rule is async (it makes HTTP calls), so the runner must convert. The runner also currently calls `branchSyntaxRule(slug, source)` which throws away the parsed `ExtractResult` — we need to extract once and share with the new rule. And the `LintFinding.severity` union must widen to include `notice`. Six concrete subtasks:
+
+- [ ] **Step 6a: Refactor `lintTutorial` to extract branch groups once, share with both rules**
+
+The current shape of `lintTutorial` (per recon) calls `branchSyntaxRule(slug, source)` which internally calls `extractBranchGroups(source, slug)` and discards the parsed result. Refactor so `lintTutorial` calls `extractBranchGroups` ONCE, passes the `ExtractResult` (or its `branchGroups`) to BOTH rules.
+
+Diff to `scripts/lint-tutorial-markdown.ts`:
 
 ```typescript
+// At top of file, alongside existing parser imports:
+import { extractBranchGroups, BranchParseError, type BranchGroup } from './parsers/branches';
 import { branchStalenessRule } from './lint-rules/branch-staleness';
 
-// ...inside the per-tutorial pass, after parser yields branches:
-const branches = (parsedBranches || []).map(g => ({
-  tutorialSlug: slug,
-  branchPointId: g.branchPointId,
-  beginLine: g.beginLine,  // promoted in Task 1
-}));
-const stalenessFindings = await branchStalenessRule({
-  slug,
-  branches,
-  env: {
-    TUTORIAL_AUTHOR_TOKEN: process.env.TUTORIAL_AUTHOR_TOKEN,
-    ANALYTICS_BASE_URL: process.env.ANALYTICS_BASE_URL,
-  },
-  fetch: globalThis.fetch,
-});
-findings.push(...stalenessFindings);
+// Refactor branchSyntaxRule to accept pre-parsed groups OR a parse error.
+// Existing signature was `(slug, source) => LintFinding[]`. New shape:
+type BranchParseOutcome =
+  | { ok: true; branchGroups: BranchGroup[] }
+  | { ok: false; error: BranchParseError };
+
+function parseBranchesForLint(slug: string, source: string): BranchParseOutcome {
+  try {
+    const result = extractBranchGroups(source, slug);
+    return { ok: true, branchGroups: result.branchGroups };
+  } catch (err) {
+    if (err instanceof BranchParseError) return { ok: false, error: err };
+    throw err;
+  }
+}
+
+// branchSyntaxRule now takes the outcome (no second parse).
+function branchSyntaxRule(slug: string, source: string, outcome: BranchParseOutcome): LintFinding[] {
+  if (outcome.ok) return [];
+  const lineIdx = Math.max(0, outcome.error.line - 1);
+  const excerpt = source.split('\n')[lineIdx] ?? '';
+  return [{
+    rule: 'branch-syntax',
+    slug,
+    file: `${slug}.md`,
+    line: outcome.error.line,
+    message: outcome.error.message,
+    excerpt: excerpt.slice(0, 100),
+    severity: 'error',
+  }];
+}
+
+// lintTutorial converts to async; extracts once; passes to both rules.
+export async function lintTutorial(slug: string, source: string): Promise<LintFinding[]> {
+  const findings: LintFinding[] = [];
+  // legacy rules (unchanged)
+  findings.push(...indentedNumberedListItemRule(slug, source));
+
+  // Parse branches ONCE; share between syntax + staleness.
+  const outcome = parseBranchesForLint(slug, source);
+  findings.push(...branchSyntaxRule(slug, source, outcome));
+
+  // Staleness only runs when parse succeeded — no point asking for telemetry
+  // on a markdown body whose branch shape we can't even parse.
+  if (outcome.ok) {
+    const branches = outcome.branchGroups.map(g => ({
+      tutorialSlug: slug,
+      branchPointId: g.id,            // ${parentStepNumber}-${groupKey} — see recon §8
+      beginLine: g.beginLine,         // promoted in Task 1
+    }));
+    findings.push(...await branchStalenessRule({
+      slug,
+      branches,
+      env: {
+        TUTORIAL_AUTHOR_TOKEN: process.env.TUTORIAL_AUTHOR_TOKEN,
+        ANALYTICS_BASE_URL: process.env.ANALYTICS_BASE_URL,
+      },
+      fetch: globalThis.fetch,
+    }));
+  }
+  return findings;
+}
 ```
 
-The exact insertion-point shape depends on the runner; match the existing per-rule style. If the runner is sync, wrap the new rule in a deferred phase or convert the runner to async — match what's there.
+- [ ] **Step 6b: Convert `main` to async, await all rule invocations**
+
+Per recon: `main()` is currently synchronous; the per-file loop calls `lintTutorial(slug, source)` and pushes the array directly. Convert:
+
+```typescript
+// Before: function main() { ... for (const file of files) { const findings = lintTutorial(slug, source); ... } }
+// After:
+async function main() {
+  // ...arg parsing unchanged (--strict, --channel)...
+  const allFindings: LintFinding[] = [];
+  const bySlug = new Map<string, LintFinding[]>();
+  for (const file of files) {
+    const slug = /* unchanged */;
+    const source = /* unchanged */;
+    const findings = await lintTutorial(slug, source);  // <— awaited
+    if (findings.length > 0) {
+      bySlug.set(slug, findings);
+      allFindings.push(...findings);
+    }
+  }
+  // ...stdout printer + JSON serializer unchanged (handle severity in 6d)...
+  // ...exit code handling unchanged...
+}
+
+// Top-level entry: await the async main, then exit.
+main().catch(err => { console.error(err); process.exit(1); });
+```
+
+Note: `process.exit(strict && allFindings.length > 0 ? 1 : 0)` stays inside `main` per the existing pattern; only the entry point wraps `main()` in `.catch(...)` to surface unhandled rejections.
+
+- [ ] **Step 6c: Confirm new rule emits the existing LintFinding shape**
+
+Already wired in Step 4 above — the `branchStalenessRule` `findings.push({...})` block writes `rule`, `slug`, `file`, `line`, `message`, `excerpt`, `severity` (per recon §1, exact field names from the existing `LintFinding` type). Step 4's rule code uses the same shape. The `LintSeverity` union in the runner must widen:
+
+```typescript
+// Before (per recon §2):
+export type LintSeverity = 'error' | 'warning';
+// After:
+export type LintSeverity = 'error' | 'warning' | 'notice';
+```
+
+- [ ] **Step 6d: Audit every consumer of `severity` in the runner**
+
+Grep the runner for every site that branches on severity, and confirm each handles `notice`. Concrete commands and expected hits:
+
+```bash
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && grep -nE "severity\s*[:=!]|LintSeverity" scripts/lint-tutorial-markdown.ts
+```
+
+Expected hits and required handling:
+
+1. **`LintSeverity` type alias** (line ~33 per recon) — widen to include `'notice'` per Step 6c.
+2. **stdout printer** (lines 252-258 per recon §5) — currently prints `f.line / f.rule / f.message / f.excerpt` and does NOT switch on severity. No changes needed; new findings render the same as legacy ones. Confirm by re-grepping after the edit:
+   ```bash
+   cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && grep -nE "f\.severity|severity ===|severity !==" scripts/lint-tutorial-markdown.ts
+   ```
+   Expected: zero hits inside the printer block (lines 250-260). If a new switch shows up, add a `notice` arm.
+3. **JSON-report serializer** (lines 263-271 per recon §5) — emits the entire `LintFinding[]` via `JSON.stringify`. No type-narrowing; new severity flows through automatically. Verify the report still parses:
+   ```bash
+   cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && node -e "JSON.parse(require('fs').readFileSync('.tutorial-cache/lint-report.json','utf-8'))" 2>&1 | head -3
+   ```
+4. **Exit-code computation** (lines 274-277 per recon §6) — currently `strict && allFindings.length > 0 ? 1 : 0`. `notice` findings count toward the strict-mode exit code. **This is intentional** — strict mode treats every finding as a build-failure signal regardless of severity. (If we wanted "strict ignores notice," we'd add a `severity !== 'notice'` filter; the spec says non-blocking by default + strict opt-in for blocking, and `continue-on-error: true` in the workflow keeps strict-on-prod from failing the rebuild.)
+5. **Any future exhaustive `switch (severity)`** — none today per recon. If a new one is added during the refactor, audit it for a `notice` arm.
+
+After applying the diff, re-run the grep:
+
+```bash
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && grep -nE "case\s+['\"]error['\"]|case\s+['\"]warning['\"]|case\s+['\"]notice['\"]" scripts/lint-tutorial-markdown.ts
+```
+
+Expected: every severity value that appears in a `case` clause covers all three states (error/warning/notice) — or none at all if the runner stays free of exhaustive switches.
+
+- [ ] **Step 6e: Use `g.id` (NOT `g.branchPointId`) in the integration mapping**
+
+Per recon §7-§8, the parser's public field is `BranchGroup.id` (constructed as `${parentStepNumber}-${groupKey}`); downstream consumers (`srv/lib/branch/decide.js:61`, `srv/lib/branch/mission-detail.js:107`) read `bp.id` and persist it as `branchPointId` on `BranchDecisions`. The integration in Step 6a already uses `branchPointId: g.id` — confirm via grep:
+
+```bash
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && grep -nE "g\.branchPointId|group\.branchPointId" scripts/lint-tutorial-markdown.ts
+```
+
+Expected: zero hits. (`BranchGroup` has no `branchPointId` field — the right name is `id`.) If a hit comes back, fix to `g.id`.
+
+The unit-test `BranchInput` shape (in `scripts/lint-rules/__tests__/branch-staleness.test.ts` Step 2 above) is unchanged — tests construct the rule input directly with `branchPointId: '1-deployment'`. Only the integration mapping in `lintTutorial` (Step 6a) computes that field from `g.id`.
+
+- [ ] **Step 6f: Confirm Step 2's runner-integration smoke test exercises real parser output**
+
+The 8th test case added to `scripts/lint-rules/__tests__/branch-staleness.test.ts` in Step 2 above (`it('integrates with extractBranchGroups (real parser output → rule input)')`) calls the REAL `extractBranchGroups` against a synthetic markdown body, then maps `g.id` → `branchPointId` and `g.beginLine` → `beginLine` exactly the way Step 6a's runner integration does. If the field-name mapping ever drifts (e.g. someone "fixes" it back to `g.branchPointId`), this test fails loudly because the rule receives `branchPointId: undefined` and never finds the row.
+
+Run the smoke after Steps 6a-6e land:
+
+```bash
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 30 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit scripts/lint-rules/__tests__/branch-staleness.test.ts -t 'integrates with extractBranchGroups' 2>&1 | tail -10
+```
+Expected: pass.
 
 - [ ] **Step 7: Run full lint test suite (regression check)**
 
@@ -1519,11 +1750,16 @@ ANALYTICS_BASE_URL=https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.han
 
 The lint step in both workflow files currently has NO `env` block. Add one. Use the literal before/after below.
 
-**File: `.github/workflows/rebuild-content.yml`** (around line 161-163, "Lint tutorial markdown" step):
+**File: `.github/workflows/rebuild-content.yml`** (around lines 156-172, "Lint tutorial markdown" step):
 
-Before:
+Before (verbatim from real file content per recon):
 
 ```yaml
+      # Author-side smell detector. Runs against raw tutorial markdown in
+      # .tutorial-cache/ and warns on patterns that produce malformed DOM
+      # downstream (see scripts/lint-tutorial-markdown.ts). Non-blocking by
+      # default — uploads a JSON report so we can track trends and chase
+      # author-side fixes without breaking the rebuild.
       - name: Lint tutorial markdown
         run: npm run lint:tutorial-markdown
         continue-on-error: true
@@ -1532,6 +1768,11 @@ Before:
 After:
 
 ```yaml
+      # Author-side smell detector. Runs against raw tutorial markdown in
+      # .tutorial-cache/ and warns on patterns that produce malformed DOM
+      # downstream (see scripts/lint-tutorial-markdown.ts). Non-blocking by
+      # default — uploads a JSON report so we can track trends and chase
+      # author-side fixes without breaking the rebuild.
       - name: Lint tutorial markdown
         env:
           TUTORIAL_AUTHOR_TOKEN: ${{ secrets.TUTORIAL_AUTHOR_TOKEN }}
@@ -1544,27 +1785,33 @@ After:
         continue-on-error: true
 ```
 
-**File: `.github/workflows/rebuild-content-qa.yml`** (around line 106-108, same step):
+**File: `.github/workflows/rebuild-content-qa.yml`** (around lines 103-117, "Lint tutorial markdown (QA channel)" step):
 
-Before:
+Before (verbatim from real file content per recon):
 
 ```yaml
-      - name: Lint tutorial markdown
-        run: npm run lint:tutorial-markdown
+      # Author-side smell detector. See rebuild-content.yml for rationale.
+      # Runs against the QA cache (-Contribution repos) where author-side
+      # smells originate before they're merged to the public sources.
+      - name: Lint tutorial markdown (QA channel)
+        run: npm run lint:tutorial-markdown -- --channel qa
         continue-on-error: true
 ```
 
-After:
+After (preserve step name "(QA channel)" AND the `-- --channel qa` arg; point at QA srv URL via `ANALYTICS_BASE_URL_QA`, NOT prod-DEV):
 
 ```yaml
-      - name: Lint tutorial markdown
+      # Author-side smell detector. See rebuild-content.yml for rationale.
+      # Runs against the QA cache (-Contribution repos) where author-side
+      # smells originate before they're merged to the public sources.
+      - name: Lint tutorial markdown (QA channel)
         env:
           TUTORIAL_AUTHOR_TOKEN: ${{ secrets.TUTORIAL_AUTHOR_TOKEN }}
-          ANALYTICS_BASE_URL: ${{ vars.ANALYTICS_BASE_URL || 'https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com/author' }}
+          ANALYTICS_BASE_URL: ${{ vars.ANALYTICS_BASE_URL_QA || 'https://tutorial-system-dev-tutorials-srv-qa.cfapps.eu10-005.hana.ondemand.com/author' }}
         # XSUAA client-credentials tokens expire ~12h. v1 path is
         # workflow_dispatch only; cron-triggered runs may find the token
         # expired, in which case the staleness rule silently skips.
-        run: npm run lint:tutorial-markdown
+        run: npm run lint:tutorial-markdown -- --channel qa
         continue-on-error: true
 ```
 
@@ -1810,7 +2057,7 @@ The lint never blocks the build. It's a quarterly review prompt, not a CI gate.
 
 Telemetry rows carry no learner-identifying data in the views — `BranchDecisions` itself includes `user_ID`, but the analytics views aggregate it away. Authors with the `Tutorial.Author` role collection see only the aggregated counts.
 
-Raw `BranchDecisions` rows participate in the standard CAP `@PersonalData` anonymization cascade (see [docs/developers/architecture/audit-logging.md](../developers/architecture/audit-logging.md)).
+Raw `BranchDecisions` rows participate in the standard CAP `@PersonalData` anonymization cascade (see [docs/developers/architecture/anonymization-cascade.md](../developers/architecture/anonymization-cascade.md)).
 ```
 
 - [ ] **Step 3: Register in the VitePress sidebar**
