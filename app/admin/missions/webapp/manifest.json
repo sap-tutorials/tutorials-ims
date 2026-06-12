@@ -15,6 +15,13 @@
         "settings": {
           "odataVersion": "4.0"
         }
+      },
+      "adminAnalytics": {
+        "uri": "/admin/analytics/",
+        "type": "OData",
+        "settings": {
+          "odataVersion": "4.0"
+        }
       }
     },
     "crossNavigation": {
@@ -124,6 +131,18 @@
                       "text": "Edit Description (Markdown)"
                     }
                   }
+                },
+                "body": {
+                  "sections": {
+                    "BranchAnalytics": {
+                      "template": "sap.tutorials.admin.missions.ext.BranchAnalyticsSection",
+                      "position": {
+                        "placement": "After",
+                        "anchor": "completionPaths"
+                      },
+                      "title": "Branch Performance"
+                    }
+                  }
                 }
               },
               "navigation": {
@@ -211,6 +230,15 @@
       "type": "XML",
       "async": true,
       "id": "appRootView"
+    },
+    "extends": {
+      "extensions": {
+        "sap.ui.controllerExtensions": {
+          "sap.fe.templates.ObjectPage.ObjectPageController": {
+            "controllerName": "sap.tutorials.admin.missions.ext.BranchAnalyticsHandler"
+          }
+        }
+      }
     }
   }
 }

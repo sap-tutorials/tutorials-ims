@@ -159,6 +159,13 @@ jobs:
       # default — uploads a JSON report so we can track trends and chase
       # author-side fixes without breaking the rebuild.
       - name: Lint tutorial markdown
+        env:
+          TUTORIAL_AUTHOR_TOKEN: ${{ secrets.TUTORIAL_AUTHOR_TOKEN }}
+          ANALYTICS_BASE_URL: ${{ vars.ANALYTICS_BASE_URL || 'https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com/author' }}
+        # XSUAA client-credentials tokens expire ~12h. v1 path is
+        # workflow_dispatch only; cron-triggered runs may find the token
+        # expired, in which case the staleness rule silently skips. This is
+        # acceptable because the rule emits non-blocking notices.
         run: npm run lint:tutorial-markdown
         continue-on-error: true
 

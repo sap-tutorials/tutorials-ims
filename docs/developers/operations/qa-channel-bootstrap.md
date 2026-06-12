@@ -105,3 +105,21 @@ Expect: yellow banner present in HTML.
 ## Step 8: Assign role collection to first authors
 
 Out-of-band via BTP cockpit: assign the **"Tutorials Author"** role collection (declared in `xs-security.json`, granting scope `$XSAPPNAME.Tutorial.Author`) to author user emails. Users must log out and back in for the new scope to appear in their JWT — until then, `/tutorials-qa/*` returns 403 even for assigned users.
+
+## Lint-Token Setup (PR 5 author observability)
+
+The `branch-staleness` lint rule reads from AuthorService with the `Tutorial.Author` scope:
+
+1. **Create a CI service-user** in the BTP cockpit's User Management (or reuse the existing CI client).
+2. **Grant the `Tutorials Author` role collection** (the same one used for QA channel access).
+3. **Generate a client-credentials grant**:
+
+   ```bash
+   cf create-service-key tutorials-uaa author-token-key
+   ```
+4. **Exchange for a token** via the XSUAA `/oauth/token` endpoint with `grant_type=client_credentials`.
+5. **Store as the GitHub Actions secret** `TUTORIAL_AUTHOR_TOKEN`.
+
+**Token rotation note (v1):** XSUAA client-credentials tokens typically expire after ~12 hours. The v1 release path is `workflow_dispatch` only — when the operator manually kicks off the workflow, they refresh the token first. Cron-triggered runs may find the token expired; in that case the staleness rule silently skips, which is fine because findings are non-blocking notices. A v2 follow-up could add a token-refresh step to the workflow.
+
+The rule skips silently when the token is missing or expired, so this is a soft-deploy step — the lint stays green throughout rollout.

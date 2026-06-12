@@ -189,3 +189,45 @@ entity TutorialFeedbackAggregate as
     sum(case when npsScore <= 6 then 1 else 0 end)        as detractors        : Integer,
     sum(case when wasAuthenticated = true then 1 else 0 end) as authenticatedCount : Integer
   } group by tutorialSlug;
+
+
+// Issue #172 PR 5 — Author observability views.
+// Window-agnostic; consumers apply day-window via OData $filter at query time.
+// `BranchPerformance` aggregates by (missionSlug, tutorialSlug, branchPointId, surface);
+// `BranchTopPick` aggregates by the same plus recommendedKey so the JS merge layer
+// can find the most-picked branch per group.
+//
+// Spec: docs/superpowers/specs/2026-06-12-172-branching-pr5-author-observability-design.md §4.1
+
+@analytics.exposed
+view AnalyticsBranchPerformance as
+  select from ims.BranchDecisions {
+    key missionSlug,
+    key tutorialSlug,
+    key branchPointId,
+    key surface,
+    count(*) as total : Integer,
+    sum(case when recommendationKind = 'condition' then 1 else 0 end) as byCondition : Integer,
+    sum(case when recommendationKind = 'ranker'    then 1 else 0 end) as byRanker    : Integer,
+    sum(case when recommendationKind = 'default'   then 1 else 0 end) as byDefault   : Integer,
+    sum(case when followedRecommendation is not null then 1 else 0 end) as clickedTotal : Integer,
+    sum(case when followedRecommendation = true then 1 else 0 end)      as followed     : Integer,
+    avg(confidence)                                                     as avgConfidence : Decimal(5,4),
+    sum(case when source = 'jouleTool' then 1 else 0 end) as bySrcJouleTool : Integer,
+    sum(case when source = 'pageLoad'  then 1 else 0 end) as bySrcPageLoad  : Integer,
+    sum(case when source = 'click'     then 1 else 0 end) as bySrcClick     : Integer,
+    min(createdAt) as firstSeenAt : Timestamp
+  }
+  group by missionSlug, tutorialSlug, branchPointId, surface;
+
+@analytics.exposed
+view AnalyticsBranchTopPick as
+  select from ims.BranchDecisions {
+    key missionSlug,
+    key tutorialSlug,
+    key branchPointId,
+    key surface,
+    key recommendedKey,
+    count(*) as pickedCount : Integer
+  }
+  group by missionSlug, tutorialSlug, branchPointId, surface, recommendedKey;
