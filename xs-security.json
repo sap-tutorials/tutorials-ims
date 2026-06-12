@@ -115,11 +115,11 @@
       ]
     }
   ],
+  "authorities": [
+    "$XSAPPNAME.Tutorial.Author",
+    "$XSAPPNAME.Everyone"
+  ],
   "oauth2-configuration": {
-    "redirect-uris": ["https://*.cfapps.*.hana.ondemand.com/**"],
-    "authorities": [
-      "$XSAPPNAME.Tutorial.Author",
-      "$XSAPPNAME.Everyone"
-    ]
+    "redirect-uris": ["https://*.cfapps.*.hana.ondemand.com/**"]
   }
 }
