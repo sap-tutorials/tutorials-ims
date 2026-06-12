@@ -1,0 +1,46 @@
+<core:FragmentDefinition
+  xmlns="sap.m"
+  xmlns:core="sap.ui.core">
+  <VBox class="sapUiSmallMargin" id="branchAnalyticsWrap">
+    <Title text="Branch Performance" level="H3" class="sapUiSmallMarginBottom" id="branchAnalyticsTitle"/>
+    <Table
+      id="branchAnalyticsTable"
+      growing="true"
+      growingThreshold="20"
+      items="{branchPerf>/}">
+      <noData>
+        <IllustratedMessage
+          illustrationType="sapIllus-NoEntries"
+          title="No data yet"
+          description="Once learners encounter a branch in this mission, decision counts will appear here."/>
+      </noData>
+      <columns>
+        <Column width="9rem"><Text text="Branch Point"/></Column>
+        <Column width="14rem"><Text text="Tutorial"/></Column>
+        <Column width="6rem"><Text text="Surface"/></Column>
+        <Column width="6rem" hAlign="End"><Text text="Total"/></Column>
+        <Column width="6rem" hAlign="End"><Text text="Click Rate"/></Column>
+        <Column width="6rem" hAlign="End"><Text text="Follow Rate"/></Column>
+        <Column width="9rem"><Text text="Top Pick"/></Column>
+      </columns>
+      <items>
+        <ColumnListItem>
+          <cells>
+            <Text text="{branchPerf>branchPointId}"/>
+            <Text text="{branchPerf>tutorialSlug}"/>
+            <Text text="{branchPerf>surface}"/>
+            <Text text="{branchPerf>total}"/>
+            <Text text="{= ${branchPerf>clickRate} === null ? '—' : (${branchPerf>clickRate} * 100).toFixed(1) + '%' }"/>
+            <Text text="{= ${branchPerf>followRate} === null ? '—' : (${branchPerf>followRate} * 100).toFixed(1) + '%' }"/>
+            <Text text="{= ${branchPerf>pickedKeyTop} ? ${branchPerf>pickedKeyTop} + ' (' + (${branchPerf>pickedKeyTopShare} * 100).toFixed(0) + '%)' : '—' }"/>
+          </cells>
+        </ColumnListItem>
+      </items>
+    </Table>
+    <Link
+      text="View in Analytics Explorer"
+      href="/analytics-ui/"
+      target="_blank"
+      class="sapUiSmallMarginTop"/>
+  </VBox>
+</core:FragmentDefinition>
