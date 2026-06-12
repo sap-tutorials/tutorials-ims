@@ -26,11 +26,12 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { extractBranchGroups, BranchParseError } from './parsers/branches.ts'
+import { prefetchBranchStaleness, branchStalenessRule } from './lint-rules/branch-staleness'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '..')
 
-export type LintSeverity = 'error' | 'warning'
+export type LintSeverity = 'error' | 'warning' | 'notice'
 
 export type LintFinding = {
   rule: string
@@ -213,7 +214,7 @@ export function lintTutorial(slug: string, source: string): LintFinding[] {
   return findings
 }
 
-function main() {
+async function main() {
   const args = process.argv.slice(2)
   const strict = args.includes('--strict')
   const channel = args.includes('--channel') ? args[args.indexOf('--channel') + 1] : 'prod'
@@ -230,11 +231,57 @@ function main() {
   const files = readdirSync(cacheDir).filter(f => f.endsWith('.md') && !f.startsWith('_'))
   console.log(`Linting ${files.length} tutorial markdown files in ${cacheDir}...\n`)
 
+  // ── Round-3 sync-runner pivot: ONE async pre-pass before the per-file loop. ──
+  // Empty cache on missing token / network error / 401. Per-slug rule invocation
+  // returns [] when the cache has no entry for that slug, so missing pre-pass is
+  // indistinguishable from missing-data-for-this-slug — both silently skip.
+  const allSlugs = files.map(f => f.replace(/\.md$/, ''))
+  const stalenessCache = await prefetchBranchStaleness({
+    slugs: allSlugs,
+    env: {
+      TUTORIAL_AUTHOR_TOKEN: process.env.TUTORIAL_AUTHOR_TOKEN,
+      ANALYTICS_BASE_URL: process.env.ANALYTICS_BASE_URL,
+    },
+    fetch: globalThis.fetch,
+  })
+
   const allFindings: LintFinding[] = []
   for (const file of files) {
     const slug = file.replace(/\.md$/, '')
     const source = readFileSync(join(cacheDir, file), 'utf-8')
-    allFindings.push(...lintTutorial(slug, source))
+    try {
+      // lintTutorial: completely unchanged signature, sync.
+      const findings = lintTutorial(slug, source)
+
+      // branchStalenessRule: sync. Caller (this main loop) parses branches up
+      // front via extractBranchGroups and passes them in. Rule is a pure
+      // function over (slug, branches, cache). Skips silently when the parser
+      // throws (parser-broken tutorials are flagged separately by
+      // branchSyntaxRule via lintTutorial; staleness has nothing useful to say
+      // without structured groups).
+      let branchInputs: { tutorialSlug: string; branchPointId: string; beginLine: number }[] = []
+      try {
+        const result = extractBranchGroups(source, slug)
+        branchInputs = result.branchGroups.map(g => ({
+          tutorialSlug: slug,
+          branchPointId: g.id,           // ${parentStepNumber}-${groupKey} — see recon §8
+          beginLine: g.beginLine,        // promoted in Task 1
+        }))
+      } catch (err) {
+        if (!(err instanceof BranchParseError)) throw err
+        // BranchParseError: branchSyntaxRule (called from lintTutorial) already emitted
+        // the user-facing finding; staleness has nothing useful to say without
+        // structured groups. Fall through with empty branchInputs → rule returns [].
+      }
+      findings.push(...branchStalenessRule({ slug, branches: branchInputs, cache: stalenessCache }))
+
+      allFindings.push(...findings)
+    } catch (err) {
+      // Per-file try/catch (round-3 NEW-B7 fix): one bad tutorial must not abort the run.
+      // Unhandled rejections in Node 22 default-terminate the process; this guard
+      // ensures CI returns a real lint summary even when one slug throws.
+      console.error(`Failed to lint ${slug}:`, err)
+    }
   }
 
   // Group by slug for the report
@@ -271,13 +318,16 @@ function main() {
   }, null, 2), 'utf-8')
   console.log(`\nReport written to ${reportPath}`)
 
-  if (strict && allFindings.length > 0) {
-    console.error(`\n--strict: exiting non-zero because ${allFindings.length} finding(s) detected`)
+  // Strict-mode exit (round-3 I9 fix): notices are non-blocking by design; only
+  // count error/warning toward strict-mode failure.
+  const blockingCount = allFindings.filter(f => f.severity !== 'notice').length
+  if (strict && blockingCount > 0) {
+    console.error(`\n--strict: exiting non-zero because ${blockingCount} blocking finding(s) detected (notices excluded)`)
     process.exit(1)
   }
 }
 
 const isMain = process.argv[1] && import.meta.url === `file://${process.argv[1].replace(/\\/g, '/')}`
 if (isMain || import.meta.url.endsWith(process.argv[1]?.replace(/\\/g, '/'))) {
-  main()
+  main().catch(err => { console.error(err); process.exit(1) })
 }
