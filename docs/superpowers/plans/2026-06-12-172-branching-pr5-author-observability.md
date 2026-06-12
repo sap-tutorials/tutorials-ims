@@ -4,7 +4,7 @@
 
 **Goal:** Give mission curators visibility into branch performance via a per-mission Fiori ObjectPage analytics tile + a markdown-lint signal that flags branches that have converged (one branch picked >95% of decisions over the last 30 days).
 
-**Architecture:** Two CDS views (`AnalyticsBranchPerformance`, `AnalyticsBranchTopPick`) aggregate `BranchDecisions` cleanly; both are window-agnostic — consumers apply day-window via OData `$filter`. A shared isomorphic `scripts/lib/merge-branch-perf.ts` computes derived fields (`pickedKeyTop`, `pickedKeyTopShare`, `followRate`) for both consumers. The Mission ObjectPage gets a Fiori Elements v4 custom section that fetches both views, merges, renders. The lint rule queries the same views over a 30-day window and emits `severity: 'notice'` findings on stale branches. New `Tutorial.Author`-scoped read access gates the views (NOT Admin), so the lint rule can run with a non-admin token.
+**Architecture:** Two CDS views (`AnalyticsBranchPerformance`, `AnalyticsBranchTopPick`) aggregate `BranchDecisions` cleanly; both are window-agnostic. Consumers fetch all-time aggregate rows and JS-side filter on `firstSeenAt` (lint rule: 30-day age threshold). Mission ObjectPage shows all-time decisions per mission. Day-windowed aggregates would require a separate windowed view. A shared isomorphic `scripts/lib/merge-branch-perf.ts` computes derived fields (`pickedKeyTop`, `pickedKeyTopShare`, `followRate`) for both consumers. The Mission ObjectPage gets a Fiori Elements v4 custom section that fetches both views, merges, renders. The lint rule queries the same views and emits `severity: 'notice'` findings on stale branches. New `Tutorial.Author`-scoped read access gates the views (NOT Admin), so the lint rule can run with a non-admin token.
 
 **Tech Stack:** CDS + CAP Node.js, vitest unit + hybrid, sap.fe.templates.ObjectPage v4 + sap.m, isomorphic ESM (`scripts/lib/merge-branch-perf.ts`), no new npm dependencies.
 
@@ -21,7 +21,8 @@ The following intentional divergences from the spec are baked into this plan. Al
 - **File names (B4):** Plan now matches spec exactly — `BranchAnalyticsSection.fragment.xml`, `BranchAnalyticsHandler.js`, `merge-branch-perf-amd.js` directly under `app/admin/missions/webapp/ext/` (no `sections/` or `lib/` subfolders).
 - **Section key + anchor (I1, I2):** Manifest section key is `BranchAnalytics`; placement anchor is `completionPaths` (both per spec).
 - **Fragment table type (B5):** Plan uses `sap.m.Table` with `<IllustratedMessage>` empty state per spec, not `sap.ui.table.Table`.
-- **Lint runner refactor:** Lint runner gains async support; `LintFinding` severity union widened with `notice`; new rule conforms to existing `rule`/`file`/`line`/`excerpt`/`severity` shape (per recon). `lintTutorial` extracts branch groups once and shares them between `branchSyntaxRule` and the new `branchStalenessRule`.
+- **FE v4 lifecycle hook (round-3):** Mission ObjectPage controller extension uses `override.routing.onAfterBinding(oContext)` rather than `onInit` + `getExtensionAPI().attachPageReady()`. `onAfterBinding` is the canonical FE v4 hook that fires every time the OP binds to a new context (initial nav, cross-mission nav, refresh) — `attachPageReady`/`dataReceived` fishing isn't needed.
+- **Lint runner refactor (round-3 sync-runner pivot):** `lintTutorial` and `branchSyntaxRule` stay SYNCHRONOUS and unchanged. The pre-existing `test/unit/lint-tutorial-markdown.test.js` continues to work without edits. Only `main()` becomes async, with a single `prefetchBranchStaleness(slugs, env)` call before the per-file loop populating a slug-keyed cache. The new `branchStalenessRule({ slug, source, cache })` is sync, invoked separately from the per-file loop (NOT registered in the `RULES` array — it carries a cache dependency the registry shape can't express). The `LintFinding` severity union widens with `'notice'`; new rule conforms to existing `rule`/`file`/`line`/`excerpt`/`severity` shape (per recon).
 
 ---
 
@@ -49,7 +50,7 @@ The following intentional divergences from the spec are baked into this plan. Al
 
 **Test files:**
 
-- `test/analytics-branch-performance.test.js` — 6 unit cases (view aggregation against in-memory CDS test serve).
+- `test/analytics-branch-performance.test.js` — 5 unit cases (view aggregation against in-memory CDS test serve).
 - `test/hybrid/analytics-branch-performance.test.js` — 3 hybrid cases (`ALLOW_HYBRID_WRITES=true` gated).
 - `scripts/lib/__tests__/merge-branch-perf.test.ts` — 7 unit cases for the shared helper.
 - `scripts/lint-rules/__tests__/branch-staleness.test.ts` — 8 unit cases (6 behavioural + 1 console-leak audit + 1 runner-integration smoke test).
@@ -189,7 +190,7 @@ git commit -m "feat(172): promote BranchGroup.beginLine for PR 5 lint signal"
 - Modify: `db/views.cds`
 - Test: `test/analytics-branch-performance.test.js` (new)
 
-Two window-agnostic views that aggregate `BranchDecisions`. Day-window applied at consumer query time via OData `$filter=createdAt gt <ISO ts>`.
+Two window-agnostic views that aggregate `BranchDecisions`. Consumers fetch all-time aggregate rows and JS-side filter on `firstSeenAt` (lint rule: 30-day age threshold). Mission ObjectPage shows all-time decisions per mission. Day-windowed aggregates would require a separate windowed view.
 
 - [ ] **Step 1: Inspect current views.cds tail**
 
@@ -287,22 +288,6 @@ describe('AnalyticsBranchPerformance view', () => {
     expect(result[1].surface).toBe('tutorialSkip');
   });
 
-  it('honors $filter=createdAt gt <iso> for day-window cutoffs', async () => {
-    const { BranchDecisions, AnalyticsBranchPerformance } = cds.entities('com.sap.developers.ims');
-    const slug = '__test__-pr5-window';
-    const oldIso = new Date(Date.now() - 8 * 24 * 3600 * 1000).toISOString();
-    const newIso = new Date(Date.now() - 1 * 24 * 3600 * 1000).toISOString();
-    await INSERT.into(BranchDecisions).entries([
-      { user_ID: null, surface: 'tutorialBranch', missionSlug: null, tutorialSlug: slug, branchPointId: '1-deployment', recommendedKey: 'hana', chosenKey: null, recommendationKind: 'condition', confidence: 1, source: 'pageLoad', followedRecommendation: true, createdAt: oldIso },
-      { user_ID: null, surface: 'tutorialBranch', missionSlug: null, tutorialSlug: slug, branchPointId: '1-deployment', recommendedKey: 'hana', chosenKey: null, recommendationKind: 'condition', confidence: 1, source: 'pageLoad', followedRecommendation: true, createdAt: newIso },
-    ]);
-    const cutoffIso = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
-    const result = await SELECT.from(AnalyticsBranchPerformance)
-      .where({ tutorialSlug: slug })
-      .and(`createdAt > ${JSON.stringify(cutoffIso)}`);
-    // Note: cds.test SQLite tolerates filter on aggregate-source rows; HANA validates separately in Task 5.
-    expect(result.length).toBeLessThanOrEqual(1);  // at most 1 row passed the cutoff
-  });
 });
 
 describe('AnalyticsBranchTopPick view', () => {
@@ -382,7 +367,7 @@ Note `ims.BranchDecisions` (qualified) per existing precedent.
 ```bash
 cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 60 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit test/analytics-branch-performance.test.js 2>&1 | tail -10
 ```
-Expected: 6 tests pass.
+Expected: 5 view tests + 1 top-pick test pass.
 
 - [ ] **Step 6: Commit**
 
@@ -474,7 +459,7 @@ Expected: zero matches. Authors must see only the aggregated views; raw rows sta
 ```bash
 cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 60 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit test/analytics-branch-performance.test.js 2>&1 | tail -8
 ```
-Expected: 6 tests still pass.
+Expected: 5 view tests + 1 top-pick test still pass.
 
 ```bash
 cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 90 npx cds compile srv/analytics-service.cds srv/author-service.cds --to sql 2>&1 | tail -10
@@ -556,7 +541,7 @@ Expected: clean EDMX emission (no errors). Look for `<Annotations Target="Analyt
 ```bash
 cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 60 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit test/analytics-branch-performance.test.js 2>&1 | tail -8
 ```
-Expected: 6 tests still pass.
+Expected: 5 view tests + 1 top-pick test still pass.
 
 - [ ] **Step 5: Commit**
 
@@ -817,7 +802,7 @@ git commit -m "feat(172): mergeBranchPerf isomorphic ESM helper"
 - Modify: `app/admin/missions/webapp/manifest.json`
 - Smoke: `npm run build:admin` (build the Missions FE component)
 
-The Missions ObjectPage gets a new section "Branch Performance" rendering a `sap.m.Table` filtered by the current mission's slug. The section uses the **Fiori v4 `targets.<X>.options.settings.content.body.sections.<KEY>`** manifest schema (verified in spec review B4) and the **`onInit` + `getExtensionAPI().attachPageReady()`** lifecycle (verified in spec review B5).
+The Missions ObjectPage gets a new section "Branch Performance" rendering a `sap.m.Table` filtered by the current mission's slug. The section uses the **Fiori v4 `targets.<X>.options.settings.content.body.sections.<KEY>`** manifest schema (verified in spec review B4) and the **`routing.onAfterBinding(oContext)`** lifecycle hook (canonical FE v4 pattern — fires every time the OP binds to a new context, no `attachPageReady`/`dataReceived` fishing required).
 
 The table data binds to `/admin/analytics/AnalyticsBranchPerformance?$filter=missionSlug eq '<currentSlug>'` via an OData V4 model defined in the manifest's `dataSources`. The Mission ObjectPage runs as Admin, so it consumes the `AnalyticsService` surface (Task 3, Step 2).
 
@@ -849,8 +834,7 @@ Create `app/admin/missions/webapp/ext/BranchAnalyticsSection.fragment.xml`:
       id="branchAnalyticsTable"
       growing="true"
       growingThreshold="20"
-      items="{branchPerf>/}"
-      ariaLabelledBy="branchAnalyticsTitle">
+      items="{branchPerf>/}">
       <noData>
         <IllustratedMessage
           illustrationType="sapIllus-NoEntries"
@@ -910,63 +894,38 @@ sap.ui.define([
     override: {
       onInit: function () {
         // Empty model up front so the visible-binding doesn't crash on first paint.
-        var oView = this.base.getView();
-        oView.setModel(new JSONModel([]), "branchPerf");
-
-        // The OP context binding does NOT exist at onInit time on Fiori v4 —
-        // the framework binds the view AFTER the route's patternMatched
-        // resolves the context path. So `attachDataReceived` must wait for
-        // the FIRST attachPageReady callback. Per round-2 reviewer guidance:
-        // "the canonical v4 pattern is to call attachDataReceived from
-        // inside the FIRST attachPageReady callback, with a once-only guard".
-        var oExt = this.base.getExtensionAPI();
-        if (oExt && typeof oExt.attachPageReady === "function") {
-          oExt.attachPageReady(this._onPageReady.bind(this));
+        this.base.getView().setModel(new JSONModel([]), "branchPerf");
+      },
+      // Fiori Elements v4 canonical lifecycle hook — fires every time the OP
+      // re-binds to a new context (initial nav, cross-mission nav, refresh).
+      // Per recon-confirmed FE v4 docs this is the right place to hang
+      // per-context data fetches; attachPageReady / dataReceived fishing is
+      // not needed.
+      routing: {
+        onAfterBinding: function (oContext) {
+          if (!oContext) return;
+          var that = this;
+          oContext.requestProperty("slug").then(function (sSlug) {
+            if (!sSlug) return;
+            that._loadBranchPerformance(sSlug);
+          });
         }
       }
     },
 
-    _onPageReady: function () {
-      this._loadBranchPerformance();
-      // Re-load on every dataReceived so cross-mission navigation stays fresh
-      // without a full page-ready re-fire. Once-only guard: at onInit the
-      // binding doesn't exist yet, so we hook it the first time pageReady
-      // fires (binding is now bound). Subsequent pageReady fires would
-      // double-attach without this flag.
-      if (!this._dataReceivedAttached) {
-        var oBinding = this.base.getView().getObjectBinding && this.base.getView().getObjectBinding();
-        if (oBinding && typeof oBinding.attachDataReceived === "function") {
-          oBinding.attachDataReceived(this._loadBranchPerformance.bind(this));
-          this._dataReceivedAttached = true;
-        }
-      }
-    },
-
-    _loadBranchPerformance: function () {
-      var oCtx = this.base.getView().getBindingContext();
-      if (!oCtx) return;
-      var sSlug = oCtx.getProperty("slug");
-      if (!sSlug) return;  // mission has no slug yet — section stays empty.
-
-      var sUrl =
-        "/admin/analytics/AnalyticsBranchPerformance?$filter=" +
-          encodeURIComponent("missionSlug eq '" + sSlug.replace(/'/g, "''") + "'") +
-        "&$top=200";
-      var sUrl2 =
-        "/admin/analytics/AnalyticsBranchTopPick?$filter=" +
-          encodeURIComponent("missionSlug eq '" + sSlug.replace(/'/g, "''") + "'") +
-        "&$top=400";
-
-      // Fetch both, merge in JS.
+    _loadBranchPerformance: function (sSlug) {
+      var sFilter = encodeURIComponent("missionSlug eq '" + sSlug.replace(/'/g, "''") + "'");
+      var sUrl  = "/admin/analytics/AnalyticsBranchPerformance?$filter=" + sFilter + "&$top=200";
+      var sUrl2 = "/admin/analytics/AnalyticsBranchTopPick?$filter="     + sFilter + "&$top=400";
+      var oModel = this.base.getView().getModel("branchPerf");
       Promise.all([
         fetch(sUrl,  { credentials: "include", headers: { Accept: "application/json" } }).then(function (r) { return r.json(); }),
         fetch(sUrl2, { credentials: "include", headers: { Accept: "application/json" } }).then(function (r) { return r.json(); })
       ]).then(function (parts) {
         var perf = (parts[0] && parts[0].value) || [];
         var top  = (parts[1] && parts[1].value) || [];
-        var merged = mergeBranchPerf(perf, top);
-        this.base.getView().getModel("branchPerf").setData(merged);
-      }.bind(this)).catch(function () {
+        oModel.setData(mergeBranchPerf(perf, top));
+      }).catch(function () {
         // Silent on failure — section just shows the IllustratedMessage no-data state.
       });
     }
@@ -1489,7 +1448,7 @@ export async function branchStalenessRule(opts: BranchStalenessOpts): Promise<Li
     if (row.pickedKeyTopShare === null) continue;
     if (row.pickedKeyTopShare <= SHARE_THRESHOLD) continue;
 
-    const branch = branches.find(b => b.branchPointId === row.branchPointId);
+    const branch = branches.find(b => b.branchPointId === row.branchPointId && b.tutorialSlug === row.tutorialSlug);
     if (!branch) continue;  // markdown ↔ telemetry drift; don't blind-cite a line
 
     const sharePct = (row.pickedKeyTopShare * 100).toFixed(0);
@@ -1654,7 +1613,7 @@ Expected hits and required handling:
    ```bash
    cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && node -e "JSON.parse(require('fs').readFileSync('.tutorial-cache/lint-report.json','utf-8'))" 2>&1 | head -3
    ```
-4. **Exit-code computation** (lines 274-277 per recon §6) — currently `strict && allFindings.length > 0 ? 1 : 0`. `notice` findings count toward the strict-mode exit code. **This is intentional** — strict mode treats every finding as a build-failure signal regardless of severity. (If we wanted "strict ignores notice," we'd add a `severity !== 'notice'` filter; the spec says non-blocking by default + strict opt-in for blocking, and `continue-on-error: true` in the workflow keeps strict-on-prod from failing the rebuild.)
+4. **Exit-code computation** (lines 274-277 per recon §6) — currently `strict && allFindings.length > 0 ? 1 : 0`. Change to count ONLY findings with `severity !== 'notice'`: `strict && allFindings.some(f => f.severity !== 'notice') ? 1 : 0`. Notices are non-blocking by design (author judgment, not a build failure); strict mode escalates errors/warnings only.
 5. **Any future exhaustive `switch (severity)`** — none today per recon. If a new one is added during the refactor, audit it for a `notice` arm.
 
 After applying the diff, re-run the grep:
@@ -1887,7 +1846,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import cds from '@sap/cds';
 import { isSafeForWrites } from './_guard.js';
 
-cds.test('serve', '--profile', 'hybrid', '--in-memory=false');
+cds.test('serve', '--project', '.', '--profile', 'hybrid');
 
 const SLUG_BRANCH = '__test__-pr5-hybrid-branch';
 const SLUG_TOP    = '__test__-pr5-hybrid-top';
@@ -2208,7 +2167,7 @@ Closes the author-observability piece of issue #172 (branching paths). This is P
 
 ## Test plan
 
-- [x] Unit (in-memory SQLite): 6 view tests + 7 merge tests + 7 lint tests (6 behavioural + 1 console-leak audit)
+- [x] Unit (in-memory SQLite): 5 view tests + 7 merge tests + 8 lint tests (6 behavioural + 1 console-leak audit + 1 runner-integration smoke)
 - [ ] Hybrid (HANA Cloud): test file written; runs opt-in via `ALLOW_HYBRID_WRITES=true` (Tom must run before merging — 3 view tests)
 - [x] Lint script smoke: silently skips when `TUTORIAL_AUTHOR_TOKEN` unset
 - [x] Fiori build: Missions FE component compiles cleanly
