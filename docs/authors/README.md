@@ -16,6 +16,7 @@ This folder is the operational manual for everyone working with the SAP Develope
 - [Authoring branched missions](./branched-missions.md) — pick-one alternatives within a mission
 - [Authoring branched tutorials](./branched-tutorials.md) — alternative step-runs and skip-runs within a single tutorial
 - [Branching cookbook](./branching-cookbook.md) — copy-paste examples for cloud/on-prem, IDE pick, and skip-ahead
+- [Reading branch telemetry](./reading-branch-telemetry.md) — how to interpret the Branch Performance section in the Missions admin app, and when the staleness lint suggests collapsing a branch.
 
 ## System landmarks
 
