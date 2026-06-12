@@ -1352,3 +1352,35 @@ annotate AdminService.TutorialCategories with @UI: {
     { $Type: 'UI.DataField', Value: score,        Label: 'Score' }
   ]
 };
+
+// Issue #172 PR 5 — branch performance LineItem rendered inside the
+// Missions ObjectPage as an additional section (manifest extension wires
+// the OData URL with $filter=missionSlug eq <current>).
+// Spec: §4.3 Mission ObjectPage section + §4.1 view shape.
+using AnalyticsService from '../srv/analytics-service';
+
+annotate AnalyticsService.AnalyticsBranchPerformance with @(
+  UI.HeaderInfo: {
+    TypeName: 'Branch Decision', TypeNamePlural: 'Branch Decisions',
+    Title: { Value: branchPointId }
+  },
+  UI.LineItem: [
+    { Value: branchPointId,    Label: 'Branch Point' },
+    { Value: tutorialSlug,     Label: 'Tutorial' },
+    { Value: surface,          Label: 'Surface' },
+    { Value: total,            Label: 'Total Decisions' },
+    { Value: clickedTotal,     Label: 'Clicks' },
+    { Value: followed,         Label: 'Followed' },
+    { Value: byCondition,      Label: 'By Condition' },
+    { Value: byRanker,         Label: 'By Ranker' },
+    { Value: byDefault,        Label: 'By Default' },
+    { Value: bySrcJouleTool,   Label: 'Via Joule' },
+    { Value: bySrcPageLoad,    Label: 'Via Page Load' },
+    { Value: avgConfidence,    Label: 'Avg Confidence' }
+  ],
+  UI.SelectionFields: [ tutorialSlug, surface ],
+  UI.PresentationVariant: {
+    SortOrder: [ { Property: total, Descending: true } ],
+    Visualizations: [ '@UI.LineItem' ]
+  }
+);
