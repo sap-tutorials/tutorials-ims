@@ -440,7 +440,12 @@ async function main() {
     opts.force = cfg.force;
   }
 
-  if (!opts.apiKey) {
+  // --verify-only is a read-only call against the public /content/hashes
+  // endpoint — no auth needed, so the API key check is skipped. Without
+  // this exemption, the daily content-drift-check workflow could never
+  // succeed (it sets CONTENT_API_KEY="" deliberately), which broke every
+  // run since the workflow shipped on 2026-06-06 (latest 27397407654).
+  if (!opts.apiKey && !opts.verifyOnly) {
     const envHint = channel === 'qa' ? 'CONTENT_API_KEY_QA' : 'CONTENT_API_KEY';
     console.error(`Error: No API key. Set ${envHint} env var or pass --api-key`);
     process.exit(1);
