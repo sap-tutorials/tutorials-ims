@@ -45,13 +45,18 @@ jobs:
     strategy:
       fail-fast: false
       # On a manual dispatch with a specific env, the matrix collapses
-      # to that one. On schedule or `all`, we verify dev + qa + prod.
+      # to that one. On schedule we only verify dev — QA is excluded
+      # because the QA srv (by design) doesn't expose `/build/catalog`
+      # (fetch-tutorials would fail) and requires `Tutorial.Author`
+      # auth on `/content/hashes` (verify-only would 401). Adding QA
+      # to the daily schedule would need a redesign of the verify path
+      # for the QA channel; until then, manual dispatch only.
       # Whether we include prod here is a judgement call — verify-only
       # is read-only on the server so it's safe; but a 5-minute window
       # of API load three times a day matters, so we keep prod off
       # the schedule by default and only run it via dispatch.
       matrix:
-        environment: ${{ fromJSON((github.event_name == 'workflow_dispatch' && inputs.environment != 'all') && format('["{0}"]', inputs.environment) || (github.event_name == 'workflow_dispatch' && inputs.environment == 'all') && '["dev", "qa", "prod"]' || '["dev", "qa"]') }}
+        environment: ${{ fromJSON((github.event_name == 'workflow_dispatch' && inputs.environment != 'all') && format('["{0}"]', inputs.environment) || (github.event_name == 'workflow_dispatch' && inputs.environment == 'all') && '["dev", "qa", "prod"]' || '["dev"]') }}
 
     steps:
       - name: Checkout
@@ -68,7 +73,41 @@ jobs:
 
       - name: Resolve env-specific URLs + secrets
         id: env
+        # Fails fast with a pointer to the missing repo secret rather than
+        # letting an empty `srv_url` bleed into `CAP_BASE_URL=""` and
+        # produce a confusing `ECONNREFUSED 127.0.0.1:4004` from inside
+        # `scripts/fetch-tutorials.ts` (which falls back to localhost when
+        # the env var is empty). Run 27397407654 spent 17 minutes on a
+        # missing secret because the actual error pointed at the wrong
+        # layer.
+        #
+        # IMPORTANT — secret masking. The `${{ secrets.X }}` interpolation
+        # is mask-exempted when written directly to `$GITHUB_OUTPUT` from
+        # the YAML, but masking DOES intercept `echo "$shell_var"`. So the
+        # guard checks emptiness via shell, then writes the output via the
+        # YAML interpolator. Routing the URL through a shell var and
+        # echoing it landed `srv_url=***` (literal) in the output and
+        # broke run 27416206424 with `Failed to parse URL from
+        # ***/build/catalog`.
         run: |
+          case "${{ matrix.environment }}" in
+            dev)
+              guard='${{ secrets.CAP_SRV_URL_DEV }}'
+              secret_name="CAP_SRV_URL_DEV"
+              ;;
+            qa)
+              guard='${{ secrets.CAP_SRV_URL_QA }}'
+              secret_name="CAP_SRV_URL_QA"
+              ;;
+            prod)
+              guard='${{ secrets.CAP_SRV_URL_PROD }}'
+              secret_name="CAP_SRV_URL_PROD"
+              ;;
+          esac
+          if [ -z "$guard" ]; then
+            echo "::error title=Missing repo secret::$secret_name is empty or unset on the sap-tutorials/tutorials-ims repo. Set it to the CAP srv base URL (the tutorials-srv app, not the approuter) e.g. https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com — verify with 'gh secret list --repo sap-tutorials/tutorials-ims'."
+            exit 1
+          fi
           case "${{ matrix.environment }}" in
             dev)
               echo "srv_url=${{ secrets.CAP_SRV_URL_DEV }}" >> "$GITHUB_OUTPUT"
