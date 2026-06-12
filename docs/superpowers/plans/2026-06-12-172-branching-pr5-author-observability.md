@@ -22,7 +22,7 @@ The following intentional divergences from the spec are baked into this plan. Al
 - **Section key + anchor (I1, I2):** Manifest section key is `BranchAnalytics`; placement anchor is `completionPaths` (both per spec).
 - **Fragment table type (B5):** Plan uses `sap.m.Table` with `<IllustratedMessage>` empty state per spec, not `sap.ui.table.Table`.
 - **FE v4 lifecycle hook (round-3):** Mission ObjectPage controller extension uses `override.routing.onAfterBinding(oContext)` rather than `onInit` + `getExtensionAPI().attachPageReady()`. `onAfterBinding` is the canonical FE v4 hook that fires every time the OP binds to a new context (initial nav, cross-mission nav, refresh) — `attachPageReady`/`dataReceived` fishing isn't needed.
-- **Lint runner refactor (round-3 sync-runner pivot):** `lintTutorial` and `branchSyntaxRule` stay SYNCHRONOUS and unchanged. The pre-existing `test/unit/lint-tutorial-markdown.test.js` continues to work without edits. Only `main()` becomes async, with a single `prefetchBranchStaleness(slugs, env)` call before the per-file loop populating a slug-keyed cache. The new `branchStalenessRule({ slug, source, cache })` is sync, invoked separately from the per-file loop (NOT registered in the `RULES` array — it carries a cache dependency the registry shape can't express). The `LintFinding` severity union widens with `'notice'`; new rule conforms to existing `rule`/`file`/`line`/`excerpt`/`severity` shape (per recon).
+- **Lint runner refactor (round-3 sync-runner pivot):** `lintTutorial` and `branchSyntaxRule` stay SYNCHRONOUS and unchanged. The pre-existing `test/unit/lint-tutorial-markdown.test.js` continues to work without edits. Only `main()` becomes async, with a single `prefetchBranchStaleness(slugs, env)` call before the per-file loop populating a slug-keyed cache. The new `branchStalenessRule({ slug, branches, cache })` is sync, invoked separately from the per-file loop (NOT registered in the `RULES` array — it carries a cache dependency the registry shape can't express). The `LintFinding` severity union widens with `'notice'`; new rule conforms to existing `rule`/`file`/`line`/`excerpt`/`severity` shape (per recon).
 
 ---
 
@@ -50,10 +50,10 @@ The following intentional divergences from the spec are baked into this plan. Al
 
 **Test files:**
 
-- `test/analytics-branch-performance.test.js` — 5 unit cases (view aggregation against in-memory CDS test serve).
+- `test/analytics-branch-performance.test.js` — 5 unit cases total (4 view + 1 top-pick aggregation against in-memory CDS test serve).
 - `test/hybrid/analytics-branch-performance.test.js` — 3 hybrid cases (`ALLOW_HYBRID_WRITES=true` gated).
 - `scripts/lib/__tests__/merge-branch-perf.test.ts` — 7 unit cases for the shared helper.
-- `scripts/lint-rules/__tests__/branch-staleness.test.ts` — 8 unit cases (6 behavioural + 1 console-leak audit + 1 runner-integration smoke test).
+- `scripts/lint-rules/__tests__/branch-staleness.test.ts` — 11 unit cases (7 sync rule behavioural + 2 async prefetch behavioural + 1 console-leak audit + 1 runner-integration smoke test).
 - Manual checklist in PR body: 6-step walkthrough.
 
 **No new npm dependencies.**
@@ -367,7 +367,7 @@ Note `ims.BranchDecisions` (qualified) per existing precedent.
 ```bash
 cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 60 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit test/analytics-branch-performance.test.js 2>&1 | tail -10
 ```
-Expected: 5 view tests + 1 top-pick test pass.
+Expected: 4 view tests + 1 top-pick test pass (5 total).
 
 - [ ] **Step 6: Commit**
 
@@ -459,7 +459,7 @@ Expected: zero matches. Authors must see only the aggregated views; raw rows sta
 ```bash
 cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 60 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit test/analytics-branch-performance.test.js 2>&1 | tail -8
 ```
-Expected: 5 view tests + 1 top-pick test still pass.
+Expected: 4 view tests + 1 top-pick test still pass (5 total).
 
 ```bash
 cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 90 npx cds compile srv/analytics-service.cds srv/author-service.cds --to sql 2>&1 | tail -10
@@ -541,7 +541,7 @@ Expected: clean EDMX emission (no errors). Look for `<Annotations Target="Analyt
 ```bash
 cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 60 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit test/analytics-branch-performance.test.js 2>&1 | tail -8
 ```
-Expected: 5 view tests + 1 top-pick test still pass.
+Expected: 4 view tests + 1 top-pick test still pass (5 total).
 
 - [ ] **Step 5: Commit**
 
@@ -905,7 +905,7 @@ sap.ui.define([
         onAfterBinding: function (oContext) {
           if (!oContext) return;
           var that = this;
-          oContext.requestProperty("slug").then(function (sSlug) {
+          oContext.requestObject("slug").then(function (sSlug) {
             if (!sSlug) return;
             that._loadBranchPerformance(sSlug);
           });
@@ -949,7 +949,7 @@ In `app/admin/missions/webapp/manifest.json`, locate `targets.<MISSIONS_OP_TARGE
 }
 ```
 
-If `completionPaths` does not exist as a section anchor, fall back to whichever section currently sits where this should land (`grep -n '"sections"' app/admin/missions/webapp/manifest.json`). Spec line 336 mandates `completionPaths`.
+If the section does not appear after smoke build + run, the manifest grep fallback won't help (`completionPaths` is a navigation property, not a section anchor — there is no `content.body.sections` block to grep). Instead: open the rendered ObjectPage in the browser, search the DOM for `fe::FacetSection::` to discover the auto-generated anchor key from the `completionPaths` navigation property (per SAP UX docs "Finding the Right Anchor Key for SAP Fiori elements OData V4"), and substitute that key into `position.anchor`. Spec line 336 mandates `completionPaths`; if browser-DOM discovery yields a different generated key (e.g. `completionPaths::Section`), use the discovered key.
 
 In the same manifest, register the controller extension via `sap.ui5.extends.extensions.sap.ui.controllerExtensions` — this is the spec-mandated shape. **Do NOT use the `controlConfiguration` alternative** (deprecated for FE v4 custom sections, ambiguous wiring).
 
@@ -1324,6 +1324,16 @@ describe('prefetchBranchStaleness (async, bulk fetch)', () => {
     expect(allCalls).not.toContain(SECRET);
     expect(allCalls).not.toMatch(/Bearer/);
 
+    // Positive assertion (B-NEW-3 round-4 fix): on the 5xx path the prefetch
+    // MUST surface the status code via console.warn so a misconfigured
+    // ANALYTICS_BASE_URL is visible in CI logs. Status codes are not secret
+    // material — passes the leak audit above.
+    const warnCalls = warnSpy.mock.calls.map(args =>
+      args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ')
+    ).join('\n');
+    expect(warnCalls).toMatch(/500/);              // status from the 5xx mock
+    expect(warnCalls).toMatch(/branch-staleness/); // identifies the rule
+
     logSpy.mockRestore();
     warnSpy.mockRestore();
     errorSpy.mockRestore();
@@ -1471,13 +1481,15 @@ export async function prefetchBranchStaleness(opts: PrefetchOpts): Promise<Branc
     Authorization: `Bearer ${env.TUTORIAL_AUTHOR_TOKEN}`,
     Accept: 'application/json',
   };
-  // Single bulk fetch: surface eq 'tutorialBranch' (skip-points are out of scope for staleness).
+  // Single bulk fetch: ALL surfaces (skip-points + branches) are pulled here.
+  // The rule body filters surface=tutorialBranch — keeping the surface decision
+  // inside the rule (not at the fetch URL) means a future surface-broadening
+  // change touches the rule, not the prefetch.
   // We do NOT filter by slug at the URL level — fetching all-time for ALL slugs in one
   // round-trip is cheaper than N round-trips, and the prod row count is small enough
   // (one row per (mission, tutorial, branchPoint, surface) tuple).
-  const filter = encodeURIComponent(`surface eq 'tutorialBranch'`);
-  const perfUrl = `${env.ANALYTICS_BASE_URL}/AnalyticsBranchPerformance?$filter=${filter}&$top=5000`;
-  const topUrl  = `${env.ANALYTICS_BASE_URL}/AnalyticsBranchTopPick?$filter=${filter}&$top=10000`;
+  const perfUrl = `${env.ANALYTICS_BASE_URL}/AnalyticsBranchPerformance?$top=5000`;
+  const topUrl  = `${env.ANALYTICS_BASE_URL}/AnalyticsBranchTopPick?$top=10000`;
   // ANALYTICS_BASE_URL is the AuthorService base (e.g. https://.../author). DO NOT
   // point this at /admin/analytics — that surface is Admin-only and a Tutorial.Author
   // token will 403.
@@ -1486,7 +1498,14 @@ export async function prefetchBranchStaleness(opts: PrefetchOpts): Promise<Branc
   let top: BranchTopPickRow[] = [];
   try {
     const [perfRes, topRes] = await Promise.all([fetch(perfUrl, { headers }), fetch(topUrl, { headers })]);
-    if (!perfRes.ok || !topRes.ok) return cache;  // 401, 5xx → silent skip
+    if (!perfRes.ok || !topRes.ok) {
+      // Surface the status code (NOT URL/token) so a misconfigured
+      // ANALYTICS_BASE_URL (e.g. pointed at /admin/analytics) is visible in CI
+      // logs instead of silently degrading to a no-op for the whole run.
+      // Status codes are not secret material — pass the console-leak audit.
+      console.warn(`branch-staleness: prefetch returned ${perfRes.status}/${topRes.status}; rule will skip. Verify ANALYTICS_BASE_URL points at /author and the token has Tutorial.Author scope.`);
+      return cache;  // 401, 5xx → skip (with diagnostic)
+    }
     const [pj, tj] = await Promise.all([perfRes.json(), topRes.json()]);
     perf = pj.value || [];
     top  = tj.value || [];
@@ -1531,6 +1550,7 @@ export function branchStalenessRule(opts: BranchStalenessOpts): LintFinding[] {
   const findings: LintFinding[] = [];
 
   for (const row of merged) {
+    if (row.surface !== 'tutorialBranch') continue;  // skip-points are out of scope for staleness
     if (row.total < MIN_TOTAL) continue;
     if (!row.firstSeenAt) continue;
     const seenMs = Date.parse(row.firstSeenAt);
@@ -1563,7 +1583,7 @@ Note that `BranchStalenessOpts` no longer carries `env` or `fetch` — those are
 ```bash
 cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 30 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit scripts/lint-rules/__tests__/branch-staleness.test.ts 2>&1 | tail -10
 ```
-Expected: 8 tests pass (6 behavioural + 1 console-leak audit + 1 runner-integration smoke test).
+Expected: 11 tests pass (7 sync rule behavioural + 2 async prefetch behavioural + 1 console-leak audit + 1 runner-integration smoke test).
 
 - [ ] **Step 6: Register the rule in `scripts/lint-tutorial-markdown.ts`**
 
@@ -1649,9 +1669,12 @@ async function main() {
       // lintTutorial: completely unchanged signature, sync.
       const findings = lintTutorial(slug, source)
 
-      // branchStalenessRule: sync. Re-parses branches internally to build BranchInput[].
-      // Skips silently when the parser throws (parser-broken tutorials are flagged
-      // separately by branchSyntaxRule via lintTutorial).
+      // branchStalenessRule: sync. Caller (this main loop) parses branches up
+      // front via extractBranchGroups and passes them in. Rule is a pure
+      // function over (slug, branches, cache). Skips silently when the parser
+      // throws (parser-broken tutorials are flagged separately by
+      // branchSyntaxRule via lintTutorial; staleness has nothing useful to say
+      // without structured groups).
       let branchInputs: { tutorialSlug: string; branchPointId: string; beginLine: number }[] = []
       try {
         const result = extractBranchGroups(source, slug)
@@ -1762,7 +1785,7 @@ The unit-test `BranchInput` shape (in `scripts/lint-rules/__tests__/branch-stale
 
 - [ ] **Step 6f: Confirm Step 2's runner-integration smoke test exercises real parser output**
 
-The 8th test case added to `scripts/lint-rules/__tests__/branch-staleness.test.ts` in Step 2 above (`it('integrates with extractBranchGroups (real parser output → rule input)')`) calls the REAL `extractBranchGroups` against a synthetic markdown body, then maps `g.id` → `branchPointId` and `g.beginLine` → `beginLine` exactly the way Step 6b's runner integration does. If the field-name mapping ever drifts (e.g. someone "fixes" it back to `g.branchPointId`), this test fails loudly because the rule receives `branchPointId: undefined` and never finds the row.
+The runner-integration smoke test added to `scripts/lint-rules/__tests__/branch-staleness.test.ts` in Step 2 above (the last `it()` in the `prefetchBranchStaleness` describe block, `it('integrates with extractBranchGroups + prefetchBranchStaleness end-to-end')`) calls the REAL `extractBranchGroups` against a synthetic markdown body, then maps `g.id` → `branchPointId` and `g.beginLine` → `beginLine` exactly the way Step 6b's runner integration does. If the field-name mapping ever drifts (e.g. someone "fixes" it back to `g.branchPointId`), this test fails loudly because the rule receives `branchPointId: undefined` and never finds the row.
 
 Run the smoke after Steps 6a-6e land:
 
@@ -2300,7 +2323,7 @@ Closes the author-observability piece of issue #172 (branching paths). This is P
 
 ## Test plan
 
-- [x] Unit (in-memory SQLite): 5 view tests + 7 merge tests + 8 lint tests (6 behavioural + 1 console-leak audit + 1 runner-integration smoke)
+- [x] Unit (in-memory SQLite): 5 view tests + 7 merge tests + 11 lint tests (7 sync rule behavioural + 2 async prefetch behavioural + 1 console-leak audit + 1 runner-integration smoke)
 - [ ] Hybrid (HANA Cloud): test file written; runs opt-in via `ALLOW_HYBRID_WRITES=true` (Tom must run before merging — 3 view tests)
 - [x] Lint script smoke: silently skips when `TUTORIAL_AUTHOR_TOKEN` unset
 - [x] Fiori build: Missions FE component compiles cleanly
