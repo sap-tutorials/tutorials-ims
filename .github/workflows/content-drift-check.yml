@@ -80,34 +80,51 @@ jobs:
         # the env var is empty). Run 27397407654 spent 17 minutes on a
         # missing secret because the actual error pointed at the wrong
         # layer.
+        #
+        # IMPORTANT — secret masking. The `${{ secrets.X }}` interpolation
+        # is mask-exempted when written directly to `$GITHUB_OUTPUT` from
+        # the YAML, but masking DOES intercept `echo "$shell_var"`. So the
+        # guard checks emptiness via shell, then writes the output via the
+        # YAML interpolator. Routing the URL through a shell var and
+        # echoing it landed `srv_url=***` (literal) in the output and
+        # broke run 27416206424 with `Failed to parse URL from
+        # ***/build/catalog`.
         run: |
           case "${{ matrix.environment }}" in
             dev)
-              srv_url="${{ secrets.CAP_SRV_URL_DEV }}"
+              guard='${{ secrets.CAP_SRV_URL_DEV }}'
               secret_name="CAP_SRV_URL_DEV"
-              api_key_secret="CONTENT_API_KEY"
-              channel="prod"
               ;;
             qa)
-              srv_url="${{ secrets.CAP_SRV_URL_QA }}"
+              guard='${{ secrets.CAP_SRV_URL_QA }}'
               secret_name="CAP_SRV_URL_QA"
-              api_key_secret="CONTENT_API_KEY_QA"
-              channel="qa"
               ;;
             prod)
-              srv_url="${{ secrets.CAP_SRV_URL_PROD }}"
+              guard='${{ secrets.CAP_SRV_URL_PROD }}'
               secret_name="CAP_SRV_URL_PROD"
-              api_key_secret="CONTENT_API_KEY"
-              channel="prod"
               ;;
           esac
-          if [ -z "$srv_url" ]; then
+          if [ -z "$guard" ]; then
             echo "::error title=Missing repo secret::$secret_name is empty or unset on the sap-tutorials/tutorials-ims repo. Set it to the CAP srv base URL (the tutorials-srv app, not the approuter) e.g. https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com — verify with 'gh secret list --repo sap-tutorials/tutorials-ims'."
             exit 1
           fi
-          echo "srv_url=$srv_url"                 >> "$GITHUB_OUTPUT"
-          echo "api_key_secret=$api_key_secret"   >> "$GITHUB_OUTPUT"
-          echo "channel=$channel"                 >> "$GITHUB_OUTPUT"
+          case "${{ matrix.environment }}" in
+            dev)
+              echo "srv_url=${{ secrets.CAP_SRV_URL_DEV }}" >> "$GITHUB_OUTPUT"
+              echo "api_key_secret=CONTENT_API_KEY"        >> "$GITHUB_OUTPUT"
+              echo "channel=prod"                          >> "$GITHUB_OUTPUT"
+              ;;
+            qa)
+              echo "srv_url=${{ secrets.CAP_SRV_URL_QA }}" >> "$GITHUB_OUTPUT"
+              echo "api_key_secret=CONTENT_API_KEY_QA"     >> "$GITHUB_OUTPUT"
+              echo "channel=qa"                            >> "$GITHUB_OUTPUT"
+              ;;
+            prod)
+              echo "srv_url=${{ secrets.CAP_SRV_URL_PROD }}" >> "$GITHUB_OUTPUT"
+              echo "api_key_secret=CONTENT_API_KEY"          >> "$GITHUB_OUTPUT"
+              echo "channel=prod"                            >> "$GITHUB_OUTPUT"
+              ;;
+          esac
 
       - name: Install dependencies
         run: |
