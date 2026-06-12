@@ -1138,79 +1138,89 @@ Create `scripts/lint-rules/__tests__/branch-staleness.test.ts`:
 
 ```typescript
 import { describe, it, expect, vi } from 'vitest';
-import { branchStalenessRule } from '../branch-staleness';
+import { branchStalenessRule, prefetchBranchStaleness, type BranchStalenessCache } from '../branch-staleness';
 
-describe('branchStalenessRule', () => {
-  function mockFetch(rows: { perf: any[]; top: any[] }) {
-    return vi.fn(async (url: string) => ({
-      ok: true,
-      json: async () => ({
-        value: url.includes('TopPick') ? rows.top : rows.perf,
-      }),
-    } as any));
+describe('branchStalenessRule (sync, cache-driven)', () => {
+  // Helper: build a BranchStalenessCache shaped like prefetchBranchStaleness's output.
+  function buildCache(slug: string, perf: any[], top: any[]): BranchStalenessCache {
+    return new Map([[slug, { perf, top }]]);
   }
 
-  it('skips silently when no token is set (offline CI)', async () => {
-    const fetchMock = mockFetch({ perf: [], top: [] });
-    const findings = await branchStalenessRule({
+  it('skips silently when the cache has no entry for the slug (offline / no data)', () => {
+    const findings = branchStalenessRule({
       slug: 't1',
       branches: [{ tutorialSlug: 't1', branchPointId: 'b1', beginLine: 12 }],
-      env: { TUTORIAL_AUTHOR_TOKEN: undefined, ANALYTICS_BASE_URL: 'https://example' },
-      fetch: fetchMock,
-    });
-    expect(findings).toEqual([]);
-    expect(fetchMock).not.toHaveBeenCalled();  // offline guard short-circuits before any I/O
-  });
-
-  it('emits no findings when total < 50', async () => {
-    const findings = await branchStalenessRule({
-      slug: 't1',
-      branches: [{ tutorialSlug: 't1', branchPointId: 'b1', beginLine: 12 }],
-      env: { TUTORIAL_AUTHOR_TOKEN: 'tok', ANALYTICS_BASE_URL: 'https://example' },
-      fetch: mockFetch({
-        perf: [{ missionSlug: null, tutorialSlug: 't1', branchPointId: 'b1', surface: 'tutorialBranch',
-                 total: 10, byCondition: 10, byRanker: 0, byDefault: 0, clickedTotal: 0, followed: 0,
-                 avgConfidence: 1, bySrcJouleTool: 0, bySrcPageLoad: 10, bySrcClick: 0,
-                 firstSeenAt: new Date(Date.now() - 60 * 86400000).toISOString() }],
-        top:  [{ missionSlug: null, tutorialSlug: 't1', branchPointId: 'b1', surface: 'tutorialBranch',
-                 recommendedKey: 'hana', pickedCount: 10 }],
-      }),
+      cache: new Map(),  // empty cache (e.g. prefetch silently failed)
     });
     expect(findings).toEqual([]);
   });
 
-  it('emits no findings when firstSeenAt < 30 days ago', async () => {
-    const findings = await branchStalenessRule({
+  it('skips silently when branches[] is empty', () => {
+    const cache = buildCache('t1', [
+      { missionSlug: null, tutorialSlug: 't1', branchPointId: 'b1', surface: 'tutorialBranch',
+        total: 100, byCondition: 100, byRanker: 0, byDefault: 0, clickedTotal: 50, followed: 50,
+        avgConfidence: 1, bySrcJouleTool: 0, bySrcPageLoad: 100, bySrcClick: 0,
+        firstSeenAt: new Date(Date.now() - 60 * 86400000).toISOString() },
+    ], [
+      { missionSlug: null, tutorialSlug: 't1', branchPointId: 'b1', surface: 'tutorialBranch',
+        recommendedKey: 'hana', pickedCount: 100 },
+    ]);
+    const findings = branchStalenessRule({ slug: 't1', branches: [], cache });
+    expect(findings).toEqual([]);  // can't cite a line if the markdown has no branches
+  });
+
+  it('emits no findings when total < 50', () => {
+    const cache = buildCache('t1', [
+      { missionSlug: null, tutorialSlug: 't1', branchPointId: 'b1', surface: 'tutorialBranch',
+        total: 10, byCondition: 10, byRanker: 0, byDefault: 0, clickedTotal: 0, followed: 0,
+        avgConfidence: 1, bySrcJouleTool: 0, bySrcPageLoad: 10, bySrcClick: 0,
+        firstSeenAt: new Date(Date.now() - 60 * 86400000).toISOString() },
+    ], [
+      { missionSlug: null, tutorialSlug: 't1', branchPointId: 'b1', surface: 'tutorialBranch',
+        recommendedKey: 'hana', pickedCount: 10 },
+    ]);
+    const findings = branchStalenessRule({
       slug: 't1',
       branches: [{ tutorialSlug: 't1', branchPointId: 'b1', beginLine: 12 }],
-      env: { TUTORIAL_AUTHOR_TOKEN: 'tok', ANALYTICS_BASE_URL: 'https://example' },
-      fetch: mockFetch({
-        perf: [{ missionSlug: null, tutorialSlug: 't1', branchPointId: 'b1', surface: 'tutorialBranch',
-                 total: 100, byCondition: 100, byRanker: 0, byDefault: 0, clickedTotal: 0, followed: 0,
-                 avgConfidence: 1, bySrcJouleTool: 0, bySrcPageLoad: 100, bySrcClick: 0,
-                 firstSeenAt: new Date(Date.now() - 5 * 86400000).toISOString() }],
-        top:  [{ missionSlug: null, tutorialSlug: 't1', branchPointId: 'b1', surface: 'tutorialBranch',
-                 recommendedKey: 'hana', pickedCount: 100 }],
-      }),
+      cache,
     });
     expect(findings).toEqual([]);
   });
 
-  it('emits a notice when total ≥ 50, age ≥ 30 days, and one branch ≥ 95%', async () => {
-    const findings = await branchStalenessRule({
+  it('emits no findings when firstSeenAt < 30 days ago', () => {
+    const cache = buildCache('t1', [
+      { missionSlug: null, tutorialSlug: 't1', branchPointId: 'b1', surface: 'tutorialBranch',
+        total: 100, byCondition: 100, byRanker: 0, byDefault: 0, clickedTotal: 0, followed: 0,
+        avgConfidence: 1, bySrcJouleTool: 0, bySrcPageLoad: 100, bySrcClick: 0,
+        firstSeenAt: new Date(Date.now() - 5 * 86400000).toISOString() },
+    ], [
+      { missionSlug: null, tutorialSlug: 't1', branchPointId: 'b1', surface: 'tutorialBranch',
+        recommendedKey: 'hana', pickedCount: 100 },
+    ]);
+    const findings = branchStalenessRule({
+      slug: 't1',
+      branches: [{ tutorialSlug: 't1', branchPointId: 'b1', beginLine: 12 }],
+      cache,
+    });
+    expect(findings).toEqual([]);
+  });
+
+  it('emits a notice when total ≥ 50, age ≥ 30 days, and one branch ≥ 95%', () => {
+    const cache = buildCache('t1', [
+      { missionSlug: null, tutorialSlug: 't1', branchPointId: 'b1', surface: 'tutorialBranch',
+        total: 100, byCondition: 100, byRanker: 0, byDefault: 0, clickedTotal: 50, followed: 50,
+        avgConfidence: 1, bySrcJouleTool: 0, bySrcPageLoad: 100, bySrcClick: 0,
+        firstSeenAt: new Date(Date.now() - 60 * 86400000).toISOString() },
+    ], [
+      { missionSlug: null, tutorialSlug: 't1', branchPointId: 'b1', surface: 'tutorialBranch',
+        recommendedKey: 'hana',     pickedCount: 96 },
+      { missionSlug: null, tutorialSlug: 't1', branchPointId: 'b1', surface: 'tutorialBranch',
+        recommendedKey: 'postgres', pickedCount: 4 },
+    ]);
+    const findings = branchStalenessRule({
       slug: 't1',
       branches: [{ tutorialSlug: 't1', branchPointId: 'b1', beginLine: 42 }],
-      env: { TUTORIAL_AUTHOR_TOKEN: 'tok', ANALYTICS_BASE_URL: 'https://example' },
-      fetch: mockFetch({
-        perf: [{ missionSlug: null, tutorialSlug: 't1', branchPointId: 'b1', surface: 'tutorialBranch',
-                 total: 100, byCondition: 100, byRanker: 0, byDefault: 0, clickedTotal: 50, followed: 50,
-                 avgConfidence: 1, bySrcJouleTool: 0, bySrcPageLoad: 100, bySrcClick: 0,
-                 firstSeenAt: new Date(Date.now() - 60 * 86400000).toISOString() }],
-        top:  [{ missionSlug: null, tutorialSlug: 't1', branchPointId: 'b1', surface: 'tutorialBranch',
-                 recommendedKey: 'hana',     pickedCount: 96 },
-               { missionSlug: null, tutorialSlug: 't1', branchPointId: 'b1', surface: 'tutorialBranch',
-                 recommendedKey: 'postgres', pickedCount: 4 }],
-      }),
+      cache,
     });
     expect(findings).toHaveLength(1);
     // Must conform to existing LintFinding shape (per recon: rule/slug/file/line/message/excerpt/severity).
@@ -1225,33 +1235,66 @@ describe('branchStalenessRule', () => {
     expect(typeof findings[0].excerpt).toBe('string');
   });
 
-  it('emits no findings when share is exactly 95% (strict > threshold)', async () => {
-    const findings = await branchStalenessRule({
+  it('emits no findings when share is exactly 95% (strict > threshold)', () => {
+    const cache = buildCache('t1', [
+      { missionSlug: null, tutorialSlug: 't1', branchPointId: 'b1', surface: 'tutorialBranch',
+        total: 100, byCondition: 100, byRanker: 0, byDefault: 0, clickedTotal: 50, followed: 50,
+        avgConfidence: 1, bySrcJouleTool: 0, bySrcPageLoad: 100, bySrcClick: 0,
+        firstSeenAt: new Date(Date.now() - 60 * 86400000).toISOString() },
+    ], [
+      { missionSlug: null, tutorialSlug: 't1', branchPointId: 'b1', surface: 'tutorialBranch',
+        recommendedKey: 'hana',     pickedCount: 95 },
+      { missionSlug: null, tutorialSlug: 't1', branchPointId: 'b1', surface: 'tutorialBranch',
+        recommendedKey: 'postgres', pickedCount: 5  },
+    ]);
+    const findings = branchStalenessRule({
       slug: 't1',
       branches: [{ tutorialSlug: 't1', branchPointId: 'b1', beginLine: 42 }],
-      env: { TUTORIAL_AUTHOR_TOKEN: 'tok', ANALYTICS_BASE_URL: 'https://example' },
-      fetch: mockFetch({
-        perf: [{ missionSlug: null, tutorialSlug: 't1', branchPointId: 'b1', surface: 'tutorialBranch',
-                 total: 100, byCondition: 100, byRanker: 0, byDefault: 0, clickedTotal: 50, followed: 50,
-                 avgConfidence: 1, bySrcJouleTool: 0, bySrcPageLoad: 100, bySrcClick: 0,
-                 firstSeenAt: new Date(Date.now() - 60 * 86400000).toISOString() }],
-        top:  [{ missionSlug: null, tutorialSlug: 't1', branchPointId: 'b1', surface: 'tutorialBranch',
-                 recommendedKey: 'hana',     pickedCount: 95 },
-               { missionSlug: null, tutorialSlug: 't1', branchPointId: 'b1', surface: 'tutorialBranch',
-                 recommendedKey: 'postgres', pickedCount: 5  }],
-      }),
+      cache,
     });
     expect(findings).toEqual([]);
   });
 
-  it('skips silently when fetch throws (e.g. 401, network error)', async () => {
-    const findings = await branchStalenessRule({
+  it('skips silently when the cache entry has no perf/top rows for this branch', () => {
+    // E.g. branch is in markdown but no telemetry yet (cold start, never rendered).
+    const cache = buildCache('t1', [], []);
+    const findings = branchStalenessRule({
       slug: 't1',
       branches: [{ tutorialSlug: 't1', branchPointId: 'b1', beginLine: 12 }],
+      cache,
+    });
+    expect(findings).toEqual([]);
+  });
+});
+
+describe('prefetchBranchStaleness (async, bulk fetch)', () => {
+  function mockFetch(rows: { perf: any[]; top: any[] }) {
+    return vi.fn(async (url: string) => ({
+      ok: true,
+      json: async () => ({
+        value: url.includes('TopPick') ? rows.top : rows.perf,
+      }),
+    } as any));
+  }
+
+  it('returns empty cache when token is missing (offline CI)', async () => {
+    const fetchMock = mockFetch({ perf: [], top: [] });
+    const cache = await prefetchBranchStaleness({
+      slugs: ['t1', 't2'],
+      env: { TUTORIAL_AUTHOR_TOKEN: undefined, ANALYTICS_BASE_URL: 'https://example' },
+      fetch: fetchMock,
+    });
+    expect(cache.size).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();  // offline guard short-circuits before any I/O
+  });
+
+  it('returns empty cache when fetch throws (network error / 401 / 5xx)', async () => {
+    const cache = await prefetchBranchStaleness({
+      slugs: ['t1'],
       env: { TUTORIAL_AUTHOR_TOKEN: 'tok', ANALYTICS_BASE_URL: 'https://example' },
       fetch: vi.fn(async () => { throw new Error('network down'); }) as any,
     });
-    expect(findings).toEqual([]);
+    expect(cache.size).toBe(0);
   });
 
   it('never logs the bearer token via console (regardless of fetch outcome)', async () => {
@@ -1260,16 +1303,14 @@ describe('branchStalenessRule', () => {
     const warnSpy  = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    // Run twice: once with success, once with throw — neither path may surface the secret.
-    await branchStalenessRule({
-      slug: 't1',
-      branches: [{ tutorialSlug: 't1', branchPointId: 'b1', beginLine: 12 }],
+    // Run twice: once with 5xx, once with throw — neither path may surface the secret.
+    await prefetchBranchStaleness({
+      slugs: ['t1'],
       env: { TUTORIAL_AUTHOR_TOKEN: SECRET, ANALYTICS_BASE_URL: 'https://example' },
       fetch: vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) } as any)),
     });
-    await branchStalenessRule({
-      slug: 't1',
-      branches: [{ tutorialSlug: 't1', branchPointId: 'b1', beginLine: 12 }],
+    await prefetchBranchStaleness({
+      slugs: ['t1'],
       env: { TUTORIAL_AUTHOR_TOKEN: SECRET, ANALYTICS_BASE_URL: 'https://example' },
       fetch: vi.fn(async () => { throw new Error('boom'); }),
     });
@@ -1292,10 +1333,12 @@ describe('branchStalenessRule', () => {
   // BranchGroup field names (parser output) and BranchInput field names
   // (rule input) — the original v1 of this rule consumed `g.branchPointId`
   // which doesn't exist on BranchGroup (the field is `g.id`). This test
-  // builds a synthetic markdown body, runs the REAL parser, and feeds the
-  // REAL parser output into the rule. If the integration mapping drifts,
-  // this test fails loudly.
-  it('integrates with extractBranchGroups (real parser output → rule input)', async () => {
+  // builds a synthetic markdown body, runs the REAL parser, runs the prefetch
+  // against a mock backend, then feeds REAL parser output → sync rule using
+  // the prefetched cache. If the integration mapping drifts, this test fails
+  // loudly because `cache.get(slug)` finds rows with `branchPointId: '1-deployment'`
+  // but `branches[].branchPointId` would be `undefined` and never match.
+  it('integrates with extractBranchGroups + prefetchBranchStaleness end-to-end', async () => {
     const { extractBranchGroups } = await import('../../parsers/branches');
     const body = [
       '### Step 1',                                        // line 1
@@ -1309,6 +1352,7 @@ describe('branchStalenessRule', () => {
     ].join('\n');
     const { branchGroups } = extractBranchGroups(body, 't1');
     expect(branchGroups).toHaveLength(1);
+
     // The integration MUST map g.id (the BranchGroup field) → branchPointId
     // (the BranchInput field). NOT g.branchPointId (which doesn't exist).
     const branches = branchGroups.map(g => ({
@@ -1319,9 +1363,9 @@ describe('branchStalenessRule', () => {
     expect(branches[0].branchPointId).toBe('1-deployment');  // ${parentStepNumber}-${groupKey}
     expect(branches[0].beginLine).toBe(3);
 
-    const findings = await branchStalenessRule({
-      slug: 't1',
-      branches,
+    // Prefetch returns rows for the same branchPointId.
+    const cache = await prefetchBranchStaleness({
+      slugs: ['t1'],
       env: { TUTORIAL_AUTHOR_TOKEN: 'tok', ANALYTICS_BASE_URL: 'https://example' },
       fetch: mockFetch({
         perf: [{ missionSlug: null, tutorialSlug: 't1', branchPointId: '1-deployment', surface: 'tutorialBranch',
@@ -1334,6 +1378,8 @@ describe('branchStalenessRule', () => {
                  recommendedKey: 'postgres', pickedCount: 4 }],
       }),
     });
+
+    const findings = branchStalenessRule({ slug: 't1', branches, cache });
     expect(findings).toHaveLength(1);
     expect(findings[0].line).toBe(3);  // citation lands on the [BRANCH_BEGIN] line, not the # heading
     expect(findings[0].rule).toBe('branch-staleness');
@@ -1393,33 +1439,45 @@ export interface LintFinding {
   severity: 'error' | 'warning' | 'notice';
 }
 
-export interface BranchStalenessOpts {
-  slug: string;
-  branches: BranchInput[];
-  env: {
-    TUTORIAL_AUTHOR_TOKEN: string | undefined;
-    ANALYTICS_BASE_URL: string | undefined;
-  };
-  fetch: typeof globalThis.fetch;
-}
-
 const MIN_TOTAL = 50;
 const MIN_AGE_DAYS = 30;
 const SHARE_THRESHOLD = 0.95;
 const MS_PER_DAY = 86400000;
 
-export async function branchStalenessRule(opts: BranchStalenessOpts): Promise<LintFinding[]> {
-  const { slug, branches, env, fetch } = opts;
-  if (!env.TUTORIAL_AUTHOR_TOKEN || !env.ANALYTICS_BASE_URL) return [];  // offline / unconfigured
-  if (branches.length === 0) return [];
+// Sync-runner pivot (round 3): the only async surface is `prefetchBranchStaleness`
+// — one bulk call before the per-file lint loop. The rule itself is sync and
+// consumes the prefetched cache, so `lintTutorial`/`branchSyntaxRule`/`RULES[]`
+// stay completely unchanged. See Step 6 for the integration shape.
+
+export interface BranchStalenessCacheEntry {
+  perf: BranchPerfRow[];
+  top: BranchTopPickRow[];
+}
+export type BranchStalenessCache = Map<string, BranchStalenessCacheEntry>;
+
+export interface PrefetchOpts {
+  slugs: string[];
+  env: { TUTORIAL_AUTHOR_TOKEN: string | undefined; ANALYTICS_BASE_URL: string | undefined };
+  fetch: typeof globalThis.fetch;
+}
+
+export async function prefetchBranchStaleness(opts: PrefetchOpts): Promise<BranchStalenessCache> {
+  const { slugs, env, fetch } = opts;
+  const cache: BranchStalenessCache = new Map();
+  if (!env.TUTORIAL_AUTHOR_TOKEN || !env.ANALYTICS_BASE_URL) return cache;  // offline / unconfigured
+  if (slugs.length === 0) return cache;
 
   const headers = {
     Authorization: `Bearer ${env.TUTORIAL_AUTHOR_TOKEN}`,
     Accept: 'application/json',
   };
-  const filter = encodeURIComponent(`tutorialSlug eq '${slug.replace(/'/g, "''")}' and surface eq 'tutorialBranch'`);
-  const perfUrl = `${env.ANALYTICS_BASE_URL}/AnalyticsBranchPerformance?$filter=${filter}&$top=200`;
-  const topUrl  = `${env.ANALYTICS_BASE_URL}/AnalyticsBranchTopPick?$filter=${filter}&$top=400`;
+  // Single bulk fetch: surface eq 'tutorialBranch' (skip-points are out of scope for staleness).
+  // We do NOT filter by slug at the URL level — fetching all-time for ALL slugs in one
+  // round-trip is cheaper than N round-trips, and the prod row count is small enough
+  // (one row per (mission, tutorial, branchPoint, surface) tuple).
+  const filter = encodeURIComponent(`surface eq 'tutorialBranch'`);
+  const perfUrl = `${env.ANALYTICS_BASE_URL}/AnalyticsBranchPerformance?$filter=${filter}&$top=5000`;
+  const topUrl  = `${env.ANALYTICS_BASE_URL}/AnalyticsBranchTopPick?$filter=${filter}&$top=10000`;
   // ANALYTICS_BASE_URL is the AuthorService base (e.g. https://.../author). DO NOT
   // point this at /admin/analytics — that surface is Admin-only and a Tutorial.Author
   // token will 403.
@@ -1428,15 +1486,47 @@ export async function branchStalenessRule(opts: BranchStalenessOpts): Promise<Li
   let top: BranchTopPickRow[] = [];
   try {
     const [perfRes, topRes] = await Promise.all([fetch(perfUrl, { headers }), fetch(topUrl, { headers })]);
-    if (!perfRes.ok || !topRes.ok) return [];  // 401, 5xx → silent skip
+    if (!perfRes.ok || !topRes.ok) return cache;  // 401, 5xx → silent skip
     const [pj, tj] = await Promise.all([perfRes.json(), topRes.json()]);
     perf = pj.value || [];
     top  = tj.value || [];
   } catch {
-    return [];  // network error → silent skip
+    return cache;  // network error → silent skip
   }
 
-  const merged = mergeBranchPerf(perf, top);
+  // Bucket by tutorialSlug so the per-file rule does an O(1) Map lookup.
+  const slugSet = new Set(slugs);
+  for (const r of perf) {
+    if (!slugSet.has(r.tutorialSlug)) continue;
+    const entry = cache.get(r.tutorialSlug) || { perf: [], top: [] };
+    entry.perf.push(r);
+    cache.set(r.tutorialSlug, entry);
+  }
+  for (const r of top) {
+    if (!slugSet.has(r.tutorialSlug)) continue;
+    const entry = cache.get(r.tutorialSlug) || { perf: [], top: [] };
+    entry.top.push(r);
+    cache.set(r.tutorialSlug, entry);
+  }
+  return cache;
+}
+
+export interface BranchStalenessOpts {
+  slug: string;
+  branches: BranchInput[];
+  cache: BranchStalenessCache;
+}
+
+// SYNC. Looks up cache.get(slug); if absent (offline / no data for this slug),
+// returns []. If parse error: caller should not invoke us — we trust `branches`
+// is a valid lint-input shape, derived in main() from `extractBranchGroups`.
+export function branchStalenessRule(opts: BranchStalenessOpts): LintFinding[] {
+  const { slug, branches, cache } = opts;
+  if (branches.length === 0) return [];
+  const entry = cache.get(slug);
+  if (!entry) return [];  // offline-skip / no-data-for-this-slug
+
+  const merged = mergeBranchPerf(entry.perf, entry.top);
   const cutoff = Date.now() - MIN_AGE_DAYS * MS_PER_DAY;
   const findings: LintFinding[] = [];
 
@@ -1466,6 +1556,8 @@ export async function branchStalenessRule(opts: BranchStalenessOpts): Promise<Li
 }
 ```
 
+Note that `BranchStalenessOpts` no longer carries `env` or `fetch` — those are bound at prefetch time. The rule is now a pure function over `(branches, cache)`. The unit tests in Step 2 must construct a `BranchStalenessCache` (a `Map`) instead of mocking `fetch` — see Step 2 below for the updated test fixture shape.
+
 - [ ] **Step 5: Verify tests pass**
 
 ```bash
@@ -1477,125 +1569,155 @@ Expected: 8 tests pass (6 behavioural + 1 console-leak audit + 1 runner-integrat
 
 The runner currently is fully synchronous (`lintTutorial: (slug, source) => LintFinding[]`, `main: () => void`, no `await` anywhere). The new staleness rule is async (it makes HTTP calls), so the runner must convert. The runner also currently calls `branchSyntaxRule(slug, source)` which throws away the parsed `ExtractResult` — we need to extract once and share with the new rule. And the `LintFinding.severity` union must widen to include `notice`. Six concrete subtasks:
 
-- [ ] **Step 6a: Refactor `lintTutorial` to extract branch groups once, share with both rules**
+- [ ] **Step 6a: Do NOT modify `lintTutorial`, `branchSyntaxRule`, or the `RULES[]` registry**
 
-The current shape of `lintTutorial` (per recon) calls `branchSyntaxRule(slug, source)` which internally calls `extractBranchGroups(source, slug)` and discards the parsed result. Refactor so `lintTutorial` calls `extractBranchGroups` ONCE, passes the `ExtractResult` (or its `branchGroups`) to BOTH rules.
+This is a deliberate non-change. The round-3 sync-runner pivot keeps the existing rule engine completely untouched:
+
+- `lintTutorial(slug, source) → LintFinding[]` stays sync (per recon §3).
+- `branchSyntaxRule(slug, source) → LintFinding[]` stays sync (per recon §4).
+- `RULES[]` registry stays as-is. The new `branchStalenessRule` is NOT added to `RULES[]` because it carries a per-run cache dependency the registry shape cannot express; it is invoked separately in `main()` (Step 6b).
+- The pre-existing `test/unit/lint-tutorial-markdown.test.js` (~12 cases per recon §3) calls `lintTutorial(...)` synchronously. After this PR they continue to work without ANY edit. If you find yourself adding `await` to those tests, stop — you have drifted off the plan.
+
+The ONLY changes inside `scripts/lint-tutorial-markdown.ts` are:
+1. Two new imports (Step 6b).
+2. Convert `main()` itself (and only `main()`) from sync to async.
+3. Add a single bulk `prefetchBranchStaleness(...)` call before the per-file loop.
+4. Add a per-file `branchStalenessRule({...})` call after `lintTutorial(slug, source)`.
+5. Wrap the per-file body in `try/catch` (defensive — unhandled rejection from the rule must not abort CI).
+6. Widen the `LintSeverity` union (Step 6c).
+7. Adjust the strict-mode exit-code computation to ignore notices (Step 6d item 4).
+
+Per [[feedback_audit_all_callers_of_buggy_primitive]]: when changing a public symbol's signature, grep the codebase for callers first. We are NOT changing `lintTutorial`'s signature, so no caller audit is needed. We ARE adding two new exports from `scripts/lint-rules/branch-staleness.ts` (`prefetchBranchStaleness`, `branchStalenessRule`); both are new symbols, so no caller audit is needed there either.
+
+- [ ] **Step 6b: Wire `prefetchBranchStaleness` + the sync rule into `main()`**
+
+Per recon §3 the entry guard is:
+
+```typescript
+const isMain = process.argv[1] && import.meta.url === `file://${process.argv[1].replace(/\\/g, '/')}`
+if (isMain || import.meta.url.endsWith(process.argv[1]?.replace(/\\/g, '/'))) {
+  main()
+}
+```
 
 Diff to `scripts/lint-tutorial-markdown.ts`:
 
 ```typescript
-// At top of file, alongside existing parser imports:
-import { extractBranchGroups, BranchParseError, type BranchGroup } from './parsers/branches';
-import { branchStalenessRule } from './lint-rules/branch-staleness';
+// 1. Add two new imports at the top of the file.
+import { prefetchBranchStaleness, branchStalenessRule } from './lint-rules/branch-staleness'
+import { extractBranchGroups, BranchParseError } from './parsers/branches.ts'  // Match recon §1: existing import uses `.ts` extension.
 
-// Refactor branchSyntaxRule to accept pre-parsed groups OR a parse error.
-// Existing signature was `(slug, source) => LintFinding[]`. New shape:
-type BranchParseOutcome =
-  | { ok: true; branchGroups: BranchGroup[] }
-  | { ok: false; error: BranchParseError };
-
-function parseBranchesForLint(slug: string, source: string): BranchParseOutcome {
-  try {
-    const result = extractBranchGroups(source, slug);
-    return { ok: true, branchGroups: result.branchGroups };
-  } catch (err) {
-    if (err instanceof BranchParseError) return { ok: false, error: err };
-    throw err;
-  }
-}
-
-// branchSyntaxRule now takes the outcome (no second parse).
-function branchSyntaxRule(slug: string, source: string, outcome: BranchParseOutcome): LintFinding[] {
-  if (outcome.ok) return [];
-  const lineIdx = Math.max(0, outcome.error.line - 1);
-  const excerpt = source.split('\n')[lineIdx] ?? '';
-  return [{
-    rule: 'branch-syntax',
-    slug,
-    file: `${slug}.md`,
-    line: outcome.error.line,
-    message: outcome.error.message,
-    excerpt: excerpt.slice(0, 100),
-    severity: 'error',
-  }];
-}
-
-// lintTutorial converts to async; extracts once; passes to both rules.
-export async function lintTutorial(slug: string, source: string): Promise<LintFinding[]> {
-  const findings: LintFinding[] = [];
-  // legacy rules (unchanged)
-  findings.push(...indentedNumberedListItemRule(slug, source));
-
-  // Parse branches ONCE; share between syntax + staleness.
-  const outcome = parseBranchesForLint(slug, source);
-  findings.push(...branchSyntaxRule(slug, source, outcome));
-
-  // Staleness only runs when parse succeeded — no point asking for telemetry
-  // on a markdown body whose branch shape we can't even parse.
-  if (outcome.ok) {
-    const branches = outcome.branchGroups.map(g => ({
-      tutorialSlug: slug,
-      branchPointId: g.id,            // ${parentStepNumber}-${groupKey} — see recon §8
-      beginLine: g.beginLine,         // promoted in Task 1
-    }));
-    findings.push(...await branchStalenessRule({
-      slug,
-      branches,
-      env: {
-        TUTORIAL_AUTHOR_TOKEN: process.env.TUTORIAL_AUTHOR_TOKEN,
-        ANALYTICS_BASE_URL: process.env.ANALYTICS_BASE_URL,
-      },
-      fetch: globalThis.fetch,
-    }));
-  }
-  return findings;
-}
-```
-
-- [ ] **Step 6b: Convert `main` to async, await all rule invocations**
-
-Per recon: `main()` is currently synchronous; the per-file loop calls `lintTutorial(slug, source)` and pushes the array directly. Convert:
-
-```typescript
-// Before: function main() { ... for (const file of files) { const findings = lintTutorial(slug, source); ... } }
-// After:
+// 2. Convert `main()` from sync to async. The body is otherwise unchanged
+//    except for the prefetch call before the loop, the rule call inside it,
+//    the try/catch wrapper, and the strict-mode exit filter.
 async function main() {
-  // ...arg parsing unchanged (--strict, --channel)...
-  const allFindings: LintFinding[] = [];
-  const bySlug = new Map<string, LintFinding[]>();
+  const args = process.argv.slice(2)
+  const strict = args.includes('--strict')
+  const channel = args.includes('--channel') ? args[args.indexOf('--channel') + 1] : 'prod'
+  const cacheDir = channel === 'qa'
+    ? join(ROOT, '.tutorial-cache-qa')
+    : join(ROOT, '.tutorial-cache')
+
+  if (!existsSync(cacheDir)) {
+    console.error(`Cache directory not found: ${cacheDir}`)
+    console.error('Run `npm run fetch-tutorials` first.')
+    process.exit(strict ? 2 : 0)
+  }
+
+  const files = readdirSync(cacheDir).filter(f => f.endsWith('.md') && !f.startsWith('_'))
+  console.log(`Linting ${files.length} tutorial markdown files in ${cacheDir}...\n`)
+
+  // ── Round-3 sync-runner pivot: ONE async pre-pass before the per-file loop. ──
+  // Empty cache on missing token / network error / 401. Per-slug rule invocation
+  // returns [] when the cache has no entry for that slug, so missing pre-pass is
+  // indistinguishable from missing-data-for-this-slug — both silently skip.
+  const allSlugs = files.map(f => f.replace(/\.md$/, ''))
+  const stalenessCache = await prefetchBranchStaleness({
+    slugs: allSlugs,
+    env: {
+      TUTORIAL_AUTHOR_TOKEN: process.env.TUTORIAL_AUTHOR_TOKEN,
+      ANALYTICS_BASE_URL: process.env.ANALYTICS_BASE_URL,
+    },
+    fetch: globalThis.fetch,
+  })
+
+  const allFindings: LintFinding[] = []
   for (const file of files) {
-    const slug = /* unchanged */;
-    const source = /* unchanged */;
-    const findings = await lintTutorial(slug, source);  // <— awaited
-    if (findings.length > 0) {
-      bySlug.set(slug, findings);
-      allFindings.push(...findings);
+    const slug = file.replace(/\.md$/, '')
+    const source = readFileSync(join(cacheDir, file), 'utf-8')
+    try {
+      // lintTutorial: completely unchanged signature, sync.
+      const findings = lintTutorial(slug, source)
+
+      // branchStalenessRule: sync. Re-parses branches internally to build BranchInput[].
+      // Skips silently when the parser throws (parser-broken tutorials are flagged
+      // separately by branchSyntaxRule via lintTutorial).
+      let branchInputs: { tutorialSlug: string; branchPointId: string; beginLine: number }[] = []
+      try {
+        const result = extractBranchGroups(source, slug)
+        branchInputs = result.branchGroups.map(g => ({
+          tutorialSlug: slug,
+          branchPointId: g.id,           // ${parentStepNumber}-${groupKey} — see recon §8
+          beginLine: g.beginLine,        // promoted in Task 1
+        }))
+      } catch (err) {
+        if (!(err instanceof BranchParseError)) throw err
+        // BranchParseError: branchSyntaxRule (called from lintTutorial) already emitted
+        // the user-facing finding; staleness has nothing useful to say without
+        // structured groups. Fall through with empty branchInputs → rule returns [].
+      }
+      findings.push(...branchStalenessRule({ slug, branches: branchInputs, cache: stalenessCache }))
+
+      allFindings.push(...findings)
+    } catch (err) {
+      // Per-file try/catch (round-3 NEW-B7 fix): one bad tutorial must not abort the run.
+      // Unhandled rejections in Node 22 default-terminate the process; this guard
+      // ensures CI returns a real lint summary even when one slug throws.
+      console.error(`Failed to lint ${slug}:`, err)
     }
   }
-  // ...stdout printer + JSON serializer unchanged (handle severity in 6d)...
-  // ...exit code handling unchanged...
+
+  // Group + print + serialize — unchanged from recon §5.
+  const bySlug = new Map<string, LintFinding[]>()
+  for (const f of allFindings) {
+    const list = bySlug.get(f.slug) ?? []
+    list.push(f)
+    bySlug.set(f.slug, list)
+  }
+  // ... existing stdout printer unchanged (recon §5) ...
+  // ... existing JSON-report serializer unchanged (recon §5) ...
+
+  // Strict-mode exit (round-3 I9 fix): notices are non-blocking by design; only
+  // count error/warning toward strict-mode failure.
+  const blockingCount = allFindings.filter(f => f.severity !== 'notice').length
+  process.exit(strict && blockingCount > 0 ? 1 : 0)
 }
 
-// Top-level entry: await the async main, then exit.
-main().catch(err => { console.error(err); process.exit(1); });
+// 3. Entry guard — preserve the existing `if (isMain || ...)` shape, add `.catch()`.
+const isMain = process.argv[1] && import.meta.url === `file://${process.argv[1].replace(/\\/g, '/')}`
+if (isMain || import.meta.url.endsWith(process.argv[1]?.replace(/\\/g, '/'))) {
+  main().catch(err => { console.error(err); process.exit(1) })
+}
 ```
 
-Note: `process.exit(strict && allFindings.length > 0 ? 1 : 0)` stays inside `main` per the existing pattern; only the entry point wraps `main()` in `.catch(...)` to surface unhandled rejections.
+The minimal diff (per recon §3): seven lines inserted before the for-of loop (the prefetch call), three lines added inside the loop body (the rule call), seven lines wrapping the body (the try/catch + branchInputs derivation), one signature change on `function main()` → `async function main()`, one `.catch(...)` chained on the entry-guard's `main()` call. **No other edits to this file.**
 
-- [ ] **Step 6c: Confirm new rule emits the existing LintFinding shape**
+- [ ] **Step 6c: Widen `LintSeverity` union to include `'notice'`**
 
-Already wired in Step 4 above — the `branchStalenessRule` `findings.push({...})` block writes `rule`, `slug`, `file`, `line`, `message`, `excerpt`, `severity` (per recon §1, exact field names from the existing `LintFinding` type). Step 4's rule code uses the same shape. The `LintSeverity` union in the runner must widen:
+Per recon §2 the existing union is `'error' | 'warning'`. Widen:
 
 ```typescript
-// Before (per recon §2):
-export type LintSeverity = 'error' | 'warning';
+// Before:
+export type LintSeverity = 'error' | 'warning'
 // After:
-export type LintSeverity = 'error' | 'warning' | 'notice';
+export type LintSeverity = 'error' | 'warning' | 'notice'
 ```
+
+This is the only type-shape change in the runner. The optional `severity?: LintSeverity` on `LintFinding` (recon §1) accepts the wider union without further edit.
 
 - [ ] **Step 6d: Audit every consumer of `severity` in the runner**
 
-Grep the runner for every site that branches on severity, and confirm each handles `notice`. Concrete commands and expected hits:
+Grep the runner for sites that branch on severity, and confirm each handles `notice`. Concrete commands and expected hits:
 
 ```bash
 cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && grep -nE "severity\s*[:=!]|LintSeverity" scripts/lint-tutorial-markdown.ts
@@ -1603,17 +1725,19 @@ cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && grep -nE "severit
 
 Expected hits and required handling:
 
-1. **`LintSeverity` type alias** (line ~33 per recon) — widen to include `'notice'` per Step 6c.
+1. **`LintSeverity` type alias** (line ~33 per recon) — widened in Step 6c.
 2. **stdout printer** (lines 252-258 per recon §5) — currently prints `f.line / f.rule / f.message / f.excerpt` and does NOT switch on severity. No changes needed; new findings render the same as legacy ones. Confirm by re-grepping after the edit:
+
    ```bash
    cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && grep -nE "f\.severity|severity ===|severity !==" scripts/lint-tutorial-markdown.ts
    ```
-   Expected: zero hits inside the printer block (lines 250-260). If a new switch shows up, add a `notice` arm.
+   Expected: only the new strict-mode `f.severity !== 'notice'` filter from Step 6b shows up. If a printer-side switch shows up, add a `notice` arm.
 3. **JSON-report serializer** (lines 263-271 per recon §5) — emits the entire `LintFinding[]` via `JSON.stringify`. No type-narrowing; new severity flows through automatically. Verify the report still parses:
+
    ```bash
    cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && node -e "JSON.parse(require('fs').readFileSync('.tutorial-cache/lint-report.json','utf-8'))" 2>&1 | head -3
    ```
-4. **Exit-code computation** (lines 274-277 per recon §6) — currently `strict && allFindings.length > 0 ? 1 : 0`. Change to count ONLY findings with `severity !== 'notice'`: `strict && allFindings.some(f => f.severity !== 'notice') ? 1 : 0`. Notices are non-blocking by design (author judgment, not a build failure); strict mode escalates errors/warnings only.
+4. **Exit-code computation** (lines 274-277 per recon §6) — was `strict && allFindings.length > 0 ? 1 : 0`; round-3 I9 fix replaces with `strict && blockingCount > 0 ? 1 : 0` where `blockingCount = allFindings.filter(f => f.severity !== 'notice').length`. See Step 6b for the integrated diff. Notices are non-blocking by design — strict mode escalates errors/warnings only.
 5. **Any future exhaustive `switch (severity)`** — none today per recon. If a new one is added during the refactor, audit it for a `notice` arm.
 
 After applying the diff, re-run the grep:
@@ -1626,7 +1750,7 @@ Expected: every severity value that appears in a `case` clause covers all three 
 
 - [ ] **Step 6e: Use `g.id` (NOT `g.branchPointId`) in the integration mapping**
 
-Per recon §7-§8, the parser's public field is `BranchGroup.id` (constructed as `${parentStepNumber}-${groupKey}`); downstream consumers (`srv/lib/branch/decide.js:61`, `srv/lib/branch/mission-detail.js:107`) read `bp.id` and persist it as `branchPointId` on `BranchDecisions`. The integration in Step 6a already uses `branchPointId: g.id` — confirm via grep:
+Per recon §7-§8, the parser's public field is `BranchGroup.id` (constructed as `${parentStepNumber}-${groupKey}`); downstream consumers (`srv/lib/branch/decide.js:61`, `srv/lib/branch/mission-detail.js:107`) read `bp.id` and persist it as `branchPointId` on `BranchDecisions`. The integration in Step 6b uses `branchPointId: g.id` — confirm via grep:
 
 ```bash
 cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && grep -nE "g\.branchPointId|group\.branchPointId" scripts/lint-tutorial-markdown.ts
@@ -1634,11 +1758,11 @@ cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && grep -nE "g\.bran
 
 Expected: zero hits. (`BranchGroup` has no `branchPointId` field — the right name is `id`.) If a hit comes back, fix to `g.id`.
 
-The unit-test `BranchInput` shape (in `scripts/lint-rules/__tests__/branch-staleness.test.ts` Step 2 above) is unchanged — tests construct the rule input directly with `branchPointId: '1-deployment'`. Only the integration mapping in `lintTutorial` (Step 6a) computes that field from `g.id`.
+The unit-test `BranchInput` shape (in `scripts/lint-rules/__tests__/branch-staleness.test.ts` Step 2 above) is unchanged — tests construct the rule input directly with `branchPointId: '1-deployment'`. Only the integration mapping in `main()` (Step 6b) computes that field from `g.id`.
 
 - [ ] **Step 6f: Confirm Step 2's runner-integration smoke test exercises real parser output**
 
-The 8th test case added to `scripts/lint-rules/__tests__/branch-staleness.test.ts` in Step 2 above (`it('integrates with extractBranchGroups (real parser output → rule input)')`) calls the REAL `extractBranchGroups` against a synthetic markdown body, then maps `g.id` → `branchPointId` and `g.beginLine` → `beginLine` exactly the way Step 6a's runner integration does. If the field-name mapping ever drifts (e.g. someone "fixes" it back to `g.branchPointId`), this test fails loudly because the rule receives `branchPointId: undefined` and never finds the row.
+The 8th test case added to `scripts/lint-rules/__tests__/branch-staleness.test.ts` in Step 2 above (`it('integrates with extractBranchGroups (real parser output → rule input)')`) calls the REAL `extractBranchGroups` against a synthetic markdown body, then maps `g.id` → `branchPointId` and `g.beginLine` → `beginLine` exactly the way Step 6b's runner integration does. If the field-name mapping ever drifts (e.g. someone "fixes" it back to `g.branchPointId`), this test fails loudly because the rule receives `branchPointId: undefined` and never finds the row.
 
 Run the smoke after Steps 6a-6e land:
 
@@ -1646,6 +1770,15 @@ Run the smoke after Steps 6a-6e land:
 cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 30 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit scripts/lint-rules/__tests__/branch-staleness.test.ts -t 'integrates with extractBranchGroups' 2>&1 | tail -10
 ```
 Expected: pass.
+
+- [ ] **Step 6g: Re-run the pre-existing lint-runner test (regression check)**
+
+The existing `test/unit/lint-tutorial-markdown.test.js` (~12 cases per recon §3) calls `lintTutorial(...)` synchronously. After the round-3 pivot it MUST continue to pass without edits — that's the whole point of keeping `lintTutorial` sync. If this fails, you have accidentally added `await` to `lintTutorial` somewhere; revert and re-check Step 6a's non-change rule.
+
+```bash
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr5 && timeout 60 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit test/unit/lint-tutorial-markdown.test.js 2>&1 | tail -10
+```
+Expected: all pre-existing tests pass without modification.
 
 - [ ] **Step 7: Run full lint test suite (regression check)**
 
