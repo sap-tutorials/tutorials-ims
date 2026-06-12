@@ -9,7 +9,7 @@
 
 The branching-paths engine (PR 1) reads `userState.profile = { deployment, role, cloud }` to evaluate condition expressions like `profile.deployment == 'cloud'`. **Today this profile is always all-null** because there is nowhere on the user record to read from — `srv/lib/branch/loaders.js#loadProfile` ships with a TODO comment ("Until PR 6 introduces the proper `UserLearningPreferences` entity, loadProfile always returns null"), and `UserMetaData` (the empty key/value store the master spec gestured at) has no rows for any user.
 
-Consequence: every condition referencing `profile.*` evaluates false, the ranker has no profile signal, and branches default-order only. The platform has all the moving parts shipped through PRs 1–5 (engine, mission alt-groups, step-level branches, Joule narration, author observability) but no learner-side personalization signal feeding them. **PR 6 is the keystone that turns the substrate live.**
+Consequence: every condition referencing `profile.*` evaluates as falsy/null, the ranker has no profile signal, and branches default-order only. The platform has all the moving parts shipped through PRs 1–5 (engine, mission alt-groups, step-level branches, Joule narration, author observability) but no learner-side personalization signal feeding them. **PR 6 is the keystone that turns the substrate live.**
 
 ## 2. Goals and non-goals
 
@@ -40,11 +40,12 @@ Consequence: every condition referencing `profile.*` evaluates false, the ranker
 │    entity UserLearningPreferences {                                 │
 │      key user : Association to Users;                               │
 │      deployment : String(20) enum { cloud; onprem };                │
-│      role       : String(20) enum { developer; architect; admin;    │
-│                                     student };                       │
-│      cloud      : String(10) enum { btp; aws; gcp };                │
+│      role       : String(20) enum { developer; architect; sysadmin; │
+│                                     student };                      │
+│      cloud      : String(20) enum { btp; aws; gcp };                │
 │    }                                                                │
 │    @PersonalData (DataSubjectDetails, cascade: 'delete')            │
+│    (annotation lives in db/audit-logging.cds — see §4.1)            │
 └─────────────────────────────────────────────────────────────────────┘
                               ▲
               ┌───────────────┴──────────────────┐
@@ -70,7 +71,7 @@ Consequence: every condition referencing `profile.*` evaluates false, the ranker
 │                                                                     │
 │    + buildUserState (user-state.js): merge override AFTER load      │
 │      profile = { ...real, ...override }                             │
-│      override only when caller has Tutorial.Author scope            │
+│      override only when caller has Tutorial.Author OR Admin scope   │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -81,13 +82,14 @@ Consequence: every condition referencing `profile.*` evaluates false, the ranker
 - Vue island (4) is a leaf consumer of DeveloperService.
 - `loaders.js` (5) is the engine's single read path; `user-state.js` handles the merge.
 
-The override is parsed in two callsites (`/api/branches/decide` and `/build/mission/<slug>`) — each callsite extracts `req.query['profile.*']`, validates `Tutorial.Author` scope, passes the validated override to `buildUserState`. Cache key fingerprint (already computed in `fingerprintUserState`) includes the merged profile, so override-mode traffic doesn't poison learner-mode cache entries.
+The override is parsed in two callsites (`/api/branches/decide` and `/build/mission/<slug>`) — each callsite extracts `req.query['profile.*']` from the **express request**, validates `Tutorial.Author` **OR** `Admin` scope, passes the validated override to `buildUserState`. Cache key fingerprint (already computed in `fingerprintUserState`) includes the merged profile, so override-mode traffic doesn't poison learner-mode cache entries.
 
 ### 3.1 Architectural invariants
 
 - **One source of truth** for profile vocabulary: the schema enum strings. The override-parser allowlist and the Vue Select options reference the same strings via a shared constants module (`srv/lib/branch/profile-fields.js`, exported to both server and Vue).
-- **Override never persists.** It's a per-request merge above the loaded row; no write path uses `req.query['profile.*']`.
-- **Self-service writes are atomic per-action.** No drafts; no partial-update OData PATCH. One POST = one upsert.
+- **Override is request-time only on express callsites.** `extractProfileOverride(req)` consumes the **express request** (not the CAP `req` object inside action handlers). The two callsites today are `decideHandler` and `missionDetailHandler` — both express handlers. CAP action handlers (e.g. `setLearningPreferences`, Joule narration tools) do **not** support `?profile.*` overrides; the override never persists in any code path.
+- **Self-service writes use PUT-style semantics.** `setLearningPreferences` always writes all three fields; values omitted by the caller are explicitly cleared (set to null). The Vue island always sends all three values via the explicit Save button. No drafts; no partial-update OData PATCH.
+- **Override-merge treats empty string as absent.** `extractProfileOverride` rejects `''` the same as missing — only string values present in `PROFILE_VOCAB[field]` are merged.
 
 ## 4. Data model
 
@@ -98,9 +100,9 @@ The override is parsed in two callsites (`/api/branches/decide` and `/build/miss
 
 entity UserLearningPreferences : managed {
   key user       : Association to Users;
-  deployment     : String(20) enum { cloud; onprem; };
-  role           : String(20) enum { developer; architect; admin; student; };
-  cloud          : String(10) enum { btp; aws; gcp; };
+  deployment     : String(20) enum { cloud; onprem; } @assert.range;
+  role           : String(20) enum { developer; architect; sysadmin; student; } @assert.range;
+  cloud          : String(20) enum { btp; aws; gcp; } @assert.range;
 }
 ```
 
@@ -133,13 +135,13 @@ annotate ims.UserLearningPreferences with @PersonalData : {
 
 @(requires: 'authenticated-user')
 action setLearningPreferences(
-  deployment : String null,
-  role       : String null,
-  cloud      : String null
+  deployment : String,
+  role       : String,
+  cloud      : String
 ) returns LearningPreferences;
 ```
 
-The read entity returns the caller's own row only — handler injects `where: { user_ID: req.user.id }`. The action validates enum values at the entry point (rejects invalid values with 400 + field-level error) and upserts.
+The read entity returns the caller's own row only via a CAP `srv.before('READ', 'LearningPreferences', ...)` hook that looks up `dbUser.ID` from `req.user.id` (XSUAA UUID) and injects `req.query.SELECT.where = { user_ID: dbUser.ID }` into the request before CAP executes the SELECT. The handler is registered alongside the action handler in `srv/developer-service.js` (~10 LoC). The action validates enum values at the entry point (rejects invalid values with 400 + field-level error) and upserts using **PUT-style semantics**: all three fields are always written. Values omitted by the caller are explicitly cleared to `null` (see §6.1, §7.2).
 
 **AdminService** (`/admin`, `@requires: 'Admin'` service-level):
 
@@ -149,21 +151,23 @@ The read entity returns the caller's own row only — handler injects `where: { 
 entity LearningPreferences as projection on ims.UserLearningPreferences;
 ```
 
-Plain read+write projection inheriting `Admin` from the service gate. No inline UI annotations in v1 — admin can edit via the Fiori draft UI or the Analytics Explorer.
+Read+write projection inheriting `Admin` from the service gate. AdminService inherits service-level `@requires: 'Admin'` — admins read all rows; **no per-row filter is injected** for AdminService (the before-READ hook is registered only on the DeveloperService projection). UI annotations live in `app/admin-annotations.cds` (§7.7) and provide a minimal Fiori Elements list view.
 
 ### 4.3 Constants module (single source of truth for vocab)
 
 ```js
-// srv/lib/branch/profile-fields.js (new — also reachable from Vue via the same import path the existing isomorphic helpers use)
+// srv/lib/branch/profile-fields.js (new — ESM, matches srv/ "type": "module")
 
 export const PROFILE_FIELDS = ['deployment', 'role', 'cloud'];
 
 export const PROFILE_VOCAB = {
   deployment: ['cloud', 'onprem'],
-  role: ['developer', 'architect', 'admin', 'student'],
+  role: ['developer', 'architect', 'sysadmin', 'student'],
   cloud: ['btp', 'aws', 'gcp'],
 };
 ```
+
+**Module shape:** ESM. `srv/` already has `"type": "module"` in `package.json` and PR 1's `user-state.js` is ESM, so server-side imports use standard `import { PROFILE_FIELDS, PROFILE_VOCAB } from './profile-fields.js';`. The Vue island imports the same file via a Vite-resolved relative path (`import { PROFILE_VOCAB } from '../../../srv/lib/branch/profile-fields.js'`); no bundler-specific shim is needed because the file has zero dependencies and is pure data. The `.js` extension keeps both consumers honest.
 
 Used by:
 
@@ -178,8 +182,9 @@ Used by:
 ```text
 HTTP request to /api/branches/decide  OR  /build/mission/<slug>
   │
-  ├─ extractProfileOverride(req):
-  │     if req.user.is('Tutorial.Author') AND any req.query['profile.<field>'] valid:
+  ├─ extractProfileOverride(req):  // express request only
+  │     if (req.user.is('Tutorial.Author') OR req.user.is('Admin'))
+  │        AND any req.query['profile.<field>'] valid:
   │       return { <field>: <value>, ... }
   │     else:
   │       return null
@@ -197,24 +202,25 @@ HTTP request to /api/branches/decide  OR  /build/mission/<slug>
             profile[f] = override?.[f] ?? profileRaw?.[f] ?? null
           return Object.freeze({ completedSlugs, completedMissionSlugs,
                                   profile: Object.freeze(profile) })
-  │
-  └─ fingerprintUserState(state) → sha256, cache key includes the merged profile
-  │
-  └─ pickBranch(...) evaluates condition against final profile
+
+  fingerprintUserState(state) → sha256, cache key includes the merged profile
+
+  pickBranch(...) evaluates condition against final profile
 ```
 
 **Three properties:**
 
-- Anonymous: `realProfile = null`, override skipped (no scope), profile all-null. `profile.deployment == 'cloud'` evaluates false. Engine falls through to ranker → default.
+- Anonymous: `realProfile = null`, override skipped (no scope), profile all-null. `profile.deployment == 'cloud'` evaluates falsy/null. Engine falls through to ranker → default.
 - Authenticated learner: real profile loaded; override skipped (no scope). Cache shared with same-fingerprint learners.
-- Authenticated `Tutorial.Author` with `?profile.deployment=cloud`: override merged in; cache fingerprint differs → separate cache slot. Author can simulate any profile without writing to their own DB row.
+- Authenticated `Tutorial.Author` **or** `Admin` with `?profile.deployment=cloud`: override merged in; cache fingerprint differs → separate cache slot. Author/Admin can simulate any profile without writing to their own DB row.
 
 ### 5.2 Write path
 
 ```text
-Vue Select onChange (debounced 500ms)
+Vue "Save preferences" button click (only enabled when dirty)
   │
   ├─ POST /api/setLearningPreferences { deployment, role, cloud }
+  │     ALL THREE fields always sent (PUT-style; null clears the slot)
   │
   ├─ @requires: 'authenticated-user' (XSUAA gate)
   │
@@ -222,24 +228,27 @@ Vue Select onChange (debounced 500ms)
   │     1. Validate each field ∈ PROFILE_VOCAB[field] ∪ {null}
   │     2. UPSERT INTO UserLearningPreferences (user_ID, deployment, role, cloud)
   │        VALUES (req.user.id, ...) ON CONFLICT (user_ID) DO UPDATE
-  │     3. After success: bust mission-detail cache for req.user.id
-  │     4. Return updated row
+  │        — ALL THREE columns are written every time (PUT semantics)
+  │     3. Return updated row
   │
-  └─ Vue: show "Saved" message-strip; on failure, retry once after 1s
+  └─ Vue: show "Saved" <ui5-message-strip> for 3s; on failure,
+        show "Couldn't save" strip and leave Selects on user's choices
 ```
 
-**Cache-bust** mirrors PR 1's existing `TaskRecords.after('CREATE')` hook — when prefs change, the user's `(missionSlug, userId, fingerprint)` cache entries get invalidated. Other PR 4/5 caches don't aggregate user state, so no other bust hooks needed.
+**Cache invalidation:** PR 6 does **not** add a cache-bust hook. `mission-detail.js` and `decide.js` each maintain their own private 5-minute TTL caches keyed on the XSUAA UUID + profile fingerprint. After a profile write the user may see up to a 5-minute stale-after-write window before the merged profile takes effect; this is acceptable for v1 (preferences are read-mostly, the engine still returns a sensible recommendation, and the fingerprint includes all three fields so a subsequent author override creates a different cache slot anyway). Per recon, neither cache exports a `bustForUser` / `invalidateForUser` hook — only `__resetCacheForTest`. v2 follow-up could add an explicit invalidator if the stale window proves user-visible (out of scope this PR).
 
 ### 5.3 Override URL shape
 
-The spec uses `?profile.deployment=cloud` (dotted query keys). Express + CAP both accept this:
+The spec uses `?profile.deployment=cloud` (dotted query keys). `extractProfileOverride(req)` consumes the **express request** only — both confirmed callsites (`decideHandler` in `srv/lib/branch/decide.js` and `missionDetailHandler` in `srv/lib/branch/mission-detail.js`) are express handlers. Express's default query parser surfaces the dotted keys as flat strings:
 
 ```text
 req.query['profile.deployment'] = 'cloud'
 req.query['profile.role'] = 'developer'
 ```
 
-Override extraction loops over `PROFILE_FIELDS` reading `req.query['profile.' + field]`, validates against `PROFILE_VOCAB[field]`. Invalid values get silently dropped (per §6.1).
+CAP action handlers (e.g. `setLearningPreferences`, the Joule narration tool) do **not** support `?profile.*` overrides — those handlers receive a CAP `req` whose `req.query` is a CQN object, not an express query map. The override is request-time only on the two express callsites; it never persists.
+
+Override extraction loops over `PROFILE_FIELDS` reading `req.query['profile.' + field]`, validates against `PROFILE_VOCAB[field]`, and treats empty string the same as missing. Invalid values get silently dropped (per §6.1).
 
 ## 6. Edge cases
 
@@ -247,10 +256,11 @@ Override extraction loops over `PROFILE_FIELDS` reading `req.query['profile.' + 
 
 | Error | Surface | Status |
 |---|---|---|
-| Invalid enum (`deployment='hybrid'`) at action | action handler | 400 with `{field}: must be one of [cloud, onprem, null]` |
-| Field omitted (vs explicit null) | action handler | preserved in DB (action only writes fields the caller supplied) |
+| Invalid enum (`deployment='hybrid'`) at action | action handler | 400 with `{field}: must be one of [cloud, onprem]` |
+| Field omitted (vs explicit null) | action handler | **PUT-style**: caller MUST send all three fields. Omitted fields are explicitly cleared to null. The Vue island always sends all three values; programmatic callers that only want to update one field must read the existing row, mutate locally, then send the full payload. |
 | Anonymous caller hits action | XSUAA gate | 401 |
 | Concurrent UPSERT (two browser tabs) | DB | last-write-wins; preferences are read-mostly, not transactional |
+| Empty-string override (`?profile.deployment=`) | override parser | dropped (treated same as missing key) |
 
 ### 6.2 Engine-level edge cases
 
@@ -261,19 +271,21 @@ Override extraction loops over `PROFILE_FIELDS` reading `req.query['profile.' + 
 | Row with partial set (`deployment` only) | `{deployment: 'cloud', role: null, cloud: null}` |
 | Anonymous request | `EMPTY_STATE` (frozen, all-null profile) |
 | Override with invalid enum | Override parser drops the field silently |
-| Override from non-`Tutorial.Author` user | Parser returns null; override never reaches `buildUserState` |
+| Override from non-`Tutorial.Author`, non-`Admin` user | Parser returns null; override never reaches `buildUserState` |
 | Override + real both present | Override wins per-field |
 | Override partial (only `deployment`) | Real contributes `role` + `cloud` |
 | User account anonymized | `cascade: 'delete'` removes the row automatically |
+| Joule narration tool | Ignores `?profile.*` overrides — narration runs through CAP `chat-orchestrator` and never sees the express `req.query`. Author must clear the override and chat from the unmodified URL to test narration. Plumbing the override through the orchestrator is deferred to v2 (see §11). |
 
 ### 6.3 Vue island error handling
 
 | Failure | Behavior |
 |---|---|
-| Network error on save | Silent retry once after 1s; if second fails, `<ui5-message-strip design="Negative">` + dropdown reverts to prior value |
-| 401 mid-edit | Same negative UX (approuter handles login redirect on next page load) |
+| Network error on save | `<ui5-message-strip design="Negative">` "Couldn't save preferences. Try again." appears for 3s; Selects keep the user's chosen values; Save button re-enables for retry |
+| 401 mid-edit | Same negative strip (approuter handles login redirect on next page load) |
 | 400 invalid enum (defensive — UI shouldn't allow) | Same negative strip; console diagnostic |
-| Empty initial state | All Selects show "— No preference —"; no special "first visit" mode |
+| Empty initial state | All Selects show "— No preference —" (sentinel value `__none__`); Save button disabled until user changes something |
+| `branchingEnabled === false` (read from `/api/ChatConfig`) | `<ui5-message-strip design="Information">` shown above the form: "Branching is currently disabled platform-wide. Your preferences will be saved and will activate when branching is turned on." |
 
 ### 6.4 Master flag interaction
 
@@ -288,39 +300,64 @@ Override extraction loops over `PROFILE_FIELDS` reading `req.query['profile.' + 
 | `db/schema.cds` | append entity | ~10 |
 | `db/audit-logging.cds` | annotate (cascade-delete) | ~5 |
 | `srv/developer-service.cds` | append projection + action | ~10 |
-| `srv/developer-service.js` | new `setLearningPreferences` handler | ~30 |
+| `srv/developer-service.js` | new `setLearningPreferences` handler + before-READ row filter | ~40 |
 | `srv/admin-service.cds` | append projection | ~3 |
-| `srv/lib/branch/profile-fields.js` | new — vocab constants | ~10 |
-| `srv/lib/branch/profile-override.js` | new — override parser | ~25 |
-| `srv/lib/branch/loaders.js` | rewrite `loadProfile` | ~15 (replace) |
+| `app/admin-annotations.cds` | new admin Fiori Elements list view (I6) | ~15 |
+| `srv/lib/branch/profile-fields.js` | new — vocab constants (ESM) | ~10 |
+| `srv/lib/branch/profile-override.js` | new — override parser (`Tutorial.Author` OR `Admin`) | ~25 |
+| `srv/lib/branch/loaders.js` | rewrite `loadProfile` body (keep try/catch) | ~15 (replace) |
 | `srv/lib/branch/user-state.js` | add override param + merge | ~5 |
-| `srv/lib/branch/decide.js` | wire override at one callsite | ~3 |
-| `srv/lib/branch/mission-detail.js` | wire override at one callsite + cache-bust on UPSERT | ~6 |
-| `hugo-apps/src/me/LearningPreferences.vue` | new island | ~80 |
-| `hugo-apps/src/me/main.ts` | mount the new island | ~3 |
-| `hugo/layouts/me/list.html` | append mount-point div | ~3 |
-| `docs/authors/branching-cookbook.md` | append override section | ~30 |
+| `srv/lib/branch/decide.js` | extract + pass override at express callsite | ~3 |
+| `srv/lib/branch/mission-detail.js` | extract + pass override at express callsite | ~3 |
+| `hugo-apps/src/me/LearningPreferences.vue` | new island — explicit Save button, branching-disabled strip + ChatConfig fetch (I7) | ~110 |
+| `hugo-apps/src/me/main.ts` | mount the new island alongside existing MyCompletions | ~3 |
+| `hugo-apps/vite.config.ts` | (no entry change — `me` entry already exists) | 0 |
+| `hugo/layouts/me/list.html` | append mount-point div inside existing QA-gate `{{ if not site.Params.qa }}` block | ~1 |
+| `docs/authors/branching-cookbook.md` | append override section (`#debug-override` anchor) | ~30 |
 | `docs/authors/pilot-runbook.md` | new | ~80 |
-| `docs/.vitepress/config.ts` | sidebar entry for runbook | ~1 |
-| Tests (unit + hybrid + Vue + smoke) | new + extensions | ~200 |
+| `docs/.vitepress/config.ts` | sidebar entry for runbook (under existing "Branching paths" group, after "Reading branch telemetry") | ~1 |
+| Tests (unit + hybrid + Vue + smoke) | new + extensions | ~210 |
 
-**~14 new/modified files. No new npm dependencies.**
+**~17 new/modified files. No new npm dependencies.**
 
-### 7.2 Action handler shape
+### 7.2 Action handler shape + before-READ row filter
 
 ```js
-// srv/developer-service.js (append)
+// srv/developer-service.js (append; ESM, srv has "type": "module")
 
-const { PROFILE_VOCAB } = require('./lib/branch/profile-fields.js');
+import { PROFILE_FIELDS, PROFILE_VOCAB } from './lib/branch/profile-fields.js';
 
+// Self-service row filter: scope every READ on LearningPreferences to the caller.
+srv.before('READ', 'LearningPreferences', async (req) => {
+  if (!req.user?.id || req.user.id === 'anonymous') {
+    return req.reject(401);
+  }
+  const { Users } = cds.entities('com.sap.developers.ims');
+  const dbUser = await SELECT.one.from(Users).columns('ID').where({ uuid: req.user.id });
+  if (!dbUser?.ID) {
+    // No DB user record yet — return empty result set, not an error.
+    req.query.SELECT.where = [{ val: false }];  // CQN: WHERE false
+    return;
+  }
+  // Inject WHERE user_ID = <dbUser.ID> into the SELECT.
+  const cqn = req.query.SELECT;
+  const filter = { ref: ['user_ID'] };
+  cqn.where = cqn.where
+    ? [{ xpr: cqn.where }, 'and', filter, '=', { val: dbUser.ID }]
+    : [filter, '=', { val: dbUser.ID }];
+});
+
+// Action: PUT-style upsert — all three fields are written; omitted = null.
 srv.on('setLearningPreferences', async (req) => {
-  const { deployment, role, cloud } = req.data;
+  // Destructure with explicit null defaults — caller MUST send all three;
+  // anything missing is treated as "clear this slot".
+  const { deployment = null, role = null, cloud = null } = req.data;
 
   // Validate each field: null OR a value from the vocab.
   for (const [field, value] of Object.entries({ deployment, role, cloud })) {
-    if (value === null || value === undefined) continue;
+    if (value === null) continue;
     if (!PROFILE_VOCAB[field].includes(value)) {
-      return req.error(400, `${field}: must be one of [${PROFILE_VOCAB[field].join(', ')}, null]`);
+      return req.error(400, `${field}: must be one of [${PROFILE_VOCAB[field].join(', ')}]`);
     }
   }
 
@@ -328,39 +365,44 @@ srv.on('setLearningPreferences', async (req) => {
   const dbUser = await SELECT.one.from(Users).columns('ID').where({ uuid: req.user.id });
   if (!dbUser?.ID) return req.error(404, 'user not found');
 
-  // Upsert: try update, fall back to insert. CAP CDS QL has no native UPSERT;
-  // use a transaction or rely on the engine's automatic idempotence on
-  // composition-keyed entities (verified in unit test 1+2).
+  // PUT-style UPSERT — all three columns get written every time.
   await UPSERT.into(UserLearningPreferences).entries({
     user_ID: dbUser.ID,
     deployment, role, cloud,
   });
 
-  // Cache-bust: mirror the TaskRecords.after('CREATE') pattern.
-  bustMissionDetailCacheFor(dbUser.ID);
-
   return await SELECT.one.from(UserLearningPreferences).where({ user_ID: dbUser.ID });
 });
 ```
 
+The `srv.before('READ', ...)` hook implements the per-row filter described in §4.2 — it runs for the DeveloperService projection only. AdminService inherits its own service-level `@requires: 'Admin'` and intentionally has no row filter. There is **no cache-bust call** in the action handler — the engine's mission-detail.js + decide.js caches expire on their own 5-minute TTL (see §5.2).
+
 ### 7.3 Override parser
 
 ```js
-// srv/lib/branch/profile-override.js (new)
+// srv/lib/branch/profile-override.js (new — ESM)
 
 import { PROFILE_FIELDS, PROFILE_VOCAB } from './profile-fields.js';
 
 /**
- * Extract a validated profile override from req.query when the requesting user
- * has Tutorial.Author scope. Returns null if no override / not authorised /
- * no valid values. Caller passes the result as opts.override to buildUserState.
+ * Extract a validated profile override from an EXPRESS request when the
+ * requesting user has Tutorial.Author OR Admin scope. Returns null if no
+ * override / not authorised / no valid values. Caller passes the result as
+ * opts.override to buildUserState.
+ *
+ * Invariant: this consumes the express `req` (req.user, req.query as flat
+ * map of strings). It is NOT for CAP action handlers — there is no `?profile.*`
+ * surface on /api/setLearningPreferences or chat-orchestrator tools.
  */
 export function extractProfileOverride(req) {
-  if (!req?.user?.is?.('Tutorial.Author')) return null;
+  const isAuthor = req?.user?.is?.('Tutorial.Author');
+  const isAdmin = req?.user?.is?.('Admin');
+  if (!isAuthor && !isAdmin) return null;
   const override = {};
   for (const field of PROFILE_FIELDS) {
     const v = req.query?.[`profile.${field}`];
-    if (typeof v === 'string' && PROFILE_VOCAB[field].includes(v)) {
+    // Treat empty string the same as missing.
+    if (typeof v === 'string' && v !== '' && PROFILE_VOCAB[field].includes(v)) {
       override[field] = v;
     }
   }
@@ -368,10 +410,14 @@ export function extractProfileOverride(req) {
 }
 ```
 
+The widened `Tutorial.Author OR Admin` gate lets Tom (an Admin in DEV) test the override on his existing admin login without needing a `Tutorial.Author` role-collection grant. Both author and admin are trusted-internal roles — the override is never exposed to learners.
+
 ### 7.4 `loaders.js` rewrite
 
+Replace the body of `loadProfile` (lines ~38-63 + the TODO comment block above it). Imports + the file-scope `LOG` declaration are unchanged. The try/catch + `LOG.warn` + return-null shape is kept verbatim — the new body just swaps the key/value reader for a typed read against `UserLearningPreferences`.
+
 ```js
-// srv/lib/branch/loaders.js — replace lines 38-63 (the key/value reader + TODO)
+// srv/lib/branch/loaders.js — replace the body of loadProfile
 
 async loadProfile(user) {
   if (!user?.id || user.id === 'anonymous') return null;
@@ -379,6 +425,7 @@ async loadProfile(user) {
     const { Users, UserLearningPreferences } = cds.entities('com.sap.developers.ims');
     const dbUser = await SELECT.one.from(Users).columns('ID').where({ uuid: user.id });
     if (!dbUser?.ID) return null;
+    // Defensive: degrade to null if entity not yet deployed (mid-rollout).
     const row = await SELECT.one.from(UserLearningPreferences)
       .where({ user_ID: dbUser.ID });
     return row ? { deployment: row.deployment, role: row.role, cloud: row.cloud } : null;
@@ -389,12 +436,13 @@ async loadProfile(user) {
 }
 ```
 
-PR 1's reviewer-mandated TODO comment ("Until PR 6 introduces the proper `UserLearningPreferences` entity, loadProfile always returns null") is stripped.
+PR 1's reviewer-mandated TODO comment ("Until PR 6 introduces the proper `UserLearningPreferences` entity, loadProfile always returns null") is stripped. The protective try/catch + LOG.warn fallback is preserved so a mid-rollout deployment that hasn't yet run `cds deploy` for the new entity continues to serve the engine with a null profile rather than crashing the read path.
 
 ### 7.5 `buildUserState` extension
 
 ```js
 // srv/lib/branch/user-state.js — add override merge
+// PROFILE_FIELDS is imported from ./profile-fields.js (single source of truth)
 
 export async function buildUserState(user, deps, opts = {}) {
   if (!user) return EMPTY_STATE;
@@ -405,11 +453,14 @@ export async function buildUserState(user, deps, opts = {}) {
     deps.loadProfile(user),
   ]);
 
-  // PR 6: merge override (already validated by caller — only valid enum
-  // values and only when user has Tutorial.Author scope).
+  // PR 6: merge override. The override is already validated by
+  // extractProfileOverride (only valid enum values, only when user has
+  // Tutorial.Author or Admin scope, empty strings already dropped). We
+  // additionally treat undefined/null/'' as "absent" here for defence in depth.
   const profile = Object.create(null);
   for (const f of PROFILE_FIELDS) {
-    profile[f] = opts.override?.[f] ?? profileRaw?.[f] ?? null;
+    const ov = opts.override?.[f];
+    profile[f] = (typeof ov === 'string' && ov !== '') ? ov : (profileRaw?.[f] ?? null);
   }
 
   return Object.freeze({
@@ -430,37 +481,117 @@ export async function buildUserState(user, deps, opts = {}) {
     <ui5-title level="H3">Learning preferences</ui5-title>
     <ui5-text>Help us personalize tutorial branching. All fields optional.</ui5-text>
 
-    <ui5-label for="deployment">Where do you typically deploy?</ui5-label>
-    <ui5-select id="deployment" :value="prefs.deployment ?? ''" @change="onChange('deployment', $event)">
-      <ui5-option value="">— No preference —</ui5-option>
-      <ui5-option value="cloud">Cloud</ui5-option>
-      <ui5-option value="onprem">On-premise</ui5-option>
+    <!-- I7: branching-disabled platform-wide notice -->
+    <ui5-message-strip v-if="branchingDisabled" design="Information" :hide-close-button="true">
+      Branching is currently disabled platform-wide. Your preferences will be saved
+      and will activate when branching is turned on.
+    </ui5-message-strip>
+
+    <ui5-label for="deployment" required-indicator="false">Where do you typically deploy?</ui5-label>
+    <ui5-select id="deployment" ref="deploymentRef"
+                @change="onChange('deployment', $event)">
+      <ui5-option value="__none__" :selected="prefs.deployment === null">— No preference —</ui5-option>
+      <ui5-option value="cloud" :selected="prefs.deployment === 'cloud'">Cloud</ui5-option>
+      <ui5-option value="onprem" :selected="prefs.deployment === 'onprem'">On-premise</ui5-option>
     </ui5-select>
 
-    <!-- role + cloud blocks identical shape -->
+    <ui5-label for="role" required-indicator="false">What's your role?</ui5-label>
+    <ui5-select id="role" ref="roleRef" @change="onChange('role', $event)">
+      <ui5-option value="__none__" :selected="prefs.role === null">— No preference —</ui5-option>
+      <ui5-option value="developer" :selected="prefs.role === 'developer'">Developer</ui5-option>
+      <ui5-option value="architect" :selected="prefs.role === 'architect'">Architect</ui5-option>
+      <ui5-option value="sysadmin" :selected="prefs.role === 'sysadmin'">System administrator</ui5-option>
+      <ui5-option value="student" :selected="prefs.role === 'student'">Student</ui5-option>
+    </ui5-select>
 
-    <ui5-message-strip v-if="status === 'saved'" design="Positive">Saved.</ui5-message-strip>
-    <ui5-message-strip v-if="status === 'error'" design="Negative">
-      Couldn't save preferences. Try again.
-    </ui5-message-strip>
+    <ui5-label for="cloud" required-indicator="false">Preferred cloud provider?</ui5-label>
+    <ui5-select id="cloud" ref="cloudRef" @change="onChange('cloud', $event)">
+      <ui5-option value="__none__" :selected="prefs.cloud === null">— No preference —</ui5-option>
+      <ui5-option value="btp" :selected="prefs.cloud === 'btp'">SAP BTP</ui5-option>
+      <ui5-option value="aws" :selected="prefs.cloud === 'aws'">AWS</ui5-option>
+      <ui5-option value="gcp" :selected="prefs.cloud === 'gcp'">Google Cloud</ui5-option>
+    </ui5-select>
+
+    <ui5-button design="Emphasized" :disabled="!dirty || saving" @click="onSave">
+      {{ saving ? 'Saving…' : 'Save preferences' }}
+    </ui5-button>
+
+    <!-- I15: a11y — wrap status strip in role=alert live region for SR announcements -->
+    <div role="alert" aria-live="polite">
+      <ui5-message-strip v-if="status === 'saved'" design="Positive">Saved.</ui5-message-strip>
+      <ui5-message-strip v-if="status === 'error'" design="Negative">
+        Couldn't save preferences. Try again.
+      </ui5-message-strip>
+    </div>
   </div>
 </template>
 ```
 
-Logic: load from `GET /api/LearningPreferences` on mount, debounce 500ms on Select change, POST to `/api/setLearningPreferences`, retry once on failure, revert dropdown to prior value on second failure.
+**State machine (`'idle' | 'saving' | 'saved' | 'error'`)** — mirrors `TutorialFeedbackForm.vue` precedent (per recon item 10). On mount: `GET /api/LearningPreferences` (404 / null row → all Selects show `__none__` sentinel) AND `GET /api/ChatConfig` to learn `branchingEnabled` (read from the public projection). Each Select `change` event maps `__none__` back to `null` and updates the local `prefs` ref + flips `dirty = true`. The Save button stays disabled until `dirty === true`. On click: POST all three values; show "Saved" strip and reset `dirty = false` after 3s auto-dismiss; on failure, show "Couldn't save" strip and focus the first Select via its `ref` (a11y per I15). The Selects keep the user's chosen values regardless of save outcome — there is no auto-revert.
 
-### 7.7 Pilot runbook
+**Required UI5 imports in `main.ts`:**
+
+```ts
+import "@ui5/webcomponents/dist/Select.js";
+import "@ui5/webcomponents/dist/Option.js";
+import "@ui5/webcomponents/dist/MessageStrip.js";
+import "@ui5/webcomponents/dist/Button.js";
+import "@ui5/webcomponents/dist/Label.js";
+import "@ui5/webcomponents/dist/Title.js";
+import "@ui5/webcomponents/dist/Text.js";
+```
+
+**Bundle estimate:** UI5's `Title`/`Text` are already in the bundle via the existing MyCompletions island. `Select` + `Option` + `MessageStrip` + `Button` + `Label` are net-new for `me.js`. Honest estimate is ~15-25 kB gzip for the additional UI5 components (each web component is ~3-5 kB gzip), plus ~3 kB for the Vue SFC itself. Total `me.js` chunk grows from ~12 kB to ~30-40 kB gzip — still well under the 100 kB rule-of-thumb.
+
+**Mount-point div ID:** `me-learning-preferences` (N5).
+
+### 7.7 Admin Fiori Elements list view
+
+```cds
+// app/admin-annotations.cds (append; pattern mirrors Events block at lines 41-65)
+
+annotate AdminService.LearningPreferences with @cds.search: { user.email, user.displayName };
+
+annotate AdminService.LearningPreferences with @UI: {
+  HeaderInfo: {
+    TypeName: 'Learning preference', TypeNamePlural: 'Learning preferences',
+    Title: { Value: user.email },
+    Description: { Value: user.displayName }
+  },
+  SelectionFields: [ deployment, role, cloud ],
+  LineItem: [
+    { Value: user.email },
+    { Value: user.displayName },
+    { Value: deployment },
+    { Value: role },
+    { Value: cloud },
+    { Value: modifiedAt }
+  ],
+  Facets: [
+    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'Preferences' }
+  ],
+  FieldGroup#General: { Data: [
+    { Value: user.email }, { Value: deployment }, { Value: role }, { Value: cloud }
+  ]}
+};
+```
+
+Shape mirrors the canonical Events template in `app/admin-annotations.cds` lines 41-65 (per recon item 9). The `@cds.search` annotation enables the standard Fiori Elements list-page search input over user identity columns. `modifiedAt` is provided by the `: managed` aspect on `UserLearningPreferences`.
+
+### 7.8 Pilot runbook
 
 `docs/authors/pilot-runbook.md` — four-phase checklist:
 
 - **Phase 1 — Pre-pilot:** mission selection criteria, vocab alignment, author readiness.
-- **Phase 2 — QA pilot:** author writes branches, tests via QA channel, exercises all four debug paths (cloud / onprem / no-override-anonymous / no-override-completed-slug).
+- **Phase 2 — QA pilot:** author writes branches, tests via QA channel, exercises all four debug paths (cloud / onprem / no-override-anonymous / no-override-completed-slug). Deeplinks to the cookbook's [`#debug-override`](../authors/branching-cookbook.md#debug-override) anchor for the override syntax.
 - **Phase 3 — Production rollout:** flip `ChatSettings.branchingEnabled` (DEV first, then prod), monitor `/admin/analytics/AnalyticsBranchPerformance`, check Branch Performance section in Missions ObjectPage, watch for `branch-staleness` notices.
 - **Phase 4 — Iterate / rollback:** thresholds for collapse / tune / investigate; rollback path (`branchingEnabled = false`).
 
-### 7.8 Cookbook extension
+Sidebar placement: added to the existing **Branching paths** group in `docs/.vitepress/config.ts` (lines 92-97), as the **fifth** entry after `Reading branch telemetry`. Single line: `{ text: 'Pilot runbook', link: '/authors/pilot-runbook' }`.
 
-`docs/authors/branching-cookbook.md` — append "Testing your conditions with the debug override" section: format, examples, cache-fingerprint note, what happens with invalid values, what happens without `Tutorial.Author` scope.
+### 7.9 Cookbook extension
+
+`docs/authors/branching-cookbook.md` — append `## Testing your conditions with the debug override` section under a deeplink anchor `#debug-override`. Content: format (`?profile.deployment=cloud&profile.role=architect`), examples, cache-fingerprint note, what happens with invalid values, what happens without `Tutorial.Author` or `Admin` scope, and a back-link to runbook **Phase 2** (`../authors/pilot-runbook.md#phase-2-qa-pilot`) for the canonical pilot-time debug walkthrough.
 
 ## 8. Testing strategy
 
@@ -469,33 +600,35 @@ Logic: load from `GET /api/LearningPreferences` on mount, debounce 500ms on Sele
 | Layer | File | Cases |
 |---|---|---|
 | Unit | `test/unit/learning-preferences.test.js` | 6 |
-| Unit | `srv/lib/branch/__tests__/profile-override.test.js` | 5 |
+| Unit | `srv/lib/branch/__tests__/profile-override.test.js` | 6 |
 | Unit | `srv/lib/branch/__tests__/loaders.test.js` (extend) | +2 |
 | Unit | `srv/lib/branch/__tests__/user-state.test.js` (extend) | +2 |
+| Unit | `scripts/__tests__/profile-fields-sync.test.js` | 1 |
 | Vue island | `hugo-apps/src/me/__tests__/LearningPreferences.test.ts` | 4 |
 | Hybrid (HANA, opt-in) | `test/hybrid/learning-preferences.test.js` | 3 |
 | Smoke (deployed) | `test/smoke/learning-preferences.smoke.test.js` | 2 |
 
-**~22 new test cases.** Existing PR 1–5 tests pass unchanged.
+**26 new test cases total.** Existing PR 1–5 tests pass unchanged.
 
 ### 8.2 Per-layer coverage
 
 **Unit — `learning-preferences.test.js` (action handler):**
 
 1. `setLearningPreferences({deployment: 'cloud', role: null, cloud: 'btp'})` — UPSERTs row; subsequent SELECT returns `{deployment: 'cloud', role: null, cloud: 'btp'}`
-2. Re-call with `{deployment: 'onprem'}` — partial update preserves prior `cloud: 'btp'`; new `deployment: 'onprem'`; explicit `null` for unspecified args clears them
+2. **PUT-style clearing:** Re-call with `{deployment: 'onprem', role: null, cloud: null}` — clears prior `role` and `cloud` while setting `deployment: 'onprem'`. Confirms PUT semantics: omitted = cleared, not preserved.
 3. Invalid enum (`deployment: 'hybrid'`) — 400 with field-level error message
 4. Anonymous caller — 401 (XSUAA gate)
-5. `GET /api/LearningPreferences` returns the caller's row only (handler-injected `where: {user_ID: $user}`)
-6. After UPSERT, mission-detail cache for that user is busted (assert via in-memory cache spy)
+5. `GET /api/LearningPreferences` returns the caller's row only — driven by the `srv.before('READ', ...)` hook that injects `where: { user_ID: dbUser.ID }` into the SELECT
+6. `setLearningPreferences` is **role: 'sysadmin'** — confirms `sysadmin` is a valid role enum (regression guard against renaming back to `admin` and colliding with the XSUAA Admin scope)
 
 **Unit — `profile-override.test.js`:**
 
 1. Authenticated `Tutorial.Author` + valid `?profile.deployment=cloud` → returns `{deployment: 'cloud'}`
-2. Authenticated non-`Tutorial.Author` + same query → returns `null` (gate works)
-3. Anonymous + same query → returns `null`
-4. Author + invalid value (`?profile.deployment=hybrid`) → field dropped, returns `null` (or partial if other fields valid)
-5. Author + multiple fields including one invalid → returns only the valid ones
+2. Authenticated **`Admin`** (no `Tutorial.Author`) + same query → returns `{deployment: 'cloud'}` (gate widening per pivot 2)
+3. Authenticated non-`Tutorial.Author`, non-`Admin` + same query → returns `null`
+4. Anonymous + same query → returns `null`
+5. Author + invalid value (`?profile.deployment=hybrid`) → field dropped; if no other valid values → returns `null`
+6. **Express query-parser fragility guard:** mock `req.query = { 'profile.deployment': 'cloud', 'profile.role': '' }` — empty-string value dropped (treated as missing); only `deployment` survives. Pairs with smoke test 1 below as a live HTTP check.
 
 **Unit — extend `loaders.test.js` (+2):**
 
@@ -507,23 +640,29 @@ Logic: load from `GET /api/LearningPreferences` on mount, debounce 500ms on Sele
 1. `buildUserState(user, deps, {override: {deployment: 'cloud'}})` merges override over real `{deployment: 'onprem'}` → final `deployment: 'cloud'`
 2. Override-merge respects null fields: `override = {deployment: 'cloud'}`, real = `{deployment: 'onprem', role: 'developer'}` → final `{deployment: 'cloud', role: 'developer', cloud: null}`
 
+**Unit — `profile-fields-sync.test.js`:**
+
+1. **Schema/vocab sync:** parse `db/schema.cds` via CDS CSN (`cds.compile.to.csn(...)`), extract the enum values for `UserLearningPreferences.deployment`, `.role`, `.cloud`, and assert they match `PROFILE_VOCAB` from `srv/lib/branch/profile-fields.js` exactly. Catches drift if a future PR changes the schema enum but forgets the constants module (or vice versa). Uses the same compiled-CSN technique as PR 1's existing CSN-shape tests.
+
 **Vue island — `LearningPreferences.test.ts`:**
 
-1. Mount → fetches `/api/LearningPreferences` → renders Selects with current values
-2. Change `deployment` Select → debounce fires after 500ms → POST to `/api/setLearningPreferences` with the changed field; success-strip appears
-3. Server returns 500 → retry once after 1s → second 500 → negative-strip appears, dropdown reverts
-4. Empty initial state (404 / null row) → all Selects show "— No preference —"
+1. Mount → fetches `/api/LearningPreferences` AND `/api/ChatConfig` → renders Selects with current values; Save button disabled (not dirty)
+2. Change `deployment` Select → Save button enables → click Save → POST to `/api/setLearningPreferences` with **all three values** (PUT-style); success-strip appears for 3s; Save button disabled again
+3. Server returns 500 → negative-strip appears; Selects keep the user's chosen values; first Select gets focus (a11y)
+4. **`branchingEnabled === false` from `/api/ChatConfig`** → Information `<ui5-message-strip>` renders above the form. With `branchingEnabled === true` the strip is absent. (I7 regression guard.)
 
 **Hybrid — `learning-preferences.test.js`** (gated by `ALLOW_HYBRID_WRITES=true` + `isSafeForWrites()`):
 
-1. Real HANA: enum constraint enforced (insert with `deployment='hybrid'` rejected at DB layer)
-2. Real HANA: UPSERT pattern works against the live DB driver (CAP-on-HANA upsert quirks)
-3. Real HANA: `@PersonalData cascade: 'delete'` removes the row when the parent Users row is deleted
+1. Real HANA: invalid enum value rejected at the **CAP runtime layer** on UPSERT (CAP enforces `@assert.range` on enum-typed fields server-side; this is a CAP-runtime constraint, not a HANA CHECK CONSTRAINT)
+2. Real HANA: schema + UPSERT shape — confirms the entity's PK is the single composition column (`USER_ID`), the FK from `USER_LEARNING_PREFERENCES.USER_ID` to `USERS.ID` enforces referential integrity, a second INSERT for the same user fails with PK-violation (driving the UPSERT path), and a UPSERT with the same payload twice yields the same row (idempotent — row count unchanged)
+3. Real HANA: `@PersonalData cascade: 'delete'` removes the row when the parent Users row is deleted (anonymization integration)
 
 **Smoke — `learning-preferences.smoke.test.js`** (HTTP against deployed):
 
-1. `GET /api/LearningPreferences` against deployed srv URL with a real user JWT — returns 200 (or 404 when no row)
-2. `POST /api/setLearningPreferences` with valid payload → 200; subsequent GET reflects the change
+1. `GET /api/LearningPreferences` against deployed srv URL **without** auth → returns 401 (unauthenticated read path is gated; this is the only smoke run in CI)
+2. `GET /api/ChatConfig` against deployed srv URL → returns 200 with `{ enabled, bannerText }` shape (confirms the public projection used by the Vue island for the branching-disabled strip is reachable unauthenticated)
+
+**Manual override smoke (runbook, not CI):** the `?profile.deployment=cloud` override path requires a `Tutorial.Author` or `Admin` JWT and is exercised manually via the §8.4 checklist + the pilot runbook Phase 2. We do **not** add a CI smoke for the authenticated override path because that would require a new GH secret (per §10 DoD: "no new role-collection or GH secret added").
 
 ### 8.3 Conventions
 
@@ -533,37 +672,45 @@ Logic: load from `GET /api/LearningPreferences` on mount, debounce 500ms on Sele
 
 ### 8.4 Manual verification (PR body checklist)
 
-1. Open `/me/` while logged in → "Learning preferences" panel renders below "Recent Activity"
-2. Pick `deployment: cloud` → 500ms later "Saved" strip appears; refresh page → Select shows `cloud`
+1. Open `/me/` while logged in → "Learning preferences" panel renders below "Recent Activity"; Save button is disabled (no dirty state)
+2. Pick `deployment: cloud` → Save button enables → click "Save preferences" → "Saved" strip appears for ~3s; refresh page → Select shows `cloud`
 3. Open a tutorial with a `[BRANCH_BEGIN ... condition="profile.deployment == 'cloud'"]` block → `cloud` branch is the recommendation
 4. Append `?profile.deployment=onprem` to the same URL while logged in as a `Tutorial.Author` user → recommendation switches to the on-prem branch
-5. Same URL as a non-author user → override is ignored (returns to `cloud`)
-6. Trigger account anonymization (admin path) → `UserLearningPreferences` row is removed (audit log entry)
+5. **Admin override (pivot 2):** same URL while logged in as Tom (Admin role-collection, no `Tutorial.Author`) → override still applies (recommendation switches)
+6. Same URL as a non-author, non-admin user → override is ignored (returns to `cloud`)
+7. Trigger account anonymization (admin path) → `UserLearningPreferences` row is removed (audit log entry)
+8. **Branching disabled UX (I7):** flip `ChatSettings.branchingEnabled = false` in admin → reload `/me/` → Information `<ui5-message-strip>` appears above the form; preferences still saveable
+9. **A11y / SR announcement (I15):** with a screen reader on, click Save with a network error injected → SR announces "Couldn't save preferences. Try again." (live region role=alert); focus moves to first Select
 
 ## 9. Risks
 
 | Risk | Likelihood | Mitigation |
 |---|---|---|
-| Override leakage to non-author | Low | Two-line `req.user.is('Tutorial.Author')` gate; tests 2+3 of `profile-override.test.js` cover negative paths |
-| Cache poisoning between author + learner | Low | `fingerprintUserState` hashes the merged profile; override-mode produces different fingerprint, separate cache slot |
+| Override leakage to non-author / non-admin | Low | Two-line `req.user.is('Tutorial.Author') OR req.user.is('Admin')` gate (per pivot 2); tests 3+4 of `profile-override.test.js` cover negative paths |
+| Cache poisoning between author/admin + learner | Low | `fingerprintUserState` hashes the merged profile; override-mode produces different fingerprint, separate cache slot in both `mission-detail.js` and `decide.js` per-callsite caches |
+| Stale-after-write window for own profile | Low | Up to 5 min until `mission-detail.js` + `decide.js` TTL caches expire (per recon: only `__resetCacheForTest` exported, no per-user invalidator). Acceptable for v1; documented in §5.2; v2 follow-up could add explicit invalidator |
 | Schema migration on prod | Low | Net-new entity; CAP/HANA `cds deploy` adds the table cleanly; no data migration |
-| Enum mismatch between schema / override-parser allowlist / Vue Select options | Medium | Single source of truth via `srv/lib/branch/profile-fields.js`; unit test asserts allowlist matches |
+| Enum mismatch between schema / override-parser allowlist / Vue Select options | Medium | Single source of truth via `srv/lib/branch/profile-fields.js`; **`profile-fields-sync.test.js`** asserts allowlist matches the compiled CSN of `db/schema.cds` (B7) |
 | Cookie/JWT scope on `/me/` returning empty | Low | `@requires: 'authenticated-user'` matches existing `MyCompletions` gate |
-| Vue island bundle size | Low | Pure UI5-webcomponents (`<ui5-select>`, `<ui5-message-strip>`) already in bundle; <5 kB gzip |
-| Concurrent UPSERT race (two browser tabs) | Low | Last-write-wins; preferences are read-mostly |
-| Anonymization cascade misses the new entity | Low | `@PersonalData cascade: 'delete'` is documented mechanism (UserMetaData + TaskRecords precedent); hybrid test 3 verifies |
-| `branchingEnabled = false` + user sets preferences | Low | Documented in §6.4; preferences stored regardless; engine consults only when branching code paths reached |
+| Vue island bundle size | Low | New UI5 components (`<ui5-select>`, `<ui5-option>`, `<ui5-message-strip>`, `<ui5-button>`, `<ui5-label>`) add ~15-25 kB gzip to `me.js` (~30-40 kB total chunk, well under 100 kB rule-of-thumb) |
+| Concurrent UPSERT race (two browser tabs) | Low | Last-write-wins; preferences are read-mostly; PUT-style semantics make divergence visible (each tab sees the other's clears) |
+| Anonymization cascade misses the new entity | Low | `@PersonalData cascade: 'delete'` is documented mechanism (UserMetaData + TaskRecords precedent); hybrid test 3 verifies. Note per recon: `_executeAnonymization` may use a hardcoded entity allowlist — implementation must verify the new entity is reached or extend the allowlist |
+| `branchingEnabled = false` + user sets preferences | Low | Documented in §6.4; Info `<ui5-message-strip>` shown to user (I7); preferences stored regardless; engine consults only when branching code paths reached |
+| Joule narration ignores override (B8) | Low | Documented in §6.2; cookbook callout. Plumbing the override through `chat-orchestrator` deferred to v2 (§11) |
 
 ## 10. Definition of Done
 
-- [ ] All ~22 unit + 3 hybrid + 2 smoke tests pass (or hybrid skipped via `ALLOW_HYBRID_WRITES`)
+- [ ] All 26 unit + Vue + 3 hybrid + 2 smoke tests pass (or hybrid skipped via `ALLOW_HYBRID_WRITES` opt-in)
 - [ ] `cds compile srv/developer-service.cds srv/admin-service.cds --to sql` clean
 - [ ] Vue island builds clean via `npm run build:apps`
-- [ ] `npm run docs:build` passes (sidebar guard accepts the new runbook)
-- [ ] Manual checklist (§8.4) verified against DEV
-- [ ] `@PersonalData` annotation present on `UserLearningPreferences`
+- [ ] `npm run docs:build` passes (sidebar guard accepts the new runbook entry under "Branching paths" → "Pilot runbook")
+- [ ] Manual checklist (§8.4) verified against DEV — including the **admin override path** (pivot 2)
+- [ ] **Manual override smoke** runbooked, not in CI — CI smoke covers only the unauthenticated read path returning 401 (B10)
+- [ ] `@PersonalData` annotation present on `UserLearningPreferences` with `cascade: 'delete'`
 - [ ] PR 1's reviewer-mandated TODO comment stripped from `loaders.js`
-- [ ] No new GH secret / role-collection grant required (PR 5's `TUTORIAL_AUTHOR_TOKEN` is unrelated; PR 6 is purely user-side)
+- [ ] **No new role-collection or GH secret added** — override reuses `Tutorial.Author` OR `Admin` scope (pivot 2); user-side write reuses standard `authenticated-user` gate (M6)
+- [ ] **`profile-fields-sync.test.js` passes** — schema enum values match `PROFILE_VOCAB` constants module (B7)
+- [ ] **Cache-bust hook NOT added** — write path relies on the existing 5-minute TTL on `mission-detail.js` + `decide.js` caches (B1; documented in §5.2)
 - [ ] PR opened against `main`; CI green; manual checklist acknowledged by Tom
 
 ## 11. Out of scope (explicit non-goals)
@@ -575,3 +722,5 @@ Logic: load from `GET /api/LearningPreferences` on mount, debounce 500ms on Sele
 - Pilot mission selection itself — runbook gives a checklist; the pick happens off-band post-merge.
 - Removing the `ChatSettings.branchingEnabled` master flag — operator action documented in runbook Phase 3.
 - Multi-field cookbook beyond the existing three patterns + the override section.
+- **Plumbing the `?profile.*` override into the Joule narration tool** — the `chat-orchestrator` uses a CAP `req`, not the express request, so the override does not flow through. Authors must clear the override and chat from the unmodified URL to test narration. v2 candidate (B8).
+- **Per-user cache invalidator (`bustForUser` / `invalidateForUser`)** — write path relies on the existing 5-minute TTL. v2 candidate if the stale-after-write window proves user-visible (B1).
