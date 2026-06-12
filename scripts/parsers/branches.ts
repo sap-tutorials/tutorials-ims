@@ -42,6 +42,8 @@ export interface BranchGroup {
   id: string;
   parentStepNumber: number;
   groupKey: string;
+  /** 1-based source line of the FIRST [BRANCH_BEGIN] in this group. Used by lint rules. */
+  beginLine: number;
   branches: Branch[];
 }
 
@@ -183,6 +185,7 @@ export function extractBranchGroups(body: string, slug: string): ExtractResult {
       id: `${pendingGroup.parentStepNumber}-${pendingGroup.groupKey}`,
       parentStepNumber: pendingGroup.parentStepNumber,
       groupKey: pendingGroup.groupKey,
+      beginLine: pendingGroup.branches[0]._beginLine ?? 0,
       branches: pendingGroup.branches.map(({ _beginLine, ...rest }) => rest),
     });
     pendingGroup = null;

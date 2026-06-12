@@ -224,3 +224,21 @@ describe('code-fence awareness', () => {
     expect(branchGroups[0].branches[0].steps[0].title).toBe('Real sub-step');
   });
 });
+
+describe('BranchGroup.beginLine', () => {
+  it('exposes the line of the first [BRANCH_BEGIN] of the group', () => {
+    const body = [
+      '### Step 1',          // line 1
+      '',                    // line 2
+      '[BRANCH_BEGIN group="g" key="a" label="A"]',  // line 3
+      '### sub-a',
+      '[BRANCH_END]',
+      '[BRANCH_BEGIN group="g" key="b" label="B"]',  // line 6
+      '### sub-b',
+      '[BRANCH_END]',
+    ].join('\n');
+    const { branchGroups } = extractBranchGroups(body, 'slug');
+    expect(branchGroups).toHaveLength(1);
+    expect(branchGroups[0].beginLine).toBe(3);  // line of FIRST BRANCH_BEGIN of the group
+  });
+});
