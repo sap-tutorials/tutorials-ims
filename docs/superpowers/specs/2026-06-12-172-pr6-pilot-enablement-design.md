@@ -799,7 +799,7 @@ Sidebar placement: added to the existing **Branching paths** group in `docs/.vit
 | Cache poisoning between author/admin + learner | Low | `fingerprintUserState` hashes the merged profile; override-mode produces different fingerprint, separate cache slot in both `mission-detail.js` and `decide.js` per-callsite caches |
 | Stale-after-write window for own profile | Low | Up to 5 min until `mission-detail.js` + `decide.js` TTL caches expire (per recon: only `__resetCacheForTest` exported, no per-user invalidator). Acceptable for v1; documented in §5.2; v2 follow-up could add explicit invalidator |
 | Schema migration on prod | Low | Net-new entity; CAP/HANA `cds deploy` adds the table cleanly; no data migration |
-| Enum mismatch between schema / override-parser allowlist / Vue Select options | Medium | Single source of truth via `srv/lib/branch/profile-fields.js`; **`profile-fields-sync.test.js`** asserts allowlist matches the compiled CSN of `db/schema.cds` (B7) |
+| Enum mismatch between schema / override-parser allowlist / Vue Select options | Medium | Single source of truth via `srv/lib/branch/profile-fields.js`; **`profile-fields-sync.test.ts`** asserts allowlist matches the compiled CSN of `db/schema.cds` (B7) |
 | Cookie/JWT scope on `/me/` returning empty | Low | `@requires: 'authenticated-user'` matches existing `MyCompletions` gate |
 | Vue island bundle size | Low | New UI5 components (`<ui5-select>`, `<ui5-option>`, `<ui5-message-strip>`, `<ui5-button>`, `<ui5-label>`) add ~20-30 kB gzip to `me.js` (~35-45 kB gzip total chunk, well under 100 kB rule-of-thumb) |
 | Concurrent write race (two browser tabs) | Low | Last-write-wins; preferences are read-mostly; PUT-style semantics make divergence visible (each tab sees the other's clears) |
