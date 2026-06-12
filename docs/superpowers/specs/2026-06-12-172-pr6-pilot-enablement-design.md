@@ -17,7 +17,7 @@ Consequence: every condition referencing `profile.*` evaluates as falsy/null, th
 
 1. **Persist a fixed-vocabulary user profile** so condition expressions referencing `profile.*` evaluate against real data.
 2. **Self-service editing** via a "Learning preferences" panel on `/me/` — users set their own values, no admin touch.
-3. **Author debug override** via `?profile.deployment=cloud`-style query param, gated by `Tutorial.Author` scope.
+3. **Author/Admin debug override** via `?profile.deployment=cloud`-style query param, gated by `Tutorial.Author` OR `Admin` scope.
 4. **Pilot runbook** with mission-selection criteria + a four-phase rollout checklist.
 5. **Cookbook extension** documenting the override mechanism for authors.
 6. **Strip PR 1's reviewer-mandated TODO** in `loaders.js` once the typed entity replaces the key/value reader.
@@ -51,10 +51,11 @@ Consequence: every condition referencing `profile.*` evaluates as falsy/null, th
               ┌───────────────┴──────────────────┐
               │                                  │
 ┌─────────────┴───────────────┐  ┌───────────────┴──────────────────┐
-│ 2. DeveloperService         │  │ 3. AdminService (read+write)     │
+│ 2. DeveloperService         │  │ 3. AdminService (read-only)      │
 │    action setLearningPrefs  │  │    @readonly entity for support  │
-│    @readonly entity prefs   │  │    + edit via Fiori Elements     │
-│    @requires authenticated  │  │    @requires Admin               │
+│    @readonly entity prefs   │  │    + list view via Fiori         │
+│    @requires authenticated  │  │      Elements (v1)               │
+│                             │  │    @requires Admin               │
 └─────────────┬───────────────┘  └──────────────────────────────────┘
               │
               ▼
@@ -112,6 +113,13 @@ entity UserLearningPreferences : managed {
 > `SELECT.one.from(UserLearningPreferences).where({ user_ID: dbUser.ID })`. The `@assert.range`
 > annotation MUST appear **before** the inline `enum { ... }` block (no colon between annotation
 > and the enum literal) — this is the canonical CAP syntax confirmed via cds-mcp.
+>
+> **Note (DM6 — `@assert.range` scope):** `@assert.range` is kept on the schema as model-level
+> documentation / future-proofing for if the entity is ever exposed for direct OData write. It does
+> NOT fire on programmatic CQL writes from action handlers — the action handler's enum-validation
+> loop (`for (const [field, value] of Object.entries(...)) { if (!PROFILE_VOCAB[field].includes(value)) ... }`)
+> is the actual runtime gate. AdminService is `@readonly`, so the only write path today is the
+> action handler. Hybrid test 1 (§8.2) asserts the JS-layer gate explicitly.
 
 ```cds
 // db/audit-logging.cds (append next to UserMetaData annotation)
@@ -153,7 +161,7 @@ The read entity returns the caller's own row only via a CAP `this.before('READ',
 **AdminService** (`/admin`, `@requires: 'Admin'` service-level):
 
 ```cds
-// srv/admin-service.cds
+// srv/admin-service.cds (append below the service line that already carries @requires: Admin)
 
 @readonly entity LearningPreferences as projection on ims.UserLearningPreferences;
 ```
@@ -165,6 +173,11 @@ Read-only projection inheriting `Admin` from the service gate. AdminService inhe
 > panel is the only edit path. Rationale: the projection key is `user : Association to Users` (FK is
 > not in the writable projection shape), so a Fiori create form has no clean way to pick the target
 > user. Reopen for v2 if support actually needs admin edit. See §11 Out of scope.
+>
+> **ChatConfig audit note (DI5):** ChatConfig keeps its existing `@requires: any` (anonymous-readable)
+> gate; `branchingEnabled` is a non-sensitive platform flag and is safe to expose to anonymous callers
+> (the Vue island reads it on mount before any auth handshake). No auth narrowing is required for the
+> projection extension.
 
 ### 4.3 Constants module (single source of truth for vocab)
 
@@ -239,8 +252,9 @@ Vue "Save preferences" button click (only enabled when dirty)
   │
   ├─ Action handler:
   │     1. Validate each field ∈ PROFILE_VOCAB[field] ∪ {null}
-  │     2. UPSERT INTO UserLearningPreferences (user_ID, deployment, role, cloud)
-  │        VALUES (req.user.id, ...) ON CONFLICT (user_ID) DO UPDATE
+  │     2. SELECT-then-INSERT-or-UPDATE on UserLearningPreferences keyed by user_ID
+  │        (codebase-wide idiom — see developer-service.js#completeStep:122-135;
+  │        zero direct upsert statements exist anywhere under srv/)
   │        — ALL THREE columns are written every time (PUT semantics)
   │     3. Return updated row
   │
@@ -248,7 +262,7 @@ Vue "Save preferences" button click (only enabled when dirty)
         show "Couldn't save" strip and leave Selects on user's choices
 ```
 
-**Cache invalidation:** PR 6 does **not** add a cache-bust hook. `mission-detail.js` and `decide.js` each maintain their own private 5-minute TTL caches keyed on **slug + user-id + the full `userState` fingerprint (which already includes the merged profile)**. After a profile write the user may see up to a 5-minute stale-after-write window before the merged profile takes effect; this is acceptable for v1 (preferences are read-mostly, the engine still returns a sensible recommendation, and the fingerprint includes all three fields so a subsequent author override creates a different cache slot anyway). Per recon, neither cache exports a `bustForUser` / `invalidateForUser` hook — only `__resetCacheForTest`. v2 follow-up could add an explicit invalidator if the stale window proves user-visible (out of scope this PR).
+**Cache invalidation:** PR 6 does **not** add a cache-bust hook. `mission-detail.js` (TTL constant ~L42) and `decide.js` each maintain their own private 5-minute TTL caches keyed on **slug + user-id + the full `userState` fingerprint (which already includes the merged profile)**. After a profile write the user may see up to a 5-minute stale-after-write window before the merged profile takes effect; this is acceptable for v1 (preferences are read-mostly, the engine still returns a sensible recommendation, and the fingerprint includes all three fields so a subsequent author override creates a different cache slot anyway). Per recon, neither cache exports a `bustForUser` / `invalidateForUser` hook — only `__resetCacheForTest`. v2 follow-up could add an explicit invalidator if the stale window proves user-visible (out of scope this PR).
 
 ### 5.3 Override URL shape
 
@@ -272,7 +286,7 @@ Override extraction loops over `PROFILE_FIELDS` reading `req.query['profile.' + 
 | Invalid enum (`deployment='hybrid'`) at action | action handler | 400 with `{field}: must be one of [cloud, onprem]` |
 | Field omitted (vs explicit null) | action handler | **PUT-style**: caller MUST send all three fields. Omitted fields are explicitly cleared to null. The Vue island always sends all three values; programmatic callers that only want to update one field must read the existing row, mutate locally, then send the full payload. |
 | Anonymous caller hits action | XSUAA gate | 401 |
-| Concurrent UPSERT (two browser tabs) | DB | last-write-wins; preferences are read-mostly, not transactional |
+| Concurrent write (two browser tabs) | DB | last-write-wins; preferences are read-mostly, not transactional |
 | Empty-string override (`?profile.deployment=`) | override parser | dropped (treated same as missing key) |
 | First-time-user save (no `Users` row yet) | action handler | **auto-provision Users row** mirroring the `completeStep` pattern at developer-service.js:122-135 (uuid + legacyId + email + firstName + lastName from `req.user.attr`); avoids a hard 404 when a learner saves prefs before completing any tutorial |
 
@@ -311,9 +325,9 @@ Override extraction loops over `PROFILE_FIELDS` reading `req.query['profile.' + 
 
 | File | Action | LoC est |
 |---|---|---|
-| `db/schema.cds` | append entity + add `branchingEnabled : Boolean default false` to `ChatSettings` (verify field is absent before adding) | ~12 |
+| `db/schema.cds` | append entity (verify `branchingEnabled` already exists on `ChatSettings` via `git grep "branchingEnabled" db/` before assuming any add) | ~12 |
 | `db/audit-logging.cds` | annotate (cascade-delete) | ~5 |
-| `srv/developer-service.cds` | append projection + action; **extend `ChatConfig` projection to include `branchingEnabled`** (~1 LoC change to existing `entity ChatConfig as projection on ims.ChatSettings { ID, enabled, bannerText }` → `{ ID, enabled, bannerText, branchingEnabled }` so the Vue island can read the platform-flag state) | ~11 |
+| `srv/developer-service.cds` | append projection + action; **extend `ChatConfig` projection to expose `branchingEnabled`** (already on `ChatSettings` as of PR 1 — `db/schema.cds:460`; ~1 LoC change to existing `entity ChatConfig as projection on ims.ChatSettings { ID, enabled, bannerText }` → `{ ID, enabled, bannerText, branchingEnabled }` so the Vue island can read the platform-flag state) | ~11 |
 | `srv/developer-service.js` | new `setLearningPreferences` handler + before-READ row filter | ~40 |
 | `srv/admin-service.cds` | append projection | ~3 |
 | `app/admin-annotations.cds` | new admin Fiori Elements list view (I6) | ~15 |
@@ -397,33 +411,30 @@ export default class DeveloperService extends cds.ApplicationService {
         dbUser = await SELECT.one.from(dbUsers).where({ uuid: req.user.id });
       }
 
-      // PUT-style UPSERT — all three columns get written every time.
-      // CAP generic handlers do NOT fire on UPSERT, so we hand-set the managed-aspect
-      // modifiedAt/modifiedBy fields explicitly to compensate. createdAt/createdBy are
-      // populated by the managed aspect on first INSERT; on subsequent UPSERTs CAP
-      // preserves them.
-      await UPSERT.into(UserLearningPreferences).entries({
-        user_ID: dbUser.ID,
-        deployment, role, cloud,
-        modifiedAt: req.timestamp,
-        modifiedBy: req.user.id,
-      });
-
-      return await SELECT.one.from(UserLearningPreferences).where({ user_ID: dbUser.ID });
+      // PUT-style write — all three columns are sent every time. Codebase-wide idiom for
+      // user-row mutations is SELECT-then-INSERT-or-UPDATE (see developer-service.js#completeStep
+      // at lines 122-135 for Users auto-provision and #createTaskRecord at lines 167-209). There
+      // are zero direct upsert statements anywhere under srv/ — sticking with this idiom keeps the
+      // managed-aspect handlers (createdAt/createdBy on INSERT, modifiedAt/modifiedBy on UPDATE)
+      // firing correctly and avoids any compensation for skipped @cds.on.update hooks.
+      const existing = await SELECT.one.from(UserLearningPreferences)
+        .where({ user_ID: dbUser.ID });
+      if (existing) {
+        await UPDATE(UserLearningPreferences)
+          .where({ user_ID: dbUser.ID })
+          .set({ deployment, role, cloud });
+      } else {
+        await INSERT.into(UserLearningPreferences).entries({
+          user_ID: dbUser.ID, deployment, role, cloud,
+        });
+      }
+      return SELECT.one.from(UserLearningPreferences).where({ user_ID: dbUser.ID });
     });
   }
 }
 ```
 
 The `this.before('READ', ...)` hook implements the per-row filter described in §4.2 — it runs for the DeveloperService projection only. AdminService inherits its own service-level `@requires: 'Admin'` and intentionally has no row filter. There is **no cache-bust call** in the action handler — the engine's mission-detail.js + decide.js caches expire on their own 5-minute TTL (see §5.2).
-
-> **Why explicit `modifiedAt: req.timestamp` (CI4)?** CAP's generic `@cds.on.update` handlers
-> attached by the `: managed` aspect run on `UPDATE` events, NOT on `UPSERT`. The Fiori Elements
-> admin list view (§7.7) renders `modifiedAt` in its LineItem column, and a `null` or stale
-> `modifiedAt` would degrade the list view's usefulness. The explicit assignment in the action
-> handler compensates for the managed-aspect skip on UPSERT. `createdAt`/`createdBy` need no
-> compensation — the managed aspect populates them on the first INSERT, and CAP's UPSERT preserves
-> them on subsequent writes.
 
 > **Cross-user data-leak guard (CB2):** the CQN builder `req.query.where({ user_ID: dbUser.ID })`
 > AND-conjoins with any pre-existing where clause (e.g. an admin-impersonation scenario where the
@@ -481,6 +492,12 @@ const userState = await buildUserState(user, loaders, { override });
 ```
 
 `extractProfileOverride` returns `null` when the requester lacks `Tutorial.Author`/`Admin` scope or when no valid override values are present, so passing `{ override: null }` is the documented no-op path (see §7.5 — `opts.override?.[f]` short-circuits cleanly on null).
+
+> **Placement note (DI7):** In `mission-detail.js`, place both lines (the `import` + the
+> `extractProfileOverride(req)` + `buildUserState` call) **INSIDE the existing `if (flagOn)` block**
+> so the override is only extracted when the engine is consulted. Outside the flag-gated block, the
+> override is meaningless (the engine is bypassed) and parsing it would just waste cycles + risk
+> leaking the parser's surface area into the non-branching read path.
 
 ### 7.4 `loaders.js` rewrite
 
@@ -605,6 +622,14 @@ export async function buildUserState(user, deps, opts = {}) {
 
 **State machine (`'idle' | 'saving' | 'saved' | 'error'`)** — mirrors `TutorialFeedbackForm.vue` precedent (per recon item 10). On mount: `GET /api/LearningPreferences` (404 / null row → all Selects show `__none__` sentinel) AND `GET /api/ChatConfig` to learn `branchingEnabled` (read from the public projection). Each Select `change` event maps `__none__` back to `null` and updates the local `prefs` ref + flips `dirty = true`. The Save button stays disabled until `dirty === true`. On click: POST all three values; show "Saved" strip and reset `dirty = false` after 3s auto-dismiss; on failure, show "Couldn't save" strip and focus the first Select via its `ref` (a11y per I15). The Selects keep the user's chosen values regardless of save outcome — there is no auto-revert.
 
+**`__none__` ↔ null mapping (DN1):**
+
+```ts
+// in onChange(field, $event):
+const raw = $event.detail.selectedOption.value;
+prefs.value[field] = raw === '__none__' ? null : raw;
+```
+
 **Required UI5 imports in `main.ts`:**
 
 ```ts
@@ -659,7 +684,7 @@ Shape mirrors the canonical Events template in `app/admin-annotations.cds` lines
 `docs/authors/pilot-runbook.md` — four-phase checklist:
 
 - **Phase 1 — Pre-pilot:** mission selection criteria, vocab alignment, author readiness.
-- **Phase 2: QA pilot** *(heading slug `phase-2-qa-pilot`)*: author writes branches, tests via QA channel, exercises all four debug paths (cloud / onprem / no-override-anonymous / no-override-completed-slug). Deeplinks to the cookbook's [`#debug-override`](../authors/branching-cookbook.md#debug-override) anchor for the override syntax. **Stale-after-write workaround:** if the author has just edited their own preferences and wants to bypass the 5-minute TTL, combine the override with `?nocache=1` (e.g. `?profile.deployment=cloud&nocache=1`) — `decideHandler` and `missionDetailHandler` short-circuit the per-callsite cache when this flag is present.
+- **Phase 2: QA pilot** *(heading slug `phase-2-qa-pilot`)*: author writes branches, tests via QA channel, exercises all four debug paths (cloud / onprem / no-override-anonymous / no-override-completed-slug). Deeplinks to the cookbook's [`#debug-override`](../authors/branching-cookbook.md#debug-override) anchor for the override syntax. Joule narration: confirmed to ignore overrides; chat from the unmodified URL (see cookbook). **Stale-after-write workaround:** if the author has just edited their own preferences and wants to bypass the 5-minute TTL, combine the override with `?nocache=1` (e.g. `?profile.deployment=cloud&nocache=1`) — `decideHandler` and `missionDetailHandler` short-circuit the per-callsite cache when this flag is present.
 - **Phase 3 — Production rollout:** flip `ChatSettings.branchingEnabled` (DEV first, then prod), monitor `/admin/analytics/AnalyticsBranchPerformance`, check Branch Performance section in Missions ObjectPage, watch for `branch-staleness` notices.
 - **Phase 4 — Iterate / rollback:** thresholds for collapse / tune / investigate; rollback path (`branchingEnabled = false`).
 
@@ -679,18 +704,19 @@ Sidebar placement: added to the existing **Branching paths** group in `docs/.vit
 | Unit | `srv/lib/branch/__tests__/profile-override.test.js` | 6 |
 | Unit | `srv/lib/branch/__tests__/loaders.test.js` (extend) | +2 |
 | Unit | `srv/lib/branch/__tests__/user-state.test.js` (extend) | +3 |
-| Unit | `scripts/__tests__/profile-fields-sync.test.js` | 1 |
+| Unit | `scripts/__tests__/profile-fields-sync.test.ts` | 1 |
+| Unit | `scripts/__tests__/anonymization-cascade-pr6.test.ts` | 1 |
 | Vue island | `hugo-apps/src/me/__tests__/LearningPreferences.test.ts` | 5 |
 | Hybrid (HANA, opt-in) | `test/hybrid/learning-preferences.test.js` | 3 |
 | Smoke (deployed) | `test/smoke/learning-preferences.smoke.test.js` | 2 |
 
-**28 new test cases total.** Existing PR 1–5 tests pass unchanged.
+**29 new test cases total.** Existing PR 1–5 tests pass unchanged.
 
 ### 8.2 Per-layer coverage
 
 **Unit — `learning-preferences.test.js` (action handler):**
 
-1. `setLearningPreferences({deployment: 'cloud', role: null, cloud: 'btp'})` — UPSERTs row; subsequent SELECT returns `{deployment: 'cloud', role: null, cloud: 'btp'}`
+1. `setLearningPreferences({deployment: 'cloud', role: null, cloud: 'btp'})` — first call INSERTs row, second call with different values UPDATEs in place (SELECT-then-INSERT-or-UPDATE); subsequent SELECT returns `{deployment: 'cloud', role: null, cloud: 'btp'}`
 2. **PUT-style clearing:** Re-call with `{deployment: 'onprem', role: null, cloud: null}` — clears prior `role` and `cloud` while setting `deployment: 'onprem'`. Confirms PUT semantics: omitted = cleared, not preserved.
 3. Invalid enum (`deployment: 'hybrid'`) — 400 with field-level error message
 4. Anonymous caller — 401 (XSUAA gate)
@@ -715,11 +741,15 @@ Sidebar placement: added to the existing **Branching paths** group in `docs/.vit
 
 1. `buildUserState(user, deps, {override: {deployment: 'cloud'}})` merges override over real `{deployment: 'onprem'}` → final `deployment: 'cloud'`
 2. Override-merge respects null fields: `override = {deployment: 'cloud'}`, real = `{deployment: 'onprem', role: 'developer'}` → final `{deployment: 'cloud', role: 'developer', cloud: null}`
-3. **Fingerprint-cache isolation (CI7):** with `deps.loadProfile` returning `{deployment: 'onprem', role: null, cloud: null}`, assert `fingerprintUserState(buildUserState(u, deps, {override: {deployment: 'cloud'}})) !== fingerprintUserState(buildUserState(u, deps))` — proves override-mode traffic gets a distinct cache slot from the matching learner-mode call (the property §3 architecture relies on for cache safety).
+3. **Fingerprint-cache isolation (CI7):** with `deps.loadProfile` returning `{deployment: 'onprem', role: null, cloud: null}`, assert `fingerprintUserState(await buildUserState(u, deps, {override: {deployment: 'cloud'}})) !== fingerprintUserState(await buildUserState(u, deps))` — proves override-mode traffic gets a distinct cache slot from the matching learner-mode call (the property §3 architecture relies on for cache safety).
 
-**Unit — `profile-fields-sync.test.js`:**
+**Unit — `profile-fields-sync.test.ts`:**
 
 1. **Schema/vocab sync:** parse `db/schema.cds` via CDS CSN (`cds.compile.to.csn(...)`), extract the enum values for `UserLearningPreferences.deployment`, `.role`, `.cloud`, and assert they match `PROFILE_VOCAB` from `srv/lib/branch/profile-fields.js` exactly. Catches drift if a future PR changes the schema enum but forgets the constants module (or vice versa). Uses the same compiled-CSN technique as PR 1's existing CSN-shape tests.
+
+**Unit — `anonymization-cascade-pr6.test.ts`:**
+
+1. **Cascade-walker pickup (DI3, ~5 LoC):** import the cascade-walker module from `srv/lib/anonymization-cascade.js`, call `cds.load` on `db/schema.cds`, run the walker over the loaded model, and assert that `UserLearningPreferences` appears in the cascade plan with `cascade: 'delete'`. Guards the §4.1 `@PersonalData` annotation against drift; runs in default CI without the hybrid gate (no DB writes — pure model walk).
 
 **Vue island — `LearningPreferences.test.ts`:**
 
@@ -732,13 +762,13 @@ Sidebar placement: added to the existing **Branching paths** group in `docs/.vit
 **Hybrid — `learning-preferences.test.js`** (gated by `ALLOW_HYBRID_WRITES=true` + `isSafeForWrites()`):
 
 1. Real HANA: invalid enum value rejected at the **JS validation layer** in the action handler (CAP `@assert.range` is OData-protocol-only and does **not** fire on programmatic CQL writes from action handlers; the action handler's explicit `for (const [field, value] of Object.entries(...)) { if (!PROFILE_VOCAB[field].includes(value)) ... }` loop is the actual gate). The hybrid test calls the action endpoint with `deployment: 'hybrid'` and asserts a 400 surface.
-2. Real HANA: schema + UPSERT shape — confirms the entity's PK is the single composition column (`USER_ID`), the FK from `USER_LEARNING_PREFERENCES.USER_ID` to `USERS.ID` enforces referential integrity, a second INSERT for the same user fails with PK-violation (driving the UPSERT path), and a UPSERT with the same payload twice yields the same row (idempotent — row count unchanged)
+2. Real HANA: schema + SELECT-then-INSERT-or-UPDATE shape — confirms the entity's PK is the single composition column (`USER_ID`), the FK from `USER_LEARNING_PREFERENCES.USER_ID` to `USERS.ID` enforces referential integrity, a second naïve INSERT for the same user fails with PK-violation (driving the SELECT-then-INSERT-or-UPDATE branch in the handler), and calling `setLearningPreferences` with the same payload twice yields the same row updated in place — row count is unchanged (idempotent: same payload → existing row UPDATEd, no duplicate INSERT)
 3. Real HANA: `@PersonalData cascade: 'delete'` removes the row when the parent Users row is deleted (anonymization integration)
 
 **Smoke — `learning-preferences.smoke.test.js`** (HTTP against deployed):
 
 1. `GET /api/LearningPreferences` against deployed srv URL **without** auth → returns 401 (unauthenticated read path is gated; this is the only smoke run in CI)
-2. `GET /api/ChatConfig` against deployed srv URL → returns 200 with `{ enabled, bannerText, branchingEnabled }` shape (confirms the public projection used by the Vue island for the branching-disabled strip is reachable unauthenticated and that the `branchingEnabled` field is actually projected — guards against the projection accidentally being narrowed in a future PR)
+2. `GET /api/ChatConfig` against deployed srv URL → returns 200 and the response includes `branchingEnabled` field at top level alongside `enabled` and `bannerText` (confirms the public projection used by the Vue island for the branching-disabled strip is reachable unauthenticated and that the `branchingEnabled` field is actually projected — guards against the projection accidentally being narrowed in a future PR; assertion is shape-tolerant of OData singleton wrappers)
 
 **Manual override smoke (runbook, not CI):** the `?profile.deployment=cloud` override path requires a `Tutorial.Author` or `Admin` JWT and is exercised manually via the §8.4 checklist + the pilot runbook Phase 2. We do **not** add a CI smoke for the authenticated override path because that would require a new GH secret (per §10 DoD: "no new role-collection or GH secret added").
 
@@ -771,15 +801,15 @@ Sidebar placement: added to the existing **Branching paths** group in `docs/.vit
 | Schema migration on prod | Low | Net-new entity; CAP/HANA `cds deploy` adds the table cleanly; no data migration |
 | Enum mismatch between schema / override-parser allowlist / Vue Select options | Medium | Single source of truth via `srv/lib/branch/profile-fields.js`; **`profile-fields-sync.test.js`** asserts allowlist matches the compiled CSN of `db/schema.cds` (B7) |
 | Cookie/JWT scope on `/me/` returning empty | Low | `@requires: 'authenticated-user'` matches existing `MyCompletions` gate |
-| Vue island bundle size | Low | New UI5 components (`<ui5-select>`, `<ui5-option>`, `<ui5-message-strip>`, `<ui5-button>`, `<ui5-label>`) add ~15-25 kB gzip to `me.js` (~30-40 kB total chunk, well under 100 kB rule-of-thumb) |
-| Concurrent UPSERT race (two browser tabs) | Low | Last-write-wins; preferences are read-mostly; PUT-style semantics make divergence visible (each tab sees the other's clears) |
+| Vue island bundle size | Low | New UI5 components (`<ui5-select>`, `<ui5-option>`, `<ui5-message-strip>`, `<ui5-button>`, `<ui5-label>`) add ~20-30 kB gzip to `me.js` (~35-45 kB gzip total chunk, well under 100 kB rule-of-thumb) |
+| Concurrent write race (two browser tabs) | Low | Last-write-wins; preferences are read-mostly; PUT-style semantics make divergence visible (each tab sees the other's clears) |
 | Anonymization cascade misses the new entity | Low | The cascade-walker is **annotation-driven** (`srv/lib/anonymization-cascade.js` discovers every `@PersonalData` entity via a CSN walk over `Object.entries(modelDefinitions)` — there is **NO hardcoded allowlist**). The `@PersonalData` block in §4.1 carries `EntitySemantics: 'DataSubjectDetails'` and `cascade: 'delete'`, plus `user @PersonalData.FieldSemantics: 'DataSubjectID'`, so the entity is picked up automatically. Hybrid test 3 verifies cascade-delete in real HANA. |
 | `branchingEnabled = false` + user sets preferences | Low | Documented in §6.4; Info `<ui5-message-strip>` shown to user (I7); preferences stored regardless; engine consults only when branching code paths reached |
 | Joule narration ignores override (B8) | Low | Documented in §6.2; cookbook callout. Plumbing the override through `chat-orchestrator` deferred to v2 (§11) |
 
 ## 10. Definition of Done
 
-- [ ] All 28 tests pass (18 unit including profile-fields-sync, 5 Vue, 3 hybrid, 2 smoke; hybrid optional via `ALLOW_HYBRID_WRITES`)
+- [ ] All 29 tests pass (19 unit including profile-fields-sync + anonymization-cascade-pr6, 5 Vue, 3 hybrid, 2 smoke; hybrid optional via `ALLOW_HYBRID_WRITES`)
 - [ ] `cds compile srv/developer-service.cds srv/admin-service.cds --to sql` clean
 - [ ] Vue island builds clean via `npm run build:apps`
 - [ ] `npm run docs:build` passes (sidebar guard accepts the new runbook entry under "Branching paths" → "Pilot runbook")
@@ -788,7 +818,7 @@ Sidebar placement: added to the existing **Branching paths** group in `docs/.vit
 - [ ] `@PersonalData` annotation present on `UserLearningPreferences` with `cascade: 'delete'`
 - [ ] PR 1's reviewer-mandated TODO comment stripped from `loaders.js`
 - [ ] **No new role-collection or GH secret added** — override reuses `Tutorial.Author` OR `Admin` scope (pivot 2); user-side write reuses standard `authenticated-user` gate (M6)
-- [ ] **`profile-fields-sync.test.js` passes** — schema enum values match `PROFILE_VOCAB` constants module (B7)
+- [ ] **`profile-fields-sync.test.ts` passes** — schema enum values match `PROFILE_VOCAB` constants module (B7)
 - [ ] **Cache-bust hook NOT added** — write path relies on the existing 5-minute TTL on `mission-detail.js` + `decide.js` caches (B1; documented in §5.2)
 - [ ] PR opened against `main`; CI green; manual checklist acknowledged by Tom
 
@@ -803,5 +833,5 @@ Sidebar placement: added to the existing **Branching paths** group in `docs/.vit
 - Multi-field cookbook beyond the existing three patterns + the override section.
 - **Plumbing the `?profile.*` override into the Joule narration tool** — the `chat-orchestrator` uses a CAP `req`, not the express request, so the override does not flow through. Authors must clear the override and chat from the unmodified URL to test narration. v2 candidate (B8).
 - **Per-user cache invalidator (`bustForUser` / `invalidateForUser`)** — write path relies on the existing 5-minute TTL. v2 candidate if the stale-after-write window proves user-visible (B1).
-- **Optimistic concurrency / `@odata.etag` on UPSERT** — no etag header, no version check; last-write-wins is the documented contract for v1 (preferences are read-mostly, two-tab edit divergence is bounded by PUT-style clearing semantics).
+- **Optimistic concurrency / `@odata.etag` on writes** — no etag header, no version check; last-write-wins is the documented contract for v1 (preferences are read-mostly, two-tab edit divergence is bounded by PUT-style clearing semantics).
 - **Admin edit-on-behalf via Fiori Elements** — the AdminService projection is `@readonly` in v1; admins read but do NOT edit user preferences. The user-facing `/me/` panel is the only edit path. v2 candidate if support cases actually require it (CB5).
