@@ -24,9 +24,9 @@ on:
         default: 'manual'
         type: string
       ai-author-enabled:
-        description: 'Enable AI-quiz generation for this run (#208 spike). Requires AI_AUTHOR_AICORE_SERVICE_KEY + CHAT_DEPLOYMENT_ID secrets. See docs/developers/operations/ai-author-ci-setup.md.'
+        description: 'Enable AI-quiz generation for this run (#208 spike, graduated #275 + #311). Default true post-graduation; flip to false only to bypass during incident triage. Requires AI_AUTHOR_AICORE_SERVICE_KEY + CHAT_DEPLOYMENT_ID secrets. See docs/developers/operations/ai-author-ci-setup.md.'
         required: false
-        default: false
+        default: true
         type: boolean
       ai-author-build-cap:
         description: 'Hard cap on AI-quiz LLM calls per build (overrides default 200). Use 10000 for first-time bulk seed.'
@@ -144,11 +144,15 @@ jobs:
           CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
           CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
           TUTORIAL_SLUG: ${{ inputs.slug }}
-          # [#208] AI-quiz authoring (default OFF). When ai-author-enabled is
-          # true, fetch-tutorials.ts wakes up the AI generator on tutorials
+          # [#208/#275] AI-quiz authoring. Default true post-graduation
+          # (#311 flipped the workflow_dispatch default). When the flag is
+          # set, fetch-tutorials.ts wakes up the AI generator on tutorials
           # carrying [AUTOAUTHOR_*] directives in their rules.vr. The
           # VCAP_SERVICES env (set by the prior step) carries the aicore
           # binding the orchestration SDK needs.
+          # NOTE: repository_dispatch events (admin-write triggers from PR
+          # #220) deliberately fall through to the empty-string fallback —
+          # admin debounce rebuilds shouldn't burn LLM dollars per tweak.
           AI_AUTHOR_ENABLED: ${{ inputs.ai-author-enabled == true && 'true' || '' }}
           AI_AUTHOR_BUILD_CAP: ${{ inputs.ai-author-build-cap }}
           CHAT_DEPLOYMENT_ID: ${{ secrets.CHAT_DEPLOYMENT_ID }}

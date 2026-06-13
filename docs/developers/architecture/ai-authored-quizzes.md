@@ -164,6 +164,53 @@ The MCQ-specific threshold is higher than text because MCQ has lower
 inherent variance — a poor MCQ generator stands out faster than a poor
 free-text generator, so the bar is higher to clear.
 
+## Graduation status
+
+**Graduated 2026-06-13 via [#275](https://github.com/sap-tutorials/tutorials-ims/issues/275).**
+Aggregate would-ship rate: **90.0%** overall (61/68), **93%** MCQ, **85%**
+text — clears all three sub-thresholds. Decision rationale + per-step
+breakdown in the [#275 close-out comment](https://github.com/sap-tutorials/tutorials-ims/issues/275).
+
+Three follow-ups graduated alongside the eval, all merged 2026-06-13:
+
+- **[#311](https://github.com/sap-tutorials/tutorials-ims/issues/311)**:
+  generator-side empty-step guard. Catches the abap-create-project step-5
+  failure mode (empty `### Test yourself` section + `[AUTOAUTHOR_*]` → LLM
+  confabulates off-topic questions). Steps with fewer than 50 substantive
+  words skip generation; the build summary line gained an
+  `<n> empty-step skipped` token.
+- **[#312](https://github.com/sap-tutorials/tutorials-ims/issues/312)**:
+  2-week soft-rollout window. The `AI_AUTHOR_ENABLED` flag stays in code
+  during the soak — fast kill-switch if a model regression sneaks in.
+  After clean signal across 2 weeks of CI rebuilds, a follow-up PR will
+  remove the flag check entirely.
+- **[#313](https://github.com/sap-tutorials/tutorials-ims/issues/313)**:
+  CI wiring. Both `rebuild-content.yml` and `rebuild-content-qa.yml` now
+  default `ai-author-enabled=true` for `workflow_dispatch` triggers.
+  `repository_dispatch` (admin-write debounce rebuilds from PR #220) is
+  deliberately left at the empty-string fallback — debounce rebuilds
+  shouldn't burn LLM dollars per content tweak.
+
+## CI integration
+
+For the operational setup (secrets, service-key rotation, VCAP wrapping)
+see [docs/developers/operations/ai-author-ci-setup.md](../operations/ai-author-ci-setup.md).
+That doc covers:
+
+- Required GitHub secrets: `AI_AUTHOR_AICORE_SERVICE_KEY` (the
+  `tutorials-aicore` service key as JSON) + `CHAT_DEPLOYMENT_ID`.
+- VCAP_SERVICES wrapping shape — the `@sap-ai-sdk/orchestration` SDK
+  reads `aicore[0].credentials` from VCAP, which the workflow constructs
+  from the secret JSON.
+- The QA channel mirrors the prod channel's setup; both share the same
+  service-key + deployment-id pair.
+
+Telemetry per build is the `[ai-author] expanded directives across all
+tutorials: ...` summary line emitted at end-of-run from
+[scripts/fetch-tutorials.ts](../../../scripts/fetch-tutorials.ts). The
+preflight smoke ([scripts/preflight-ai-quiz-smoke.ts](../../../scripts/preflight-ai-quiz-smoke.ts))
+parses this line via the `no-upstream-errors` invariant.
+
 ## Pre-go-live smoke runbook
 
 The pre-go-live smoke (`npm run preflight:ai-quiz-smoke`) is a one-time gate run before the AI-quiz spike graduates (#278). It samples a fraction of the catalog and runs the full pipeline against each sampled tutorial, checking five invariants programmatically.

@@ -17,6 +17,7 @@ export interface ExpandStats {
   calls: number    // cache miss → LLM call
   hits: number     // cache hit
   errors: number   // generator returned errorReason; placeholder dropped
+  skips?: number   // [#311] step skipped: body below MIN_SUBSTANTIVE_WORDS
 }
 
 export interface AllDirective {
@@ -30,6 +31,56 @@ interface PlaceholderQuestion extends ValidationQuestion {
 }
 
 const DEFAULT_HARD_CAP = parseInt(process.env.AI_AUTHOR_BUILD_CAP ?? '200', 10)
+
+/**
+ * [#311] Minimum substantive word count for a step body to be eligible for
+ * AI-quiz generation. Steps below this threshold are skipped with a warning.
+ *
+ * Rationale: when a step body is effectively empty (e.g. an unfilled
+ * `### Test yourself` placeholder, or a step that's just a link to another
+ * tutorial), the LLM has nothing to ground against and produces plausible-but-
+ * off-topic questions — the canonical failure mode caught in the #275 pilot
+ * (abap-create-project step 5 generated SAP BTP cockpit questions for a
+ * tutorial about installing Eclipse-based ABAP Development Tools).
+ *
+ * The fix is at the data layer, not the prompt. No amount of "don't
+ * hallucinate" nudging helps when there's no content to anchor the
+ * generation to.
+ */
+const MIN_SUBSTANTIVE_WORDS = 50
+
+/**
+ * [#311] Strip non-prose noise from a step body and count words.
+ *
+ * Excluded from the count:
+ *   - Fenced code blocks (\`\`\`...\`\`\`) — code mass != tutorial intent for
+ *     a question generator.
+ *   - Author directives ([VALIDATE_N], [AUTOAUTHOR_N], [CODECHECK_N], etc.)
+ *     — these are sentinels, not content.
+ *   - Lines that are nothing but a single markdown link or list-item link
+ *     (e.g. "- [Tutorial: Foo](foo)") — common pattern in placeholder
+ *     "Test yourself" sections.
+ *
+ * Exported for unit-test reuse.
+ */
+export function countSubstantiveWords(stepBody: string): number {
+  if (!stepBody) return 0
+  const stripped = stepBody
+    .replace(/```[\s\S]*?```/g, '')                       // fenced code blocks
+    .replace(/\[[A-Z_]+(?:_\d+)?\]/g, '')                  // author directives
+    .replace(/^\s*[-*]\s*\[[^\]]+\]\([^)]+\)\s*$/gm, '')   // bullet-of-link lines
+    .trim()
+  return stripped.split(/\s+/).filter(Boolean).length
+}
+
+/**
+ * [#311] True when a step has enough substantive content for the LLM to
+ * ground its question generation against. See countSubstantiveWords for the
+ * extraction rules and MIN_SUBSTANTIVE_WORDS for the threshold.
+ */
+export function isStepSubstantive(stepBody: string): boolean {
+  return countSubstantiveWords(stepBody) >= MIN_SUBSTANTIVE_WORDS
+}
 
 /**
  * Walk the parsedMap for sentinel placeholders + apply the all-directive.
@@ -46,6 +97,7 @@ const DEFAULT_HARD_CAP = parseInt(process.env.AI_AUTHOR_BUILD_CAP ?? '200', 10)
  *   - onCallStats   — tracks calls/hits/errors across the build (caller persists)
  *   - hardCap       — defaults to AI_AUTHOR_BUILD_CAP env var or 200
  *   - allDirective  — optional tutorial-wide directive from parseRulesVrEnriched
+ *   - minSubstantiveWords — test-only: override MIN_SUBSTANTIVE_WORDS guard threshold
  *   - hashKeyOverride — test-only: override hashKey() for deterministic cache lookups
  */
 export async function expandAiAuthoredQuestions(
@@ -62,10 +114,15 @@ export async function expandAiAuthoredQuestions(
     // regex-substring without ###Question). Phase 3 must NOT fire AI on top
     // of these regardless of whether parsedMap has an entry.
     handAuthoredSteps?: Set<number>
+    // [#311] Override the minimum-substantive-words guard threshold. Defaults
+    // to MIN_SUBSTANTIVE_WORDS (50). Set to 0 in unit tests that don't
+    // care about the empty-step guard.
+    minSubstantiveWords?: number
     hashKeyOverride?: (input: any) => string
   },
 ): Promise<void> {
   const hardCap = deps.hardCap ?? DEFAULT_HARD_CAP
+  const minWords = deps.minSubstantiveWords ?? MIN_SUBSTANTIVE_WORDS
   const hk = deps.hashKeyOverride ?? hashKey
 
   // 1. Apply allDirective: materialize placeholders for steps that don't
@@ -101,6 +158,24 @@ export async function expandAiAuthoredQuestions(
     }
 
     const stepBody = stepBodies.get(stepNum) ?? ''
+
+    // [#311] Empty-step guard. Catch the abap-create-project step-5
+    // failure mode: a step with no substantive body + an [AUTOAUTHOR_*]
+    // directive made the LLM confabulate questions about completely
+    // unrelated topics. Skip the LLM call entirely and clear any stale
+    // cache entry so a future re-seed against substantive content
+    // doesn't surface ghosts.
+    const wordCount = countSubstantiveWords(stepBody)
+    if (wordCount < minWords) {
+      console.warn(
+        `[ai-author] skipping empty step ${stepNum} — body has ${wordCount} substantive words, threshold is ${minWords}`,
+      )
+      deps.onCallStats.skips = (deps.onCallStats.skips ?? 0) + 1
+      parsedMap.set(stepNum, [])
+      delete deps.cache.entries[String(stepNum)]
+      continue
+    }
+
     const directive = `[AUTOAUTHOR_${stepNum}${placeholder.__directiveTypes !== 'mcq-and-text' ? ':' + (placeholder.__directiveTypes === 'mcq-only' ? 'mcq' : 'text') : ''}]`
     const types = placeholder.__directiveTypes ?? 'mcq-and-text'
 
