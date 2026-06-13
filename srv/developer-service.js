@@ -3,6 +3,7 @@ import { calculateTutorialProgress } from './lib/status-calculator.js';
 import { getNextLegacyId } from './lib/legacy-id.js';
 import { hashIp } from './lib/feedback-salt.js';
 import { getMyCompletedTutorials } from './lib/user-progress.js';
+import { PROFILE_VOCAB } from './lib/branch/profile-fields.js';
 
 const RATE_LIMIT = new Map();
 const RATE_WINDOW_MS = 60 * 60 * 1000;
@@ -39,7 +40,7 @@ export default class DeveloperService extends cds.ApplicationService {
     const { Tutorials: dbTutorials, Steps: dbSteps, TaskRecords: dbTaskRecords,
             Users: dbUsers, Events: dbEvents, Missions: dbMissions,
             CompletionPaths: dbPaths, CompletionPathItems: dbPathItems,
-            Checkpoints: dbCheckpoints } = cds.entities('com.sap.developers.ims');
+            Checkpoints: dbCheckpoints, UserLearningPreferences } = cds.entities('com.sap.developers.ims');
 
     // Auto-assign legacyId on TaskRecord creation
     this.before('CREATE', 'TaskRecords', async (req) => {
@@ -553,6 +554,75 @@ export default class DeveloperService extends cds.ApplicationService {
       });
 
       return { submissionId: id };
+    });
+
+    // PR 6 — Self-service row filter: scope every authenticated READ on
+    // LearningPreferences to the caller's own row only. The XSUAA gate
+    // (`@requires: 'authenticated-user'` on the projection) already guarantees
+    // an authenticated user — no defensive 401 needed here.
+    // CB2 fix: use the CQN builder (req.query.where(...)) — it AND-conjoins
+    // safely with any pre-existing where clause. Hand-built CQN-token splices
+    // get AND-precedence wrong on existing where clauses and are a security
+    // boundary; do NOT revert.
+    this.before('READ', 'LearningPreferences', async (req) => {
+      const dbUser = await SELECT.one.from(dbUsers).columns('ID').where({ uuid: req.user.id });
+      if (!dbUser?.ID) {
+        // No DB user record yet — short-circuit with empty result set
+        // (cleaner CQN-builder convention than splicing a `1 = 0` predicate).
+        req.results = [];
+        return;
+      }
+      req.query.where({ user_ID: dbUser.ID });
+    });
+
+    // PR 6 — Self-service write surface. PUT-style: all three fields are
+    // written every time; values omitted by the caller default to null and
+    // explicitly clear the slot. SELECT-then-INSERT-or-UPDATE matches the
+    // codebase-wide idiom (zero direct UPSERT statements anywhere under srv/).
+    // Spec: §4.2, §7.2
+    this.on('setLearningPreferences', async (req) => {
+      const { deployment = null, role = null, cloud = null } = req.data;
+
+      // Validate each field: null OR a value from the vocab. JS validation
+      // layer is the actual runtime gate — CAP's @assert.range fires only at
+      // the OData protocol layer, not on programmatic CQL writes from action
+      // handlers, so the explicit loop here IS the security boundary.
+      for (const [field, value] of Object.entries({ deployment, role, cloud })) {
+        if (value === null) continue;
+        if (!PROFILE_VOCAB[field].includes(value)) {
+          return req.error(400, `${field}: must be one of [${PROFILE_VOCAB[field].join(', ')}]`);
+        }
+      }
+
+      // Auto-provision the Users row for first-time savers (mirrors completeStep
+      // pattern at developer-service.js:122-135). A learner who lands on /me/
+      // before completing any tutorial otherwise hits a hard 404 here.
+      let dbUser = await SELECT.one.from(dbUsers).where({ uuid: req.user.id });
+      if (!dbUser) {
+        const newUser = {
+          uuid: req.user.id,
+          legacyId: await getNextLegacyId('Users', db),
+          email: req.user.attr?.email || '',
+          firstName: req.user.attr?.given_name || '',
+          lastName: req.user.attr?.family_name || '',
+        };
+        await INSERT.into(dbUsers).entries(newUser);
+        dbUser = await SELECT.one.from(dbUsers).where({ uuid: req.user.id });
+      }
+
+      // PUT-style write — SELECT-then-INSERT-or-UPDATE (codebase-wide idiom).
+      const existing = await SELECT.one.from(UserLearningPreferences)
+        .where({ user_ID: dbUser.ID });
+      if (existing) {
+        await UPDATE(UserLearningPreferences)
+          .where({ user_ID: dbUser.ID })
+          .set({ deployment, role, cloud });
+      } else {
+        await INSERT.into(UserLearningPreferences).entries({
+          user_ID: dbUser.ID, deployment, role, cloud,
+        });
+      }
+      return SELECT.one.from(UserLearningPreferences).where({ user_ID: dbUser.ID });
     });
 
     await super.init();
