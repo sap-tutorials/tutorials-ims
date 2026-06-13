@@ -62,6 +62,7 @@ export default defineConfig({
 
   themeConfig: {
     nav: [
+      { text: '🚀 Launch',  link: '/launch' },
       { text: 'End Users',  link: '/end-users/' },
       { text: 'Authors',    link: '/authors/' },
       { text: 'Developers', link: '/developers/' },

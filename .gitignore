@@ -20,6 +20,7 @@ hugo/static-qa/
 .env
 .playwright-mcp/
 *.png
+!docs/public/launch/*.png
 hugo/static/js/*
 !hugo/static/js/joule.js
 !hugo/static/js/joule-render.js
