@@ -71,3 +71,41 @@ describe('fingerprintUserState', () => {
     expect(fp).toMatch(/^[a-f0-9]{64}$/);
   });
 });
+
+describe('buildUserState — override merge (PR 6)', () => {
+  function makeFakeDeps(profile) {
+    return {
+      loadCompletedSlugs: async () => [],
+      loadCompletedMissionSlugs: async () => [],
+      loadProfile: async () => profile,
+    };
+  }
+
+  it('merges override OVER real profile (per-field override wins)', async () => {
+    const { buildUserState } = await import('../../../srv/lib/branch/user-state.js');
+    const state = await buildUserState(
+      { id: 'u' },
+      makeFakeDeps({ deployment: 'onprem', role: null, cloud: null }),
+      { override: { deployment: 'cloud' } }
+    );
+    expect(state.profile).toEqual({ deployment: 'cloud', role: null, cloud: null });
+  });
+
+  it('respects null fields in override merge — partial override + real profile preserved', async () => {
+    const { buildUserState } = await import('../../../srv/lib/branch/user-state.js');
+    const state = await buildUserState(
+      { id: 'u' },
+      makeFakeDeps({ deployment: 'onprem', role: 'developer', cloud: null }),
+      { override: { deployment: 'cloud' } }
+    );
+    expect(state.profile).toEqual({ deployment: 'cloud', role: 'developer', cloud: null });
+  });
+
+  it('fingerprint-cache isolation: override-mode and learner-mode produce distinct fingerprints', async () => {
+    const { buildUserState, fingerprintUserState } = await import('../../../srv/lib/branch/user-state.js');
+    const deps = makeFakeDeps({ deployment: 'onprem', role: null, cloud: null });
+    const learner = await buildUserState({ id: 'u' }, deps);
+    const override = await buildUserState({ id: 'u' }, deps, { override: { deployment: 'cloud' } });
+    expect(fingerprintUserState(override)).not.toBe(fingerprintUserState(learner));
+  });
+});

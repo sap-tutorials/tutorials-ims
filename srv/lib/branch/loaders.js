@@ -37,25 +37,18 @@ export function makeBranchLoaders() {
 
     async loadProfile(user) {
       if (!user?.id || user.id === 'anonymous') return null;
-      // PER REVIEWER ADDENDUM C: UserMetaData is key/value (![key]/value), so a typed
-      // SELECT('deployment','role','cloud') will fail. Until PR 6 introduces the proper
-      // UserLearningPreferences entity, loadProfile always returns null. The try/catch
-      // protects against any future schema evolution mid-rollout.
       try {
-        const { Users, UserMetaData } = cds.entities('com.sap.developers.ims');
+        // PR 6: typed read against UserLearningPreferences (replaces PR 1's
+        // key/value placeholder against UserMetaData). Defensive try/catch +
+        // LOG.warn + return-null shape preserved so a mid-rollout deploy that
+        // hasn't yet run `cds deploy` for the new entity continues to serve
+        // the engine with a null profile rather than crashing the read path.
+        const { Users, UserLearningPreferences } = cds.entities('com.sap.developers.ims');
         const dbUser = await SELECT.one.from(Users).columns('ID').where({ uuid: user.id });
         if (!dbUser?.ID) return null;
-        // Read all key/value rows for the user; flatten into a profile-shaped object
-        // ONLY for fixed-vocabulary keys. PR 6 replaces this with a proper entity.
-        const rows = await SELECT.from(UserMetaData).where({ user_ID: dbUser.ID });
-        if (!rows?.length) return null;
-        const ALLOWED_KEYS = new Set(['deployment', 'role', 'cloud']);
-        const profile = {};
-        for (const r of rows) {
-          const k = r['key'] ?? r.key;
-          if (k && ALLOWED_KEYS.has(k)) profile[k] = r.value || null;
-        }
-        return Object.keys(profile).length ? profile : null;
+        const row = await SELECT.one.from(UserLearningPreferences)
+          .where({ user_ID: dbUser.ID });
+        return row ? { deployment: row.deployment, role: row.role, cloud: row.cloud } : null;
       } catch (err) {
         LOG.warn(`loadProfile: ${err.message} — degrading to null profile`);
         return null;

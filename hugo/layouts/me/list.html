@@ -1,8 +1,9 @@
 {{ define "main" }}
-{{/* U17 profile timeline + recent activity. QA preview strips this — read-only
-     preview has no per-user progress data. Also excluded by hugo.qa.toml ignoreFiles. */}}
+{{/* U17 + PR 6 — both panels gated; QA preview omits per-user data.
+     Also excluded by hugo.qa.toml ignoreFiles. */}}
 {{ if not site.Params.qa }}
 <div id="me-completions"></div>
+<div id="me-learning-preferences"></div>
 <script type="module" src="/js/me.js?v={{ now.Unix }}"></script>
 {{ end }}
 {{ end }}

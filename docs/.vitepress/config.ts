@@ -93,7 +93,8 @@ export default defineConfig({
           { text: 'Branched missions',  link: '/authors/branched-missions' },
           { text: 'Branched tutorials', link: '/authors/branched-tutorials' },
           { text: 'Branching cookbook', link: '/authors/branching-cookbook' },
-          { text: 'Reading branch telemetry', link: '/authors/reading-branch-telemetry' }
+          { text: 'Reading branch telemetry', link: '/authors/reading-branch-telemetry' },
+          { text: 'Pilot runbook',     link: '/authors/pilot-runbook' }
         ]}
       ],
 

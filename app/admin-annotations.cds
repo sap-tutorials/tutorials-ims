@@ -1384,3 +1384,31 @@ annotate AnalyticsService.AnalyticsBranchPerformance with @(
     Visualizations: [ '@UI.LineItem' ]
   }
 );
+
+// PR 6 — Pilot enablement: read-only Fiori Elements list view for support.
+// Edit-on-behalf is out of scope for v1 (the entity is @readonly on AdminService).
+// Spec: §7.7
+annotate AdminService.LearningPreferences with @cds.search: { user.email, user.displayName };
+
+annotate AdminService.LearningPreferences with @UI: {
+  HeaderInfo: {
+    TypeName: 'Learning preference', TypeNamePlural: 'Learning preferences',
+    Title: { Value: user.email },
+    Description: { Value: user.displayName }
+  },
+  SelectionFields: [ deployment, role, cloud ],
+  LineItem: [
+    { Value: user.email },
+    { Value: user.displayName },
+    { Value: deployment },
+    { Value: role },
+    { Value: cloud },
+    { Value: modifiedAt }
+  ],
+  Facets: [
+    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General', Label: 'Preferences' }
+  ],
+  FieldGroup#General: { Data: [
+    { Value: user.email }, { Value: deployment }, { Value: role }, { Value: cloud }
+  ]}
+};

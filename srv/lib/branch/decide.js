@@ -15,6 +15,7 @@ import { rankBranches } from './ranker.js';
 import { buildUserState, fingerprintUserState } from './user-state.js';
 import { makeBranchLoaders } from './loaders.js';
 import { writeBranchDecision, writeSkipDecision } from './branch-telemetry.js';
+import { extractProfileOverride } from './profile-override.js';
 
 const LOG = cds.log('branches-decide');
 
@@ -47,7 +48,8 @@ export async function decideHandler(req, res) {
     catch (e) { LOG.warn(`skipPoints parse failed for ${slug}: ${e.message}`); }
 
     const loaders = makeBranchLoaders();
-    const userState = await buildUserState(user, loaders);
+    const override = extractProfileOverride(req);
+    const userState = await buildUserState(user, loaders, { override });
     const cacheKey = `${slug}:${user?.id || 'anon'}:${fingerprintUserState(userState)}`;
 
     if (!noCache) {

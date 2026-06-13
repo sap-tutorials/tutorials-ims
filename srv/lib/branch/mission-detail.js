@@ -11,6 +11,7 @@ import { makeBranchLoaders } from './loaders.js';
 import { slugifyKey } from './slug-key.js';
 import { writeBranchDecision } from './branch-telemetry.js';
 import { groupByAlt } from './group-by-alt.js';
+import { extractProfileOverride } from './profile-override.js';
 
 const LOG = cds.log('build-mission-detail');
 
@@ -52,7 +53,8 @@ export async function missionDetailHandler(req, res) {
     let loaders = null;
     if (flagOn) {
       loaders = makeBranchLoaders();
-      userState = await buildUserState(user, loaders);
+      const override = extractProfileOverride(req);
+      userState = await buildUserState(user, loaders, { override });
       cacheKey = `${slug}:${user?.id || 'anon'}:${fingerprintUserState(userState)}`;
       if (!noCache) {
         const hit = cache.get(cacheKey);

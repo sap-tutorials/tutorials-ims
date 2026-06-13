@@ -130,6 +130,29 @@ entity UserMetaData : cuid, LegacyKeyed {
   value                     : String(2000);
 }
 
+// Issue #172 PR 6 — Pilot enablement.
+// Typed user profile for branching-condition evaluation. Replaces the master
+// spec's "three String columns on UserMetaData" direction (PR 1 reviewer
+// mandated a separate entity to avoid overloading the key/value store).
+//
+// `key user : Association to Users` — one row per user; HANA table PK is
+// USER_ID only (no ID column). Canonical lookup:
+//   SELECT.one.from(UserLearningPreferences).where({ user_ID: dbUser.ID })
+//
+// `@assert.range` is kept as model-level documentation / future-proofing if the
+// entity is ever exposed for direct OData write. CAP's @assert.range fires only
+// at the OData protocol layer, NOT on programmatic CQL writes from action
+// handlers — the action handler's enum-validation loop is the actual runtime
+// gate (see srv/developer-service.js setLearningPreferences).
+//
+// Spec: docs/superpowers/specs/2026-06-12-172-pr6-pilot-enablement-design.md §4.1
+entity UserLearningPreferences : managed {
+  key user       : Association to Users;
+  deployment     : String(20) @assert.range enum { cloud; onprem; };
+  role           : String(20) @assert.range enum { developer; architect; sysadmin; student; };
+  cloud          : String(20) @assert.range enum { btp; aws; gcp; };
+}
+
 entity DeveloperEnvironmentTabs : cuid, LegacyKeyed {
   user                      : Association to Users;
   tabName                   : String(255);
