@@ -20,6 +20,7 @@
 
 import cds from '@sap/cds';
 import { OrchestrationClient } from '@sap-ai-sdk/orchestration';
+import { resolveChatLlmSettings } from './chat-settings-resolver.js';
 
 const LOG = cds.log('ai-quiz-llm');
 
@@ -64,36 +65,10 @@ const QUIZ_MAX_TOKENS = 1200;
  */
 // eslint-disable-next-line no-unused-vars
 export async function callQuizModel({ messages, tools, toolChoice, schema }) {
-  // 1. Read ChatSettings — tolerant of build-pipeline contexts where
-  //    cds.entities is undefined (CAP hasn't booted via cds.serve).
-  //    Mirrors srv/lib/code-check-llm.js (commit 0f3e9b8).
-  let settings = null;
-  try {
-    if (typeof cds.entities === 'function') {
-      const { ChatSettings } = cds.entities('com.sap.developers.ims');
-      settings = await SELECT.one.from(ChatSettings);
-    } else {
-      // Build-pipeline path: CAP model loader hasn't initialized
-      // cds.entities, but `cds.connect.to('db')` may have succeeded.
-      const db = await cds.connect.to('db');
-      const rows = await db.run(
-        'SELECT modelName, deploymentId FROM COM_SAP_DEVELOPERS_IMS_CHATSETTINGS LIMIT 1'
-      );
-      settings = rows?.[0] ?? null;
-    }
-  } catch (err) {
-    LOG.warn('ChatSettings read failed; using env-var defaults', err.message);
-  }
-
-  const modelName = settings?.modelName
-    || settings?.MODELNAME       // raw-SQL path returns UPPERCASE column names on HANA
-    || process.env.CHAT_MODEL_NAME
-    || 'anthropic--claude-4.6-sonnet';
-
-  const deploymentId = settings?.deploymentId
-    || settings?.DEPLOYMENTID
-    || process.env.CHAT_DEPLOYMENT_ID
-    || null;
+  // 1. Resolve modelName + deploymentId. See srv/lib/chat-settings-resolver.js.
+  //    Throws (rather than passing null deploymentId to the SDK) when both
+  //    ChatSettings AND env var resolve to null — see issue #318.
+  const { modelName, deploymentId } = await resolveChatLlmSettings();
 
   // 2. Split messages into prompt template (system) + messagesHistory (rest).
   //    SDK convention from code-check-llm.js: system goes in template,
@@ -123,9 +98,9 @@ export async function callQuizModel({ messages, tools, toolChoice, schema }) {
         },
       },
     },
-    // Pass deploymentId only when set — some SDK versions reject
-    // { deploymentId: null } in the constructor.
-    deploymentId ? { deploymentId } : {}
+    // resolveChatLlmSettings throws when deploymentId is unresolvable, so by
+    // the time we reach here it's guaranteed non-empty.
+    { deploymentId }
   );
 
   // 4. Single non-streaming round-trip
