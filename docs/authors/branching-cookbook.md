@@ -112,3 +112,40 @@ You should see `v22.x.x`.
 | **Skip-run** | No | Yes | The step is fully redundant for some learners (covered elsewhere). |
 
 Branch groups and skip-runs compose freely — a tutorial can have several of each.
+
+## Testing your conditions with the debug override {#debug-override}
+
+> **Audience:** authors with `Tutorial.Author` or `Admin` scope.
+
+When you write a `[BRANCH_BEGIN ... condition="profile.deployment == 'cloud'"]` directive, you need a way to test both arms of the branch without changing your own learning preferences in `/me/`. The `?profile.<field>=<value>` query parameter does exactly that.
+
+**Format:** add `?profile.<field>=<value>` to any tutorial URL. Multiple fields are AND-ed:
+
+```text
+https://.../tutorials-qa/<slug>/?profile.deployment=cloud
+https://.../tutorials-qa/<slug>/?profile.deployment=onprem&profile.role=architect
+```
+
+**Allowed values** (see [pilot-runbook.md#phase-1-pre-pilot](./pilot-runbook.md#phase-1-pre-pilot) for the v1 vocabulary):
+
+- `profile.deployment`: `cloud`, `onprem`
+- `profile.role`: `developer`, `architect`, `sysadmin`, `student`
+- `profile.cloud`: `btp`, `aws`, `gcp`
+
+**Cache fingerprint:** the override is mixed into the per-callsite cache key, so override-mode traffic gets a separate cache slot from learner-mode traffic. You won't poison cache for real learners.
+
+**Invalid values are silently dropped.** `?profile.deployment=hybrid` is treated as if no override were sent for `deployment`.
+
+**Empty strings are treated as missing.** `?profile.deployment=` is the same as omitting the field.
+
+**Without `Tutorial.Author` or `Admin` scope:** the override is silently ignored (parser returns null). The widened gate (`Tutorial.Author OR Admin`) lets admins test the override on their existing role-collection without needing a separate Tutorial.Author grant.
+
+**Joule narration ignores overrides.** The chat-orchestrator runs through a CAP `req`, not the express request, so `?profile.*` doesn't reach the narration tool. To test branch narration, clear the override from the URL and chat from the unmodified URL. (Plumbing the override through chat is a v2 candidate.)
+
+**Stale-after-write workaround:** if you just edited your own preferences in `/me/` and want to bypass the 5-minute TTL on the per-callsite cache, combine with `?nocache=1`:
+
+```text
+https://.../tutorials-qa/<slug>/?profile.deployment=cloud&nocache=1
+```
+
+For the canonical pilot-time debug walkthrough, see [Phase 2: QA pilot](./pilot-runbook.md#phase-2-qa-pilot) in the pilot runbook.
