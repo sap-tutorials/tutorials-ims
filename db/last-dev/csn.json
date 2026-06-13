@@ -923,6 +923,21 @@
         "itemOrder": {
           "type": "cds.Integer",
           "@cds.persistence.name": "ITEMORDER"
+        },
+        "altGroupKey": {
+          "type": "cds.String",
+          "length": 40,
+          "@cds.persistence.name": "ALTGROUPKEY"
+        },
+        "altGroupLabel": {
+          "type": "cds.String",
+          "length": 120,
+          "@cds.persistence.name": "ALTGROUPLABEL"
+        },
+        "altCondition": {
+          "type": "cds.String",
+          "length": 500,
+          "@cds.persistence.name": "ALTCONDITION"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHITEMS"
@@ -1613,6 +1628,13 @@
             "val": false
           },
           "@cds.persistence.name": "VALIDATEANSWERENABLED"
+        },
+        "branchingEnabled": {
+          "type": "cds.Boolean",
+          "default": {
+            "val": false
+          },
+          "@cds.persistence.name": "BRANCHINGENABLED"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CHATSETTINGS"
