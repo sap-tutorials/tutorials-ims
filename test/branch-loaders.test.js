@@ -45,11 +45,13 @@ describe('makeBranchLoaders', () => {
     expect(slugs).toEqual([]);
   });
 
-  it('loadProfile returns null in v1 (UserMetaData is key/value, no fixed-vocab columns yet — see Reviewer addendum C)', async () => {
+  it('loadProfile returns null when user has no UserLearningPreferences row (PR 6 typed read)', async () => {
     const loaders = makeBranchLoaders();
     const profile = await loaders.loadProfile({ id: 'xsuaa-9100' });
-    // PR 6 will populate the fixed-vocab fields. Until then, loadProfile reads
-    // key/value rows; with no seeded keys in this fixture, it returns null.
+    // PR 6 replaced the PR 1 placeholder (UserMetaData key/value flatten) with a
+    // typed SELECT against UserLearningPreferences. With no row seeded for this
+    // user the typed read returns null; positive-shape coverage lives in
+    // test/unit/branch/loaders.test.js.
     expect(profile).toBeNull();
   });
 
