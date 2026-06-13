@@ -29,7 +29,7 @@ These intentional divergences from the original master-spec direction (issue #17
 
 ## File Structure
 
-**Create (~9 new files):**
+**Create (~11 new files):**
 
 - `srv/lib/branch/profile-fields.js` — vocab constants (ESM)
 - `srv/lib/branch/profile-override.js` — express request override parser (Tutorial.Author OR Admin gate)
@@ -37,7 +37,7 @@ These intentional divergences from the original master-spec direction (issue #17
 - `hugo-apps/src/me/LearningPreferences.vue` — new Vue island
 - `docs/authors/pilot-runbook.md` — new runbook
 - `test/unit/learning-preferences.test.js` — action-handler unit tests (6 cases)
-- `srv/lib/branch/__tests__/profile-override.test.js` — override-parser unit tests (6 cases)
+- `test/unit/branch/profile-override.test.js` — override-parser unit tests (6 cases)
 - `scripts/__tests__/profile-fields-sync.test.ts` — schema/vocab sync test (1 case)
 - `scripts/__tests__/anonymization-cascade-pr6.test.ts` — cascade-walker pickup test (1 case)
 - `hugo-apps/src/me/__tests__/LearningPreferences.test.ts` — Vue island tests (5 cases)
@@ -55,8 +55,8 @@ These intentional divergences from the original master-spec direction (issue #17
 - `srv/lib/branch/user-state.js` — add override param + merge; remove inline `PROFILE_FIELDS` const, import from new module (~5 LoC delta)
 - `srv/lib/branch/decide.js` — extract + pass override at express callsite (~3 LoC)
 - `srv/lib/branch/mission-detail.js` — extract + pass override INSIDE existing `if (flagOn)` block (~3 LoC)
-- `srv/lib/branch/__tests__/loaders.test.js` — extend with 2 cases
-- `srv/lib/branch/__tests__/user-state.test.js` — extend with 3 cases (incl. fingerprint-divergence)
+- `test/unit/branch/loaders.test.js` — extend with 2 cases
+- `test/unit/branch/user-state.test.js` — extend with 3 cases (incl. fingerprint-divergence)
 - `hugo-apps/src/me/main.ts` — mount the new island + 7 UI5 imports (~10 LoC)
 - `hugo/layouts/me/list.html` — append mount-point div inside existing `{{ if not site.Params.qa }}` block (~1 LoC)
 - `docs/authors/branching-cookbook.md` — append `#debug-override` section (~30 LoC)
@@ -226,13 +226,15 @@ Append to `db/audit-logging.cds` (the position doesn't matter much; conventional
 // (srv/lib/anonymization-cascade.js) is annotation-driven and walks every
 // entity with @PersonalData; no allowlist update needed. Hybrid test 3
 // verifies cascade-delete in real HANA.
-annotate ims.UserLearningPreferences with @PersonalData : {
+annotate ims.UserLearningPreferences with @PersonalData: {
   EntitySemantics: 'DataSubjectDetails',
   cascade: 'delete'
 } {
   user @PersonalData.FieldSemantics: 'DataSubjectID';
-};
+}
 ```
+
+(No trailing `;` after the closing `}` of the field-annotation block — matches the canonical UserMetaData annotation in db/audit-logging.cds:18-23 verbatim.)
 
 - [ ] **Step 4: Compile-check**
 
@@ -369,17 +371,17 @@ git commit -m "feat(172): project UserLearningPreferences on DeveloperService + 
 
 **Files:**
 - Create: `srv/lib/branch/profile-override.js`
-- Create: `srv/lib/branch/__tests__/profile-override.test.js`
+- Create: `test/unit/branch/profile-override.test.js`
 
 The express-only override extractor. Gated on `Tutorial.Author` OR `Admin` (round-1 pivot 2). Imports vocab from Task 1's constants module. Empty strings treated as absent. Loops over `PROFILE_FIELDS` and validates each candidate against `PROFILE_VOCAB[field]`.
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `srv/lib/branch/__tests__/profile-override.test.js`:
+Create `test/unit/branch/profile-override.test.js`:
 
 ```js
 import { describe, it, expect } from 'vitest';
-import { extractProfileOverride } from '../profile-override.js';
+import { extractProfileOverride } from '../../../srv/lib/branch/profile-override.js';
 
 function fakeReq({ scopes = [], query = {} } = {}) {
   return {
@@ -442,7 +444,7 @@ describe('extractProfileOverride', () => {
 - [ ] **Step 2: Run failing test**
 
 ```bash
-cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr6 && timeout 30 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit srv/lib/branch/__tests__/profile-override.test.js 2>&1 | tail -10
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr6 && timeout 30 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit test/unit/branch/profile-override.test.js 2>&1 | tail -10
 ```
 
 Expected: FAIL — module `../profile-override.js` not found.
@@ -498,7 +500,7 @@ export function extractProfileOverride(req) {
 - [ ] **Step 4: Re-run tests**
 
 ```bash
-cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr6 && timeout 30 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit srv/lib/branch/__tests__/profile-override.test.js 2>&1 | tail -10
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr6 && timeout 30 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit test/unit/branch/profile-override.test.js 2>&1 | tail -10
 ```
 
 Expected: 6 tests pass.
@@ -507,7 +509,7 @@ Expected: 6 tests pass.
 
 ```bash
 cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr6 && git branch --show-current
-git add srv/lib/branch/profile-override.js srv/lib/branch/__tests__/profile-override.test.js
+git add srv/lib/branch/profile-override.js test/unit/branch/profile-override.test.js
 git commit -m "feat(172): profile-override parser (Tutorial.Author OR Admin gate)"
 ```
 
@@ -520,12 +522,12 @@ git commit -m "feat(172): profile-override parser (Tutorial.Author OR Admin gate
 - Modify: `srv/lib/branch/user-state.js`
 - Modify: `srv/lib/branch/decide.js`
 - Modify: `srv/lib/branch/mission-detail.js`
-- Modify: `srv/lib/branch/__tests__/loaders.test.js`
-- Modify: `srv/lib/branch/__tests__/user-state.test.js`
+- Modify: `test/unit/branch/loaders.test.js`
+- Modify: `test/unit/branch/user-state.test.js`
 
 Five surgical changes to wire profile data into the engine:
 
-1. **`loaders.js`**: replace the `loadProfile` placeholder body (lines 38-63 + the TODO comment block above it) with a typed SELECT against `UserLearningPreferences`. Keep the try/catch + `LOG.warn` + return-null fallback so a mid-rollout deploy without the new entity doesn't crash the read path.
+1. **`loaders.js`**: replace the `loadProfile` placeholder body (lines 38-63 inclusive, including the embedded PER REVIEWER ADDENDUM C: ... TODO comment block at lines 40-43) with a typed SELECT against `UserLearningPreferences`. Keep the try/catch + `LOG.warn` + return-null fallback so a mid-rollout deploy without the new entity doesn't crash the read path.
 2. **`user-state.js`**: remove the inline `const PROFILE_FIELDS = [...]` declaration on line 9 (now imported from the new `profile-fields.js` module); add `opts.override` parameter to `buildUserState`; merge override over real profile in the per-field loop.
 3. **`decide.js`**: import `extractProfileOverride`; call it on the express `req` before `buildUserState`; pass the result via `opts.override`.
 4. **`mission-detail.js`**: same patch as decide.js, but place the import + extraction + buildUserState lines INSIDE the existing `if (flagOn) { ... }` block (per spec §7.3.1 placement note — outside the flag, override is meaningless and parsing wastes cycles).
@@ -553,15 +555,17 @@ Note the existing call sites in both handlers + the `if (flagOn)` guard in `miss
 
 - [ ] **Step 2: Write extended tests for `loaders.test.js` (+2 cases)**
 
-Append to `srv/lib/branch/__tests__/loaders.test.js`:
+Append to `test/unit/branch/loaders.test.js` — note this test needs a live CDS service for `cds.entities(...)` + INSERT/SELECT, so the appended `describe` MUST be paired with a `cds.test('serve', ...)` invocation. If the existing file does NOT already have a `cds.test()` at module scope, add one at the top of the appended block (matching the canonical pattern from `test/branch-loaders.test.js`):
 
 ```js
+import cds from '@sap/cds';
+const project = cds.test('serve', '--project', '.', '--in-memory');
+
 describe('loadProfile (PR 6 typed read)', () => {
   it('returns {deployment, role, cloud} shape from UserLearningPreferences', async () => {
     // Use the existing in-memory CDS test serve; create a Users row + a
     // matching UserLearningPreferences row; assert loadProfile returns the
     // typed shape.
-    const cds = (await import('@sap/cds')).default;
     const { Users, UserLearningPreferences } = cds.entities('com.sap.developers.ims');
     const userUuid = '__test__-pr6-load-1';
     const dbUser = await INSERT.into(Users).entries({
@@ -571,14 +575,14 @@ describe('loadProfile (PR 6 typed read)', () => {
     await INSERT.into(UserLearningPreferences).entries({
       user_ID: dbUserId, deployment: 'cloud', role: 'developer', cloud: 'btp',
     });
-    const { makeBranchLoaders } = await import('../loaders.js');
+    const { makeBranchLoaders } = await import('../../../srv/lib/branch/loaders.js');
     const loaders = makeBranchLoaders();
     const profile = await loaders.loadProfile({ id: userUuid });
     expect(profile).toEqual({ deployment: 'cloud', role: 'developer', cloud: 'btp' });
   });
 
   it('returns null when user has no UserLearningPreferences row', async () => {
-    const { makeBranchLoaders } = await import('../loaders.js');
+    const { makeBranchLoaders } = await import('../../../srv/lib/branch/loaders.js');
     const loaders = makeBranchLoaders();
     const profile = await loaders.loadProfile({ id: '__test__-pr6-load-noexist' });
     expect(profile).toBeNull();
@@ -586,9 +590,11 @@ describe('loadProfile (PR 6 typed read)', () => {
 });
 ```
 
+(If the existing `test/unit/branch/loaders.test.js` already has a `cds.test('serve', ...)` at module scope, omit the duplicate and just append the `describe` block plus its imports.)
+
 - [ ] **Step 3: Write extended tests for `user-state.test.js` (+3 cases)**
 
-Append to `srv/lib/branch/__tests__/user-state.test.js`:
+Append to `test/unit/branch/user-state.test.js`:
 
 ```js
 describe('buildUserState — override merge (PR 6)', () => {
@@ -601,7 +607,7 @@ describe('buildUserState — override merge (PR 6)', () => {
   }
 
   it('merges override OVER real profile (per-field override wins)', async () => {
-    const { buildUserState } = await import('../user-state.js');
+    const { buildUserState } = await import('../../../srv/lib/branch/user-state.js');
     const state = await buildUserState(
       { id: 'u' },
       makeFakeDeps({ deployment: 'onprem', role: null, cloud: null }),
@@ -611,7 +617,7 @@ describe('buildUserState — override merge (PR 6)', () => {
   });
 
   it('respects null fields in override merge — partial override + real profile preserved', async () => {
-    const { buildUserState } = await import('../user-state.js');
+    const { buildUserState } = await import('../../../srv/lib/branch/user-state.js');
     const state = await buildUserState(
       { id: 'u' },
       makeFakeDeps({ deployment: 'onprem', role: 'developer', cloud: null }),
@@ -621,7 +627,7 @@ describe('buildUserState — override merge (PR 6)', () => {
   });
 
   it('fingerprint-cache isolation: override-mode and learner-mode produce distinct fingerprints', async () => {
-    const { buildUserState, fingerprintUserState } = await import('../user-state.js');
+    const { buildUserState, fingerprintUserState } = await import('../../../srv/lib/branch/user-state.js');
     const deps = makeFakeDeps({ deployment: 'onprem', role: null, cloud: null });
     const learner = await buildUserState({ id: 'u' }, deps);
     const override = await buildUserState({ id: 'u' }, deps, { override: { deployment: 'cloud' } });
@@ -633,14 +639,14 @@ describe('buildUserState — override merge (PR 6)', () => {
 - [ ] **Step 4: Run failing tests (5 new cases)**
 
 ```bash
-cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr6 && timeout 30 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit srv/lib/branch/__tests__/loaders.test.js srv/lib/branch/__tests__/user-state.test.js 2>&1 | tail -10
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr6 && timeout 30 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit test/unit/branch/loaders.test.js test/unit/branch/user-state.test.js 2>&1 | tail -10
 ```
 
 Expected: 5 failures (loaders: typed shape mismatch since current loadProfile reads UserMetaData; user-state: override param not yet supported).
 
 - [ ] **Step 5: Rewrite `loadProfile` in `srv/lib/branch/loaders.js`**
 
-Replace the existing `loadProfile` function body (lines 38-63 inclusive — including the TODO comment block above it) with:
+Replace lines 38-63 inclusive (the entire `loadProfile` body, including the embedded PER REVIEWER ADDENDUM C: ... TODO comment block at lines 40-43) with the typed read below:
 
 ```js
     async loadProfile(user) {
@@ -750,7 +756,7 @@ Then update the `buildUserState` call to pass `{ override }` as the third argume
 - [ ] **Step 9: Run all tests**
 
 ```bash
-cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr6 && timeout 60 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit srv/lib/branch/__tests__/ 2>&1 | tail -10
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr6 && timeout 60 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit test/unit/branch/ 2>&1 | tail -10
 ```
 
 Expected: all branch-engine unit tests pass (existing + 5 new = 17+ passing).
@@ -759,7 +765,7 @@ Expected: all branch-engine unit tests pass (existing + 5 new = 17+ passing).
 
 ```bash
 cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr6 && git branch --show-current
-git add srv/lib/branch/loaders.js srv/lib/branch/user-state.js srv/lib/branch/decide.js srv/lib/branch/mission-detail.js srv/lib/branch/__tests__/loaders.test.js srv/lib/branch/__tests__/user-state.test.js
+git add srv/lib/branch/loaders.js srv/lib/branch/user-state.js srv/lib/branch/decide.js srv/lib/branch/mission-detail.js test/unit/branch/loaders.test.js test/unit/branch/user-state.test.js
 git commit -m "feat(172): typed loadProfile + buildUserState override merge + callsite patches"
 ```
 
@@ -816,9 +822,10 @@ describe('setLearningPreferences action handler', () => {
 
   it('1. INSERTs a new row on first call; subsequent SELECT returns the typed shape', async () => {
     const userUuid = '__test__-pr6-act-1';
-    // Simulate authenticated request via cds.test default user override; PR 5
-    // hybrid tests use the same pattern.
-    const result = await POST(
+    // Per recon item 2: use the project handle returned from cds.test('serve', ...).
+    // project.post / project.get are the HTTP entrypoints; auth is passed via
+    // basic-auth options on the request config.
+    const { data: result } = await project.post(
       '/api/setLearningPreferences',
       { deployment: 'cloud', role: null, cloud: 'btp' },
       { auth: { username: userUuid } }
@@ -830,11 +837,11 @@ describe('setLearningPreferences action handler', () => {
 
   it('2. PUT-style clearing: re-call with {deployment: onprem, role: null, cloud: null} — clears prior role+cloud', async () => {
     const userUuid = '__test__-pr6-act-2';
-    await POST('/api/setLearningPreferences',
+    await project.post('/api/setLearningPreferences',
       { deployment: 'cloud', role: 'developer', cloud: 'btp' },
       { auth: { username: userUuid } }
     );
-    const result = await POST('/api/setLearningPreferences',
+    const { data: result } = await project.post('/api/setLearningPreferences',
       { deployment: 'onprem', role: null, cloud: null },
       { auth: { username: userUuid } }
     );
@@ -845,30 +852,28 @@ describe('setLearningPreferences action handler', () => {
 
   it('3. Invalid enum value returns 400 with field-level error message', async () => {
     const userUuid = '__test__-pr6-act-3';
-    await expect(
-      POST('/api/setLearningPreferences',
-        { deployment: 'hybrid', role: null, cloud: null },
-        { auth: { username: userUuid } }
-      )
-    ).rejects.toMatchObject({ response: { status: 400 } });
+    const res = await project.post('/api/setLearningPreferences',
+      { deployment: 'hybrid', role: null, cloud: null },
+      { auth: { username: userUuid } }
+    ).catch(e => e);
+    expect(res.response?.status || res.status).toBe(400);
   });
 
   it('4. Anonymous caller is rejected by the XSUAA gate (401)', async () => {
-    await expect(
-      POST('/api/setLearningPreferences',
-        { deployment: 'cloud', role: null, cloud: null }
-        // no auth
-      )
-    ).rejects.toMatchObject({ response: { status: 401 } });
+    const res = await project.post('/api/setLearningPreferences',
+      { deployment: 'cloud', role: null, cloud: null }
+      // no auth
+    ).catch(e => e);
+    expect(res.response?.status || res.status).toBe(401);
   });
 
   it('5. GET /api/LearningPreferences returns the caller own row only (before-READ filter)', async () => {
     const userUuid = '__test__-pr6-act-5';
-    await POST('/api/setLearningPreferences',
+    await project.post('/api/setLearningPreferences',
       { deployment: 'cloud', role: 'architect', cloud: 'aws' },
       { auth: { username: userUuid } }
     );
-    const list = await GET('/api/LearningPreferences', { auth: { username: userUuid } });
+    const { data: list } = await project.get('/api/LearningPreferences', { auth: { username: userUuid } });
     expect(list.value).toHaveLength(1);
     expect(list.value[0]).toMatchObject({
       deployment: 'cloud', role: 'architect', cloud: 'aws',
@@ -877,7 +882,7 @@ describe('setLearningPreferences action handler', () => {
 
   it('6. role = sysadmin is a valid enum value (regression guard against admin XSUAA collision)', async () => {
     const userUuid = '__test__-pr6-act-6';
-    const result = await POST('/api/setLearningPreferences',
+    const { data: result } = await project.post('/api/setLearningPreferences',
       { deployment: null, role: 'sysadmin', cloud: null },
       { auth: { username: userUuid } }
     );
@@ -902,12 +907,9 @@ Add the import near the top of the file (alongside other srv imports):
 import { PROFILE_FIELDS, PROFILE_VOCAB } from './lib/branch/profile-fields.js';
 ```
 
-Inside the existing `class DeveloperService extends cds.ApplicationService { async init() { ... } }`, after the existing destructure of entities, add:
+Inside the existing `class DeveloperService extends cds.ApplicationService { async init() { ... } }`, **fold `UserLearningPreferences` into the existing `cds.entities('com.sap.developers.ims')` destructure at developer-service.js:38-44** (M3 — do not introduce a second destructure call). Then add the handlers below:
 
 ```js
-    // PR 6 — Pilot enablement: extend cds.entities destructure
-    const { UserLearningPreferences } = cds.entities('com.sap.developers.ims');
-
     // PR 6 — Self-service row filter: scope every authenticated READ on
     // LearningPreferences to the caller's own row only. The XSUAA gate
     // (`@requires: 'authenticated-user'` on the projection) already guarantees
@@ -919,8 +921,9 @@ Inside the existing `class DeveloperService extends cds.ApplicationService { asy
     this.before('READ', 'LearningPreferences', async (req) => {
       const dbUser = await SELECT.one.from(dbUsers).columns('ID').where({ uuid: req.user.id });
       if (!dbUser?.ID) {
-        // No DB user record yet — return empty result set, not an error.
-        req.query.where('1 = 0');
+        // No DB user record yet — short-circuit with empty result set
+        // (cleaner CQN-builder convention than splicing a `1 = 0` predicate).
+        req.results = [];
         return;
       }
       req.query.where({ user_ID: dbUser.ID });
@@ -1031,7 +1034,7 @@ The Vue island below mirrors this state-machine + ref-based focus pattern.
 
 ```ts
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { mount, flushPromises } from '@vue/test-utils';
 import LearningPreferences from '../LearningPreferences.vue';
 
 function mockFetch(routes: Record<string, () => Promise<any>>) {
@@ -1093,6 +1096,7 @@ describe('LearningPreferences.vue', () => {
   });
 
   it('3. server returns 500 → negative-strip appears; Selects keep user values; first Select gets focus', async () => {
+    const focusSpy = vi.spyOn(HTMLElement.prototype, 'focus');
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       if (init?.method === 'POST') return { ok: false, status: 500, json: async () => ({}) };
       if (url.endsWith('/LearningPreferences')) return { ok: true, json: async () => ({ value: [] }) };
@@ -1107,6 +1111,7 @@ describe('LearningPreferences.vue', () => {
     await new Promise(r => setTimeout(r, 0));
     expect((wrapper.vm as any).status).toBe('error');
     expect((wrapper.vm as any).prefs.deployment).toBe('onprem');  // not reverted
+    expect(focusSpy).toHaveBeenCalled();  // a11y: focus moved to first Select on save failure
   });
 
   it('4. branchingEnabled = false → Information strip rendered; branchingEnabled = true → strip NOT rendered', async () => {
@@ -1117,8 +1122,7 @@ describe('LearningPreferences.vue', () => {
     }));
     vi.stubGlobal('fetch', fetchMock);
     let wrapper = mount(LearningPreferences);
-    await new Promise(r => setTimeout(r, 0));
-    await wrapper.vm.$nextTick();
+    await flushPromises();
     expect((wrapper.vm as any).branchingDisabled).toBe(true);
 
     // On
@@ -1128,8 +1132,7 @@ describe('LearningPreferences.vue', () => {
     }));
     vi.stubGlobal('fetch', fetchMock);
     wrapper = mount(LearningPreferences);
-    await new Promise(r => setTimeout(r, 0));
-    await wrapper.vm.$nextTick();
+    await flushPromises();
     expect((wrapper.vm as any).branchingDisabled).toBe(false);
   });
 
@@ -1354,8 +1357,8 @@ Replace the existing content with:
 
 ```html
 {{ define "main" }}
-{{/* U17 profile timeline + recent activity. QA preview strips this — read-only
-     preview has no per-user progress data. Also excluded by hugo.qa.toml ignoreFiles. */}}
+{{/* U17 + PR 6 — both panels gated; QA preview omits per-user data.
+     Also excluded by hugo.qa.toml ignoreFiles. */}}
 {{ if not site.Params.qa }}
 <div id="me-completions"></div>
 <div id="me-learning-preferences"></div>
@@ -1514,10 +1517,16 @@ import cds from '@sap/cds';
 import { getCascadePlan } from '../../srv/lib/anonymization-cascade.js';
 
 describe('anonymization-cascade pickup of UserLearningPreferences (PR 6)', () => {
-  it('UserLearningPreferences appears in the cascade plan with cascade: delete', async () => {
+  it('UserLearningPreferences appears in the cascade plan with action: delete', async () => {
+    // Per recon item 4: each plan entry has shape
+    //   { entityName, action, dataSubjectField, personalFields }
+    // (NOT `name`, NOT `cascade` — the cascade value is encoded in `action`).
+    // Loading via cds.load + getCascadePlan(csn.definitions) walks @PersonalData
+    // annotations against the live CSN; the assertion is the drift guard for the
+    // db/audit-logging.cds annotation in Task 2.
     const csn = await cds.load('db/schema.cds');
     const plan = getCascadePlan(csn.definitions);
-    const entry = plan.find((p: any) => p.name === 'com.sap.developers.ims.UserLearningPreferences');
+    const entry = plan.find((p: any) => p.entityName === 'com.sap.developers.ims.UserLearningPreferences');
     expect(entry, 'UserLearningPreferences must appear in cascade plan').toBeDefined();
     expect(entry?.action).toBe('delete');
   });
@@ -1531,6 +1540,8 @@ cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr6 && timeout 30 D:/pro
 ```
 
 Expected: tests run; if Tasks 1+2+5 are merged in this branch, both should already PASS. (TDD discipline: write tests AFTER the producer was ready in earlier tasks; the tests must be in this branch as guards.)
+
+// Drift-guard tests run only after producer modules exist (Tasks 1-5); they pass on first run by design.
 
 - [ ] **Step 4: Commit**
 
@@ -1571,7 +1582,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import cds from '@sap/cds';
 import { isSafeForWrites } from './_guard.js';
 
-cds.test('serve', '--project', '.', '--profile', 'hybrid');
+const project = cds.test('serve', '--project', '.', '--profile', 'hybrid');
 
 const PREFIX = '__test__-pr6-hybrid';
 const writesEnabled = process.env.ALLOW_HYBRID_WRITES === 'true';
@@ -1596,13 +1607,14 @@ describe('UserLearningPreferences (hybrid HANA)', () => {
     '1. invalid enum value rejected at the JS validation layer in the action handler',
     async () => {
       // Hybrid hits the action endpoint with invalid enum and asserts a 400.
+      // Per recon item 2: project.post returns/throws via axios-style; on 4xx it
+      // throws an error whose .response.status carries the HTTP status.
       const userUuid = `${PREFIX}-enum`;
-      await expect(
-        POST('/api/setLearningPreferences',
-          { deployment: 'hybrid', role: null, cloud: null },
-          { auth: { username: userUuid } }
-        )
-      ).rejects.toMatchObject({ response: { status: 400 } });
+      const res = await project.post('/api/setLearningPreferences',
+        { deployment: 'hybrid', role: null, cloud: null },
+        { auth: { username: userUuid } }
+      ).catch(e => e);
+      expect(res.response?.status || res.status).toBe(400);
     }
   );
 
@@ -1611,12 +1623,12 @@ describe('UserLearningPreferences (hybrid HANA)', () => {
     async () => {
       const userUuid = `${PREFIX}-schema`;
       // First call INSERTs.
-      await POST('/api/setLearningPreferences',
+      await project.post('/api/setLearningPreferences',
         { deployment: 'cloud', role: 'developer', cloud: 'btp' },
         { auth: { username: userUuid } }
       );
       // Same payload twice — idempotent: existing row UPDATEd, no duplicate INSERT.
-      await POST('/api/setLearningPreferences',
+      await project.post('/api/setLearningPreferences',
         { deployment: 'cloud', role: 'developer', cloud: 'btp' },
         { auth: { username: userUuid } }
       );
@@ -1632,7 +1644,7 @@ describe('UserLearningPreferences (hybrid HANA)', () => {
     '3. @PersonalData cascade: delete removes the row when the parent Users row is deleted',
     async () => {
       const userUuid = `${PREFIX}-cascade`;
-      await POST('/api/setLearningPreferences',
+      await project.post('/api/setLearningPreferences',
         { deployment: 'cloud', role: null, cloud: null },
         { auth: { username: userUuid } }
       );
@@ -1714,7 +1726,7 @@ describe.skipIf(!SRV)('LearningPreferences smoke (deployed)', () => {
     const body = await resp.json();
     // OData singleton wrapper varies — find branchingEnabled wherever it sits.
     const flat = JSON.stringify(body);
-    expect(flat).toMatch(/"branchingEnabled"\s*:/);
+    expect(flat).toMatch(/"branchingEnabled"\s*:\s*(true|false)/);
     expect(flat).toMatch(/"enabled"\s*:/);
     expect(flat).toMatch(/"bannerText"\s*:/);
   });
@@ -1917,7 +1929,7 @@ This task wraps the work and surfaces it for review. Mirrors PR 3/4/5 final-bran
 cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr6 && git branch --show-current && pwd && git status -sb && git log --oneline main..HEAD
 ```
 
-Expected: `feat/172-pr6-pilot-enablement` branch on `.../feat-172-pr6` worktree, clean tree, commit count of ~13 (one per task that wrote code, plus the spec/plan).
+Expected: `feat/172-pr6-pilot-enablement` branch on `.../feat-172-pr6` worktree, clean tree, commit count of ~12-13 (one per task that wrote code; plan/spec already committed if branch was started fresh).
 
 - [ ] **Step 2: Run the unit suite end-to-end**
 
@@ -1928,13 +1940,23 @@ cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr6 && timeout 300 npm t
 Expected: all PR 6 unit tests pass (29 cases) + existing PR 1-5 tests pass unchanged. If the unit suite hangs ([[feedback_worktree_tests_hang]]), fall back to running only the PR 6 files via the absolute vitest path:
 
 ```bash
-cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr6 && timeout 90 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit test/unit/learning-preferences.test.js srv/lib/branch/__tests__/profile-override.test.js srv/lib/branch/__tests__/loaders.test.js srv/lib/branch/__tests__/user-state.test.js scripts/__tests__/profile-fields-sync.test.ts scripts/__tests__/anonymization-cascade-pr6.test.ts hugo-apps/src/me/__tests__/LearningPreferences.test.ts 2>&1 | tail -15
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr6 && timeout 90 D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit test/unit/learning-preferences.test.js test/unit/branch/profile-override.test.js test/unit/branch/loaders.test.js test/unit/branch/user-state.test.js scripts/__tests__/profile-fields-sync.test.ts scripts/__tests__/anonymization-cascade-pr6.test.ts hugo-apps/src/me/__tests__/LearningPreferences.test.ts 2>&1 | tail -15
 ```
 
 - [ ] **Step 3: Compile-check both services + Vue island build**
 
+Run each build separately so failures surface at the offending step:
+
 ```bash
-cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr6 && timeout 60 npx cds compile srv/developer-service.cds srv/admin-service.cds --to sql 2>&1 | tail -10 && timeout 90 npm run build:apps 2>&1 | tail -5 && timeout 90 npm run docs:build 2>&1 | tail -5
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr6 && timeout 60 npx cds compile srv/developer-service.cds srv/admin-service.cds --to sql 2>&1 | tail -10
+```
+
+```bash
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr6 && timeout 90 npm run build:apps 2>&1 | tail -5
+```
+
+```bash
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr6 && timeout 90 npm run docs:build 2>&1 | tail -5
 ```
 
 Expected: clean SQL emission for both services, clean apps bundle, docs build passes.
@@ -1948,22 +1970,33 @@ cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr6 && grep -nE "scripts
 PR 6 only adds frontend (Vue) + lint-script files + new srv lib files (`profile-fields.js`, `profile-override.js`). The srv-side new files are imported by `srv/developer-service.js` (which IS in srv-qa cp list), so they need to be added.
 
 ```bash
-grep -nE "srv/lib/branch/profile-fields\|srv/lib/branch/profile-override" .deploy/mta.yaml | head -3
+grep -nE "srv/lib/branch/profile-fields|srv/lib/branch/profile-override" .deploy/mta.yaml | head -3
 ```
 
-Expected: zero matches (current state). **Add the two new files to the srv-qa cp list in `.deploy/mta.yaml`** if PR 6 srv-qa parity is required:
+Expected: zero matches (current state). **Add the two new files to the srv-qa cp list in `.deploy/mta.yaml`** — per recon item 3 the cp list is a single `bash -c "..."` line under the `tutorials-srv-qa` module's build-parameters; the new files go into the existing `cp ... srv/lib/branch/` segment alongside the other branch entries (`condition.js engine.js ranker.js user-state.js loaders.js mission-detail.js slug-key.js decide.js joule-tool.js branch-telemetry.js group-by-alt.js`):
 
-```yaml
-# .deploy/mta.yaml — under the srv-qa module's "cp" list, alongside other srv/lib/branch entries
-- src: ../srv/lib/branch/profile-fields.js
-- src: ../srv/lib/branch/profile-override.js
+```text
+# .deploy/mta.yaml — extend the existing
+#   cp ../../srv/lib/branch/condition.js ../../srv/lib/branch/engine.js ... srv/lib/branch/
+# segment (currently around line 90 of mta.yaml inside the
+# `- bash -c "mkdir -p srv/jobs && ..."` command for the `tutorials-srv-qa` module)
+# by appending these two paths to the same `cp` source list, BEFORE the
+# `srv/lib/branch/` destination:
+#   ../../srv/lib/branch/profile-fields.js \
+#   ../../srv/lib/branch/profile-override.js \
+```
+
+Final segment (verbatim shape — same single-line `bash -c "..."` as today, just two more source paths):
+
+```text
+cp ../../srv/lib/branch/condition.js ../../srv/lib/branch/engine.js ../../srv/lib/branch/ranker.js ../../srv/lib/branch/user-state.js ../../srv/lib/branch/loaders.js ../../srv/lib/branch/mission-detail.js ../../srv/lib/branch/slug-key.js ../../srv/lib/branch/decide.js ../../srv/lib/branch/joule-tool.js ../../srv/lib/branch/branch-telemetry.js ../../srv/lib/branch/group-by-alt.js ../../srv/lib/branch/profile-fields.js ../../srv/lib/branch/profile-override.js srv/lib/branch/
 ```
 
 (Per [[feedback_srv_qa_cp_list]] / [[feedback_check_srv_qa_when_changing_srv]]: walk transitive `./` imports from `srv/developer-service.js` whenever new srv lib files are added.)
 
 - [ ] **Step 5: Final-branch reviewer subagent**
 
-Dispatch a `feature-dev:code-reviewer` subagent over the entire branch diff:
+Dispatch a code review over the entire branch diff using the `superpowers:requesting-code-review` skill (the canonical review skill in the available-skills list; PR 5's plan used the literal phrase "`feature-dev:code-reviewer` subagent" — that agent type is not present as a Skill in this environment, so prefer the available `superpowers:requesting-code-review` skill or the `/code-review` slash command for the same outcome):
 
 ```text
 Branch: feat/172-pr6-pilot-enablement
@@ -2024,7 +2057,7 @@ Closes the pilot-enablement piece of issue #172 (branching paths). This is **PR 
 
 ## Test plan
 
-- [x] Unit (in-memory SQLite): 6 action handler + 6 override parser + 2 loaders extension + 3 user-state extension + 1 profile-fields-sync drift guard + 1 anonymization-cascade-pr6 drift guard + 5 Vue island = **24 unit tests pass**
+- [x] Unit (in-memory SQLite): 6 action handler + 6 override parser + 2 loaders extension + 3 user-state extension + 1 profile-fields-sync drift guard + 1 anonymization-cascade-pr6 drift guard + 5 Vue island = **24 unit + Vue tests pass (19 unit + 5 Vue island)**
 - [ ] Hybrid (HANA Cloud): test file written; runs opt-in via `ALLOW_HYBRID_WRITES=true` (Tom must run before merging — 3 hybrid tests)
 - [x] Smoke (CI-safe; unauthenticated): 2 tests confirm 401 gate + ChatConfig.branchingEnabled exposure
 - [x] Vue island compiles cleanly via `npm run build:apps`
@@ -2083,7 +2116,7 @@ PR 6 ships when:
 
 ## Reviewer addendum
 
-(Reserved — items A-N added during plan-review loop, mirrored from PR 3/4/5 plans. Implementer agents MUST read this section before starting each task.)
+(Reserved — items A-P added during plan-review loop, mirrored from PR 3/4/5 plans. Implementer agents MUST read this section before starting each task.)
 
 A. **ALWAYS run vitest via `D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit <path>` from project root**, NEVER `npx vitest` from `hugo-apps/` ([[feedback_worktree_tests_hang]]).
 
