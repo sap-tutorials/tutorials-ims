@@ -61,8 +61,15 @@ describe('UserLearningPreferences (hybrid HANA)', () => {
   );
 
   it.skipIf(!writesEnabled)(
-    '3. @PersonalData cascade: delete removes the row when the parent Users row is deleted',
+    '3. FK cascade-on-delete removes the row when the parent Users row is deleted (DB-level, NOT @PersonalData walker)',
     async () => {
+      // NOTE: this exercises the DB-level FK cascade from the composition-keyed
+      // `key user : Association to Users`, NOT the @PersonalData annotation
+      // walker. The walker is invoked by AdminService._executeAnonymization
+      // (srv/lib/anonymization-cascade.js); coverage of THAT path lives in
+      // scripts/__tests__/anonymization-cascade-pr6.test.ts which asserts
+      // UserLearningPreferences appears in the cascade plan with action: delete.
+      // Both layers must agree for cascade-delete to actually fire end-to-end.
       const userUuid = `${PREFIX}-cascade`;
       await project.post('/api/setLearningPreferences',
         { deployment: 'cloud', role: null, cloud: null },
@@ -70,7 +77,7 @@ describe('UserLearningPreferences (hybrid HANA)', () => {
       );
       const { Users, UserLearningPreferences } = cds.entities('com.sap.developers.ims');
       const dbUser = await SELECT.one.from(Users).where({ uuid: userUuid });
-      // Trigger anonymization cascade: simulate by deleting the parent row.
+      // Trigger DB FK cascade by deleting the parent row.
       await DELETE.from(Users).where({ ID: dbUser.ID });
       const rows = await SELECT.from(UserLearningPreferences).where({ user_ID: dbUser.ID });
       expect(rows).toHaveLength(0);

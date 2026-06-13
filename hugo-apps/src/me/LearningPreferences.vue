@@ -19,25 +19,34 @@
       @change="(e) => onChange('deployment', e)"
     >
       <ui5-option value="__none__" :selected="prefs.deployment === null">— No preference —</ui5-option>
-      <ui5-option value="cloud" :selected="prefs.deployment === 'cloud'">Cloud</ui5-option>
-      <ui5-option value="onprem" :selected="prefs.deployment === 'onprem'">On-premise</ui5-option>
+      <ui5-option
+        v-for="value in PROFILE_VOCAB.deployment"
+        :key="value"
+        :value="value"
+        :selected="prefs.deployment === value"
+      >{{ DEPLOYMENT_LABEL[value] || value }}</ui5-option>
     </ui5-select>
 
     <ui5-label for="role">What's your role?</ui5-label>
     <ui5-select id="role" ref="roleRef" @change="(e) => onChange('role', e)">
       <ui5-option value="__none__" :selected="prefs.role === null">— No preference —</ui5-option>
-      <ui5-option value="developer" :selected="prefs.role === 'developer'">Developer</ui5-option>
-      <ui5-option value="architect" :selected="prefs.role === 'architect'">Architect</ui5-option>
-      <ui5-option value="sysadmin" :selected="prefs.role === 'sysadmin'">System administrator</ui5-option>
-      <ui5-option value="student" :selected="prefs.role === 'student'">Student</ui5-option>
+      <ui5-option
+        v-for="value in PROFILE_VOCAB.role"
+        :key="value"
+        :value="value"
+        :selected="prefs.role === value"
+      >{{ ROLE_LABEL[value] || value }}</ui5-option>
     </ui5-select>
 
     <ui5-label for="cloud">Preferred cloud provider?</ui5-label>
     <ui5-select id="cloud" ref="cloudRef" @change="(e) => onChange('cloud', e)">
       <ui5-option value="__none__" :selected="prefs.cloud === null">— No preference —</ui5-option>
-      <ui5-option value="btp" :selected="prefs.cloud === 'btp'">SAP BTP</ui5-option>
-      <ui5-option value="aws" :selected="prefs.cloud === 'aws'">AWS</ui5-option>
-      <ui5-option value="gcp" :selected="prefs.cloud === 'gcp'">Google Cloud</ui5-option>
+      <ui5-option
+        v-for="value in PROFILE_VOCAB.cloud"
+        :key="value"
+        :value="value"
+        :selected="prefs.cloud === value"
+      >{{ CLOUD_LABEL[value] || value }}</ui5-option>
     </ui5-select>
 
     <ui5-button design="Emphasized" :disabled="!dirty || saving" @click="onSave">
@@ -56,6 +65,23 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue';
+// PR 6: import vocabulary from the single source of truth (single source of
+// truth is srv/lib/branch/profile-fields.js — also imported by the action
+// handler and used by the schema-drift guard test). Vite resolves the relative
+// path; Vue island and CAP service stay byte-equivalent in vocabulary.
+import { PROFILE_VOCAB } from '../../../srv/lib/branch/profile-fields.js';
+
+// Human-readable labels keyed by canonical enum value. Adding a new value to
+// PROFILE_VOCAB without a matching label entry falls back to the raw value
+// (see template's `|| value` fallback) — safe degradation.
+const DEPLOYMENT_LABEL: Record<string, string> = { cloud: 'Cloud', onprem: 'On-premise' };
+const ROLE_LABEL: Record<string, string> = {
+  developer: 'Developer',
+  architect: 'Architect',
+  sysadmin: 'System administrator',
+  student: 'Student',
+};
+const CLOUD_LABEL: Record<string, string> = { btp: 'SAP BTP', aws: 'AWS', gcp: 'Google Cloud' };
 
 type ProfileField = 'deployment' | 'role' | 'cloud';
 type ProfileValue = string | null;
@@ -142,5 +168,7 @@ async function onSave() {
   }
 }
 
-defineExpose({ prefs, dirty, status, branchingDisabled, onChange, onSave });
+// test-only: expose mutable internals for the Vue test harness (vue-test-utils
+// setup-script bindings need this). All shape-relevant state for assertions.
+defineExpose({ prefs, dirty, status, branchingDisabled, onChange, onSave, PROFILE_VOCAB });
 </script>
