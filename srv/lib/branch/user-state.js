@@ -5,8 +5,7 @@
 // Spec: docs/superpowers/specs/2026-06-09-172-branching-paths-design.md §4.3, §5.6
 
 import { createHash } from 'node:crypto';
-
-const PROFILE_FIELDS = ['deployment', 'role', 'cloud'];
+import { PROFILE_FIELDS } from './profile-fields.js';
 
 const EMPTY_STATE = Object.freeze({
   completedSlugs: new Set(),
@@ -18,8 +17,11 @@ const EMPTY_STATE = Object.freeze({
  * Build a frozen userState for the request.
  * - Anonymous user → null user → empty Sets and null-fields profile.
  * - Profile fields not in PROFILE_FIELDS are dropped.
+ * - PR 6: opts.override (validated upstream by extractProfileOverride) merges
+ *   over the real profile per-field. Override values take precedence; absent
+ *   override fields fall back to the real profile.
  */
-export async function buildUserState(user, deps) {
+export async function buildUserState(user, deps, opts = {}) {
   if (!user) return EMPTY_STATE;
 
   const [slugs, missions, profileRaw] = await Promise.all([
@@ -28,8 +30,15 @@ export async function buildUserState(user, deps) {
     deps.loadProfile(user),
   ]);
 
+  // PR 6: merge override. The override is already validated by
+  // extractProfileOverride (only valid enum values, only when user has
+  // Tutorial.Author or Admin scope, empty strings already dropped). We
+  // additionally treat undefined/null/'' as "absent" here for defence in depth.
   const profile = Object.create(null);
-  for (const f of PROFILE_FIELDS) profile[f] = profileRaw?.[f] ?? null;
+  for (const f of PROFILE_FIELDS) {
+    const ov = opts.override?.[f];
+    profile[f] = (typeof ov === 'string' && ov !== '') ? ov : (profileRaw?.[f] ?? null);
+  }
 
   return Object.freeze({
     completedSlugs: new Set(slugs),
