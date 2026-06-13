@@ -1141,7 +1141,8 @@ async function main() {
       `[ai-author] expanded directives across all tutorials: ` +
       `${globalCallStats.calls} cache miss (LLM call), ` +
       `${globalCallStats.hits} cache hit, ` +
-      `${globalCallStats.errors} errors. ` +
+      `${globalCallStats.errors} errors, ` +
+      `${globalCallStats.skips ?? 0} empty-step skipped. ` +
       `Build cap: ${process.env.AI_AUTHOR_BUILD_CAP ?? '200'}.`,
     )
   }

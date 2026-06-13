@@ -46,6 +46,24 @@ describe('invariantNoUpstreamErrors', () => {
     expect(result.passed).toBe(false)
     expect(result.reason).toMatch(/could not parse/i)
   })
+
+  // [#311] Empty-step guard added a new "<n> empty-step skipped" token to
+  // the summary line. The regex was updated to accept it as optional —
+  // these two tests assert both shapes still parse.
+  it('passes the post-#311 summary line shape (with empty-step skipped token)', () => {
+    const line = '[ai-author] expanded directives across all tutorials: 6 cache miss (LLM call), 0 cache hit, 0 errors, 3 empty-step skipped. Build cap: 200.'
+    const result = invariantNoUpstreamErrors(line)
+    expect(result.passed).toBe(true)
+    expect(result.details?.miss).toBe(6)
+    expect(result.details?.hit).toBe(0)
+    expect(result.details?.errors).toBe(0)
+  })
+
+  it('passes the pre-#311 summary line shape (no empty-step skipped token) — backwards compat', () => {
+    const line = '[ai-author] expanded directives across all tutorials: 6 cache miss (LLM call), 0 cache hit, 0 errors. Build cap: 200.'
+    const result = invariantNoUpstreamErrors(line)
+    expect(result.passed).toBe(true)
+  })
 })
 
 // ---------------------------------------------------------------------------

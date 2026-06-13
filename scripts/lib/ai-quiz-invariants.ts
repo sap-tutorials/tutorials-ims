@@ -44,7 +44,10 @@ export type { AiQuizCache, AiQuizCacheEntry, ValidationQuestion }
 // Invariant 1: no-upstream-errors
 // ---------------------------------------------------------------------------
 
-const SUMMARY_REGEX = /^\[ai-author\] expanded directives across all tutorials: (\d+) cache miss \(LLM call\), (\d+) cache hit, (\d+) errors\. Build cap: \d+\.$/
+// [#311] Summary line gained an "<n> empty-step skipped" token between
+// errors and Build cap. The skip count is optional in the regex so older
+// fetch-tutorials.ts logs (without #311's guard) still parse cleanly.
+const SUMMARY_REGEX = /^\[ai-author\] expanded directives across all tutorials: (\d+) cache miss \(LLM call\), (\d+) cache hit, (\d+) errors(?:, (\d+) empty-step skipped)?\. Build cap: \d+\.$/
 
 export function invariantNoUpstreamErrors(summaryLine: string | null): InvariantResult {
   const name: InvariantName = 'no-upstream-errors'
