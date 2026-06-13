@@ -269,6 +269,43 @@ cds.on('bootstrap', (app) => {
   // streaming logic are bound lazily in 'served' via wireExportsBridge().
   registerExportsBridge(app);
 
+  // Reserve POST /api/codecheck and POST /api/validate-answer BEFORE CAP mounts
+  // DeveloperService at /api. Without this, DeveloperService's OData adapter
+  // (mounted at /api by `cds.serve`) intercepts /api/* path segments first and
+  // returns "Invalid resource path" — the express handlers mounted in 'served'
+  // never get a chance to match. Issue #314 surfaced the resulting 404.
+  // Auth + context middlewares are looked up the same way the export bridge
+  // above does — fall back to a no-op when CAP middlewares aren't yet wired.
+  const _apiContextMw = cds.middlewares?.context?.() || ((req, res, next) => next());
+  const _apiAuthMw    = cds.middlewares?.auth?.()    || ((req, res, next) => next());
+
+  // AI code-check endpoint (issue #171). Body limit is conservative (64 KB) —
+  // the handler itself enforces the 20 KB code cap. Rate limits (30/hour per
+  // user, 5/5min per step) are enforced inside the handler too.
+  const codeCheckHandler = makeCodeCheckHandler({
+    callModel: defaultCallModel,
+    loadStepText: defaultLoadStepText,
+  });
+  app.post('/api/codecheck',
+    express.json({ limit: '64kb' }),
+    _apiContextMw, _apiAuthMw,
+    (req, res, next) => Promise.resolve(codeCheckHandler(req, res)).catch(next)
+  );
+
+  // AI free-text answer grader (issue #209). Same auth + rate-limit shape as
+  // /api/codecheck. Body cap is smaller (5 KB inside the handler) — text
+  // answers are smaller than code. defaultCallModel is reused as-is from
+  // code-check-llm.js; only the schema differs (passed via dispatch).
+  const validateAnswerHandler = makeValidateAnswerHandler({
+    callModel: defaultCallModel,
+    loadQuestion: defaultLoadQuestion,
+  });
+  app.post('/api/validate-answer',
+    express.json({ limit: '64kb' }),
+    _apiContextMw, _apiAuthMw,
+    (req, res, next) => Promise.resolve(validateAnswerHandler(req, res)).catch(next)
+  );
+
   // Per-IP rate limit for the public /search endpoint. Mounted in 'bootstrap'
   // so it runs BEFORE CAP wires SearchService at /search. Defaults: 60 req/min
   // per IP; tune via SEARCH_RATE_LIMIT_MAX / SEARCH_RATE_LIMIT_WINDOW_MS.
@@ -409,33 +446,6 @@ cds.on('served', async () => {
   app.get('/build/my-progress', contextMw, authMw, (req, res, next) => {
     Promise.resolve(myProgressHandler(req, res)).catch(next);
   });
-
-  // AI code-check endpoint. Uses contextMw + authMw so req.user is populated.
-  // Rate limits are enforced inside the handler (30/hour per user, 5/5min per step).
-  // Body limit is conservative (64 KB) — the handler itself enforces the 20 KB code cap.
-  const codeCheckHandler = makeCodeCheckHandler({
-    callModel: defaultCallModel,
-    loadStepText: defaultLoadStepText,
-  });
-  app.post('/api/codecheck',
-    express.json({ limit: '64kb' }),
-    contextMw, authMw,
-    (req, res, next) => Promise.resolve(codeCheckHandler(req, res)).catch(next)
-  );
-
-  // AI free-text answer grader (issue #209). Same auth + rate-limit shape as
-  // /api/codecheck. Body cap is smaller (5 KB inside the handler) — text
-  // answers are smaller than code. defaultCallModel is reused as-is from
-  // code-check-llm.js; only the schema differs (passed via dispatch).
-  const validateAnswerHandler = makeValidateAnswerHandler({
-    callModel: defaultCallModel,
-    loadQuestion: defaultLoadQuestion,
-  });
-  app.post('/api/validate-answer',
-    express.json({ limit: '64kb' }),
-    contextMw, authMw,
-    (req, res, next) => Promise.resolve(validateAnswerHandler(req, res)).catch(next)
-  );
 
   const embeddingsStatsBusiness = async (req, res) => {
     const user = cds.context?.user;
