@@ -54,7 +54,7 @@ Consequence: every condition referencing `profile.*` evaluates as falsy/null, th
 │ 2. DeveloperService         │  │ 3. AdminService (read-only)      │
 │    action setLearningPrefs  │  │    @readonly entity for support  │
 │    @readonly entity prefs   │  │    + list view via Fiori         │
-│    @requires authenticated  │  │      Elements (v1)               │
+│    @requires authenticated- │  │      Elements (v1)               │
 │                             │  │    @requires Admin               │
 └─────────────┬───────────────┘  └──────────────────────────────────┘
               │
@@ -620,7 +620,7 @@ export async function buildUserState(user, deps, opts = {}) {
 </template>
 ```
 
-**State machine (`'idle' | 'saving' | 'saved' | 'error'`)** — mirrors `TutorialFeedbackForm.vue` precedent (per recon item 10). On mount: `GET /api/LearningPreferences` (404 / null row → all Selects show `__none__` sentinel) AND `GET /api/ChatConfig` to learn `branchingEnabled` (read from the public projection). Each Select `change` event maps `__none__` back to `null` and updates the local `prefs` ref + flips `dirty = true`. The Save button stays disabled until `dirty === true`. On click: POST all three values; show "Saved" strip and reset `dirty = false` after 3s auto-dismiss; on failure, show "Couldn't save" strip and focus the first Select via its `ref` (a11y per I15). The Selects keep the user's chosen values regardless of save outcome — there is no auto-revert.
+**State machine (`'idle' | 'saving' | 'saved' | 'error'`)** — mirrors `TutorialFeedbackForm.vue` precedent (per recon item 10). On mount: `GET /api/LearningPreferences` (returns `{value: [row]}` when the user has a row, `{value: []}` when not — the Vue extracts `data.value?.[0]` and treats `undefined` as the empty/sentinel state, so all Selects show `__none__`) AND `GET /api/ChatConfig` to learn `branchingEnabled` (read from the public projection). Each Select `change` event maps `__none__` back to `null` and updates the local `prefs` ref + flips `dirty = true`. The Save button stays disabled until `dirty === true`. On click: POST all three values; show "Saved" strip and reset `dirty = false` after 3s auto-dismiss; on failure, show "Couldn't save" strip and focus the first Select via its `ref` (a11y per I15). The Selects keep the user's chosen values regardless of save outcome — there is no auto-revert.
 
 **`__none__` ↔ null mapping (DN1):**
 
