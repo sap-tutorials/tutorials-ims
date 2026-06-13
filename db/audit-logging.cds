@@ -22,6 +22,18 @@ annotate ims.UserMetaData with @PersonalData: {
   user @PersonalData.FieldSemantics: 'DataSubjectID';
 }
 
+// Issue #172 PR 6 — Pilot enablement.
+// Mirrors the UserMetaData pattern verbatim. The cascade walker
+// (srv/lib/anonymization-cascade.js) is annotation-driven and walks every
+// entity with @PersonalData; no allowlist update needed. Hybrid test 3
+// verifies cascade-delete in real HANA.
+annotate ims.UserLearningPreferences with @PersonalData: {
+  EntitySemantics: 'DataSubjectDetails',
+  cascade: 'delete'
+} {
+  user @PersonalData.FieldSemantics: 'DataSubjectID';
+}
+
 annotate ims.TaskRecords with @PersonalData: {
   EntitySemantics: 'DataSubjectDetails',
   cascade: 'audit-only'
