@@ -55,7 +55,7 @@ These intentional divergences from the original master-spec direction (issue #17
 - `srv/lib/branch/user-state.js` — add override param + merge; remove inline `PROFILE_FIELDS` const, import from new module (~5 LoC delta)
 - `srv/lib/branch/decide.js` — extract + pass override at express callsite (~3 LoC)
 - `srv/lib/branch/mission-detail.js` — extract + pass override INSIDE existing `if (flagOn)` block (~3 LoC)
-- `test/unit/branch/loaders.test.js` — extend with 2 cases
+- `test/unit/branch/loaders.test.js` — new file (2 cases) covering the typed `loadProfile` read path
 - `test/unit/branch/user-state.test.js` — extend with 3 cases (incl. fingerprint-divergence)
 - `hugo-apps/src/me/main.ts` — mount the new island + 7 UI5 imports (~10 LoC)
 - `hugo/layouts/me/list.html` — append mount-point div inside existing `{{ if not site.Params.qa }}` block (~1 LoC)
@@ -553,9 +553,9 @@ grep -n "buildUserState\|extractProfileOverride\|if (flagOn)" srv/lib/branch/dec
 
 Note the existing call sites in both handlers + the `if (flagOn)` guard in `mission-detail.js`.
 
-- [ ] **Step 2: Write extended tests for `loaders.test.js` (+2 cases)**
+- [ ] **Step 2: Write tests for `loaders.test.js` (2 cases) — new file**
 
-Append to `test/unit/branch/loaders.test.js` — note this test needs a live CDS service for `cds.entities(...)` + INSERT/SELECT, so the appended `describe` MUST be paired with a `cds.test('serve', ...)` invocation. If the existing file does NOT already have a `cds.test()` at module scope, add one at the top of the appended block (matching the canonical pattern from `test/branch-loaders.test.js`):
+Create `test/unit/branch/loaders.test.js` as a new file. Per round-2 plan review B-NEW-1 follow-up: this file does not exist today; the legacy `test/branch-loaders.test.js` covers the placeholder shape that Task 5 Step 5 replaces. The new file body below is authoritative — single `import cds` + module-scope `cds.test('serve', ...)` + `describe`. Use this verbatim (matching the canonical pattern from `test/branches-decide.test.js`):
 
 ```js
 import cds from '@sap/cds';
@@ -590,7 +590,7 @@ describe('loadProfile (PR 6 typed read)', () => {
 });
 ```
 
-(If the existing `test/unit/branch/loaders.test.js` already has a `cds.test('serve', ...)` at module scope, omit the duplicate and just append the `describe` block plus its imports.)
+(The block above is the entire authoritative file body — no conditional / no append. Replaces previous round-1 conditional language.)
 
 - [ ] **Step 3: Write extended tests for `user-state.test.js` (+3 cases)**
 
@@ -769,6 +769,30 @@ git add srv/lib/branch/loaders.js srv/lib/branch/user-state.js srv/lib/branch/de
 git commit -m "feat(172): typed loadProfile + buildUserState override merge + callsite patches"
 ```
 
+- [ ] **Step 11: Audit legacy `test/branch-loaders.test.js`**
+
+The legacy file `test/branch-loaders.test.js` (the canonical pattern source for the new typed test) was written against PR 1's placeholder `loadProfile` body — it asserts the function reads from `UserMetaData` directly. After Step 5 lands, that read path no longer exists; any assertion that depends on the old shape will break.
+
+Run the legacy test in isolation:
+
+```bash
+D:/projects/tutorials-poc/node_modules/.bin/vitest run --project unit test/branch-loaders.test.js
+```
+
+Then choose ONE of the two paths:
+
+(a) **Update in place** — if the failures are confined to `loadProfile` cases (typically 1-2 cases), update those cases to match the typed-read shape from Step 5: insert a `UserLearningPreferences` row instead of `UserMetaData`, and assert `{ deployment, role, cloud }`. Keep the rest of the file (other loader behaviours like `loadCompletedSlugs`, `loadCompletedMissionSlugs`) unchanged.
+
+(b) **Defer as PR follow-up** — if the breakage spans more cases or risks scope-creep on this PR, add a `it.skip(...)` annotation on the broken cases with a `// TODO PR6-followup: re-enable after typed loadProfile audit` comment, AND record this file at the bottom of the PR body under "Known follow-ups". Pick (a) when fewer than 3 cases need surgery; pick (b) otherwise.
+
+Commit:
+
+```bash
+cd D:/projects/tutorials-poc/.claude/worktrees/feat-172-pr6 && git branch --show-current
+git add test/branch-loaders.test.js
+git commit -m "fix(172): legacy branch-loaders.test.js — typed loadProfile shape"
+```
+
 ---
 
 ## Task 6: Action handler + before-READ row filter — `srv/developer-service.js`
@@ -904,7 +928,7 @@ Expected: 6 failures — `setLearningPreferences` action not yet registered.
 Add the import near the top of the file (alongside other srv imports):
 
 ```js
-import { PROFILE_FIELDS, PROFILE_VOCAB } from './lib/branch/profile-fields.js';
+import { PROFILE_VOCAB } from './lib/branch/profile-fields.js';
 ```
 
 Inside the existing `class DeveloperService extends cds.ApplicationService { async init() { ... } }`, **fold `UserLearningPreferences` into the existing `cds.entities('com.sap.developers.ims')` destructure at developer-service.js:38-44** (M3 — do not introduce a second destructure call). Then add the handlers below:
@@ -1524,11 +1548,16 @@ describe('anonymization-cascade pickup of UserLearningPreferences (PR 6)', () =>
     // Loading via cds.load + getCascadePlan(csn.definitions) walks @PersonalData
     // annotations against the live CSN; the assertion is the drift guard for the
     // db/audit-logging.cds annotation in Task 2.
-    const csn = await cds.load('db/schema.cds');
+    const csn = await cds.load(['db/schema.cds', 'db/audit-logging.cds']);
     const plan = getCascadePlan(csn.definitions);
     const entry = plan.find((p: any) => p.entityName === 'com.sap.developers.ims.UserLearningPreferences');
     expect(entry, 'UserLearningPreferences must appear in cascade plan').toBeDefined();
     expect(entry?.action).toBe('delete');
+    // Note: loading BOTH schema.cds AND audit-logging.cds is required — cds.load()
+    // does not auto-discover sibling .cds files. The @PersonalData annotation under
+    // test lives in audit-logging.cds; without it the CSN has the entity but no
+    // annotation, and the walker returns no entry (silent regression-by-incomplete-fix
+    // discovered in round-2 plan review B-NEW-1).
   });
 });
 ```
