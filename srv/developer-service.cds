@@ -14,10 +14,14 @@ service DeveloperService {
   entity TaskRecords as projection on ims.TaskRecords;
 
   // Singleton sentinel UUID; safe to expose — already in seed CSV, required because CDS projections need a key.
+  // PR 6 — added branchingEnabled so /me/ can show the "branching is currently disabled"
+  // info-strip when the master flag is off. ChatConfig keeps @requires: 'any' (anonymous-readable)
+  // because Vue islands fetch it on mount before any auth handshake; branchingEnabled is a
+  // non-sensitive platform flag.
   @odata.singleton
   @(requires: 'any')
   @readonly
-  entity ChatConfig as projection on ims.ChatSettings { ID, enabled, bannerText };
+  entity ChatConfig as projection on ims.ChatSettings { ID, enabled, bannerText, branchingEnabled };
 
   // Frontend endpoints (slug-based, used by tutorials-poc UI)
   @(requires: 'authenticated-user')
@@ -142,4 +146,22 @@ service DeveloperService {
     wasAuthenticated  : Boolean,
     honeypot          : String
   ) returns { submissionId : UUID };
+
+  // PR 6 — Pilot enablement. The before-READ row filter (in srv/developer-service.js)
+  // scopes every authenticated GET to the caller's own row only.
+  // Spec: §4.2
+  @(requires: 'authenticated-user')
+  @readonly entity LearningPreferences as projection on ims.UserLearningPreferences {
+    user, deployment, role, cloud
+  };
+
+  // PR 6 — Self-service write surface. PUT-style: all three fields are written every time;
+  // values omitted by the caller are explicitly cleared to null.
+  // Spec: §4.2, §7.2
+  @(requires: 'authenticated-user')
+  action setLearningPreferences(
+    deployment : String,
+    role       : String,
+    cloud      : String
+  ) returns LearningPreferences;
 }

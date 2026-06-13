@@ -267,4 +267,10 @@ service AdminService {
   action embedAllSeeds() returns {
     processed : Integer;
   };
+
+  // PR 6 — Pilot enablement. Read-only support surface; admins read all rows
+  // (no per-row filter — inherits Admin gate from the service level). UI annotations
+  // live in app/admin-annotations.cds (Task 8). Edit-on-behalf is out of scope for v1.
+  // Spec: §4.2
+  @readonly entity LearningPreferences as projection on ims.UserLearningPreferences;
 }
