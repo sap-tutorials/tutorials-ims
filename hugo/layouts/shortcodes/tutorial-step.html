@@ -34,12 +34,12 @@
          Empty when the step has no branchPointId / skipIf — the island
          queries `.tutorial-branch-mount`/`.tutorial-skip-mount` selectors so
          absent markers are a clean no-op. */}}
-    {{ if $branchPointId }}
+    {{- if $branchPointId }}
     <div class="tutorial-branch-mount" data-branch-point-id="{{ $branchPointId }}" data-step="{{ $number }}"></div>
-    {{ end }}
-    {{ if $skipIf }}
+    {{- end }}
+    {{- if $skipIf }}
     <div class="tutorial-skip-mount" data-step="{{ $number }}"></div>
-    {{ end }}
+    {{- end }}
     <div class="step-actions">
       <button class="fd-button fd-button--emphasized" data-action="mark-done" data-step="{{ $number }}">Done</button>
     </div>
