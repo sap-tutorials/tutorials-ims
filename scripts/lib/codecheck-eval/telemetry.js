@@ -13,13 +13,25 @@ export function buildQueries(sinceIso) {
             WHERE createdAt >= ? GROUP BY verdict`,
       params: [sinceIso],
     },
-    latency: {
-      sql: `SELECT
-              MIN(latencyMs) AS p_min,
-              PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY latencyMs) AS p50,
-              PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latencyMs) AS p95,
-              PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY latencyMs) AS p99,
-              MAX(latencyMs) AS p_max
+    latencyMinMax: {
+      sql: `SELECT MIN(latencyMs) AS p_min, MAX(latencyMs) AS p_max
+            FROM ${TABLE}
+            WHERE createdAt >= ? AND latencyMs IS NOT NULL`,
+      params: [sinceIso],
+    },
+    // [#319] HANA's PERCENTILE_CONT(...) WITHIN GROUP (...) is a window
+    // function and requires OVER (). Combining it with MIN/MAX in the same
+    // SELECT errors with "invalid column name" because window-function
+    // output is per-row while MIN/MAX want a grouped scalar. Split the two
+    // queries; shapeResults merges them back into one `latency` block.
+    //
+    // SELECT TOP 1 (HANA dialect) keeps a single row; PERCENTILE_CONT OVER ()
+    // returns the same value on every row so any row works.
+    latencyPercentiles: {
+      sql: `SELECT TOP 1
+              PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY latencyMs) OVER () AS p50,
+              PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latencyMs) OVER () AS p95,
+              PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY latencyMs) OVER () AS p99
             FROM ${TABLE}
             WHERE createdAt >= ? AND latencyMs IS NOT NULL`,
       params: [sinceIso],
@@ -64,12 +76,16 @@ export function shapeResults(raw, sinceIso) {
     verdict: pick(r, 'verdict'),
     n: Number(pick(r, 'n')) || 0,
   }));
-  const latRow = (raw.latency || [])[0] || {};
+  // [#319] Latency lives in two queries (see buildQueries comment) — merge.
+  // Backwards-compat: if a caller passes the legacy `latency` key (single
+  // row with all five fields), use that instead.
+  const latRow = (raw.latency || raw.latencyMinMax || [])[0] || {};
+  const pctRow = (raw.latencyPercentiles || raw.latency || [])[0] || {};
   const latency = {
     p_min: pick(latRow, 'p_min'),
-    p50:   pick(latRow, 'p50'),
-    p95:   pick(latRow, 'p95'),
-    p99:   pick(latRow, 'p99'),
+    p50:   pick(pctRow, 'p50'),
+    p95:   pick(pctRow, 'p95'),
+    p99:   pick(pctRow, 'p99'),
     p_max: pick(latRow, 'p_max'),
   };
   const tokRow = (raw.tokens || [])[0] || {};
