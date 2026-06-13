@@ -1,22 +1,5 @@
 # Phase 4 — AI code-check spike evaluation
 
-> ⚠️ **Runbook is currently broken (2026-06-13).** Two production blockers must
-> be fixed before this runbook can run end-to-end:
->
-> - **[#314](https://github.com/sap-tutorials/tutorials-ims/issues/314)** —
->   `POST /api/codecheck` is shadowed by the DeveloperService OData router at
->   `/api/*` and returns 404 instead of reaching the handler. The express
->   handler is mounted in `cds.on('served', ...)` (too late); needs to move to
->   the `bootstrap` event.
-> - **[#315](https://github.com/sap-tutorials/tutorials-ims/issues/315)** —
->   `scripts/evaluate-code-check.js` fails with `cds.entities is not a function`
->   when invoked via `cds bind --exec` because the runtime getter is only
->   initialized inside `cds.serve()`. Workaround documented in memory note
->   `feedback_cds_entities_runtime_only.md` (use raw SQL).
->
-> Both bugs were surfaced by the #210 bootstrap on 2026-06-13. Track resolution
-> in those issues; once both land + deploy, the runbook below should work.
-
 Runbook for [issue #210](https://github.com/sap-tutorials/tutorials-ims/issues/210)
 (follow-up to [#171](https://github.com/sap-tutorials/tutorials-ims/issues/171),
 shipped in [PR #205](https://github.com/sap-tutorials/tutorials-ims/pull/205)).
@@ -57,13 +40,24 @@ in the 30 `code` strings, using the per-row `_hint` for coverage guidance.
 
 ## 4. Run the eval harness per step
 
+The harness POSTs each submission to `/api/codecheck` over HTTP — same path
+an in-app learner hits. Mint a token first per
+[QA channel bootstrap → Mint a token](./qa-channel-bootstrap.md#mint-a-token)
+(or paste a user JWT pulled from an interactive session).
+
 ```bash
-ALLOW_HYBRID_WRITES=true \
+CODECHECK_TOKEN=<bearer-token> \
+  CAP_BASE_URL=https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com \
+  ALLOW_HYBRID_WRITES=true \
   npx cds bind --exec -- node scripts/evaluate-code-check.js \
   --slug <pilot-slug> --step <n> \
   --submissions scripts/sample-submissions/<slug>-step-<n>.jsonl \
   --output verdicts/<slug>-step-<n>.csv
 ```
+
+Token-cost telemetry (`prompt_tokens`, `completion_tokens` columns) is read
+from `CodeCheckSubmissions` via raw SQL through the bound HANA — `cds bind`
+is still required even though grading itself runs over HTTP.
 
 ## 5. Author rates the CSV
 

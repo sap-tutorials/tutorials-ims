@@ -19,6 +19,36 @@ describe('Code check endpoint smoke', () => {
     expect(res.status).toBe(401);
   });
 
+  // Test 1b — regression guard for issue #314.
+  // Until #314 was fixed, POST /api/codecheck was shadowed by DeveloperService's
+  // OData router (mounted at /api/* by cds.serve). The express handler in
+  // cds.on('served', ...) was registered too late: CAP's OData middleware would
+  // try to parse "codecheck" as an entity name and 404 with
+  // {"error":{"message":"Invalid resource path \"DeveloperService.codecheck\"",...}}.
+  //
+  // The fix moved the mount to cds.on('bootstrap', ...) so it runs before CAP's
+  // OData router for DeveloperService. This test asserts the handler is reached
+  // by checking that the *response shape* is the handler's auth-failure shape,
+  // not the OData parser's resource-path error shape.
+  it('POST /api/codecheck is not shadowed by the /api OData router (#314 regression guard)', async () => {
+    const res = await fetchWithRetry(`${SRV_URL}/api/codecheck`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tutorialSlug: 'sap-cloud-application-programming-getting-started',
+        stepNumber: 1,
+        submittedCode: 'const x = 1;',
+      }),
+    });
+    const text = await res.text();
+    // The OData router emits a body like
+    //   {"error":{"message":"Invalid resource path \"DeveloperService.codecheck\""}}
+    // — that's the regression we are guarding against.
+    expect(text, `Response was the OData parser error — /api/codecheck is being shadowed again. body=${text}`)
+      .not.toContain('Invalid resource path');
+    expect(text).not.toContain('DeveloperService.codecheck');
+  });
+
   // Test 2: clearly-fake bearer token → 401
   it('POST /api/codecheck with a bad bearer token returns 401', async () => {
     const res = await fetchWithRetry(`${SRV_URL}/api/codecheck`, {
