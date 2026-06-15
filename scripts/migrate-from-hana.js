@@ -677,6 +677,39 @@ async function main() {
     }
   }
 
+  // 11d. PrizeRecords (user prize claims)
+  // FKs: user_id → Users; prize_id → Prizes; event_id → Events;
+  //      completionpathitem_id → CompletionPathItems (optional).
+  // CompletionPathItems uses LEGACYID → newly-generated UUID; the
+  // migrator generates a fresh UUID per row (see line 579) and never
+  // builds a lookup map, so we cannot resolve this FK here. Left NULL.
+  // See spec §Risk register.
+  if (uuidMap.users.size > 0 && uuidMap.prizes.size > 0) {
+    try {
+      results.push(await migrateEntity(source, target, T, {
+        name: 'prizerecords',
+        sourceQuery: `SELECT "ID", "USER_ID", "EVENT_ID", "PRIZE_ID", "STATUS" FROM ${S}."IMS_PRIZE_RECORD"`,
+        targetTable: 'COM_SAP_DEVELOPERS_IMS_PRIZERECORDS',
+        mapRow: (row) => {
+          const userUuid = uuidMap.users.get(row.USER_ID);
+          const prizeUuid = uuidMap.prizes.get(row.PRIZE_ID);
+          if (!userUuid || !prizeUuid) return null;
+          return {
+            ID: randomUUID(),
+            LEGACYID: row.ID,
+            USER_ID: userUuid,
+            EVENT_ID: row.EVENT_ID ? uuidMap.events.get(row.EVENT_ID) : null,
+            PRIZE_ID: prizeUuid,
+            COMPLETIONPATHITEM_ID: null, // see comment above
+            STATUS: truncStr(row.STATUS, 50),
+          };
+        },
+      }));
+    } catch (e) {
+      console.log(`  ⊘ PrizeRecords: ${e.message.split('\n')[0]}`);
+    }
+  }
+
   // 12. TutorialTags (many-to-many)
   try {
     results.push(await migrateEntity(source, target, T, {
