@@ -651,6 +651,32 @@ async function main() {
     }
   }
 
+  // 11c. AccomplishmentRecords (user-earned badges)
+  // FKs: user_id → Users; accomplishment_id → Accomplishments.
+  if (uuidMap.users.size > 0 && uuidMap.accomplishments.size > 0) {
+    try {
+      results.push(await migrateEntity(source, target, T, {
+        name: 'accomplishmentrecords',
+        sourceQuery: `SELECT "ID", "USER_ID", "ACCOMPLISHMENT_ID", "AWARDED_AT" FROM ${S}."IMS_ACCOMPLISHMENT_RECORD"`,
+        targetTable: 'COM_SAP_DEVELOPERS_IMS_ACCOMPLISHMENTRECORDS',
+        mapRow: (row) => {
+          const userUuid = uuidMap.users.get(row.USER_ID);
+          const accUuid = uuidMap.accomplishments.get(row.ACCOMPLISHMENT_ID);
+          if (!userUuid || !accUuid) return null;
+          return {
+            ID: randomUUID(),
+            LEGACYID: row.ID,
+            USER_ID: userUuid,
+            ACCOMPLISHMENT_ID: accUuid,
+            AWARDEDAT: toISOTimestamp(row.AWARDED_AT),
+          };
+        },
+      }));
+    } catch (e) {
+      console.log(`  ⊘ AccomplishmentRecords: ${e.message.split('\n')[0]}`);
+    }
+  }
+
   // 12. TutorialTags (many-to-many)
   try {
     results.push(await migrateEntity(source, target, T, {
