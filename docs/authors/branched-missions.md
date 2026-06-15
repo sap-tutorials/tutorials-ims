@@ -77,6 +77,6 @@ These are all open in v2 — file an issue if you need them.
 
 ## See also
 
-- [Branching paths design (issue #172)](https://github.com/sap-tutorials/tutorials-poc/blob/main/docs/superpowers/specs/2026-06-09-172-branching-paths-design.md) (internal repo path)
+- [Branching paths design (issue #172)](https://github.com/sap-tutorials/tutorials-ims/blob/main/docs/superpowers/specs/2026-06-09-172-branching-paths-design.md) (internal repo path)
 - Step-level branches inside one tutorial — Authoring branched tutorials (lands in PR 3)
 - Branching cookbook with copy-paste examples — branching cookbook (lands after PR 3)

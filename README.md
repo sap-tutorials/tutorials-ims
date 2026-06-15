@@ -9,7 +9,7 @@ A tutorial hosting platform for [developers.sap.com](https://developers.sap.com)
 ## Folder Map
 
 ```
-tutorials-poc/
+tutorials-ims/
 ├── approuter/                  # BTP AppRouter — serves static files + proxies to CAP via XSUAA auth
 │   ├── server.js               #   Custom AppRouter wrapper (VCAP merge, serve-static, proxy fixes)
 │   ├── static/                 #   Pre-built assets deployed to CF

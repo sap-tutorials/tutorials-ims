@@ -8,7 +8,7 @@ This folder (`docs/historic/`) is intended to grow as other historical documents
 
 | Old task | Status | Replacement |
 | --- | --- | --- |
-| Update Developer Center Home Page (AEM Quick Publish, weekly) | Removed | The landing page is now built by Hugo from `tutorials-poc` and deploys automatically on merge — no manual publish step. |
+| Update Developer Center Home Page (AEM Quick Publish, weekly) | Removed | The landing page is now built by Hugo from `tutorials-ims` and deploys automatically on merge — no manual publish step. |
 | Check AEM Tutorial Pipeline / Tutorial Import Admintool | Replaced | [GitHub Actions `rebuild-content.yml`](../../.github/workflows/rebuild-content.yml) plus the admin UI Pipeline Logs — see [center-admin.md § Monitor the publish pipeline](../authors/center-admin.md#task-monitor-the-publish-pipeline). |
 | AEM Log Harvester (`bin/systemReport.this.html`) | Replaced | Cloud Foundry logs via the admin UI's `cfLogsUrl` link, or `cf logs <app>` directly. |
 | Import a New Tag from AEM/Semaphore (AEM Tutorial Import plugin / `gitHubAdmin.html`) | Replaced | Admin UI Tags app at `/admin-ui/tags` — see [center-admin.md § Import a new tag from the SAP taxonomy](../authors/center-admin.md#task-import-a-new-tag-from-the-sap-taxonomy). |
@@ -34,7 +34,7 @@ This folder (`docs/historic/`) is intended to grow as other historical documents
 
 | Old task | Status | Replacement |
 | --- | --- | --- |
-| Administer CircleCI (lint pipeline for `sap-tutorials` org) | Replaced | The Sage VS Code extension provides equivalent linting at author time. The `tutorials-poc` test suite runs in CI via [GitHub Actions](../../.github/workflows/). |
+| Administer CircleCI (lint pipeline for `sap-tutorials` org) | Replaced | The Sage VS Code extension provides equivalent linting at author time. The `tutorials-ims` test suite runs in CI via [GitHub Actions](../../.github/workflows/). |
 | `tutorial-checker` repository (CircleCI lint script) | Partially retained | The lint script is no longer run, but `data/repository.owner.json` in the `sap-tutorials/tutorial-checker` repo is still the canonical owner registry — see [repo-group-owners.md § Canonical owner registry](../authors/repo-group-owners.md#canonical-owner-registry). |
 
 ## Concept changes
@@ -42,7 +42,7 @@ This folder (`docs/historic/`) is intended to grow as other historical documents
 | Old concept | What replaced it |
 | --- | --- |
 | AEM as the frontend for `developers.sap.com/tutorials` | Hugo static site behind an XSUAA-protected AppRouter, content stored in HANA BLOBs and served by CAP. |
-| AEM editorial workflow ("Quick Publish") | GitHub PR merge → repo dispatch → `tutorials-poc` CI → Hugo rebuild → HANA upload, with no manual publish step. |
+| AEM editorial workflow ("Quick Publish") | GitHub PR merge → repo dispatch → `tutorials-ims` CI → Hugo rebuild → HANA upload, with no manual publish step. |
 | IMS as the progress-tracking backend | CAP Node.js service (`srv/`) backed by HANA Cloud. |
 | Repository Group Curator (separate persona in old run-book) | Collapsed into Repo Group Owner and Center Admin — the new system has no distinct curator role. |
 

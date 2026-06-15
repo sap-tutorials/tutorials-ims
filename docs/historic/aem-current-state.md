@@ -1,6 +1,6 @@
 # AEM Current State — Historical Reference
 
-> **Purpose:** Document how Adobe Experience Manager (AEM) currently serves developers.sap.com so the team can support production until cutover to the tutorials-poc replacement is complete. This is a snapshot of the live system, not a design document.
+> **Purpose:** Document how Adobe Experience Manager (AEM) currently serves developers.sap.com so the team can support production until cutover to the tutorials-ims replacement is complete. This is a snapshot of the live system, not a design document.
 >
 > **Source:** `D:\projects\com.sap.wcms.dx.developers` (1,013 Java files, 6 OSGi bundles, 341 content XML/HTML files), reviewed 2026-05-20.
 >
@@ -49,7 +49,7 @@
                                              └────────────────────┘
 ```
 
-The tutorials-poc replacement collapses Author/Publish/Dispatcher into a single AppRouter+CAP stack on BTP Cloud Foundry, with HANA replacing JCR for tutorial HTML and progress data.
+The tutorials-ims replacement collapses Author/Publish/Dispatcher into a single AppRouter+CAP stack on BTP Cloud Foundry, with HANA replacing JCR for tutorial HTML and progress data.
 
 ---
 
@@ -140,7 +140,7 @@ Notable components that affect the public surface:
 AEM ships ~18 clientlib categories: base CSS, base JS, fonts, analytics, search, video, code-syntax, etc. The Hugo replacement consolidates these into `hugo/static/css/sap-fundamental.css` (PostCSS-built) and small Vue islands in `apps/`. Specific JS behaviors to verify:
 
 - Cookie consent banner (likely OneTrust)
-- Analytics tracking (Adobe Analytics — not yet wired in tutorials-poc)
+- Analytics tracking (Adobe Analytics — not yet wired in tutorials-ims)
 - Search box autocomplete
 - Mobile nav / hamburger
 - Anchor-link smooth scroll on tutorial steps
@@ -177,7 +177,7 @@ Replacement: CAP `DeveloperService` reimplements IMS endpoints; `srv/lib/ims-pro
 
 A servlet proxying SQL execution and algorithm runs to a HANA instance for embedded tutorial demos (e.g., "run this query against a sample dataset"). Authenticated, rate-limited, with sandbox per-user temp schemas.
 
-**This is entirely missing from the tutorials-poc replacement.** Tutorials that depend on it will break unless the proxy is kept running pointing at the AEM URL during cutover, or the feature is reimplemented.
+**This is entirely missing from the tutorials-ims replacement.** Tutorials that depend on it will break unless the proxy is kept running pointing at the AEM URL during cutover, or the feature is reimplemented.
 
 ### 5.3 GitHub Feedback → GitHub Issues
 
@@ -302,7 +302,7 @@ Adobe Analytics tags injected via clientlib. Page-view, tutorial-step-view, and 
 
 ## 15. Cutover Reference Checklist
 
-When tutorials-poc reaches production parity, the following items must be migrated, kept dual-running, or explicitly retired:
+When tutorials-ims reaches production parity, the following items must be migrated, kept dual-running, or explicitly retired:
 
 | Item | Action required at cutover |
 | --- | --- |
@@ -326,4 +326,4 @@ When tutorials-poc reaches production parity, the following items must be migrat
 
 ---
 
-*See `aem-gap-analysis.md` for a prioritized gap list and edge cases vs the tutorials-poc replacement.*
+*See `aem-gap-analysis.md` for a prioritized gap list and edge cases vs the tutorials-ims replacement.*

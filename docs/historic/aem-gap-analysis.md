@@ -1,6 +1,6 @@
-# AEM → tutorials-poc Gap Analysis
+# AEM → tutorials-ims Gap Analysis
 
-> **Scope:** Identify functional gaps between the live AEM-backed developers.sap.com and the tutorials-poc replacement, including edge cases not yet in the team's TODO list.
+> **Scope:** Identify functional gaps between the live AEM-backed developers.sap.com and the tutorials-ims replacement, including edge cases not yet in the team's TODO list.
 >
 > **Companion document:** `aem-current-state.md` is the historical reference for how AEM works today.
 >
@@ -231,7 +231,7 @@ Costs avoided: a long-lived GitHub PAT (rotation, expiry, secret hygiene), a new
 
 **AEM:** Content Fragment authoring (out of scope per Tom) but the *rendered output* of these fragments composes the homepage and many landing pages. The hero banner, secondary navigation per topic area, and the "related resources" rail are content-fragment-driven.
 
-**Scope decision (2026-05-20):** The tutorials-poc project replaces **only the `/tutorials/*` section** of developers.sap.com. The homepage, topic landing pages, hero banners, sub-navigation rails, and "related resources" components live outside the tutorials section and will be redirected to the SAP Community site at cutover, not reimplemented here.
+**Scope decision (2026-05-20):** The tutorials-ims project replaces **only the `/tutorials/*` section** of developers.sap.com. The homepage, topic landing pages, hero banners, sub-navigation rails, and "related resources" components live outside the tutorials section and will be redirected to the SAP Community site at cutover, not reimplemented here.
 
 **Verification:** Grepped `hugo/` for `hero|subnav|relatedResources|content-fragment` — all hits are either (a) CSS class names in the existing Hugo homepage layout (which is itself transitional and will be redirected), or (b) incidental occurrences of the word "hero" inside tutorial code samples. No tutorial-section-internal content fragment was found. If a future requirement surfaces a *tutorial-section* hero or rail (e.g., a "Featured tutorials" component at `/tutorials/`), it would be reopened as a separate gap.
 

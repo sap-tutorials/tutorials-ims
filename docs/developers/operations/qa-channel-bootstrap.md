@@ -2,33 +2,33 @@
 
 One-time setup procedure for the QA author-preview channel (`tutorials-srv-qa` + `tutorials-hana-qa` + `/tutorials-qa/*` route).
 
-For day-to-day QA commands (`fetch-tutorials:qa`, `build:qa`, `publish-content:qa`, `qa:full`) see the Commands section in [CLAUDE.md](https://github.com/sap-tutorials/tutorials-poc/blob/main/CLAUDE.md). For QA-specific gotchas (cache marker, `hugo.qa.toml`, `CONTENT_API_KEY_QA`) see the Gotchas section there.
+For day-to-day QA commands (`fetch-tutorials:qa`, `build:qa`, `publish-content:qa`, `qa:full`) see the Commands section in [CLAUDE.md](https://github.com/sap-tutorials/tutorials-ims/blob/main/CLAUDE.md). For QA-specific gotchas (cache marker, `hugo.qa.toml`, `CONTENT_API_KEY_QA`) see the Gotchas section there.
 
 ---
 
-## Step 1: Set CI secrets in tutorials-poc
+## Step 1: Set CI secrets in tutorials-ims
 
-In tutorials-poc repo: `CONTENT_API_KEY_QA`, `CAP_SRV_URL_QA`, `TUTORIAL_FETCH_TOKEN`, `SMOKE_QA_TOKEN`.
+In tutorials-ims repo: `CONTENT_API_KEY_QA`, `CAP_SRV_URL_QA`, `TUTORIAL_FETCH_TOKEN`, `SMOKE_QA_TOKEN`.
 
 ```bash
-gh secret set CONTENT_API_KEY_QA      -R sap-tutorials/tutorials-poc -b "<value>"
-gh secret set CAP_SRV_URL_QA          -R sap-tutorials/tutorials-poc -b "https://tutorial-system-dev-tutorials-srv-qa.cfapps.eu10-005.hana.ondemand.com"
-gh secret set TUTORIAL_FETCH_TOKEN    -R sap-tutorials/tutorials-poc -b "<value>"
-gh secret set SMOKE_QA_TOKEN          -R sap-tutorials/tutorials-poc -b "<value>"
+gh secret set CONTENT_API_KEY_QA      -R sap-tutorials/tutorials-ims -b "<value>"
+gh secret set CAP_SRV_URL_QA          -R sap-tutorials/tutorials-ims -b "https://tutorial-system-dev-tutorials-srv-qa.cfapps.eu10-005.hana.ondemand.com"
+gh secret set TUTORIAL_FETCH_TOKEN    -R sap-tutorials/tutorials-ims -b "<value>"
+gh secret set SMOKE_QA_TOKEN          -R sap-tutorials/tutorials-ims -b "<value>"
 ```
 
 Also set the QA URL repo-level **variables** (not secrets) so the post-deploy smoke step can resolve QA endpoints. `qa-routes.test.ts` self-skips when these are absent — without them, security regressions on `tutorials-srv-qa` won't be caught in CI.
 
 ```bash
-gh variable set APPROUTER_URL_QA -R sap-tutorials/tutorials-poc -b "https://<approuter-host>"
-gh variable set SRV_URL_QA       -R sap-tutorials/tutorials-poc -b "https://tutorial-system-dev-tutorials-srv-qa.cfapps.eu10-005.hana.ondemand.com"
+gh variable set APPROUTER_URL_QA -R sap-tutorials/tutorials-ims -b "https://<approuter-host>"
+gh variable set SRV_URL_QA       -R sap-tutorials/tutorials-ims -b "https://tutorial-system-dev-tutorials-srv-qa.cfapps.eu10-005.hana.ondemand.com"
 ```
 
 ## Step 2: Generate the dispatch token (`TUTORIALS_POC_DISPATCH_TOKEN`)
 
 Create a fine-grained PAT (or GitHub App installation token) on a maintainer account with the minimum scope:
 
-- Repository access: `sap-tutorials/tutorials-poc` only.
+- Repository access: `sap-tutorials/tutorials-ims` only.
 - Permissions: `Contents: read`, `Metadata: read`, `Actions: write` (for `repository_dispatch`).
 
 Save the token value securely; it must be set as a per-repo secret in EACH `*-Contribution` repo (Step 3).

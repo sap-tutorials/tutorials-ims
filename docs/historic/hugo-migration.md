@@ -28,7 +28,7 @@ Hugo is a compiled Go binary that renders markdown to HTML using Go templates. I
 ### Current (VitePress)
 
 ```
-tutorials-poc/
+tutorials-ims/
 ├── site/
 │   ├── .vitepress/
 │   │   ├── config.ts
@@ -60,7 +60,7 @@ tutorials-poc/
 ### Target (Hugo)
 
 ```
-tutorials-poc/
+tutorials-ims/
 ├── hugo/                        ← Hugo site root
 │   ├── hugo.toml                ← Hugo configuration
 │   ├── content/

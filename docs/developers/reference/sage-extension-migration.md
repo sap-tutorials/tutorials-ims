@@ -1,7 +1,7 @@
 # Sage VS Code Extension — Backend Coupling & Migration Analysis
 
 **Subject:** [`sage-tutorial-extension`](https://github.com/sap-tutorials/sage-tutorial-extension) (codename "Sage") — VS Code extension for SAP Developer Tutorial authors.
-**Question:** What does Sage need from a backend, what does `tutorials-poc` already provide, and what's the gap to fully retire its local SQLite cache and the legacy IMS dependency?
+**Question:** What does Sage need from a backend, what does `tutorials-ims` already provide, and what's the gap to fully retire its local SQLite cache and the legacy IMS dependency?
 **Source repo analyzed:** `D:/projects/sage-tutorial-extension` at the time of writing (Sage v0.10.7+).
 **Last updated:** 2026-05-25.
 
@@ -11,7 +11,7 @@
 
 ## Executive Summary
 
-The CAP backend in `tutorials-poc` now **fully covers the IMS surface that Sage uses**. The data shapes match, the entities (`Tutorials`, `Tags`, `TutorialMeta`) exist with author-scoped projections, the `POST /preview/render` endpoint on `tutorials-srv-qa` replaces Sage's local markdown renderer, and the new `AuthorService` at `/author` exposes the read/write surface Sage needs without giving it admin scope.
+The CAP backend in `tutorials-ims` now **fully covers the IMS surface that Sage uses**. The data shapes match, the entities (`Tutorials`, `Tags`, `TutorialMeta`) exist with author-scoped projections, the `POST /preview/render` endpoint on `tutorials-srv-qa` replaces Sage's local markdown renderer, and the new `AuthorService` at `/author` exposes the read/write surface Sage needs without giving it admin scope.
 
 The remaining work is entirely on the Sage side:
 
@@ -72,11 +72,11 @@ In addition, Sage hits a public GitHub raw URL for repo-group config:
 
 > `https://raw.githubusercontent.com/sap-tutorials/Tutorials/refs/heads/master/config/repository-groups.json`
 
-…which is also already mirrored into `tutorials-poc` as the `RepoCatalog` entity (see below).
+…which is also already mirrored into `tutorials-ims` as the `RepoCatalog` entity (see below).
 
 ---
 
-## What `tutorials-poc` Already Exposes
+## What `tutorials-ims` Already Exposes
 
 The CAP DB schema in [`db/schema.cds`](../../../db/schema.cds) is a near-complete superset of the IMS shape:
 
@@ -172,7 +172,7 @@ The strategic question worth answering before writing code is whether SQLite sta
 
 ## References
 
-- Sage backend gaps PR (closes hard gaps 1–3 and soft gaps 6–8): [tutorials-poc PR #54](https://github.com/sap-tutorials/tutorials-ims/pull/54).
+- Sage backend gaps PR (closes hard gaps 1–3 and soft gaps 6–8): [tutorials-ims PR #54](https://github.com/sap-tutorials/tutorials-ims/pull/54).
 - Sage source: [`D:/projects/sage-tutorial-extension`](https://github.com/sap-tutorials/sage-tutorial-extension) (also available on disk).
 - Sage architecture overview: [`D:/projects/sage-tutorial-extension/CLAUDE.md`](https://github.com/sap-tutorials/sage-tutorial-extension/blob/main/CLAUDE.md).
 - IMS API reference (legacy): [docs/historic/ims-api-reference.md](../../historic/ims-api-reference.md).

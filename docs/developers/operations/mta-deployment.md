@@ -1,6 +1,6 @@
 # MTA Deployment Runbook
 
-Complete deployment procedure for standing up the tutorials-poc stack in a CF space. Creates its own isolated service instances (HANA HDI, XSUAA, Destination, etc.) — does NOT reuse legacy IMS services.
+Complete deployment procedure for standing up the tutorials-ims stack in a CF space. Creates its own isolated service instances (HANA HDI, XSUAA, Destination, etc.) — does NOT reuse legacy IMS services.
 
 ## Architecture
 

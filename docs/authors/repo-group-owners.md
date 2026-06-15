@@ -8,7 +8,7 @@ Operational manual for owners of a tutorial repository in the [`sap-tutorials`](
 - **Tools and access:**
   - GitHub admin on the repos you own
   - Optional: `Tutorial.Author` BTP role-collection scope for the QA author-preview channel — request from a [Center Admin](center-admin.md)
-  - Local clone of [`tutorials-poc`](https://github.com/sap-tutorials/tutorials-poc) for reviewing renders before merge
+  - Local clone of [`tutorials-ims`](https://github.com/sap-tutorials/tutorials-ims) for reviewing renders before merge
 
 ## Canonical owner registry
 
@@ -24,10 +24,10 @@ If you change role, update this file (Task: Designate or change a repository gro
 - **Purpose and Objective:** When a tutorial PR merges to `main`, trigger a rebuild of the published site so the change goes live within minutes.
 - **Prerequisites:** GitHub admin on the source repo; a `DISPATCH_TOKEN` repo secret obtained from a [Center Admin](center-admin.md).
 
-1. Copy [`docs/tutorial-repo-dispatch.yml`](tutorial-repo-dispatch.yml) from `tutorials-poc` into your repo at `.github/workflows/tutorial-repo-dispatch.yml`.
+1. Copy [`docs/tutorial-repo-dispatch.yml`](tutorial-repo-dispatch.yml) from `tutorials-ims` into your repo at `.github/workflows/tutorial-repo-dispatch.yml`.
 2. In the source repo's Settings → Secrets and variables → Actions, add a secret named `DISPATCH_TOKEN` with the value supplied by the Center Admin.
 3. Commit the workflow file on `main`.
-4. Verify: push a small change (e.g., a typo fix) and watch the `tutorials-poc` repo's Actions tab for a triggered run within ~10 seconds.
+4. Verify: push a small change (e.g., a typo fix) and watch the `tutorials-ims` repo's Actions tab for a triggered run within ~10 seconds.
 5. If the run does not appear, check the source repo's Actions log for the dispatch step. The most common failure is a stale or missing `DISPATCH_TOKEN`.
 
 **Related:** [Center Admin: Force-rebuild content](center-admin.md), [build.md](../developers/architecture/build.md)
@@ -38,7 +38,7 @@ If you change role, update this file (Task: Designate or change a repository gro
 - **Interval:** Daily
 - **Status:** Active
 - **Purpose and Objective:** Catch frontmatter, structure, and metadata issues before they reach the build pipeline.
-- **Prerequisites:** GitHub admin on the source repo; optional local `tutorials-poc` clone.
+- **Prerequisites:** GitHub admin on the source repo; optional local `tutorials-ims` clone.
 
 Review checklist (verify each PR before merge):
 
@@ -56,7 +56,7 @@ Review checklist (verify each PR before merge):
 For larger or higher-risk changes, render locally:
 
 ```bash
-cd tutorials-poc
+cd tutorials-ims
 npm run fetch-tutorials
 npm run dev
 ```
@@ -75,15 +75,15 @@ Escalate to a [Center Admin](center-admin.md) if:
 ### Task: Triage repo issues
 - **Interval:** Bi-weekly
 - **Status:** Active
-- **Purpose and Objective:** Keep the repo's open-issue queue moving; route platform issues to `tutorials-poc`.
+- **Purpose and Objective:** Keep the repo's open-issue queue moving; route platform issues to `tutorials-ims`.
 - **Prerequisites:** GitHub triage permission on the source repo.
 
 1. Sweep all open issues with no recent activity. Apply labels: `bug`, `enhancement`, `question`, `tutorial-needs-fix`, `platform`.
 2. **Tutorial content issues** (a step is wrong, a screenshot is outdated, etc.) — assign to the author or a relevant reviewer.
-3. **Platform issues** (rendering bug, build failure, infrastructure question) — re-file as a new issue in `sap-tutorials/tutorials-poc` and close the source-repo issue with a link.
+3. **Platform issues** (rendering bug, build failure, infrastructure question) — re-file as a new issue in `sap-tutorials/tutorials-ims` and close the source-repo issue with a link.
 4. **Stale questions** older than 30 days with no author response — close with a polite "please reopen if still relevant" message.
 
-**Related:** [tutorials-poc Issues](https://github.com/sap-tutorials/tutorials-poc/issues)
+**Related:** [tutorials-ims Issues](https://github.com/sap-tutorials/tutorials-ims/issues)
 
 ---
 

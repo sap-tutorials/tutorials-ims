@@ -1,12 +1,12 @@
 # GitHub App Setup — `sap-tutorials-builder`
 
-> **Audience:** the SAP GitHub org admin who owns `https://github.com/sap-tutorials`, and the `tutorials-poc` repo maintainer who will set the Actions secrets and flip the activation variable. This doc is intentionally short and copy-pasteable.
+> **Audience:** the SAP GitHub org admin who owns `https://github.com/sap-tutorials`, and the `tutorials-ims` repo maintainer who will set the Actions secrets and flip the activation variable. This doc is intentionally short and copy-pasteable.
 
 For the *why* behind this change, see [`github-app-migration.md`](../../historic/github-app-migration.md). The short version: replace a long-lived classic PAT (which expires under SAP rotation policy and is tied to one human) with a GitHub App that mints a fresh 1-hour token per workflow run.
 
 ## What this changes operationally
 
-- Today: `tutorials-poc` runs `npm run fetch-tutorials` in CI using the `TUTORIALS_GITHUB_TOKEN` secret (a classic PAT). When the PAT expires, the build breaks until someone with access regenerates and re-pastes it.
+- Today: `tutorials-ims` runs `npm run fetch-tutorials` in CI using the `TUTORIALS_GITHUB_TOKEN` secret (a classic PAT). When the PAT expires, the build breaks until someone with access regenerates and re-pastes it.
 - After: the workflow asks GitHub for a short-lived installation token at the start of each run. Nothing to rotate.
 
 ## What's already in the repo
@@ -34,7 +34,7 @@ These run once. Estimated time: 15 minutes.
 1. Go to **https://github.com/organizations/sap-tutorials/settings/apps/new**
 2. Fill in:
    - **GitHub App name:** `sap-tutorials-builder`
-   - **Homepage URL:** `https://github.com/sap-tutorials/tutorials-poc` (or wherever the repo lives)
+   - **Homepage URL:** `https://github.com/sap-tutorials/tutorials-ims` (or wherever the repo lives)
    - **Webhook → Active:** **uncheck** (we don't consume events)
    - **Repository permissions:**
      - `Contents`: **Read-only**
@@ -65,7 +65,7 @@ At the top of the App's settings page: **App ID:** `XXXXXXX`. Copy this number.
 
 ### 1.5 Hand off to the repo maintainer
 
-Send to whoever owns `tutorials-poc` Actions secrets:
+Send to whoever owns `tutorials-ims` Actions secrets:
 
 - **App ID** (the number from 1.3)
 - **The full contents of the `.pem` file** from 1.2 — paste between `-----BEGIN RSA PRIVATE KEY-----` and `-----END RSA PRIVATE KEY-----` inclusive
@@ -75,7 +75,7 @@ Use a secure channel (e.g. SAP password vault, encrypted email, in-person). Trea
 
 ---
 
-## Part 2 — Repo maintainer steps (tutorials-poc)
+## Part 2 — Repo maintainer steps (tutorials-ims)
 
 These also run once, after Part 1 is complete. Estimated time: 5 minutes.
 

@@ -1,8 +1,8 @@
-# Gap Analysis — tutorials-poc
+# Gap Analysis — tutorials-ims
 
 ## Executive Summary
 
-The tutorials-poc project has a working **learner-facing frontend** (tutorial navigation, progress tracking, App Space event view), a **CAP backend** that is substantially complete, and a full **admin UI** (9 Fiori Elements apps + 1 freestyle SAPUI5 app). Tutorial content is served from **HANA BLOBs** (delta-aware publish pipeline validated end-to-end). The remaining gaps are: **content push pipeline** (dispatch workflow template only, not deployed to sap-tutorials repos), and a few backend edge cases not yet validated against production IMS.
+The tutorials-ims project has a working **learner-facing frontend** (tutorial navigation, progress tracking, App Space event view), a **CAP backend** that is substantially complete, and a full **admin UI** (9 Fiori Elements apps + 1 freestyle SAPUI5 app). Tutorial content is served from **HANA BLOBs** (delta-aware publish pipeline validated end-to-end). The remaining gaps are: **content push pipeline** (dispatch workflow template only, not deployed to sap-tutorials repos), and a few backend edge cases not yet validated against production IMS.
 
 ---
 
@@ -84,9 +84,9 @@ Dispatch template in `docs/authors/tutorial-repo-dispatch.yml`. Receiving workfl
 - [x] Create receiving workflow (`.github/workflows/rebuild-content.yml`) — triggers on `repository_dispatch` type `tutorial-updated` + manual `workflow_dispatch`
 - [x] Implement AppRouter rebuild endpoint (`/admin/rebuild`) — receives gzipped tarball, atomic swap
 - [ ] Install dispatch workflow in sap-tutorials repos (or at org level via reusable workflow)
-- [ ] Fill in `<OWNER>` placeholder in the dispatch URL (`sap-tutorials/tutorials-poc`)
+- [ ] Fill in `<OWNER>` placeholder in the dispatch URL (`sap-tutorials/tutorials-ims`)
 - [ ] Configure `TUTORIALS_DISPATCH_TOKEN` secret (GitHub PAT with repo scope)
-- [ ] Configure `REBUILD_API_KEY` secret in tutorials-poc repo (for workflow → AppRouter auth)
+- [ ] Configure `REBUILD_API_KEY` secret in tutorials-ims repo (for workflow → AppRouter auth)
 - [ ] Configure `TUTORIALS_GITHUB_TOKEN` secret (for fetch-tutorials to access sap-tutorials org)
 
 ---
@@ -155,7 +155,7 @@ Solved via the content push pipeline above — the receiving workflow POSTs a co
 ## 9. Immediate Action Items
 
 - [ ] Deploy the dispatch workflow to at least one sap-tutorials repo as proof-of-concept
-- [x] Create the receiving workflow in tutorials-poc (`.github/workflows/rebuild-content.yml`)
+- [x] Create the receiving workflow in tutorials-ims (`.github/workflows/rebuild-content.yml`)
 - [x] Wire all AEM endpoints to CAP (progress series, search, QR code — all complete)
 - [ ] Configure BTP Destinations for NGDS and Adobe Analytics
 - [x] Verify `cds deploy --to hana` succeeds with the full 35-entity schema (see §11)

@@ -11,7 +11,7 @@ This document describes the **current** authoring workflow and flags **planned i
 ```text
 You write Markdown            Platform fetches & rebuilds        Readers see HTML
 ─────────────────────         ────────────────────────────       ─────────────────
-sap-tutorials/<repo>/   ──▶   tutorials-poc CI               ──▶ developers.sap.com
+sap-tutorials/<repo>/   ──▶   tutorials-ims CI               ──▶ developers.sap.com
    *.md + images               (fetch → Hugo → publish)            /tutorials/<slug>
 ```
 
@@ -236,7 +236,7 @@ entity Books : managed {
 3. Commit any new images in the slug-named folder
 4. Open a PR against main
 5. PR review + merge (current review is informal — see §11)
-6. Push to main → repo dispatch event → tutorials-poc CI
+6. Push to main → repo dispatch event → tutorials-ims CI
 7. CI re-fetches your tutorial, rebuilds Hugo, publishes to HANA
 8. Live at developers.sap.com/tutorials/<your-slug> within a few minutes
 ```
@@ -250,8 +250,8 @@ The notification step (6) is wired by adding a small workflow file to your tutor
 To see your tutorial render exactly the way it will on production:
 
 ```bash
-git clone https://github.com/sap-tutorials/tutorials-poc.git
-cd tutorials-poc
+git clone https://github.com/sap-tutorials/tutorials-ims.git
+cd tutorials-ims
 npm install
 npm run fetch-tutorials      # Pulls every tutorial from the org (cached after first run)
 npm run dev                  # Hugo dev server at http://localhost:1313
@@ -303,14 +303,14 @@ Run through this before opening your PR:
 | Step | Where | Duration |
 |------|-------|----------|
 | GitHub Action sends repo dispatch | Your tutorial repo | seconds |
-| `tutorials-poc` CI checks out, fetches all tutorials (cached) | GitHub Actions runner | ~3 s cached / ~2 min cold |
+| `tutorials-ims` CI checks out, fetches all tutorials (cached) | GitHub Actions runner | ~3 s cached / ~2 min cold |
 | Hugo rebuilds the static site | Runner | 5–10 s |
 | Delta publish: only changed slugs upload to HANA | CAP backend | 2–4 s |
 | LRU cache invalidates; next request serves new content | Production | immediate |
 
 Total: **typically under a minute** for incremental edits, a few minutes for a full rebuild. See [build.md](../developers/architecture/build.md) for details.
 
-If the build fails, the dispatch run will be red in the `tutorials-poc` GitHub Actions tab. Common causes:
+If the build fails, the dispatch run will be red in the `tutorials-ims` GitHub Actions tab. Common causes:
 
 - Bad YAML in frontmatter
 - Missing image referenced from Markdown
@@ -342,7 +342,7 @@ _This section number is reserved for future use. See §11 for known gaps._
 | Question type | Where |
 |---------------|-------|
 | "Is my Markdown structured correctly?" | Open a draft PR; a [repo group owner](repo-group-owners.md) can review a draft PR and flag issues |
-| "Why didn't my change appear on production?" | Check the `tutorials-poc` GitHub Actions runs; look for the failed dispatch |
+| "Why didn't my change appear on production?" | Check the `tutorials-ims` GitHub Actions runs; look for the failed dispatch |
 | "How do I add a new tag / category?" | See [Center Admin](center-admin.md) § "Import a new tag" — taxonomy is centrally managed |
 | "I need a preview before merging" | Run locally per §5, or request QA channel access (§5.1) — see [../developers/operations/qa-channel-bootstrap.md](../developers/operations/qa-channel-bootstrap.md) (Tutorial.Author scope required) |
 | Anything else | Platform team channel (internal) |

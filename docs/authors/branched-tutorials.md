@@ -145,6 +145,6 @@ These are open in future work — file an issue if you need them.
 
 ## See also
 
-- [Branching paths design (issue #172)](https://github.com/sap-tutorials/tutorials-poc/blob/main/docs/superpowers/specs/2026-06-09-172-branching-paths-design.md) (internal repo path)
+- [Branching paths design (issue #172)](https://github.com/sap-tutorials/tutorials-ims/blob/main/docs/superpowers/specs/2026-06-09-172-branching-paths-design.md) (internal repo path)
 - [Authoring branched missions](./branched-missions.md) — mission-level alt-groups (PR 2)
 - [Branching cookbook](./branching-cookbook.md) — copy-paste examples

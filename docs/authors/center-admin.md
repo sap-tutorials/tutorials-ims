@@ -12,7 +12,7 @@ Operational manual for the developer center administrator — the operator role 
   - "Tutorials Admin" role collection (scopes: `Admin`, `DisplayApp`, `DeveloperApp`, `Everyone`) — sufficient for day-to-day operations.
   - "Tutorials SuperAdmin" role collection (adds `SuperAdmin` scope) — required for destructive operations such as DB schema changes.
   - `CONTENT_API_KEY` env var value (held by the Center Admin team; required for `POST /content/publish` and `POST /content/rollback`)
-  - Local clone of `tutorials-poc` for emergency operations and rebuilds
+  - Local clone of `tutorials-ims` for emergency operations and rebuilds
 
 ## Layout of this guide
 
@@ -66,7 +66,7 @@ A short [decommissioned-tasks.md](../historic/decommissioned-tasks.md) appendix 
 
 4. Save. The change is now in HANA.
 5. Trigger a content rebuild so Hugo regenerates the group page and the navigator catalog picks up the change:
-   - GitHub → `tutorials-poc` → **Actions** → **Rebuild Content** → **Run workflow** → leave **slug** blank → choose environment → **Run workflow**.
+   - GitHub → `tutorials-ims` → **Actions** → **Rebuild Content** → **Run workflow** → leave **slug** blank → choose environment → **Run workflow**.
 6. Verify: `GET /build/catalog` returns the group with the new slug. The navigator at `/tutorial-navigator.html` reflects the update after the rebuild completes.
 
 **Slug population check:** If after a fresh environment deploy group slugs are missing (the navigator shows numeric IDs), run:
@@ -219,12 +219,12 @@ npx cds bind --exec -- node scripts/setup-dev-data.cjs
 - **Purpose and Objective:** Trigger the CI pipeline to re-fetch tutorial Markdown from GitHub, rebuild Hugo, and publish updated HTML BLOBs to HANA. Use a full rebuild for catalog changes; use a single-slug rebuild for isolated tutorial fixes.
 
 **Prerequisites:**
-- Write access to the `tutorials-poc` GitHub repository
+- Write access to the `tutorials-ims` GitHub repository
 - CI secrets already configured (`CONTENT_API_KEY`, `TUTORIALS_APP_ID` / `TUTORIALS_APP_PRIVATE_KEY` or `TUTORIALS_GITHUB_TOKEN`)
 
 **Steps — full rebuild:**
 
-1. GitHub → `tutorials-poc` → **Actions** → **Rebuild Content** → **Run workflow**.
+1. GitHub → `tutorials-ims` → **Actions** → **Rebuild Content** → **Run workflow**.
 2. Choose **environment** (`dev`, `qa`, or `prod`).
 3. Leave **slug** blank.
 4. Press **Run workflow**.
@@ -304,7 +304,7 @@ The pipeline: fetches all tutorials from GitHub → generates Hugo pages → bui
 
 1. **Admin UI pipeline logs:** Navigate to `/admin-ui/` → **Operations** tile → **Pipeline Logs** tab. Each workflow run has a row. The `cfLogsUrl` virtual field in each log row opens SAP Cloud Logging pre-filtered to a ±30-second window around the run — click it for detailed server-side traces.
 
-2. **GitHub Actions:** GitHub → `tutorials-poc` → **Actions** → filter by **Rebuild Content** or **Deploy**. Red runs need investigation.
+2. **GitHub Actions:** GitHub → `tutorials-ims` → **Actions** → filter by **Rebuild Content** or **Deploy**. Red runs need investigation.
 
 3. **Smoke tests:** After any deploy, the CI pipeline automatically runs smoke tests. Check the Actions run summary for smoke-test results. Key smoke targets include:
    - `GET /health` and `GET /health/db` — liveness and HANA connectivity.
@@ -327,15 +327,15 @@ The pipeline: fetches all tutorials from GitHub → generates Hugo pages → bui
 
 **Prerequisites:**
 - CF Space Developer in prod
-- Access to GitHub Actions on `tutorials-poc`
+- Access to GitHub Actions on `tutorials-ims`
 - `CONTENT_API_KEY` for rollback operations
 
 | Symptom | Likely cause | First check | Fix |
 |---|---|---|---|
-| Author's PR merged but content not live after 15 min | `repository_dispatch` from the source repo did not reach `tutorials-poc` | Source repo Actions tab — check whether the dispatch step ran and what HTTP status it received | Verify `TUTORIALS_DISPATCH_TOKEN` secret on the source repo (e.g., `sap-tutorials/abap-core-development`) is still valid; rotate if expired |
+| Author's PR merged but content not live after 15 min | `repository_dispatch` from the source repo did not reach `tutorials-ims` | Source repo Actions tab — check whether the dispatch step ran and what HTTP status it received | Verify `TUTORIALS_DISPATCH_TOKEN` secret on the source repo (e.g., `sap-tutorials/abap-core-development`) is still valid; rotate if expired |
 | All publishes failing with HANA LOB errors | A recent code change is SELECTing a BLOB column alongside metadata in a single CDS QL query, triggering locator expiry | `cfLogsUrl` on the failing Pipeline Log row — look for `LOB locator expired` or `invalid locator handle` | In `srv/lib/content-store.js` (or whichever handler regressed), split the query: use `db.run()` raw SQL for BLOB retrieval, and a separate CDS QL query for metadata — never mix them in a single `SELECT` on HANA |
 | Manifest stuck in `PUBLISHING` status | Publish job crashed mid-run (network timeout, OOM, pod restart) leaving the manifest in a non-`ACTIVE` state | `GET /content/hashes` returns an error or empty; Pipeline Log shows status `PUBLISHING` with no `ACTIVE` follow-up | Run `POST /content/rollback` (see [Task: Content rollback](#task-content-rollback)) to revert to the previous manifest; then trigger a full rebuild |
-| GitHub rate-limit errors during fetch | Too many cold builds without a valid GitHub token | Actions log — look for `403 rate limit exceeded` from GitHub API calls | Ensure `TUTORIALS_APP_ID` + `TUTORIALS_APP_PRIVATE_KEY` secrets are set on `tutorials-poc` (preferred — generates short-lived app tokens); fallback is `TUTORIALS_GITHUB_TOKEN` PAT |
+| GitHub rate-limit errors during fetch | Too many cold builds without a valid GitHub token | Actions log — look for `403 rate limit exceeded` from GitHub API calls | Ensure `TUTORIALS_APP_ID` + `TUTORIALS_APP_PRIVATE_KEY` secrets are set on `tutorials-ims` (preferred — generates short-lived app tokens); fallback is `TUTORIALS_GITHUB_TOKEN` PAT |
 | `/tutorials/<slug>` returns 404 after rebuild | Slug not in the active manifest (BLOB never published for it) | `GET /content/hashes` — check whether the slug appears | Run a single-slug rebuild with that slug; if the tutorial source was deleted, the 404 is expected — set up a redirect via the Operations admin app |
 | Smoke tests failing on `/build/catalog` | CAP srv is down or HANA binding is broken | `GET /health/db` — check HANA status | Check CF app status (`cf app tutorials-srv`); restart if crashed; check HANA Cloud instance status in BTP cockpit |
 | Admin UI shows no data / OData 401 | XSUAA token expired or role-collection missing | `/auth/user` endpoint — check `scopes` array | Assign the correct role collection in BTP cockpit; wait for token expiry (or log out and back in) |
@@ -480,7 +480,7 @@ Document the result (date, duration, success/fail) in the team's incident log.
 - **Status:** Stub
 - **Purpose and Objective:** Provide guidance to tutorial authors on taxonomy, access, preview deploys, and authoring best practices. The Center Admin is the first escalation point for authors who cannot resolve an issue with the standard [writing-tutorials.md](writing-tutorials.md) guide or their repo group owner.
 
-> **Note (Stub):** The intake channel for author support is currently internal Slack and GitHub Issues on `tutorials-poc`. This task will be updated once a formal support channel and SLA are established.
+> **Note (Stub):** The intake channel for author support is currently internal Slack and GitHub Issues on `tutorials-ims`. This task will be updated once a formal support channel and SLA are established.
 
 **Prerequisites:**
 - Familiarity with [writing-tutorials.md](writing-tutorials.md) and [repo-group-owners.md](repo-group-owners.md)
@@ -497,7 +497,7 @@ Document the result (date, duration, success/fail) in the team's incident log.
 | "My tutorial has a broken image after merge" | Confirm image path convention in [writing-tutorials.md](writing-tutorials.md) §3.4; if path is correct, trigger a single-slug rebuild |
 
 **Escalation paths:**
-- Technical platform issues → open a GitHub Issue on `tutorials-poc` with the `platform` label.
+- Technical platform issues → open a GitHub Issue on `tutorials-ims` with the `platform` label.
 - Product taxonomy questions → route to the product owner or SAP taxonomy team.
 - GitHub org access → route to SAP OSPO.
 

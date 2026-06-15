@@ -21,7 +21,7 @@ This folder is the operational manual for everyone working with the SAP Develope
 ## System landmarks
 
 - **Source repos** — [`sap-tutorials`](https://github.com/sap-tutorials) GitHub organization (one repo per topical group)
-- **Platform repo** — [`sap-tutorials/tutorials-poc`](https://github.com/sap-tutorials/tutorials-poc) (this repo)
+- **Platform repo** — [`sap-tutorials/tutorials-ims`](https://github.com/sap-tutorials/tutorials-ims) (this repo)
 - **Admin UI** — `/admin-ui/` on the deployed app (XSUAA-gated, `Admin` scope)
 - **Analytics UI** — `/analytics-ui/` on the deployed app (`Admin` scope)
 - **Public site** — `https://developers.sap.com/tutorials/<slug>`

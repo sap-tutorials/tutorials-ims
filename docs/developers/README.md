@@ -5,7 +5,7 @@ description: Building and maintaining the SAP Tutorial Platform — architecture
 
 # Developers — Building and Maintaining the Platform
 
-You're in the right place if you're a platform engineer working on the tutorials-poc codebase: the CAP backend, AppRouter, Hugo site, build pipeline, deployment, or anything else under `srv/`, `app/`, `hugo/`, `approuter/`, or `scripts/`.
+You're in the right place if you're a platform engineer working on the tutorials-ims codebase: the CAP backend, AppRouter, Hugo site, build pipeline, deployment, or anything else under `srv/`, `app/`, `hugo/`, `approuter/`, or `scripts/`.
 
 ## Start here
 

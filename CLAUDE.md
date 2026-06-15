@@ -194,7 +194,7 @@ Set `IMS_BASE_URL`, `CAP_BASE_URL`, and `IMS_AUTH_TOKEN` env vars. Export files 
 - **`deploy.yml`** — Full MTA build + deploy to BTP Cloud Foundry, followed by smoke tests
 - **`rebuild-content.yml`** — Re-fetches tutorials, rebuilds Hugo, and publishes content to HANA (triggered manually or on tutorial source changes). Authors can force-refresh a single tutorial by running the workflow with the optional `slug` input filled in — the fetch step honors `TUTORIAL_SLUG` env var, busts that slug's markdown cache, regenerates the rest from cache, and skips the HANA `RepoCatalog` upload so the partial run doesn't overwrite the catalog. Leave `slug` blank for a full rebuild.
 - **`rebuild-content-qa.yml`** — QA-channel sibling of `rebuild-content.yml`; sources only `*-Contribution` repos and publishes to the `tutorials-srv-qa` srv via `CONTENT_API_KEY_QA`.
-- **`docs-deploy.yml`** — Builds the VitePress docs site (`npm run docs:build`) and deploys to GitHub Pages at <https://sap-tutorials.github.io/tutorials-poc/>.
+- **`docs-deploy.yml`** — Builds the VitePress docs site (`npm run docs:build`) and deploys to GitHub Pages at <https://sap-tutorials.github.io/tutorials-ims/>.
 - **`schema-drift-check.yml`** — Compares the prod and QA HDI artefacts to catch unintended schema divergence; narrowed to `JobLocks` after the shared-aspects refactor (PR #52).
 
 ### Documentation (docs/)
@@ -207,9 +207,9 @@ Architecture and reference docs for developers (not deployed). Organized by pers
 - [docs/developers/README.md](docs/developers/README.md) — for platform engineers (you)
 - [docs/historic/README.md](docs/historic/README.md) — AEM, IMS, completed migrations
 
-The same persona docs are published as a public VitePress site at <https://sap-tutorials.github.io/tutorials-poc/>. Build commands:
+The same persona docs are published as a public VitePress site at <https://sap-tutorials.github.io/tutorials-ims/>. Build commands:
 
-- `npm run docs:dev` — local preview at <http://localhost:5173/tutorials-poc/>
+- `npm run docs:dev` — local preview at <http://localhost:5173/tutorials-ims/>
 - `npm run docs:build` — production build (runs sidebar guard + font copy first)
 - `npm run docs:preview` — preview the built site
 
