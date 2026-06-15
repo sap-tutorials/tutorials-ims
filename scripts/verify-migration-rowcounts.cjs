@@ -7,9 +7,13 @@
  * Spec: docs/superpowers/specs/2026-06-15-ims-prod-to-dev-cutover-rehearsal-design.md
  *
  * Usage:
- *   node scripts/verify-migration-rowcounts.cjs [--output-dir=<path>] [--json]
+ *   node scripts/verify-migration-rowcounts.cjs [--output-dir=<path>] [--json] [--target-only]
  *
  * Source/target credentials follow the same resolution as migrate-from-hana.js.
+ * --target-only skips IMS source connection (used for the preflight DEV snapshot
+ * before IMS creds have been captured). In that mode every entity's sourceCount
+ * is null and the tolerance check is skipped — exit 0 if all queries succeed.
+ *
  * Exit codes: 0 all-pass | 1 any out-of-tolerance diff | 2 connection or query error.
  */
 
@@ -92,14 +96,17 @@ async function main() {
   const outputDirArg = process.argv.find(a => a.startsWith('--output-dir='));
   const outputDir = outputDirArg ? outputDirArg.split('=')[1] : null;
   const jsonOnly = process.argv.includes('--json');
+  const targetOnly = process.argv.includes('--target-only');
 
   let source, target;
   try {
-    const sourceCreds = resolveCreds('source');
+    if (!targetOnly) {
+      const sourceCreds = resolveCreds('source');
+      source = await connect(sourceCreds);
+      await runSql(source, `SET SCHEMA "${sourceCreds.schema}"`);
+    }
     const targetCreds = resolveCreds('target');
-    source = await connect(sourceCreds);
     target = await connect({ ...targetCreds, hdi_user: null, hdi_password: null });
-    await runSql(source, `SET SCHEMA "${sourceCreds.schema}"`);
     await runSql(target, `SET SCHEMA "${targetCreds.schema}"`);
   } catch (e) {
     console.error('✗ Connection error:', e.message);
@@ -109,15 +116,21 @@ async function main() {
   const results = [];
   for (const [name, sourceTable, targetTable] of ENTITY_TABLES) {
     try {
+      const tgtSql = `SELECT COUNT(*) AS "C" FROM "${targetTable}"`;
+      const [tgt] = await runSql(target, tgtSql);
+      const targetCount = Number(tgt.C);
+
+      if (targetOnly) {
+        results.push({ name, sourceCount: null, targetCount, ok: true, diff: null, tolerance: null, class: null });
+        continue;
+      }
+
       const filter = TASK_TYPE_FILTER[name];
       const srcSql = filter
         ? `SELECT COUNT(*) AS "C" FROM "${sourceTable}" WHERE "TASK_TYPE" = '${filter}'`
         : `SELECT COUNT(*) AS "C" FROM "${sourceTable}"`;
-      const tgtSql = `SELECT COUNT(*) AS "C" FROM "${targetTable}"`;
       const [src] = await runSql(source, srcSql);
-      const [tgt] = await runSql(target, tgtSql);
       const sourceCount = Number(src.C);
-      const targetCount = Number(tgt.C);
       const verdict = checkTolerance(name, sourceCount, targetCount);
       results.push({ name, sourceCount, targetCount, ...verdict });
     } catch (e) {
@@ -125,7 +138,7 @@ async function main() {
     }
   }
 
-  source.disconnect();
+  if (source) source.disconnect();
   target.disconnect();
 
   if (!jsonOnly) {
@@ -136,11 +149,14 @@ async function main() {
         console.log(`${r.name.padEnd(22)} ERROR: ${r.error}`);
         continue;
       }
+      const srcStr = r.sourceCount === null ? '       —  ' : String(r.sourceCount).padStart(10);
+      const diffStr = r.diff === null ? '    —' : String(r.diff).padStart(5);
+      const tolStr = r.tolerance === null ? ' — ' : `±${r.tolerance}`;
       const status = r.ok ? '✓' : '✗ FAIL';
       console.log(
-        `${r.name.padEnd(22)} ${String(r.sourceCount).padStart(10)} ` +
-        `${String(r.targetCount).padStart(10)}  ${String(r.diff).padStart(5)}  ` +
-        `±${r.tolerance}    ${status}`
+        `${r.name.padEnd(22)} ${srcStr} ` +
+        `${String(r.targetCount).padStart(10)}  ${diffStr}  ` +
+        `${tolStr}    ${status}`
       );
     }
   }
