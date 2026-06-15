@@ -3,7 +3,10 @@ import { defineConfig } from 'vitepress';
 export default defineConfig({
   title: 'SAP Tutorials Platform',
   description: 'The platform behind developers.sap.com — for readers, authors, and engineers.',
-  base: '/',
+  // GitHub Pages serves this site at https://sap-tutorials.github.io/tutorials-ims/
+  // The trailing-slash project base is required so VitePress prefixes generated
+  // bundle URLs (/assets/*) and router links (sidebar/nav) under the repo path.
+  base: '/tutorials-ims/',
   cleanUrls: true,
   lastUpdated: true,
   appearance: 'auto',
@@ -38,10 +41,15 @@ export default defineConfig({
 
   srcExclude: ['improvements.md', 'TODO.md', 'pilot-status.md', 'superpowers/**'],
 
+  // Paths in `head[]` are passed through verbatim — VitePress does not
+  // apply `base` here. Relative paths resolve against the current page URL
+  // (which breaks on deep routes like /end-users/getting-started), so the
+  // `base` prefix is included explicitly. Update both this and `base` above
+  // if the repo is ever renamed.
   head: [
-    ['link', { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' }],
-    ['link', { rel: 'preload', href: '/fonts/72-Regular.woff2', as: 'font', type: 'font/woff2', crossorigin: '' }],
-    ['link', { rel: 'preload', href: '/fonts/72-Bold.woff2',    as: 'font', type: 'font/woff2', crossorigin: '' }]
+    ['link', { rel: 'icon', href: '/tutorials-ims/favicon.svg', type: 'image/svg+xml' }],
+    ['link', { rel: 'preload', href: '/tutorials-ims/fonts/72-Regular.woff2', as: 'font', type: 'font/woff2', crossorigin: '' }],
+    ['link', { rel: 'preload', href: '/tutorials-ims/fonts/72-Bold.woff2',    as: 'font', type: 'font/woff2', crossorigin: '' }]
   ],
 
   markdown: {
