@@ -54,7 +54,7 @@ IMS PROD (Developer Destination_IMS / DEV space, us30 / GCP)
        │  hdb Node client over TLS (port 443)
        │  cf service-key → HDI hdi_user/hdi_password
        ▼
-   migrate-from-hana.js (extended: 12 → 15 entities)
+   migrate-from-hana.js (extended: 12 → 16 entities)
        │  read source schema directly with raw SELECT
        │  per-entity: DELETE target → INSERT source rows in batches of 1000
        ▼
@@ -142,7 +142,7 @@ Every step writes to `.migration-data/cutover-<ISO-timestamp>/`. The runner is r
 
 ### Verifier — `scripts/verify-migration-rowcounts.cjs`
 
-New script. Connects to both HDI containers using the same credential resolution as the migrator. Runs `SELECT COUNT(*) FROM "<schema>"."<table>"` for each of the 15 entities on both sides. Emits a side-by-side report:
+New script. Connects to both HDI containers using the same credential resolution as the migrator. Runs `SELECT COUNT(*) FROM "<schema>"."<table>"` for each of the 16 entities on both sides. Emits a side-by-side report:
 
 ```text
 entity                  IMS_PROD    DEV       diff   status
