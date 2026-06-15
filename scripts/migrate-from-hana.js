@@ -28,6 +28,7 @@ import hdb from 'hdb';
 const DRY_RUN = process.argv.includes('--dry-run');
 const DISCOVER = process.argv.includes('--discover');
 const SOURCE_ONLY = process.argv.includes('--source-only');
+const LIST_ENTITIES = process.argv.includes('--list-entities');
 const ENTITY_FILTER = process.argv.find(a => a.startsWith('--entity='))?.split('=')[1]?.split(',') || null;
 
 const SOURCE_INSTANCE = process.argv.find(a => a.startsWith('--source-instance='))?.split('=')[1] || 'ims-hana-qa-container';
@@ -211,6 +212,34 @@ async function main() {
   if (DRY_RUN) console.log('  ⚠ DRY RUN MODE — no data will be written');
   if (DISCOVER) console.log('  ⚠ DISCOVER MODE — listing tables only');
   console.log('');
+
+  if (LIST_ENTITIES) {
+    const order = [
+      ['1', 'tags', 'reference', 'IMS_TAG'],
+      ['2', 'events', 'reference', 'IMS_EVENT'],
+      ['3', 'groups', 'reference', 'IMS_TASK (TASK_TYPE=GROUP)'],
+      ['4', 'missions', 'reference', 'IMS_TASK (TASK_TYPE=MISSION)'],
+      ['5', 'tutorials', 'reference', 'IMS_TASK (TASK_TYPE=TUTORIAL)'],
+      ['6', 'steps', 'reference', 'IMS_TASK (TASK_TYPE=STEP)'],
+      ['7', 'users', 'activity', 'IMS_USER'],
+      ['7b', 'usermetadata', 'activity', 'IMS_USER_METADATA'],
+      ['8', 'taskrecords', 'activity', 'IMS_TASK_RECORD'],
+      ['9', 'completionpaths', 'reference', 'IMS_COMPLETION_PATH'],
+      ['10', 'completionpathitems', 'reference', 'IMS_COMPLETION_PATH_TO_TASK'],
+      ['11', 'prizes', 'reference', 'IMS_PRIZE'],
+      ['11b', 'accomplishments', 'reference', 'IMS_ACCOMPLISHMENT'],
+      ['11c', 'accomplishmentrecords', 'activity', 'IMS_ACCOMPLISHMENT_RECORD'],
+      ['11d', 'prizerecords', 'activity', 'IMS_PRIZE_RECORD'],
+      ['12', 'tutorialtags', 'reference', 'IMS_TAG_TO_TASK'],
+    ];
+    console.log('Migration order (FK-correct):\n');
+    for (const [n, name, klass, src] of order) {
+      console.log(`  ${n.padStart(3)}. ${name.padEnd(22)} ${klass.padEnd(10)} ← ${src}`);
+    }
+    console.log('\n  reference = zero-diff tolerance | activity = ±2 tolerance');
+    console.log('  Spec: docs/superpowers/specs/2026-06-15-ims-prod-to-dev-cutover-rehearsal-design.md\n');
+    process.exit(0);
+  }
 
   console.log('Resolving source credentials...');
   let imsCreds;
