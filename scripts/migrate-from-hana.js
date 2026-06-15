@@ -22,8 +22,23 @@
  *   --source-only  Only connect to source (skip target)
  */
 import { execFileSync } from 'child_process';
-import { randomUUID } from 'crypto';
+import { createRequire } from 'module';
 import hdb from 'hdb';
+
+// Issue #337: deterministic UUIDs derived from (entity_namespace, legacyId).
+// Re-running the migrator produces the same UUIDs for the same source rows,
+// so CAP-era tables that reference these entities by FK (TutorialMeta,
+// TutorialEmbedding, etc.) stay linked across re-runs.
+const _require = createRequire(import.meta.url);
+const { v5: uuidv5 } = _require('uuid');
+const { NAMESPACES } = _require('./lib/migration-uuid-namespaces.cjs');
+
+function deriveUuid(entityType, legacyId) {
+  const ns = NAMESPACES[entityType];
+  if (!ns) throw new Error(`No UUID namespace registered for entity type "${entityType}". Add it to scripts/lib/migration-uuid-namespaces.cjs.`);
+  if (legacyId === null || legacyId === undefined) throw new Error(`deriveUuid("${entityType}", ?) called with null/undefined legacyId`);
+  return uuidv5(String(legacyId), ns);
+}
 
 const DRY_RUN = process.argv.includes('--dry-run');
 const DISCOVER = process.argv.includes('--discover');
@@ -435,27 +450,26 @@ async function main() {
 
   const allTasks = await query(source, `SELECT "ID", "TASK_TYPE" FROM ${S}."IMS_TASK"`);
   for (const t of allTasks) {
-    const uuid = randomUUID();
     const type = (t.TASK_TYPE || '').toLowerCase();
-    if (type === 'tutorial') uuidMap.tutorials.set(t.ID, uuid);
-    else if (type === 'mission') uuidMap.missions.set(t.ID, uuid);
-    else if (type === 'group') uuidMap.groups.set(t.ID, uuid);
-    else if (type === 'step') uuidMap.steps.set(t.ID, uuid);
+    if (type === 'tutorial') uuidMap.tutorials.set(t.ID, deriveUuid('tutorial', t.ID));
+    else if (type === 'mission') uuidMap.missions.set(t.ID, deriveUuid('mission', t.ID));
+    else if (type === 'group') uuidMap.groups.set(t.ID, deriveUuid('group', t.ID));
+    else if (type === 'step') uuidMap.steps.set(t.ID, deriveUuid('step', t.ID));
   }
   console.log(`  Tasks: ${allTasks.length} (tutorials: ${uuidMap.tutorials.size}, missions: ${uuidMap.missions.size}, groups: ${uuidMap.groups.size}, steps: ${uuidMap.steps.size})`);
 
   const allUsers = await query(source, `SELECT "ID" FROM ${S}."IMS_USER"`);
-  allUsers.forEach(u => uuidMap.users.set(u.ID, randomUUID()));
+  allUsers.forEach(u => uuidMap.users.set(u.ID, deriveUuid('user', u.ID)));
   console.log(`  Users: ${uuidMap.users.size}`);
 
   const allEvents = await query(source, `SELECT "ID" FROM ${S}."IMS_EVENT"`);
-  allEvents.forEach(e => uuidMap.events.set(e.ID, randomUUID()));
+  allEvents.forEach(e => uuidMap.events.set(e.ID, deriveUuid('event', e.ID)));
   console.log(`  Events: ${uuidMap.events.size}`);
 
   let allTags = [];
   try {
     allTags = await query(source, `SELECT "ID" FROM ${S}."IMS_TAG"`);
-    allTags.forEach(t => uuidMap.tags.set(t.ID, randomUUID()));
+    allTags.forEach(t => uuidMap.tags.set(t.ID, deriveUuid('tag', t.ID)));
     console.log(`  Tags (entities): ${uuidMap.tags.size}`);
   } catch (e) { /* table might not exist */ }
 
@@ -465,20 +479,20 @@ async function main() {
     hasCompletionPaths = cpCount[0].C > 0;
     if (hasCompletionPaths) {
       const cps = await query(source, `SELECT "ID" FROM ${S}."IMS_COMPLETION_PATH"`);
-      cps.forEach(cp => uuidMap.completionPaths.set(cp.ID, randomUUID()));
+      cps.forEach(cp => uuidMap.completionPaths.set(cp.ID, deriveUuid('completionpath', cp.ID)));
       console.log(`  CompletionPaths: ${uuidMap.completionPaths.size}`);
     }
   } catch (e) { /* optional table */ }
 
   try {
     const prizes = await query(source, `SELECT "ID" FROM ${S}."IMS_PRIZE"`);
-    prizes.forEach(p => uuidMap.prizes.set(p.ID, randomUUID()));
+    prizes.forEach(p => uuidMap.prizes.set(p.ID, deriveUuid('prize', p.ID)));
     console.log(`  Prizes: ${uuidMap.prizes.size}`);
   } catch (e) { /* optional table */ }
 
   try {
     const accs = await query(source, `SELECT "ID" FROM ${S}."IMS_ACCOMPLISHMENT"`);
-    accs.forEach(a => uuidMap.accomplishments.set(a.ID, randomUUID()));
+    accs.forEach(a => uuidMap.accomplishments.set(a.ID, deriveUuid('accomplishment', a.ID)));
     console.log(`  Accomplishments: ${uuidMap.accomplishments.size}`);
   } catch (e) { /* optional table */ }
 
@@ -661,7 +675,7 @@ async function main() {
       sourceQueryForRange: (lo, hi) => `SELECT "ID", "USER_ID", "TASK_ID", "EVENT_ID", "TASK_TYPE", "STATUS", "COMPLETION_TIME", "PROGRESS", "CONTENT_LANGUAGE", "SITE_LANGUAGE", "SUBMISSION_ID_STARTED", "SUBMISSION_ID_COMPLETED", "CREATED_AT", "UPDATED_AT" FROM ${S}."IMS_TASK_RECORD" WHERE "ID" > ${lo} AND "ID" <= ${hi}`,
       targetTable: 'COM_SAP_DEVELOPERS_IMS_TASKRECORDS',
       mapRow: (row) => ({
-        ID: randomUUID(),
+        ID: deriveUuid('taskrecord', row.ID),
         LEGACYID: row.ID,
         USER_ID: uuidMap.users.get(row.USER_ID) || null,
         TASKLEGACYID: row.TASK_ID,
@@ -710,7 +724,7 @@ async function main() {
           else if (uuidMap.groups.has(row.TASK_ID)) taskType = 'GROUP';
 
           return {
-            ID: randomUUID(),
+            ID: deriveUuid('completionpathitem', row.ID),
             LEGACYID: row.ID,
             PATH_ID: uuidMap.completionPaths.get(row.PATH_ID) || null,
             TASKLEGACYID: row.TASK_ID,
@@ -745,7 +759,7 @@ async function main() {
     try {
       results.push(await migrateEntity(source, target, T, {
         name: 'accomplishments',
-        sourceQuery: `SELECT "ID", "NAME", "RULE", "DESCRIPTION" FROM ${S}."IMS_ACCOMPLISHMENT"`,
+        sourceQuery: `SELECT "ID", "NAME", CAST("RULE" AS NVARCHAR(5000)) AS "RULE", CAST("DESCRIPTION" AS NVARCHAR(2000)) AS "DESCRIPTION" FROM ${S}."IMS_ACCOMPLISHMENT"`,
         targetTable: 'COM_SAP_DEVELOPERS_IMS_ACCOMPLISHMENTS',
         mapRow: (row) => ({
           ID: uuidMap.accomplishments.get(row.ID),
@@ -775,7 +789,7 @@ async function main() {
           const accUuid = uuidMap.accomplishments.get(row.ACCOMPLISHMENT_ID);
           if (!userUuid || !accUuid) return null;
           return {
-            ID: randomUUID(),
+            ID: deriveUuid('accomplishmentrecord', row.ID),
             LEGACYID: row.ID,
             USER_ID: userUuid,
             ACCOMPLISHMENT_ID: accUuid,
@@ -806,7 +820,7 @@ async function main() {
           const prizeUuid = uuidMap.prizes.get(row.PRIZE_ID);
           if (!userUuid || !prizeUuid) return null;
           return {
-            ID: randomUUID(),
+            ID: deriveUuid('prizerecord', row.ID),
             LEGACYID: row.ID,
             USER_ID: userUuid,
             EVENT_ID: row.EVENT_ID ? uuidMap.events.get(row.EVENT_ID) : null,
