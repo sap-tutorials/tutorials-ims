@@ -213,45 +213,110 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
-      - name: Summarize
+      # Single report-and-fail step. Writes the SAME human-readable
+      # report to stdout (so it appears in the auto-expanded "failed
+      # step" log, email digests, and PR-check excerpts) and to the
+      # run summary tab. Earlier split — "Summarize" → step summary,
+      # "Fail the run" → bare `exit "$EXIT"` — produced a hostile
+      # failure log that read like a CI syntax error
+      # ("Run EXIT=\"2\"\n  EXIT=\"2\"\n  if [ ... ]\n  Error: ... exit 2"),
+      # forcing the reader to click into the run summary to find out
+      # what was actually wrong. Combined here so the actionable
+      # message is the FIRST thing anyone sees.
+      - name: Report outcome
         if: always()
+        env:
+          ENVIRONMENT: ${{ matrix.environment }}
+          SRV_URL: ${{ steps.env.outputs.srv_url }}
+          EXIT: ${{ steps.verify.outputs.exit_code }}
+          # Title used for the GitHub annotation (visible at the top of
+          # the run page) AND the heading in the run summary. Crafted
+          # so the GitHub email subject line is self-explanatory.
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
         run: |
-          {
-            echo "### Content drift check — ${{ matrix.environment }}"
-            echo ""
-            EXIT="${{ steps.verify.outputs.exit_code }}"
-            case "$EXIT" in
-              0)
-                echo "✅ **Match** — every Hugo-built slug hashes identically to what the srv serves."
-                ;;
-              2)
-                echo "⚠ **Drift detected** — at least one slug on the server does not match Hugo."
+          set -u
+
+          # Build the report into a temp file once, then tee it to
+          # both stdout and the step summary. Using a heredoc keeps
+          # the formatting honest and avoids accidental shell
+          # expansion of the slug list.
+          REPORT=$(mktemp)
+
+          case "$EXIT" in
+            0)
+              {
+                echo "### ✅ Content match — $ENVIRONMENT"
                 echo ""
-                echo "**Repair:** \`CAP_BASE_URL=\"${{ steps.env.outputs.srv_url }}\" npm run publish-content -- --heal\`"
+                echo "Every Hugo-built slug hashes identically to what the srv serves."
+              } > "$REPORT"
+              ;;
+            2)
+              # Count drifted slugs from the verify.log line
+              # 'Verify FAILED: N slugs differ:' so the title carries
+              # the magnitude without a click.
+              DRIFT_COUNT=$(grep -oE 'Verify FAILED: [0-9]+ slugs? differ' verify.log | grep -oE '[0-9]+' | head -1)
+              DRIFT_COUNT=${DRIFT_COUNT:-?}
+              {
+                echo "### ⚠️ Content drift on $ENVIRONMENT — $DRIFT_COUNT slug(s) stale on the server"
                 echo ""
-                echo "Drift list (first 50, see full \`verify.log\` artifact):"
+                echo "The HTML stored in HANA for the slugs below no longer matches what \`hugo --minify\`"
+                echo "produces from current \`main\` + current upstream tutorial sources. **This is expected**"
+                echo "when the upstream content-update triggers (\`repository_dispatch\` from the"
+                echo "\`*-Contribution\` repos) are not yet wired — every parser/layout/source change"
+                echo "since the last manual rebuild will show as drift here until the next publish."
                 echo ""
-                echo "\`\`\`"
-                grep '^  - ' verify.log || echo "(empty)"
-                echo "\`\`\`"
-                ;;
-              *)
-                echo "❌ **Verification failed** — could not reach the server or unexpected error."
+                echo "**To repair (one-shot, full republish):**"
+                echo ""
+                echo "    gh workflow run rebuild-content.yml -f environment=$ENVIRONMENT"
+                echo ""
+                echo "**Or locally, healing only the drifted slugs:**"
+                echo ""
+                echo "    CAP_BASE_URL=\"$SRV_URL\" \\"
+                echo "      CONTENT_API_KEY=\"\$CONTENT_API_KEY\" \\"
+                echo "      npm run publish-content -- --heal"
+                echo ""
+                echo "Drifted slugs (first 50; full list in the \`verify.log\` artifact on this run):"
+                echo ""
+                echo '```'
+                grep '^  - ' verify.log || echo "(no slug list captured — see verify.log artifact)"
+                echo '```'
+                echo ""
+                echo "Artifact: \`content-drift-$ENVIRONMENT-${{ github.run_number }}\` on https://github.com/$REPO/actions/runs/$RUN_ID"
+              } > "$REPORT"
+              ;;
+            *)
+              {
+                echo "### ❌ Drift check tooling failed on $ENVIRONMENT (exit $EXIT)"
+                echo ""
+                echo "This is **not** a content-drift signal — \`publish-content.ts --verify-only\` could"
+                echo "not complete its compare. Common causes: srv unreachable, missing repo secret,"
+                echo "fetch-tutorials hit GitHub rate limits, Hugo build error."
                 echo ""
                 echo "Tail of \`verify.log\`:"
                 echo ""
-                echo "\`\`\`"
+                echo '```'
                 tail -n 30 verify.log
-                echo "\`\`\`"
-                ;;
-            esac
-          } >> "$GITHUB_STEP_SUMMARY"
+                echo '```'
+                echo ""
+                echo "Full log: \`content-drift-$ENVIRONMENT-${{ github.run_number }}\` artifact on this run."
+              } > "$REPORT"
+              ;;
+          esac
 
-      - name: Fail the run if drift or error
-        if: always()
-        run: |
-          EXIT="${{ steps.verify.outputs.exit_code }}"
-          if [ "$EXIT" != "0" ]; then
-            echo "::error::Content drift check failed for ${{ matrix.environment }} (exit $EXIT)"
+          # Print to the visible step log AND to the summary tab.
+          cat "$REPORT"
+          cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
+
+          # Emit a single annotation with a specific title so the run
+          # page header and the email subject line carry the magnitude
+          # of the problem, not a generic "exit 2".
+          if [ "$EXIT" = "2" ]; then
+            DRIFT_COUNT=$(grep -oE 'Verify FAILED: [0-9]+ slugs? differ' verify.log | grep -oE '[0-9]+' | head -1)
+            DRIFT_COUNT=${DRIFT_COUNT:-?}
+            echo "::error title=Content drift on $ENVIRONMENT::${DRIFT_COUNT} slug(s) stale on the server. Repair with: gh workflow run rebuild-content.yml -f environment=$ENVIRONMENT"
+            exit 2
+          elif [ "$EXIT" != "0" ]; then
+            echo "::error title=Drift check tooling failed on $ENVIRONMENT::publish-content.ts --verify-only exited $EXIT (not a drift signal — see verify.log artifact)"
             exit "$EXIT"
           fi
