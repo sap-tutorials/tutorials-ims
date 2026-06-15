@@ -1,5 +1,13 @@
-@font-face { font-family: '72'; src: url('/fonts/72-Regular.woff2')   format('woff2'); font-weight: 400; font-style: normal;  font-display: swap; }
-@font-face { font-family: '72'; src: url('/fonts/72-Bold.woff2')      format('woff2'); font-weight: 700; font-style: normal;  font-display: swap; }
-@font-face { font-family: '72'; src: url('/fonts/72-Italic.woff2')    format('woff2'); font-weight: 400; font-style: italic;  font-display: swap; }
-@font-face { font-family: '72'; src: url('/fonts/72-Light.woff2')     format('woff2'); font-weight: 300; font-style: normal;  font-display: swap; }
-@font-face { font-family: '72'; src: url('/fonts/72-BoldItalic.woff2') format('woff2'); font-weight: 700; font-style: italic;  font-display: swap; }
+/* Fonts live in docs/.vitepress/public/fonts/ — copied there at build time
+   by scripts/copy-sap-fonts.cjs. VitePress public/ assets must be referenced
+   with absolute paths AND the explicit `base` prefix (it does not rewrite
+   url() values inside plain CSS files).
+
+   The site is served at https://sap-tutorials.github.io/tutorials-ims/.
+   If the repo is renamed, update both here and `base` in
+   docs/.vitepress/config.ts. */
+@font-face { font-family: '72'; src: url('/tutorials-ims/fonts/72-Regular.woff2')    format('woff2'); font-weight: 400; font-style: normal;  font-display: swap; }
+@font-face { font-family: '72'; src: url('/tutorials-ims/fonts/72-Bold.woff2')       format('woff2'); font-weight: 700; font-style: normal;  font-display: swap; }
+@font-face { font-family: '72'; src: url('/tutorials-ims/fonts/72-Italic.woff2')     format('woff2'); font-weight: 400; font-style: italic;  font-display: swap; }
+@font-face { font-family: '72'; src: url('/tutorials-ims/fonts/72-Light.woff2')      format('woff2'); font-weight: 300; font-style: normal;  font-display: swap; }
+@font-face { font-family: '72'; src: url('/tutorials-ims/fonts/72-BoldItalic.woff2') format('woff2'); font-weight: 700; font-style: italic;  font-display: swap; }
