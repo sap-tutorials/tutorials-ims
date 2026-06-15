@@ -25,6 +25,11 @@ const readline = require('readline');
 
 const NO_ACT = process.argv.includes('--no-act');
 
+// Heap bump for the migrator: even with TaskRecords paginated, Users (~786k rows)
+// and Tags (~10k rows × wide) can push past Node's default 4 GB heap. 12 GB is
+// safely above that on a developer laptop. Issue #332.
+const MIGRATOR_NODE_FLAGS = ['--max-old-space-size=12288'];
+
 const TIMESTAMP = new Date().toISOString().replace(/[:.]/g, '-');
 const OUTPUT_DIR = join('.migration-data', `cutover-${TIMESTAMP}`);
 
@@ -209,7 +214,7 @@ function loadEnvCreds() {
 function step6() {
   banner(6, 'Migrator --discover (connectivity probe)');
   const env = loadEnvCreds();
-  const code = runChild(6, 'discover', 'node', ['scripts/migrate-from-hana.js', '--discover'], env);
+  const code = runChild(6, 'discover', 'node', [...MIGRATOR_NODE_FLAGS, 'scripts/migrate-from-hana.js', '--discover'], env);
   if (code !== 0) fail(6, 'discover', `migrate-from-hana --discover exited ${code}`);
 }
 
@@ -217,7 +222,7 @@ function step6() {
 function step7() {
   banner(7, 'Migrator --dry-run (mapRow sanity check)');
   const env = loadEnvCreds();
-  const code = runChild(7, 'dry-run', 'node', ['scripts/migrate-from-hana.js', '--dry-run'], env);
+  const code = runChild(7, 'dry-run', 'node', [...MIGRATOR_NODE_FLAGS, 'scripts/migrate-from-hana.js', '--dry-run'], env);
   if (code !== 0) fail(7, 'dry-run', `migrate-from-hana --dry-run exited ${code}`);
 }
 
@@ -238,7 +243,7 @@ async function step8() {
 function step9() {
   banner(9, 'Migrator (real run)');
   const env = loadEnvCreds();
-  const code = runChild(9, 'migrate', 'node', ['scripts/migrate-from-hana.js'], env);
+  const code = runChild(9, 'migrate', 'node', [...MIGRATOR_NODE_FLAGS, 'scripts/migrate-from-hana.js'], env);
   if (code !== 0) fail(9, 'migrate', `migrate-from-hana exited ${code}`);
 }
 
