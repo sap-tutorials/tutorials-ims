@@ -23,7 +23,6 @@ const ACTIVITY_ENTITIES = [
   'taskrecords',
   'prizerecords',
   'accomplishmentrecords',
-  'usermetadata',
 ];
 
 const TOLERANCES = { reference: 0, activity: 2 };

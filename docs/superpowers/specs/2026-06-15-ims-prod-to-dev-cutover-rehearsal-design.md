@@ -36,7 +36,7 @@ The rehearsal is not a partial test or a sample — it is the same migration we 
 | 3 | Entity scope | **Full set** — all entities IMS prod populates, including Users, TaskRecords, prize claims, accomplishments |
 | 4 | PII handling | **Verbatim** — real names, emails, sUserIds copied across to maximize cutover-rehearsal fidelity |
 | 5 | Verification depth | **Three tiers** — row counts (scripted), endpoint parity (scripted), functional smoke (manual, ~30 min) |
-| 6 | Migrator coverage gap | **Extend** the migrator with three new entities (`UserMetaData`, `AccomplishmentRecords`, `PrizeRecords`) before running |
+| 6 | Migrator coverage gap | **Extend** the migrator with two new entities (`AccomplishmentRecords`, `PrizeRecords`) plus the `Accomplishments` catalog. UserMetaData was originally in this list but the IMS source schema turned out to be unrelated to the CAP entity — dropped (issue #330). |
 | 7 | Smoke identity | **Thomas Jung's real account** — logs in via SAP IDP, sees own migrated history |
 | 8 | Rollback | **Wipe + re-run** — no separate restore path; the migrator's per-table DELETE-then-INSERT is correctness-equivalent to a fresh start |
 | 9 | Row-count tolerance | **Zero** on reference tables (missions, groups, tutorials, tags, prizes); **±2** on activity tables (TaskRecords, etc.) to absorb live-write skew during the read window |
@@ -54,7 +54,7 @@ IMS PROD (Developer Destination_IMS / DEV space, us30 / GCP)
        │  hdb Node client over TLS (port 443)
        │  cf service-key → HDI hdi_user/hdi_password
        ▼
-   migrate-from-hana.js (extended: 12 → 16 entities)
+   migrate-from-hana.js (extended: 12 → 15 entities)
        │  read source schema directly with raw SELECT
        │  per-entity: DELETE target → INSERT source rows in batches of 1000
        ▼
@@ -91,23 +91,21 @@ tutorials-hana (tutorial-system / dev, eu10 / AWS)
 
 ### Migrator extension — `scripts/migrate-from-hana.js`
 
-Three new entity definitions appended to the existing migration array, in FK-correct order. The pattern follows the existing 12 entries (`name`, `sourceQuery`, `targetTable`, `mapRow`, optional `preInsert`).
+Two new entity definitions appended to the existing migration array, in FK-correct order. The pattern follows the existing 12 entries (`name`, `sourceQuery`, `targetTable`, `mapRow`, optional `preInsert`).
 
-1. **`usermetadata`** — placed after `users`, before `taskrecords`.
-   - Source columns: legacy `id`, `user_id`, key/value pairs, timestamps.
-   - Target table: `COM_SAP_DEVELOPERS_IMS_USERMETADATA`.
-   - mapRow: generate fresh UUID for `ID`, copy legacy `id` to `legacyId`, FK-resolve `user_id` to the migrated Users row's UUID via legacyId join (the migrator already builds this lookup map for TaskRecords; we extend it).
-   - Managed columns: not present on this entity (only `cuid` + `LegacyKeyed`); migrator leaves `createdAt`/`createdBy` as NULL.
-
-2. **`accomplishmentrecords`** — placed after both `users` and `accomplishments`.
-   - Source: user-earned badge junction rows.
+1. **`accomplishmentrecords`** — placed after both `users` and `accomplishments`.
+   - Source: user-earned badge junction rows. Source column for the awarded timestamp is `DATE` (not `AWARDED_AT`) — caught during the 2026-06-15 dry-run, issue #331.
    - Target: `COM_SAP_DEVELOPERS_IMS_ACCOMPLISHMENTRECORDS`.
    - mapRow: FK-resolve `user_id` and `accomplishment_id` to the migrated rows' UUIDs.
 
-3. **`prizerecords`** — placed after `users`, `prizes`, and `events`.
+2. **`prizerecords`** — placed after `users`, `prizes`, and `events`.
    - Source: prize claim junction rows including `claimed`, `claimedAt`, `claimedBy`.
    - Target: `COM_SAP_DEVELOPERS_IMS_PRIZERECORDS`.
    - mapRow: FK-resolve `user_id`, `prize_id`, `event_id`. Carry `claimed` flags verbatim (per Q3 follow-up).
+
+Plus the missing `accomplishments` catalog migration (the existing migrator pre-built `uuidMap.accomplishments` but never inserted into `COM_SAP_DEVELOPERS_IMS_ACCOMPLISHMENTS`); see the dry-run findings doc for details.
+
+**Originally planned but DROPPED (issue #330):** `usermetadata`. The IMS source `IMS_USER_META_DATA` is a visitor-ID tracking table with completely different columns (USER_ID, VISITOR_ID, CREATED_BY/UPDATED_BY/CREATED_AT/UPDATED_AT — no ID, KEY, or VALUE), unrelated to the CAP `UserMetaData` entity's key/value model. The CDS entity is a v2 design IMS never used.
 
 A new `--list-entities` CLI flag prints the migration order so we can audit it before the real run, separate from `--discover` (which lists source schema tables).
 
@@ -142,7 +140,7 @@ Every step writes to `.migration-data/cutover-<ISO-timestamp>/`. The runner is r
 
 ### Verifier — `scripts/verify-migration-rowcounts.cjs`
 
-New script. Connects to both HDI containers using the same credential resolution as the migrator. Runs `SELECT COUNT(*) FROM "<schema>"."<table>"` for each of the 16 entities on both sides. Emits a side-by-side report:
+New script. Connects to both HDI containers using the same credential resolution as the migrator. Runs `SELECT COUNT(*) FROM "<schema>"."<table>"` for each of the 15 entities on both sides. Emits a side-by-side report:
 
 ```text
 entity                  IMS_PROD    DEV       diff   status
@@ -153,13 +151,12 @@ users                     47213   47213          0   ✓
 taskrecords              892341  892340         -1   ✓ (within tolerance)
 prizerecords               8421    8421          0   ✓
 accomplishmentrecords     31204   31204          0   ✓
-usermetadata              12877   12877          0   ✓
 ...
 ```
 
 Tolerance:
 - **Reference tables** (tutorials, missions, groups, tags, events, prizes, completionpaths, completionpathitems, tutorialtags, accomplishments, steps): **zero diff** required.
-- **Activity tables** (users, taskrecords, prizerecords, accomplishmentrecords, usermetadata): **±2 diff** tolerated to absorb live writes on IMS prod during the read window.
+- **Activity tables** (users, taskrecords, prizerecords, accomplishmentrecords): **±2 diff** tolerated to absorb live writes on IMS prod during the read window.
 
 Exit code 0 on all-pass; exit code 1 on any out-of-tolerance diff. The runner halts on non-zero exit.
 
@@ -245,7 +242,7 @@ This step is sequenced after migration because the publisher writes `tutorialsTa
 | TaskRecord write skew (rows added on prod during read window) | Med | Low | ±2 tolerance on activity tables; if exceeded, re-run with source quiesced or document |
 | FK violation on insert (e.g. orphaned TaskRecord whose User wasn't migrated) | Low | Per-row | Migrator already does row-by-row fallback on batch failure (line 184-192); orphan rows error out and are counted in `errors` |
 | HANA disk pressure on tutorials-hana from bulk insert | Low | Service degradation | DEV HANA has spare capacity; ~900k TaskRecords ≈ 200-400 MB. Watch `cf logs tutorials-srv` for OOM/GC during run |
-| Schema drift between IMS and CAP breaks `mapRow` for a new entity | Med | Per-entity | Existing 12 entities are hardened; the 3 new ones (UserMetaData, AccomplishmentRecords, PrizeRecords) carry the highest risk. Dry-run + small-sample test before full run |
+| Schema drift between IMS and CAP breaks `mapRow` for a new entity | Med | Per-entity | Existing 12 entities are hardened; the 2 new ones (AccomplishmentRecords, PrizeRecords) plus the Accomplishments catalog were validated in the 2026-06-15 dry-run after issue #331 fix. UserMetaData was originally in scope but dropped (issue #330 — IMS source schema unrelated to CAP entity). |
 | Real PII in DEV persists beyond rehearsal | Med | Compliance | Documented as known state. Either run anonymization cascade post-test or wipe DEV when next rehearsal starts. Tracked, not part of this test plan. |
 | `tutorials-srv` serves a half-migrated DB during the run | Cert | Low | DEV is non-public, role-collection scoped. Acceptable. |
 | Job scheduler fires mid-migration (cleanup, ngds-retry, account-merge) | Low | Per-job | Worst case: cleanup sees no SUPERSEDED content (wipe just emptied it), no-op. Monitor logs; `cf stop tutorials-srv` for the duration if a job becomes problematic |

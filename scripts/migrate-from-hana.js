@@ -203,6 +203,94 @@ async function migrateEntity(source, target, targetSchema, config) {
   return { name, count: inserted, errors };
 }
 
+// Paginated migration for entities too large to fit in memory. Walks the source
+// in id-keyed page slices (default 50_000 rows) and feeds each page through the
+// same map → batch-insert pipeline as migrateEntity. Caller supplies
+// `sourceQueryForRange(min, max)` returning the SELECT for `id IN (min, max]`.
+// Issue #332 — IMS prod TaskRecords is large enough to OOM the single-shot path.
+async function migrateEntityPaginated(source, target, targetSchema, config) {
+  const { name, idColumn, idMin, idMax, pageSize, sourceQueryForRange, targetTable, mapRow, preInsert } = config;
+
+  if (ENTITY_FILTER && !ENTITY_FILTER.includes(name)) {
+    console.log(`  ⊘ Skipping ${name} (not in filter)`);
+    return { name, count: 0, skipped: true };
+  }
+
+  console.log(`\n─── Migrating: ${name} (paginated by ${idColumn}) ───`);
+  console.log(`  Range: ${idMin}..${idMax}, pageSize=${pageSize}`);
+
+  if (preInsert) await preInsert(target, targetSchema);
+
+  const fullTable = `"${targetSchema}"."${targetTable}"`;
+  if (!DRY_RUN) {
+    const existing = await query(target, `SELECT COUNT(*) AS "C" FROM ${fullTable}`);
+    if (existing[0].C > 0) {
+      console.log(`  Clearing ${existing[0].C} existing records in target...`);
+      await execStmt(target, `DELETE FROM ${fullTable}`);
+    }
+  }
+
+  let stmt = null;
+  let cols = null;
+  let inserted = 0;
+  let errors = 0;
+  let totalRead = 0;
+
+  for (let lo = idMin - 1; lo < idMax; lo += pageSize) {
+    const hi = Math.min(lo + pageSize, idMax);
+    const pageSql = sourceQueryForRange(lo, hi);
+    const pageRows = await query(source, pageSql);
+    totalRead += pageRows.length;
+    if (pageRows.length === 0) continue;
+
+    const mapped = [];
+    for (const row of pageRows) {
+      const m = mapRow(row);
+      if (m) mapped.push(m);
+    }
+
+    if (DRY_RUN) {
+      // Print samples from the first non-empty page only.
+      if (inserted === 0 && mapped.length > 0) {
+        mapped.slice(0, 3).forEach(m => console.log(`  [dry-run] Would insert:`, JSON.stringify(m).slice(0, 200)));
+      }
+      inserted += mapped.length;
+      process.stdout.write(`  page ${lo + 1}..${hi}: read=${pageRows.length} mapped=${mapped.length} (running total mapped=${inserted})\r`);
+      continue;
+    }
+
+    if (mapped.length === 0) continue;
+    if (!stmt) {
+      cols = Object.keys(mapped[0]);
+      const colNames = cols.map(c => `"${c}"`).join(', ');
+      const placeholders = cols.map(() => '?').join(', ');
+      stmt = await prepare(target, `INSERT INTO ${fullTable} (${colNames}) VALUES (${placeholders})`);
+    }
+
+    for (let i = 0; i < mapped.length; i += BATCH_SIZE) {
+      const batch = mapped.slice(i, i + BATCH_SIZE);
+      const paramRows = batch.map(row => cols.map(c => row[c] ?? null));
+      try {
+        await execBatch(stmt, paramRows);
+        inserted += batch.length;
+      } catch (e) {
+        for (const params of paramRows) {
+          try { await execBatch(stmt, [params]); inserted++; }
+          catch (rowErr) {
+            errors++;
+            if (errors <= 5) console.error(`  ✗ Row error: ${rowErr.message.split('\n')[0]}`);
+          }
+        }
+      }
+    }
+    process.stdout.write(`  page ${lo + 1}..${hi}: ${inserted} inserted, ${errors} errors\r`);
+  }
+
+  if (stmt) stmt.drop();
+  console.log(`\n  ✓ ${inserted} inserted, ${errors} errors (read ${totalRead} from source)`);
+  return { name, count: inserted, errors };
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -222,7 +310,6 @@ async function main() {
       ['5', 'tutorials', 'reference', 'IMS_TASK (TASK_TYPE=TUTORIAL)'],
       ['6', 'steps', 'reference', 'IMS_TASK (TASK_TYPE=STEP)'],
       ['7', 'users', 'activity', 'IMS_USER'],
-      ['7b', 'usermetadata', 'activity', 'IMS_USER_METADATA'],
       ['8', 'taskrecords', 'activity', 'IMS_TASK_RECORD'],
       ['9', 'completionpaths', 'reference', 'IMS_COMPLETION_PATH'],
       ['10', 'completionpathitems', 'reference', 'IMS_COMPLETION_PATH_TO_TASK'],
@@ -403,18 +490,15 @@ async function main() {
     console.log(`  Task-to-parent links: ${stepParentMap.size}`);
   } catch (e) { /* optional */ }
 
-  // Mission-to-group mapping
+  // Mission-to-group mapping: INTENTIONALLY EMPTY.
+  // IMS does NOT model missions as children of groups (probed 2026-06-15:
+  // SELECT ... FROM IMS_TASK_TO_PARENT ttp JOIN IMS_TASK m ON m.ID = ttp.CHILD_TASK_ID
+  // AND m.TASK_TYPE='MISSION' returns 0 rows in either direction). Missions stand
+  // alone in IMS; the group-of-missions relationship lives only in the CAP v2
+  // schema. Migrated missions therefore land with GROUP_ID NULL. The legitimate
+  // mission grouping is via CompletionPaths.mission, not Missions.group_id.
+  // Issue #333.
   const missionGroupMap = new Map();
-  try {
-    const missionGroups = await query(source, `
-      SELECT ttp."CHILD_TASK_ID" AS "MISSION_ID", ttp."PARENT_TASK_ID" AS "GROUP_ID"
-      FROM ${S}."IMS_TASK_TO_PARENT" ttp
-      JOIN ${S}."IMS_TASK" t ON t."ID" = ttp."CHILD_TASK_ID" AND t."TASK_TYPE" = 'MISSION'
-      JOIN ${S}."IMS_TASK" g ON g."ID" = ttp."PARENT_TASK_ID" AND g."TASK_TYPE" = 'GROUP'
-    `);
-    missionGroups.forEach(mg => missionGroupMap.set(mg.MISSION_ID, mg.GROUP_ID));
-    console.log(`  Mission-to-group links: ${missionGroupMap.size}`);
-  } catch (e) { /* optional */ }
 
   // ─── Entity migrations (order matters for FK integrity) ─────────────────────
   const results = [];
@@ -551,57 +635,53 @@ async function main() {
     }),
   }));
 
-  // 7b. UserMetaData (CAP entity: UserMetaData)
-  // FK: user_id → Users. Insert after Users so the FK resolves.
-  // Defensive: IMS prod may not have this table populated.
-  // HANA column for `key` is "KEY" (uppercase) per db/last-dev/csn.json.
-  try {
-    results.push(await migrateEntity(source, target, T, {
-      name: 'usermetadata',
-      sourceQuery: `SELECT "ID", "USER_ID", "KEY", "VALUE" FROM ${S}."IMS_USER_METADATA"`,
-      targetTable: 'COM_SAP_DEVELOPERS_IMS_USERMETADATA',
-      mapRow: (row) => {
-        const userUuid = uuidMap.users.get(row.USER_ID);
-        if (!userUuid) return null; // orphan: no migrated user → drop row
-        return {
-          ID: randomUUID(),
-          LEGACYID: row.ID,
-          USER_ID: userUuid,
-          KEY: truncStr(row.KEY, 255),
-          VALUE: truncStr(row.VALUE, 2000),
-        };
-      },
-    }));
-  } catch (e) {
-    console.log(`  ⊘ UserMetaData: ${e.message.split('\n')[0]}`);
-  }
+  // 7b. UserMetaData — INTENTIONALLY NOT MIGRATED.
+  // The CAP UserMetaData entity (db/schema.cds:127-131) models a per-user
+  // key/value store. The IMS source IMS_USER_META_DATA is a visitor-ID
+  // tracking table with completely different columns (USER_ID, VISITOR_ID,
+  // CREATED_BY, UPDATED_BY, CREATED_AT, UPDATED_AT — no ID/KEY/VALUE).
+  // The CDS entity is a v2 design IMS never used; nothing to migrate.
+  // See issue #330. Caught during 2026-06-15 cutover-rehearsal dry-run.
 
-  // 8. Task Records
-  results.push(await migrateEntity(source, target, T, {
-    name: 'taskrecords',
-    sourceQuery: `SELECT "ID", "USER_ID", "TASK_ID", "EVENT_ID", "TASK_TYPE", "STATUS", "COMPLETION_TIME", "PROGRESS", "CONTENT_LANGUAGE", "SITE_LANGUAGE", "SUBMISSION_ID_STARTED", "SUBMISSION_ID_COMPLETED", "CREATED_AT", "UPDATED_AT" FROM ${S}."IMS_TASK_RECORD"`,
-    targetTable: 'COM_SAP_DEVELOPERS_IMS_TASKRECORDS',
-    mapRow: (row) => ({
-      ID: randomUUID(),
-      LEGACYID: row.ID,
-      USER_ID: uuidMap.users.get(row.USER_ID) || null,
-      TASKLEGACYID: row.TASK_ID,
-      TASKTYPE: row.TASK_TYPE,
-      STATUS: row.STATUS,
-      PROGRESS: row.PROGRESS,
-      COMPLETIONTIME: row.COMPLETION_TIME,
-      COMPLETIONDATE: row.STATUS === 'COMPLETED' ? toISOTimestamp(row.UPDATED_AT) : null,
-      CONTENTLANGUAGE: row.CONTENT_LANGUAGE,
-      SITELANGUAGE: row.SITE_LANGUAGE,
-      SUBMISSIONIDSTARTED: row.SUBMISSION_ID_STARTED,
-      SUBMISSIONIDCOMPLETED: row.SUBMISSION_ID_COMPLETED,
-      EVENT_ID: row.EVENT_ID ? uuidMap.events.get(row.EVENT_ID) : null,
-      CREATEDAT: toISOTimestamp(row.CREATED_AT) || new Date().toISOString(),
-      MODIFIEDAT: toISOTimestamp(row.UPDATED_AT) || new Date().toISOString(),
-      CREATEDBY: 'migration',
-      MODIFIEDBY: 'migration',
-    }),
-  }));
+  // 8. Task Records — paginated by ID range to bypass the OOM that otherwise
+  // hits at IMS prod scale (~10M+ rows). Issue #332.
+  // Probe the actual range first so we don't iterate over empty space.
+  const tr = await query(source, `SELECT MIN("ID") AS "LO", MAX("ID") AS "HI", COUNT(*) AS "C" FROM ${S}."IMS_TASK_RECORD"`);
+  const trMin = Number(tr[0].LO ?? 0);
+  const trMax = Number(tr[0].HI ?? 0);
+  const trCount = Number(tr[0].C ?? 0);
+  console.log(`\n  TaskRecord ID range: ${trMin}..${trMax} (${trCount} rows)`);
+  if (trCount > 0) {
+    results.push(await migrateEntityPaginated(source, target, T, {
+      name: 'taskrecords',
+      idColumn: 'ID',
+      idMin: trMin,
+      idMax: trMax,
+      pageSize: 50_000,
+      sourceQueryForRange: (lo, hi) => `SELECT "ID", "USER_ID", "TASK_ID", "EVENT_ID", "TASK_TYPE", "STATUS", "COMPLETION_TIME", "PROGRESS", "CONTENT_LANGUAGE", "SITE_LANGUAGE", "SUBMISSION_ID_STARTED", "SUBMISSION_ID_COMPLETED", "CREATED_AT", "UPDATED_AT" FROM ${S}."IMS_TASK_RECORD" WHERE "ID" > ${lo} AND "ID" <= ${hi}`,
+      targetTable: 'COM_SAP_DEVELOPERS_IMS_TASKRECORDS',
+      mapRow: (row) => ({
+        ID: randomUUID(),
+        LEGACYID: row.ID,
+        USER_ID: uuidMap.users.get(row.USER_ID) || null,
+        TASKLEGACYID: row.TASK_ID,
+        TASKTYPE: row.TASK_TYPE,
+        STATUS: row.STATUS,
+        PROGRESS: row.PROGRESS,
+        COMPLETIONTIME: row.COMPLETION_TIME,
+        COMPLETIONDATE: row.STATUS === 'COMPLETED' ? toISOTimestamp(row.UPDATED_AT) : null,
+        CONTENTLANGUAGE: row.CONTENT_LANGUAGE,
+        SITELANGUAGE: row.SITE_LANGUAGE,
+        SUBMISSIONIDSTARTED: row.SUBMISSION_ID_STARTED,
+        SUBMISSIONIDCOMPLETED: row.SUBMISSION_ID_COMPLETED,
+        EVENT_ID: row.EVENT_ID ? uuidMap.events.get(row.EVENT_ID) : null,
+        CREATEDAT: toISOTimestamp(row.CREATED_AT) || new Date().toISOString(),
+        MODIFIEDAT: toISOTimestamp(row.UPDATED_AT) || new Date().toISOString(),
+        CREATEDBY: 'migration',
+        MODIFIEDBY: 'migration',
+      }),
+    }));
+  }
 
   // 9. Completion Paths
   if (hasCompletionPaths) {
@@ -682,11 +762,13 @@ async function main() {
 
   // 11c. AccomplishmentRecords (user-earned badges)
   // FKs: user_id → Users; accomplishment_id → Accomplishments.
+  // IMS source column for the awarded timestamp is "DATE" (per probe of
+  // SYS.TABLE_COLUMNS on 2026-06-15), not "AWARDED_AT". Issue #331.
   if (uuidMap.users.size > 0 && uuidMap.accomplishments.size > 0) {
     try {
       results.push(await migrateEntity(source, target, T, {
         name: 'accomplishmentrecords',
-        sourceQuery: `SELECT "ID", "USER_ID", "ACCOMPLISHMENT_ID", "AWARDED_AT" FROM ${S}."IMS_ACCOMPLISHMENT_RECORD"`,
+        sourceQuery: `SELECT "ID", "USER_ID", "ACCOMPLISHMENT_ID", "DATE" FROM ${S}."IMS_ACCOMPLISHMENT_RECORD"`,
         targetTable: 'COM_SAP_DEVELOPERS_IMS_ACCOMPLISHMENTRECORDS',
         mapRow: (row) => {
           const userUuid = uuidMap.users.get(row.USER_ID);
@@ -697,7 +779,7 @@ async function main() {
             LEGACYID: row.ID,
             USER_ID: userUuid,
             ACCOMPLISHMENT_ID: accUuid,
-            AWARDEDAT: toISOTimestamp(row.AWARDED_AT),
+            AWARDEDAT: toISOTimestamp(row.DATE),
           };
         },
       }));

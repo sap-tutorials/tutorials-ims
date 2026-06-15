@@ -34,7 +34,6 @@ const ENTITY_TABLES = [
   ['tutorials',             'IMS_TASK',                        'COM_SAP_DEVELOPERS_IMS_TUTORIALS'],
   ['steps',                 'IMS_TASK',                        'COM_SAP_DEVELOPERS_IMS_STEPS'],
   ['users',                 'IMS_USER',                        'COM_SAP_DEVELOPERS_IMS_USERS'],
-  ['usermetadata',          'IMS_USER_METADATA',               'COM_SAP_DEVELOPERS_IMS_USERMETADATA'],
   ['taskrecords',           'IMS_TASK_RECORD',                 'COM_SAP_DEVELOPERS_IMS_TASKRECORDS'],
   ['completionpaths',       'IMS_COMPLETION_PATH',             'COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHS'],
   ['completionpathitems',   'IMS_COMPLETION_PATH_TO_TASK',     'COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHITEMS'],

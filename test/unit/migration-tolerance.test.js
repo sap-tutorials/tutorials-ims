@@ -26,7 +26,10 @@ describe('classifyEntity', () => {
     expect(classifyEntity('taskrecords')).toBe('activity');
     expect(classifyEntity('prizerecords')).toBe('activity');
     expect(classifyEntity('accomplishmentrecords')).toBe('activity');
-    expect(classifyEntity('usermetadata')).toBe('activity');
+  });
+
+  it('does NOT classify usermetadata (issue #330: dropped from migrator)', () => {
+    expect(() => classifyEntity('usermetadata')).toThrow(/unknown entity/i);
   });
 
   it('throws on unknown entities — fail loud, never silently allow drift', () => {
