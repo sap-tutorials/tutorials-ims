@@ -522,6 +522,31 @@ async function main() {
     }),
   }));
 
+  // 7b. UserMetaData (CAP entity: UserMetaData)
+  // FK: user_id → Users. Insert after Users so the FK resolves.
+  // Defensive: IMS prod may not have this table populated.
+  // HANA column for `key` is "KEY" (uppercase) per db/last-dev/csn.json.
+  try {
+    results.push(await migrateEntity(source, target, T, {
+      name: 'usermetadata',
+      sourceQuery: `SELECT "ID", "USER_ID", "KEY", "VALUE" FROM ${S}."IMS_USER_METADATA"`,
+      targetTable: 'COM_SAP_DEVELOPERS_IMS_USERMETADATA',
+      mapRow: (row) => {
+        const userUuid = uuidMap.users.get(row.USER_ID);
+        if (!userUuid) return null; // orphan: no migrated user → drop row
+        return {
+          ID: randomUUID(),
+          LEGACYID: row.ID,
+          USER_ID: userUuid,
+          KEY: truncStr(row.KEY, 255),
+          VALUE: truncStr(row.VALUE, 2000),
+        };
+      },
+    }));
+  } catch (e) {
+    console.log(`  ⊘ UserMetaData: ${e.message.split('\n')[0]}`);
+  }
+
   // 8. Task Records
   results.push(await migrateEntity(source, target, T, {
     name: 'taskrecords',
