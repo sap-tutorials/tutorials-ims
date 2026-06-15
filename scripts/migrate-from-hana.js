@@ -28,6 +28,7 @@ import hdb from 'hdb';
 const DRY_RUN = process.argv.includes('--dry-run');
 const DISCOVER = process.argv.includes('--discover');
 const SOURCE_ONLY = process.argv.includes('--source-only');
+const LIST_ENTITIES = process.argv.includes('--list-entities');
 const ENTITY_FILTER = process.argv.find(a => a.startsWith('--entity='))?.split('=')[1]?.split(',') || null;
 
 const SOURCE_INSTANCE = process.argv.find(a => a.startsWith('--source-instance='))?.split('=')[1] || 'ims-hana-qa-container';
@@ -211,6 +212,34 @@ async function main() {
   if (DRY_RUN) console.log('  ⚠ DRY RUN MODE — no data will be written');
   if (DISCOVER) console.log('  ⚠ DISCOVER MODE — listing tables only');
   console.log('');
+
+  if (LIST_ENTITIES) {
+    const order = [
+      ['1', 'tags', 'reference', 'IMS_TAG'],
+      ['2', 'events', 'reference', 'IMS_EVENT'],
+      ['3', 'groups', 'reference', 'IMS_TASK (TASK_TYPE=GROUP)'],
+      ['4', 'missions', 'reference', 'IMS_TASK (TASK_TYPE=MISSION)'],
+      ['5', 'tutorials', 'reference', 'IMS_TASK (TASK_TYPE=TUTORIAL)'],
+      ['6', 'steps', 'reference', 'IMS_TASK (TASK_TYPE=STEP)'],
+      ['7', 'users', 'activity', 'IMS_USER'],
+      ['7b', 'usermetadata', 'activity', 'IMS_USER_METADATA'],
+      ['8', 'taskrecords', 'activity', 'IMS_TASK_RECORD'],
+      ['9', 'completionpaths', 'reference', 'IMS_COMPLETION_PATH'],
+      ['10', 'completionpathitems', 'reference', 'IMS_COMPLETION_PATH_TO_TASK'],
+      ['11', 'prizes', 'reference', 'IMS_PRIZE'],
+      ['11b', 'accomplishments', 'reference', 'IMS_ACCOMPLISHMENT'],
+      ['11c', 'accomplishmentrecords', 'activity', 'IMS_ACCOMPLISHMENT_RECORD'],
+      ['11d', 'prizerecords', 'activity', 'IMS_PRIZE_RECORD'],
+      ['12', 'tutorialtags', 'reference', 'IMS_TAG_TO_TASK'],
+    ];
+    console.log('Migration order (FK-correct):\n');
+    for (const [n, name, klass, src] of order) {
+      console.log(`  ${n.padStart(3)}. ${name.padEnd(22)} ${klass.padEnd(10)} ← ${src}`);
+    }
+    console.log('\n  reference = zero-diff tolerance | activity = ±2 tolerance');
+    console.log('  Spec: docs/superpowers/specs/2026-06-15-ims-prod-to-dev-cutover-rehearsal-design.md\n');
+    process.exit(0);
+  }
 
   console.log('Resolving source credentials...');
   let imsCreds;
@@ -522,6 +551,31 @@ async function main() {
     }),
   }));
 
+  // 7b. UserMetaData (CAP entity: UserMetaData)
+  // FK: user_id → Users. Insert after Users so the FK resolves.
+  // Defensive: IMS prod may not have this table populated.
+  // HANA column for `key` is "KEY" (uppercase) per db/last-dev/csn.json.
+  try {
+    results.push(await migrateEntity(source, target, T, {
+      name: 'usermetadata',
+      sourceQuery: `SELECT "ID", "USER_ID", "KEY", "VALUE" FROM ${S}."IMS_USER_METADATA"`,
+      targetTable: 'COM_SAP_DEVELOPERS_IMS_USERMETADATA',
+      mapRow: (row) => {
+        const userUuid = uuidMap.users.get(row.USER_ID);
+        if (!userUuid) return null; // orphan: no migrated user → drop row
+        return {
+          ID: randomUUID(),
+          LEGACYID: row.ID,
+          USER_ID: userUuid,
+          KEY: truncStr(row.KEY, 255),
+          VALUE: truncStr(row.VALUE, 2000),
+        };
+      },
+    }));
+  } catch (e) {
+    console.log(`  ⊘ UserMetaData: ${e.message.split('\n')[0]}`);
+  }
+
   // 8. Task Records
   results.push(await migrateEntity(source, target, T, {
     name: 'taskrecords',
@@ -603,6 +657,86 @@ async function main() {
         EVENT_ID: null,
       }),
     }));
+  }
+
+  // 11b. Accomplishments catalog (CAP entity: Accomplishments)
+  // FK shape: parent of AccomplishmentRecords. No own FKs.
+  if (uuidMap.accomplishments.size > 0) {
+    try {
+      results.push(await migrateEntity(source, target, T, {
+        name: 'accomplishments',
+        sourceQuery: `SELECT "ID", "NAME", "RULE", "DESCRIPTION" FROM ${S}."IMS_ACCOMPLISHMENT"`,
+        targetTable: 'COM_SAP_DEVELOPERS_IMS_ACCOMPLISHMENTS',
+        mapRow: (row) => ({
+          ID: uuidMap.accomplishments.get(row.ID),
+          LEGACYID: row.ID,
+          NAME: truncStr(row.NAME, 255),
+          RULE: truncStr(row.RULE, 2000),
+          DESCRIPTION: truncStr(row.DESCRIPTION, 1000),
+        }),
+      }));
+    } catch (e) {
+      console.log(`  ⊘ Accomplishments: ${e.message.split('\n')[0]}`);
+    }
+  }
+
+  // 11c. AccomplishmentRecords (user-earned badges)
+  // FKs: user_id → Users; accomplishment_id → Accomplishments.
+  if (uuidMap.users.size > 0 && uuidMap.accomplishments.size > 0) {
+    try {
+      results.push(await migrateEntity(source, target, T, {
+        name: 'accomplishmentrecords',
+        sourceQuery: `SELECT "ID", "USER_ID", "ACCOMPLISHMENT_ID", "AWARDED_AT" FROM ${S}."IMS_ACCOMPLISHMENT_RECORD"`,
+        targetTable: 'COM_SAP_DEVELOPERS_IMS_ACCOMPLISHMENTRECORDS',
+        mapRow: (row) => {
+          const userUuid = uuidMap.users.get(row.USER_ID);
+          const accUuid = uuidMap.accomplishments.get(row.ACCOMPLISHMENT_ID);
+          if (!userUuid || !accUuid) return null;
+          return {
+            ID: randomUUID(),
+            LEGACYID: row.ID,
+            USER_ID: userUuid,
+            ACCOMPLISHMENT_ID: accUuid,
+            AWARDEDAT: toISOTimestamp(row.AWARDED_AT),
+          };
+        },
+      }));
+    } catch (e) {
+      console.log(`  ⊘ AccomplishmentRecords: ${e.message.split('\n')[0]}`);
+    }
+  }
+
+  // 11d. PrizeRecords (user prize claims)
+  // FKs: user_id → Users; prize_id → Prizes; event_id → Events;
+  //      completionpathitem_id → CompletionPathItems (optional).
+  // CompletionPathItems uses LEGACYID → newly-generated UUID; the
+  // migrator generates a fresh UUID per row (see line 579) and never
+  // builds a lookup map, so we cannot resolve this FK here. Left NULL.
+  // See spec §Risk register.
+  if (uuidMap.users.size > 0 && uuidMap.prizes.size > 0) {
+    try {
+      results.push(await migrateEntity(source, target, T, {
+        name: 'prizerecords',
+        sourceQuery: `SELECT "ID", "USER_ID", "EVENT_ID", "PRIZE_ID", "STATUS" FROM ${S}."IMS_PRIZE_RECORD"`,
+        targetTable: 'COM_SAP_DEVELOPERS_IMS_PRIZERECORDS',
+        mapRow: (row) => {
+          const userUuid = uuidMap.users.get(row.USER_ID);
+          const prizeUuid = uuidMap.prizes.get(row.PRIZE_ID);
+          if (!userUuid || !prizeUuid) return null;
+          return {
+            ID: randomUUID(),
+            LEGACYID: row.ID,
+            USER_ID: userUuid,
+            EVENT_ID: row.EVENT_ID ? uuidMap.events.get(row.EVENT_ID) : null,
+            PRIZE_ID: prizeUuid,
+            COMPLETIONPATHITEM_ID: null, // see comment above
+            STATUS: truncStr(row.STATUS, 50),
+          };
+        },
+      }));
+    } catch (e) {
+      console.log(`  ⊘ PrizeRecords: ${e.message.split('\n')[0]}`);
+    }
   }
 
   // 12. TutorialTags (many-to-many)
