@@ -605,6 +605,27 @@ async function main() {
     }));
   }
 
+  // 11b. Accomplishments catalog (CAP entity: Accomplishments)
+  // FK shape: parent of AccomplishmentRecords. No own FKs.
+  if (uuidMap.accomplishments.size > 0) {
+    try {
+      results.push(await migrateEntity(source, target, T, {
+        name: 'accomplishments',
+        sourceQuery: `SELECT "ID", "NAME", "RULE", "DESCRIPTION" FROM ${S}."IMS_ACCOMPLISHMENT"`,
+        targetTable: 'COM_SAP_DEVELOPERS_IMS_ACCOMPLISHMENTS',
+        mapRow: (row) => ({
+          ID: uuidMap.accomplishments.get(row.ID),
+          LEGACYID: row.ID,
+          NAME: truncStr(row.NAME, 255),
+          RULE: truncStr(row.RULE, 2000),
+          DESCRIPTION: truncStr(row.DESCRIPTION, 1000),
+        }),
+      }));
+    } catch (e) {
+      console.log(`  ⊘ Accomplishments: ${e.message.split('\n')[0]}`);
+    }
+  }
+
   // 12. TutorialTags (many-to-many)
   try {
     results.push(await migrateEntity(source, target, T, {
