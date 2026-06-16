@@ -108,9 +108,16 @@ sap.ui.define([
       });
     },
 
-    formatRowHighlight: function (sReviewedDate) {
-      if (!sReviewedDate) { return "None"; }
-      var iAge = Date.now() - new Date(sReviewedDate).getTime();
+    formatRowHighlight: function (vReviewedDate) {
+      // The binding part comes through as either a JS Date (when the binding's
+      // type is sap.ui.model.odata.type.DateTimeOffset) or a string (basic
+      // binding). Handle both; bail safely on null/undefined/invalid.
+      if (!vReviewedDate) { return "None"; }
+      var iTime = vReviewedDate instanceof Date
+        ? vReviewedDate.getTime()
+        : new Date(vReviewedDate).getTime();
+      if (Number.isNaN(iTime)) { return "None"; }
+      var iAge = Date.now() - iTime;
       return iAge > OUTDATED_DAYS * 86400000 ? "Error" : "None";
     },
 

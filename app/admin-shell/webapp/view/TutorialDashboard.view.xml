@@ -46,7 +46,7 @@
             </t:template>
           </t:Column>
           <t:Column label="Last Reviewed" width="9rem">
-            <t:template><Text text="{path: 'admin>reviewedDate', type: 'sap.ui.model.type.Date', formatOptions: {style: 'medium'}}" wrapping="false"/></t:template>
+            <t:template><Text text="{path: 'admin>reviewedDate', type: 'sap.ui.model.odata.type.DateTimeOffset', formatOptions: {style: 'medium'}}" wrapping="false"/></t:template>
           </t:Column>
           <t:Column label="Notifications" width="6rem">
             <t:template>
@@ -54,7 +54,7 @@
             </t:template>
           </t:Column>
           <t:Column label="Last Reminder" width="9rem">
-            <t:template><Text text="{path: 'admin>lastNotificationDate', type: 'sap.ui.model.type.Date', formatOptions: {style: 'medium'}}" wrapping="false"/></t:template>
+            <t:template><Text text="{path: 'admin>lastNotificationDate', type: 'sap.ui.model.odata.type.DateTimeOffset', formatOptions: {style: 'medium'}}" wrapping="false"/></t:template>
           </t:Column>
         </t:columns>
       </t:Table>
