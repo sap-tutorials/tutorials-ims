@@ -3,25 +3,29 @@
  *
  * This script performs two operations:
  *   1. Deletes all "autotest" records (test data from IMS integration tests)
- *   2. Assigns slug values from .migration-data/slug-mapping.json to missions and groups
+ *   2. Derives slugs from titles for missions, groups, and CompletionPaths
  *
  * Prerequisites:
  *   - `cf login` to the DEV space
  *   - `cds bind --to tutorials-db` (creates .cdsrc-private.json with HANA binding)
- *   - .migration-data/slug-mapping.json must exist (extracted from ContentFiles)
  *
  * Slug coverage:
- *   - Step 2 assigns slugs from the static migration mapping for legacy rows.
- *   - Step 3 derives slugs from titles for any Missions/Groups still missing
- *     them (e.g. rows created in the new system before auto-derivation shipped).
+ *   - Step 3 (Title-derived) is the canonical path. It runs on all SLUG-NULL
+ *     rows of Missions, Groups, and CompletionPaths whose TITLE/NAME is set.
+ *   - Step 2 (static mapping from slug-mapping.json) is OFF by default since
+ *     issue #348. The static mapping was a one-off bootstrap helper from a
+ *     specific DEV state; running it against fresh prod data corrupts row
+ *     titles via positional misalignment. Re-enable with --from-static-mapping
+ *     for the legacy bootstrap scenario only.
  *
  * Usage:
  *   npx cds bind --exec -- node scripts/setup-dev-data.cjs
  *
  * Flags:
- *   --skip-cleanup    Skip autotest record deletion
- *   --skip-slugs      Skip slug assignment
- *   --dry-run         Show what would happen without making changes
+ *   --skip-cleanup            Skip autotest record deletion
+ *   --skip-slugs              Skip slug assignment (both Step 2 and Step 3)
+ *   --from-static-mapping     Opt back into Step 2 (legacy bootstrap; corrupts titles)
+ *   --dry-run                 Show what would happen without making changes
  */
 
 const cds = require('@sap/cds');
@@ -30,6 +34,7 @@ const fs = require('fs');
 const args = process.argv.slice(2);
 const skipCleanup = args.includes('--skip-cleanup');
 const skipSlugs = args.includes('--skip-slugs');
+const fromStaticMapping = args.includes('--from-static-mapping');
 const dryRun = args.includes('--dry-run');
 
 (async () => {
@@ -63,9 +68,20 @@ const dryRun = args.includes('--dry-run');
     }
   }
 
-  // --- Step 2: Assign slugs ---
-  if (!skipSlugs) {
-    console.log('\n=== Step 2: Assigning slugs from slug-mapping.json ===');
+  // --- Step 2: Assign slugs from static mapping (OFF by default since #348) ---
+  //
+  // This step blindly assigns SLUG and TITLE from .migration-data/slug-mapping.json
+  // by positional index (i-th NULL-slug row gets the i-th mapping entry). It was
+  // a one-off bootstrap helper for an earlier DEV state where the IDs in the JSON
+  // happened to match. After a real prod migration the row order is different,
+  // so this corrupts CompletionPath/Mission TITLEs by attaching them to the
+  // wrong rows.
+  //
+  // Step 3 below derives slugs from real TITLEs, which is correct. Pass
+  // --from-static-mapping to opt back into Step 2 for the original bootstrap
+  // scenario.
+  if (!skipSlugs && fromStaticMapping) {
+    console.log('\n=== Step 2: Assigning slugs from slug-mapping.json (--from-static-mapping) ===');
     const mappingPath = '.migration-data/slug-mapping.json';
     if (!fs.existsSync(mappingPath)) {
       console.error(`ERROR: ${mappingPath} not found.`);
@@ -128,20 +144,24 @@ const dryRun = args.includes('--dry-run');
       const [gCheck] = await db.run(`SELECT COUNT(*) AS "C" FROM "COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHS" WHERE "SLUG" IS NOT NULL`);
       console.log(`\n  Verification: ${mCheck.C} missions with slugs, ${gCheck.C} groups with slugs`);
     }
+  } else if (!skipSlugs) {
+    console.log('\n=== Step 2: SKIPPED (use --from-static-mapping for legacy bootstrap behaviour) ===');
   }
 
-  // --- Step 3: Title-derived slugs for new-system rows ---
+  // --- Step 3: Title-derived slugs ---
   //
-  // The static mapping covers legacy rows by index. Anything created in the
-  // new admin UI before auto-derivation shipped (or any imported row the
-  // mapping didn't reach) still has a NULL slug, which makes navigator URLs
-  // fall back to legacyId and 404. Derive slug from title for those rows.
+  // For Missions, Groups, and CompletionPaths: any row whose title (NAME for
+  // CompletionPaths) is set but slug is NULL gets a derived slug. CompletionPaths
+  // with NULL NAME stay slugless — Tom's published-default-false (#349) means
+  // those paths aren't visible until a SuperAdmin curates them anyway, so the
+  // missing slug doesn't strand any visible page.
   if (!skipSlugs) {
     console.log('\n=== Step 3: Deriving slugs from titles for remaining rows ===');
 
     for (const { name, table, titleCol } of [
-      { name: 'Missions', table: 'COM_SAP_DEVELOPERS_IMS_MISSIONS',  titleCol: 'TITLE' },
-      { name: 'Groups',   table: 'COM_SAP_DEVELOPERS_IMS_GROUPS',    titleCol: 'TITLE' },
+      { name: 'Missions',         table: 'COM_SAP_DEVELOPERS_IMS_MISSIONS',         titleCol: 'TITLE' },
+      { name: 'Groups',           table: 'COM_SAP_DEVELOPERS_IMS_GROUPS',           titleCol: 'TITLE' },
+      { name: 'CompletionPaths',  table: 'COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHS',  titleCol: 'NAME'  },
     ]) {
       // Skip silently if the table doesn't exist yet (Groups slug column was
       // only just added — pre-deploy environments won't have it).
