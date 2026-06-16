@@ -50,24 +50,24 @@ describe('Published Flag', () => {
   });
 
   describe('Default Value', () => {
-    it('missions default to published=true', async () => {
+    it('missions default to published=false (SuperAdmin must opt-in to publish; #348)', async () => {
       const { Missions } = cds.entities('com.sap.developers.ims');
       await INSERT.into(Missions).entries({
         ID: '11111111-0000-0000-0000-000000000099',
         legacyId: 90099, title: '__TEST__ Default Mission', slug: 'test-default'
       });
       const result = await SELECT.one.from(Missions).where({ ID: '11111111-0000-0000-0000-000000000099' });
-      expect(result.published).toBe(true);
+      expect(result.published).toBe(false);
     });
 
-    it('groups default to published=true', async () => {
+    it('groups default to published=false (SuperAdmin must opt-in to publish; #348)', async () => {
       const { Groups } = cds.entities('com.sap.developers.ims');
       await INSERT.into(Groups).entries({
         ID: '22222222-0000-0000-0000-000000000099',
         legacyId: 90098, title: '__TEST__ Default Group'
       });
       const result = await SELECT.one.from(Groups).where({ ID: '22222222-0000-0000-0000-000000000099' });
-      expect(result.published).toBe(true);
+      expect(result.published).toBe(false);
     });
   });
 
@@ -148,7 +148,7 @@ describe('Published Flag', () => {
       ).catch(() => {});
     });
 
-    it('regular Admin can activate a new draft (published stays default true)', async () => {
+    it('regular Admin can activate a new draft (published stays default false; #348)', async () => {
       const { data: draft } = await project.post('/admin/Missions', {
         title: '__TEST__ Admin Activate',
         slug: 'test-admin-activate',
