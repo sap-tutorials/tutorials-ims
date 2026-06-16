@@ -596,7 +596,14 @@ async function main() {
       LEGACYID: row.ID,
       TITLE: truncStr(row.TITLE, 255),
       STATUS: truncStr(row.TASK_STATUS, 50),
-      SLUG: truncStr((row.URL || '').split('/').pop() || `tutorial-${row.ID}`, 255),
+      // IMS source stores tutorial slugs as the markdown filename
+      // (e.g. "abap-environment-maintain-bc-app.md"). Hugo serves
+      // tutorials at /tutorials/<slug-without-md>, and /build/catalog
+      // emits whatever's in the SLUG column verbatim. Without this
+      // strip, Hugo's tutorial cache (keyed off the .md-less slug)
+      // never matches the catalog mappings, so the navigator emits
+      // 0 mission/group cards. Surfaced 2026-06-16 cutover rehearsal.
+      SLUG: truncStr(((row.URL || '').split('/').pop() || `tutorial-${row.ID}`).replace(/\.md$/i, ''), 255),
       MDFILEURL: truncStr(row.URL, 1000),
       PRIMARYTAG: truncStr(tagMap.get(row.PRIMARY_TAG_ID), 255) || null,
       EXPERIENCETAG: truncStr(tagMap.get(row.EXPERIENCE_TAG_ID), 255) || null,
