@@ -36,6 +36,20 @@ cf deploy mta_archives/tutorials-poc_1.0.0.mtar -e ../deploy/dev.mtaext
 
 The `dev.mtaext` extension adds DEV-specific overrides (debug logging, approuter name suffix, expose CAP UI). For production, omit `-e` or provide a prod extension.
 
+### Canonical app names per environment
+
+The MTA module name `tutorials-approuter` is overridden per environment via the `mtaext` files. The deployed CF app name follows this scheme:
+
+| Env | MTA ext | Deployed app name | Public route |
+| --- | --- | --- | --- |
+| dev | `deploy/dev.mtaext` | `tutorials-dev-approuter` | `tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com` |
+| qa | `deploy/qa.mtaext` | `tutorials-qa-approuter` | `tutorial-system-qa-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com` |
+| prod | `deploy/prod.mtaext` | `tutorials-prod-approuter` | `tutorial-system-prod-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com` |
+
+Only ONE `*approuter*` app should exist per space. If `cf apps` shows more than one (e.g. a leftover bare-named `tutorials-approuter` from a manual `cf push`), the duplicate is a hazard — operators can crash the wrong app and the live route stays bound to whichever one was pushed last under that name. **Prevention:** never run `cf push tutorials-approuter` directly; always go through MTA. **Detection:** `cf apps | grep approuter` should return exactly one row. **Recovery:** `cf delete <leftover-name> -f -r` (the `-r` removes any orphaned routes too).
+
+The `cutover-rehearsal.cjs` orchestrator's Step 1 also asserts this invariant — see #363.
+
 **What happens:**
 
 1. `before-all` runs: `npm install`, `cds build --production`, copies `xs-security.json` into `.deploy/`

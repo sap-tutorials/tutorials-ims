@@ -110,6 +110,30 @@ function step1() {
     fail(1, 'cf-target', `Expected org=tutorial-system space=dev, got org=${org} space=${space}. Run: cf target -o tutorial-system -s dev`);
   }
   console.log(`  ✓ org=${org} space=${space}`);
+
+  // Issue #363: assert exactly one approuter app exists in the target space.
+  // Duplicate-app drift is a real hazard — during the 2026-06-16 rehearsal an
+  // accidental `cf push tutorials-approuter` (the bare module name) had landed
+  // alongside the canonical `tutorials-dev-approuter`, and a manual rolling
+  // deploy crashed the wrong one.
+  const appsResult = spawnSync('cf', ['apps'], { encoding: 'utf-8', shell: false });
+  if (appsResult.status !== 0) {
+    fail(1, 'cf-apps', `cf apps exited ${appsResult.status}: ${appsResult.stderr || appsResult.stdout}`);
+  }
+  const approuterRows = appsResult.stdout
+    .split(/\r?\n/)
+    .filter((line) => /\bapprouter\b/.test(line) && !/^name\s+requested\s+state/i.test(line));
+  if (approuterRows.length === 0) {
+    fail(1, 'cf-apps', 'No *approuter* app found in this space. Deploy the MTA first.');
+  }
+  if (approuterRows.length > 1) {
+    fail(1, 'cf-apps',
+      `Found ${approuterRows.length} *approuter* apps in this space. Exactly one expected.\n` +
+      approuterRows.map((r) => '    ' + r).join('\n') + '\n\n' +
+      'Duplicate-app drift hazard. Recovery: cf delete <leftover-name> -f -r. ' +
+      'See docs/developers/operations/mta-deployment.md → "Canonical app names per environment".');
+  }
+  console.log(`  ✓ exactly one approuter: ${approuterRows[0].trim().split(/\s+/)[0]}`);
 }
 
 // ─── Step 2: Snapshot DEV row counts → preflight-rowcounts.json ───────────────
