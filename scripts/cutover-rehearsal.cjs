@@ -247,6 +247,29 @@ function step9() {
   if (code !== 0) fail(9, 'migrate', `migrate-from-hana exited ${code}`);
 }
 
+// ─── Step 9.5: Post-migration data setup (slug population) ────────────────────
+// Required after every migration: the migrator does not derive slugs for
+// Missions or CompletionPaths, leaving them NULL. Without slugs:
+//   - /build/navigator filter `mission.published = true AND tut.slug IS NOT NULL`
+//     still matches (since published defaults to TRUE) but mission/group
+//     navigation URLs fall back to legacyId
+//   - /browse/ static page counts missions/groups as 0 because the Hugo build
+//     filters out rows whose slug looks like a numeric legacyId
+// scripts/setup-dev-data.cjs does TWO things post-migration:
+//   1. Deletes any "autotest" cruft (no-op on prod-data migration)
+//   2. Assigns slugs from .migration-data/slug-mapping.json (87 missions + 66
+//      groups for the legacy hand-curated set), then derives slugs from titles
+//      for the remaining rows
+// Discovered missing in Sitting 2.5 rehearsal — past loads ran this manually.
+function step9_5() {
+  banner('9.5', 'Post-migration: populate Mission/CompletionPath slugs');
+  // Use cds bind --exec because setup-dev-data.cjs imports @sap/cds and needs
+  // a HANA binding resolved at startup.
+  const code = runChild('9_5', 'setup-dev-data',
+    'npx', ['cds', 'bind', '--exec', '--', 'node', 'scripts/setup-dev-data.cjs']);
+  if (code !== 0) fail('9.5', 'setup-dev-data', `setup-dev-data.cjs exited ${code}`);
+}
+
 // ─── Step 10: Tier A row-count verify ─────────────────────────────────────────
 function step10() {
   banner(10, 'Tier A: row-count verifier');
@@ -332,6 +355,7 @@ async function main() {
   step7();
   await step8();
   step9();
+  step9_5();
   step10();
   step11();
   step12();
