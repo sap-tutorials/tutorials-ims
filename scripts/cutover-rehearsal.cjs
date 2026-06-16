@@ -340,6 +340,26 @@ function step9_7() {
   if (code !== 0) fail('9.7', 'aem-published-sync', `aem-published-sync exited ${code}`);
 }
 
+// ─── Step 9.8: Apply curated TutorialMeta owner overrides ────────────────────
+// Issue #371: IMS_TUTORIAL_AUTHOR.EMAIL contains synthetic placeholder
+// addresses for ~225 of 1,396 tutorials (e.g.
+// "noreply-tutorial-cleanup@sap-tutorials.local" or
+// "<id>+<github>@users.noreply.github.com"). Step 9.6's backfill now
+// FILTERS those placeholders out (leaves OWNER=NULL), so this step rewrites
+// the small set of placeholder rows we have a verified mapping for back to
+// their real corporate emails. Currently covers Thomas Jung's 68 tutorials;
+// extend the OVERRIDES table in the script as more authors are
+// human-verified.
+function step9_8() {
+  banner('9.8', 'Apply curated TutorialMeta owner overrides (Issue #371)');
+  const env = loadEnvCreds();
+  // Target-only; no source connection needed.
+  const code = runChild('9_8', 'apply-owner-overrides',
+    'node', ['scripts/apply-tutorialmeta-owner-overrides.cjs'],
+    { CAP_HANA_CREDENTIALS: env.CAP_HANA_CREDENTIALS });
+  if (code !== 0) fail('9.8', 'apply-owner-overrides', `apply-owner-overrides exited ${code}`);
+}
+
 // ─── Step 10: Tier A row-count verify ─────────────────────────────────────────
 function step10() {
   banner(10, 'Tier A: row-count verifier');
@@ -439,6 +459,7 @@ async function main() {
   step9_5();
   step9_6();
   step9_7();
+  step9_8();
   step10();
   step11();
   step12();

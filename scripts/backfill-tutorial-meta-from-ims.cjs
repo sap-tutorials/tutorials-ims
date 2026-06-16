@@ -141,7 +141,7 @@ function tutorialUuid(legacyId) {
   console.log(`  - With email:  ${withEmail}`);
   console.log(`  - Reviewed:    ${reviewedCount}`);
 
-  let updatedOwner = 0, updatedReviewed = 0, updatedNotif = 0, missing = 0, errCount = 0;
+  let updatedOwner = 0, updatedReviewed = 0, updatedNotif = 0, missing = 0, errCount = 0, skippedPlaceholders = 0;
   let stmt = null;
   if (!DRY_RUN) {
     stmt = await prepareStmt(target,
@@ -157,7 +157,21 @@ function tutorialUuid(legacyId) {
 
   for (const row of sourceRows) {
     const targetTutorialUuid = tutorialUuid(row.TUT_LEGACY_ID);
-    const ownerEmail = row.OWNER_EMAIL || null;
+    // Filter out placeholder emails. IMS_TUTORIAL_AUTHOR.EMAIL contains
+    // synthetic addresses for ~225 tutorials across 46 authors:
+    //   - "noreply-tutorial-cleanup@sap-tutorials.local"  (1 author, 68 tutorials)
+    //   - "<id>+<github-username>@users.noreply.github.com"  (45 authors,
+    //      ~155 tutorials; github-private-email convention)
+    // Carrying these forward as the OWNER value breaks the admin Tutorial
+    // Health "Monitored by me" filter for the affected authors — the filter
+    // compares OWNER to the authenticated user's real email. Leave OWNER
+    // NULL for these rows so admins can claim ownership cleanly via the UI
+    // (and so the lazy-self-heal user-profile path on /auth/user, PR #370,
+    // doesn't accidentally inherit a placeholder).
+    const isPlaceholderEmail =
+      row.OWNER_EMAIL && /(@users\.noreply\.github\.com|@sap-tutorials\.local)$/i.test(row.OWNER_EMAIL);
+    const ownerEmail = (row.OWNER_EMAIL && !isPlaceholderEmail) ? row.OWNER_EMAIL : null;
+    if (isPlaceholderEmail) skippedPlaceholders++;
     const reviewedDate = (row.IS_REVIEWED === 1 && row.UPDATED_AT) ? row.UPDATED_AT : null;
     const notifNum = (row.NOTIF_NUM != null && row.NOTIF_NUM !== 0) ? row.NOTIF_NUM : null;
     const notifDate = row.NOTIF_DATE || null;
@@ -201,6 +215,7 @@ function tutorialUuid(legacyId) {
   console.log(`  ${DRY_RUN ? 'Would update' : 'Updated'} reviewedDate:       ${updatedReviewed}`);
   console.log(`  ${DRY_RUN ? 'Would update' : 'Updated'} notification stats: ${updatedNotif}`);
   console.log(`  Skipped (no data or no target row):  ${missing}`);
+  console.log(`  Skipped placeholder emails:          ${skippedPlaceholders}`);
   console.log(`  Errors:                              ${errCount}`);
 
   source.end();
