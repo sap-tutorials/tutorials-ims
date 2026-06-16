@@ -4,6 +4,7 @@ import { getNextLegacyId } from './lib/legacy-id.js';
 import { hashIp } from './lib/feedback-salt.js';
 import { getMyCompletedTutorials } from './lib/user-progress.js';
 import { PROFILE_VOCAB } from './lib/branch/profile-fields.js';
+import { resolveUserSapId } from './lib/resolve-db-user.js';
 
 const RATE_LIMIT = new Map();
 const RATE_WINDOW_MS = 60 * 60 * 1000;
@@ -61,8 +62,10 @@ export default class DeveloperService extends cds.ApplicationService {
 
       const steps = await SELECT.from(dbSteps).where({ tutorial_ID: tutorial.ID });
 
-      // Find user's task records for this tutorial's steps
-      const dbUser = await SELECT.one.from(dbUsers).where({ uuid: user.id });
+      // Find user's task records for this tutorial's steps. Issue #343:
+      // lookup by sapId (the JWT user_uuid claim), not uuid (= email).
+      const sapId = resolveUserSapId(user);
+      const dbUser = sapId ? await SELECT.one.from(dbUsers).where({ sapId }) : null;
       if (!dbUser) return { completedSteps: [], points: 0, badges: [] };
 
       const stepRecords = await SELECT.from(dbTaskRecords).where({
@@ -121,18 +124,23 @@ export default class DeveloperService extends cds.ApplicationService {
         step.legacyId = legacyId;
       }
 
-      // Get or create user
-      let dbUser = await SELECT.one.from(dbUsers).where({ uuid: user.id });
+      // Get or create user. Issue #343: lookup + auto-provision keyed on
+      // sapId (the JWT user_uuid claim) so migrated IMS users (Users.sapId
+      // populated by migrator) are found by their existing row.
+      const sapId = resolveUserSapId(user);
+      if (!sapId) return req.reject(401, 'Unauthenticated');
+      let dbUser = await SELECT.one.from(dbUsers).where({ sapId });
       if (!dbUser) {
         const newUser = {
           uuid: user.id,
+          sapId,
           legacyId: await getNextLegacyId('Users', db),
           email: user.attr?.email || '',
           firstName: user.attr?.given_name || '',
           lastName: user.attr?.family_name || ''
         };
         await INSERT.into(dbUsers).entries(newUser);
-        dbUser = await SELECT.one.from(dbUsers).where({ uuid: user.id });
+        dbUser = await SELECT.one.from(dbUsers).where({ sapId });
       }
 
       // Check if step already completed
@@ -169,7 +177,8 @@ export default class DeveloperService extends cds.ApplicationService {
       const { taskLegacyId, taskType, eventLegacyId } = req.data;
       const user = req.user;
 
-      let dbUser = await SELECT.one.from(dbUsers).where({ uuid: user.id });
+      const sapId = resolveUserSapId(user);
+      let dbUser = sapId ? await SELECT.one.from(dbUsers).where({ sapId }) : null;
       if (!dbUser) return req.reject(404, 'User not found');
 
       let event_ID = null;
@@ -306,7 +315,8 @@ export default class DeveloperService extends cds.ApplicationService {
       }
 
       let userRecords = [];
-      const dbUser = await SELECT.one.from(dbUsers).where({ uuid: user.id });
+      const sapId = resolveUserSapId(user);
+      const dbUser = sapId ? await SELECT.one.from(dbUsers).where({ sapId }) : null;
       if (dbUser) {
         userRecords = await SELECT.from(dbTaskRecords).where({
           user_ID: dbUser.ID,
@@ -399,7 +409,8 @@ export default class DeveloperService extends cds.ApplicationService {
       for (const c of checkpoints) taskMap.set(`CHECKPOINT:${c.legacyId}`, c);
 
       let userRecords = [];
-      const dbUser = await SELECT.one.from(dbUsers).where({ uuid: user.id });
+      const sapId = resolveUserSapId(user);
+      const dbUser = sapId ? await SELECT.one.from(dbUsers).where({ sapId }) : null;
       if (dbUser) {
         userRecords = await SELECT.from(dbTaskRecords).where({
           user_ID: dbUser.ID,
@@ -565,7 +576,8 @@ export default class DeveloperService extends cds.ApplicationService {
     // get AND-precedence wrong on existing where clauses and are a security
     // boundary; do NOT revert.
     this.before('READ', 'LearningPreferences', async (req) => {
-      const dbUser = await SELECT.one.from(dbUsers).columns('ID').where({ uuid: req.user.id });
+      const sapId = resolveUserSapId(req.user);
+      const dbUser = sapId ? await SELECT.one.from(dbUsers).columns('ID').where({ sapId }) : null;
       if (!dbUser?.ID) {
         // No DB user record yet — short-circuit with empty result set
         // (cleaner CQN-builder convention than splicing a `1 = 0` predicate).
@@ -597,17 +609,22 @@ export default class DeveloperService extends cds.ApplicationService {
       // Auto-provision the Users row for first-time savers (mirrors completeStep
       // pattern at developer-service.js:122-135). A learner who lands on /me/
       // before completing any tutorial otherwise hits a hard 404 here.
-      let dbUser = await SELECT.one.from(dbUsers).where({ uuid: req.user.id });
+      // Issue #343: lookup + auto-provision keyed on sapId (the JWT user_uuid
+      // claim) so migrated IMS users are matched to their existing row.
+      const sapId = resolveUserSapId(req.user);
+      if (!sapId) return req.reject(401, 'Unauthenticated');
+      let dbUser = await SELECT.one.from(dbUsers).where({ sapId });
       if (!dbUser) {
         const newUser = {
           uuid: req.user.id,
+          sapId,
           legacyId: await getNextLegacyId('Users', db),
           email: req.user.attr?.email || '',
           firstName: req.user.attr?.given_name || '',
           lastName: req.user.attr?.family_name || '',
         };
         await INSERT.into(dbUsers).entries(newUser);
-        dbUser = await SELECT.one.from(dbUsers).where({ uuid: req.user.id });
+        dbUser = await SELECT.one.from(dbUsers).where({ sapId });
       }
 
       // PUT-style write — SELECT-then-INSERT-or-UPDATE (codebase-wide idiom).

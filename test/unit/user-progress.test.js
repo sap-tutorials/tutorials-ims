@@ -19,6 +19,10 @@ async function seed() {
   await INSERT.into(Users).entries({
     ID: USER_ID,
     uuid: USER_UUID,
+    sapId: USER_UUID,            // Issue #343: lookup is now WHERE sapId = ?,
+                                  // and the test mock user passes user.id with no JWT,
+                                  // which falls back to user.id as the sapId. Seed both
+                                  // columns with the same value so the resolver matches.
     legacyId: 9001,
     firstName: 'Test',
     lastName: 'User',

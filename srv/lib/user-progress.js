@@ -1,18 +1,21 @@
 import cds from '@sap/cds';
+import { resolveUserSapId } from './resolve-db-user.js';
 
 const LOG = cds.log('chat');
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 25;
 
-// Resolve the chat user (XSUAA sub) to the internal Users.ID. Cached on the
-// per-request user object so a single chat turn that uses both getUserProgress
-// AND searchTutorials annotation doesn't pay two lookups.
+// Resolve the chat user (XSUAA `user_uuid` claim = SAP ID) to the internal
+// Users.ID. Cached on the per-request user object so a single chat turn that
+// uses both getUserProgress AND searchTutorials annotation doesn't pay two
+// lookups. Issue #343.
 async function resolveDbUserId(user) {
-  if (!user?.id || user.id === 'anonymous') return null;
+  const sapId = resolveUserSapId(user);
+  if (!sapId) return null;
   if (user.__dbUserId !== undefined) return user.__dbUserId;
   try {
     const { Users } = cds.entities('com.sap.developers.ims');
-    const dbUser = await SELECT.one.from(Users).columns('ID').where({ uuid: user.id });
+    const dbUser = await SELECT.one.from(Users).columns('ID').where({ sapId });
     user.__dbUserId = dbUser?.ID || null;
     return user.__dbUserId;
   } catch (err) {

@@ -13,14 +13,16 @@
 // returned regardless — telemetry never blocks a recommendation response.
 
 import cds from '@sap/cds';
+import { resolveUserSapId } from '../resolve-db-user.js';
 
 const LOG = cds.log('branch-telemetry');
 
 async function resolveUserIdInternal(user) {
-  if (!user?.id) return null;
+  const sapId = resolveUserSapId(user);
+  if (!sapId) return null;
   try {
     const { Users } = cds.entities('com.sap.developers.ims');
-    const u = await SELECT.one.from(Users).columns('ID').where({ uuid: user.id });
+    const u = await SELECT.one.from(Users).columns('ID').where({ sapId });
     return u?.ID || null;
   } catch (err) {
     LOG.warn(`resolveUserIdInternal: ${err.message}`);

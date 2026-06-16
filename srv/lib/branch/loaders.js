@@ -10,6 +10,7 @@ import { getUserProgress } from '../user-progress.js';
 import { computeCoCompletions } from '../co-completion.js';
 import { getCentroid, getCentroidBulk, averageVectors } from '../tutorial-centroid.js';
 import { loadStepVectors, loadStepVectorsBulk } from '../step-vectors.js';
+import { resolveUserSapId } from '../resolve-db-user.js';
 
 const LOG = cds.log('branch-loaders');
 
@@ -36,15 +37,17 @@ export function makeBranchLoaders() {
     },
 
     async loadProfile(user) {
-      if (!user?.id || user.id === 'anonymous') return null;
+      const sapId = resolveUserSapId(user);
+      if (!sapId) return null;
       try {
         // PR 6: typed read against UserLearningPreferences (replaces PR 1's
         // key/value placeholder against UserMetaData). Defensive try/catch +
         // LOG.warn + return-null shape preserved so a mid-rollout deploy that
         // hasn't yet run `cds deploy` for the new entity continues to serve
         // the engine with a null profile rather than crashing the read path.
+        // Issue #343: lookup by sapId (the JWT user_uuid claim), not uuid.
         const { Users, UserLearningPreferences } = cds.entities('com.sap.developers.ims');
-        const dbUser = await SELECT.one.from(Users).columns('ID').where({ uuid: user.id });
+        const dbUser = await SELECT.one.from(Users).columns('ID').where({ sapId });
         if (!dbUser?.ID) return null;
         const row = await SELECT.one.from(UserLearningPreferences)
           .where({ user_ID: dbUser.ID });

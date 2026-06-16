@@ -28,7 +28,7 @@ async function seed() {
   await DELETE.from(Users);
 
   await INSERT.into(Users).entries({
-    ID: USER_ID, uuid: USER_UUID, legacyId: 9101, firstName: 'X', lastName: 'Y', email: 'x@y'
+    ID: USER_ID, uuid: USER_UUID, sapId: USER_UUID, legacyId: 9101, firstName: 'X', lastName: 'Y', email: 'x@y'
   });
   await INSERT.into(Tutorials).entries([
     { ID: '11111111-0000-0000-0000-000000000a01', legacyId: 500, slug: 'done-tut',     title: 'Done Tut' },
