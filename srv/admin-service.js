@@ -785,10 +785,17 @@ export default class AdminService extends cds.ApplicationService {
       }
     });
 
-    // Guard: only SuperAdmin can change the published field
+    // Guard: only SuperAdmin can change the published flag in either direction
+    // (publish OR unpublish). The CREATE exemption permits the runtime's
+    // draft-activation flow, where the activation payload echoes published=false
+    // (the column default per #348) — this is a pass-through, not a change,
+    // so we let regular Admins activate new drafts without elevating.
+    // Any explicit published=true on CREATE is still a change (against the
+    // false default) and requires SuperAdmin. Any PATCH that touches published
+    // is a change against an existing row's value and always requires SuperAdmin.
     const _guardPublished = (req) => {
       if (!('published' in req.data)) return;
-      if (req.event === 'CREATE' && req.data.published !== false) return;
+      if (req.event === 'CREATE' && req.data.published === false) return;
       if (!req.user.is('SuperAdmin')) {
         req.reject(403, 'Only SuperAdmin can change the published state');
       }

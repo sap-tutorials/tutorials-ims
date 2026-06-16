@@ -46,7 +46,10 @@ entity Missions : TaskBase {
   slug                      : String(255);
   communityMissionId        : String(255);
   missionType               : MissionType @assert.range;
-  published                 : Boolean default true;
+  // Default false: new and migrated missions are NOT visible until a SuperAdmin
+  // toggles published to true. Replaces AEM's role of curating which missions
+  // surface on the website. Write-guard at admin-service.js:788. Issue #348.
+  published                 : Boolean default false;
   primaryTagRef             : Association to Tags;
   group                     : Association to Groups;
   event                     : Association to Events;
@@ -57,7 +60,9 @@ entity Missions : TaskBase {
 
 entity Groups : TaskBase {
   slug                      : String(255);
-  published                 : Boolean default true;
+  // Default false: see Missions.published comment above. Same SuperAdmin
+  // write-guard at admin-service.js:788. Issue #348.
+  published                 : Boolean default false;
   primaryTagRef             : Association to Tags;
   missions                  : Association to many Missions on missions.group = $self;
   tags                      : Composition of many GroupTags on tags.group = $self;
