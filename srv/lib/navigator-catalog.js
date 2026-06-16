@@ -4,6 +4,22 @@ let cachedResponse = null;
 let cacheTimestamp = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
+// Issue #364: by default, do NOT emit a top-level groups[] card for groups
+// that only appear nested inside a Mission's CompletionPath. The legacy
+// AEM-curated navigator only ever surfaced standalone groups (~194), and
+// matching that behavior keeps the developers.sap.com-replacement chip
+// counts aligned with prod expectations. Set NAV_INCLUDE_NESTED_GROUPS=true
+// to opt back into the richer behavior (extra ~65 cards on dev). Tutorials
+// inside nested groups still get a tutorialMappings entry so routing works
+// regardless of this flag — the flag only gates the navigator-card emission.
+//
+// The env var is read at request time (not at module load) so tests can flip
+// it via beforeAll/afterAll. Note: there's a 5-min response cache; the test
+// suite uses ?nocache=1 to bypass.
+function shouldIncludeNestedGroups() {
+  return process.env.NAV_INCLUDE_NESTED_GROUPS === 'true';
+}
+
 export function invalidateNavigatorCache() {
   cachedResponse = null;
   cacheTimestamp = 0;
@@ -167,7 +183,10 @@ export async function navigatorCatalogHandler(req, res) {
 
       const groupSlug = group.slug || String(group.legacyId);
       // Dedup: same Group nested under multiple Missions — first Mission wins.
-      if (!groupRefs.find(g => g.id === group.legacyId)) {
+      // Issue #364: only emit the navigator card when the operator opts in via
+      // NAV_INCLUDE_NESTED_GROUPS. Tutorial mappings below still emit so
+      // tutorials inside nested groups remain routable regardless of the flag.
+      if (shouldIncludeNestedGroups() && !groupRefs.find(g => g.id === group.legacyId)) {
         groupRefs.push({
           id: group.legacyId,
           title: group.title,
