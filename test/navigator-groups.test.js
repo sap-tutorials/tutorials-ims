@@ -79,7 +79,15 @@ describe('/build/navigator: nested Group inside a Mission', () => {
   const NESTED_GPI_ID     = 'cccccccc-9002-0000-0000-000000000021';
   const NESTED_CPI_ID     = 'cccccccc-9002-0000-0000-000000000031';
 
+  // Issue #364: opt back into nested-group card emission for the duration of
+  // these assertions. Default behavior (NAV_INCLUDE_NESTED_GROUPS unset) hides
+  // the nested-group card to match the legacy AEM-curated navigator's chip
+  // count. The contract this describe block exercises is the richer behavior
+  // operators can opt into per environment. The default-off path is asserted
+  // in a separate describe block below.
+  const _origFlag = process.env.NAV_INCLUDE_NESTED_GROUPS;
   beforeAll(async () => {
+    process.env.NAV_INCLUDE_NESTED_GROUPS = 'true';
     const { Tags, Missions, CompletionPaths, CompletionPathItems, Groups, Tutorials, GroupPathItems } =
       cds.entities('com.sap.developers.ims');
 
@@ -121,6 +129,9 @@ describe('/build/navigator: nested Group inside a Mission', () => {
     await DELETE.from(Groups).where({ ID: NESTED_GROUP_ID });
     await DELETE.from(Tutorials).where({ ID: NESTED_TUT_ID });
     await DELETE.from(Tags).where({ ID: NESTED_TAG_ID });
+    // Restore the env var so subsequent describe blocks see the default.
+    if (_origFlag === undefined) delete process.env.NAV_INCLUDE_NESTED_GROUPS;
+    else process.env.NAV_INCLUDE_NESTED_GROUPS = _origFlag;
   });
 
   it('emits the nested Group as a member of the Mission', async () => {
@@ -156,6 +167,81 @@ describe('/build/navigator: nested Group inside a Mission', () => {
     // Whichever entry the consumer's .find() returns first must have the nested Group's groupId
     // (because in this fixture there is no direct-under-Mission CompletionPathItem for this tutorial).
     expect(matches[0].groupId).toBe(99002);
+  });
+});
+
+// Issue #364: validates the strict-prod-parity default. Same fixture shape as the
+// describe block above (one Mission whose CompletionPath references one nested
+// Group), but the env var is left UNSET so the navigator-card emission for the
+// nested group should be suppressed. tutorialMappings still emit so routing
+// continues to work.
+describe('/build/navigator: nested Group default-off (Issue #364)', () => {
+  const D_TAG_ID    = 'aaaaaaaa-9009-0000-0000-000000000001';
+  const D_MISSION_ID = '11111111-9009-0000-0000-000000000001';
+  const D_PATH_ID    = '22222222-9009-0000-0000-000000000001';
+  const D_GROUP_ID   = 'cccccccc-9009-0000-0000-000000000001';
+  const D_TUT_ID     = 'cccccccc-9009-0000-0000-000000000011';
+  const D_GPI_ID     = 'cccccccc-9009-0000-0000-000000000021';
+  const D_CPI_ID     = 'cccccccc-9009-0000-0000-000000000031';
+
+  beforeAll(async () => {
+    // Belt-and-suspenders: explicitly clear the flag in case prior describe
+    // didn't restore (the prior afterAll DOES restore — this is defense in depth).
+    delete process.env.NAV_INCLUDE_NESTED_GROUPS;
+    const { Tags, Missions, CompletionPaths, CompletionPathItems, Groups, Tutorials, GroupPathItems } =
+      cds.entities('com.sap.developers.ims');
+    await INSERT.into(Tags).entries({ ID: D_TAG_ID, legacyId: 99009, name: '__TEST__ Default-Off Tag' });
+    await INSERT.into(Tutorials).entries({
+      ID: D_TUT_ID, legacyId: 99131, title: '__TEST__ Default-Off Tut', slug: 'test-defaultoff-tut', status: 'ACTIVE',
+    });
+    await INSERT.into(Groups).entries({
+      ID: D_GROUP_ID, legacyId: 99019, title: '__TEST__ Default-Off Group',
+      description: 'desc', experienceTag: 'beginner', primaryTagRef_ID: D_TAG_ID,
+      published: true, status: 'ACTIVE',
+    });
+    await INSERT.into(GroupPathItems).entries({
+      ID: D_GPI_ID, legacyId: 99041, group_ID: D_GROUP_ID, tutorial_ID: D_TUT_ID, itemOrder: 0,
+    });
+    await INSERT.into(Missions).entries({
+      ID: D_MISSION_ID, legacyId: 99019, title: '__TEST__ Default-Off Mission',
+      slug: 'test-defaultoff-mission', description: 'desc', experienceTag: 'beginner',
+      primaryTagRef_ID: D_TAG_ID, published: true, status: 'ACTIVE',
+    });
+    await INSERT.into(CompletionPaths).entries({
+      ID: D_PATH_ID, legacyId: 99019,
+      mission_ID: D_MISSION_ID, name: '__TEST__ Default-Off Path', slug: 'test-defaultoff-path',
+    });
+    await INSERT.into(CompletionPathItems).entries({
+      ID: D_CPI_ID, legacyId: 99051,
+      path_ID: D_PATH_ID, taskType: 'GROUP',
+      group_ID: D_GROUP_ID, taskLegacyId: 99019, itemOrder: 0,
+    });
+  });
+
+  afterAll(async () => {
+    const { Tags, Missions, CompletionPaths, CompletionPathItems, Groups, Tutorials, GroupPathItems } =
+      cds.entities('com.sap.developers.ims');
+    await DELETE.from(CompletionPathItems).where({ ID: D_CPI_ID });
+    await DELETE.from(CompletionPaths).where({ ID: D_PATH_ID });
+    await DELETE.from(Missions).where({ ID: D_MISSION_ID });
+    await DELETE.from(GroupPathItems).where({ ID: D_GPI_ID });
+    await DELETE.from(Groups).where({ ID: D_GROUP_ID });
+    await DELETE.from(Tutorials).where({ ID: D_TUT_ID });
+    await DELETE.from(Tags).where({ ID: D_TAG_ID });
+  });
+
+  it('does NOT emit a nested-group card by default', async () => {
+    const { data } = await project.get('/build/navigator?nocache=1');
+    const grp = data.groups.find(g => g.id === 99019);
+    expect(grp).toBeUndefined();
+  });
+
+  it('still emits tutorialMappings entries for tutorials inside the nested group (routing intact)', async () => {
+    const { data } = await project.get('/build/navigator?nocache=1');
+    const tut = data.tutorialMappings.find(t => t.slug === 'test-defaultoff-tut');
+    expect(tut).toBeDefined();
+    expect(tut.missionId).toBe(99019);
+    expect(tut.groupId).toBe(99019);
   });
 });
 
@@ -200,7 +286,11 @@ describe('/build/navigator: Checkpoint markers', () => {
 });
 
 describe('/build/navigator: cache invalidation on admin writes', () => {
-  const adminAuth = { auth: { username: 'admin', password: 'admin' } };
+  // PR #349's strict published-flag guard requires SuperAdmin to flip the
+  // published bit in either direction (including draft activation when the
+  // draft sets published=true). Use the superadmin mocked user so this
+  // test's draft-activate step succeeds.
+  const adminAuth = { auth: { username: 'superadmin', password: 'superadmin' } };
   const INV_TAG_ID    = 'aaaaaaaa-9004-0000-0000-000000000001';
   const INV_GROUP_ID  = 'cccccccc-9004-0000-0000-000000000001';
   const INV_TUT_ID    = 'cccccccc-9004-0000-0000-000000000011';
