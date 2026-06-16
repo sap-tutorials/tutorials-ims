@@ -33,6 +33,11 @@ on:
         required: false
         default: '200'
         type: string
+      force-cap-refetch:
+        description: 'Bypass the .tutorial-cache/ CAP catalog snapshot (24h TTL) and re-fetch /build/catalog fresh. Set true after fixing data the catalog reads from (publish flag, slugs, etc.) so the rebuild reflects the change in the same run instead of waiting for the cache to expire.'
+        required: false
+        default: false
+        type: boolean
 
 env:
   NODE_VERSION: '20'
@@ -138,7 +143,12 @@ jobs:
           echo "VCAP_SERVICES=${VCAP}" >> "$GITHUB_ENV"
 
       - name: Fetch tutorials
-        run: npm run fetch-tutorials
+        # [#357 followup] When force-cap-refetch is true, pass --force-cap so
+        # fetch-tutorials.ts ignores the .tutorial-cache/ CAP catalog snapshot
+        # (24h TTL) and pulls fresh from /build/catalog. Use after fixing data
+        # the catalog reads from (publish flag, slug format, etc.) so the
+        # rebuild reflects the change in the same run.
+        run: npm run fetch-tutorials -- ${{ inputs.force-cap-refetch == true && '--force-cap' || '' }}
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.TUTORIALS_GITHUB_TOKEN }}
           CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
