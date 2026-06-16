@@ -86,6 +86,21 @@ function runSql(client, sql) {
 function resolveCreds(side) {
   const envName = side === 'source' ? 'IMS_HANA_CREDENTIALS' : 'CAP_HANA_CREDENTIALS';
   if (process.env[envName]) return JSON.parse(process.env[envName]);
+
+  // Issue #360: split-form env-var fallback for the source side (cf env imsprod
+  // returns DB_URL/USERNAME/PASSWORD as user-provided env vars, not as the
+  // canonical service-key JSON). Mirrors scripts/migrate-from-hana.js:350.
+  if (side === 'source' && process.env.IMS_DB_URL) {
+    const url = new URL(process.env.IMS_DB_URL.replace('jdbc:sap://', 'https://'));
+    return {
+      host: url.hostname,
+      port: url.port || '443',
+      user: process.env.IMS_DB_USERNAME,
+      password: process.env.IMS_DB_PASSWORD,
+      schema: url.searchParams.get('currentschema') || process.env.IMS_DB_USERNAME,
+    };
+  }
+
   if (side === 'source') return getCredentials('ims-hana-prod-container', 'ims-hana-prod-container-key');
   return getCredentials('tutorials-hana', 'tutorials-hana-key');
 }
