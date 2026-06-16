@@ -208,12 +208,31 @@ jobs:
       - name: Build display app
         run: npm run build:display
 
+      - name: Build admin SPAs
+        # Issue #350: the rebuild-content tarball must include admin-shell,
+        # analytics-explorer, and scanner. The approuter's /admin/rebuild
+        # handler atomically swaps STATIC_DIR with the tarball contents, so
+        # any directory NOT in the tarball gets wiped from the deployed pod.
+        # Without this step, every successful workflow run breaks
+        # /admin-ui/, /scanner-ui/, and /analytics-ui/ until the next mta
+        # deploy. The recipe mirrors .deploy/mta.yaml:115-123.
+        run: |
+          npm --prefix app/admin-shell install
+          npm --prefix app/admin-shell run build
+          npm --prefix app/analytics-explorer install
+          npm --prefix app/analytics-explorer run build
+
       - name: Assemble static content
         run: |
           mkdir -p approuter/static
           cp -r hugo/public/* approuter/static/
           rm -rf approuter/static/tutorials
           cp -r app/display-app/dist approuter/static/display-app
+          mkdir -p approuter/static/admin-ui
+          cp -r app/admin-shell/dist/. approuter/static/admin-ui/
+          mkdir -p approuter/static/analytics-ui
+          cp -r app/analytics-explorer/dist/. approuter/static/analytics-ui/
+          cp -r app/scanner/webapp approuter/static/scanner-ui
 
       - name: Create content tarball
         run: tar czf content.tar.gz -C approuter/static .
