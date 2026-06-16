@@ -39,24 +39,48 @@ sap.ui.define([
     },
 
     onSyncMetadata: function () {
+      var oButton = this.byId("syncMetadataBtn");
+      var sOriginalText = oButton.getText();
+      oButton.setEnabled(false);
+      oButton.setBusy(true);
+      oButton.setText("Syncing...");
       var oModel = this.getOwnerComponent().getModel("admin");
       var oAction = oModel.bindContext("/syncTutorialMetadata(...)");
       oAction.execute().then(function () {
         var oResult = oAction.getBoundContext().getObject();
-        MessageToast.show("Synced " + oResult.synced + " tutorials");
-      }).catch(function (oError) {
-        MessageBox.error("Sync failed: " + oError.message);
+        var sMessage = oResult.synced > 0
+          ? "Sync complete. Backfilled " + oResult.synced + " missing tutorial metadata row" + (oResult.synced === 1 ? "" : "s") + "."
+          : "Sync complete. All tutorials already have metadata.";
+        MessageBox.success(sMessage, { title: "Sync Metadata" });
+        var oTable = this.byId("tutorialMetaTable");
+        var oBinding = oTable && oTable.getBinding("rows");
+        if (oBinding) { oBinding.refresh(); }
+      }.bind(this)).catch(function (oError) {
+        MessageBox.error("Sync failed: " + (oError && oError.message ? oError.message : "Unknown error"), { title: "Sync Metadata" });
+      }).finally(function () {
+        oButton.setEnabled(true);
+        oButton.setBusy(false);
+        oButton.setText(sOriginalText);
       });
     },
 
     onSendNotifications: function () {
+      var oButton = this.byId("sendNotificationsBtn");
+      var sOriginalText = oButton.getText();
+      oButton.setEnabled(false);
+      oButton.setBusy(true);
+      oButton.setText("Sending...");
       var oModel = this.getOwnerComponent().getModel("admin");
       var oAction = oModel.bindContext("/sendContributorNotifications(...)");
       oAction.execute().then(function () {
         var oResult = oAction.getBoundContext().getObject();
-        MessageToast.show("Notified " + oResult.notified + " contributors");
+        MessageBox.success("Notified " + oResult.notified + " contributor" + (oResult.notified === 1 ? "" : "s") + ".", { title: "Send Notifications" });
       }).catch(function (oError) {
-        MessageBox.error("Notification failed: " + oError.message);
+        MessageBox.error("Notification failed: " + (oError && oError.message ? oError.message : "Unknown error"), { title: "Send Notifications" });
+      }).finally(function () {
+        oButton.setEnabled(true);
+        oButton.setBusy(false);
+        oButton.setText(sOriginalText);
       });
     },
 
