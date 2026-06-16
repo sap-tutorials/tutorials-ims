@@ -240,10 +240,17 @@ async function step8() {
 }
 
 // ─── Step 9: Real migration ───────────────────────────────────────────────────
+// Captures the migration window (start → end) so Step 10 can compute realistic
+// activity-class tolerances. Issue #361.
+let migrationStartMs = null;
+let migrationEndMs = null;
+
 function step9() {
   banner(9, 'Migrator (real run)');
   const env = loadEnvCreds();
+  migrationStartMs = Date.now();
   const code = runChild(9, 'migrate', 'node', [...MIGRATOR_NODE_FLAGS, 'scripts/migrate-from-hana.js'], env);
+  migrationEndMs = Date.now();
   if (code !== 0) fail(9, 'migrate', `migrate-from-hana exited ${code}`);
 }
 
@@ -313,8 +320,19 @@ function step9_7() {
 function step10() {
   banner(10, 'Tier A: row-count verifier');
   const env = loadEnvCreds();
-  const code = runChild(10, 'verify-rowcounts',
-    'node', ['scripts/verify-migration-rowcounts.cjs', `--output-dir=${OUTPUT_DIR}`], env);
+
+  // Issue #361: pass the migration window so the verifier can scale
+  // activity-class tolerances proportionally. Defaults to undefined when
+  // step9 didn't run (e.g. partial replay), letting the verifier fall back
+  // to its 2-hour assumption.
+  const verifierArgs = ['scripts/verify-migration-rowcounts.cjs', `--output-dir=${OUTPUT_DIR}`];
+  if (migrationStartMs && migrationEndMs) {
+    const seconds = Math.ceil((migrationEndMs - migrationStartMs) / 1000);
+    verifierArgs.push(`--migration-window-seconds=${seconds}`);
+    console.log(`  Migration window: ${seconds}s (≈${Math.round(seconds / 60)}min)`);
+  }
+
+  const code = runChild(10, 'verify-rowcounts', 'node', verifierArgs, env);
   if (code === 1) fail(10, 'verify-rowcounts', 'row-count diff out of tolerance');
   if (code === 2) fail(10, 'verify-rowcounts', 'connection or query error');
   if (code !== 0) fail(10, 'verify-rowcounts', `unexpected exit ${code}`);

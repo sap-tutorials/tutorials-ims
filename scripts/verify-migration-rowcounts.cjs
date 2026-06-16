@@ -97,6 +97,15 @@ async function main() {
   const jsonOnly = process.argv.includes('--json');
   const targetOnly = process.argv.includes('--target-only');
 
+  // Issue #361: activity-class tolerances scale with the migration window.
+  // The orchestrator passes --migration-window-seconds=<N> based on the
+  // migrator's actual start-to-finish duration; standalone runs fall back
+  // to a 2-hour assumption (defined in migration-tolerance.cjs).
+  const windowArg = process.argv.find(a => a.startsWith('--migration-window-seconds='));
+  const migrationWindowSeconds = windowArg
+    ? Number(windowArg.split('=')[1])
+    : undefined;
+
   let source, target;
   try {
     if (!targetOnly) {
@@ -130,7 +139,7 @@ async function main() {
         : `SELECT COUNT(*) AS "C" FROM "${sourceTable}"`;
       const [src] = await runSql(source, srcSql);
       const sourceCount = Number(src.C);
-      const verdict = checkTolerance(name, sourceCount, targetCount);
+      const verdict = checkTolerance(name, sourceCount, targetCount, { migrationWindowSeconds });
       results.push({ name, sourceCount, targetCount, ...verdict });
     } catch (e) {
       results.push({ name, error: e.message.split('\n')[0] });
