@@ -71,3 +71,69 @@ export async function resolveDbUser(user, columns) {
   if (columns && columns.length) q = q.columns(...columns);
   return await q;
 }
+
+/**
+ * Issue #339: opportunistically populate firstName / lastName / email on the
+ * migrated Users row from the authenticated request's JWT claims.
+ *
+ * Why: the IMS migrator copies SAP_ID + pre-computed totals, but never the
+ * profile fields — IMS Java JIT-fetched names from SAP IDP at request time
+ * and never persisted them. Most migrated rows have NULL firstName/lastName/
+ * email, so the admin Users list and any UI that surfaces a learner's name
+ * shows blank.
+ *
+ * SAP ID Service (Option A trust, see docs/developers/operations/ias-setup.md)
+ * does NOT expose a SCIM/People bulk API. The only way to populate these
+ * fields after migration is per-user, when the user authenticates and the
+ * JWT carries `given_name` / `family_name` / `email` claims.
+ *
+ * This helper is the lazy-self-heal half of the fix:
+ *   - Called from authenticated request hooks (notably /auth/user, which
+ *     fires on every page load), it issues an UPDATE iff the row has at
+ *     least one blank field that the JWT can fill.
+ *   - No-op when fields are already populated, so it's safe to call on
+ *     every request.
+ *   - No-op when no Users row exists yet (auto-provision will fill the
+ *     fields on INSERT).
+ *
+ * Caller pattern (fire-and-forget):
+ *
+ *   backfillUserProfile(user).catch(err =>
+ *     console.warn('[backfill]', err.message));
+ *
+ * Returns a verdict object for callers that want to log or test:
+ *   { backfilled: false, reason: 'anonymous' | 'no-user' | 'no-blanks' | 'no-claims' }
+ *   { backfilled: true,  fields: ['firstName', 'email', ...] }
+ *
+ * NOT covered:
+ *   - avatarUrl (not in standard SAP ID Service JWT claims)
+ *   - displayName (computed at read time from firstName + lastName)
+ */
+export async function backfillUserProfile(user) {
+  const sapId = resolveUserSapId(user);
+  if (!sapId) return { backfilled: false, reason: 'anonymous' };
+  if (!user.attr) return { backfilled: false, reason: 'no-claims' };
+
+  const { Users } = cds.entities('com.sap.developers.ims');
+  const dbUser = await SELECT.one.from(Users)
+    .where({ sapId })
+    .columns('ID', 'firstName', 'lastName', 'email');
+  if (!dbUser) return { backfilled: false, reason: 'no-user' };
+
+  // JWT claim shape from SAP ID Service / IAS — confirmed via /auth/user
+  // diag dump 2026-06-16. Either snake_case (SAP ID Service) or camelCase
+  // (some IAS configurations) shows up, hence the `||` fallback.
+  const claimFirstName = user.attr.given_name || user.attr.givenName;
+  const claimLastName  = user.attr.family_name || user.attr.familyName;
+  const claimEmail     = user.attr.email;
+
+  const updates = {};
+  if (!dbUser.firstName && claimFirstName) updates.firstName = claimFirstName;
+  if (!dbUser.lastName  && claimLastName)  updates.lastName  = claimLastName;
+  if (!dbUser.email     && claimEmail)     updates.email     = claimEmail;
+
+  if (Object.keys(updates).length === 0) return { backfilled: false, reason: 'no-blanks' };
+
+  await UPDATE(Users).where({ sapId }).set(updates);
+  return { backfilled: true, fields: Object.keys(updates) };
+}

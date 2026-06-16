@@ -31,6 +31,7 @@ import { makeValidateAnswerHandler } from './lib/validate-answer-handler.js';
 import { defaultLoadQuestion } from './lib/validate-answer-question-loader.js';
 import { scheduleRebuild, checkFeatureFlag as checkRebuildTriggerFeatureFlag } from './lib/rebuild-trigger.js';
 import { handleUIEvent, checkFeatureFlag as checkUIEventFeatureFlag } from './lib/ui-event-handler.js';
+import { backfillUserProfile } from './lib/resolve-db-user.js';
 
 // Late-bound POST /chat/stream handler. Registered in 'bootstrap' (before CAP
 // mounts ChatService at /chat, which would otherwise swallow /chat/stream as
@@ -421,6 +422,14 @@ cds.on('served', async () => {
     if (!user?.id || user.id === 'anonymous') {
       return res.status(401).json({ authenticated: false });
     }
+    // Issue #339: opportunistically backfill firstName/lastName/email on the
+    // migrated Users row from JWT claims. The migrator copies SAP_ID and
+    // pre-computed totals only — IMS Java JIT-fetched names from SAP IDP and
+    // never persisted them. SAP ID Service has no SCIM bulk API, so this
+    // per-request lazy fill is the only path post-cutover. Fire-and-forget;
+    // never block the response on a write that's pure self-heal.
+    backfillUserProfile(user).catch(err =>
+      console.warn('[backfill-user-profile]', err.message));
     res.json({
       authenticated: true,
       id: user.id,
