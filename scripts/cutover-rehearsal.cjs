@@ -270,6 +270,45 @@ function step9_5() {
   if (code !== 0) fail('9.5', 'setup-dev-data', `setup-dev-data.cjs exited ${code}`);
 }
 
+// ─── Step 9.6: Backfill TutorialMeta owner+reviewedDate from IMS source ──────
+// The main migrator skips TutorialMeta (CAP-era entity), but IMS prod's
+// IMS_TUTORIAL_META holds 1,428 real-world author assignments + review status
+// that DO matter for Tutorial Health. This backfill closes that gap.
+//
+// PR #355 — surfaced when 2026-06-16 rehearsal showed Tutorial Health rows
+// with blank Owner / Last Reviewed columns. UPDATEs use COALESCE so non-NULL
+// DEV values are never overwritten; idempotent across re-runs.
+function step9_6() {
+  banner('9.6', 'Backfill TutorialMeta owner + reviewedDate from IMS source');
+  const env = loadEnvCreds();
+  const code = runChild('9_6', 'backfill-tutorial-meta',
+    'node', ['scripts/backfill-tutorial-meta-from-ims.cjs'], env);
+  if (code !== 0) fail('9.6', 'backfill-tutorial-meta', `backfill exited ${code}`);
+}
+
+// ─── Step 9.7: Sync Mission/Group published flag from AEM sitemap ─────────────
+// The AEM-replacement curation gate (`Missions.published` / `Groups.published`,
+// PR #349) needs a signal to decide which 87/193 of the 888/359 migrated rows
+// should land as published. AEM's sitemap is the source of truth: every
+// publicly-visible mission appears as `mission.<slug>.html`; same for groups.
+//
+// The script fetches the sitemap, fetches each mission/group page, matches
+// AEM page <title> to DB Missions.title / Groups.title, and applies:
+//   UPDATE Missions/Groups SET published=false everywhere
+//   UPDATE Missions/Groups SET published=true on AEM-matched rows
+//
+// PR #356 — surfaced when 2026-06-16 rehearsal showed 370/203 published
+// (every non-DELETED row) where IMS prod navigator showed 86/194.
+function step9_7() {
+  banner('9.7', 'Sync Missions/Groups published flag from AEM sitemap');
+  const env = loadEnvCreds();
+  // Source creds not needed; this script only writes to DEV.
+  const code = runChild('9_7', 'aem-published-sync',
+    'node', ['scripts/sync-published-flag-from-aem-sitemap.cjs'],
+    { CAP_HANA_CREDENTIALS: env.CAP_HANA_CREDENTIALS });
+  if (code !== 0) fail('9.7', 'aem-published-sync', `aem-published-sync exited ${code}`);
+}
+
 // ─── Step 10: Tier A row-count verify ─────────────────────────────────────────
 function step10() {
   banner(10, 'Tier A: row-count verifier');
@@ -356,6 +395,8 @@ async function main() {
   await step8();
   step9();
   step9_5();
+  step9_6();
+  step9_7();
   step10();
   step11();
   step12();
