@@ -5249,6 +5249,11 @@
     "repo": "sap-build-process-automation",
     "branch": "main"
   },
+  "joulestudio-document-grounding": {
+    "slug": "joulestudio-document-grounding",
+    "repo": "sap-build-process-automation",
+    "branch": "main"
+  },
   "joulestudio-skill-action-create": {
     "slug": "joulestudio-skill-action-create",
     "repo": "sap-build-process-automation",
