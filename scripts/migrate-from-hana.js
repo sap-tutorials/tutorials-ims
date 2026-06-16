@@ -725,10 +725,26 @@ async function main() {
         sourceQuery: `SELECT "ID", "PATH_ID", "TASK_ID", "COMPLETION_PATH_ORDER" FROM ${S}."IMS_COMPLETION_PATH_TO_TASK"`,
         targetTable: 'COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHITEMS',
         mapRow: (row) => {
+          // Resolve the TASK_ID against each entity-type UUID map. The
+          // typed FK columns (TUTORIAL_ID, GROUP_ID) on the target are
+          // what the navigator-catalog handler reads — without them set,
+          // missions whose CompletionPathItems point at GROUPs (the
+          // "nested groups" pattern, ~17 of 87 published missions on
+          // 2026-06-16 cutover) drop out of /build/navigator entirely.
           let taskType = null;
-          if (uuidMap.tutorials.has(row.TASK_ID)) taskType = 'TUTORIAL';
-          else if (uuidMap.missions.has(row.TASK_ID)) taskType = 'MISSION';
-          else if (uuidMap.groups.has(row.TASK_ID)) taskType = 'GROUP';
+          let tutorialId = null;
+          let groupId = null;
+          if (uuidMap.tutorials.has(row.TASK_ID)) {
+            taskType = 'TUTORIAL';
+            tutorialId = uuidMap.tutorials.get(row.TASK_ID);
+          } else if (uuidMap.missions.has(row.TASK_ID)) {
+            taskType = 'MISSION';
+            // CPI schema has no MISSION_ID column; current data has zero
+            // taskType='MISSION' rows. Leave both FKs null.
+          } else if (uuidMap.groups.has(row.TASK_ID)) {
+            taskType = 'GROUP';
+            groupId = uuidMap.groups.get(row.TASK_ID);
+          }
 
           return {
             ID: deriveUuid('completionpathitem', row.ID),
@@ -736,12 +752,53 @@ async function main() {
             PATH_ID: uuidMap.completionPaths.get(row.PATH_ID) || null,
             TASKLEGACYID: row.TASK_ID,
             TASKTYPE: taskType,
+            TUTORIAL_ID: tutorialId,
+            GROUP_ID: groupId,
             ITEMORDER: row.COMPLETION_PATH_ORDER,
           };
         },
       }));
     } catch (e) {
       console.log(`  ⊘ Completion path items: ${e.message.split('\n')[0]}`);
+    }
+
+    // 10b. Group → Tutorial path items (CAP-era table; IMS holds the
+    // relationship in IMS_TASK_TO_PARENT where parent.task_type='GROUP'
+    // and child.task_type='TUTORIAL'). Without this, the navigator
+    // handler's standalone-group + nested-group paths can't surface
+    // tutorials for ~122 of the 193 published groups (2026-06-16
+    // cutover). 820 source links exist on prod IMS.
+    try {
+      results.push(await migrateEntity(source, target, T, {
+        name: 'grouppathitems',
+        sourceQuery: `SELECT
+          ttp."PARENT_TASK_ID" AS "GROUP_LEGACYID",
+          ttp."CHILD_TASK_ID"  AS "TUT_LEGACYID",
+          ROW_NUMBER() OVER (PARTITION BY ttp."PARENT_TASK_ID" ORDER BY ttp."CHILD_TASK_ID") AS "ITEM_ORDER"
+        FROM ${S}."IMS_TASK_TO_PARENT" ttp
+        INNER JOIN ${S}."IMS_TASK" p ON p."ID" = ttp."PARENT_TASK_ID"
+        INNER JOIN ${S}."IMS_TASK" c ON c."ID" = ttp."CHILD_TASK_ID"
+        WHERE p."TASK_TYPE" = 'GROUP' AND c."TASK_TYPE" = 'TUTORIAL'
+        ORDER BY ttp."PARENT_TASK_ID", ttp."CHILD_TASK_ID"`,
+        targetTable: 'COM_SAP_DEVELOPERS_IMS_GROUPPATHITEMS',
+        mapRow: (row) => {
+          const groupUuid = uuidMap.groups.get(row.GROUP_LEGACYID);
+          const tutorialUuid = uuidMap.tutorials.get(row.TUT_LEGACYID);
+          if (!groupUuid || !tutorialUuid) return null;
+          // Re-use the completionpathitem namespace; legacyIds from this
+          // source table don't collide with IMS_COMPLETION_PATH_TO_TASK,
+          // and the input keys are namespaced with a "gpi:" prefix so the
+          // derived UUIDs are stable across re-runs and never overlap.
+          return {
+            ID: uuidv5(`gpi:${row.GROUP_LEGACYID}:${row.TUT_LEGACYID}`, NAMESPACES.completionpathitem),
+            GROUP_ID: groupUuid,
+            TUTORIAL_ID: tutorialUuid,
+            ITEMORDER: row.ITEM_ORDER,
+          };
+        },
+      }));
+    } catch (e) {
+      console.log(`  ⊘ Group path items: ${e.message.split('\n')[0]}`);
     }
   }
 
