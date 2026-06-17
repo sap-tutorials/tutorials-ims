@@ -1,0 +1,86 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.advocates",
+    "type": "application",
+    "title": "{{appTitle}}",
+    "description": "{{appSubtitle}}",
+    "applicationVersion": { "version": "0.0.1" },
+    "i18n": "i18n/i18n.properties",
+    "dataSources": {
+      "mainService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "Advocate-display": {
+          "semanticObject": "Advocate",
+          "action": "display",
+          "title": "{{appTitle}}",
+          "signature": { "parameters": {}, "additionalParameters": "allowed" }
+        }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": { "sap.fe.templates": {}, "sap.m": {}, "sap.ui.unified": {} }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      },
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": { "bundleName": "sap.tutorials.admin.advocates.i18n.i18n" }
+      }
+    },
+    "routing": {
+      "routes": [
+        { "pattern": ":?query:", "name": "AdvocatesList", "target": "AdvocatesList" },
+        { "pattern": "Advocates({key}):?query:", "name": "AdvocateObjectPage", "target": "AdvocateObjectPage" }
+      ],
+      "targets": {
+        "AdvocatesList": {
+          "type": "Component",
+          "id": "AdvocatesList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/Advocates",
+              "variantManagement": "Page",
+              "initialLoad": "Enabled",
+              "navigation": {
+                "Advocates": {
+                  "detail": { "route": "AdvocateObjectPage" }
+                }
+              }
+            }
+          }
+        },
+        "AdvocateObjectPage": {
+          "type": "Component",
+          "id": "AdvocateObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/Advocates",
+              "editableHeaderContent": false
+            }
+          }
+        }
+      }
+    }
+  }
+}
