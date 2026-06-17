@@ -8,6 +8,7 @@ const MAX_TUTORIAL_PREFS_GZIP = 8 * 1024;
 const MAX_CODE_CHECK_GZIP = 8 * 1024;
 const MAX_VALIDATION_GZIP = 8 * 1024;
 const MAX_TUTORIAL_BRANCHES_GZIP = 12 * 1024;
+const MAX_ADVOCATES_GZIP = 30 * 1024;
 
 function codeCheckBudget() {
   return {
@@ -63,6 +64,24 @@ function tutorialBranchesBudget() {
   };
 }
 
+function advocatesBudget() {
+  return {
+    name: 'advocates-budget',
+    generateBundle(_opts: unknown, bundle: Record<string, any>) {
+      const chunk = bundle['advocates.js'];
+      if (!chunk || chunk.type !== 'chunk') return;
+      const gz = gzipSync(chunk.code).length;
+      if (gz > MAX_ADVOCATES_GZIP) {
+        // @ts-ignore — Rollup plugin context
+        this.error(`advocates.js is ${gz} bytes gzipped (> ${MAX_ADVOCATES_GZIP}). Move code to a lazy chunk.`);
+      } else {
+        // @ts-ignore
+        this.warn(`advocates.js: ${gz} bytes gzipped (budget ${MAX_ADVOCATES_GZIP}).`);
+      }
+    }
+  };
+}
+
 function tutorialPrefsBudget() {
   return {
     name: 'tutorial-prefs-budget',
@@ -82,7 +101,7 @@ function tutorialPrefsBudget() {
 }
 
 export default defineConfig({
-  plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget(), codeCheckBudget(), validationBudget(), tutorialBranchesBudget()],
+  plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget(), codeCheckBudget(), validationBudget(), tutorialBranchesBudget(), advocatesBudget()],
   // Approuter serves these bundles at /js/. Without `base`, Vite emits
   // dynamic-import paths as `./chunks/x.js` which the browser resolves
   // against the *document URL* (e.g. `/` → `/chunks/x.js` → 404). Setting
@@ -123,6 +142,7 @@ export default defineConfig({
         // which writes to the same /js/tutorial.js URL and would clobber (or be
         // clobbered by) this Vite entry depending on build order.
         'tutorial-referred': resolve(__dirname, 'src/tutorial-referred/main.ts'),
+        advocates: resolve(__dirname, 'src/advocates/main.ts'),
       },
       output: {
         entryFileNames: '[name].js',
