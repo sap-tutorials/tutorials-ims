@@ -1,4 +1,5 @@
-'use strict';
+// ESM module — the project's package.json has "type": "module" so the
+// native Node loader (which CAP runtime uses) treats this as ESM.
 
 const MAX_SLUG_LEN = 64;
 const FALLBACK_SLUG = 'advocate';
@@ -13,7 +14,7 @@ function normalize(s) {
     .replace(/^-+|-+$/g, '');
 }
 
-function deriveSlug(firstName, lastName) {
+export function deriveSlug(firstName, lastName) {
   const fn = normalize(firstName);
   const ln = normalize(lastName);
   let slug = [fn, ln].filter(Boolean).join('-');
@@ -24,7 +25,7 @@ function deriveSlug(firstName, lastName) {
   return slug;
 }
 
-function suffixOnCollision(base, takenSet) {
+export function suffixOnCollision(base, takenSet) {
   if (!takenSet.has(base)) return base;
   let n = 2;
   // eslint-disable-next-line no-constant-condition
@@ -38,5 +39,3 @@ function suffixOnCollision(base, takenSet) {
     n += 1;
   }
 }
-
-module.exports = { deriveSlug, suffixOnCollision };

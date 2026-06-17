@@ -1,12 +1,13 @@
-'use strict';
+// ESM module — the project's package.json has "type": "module" so the
+// native Node loader (which CAP runtime uses) treats this as ESM.
 
-const sharp = require('sharp');
-const crypto = require('node:crypto');
+import sharp from 'sharp';
+import crypto from 'node:crypto';
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
-async function processUpload(buffer, mimeType) {
+export async function processUpload(buffer, mimeType) {
   if (!Buffer.isBuffer(buffer)) {
     throw new Error('processUpload: buffer is required');
   }
@@ -50,5 +51,3 @@ async function processUpload(buffer, mimeType) {
     photoMimeType: 'image/webp',
   };
 }
-
-module.exports = { processUpload };
