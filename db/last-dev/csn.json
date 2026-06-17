@@ -238,6 +238,11 @@
     },
     "com.sap.developers.ims.Missions": {
       "kind": "entity",
+      "@assert.unique.slug": [
+        {
+          "=": "slug"
+        }
+      ],
       "@cds.persistence.journal": true,
       "elements": {
         "ID": {
@@ -349,6 +354,21 @@
           "@cds.persistence.name": "GROUPORDER"
         }
       },
+      "$tableConstraints": {
+        "unique": {
+          "slug": {
+            "paths": [
+              {
+                "ref": [
+                  "slug"
+                ],
+                "isChecked": true
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.Missions"
+          }
+        }
+      },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_MISSIONS"
     },
     "com.sap.developers.ims.Tags": {
@@ -391,6 +411,11 @@
     },
     "com.sap.developers.ims.Groups": {
       "kind": "entity",
+      "@assert.unique.slug": [
+        {
+          "=": "slug"
+        }
+      ],
       "@cds.persistence.journal": true,
       "elements": {
         "ID": {
@@ -473,10 +498,30 @@
           "@cds.persistence.name": "PUBLISHED"
         }
       },
+      "$tableConstraints": {
+        "unique": {
+          "slug": {
+            "paths": [
+              {
+                "ref": [
+                  "slug"
+                ],
+                "isChecked": true
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.Groups"
+          }
+        }
+      },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_GROUPS"
     },
     "com.sap.developers.ims.Tutorials": {
       "kind": "entity",
+      "@assert.unique.slug": [
+        {
+          "=": "slug"
+        }
+      ],
       "@cds.persistence.journal": true,
       "elements": {
         "ID": {
@@ -569,6 +614,21 @@
           "length": 36,
           "@odata.foreignKey4": "redirectTo",
           "@cds.persistence.name": "REDIRECTTO_ID"
+        }
+      },
+      "$tableConstraints": {
+        "unique": {
+          "slug": {
+            "paths": [
+              {
+                "ref": [
+                  "slug"
+                ],
+                "isChecked": true
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.Tutorials"
+          }
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_TUTORIALS"
