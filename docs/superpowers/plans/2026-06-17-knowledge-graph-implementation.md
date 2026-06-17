@@ -40,7 +40,7 @@ The full set of files this plan creates or modifies:
 
 ### New files
 
-```
+```text
 db/
   knowledge-graph.cds                     # Concepts, TutorialConceptLinks, ConceptEdges, GraphMetadata
 srv/
@@ -94,7 +94,7 @@ docs/
 
 ### Modified files
 
-```
+```text
 db/
   audit-logging.cds                       # Add Concepts to audit
   change-tracking.cds                     # Add Concepts to change-tracking
@@ -508,7 +508,43 @@ git add srv/jobs/extract-concepts-job.js srv/jobs/scheduler.js srv/server.js
 git commit -m "feat(kg): extractConcepts cron job (#381 PR 3/8 part 3)"
 ```
 
-### Task 3.4: Open PR, merge, observe first nightly run on DEV
+### Task 3.4: Wire `scripts/kg-reextract.cjs` one-shot CLI
+
+**Files:**
+
+- Create: `scripts/kg-reextract.cjs`
+- Modify: `package.json` (add `kg:reextract` script)
+
+- [ ] **Step 1: Write the CLI**
+
+`scripts/kg-reextract.cjs` is a thin wrapper that imports `srv/jobs/extract-concepts-job.js` and runs it with `KG_EXTRACT_BUILD_CAP` defaulted to 10000 (override via env). Logs progress; exits 0 on success, non-zero on failure.
+
+This is the documented recovery path for the "HDI deploy wipes Concepts" failure mode in the spec.
+
+- [ ] **Step 2: Wire `npm run kg:reextract`**
+
+In `package.json`:
+
+```json
+"kg:reextract": "KG_EXTRACT_BUILD_CAP=10000 cds bind --exec -- node scripts/kg-reextract.cjs"
+```
+
+- [ ] **Step 3: Smoke locally**
+
+```bash
+KG_EXTRACT_BUILD_CAP=2 npm run kg:reextract
+```
+
+Expect: 2 LLM calls run, exit 0.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add scripts/kg-reextract.cjs package.json
+git commit -m "feat(kg): kg:reextract CLI for cache rebuild (#381 PR 3/8 part 4)"
+```
+
+### Task 3.5: Open PR, merge, observe first nightly run on DEV
 
 - [ ] **Step 1: Push and PR**
 
@@ -1443,3 +1479,4 @@ But the prod cron jobs still need to run a full corpus pass before the sidebar w
 - **Default-OFF flags need live smoke** — don't rely solely on automated tests ([[feedback_default_off_flags_need_live_smoke]])
 - **Audit all callers** when changing a buggy primitive ([[feedback_audit_all_callers_of_buggy_primitive]])
 - **Module singletons in vitest+CDS** — load on demand, not at import time, on Windows ([[feedback_module_singletons_in_vitest_cds]])
+- **HANA table-name casing** — CAP compiles entity `Concepts` to HANA table `COM_SAP_DEVELOPERS_IMS_CONCEPTS` (uppercase). The plan uses lowercase in inline `hdbsql` snippets for readability — adjust to uppercase or use double-quoted form when actually running. CAP CQL on the `db` connection is case-insensitive so unit/hybrid tests using CDS QL are unaffected.
