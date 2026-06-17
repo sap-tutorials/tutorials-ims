@@ -119,18 +119,19 @@ export async function fetchPhoto(slug, size) {
 
   let row;
   if (isHana) {
-    // Raw SQL on HANA. Quoted identifiers preserve the case CAP emits
-    // (snake_cased entity names). The `db.run(sql, params)` signature
-    // accepts a positional-param array.
+    // Raw SQL on HANA. Identifiers go UPPERCASE-unquoted to match HANA's
+    // default casing for HDI-deployed tables — quoted lowercase fails with
+    // "Could not find table/view" because HANA preserves the case in
+    // quoted form. (Discovered the hard way on first DEV deploy.)
     const adv = await db.run(
-      'SELECT "ID" FROM "com_sap_developers_ims_Advocates" WHERE LOWER("slug") = ?',
+      'SELECT ID FROM COM_SAP_DEVELOPERS_IMS_ADVOCATES WHERE LOWER(SLUG) = ?',
       [String(slug).toLowerCase()],
     );
     if (!adv || !adv.length) return null;
     const advId = adv[0].ID;
 
     const blob = await db.run(
-      `SELECT "${col}" AS "blob", "photoMimeType" AS "mimeType", "sha256" AS "sha256" FROM "com_sap_developers_ims_AdvocatePhotos" WHERE "advocate_ID" = ?`,
+      `SELECT ${col.toUpperCase()} AS "blob", PHOTOMIMETYPE AS "mimeType", SHA256 AS "sha256" FROM COM_SAP_DEVELOPERS_IMS_ADVOCATEPHOTOS WHERE ADVOCATE_ID = ?`,
       [advId],
     );
     if (!blob || !blob.length || !blob[0].blob) return null;
