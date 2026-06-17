@@ -32,6 +32,48 @@ const cds = require('@sap/cds');
 const fs = require('node:fs');
 const path = require('node:path');
 
+const SNAPSHOT_DIR = path.resolve(__dirname, '..', '.migration-data');
+const SNAPSHOT_PATH = path.join(
+  SNAPSHOT_DIR,
+  `dup-merge-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.jsonl`
+);
+let snapshotInited = false;
+function appendSnapshot(record) {
+  if (!snapshotInited) {
+    fs.mkdirSync(SNAPSHOT_DIR, { recursive: true });
+    snapshotInited = true;
+  }
+  fs.appendFileSync(SNAPSHOT_PATH, JSON.stringify(record) + '\n');
+}
+
+async function ensureSnapshot(db, I, table, rows, losers, fkList) {
+  // Snapshot every row in the dup-group (winner + losers) so a full revert
+  // can both re-INSERT loser rows AND see the winner state at merge time.
+  for (const r of rows) {
+    appendSnapshot({ kind: 'row', table: I.tables[table], data: r });
+  }
+  // Snapshot only the FK rows pointing at LOSERS — those are the rows the
+  // merge will redirect to the winner. Winner-attached children stay put,
+  // so including them would muddy the rollback contract (a `kind: 'fk'`
+  // line means "this row was redirected away from fromId").
+  //
+  // Note on payload fidelity: SELECT * returns row data verbatim. Most
+  // columns round-trip cleanly through JSON.stringify, but specialty HANA
+  // types (e.g. Vector(N) on TutorialEmbedding) may not. For the current
+  // dup-set the loser is always the legacy migration row which has no
+  // TutorialEmbedding row, so this is moot — but a future use of this
+  // script against a different dup-set should verify Vector serialisation
+  // before relying on the snapshot for full revert.
+  for (const [tbl, col] of fkList) {
+    for (const loser of losers) {
+      const refs = await db.run(`SELECT * FROM ${tbl} WHERE ${col} = ?`, [loser.ID]);
+      for (const ref of refs) {
+        appendSnapshot({ kind: 'fk', table: tbl, col, fromId: loser.ID, data: ref });
+      }
+    }
+  }
+}
+
 const argv = process.argv.slice(2);
 const COMMIT = argv.includes('--commit');
 const VERIFY_ONLY = argv.includes('--verify-only');
@@ -121,6 +163,7 @@ async function main() {
     console.error('FATAL: this script must run on HANA. Use `cds bind --exec`.');
     process.exit(1);
   }
+  if (COMMIT) console.log(`Snapshot will be written to: ${SNAPSHOT_PATH}\n`);
   const I = ident();
   // Order matters: groups must be merged BEFORE missions (Missions.GROUP_ID
   // is a carry-forward field for missions, so group-loser IDs must already
@@ -203,6 +246,10 @@ async function processTable(db, I, table, commit) {
     const losers = rows.filter(r => r.ID !== winner.ID);
 
     console.log(`  slug=${slug}: winner=${winner.ID.slice(0,8)} losers=[${losers.map(l => l.ID.slice(0,8)).join(',')}]`);
+
+    // Pre-merge snapshot: every row about to be touched, plus every FK row
+    // about to be redirected. Written once per run, append-mode.
+    if (commit) await ensureSnapshot(db, I, table, rows, losers, FK_REDIRECTS[table]);
 
     // Step 2.1.x is implemented in subsequent steps. Dry-run prints the plan.
     if (!commit) continue;
