@@ -169,6 +169,8 @@ When `EXPOSE_CAP_UI=true` is set on the CAP srv app, these are accessible throug
 | `/build/slug-mapping` | GET | Slug→ID mapping for all missions/groups | None |
 | `/build/repo-catalog` | GET | Slug-keyed `DiscoveredTutorial` map (third-tier discovery fallback) | None |
 | `/build/repo-catalog` | POST | Write the discovered-tutorial baseline (CI-as-canonical-writer) | Bearer (`CONTENT_API_KEY`) |
+| `/api/advocates` | GET | Public list of active developer advocates (sorted by lastName, topics + links denormalized, ETag + `max-age=60, stale-while-revalidate=600`) | None |
+| `/api/advocates/:slug/photo[?size=thumb]` | GET | Photo bytes (256-WebP default, 64-WebP with `?size=thumb`) served from HANA `AdvocatePhotos`. ETag is the sha256, `max-age=86400`. 404 when the advocate has no photo or slug is unknown. | None |
 | `/feedback/submit` | POST | Tutorial feedback form (rate-limited; submitter IP hashed via `SUBMISSION_SALT_SECRET`) | None |
 | `/chat/stream` | POST | Joule chat streaming endpoint (Server-Sent Events) | XSUAA |
 | `/api/codecheck` | POST | AI code-check spike (issue #171, gated on `ChatSettings.codeCheckEnabled`). Body: `{ tutorialSlug, stepNumber, submittedCode, language? }`. Returns `{ verdict: 'pass'\|'partial'\|'fail', summary, suggestions[], correctAspects[] }`. 503 when flag off; 429 with `Retry-After` on per-user 30/hr or per-(user,slug,step) 5/5min cap. | XSUAA |
