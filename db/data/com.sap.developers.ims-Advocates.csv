@@ -1,0 +1,6 @@
+ID;slug;firstName;lastName;title;pronouns;location;region;bio;isActive;sortOverride;joinedDate;hasPhoto;photoUpdatedAt
+ADC00001-0000-0000-0000-000000000001;thomas-jung;Thomas;Jung;Chief Developer Advocate;he/him;Houston, TX;AMERICAS;Builds CAP samples and decommissions Java IMS one endpoint at a time.;true;;2018-01-01;false;
+ADC00001-0000-0000-0000-000000000002;placeholder-emea;Placeholder;EMEA;Developer Advocate (EMEA);;Walldorf, Germany;EMEA;TODO replace with real advocate.;true;;2024-01-01;false;
+ADC00001-0000-0000-0000-000000000003;placeholder-apj;Placeholder;APJ;Developer Advocate (APJ);;Singapore;APJ;TODO replace with real advocate.;true;;2024-01-01;false;
+ADC00001-0000-0000-0000-000000000004;placeholder-amer;Placeholder;Americas;Developer Advocate (Americas);;Palo Alto, CA;AMERICAS;TODO replace with real advocate.;true;;2024-01-01;false;
+ADC00001-0000-0000-0000-000000000005;placeholder-multi;Placeholder;Roving;Developer Advocate;;Remote;EMEA;TODO replace with real advocate.;true;;2024-01-01;false;
