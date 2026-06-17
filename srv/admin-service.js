@@ -10,6 +10,7 @@ import { reviewTutorial, snoozeTutorial } from './lib/tutorial-review.js';
 import { slugify, ensureUniqueSlug } from './lib/slug-utils.js';
 import { classifyAndPersist } from './lib/category-classifier.js';
 import { makeAltGroupHandler } from './handlers/completion-path-items-altgroup.js';
+import * as advocateHandlers from './handlers/advocate-handlers.js';
 
 export default class AdminService extends cds.ApplicationService {
 
@@ -101,6 +102,9 @@ export default class AdminService extends cds.ApplicationService {
     this.before('UPDATE', 'CompletionPathItems', makeAltGroupHandler('CompletionPathItems', 'path_ID', 'UPDATE'));
     this.before('CREATE', 'GroupPathItems',      makeAltGroupHandler('GroupPathItems',      'group_ID', 'CREATE'));
     this.before('UPDATE', 'GroupPathItems',      makeAltGroupHandler('GroupPathItems',      'group_ID', 'UPDATE'));
+
+    // Advocates: auto-derive slug from firstName + lastName on CREATE.
+    advocateHandlers.register(this);
 
     // Validate Start Date < End Date on Events
     this.before(['CREATE', 'PATCH'], 'Events', (req) => {
