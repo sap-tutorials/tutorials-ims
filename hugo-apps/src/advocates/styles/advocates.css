@@ -1,0 +1,78 @@
+:root {
+  --adv-card-radius: 20px;
+  --adv-bg-amer: linear-gradient(135deg,#0070f2 0%,#6c3dff 60%,#ff6db5 100%);
+  --adv-bg-emea: linear-gradient(135deg,#0a6ed1 0%,#1c63dc 60%,#2b9fd8 100%);
+  --adv-bg-apj:  linear-gradient(135deg,#7858d8 0%,#b056d1 60%,#f96fb0 100%);
+  --adv-back:    linear-gradient(160deg,#001a4f 0%,#0a3d91 50%,#0070f2 100%);
+}
+
+.adv-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; padding: 24px; }
+@media (max-width: 1100px) { .adv-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 800px)  { .adv-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 540px)  { .adv-grid { grid-template-columns: 1fr; } }
+
+.adv-flipwrap { perspective: 1400px; }
+.adv-card-inner {
+  position: relative; width: 100%; aspect-ratio: 4 / 5;
+  transition: transform .85s cubic-bezier(.2,.85,.25,1);
+  transform-style: preserve-3d; cursor: pointer;
+}
+.adv-flipwrap:hover .adv-card-inner,
+.adv-flipwrap.is-flipped .adv-card-inner { transform: rotateY(180deg); }
+.adv-face {
+  position: absolute; inset: 0; backface-visibility: hidden;
+  border-radius: var(--adv-card-radius); overflow: hidden;
+  background: #fff; border: 1px solid #e4e4e8;
+  box-shadow: 0 8px 24px rgba(8,32,80,.06);
+  display: flex; flex-direction: column;
+}
+.adv-flipwrap:hover .adv-face { box-shadow: 0 18px 44px rgba(8,32,80,.14); }
+
+.adv-front .adv-hero { height: 56%; position: relative; overflow: hidden; }
+.adv-front .adv-hero[data-region="AMERICAS"] { background: var(--adv-bg-amer); }
+.adv-front .adv-hero[data-region="EMEA"]      { background: var(--adv-bg-emea); }
+.adv-front .adv-hero[data-region="APJ"]       { background: var(--adv-bg-apj); }
+.adv-front .adv-hero::after {
+  content:''; position:absolute; inset:0;
+  background: radial-gradient(900px circle at 25% 0%, rgba(255,255,255,.32), transparent 55%);
+}
+.adv-photo, .adv-front .adv-initials {
+  position: absolute; left: 50%; bottom: -44px; transform: translateX(-50%);
+  width: 130px; height: 130px; border-radius: 50%; border: 5px solid #fff;
+  background-position: center; background-size: cover; background-color: #cfe3ff;
+  box-shadow: 0 14px 28px rgba(0,40,100,.22);
+}
+
+.adv-front .adv-body { padding: 60px 18px 14px; text-align: center; flex: 1; display: flex; flex-direction: column; }
+.adv-name { margin: 0; font-size: 18px; }
+.adv-pron { font-size: 12px; color: #6b7c93; margin-left: 4px; font-weight: 400; }
+.adv-role { color: #5b738b; font-size: 13px; margin-top: 4px; }
+.adv-loc  { color: #8696a8; font-size: 12px; margin-top: 2px; }
+.adv-chips { display:flex; flex-wrap:wrap; justify-content:center; gap:6px; margin-top:14px; }
+.adv-chip { font-size:11px; padding: 3px 9px; border-radius: 999px; background:#eaf4ff; color:#0a3d91; border:1px solid #cfe3ff; }
+.adv-legend { margin-top:auto; padding-top: 12px; font-size: 11px; color:#aab5c6; letter-spacing:.08em; text-transform:uppercase; }
+
+.adv-back { transform: rotateY(180deg); padding: 22px; color: #fff; background: var(--adv-back); }
+.adv-back .adv-name, .adv-back h3 { color: #fff; }
+.adv-back .adv-bio { font-size: 13px; line-height: 1.55; margin: 14px 0; flex: 1; overflow: auto; }
+.adv-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.adv-iconbtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 10px;
+  background: rgba(255,255,255,.14); color: #fff;
+  text-decoration: none; font-weight: 600;
+  border: 1px solid rgba(255,255,255,.18);
+  transition: background .2s ease;
+}
+.adv-iconbtn:hover { background: rgba(255,255,255,.28); }
+.adv-profile { margin-top: 14px; font-size: 12px; color: #cfe3ff; text-decoration: underline; }
+
+@media (prefers-reduced-motion: reduce) {
+  .adv-card-inner { transition: opacity .25s ease; }
+  .adv-flipwrap:hover .adv-card-inner,
+  .adv-flipwrap.is-flipped .adv-card-inner { transform: none; }
+  .adv-flipwrap:hover .adv-front,
+  .adv-flipwrap.is-flipped .adv-front { opacity: 0; pointer-events: none; }
+  .adv-flipwrap:hover .adv-back,
+  .adv-flipwrap.is-flipped .adv-back { opacity: 1; transform: none; }
+}
