@@ -745,6 +745,11 @@
     },
     "com.sap.developers.ims.TutorialMeta": {
       "kind": "entity",
+      "@assert.unique.tutorial": [
+        {
+          "=": "tutorial"
+        }
+      ],
       "@cds.persistence.journal": true,
       "elements": {
         "ID": {
@@ -810,6 +815,20 @@
         "lastNotificationDate": {
           "type": "cds.Timestamp",
           "@cds.persistence.name": "LASTNOTIFICATIONDATE"
+        }
+      },
+      "$tableConstraints": {
+        "unique": {
+          "tutorial": {
+            "paths": [
+              {
+                "ref": [
+                  "tutorial_ID"
+                ]
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.TutorialMeta"
+          }
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_TUTORIALMETA"

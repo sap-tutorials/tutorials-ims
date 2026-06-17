@@ -55,9 +55,10 @@ describe('AdminService integrations', () => {
     it('computes notifications for stale tutorials', async () => {
       const { TutorialMeta, TutorialContributors } = cds.entities('com.sap.developers.ims');
       const staleDate = new Date(Date.now() - 200 * 86400000).toISOString();
-      await INSERT.into(TutorialMeta).entries({
-        ID: 'dddddddd-intg-0000-0000-000000000001',
-        tutorial_ID: 'bbbbbbbb-intg-0000-0000-000000000001',
+      // syncTutorialMetadata (test above) already backfilled a TutorialMeta row for this
+      // tutorial; @assert.unique.tutorial now prevents a second INSERT. UPDATE the row
+      // that was backfilled (keyed by tutorial_ID) to set the stale date and owner.
+      await UPDATE(TutorialMeta).where({ tutorial_ID: 'bbbbbbbb-intg-0000-0000-000000000001' }).set({
         reviewedDate: staleDate, owner: 'owner@sap.com',
         monitoredStatus: 'ACTIVE', notificationNumber: 0, legacyId: 4301
       });

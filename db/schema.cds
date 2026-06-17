@@ -295,6 +295,7 @@ entity GroupPathItems : cuid, LegacyKeyed {
   altCondition              : String(500);
 }
 
+@assert.unique.tutorial : [tutorial]
 entity TutorialMeta : cuid, managed, LegacyKeyed {
   tutorial                  : Association to Tutorials;
   reviewedDate              : Timestamp;
