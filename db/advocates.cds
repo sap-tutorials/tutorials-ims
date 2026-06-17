@@ -39,10 +39,10 @@ entity AdvocateLinks : cuid {
 }
 
 entity AdvocatePhotos {
-  // One-to-one composition: AdvocatePhotos has the key, Advocates has the composition edge.
-  // We do NOT declare advocate_ID here — CAP generates it from the association.
-  key id : UUID;
-  advocate        : Association to Advocates;
+  // One-to-one composition: the association IS the key.
+  // CAP generates the FK column `advocate_ID` and uses it as the PK,
+  // enforcing 1:1 at the schema level (one photo row per advocate).
+  key advocate    : Association to Advocates not null;
   photo256        : LargeBinary @Core.MediaType: photoMimeType;
   photo64         : LargeBinary @Core.MediaType: 'image/webp';
   photoMimeType   : String(40)  @Core.IsMediaType default 'image/webp';
