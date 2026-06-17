@@ -120,6 +120,9 @@
     "$XSAPPNAME.Everyone"
   ],
   "oauth2-configuration": {
-    "redirect-uris": ["https://*.cfapps.*.hana.ondemand.com/**"]
+    "redirect-uris": [
+      "https://*.cfapps.*.hana.ondemand.com/**",
+      "vscode://sap-tutorials.sage-tutorial-extension/**"
+    ]
   }
 }
