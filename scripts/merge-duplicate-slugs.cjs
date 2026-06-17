@@ -125,6 +125,28 @@ async function redirectFkSafe(tx, tbl, col, otherKeys, loserId, winnerId) {
   return { redirected: toRedirect.length, dropped: toDelete.length };
 }
 
+// Redirect a "logical singleton" FK column (e.g. TutorialMeta) where the
+// parent should have exactly one child row. If the winner already has a
+// child, DELETE the loser's child(ren) — the winner's row is canonical.
+// If the winner has no child, UPDATE the loser's row to point at winner.
+//
+// This avoids the post-merge state of two singleton rows per parent that
+// would otherwise occur with kind:'simple' on TutorialMeta etc.
+async function redirectFkSingleton(tx, tbl, col, loserId, winnerId) {
+  const winnerRows = await tx.run(`SELECT "ID" FROM ${tbl} WHERE ${col} = ?`, [winnerId]);
+  if (winnerRows.length === 0) {
+    // Winner has no row — promote the loser's row.
+    const r = await tx.run(`UPDATE ${tbl} SET ${col} = ? WHERE ${col} = ?`, [winnerId, loserId]);
+    return { redirected: typeof r === 'number' ? r : 0, dropped: 0 };
+  }
+  // Winner already has a row — drop loser's row(s).
+  const loserRows = await tx.run(`SELECT "ID" FROM ${tbl} WHERE ${col} = ?`, [loserId]);
+  for (const r of loserRows) {
+    await tx.run(`DELETE FROM ${tbl} WHERE "ID" = ?`, [r.ID]);
+  }
+  return { redirected: 0, dropped: loserRows.length };
+}
+
 const argv = process.argv.slice(2);
 const COMMIT = argv.includes('--commit');
 const VERIFY_ONLY = argv.includes('--verify-only');
@@ -174,7 +196,7 @@ const FK_REDIRECTS = {
     { tbl: '"COM_SAP_DEVELOPERS_IMS_TUTORIALCATEGORIES"',   col: '"TUTORIAL_ID"',   kind: 'simple' },
     { tbl: '"COM_SAP_DEVELOPERS_IMS_TUTORIALCONTRIBUTORS"', col: '"TUTORIAL_ID"',   kind: 'simple' },
     { tbl: '"COM_SAP_DEVELOPERS_IMS_TUTORIALEMBEDDING"',    col: '"TUTORIAL_ID"',   kind: 'composite-pk', otherKeys: ['"STEPNUMBER"'] },
-    { tbl: '"COM_SAP_DEVELOPERS_IMS_TUTORIALMETA"',         col: '"TUTORIAL_ID"',   kind: 'simple' },
+    { tbl: '"COM_SAP_DEVELOPERS_IMS_TUTORIALMETA"',         col: '"TUTORIAL_ID"',   kind: 'singleton' },
     { tbl: '"COM_SAP_DEVELOPERS_IMS_TUTORIALREPOSITORIES"', col: '"TUTORIAL_ID"',   kind: 'simple' },
     { tbl: '"COM_SAP_DEVELOPERS_IMS_TUTORIALS"',            col: '"REDIRECTTO_ID"', kind: 'simple' },
     { tbl: '"COM_SAP_DEVELOPERS_IMS_TUTORIALTAGS"',         col: '"TUTORIAL_ID"',   kind: 'composite-pk', otherKeys: ['"TAG_ID"'] },
@@ -405,6 +427,11 @@ async function processTable(db, I, table, commit) {
             }
           } else if (fk.kind === 'composite-pk') {
             const summary = await redirectFkSafe(tx, fk.tbl, fk.col, fk.otherKeys, loser.ID, winner.ID);
+            if (summary.dropped > 0 || summary.redirected > 50) {
+              console.log(`    ${fk.tbl}.${fk.col}: redirected=${summary.redirected} dropped=${summary.dropped}`);
+            }
+          } else if (fk.kind === 'singleton') {
+            const summary = await redirectFkSingleton(tx, fk.tbl, fk.col, loser.ID, winner.ID);
             if (summary.dropped > 0 || summary.redirected > 50) {
               console.log(`    ${fk.tbl}.${fk.col}: redirected=${summary.redirected} dropped=${summary.dropped}`);
             }
