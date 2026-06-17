@@ -30,12 +30,14 @@ import {
 function parseRoleCollectionMap() {
   if (!process.env.BTP_ROLES_MAP_OVERRIDE) {
     return {
-      // 'IMS Admin':         'Tutorials Admin',
-      // 'IMS SuperAdmin':    'Tutorials SuperAdmin',
-      // 'IMS ContentAuthor': 'Tutorials Author',
-      // 'IMS Developer':     'Tutorials Developer',
-      // 'IMS Display':       'Tutorials Display',
-      // 'IMS Scanner':       'Tutorials Scanner',
+      // Filled in 2026-06-17 from the discovery export run against IMS Prod
+      // (subaccount eandc-ims). Only prod admin + content-author roles were
+      // migrated — dev/qa role collections, HANA Cloud admin roles, and the
+      // legacy 'Tutorial Admin' (single user) were intentionally excluded.
+      // Result: 315 assignments materialized on tutorial-system (28 admins +
+      // 287 content authors). Tom + Claude, June 2026 cutover.
+      'IMS_Admin_prod':          'Tutorials Admin',
+      'IMS_Content_Author_prod': 'Tutorials Author',
     };
   }
   try {
