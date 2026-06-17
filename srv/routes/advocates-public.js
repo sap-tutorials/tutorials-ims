@@ -39,12 +39,15 @@ async function handleAdvocates(req, res) {
         : [],
     ]);
 
-    // Resolve topic tag → { slug, label }
+    // Resolve topic tag → { slug, label }.
+    // Note: the Tags entity has no `slug` column — its slug-equivalent is
+    // `name` (e.g. "software-product>cap"). We expose it as `slug` in the
+    // public API for client-side simplicity.
     const tagIds = [...new Set(topics.map((t) => t.tag_ID).filter(Boolean))];
     const tagRows = tagIds.length
       ? await db.run(
           SELECT.from(Tags)
-            .columns('ID', 'slug', 'label')
+            .columns('ID', 'name', 'label')
             .where({ ID: { in: tagIds } }),
         )
       : [];
@@ -55,7 +58,7 @@ async function handleAdvocates(req, res) {
       const tag = tagById.get(t.tag_ID);
       if (!tag) continue;
       if (!topicsByAdv.has(t.advocate_ID)) topicsByAdv.set(t.advocate_ID, []);
-      topicsByAdv.get(t.advocate_ID).push({ slug: tag.slug, label: tag.label });
+      topicsByAdv.get(t.advocate_ID).push({ slug: tag.name, label: tag.label });
     }
 
     const linksByAdv = new Map();
