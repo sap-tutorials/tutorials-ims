@@ -30,7 +30,8 @@ const ALREADY_ASSIGNED = /already\s+(assigned|a member|granted|has)|user\s+is\s+
  */
 export async function runBtp(args, opts = {}) {
   const bin = opts.btpBin || process.env.BTP_BIN || 'btp';
-  const prefix = opts.btpBinArgs || [];
+  const envBinArgs = process.env.BTP_BIN_ARGS ? [process.env.BTP_BIN_ARGS] : [];
+  const prefix = opts.btpBinArgs || envBinArgs;
   const fullArgs = [...prefix, ...args, '--format', 'json'];
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 

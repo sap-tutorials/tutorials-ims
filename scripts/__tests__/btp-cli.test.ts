@@ -56,6 +56,22 @@ describe('runBtp', () => {
     expect(result.ok).toBe(false);
     expect(result.stderr).toContain('timeout after');
   });
+
+  it('reads btpBinArgs from BTP_BIN_ARGS env var when opts.btpBinArgs is not provided', async () => {
+    const oldVal = process.env.BTP_BIN_ARGS;
+    process.env.BTP_BIN_ARGS = FAKE_BTP;
+    try {
+      const result = await runBtp(['list', 'security/role-collection'], {
+        btpBin: process.execPath,
+        env: { FAKE_BTP_RESPONSE: JSON.stringify([{ name: 'X' }]) }
+      });
+      expect(result.ok).toBe(true);
+      expect(result.data).toEqual([{ name: 'X' }]);
+    } finally {
+      if (oldVal === undefined) delete process.env.BTP_BIN_ARGS;
+      else process.env.BTP_BIN_ARGS = oldVal;
+    }
+  });
 });
 
 describe('getCurrentTarget', () => {
