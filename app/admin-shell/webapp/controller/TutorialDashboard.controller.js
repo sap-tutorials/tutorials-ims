@@ -3,12 +3,18 @@ sap.ui.define([
   "sap/ui/model/json/JSONModel",
   "sap/ui/model/Filter",
   "sap/ui/model/FilterOperator",
+  "sap/ui/core/format/DateFormat",
   "sap/m/MessageToast",
   "sap/m/MessageBox"
-], function (Controller, JSONModel, Filter, FilterOperator, MessageToast, MessageBox) {
+], function (Controller, JSONModel, Filter, FilterOperator, DateFormat, MessageToast, MessageBox) {
   "use strict";
 
   var OUTDATED_DAYS = 180;
+  // Single shared formatter (Issue #373). Idiomatic UI5 read-side date
+  // rendering — bypasses the OData v4 DateTimeOffset type's auto-conversion
+  // to String targetType which throws FormatException when the wire value
+  // is the ISO 8601 form.
+  var DATE_FORMATTER = DateFormat.getDateInstance({ style: "medium" });
 
   return Controller.extend("sap.tutorials.admin.shell.controller.TutorialDashboard", {
     onInit: function () {
@@ -119,6 +125,19 @@ sap.ui.define([
       if (Number.isNaN(iTime)) { return "None"; }
       var iAge = Date.now() - iTime;
       return iAge > OUTDATED_DAYS * 86400000 ? "Error" : "None";
+    },
+
+    // Issue #373: format an OData v4 Edm.DateTimeOffset (ISO 8601 string) for
+    // display. Used in place of `type: sap.ui.model.odata.type.DateTimeOffset`
+    // bindings which throw FormatException when UI5 auto-converts the value
+    // to the bound control's String targetType. Plain formatter callbacks
+    // run only in the read direction so there's no parse round-trip to
+    // confuse.
+    formatDateMedium: function (vValue) {
+      if (!vValue) { return ""; }
+      var d = vValue instanceof Date ? vValue : new Date(vValue);
+      if (Number.isNaN(d.getTime())) { return ""; }
+      return DATE_FORMATTER.format(d);
     },
 
     onTutorialLinkPress: function (oEvent) {
