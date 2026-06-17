@@ -141,6 +141,13 @@
       "csrfProtection": false
     },
     {
+      "source": "^/api/advocates(/.*)?$",
+      "target": "/api/advocates$1",
+      "destination": "srv-api",
+      "authenticationType": "none",
+      "csrfProtection": false
+    },
+    {
       "source": "^/api/(.*)$",
       "target": "/api/$1",
       "destination": "srv-api",

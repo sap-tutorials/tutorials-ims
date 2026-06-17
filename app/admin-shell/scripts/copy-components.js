@@ -12,6 +12,7 @@ const COMPONENTS = [
   'tutorials',
   'tags',
   'categories',
+  'advocates',
   'accomplishments',
   'prizes',
   'operations',

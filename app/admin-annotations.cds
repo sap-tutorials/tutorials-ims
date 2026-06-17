@@ -1412,3 +1412,112 @@ annotate AdminService.LearningPreferences with @UI: {
     { Value: user.email }, { Value: deployment }, { Value: role }, { Value: cloud }
   ]}
 };
+
+// =====================================================================
+// Developer Advocates (Phase 6 of advocates impl)
+// =====================================================================
+
+annotate AdminService.Advocates with {
+  slug         @Common.Label: 'Slug'        @UI.HiddenFilter;
+  firstName    @Common.Label: 'First name';
+  lastName     @Common.Label: 'Last name';
+  title        @Common.Label: 'Title';
+  pronouns     @Common.Label: 'Pronouns';
+  location     @Common.Label: 'Location';
+  region       @Common.Label: 'Region';
+  bio          @Common.Label: 'Bio'         @Common.MultiLineText;
+  isActive     @Common.Label: 'Active';
+  sortOverride @Common.Label: 'Sort override';
+  joinedDate   @Common.Label: 'Joined';
+  hasPhoto     @Common.Label: 'Has photo'   @UI.HiddenFilter @Core.Computed;
+  photoUpdatedAt @Common.Label: 'Photo updated' @UI.HiddenFilter @Core.Computed;
+};
+
+annotate AdminService.Advocates with @(
+  UI.HeaderInfo: {
+    TypeName: 'Advocate',
+    TypeNamePlural: 'Advocates',
+    Title: { Value: lastName },
+    Description: { Value: title }
+  },
+  UI.SelectionFields: [ region, isActive, lastName ],
+  UI.LineItem: [
+    { $Type: 'UI.DataField', Value: lastName,  Label: 'Last name' },
+    { $Type: 'UI.DataField', Value: firstName, Label: 'First name' },
+    { $Type: 'UI.DataField', Value: title,     Label: 'Title' },
+    { $Type: 'UI.DataField', Value: region,    Label: 'Region' },
+    { $Type: 'UI.DataField', Value: isActive,  Label: 'Active' }
+  ],
+  UI.PresentationVariant: {
+    SortOrder: [
+      { Property: lastName,  Descending: false },
+      { Property: firstName, Descending: false }
+    ],
+    Visualizations: [ '@UI.LineItem' ]
+  },
+  UI.FieldGroup #Identity: {
+    Data: [
+      { Value: firstName },
+      { Value: lastName },
+      { Value: pronouns },
+      { Value: title },
+      { Value: location },
+      { Value: region },
+      { Value: joinedDate }
+    ]
+  },
+  UI.FieldGroup #Bio: {
+    Data: [ { Value: bio } ]
+  },
+  UI.FieldGroup #Visibility: {
+    Data: [
+      { Value: isActive },
+      { Value: sortOverride },
+      { Value: slug }
+    ]
+  },
+  UI.Facets: [
+    { $Type: 'UI.ReferenceFacet', ID: 'Identity',   Label: 'Identity',     Target: '@UI.FieldGroup#Identity' },
+    { $Type: 'UI.ReferenceFacet', ID: 'Bio',        Label: 'Bio',          Target: '@UI.FieldGroup#Bio' },
+    { $Type: 'UI.ReferenceFacet', ID: 'Visibility', Label: 'Visibility',   Target: '@UI.FieldGroup#Visibility' },
+    { $Type: 'UI.ReferenceFacet', ID: 'Topics',     Label: 'Topics',       Target: 'topics/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', ID: 'Links',      Label: 'Social links', Target: 'links/@UI.LineItem' }
+  ]
+);
+
+// AdvocateTopics — inline table with Tag value-help.
+annotate AdminService.AdvocateTopics with {
+  tag @Common.Label: 'Topic'
+      @Common.Text: tag.label  @Common.TextArrangement: #TextOnly
+      @Common.ValueList: {
+        CollectionPath: 'Tags',
+        Parameters: [
+          { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: tag_ID, ValueListProperty: 'ID' },
+          { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'label' },
+          { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'name' }
+        ]
+      };
+};
+
+annotate AdminService.AdvocateTopics with @UI: {
+  LineItem: [
+    { $Type: 'UI.DataField', Value: tag_ID, Label: 'Topic' }
+  ]
+};
+
+// AdvocateLinks — inline table for the social-links facet.
+annotate AdminService.AdvocateLinks with {
+  kind      @Common.Label: 'Kind';
+  url       @Common.Label: 'URL';
+  label     @Common.Label: 'Label override';
+  sortOrder @Common.Label: 'Sort';
+};
+
+annotate AdminService.AdvocateLinks with @UI: {
+  LineItem: [
+    { $Type: 'UI.DataField', Value: kind,      Label: 'Kind' },
+    { $Type: 'UI.DataField', Value: url,       Label: 'URL' },
+    { $Type: 'UI.DataField', Value: label,     Label: 'Label' },
+    { $Type: 'UI.DataField', Value: sortOrder, Label: 'Sort' }
+  ]
+};

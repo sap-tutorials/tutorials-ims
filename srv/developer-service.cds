@@ -164,4 +164,14 @@ service DeveloperService {
     role       : String,
     cloud      : String
   ) returns LearningPreferences;
+
+  // Developer Advocates — public read. The hasPhoto flag is INCLUDED so the
+  // Vue island can pick `<img>` vs InitialsAvatar without a wasted 404.
+  // Public clients construct photo URLs as /api/advocates/:slug/photo from
+  // slug + photoUpdatedAt. Spec: docs/superpowers/specs/2026-06-17-developer-advocates-design.md
+  @(requires: 'any')
+  @readonly entity Advocates as projection on ims.Advocates {
+    *,
+    topics, links
+  };
 }

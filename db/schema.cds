@@ -2,6 +2,7 @@ namespace com.sap.developers.ims;
 
 using { managed, cuid } from '@sap/cds/common';
 using { com.sap.developers.ims.shared } from './_content-shape';
+using from './advocates';
 
 // Sequence-backed business ID for backward compatibility with legacy integer IDs
 aspect LegacyKeyed {

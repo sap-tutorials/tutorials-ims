@@ -273,4 +273,11 @@ service AdminService {
   // live in app/admin-annotations.cds (Task 8). Edit-on-behalf is out of scope for v1.
   // Spec: §4.2
   @readonly entity LearningPreferences as projection on ims.UserLearningPreferences;
+
+  // Developer Advocates — admin CRUD. Spec: docs/superpowers/specs/2026-06-17-developer-advocates-design.md
+  @odata.draft.enabled
+  entity Advocates       as projection on ims.Advocates;
+  entity AdvocateTopics  as projection on ims.AdvocateTopics;
+  entity AdvocateLinks   as projection on ims.AdvocateLinks;
+  entity AdvocatePhotos  as projection on ims.AdvocatePhotos;
 }
