@@ -24,6 +24,7 @@ aspect TaskBase : cuid, managed, LegacyKeyed {
   averageTimeToComplete     : Integer;
 }
 
+@assert.unique.slug: [slug]
 entity Tutorials : TaskBase {
   slug                      : String(255) @mandatory;
   mdFileUrl                 : String(1000);
@@ -42,6 +43,7 @@ entity Tutorials : TaskBase {
   categories                : Composition of many TutorialCategories on categories.tutorial = $self;
 }
 
+@assert.unique.slug: [slug]
 entity Missions : TaskBase {
   slug                      : String(255);
   communityMissionId        : String(255);
@@ -58,6 +60,7 @@ entity Missions : TaskBase {
   categories                : Composition of many MissionCategories on categories.mission = $self;
 }
 
+@assert.unique.slug: [slug]
 entity Groups : TaskBase {
   slug                      : String(255);
   // Default false: see Missions.published comment above. Same SuperAdmin
