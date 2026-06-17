@@ -83,7 +83,11 @@ entity AdvocateLinks : cuid {
 }
 
 entity AdvocatePhotos {
-  key advocate_ID : UUID;                // composite key matches association
+  // The explicit `advocate_ID` IS the FK column generated for the
+  // association below — not a sibling. CAP's compiler resolves the
+  // `Association to Advocates` to use this same column rather than
+  // generating its own `advocate_ID`, because we declare it `key`.
+  key advocate_ID : UUID;
   advocate        : Association to Advocates not null;
   photo256        : LargeBinary @Core.MediaType: photoMimeType;
   photo64         : LargeBinary @Core.MediaType: 'image/webp';
@@ -158,7 +162,10 @@ extend service DeveloperService with {
   entity Advocates as projection on ims.Advocates {
     *,
     topics, links
-  } excluding { hasPhoto };  // public clients use the photo URL, not the flag
+    // hasPhoto is INCLUDED so the Vue island can pick <img> vs
+    // InitialsAvatar without a wasted 404 round-trip on first paint
+    // for every advocate without a photo.
+  };
 }
 ```
 
@@ -176,8 +183,10 @@ extend service DeveloperService with {
   when the client's `If-None-Match` matches.
 - `Cache-Control: public, max-age=60, stale-while-revalidate=600` — admin
   saves are visible publicly within ~60 s without manual cache purge.
-- Response excludes `hasPhoto` (clients use `/api/advocates/:slug/photo`
-  directly; absence → 404 → fallback avatar).
+- Response **includes** `hasPhoto` so the client can pick `<img>` vs
+  `InitialsAvatar` without a wasted 404 round-trip. The photo URL itself
+  is not part of the JSON payload — clients construct it from `slug` +
+  `photoUpdatedAt`.
 
 #### `GET /api/advocates/:slug/photo`
 
@@ -410,7 +419,13 @@ reads use no auth.
   with Tom's name + role, four marked `TODO: replace with real advocate`).
   Provides on-screen data immediately post-deploy without waiting for an
   admin to populate.
-- One linked `AdvocateLinks` row per placeholder (LinkedIn).
+- `db/data/com.sap.developers.ims-AdvocateLinks.csv` — one LinkedIn row per
+  placeholder.
+- `db/data/com.sap.developers.ims-AdvocateTopics.csv` — at least one topic
+  row per placeholder, drawn from existing high-traffic `Tags` slugs (e.g.
+  `software-product>cap`, `software-product>abap`,
+  `software-product>btp`). Ensures the topic-filter UI has something to
+  demonstrate on first deploy without an admin populating the join table.
 - No CSV photos — `hasPhoto=false`. `InitialsAvatar.vue` fills the gap.
 
 ## Testing
