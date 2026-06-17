@@ -75,23 +75,54 @@ describe('runBtp', () => {
 });
 
 describe('getCurrentTarget', () => {
-  it('normalizes subaccount and globalAccount fields from btp target output', async () => {
-    const target = await getCurrentTarget({
-      btpBin: process.execPath,
-      btpBinArgs: [FAKE_BTP],
-      env: {
-        FAKE_BTP_RESPONSE: JSON.stringify({
-          subaccountId: 'sa-guid-123',
-          subaccountSubdomain: 'tutorial-system',
-          globalAccountSubdomain: 'devrel-tools',
-        }),
-      },
-    });
-    expect(target).toEqual({
+  it('returns the target via BTP_TARGET_OVERRIDE env (test-only short-circuit)', async () => {
+    const oldVal = process.env.BTP_TARGET_OVERRIDE;
+    process.env.BTP_TARGET_OVERRIDE = JSON.stringify({
       subaccountId: 'sa-guid-123',
       subaccountSubdomain: 'tutorial-system',
       globalAccountSubdomain: 'devrel-tools',
     });
+    try {
+      const target = await getCurrentTarget();
+      expect(target).toEqual({
+        subaccountId: 'sa-guid-123',
+        subaccountSubdomain: 'tutorial-system',
+        globalAccountSubdomain: 'devrel-tools',
+      });
+    } finally {
+      if (oldVal === undefined) delete process.env.BTP_TARGET_OVERRIDE;
+      else process.env.BTP_TARGET_OVERRIDE = oldVal;
+    }
+  });
+
+  it('reads TargetHierarchy from a btp config file when present', async () => {
+    // Write a fake config.json into a temp HOME, point process.env at it,
+    // and verify getCurrentTarget extracts the structured fields.
+    const { mkdtempSync, writeFileSync, mkdirSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const tmpHome = mkdtempSync(join(tmpdir(), 'btp-test-home-'));
+    mkdirSync(join(tmpHome, '.config', '.btp'), { recursive: true });
+    writeFileSync(join(tmpHome, '.config', '.btp', 'config.json'), JSON.stringify({
+      TargetHierarchy: [
+        { Type: 'globalaccount', Subdomain: 'devrel-tools', ID: 'ga-id', DisplayName: 'DevRel' },
+        { Type: 'subaccount',    Subdomain: 'tutorial-system', ID: 'sa-guid-456', DisplayName: 'Tutorial System' },
+      ],
+    }));
+    const oldHome = process.env.HOME, oldAppdata = process.env.APPDATA;
+    process.env.HOME = tmpHome;
+    delete process.env.APPDATA;  // skip the Windows-specific candidate
+    try {
+      const target = await getCurrentTarget();
+      expect(target).toEqual({
+        subaccountId: 'sa-guid-456',
+        subaccountSubdomain: 'tutorial-system',
+        globalAccountSubdomain: 'devrel-tools',
+      });
+    } finally {
+      if (oldHome !== undefined)    process.env.HOME = oldHome;     else delete process.env.HOME;
+      if (oldAppdata !== undefined) process.env.APPDATA = oldAppdata;
+    }
   });
 });
 

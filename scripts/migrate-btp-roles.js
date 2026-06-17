@@ -76,6 +76,7 @@ function isBuiltin(name) {
 function parseImportFlags(argv) {
   const dryRun = argv.includes('--dry-run');
   const confirm = argv.includes('--confirm');
+  const createMissingUsers = argv.includes('--create-missing-users');
   if (dryRun && confirm) {
     console.error('Pass either --dry-run or --confirm, not both.');
     process.exit(2);
@@ -84,7 +85,7 @@ function parseImportFlags(argv) {
     console.error('Pass --dry-run to preview, or --confirm to actually write.');
     process.exit(2);
   }
-  return { dryRun, confirm };
+  return { dryRun, confirm, createMissingUsers };
 }
 
 async function main() {
@@ -177,7 +178,7 @@ async function runAssignmentLoop(exportDoc, target, flags) {
         log.push({ collection: targetName, user, origin, status: 'dry-run' });
         continue;
       }
-      const result = await assignUser(targetName, user, origin);
+      const result = await assignUser(targetName, user, origin, { createUserIfMissing: flags.createMissingUsers });
       log.push({ collection: targetName, user, origin, status: result.status, message: result.message });
       if (result.status === 'ok')      { okCount++;      console.log(`[ok]      ${targetName} ← ${user}`); }
       else if (result.status === 'already') { alreadyCount++; console.log(`[already] ${targetName} ← ${user}`); }

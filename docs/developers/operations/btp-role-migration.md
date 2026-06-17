@@ -61,11 +61,24 @@ Watch for `[FAIL]` lines. Per-call results are logged to `.migration-data/btp-ro
 
 | What you see | Likely cause | Fix |
 |---|---|---|
-| `[FAIL] ... user ... not exist` (or similar) | The user has never logged into the new GA's IDP, and `--create-user-if-missing false` blocks shadow creation. | Have the user log in once (creates the shadow user), then re-run. Re-run is idempotent — already-OK assignments are skipped. |
+| `[FAIL] ... user ... not exist` (or similar) | The user has never logged into the target subaccount, so there's no shadow IDP user to assign to. The default `--create-user-if-missing false` blocks shadow creation. | **Recommended:** re-run with `--create-missing-users` (see below) to materialize the shadow users in one shot. **Alternatively:** ask each user to log in once (which creates their shadow), then re-run without the flag. |
 | `[FAIL] ... 403 ...` or `... permission ...` | The currently-targeted user lacks rights to assign on the target subaccount. | Verify your CLI session has Subaccount Administrator on the target. |
 | `Target subaccount is missing these mapped role collections: ...` (script aborts BEFORE running) | The pre-flight detected a mapped target collection that doesn't exist on the target subaccount yet. | Run the MTA deploy to provision the role collections, or correct the mapping in `ROLE_COLLECTION_MAP` and re-export. |
 
 The script exits 1 if any `[FAIL]` line is emitted (otherwise 0). CI wrappers can rely on the exit code to gate downstream steps.
+
+### Phase 4b — Re-run with `--create-missing-users` (cutover only)
+
+When you're cutting over a tutorial system to a new subaccount, the people in your source role collections almost certainly haven't logged in yet on the target. The first `--confirm` run will fail with `No such user` for everyone but the few who've already touched the target. Two options:
+
+```bash
+# Pre-provision shadow users for everyone in the export, in one shot:
+npm run migrate:btp-roles -- import --confirm --create-missing-users
+```
+
+This passes `--create-user-if-missing true` to `btp assign`. Materialized shadows auto-link to IAS the first time the user SSOs in. Use this **only after the loud `--confirm` run** has shown that all failures are `No such user` (i.e. confirming source data is clean — no typos, no departed-employee emails). If you see any other failure category, investigate before bulk-creating shadows.
+
+The default keeps `--create-user-if-missing false` because for most operational re-runs (people who already have shadows), silent shadow creation would mask data errors.
 
 ## Phase 5 — Verify
 
