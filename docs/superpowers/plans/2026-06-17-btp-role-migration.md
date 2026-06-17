@@ -449,11 +449,11 @@ The `runBtp` helper accepts `btpBinArgs` in code, but child processes invoked vi
 
 ```js
 // At top of runBtp(), after computing `bin`:
-const envBinArgs = process.env.BTP_BIN_ARGS ? process.env.BTP_BIN_ARGS.split('') : [];
+const envBinArgs = process.env.BTP_BIN_ARGS ? [process.env.BTP_BIN_ARGS] : [];
 const prefix = opts.btpBinArgs || envBinArgs;
 ```
 
-So tests can do `BTP_BIN=node BTP_BIN_ARGS=<path-to-fake-btp.cjs>` and the script will invoke `node fake-btp.cjs <real-args> --format json`. Use `` as separator (no quoting concerns; never appears in real paths).
+`BTP_BIN_ARGS` carries exactly one path (always the fake-btp wrapper script). Tests do `BTP_BIN=node BTP_BIN_ARGS=<absolute-path-to-fake-btp.cjs>` and the script invokes `node fake-btp.cjs <real-args> --format json`. We don't need a multi-arg shape; if that ever becomes useful, switch to `\x1f` (ASCII unit-separator) split, but YAGNI.
 
 Update `btp-cli.test.ts` to also exercise the env-var path with one assertion.
 
