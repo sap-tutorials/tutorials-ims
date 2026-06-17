@@ -147,14 +147,19 @@ works end-to-end; this is a UX gap, not a functional one.
 
 ## Sample Data
 
-Seeded by:
+**No CSV seeds.** Earlier drafts shipped placeholder rows in
+`db/data/com.sap.developers.ims-Advocates.csv` etc., but CAP's HDI deployer
+re-imports CSVs on every deploy as an UPSERT keyed on the row's primary
+key — meaning admin edits to those rows would be silently reverted to the
+CSV values on the next deploy. For an entity that admins actively edit,
+that's a footgun. CSVs were removed (PR #397).
 
-- `db/data/com.sap.developers.ims-Advocates.csv` — 5 placeholder rows.
-- `db/data/com.sap.developers.ims-AdvocateLinks.csv` — one LinkedIn link
-  per placeholder.
-- `db/data/com.sap.developers.ims-AdvocateTopics.csv` — header-only
-  initially. Phase 8 of the implementation populates with real Tag IDs
-  once HANA is bound.
+Net effect: a fresh deploy starts with zero advocate rows. Admins populate
+the roster via the Fiori admin UI at `/admin-ui/#advocates`. Use the
+List Report's Create button or `MassEdit` for bulk imports.
+
+For local dev, the same applies — `cds watch` against in-memory SQLite
+starts empty.
 
 ## Tests
 
