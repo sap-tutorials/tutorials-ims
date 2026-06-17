@@ -210,3 +210,126 @@ describe('migrate-btp-roles import', () => {
     expect(log.entries.find((e: any) => e.user === 'user3@sap.com').status).toBe('failed');
   });
 });
+
+describe('migrate-btp-roles verify', () => {
+  it('verify reports zero missing/extra and exits 0 when target matches export', () => {
+    // Export with 1 collection / 2 users
+    writeFileSync(join(work, 'btp-roles.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        source: { subaccountId: 'sub-source' },
+        roleCollections: [{
+          sourceName: 'IMS Admin',
+          users: [
+            { user: 'user1@sap.com', origin: 'sap.default' },
+            { user: 'user2@sap.com', origin: 'sap.default' },
+          ],
+        }],
+      }));
+    // Fixture: target subaccount differs (sub-target), and Tutorials Admin
+    // already has both expected users.
+    const fixturePath = join(work, 'fixtures.jsonl');
+    writeFileSync(fixturePath, [
+      { match: 'target', response: { subaccountId: 'sub-target', subaccountSubdomain: 'tut', globalAccountSubdomain: 'ga' }},
+      { match: 'get security/role-collection Tutorials Admin --show-user-assignments', response: {
+        userReferences: [
+          { name: 'user1@sap.com', origin: 'sap.default' },
+          { name: 'user2@sap.com', origin: 'sap.default' },
+        ]
+      }},
+    ].map(o => JSON.stringify(o)).join('\n'));
+    const result = runScript(['verify'], {
+      FAKE_BTP_FIXTURE_FILE: fixturePath,
+      BTP_ROLES_MAP_OVERRIDE: JSON.stringify({ 'IMS Admin': 'Tutorials Admin' }),
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/expected 2, found 2, missing 0, extra 0/);
+  });
+
+  it('verify exits 1 when target is missing a user from export', () => {
+    // Export has 2 users; target only has 1 (user1).
+    writeFileSync(join(work, 'btp-roles.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        source: { subaccountId: 'sub-source' },
+        roleCollections: [{
+          sourceName: 'IMS Admin',
+          users: [
+            { user: 'user1@sap.com', origin: 'sap.default' },
+            { user: 'missing-user@sap.com', origin: 'sap.default' },
+          ],
+        }],
+      }));
+    const fixturePath = join(work, 'fixtures.jsonl');
+    writeFileSync(fixturePath, [
+      { match: 'target', response: { subaccountId: 'sub-target', subaccountSubdomain: 'tut', globalAccountSubdomain: 'ga' }},
+      { match: 'get security/role-collection Tutorials Admin --show-user-assignments', response: {
+        userReferences: [{ name: 'user1@sap.com', origin: 'sap.default' }]
+      }},
+    ].map(o => JSON.stringify(o)).join('\n'));
+    const result = runScript(['verify'], {
+      FAKE_BTP_FIXTURE_FILE: fixturePath,
+      BTP_ROLES_MAP_OVERRIDE: JSON.stringify({ 'IMS Admin': 'Tutorials Admin' }),
+    });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toMatch(/\[missing\] missing-user@sap\.com\|sap\.default/);
+  });
+
+  it('verify exits 0 even when target has extra users not in export', () => {
+    // Export has 1 user; target has 2 (an "extra" extra-user@sap.com that
+    // wasn't in the source). Pre-existing target assignments are not a failure.
+    writeFileSync(join(work, 'btp-roles.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        source: { subaccountId: 'sub-source' },
+        roleCollections: [{
+          sourceName: 'IMS Admin',
+          users: [{ user: 'user1@sap.com', origin: 'sap.default' }],
+        }],
+      }));
+    const fixturePath = join(work, 'fixtures.jsonl');
+    writeFileSync(fixturePath, [
+      { match: 'target', response: { subaccountId: 'sub-target', subaccountSubdomain: 'tut', globalAccountSubdomain: 'ga' }},
+      { match: 'get security/role-collection Tutorials Admin --show-user-assignments', response: {
+        userReferences: [
+          { name: 'user1@sap.com', origin: 'sap.default' },
+          { name: 'extra-user@sap.com', origin: 'sap.default' },
+        ]
+      }},
+    ].map(o => JSON.stringify(o)).join('\n'));
+    const result = runScript(['verify'], {
+      FAKE_BTP_FIXTURE_FILE: fixturePath,
+      BTP_ROLES_MAP_OVERRIDE: JSON.stringify({ 'IMS Admin': 'Tutorials Admin' }),
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/\[extra\]\s+extra-user@sap\.com/);
+  });
+
+  it('warns about unmapped source collections in the export', () => {
+    // Export contains a collection NOT in ROLE_COLLECTION_MAP. Verify must
+    // mention it on stderr/stdout but still exit 0 (read-only, no missing).
+    writeFileSync(join(work, 'btp-roles.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        source: { subaccountId: 'sub-source' },
+        roleCollections: [{
+          sourceName: 'IMS Mystery',  // not in the map
+          users: [{ user: 'mystery@sap.com', origin: 'sap.default' }],
+        }],
+      }));
+    const fixturePath = join(work, 'fixtures.jsonl');
+    writeFileSync(fixturePath, [
+      { match: 'target', response: { subaccountId: 'sub-target', subaccountSubdomain: 'tut', globalAccountSubdomain: 'ga' }},
+    ].map(o => JSON.stringify(o)).join('\n'));
+    const result = runScript(['verify'], {
+      FAKE_BTP_FIXTURE_FILE: fixturePath,
+      BTP_ROLES_MAP_OVERRIDE: '{}',  // empty map → IMS Mystery is unmapped
+    });
+    expect(result.status).toBe(0);
+    // Warning may go to stdout or stderr depending on console.warn behavior.
+    // Vitest's spawnSync captures both; combine for the assertion.
+    const combined = result.stdout + result.stderr;
+    expect(combined).toMatch(/Skipped 1 unmapped source collection/);
+    expect(combined).toMatch(/IMS Mystery/);
+  });
+});

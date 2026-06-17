@@ -257,7 +257,52 @@ async function runImport() {
 
   await runAssignmentLoop(exportDoc, target, flags);
 }
-async function runVerify() { throw new Error('not implemented'); }
+async function runVerify() {
+  if (!existsSync(OUTPUT_FILE)) {
+    console.error(`Export file not found: ${OUTPUT_FILE}`);
+    process.exit(1);
+  }
+  const exportDoc = JSON.parse(readFileSync(OUTPUT_FILE, 'utf-8'));
+
+  const target = await getCurrentTarget();
+  if (target.subaccountId === exportDoc.source?.subaccountId) {
+    console.error(`Refusing to verify: btp target points at the source subaccount, not the import target.`);
+    process.exit(1);
+  }
+
+  let totalMissing = 0, totalExtra = 0;
+  const skippedUnmapped = [];
+  for (const rc of exportDoc.roleCollections) {
+    const targetName = ROLE_COLLECTION_MAP[rc.sourceName];
+    if (!targetName) { skippedUnmapped.push(rc.sourceName); continue; }
+
+    const targetUsers = await getRoleCollectionUsers(targetName);
+    const expected = new Set(rc.users.map(u => `${u.user}|${u.origin}`));
+    const actual   = new Set(targetUsers.map(u => `${u.user}|${u.origin}`));
+
+    const missing = [...expected].filter(k => !actual.has(k));
+    const extra   = [...actual].filter(k => !expected.has(k));
+
+    console.log(`\n${targetName}`);
+    console.log(`  expected ${expected.size}, found ${actual.size}, missing ${missing.length}, extra ${extra.length}`);
+    // Column-aligned: '[missing] ' (10 chars) and '[extra]   ' (10 chars) so the
+    // keys line up in terminal output. Don't "fix" the spacing.
+    for (const k of missing) console.log(`    [missing] ${k}`);
+    for (const k of extra)   console.log(`    [extra]   ${k}`);
+
+    totalMissing += missing.length;
+    totalExtra   += extra.length;
+  }
+
+  if (skippedUnmapped.length > 0) {
+    console.warn(`\nSkipped ${skippedUnmapped.length} unmapped source collection(s): ${skippedUnmapped.join(', ')}`);
+    console.warn('  These appear in the export but have no entry in ROLE_COLLECTION_MAP.');
+    console.warn('  Their users were NOT verified on the target.');
+  }
+
+  console.log(`\nVerify summary: ${totalMissing} missing, ${totalExtra} extra`);
+  process.exit(totalMissing > 0 ? 1 : 0);
+}
 
 // Allow `import` from tests without auto-running main(). On Windows the
 // `===` comparison fails (process.argv[1] is a backslash path; import.meta.url
