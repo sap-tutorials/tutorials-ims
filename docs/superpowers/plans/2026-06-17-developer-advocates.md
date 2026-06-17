@@ -30,7 +30,7 @@
 | `hugo/content/developer-advocates/_index.md` | Hugo content stub that mounts the Vue island. |
 | `hugo/data/advocate_fallback.json` | Region-team mailtos shown in `<noscript>`. |
 | `hugo/layouts/developer-advocates/list.html` | Hugo template that renders the mount point + `<noscript>` block + script tag. |
-| `hugo-apps/src/advocates/index.ts` | Vue island entry — mounts `App.vue`. |
+| `hugo-apps/src/advocates/main.ts` | Vue island entry — mounts `App.vue`. (Naming: every existing island uses `main.ts`, not `index.ts`.) |
 | `hugo-apps/src/advocates/App.vue` | Page shell: fetches `/api/advocates`, owns filter state, renders `HeaderBand` + grid + `EmptyState`. |
 | `hugo-apps/src/advocates/components/AdvocateCard.vue` | The flip card (front + back faces). |
 | `hugo-apps/src/advocates/components/HeaderBand.vue` | Gradient header + slim metadata + chips + search + inline `WorldMap`. |
@@ -142,6 +142,9 @@ entity Advocates : cuid, managed {
   photoUpdatedAt: Timestamp;
   topics        : Composition of many AdvocateTopics on topics.advocate = $self;
   links         : Composition of many AdvocateLinks  on links.advocate  = $self;
+  // Inverse association — required so the admin Object Page can target
+  // `photo/@UI.FieldGroup#Photo` for the UploadSet binding (see Phase 6 Task 6.2).
+  photo         : Composition of one AdvocatePhotos on photo.advocate = $self;
 }
 
 entity AdvocateTopics : cuid {
