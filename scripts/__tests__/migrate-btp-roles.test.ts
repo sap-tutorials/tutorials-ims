@@ -27,6 +27,15 @@ function runScript(args: string[], extraEnv: Record<string,string> = {}) {
       BTP_BIN_ARGS: FAKE_BTP,
       BTP_ROLES_OUTPUT: join(work, 'btp-roles.json'),
       BTP_ROLES_IMPORT_LOG: join(work, 'btp-roles-import.log.json'),
+      // getCurrentTarget() now reads $APPDATA/SAP/btp/config.json directly (no
+      // subprocess), so tests use BTP_TARGET_OVERRIDE to short-circuit it.
+      // Default: a "target" subaccount — tests that need a specific value
+      // (e.g. source==target safety belt) override this.
+      BTP_TARGET_OVERRIDE: JSON.stringify({
+        subaccountId: 'sub-target',
+        subaccountSubdomain: 'tut',
+        globalAccountSubdomain: 'ga',
+      }),
       ...extraEnv,
     },
     encoding: 'utf-8',
@@ -40,11 +49,6 @@ describe('migrate-btp-roles export', () => {
     // and writes JSON.stringify(entry.response) to stdout.
     const fixturePath = join(work, 'fake-btp-fixtures.jsonl');
     const lines = [
-      { match: 'target', response: {
-        subaccountId: 'sub-source-123',
-        subaccountSubdomain: 'imsprod',
-        globalAccountSubdomain: 'sap-ims',
-      }},
       { match: 'list security/role-collection', response: [
         { name: 'IMS Admin', description: 'Admin role' },
         { name: 'Some Other Collection', description: 'Unmapped' },
@@ -59,6 +63,13 @@ describe('migrate-btp-roles export', () => {
     const result = runScript(['export'], {
       FAKE_BTP_FIXTURE_FILE: fixturePath,
       BTP_ROLES_MAP_OVERRIDE: JSON.stringify({ 'IMS Admin': 'Tutorials Admin' }),
+      // Override the default target with a "source-shaped" one so the export's
+      // source.subaccountId assertion finds 'sub-source-123' and not the default 'sub-target'.
+      BTP_TARGET_OVERRIDE: JSON.stringify({
+        subaccountId: 'sub-source-123',
+        subaccountSubdomain: 'imsprod',
+        globalAccountSubdomain: 'sap-ims',
+      }),
     });
 
     expect(result.status).toBe(0);
@@ -75,12 +86,9 @@ describe('migrate-btp-roles export', () => {
   });
 
   it('exits 1 when btp target has no subaccount', () => {
-    const fixturePath = join(work, 'fake-btp-fixtures.jsonl');
-    writeFileSync(fixturePath, JSON.stringify({
-      match: 'target', response: {}, exit: 0
-    }));
     const result = runScript(['export'], {
-      FAKE_BTP_FIXTURE_FILE: fixturePath,
+      // Override the default with a target whose subaccountId is missing/empty.
+      BTP_TARGET_OVERRIDE: JSON.stringify({}),
       BTP_ROLES_MAP_OVERRIDE: '{}',
     });
     expect(result.status).toBe(1);
@@ -110,12 +118,14 @@ describe('migrate-btp-roles import', () => {
       JSON.stringify({ schemaVersion: 1, source: { subaccountId: 'sub-1' }, roleCollections: [] }));
     const fixturePath = join(work, 'fixtures.jsonl');
     writeFileSync(fixturePath, [
-      { match: 'target', response: { subaccountId: 'sub-1', subaccountSubdomain: 'foo', globalAccountSubdomain: 'ga' } },
       { match: 'list security/role-collection', response: [] },
     ].map(o => JSON.stringify(o)).join('\n'));
     const result = runScript(['import', '--confirm'], {
       FAKE_BTP_FIXTURE_FILE: fixturePath,
       BTP_ROLES_MAP_OVERRIDE: '{}',
+      // Override the default target so the source.subaccountId == target.subaccountId
+      // safety belt fires (default target is 'sub-target', export's source is 'sub-1').
+      BTP_TARGET_OVERRIDE: JSON.stringify({ subaccountId: 'sub-1', subaccountSubdomain: 'foo', globalAccountSubdomain: 'ga' }),
     });
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('target subaccount equals source');
@@ -130,7 +140,7 @@ describe('migrate-btp-roles import', () => {
       }));
     const fixturePath = join(work, 'fixtures.jsonl');
     writeFileSync(fixturePath, [
-      { match: 'target', response: { subaccountId: 'sub-target', subaccountSubdomain: 'foo', globalAccountSubdomain: 'ga' } },
+
       { match: 'list security/role-collection', response: [] },
     ].map(o => JSON.stringify(o)).join('\n'));
     const result = runScript(['import', '--confirm'], {
@@ -157,7 +167,7 @@ describe('migrate-btp-roles import', () => {
       }));
     const fixturePath = join(work, 'fixtures.jsonl');
     writeFileSync(fixturePath, [
-      { match: 'target', response: { subaccountId: 'sub-target', subaccountSubdomain: 'tut', globalAccountSubdomain: 'ga' } },
+
       { match: 'list security/role-collection', response: [{ name: 'Tutorials Admin' }] },
     ].map(o => JSON.stringify(o)).join('\n'));
     const tracePath = join(work, 'trace.jsonl');
@@ -193,7 +203,7 @@ describe('migrate-btp-roles import', () => {
       }));
     const fixturePath = join(work, 'fixtures.jsonl');
     writeFileSync(fixturePath, [
-      { match: 'target', response: { subaccountId: 'sub-target', subaccountSubdomain: 'tut', globalAccountSubdomain: 'ga' } },
+
       { match: 'list security/role-collection', response: [{ name: 'Tutorials Admin' }] },
       { match: '--to-user user1@sap.com', response: 'OK', exit: 0 },
       { match: '--to-user user2@sap.com', stderr: 'User is already a member of role collection Tutorials Admin', exit: 1 },
@@ -208,6 +218,38 @@ describe('migrate-btp-roles import', () => {
     const log = JSON.parse(readFileSync(logPath, 'utf-8'));
     expect(log.summary).toEqual({ ok: 1, already: 1, failed: 1 });
     expect(log.entries.find((e: any) => e.user === 'user3@sap.com').status).toBe('failed');
+  });
+
+  it('--create-missing-users flips --create-user-if-missing from false to true on btp assign', () => {
+    writeFileSync(join(work, 'btp-roles.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        source: { subaccountId: 'sub-source' },
+        roleCollections: [{
+          sourceName: 'IMS Admin',
+          users: [{ user: 'newcomer@sap.com', origin: 'sap.default' }],
+        }],
+      }));
+    const fixturePath = join(work, 'fixtures.jsonl');
+    writeFileSync(fixturePath, [
+      { match: 'list security/role-collection', response: [{ name: 'Tutorials Admin' }] },
+      { match: '--to-user newcomer@sap.com', response: 'OK', exit: 0 },
+    ].map(o => JSON.stringify(o)).join('\n'));
+    const tracePath = join(work, 'trace.jsonl');
+    const result = runScript(['import', '--confirm', '--create-missing-users'], {
+      FAKE_BTP_FIXTURE_FILE: fixturePath,
+      BTP_ROLES_MAP_OVERRIDE: JSON.stringify({ 'IMS Admin': 'Tutorials Admin' }),
+      FAKE_BTP_TRACE_FILE: tracePath,
+    });
+    expect(result.status).toBe(0);
+    // The trace file should record an `assign` call with `--create-user-if-missing true`,
+    // not the default `false`.
+    const traceLines = readFileSync(tracePath, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+    const assignCall = traceLines.find((args: string[]) => args.includes('assign'));
+    expect(assignCall).toBeDefined();
+    const flagIdx = assignCall.indexOf('--create-user-if-missing');
+    expect(flagIdx).toBeGreaterThan(-1);
+    expect(assignCall[flagIdx + 1]).toBe('true');
   });
 });
 
@@ -230,7 +272,7 @@ describe('migrate-btp-roles verify', () => {
     // already has both expected users.
     const fixturePath = join(work, 'fixtures.jsonl');
     writeFileSync(fixturePath, [
-      { match: 'target', response: { subaccountId: 'sub-target', subaccountSubdomain: 'tut', globalAccountSubdomain: 'ga' }},
+
       { match: 'get security/role-collection Tutorials Admin --show-user-assignments', response: {
         userReferences: [
           { name: 'user1@sap.com', origin: 'sap.default' },
@@ -262,7 +304,7 @@ describe('migrate-btp-roles verify', () => {
       }));
     const fixturePath = join(work, 'fixtures.jsonl');
     writeFileSync(fixturePath, [
-      { match: 'target', response: { subaccountId: 'sub-target', subaccountSubdomain: 'tut', globalAccountSubdomain: 'ga' }},
+
       { match: 'get security/role-collection Tutorials Admin --show-user-assignments', response: {
         userReferences: [{ name: 'user1@sap.com', origin: 'sap.default' }]
       }},
@@ -289,7 +331,7 @@ describe('migrate-btp-roles verify', () => {
       }));
     const fixturePath = join(work, 'fixtures.jsonl');
     writeFileSync(fixturePath, [
-      { match: 'target', response: { subaccountId: 'sub-target', subaccountSubdomain: 'tut', globalAccountSubdomain: 'ga' }},
+
       { match: 'get security/role-collection Tutorials Admin --show-user-assignments', response: {
         userReferences: [
           { name: 'user1@sap.com', origin: 'sap.default' },
@@ -319,7 +361,7 @@ describe('migrate-btp-roles verify', () => {
       }));
     const fixturePath = join(work, 'fixtures.jsonl');
     writeFileSync(fixturePath, [
-      { match: 'target', response: { subaccountId: 'sub-target', subaccountSubdomain: 'tut', globalAccountSubdomain: 'ga' }},
+
     ].map(o => JSON.stringify(o)).join('\n'));
     const result = runScript(['verify'], {
       FAKE_BTP_FIXTURE_FILE: fixturePath,

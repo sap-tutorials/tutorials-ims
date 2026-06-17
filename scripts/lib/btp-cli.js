@@ -2,6 +2,8 @@
 // through runBtp() so we have one place to inject --format json, capture
 // stderr, enforce timeouts, and swap the binary for tests via BTP_BIN.
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -32,7 +34,10 @@ export async function runBtp(args, opts = {}) {
   const bin = opts.btpBin || process.env.BTP_BIN || 'btp';
   const envBinArgs = process.env.BTP_BIN_ARGS ? [process.env.BTP_BIN_ARGS] : [];
   const prefix = opts.btpBinArgs || envBinArgs;
-  const fullArgs = [...prefix, ...args, '--format', 'json'];
+  // `--format json` is a btp CLI top-level OPTION, not a per-subcommand flag.
+  // It MUST appear before the action keyword (e.g. `btp --format json list ...`).
+  // Putting it at the end yields `Unknown parameter: --format` on most subcommands.
+  const fullArgs = [...prefix, '--format', 'json', ...args];
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   return await new Promise((resolve) => {
@@ -72,18 +77,51 @@ export async function runBtp(args, opts = {}) {
   });
 }
 
-/** Read the active subaccount/global-account from `btp target`. */
+/**
+ * Read the active subaccount/global-account from the BTP CLI's config file.
+ *
+ * We can't shell out to `btp target` for this — bare `btp target` is
+ * INTERACTIVE (prompts for a subaccount selection if not given a flag), and
+ * even with `--format json` it rejects the flag (it's a top-level option, but
+ * the `target` subcommand explicitly disallows JSON output). The CLI persists
+ * its current target to `$APPDATA/SAP/btp/config.json` (Windows) or
+ * `$HOME/.config/.btp/config.json` (POSIX) — the structured `TargetHierarchy`
+ * field there is exactly what we need, and reading it directly avoids any
+ * subprocess that might prompt or hang.
+ *
+ * TEST-ONLY: BTP_TARGET_OVERRIDE env var (JSON of the return value) short-circuits
+ * the file read. Used by tests that spawn the script as a child process.
+ */
 export async function getCurrentTarget(opts = {}) {
-  const result = await runBtp(['target'], opts);
-  if (!result.ok || !result.data) {
-    throw new Error(`btp target failed: ${result.stderr || 'no JSON'}`);
+  // opts kept for signature compatibility; this implementation doesn't shell out.
+  void opts;
+
+  if (process.env.BTP_TARGET_OVERRIDE) {
+    try { return JSON.parse(process.env.BTP_TARGET_OVERRIDE); }
+    catch (err) { throw new Error(`BTP_TARGET_OVERRIDE is not valid JSON: ${err.message}`); }
   }
-  // Field names vary by CLI version; normalize defensively.
-  const d = result.data;
+
+  const candidates = [];
+  if (process.env.APPDATA) candidates.push(join(process.env.APPDATA, 'SAP', 'btp', 'config.json'));
+  if (process.env.HOME)    candidates.push(join(process.env.HOME, '.config', '.btp', 'config.json'));
+  if (process.env.HOME)    candidates.push(join(process.env.HOME, '.btp', 'config.json'));
+
+  let cfg;
+  for (const path of candidates) {
+    try { cfg = JSON.parse(readFileSync(path, 'utf-8')); break; }
+    catch { /* try next */ }
+  }
+  if (!cfg) {
+    throw new Error(`btp config file not found in any of: ${candidates.join(', ')}\nRun 'btp login' and 'btp target -sa <id>' first.`);
+  }
+
+  const hierarchy = cfg.TargetHierarchy || [];
+  const ga  = hierarchy.find(t => t.Type === 'globalaccount');
+  const sa  = hierarchy.find(t => t.Type === 'subaccount');
   return {
-    subaccountId: d.subaccountId || d.subaccount?.guid || d.subaccount,
-    subaccountSubdomain: d.subaccountSubdomain || d.subaccount?.subdomain,
-    globalAccountSubdomain: d.globalAccountSubdomain || d.globalAccount?.subdomain || d.globalAccount,
+    subaccountId:           sa?.ID,
+    subaccountSubdomain:    sa?.Subdomain,
+    globalAccountSubdomain: ga?.Subdomain,
   };
 }
 
@@ -105,21 +143,34 @@ export async function getRoleCollectionUsers(name, opts = {}) {
       opts
     );
     if (!result.ok) throw new Error(`btp get role-collection "${name}" page ${page} failed: ${result.stderr}`);
-    const users = result.data?.userReferences || [];
-    all.push(...users.map(u => ({ user: u.name || u.user, origin: u.origin || 'sap.default' })));
+    // CLI shape varies: real BTP CLI v2.97 emits `{ items: [{username, origin, ...}], count, totalPages }`.
+    // Older / mocked versions used `{ userReferences: [{name, origin}] }`. Accept both.
+    const users = result.data?.items || result.data?.userReferences || [];
+    all.push(...users.map(u => ({
+      user: u.username || u.user || u.name,
+      origin: u.origin || 'sap.default',
+    })));
     if (users.length < BTP_PAGE_SIZE) break;
   }
   return all;
 }
 
-/** Assign one user. Distinguishes "ok", "already" (idempotent re-assign), "failed". */
+/**
+ * Assign one user. Distinguishes "ok", "already" (idempotent re-assign), "failed".
+ *
+ * @param {boolean} [opts.createUserIfMissing=false] when true, allows the BTP CLI
+ *   to mint a shadow user if the email isn't in the target IDP yet. Default false
+ *   (loud failure on typos); set true for cutover migrations where you want to
+ *   pre-provision shadow users for people who haven't logged in yet.
+ */
 export async function assignUser(roleCollection, user, origin, opts = {}) {
+  const createMissing = opts.createUserIfMissing === true ? 'true' : 'false';
   const result = await runBtp(
     [
       'assign', 'security/role-collection', roleCollection,
       '--to-user', user,
       '--of-idp', origin,
-      '--create-user-if-missing', 'false',
+      '--create-user-if-missing', createMissing,
     ],
     opts
   );
