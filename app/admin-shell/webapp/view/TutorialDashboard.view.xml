@@ -19,7 +19,7 @@
       </Toolbar>
 
       <t:Table id="tutorialMetaTable"
-        rows="{path: 'admin>/TutorialMeta', parameters: {$expand: 'tutorial($select=title,slug,primaryTag)'}}"
+        rows="{path: 'admin>/TutorialMeta', parameters: {$expand: 'tutorial($select=title,slug,primaryTag,status)'}}"
         selectionMode="None"
         visibleRowCount="20"
         enableBusyIndicator="true"
