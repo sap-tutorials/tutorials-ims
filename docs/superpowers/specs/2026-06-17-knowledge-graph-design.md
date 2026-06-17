@@ -196,6 +196,17 @@ entity ConceptEdges : cuid, managed {
 
 annotate TutorialConceptLinks with @assert.unique.tutorialConcept : [tutorial, concept, predicate];
 annotate ConceptEdges with @assert.unique.conceptEdge : [source, target, predicate];
+
+/**
+ * Single-row projection metadata. Updated at the end of every graphRebuild.
+ * Read by the query-layer cache to mint a graphVersion cache key.
+ */
+entity GraphMetadata : cuid, managed {
+  graphVersion  : String(40);    // ULID minted on rebuild
+  lastRebuiltAt : Timestamp;
+  tripleCount   : Integer;
+  durationMs    : Integer;
+}
 ```
 
 ### Notes on the schema
@@ -219,7 +230,7 @@ The named graph URI is `<https://developers.sap.com/kg/tutorials>`. All resource
 | `kg:requires` | AI-extracted (high-confidence only) | Concept → Concept | Top-2 per concept; `confidence ≥ 0.75`; cycle-validated |
 | `kg:relatedTo` | AI-extracted (co-occurrence + embedding) | Concept → Concept | Weaker than `:requires`; symmetric |
 | `kg:extends` | AI-extracted ("if you've completed X" prose) | Tutorial → Tutorial | 0–1 per tutorial |
-| `kg:partOf` | CDS (existing `Missions` ↔ `Tutorials`) | Tutorial → Mission, Mission → Group | Structural; no AI |
+| `kg:partOf` | CDS (existing `Missions` ↔ `Tutorials`) | Tutorial → Mission, Mission → Group | Single predicate used in two contexts; do **not** split into two predicates |
 | `kg:taggedWith` | CDS (existing `Tutorial.tags`) | Tutorial → Tag | Structural; no AI |
 | `kg:inCategory` | CDS (existing `Mission.category`) | Mission → Category | Structural; no AI |
 | `kg:aboutProduct` | CDS (extracted from `software-product>*` tags) | Tutorial → Product | Product is a derived node type |
@@ -623,15 +634,16 @@ The spike outputs become a one-page "HANA KGE access patterns" document committe
 
 ## Phase 1 ship-list (summary)
 
-- 3 new CDS entities (`Concepts`, `TutorialConceptLinks`, `ConceptEdges`) + `GraphMetadata` projection-state row
+- 3 new CDS entities (`Concepts`, `TutorialConceptLinks`, `ConceptEdges`) + 1 projection-state entity (`GraphMetadata`)
 - 1 new CAP service (`KnowledgeGraphService` at `/graph` with Phase 2 method stubs)
 - 5 new lib files (`kg-extract.js`, `kg-queries.js`, `kg-projection.js`, `kg-similarity.js`, `kg-cycles.js`)
 - 2 new cron jobs (`extractConcepts`, `consolidateConcepts`) registered through `srv/jobs/scheduler.js`
 - 1 new Vue island (`hugo-apps/src/related-graph/`)
 - 1 new admin app (`app/admin/concepts/`) + admin-shell side-nav entry
+- 1 one-shot CLI (`scripts/kg-reextract.cjs` + `npm run kg:reextract`) for cache rebuild after a HDI wipe
 - 1 new feature flag (`KNOWLEDGE_GRAPH_ENABLED`, default OFF)
 - 1 new XSUAA scope (`KnowledgeGraph.Admin`) attached to existing `Tutorial.Admin` role collection
-- 1 new env var (`KG_EXTRACT_BUILD_CAP`, default 200; `KG_MERGE_SIM_THRESHOLD`, default 0.92)
+- 2 new env vars: `KG_EXTRACT_BUILD_CAP` (default 200), `KG_MERGE_SIM_THRESHOLD` (default 0.92)
 - 1-day spike to validate HANA KGE access via `EXECUTE STATEMENT 'SPARQL …'` *before* locking the implementation
 - Audit-logging + change-tracking on `Concepts`
 - ORD annotations for `KnowledgeGraphService`
@@ -667,6 +679,9 @@ The spike outputs become a one-page "HANA KGE access patterns" document committe
 ## Open questions
 
 - **HANA KGE feature availability on the `tutorial-system` subaccount.** Tom to confirm via `btp_target` / service-marketplace check before the spike. If not available on EU10-005, this whole spec needs re-targeting.
-- **Daily cron cadence vs more frequent.** `13 2 * * *` is a starting guess; if the publish workflow runs frequently and authors expect graph updates within hours, we may need to invoke `extractConcepts` from `POST /content/publish` after a successful commit.
-- **Sidebar placement on the OP.** Right rail vs below-the-fold below the discussion area. Phase 1 default is right rail; mobile collapses to a `ui5-dialog` bottom sheet (mirrors [[project_U18_mobile_sheet]]).
-- **Admin "Concepts" tile location in admin-shell.** Side-nav slot needs picking — Concepts live conceptually next to Tags but the existing nav is alphabetical; wedging "Concepts" between "Categories" and "Events" works.
+
+## Decisions deferred at brainstorm but locked here for the plan
+
+- **Cron-only extraction in Phase 1.** No `POST /content/publish` hook into `extractConcepts`. Eventual consistency on a daily cadence is acceptable for the discovery surface; publish-triggered extraction is a Phase 2 concern if real-time drift becomes a complaint.
+- **Sidebar placement: right rail on desktop, bottom-sheet on mobile.** Right rail mounts in [hugo/layouts/tutorials/single.html](hugo/layouts/tutorials/single.html) (or its sidebar partial) below the existing `tutorial-rating` panel. Mobile reuses the `ui5-dialog` bottom-sheet pattern from [[project_U18_mobile_sheet]].
+- **Admin "Concepts" tile slot.** Wedge between "Categories" and "Events" in the admin-shell side nav (alphabetical). Same icon convention as existing tiles.
