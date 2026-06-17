@@ -18,7 +18,7 @@ async function streamToBuffer(stream) {
 }
 
 /** Coerce a value that might be a Buffer, Uint8Array, or Readable into a Buffer. */
-async function toBuffer(value) {
+export async function toBuffer(value) {
   if (Buffer.isBuffer(value)) return value;
   if (value && typeof value.pipe === 'function') return streamToBuffer(value);
   if (value instanceof Uint8Array) return Buffer.from(value);

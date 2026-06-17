@@ -204,3 +204,62 @@ describe('GET /api/advocates/:slug/photo', () => {
     expect(status).toBe(304);
   });
 });
+
+describe('AdvocatePhotos upload handler', () => {
+  it('processPhotoUpload mutates data.photo256 from raw JPEG to processed WebP', async () => {
+    const { processPhotoUpload } = await import('../../../srv/handlers/advocate-handlers.js');
+    const rawJpeg = await readFile('test/unit/advocates/fixtures/portrait.jpg');
+    const data = {
+      photo256: rawJpeg,
+      photoMimeType: 'image/jpeg',
+    };
+    await processPhotoUpload({ data, headers: {} });
+
+    expect(data.photoMimeType).toBe('image/webp');
+    expect(data.sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(data.sizeBytes).toBeGreaterThan(0);
+    expect(data.uploadedAt).toBeTruthy();
+
+    // photo256 + photo64 are Buffers of WebP bytes (RIFF magic).
+    expect(Buffer.isBuffer(data.photo256)).toBe(true);
+    expect(Buffer.isBuffer(data.photo64)).toBe(true);
+    expect(data.photo256.subarray(0, 4).toString('ascii')).toBe('RIFF');
+    expect(data.photo256.subarray(8, 12).toString('ascii')).toBe('WEBP');
+    expect(data.photo64.subarray(0, 4).toString('ascii')).toBe('RIFF');
+    expect(data.photo64.length).toBeLessThan(data.photo256.length);
+  });
+
+  it('processPhotoUpload is a no-op when no photo256 was sent', async () => {
+    const { processPhotoUpload } = await import('../../../srv/handlers/advocate-handlers.js');
+    const data = { photoMimeType: 'image/webp', sortOrder: 5 };
+    await processPhotoUpload({ data, headers: {} });
+    // Nothing else got mutated — sha256 etc. weren't set.
+    expect(data.sha256).toBeUndefined();
+    expect(data.sizeBytes).toBeUndefined();
+    expect(data.uploadedAt).toBeUndefined();
+    // The original payload is untouched.
+    expect(data.sortOrder).toBe(5);
+  });
+
+  it('processPhotoUpload accepts a Readable stream as photo256', async () => {
+    const { processPhotoUpload } = await import('../../../srv/handlers/advocate-handlers.js');
+    const { Readable } = await import('node:stream');
+    const rawJpeg = await readFile('test/unit/advocates/fixtures/portrait.jpg');
+    const stream = Readable.from([rawJpeg]);
+    const data = { photo256: stream, photoMimeType: 'image/jpeg' };
+    await processPhotoUpload({ data, headers: {} });
+    expect(Buffer.isBuffer(data.photo256)).toBe(true);
+    expect(data.photo256.subarray(0, 4).toString('ascii')).toBe('RIFF');
+  });
+
+  it('processPhotoUpload falls back to req.headers content-type when photoMimeType missing', async () => {
+    const { processPhotoUpload } = await import('../../../srv/handlers/advocate-handlers.js');
+    const rawJpeg = await readFile('test/unit/advocates/fixtures/portrait.jpg');
+    const data = { photo256: rawJpeg };
+    await processPhotoUpload({
+      data,
+      headers: { 'content-type': 'image/jpeg' },
+    });
+    expect(data.photoMimeType).toBe('image/webp');
+  });
+});
