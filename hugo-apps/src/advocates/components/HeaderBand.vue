@@ -22,7 +22,6 @@ defineEmits<{
         <h1 class="adv-h1">Developer Advocates</h1>
         <span class="adv-count">{{ total }} people · 3 regions · {{ topics.length }} focus areas</span>
       </div>
-      <WorldMap :region-counts="regionCounts" :active="state.region" @pick="$emit('set-region', $event)" />
     </div>
     <div class="adv-chips-row">
       <button class="adv-pill" :class="{ active: state.region === 'ALL' }"      @click="$emit('set-region','ALL')">All</button>
@@ -40,6 +39,7 @@ defineEmits<{
              @input="$emit('set-q', ($event.target as HTMLInputElement).value)"
              aria-label="Search advocates" />
     </div>
+    <WorldMap :region-counts="regionCounts" :active="state.region" @pick="$emit('set-region', $event)" />
   </header>
 </template>
 
@@ -53,7 +53,7 @@ defineEmits<{
   content: ''; position: absolute; top: -80px; right: -100px; width: 320px; height: 320px;
   border-radius: 50%; background: radial-gradient(circle, rgba(255,109,181,.55), transparent 65%);
 }
-.adv-header-row { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; position: relative; z-index: 1; }
+.adv-header-row { position: relative; z-index: 1; }
 .adv-header-meta { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .adv-h1 { margin: 0; font-size: 22px; letter-spacing: -.01em; }
 .adv-count { color: rgba(255,255,255,.78); font-size: 13px; }

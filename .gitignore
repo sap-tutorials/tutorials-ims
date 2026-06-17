@@ -21,6 +21,7 @@ hugo/static-qa/
 .playwright-mcp/
 *.png
 !docs/public/launch/*.png
+!hugo/static/img/advocates-world-map.png
 hugo/static/js/*
 !hugo/static/js/joule.js
 !hugo/static/js/joule-render.js

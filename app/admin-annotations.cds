@@ -1480,9 +1480,31 @@ annotate AdminService.Advocates with @(
     { $Type: 'UI.ReferenceFacet', ID: 'Identity',   Label: 'Identity',     Target: '@UI.FieldGroup#Identity' },
     { $Type: 'UI.ReferenceFacet', ID: 'Bio',        Label: 'Bio',          Target: '@UI.FieldGroup#Bio' },
     { $Type: 'UI.ReferenceFacet', ID: 'Visibility', Label: 'Visibility',   Target: '@UI.FieldGroup#Visibility' },
+    { $Type: 'UI.ReferenceFacet', ID: 'Photo',      Label: 'Photo',        Target: 'photo/@UI.FieldGroup#Photo' },
     { $Type: 'UI.ReferenceFacet', ID: 'Topics',     Label: 'Topics',       Target: 'topics/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', ID: 'Links',      Label: 'Social links', Target: 'links/@UI.LineItem' }
   ]
+);
+
+// AdvocatePhotos — Fiori Elements renders an UploadSet for @Core.MediaType
+// columns. The Photo facet on the Advocate Object Page targets this
+// FieldGroup, which surfaces the photo256 column as an upload control.
+// photo64 is server-derived (sharp resamples on every upload); we don't
+// expose it in the UI to avoid confusion.
+annotate AdminService.AdvocatePhotos with {
+  photo256       @Common.Label: 'Photo'      @Core.ContentDisposition: { Filename: 'advocate-photo.webp' };
+  photoMimeType  @Common.Label: 'MIME type'  @UI.HiddenFilter @Core.Computed;
+  sizeBytes      @Common.Label: 'Size (bytes)' @UI.HiddenFilter @Core.Computed;
+  sha256         @Common.Label: 'SHA-256'    @UI.HiddenFilter @Core.Computed;
+  uploadedAt     @Common.Label: 'Uploaded'   @UI.HiddenFilter @Core.Computed;
+};
+
+annotate AdminService.AdvocatePhotos with @(
+  UI.FieldGroup #Photo: {
+    Data: [
+      { $Type: 'UI.DataField', Value: photo256, Label: 'Photo' }
+    ]
+  }
 );
 
 // AdvocateTopics — inline table with Tag value-help.
