@@ -64,6 +64,11 @@ export const SKIP_BUILTIN_PREFIXES = [
 const OUTPUT_FILE = process.env.BTP_ROLES_OUTPUT || '.migration-data/btp-roles.json';
 const IMPORT_LOG = process.env.BTP_ROLES_IMPORT_LOG || '.migration-data/btp-roles-import.log.json';
 
+// Sleep between assignment calls so the BTP control plane isn't slammed.
+// Wall-clock ≈ N users × (CLI ~200 ms + this throttle). For N > 500 consider
+// raising it or pooling.
+const THROTTLE_MS = 100;
+
 function isBuiltin(name) {
   return SKIP_BUILTIN_PREFIXES.some(p => name.startsWith(p));
 }
@@ -94,7 +99,6 @@ async function main() {
   }
 }
 
-// Stubs filled in by later steps:
 async function runExport() {
   const target = await getCurrentTarget();
   if (!target.subaccountId) {
@@ -179,7 +183,7 @@ async function runAssignmentLoop(exportDoc, target, flags) {
       else if (result.status === 'already') { alreadyCount++; console.log(`[already] ${targetName} ← ${user}`); }
       else                              { failCount++;    console.error(`[FAIL]    ${targetName} ← ${user}: ${result.message}`); }
       // Be polite to the BTP control plane.
-      await new Promise(r => setTimeout(r, 100));
+      await new Promise(r => setTimeout(r, THROTTLE_MS));
     }
   }
 
