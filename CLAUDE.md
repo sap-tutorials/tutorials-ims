@@ -183,6 +183,7 @@ Single MTA deployment (`mta.yaml`): AppRouter module serves Hugo static build fr
 ### Data Migration
 
 Migration scripts in `scripts/` support parallel operation during cutover:
+- `migrate-btp-roles.js` — copy BTP role-collection user assignments from a source subaccount to the current target. See [docs/developers/operations/btp-role-migration.md](docs/developers/operations/btp-role-migration.md).
 - `migrate-reference-data.js` — export/import tutorials, missions, events, tags; `populate-slugs` mode patches slug fields from CAP catalog cache
 - `migrate-user-progress.js` — export/import users and task records (paged, resumable)
 - `compare-systems.js` — endpoint-by-endpoint diff between Java IMS and CAP
