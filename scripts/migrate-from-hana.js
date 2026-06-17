@@ -137,8 +137,56 @@ function execBatch(stmt, rows) {
   });
 }
 
+// Partition mapped rows by whether their lowercased SLUG already exists in
+// the target table. Pure function — exported for unit tests. Rows without a
+// SLUG field bypass the partition (they don't participate in slug-based
+// matching) and are returned in `passthrough` so the caller can decide what
+// to do with them.
+//
+// Mirrors the publish-side LOWER(slug)=? upsert in
+// srv/lib/content-publish-session.js so a re-run of the cutover migrator no
+// longer creates duplicates on top of already-published rows. Issue #338.
+export function partitionBySlug(mapped, existingMap) {
+  const inserts = [];
+  const updates = [];
+  const passthrough = [];
+  for (const row of mapped) {
+    if (row.SLUG === undefined || row.SLUG === null || row.SLUG === '') {
+      passthrough.push(row);
+      continue;
+    }
+    const key = String(row.SLUG).toLowerCase();
+    if (existingMap.has(key)) {
+      updates.push({ ...row, ID: existingMap.get(key) });
+    } else {
+      inserts.push(row);
+    }
+  }
+  return { inserts, updates, passthrough };
+}
+
+// Look up which lowercased slugs already exist in target. Chunks the IN-list
+// to keep individual statements under HANA's parameter cap (32k); 500 is a
+// friendlier round-trip size.
+async function fetchExistingSlugMap(target, fullTable, slugs) {
+  const existingMap = new Map();
+  if (slugs.length === 0) return existingMap;
+  const CHUNK = 500;
+  for (let i = 0; i < slugs.length; i += CHUNK) {
+    const slice = slugs.slice(i, i + CHUNK);
+    const placeholders = slice.map(() => '?').join(',');
+    const rows = await query(
+      target,
+      `SELECT "ID", LOWER("SLUG") AS "S" FROM ${fullTable} WHERE LOWER("SLUG") IN (${placeholders})`,
+      slice
+    );
+    for (const r of rows) existingMap.set(r.S, r.ID);
+  }
+  return existingMap;
+}
+
 async function migrateEntity(source, target, targetSchema, config) {
-  const { name, sourceQuery, targetTable, mapRow, preInsert } = config;
+  const { name, sourceQuery, targetTable, mapRow, preInsert, upsertOnSlug = false } = config;
 
   if (ENTITY_FILTER && !ENTITY_FILTER.includes(name)) {
     console.log(`  ⊘ Skipping ${name} (not in filter)`);
@@ -155,13 +203,6 @@ async function migrateEntity(source, target, targetSchema, config) {
   if (preInsert) await preInsert(target, targetSchema);
 
   const fullTable = `"${targetSchema}"."${targetTable}"`;
-  if (!DRY_RUN) {
-    const existing = await query(target, `SELECT COUNT(*) AS "C" FROM ${fullTable}`);
-    if (existing[0].C > 0) {
-      console.log(`  Clearing ${existing[0].C} existing records in target...`);
-      await execStmt(target, `DELETE FROM ${fullTable}`);
-    }
-  }
 
   // Map all rows and filter nulls
   const mapped = [];
@@ -170,13 +211,91 @@ async function migrateEntity(source, target, targetSchema, config) {
     if (m) mapped.push(m);
   }
 
+  // Decide whether to take the slug-aware upsert path. The flag is per-config,
+  // but we also require at least one mapped row to actually carry a SLUG —
+  // otherwise we fall through to the original delete-then-insert path (e.g.
+  // groups/missions whose mapRow doesn't emit SLUG; their slugs are assigned
+  // post-migration by setup-dev-data.cjs).
+  const hasSlugColumn = upsertOnSlug && mapped.length > 0
+    && mapped[0].SLUG !== undefined && mapped[0].SLUG !== null;
+
+  if (!hasSlugColumn) {
+    // Original path: clear the target then batch-INSERT everything.
+    if (!DRY_RUN) {
+      const existing = await query(target, `SELECT COUNT(*) AS "C" FROM ${fullTable}`);
+      if (existing[0].C > 0) {
+        console.log(`  Clearing ${existing[0].C} existing records in target...`);
+        await execStmt(target, `DELETE FROM ${fullTable}`);
+      }
+    }
+
+    if (DRY_RUN) {
+      mapped.slice(0, 3).forEach(m => console.log(`  [dry-run] Would insert:`, JSON.stringify(m).slice(0, 200)));
+      console.log(`  ✓ ${mapped.length} inserted, 0 errors`);
+      return { name, count: mapped.length };
+    }
+
+    const result = await batchInsert(target, fullTable, mapped);
+    console.log(`  ✓ ${result.inserted} inserted, ${result.errors} errors`);
+    return { name, count: result.inserted, errors: result.errors };
+  }
+
+  // Upsert-on-slug path: do NOT clear the target. Look up which slugs already
+  // exist, UPDATE matching rows, INSERT the rest. This is the same shape as
+  // srv/lib/content-publish-session.js so a re-run of the migrator no longer
+  // duplicates rows on top of already-published content. Belt-and-braces:
+  // @assert.unique.slug would also block plain-INSERT duplicates, but a clean
+  // no-op on re-run is friendlier than a constraint violation.
+  const slugs = mapped
+    .map(r => (r.SLUG == null ? '' : String(r.SLUG).toLowerCase()))
+    .filter(Boolean);
+
   if (DRY_RUN) {
-    mapped.slice(0, 3).forEach(m => console.log(`  [dry-run] Would insert:`, JSON.stringify(m).slice(0, 200)));
-    console.log(`  ✓ ${mapped.length} inserted, 0 errors`);
+    mapped.slice(0, 3).forEach(m => console.log(`  [dry-run] Would upsert:`, JSON.stringify(m).slice(0, 200)));
+    console.log(`  ✓ ${mapped.length} would be upserted (slug-keyed)`);
     return { name, count: mapped.length };
   }
 
-  // Prepare INSERT statement using named parameters from first row's keys
+  const existingMap = await fetchExistingSlugMap(target, fullTable, slugs);
+  const { inserts, updates, passthrough } = partitionBySlug(mapped, existingMap);
+
+  // Apply UPDATEs one row at a time. Updates set every column EXCEPT the
+  // primary key (ID) and SLUG itself — overwriting ID would lose the existing
+  // row's identity (and any FKs that point at it from prior runs); overwriting
+  // SLUG is unnecessary since it's the join key.
+  let updated = 0;
+  let updateErrors = 0;
+  for (const row of updates) {
+    const setCols = Object.keys(row).filter(c => c !== 'ID' && c !== 'SLUG');
+    if (setCols.length === 0) continue;
+    const setClause = setCols.map(c => `"${c}" = ?`).join(', ');
+    const params = [...setCols.map(c => row[c] ?? null), row.ID];
+    try {
+      await execStmt(target, `UPDATE ${fullTable} SET ${setClause} WHERE "ID" = ?`, params);
+      updated++;
+    } catch (e) {
+      updateErrors++;
+      if (updateErrors <= 5) console.error(`  ✗ Update error: ${e.message.split('\n')[0]}`);
+    }
+  }
+
+  // INSERT the new-slug bucket plus any passthrough rows (rows whose mapRow
+  // didn't emit a SLUG — should be empty in practice when hasSlugColumn is
+  // true, but kept here for defence-in-depth).
+  const toInsert = inserts.concat(passthrough);
+  const insertResult = toInsert.length > 0
+    ? await batchInsert(target, fullTable, toInsert)
+    : { inserted: 0, errors: 0 };
+
+  console.log(`  ✓ upsert: ${insertResult.inserted} inserted, ${updated} updated, ${insertResult.errors + updateErrors} errors`);
+  return { name, count: insertResult.inserted + updated, errors: insertResult.errors + updateErrors };
+}
+
+// Batch-insert a list of mapped rows into `fullTable`. Falls back to row-by-row
+// inside a failing batch so a single bad row doesn't sink the whole batch.
+async function batchInsert(target, fullTable, mapped) {
+  if (mapped.length === 0) return { inserted: 0, errors: 0 };
+
   const cols = Object.keys(mapped[0]);
   const colNames = cols.map(c => `"${c}"`).join(', ');
   const placeholders = cols.map(() => '?').join(', ');
@@ -186,10 +305,8 @@ async function migrateEntity(source, target, targetSchema, config) {
   let inserted = 0;
   let errors = 0;
 
-  // Execute in batches
   for (let i = 0; i < mapped.length; i += BATCH_SIZE) {
     const batch = mapped.slice(i, i + BATCH_SIZE);
-    // Convert objects to arrays of values in column order
     const paramRows = batch.map(row => cols.map(c => row[c] ?? null));
 
     try {
@@ -214,8 +331,7 @@ async function migrateEntity(source, target, targetSchema, config) {
   }
 
   stmt.drop();
-  console.log(`  ✓ ${inserted} inserted, ${errors} errors`);
-  return { name, count: inserted, errors };
+  return { inserted, errors };
 }
 
 // Paginated migration for entities too large to fit in memory. Walks the source
@@ -563,6 +679,12 @@ async function main() {
       CREATEDBY: truncStr(row.CREATED_BY, 255) || 'migration',
       MODIFIEDBY: truncStr(row.UPDATED_BY, 255) || 'migration',
     }),
+    // Groups.slug is nullable and the migrator's mapRow doesn't emit SLUG —
+    // slugs are assigned post-migration by setup-dev-data.cjs. The flag is a
+    // no-op here in practice (rows fall through to the original delete-then-
+    // insert path), but kept for symmetry/future-proofing if a migrator
+    // generation ever populates Groups.slug.
+    upsertOnSlug: true,
   }));
 
   // 4. Missions
@@ -584,6 +706,9 @@ async function main() {
         MODIFIEDBY: truncStr(row.UPDATED_BY, 255) || 'migration',
       };
     },
+    // Same caveat as `groups`: Missions.slug is nullable and not emitted by
+    // mapRow today; flag kept for symmetry / future migrator generations.
+    upsertOnSlug: true,
   }));
 
   // 5. Tutorials
@@ -614,6 +739,12 @@ async function main() {
       CREATEDBY: truncStr(row.CREATED_BY, 255) || 'migration',
       MODIFIEDBY: truncStr(row.UPDATED_BY, 255) || 'migration',
     }),
+    // Tutorials.slug is @mandatory and emitted from URL filename above. The
+    // 2026-06-16 cutover rehearsal duplicated rows when multiple source
+    // legacyIds resolved to the same slug; the upsert path now matches on
+    // LOWER(SLUG) (mirroring srv/lib/content-publish-session.js) so a re-run
+    // updates rather than dup-inserts. Issue #338.
+    upsertOnSlug: true,
   }));
 
   // 6. Steps
@@ -934,7 +1065,16 @@ async function main() {
   console.log('\nDone. Connections closed.');
 }
 
-main().catch(e => {
-  console.error('\n✗ Fatal error:', e.message);
-  process.exit(1);
-});
+// Only execute main() when this file is invoked directly (`node scripts/
+// migrate-from-hana.js …`). When imported as a module — e.g. by the unit
+// test that exercises partitionBySlug() in isolation — main() must NOT run,
+// otherwise it tries to look up cf service-keys and exits the test process.
+const _isDirectInvocation = import.meta.url === `file://${process.argv[1]}`
+  || import.meta.url === new URL(process.argv[1], 'file://').href;
+
+if (_isDirectInvocation) {
+  main().catch(e => {
+    console.error('\n✗ Fatal error:', e.message);
+    process.exit(1);
+  });
+}
