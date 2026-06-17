@@ -1,5 +1,7 @@
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import cds from '@sap/cds';
+import { readFile } from 'node:fs/promises';
+import { processUpload, _resetCache } from '../../../srv/lib/advocate-photo-store.js';
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
 const adminAuth = { auth: { username: 'admin', password: 'admin' } };
@@ -101,5 +103,104 @@ describe('GET /api/advocates', () => {
     const res = await project.get('/api/advocates');
     expect(res.data.advocates.find((a) => a.ID === id)).toBeUndefined();
     await db.run(DELETE.from(Advocates).where({ ID: id }));
+  });
+});
+
+describe('GET /api/advocates/:slug/photo', () => {
+  let processed;
+
+  beforeAll(async () => {
+    _resetCache();
+    const buf = await readFile('test/unit/advocates/fixtures/portrait.jpg');
+    processed = await processUpload(buf, 'image/jpeg');
+
+    const db = await cds.connect.to('db');
+    const { Advocates, AdvocatePhotos } = cds.entities('com.sap.developers.ims');
+    const advocate = await db.run(
+      SELECT.one.from(Advocates).where({ slug: 'thomas-jung' }),
+    );
+    // Idempotent — the photo-serve.test.js suite may have inserted one already.
+    await db.run(DELETE.from(AdvocatePhotos).where({ advocate_ID: advocate.ID }));
+    await db.run(
+      INSERT.into(AdvocatePhotos).entries({
+        advocate_ID: advocate.ID,
+        photo256: processed.photo256,
+        photo64: processed.photo64,
+        photoMimeType: 'image/webp',
+        sizeBytes: processed.sizeBytes,
+        sha256: processed.sha256,
+        uploadedAt: new Date().toISOString(),
+      }),
+    );
+    _resetCache();
+  });
+
+  it('returns 404 when the advocate has no photo row', async () => {
+    let status;
+    try {
+      const res = await project.get('/api/advocates/placeholder-emea/photo', {
+        validateStatus: (s) => s === 200 || s === 404,
+        responseType: 'arraybuffer',
+      });
+      status = res.status;
+    } catch (err) {
+      status = err.response?.status;
+    }
+    expect(status).toBe(404);
+  });
+
+  it('returns 404 for an unknown slug', async () => {
+    let status;
+    try {
+      const res = await project.get('/api/advocates/no-such-advocate/photo', {
+        validateStatus: (s) => s === 200 || s === 404,
+        responseType: 'arraybuffer',
+      });
+      status = res.status;
+    } catch (err) {
+      status = err.response?.status;
+    }
+    expect(status).toBe(404);
+  });
+
+  it('returns the WebP for a real photo with ETag and Cache-Control', async () => {
+    const res = await project.get('/api/advocates/thomas-jung/photo', {
+      responseType: 'arraybuffer',
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/image\/webp/);
+    expect(res.headers.etag).toBe('"' + processed.sha256 + '"');
+    expect(res.headers['cache-control']).toMatch(/max-age=86400/);
+    // Body matches the processed bytes.
+    expect(Buffer.compare(Buffer.from(res.data), processed.photo256)).toBe(0);
+  });
+
+  it('returns ?size=thumb 64-px WebP', async () => {
+    const res = await project.get('/api/advocates/thomas-jung/photo?size=thumb', {
+      responseType: 'arraybuffer',
+    });
+    expect(res.status).toBe(200);
+    expect(Buffer.compare(Buffer.from(res.data), processed.photo64)).toBe(0);
+  });
+
+  it('returns 304 when If-None-Match matches the photo sha256', async () => {
+    const first = await project.get('/api/advocates/thomas-jung/photo', {
+      responseType: 'arraybuffer',
+    });
+    const etag = first.headers.etag;
+    expect(etag).toBeTruthy();
+
+    let status;
+    try {
+      const res = await project.get('/api/advocates/thomas-jung/photo', {
+        headers: { 'If-None-Match': etag },
+        validateStatus: (s) => s === 200 || s === 304,
+        responseType: 'arraybuffer',
+      });
+      status = res.status;
+    } catch (err) {
+      status = err.response?.status;
+    }
+    expect(status).toBe(304);
   });
 });

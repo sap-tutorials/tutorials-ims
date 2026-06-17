@@ -2,6 +2,7 @@
 // Spec: docs/superpowers/specs/2026-06-17-developer-advocates-design.md
 
 import cds from '@sap/cds';
+import { fetchPhoto } from '../lib/advocate-photo-store.js';
 
 const log = cds.log('advocates');
 
@@ -128,6 +129,29 @@ async function handleAdvocates(req, res) {
   }
 }
 
+async function handlePhoto(req, res) {
+  try {
+    const size = req.query.size === 'thumb' ? 'thumb' : 'full';
+    const out = await fetchPhoto(req.params.slug, size);
+    if (!out) {
+      res.status(404).end();
+      return;
+    }
+    res.setHeader('ETag', out.etag);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    if (req.headers['if-none-match'] === out.etag) {
+      res.status(304).end();
+      return;
+    }
+    res.setHeader('Content-Type', out.mimeType);
+    res.send(out.buffer);
+  } catch (err) {
+    log.error(err);
+    res.status(500).end();
+  }
+}
+
 export function register(app) {
   app.get('/api/advocates', handleAdvocates);
+  app.get('/api/advocates/:slug/photo', handlePhoto);
 }
