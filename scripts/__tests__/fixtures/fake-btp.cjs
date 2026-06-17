@@ -25,15 +25,25 @@ if (process.env.FAKE_BTP_SLEEP_MS) {
   return;
 }
 
+let perEntryExit = null;
+
 if (process.env.FAKE_BTP_FIXTURE_FILE) {
-  // JSON-Lines file: each line is { match: <substring of joined args>, response: <JSON value> }.
-  // First match wins. Used by tests that need different responses per call (e.g. paging).
+  // JSON-Lines file: each line is { match: <substring of joined args>, response: <JSON value>,
+  // stderr?: string, exit?: number }. First match wins. `response` is JSON-stringified to
+  // stdout (string responses end up double-quoted JSON strings); `stderr` and `exit` let
+  // tests model error paths per-call.
   const lines = fs.readFileSync(process.env.FAKE_BTP_FIXTURE_FILE, 'utf8').split('\n').filter(Boolean);
   const joined = args.join(' ');
   for (const line of lines) {
     const entry = JSON.parse(line);
     if (joined.includes(entry.match)) {
-      process.stdout.write(JSON.stringify(entry.response));
+      if (entry.response !== undefined) {
+        process.stdout.write(
+          typeof entry.response === 'string' ? entry.response : JSON.stringify(entry.response)
+        );
+      }
+      if (entry.stderr) process.stderr.write(entry.stderr);
+      if (typeof entry.exit === 'number') perEntryExit = entry.exit;
       break;
     }
   }
@@ -41,4 +51,4 @@ if (process.env.FAKE_BTP_FIXTURE_FILE) {
   process.stdout.write(process.env.FAKE_BTP_RESPONSE);
 }
 
-process.exit(exitCode);
+process.exit(perEntryExit !== null ? perEntryExit : exitCode);

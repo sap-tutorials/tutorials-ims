@@ -95,3 +95,118 @@ describe('migrate-btp-roles export', () => {
     expect(result.stderr).toContain('BTP_ROLES_MAP_OVERRIDE');
   });
 });
+
+describe('migrate-btp-roles import', () => {
+  it('exits 2 when neither --dry-run nor --confirm is passed', () => {
+    writeFileSync(join(work, 'btp-roles.json'),
+      JSON.stringify({ schemaVersion: 1, source: { subaccountId: 'a' }, roleCollections: [] }));
+    const result = runScript(['import']);
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('--dry-run');
+  });
+
+  it('refuses to import when target subaccount equals source', () => {
+    writeFileSync(join(work, 'btp-roles.json'),
+      JSON.stringify({ schemaVersion: 1, source: { subaccountId: 'sub-1' }, roleCollections: [] }));
+    const fixturePath = join(work, 'fixtures.jsonl');
+    writeFileSync(fixturePath, [
+      { match: 'target', response: { subaccountId: 'sub-1', subaccountSubdomain: 'foo', globalAccountSubdomain: 'ga' } },
+      { match: 'list security/role-collection', response: [] },
+    ].map(o => JSON.stringify(o)).join('\n'));
+    const result = runScript(['import', '--confirm'], {
+      FAKE_BTP_FIXTURE_FILE: fixturePath,
+      BTP_ROLES_MAP_OVERRIDE: '{}',
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('target subaccount equals source');
+  });
+
+  it('exits 1 when a mapped target collection does not exist on target', () => {
+    writeFileSync(join(work, 'btp-roles.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        source: { subaccountId: 'sub-source' },
+        roleCollections: [{ sourceName: 'IMS Admin', users: [] }],
+      }));
+    const fixturePath = join(work, 'fixtures.jsonl');
+    writeFileSync(fixturePath, [
+      { match: 'target', response: { subaccountId: 'sub-target', subaccountSubdomain: 'foo', globalAccountSubdomain: 'ga' } },
+      { match: 'list security/role-collection', response: [] },
+    ].map(o => JSON.stringify(o)).join('\n'));
+    const result = runScript(['import', '--confirm'], {
+      FAKE_BTP_FIXTURE_FILE: fixturePath,
+      BTP_ROLES_MAP_OVERRIDE: JSON.stringify({ 'IMS Admin': 'Tutorials Admin' }),
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('Tutorials Admin');
+    expect(result.stderr).toContain('missing');
+  });
+
+  it('dry-run logs all assignments without calling btp assign', () => {
+    writeFileSync(join(work, 'btp-roles.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        source: { subaccountId: 'sub-source' },
+        roleCollections: [{
+          sourceName: 'IMS Admin',
+          users: [
+            { user: 'user1@sap.com', origin: 'sap.default' },
+            { user: 'user2@sap.com', origin: 'sap.default' },
+          ],
+        }],
+      }));
+    const fixturePath = join(work, 'fixtures.jsonl');
+    writeFileSync(fixturePath, [
+      { match: 'target', response: { subaccountId: 'sub-target', subaccountSubdomain: 'tut', globalAccountSubdomain: 'ga' } },
+      { match: 'list security/role-collection', response: [{ name: 'Tutorials Admin' }] },
+    ].map(o => JSON.stringify(o)).join('\n'));
+    const tracePath = join(work, 'trace.jsonl');
+    const result = runScript(['import', '--dry-run'], {
+      FAKE_BTP_FIXTURE_FILE: fixturePath,
+      BTP_ROLES_MAP_OVERRIDE: JSON.stringify({ 'IMS Admin': 'Tutorials Admin' }),
+      FAKE_BTP_TRACE_FILE: tracePath,
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/\[dry-run\] would assign "Tutorials Admin" to user1@sap\.com/);
+    expect(result.stdout).toMatch(/\[dry-run\] would assign "Tutorials Admin" to user2@sap\.com/);
+    const trace = readFileSync(tracePath, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l));
+    expect(trace.find((args: string[]) => args.includes('assign'))).toBeUndefined();
+
+    // After Fix #2 (don't write log under dry-run): the log file must not exist.
+    const logPath = join(work, 'btp-roles-import.log.json');
+    expect(existsSync(logPath)).toBe(false);
+  });
+
+  it('--confirm tallies ok/already/failed correctly and exits 1 on any fail', () => {
+    writeFileSync(join(work, 'btp-roles.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        source: { subaccountId: 'sub-source' },
+        roleCollections: [{
+          sourceName: 'IMS Admin',
+          users: [
+            { user: 'user1@sap.com', origin: 'sap.default' },
+            { user: 'user2@sap.com', origin: 'sap.default' },
+            { user: 'user3@sap.com', origin: 'sap.default' },
+          ],
+        }],
+      }));
+    const fixturePath = join(work, 'fixtures.jsonl');
+    writeFileSync(fixturePath, [
+      { match: 'target', response: { subaccountId: 'sub-target', subaccountSubdomain: 'tut', globalAccountSubdomain: 'ga' } },
+      { match: 'list security/role-collection', response: [{ name: 'Tutorials Admin' }] },
+      { match: '--to-user user1@sap.com', response: 'OK', exit: 0 },
+      { match: '--to-user user2@sap.com', stderr: 'User is already a member of role collection Tutorials Admin', exit: 1 },
+      { match: '--to-user user3@sap.com', stderr: 'user not found in IDP', exit: 1 },
+    ].map(o => JSON.stringify(o)).join('\n'));
+    const result = runScript(['import', '--confirm'], {
+      FAKE_BTP_FIXTURE_FILE: fixturePath,
+      BTP_ROLES_MAP_OVERRIDE: JSON.stringify({ 'IMS Admin': 'Tutorials Admin' }),
+    });
+    expect(result.status).toBe(1);
+    const logPath = join(work, 'btp-roles-import.log.json');
+    const log = JSON.parse(readFileSync(logPath, 'utf-8'));
+    expect(log.summary).toEqual({ ok: 1, already: 1, failed: 1 });
+    expect(log.entries.find((e: any) => e.user === 'user3@sap.com').status).toBe('failed');
+  });
+});

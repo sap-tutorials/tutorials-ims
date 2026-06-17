@@ -9,9 +9,10 @@
  *   import --confirm       Actually call `btp assign ...` per assignment
  *   verify                 Re-read active subaccount, diff against the export
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import {
+  assignUser,
   getCurrentTarget,
   listRoleCollections,
   getRoleCollectionUsers,
@@ -65,6 +66,20 @@ const IMPORT_LOG = process.env.BTP_ROLES_IMPORT_LOG || '.migration-data/btp-role
 
 function isBuiltin(name) {
   return SKIP_BUILTIN_PREFIXES.some(p => name.startsWith(p));
+}
+
+function parseImportFlags(argv) {
+  const dryRun = argv.includes('--dry-run');
+  const confirm = argv.includes('--confirm');
+  if (dryRun && confirm) {
+    console.error('Pass either --dry-run or --confirm, not both.');
+    process.exit(2);
+  }
+  if (!dryRun && !confirm) {
+    console.error('Pass --dry-run to preview, or --confirm to actually write.');
+    process.exit(2);
+  }
+  return { dryRun, confirm };
 }
 
 async function main() {
@@ -133,7 +148,115 @@ async function runExport() {
     console.log(`\nSkipped ${skippedBuiltins.length} built-in BTP collections.`);
   }
 }
-async function runImport() { throw new Error('not implemented'); }
+/**
+ * Sequentially assign each user in the export to their mapped role collection
+ * on the currently-targeted subaccount.
+ *
+ * Throttled at 100 ms between calls to be polite to the BTP control plane.
+ * Wall-clock ≈ N × (CLI ~200 ms + 100 ms throttle). For N > 500 consider a
+ * pooled variant with concurrency 4–8.
+ *
+ * In `--dry-run` mode, prints `[dry-run] would assign ...` lines and skips
+ * both the actual `btp assign` call AND writing the log file. In `--confirm`
+ * mode, calls `assignUser`, classifies ok/already/failed, persists the per-call
+ * result to IMPORT_LOG, and exits 1 if any assignment failed.
+ */
+async function runAssignmentLoop(exportDoc, target, flags) {
+  const log = [];
+  let okCount = 0, alreadyCount = 0, failCount = 0;
+
+  for (const rc of exportDoc.roleCollections) {
+    const targetName = ROLE_COLLECTION_MAP[rc.sourceName];
+    for (const { user, origin } of rc.users) {
+      if (flags.dryRun) {
+        console.log(`[dry-run] would assign "${targetName}" to ${user} (origin=${origin})`);
+        log.push({ collection: targetName, user, origin, status: 'dry-run' });
+        continue;
+      }
+      const result = await assignUser(targetName, user, origin);
+      log.push({ collection: targetName, user, origin, status: result.status, message: result.message });
+      if (result.status === 'ok')      { okCount++;      console.log(`[ok]      ${targetName} ← ${user}`); }
+      else if (result.status === 'already') { alreadyCount++; console.log(`[already] ${targetName} ← ${user}`); }
+      else                              { failCount++;    console.error(`[FAIL]    ${targetName} ← ${user}: ${result.message}`); }
+      // Be polite to the BTP control plane.
+      await new Promise(r => setTimeout(r, 100));
+    }
+  }
+
+  // Summary. Real runs persist the log; dry-run does not (no mutations under
+  // .migration-data/ from a "preview" call).
+  if (!flags.dryRun) {
+    mkdirSync(dirname(IMPORT_LOG), { recursive: true });
+    writeFileSync(IMPORT_LOG, JSON.stringify({
+      importedAt: new Date().toISOString(),
+      target: { subaccountId: target.subaccountId, subaccountSubdomain: target.subaccountSubdomain },
+      flags: { dryRun: !!flags.dryRun, confirm: !!flags.confirm },
+      summary: { ok: okCount, already: alreadyCount, failed: failCount },
+      entries: log,
+    }, null, 2));
+  }
+
+  console.log(`\nImport summary (target subaccount: ${target.subaccountSubdomain || target.subaccountId})`);
+  console.log(`  Collections processed: ${exportDoc.roleCollections.length}`);
+  if (flags.dryRun) {
+    console.log(`  Dry-run lines:         ${log.length}`);
+    console.log(`  No log written (dry-run).`);
+  } else {
+    console.log(`  Assignments OK:        ${okCount}`);
+    console.log(`  Already-assigned:      ${alreadyCount}`);
+    console.log(`  Failed:                ${failCount}`);
+    console.log(`  Log written: ${IMPORT_LOG}`);
+  }
+
+  process.exit(failCount > 0 ? 1 : 0);
+}
+
+async function runImport() {
+  const flags = parseImportFlags(process.argv);
+
+  // 1. Export file exists.
+  if (!existsSync(OUTPUT_FILE)) {
+    console.error(`Export file not found: ${OUTPUT_FILE}\nRun 'export' against the source subaccount first.`);
+    process.exit(1);
+  }
+  const exportDoc = JSON.parse(readFileSync(OUTPUT_FILE, 'utf-8'));
+
+  // 2. Current btp target.
+  const target = await getCurrentTarget();
+  if (!target.subaccountId) {
+    console.error('Could not determine current btp target. Run `btp login` and `btp target -sa <id>` first.');
+    process.exit(1);
+  }
+
+  // 3. Source != target. Re-targeting safety belt.
+  if (target.subaccountId === exportDoc.source?.subaccountId) {
+    console.error(
+      `Refusing to import: target subaccount equals source subaccount (${target.subaccountId}).\n` +
+      `You're connected to the same subaccount the export came from. Re-target with \`btp target -sa <new-id>\`.`
+    );
+    process.exit(1);
+  }
+
+  // 4. Every mapped target collection exists on the target subaccount.
+  const targetCollections = await listRoleCollections();
+  const targetNames = new Set(targetCollections.map(c => c.name));
+  const missing = [];
+  for (const rc of exportDoc.roleCollections) {
+    const targetName = ROLE_COLLECTION_MAP[rc.sourceName];
+    if (!targetName) {
+      console.error(`Export contains "${rc.sourceName}" but ROLE_COLLECTION_MAP has no entry. Did the script change after export?`);
+      process.exit(1);
+    }
+    if (!targetNames.has(targetName)) missing.push(targetName);
+  }
+  if (missing.length > 0) {
+    const uniqueMissing = [...new Set(missing)].sort();
+    console.error(`Target subaccount is missing these mapped role collections:\n  - ${uniqueMissing.join('\n  - ')}\nDeploy xs-security.json or fix the mapping table.`);
+    process.exit(1);
+  }
+
+  await runAssignmentLoop(exportDoc, target, flags);
+}
 async function runVerify() { throw new Error('not implemented'); }
 
 // Allow `import` from tests without auto-running main(). On Windows the
