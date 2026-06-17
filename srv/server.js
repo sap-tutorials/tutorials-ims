@@ -15,6 +15,7 @@ import { myProgressHandler } from './lib/my-progress-handler.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
 import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, navHandler, rollbackHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler } from './lib/content-store.js';
 import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-catalog.js';
+import * as advocatesPublic from './routes/advocates-public.js';
 import { buildSystemPrompt } from './lib/chat-context.js';
 import { createRateLimiter, RateLimitError } from './lib/chat-rate-limit.js';
 import { createIpRateLimiter, ipRateLimitMiddleware } from './lib/ip-rate-limit.js';
@@ -169,6 +170,10 @@ cds.on('bootstrap', (app) => {
   });
   app.get('/build/repo-catalog', repoCatalogReadHandler);
   app.post('/build/repo-catalog', express.json({ limit: '10mb' }), contentAuthMiddleware, repoCatalogWriteHandler);
+
+  // Public read for the developer-advocates page (Task 4.4 of advocates impl).
+  // Spec: docs/superpowers/specs/2026-06-17-developer-advocates-design.md
+  advocatesPublic.register(app);
 
   // Content persistence endpoints
   app.get('/content/nav', navHandler);
