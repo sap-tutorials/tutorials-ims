@@ -21,12 +21,21 @@ sap.ui.define([
       this.getView().setModel(new JSONModel({ enabled: false, recipients: "" }), "notifConfig");
       this._loadNotificationConfig();
       this._loadUserEmail();
-      // Issue #377: hide DELETED / INACTIVE tutorials from Tutorial Health
-      // (1,359 of 2,892 tutorials on prod are DELETED, dragging in noise +
-      // missing review dates). The baseline filter is applied once after
-      // the binding initializes; both user-filter entry points
-      // (_applyFilters, onColumnFilter) layer their filters AND-combined
-      // with the baseline so it's never lost.
+      // Issue #377: hide DELETED / INACTIVE tutorials from Tutorial Health.
+      // The actual filter application happens in onAfterRendering — the
+      // table's rows-binding doesn't exist during onInit (oTable.getBinding
+      // returns undefined and the silent early-return in _applyBaselineFilter
+      // means the filter never lands). Track that we've already applied so
+      // re-renders don't re-fire it.
+      this._baselineFilterApplied = false;
+    },
+
+    onAfterRendering: function () {
+      if (this._baselineFilterApplied) { return; }
+      var oTable = this.byId("tutorialMetaTable");
+      var oBinding = oTable && oTable.getBinding("rows");
+      if (!oBinding) { return; }  // wait for next render
+      this._baselineFilterApplied = true;
       this._applyBaselineFilter();
     },
 
