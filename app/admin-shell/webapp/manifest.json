@@ -42,6 +42,7 @@
       "sap.tutorials.admin.tutorials": "./components/tutorials",
       "sap.tutorials.admin.tags": "./components/tags",
       "sap.tutorials.admin.categories": "./components/categories",
+      "sap.tutorials.admin.advocates": "./components/advocates",
       "sap.tutorials.admin.accomplishments": "./components/accomplishments",
       "sap.tutorials.admin.prizes": "./components/prizes",
       "sap.tutorials.admin.operations": "./components/operations",
@@ -95,6 +96,12 @@
       },
       "categoriesComponent": {
         "name": "sap.tutorials.admin.categories",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "advocatesComponent": {
+        "name": "sap.tutorials.admin.advocates",
         "settings": {},
         "componentData": {},
         "lazy": true
@@ -175,6 +182,7 @@
         { "name": "tutorials", "pattern": "tutorials", "target": [{"name": "tutorialsTarget", "prefix": "tu"}] },
         { "name": "tags", "pattern": "tags", "target": [{"name": "tagsTarget", "prefix": "ta"}] },
         { "name": "categories", "pattern": "categories", "target": [{"name": "categoriesTarget", "prefix": "ca"}] },
+        { "name": "advocates", "pattern": "advocates", "target": [{"name": "advocatesTarget", "prefix": "av"}] },
         { "name": "accomplishments", "pattern": "accomplishments", "target": [{"name": "accomplishmentsTarget", "prefix": "ac"}] },
         { "name": "prizes", "pattern": "prizes", "target": [{"name": "prizesTarget", "prefix": "pr"}] },
         { "name": "operations", "pattern": "operations", "target": [{"name": "operationsTarget", "prefix": "op"}] },
@@ -234,6 +242,13 @@
           "id": "categoriesTarget",
           "viewLevel": 1,
           "prefix": "ca"
+        },
+        "advocatesTarget": {
+          "type": "Component",
+          "usage": "advocatesComponent",
+          "id": "advocatesTarget",
+          "viewLevel": 1,
+          "prefix": "av"
         },
         "accomplishmentsTarget": {
           "type": "Component",
