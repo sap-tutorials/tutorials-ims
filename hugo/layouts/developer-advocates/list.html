@@ -1,0 +1,16 @@
+{{ define "main" }}
+<main id="advocates-mount"
+      data-api="/api/advocates"
+      data-photo-base="/api/advocates"></main>
+<noscript>
+  <div class="ds-noscript-fallback">
+    <p>JavaScript is required to view the advocates directory. To reach a regional team:</p>
+    <ul>
+      {{ range $.Site.Data.advocate_fallback }}
+      <li><a href="mailto:{{ .email }}">{{ .region }} ({{ .email }})</a></li>
+      {{ end }}
+    </ul>
+  </div>
+</noscript>
+<script type="module" src="{{ "/js/advocates.js" | relURL }}"></script>
+{{ end }}

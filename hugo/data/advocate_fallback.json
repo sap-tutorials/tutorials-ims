@@ -1,0 +1,5 @@
+[
+  { "region": "Americas", "email": "developer-advocates-amer@sap.com" },
+  { "region": "EMEA",     "email": "developer-advocates-emea@sap.com" },
+  { "region": "APJ",      "email": "developer-advocates-apj@sap.com"  }
+]
