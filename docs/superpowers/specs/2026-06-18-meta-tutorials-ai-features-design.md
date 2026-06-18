@@ -7,7 +7,7 @@
 
 ## Summary
 
-Build a **mission** titled *"Tutorial Platform Features for Authors"* containing four self-referential tutorials that demonstrate the platform's recently shipped AI features and new authoring syntax. Source markdown lives in a new `tutorials/` folder inside the existing `sap-tutorials/meta-tutorials` repo (currently excluded from the build). A new path-prefix filter lets that folder participate in the build pipeline while leaving the run-book and other meta-content excluded. Quiz/validation companion files live in a new `sap-tutorials/meta-tutorials-Contribution` repo. The mission is registered post-publish by a Center Admin via `/admin-ui/#missions-display`.
+Build a **mission** titled *"Tutorial Platform Features for Authors"* containing four self-referential tutorials that demonstrate the platform's recently shipped AI features and new authoring syntax. Source markdown lives in a new `tutorials/` folder inside the existing `sap-tutorials/meta-tutorials` repo (currently excluded from the build), with each tutorial in its own `tutorials/<slug>/<slug>.md` folder per platform convention. Removing `meta-tutorials` from `EXCLUDED_REPOS` is sufficient to bring the new content into the build — the discovery layer already only reads the `tutorials/` subtree, so `run-book/`, `task-interview-coach/`, and root-level files like `README.MD` remain invisible without any extra filter. Quiz/validation companion files live in a new `sap-tutorials/meta-tutorials-Contribution` repo with the same folder-per-slug layout. The mission is registered post-publish by a Center Admin via `/admin-ui/#missions-display`.
 
 These tutorials are simultaneously (a) a copy-pasteable reference for authors learning the syntax, linked from [docs/authors/writing-tutorials.md](../../authors/writing-tutorials.md), and (b) live demonstrations of the features at developers.sap.com. The worked subject matter is tutorial-authoring itself, so each tutorial's quiz / code-check / generated questions are *about* the platform feature being demonstrated.
 
@@ -40,30 +40,37 @@ Approach C, the chosen path, **adds a folder-scoped allowlist** to keep `meta-tu
 ## Architecture
 
 ```text
-sap-tutorials/meta-tutorials/                    (existing repo)
-├── README.MD                                    (unchanged, NOT fetched)
-├── run-book/                                    (unchanged, NOT fetched)
-├── task-interview-coach/                        (unchanged, NOT fetched)
-└── tutorials/                                   (NEW — fetched into Hugo build)
-    ├── use-codecheck-to-ai-grade-reader-code.md
+sap-tutorials/meta-tutorials/                                          (existing repo)
+├── README.MD                                                          (unchanged, NOT fetched)
+├── run-book/                                                          (unchanged, NOT fetched — sibling of tutorials/)
+├── task-interview-coach/                                              (unchanged, NOT fetched — sibling of tutorials/)
+└── tutorials/                                                         (NEW — fetched)
     ├── use-codecheck-to-ai-grade-reader-code/
+    │   ├── use-codecheck-to-ai-grade-reader-code.md
     │   ├── 001-rules-vr-overview.png
     │   └── 002-codecheck-grading-result.png
-    ├── use-validate-to-ai-grade-free-text-answers.md
     ├── use-validate-to-ai-grade-free-text-answers/
+    │   ├── use-validate-to-ai-grade-free-text-answers.md
     │   └── 001-text-answer-feedback.png
-    ├── use-autoauthor-to-generate-quiz-questions.md
     ├── use-autoauthor-to-generate-quiz-questions/
+    │   ├── use-autoauthor-to-generate-quiz-questions.md
     │   └── 001-build-time-generation.png
-    └── tutorial-platform-feature-cookbook.md
+    └── tutorial-platform-feature-cookbook/
+        └── tutorial-platform-feature-cookbook.md
+        (no images — all-text demo)
 
-sap-tutorials/meta-tutorials-Contribution/       (NEW repo, parallels meta-tutorials)
+sap-tutorials/meta-tutorials-Contribution/                             (NEW repo, parallels meta-tutorials)
 └── tutorials/
-    ├── use-codecheck-to-ai-grade-reader-code.rules.vr
-    ├── use-validate-to-ai-grade-free-text-answers.rules.vr
-    └── use-autoauthor-to-generate-quiz-questions.rules.vr
+    ├── use-codecheck-to-ai-grade-reader-code/
+    │   └── rules.vr
+    ├── use-validate-to-ai-grade-free-text-answers/
+    │   └── rules.vr
+    └── use-autoauthor-to-generate-quiz-questions/
+        └── rules.vr
     (cookbook has no rules.vr — auto_validation: false)
 ```
+
+The folder-per-slug layout matches the platform convention enforced by [scripts/parsers/github.ts:445](../../../scripts/parsers/github.ts#L445) (`entries.filter(e => e.type === 'tree')`) and the fetch URL at [scripts/fetch-tutorials.ts:135](../../../scripts/fetch-tutorials.ts#L135) (`tutorials/<slug>/<slug>.md`). The contribution-repo `rules.vr` lookup at [scripts/parsers/github.ts:774](../../../scripts/parsers/github.ts#L774) (`tutorials/<slug>/rules.vr`) mirrors this shape.
 
 ### Mission registration (post-publish)
 
@@ -81,30 +88,31 @@ The mission itself is a `Missions` row in HANA, created via `/admin-ui/#missions
 
 Mission slugs are subject to the same `@assert.unique.slug` constraint as tutorial slugs ([project_fix_duplicate_slugs]). The chosen slug is unlikely to collide but the constraint will surface any conflict at insert time.
 
-## Pipeline change: folder-scoped allowlist
+## Pipeline change
 
-The single substantive code change is in [scripts/parsers/github.ts](../../../scripts/parsers/github.ts).
+The single substantive code change is one line in [scripts/parsers/github.ts](../../../scripts/parsers/github.ts).
 
 **Current state** (line 25):
+
 ```ts
 export const EXCLUDED_REPOS = new Set(['tutorials-ims', 'meta-tutorials'])
 ```
 
-`meta-tutorials` is currently excluded wholesale; both `discoverAllTutorials` paths (lines 432 and 483) skip it.
-
 **Target state:**
+
 ```ts
 export const EXCLUDED_REPOS = new Set(['tutorials-ims'])
-export const REPO_PATH_FILTERS: Record<string, RegExp> = {
-  // meta-tutorials hosts admin run-books and tutorial-system meta-skills.
-  // Only the tutorials/ subfolder participates in the public tutorial build.
-  'meta-tutorials': /^tutorials\//,
-}
 ```
 
-Every code path that today skips a repo via `EXCLUDED_REPOS.has(...)` is augmented with: when the repo has a path filter, also skip any file whose path doesn't match the filter regex. The two relevant call sites are inside the `for (const repo of repos)` loops at [scripts/parsers/github.ts:432](../../../scripts/parsers/github.ts#L432) and [scripts/parsers/github.ts:483](../../../scripts/parsers/github.ts#L483); both iterate per-file inside the repo and need to consult `REPO_PATH_FILTERS[repo.name]` before deciding to enqueue a file.
+That's the entire change. No new filter machinery is needed because the discovery layer already only reads the `tutorials/` subtree of each repo:
 
-The `<repo>-Contribution` resolver already keys off the base repo name, so `meta-tutorials-Contribution` is automatically picked up as the source of `rules.vr` files for tutorials sourced from `meta-tutorials/tutorials/`.
+- The GraphQL discovery path queries `object(expression: "HEAD:tutorials")` ([scripts/parsers/github.ts:397](../../../scripts/parsers/github.ts#L397)) — sibling content like `run-book/`, `task-interview-coach/`, `README.MD`, `LICENSE.txt` is never visible.
+- The REST discovery path requests `/contents/tutorials` ([scripts/parsers/github.ts:495](../../../scripts/parsers/github.ts#L495)) — same property.
+- Both then `entries.filter(e => e.type === 'tree')` (line 445 / 503), so only **subdirectories** of `tutorials/` are enqueued. A stray top-level file in `tutorials/` would also be ignored.
+
+The `<repo>-Contribution` resolver at [scripts/parsers/github.ts:774](../../../scripts/parsers/github.ts#L774) already keys off the base repo name, so `meta-tutorials-Contribution` is automatically picked up as the source of `rules.vr` files for tutorials sourced from `meta-tutorials/tutorials/`.
+
+**Why "no filter is good enough" is safe.** The only way unintended content from `meta-tutorials` could ship to production after this change is if someone added a directory under `meta-tutorials/tutorials/` that wasn't an actual tutorial. The same risk exists today for every repo in `sap-tutorials/*` — the platform relies on repos under that org being tutorial-shaped by convention. No new control needed for `meta-tutorials` specifically.
 
 ## Tutorial-by-tutorial content
 
@@ -196,7 +204,7 @@ The free-text grader has no separate enable-flag — it inherits the same enable
 1. **Hugo build** — `npm run build:all` must complete with no errors against the new tutorials.
 2. **`npm run lint:tutorial-markdown`** — markdown linter ([project_tutorial_markdown_lint]) passes on each file.
 3. **rules.vr parses cleanly** — `parseRulesVrEnriched` covers this; malformed rules.vr fails the build.
-4. **github.ts unit test** — new test exercises the path filter: `meta-tutorials/README.MD` excluded; `meta-tutorials/tutorials/foo.md` included.
+4. **github.ts unit test** — new test asserts that with the `EXCLUDED_REPOS` change, a fixture repo named `meta-tutorials` containing `tutorials/foo/`, `tutorials/bar/` directories yields the expected slug list. Documents the discovery contract in tests so future refactors can't silently re-exclude the repo.
 5. **Live deploy validation history** — added to the tutorials-ims PR per [feedback_default_off_flags_need_live_smoke]:
 
 | Tutorial | "Did it work?" check on DEV |
@@ -212,8 +220,8 @@ The free-text grader has no separate enable-flag — it inherits the same enable
 
 | File | Change |
 |------|--------|
-| [scripts/parsers/github.ts](../../../scripts/parsers/github.ts) | Remove `'meta-tutorials'` from `EXCLUDED_REPOS`; add `REPO_PATH_FILTERS` map; apply filter in both `discoverAllTutorials` paths (lines ~432 and ~483). |
-| `scripts/parsers/__tests__/github.test.ts` | Add unit test exercising the filter: meta-tutorials root files (README.MD, run-book/*) excluded; `tutorials/*.md` included. |
+| [scripts/parsers/github.ts](../../../scripts/parsers/github.ts) | Remove `'meta-tutorials'` from `EXCLUDED_REPOS` (one-line change at line 25). |
+| `scripts/parsers/__tests__/github.test.ts` | Add unit test exercising the discovery filter against a fixture: a repo named `meta-tutorials` with `tutorials/<slug>/` subdirectories yields one `DiscoveredTutorial` per slug. (Sibling content like `run-book/` is invisible to the discovery query in the first place — the test asserts the slugs that ARE found, not the ones that aren't.) |
 | [docs/authors/writing-tutorials.md](../../authors/writing-tutorials.md) | Add "Live examples" callout at top of §3 linking to all 4 tutorial URLs. |
 | [.github/workflows/rebuild-content.yml](../../../.github/workflows/rebuild-content.yml) | Add `AI_AUTHOR_ENABLED=true` and `AI_AUTHOR_BUILD_CAP=50` to env block. |
 | `docs/superpowers/specs/2026-06-18-meta-tutorials-ai-features-design.md` | This spec. |
@@ -240,11 +248,12 @@ Repo creation (one-time) + 3 rules.vr files (cookbook has none).
 ## Risks and open questions
 
 1. **AUTOAUTHOR cache stability** — if the runtime model changes between writing the spec and merge, auto-generated questions for Tutorial 3 shift. Mitigation: accept drift and call it out in the tutorial body itself ("the questions you see may differ from these screenshots if the model has been updated"). Consistent with the design of [project_208_ai_authored_quizzes_shipped].
-2. **`auto_validation: false` on the cookbook** — confirm that omitting (or setting false) `auto_validation` doesn't trigger a `404` on `<slug>.rules.vr` fetch. From `fetchRulesVr`'s null-on-miss behavior, this should be benign — but worth a smoke check during implementation.
+2. **`auto_validation: false` on the cookbook** — confirmed safe: mission completion is tracked per-tutorial via TaskRecord, independent of whether the tutorial has a quiz. The cookbook completes on reaching its last step. `fetchRulesVr` returns null on miss, so the cookbook's missing rules.vr file is benign.
 3. **Mission slug collision** — `tutorial-platform-features-for-authors` is unlikely to collide; `@assert.unique.slug` constraint will catch it at insert time if it does.
-4. **Existing meta-tutorials content tripping the build** — the new filter excludes `README.MD` and `run-book/`, but anything else under `tutorials/` would auto-fetch. Since we're creating that folder fresh, low risk. Monitor the next CI run for unexpected fetched files.
+4. **Existing meta-tutorials content tripping the build** — discovery only reads the `tutorials/` subtree, so siblings (`run-book/`, `task-interview-coach/`, `README.MD`, `LICENSE.txt`) are invisible without any new filter. The only risk path is a directory under `tutorials/` that isn't actually tutorial-shaped — same risk as exists today for every other repo in the org. Monitor the next CI run for unexpected fetched slugs from `meta-tutorials`.
 5. **Tag presence** — `software-product-function>sap-developer-center` may not exist in the platform's tag taxonomy. Verify before mission creation; fall back to `software-product>sap-business-technology-platform` or omit the secondary tag if no exact match.
 6. **Self-referential maintenance** — these tutorials describe platform syntax. If syntax changes, they go stale. They should be linked from author docs as living examples and updated when those docs change. Add a one-line note in the cookbook's intro that the tutorial set is co-maintained with [writing-tutorials.md](../../authors/writing-tutorials.md).
+7. **BRANCH_BEGIN inside the cookbook tutorial** — branched-tutorials syntax is explicitly designed for step-level branches *within* one tutorial ([docs/authors/branched-tutorials.md](../../authors/branched-tutorials.md)). Cookbook step 3 creating a 2-key branch group is in scope of the feature; the branch picker UX renders independently of any mission-level alt-group. Confirm at smoke-test time.
 
 ## References
 
