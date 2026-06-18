@@ -92,11 +92,14 @@ space is the single most-common foot-gun on this codebase; double-check.
 ```bash
 cf target -o <org> -s <space>
 
-# The -t "hana" tag is REQUIRED. Without it, @sap/hdi-deploy's grants
-# plug-in does not recognise this user-provided service as a HANA-backed
-# grantor and the HDI deploy fails with a confusing "no grantor service
-# bound" error rather than honouring the binding from mta.yaml.
-cf cups tutorials-kg-grantor -t "hana" -p '{
+# The -t "hana,password" tags are REQUIRED — both of them. The `hana` tag
+# tells @sap/hdi-deploy's grants plug-in this is a HANA-backed grantor;
+# the `password` tag tells it this is a basic-auth (user/password)
+# binding rather than a certificate-based one. Without BOTH, the HDI
+# deploy fails with a confusing "no grantor service bound" /
+# "missing required tags" error rather than honouring the binding from
+# mta.yaml. Tag spelling is comma-separated, no spaces.
+cf cups tutorials-kg-grantor -t "hana,password" -p '{
   "user":     "TUTORIALS_KG_GRANTOR",
   "password": "<password>",
   "host":     "<hana-host>",
@@ -111,7 +114,7 @@ For the QA grantor (in the same or a different space, depending on your
 deployment topology):
 
 ```bash
-cf cups tutorials-kg-grantor-qa -t "hana" -p '{
+cf cups tutorials-kg-grantor-qa -t "hana,password" -p '{
   "user":     "TUTORIALS_KG_GRANTOR_QA",
   "password": "<password-qa>",
   "host":     "<hana-host-qa>",
@@ -122,12 +125,12 @@ cf cups tutorials-kg-grantor-qa -t "hana" -p '{
 }'
 ```
 
-> **If you already created the services without `-t "hana"`** (or with a
+> **If you already created the services without `-t "hana,password"`** (or with a
 > minimal credentials shape), update them in place instead of recreating:
 >
 > ```bash
-> cf uups tutorials-kg-grantor    -t "hana" -p '{ ...same JSON as above... }'
-> cf uups tutorials-kg-grantor-qa -t "hana" -p '{ ...same JSON as above... }'
+> cf uups tutorials-kg-grantor    -t "hana,password" -p '{ ...same JSON as above... }'
+> cf uups tutorials-kg-grantor-qa -t "hana,password" -p '{ ...same JSON as above... }'
 > ```
 >
 > The HDI deployer reads tags + credentials at deploy time, so a fresh
@@ -206,9 +209,9 @@ or per your org's password-rotation policy):
 ALTER USER TUTORIALS_KG_GRANTOR PASSWORD <new-strong-password> NO FORCE_FIRST_PASSWORD_CHANGE;
 
 # 2. Update the user-provided service binding in CF.
-#    Re-pass `-t "hana"` and the full credentials shape — `cf uups` overwrites,
+#    Re-pass `-t "hana,password"` and the full credentials shape — `cf uups` overwrites,
 #    not merges, so omitting either drops it from the binding.
-cf uups tutorials-kg-grantor -t "hana" -p '{
+cf uups tutorials-kg-grantor -t "hana,password" -p '{
   "user":     "TUTORIALS_KG_GRANTOR",
   "password": "<new-strong-password>",
   "host":     "<hana-host>",
@@ -303,7 +306,7 @@ look like a HANA service, or the deploy succeeds but no privileges are
 actually granted to `default_access_role` (probe still exits 2).
 
 Root cause: the user-provided service was created with `cf cups` but
-without `-t "hana"`, or without the full HANA credentials shape (missing
+without `-t "hana,password"`, or without the full HANA credentials shape (missing
 `driver` / `url`). The grants plug-in looks for the `hana` tag to
 identify HANA-backed grantors and inspects the credentials JSON for
 JDBC connection fields.
@@ -311,7 +314,7 @@ JDBC connection fields.
 Fix without recreating:
 
 ```bash
-cf uups tutorials-kg-grantor -t "hana" -p '{
+cf uups tutorials-kg-grantor -t "hana,password" -p '{
   "user":     "TUTORIALS_KG_GRANTOR",
   "password": "<password>",
   "host":     "<hana-host>",
