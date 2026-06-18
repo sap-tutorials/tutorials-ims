@@ -69,60 +69,61 @@ Expected: tests use `import { describe, it, expect, beforeAll } from 'vitest'`; 
 
 - [ ] **Step 1.2: Write the contract-pin test (RED)**
 
+The contract pin uses `Advocates`, annotated `@changelog` directly at the DB level in [`db/change-tracking.cds`](../../../db/change-tracking.cds). That removes any service-vs-DB ambiguity — direct DB-level INSERTs fire the SQLite trigger that the plugin deploys at `served`.
+
+The test scaffolding pattern follows the project's existing convention (e.g. [`test/unit/advocates/api.test.js:6`](../../../test/unit/advocates/api.test.js)): `const project = cds.test('serve', '--project', '.', '--in-memory');` returning a handle whose `.url` field exposes the running srv. Auth user `admin:admin` is defined in `.cdsrc.json` with role `Admin`.
+
 Create `test/unit/migration-mode.test.js`:
 
 ```js
 import cds from '@sap/cds';
 import { describe, it, expect, beforeAll } from 'vitest';
 
-cds.test(import.meta.dirname + '/../..');
+const project = cds.test('serve', '--project', '.', '--in-memory');
 
 describe('change-tracking ct.skip session variable contract', () => {
-  let db, AdminMissions, Changes;
+  let Advocates, Changes;
 
   beforeAll(async () => {
-    db = await cds.connect.to('db');
-    const admin = await cds.connect.to('AdminService');
-    AdminMissions = admin.entities.Missions;
+    await cds.connect.to('db');
+    ({ Advocates } = cds.entities('com.sap.developers.ims'));
     // The plugin auto-deploys the changelog entity; canonical name:
     Changes = cds.entities['sap.changelog.Changes'];
   });
 
   it('sets ct.skip="true" via tx.set → no Changes row inserted on @changelog entity', async () => {
-    const before = await SELECT.one`count(*) as n`.from(Changes);
-    const beforeN = Number(before?.n ?? 0);
+    const before = Number((await SELECT.one`count(*) as n`.from(Changes))?.n ?? 0);
 
     await cds.tx({ user: new cds.User.Privileged() }, async (tx) => {
       tx.set({ 'ct.skip': 'true' });
-      await tx.run(INSERT.into(AdminMissions).entries({
+      await tx.run(INSERT.into(Advocates).entries({
         ID: cds.utils.uuid(),
-        title: '__TEST__ ct-skip pin',
         slug: '__test__-ct-skip-pin-' + Date.now(),
+        firstName: '__TEST__',
+        lastName: 'CtSkipPin',
+        region: 'AMERICAS',
       }));
     });
 
-    const after = await SELECT.one`count(*) as n`.from(Changes);
-    const afterN = Number(after?.n ?? 0);
-
-    expect(afterN - beforeN).toBe(0);
+    const after = Number((await SELECT.one`count(*) as n`.from(Changes))?.n ?? 0);
+    expect(after - before).toBe(0);
   });
 
   it('without ct.skip → at least one Changes row appears (control)', async () => {
-    const before = await SELECT.one`count(*) as n`.from(Changes);
-    const beforeN = Number(before?.n ?? 0);
+    const before = Number((await SELECT.one`count(*) as n`.from(Changes))?.n ?? 0);
 
     await cds.tx({ user: new cds.User.Privileged() }, async (tx) => {
-      await tx.run(INSERT.into(AdminMissions).entries({
+      await tx.run(INSERT.into(Advocates).entries({
         ID: cds.utils.uuid(),
-        title: '__TEST__ ct control',
         slug: '__test__-ct-control-' + Date.now(),
+        firstName: '__TEST__',
+        lastName: 'CtControl',
+        region: 'AMERICAS',
       }));
     });
 
-    const after = await SELECT.one`count(*) as n`.from(Changes);
-    const afterN = Number(after?.n ?? 0);
-
-    expect(afterN).toBeGreaterThan(beforeN);
+    const after = Number((await SELECT.one`count(*) as n`.from(Changes))?.n ?? 0);
+    expect(after).toBeGreaterThan(before);
   });
 });
 ```
@@ -153,40 +154,41 @@ git commit -m "test: pin @cap-js/change-tracking ct.skip session-variable contra
 
 - [ ] **Step 2.1: Add handler-behavior test cases (RED)**
 
-Append to `test/unit/migration-mode.test.js` a new `describe` block. The handler is registered globally by `srv/server.js` `served` hook — `cds.test()` already invokes the served lifecycle, so by the time these tests run the handler is wired.
+Append a new `describe` block to `test/unit/migration-mode.test.js`. The handler is registered globally by `srv/server.js` `served` hook — `cds.test('serve', ...)` already invokes the served lifecycle, so by the time these tests run the handler is wired.
+
+The tests POST to `/admin/Advocates` (DB-level `@changelog`-tracked, plus exposed by the AdminService — see [`srv/admin-service.cds`](../../../srv/admin-service.cds)). Auth uses `admin:admin` from `.cdsrc.json` — the user has the `Admin` role required for the gate.
 
 ```js
-import express from 'express';
-// ... add to imports at top of file
-
 describe('migration-mode handler — header gate', () => {
-  let admin, srvUrl, Changes;
+  let srvUrl;
+  let Changes;
+  const ADMIN_AUTH = 'Basic ' + Buffer.from('admin:admin').toString('base64');
 
   beforeAll(async () => {
     Changes = cds.entities['sap.changelog.Changes'];
-    // cds.test exposes the running srv URL via `cds.test().port` after start
-    srvUrl = `http://localhost:${cds.test.port || 4004}`;
+    srvUrl = project.url; // captured at top of file from cds.test('serve', ...)
   });
 
-  async function postMission({ headers = {}, slugSuffix }) {
-    return fetch(`${srvUrl}/admin/Missions`, {
+  async function postAdvocate({ headers = {}, slugSuffix }) {
+    return fetch(`${srvUrl}/admin/Advocates`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // Privileged auth: cds.test mock-auths if no XSUAA bound
-        Authorization: 'Basic ' + Buffer.from('admin:').toString('base64'),
+        Authorization: ADMIN_AUTH,
         ...headers,
       },
       body: JSON.stringify({
-        title: '__TEST__ handler ' + slugSuffix,
         slug: '__test__-handler-' + slugSuffix,
+        firstName: '__TEST__',
+        lastName: 'Handler',
+        region: 'AMERICAS',
       }),
     });
   }
 
   it('header present + Admin role → 0 Changes rows', async () => {
     const before = Number((await SELECT.one`count(*) as n`.from(Changes))?.n ?? 0);
-    const r = await postMission({ headers: { 'x-migration-mode': 'true' }, slugSuffix: 'admin-' + Date.now() });
+    const r = await postAdvocate({ headers: { 'x-migration-mode': 'true' }, slugSuffix: 'admin-' + Date.now() });
     expect(r.ok).toBe(true);
     const after = Number((await SELECT.one`count(*) as n`.from(Changes))?.n ?? 0);
     expect(after - before).toBe(0);
@@ -194,7 +196,7 @@ describe('migration-mode handler — header gate', () => {
 
   it('header absent → Changes rows recorded (control)', async () => {
     const before = Number((await SELECT.one`count(*) as n`.from(Changes))?.n ?? 0);
-    const r = await postMission({ slugSuffix: 'noheader-' + Date.now() });
+    const r = await postAdvocate({ slugSuffix: 'noheader-' + Date.now() });
     expect(r.ok).toBe(true);
     const after = Number((await SELECT.one`count(*) as n`.from(Changes))?.n ?? 0);
     expect(after).toBeGreaterThan(before);
@@ -202,7 +204,7 @@ describe('migration-mode handler — header gate', () => {
 
   it('header value other than "true" → ignored (changes recorded)', async () => {
     const before = Number((await SELECT.one`count(*) as n`.from(Changes))?.n ?? 0);
-    const r = await postMission({ headers: { 'x-migration-mode': 'false' }, slugSuffix: 'false-' + Date.now() });
+    const r = await postAdvocate({ headers: { 'x-migration-mode': 'false' }, slugSuffix: 'false-' + Date.now() });
     expect(r.ok).toBe(true);
     const after = Number((await SELECT.one`count(*) as n`.from(Changes))?.n ?? 0);
     expect(after).toBeGreaterThan(before);
@@ -310,7 +312,7 @@ Add inside `cds.on('served', async () => { ... })` (after the navigator-cache bl
 Run: `npx vitest run test/unit/migration-mode.test.js`
 Expected: ALL tests pass (contract pins + handler-gate tests).
 
-If "header present + Admin → 0 Changes rows" still fails: the auth-mock pattern in `cds.test()` may not assign the `Admin` role. Check by adding a temporary `console.log(cds.context?.user)` inside `migrationModeRequested()`. The fix is usually to use `Authorization: 'Basic ' + Buffer.from('alice:').toString('base64')` where `alice` is in the project's `.cdsrc.json` mocked-users with the `Admin` role — read `.cdsrc.json` / `package.json` `cds.requires.auth.users` to confirm the right username. Adjust the test accordingly.
+If "header present + Admin → 0 Changes rows" still fails: the auth-mock pattern in `cds.test()` may not have authenticated as `admin`. Check by adding a temporary `console.log(cds.context?.user?.id, cds.context?.user?.roles)` inside `migrationModeRequested()`. The user must be `admin` (from `.cdsrc.json`) with role `Admin`. Confirm the basic-auth header is `'Basic ' + Buffer.from('admin:admin').toString('base64')` (the password is required — the project's `.cdsrc.json` sets `password: 'admin'`).
 
 - [ ] **Step 2.6: Commit**
 
@@ -415,7 +417,13 @@ Three header sites:
 
 - [ ] **Step 4.1: Inspect existing hybrid test scaffolding**
 
-Read `test/hybrid/_guard.js` and one short existing hybrid test (e.g. `test/hybrid/duplicate-slugs.test.js`) to match the pattern: `ALLOW_HYBRID_WRITES` env gate, `__TEST__` prefix on test data, `afterAll` cleanup.
+Read [`test/hybrid/_guard.js`](../../../test/hybrid/_guard.js) and a short existing hybrid test (e.g. [`test/hybrid/admin-crud.test.js`](../../../test/hybrid/admin-crud.test.js)) to match the project's actual pattern:
+
+- Named import: `import { isSafeForWrites } from './_guard.js';`
+- Gated describe: `describe.runIf(isSafeForWrites())('...', () => { ... })`
+- Entities accessed via the function-call form: `const { Foo } = cds.entities('com.sap.developers.ims');`
+- `cds.test('serve', ...)` returns a project handle; use `project.url` rather than guessing a port.
+- `__TEST__` prefix on test data + `afterAll` cleanup.
 
 - [ ] **Step 4.2: Write the hybrid test**
 
@@ -424,31 +432,29 @@ Create `test/hybrid/migration-mode.test.js`:
 ```js
 import cds from '@sap/cds';
 import { describe, it, expect, afterAll, beforeAll } from 'vitest';
-import './_guard.js';
+import { isSafeForWrites } from './_guard.js';
 
-cds.test(import.meta.dirname + '/../..');
+const project = cds.test('serve', '--project', '.', '--profile', 'hybrid');
 
 const TEST_PREFIX = '__TEST__ migration-mode ';
+const ADMIN_AUTH = 'Basic ' + Buffer.from('admin:admin').toString('base64');
 
-describe('migration-mode handler — HANA session-context contract', () => {
-  let srvUrl, headers, createdIds = [];
+describe.runIf(isSafeForWrites())('migration-mode handler — HANA session-context contract', () => {
+  let createdIds = [];
 
-  beforeAll(() => {
-    srvUrl = `http://localhost:${cds.test.port || 4004}`;
-    headers = (extra = {}) => ({
+  function buildHeaders(extra = {}) {
+    return {
       'Content-Type': 'application/json',
-      // Replace with the project's hybrid-admin auth pattern; use
-      // `cf bind --exec` mocked tokens or basic-auth as configured.
-      Authorization: 'Basic ' + Buffer.from('admin:').toString('base64'),
+      Authorization: ADMIN_AUTH,
       ...extra,
-    });
-  });
+    };
+  }
 
   afterAll(async () => {
     if (!createdIds.length) return;
     const db = await cds.connect.to('db');
-    const Missions = cds.entities['com.sap.developers.ims'].Missions;
-    await db.run(DELETE.from(Missions).where({ ID: { in: createdIds } }));
+    const { Advocates } = cds.entities('com.sap.developers.ims');
+    await db.run(DELETE.from(Advocates).where({ ID: { in: createdIds } }));
   });
 
   it('with x-migration-mode header → 0 Changes rows on HANA', async () => {
@@ -456,10 +462,15 @@ describe('migration-mode handler — HANA session-context contract', () => {
     const before = Number((await SELECT.one`count(*) as n`.from(Changes))?.n ?? 0);
 
     const slug = '__test__-mig-' + Date.now();
-    const r = await fetch(`${srvUrl}/admin/Missions`, {
+    const r = await fetch(`${project.url}/admin/Advocates`, {
       method: 'POST',
-      headers: headers({ 'x-migration-mode': 'true' }),
-      body: JSON.stringify({ title: TEST_PREFIX + 'with-header', slug }),
+      headers: buildHeaders({ 'x-migration-mode': 'true' }),
+      body: JSON.stringify({
+        slug,
+        firstName: TEST_PREFIX + 'with-header',
+        lastName: 'Hybrid',
+        region: 'AMERICAS',
+      }),
     });
     expect(r.ok).toBe(true);
     const created = await r.json();
@@ -474,10 +485,15 @@ describe('migration-mode handler — HANA session-context contract', () => {
     const before = Number((await SELECT.one`count(*) as n`.from(Changes))?.n ?? 0);
 
     const slug = '__test__-mig-control-' + Date.now();
-    const r = await fetch(`${srvUrl}/admin/Missions`, {
+    const r = await fetch(`${project.url}/admin/Advocates`, {
       method: 'POST',
-      headers: headers(),
-      body: JSON.stringify({ title: TEST_PREFIX + 'no-header', slug }),
+      headers: buildHeaders(),
+      body: JSON.stringify({
+        slug,
+        firstName: TEST_PREFIX + 'no-header',
+        lastName: 'Hybrid',
+        region: 'AMERICAS',
+      }),
     });
     expect(r.ok).toBe(true);
     const created = await r.json();
@@ -493,9 +509,12 @@ describe('migration-mode handler — HANA session-context contract', () => {
 
 Run: `cf target` to confirm DEV space, then:
 ```bash
-ALLOW_HYBRID_WRITES=true npx cds bind --exec -- npx vitest run test/hybrid/migration-mode.test.js
+npx cds bind --exec -- npx vitest run test/hybrid/migration-mode.test.js
 ```
-Expected: both tests pass against real HANA. If the auth header form differs from what hybrid tests use, replace the `Authorization` value with whatever pattern the existing hybrid tests use.
+
+The actual write gate is [`isSafeForWrites()`](../../../test/hybrid/_guard.js) — it inspects `NODE_ENV`, `VCAP_SERVICES`, and `CF_TARGET_SPACE` and skips the suite when the bound space looks like prod. The previous draft of this plan suggested an `ALLOW_HYBRID_WRITES=true` prefix; that env var isn't read by the guard and is unnecessary here.
+
+Expected: both tests pass against the bound DEV HANA. If auth fails in CI, check whether the hybrid lane uses a different mocked-user pattern and align the `ADMIN_AUTH` constant.
 
 - [ ] **Step 4.4: Commit**
 
