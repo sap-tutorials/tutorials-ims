@@ -6,6 +6,48 @@ import { processUpload, _resetCache } from '../../../srv/lib/advocate-photo-stor
 const project = cds.test('serve', '--project', '.', '--in-memory');
 const adminAuth = { auth: { username: 'admin', password: 'admin' } };
 
+// Seed the advocates these tests reference. CSVs were removed from
+// db/data so prod deploys don't clobber admin edits — tests own their
+// fixtures from here on.
+beforeAll(async () => {
+  const db = await cds.connect.to('db');
+  const { Advocates, AdvocateLinks } = cds.entities('com.sap.developers.ims');
+  const existing = await db.run(SELECT.from(Advocates).columns('slug'));
+  const slugs = new Set(existing.map((r) => r.slug));
+  const rows = [];
+  if (!slugs.has('thomas-jung')) {
+    rows.push({
+      ID: 'ADC00001-0000-0000-0000-000000000001',
+      slug: 'thomas-jung',
+      firstName: 'Thomas', lastName: 'Jung',
+      title: 'Chief Developer Advocate',
+      pronouns: 'he/him', location: 'Houston, TX',
+      region: 'AMERICAS', isActive: true,
+      bio: 'Builds CAP samples and decommissions Java IMS one endpoint at a time.',
+    });
+  }
+  if (!slugs.has('placeholder-emea')) {
+    rows.push({
+      ID: 'ADC00001-0000-0000-0000-000000000002',
+      slug: 'placeholder-emea',
+      firstName: 'Placeholder', lastName: 'EMEA',
+      title: 'Developer Advocate (EMEA)',
+      region: 'EMEA', isActive: true,
+    });
+  }
+  if (rows.length) {
+    await db.run(INSERT.into(Advocates).entries(rows));
+    await db.run(INSERT.into(AdvocateLinks).entries(rows.map((r, i) => ({
+      ID: 'ADL00001-0000-0000-0000-00000000000' + (i + 1),
+      advocate_ID: r.ID,
+      kind: 'LinkedIn',
+      url: 'https://www.linkedin.com/in/' + r.slug,
+      label: 'LinkedIn',
+      sortOrder: 100,
+    }))));
+  }
+});
+
 describe('Advocates admin handlers', () => {
   afterAll(async () => {
     const db = await cds.connect.to('db');

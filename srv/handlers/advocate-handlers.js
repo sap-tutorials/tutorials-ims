@@ -116,4 +116,92 @@ export function register(srv) {
       r.photoIconUrl = '/api/advocates/' + encodeURIComponent(r.slug) + '/photo' + v;
     }
   });
+
+  // Bound action: uploadPhoto. Admins call this from the Object Page
+  // (or via $batch) with base64-encoded photo bytes + a MIME type. We
+  // run the same sharp pipeline the public path uses, upsert the
+  // AdvocatePhotos row directly, and stamp hasPhoto + photoUpdatedAt
+  // so the public /api/advocates JSON immediately surfaces the photo.
+  //
+  // Why a bound action (not the Fiori UploadSet on the photo composition):
+  // the draft-enabled `Composition of one` whose key IS the parent
+  // association doesn't carry uploaded bytes through to our before-CREATE
+  // handler — the upload silently drops on activation. This action is
+  // the direct, working path.
+  srv.on('uploadPhoto', Advocates, async (req) => {
+    const advocateID = req.params?.[0]?.ID || req.params?.[0];
+    if (!advocateID) {
+      return req.error(400, 'uploadPhoto: missing advocate key in path');
+    }
+    const { photoBase64, mimeType } = req.data || {};
+    if (!photoBase64 || typeof photoBase64 !== 'string') {
+      return req.error(400, 'uploadPhoto: photoBase64 (string) is required');
+    }
+    let buffer;
+    try {
+      // Strip optional `data:image/...;base64,` prefix if a browser sent it.
+      const cleaned = photoBase64.replace(/^data:[^,]+,/, '');
+      buffer = Buffer.from(cleaned, 'base64');
+    } catch {
+      return req.error(400, 'uploadPhoto: photoBase64 must be valid base64');
+    }
+    let processed;
+    try {
+      processed = await processUpload(buffer, mimeType || 'image/jpeg');
+    } catch (e) {
+      return req.error(400, 'uploadPhoto: ' + e.message);
+    }
+    const db = await cds.connect.to('db');
+    const now = new Date().toISOString();
+    const { AdvocatePhotos: AP } = cds.entities('com.sap.developers.ims');
+    const existing = await db.run(
+      SELECT.one.from(AP).columns('advocate_ID').where({ advocate_ID: advocateID }),
+    );
+    if (existing) {
+      await db.run(
+        UPDATE(AP).set({
+          photo256: processed.photo256,
+          photo64: processed.photo64,
+          photoMimeType: processed.photoMimeType,
+          sha256: processed.sha256,
+          sizeBytes: processed.sizeBytes,
+          uploadedAt: now,
+        }).where({ advocate_ID: advocateID }),
+      );
+    } else {
+      await db.run(
+        INSERT.into(AP).entries({
+          advocate_ID: advocateID,
+          photo256: processed.photo256,
+          photo64: processed.photo64,
+          photoMimeType: processed.photoMimeType,
+          sha256: processed.sha256,
+          sizeBytes: processed.sizeBytes,
+          uploadedAt: now,
+        }),
+      );
+    }
+    await db.run(
+      UPDATE(Advocates).set({ hasPhoto: true, photoUpdatedAt: now }).where({ ID: advocateID }),
+    );
+    // Return the refreshed advocate so Fiori re-renders the header avatar.
+    return SELECT.one.from(Advocates).where({ ID: advocateID });
+  });
+
+  // clearPhoto: drop the AdvocatePhotos row + flip hasPhoto=false.
+  srv.on('clearPhoto', Advocates, async (req) => {
+    const advocateID = req.params?.[0]?.ID || req.params?.[0];
+    if (!advocateID) {
+      return req.error(400, 'clearPhoto: missing advocate key in path');
+    }
+    const db = await cds.connect.to('db');
+    const { AdvocatePhotos: AP } = cds.entities('com.sap.developers.ims');
+    await db.run(DELETE.from(AP).where({ advocate_ID: advocateID }));
+    await db.run(
+      UPDATE(Advocates)
+        .set({ hasPhoto: false, photoUpdatedAt: new Date().toISOString() })
+        .where({ ID: advocateID }),
+    );
+    return SELECT.one.from(Advocates).where({ ID: advocateID });
+  });
 }
