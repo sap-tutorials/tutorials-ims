@@ -285,6 +285,19 @@ service AdminService {
     // so we route through the public REST endpoint that already serves
     // these bytes. The ?v={photoUpdatedAt} suffix busts the 24h cache.
     virtual null as photoIconUrl : String,
+  } actions {
+    // Bound action for the Object Page photo-upload flow. The Fiori
+    // UploadSet against the `photo` composition silently drops bytes
+    // through the draft layer; this action is the explicit, working
+    // path: admin clicks Upload Photo, picks a file, the AdminService
+    // handler runs sharp -> 256/64 WebP, upserts AdvocatePhotos, and
+    // flips Advocates.hasPhoto + photoUpdatedAt. The bytes come in as
+    // base64 to keep the OData payload self-describing.
+    @cds.odata.bindingparameter.collection
+    action uploadPhoto(photoBase64 : String, mimeType : String) returns Advocates;
+
+    // Pair with an action to clear a photo without deleting the advocate.
+    action clearPhoto() returns Advocates;
   };
   entity AdvocateTopics  as projection on ims.AdvocateTopics;
   entity AdvocateLinks   as projection on ims.AdvocateLinks;

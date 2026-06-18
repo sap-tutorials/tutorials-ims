@@ -9,6 +9,34 @@ import {
 
 cds.test('serve', '--project', '.', '--in-memory');
 
+// Seed the two advocates these tests rely on. The CSVs were removed from
+// db/data so prod deploys don't clobber admin edits — tests now create
+// their own fixtures.
+beforeAll(async () => {
+  const db = await cds.connect.to('db');
+  const { Advocates } = cds.entities('com.sap.developers.ims');
+  const existing = await db.run(SELECT.from(Advocates).columns('slug'));
+  const slugs = new Set(existing.map((r) => r.slug));
+  const rows = [];
+  if (!slugs.has('thomas-jung')) {
+    rows.push({
+      ID: 'ADC00001-0000-0000-0000-000000000001',
+      slug: 'thomas-jung',
+      firstName: 'Thomas', lastName: 'Jung',
+      region: 'AMERICAS', isActive: true,
+    });
+  }
+  if (!slugs.has('placeholder-emea')) {
+    rows.push({
+      ID: 'ADC00001-0000-0000-0000-000000000002',
+      slug: 'placeholder-emea',
+      firstName: 'Placeholder', lastName: 'EMEA',
+      region: 'EMEA', isActive: true,
+    });
+  }
+  if (rows.length) await db.run(INSERT.into(Advocates).entries(rows));
+});
+
 describe('fetchPhoto (read path)', () => {
   beforeAll(async () => {
     _resetCache();

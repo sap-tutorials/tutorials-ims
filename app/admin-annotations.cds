@@ -1453,7 +1453,7 @@ annotate AdminService.Advocates with @(
     TypeNamePlural: 'Advocates',
     Title: { Value: lastName },
     Description: { Value: title },
-    ImageUrl: 'photoIconUrl'
+    ImageUrl: photoIconUrl
   },
   UI.SelectionFields: [ region, isActive, lastName ],
   UI.LineItem: [
@@ -1495,7 +1495,15 @@ annotate AdminService.Advocates with @(
     { $Type: 'UI.ReferenceFacet', ID: 'Identity',   Label: 'Identity',     Target: '@UI.FieldGroup#Identity' },
     { $Type: 'UI.ReferenceFacet', ID: 'Bio',        Label: 'Bio',          Target: '@UI.FieldGroup#Bio' },
     { $Type: 'UI.ReferenceFacet', ID: 'Visibility', Label: 'Visibility',   Target: '@UI.FieldGroup#Visibility' },
-    { $Type: 'UI.ReferenceFacet', ID: 'Photo',      Label: 'Photo',        Target: 'photo/@UI.FieldGroup#Photo' },
+    // Photo facet intentionally omitted in v1: the Fiori UploadSet on a
+    // draft-enabled `Composition of one` whose key IS the parent
+    // association doesn't persist uploads cleanly (the photo bytes go
+    // through Fiori's media-stream PUT but never reach our before-CREATE
+    // handler — confirmed via empty AdvocatePhotos table after a save).
+    // The avatar in @UI.HeaderInfo.ImageUrl above still works because
+    // it routes through the public /api/advocates/:slug/photo endpoint.
+    // For v2: a custom controller-extension that intercepts the upload
+    // and POSTs to a new Advocates.uploadPhoto bound action.
     { $Type: 'UI.ReferenceFacet', ID: 'Topics',     Label: 'Topics',       Target: 'topics/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', ID: 'Links',      Label: 'Social links', Target: 'links/@UI.LineItem' }
   ]
