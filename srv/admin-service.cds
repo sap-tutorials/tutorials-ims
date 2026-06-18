@@ -4,6 +4,13 @@ using from '../app/admin-annotations';
 
 @path: '/admin'
 @requires: 'Admin'
+// Photo uploads (Advocates.uploadPhoto bound action) embed base64 image
+// bytes in the OData $batch payload. A 4 MB JPEG inflates to ~5.4 MB
+// base64 + JSON envelope; the CAP default body_parser limit (1mb)
+// rejects with 413. The client-side check at AdvocatePhotoController.js
+// caps file uploads at 5 MB raw → ~7 MB after base64 + envelope, so 8mb
+// gives a small safety margin without inviting abuse.
+@cds.server.body_parser.limit: '8mb'
 service AdminService {
 
   // Full CRUD entity projections
