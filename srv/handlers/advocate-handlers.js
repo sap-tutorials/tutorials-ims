@@ -99,4 +99,21 @@ export function register(srv) {
       .set({ hasPhoto: false, photoUpdatedAt: new Date().toISOString() })
       .where({ ID: advId });
   });
+
+  // Compute the virtual `photoIconUrl` on Advocates reads. This is what
+  // @UI.HeaderInfo.ImageUrl binds to in app/admin-annotations.cds. We
+  // route through the public REST endpoint (not the OData media stream)
+  // because the latter 404s through a draft-enabled composition.
+  // ?v={photoUpdatedAt} busts the public 24h cache when admins re-upload.
+  srv.after('READ', Advocates, (rows) => {
+    if (!rows) return;
+    const list = Array.isArray(rows) ? rows : [rows];
+    for (const r of list) {
+      if (!r || !r.slug || !r.hasPhoto) continue;
+      const v = r.photoUpdatedAt
+        ? '?v=' + encodeURIComponent(new Date(r.photoUpdatedAt).getTime())
+        : '';
+      r.photoIconUrl = '/api/advocates/' + encodeURIComponent(r.slug) + '/photo' + v;
+    }
+  });
 }
