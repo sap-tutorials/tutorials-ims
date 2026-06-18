@@ -84,7 +84,7 @@ The mission itself is a `Missions` row in HANA, created via `/admin-ui/#missions
 | Tutorials (ordered) | 1. `use-codecheck-to-ai-grade-reader-code`<br>2. `use-validate-to-ai-grade-free-text-answers`<br>3. `use-autoauthor-to-generate-quiz-questions`<br>4. `tutorial-platform-feature-cookbook` |
 | Description | Short paragraph linking back to the writing-tutorials docs |
 | Primary tag | `tutorial>intermediate` |
-| Secondary tag | `software-product-function>sap-developer-center` (verify presence; fall back to closest if not in taxonomy) |
+| Secondary tag | `software-product>sap-business-technology-platform` (verified to exist in production catalog; the originally considered `software-product-function>sap-developer-center` does not exist in current taxonomy and would require a Center Admin tag-import step we explicitly scoped out) |
 
 Mission slugs are subject to the same `@assert.unique.slug` constraint as tutorial slugs ([project_fix_duplicate_slugs]). The chosen slug is unlikely to collide but the constraint will surface any conflict at insert time.
 
@@ -127,7 +127,7 @@ Each tutorial follows the standard frontmatter + intro + steps shape from [docs/
 parser: v2
 auto_validation: true
 primary_tag: tutorial>intermediate
-tags: [tutorial>intermediate, software-product-function>sap-developer-center]
+tags: [tutorial>intermediate, software-product>sap-business-technology-platform]
 time: 15
 author_name: <author>
 author_profile: <gh url>
@@ -182,6 +182,8 @@ author_profile: <gh url>
 **Steps:**
 1. **OS-conditional content** — uses `[OPTION BEGIN [Windows]]` / `[OPTION BEGIN [Mac and Linux]]` for the step body itself. Live demo: reader sees one variant per their detected OS; global picker functional.
 2. **Generic option blocks** — `[OPTION BEGIN [JSON]] / [OPTION BEGIN [XML]]` per-step tabs (independent of OS picker).
+
+   **Note for the planner:** OS-conditional vs generic option blocks share the same `[OPTION BEGIN [label]]` syntax. The platform's auto-detection differentiates them by **label content** — labels matching the OS taxonomy table in [writing-tutorials.md §3.5.2](../../authors/writing-tutorials.md#L168) (Windows / macOS / Mac and Linux / BAS / etc.) wire into the global OS picker; any other labels (JSON/XML/Java/Node) render as per-step tabs. The cookbook step bodies should make this distinction explicit so a reader copy-pasting either form gets the expected behavior.
 3. **Branched tutorials with `[BRANCH_BEGIN ...]`** — actually creates a real branch group inside this step ("HANA Cloud" vs "PostgreSQL"). Reader picks one. Cross-link to [branched-tutorials.md](../../authors/branched-tutorials.md).
 4. **Skip-runs with `skipIf`** — shows the per-step frontmatter syntax. (Single-tutorial context can only show syntax, not full skip-run behavior.)
 5. **Mermaid diagrams** — `{{< mermaid >}}` shortcode with a small flowchart. Renders inline with Horizon palette.
@@ -221,7 +223,7 @@ The free-text grader has no separate enable-flag — it inherits the same enable
 | File | Change |
 |------|--------|
 | [scripts/parsers/github.ts](../../../scripts/parsers/github.ts) | Remove `'meta-tutorials'` from `EXCLUDED_REPOS` (one-line change at line 25). |
-| `scripts/parsers/__tests__/github.test.ts` | Add unit test exercising the discovery filter against a fixture: a repo named `meta-tutorials` with `tutorials/<slug>/` subdirectories yields one `DiscoveredTutorial` per slug. (Sibling content like `run-book/` is invisible to the discovery query in the first place — the test asserts the slugs that ARE found, not the ones that aren't.) |
+| `scripts/parsers/__tests__/github.test.ts` | Add unit test exercising the discovery filter against a fixture: a repo named `meta-tutorials` with `tutorials/<slug>/` subdirectories yields one `DiscoveredTutorial` per slug. The fixture also includes a sibling `run-book/foo.md` file at the repo root, and the test asserts that file does NOT appear in the result — pinning the discovery contract so a future refactor that switches to a recursive walk would surface this test failure rather than silently shipping admin docs as tutorials. |
 | [docs/authors/writing-tutorials.md](../../authors/writing-tutorials.md) | Add "Live examples" callout at top of §3 linking to all 4 tutorial URLs. |
 | [.github/workflows/rebuild-content.yml](../../../.github/workflows/rebuild-content.yml) | Add `AI_AUTHOR_ENABLED=true` and `AI_AUTHOR_BUILD_CAP=50` to env block. |
 | `docs/superpowers/specs/2026-06-18-meta-tutorials-ai-features-design.md` | This spec. |
@@ -251,7 +253,7 @@ Repo creation (one-time) + 3 rules.vr files (cookbook has none).
 2. **`auto_validation: false` on the cookbook** — confirmed safe: mission completion is tracked per-tutorial via TaskRecord, independent of whether the tutorial has a quiz. The cookbook completes on reaching its last step. `fetchRulesVr` returns null on miss, so the cookbook's missing rules.vr file is benign.
 3. **Mission slug collision** — `tutorial-platform-features-for-authors` is unlikely to collide; `@assert.unique.slug` constraint will catch it at insert time if it does.
 4. **Existing meta-tutorials content tripping the build** — discovery only reads the `tutorials/` subtree, so siblings (`run-book/`, `task-interview-coach/`, `README.MD`, `LICENSE.txt`) are invisible without any new filter. The only risk path is a directory under `tutorials/` that isn't actually tutorial-shaped — same risk as exists today for every other repo in the org. Monitor the next CI run for unexpected fetched slugs from `meta-tutorials`.
-5. **Tag presence** — `software-product-function>sap-developer-center` may not exist in the platform's tag taxonomy. Verify before mission creation; fall back to `software-product>sap-business-technology-platform` or omit the secondary tag if no exact match.
+5. **Tag presence** — Resolved at spec time: queried `/build/tag-labels` and `/build/catalog` on DEV; `software-product-function>sap-developer-center` does not exist in current taxonomy. Switching the secondary tag to `software-product>sap-business-technology-platform` (which is widely used and confirmed present). No new tag-onboarding step needed.
 6. **Self-referential maintenance** — these tutorials describe platform syntax. If syntax changes, they go stale. They should be linked from author docs as living examples and updated when those docs change. Add a one-line note in the cookbook's intro that the tutorial set is co-maintained with [writing-tutorials.md](../../authors/writing-tutorials.md).
 7. **BRANCH_BEGIN inside the cookbook tutorial** — branched-tutorials syntax is explicitly designed for step-level branches *within* one tutorial ([docs/authors/branched-tutorials.md](../../authors/branched-tutorials.md)). Cookbook step 3 creating a 2-key branch group is in scope of the feature; the branch picker UX renders independently of any mission-level alt-group. Confirm at smoke-test time.
 
