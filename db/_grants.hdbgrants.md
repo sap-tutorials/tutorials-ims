@@ -1,6 +1,12 @@
 # `_grants.hdbgrants` — design notes
 
-This file documents the design rationale for `db/src/_grants.hdbgrants`. The notes used to live as `_comment_*` keys inline in the JSON; HDI's grants-file processor strictly iterates ALL top-level keys as bound-grantor service names, so the `_comment_purpose` key was looked up as a service and the deploy failed with `service _comment_purpose not found`. JSON has no comment syntax; for `.hdbgrants` files specifically, every top-level key MUST be a valid grantor service name. Caught 2026-06-18 on the first deploy after PR #403 landed.
+This file documents the design rationale for **two** sibling artefacts:
+[`db/src/_grants.hdbgrants`](src/_grants.hdbgrants) (prod, in this directory) and
+[`db-qa/src/_grants.hdbgrants`](../db-qa/src/_grants.hdbgrants) (QA). They have
+the same shape and the same purpose, differing only in which grantor service-
+name they list.
+
+The notes used to live as `_comment_*` keys inline in the JSON; HDI's grants-file processor strictly iterates ALL top-level keys as bound-grantor service names, so the `_comment_purpose` key was looked up as a service and the deploy failed with `service _comment_purpose not found`. JSON has no comment syntax; for `.hdbgrants` files specifically, every top-level key MUST be a valid grantor service name. Caught 2026-06-18 on the first deploy after PR #403 landed.
 
 ## Purpose
 
@@ -18,9 +24,16 @@ Field names verified 2026-06-18 against the [@sap/hdi-deploy README](https://git
 
 The architecture-doc sketch hedged this; the shape used in the file is the verified one. Cross-checked against [SAP-samples/hana-ml-samples](https://github.com/SAP-samples/hana-ml-samples/blob/main/Templates/BTP-App/CAP-App/db/src/hana-ml-grants.hdbgrants) for the multi-grantee structure.
 
-## Dual grantor
+## Per-channel split (not dual grantor in one file)
 
-Two grantor keys are listed (one per environment) so the same artefact can be deployed by both `tutorials-db-deployer` (binds `tutorials-kg-grantor`) and `tutorials-db-qa-deployer` (binds `tutorials-kg-grantor-qa`). README text "For each grantor in the file, the HDI Deployer looks up a bound service with the name…" indicates the deployer iterates per-grantor, so a grantor whose service is not bound to the current deployer is expected to be a no-op (best understanding from public docs; verify on first dev deploy). If empirical behaviour rejects unbound grantors, split into per-channel artefacts (e.g. `_grants.prod.hdbgrants` / `_grants.qa.hdbgrants` gated by HDI features) as a follow-up.
+The original PR #403 design hedged: *"two grantor keys listed in one file; if empirical behaviour rejects unbound grantors, split into per-channel artefacts as a follow-up."* The empirical behaviour did reject unbound grantors — `tutorials-db-deployer` failed with `service tutorials-kg-grantor-qa not found; the service definition does not exist` because the prod deployer has no binding for the QA grantor (and shouldn't).
+
+The follow-up split landed: each channel has its own `_grants.hdbgrants` listing only its own grantor:
+
+- [`db/src/_grants.hdbgrants`](src/_grants.hdbgrants) → `tutorials-kg-grantor` (prod)
+- [`db-qa/src/_grants.hdbgrants`](../db-qa/src/_grants.hdbgrants) → `tutorials-kg-grantor-qa` (QA)
+
+No `mta.yaml` changes were needed. CAP's existing build tasks (`cds build --production` for the prod task, `cds build --production --for db-qa` for the QA task — both already invoked by `mta.yaml`'s `before-all`) automatically copy each channel's `src/_grants.hdbgrants` into the channel's `gen/` output. The deployer ships only its own grantor.
 
 ## Grantee choice
 

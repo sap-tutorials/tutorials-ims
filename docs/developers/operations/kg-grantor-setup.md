@@ -15,11 +15,12 @@ hold transitively. The canonical SAP-supported pattern is the
    service (`tutorials-kg-grantor` / `tutorials-kg-grantor-qa`).
 3. That service is bound to the HDI deployer module in
    [`mta.yaml`](../../../mta.yaml). At deploy time, the grants plug-in inside
-   `@sap/hdi-deploy` reads
-   [`db/src/_grants.hdbgrants`](../../../db/src/_grants.hdbgrants), connects
-   as the grantor, and `GRANT`s the two SPARQL privileges to the container's
-   `default_access_role` (which is in turn auto-granted to the runtime user
-   that CAP uses for `cds.connect.to('db')`).
+   `@sap/hdi-deploy` reads the channel's `_grants.hdbgrants`
+   ([`db/src/_grants.hdbgrants`](../../../db/src/_grants.hdbgrants) for prod;
+   [`db-qa/src/_grants.hdbgrants`](../../../db-qa/src/_grants.hdbgrants) for
+   QA), connects as the grantor named there, and `GRANT`s the two SPARQL
+   privileges to the container's `default_access_role` (which is in turn
+   auto-granted to the runtime user that CAP uses for `cds.connect.to('db')`).
 
 A **direct `GRANT … TO <runtime-user>` is the anti-pattern** — the runtime
 user is owned by HDI and re-created on container redeploy, so out-of-band
@@ -288,14 +289,32 @@ Then re-run `cf deploy`.
 
 ### "HDI deploy fails: cannot find grantor service"
 
-The bound service-name in CF does not match a top-level key in
-`db/src/_grants.hdbgrants`. Confirm:
+The bound service-name in CF does not match a top-level key in the
+channel's `_grants.hdbgrants`, or the wrong channel's artefact is being
+shipped to the deployer. Confirm:
 
 ```bash
-cf services | grep grantor    # what's bound
-grep -E '^\s*"tutorials-kg-grantor' db/src/_grants.hdbgrants    # what the artefact expects
-grep -E 'service-name:\s*tutorials-kg-grantor' mta.yaml         # what mta.yaml declares
+cf services | grep grantor                                          # what's bound
+
+# Prod artefact must contain ONLY tutorials-kg-grantor (no -qa entry):
+jq -c keys db/src/_grants.hdbgrants
+# expect: ["tutorials-kg-grantor"]
+
+# QA artefact must contain ONLY tutorials-kg-grantor-qa:
+jq -c keys db-qa/src/_grants.hdbgrants
+# expect: ["tutorials-kg-grantor-qa"]
+
+grep -E 'service-name:\s*tutorials-kg-grantor' mta.yaml             # what mta.yaml declares
 ```
+
+> **One grantor per channel.** Listing both grantors in a single
+> `_grants.hdbgrants` causes HDI to demand bindings for both on every
+> deployer — so the prod deployer fails with `service tutorials-kg-grantor-qa
+> not found` even though it has no business binding the QA grantor.
+> The fix is per-channel artefacts (one in `db/src/`, one in
+> `db-qa/src/`); each `cds build` task copies its source `_grants.hdbgrants`
+> verbatim into the channel's `gen/db/` or `gen/db-qa/` output, so the
+> deployer ships only the grantor it needs.
 
 All three must agree exactly. Renaming requires updating all three.
 
@@ -349,6 +368,8 @@ attach the output to a comment on
 - [mta-deployment.md](mta-deployment.md)
   — full MTA deploy procedure
 - [`db/src/_grants.hdbgrants`](../../../db/src/_grants.hdbgrants)
-  — the artefact this runbook backs
+  — the prod artefact this runbook backs
+- [`db-qa/src/_grants.hdbgrants`](../../../db-qa/src/_grants.hdbgrants)
+  — the QA artefact (sibling, gates the QA grantor for the QA channel only)
 - [`scripts/spike/kg-probe.cjs`](../../../scripts/spike/kg-probe.cjs)
   — the canonical smoke test

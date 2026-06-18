@@ -155,11 +155,21 @@ The flow has three actors:
    DBADMIN. Bound to the HDI deployer module as a (typically user-provided)
    service. HDI cannot grant privileges it does not itself hold; the grantor
    is what gives HDI that authority at deploy time.
-2. **`.hdbgrants` artefact** — a JSON file in the HDI source tree (e.g.
-   `db/src/_grants.hdbgrants`) that declares which system privileges should be
-   granted to the container's `default_access_role` (or to a custom role).
-   The grants plug-in reads this file at deploy time and instructs the
-   grantor user to issue the GRANTs.
+2. **`.hdbgrants` artefact (one per channel)** — a JSON file in the HDI
+   source tree of each channel that declares which system privileges should
+   be granted to the container's `default_access_role` (or to a custom
+   role). The grants plug-in reads this file at deploy time and instructs
+   the channel's grantor user to issue the GRANTs. Empirically verified
+   2026-06-18: HDI demands a binding for **every** top-level grantor key
+   in the artefact, so listing both prod and QA grantors in one file
+   causes the prod deployer to fail with `service tutorials-kg-grantor-qa
+   not found` (and vice-versa). The fix is per-channel artefacts:
+   [`db/src/_grants.hdbgrants`](../../../db/src/_grants.hdbgrants) (prod
+   only) and
+   [`db-qa/src/_grants.hdbgrants`](../../../db-qa/src/_grants.hdbgrants)
+   (QA only). `cds build` for the `db` task copies the prod artefact into
+   `gen/db/src/`; `cds build --for db-qa` copies the QA artefact into
+   `gen/db-qa/src/`. Each deployer ships only its channel's grantor.
 3. **`default_access_role`** — the role HDI auto-creates inside the container
    schema and grants to the runtime application user. By default it carries
    only schema-local rights. `.hdbgrants` adds system privileges to it.
@@ -207,9 +217,15 @@ above is the verified shape.
 
 PR 2 (data model + HDI deploy) MUST land all of:
 
-- A `db/src/_grants.hdbgrants` artefact with `application_user.system_privileges`
-  containing `"SPARQL QUERY"` and `"SPARQL UPDATE"` — final field names verified
-  against the latest `@sap/hdi-deploy` README before commit.
+- **Two `.hdbgrants` artefacts (one per channel).**
+  [`db/src/_grants.hdbgrants`](../../../db/src/_grants.hdbgrants) lists ONLY
+  `tutorials-kg-grantor`;
+  [`db-qa/src/_grants.hdbgrants`](../../../db-qa/src/_grants.hdbgrants) lists
+  ONLY `tutorials-kg-grantor-qa`. Both grant `SPARQL QUERY` and `SPARQL
+  UPDATE` to `application_user`. Sharing a single dual-grantor file causes
+  HDI to demand bindings for both grantors on every deployer (verified 2026-
+  06-18). Final field names verified against the latest `@sap/hdi-deploy`
+  README before commit.
 - A grantor service-instance + binding for each environment (dev / qa / prod).
   This is an **ops-team dependency**: the grantor user has to be created by
   DBADMIN (with `WITH ADMIN OPTION` on the two SPARQL system privileges) and
@@ -217,8 +233,6 @@ PR 2 (data model + HDI deploy) MUST land all of:
   `tutorials-db-qa-deployer`) via `mta.yaml`. Service-creation steps go in the
   PR 2 commit message + a runbook entry under
   [docs/developers/operations/](../operations/).
-- A QA-channel mirror — `tutorials-db-qa` needs the same grants flow against
-  its own grantor (or the same grantor if the platform team prefers).
 - **Operations runbook:** see [docs/developers/operations/kg-grantor-setup.md](../operations/kg-grantor-setup.md) for the per-environment grantor-user setup steps.
 
 A deploy without these in place will fail at the first SPARQL call in PR 4
