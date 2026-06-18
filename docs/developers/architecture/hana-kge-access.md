@@ -155,11 +155,18 @@ The flow has three actors:
    DBADMIN. Bound to the HDI deployer module as a (typically user-provided)
    service. HDI cannot grant privileges it does not itself hold; the grantor
    is what gives HDI that authority at deploy time.
-2. **`.hdbgrants` artefact** — a JSON file in the HDI source tree (e.g.
-   `db/src/_grants.hdbgrants`) that declares which system privileges should be
-   granted to the container's `default_access_role` (or to a custom role).
-   The grants plug-in reads this file at deploy time and instructs the
-   grantor user to issue the GRANTs.
+2. **`.hdbgrants` artefact (one per channel)** — a JSON file in each channel's
+   HDI source tree that declares which system privileges should be granted to
+   the container's `default_access_role` (or to a custom role). HDI demands a
+   binding for **every** top-level grantor key in the file, so prod and QA
+   each have their own:
+   [`db/src/_grants.hdbgrants`](../../../db/src/_grants.hdbgrants) (prod —
+   `tutorials-kg-grantor` only) and
+   [`db-qa/src/_grants.hdbgrants`](../../../db-qa/src/_grants.hdbgrants) (QA —
+   `tutorials-kg-grantor-qa` only). `cds build` for each channel copies its
+   `src/_grants.hdbgrants` verbatim into the channel's `gen/` output. See
+   [`db/_grants.hdbgrants.md`](../../../db/_grants.hdbgrants.md) for the
+   per-channel split rationale.
 3. **`default_access_role`** — the role HDI auto-creates inside the container
    schema and grants to the runtime application user. By default it carries
    only schema-local rights. `.hdbgrants` adds system privileges to it.
@@ -175,10 +182,12 @@ DBADMIN
                       └─ runtime user calls SYS.SPARQL_EXECUTE → succeeds
 ```
 
-**Verified shape of `db/src/_grants.hdbgrants`** (field names confirmed
-2026-06-18 against the `@sap/hdi-deploy` README during PR 2 implementation;
-see [db/src/_grants.hdbgrants](../../../db/src/_grants.hdbgrants) for the
-authoritative artefact):
+**Verified shape of the channel-specific `_grants.hdbgrants` files**
+(field names confirmed 2026-06-18 against the `@sap/hdi-deploy` README
+during PR 2 implementation; see
+[db/src/_grants.hdbgrants](../../../db/src/_grants.hdbgrants) (prod) and
+[db-qa/src/_grants.hdbgrants](../../../db-qa/src/_grants.hdbgrants) (QA)
+for the authoritative artefacts):
 
 ```json
 {
@@ -207,9 +216,17 @@ above is the verified shape.
 
 PR 2 (data model + HDI deploy) MUST land all of:
 
-- A `db/src/_grants.hdbgrants` artefact with `application_user.system_privileges`
-  containing `"SPARQL QUERY"` and `"SPARQL UPDATE"` — final field names verified
-  against the latest `@sap/hdi-deploy` README before commit.
+- **Two `_grants.hdbgrants` artefacts** — one per channel, each listing
+  exactly one grantor:
+  [`db/src/_grants.hdbgrants`](../../../db/src/_grants.hdbgrants) (prod —
+  `tutorials-kg-grantor`) and
+  [`db-qa/src/_grants.hdbgrants`](../../../db-qa/src/_grants.hdbgrants) (QA —
+  `tutorials-kg-grantor-qa`). Both use the same shape:
+  `application_user.system_privileges` containing `"SPARQL QUERY"` and
+  `"SPARQL UPDATE"` — field names verified against the latest
+  `@sap/hdi-deploy` README before commit. The split is required because
+  HDI demands a binding for every top-level grantor key in the file; see
+  [`db/_grants.hdbgrants.md`](../../../db/_grants.hdbgrants.md).
 - A grantor service-instance + binding for each environment (dev / qa / prod).
   This is an **ops-team dependency**: the grantor user has to be created by
   DBADMIN (with `WITH ADMIN OPTION` on the two SPARQL system privileges) and
@@ -217,8 +234,6 @@ PR 2 (data model + HDI deploy) MUST land all of:
   `tutorials-db-qa-deployer`) via `mta.yaml`. Service-creation steps go in the
   PR 2 commit message + a runbook entry under
   [docs/developers/operations/](../operations/).
-- A QA-channel mirror — `tutorials-db-qa` needs the same grants flow against
-  its own grantor (or the same grantor if the platform team prefers).
 - **Operations runbook:** see [docs/developers/operations/kg-grantor-setup.md](../operations/kg-grantor-setup.md) for the per-environment grantor-user setup steps.
 
 A deploy without these in place will fail at the first SPARQL call in PR 4

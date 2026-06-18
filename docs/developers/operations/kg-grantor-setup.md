@@ -15,11 +15,15 @@ hold transitively. The canonical SAP-supported pattern is the
    service (`tutorials-kg-grantor` / `tutorials-kg-grantor-qa`).
 3. That service is bound to the HDI deployer module in
    [`mta.yaml`](../../../mta.yaml). At deploy time, the grants plug-in inside
-   `@sap/hdi-deploy` reads
-   [`db/src/_grants.hdbgrants`](../../../db/src/_grants.hdbgrants), connects
-   as the grantor, and `GRANT`s the two SPARQL privileges to the container's
-   `default_access_role` (which is in turn auto-granted to the runtime user
-   that CAP uses for `cds.connect.to('db')`).
+   `@sap/hdi-deploy` reads the channel's `_grants.hdbgrants`
+   ([`db/src/_grants.hdbgrants`](../../../db/src/_grants.hdbgrants) for prod;
+   [`db-qa/src/_grants.hdbgrants`](../../../db-qa/src/_grants.hdbgrants) for
+   QA — split per-channel because HDI demands a binding for **every** top-
+   level grantor key in the file; see [`db/_grants.hdbgrants.md`](../../../db/_grants.hdbgrants.md)
+   for the design rationale), connects as the grantor named there, and
+   `GRANT`s the two SPARQL privileges to the container's `default_access_role`
+   (which is in turn auto-granted to the runtime user that CAP uses for
+   `cds.connect.to('db')`).
 
 A **direct `GRANT … TO <runtime-user>` is the anti-pattern** — the runtime
 user is owned by HDI and re-created on container redeploy, so out-of-band
@@ -138,9 +142,11 @@ cf cups tutorials-kg-grantor-qa -t "hana,password" -p '{
 
 > **Service-name spelling matters.** The names `tutorials-kg-grantor` and
 > `tutorials-kg-grantor-qa` are referenced verbatim from
-> [`mta.yaml`](../../../mta.yaml) (resources block) and from
-> [`db/src/_grants.hdbgrants`](../../../db/src/_grants.hdbgrants) (top-level
-> keys). Renaming requires updating all three.
+> [`mta.yaml`](../../../mta.yaml) (resources block) and from each channel's
+> `_grants.hdbgrants` (top-level keys —
+> [`db/src/_grants.hdbgrants`](../../../db/src/_grants.hdbgrants) for prod,
+> [`db-qa/src/_grants.hdbgrants`](../../../db-qa/src/_grants.hdbgrants) for
+> QA). Renaming requires updating all three places per channel.
 
 > **`schema` field is informational** — HDI does not connect to a schema
 > when issuing system grants (system privileges are global), but `@sap/hdi-deploy`
@@ -288,16 +294,31 @@ Then re-run `cf deploy`.
 
 ### "HDI deploy fails: cannot find grantor service"
 
-The bound service-name in CF does not match a top-level key in
-`db/src/_grants.hdbgrants`. Confirm:
+The bound service-name in CF does not match a top-level key in the
+channel's `_grants.hdbgrants`, or the wrong channel's artefact has been
+shipped. Each deployer ships only its channel's artefact (prod from
+`db/src/`, QA from `db-qa/src/`); each artefact lists exactly one
+grantor key. Confirm:
 
 ```bash
-cf services | grep grantor    # what's bound
-grep -E '^\s*"tutorials-kg-grantor' db/src/_grants.hdbgrants    # what the artefact expects
-grep -E 'service-name:\s*tutorials-kg-grantor' mta.yaml         # what mta.yaml declares
+cf services | grep grantor                                       # what's bound
+
+# Prod artefact — must list ONLY tutorials-kg-grantor:
+jq -c keys db/src/_grants.hdbgrants
+# expect: ["tutorials-kg-grantor"]
+
+# QA artefact — must list ONLY tutorials-kg-grantor-qa:
+jq -c keys db-qa/src/_grants.hdbgrants
+# expect: ["tutorials-kg-grantor-qa"]
+
+grep -E 'service-name:\s*tutorials-kg-grantor' mta.yaml          # what mta.yaml declares
 ```
 
-All three must agree exactly. Renaming requires updating all three.
+All three layers must agree per channel. If a single artefact lists
+both grantors, every deployer demands bindings for both and the prod
+deployer fails with `service tutorials-kg-grantor-qa not found`. See
+[`db/_grants.hdbgrants.md`](../../../db/_grants.hdbgrants.md) for the
+per-channel-split rationale.
 
 ### "HDI deploy fails: grantor service is missing required tags / wrong shape"
 
@@ -349,6 +370,10 @@ attach the output to a comment on
 - [mta-deployment.md](mta-deployment.md)
   — full MTA deploy procedure
 - [`db/src/_grants.hdbgrants`](../../../db/src/_grants.hdbgrants)
-  — the artefact this runbook backs
+  — the prod artefact this runbook backs
+- [`db-qa/src/_grants.hdbgrants`](../../../db-qa/src/_grants.hdbgrants)
+  — the QA-channel sibling (lists `tutorials-kg-grantor-qa` only)
+- [`db/_grants.hdbgrants.md`](../../../db/_grants.hdbgrants.md)
+  — design notes covering the per-channel split + `_comment_*`-key gotcha
 - [`scripts/spike/kg-probe.cjs`](../../../scripts/spike/kg-probe.cjs)
   — the canonical smoke test
