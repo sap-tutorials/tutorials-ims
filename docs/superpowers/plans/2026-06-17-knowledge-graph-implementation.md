@@ -4,7 +4,7 @@
 
 **Goal:** Ship Phase 1 of the knowledge graph as defined in [the spec](../specs/2026-06-17-knowledge-graph-design.md): an AI-extracted concept graph projected into HANA Cloud's Knowledge Graph Engine, surfaced as a sidebar on tutorial Object Pages and an admin concept-review tool.
 
-**Architecture:** Three new CDS entities (`Concepts`, `TutorialConceptLinks`, `ConceptEdges`, plus projection-state `GraphMetadata`) hold canonical state. Two cron jobs extract (nightly, per-tutorial, content-hash-keyed) and consolidate (weekly, embedding-similarity merge + cycle detection + graph rebuild). HANA KGE is rebuilt as a *projection* of CDS state via `EXECUTE STATEMENT 'SPARQL …'`. Query layer `KnowledgeGraphService` exposes typed named queries to the public, raw SPARQL only to admins. Phase 1 surfaces are a Vue 3 sidebar island and a Fiori Elements admin app.
+**Architecture:** Three new CDS entities (`Concepts`, `TutorialConceptLinks`, `ConceptEdges`, plus projection-state `GraphMetadata`) hold canonical state. Two cron jobs extract (nightly, per-tutorial, content-hash-keyed) and consolidate (weekly, embedding-similarity merge + cycle detection + graph rebuild). HANA KGE is rebuilt as a *projection* of CDS state via `CALL SYS.SPARQL_EXECUTE(?, ?, ?, ?)` (per PR 1 spike findings — see [docs/developers/architecture/hana-kge-access.md](../../developers/architecture/hana-kge-access.md)). Query layer `KnowledgeGraphService` exposes typed named queries to the public, raw SPARQL only to admins. Phase 1 surfaces are a Vue 3 sidebar island and a Fiori Elements admin app.
 
 **Tech Stack:** CAP Node.js (`@sap/cds`), HANA Cloud (Knowledge Graph Engine, vector embeddings via existing infrastructure), `@sap-ai-sdk/orchestration` (LLM calls — same client as #205/#208/#234), Vue 3 + Vite (sidebar island), Fiori Elements V4 (admin app), Vitest (test runner), `@cap-js/audit-logging` + `@cap-js/change-tracking` (admin auditing).
 
@@ -19,8 +19,8 @@ This plan is structured as **8 sequential PRs**, each producing a working, testa
 
 | PR | Scope | Risk gate |
 | -- | ----- | --------- |
-| 1 | Day-1 spike: HANA KGE access patterns | Validates `EXECUTE STATEMENT 'SPARQL …'` path before locking the data model |
-| 2 | Data model + HDI deploy (`Concepts`, `TutorialConceptLinks`, `ConceptEdges`, `GraphMetadata`) | Schema lands in DEV; rest of plan can build on real tables |
+| 1 | Day-1 spike: HANA KGE access patterns | Validates the SPARQL access path before locking the data model. **Result (PR 1 / [#401](https://github.com/sap-tutorials/tutorials-ims/pull/401)):** `EXECUTE STATEMENT 'SPARQL …'` does not exist; canonical path is `CALL SYS.SPARQL_EXECUTE(?, ?, ?, ?)`. Privileges delivered via `.hdbgrants` + grantor (PR 2 scope). |
+| 2 | Data model + HDI deploy (`Concepts`, `TutorialConceptLinks`, `ConceptEdges`, `GraphMetadata`) **+ `.hdbgrants` + grantor service plumbing + ops runbook** | Schema lands in DEV with grants flow operational; PR 4 SPARQL writes will succeed. |
 | 3 | Extraction pipeline (`extractConcepts` cron + `kg-extract.js`) | Concept registry populates from real tutorials; no graph yet |
 | 4 | Consolidator + graph projection (`consolidateConcepts` cron + `graphRebuild`) | Triple store is populated; SPARQL queries can be run from `hdbsql` |
 | 5 | Query layer (`KnowledgeGraphService` + named queries + `runSparql` admin action) | HTTP API works; sidebar can fetch real data even though it doesn't exist yet |
@@ -43,6 +43,8 @@ The full set of files this plan creates or modifies:
 ```text
 db/
   knowledge-graph.cds                     # Concepts, TutorialConceptLinks, ConceptEdges, GraphMetadata
+  src/
+    _grants.hdbgrants                     # PR 2: SPARQL QUERY/UPDATE → default_access_role
 srv/
   knowledge-graph-service.cds             # KnowledgeGraphService at /graph
   knowledge-graph-service.js              # Service handlers
@@ -52,7 +54,7 @@ srv/
     kg-projection.js                      # CDS state → RDF triples
     kg-similarity.js                      # cosineSim + findNearDuplicates
     kg-cycles.js                          # DFS cycle detection on :requires
-    kg-sparql-client.js                   # EXECUTE STATEMENT wrapper (or REST fallback)
+    kg-sparql-client.js                   # CALL SYS.SPARQL_EXECUTE wrapper (DO BEGIN…END for OUT params; per PR 1 spike)
   jobs/
     extract-concepts-job.js               # Nightly cron handler
     consolidate-concepts-job.js           # Weekly cron handler
@@ -89,7 +91,9 @@ test/
 docs/
   developers/
     architecture/
-      hana-kge-access.md                  # Spike output
+      hana-kge-access.md                  # Spike output (PR 1)
+    operations/
+      kg-grantor-setup.md                 # PR 2: DBADMIN + cf cups runbook for grantor service
 ```
 
 ### Modified files
@@ -110,13 +114,15 @@ hugo-apps/
 hugo/
   layouts/tutorials/single.html (or partial)  # Mount <div data-vue-island="related-graph">
 .deploy/
-  mta.yaml                                # Add srv/lib/kg-*.js to srv-qa cp list
+  mta.yaml                                # PR 2: tutorials-kg-grantor user-provided service + bind to db-deployer; add srv/lib/kg-*.js to srv-qa cp list
 package.json                              # Add scripts (kg:reextract)
 ```
 
 ---
 
 ## PR 1 — Day-1 Spike: HANA KGE Access Patterns
+
+> **✅ Completed — landed as [#401](https://github.com/sap-tutorials/tutorials-ims/pull/401).** Findings disproved the `EXECUTE STATEMENT 'SPARQL …'` hypothesis below; the canonical path is `CALL SYS.SPARQL_EXECUTE(?, ?, ?, ?)` with `.hdbgrants`-delivered privileges. The task list below is preserved as historical context for what the spike investigated. The authoritative reference for everything PR 2+ depends on is [docs/developers/architecture/hana-kge-access.md](../../developers/architecture/hana-kge-access.md).
 
 **Goal:** Confirm that `EXECUTE STATEMENT 'SPARQL …'` over the existing `cds.connect.to('db')` connection can CLEAR a named graph, INSERT triples, and SELECT them back. If it cannot, document the REST-endpoint fallback. Output is a one-page architecture doc, not production code.
 
@@ -200,6 +206,14 @@ Wait for review + merge. **The remaining PRs assume this spike's findings.** If 
 
 **Branch:** `feat/kg-data-model`
 
+> **Scope expansion (post-spike, PR 1 found):** The day-1 spike ([#401](https://github.com/sap-tutorials/tutorials-ims/pull/401)) established that the HANA KGE runtime user needs `SPARQL QUERY` and `SPARQL UPDATE` system privileges, delivered via the canonical `@sap/hdi-deploy` flow — **not** an out-of-band DBADMIN grant. PR 2 must therefore additionally deliver:
+>
+> 1. A `.hdbgrants` artefact under `db/src/` that grants the two SPARQL system privileges to the container's `default_access_role` (which is granted to the runtime `application_user`).
+> 2. Grantor user-provided service binding in `mta.yaml` for `tutorials-db-deployer` (and the QA equivalent).
+> 3. A runbook at `docs/developers/operations/kg-grantor-setup.md` documenting the one-time DBADMIN setup steps per environment.
+>
+> Without all three, PR 4's first SPARQL call fails with `User does not have SPARQL query privileges`. See [docs/developers/architecture/hana-kge-access.md § Privileges required](../../developers/architecture/hana-kge-access.md).
+
 **Hard reminder:** HDI deploys can wipe data ([[feedback_hdi_deploys_can_wipe_data]]). Snapshot row counts on `Tutorials`/`Missions`/`Groups`/etc. before merging this PR — if any drop, halt the deploy.
 
 ### Task 2.1: Write the data model
@@ -244,6 +258,84 @@ Then attach it to the existing `Tutorial.Admin` role-template (find the existing
 - [ ] **Step 5: Add `srv/lib/kg-*.js` glob to srv-qa cp list**
 
 In `.deploy/mta.yaml`, find the `srv-qa` module and its `cp` list ([[feedback_srv_qa_cp_list_recurring]]). Add the future lib files now even though they don't exist yet, so the build doesn't break later. Commit message must mention this preventive add.
+
+### Task 2.1b: `.hdbgrants` artefact + grantor user contract
+
+**Files:**
+
+- Create: `db/src/_grants.hdbgrants`
+- Reference: [docs/developers/architecture/hana-kge-access.md § Privileges required > HDI delivery](../../developers/architecture/hana-kge-access.md)
+
+- [ ] **Step 1: Read the canonical flow**
+
+Read [docs/developers/architecture/hana-kge-access.md § Privileges required > HDI delivery](../../developers/architecture/hana-kge-access.md) end-to-end. Internalise the three actors (grantor user, `.hdbgrants` artefact, `default_access_role`) and why direct `GRANT … TO <runtime-user>` is the anti-pattern.
+
+- [ ] **Step 2: Verify exact `.hdbgrants` JSON field names against the live `@sap/hdi-deploy` README**
+
+The architecture doc carries an explicit hedge — "exact field names to be confirmed against `@sap/hdi-deploy` README at PR 2 implementation time". Open <https://www.npmjs.com/package/@sap/hdi-deploy> (or the locally-installed `node_modules/@sap/hdi-deploy/README.md`) and confirm the exact spelling of `application_user`, `system_privileges`, and the grantor-binding key before writing the artefact. Capture the README version checked in the commit message.
+
+- [ ] **Step 3: Create `db/src/_grants.hdbgrants`**
+
+Grant `SPARQL QUERY` and `SPARQL UPDATE` to the container's `application_user` (which maps to `default_access_role`). The skeleton from the architecture doc is the starting point; replace `<grantor-service-name>` with the actual grantor service name from `mta.yaml` (Task 2.1c).
+
+- [ ] **Step 4: Document the grantor service-instance contract**
+
+In the runbook (Task 2.1d), document that the user-provided service must expose `user` + `password` credentials for a HANA user that already holds `SPARQL QUERY`/`SPARQL UPDATE` `WITH ADMIN OPTION`. This user is created once per environment by DBADMIN; it is **not** a managed service.
+
+### Task 2.1c: `mta.yaml` plumbing for grantor service
+
+**Files:**
+
+- Modify: `mta.yaml` (and `.deploy/mta.yaml` if the deploy MTA is separately maintained)
+
+- [ ] **Step 1: Add `tutorials-kg-grantor` resource entry**
+
+Under `resources:` in `mta.yaml`, add:
+
+```yaml
+- name: tutorials-kg-grantor
+  type: org.cloudfoundry.user-provided-service
+  parameters:
+    service-name: tutorials-kg-grantor
+```
+
+- [ ] **Step 2: Bind it to `tutorials-db-deployer`**
+
+Add `tutorials-kg-grantor` to the `requires:` list on the `tutorials-db-deployer` module. If the QA channel data model is in PR 2 scope, also add it to `tutorials-db-qa-deployer`; otherwise add a `TODO(kg-pr-followup)` comment naming the QA grantor as a follow-up task and surface it in the PR description.
+
+- [ ] **Step 3: Verify `mbt build` produces a valid MTAR**
+
+```bash
+cd .deploy && mbt build
+```
+
+Confirm the resulting MTAR's `mtad.yaml` includes the new resource and the deployer module's requires list.
+
+### Task 2.1d: Operations runbook for grantor setup
+
+**Files:**
+
+- Create: `docs/developers/operations/kg-grantor-setup.md`
+- Modify: `docs/developers/architecture/hana-kge-access.md` (cross-link from "What PR 2 must add")
+- Modify: docs sidebar/index file if one exists (`docs/.vitepress/config.ts` `themeConfig.sidebar` and/or `docs/developers/operations/README.md`)
+
+- [ ] **Step 1: Write the runbook**
+
+`docs/developers/operations/kg-grantor-setup.md` sections:
+
+- **Why this exists** — one paragraph, link to [docs/developers/architecture/hana-kge-access.md](../architecture/hana-kge-access.md). Explain that HDI cannot grant privileges it does not itself hold; the grantor user is what gives the deployer that authority.
+- **Per-environment one-time setup** — DBADMIN steps to create the grantor user (`CREATE USER tutorials_kg_grantor PASSWORD …;`), `GRANT "SPARQL QUERY", "SPARQL UPDATE" TO tutorials_kg_grantor WITH ADMIN OPTION;`, and capture the credentials securely.
+- **How to bind the user-provided service in CF** — the `cf cups tutorials-kg-grantor -p '{"user":"…","password":"…","host":"…","port":"…","driver":"…"}'` command line; note that the field shape is what `@sap/hdi-deploy` expects.
+- **Verification** — re-run the spike probe (`npx cds bind --exec --profile hybrid -- node scripts/spike/kg-probe.cjs`); should now exit 0 against the bound HDI runtime user.
+- **Rotation runbook** — when the grantor's HANA password is rotated: re-run the `cf cups tutorials-kg-grantor -p …` (use `cf uups` for update), then `cf restart tutorials-db-deployer` is **not** needed because the grantor is only consumed at deploy-time; instead the next `cf deploy` of the MTA picks up the new credentials.
+
+- [ ] **Step 2: Cross-link from the architecture doc**
+
+In `docs/developers/architecture/hana-kge-access.md` § "What PR 2 must add", add a sentence: "Step-by-step DBADMIN + `cf cups` instructions live in [docs/developers/operations/kg-grantor-setup.md](../operations/kg-grantor-setup.md)."
+
+- [ ] **Step 3: Add to operations docs index**
+
+If `docs/.vitepress/config.ts` `themeConfig.sidebar` enumerates operations runbooks, register the new page; if there is a `docs/developers/operations/README.md` index, add a bullet linking to it. The `predocs:build` sidebar guard rejects unregistered pages — failing this step breaks the docs deploy.
 
 ### Task 2.2: TDD — `@assert.unique` on Concepts.slug
 
@@ -324,6 +416,14 @@ git commit -m "feat(kg): add Concepts/TutorialConceptLinks/ConceptEdges/GraphMet
 ```
 
 ### Task 2.3: Open PR, deploy, verify hybrid test passes
+
+- [ ] **Step 0: Confirm grantor service exists in DEV space before opening the PR**
+
+```bash
+cf services | grep tutorials-kg-grantor
+```
+
+If the grantor service is **not** present, [docs/developers/operations/kg-grantor-setup.md](../../developers/operations/kg-grantor-setup.md) MUST be executed against DEV first — otherwise the post-merge HDI deploy will succeed at the schema level but PR 4's first SPARQL call will fail at runtime. Do not proceed to Step 1 until the service is bound.
 
 - [ ] **Step 1: Open PR**
 
@@ -661,18 +761,15 @@ git commit -m "feat(kg): CDS state → RDF triples projection (#381 PR 4/8 part 
 
 - [ ] **Step 1: Implement based on the spike findings**
 
-`srv/lib/kg-sparql-client.js` exports `sparqlExec(db, sparql)` and `sparqlQuery(db, sparql)`. The implementation follows whichever access path the day-1 spike validated:
+`srv/lib/kg-sparql-client.js` exports `sparqlExec(db, sparql)` and `sparqlQuery(db, sparql)`. The PR 1 spike ([#401](https://github.com/sap-tutorials/tutorials-ims/pull/401)) established the canonical access path:
 
-- **Primary:** `db.run("SPARQL EXECUTE '<sparql>'")` — string-substitutes the user-provided SPARQL into an `EXECUTE STATEMENT`-style wrapper
-- **Fallback:** REST endpoint via the BTP Destination Service
-
-Both implementations live behind the same export surface so the rest of the code is path-agnostic.
+- **Primary (and only):** `CALL SYS.SPARQL_EXECUTE(?, ?, ?, ?)` invoked over the existing `cds.connect.to('db')` connection. Wrap in a `DO BEGIN … END` block to surface the OUT params (`response`, `headers`) reliably across cds-driver versions — see the `sparqlCall` reference implementation in [docs/developers/architecture/hana-kge-access.md](../../developers/architecture/hana-kge-access.md). Pass the SPARQL body as a parameter binding, **not** by string concatenation.
+- **No REST fallback.** The procedure works over the same JDBC pool, auth context, and transaction boundary as every other `db.run()`; routing through the destination service would only add a second auth surface, a different transaction boundary, and operational drift (see spec § Why no REST fallback?).
 
 The client also takes care of:
 
-- escaping single quotes in the SPARQL body (HANA `EXECUTE STATEMENT` is single-quote-delimited)
 - a 30s timeout via `Promise.race` ([[feedback_hana_with_hint_scope]])
-- structured error mapping (network / syntax / privilege)
+- structured error mapping (network / syntax / privilege — including the "missing SPARQL privilege" path that points operators at [docs/developers/operations/kg-grantor-setup.md](../../developers/operations/kg-grantor-setup.md))
 
 - [ ] **Step 2: Commit**
 
@@ -1458,8 +1555,8 @@ But the prod cron jobs still need to run a full corpus pass before the sidebar w
 
 ## Done-when checklist
 
-- [ ] PR 1: HANA KGE access pattern documented; `EXECUTE STATEMENT` validated OR REST fallback documented
-- [ ] PR 2: 4 entities deployed; `@assert.unique` on Concepts.slug enforced
+- [x] PR 1: HANA KGE access pattern documented; `EXECUTE STATEMENT 'SPARQL …'` disproven, `CALL SYS.SPARQL_EXECUTE(?, ?, ?, ?)` validated as canonical path. ([#401](https://github.com/sap-tutorials/tutorials-ims/pull/401))
+- [ ] PR 2: 4 entities deployed; `@assert.unique` enforced; `.hdbgrants` ships `SPARQL QUERY`/`SPARQL UPDATE` to `default_access_role`; grantor service bound; spike probe passes against bound HDI runtime user
 - [ ] PR 3: extractConcepts cron populates ~80–150 ACTIVE Concepts on DEV
 - [ ] PR 4: consolidateConcepts cron + graphRebuild populate the named graph; SPARQL hdbsql probe returns triples
 - [ ] PR 5: `/graph/neighborhood?slug=…` returns 4-section JSON; admin runSparql gated on scope

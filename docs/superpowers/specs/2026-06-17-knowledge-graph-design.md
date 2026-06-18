@@ -13,6 +13,15 @@ The graph is built by two cron jobs in `srv/jobs/`: a nightly per-tutorial conce
 
 This is also a deliberate showcase of HANA Cloud's Knowledge Graph Engine — an under-promoted multi-model capability ([the multi-model tutorial](https://developers.sap.com/tutorials/hana-dbx-multi-model.html) is one of the few public touchpoints). The Phase 1 flagship SPARQL query — a 4-way UNION inside `neighborhood(slug)` — exercises multi-hop property paths (`teaches → requires → teaches`) that are awkward in plain SQL and elegant in SPARQL.
 
+## Spike findings (PR 1)
+
+The day-1 spike (PR 1 of the implementation plan, [#401](https://github.com/sap-tutorials/tutorials-ims/pull/401)) disproved two assumptions baked into earlier drafts of this spec:
+
+1. **Access path.** `db.run("SPARQL EXECUTE '<query>'")` (and the documented variants `EXECUTE 'SPARQL <q>'` / `EXECUTE 'SPARQL <q>' AS SPARQL`) are rejected by the HANA SQL parser before reaching any SPARQL engine. The verified canonical path is the stored procedure `CALL SYS.SPARQL_EXECUTE(?, ?, ?, ?)` invoked over the same `cds.connect.to('db')` connection — wrapped in a `DO BEGIN … END` block to surface the OUT params reliably across cds-driver versions.
+2. **Privilege delivery.** The runtime user MUST receive `SPARQL QUERY` and `SPARQL UPDATE` via the canonical `@sap/hdi-deploy` flow — `.hdbgrants` artefact + grantor user (user-provided service) + `default_access_role`. Direct `GRANT … TO <runtime-user>` is the anti-pattern: it does not survive HDI redeploys.
+
+Full write-up — including the `sparqlCall` wrapper, the disproven syntax, the HDI grants flow, and probe behaviour — is in [docs/developers/architecture/hana-kge-access.md](../../developers/architecture/hana-kge-access.md). All references below are aligned with those findings.
+
 ## Goals
 
 1. **End-user discovery first.** A new sidebar on tutorial Object Pages helps users find prerequisites, related tutorials, and what-to-learn-next. Behind feature flag `KNOWLEDGE_GRAPH_ENABLED` (default OFF) until extraction quality is validated against real eyeballs.
@@ -97,7 +106,7 @@ Two alternatives considered and rejected:
 2. **Two cron jobs in `srv/jobs/`, both using `job-lock.js` for distributed locking.** `extractConcepts` is per-tutorial and content-hash-keyed (mirrors [#208 AI-quiz cache](C:\Users\I809764\.claude\projects\d--projects-tutorials-poc\memory\project_208_ai_authored_quizzes_shipped.md)). `consolidateConcepts` runs weekly and ends with a full `graphRebuild` of the named graph in HANA KGE.
 3. **Named queries on the public surface, raw SPARQL admin-only.** Same security model as [`AnalyticsService.runSelectQuery`](srv/lib/analytics-sql-validator.cjs): server-validated, parameterized, easy to cache, easy to evolve. Phase 2's `pathBetween()` and `conceptsForUser()` are stubs in Phase 1 so the contract stays stable across phases.
 4. **No new approuter routes for Phase 1.** Sidebar is a Vue island consumed by the existing tutorial Object Page. Admin concept review reuses `/admin-ui/`. The only new route is `/graph/*` on `tutorials-srv`. New XSUAA scope: `KnowledgeGraph.Admin`, added to the existing `Tutorial.Admin` role collection.
-5. **HANA KGE access via `EXECUTE STATEMENT 'SPARQL …'`** over the existing `cds.connect.to('db')` connection — same connection lifecycle, same auth, no second client. Day-1 spike validates this pattern before locking the implementation; if `EXECUTE STATEMENT` doesn't work, fall back to KGE's REST endpoint.
+5. **HANA KGE access via `CALL SYS.SPARQL_EXECUTE(?, ?, ?, ?)`** over the existing `cds.connect.to('db')` connection — same connection lifecycle, same auth, no second client. Confirmed by the day-1 spike (PR 1, [#401](https://github.com/sap-tutorials/tutorials-ims/pull/401)). The wrapper uses a `DO BEGIN … END` block to reliably surface the OUT params (`response`, `headers`) across cds-driver versions. See [docs/developers/architecture/hana-kge-access.md](../../developers/architecture/hana-kge-access.md) for the authoritative reference.
 
 ### New modules
 
@@ -330,7 +339,7 @@ Pure projection. No LLM calls. Idempotent.
 
 ```
 1. Compute graphVersion = ULID()
-2. EXECUTE STATEMENT 'SPARQL CLEAR GRAPH <kg:tutorials>'
+2. CALL SYS.SPARQL_EXECUTE('CLEAR GRAPH <kg:tutorials>', '', :response OUT, :headers OUT)
 3. Project triples in batches of ~5000:
    - Concepts (status=ACTIVE) → kg:concept/<slug> rdf:type kg:Concept ;
                                                 kg:slug "<slug>" ;
@@ -344,7 +353,7 @@ Pure projection. No LLM calls. Idempotent.
    - Tutorials → kg:partOf, kg:taggedWith, kg:aboutProduct
    - Missions/Groups → kg:partOf, kg:inCategory
    - Top-10 co-completions per Tutorial → kg:coCompletedWith with kg:weight
-4. Each batch: EXECUTE STATEMENT 'SPARQL INSERT DATA { GRAPH <kg:tutorials> { ... } }'
+4. Each batch: CALL SYS.SPARQL_EXECUTE('INSERT DATA { GRAPH <kg:tutorials> { ... } }', '', :response OUT, :headers OUT)
 5. Update sidecar in CDS: GraphMetadata.lastRebuiltAt + .graphVersion
 6. Cache busts: any /graph/neighborhood result keyed on old graphVersion is now stale
 ```
@@ -361,7 +370,7 @@ Pure projection. No LLM calls. Idempotent.
 | Cycle in `:requires` | DFS during consolidation | Auto-VETO weakest edge in cycle |
 | KGE INSERT batch fails | try/catch around batch | Roll back transaction, retry once with smaller batch, then alert via existing alerting hook |
 | Job crashes mid-run | `job-lock.js` releases lock on TTL expiry | Next tick picks up where it left off (per-tutorial caching means resumable) |
-| `EXECUTE STATEMENT 'SPARQL …'` not supported | Day-1 spike | Fall back to KGE REST endpoint via Destination Service |
+| Privilege not granted on container deploy | First SPARQL call returns `User does not have SPARQL query privileges` | PR 2's `.hdbgrants` + grantor flow ensures it; deploy fails fast if not in place. See [docs/developers/architecture/hana-kge-access.md § Privileges required](../../developers/architecture/hana-kge-access.md) |
 | `Concepts` table wiped by HDI deploy | Pre-deploy snapshot row count | Re-run `extractConcepts` with `KG_EXTRACT_BUILD_CAP=10000` to rebuild from cache (~$5) |
 | `srv-qa` cp-list misses new lib files | QA boot smoke test | PR-time audit ([[feedback_srv_qa_cp_list_recurring]]) |
 
@@ -464,7 +473,7 @@ That's a real multi-hop SPARQL query — exactly the shape that's painful in pla
 The handler:
 
 1. Substitutes `$SLUG` (after kebab-case validation)
-2. Calls `db.run('EXECUTE STATEMENT ?', sparqlString)` — same connection used by everything else
+2. Calls `SYS.SPARQL_EXECUTE` via the canonical `DO BEGIN … END` wrapper over the existing `cds.connect.to('db')` connection (see [docs/developers/architecture/hana-kge-access.md](../../developers/architecture/hana-kge-access.md) for the wrapper shape and [`srv/lib/kg-sparql-client.js`](srv/lib/kg-sparql-client.js) for the production helper PR 4 lands)
 3. Groups raw rows by `?type`
 4. Re-ranks `whatToLearnNext`: SPARQL gives candidates; JS layer multiplies by `coCompletedWith` weight from a second SPARQL hop (or cached map) and subtracts a penalty for tutorials whose `:teaches` concepts the current user has already seen (Phase 1: anonymous; Phase 2: per-user via `conceptsForUser`)
 5. Returns top 10 of each section
@@ -607,21 +616,23 @@ Following the three Vitest workspaces in [vitest.config.ts](vitest.config.ts):
 
 ### Day-1 spike (before locking the implementation)
 
+**✅ Resolved by PR 1 ([#401](https://github.com/sap-tutorials/tutorials-ims/pull/401)) — see "Spike findings (PR 1)" near the top of this spec and [docs/developers/architecture/hana-kge-access.md](../../developers/architecture/hana-kge-access.md) for the full write-up. The questions below are preserved as historical context for what the spike investigated.**
+
 A 1-day investigation, separate PR, *before* the data-model PR. Goals:
 
-1. Can `db.run('EXECUTE STATEMENT \\'SPARQL CLEAR GRAPH <kg:tutorials>\\'')` execute against a `cds bind`'d HANA Cloud DEV tenant? If yes → primary path. If no → switch to KGE REST endpoint via Destination Service. Document either way.
-2. What's the actual triple-store DDL? (`CREATE GRAPH WORKSPACE`?, special privileges?). The HDI deployer needs to know.
-3. Round-trip: insert 100 dummy triples, run a 2-hop SPARQL SELECT, measure latency. If >1s for that, the design assumes wrong order of magnitude and we need to revisit caching.
+1. Can `db.run('EXECUTE STATEMENT \\'SPARQL CLEAR GRAPH <kg:tutorials>\\'')` execute against a `cds bind`'d HANA Cloud DEV tenant? If yes → primary path. If no → switch to KGE REST endpoint via Destination Service. Document either way. *(Resolved: NO — the SQL extension does not exist; the canonical path is `CALL SYS.SPARQL_EXECUTE(?, ?, ?, ?)` with no REST fallback needed.)*
+2. What's the actual triple-store DDL? (`CREATE GRAPH WORKSPACE`?, special privileges?). The HDI deployer needs to know. *(Resolved: no DDL — `INSERT DATA` into an unknown named graph creates it implicitly. Privileges are `SPARQL QUERY` + `SPARQL UPDATE` delivered via `.hdbgrants` + grantor service.)*
+3. Round-trip: insert 100 dummy triples, run a 2-hop SPARQL SELECT, measure latency. If >1s for that, the design assumes wrong order of magnitude and we need to revisit caching. *(Pending: latency re-measurement once PR 2's grants flow lands.)*
 4. Confirm `xs-security.json` scope check works for `runSparql` admin-only action without surprises.
 
-The spike outputs become a one-page "HANA KGE access patterns" document committed to [docs/developers/architecture/](docs/developers/architecture/), referenced in the implementation plan.
+The spike outputs become a one-page "HANA KGE access patterns" document committed to [docs/developers/architecture/](../../developers/architecture/), referenced in the implementation plan.
 
 ## Risks & mitigations
 
 | Risk | Likelihood | Mitigation |
 | ---- | ---------- | ---------- |
 | AI extracts garbage concepts ("things about deploying") | High in early runs | Constrained extraction limits new concepts; admin veto is the relief valve; concept review tool ships in Phase 1 so quality is visible from day 1 |
-| HANA KGE auth or syntax differs from what the design assumes | Medium — under-documented capability | Day-1 spike validates `EXECUTE STATEMENT` path; fall back to REST endpoint if broken; **don't lock the data model around an engine we can't drive yet** |
+| HANA KGE auth or syntax differs from what the design assumes | Resolved — disproven by PR 1 spike | Spike replaced the assumed `EXECUTE STATEMENT 'SPARQL …'` syntax (rejected by HANA SQL parser) with `CALL SYS.SPARQL_EXECUTE`. Privilege delivery now via canonical HDI `.hdbgrants` flow. See [docs/developers/architecture/hana-kge-access.md](../../developers/architecture/hana-kge-access.md) |
 | Phase 1 wow factor lower than expected ("just another sidebar") | Medium | Admin Concepts review is genuinely interesting on its own; SPARQL endpoint is the technical-credibility piece for any internal demo |
 | LLM costs balloon | Low | Hard `KG_EXTRACT_BUILD_CAP=200` per job; content-hash cache; weekly consolidation budget separate. Steady-state ~$1–2/week |
 | Cycles in `:requires` make SPARQL property-path queries explode | Medium | DFS validation in `consolidateConcepts`; auto-VETO weakest edge; alert on detection |
@@ -644,7 +655,7 @@ The spike outputs become a one-page "HANA KGE access patterns" document committe
 - 1 new feature flag (`KNOWLEDGE_GRAPH_ENABLED`, default OFF)
 - 1 new XSUAA scope (`KnowledgeGraph.Admin`) attached to existing `Tutorial.Admin` role collection
 - 2 new env vars: `KG_EXTRACT_BUILD_CAP` (default 200), `KG_MERGE_SIM_THRESHOLD` (default 0.92)
-- 1-day spike to validate HANA KGE access via `EXECUTE STATEMENT 'SPARQL …'` *before* locking the implementation
+- 1-day spike (✅ landed in PR 1 / [#401](https://github.com/sap-tutorials/tutorials-ims/pull/401)) — confirmed `CALL SYS.SPARQL_EXECUTE` access path and `.hdbgrants`-based privilege delivery; full findings at [docs/developers/architecture/hana-kge-access.md](../../developers/architecture/hana-kge-access.md)
 - Audit-logging + change-tracking on `Concepts`
 - ORD annotations for `KnowledgeGraphService`
 - Smoke + hybrid + unit test coverage as described above
@@ -669,7 +680,7 @@ The spike outputs become a one-page "HANA KGE access patterns" document committe
 5. **Phasing P1.1 — backend + sidebar (B)** over Joule-first or admin-only. Smallest end-user surface, real eyeballs surface extraction-quality bugs we'd never find from internal review.
 6. **Named queries on the public surface, raw SPARQL admin-only.** Same model as `AnalyticsService.runSelectQuery`.
 7. **`whatToLearnNext` ranking happens in JS** after the SPARQL hop, not in SPARQL. Keeps SPARQL clean; ranking stays where it's easy to tune.
-8. **HANA KGE access via `EXECUTE STATEMENT 'SPARQL …'`** over existing `db.run()` connection, not a separate REST client. Subject to day-1 spike confirmation.
+8. **HANA KGE access via `CALL SYS.SPARQL_EXECUTE(?, ?, ?, ?)` stored procedure** over the existing `cds.connect.to('db')` connection, not a separate REST client. Procedure-based is what HANA Cloud actually exposes — chosen via the day-1 spike (PR 1 / [#401](https://github.com/sap-tutorials/tutorials-ims/pull/401)). The earlier-assumed `EXECUTE STATEMENT 'SPARQL …'` SQL extension does not exist in HANA Cloud QRC 2026.2. Wrapper uses `DO BEGIN … END` for OUT-param robustness; full reference in [docs/developers/architecture/hana-kge-access.md](../../developers/architecture/hana-kge-access.md).
 9. **Single `TutorialConceptLinks` entity** with predicate column over split `TeachesLinks` + `ExtendsLinks` entities — same extraction pipeline, same cache key.
 10. **`@assert.unique` on `Concepts.slug`** from day one (PR #386 lesson learned).
 11. **Hide-on-empty sidebar** rather than empty-state UI — Phase 1 ships only after first cron run.
@@ -678,7 +689,7 @@ The spike outputs become a one-page "HANA KGE access patterns" document committe
 
 ## Open questions
 
-- **HANA KGE feature availability on the `tutorial-system` subaccount.** Tom to confirm via `btp_target` / service-marketplace check before the spike. If not available on EU10-005, this whole spec needs re-targeting.
+- **HANA KGE feature availability on the `tutorial-system` subaccount.** Tom to confirm via `btp_target` / service-marketplace check before the spike. If not available on EU10-005, this whole spec needs re-targeting. (✅ Confirmed available; see PR 1 / [#401](https://github.com/sap-tutorials/tutorials-ims/pull/401))
 
 ## Decisions deferred at brainstorm but locked here for the plan
 
