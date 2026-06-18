@@ -276,16 +276,14 @@ service AdminService {
   @readonly entity LearningPreferences as projection on ims.UserLearningPreferences;
 
   // Developer Advocates — admin CRUD. Spec: docs/superpowers/specs/2026-06-17-developer-advocates-design.md
+  // Note: I tried adding a `virtual photoIconUrl` element here so the OP
+  // HeaderInfo.ImageUrl could resolve to the public REST endpoint, but
+  // OData v4 drill-down treats virtual non-primitive paths weirdly and
+  // spams "invalid segment: photoIconUrl" errors on every read. Reverted.
+  // The header avatar is a v2 follow-up; primary use case is the
+  // uploadPhoto / clearPhoto bound actions which work without the virtual.
   @odata.draft.enabled
-  entity Advocates as projection on ims.Advocates {
-    *,
-    // Virtual: rendered URL the Object Page header avatar points at.
-    // We can't bind ImageUrl to /admin/Advocates(...)/photo/photo256
-    // (the OData media stream through a draft-enabled composition 404s),
-    // so we route through the public REST endpoint that already serves
-    // these bytes. The ?v={photoUpdatedAt} suffix busts the 24h cache.
-    virtual null as photoIconUrl : String,
-  } actions {
+  entity Advocates as projection on ims.Advocates actions {
     // Bound action for the Object Page photo-upload flow. The Fiori
     // UploadSet against the `photo` composition silently drops bytes
     // through the draft layer; this action is the explicit, working

@@ -86,8 +86,8 @@
             "settings": {
               "contextPath": "/Advocates",
               "editableHeaderContent": false,
-              "controlConfiguration": {
-                "@com.sap.vocabularies.UI.v1.HeaderInfo": {
+              "content": {
+                "header": {
                   "actions": {
                     "uploadPhoto": {
                       "press": "sap.tutorials.admin.advocates.ext.AdvocatePhotoController.onUploadPhotoPress",
