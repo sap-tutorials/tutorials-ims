@@ -41,6 +41,24 @@
   const startedAt = Date.now();
 
   try {
+    // DB-kind guard: refuse to run against anything but HANA. Without
+    // `cds bind --exec --profile hybrid`, this script would silently use the
+    // in-memory SQLite default and write garbage to the wrong DB. Mirrors
+    // the pattern in scripts/spike/kg-probe.cjs.
+    const cdsMod = await import('@sap/cds');
+    const cds = cdsMod.default || cdsMod;
+    const db = await cds.connect.to('db');
+    if (db.kind !== 'hana') {
+      console.error(
+        `[kg-reextract] WRONG DRIVER: db.kind is "${db.kind}", expected "hana".`,
+      );
+      console.error('[kg-reextract] You probably forgot --profile hybrid. Try:');
+      console.error(
+        '[kg-reextract]   cds bind --exec --profile hybrid -- node scripts/kg-reextract.cjs',
+      );
+      process.exit(3);
+    }
+
     // Dynamic import because the job module is ESM (type:module project).
     const { runExtractConcepts } = await import('../srv/jobs/extract-concepts-job.js');
     const summary = await runExtractConcepts();

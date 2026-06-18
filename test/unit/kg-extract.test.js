@@ -337,3 +337,88 @@ describe('extractConceptsFromTutorial — prerequisites cap', () => {
     expect(result.warnings.some((w) => /prerequisites/i.test(w))).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// callModel failure paths — graceful degradation, not throwing
+// ---------------------------------------------------------------------------
+
+describe('extractConceptsFromTutorial — callModel failure paths', () => {
+  it('propagates the original error when callModel rejects (does not swallow)', async () => {
+    const boom = new Error('LLM 503: rate-limited');
+    const callModel = vi.fn().mockRejectedValue(boom);
+
+    await expect(
+      extractConceptsFromTutorial({
+        tutorialSlug: 't-1',
+        tutorialTitle: 'T1',
+        tutorialBody: 'body',
+        registry: [],
+        callModel,
+      })
+    ).rejects.toThrow('LLM 503: rate-limited');
+    expect(callModel).toHaveBeenCalledOnce();
+  });
+
+  it('resolves with empty teaches/prerequisites + warning when callModel returns null', async () => {
+    const callModel = vi.fn().mockResolvedValue(null);
+
+    const result = await extractConceptsFromTutorial({
+      tutorialSlug: 't-1',
+      tutorialTitle: 'T1',
+      tutorialBody: 'body',
+      registry: [],
+      callModel,
+    });
+
+    expect(result.teaches).toEqual([]);
+    expect(result.prerequisites).toEqual([]);
+    expect(result.extends).toBeNull();
+    expect(result.tokenUsage).toEqual({ prompt: 0, completion: 0 });
+    // teaches.length=0 is outside [3,7] — that's the malformed-response signal
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.warnings.some((w) => /teaches/i.test(w))).toBe(true);
+  });
+
+  it('drops to empty teaches + warning when verdict.teaches is not an array', async () => {
+    const verdict = {
+      teaches: 'not an array',
+      extends: null,
+      prerequisites: [],
+    };
+    const callModel = vi.fn().mockResolvedValue(makeResponse(verdict));
+
+    const result = await extractConceptsFromTutorial({
+      tutorialSlug: 't-1',
+      tutorialTitle: 'T1',
+      tutorialBody: 'body',
+      registry: [],
+      callModel,
+    });
+
+    expect(result.teaches).toEqual([]);
+    expect(result.prerequisites).toEqual([]);
+    // teaches.length=0 fires the bounds warning
+    expect(result.warnings.some((w) => /teaches.*\b3\b.*\b7\b/.test(w))).toBe(true);
+  });
+
+  it('drops to empty prerequisites + warning when verdict.prerequisites is not an array', async () => {
+    const verdict = {
+      teaches: [],
+      extends: null,
+      prerequisites: 'not an array',
+    };
+    const callModel = vi.fn().mockResolvedValue(makeResponse(verdict));
+
+    const result = await extractConceptsFromTutorial({
+      tutorialSlug: 't-1',
+      tutorialTitle: 'T1',
+      tutorialBody: 'body',
+      registry: [],
+      callModel,
+    });
+
+    expect(result.teaches).toEqual([]);
+    expect(result.prerequisites).toEqual([]);
+    expect(result.warnings.length).toBeGreaterThan(0);
+  });
+});

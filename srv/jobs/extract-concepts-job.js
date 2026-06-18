@@ -118,8 +118,25 @@ export async function runExtractConcepts(deps = {}) {
   const embed = deps.embed ?? defaultEmbed;
   const log = deps.log ?? cds.log('extract-concepts');
 
-  const buildCap = Number(process.env.KG_EXTRACT_BUILD_CAP) || 200;
-  log.info(`extract-concepts: starting (KG_EXTRACT_BUILD_CAP=${buildCap})`);
+  // KG_EXTRACT_BUILD_CAP=0 means "make zero LLM calls" (effectively dry-run).
+  // Negative or NaN falls back to the default 200. Don't use `|| 200` — that
+  // would silently swallow the explicit-zero case.
+  const capRaw = process.env.KG_EXTRACT_BUILD_CAP;
+  const capParsed = capRaw !== undefined ? Number(capRaw) : NaN;
+  const buildCap = Number.isFinite(capParsed) && capParsed >= 0 ? capParsed : 200;
+
+  // Merge-on-extract threshold: cosine similarity above this collapses a
+  // newly-proposed concept into an existing one rather than minting.
+  // Override via KG_MERGE_SIM_THRESHOLD_EXTRACT (must be in (0, 1]).
+  const thresholdRaw = Number(process.env.KG_MERGE_SIM_THRESHOLD_EXTRACT);
+  const MERGE_THRESHOLD =
+    Number.isFinite(thresholdRaw) && thresholdRaw > 0 && thresholdRaw <= 1
+      ? thresholdRaw
+      : MERGE_AT_EXTRACT_THRESHOLD;
+
+  log.info(
+    `extract-concepts: starting (KG_EXTRACT_BUILD_CAP=${buildCap}, MERGE_THRESHOLD=${MERGE_THRESHOLD})`,
+  );
 
   // Resolve model identity once. modelVersion drives the cache key for
   // TutorialConceptLinks, so a model swap forces a re-extract.
@@ -229,7 +246,14 @@ export async function runExtractConcepts(deps = {}) {
         }
 
         // ---- Resolve teaches → concept IDs (mint or merge as needed) ----
+        // Decisions are computed pre-tx (pure computation against the
+        // page-scoped registry); the actual Concepts INSERT is deferred to
+        // inside the per-tutorial tx so a failed tx does NOT leave orphan
+        // concepts in HANA. Registry mutations happen AFTER the tx commits
+        // — see `pendingRegistryMutations` below.
         const teachesResolved = []; // [{ conceptId, confidence }]
+        const pendingNewConcepts = []; // [{ ID, slug, name, embeddingBuf, embeddingVec, confidence }]
+        const newSlugToPendingId = new Map(); // slug → pending newId, so dup teaches in same tutorial collapse
         for (const t of extraction.teaches) {
           const exact = registryBySlug.get(t.slug);
           if (exact) {
@@ -237,10 +261,17 @@ export async function runExtractConcepts(deps = {}) {
             continue;
           }
 
-          // New slug. Embed name + description to check for near-duplicate
-          // before minting. Description is empty at this point (LLM doesn't
-          // emit it; concept descriptions are admin-curated post-hoc), so we
-          // embed `name` only — kg-extract's teaches schema only carries name.
+          // If we already minted this slug earlier in THIS tutorial's loop,
+          // reuse the pending ID — don't embed/mint twice.
+          const alreadyPending = newSlugToPendingId.get(t.slug);
+          if (alreadyPending) {
+            teachesResolved.push({ conceptId: alreadyPending, confidence: t.confidence });
+            continue;
+          }
+
+          // New slug. Embed name to check for near-duplicate before minting.
+          // Description is empty at this point (LLM doesn't emit it; concept
+          // descriptions are admin-curated post-hoc), so we embed `name` only.
           const embedInput = `${t.name}`;
           let candidateVec;
           try {
@@ -259,7 +290,7 @@ export async function runExtractConcepts(deps = {}) {
           }
 
           const match = findBestMatch(candidateVec, registryEmbeddings);
-          if (match.conceptId && match.sim > MERGE_AT_EXTRACT_THRESHOLD) {
+          if (match.conceptId && match.sim > MERGE_THRESHOLD) {
             mergedAtExtract++;
             log.warn(
               `[${tutorial.slug}] merged new concept "${t.slug}" into existing ` +
@@ -272,29 +303,23 @@ export async function runExtractConcepts(deps = {}) {
             continue;
           }
 
-          // Mint a new concept.
+          // Defer the mint. Pre-allocate the UUID + embedding buffer so the
+          // tx body is just a synchronous-ish write. The actual INSERT and
+          // any registry mutation happen inside / after the tx, respectively.
           const newId = cds.utils.uuid();
           const embeddingBuf = Buffer.from(
             candidateVec.buffer,
             candidateVec.byteOffset,
             candidateVec.byteLength,
           );
-          await INSERT.into(Concepts).entries({
+          pendingNewConcepts.push({
             ID: newId,
             slug: t.slug,
             name: t.name,
-            description: '',
-            embedding: embeddingBuf,
-            status: 'ACTIVE',
-            extractionCount: 0,
-            lastSeenAt: new Date().toISOString(),
+            embeddingBuf,
+            embeddingVec: candidateVec,
           });
-          // Update in-memory caches so subsequent teaches in the same tutorial
-          // page reference the freshly minted row.
-          registry.push({ ID: newId, slug: t.slug, name: t.name, description: '' });
-          registryBySlug.set(t.slug, { ID: newId, slug: t.slug, name: t.name });
-          registryEmbeddings.set(newId, candidateVec);
-          newConcepts++;
+          newSlugToPendingId.set(t.slug, newId);
           teachesResolved.push({ conceptId: newId, confidence: t.confidence });
         }
 
@@ -334,11 +359,31 @@ export async function runExtractConcepts(deps = {}) {
           });
         }
 
-        // ---- Atomic write: replace links + edges + bump counters --------
+        // ---- Atomic write: mint pending concepts + replace links + edges --
+        // Pending Concepts INSERTs happen INSIDE the per-tutorial tx so a
+        // mid-tx failure doesn't leave orphan rows in HANA. Registry
+        // mutations are deferred until AFTER the tx commits — see below.
         const touchedConceptIds = teachesResolved.map((x) => x.conceptId);
         const nowIso = new Date().toISOString();
 
-        await cds.tx(async (tx) => {
+        await db.tx(async (tx) => {
+          // Mint deferred Concepts first — same tx as the FK-bearing rows
+          // that reference them, so a rollback erases everything together.
+          for (const pc of pendingNewConcepts) {
+            await tx.run(
+              INSERT.into(Concepts).entries({
+                ID: pc.ID,
+                slug: pc.slug,
+                name: pc.name,
+                description: '',
+                embedding: pc.embeddingBuf,
+                status: 'ACTIVE',
+                extractionCount: 0,
+                lastSeenAt: nowIso,
+              }),
+            );
+          }
+
           // Replace prior links for this tutorial (predicate-agnostic — both
           // 'teaches' and 'extends' rows are owned by this tutorial's
           // extraction record).
@@ -417,6 +462,18 @@ export async function runExtractConcepts(deps = {}) {
             );
           }
         });
+
+        // Tx committed successfully — only NOW mutate the in-memory registry
+        // so subsequent tutorials in the same page see the freshly-minted
+        // concepts. If the tx had thrown, we would NOT reach this line and
+        // the registry stays consistent with persisted state (the tutorial
+        // is counted as an error and re-extracted on the next run).
+        for (const pc of pendingNewConcepts) {
+          registry.push({ ID: pc.ID, slug: pc.slug, name: pc.name, description: '' });
+          registryBySlug.set(pc.slug, { ID: pc.ID, slug: pc.slug, name: pc.name });
+          registryEmbeddings.set(pc.ID, pc.embeddingVec);
+          newConcepts++;
+        }
 
         processed++;
         if (processed % 10 === 0) {

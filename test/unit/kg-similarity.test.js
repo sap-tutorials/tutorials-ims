@@ -174,4 +174,42 @@ describe('findNearDuplicates', () => {
     expect(pair.canonical).toBe(b); // higher extractionCount
     expect(pair.loser).toBe(a);
   });
+
+  it('skips concepts whose embeddingVec is missing/null/undefined without throwing', () => {
+    // Two well-formed concepts that would normally pair (sim=1.0)…
+    const a = makeConcept('a', [1, 2, 3], /*ext*/ 5);
+    const b = makeConcept('b', [1, 2, 3], /*ext*/ 2);
+    // …plus three concepts with broken embeddings: missing, null, undefined.
+    const missing = {
+      ID: 'missing',
+      slug: 'missing',
+      // embeddingVec is absent entirely
+      extractionCount: 1,
+      firstSeenAt: '2026-01-01T00:00:00Z',
+    };
+    const nullVec = {
+      ID: 'null-vec',
+      slug: 'null-vec',
+      embeddingVec: null,
+      extractionCount: 1,
+      firstSeenAt: '2026-01-01T00:00:00Z',
+    };
+    const undefVec = {
+      ID: 'undef-vec',
+      slug: 'undef-vec',
+      embeddingVec: undefined,
+      extractionCount: 1,
+      firstSeenAt: '2026-01-01T00:00:00Z',
+    };
+
+    let dups;
+    expect(() => {
+      dups = findNearDuplicates([missing, a, nullVec, b, undefVec], 0.92);
+    }).not.toThrow();
+
+    // Only the (a, b) pair survives — the broken concepts are skipped silently
+    expect(dups).toHaveLength(1);
+    const ids = new Set([dups[0].canonical.ID, dups[0].loser.ID]);
+    expect(ids).toEqual(new Set(['a', 'b']));
+  });
 });
