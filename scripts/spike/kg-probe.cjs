@@ -151,11 +151,17 @@ function handlePrivilegeError(label, err) {
  * @returns {Promise<{response:string, headers:string, latencyMs:number}>}
  */
 async function sparqlCall(db, request, parameter = '') {
+  // HANA SQLScript binds parameters at the DO block's signature, not via
+  // bare `?` inside the block body. Declare typed IN parameters and
+  // reference them by name inside the procedure call.
+  //
+  // The OUT params (response, headers) are SELECTed back into a result-set
+  // so we can read them via cds without depending on driver OUT-bind support.
   const sql = `
-DO BEGIN
+DO (IN p_request NCLOB => ?, IN p_param NVARCHAR(5000) => ?) BEGIN
   DECLARE response NCLOB;
   DECLARE headers NVARCHAR(5000);
-  CALL SYS.SPARQL_EXECUTE(?, ?, response, headers);
+  CALL SYS.SPARQL_EXECUTE(:p_request, :p_param, response, headers);
   SELECT :response AS response, :headers AS headers FROM DUMMY;
 END
 `.trim();

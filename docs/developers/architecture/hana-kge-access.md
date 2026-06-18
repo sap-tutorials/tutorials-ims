@@ -80,11 +80,17 @@ how `db.run('CALL …')` surfaces OUT bind parameters:
 async function sparqlCall(db, request, parameter = '') {
   // Production version (PR 4): see scripts/spike/kg-probe.cjs for full
   // shape-variance handling — driver shapes vary between cds versions.
+  //
+  // HANA SQLScript binds parameters at the DO block's SIGNATURE, not via
+  // bare `?` inside the block body. Declaring `IN p_request NCLOB => ?`
+  // and referencing `:p_request` is the canonical form; trying to use `?`
+  // directly inside the block fails with SqlError 1287
+  // ("identifier must be declared").
   const sql = `
-DO BEGIN
+DO (IN p_request NCLOB => ?, IN p_param NVARCHAR(5000) => ?) BEGIN
   DECLARE response NCLOB;
   DECLARE headers NVARCHAR(5000);
-  CALL SYS.SPARQL_EXECUTE(?, ?, response, headers);
+  CALL SYS.SPARQL_EXECUTE(:p_request, :p_param, response, headers);
   SELECT :response AS response, :headers AS headers FROM DUMMY;
 END
 `.trim();
