@@ -662,7 +662,7 @@ After the tutorials-ims merge, the rebuild-content workflow fires. The first run
 - [ ] **Step 1: Watch the workflow run**
 
 ```bash
-RUN_ID=$(gh run list --repo sap-tutorials/tutorials-ims --workflow=rebuild-content.yml --limit 1 --json databaseId -q "[.[0].databaseId")
+RUN_ID=$(gh run list --repo sap-tutorials/tutorials-ims --workflow=rebuild-content.yml --limit 1 --json databaseId -q ".[0].databaseId")
 gh run watch --repo sap-tutorials/tutorials-ims "$RUN_ID"
 ```
 
