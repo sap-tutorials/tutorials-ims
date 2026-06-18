@@ -435,7 +435,7 @@ npm run lint:tutorial-markdown -- --slugs use-codecheck-to-ai-grade-reader-code,
 
 Expected: no `severity: error` items in the report. Warnings are OK to ship; errors must be fixed.
 
-> **If the `--slugs` flag isn't supported by `lint:tutorial-markdown`** (run `npx tsx scripts/lint-tutorial-markdown.ts --help` to check), simply run the linter on the entire cache and grep for the new slugs in the report.
+> **If the `--slugs` flag isn't supported by `lint:tutorial-markdown`** (run `npx tsx scripts/lint-tutorial-markdown.ts --help` to check), simply run the linter on the entire cache and grep the report for the new slugs. (Verified: the linter reads from .tutorial-cache/<slug>.md per scripts/lint-tutorial-markdown.ts lines 222-223.)
 
 - [ ] **Step 3: Commit Phase B in the meta-tutorials repo**
 
@@ -459,7 +459,10 @@ This is a privileged step — only org admins can create repos under `sap-tutori
 - [ ] **Step 1: Create the new repo via gh CLI**
 
 ```bash
-gh repo create sap-tutorials/meta-tutorials-Contribution --private --add-readme --license MIT
+# CHECK FIRST — verify what license other *-Contribution repos use:
+#   gh repo view sap-tutorials/abap-core-development-Contribution --json licenseInfo
+# Most use Apache-2.0. Pass the matching SPDX as --license (renaming post-create is not graceful).
+gh repo create sap-tutorials/meta-tutorials-Contribution --private --add-readme --license Apache-2.0
 ```
 
 If `--license MIT` doesn't match what other `*-Contribution` repos use, swap it for the correct SPDX identifier. Check by: `gh repo view sap-tutorials/abap-core-development-Contribution --json licenseInfo`.
@@ -659,7 +662,8 @@ After the tutorials-ims merge, the rebuild-content workflow fires. The first run
 - [ ] **Step 1: Watch the workflow run**
 
 ```bash
-gh run watch --repo sap-tutorials/tutorials-ims
+RUN_ID=$(gh run list --repo sap-tutorials/tutorials-ims --workflow=rebuild-content.yml --limit 1 --json databaseId -q "[.[0].databaseId")
+gh run watch --repo sap-tutorials/tutorials-ims "$RUN_ID"
 ```
 
 - [ ] **Step 2: Confirm the meta-tutorials repo was discovered**
@@ -791,14 +795,14 @@ Print to chat:
 > - Secondary tag: software-product>sap-business-technology-platform
 > - Description: paragraph linking to writing-tutorials.md
 >
-> Confirm when done so I can run the smoke test on `/mission.tutorial-platform-features-for-authors.html` and add the writing-tutorials.md callout."
+> Confirm when done so I can run the smoke test on `/missions/tutorial-platform-features-for-authors/` and add the writing-tutorials.md callout."
 
 ### Task F2: Smoke-test the mission landing page
 
 - [ ] **Step 1: HTTP 200 on the mission page**
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}" "https://<approuter-host>/mission.tutorial-platform-features-for-authors.html"
+curl -s -o /dev/null -w "%{http_code}" "https://<approuter-host>/missions/tutorial-platform-features-for-authors/"
 ```
 
 Expected: 200.
@@ -821,7 +825,7 @@ git checkout -b chore/writing-tutorials-live-examples
 Open `docs/authors/writing-tutorials.md`. Find the line `## 3. Anatomy of a tutorial` (around line 41). Immediately after the existing intro paragraph and before `### 3.1 Frontmatter`, add:
 
 ```markdown
-> **★ Live examples** — see the [Tutorial Platform Features for Authors](https://developers.sap.com/mission.tutorial-platform-features-for-authors.html) mission for working tutorials that demonstrate every piece of syntax described below: the [CODECHECK demo](https://developers.sap.com/tutorials/use-codecheck-to-ai-grade-reader-code.html), [free-text grading](https://developers.sap.com/tutorials/use-validate-to-ai-grade-free-text-answers.html), [AUTOAUTHOR](https://developers.sap.com/tutorials/use-autoauthor-to-generate-quiz-questions.html), and the [feature cookbook](https://developers.sap.com/tutorials/tutorial-platform-feature-cookbook.html) (OS variants, branches, mermaid, codetabs, glossary, lightbox).
+> **★ Live examples** — see the [Tutorial Platform Features for Authors](https://developers.sap.com/missions/tutorial-platform-features-for-authors/) mission for working tutorials that demonstrate every piece of syntax described below: the [CODECHECK demo](https://developers.sap.com/tutorials/use-codecheck-to-ai-grade-reader-code/), [free-text grading](https://developers.sap.com/tutorials/use-validate-to-ai-grade-free-text-answers/), [AUTOAUTHOR](https://developers.sap.com/tutorials/use-autoauthor-to-generate-quiz-questions/), and the [feature cookbook](https://developers.sap.com/tutorials/tutorial-platform-feature-cookbook/) (OS variants, branches, mermaid, codetabs, glossary, lightbox).
 ```
 
 > URL caveat: until the mission is also live in production (not just DEV), the `developers.sap.com` URLs will 404. If the production deploy is delayed, swap them for the DEV approuter URLs and add a TODO to update on prod-cutover.
