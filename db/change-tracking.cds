@@ -6,8 +6,14 @@
 // are tracked — bulk imports, scheduled jobs, and replication are excluded.
 
 using { com.sap.developers.ims as ims } from './schema';
+using from './knowledge-graph';
 
 annotate ims.ChatSettings with @changelog;
 annotate ims.Advocates       with @changelog;
 annotate ims.AdvocateTopics  with @changelog;
 annotate ims.AdvocateLinks   with @changelog;
+
+// Knowledge graph (#381). Track admin curation actions on Concepts (rename /
+// describe / veto) and ConceptEdges (veto). Mirrors the existing pattern.
+annotate ims.Concepts      with @changelog : ['name', 'description', 'status'];
+annotate ims.ConceptEdges  with @changelog : ['status'];

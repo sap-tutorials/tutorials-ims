@@ -124,7 +124,8 @@ export default defineConfig({
           { text: 'Free-text grader',                 link: '/developers/architecture/free-text-grader' },
           { text: 'AI-authored quizzes',              link: '/developers/architecture/ai-authored-quizzes' },
           { text: 'Categories classifier',            link: '/developers/architecture/categories-classifier' },
-          { text: 'Developer Advocates',              link: '/developers/architecture/advocates' }
+          { text: 'Developer Advocates',              link: '/developers/architecture/advocates' },
+          { text: 'HANA KG Engine access',            link: '/developers/architecture/hana-kge-access' }
         ]},
         { text: 'Operations', items: [
           { text: 'A/B comparison runbook',    link: '/developers/operations/ab-comparison-runbook' },
@@ -136,6 +137,7 @@ export default defineConfig({
           { text: 'HDI deploy checklist',      link: '/developers/operations/hdi-deploy-checklist' },
           { text: 'IAS setup',                 link: '/developers/operations/ias-setup' },
           { text: 'Joule chat admin settings', link: '/developers/operations/joule-chat-admin-settings' },
+          { text: 'KG grantor setup',          link: '/developers/operations/kg-grantor-setup' },
           { text: 'MTA deployment',            link: '/developers/operations/mta-deployment' },
           { text: 'Phase 4 code-check eval',   link: '/developers/operations/phase-4-codecheck-eval' },
           { text: 'Postmortems', collapsed: true, items: [

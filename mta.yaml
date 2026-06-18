@@ -89,6 +89,7 @@ modules:
     requires:
       - name: tutorials-hana
       - name: tutorials-cloud-logging   # forwards deployer stdout to Cloud Logging (~30 days), not just cf logs ring buffer (~30 min). Closes the forensic gap from #257.
+      - name: tutorials-kg-grantor      # supplies the SPARQL QUERY/UPDATE grants to default_access_role via db/src/_grants.hdbgrants. See docs/developers/operations/kg-grantor-setup.md.
 
   - name: tutorials-db-qa-deployer
     type: hdb
@@ -98,6 +99,7 @@ modules:
     requires:
       - name: tutorials-hana-qa
       - name: tutorials-cloud-logging   # same as tutorials-db-deployer; mirrors the prod binding for QA forensic parity.
+      - name: tutorials-kg-grantor-qa   # QA-channel grantor; sibling of tutorials-kg-grantor for the QA HDI container.
 
   - name: tutorials-approuter
     type: approuter.nodejs
@@ -176,3 +178,19 @@ resources:
       config:
         ingest_otlp:
           enabled: true
+
+  # Knowledge-graph SPARQL grantor (PR #381 / KG PR 2). User-provided service holding
+  # credentials for a HANA user that already owns SPARQL QUERY/SPARQL UPDATE WITH ADMIN
+  # OPTION. Consumed by tutorials-db-deployer + db/src/_grants.hdbgrants to add those
+  # privileges to the HDI container's default_access_role. Per-environment setup is in
+  # docs/developers/operations/kg-grantor-setup.md.
+  - name: tutorials-kg-grantor
+    type: org.cloudfoundry.user-provided-service
+    parameters:
+      service-name: tutorials-kg-grantor
+
+  # QA-channel sibling of tutorials-kg-grantor. Bound to tutorials-db-qa-deployer.
+  - name: tutorials-kg-grantor-qa
+    type: org.cloudfoundry.user-provided-service
+    parameters:
+      service-name: tutorials-kg-grantor-qa
