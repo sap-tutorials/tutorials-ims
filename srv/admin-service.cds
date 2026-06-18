@@ -86,6 +86,7 @@ service AdminService {
   @readonly @cds.persistence.skip entity TaskStatuses     { key code : String(50); }
   @readonly @cds.persistence.skip entity MissionTypes     { key code : String(20); }
   @readonly @cds.persistence.skip entity TaskTypes        { key code : String(20); }
+  @readonly @cds.persistence.skip entity AdvocateRegions  { key code : String(16); label : String(40); }
 
   // Analytics-specific code lists (label included for human-readable dropdowns).
   // taskType differs from TaskTypes above: analytics records carry TUTORIAL,
@@ -276,7 +277,15 @@ service AdminService {
 
   // Developer Advocates — admin CRUD. Spec: docs/superpowers/specs/2026-06-17-developer-advocates-design.md
   @odata.draft.enabled
-  entity Advocates       as projection on ims.Advocates;
+  entity Advocates as projection on ims.Advocates {
+    *,
+    // Virtual: rendered URL the Object Page header avatar points at.
+    // We can't bind ImageUrl to /admin/Advocates(...)/photo/photo256
+    // (the OData media stream through a draft-enabled composition 404s),
+    // so we route through the public REST endpoint that already serves
+    // these bytes. The ?v={photoUpdatedAt} suffix busts the 24h cache.
+    virtual null as photoIconUrl : String,
+  };
   entity AdvocateTopics  as projection on ims.AdvocateTopics;
   entity AdvocateLinks   as projection on ims.AdvocateLinks;
   entity AdvocatePhotos  as projection on ims.AdvocatePhotos;

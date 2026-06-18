@@ -23,7 +23,16 @@ const regionCounts = computed(() => {
 
 const topics = computed(() => {
   const seen = new Map<string, string>();
-  for (const a of advocates.value) for (const t of a.topics) if (!seen.has(t.slug)) seen.set(t.slug, t.label);
+  for (const a of advocates.value) {
+    for (const t of a.topics) {
+      // Defensive: skip topics with empty/null slug or label so we never
+      // render a blank-text chip even if the API hands us malformed data.
+      const slug  = (t.slug  || '').trim();
+      const label = (t.label || '').trim();
+      if (!slug || !label) continue;
+      if (!seen.has(slug)) seen.set(slug, label);
+    }
+  }
   return [...seen].map(([slug, label]) => ({ slug, label })).sort((a, b) => a.label.localeCompare(b.label));
 });
 

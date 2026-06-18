@@ -57,8 +57,16 @@ async function handleAdvocates(req, res) {
     for (const t of topics) {
       const tag = tagById.get(t.tag_ID);
       if (!tag) continue;
+      // Fallback chain: if a Tag row has no human-readable label, use its
+      // 'name' (slug-equivalent). Skip entirely if both are missing — an
+      // empty-string label causes a no-text chip to render on the public
+      // page. Defense in depth is also applied client-side in App.vue.
+      const label = (tag.label && String(tag.label).trim())
+        || (tag.name  && String(tag.name).trim())
+        || null;
+      if (!label) continue;
       if (!topicsByAdv.has(t.advocate_ID)) topicsByAdv.set(t.advocate_ID, []);
-      topicsByAdv.get(t.advocate_ID).push({ slug: tag.name, label: tag.label });
+      topicsByAdv.get(t.advocate_ID).push({ slug: tag.name, label });
     }
 
     const linksByAdv = new Map();

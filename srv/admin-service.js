@@ -36,6 +36,11 @@ export default class AdminService extends cds.ApplicationService {
     this.on('READ', 'TaskTypes', () => [
       { code: 'TUTORIAL' }, { code: 'GROUP' }, { code: 'CHECKPOINT' }
     ]);
+    this.on('READ', 'AdvocateRegions', () => [
+      { code: 'AMERICAS', label: 'Americas' },
+      { code: 'EMEA',     label: 'EMEA' },
+      { code: 'APJ',      label: 'APJ' },
+    ]);
     this.on('READ', 'AnalyticsTaskTypes', () => [
       { code: 'TUTORIAL', label: 'Tutorial' },
       { code: 'GROUP',    label: 'Group'    },

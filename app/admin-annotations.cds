@@ -1424,8 +1424,16 @@ annotate AdminService.Advocates with {
   title        @Common.Label: 'Title';
   pronouns     @Common.Label: 'Pronouns';
   location     @Common.Label: 'Location';
-  region       @Common.Label: 'Region';
-  bio          @Common.Label: 'Bio'         @Common.MultiLineText;
+  region       @Common.Label: 'Region'
+               @Common.ValueListWithFixedValues
+               @Common.ValueList: {
+                 CollectionPath: 'AdvocateRegions',
+                 Parameters: [
+                   { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: region, ValueListProperty: 'code' },
+                   { $Type: 'Common.ValueListParameterDisplayOnly',                            ValueListProperty: 'label' }
+                 ]
+               };
+  bio          @Common.Label: 'Bio'         @UI.MultiLineText;
   isActive     @Common.Label: 'Active';
   sortOverride @Common.Label: 'Sort override';
   joinedDate   @Common.Label: 'Joined';
@@ -1434,11 +1442,18 @@ annotate AdminService.Advocates with {
 };
 
 annotate AdminService.Advocates with @(
+  // Photo on the Object Page header. The OData media stream
+  // /admin/Advocates(...)/photo/photo256 doesn't work cleanly through the
+  // draft-enabled composition layer (404 on read), so we point ImageUrl
+  // at the public REST endpoint that the Vue island also uses. The
+  // ?v={photoUpdatedAt} suffix busts the 24h CDN cache when admins
+  // upload a new photo.
   UI.HeaderInfo: {
     TypeName: 'Advocate',
     TypeNamePlural: 'Advocates',
     Title: { Value: lastName },
-    Description: { Value: title }
+    Description: { Value: title },
+    ImageUrl: 'photoIconUrl'
   },
   UI.SelectionFields: [ region, isActive, lastName ],
   UI.LineItem: [
@@ -1467,7 +1482,7 @@ annotate AdminService.Advocates with @(
     ]
   },
   UI.FieldGroup #Bio: {
-    Data: [ { Value: bio } ]
+    Data: [ { $Type: 'UI.DataField', Value: bio, ![@UI.MultiLineText]: true } ]
   },
   UI.FieldGroup #Visibility: {
     Data: [
@@ -1508,22 +1523,26 @@ annotate AdminService.AdvocatePhotos with @(
 );
 
 // AdvocateTopics — inline table with Tag value-help.
+// The visible cell shows Tag.label (via @Common.Text on the association,
+// resolved through tag_ID -> Tags). The value-help dialog ranks 'label'
+// first so admins find topics by their human label, not by GUID.
 annotate AdminService.AdvocateTopics with {
   tag @Common.Label: 'Topic'
-      @Common.Text: tag.label  @Common.TextArrangement: #TextOnly
+      @Common.Text: tag.label
+      @Common.TextArrangement: #TextOnly
       @Common.ValueList: {
         CollectionPath: 'Tags',
         Parameters: [
           { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: tag_ID, ValueListProperty: 'ID' },
-          { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'label' },
-          { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'name' }
+          { $Type: 'Common.ValueListParameterDisplayOnly',                            ValueListProperty: 'label' },
+          { $Type: 'Common.ValueListParameterDisplayOnly',                            ValueListProperty: 'name' }
         ]
       };
 };
 
 annotate AdminService.AdvocateTopics with @UI: {
   LineItem: [
-    { $Type: 'UI.DataField', Value: tag_ID, Label: 'Topic' }
+    { $Type: 'UI.DataField', Value: tag.label, Label: 'Topic' }
   ]
 };
 
