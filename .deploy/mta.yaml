@@ -109,6 +109,14 @@ modules:
       builder: custom
       commands:
         - npm install
+        # cp -r is union, not sync — it ADDS files but never DELETES them. Renames in
+        # any source directory would leave ghost files in approuter/static/ that ship
+        # with every deploy until manually removed (caught Tom 2026-06-18 PR #405:
+        # AdvocatePhotoController.controller.js still served alongside the new .js).
+        # Wipe each static dir BEFORE cp'ing fresh content. Hugo public, qa, admin-ui,
+        # analytics-ui, scanner-ui all need this; everything not under static/ here
+        # (e.g. node_modules, package.json) is preserved.
+        - rm -rf static/admin-ui static/analytics-ui static/scanner-ui static/qa
         - cp -r ../hugo/public/. static/
         - rm -rf static/tutorials
         - mkdir -p static/qa
