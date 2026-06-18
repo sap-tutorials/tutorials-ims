@@ -92,13 +92,21 @@ space is the single most-common foot-gun on this codebase; double-check.
 ```bash
 cf target -o <org> -s <space>
 
-cf cups tutorials-kg-grantor -p '{
+# The -t "hana,password" tags are REQUIRED — both of them. The `hana` tag
+# tells @sap/hdi-deploy's grants plug-in this is a HANA-backed grantor;
+# the `password` tag tells it this is a basic-auth (user/password)
+# binding rather than a certificate-based one. Without BOTH, the HDI
+# deploy fails with a confusing "no grantor service bound" /
+# "missing required tags" error rather than honouring the binding from
+# mta.yaml. Tag spelling is comma-separated, no spaces.
+cf cups tutorials-kg-grantor -t "hana,password" -p '{
   "user":     "TUTORIALS_KG_GRANTOR",
   "password": "<password>",
   "host":     "<hana-host>",
   "port":     "<hana-port>",
   "schema":   "DBADMIN",
-  "driver":   "com.sap.db.jdbc.Driver"
+  "driver":   "com.sap.db.jdbc.Driver",
+  "url":      "jdbc:sap://<hana-host>:<hana-port>?encrypt=true&validateCertificate=true"
 }'
 ```
 
@@ -106,15 +114,27 @@ For the QA grantor (in the same or a different space, depending on your
 deployment topology):
 
 ```bash
-cf cups tutorials-kg-grantor-qa -p '{
+cf cups tutorials-kg-grantor-qa -t "hana,password" -p '{
   "user":     "TUTORIALS_KG_GRANTOR_QA",
   "password": "<password-qa>",
   "host":     "<hana-host-qa>",
   "port":     "<hana-port-qa>",
   "schema":   "DBADMIN",
-  "driver":   "com.sap.db.jdbc.Driver"
+  "driver":   "com.sap.db.jdbc.Driver",
+  "url":      "jdbc:sap://<hana-host-qa>:<hana-port-qa>?encrypt=true&validateCertificate=true"
 }'
 ```
+
+> **If you already created the services without `-t "hana,password"`** (or with a
+> minimal credentials shape), update them in place instead of recreating:
+>
+> ```bash
+> cf uups tutorials-kg-grantor    -t "hana,password" -p '{ ...same JSON as above... }'
+> cf uups tutorials-kg-grantor-qa -t "hana,password" -p '{ ...same JSON as above... }'
+> ```
+>
+> The HDI deployer reads tags + credentials at deploy time, so a fresh
+> `cf deploy` after `cf uups` picks up the corrected shape.
 
 > **Service-name spelling matters.** The names `tutorials-kg-grantor` and
 > `tutorials-kg-grantor-qa` are referenced verbatim from
@@ -188,14 +208,17 @@ or per your org's password-rotation policy):
 # 1. Rotate the password on the HANA side (DBADMIN)
 ALTER USER TUTORIALS_KG_GRANTOR PASSWORD <new-strong-password> NO FORCE_FIRST_PASSWORD_CHANGE;
 
-# 2. Update the user-provided service binding in CF
-cf uups tutorials-kg-grantor -p '{
+# 2. Update the user-provided service binding in CF.
+#    Re-pass `-t "hana,password"` and the full credentials shape — `cf uups` overwrites,
+#    not merges, so omitting either drops it from the binding.
+cf uups tutorials-kg-grantor -t "hana,password" -p '{
   "user":     "TUTORIALS_KG_GRANTOR",
   "password": "<new-strong-password>",
   "host":     "<hana-host>",
   "port":     "<hana-port>",
   "schema":   "DBADMIN",
-  "driver":   "com.sap.db.jdbc.Driver"
+  "driver":   "com.sap.db.jdbc.Driver",
+  "url":      "jdbc:sap://<hana-host>:<hana-port>?encrypt=true&validateCertificate=true"
 }'
 
 # 3. Restart any apps that consume this binding so they pick up the new VCAP_SERVICES.
@@ -275,6 +298,38 @@ grep -E 'service-name:\s*tutorials-kg-grantor' mta.yaml         # what mta.yaml 
 ```
 
 All three must agree exactly. Renaming requires updating all three.
+
+### "HDI deploy fails: grantor service is missing required tags / wrong shape"
+
+Symptoms: deploy log mentions the grantor service but says it doesn't
+look like a HANA service, or the deploy succeeds but no privileges are
+actually granted to `default_access_role` (probe still exits 2).
+
+Root cause: the user-provided service was created with `cf cups` but
+without `-t "hana,password"`, or without the full HANA credentials shape (missing
+`driver` / `url`). The grants plug-in looks for the `hana` tag to
+identify HANA-backed grantors and inspects the credentials JSON for
+JDBC connection fields.
+
+Fix without recreating:
+
+```bash
+cf uups tutorials-kg-grantor -t "hana,password" -p '{
+  "user":     "TUTORIALS_KG_GRANTOR",
+  "password": "<password>",
+  "host":     "<hana-host>",
+  "port":     "<hana-port>",
+  "schema":   "DBADMIN",
+  "driver":   "com.sap.db.jdbc.Driver",
+  "url":      "jdbc:sap://<hana-host>:<hana-port>?encrypt=true&validateCertificate=true"
+}'
+# repeat for tutorials-kg-grantor-qa
+# then redeploy the MTA — the new binding shape is picked up at deploy time
+cd .deploy && mbt build && cf deploy mta_archives/*.mtar -e ../deploy/dev.mtaext -f
+```
+
+Verify with `cf service tutorials-kg-grantor | grep tags` — must show
+`tags: hana` (not empty).
 
 ### Spike probe still exits 2 after a successful deploy
 
