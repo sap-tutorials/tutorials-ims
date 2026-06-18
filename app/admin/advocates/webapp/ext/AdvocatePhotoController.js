@@ -1,8 +1,21 @@
+// Plain UI5 module for the Advocates Object Page header actions.
+//
+// Why NOT a ControllerExtension: Fiori Elements v4 resolves `press`
+// references in manifest action config as plain modules (loader path
+// `<dotted-name>.js`), not as controller extensions (loader path
+// `<dotted-name>.controller.js`). Mismatching the suffix produces:
+//
+//   failed to load 'sap/tutorials/admin/advocates/ext/AdvocatePhotoController.js'
+//
+// Press handlers don't need lifecycle hooks — they get the event and
+// the binding context as arguments. A bare `sap.ui.define` module
+// returning an object literal is the right shape.
+//
+// Signature: (oEvent, oContext) where oContext is the OP binding context.
 sap.ui.define([
-  "sap/ui/core/mvc/ControllerExtension",
   "sap/m/MessageToast",
   "sap/m/MessageBox"
-], function (ControllerExtension, MessageToast, MessageBox) {
+], function (MessageToast, MessageBox) {
   "use strict";
 
   // Read a File as a base64-encoded string (without the data: prefix).
@@ -20,33 +33,27 @@ sap.ui.define([
     });
   }
 
-  // Pull the current Advocate's ID from the Object Page's binding context.
-  // Works for both active and draft modes; we always invoke the action on
-  // the active row by stripping IsActiveEntity if present.
-  function advocateContextId(view) {
-    const ctx = view && view.getBindingContext && view.getBindingContext();
-    if (!ctx) return null;
-    return ctx.getObject && ctx.getObject().ID;
-  }
-
-  return ControllerExtension.extend("sap.tutorials.admin.advocates.ext.AdvocatePhotoController", {
+  return {
 
     /**
      * Header action: prompt for a file, base64-encode, call the
-     * Advocates.uploadPhoto bound action. The server runs sharp ->
-     * 256/64 WebP, upserts AdvocatePhotos, flips hasPhoto. The Object
-     * Page's HeaderInfo.ImageUrl re-renders on the next refresh.
+     * Advocates.uploadPhoto bound action. The server runs sharp →
+     * 256/64 WebP, upserts AdvocatePhotos, flips hasPhoto.
+     *
+     * FE V4 press signature: (oEvent, oContext). oContext is the OP's
+     * binding context for the current Advocate row.
      */
-    onUploadPhotoPress: function () {
-      const ctrl = this;
-      const view = this.base.getView();
-      const advId = advocateContextId(view);
-      if (!advId) {
+    onUploadPhotoPress: function (oEvent, oContext) {
+      // Defensive: when the OP fires the action, oContext is the row
+      // context; in some bound-action setups it arrives via the event
+      // source. Try both, fail loudly if neither has it.
+      const ctx = oContext
+        || (oEvent && oEvent.getSource && oEvent.getSource().getBindingContext && oEvent.getSource().getBindingContext());
+      if (!ctx) {
         MessageToast.show("Open an advocate first");
         return;
       }
-      // Build a transient <input type=file> so we don't have to ship a
-      // dialog fragment. The element is removed after the picker resolves.
+      // Build a transient <input type=file> so we don't need a fragment.
       const input = document.createElement("input");
       input.type = "file";
       input.accept = "image/jpeg,image/png,image/webp,image/gif";
@@ -62,8 +69,7 @@ sap.ui.define([
           }
           MessageToast.show("Uploading…");
           const photoBase64 = await readFileAsBase64(file);
-          const model = view.getModel();
-          const ctx = view.getBindingContext();
+          const model = ctx.getModel();
           // OData v4 bound-action invocation. The action lives on
           // AdminService.Advocates as 'AdminService.uploadPhoto'.
           const op = model.bindContext(
@@ -74,7 +80,7 @@ sap.ui.define([
           op.setParameter("mimeType", file.type || "image/jpeg");
           await op.execute();
           MessageToast.show("Photo uploaded.");
-          // Refresh the Object Page so HeaderInfo.ImageUrl re-resolves.
+          // Refresh the OP so hasPhoto / photoUpdatedAt re-resolve.
           if (ctx.refresh) ctx.refresh();
         } catch (err) {
           MessageBox.error("Upload failed: " + (err && err.message ? err.message : err));
@@ -87,12 +93,12 @@ sap.ui.define([
 
     /**
      * Header action: confirm + call Advocates.clearPhoto. Drops the
-     * AdvocatePhotos row, flips hasPhoto=false. Header avatar disappears.
+     * AdvocatePhotos row, flips hasPhoto=false.
      */
-    onClearPhotoPress: function () {
-      const view = this.base.getView();
-      const advId = advocateContextId(view);
-      if (!advId) {
+    onClearPhotoPress: function (oEvent, oContext) {
+      const ctx = oContext
+        || (oEvent && oEvent.getSource && oEvent.getSource().getBindingContext && oEvent.getSource().getBindingContext());
+      if (!ctx) {
         MessageToast.show("Open an advocate first");
         return;
       }
@@ -103,8 +109,7 @@ sap.ui.define([
           onClose: async function (action) {
             if (action !== MessageBox.Action.OK) return;
             try {
-              const model = view.getModel();
-              const ctx = view.getBindingContext();
+              const model = ctx.getModel();
               const op = model.bindContext(
                 "AdminService.clearPhoto(...)",
                 ctx
@@ -120,5 +125,5 @@ sap.ui.define([
       );
     }
 
-  });
+  };
 });
