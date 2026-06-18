@@ -71,124 +71,54 @@ The plan unfolds in 6 phases. Each phase produces working, testable software. Wi
 **Files:**
 - Create: `scripts/parsers/__tests__/github.test.ts`
 
-The test stubs the GraphQL/REST clients and asserts that with `EXCLUDED_REPOS` containing only `'tutorials-ims'`, a fixture repo named `meta-tutorials` whose `HEAD:tutorials` tree contains two subdirectories yields exactly two `DiscoveredTutorial` entries — and that a sibling root file `run-book/foo.md` is NOT enumerated. The test will FAIL until Task A2 lands the EXCLUDED_REPOS change.
+The test asserts the value of the `EXCLUDED_REPOS` export — a minimal pin on the contract. (We considered an end-to-end test stubbing `global.fetch` to drive `discoverAllTutorials`, but the discovery code path is multi-network-call, multi-strategy, and would balloon the test fixture. The single-line assertion captures the intent — "meta-tutorials is no longer excluded" — without coupling the test to the discovery internals.)
 
-Look at `scripts/parsers/__tests__/branches.test.ts` for the project's vitest convention. Read [scripts/parsers/github.ts:380-460](../../../scripts/parsers/github.ts#L380-L460) to confirm the exact GraphQL function name and signature you need to stub.
-
-- [ ] **Step 1: Read the existing discovery code** to see how to mock the GraphQL/REST clients.
+Verify the actual exported symbols before writing the test:
 
 ```bash
 cd d:/projects/tutorials-poc
-sed -n '380,460p' scripts/parsers/github.ts
+grep -n "^export" scripts/parsers/github.ts | head -10
 ```
 
-Note the function names you need to test (`discoverFromGraphql` and `discoverFromRest`) and how they obtain `repos` data (`graphqlRequest` for one, `restApiPaginated`/`restApiRequest` for the other). The test will need to mock these.
+You should see `export const EXCLUDED_REPOS` at line 25. If the symbol name has changed, update the test imports accordingly.
 
-- [ ] **Step 2: Write the failing test**
+- [ ] **Step 1: Write the failing test**
 
 Create `scripts/parsers/__tests__/github.test.ts`:
 
 ```ts
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
+import { EXCLUDED_REPOS } from '../github.js'
 
-describe('discovery — meta-tutorials inclusion (#382)', () => {
-  beforeEach(() => {
-    vi.resetModules()
-    delete process.env.GITHUB_TOKEN
-    delete process.env.TUTORIALS_GITHUB_TOKEN
-    delete process.env.INCLUDE_CONTRIBUTION_REPOS
-    delete process.env.ONLY_CONTRIBUTION_REPOS
+describe('EXCLUDED_REPOS — discovery contract (#382)', () => {
+  it('does NOT exclude meta-tutorials', () => {
+    // Pinning issue #382: meta-tutorials/tutorials/<slug>/ folders should
+    // participate in the build pipeline. Discovery only reads each repo's
+    // tutorials/ subtree (github.ts:397 and 495), so siblings like
+    // run-book/ and task-interview-coach/ remain invisible without any
+    // path filter.
+    expect(EXCLUDED_REPOS.has('meta-tutorials')).toBe(false)
   })
 
-  it('discoverFromGraphql enumerates meta-tutorials/tutorials/<slug> dirs and ignores siblings', async () => {
-    // Mock graphqlRequest before importing github.ts so the module-level
-    // import binding picks up the spy.
-    vi.doMock('../graphql.js', () => ({
-      graphqlRequest: vi.fn().mockResolvedValueOnce({
-        organization: {
-          repositories: {
-            nodes: [
-              {
-                name: 'meta-tutorials',
-                isArchived: false,
-                isDisabled: false,
-                isFork: false,
-                defaultBranchRef: { name: 'main' },
-                tutorials: {
-                  entries: [
-                    { name: 'use-codecheck-to-ai-grade-reader-code', type: 'tree' },
-                    { name: 'use-validate-to-ai-grade-free-text-answers', type: 'tree' },
-                    // sibling-style stray files — discovery should ignore them
-                    { name: 'README.md', type: 'blob' },
-                  ],
-                },
-              },
-            ],
-            pageInfo: { endCursor: null, hasNextPage: false },
-          },
-          rateLimit: { cost: 1, remaining: 4999, limit: 5000, resetAt: '2026-06-18T00:00:00Z' },
-        },
-      }),
-      Transient5xxError: class {},
-    }))
-
-    const { discoverFromGraphql } = await import('../github.js')
-    const result = await discoverFromGraphql()
-
-    expect(result.map(t => t.slug).sort()).toEqual([
-      'use-codecheck-to-ai-grade-reader-code',
-      'use-validate-to-ai-grade-free-text-answers',
-    ])
-    // Verify that no entry resembles a non-tutorial sibling dir
-    expect(result.find(t => t.slug === 'run-book')).toBeUndefined()
-    expect(result.find(t => t.slug === 'README.md')).toBeUndefined()
-    // The repo column should always be 'meta-tutorials' for this fixture
-    expect(result.every(t => t.repo === 'meta-tutorials')).toBe(true)
-  })
-
-  it('EXCLUDED_REPOS still skips tutorials-ims itself', async () => {
-    // Sanity check: the one remaining excluded repo is honored. Add a second
-    // repo named 'tutorials-ims' to the fixture; expect zero discoveries.
-    vi.doMock('../graphql.js', () => ({
-      graphqlRequest: vi.fn().mockResolvedValueOnce({
-        organization: {
-          repositories: {
-            nodes: [
-              {
-                name: 'tutorials-ims',
-                isArchived: false,
-                isDisabled: false,
-                isFork: false,
-                defaultBranchRef: { name: 'main' },
-                tutorials: { entries: [{ name: 'whatever', type: 'tree' }] },
-              },
-            ],
-            pageInfo: { endCursor: null, hasNextPage: false },
-          },
-          rateLimit: { cost: 1, remaining: 4999, limit: 5000, resetAt: '2026-06-18T00:00:00Z' },
-        },
-      }),
-      Transient5xxError: class {},
-    }))
-
-    const { discoverFromGraphql } = await import('../github.js')
-    const result = await discoverFromGraphql()
-    expect(result).toHaveLength(0)
+  it('still excludes tutorials-ims itself', () => {
+    // Sanity: removing meta-tutorials must not accidentally unblock
+    // tutorials-ims (this repo) from discovering itself recursively.
+    expect(EXCLUDED_REPOS.has('tutorials-ims')).toBe(true)
   })
 })
 ```
 
-> **Note for the implementer:** the import path of the GraphQL client (`'../graphql.js'`) and the function name (`graphqlRequest`) need to match what `github.ts` actually imports. Open `github.ts` lines 1-40 to confirm and adjust the `vi.doMock` path. Project uses `.js` import suffix even on `.ts` files (NodeNext module resolution).
+> **Note for the implementer:** the project uses NodeNext module resolution; the import suffix is `.js` even though the source is `.ts`. Match the `.js` convention from sibling test files (e.g. `__tests__/branches.test.ts`).
 
-- [ ] **Step 3: Run the test to verify it fails on the right reason**
+- [ ] **Step 2: Run the test to verify it fails on the right reason**
 
 ```bash
 npx vitest run scripts/parsers/__tests__/github.test.ts
 ```
 
-Expected: the first test FAILS because `discoverFromGraphql` will currently return 0 entries (since `meta-tutorials` is in `EXCLUDED_REPOS`). The second test should PASS already.
+Expected: the first test FAILS with `expected true to be false` because `EXCLUDED_REPOS` currently contains `'meta-tutorials'`. The second test should PASS already.
 
-If the test fails for an unrelated reason (e.g. import path wrong, mock not applied), fix the test setup until it fails for the right reason — "expected 2 entries, got 0" — before moving on.
+If the test fails for an unrelated reason (e.g. import resolution), fix the imports until it fails for the right reason — `expected true to be false` on line 1 — before moving on.
 
 ### Task A2: Apply the one-line github.ts change
 
