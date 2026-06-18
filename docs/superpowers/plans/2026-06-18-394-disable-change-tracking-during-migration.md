@@ -835,3 +835,30 @@ Watch the smoke + unit + hybrid jobs. The hybrid job runs against the project's 
 3. `npm run docs:build` — green.
 4. Manual snapshot delta on DEV: 0.
 5. PR open, CI green, Closes #394.
+
+---
+
+## Plan revision (2026-06-18, after Task 1 attempt)
+
+The implementer subagent for Task 1 surfaced two SQLite-harness limitations that invalidate the unit-test strategy:
+
+1. `tx.set({ 'ct.skip': 'true' })` errors with **"Cannot set session context: No database connection"** when called inside `cds.tx({user}, async tx => tx.set(...))`. The `@cap-js/sqlite` driver requires `dbc` to be initialized (via a prior run on the tx) before session vars can be set.
+2. **More critically:** `POST /admin/Missions` in `cds.test('serve', '--in-memory')` produces **zero `sap.changelog.Changes` rows** even WITHOUT any suppression — confirmed via probe test. The change-tracking plugin's SQLite triggers don't fire in the in-memory harness. Tom selected **hybrid-only test coverage** as the path forward.
+
+### Revised test strategy
+
+- **Drop** the unit Changes-row contract-pin test (Task 1 as originally written).
+- **Keep** a small unit test that **spies on `req._tx.set`** to verify the handler routes correctly: header + Admin → set called with `{ 'ct.skip': 'true' }`; otherwise → not called. This tests the handler's logic without depending on trigger firing.
+- **Move** the end-to-end Changes-row verification to Task 4 (hybrid test against real HANA), where `SESSION_CONTEXT('ct.skip')` is honored by HANA-deployed triggers.
+
+### Revised task ordering
+
+1. **Task 1 (revised):** Create `srv/lib/migration-mode.js` (handler) + unit spy test in `test/unit/migration-mode.test.js`.
+2. **Task 2 (revised):** Wire into `srv/server.js` `served` hook with idempotency guard.
+3. **Task 3:** Update REST migrators (unchanged from original).
+4. **Task 4:** Hybrid test (unchanged from original — this is now the only end-to-end coverage).
+5. **Task 5:** Documentation (unchanged).
+6. **Task 6:** Manual verification on DEV (unchanged — and now even more important, since hybrid CI may not run on every PR).
+7. **Task 7:** PR (unchanged).
+
+The original Task 1 + Task 2 split (write contract pin first, then handler-gate tests) is collapsed into a single revised Task 1 because the unit layer no longer pins plugin behavior — it only pins handler-routing behavior, which is a single concern.
