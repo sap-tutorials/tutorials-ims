@@ -1442,18 +1442,17 @@ annotate AdminService.Advocates with {
 };
 
 annotate AdminService.Advocates with @(
-  // Photo on the Object Page header. The OData media stream
-  // /admin/Advocates(...)/photo/photo256 doesn't work cleanly through the
-  // draft-enabled composition layer (404 on read), so we point ImageUrl
-  // at the public REST endpoint that the Vue island also uses. The
-  // ?v={photoUpdatedAt} suffix busts the 24h CDN cache when admins
-  // upload a new photo.
+  // Object Page header. The avatar (HeaderInfo.ImageUrl) is intentionally
+  // omitted in v1 — wiring it via a virtual photoIconUrl element confused
+  // OData v4 drill-down ("invalid segment: photoIconUrl" errors on every
+  // read). Photo display in the OP header is a v2 polish; the
+  // uploadPhoto / clearPhoto header actions still work and the photo
+  // shows correctly on the public /developer-advocates/ flip cards.
   UI.HeaderInfo: {
     TypeName: 'Advocate',
     TypeNamePlural: 'Advocates',
     Title: { Value: lastName },
-    Description: { Value: title },
-    ImageUrl: photoIconUrl
+    Description: { Value: title }
   },
   UI.SelectionFields: [ region, isActive, lastName ],
   UI.LineItem: [
