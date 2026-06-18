@@ -38,7 +38,7 @@ Add a small **DB-level** before-handler that sets that same variable when:
 1. The HTTP request carries header `x-migration-mode: true`, **and**
 2. The authenticated user has the `Admin` role (`req.user.is('Admin')`).
 
-The handler is registered at `cds.db.before('*', ...)` — the same hook the plugin itself uses, where `req._tx` is reliably the DB tx with a working `.set()` method. Both REST migrators send the header. The handler is per-request — when the request ends, the session variable is reset (paired `after` handler).
+The handler is registered at `cds.db.before(['INSERT', 'UPDATE', 'DELETE'], ...)` — the same hook the plugin itself uses (verbatim event list, see [`node_modules/@cap-js/change-tracking/lib/skipHandlers.js:10`](../../../node_modules/@cap-js/change-tracking/lib/skipHandlers.js)) — where `req._tx` is reliably the DB tx with a working `.set()` method. Both REST migrators send the header. The handler is per-request — when the request ends, the session variable is reset (paired `after` handler).
 
 ### Why DB-level, not AdminService-level
 
