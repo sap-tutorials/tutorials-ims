@@ -831,7 +831,7 @@ Watch the smoke + unit + hybrid jobs. The hybrid job runs against the project's 
 ## What success looks like
 
 1. `npx vitest run test/unit/migration-mode.test.js` — all green.
-2. `ALLOW_HYBRID_WRITES=true npx cds bind --exec -- npx vitest run test/hybrid/migration-mode.test.js` — green against DEV HANA.
+2. `npx cds bind --exec -- npx vitest run test/hybrid/migration-mode.test.js` — green against DEV HANA.
 3. `npm run docs:build` — green.
 4. Manual snapshot delta on DEV: 0.
 5. PR open, CI green, Closes #394.
