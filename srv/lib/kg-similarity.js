@@ -1,0 +1,1 @@
+// Stub for kg-similarity (PR 2). Real implementation lands in PRs 3/4/5 per docs/superpowers/plans/2026-06-17-knowledge-graph-implementation.md. Stub exists so .deploy/mta.yaml srv-qa cp-list pre-add does not break mbt build for PR 2. Do not import from this file - it has no exports.

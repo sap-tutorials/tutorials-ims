@@ -169,28 +169,33 @@ DBADMIN
                       └─ runtime user calls SYS.SPARQL_EXECUTE → succeeds
 ```
 
-**Sketch of `db/src/_grants.hdbgrants`** (exact field names to be confirmed
-against `@sap/hdi-deploy` README at PR 2 implementation time):
+**Verified shape of `db/src/_grants.hdbgrants`** (field names confirmed
+2026-06-18 against the `@sap/hdi-deploy` README during PR 2 implementation;
+see [db/src/_grants.hdbgrants](../../../db/src/_grants.hdbgrants) for the
+authoritative artefact):
 
 ```json
 {
   "<grantor-service-name>": {
-    "object_owner": {
-      "system_privileges": []
-    },
     "application_user": {
       "system_privileges": [
-        "SPARQL QUERY",
-        "SPARQL UPDATE"
+        { "privileges": ["SPARQL QUERY", "SPARQL UPDATE"] }
       ]
     }
   }
 }
 ```
 
-The `application_user` block grants to `default_access_role` (which is in
-turn granted to the runtime user). The `object_owner` block, if present,
-grants to the schema owner — not needed here, the runtime path is enough.
+The `application_user` block grants to the container's `default_access_role`
+(which is in turn granted to the runtime user that CAP uses for
+`cds.connect.to('db')`). An `object_owner` block, if present, grants to the
+schema owner — not needed here, the runtime path is enough.
+
+**Shape gotcha:** `system_privileges` is an array of *objects* — each with a
+`privileges` sub-array (and an optional `privileges_with_admin_option`
+sub-array) — **not** a flat array of strings. An earlier draft of this doc
+sketched the flat-array form; that would fail HDI validation. The artefact
+above is the verified shape.
 
 ### What PR 2 must add
 
@@ -208,6 +213,7 @@ PR 2 (data model + HDI deploy) MUST land all of:
   [docs/developers/operations/](../operations/).
 - A QA-channel mirror — `tutorials-db-qa` needs the same grants flow against
   its own grantor (or the same grantor if the platform team prefers).
+- **Operations runbook:** see [docs/developers/operations/kg-grantor-setup.md](../operations/kg-grantor-setup.md) for the per-environment grantor-user setup steps.
 
 A deploy without these in place will fail at the first SPARQL call in PR 4
 with `User does not have SPARQL query privileges`. The spike probe

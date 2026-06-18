@@ -145,7 +145,7 @@ Two alternatives considered and rejected:
 
 ## Data model
 
-Three new CDS entities in [db/knowledge-graph.cds](db/knowledge-graph.cds):
+Four new CDS entities in [db/knowledge-graph.cds](db/knowledge-graph.cds) — three carry domain state (`Concepts`, `TutorialConceptLinks`, `ConceptEdges`); one (`GraphMetadata`) is a single-row projection-state sidecar updated on every `graphRebuild`:
 
 ```cds
 namespace com.sap.developers.ims;

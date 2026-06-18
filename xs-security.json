@@ -11,18 +11,19 @@
     { "name": "$XSAPPNAME.DisplayApp",         "description": "Read-only UI access" },
     { "name": "$XSAPPNAME.ConsolidationScope", "description": "Account merge operations (SCI technical user)" },
     { "name": "$XSAPPNAME.Tutorial.Author",    "description": "QA channel author preview (unpublished tutorials at /tutorials-qa/*)" },
+    { "name": "$XSAPPNAME.KnowledgeGraph.Admin", "description": "Knowledge graph admin: merge/veto concepts, run raw SPARQL" },
     { "name": "$XSAPPNAME.Everyone",           "description": "Baseline access" }
   ],
   "role-templates": [
     {
       "name": "Admin",
       "description": "Administrator",
-      "scope-references": ["$XSAPPNAME.Admin", "$XSAPPNAME.Everyone"]
+      "scope-references": ["$XSAPPNAME.Admin", "$XSAPPNAME.KnowledgeGraph.Admin", "$XSAPPNAME.Everyone"]
     },
     {
       "name": "SuperAdmin",
       "description": "Elevated Administrator (can publish/unpublish)",
-      "scope-references": ["$XSAPPNAME.SuperAdmin", "$XSAPPNAME.Admin", "$XSAPPNAME.Everyone"]
+      "scope-references": ["$XSAPPNAME.SuperAdmin", "$XSAPPNAME.Admin", "$XSAPPNAME.KnowledgeGraph.Admin", "$XSAPPNAME.Everyone"]
     },
     {
       "name": "ContentAuthor",

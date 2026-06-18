@@ -1,4 +1,5 @@
 using { com.sap.developers.ims as ims } from './schema';
+using from './knowledge-graph';
 
 annotate ims.Users with @PersonalData: {
   DataSubjectRole: 'Developer',
@@ -68,3 +69,11 @@ annotate ims.BranchDecisions with @PersonalData: {
 } {
   user @PersonalData.FieldSemantics: 'DataSubjectID';
 }
+
+// Knowledge graph (#381). Concepts is admin-edited (merge / veto / rename) and
+// while it carries no personal data, the audit-logging plugin's annotation-driven
+// emission gives us a tamper-evident record of curation actions for free —
+// mirrors how Categories / Missions admin edits are surfaced.
+annotate ims.Concepts with @PersonalData: {
+  EntitySemantics: 'Other'
+};
