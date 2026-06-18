@@ -46,6 +46,15 @@
         "settings": { "bundleName": "sap.tutorials.admin.advocates.i18n.i18n" }
       }
     },
+    "extends": {
+      "extensions": {
+        "sap.ui.controllerExtensions": {
+          "sap.fe.templates.ObjectPage.ObjectPageController": {
+            "controllerName": "sap.tutorials.admin.advocates.ext.AdvocatePhotoController"
+          }
+        }
+      }
+    },
     "routing": {
       "routes": [
         { "pattern": ":?query:", "name": "AdvocatesList", "target": "AdvocatesList" },
@@ -76,7 +85,25 @@
           "options": {
             "settings": {
               "contextPath": "/Advocates",
-              "editableHeaderContent": false
+              "editableHeaderContent": false,
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.HeaderInfo": {
+                  "actions": {
+                    "uploadPhoto": {
+                      "press": "sap.tutorials.admin.advocates.ext.AdvocatePhotoController.onUploadPhotoPress",
+                      "visible": true,
+                      "enabled": true,
+                      "text": "Upload Photo"
+                    },
+                    "clearPhoto": {
+                      "press": "sap.tutorials.admin.advocates.ext.AdvocatePhotoController.onClearPhotoPress",
+                      "visible": "{= !!${hasPhoto} }",
+                      "enabled": true,
+                      "text": "Clear Photo"
+                    }
+                  }
+                }
+              }
             }
           }
         }
