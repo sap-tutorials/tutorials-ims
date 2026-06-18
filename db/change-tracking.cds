@@ -1,9 +1,15 @@
-// Change tracking is configured via @changelog annotations at the service level
-// in srv/change-tracking.cds. The @cap-js/change-tracking plugin automatically
-// adds the 'changes' association and UI facet to annotated entities at runtime.
+// Change tracking is configured via @changelog annotations at the service level.
+// The @cap-js/change-tracking plugin automatically adds the 'changes' association
+// and UI facet to annotated entities at runtime.
 //
-// Annotating at the service level (AdminService) means only admin UI changes
-// are tracked — bulk imports, scheduled jobs, and replication are excluded.
+// Annotating at AdminService means only admin UI changes are tracked
+// FOR NON-DB-LEVEL WRITE PATHS. On HANA the plugin generates AFTER
+// INSERT/UPDATE/DELETE triggers at the DB level, so direct hdb-driver
+// writes (e.g. scripts/migrate-from-hana.js, raw SQL maintenance) DO
+// fire the triggers unless the connection sets
+// SESSION_CONTEXT('ct.skip') = 'true'. The REST migrators set this via
+// the `x-migration-mode` HTTP header — see
+// docs/developers/operations/migration-from-ims.md.
 
 using { com.sap.developers.ims as ims } from './schema';
 using from './knowledge-graph';
