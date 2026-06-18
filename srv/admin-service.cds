@@ -298,7 +298,12 @@ service AdminService {
     // handler runs sharp -> 256/64 WebP, upserts AdvocatePhotos, and
     // flips Advocates.hasPhoto + photoUpdatedAt. The bytes come in as
     // base64 to keep the OData payload self-describing.
-    @cds.odata.bindingparameter.collection
+    //
+    // Instance-bound (no @cds.odata.bindingparameter.collection): FE V4
+    // OP header actions invoke against a single-row context, not the
+    // entity set. Tom 2026-06-18 hit "Action uploadPhoto must be called
+    // on a collection of AdminService.Advocates" when the action was
+    // collection-bound but the press handler passed an OP context.
     action uploadPhoto(photoBase64 : String, mimeType : String) returns Advocates;
 
     // Pair with an action to clear a photo without deleting the advocate.
