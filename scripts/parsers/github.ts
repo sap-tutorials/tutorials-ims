@@ -22,7 +22,7 @@ const MAX_RETRIES = 8
 const BASE_DELAY_MS = 1000
 const MAX_DELAY_MS = 60_000
 
-export const EXCLUDED_REPOS = new Set(['tutorials-ims', 'meta-tutorials'])
+export const EXCLUDED_REPOS = new Set(['tutorials-ims'])
 
 export interface GitHubContributor {
   name: string
