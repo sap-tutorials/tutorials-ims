@@ -1,6 +1,12 @@
 {{ if and (not site.Params.qa) (not site.Params.previewMode) }}
 <div id="joule-panel" hidden role="dialog" aria-modal="false" aria-labelledby="joule-panel-title">
   <header class="joule-panel__header">
+    <div class="joule-aurora" aria-hidden="true">
+      <div class="joule-aurora__layer joule-aurora__layer--a"></div>
+      <div class="joule-aurora__layer joule-aurora__layer--b"></div>
+      <div class="joule-aurora__layer joule-aurora__layer--c"></div>
+      <div class="joule-aurora__layer joule-aurora__layer--d"></div>
+    </div>
     {{ partial "joule-icon.html" (dict "size" "small") }}
     <h2 id="joule-panel-title" class="joule-panel__title">Joule</h2>
     <button type="button" class="joule-panel__icon-btn" data-action="expand" aria-label="Expand">
@@ -23,9 +29,17 @@
 
   <div class="joule-panel__body">
     <section class="joule-panel__hero">
-      <div class="joule-panel__hero-mark">{{ partial "joule-icon.html" (dict "size" "large") }}</div>
-      <p class="joule-panel__hero-greeting" data-default-greeting="Hello, How can I help you?"></p>
-      <div class="joule-panel__starters" role="list"></div>
+      <div class="joule-aurora" aria-hidden="true">
+        <div class="joule-aurora__layer joule-aurora__layer--a"></div>
+        <div class="joule-aurora__layer joule-aurora__layer--b"></div>
+        <div class="joule-aurora__layer joule-aurora__layer--c"></div>
+        <div class="joule-aurora__layer joule-aurora__layer--d"></div>
+      </div>
+      <div class="joule-panel__hero-content">
+        <div class="joule-panel__hero-mark">{{ partial "joule-icon.html" (dict "size" "large") }}</div>
+        <p class="joule-panel__hero-greeting" data-default-greeting="Hello, How can I help you?"></p>
+        <div class="joule-panel__starters" role="list"></div>
+      </div>
     </section>
 
     <section class="joule-panel__chat" hidden>
