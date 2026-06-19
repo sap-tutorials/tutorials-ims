@@ -1569,3 +1569,108 @@ annotate AdminService.AdvocateLinks with @UI: {
     { $Type: 'UI.DataField', Value: sortOrder, Label: 'Sort' }
   ]
 };
+
+// =============================================================================
+// KnowledgeGraphService — Concepts admin curation (#381 PR 6)
+// =============================================================================
+//
+// Concepts is exposed by KnowledgeGraphService at /graph/. The Fiori Elements
+// admin app at /admin-ui/#concepts-display talks to /graph/ directly (not /admin/),
+// but its @UI annotations live in this file so all admin-side @UI metadata stays
+// co-located.
+//
+// The dropped Criticality: clause on `status` is a deliberate simplification:
+// adding it would require a virtual or calculated element on the projection
+// (statusCriticality returning 3=ACTIVE, 5=MERGED/Veto-friendly, 1=VETOED).
+// The plain status string is good enough for v1 — admins can read ACTIVE /
+// MERGED / VETOED at a glance. Track in PR 6.x follow-up if a Criticality
+// signal is desired.
+using KnowledgeGraphService from '../srv/knowledge-graph-service';
+
+annotate KnowledgeGraphService.Concepts with {
+  slug            @Common.Label: 'Slug'           @Common.FieldControl: #ReadOnly;
+  name            @Common.Label: 'Name';
+  description     @Common.Label: 'Description'    @Common.MultiLineText;
+  status          @Common.Label: 'Status'         @Common.FieldControl: #ReadOnly;
+  extractionCount @Common.Label: 'Extractions'    @Common.FieldControl: #ReadOnly;
+  firstSeenAt     @Common.Label: 'First Seen'     @Common.FieldControl: #ReadOnly;
+  lastSeenAt      @Common.Label: 'Last Seen'      @Common.FieldControl: #ReadOnly;
+};
+
+annotate KnowledgeGraphService.Concepts with @(
+  UI.HeaderInfo: {
+    TypeName       : 'Concept',
+    TypeNamePlural : 'Concepts',
+    Title          : { Value: name },
+    Description    : { Value: slug }
+  },
+
+  UI.SelectionFields: [ status, slug ],
+
+  UI.LineItem: [
+    { $Type: 'UI.DataField', Value: slug,            Label: 'Slug' },
+    { $Type: 'UI.DataField', Value: name,            Label: 'Name' },
+    { $Type: 'UI.DataField', Value: status,          Label: 'Status' },
+    { $Type: 'UI.DataField', Value: extractionCount, Label: 'Extractions' },
+    { $Type: 'UI.DataField', Value: lastSeenAt,      Label: 'Last Seen' }
+  ],
+
+  UI.FieldGroup #General: {
+    Data: [
+      { $Type: 'UI.DataField', Value: slug,            Label: 'Slug' },
+      { $Type: 'UI.DataField', Value: name,            Label: 'Name' },
+      { $Type: 'UI.DataField', Value: description,     Label: 'Description' },
+      { $Type: 'UI.DataField', Value: status,          Label: 'Status' },
+      { $Type: 'UI.DataField', Value: extractionCount, Label: 'Extractions' },
+      { $Type: 'UI.DataField', Value: firstSeenAt,     Label: 'First Seen' },
+      { $Type: 'UI.DataField', Value: lastSeenAt,      Label: 'Last Seen' }
+    ]
+  },
+
+  UI.Facets: [
+    { $Type: 'UI.ReferenceFacet', Label: 'General',         Target: '@UI.FieldGroup#General' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Tutorials',       Target: 'links/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Outgoing edges',  Target: 'outgoingEdges/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Incoming edges',  Target: 'incomingEdges/@UI.LineItem' }
+  ],
+
+  // Inline-edit only on `name` + `description`. The other fields are gated by
+  // @Common.FieldControl: #ReadOnly above. Status flips happen through the
+  // vetoConcept / mergeConcepts actions, not direct PATCH.
+  Capabilities.UpdateRestrictions: { Updatable: true },
+  Capabilities.DeleteRestrictions: { Deletable: false },
+  Capabilities.InsertRestrictions: { Insertable: false }
+);
+
+// --- TutorialConceptLinks — read-only inline table on the OP "Tutorials" facet
+annotate KnowledgeGraphService.TutorialConceptLinks with {
+  predicate   @Common.Label: 'Predicate';
+  confidence  @Common.Label: 'Confidence';
+  extractedAt @Common.Label: 'Extracted At';
+};
+
+annotate KnowledgeGraphService.TutorialConceptLinks with @UI: {
+  LineItem: [
+    { $Type: 'UI.DataField', Value: tutorial.slug,    Label: 'Tutorial' },
+    { $Type: 'UI.DataField', Value: predicate,        Label: 'Predicate' },
+    { $Type: 'UI.DataField', Value: confidence,       Label: 'Confidence' },
+    { $Type: 'UI.DataField', Value: extractedAt,      Label: 'Extracted At' }
+  ]
+};
+
+// --- ConceptEdges — read-only inline table on the OP "Edges" facets
+annotate KnowledgeGraphService.ConceptEdges with {
+  predicate  @Common.Label: 'Predicate';
+  confidence @Common.Label: 'Confidence';
+  status     @Common.Label: 'Status';
+};
+
+annotate KnowledgeGraphService.ConceptEdges with @UI: {
+  LineItem: [
+    { $Type: 'UI.DataField', Value: source.slug, Label: 'Source' },
+    { $Type: 'UI.DataField', Value: target.slug, Label: 'Target' },
+    { $Type: 'UI.DataField', Value: predicate,   Label: 'Predicate' },
+    { $Type: 'UI.DataField', Value: confidence,  Label: 'Confidence' },
+    { $Type: 'UI.DataField', Value: status,      Label: 'Status' }
+  ]
+};

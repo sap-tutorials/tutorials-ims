@@ -1,0 +1,140 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.concepts",
+    "type": "application",
+    "title": "{{appTitle}}",
+    "description": "{{appSubtitle}}",
+    "applicationVersion": { "version": "0.0.1" },
+    "i18n": "i18n/i18n.properties",
+    "dataSources": {
+      "mainService": {
+        "uri": "/graph/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "Concept-display": {
+          "semanticObject": "Concept",
+          "action": "display",
+          "title": "{{appTitle}}",
+          "signature": { "parameters": {}, "additionalParameters": "allowed" }
+        }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": { "sap.fe.templates": {}, "sap.m": {}, "sap.ui.unified": {} }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      },
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": { "bundleName": "sap.tutorials.admin.concepts.i18n.i18n" }
+      }
+    },
+    "extends": {
+      "extensions": {
+        "sap.ui.controllerExtensions": {
+          "sap.fe.templates.ListReport.ListReportController": {
+            "controllerName": "sap.tutorials.admin.concepts.ext.ConceptActionsController"
+          },
+          "sap.fe.templates.ObjectPage.ObjectPageController": {
+            "controllerName": "sap.tutorials.admin.concepts.ext.ConceptActionsController"
+          }
+        }
+      }
+    },
+    "routing": {
+      "routes": [
+        {
+          "pattern": ":?query:",
+          "name": "ConceptsList",
+          "target": "ConceptsList"
+        },
+        {
+          "pattern": "Concepts({key}):?query:",
+          "name": "ConceptsObjectPage",
+          "target": "ConceptsObjectPage"
+        }
+      ],
+      "targets": {
+        "ConceptsList": {
+          "type": "Component",
+          "id": "ConceptsList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/Concepts",
+              "variantManagement": "Page",
+              "initialLoad": "Enabled",
+              "navigation": {
+                "Concepts": { "detail": { "route": "ConceptsObjectPage" } }
+              },
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "actions": {
+                    "previewMerges": {
+                      "press": "sap.tutorials.admin.concepts.ext.ConceptActionsController.onPreviewMerges",
+                      "visible": true,
+                      "enabled": true,
+                      "text": "{i18n>previewMergesButton}"
+                    },
+                    "triggerGraphRebuild": {
+                      "press": "sap.tutorials.admin.concepts.ext.ConceptActionsController.onTriggerGraphRebuild",
+                      "visible": true,
+                      "enabled": true,
+                      "text": "{i18n>triggerRebuildButton}"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "ConceptsObjectPage": {
+          "type": "Component",
+          "id": "ConceptsObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/Concepts",
+              "editableHeaderContent": false,
+              "content": {
+                "header": {
+                  "actions": {
+                    "vetoConcept": {
+                      "press": "sap.tutorials.admin.concepts.ext.ConceptActionsController.onVetoConcept",
+                      "visible": true,
+                      "enabled": true,
+                      "text": "{i18n>vetoConceptButton}"
+                    },
+                    "mergeConcepts": {
+                      "press": "sap.tutorials.admin.concepts.ext.ConceptActionsController.onMergeConcepts",
+                      "visible": true,
+                      "enabled": true,
+                      "text": "{i18n>mergeConceptsButton}"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

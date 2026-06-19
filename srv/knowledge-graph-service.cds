@@ -17,8 +17,14 @@ using { com.sap.developers.ims as ims } from '../db/knowledge-graph';
 @requires : 'authenticated-user'
 service KnowledgeGraphService @(path : '/graph') {
 
-  // ─── Read-only projections (curation introspection + admin tooling) ────
-  @readonly entity Concepts             as projection on ims.Concepts;
+  // ─── Projections (curation introspection + admin tooling) ─────────────
+  // `Concepts` is writable so admins can inline-edit `name` + `description`
+  // from the Fiori Elements UI (PR 6 of #381). Field-level
+  // @Common.FieldControl: #ReadOnly in app/admin-annotations.cds plus the
+  // before('UPDATE') guard in srv/knowledge-graph-service.js restrict the
+  // write surface to those two fields. ConceptEdges and TutorialConceptLinks
+  // remain read-only — status flips on edges happen via the `vetoEdge` action.
+  entity Concepts                       as projection on ims.Concepts;
   @readonly entity ConceptEdges         as projection on ims.ConceptEdges;
   @readonly entity TutorialConceptLinks as projection on ims.TutorialConceptLinks;
 
@@ -66,6 +72,15 @@ service KnowledgeGraphService @(path : '/graph') {
       count     : Integer;
     };
   }
+  type MergePreview {
+    loserId       : UUID;
+    loserSlug     : String;
+    loserName     : String;
+    canonicalId   : UUID;
+    canonicalSlug : String;
+    canonicalName : String;
+    similarity    : Decimal(4, 3);  // 0.000–1.000
+  }
 
   // ─── Phase 1 + Phase 2 typed query functions (open to authenticated) ──
   function neighborhood(slug : String)                        returns NeighborhoodResult;
@@ -78,6 +93,13 @@ service KnowledgeGraphService @(path : '/graph') {
 
   @requires : 'KnowledgeGraph.Admin'
   action mergeConcepts(loser : UUID, canonical : UUID);
+
+  // previewMerges — dry-run wrapper around the consolidator's findNearDuplicates.
+  // No writes; returns the candidate (loser, canonical, similarity) triples that
+  // a forced consolidation pass would collapse. Used by the admin "Preview merges"
+  // toolbar button before a curator decides whether to invoke mergeConcepts.
+  @requires : 'KnowledgeGraph.Admin'
+  action previewMerges() returns array of MergePreview;
 
   @requires : 'KnowledgeGraph.Admin'
   action vetoConcept(conceptId : UUID);
