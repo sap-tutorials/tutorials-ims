@@ -26,6 +26,7 @@ import cds from '@sap/cds';
 import { findNearDuplicates } from '../lib/kg-similarity.js';
 import { findCycles } from '../lib/kg-cycles.js';
 import { graphRebuild } from '../lib/kg-graph-rebuild.js';
+import { mergeConceptPair } from '../lib/kg-merge-pair.js';
 
 const NAMESPACE = 'com.sap.developers.ims';
 const DEFAULT_MERGE_THRESHOLD = 0.92;
@@ -142,7 +143,7 @@ export async function runConsolidateConcepts(deps = {}, _logId) {
     `consolidate-concepts: starting (KG_MERGE_SIM_THRESHOLD=${MERGE_THRESHOLD})`,
   );
 
-  const { Concepts, ConceptEdges, TutorialConceptLinks } = cds.entities(NAMESPACE);
+  const { ConceptEdges } = cds.entities(NAMESPACE);
 
   // --------------------------------------------------------------------
   // Phase 1 — load concepts + find near-duplicate pairs
@@ -184,136 +185,14 @@ export async function runConsolidateConcepts(deps = {}, _logId) {
     }
 
     try {
-      await db.tx(async (tx) => {
-        // ---- Pre-detect-and-delete: TutorialConceptLinks ----
-        // For (tutorial_ID, predicate) pairs that already have a
-        // canonical-row, drop the matching loser-row before the bulk
-        // UPDATE so we don't violate @assert.unique.tutorialConcept.
-        const linkSurvivors = await tx.run(
-          SELECT.from(TutorialConceptLinks)
-            .columns('tutorial_ID', 'predicate')
-            .where({ concept_ID: canonical.ID }),
-        );
-        if (linkSurvivors.length > 0) {
-          const survivorKeys = new Set(
-            linkSurvivors.map((r) => `${r.tutorial_ID}:${r.predicate}`),
-          );
-          const loserLinks = await tx.run(
-            SELECT.from(TutorialConceptLinks)
-              .columns('ID', 'tutorial_ID', 'predicate')
-              .where({ concept_ID: loser.ID }),
-          );
-          const collidingIds = loserLinks
-            .filter((r) => survivorKeys.has(`${r.tutorial_ID}:${r.predicate}`))
-            .map((r) => r.ID);
-          if (collidingIds.length > 0) {
-            await tx.run(
-              DELETE.from(TutorialConceptLinks).where({ ID: { in: collidingIds } }),
-            );
-            linksDeleted += collidingIds.length;
-          }
-        }
-
-        // Now safe: redirect remaining tutorial-level FK references.
-        await tx.run(
-          UPDATE(TutorialConceptLinks)
-            .set({ concept_ID: canonical.ID })
-            .where({ concept_ID: loser.ID }),
-        );
-
-        // ---- Pre-detect-and-delete: ConceptEdges (source-redirect) ----
-        // For (target_ID, predicate) pairs where canonical is already a
-        // source, drop the matching loser-source rows.
-        const edgeSourceSurvivors = await tx.run(
-          SELECT.from(ConceptEdges)
-            .columns('target_ID', 'predicate')
-            .where({ source_ID: canonical.ID }),
-        );
-        if (edgeSourceSurvivors.length > 0) {
-          const survivorKeys = new Set(
-            edgeSourceSurvivors.map((r) => `${r.target_ID}:${r.predicate}`),
-          );
-          const loserEdgeSources = await tx.run(
-            SELECT.from(ConceptEdges)
-              .columns('ID', 'target_ID', 'predicate')
-              .where({ source_ID: loser.ID }),
-          );
-          const collidingIds = loserEdgeSources
-            .filter((r) => survivorKeys.has(`${r.target_ID}:${r.predicate}`))
-            .map((r) => r.ID);
-          if (collidingIds.length > 0) {
-            await tx.run(
-              DELETE.from(ConceptEdges).where({ ID: { in: collidingIds } }),
-            );
-            edgesDeleted += collidingIds.length;
-          }
-        }
-
-        // Redirect both endpoints of any concept-to-concept edges that
-        // referenced the loser.
-        await tx.run(
-          UPDATE(ConceptEdges)
-            .set({ source_ID: canonical.ID })
-            .where({ source_ID: loser.ID }),
-        );
-
-        // ---- Pre-detect-and-delete: ConceptEdges (target-redirect) ----
-        // For (source_ID, predicate) pairs where canonical is already a
-        // target, drop the matching loser-target rows.
-        const edgeTargetSurvivors = await tx.run(
-          SELECT.from(ConceptEdges)
-            .columns('source_ID', 'predicate')
-            .where({ target_ID: canonical.ID }),
-        );
-        if (edgeTargetSurvivors.length > 0) {
-          const survivorKeys = new Set(
-            edgeTargetSurvivors.map((r) => `${r.source_ID}:${r.predicate}`),
-          );
-          const loserEdgeTargets = await tx.run(
-            SELECT.from(ConceptEdges)
-              .columns('ID', 'source_ID', 'predicate')
-              .where({ target_ID: loser.ID }),
-          );
-          const collidingIds = loserEdgeTargets
-            .filter((r) => survivorKeys.has(`${r.source_ID}:${r.predicate}`))
-            .map((r) => r.ID);
-          if (collidingIds.length > 0) {
-            await tx.run(
-              DELETE.from(ConceptEdges).where({ ID: { in: collidingIds } }),
-            );
-            edgesDeleted += collidingIds.length;
-          }
-        }
-
-        await tx.run(
-          UPDATE(ConceptEdges)
-            .set({ target_ID: canonical.ID })
-            .where({ target_ID: loser.ID }),
-        );
-
-        // Drop self-loops created by the redirect (e.g. an edge that used to
-        // run loser→canonical now points canonical→canonical). We can't use
-        // CDS QL's where() for a column=column predicate cleanly, so SELECT
-        // the offending IDs first then DELETE by ID — keeps the statement
-        // shape portable between HANA and the SQLite test path.
-        const selfLoops = await tx.run(
-          SELECT.from(ConceptEdges)
-            .columns('ID', 'source_ID', 'target_ID')
-            .where({ source_ID: canonical.ID, target_ID: canonical.ID }),
-        );
-        if (selfLoops.length > 0) {
-          await tx.run(
-            DELETE.from(ConceptEdges).where({ ID: { in: selfLoops.map((r) => r.ID) } }),
-          );
-        }
-
-        // Flag the loser as MERGED and pin its mergedInto pointer.
-        await tx.run(
-          UPDATE(Concepts)
-            .set({ status: 'MERGED', mergedInto_ID: canonical.ID })
-            .where({ ID: loser.ID }),
-        );
+      const counts = await mergeConceptPair({
+        db,
+        log,
+        canonicalId: canonical.ID,
+        loserId: loser.ID,
       });
+      linksDeleted += counts.linksDeleted;
+      edgesDeleted += counts.edgesDeleted;
       stillActive.delete(loser.ID);
       mergesPerformed++;
       log.info(

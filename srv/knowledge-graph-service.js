@@ -180,3 +180,498 @@ export function rankNeighborhood(rows, slug, coCompletionMap, tutorialTeachesMap
 
 // Re-exported for the (next-dispatch) handler to consume without re-deriving.
 export const _internals = { GROUP_KEYS, TOP_N, DEFAULT_WEIGHT, coCompletionBoost, isFullySubset };
+
+// ---------------------------------------------------------------------------
+// CAP service-impl — Task 5.3
+// ---------------------------------------------------------------------------
+//
+// Routes:
+//   GET  /graph/Concepts                — readonly projection (authenticated)
+//   GET  /graph/ConceptEdges            — readonly projection (authenticated)
+//   GET  /graph/TutorialConceptLinks    — readonly projection (authenticated)
+//   GET  /graph/neighborhood(slug=...)  — flagship typed query (authenticated)
+//   GET  /graph/pathBetween(...)        — Phase 2 stub (authenticated)
+//   GET  /graph/conceptsForUser(...)    — Phase 2 stub (authenticated)
+//   POST /graph/runSparql               — admin raw SPARQL passthrough
+//   POST /graph/mergeConcepts           — admin curation
+//   POST /graph/vetoConcept             — admin curation
+//   POST /graph/vetoEdge                — admin curation
+//   POST /graph/triggerGraphRebuild     — admin force-rebuild
+//
+// Feature-flag: process.env.KNOWLEDGE_GRAPH_ENABLED must equal 'true' or
+// every operation on the service is rejected with HTTP 503. Gates the entire
+// surface (reads + admin actions) for the simplest first-cut. Toggling at
+// runtime requires a CAP restart only if the env var is read at boot — we
+// re-check on every request so a `cf set-env` + `cf restart` flips it cleanly.
+
+import cds from '@sap/cds';
+import { NEIGHBORHOOD_QUERY, substitute } from './lib/kg-queries.js';
+import {
+  sparqlQuery,
+  SparqlPrivilegeError,
+  SparqlSyntaxError,
+  SparqlTimeoutError,
+} from './lib/kg-sparql-client.js';
+import { graphRebuild } from './lib/kg-graph-rebuild.js';
+import { computeCoCompletions } from './lib/co-completion.js';
+import { mergeConceptPair } from './lib/kg-merge-pair.js';
+
+const NAMESPACE = 'com.sap.developers.ims';
+
+// Same shape used by kg-queries SLUG_RE — kept local so the handler can
+// 400 quickly without importing kg-queries' private regex.
+const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,78}[a-z0-9])?$/;
+
+// SPARQL response IRI prefix for tutorials (from kg-projection.js +
+// kg-queries.js). The neighborhood query already strips this via
+// REPLACE(STR(?iri), prefix, '') BIND, but we hold the constant here for
+// the parseNeighborhoodSparqlResponse helper if a caller passes a row
+// where the BIND was skipped (e.g. the teaches branch carries a Concept
+// IRI in the pre-bind variable).
+const TUTORIAL_IRI_PREFIX = 'https://developers.sap.com/kg/tutorial/';
+
+// Bound on the in-memory tutorialTeachesMap built per-request. Refer to
+// the comment in `neighborhood` for the cardinality estimate.
+const MAX_TEACHES_MAP_ROWS = 200_000;
+
+// LRU cache (graphVersion-aware). The plan calls for one keyed by
+// `${slug}:${graphVersion}` so repeated reads of the same tutorial avoid
+// the SPARQL+co-completion+title-join round-trip. lru-cache is NOT a
+// project dependency yet, so the read path is a TODO — capture the cache
+// shape inline so swapping in lru-cache is a one-liner once Tom approves
+// adding the dep.
+//
+// TODO(#381 PR 6): wire `lru-cache` here once added to package.json. Cache
+// key: `${slug}:${graphVersion}` (so `graphRebuild` invalidates by minting
+// a fresh ULID). Suggested size: 500 entries / 5MB. For now: zero caching;
+// every read pays the full cost.
+const _NEIGHBORHOOD_CACHE = null;
+
+function isHana(db) {
+  return db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+}
+
+/**
+ * Parse the SPARQL JSON response emitted by SYS.SPARQL_EXECUTE for the
+ * NEIGHBORHOOD_QUERY (4-way UNION SELECT DISTINCT). Each binding has at
+ * most these vars: ?type, ?targetSlug, ?targetLabel (teaches branch
+ * only), ?weight (teaches + prerequisitesOf branches).
+ *
+ * SPARQL emits unbound projection vars as missing keys in the binding
+ * object, NOT as null. We coerce missing → null for downstream simplicity.
+ *
+ * Exported for unit testing — kept here (rather than in kg-queries.js)
+ * because the response shape is co-located with the handler that consumes
+ * it.
+ *
+ * @param {string} jsonStr — raw JSON from SPARQL_EXECUTE's response NCLOB
+ * @param {string} _slug   — the input tutorial slug; reserved for future
+ *   defensive validation of bound IRIs (currently unused, the SPARQL
+ *   query already filters self-rows).
+ * @returns {Array<{type:?string, targetSlug:?string, targetLabel:?string, weight:?number}>}
+ * @throws {SyntaxError} on malformed JSON
+ */
+export function parseNeighborhoodSparqlResponse(jsonStr, _slug) {
+  const parsed = JSON.parse(jsonStr);
+  const bindings = parsed?.results?.bindings;
+  if (!Array.isArray(bindings)) return [];
+  return bindings.map((b) => ({
+    type:        b?.type?.value ?? null,
+    targetSlug:  b?.targetSlug?.value ?? null,
+    targetLabel: b?.targetLabel?.value ?? null,
+    weight:
+      b?.weight?.value !== undefined && b?.weight?.value !== null
+        ? Number(b.weight.value)
+        : null,
+  }));
+}
+
+/**
+ * Map the kg-sparql-client error classes onto CAP req.error codes. Privilege
+ * errors are 503 (ops issue, not the user's fault); syntax errors are 500
+ * (we constructed the SPARQL — never the caller); timeouts are 504.
+ */
+function mapSparqlError(err, req, log) {
+  if (err instanceof SparqlPrivilegeError) {
+    log.error('SPARQL privilege missing', { remediation: err.remediation });
+    return req.error(503, 'Knowledge graph temporarily unavailable');
+  }
+  if (err instanceof SparqlSyntaxError) {
+    log.error('SPARQL syntax error in generated query', {
+      sparql: err.sparql,
+      cause: err.message,
+    });
+    return req.error(500, 'Internal knowledge-graph query error');
+  }
+  if (err instanceof SparqlTimeoutError) {
+    return req.error(504, 'Knowledge-graph query timed out');
+  }
+  throw err;
+}
+
+/**
+ * Build a Map<tutorialSlug, Set<conceptSlug>> for the subset-suppression
+ * pass in the ranker. One row per (tutorial, concept) teaches link.
+ *
+ * Cost: one SQL round-trip; current dataset is ~1.4k tutorials × <10
+ * concepts ≈ 14k rows. The MAX_TEACHES_MAP_ROWS guard logs a warning if
+ * the result set ever explodes, so PR 6 can revisit caching at that
+ * point. Returns an empty Map if the join is empty (cold start).
+ */
+async function buildTutorialTeachesMap(db, log) {
+  const rows = isHana(db)
+    ? await db.run(
+        `SELECT t."SLUG" AS "TUT_SLUG", c."SLUG" AS "CONCEPT_SLUG"
+         FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALCONCEPTLINKS" l
+         JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" t ON t."ID" = l."TUTORIAL_ID"
+         JOIN "COM_SAP_DEVELOPERS_IMS_CONCEPTS" c   ON c."ID" = l."CONCEPT_ID"
+         WHERE l."PREDICATE" = 'teaches' AND c."STATUS" = 'ACTIVE'`,
+      )
+    : await (async () => {
+        const { TutorialConceptLinks, Tutorials, Concepts } = cds.entities(NAMESPACE);
+        // SQLite test path: small enough that a 3-way fetch+join in JS is fine.
+        const links = await SELECT.from(TutorialConceptLinks)
+          .columns('tutorial_ID', 'concept_ID')
+          .where({ predicate: 'teaches' });
+        const tutIds = [...new Set(links.map((l) => l.tutorial_ID).filter(Boolean))];
+        const conceptIds = [...new Set(links.map((l) => l.concept_ID).filter(Boolean))];
+        const [tuts, concepts] = await Promise.all([
+          tutIds.length
+            ? SELECT.from(Tutorials).columns('ID', 'slug').where({ ID: { in: tutIds } })
+            : Promise.resolve([]),
+          conceptIds.length
+            ? SELECT.from(Concepts).columns('ID', 'slug', 'status').where({ ID: { in: conceptIds }, status: 'ACTIVE' })
+            : Promise.resolve([]),
+        ]);
+        const tutSlug = new Map(tuts.map((t) => [t.ID, t.slug]));
+        const conSlug = new Map(concepts.map((c) => [c.ID, c.slug]));
+        return links.map((l) => ({
+          TUT_SLUG: tutSlug.get(l.tutorial_ID),
+          CONCEPT_SLUG: conSlug.get(l.concept_ID),
+        }));
+      })();
+
+  const map = new Map();
+  let count = 0;
+  for (const r of rows) {
+    const tut = r.TUT_SLUG ?? r.tut_slug;
+    const con = r.CONCEPT_SLUG ?? r.concept_slug;
+    if (!tut || !con) continue;
+    if (++count > MAX_TEACHES_MAP_ROWS) {
+      log.warn(
+        `kg-service: tutorialTeachesMap exceeded ${MAX_TEACHES_MAP_ROWS} rows; truncating — PR 6 should add caching`,
+      );
+      break;
+    }
+    if (!map.has(tut)) map.set(tut, new Set());
+    map.get(tut).add(con);
+  }
+  return map;
+}
+
+export default cds.service.impl(async function () {
+  const log = cds.log('knowledge-graph-service');
+  const db = await cds.connect.to('db');
+
+  // Audit-log channel — used by curation actions. Best-effort: if the
+  // audit-log service is not bound (local dev with no audit binding), skip
+  // logging silently rather than failing the action.
+  let auditLog = null;
+  try {
+    auditLog = await cds.connect.to('audit-log');
+  } catch (err) {
+    log.warn(`kg-service: audit-log binding unavailable (${err.message ?? err}); curation actions will not be audited`);
+  }
+
+  async function audit(action, data) {
+    if (!auditLog) return;
+    try {
+      await auditLog.log('SecurityEvent', { data: { action, ...data } });
+    } catch (err) {
+      log.warn(`kg-service: audit log write failed (${err.message ?? err})`);
+    }
+  }
+
+  // ─── Feature flag — gate the entire surface ────────────────────────────
+  this.before('*', (req) => {
+    if (process.env.KNOWLEDGE_GRAPH_ENABLED !== 'true') {
+      req.reject(503, 'Knowledge graph is currently disabled');
+    }
+  });
+
+  // ─── neighborhood(slug) ────────────────────────────────────────────────
+  this.on('neighborhood', async (req) => {
+    const { slug } = req.data;
+    if (typeof slug !== 'string' || !SLUG_RE.test(slug)) {
+      return req.error(400, 'Invalid slug');
+    }
+
+    // 1. Read graphVersion. If null, the consolidator hasn't run yet —
+    // return an empty-but-valid envelope so clients render gracefully.
+    const { GraphMetadata, Tutorials } = cds.entities(NAMESPACE);
+    const meta = await SELECT.one
+      .from(GraphMetadata)
+      .columns('graphVersion');
+    const graphVersion = meta?.graphVersion ?? null;
+
+    // ETag for client-side cache. Only meaningful once graphVersion exists.
+    if (graphVersion && req._?.req?.res?.set) {
+      req._.req.res.set('ETag', `"${slug}:${graphVersion}"`);
+    }
+
+    // 2. Look up input tutorial title.
+    const inputTutorial = await SELECT.one
+      .from(Tutorials)
+      .columns('slug', 'title')
+      .where({ slug });
+    const tutorialInfo = {
+      slug,
+      title: inputTutorial?.title ?? slug,
+    };
+
+    if (!graphVersion) {
+      log.info(`kg-service: neighborhood(${slug}) — no graphVersion yet; returning empty envelope`);
+      return {
+        tutorial:        tutorialInfo,
+        graphVersion:    null,
+        teaches:         [],
+        prerequisitesOf: [],
+        sharedConcepts:  [],
+        whatToLearnNext: [],
+      };
+    }
+
+    // 3. (Cache lookup would happen here — see _NEIGHBORHOOD_CACHE TODO.)
+
+    // 4. Substitute slug into the named query.
+    let sparql;
+    try {
+      sparql = substitute(NEIGHBORHOOD_QUERY, { SLUG: slug });
+    } catch (err) {
+      if (err.code === 'KG_QUERY_INVALID_SLUG') {
+        return req.error(400, err.message);
+      }
+      throw err;
+    }
+
+    // 5. Run the SPARQL query.
+    let response;
+    try {
+      ({ response } = await sparqlQuery(db, sparql));
+    } catch (err) {
+      return mapSparqlError(err, req, log);
+    }
+
+    // 6. Parse SPARQL response into the row shape rankNeighborhood expects.
+    let rows;
+    try {
+      rows = parseNeighborhoodSparqlResponse(response, slug);
+    } catch (err) {
+      log.error(`kg-service: malformed SPARQL response: ${err.message}`);
+      return req.error(500, 'Internal knowledge-graph query error');
+    }
+
+    // 7. Load co-completion map for whatToLearnNext boost.
+    let coMap = new Map();
+    try {
+      const coCompletions = await computeCoCompletions();
+      coMap = new Map((coCompletions[slug] ?? []).map((e) => [e.slug, e.score]));
+    } catch (err) {
+      log.warn(`kg-service: computeCoCompletions failed (${err.message ?? err}); proceeding without boost`);
+    }
+
+    // 8. Build tutorial-teaches map for sharedConcepts subset suppression.
+    let tutorialTeachesMap;
+    try {
+      tutorialTeachesMap = await buildTutorialTeachesMap(db, log);
+    } catch (err) {
+      log.warn(`kg-service: buildTutorialTeachesMap failed (${err.message ?? err}); proceeding without subset suppression`);
+      tutorialTeachesMap = undefined;
+    }
+
+    // 9. Run the pure ranker.
+    const ranked = rankNeighborhood(rows, slug, coMap, tutorialTeachesMap);
+
+    // 10. Enrich tutorial-targeted items with title from Tutorials table.
+    const candidateSlugs = new Set();
+    for (const item of ranked.prerequisitesOf) candidateSlugs.add(item.slug);
+    for (const item of ranked.sharedConcepts)  candidateSlugs.add(item.slug);
+    for (const item of ranked.whatToLearnNext) candidateSlugs.add(item.slug);
+
+    let titleBySlug = new Map();
+    if (candidateSlugs.size > 0) {
+      const titleRows = await SELECT.from(Tutorials)
+        .columns('slug', 'title')
+        .where({ slug: { in: [...candidateSlugs] } });
+      titleBySlug = new Map(titleRows.map((r) => [r.slug, r.title ?? r.slug]));
+    }
+    const enrich = (arr) =>
+      arr.map((item) => ({ ...item, title: titleBySlug.get(item.slug) ?? item.slug }));
+
+    const result = {
+      tutorial:        tutorialInfo,
+      graphVersion,
+      teaches:         ranked.teaches.map((c) => ({
+        slug: c.slug,
+        name: c.name,
+        description: '',  // Concepts.description not pulled by the ranker; left empty for Phase 1
+      })),
+      prerequisitesOf: enrich(ranked.prerequisitesOf),
+      sharedConcepts:  enrich(ranked.sharedConcepts),
+      whatToLearnNext: enrich(ranked.whatToLearnNext),
+    };
+
+    // 11. (Cache-store would happen here — see _NEIGHBORHOOD_CACHE TODO.)
+    return result;
+  });
+
+  // ─── pathBetween — Phase 2 stub ────────────────────────────────────────
+  this.on('pathBetween', async (req) => {
+    const { fromSlug, toSlug } = req.data;
+    log.warn(`kg-service: pathBetween(${fromSlug} → ${toSlug}) — Phase 2 stub, returning []`);
+    return [];
+  });
+
+  // ─── conceptsForUser — Phase 2 stub ────────────────────────────────────
+  this.on('conceptsForUser', async (req) => {
+    const { userId } = req.data;
+    log.warn(`kg-service: conceptsForUser(${userId}) — Phase 2 stub, returning empty coverage`);
+    return { learned: [], partial: [] };
+  });
+
+  // ─── runSparql — admin raw SPARQL passthrough ──────────────────────────
+  this.on('runSparql', async (req) => {
+    const { query } = req.data;
+    if (typeof query !== 'string' || query.length === 0) {
+      return req.error(400, 'Query required');
+    }
+    if (query.length > 8 * 1024) {
+      return req.error(400, 'Query too long (max 8KB)');
+    }
+
+    const truncatedForLog = query.length > 1024 ? query.slice(0, 1024) + '…' : query;
+    log.info(`kg-service: runSparql by ${req.user?.id ?? 'unknown'} (${query.length} chars)`);
+    await audit('KnowledgeGraphRunSparql', {
+      user: req.user?.id ?? 'unknown',
+      queryLength: query.length,
+      query: truncatedForLog,
+    });
+
+    let response;
+    try {
+      ({ response } = await sparqlQuery(db, query));
+    } catch (err) {
+      return mapSparqlError(err, req, log);
+    }
+
+    // Parse the SPARQL JSON results into { columns, rows-as-strings }.
+    let parsed;
+    try {
+      parsed = JSON.parse(response);
+    } catch (err) {
+      log.error(`kg-service: SPARQL response not JSON (${err.message})`);
+      return req.error(500, 'SPARQL response was not parseable');
+    }
+    const columns = Array.isArray(parsed?.head?.vars) ? parsed.head.vars : [];
+    const bindings = Array.isArray(parsed?.results?.bindings) ? parsed.results.bindings : [];
+    // Mirror AnalyticsService.runSelectQuery's wire shape: each row is a
+    // JSON-stringified array of column-value strings. CDS type system
+    // doesn't support `array of array of String` in type definitions.
+    const rows = bindings.map((b) =>
+      JSON.stringify(columns.map((c) => (b?.[c]?.value !== undefined ? String(b[c].value) : ''))),
+    );
+    return { columns, rows };
+  });
+
+  // ─── mergeConcepts — admin curation ────────────────────────────────────
+  this.on('mergeConcepts', async (req) => {
+    const { loser, canonical } = req.data;
+    if (!loser || !canonical) return req.error(400, 'loser and canonical UUIDs required');
+    if (loser === canonical) return req.error(400, 'loser and canonical must differ');
+
+    try {
+      const counts = await mergeConceptPair({ db, log, loserId: loser, canonicalId: canonical });
+      await audit('KnowledgeGraphMergeConcepts', {
+        user: req.user?.id ?? 'unknown',
+        loser,
+        canonical,
+        ...counts,
+      });
+      // Fire-and-forget rebuild so the SPARQL graph reflects the change.
+      graphRebuild({ db, log }).catch((err) =>
+        log.error(`kg-service: async rebuild after mergeConcepts failed: ${err.message ?? err}`),
+      );
+    } catch (err) {
+      log.error(`kg-service: mergeConcepts failed: ${err.message ?? err}`);
+      return req.error(500, `Merge failed: ${err.message ?? 'unknown error'}`);
+    }
+  });
+
+  // ─── vetoConcept — admin curation ──────────────────────────────────────
+  this.on('vetoConcept', async (req) => {
+    const { conceptId } = req.data;
+    if (!conceptId) return req.error(400, 'conceptId required');
+
+    const { Concepts } = cds.entities(NAMESPACE);
+    try {
+      await db.tx(async (tx) => {
+        await tx.run(UPDATE(Concepts).set({ status: 'VETOED' }).where({ ID: conceptId }));
+      });
+      await audit('KnowledgeGraphVetoConcept', {
+        user: req.user?.id ?? 'unknown',
+        conceptId,
+      });
+      graphRebuild({ db, log }).catch((err) =>
+        log.error(`kg-service: async rebuild after vetoConcept failed: ${err.message ?? err}`),
+      );
+    } catch (err) {
+      log.error(`kg-service: vetoConcept failed: ${err.message ?? err}`);
+      return req.error(500, `Veto failed: ${err.message ?? 'unknown error'}`);
+    }
+  });
+
+  // ─── vetoEdge — admin curation ─────────────────────────────────────────
+  this.on('vetoEdge', async (req) => {
+    const { edgeId } = req.data;
+    if (!edgeId) return req.error(400, 'edgeId required');
+
+    const { ConceptEdges } = cds.entities(NAMESPACE);
+    try {
+      await db.tx(async (tx) => {
+        await tx.run(UPDATE(ConceptEdges).set({ status: 'VETOED' }).where({ ID: edgeId }));
+      });
+      await audit('KnowledgeGraphVetoEdge', {
+        user: req.user?.id ?? 'unknown',
+        edgeId,
+      });
+      graphRebuild({ db, log }).catch((err) =>
+        log.error(`kg-service: async rebuild after vetoEdge failed: ${err.message ?? err}`),
+      );
+    } catch (err) {
+      log.error(`kg-service: vetoEdge failed: ${err.message ?? err}`);
+      return req.error(500, `Veto failed: ${err.message ?? 'unknown error'}`);
+    }
+  });
+
+  // ─── triggerGraphRebuild — admin force-rebuild ─────────────────────────
+  this.on('triggerGraphRebuild', async (req) => {
+    log.info(`kg-service: triggerGraphRebuild by ${req.user?.id ?? 'unknown'}`);
+    try {
+      const result = await graphRebuild({ db, log });
+      await audit('KnowledgeGraphTriggerRebuild', {
+        user: req.user?.id ?? 'unknown',
+        graphVersion: result.graphVersion,
+        tripleCount: result.tripleCount,
+        durationMs: result.durationMs,
+      });
+      return result;
+    } catch (err) {
+      log.error(`kg-service: triggerGraphRebuild failed: ${err.message ?? err}`);
+      return req.error(500, `Rebuild failed: ${err.message ?? 'unknown error'}`);
+    }
+  });
+});
+
+// Re-export the parser constant so tests / future inspectors can verify
+// the IRI prefix without re-deriving it from the SPARQL template.
+export const __HANDLER_TESTING__ = { TUTORIAL_IRI_PREFIX, SLUG_RE };
