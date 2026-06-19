@@ -1612,7 +1612,10 @@ annotate KnowledgeGraphService.Concepts with @(
     { $Type: 'UI.DataField', Value: name,            Label: 'Name' },
     { $Type: 'UI.DataField', Value: status,          Label: 'Status' },
     { $Type: 'UI.DataField', Value: extractionCount, Label: 'Extractions' },
-    { $Type: 'UI.DataField', Value: lastSeenAt,      Label: 'Last Seen' }
+    { $Type: 'UI.DataField', Value: lastSeenAt,      Label: 'Last Seen' },
+    // ID exposed last so admins can copy the canonical UUID for paste-into-mergeConcepts
+    // workflow without dominating the table layout.
+    { $Type: 'UI.DataField', Value: ID,              Label: 'ID' }
   ],
 
   UI.FieldGroup #General: {
@@ -1651,7 +1654,11 @@ annotate KnowledgeGraphService.TutorialConceptLinks with {
 
 annotate KnowledgeGraphService.TutorialConceptLinks with @UI: {
   LineItem: [
-    { $Type: 'UI.DataField', Value: tutorial.slug,    Label: 'Tutorial' },
+    // tutorial_ID (UUID) shown instead of tutorial.slug because Tutorials is not
+    // projected into KnowledgeGraphService — the `tutorial` association has no
+    // NavigationProperty in the EDMX so dot-paths fail at OP render time.
+    // TODO(PR 7+): project Tutorials into KG service for slug+title display.
+    { $Type: 'UI.DataField', Value: tutorial_ID,      Label: 'Tutorial ID' },
     { $Type: 'UI.DataField', Value: predicate,        Label: 'Predicate' },
     { $Type: 'UI.DataField', Value: confidence,       Label: 'Confidence' },
     { $Type: 'UI.DataField', Value: extractedAt,      Label: 'Extracted At' }

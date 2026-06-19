@@ -448,6 +448,14 @@ export default cds.service.impl(async function () {
   // PATCH could try to mutate `slug`/`status`/`embedding` etc. — reject any
   // such attempt at the service layer. Status flips happen exclusively via
   // the vetoConcept / mergeConcepts actions.
+  //
+  // NOTE: at the OData path, FieldControl metadata strips read-only fields
+  // before this handler runs, so the negative path is rarely exercised over
+  // HTTP. This guard catches programmatic UPDATEs (cross-service calls,
+  // jobs) where no metadata filter applies. req.reject ensures a hard
+  // failure rather than silent error-queuing.
+  // See test/unit/kg-concepts-update-guard.test.js for the editable-surface
+  // smoke test (positive path only — negative-path testing is a TODO).
   const CONCEPTS_PATCH_ALLOWLIST = new Set(['name', 'description']);
   this.before('UPDATE', 'Concepts', (req) => {
     const data = req.data || {};
@@ -457,7 +465,7 @@ export default cds.service.impl(async function () {
       if (key === 'createdAt' || key === 'createdBy') continue;
       if (key === 'modifiedAt' || key === 'modifiedBy') continue;
       if (CONCEPTS_PATCH_ALLOWLIST.has(key)) continue;
-      return req.error(403, `Field '${key}' is not editable on Concepts`);
+      return req.reject(403, `Field '${key}' is not editable on Concepts`);
     }
   });
 

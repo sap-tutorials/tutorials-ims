@@ -111,6 +111,14 @@
       "csrfProtection": false
     },
     {
+      "source": "^/graph/(.*)$",
+      "target": "/graph/$1",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.Admin",
+      "csrfProtection": false
+    },
+    {
       "source": "^/display/(.*)$",
       "target": "/display/$1",
       "destination": "srv-api",
