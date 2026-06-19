@@ -104,9 +104,10 @@ WHEN MATCHED AND (
  *   (count of TUTORIALS the MERGE was scoped to). SQLite path returns the
  *   sum of per-tutorial `rechecked` from `recomputeTutorialProgress`, which
  *   counts ROWS examined. The two units differ but neither is load-bearing
- *   for callers — `updated` is the meaningful signal (HANA: affected rows;
- *   SQLite: rows actually mutated). Tests assert `updated` exact values and
- *   `rechecked >= 1` rather than exact-match across both paths.
+ *   for callers — `updated` is the meaningful signal (HANA: null because
+ *   MERGE doesn't return affectedRows; SQLite: rows actually mutated).
+ *   Tests assert `updated` exact values on SQLite and rely on per-row state
+ *   reads on HANA (see test/hybrid/recompute-tutorial-progress-bulk-sql.test.js).
  */
 export async function recomputeTutorialProgressBulkSQL(db, namespace, tutorialIds) {
   // Defensive guard: filter to actual non-empty strings before the DB call.
@@ -141,21 +142,24 @@ export async function recomputeTutorialProgressBulkSQL(db, namespace, tutorialId
   }
 
   // HANA fast path: single set-based MERGE. The same tutorialIds list is bound
-  // twice (inner aggregate scope + outer MERGE scope). HANA's parameter binding
-  // for IN (...) varies by driver — try array binding first; if that fails,
-  // fall back to interpolating a sanitized comma-separated list of single-quoted
-  // UUIDs (UUIDs are alphanumeric + '-' so not SQL-injection vectors, but the
-  // single-quote escape is belt-and-suspenders for malformed input).
+  // twice (inner aggregate scope + outer MERGE scope).
+  //
+  // [#382 phase C finding] @cap-js/hana does NOT support array binding for
+  // `IN (:tutorialIds)` parameter placeholders — every attempt errored with
+  // "cannot use parameter variable: TUTORIALIDS". We interpolate a sanitized
+  // comma-separated list of single-quoted UUIDs instead. UUIDs are alphanumeric
+  // + '-' so not SQL-injection vectors, but the single-quote escape is
+  // belt-and-suspenders for malformed input. The defensive filter at the top
+  // of this function further guards against non-string elements.
+  //
+  // [#382 phase C finding] HANA MERGE does not return `affectedRows` to the
+  // driver, so `updated` is `null` from this path. Per-row state changes are
+  // verified by `WHEN MATCHED AND (NULL-safe-inequality)` in the SQL itself
+  // and by the hybrid test's row-by-row assertions. Logging shows '(unknown)'.
   const start = Date.now();
-  let result;
-  try {
-    result = await db.run(BULK_RECOMPUTE_MERGE_SQL, [cleaned, cleaned]);
-  } catch (err) {
-    LOG.warn(`recomputeTutorialProgressBulkSQL: array-bind failed (${err?.message || err}); falling back to UUID-list interpolation`);
-    const idsLit = cleaned.map(id => `'${id.replace(/'/g, "''")}'`).join(',');
-    const sql = BULK_RECOMPUTE_MERGE_SQL.split(':tutorialIds').join(idsLit);
-    result = await db.run(sql);
-  }
+  const idsLit = cleaned.map(id => `'${id.replace(/'/g, "''")}'`).join(',');
+  const sql = BULK_RECOMPUTE_MERGE_SQL.split(':tutorialIds').join(idsLit);
+  const result = await db.run(sql);
   const durationMs = Date.now() - start;
   const updated = result?.affectedRows ?? null;
   LOG.info(`recomputeTutorialProgressBulkSQL: tutorialIds=${cleaned.length} updated=${updated ?? '(unknown)'} durationMs=${durationMs}`);
