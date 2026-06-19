@@ -186,3 +186,91 @@ describe('renderMissionBody', () => {
     expect(html).toContain('&lt;img');
   });
 });
+
+// #382 phase F1 — synthetic-group rendering for direct-TUTORIAL paths
+// (loadMissionContext now returns groups with `isSynthetic: true` when the
+// path has TUTORIAL items directly instead of nested Groups). The renderer
+// must NOT generate a /tutorials/group-<slug> hyperlink for synthetic groups
+// — there is no Group page to navigate to.
+describe('renderMissionBody — synthetic groups (#382 phase F1)', () => {
+  const fxSyntheticOnly = {
+    mission: { ID: 'mS', slug: 'syn', title: 'Synthetic Mission', description: '' },
+    groups: [
+      {
+        ID: 'pS',
+        slug: 'p-syn',
+        title: 'P Syn',
+        isSynthetic: true,
+        tutorials: [
+          { slug: 'tA', title: 'TA', level: 'beginner', time: 5, stepCount: 1 },
+          { slug: 'tB', title: 'TB', level: 'intermediate', time: 8, stepCount: 2 },
+        ],
+      },
+    ],
+    groupCount: 1,
+    tutorialCount: 2,
+    totalTime: 13,
+    level: 'intermediate',
+  };
+
+  it('renders the synthetic group title as plain h3 (no href)', () => {
+    const html = renderMissionBody(fxSyntheticOnly);
+    // The synthetic group's title should be present...
+    expect(html).toContain('>P Syn<');
+    // ...but never wrapped in an anchor pointing at /tutorials/group-p-syn
+    expect(html).not.toContain('href="/tutorials/group-p-syn"');
+  });
+
+  it('omits the "View Group →" link for synthetic groups', () => {
+    const html = renderMissionBody(fxSyntheticOnly);
+    expect(html).not.toContain('View Group');
+    expect(html).not.toContain('group-start-link');
+  });
+
+  it('still emits the inner tutorial list with /tutorials/<slug> links for synthetic groups', () => {
+    const html = renderMissionBody(fxSyntheticOnly);
+    expect(html).toContain('href="/tutorials/tA"');
+    expect(html).toContain('href="/tutorials/tB"');
+    expect(html).toContain('>TA<');
+    expect(html).toContain('>TB<');
+  });
+
+  it('regression: real (non-synthetic) groups still get the anchor + View Group link', () => {
+    // fxMission from earlier in the file has 2 real groups — neither isSynthetic.
+    // Re-verify the existing behavior unchanged.
+    const html = renderMissionBody(fxMission);
+    expect(html).toContain('href="/tutorials/group-g-one"');
+    expect(html).toContain('href="/tutorials/group-g-two"');
+    expect(html).toContain('View Group');
+    expect(html).toContain('group-start-link');
+  });
+
+  it('handles a mixed mission: synthetic first, then nested group', () => {
+    const fxMixed = {
+      mission: { ID: 'mM', slug: 'mix', title: 'Mixed', description: '' },
+      groups: [
+        {
+          ID: 'pMix', slug: 'p-mix', title: 'P Mix', isSynthetic: true,
+          tutorials: [{ slug: 'tDirect', title: 'TDirect', level: 'beginner', time: 3, stepCount: 1 }],
+        },
+        {
+          ID: 'gNested', slug: 'g-nested', title: 'G Nested',
+          tutorials: [{ slug: 'tNested', title: 'TNested', level: 'beginner', time: 4, stepCount: 2 }],
+        },
+      ],
+      groupCount: 2,
+      tutorialCount: 2,
+      totalTime: 7,
+      level: 'beginner',
+    };
+    const html = renderMissionBody(fxMixed);
+    // Synthetic appears first
+    const synthIdx = html.indexOf('>P Mix<');
+    const nestedIdx = html.indexOf('>G Nested<');
+    expect(synthIdx).toBeGreaterThan(0);
+    expect(nestedIdx).toBeGreaterThan(synthIdx);
+    // Synthetic has no group anchor; nested does
+    expect(html).not.toContain('href="/tutorials/group-p-mix"');
+    expect(html).toContain('href="/tutorials/group-g-nested"');
+  });
+});

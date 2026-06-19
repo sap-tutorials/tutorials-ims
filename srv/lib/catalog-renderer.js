@@ -139,11 +139,22 @@ export function renderMissionBody(ctx) {
               </div>
             </li>`).join('\n');
 
+    // [#382 phase F1] Synthetic groups (paths with direct TUTORIAL items, no
+    // wrapping Group entity) render with a plain h3 title and no
+    // "View Group →" link — there's no /tutorials/group-<slug> page to
+    // navigate to. The inner tutorial list still renders normally.
+    const titleHtml = g.isSynthetic
+      ? `<h3>${escapeHtml(g.title)}</h3>`
+      : `<h3><a href="/tutorials/group-${escapeHtml(g.slug)}" onclick="event.stopPropagation()">${escapeHtml(g.title)}</a></h3>`;
+    const viewGroupLink = g.isSynthetic
+      ? ''
+      : `<a href="/tutorials/group-${escapeHtml(g.slug)}" class="group-start-link">View Group &rarr;</a>`;
+
     return `      <div class="group-card">
         <div class="group-card-header" onclick="this.parentElement.classList.toggle('expanded')">
           <div class="group-header-left">
             <span class="type-badge type-badge--group">GROUP</span>
-            <h3><a href="/tutorials/group-${escapeHtml(g.slug)}" onclick="event.stopPropagation()">${escapeHtml(g.title)}</a></h3>
+            ${titleHtml}
             <span class="group-meta">${g.tutorials.length} Tutorials</span>
           </div>
           <span class="group-chevron">&#9662;</span>
@@ -152,7 +163,7 @@ export function renderMissionBody(ctx) {
           <ol class="group-tutorials">
 ${tuts}
           </ol>
-          <a href="/tutorials/group-${escapeHtml(g.slug)}" class="group-start-link">View Group &rarr;</a>
+          ${viewGroupLink}
         </div>
       </div>`;
   }).join('\n');
