@@ -3,7 +3,8 @@ import { createHash } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 import { acquireLock, releaseLock } from '../jobs/job-lock.js';
 import { getNextLegacyId } from './legacy-id.js';
-import { recomputeTutorialProgress, toBuffer } from './content-store.js';
+import { toBuffer } from './content-store.js';
+import { recomputeTutorialProgressBulkSQL } from './recompute-tutorial-progress-bulk-sql.js';
 import { tutorialsTableInfo } from './_tutorials-table.js';
 
 const LOG = cds.log('content-publish');
@@ -104,7 +105,16 @@ export function createSessionHelpers({ namespace }) {
     }
 
     if (Object.keys(metadata).length > 0) {
-      await upsertTutorialMetadata(namespace, metadata);
+      const { tutorialIds } = await upsertTutorialMetadata(namespace, metadata);
+      // [#382 phase E] Bulk-recompute TUTORIAL TaskRecords progress in ONE SQL
+      // for every tutorial whose metadata was just upserted. Replaces the
+      // per-slug loop inside upsertTutorialMetadata that was issuing 3 + 2N
+      // queries per tutorial — for ~25-slug append batches with thousands of
+      // user TaskRecords each, that loop was the dominant publish cost.
+      if (tutorialIds.length > 0) {
+        const db = await cds.connect.to('db');
+        await recomputeTutorialProgressBulkSQL(db, namespace, tutorialIds);
+      }
     }
     if (Object.keys(bodyTexts).length > 0) {
       await upsertBodyTexts(namespace, bodyTexts);
@@ -264,6 +274,9 @@ async function upsertTutorialMetadata(namespace, metadata) {
   const { Tutorials, Steps } = cds.entities(namespace);
   const db = await cds.connect.to('db');
   let metaUpserted = 0;
+  // Collect tutorialIds touched by this batch so the caller can issue a single
+  // set-based recompute (#382 phase E) instead of N per-slug recomputes here.
+  const tutorialIds = [];
 
   for (const [rawSlug, meta] of Object.entries(metadata)) {
     // Canonical slug is lowercase. Source repos sometimes ship folder names with
@@ -337,13 +350,13 @@ async function upsertTutorialMetadata(namespace, metadata) {
           }
         }
 
-        // Recompute progress for any existing TUTORIAL TaskRecords on
-        // this tutorial. Without this, users who marked steps complete
-        // before the authoritative stepCount was set (or before steps
-        // beyond their last completion existed in the DB) keep a stale
-        // progress=100/COMPLETED row even after the true denominator
-        // grows. See issue #89.
-        await recomputeTutorialProgress(db, namespace, tutorialId, meta.steps.length);
+        // Collect tutorialIds for the batched bulk recompute (#382 phase E).
+        // The caller in appendToSession runs ONE set-based MERGE for every
+        // tutorial in this batch after the upsert loop completes. Without
+        // this, users who marked steps complete before the authoritative
+        // stepCount was set keep stale progress=100/COMPLETED rows even
+        // after the true denominator grows. See issue #89.
+        tutorialIds.push(tutorialId);
       }
 
       // Auto-init TutorialMeta: new tutorial → INSERT; refreshed tutorial → UPDATE reviewedDate
@@ -404,6 +417,7 @@ async function upsertTutorialMetadata(namespace, metadata) {
   if (metaUpserted > 0) {
     console.log(`[content/publish] Upserted metadata for ${metaUpserted} tutorials`);
   }
+  return { tutorialIds };
 }
 
 async function upsertBodyTexts(namespace, bodyTexts) {
@@ -556,10 +570,18 @@ async function carryForwardUnchanged(namespace, newVersion, hanaTableName, getAc
 
 // ---------------------------------------------------------------------------
 // Recompute TUTORIAL TaskRecords progress for any tutorial whose body content
-// was published in this version. appendToSession already calls
-// recomputeTutorialProgress when metadata is provided, but if a chunk arrived
-// with body text only (no metadata payload), the recompute would be skipped.
-// Re-running here is a safety net — recomputeTutorialProgress is idempotent.
+// was published in this version. appendToSession already calls the bulk
+// recompute when metadata is provided, but if a chunk arrived with body text
+// only (no metadata payload), the recompute would be skipped. Re-running here
+// is a safety net — the bulk function is idempotent (the MERGE's
+// WHEN MATCHED predicate filters no-op rows).
+//
+// [#382 phase E] Slug → tutorialId resolution is ONE batched query, not N.
+// With ~1400 slugs × ~50ms HANA latency, the per-slug loop alone would burn
+// 70+ seconds of the 90s publish budget before recompute even started.
+// HANA driver caveat: @cap-js/hana does not accept array binding for
+// `IN (?, ?, ...)`; we use positional `?` placeholders expanded inline (one
+// per slug). This was validated in Phase C.
 // ---------------------------------------------------------------------------
 async function recomputeProgressForChangedTutorials(namespace, newVersion) {
   const { ContentFiles } = cds.entities(namespace);
@@ -572,21 +594,32 @@ async function recomputeProgressForChangedTutorials(namespace, newVersion) {
   if (slugs.length === 0) return;
 
   const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
-  const { table, idCol, slugCol, stepCountCol } = tutorialsTableInfo(namespace, isHana);
+  const { table, idCol, slugCol } = tutorialsTableInfo(namespace, isHana);
 
-  for (const slug of slugs) {
-    try {
-      const hits = await db.run(
-        `SELECT ${idCol}, ${stepCountCol} FROM ${table} WHERE LOWER(${slugCol}) = ?`,
-        [slug.toLowerCase()]
-      );
-      const row = hits?.[0];
-      const tutorialId = row?.ID ?? row?.id ?? null;
-      const stepCount = row?.stepCount ?? row?.STEPCOUNT ?? null;
-      if (!tutorialId || !Number.isInteger(stepCount) || stepCount <= 0) continue;
-      await recomputeTutorialProgress(db, namespace, tutorialId, stepCount);
-    } catch (e) {
-      LOG.warn(`recomputeProgressForChangedTutorials: ${slug} failed`, e.message);
-    }
+  // Resolve all slugs → tutorialIds in ONE query.
+  const lowerSlugs = slugs.map(s => s.toLowerCase());
+  let hits;
+  try {
+    const placeholders = lowerSlugs.map(() => '?').join(',');
+    hits = await db.run(
+      `SELECT ${idCol}, LOWER(${slugCol}) AS LSLUG FROM ${table} WHERE LOWER(${slugCol}) IN (${placeholders})`,
+      lowerSlugs
+    );
+  } catch (e) {
+    // Fallback: some HANA driver versions reject positional placeholders for
+    // IN (...). Interpolate a sanitized single-quoted list. Slugs are
+    // case-folded already and the DB schema constrains them, but the
+    // single-quote escape is belt-and-suspenders.
+    LOG.warn(`recomputeProgressForChangedTutorials: positional bind failed (${e.message}); falling back to inline literal`);
+    const lit = lowerSlugs.map(s => `'${String(s).replace(/'/g, "''")}'`).join(',');
+    hits = await db.run(
+      `SELECT ${idCol}, LOWER(${slugCol}) AS LSLUG FROM ${table} WHERE LOWER(${slugCol}) IN (${lit})`
+    );
   }
+  const tutorialIds = (hits || [])
+    .map(h => h.ID ?? h.id)
+    .filter(id => typeof id === 'string' && id.length > 0);
+  if (tutorialIds.length === 0) return;
+
+  await recomputeTutorialProgressBulkSQL(db, namespace, tutorialIds);
 }

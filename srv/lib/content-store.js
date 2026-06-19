@@ -11,6 +11,7 @@ import { renderCatalogPage } from './catalog-renderer.js';
 import { loadGroupContext, loadMissionContext } from './catalog-data.js';
 import { createShellLoader, ShellMarkerError, composeShell } from './chrome-shell.js';
 import { createSessionHelpers } from './content-publish-session.js';
+import { recomputeTutorialProgressBulkSQL } from './recompute-tutorial-progress-bulk-sql.js';
 import { tutorialsTableInfo } from './_tutorials-table.js';
 
 const LOG = cds.log('content-store');
@@ -427,6 +428,9 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
 
       // Upsert Tutorials + Steps metadata (self-healing on every publish)
       let metaUpserted = 0;
+      // [#382 phase E] Collect tutorialIds touched in the loop so we can issue
+      // ONE set-based recompute after the loop instead of per-slug.
+      const touchedTutorialIds = [];
       if (!skipMetadataUpsert && metadata && typeof metadata === 'object') {
         const { Tutorials, Steps } = cds.entities(namespace);
         const db = await cds.connect.to('db');
@@ -501,13 +505,13 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
                 }
               }
 
-              // Recompute progress for any existing TUTORIAL TaskRecords on
-              // this tutorial. Without this, users who marked steps complete
-              // before the authoritative stepCount was set (or before steps
-              // beyond their last completion existed in the DB) keep a stale
-              // progress=100/COMPLETED row even after the true denominator
-              // grows. See issue #89.
-              await recomputeTutorialProgress(db, namespace, tutorialId, meta.steps.length);
+              // [#382 phase E] Collect tutorialIds for the bulk recompute
+              // after the metadata loop. Without recompute, users who marked
+              // steps complete before the authoritative stepCount was set
+              // (or before steps beyond their last completion existed in the
+              // DB) keep a stale progress=100/COMPLETED row even after the
+              // true denominator grows. See issue #89.
+              touchedTutorialIds.push(tutorialId);
             }
             // Auto-init TutorialMeta: new tutorial → INSERT; refreshed tutorial → UPDATE reviewedDate
             try {
@@ -577,6 +581,15 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         }
         if (metaUpserted > 0) {
           console.log(`[content/publish] Upserted metadata for ${metaUpserted} tutorials`);
+        }
+        // [#382 phase E] One bulk set-based recompute for every tutorial
+        // touched in this publish — replaces N per-slug recomputeTutorialProgress
+        // calls. Idempotent: the MERGE's WHEN MATCHED predicate skips no-op
+        // rows. SQLite path inside the bulk function loops the JS
+        // implementation so unit-test parity is preserved.
+        if (touchedTutorialIds.length > 0) {
+          const db = await cds.connect.to('db');
+          await recomputeTutorialProgressBulkSQL(db, namespace, touchedTutorialIds);
         }
       }
 
