@@ -44,16 +44,23 @@ Validate via the boot log line: `[rebuild-trigger] active — admin writes will 
 
    Expect: HTTP 204 (no body). A new run should appear in the [Actions tab](https://github.com/sap-tutorials/tutorials-ims/actions/workflows/rebuild-content.yml) within seconds.
 
-3. **Update CF env on each environment** (DEV, then QA, then PROD):
+3. **Update the GitHub Actions secret + redeploy each environment.** The token now lives in the `GITHUB_DISPATCH_TOKEN` repository secret and is injected into each `tutorials-srv` deploy via `cf deploy --var github-dispatch-token=...`. `REBUILD_TARGET_ENV` is a literal in each `deploy/<env>.mtaext` and does not need rotation.
 
    ```bash
-   cf target -s dev
-   cf set-env tutorials-srv GITHUB_DISPATCH_TOKEN "<NEW_TOKEN>"
-   cf set-env tutorials-srv REBUILD_TARGET_ENV "dev"   # or unset; defaults to 'dev'
-   cf restart tutorials-srv
+   # Update the repo-level secret (one-time, applies to all envs):
+   gh secret set GITHUB_DISPATCH_TOKEN --repo sap-tutorials/tutorials-ims --body "<NEW_TOKEN>"
+
+   # Then trigger the Build & Deploy workflow (.github/workflows/deploy.yml) for each env:
+   gh workflow run deploy.yml --repo sap-tutorials/tutorials-ims -f environment=dev
+   gh workflow run deploy.yml --repo sap-tutorials/tutorials-ims -f environment=qa
+   gh workflow run deploy.yml --repo sap-tutorials/tutorials-ims -f environment=prod
    ```
 
-   Repeat for `qa` (with `REBUILD_TARGET_ENV=qa`) and `prod` (with `REBUILD_TARGET_ENV=prod`) spaces. Validate via the deployed log line on boot — the line `[rebuild-trigger] active — admin writes will dispatch with environment='<env>'` should appear with the right env, and the unset-token warning should **NOT** appear.
+   Validate after each deploy: `cf logs tutorials-srv --recent | grep rebuild-trigger` should show
+   `[rebuild-trigger] active — admin writes will dispatch with environment='<env>'`
+   with the right env, and the unset-token warning should **NOT** appear.
+
+   **Local manual deploy fallback** (`cd .deploy && cf deploy ... -e ../deploy/dev.mtaext`): pass `--var github-dispatch-token=<NEW_TOKEN>` on the command line, or accept that the deployed env var will be empty for that one deploy until the next CI deploy restores it. Same convention as `content-api-key` for prod/qa today.
 
 4. **Revoke the old token.** GitHub → Settings → Developer settings → Personal access tokens → click old token → Revoke.
 
@@ -71,7 +78,7 @@ If the token is suspected leaked (committed to a repo, posted in a chat, posted 
 
 | Mode | Symptom | Action |
 |---|---|---|
-| **Token unset** | `[rebuild-trigger]` boot warning; admin writes don't trigger rebuilds | Acceptable degraded mode — content stays fresh via the existing push trigger only. Set the env var when ready. |
+| **Token unset** | `[rebuild-trigger]` boot warning; admin writes don't trigger rebuilds | Acceptable degraded mode — content stays fresh via the existing push trigger only. Confirm `gh secret list --repo sap-tutorials/tutorials-ims` shows `GITHUB_DISPATCH_TOKEN`; if missing, add it and trigger a redeploy. If present, check the most recent deploy run's `Deploy MTA` step for the `--var github-dispatch-token=` line. |
 | **Token expired / revoked** | GitHub returns 401; admin save logs `[rebuild-trigger] dispatch failed: GitHub dispatch 401 ...` | Rotate per the steps above. Admin saves still succeed; only the auto-rebuild dispatch is broken. |
 | **`REBUILD_TARGET_ENV` mismatch** | Admin save on QA srv triggers a DEV rebuild (or vice versa); boot log shows `environment='dev'` on a non-DEV space | Set `REBUILD_TARGET_ENV` to match the space (`qa`/`prod`) and `cf restart`. Until then content stays fresh on the wrong env. |
 | **Token over-permissioned** | Token has scopes beyond `actions:write` (e.g. `contents:write`, `metadata:read`, etc.) | Defense-in-depth violation, not an outage. Re-issue with `actions:write` only on next rotation cycle. |
@@ -93,6 +100,7 @@ The fine-grained PAT is the simplest fit: scoped, expirable, revocable, and the 
 - [`srv/lib/rebuild-trigger.js`](../../../srv/lib/rebuild-trigger.js) — module that consumes the token; module-level comment explains the feature flag.
 - [`srv/server.js`](../../../srv/server.js) — admin-write hook that calls `scheduleRebuild('admin-write')` after entity writes.
 - [`.github/workflows/rebuild-content.yml`](../../../.github/workflows/rebuild-content.yml) — the workflow being dispatched.
+- [`deploy/dev.mtaext`](../../../deploy/dev.mtaext) / [`deploy/qa.mtaext`](../../../deploy/qa.mtaext) / [`deploy/prod.mtaext`](../../../deploy/prod.mtaext) — the property mapping. The `${github-dispatch-token}` placeholder is resolved by [`.github/workflows/deploy.yml`](../../../.github/workflows/deploy.yml) at deploy time.
 
 There is currently no `.env.example` file in this repo's root. If one is added in the future, include `GITHUB_DISPATCH_TOKEN=` (empty) with a pointer to this runbook.
 
