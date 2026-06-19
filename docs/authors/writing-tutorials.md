@@ -40,6 +40,10 @@ If your tutorial has a quiz, validation rules live in a parallel `<repo>-Contrib
 
 ## 3. Anatomy of a tutorial
 
+> **★ Live examples** — see the [Tutorial Platform Features for Authors](https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/tutorials/mission-tutorial-platform-features-for-authors) mission for working tutorials that demonstrate every piece of syntax described below: the [CODECHECK demo](https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/tutorials/use-codecheck-to-ai-grade-reader-code), [free-text grading](https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/tutorials/use-validate-to-ai-grade-free-text-answers), [AUTOAUTHOR](https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/tutorials/use-autoauthor-to-generate-quiz-questions), and the [feature cookbook](https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/tutorials/tutorial-platform-feature-cookbook) (OS variants, branches, mermaid, codetabs, glossary, lightbox).
+>
+> <!-- TODO(#382 prod cutover): swap DEV approuter URLs for https://developers.sap.com/... once the mission and tutorials are live in production -->
+
 A tutorial Markdown file has three required parts: **frontmatter**, an **introduction**, and **steps**.
 
 ### 3.1 Frontmatter
