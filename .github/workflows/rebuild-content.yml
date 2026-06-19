@@ -18,6 +18,10 @@ on:
         description: Refresh a single tutorial slug only (leave blank for full rebuild)
         required: false
         type: string
+      slugs:
+        description: 'Refresh multiple slugs (comma-separated, e.g. "foo,bar,baz"). Unioned with `slug` if both set; full rebuild if both blank. Spec: #433.'
+        required: false
+        type: string
       trigger-source:
         description: 'Where the rebuild was triggered from (admin-write | manual | scheduled)'
         required: false
@@ -164,6 +168,7 @@ jobs:
           CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
           CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
           TUTORIAL_SLUG: ${{ inputs.slug }}
+          TUTORIAL_SLUGS: ${{ inputs.slugs }}
           # [#208/#275] AI-quiz authoring. Default true post-graduation
           # (#311 flipped the workflow_dispatch default). When the flag is
           # set, fetch-tutorials.ts wakes up the AI generator on tutorials
@@ -296,8 +301,14 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Environment:** ${{ steps.env.outputs.target }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Trigger:** ${{ github.event_name }}" >> "$GITHUB_STEP_SUMMARY"
-          if [ -n "${{ inputs.slug }}" ]; then
-            echo "- **Slug filter:** ${{ inputs.slug }} (single-tutorial refresh)" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "${{ inputs.slug }}" ] || [ -n "${{ inputs.slugs }}" ]; then
+            FILTER="${{ inputs.slug }}"
+            if [ -n "${{ inputs.slugs }}" ]; then
+              if [ -n "$FILTER" ]; then FILTER="$FILTER,${{ inputs.slugs }}"
+              else FILTER="${{ inputs.slugs }}"
+              fi
+            fi
+            echo "- **Slug filter:** $FILTER (partial refresh)" >> "$GITHUB_STEP_SUMMARY"
           fi
           if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
             echo "- **Source repo:** ${{ github.event.client_payload.repository }}" >> "$GITHUB_STEP_SUMMARY"
