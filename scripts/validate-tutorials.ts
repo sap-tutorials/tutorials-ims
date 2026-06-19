@@ -39,6 +39,26 @@ export function shortcodeBalanceCheck(body: string): string | null {
   return null
 }
 
+/**
+ * Returns a quarantine reason for a tutorial whose source is empty or
+ * whitespace-only — typically an empty stub committed to the upstream
+ * repo (e.g. `abap-environment-create-tile.md` has been 0 bytes for
+ * months as of 2026-06-19).
+ *
+ * Without this short-circuit, the validator quarantines the file with
+ * `Missing required frontmatter field: type` — accurate but unhelpful
+ * because the frontmatter is empty as a consequence of the file being
+ * empty. Surfaced by #432.
+ *
+ * @returns reason string for quarantine, or `null` if content is non-empty.
+ */
+export function emptyContentCheck(content: string): string | null {
+  if (content.trim().length === 0) {
+    return 'Tutorial source is empty or whitespace-only — likely an empty stub in the upstream repo'
+  }
+  return null
+}
+
 const files = readdirSync(TUTORIALS_DIR).filter(f => f.endsWith('.md') && !f.startsWith('_'))
 
 console.log(`Pre-validating ${files.length} tutorials (Hugo frontmatter)...\n`)
@@ -47,37 +67,39 @@ const quarantined: Array<{ file: string; reason: string }> = []
 
 for (const file of files) {
   const content = readFileSync(join(TUTORIALS_DIR, file), 'utf-8')
-  let reason: string | null = null
+  let reason: string | null = emptyContentCheck(content)
 
-  try {
-    const { data: fm } = matter(content)
+  if (!reason) {
+    try {
+      const { data: fm } = matter(content)
 
-    // Check required frontmatter fields
-    for (const field of REQUIRED_FIELDS) {
-      if (fm[field] === undefined || fm[field] === null) {
-        reason = `Missing required frontmatter field: ${field}`
-        break
+      // Check required frontmatter fields
+      for (const field of REQUIRED_FIELDS) {
+        if (fm[field] === undefined || fm[field] === null) {
+          reason = `Missing required frontmatter field: ${field}`
+          break
+        }
       }
-    }
 
-    // Validate time is a positive number
-    if (!reason && (typeof fm.time !== 'number' || fm.time <= 0)) {
-      reason = `Invalid 'time' value: ${fm.time}`
-    }
+      // Validate time is a positive number
+      if (!reason && (typeof fm.time !== 'number' || fm.time <= 0)) {
+        reason = `Invalid 'time' value: ${fm.time}`
+      }
 
-    // Validate stepCount is a positive integer
-    if (!reason && (!Number.isInteger(fm.stepCount) || fm.stepCount <= 0)) {
-      reason = `Invalid 'stepCount' value: ${fm.stepCount}`
-    }
+      // Validate stepCount is a positive integer
+      if (!reason && (!Number.isInteger(fm.stepCount) || fm.stepCount <= 0)) {
+        reason = `Invalid 'stepCount' value: ${fm.stepCount}`
+      }
 
-    // Check for unclosed shortcode blocks (Hugo-specific). Helper is exported
-    // for unit testing — see test/validate-tutorials-shortcode.test.ts.
-    if (!reason) {
-      const body = content.replace(/^---[\s\S]*?---\n?/, '')
-      reason = shortcodeBalanceCheck(body)
+      // Check for unclosed shortcode blocks (Hugo-specific). Helper is exported
+      // for unit testing — see test/validate-tutorials-shortcode.test.ts.
+      if (!reason) {
+        const body = content.replace(/^---[\s\S]*?---\n?/, '')
+        reason = shortcodeBalanceCheck(body)
+      }
+    } catch (e: any) {
+      reason = e.message?.slice(0, 200) ?? 'Unknown parse error'
     }
-  } catch (e: any) {
-    reason = e.message?.slice(0, 200) ?? 'Unknown parse error'
   }
 
   if (reason) {

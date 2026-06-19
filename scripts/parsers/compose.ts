@@ -7,6 +7,25 @@ import { extractBranchGroups, BranchParseError } from './branches.js'
 import type { BranchGroup } from './branches.js'
 import type { TutorialStep, TutorialFrontmatter } from './types.js'
 
+/**
+ * Normalize line endings to LF. Catches CRLF (Windows / GitHub-via-Windows-
+ * clients) and CR-only (legacy Mac) input so downstream regexes that anchor
+ * on `$` see consistent line terminators.
+ *
+ * Why this matters: JS regex `$` (without the `m` flag) only matches before
+ * `\n` or end-of-string, NOT before `\r`. The metacharacter `.` excludes
+ * `\r` (and `\n`), so `/^### (.+)$/` against `### foo\r` returns null —
+ * `(.+)` cannot consume the `\r`, and `$` cannot match before it. Result:
+ * tutorials with CRLF source produce 0 steps from parseV2Steps even when
+ * they have valid `### ` H3 step headings. Surfaced by #432 (~30 tutorials
+ * quarantined per publish).
+ *
+ * Spec: docs/superpowers/specs/2026-06-19-validate-tutorials-stepcount-crlf-design.md
+ */
+export function normalizeLineEndings(s: string): string {
+  return s.replace(/\r\n?/g, '\n')
+}
+
 export interface ComposeOpts {
   repo: string
   branch: string
@@ -28,8 +47,12 @@ export interface ComposeResult {
 }
 
 export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult {
+  // [#432] Normalize CRLF/CR-only to LF so every downstream parser sees
+  // consistent line terminators. parseV2Steps's /^### (.+)$/ would otherwise
+  // return 0 steps for CRLF tutorials.
+  const normalized = normalizeLineEndings(rawMd)
   const { title, description, youWillLearn, prerequisites, level, frontmatter, body } =
-    extractFrontmatter(rawMd)
+    extractFrontmatter(normalized)
 
   const isV2 = frontmatter.parser === 'v2'
   let processedBody = resolveImageURLs(body, {
