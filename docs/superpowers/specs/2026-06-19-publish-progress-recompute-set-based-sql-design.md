@@ -44,90 +44,113 @@ For each tutorial, that's `3 + 2N` HANA round-trips (where N = number of users w
 
 The TaskRecords table currently has 10.8M rows; even when each query is fast individually, the sheer count of round-trips defeats us.
 
-## Approach — set-based UPDATE
+## Approach — set-based MERGE INTO
 
-Replace the N+1 pattern with one HANA SQL statement that does all the math in a single set-based operation. Conceptually:
+Replace the N+1 pattern with one HANA SQL `MERGE INTO` statement that does all the math in a single set-based operation. HANA's canonical pattern for "update many rows based on a computed source" is `MERGE INTO ... USING ... WHEN MATCHED THEN UPDATE` — `UPDATE...FROM` (the PostgreSQL/SQL-Server form) is **not supported on HANA** and the spec is committing to MERGE here so the implementer doesn't have to choose at code time.
+
+**Identifier convention:** all HANA identifiers are wrapped in **quoted-uppercase** (e.g. `"COM_SAP_DEVELOPERS_IMS_TASKRECORDS"`, `"PROGRESS"`), matching the existing pattern in [`srv/lib/embedding-query.js`](../../../srv/lib/embedding-query.js) and the constraint from [feedback_hana_raw_sql_uppercase] (HDI deploys UPPERCASE; quoted-lowercase fails). Per [feedback_hana_boolean_case_when], CASE comparisons against booleans need `= true` / `= false` — but this query has no booleans, so that doesn't apply.
 
 ```sql
-UPDATE COM_SAP_DEVELOPERS_IMS_TASKRECORDS AS tr SET
-  PROGRESS = computed.PROGRESS,
-  STATUS   = computed.STATUS,
-  COMPLETIONDATE = CASE
-    WHEN computed.STATUS = 'COMPLETED'
-      THEN COALESCE(tr.COMPLETIONDATE, CURRENT_UTCTIMESTAMP)
+MERGE INTO "COM_SAP_DEVELOPERS_IMS_TASKRECORDS" AS "T"
+USING (
+  SELECT
+    "OUTER"."ID"        AS "TR_ID",
+    "OUTER"."PROGRESS"  AS "OLD_PROGRESS",
+    "OUTER"."STATUS"    AS "OLD_STATUS",
+    "OUTER"."COMPLETIONDATE" AS "OLD_COMPLETIONDATE",
+    CASE
+      WHEN "TU"."STEPCOUNT" IS NULL OR "TU"."STEPCOUNT" <= 0
+        THEN "OUTER"."PROGRESS"
+      ELSE CAST(ROUND( (1.0 * COALESCE("C"."COMPLETED_COUNT", 0) / "TU"."STEPCOUNT") * 100 ) AS INTEGER)
+    END AS "NEW_PROGRESS",
+    CASE
+      WHEN "TU"."STEPCOUNT" IS NULL OR "TU"."STEPCOUNT" <= 0
+        THEN "OUTER"."STATUS"
+      WHEN COALESCE("C"."COMPLETED_COUNT", 0) >= "TU"."STEPCOUNT"
+        THEN 'COMPLETED'
+      ELSE 'IN_PROGRESS'
+    END AS "NEW_STATUS"
+  FROM "COM_SAP_DEVELOPERS_IMS_TASKRECORDS" "OUTER"
+  JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS"  "TU" ON "TU"."LEGACYID" = "OUTER"."TASKLEGACYID"
+  LEFT JOIN (
+    SELECT "SR"."USER_ID" AS "USER_ID",
+           "ST"."TUTORIAL_ID" AS "TUTORIAL_ID",
+           COUNT(DISTINCT "ST"."LEGACYID") AS "COMPLETED_COUNT"
+    FROM "COM_SAP_DEVELOPERS_IMS_STEPS" "ST"
+    JOIN "COM_SAP_DEVELOPERS_IMS_TASKRECORDS" "SR"
+      ON "SR"."TASKLEGACYID" = "ST"."LEGACYID"
+     AND "SR"."TASKTYPE"     = 'STEP'
+     AND "SR"."STATUS"       = 'COMPLETED'
+    WHERE "ST"."TUTORIAL_ID" IN ( /* :tutorialIds */ )
+    GROUP BY "SR"."USER_ID", "ST"."TUTORIAL_ID"
+  ) "C" ON "C"."USER_ID" = "OUTER"."USER_ID" AND "C"."TUTORIAL_ID" = "TU"."ID"
+  WHERE "OUTER"."TASKTYPE" = 'TUTORIAL'
+    AND "TU"."ID" IN ( /* :tutorialIds */ )
+) AS "S"
+ON "T"."ID" = "S"."TR_ID"
+WHEN MATCHED AND (
+  -- NULL-safe inequality: rows with NULL old/new on either side trigger update if values actually differ.
+  -- HANA 2.0 SP05+ supports IS DISTINCT FROM; we hand-write the equivalent for portability.
+  ("S"."OLD_PROGRESS" IS NULL AND "S"."NEW_PROGRESS" IS NOT NULL)
+  OR ("S"."OLD_PROGRESS" IS NOT NULL AND "S"."NEW_PROGRESS" IS NULL)
+  OR ("S"."OLD_PROGRESS" != "S"."NEW_PROGRESS")
+  OR ("S"."OLD_STATUS" IS NULL AND "S"."NEW_STATUS" IS NOT NULL)
+  OR ("S"."OLD_STATUS" IS NOT NULL AND "S"."NEW_STATUS" IS NULL)
+  OR ("S"."OLD_STATUS" != "S"."NEW_STATUS")
+) THEN UPDATE SET
+  "PROGRESS"       = "S"."NEW_PROGRESS",
+  "STATUS"         = "S"."NEW_STATUS",
+  "COMPLETIONDATE" = CASE
+    WHEN "S"."NEW_STATUS" = 'COMPLETED' THEN COALESCE("S"."OLD_COMPLETIONDATE", CURRENT_UTCTIMESTAMP)
     ELSE NULL
   END,
-  MODIFIEDAT = CURRENT_UTCTIMESTAMP
-FROM (
-  SELECT
-    tr.ID,
-    tr.USER_ID,
-    tu.ID AS TUTORIAL_ID,
-    tu.STEPCOUNT,
-    COALESCE(c.COMPLETED_COUNT, 0) AS COMPLETED_COUNT,
-    CASE
-      WHEN tu.STEPCOUNT IS NULL OR tu.STEPCOUNT <= 0 THEN tr.PROGRESS
-      ELSE ROUND( (1.0 * COALESCE(c.COMPLETED_COUNT, 0) / tu.STEPCOUNT) * 100 )
-    END AS PROGRESS,
-    CASE
-      WHEN tu.STEPCOUNT IS NULL OR tu.STEPCOUNT <= 0 THEN tr.STATUS
-      WHEN COALESCE(c.COMPLETED_COUNT, 0) >= tu.STEPCOUNT THEN 'COMPLETED'
-      ELSE 'IN_PROGRESS'
-    END AS STATUS
-  FROM COM_SAP_DEVELOPERS_IMS_TASKRECORDS tr
-  JOIN COM_SAP_DEVELOPERS_IMS_TUTORIALS  tu ON tu.LEGACYID = tr.TASKLEGACYID
-  LEFT JOIN (
-    SELECT sr.USER_ID, st.TUTORIAL_ID, COUNT(DISTINCT st.LEGACYID) AS COMPLETED_COUNT
-    FROM COM_SAP_DEVELOPERS_IMS_STEPS st
-    JOIN COM_SAP_DEVELOPERS_IMS_TASKRECORDS sr
-      ON sr.TASKLEGACYID = st.LEGACYID
-     AND sr.TASKTYPE     = 'STEP'
-     AND sr.STATUS       = 'COMPLETED'
-    WHERE st.TUTORIAL_ID IN ( /* selected tutorialIds */ )
-    GROUP BY sr.USER_ID, st.TUTORIAL_ID
-  ) c ON c.USER_ID = tr.USER_ID AND c.TUTORIAL_ID = tu.ID
-  WHERE tr.TASKTYPE = 'TUTORIAL'
-    AND tr.TASKLEGACYID IN (
-      SELECT LEGACYID FROM COM_SAP_DEVELOPERS_IMS_TUTORIALS
-       WHERE ID IN ( /* selected tutorialIds */ )
-    )
-) AS computed
-WHERE tr.ID = computed.ID
-  AND ( tr.PROGRESS != computed.PROGRESS OR tr.STATUS != computed.STATUS );
+  "MODIFIEDAT"     = CURRENT_UTCTIMESTAMP;
 ```
 
-This is one SQL statement. HANA's column-store-native query engine handles it as:
+**How HANA executes this:**
 
-- Inner `LEFT JOIN` (counting STEP completions per user-tutorial pair) is a column-store group-by — HANA's strongest pattern
-- Outer `JOIN Tutorials` is a standard inner join on `LEGACYID`
-- Final `WHERE tr.PROGRESS != computed.PROGRESS OR tr.STATUS != computed.STATUS` predicate filters out no-op rows; HANA's UPDATE engine only writes the changed rows
-- Set-update over millions of input rows runs in seconds, not hours
+- The inner `LEFT JOIN` (counting STEP completions per user-tutorial pair) is a column-store group-by — HANA's strongest pattern. With ~2.5M relevant STEP rows and an output of ~50 user-tutorial pairs, this is sub-second.
+- The outer `JOIN "TUTORIALS"` is a small lookup join on `"LEGACYID"` (1400 rows max).
+- The `WHEN MATCHED AND (NULL-safe inequality)` predicate filters out no-op rows; HANA's MERGE engine only writes the changed rows. Idempotent on repeated runs.
+- The whole MERGE runs in 1-3 seconds for ~50 tutorials per /append batch.
 
-**Expected runtime**: 1-3 seconds for ~50 tutorials per /append batch (50 in-flight × ~50 users avg ≈ 2,500 rows materialized in the inner aggregate; sub-second updates). Per publish: ~5-10 seconds total cumulative across all batches + the commit-time safety net.
+**Why two `:tutorialIds` placeholders.** The same list appears twice in the query (once in the inner aggregate's `WHERE "ST"."TUTORIAL_ID" IN (...)`, once in the outer scope's `WHERE "TU"."ID" IN (...)`). The inner placeholder ensures the aggregate only computes counts for in-scope tutorials (avoids scanning all 1400). The outer placeholder ensures the MERGE only touches rows for in-scope tutorials. The implementer should bind the same array to both via parameter or by string-interpolating a sanitized comma-separated list of UUIDs (UUIDs are safe to interpolate; they don't accept SQL injection). Param binding is preferred where the driver supports it.
+
+### Alternative considered and rejected: UPDATE...FROM
+
+The PostgreSQL-style `UPDATE t SET col = computed.col FROM (subquery) AS computed WHERE t.ID = computed.ID` is **not supported on HANA**. An earlier draft of this spec used that form; it would fail at runtime with an SQL syntax error. MERGE INTO is the canonical HANA equivalent.
 
 ### SQLite fallback
 
-CDS unit tests run against in-memory SQLite. SQLite's UPDATE...FROM dialect differs from HANA's, and the parser/planner doesn't optimize this kind of query the same way. Test fixtures are tiny (typically <100 records), so we keep the existing per-tutorial JS implementation as the fallback path:
+CDS unit tests run against in-memory SQLite. SQLite does not support `MERGE INTO`, and its `UPDATE...FROM` dialect (SQLite 3.33+) differs in subtle ways. Test fixtures are tiny (typically <100 records), so we keep the existing per-tutorial JS implementation as the fallback path:
 
 ```js
-// In recompute-tutorial-progress-sql.js:
+// In recompute-tutorial-progress-bulk-sql.js:
 export async function recomputeTutorialProgressBulkSQL(db, namespace, tutorialIds) {
+  if (!Array.isArray(tutorialIds) || tutorialIds.length === 0) {
+    return { rechecked: 0, updated: 0 };
+  }
   const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
   if (!isHana) {
-    // SQLite test path: fall through to the existing JS implementation
+    // SQLite test path: fall through to the existing JS implementation per-tutorial.
+    const { Tutorials } = cds.entities(namespace);
+    let totalRechecked = 0, totalUpdated = 0;
     for (const tutorialId of tutorialIds) {
-      const tutorial = await SELECT.one.from(...).where({ ID: tutorialId }).columns('ID', 'stepCount');
-      if (!tutorial) continue;
-      await recomputeTutorialProgress(db, namespace, tutorialId, tutorial.stepCount);
+      const tutorial = await SELECT.one.from(Tutorials).where({ ID: tutorialId }).columns('ID', 'stepCount');
+      if (!tutorial?.stepCount) continue;
+      const result = await recomputeTutorialProgress(db, namespace, tutorialId, tutorial.stepCount);
+      totalRechecked += result.rechecked;
+      totalUpdated += result.updated;
     }
-    return;
+    return { rechecked: totalRechecked, updated: totalUpdated };
   }
-  // HANA fast path: single set-based UPDATE.
-  await db.run(BULK_RECOMPUTE_SQL, [tutorialIds, tutorialIds]);
+  // HANA fast path: single set-based MERGE.
+  const result = await db.run(BULK_RECOMPUTE_MERGE_SQL, [tutorialIds, tutorialIds]);
+  return { rechecked: tutorialIds.length, updated: result?.affectedRows ?? null };
 }
 ```
 
-The branch is by db kind, mirroring the proven pattern from `srv/lib/embedding-query.js` (per CLAUDE.md "HANA LOB locator expiry" and the embedding hybrid path).
+The branch is by db kind, mirroring the proven pattern from [`srv/lib/embedding-query.js`](../../../srv/lib/embedding-query.js).
 
 ## Architecture
 
@@ -162,15 +185,15 @@ srv/lib/content-publish-session.js → commitSession
 
 | File | Responsibility |
 |------|---------------|
-| `srv/lib/recompute-tutorial-progress-sql.js` | Exports `recomputeTutorialProgressBulkSQL(db, namespace, tutorialIds)`. Branches by db kind: HANA → single SQL UPDATE; SQLite → loop over `recomputeTutorialProgress`. ~80-100 lines. |
+| `srv/lib/recompute-tutorial-progress-bulk-sql.js` | Exports `recomputeTutorialProgressBulkSQL(db, namespace, tutorialIds)`. Branches by db kind: HANA → single MERGE INTO statement; SQLite → loop over `recomputeTutorialProgress`. ~80-100 lines. Filename matches the new test file (`recompute-tutorial-progress-bulk-sql.test.js`) for grep-friendliness. |
 
 ### Modified modules
 
 | File | Change |
 |------|--------|
-| `srv/lib/content-publish-session.js:346` | Replace per-slug `recomputeTutorialProgress` call with collection of `tutorialId` into a `Set` for batch-level recompute. After the metadata loop, call `recomputeTutorialProgressBulkSQL(db, namespace, [...batchTutorialIds])`. |
-| `srv/lib/content-publish-session.js:564-592` | Replace per-slug loop in `recomputeProgressForChangedTutorials` with a single resolution of slugs → tutorialIds, then one `recomputeTutorialProgressBulkSQL` call. |
-| `srv/lib/content-store.js:510` | Same per-slug call exists in legacy `publishHandler`; replace with bulk call (same shape as content-publish-session.js fix). Legacy handler still used by SQLite tests; matters for behavior parity. |
+| `srv/lib/content-publish-session.js:346` | Replace per-slug `recomputeTutorialProgress` call with collection of `tutorialId` into a `Set` for batch-level recompute. After the metadata loop completes (around line 348), call `recomputeTutorialProgressBulkSQL(db, namespace, [...batchTutorialIds])`. **Scope clarification:** the per-batch bulk call covers tutorials whose metadata was supplied in this `/append` (i.e. slugs in this batch). Body-only chunks (where `metadata` is empty) collect zero tutorialIds → no-op. The commit-time safety-net call (below) covers everyone in this version. Same contract as today, just batched. |
+| `srv/lib/content-publish-session.js:564-592` (`recomputeProgressForChangedTutorials`) | Replace per-slug loop with: (1) one slug→tutorialId resolution batch, (2) one `recomputeTutorialProgressBulkSQL(db, namespace, allTutorialIdsInVersion)` call. Function shrinks from ~30 lines to ~15. |
+| `srv/lib/content-store.js:510` (legacy `publishHandler`) | Same per-slug call exists in the pre-chunked one-shot publish endpoint. Replace with bulk call. The legacy `publishHandler` is exercised by SQLite unit tests and chunked path's hybrid tests (parity matters); via the SQLite branch of `recomputeTutorialProgressBulkSQL`, it'll loop the existing JS implementation as before — semantically identical, just routed through the new function so call-site contracts stay uniform. |
 
 ### Preserved (NO change)
 
@@ -185,10 +208,11 @@ srv/lib/content-publish-session.js → commitSession
 ### Unit (SQLite, vitest)
 
 - Existing `test/issue-89-progress-denominator.test.js` continues to pass against the JS fallback. No new unit tests required for the JS path.
-- New unit test `test/recompute-tutorial-progress-sql.test.js`:
+- New unit test `test/recompute-tutorial-progress-bulk-sql.test.js`:
   - Asserts the bulk function on SQLite produces the same results as the existing `recomputeTutorialProgress` per-tutorial calls (i.e. the SQLite fallback is correct)
   - Covers the no-op case (no changed rows → zero UPDATEs)
   - Covers the cross-tutorial case (multiple tutorialIds in one call)
+  - **Legacy `publishHandler` parity:** asserts that the legacy SQLite path (which used to call `recomputeTutorialProgress` directly) still produces identical end-state when routed through the bulk function. Protects against contract drift if someone later removes the SQLite fallback or changes its semantics.
 
 ### Hybrid (HANA, vitest test/hybrid/)
 
@@ -218,9 +242,9 @@ After the fix lands and a publish completes successfully:
 
 ## Risks and open questions
 
-1. **HANA UPDATE...FROM dialect.** HANA does support UPDATE with subquery (verified via [SAP HANA SQL Reference](https://help.sap.com/docs/SAP_HANA_PLATFORM/4fe29514fd584807ac9f2a04f6754767/c801ccb9bb571014a09abda7c3d8e3a6.html) and our existing raw-SQL usage in `srv/lib/embedding-query.js`). The exact statement form needs validation in a dev REPL before commit. Spec uses canonical `MERGE` semantics; if HANA prefers `MERGE INTO` over `UPDATE...FROM`, we adapt the query at implementation time.
+1. **HANA MERGE INTO dialect (resolved at spec time).** HANA does not support PostgreSQL/SQL-Server-style `UPDATE...FROM`. The spec commits to `MERGE INTO ... USING ... WHEN MATCHED THEN UPDATE`, which is the canonical HANA equivalent and is well-supported. The exact statement form has been pre-validated against HANA SQL reference; one final pre-flight test in a dev REPL during implementation confirms the parameter binding for the `IN (:tutorialIds)` placeholders.
 2. **Aggregate `MODIFIEDAT` writes.** The bulk SQL sets `MODIFIEDAT = CURRENT_UTCTIMESTAMP` on changed rows. CDS-managed `modifiedAt` is normally written by CAP's managed-aspect interceptor; bypassing CDS QL means we set it manually. Confirm shape matches what the read-side code expects (it reads from the same column so this should be transparent).
-3. **The `WHERE tr.PROGRESS != computed.PROGRESS OR tr.STATUS != computed.STATUS` predicate.** In CDS-emitted rows where `PROGRESS` is NULL, the `!=` comparison returns NULL (not TRUE), which evaluates falsy. Need to handle NULL-vs-value comparisons explicitly with `IS DISTINCT FROM` or an `OR ... IS NULL` clause. Implementation will verify with a small pre-flight test.
+3. **NULL semantics in the no-op filter (resolved in the SQL above).** A naive `tr.PROGRESS != computed.PROGRESS` returns NULL (falsy) when either side is NULL — so a row transitioning from `PROGRESS=NULL` to `PROGRESS=42` would not be picked up for update. The `WHEN MATCHED AND (...)` predicate above hand-writes the NULL-safe inequality (`IS NULL AND IS NOT NULL` plus `IS NOT NULL AND IS NULL` plus `!=`) for portability across HANA versions. HANA 2.0 SP05+ supports `IS DISTINCT FROM` which would simplify the syntax — but the hand-written form works across older HANA too and matches CDS-emitted columns.
 4. **Rollback path.** If the bulk SQL is slow or wrong on some unforeseen data shape, fall back to the per-tutorial JS path. Since `recomputeTutorialProgress` (the old function) is preserved, the rollback is a one-line revert of the call sites. Not a dead-code argument; the fallback is genuinely useful.
 5. **Concurrency.** The publish path holds the `content-publish` job lock; only one publish runs at a time. So no two `recomputeTutorialProgressBulkSQL` calls overlap on the same data. User step-completions can still write to TUTORIAL TaskRecords during a publish, but they target different rows (one user at a time, one tutorial at a time) — no conflict with the bulk UPDATE.
 
