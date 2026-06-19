@@ -5,6 +5,7 @@ import { retryNgds } from './ngds-retry.js';
 import { processAccountMerges } from './account-merge-job.js';
 import { runReconciliationJob } from './embedding-reconciliation.js';
 import { runExtractConcepts } from './extract-concepts-job.js';
+import { runConsolidateConcepts } from './consolidate-concepts-job.js';
 import { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, isNotificationsEnabled } from '../lib/contributor-notifications.js';
 import { sendNotificationEmail, retryFailedEmails } from '../lib/mail-client.js';
 import { logPipelineStart, logPipelineEnd, logJobItem } from '../lib/pipeline-log.js';
@@ -186,6 +187,15 @@ export function registerJobs() {
   // LLM call up to KG_EXTRACT_BUILD_CAP (default 200/tick).
   cron.schedule('13 2 * * *', () =>
     runWithLock('extractConcepts', 30 * 60 * 1000, runExtractConcepts)
+  );
+
+  // Weekly Sunday at 03:47 — knowledge-graph consolidation (#381 PR 4).
+  // Off-minute (:47) and weekly cadence so the merge-on-write path during
+  // extraction is the steady-state mechanism; this run mops up cross-batch
+  // duplicates, auto-VETOes cycle-causing :requires edges, and rebuilds the
+  // SPARQL projection. 30-min TTL matches extractConcepts.
+  cron.schedule('47 3 * * 0', () =>
+    runWithLock('consolidateConcepts', 30 * 60 * 1000, runConsolidateConcepts)
   );
 
   LOG.info('All scheduled jobs registered');
