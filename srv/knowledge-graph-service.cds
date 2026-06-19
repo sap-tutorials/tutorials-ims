@@ -58,9 +58,13 @@ service KnowledgeGraphService @(path : '/graph') {
     rows    : array of String;
   }
   type RebuildResult {
-    graphVersion : String;
-    tripleCount  : Integer;
-    durationMs   : Integer;
+    graphVersion    : String;
+    tripleCount     : Integer;
+    durationMs      : Integer;
+    predicateCounts : array of {
+      predicate : String;
+      count     : Integer;
+    };
   }
 
   // ─── Phase 1 + Phase 2 typed query functions (open to authenticated) ──

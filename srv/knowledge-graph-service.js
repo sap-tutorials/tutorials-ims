@@ -205,7 +205,7 @@ export const _internals = { GROUP_KEYS, TOP_N, DEFAULT_WEIGHT, coCompletionBoost
 // re-check on every request so a `cf set-env` + `cf restart` flips it cleanly.
 
 import cds from '@sap/cds';
-import { NEIGHBORHOOD_QUERY, substitute } from './lib/kg-queries.js';
+import { NEIGHBORHOOD_QUERY, SLUG_RE, substitute } from './lib/kg-queries.js';
 import {
   sparqlQuery,
   SparqlPrivilegeError,
@@ -217,10 +217,6 @@ import { computeCoCompletions } from './lib/co-completion.js';
 import { mergeConceptPair } from './lib/kg-merge-pair.js';
 
 const NAMESPACE = 'com.sap.developers.ims';
-
-// Same shape used by kg-queries SLUG_RE — kept local so the handler can
-// 400 quickly without importing kg-queries' private regex.
-const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,78}[a-z0-9])?$/;
 
 // SPARQL response IRI prefix for tutorials (from kg-projection.js +
 // kg-queries.js). The neighborhood query already strips this via
@@ -249,6 +245,21 @@ const _NEIGHBORHOOD_CACHE = null;
 
 function isHana(db) {
   return db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+}
+
+/**
+ * Set a response header on a CAP request. Reaches into CAP's underlying
+ * express response via `req._.req.res`, which is undocumented — if a future
+ * @sap/cds release changes the layout, this becomes a no-op (the optional
+ * chaining ensures graceful degradation rather than a TypeError). Centralised
+ * here so any future fix only needs to touch one site.
+ */
+function setResponseHeader(req, name, value) {
+  try {
+    req._?.req?.res?.set?.(name, value);
+  } catch {
+    // Never let header-setting break the response — silent fallback.
+  }
 }
 
 /**
@@ -306,6 +317,10 @@ function mapSparqlError(err, req, log) {
   if (err instanceof SparqlTimeoutError) {
     return req.error(504, 'Knowledge-graph query timed out');
   }
+  log.error('kg-service: unexpected SPARQL error class — falling through to framework default', {
+    name: err?.constructor?.name,
+    message: err?.message,
+  });
   throw err;
 }
 
@@ -392,6 +407,31 @@ export default cds.service.impl(async function () {
     }
   }
 
+  /**
+   * Fire-and-forget graphRebuild after a curation action. Logs structured
+   * details on failure (so operators get a signal beyond a generic stack
+   * trace) and best-effort emits a SecurityEvent audit entry. Never throws
+   * — by design, the user response has already been sent.
+   */
+  function asyncRebuildAfterCuration(action, actorContext = {}) {
+    graphRebuild({ db, log }).catch((err) => {
+      log.error(`kg-service: async graphRebuild after ${action} failed`, {
+        action,
+        error: err?.message,
+        stack: err?.stack,
+        ...actorContext,
+      });
+      if (auditLog) {
+        // Best-effort audit entry; never blocks or rethrows.
+        audit('KnowledgeGraphAsyncRebuildFailed', {
+          action,
+          error: err?.message,
+          ...actorContext,
+        }).catch(() => {});
+      }
+    });
+  }
+
   // ─── Feature flag — gate the entire surface ────────────────────────────
   this.before('*', (req) => {
     if (process.env.KNOWLEDGE_GRAPH_ENABLED !== 'true') {
@@ -415,8 +455,8 @@ export default cds.service.impl(async function () {
     const graphVersion = meta?.graphVersion ?? null;
 
     // ETag for client-side cache. Only meaningful once graphVersion exists.
-    if (graphVersion && req._?.req?.res?.set) {
-      req._.req.res.set('ETag', `"${slug}:${graphVersion}"`);
+    if (graphVersion) {
+      setResponseHeader(req, 'ETag', `"${slug}:${graphVersion}"`);
     }
 
     // 2. Look up input tutorial title.
@@ -598,9 +638,11 @@ export default cds.service.impl(async function () {
         ...counts,
       });
       // Fire-and-forget rebuild so the SPARQL graph reflects the change.
-      graphRebuild({ db, log }).catch((err) =>
-        log.error(`kg-service: async rebuild after mergeConcepts failed: ${err.message ?? err}`),
-      );
+      asyncRebuildAfterCuration('mergeConcepts', {
+        user: req.user?.id ?? 'unknown',
+        loser,
+        canonical,
+      });
     } catch (err) {
       log.error(`kg-service: mergeConcepts failed: ${err.message ?? err}`);
       return req.error(500, `Merge failed: ${err.message ?? 'unknown error'}`);
@@ -621,9 +663,10 @@ export default cds.service.impl(async function () {
         user: req.user?.id ?? 'unknown',
         conceptId,
       });
-      graphRebuild({ db, log }).catch((err) =>
-        log.error(`kg-service: async rebuild after vetoConcept failed: ${err.message ?? err}`),
-      );
+      asyncRebuildAfterCuration('vetoConcept', {
+        user: req.user?.id ?? 'unknown',
+        conceptId,
+      });
     } catch (err) {
       log.error(`kg-service: vetoConcept failed: ${err.message ?? err}`);
       return req.error(500, `Veto failed: ${err.message ?? 'unknown error'}`);
@@ -644,9 +687,10 @@ export default cds.service.impl(async function () {
         user: req.user?.id ?? 'unknown',
         edgeId,
       });
-      graphRebuild({ db, log }).catch((err) =>
-        log.error(`kg-service: async rebuild after vetoEdge failed: ${err.message ?? err}`),
-      );
+      asyncRebuildAfterCuration('vetoEdge', {
+        user: req.user?.id ?? 'unknown',
+        edgeId,
+      });
     } catch (err) {
       log.error(`kg-service: vetoEdge failed: ${err.message ?? err}`);
       return req.error(500, `Veto failed: ${err.message ?? 'unknown error'}`);
@@ -664,7 +708,25 @@ export default cds.service.impl(async function () {
         tripleCount: result.tripleCount,
         durationMs: result.durationMs,
       });
-      return result;
+      // Transform predicateCounts (Map | plain object | array) into the
+      // CDS-declared `array of { predicate, count }` shape so OData clients
+      // see the per-predicate telemetry instead of having it projected away.
+      let predicateCounts;
+      if (result.predicateCounts instanceof Map) {
+        predicateCounts = [...result.predicateCounts.entries()].map(([predicate, count]) => ({ predicate, count }));
+      } else if (Array.isArray(result.predicateCounts)) {
+        predicateCounts = result.predicateCounts;
+      } else if (result.predicateCounts && typeof result.predicateCounts === 'object') {
+        predicateCounts = Object.entries(result.predicateCounts).map(([predicate, count]) => ({ predicate, count }));
+      } else {
+        predicateCounts = [];
+      }
+      return {
+        graphVersion: result.graphVersion,
+        tripleCount: result.tripleCount,
+        durationMs: result.durationMs,
+        predicateCounts,
+      };
     } catch (err) {
       log.error(`kg-service: triggerGraphRebuild failed: ${err.message ?? err}`);
       return req.error(500, `Rebuild failed: ${err.message ?? 'unknown error'}`);

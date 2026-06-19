@@ -46,8 +46,9 @@ import { iriEscapeSegment } from './kg-projection.js';
 
 // Slug regex matches the same shape used elsewhere in the codebase
 // (Tutorials.slug, Missions.slug, Groups.slug). 1–80 chars, lowercase
-// alnum + hyphen, no leading/trailing hyphen.
-const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,78}[a-z0-9])?$/;
+// alnum + hyphen, no leading/trailing hyphen. Exported so the
+// KnowledgeGraphService handler can reuse it without re-deriving.
+export const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,78}[a-z0-9])?$/;
 
 // RFC 4122 UUID — case-insensitive (we do not try to canonicalise).
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

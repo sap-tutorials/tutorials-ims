@@ -35,6 +35,15 @@ const AUTH_TOKEN = process.env.SMOKE_AUTH_TOKEN;
 const KG_TUTORIAL_SLUG = process.env.SMOKE_KG_TUTORIAL_SLUG || 'hana-cloud-cap-create';
 const KG_FLAG_DISABLED = process.env.SMOKE_KG_FLAG_DISABLED === 'true';
 
+if (!process.env.SMOKE_KG_FLAG_DISABLED) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    '[kg-endpoints smoke] SMOKE_KG_FLAG_DISABLED unset; the disabled-flag assertions will be skipped. ' +
+    'To exercise that path: cf set-env tutorials-srv KNOWLEDGE_GRAPH_ENABLED false && cf restart, ' +
+    'then SMOKE_KG_FLAG_DISABLED=true.'
+  );
+}
+
 function authHeaders(token = AUTH_TOKEN) {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }

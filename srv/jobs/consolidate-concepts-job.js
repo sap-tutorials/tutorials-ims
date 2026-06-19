@@ -164,17 +164,7 @@ export async function runConsolidateConcepts(deps = {}, _logId) {
   const stillActive = new Set(concepts.map((c) => c.ID));
   let mergesPerformed = 0;
   let mergesSkipped = 0;
-  // Track collateral deletions during pre-detection of composite-PK
-  // collisions on the FK redirect targets — see
-  // [[feedback_composite_pk_collision_on_fk_redirect]] (memory captured
-  // 2026-06-17). When a tutorial has BOTH (t, loser, predicate) and
-  // (t, canonical, predicate) rows in TutorialConceptLinks, the bulk
-  // UPDATE … SET concept_ID = canonical WHERE concept_ID = loser would
-  // collide on @assert.unique.tutorialConcept and abort the entire
-  // transaction. Same hazard on ConceptEdges' @assert.unique.conceptEdge
-  // when both endpoints converge. Solution: delete the loser-row before
-  // the bulk redirect so the destination is unique. We keep the
-  // canonical-row's existing confidence/extracts (it's the survivor).
+  // Per-pair merge: see srv/lib/kg-merge-pair.js for composite-PK collision rationale.
   let linksDeleted = 0;
   let edgesDeleted = 0;
 
