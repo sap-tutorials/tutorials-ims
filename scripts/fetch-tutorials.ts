@@ -90,6 +90,30 @@ export function getNavJsonDir(target: BuildTarget, channel: Channel = 'prod'): s
   return join(__dirname, '..', 'site', 'tutorials')
 }
 
+/**
+ * Parse the single-slug `slug` input + the comma-separated `slugs` input
+ * into a unified `Set<string>` filter, or `null` for full rebuild.
+ *
+ * - Both empty → `null` (full rebuild).
+ * - `slug=foo` → `Set(['foo'])` (back-compat with single-slug refresh).
+ * - `slugs=foo,bar,baz` → `Set(['foo','bar','baz'])`.
+ * - `slugs="foo, bar , baz"` → `Set(['foo','bar','baz'])` (spaces tolerated).
+ * - Both provided → union with dedupe.
+ * - Empty tokens (`"foo,,bar"`) silently dropped.
+ *
+ * Spec: docs/superpowers/specs/2026-06-19-rebuild-content-multi-slug-design.md (#433).
+ */
+export function parseSlugFilter(slug?: string, slugs?: string): Set<string> | null {
+  const set = new Set<string>()
+  const single = (slug ?? '').trim()
+  if (single) set.add(single)
+  for (const tok of (slugs ?? '').split(',')) {
+    const t = tok.trim()
+    if (t) set.add(t)
+  }
+  return set.size > 0 ? set : null
+}
+
 interface ErrorEntry {
   slug: string
   repo: string
@@ -464,7 +488,7 @@ async function main() {
   const totalStart = performance.now()
   const regenerateMode = process.argv.includes('--regenerate')
   const discoverOnly = process.argv.includes('--discover-only')
-  const tutorialSlugFilter = (process.env.TUTORIAL_SLUG ?? '').trim() || null
+  const tutorialSlugFilter = parseSlugFilter(process.env.TUTORIAL_SLUG, process.env.TUTORIAL_SLUGS)
   const target = parseTarget(process.argv)
   const channel = parseChannel(process.argv)
   // QA channel: discover only -Contribution repos via inverse filter in github.ts.
@@ -571,20 +595,38 @@ async function main() {
     // Validate slug filter and bust its markdown cache so it gets re-fetched.
     // Other tutorials will be regenerated from cached markdown (see Phase 3).
     if (tutorialSlugFilter) {
-      const match = allTutorials.find(t => t.slug === tutorialSlugFilter)
-      if (!match) {
-        console.error(`ERROR: TUTORIAL_SLUG="${tutorialSlugFilter}" not found in discovered tutorials.`)
+      // Validate every requested slug exists; fail-fast and list ALL unknowns
+      // so the author fixes typos in one rerun (per #433 spec).
+      const discoveredSlugs = new Set(allTutorials.map(t => t.slug))
+      const unknown = [...tutorialSlugFilter].filter(s => !discoveredSlugs.has(s))
+      if (unknown.length > 0) {
+        console.error(`ERROR: ${unknown.length} unknown slug(s) in filter: ${unknown.join(', ')}`)
         console.error(`  Discovery returned ${allTutorials.length} slugs from source: ${discovery.source}`)
         process.exit(1)
       }
-      const targetCacheFile = join(CACHE_DIR, `${tutorialSlugFilter}.md`)
-      if (existsSync(targetCacheFile)) {
-        unlinkSync(targetCacheFile)
-        console.log(`[slug-filter] busted cache for ${tutorialSlugFilter} (${match.repo}@${match.branch}) — will be re-fetched`)
+      // Source-attributed log line so authors can see how their inputs combined.
+      const fromSlug = (process.env.TUTORIAL_SLUG ?? '').trim()
+      const fromSlugs = (process.env.TUTORIAL_SLUGS ?? '')
+        .split(',').map(s => s.trim()).filter(Boolean)
+      const filterList = [...tutorialSlugFilter].join(', ')
+      if (fromSlug && fromSlugs.length > 0) {
+        console.log(`[slug-filter] ${tutorialSlugFilter.size} slug(s) (1 from slug, ${fromSlugs.length} from slugs): ${filterList}`)
       } else {
-        console.log(`[slug-filter] no cache to bust for ${tutorialSlugFilter} — fresh fetch will run`)
+        console.log(`[slug-filter] ${tutorialSlugFilter.size} slug(s): ${filterList}`)
       }
-      console.log(`[slug-filter] ${allTutorials.length - 1} other tutorials will be regenerated from cache\n`)
+      // Bust each requested slug's markdown cache so it gets re-fetched.
+      for (const slug of tutorialSlugFilter) {
+        const match = allTutorials.find(t => t.slug === slug)!  // already validated above
+        const targetCacheFile = join(CACHE_DIR, `${slug}.md`)
+        if (existsSync(targetCacheFile)) {
+          unlinkSync(targetCacheFile)
+          console.log(`[slug-filter] busted cache for ${slug} (${match.repo}@${match.branch}) — will be re-fetched`)
+        } else {
+          console.log(`[slug-filter] no cache to bust for ${slug} — fresh fetch will run`)
+        }
+      }
+      const remaining = allTutorials.length - tutorialSlugFilter.size
+      console.log(`[slug-filter] ${remaining} other tutorials will be regenerated from cache\n`)
     }
 
     // ── Phase 2: Batch prefetch GitHub metadata via GraphQL ──
@@ -638,7 +680,7 @@ async function main() {
       let createdAt = ''
       let contributors: Array<{ name: string; login: string; email: string; avatarUrl: string }> = []
 
-      if (regenerateMode || (tutorialSlugFilter && t.slug !== tutorialSlugFilter)) {
+      if (regenerateMode || (tutorialSlugFilter && !tutorialSlugFilter.has(t.slug))) {
         const cacheFile = join(CACHE_DIR, `${t.slug}.md`)
         if (!existsSync(cacheFile)) throw new Error(`Cache file not found: ${cacheFile}`)
         rawMd = readFileSync(cacheFile, 'utf-8')
