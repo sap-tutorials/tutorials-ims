@@ -4,6 +4,13 @@ using from '../app/admin-annotations';
 
 @path: '/admin'
 @requires: 'Admin'
+// Photo uploads (Advocates.uploadPhoto bound action) embed base64 image
+// bytes in the OData $batch payload. A 4 MB JPEG inflates to ~5.4 MB
+// base64 + JSON envelope; the CAP default body_parser limit (1mb)
+// rejects with 413. The client-side check at AdvocatePhotoController.js
+// caps file uploads at 5 MB raw → ~7 MB after base64 + envelope, so 8mb
+// gives a small safety margin without inviting abuse.
+@cds.server.body_parser.limit: '8mb'
 service AdminService {
 
   // Full CRUD entity projections
@@ -291,7 +298,12 @@ service AdminService {
     // handler runs sharp -> 256/64 WebP, upserts AdvocatePhotos, and
     // flips Advocates.hasPhoto + photoUpdatedAt. The bytes come in as
     // base64 to keep the OData payload self-describing.
-    @cds.odata.bindingparameter.collection
+    //
+    // Instance-bound (no @cds.odata.bindingparameter.collection): FE V4
+    // OP header actions invoke against a single-row context, not the
+    // entity set. Tom 2026-06-18 hit "Action uploadPhoto must be called
+    // on a collection of AdminService.Advocates" when the action was
+    // collection-bound but the press handler passed an OP context.
     action uploadPhoto(photoBase64 : String, mimeType : String) returns Advocates;
 
     // Pair with an action to clear a photo without deleting the advocate.
