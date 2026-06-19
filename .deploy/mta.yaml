@@ -58,6 +58,11 @@ modules:
       instances: 1
     properties:
       NODE_ENV: production
+      # Knowledge graph (PR 7+ of #381): default OFF; flip per-environment via cf set-env.
+      # When 'false', `/graph/*` returns 503 (PR 5 gate) and the sidebar island renders nothing.
+      KNOWLEDGE_GRAPH_ENABLED: 'false'
+      KG_EXTRACT_BUILD_CAP: '200'
+      KG_MERGE_SIM_THRESHOLD: '0.92'
     provides:
       - name: srv-api
         properties:
