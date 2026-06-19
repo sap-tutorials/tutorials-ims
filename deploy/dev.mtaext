@@ -9,6 +9,12 @@ modules:
       CONTENT_API_KEY: tutorials-content-publish-2024
       GITHUB_DISPATCH_TOKEN: ${github-dispatch-token}
       REBUILD_TARGET_ENV: dev
+      # KG Phase 1 flag flipped 2026-06-19 (#381 / #442). Override the
+      # mta.yaml default ('false') so MTA redeploys preserve the DEV-only
+      # flip — `cf set-env` overrides do NOT survive `cf deploy` of a new
+      # MTA. prod.mtaext / qa.mtaext intentionally inherit 'false' until
+      # Phase 1 is signed off.
+      KNOWLEDGE_GRAPH_ENABLED: 'true'
 
   - name: tutorials-approuter
     parameters:
