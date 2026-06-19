@@ -10,6 +10,35 @@ const QUARANTINE_DIR = join(ROOT, '.tutorial-cache', 'quarantine')
 
 const REQUIRED_FIELDS = ['type', 'slug', 'title', 'time', 'stepCount'] as const
 
+/**
+ * Counts Hugo shortcode opens vs closes in a tutorial body.
+ *
+ * Hugo allows whitespace between `{{<` and `/` for close tags (e.g.
+ * `{{< /os-panel >}}`), and the project's parser at `scripts/parsers/options.ts`
+ * always emits the spaced form. The original regex for closes was `\{\{<\/`
+ * (no space), which silently classified spaced closes as opens — false-positive
+ * quarantining ~21 tutorials per publish (their continued availability has been
+ * masked by carry-forward of prior versions; new tutorials with spaced closes
+ * just go missing — see #382 phase E cookbook).
+ *
+ * Both opens and closes patterns now allow optional whitespace around `/`. They
+ * are mutually exclusive: the open pattern requires the next non-whitespace
+ * char to be a letter (NOT `/`), and the close pattern requires a `/` between
+ * `{{<` and the letter.
+ *
+ * @returns `null` if balanced, otherwise a reason string for quarantine.
+ */
+export function shortcodeBalanceCheck(body: string): string | null {
+  // Open: `{{<` + optional whitespace + a letter (excluding `/`).
+  const opens = (body.match(/\{\{<\s*[A-Za-z]/g) || []).length
+  // Close: `{{<` + optional whitespace + `/` + optional whitespace + a letter.
+  const closes = (body.match(/\{\{<\s*\/\s*[A-Za-z]/g) || []).length
+  if (opens !== closes) {
+    return `Possible unclosed Hugo shortcode (${opens} opens, ${closes} closes)`
+  }
+  return null
+}
+
 const files = readdirSync(TUTORIALS_DIR).filter(f => f.endsWith('.md') && !f.startsWith('_'))
 
 console.log(`Pre-validating ${files.length} tutorials (Hugo frontmatter)...\n`)
@@ -41,14 +70,11 @@ for (const file of files) {
       reason = `Invalid 'stepCount' value: ${fm.stepCount}`
     }
 
-    // Check for unclosed shortcode blocks (Hugo-specific)
+    // Check for unclosed shortcode blocks (Hugo-specific). Helper is exported
+    // for unit testing — see test/validate-tutorials-shortcode.test.ts.
     if (!reason) {
       const body = content.replace(/^---[\s\S]*?---\n?/, '')
-      const openCount = (body.match(/\{\{<\s*\w/g) || []).length
-      const closeCount = (body.match(/\{\{<\/\s*\w/g) || []).length
-      if (openCount !== closeCount) {
-        reason = `Possible unclosed Hugo shortcode (${openCount} opens, ${closeCount} closes)`
-      }
+      reason = shortcodeBalanceCheck(body)
     }
   } catch (e: any) {
     reason = e.message?.slice(0, 200) ?? 'Unknown parse error'
