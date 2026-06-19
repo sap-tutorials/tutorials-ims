@@ -38,6 +38,16 @@ on:
         required: false
         default: false
         type: boolean
+      publish-concurrency:
+        description: 'Number of /content/publish/append batches in flight at once. Lower if srv hits HeadersTimeoutError (event-loop saturation under 6x50 default). Defaults are conservative; raise only after monitoring srv memory + event-loop lag during a run.'
+        required: false
+        default: '2'
+        type: string
+      publish-batch-size:
+        description: 'Slugs per /content/publish/append batch. Lower if srv hits HeadersTimeoutError. Multiplied by publish-concurrency gives total in-flight slugs (default 2x25 = 50). The whole catalog has ~1400 slugs so smaller batches just take longer linearly, not exponentially.'
+        required: false
+        default: '25'
+        type: string
 
 env:
   NODE_VERSION: '20'
@@ -205,12 +215,21 @@ jobs:
         run: /tmp/hugo --source hugo --minify
 
       - name: Publish tutorial content to HANA
+        # Concurrency / batch-size are tunable via workflow_dispatch inputs
+        # (default 2/25). The historical 6/50 default saturated srv's event
+        # loop on a 1G/1-instance app, producing HeadersTimeoutError on
+        # every parallel append batch (#382 phase E rerun 2026-06-18 +
+        # 2026-06-19). repository_dispatch events fall through to the
+        # safer defaults via the empty-string fallback expression below.
+        # See #420 for the planned worker_threads fix.
         run: |
           npx tsx scripts/publish-content.ts \
             --hugo-dir hugo/public \
             --base-url "${{ steps.srv.outputs.srv_url }}" \
             --trigger "ci/${{ github.event_name }}@${{ github.sha }}" \
             --hugo-version "0.147.7" \
+            --concurrency "${{ inputs.publish-concurrency || '2' }}" \
+            --batch-size "${{ inputs.publish-batch-size || '25' }}" \
             --verbose
         env:
           CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
