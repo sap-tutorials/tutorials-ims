@@ -88,3 +88,55 @@ describe('composeTutorial branches integration (#172 PR 3)', () => {
     }
   })
 })
+
+describe('composeTutorial CRLF regression (#432)', () => {
+  it('produces non-zero steps for a real-world CRLF v2 tutorial shape', () => {
+    // This fixture mirrors the actual structure of btp-cockpit-setup.md as it
+    // arrived in the upstream repo: parser: v2 declared, three ### H3 step
+    // headings, and \r\n line endings throughout.
+    const md = [
+      '---',
+      'parser: v2',
+      'author_name: Tester',
+      'time: 5',
+      'tags: [tutorial>beginner, software-product>sap-business-technology-platform]',
+      'primary_tag: software-product>sap-business-technology-platform',
+      '---',
+      '',
+      '# Get an SAP BTP Account for Tutorials',
+      '<!-- description --> Learn which account model on SAP Business Technology Platform is best suited for your purposes.',
+      '',
+      '## You will learn',
+      '  - How to decide which account model is suited for you',
+      '',
+      '---',
+      '',
+      '### Understanding Trial vs. Free Tier',
+      '',
+      'Body of step one.',
+      '',
+      '### Which to choose?',
+      '',
+      'Body of step two.',
+      '',
+      '### How to set up an account',
+      '',
+      'Body of step three.',
+    ].join('\r\n')  // <- critical: full CRLF input
+
+    const result = composeTutorial(md, {
+      repo: 'sap-tutorials/sap-cloud-platform',
+      branch: 'main',
+      slug: 'btp-cockpit-setup',
+      target: 'hugo',
+      rewriteImages: false,
+    })
+
+    expect(result.steps).toHaveLength(3)
+    expect(result.steps.map(s => s.title)).toEqual([
+      'Understanding Trial vs. Free Tier',
+      'Which to choose?',
+      'How to set up an account',
+    ])
+  })
+})
