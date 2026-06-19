@@ -163,6 +163,19 @@ export async function runConsolidateConcepts(deps = {}, _logId) {
   const stillActive = new Set(concepts.map((c) => c.ID));
   let mergesPerformed = 0;
   let mergesSkipped = 0;
+  // Track collateral deletions during pre-detection of composite-PK
+  // collisions on the FK redirect targets — see
+  // [[feedback_composite_pk_collision_on_fk_redirect]] (memory captured
+  // 2026-06-17). When a tutorial has BOTH (t, loser, predicate) and
+  // (t, canonical, predicate) rows in TutorialConceptLinks, the bulk
+  // UPDATE … SET concept_ID = canonical WHERE concept_ID = loser would
+  // collide on @assert.unique.tutorialConcept and abort the entire
+  // transaction. Same hazard on ConceptEdges' @assert.unique.conceptEdge
+  // when both endpoints converge. Solution: delete the loser-row before
+  // the bulk redirect so the destination is unique. We keep the
+  // canonical-row's existing confidence/extracts (it's the survivor).
+  let linksDeleted = 0;
+  let edgesDeleted = 0;
 
   for (const { canonical, loser, sim } of pairs) {
     if (!stillActive.has(canonical.ID) || !stillActive.has(loser.ID)) {
@@ -172,12 +185,69 @@ export async function runConsolidateConcepts(deps = {}, _logId) {
 
     try {
       await db.tx(async (tx) => {
-        // Redirect tutorial-level FK references onto the canonical.
+        // ---- Pre-detect-and-delete: TutorialConceptLinks ----
+        // For (tutorial_ID, predicate) pairs that already have a
+        // canonical-row, drop the matching loser-row before the bulk
+        // UPDATE so we don't violate @assert.unique.tutorialConcept.
+        const linkSurvivors = await tx.run(
+          SELECT.from(TutorialConceptLinks)
+            .columns('tutorial_ID', 'predicate')
+            .where({ concept_ID: canonical.ID }),
+        );
+        if (linkSurvivors.length > 0) {
+          const survivorKeys = new Set(
+            linkSurvivors.map((r) => `${r.tutorial_ID}:${r.predicate}`),
+          );
+          const loserLinks = await tx.run(
+            SELECT.from(TutorialConceptLinks)
+              .columns('ID', 'tutorial_ID', 'predicate')
+              .where({ concept_ID: loser.ID }),
+          );
+          const collidingIds = loserLinks
+            .filter((r) => survivorKeys.has(`${r.tutorial_ID}:${r.predicate}`))
+            .map((r) => r.ID);
+          if (collidingIds.length > 0) {
+            await tx.run(
+              DELETE.from(TutorialConceptLinks).where({ ID: { in: collidingIds } }),
+            );
+            linksDeleted += collidingIds.length;
+          }
+        }
+
+        // Now safe: redirect remaining tutorial-level FK references.
         await tx.run(
           UPDATE(TutorialConceptLinks)
             .set({ concept_ID: canonical.ID })
             .where({ concept_ID: loser.ID }),
         );
+
+        // ---- Pre-detect-and-delete: ConceptEdges (source-redirect) ----
+        // For (target_ID, predicate) pairs where canonical is already a
+        // source, drop the matching loser-source rows.
+        const edgeSourceSurvivors = await tx.run(
+          SELECT.from(ConceptEdges)
+            .columns('target_ID', 'predicate')
+            .where({ source_ID: canonical.ID }),
+        );
+        if (edgeSourceSurvivors.length > 0) {
+          const survivorKeys = new Set(
+            edgeSourceSurvivors.map((r) => `${r.target_ID}:${r.predicate}`),
+          );
+          const loserEdgeSources = await tx.run(
+            SELECT.from(ConceptEdges)
+              .columns('ID', 'target_ID', 'predicate')
+              .where({ source_ID: loser.ID }),
+          );
+          const collidingIds = loserEdgeSources
+            .filter((r) => survivorKeys.has(`${r.target_ID}:${r.predicate}`))
+            .map((r) => r.ID);
+          if (collidingIds.length > 0) {
+            await tx.run(
+              DELETE.from(ConceptEdges).where({ ID: { in: collidingIds } }),
+            );
+            edgesDeleted += collidingIds.length;
+          }
+        }
 
         // Redirect both endpoints of any concept-to-concept edges that
         // referenced the loser.
@@ -186,6 +256,35 @@ export async function runConsolidateConcepts(deps = {}, _logId) {
             .set({ source_ID: canonical.ID })
             .where({ source_ID: loser.ID }),
         );
+
+        // ---- Pre-detect-and-delete: ConceptEdges (target-redirect) ----
+        // For (source_ID, predicate) pairs where canonical is already a
+        // target, drop the matching loser-target rows.
+        const edgeTargetSurvivors = await tx.run(
+          SELECT.from(ConceptEdges)
+            .columns('source_ID', 'predicate')
+            .where({ target_ID: canonical.ID }),
+        );
+        if (edgeTargetSurvivors.length > 0) {
+          const survivorKeys = new Set(
+            edgeTargetSurvivors.map((r) => `${r.source_ID}:${r.predicate}`),
+          );
+          const loserEdgeTargets = await tx.run(
+            SELECT.from(ConceptEdges)
+              .columns('ID', 'source_ID', 'predicate')
+              .where({ target_ID: loser.ID }),
+          );
+          const collidingIds = loserEdgeTargets
+            .filter((r) => survivorKeys.has(`${r.source_ID}:${r.predicate}`))
+            .map((r) => r.ID);
+          if (collidingIds.length > 0) {
+            await tx.run(
+              DELETE.from(ConceptEdges).where({ ID: { in: collidingIds } }),
+            );
+            edgesDeleted += collidingIds.length;
+          }
+        }
+
         await tx.run(
           UPDATE(ConceptEdges)
             .set({ target_ID: canonical.ID })
@@ -265,14 +364,40 @@ export async function runConsolidateConcepts(deps = {}, _logId) {
   // --------------------------------------------------------------------
   // Phase 4 — full graph rebuild so the SPARQL projection mirrors the
   // freshly canonicalised CDS state.
+  //
+  // OPTIMIZATION: when nothing changed (no merges performed AND no edges
+  // auto-VETOed), skip graphRebuild entirely. The SPARQL projection of
+  // the (unchanged) CDS state would produce the same triples and the
+  // same graphVersion semantics; PR 5's read-cache invalidates on
+  // graphVersion change, so a no-op weekly tick that does NOT bump the
+  // version is correct (steady-state cached reads remain valid).
+  //
+  // We still report a coherent summary by reading the current
+  // GraphMetadata singleton.
   // --------------------------------------------------------------------
-  const rebuildResult = await graphRebuild({ db, log });
+  let rebuildResult;
+  if (mergesPerformed === 0 && weakestEdges.length === 0) {
+    log.info('consolidate-concepts: no changes; graph rebuild skipped');
+    const { GraphMetadata } = cds.entities(NAMESPACE);
+    const current = await SELECT.one
+      .from(GraphMetadata)
+      .columns('graphVersion', 'tripleCount', 'durationMs');
+    rebuildResult = {
+      graphVersion: current?.graphVersion ?? null,
+      tripleCount: current?.tripleCount ?? 0,
+      durationMs: 0,
+    };
+  } else {
+    rebuildResult = await graphRebuild({ db, log });
+  }
 
   const summary = {
     conceptsScanned: concepts.length,
     candidatePairs: pairs.length,
     mergesPerformed,
     mergesSkipped,
+    linksDeleted,
+    edgesDeleted,
     cyclesDetected: cycles.length,
     edgesVetoed: weakestEdges.length,
     graphVersion: rebuildResult.graphVersion,

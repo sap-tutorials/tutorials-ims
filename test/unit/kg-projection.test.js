@@ -23,7 +23,7 @@
 //   rdf:type → <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>
 
 import { describe, it, expect } from 'vitest';
-import { projectFromFixtures } from '../../srv/lib/kg-projection.js';
+import { projectFromFixtures, iriEscapeSegment } from '../../srv/lib/kg-projection.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -226,8 +226,11 @@ describe('projectFromFixtures — Tutorial structural triples', () => {
     expect(triples).toContain(
       `<${KG}tutorial/tut-a> <${KG}taggedWith> <${KG}tag/cloud> .`
     );
+    // Tag slug containing '>' is percent-encoded in the IRI per RFC 3986
+    // so the IRI doesn't close at the first '>'. The literal '>' would
+    // produce malformed SPARQL; %3E is the canonical escape.
     expect(triples).toContain(
-      `<${KG}tutorial/tut-a> <${KG}taggedWith> <${KG}tag/topic>development> .`
+      `<${KG}tutorial/tut-a> <${KG}taggedWith> <${KG}tag/topic%3Edevelopment> .`
     );
   });
 
@@ -331,6 +334,144 @@ describe('projectFromFixtures — coCompletedWith', () => {
     );
     expect(triples).toContain(
       `<${KG}tutorial/a> <${KG}coCompletedWith> <${KG}tutorial/c> .`
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests — IRI escaping (Critical fix from PR 4 code-review)
+// ---------------------------------------------------------------------------
+
+describe('iriEscapeSegment — direct unit tests', () => {
+  it('returns the empty string for non-string input', () => {
+    expect(iriEscapeSegment(null)).toBe('');
+    expect(iriEscapeSegment(undefined)).toBe('');
+    expect(iriEscapeSegment(42)).toBe('');
+  });
+
+  it('passes plain ASCII slugs through unchanged', () => {
+    expect(iriEscapeSegment('cap-handlers')).toBe('cap-handlers');
+    expect(iriEscapeSegment('software-product')).toBe('software-product');
+    // Slash, colon, hash, question-mark are intentionally preserved.
+    expect(iriEscapeSegment('foo/bar:baz#q?x')).toBe('foo/bar:baz#q?x');
+  });
+
+  it('percent-encodes > as %3E', () => {
+    expect(iriEscapeSegment('software-product>sap-s-4hana')).toBe(
+      'software-product%3Esap-s-4hana'
+    );
+  });
+
+  it('percent-encodes < as %3C', () => {
+    expect(iriEscapeSegment('foo<bar')).toBe('foo%3Cbar');
+  });
+
+  it('percent-encodes space as %20', () => {
+    expect(iriEscapeSegment('foo bar')).toBe('foo%20bar');
+  });
+
+  it('percent-encodes double-quote as %22', () => {
+    expect(iriEscapeSegment('foo"bar')).toBe('foo%22bar');
+  });
+
+  it('percent-encodes backslash as %5C', () => {
+    expect(iriEscapeSegment('foo\\bar')).toBe('foo%5Cbar');
+  });
+
+  it('percent-encodes braces as %7B / %7D', () => {
+    expect(iriEscapeSegment('foo{bar}')).toBe('foo%7Bbar%7D');
+  });
+
+  it('percent-encodes pipe / caret / backtick', () => {
+    expect(iriEscapeSegment('foo|bar^baz`qux')).toBe(
+      'foo%7Cbar%5Ebaz%60qux'
+    );
+  });
+
+  it('percent-encodes control characters', () => {
+    // U+0009 (tab), U+000A (LF), U+007F (DEL)
+    expect(iriEscapeSegment('a\tb')).toBe('a%09b');
+    expect(iriEscapeSegment('a\nb')).toBe('a%0Ab');
+    expect(iriEscapeSegment('a\x7Fb')).toBe('a%7Fb');
+    expect(iriEscapeSegment('a\x00b')).toBe('a%00b');
+  });
+});
+
+describe('projectFromFixtures — IRI escaping in iri-mint helpers', () => {
+  it('escapes > in tag IRI', async () => {
+    const fixtures = {
+      ...EMPTY_FIXTURES,
+      tutorials: [{ slug: 'tut-a', missions: [], tags: ['topic>development'] }],
+    };
+    const { triples } = await collectAll(fixtures);
+    expect(triples).toContain(
+      `<${KG}tutorial/tut-a> <${KG}taggedWith> <${KG}tag/topic%3Edevelopment> .`
+    );
+  });
+
+  it('escapes space in concept slug', async () => {
+    const fixtures = {
+      ...EMPTY_FIXTURES,
+      concepts: [{ slug: 'foo bar', name: 'F', description: '', status: 'ACTIVE' }],
+    };
+    const { triples } = await collectAll(fixtures);
+    // Subject IRI is escaped, but the slug-literal preserves the raw value.
+    expect(triples).toContain(
+      `<${KG}concept/foo%20bar> <${RDF_TYPE}> <${KG}Concept> .`
+    );
+    expect(triples).toContain(
+      `<${KG}concept/foo%20bar> <${KG}slug> "foo bar" .`
+    );
+  });
+
+  it('escapes < and > in tutorial slug', async () => {
+    const fixtures = {
+      ...EMPTY_FIXTURES,
+      tutorials: [{ slug: 'tut<x>', missions: ['m'], tags: [] }],
+    };
+    const { triples } = await collectAll(fixtures);
+    expect(triples).toContain(
+      `<${KG}tutorial/tut%3Cx%3E> <${KG}partOf> <${KG}mission/m> .`
+    );
+  });
+
+  it('escapes backslash in mission slug', async () => {
+    const fixtures = {
+      ...EMPTY_FIXTURES,
+      missions: [{ slug: 'a\\b', group_slug: 'g', categories: [] }],
+    };
+    const { triples } = await collectAll(fixtures);
+    expect(triples).toContain(
+      `<${KG}mission/a%5Cb> <${KG}partOf> <${KG}group/g> .`
+    );
+  });
+
+  it('escapes a control character in a category slug', async () => {
+    const fixtures = {
+      ...EMPTY_FIXTURES,
+      missions: [{ slug: 'm', group_slug: null, categories: ['cat\tx'] }],
+    };
+    const { triples } = await collectAll(fixtures);
+    expect(triples).toContain(
+      `<${KG}mission/m> <${KG}inCategory> <${KG}category/cat%09x> .`
+    );
+  });
+
+  it('escapes double-quote in product slug derived from software-product>* tag', async () => {
+    const fixtures = {
+      ...EMPTY_FIXTURES,
+      tutorials: [
+        { slug: 'tut-a', missions: [], tags: ['software-product>foo"bar'] },
+      ],
+    };
+    const { triples } = await collectAll(fixtures);
+    // The taggedWith IRI escapes the >; the aboutProduct product slug
+    // (the suffix after `software-product>`) escapes the embedded ".
+    expect(triples).toContain(
+      `<${KG}tutorial/tut-a> <${KG}taggedWith> <${KG}tag/software-product%3Efoo%22bar> .`
+    );
+    expect(triples).toContain(
+      `<${KG}tutorial/tut-a> <${KG}aboutProduct> <${KG}product/foo%22bar> .`
     );
   });
 });

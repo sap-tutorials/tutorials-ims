@@ -22,14 +22,47 @@ const KG = 'https://developers.sap.com/kg/';
 const RDF_TYPE = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type';
 const KG_CONCEPT = `${KG}Concept`;
 
+/**
+ * Percent-encode characters that would corrupt an IRI per RFC 3986/3987.
+ * Used as a defense-in-depth for slug inputs into iri{Concept,Tutorial,...}
+ * helpers, since real-world tag values like 'software-product>foo' contain
+ * '>' which would otherwise close the IRI at the first '>' and produce
+ * invalid SPARQL.
+ *
+ * Reserved by RFC 3986 section 2.2: gen-delims minus '/' (we keep '/'
+ * because slug segments may contain it intentionally, e.g. 'foo/bar' as
+ * a hierarchical key). The full list we encode:
+ *   < > " { } | ^ ` (and space)
+ * Plus control chars (U+0000–U+001F, U+007F).
+ *
+ * `/`, `:`, `?`, `#` etc. are kept as-is — slug semantics may rely on them.
+ *
+ * Exported so the unit test can assert escape behaviour directly.
+ */
+// Characters that MUST be percent-encoded inside an IRI: control chars
+// (U+0000–U+001F, U+007F), space, and the IRI-reserved set
+// `< > " { } | ^ \` \\`. The class is built via new RegExp() because the
+// raw character class plus a backtick is fiddly inside a JS template
+// literal; a plain regex literal would also need careful escaping.
+const IRI_UNSAFE_RE = new RegExp(
+  '[\\u0000-\\u001F\\u007F <>"{}|^`\\\\]',
+  'g'
+);
+export function iriEscapeSegment(s) {
+  if (typeof s !== 'string') return '';
+  return s.replace(IRI_UNSAFE_RE, (ch) => {
+    return '%' + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0');
+  });
+}
+
 const iri = (s) => `<${s}>`;
-const iriConcept = (slug) => iri(`${KG}concept/${slug}`);
-const iriTutorial = (slug) => iri(`${KG}tutorial/${slug}`);
-const iriMission = (slug) => iri(`${KG}mission/${slug}`);
-const iriGroup = (slug) => iri(`${KG}group/${slug}`);
-const iriTag = (slug) => iri(`${KG}tag/${slug}`);
-const iriProduct = (slug) => iri(`${KG}product/${slug}`);
-const iriCategory = (slug) => iri(`${KG}category/${slug}`);
+const iriConcept = (slug) => iri(`${KG}concept/${iriEscapeSegment(slug)}`);
+const iriTutorial = (slug) => iri(`${KG}tutorial/${iriEscapeSegment(slug)}`);
+const iriMission = (slug) => iri(`${KG}mission/${iriEscapeSegment(slug)}`);
+const iriGroup = (slug) => iri(`${KG}group/${iriEscapeSegment(slug)}`);
+const iriTag = (slug) => iri(`${KG}tag/${iriEscapeSegment(slug)}`);
+const iriProduct = (slug) => iri(`${KG}product/${iriEscapeSegment(slug)}`);
+const iriCategory = (slug) => iri(`${KG}category/${iriEscapeSegment(slug)}`);
 const iriPredicate = (name) => iri(`${KG}${name}`);
 
 /**
@@ -329,8 +362,15 @@ async function loadFixtures(db) {
       if (!missionsByTutorialId.has(it.tutorial_ID)) missionsByTutorialId.set(it.tutorial_ID, new Set());
       missionsByTutorialId.get(it.tutorial_ID).add(missionSlug);
     }
-  } catch {
+  } catch (err) {
     // CompletionPaths may be missing in light test DBs - degrade gracefully.
+    // Log so we don't silently produce a graph with zero :partOf
+    // Tutorial-Mission edges in production. Per memory
+    // [[feedback_silent_swallow_hides_dead_code]] (2026-06-17).
+    const log = cds.log('kg-projection');
+    log.warn(
+      `kg-projection: CompletionPathItems load failed; mission membership will be empty. err=${err && err.message ? err.message : String(err)}`
+    );
   }
 
   const tutorials = allTutorials.map((t) => ({
