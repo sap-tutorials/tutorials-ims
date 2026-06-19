@@ -264,3 +264,68 @@ describe('<TutorialCard> category chip', () => {
     expect(w.find('ui5-tag.card-category-chip').exists()).toBe(false)
   })
 })
+
+// ────────────────────────────────────────────────────────────────────────
+// Regression: issue #399 — ring presence must not change content geometry.
+// Before the fix: `.nav-card--has-progress` added `padding-left: 3rem`
+// to .nav-card__type/__title/__desc, making ringed cards' content area
+// 3rem narrower than non-ringed neighbors and breaking horizontal grid
+// alignment. Fix: ring moves to top-right, the conditional padding rule
+// is deleted, and one collision rule shifts the license icon when both
+// license + ring are present on a tutorial card.
+//
+// We assert against the card.css SOURCE directly because Vitest does not
+// apply imported CSS to happy-dom (Vite stubs side-effect CSS imports in
+// the test runner). The shape of the rules is the contract; getComputed-
+// Style would tautologically pass with no styles applied.
+// ────────────────────────────────────────────────────────────────────────
+describe('issue #399: ring presence does not shift content', () => {
+  // Lazy import via Node fs so we read the file as text without going
+  // through Vite's CSS transformer.
+  let cardCss: string
+  beforeEach(async () => {
+    if (!cardCss) {
+      const fs = await import('node:fs')
+      const path = await import('node:path')
+      // Vitest runs from the project root (or hugo-apps when --root is set).
+      // Resolve relative to cwd, falling back through both layouts.
+      const candidates = [
+        path.resolve(process.cwd(), 'hugo-apps/src/shared/cards/card.css'),
+        path.resolve(process.cwd(), 'src/shared/cards/card.css'),
+      ]
+      const found = candidates.find((p) => fs.existsSync(p))
+      if (!found) {
+        throw new Error('card.css not found from cwd=' + process.cwd() + '; tried: ' + candidates.join(', '))
+      }
+      cardCss = fs.readFileSync(found, 'utf-8')
+    }
+  })
+
+  it('does NOT contain the legacy `.nav-card--has-progress` padding-left rule', () => {
+    // Bug: this rule made ringed cards' content area 3rem narrower than
+    // their neighbors. The fix deletes it.
+    expect(cardCss).not.toMatch(/\.nav-card--has-progress\s+\.nav-card__type[^{]*\{[^}]*padding-left/s)
+    expect(cardCss).not.toMatch(/\.nav-card--has-progress\s+\.nav-card__title[^{]*\{[^}]*padding-left/s)
+    expect(cardCss).not.toMatch(/\.nav-card--has-progress\s+\.nav-card__desc[^{]*\{[^}]*padding-left/s)
+  })
+
+  it('positions the progress overlay at right, not left', () => {
+    // Find the .nav-card__progress rule body. Has to anchor on the rule
+    // selector to avoid matching the license-collision rule that also
+    // mentions .nav-card.
+    const m = cardCss.match(/\.nav-card__progress\s*\{([^}]*)\}/)
+    expect(m, 'expected a .nav-card__progress rule').not.toBeNull()
+    const body = (m![1] || '').replace(/\s+/g, ' ')
+    expect(body).toMatch(/right:\s*0\.75rem/)
+    expect(body).not.toMatch(/(?:^|[\s;])left:\s*0\.75rem/)
+  })
+
+  it('shifts the license icon left when a ring is also present', () => {
+    // Tutorial cards may have both a license icon and a progress ring.
+    // The collision rule moves the license to right: 3.75rem so the two
+    // sit side-by-side at the top-right corner.
+    expect(cardCss).toMatch(
+      /\.nav-card--has-progress\s+\.nav-card__license\s*\{[^}]*right:\s*3\.75rem/s
+    )
+  })
+})
