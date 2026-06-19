@@ -112,18 +112,26 @@ export async function loadMissionContext(slug) {
 
   const paths = await SELECT.from(CompletionPaths)
     .where({ mission_ID: mission.ID })
-    .columns('ID', 'name', 'slug')
+    .columns('ID', 'name', 'slug', 'legacyId')
     .orderBy('legacyId');
 
   const pathIds = paths.map(p => p.ID);
+  // [#382 phase F1] Fetch BOTH taskType variants. Direct TUTORIAL items
+  // become synthetic path-as-group cards; nested GROUP items resolve through
+  // the Groups table. Mirrors srv/lib/build-catalog.js:91-117 exactly.
   const items = pathIds.length
     ? await SELECT.from(CompletionPathItems)
-        .where({ path_ID: { in: pathIds }, taskType: 'GROUP', group_ID: { '!=': null } })
-        .columns('group_ID', 'itemOrder', 'path_ID')
+        .where({ path_ID: { in: pathIds } })
+        .columns('group_ID', 'tutorial_ID', 'taskType', 'itemOrder', 'path_ID')
         .orderBy('path_ID', 'itemOrder')
     : [];
 
-  const groupIds = [...new Set(items.map(i => i.group_ID))];
+  // Direct TUTORIAL items per path (taskType='TUTORIAL').
+  const directItems = items.filter(i => i.taskType === 'TUTORIAL' && i.tutorial_ID);
+  // Nested GROUP items per path (taskType='GROUP', existing behavior).
+  const groupItems = items.filter(i => i.taskType === 'GROUP' && i.group_ID);
+
+  const groupIds = [...new Set(groupItems.map(i => i.group_ID))];
   const groups = groupIds.length
     ? await SELECT.from(Groups)
         .where({ ID: { in: groupIds }, published: true, status: 'ACTIVE' })
@@ -137,7 +145,12 @@ export async function loadMissionContext(slug) {
         .columns('group_ID', 'tutorial_ID', 'itemOrder')
         .orderBy('group_ID', 'itemOrder')
     : [];
-  const tutorialIds = [...new Set(gpiRows.map(r => r.tutorial_ID).filter(Boolean))];
+
+  // Combine tutorial UUIDs from BOTH paths (direct + nested) into one
+  // SELECT to minimize round-trips.
+  const directTutorialIds = directItems.map(i => i.tutorial_ID);
+  const nestedTutorialIds = gpiRows.map(r => r.tutorial_ID).filter(Boolean);
+  const tutorialIds = [...new Set([...directTutorialIds, ...nestedTutorialIds])];
   const tutorials = tutorialIds.length
     ? await SELECT.from(Tutorials)
         .where({ ID: { in: tutorialIds }, status: { '!=': 'INACTIVE' } })
@@ -146,16 +159,47 @@ export async function loadMissionContext(slug) {
     : [];
   const tutById = new Map(tutorials.map(t => [t.ID, t]));
 
-  const groupCards = items.map(item => {
-    const g = groupById.get(item.group_ID);
-    if (!g) return null;
-    const groupTuts = gpiRows
-      .filter(r => r.group_ID === g.ID)
-      .map(r => tutById.get(r.tutorial_ID))
+  // Build cards in the same order build-catalog.js:117 emits — for each path,
+  // synthetic-group first (if any direct TUTORIAL items exist), then nested
+  // groups. Across paths, paths are already ordered by legacyId.
+  const groupCards = paths.flatMap(p => {
+    const cards = [];
+
+    // Synthetic group from direct-TUTORIAL items.
+    const pathDirect = directItems
+      .filter(i => i.path_ID === p.ID)
+      .map(i => tutById.get(i.tutorial_ID))
       .filter(Boolean)
       .map(projectTutorial);
-    return { ...g, tutorials: groupTuts };
-  }).filter(Boolean);
+    if (pathDirect.length > 0) {
+      cards.push({
+        ID: p.ID,
+        slug: p.slug || String(p.legacyId ?? ''),
+        title: p.name || '',
+        description: '',
+        tutorials: pathDirect,
+        isSynthetic: true,
+      });
+    }
+
+    // Nested-Group cards from taskType='GROUP' items (existing behavior).
+    const pathGroups = groupItems
+      .filter(i => i.path_ID === p.ID)
+      .map(item => {
+        const g = groupById.get(item.group_ID);
+        if (!g) return null;
+        const groupTuts = gpiRows
+          .filter(r => r.group_ID === g.ID)
+          .map(r => tutById.get(r.tutorial_ID))
+          .filter(Boolean)
+          .map(projectTutorial);
+        return { ...g, tutorials: groupTuts };
+      })
+      .filter(Boolean);
+    cards.push(...pathGroups);
+
+    return cards;
+  });
 
   const allTutorials = groupCards.flatMap(g => g.tutorials);
   const totalTime = allTutorials.reduce((s, t) => s + (t.time || 0), 0);
