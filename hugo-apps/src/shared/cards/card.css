@@ -153,15 +153,18 @@
 .nav-card__progress {
   position: absolute;
   top: 0.75rem;
-  left: 0.75rem;
+  right: 0.75rem;
   opacity: 0;
   transition: opacity 0.15s ease-out;
 }
 .tutorial-navigator[data-progress-loaded="true"] .nav-card__progress {
   opacity: 1;
 }
-.nav-card--has-progress .nav-card__type,
-.nav-card--has-progress .nav-card__title,
-.nav-card--has-progress .nav-card__desc {
-  padding-left: 3rem;
+
+/* ─── License + ring collision (tutorial cards may have both) ─── */
+/* When both are present, license shifts left so they sit side-by-side
+   at the top-right corner: [license][ring]. Math: 0.75rem gutter +
+   2.5rem ring + 0.5rem gap = 3.75rem. */
+.nav-card--has-progress .nav-card__license {
+  right: 3.75rem;
 }
