@@ -215,6 +215,8 @@ import {
 import { graphRebuild } from './lib/kg-graph-rebuild.js';
 import { computeCoCompletions } from './lib/co-completion.js';
 import { mergeConceptPair } from './lib/kg-merge-pair.js';
+import { findNearDuplicates } from './lib/kg-similarity.js';
+import { loadConceptsWithEmbeddings } from './lib/kg-concept-loader.js';
 
 const NAMESPACE = 'com.sap.developers.ims';
 
@@ -439,6 +441,34 @@ export default cds.service.impl(async function () {
     }
   });
 
+  // ─── Concepts UPDATE guard — restrict the writable surface ─────────────
+  // The Concepts projection is no longer @readonly so the Fiori Elements
+  // admin app can PATCH `name` + `description`. Defense-in-depth: even with
+  // @Common.FieldControl: #ReadOnly on the other fields, a hand-crafted
+  // PATCH could try to mutate `slug`/`status`/`embedding` etc. — reject any
+  // such attempt at the service layer. Status flips happen exclusively via
+  // the vetoConcept / mergeConcepts actions.
+  //
+  // NOTE: at the OData path, FieldControl metadata strips read-only fields
+  // before this handler runs, so the negative path is rarely exercised over
+  // HTTP. This guard catches programmatic UPDATEs (cross-service calls,
+  // jobs) where no metadata filter applies. req.reject ensures a hard
+  // failure rather than silent error-queuing.
+  // See test/unit/kg-concepts-update-guard.test.js for the editable-surface
+  // smoke test (positive path only — negative-path testing is a TODO).
+  const CONCEPTS_PATCH_ALLOWLIST = new Set(['name', 'description']);
+  this.before('UPDATE', 'Concepts', (req) => {
+    const data = req.data || {};
+    for (const key of Object.keys(data)) {
+      // CAP includes the entity key + audit fields automatically; skip those.
+      if (key === 'ID') continue;
+      if (key === 'createdAt' || key === 'createdBy') continue;
+      if (key === 'modifiedAt' || key === 'modifiedBy') continue;
+      if (CONCEPTS_PATCH_ALLOWLIST.has(key)) continue;
+      return req.reject(403, `Field '${key}' is not editable on Concepts`);
+    }
+  });
+
   // ─── neighborhood(slug) ────────────────────────────────────────────────
   this.on('neighborhood', async (req) => {
     const { slug } = req.data;
@@ -647,6 +677,52 @@ export default cds.service.impl(async function () {
       log.error(`kg-service: mergeConcepts failed: ${err.message ?? err}`);
       return req.error(500, `Merge failed: ${err.message ?? 'unknown error'}`);
     }
+  });
+
+  // ─── previewMerges — dry-run dedupe over ACTIVE concepts ───────────────
+  // Thin wrapper around findNearDuplicates: loads every ACTIVE concept (with
+  // its cached embedding decoded to Float32Array via the shared
+  // kg-concept-loader), runs the same pairwise cosine-similarity scan the
+  // weekly consolidator uses, and returns the candidate (loser, canonical,
+  // similarity) triples without writing anything. Threshold mirrors the
+  // consolidator: KG_MERGE_SIM_THRESHOLD env var (default 0.92).
+  this.on('previewMerges', async (req) => {
+    let concepts;
+    try {
+      concepts = await loadConceptsWithEmbeddings(db, log);
+    } catch (err) {
+      log.error(`kg-service: previewMerges loader failed: ${err.message ?? err}`);
+      return req.error(500, `Preview failed: ${err.message ?? 'unknown error'}`);
+    }
+
+    const thresholdRaw = process.env.KG_MERGE_SIM_THRESHOLD;
+    const thresholdParsed = thresholdRaw !== undefined ? Number(thresholdRaw) : NaN;
+    const threshold =
+      Number.isFinite(thresholdParsed) && thresholdParsed >= 0 && thresholdParsed <= 1
+        ? thresholdParsed
+        : 0.92;
+
+    const pairs = findNearDuplicates(concepts, threshold);
+    log.info(
+      `kg-service: previewMerges scanned ${concepts.length} ACTIVE concepts at threshold=${threshold}, found ${pairs.length} candidate pair(s)`,
+    );
+    await audit('KnowledgeGraphPreviewMerges', {
+      user: req.user?.id ?? 'unknown',
+      threshold,
+      conceptsScanned: concepts.length,
+      candidatePairs: pairs.length,
+    });
+
+    return pairs.map((p) => ({
+      loserId: p.loser.ID,
+      loserSlug: p.loser.slug,
+      loserName: p.loser.name,
+      canonicalId: p.canonical.ID,
+      canonicalSlug: p.canonical.slug,
+      canonicalName: p.canonical.name,
+      // Round to 3 decimals to match the Decimal(4, 3) wire type.
+      similarity: Number(p.sim.toFixed(3)),
+    }));
   });
 
   // ─── vetoConcept — admin curation ──────────────────────────────────────
