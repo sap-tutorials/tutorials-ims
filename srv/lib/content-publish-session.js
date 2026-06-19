@@ -301,7 +301,13 @@ async function upsertTutorialMetadata(namespace, metadata) {
       let tutorialId = hits?.[0]?.ID ?? hits?.[0]?.id ?? null;
 
       if (tutorialId) {
-        await UPDATE(Tutorials).where({ ID: tutorialId }).set({
+        // [#431] Self-heal: if an existing row was inserted with NULL legacyId by
+        // the bug pre-this-fix, fill it in on the next publish. Avoids relying on
+        // the repair script for any tutorial that gets re-published after deploy.
+        // Note: this does NOT propagate to CompletionPathItems — that fixup is the
+        // repair script's job (scripts/repair-tutorial-legacyid.cjs).
+        const existing = await SELECT.one.from(Tutorials).where({ ID: tutorialId }).columns('legacyId');
+        const updates = {
           title: meta.title,
           description: meta.description || null,
           averageTimeToComplete: meta.time || null,
@@ -309,7 +315,11 @@ async function upsertTutorialMetadata(namespace, metadata) {
           primaryTag: meta.primaryTag || null,
           stepCount: Array.isArray(meta.steps) ? meta.steps.length : null,
           status: 'ACTIVE'
-        });
+        };
+        if (existing?.legacyId == null) {
+          updates.legacyId = await getNextLegacyId('Tutorials', db);
+        }
+        await UPDATE(Tutorials).where({ ID: tutorialId }).set(updates);
       } else {
         tutorialId = cds.utils.uuid();
         await INSERT.into(Tutorials).entries({
@@ -321,7 +331,8 @@ async function upsertTutorialMetadata(namespace, metadata) {
           experienceTag: meta.level || null,
           primaryTag: meta.primaryTag || null,
           stepCount: Array.isArray(meta.steps) ? meta.steps.length : null,
-          status: 'ACTIVE'
+          status: 'ACTIVE',
+          legacyId: await getNextLegacyId('Tutorials', db)  // [#431]
         });
       }
 
