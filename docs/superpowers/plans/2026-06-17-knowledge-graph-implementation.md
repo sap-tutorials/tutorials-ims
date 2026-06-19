@@ -1556,13 +1556,13 @@ But the prod cron jobs still need to run a full corpus pass before the sidebar w
 ## Done-when checklist
 
 - [x] PR 1: HANA KGE access pattern documented; `EXECUTE STATEMENT 'SPARQL …'` disproven, `CALL SYS.SPARQL_EXECUTE(?, ?, ?, ?)` validated as canonical path. ([#401](https://github.com/sap-tutorials/tutorials-ims/pull/401))
-- [ ] PR 2: 4 entities deployed; `@assert.unique` enforced; `.hdbgrants` ships `SPARQL QUERY`/`SPARQL UPDATE` to `default_access_role`; grantor service bound; spike probe passes against bound HDI runtime user
-- [ ] PR 3: extractConcepts cron populates ~80–150 ACTIVE Concepts on DEV
-- [ ] PR 4: consolidateConcepts cron + graphRebuild populate the named graph; SPARQL hdbsql probe returns triples
-- [ ] PR 5: `/graph/neighborhood?slug=…` returns 4-section JSON; admin runSparql gated on scope
-- [ ] PR 6: `/admin-ui/#concepts-display` lets Tom merge / veto / rebuild
-- [ ] PR 7: Sidebar deployed with flag default OFF; OP unaffected
-- [ ] PR 8: Flag-flipped on DEV; 48h soak clean; rollout note merged; #381 closed
+- [x] PR 2: 4 entities deployed; `@assert.unique` enforced; `.hdbgrants` ships `SPARQL QUERY`/`SPARQL UPDATE` to `default_access_role`; grantor service bound; spike probe passes against bound HDI runtime user. ([#403](https://github.com/sap-tutorials/tutorials-ims/pull/403) + deploy unblockers [#407](https://github.com/sap-tutorials/tutorials-ims/pull/407)/[#408](https://github.com/sap-tutorials/tutorials-ims/pull/408)/[#411](https://github.com/sap-tutorials/tutorials-ims/pull/411)/[#413](https://github.com/sap-tutorials/tutorials-ims/pull/413))
+- [x] PR 3: extractConcepts cron populates ~80–150 ACTIVE Concepts on DEV. ([#416](https://github.com/sap-tutorials/tutorials-ims/pull/416))
+- [x] PR 4: consolidateConcepts cron + graphRebuild populate the named graph; SPARQL hdbsql probe returns triples. ([#419](https://github.com/sap-tutorials/tutorials-ims/pull/419))
+- [x] PR 5: `/graph/neighborhood?slug=…` returns 4-section JSON; admin runSparql gated on scope. ([#427](https://github.com/sap-tutorials/tutorials-ims/pull/427))
+- [x] PR 6: `/admin-ui/#concepts-display` lets Tom merge / veto / rebuild. ([#439](https://github.com/sap-tutorials/tutorials-ims/pull/439))
+- [x] PR 7: Sidebar deployed with flag default OFF; OP unaffected. ([#441](https://github.com/sap-tutorials/tutorials-ims/pull/441))
+- [ ] PR 8: Flag-flipped on DEV; 48h soak clean; rollout note merged; #381 closed. (See [docs/superpowers/done/2026-06-19-knowledge-graph-phase1-shipped.md](../done/2026-06-19-knowledge-graph-phase1-shipped.md))
 
 ## Cross-cutting reminders for every PR
 
