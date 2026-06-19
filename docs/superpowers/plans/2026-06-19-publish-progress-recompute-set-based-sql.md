@@ -117,7 +117,7 @@ If non-zero rows are updated on the second run, the predicate is wrong. Fix.
 
 - [ ] **Step 6: Capture the validated SQL and document any tweaks**
 
-Whatever the SQL form actually is when it works correctly on DEV — keep that as the canonical statement. Paste it into a comment block in the new module (Phase B Task B1) so future maintainers see what was actually validated, not just what was speced.
+Whatever the SQL form actually is when it works correctly on DEV — keep that as the canonical statement. Paste it into a comment block in the new module's source file (Phase B **Task B2** — the implementation file `srv/lib/recompute-tutorial-progress-bulk-sql.js`, NOT the test file). Future maintainers see what was actually validated, not just what was speced.
 
 **Phase A acceptance:** The MERGE statement runs on DEV HANA, produces correct results, and is idempotent. Document the final form (which may differ slightly from the spec's example).
 
@@ -343,7 +343,15 @@ Expected: first test PASSES. Other tests are stubs — fill them in next.
 
 - [ ] **Step 3: Fill in the remaining unit tests (cross-tutorial isolation, legacy parity, no-op)**
 
-Following the same pattern as the first test. All four should pass against the SQLite fallback.
+The three skeleton tests above (cross-tutorial isolation, legacy parity, scale) are not real tests until you fill in their bodies. **This step is the gate** — do not move to Task B2 thinking the test file is "done" when it has stubs.
+
+Specific assertions to write:
+
+- **`cross-tutorial isolation`**: seed tutorials A and B, each with one user and a stale TUTORIAL TaskRecord. Call the bulk function with only A's tutorialId. Assert A's row updated, B's row untouched (its `progress`/`status`/`modifiedAt` all unchanged from the seeded values).
+- **`legacy publishHandler parity`**: seed a tutorial with stale TUTORIAL records. Take a snapshot of post-state via the OLD `recomputeTutorialProgress` directly. Reset (use `cds.test`'s in-memory db reset between tests, OR seed a parallel fixture with different IDs). Call the new bulk function with the same input. Assert end-states are identical row-for-row.
+- **`no-op when tutorialIds is empty`**: already in the file as the third test — just confirm it runs.
+
+All three must produce real PASS results, not stubbed comments. The unit-test sweep at Task B2 Step 4 won't differentiate stubs from skipped tests, so verify each test name shows in the output before moving on.
 
 - [ ] **Step 4: Run the full unit-test suite for regressions**
 
@@ -450,7 +458,15 @@ describe('recomputeTutorialProgressBulkSQL — HANA MERGE (#382 phase E)', () =>
 ALLOW_HYBRID_WRITES=true npx cds bind --exec -- npx vitest run test/hybrid/recompute-tutorial-progress-bulk-sql.test.js
 ```
 
-Expected: all 6 tests pass against DEV HANA.
+Expected: all 6 tests pass against DEV HANA. **Each test body must have real assertions, not stub comments.** The 6-test scaffold above shows shape; you fill in seed/exercise/assert.
+
+Fixture sizes per test:
+- correctness: 5 tutorials × 10 users
+- idempotency: 1 tutorial × 5 users (re-uses correctness fixture)
+- cross-tutorial isolation: 2 tutorials × 3 users each
+- NULL-safe: 1 tutorial × 1 user
+- scale: 1 tutorial × 1000 users (the actual production shape)
+- concurrent: 1 tutorial × 10 users with parallel UPDATE injection
 
 If a test fails:
 - Correctness: the MERGE statement is wrong. Go back to Phase A and re-validate.
@@ -486,12 +502,18 @@ Confirm line numbers haven't shifted from the spec.
 
 - [ ] **Step 2: Make the change**
 
-In `appendToSession`, the metadata-upsert loop builds tutorialIds in `upsertTutorialMetadata`. We need to expose those tutorialIds back to the caller. Two options:
+In `appendToSession`, the metadata-upsert loop builds tutorialIds in `upsertTutorialMetadata`. We need to expose those tutorialIds back to the caller. **First, audit `upsertTutorialMetadata`'s current signature and its single caller** (it's currently called only from `appendToSession`):
 
-(a) Modify `upsertTutorialMetadata` to return `{ tutorialIds, ... }` and have `appendToSession` collect them
+```bash
+grep -n "upsertTutorialMetadata" srv/lib/content-publish-session.js srv/lib/content-store.js
+```
+
+Confirm only one caller. Then choose:
+
+(a) **Recommended:** Modify `upsertTutorialMetadata` to return `{ tutorialIds, ... }` (instead of its current return shape — note what it is and either extend the return object or rename if more invasive)
 (b) Capture them in a local Set inside `upsertTutorialMetadata` and pass via a callback
 
-Option (a) is cleaner. Adjust `upsertTutorialMetadata` to return an object including the array of touched tutorialIds. In `appendToSession`, replace the per-slug `recomputeTutorialProgress` call with a single `recomputeTutorialProgressBulkSQL(db, namespace, tutorialIds)` after the metadata loop.
+Option (a) is cleaner and safe given the single-caller audit. Adjust `upsertTutorialMetadata` to return an object including the array of touched tutorialIds. In `appendToSession`, after the upsert call, extract the array and pass to the bulk function.
 
 Add the import at the top of the file:
 
@@ -523,7 +545,9 @@ git commit -m "refactor(publish): replace per-slug recompute in appendToSession 
 
 - [ ] **Step 1: Replace the function body**
 
-The function currently loops slugs and calls `recomputeTutorialProgress` per-slug. Replace with:
+The function currently loops slugs and calls `recomputeTutorialProgress` per-slug. Replace with one bulk slug→tutorialId resolution + one bulk recompute call.
+
+**Important:** the slug-resolve loop in the existing code is N round-trips. With ~1400 slugs × ~50ms HANA latency that's ~70s — eating into the 90s publish budget all by itself. **Resolve all slugs in one query** instead:
 
 ```js
 async function recomputeProgressForChangedTutorials(namespace, newVersion) {
@@ -539,29 +563,32 @@ async function recomputeProgressForChangedTutorials(namespace, newVersion) {
   const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
   const { table, idCol, slugCol } = tutorialsTableInfo(namespace, isHana);
 
-  // Resolve slugs → tutorialIds in one SELECT, then bulk-recompute.
-  const tutorialIds = [];
-  for (const slug of slugs) {
-    try {
-      const hits = await db.run(
-        `SELECT ${idCol} FROM ${table} WHERE LOWER(${slugCol}) = ?`,
-        [slug.toLowerCase()]
-      );
-      const tutorialId = hits?.[0]?.ID ?? hits?.[0]?.id;
-      if (tutorialId) tutorialIds.push(tutorialId);
-    } catch (e) {
-      LOG.warn(`recomputeProgressForChangedTutorials: slug-resolve ${slug} failed`, e.message);
-    }
-  }
+  // [#382] Resolve all slugs → tutorialIds in ONE query, not N. With 1400
+  // slugs × ~50ms HANA latency, the per-slug loop alone would burn 70+ seconds
+  // of the 90s publish budget before the bulk recompute even starts.
+  const lowerSlugs = slugs.map(s => s.toLowerCase());
+  const placeholders = lowerSlugs.map(() => '?').join(',');
+  const hits = await db.run(
+    `SELECT ${idCol}, LOWER(${slugCol}) AS LSLUG FROM ${table} WHERE LOWER(${slugCol}) IN (${placeholders})`,
+    lowerSlugs
+  );
+  const tutorialIds = hits.map(h => h.ID ?? h.id).filter(Boolean);
   if (tutorialIds.length === 0) return;
 
   await recomputeTutorialProgressBulkSQL(db, namespace, tutorialIds);
 }
 ```
 
-This goes from ~30 lines per-slug-loop with N+1 inner SELECTs to one bulk call.
+This goes from ~30 lines per-slug-loop with N+1 inner SELECTs to one slug-resolution batch + one bulk recompute. The whole function should run in <2 seconds for a full publish.
 
-The slug-resolve loop is still N round-trips for slugs (no easy way to bulk-resolve case-insensitively in one query without more work) — but it's a fast index-friendly lookup, not the 10M-row scan.
+**HANA `IN (?, ?, ...)` parameter binding caveat:** if the HANA driver doesn't accept array-style binding for IN clauses (driver-specific), fall back to UUID-list interpolation as in Phase B Task B2 Step 1. The slug list isn't UUIDs, so for that path you'd interpolate single-quoted SQL-escaped strings:
+
+```js
+const lit = lowerSlugs.map(s => `'${s.replace(/'/g, "''")}'`).join(',');
+const hits = await db.run(
+  `SELECT ${idCol}, LOWER(${slugCol}) AS LSLUG FROM ${table} WHERE LOWER(${slugCol}) IN (${lit})`
+);
+```
 
 - [ ] **Step 2: Run tests**
 
@@ -623,15 +650,48 @@ git push -u origin fix/publish-progress-recompute-set-based-sql
 
 - [ ] **Step 2: Open the PR**
 
-```bash
-gh pr create --title "fix(publish): bulk SQL recompute for TUTORIAL TaskRecords (closes #382 phase E)" --body-file .pr-body-c4.tmp.md
-```
+Write a PR-body file first, then create the PR with `--body-file`:
 
-PR body should reference:
-- The spec doc
-- The two failing runs ([27790881959](https://github.com/sap-tutorials/tutorials-ims/actions/runs/27790881959), [27823662006](https://github.com/sap-tutorials/tutorials-ims/actions/runs/27823662006))
-- The diagnostic chain (TaskRecords scale → N+1 query pattern → set-based MERGE INTO fix)
-- Issues #420 and #421 (now de-prioritized since this fix addresses the root cause)
+```bash
+cat > .pr-body-c4.tmp.md <<'EOF'
+## Summary
+
+Replace the per-tutorial N+1 query pattern in publish progress-recompute with a single set-based HANA `MERGE INTO` statement.
+
+## Why
+
+The publish step in #382 phase E has been failing repeatedly with `HeadersTimeoutError`. Diagnosis traced this to `recomputeTutorialProgress` in `srv/lib/content-store.js` — for each of ~1400 tutorials in a publish, it issues 3 + 2N SQL queries where N = users with TaskRecords on that tutorial. With 10.8M total TaskRecords, a single /append batch (25 slugs) was taking 286+ seconds — past undici's 30s headers timeout. See failing runs:
+
+- <https://github.com/sap-tutorials/tutorials-ims/actions/runs/27790881959>
+- <https://github.com/sap-tutorials/tutorials-ims/actions/runs/27823662006>
+
+## Fix
+
+A single set-based `MERGE INTO` statement in the new function `recomputeTutorialProgressBulkSQL` does what the JS recompute did, but as one HANA-native column-store operation. SQLite path (unit tests) keeps the existing JS implementation as a fallback.
+
+Three call sites switch to the bulk function:
+
+- `srv/lib/content-publish-session.js` `appendToSession` (per-batch)
+- `srv/lib/content-publish-session.js` `recomputeProgressForChangedTutorials` (commit-time safety net, also batched slug-resolution)
+- `srv/lib/content-store.js` legacy `publishHandler`
+
+Issues #420 (worker_threads pool) and #421 (split publish-worker app) were the wrong-tier diagnoses — both predicted to remain de-prioritized after this lands since the publish event loop is no longer saturated. Will close them after PR merge confirms.
+
+## Spec + plan
+
+- Spec: docs/superpowers/specs/2026-06-19-publish-progress-recompute-set-based-sql-design.md
+- Plan: docs/superpowers/plans/2026-06-19-publish-progress-recompute-set-based-sql.md
+
+## Live deploy validation history
+
+(filled in after Phase E2-E3 smoke completes)
+
+Closes #382 phase E.
+EOF
+
+gh pr create --title "fix(publish): bulk SQL recompute for TUTORIAL TaskRecords (closes #382 phase E)" --body-file .pr-body-c4.tmp.md
+rm .pr-body-c4.tmp.md
+```
 
 - [ ] **Step 3: Confirm with Tom before merge**
 
@@ -700,7 +760,7 @@ Comment on the closed PR with the run URL + the 4 HTTP 200s. Mark #382 phase E c
 - [ ] Phase A: MERGE INTO statement validated on DEV HANA, idempotent, fast
 - [ ] Phase B: New module + 4 unit tests, all passing on SQLite
 - [ ] Phase C: 6 hybrid tests passing on DEV HANA (correctness + scale + concurrency)
-- [ ] Phase D: Three call sites switched; spec/plan committed; full unit test sweep green
+- [ ] Phase D: Three call sites switched; full unit test sweep green
 - [ ] Phase E: PR merged; live publish completes in <90s; 4 phase-E slugs return 200
 
 ---
