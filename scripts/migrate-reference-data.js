@@ -103,6 +103,7 @@ async function importData() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-migration-mode': 'true',
           ...(AUTH_TOKEN ? { Authorization: `Bearer ${AUTH_TOKEN}` } : {})
         },
         body: JSON.stringify(record)
@@ -146,6 +147,7 @@ async function populateSlugs() {
 
   const headers = {
     'Content-Type': 'application/json',
+    'x-migration-mode': 'true',
     ...(AUTH_TOKEN ? { Authorization: `Bearer ${AUTH_TOKEN}` } : {})
   };
 

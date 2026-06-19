@@ -33,6 +33,7 @@ import { defaultLoadQuestion } from './lib/validate-answer-question-loader.js';
 import { scheduleRebuild, checkFeatureFlag as checkRebuildTriggerFeatureFlag } from './lib/rebuild-trigger.js';
 import { handleUIEvent, checkFeatureFlag as checkUIEventFeatureFlag } from './lib/ui-event-handler.js';
 import { backfillUserProfile } from './lib/resolve-db-user.js';
+import { registerMigrationModeHandler } from './lib/migration-mode.js';
 
 // Late-bound POST /chat/stream handler. Registered in 'bootstrap' (before CAP
 // mounts ChatService at /chat, which would otherwise swallow /chat/stream as
@@ -372,6 +373,14 @@ cds.on('served', async () => {
       }
     });
     globalThis.__navigatorCacheInvalidatorRegistered = true;
+  }
+
+  // Skip @cap-js/change-tracking output for admin-authenticated bulk-migration
+  // requests that send `x-migration-mode: true`. Sets `ct.skip` session var on
+  // the DB tx; reset in paired after-handler. See spec #394.
+  if (!globalThis.__migrationModeRegistered) {
+    registerMigrationModeHandler();
+    globalThis.__migrationModeRegistered = true;
   }
 
   // [#201] Register after-hooks that keep the categories facet cache warm

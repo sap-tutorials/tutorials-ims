@@ -233,7 +233,7 @@ PR 2 (data model + HDI deploy) MUST land all of:
   the corresponding service instance bound to `tutorials-db-deployer` (and
   `tutorials-db-qa-deployer`) via `mta.yaml`. Service-creation steps go in the
   PR 2 commit message + a runbook entry under
-  [docs/developers/operations/](../operations/).
+  [docs/developers/operations/kg-grantor-setup.md](../operations/kg-grantor-setup.md).
 - **Operations runbook:** see [docs/developers/operations/kg-grantor-setup.md](../operations/kg-grantor-setup.md) for the per-environment grantor-user setup steps.
 
 A deploy without these in place will fail at the first SPARQL call in PR 4
@@ -331,8 +331,8 @@ PR 2 (data model + HDI deploy) MUST also include an `.hdbgrants` artefact
 declaring `SPARQL QUERY` and `SPARQL UPDATE` against the container's
 `default_access_role`, plus the corresponding grantor-user setup in HANA
 Cloud and the grantor service binding in `mta.yaml`. See § Privileges
-required > HDI delivery for the full flow. **Direct `GRANT … TO
-<runtime-user>` is the anti-pattern and must not be used as a workaround** —
+required &gt; HDI delivery for the full flow. **Direct `GRANT … TO
+&lt;runtime-user&gt;` is the anti-pattern and must not be used as a workaround** —
 it does not survive HDI redeploys and breaks the principle that container
 privileges are declarative.
 

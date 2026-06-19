@@ -191,6 +191,8 @@ Migration scripts in `scripts/` support parallel operation during cutover:
 
 Set `IMS_BASE_URL`, `CAP_BASE_URL`, and `IMS_AUTH_TOKEN` env vars. Export files go to `.migration-data/` (gitignored).
 
+- **Change tracking is suppressed for REST migrators** via the `x-migration-mode: true` header sent by `migrate-reference-data.js` and `migrate-user-progress.js`. The HANA-to-HANA path (`migrate-from-hana.js`) still fires DB-level changelog triggers — see [migration-from-ims.md](docs/developers/operations/migration-from-ims.md) for mitigations.
+
 ### CI/CD (.github/workflows/)
 
 - **`deploy.yml`** — Full MTA build + deploy to BTP Cloud Foundry, followed by smoke tests
