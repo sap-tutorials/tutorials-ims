@@ -8,7 +8,7 @@
 
 `upsertTutorialMetadata` at [srv/lib/content-publish-session.js:300-326](../../../srv/lib/content-publish-session.js#L300) creates new `Tutorials` rows without assigning `legacyId`. The companion Steps INSERT at line 348 correctly uses `getNextLegacyId('Steps', db)` — Tutorials was simply missed.
 
-Surfaced 2026-06-19 during #382 phase F1 mission-data repair: all 4 newly-published meta-tutorials (`use-codecheck-...`, `use-validate-...`, `use-autoauthor-...`, `tutorial-platform-feature-cookbook`) had `Tutorials.LEGACYID = NULL`. Existing tutorials (max legacyId 25214) all have non-NULL values from the IMS migration.
+Surfaced 2026-06-19 during #382 phase F1 mission-data repair: 5 known NULL rows at the time of issue authoring (4 newly-published meta-tutorials — `use-codecheck-...`, `use-validate-...`, `use-autoauthor-...`, `tutorial-platform-feature-cookbook` — plus the historical `test-tutorial` slug). The repair script's `WHERE legacyId IS NULL` scan handles any additional NULL rows accumulated between issue authoring and merge. Existing tutorials (max legacyId 25214) all have non-NULL values from the IMS migration.
 
 ## Why this matters (downstream NULL propagation)
 
@@ -29,11 +29,21 @@ Two parts:
 
 ## Approach
 
-### 1. Forward fix (single-line addition)
+### 1. Forward fix (single-line addition + opportunistic UPDATE-branch self-heal)
 
-[srv/lib/content-publish-session.js](../../../srv/lib/content-publish-session.js) line 314–325 currently:
+[srv/lib/content-publish-session.js](../../../srv/lib/content-publish-session.js) line 303–326 currently:
 
 ```js
+if (tutorialId) {
+  await UPDATE(Tutorials).where({ ID: tutorialId }).set({
+    title: meta.title,
+    description: meta.description || null,
+    averageTimeToComplete: meta.time || null,
+    experienceTag: meta.level || null,
+    primaryTag: meta.primaryTag || null,
+    stepCount: Array.isArray(meta.steps) ? meta.steps.length : null,
+    status: 'ACTIVE'
+  });
 } else {
   tutorialId = cds.utils.uuid();
   await INSERT.into(Tutorials).entries({
@@ -53,6 +63,24 @@ Two parts:
 Becomes:
 
 ```js
+if (tutorialId) {
+  // [#431] Self-heal: if an existing row was inserted with NULL legacyId by
+  // the bug pre-this-fix, fill it in on the next publish. Avoids relying on
+  // the repair script for any tutorial that gets re-published after deploy.
+  const existingLegacy = (await SELECT.one.from(Tutorials).where({ ID: tutorialId }).columns('legacyId'))?.legacyId;
+  const updates = {
+    title: meta.title,
+    description: meta.description || null,
+    averageTimeToComplete: meta.time || null,
+    experienceTag: meta.level || null,
+    primaryTag: meta.primaryTag || null,
+    stepCount: Array.isArray(meta.steps) ? meta.steps.length : null,
+    status: 'ACTIVE'
+  };
+  if (existingLegacy == null) {
+    updates.legacyId = await getNextLegacyId('Tutorials', db);
+  }
+  await UPDATE(Tutorials).where({ ID: tutorialId }).set(updates);
 } else {
   tutorialId = cds.utils.uuid();
   await INSERT.into(Tutorials).entries({
@@ -70,6 +98,8 @@ Becomes:
 }
 ```
 
+Two changes: the INSERT branch unconditionally assigns `legacyId`, and the UPDATE branch reads the existing `legacyId` first and assigns one only if NULL (self-heal). Note that the UPDATE-branch self-heal does NOT propagate to `CompletionPathItems` — that propagation is only done by the repair script. The self-heal closes the *forward* leak; it doesn't replace the script's downstream-fixup duty.
+
 `getNextLegacyId('Tutorials', db)` already exists in the allowlist at [srv/lib/legacy-id.js:5](../../../srv/lib/legacy-id.js#L5). HANA hits `COM_SAP_DEVELOPERS_IMS_TUTORIALS_SEQ`; SQLite uses an in-memory counter starting at 10,000,000.
 
 ### 2. Forward regression test (hybrid HANA test)
@@ -78,13 +108,23 @@ Add a new `it()` block to [test/hybrid/content-publish-chunked.test.js](../../..
 
 ```js
 it('upsertTutorialMetadata assigns a non-null legacyId on INSERT for new slugs (#431)', async () => {
-  // Drive a chunked publish for a brand-new slug, then assert the resulting
-  // Tutorials row carries a positive integer legacyId.
-  // ...uses the same helpers + cleanup pattern as the existing tests in this file.
+  // 1. Drive a chunked publish for a brand-new __TEST__ slug (mirroring the
+  //    existing "case-insensitively" test's setup pattern).
+  // 2. SELECT.one.from(Tutorials).where({ slug }).columns('legacyId')
+  // 3. expect(row.legacyId).toBeTypeOf('number')
+  //    expect(row.legacyId).toBeGreaterThan(0)
+});
+
+it('upsertTutorialMetadata UPDATE branch self-heals NULL legacyId on republish (#431)', async () => {
+  // 1. Manually INSERT a Tutorials row with legacyId: null (mimics a
+  //    pre-fix-deploy stub).
+  // 2. Drive a chunked publish for the same slug → exercises the UPDATE
+  //    branch.
+  // 3. SELECT and assert legacyId is now a positive integer.
 });
 ```
 
-Mirror the existing `upsertTutorialMetadata matches mixed-case Tutorials.slug case-insensitively` test for setup/teardown shape. Verify legacyId > 0. The unit-test path doesn't apply because `upsertTutorialMetadata` is tightly coupled to `cds.entities()` and DB sequences — the hybrid test is the right altitude.
+Mirror the existing `upsertTutorialMetadata matches mixed-case Tutorials.slug case-insensitively` test for setup/teardown shape. The unit-test path doesn't apply because `upsertTutorialMetadata` is tightly coupled to `cds.entities()` and DB sequences — the hybrid test is the right altitude.
 
 ### 3. Backward repair script: `scripts/repair-tutorial-legacyid.cjs`
 
