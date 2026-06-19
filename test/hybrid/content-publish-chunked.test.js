@@ -8,6 +8,7 @@ import { tutorialsTableInfo } from '../../srv/lib/_tutorials-table.js';
 const NS = 'com.sap.developers.ims';
 const PREFIX = '__TEST__chunked-';
 const MIXED_PREFIX = '__TEST__mixedcase-';
+const LEGACY_PREFIX = '__TEST__legacyid-';
 
 describe('content publish chunked — HANA', () => {
   let helpers;
@@ -37,6 +38,7 @@ describe('content publish chunked — HANA', () => {
     // Clean any test slugs in ContentFiles (both prefixes).
     await DELETE.from(ContentFiles).where({ slug: { like: `${PREFIX}%` } });
     await DELETE.from(ContentFiles).where({ slug: { like: `${MIXED_PREFIX}%` } });
+    await DELETE.from(ContentFiles).where({ slug: { like: `${LEGACY_PREFIX}%` } });
 
     // Clean Tutorials and Steps rows for mixed-case test slugs.
     // Use raw SQL with LOWER() so a row seeded with mixed-case slug is caught
@@ -55,6 +57,19 @@ describe('content publish chunked — HANA', () => {
     );
     if (mixedRows.length) {
       const ids = mixedRows.map(r => r.ID ?? r.id);
+      for (const id of ids) {
+        await db.run(`DELETE FROM ${stepsTable} WHERE ${tutorialIdCol} = ?`, [id]);
+      }
+      await DELETE.from(Tutorials).where({ ID: { in: ids } });
+    }
+
+    // Same cleanup for the LEGACY_PREFIX rows used by the #431 regression tests.
+    const legacyRows = await db.run(
+      `SELECT ${idCol} FROM ${tutTable} WHERE LOWER(${slugCol}) LIKE ?`,
+      [`${LEGACY_PREFIX.toLowerCase()}%`]
+    );
+    if (legacyRows.length) {
+      const ids = legacyRows.map(r => r.ID ?? r.id);
       for (const id of ids) {
         await db.run(`DELETE FROM ${stepsTable} WHERE ${tutorialIdCol} = ?`, [id]);
       }
@@ -195,5 +210,98 @@ describe('content publish chunked — HANA', () => {
     // 4. Verify Steps rows were created under the same tutorial ID (not a new duplicate row).
     const steps = await SELECT.from(Steps).where({ tutorial_ID: seedId });
     expect(steps.length).toBe(3);
+  });
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Issue #431 regressions: upsertTutorialMetadata must assign a non-null
+  // legacyId on INSERT and self-heal NULL on UPDATE.
+  //
+  // Why these tests use appendToSession + abortSession: upsertTutorialMetadata
+  // runs as a side-effect of appendToSession, writing directly to Tutorials/
+  // Steps (NOT through the manifest). abortSession rolls back the manifest
+  // but leaves the Tutorials/Steps writes intact — exactly the hook we need.
+  // ────────────────────────────────────────────────────────────────────────
+
+  it('upsertTutorialMetadata assigns a non-null legacyId on INSERT for new slugs (#431)', async () => {
+    const slug = `${LEGACY_PREFIX}forward-insert`;
+    const html = `<html><body><main class="tutorial-main">${slug}</main></body></html>`;
+
+    const db = await cds.connect.to('db');
+    const { Tutorials } = cds.entities(NS);
+
+    // Sanity: ensure no pre-existing row for this slug.
+    const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+    const { table: tutTable, slugCol } = tutorialsTableInfo(NS, isHana);
+    const pre = await db.run(`SELECT COUNT(*) AS C FROM ${tutTable} WHERE LOWER(${slugCol}) = ?`, [slug]);
+    expect(pre[0].C ?? pre[0].c).toBe(0);
+
+    // Drive a chunked publish that creates a brand-new Tutorials row.
+    const begin = await helpers.beginPublishSession({
+      trigger: 'hybrid-legacyid-insert', hugoVersion: 'test', expectedSlugCount: 1
+    });
+    await helpers.appendToSession({
+      sessionId: begin.sessionId,
+      files: { [slug]: gzipSync(Buffer.from(html)).toString('base64') },
+      metadata: {
+        [slug]: {
+          title: 'legacyid forward insert probe',
+          steps: [{ number: 1, title: 'Step one' }, { number: 2, title: 'Step two' }],
+        },
+      },
+      bodyTexts: {},
+    });
+    await helpers.abortSession({ sessionId: begin.sessionId, reason: 'legacyid-probe-cleanup' });
+
+    // Assert: the newly-inserted Tutorials row has a positive legacyId.
+    const row = await SELECT.one.from(Tutorials).where({ slug }).columns('ID', 'legacyId');
+    expect(row).toBeTruthy();
+    expect(typeof row.legacyId).toBe('number');
+    expect(row.legacyId).toBeGreaterThan(0);
+  });
+
+  it('upsertTutorialMetadata UPDATE branch self-heals NULL legacyId on republish (#431)', async () => {
+    const slug = `${LEGACY_PREFIX}update-selfheal`;
+    const seedId = cds.utils.uuid();
+
+    const db = await cds.connect.to('db');
+    const { Tutorials } = cds.entities(NS);
+
+    // 1. Manually INSERT a Tutorials row with legacyId: null (mimics a stub
+    //    written before the fix landed — the bug shape from #431).
+    await INSERT.into(Tutorials).entries({
+      ID: seedId,
+      slug,
+      title: 'legacyid update self-heal probe',
+      status: 'ACTIVE',
+      stepCount: null,
+      legacyId: null,
+    });
+
+    // Sanity: confirm legacyId is NULL.
+    const before = await SELECT.one.from(Tutorials).where({ ID: seedId }).columns('legacyId');
+    expect(before?.legacyId).toBeNull();
+
+    // 2. Drive a publish for the same slug → exercises the UPDATE branch.
+    const html = `<html><body><main class="tutorial-main">${slug}</main></body></html>`;
+    const begin = await helpers.beginPublishSession({
+      trigger: 'hybrid-legacyid-update', hugoVersion: 'test', expectedSlugCount: 1
+    });
+    await helpers.appendToSession({
+      sessionId: begin.sessionId,
+      files: { [slug]: gzipSync(Buffer.from(html)).toString('base64') },
+      metadata: {
+        [slug]: {
+          title: 'legacyid update self-heal probe',
+          steps: [{ number: 1, title: 'Step one' }],
+        },
+      },
+      bodyTexts: {},
+    });
+    await helpers.abortSession({ sessionId: begin.sessionId, reason: 'legacyid-probe-cleanup' });
+
+    // 3. Assert: the same row now has a positive legacyId.
+    const after = await SELECT.one.from(Tutorials).where({ ID: seedId }).columns('legacyId');
+    expect(typeof after?.legacyId).toBe('number');
+    expect(after.legacyId).toBeGreaterThan(0);
   });
 });
