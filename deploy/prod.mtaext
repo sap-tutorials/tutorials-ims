@@ -8,6 +8,8 @@ modules:
       instances: 2
     properties:
       CONTENT_API_KEY: ${content-api-key}
+      GITHUB_DISPATCH_TOKEN: ${github-dispatch-token}
+      REBUILD_TARGET_ENV: prod
 
   - name: tutorials-approuter
     parameters:

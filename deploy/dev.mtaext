@@ -7,6 +7,8 @@ modules:
     properties:
       EXPOSE_CAP_UI: true
       CONTENT_API_KEY: tutorials-content-publish-2024
+      GITHUB_DISPATCH_TOKEN: ${github-dispatch-token}
+      REBUILD_TARGET_ENV: dev
 
   - name: tutorials-approuter
     parameters:

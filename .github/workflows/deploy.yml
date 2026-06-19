@@ -131,6 +131,7 @@ jobs:
             --var content-api-key="${{ secrets.CONTENT_API_KEY }}" \
             --var rebuild-api-key="${{ secrets.REBUILD_API_KEY }}" \
             --var approuter-url="${{ steps.deploy-vars.outputs.approuter_url }}" \
+            --var github-dispatch-token="${{ secrets.DISPATCH_TOKEN }}" \
             $STRATEGY_FLAGS \
             -f
 
