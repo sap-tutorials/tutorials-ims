@@ -44,11 +44,11 @@ Validate via the boot log line: `[rebuild-trigger] active — admin writes will 
 
    Expect: HTTP 204 (no body). A new run should appear in the [Actions tab](https://github.com/sap-tutorials/tutorials-ims/actions/workflows/rebuild-content.yml) within seconds.
 
-3. **Update the GitHub Actions secret + redeploy each environment.** The token now lives in the `GITHUB_DISPATCH_TOKEN` repository secret and is injected into each `tutorials-srv` deploy via `cf deploy --var github-dispatch-token=...`. `REBUILD_TARGET_ENV` is a literal in each `deploy/<env>.mtaext` and does not need rotation.
+3. **Update the GitHub Actions secret + redeploy each environment.** The token lives in the `DISPATCH_TOKEN` repository secret (named `DISPATCH_TOKEN` — not `GITHUB_DISPATCH_TOKEN` — because GitHub reserves the `GITHUB_` prefix for secret names) and is injected into each `tutorials-srv` deploy via `cf deploy --var github-dispatch-token=...`. The runtime env var on `tutorials-srv` is still `GITHUB_DISPATCH_TOKEN` (that's what `srv/lib/rebuild-trigger.js` reads); only the GitHub Actions secret had to drop the prefix. `REBUILD_TARGET_ENV` is a literal in each `deploy/<env>.mtaext` and does not need rotation.
 
    ```bash
    # Update the repo-level secret (one-time, applies to all envs):
-   gh secret set GITHUB_DISPATCH_TOKEN --repo sap-tutorials/tutorials-ims --body "<NEW_TOKEN>"
+   gh secret set DISPATCH_TOKEN --repo sap-tutorials/tutorials-ims --body "<NEW_TOKEN>"
 
    # Then trigger the Build & Deploy workflow (.github/workflows/deploy.yml) for each env:
    gh workflow run deploy.yml --repo sap-tutorials/tutorials-ims -f environment=dev
@@ -78,7 +78,7 @@ If the token is suspected leaked (committed to a repo, posted in a chat, posted 
 
 | Mode | Symptom | Action |
 |---|---|---|
-| **Token unset** | `[rebuild-trigger]` boot warning; admin writes don't trigger rebuilds | Acceptable degraded mode — content stays fresh via the existing push trigger only. Confirm `gh secret list --repo sap-tutorials/tutorials-ims` shows `GITHUB_DISPATCH_TOKEN`; if missing, add it and trigger a redeploy. If present, check the most recent deploy run's `Deploy MTA` step for the `--var github-dispatch-token=` line. |
+| **Token unset** | `[rebuild-trigger]` boot warning; admin writes don't trigger rebuilds | Acceptable degraded mode — content stays fresh via the existing push trigger only. Confirm `gh secret list --repo sap-tutorials/tutorials-ims` shows `DISPATCH_TOKEN` (note: secret is named `DISPATCH_TOKEN`, not `GITHUB_DISPATCH_TOKEN`, because GitHub reserves the `GITHUB_` prefix); if missing, add it and trigger a redeploy. If present, check the most recent deploy run's `Deploy MTA` step for the `--var github-dispatch-token=` line. |
 | **Token expired / revoked** | GitHub returns 401; admin save logs `[rebuild-trigger] dispatch failed: GitHub dispatch 401 ...` | Rotate per the steps above. Admin saves still succeed; only the auto-rebuild dispatch is broken. |
 | **`REBUILD_TARGET_ENV` mismatch** | Admin save on QA srv triggers a DEV rebuild (or vice versa); boot log shows `environment='dev'` on a non-DEV space | Set `REBUILD_TARGET_ENV` to match the space (`qa`/`prod`) and `cf restart`. Until then content stays fresh on the wrong env. |
 | **Token over-permissioned** | Token has scopes beyond `actions:write` (e.g. `contents:write`, `metadata:read`, etc.) | Defense-in-depth violation, not an outage. Re-issue with `actions:write` only on next rotation cycle. |
