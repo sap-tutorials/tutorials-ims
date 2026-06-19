@@ -4,6 +4,7 @@ import { cleanupStepFailures, cleanupUnusedTags, cleanupContentVersions, cleanup
 import { retryNgds } from './ngds-retry.js';
 import { processAccountMerges } from './account-merge-job.js';
 import { runReconciliationJob } from './embedding-reconciliation.js';
+import { runExtractConcepts } from './extract-concepts-job.js';
 import { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, isNotificationsEnabled } from '../lib/contributor-notifications.js';
 import { sendNotificationEmail, retryFailedEmails } from '../lib/mail-client.js';
 import { logPipelineStart, logPipelineEnd, logJobItem } from '../lib/pipeline-log.js';
@@ -177,6 +178,14 @@ export function registerJobs() {
   // Every 4 hours — email retry
   cron.schedule('0 */4 * * *', () =>
     runWithLock('email-retry', 900000, retryFailedEmails)
+  );
+
+  // Daily at 02:13 — knowledge-graph concept extraction (#381 PR 3).
+  // Off-minute (:13) to avoid the :00/:30 thundering herd. 30-min TTL covers
+  // a full pass of ~1400 tutorials at ~1s/tutorial cache-hit + ~3s/tutorial
+  // LLM call up to KG_EXTRACT_BUILD_CAP (default 200/tick).
+  cron.schedule('13 2 * * *', () =>
+    runWithLock('extractConcepts', 30 * 60 * 1000, runExtractConcepts)
   );
 
   LOG.info('All scheduled jobs registered');
