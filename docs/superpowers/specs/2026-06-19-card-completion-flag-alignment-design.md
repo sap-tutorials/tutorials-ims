@@ -27,15 +27,15 @@ Cards in the same grid row share identical content widths and horizontal baselin
 1. **[hugo-apps/src/shared/cards/card.css](../../../hugo-apps/src/shared/cards/card.css)**
    - **Move `.nav-card__progress`** from `left: 0.75rem` to `right: 0.75rem` (keep `top: 0.75rem`).
    - **Delete** the three-selector `padding-left: 3rem` rule at lines 163–167. Title/desc/type-label go back to flowing from the natural card padding edge on every card.
-   - **Add license collision rule:** `.nav-card--has-progress .nav-card__license { right: 3.5rem; }` — when a tutorial card has both a license icon AND a progress ring, the license shifts left so the two sit side-by-side at the top-right corner: `[license][ring]`.
+   - **Add license collision rule:** `.nav-card--has-progress .nav-card__license { right: 3.75rem; }` — when a tutorial card has both a license icon AND a progress ring, the license shifts left so the two sit side-by-side at the top-right corner: `[license][ring]`. (3.75rem = 0.75rem gutter + 2.5rem ring + 0.5rem gap.)
 
 2. **No markup changes.** [MissionCard.vue](../../../hugo-apps/src/shared/cards/MissionCard.vue), [GroupCard.vue](../../../hugo-apps/src/shared/cards/GroupCard.vue), [TutorialCard.vue](../../../hugo-apps/src/shared/cards/TutorialCard.vue), and the three Hugo mirror partials at [hugo/layouts/partials/browse/_partials/card-*.html](../../../hugo/layouts/partials/browse/_partials/) stay byte-equivalent. The drift-parity test (existing) keeps passing.
 
 3. **No JS changes.** `cardProgress()` semantics, `ProgressPayload` shape, and `nav-card--has-progress` class application are unchanged.
 
 4. **Test additions in [hugo-apps/src/shared/cards/cards.test.ts](../../../hugo-apps/src/shared/cards/cards.test.ts):**
-   - Add a regression assertion that the `padding-left: 3rem` rule no longer exists. Implement as a string check on the imported card.css contents OR a getComputedStyle assertion on a mounted ringed card (no left-padding inflation).
-   - Confirm `.nav-card__progress` resolves to a position with `right` set (not `left`).
+   - Add a regression assertion using `getComputedStyle` on a mounted ringed card: confirm `padding-left` resolves to the same value as a non-ringed card (i.e., no left-padding inflation). Matches the existing test style.
+   - Confirm the mounted `.nav-card__progress` element resolves to a position with `right` set (not `left`).
 
 5. **No spec drift on Hugo partials.** Card markup is unchanged; only its CSS shifts. The "markup MUST be byte-equivalent" parity invariant in the partial header comments is preserved.
 
@@ -51,7 +51,7 @@ Cards in the same grid row share identical content widths and horizontal baselin
 
 | Mode | Symptom | Action |
 |---|---|---|
-| Tutorial with both license icon AND progress ring | License icon overlaps ring at top-right | The `.nav-card--has-progress .nav-card__license { right: 3.5rem; }` rule shifts the license left. Both visible side-by-side: `[license 14px][ring 2.5rem]`. |
+| Tutorial with both license icon AND progress ring | License icon overlaps ring at top-right | The `.nav-card--has-progress .nav-card__license { right: 3.75rem; }` rule shifts the license left. Both visible side-by-side: `[license 14px][gap][ring 2.5rem]`. |
 | Ring + NEW badge | NEW badge is at bottom-right ([card.css:31–44](../../../hugo-apps/src/shared/cards/card.css#L31-L44)) — different corner; no collision. | None. |
 | Ring + category-chip (`ui5-tag`) | Category chip is at end of card flow (no positioning); ring is absolute. No collision. | None. |
 | `padding-left: 3rem` regression sneaking back | Visible misalignment returns | Caught by the regression test (Task 4). |
@@ -81,7 +81,7 @@ After the fix is applied locally and built (`npm run dev`):
 3. On a tutorial card that has both a license AND progress:
    - License icon and ring sit side-by-side at the top-right, license on the left of the ring.
 
-4. Hugo partial parity test (existing) passes — Vue and Hugo card markup stay byte-equivalent.
+4. Hugo partial drift-parity test (existing) runs unchanged and must still pass — only CSS changed; markup is byte-equivalent across Vue and Hugo.
 
 5. Unit tests: existing `<ProgressOverlay>` SSR/CSR tests still pass; new regression test for the absent `padding-left` rule passes.
 
