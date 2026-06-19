@@ -2146,6 +2146,27 @@ html.dark .tutorial-main img:hover {
   }
 }
 
+/* Knowledge-graph "Related concepts" sidebar — responsive split.
+   .kg-sidebar-desktop lives inside <aside class="tutorial-right-col"> which
+   itself goes display:none below 960px. The companion .kg-sidebar-mobile
+   placeholder lives in the main content column and is only visible below
+   960px. main.ts uses window.matchMedia to mount the Vue app onto exactly
+   one placeholder per viewport — the other stays in the DOM but unmounted. */
+.kg-sidebar-desktop {
+  display: block;
+}
+.kg-sidebar-mobile {
+  display: none;
+}
+@media (max-width: 960px) {
+  .kg-sidebar-mobile {
+    display: block;
+  }
+  .kg-sidebar-desktop {
+    display: none;
+  }
+}
+
 @media (max-width: 640px) {
   .tutorial-nav-bottom {
     flex-direction: column;

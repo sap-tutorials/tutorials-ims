@@ -352,6 +352,16 @@
             <ui5-button design="Default" icon="post" onclick="window.open('https://community.sap.com/t5/forums/searchpage/tab/message?q={{ .Params.slug }}', '_blank')">Discuss in Community</ui5-button>
           </div>
         </section>
+
+        {{/* Knowledge-graph "Related concepts" — mobile mount.
+             At narrow widths the right column is display:none, so the
+             desktop mount inside <aside class="tutorial-right-col"> below
+             never shows. This duplicate placeholder lives in the main
+             content column and is gated to mobile via the `kg-sidebar-mobile`
+             class (see hugo/assets/css). main.ts picks ONE mount per viewport
+             via window.matchMedia so we don't double-fetch + double-emit
+             telemetry. Same QA/preview gate as the desktop mount. */}}
+        {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<div data-vue-island="related-graph" class="kg-sidebar-mobile"></div>{{ end }}
       </div>
 
       <aside class="tutorial-right-col">
@@ -379,7 +389,7 @@
              returns 503 when off, which the component renders as a hidden
              empty state). The component reads the slug from <html
              data-page-slug="…">, set by baseof.html. */}}
-        {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<div data-vue-island="related-graph"></div>{{ end }}
+        {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<div data-vue-island="related-graph" class="kg-sidebar-desktop"></div>{{ end }}
       </aside>
     </main>
   </div>
