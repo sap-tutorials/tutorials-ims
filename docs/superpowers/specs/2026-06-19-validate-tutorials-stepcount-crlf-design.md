@@ -30,17 +30,27 @@ Two changes:
 
 ### 1. Centralize line-ending normalization in `composeTutorial()`
 
-**[scripts/parsers/compose.ts](../../../scripts/parsers/compose.ts)**: at the very top of the function, normalize `rawMd` to LF line endings:
+**[scripts/parsers/compose.ts](../../../scripts/parsers/compose.ts)**: extract a small exported helper `normalizeLineEndings(s: string): string` and call it at the very top of `composeTutorial()` before any other processing:
 
 ```ts
+/**
+ * Normalize line endings to LF. Catches CRLF (Windows) and CR-only
+ * (legacy Mac) input so downstream regexes that anchor on `$` (which
+ * in JS doesn't match before `\r`) see consistent line terminators.
+ * Spec: docs/superpowers/specs/2026-06-19-validate-tutorials-stepcount-crlf-design.md (#432).
+ */
+export function normalizeLineEndings(s: string): string {
+  return s.replace(/\r\n?/g, '\n')
+}
+
 export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult {
-  const normalized = rawMd.replace(/\r\n?/g, '\n')  // CRLF or CR-only → LF
+  const normalized = normalizeLineEndings(rawMd)
   const { title, description, ... } = extractFrontmatter(normalized)
   // ... rest unchanged
 }
 ```
 
-A single normalization at the entry point means every downstream parser (`extractFrontmatter`, `resolveImageURLs`, `convertOptionBlocks`, `extractBranchGroups`, `parseV1Steps`, `parseV2Steps`) sees consistent LF input. Defense against any future regex-with-`$` bug too — they all benefit.
+A single normalization at the entry point means every downstream parser (`extractFrontmatter`, `resolveImageURLs`, `convertOptionBlocks`, `extractBranchGroups`, `parseV1Steps`, `parseV2Steps`) sees consistent LF input. Defense against any future regex-with-`$` bug too — they all benefit. Exporting the helper makes it unit-testable in isolation.
 
 The replace covers three cases the wild produces:
 - `\r\n` (Windows / GitHub-from-Windows-clients) → `\n`
@@ -53,14 +63,14 @@ The replace covers three cases the wild produces:
 
 ### 2. Distinguish 0-byte sources from missing-field errors in the validator
 
-**[scripts/validate-tutorials.ts](../../../scripts/validate-tutorials.ts)**: before the `REQUIRED_FIELDS` loop, check for empty content and emit a specific reason:
+**[scripts/validate-tutorials.ts](../../../scripts/validate-tutorials.ts)**: before the `REQUIRED_FIELDS` loop, check for empty (or whitespace-only) content and emit a specific reason:
 
 ```ts
 const content = readFileSync(join(TUTORIALS_DIR, file), 'utf-8')
 let reason: string | null = null
 
 if (content.trim().length === 0) {
-  reason = `Tutorial source is empty (0 bytes) — likely an empty stub in the upstream repo`
+  reason = `Tutorial source is empty or whitespace-only — likely an empty stub in the upstream repo`
 } else {
   try {
     const { data: fm } = matter(content)
@@ -69,7 +79,7 @@ if (content.trim().length === 0) {
 }
 ```
 
-This converts the cryptic `Missing required frontmatter field: type` (true but unhelpful — frontmatter is empty because the file is empty) into an actionable message that points authors at the upstream stub. No behavioral change otherwise: still quarantines, still proceeds with the rest of the run.
+This converts the cryptic `Missing required frontmatter field: type` (true but unhelpful — frontmatter is empty because the file is empty) into an actionable message that points authors at the upstream stub. Catches both literal-zero-bytes (e.g. `abap-environment-create-tile.md`) and the rare whitespace-only-file case. No behavioral change otherwise: still quarantines, still proceeds with the rest of the run.
 
 ### What does NOT change
 
@@ -95,7 +105,7 @@ This converts the cryptic `Missing required frontmatter field: type` (true but u
 | Future tutorial uses `\r\n` line endings | Normalized at `composeTutorial()` entry; all parsers see LF. | None. |
 | Future tutorial uses `\r` only (CR-only) | Same — `\r\n?` covers both. | None. |
 | Tutorial body has stray `\r` mid-line (rare; e.g. inside a code block) | Replaced with `\n` — could affect rendered output of the code block. | Acceptable — `\r` mid-line is virtually never authored intentionally; if it ever is, escape it as `\r` text. |
-| Tutorial source is 0 bytes (upstream stub) | Quarantine with `Tutorial source is empty (0 bytes) — likely an empty stub in the upstream repo`. | Author fixes the source repo. |
+| Tutorial source is 0 bytes (upstream stub) OR whitespace-only | Quarantine with `Tutorial source is empty or whitespace-only — likely an empty stub in the upstream repo`. | Author fixes the source repo. |
 | Tutorial declares `parser: v2` but has no `### ` headings | Quarantine with `Invalid stepCount value: 0` (existing behavior). | Author adds `### ` headings or removes the `parser: v2` declaration. |
 
 ## Out of scope
