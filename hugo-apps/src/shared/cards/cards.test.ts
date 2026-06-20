@@ -310,14 +310,28 @@ describe('issue #399: ring presence does not shift content', () => {
   })
 
   it('positions the progress overlay at right, not left', () => {
-    // Find the .nav-card__progress rule body. Has to anchor on the rule
-    // selector to avoid matching the license-collision rule that also
-    // mentions .nav-card.
-    const m = cardCss.match(/\.nav-card__progress\s*\{([^}]*)\}/)
-    expect(m, 'expected a .nav-card__progress rule').not.toBeNull()
+    // Find the rule body for the ring overlay. The selector is intentionally
+    // specific (`.nav-card .progress-ring.nav-card__progress`, 0,3,0) to beat
+    // ProgressRing.vue's scoped `<style scoped>` rule
+    // `.progress-ring[data-v-XXX] { position: relative }` which is 0,2,0.
+    // A plain `.nav-card__progress { ... }` (0,1,0) loses the cascade and
+    // leaves the ring at `position: relative` — see #399 follow-up
+    // 2026-06-20 (Playwright reproduction on the deployed DEV approuter).
+    const m = cardCss.match(/\.nav-card\s+\.progress-ring\.nav-card__progress\s*\{([^}]*)\}/)
+    expect(m, 'expected a `.nav-card .progress-ring.nav-card__progress` rule').not.toBeNull()
     const body = (m![1] || '').replace(/\s+/g, ' ')
+    expect(body).toMatch(/position:\s*absolute/)
     expect(body).toMatch(/right:\s*0\.75rem/)
     expect(body).not.toMatch(/(?:^|[\s;])left:\s*0\.75rem/)
+  })
+
+  it('uses a 0,3,0+ specificity selector for the overlay (beats ProgressRing\'s scoped 0,2,0)', () => {
+    // Defends against a future refactor that simplifies the selector down to
+    // `.nav-card__progress { ... }` (0,1,0) — which loses the cascade against
+    // ProgressRing.vue's scoped `.progress-ring[data-v-XXX]` (0,2,0) and
+    // silently re-introduces the #399 bug.
+    expect(cardCss).not.toMatch(/^\s*\.nav-card__progress\s*\{[^}]*position:\s*absolute/m)
+    expect(cardCss).toMatch(/\.nav-card\s+\.progress-ring\.nav-card__progress\s*\{/)
   })
 
   it('shifts the license icon left when a ring is also present', () => {
