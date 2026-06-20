@@ -316,4 +316,23 @@ service AdminService {
   entity AdvocateTopics  as projection on ims.AdvocateTopics;
   entity AdvocateLinks   as projection on ims.AdvocateLinks;
   entity AdvocatePhotos  as projection on ims.AdvocatePhotos;
+
+  // Phase 2-B (#464): Secrets-visibility metadata-only.
+  // Full CRUD over tracked-secret rows. NOT @odata.singleton — this is a list,
+  // not a singleton (unlike ChatSettings / KnowledgeGraphSettings).
+  @requires: 'Admin'
+  entity Secrets as projection on ims.Secrets;
+
+  // Severity-classified expiry warnings, used by the admin-shell notifications
+  // popover. Read-only function (NOT action) — invokable via GET; no CSRF
+  // token required for the popover fetch.
+  @requires: 'Admin'
+  function secretWarnings() returns array of {
+    ![key]            : String(120);
+    description       : String(500);
+    daysRemaining     : Integer;
+    severity          : String(10);
+    rotationOwner     : String(120);
+    rotationDocsUrl   : String(500);
+  };
 }
