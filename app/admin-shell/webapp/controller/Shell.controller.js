@@ -32,7 +32,12 @@ sap.ui.define([
     privacy: "privacy",
     feedbackList: "feedbackList",
     feedbackDashboard: "feedbackDashboard",
-    dataExport: "dataExport"
+    dataExport: "dataExport",
+    uiEvents: "uiEvents",
+    search: "search",
+    navigator: "navigator",
+    display: "display",
+    tenant: "tenant"
   };
 
   var NAV_KEY_TO_TITLE = {
@@ -61,11 +66,16 @@ sap.ui.define([
     privacy: "Privacy",
     feedbackList: "Tutorial Feedback",
     feedbackDashboard: "Feedback Dashboard",
-    dataExport: "Data Export"
+    dataExport: "Data Export",
+    uiEvents: "UI Events",
+    search: "Search",
+    navigator: "Navigator",
+    display: "Display",
+    tenant: "Tenant"
   };
 
   var NAV_GROUPS_STORAGE_KEY = "sap-tutorials-admin-nav-groups";
-  var NAV_GROUP_KEYS = ["content", "rewards", "feedback", "reporting", "system"];
+  var NAV_GROUP_KEYS = ["content", "rewards", "feedback", "reporting", "system", "runtimeSettings"];
 
   return Controller.extend("sap.tutorials.admin.shell.controller.Shell", {
     onInit: function () {
