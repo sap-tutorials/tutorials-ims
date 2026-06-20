@@ -7,9 +7,12 @@ build-parameters:
     - builder: custom
       commands:
         - npm install
+        # Single cds build covers all 4 targets (db, srv, db-qa, srv-qa) per
+        # .cdsrc.json's build.tasks config. The previous explicit --for db-qa /
+        # --for srv-qa lines used deprecated cds-dk flags (--output-dir, plus
+        # custom target names not in cds build's --for enum) and broke CI on
+        # 2026-06-20 with `Invalid option: --output-dir`. Issue #478.
         - npx cds build --production
-        - npx cds build --production --for db-qa --output-dir gen/db-qa
-        - npx cds build --production --for srv-qa --output-dir gen/srv-qa
         - npm --prefix hugo-apps install
         - npm run fetch-tutorials -- --target hugo
         - npm run validate-tutorials
