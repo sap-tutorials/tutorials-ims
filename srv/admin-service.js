@@ -126,6 +126,56 @@ export default class AdminService extends cds.ApplicationService {
         req.reject(400, 'At least one Tag is required');
       }
     });
+
+    // [#436] Publish-time integrity guard: refuse a published=true transition
+    // when any CompletionPathItems row is unresolvable. Drafts and unpublished
+    // saves still allow partial state for incremental authoring; only the
+    // false→true publish gate enforces correctness.
+    this.before('SAVE', 'Missions', async (req) => {
+      if (req.data.published !== true) return;
+      const ID = req.data.ID;
+      if (!ID) return;
+
+      // Detect transition: only refuse on false→true, not when re-saving an
+      // already-published mission whose payload echoes published=true.
+      const [prior] = await SELECT.from(Missions).where({ ID }).columns('published');
+      if (prior?.published === true) return;
+
+      const paths = await SELECT.from(CompletionPaths)
+        .where({ mission_ID: ID })
+        .columns('ID', 'name');
+      for (const path of paths) {
+        const items = await SELECT.from(CompletionPathItems)
+          .where({ path_ID: path.ID })
+          .columns('ID', 'itemOrder', 'taskType', 'tutorial_ID', 'group_ID', 'checkpointTitle');
+        for (const item of items) {
+          const ord = item.itemOrder ?? '?';
+          if (item.itemOrder == null) {
+            return req.reject(400, `Cannot publish: path "${path.name}" has an item with no itemOrder`);
+          }
+          switch (item.taskType) {
+            case 'TUTORIAL':
+              if (!item.tutorial_ID) {
+                return req.reject(400, `Cannot publish: path "${path.name}" item ${ord} has taskType=TUTORIAL but no tutorial linked`);
+              }
+              break;
+            case 'GROUP':
+              if (!item.group_ID) {
+                return req.reject(400, `Cannot publish: path "${path.name}" item ${ord} has taskType=GROUP but no group linked`);
+              }
+              break;
+            case 'CHECKPOINT':
+              if (!item.checkpointTitle) {
+                return req.reject(400, `Cannot publish: path "${path.name}" item ${ord} has taskType=CHECKPOINT but no checkpointTitle`);
+              }
+              break;
+            default:
+              return req.reject(400, `Cannot publish: path "${path.name}" item ${ord} has unknown taskType "${item.taskType}"`);
+          }
+        }
+      }
+    });
+
     this.before('SAVE', 'Groups', async (req) => {
       const tags = req.data.tags;
       if (!tags || tags.length === 0) {
