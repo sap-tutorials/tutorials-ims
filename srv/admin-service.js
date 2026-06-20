@@ -227,6 +227,39 @@ export default class AdminService extends cds.ApplicationService {
       this.before('SAVE',   entityName, handler);
     }
 
+    // [#436] legacyId self-heal for entities authored via the admin UI's draft
+    // lifecycle (NEW on .drafts → PATCH autosaves → SAVE on activation). The
+    // existing legacyKeyedEntities loop at lines 71-85 covers `before('CREATE')`
+    // for programmatic POSTs, but NEW/PATCH/SAVE on draft-edited entities never
+    // hit CREATE — so missions/groups/paths created via Fiori (the #382 F1 path)
+    // ended up with NULL legacyId.
+    //
+    // This handler:
+    //   - Fires on NEW (draft create), PATCH (draft autosave), SAVE (activation)
+    //   - Does NOT register for CREATE (already handled by the line 71 loop)
+    //   - Self-heals UPDATE/PATCH/SAVE on existing rows whose legacyId is NULL
+    //   - Skips when the row already has legacyId (idempotent across draft lifecycle)
+    const initLegacyIdForEntity = (entityName) => async (req) => {
+      if (req.data.legacyId != null) return;
+      // Self-heal path: only do the prior-row lookup when the row exists. NEW
+      // (draft create) carries a fresh UUID in req.data.ID but has no prior
+      // row, so skip the SELECT to save a round-trip.
+      if (req.data.ID && (req.event === 'PATCH' || req.event === 'SAVE' || req.event === 'UPDATE')) {
+        const [prior] = await SELECT.from(req.target).where({ ID: req.data.ID }).columns('legacyId');
+        if (prior?.legacyId != null) return;
+      }
+      req.data.legacyId = await getNextLegacyId(entityName, db);
+    };
+
+    for (const entityName of ['Missions', 'Groups', 'CompletionPaths']) {
+      const handler = initLegacyIdForEntity(entityName);
+      this.before('NEW',   `${entityName}.drafts`, handler);
+      this.before('PATCH', `${entityName}.drafts`, handler);
+      this.before('SAVE',  entityName,             handler);
+      // CREATE is intentionally NOT registered here — the existing
+      // legacyKeyedEntities loop at lines 71-85 already covers it.
+    }
+
     // Reset notification escalation when reviewedDate is updated via Fiori UI
     this.before('UPDATE', 'TutorialMeta', (req) => {
       if (req.data.reviewedDate) {
