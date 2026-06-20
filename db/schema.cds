@@ -739,3 +739,12 @@ entity SearchSettings : cuid, managed {
   rateLimitMax         : Integer @assert.range: [0, 100000];
   rateLimitWindowMs    : Integer @assert.range: [1000, 600000];
 }
+
+
+// Phase 3 (#466): Navigator nested-group inclusion flag.
+// When true, /build/navigator emits cards for nested groups (richer behavior,
+// ~65 extra cards on dev). False matches developers.sap.com chip-counts.
+// See issue #364.
+entity NavigatorSettings : cuid, managed {
+  includeNestedGroups  : Boolean;
+}
