@@ -1,12 +1,13 @@
 import cds from '@sap/cds';
 import { timingSafeEqual } from 'node:crypto';
+import { resolveTenantSettings } from './runtime-config/tenant-settings.js';
 
 let techUsers = null;
 
-function loadTechUsers() {
+async function loadTechUsers() {
   if (techUsers) return techUsers;
 
-  const raw = process.env.TECH_USERS;
+  const raw = (await resolveTenantSettings()).techUsers;
   if (!raw) {
     techUsers = new Map();
     return techUsers;
@@ -26,8 +27,8 @@ function loadTechUsers() {
   return techUsers;
 }
 
-function loadTechUserMapping() {
-  const raw = process.env.TECH_USERS_MAPPING;
+async function loadTechUserMapping() {
+  const raw = (await resolveTenantSettings()).techUsersMapping;
   if (!raw) return new Map();
 
   // Format: "tech_id1:real_uuid1;tech_id2:real_uuid2"
@@ -39,11 +40,11 @@ function loadTechUserMapping() {
   return mapping;
 }
 
-export function basicAuthMiddleware(req, res, next) {
+export async function basicAuthMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Basic ')) return next();
 
-  const users = loadTechUsers();
+  const users = await loadTechUsers();
   if (users.size === 0) return next();
 
   try {
@@ -61,7 +62,7 @@ export function basicAuthMiddleware(req, res, next) {
     const actual = Buffer.from(password);
     if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return next();
 
-    const mapping = loadTechUserMapping();
+    const mapping = await loadTechUserMapping();
     const userId = mapping.get(username) || username;
 
     req.user = new cds.User({
