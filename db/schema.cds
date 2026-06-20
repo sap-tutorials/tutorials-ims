@@ -720,3 +720,11 @@ entity Secrets : cuid, managed {
   expiresAt           : Date;
   lastRotatedAt       : Timestamp;
 }
+
+
+// Phase 3 (#466): UI events telemetry feature flag.
+// Resolver at srv/lib/runtime-config/ui-events-settings.js layers DB > env > default.
+// CSV seed must stay empty (HDI-clobbers-admin-edits footgun).
+entity UiEventsSettings : cuid, managed {
+  enabled              : Boolean;
+}
