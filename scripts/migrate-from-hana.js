@@ -25,6 +25,7 @@ import { execFileSync } from 'child_process';
 import { createRequire } from 'module';
 import { mkdirSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
+import { pathToFileURL } from 'node:url';
 import hdb from 'hdb';
 
 // Issue #337: deterministic UUIDs derived from (entity_namespace, legacyId).
@@ -1170,8 +1171,18 @@ async function main() {
 // migrate-from-hana.js …`). When imported as a module — e.g. by the unit
 // test that exercises partitionBySlug() in isolation — main() must NOT run,
 // otherwise it tries to look up cf service-keys and exits the test process.
-const _isDirectInvocation = import.meta.url === `file://${process.argv[1]}`
-  || import.meta.url === new URL(process.argv[1], 'file://').href;
+//
+// Use Node's pathToFileURL() to canonicalize argv[1] into a `file://`-style
+// URL that matches `import.meta.url` on every platform. The previous
+// hand-rolled comparison (`file://${argv[1]}` plus `new URL(argv[1], 'file://')`)
+// silently failed on Windows + Git Bash, where argv[1] arrives as a
+// MinGW-translated POSIX-ish path (e.g. `C:/Program Files/Git/...`) that
+// doesn't match `import.meta.url` (`file:///D:/...`). The script then
+// silently exited 0 without invoking main(). Discovered 2026-06-20 mid
+// re-migration session.
+const _isDirectInvocation = process.argv[1]
+  ? import.meta.url === pathToFileURL(process.argv[1]).href
+  : false;
 
 if (_isDirectInvocation) {
   main().catch(e => {
