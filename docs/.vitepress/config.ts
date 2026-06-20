@@ -132,6 +132,7 @@ export default defineConfig({
           { text: 'A/B comparison runbook',    link: '/developers/operations/ab-comparison-runbook' },
           { text: 'AI-author CI setup',        link: '/developers/operations/ai-author-ci-setup' },
           { text: 'BTP role migration',        link: '/developers/operations/btp-role-migration' },
+          { text: 'Dedupe Step rows',          link: '/developers/operations/dedupe-step-rows' },
           { text: 'Migration from IMS',        link: '/developers/operations/migration-from-ims' },
           { text: 'Deployment',                link: '/developers/operations/deployment' },
           { text: 'GitHub App setup',          link: '/developers/operations/github-app-setup' },
