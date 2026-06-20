@@ -220,6 +220,10 @@ function _testSetAnswers(next: Record<string, string>) {
   answers.value = { ...next };
 }
 
+function _testSetPending(next: boolean) {
+  pending.value = next;
+}
+
 defineExpose({
   // Reactive state (auto-unwrapped on read via vm proxy)
   result,
@@ -231,6 +235,7 @@ defineExpose({
   onTryAgain,
   // Test setter — preserves reactivity that direct vm.answers = ... would lose
   _testSetAnswers,
+  _testSetPending,
 });
 </script>
 
@@ -274,7 +279,7 @@ defineExpose({
       </fieldset>
 
       <div class="validation-actions">
-        <ui5-button design="Emphasized" type="Submit" :disabled="pending">
+        <ui5-button design="Emphasized" type="Submit" v-bind="pending ? { disabled: true } : {}">
           Submit Answer
         </ui5-button>
         <!-- Async grading overlay. delay=0 so the spinner appears instantly
@@ -305,7 +310,7 @@ defineExpose({
         <ui5-button
           design="Default"
           @click="onTryAgain"
-          :disabled="pending"
+          v-bind="pending ? { disabled: true } : {}"
           style="margin-top: 0.5rem;"
         >
           Try Again
@@ -326,7 +331,7 @@ defineExpose({
         <ui5-button
           design="Default"
           @click="onTryAgain"
-          :disabled="pending"
+          v-bind="pending ? { disabled: true } : {}"
           style="margin-top: 0.5rem;"
         >
           Try Again
@@ -343,7 +348,7 @@ defineExpose({
         <ui5-button
           design="Default"
           @click="onTryAgain"
-          :disabled="pending"
+          v-bind="pending ? { disabled: true } : {}"
           style="margin-top: 0.5rem;"
         >
           Try Again
