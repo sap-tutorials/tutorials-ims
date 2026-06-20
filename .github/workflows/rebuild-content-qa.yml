@@ -21,7 +21,7 @@ on:
         type: string
 
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '22'
   CHANNEL: qa
 
 jobs:
