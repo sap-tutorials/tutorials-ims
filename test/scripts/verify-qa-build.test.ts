@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { findForbiddenMarkers, stripScripts } from '../../scripts/verify-qa-build';
+import {
+  findForbiddenMarkers,
+  stripScripts,
+  markerAppearsAsAttribute,
+} from '../../scripts/verify-qa-build';
 
 describe('verify-qa-build', () => {
   describe('stripScripts', () => {
@@ -15,7 +19,7 @@ describe('verify-qa-build', () => {
 
     it('removes multiple script tags', () => {
       const html = '<script>a</script>middle<script type="module">b</script>end';
-      expect(stripScripts(html)).toBe('middle' + 'end');
+      expect(stripScripts(html)).toBe('middleend');
     });
 
     it('handles multi-line script bodies', () => {
@@ -32,34 +36,82 @@ describe('verify-qa-build', () => {
     });
   });
 
+  describe('markerAppearsAsAttribute', () => {
+    it('matches id="X" with double quotes', () => {
+      expect(markerAppearsAsAttribute('<div id="op-sheet-mark">', 'op-sheet-mark')).toBe(true);
+    });
+
+    it("matches id='X' with single quotes", () => {
+      expect(markerAppearsAsAttribute("<div id='op-sheet-mark'>", 'op-sheet-mark')).toBe(true);
+    });
+
+    it('matches class="X" as full class', () => {
+      expect(markerAppearsAsAttribute('<div class="progress-bar">', 'progress-bar')).toBe(true);
+    });
+
+    it('matches class="...X..." as one token in space-separated list', () => {
+      expect(markerAppearsAsAttribute('<div class="foo progress-bar bar">', 'progress-bar')).toBe(true);
+    });
+
+    it('does NOT match compound class containing the marker', () => {
+      // class="nav-progress-bar" should not match "progress-bar"
+      expect(markerAppearsAsAttribute('<div class="nav-progress-bar">', 'progress-bar')).toBe(false);
+    });
+
+    it('does NOT match arbitrary URL substring', () => {
+      expect(markerAppearsAsAttribute('<img src="progress-bars-1.png">', 'progress-bar')).toBe(false);
+    });
+
+    it('does NOT match prose substring', () => {
+      expect(markerAppearsAsAttribute('<p>Set up a leaderboard for your event</p>', 'leaderboard')).toBe(false);
+    });
+  });
+
   describe('findForbiddenMarkers', () => {
     it('returns no markers on clean QA HTML', () => {
-      const html = '<div>welcome to tutorial</div>';
+      expect(findForbiddenMarkers('<div>welcome</div>')).toEqual([]);
+    });
+
+    it('flags real DOM id', () => {
+      expect(findForbiddenMarkers('<div id="op-sheet-mark">x</div>')).toContain('op-sheet-mark');
+    });
+
+    it('flags real DOM class', () => {
+      expect(findForbiddenMarkers('<div class="progress-bar">x</div>')).toContain('progress-bar');
+    });
+
+    it('does NOT flag inside script tags', () => {
+      const html = `<div>QA tutorial</div><script>
+        const markBtn = document.getElementById("op-sheet-mark");
+        const tutorialSlug = document.querySelector("#tutorial-rating-mount")?.dataset.slug;
+        const progressBar = document.getElementById("progress-bar");
+      </script>`;
       expect(findForbiddenMarkers(html)).toEqual([]);
     });
 
-    it('flags forbidden markers in visible DOM', () => {
-      const html = '<div id="op-sheet-mark">Mark Done</div>';
-      expect(findForbiddenMarkers(html)).toContain('op-sheet-mark');
+    it('does NOT flag prose mentioning the markers', () => {
+      // Regression case from rebuild-content-qa.yml run #27885050471:
+      // ai-core-genaihub-evaluation-quickstart has "leaderboard" in body text.
+      const html = '<p>Set up a leaderboard to track participants</p>';
+      expect(findForbiddenMarkers(html)).toEqual([]);
     });
 
-    it('does NOT flag forbidden markers inside script tags (QA defensive references)', () => {
-      // This is the regression case — u1-object-page.html line 580+ has an
-      // inline script that calls getElementById("op-sheet-mark") even though
-      // the DOM element is correctly QA-stripped via {{ if not site.Params.qa }}.
-      const html = `<div>QA tutorial content</div>
-        <script type="module">
-          const markBtn = document.getElementById("op-sheet-mark");
-          const tutorialSlug = document.querySelector("#tutorial-rating-mount")?.dataset.slug;
-          const progressBar = document.getElementById("progress-bar");
-        </script>`;
+    it('does NOT flag image filename containing marker substring', () => {
+      // Regression case: btp-cockpit-cf-understanding-spaces has
+      // <img src="...progress-bars-1.png"> which previously tripped progress-bar.
+      const html = '<img src="https://example.com/progress-bars-1.png">';
+      expect(findForbiddenMarkers(html)).toEqual([]);
+    });
+
+    it('does NOT flag compound class names containing marker', () => {
+      // class="nav-progress-bar" should not match "progress-bar" because
+      // it's not a complete whitespace-separated class token.
+      const html = '<ui5-progress-indicator class="nav-progress-bar"></ui5-progress-indicator>';
       expect(findForbiddenMarkers(html)).toEqual([]);
     });
 
     it('still flags markers when both visible AND in script', () => {
-      // If QA somehow leaks the visible UI, we should still flag — the script-
-      // tag whitelist is only for cases where the DOM is correctly absent.
-      const html = `<div id="progress-bar">x</div><script>document.getElementById("progress-bar")</script>`;
+      const html = '<div id="progress-bar">x</div><script>document.getElementById("progress-bar")</script>';
       expect(findForbiddenMarkers(html)).toContain('progress-bar');
     });
   });

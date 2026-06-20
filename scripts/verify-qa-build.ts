@@ -24,31 +24,49 @@ const FORBIDDEN = [
   'leaderboard'               // defensive (Vue app, won't render in Hugo, but cheap)
 ];
 
-// Strip <script>...</script> blocks before substring matching. The forbidden
-// markers are about user-visible UI (rating widget, mark-done button, progress
-// bar) — DOM elements that QA pages must not render. Script blocks may
-// reference these IDs defensively via getElementById/querySelector with null
-// checks; those references stay in the page source even when the DOM elements
-// are guarded out by Hugo templates. Without this strip, verify-qa-build flags
-// the JS reference text as a forbidden marker, producing a false positive.
+// Strip <script>...</script> blocks before substring matching. Defensive
+// JS references to QA-stripped DOM IDs (e.g. getElementById("op-sheet-mark"))
+// stay in page source even when the elements themselves are guarded out.
+// Without this strip, verify-qa-build flags those references as forbidden.
 //
-// The hugo template for tutorials (u1-object-page.html) has a 311-line inline
-// script block at lines 437-748 that does multiple things: scrollspy, anchor
-// bar, mobile sheet, header height observer. Some pieces are common (kept on
-// QA) and some are QA-stripped UI — wrapping the WHOLE script in `{{ if not
-// site.Params.qa }}` would break the common pieces. Loosening the verify here
-// is the right level of fix.
-//
-// Discovered 2026-06-20 mid CI rebuild chain: rebuild-content-qa.yml run
-// #27884205837 flagged 1390 tutorials despite all DOM elements being
-// correctly QA-guarded.
+// Discovered 2026-06-20 mid CI rebuild chain (PR #488).
 export function stripScripts(html: string): string {
   return html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
 }
 
+// Match a forbidden marker only when it appears as a complete id/class
+// attribute value, not as arbitrary substring. Tutorial prose and image
+// filenames may legitimately contain words like "leaderboard" or
+// "progress-bar" — the btp-cockpit tutorial has progress-bars-1.png as an
+// image src; the ai-core-genaihub-evaluation-quickstart tutorial uses
+// "leaderboard" in body text. The forbidden markers are HTML element
+// IDs/classes — checking attribute position avoids both false positives.
+//
+// Matches:
+//   id="X"            id='X'
+//   class="X"         class='X'
+//   class="...X..."   where X is a complete whitespace-separated token
+//
+// Does NOT match:
+//   <img src="progress-bars-1.png">       (substring in URL)
+//   <p>Set up a leaderboard</p>           (substring in prose)
+//   class="nav-progress-bar"              (substring of compound class name)
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export function markerAppearsAsAttribute(html: string, marker: string): boolean {
+  const m = escapeRegExp(marker);
+  // id="X" / id='X' exact match
+  if (new RegExp(`\\bid=["']${m}["']`).test(html)) return true;
+  // class="X" / class='...X...' where X is a complete whitespace-separated token
+  if (new RegExp(`\\bclass=["'](?:[^"']*\\s)?${m}(?:\\s[^"']*)?["']`).test(html)) return true;
+  return false;
+}
+
 export function findForbiddenMarkers(html: string): string[] {
   const visible = stripScripts(html);
-  return FORBIDDEN.filter(m => visible.includes(m));
+  return FORBIDDEN.filter(m => markerAppearsAsAttribute(visible, m));
 }
 
 function walk(dir: string): string[] {
