@@ -96,6 +96,21 @@ jobs:
             tutorial-cache-deploy-
             tutorial-cache-
 
+      # The QA-channel fetch (npm run fetch-tutorials -- --channel qa) writes
+      # to .tutorial-cache-qa/ — a SEPARATE directory from .tutorial-cache/.
+      # Both must be warm or mbt's 10-minute before-all timeout fires during
+      # the QA fetch (cf run 27882676435: prod cache hit ✓, QA cold-fetch ✗).
+      # Mirrors rebuild-content-qa.yml's cache step.
+      - name: Restore QA tutorial cache
+        uses: actions/cache@v4
+        with:
+          path: .tutorial-cache-qa
+          key: tutorial-cache-qa-deploy-${{ hashFiles('.github/workflows/deploy.yml') }}-${{ github.run_id }}
+          restore-keys: |
+            tutorial-cache-qa-deploy-${{ hashFiles('.github/workflows/deploy.yml') }}-
+            tutorial-cache-qa-deploy-
+            tutorial-cache-qa-
+
       - name: Set CAP_BASE_URL for build
         id: cap-url
         run: |
