@@ -6,16 +6,16 @@ modules:
   - name: tutorials-srv
     properties:
       EXPOSE_CAP_UI: true
-      CONTENT_API_KEY: ${content-api-key}
-      GITHUB_DISPATCH_TOKEN: ${github-dispatch-token}
+      CONTENT_API_KEY: ${CONTENT_API_KEY}
+      GITHUB_DISPATCH_TOKEN: ${GITHUB_DISPATCH_TOKEN}
       REBUILD_TARGET_ENV: qa
 
   - name: tutorials-approuter
     parameters:
       app-name: tutorials-qa-approuter
     properties:
-      REBUILD_API_KEY: ${rebuild-api-key}
-      APPROUTER_URL: ${approuter-url}
+      REBUILD_API_KEY: ${REBUILD_API_KEY}
+      APPROUTER_URL: ${APPROUTER_URL}
 
 resources:
   - name: tutorials-xsuaa
