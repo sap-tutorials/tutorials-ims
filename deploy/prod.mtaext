@@ -7,8 +7,8 @@ modules:
     parameters:
       instances: 2
     properties:
-      CONTENT_API_KEY: ${content-api-key}
-      GITHUB_DISPATCH_TOKEN: ${github-dispatch-token}
+      CONTENT_API_KEY: ${CONTENT_API_KEY}
+      GITHUB_DISPATCH_TOKEN: ${GITHUB_DISPATCH_TOKEN}
       REBUILD_TARGET_ENV: prod
 
   - name: tutorials-approuter
@@ -17,8 +17,8 @@ modules:
       instances: 2
       keep-existing-routes: true
     properties:
-      REBUILD_API_KEY: ${rebuild-api-key}
-      APPROUTER_URL: ${approuter-url}
+      REBUILD_API_KEY: ${REBUILD_API_KEY}
+      APPROUTER_URL: ${APPROUTER_URL}
 
 resources:
   - name: tutorials-xsuaa
