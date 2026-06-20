@@ -587,7 +587,7 @@ Both use `ensureWriteAllowed()` from `test/hybrid/_guard.js` and clean up via `a
 ### Tests intentionally OUT of scope
 
 - **Smoke tests against deployed admin endpoint.** Pattern-matches existing tile-smoke, defer to a follow-up.
-- **Audit-log emission verification.** `@cap-js/audit-logging` is plugin-driven; coverage exists at the plugin level, no project-specific test needed for this PR.
+- **Change-tracking entry verification.** `@cap-js/change-tracking` is plugin-driven; coverage exists at the plugin level, no project-specific test needed for this PR.
 - **`extractBuildCap === 0` edge case.** The nullish-coalesce `0 ?? 200 → 0` preserves it correctly. No additional test; covered as a comment in the schema.
 - **OData V4 contract test.** The projection is a one-liner against an existing pattern; smoke would catch any regression on first deploy.
 
