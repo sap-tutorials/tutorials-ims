@@ -1,0 +1,42 @@
+<mvc:View
+  controllerName="sap.tutorials.admin.knowledgeGraph.controller.Settings"
+  xmlns:mvc="sap.ui.core.mvc"
+  xmlns="sap.m"
+  xmlns:f="sap.ui.layout.form"
+  height="100%">
+  <ScrollContainer height="100%" width="100%" vertical="true" horizontal="false">
+    <VBox class="sapUiMediumMargin">
+      <Title text="{i18n>pageTitle}" level="H2" class="sapUiSmallMarginBottom" />
+      <MessageStrip
+        text="{i18n>infoStrip}"
+        type="Information"
+        showIcon="true"
+        class="sapUiSmallMarginBottom" />
+
+      <Panel headerText="{i18n>generalHeader}" class="sapUiSmallMarginBottom">
+        <f:SimpleForm editable="true" layout="ResponsiveGridLayout">
+          <Label text="{i18n>fieldEnabled}" />
+          <Switch state="{settings>/enabled}" />
+
+          <Label text="{i18n>fieldExtractBuildCap}" />
+          <Input value="{settings>/extractBuildCap}" type="Number"
+                 placeholder="{i18n>placeholderExtractBuildCap}" />
+
+          <Label text="{i18n>fieldMergeSimThreshold}" />
+          <Input value="{settings>/mergeSimThreshold}" type="Number"
+                 placeholder="{i18n>placeholderMergeSimThreshold}" />
+
+          <Label text="{i18n>fieldMergeSimThresholdExtract}" />
+          <Input value="{settings>/mergeSimThresholdExtract}" type="Number"
+                 placeholder="{i18n>placeholderMergeSimThresholdExtract}" />
+        </f:SimpleForm>
+      </Panel>
+
+      <HBox justifyContent="End">
+        <Button text="{i18n>buttonReload}" press=".onReload" />
+        <Button text="{i18n>buttonSave}" type="Emphasized" press=".onSave"
+                class="sapUiTinyMarginBegin" />
+      </HBox>
+    </VBox>
+  </ScrollContainer>
+</mvc:View>
