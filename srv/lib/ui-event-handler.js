@@ -7,6 +7,7 @@
 // Spec: docs/superpowers/specs/2026-06-04-ab-instrumentation-design.md (#204)
 
 import cds from '@sap/cds'
+import { resolveUiEventsSettings } from './runtime-config/ui-events-settings.js'
 
 const VALID_EVENT_TYPES = new Set([
   'page_view', 'filter_change', 'card_click', 'pagination_change',
@@ -18,7 +19,6 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const MAX_PAYLOAD_BYTES = 32 * 1024 // 32 KB defensive cap (pagehide sendBeacon hard limit is 64 KB)
 
 let _state = {
-  enabled: process.env.UI_EVENTS_ENABLED === 'true',
   insertFn: defaultInsert,
 }
 
@@ -28,15 +28,12 @@ async function defaultInsert(rows) {
   return db.run(INSERT.into(UIEvent).entries(rows))
 }
 
-export function _resetForTests({ enabled, insertFn }) {
-  _state.enabled = enabled
+export function _resetForTests({ insertFn }) {
   _state.insertFn = insertFn ?? defaultInsert
 }
 
 export function checkFeatureFlag() {
-  if (!_state.enabled) {
-    console.warn('[ui-event] UI_EVENTS_ENABLED unset — POST /api/ui-event returns 503 by default. Tracker self-disables. Set UI_EVENTS_ENABLED=true on tutorials-srv when ready to start collecting A/B data.')
-  }
+  console.log('[ui-event] UI events handler loaded. Feature flag resolved per-request from UiEventsSettings + env var fallback.')
 }
 
 export function validateBatch(body) {
@@ -73,7 +70,8 @@ export function validateBatch(body) {
 }
 
 export async function handleUIEvent(req, res) {
-  if (!_state.enabled) {
+  const { enabled } = await resolveUiEventsSettings()
+  if (!enabled) {
     return res.status(503).json({ error: 'ui-events disabled' })
   }
 
