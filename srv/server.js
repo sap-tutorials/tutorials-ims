@@ -28,6 +28,7 @@ import { defaultCallModel } from './lib/code-check-llm.js';
 import { defaultLoadStepText } from './lib/code-check-step-loader.js';
 import { codeCheckSpecPublishHandler } from './lib/code-check-spec-publish.js';
 import { publishValidateAnswerSpecs } from './lib/validate-answer-spec-publish.js';
+import { resolveSearchSettings } from './lib/runtime-config/search-settings.js';
 import { makeValidateAnswerHandler } from './lib/validate-answer-handler.js';
 import { defaultLoadQuestion } from './lib/validate-answer-question-loader.js';
 import { scheduleRebuild, checkFeatureFlag as checkRebuildTriggerFeatureFlag } from './lib/rebuild-trigger.js';
@@ -314,13 +315,27 @@ cds.on('bootstrap', (app) => {
   );
 
   // Per-IP rate limit for the public /search endpoint. Mounted in 'bootstrap'
-  // so it runs BEFORE CAP wires SearchService at /search. Defaults: 60 req/min
-  // per IP; tune via SEARCH_RATE_LIMIT_MAX / SEARCH_RATE_LIMIT_WINDOW_MS.
-  const searchLimiter = createIpRateLimiter({
-    windowMs: Number(process.env.SEARCH_RATE_LIMIT_WINDOW_MS) || 60 * 1000,
-    max: Number(process.env.SEARCH_RATE_LIMIT_MAX) || 60
+  // so it runs BEFORE CAP wires SearchService at /search.
+  // Phase 3 (#466): Lazy rate-limiter — resolver returns DB-backed values
+  // (with 5s cache). Counter resets on rebuild within the cache window.
+  // Documented in PR body as bounded surface widening (~120 req/10s burst).
+  let _cachedLimiter = null;
+  let _cachedLimiterAt = 0;
+  const LIMITER_TTL_MS = 5_000;
+
+  async function getSearchLimiter() {
+    const now = Date.now();
+    if (_cachedLimiter && (now - _cachedLimiterAt) < LIMITER_TTL_MS) return _cachedLimiter;
+    const { rateLimitMax, rateLimitWindowMs } = await resolveSearchSettings();
+    _cachedLimiter = createIpRateLimiter({ windowMs: rateLimitWindowMs, max: rateLimitMax });
+    _cachedLimiterAt = now;
+    return _cachedLimiter;
+  }
+
+  app.use('/search', async (req, res, next) => {
+    const limiter = await getSearchLimiter();
+    return ipRateLimitMiddleware(limiter, { logName: 'search-rate-limit' })(req, res, next);
   });
-  app.use('/search', ipRateLimitMiddleware(searchLimiter, { logName: 'search-rate-limit' }));
 });
 
 cds.on('served', async () => {
