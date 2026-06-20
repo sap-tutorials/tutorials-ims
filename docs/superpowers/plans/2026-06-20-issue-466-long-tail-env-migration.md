@@ -2210,8 +2210,9 @@ The 5 sub-tasks below summarize the per-tile work. Each subagent executes one ti
   is DB-backed.
 
   ## ⚠️ 3 behavior changes
-  1. recordEvent() in srv/lib/ui-event-handler.js is now async (5s
-     resolver TTL replaces module-load env-snapshot).
+  1. handleUIEvent() in srv/lib/ui-event-handler.js is now async (5s
+     resolver TTL replaces module-load env-snapshot). checkFeatureFlag()
+     boot-log message updated to drop the now-stale env-name reference.
   2. scheduleRebuild() in srv/lib/rebuild-trigger.js is now async.
      Production caller in srv/server.js:370 changed try/catch → .catch()
      to preserve fire-and-forget semantics. 13 test callers + the
