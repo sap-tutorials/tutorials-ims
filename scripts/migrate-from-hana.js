@@ -192,6 +192,25 @@ export function computeTutorialStepCount(stepParentMap) {
   return counts;
 }
 
+// Java IMS uses TASK_STATUS=NULL to mean "active" and 'DELETED' for soft-deleted.
+// CAP catalog filters expect 'ACTIVE' or 'DELETED' literals — see catalog-data
+// .js:137 which requires strict status='ACTIVE'. Without normalization at
+// migration time, /build/catalog returns 0 missions/groups (issue #477).
+// Pure helper — exported for unit tests.
+export function normalizeStatus(rawStatus) {
+  if (rawStatus == null || rawStatus === '') return 'ACTIVE';
+  return String(rawStatus).toUpperCase();
+}
+
+// Java IMS has no `published` column. CAP schema declares published : Boolean
+// with implicit default false. /build/catalog's first query is
+// SELECT.from(Missions).where({ published: true }), so unset = invisible.
+// Derive from source TASK_STATUS: any non-DELETED row is published.
+// Pure helper — exported for unit tests.
+export function derivePublished(rawStatus) {
+  return normalizeStatus(rawStatus) !== 'DELETED';
+}
+
 // Derive a slug for a CompletionPath from its title (Java IMS doesn't store
 // one — slug is a CAP-side concept). Returns kebab-cased title with a
 // `path-${legacyId}` fallback for missing/empty input. Collision avoidance
@@ -822,7 +841,8 @@ async function main() {
       ID: uuidMap.groups.get(row.ID),
       LEGACYID: row.ID,
       TITLE: truncStr(row.TITLE, 255),
-      STATUS: truncStr(row.TASK_STATUS, 50),
+      STATUS: normalizeStatus(row.TASK_STATUS),
+      PUBLISHED: derivePublished(row.TASK_STATUS),
       CREATEDAT: toISOTimestamp(row.CREATED_AT) || new Date().toISOString(),
       MODIFIEDAT: toISOTimestamp(row.UPDATED_AT) || new Date().toISOString(),
       CREATEDBY: truncStr(row.CREATED_BY, 255) || 'migration',
@@ -847,7 +867,8 @@ async function main() {
         ID: uuidMap.missions.get(row.ID),
         LEGACYID: row.ID,
         TITLE: truncStr(row.TITLE, 255),
-        STATUS: truncStr(row.TASK_STATUS, 50),
+        STATUS: normalizeStatus(row.TASK_STATUS),
+        PUBLISHED: derivePublished(row.TASK_STATUS),
         GROUP_ID: groupLegacyId ? uuidMap.groups.get(groupLegacyId) : null,
         CREATEDAT: toISOTimestamp(row.CREATED_AT) || new Date().toISOString(),
         MODIFIEDAT: toISOTimestamp(row.UPDATED_AT) || new Date().toISOString(),
@@ -877,7 +898,7 @@ async function main() {
       ID: uuidMap.tutorials.get(row.ID),
       LEGACYID: row.ID,
       TITLE: truncStr(row.TITLE, 255),
-      STATUS: truncStr(row.TASK_STATUS, 50),
+      STATUS: normalizeStatus(row.TASK_STATUS),
       // IMS source stores tutorial slugs as the markdown filename
       // (e.g. "abap-environment-maintain-bc-app.md"). Hugo serves
       // tutorials at /tutorials/<slug-without-md>, and /build/catalog
@@ -933,7 +954,7 @@ async function main() {
         ID: uuidMap.steps.get(row.ID),
         LEGACYID: row.ID,
         TITLE: truncStr(row.TITLE, 255),
-        STATUS: truncStr(row.TASK_STATUS, 50),
+        STATUS: normalizeStatus(row.TASK_STATUS),
         TUTORIAL_ID: tutorialUuid,
         // Java IMS uses 0-based TASK_ORDER; CAP publish writes 1-based stepOrder.
         // Normalize at migration time so both populations share a single key
