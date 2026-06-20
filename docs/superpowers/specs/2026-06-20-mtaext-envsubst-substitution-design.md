@@ -69,8 +69,10 @@ Replace the broken `--var`-based block with:
           # ${OTHER} sequences elsewhere in the file (description text, etc.).
           envsubst '$CONTENT_API_KEY $REBUILD_API_KEY $APPROUTER_URL $GITHUB_DISPATCH_TOKEN' \
             < "$IN" > "$OUT"
-          # Fail loudly if any placeholder survived.
-          if grep -nE '\$\{[A-Z_]+\}' "$OUT"; then
+          # Fail loudly if any placeholder survived. The character class
+          # accepts hyphenated names too (e.g. ${content-api-key}) so a
+          # half-finished rename surfaces the same way as a typo.
+          if grep -nE '\$\{[A-Za-z_-]+\}' "$OUT"; then
             echo "::error::Unresolved placeholder(s) in $OUT — check that the env-var is exported and matches the placeholder name."
             exit 1
           fi
@@ -114,7 +116,7 @@ rm -f deploy/dev.resolved.mtaext
 
 ### 4. Update [docs/developers/operations/github-dispatch-pat-rotation.md](../../developers/operations/github-dispatch-pat-rotation.md)
 
-The runbook references `cf deploy --var github-dispatch-token=` (added in PR #438). Replace with the envsubst flow + a note that the local-edit-and-revert workaround Tom used on 2026-06-19 is no longer needed.
+The runbook references `cf deploy --var github-dispatch-token=` (added in PR #438). Replace with the envsubst flow. **Delete (don't just annotate) the local-edit-and-revert workaround Tom used on 2026-06-19** — it was a one-off compensation for the missing `--var` substitution; with envsubst working both in CI and locally, the workaround is obsolete and keeping it around invites someone to follow the wrong path.
 
 ### 5. Add `.gitignore` entry for `deploy/*.resolved.mtaext`
 
@@ -141,7 +143,7 @@ A small job at the top of the workflow that runs `envsubst` over a fixture mtaex
             OUT=$(mktemp)
             envsubst '$CONTENT_API_KEY $REBUILD_API_KEY $APPROUTER_URL $GITHUB_DISPATCH_TOKEN' \
               < deploy/${env}.mtaext > "$OUT"
-            if grep -nE '\$\{[A-Z_]+\}' "$OUT"; then
+            if grep -nE '\$\{[A-Za-z_-]+\}' "$OUT"; then
               echo "::error::Unresolved placeholder(s) in deploy/${env}.mtaext after envsubst"
               cat "$OUT"
               exit 1
@@ -150,7 +152,7 @@ A small job at the top of the workflow that runs `envsubst` over a fixture mtaex
           echo "All three mtaext files resolve cleanly."
 ```
 
-The `deploy` job depends on this via `needs: validate-mtaext-substitution`. If the smoke fails, the deploy never starts.
+The `deploy` job depends on this via `needs: validate-mtaext-substitution` (added to the existing `deploy:` job's `needs:` field — currently the workflow has only one job, so this introduces the workflow's first job dependency). If the smoke fails, the deploy never starts.
 
 ## Why this approach
 
