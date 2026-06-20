@@ -132,7 +132,12 @@ jobs:
           if-no-files-found: ignore
 
       - name: Build QA Hugo site
-        run: npm run build:qa
+        # Hugo was downloaded to /tmp/hugo (line 44). The build:qa npm script
+        # invokes 'hugo' (bare binary name) — works locally where hugo is
+        # system-installed, but in CI the binary lives at /tmp/hugo and isn't
+        # on PATH. Prepend /tmp so npm finds it. Cheaper than installing to
+        # /usr/local/bin which needs sudo. Issue: this run failed at #27883670683.
+        run: PATH="/tmp:$PATH" npm run build:qa
 
       - name: Publish QA content to HANA
         run: npm run publish-content:qa
