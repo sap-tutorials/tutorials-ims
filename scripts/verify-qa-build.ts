@@ -24,8 +24,31 @@ const FORBIDDEN = [
   'leaderboard'               // defensive (Vue app, won't render in Hugo, but cheap)
 ];
 
+// Strip <script>...</script> blocks before substring matching. The forbidden
+// markers are about user-visible UI (rating widget, mark-done button, progress
+// bar) — DOM elements that QA pages must not render. Script blocks may
+// reference these IDs defensively via getElementById/querySelector with null
+// checks; those references stay in the page source even when the DOM elements
+// are guarded out by Hugo templates. Without this strip, verify-qa-build flags
+// the JS reference text as a forbidden marker, producing a false positive.
+//
+// The hugo template for tutorials (u1-object-page.html) has a 311-line inline
+// script block at lines 437-748 that does multiple things: scrollspy, anchor
+// bar, mobile sheet, header height observer. Some pieces are common (kept on
+// QA) and some are QA-stripped UI — wrapping the WHOLE script in `{{ if not
+// site.Params.qa }}` would break the common pieces. Loosening the verify here
+// is the right level of fix.
+//
+// Discovered 2026-06-20 mid CI rebuild chain: rebuild-content-qa.yml run
+// #27884205837 flagged 1390 tutorials despite all DOM elements being
+// correctly QA-guarded.
+export function stripScripts(html: string): string {
+  return html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+}
+
 export function findForbiddenMarkers(html: string): string[] {
-  return FORBIDDEN.filter(m => html.includes(m));
+  const visible = stripScripts(html);
+  return FORBIDDEN.filter(m => visible.includes(m));
 }
 
 function walk(dir: string): string[] {
