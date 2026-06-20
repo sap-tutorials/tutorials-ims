@@ -748,3 +748,10 @@ entity SearchSettings : cuid, managed {
 entity NavigatorSettings : cuid, managed {
   includeNestedGroups  : Boolean;
 }
+
+
+// Phase 3 (#466): Display dashboard URL used in contributor-notification emails.
+// Default fallback (when null) is the prod approuter URL.
+entity DisplaySettings : cuid, managed {
+  dashboardUrl         : String(500);
+}
