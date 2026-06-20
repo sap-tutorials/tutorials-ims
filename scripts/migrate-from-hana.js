@@ -87,20 +87,56 @@ function connect(creds, label) {
   });
 }
 
-function query(client, sql, params = []) {
+export function query(client, sql, params = []) {
   return new Promise((resolve, reject) => {
-    client.exec(sql, params, (err, rows) => {
-      if (err) reject(new Error(`SQL error: ${err.message}\n  SQL: ${sql}`));
-      else resolve(rows);
+    if (!params || params.length === 0) {
+      // No parameters → hdb's exec(sql, options, cb) auto-fetches result rows.
+      client.exec(sql, (err, rows) => {
+        if (err) reject(new Error(`SQL error: ${err.message}\n  SQL: ${sql}`));
+        else resolve(rows);
+      });
+      return;
+    }
+    // Parameterized → must prepare + statement.exec(params, cb). The client
+    // .exec(command, options, cb) signature treats the middle arg as OPTIONS,
+    // not as bound parameters — passing an array there silently leaves all `?`
+    // placeholders unbound (HANA then errors with "unbound parameter : 1 of N").
+    // Discovered 2026-06-20 mid re-migration session — the upsertOnSlug code
+    // path in PR #468 was the first real-mode caller of query() with params.
+    client.prepare(sql, (prepErr, stmt) => {
+      if (prepErr) {
+        reject(new Error(`SQL error: ${prepErr.message}\n  SQL: ${sql}`));
+        return;
+      }
+      stmt.exec(params, (execErr, rows) => {
+        // hdb's stmt.drop() releases server-side state; safe to fire-and-forget.
+        try { stmt.drop(() => {}); } catch (_e) { /* ignore */ }
+        if (execErr) reject(new Error(`SQL error: ${execErr.message}\n  SQL: ${sql}`));
+        else resolve(rows);
+      });
     });
   });
 }
 
-function execStmt(client, sql, params = []) {
+export function execStmt(client, sql, params = []) {
   return new Promise((resolve, reject) => {
-    client.exec(sql, params, (err, result) => {
-      if (err) reject(new Error(`SQL error: ${err.message}\n  SQL: ${sql.slice(0, 200)}`));
-      else resolve(result);
+    if (!params || params.length === 0) {
+      client.exec(sql, (err, result) => {
+        if (err) reject(new Error(`SQL error: ${err.message}\n  SQL: ${sql.slice(0, 200)}`));
+        else resolve(result);
+      });
+      return;
+    }
+    client.prepare(sql, (prepErr, stmt) => {
+      if (prepErr) {
+        reject(new Error(`SQL error: ${prepErr.message}\n  SQL: ${sql.slice(0, 200)}`));
+        return;
+      }
+      stmt.exec(params, (execErr, result) => {
+        try { stmt.drop(() => {}); } catch (_e) { /* ignore */ }
+        if (execErr) reject(new Error(`SQL error: ${execErr.message}\n  SQL: ${sql.slice(0, 200)}`));
+        else resolve(result);
+      });
     });
   });
 }
