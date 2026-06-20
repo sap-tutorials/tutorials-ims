@@ -6,7 +6,7 @@
 
 **Architecture:** New singleton entity in `db/schema.cds` mirrors `ChatSettings`. Self-contained resolver `srv/lib/runtime-config/kg-settings.js` layers DB → env → hardcoded with 5s LRU TTL. Three consumer files (`srv/knowledge-graph-service.js`, `srv/jobs/extract-concepts-job.js`, `srv/jobs/consolidate-concepts-job.js`) swap `process.env.X` reads for resolver calls; cron consumers add `if (!kg.enabled) return` (intentional behavior tightening). Admin tile at `app/admin/knowledgeGraph/` mirrors Joule (custom XML, not Fiori Elements).
 
-**Tech Stack:** SAP CAP Node.js, HANA Cloud, `lru-cache` (already a dep), Vitest (unit + hybrid), UI5 (custom XML, sap.m), `@cap-js/change-tracking`.
+**Tech Stack:** SAP CAP Node.js, HANA Cloud, Vitest (unit + hybrid), UI5 (custom XML, sap.m), `@cap-js/change-tracking`. **No new npm deps** — the resolver implements a tiny inline `Map`+timestamp cache (10 lines) rather than pulling in `lru-cache`. The chat-settings-resolver precedent is zero-dep; we keep the new lib zero-dep too.
 
 **Spec:** [docs/superpowers/specs/2026-06-20-issue-463-runtime-config-foundation-design.md](../specs/2026-06-20-issue-463-runtime-config-foundation-design.md)
 
@@ -18,7 +18,7 @@
 
 | File | Action | Responsibility |
 | --- | --- | --- |
-| `db/schema.cds` | Modify (append after `ChatSettings` block at line 487) | Define `KnowledgeGraphSettings` singleton entity |
+| `db/schema.cds` | Modify (append after `ChatSettings` block — entity ends ~line 494; verify with grep) | Define `KnowledgeGraphSettings` singleton entity |
 | `db/data/com.sap.developers.ims-KnowledgeGraphSettings.csv` | Create | HEADER ONLY — empty seed (must stay empty per [feedback_cap_csv_seeds_clobber_admin_data]) |
 | `db/change-tracking.cds` | Modify (append after `ChatSettings` line 17) | Add `@changelog` annotation |
 | `srv/admin-service.cds` | Modify (append after `ChatSettings` projection at line 89) | Add `@odata.singleton @requires:'Admin'` projection |
@@ -61,25 +61,19 @@
 
   If wrong: STOP. Re-enter the worktree before any edits ([feedback_subagent_writes_can_leak_to_parent_repo](C:\Users\I809764\.claude\projects\d--projects-tutorials-poc\memory\feedback_subagent_writes_can_leak_to_parent_repo.md)).
 
-- [ ] **Step 0.2: Verify spec is committed at HEAD**
+- [ ] **Step 0.2: Verify spec is committed in branch history**
 
   Run:
 
   ```bash
-  git log --oneline -3
+  git log --oneline -10 | grep -E 'docs.*spec.*#463'
   ```
 
-  Expected: `fb222236 docs(spec): final consistency fix...` is the most recent commit. Spec must be committed before plan execution starts so subagents can read it.
+  Expected: at least one match showing the spec was committed (e.g. `docs(spec): Phase 2-A foundation + KG migration design (#463)`). Multiple matches across the spec-correction iterations are fine.
 
-- [ ] **Step 0.3: Verify lru-cache is in deps**
+- [ ] **Step 0.3: (REMOVED — no `lru-cache` dependency)**
 
-  Run:
-
-  ```bash
-  grep '"lru-cache"' package.json
-  ```
-
-  Expected: a line like `"lru-cache": "^11.x.x"` (or similar) in dependencies. Already there per `srv/lib/content-store.js` usage; this is just a sanity check.
+  Plan originally checked for `lru-cache` in deps. Resolver in Task 5 uses a self-contained `Map`+timestamp cache instead — no npm dep. Skip this step.
 
 - [ ] **Step 0.4: Confirm the existing chat-settings-resolver pattern is at HEAD**
 
@@ -98,7 +92,7 @@
 
 **Files:**
 
-- Modify: `db/schema.cds:485-487` (append after `ChatSettings` block — verify location with grep first)
+- Modify: `db/schema.cds` (append after the `ChatSettings` entity — `entity ChatSettings` starts at line 465, the block ends at the closing `}` around line 494; verify exact location with grep first)
 
 - [ ] **Step 1.1: Locate the exact ChatSettings end line**
 
@@ -313,28 +307,33 @@
   ```javascript
   // srv/lib/runtime-config/kg-settings.js
   // Resolves the 4 Knowledge Graph runtime knobs. Layered precedence:
-  //   1. KnowledgeGraphSettings row (CDS-via-cds.entities)
-  //   2. KnowledgeGraphSettings raw-SQL UPPERCASE (HANA build-pipeline path)
+  //   1. KnowledgeGraphSettings row via cds.entities (CAP runtime path)
+  //   2. KnowledgeGraphSettings raw-SQL UPPERCASE (HANA build-pipeline path,
+  //      reached via the catch fallback when cds.entities('com.sap.developers.ims')
+  //      throws because the model isn't loaded)
   //   3. process.env.KNOWLEDGE_GRAPH_ENABLED / KG_EXTRACT_BUILD_CAP /
   //      KG_MERGE_SIM_THRESHOLD / KG_MERGE_SIM_THRESHOLD_EXTRACT
   //   4. Hardcoded defaults: enabled=false, cap=200, thresholds 0.92/0.85
   //
-  // 5-second LRU TTL. Hot-path consumers (knowledge-graph-service.js per-request
-  // gate) hit cache; cron consumers (extract/consolidate jobs) call once per tick.
+  // Inspired by srv/lib/chat-settings-resolver.js (#318), which provides the
+  // layered DB→env→default pattern. This resolver ADDS a 5-second in-module
+  // cache because the 3 KG consumers are hotter than chat-settings: the HTTP
+  // gate fires per /graph/* request, and the 2 cron consumers fire per tick.
+  // chat-settings-resolver is called once per LLM call and doesn't cache.
+  // The cache is a tiny Map+timestamp — no npm dep. Self-contained per Phase
+  // 2-A spec; base helper extraction deferred to Phase 3 once 3+ resolvers
+  // exist to inform the abstraction.
   //
   // Backwards-compatible: with an empty DB row, behavior is identical to the
   // current process.env reads in the 3 consumer files. Reverting this PR is safe.
-  //
-  // Pattern derived from srv/lib/chat-settings-resolver.js (#318). Self-contained
-  // per Phase 2-A spec — base helper extraction deferred to Phase 3.
 
   import cds from '@sap/cds';
-  import { LRUCache } from 'lru-cache';
 
   const LOG = cds.log('kg-settings-resolver');
 
-  const CACHE_KEY = 'kg-settings';
-  const cache = new LRUCache({ max: 1, ttl: 5_000 });
+  const TTL_MS = 5_000;
+  let _cachedAt = 0;
+  let _cached = null;
 
   const DEFAULTS = {
     enabled: false,
@@ -344,22 +343,26 @@
   };
 
   /** Read the singleton row, tolerant of build-pipeline contexts where
-   *  cds.entities() isn't initialized yet. Returns null on any failure. */
+   *  cds.entities() throws because the model isn't loaded. Returns null on
+   *  any failure — caller falls through to env-var path. */
   async function readRow() {
     try {
-      if (typeof cds.entities === 'function') {
-        const { KnowledgeGraphSettings } = cds.entities('com.sap.developers.ims');
-        return (await SELECT.one.from(KnowledgeGraphSettings)) ?? null;
+      const { KnowledgeGraphSettings } = cds.entities('com.sap.developers.ims');
+      return (await SELECT.one.from(KnowledgeGraphSettings)) ?? null;
+    } catch (capErr) {
+      // CAP path failed (model not loaded, etc.). Try raw SQL — same approach
+      // chat-settings-resolver uses for the build-pipeline path.
+      try {
+        const db = await cds.connect.to('db');
+        const rows = await db.run(
+          'SELECT enabled, extractBuildCap, mergeSimThreshold, mergeSimThresholdExtract ' +
+          'FROM COM_SAP_DEVELOPERS_IMS_KNOWLEDGEGRAPHSETTINGS LIMIT 1'
+        );
+        return rows?.[0] ?? null;
+      } catch (sqlErr) {
+        LOG.warn('KnowledgeGraphSettings read failed; using env-var defaults', sqlErr.message);
+        return null;
       }
-      const db = await cds.connect.to('db');
-      const rows = await db.run(
-        'SELECT enabled, extractBuildCap, mergeSimThreshold, mergeSimThresholdExtract ' +
-        'FROM COM_SAP_DEVELOPERS_IMS_KNOWLEDGEGRAPHSETTINGS LIMIT 1'
-      );
-      return rows?.[0] ?? null;
-    } catch (err) {
-      LOG.warn('KnowledgeGraphSettings read failed; using env-var defaults', err.message);
-      return null;
     }
   }
 
@@ -391,16 +394,21 @@
    *                     mergeSimThreshold: number, mergeSimThresholdExtract: number }>}
    */
   export async function resolveKnowledgeGraphSettings() {
-    const cached = cache.get(CACHE_KEY);
-    if (cached) return cached;
+    const now = Date.now();
+    if (_cached && (now - _cachedAt) < TTL_MS) return _cached;
 
     const row = await readRow();
 
     const settings = {
-      enabled:
+      // Boolean coercion is critical: SQLite stores boolean as 0/1, and the
+      // nullish-coalesce (??) does NOT fall through 0. Without Boolean(),
+      // s.enabled would be 0 (falsy but not === false) and downstream
+      // `s.enabled === false` checks would fail.
+      enabled: Boolean(
         pick(row, 'enabled', 'ENABLED')
         ?? envFlag('KNOWLEDGE_GRAPH_ENABLED')
-        ?? DEFAULTS.enabled,
+        ?? DEFAULTS.enabled
+      ),
       extractBuildCap:
         pick(row, 'extractBuildCap', 'EXTRACTBUILDCAP')
         ?? envNumber('KG_EXTRACT_BUILD_CAP')
@@ -415,7 +423,8 @@
         ?? DEFAULTS.mergeSimThresholdExtract,
     };
 
-    cache.set(CACHE_KEY, settings);
+    _cached = settings;
+    _cachedAt = now;
     return settings;
   }
 
@@ -423,7 +432,8 @@
    *  exercise a fresh read after seeding a row. Not exported through any
    *  public surface. */
   export function _resetCacheForTests() {
-    cache.clear();
+    _cached = null;
+    _cachedAt = 0;
   }
   ```
 
@@ -443,21 +453,28 @@
   git add srv/lib/runtime-config/kg-settings.js
   git commit -m "feat(srv): KnowledgeGraphSettings resolver lib (#463)
 
-  Self-contained resolver mirroring chat-settings-resolver shape.
+  Self-contained resolver inspired by chat-settings-resolver shape.
   Layered precedence: DB row → env var → hardcoded default.
-  5s LRU TTL via lru-cache (already a dep).
+  5-second cache via inline Map+timestamp (no npm dep).
 
+  - Boolean coercion on the enabled field is critical: SQLite stores
+    boolean as 0/1, and ?? does NOT fall through 0; without Boolean(),
+    s.enabled would be 0 (falsy but not === false) and downstream
+    s.enabled === false checks would fail.
   - Nullish-coalesce (??) preserves admin-set false/0 vs OR (||).
   - pick() helper centralizes lowercase/UPPERCASE column-name handling
     (CAP returns lowercase; HANA raw db.run returns UPPERCASE).
-  - readRow() tolerates build-pipeline contexts where cds.entities()
-    isn't initialized; falls through to raw SQL.
+  - readRow() falls through to raw SQL when cds.entities() throws
+    (build-pipeline contexts where the model isn't loaded). Mirrors
+    chat-settings-resolver's catch+raw-SQL pattern.
   - _resetCacheForTests exported for unit-test TTL assertions."
   ```
 
 ---
 
 ## Task 6: Unit tests for resolver
+
+**TDD note:** Task 6 ships AFTER Task 5 because the resolver is a translation of an established spec — the existing 4 `process.env.X` reads + their fallback semantics — not a green-field design. There is no design exploration to drive with red tests. Tests are written second to lock in the translation, not to discover the design.
 
 **Files:**
 
@@ -665,6 +682,14 @@
 
 - [ ] **Step 7.3: Replace the threshold read at line 698**
 
+  First, **verify the enclosing handler is `async`** (the resolver call requires `await`):
+
+  ```bash
+  sed -n '670,705p' srv/knowledge-graph-service.js | grep -nE 'function|async'
+  ```
+
+  Expected: at least one line shows `async function` or `async (req)` for the handler that contains line 698. If the handler is NOT async (e.g. plain `function (req)` or arrow `(req) =>`), the worker MUST add the `async` keyword to that handler's signature in the same edit — otherwise the file fails to load with `SyntaxError: await is only valid in async functions`.
+
   Find the block:
 
   ```javascript
@@ -688,8 +713,6 @@
   The bounds check is removed because:
   - `@assert.range` enforces `[0.01, 1.00]` at write time.
   - The resolver returns `Number` already (no parse needed).
-
-  Confirm the enclosing handler is `async` (it almost certainly is — it does `await db.run(...)` already). If by some accident it's not, mark it `async`.
 
 - [ ] **Step 7.4: Run unit tests for knowledge-graph-service if any exist**
 
@@ -780,19 +803,33 @@
 
 - [ ] **Step 8.3: Verify the early-return shape matches what the scheduler expects**
 
-  Check what other early-returns (if any) in this file return:
+  First, find what the scheduler / job-summary formatter consumes from this job's return value:
+
+  ```bash
+  grep -n 'extractConceptsJob\|extract-concepts\|runExtractConcepts' srv/jobs/scheduler.js srv/lib/job-summary*.js srv/lib/format-job*.js 2>/dev/null
+  ```
+
+  Read the consumer and identify which fields are read off the return value (e.g. `result.conceptsExtracted`, `result.conceptsCreated`, etc.). The early-return MUST include zero values for every field that any consumer reads, or `formatJobSummary` will NPE on `undefined.toFixed()` etc. and the job log will show as ERROR.
+
+  Then check what other early-returns (if any) in this file look like:
 
   ```bash
   grep -n 'return {' srv/jobs/extract-concepts-job.js | head -10
   ```
 
-  Confirm the `{ reason, conceptsExtracted }` shape is consistent with other early-returns. If the file uses a different convention (e.g. throwing, returning `null`), match that instead.
-
-  If the file's normal happy-path return shape includes additional fields (like `conceptsCreated`, `conceptsMerged`, `conceptsSkipped`), include zero values for those in the early-return so any downstream consumer (formatJobSummary etc.) doesn't NPE on missing keys:
+  Build the early-return object to include all fields the scheduler/formatter reads, set to safe zero values. Example shape (adjust to match what the consumers actually read):
 
   ```javascript
-      return { reason: 'kg-disabled', conceptsExtracted: 0, conceptsCreated: 0, conceptsMerged: 0, conceptsSkipped: 0 };
+      return {
+        reason: 'kg-disabled',
+        conceptsExtracted: 0,
+        conceptsCreated: 0,
+        conceptsMerged: 0,
+        conceptsSkipped: 0,
+      };
   ```
+
+  Confirm against the scheduler/formatter consumer before settling on the shape.
 
 - [ ] **Step 8.4: Run any existing tests for the job**
 
@@ -960,10 +997,12 @@
       const db = await cds.connect.to('db');
       const id = '__TEST__a3000000-0000-0000-0000-000000000002';
       cleanup.push(id);
-      // Idempotent cleanup before insert
+      // Make the test deterministic: clean ALL __TEST__ rows from this entity
+      // before insert, so the resolver's SELECT...LIMIT 1 returns OUR row.
+      // Hybrid runs are gated by ALLOW_HYBRID_WRITES — concurrent test runs
+      // are not a real concern.
       await db.run(
-        'DELETE FROM COM_SAP_DEVELOPERS_IMS_KNOWLEDGEGRAPHSETTINGS WHERE ID = ?',
-        [id],
+        "DELETE FROM COM_SAP_DEVELOPERS_IMS_KNOWLEDGEGRAPHSETTINGS WHERE ID LIKE '__TEST__%'",
       );
       await db.run(
         'INSERT INTO COM_SAP_DEVELOPERS_IMS_KNOWLEDGEGRAPHSETTINGS ' +
@@ -973,18 +1012,14 @@
       );
       _resetCacheForTests();
       const s = await resolveKnowledgeGraphSettings();
-      // The DB has 2 rows now (one from each test), and the resolver picks
-      // ONE row (whichever HANA returns first via SELECT...LIMIT 1). So we
-      // assert ANY of the test data appears, not specifically this row's
-      // data — the value of THIS test is exercising the raw-SQL UPPERCASE
-      // code path without errors.
-      expect(typeof s.extractBuildCap).toBe('number');
-      expect(typeof s.enabled).toBe('boolean');
+      expect(s.extractBuildCap).toBe(7);
+      expect(Number(s.mergeSimThreshold)).toBeCloseTo(0.30, 2);
+      expect(Number(s.mergeSimThresholdExtract)).toBeCloseTo(0.40, 2);
     });
   });
   ```
 
-  **Note on the second test:** because the resolver does `SELECT … LIMIT 1` and there are two rows in the table during the test run, we can't deterministically assert THIS row's specific values. The value of the test is exercising the raw-SQL UPPERCASE code path — it asserts the shape but not the specific values. If you'd prefer fully-deterministic asserts, the second test must DELETE all rows before its insert; do that only if you're confident no other test/run is concurrently using the table.
+  **Note on test ordering:** Vitest runs `it()` blocks in declaration order within a `describe`. Test 1 inserts a row; test 2 deletes all `__TEST__` rows before inserting. Test 1 must run first (it does, by declaration order) so its assertion can pass before test 2's wipe. `afterAll` cleans both up.
 
 - [ ] **Step 10.3: Run the hybrid tests**
 
@@ -1023,6 +1058,16 @@
 - Create: `app/admin/knowledgeGraph/webapp/i18n/i18n.properties`
 
 - [ ] **Step 11.1: Create the directory tree**
+
+  Before writing files, **inspect Joule's empty-singleton load behavior** to confirm the new controller's load handler is correct:
+
+  ```bash
+  sed -n '39,67p' app/admin/joule/webapp/controller/Settings.controller.js
+  ```
+
+  Note: Joule's `_loadSettings` does `if (!res.ok) throw` and relies on CAP's `@odata.singleton` returning HTTP 200 with a JSON body (possibly `{}` or default values) when the underlying row is absent. CAP handles this implicitly — no special empty-row branch needed in the new controller. If the worker observes `res.ok` is false in DEV testing on an empty `KnowledgeGraphSettings` table, that's a CAP-server bug, not a controller bug.
+
+  Then create the directory tree:
 
   ```bash
   mkdir -p app/admin/knowledgeGraph/webapp/{view,controller,i18n}
@@ -1438,15 +1483,23 @@
 
   **Be precise about quote balance** — this is a single bash string argument; the shell will refuse if quotes mismatch.
 
-- [ ] **Step 13.3: Verify mta.yaml parses**
+- [ ] **Step 13.3: Verify mta.yaml parses AND the bash chain is syntactically valid**
 
-  Run:
+  YAML parse check:
 
   ```bash
-  yq '.modules[] | select(.name == "tutorials-srv-qa")' .deploy/mta.yaml > /dev/null && echo OK
+  yq '.modules[] | select(.name == "tutorials-srv-qa")' .deploy/mta.yaml > /dev/null && echo YAML_OK
   ```
 
-  Expected: `OK`. If it fails, the YAML is broken — restore from `git checkout .deploy/mta.yaml` and try again.
+  Bash syntax check (catches quote/escape mismatches that YAML accepts but bash refuses):
+
+  ```bash
+  yq -r '.modules[] | select(.name == "tutorials-srv-qa") | ."build-parameters".commands[] | select(test("knowledgeGraph|runtime-config"))' .deploy/mta.yaml | bash -n && echo SHELL_OK
+  ```
+
+  Expected: both `YAML_OK` and `SHELL_OK`. If `SHELL_OK` fails (bash syntax error in the chain), the YAML technically parses but the deploy will crash inside the bash subshell. Per [feedback_srv_qa_cp_list_recurring](C:\Users\I809764\.claude\projects\d--projects-tutorials-poc\memory\feedback_srv_qa_cp_list_recurring.md), this is a hand-curated string with no other safety net.
+
+  **Rollback:** If either check fails, run `git checkout .deploy/mta.yaml` and try the edit again, paying close attention to quote balance and `&&` chain integrity.
 
 - [ ] **Step 13.4: Commit**
 
@@ -1469,7 +1522,7 @@
 - [ ] **Step 14.1: Run all unit tests**
 
   ```bash
-  npm test -- --run 2>&1 | tail -30
+  npm test 2>&1 | tail -30
   ```
 
   Expected: all tests pass. If any fail, the failure is most likely related to the resolver tests or a regression in an existing test caused by the schema or admin-service modifications.
