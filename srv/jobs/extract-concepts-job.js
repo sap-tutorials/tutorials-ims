@@ -22,6 +22,7 @@ import { cosineSim } from '../lib/kg-similarity.js';
 import { defaultCallModel } from '../lib/code-check-llm.js';
 import { embed as defaultEmbed } from '../lib/embedding-client.js';
 import { resolveChatLlmSettings } from '../lib/chat-settings-resolver.js';
+import { resolveKnowledgeGraphSettings } from '../lib/runtime-config/kg-settings.js';
 
 const NAMESPACE = 'com.sap.developers.ims';
 const PAGE_SIZE = 50;
@@ -118,21 +119,26 @@ export async function runExtractConcepts(deps = {}) {
   const embed = deps.embed ?? defaultEmbed;
   const log = deps.log ?? cds.log('extract-concepts');
 
-  // KG_EXTRACT_BUILD_CAP=0 means "make zero LLM calls" (effectively dry-run).
-  // Negative or NaN falls back to the default 200. Don't use `|| 200` — that
-  // would silently swallow the explicit-zero case.
-  const capRaw = process.env.KG_EXTRACT_BUILD_CAP;
-  const capParsed = capRaw !== undefined ? Number(capRaw) : NaN;
-  const buildCap = Number.isFinite(capParsed) && capParsed >= 0 ? capParsed : 200;
-
-  // Merge-on-extract threshold: cosine similarity above this collapses a
-  // newly-proposed concept into an existing one rather than minting.
-  // Override via KG_MERGE_SIM_THRESHOLD_EXTRACT (must be in (0, 1]).
-  const thresholdRaw = Number(process.env.KG_MERGE_SIM_THRESHOLD_EXTRACT);
-  const MERGE_THRESHOLD =
-    Number.isFinite(thresholdRaw) && thresholdRaw > 0 && thresholdRaw <= 1
-      ? thresholdRaw
-      : MERGE_AT_EXTRACT_THRESHOLD;
+  // Phase 2-A (#463): resolver layers DB > env > default. Gate the entire
+  // tick on kg.enabled — previously this job ran regardless of the env
+  // flag. The flag now means "stop new extraction work" end-to-end.
+  const kg = await resolveKnowledgeGraphSettings();
+  if (!kg.enabled) {
+    log.info('extract-concepts: KnowledgeGraphSettings.enabled=false; skipping tick');
+    return {
+      reason: 'kg-disabled',
+      totalTutorials: 0,
+      processed: 0,
+      cacheHits: 0,
+      llmCalls: 0,
+      newConcepts: 0,
+      mergedAtExtract: 0,
+      errors: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+    };
+  }
+  const { extractBuildCap: buildCap, mergeSimThresholdExtract: MERGE_THRESHOLD } = kg;
 
   log.info(
     `extract-concepts: starting (KG_EXTRACT_BUILD_CAP=${buildCap}, MERGE_THRESHOLD=${MERGE_THRESHOLD})`,

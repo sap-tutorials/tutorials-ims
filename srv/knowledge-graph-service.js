@@ -217,6 +217,7 @@ import { computeCoCompletions } from './lib/co-completion.js';
 import { mergeConceptPair } from './lib/kg-merge-pair.js';
 import { findNearDuplicates } from './lib/kg-similarity.js';
 import { loadConceptsWithEmbeddings } from './lib/kg-concept-loader.js';
+import { resolveKnowledgeGraphSettings } from './lib/runtime-config/kg-settings.js';
 
 const NAMESPACE = 'com.sap.developers.ims';
 
@@ -435,8 +436,9 @@ export default cds.service.impl(async function () {
   }
 
   // ─── Feature flag — gate the entire surface ────────────────────────────
-  this.before('*', (req) => {
-    if (process.env.KNOWLEDGE_GRAPH_ENABLED !== 'true') {
+  this.before('*', async (req) => {
+    const kg = await resolveKnowledgeGraphSettings();
+    if (!kg.enabled) {
       req.reject(503, 'Knowledge graph is currently disabled');
     }
   });
@@ -695,13 +697,7 @@ export default cds.service.impl(async function () {
       return req.error(500, `Preview failed: ${err.message ?? 'unknown error'}`);
     }
 
-    const thresholdRaw = process.env.KG_MERGE_SIM_THRESHOLD;
-    const thresholdParsed = thresholdRaw !== undefined ? Number(thresholdRaw) : NaN;
-    const threshold =
-      Number.isFinite(thresholdParsed) && thresholdParsed >= 0 && thresholdParsed <= 1
-        ? thresholdParsed
-        : 0.92;
-
+    const { mergeSimThreshold: threshold } = await resolveKnowledgeGraphSettings();
     const pairs = findNearDuplicates(concepts, threshold);
     log.info(
       `kg-service: previewMerges scanned ${concepts.length} ACTIVE concepts at threshold=${threshold}, found ${pairs.length} candidate pair(s)`,

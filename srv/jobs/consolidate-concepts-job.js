@@ -28,6 +28,7 @@ import { findCycles } from '../lib/kg-cycles.js';
 import { graphRebuild } from '../lib/kg-graph-rebuild.js';
 import { mergeConceptPair } from '../lib/kg-merge-pair.js';
 import { loadConceptsWithEmbeddings } from '../lib/kg-concept-loader.js';
+import { resolveKnowledgeGraphSettings } from '../lib/runtime-config/kg-settings.js';
 
 const NAMESPACE = 'com.sap.developers.ims';
 const DEFAULT_MERGE_THRESHOLD = 0.92;
@@ -53,17 +54,24 @@ export async function runConsolidateConcepts(deps = {}, _logId) {
   const db = deps.db ?? (await cds.connect.to('db'));
   const log = deps.log ?? cds.log('consolidate-concepts');
 
-  // Merge threshold: cosine similarity STRICTLY ABOVE this collapses two
-  // concepts. Override via KG_MERGE_SIM_THRESHOLD (must be in (0, 1]).
-  // Setting `0` is a no-op (nothing satisfies `> 0` for normalised vectors of
-  // disjoint concepts; useful for a "skip merges, only run cycles+rebuild"
-  // dry-run pass). Don't use `|| DEFAULT` — that swallows the explicit 0.
-  const thresholdRaw = process.env.KG_MERGE_SIM_THRESHOLD;
-  const thresholdParsed = thresholdRaw !== undefined ? Number(thresholdRaw) : NaN;
-  const MERGE_THRESHOLD =
-    Number.isFinite(thresholdParsed) && thresholdParsed >= 0 && thresholdParsed <= 1
-      ? thresholdParsed
-      : DEFAULT_MERGE_THRESHOLD;
+  // Phase 2-A (#463): resolver layers DB > env > default. Gate the entire
+  // tick on kg.enabled.
+  const kg = await resolveKnowledgeGraphSettings();
+  if (!kg.enabled) {
+    log.info('consolidate-concepts: KnowledgeGraphSettings.enabled=false; skipping tick');
+    return {
+      reason: 'kg-disabled',
+      conceptsScanned: 0,
+      candidatePairs: 0,
+      mergesPerformed: 0,
+      mergesSkipped: 0,
+      linksDeleted: 0,
+      edgesDeleted: 0,
+      cyclesDetected: 0,
+      edgesVetoed: 0,
+    };
+  }
+  const { mergeSimThreshold: MERGE_THRESHOLD } = kg;
 
   log.info(
     `consolidate-concepts: starting (KG_MERGE_SIM_THRESHOLD=${MERGE_THRESHOLD})`,

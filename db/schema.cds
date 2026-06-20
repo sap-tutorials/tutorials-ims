@@ -496,6 +496,22 @@ entity ChatSettings : cuid, managed {
   branchingEnabled     : Boolean default false;
 }
 
+// Phase 2-A foundation (#463). Mirrors the ChatSettings singleton pattern.
+// Resolver at srv/lib/runtime-config/kg-settings.js layers DB > env > default.
+// CSV seed at db/data/...-KnowledgeGraphSettings.csv MUST stay empty so HDI
+// redeploy doesn't clobber operator-set values (see feedback_cap_csv_seeds_clobber_admin_data).
+//
+// All 4 columns are nullable on purpose. Null means "fall through to env"
+// in the resolver. With a fresh deploy + no row + KNOWLEDGE_GRAPH_ENABLED=true
+// in mtaext, behavior is identical to today. After an admin saves the row,
+// DB values win.
+entity KnowledgeGraphSettings : cuid, managed {
+  enabled                    : Boolean;
+  extractBuildCap            : Integer       @assert.range: [0, 100000];
+  mergeSimThreshold          : Decimal(3, 2) @assert.range: [0.01, 1.00];
+  mergeSimThresholdExtract   : Decimal(3, 2) @assert.range: [0.01, 1.00];
+}
+
 entity TutorialEmbedding {
   key tutorial_ID  : UUID;
   key stepNumber   : Integer;

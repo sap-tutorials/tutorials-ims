@@ -104,6 +104,7 @@
             <tnt:NavigationListItem text="Change Log" key="changelog" />
             <tnt:NavigationListItem text="Board" key="board" />
             <tnt:NavigationListItem text="Joule Settings" key="joule" />
+            <tnt:NavigationListItem text="Knowledge Graph" key="knowledgeGraph" />
             <tnt:NavigationListItem text="Privacy" key="privacy" />
           </tnt:NavigationListItem>
         </tnt:NavigationList>
