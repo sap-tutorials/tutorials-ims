@@ -29,6 +29,7 @@ import { defaultLoadStepText } from './lib/code-check-step-loader.js';
 import { codeCheckSpecPublishHandler } from './lib/code-check-spec-publish.js';
 import { publishValidateAnswerSpecs } from './lib/validate-answer-spec-publish.js';
 import { resolveSearchSettings } from './lib/runtime-config/search-settings.js';
+import { resolveTenantSettings } from './lib/runtime-config/tenant-settings.js';
 import { makeValidateAnswerHandler } from './lib/validate-answer-handler.js';
 import { defaultLoadQuestion } from './lib/validate-answer-question-loader.js';
 import { scheduleRebuild, checkFeatureFlag as checkRebuildTriggerFeatureFlag } from './lib/rebuild-trigger.js';
@@ -102,23 +103,25 @@ cds.on('bootstrap', (app) => {
   // CORS: strict allowlist (issue #133). Previously this reflected any Origin
   // header with credentials when NODE_ENV !== 'production', but NODE_ENV is not
   // set in any deployment manifest, so the reflect-all branch was always live
-  // in CF. Now driven by ALLOWED_CORS_ORIGINS (comma-separated), defaulting to
-  // localhost-only origins for hugo/approuter/CAP dev. Set the env var on a
-  // deployed environment if you need to whitelist a specific external origin.
-  const ALLOWED_CORS_ORIGINS = new Set(
-    (process.env.ALLOWED_CORS_ORIGINS || 'http://localhost:1313,http://localhost:5000,http://localhost:4004')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean),
-  );
-  app.use((req, res, next) => {
+  // in CF.
+  // Phase 3 (#466): CORS allowlist resolved per-request from TenantSettings
+  // (resolver caches the underlying string for 5s, so the new Set() cost is
+  // microseconds × ~once-per-5s × N requests). Hardcoded localhost fallback
+  // moved into the resolver's DEFAULTS.allowedCorsOrigins.
+  app.use(async (req, res, next) => {
     const origin = req.headers.origin;
-    if (origin && ALLOWED_CORS_ORIGINS.has(origin)) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-      res.setHeader('Vary', 'Origin');
+    if (origin) {
+      const { allowedCorsOrigins } = await resolveTenantSettings();
+      const allowed = new Set(
+        allowedCorsOrigins.split(',').map((s) => s.trim()).filter(Boolean)
+      );
+      if (allowed.has(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+        res.setHeader('Vary', 'Origin');
+      }
     }
     if (req.method === 'OPTIONS') return res.status(204).end();
     next();
