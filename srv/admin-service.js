@@ -6,6 +6,7 @@ import { embedSlugs } from './lib/embedding-pipeline.js';
 import { randomUUID } from 'node:crypto';
 import { parsePayload, classify, apply, sharedCache, MAX_BYTES } from './lib/tag-import/index.js';
 import { buildCfLogsUrl } from './lib/cf-logs-link.js';
+import { resolveDisplaySettings } from './lib/runtime-config/display-settings.js';
 import { reviewTutorial, snoozeTutorial } from './lib/tutorial-review.js';
 import { slugify, ensureUniqueSlug } from './lib/slug-utils.js';
 import { classifyAndPersist } from './lib/category-classifier.js';
@@ -789,7 +790,7 @@ export default class AdminService extends cds.ApplicationService {
 
       const adminEmails = await getAdminEmailList();
       const notifications = await computeStaleNotifications(180);
-      const dashboardUrl = process.env.DASHBOARD_URL || 'https://tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/ui/tutorialDashboard';
+      const dashboardUrl = (await resolveDisplaySettings()).dashboardUrl;
 
       let sent = 0;
       for (const n of notifications) {
