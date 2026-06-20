@@ -397,7 +397,7 @@ function pickEntries<T>(src: Record<string, T>, keys: string[]): Record<string, 
   return out;
 }
 
-async function collectSidecars(hugoDir: string, payload: Record<string, string>, log: (s: string) => void): Promise<string[]> {
+async function collectSidecars(hugoDir: string, payload: Record<string, string>, log: (s: string) => void, channel: Channel = "prod"): Promise<string[]> {
   const keys: string[] = [];
   const navJsonPath = join(hugoDir, 'tutorials', '_nav.json');
   if (existsSync(navJsonPath)) {
@@ -413,6 +413,16 @@ async function collectSidecars(hugoDir: string, payload: Record<string, string>,
     const notFoundContent = readFileSync(notFoundPath);
     payload['__404__'] = gzipSync(notFoundContent).toString('base64');
     keys.push('__404__');
+  }
+  // The chrome shell wraps tutorial content with site-wide UI (header, nav,
+  // footer, Joule FAB, etc.). On the QA channel, hugo.qa.toml strips all that
+  // chrome AND the QA srv at /tutorials-qa/ stands alone for author preview —
+  // the __shell__ slug is unused server-side for QA reads. Skipping avoids
+  // a hard failure when the QA Hugo build legitimately doesn't emit
+  // _shell/index.html. Issue: rebuild-content-qa.yml run #27885050471.
+  if (channel === 'qa') {
+    log('Skipping __shell__ sidecar (QA channel — no chrome wrapping)');
+    return keys;
   }
   const shellPath = join(hugoDir, '_shell', 'index.html');
   if (!existsSync(shellPath)) {
@@ -553,7 +563,7 @@ async function main() {
 
   // __nav__ / __404__ / __shell__ ride along on the first batch (these are
   // small and the server happily accepts them mixed with regular slugs).
-  const sidecarKeys = await collectSidecars(opts.hugoDir, payload, log);
+  const sidecarKeys = await collectSidecars(opts.hugoDir, payload, log, channel);
 
   const begin = await beginSession({
     baseUrl: opts.baseUrl, apiKey: opts.apiKey,

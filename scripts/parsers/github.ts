@@ -24,6 +24,17 @@ const MAX_DELAY_MS = 60_000
 
 export const EXCLUDED_REPOS = new Set(['tutorials-ims'])
 
+// Private repos that SHOULD be discovered + fetched despite being non-public.
+// `meta-tutorials` contains showcase tutorials demonstrating platform features
+// for authors (CODECHECK_N, VALIDATE_N AI grading, AUTOAUTHOR_*, mermaid,
+// codetabs, glossary, lightbox, etc.). The repo is private but the content
+// is intended for tutorial-author consumption — we keep it private to gate
+// it behind an SAP-internal audience while still surfacing it on the
+// platform. -Contribution repos are also private but excluded by name
+// pattern; INCLUDED_PRIVATE_REPOS is a separate concept (allowlist for
+// non-Contribution private repos).
+export const INCLUDED_PRIVATE_REPOS = new Set(['meta-tutorials'])
+
 export interface GitHubContributor {
   name: string
   login: string
@@ -393,6 +404,7 @@ async function discoverFromGitHub(): Promise<DiscoveredTutorial[]> {
             isArchived
             isDisabled
             isFork
+            isPrivate
             defaultBranchRef { name }
             tutorials: object(expression: "HEAD:tutorials") {
               ... on Tree {
@@ -430,6 +442,11 @@ async function discoverFromGitHub(): Promise<DiscoveredTutorial[]> {
     for (const repo of repos.nodes) {
       if (repo.isArchived || repo.isDisabled || repo.isFork) continue
       if (EXCLUDED_REPOS.has(repo.name)) continue
+      // Private repos: include only if explicitly allowlisted OR if they're
+      // a -Contribution repo (handled by the next filter). This keeps
+      // organization-private repos out of the build by default while still
+      // letting us surface targeted ones like meta-tutorials.
+      if (repo.isPrivate && !INCLUDED_PRIVATE_REPOS.has(repo.name) && !repo.name.endsWith('-Contribution')) continue
       if (onlyContribution) {
         // QA channel: only -Contribution repos (inverse of prod filter).
         if (!repo.name.endsWith('-Contribution')) continue
@@ -463,6 +480,7 @@ interface RestRepoMeta {
   archived?: boolean
   disabled?: boolean
   fork?: boolean
+  private?: boolean
   default_branch?: string
 }
 
@@ -475,12 +493,16 @@ export async function discoverFromRest(): Promise<DiscoveredTutorial[]> {
   const includeContribution = process.env.INCLUDE_CONTRIBUTION_REPOS === 'true'
   const onlyContribution = process.env.ONLY_CONTRIBUTION_REPOS === 'true'
   console.log(`  [rest] Listing repos in ${ORG}...`)
-  const repos = await restApiPaginated<RestRepoMeta>(`/orgs/${ORG}/repos?per_page=100&type=public`)
+  // type=all (was: type=public) to allow discovery of allowlisted private
+  // repos like meta-tutorials. Private repos are filtered post-fetch via
+  // INCLUDED_PRIVATE_REPOS (mirror of the GraphQL path's check).
+  const repos = await restApiPaginated<RestRepoMeta>(`/orgs/${ORG}/repos?per_page=100&type=all`)
 
   const tutorials: DiscoveredTutorial[] = []
   for (const repo of repos) {
     if (repo.archived || repo.disabled || repo.fork) continue
     if (EXCLUDED_REPOS.has(repo.name)) continue
+    if (repo.private && !INCLUDED_PRIVATE_REPOS.has(repo.name) && !repo.name.endsWith('-Contribution')) continue
     if (onlyContribution) {
       if (!repo.name.endsWith('-Contribution')) continue
     } else if (!includeContribution && repo.name.endsWith('-Contribution')) {
