@@ -18,8 +18,38 @@ env:
   MBT_VERSION: '1.2.31'
 
 jobs:
+  validate-mtaext-substitution:
+    # [#455] Verify envsubst resolves every placeholder in every mtaext.
+    # Catches regressions where someone reverts the rename or removes the
+    # envsubst step in `deploy:`. Runs on every deploy invocation.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify envsubst resolves all known placeholders
+        env:
+          CONTENT_API_KEY: dummy-content
+          REBUILD_API_KEY: dummy-rebuild
+          APPROUTER_URL: https://dummy.example.com
+          GITHUB_DISPATCH_TOKEN: dummy-token
+        run: |
+          set -euo pipefail
+          for env in dev qa prod; do
+            OUT=$(mktemp)
+            envsubst '$CONTENT_API_KEY $REBUILD_API_KEY $APPROUTER_URL $GITHUB_DISPATCH_TOKEN' \
+              < deploy/${env}.mtaext > "$OUT"
+            # The character class also catches hyphenated leftovers (e.g.
+            # ${content-api-key}) so a half-finished rename surfaces here too.
+            if grep -nE '\$\{[A-Za-z_-]+\}' "$OUT"; then
+              echo "::error::Unresolved placeholder(s) in deploy/${env}.mtaext after envsubst"
+              cat "$OUT"
+              exit 1
+            fi
+          done
+          echo "All three mtaext files resolve cleanly."
+
   deploy:
     runs-on: ubuntu-latest
+    needs: validate-mtaext-substitution
     timeout-minutes: 30
     permissions:
       contents: write
@@ -119,6 +149,34 @@ jobs:
             prod) echo "approuter_url=${{ secrets.APPROUTER_URL_PROD }}" >> "$GITHUB_OUTPUT" ;;
           esac
 
+      - name: Resolve mtaext placeholders
+        # [#455] envsubst replaces ${VAR} placeholders with real values from
+        # CI secrets BEFORE cf deploy sees the file. The --var flag is NOT
+        # supported by the multiapps-cli-plugin (verified by reading the
+        # plugin's source); the previous --var-based block was non-functional
+        # but had never run successfully (CI was failing at mbt build for
+        # unrelated reasons since 2026-05-05).
+        env:
+          CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
+          REBUILD_API_KEY: ${{ secrets.REBUILD_API_KEY }}
+          APPROUTER_URL: ${{ steps.deploy-vars.outputs.approuter_url }}
+          GITHUB_DISPATCH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
+        run: |
+          set -euo pipefail
+          IN=deploy/${{ steps.env.outputs.target }}.mtaext
+          OUT=deploy/${{ steps.env.outputs.target }}.resolved.mtaext
+          # Restrict substitution to known names — defends against incidental
+          # ${OTHER} sequences elsewhere in the file (description text, etc.).
+          envsubst '$CONTENT_API_KEY $REBUILD_API_KEY $APPROUTER_URL $GITHUB_DISPATCH_TOKEN' \
+            < "$IN" > "$OUT"
+          # Fail loudly if any placeholder survived. The character class
+          # accepts hyphenated names too (e.g. ${content-api-key}) so a
+          # half-finished rename surfaces the same way as a typo.
+          if grep -nE '\$\{[A-Za-z_-]+\}' "$OUT"; then
+            echo "::error::Unresolved placeholder(s) in $OUT — check that the env-var is exported and matches the placeholder name."
+            exit 1
+          fi
+
       - name: Deploy MTA
         run: |
           STRATEGY_FLAGS=""
@@ -127,11 +185,7 @@ jobs:
           fi
 
           cf deploy mta_archives/tutorials-poc_${{ steps.version.outputs.version }}.mtar \
-            -e deploy/${{ steps.env.outputs.target }}.mtaext \
-            --var content-api-key="${{ secrets.CONTENT_API_KEY }}" \
-            --var rebuild-api-key="${{ secrets.REBUILD_API_KEY }}" \
-            --var approuter-url="${{ steps.deploy-vars.outputs.approuter_url }}" \
-            --var github-dispatch-token="${{ secrets.DISPATCH_TOKEN }}" \
+            -e deploy/${{ steps.env.outputs.target }}.resolved.mtaext \
             $STRATEGY_FLAGS \
             -f
 
