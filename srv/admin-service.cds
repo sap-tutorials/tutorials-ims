@@ -88,6 +88,10 @@ service AdminService {
     };
   };
 
+  @odata.singleton
+  @requires: 'Admin'
+  entity KnowledgeGraphSettings as projection on ims.KnowledgeGraphSettings;
+
   // Code list entities for enum dropdowns (no DB table needed)
   @readonly @cds.persistence.skip entity ExperienceLevels { key code : String(255); }
   @readonly @cds.persistence.skip entity TaskStatuses     { key code : String(50); }
