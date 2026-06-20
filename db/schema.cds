@@ -755,3 +755,29 @@ entity NavigatorSettings : cuid, managed {
 entity DisplaySettings : cuid, managed {
   dashboardUrl         : String(500);
 }
+
+
+// Phase 3 (#466): Tenant-wide config bag.
+// allowedCorsOrigins: comma-separated origin URLs (raw env-var format).
+// rebuildTargetEnv: dev/qa/prod controlling rebuild-trigger workflow_dispatch
+//   target. NOT @assert.range enum-constrained at the DB level — only the
+//   admin-tile ComboBox enforces the value set. Direct OData PATCH (e.g. via
+//   curl by an Admin) bypasses validation. Deliberate: matches the
+//   no-write-time-validation stance for the other special-shape Tenant fields.
+//   Add @assert.range enum if this becomes painful (Phase 4).
+// techUsers: legacy JSON-array format (raw env-var format).
+// techUsersMapping: 'tech_id1:real_uuid1;tech_id2:real_uuid2' (raw env-var format).
+//
+// LargeString chosen for the 3 special-shape fields (CORS, techUsers,
+// techUsersMapping) to avoid silent truncation if these grow beyond 2000
+// chars in a multi-tenant rollout.
+//
+// Special-shape fields stored as raw String/LargeString — consumers keep their
+// existing parse logic. No write-time validation in this PR (matches today's
+// env-var typo failure mode); add @assert.format if validation becomes painful.
+entity TenantSettings : cuid, managed {
+  allowedCorsOrigins   : LargeString;
+  rebuildTargetEnv     : String(10);
+  techUsers            : LargeString;
+  techUsersMapping     : LargeString;
+}
