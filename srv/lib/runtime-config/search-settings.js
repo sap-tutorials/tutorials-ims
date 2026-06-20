@@ -10,8 +10,10 @@ import cds from '@sap/cds';
 const LOG = cds.log('search-settings-resolver');
 
 const TTL_MS = 5_000;
-let _cachedAt = 0;
-let _cached = null;
+// Cache stored on globalThis so module-singleton multiplicity (Vitest+CDS
+// on Windows) doesn't produce divergent caches across instances.
+const STATE_KEY = Symbol.for('com.sap.developers.ims:search-settings-resolver');
+const _state = (globalThis[STATE_KEY] ??= { cached: null, cachedAt: 0 });
 
 const DEFAULTS = {
   rateLimitMax: 60,
@@ -53,7 +55,7 @@ function envNumber(name) {
 
 export async function resolveSearchSettings() {
   const now = Date.now();
-  if (_cached && (now - _cachedAt) < TTL_MS) return _cached;
+  if (_state.cached && (now - _state.cachedAt) < TTL_MS) return _state.cached;
 
   const row = await readRow();
   const settings = {
@@ -67,12 +69,12 @@ export async function resolveSearchSettings() {
       ?? DEFAULTS.rateLimitWindowMs,
   };
 
-  _cached = settings;
-  _cachedAt = now;
+  _state.cached = settings;
+  _state.cachedAt = now;
   return settings;
 }
 
 export function _resetCacheForTests() {
-  _cached = null;
-  _cachedAt = 0;
+  _state.cached = null;
+  _state.cachedAt = 0;
 }

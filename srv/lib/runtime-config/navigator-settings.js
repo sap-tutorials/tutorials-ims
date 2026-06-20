@@ -1,14 +1,20 @@
 // srv/lib/runtime-config/navigator-settings.js
 // Resolves the /build/navigator nested-group inclusion flag. Layered:
 //   1. NavigatorSettings row → 2. raw-SQL UPPERCASE → 3. env → 4. default false
+//
+// Cache state is stored on globalThis under a Symbol.for() key so a single
+// in-process cache is shared even when this module is loaded under multiple
+// resolved paths (Vitest+CDS on Windows can resolve the same .js via
+// different drive-letter casing or `D:/...` vs `d:\\...`, producing
+// distinct module instances — see MEMORY: "Module Singletons in vitest+CDS").
 
 import cds from '@sap/cds';
 
 const LOG = cds.log('navigator-settings-resolver');
 
 const TTL_MS = 5_000;
-let _cachedAt = 0;
-let _cached = null;
+const STATE_KEY = Symbol.for('com.sap.developers.ims:navigator-settings-resolver');
+const _state = (globalThis[STATE_KEY] ??= { cached: null, cachedAt: 0 });
 
 const DEFAULTS = { includeNestedGroups: false };
 
@@ -46,7 +52,7 @@ function envFlag(name) {
 
 export async function resolveNavigatorSettings() {
   const now = Date.now();
-  if (_cached && (now - _cachedAt) < TTL_MS) return _cached;
+  if (_state.cached && (now - _state.cachedAt) < TTL_MS) return _state.cached;
 
   const row = await readRow();
   const settings = {
@@ -57,12 +63,12 @@ export async function resolveNavigatorSettings() {
     ),
   };
 
-  _cached = settings;
-  _cachedAt = now;
+  _state.cached = settings;
+  _state.cachedAt = now;
   return settings;
 }
 
 export function _resetCacheForTests() {
-  _cached = null;
-  _cachedAt = 0;
+  _state.cached = null;
+  _state.cachedAt = 0;
 }

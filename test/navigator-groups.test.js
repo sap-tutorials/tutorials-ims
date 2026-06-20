@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import cds from '@sap/cds';
+import { _resetCacheForTests as _resetNavigatorCache } from '../srv/lib/runtime-config/navigator-settings.js';
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
 
@@ -188,6 +189,9 @@ describe('/build/navigator: nested Group default-off (Issue #364)', () => {
     // Belt-and-suspenders: explicitly clear the flag in case prior describe
     // didn't restore (the prior afterAll DOES restore — this is defense in depth).
     delete process.env.NAV_INCLUDE_NESTED_GROUPS;
+    // Reset resolver cache so the prior block's `true` value (cached for 5s)
+    // doesn't leak into this block's default-off assertion.
+    _resetNavigatorCache();
     const { Tags, Missions, CompletionPaths, CompletionPathItems, Groups, Tutorials, GroupPathItems } =
       cds.entities('com.sap.developers.ims');
     await INSERT.into(Tags).entries({ ID: D_TAG_ID, legacyId: 99009, name: '__TEST__ Default-Off Tag' });
