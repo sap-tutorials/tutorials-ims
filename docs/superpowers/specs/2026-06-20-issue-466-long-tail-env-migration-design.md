@@ -54,7 +54,13 @@ After this PR, every runtime-tunable env var from the #444 inventory is DB-backe
 
 ## CDS schema
 
-Append to [db/schema.cds](../../../db/schema.cds) at end-of-file. **Note:** this worktree may have branched before #471/#482 merged. The 5 new entities go at end-of-file regardless of whether `KnowledgeGraphSettings` and `Secrets` are present in this worktree's view of `schema.cds` (idempotent appendable pattern matching #463/#464's plan-template).
+Append to [db/schema.cds](../../../db/schema.cds) at end-of-file. **Worktree-state warning:** this worktree branched from main BEFORE PRs #471 and #482 merged. Verified at spec-review time:
+
+- `srv/lib/runtime-config/` does NOT exist here (kg-settings.js absent).
+- `KnowledgeGraphSettings` and `Secrets` entities are NOT in this worktree's `db/schema.cds`.
+- Knowledge Graph and Secrets nav-entries are NOT in `Shell.view.xml`.
+
+**Implication:** the spec uses idempotent appendable patterns throughout, but the "RELOCATE" framing for KG + Secrets in the TL;DR + nav-restructuring sections becomes "ADD" if those entries don't exist when the implementer runs. Plan tasks must check both states (worktree rebased post-#471/#482 vs unrebased) and act accordingly. The 5 new entities go at end-of-file regardless of whether KnowledgeGraphSettings and Secrets are present.
 
 ```cds
 
@@ -92,9 +98,19 @@ entity DisplaySettings : cuid, managed {
 
 // Phase 3 (#466): Tenant-wide config bag.
 // allowedCorsOrigins: comma-separated origin URLs (raw env-var format).
-// rebuildTargetEnv: enum dev/qa/prod controlling rebuild-trigger workflow_dispatch target.
+// rebuildTargetEnv: dev/qa/prod controlling rebuild-trigger workflow_dispatch
+//   target. NOT @assert.range enum-constrained at the DB level — only the
+//   admin-tile ComboBox enforces the value set. Direct OData PATCH (e.g. via
+//   curl by an Admin) bypasses validation. Deliberate: matches the
+//   no-write-time-validation stance for the other special-shape Tenant fields.
+//   Add @assert.range enum if this becomes painful (Phase 4).
 // techUsers: legacy JSON-array format (raw env-var format).
 // techUsersMapping: 'tech_id1:real_uuid1;tech_id2:real_uuid2' (raw env-var format).
+//
+// LargeString chosen for the 3 special-shape fields (CORS, techUsers,
+// techUsersMapping) to avoid silent truncation if these grow beyond 2000
+// chars in a multi-tenant rollout. String(2000) would fit today's values but
+// not future-proof.
 //
 // Special-shape fields stored as raw String/LargeString — consumers keep their
 // existing parse logic. No write-time validation in this PR (matches today's
@@ -331,6 +347,8 @@ app.use('/search', async (req, res, next) => {
 });
 ```
 
+**Optimization note:** the new code calls `ipRateLimitMiddleware(limiter, ...)` (the factory) on every request. If profiling shows the factory is non-trivial (closes over substantial state), cache the **constructed middleware** alongside `_cachedLimiter` — the cache key becomes a `{ limiter, middleware }` pair invalidated together. Plan task includes a sub-step: "If `ipRateLimitMiddleware` is more than a thin closure, cache the constructed middleware in `_cachedLimiter`'s sibling slot."
+
 ### Navigator — `srv/lib/navigator-catalog.js`
 
 `shouldIncludeNestedGroups()` becomes async.
@@ -439,7 +457,7 @@ export async function scheduleRebuild(reason) {
 }
 ```
 
-**Behavior change:** `scheduleRebuild()` becomes async. Plan task explicitly greps for `scheduleRebuild(` callers and verifies all either `await` or explicitly fire-and-forget with a comment. CAP after-handlers DO support async returns, so `srv/server.js` admin-write hooks should be fine, but plan must verify.
+**Behavior change:** `scheduleRebuild()` becomes async. Plan task explicitly greps for `scheduleRebuild(` callers and verifies all either `await` or explicitly fire-and-forget with a comment. CAP after-handlers DO support async returns, so `srv/server.js` admin-write hooks should be fine, but plan must verify. **The existing `srv/lib/__tests__/rebuild-trigger.test.js` has 13 `scheduleRebuild(` calls that must become `await scheduleRebuild(...)`** — plan task includes this explicit test-file update.
 
 #### `srv/lib/tech-user-auth.js` — both `loadTechUsers()` and `loadTechUserMapping()` become async
 
@@ -595,6 +613,8 @@ Plan must grep existing prefixes (`'prefix':`) before adding to verify uniquenes
 **Highest JSON-syntax-error risk in the PR.** Plan task should run `mcp__plugin_ui5_ui5-mcp-server__run_manifest_validation` after each cluster of 5 entries (4 validation runs total), not just at the end.
 
 ### `app/admin-shell/webapp/view/Shell.view.xml` — TWO changes
+
+**i18n note:** the new "Runtime Settings" group label and the 5 child labels (`UI Events`, `Search`, `Navigator`, `Display`, `Tenant`) are hardcoded XML strings — **deliberately consistent with the existing pattern** (every nav-item label in the System / Content / Rewards / Feedback groups is hardcoded XML, NOT bound to the i18n bundle). The admin-shell i18n bundle created in #482 holds operator-facing labels (`notificationsEmpty`); migrating nav-item labels is a separate cleanup PR (out of scope per the bottom-of-spec list).
 
 #### Change 1: Add new "Runtime Settings" nav-group parent
 
