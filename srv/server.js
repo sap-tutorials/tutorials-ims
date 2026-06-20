@@ -384,11 +384,9 @@ cds.on('served', async () => {
       // [#174 PR 3] Also schedule a /browse/ SSR rebuild. Debounced 60s so a
       // single admin bulk-edit (rename tag → 50 tutorials updated) collapses
       // into one workflow_dispatch instead of 50.
-      try {
-        scheduleRebuild('admin-write');
-      } catch (err) {
+      scheduleRebuild('admin-write').catch(err => {
         console.error('[rebuild-trigger] scheduling failed', err);
-      }
+      });
     });
     globalThis.__navigatorCacheInvalidatorRegistered = true;
   }

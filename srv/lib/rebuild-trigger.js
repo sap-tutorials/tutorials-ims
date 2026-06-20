@@ -11,6 +11,8 @@
 // Spec: docs/superpowers/specs/2026-06-02-browse-layout-design.md (Q11)
 // Uses native fetch (Node >= 20) — no octokit dependency.
 
+import { resolveTenantSettings } from './runtime-config/tenant-settings.js';
+
 const REPO_OWNER = 'sap-tutorials'
 const REPO_NAME = 'tutorials-ims'
 const WORKFLOW_FILE = 'rebuild-content.yml'
@@ -19,11 +21,6 @@ const GITHUB_API = 'https://api.github.com'
 
 let _state = {
   token: process.env.GITHUB_DISPATCH_TOKEN ?? null,
-  // REBUILD_TARGET_ENV controls which Cloud Foundry approuter the rebuild
-  // workflow_dispatch targets. Default 'dev' matches the original DEV-only
-  // rollout; set per CF env (qa/prod) when GITHUB_DISPATCH_TOKEN rolls
-  // forward to those environments. See docs/developers/operations/github-dispatch-pat-rotation.md.
-  environment: process.env.REBUILD_TARGET_ENV ?? 'dev',
   debounceMs: DEFAULT_DEBOUNCE_MS,
   pendingTimer: null,
   pendingReason: null,
@@ -50,7 +47,7 @@ async function defaultDispatch(inputs) {
   return { status: res.status }
 }
 
-export function scheduleRebuild(reason) {
+export async function scheduleRebuild(reason) {
   if (!_state.token) {
     return  // Feature flag off — no-op silently. Token-missing is logged once at boot.
   }
@@ -61,15 +58,18 @@ export function scheduleRebuild(reason) {
     clearTimeout(_state.pendingTimer)
   }
   _state.pendingReason = reason
-  _state.pendingTimer = setTimeout(() => {
+  _state.pendingTimer = setTimeout(async () => {
     const reasonAtFire = _state.pendingReason
     _state.pendingTimer = null
     _state.pendingReason = null
-    _state.dispatchFn({ 'trigger-source': reasonAtFire, environment: _state.environment }).catch((err) => {
+    try {
+      const { rebuildTargetEnv } = await resolveTenantSettings();
+      await _state.dispatchFn({ 'trigger-source': reasonAtFire, environment: rebuildTargetEnv });
+    } catch (err) {
       console.error('[rebuild-trigger] dispatch failed:', err.message ?? err)
       // Do NOT rethrow. Admin save already succeeded; the next trigger
       // picks up the missed change.
-    })
+    }
   }, _state.debounceMs)
 }
 
@@ -81,16 +81,15 @@ export function checkFeatureFlag() {
     console.warn('[rebuild-trigger] GITHUB_DISPATCH_TOKEN unset — admin writes will not trigger /browse/ rebuilds. Falls back to next-push cadence.')
   } else if (_state.token && !_bootWarned) {
     _bootWarned = true
-    console.log(`[rebuild-trigger] active — admin writes will dispatch with environment='${_state.environment}'.`)
+    console.log('[rebuild-trigger] active — admin writes will dispatch (target env resolved per-call from TenantSettings).')
   }
 }
 
 // Test-only escape hatch.
-export function _resetForTests({ dispatchFn, debounceMs, token, environment }) {
+export function _resetForTests({ dispatchFn, debounceMs, token }) {
   if (_state.pendingTimer) clearTimeout(_state.pendingTimer)
   _state = {
     token: token ?? null,
-    environment: environment ?? 'dev',
     debounceMs: debounceMs ?? DEFAULT_DEBOUNCE_MS,
     pendingTimer: null,
     pendingReason: null,
