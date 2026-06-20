@@ -1,0 +1,32 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.tenant",
+    "type": "application",
+    "title": "{{appTitle}}",
+    "i18n": "i18n/i18n.properties"
+  },
+  "sap.ui5": {
+    "rootView": {
+      "viewName": "sap.tutorials.admin.tenant.view.Settings",
+      "type": "XML",
+      "id": "settings",
+      "async": true
+    },
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": {
+        "sap.m": {},
+        "sap.ui.core": {},
+        "sap.ui.layout": {}
+      }
+    },
+    "models": {
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": { "bundleName": "sap.tutorials.admin.tenant.i18n.i18n" }
+      }
+    },
+    "contentDensities": { "compact": true, "cozy": true }
+  }
+}
