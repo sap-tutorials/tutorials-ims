@@ -149,6 +149,7 @@ export default defineConfig({
           ]},
           { text: 'Production readiness',      link: '/developers/operations/production-ready' },
           { text: 'QA channel bootstrap',      link: '/developers/operations/qa-channel-bootstrap' },
+          { text: 'Re-migration runbook',      link: '/developers/operations/re-migration-runbook' },
           { text: 'Testing endpoints',         link: '/developers/operations/testing-endpoints' },
           { text: 'Testing guide',             link: '/developers/operations/testing-guide' },
           { text: 'Tutorial markdown lint',    link: '/developers/operations/tutorial-markdown-lint' }
