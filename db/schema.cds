@@ -93,6 +93,7 @@ entity MissionSlugRedirects : cuid, managed {
   slug                      : String(255) @mandatory;
 }
 
+@assert.unique.tutorialStep : [tutorial, stepOrder]
 entity Steps : TaskBase {
   tutorial                  : Association to Tutorials;
   stepOrder                 : Integer;
@@ -101,6 +102,7 @@ entity Steps : TaskBase {
 
 entity Checkpoints : TaskBase { }
 
+@assert.unique.sapId : [sapId]
 entity Users : cuid, managed, LegacyKeyed {
   uuid                      : String(36) @mandatory;
   sapId                     : String(255);
@@ -261,6 +263,7 @@ entity AccomplishmentRecords : cuid, LegacyKeyed {
   awardedAt                 : Timestamp;
 }
 
+@assert.unique.slug : [slug]
 entity CompletionPaths : cuid, LegacyKeyed {
   mission                   : Association to Missions;
   name                      : String(255);
