@@ -150,14 +150,25 @@
 }
 
 /* ─── ProgressOverlay (CSR-only, gated on hydration) ─── */
-.nav-card__progress {
+/* Selector specificity NOTE (#399 follow-up):
+   The element this targets has BOTH classes:
+     class="progress-ring progress-ring--complete nav-card__progress nav-card__progress--animate-in"
+   ProgressRing.vue carries a `<style scoped>` rule:
+     .progress-ring[data-v-XXX] { position: relative }    (specificity 0,2,0)
+   A plain `.nav-card__progress { position: absolute }` is 0,1,0 — LOSES the
+   cascade to the scoped rule, leaving the ring as `position: relative` and
+   in normal flow at the top-left of the card (issue surfaced 2026-06-20 via
+   Playwright on https://...dev-tutorials-approuter.../).
+   The selector below is 0,3,0 (.nav-card + .progress-ring + .nav-card__progress)
+   which beats the scoped 0,2,0. Same applies to the license-collision rule. */
+.nav-card .progress-ring.nav-card__progress {
   position: absolute;
   top: 0.75rem;
   right: 0.75rem;
   opacity: 0;
   transition: opacity 0.15s ease-out;
 }
-.tutorial-navigator[data-progress-loaded="true"] .nav-card__progress {
+.tutorial-navigator[data-progress-loaded="true"] .nav-card .progress-ring.nav-card__progress {
   opacity: 1;
 }
 
