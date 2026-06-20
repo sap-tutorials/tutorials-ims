@@ -167,13 +167,7 @@ If the implementer sees `KnowledgeGraphSettings` in this worktree, the worktree 
   npx cds compile db/schema.cds > /dev/null && echo OK
   ```
 
-  Expected: `OK`. If `@assert.unique.key` syntax errors, try alternative form:
-
-  ```cds
-  @assert.unique.key : [key]
-  ```
-
-  (without the `![key]` escape inside the array — the `![]` is for declaring a column with reserved-word name; references inside annotations may not need it.)
+  Expected: `OK`. If compile fails, run `npx cds compile db/schema.cds 2>&1` (without `> /dev/null`) and read the actual error before guessing. The `@assert.unique.key : [![key]]` form matches the entity-level named pattern at `db/schema.cds:28,47,64,298` — don't substitute alternative forms without understanding the error first.
 
 - [ ] **Step 1.4: Commit**
 
@@ -497,7 +491,7 @@ If the implementer sees `KnowledgeGraphSettings` in this worktree, the worktree 
 
   Find the existing cron registrations inside `registerJobs()`. They're around lines 55-200 (each `cron.schedule(...)` block). Append a new registration. The 04:11 UTC slot is uncontested by other crons.
 
-  Use Edit. Anchor on the closing `}` of `registerJobs()` (or the last `cron.schedule` block — pick whichever is unique). Insert before it:
+  Use Edit. Anchor on `LOG.info('All scheduled jobs registered');` (the unique line at the END of `registerJobs()`, around line 201) and insert the new registration BEFORE it.
 
   ```javascript
 
@@ -1659,10 +1653,10 @@ If the implementer sees `KnowledgeGraphSettings` in this worktree, the worktree 
 
   ```bash
   yq '.modules[] | select(.name == "tutorials-srv-qa")' .deploy/mta.yaml > /dev/null && echo YAML_OK
-  yq -r '.modules[] | select(.name == "tutorials-srv-qa") | ."build-parameters".commands[] | select(test("secret-expiry-check"))' .deploy/mta.yaml | bash -n && echo SHELL_OK
+  grep -c "secret-expiry-check.js" .deploy/mta.yaml
   ```
 
-  Expected: both `YAML_OK` and `SHELL_OK`. If either fails, `git checkout .deploy/mta.yaml` and try again with extra care for quote balance.
+  Expected: `YAML_OK` printed AND the count from the second command is `≥ 1` (the new file appears in the cp chain). If YAML parse fails OR count is 0, `git checkout .deploy/mta.yaml` and try again with extra care for quote balance + cp filename.
 
 - [ ] **Step 13.4: Commit**
 
