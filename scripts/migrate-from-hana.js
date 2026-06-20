@@ -214,6 +214,51 @@ export function deriveCompletionPathSlug(name, legacyId, seen) {
   return candidate;
 }
 
+// Dedupe Tutorials.slug across an in-pass `seen` Set. Java IMS sometimes has
+// multiple IMS_TASK rows mapping to the same source markdown URL — most
+// commonly an ACTIVE row + a DELETED archive row pointing at the same
+// GitHub path. With @assert.unique.slug enforced (PR #467), both rows can't
+// coexist; the later-seen one needs a suffix. Suffixing on legacyId makes
+// the choice deterministic across re-runs (uuid v5 from the migrator's
+// deriveUuid uses legacyId, so the suffixed slug stays stable too).
+//
+// The caller MUST sort source rows by `(STATUS != 'DELETED', UPDATED_AT DESC)`
+// so the surviving "winner" slug is the most recent ACTIVE row. The DELETED
+// or older row gets the suffixed slug.
+//
+// Issue #473.
+export function dedupeTutorialSlug(rawSlug, legacyId, seen) {
+  if (!rawSlug) {
+    // Empty/null source: emit `tutorial-${legacyId}` and let the caller's
+    // mapRow placeholder branch handle it. We still record it in `seen`
+    // for collision tracking.
+    const candidate = `tutorial-${legacyId}`;
+    if (seen.has(candidate)) {
+      // Extremely unlikely but possible if legacyId collides — mostly a
+      // belt-and-braces guard. Suffix with a counter.
+      let i = 1;
+      while (seen.has(`${candidate}-${i}`)) i++;
+      const final = `${candidate}-${i}`;
+      seen.add(final);
+      return final;
+    }
+    seen.add(candidate);
+    return candidate;
+  }
+  if (!seen.has(rawSlug)) {
+    seen.add(rawSlug);
+    return rawSlug;
+  }
+  // Collision: suffix with legacyId for stability.
+  let candidate = `${rawSlug}-${legacyId}`;
+  let i = 1;
+  while (seen.has(candidate)) {
+    candidate = `${rawSlug}-${legacyId}-${i++}`;
+  }
+  seen.add(candidate);
+  return candidate;
+}
+
 // Audit users with NULL SAP_ID. They land in the DB so their TaskRecords
 // have a FK target, but they're invisible to /api/getProgress (developer-
 // service.js looks up by sapId; missing → returns 0/0/0). The 2026-06-20
@@ -816,9 +861,17 @@ async function main() {
   }));
 
   // 5. Tutorials
+  // Java IMS sometimes has multiple IMS_TASK rows pointing to the same source
+  // markdown URL (most commonly an ACTIVE + DELETED pair). The migrator
+  // derives SLUG from the URL filename, so colliding rows would map to the
+  // same slug and the second INSERT would hit the
+  // COM_SAP_DEVELOPERS_IMS_TUTORIALS_SLUG unique index. Sort the source so
+  // ACTIVE-with-recent-UPDATED_AT wins (claims the preferred slug); DELETED
+  // or older rows get suffixed by dedupeTutorialSlug. Issue #473.
+  const _tutorialSlugSeen = new Set();
   results.push(await migrateEntity(source, target, T, {
     name: 'tutorials',
-    sourceQuery: `SELECT "ID", "TITLE", "TASK_STATUS", "URL", "PRIMARY_TAG_ID", "EXPERIENCE_TAG_ID", "AVERAGE_TTC", "FEATURED_ORDER", "CREATED_AT", "UPDATED_AT", "CREATED_BY", "UPDATED_BY" FROM ${S}."IMS_TASK" WHERE "TASK_TYPE" = 'TUTORIAL'`,
+    sourceQuery: `SELECT "ID", "TITLE", "TASK_STATUS", "URL", "PRIMARY_TAG_ID", "EXPERIENCE_TAG_ID", "AVERAGE_TTC", "FEATURED_ORDER", "CREATED_AT", "UPDATED_AT", "CREATED_BY", "UPDATED_BY" FROM ${S}."IMS_TASK" WHERE "TASK_TYPE" = 'TUTORIAL' ORDER BY (CASE WHEN "TASK_STATUS" = 'DELETED' THEN 1 ELSE 0 END), "UPDATED_AT" DESC`,
     targetTable: 'COM_SAP_DEVELOPERS_IMS_TUTORIALS',
     mapRow: (row) => ({
       ID: uuidMap.tutorials.get(row.ID),
@@ -832,7 +885,19 @@ async function main() {
       // strip, Hugo's tutorial cache (keyed off the .md-less slug)
       // never matches the catalog mappings, so the navigator emits
       // 0 mission/group cards. Surfaced 2026-06-16 cutover rehearsal.
-      SLUG: truncStr(((row.URL || '').split('/').pop() || `tutorial-${row.ID}`).replace(/\.md$/i, ''), 255),
+      //
+      // Issue #473: dedupe in-pass so an ACTIVE+DELETED collision pair
+      // doesn't trip the @assert.unique.slug constraint. The ORDER BY
+      // on the source query ensures the surviving ACTIVE row claims
+      // the preferred slug; the loser gets `${rawSlug}-${legacyId}`.
+      SLUG: truncStr(
+        dedupeTutorialSlug(
+          ((row.URL || '').split('/').pop() || '').replace(/\.md$/i, ''),
+          row.ID,
+          _tutorialSlugSeen
+        ),
+        255
+      ),
       MDFILEURL: truncStr(row.URL, 1000),
       PRIMARYTAG: truncStr(tagMap.get(row.PRIMARY_TAG_ID), 255) || null,
       EXPERIENCETAG: truncStr(tagMap.get(row.EXPERIENCE_TAG_ID), 255) || null,
