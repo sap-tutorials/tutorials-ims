@@ -260,6 +260,44 @@ export default class AdminService extends cds.ApplicationService {
       // legacyKeyedEntities loop at lines 71-85 already covers it.
     }
 
+    // [#436] Auto-derive CompletionPaths.slug from name. Mirrors
+    // deriveSlugForEntity but adapted for two CompletionPaths-specific facts:
+    //   1. The source field is `name`, not `title`.
+    //   2. Slug uniqueness is scoped to the parent mission, not the entity table —
+    //      two missions can each legitimately have a "Path A".
+    const deriveCompletionPathSlug = async (req) => {
+      const isCreate = req.event === 'CREATE' || req.event === 'NEW';
+      const ID = req.data.ID;
+      const name = req.data.name;
+      const missionId = req.data.mission_ID;
+
+      let prior = null;
+      if (!isCreate && ID) {
+        [prior] = await SELECT.from(req.target).where({ ID }).columns('name', 'slug', 'mission_ID');
+      }
+      const effectiveName = name ?? prior?.name;
+      const effectiveMission = missionId ?? prior?.mission_ID;
+      if (!effectiveName || !effectiveMission) return;
+
+      const base = slugify(effectiveName);
+      if (!isCreate && prior?.slug && (name === undefined || name === prior.name)) return;
+
+      // Scope-unique: only collide against siblings under the same mission.
+      const siblings = await SELECT.from(CompletionPaths)
+        .columns('ID', 'slug')
+        .where({ mission_ID: effectiveMission, slug: { '!=': null } });
+      const taken = new Set(
+        siblings.filter(r => r.ID !== ID).map(r => r.slug).filter(Boolean)
+      );
+
+      req.data.slug = ensureUniqueSlug(base, taken, prior?.slug ?? null);
+    };
+
+    this.before('CREATE', 'CompletionPaths', deriveCompletionPathSlug);
+    this.before('NEW',    'CompletionPaths.drafts', deriveCompletionPathSlug);
+    this.before('PATCH',  'CompletionPaths.drafts', deriveCompletionPathSlug);
+    this.before('SAVE',   'CompletionPaths', deriveCompletionPathSlug);
+
     // Reset notification escalation when reviewedDate is updated via Fiori UI
     this.before('UPDATE', 'TutorialMeta', (req) => {
       if (req.data.reviewedDate) {
