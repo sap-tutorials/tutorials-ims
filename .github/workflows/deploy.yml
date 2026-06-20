@@ -81,10 +81,25 @@ jobs:
       - name: Install MTA Build Tool
         run: npm install -g mbt@${{ env.MBT_VERSION }}
 
+      - name: Set CAP_BASE_URL for build
+        id: cap-url
+        run: |
+          case "${{ steps.env.outputs.target }}" in
+            dev)  echo "url=${{ secrets.CAP_SRV_URL_DEV }}" >> "$GITHUB_OUTPUT" ;;
+            qa)   echo "url=${{ secrets.CAP_SRV_URL_QA }}" >> "$GITHUB_OUTPUT" ;;
+            prod) echo "url=${{ secrets.CAP_SRV_URL_PROD }}" >> "$GITHUB_OUTPUT" ;;
+          esac
+
       - name: Build MTA archive
         run: mbt build -e deploy/${{ steps.env.outputs.target }}.mtaext
         env:
           GITHUB_TOKEN: ${{ secrets.TUTORIALS_GITHUB_TOKEN || github.token }}
+          # Required by scripts/parsers/cap.ts during fetch-tutorials Phase 4
+          # (mission/group catalog fetch from the deployed srv). Without it,
+          # the build defaults to http://localhost:4004 and fails with
+          # "TypeError: fetch failed" since no local CAP runs in CI. The
+          # build is target-aware so qa fetches its own QA-channel catalog.
+          CAP_BASE_URL: ${{ steps.cap-url.outputs.url }}
 
       - name: Upload MTAR artifact
         uses: actions/upload-artifact@v4
