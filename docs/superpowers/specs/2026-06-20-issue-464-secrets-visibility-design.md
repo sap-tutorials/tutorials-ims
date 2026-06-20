@@ -90,7 +90,9 @@ app/admin-shell/webapp/i18n/i18n.properties (CREATE — first i18n bundle in adm
   + notificationsEmpty=...
 
 .deploy/mta.yaml   (modify line 97)
-  ~ srv-qa cp chain adds srv/jobs/secret-expiry-check.js
+  ~ srv-qa cp chain DEFENSIVELY adds srv/jobs/secret-expiry-check.js
+    (not strictly needed — srv-qa doesn't load scheduler.js — but mirrors
+    the convention that all srv/jobs/* files ship to QA)
 
 test/unit/jobs/secret-expiry-check.test.js
   + ~6 unit tests covering classifySeverity boundaries + runSecretExpiryCheck shape
@@ -130,8 +132,9 @@ Append to [db/schema.cds](../../../db/schema.cds) after the `KnowledgeGraphSetti
 // CSV seed at db/data/...-Secrets.csv MUST stay empty per the
 // HDI-clobbers-admin-edits footgun ([feedback_cap_csv_seeds_clobber_admin_data]).
 // Initial seeding is a one-shot script: scripts/seed-secrets.cjs.
+@assert.unique.key : [![key]]
 entity Secrets : cuid, managed {
-  ![key]              : String(120) @assert.unique;
+  ![key]              : String(120);
   description         : String(500);
   kind                : String(40);
   rotationOwner       : String(120);
@@ -142,6 +145,8 @@ entity Secrets : cuid, managed {
 ```
 
 `![key]` escapes the CDS reserved word `key` (which marks primary keys structurally). The column is `String(120)`, NOT a primary key — `cuid` already provides `ID : UUID` as the PK.
+
+The `@assert.unique.key` annotation uses the **entity-level named form** matching the four existing patterns in `db/schema.cds` (lines 28, 47, 64, 298). Generates a deterministic HANA constraint name (`COM_SAP_DEVELOPERS_IMS_SECRETS_KEY`) and matches local convention.
 
 **Kind enum** — free-text for forward-compat, but documented values are:
 
@@ -218,8 +223,9 @@ const WARNING_THRESHOLD_DAYS = 7;    // 0 < days ≤ 7
 const INFO_THRESHOLD_DAYS = 14;      // 7 < days ≤ 14
 
 /** Compute calendar-day delta between today (UTC) and expiresAt.
- *  Negative = already expired. */
-function daysUntil(expiresAt, now = new Date()) {
+ *  Negative = already expired. Exported so the secretWarnings()
+ *  AdminService handler can reuse it without duplication. */
+export function daysUntil(expiresAt, now = new Date()) {
   if (!expiresAt) return null;
   const expiry = new Date(expiresAt).getTime();
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).getTime();
@@ -276,7 +282,7 @@ export async function runSecretExpiryCheck() {
 }
 ```
 
-### Why these specifics
+### Why the cron is shaped this way
 
 - **`daysUntil` truncates to UTC calendar days.** Without truncation, an expiry at "2026-06-30 00:00 UTC" would report "30 days remaining" at 23:59 UTC June 30 (seconds before expiry) AND "29 days" 1 second later. Truncation makes thresholds stable across cron-fire times.
 - **`criticalKeys.slice(0, 5)`** keeps the PipelineLog `summary` column readable. The scheduler's `formatJobSummary` flattens the result object into a key=value string capped at 2000 chars. Five names is enough to convey "the problem is X" without bloating logs.
@@ -305,7 +311,7 @@ The 10-minute lock duration matches similar jobs (cleanup-step-failures uses 60m
 In [srv/admin-service.js](../../../srv/admin-service.js), add the function handler alongside other AdminService handlers:
 
 ```javascript
-import { classifySeverity } from './jobs/secret-expiry-check.js';
+import { classifySeverity, daysUntil } from './jobs/secret-expiry-check.js';
 
 this.on('secretWarnings', async (req) => {
   const { Secrets } = cds.entities('com.sap.developers.ims');
@@ -314,12 +320,9 @@ this.on('secretWarnings', async (req) => {
     .where({ expiresAt: { '!=': null } });
 
   const now = new Date();
-  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).getTime();
-
   const warnings = [];
   for (const row of rows) {
-    const expiry = new Date(row.expiresAt).getTime();
-    const daysRemaining = Math.floor((expiry - today) / 86_400_000);
+    const daysRemaining = daysUntil(row.expiresAt, now);
     const severity = classifySeverity(daysRemaining);
     if (!severity) continue;
     warnings.push({
@@ -337,10 +340,9 @@ this.on('secretWarnings', async (req) => {
 });
 ```
 
-### Why these specifics
+### Why the handler is shaped this way
 
-- **Importing `classifySeverity` from the cron module** keeps threshold logic in one place. Both consumers (cron + handler) update together if `WARNING_THRESHOLD_DAYS` ever changes.
-- **The `daysUntil` math is duplicated** intentionally (~3 lines). Extracting a shared helper means a new module for trivial code — YAGNI. Refactor when a third consumer appears.
+- **Importing `classifySeverity` + `daysUntil` from the cron module** keeps both the threshold logic AND the date-math in one place. Single source of truth for severity bucket boundaries AND the UTC-truncation contract. If we ever change `WARNING_THRESHOLD_DAYS` from 7 to 10, OR change how "today" is computed, both consumers update together.
 - **Empty-string fallbacks** (`?? ''`) for nullable fields make UI binding safer; UI5 `Text.text` with `null` literally renders "null" in some control types.
 - **Sort by `daysRemaining` asc** puts already-expired (negative) and most-urgent secrets at the top of the popover.
 
@@ -721,7 +723,7 @@ main()
   .finally(() => process.exit(0));
 ```
 
-### Why these specifics
+### Why the seed script is shaped this way
 
 - **All 6 seeds ship with `expiresAt: null`.** Cron treats null = "never expires." Shipping placeholder dates would create false-positive warnings on day 1, training admins to ignore the popover (the boy-who-cried-wolf failure mode). Better to start silent and let admins explicitly opt-in to tracking.
 - **`process.exit(0)` in `.finally()`** is needed because `@sap/cds` opens DB connections that don't auto-close. Without it, the script hangs after `main()` resolves. Pattern matches existing `scripts/setup-dev-data.cjs`.
@@ -786,7 +788,7 @@ Test bootstrap pattern: `await cds.deploy(path.join(process.cwd(), 'db', 'schema
 | Cron fires on multiple instances (multi-instance srv). | `runWithLock` distributed lock (existing scheduler pattern) prevents duplicate runs across CF instances. |
 | `5th wiring location` regression (Shell.controller.js NAV maps) — same bug as #463 had. | Plan explicitly lists 5 admin-shell wiring locations; the controller's NAV_KEY_TO_ROUTE + NAV_KEY_TO_TITLE maps are the 5th. Added to a Phase-3 template note in the project memory. |
 | `i18n.properties` bundle creation in admin-shell is the first time. | Mirror per-tile pattern verbatim. Manifest registration in `models.i18n` block. Empty-state label is the only key for now; future expansion is additive. |
-| `mta.yaml` srv-qa cp drift between `srv` and `srv-qa`. | New `srv/jobs/secret-expiry-check.js` MUST be added to the `srv-qa` `cp` list at [.deploy/mta.yaml:97](../../../.deploy/mta.yaml#L97). Plan explicitly calls this out as a mandatory step. The cp is into an existing `srv/jobs/` subdirectory — no `mkdir -p` needed (unlike #463's new `srv/lib/runtime-config/` subdirectory). |
+| `mta.yaml` srv-qa cp drift between `srv` and `srv-qa`. | New `srv/jobs/secret-expiry-check.js` is **defensively** added to the `srv-qa` `cp` list at [.deploy/mta.yaml:97](../../../.deploy/mta.yaml#L97). NOT strictly required today — `srv-qa/server.js` is a slim app that only loads content-store + preview routes; it does NOT import `scheduler.js` or anything under `srv/jobs/`, so the cron module would be a dead file in `gen/srv-qa/srv/jobs/`. Adding it preserves the convention that any new `srv/jobs/*` file is mirrored to QA, preempting a crash if QA ever grows a feature that loads the cron module. The cp is into the EXISTING `srv/jobs/` subdirectory — no `mkdir -p` needed (unlike #463's new `srv/lib/runtime-config/` subdirectory). |
 | Encryption-key debate stalls Phase 2-C. | This PR ships the visibility win independently. Phase 2-C (#465) is a separately-mergeable follow-up. |
 
 ---
