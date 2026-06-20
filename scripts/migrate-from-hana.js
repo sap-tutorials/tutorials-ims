@@ -23,6 +23,8 @@
  */
 import { execFileSync } from 'child_process';
 import { createRequire } from 'module';
+import { mkdirSync, writeFileSync } from 'fs';
+import { join, dirname } from 'path';
 import hdb from 'hdb';
 
 // Issue #337: deterministic UUIDs derived from (entity_namespace, legacyId).
@@ -135,6 +137,64 @@ function execBatch(stmt, rows) {
       else resolve(result);
     });
   });
+}
+
+// Aggregate per-tutorial step counts from a stepParentMap. Pure helper —
+// exported for unit tests. Input shape: Map<childTaskId, { parentId, order }>
+// from IMS_TASK_TO_PARENT. Output: Map<tutorialId, count>. Rows with null
+// parentId are skipped (orphan steps don't contribute to any tutorial's
+// rollup denominator). Issue #466 — Tutorials.stepCount was NULL for
+// 1391/~1397 tutorials in the 2026-06-20 cutover audit because the migrator
+// never populated it.
+export function computeTutorialStepCount(stepParentMap) {
+  const counts = new Map();
+  for (const { parentId } of stepParentMap.values()) {
+    if (parentId == null) continue;
+    counts.set(parentId, (counts.get(parentId) ?? 0) + 1);
+  }
+  return counts;
+}
+
+// Derive a slug for a CompletionPath from its title (Java IMS doesn't store
+// one — slug is a CAP-side concept). Returns kebab-cased title with a
+// `path-${legacyId}` fallback for missing/empty input. Collision avoidance
+// via the caller-supplied `seen` Set: re-using the same Set across calls in
+// one migration pass guarantees uniqueness within the pass. Pure helper —
+// exported for unit tests. Issue #466 — CompletionPaths.slug was NULL for
+// 311 rows in the 2026-06-20 cutover audit, breaking /build/catalog.
+export function deriveCompletionPathSlug(name, legacyId, seen) {
+  const base = (name || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 240);
+  let candidate = base || `path-${legacyId}`;
+  let i = 1;
+  while (seen.has(candidate)) {
+    candidate = `${base || 'path'}-${legacyId}-${i++}`;
+  }
+  seen.add(candidate);
+  return candidate;
+}
+
+// Audit users with NULL SAP_ID. They land in the DB so their TaskRecords
+// have a FK target, but they're invisible to /api/getProgress (developer-
+// service.js looks up by sapId; missing → returns 0/0/0). The 2026-06-20
+// cutover audit found 472 such users. We don't drop them (FK survival), but
+// we DO write their legacyIds out so post-migration ops can reconcile or
+// hard-delete. Issue #466. Pure-ish helper — exported for tests; the `fs`
+// implementation is injected so tests can verify without writing to disk.
+export async function auditNullSapidUsers(source, sourceSchema, queryFn, fsImpl = { mkdirSync, writeFileSync }, cwd = process.cwd()) {
+  try {
+    const rows = await queryFn(source, `SELECT "ID", "UUID" FROM "${sourceSchema}"."IMS_USER" WHERE "SAP_ID" IS NULL`);
+    if (!rows || rows.length === 0) return { count: 0, path: null };
+    const path = join(cwd, '.migration-data', 'null-sapid-users.json');
+    fsImpl.mkdirSync(dirname(path), { recursive: true });
+    fsImpl.writeFileSync(path, JSON.stringify(rows, null, 2));
+    return { count: rows.length, path };
+  } catch (e) {
+    return { count: 0, path: null, error: e.message };
+  }
 }
 
 // Partition mapped rows by whether their lowercased SLUG already exists in
@@ -620,6 +680,13 @@ async function main() {
     console.log(`  Task-to-parent links: ${stepParentMap.size}`);
   } catch (e) { /* optional */ }
 
+  // Pre-compute per-tutorial step counts so Tutorials.stepCount can be
+  // populated at migration time (was NULL for 1391/~1397 tutorials in the
+  // 2026-06-20 cutover audit, which broke _updateTutorialProgress's rollup
+  // denominator).
+  const tutorialStepCount = computeTutorialStepCount(stepParentMap);
+  console.log(`  Per-tutorial step counts: ${tutorialStepCount.size} tutorials`);
+
   // Mission-to-group mapping: INTENTIONALLY EMPTY.
   // IMS does NOT model missions as children of groups (probed 2026-06-15:
   // SELECT ... FROM IMS_TASK_TO_PARENT ttp JOIN IMS_TASK m ON m.ID = ttp.CHILD_TASK_ID
@@ -734,6 +801,11 @@ async function main() {
       EXPERIENCETAG: truncStr(tagMap.get(row.EXPERIENCE_TAG_ID), 255) || null,
       AVERAGETIMETOCOMPLETE: row.AVERAGE_TTC,
       FEATUREDORDER: row.FEATURED_ORDER,
+      // STEPCOUNT was previously NULL for 1391/~1397 tutorials post-migration
+      // because the migrator never set it. Populate from the per-tutorial
+      // pre-aggregation built off IMS_TASK_TO_PARENT. _updateTutorialProgress
+      // uses this as the rollup denominator. Issue #466.
+      STEPCOUNT: tutorialStepCount.get(row.ID) ?? null,
       CREATEDAT: toISOTimestamp(row.CREATED_AT) || new Date().toISOString(),
       MODIFIEDAT: toISOTimestamp(row.UPDATED_AT) || new Date().toISOString(),
       CREATEDBY: truncStr(row.CREATED_BY, 255) || 'migration',
@@ -761,7 +833,14 @@ async function main() {
         TITLE: truncStr(row.TITLE, 255),
         STATUS: truncStr(row.TASK_STATUS, 50),
         TUTORIAL_ID: tutorialUuid,
-        STEPORDER: parent?.order ?? 0,
+        // Java IMS uses 0-based TASK_ORDER; CAP publish writes 1-based stepOrder.
+        // Normalize at migration time so both populations share a single key
+        // space — this prevents the duplicate-Step-row corruption that affected
+        // 1372/1397 tutorials in the 2026-06 cutover (audited 2026-06-20).
+        // The 0 fallback for orphan steps (no parent link) is intentional: it
+        // keeps them visible as "broken" rather than silently colliding with
+        // stepOrder=1.
+        STEPORDER: parent?.order != null ? parent.order + 1 : 0,
         CREATEDAT: toISOTimestamp(row.CREATED_AT) || new Date().toISOString(),
         MODIFIEDAT: toISOTimestamp(row.UPDATED_AT) || new Date().toISOString(),
         CREATEDBY: 'migration',
@@ -786,6 +865,21 @@ async function main() {
       MODIFIEDBY: 'migration',
     }),
   }));
+
+  // Audit: surface users with NULL sapId. They land in the DB so their
+  // TaskRecords have a FK target, but they're invisible to /api/getProgress
+  // (developer-service.js looks up by sapId; missing → returns 0/0/0). Emit
+  // count + write the legacyIds out so post-migration ops can either
+  // reconcile or hard-delete. Issue #466 — 472 such users in the 2026-06-20
+  // cutover audit.
+  if (!DRY_RUN) {
+    const audit = await auditNullSapidUsers(source, imsCreds.schema, query);
+    if (audit.error) {
+      console.warn(`  ⚠️  could not audit null-sapid users: ${audit.error}`);
+    } else if (audit.count > 0) {
+      console.warn(`  ⚠️  ${audit.count} users have NULL SAP_ID. Wrote legacyIds to ${audit.path}.`);
+    }
+  }
 
   // 7b. UserMetaData — INTENTIONALLY NOT MIGRATED.
   // The CAP UserMetaData entity (db/schema.cds:127-131) models a per-user
@@ -837,6 +931,12 @@ async function main() {
 
   // 9. Completion Paths
   if (hasCompletionPaths) {
+    // Slug derivation: Java IMS doesn't store slugs (CAP-side concept). The
+    // pre-2026-06-20 migrator left CompletionPaths.SLUG NULL for all 311 rows,
+    // which broke /build/catalog. Generate from title; fall back to
+    // `path-${legacyId}` for missing/empty input. Collisions resolved via the
+    // `seen` Set scoped to this entity migration. Issue #466.
+    const _completionPathSlugSeen = new Set();
     results.push(await migrateEntity(source, target, T, {
       name: 'completionpaths',
       sourceQuery: `SELECT "ID", "MISSION_ID", "TITLE", "DESCRIPTION", "PATH_ORDER" FROM ${S}."IMS_COMPLETION_PATH"`,
@@ -846,6 +946,7 @@ async function main() {
         LEGACYID: row.ID,
         MISSION_ID: uuidMap.missions.get(row.MISSION_ID) || null,
         NAME: truncStr(row.TITLE, 255),
+        SLUG: truncStr(deriveCompletionPathSlug(row.TITLE, row.ID, _completionPathSlugSeen), 255),
       }),
     }));
 

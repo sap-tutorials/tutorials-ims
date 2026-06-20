@@ -9,9 +9,21 @@
  * duplicated Tutorials too) by plain-INSERTing rows whose SLUG already lived
  * in the target. The patch mirrors the publish-side LOWER(slug)=? upsert in
  * srv/lib/content-publish-session.js.
+ *
+ * Issue #466 — additional tests for the four corruption-source fixes from
+ * the 2026-06-20 audit:
+ *   A. stepOrder normalization (0-based IMS → 1-based CAP)
+ *   B. Tutorials.stepCount derivation from stepParentMap
+ *   C. CompletionPaths.slug derivation (kebab-case + collision avoidance)
+ *   D. NULL-sapId users audit
  */
 import { describe, it, expect } from 'vitest';
-import { partitionBySlug } from '../../scripts/migrate-from-hana.js';
+import {
+  partitionBySlug,
+  computeTutorialStepCount,
+  deriveCompletionPathSlug,
+  auditNullSapidUsers,
+} from '../../scripts/migrate-from-hana.js';
 
 describe('partitionBySlug()', () => {
   it('partitions rows into inserts (new slugs) and updates (matching slugs)', () => {
@@ -101,5 +113,159 @@ describe('partitionBySlug()', () => {
       STATUS: 'ACTIVE',
       LEGACYID: 42,
     });
+  });
+});
+
+// ─── Issue #466 — corruption-source fixes ───────────────────────────────────
+
+describe('Fix A: step parent → STEPORDER mapping (1-based)', () => {
+  // The actual mapping happens inside an inline mapRow closure in main(); we
+  // test the same one-liner here to lock the contract: parent.order is the
+  // 0-based IMS TASK_ORDER, and we add 1 to land on CAP's 1-based stepOrder.
+  // The migrator preserves the `0` fallback for orphan steps (no parent link)
+  // so they show up as "broken" rather than colliding with stepOrder=1.
+  const stepOrderFor = (parent) => parent?.order != null ? parent.order + 1 : 0;
+
+  it('shifts 0-based IMS TASK_ORDER to 1-based CAP stepOrder', () => {
+    expect(stepOrderFor({ order: 0 })).toBe(1);
+    expect(stepOrderFor({ order: 4 })).toBe(5);
+    expect(stepOrderFor({ order: 99 })).toBe(100);
+  });
+
+  it('returns 0 (orphan sentinel) when parent is missing', () => {
+    expect(stepOrderFor(undefined)).toBe(0);
+    expect(stepOrderFor(null)).toBe(0);
+  });
+
+  it('returns 0 when parent exists but order is null', () => {
+    expect(stepOrderFor({ order: null })).toBe(0);
+    expect(stepOrderFor({ order: undefined })).toBe(0);
+  });
+});
+
+describe('Fix B: computeTutorialStepCount()', () => {
+  it('aggregates step rows by parent tutorial id', () => {
+    const stepParentMap = new Map([
+      [101, { parentId: 10, order: 0 }],
+      [102, { parentId: 10, order: 1 }],
+      [103, { parentId: 10, order: 2 }],
+      [104, { parentId: 10, order: 3 }],
+      [105, { parentId: 10, order: 4 }],
+      [201, { parentId: 20, order: 0 }],
+      [202, { parentId: 20, order: 1 }],
+    ]);
+    const counts = computeTutorialStepCount(stepParentMap);
+    expect(counts.get(10)).toBe(5);
+    expect(counts.get(20)).toBe(2);
+    expect(counts.size).toBe(2);
+  });
+
+  it('skips orphan rows (parentId null/undefined)', () => {
+    const stepParentMap = new Map([
+      [101, { parentId: 10, order: 0 }],
+      [102, { parentId: null, order: 0 }],
+      [103, { parentId: undefined, order: 1 }],
+      [104, { parentId: 10, order: 2 }],
+    ]);
+    const counts = computeTutorialStepCount(stepParentMap);
+    expect(counts.get(10)).toBe(2);
+    expect(counts.size).toBe(1);
+  });
+
+  it('returns empty map for empty input', () => {
+    const counts = computeTutorialStepCount(new Map());
+    expect(counts.size).toBe(0);
+  });
+});
+
+describe('Fix C: deriveCompletionPathSlug()', () => {
+  it('kebab-cases a normal title', () => {
+    const seen = new Set();
+    expect(deriveCompletionPathSlug('Hello World', 1, seen)).toBe('hello-world');
+  });
+
+  it('strips leading/trailing punctuation and runs of non-alphanum', () => {
+    const seen = new Set();
+    expect(deriveCompletionPathSlug("  Hello,  World!  ", 1, seen)).toBe('hello-world');
+    expect(deriveCompletionPathSlug('SAP S/4HANA', 2, seen)).toBe('sap-s-4hana');
+  });
+
+  it('falls back to path-${legacyId} when title is null/empty/whitespace', () => {
+    const seen = new Set();
+    expect(deriveCompletionPathSlug(null, 99, seen)).toBe('path-99');
+    expect(deriveCompletionPathSlug('', 100, seen)).toBe('path-100');
+    expect(deriveCompletionPathSlug('   ', 101, seen)).toBe('path-101');
+  });
+
+  it('disambiguates collisions inside the same migration pass', () => {
+    const seen = new Set();
+    expect(deriveCompletionPathSlug('Hello World', 1, seen)).toBe('hello-world');
+    expect(deriveCompletionPathSlug('Hello World', 2, seen)).toBe('hello-world-2-1');
+    expect(deriveCompletionPathSlug('Hello World', 3, seen)).toBe('hello-world-3-1');
+  });
+
+  it('collision-suffixes the fallback path-${legacyId} too', () => {
+    const seen = new Set();
+    // Pre-seed `path-7` so the empty-title call collides
+    seen.add('path-7');
+    expect(deriveCompletionPathSlug('', 7, seen)).toBe('path-7-1');
+  });
+});
+
+describe('Fix D: auditNullSapidUsers()', () => {
+  it('writes legacyIds to .migration-data/null-sapid-users.json when rows exist', async () => {
+    const writes = [];
+    const dirs = [];
+    const fakeFs = {
+      mkdirSync: (p, opts) => { dirs.push({ p, opts }); },
+      writeFileSync: (p, content) => { writes.push({ p, content }); },
+    };
+    const fakeQuery = async (_src, sql) => {
+      // Lock the SQL shape: SELECT ID, UUID FROM IMS_USER WHERE SAP_ID IS NULL
+      expect(sql).toContain('IMS_USER');
+      expect(sql).toContain('SAP_ID');
+      expect(sql).toContain('IS NULL');
+      return [
+        { ID: 12345, UUID: 'abc-1' },
+        { ID: 12346, UUID: 'abc-2' },
+      ];
+    };
+    const result = await auditNullSapidUsers(
+      {}, 'IMSDBUSER', fakeQuery, fakeFs, '/fake/cwd'
+    );
+    expect(result.count).toBe(2);
+    expect(result.path).toMatch(/[\\/]\.migration-data[\\/]null-sapid-users\.json$/);
+    expect(writes).toHaveLength(1);
+    const parsed = JSON.parse(writes[0].content);
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0]).toMatchObject({ ID: 12345, UUID: 'abc-1' });
+    // mkdirSync called with recursive: true
+    expect(dirs[0].opts).toMatchObject({ recursive: true });
+  });
+
+  it('returns count=0 and writes nothing when no rows are returned', async () => {
+    const writes = [];
+    const fakeFs = {
+      mkdirSync: () => { throw new Error('should not be called'); },
+      writeFileSync: (p, content) => { writes.push({ p, content }); },
+    };
+    const fakeQuery = async () => [];
+    const result = await auditNullSapidUsers(
+      {}, 'IMSDBUSER', fakeQuery, fakeFs, '/fake/cwd'
+    );
+    expect(result.count).toBe(0);
+    expect(result.path).toBeNull();
+    expect(writes).toHaveLength(0);
+  });
+
+  it('captures and returns the error message when query fails (non-fatal)', async () => {
+    const fakeFs = { mkdirSync: () => {}, writeFileSync: () => {} };
+    const fakeQuery = async () => { throw new Error('table not found'); };
+    const result = await auditNullSapidUsers(
+      {}, 'IMSDBUSER', fakeQuery, fakeFs, '/fake/cwd'
+    );
+    expect(result.count).toBe(0);
+    expect(result.path).toBeNull();
+    expect(result.error).toBe('table not found');
   });
 });
