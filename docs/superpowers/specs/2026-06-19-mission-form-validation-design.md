@@ -14,7 +14,7 @@ Issue #436 names 5 contributing root causes. **This PR addresses three of them �
 
 | # | Root cause | This PR? |
 |---|---|---|
-| 1 | Missing legacyId backfill for new `Missions` and `CompletionPaths` rows | **Yes** (Tutorials portion shipped in PR #452) |
+| 1 | Missing legacyId backfill for new `Missions` and `CompletionPaths` rows | **Yes** (Tutorials portion shipped in PR #452; this PR also defensively adds `Groups`) |
 | 2 | Missing slug auto-derivation on new `CompletionPaths` | **Yes** |
 | 5 | No save-time validation that a published Mission has resolvable path items | **Yes** |
 | 3 | Broken value-help on the CompletionPathItems Task field | No (separate UI issue) |
@@ -26,17 +26,17 @@ The publish-time guard added here means a SuperAdmin who hits the broken UI path
 
 Three backend-side guarantees:
 
-1. **Every new `Missions` row has a non-null `legacyId`** — auto-assigned via `getNextLegacyId('Missions', db)` in a `before('CREATE')` hook. UPDATE branch self-heals NULL rows on next save (mirror PR #452's `Tutorials` pattern).
-2. **Every new `CompletionPaths` row has a non-null `legacyId` and a non-null `slug`** — `legacyId` auto-assigned via sequence; `slug` kebab-derived from `name`, scoped-unique within the mission.
+1. **Every new `Missions`, `Groups`, and `CompletionPaths` row has a non-null `legacyId`** — auto-assigned via `getNextLegacyId(entityName, db)` in a `before('CREATE')` hook. UPDATE branch self-heals NULL rows on next save (mirror PR #452's `Tutorials` pattern).
+2. **Every new `CompletionPaths` row also has a non-null `slug`** — kebab-derived from `name`, scoped-unique within the parent mission.
 3. **Publishing a Mission refuses if any `CompletionPathItems` row is unresolvable** — `before('SAVE', 'Missions')` walks `path.items[]` and rejects when `published` is being set true while at least one item lacks the FK its `taskType` requires.
 
 Plus: a one-shot repair script for the partial-NULL rows that already exist (the F1 mission and any siblings).
 
 ## Approach
 
-### 1. `legacyId` auto-init for `Missions` and `CompletionPaths`
+### 1. `legacyId` auto-init for `Missions`, `Groups`, and `CompletionPaths`
 
-Add two new `before('CREATE')` handlers in `srv/admin-service.js`, mirroring the existing `deriveSlugForEntity` pattern. They fire on the full draft lifecycle (`NEW`, `PATCH`, `CREATE`, `SAVE`):
+Add a new `before('CREATE')` handler in `srv/admin-service.js`, mirroring the existing `deriveSlugForEntity` pattern. It fires on the full draft lifecycle (`NEW`, `PATCH`, `CREATE`, `SAVE`):
 
 ```js
 const initLegacyIdForEntity = (entityName) => async (req) => {
@@ -52,9 +52,9 @@ const initLegacyIdForEntity = (entityName) => async (req) => {
 };
 ```
 
-The helper is registered for both `Missions` and `CompletionPaths` (and their drafts). The `getNextLegacyId` allowlist at [srv/lib/legacy-id.js:5](../../../srv/lib/legacy-id.js#L5) already includes both.
+The helper is registered for `Missions`, `Groups`, and `CompletionPaths` (and their drafts). The `getNextLegacyId` allowlist at [srv/lib/legacy-id.js:5](../../../srv/lib/legacy-id.js#L5) already includes all three. Including `Groups` is a defensive add — #436 only surfaced under Missions, but the schema and code paths are identical so the cost-of-prevention is two lines of registration.
 
-> **Why a `before('CREATE')` hook on the AdminService rather than the publish path?** Missions and CompletionPaths get created via the admin UI (Fiori draft activation), not the publish session. They have no equivalent of `upsertTutorialMetadata`. The CDS handler is the right altitude.
+> **Why a `before('CREATE')` hook on the AdminService rather than the publish path?** Missions, Groups, and CompletionPaths get created via the admin UI (Fiori draft activation), not the publish session. They have no equivalent of `upsertTutorialMetadata`. The CDS handler is the right altitude.
 
 ### 2. Slug auto-derivation for `CompletionPaths`
 
@@ -218,11 +218,11 @@ Snapshot file: `.migration-data/mission-cp-repair-backup-<ISO>.jsonl`. Same JSON
 - **Backfilling `Tutorials.legacyId`** — already shipped via PR #452.
 - **Auto-repairing unresolvable `CompletionPathItems`** — no signal in the row to recover the intended target; SuperAdmin must re-link via UI.
 - **Form-side tag-required visual indicator** — server validation already in place; UI label is a separate concern.
-- **Backfilling `Groups.legacyId`** — not surfaced by #436 (#382 F1 only created Missions). Same pattern applies; we add it speculatively only if the spec reviewer or Tom asks.
+- **Backfilling `Groups.legacyId`** — moved INTO scope of this PR per spec review; see Approach §1. Two extra lines of handler registration.
 
 ## Verification
 
-1. **Unit tests via `cds.test('serve')` against in-memory SQLite** in `srv/__tests__/admin-service-mission-form.test.js`:
+1. **Unit tests via `cds.test('serve')` against in-memory SQLite** in `srv/__tests__/admin-service-mission-form.test.js`. The tests invoke the AdminService over **HTTP** (`POST /admin/Missions`, `POST /admin/CompletionPaths`, `PATCH /admin/Missions(<id>)`) — exercises the full Express pipeline + auth bypass that `cds.test('serve')` provides:
    - Creating a Mission via `POST /admin/Missions` with no `legacyId` in the payload → resulting row has `legacyId > 0`.
    - Creating a CompletionPath via `POST /admin/CompletionPaths` with `name='My Path'` and no `slug` → resulting row has `slug='my-path'` and `legacyId > 0`.
    - Two CompletionPaths with `name='My Path'` under the same mission → second one gets `slug='my-path-2'`.
