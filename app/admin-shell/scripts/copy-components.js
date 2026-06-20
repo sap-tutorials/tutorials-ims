@@ -21,6 +21,7 @@ const COMPONENTS = [
   'changelog',
   'analytics',
   'joule',
+  'knowledgeGraph',
   'feedback'
 ]
 

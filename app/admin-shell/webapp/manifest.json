@@ -51,6 +51,7 @@
       "sap.tutorials.admin.changelog": "./components/changelog",
       "sap.tutorials.admin.analytics": "./components/analytics",
       "sap.tutorials.admin.joule": "./components/joule",
+      "sap.tutorials.admin.knowledgeGraph": "./components/knowledgeGraph",
       "sap.tutorials.admin.feedback": "./components/feedback"
     },
     "models": {
@@ -155,6 +156,12 @@
         "componentData": {},
         "lazy": true
       },
+      "knowledgeGraphSettingsComponent": {
+        "name": "sap.tutorials.admin.knowledgeGraph",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
       "feedbackComponent": {
         "name": "sap.tutorials.admin.feedback",
         "settings": {},
@@ -200,6 +207,7 @@
         { "name": "changelog", "pattern": "changelog", "target": [{"name": "changelogTarget", "prefix": "cl"}] },
         { "name": "analytics", "pattern": "analytics", "target": [{"name": "analyticsTarget", "prefix": "an"}] },
         { "name": "joule", "pattern": "joule", "target": [{"name": "jouleSettingsTarget", "prefix": "jo"}] },
+        { "name": "knowledgeGraph", "pattern": "knowledgeGraph", "target": [{"name": "knowledgeGraphSettingsTarget", "prefix": "kg"}] },
         { "name": "feedbackList", "pattern": "feedback/list", "target": [{"name": "feedbackTarget", "prefix": "fb"}] },
         { "name": "feedbackDashboard", "pattern": "feedback/dashboard", "target": "feedbackDashboardTarget" },
         { "name": "board", "pattern": "board", "target": "boardTarget" },
@@ -313,6 +321,13 @@
           "id": "jouleSettingsTarget",
           "viewLevel": 1,
           "prefix": "jo"
+        },
+        "knowledgeGraphSettingsTarget": {
+          "type": "Component",
+          "usage": "knowledgeGraphSettingsComponent",
+          "id": "knowledgeGraphSettingsTarget",
+          "viewLevel": 1,
+          "prefix": "kg"
         },
         "feedbackTarget": {
           "type": "Component",
