@@ -126,6 +126,56 @@ export default class AdminService extends cds.ApplicationService {
         req.reject(400, 'At least one Tag is required');
       }
     });
+
+    // [#436] Publish-time integrity guard: refuse a published=true transition
+    // when any CompletionPathItems row is unresolvable. Drafts and unpublished
+    // saves still allow partial state for incremental authoring; only the
+    // false→true publish gate enforces correctness.
+    this.before('SAVE', 'Missions', async (req) => {
+      if (req.data.published !== true) return;
+      const ID = req.data.ID;
+      if (!ID) return;
+
+      // Detect transition: only refuse on false→true, not when re-saving an
+      // already-published mission whose payload echoes published=true.
+      const [prior] = await SELECT.from(Missions).where({ ID }).columns('published');
+      if (prior?.published === true) return;
+
+      const paths = await SELECT.from(CompletionPaths)
+        .where({ mission_ID: ID })
+        .columns('ID', 'name');
+      for (const path of paths) {
+        const items = await SELECT.from(CompletionPathItems)
+          .where({ path_ID: path.ID })
+          .columns('ID', 'itemOrder', 'taskType', 'tutorial_ID', 'group_ID', 'checkpointTitle');
+        for (const item of items) {
+          const ord = item.itemOrder ?? '?';
+          if (item.itemOrder == null) {
+            return req.reject(400, `Cannot publish: path "${path.name}" has an item with no itemOrder`);
+          }
+          switch (item.taskType) {
+            case 'TUTORIAL':
+              if (!item.tutorial_ID) {
+                return req.reject(400, `Cannot publish: path "${path.name}" item ${ord} has taskType=TUTORIAL but no tutorial linked`);
+              }
+              break;
+            case 'GROUP':
+              if (!item.group_ID) {
+                return req.reject(400, `Cannot publish: path "${path.name}" item ${ord} has taskType=GROUP but no group linked`);
+              }
+              break;
+            case 'CHECKPOINT':
+              if (!item.checkpointTitle) {
+                return req.reject(400, `Cannot publish: path "${path.name}" item ${ord} has taskType=CHECKPOINT but no checkpointTitle`);
+              }
+              break;
+            default:
+              return req.reject(400, `Cannot publish: path "${path.name}" item ${ord} has unknown taskType "${item.taskType}"`);
+          }
+        }
+      }
+    });
+
     this.before('SAVE', 'Groups', async (req) => {
       const tags = req.data.tags;
       if (!tags || tags.length === 0) {
@@ -226,6 +276,77 @@ export default class AdminService extends cds.ApplicationService {
       this.before('PATCH',  `${entityName}.drafts`, handler);
       this.before('SAVE',   entityName, handler);
     }
+
+    // [#436] legacyId self-heal for entities authored via the admin UI's draft
+    // lifecycle (NEW on .drafts → PATCH autosaves → SAVE on activation). The
+    // existing legacyKeyedEntities loop at lines 71-85 covers `before('CREATE')`
+    // for programmatic POSTs, but NEW/PATCH/SAVE on draft-edited entities never
+    // hit CREATE — so missions/groups/paths created via Fiori (the #382 F1 path)
+    // ended up with NULL legacyId.
+    //
+    // This handler:
+    //   - Fires on NEW (draft create), PATCH (draft autosave), SAVE (activation)
+    //   - Does NOT register for CREATE (already handled by the line 71 loop)
+    //   - Self-heals UPDATE/PATCH/SAVE on existing rows whose legacyId is NULL
+    //   - Skips when the row already has legacyId (idempotent across draft lifecycle)
+    const initLegacyIdForEntity = (entityName) => async (req) => {
+      if (req.data.legacyId != null) return;
+      // Self-heal path: only do the prior-row lookup when the row exists. NEW
+      // (draft create) carries a fresh UUID in req.data.ID but has no prior
+      // row, so skip the SELECT to save a round-trip.
+      if (req.data.ID && (req.event === 'PATCH' || req.event === 'SAVE' || req.event === 'UPDATE')) {
+        const [prior] = await SELECT.from(req.target).where({ ID: req.data.ID }).columns('legacyId');
+        if (prior?.legacyId != null) return;
+      }
+      req.data.legacyId = await getNextLegacyId(entityName, db);
+    };
+
+    for (const entityName of ['Missions', 'Groups', 'CompletionPaths']) {
+      const handler = initLegacyIdForEntity(entityName);
+      this.before('NEW',   `${entityName}.drafts`, handler);
+      this.before('PATCH', `${entityName}.drafts`, handler);
+      this.before('SAVE',  entityName,             handler);
+      // CREATE is intentionally NOT registered here — the existing
+      // legacyKeyedEntities loop at lines 71-85 already covers it.
+    }
+
+    // [#436] Auto-derive CompletionPaths.slug from name. Mirrors
+    // deriveSlugForEntity but adapted for two CompletionPaths-specific facts:
+    //   1. The source field is `name`, not `title`.
+    //   2. Slug uniqueness is scoped to the parent mission, not the entity table —
+    //      two missions can each legitimately have a "Path A".
+    const deriveCompletionPathSlug = async (req) => {
+      const isCreate = req.event === 'CREATE' || req.event === 'NEW';
+      const ID = req.data.ID;
+      const name = req.data.name;
+      const missionId = req.data.mission_ID;
+
+      let prior = null;
+      if (!isCreate && ID) {
+        [prior] = await SELECT.from(req.target).where({ ID }).columns('name', 'slug', 'mission_ID');
+      }
+      const effectiveName = name ?? prior?.name;
+      const effectiveMission = missionId ?? prior?.mission_ID;
+      if (!effectiveName || !effectiveMission) return;
+
+      const base = slugify(effectiveName);
+      if (!isCreate && prior?.slug && (name === undefined || name === prior.name)) return;
+
+      // Scope-unique: only collide against siblings under the same mission.
+      const siblings = await SELECT.from(CompletionPaths)
+        .columns('ID', 'slug')
+        .where({ mission_ID: effectiveMission, slug: { '!=': null } });
+      const taken = new Set(
+        siblings.filter(r => r.ID !== ID).map(r => r.slug).filter(Boolean)
+      );
+
+      req.data.slug = ensureUniqueSlug(base, taken, prior?.slug ?? null);
+    };
+
+    this.before('CREATE', 'CompletionPaths', deriveCompletionPathSlug);
+    this.before('NEW',    'CompletionPaths.drafts', deriveCompletionPathSlug);
+    this.before('PATCH',  'CompletionPaths.drafts', deriveCompletionPathSlug);
+    this.before('SAVE',   'CompletionPaths', deriveCompletionPathSlug);
 
     // Reset notification escalation when reviewedDate is updated via Fiori UI
     this.before('UPDATE', 'TutorialMeta', (req) => {
