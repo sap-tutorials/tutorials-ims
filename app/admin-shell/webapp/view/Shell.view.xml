@@ -105,6 +105,7 @@
             <tnt:NavigationListItem text="Board" key="board" />
             <tnt:NavigationListItem text="Joule Settings" key="joule" />
             <tnt:NavigationListItem text="Knowledge Graph" key="knowledgeGraph" />
+            <tnt:NavigationListItem text="Secrets" key="secrets" />
             <tnt:NavigationListItem text="Privacy" key="privacy" />
           </tnt:NavigationListItem>
         </tnt:NavigationList>
@@ -141,9 +142,33 @@
       <Popover
         id="notificationsPopover"
         placement="Bottom"
-        title="Notifications">
+        title="Notifications"
+        contentWidth="380px">
         <VBox class="sapUiSmallMargin">
-          <Label text="No new notifications" class="sapUiSmallMargin" />
+          <List
+            id="notificationsList"
+            items="{notifications>/items}"
+            noDataText="{i18n>notificationsEmpty}"
+            showSeparators="Inner">
+            <CustomListItem>
+              <VBox class="sapUiSmallMargin">
+                <ObjectStatus
+                  text="{notifications>key}"
+                  state="{notifications>uiState}"
+                  icon="{notifications>uiIcon}" />
+                <Text text="{notifications>summary}" class="sapUiTinyMarginTop" />
+                <HBox class="sapUiTinyMarginTop">
+                  <Link
+                    text="Rotation guide"
+                    href="{notifications>rotationDocsUrl}"
+                    target="_blank"
+                    visible="{= !!${notifications>rotationDocsUrl} }" />
+                  <ToolbarSpacer />
+                  <Text text="{notifications>rotationOwner}" class="sapUiTinyMarginBegin" />
+                </HBox>
+              </VBox>
+            </CustomListItem>
+          </List>
         </VBox>
       </Popover>
     </tnt:dependents>

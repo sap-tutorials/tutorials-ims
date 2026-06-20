@@ -691,3 +691,32 @@ entity BranchDecisions : managed {
   source                 : BranchSource;
   followedRecommendation : Boolean;
 }
+
+
+// Phase 2-B (#464): Secrets-visibility metadata-only inventory.
+// Tracks WHAT credentials exist, WHEN they expire, WHO owns rotation.
+// Does NOT store secret values — those stay in CF env / mtaext / GH Actions
+// secrets. Phase 2-C (#465) will add encryptedValue + encryptionKeyId
+// columns once the encryption-key management decision is made.
+//
+// Daily cron (srv/jobs/secret-expiry-check.js, 04:11 UTC) computes
+// days-remaining and surfaces warnings via /admin/secretWarnings() ↦
+// admin-shell notifications popover.
+//
+// CSV seed at db/data/...-Secrets.csv MUST stay empty per the
+// HDI-clobbers-admin-edits footgun ([feedback_cap_csv_seeds_clobber_admin_data]).
+// Initial seeding is a one-shot script: scripts/seed-secrets.cjs.
+//
+// Note: @assert.unique uses the field-level form here because the
+// entity-level array form `[![key]]` is ambiguous to the CDS parser
+// (the closing `]` of `![key]` collides with the array's closing `]`).
+// Field-level uniqueness gives the same constraint.
+entity Secrets : cuid, managed {
+  ![key]              : String(120) @assert.unique;
+  description         : String(500);
+  kind                : String(40);
+  rotationOwner       : String(120);
+  rotationDocsUrl     : String(500);
+  expiresAt           : Date;
+  lastRotatedAt       : Timestamp;
+}

@@ -6,6 +6,7 @@ import { processAccountMerges } from './account-merge-job.js';
 import { runReconciliationJob } from './embedding-reconciliation.js';
 import { runExtractConcepts } from './extract-concepts-job.js';
 import { runConsolidateConcepts } from './consolidate-concepts-job.js';
+import { runSecretExpiryCheck } from './secret-expiry-check.js';
 import { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, isNotificationsEnabled } from '../lib/contributor-notifications.js';
 import { sendNotificationEmail, retryFailedEmails } from '../lib/mail-client.js';
 import { logPipelineStart, logPipelineEnd, logJobItem } from '../lib/pipeline-log.js';
@@ -196,6 +197,14 @@ export function registerJobs() {
   // SPARQL projection. 30-min TTL matches extractConcepts.
   cron.schedule('47 3 * * 0', () =>
     runWithLock('consolidateConcepts', 30 * 60 * 1000, runConsolidateConcepts)
+  );
+
+  // Phase 2-B (#464): Daily expiry check for tracked secrets.
+  // Off-minute (04:11) avoids the :00 thundering-herd spike. 10-minute
+  // lock matches similar lightweight jobs; the actual run is a single
+  // SELECT + classification, well under a second.
+  cron.schedule('11 4 * * *', () =>
+    runWithLock('secret-expiry-check', 600000, runSecretExpiryCheck)
   );
 
   LOG.info('All scheduled jobs registered');

@@ -24,3 +24,7 @@ annotate ims.AdvocateLinks   with @changelog;
 // describe / veto) and ConceptEdges (veto). Mirrors the existing pattern.
 annotate ims.Concepts      with @changelog : ['name', 'description', 'status'];
 annotate ims.ConceptEdges  with @changelog : ['status'];
+
+// Phase 2-B (#464): track admin edits to tracked-secret metadata
+// (description, expiresAt, rotationOwner). Surfaces in /admin-ui/#changelog-display.
+annotate ims.Secrets with @changelog;

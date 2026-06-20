@@ -1,8 +1,9 @@
 sap.ui.define([
   "sap/ui/core/mvc/Controller",
   "sap/ui/core/Theming",
-  "sap/ui/core/routing/HashChanger"
-], function (Controller, Theming, HashChanger) {
+  "sap/ui/core/routing/HashChanger",
+  "sap/ui/model/json/JSONModel"
+], function (Controller, Theming, HashChanger, JSONModel) {
   "use strict";
 
   var NAV_KEY_TO_ROUTE = {
@@ -27,6 +28,7 @@ sap.ui.define([
     statistics: "statistics",
     joule: "joule",
     knowledgeGraph: "knowledgeGraph",
+    secrets: "secrets",
     privacy: "privacy",
     feedbackList: "feedbackList",
     feedbackDashboard: "feedbackDashboard",
@@ -55,6 +57,7 @@ sap.ui.define([
     statistics: "Statistics",
     joule: "Joule Settings",
     knowledgeGraph: "Knowledge Graph",
+    secrets: "Secrets",
     privacy: "Privacy",
     feedbackList: "Tutorial Feedback",
     feedbackDashboard: "Feedback Dashboard",
@@ -170,7 +173,49 @@ sap.ui.define([
     },
 
     onNotificationsPress: function (oEvent) {
-      this.byId("notificationsPopover").openBy(oEvent.getSource());
+      var oButton = oEvent.getSource();
+      var oPopover = this.byId("notificationsPopover");
+      var oNotifModel = this.getView().getModel("notifications") ||
+        new JSONModel({ items: [] });
+      this.getView().setModel(oNotifModel, "notifications");
+
+      fetch("/admin/secretWarnings()", {
+        credentials: "include",
+        headers: { "Accept": "application/json" }
+      })
+        .then(function (res) {
+          if (!res.ok) { throw new Error("HTTP " + res.status); }
+          return res.json();
+        })
+        .then(function (body) {
+          var aWarnings = (body.value || []).map(function (w) {
+            var sUiState = w.severity === "CRITICAL" ? "Error"
+                         : w.severity === "WARNING"  ? "Warning"
+                         : "Information";
+            var sUiIcon = w.severity === "CRITICAL" ? "sap-icon://alert"
+                         : w.severity === "WARNING"  ? "sap-icon://warning"
+                         : "sap-icon://information";
+            var sSummary = w.daysRemaining < 0
+              ? "Expired " + Math.abs(w.daysRemaining) + " day(s) ago"
+              : w.daysRemaining === 0
+              ? "Expires today"
+              : "Expires in " + w.daysRemaining + " day(s)";
+            return {
+              key: w.key,
+              summary: sSummary,
+              uiState: sUiState,
+              uiIcon: sUiIcon,
+              rotationOwner: w.rotationOwner,
+              rotationDocsUrl: w.rotationDocsUrl,
+            };
+          });
+          oNotifModel.setData({ items: aWarnings });
+        })
+        .catch(function () {
+          oNotifModel.setData({ items: [] });
+        });
+
+      oPopover.openBy(oButton);
     },
 
     onAvatarPress: function (oEvent) {

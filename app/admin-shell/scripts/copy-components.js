@@ -22,7 +22,8 @@ const COMPONENTS = [
   'analytics',
   'joule',
   'knowledgeGraph',
-  'feedback'
+  'feedback',
+  'secrets'
 ]
 
 mkdirSync(COMPONENTS_DIR, { recursive: true })
