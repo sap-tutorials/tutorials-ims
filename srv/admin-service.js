@@ -11,6 +11,7 @@ import { slugify, ensureUniqueSlug } from './lib/slug-utils.js';
 import { classifyAndPersist } from './lib/category-classifier.js';
 import { makeAltGroupHandler } from './handlers/completion-path-items-altgroup.js';
 import * as advocateHandlers from './handlers/advocate-handlers.js';
+import { classifySeverity, daysUntil } from './jobs/secret-expiry-check.js';
 
 export default class AdminService extends cds.ApplicationService {
 
@@ -979,6 +980,36 @@ export default class AdminService extends cds.ApplicationService {
       _resetCache(); // force re-embed of all seeds on next call
       const map = await getSeedEmbeddings();
       return { processed: map.size };
+    });
+
+    // Phase 2-B (#464): Severity-classified expiry warnings for the
+    // admin-shell notifications popover. Read-only — no DB writes.
+    // Imports daysUntil + classifySeverity from the cron module to share
+    // the threshold + UTC-truncation contract.
+    this.on('secretWarnings', async (req) => {
+      const { Secrets } = cds.entities('com.sap.developers.ims');
+      const rows = await SELECT.from(Secrets)
+        .columns('key', 'description', 'expiresAt', 'rotationOwner', 'rotationDocsUrl')
+        .where({ expiresAt: { '!=': null } });
+
+      const now = new Date();
+      const warnings = [];
+      for (const row of rows) {
+        const daysRemaining = daysUntil(row.expiresAt, now);
+        const severity = classifySeverity(daysRemaining);
+        if (!severity) continue;
+        warnings.push({
+          key: row.key,
+          description: row.description ?? '',
+          daysRemaining,
+          severity,
+          rotationOwner: row.rotationOwner ?? '',
+          rotationDocsUrl: row.rotationDocsUrl ?? '',
+        });
+      }
+
+      warnings.sort((a, b) => a.daysRemaining - b.daysRemaining);
+      return warnings;
     });
 
     await super.init();
