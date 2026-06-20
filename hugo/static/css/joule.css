@@ -1,12 +1,19 @@
 :root {
-  --joule-purple-1: #5D36FF;
+  --joule-purple-1: #5D36FF;   /* == prod aurora mesh-d1 */
   --joule-purple-2: #7B42F0;
-  --joule-purple-3: #A100C2;
+  --joule-purple-3: #A100C2;   /* == prod aurora mesh-c2 */
   --joule-chrome:   #14082F;
   --joule-chrome-2: #1F1340;
   --joule-text:     #f5f5fb;
   --joule-muted:    rgba(245,245,251,.65);
   --joule-radius:   16px;
+
+  /* Issue #392 — aurora mesh layers ported from prod com.sap.das.webclient.
+     mesh-d1 == --joule-purple-1, mesh-c2 == --joule-purple-3 (reused). */
+  --joule-mesh-a:   #8000dc;
+  --joule-mesh-b:   #afd8ff;
+  --joule-mesh-c1:  #f1acff;
+  --joule-mesh-d2:  #cfc3ff;
 }
 
 #joule-panel {
@@ -253,4 +260,132 @@
 
 @media (max-width: 960px) {
   .joule-step-fab { display: none !important; }
+}
+
+/* Issue #392 — aurora mesh background.
+   Used inside .joule-panel__hero, scaled-down inside .joule-panel__header,
+   and as an animated paint on .joule-step-fab (Hugo public site only).
+   Source: production Joule Web Client (com.sap.das.webclient v1.37.0). */
+.joule-aurora {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+.joule-aurora__layer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  background-repeat: no-repeat;
+  width: 200%;
+  height: 50%;
+  filter: blur(50px);
+  will-change: transform;
+  pointer-events: none;
+  z-index: 0;
+}
+.joule-aurora__layer--a {
+  opacity: 0.2;
+  background-image: radial-gradient(ellipse at 50% 130%,
+    var(--joule-mesh-a), var(--joule-mesh-a), transparent 50%);
+  animation: jouleFloatA 14s ease-in-out infinite;
+}
+.joule-aurora__layer--b {
+  opacity: 0.5;
+  background-image: radial-gradient(ellipse at 50% 110%,
+    var(--joule-mesh-b), var(--joule-mesh-b), transparent 50%);
+  animation: jouleFloatB 12s ease-in-out infinite;
+}
+.joule-aurora__layer--c {
+  opacity: 0.18;
+  background-image: radial-gradient(ellipse at 50% 100%,
+    var(--joule-mesh-c1), var(--joule-purple-3), transparent 50%);
+  animation: jouleFloatC 16s ease-in-out infinite;
+}
+.joule-aurora__layer--d {
+  opacity: 0.18;
+  background-image: radial-gradient(ellipse at 50% 100%,
+    var(--joule-purple-1), var(--joule-mesh-d2), transparent 50%);
+  animation: jouleFloatD 15s ease-in-out infinite;
+}
+
+@keyframes jouleFloatA {
+  0%   { transform: translate3d( 10%, 0,   0) scale(1.10); }
+  50%  { transform: translate3d(-100%, 0,  0) scale(1.08); }
+  100% { transform: translate3d( 10%, 0%,  0) scale(1.18); }
+}
+@keyframes jouleFloatB {
+  0%   { transform: translate3d(-80%, 0,   0) scale(1.10); }
+  50%  { transform: translate3d(-10%, 10%, 0) scale(1.08); }
+  100% { transform: translate3d(-80%, 0%,  0) scale(1.18); }
+}
+@keyframes jouleFloatC {
+  0%   { transform: translate3d( 30%, 0,   0) scale(1.10); }
+  50%  { transform: translate3d(-30%,-10%, 0) scale(1.08); }
+  100% { transform: translate3d( 30%, 0%,  0) scale(1.18); }
+}
+@keyframes jouleFloatD {
+  0%   { transform: translate3d(-20%, 0%,  0) scale(1.10); }
+  50%  { transform: translate3d( 10%,-10%, 0) scale(1.08); }
+  100% { transform: translate3d(-20%, 0%,  0) scale(1.18); }
+}
+
+/* Hero — full-strength aurora (replaces the static linear-gradient at the
+   pre-existing .joule-panel__hero rule). */
+.joule-panel__hero {
+  position: relative;
+  background: var(--joule-chrome);
+}
+.joule-panel__hero-content {
+  position: relative;
+  z-index: 1;
+  display: flex; flex-direction: column; align-items: center;
+  width: 100%;
+}
+.joule-panel__hero .joule-panel__hero-mark {
+  animation: jouleBob 2s ease-in-out infinite;
+}
+
+/* Header strip — same paint, smaller scale, larger blur, less motion. */
+.joule-panel__header {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(165deg,
+    var(--joule-purple-1) 0%, var(--joule-purple-2) 45%, var(--joule-purple-3) 100%);
+}
+.joule-panel__header > * { position: relative; z-index: 1; }
+.joule-panel__header .joule-aurora__layer {
+  height: 200%;
+  filter: blur(40px);
+}
+
+/* Step-help FAB — pill shape gets the aurora as its paint. */
+.joule-step-fab {
+  background:
+    radial-gradient(ellipse at 0% 130%,
+      var(--joule-mesh-a), transparent 50%),
+    radial-gradient(ellipse at 100% 130%,
+      var(--joule-mesh-b), transparent 50%),
+    radial-gradient(ellipse at 50% 0%,
+      var(--joule-mesh-c1), transparent 60%),
+    linear-gradient(165deg,
+      var(--joule-purple-1) 0%, var(--joule-purple-2) 45%, var(--joule-purple-3) 100%);
+  background-blend-mode: screen, screen, screen, normal;
+}
+
+/* Logo bob keyframes (used on .joule-panel__hero-mark above). */
+@keyframes jouleBob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-10px); }
+}
+@keyframes jouleBobSettle {
+  to { transform: translateY(0); }
+}
+
+/* Reduced-motion guard — aurora and bob both stop. The static
+   header gradient and FAB linear-gradient remain as the visual fallback. */
+@media (prefers-reduced-motion: reduce) {
+  .joule-aurora__layer { animation: none; }
+  .joule-panel__hero-mark { animation: none; }
 }

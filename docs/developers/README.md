@@ -19,6 +19,7 @@ How the platform fits together. Read these when you need to understand a subsyst
 - [Runtime Architecture](architecture/runtime.md) — request flow, AppRouter, CAP
 - [Build Architecture](architecture/build.md) — fetch → parse → Hugo → publish
 - [Joule Architecture](architecture/joule.md) — chat, tools, RAG, embeddings
+- [Joule Aurora Background](architecture/joule-aurora.md) — aurora mesh background animation (#392)
 - [CAP Backend](architecture/cap-backend.md) — services, entities, jobs, bootstrap
 - [Frontend Apps](architecture/frontend-apps.md) — admin shell, scanner, display
 
