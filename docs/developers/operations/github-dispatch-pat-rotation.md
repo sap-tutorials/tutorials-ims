@@ -44,7 +44,7 @@ Validate via the boot log line: `[rebuild-trigger] active — admin writes will 
 
    Expect: HTTP 204 (no body). A new run should appear in the [Actions tab](https://github.com/sap-tutorials/tutorials-ims/actions/workflows/rebuild-content.yml) within seconds.
 
-3. **Update the GitHub Actions secret + redeploy each environment.** The token lives in the `DISPATCH_TOKEN` repository secret (named `DISPATCH_TOKEN` — not `GITHUB_DISPATCH_TOKEN` — because GitHub reserves the `GITHUB_` prefix for secret names) and is injected into each `tutorials-srv` deploy via `cf deploy --var github-dispatch-token=...`. The runtime env var on `tutorials-srv` is still `GITHUB_DISPATCH_TOKEN` (that's what `srv/lib/rebuild-trigger.js` reads); only the GitHub Actions secret had to drop the prefix. `REBUILD_TARGET_ENV` is a literal in each `deploy/<env>.mtaext` and does not need rotation.
+3. **Update the GitHub Actions secret + redeploy each environment.** The token lives in the `DISPATCH_TOKEN` repository secret (named `DISPATCH_TOKEN` — not `GITHUB_DISPATCH_TOKEN` — because GitHub reserves the `GITHUB_` prefix for secret names) and is injected into each `tutorials-srv` deploy by an `envsubst` step in [.github/workflows/deploy.yml](../../../.github/workflows/deploy.yml) that writes `deploy/<env>.resolved.mtaext` from the `deploy/<env>.mtaext` template using the secret as the `GITHUB_DISPATCH_TOKEN` env var. `cf deploy -e <resolved>` then consumes the resolved file. The `cf deploy --var` mechanism that previously appeared here is **not** supported by the multiapps-cli-plugin (see #455). The runtime env var on `tutorials-srv` is still `GITHUB_DISPATCH_TOKEN` (that's what `srv/lib/rebuild-trigger.js` reads); only the GitHub Actions secret had to drop the prefix. `REBUILD_TARGET_ENV` is a literal in each `deploy/<env>.mtaext` and does not need rotation.
 
    ```bash
    # Update the repo-level secret (one-time, applies to all envs):
@@ -60,7 +60,24 @@ Validate via the boot log line: `[rebuild-trigger] active — admin writes will 
    `[rebuild-trigger] active — admin writes will dispatch with environment='<env>'`
    with the right env, and the unset-token warning should **NOT** appear.
 
-   **Local manual deploy fallback** (`cd .deploy && cf deploy ... -e ../deploy/dev.mtaext`): pass `--var github-dispatch-token=<NEW_TOKEN>` on the command line, or accept that the deployed env var will be empty for that one deploy until the next CI deploy restores it. Same convention as `content-api-key` for prod/qa today.
+   **Local rotation validation** (optional — verify the new token before merging the secret bump to all envs):
+
+   ```bash
+   # From the repo root:
+   export GITHUB_DISPATCH_TOKEN="<NEW_TOKEN>"
+   # qa/prod also need:
+   export CONTENT_API_KEY="<value>"
+   export REBUILD_API_KEY="<value>"
+   export APPROUTER_URL="<value>"
+
+   envsubst '$CONTENT_API_KEY $REBUILD_API_KEY $APPROUTER_URL $GITHUB_DISPATCH_TOKEN' \
+     < deploy/dev.mtaext > deploy/dev.resolved.mtaext
+
+   cd .deploy && mbt build
+   cf deploy mta_archives/tutorials-poc_*.mtar -e ../deploy/dev.resolved.mtaext -f
+   ```
+
+   `deploy/*.resolved.mtaext` is gitignored — leave it on disk or `rm` after the deploy.
 
 4. **Revoke the old token.** GitHub → Settings → Developer settings → Personal access tokens → click old token → Revoke.
 
@@ -78,7 +95,7 @@ If the token is suspected leaked (committed to a repo, posted in a chat, posted 
 
 | Mode | Symptom | Action |
 |---|---|---|
-| **Token unset** | `[rebuild-trigger]` boot warning; admin writes don't trigger rebuilds | Acceptable degraded mode — content stays fresh via the existing push trigger only. Confirm `gh secret list --repo sap-tutorials/tutorials-ims` shows `DISPATCH_TOKEN` (note: secret is named `DISPATCH_TOKEN`, not `GITHUB_DISPATCH_TOKEN`, because GitHub reserves the `GITHUB_` prefix); if missing, add it and trigger a redeploy. If present, check the most recent deploy run's `Deploy MTA` step for the `--var github-dispatch-token=` line. |
+| **Token unset** | `[rebuild-trigger]` boot warning; admin writes don't trigger rebuilds | Acceptable degraded mode — content stays fresh via the existing push trigger only. Confirm `gh secret list --repo sap-tutorials/tutorials-ims` shows `DISPATCH_TOKEN` (note: secret is named `DISPATCH_TOKEN`, not `GITHUB_DISPATCH_TOKEN`, because GitHub reserves the `GITHUB_` prefix); if missing, add it and trigger a redeploy. If present, check the most recent deploy run's `Resolve mtaext placeholders` step for the `GITHUB_DISPATCH_TOKEN` env-var declaration and confirm the next step's `cf deploy` consumed `deploy/<env>.resolved.mtaext`. |
 | **Token expired / revoked** | GitHub returns 401; admin save logs `[rebuild-trigger] dispatch failed: GitHub dispatch 401 ...` | Rotate per the steps above. Admin saves still succeed; only the auto-rebuild dispatch is broken. |
 | **`REBUILD_TARGET_ENV` mismatch** | Admin save on QA srv triggers a DEV rebuild (or vice versa); boot log shows `environment='dev'` on a non-DEV space | Set `REBUILD_TARGET_ENV` to match the space (`qa`/`prod`) and `cf restart`. Until then content stays fresh on the wrong env. |
 | **Token over-permissioned** | Token has scopes beyond `actions:write` (e.g. `contents:write`, `metadata:read`, etc.) | Defense-in-depth violation, not an outage. Re-issue with `actions:write` only on next rotation cycle. |
