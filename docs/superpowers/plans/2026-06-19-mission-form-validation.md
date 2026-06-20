@@ -78,6 +78,9 @@ No CSN schema change. No new dependencies.
   //   - Skips when the row already has legacyId (idempotent across draft lifecycle)
   const initLegacyIdForEntity = (entityName) => async (req) => {
     if (req.data.legacyId != null) return;
+    // Self-heal path: only do the prior-row lookup when the row exists. NEW
+    // (draft create) carries a fresh UUID in req.data.ID but has no prior
+    // row, so skip the SELECT to save a round-trip.
     if (req.data.ID && (req.event === 'PATCH' || req.event === 'SAVE' || req.event === 'UPDATE')) {
       const [prior] = await SELECT.from(req.target).where({ ID: req.data.ID }).columns('legacyId');
       if (prior?.legacyId != null) return;
@@ -583,7 +586,7 @@ The test file follows the established `admin-service-categories.test.js` pattern
 
   Expected: all 8 tests pass. The suite exercises the handlers shipped in Tasks 1, 2, 3.
 
-  > **Hardcoded fixture slugs are advisory only:** The publish-guard tests INSERT `slug: 'bad-path'` etc. directly via `INSERT.into(CompletionPaths)`. That goes through the new `before('CREATE', 'CompletionPaths')` slug-derive handler from Task 2, which will OVERWRITE the hardcoded slug if `name` resolves to a different slug. The tests only assert behavior on `published`/`legacyId`, so this is harmless — but if you `expect(data.slug).toBe('bad-path')` somewhere, it will fail because the handler computed `slug='bad-path'` from `name='Bad Path'` (which happens to match here). For different name/slug pairs, the handler wins.
+  > **`INSERT.into` bypasses service handlers:** The publish-guard tests INSERT `slug: 'bad-path'`/`'good-path'` directly via `INSERT.into(CompletionPaths)`. That writes through the DB layer and **bypasses the new `before('CREATE')` slug-derive handler from Task 2**, so the slug stays exactly as INSERTed. This is intentional: the tests want deterministic fixture state for the publish-guard scenario, not to exercise the slug-derive handler (which has its own dedicated tests above). If a future test needs the handler to fire, drive the row through `project.post('/admin/CompletionPaths', ...)` instead.
 
 - [ ] **Step 4: Commit**
 
