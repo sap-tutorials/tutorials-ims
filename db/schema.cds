@@ -728,3 +728,14 @@ entity Secrets : cuid, managed {
 entity UiEventsSettings : cuid, managed {
   enabled              : Boolean;
 }
+
+
+// Phase 3 (#466): Search /search/* per-IP rate limit.
+// rateLimitMax = requests-per-window; rateLimitWindowMs = rolling window in ms.
+// Range upper bound on windowMs at 600000 (10min) prevents an admin from
+// configuring a 1-hour rate-limit cell that would persist rejection state
+// across deploys.
+entity SearchSettings : cuid, managed {
+  rateLimitMax         : Integer @assert.range: [0, 100000];
+  rateLimitWindowMs    : Integer @assert.range: [1000, 600000];
+}
