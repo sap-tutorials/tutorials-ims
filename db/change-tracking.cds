@@ -15,6 +15,7 @@ using { com.sap.developers.ims as ims } from './schema';
 using from './knowledge-graph';
 
 annotate ims.ChatSettings with @changelog;
+annotate ims.KnowledgeGraphSettings with @changelog;
 annotate ims.Advocates       with @changelog;
 annotate ims.AdvocateTopics  with @changelog;
 annotate ims.AdvocateLinks   with @changelog;
