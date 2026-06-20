@@ -52,7 +52,8 @@
       "sap.tutorials.admin.analytics": "./components/analytics",
       "sap.tutorials.admin.joule": "./components/joule",
       "sap.tutorials.admin.knowledgeGraph": "./components/knowledgeGraph",
-      "sap.tutorials.admin.feedback": "./components/feedback"
+      "sap.tutorials.admin.feedback": "./components/feedback",
+      "sap.tutorials.admin.secrets": "./components/secrets"
     },
     "models": {
       "admin": {
@@ -167,6 +168,12 @@
         "settings": {},
         "componentData": {},
         "lazy": true
+      },
+      "secretsComponent": {
+        "name": "sap.tutorials.admin.secrets",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
       }
     },
     "services": {
@@ -208,6 +215,7 @@
         { "name": "analytics", "pattern": "analytics", "target": [{"name": "analyticsTarget", "prefix": "an"}] },
         { "name": "joule", "pattern": "joule", "target": [{"name": "jouleSettingsTarget", "prefix": "jo"}] },
         { "name": "knowledgeGraph", "pattern": "knowledgeGraph", "target": [{"name": "knowledgeGraphSettingsTarget", "prefix": "kg"}] },
+        { "name": "secrets", "pattern": "secrets", "target": [{"name": "secretsTarget", "prefix": "se"}] },
         { "name": "feedbackList", "pattern": "feedback/list", "target": [{"name": "feedbackTarget", "prefix": "fb"}] },
         { "name": "feedbackDashboard", "pattern": "feedback/dashboard", "target": "feedbackDashboardTarget" },
         { "name": "board", "pattern": "board", "target": "boardTarget" },
@@ -335,6 +343,13 @@
           "id": "feedbackTarget",
           "viewLevel": 1,
           "prefix": "fb"
+        },
+        "secretsTarget": {
+          "type": "Component",
+          "usage": "secretsComponent",
+          "id": "secretsTarget",
+          "viewLevel": 1,
+          "prefix": "se"
         },
         "feedbackDashboardTarget": {
           "viewName": "TutorialFeedbackDashboard",
