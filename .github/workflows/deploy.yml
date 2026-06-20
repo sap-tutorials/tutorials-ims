@@ -81,6 +81,21 @@ jobs:
       - name: Install MTA Build Tool
         run: npm install -g mbt@${{ env.MBT_VERSION }}
 
+      # Cache .tutorial-cache/ across runs so fetch-tutorials does not re-pull
+      # ~1400 tutorials from GitHub on every CI run. Without this, mbt's 10-min
+      # per-command timeout fires during the QA-channel fetch (the second of
+      # two fetches in the build sequence). Mirrors rebuild-content.yml's
+      # caching pattern.
+      - name: Restore tutorial cache
+        uses: actions/cache@v4
+        with:
+          path: .tutorial-cache
+          key: tutorial-cache-deploy-${{ hashFiles('.github/workflows/deploy.yml') }}-${{ github.run_id }}
+          restore-keys: |
+            tutorial-cache-deploy-${{ hashFiles('.github/workflows/deploy.yml') }}-
+            tutorial-cache-deploy-
+            tutorial-cache-
+
       - name: Set CAP_BASE_URL for build
         id: cap-url
         run: |
