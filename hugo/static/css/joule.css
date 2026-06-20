@@ -332,9 +332,15 @@
 }
 
 /* Hero — full-strength aurora (replaces the static linear-gradient at the
-   pre-existing .joule-panel__hero rule). */
+/* Hero — full-strength aurora (replaces the static linear-gradient at the
+   pre-existing .joule-panel__hero rule).
+   `flex: 1` makes the hero grow to fill .joule-panel__body's free space so
+   the aurora layers (height:50% of hero) cover the whole panel below the
+   header — without it the hero only sized to the logo+greeting+starters
+   and the aurora bottomed out about halfway down the panel (#392 followup). */
 .joule-panel__hero {
   position: relative;
+  flex: 1;
   background: var(--joule-chrome);
 }
 .joule-panel__hero-content {
