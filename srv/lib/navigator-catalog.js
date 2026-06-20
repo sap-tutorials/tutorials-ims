@@ -1,4 +1,5 @@
 import cds from '@sap/cds';
+import { resolveNavigatorSettings } from './runtime-config/navigator-settings.js';
 
 let cachedResponse = null;
 let cacheTimestamp = 0;
@@ -16,8 +17,8 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 // The env var is read at request time (not at module load) so tests can flip
 // it via beforeAll/afterAll. Note: there's a 5-min response cache; the test
 // suite uses ?nocache=1 to bypass.
-function shouldIncludeNestedGroups() {
-  return process.env.NAV_INCLUDE_NESTED_GROUPS === 'true';
+async function shouldIncludeNestedGroups() {
+  return (await resolveNavigatorSettings()).includeNestedGroups;
 }
 
 export function invalidateNavigatorCache() {
@@ -186,7 +187,7 @@ export async function navigatorCatalogHandler(req, res) {
       // Issue #364: only emit the navigator card when the operator opts in via
       // NAV_INCLUDE_NESTED_GROUPS. Tutorial mappings below still emit so
       // tutorials inside nested groups remain routable regardless of the flag.
-      if (shouldIncludeNestedGroups() && !groupRefs.find(g => g.id === group.legacyId)) {
+      if ((await shouldIncludeNestedGroups()) && !groupRefs.find(g => g.id === group.legacyId)) {
         groupRefs.push({
           id: group.legacyId,
           title: group.title,
