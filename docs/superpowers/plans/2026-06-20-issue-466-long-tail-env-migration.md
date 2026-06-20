@@ -364,7 +364,7 @@
   logic). rebuildTargetEnv is String(10) NOT @assert.range
   enum-constrained — only the ComboBox enforces dev/qa/prod.
   Direct OData PATCH bypasses; deliberate stance, matches the
-  no-write-time-validation pattern for the other Tenant fields.\"
+  no-write-time-validation pattern for the other Tenant fields."
   ```
 
 ---
@@ -1150,16 +1150,26 @@ Total: 28 tests across 5 files.
 
 **Files:**
 
-- Modify: `srv/lib/ui-event-handler.js` — async-ify `recordEvent()`; replace `_state.enabled` boot-snapshot with resolver call.
+- Modify: `srv/lib/ui-event-handler.js` — async-ify `handleUIEvent()`; replace `_state.enabled` boot-snapshot with resolver call.
+
+**⚠️ Plan-vs-spec correction:** the spec called the consumer function `recordEvent()`. The actual exported function is **`handleUIEvent`** (line 75). The spec inherited the wrong name. This task uses the correct name.
+
+There are also **two `_state.enabled` reads** in the file:
+
+- Line 37 in `checkFeatureFlag()` — sync exported function called from `srv/server.js:399` for boot-time logging.
+- Line 76 in `handleUIEvent` — the per-request gate.
+
+Both need conversion. Plan handles each below.
 
 - [ ] **Step 13.1: Read current state**
 
   ```bash
-  sed -n '1,40p' srv/lib/ui-event-handler.js
+  sed -n '1,45p' srv/lib/ui-event-handler.js
   sed -n '70,110p' srv/lib/ui-event-handler.js
+  grep -n '_state\.enabled\|handleUIEvent\|checkFeatureFlag' srv/lib/ui-event-handler.js
   ```
 
-  Confirm: line 21 has `enabled: process.env.UI_EVENTS_ENABLED === 'true'` (boot-snapshot to remove); line 76 inside `recordEvent` has `if (!_state.enabled)` (the gate to convert).
+  Confirm: line 20 (`_state` literal with `enabled`), line 37 (`checkFeatureFlag` reads `_state.enabled`), line 75 (`export async function handleUIEvent`), line 76 (gate inside `handleUIEvent`).
 
 - [ ] **Step 13.2: Add resolver import** at top of file:
 
@@ -1175,7 +1185,7 @@ Total: 28 tests across 5 files.
   }
   ```
 
-- [ ] **Step 13.4: Convert the gate inside `recordEvent` (around line 76)**
+- [ ] **Step 13.4: Convert the gate inside `handleUIEvent` (around line 76)**
 
   Replace `if (!_state.enabled) { ... }` with:
 
@@ -1186,9 +1196,25 @@ Total: 28 tests across 5 files.
   }
   ```
 
-  Verify `recordEvent()` is already declared `async` (it is — uses `await _state.insertFn(rows)` at line 100).
+  `handleUIEvent` is already declared `async` (line 75: `export async function handleUIEvent`).
 
-- [ ] **Step 13.5: Audit `_resetForTests` if it sets `enabled`**
+- [ ] **Step 13.5: Convert `checkFeatureFlag` boot-time gate (line 36-40)**
+
+  `checkFeatureFlag()` is exported and called from `srv/server.js:399` at server boot for logging. It reads `_state.enabled` synchronously. Two options:
+
+  **Option A (recommended): drop the boot warning** — the resolver-based gate inside `handleUIEvent` is sufficient; the boot warning is non-critical UX. Replace `checkFeatureFlag`'s body with a no-op stub that logs a generic message:
+
+  ```javascript
+  export function checkFeatureFlag() {
+    console.log('[ui-event] UI events handler loaded. Feature flag resolved per-request from UiEventsSettings + env var fallback.');
+  }
+  ```
+
+  **Option B: async-ify `checkFeatureFlag`** — convert to `export async function checkFeatureFlag()`, await the resolver, propagate `await` to the caller in `srv/server.js:399`. More invasive.
+
+  Plan ships **Option A** (simpler; preserves the original "this loaded" log signal without a behavior-tied check at boot).
+
+- [ ] **Step 13.6: Audit `_resetForTests` if it sets `enabled`**
 
   ```bash
   grep -n '_resetForTests\|setEnabled' srv/lib/ui-event-handler.js
@@ -1196,7 +1222,7 @@ Total: 28 tests across 5 files.
 
   If `_resetForTests` accepts an `enabled` argument, drop it (resolver is source of truth now).
 
-- [ ] **Step 13.6: Update existing tests**
+- [ ] **Step 13.7: Update existing tests**
 
   ```bash
   ls srv/lib/__tests__/ui-event-handler.test.js 2>&1
@@ -1204,7 +1230,7 @@ Total: 28 tests across 5 files.
 
   If test file exists, replace any `_resetForTests({ enabled: ... })` calls with `vi.spyOn` of `resolveUiEventsSettings`. Run tests.
 
-- [ ] **Step 13.7: Commit**
+- [ ] **Step 13.8: Commit**
 
   ```bash
   git add srv/lib/ui-event-handler.js srv/lib/__tests__/ui-event-handler.test.js 2>/dev/null || git add srv/lib/ui-event-handler.js
@@ -1504,7 +1530,27 @@ This is the largest consumer-conversion task — 3 files, ~30-40 line test diff.
   const { rebuildTargetEnv } = await resolveTenantSettings();
   ```
 
-  Replace `_state.environment` references with `rebuildTargetEnv`. For the boot-time console.log at line 84, drop the env-name from the message OR resolve once at module init (the resolver populates the cache; subsequent calls hit it).
+  Replace `_state.environment` references with `rebuildTargetEnv`.
+
+  **Boot-time `console.log` at line 83 (inside `checkFeatureFlag`):**
+
+  Currently:
+
+  ```javascript
+  console.log(`[rebuild-trigger] active — admin writes will dispatch with environment='${_state.environment}'.`)
+  ```
+
+  `checkFeatureFlag` is exported and called from `srv/server.js:396` at boot. Two options:
+
+  **Plan ships Option A: drop the env-name from the message.** The log signal "rebuild-trigger active" remains; the env-name was nice-to-have. Replace the line with:
+
+  ```javascript
+  console.log('[rebuild-trigger] active — admin writes will dispatch (target env resolved per-call from TenantSettings).')
+  ```
+
+  No change to `checkFeatureFlag`'s sync signature; no change at the caller in `srv/server.js:396`.
+
+  **Option B (rejected for simplicity):** convert `checkFeatureFlag` to async, await the resolver, propagate `await` to the caller in `srv/server.js:396`. More invasive than Option A and the env-name is non-critical.
 
 - [ ] **Step 18.5: Update production caller in `srv/server.js:370`**
 
@@ -1617,14 +1663,28 @@ This is the largest consumer-conversion task — 3 files, ~30-40 line test diff.
 
   Same shape for `loadTechUserMapping()`.
 
-- [ ] **Step 19.4: Update internal callers (lines 46, 64)**
+- [ ] **Step 19.4: Update internal callers (lines 46, 64) — and async-ify the enclosing middleware**
 
   ```javascript
   const users = await loadTechUsers();
   const mapping = await loadTechUserMapping();
   ```
 
-  Verify enclosing functions are async; propagate `async` upward if needed.
+  **The enclosing function is `basicAuthMiddleware` (line 42)**, an exported sync Express middleware. After async-ification of `loadTechUsers`/`loadTechUserMapping`, the middleware itself MUST be async:
+
+  ```javascript
+  // Before:
+  export function basicAuthMiddleware(req, res, next) {
+    // ...
+  }
+
+  // After:
+  export async function basicAuthMiddleware(req, res, next) {
+    // ...
+  }
+  ```
+
+  Express handles async middleware natively (errors propagate via `next(err)` if thrown). No call-site change needed at the registration point in `srv/server.js` — `app.use(basicAuthMiddleware)` works the same for sync and async middleware.
 
 - [ ] **Step 19.5: Find external callers**
 
@@ -1865,6 +1925,8 @@ The 5 sub-tasks below summarize the per-tile work. Each subagent executes one ti
 
   **Note:** the spec showed 7 children (KG + Secrets relocated in). This worktree has neither in Shell.view.xml, so the new group only has 5 children. Sort order matches spec (UI Events → Tenant). KG + Secrets get added in a rebase-conflict resolution commit when the PR rebases onto main.
 
+  **Default expanded state:** the spec said "Default collapsed." Actual project convention is **default expanded** (every other group's `_loadGroupExpanded()` default is `true`). The `expanded="{viewModel>/groupExpanded/runtimeSettings}"` binding will resolve to `true` after Task 23.2 appends `"runtimeSettings"` to `NAV_GROUP_KEYS`. Plan ships default-expanded for consistency.
+
 - [ ] **Step 22.3: Verify XML well-formed**
 
   ```bash
@@ -1893,40 +1955,45 @@ The 5 sub-tasks below summarize the per-tile work. Each subagent executes one ti
 
 ---
 
-## Task 23: Admin-shell wiring — Shell.controller.js (groupExpanded init + NAV maps × 2)
+## Task 23: Admin-shell wiring — Shell.controller.js (NAV_GROUP_KEYS array + NAV maps × 2)
 
 **Files:**
 
 - Modify: `app/admin-shell/webapp/controller/Shell.controller.js`
 
-3 changes: (a) `groupExpanded.runtimeSettings = false` in `onInit`; (b) 5 NAV_KEY_TO_ROUTE entries; (c) 5 NAV_KEY_TO_TITLE entries.
+**⚠️ Plan-vs-spec correction:** the spec said "find the `groupExpanded: { content: false, rewards: false, ... }` literal in onInit." The actual code uses an **array** `NAV_GROUP_KEYS = ["content", "rewards", "feedback", "reporting", "system"]` (line 63), and `_loadGroupExpanded()` iterates the array setting each key to **`true`** (default expanded, not collapsed). The spec inherited the wrong structure description.
+
+3 changes: (a) append `"runtimeSettings"` to `NAV_GROUP_KEYS`; (b) 5 NAV_KEY_TO_ROUTE entries; (c) 5 NAV_KEY_TO_TITLE entries.
+
+**Default expanded state:** the existing convention is `true` (expanded). The spec's "default collapsed" framing is therefore inconsistent with project convention. **Plan ships default-expanded** (matching every other group). Tom can collapse manually via the side-nav UI; localStorage persistence preserves the choice across reloads.
 
 - [ ] **Step 23.1: Read current state**
 
   ```bash
-  grep -n 'NAV_KEY_TO_ROUTE\|NAV_KEY_TO_TITLE\|groupExpanded' app/admin-shell/webapp/controller/Shell.controller.js | head -15
+  grep -n 'NAV_KEY_TO_ROUTE\|NAV_KEY_TO_TITLE\|NAV_GROUP_KEYS\|_loadGroupExpanded' app/admin-shell/webapp/controller/Shell.controller.js | head -15
   ```
 
-  Confirm the maps live around lines 8 and 35; `groupExpanded` literal is in `onInit`.
+  Confirm: `NAV_GROUP_KEYS` array around line 63 with 5 strings; `NAV_KEY_TO_ROUTE` around line 8; `NAV_KEY_TO_TITLE` around line 35.
 
-- [ ] **Step 23.2: Add `runtimeSettings: false` to `groupExpanded`**
+- [ ] **Step 23.2: Append `"runtimeSettings"` to `NAV_GROUP_KEYS`**
 
-  Find the `groupExpanded: { content: false, rewards: false, ... }` literal in onInit. Add:
+  Find line 63:
 
   ```javascript
-  groupExpanded: {
-    content: false,
-    rewards: false,
-    feedback: false,
-    reporting: false,
-    system: false,
-    runtimeSettings: false,    // <-- NEW
-  },
+  var NAV_GROUP_KEYS = ["content", "rewards", "feedback", "reporting", "system"];
   ```
+
+  Replace with:
+
+  ```javascript
+  var NAV_GROUP_KEYS = ["content", "rewards", "feedback", "reporting", "system", "runtimeSettings"];
+  ```
+
+  This automatically populates `groupExpanded.runtimeSettings = true` (default expanded, consistent with all other groups) via the existing `_loadGroupExpanded()` iterator.
 
 - [ ] **Step 23.3: Add 5 NAV_KEY_TO_ROUTE entries**
 
-  Find the `var NAV_KEY_TO_ROUTE = { ... }` literal. Add at the end (before the closing `}`):
+  Find the `var NAV_KEY_TO_ROUTE = { ... }` literal (line 8). Add at the end (before the closing `}`):
 
   ```javascript
   uiEvents:  "uiEvents",
@@ -1938,7 +2005,7 @@ The 5 sub-tasks below summarize the per-tile work. Each subagent executes one ti
 
 - [ ] **Step 23.4: Add 5 NAV_KEY_TO_TITLE entries**
 
-  Find the `var NAV_KEY_TO_TITLE = { ... }` literal. Add at the end:
+  Find the `var NAV_KEY_TO_TITLE = { ... }` literal (line 35). Add at the end:
 
   ```javascript
   uiEvents:  "UI Events",
@@ -1966,14 +2033,21 @@ The 5 sub-tasks below summarize the per-tile work. Each subagent executes one ti
 
   ```bash
   git add app/admin-shell/webapp/controller/Shell.controller.js
-  git commit -m "feat(admin-shell): NAV maps + groupExpanded for 5 new tiles (#466)
+  git commit -m "feat(admin-shell): NAV maps + NAV_GROUP_KEYS for 5 new tiles (#466)
 
   5th wiring location lesson from #463/#464: NAV_KEY_TO_ROUTE and
   NAV_KEY_TO_TITLE maps must include the new tile keys, otherwise
   clicking the side-nav item is a no-op.
 
-  Also adds groupExpanded.runtimeSettings=false (collapsed by default
-  for the new peer-group)."
+  Also appends 'runtimeSettings' to NAV_GROUP_KEYS array — automatic
+  groupExpanded.runtimeSettings=true via _loadGroupExpanded()
+  iterator. Default expanded matches every other group (content,
+  rewards, feedback, reporting, system).
+
+  Plan-vs-spec correction: spec described groupExpanded as an object
+  literal with false defaults; actual structure is the NAV_GROUP_KEYS
+  array iterated with default-true. This commit follows the actual
+  convention."
   ```
 
 ---
