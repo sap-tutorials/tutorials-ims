@@ -17,7 +17,7 @@ This PR establishes the **template** that Phase 2-B (#464), 2-C (#465), and Phas
 ## Implementation choices made during brainstorming
 
 | Decision | Choice |
-|---|---|
+| --- | --- |
 | Resolver lib structure | **Self-contained `kg-settings.js`** — do NOT refactor `chat-settings-resolver` yet. Extract a base helper later in Phase 3 once 3+ resolvers exist to inform the abstraction. |
 | Admin tile shape | **Custom XML form** mirroring the existing Joule tile (`sap.m.Switch` + `sap.m.Input` × 4 in a `f:SimpleForm`) — NOT Fiori Elements ObjectPage. |
 | Cron flag-flip lag | **Per-tick re-read.** Cron jobs (`extract-concepts-job`, `consolidate-concepts-job`) call `resolveKnowledgeGraphSettings()` once at the top of `run()`. Flag flip applies on the next tick. No mid-tick re-reads. |
@@ -29,7 +29,7 @@ This PR establishes the **template** that Phase 2-B (#464), 2-C (#465), and Phas
 
 ## File structure
 
-```
+```text
 db/schema.cds
   + entity KnowledgeGraphSettings : cuid, managed { 4 columns }   (~10 lines)
 
@@ -114,7 +114,15 @@ In [srv/admin-service.cds](../../../srv/admin-service.cds), add a sibling to the
 entity KnowledgeGraphSettings as projection on ims.KnowledgeGraphSettings;
 ```
 
-`@odata.singleton` makes the OData URL `/admin/KnowledgeGraphSettings` (no key suffix) — clients don't need to know the row's UUID. `@requires:'Admin'` enforces XSUAA scope. Audit logging is provided by the existing `@cap-js/audit-logging` plugin; no annotation needed at this layer (audit-logging defaults to logging WRITES on entities the plugin is bound to).
+`@odata.singleton` makes the OData URL `/admin/KnowledgeGraphSettings` (no key suffix) — clients don't need to know the row's UUID. `@requires:'Admin'` enforces XSUAA scope.
+
+**Change-tracking** (NOT audit-logging — they're different plugins with different sinks). Add to [db/change-tracking.cds](../../../db/change-tracking.cds), mirroring the existing `ChatSettings` line at [db/change-tracking.cds:17](../../../db/change-tracking.cds#L17):
+
+```cds
+annotate ims.KnowledgeGraphSettings with @changelog;
+```
+
+`@cap-js/change-tracking` writes mutations to the `ChangeLog` entity, surfaced via the existing admin tile at `/admin-ui/#changelog-display`. The `@cap-js/audit-logging` plugin is a different mechanism — it requires `@PersonalData` field-level annotations (used today on Users / TaskRecords / etc., not on ChatSettings or other config entities). The KG settings entity carries no personal data, so change-tracking is the correct plugin.
 
 ### CSV seed (empty)
 
@@ -409,15 +417,16 @@ This is the obviously-correct behavior — and an admin who sees `Enabled = OFF`
       </Panel>
 
       <HBox justifyContent="End">
+        <Button text="{i18n>buttonReload}" press=".onReload" />
         <Button text="{i18n>buttonSave}" type="Emphasized" press=".onSave"
-                enabled="{view>/dirty}" />
-        <Button text="{i18n>buttonReset}" press=".onReset"
-                enabled="{view>/dirty}" class="sapUiTinyMarginBegin" />
+                class="sapUiTinyMarginBegin" />
       </HBox>
     </VBox>
   </ScrollContainer>
 </mvc:View>
 ```
+
+Save button is **always enabled** — Joule controller does not implement dirty-tracking, and `JSONModel.attachPropertyChange` does NOT fire for two-way binding leaf mutations from `<Input value="{settings>/x}" />` (it only fires on explicit `setProperty()` calls). Mirroring the Joule precedent verbatim avoids inheriting a non-existent dirty flag.
 
 ### `controller/Settings.controller.js`
 
@@ -432,63 +441,90 @@ sap.ui.define([
 
   return Controller.extend("sap.tutorials.admin.knowledgeGraph.controller.Settings", {
     onInit: function () {
-      this._viewModel = new JSONModel({ dirty: false, busy: false });
-      this.getView().setModel(this._viewModel, "view");
-      this._settingsModel = new JSONModel({});
-      this.getView().setModel(this._settingsModel, "settings");
-      this._load();
-      this._settingsModel.attachPropertyChange(() => {
-        this._viewModel.setProperty("/dirty", true);
+      var oJSON = new JSONModel({
+        enabled: false,
+        extractBuildCap: null,
+        mergeSimThreshold: null,
+        mergeSimThresholdExtract: null
       });
+      this.getView().setModel(oJSON, "settings");
+      this._loadSettings();
     },
 
-    _load: async function () {
-      this._viewModel.setProperty("/busy", true);
-      try {
-        const r = await fetch("/admin/KnowledgeGraphSettings", {
-          headers: { Accept: "application/json" }
+    _loadSettings: function () {
+      var oModel = this.getView().getModel("settings");
+      fetch("/admin/KnowledgeGraphSettings", {
+        credentials: "include",
+        headers: { "Accept": "application/json" }
+      })
+        .then(function (res) {
+          if (!res.ok) { throw new Error("HTTP " + res.status); }
+          return res.json();
+        })
+        .then(function (data) {
+          oModel.setData({
+            enabled: !!data.enabled,
+            extractBuildCap: data.extractBuildCap != null ? data.extractBuildCap : null,
+            mergeSimThreshold: data.mergeSimThreshold != null ? data.mergeSimThreshold : null,
+            mergeSimThresholdExtract: data.mergeSimThresholdExtract != null ? data.mergeSimThresholdExtract : null
+          });
+        })
+        .catch(function (err) {
+          MessageToast.show("Failed to load settings: " + err.message);
         });
-        if (r.status === 404) {
-          this._settingsModel.setData({});
-        } else if (!r.ok) {
-          throw new Error(`Load failed: ${r.status}`);
-        } else {
-          this._settingsModel.setData(await r.json());
-        }
-        this._viewModel.setProperty("/dirty", false);
-      } catch (err) {
-        MessageBox.error(err.message);
-      } finally {
-        this._viewModel.setProperty("/busy", false);
-      }
     },
 
-    onSave: async function () {
-      this._viewModel.setProperty("/busy", true);
-      try {
-        const r = await fetch("/admin/KnowledgeGraphSettings", {
-          method: "PATCH",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(this._settingsModel.getData())
+    onReload: function () {
+      this._loadSettings();
+    },
+
+    onSave: function () {
+      var data = this.getView().getModel("settings").getData();
+      var cap = data.extractBuildCap === "" || data.extractBuildCap == null ? null : parseInt(data.extractBuildCap, 10);
+      var t1  = data.mergeSimThreshold === "" || data.mergeSimThreshold == null ? null : Number(data.mergeSimThreshold);
+      var t2  = data.mergeSimThresholdExtract === "" || data.mergeSimThresholdExtract == null ? null : Number(data.mergeSimThresholdExtract);
+      var body = {
+        enabled: !!data.enabled,
+        extractBuildCap: cap,
+        mergeSimThreshold: t1,
+        mergeSimThresholdExtract: t2
+      };
+
+      // CSRF round-trip: HEAD /admin/$metadata returns the token; PATCH echoes it.
+      // CAP enforces CSRF on writes; no exemption for /admin/. Joule does the same.
+      fetch("/admin/$metadata", {
+        method: "HEAD",
+        credentials: "include",
+        headers: { "x-csrf-token": "fetch" }
+      })
+        .then(function (res) {
+          return res.headers.get("x-csrf-token") || "";
+        })
+        .then(function (token) {
+          return fetch("/admin/KnowledgeGraphSettings", {
+            method: "PATCH",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+              "x-csrf-token": token
+            },
+            body: JSON.stringify(body)
+          });
+        })
+        .then(function (res) {
+          if (!res.ok) { throw new Error("HTTP " + res.status); }
+          MessageToast.show("Saved");
+        })
+        .catch(function (err) {
+          MessageBox.error("Save failed: " + err.message);
         });
-        if (!r.ok) throw new Error(`Save failed: ${r.status}`);
-        MessageToast.show(this.getView().getModel("i18n")
-          .getResourceBundle().getText("toastSaved"));
-        await this._load();
-      } catch (err) {
-        MessageBox.error(err.message);
-      } finally {
-        this._viewModel.setProperty("/busy", false);
-      }
-    },
-
-    onReset: function () { this._load(); }
+    }
   });
 });
 ```
+
+Pattern is line-for-line equivalent to [app/admin/joule/webapp/controller/Settings.controller.js](../../../app/admin/joule/webapp/controller/Settings.controller.js) for the CSRF round-trip, `credentials: "include"`, and JSONModel usage. **No dirty flag** — Save is always enabled; Reload always reloads.
 
 ### `i18n/i18n.properties`
 
@@ -505,8 +541,7 @@ placeholderExtractBuildCap=200
 placeholderMergeSimThreshold=0.92
 placeholderMergeSimThresholdExtract=0.85
 buttonSave=Save
-buttonReset=Reset
-toastSaved=Settings saved
+buttonReload=Reload
 ```
 
 The `infoStrip` is real UX honesty: without it, an admin who flips Enabled and immediately checks `/graph/*` and sees it still working will think the toggle is broken. This is the [feedback_default_off_flags_need_live_smoke](C:\Users\I809764\.claude\projects\d--projects-tutorials-poc\memory\feedback_default_off_flags_need_live_smoke.md) lesson applied at the UI layer.
@@ -518,6 +553,8 @@ Standard UI5 component shell, mirroring `app/admin/joule/webapp/`. ~10 lines com
 ### Admin-shell wiring
 
 In `app/admin-shell/webapp/manifest.json`, add a `componentUsages` entry mirroring the existing `joule` entry, plus a navigation tile entry that points to the same destination. Approximately 20-30 lines added; pattern is mechanical and proven from every existing tile.
+
+In `app/admin-shell/webapp/i18n/i18n.properties`, add the side-nav label key (e.g. `nav.knowledgeGraph=Knowledge Graph`). One line.
 
 `mta.yaml`: the `cp -r ../app/<tile>/webapp/. static/admin-ui/components/<tile>/` pattern is already established. Adding `knowledgeGraph` to that list of `cp` targets is one line in [.deploy/mta.yaml](../../../.deploy/mta.yaml).
 
@@ -536,7 +573,7 @@ In-memory SQLite, ~6 cases:
 5. **Cache hit** within 5s TTL — second read returns cached value even after row mutation.
 6. **Cache reset** returns fresh row (simulating TTL expiry via `_resetCacheForTests`).
 
-Full test file content as specified during brainstorming Section 6. The TTL test uses `_resetCacheForTests()` to simulate expiry rather than `await sleep(5500)` — saves 5s × N tests in CI; the LRU's TTL behavior is already battle-tested by lru-cache. We test our caching contract, not lru-cache's clock.
+**Test bootstrap:** Each test file MUST call `cds.test('serve')` (or use `vitest.config.ts`'s existing test-context wiring — verify the project's pattern in `test/unit/` siblings before writing) so `cds.entities('com.sap.developers.ims')` is populated before the resolver's `readRow()` runs. Without this, the unit tests fail with an opaque `Cannot read property KnowledgeGraphSettings of undefined`. Pattern lives in existing unit-test files; this spec doesn't dictate the exact bootstrap line because it's project convention.
 
 ### Hybrid tests — `test/hybrid/runtime-config.test.js`
 
@@ -571,13 +608,13 @@ The env-var-still-in-mtaext invariant is the safety net for all of Phase 2 + Pha
 ## Risks & open questions
 
 | Risk | Mitigation |
-|---|---|
-| Cron job behavior tightening (gate on `kg.enabled`) silently changes prod behavior on first DEV deploy where someone was using `KNOWLEDGE_GRAPH_ENABLED=false` to stop cron writes via env. | Today the env-var pattern is strict — `process.env.KNOWLEDGE_GRAPH_ENABLED !== 'true'` blocks the HTTP gate. Cron jobs DON'T currently honor it (they just run when scheduled). PR diff comment + PR body call this out as the intentional behavior change. The change is the obviously-correct one — env was misleading admins about what the flag did. |
-| HANA HDI rejects `Decimal(3, 2)` columns with no default on first deploy. | Same precision/scale as `ChatSettings.temperature` at [db/schema.cds:469](../../../db/schema.cds#L469); proven safe in this schema. |
+| --- | --- |
+| Cron job behavior tightening (gate on `kg.enabled`) silently changes prod behavior on first DEV deploy where someone was using `KNOWLEDGE_GRAPH_ENABLED=false` to stop cron writes via env. | Today the env-var pattern is strict — `process.env.KNOWLEDGE_GRAPH_ENABLED !== 'true'` blocks the HTTP gate. Cron jobs DON'T currently honor it (verified at [srv/jobs/extract-concepts-job.js:115](../../../srv/jobs/extract-concepts-job.js#L115) — no env check before the body runs). PR diff comment + PR body call this out as the intentional behavior change. The change is the obviously-correct one — env was misleading admins about what the flag did. |
+| HANA HDI rejects `Decimal(3, 2)` columns with no default on first deploy. | Same precision/scale as `ChatSettings.temperature` at [db/schema.cds:469](../../../db/schema.cds#L469); proven safe in this schema. **Do NOT widen to `Decimal(4, 2)` "to be safe"** — `Decimal(3, 2)` represents `0.00`–`9.99` and the bounds `0.01`–`1.00` fit. Parity with `ChatSettings.temperature` matters for HANA-rejection symmetry. |
 | Admin saves null Boolean (cleared the field), expecting "use env var" — but writes a non-null entity with explicit null field; resolver correctly falls through to env. | Clarified in the `null DB column → env` unit test. The admin UI's `Switch` widget can't write null (only true/false), so this only matters for direct OData writes (e.g. via Postman). Acceptable surface. |
 | Concurrent `knowledge-graph-service` requests trigger N parallel `readRow()` calls within the same first 5s window before cache populates. | LRU `set` is synchronous; multiple parallel requests racing to populate the same key all complete the read and overwrite each other harmlessly. Worst case: ~3-5 redundant DB reads in the first 5s after server boot. Negligible. |
-| `attachPropertyChange` on `JSONModel` is fragile for nested updates (UI5 quirk). Joule controller has same pattern; we inherit. | Acceptable for this PR — same precedent. Refactor opportunity for both tiles in a separate cleanup PR. |
-| `mta.yaml` `cp` target list drift between `srv` and `srv-qa` (per [feedback_srv_qa_cp_list_recurring](C:\Users\I809764\.claude\projects\d--projects-tutorials-poc\memory\feedback_srv_qa_cp_list_recurring.md)). | The new `srv/lib/runtime-config/kg-settings.js` module must be added to the `srv-qa` `cp` list in [.deploy/mta.yaml](../../../.deploy/mta.yaml). Verified at plan-writing time. |
+| `extractBuildCap === 0` cron edge case (today's "dry-run" knob via env) is now redundant in cron path because `if (!kg.enabled) return` short-circuits before the cap is read. | Acceptable — the canonical way to halt extraction is `enabled = false`; `cap = 0` was always a workaround. The hot-path `knowledge-graph-service.js` consumer still reads the cap, so the value retains semantic meaning for any future per-request consumer. Resolver's nullish-coalesce (`0 ?? 200 → 0`) preserves the value correctly via `pick()`'s `!== null` guard. |
+| `mta.yaml` `cp` target list drift between `srv` and `srv-qa` (per [feedback_srv_qa_cp_list_recurring](C:\Users\I809764\.claude\projects\d--projects-tutorials-poc\memory\feedback_srv_qa_cp_list_recurring.md)). | The new module is in a NEW subdirectory `srv/lib/runtime-config/`. The srv-qa cp step is a flat-file `cp` chain at [.deploy/mta.yaml:97](../../../.deploy/mta.yaml#L97). **Two edits required**, mirroring the existing `srv/lib/branch/` precedent: (a) add `mkdir -p srv/lib/runtime-config` to the `bash -c "..."` chain, and (b) add a separate `cp ../../srv/lib/runtime-config/kg-settings.js srv/lib/runtime-config/` after that mkdir. Without this, srv-qa boot crashes on the first `import` of the resolver. Plan should explicitly call this out as a mandatory step. |
 
 ---
 
@@ -585,10 +622,12 @@ The env-var-still-in-mtaext invariant is the safety net for all of Phase 2 + Pha
 
 - [ ] All 4 KG env vars resolve from DB → env → default in tested order (verified via 6 unit tests).
 - [ ] Admin tile shows + edits + saves all 4 values (manual smoke during DEV deploy + tile loads from `/admin-ui/#knowledgeGraph-display`).
-- [ ] Audit log entry on every write to `KnowledgeGraphSettings` (via existing `@cap-js/audit-logging` plugin; verified by checking `AuditLog` table after admin save).
+- [ ] Change-tracking entry on every write to `KnowledgeGraphSettings` (via existing `@cap-js/change-tracking` plugin; verified by checking `ChangeLog` table after admin save and confirming the entry appears in `/admin-ui/#changelog-display`).
 - [ ] 5-second TTL verified via test (write DB row → first read returns new value within 5s, second read within window returns cache).
 - [ ] Existing env-var path still works when no DB row + env var set (regression test).
 - [ ] CSV seed is empty so HDI redeploy doesn't clobber operator-set values.
+- [ ] **PR body and release notes call out the cron behavior tightening** — `extract-concepts-job` and `consolidate-concepts-job` now early-return when `KnowledgeGraphSettings.enabled` is OFF. Previously these jobs ran regardless of `KNOWLEDGE_GRAPH_ENABLED`. Operators relying on the (broken) env-flag-stops-cron behavior should set `enabled = false` in the new tile after first deploy.
+- [ ] **`.deploy/mta.yaml` srv-qa cp chain updated** — `mkdir -p srv/lib/runtime-config` and a separate `cp` line for the new resolver module added to the `bash -c "..."` chain at line 97. Verified by inspecting srv-qa boot logs after deploy.
 
 ---
 
