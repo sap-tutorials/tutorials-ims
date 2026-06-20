@@ -100,7 +100,7 @@ The fine-grained PAT is the simplest fit: scoped, expirable, revocable, and the 
 - [`srv/lib/rebuild-trigger.js`](../../../srv/lib/rebuild-trigger.js) — module that consumes the token; module-level comment explains the feature flag.
 - [`srv/server.js`](../../../srv/server.js) — admin-write hook that calls `scheduleRebuild('admin-write')` after entity writes.
 - [`.github/workflows/rebuild-content.yml`](../../../.github/workflows/rebuild-content.yml) — the workflow being dispatched.
-- [`deploy/dev.mtaext`](../../../deploy/dev.mtaext) / [`deploy/qa.mtaext`](../../../deploy/qa.mtaext) / [`deploy/prod.mtaext`](../../../deploy/prod.mtaext) — the property mapping. The `${github-dispatch-token}` placeholder is resolved by [`.github/workflows/deploy.yml`](../../../.github/workflows/deploy.yml) at deploy time.
+- `deploy/dev.mtaext` / `deploy/qa.mtaext` / `deploy/prod.mtaext` — the property mapping. The `${github-dispatch-token}` placeholder is resolved by [`.github/workflows/deploy.yml`](../../../.github/workflows/deploy.yml) at deploy time.
 
 There is currently no `.env.example` file in this repo's root. If one is added in the future, include `GITHUB_DISPATCH_TOKEN=` (empty) with a pointer to this runbook.
 
