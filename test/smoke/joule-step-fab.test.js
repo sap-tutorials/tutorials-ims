@@ -45,4 +45,17 @@ describe('Joule step-help FAB smoke', () => {
     expect(js).toMatch(/openWithStepContext/);
     expect(js).toMatch(/joule-step-fab/);
   });
+
+  it('joule.js observes BOTH .tutorial-nav-bottom AND .next-steps (issue #456)', async () => {
+    // Issue #102 added an IntersectionObserver on .tutorial-nav-bottom so
+    // the FAB lifts clear of the in-flow prev/next nav row. Issue #456 noted
+    // the FAB ALSO overlaps the "Next Steps" card (.next-steps in
+    // next-steps.html) which sits ABOVE the nav row in mission/group
+    // tutorials. The fix observes both selectors with a shared observer.
+    const res = await fetchWithRetry(`${BASE_URL}/js/joule.js`);
+    expect(res.status).toBe(200);
+    const js = await res.text();
+    expect(js).toMatch(/\.tutorial-nav-bottom/);
+    expect(js).toMatch(/\.next-steps/);
+  });
 });
