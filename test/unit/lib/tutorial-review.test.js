@@ -18,15 +18,23 @@ describe('tutorial-review module', () => {
       ID: 'm-rev', tutorial_ID: 't-rev', owner: 'X',
       reviewedDate: '2020-01-01T00:00:00Z',
       notificationNumber: 5,
-      lastNotificationDate: '2024-01-01T00:00:00Z'
+      lastNotificationDate: '2024-01-01T00:00:00Z',
+      firstNotificationDate: '2024-01-01T00:00:00Z'
     });
   });
 
-  it('reviewTutorial resets reviewedDate and notification counters', async () => {
+  it('reviewTutorial resets reviewedDate and ALL notification counters', async () => {
     const result = await reviewTutorial('t-rev');
     expect(result.notificationNumber).toBe(0);
     expect(result.reviewedDate).toBeDefined();
     expect(new Date(result.reviewedDate).getTime()).toBeGreaterThan(Date.parse('2020-01-01T00:00:00Z'));
+
+    // #450: verify ALL 4 review-state fields cleared in the persisted row
+    const { TutorialMeta } = cds.entities('com.sap.developers.ims');
+    const persisted = await SELECT.one.from(TutorialMeta).where({ ID: 'm-rev' });
+    expect(persisted.notificationNumber).toBe(0);
+    expect(persisted.lastNotificationDate).toBeNull();
+    expect(persisted.firstNotificationDate).toBeNull();
   });
 
   it('reviewTutorial throws when meta not found', async () => {

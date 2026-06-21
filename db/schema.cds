@@ -307,6 +307,7 @@ entity TutorialMeta : cuid, managed, LegacyKeyed {
   monitoredStatus           : String(50);
   notificationNumber        : Integer default 0;
   lastNotificationDate      : Timestamp;
+  firstNotificationDate       : Timestamp;
 }
 
 entity TutorialContributors : cuid, LegacyKeyed {

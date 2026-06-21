@@ -1,6 +1,6 @@
 import cds from '@sap/cds';
 
-const STALE_DAYS_DEFAULT = 180;
+const STALE_DAYS_DEFAULT = 90;
 const RESEND_INTERVAL_DAYS = 30;
 const MAX_NOTIFICATION_LEVEL = 3;
 
@@ -65,9 +65,15 @@ export async function markNotificationSent(tutorialId) {
   const { TutorialMeta } = cds.entities('com.sap.developers.ims');
   const meta = await SELECT.one.from(TutorialMeta).where({ tutorial_ID: tutorialId });
   if (!meta) return;
+  const now = new Date().toISOString();
+  const isFirstNag = !meta.notificationNumber;
   await UPDATE(TutorialMeta, meta.ID).set({
     notificationNumber: (meta.notificationNumber || 0) + 1,
-    lastNotificationDate: new Date().toISOString()
+    lastNotificationDate: now,
+    // #450: set firstNotificationDate ONLY on the first nag. The
+    // spread-conditional pattern keeps the UPDATE atomic and avoids
+    // overwriting on subsequent nags.
+    ...(isFirstNag && { firstNotificationDate: now }),
   });
 }
 

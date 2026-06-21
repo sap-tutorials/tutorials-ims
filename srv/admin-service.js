@@ -357,6 +357,7 @@ export default class AdminService extends cds.ApplicationService {
       if (req.data.reviewedDate) {
         req.data.notificationNumber = 0;
         req.data.lastNotificationDate = null;
+        req.data.firstNotificationDate = null;  // #450: clear all 3 fields atomically
       }
     });
 
@@ -791,7 +792,7 @@ export default class AdminService extends cds.ApplicationService {
       const { sendNotificationEmail } = await import('./lib/mail-client.js');
 
       const adminEmails = await getAdminEmailList();
-      const notifications = await computeStaleNotifications(180);
+      const notifications = await computeStaleNotifications(90);
       const dashboardUrl = (await resolveDisplaySettings()).dashboardUrl;
 
       let sent = 0;

@@ -4,6 +4,11 @@
 
 import cds from '@sap/cds';
 
+// #450: matches the runtime cron threshold (srv/lib/contributor-notifications.js
+// STALE_DAYS_DEFAULT). Seeded dev data populates notificationNumber for rows
+// older than this threshold; keeps dev/prod semantics aligned.
+const STALE_THRESHOLD_DAYS = 90;
+
 async function main() {
   process.env.cds_requires_auth_kind = 'mocked';
   const csn = await cds.load('*');
@@ -47,7 +52,7 @@ async function main() {
     const daysAgo = Math.floor(Math.random() * 365);
     const reviewedDate = new Date(now - daysAgo * 86400000).toISOString();
     const notifDaysAgo = Math.floor(Math.random() * 30);
-    const lastNotificationDate = daysAgo > 180
+    const lastNotificationDate = daysAgo > STALE_THRESHOLD_DAYS
       ? new Date(now - notifDaysAgo * 86400000).toISOString()
       : null;
 
@@ -57,7 +62,7 @@ async function main() {
       reviewedDate,
       owner: owners[i % owners.length],
       monitoredStatus: statuses[i % statuses.length],
-      notificationNumber: daysAgo > 180 ? Math.floor(Math.random() * 4) + 1 : 0,
+      notificationNumber: daysAgo > STALE_THRESHOLD_DAYS ? Math.floor(Math.random() * 4) + 1 : 0,
       lastNotificationDate,
       legacyId: nextLegacyId++
     };
