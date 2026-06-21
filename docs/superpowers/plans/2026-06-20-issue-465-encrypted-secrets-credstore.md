@@ -4,7 +4,7 @@
 
 **Goal:** Add encrypted-value storage to the existing `Secrets` HANA entity (metadata-only from #482) via BTP Credential Store. HANA stays metadata-only; values live in credstore keyed by `Secrets.key`. Admin tile gains Set / Rotate / Clear / Reveal operations with a 30-second auto-hide window.
 
-**Architecture:** Single chokepoint at `srv/lib/credstore.js` (globalThis-keyed cache, JWE-decrypt via `jose`, native fetch). 3 actions + 1 function on AdminService `Secrets` projection. Admin tile dialog gains a collapsible "Secret Value" Panel. CAP audit-logging via `@AuditLog.Operation` annotation on `Secrets` + explicit `audit.log()` calls via `cds.connect.to('audit-log')` in the value-operation handlers (custom OData functions don't fire CRUD interceptors). NO schema migration — HANA `Secrets` entity unchanged.
+**Architecture:** Single chokepoint at `srv/lib/credstore.js` (globalThis-keyed cache, JWE-decrypt via `jose`, native fetch). 3 actions + 1 function on AdminService `Secrets` projection. Admin tile dialog gains a collapsible "Secret Value" Panel. CAP audit-logging via `@PersonalData.EntitySemantics: 'Other'` annotation on `Secrets` (the documented annotation for entities needing audit logging that aren't DataSubjects) + explicit `audit.log('SecurityEvent', { data: { action, ... } })` calls via `cds.connect.to('audit-log')` in the value-operation handlers (custom OData functions don't fire CRUD interceptors; `'SecurityEvent'` is the only registered event name in the plugin — custom event names like `'SecretValueRead'` are NOT registered and would silently drop or throw, so the action discriminator goes into `data.action`). NO schema migration — HANA `Secrets` entity unchanged.
 
 **Tech Stack:** SAP CAP Node.js, BTP Credential Store (default plan + JWE), `jose` (new dep), `@sap/xsenv` (already a dep), Vitest (unit-only), UI5 v1.136.
 
@@ -54,7 +54,7 @@ Branched from main **AFTER** all 4 prior PRs merged. Verified via inspection:
 - `Secrets` entity at `db/schema.cds` (metadata-only: 7 columns + `@assert.unique` on `key`) ✓
 - Existing `secretWarnings` handler at `srv/admin-service.js:990` ✓
 - Existing `_withCsrf(callback)` helper at `app/admin/secrets/webapp/controller/Secrets.controller.js:178` ✓
-- `db/audit-logging.cds` exists; uses `@PersonalData` for Users / UserMetaData / etc. **NO existing `@AuditLog.Operation` precedent — Phase 2-C is the first user of that annotation in this codebase.**
+- `db/audit-logging.cds` exists; uses `@PersonalData` for Users / UserMetaData / etc. **NO existing `@PersonalData.EntitySemantics: 'Other'` precedent on a non-personal-data entity — Phase 2-C is the first user of that documented `'Other'` value in this codebase.**
 
 **No rebase risk expected.** No worktree-state-aware branching needed in this plan.
 
@@ -77,7 +77,7 @@ Branched from main **AFTER** all 4 prior PRs merged. Verified via inspection:
 | `package.json` | Add `jose ^5.x` dep. |
 | `mta.yaml` | Add `tutorials-credstore` managed-service instance + binding to srv module. |
 | `.deploy/mta.yaml` | Same `tutorials-credstore` resource + binding edits as root `mta.yaml` (CI builds from this file). ALSO add `../../srv/lib/credstore.js` to the srv-qa module's hand-curated cp chain. |
-| `db/audit-logging.cds` | Append `@AuditLog.Operation` annotation on `ims.Secrets` (security-purpose, NOT GDPR-purpose). |
+| `db/audit-logging.cds` | Append `@PersonalData.EntitySemantics: 'Other'` annotation on `ims.Secrets` (documented annotation for non-DataSubject entities needing audit logging — `@AuditLog.Operation` from earlier drafts is undocumented and silently ignored by the plugin). |
 | `srv/admin-service.cds` | Add 3 actions + 1 function to existing `Secrets` projection. |
 | `srv/admin-service.js` | Add 4 handlers + explicit `audit.log()` calls (via `cds.connect.to('audit-log')`) for revealSecretValue / rotateSecretValue. |
 | `app/admin/secrets/webapp/view/SecretDialog.fragment.xml` | Add collapsible "Secret Value" Panel below metadata fields. |
@@ -129,12 +129,12 @@ Before any task, the implementer subagent runs these checks. Each should return 
 - [ ] **Step 0.3: Verify `db/audit-logging.cds` shape**
 
   ```bash
-  grep -n '@AuditLog\.Operation\|@PersonalData\|Secrets' db/audit-logging.cds | head -10
+  grep -n "EntitySemantics: 'Other'\|@PersonalData\|Secrets" db/audit-logging.cds | head -10
   ```
 
-  Expected: ZERO matches for `@AuditLog.Operation`, multiple `@PersonalData` rows for Users/UserMetaData/etc., zero matches for `Secrets` (#482 deliberately did not annotate it).
+  Expected: ZERO matches for `EntitySemantics: 'Other'`, multiple `@PersonalData` rows for Users/UserMetaData/etc. (those use `DataSubject` / `DataSubjectDetails` semantics), zero matches for `Secrets` (#482 deliberately did not annotate it).
 
-  This confirms: Phase 2-C is the first user of `@AuditLog.Operation` in this codebase. Task 4 below adds the first row.
+  This confirms: Phase 2-C is the first user of `@PersonalData.EntitySemantics: 'Other'` in this codebase. Task 3 below adds the first row.
 
 - [ ] **Step 0.4: Confirm `@cap-js/audit-logging` is in dependencies**
 
@@ -249,11 +249,14 @@ Both `mta.yaml` files MUST receive the same `tutorials-credstore` resource + bin
       parameters:
         service: credstore
         service-plan: default
+        service-name: tutorials-credstore
         config:
           authentication: basic
   ```
 
   Match existing indentation (2 spaces under `resources:`, 4 spaces for `parameters:`, 6 spaces for `config:`).
+
+  **`service-name:` is conventional in this repo** (verified 2026-06-21 against `.deploy/mta.yaml`): every other managed-service block declares `service-name: <name>` under `parameters:` — e.g. line 208 `service-name: tutorials-audit-log`, line 216 `service-name: tutorials-cloud-logging`. Without it, Cloud Foundry auto-generates an instance name from the MTA-id (less predictable for `cf delete-service` cleanup, and inconsistent with neighbors).
 
 - [ ] **Step 2.4: Repeat 2.2 and 2.3 in `.deploy/mta.yaml`**
 
@@ -292,9 +295,10 @@ Both `mta.yaml` files MUST receive the same `tutorials-credstore` resource + bin
   yq '.modules[] | select(.name == "tutorials-srv") | .requires' .deploy/mta.yaml | head -10
   yq '.resources[] | select(.name == "tutorials-credstore")' mta.yaml
   yq '.resources[] | select(.name == "tutorials-credstore")' .deploy/mta.yaml
+  yq '.resources[] | select(.name == "tutorials-credstore") | .parameters."service-name"' mta.yaml .deploy/mta.yaml
   ```
 
-  Expected: in BOTH files, requires lists include `tutorials-credstore`; both resource definitions emit identically.
+  Expected: in BOTH files, requires lists include `tutorials-credstore`; both resource definitions emit identically; the `service-name` field reads `tutorials-credstore` in both (matching the sibling service-instance convention).
 
   Cross-file diff sanity check (matching resource definitions):
 
@@ -328,7 +332,7 @@ Both `mta.yaml` files MUST receive the same `tutorials-credstore` resource + bin
 
 ---
 
-## Task 3: Add `@AuditLog.Operation` annotation on `Secrets`
+## Task 3: Add `@PersonalData.EntitySemantics: 'Other'` annotation on `Secrets`
 
 **Files:**
 
@@ -342,53 +346,83 @@ Both `mta.yaml` files MUST receive the same `tutorials-credstore` resource + bin
 
   Confirm:
   - File starts with `using ... from '@cap-js/audit-logging';` or similar import.
-  - Existing annotations use `@PersonalData` form on Users / UserMetaData / TaskRecords / etc.
-  - No existing `@AuditLog.Operation` annotation anywhere.
+  - Existing annotations use `@PersonalData` form on Users / UserMetaData / TaskRecords / etc. with `EntitySemantics: 'DataSubject'` or `'DataSubjectDetails'`.
+  - No existing `EntitySemantics: 'Other'` annotation anywhere.
 
-- [ ] **Step 3.2: Append `@AuditLog.Operation` annotation on Secrets**
+- [ ] **Step 3.2: Append `@PersonalData.EntitySemantics: 'Other'` annotation on Secrets**
 
   Use Edit. Anchor on the LAST `annotate ims.<EntityName> with @PersonalData...` block in the file (the file is structured as a sequence of annotate-blocks). After the closing `};` of that last block, append:
 
   ```cds
 
   // Phase 2-C (#465): security-purpose audit on Secrets metadata writes.
-  // @PersonalData is intentionally NOT set — secret values aren't personal
-  // data per GDPR semantics. @AuditLog.Operation is the security-purpose
-  // annotation that triggers @cap-js/audit-logging plugin events on CRUD
-  // mutations. Custom OData V4 actions/functions (setSecretValue,
-  // rotateSecretValue, revealSecretValue, clearSecretValue) do NOT fire
-  // these CRUD interceptors — their handlers in srv/admin-service.js call
-  // cds.audit.log() explicitly. This annotation captures metadata-edits
-  // via the standard projection (description, expiresAt, rotationOwner
-  // changes via the admin tile's metadata editor).
-  annotate ims.Secrets with @AuditLog.Operation: {
-    Read   : true,
-    Insert : true,
-    Update : true,
-    Delete : true,
+  // EntitySemantics: 'Other' is the documented annotation for entities that
+  // need audit logging but are NOT DataSubjects (DataSubject / DataSubjectDetails
+  // are for personal-data entities; 'Other' covers everything else). Per CAP
+  // @PersonalData docs, 'Other' on Secrets registers the entity with the
+  // @cap-js/audit-logging plugin so CRUD mutations on the standard projection
+  // (description, expiresAt, rotationOwner changes via the admin tile's
+  // metadata editor) emit audit events.
+  //
+  // The 4 custom OData V4 operations (setSecretValue, rotateSecretValue,
+  // revealSecretValue, clearSecretValue) do NOT fire these CRUD interceptors
+  // — their handlers in srv/admin-service.js call audit.log('SecurityEvent',
+  // { data: { action: 'SecretValueRead', ... } }) explicitly via the
+  // auditEvent() helper (Task 6). 'SecurityEvent' is the only registered
+  // event name; custom event names like 'SecretValueRead' are NOT registered
+  // in the plugin's CDS service definition and would silently drop or throw.
+  // The action discriminator therefore lives in data.action.
+  annotate ims.Secrets with @(
+    PersonalData.EntitySemantics: 'Other'
+  ) {
+    key         @PersonalData.IsPotentiallyPersonal;
+    description @PersonalData.IsPotentiallyPersonal;
   };
   ```
 
-- [ ] **Step 3.3: Verify CDS compiles**
+  **Note on field-level annotations:** `@PersonalData.IsPotentiallyPersonal` is applied to `key` and `description` because admins may use those fields to hint at the secret's vendor/account (e.g. "GitHub PAT for octocat user") — the spec's privacy review can downgrade to bare entity-level if the implementer judges those fields strictly non-personal.
+
+- [ ] **Step 3.3: Verify CDS compiles AND annotation lands in CSN**
 
   ```bash
   npx cds compile srv/admin-service.cds > /dev/null && echo OK
   ```
 
-  Expected: `OK`. If the `@AuditLog.Operation` syntax fails to parse, cross-reference against the `@cap-js/audit-logging` plugin's README in `node_modules/@cap-js/audit-logging/README.md` for the exact annotation form (the spec uses the documented shape; small variations like `Operations` vs `Operation` are plugin-version dependent).
+  Expected: `OK`.
+
+  Then confirm the annotation actually attached (memory `feedback_cds_csn_flat_vs_nested_annotations`: nested annotation syntax compiles to flat dotted keys; a typo wouldn't fail the compile but the annotation would silently miss):
+
+  ```bash
+  npx cds compile srv/admin-service.cds --to json 2>/dev/null | \
+    grep -A2 '"AdminService.Secrets"\|"com.sap.developers.ims.Secrets"' | \
+    grep -i 'EntitySemantics'
+  ```
+
+  Expected: at least one match showing `"@PersonalData.EntitySemantics": "Other"` (flat dotted form). If empty, the annotation is malformed — recheck the `annotate ... with @(...)` syntax.
+
+  Verify `@AuditLog.Operation` is NOT in the file (would be inert):
+
+  ```bash
+  grep -n '@AuditLog\.Operation' db/audit-logging.cds   # Expect: 0 matches
+  grep -A3 "Secrets with @" db/audit-logging.cds        # Expect: shows PersonalData.EntitySemantics: 'Other'
+  ```
 
 - [ ] **Step 3.4: Commit**
 
   ```bash
   git add db/audit-logging.cds
-  git commit -m "feat(audit-log): @AuditLog.Operation on Secrets (#465)
+  git commit -m "feat(audit-log): @PersonalData.EntitySemantics: 'Other' on Secrets (#465)
 
-  Security-purpose annotation (NOT @PersonalData — secret values
-  aren't personal data per GDPR). Captures CRUD events on Secrets
-  metadata edits. Custom OData V4 actions for value mutation
-  (setSecretValue etc.) fire cds.audit.log() explicitly in their
-  handlers (Task 6) — CRUD interceptors only catch standard
-  projection CRUD, not bound actions/functions."
+  Documented annotation for entities needing audit logging that aren't
+  DataSubjects ('Other' is the third EntitySemantics value alongside
+  'DataSubject' and 'DataSubjectDetails'). Captures CRUD events on
+  Secrets metadata edits. Custom OData V4 actions for value mutation
+  (setSecretValue etc.) fire audit.log('SecurityEvent', { data: { action,
+  ...}}) explicitly in their handlers (Task 6) — CRUD interceptors only
+  catch standard projection CRUD, not bound actions/functions.
+
+  Replaces the @AuditLog.Operation form from earlier draft, which is
+  undocumented in the @cap-js/audit-logging plugin and silently ignored."
   ```
 
 ---
@@ -612,9 +646,12 @@ This is the single chokepoint for all BTP Credential Store I/O. ~140 lines. Uses
 
     // Phase 2-C (#465): Reveal the current secret value for short-lived
     // display in the admin tile. Returns plaintext + server-supplied
-    // expiresAt (~30s). Each invocation emits a SecretValueRead audit-log
-    // event via explicit cds.audit.log() call in the handler (custom OData
-    // functions don't fire CRUD interceptors).
+    // expiresAt (~30s). Each invocation emits an audit event via
+    // `audit.log('SecurityEvent', { data: { action: 'SecretValueRead', ... } })`
+    // through the `auditEvent()` helper in srv/admin-service.js (custom
+    // OData functions don't fire CRUD interceptors; `'SecurityEvent'` is
+    // the only registered event name in the @cap-js/audit-logging plugin's
+    // CDS service definition — the discriminator lives in `data.action`).
     function revealSecretValue() returns {
       value : String;
       expiresAt : Timestamp;
@@ -682,7 +719,7 @@ This is the single chokepoint for all BTP Credential Store I/O. ~140 lines. Uses
 
 - Modify: `srv/admin-service.js` (insert after existing `secretWarnings` handler at line ~990)
 
-This task adds 4 handlers + 3 helpers (loadSecretRow, stampRotated, auditEvent) + 1 response-header helper (setNoStoreHeaders). ~140 lines. Each handler emits explicit audit events via the `auditEvent()` helper (which uses `cds.connect.to('audit-log')` + `.log(name, { data })` per verified codebase patterns) where the standard CRUD interceptor wouldn't fire.
+This task adds 4 handlers + 3 helpers (loadSecretRow, stampRotated, auditEvent) + 1 response-header helper (setNoStoreHeaders). ~140 lines. Each handler emits explicit audit events via the `auditEvent(action, data)` helper. The helper routes every call through `audit.log('SecurityEvent', { data: { action, ...data } })` — verified canonical pattern at `srv/admin-service.js:1073`. **`'SecurityEvent'` is the only event name registered in the `@cap-js/audit-logging` plugin's CDS service definition** (alongside `SensitiveDataRead`, `PersonalDataModified`, `ConfigurationModified` for other entity-semantics). Custom event names like `'SecretValueRead'` are NOT registered and would silently drop, throw, or produce a malformed payload depending on plugin version. The action discriminator lives in `data.action`.
 
 - [ ] **Step 6.1: Locate insertion point**
 
@@ -746,16 +783,25 @@ This task adds 4 handlers + 3 helpers (loadSecretRow, stampRotated, auditEvent) 
       };
 
       // BLOCKING 1: audit-log helper. Verified against existing usage at
-      // srv/admin-service.js:1072-1073 (canonical pattern: cds.connect.to('audit-log')
-      // + audit.log(eventName, { data: {...} })) and the graceful-degradation
-      // pattern at srv/knowledge-graph-service.js:395-401 (catch missing binding).
+      // srv/admin-service.js:1073 (canonical pattern: cds.connect.to('audit-log')
+      // + audit.log('SecurityEvent', { data: { action, ...} })) and the
+      // graceful-degradation pattern at srv/knowledge-graph-service.js:395-401
+      // (catch missing binding).
+      //
+      // 'SecurityEvent' is the ONLY event name registered in the
+      // @cap-js/audit-logging plugin's CDS service definition (alongside
+      // SensitiveDataRead / PersonalDataModified / ConfigurationModified for
+      // other entity-semantics). Custom event names like 'SecretValueRead'
+      // are NOT registered and would silently drop or throw depending on
+      // plugin version. The action discriminator therefore goes into
+      // data.action — every call site stays ergonomic via this helper.
       //
       // cds.audit?.log?.(...) does NOT exist — optional-chaining would mean
       // audit events silently never fire. Use this helper everywhere instead.
-      const auditEvent = async (eventName, data) => {
+      const auditEvent = async (action, data) => {
         const audit = await cds.connect.to('audit-log').catch(() => null);
         if (audit) {
-          await audit.log(eventName, { data });
+          await audit.log('SecurityEvent', { data: { action, ...data } });
         }
       };
 
@@ -782,7 +828,8 @@ This task adds 4 handlers + 3 helpers (loadSecretRow, stampRotated, auditEvent) 
         await writeSecret(row.key, value);
         const lastRotatedAt = await stampRotated(row.ID);
         // CRUD interceptor on Secrets fires for the UPDATE on lastRotatedAt
-        // → captured by @AuditLog.Operation; no explicit audit event needed here.
+        // → captured by @PersonalData.EntitySemantics: 'Other'; no explicit
+        // audit event needed here.
         return { written: true, lastRotatedAt };
       });
 
@@ -866,14 +913,15 @@ This task adds 4 handlers + 3 helpers (loadSecretRow, stampRotated, auditEvent) 
       });
   ```
 
-  **BLOCKING 1 note (verified against codebase 2026-06-21):** Existing pattern at `srv/admin-service.js:1072-1073` uses:
+  **BLOCKING 1 note (verified against codebase 2026-06-21):** Existing pattern at `srv/admin-service.js:1073` uses:
 
   ```javascript
-  const audit = await cds.connect.to('audit-log');
-  await audit.log('SecurityEvent', { /* data */ });
+  await audit.log('SecurityEvent', { data: { action: 'AnonymizeUser', sapId: ..., ... } });
   ```
 
-  Graceful-degradation pattern at `srv/knowledge-graph-service.js:395-401` wraps the connect in `try/catch` so missing-binding contexts (unit tests) don't break the handler. The `auditEvent()` helper above combines both. **`cds.audit?.log?.()` does NOT exist as an API** — optional chaining there means audit events would silently never fire.
+  Event name is ALWAYS `'SecurityEvent'`; the action discriminator goes into `data.action`. The `@cap-js/audit-logging` plugin's CDS service definition registers exactly four event names: `SensitiveDataRead`, `PersonalDataModified`, `ConfigurationModified`, `SecurityEvent`. Custom event names (`'SecretValueRead'`, etc.) are NOT registered and produce plugin-version-dependent behavior (silent drop, throw, or malformed payload).
+
+  Graceful-degradation pattern at `srv/knowledge-graph-service.js:395-401` wraps the connect in `try/catch` so missing-binding contexts (unit tests) don't break the handler. The `auditEvent(action, data)` helper above combines both, and every call site stays ergonomic — pass the action string as the first arg, the helper canonicalizes the event-name wrapping. **`cds.audit?.log?.()` does NOT exist as an API** — optional chaining there means audit events would silently never fire.
 
   **IMPORTANT 8 note:** `req._.res.setHeader` is CAP internal API and may change between minor versions. The `setNoStoreHeaders` helper above prefers `req.req?.res` (the Express request's `.res` back-reference, public) and falls back to `req._.res` only if needed. Best-effort: if header-setting fails entirely the action still returns the value, the cache header was defense-in-depth only.
 
@@ -900,7 +948,7 @@ This task adds 4 handlers + 3 helpers (loadSecretRow, stampRotated, auditEvent) 
   grep -n -B1 -A2 "cds\.connect\.to('audit-log')" srv/admin-service.js srv/knowledge-graph-service.js
   ```
 
-  Expected: matches at admin-service.js:1072 (existing SecurityEvent call) and knowledge-graph-service.js:395-401 (existing graceful-degradation pattern).
+  Expected: matches at admin-service.js:1073 (existing `audit.log('SecurityEvent', { data: { action: 'AnonymizeUser', ... } })` call) and knowledge-graph-service.js:395-401 (existing graceful-degradation pattern). Confirm the existing call uses `'SecurityEvent'` as event name, NOT a custom name.
 
 - [ ] **Step 6.6: Smoke boot to verify handlers register**
 
@@ -917,13 +965,17 @@ This task adds 4 handlers + 3 helpers (loadSecretRow, stampRotated, auditEvent) 
   git commit -m "feat(admin): 4 handlers for Secrets value operations (#465)
 
   setSecretValue / rotateSecretValue / clearSecretValue handlers
-  fire @AuditLog.Operation CRUD interceptor via stampRotated()
-  UPDATE on Secrets. revealSecretValue + the value-emit paths
-  emit explicit audit events via auditEvent() helper (custom OData
-  V4 actions/functions don't trigger CRUD interceptors).
+  fire @PersonalData.EntitySemantics: 'Other' CRUD interceptor via
+  stampRotated() UPDATE on Secrets. revealSecretValue + the value-emit
+  paths emit explicit audit events via auditEvent(action, data) helper
+  (custom OData V4 actions/functions don't trigger CRUD interceptors).
 
-  auditEvent() uses cds.connect.to('audit-log') wrapped in catch(()=>null)
-  per existing patterns at srv/admin-service.js:1072 + knowledge-graph-
+  auditEvent() routes every call through audit.log('SecurityEvent',
+  { data: { action, ...} }) — 'SecurityEvent' is the only event name
+  registered in @cap-js/audit-logging plugin's CDS service definition;
+  custom event names like 'SecretValueRead' would silently drop or
+  throw. The action discriminator lives in data.action. Pattern
+  verified against srv/admin-service.js:1073 + knowledge-graph-
   service.js:395-401. The cds.audit?.log?.() shape from earlier drafts
   was wrong — that API does NOT exist; optional chaining there means
   audit events silently never fire.
@@ -1501,9 +1553,46 @@ Adds 5 handlers + 1 helper (`_invokeBoundAction`) + reveal-countdown ticker. ~15
 
   **Note on JS style:** the existing controller uses `var` + `function` rather than `const` + arrow functions. New methods should match (UI5 v1.x compatibility, no `?.` chaining inside the controller for older browsers).
 
-- [ ] **Step 10.3: Add 5 handlers + reveal-countdown ticker**
+- [ ] **Step 10.3: Add 5 handlers + reveal-countdown ticker** (Strategy B — verified 2026-06-21)
 
-  After `_invokeBoundAction`, append:
+  The existing controller at `app/admin/secrets/webapp/controller/Secrets.controller.js` lines 1-7 uses Strategy B (`sap.ui.define([...modules], function (Controller, Fragment, JSONModel, MessageToast, MessageBox) { ... })` with imported identifiers used as `MessageBox.error(...)`, `new JSONModel(...)` — NOT `sap.m.MessageBox.error(...)`). Match that style: add the new modules to BOTH the dependency array AND the factory function args FIRST (Step 10.2.5), then write handler code that uses the imported identifiers.
+
+  **Pre-step 10.2.5: Extend the dependency array**
+
+  Use Edit. The current `sap.ui.define` array reads:
+
+  ```javascript
+  sap.ui.define([
+    "sap/ui/core/mvc/Controller",
+    "sap/ui/core/Fragment",
+    "sap/ui/model/json/JSONModel",
+    "sap/m/MessageToast",
+    "sap/m/MessageBox"
+  ], function (Controller, Fragment, JSONModel, MessageToast, MessageBox) {
+  ```
+
+  Replace with:
+
+  ```javascript
+  sap.ui.define([
+    "sap/ui/core/mvc/Controller",
+    "sap/ui/core/Fragment",
+    "sap/ui/model/json/JSONModel",
+    "sap/m/MessageToast",
+    "sap/m/MessageBox",
+    "sap/m/Dialog",       // NEW for reveal-error / set-value / vendor-rotation dialogs
+    "sap/m/Button",       // NEW
+    "sap/m/Input",        // NEW for rotate dialog
+    "sap/m/Label",        // NEW
+    "sap/m/VBox",         // NEW
+    "sap/m/Text",         // NEW for reveal display
+    "sap/m/Link"          // NEW for rotate-docs link
+  ], function (Controller, Fragment, JSONModel, MessageToast, MessageBox, Dialog, Button, Input, Label, VBox, Text, Link) {
+  ```
+
+  Parameter order in the factory function MUST exactly match the array order — UI5 positional binding, no named lookup.
+
+  **Then append the handlers + sub-dialogs after `_invokeBoundAction`:**
 
   ```javascript
 
@@ -1520,7 +1609,7 @@ Adds 5 handlers + 1 helper (`_invokeBoundAction`) + reveal-countdown ticker. ~15
           headers: { "Accept": "application/json" },
         }).then(function (res) {
           if (!res.ok) return res.text().then(function (t) {
-            sap.m.MessageBox.error("Reveal failed: " + (t || res.status));
+            MessageBox.error("Reveal failed: " + (t || res.status));
             throw new Error("reveal failed");
           });
           return res.json();
@@ -1536,7 +1625,7 @@ Adds 5 handlers + 1 helper (`_invokeBoundAction`) + reveal-countdown ticker. ~15
           return self._invokeBoundAction(data.ID, "setSecretValue", { value: value })
             .then(function (result) {
               self.getView().getModel("dialog").setProperty("/lastRotatedAt", result.lastRotatedAt);
-              sap.m.MessageToast.show("Value saved.");
+              MessageToast.show("Value saved.");
             });
         });
       },
@@ -1554,21 +1643,21 @@ Adds 5 handlers + 1 helper (`_invokeBoundAction`) + reveal-countdown ticker. ~15
             }
           })
           .catch(function (e) {
-            sap.m.MessageBox.error("Rotate failed: " + e.message);
+            MessageBox.error("Rotate failed: " + e.message);
           });
       },
 
       onClearValue: function () {
         var self = this;
         var data = this.getView().getModel("dialog").getData();
-        sap.m.MessageBox.confirm(
+        MessageBox.confirm(
           "Delete the credstore value for '" + data.key + "'? Metadata stays in HANA.",
           {
             onClose: function (action) {
-              if (action !== sap.m.MessageBox.Action.OK) return;
+              if (action !== MessageBox.Action.OK) return;
               self._invokeBoundAction(data.ID, "clearSecretValue", {})
-                .then(function () { sap.m.MessageToast.show("Value cleared."); })
-                .catch(function (e) { sap.m.MessageBox.error("Clear failed: " + e.message); });
+                .then(function () { MessageToast.show("Value cleared."); })
+                .catch(function (e) { MessageBox.error("Clear failed: " + e.message); });
             },
           }
         );
@@ -1609,25 +1698,27 @@ Adds 5 handlers + 1 helper (`_invokeBoundAction`) + reveal-countdown ticker. ~15
       // ──────────────────────────────────────────────────────────────────
       // Sub-dialogs: SetValue (masked input), RotatedValue (auto-hide
       // reveal of the new value), VendorRotation (guidance + paste bridge).
+      // All use imported Dialog/Button/Input/Label/VBox/Text/Link identifiers
+      // (Strategy B; matches existing MessageBox / MessageToast style).
       // ──────────────────────────────────────────────────────────────────
 
       _openSetValueDialog: function (onSave) {
-        var oDialog = new sap.m.Dialog({
+        var oDialog = new Dialog({
           title: "{i18n>dialogTitleSetValue}",
           contentWidth: "30rem",
-          beginButton: new sap.m.Button({ text: "Save", type: "Emphasized", press: function () {
+          beginButton: new Button({ text: "Save", type: "Emphasized", press: function () {
             var value = oInput.getValue();
-            if (!value) { sap.m.MessageBox.error("Value cannot be empty."); return; }
+            if (!value) { MessageBox.error("Value cannot be empty."); return; }
             onSave(value).then(function () { oDialog.close(); oDialog.destroy(); });
           }}),
-          endButton: new sap.m.Button({ text: "Cancel", press: function () {
+          endButton: new Button({ text: "Cancel", press: function () {
             oDialog.close(); oDialog.destroy();
           }}),
         });
-        var oInput = new sap.m.Input({ type: "Password", placeholder: "New secret value" });
-        oDialog.addContent(new sap.m.VBox({
+        var oInput = new Input({ type: "Password", placeholder: "New secret value" });
+        oDialog.addContent(new VBox({
           items: [
-            new sap.m.Label({ text: "Type or paste the new value:" }),
+            new Label({ text: "Type or paste the new value:" }),
             oInput,
           ],
         }).addStyleClass("sapUiSmallMargin"));
@@ -1640,7 +1731,7 @@ Adds 5 handlers + 1 helper (`_invokeBoundAction`) + reveal-countdown ticker. ~15
         // is also bound here. Admin copies the value before auto-hide.
         var self = this;
         this._startRevealCountdown(newValue, expiresAt);
-        sap.m.MessageBox.information(
+        MessageBox.information(
           "New value generated. Visible for ~30s in the dialog field above.",
           { title: "{i18n>dialogTitleRotated}" }
         );
@@ -1648,10 +1739,10 @@ Adds 5 handlers + 1 helper (`_invokeBoundAction`) + reveal-countdown ticker. ~15
 
       _showVendorRotationGuidance: function (rotationDocsUrl, secretId) {
         var self = this;
-        var oDialog = new sap.m.Dialog({
+        var oDialog = new Dialog({
           title: "{i18n>dialogTitleVendorRotation}",
           contentWidth: "32rem",
-          beginButton: new sap.m.Button({ text: "Paste new value", type: "Emphasized", press: function () {
+          beginButton: new Button({ text: "Paste new value", type: "Emphasized", press: function () {
             oDialog.close(); oDialog.destroy();
             // Bridge to the Set Value flow — admin pastes the just-rotated value.
             var data = self.getView().getModel("dialog").getData();
@@ -1659,17 +1750,17 @@ Adds 5 handlers + 1 helper (`_invokeBoundAction`) + reveal-countdown ticker. ~15
               return self._invokeBoundAction(data.ID, "setSecretValue", { value: value })
                 .then(function (result) {
                   self.getView().getModel("dialog").setProperty("/lastRotatedAt", result.lastRotatedAt);
-                  sap.m.MessageToast.show("Rotation complete.");
+                  MessageToast.show("Rotation complete.");
                 });
             });
           }}),
-          endButton: new sap.m.Button({ text: "Cancel", press: function () {
+          endButton: new Button({ text: "Cancel", press: function () {
             oDialog.close(); oDialog.destroy();
           }}),
         });
-        var oVBox = new sap.m.VBox({ items: [
-          new sap.m.Text({ text: "This kind of secret can't be self-rotated. Mint a new value at the vendor's UI, then click 'Paste new value' below." }),
-          new sap.m.Link({
+        var oVBox = new VBox({ items: [
+          new Text({ text: "This kind of secret can't be self-rotated. Mint a new value at the vendor's UI, then click 'Paste new value' below." }),
+          new Link({
             text: "Rotation docs",
             href: rotationDocsUrl || "",
             target: "_blank",
@@ -1689,64 +1780,56 @@ Adds 5 handlers + 1 helper (`_invokeBoundAction`) + reveal-countdown ticker. ~15
 
   Expected: `OK`. Common pitfalls: missing comma between method blocks, mismatched `var self = this;` referencing, missing `sap.ui.define(...)` deps.
 
-- [ ] **Step 10.5: Audit `sap.ui.define` dependency array** (IMPORTANT 6)
+- [ ] **Step 10.5: Audit `sap.ui.define` dependency array** (IMPORTANT 6 — Strategy B only)
 
-  Verified against codebase: the existing controller's `sap.ui.define([...])` array currently lists (approx):
-  `Controller, Fragment, JSONModel, MessageToast, MessageBox`.
+  Verified against codebase 2026-06-21: the existing controller (`app/admin/secrets/webapp/controller/Secrets.controller.js` lines 1-7) uses **Strategy B** — modules are imported by AMD path and referenced by their factory-function identifier (`MessageBox.error(...)`, `new JSONModel(...)`), NOT by `sap.m.X` globals. Phase 2-C MUST match. Strategy A (globals) was offered in an earlier plan draft and has been removed; the controller code in Step 10.3 above already uses imported identifiers throughout.
 
-  The handler code from Step 10.3 references additional UI5 modules (`sap.m.Dialog`, `sap.m.Button`, `sap.m.Input`, `sap.m.Label`, `sap.m.VBox`, `sap.m.Text`, `sap.m.Link`). Two equally valid resolution strategies — pick one:
-
-  **Strategy A — keep `sap.m.X` global references in handler code**
-
-  If the existing handler code in the file (pre-edit) already uses `sap.m.MessageBox` global rather than the imported `MessageBox` identifier, keep that style. The `sap.ui.define` array does NOT need new entries — UI5 resolves global module aliases at runtime. Match the existing controller's style.
-
-  **Strategy B — add to the dependency array (cleaner)**
-
-  If the existing code uses imported identifiers (`MessageBox.error(...)` not `sap.m.MessageBox.error(...)`), extend the array:
+  After Step 10.2.5 (array extension) + Step 10.3 (handler insert), the array MUST contain exactly these 12 entries in order, with matching factory args:
 
   ```javascript
   sap.ui.define([
     "sap/ui/core/mvc/Controller",
     "sap/ui/core/Fragment",
     "sap/ui/model/json/JSONModel",
-    "sap/m/MessageBox",
     "sap/m/MessageToast",
-    "sap/m/Dialog",          // NEW
-    "sap/m/Button",          // NEW
-    "sap/m/Input",           // NEW
-    "sap/m/Label",           // NEW
-    "sap/m/VBox",            // NEW
-    "sap/m/Text",            // NEW
-    "sap/m/Link",            // NEW
-  ], function (Controller, Fragment, JSONModel, MessageBox, MessageToast, Dialog, Button, Input, Label, VBox, Text, Link) {
-    // ...
-  }
+    "sap/m/MessageBox",
+    "sap/m/Dialog",
+    "sap/m/Button",
+    "sap/m/Input",
+    "sap/m/Label",
+    "sap/m/VBox",
+    "sap/m/Text",
+    "sap/m/Link"
+  ], function (Controller, Fragment, JSONModel, MessageToast, MessageBox, Dialog, Button, Input, Label, VBox, Text, Link) {
   ```
-
-  Then rewrite the handler code from Step 10.3 to use imported identifiers (`new Dialog({...})` instead of `new sap.m.Dialog({...})`, etc.).
 
   **Audit script — run after Step 10.3 + 10.5:**
 
   ```bash
-  # Extract the current sap.ui.define dependency array:
+  # 1. Confirm ZERO sap.m.X globals remain in the controller (Strategy B mandate).
+  grep -nE '\bsap\.m\.[A-Z]' app/admin/secrets/webapp/controller/Secrets.controller.js
+
+  # 2. Confirm the dependency array has all 12 expected modules.
   node -e "
     const src = require('fs').readFileSync('app/admin/secrets/webapp/controller/Secrets.controller.js','utf8');
     const m = src.match(/sap\.ui\.define\(\[([^\]]+)\]/s);
     const deps = m ? m[1].split(',').map(s => s.trim().replace(/[\"']/g, '')).filter(Boolean) : [];
+    const expected = ['sap/ui/core/mvc/Controller','sap/ui/core/Fragment','sap/ui/model/json/JSONModel',
+                      'sap/m/MessageToast','sap/m/MessageBox','sap/m/Dialog','sap/m/Button',
+                      'sap/m/Input','sap/m/Label','sap/m/VBox','sap/m/Text','sap/m/Link'];
+    const missing = expected.filter(e => !deps.includes(e));
+    const extras = deps.filter(d => !expected.includes(d));
     console.log('deps:', deps);
-    // List of sap.m.X references in the new handler code
-    const refs = [...src.matchAll(/new sap\.m\.(\w+)/g)].map(x => 'sap/m/' + x[1]);
-    console.log('sap.m refs:', [...new Set(refs)]);
-    // Anything in refs not in deps?
-    const depsSet = new Set(deps.map(d => d.replace(/^sap\./, 'sap/').replace(/\./g, '/')));
-    const missing = [...new Set(refs)].filter(r => !depsSet.has(r));
-    console.log('missing from define array:', missing);
+    console.log('missing:', missing);
+    console.log('extras:', extras);   // ok if any pre-existing extras
   "
   ```
 
-  Expected: `missing from define array: []`. If anything is missing AND Strategy A is in use (global refs OK), this is informational only. If Strategy B is in use and `missing` is non-empty, add those modules to the `sap.ui.define` array.
+  Expected:
+  - Step 1: **ZERO matches** for `sap.m.X` global refs in the controller. If any match, Strategy B has been violated — rewrite those call sites to use the imported identifier.
+  - Step 2: `missing: []` (every expected dep is in the array). Extras are fine if they pre-exist from other features.
 
-  Common pitfall: parameter order in the callback must match array order exactly. Use Edit on BOTH the array AND the function signature if changing this.
+  Common pitfall: parameter order in the callback must match array order EXACTLY (UI5 positional binding). Use Edit on BOTH the array AND the function signature if changing.
 
 - [ ] **Step 10.6: Commit**
 
@@ -1892,21 +1975,29 @@ Adds 5 handlers + 1 helper (`_invokeBoundAction`) + reveal-countdown ticker. ~15
   ### Audit logs
 
   - **CRUD on Secrets metadata** (description, expiresAt, etc.) — captured
-    automatically by `@AuditLog.Operation` annotation on the entity (added
-    in `db/audit-logging.cds` as part of #465).
+    automatically by `@PersonalData.EntitySemantics: 'Other'` annotation on
+    the entity (added in `db/audit-logging.cds` as part of #465). `'Other'`
+    is the documented value for entities needing audit logging that aren't
+    DataSubjects.
   - **Custom OData operations** (setSecretValue, rotateSecretValue,
     clearSecretValue, revealSecretValue) — custom OData V4 functions /
     actions do NOT fire the CRUD interceptors. Each handler emits an
-    explicit `cds.audit.log()` call with event name `SecretValueRead` /
-    `SecretValueRotated` / `SecretValueRotateAttempted` /
-    `SecretValueCleared`.
+    explicit `audit.log('SecurityEvent', { data: { action, ... } })` call
+    via the `auditEvent(action, data)` helper in `srv/admin-service.js`.
+    `'SecurityEvent'` is the only registered event name in the
+    `@cap-js/audit-logging` plugin's CDS service definition; the action
+    discriminator (`SecretValueRead` / `SecretValueRotated` /
+    `SecretValueRotateAttempted` / `SecretValueCleared`) lives in
+    `data.action`.
 
   ### Where to find audit events
 
   Per the `@cap-js/audit-logging` plugin's output target (configured in
   `package.json` `cds.requires['audit-log']`). Typically goes to the
   SAP Audit Log service on BTP; in DEV-only contexts may write to
-  console. Check plugin docs for the canonical place to query in your env.
+  console. Query by `event: 'SecurityEvent'` AND
+  `data.action: 'SecretValueRead'` (or the other three action values).
+  Check plugin docs for the canonical place to query in your env.
 
   ### Vendor-side rotation runbook
 
@@ -1981,7 +2072,9 @@ Adds 5 handlers + 1 helper (`_invokeBoundAction`) + reveal-countdown ticker. ~15
   npx vitest run 2>&1 | tail -15
   ```
 
-  Expected: existing tests still pass + the 14 new ones (6 credstore lib + 8 handler) pass. Watch for any test that loads `srv/admin-service.js` end-to-end — the `auditEvent()` helper added in Task 6 wraps `cds.connect.to('audit-log')` in `.catch(() => null)`, so test contexts without the audit-log binding are safely silent. If a test fails with "audit binding required" or similar, verify the helper's catch is intact.
+  Expected: existing tests still pass + the 14 new ones (6 credstore lib + 8 handler) pass.
+
+  Note on `auditEvent()`'s `.catch(() => null)` guard added in Task 6: the catch is for the production-boot scenario where the audit-log service binding hasn't been provisioned yet on the first `cf push` of a new environment (e.g. a freshly created QA subaccount). It rarely fires in tests — `package.json` configures `cds.requires.audit-log.kind: audit-log-to-console` for the test profile, which makes audit calls a no-op rather than throwing. So if a test fails with "audit binding required" or similar, the more likely cause is that the test profile has been edited away from `audit-log-to-console`, not that the catch is missing — but it's still worth confirming the catch is intact.
 
 - [ ] **Step 13.2: Run admin-shell build**
 
@@ -1990,6 +2083,21 @@ Adds 5 handlers + 1 helper (`_invokeBoundAction`) + reveal-countdown ticker. ~15
   ```
 
   Expected: build succeeds. UI5 build catches XML / JS errors in the controller.
+
+- [ ] **Step 13.2a: Verify audit events route through `'SecurityEvent'` event name** (BLOCKING 1)
+
+  Static-check the handler code emits the canonical event name + action-discriminator shape — NOT the wrong-shape custom event names:
+
+  ```bash
+  # Expect: every audit.log call uses 'SecurityEvent' as event name.
+  grep -nE "audit\.log\(" srv/admin-service.js
+  # Expect: zero matches for custom event names being passed as 1st arg to audit.log.
+  grep -nE "audit\.log\(['\"](SecretValue|SecretValueRead|SecretValueRotated|SecretValueCleared|SecretValueRotateAttempted)['\"]" srv/admin-service.js
+  ```
+
+  Expected: every `audit.log(...)` call in the file (Phase 2-C handlers + the existing 1073-line anonymize call) uses `'SecurityEvent'` as the first arg; ZERO matches for `audit.log('SecretValueRead', ...)` etc.
+
+  When the audit binding is actually present (DEV / PROD deploy after this PR lands), the implementer should manually verify in the audit-log SaaS UI that `SecretValueRead` events surface under `event: 'SecurityEvent'` with `data.action: 'SecretValueRead'` (i.e. the discriminator is queryable). Defer this to the post-merge DEV smoke since unit tests use `audit-log-to-console`.
 
 - [ ] **Step 13.3: Smoke boot CAP service**
 
@@ -2048,8 +2156,10 @@ Adds 5 handlers + 1 helper (`_invokeBoundAction`) + reveal-countdown ticker. ~15
 - [ ] 14 unit tests pass (`npx vitest run test/unit/lib/credstore.test.js test/unit/admin-secret-value-handlers.test.js`).
 - [ ] All 4 OData operations registered (visible in `/admin/$metadata` after smoke boot).
 - [ ] Admin-shell build succeeds; controller and dialog compile.
-- [ ] `db/audit-logging.cds` has the new `@AuditLog.Operation` annotation on `Secrets`.
-- [ ] `mta.yaml` binds `tutorials-credstore` to srv module.
+- [ ] `db/audit-logging.cds` has the new `@PersonalData.EntitySemantics: 'Other'` annotation on `Secrets` (NOT `@AuditLog.Operation`).
+- [ ] All `audit.log(...)` call sites in `srv/admin-service.js` use `'SecurityEvent'` as the event name (action discriminator in `data.action`).
+- [ ] Controller uses Strategy B (imported identifiers) — `grep -nE '\bsap\.m\.[A-Z]' app/admin/secrets/webapp/controller/Secrets.controller.js` returns ZERO matches.
+- [ ] `mta.yaml` binds `tutorials-credstore` to srv module AND the resource block declares `service-name: tutorials-credstore` (sibling-service convention).
 - [ ] `package.json` has `jose ^5.x`.
 - [ ] `docs/developers/operations/runtime-config.md` has the Phase 2-C section.
 
