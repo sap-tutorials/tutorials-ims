@@ -26,11 +26,24 @@ build-parameters:
         # metadata prefetch (~4m for 1383 tutorials) is uncached and ran twice.
         # For LOCAL `mbt build` to work standalone, run `npm run fetch-tutorials`
         # first (or use `npm run build:all` which orchestrates fetch + Hugo).
-        - npm run validate-tutorials
-        - npm --prefix hugo-apps run build
-        - npm run copy-joule-vendor
-        - curl -fsSL https://github.com/gohugoio/hugo/releases/download/v0.147.7/hugo_extended_0.147.7_linux-amd64.tar.gz -o /tmp/hugo.tar.gz
-        - tar -xzf /tmp/hugo.tar.gz -C /tmp hugo
+        # Run 4 independent pre-Hugo-build tasks in parallel. They have no
+        # interdependencies and all complete before the Hugo build at the next
+        # step needs their outputs:
+        #   - validate-tutorials: reads hugo/content/tutorials/ (populated by
+        #     deploy.yml's prefetch step), independent of all others
+        #   - hugo-apps build: Vite compile of hugo-apps/src/ → hugo/static/js/
+        #   - copy-joule-vendor: cp from @sap/joule-* to hugo/static/
+        #   - Hugo binary download: curl + tar to /tmp/hugo (skipped on cache hit)
+        # Wall-clock = slowest single task (~10-15s) vs sum (~25-40s). Saves
+        # 10-15s on every run.
+        # If any task throws, set -e + the explicit `wait` per pid surfaces
+        # the failure (vs a single `wait` that loses exit codes).
+        # Hugo binary download — skip if already present (deploy.yml caches it
+        # in /tmp/hugo across CI runs via actions/cache@v4). Local `mbt build`
+        # invocations fall through to the curl path on first run; cached after.
+        # Version bumps to this URL automatically invalidate the CI cache too
+        # (deploy.yml's cache key is hashFiles('mta.yaml')).
+        - 'set -e; npm run validate-tutorials & p1=$!; npm --prefix hugo-apps run build & p2=$!; npm run copy-joule-vendor & p3=$!; bash -c "[ -x /tmp/hugo ] || (curl -fsSL https://github.com/gohugoio/hugo/releases/download/v0.147.7/hugo_extended_0.147.7_linux-amd64.tar.gz -o /tmp/hugo.tar.gz && tar -xzf /tmp/hugo.tar.gz -C /tmp hugo)" & p4=$!; wait $p1; wait $p2; wait $p3; wait $p4'
         # Run prod + QA Hugo builds in parallel. They write to different
         # output dirs (hugo/public/ vs hugo/public-qa/) so they don't collide
         # on output. They DO share hugo/resources/_gen/ for image-resize
