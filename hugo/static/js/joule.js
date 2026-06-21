@@ -674,22 +674,53 @@
       // in-flow Previous/Next nav row at the bottom of the page that overlaps
       // the fixed-positioned FAB at viewport bottom. When the row scrolls into
       // view, set [data-near-nav-bottom] on the FAB so the matching CSS rule
-      // can lift it clear. IntersectionObserver is scoped to the row's
-      // existence — pages without it (single tutorials, no prev/next) skip
-      // the observer entirely. rootMargin pushes the trigger up by 160px so
-      // the lift completes before the row visually meets the FAB.
-      const navBottom = document.querySelector('.tutorial-nav-bottom');
-      if (navBottom && 'IntersectionObserver' in window) {
+      // can lift it clear.
+      //
+      // Issue #456: tutorials assigned to a mission/group ALSO render a
+      // "Next Steps" card (.next-steps with .next-steps-card inside) that
+      // sits visually ABOVE the .tutorial-nav-bottom row. The card is wider
+      // and reaches the right edge of the content column, so it overlaps
+      // the bottom-right FAB BEFORE the prev/next nav row does. Observing
+      // only .tutorial-nav-bottom missed this case — the card was already
+      // half-visible by the time the lift fired.
+      //
+      // Fix: observe BOTH elements with a SHARED observer. Either one
+      // intersecting triggers the lift; both clearing lifts the FAB back
+      // down. The shared observer also coalesces the two callbacks so we
+      // don't thrash data-near-nav-bottom on mixed-visibility transitions.
+      //
+      // rootMargin pushes the trigger up by 160px so the lift completes
+      // before either element visually meets the FAB. IntersectionObserver
+      // is scoped to whichever targets actually exist — pages without
+      // either (single tutorials, no prev/next, no recommendations) skip
+      // the observer entirely.
+      const navTargets = [
+        document.querySelector('.tutorial-nav-bottom'),
+        document.querySelector('.next-steps'),
+      ].filter(Boolean);
+      if (navTargets.length > 0 && 'IntersectionObserver' in window) {
+        // Track which observed targets are currently intersecting so we can
+        // toggle data-near-nav-bottom on the FAB based on ANY-intersecting,
+        // not just the latest entry. Without this, a mixed-visibility batch
+        // (e.g. next-steps leaves view while tutorial-nav-bottom enters)
+        // could end with the wrong final state depending on iteration order.
+        const intersecting = new WeakSet();
         const navObserver = new IntersectionObserver((entries) => {
           for (const entry of entries) {
             if (entry.isIntersecting) {
-              stepFab.dataset.nearNavBottom = 'true';
+              intersecting.add(entry.target);
             } else {
-              delete stepFab.dataset.nearNavBottom;
+              intersecting.delete(entry.target);
             }
           }
+          const anyVisible = navTargets.some((t) => intersecting.has(t));
+          if (anyVisible) {
+            stepFab.dataset.nearNavBottom = 'true';
+          } else {
+            delete stepFab.dataset.nearNavBottom;
+          }
         }, { rootMargin: '0px 0px 160px 0px' });
-        navObserver.observe(navBottom);
+        for (const target of navTargets) navObserver.observe(target);
       }
     }
     if (cfg.bannerText) { banner.textContent = cfg.bannerText; banner.hidden = false; }
