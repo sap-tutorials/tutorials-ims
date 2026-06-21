@@ -8,6 +8,16 @@ variable "subaccount_id" {
   }
 }
 
+variable "btp_globalaccount" {
+  type        = string
+  description = "Global-account subdomain (NOT the GUID — though they happen to be the same string for GUID-named global accounts). Required by the SAP/btp provider; cannot be sourced from BTP_GLOBALACCOUNT env var. Find via `btp get accounts/global-account --format json | jq -r .subdomain`."
+
+  validation {
+    condition     = length(var.btp_globalaccount) > 0
+    error_message = "btp_globalaccount cannot be empty."
+  }
+}
+
 variable "cf_org_name" {
   type        = string
   description = "Cloud Foundry org name the principal should be allowed to target (e.g. 'tutorial-system'). Recorded in role-collection descriptions for audit clarity."
