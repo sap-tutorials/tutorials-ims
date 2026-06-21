@@ -14,14 +14,19 @@ build-parameters:
         # 2026-06-20 with `Invalid option: --output-dir`. Issue #478.
         - npx cds build --production
         - npm --prefix hugo-apps install
-        - npm run fetch-tutorials -- --target hugo
+        # NOTE: tutorial fetch (prod + qa) happens BEFORE mbt build via deploy.yml
+        # workflow steps (PR #492). mbt's 10-min before-all timeout was burned by
+        # rerunning fetch-tutorials here even though caches were warm — Phase 2's
+        # metadata prefetch (~4m for 1383 tutorials) is uncached and ran twice.
+        # For LOCAL `mbt build` to work standalone, run `npm run fetch-tutorials`
+        # first (or use `npm run build:all` which orchestrates fetch + Hugo).
         - npm run validate-tutorials
         - npm --prefix hugo-apps run build
         - npm run copy-joule-vendor
         - curl -fsSL https://github.com/gohugoio/hugo/releases/download/v0.147.7/hugo_extended_0.147.7_linux-amd64.tar.gz -o /tmp/hugo.tar.gz
         - tar -xzf /tmp/hugo.tar.gz -C /tmp hugo
         - /tmp/hugo --source hugo --minify
-        - npm run fetch-tutorials -- --target hugo --channel qa
+        # QA fetch also moved to deploy.yml workflow step (see comment above).
         - /tmp/hugo --source hugo --config ../hugo.qa.toml --minify
         - npx tsx scripts/verify-qa-build.ts hugo/public-qa
         - mkdir -p approuter/static/qa
