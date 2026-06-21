@@ -9,6 +9,15 @@
 #   btp list accounts/subaccount --format json | jq '.value[] | {name, guid, subdomain}'
 subaccount_id = "00000000-0000-0000-0000-000000000000"
 
+# Global-account subdomain (the SAP/btp provider needs this in HCL; it
+# CANNOT be sourced from the BTP_GLOBALACCOUNT environment variable).
+# Find via:
+#   btp get accounts/global-account --format json | jq -r .subdomain
+# Note: in subaccounts where the global account was created with a GUID-only
+# name, the subdomain and GUID are the same string. Either way, use the
+# `.subdomain` field — that's what the provider validates against.
+btp_globalaccount = "your-globalaccount-subdomain"
+
 # CF org name (used in role collection descriptions for audit clarity).
 cf_org_name = "tutorial-system"
 
