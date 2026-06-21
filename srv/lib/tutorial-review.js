@@ -12,7 +12,8 @@ export async function reviewTutorial(tutorialId) {
   await UPDATE(TutorialMeta, meta.ID).set({
     reviewedDate: now,
     notificationNumber: 0,
-    lastNotificationDate: null
+    lastNotificationDate: null,
+    firstNotificationDate: null
   });
   return { reviewedDate: now, notificationNumber: 0 };
 }
