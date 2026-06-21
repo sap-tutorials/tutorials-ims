@@ -34,7 +34,7 @@ This PR completes the original #444 vision: every credential the platform uses h
 | Plan choice + decryption library | **`default` plan + `jose` library.** Smallest surface; matches the canonical SAP Node.js sample (`btp-integration-toolkit-lite`). |
 | Namespace strategy | **Single namespace `tutorials` per environment.** Each env (DEV/QA/PROD) has its own `tutorials-credstore` instance bound to its srv app. Instance-isolation by deployment, not logical-isolation by namespace. |
 | Tile value-edit UX | **Set / Rotate / Clear / Reveal (Show with auto-hide).** 30-second server-supplied reveal window. CAP audit-logging records all value reads/writes. |
-| Audit log surface | **CAP audit-logging plugin output (canonical) + change-tracking on metadata-edits.** No separate HANA viewer-log entity — CAP's audit-logging is the canonical record. |
+| Audit log surface | **Explicit `@AuditLog.Operation` annotation on `Secrets`** + per-handler `cds.audit.log()` calls for `revealSecretValue` (functions don't fire CRUD interceptors). NO separate HANA viewer-log entity. The existing `Secrets` entity does NOT have `@PersonalData` annotation (verified against `db/audit-logging.cds`) — that's correct (secret values aren't personal data per GDPR), but means the audit-logging plugin needs a security-purpose annotation, not a privacy-purpose one. |
 | Vendor-side rotate UX | **Structured response `{ rotated: false, reason, rotationDocsUrl }`** so the tile renders friendly guidance rather than a 503 error toast. |
 | Reveal expiry mechanism | **Server-supplied `expiresAt`** in the response. Tile auto-hides based on this — no client-side fixed timer. |
 
@@ -114,8 +114,9 @@ The HANA `Secrets` entity, the credstore, and the admin tile are loosely coupled
 | File | Change |
 | --- | --- |
 | `mta.yaml` | Add `tutorials-credstore` managed-service instance + binding to srv module. |
+| `db/audit-logging.cds` | Add `@AuditLog.Operation` annotation on `Secrets` for security-purpose audit (existing entity has no `@PersonalData` — verified). |
 | `srv/admin-service.cds` | Add 3 actions + 1 function to existing `Secrets` projection. |
-| `srv/admin-service.js` | Add 4 handlers next to existing `secretWarnings` handler at line ~990. |
+| `srv/admin-service.js` | Add 4 handlers + explicit `cds.audit.log()` calls for `revealSecretValue` / `rotateSecretValue` (custom OData functions don't fire CRUD interceptors). |
 | `app/admin/secrets/webapp/view/SecretDialog.fragment.xml` | Add "Secret Value" Panel below existing metadata fields. |
 | `app/admin/secrets/webapp/controller/Secrets.controller.js` | Add 5 handlers (Show / Set / Rotate / Clear + reveal countdown). |
 | `app/admin/secrets/webapp/i18n/i18n.properties` | ~10 new keys (panel/button labels, dialog titles, confirm-clear text). |
@@ -187,19 +188,21 @@ import cds from '@sap/cds';
 const LOG = cds.log('credstore');
 const NAMESPACE = 'tutorials';   // single namespace per env (Phase 2-C spec)
 
-// Module-level binding capture. Credstore binding doesn't change at runtime,
-// so resolve once. Throws at first use if the binding is absent — caller
-// (admin handler) catches and surfaces a 503 with a clear message.
-let _binding = null;
-let _privateKey = null;
+// Cache stored on globalThis so module-singleton multiplicity (Vitest+CDS on
+// Windows) doesn't produce divergent caches across instances. Same pattern as
+// srv/lib/runtime-config/*-settings.js after #491 final-review fix. The memory
+// has fired 4× already — preempting here.
+const STATE_KEY = Symbol.for('com.sap.developers.ims:credstore');
+const _state = (globalThis[STATE_KEY] ??= { binding: null, privateKey: null });
+
 function getBinding() {
-  if (_binding) return _binding;
+  if (_state.binding) return _state.binding;
   const services = getServices({ credstore: { tag: 'credstore' } });
-  _binding = services.credstore;
-  return _binding;
+  _state.binding = services.credstore;
+  return _state.binding;
 }
 async function getPrivateKey() {
-  if (_privateKey) return _privateKey;
+  if (_state.privateKey) return _state.privateKey;
   const binding = getBinding();
   const pem = binding.encryption?.client_private_key;
   if (!pem) {
@@ -207,8 +210,8 @@ async function getPrivateKey() {
   }
   // jose's importPKCS8 expects PEM with proper headers. RSA-OAEP-256 matches
   // the credstore service's JWE algorithm (SAP-published).
-  _privateKey = await importPKCS8(pem, 'RSA-OAEP-256');
-  return _privateKey;
+  _state.privateKey = await importPKCS8(pem, 'RSA-OAEP-256');
+  return _state.privateKey;
 }
 
 function authHeader() {
@@ -279,8 +282,8 @@ export async function deleteSecret(alias) {
 
 /** Test-only: clear cached binding so unit tests can swap mocks. */
 export function _resetForTests() {
-  _binding = null;
-  _privateKey = null;
+  _state.binding = null;
+  _state.privateKey = null;
 }
 ```
 
@@ -441,9 +444,10 @@ this.on('revealSecretValue', 'Secrets', async (req) => {
   if (value == null) return req.reject(404, 'No value stored for this secret');
 
   // Defense-in-depth: don't let proxies cache the response, even though
-  // /admin/* is XSUAA-gated and not normally proxy-cached.
+  // /admin/* is XSUAA-gated and not normally proxy-cached. `private` for
+  // shared-cache defense; `no-store` is the strict directive.
   if (req._.res) {
-    req._.res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    req._.res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     req._.res.setHeader('Pragma', 'no-cache');
   }
 
@@ -460,7 +464,7 @@ this.on('revealSecretValue', 'Secrets', async (req) => {
 - `req._.res` is the underlying Express response — CAP exposes it for cases like this where you need to set HTTP-level headers. Documented but seldom-needed; here it's the cleanest way to add `Cache-Control` on reveal responses.
 - The discriminated-union response in `rotateSecretValue` populates ALL fields (with empty strings / nulls for the inactive branch) so OData's marshalling is predictable. Strict-typed clients see the full shape; the tile's controller branches on `result.rotated`.
 - `if (value == null)` in reveal distinguishes "metadata exists but no value set" from "metadata doesn't exist" (the latter caught by `loadSecretRow`). Friendly UX: the tile shows "No value yet — click Set Value to add one."
-- **Audit-logging** — all 4 handlers fall under the existing `@cap-js/audit-logging` plugin scope on the `Secrets` entity. The plugin emits read/write events automatically as long as `@PersonalData.EntitySemantics: 'Other'` is on the entity (verify when implementing — should be from #482).
+- **Audit-logging strategy** — the existing `Secrets` entity has NO `@PersonalData` annotation in `db/audit-logging.cds` (verified). Secret values aren't personal data per GDPR semantics, so the GDPR-purpose annotation doesn't apply. Phase 2-C adds a security-purpose `@AuditLog.Operation` annotation on the entity (per the `@cap-js/audit-logging` plugin's documented API) for CRUD events on `Secrets` — this captures `setSecretValue` (which writes via `UPDATE` for `lastRotatedAt`) and `clearSecretValue` (which doesn't UPDATE Secrets but mutates state). For `revealSecretValue` and `rotateSecretValue`'s value-emit specifically, **the handlers must call `cds.audit.log()` (or the plugin's API equivalent) explicitly** — custom OData V4 actions/functions don't fire the plugin's CRUD interceptors automatically. Plan-task includes both: (a) annotation on the projection, (b) explicit `cds.audit.log()` calls in revealSecretValue + rotateSecretValue handlers tagged with `SecretValueRead` / `SecretValueRotate` event names.
 
 ---
 
@@ -531,23 +535,27 @@ The 4 buttons are disabled when `isNew=true` (new metadata row hasn't been saved
 
 ```javascript
 // Helper: invoke a bound action via OData V4 + CSRF round-trip.
-// Same pattern as the existing onSave/onDelete in this controller.
-async function invokeBoundAction(view, secretId, actionName, body) {
-  const csrfToken = await fetchCsrfToken();
+// Uses the existing controller's `_withCsrf(callback)` callback-style helper
+// at line 178 of Secrets.controller.js. We bind it to `this` so callers can
+// `await this._invokeBoundAction(...)` from any handler method.
+_invokeBoundAction: function (secretId, actionName, body) {
   const url = `/admin/Secrets(${secretId})/AdminService.${actionName}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      'x-csrf-token': csrfToken,
-    },
-    credentials: 'include',
-    body: JSON.stringify(body || {}),
+  return this._withCsrf((token) =>
+    fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'x-csrf-token': token,
+      },
+      body: JSON.stringify(body || {}),
+    })
+  ).then(async (res) => {
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    return res.json();
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-  return res.json();
-}
+},
 
 // ────────────────────────────────────────────────────────────────────────────
 onRevealValue: async function () {
@@ -573,7 +581,7 @@ onSetValue: function () {
   // Use a sap.m.Dialog with a single masked Input field.
   // Show "Type or paste new value, click Save."
   this._openSetValueDialog((value) => {
-    return invokeBoundAction(self.getView(), data.ID, 'setSecretValue', { value })
+    return self._invokeBoundAction(data.ID, 'setSecretValue', { value })
       .then((result) => {
         // Update lastRotatedAt in the parent dialog model
         self.getView().getModel("dialog").setProperty("/lastRotatedAt", result.lastRotatedAt);
@@ -585,8 +593,8 @@ onSetValue: function () {
 // ────────────────────────────────────────────────────────────────────────────
 onRotate: async function () {
   const data = this.getView().getModel("dialog").getData();
-  const result = await invokeBoundAction(this.getView(), data.ID, 'rotateSecretValue', {});
-  if (result.rotated) {
+  const result = await this._invokeBoundAction(data.ID, 'rotateSecretValue', {});
+  if (result.rotated === true) {
     // Self-generated: update lastRotatedAt + show new value in a guidance dialog
     this.getView().getModel("dialog").setProperty("/lastRotatedAt", result.lastRotatedAt);
     this._showRotatedValueDialog(result.newValue, new Date(result.revealExpiresAt));
@@ -598,13 +606,14 @@ onRotate: async function () {
 
 // ────────────────────────────────────────────────────────────────────────────
 onClearValue: function () {
+  const self = this;
   const data = this.getView().getModel("dialog").getData();
   sap.m.MessageBox.confirm(
     "Delete the credstore value for '" + data.key + "'? Metadata stays in HANA.",
     {
       onClose: async (action) => {
         if (action !== "OK") return;
-        await invokeBoundAction(this.getView(), data.ID, 'clearSecretValue', {});
+        await self._invokeBoundAction(data.ID, 'clearSecretValue', {});
         sap.m.MessageToast.show("Value cleared.");
       }
     }
@@ -613,7 +622,12 @@ onClearValue: function () {
 
 // ────────────────────────────────────────────────────────────────────────────
 // Reveal countdown — server-supplied expiry; clamped against negative drift.
+// Tracks the active timer so a 2nd Show click cancels the 1st ticker (race fix).
 _startRevealCountdown: function (value, expiresAt) {
+  if (this._revealTickerId) {
+    clearTimeout(this._revealTickerId);
+    this._revealTickerId = null;
+  }
   const model = this.getView().getModel("dialog");
   model.setProperty("/revealedValue", value);
   this._tickReveal(model, expiresAt);
@@ -626,10 +640,18 @@ _tickReveal: function (model, expiresAt) {
   if (remaining <= 0) {
     model.setProperty("/revealedValue", "");
     model.setProperty("/revealSecondsLeft", 0);
+    this._revealTickerId = null;
     return;
   }
-  // Re-tick once per second until expiry
-  setTimeout(() => this._tickReveal(model, expiresAt), 1000);
+  // Re-tick once per second until expiry. setTimeout (vs setInterval) chosen
+  // so the displayed countdown stays in sync with the server-supplied
+  // expiresAt even when the tab is backgrounded (browsers throttle setInterval
+  // aggressively in background tabs but re-bias each setTimeout against the
+  // wall-clock).
+  this._revealTickerId = setTimeout(
+    () => this._tickReveal(model, expiresAt),
+    1000
+  );
 },
 ```
 
@@ -719,7 +741,12 @@ Each handler test mocks `srv/lib/credstore.js` via `vi.spyOn(credstoreModule, 'w
 | `lastRotatedAt` update races with another admin editing the same row | Last-write-wins on the column. Acceptable for low-contention admin tile (single admin team, no realistic concurrent edits). |
 | BTP entitlement quota exceeded at deploy | Tom confirmed quota available 2026-06-20. Verify before deploy via `btp_service_instances` MCP. |
 | `cds bind --to credstore` for local hybrid dev not yet documented | Plan task adds doc note in `docs/developers/operations/runtime-config.md` (extending the existing runtime-config doc). |
-| Module-singleton multiplicity in tests (Vitest+CDS+Windows; fired 3× already per [feedback_module_singletons_in_vitest_cds]) | `_binding` and `_privateKey` use module-level `let` — same shape as #491's resolvers BEFORE the globalThis fix. **Plan task includes globalThis-keyed cache pattern from the start** to preempt the 4th occurrence. |
+| Module-singleton multiplicity in tests (Vitest+CDS+Windows; fired 4× already per [feedback_module_singletons_in_vitest_cds]) | `srv/lib/credstore.js` uses globalThis-keyed cache pattern from start (see lib code: `Symbol.for('com.sap.developers.ims:credstore')` + `globalThis[STATE_KEY] ??= {...}`). Same pattern as runtime-config resolvers post-#491-fix. Preempts a 5th occurrence. |
+| JWE algorithm-confusion (credstore service starts emitting different alg) | `compactDecrypt(jwe, importPKCS8(pem, 'RSA-OAEP-256'))` pins the algorithm. If the service ever returns a different alg header, jose rejects via the algorithm-list pin. Defense-in-depth. |
+| Secret values containing JSON-special chars (quotes, newlines, Unicode) | `JSON.stringify({ name, value })` handles native — no manual escaping needed. Round-trip unit-tested with a fixture containing `"\\n\\u00e9` characters to catch regressions. |
+| Reveal double-click race (admin clicks Show twice within 30s → 2 tickers compete) | `_startRevealCountdown` cancels any prior `_revealTickerId` before scheduling a new one. Tested by clicking twice in DEV smoke. |
+| `req._.res.setHeader` is CAP internal (`req._` is a private state bag, may break on minor-version bump) | Plan task: verify `req._.res.setHeader` works in current `@sap/cds` version during DEV smoke. Fallback if it breaks: srv-level express `app.use` middleware keyed on the `revealSecretValue` URL pattern (more code, more stable seat). Add `private` to the `Cache-Control` header for shared-cache defense. |
+| `service-plan: default` and `authentication: basic` may have been renamed | Before deploy, run `cf marketplace -e credstore` (or `btp_service_instances` MCP) to confirm catalog plan name is still `default`. SAP renamed `standard` → `default` historically; reverse rename is unlikely but worth a 30-second check. |
 
 ---
 
