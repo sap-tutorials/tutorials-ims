@@ -2,6 +2,7 @@
 
 import { deriveSlug, suffixOnCollision } from '../lib/advocate-slug.js';
 import { processUpload, toBuffer } from '../lib/advocate-photo-store.js';
+import { uploadAndUpsertAdvocatePhoto } from '../lib/advocate-photo-upsert.js';
 
 /**
  * Build the public REST URL for an advocate's photo.
@@ -160,6 +161,14 @@ export function register(srv) {
   // association doesn't carry uploaded bytes through to our before-CREATE
   // handler — the upload silently drops on activation. This action is
   // the direct, working path.
+  //
+  // Issue #417: this base64-over-OData path is being superseded by a
+  // multipart/form-data REST endpoint at POST /admin/advocates/:slug/photo
+  // (see srv/server.js). The action is KEPT for back-compat during the
+  // rollout — the FE V4 controller migrates at the same time the new
+  // endpoint ships. Once a release cycle confirms the new path works,
+  // both this action AND the @cds.server.body_parser.limit annotation in
+  // srv/admin-service.cds can be removed.
   srv.on('uploadPhoto', Advocates, async (req) => {
     const advocateID = req.params?.[0]?.ID || req.params?.[0];
     if (!advocateID) {
@@ -177,56 +186,22 @@ export function register(srv) {
     } catch {
       return req.error(400, 'uploadPhoto: photoBase64 must be valid base64');
     }
-    let processed;
+    // Slug is required by the shared lib (for photoUrl computation). Always
+    // committed by the time uploadPhoto fires (set at draft-NEW).
+    const adv = await SELECT.one.from(Advocates).columns('slug').where({ ID: advocateID });
+    if (!adv?.slug) {
+      return req.error(404, 'uploadPhoto: advocate not found or has no slug');
+    }
     try {
-      processed = await processUpload(buffer, mimeType || 'image/jpeg');
+      await uploadAndUpsertAdvocatePhoto({
+        advocateID,
+        slug: adv.slug,
+        buffer,
+        mimeType: mimeType || 'image/jpeg',
+      });
     } catch (e) {
       return req.error(400, 'uploadPhoto: ' + e.message);
     }
-    const db = await cds.connect.to('db');
-    const now = new Date().toISOString();
-    const { AdvocatePhotos: AP } = cds.entities('com.sap.developers.ims');
-    const existing = await db.run(
-      SELECT.one.from(AP).columns('advocate_ID').where({ advocate_ID: advocateID }),
-    );
-    if (existing) {
-      await db.run(
-        UPDATE(AP).set({
-          photo256: processed.photo256,
-          photo64: processed.photo64,
-          photoMimeType: processed.photoMimeType,
-          sha256: processed.sha256,
-          sizeBytes: processed.sizeBytes,
-          uploadedAt: now,
-        }).where({ advocate_ID: advocateID }),
-      );
-    } else {
-      await db.run(
-        INSERT.into(AP).entries({
-          advocate_ID: advocateID,
-          photo256: processed.photo256,
-          photo64: processed.photo64,
-          photoMimeType: processed.photoMimeType,
-          sha256: processed.sha256,
-          sizeBytes: processed.sizeBytes,
-          uploadedAt: now,
-        }),
-      );
-    }
-    await db.run(
-      UPDATE(Advocates).set({
-        hasPhoto: true,
-        photoUpdatedAt: now,
-        // photoUrl mirrors the public route shape; advocate's slug is already
-        // committed by the time uploadPhoto fires (it's set at draft-NEW).
-        // Fetch slug here rather than threading it through — keeps the
-        // invariant maintained in a single SQL even if the call site is
-        // racing with a slug rename (the slug-rename handler runs after).
-        photoUrl: urlForSlug(
-          (await db.run(SELECT.one.from(Advocates).columns('slug').where({ ID: advocateID })))?.slug,
-        ),
-      }).where({ ID: advocateID }),
-    );
     // Return the refreshed advocate so Fiori re-renders the header avatar.
     return SELECT.one.from(Advocates).where({ ID: advocateID });
   });
