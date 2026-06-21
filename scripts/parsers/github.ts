@@ -49,6 +49,107 @@ export interface GitHubMeta {
   contributors: GitHubContributor[]
 }
 
+// =============================================================================
+// Volatile-metadata normalization
+// -----------------------------------------------------------------------------
+// Three fields in tutorial frontmatter were causing 50%+ daily drift in the
+// content-drift-check workflow (issue surfaced via run 27895228770):
+//
+//  1. avatarUrl — GitHub avatar URLs include "?v=<version>" that increments
+//     whenever the user updates their profile picture. ONE author updating
+//     their avatar flips EVERY tutorial they've ever contributed to.
+//
+//  2. email — GitHub may serve either the user's real email OR the noreply
+//     form (<id>+<login>@users.noreply.github.com). Toggling email-privacy
+//     mid-flight flips email for every commit they've authored.
+//
+//  3. createdAt — derived from `commits[commits.length-1].commit.author.date`
+//     over a sliding 30-commit window. As newer commits accumulate, older
+//     commits drop off the window edge and `createdAt` shifts forward in
+//     time. Calling it "createdAt" is a misnomer — it's "earliest of last 30
+//     commits". Drift was real per-tutorial whenever the 30-commit boundary
+//     moved.
+//
+// These helpers normalize each field deterministically so the tutorial-cache's
+// content-addressable SHA (markdown source) is sufficient to keep frontmatter
+// stable. The result: drift checks measure REAL content drift, not metadata
+// noise.
+// =============================================================================
+
+// Drop the volatile "?v=<version>" query from a GitHub avatar URL.
+// Result: a stable URL that GitHub still serves (the unversioned form is the
+// canonical reference; the ?v param is a cache-buster for browsers).
+export function normalizeAvatarUrl(url: string): string {
+  if (!url) return ''
+  const q = url.indexOf('?')
+  return q >= 0 ? url.slice(0, q) : url
+}
+
+// Synthesize the GitHub noreply form so email is invariant under email-privacy
+// toggles. We prefer the LOGIN form (`<login>@users.noreply.github.com`) over
+// the ID form (`<id>+<login>@users.noreply.github.com`) because:
+//   - We only have the login, not the numeric user ID
+//   - GitHub accepts both as authoritative noreply addresses
+//   - The login form is what `git config user.email` defaults to for users
+//     who haven't customized it
+//
+// If the original email is ALREADY a noreply form (either variant), keep it
+// as-is to preserve any user-ID information embedded in it. Only synthesize
+// when the original email is a real address (or empty).
+export function normalizeEmail(rawEmail: string, login: string): string {
+  if (!login) return rawEmail || ''
+  if (/@users\.noreply\.github\.com$/i.test(rawEmail)) return rawEmail
+  return `${login}@users.noreply.github.com`
+}
+
+// Returns the path of the gitignored cache file that pins a tutorial's
+// createdAt date. Each file holds a single ISO-8601 date string.
+function createdAtCacheFile(slug: string): string {
+  return join(CACHE_DIR, `${slug}.created`)
+}
+
+// Pin a tutorial's createdAt to the FIRST value observed for it. Subsequent
+// calls see the cached value regardless of GitHub-side changes.
+//
+// On a fresh clone or after `rm -rf .tutorial-cache/`, the FIRST observation
+// is whatever the sliding-window's earliest-of-30-commits returns at that
+// moment — same as the old behavior. The fix is "freeze AFTER first sight"
+// not "freeze to a known-correct creation date", because the latter requires
+// paginating /commits to its tail (expensive: ~50 API calls for a 5-year-old
+// tutorial). Once committed and propagated to a CI run, all subsequent runs
+// see the cached value.
+export function pinCreatedAt(slug: string, observed: string): string {
+  if (!observed) return ''
+  const file = createdAtCacheFile(slug)
+  try {
+    if (existsSync(file)) {
+      const cached = readFileSync(file, 'utf-8').trim()
+      if (cached) return cached
+    }
+  } catch {
+    // fall through to write
+  }
+  try {
+    mkdirSync(CACHE_DIR, { recursive: true })
+    writeFileSync(file, observed, 'utf-8')
+  } catch {
+    // best-effort: if we can't write, return the observed value so the
+    // current run isn't blocked. Next run will try again.
+  }
+  return observed
+}
+
+// Apply all volatile-field normalizations to a contributors array in place.
+// Centralized so all 3 contributor-emission sites stay consistent.
+function normalizeContributors(contribs: GitHubContributor[]): GitHubContributor[] {
+  return contribs.map(c => ({
+    name: c.name,
+    login: c.login,
+    email: normalizeEmail(c.email, c.login),
+    avatarUrl: normalizeAvatarUrl(c.avatarUrl),
+  }))
+}
+
 export interface DiscoveredTutorial {
   slug: string
   repo: string
@@ -554,7 +655,8 @@ export async function fetchMetaFromRest(repo: string, slug: string, branch: stri
 
   const lastCommitSha = commits[0].sha ?? ''
   const lastUpdated = commits[0].commit?.author?.date ?? ''
-  const createdAt = commits[commits.length - 1].commit?.author?.date ?? ''
+  const observedCreatedAt = commits[commits.length - 1].commit?.author?.date ?? ''
+  const createdAt = pinCreatedAt(slug, observedCreatedAt)
 
   const seen = new Set<string>()
   const contributors: GitHubContributor[] = []
@@ -570,7 +672,7 @@ export async function fetchMetaFromRest(repo: string, slug: string, branch: stri
     })
   }
 
-  return { lastCommitSha, lastUpdated, createdAt, contributors }
+  return { lastCommitSha, lastUpdated, createdAt, contributors: normalizeContributors(contributors) }
 }
 
 export async function fetchContributorsFromRestContrib(
@@ -602,7 +704,7 @@ export async function fetchContributorsFromRestContrib(
       avatarUrl: c.author?.avatar_url ?? '',
     })
   }
-  return contributors.length > 0 ? contributors : null
+  return contributors.length > 0 ? normalizeContributors(contributors) : null
 }
 
 export function extractContributors(nodes: any[]): GitHubContributor[] {
@@ -619,7 +721,7 @@ export function extractContributors(nodes: any[]): GitHubContributor[] {
       avatarUrl: node.author?.user?.avatarUrl ?? '',
     })
   }
-  return contributors
+  return normalizeContributors(contributors)
 }
 
 async function fetchContributorsFromContribRepo(
@@ -738,9 +840,12 @@ export async function fetchGitHubMetaBatch(
 
         const lastCommitSha = nodes[0].oid ?? ''
         const lastUpdated = nodes[0].authoredDate ?? ''
-        const createdAt = nodes[nodes.length - 1].authoredDate ?? ''
+        const observedCreatedAt = nodes[nodes.length - 1].authoredDate ?? ''
+        const createdAt = pinCreatedAt(slug, observedCreatedAt)
 
-        // Prefer contributors from -Contribution repo; fall back to main repo
+        // Prefer contributors from -Contribution repo; fall back to main repo.
+        // Both code paths already normalize via extractContributors() /
+        // fetchContributorsFromRestContrib() which apply normalizeContributors.
         const contributors = contribMap.get(slug) ?? extractContributors(nodes)
 
         const meta: GitHubMeta = { lastCommitSha, lastUpdated, createdAt, contributors }
