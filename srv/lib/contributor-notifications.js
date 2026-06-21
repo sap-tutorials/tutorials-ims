@@ -1,6 +1,6 @@
 import cds from '@sap/cds';
 
-const STALE_DAYS_DEFAULT = 180;
+const STALE_DAYS_DEFAULT = 90;
 const RESEND_INTERVAL_DAYS = 30;
 const MAX_NOTIFICATION_LEVEL = 3;
 

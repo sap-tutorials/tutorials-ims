@@ -791,7 +791,7 @@ export default class AdminService extends cds.ApplicationService {
       const { sendNotificationEmail } = await import('./lib/mail-client.js');
 
       const adminEmails = await getAdminEmailList();
-      const notifications = await computeStaleNotifications(180);
+      const notifications = await computeStaleNotifications(90);
       const dashboardUrl = (await resolveDisplaySettings()).dashboardUrl;
 
       let sent = 0;

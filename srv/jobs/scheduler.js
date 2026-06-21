@@ -132,7 +132,7 @@ export function registerJobs() {
         return { enabled: false };
       }
       const adminEmails = await getAdminEmailList();
-      const notifications = await computeStaleNotifications(180);
+      const notifications = await computeStaleNotifications(90);
       const dashboardUrl = (await resolveDisplaySettings()).dashboardUrl;
 
       let sent = 0, skipped = 0, failed = 0;
