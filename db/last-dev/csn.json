@@ -425,6 +425,25 @@
           "virtual": true,
           "type": "cds.String",
           "length": 5000
+        },
+        "semaphoreId": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "SEMAPHOREID"
+        },
+        "isActualTag": {
+          "type": "cds.Boolean",
+          "default": {
+            "val": false
+          },
+          "@cds.persistence.name": "ISACTUALTAG"
+        },
+        "isInterestItem": {
+          "type": "cds.Boolean",
+          "default": {
+            "val": false
+          },
+          "@cds.persistence.name": "ISINTERESTITEM"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_TAGS"
@@ -867,6 +886,12 @@
         "firstNotificationDate": {
           "type": "cds.Timestamp",
           "@cds.persistence.name": "FIRSTNOTIFICATIONDATE"
+        },
+        "repository_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "repository",
+          "@cds.persistence.name": "REPOSITORY_ID"
         }
       },
       "$tableConstraints": {
@@ -884,6 +909,54 @@
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_TUTORIALMETA"
+    },
+    "com.sap.developers.ims.TutorialRepositories": {
+      "kind": "entity",
+      "@assert.unique.name": [
+        {
+          "=": "name"
+        }
+      ],
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "legacyId": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "LEGACYID"
+        },
+        "name": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "NAME"
+        },
+        "repositoryOwner_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "repositoryOwner",
+          "@cds.persistence.name": "REPOSITORYOWNER_ID"
+        }
+      },
+      "$tableConstraints": {
+        "unique": {
+          "name": {
+            "paths": [
+              {
+                "ref": [
+                  "name"
+                ],
+                "isChecked": true
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.TutorialRepositories"
+          }
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_TUTORIALREPOSITORIES"
     },
     "com.sap.developers.ims.TutorialContributors": {
       "kind": "entity",
@@ -922,44 +995,6 @@
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_TUTORIALCONTRIBUTORS"
-    },
-    "com.sap.developers.ims.TutorialRepositories": {
-      "kind": "entity",
-      "@cds.persistence.journal": true,
-      "elements": {
-        "ID": {
-          "key": true,
-          "type": "cds.String",
-          "length": 36,
-          "@cds.persistence.name": "ID"
-        },
-        "legacyId": {
-          "type": "cds.Integer",
-          "@cds.persistence.name": "LEGACYID"
-        },
-        "tutorial_ID": {
-          "type": "cds.String",
-          "length": 36,
-          "@odata.foreignKey4": "tutorial",
-          "@cds.persistence.name": "TUTORIAL_ID"
-        },
-        "repoUrl": {
-          "type": "cds.String",
-          "length": 1000,
-          "@cds.persistence.name": "REPOURL"
-        },
-        "branch": {
-          "type": "cds.String",
-          "length": 255,
-          "@cds.persistence.name": "BRANCH"
-        },
-        "owner": {
-          "type": "cds.String",
-          "length": 255,
-          "@cds.persistence.name": "OWNER"
-        }
-      },
-      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_TUTORIALREPOSITORIES"
     },
     "com.sap.developers.ims.CompletionPaths": {
       "kind": "entity",
