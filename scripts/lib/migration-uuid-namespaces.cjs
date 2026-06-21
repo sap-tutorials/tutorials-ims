@@ -36,6 +36,8 @@ const NAMESPACES = Object.freeze({
   accomplishmentrecord: '0c8740bb-3ff6-478d-a05d-c368e6f2e175',
   prizerecord:          '206bcf19-2115-487f-94cb-7e41e73b7886',
   tutorialtag:          '2247f0d9-48f1-400d-ac73-8ce074633fe3',
+  tutorialcontributor:  'eb6d99e6-a274-41b0-84de-e19b376f3668',  // added 2026-06-21 for #385 PR-2
+  tutorialrepository:   '7bea6f53-ae05-4daa-a205-75482fa7eec3',  // added 2026-06-21 for #385 PR-2
 });
 
 module.exports = { NAMESPACES };

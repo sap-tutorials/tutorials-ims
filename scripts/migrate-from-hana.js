@@ -307,6 +307,54 @@ export async function auditNullSapidUsers(source, sourceSchema, queryFn, fsImpl 
 // Mirrors the publish-side LOWER(slug)=? upsert in
 // srv/lib/content-publish-session.js so a re-run of the cutover migrator no
 // longer creates duplicates on top of already-published rows. Issue #338.
+// #385 PR-2: extracted for vitest reach-through. Source schema verified against
+// Tag.java 2026-06-21 — semaphore_id is NOT NULL in source but CAP stays
+// nullable; is_actual_tag is primitive bool (never null); is_interest_item is
+// Boolean boxed (nullable). HANA's hdb driver returns booleans as 1/0
+// integers — accept both 1 and true explicitly.
+export function mapTagRow(row, tagUuid) {
+  return {
+    ID: tagUuid,
+    LEGACYID: row.ID,
+    NAME: truncStr(row.NAME, 255),
+    SEMAPHOREID: truncStr(row.SEMAPHORE_ID, 255),
+    ISACTUALTAG:    row.IS_ACTUAL_TAG === 1 || row.IS_ACTUAL_TAG === true,
+    ISINTERESTITEM: row.IS_INTEREST_ITEM === 1 || row.IS_INTEREST_ITEM === true,
+  };
+}
+
+// #385 PR-2: extracted for vitest reach-through. IMS_TUTORIAL_AUTHOR is a
+// flat global table — no per-tutorial FK on the Java entity. Migrated rows
+// land with TUTORIAL_ID = NULL; CAP-side TutorialContributors.tutorial is
+// nullable, so flat-global rows co-exist with future per-tutorial records.
+export function mapTutorialContributorRow(row) {
+  return {
+    ID: deriveUuid('tutorialcontributor', row.ID),
+    LEGACYID: row.ID,
+    TUTORIAL_ID: null,
+    NAME:  truncStr(row.NAME, 255),
+    EMAIL: truncStr(row.EMAIL, 255),
+    ROLE:  null,
+  };
+}
+
+// #385 PR-2: extracted for vitest reach-through. Source IMS_TUTORIAL_REPOSITORY
+// = (id, repository_name UNIQUE, repository_owner_id → IMS_TUTORIAL_AUTHOR.id).
+// PR-1 reshape made TutorialRepositories.repositoryOwner an Association to
+// TutorialContributors — `contributorMap` resolves the FK at map time so we
+// don't need a runtime JOIN. Orphan FKs (source row points at a missing
+// contributor) become NULL — matches the spec's chain-query NULL-safe path.
+export function mapTutorialRepositoryRow(row, contributorMap) {
+  return {
+    ID: deriveUuid('tutorialrepository', row.ID),
+    LEGACYID: row.ID,
+    NAME: truncStr(row.REPOSITORY_NAME, 255),
+    REPOSITORYOWNER_ID: row.REPOSITORY_OWNER_ID
+      ? (contributorMap.get(row.REPOSITORY_OWNER_ID) || null)
+      : null,
+  };
+}
+
 export function partitionBySlug(mapped, existingMap) {
   const inserts = [];
   const updates = [];
@@ -723,6 +771,8 @@ async function main() {
     completionPaths: new Map(),
     prizes: new Map(),
     accomplishments: new Map(),
+    contributors: new Map(),       // NEW (#385 PR-2)
+    repositories: new Map(),       // NEW (#385 PR-2)
   };
 
   const allTasks = await query(source, `SELECT "ID", "TASK_TYPE" FROM ${S}."IMS_TASK"`);
@@ -773,6 +823,25 @@ async function main() {
     console.log(`  Accomplishments: ${uuidMap.accomplishments.size}`);
   } catch (e) { /* optional table */ }
 
+  // #385 PR-2: build contributor + repository uuidMaps. Both source tables are
+  // optional from the migrator's POV — if missing (e.g. older IMS instance),
+  // migration of dependent entities just skips silently.
+  try {
+    const contributors = await query(source, `SELECT "ID" FROM ${S}."IMS_TUTORIAL_AUTHOR"`);
+    contributors.forEach(c => uuidMap.contributors.set(c.ID, deriveUuid('tutorialcontributor', c.ID)));
+    console.log(`  TutorialContributors: ${uuidMap.contributors.size}`);
+  } catch (e) { /* optional table */ }
+
+  // Note: uuidMap.repositories is built for symmetry with other entities and to
+  // give future migration code an FK-resolution hook. The current mapRow path
+  // re-derives the same UUID via deriveUuid() so the map isn't strictly required
+  // today, but populating it costs only one extra SELECT.
+  try {
+    const repositories = await query(source, `SELECT "ID" FROM ${S}."IMS_TUTORIAL_REPOSITORY"`);
+    repositories.forEach(r => uuidMap.repositories.set(r.ID, deriveUuid('tutorialrepository', r.ID)));
+    console.log(`  TutorialRepositories: ${uuidMap.repositories.size}`);
+  } catch (e) { /* optional table */ }
+
   // Step parent mapping: step ID → { parentId (tutorial), order }
   const stepParentMap = new Map();
   try {
@@ -801,16 +870,12 @@ async function main() {
   // ─── Entity migrations (order matters for FK integrity) ─────────────────────
   const results = [];
 
-  // 1. Tags
+  // 1. Tags — extended for #385 PR-2 (3 new source columns).
   results.push(await migrateEntity(source, target, T, {
     name: 'tags',
-    sourceQuery: `SELECT "ID", "NAME" FROM ${S}."IMS_TAG"`,
+    sourceQuery: `SELECT "ID", "NAME", "SEMAPHORE_ID", "IS_ACTUAL_TAG", "IS_INTEREST_ITEM" FROM ${S}."IMS_TAG"`,
     targetTable: 'COM_SAP_DEVELOPERS_IMS_TAGS',
-    mapRow: (row) => ({
-      ID: uuidMap.tags.get(row.ID),
-      LEGACYID: row.ID,
-      NAME: truncStr(row.NAME, 255),
-    }),
+    mapRow: (row) => mapTagRow(row, uuidMap.tags.get(row.ID)),
   }));
 
   // 2. Events
@@ -1038,6 +1103,34 @@ async function main() {
   // CREATED_BY, UPDATED_BY, CREATED_AT, UPDATED_AT — no ID/KEY/VALUE).
   // The CDS entity is a v2 design IMS never used; nothing to migrate.
   // See issue #330. Caught during 2026-06-15 cutover-rehearsal dry-run.
+
+  // 7c. TutorialContributors — global flat author table (#385 PR-2).
+  // Source IMS_TUTORIAL_AUTHOR has no tutorial_id FK; rows are the global pool
+  // of named authors. CAP TutorialContributors.tutorial is nullable so migrated
+  // rows land with tutorial_ID = NULL. PR-1 reshape made
+  // TutorialRepositories.repositoryOwner an Association to this entity, so
+  // these rows MUST exist before tutorialrepositories migrates.
+  if (uuidMap.contributors.size > 0) {
+    results.push(await migrateEntity(source, target, T, {
+      name: 'tutorialcontributors',
+      sourceQuery: `SELECT "ID", "NAME", "EMAIL" FROM ${S}."IMS_TUTORIAL_AUTHOR"`,
+      targetTable: 'COM_SAP_DEVELOPERS_IMS_TUTORIALCONTRIBUTORS',
+      mapRow: (row) => mapTutorialContributorRow(row),
+    }));
+  }
+
+  // 7d. TutorialRepositories — repo-group reference table (#385 PR-2).
+  // PR-1 reshape; source IMS_TUTORIAL_REPOSITORY =
+  // (id, repository_name UNIQUE, repository_owner_id).
+  // repositoryOwner_ID resolves through uuidMap.contributors built above.
+  if (uuidMap.repositories.size > 0) {
+    results.push(await migrateEntity(source, target, T, {
+      name: 'tutorialrepositories',
+      sourceQuery: `SELECT "ID", "REPOSITORY_NAME", "REPOSITORY_OWNER_ID" FROM ${S}."IMS_TUTORIAL_REPOSITORY"`,
+      targetTable: 'COM_SAP_DEVELOPERS_IMS_TUTORIALREPOSITORIES',
+      mapRow: (row) => mapTutorialRepositoryRow(row, uuidMap.contributors),
+    }));
+  }
 
   // 8. Task Records — paginated by ID range to bypass the OOM that otherwise
   // hits at IMS prod scale (~10M+ rows). Issue #332.
