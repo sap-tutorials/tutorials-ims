@@ -30,7 +30,8 @@
 //
 // WHY WE BUILD A LOCAL SPARQL VARIANT
 //   The production NEIGHBORHOOD_QUERY (srv/lib/kg-queries.js) hardcodes
-//   `FROM <https://developers.sap.com/kg/tutorials>` so that the public
+//   `FROM <https://developers.sap.com/kg/tutorials-v2>` (bumped from
+//   `/tutorials` on 2026-06-21 per issue #533) so that the public
 //   handler never accidentally queries a non-canonical graph. To exercise
 //   the same UNION branch logic without touching production state, this
 //   test builds an analogous query string by substituting our TEST_GRAPH_IRI
