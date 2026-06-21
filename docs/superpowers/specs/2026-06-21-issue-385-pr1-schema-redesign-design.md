@@ -169,13 +169,22 @@ notifications.push({
 
 The `determineRecipients` function consumes `repoOwner` as a string-or-null already; no change needed there.
 
-### 6. Auto-regenerated files
+### 6. `scripts/cleanup-catalog-pollution.cjs` — remove TutorialRepositories from childTablesById
+
+The cleanup script (line ~166) currently includes `'TutorialRepositories'` in the `childTablesById` array that gets a `DELETE FROM ... WHERE TUTORIAL_ID IN (...)` per slug-orphaned tutorial. After this PR:
+
+- `TutorialRepositories.tutorial_ID` column no longer exists.
+- `TutorialRepositories` is now a repo-GROUP table, not per-tutorial — deleting from it as part of a tutorial-cleanup makes no semantic sense anyway.
+
+The script wraps each delete in try/catch and `console.warn`s on failure, so it would not crash, but it would silently fail to do anything (the column won't exist). Remove `'TutorialRepositories'` from the `childTablesById` array.
+
+### 7. Auto-regenerated files
 
 `cds build` will regenerate:
 
-- `db/src/com.sap.developers.ims.TutorialRepositories.hdbmigrationtable` — emits `migration=3` with DROP COLUMN (tutorial_ID, repoUrl, branch, owner) + ADD COLUMN (name, repositoryOwner_ID). HDI flags DROPs as `>>>>> Manual resolution required` — implementer uncomments them after verifying TutorialRepositories is empty.
-- `db/src/com.sap.developers.ims.TutorialMeta.hdbmigrationtable` — emits `migration=4` with ADD COLUMN (repository_ID).
-- `db/src/com.sap.developers.ims.Tags.hdbmigrationtable` — emits a new migration block with ADD COLUMN (semaphoreId, isActualTag, isInterestItem).
+- `db/src/com.sap.developers.ims.TutorialRepositories.hdbmigrationtable` — currently at `== version=1` with no migration blocks (the entity has never been altered since first deploy). This PR will emit `== version=2` plus a new `== migration=2` block with `ALTER TABLE ... DROP (TUTORIAL_ID, REPOURL, BRANCH, OWNER)` + `ADD (NAME, REPOSITORYOWNER_ID)`. HDI flags DROPs as `>>>>> Manual resolution required` — implementer uncomments them after verifying `TutorialRepositories` is empty.
+- `db/src/com.sap.developers.ims.TutorialMeta.hdbmigrationtable` — currently at `== version=3` with last block `== migration=3` (from #513 `firstNotificationDate`). This PR will emit `== version=4` plus a new `== migration=4` block with `ALTER TABLE ... ADD (REPOSITORY_ID NVARCHAR(36))`.
+- `db/src/com.sap.developers.ims.Tags.hdbmigrationtable` — currently at `== version=3` with last block `== migration=3`. This PR will emit `== version=4` plus a new `== migration=4` block with `ALTER TABLE ... ADD (SEMAPHOREID NVARCHAR(255), ISACTUALTAG BOOLEAN DEFAULT FALSE, ISINTERESTITEM BOOLEAN DEFAULT FALSE)`.
 - `db/last-dev/csn.json` — CSN cache regen.
 
 ## HDI migration safety
@@ -211,7 +220,8 @@ If QA has data, hold the PR until QA can also be safely migrated.
 1. `TutorialRepositories.name` is queryable and unique-constrained (insert two rows with same name → second fails with assertion violation).
 2. `TutorialMeta.repository_ID` FK is accepted in INSERT, resolves to a `TutorialRepositories` row on SELECT.
 3. `Tags.semaphoreId`, `isActualTag`, `isInterestItem` columns exist and accept NULL/false/false defaults.
-4. The chain query `SELECT t.tutorial_ID, t.repository.repositoryOwner.email FROM TutorialMeta` syntactically parses on real HANA (memory `[reference_hana_raw_sql_uppercase]` — table identifiers uppercased automatically by CAP query builder).
+4. **End-to-end 2-level chain query**: insert TutorialContributors row (`email: 'owner@sap.com'`) → insert TutorialRepositories row with `repositoryOwner_ID` set to that contributor → insert TutorialMeta with `repository_ID` set to that repo. Run `SELECT.one.from(TutorialMeta).columns('repository.repositoryOwner.email as email').where({ ID: metaId })`. **Assert the returned `email === 'owner@sap.com'`.** This proves the 2-level chain compiles to a LEFT JOIN on HANA AND returns the correct value end-to-end (not just "syntactically parses"). 2-level path expressions are uncommon in this codebase — grep for `\.columns\(.*\\.\\w+\\.\\w+\\.\\w+` returns ZERO hits today — so the hybrid test is the only way to verify the JOIN works on real HANA.
+5. **NULL-safe chain**: same fixture but with `TutorialMeta.repository_ID = NULL`. Run the same chain query. **Assert the returned row has `email: null`** (not undefined, not a throw). Confirms NULL-safety of the chain when `meta.repository` is unset — the common case before PR-2 migrator runs.
 
 Cleanup in `afterAll` (existing `test/hybrid/_guard.js` enforces `ALLOW_HYBRID_WRITES=true`).
 
@@ -219,9 +229,9 @@ Cleanup in `afterAll` (existing `test/hybrid/_guard.js` enforces `ALLOW_HYBRID_W
 
 **`test/lib/contributor-notifications.test.js`** — extend to cover the new chain:
 
-- Add fixture: insert one `TutorialRepositories` row (`name: 'btp-foundation'`), one `TutorialContributors` row (`email: 'owner@sap.com'`), set `TutorialRepositories.repositoryOwner_ID` to the contributor's ID. Set `TutorialMeta.repository_ID` to the repo's ID.
-- New test: `computeStaleNotifications` produces `repoOwner: 'owner@sap.com'` when chain resolves.
-- New test: another fixture with `TutorialMeta.repository_ID = null`, assert `repoOwner: null`. Confirms NULL-safe path.
+- Add fixture (in `beforeAll`, AFTER the existing TutorialContributors INSERT and BEFORE the existing TutorialMeta INSERT — the order matters for FK resolution): insert one `TutorialRepositories` row (`name: 'btp-foundation'`, `repositoryOwner_ID` pointing to the existing 'alice@sap.com' TutorialContributor). Then update the existing `TutorialMeta` INSERT to include `repository_ID` pointing to the new TutorialRepositories row.
+- New test: `computeStaleNotifications` produces `repoOwner: 'alice@sap.com'` when chain resolves.
+- New test: another fixture seeded with `TutorialMeta.repository_ID = null`, assert `repoOwner: null`. Confirms NULL-safe path.
 
 ### Migration table verification
 
@@ -266,12 +276,16 @@ Acceptance criteria:
 - [ ] `db/schema.cds` `Tags` has `semaphoreId`, `isActualTag`, `isInterestItem` columns.
 - [ ] `db/schema.cds` `Tutorials.repositories` Composition is REMOVED (otherwise CDS compile fails).
 - [ ] `cds compile db/schema.cds` succeeds; CSN has expected element shapes.
-- [ ] `cds build --production` emits 3 manually-resolved migration table updates (TutorialRepositories migration=3, TutorialMeta migration=4, Tags new migration block).
-- [ ] `srv/lib/contributor-notifications.js` uses chain query through `meta.repository.repositoryOwner.email`.
+- [ ] `cds build --production` emits the 3 migration table updates: TutorialRepositories `version=2` / `migration=2`; TutorialMeta `version=4` / `migration=4`; Tags `version=4` / `migration=4`.
+- [ ] Implementer manually resolves the `>>>>>` blocks in `TutorialRepositories.hdbmigrationtable`'s `migration=2` (uncomments DROP statements after confirming row count = 0).
+- [ ] `srv/lib/contributor-notifications.js` uses 2-level chain query through `meta.repository.repositoryOwner.email`.
+- [ ] `scripts/cleanup-catalog-pollution.cjs` `childTablesById` array no longer includes `'TutorialRepositories'`.
 - [ ] `node --check srv/lib/contributor-notifications.js` passes.
-- [ ] Unit tests for the lib extended with new chain coverage (2 new tests).
-- [ ] Hybrid test for schema reachability + chain query.
-- [ ] DEV HANA deploy succeeds (verify `TutorialRepositories` row count = 0 before merge).
+- [ ] Unit tests for the lib extended with new chain coverage (2 new tests: chain resolves email, chain returns null when repository_ID is null).
+- [ ] Hybrid test for schema reachability + end-to-end chain query (asserts actual email returned, not just "parses").
+- [ ] **DEV** HANA `TutorialRepositories` row count = 0 verified before manual-resolution uncomment.
+- [ ] **QA** HANA `TutorialRepositories` row count = 0 verified before merge (both `tutorials-hana` and `tutorials-hana-qa` containers receive the same migration).
+- [ ] DEV HANA deploy succeeds.
 
 ## Risks & mitigations
 
@@ -280,7 +294,8 @@ Acceptance criteria:
 | HDI DROP wipes data we didn't expect | Mandatory pre-DROP `SELECT COUNT(*)` verification; STOP if non-zero |
 | QA channel has different data than DEV | Verify `tutorials-hana-qa` row count too before merge |
 | `contributor-notifications.js` cron crashes mid-deploy | NULL-safe chain query; `repoOwner: null` falls through to existing level-1 owner-only path |
-| Other code reads `TutorialRepositories` columns we drop | Grep-verified single consumer (`contributor-notifications.js`); admin-service.cds star-projection auto-propagates |
+| Other code reads `TutorialRepositories` columns we drop | Grep-verified consumers: (a) `srv/lib/contributor-notifications.js` (updated in this PR), (b) `scripts/cleanup-catalog-pollution.cjs` (`'TutorialRepositories'` removed from `childTablesById`); `admin-service.cds` star-projection auto-propagates new shape |
+| `db/undeploy.json:36` references `TutorialRepositories.hdbtable` (not `.hdbmigrationtable`) | Stale reference predates the `@cds.persistence.journal` annotation. Implementer should confirm `cds build` doesn't emit conflicting undeploy artifacts; if it does, update `undeploy.json` to reference `.hdbmigrationtable` instead. Not blocking the schema change itself. |
 | PR-2 migrator can't populate the new shape | Source schema verified against Java IMS @Entity files (Tag.java + RepositoryModel.java + TutorialMeta.java); shape is faithful |
 | Tutorials.repositories Composition removal breaks something | Grep shows zero consumers; the Composition only existed as a CDS declaration that auto-derived NULL anyway |
 
