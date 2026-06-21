@@ -338,6 +338,23 @@ export function mapTutorialContributorRow(row) {
   };
 }
 
+// #385 PR-2: extracted for vitest reach-through. Source IMS_TUTORIAL_REPOSITORY
+// = (id, repository_name UNIQUE, repository_owner_id → IMS_TUTORIAL_AUTHOR.id).
+// PR-1 reshape made TutorialRepositories.repositoryOwner an Association to
+// TutorialContributors — `contributorMap` resolves the FK at map time so we
+// don't need a runtime JOIN. Orphan FKs (source row points at a missing
+// contributor) become NULL — matches the spec's chain-query NULL-safe path.
+export function mapTutorialRepositoryRow(row, contributorMap) {
+  return {
+    ID: deriveUuid('tutorialrepository', row.ID),
+    LEGACYID: row.ID,
+    NAME: truncStr(row.REPOSITORY_NAME, 255),
+    REPOSITORYOWNER_ID: row.REPOSITORY_OWNER_ID
+      ? (contributorMap.get(row.REPOSITORY_OWNER_ID) || null)
+      : null,
+  };
+}
+
 export function partitionBySlug(mapped, existingMap) {
   const inserts = [];
   const updates = [];

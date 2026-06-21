@@ -6,7 +6,7 @@
  * Spec: docs/superpowers/specs/2026-06-21-issue-385-pr2-migrator-extension-design.md
  */
 import { describe, it, expect } from 'vitest';
-import { mapTagRow, mapTutorialContributorRow } from '../../scripts/migrate-from-hana.js';
+import { mapTagRow, mapTutorialContributorRow, mapTutorialRepositoryRow } from '../../scripts/migrate-from-hana.js';
 import { v5 as uuidv5 } from 'uuid';
 const { NAMESPACES } = await import('../../scripts/lib/migration-uuid-namespaces.cjs');
 
@@ -87,5 +87,55 @@ describe('mapTutorialContributorRow() (#385 PR-2)', () => {
   it('handles null email (source has ~136/385 authors with null EMAIL)', () => {
     const out = mapTutorialContributorRow({ ID: 7, NAME: 'Alice', EMAIL: null });
     expect(out.EMAIL).toBeNull();
+  });
+});
+
+describe('mapTutorialRepositoryRow() (#385 PR-2)', () => {
+  // The contributorMap is what main() builds from `SELECT "ID" FROM IMS_TUTORIAL_AUTHOR`.
+  // Test fixtures inject a controlled map so we don't depend on real source data.
+  const contributorMap = new Map([
+    [10, uuidv5('10', NAMESPACES.tutorialcontributor)],
+    [11, uuidv5('11', NAMESPACES.tutorialcontributor)],
+  ]);
+
+  it('derives deterministic UUID from legacyId via tutorialrepository namespace', () => {
+    const out = mapTutorialRepositoryRow(
+      { ID: 5, REPOSITORY_NAME: 'btp-foundation', REPOSITORY_OWNER_ID: 10 },
+      contributorMap,
+    );
+    expect(out.ID).toBe(uuidv5('5', NAMESPACES.tutorialrepository));
+  });
+
+  it('resolves REPOSITORYOWNER_ID via the contributor map', () => {
+    const out = mapTutorialRepositoryRow(
+      { ID: 5, REPOSITORY_NAME: 'btp-foundation', REPOSITORY_OWNER_ID: 10 },
+      contributorMap,
+    );
+    expect(out.REPOSITORYOWNER_ID).toBe(uuidv5('10', NAMESPACES.tutorialcontributor));
+  });
+
+  it('emits REPOSITORYOWNER_ID: null when source REPOSITORY_OWNER_ID is null', () => {
+    const out = mapTutorialRepositoryRow(
+      { ID: 5, REPOSITORY_NAME: 'btp-foundation', REPOSITORY_OWNER_ID: null },
+      contributorMap,
+    );
+    expect(out.REPOSITORYOWNER_ID).toBeNull();
+  });
+
+  it('emits REPOSITORYOWNER_ID: null when REPOSITORY_OWNER_ID is set but not in contributor map (orphan FK)', () => {
+    const out = mapTutorialRepositoryRow(
+      { ID: 5, REPOSITORY_NAME: 'btp-foundation', REPOSITORY_OWNER_ID: 999 }, // 999 not in map
+      contributorMap,
+    );
+    expect(out.REPOSITORYOWNER_ID).toBeNull();
+  });
+
+  it('passes name through (truncated to 255 chars)', () => {
+    const out = mapTutorialRepositoryRow(
+      { ID: 5, REPOSITORY_NAME: 'btp-foundation', REPOSITORY_OWNER_ID: 10 },
+      contributorMap,
+    );
+    expect(out.NAME).toBe('btp-foundation');
+    expect(out.LEGACYID).toBe(5);
   });
 });
