@@ -189,12 +189,13 @@ jobs:
             -o "${{ secrets.CF_ORG }}" \
             -s "${{ steps.cf.outputs.space }}"
 
-      - name: Install npm deps for HDI guard
-        # check-hana-rowcounts.cjs needs `hdb` from package.json. mbt build
-        # only installs deps inside MTA modules, not the project root, so a
-        # plain `npm ci` is needed before the guard scripts can run.
-        run: npm ci --ignore-scripts
-
+      # Note: 'npm ci --ignore-scripts' previously ran here to install hdb
+      # for check-hana-rowcounts.cjs. After PR #492 the prefetch step at the
+      # top of this job runs 'npm install' which already installs hdb (and
+      # everything else); node_modules persists across steps in a single-job
+      # workflow. The redundant 'npm ci' added ~30-60s per run. If we ever
+      # split into multi-job (research item #1), each job needs its own
+      # node_modules — reintroduce here or use actions/cache for node_modules.
       - name: HDI pre-deploy row-count snapshot
         # Captures all COM_SAP_DEVELOPERS_IMS_* row counts BEFORE the deploy.
         # Uploaded as artifact so the post-deploy step can diff against it.
