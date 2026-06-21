@@ -11,6 +11,10 @@
 terraform.tfvars
 *.auto.tfvars
 
+# Local credential env vars sourced before `terraform apply`. NEVER commit.
+.env.local
+.env.local.*
+
 # Plan output files.
 *.tfplan
 
