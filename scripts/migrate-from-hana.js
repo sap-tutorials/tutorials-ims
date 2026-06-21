@@ -323,6 +323,21 @@ export function mapTagRow(row, tagUuid) {
   };
 }
 
+// #385 PR-2: extracted for vitest reach-through. IMS_TUTORIAL_AUTHOR is a
+// flat global table — no per-tutorial FK on the Java entity. Migrated rows
+// land with TUTORIAL_ID = NULL; CAP-side TutorialContributors.tutorial is
+// nullable, so flat-global rows co-exist with future per-tutorial records.
+export function mapTutorialContributorRow(row) {
+  return {
+    ID: deriveUuid('tutorialcontributor', row.ID),
+    LEGACYID: row.ID,
+    TUTORIAL_ID: null,
+    NAME:  truncStr(row.NAME, 255),
+    EMAIL: truncStr(row.EMAIL, 255),
+    ROLE:  null,
+  };
+}
+
 export function partitionBySlug(mapped, existingMap) {
   const inserts = [];
   const updates = [];

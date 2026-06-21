@@ -6,7 +6,7 @@
  * Spec: docs/superpowers/specs/2026-06-21-issue-385-pr2-migrator-extension-design.md
  */
 import { describe, it, expect } from 'vitest';
-import { mapTagRow } from '../../scripts/migrate-from-hana.js';
+import { mapTagRow, mapTutorialContributorRow } from '../../scripts/migrate-from-hana.js';
 import { v5 as uuidv5 } from 'uuid';
 const { NAMESPACES } = await import('../../scripts/lib/migration-uuid-namespaces.cjs');
 
@@ -53,5 +53,39 @@ describe('mapTagRow() — 3 new columns (#385 PR-2)', () => {
       tagUuid,
     );
     expect(out.SEMAPHOREID).toBeNull();
+  });
+});
+
+describe('mapTutorialContributorRow() (#385 PR-2)', () => {
+  it('derives deterministic UUID from legacyId via tutorialcontributor namespace', () => {
+    const out = mapTutorialContributorRow({ ID: 7, NAME: 'Alice', EMAIL: 'alice@sap.com' });
+    expect(out.ID).toBe(uuidv5('7', NAMESPACES.tutorialcontributor));
+  });
+
+  it('same legacyId always yields the same UUID (idempotent re-runs)', () => {
+    const a = mapTutorialContributorRow({ ID: 7, NAME: 'Alice', EMAIL: 'alice@sap.com' });
+    const b = mapTutorialContributorRow({ ID: 7, NAME: 'Renamed', EMAIL: 'alice@sap.com' });
+    expect(a.ID).toBe(b.ID);
+  });
+
+  it('emits TUTORIAL_ID: null (source is flat global table; no per-tutorial FK)', () => {
+    const out = mapTutorialContributorRow({ ID: 7, NAME: 'Alice', EMAIL: 'alice@sap.com' });
+    expect(out.TUTORIAL_ID).toBeNull();
+  });
+
+  it('emits ROLE: null (CAP-side concept; no source counterpart)', () => {
+    const out = mapTutorialContributorRow({ ID: 7, NAME: 'Alice', EMAIL: 'alice@sap.com' });
+    expect(out.ROLE).toBeNull();
+  });
+
+  it('passes name and email through (truncated to 255 chars)', () => {
+    const out = mapTutorialContributorRow({ ID: 7, NAME: 'Alice', EMAIL: 'alice@sap.com' });
+    expect(out.NAME).toBe('Alice');
+    expect(out.EMAIL).toBe('alice@sap.com');
+  });
+
+  it('handles null email (source has ~136/385 authors with null EMAIL)', () => {
+    const out = mapTutorialContributorRow({ ID: 7, NAME: 'Alice', EMAIL: null });
+    expect(out.EMAIL).toBeNull();
   });
 });
