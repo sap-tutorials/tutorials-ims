@@ -94,7 +94,17 @@ entity MissionSlugRedirects : cuid, managed {
 
 @assert.unique.tutorialStep : [tutorial, stepOrder]
 entity Steps : TaskBase {
-  tutorial                  : Association to Tutorials;
+  // tutorial NOT NULL: orphan Step rows (no parent link in IMS_TASK_TO_TASK)
+  // were silently inserted by scripts/migrate-from-hana.js with
+  // tutorial_ID=NULL + stepOrder=0. HANA's @assert.unique treats NULL=NULL
+  // for constraint purposes, so two such orphans violate the unique
+  // constraint above. 5 orphans surfaced in DEV on 2026-06-21 blocking
+  // the unique-constraint HDI deploy from PR #467. Forcing NOT NULL at
+  // schema level makes orphan inserts impossible going forward (the
+  // migrator change in scripts/migrate-from-hana.js is belt-and-suspenders
+  // — it skips orphans before inserting, but if a future migrator path
+  // forgets that, this constraint still rejects at the DB layer).
+  tutorial                  : Association to Tutorials not null;
   stepOrder                 : Integer;
   contentHash               : String(64);
 }
