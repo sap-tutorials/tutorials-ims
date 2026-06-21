@@ -9,6 +9,7 @@
 // to hugo/layouts/groups/single.html and hugo/layouts/missions/single.html.
 
 import cds from '@sap/cds';
+import { assembleMissionHierarchy } from './catalog-mission-hierarchy.js';
 
 const NAMESPACE = 'com.sap.developers.ims';
 
@@ -159,16 +160,41 @@ export async function loadMissionContext(slug) {
     : [];
   const tutById = new Map(tutorials.map(t => [t.ID, t]));
 
-  // Build cards in the same order build-catalog.js:117 emits — for each path,
-  // synthetic-group first (if any direct TUTORIAL items exist), then nested
-  // groups. Across paths, paths are already ordered by legacyId.
-  const groupCards = paths.flatMap(p => {
+  // Delegate the path → group → tutorial walk to the shared helper. We pass
+  // the per-mission row subset we just loaded (the helper filters per-path
+  // internally). The resolver returns tutorial_ID (UUID) for direct
+  // TUTORIAL items; we project UUIDs → full tutorial objects below via
+  // tutById. See srv/lib/catalog-mission-hierarchy.js for the contract.
+  const canonical = assembleMissionHierarchy({
+    mission,
+    paths,
+    items,
+    groupById,
+    groupPathItems: gpiRows,
+    resolveTutorialIdentity: i => i.tutorial_ID,
+  });
+
+  // Project canonical hierarchy → catalog-data.js's external shape
+  // (full tutorial objects, no isFlat collapse, no altGroups today). The
+  // helper deliberately doesn't know about this shape — build-catalog.js
+  // projects to a DIFFERENT shape (slug-based, with isFlat collapse).
+  //
+  // Per-path: synthetic group from direct-TUTORIAL items (if any), then
+  // one card per nested GROUP item in itemOrder. Mirrors the order
+  // build-catalog.js:117 emits, which is the SSR-rendering order expected
+  // by hugo/layouts/missions/single.html.
+  //
+  // NOTE: altGroups are intentionally dropped at this projection layer.
+  // The mission SSR page doesn't render branch UI today (only the
+  // navigator JSON does). When the SSR page gains alt-group support, the
+  // projection here gains a `branches:` field on each card. See issue
+  // #437 for the design conversation.
+  const groupCards = canonical.paths.flatMap(({ path: p, directTutorialIdentities: pathDirectIds, nestedGroups }) => {
     const cards = [];
 
     // Synthetic group from direct-TUTORIAL items.
-    const pathDirect = directItems
-      .filter(i => i.path_ID === p.ID)
-      .map(i => tutById.get(i.tutorial_ID))
+    const pathDirect = pathDirectIds
+      .map(id => tutById.get(id))
       .filter(Boolean)
       .map(projectTutorial);
     if (pathDirect.length > 0) {
@@ -182,21 +208,16 @@ export async function loadMissionContext(slug) {
       });
     }
 
-    // Nested-Group cards from taskType='GROUP' items (existing behavior).
-    const pathGroups = groupItems
-      .filter(i => i.path_ID === p.ID)
-      .map(item => {
-        const g = groupById.get(item.group_ID);
-        if (!g) return null;
-        const groupTuts = gpiRows
-          .filter(r => r.group_ID === g.ID)
-          .map(r => tutById.get(r.tutorial_ID))
-          .filter(Boolean)
-          .map(projectTutorial);
-        return { ...g, tutorials: groupTuts };
-      })
-      .filter(Boolean);
-    cards.push(...pathGroups);
+    // Nested-Group cards (existing behavior). The helper has already
+    // filtered group-items to those with a published+ACTIVE group in
+    // groupById; here we just project to the SSR shape.
+    for (const { group: g, tutorialIds: nestedIds } of nestedGroups) {
+      const groupTuts = nestedIds
+        .map(id => tutById.get(id))
+        .filter(Boolean)
+        .map(projectTutorial);
+      cards.push({ ...g, tutorials: groupTuts });
+    }
 
     return cards;
   });

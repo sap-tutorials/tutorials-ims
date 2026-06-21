@@ -1,40 +1,15 @@
 import cds from '@sap/cds';
 import { categorySlugsFor, buildCategoriesPayload } from './build-catalog-categories.js';
-import { slugifyKey } from './branch/slug-key.js';
+import { assembleMissionHierarchy, collectAltGroups } from './catalog-mission-hierarchy.js';
 
 const FEATURED_LIMIT = 6;
 
-/**
- * Collect alt-group branches from a list of items that share a parent
- * (CompletionPath or Group). Items with the same (itemOrder, altGroupKey)
- * fork the parent's linear backbone into branches; items without altGroupKey
- * are unaffected.
- *
- * `resolveSlug(item)` adapts the item-shape difference between
- * `CompletionPathItems` (taskType + taskLegacyId) and `GroupPathItems`
- * (tutorial_ID).
- */
-function collectAltGroups(items, resolveSlug) {
-  const altGroups = [];
-  const seenAltKeys = new Map();
-  for (const it of items) {
-    if (!it.altGroupKey) continue;
-    const k = `${it.itemOrder}:${it.altGroupKey}`;
-    const branch = {
-      key: slugifyKey(it.altGroupLabel || ''),
-      label: it.altGroupLabel || '',
-      tutorialSlug: resolveSlug(it) || '',
-      condition: it.altCondition || null,
-    };
-    if (seenAltKeys.has(k)) {
-      altGroups[seenAltKeys.get(k)].branches.push(branch);
-    } else {
-      seenAltKeys.set(k, altGroups.length);
-      altGroups.push({ groupKey: it.altGroupKey, branches: [branch] });
-    }
-  }
-  return altGroups;
-}
+// NOTE: collectAltGroups + the inline hierarchy walk that lived here
+// previously have moved to srv/lib/catalog-mission-hierarchy.js so this
+// file and srv/lib/catalog-data.js share one canonical implementation.
+// See issue #437 + memory feedback_two_source_of_truth_drift_in_catalog
+// (PR #428 fixed the symptom of drift on 2026-06-19; this refactor closes
+// the door on the pattern that allowed it).
 
 export async function buildCatalogHandler(req, res) {
   const { Missions, CompletionPaths, CompletionPathItems, Tutorials, FeaturedTasks, Groups, GroupPathItems,
@@ -88,63 +63,64 @@ export async function buildCatalogHandler(req, res) {
 
     const hierarchies = missions.map(m => {
       const missionPaths = paths.filter(p => p.mission_ID === m.ID);
-      const groupHierarchies = missionPaths.flatMap(p => {
-        const pathItems = items.filter(i => i.path_ID === p.ID);
 
-        // TUTORIAL items in this path → the path's own slug list
-        const pathTutorialSlugs = pathItems
-          .filter(i => i.taskType === 'TUTORIAL')
-          .sort((a, b) => a.itemOrder - b.itemOrder)
-          .map(i => slugByLegacyId.get(i.taskLegacyId))
-          .filter(Boolean);
+      // Delegate the walk to the shared helper. Returns a canonical
+      // hierarchy whose tutorial-identity strings are already slugs (we
+      // pass `slugByLegacyId.get(taskLegacyId)` as the resolver). The
+      // helper is identity-agnostic; catalog-data.js calls it with a
+      // tutorial_ID UUID resolver. See srv/lib/catalog-mission-hierarchy.js
+      // for the contract.
+      const canonical = assembleMissionHierarchy({
+        mission: m,
+        paths: missionPaths,
+        items,
+        groupById,
+        groupPathItems,
+        resolveTutorialIdentity: i => slugByLegacyId.get(i.taskLegacyId),
+      });
 
-        // Collect alt-group branches on the path-level group. Items sharing
-        // (itemOrder, altGroupKey) are branches of the same fork. Linear
-        // backbone items (no altGroupKey) are unaffected.
-        const altGroups = collectAltGroups(
-          pathItems.filter(it => it.taskType === 'TUTORIAL'),
-          it => slugByLegacyId.get(it.taskLegacyId),
-        );
-
+      // Project canonical hierarchy → build-catalog.js's external shape
+      // (slug-based, with isFlat collapse). The helper deliberately doesn't
+      // know about this shape — it's how the navigator JSON contract has
+      // looked since pre-#382, and catalog-data.js projects to a DIFFERENT
+      // shape (full tutorial objects, no isFlat collapse).
+      const groupHierarchies = canonical.paths.flatMap(({ path: p, directTutorialIdentities, altGroups, nestedGroups }) => {
         // Emit one HierarchyGroup for the path itself (existing behavior)
         const pathGroup = {
           imsId: p.legacyId,
           title: p.name || '',
           slug: p.slug || String(p.legacyId),
           description: '',
-          tutorialSlugs: pathTutorialSlugs,
+          tutorialSlugs: directTutorialIdentities,  // already slugs (resolver above)
           ...(altGroups.length ? { altGroups } : {}),
         };
 
         // Plus one HierarchyGroup per nested GROUP item in this path
-        const nestedGroups = pathItems
-          .filter(i => i.taskType === 'GROUP' && i.group_ID)
-          .sort((a, b) => a.itemOrder - b.itemOrder)
-          .map(i => {
-            const g = groupById.get(i.group_ID);
-            if (!g) return null;
-            const gpItems = groupPathItems
-              .filter(gpi => gpi.group_ID === g.ID)
-              .sort((a, b) => a.itemOrder - b.itemOrder);
-            const tutorialSlugs = gpItems
-              .map(gpi => tutorialByUuid.get(gpi.tutorial_ID))
-              .filter(Boolean);
-            const groupAltGroups = collectAltGroups(
-              gpItems,
-              gpi => tutorialByUuid.get(gpi.tutorial_ID),
-            );
-            return {
-              imsId: g.legacyId,
-              title: g.title || '',
-              slug: g.slug || String(g.legacyId),
-              description: g.description || '',
-              tutorialSlugs,
-              ...(groupAltGroups.length ? { altGroups: groupAltGroups } : {}),
-            };
-          })
-          .filter(Boolean);
+        const nestedHierarchyGroups = nestedGroups.map(({ group: g, tutorialIds, altGroups: gAltGroups }) => {
+          // GroupPathItems always carry tutorial_ID (UUID), so project
+          // through tutorialByUuid to slugs for both the linear list and
+          // the alt-group branches.
+          const tutorialSlugs = tutorialIds
+            .map(id => tutorialByUuid.get(id))
+            .filter(Boolean);
+          const projectedAltGroups = gAltGroups.map(ag => ({
+            groupKey: ag.groupKey,
+            branches: ag.branches.map(b => ({
+              ...b,
+              tutorialSlug: tutorialByUuid.get(b.tutorialSlug) || b.tutorialSlug,
+            })),
+          }));
+          return {
+            imsId: g.legacyId,
+            title: g.title || '',
+            slug: g.slug || String(g.legacyId),
+            description: g.description || '',
+            tutorialSlugs,
+            ...(projectedAltGroups.length ? { altGroups: projectedAltGroups } : {}),
+          };
+        });
 
-        return [pathGroup, ...nestedGroups];
+        return [pathGroup, ...nestedHierarchyGroups];
       });
 
       // isFlat must remain true for single-path no-nested-group missions (existing
