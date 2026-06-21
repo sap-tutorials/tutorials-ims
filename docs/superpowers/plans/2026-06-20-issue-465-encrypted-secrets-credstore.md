@@ -54,7 +54,7 @@ Branched from main **AFTER** all 4 prior PRs merged. Verified via inspection:
 - `Secrets` entity at `db/schema.cds` (metadata-only: 7 columns + `@assert.unique` on `key`) ✓
 - Existing `secretWarnings` handler at `srv/admin-service.js:990` ✓
 - Existing `_withCsrf(callback)` helper at `app/admin/secrets/webapp/controller/Secrets.controller.js:178` ✓
-- `db/audit-logging.cds` exists; uses `@PersonalData` for Users / UserMetaData / etc. **NO existing `@PersonalData.EntitySemantics: 'Other'` precedent on a non-personal-data entity — Phase 2-C is the first user of that documented `'Other'` value in this codebase.**
+- `db/audit-logging.cds` exists; uses `@PersonalData` for Users / UserMetaData / etc. Five existing rows already use `EntitySemantics: 'Other'` (CodeCheckSubmissions, ValidateAnswerSubmissions, AuthorAiRequests, BranchDecisions, Concepts) — Phase 2-C adds a sixth (`ims.Secrets`). Style convention in the file is the colon-object form `with @PersonalData: { EntitySemantics: 'Other' } { ... };` — match it.
 
 **No rebase risk expected.** No worktree-state-aware branching needed in this plan.
 
@@ -70,7 +70,7 @@ Branched from main **AFTER** all 4 prior PRs merged. Verified via inspection:
 | `test/unit/lib/credstore.test.js` | 6 unit tests (JWE round-trip, 404 handling, idempotent delete, envelope unwrap). |
 | `test/unit/admin-secret-value-handlers.test.js` | 8 unit tests (4 handlers × happy + edge cases). |
 
-### Modified files (7)
+### Modified files (9)
 
 | File | Change |
 | --- | --- |
@@ -132,9 +132,9 @@ Before any task, the implementer subagent runs these checks. Each should return 
   grep -n "EntitySemantics: 'Other'\|@PersonalData\|Secrets" db/audit-logging.cds | head -10
   ```
 
-  Expected: ZERO matches for `EntitySemantics: 'Other'`, multiple `@PersonalData` rows for Users/UserMetaData/etc. (those use `DataSubject` / `DataSubjectDetails` semantics), zero matches for `Secrets` (#482 deliberately did not annotate it).
+  Expected: 5 existing matches for `EntitySemantics: 'Other'` (CodeCheckSubmissions, ValidateAnswerSubmissions, AuthorAiRequests, BranchDecisions, Concepts); multiple `@PersonalData` rows for Users/UserMetaData/etc. (those use `DataSubject` / `DataSubjectDetails` semantics); zero matches for `Secrets` (#482 deliberately did not annotate it).
 
-  This confirms: Phase 2-C is the first user of `@PersonalData.EntitySemantics: 'Other'` in this codebase. Task 3 below adds the first row.
+  This confirms: Phase 2-C adds the sixth row using `EntitySemantics: 'Other'`. Task 3 below adds the new `ims.Secrets` annotation in the colon-object style (`with @PersonalData: { ... }`) to match the existing five.
 
 - [ ] **Step 0.4: Confirm `@cap-js/audit-logging` is in dependencies**
 
@@ -347,7 +347,7 @@ Both `mta.yaml` files MUST receive the same `tutorials-credstore` resource + bin
   Confirm:
   - File starts with `using ... from '@cap-js/audit-logging';` or similar import.
   - Existing annotations use `@PersonalData` form on Users / UserMetaData / TaskRecords / etc. with `EntitySemantics: 'DataSubject'` or `'DataSubjectDetails'`.
-  - No existing `EntitySemantics: 'Other'` annotation anywhere.
+  - Five existing entities already use `EntitySemantics: 'Other'` (CodeCheckSubmissions, ValidateAnswerSubmissions, AuthorAiRequests, BranchDecisions, Concepts) — Phase 2-C adds the sixth using the same colon-object style.
 
 - [ ] **Step 3.2: Append `@PersonalData.EntitySemantics: 'Other'` annotation on Secrets**
 
@@ -372,9 +372,9 @@ Both `mta.yaml` files MUST receive the same `tutorials-credstore` resource + bin
   // event name; custom event names like 'SecretValueRead' are NOT registered
   // in the plugin's CDS service definition and would silently drop or throw.
   // The action discriminator therefore lives in data.action.
-  annotate ims.Secrets with @(
-    PersonalData.EntitySemantics: 'Other'
-  ) {
+  annotate ims.Secrets with @PersonalData: {
+    EntitySemantics: 'Other'
+  } {
     key         @PersonalData.IsPotentiallyPersonal;
     description @PersonalData.IsPotentiallyPersonal;
   };
