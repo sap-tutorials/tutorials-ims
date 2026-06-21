@@ -169,4 +169,72 @@ describe('contributor-notifications', () => {
       expect(slugs).not.toContain('inactive-tutorial');
     });
   });
+
+  describe('PR-1 2-level chain query for repo-group owner', () => {
+    it('resolves repoOwner via TutorialMeta.repository.repositoryOwner.email', async () => {
+      const { Tutorials, TutorialMeta, TutorialContributors, TutorialRepositories } =
+        cds.entities('com.sap.developers.ims');
+
+      const tutorialId = 'ffffffff-385a-0000-0000-000000000001';
+      const metaId = 'aaaaaaaa-385a-0000-0000-000000000001';
+      const repoId = 'cccccccc-385a-0000-0000-000000000001';
+      const ownerContribId = 'bbbbbbbb-385a-0000-0000-000000000001';
+
+      // FK insertion order: TutorialContributors first (FK target for repositoryOwner),
+      // then TutorialRepositories (FK target for TutorialMeta.repository), then TutorialMeta.
+      await INSERT.into(Tutorials).entries({
+        ID: tutorialId, slug: '385a-tutorial', title: 'PR-1 chain test',
+        legacyId: 9301, status: 'ACTIVE',
+      });
+      await INSERT.into(TutorialContributors).entries({
+        ID: ownerContribId, tutorial_ID: tutorialId,
+        name: 'Repo Owner', email: 'repoowner@sap.com', role: 'OWNER', legacyId: 9501,
+      });
+      await INSERT.into(TutorialRepositories).entries({
+        ID: repoId, name: 'btp-foundation',
+        repositoryOwner_ID: ownerContribId, legacyId: 9601,
+      });
+      await INSERT.into(TutorialMeta).entries({
+        ID: metaId, tutorial_ID: tutorialId,
+        reviewedDate: new Date(Date.now() - 200 * 86400000).toISOString(),
+        owner: 'metaowner@sap.com', monitoredStatus: 'ACTIVE',
+        notificationNumber: 0, legacyId: 9401,
+        repository_ID: repoId,
+      });
+
+      const notifications = await computeStaleNotifications(90);
+      const match = notifications.find(n => n.slug === '385a-tutorial');
+      expect(match).toBeTruthy();
+      expect(match.repoOwner).toBe('repoowner@sap.com');
+    });
+
+    it('returns repoOwner=null when meta.repository is unset (NULL-safe)', async () => {
+      const { Tutorials, TutorialMeta, TutorialContributors } =
+        cds.entities('com.sap.developers.ims');
+
+      const tutorialId = 'ffffffff-385b-0000-0000-000000000001';
+      const metaId = 'aaaaaaaa-385b-0000-0000-000000000001';
+
+      await INSERT.into(Tutorials).entries({
+        ID: tutorialId, slug: '385b-tutorial', title: 'PR-1 null-safe test',
+        legacyId: 9302, status: 'ACTIVE',
+      });
+      await INSERT.into(TutorialContributors).entries({
+        ID: 'bbbbbbbb-385b-0000-0000-000000000001', tutorial_ID: tutorialId,
+        name: 'Solo', email: 'solo@sap.com', role: 'AUTHOR', legacyId: 9502,
+      });
+      await INSERT.into(TutorialMeta).entries({
+        ID: metaId, tutorial_ID: tutorialId,
+        reviewedDate: new Date(Date.now() - 200 * 86400000).toISOString(),
+        owner: 'solo@sap.com', monitoredStatus: 'ACTIVE',
+        notificationNumber: 0, legacyId: 9402,
+        // No repository_ID — left null.
+      });
+
+      const notifications = await computeStaleNotifications(90);
+      const match = notifications.find(n => n.slug === '385b-tutorial');
+      expect(match).toBeTruthy();
+      expect(match.repoOwner).toBeNull();
+    });
+  });
 });

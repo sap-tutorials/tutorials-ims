@@ -5,7 +5,7 @@ const RESEND_INTERVAL_DAYS = 30;
 const MAX_NOTIFICATION_LEVEL = 3;
 
 export async function computeStaleNotifications(staleDaysThreshold = STALE_DAYS_DEFAULT) {
-  const { Tutorials, TutorialMeta, TutorialContributors, TutorialRepositories } =
+  const { Tutorials, TutorialMeta, TutorialContributors } =
     cds.entities('com.sap.developers.ims');
 
   const cutoffDate = new Date(Date.now() - staleDaysThreshold * 86400000).toISOString();
@@ -29,7 +29,13 @@ export async function computeStaleNotifications(staleDaysThreshold = STALE_DAYS_
     const contributors = await SELECT.from(TutorialContributors)
       .where({ tutorial_ID: tutorial.ID });
 
-    const repo = await SELECT.one.from(TutorialRepositories)
+    // #385 PR-1: repo-group owner now lives on TutorialMeta.repository.repositoryOwner.
+    // 2-level Association chain compiles to a LEFT JOIN on HANA. NULL-safe — if
+    // meta.repository is null (no group assigned yet — common until PR-2 migrator
+    // runs), the chain returns { email: null } and notification level 1 falls
+    // through to owner-only recipients (existing behaviour).
+    const repoOwnerRow = await SELECT.one.from(TutorialMeta)
+      .columns('repository.repositoryOwner.email as email')
       .where({ tutorial_ID: tutorial.ID });
 
     notifications.push({
@@ -39,7 +45,7 @@ export async function computeStaleNotifications(staleDaysThreshold = STALE_DAYS_
       reviewedDate: meta.reviewedDate,
       notificationLevel: meta.notificationNumber || 0,
       contributors: contributors.map(c => ({ name: c.name, email: c.email, role: c.role })),
-      repoOwner: repo?.owner || null
+      repoOwner: repoOwnerRow?.email ?? null
     });
   }
 
