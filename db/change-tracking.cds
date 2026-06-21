@@ -36,4 +36,3 @@ annotate ims.SearchSettings    with @changelog;
 annotate ims.NavigatorSettings with @changelog;
 annotate ims.DisplaySettings   with @changelog;
 annotate ims.TenantSettings    with @changelog;
->>>>>>> 5ef5e941 (feat(db): change-tracking on 5 runtime-config entities (#466))
