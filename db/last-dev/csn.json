@@ -3,6 +3,11 @@
   "definitions": {
     "com.sap.developers.ims.Users": {
       "kind": "entity",
+      "@assert.unique.sapId": [
+        {
+          "=": "sapId"
+        }
+      ],
       "@cds.persistence.journal": true,
       "elements": {
         "ID": {
@@ -67,6 +72,21 @@
           "type": "cds.String",
           "length": 1000,
           "@cds.persistence.name": "AVATARURL"
+        }
+      },
+      "$tableConstraints": {
+        "unique": {
+          "sapId": {
+            "paths": [
+              {
+                "ref": [
+                  "sapId"
+                ],
+                "isChecked": true
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.Users"
+          }
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_USERS"
@@ -635,6 +655,14 @@
     },
     "com.sap.developers.ims.Steps": {
       "kind": "entity",
+      "@assert.unique.tutorialStep": [
+        {
+          "=": "tutorial"
+        },
+        {
+          "=": "stepOrder"
+        }
+      ],
       "@cds.persistence.journal": true,
       "elements": {
         "ID": {
@@ -718,6 +746,26 @@
           "type": "cds.String",
           "length": 64,
           "@cds.persistence.name": "CONTENTHASH"
+        }
+      },
+      "$tableConstraints": {
+        "unique": {
+          "tutorialStep": {
+            "paths": [
+              {
+                "ref": [
+                  "tutorial_ID"
+                ]
+              },
+              {
+                "ref": [
+                  "stepOrder"
+                ],
+                "isChecked": true
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.Steps"
+          }
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_STEPS"
@@ -815,6 +863,10 @@
         "lastNotificationDate": {
           "type": "cds.Timestamp",
           "@cds.persistence.name": "LASTNOTIFICATIONDATE"
+        },
+        "firstNotificationDate": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "FIRSTNOTIFICATIONDATE"
         }
       },
       "$tableConstraints": {
@@ -911,6 +963,11 @@
     },
     "com.sap.developers.ims.CompletionPaths": {
       "kind": "entity",
+      "@assert.unique.slug": [
+        {
+          "=": "slug"
+        }
+      ],
       "@cds.persistence.journal": true,
       "elements": {
         "ID": {
@@ -943,6 +1000,21 @@
           "type": "cds.String",
           "length": 255,
           "@cds.persistence.name": "SLUG"
+        }
+      },
+      "$tableConstraints": {
+        "unique": {
+          "slug": {
+            "paths": [
+              {
+                "ref": [
+                  "slug"
+                ],
+                "isChecked": true
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.CompletionPaths"
+          }
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_COMPLETIONPATHS"

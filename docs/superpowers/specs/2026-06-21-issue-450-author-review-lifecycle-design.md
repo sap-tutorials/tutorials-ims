@@ -24,16 +24,16 @@ The author-review nag system (Riley's legacy IMS rule: 1st nag at N days → mon
 ## What's NOT shipped (this spec's scope)
 
 1. **`MyTutorialsView.outdated` calc field** — Sage has no derived "tutorial has been ignored 4+ times" signal.
-2. **`firstNotificationAt` tracking** — current schema knows when the last nag fired but not when the first did, so Sage can't render "first nag sent on YYYY-MM-DD" context.
+2. **`firstNotificationDate` tracking** — current schema knows when the last nag fired but not when the first did, so Sage can't render "first nag sent on YYYY-MM-DD" context.
 3. **Threshold 180 → 90 days** — current `STALE_DAYS_DEFAULT = 180` is more lenient than Riley's IMS rule (90 or 120). Tightening to 90 matches the lower bound.
 4. **Thin unit tests for `srv/lib/contributor-notifications.js`** — [test/lib/contributor-notifications.test.js](../../../../test/lib/contributor-notifications.test.js) exists (2 tests covering `computeStaleNotifications(180)` stale + fresh cases) but hardcodes the old threshold and doesn't cover `markNotificationSent` at all. Extend the existing file rather than create a parallel one.
-5. **Reset of `firstNotificationAt`** — when `reviewTutorial()` clears the counter, it must also clear this new field.
+5. **Reset of `firstNotificationDate`** — when `reviewTutorial()` clears the counter, it must also clear this new field.
 
 ## Settled decisions (from 2026-06-21 brainstorming)
 
 1. **Threshold**: 90 days for the first nag (was 180). Riley's lower bound; matches "every quarter" mental model.
 2. **`outdated` semantics**: `Boolean = (notificationNumber >= 4)`. Simple derivation from the existing counter; no time-based ceiling, no NULL-handling gymnastics.
-3. **`firstNotificationAt`**: add the column + expose via `MyTutorialsView` for Sage's "1st nag sent on..." UX.
+3. **`firstNotificationDate`**: add the column + expose via `MyTutorialsView` for Sage's "1st nag sent on..." UX.
 4. **Deploy plan**: ship straight to DEV; Tom posts in `#devrel-tools` to flag the upcoming nag wave (some authors will get a first nag the Monday after deploy whose tutorials are 90-179 days stale).
 
 ## Changes by file
@@ -43,7 +43,7 @@ The author-review nag system (Riley's legacy IMS rule: 1st nag at N days → mon
 After the existing `lastNotificationDate : Timestamp;` line on `TutorialMeta`, add:
 
 ```cds
-firstNotificationAt : Timestamp;
+firstNotificationDate : Timestamp;
 ```
 
 Stays nullable. Populated only when `markNotificationSent` fires on a tutorial whose `notificationNumber` was 0; cleared by `reviewTutorial`.
@@ -53,7 +53,7 @@ Stays nullable. Populated only when `markNotificationSent` fires on a tutorial w
 Add two lines inside the projection's select-list:
 
 ```cds
-m.firstNotificationAt,
+m.firstNotificationDate,
 m.notificationNumber >= 4 as outdated : Boolean,
 ```
 
@@ -67,7 +67,7 @@ Both SQLite (unit tests) and HANA (hybrid + prod) support the inline boolean exp
 + const STALE_DAYS_DEFAULT = 90;
 ```
 
-**3b.** `markNotificationSent()` (around line 64) — populate `firstNotificationAt` on the first nag only:
+**3b.** `markNotificationSent()` (around line 64) — populate `firstNotificationDate` on the first nag only:
 ```javascript
 export async function markNotificationSent(tutorialId) {
   const { TutorialMeta } = cds.entities('com.sap.developers.ims');
@@ -78,19 +78,19 @@ export async function markNotificationSent(tutorialId) {
   await UPDATE(TutorialMeta, meta.ID).set({
     notificationNumber: (meta.notificationNumber || 0) + 1,
     lastNotificationDate: now,
-    ...(isFirstNag && { firstNotificationAt: now }),
+    ...(isFirstNag && { firstNotificationDate: now }),
   });
 }
 ```
 
-The spread-conditional pattern keeps the UPDATE atomic and avoids writing `firstNotificationAt: null` on subsequent nags (which would erroneously clear it if the spread were unconditional).
+The spread-conditional pattern keeps the UPDATE atomic and avoids writing `firstNotificationDate: null` on subsequent nags (which would erroneously clear it if the spread were unconditional).
 
 ### 4. `srv/lib/tutorial-review.js` — extend reset
 
 In `reviewTutorial()`'s `.set({...})` block (around line 12), add one line:
 
 ```javascript
-firstNotificationAt: null,
+firstNotificationDate: null,
 ```
 
 So the reset clears all three notification fields atomically:
@@ -100,7 +100,7 @@ await UPDATE(TutorialMeta, meta.ID).set({
   reviewedDate: now,
   notificationNumber: 0,
   lastNotificationDate: null,
-  firstNotificationAt: null,
+  firstNotificationDate: null,
 });
 ```
 
@@ -133,7 +133,7 @@ this.before('UPDATE', 'TutorialMeta', (req) => {
   if (req.data.reviewedDate) {
     req.data.notificationNumber = 0;
     req.data.lastNotificationDate = null;
-    req.data.firstNotificationAt = null;
+    req.data.firstNotificationDate = null;
   }
 });
 ```
@@ -152,13 +152,13 @@ Spec picks (a).
 
 ### Admin-service projection auto-propagation
 
-`srv/admin-service.cds:53` is `entity TutorialMeta as projection on ims.TutorialMeta;` (star projection — no explicit column list). CAP auto-propagates new columns, so `firstNotificationAt` flows through to `/admin/TutorialMeta` automatically. No edit needed there.
+`srv/admin-service.cds:53` is `entity TutorialMeta as projection on ims.TutorialMeta;` (star projection — no explicit column list). CAP auto-propagates new columns, so `firstNotificationDate` flows through to `/admin/TutorialMeta` automatically. No edit needed there.
 
 ## Tests
 
 ### Extend existing tests (additive — no new test files)
 
-**`test/unit/lib/tutorial-review.test.js`** — extend the existing `reviewTutorial` test to assert all 4 fields cleared, including `firstNotificationAt`. Bootstrap is `cds.deploy(dbDir).to('sqlite::memory:')` per the existing file (lighter than `cds.test('serve')` — pure-lib test doesn't need the HTTP stack).
+**`test/unit/lib/tutorial-review.test.js`** — extend the existing `reviewTutorial` test to assert all 4 fields cleared, including `firstNotificationDate`. Bootstrap is `cds.deploy(dbDir).to('sqlite::memory:')` per the existing file (lighter than `cds.test('serve')` — pure-lib test doesn't need the HTTP stack).
 
 **`test/notification-reset.test.js`** — extend the OData `reviewTutorial` integration test. The reviewer flagged that querying `/author/MyTutorials` from this test would require seeding a `Users` row + authenticating as `Tutorial.Author`, which the existing test doesn't do. Workaround: query the underlying view directly via the CDS db connection (consistent with the existing test's `SELECT.one.from(TutorialMeta).where({ ID: metaId })` pattern at line ~55).
 
@@ -226,8 +226,8 @@ Use strict `.toBe(true)` / `.toBe(false)` (not truthy) — CAP normalizes SQLite
 
 *Add 4 new tests* (in the same `describe('contributor-notifications', () => { ... })` block):
 
-1. `markNotificationSent` sets `firstNotificationAt` to a recent timestamp when called on a meta-row with `notificationNumber=0`. `lastNotificationDate` and `firstNotificationAt` are equal on this first call.
-2. `markNotificationSent` on a meta with `notificationNumber=2` increments to 3 and updates `lastNotificationDate` but leaves `firstNotificationAt` untouched (still its earlier value).
+1. `markNotificationSent` sets `firstNotificationDate` to a recent timestamp when called on a meta-row with `notificationNumber=0`. `lastNotificationDate` and `firstNotificationDate` are equal on this first call.
+2. `markNotificationSent` on a meta with `notificationNumber=2` increments to 3 and updates `lastNotificationDate` but leaves `firstNotificationDate` untouched (still its earlier value).
 3. `computeStaleNotifications(90)` filters out rows with `notificationNumber >= 4` (the lib filters `notificationNumber <= MAX_NOTIFICATION_LEVEL` = 3). Seed one row at level 4; confirm absent from result.
 4. `computeStaleNotifications` filters by `monitoredStatus = 'ACTIVE'` and `tutorial.status = 'ACTIVE'`. Seed a tutorial with `tutorial.status = 'INACTIVE'`; confirm filtered out.
 
@@ -246,23 +246,23 @@ Bootstrap pattern: the existing file uses `cds.test('serve', '--project', '.', '
 - **No threshold-via-ImsConfig.** Hardcoded 90 is fine; if ops wants to tune later, that's a single PR.
 - **No daily cron.** Weekly Monday cron works; nags fire at the 30-day resend interval regardless.
 - **No `daysSinceReview` calc field.** That's #385 (still open) and not blocking #450's acceptance criteria.
-- **No vendor-side change to email content.** Existing `sendNotificationEmail` template stays; downstream `firstNotificationAt` context (if needed in the email body) is a follow-up.
-- **No data migration.** Existing rows get `firstNotificationAt = NULL` and are populated naturally as nags fire. Sage UI is told to render "first nag sent on..." only when `firstNotificationAt IS NOT NULL`.
+- **No vendor-side change to email content.** Existing `sendNotificationEmail` template stays; downstream `firstNotificationDate` context (if needed in the email body) is a follow-up.
+- **No data migration.** Existing rows get `firstNotificationDate = NULL` and are populated naturally as nags fire. Sage UI is told to render "first nag sent on..." only when `firstNotificationDate IS NOT NULL`.
 
 ## Acceptance criteria
 
-- [ ] `TutorialMeta.firstNotificationAt` exists as a nullable Timestamp column
-- [ ] `MyTutorialsView` exposes `firstNotificationAt` and `outdated` (derived from `notificationNumber >= 4`)
+- [ ] `TutorialMeta.firstNotificationDate` exists as a nullable Timestamp column
+- [ ] `MyTutorialsView` exposes `firstNotificationDate` and `outdated` (derived from `notificationNumber >= 4`)
 - [ ] `STALE_DAYS_DEFAULT = 90` in `srv/lib/contributor-notifications.js` AND `srv/jobs/scheduler.js:135` call site AND `srv/admin-service.js:794` call site
 - [ ] `scripts/seed-tutorial-meta.js` updated from `180` to `90` (or annotated if Tom chooses option b)
-- [ ] `markNotificationSent` sets `firstNotificationAt` ONLY when prior `notificationNumber === 0`
-- [ ] `reviewTutorial` clears all 4 review-state fields (`reviewedDate→now`, `notificationNumber→0`, `lastNotificationDate→null`, `firstNotificationAt→null`)
-- [ ] `srv/admin-service.js:356` `before('UPDATE', 'TutorialMeta')` hook also clears `firstNotificationAt` when `reviewedDate` is touched
-- [ ] Existing `test/unit/lib/tutorial-review.test.js` extended with `firstNotificationAt: null` assertion
+- [ ] `markNotificationSent` sets `firstNotificationDate` ONLY when prior `notificationNumber === 0`
+- [ ] `reviewTutorial` clears all 4 review-state fields (`reviewedDate→now`, `notificationNumber→0`, `lastNotificationDate→null`, `firstNotificationDate→null`)
+- [ ] `srv/admin-service.js:356` `before('UPDATE', 'TutorialMeta')` hook also clears `firstNotificationDate` when `reviewedDate` is touched
+- [ ] Existing `test/unit/lib/tutorial-review.test.js` extended with `firstNotificationDate: null` assertion
 - [ ] Existing `test/notification-reset.test.js` extended with `MyTutorialsView.outdated` assertions via direct CDS db query (not OData `/author/MyTutorials`)
 - [ ] Existing `test/lib/contributor-notifications.test.js` has **6 tests total** (2 updated + 4 new) and all pass
 - [ ] `npm run test` (unit suite) is green
-- [ ] HDI build emits a new `migration=3` block on `db/src/com.sap.developers.ims.TutorialMeta.hdbmigrationtable` with `ALTER TABLE ... ADD (firstNotificationAt TIMESTAMP)` — verify before pushing
+- [ ] HDI build emits a new `migration=3` block on `db/src/com.sap.developers.ims.TutorialMeta.hdbmigrationtable` with `ALTER TABLE ... ADD (firstNotificationDate TIMESTAMP)` — verify before pushing
 - [ ] HDI deploy succeeds (additive nullable column + view extension; no destructive operations per memory `[feedback_hdi_deploys_can_wipe_data]`)
 - [ ] No new `cf set-env` required (no new env vars)
 
@@ -272,7 +272,7 @@ Bootstrap pattern: the existing file uses `cds.test('serve', '--project', '.', '
 | --- | --- |
 | Initial nag wave at first post-deploy cron fires confusing authors | Comm in `#devrel-tools` pre-deploy. 30-day resend interval bounds the wave to ≤1 email per author. |
 | Calc field `outdated` evaluates differently on HANA vs SQLite | Hybrid test (existing `test/hybrid/author-service.test.js`) confirms HANA path; unit tests cover SQLite. Both engines support the inline boolean expression. |
-| `firstNotificationAt` left NULL for rows already at notification level 1-3 | Acceptable per "no data migration" decision. Next nag fired for those rows leaves `firstNotificationAt` NULL still (because `notificationNumber > 0`). Sage handles NULL gracefully ("first nag sent: —"). |
+| `firstNotificationDate` left NULL for rows already at notification level 1-3 | Acceptable per "no data migration" decision. Next nag fired for those rows leaves `firstNotificationDate` NULL still (because `notificationNumber > 0`). Sage handles NULL gracefully ("first nag sent: —"). |
 | HDI deploy regression | Schema change is purely additive (new nullable column + view extension). No destructive operation. Verified against memory `[feedback_hdi_deploys_can_wipe_data]`. |
 
 ## References
@@ -289,4 +289,4 @@ Bootstrap pattern: the existing file uses `cds.test('serve', '--project', '.', '
   - [test/notification-reset.test.js](../../../../test/notification-reset.test.js)
   - [test/unit/lib/tutorial-review.test.js](../../../../test/unit/lib/tutorial-review.test.js)
   - [test/hybrid/author-service.test.js](../../../../test/hybrid/author-service.test.js)
-- Brainstorm decisions log: threshold→90d; outdated→`notificationNumber >= 4`; firstNotificationAt→add+expose; deploy→ship straight + Slack comms.
+- Brainstorm decisions log: threshold→90d; outdated→`notificationNumber >= 4`; firstNotificationDate→add+expose; deploy→ship straight + Slack comms.
