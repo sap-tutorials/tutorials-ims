@@ -19,7 +19,7 @@ build-parameters:
         # --for srv-qa lines used deprecated cds-dk flags (--output-dir, plus
         # custom target names not in cds build's --for enum) and broke CI on
         # 2026-06-20 with `Invalid option: --output-dir`. Issue #478.
-        - set -e; npx cds build --production & p1=$!; npm --prefix hugo-apps install & p2=$!; bash -c "npm --prefix app/display-app install && npm --prefix app/display-app run build" & p3=$!; wait $p1; wait $p2; wait $p3
+        - bash -c 'set -e; npx cds build --production & p1=$!; npm --prefix hugo-apps install & p2=$!; (npm --prefix app/display-app install && npm --prefix app/display-app run build) & p3=$!; wait $p1; wait $p2; wait $p3'
         # NOTE: tutorial fetch (prod + qa) happens BEFORE mbt build via deploy.yml
         # workflow steps (PR #492). mbt's 10-min before-all timeout was burned by
         # rerunning fetch-tutorials here even though caches were warm — Phase 2's
@@ -43,14 +43,14 @@ build-parameters:
         # invocations fall through to the curl path on first run; cached after.
         # Version bumps to this URL automatically invalidate the CI cache too
         # (deploy.yml's cache key is hashFiles('mta.yaml')).
-        - 'set -e; npm run validate-tutorials & p1=$!; npm --prefix hugo-apps run build & p2=$!; npm run copy-joule-vendor & p3=$!; bash -c "[ -x /tmp/hugo ] || (curl -fsSL https://github.com/gohugoio/hugo/releases/download/v0.147.7/hugo_extended_0.147.7_linux-amd64.tar.gz -o /tmp/hugo.tar.gz && tar -xzf /tmp/hugo.tar.gz -C /tmp hugo)" & p4=$!; wait $p1; wait $p2; wait $p3; wait $p4'
+        - 'bash -c ''set -e; npm run validate-tutorials & p1=$!; npm --prefix hugo-apps run build & p2=$!; npm run copy-joule-vendor & p3=$!; { [ -x /tmp/hugo ] || (curl -fsSL https://github.com/gohugoio/hugo/releases/download/v0.147.7/hugo_extended_0.147.7_linux-amd64.tar.gz -o /tmp/hugo.tar.gz && tar -xzf /tmp/hugo.tar.gz -C /tmp hugo); } & p4=$!; wait $p1; wait $p2; wait $p3; wait $p4'''
         # Run prod + QA Hugo builds in parallel. They write to different
         # output dirs (hugo/public/ vs hugo/public-qa/) so they don't collide
         # on output. They DO share hugo/resources/_gen/ for image-resize
         # cache, but Hugo uses BoltDB there with proper inter-process
         # locking. Saves ~30-60s on every run.
         # QA fetch was moved to deploy.yml workflow step (see fetch comment above).
-        - set -e; /tmp/hugo --source hugo --minify & p1=$!; /tmp/hugo --source hugo --config ../hugo.qa.toml --minify & p2=$!; wait $p1; wait $p2
+        - bash -c 'set -e; /tmp/hugo --source hugo --minify & p1=$!; /tmp/hugo --source hugo --config ../hugo.qa.toml --minify & p2=$!; wait $p1; wait $p2'
         - npx tsx scripts/verify-qa-build.ts hugo/public-qa
         - mkdir -p approuter/static/qa
         - cp -r hugo/public-qa/. approuter/static/qa/
