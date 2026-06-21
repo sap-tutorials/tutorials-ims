@@ -755,6 +755,7 @@
           "type": "cds.String",
           "length": 36,
           "@odata.foreignKey4": "tutorial",
+          "notNull": true,
           "@cds.persistence.name": "TUTORIAL_ID"
         },
         "stepOrder": {
