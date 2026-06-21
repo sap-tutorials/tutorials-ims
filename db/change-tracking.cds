@@ -28,3 +28,12 @@ annotate ims.ConceptEdges  with @changelog : ['status'];
 // Phase 2-B (#464): track admin edits to tracked-secret metadata
 // (description, expiresAt, rotationOwner). Surfaces in /admin-ui/#changelog-display.
 annotate ims.Secrets with @changelog;
+
+
+// Phase 3 (#466): track admin edits to runtime-tunable settings.
+annotate ims.UiEventsSettings  with @changelog;
+annotate ims.SearchSettings    with @changelog;
+annotate ims.NavigatorSettings with @changelog;
+annotate ims.DisplaySettings   with @changelog;
+annotate ims.TenantSettings    with @changelog;
+>>>>>>> 5ef5e941 (feat(db): change-tracking on 5 runtime-config entities (#466))

@@ -23,7 +23,12 @@ const COMPONENTS = [
   'joule',
   'knowledgeGraph',
   'feedback',
-  'secrets'
+  'secrets',
+  'uiEvents',
+  'search',
+  'navigator',
+  'display',
+  'tenant'
 ]
 
 mkdirSync(COMPONENTS_DIR, { recursive: true })

@@ -28,6 +28,8 @@ import { defaultCallModel } from './lib/code-check-llm.js';
 import { defaultLoadStepText } from './lib/code-check-step-loader.js';
 import { codeCheckSpecPublishHandler } from './lib/code-check-spec-publish.js';
 import { publishValidateAnswerSpecs } from './lib/validate-answer-spec-publish.js';
+import { resolveSearchSettings } from './lib/runtime-config/search-settings.js';
+import { resolveTenantSettings } from './lib/runtime-config/tenant-settings.js';
 import { makeValidateAnswerHandler } from './lib/validate-answer-handler.js';
 import { defaultLoadQuestion } from './lib/validate-answer-question-loader.js';
 import { scheduleRebuild, checkFeatureFlag as checkRebuildTriggerFeatureFlag } from './lib/rebuild-trigger.js';
@@ -101,23 +103,25 @@ cds.on('bootstrap', (app) => {
   // CORS: strict allowlist (issue #133). Previously this reflected any Origin
   // header with credentials when NODE_ENV !== 'production', but NODE_ENV is not
   // set in any deployment manifest, so the reflect-all branch was always live
-  // in CF. Now driven by ALLOWED_CORS_ORIGINS (comma-separated), defaulting to
-  // localhost-only origins for hugo/approuter/CAP dev. Set the env var on a
-  // deployed environment if you need to whitelist a specific external origin.
-  const ALLOWED_CORS_ORIGINS = new Set(
-    (process.env.ALLOWED_CORS_ORIGINS || 'http://localhost:1313,http://localhost:5000,http://localhost:4004')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean),
-  );
-  app.use((req, res, next) => {
+  // in CF.
+  // Phase 3 (#466): CORS allowlist resolved per-request from TenantSettings
+  // (resolver caches the underlying string for 5s, so the new Set() cost is
+  // microseconds × ~once-per-5s × N requests). Hardcoded localhost fallback
+  // moved into the resolver's DEFAULTS.allowedCorsOrigins.
+  app.use(async (req, res, next) => {
     const origin = req.headers.origin;
-    if (origin && ALLOWED_CORS_ORIGINS.has(origin)) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-      res.setHeader('Vary', 'Origin');
+    if (origin) {
+      const { allowedCorsOrigins } = await resolveTenantSettings();
+      const allowed = new Set(
+        allowedCorsOrigins.split(',').map((s) => s.trim()).filter(Boolean)
+      );
+      if (allowed.has(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+        res.setHeader('Vary', 'Origin');
+      }
     }
     if (req.method === 'OPTIONS') return res.status(204).end();
     next();
@@ -314,13 +318,27 @@ cds.on('bootstrap', (app) => {
   );
 
   // Per-IP rate limit for the public /search endpoint. Mounted in 'bootstrap'
-  // so it runs BEFORE CAP wires SearchService at /search. Defaults: 60 req/min
-  // per IP; tune via SEARCH_RATE_LIMIT_MAX / SEARCH_RATE_LIMIT_WINDOW_MS.
-  const searchLimiter = createIpRateLimiter({
-    windowMs: Number(process.env.SEARCH_RATE_LIMIT_WINDOW_MS) || 60 * 1000,
-    max: Number(process.env.SEARCH_RATE_LIMIT_MAX) || 60
+  // so it runs BEFORE CAP wires SearchService at /search.
+  // Phase 3 (#466): Lazy rate-limiter — resolver returns DB-backed values
+  // (with 5s cache). Counter resets on rebuild within the cache window.
+  // Documented in PR body as bounded surface widening (~120 req/10s burst).
+  let _cachedLimiter = null;
+  let _cachedLimiterAt = 0;
+  const LIMITER_TTL_MS = 5_000;
+
+  async function getSearchLimiter() {
+    const now = Date.now();
+    if (_cachedLimiter && (now - _cachedLimiterAt) < LIMITER_TTL_MS) return _cachedLimiter;
+    const { rateLimitMax, rateLimitWindowMs } = await resolveSearchSettings();
+    _cachedLimiter = createIpRateLimiter({ windowMs: rateLimitWindowMs, max: rateLimitMax });
+    _cachedLimiterAt = now;
+    return _cachedLimiter;
+  }
+
+  app.use('/search', async (req, res, next) => {
+    const limiter = await getSearchLimiter();
+    return ipRateLimitMiddleware(limiter, { logName: 'search-rate-limit' })(req, res, next);
   });
-  app.use('/search', ipRateLimitMiddleware(searchLimiter, { logName: 'search-rate-limit' }));
 });
 
 cds.on('served', async () => {
@@ -366,11 +384,9 @@ cds.on('served', async () => {
       // [#174 PR 3] Also schedule a /browse/ SSR rebuild. Debounced 60s so a
       // single admin bulk-edit (rename tag → 50 tutorials updated) collapses
       // into one workflow_dispatch instead of 50.
-      try {
-        scheduleRebuild('admin-write');
-      } catch (err) {
+      scheduleRebuild('admin-write').catch(err => {
         console.error('[rebuild-trigger] scheduling failed', err);
-      }
+      });
     });
     globalThis.__navigatorCacheInvalidatorRegistered = true;
   }

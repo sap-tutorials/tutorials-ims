@@ -1,9 +1,15 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { _resetForTests, validateBatch, handleUIEvent } from '../ui-event-handler.js'
+import * as uiEventsResolver from '../runtime-config/ui-events-settings.js'
 
 describe('ui-event-handler', () => {
   beforeEach(() => {
-    _resetForTests({ enabled: true, insertFn: vi.fn().mockResolvedValue() })
+    _resetForTests({ insertFn: vi.fn().mockResolvedValue() })
+    vi.spyOn(uiEventsResolver, 'resolveUiEventsSettings').mockResolvedValue({ enabled: true })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   describe('validateBatch', () => {
@@ -63,7 +69,8 @@ describe('ui-event-handler', () => {
   describe('handleUIEvent', () => {
     it('returns 204 on valid batch and calls insert', async () => {
       const insertFn = vi.fn().mockResolvedValue()
-      _resetForTests({ enabled: true, insertFn })
+      _resetForTests({ insertFn })
+      vi.spyOn(uiEventsResolver, 'resolveUiEventsSettings').mockResolvedValue({ enabled: true })
       const req = mockReq({
         sessionId: 'a3e0a8b1-1234-4567-89ab-cdef01234567',
         events: [{ eventType: 'page_view', surface: '/', timestamp: 1, payload: { path: '/', referrer: '' } }],
@@ -75,7 +82,8 @@ describe('ui-event-handler', () => {
     })
 
     it('returns 503 when feature flag is off', async () => {
-      _resetForTests({ enabled: false, insertFn: vi.fn() })
+      _resetForTests({ insertFn: vi.fn() })
+      vi.spyOn(uiEventsResolver, 'resolveUiEventsSettings').mockResolvedValue({ enabled: false })
       const req = mockReq({ sessionId: 'a3e0a8b1-1234-4567-89ab-cdef01234567', events: [] })
       const res = mockRes()
       await handleUIEvent(req, res)

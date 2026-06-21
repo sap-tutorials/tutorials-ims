@@ -335,4 +335,19 @@ service AdminService {
     rotationOwner     : String(120);
     rotationDocsUrl   : String(500);
   };
+
+  @odata.singleton @requires: 'Admin'
+  entity UiEventsSettings as projection on ims.UiEventsSettings;
+
+  @odata.singleton @requires: 'Admin'
+  entity SearchSettings as projection on ims.SearchSettings;
+
+  @odata.singleton @requires: 'Admin'
+  entity NavigatorSettings as projection on ims.NavigatorSettings;
+
+  @odata.singleton @requires: 'Admin'
+  entity DisplaySettings as projection on ims.DisplaySettings;
+
+  @odata.singleton @requires: 'Admin'
+  entity TenantSettings as projection on ims.TenantSettings;
 }

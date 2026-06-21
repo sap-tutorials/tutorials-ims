@@ -108,6 +108,13 @@
             <tnt:NavigationListItem text="Secrets" key="secrets" />
             <tnt:NavigationListItem text="Privacy" key="privacy" />
           </tnt:NavigationListItem>
+          <tnt:NavigationListItem text="Runtime Settings" icon="sap-icon://settings" expanded="{viewModel>/groupExpanded/runtimeSettings}">
+            <tnt:NavigationListItem text="UI Events" key="uiEvents" />
+            <tnt:NavigationListItem text="Search" key="search" />
+            <tnt:NavigationListItem text="Navigator" key="navigator" />
+            <tnt:NavigationListItem text="Display" key="display" />
+            <tnt:NavigationListItem text="Tenant" key="tenant" />
+          </tnt:NavigationListItem>
         </tnt:NavigationList>
       </tnt:SideNavigation>
     </tnt:sideContent>

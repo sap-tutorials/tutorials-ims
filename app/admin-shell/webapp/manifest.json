@@ -53,7 +53,12 @@
       "sap.tutorials.admin.joule": "./components/joule",
       "sap.tutorials.admin.knowledgeGraph": "./components/knowledgeGraph",
       "sap.tutorials.admin.feedback": "./components/feedback",
-      "sap.tutorials.admin.secrets": "./components/secrets"
+      "sap.tutorials.admin.secrets": "./components/secrets",
+      "sap.tutorials.admin.uiEvents": "./components/uiEvents",
+      "sap.tutorials.admin.search": "./components/search",
+      "sap.tutorials.admin.navigator": "./components/navigator",
+      "sap.tutorials.admin.display": "./components/display",
+      "sap.tutorials.admin.tenant": "./components/tenant"
     },
     "models": {
       "admin": {
@@ -178,6 +183,36 @@
         "settings": {},
         "componentData": {},
         "lazy": true
+      },
+      "uiEventsSettingsComponent": {
+        "name": "sap.tutorials.admin.uiEvents",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "searchSettingsComponent": {
+        "name": "sap.tutorials.admin.search",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "navigatorSettingsComponent": {
+        "name": "sap.tutorials.admin.navigator",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "displaySettingsComponent": {
+        "name": "sap.tutorials.admin.display",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "tenantSettingsComponent": {
+        "name": "sap.tutorials.admin.tenant",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
       }
     },
     "services": {
@@ -222,6 +257,11 @@
         { "name": "secrets", "pattern": "secrets", "target": [{"name": "secretsTarget", "prefix": "se"}] },
         { "name": "feedbackList", "pattern": "feedback/list", "target": [{"name": "feedbackTarget", "prefix": "fb"}] },
         { "name": "feedbackDashboard", "pattern": "feedback/dashboard", "target": "feedbackDashboardTarget" },
+        { "name": "uiEvents", "pattern": "uiEvents", "target": [{"name": "uiEventsSettingsTarget", "prefix": "ue"}] },
+        { "name": "search", "pattern": "search", "target": [{"name": "searchSettingsTarget", "prefix": "sr"}] },
+        { "name": "navigator", "pattern": "navigator", "target": [{"name": "navigatorSettingsTarget", "prefix": "nv"}] },
+        { "name": "display", "pattern": "display", "target": [{"name": "displaySettingsTarget", "prefix": "dp"}] },
+        { "name": "tenant", "pattern": "tenant", "target": [{"name": "tenantSettingsTarget", "prefix": "tn"}] },
         { "name": "board", "pattern": "board", "target": "boardTarget" },
         { "name": "dashboard", "pattern": "", "target": "dashboardTarget" },
         { "name": "statistics", "pattern": "statistics", "target": "statisticsTarget" },
@@ -354,6 +394,41 @@
           "id": "secretsTarget",
           "viewLevel": 1,
           "prefix": "se"
+        },
+        "uiEventsSettingsTarget": {
+          "type": "Component",
+          "usage": "uiEventsSettingsComponent",
+          "id": "uiEventsSettingsTarget",
+          "viewLevel": 1,
+          "prefix": "ue"
+        },
+        "searchSettingsTarget": {
+          "type": "Component",
+          "usage": "searchSettingsComponent",
+          "id": "searchSettingsTarget",
+          "viewLevel": 1,
+          "prefix": "sr"
+        },
+        "navigatorSettingsTarget": {
+          "type": "Component",
+          "usage": "navigatorSettingsComponent",
+          "id": "navigatorSettingsTarget",
+          "viewLevel": 1,
+          "prefix": "nv"
+        },
+        "displaySettingsTarget": {
+          "type": "Component",
+          "usage": "displaySettingsComponent",
+          "id": "displaySettingsTarget",
+          "viewLevel": 1,
+          "prefix": "dp"
+        },
+        "tenantSettingsTarget": {
+          "type": "Component",
+          "usage": "tenantSettingsComponent",
+          "id": "tenantSettingsTarget",
+          "viewLevel": 1,
+          "prefix": "tn"
         },
         "feedbackDashboardTarget": {
           "viewName": "TutorialFeedbackDashboard",

@@ -720,3 +720,64 @@ entity Secrets : cuid, managed {
   expiresAt           : Date;
   lastRotatedAt       : Timestamp;
 }
+
+
+// Phase 3 (#466): UI events telemetry feature flag.
+// Resolver at srv/lib/runtime-config/ui-events-settings.js layers DB > env > default.
+// CSV seed must stay empty (HDI-clobbers-admin-edits footgun).
+entity UiEventsSettings : cuid, managed {
+  enabled              : Boolean;
+}
+
+
+// Phase 3 (#466): Search /search/* per-IP rate limit.
+// rateLimitMax = requests-per-window; rateLimitWindowMs = rolling window in ms.
+// Range upper bound on windowMs at 600000 (10min) prevents an admin from
+// configuring a 1-hour rate-limit cell that would persist rejection state
+// across deploys.
+entity SearchSettings : cuid, managed {
+  rateLimitMax         : Integer @assert.range: [0, 100000];
+  rateLimitWindowMs    : Integer @assert.range: [1000, 600000];
+}
+
+
+// Phase 3 (#466): Navigator nested-group inclusion flag.
+// When true, /build/navigator emits cards for nested groups (richer behavior,
+// ~65 extra cards on dev). False matches developers.sap.com chip-counts.
+// See issue #364.
+entity NavigatorSettings : cuid, managed {
+  includeNestedGroups  : Boolean;
+}
+
+
+// Phase 3 (#466): Display dashboard URL used in contributor-notification emails.
+// Default fallback (when null) is the prod approuter URL.
+entity DisplaySettings : cuid, managed {
+  dashboardUrl         : String(500);
+}
+
+
+// Phase 3 (#466): Tenant-wide config bag.
+// allowedCorsOrigins: comma-separated origin URLs (raw env-var format).
+// rebuildTargetEnv: dev/qa/prod controlling rebuild-trigger workflow_dispatch
+//   target. NOT @assert.range enum-constrained at the DB level — only the
+//   admin-tile ComboBox enforces the value set. Direct OData PATCH (e.g. via
+//   curl by an Admin) bypasses validation. Deliberate: matches the
+//   no-write-time-validation stance for the other special-shape Tenant fields.
+//   Add @assert.range enum if this becomes painful (Phase 4).
+// techUsers: legacy JSON-array format (raw env-var format).
+// techUsersMapping: 'tech_id1:real_uuid1;tech_id2:real_uuid2' (raw env-var format).
+//
+// LargeString chosen for the 3 special-shape fields (CORS, techUsers,
+// techUsersMapping) to avoid silent truncation if these grow beyond 2000
+// chars in a multi-tenant rollout.
+//
+// Special-shape fields stored as raw String/LargeString — consumers keep their
+// existing parse logic. No write-time validation in this PR (matches today's
+// env-var typo failure mode); add @assert.format if validation becomes painful.
+entity TenantSettings : cuid, managed {
+  allowedCorsOrigins   : LargeString;
+  rebuildTargetEnv     : String(10);
+  techUsers            : LargeString;
+  techUsersMapping     : LargeString;
+}
