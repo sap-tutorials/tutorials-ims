@@ -943,6 +943,19 @@ async function main() {
   }));
 
   // 6. Steps
+  //
+  // Orphan-skip behavior (added 2026-06-21): if a Step has no parent link
+  // in IMS_TASK_TO_TASK (`stepParentMap.get(row.ID)` returns null), the
+  // mapRow returns `null` and migrateEntity skips the insert. Previously
+  // these became silent orphan rows with TUTORIAL_ID=NULL + STEPORDER=0,
+  // which HANA's @assert.unique.tutorialStep treats as duplicates (NULL=NULL
+  // for unique-constraint purposes) — 5 such orphans blocked the deploy
+  // on 2026-06-21. The schema-side `tutorial : Association to Tutorials
+  // not null` is the belt-and-suspenders guard; this migrator skip is the
+  // first line of defense.
+  //
+  // Orphan count is logged as a stderr warning so it surfaces in CI output.
+  let orphanStepCount = 0;
   results.push(await migrateEntity(source, target, T, {
     name: 'steps',
     sourceQuery: `SELECT "ID", "TITLE", "TASK_STATUS", "CREATED_AT", "UPDATED_AT" FROM ${S}."IMS_TASK" WHERE "TASK_TYPE" = 'STEP'`,
@@ -950,6 +963,15 @@ async function main() {
     mapRow: (row) => {
       const parent = stepParentMap.get(row.ID);
       const tutorialUuid = parent ? uuidMap.tutorials.get(parent.parentId) : null;
+      if (!tutorialUuid) {
+        // No resolvable tutorial parent. Skip the insert. These rows would
+        // otherwise become deploy-blocking orphans (see schema comment on
+        // Steps.tutorial). Caller has no use for an unattached Step row —
+        // no tutorial means no rendering surface, no completion target,
+        // no user progress can attach to it.
+        orphanStepCount++;
+        return null;
+      }
       return {
         ID: uuidMap.steps.get(row.ID),
         LEGACYID: row.ID,
@@ -960,10 +982,7 @@ async function main() {
         // Normalize at migration time so both populations share a single key
         // space — this prevents the duplicate-Step-row corruption that affected
         // 1372/1397 tutorials in the 2026-06 cutover (audited 2026-06-20).
-        // The 0 fallback for orphan steps (no parent link) is intentional: it
-        // keeps them visible as "broken" rather than silently colliding with
-        // stepOrder=1.
-        STEPORDER: parent?.order != null ? parent.order + 1 : 0,
+        STEPORDER: parent.order != null ? parent.order + 1 : 1,
         CREATEDAT: toISOTimestamp(row.CREATED_AT) || new Date().toISOString(),
         MODIFIEDAT: toISOTimestamp(row.UPDATED_AT) || new Date().toISOString(),
         CREATEDBY: 'migration',
@@ -971,6 +990,14 @@ async function main() {
       };
     },
   }));
+  if (orphanStepCount > 0) {
+    console.warn(
+      `  ⚠ ${orphanStepCount} orphan Step row(s) skipped during migration ` +
+      `(no parent in IMS_TASK_TO_TASK). This is expected when source IMS has ` +
+      `dangling task-of-step references; the rows have no rendering target ` +
+      `in CAP. Increase verbose logging if these counts surprise you.`
+    );
+  }
 
   // 7. Users
   results.push(await migrateEntity(source, target, T, {

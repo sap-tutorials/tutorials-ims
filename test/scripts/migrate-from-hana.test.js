@@ -118,28 +118,74 @@ describe('partitionBySlug()', () => {
 
 // ─── Issue #466 — corruption-source fixes ───────────────────────────────────
 
-describe('Fix A: step parent → STEPORDER mapping (1-based)', () => {
-  // The actual mapping happens inside an inline mapRow closure in main(); we
-  // test the same one-liner here to lock the contract: parent.order is the
-  // 0-based IMS TASK_ORDER, and we add 1 to land on CAP's 1-based stepOrder.
-  // The migrator preserves the `0` fallback for orphan steps (no parent link)
-  // so they show up as "broken" rather than colliding with stepOrder=1.
-  const stepOrderFor = (parent) => parent?.order != null ? parent.order + 1 : 0;
+describe('Fix A: step parent → orphan-skip + STEPORDER mapping (1-based)', () => {
+  // The migrator's Steps mapRow closure is in main() and looks like:
+  //
+  //   const parent = stepParentMap.get(row.ID);
+  //   const tutorialUuid = parent ? uuidMap.tutorials.get(parent.parentId) : null;
+  //   if (!tutorialUuid) { orphanStepCount++; return null; }
+  //   return { ..., STEPORDER: parent.order != null ? parent.order + 1 : 1, ... };
+  //
+  // We mirror that one-liner here. The contract has TWO halves:
+  //
+  //   1. If there's no resolvable tutorial parent, return null. migrateEntity()
+  //      filters null results before INSERT, so orphans are dropped on the
+  //      floor. This is the 2026-06-21 fix that prevents the 5-orphan
+  //      @assert.unique.tutorialStep deploy block from recurring (5 rows
+  //      with tutorial_ID=NULL + STEPORDER=0 collide under HANA's NULL=NULL
+  //      unique semantics).
+  //
+  //   2. For non-orphans, shift 0-based IMS TASK_ORDER → 1-based CAP stepOrder
+  //      (parent.order + 1). The null-fallback is now 1 (still 1-based), not
+  //      0 — there's no longer a "broken sentinel" path because the row
+  //      doesn't exist anymore.
+  function mapStepRow({ stepParentMap, uuidMap }, rowId) {
+    const parent = stepParentMap.get(rowId);
+    const tutorialUuid = parent ? uuidMap.tutorials.get(parent.parentId) : null;
+    if (!tutorialUuid) return null;
+    return {
+      TUTORIAL_ID: tutorialUuid,
+      STEPORDER: parent.order != null ? parent.order + 1 : 1,
+    };
+  }
 
-  it('shifts 0-based IMS TASK_ORDER to 1-based CAP stepOrder', () => {
-    expect(stepOrderFor({ order: 0 })).toBe(1);
-    expect(stepOrderFor({ order: 4 })).toBe(5);
-    expect(stepOrderFor({ order: 99 })).toBe(100);
+  const fixtures = {
+    uuidMap: { tutorials: new Map([[10, 'tut-uuid-10']]) },
+  };
+
+  it('shifts 0-based IMS TASK_ORDER to 1-based CAP stepOrder for resolvable parents', () => {
+    const ctx = { ...fixtures, stepParentMap: new Map([
+      [100, { parentId: 10, order: 0 }],
+      [101, { parentId: 10, order: 4 }],
+      [102, { parentId: 10, order: 99 }],
+    ])};
+    expect(mapStepRow(ctx, 100).STEPORDER).toBe(1);
+    expect(mapStepRow(ctx, 101).STEPORDER).toBe(5);
+    expect(mapStepRow(ctx, 102).STEPORDER).toBe(100);
   });
 
-  it('returns 0 (orphan sentinel) when parent is missing', () => {
-    expect(stepOrderFor(undefined)).toBe(0);
-    expect(stepOrderFor(null)).toBe(0);
+  it('returns null (skip) when there is no parent link at all', () => {
+    const ctx = { ...fixtures, stepParentMap: new Map() };
+    expect(mapStepRow(ctx, 999)).toBe(null);
   });
 
-  it('returns 0 when parent exists but order is null', () => {
-    expect(stepOrderFor({ order: null })).toBe(0);
-    expect(stepOrderFor({ order: undefined })).toBe(0);
+  it('returns null (skip) when parent points to an unknown tutorial', () => {
+    // parent exists but parentId 9999 has no entry in uuidMap.tutorials
+    const ctx = { ...fixtures, stepParentMap: new Map([
+      [100, { parentId: 9999, order: 0 }],
+    ])};
+    expect(mapStepRow(ctx, 100)).toBe(null);
+  });
+
+  it('returns STEPORDER=1 (not 0) when parent exists but order is null', () => {
+    // Parent link is resolvable so the row survives; the 1-based fallback
+    // keeps it in the same key space as the publish-side writes.
+    const ctx = { ...fixtures, stepParentMap: new Map([
+      [100, { parentId: 10, order: null }],
+      [101, { parentId: 10, order: undefined }],
+    ])};
+    expect(mapStepRow(ctx, 100).STEPORDER).toBe(1);
+    expect(mapStepRow(ctx, 101).STEPORDER).toBe(1);
   });
 });
 
