@@ -78,6 +78,32 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
+      # Cache node_modules across runs. setup-node@v4's `cache: npm` above caches
+      # the ~/.npm tarball download cache, but still runs `npm install` (~30-90s
+      # including native-binding compile for better-sqlite3, hdb, etc.). This
+      # cache skips the install entirely on a hit.
+      #
+      # Three lockfiles drive the cache key — root, hugo-apps, and display-app —
+      # because mta.yaml's before-all runs `npm install` against all three.
+      # admin-shell / analytics-explorer / approuter are NOT installed in this
+      # workflow (they're in .deploy/mta.yaml's approuter module, used by other
+      # build paths — out of scope here).
+      #
+      # Key includes runner.os + Node version so a runner image swap or Node
+      # bump auto-invalidates (native bindings would otherwise be ABI-mismatched).
+      # restore-keys fallback catches the case where one lockfile changed and
+      # we want most of the cache anyway.
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            hugo-apps/node_modules
+            app/display-app/node_modules
+          key: node-modules-${{ runner.os }}-node${{ env.NODE_VERSION }}-${{ hashFiles('package-lock.json', 'hugo-apps/package-lock.json', 'app/display-app/package-lock.json') }}
+          restore-keys: |
+            node-modules-${{ runner.os }}-node${{ env.NODE_VERSION }}-
+
       - name: Install MTA Build Tool
         run: npm install -g mbt@${{ env.MBT_VERSION }}
 
