@@ -1,0 +1,40 @@
+name: CDS build staging check
+
+on:
+  pull_request:
+    paths:
+      # Schema sources — the trigger condition. Adding a column, changing
+      # a type, or adding an annotation regenerates CSN snapshot +
+      # hdbmigrationtable, which MUST be staged in the same PR.
+      - 'db/**/*.cds'
+      - 'srv/**/*.cds'
+      - 'srv-qa/**/*.cds'
+      # Annotation-only files that ALSO regenerate build output.
+      - 'db/audit-logging.cds'
+      - 'db/change-tracking.cds'
+      - 'db/persistence.cds'
+      # The check itself, so a regression in it surfaces on PRs that touch it.
+      - 'scripts/check-cds-build-staging.ts'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      # `cds build --production` invokes the cds-compiler which lives in
+      # @sap/cds-dk (devDependency). `npm ci` ensures it's available.
+      # ~30s cold; ~5s with cache.
+      - run: npm ci
+      - name: Run CDS build staging check
+        # Approach: regenerate the artifacts via `cds build --production`,
+        # then `git diff --exit-code` against the staged outputs. Any
+        # discrepancy means the PR author forgot to stage the artifacts
+        # that accompany the schema change. The script provides a
+        # copy-pasteable fix in its failure message.
+        run: npx tsx scripts/check-cds-build-staging.ts
