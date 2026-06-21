@@ -1,0 +1,25 @@
+# Terraform state — NEVER commit. Contains secrets and IDs.
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Local Terraform working directory — provider binaries, etc. Re-created by `terraform init`.
+.terraform/
+.terraform.lock.hcl
+
+# Local variable values — copy from terraform.tfvars.example.
+terraform.tfvars
+*.auto.tfvars
+
+# Plan output files.
+*.tfplan
+
+# Crash logs.
+crash.log
+crash.*.log
+
+# Override files (sometimes used for local experiments).
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
