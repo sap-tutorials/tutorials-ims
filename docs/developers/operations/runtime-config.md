@@ -101,9 +101,126 @@ Repeated for emphasis: the rate-limiter is rebuilt every ~5s within the resolver
 
 The **Runtime Settings** nav-group lives below the **System** group in the admin-shell side-nav. Default expanded. Contains 7 tiles (5 from Phase 3 + Knowledge Graph from #463 + Secrets from #464 — the latter two relocate from System into Runtime Settings).
 
-## Phase 2-C Secrets encrypted-values append-point
+## Phase 2-C: Encrypted secrets via BTP Credential Store (#465 / PR #_____)
 
-This doc is structured so each domain section is independently appendable. When Phase 2-C (#465) ships, append a "Secrets — encrypted values" section here.
+Extends the metadata-only `Secrets` entity from #482 with value-storage in
+**BTP Credential Store**. HANA stays metadata-only; values live in credstore
+keyed by `Secrets.key`.
+
+### What's where
+
+| Layer | Stores | Access |
+| --- | --- | --- |
+| HANA `Secrets` entity | metadata (key, description, kind, rotationOwner, rotationDocsUrl, expiresAt, lastRotatedAt) | OData V4 via `/admin/Secrets` |
+| BTP Credential Store | values (plaintext, JWE-on-wire) | Via `srv/lib/credstore.js` chokepoint |
+
+The HANA `Secrets.key` value doubles as the credstore alias. 1:1 join.
+
+### 4 admin-tile operations
+
+All bound to a row in `/admin/Secrets` (open the row's edit dialog, expand
+the "Secret Value" Panel):
+
+- **Show Value** — fetches the current value, displays for ~30 seconds in
+  an editable-false Input, auto-hides at the server-supplied `expiresAt`.
+  Each Show emits a `SecretValueRead` audit event tagged with the admin's
+  identity. **Do not click during screenshare**; do not screenshot.
+- **Set Value** — opens a sub-dialog with a single masked-Password input.
+  On Save, writes the value to credstore and stamps `lastRotatedAt`.
+- **Rotate** — for self-gen kinds (`salt`, `content-api-key`), mints a
+  fresh 32-byte hex value (64 chars) and writes it. For vendor-side kinds
+  (`github-pat`, `service-key`, `smtp-credential`, `other`), opens a
+  guidance dialog with the row's `rotationDocsUrl` link + a "Paste new
+  value" button bridging to the Set Value flow.
+- **Clear Value** — deletes the credstore entry. Metadata row stays.
+
+### Reveal-window behavior
+
+- Default 30 seconds (`REVEAL_WINDOW_MS = 30_000` in
+  `srv/admin-service.js`).
+- Server-supplied `expiresAt` in the response; client trusts that
+  timestamp.
+- Client tick (recursive `setTimeout`) updates the visible countdown each
+  second; auto-hides at expiry.
+- Re-clicking Show before the first reveal expires cancels the prior
+  timer and starts fresh (race guard via `_revealTickerId`).
+
+### Audit logs
+
+- **CRUD on Secrets metadata** (description, expiresAt, etc.) — captured
+  automatically by `@PersonalData.EntitySemantics: 'Other'` annotation on
+  the entity (added in `db/audit-logging.cds` as part of #465). `'Other'`
+  is the documented value for entities needing audit logging that aren't
+  DataSubjects.
+- **Custom OData operations** (setSecretValue, rotateSecretValue,
+  clearSecretValue, revealSecretValue) — custom OData V4 functions /
+  actions do NOT fire the CRUD interceptors. Each handler emits an
+  explicit `audit.log('SecurityEvent', { data: { action, ... } })` call
+  via the `auditEvent(action, data)` helper in `srv/admin-service.js`.
+  `'SecurityEvent'` is the only registered event name in the
+  `@cap-js/audit-logging` plugin's CDS service definition; the action
+  discriminator (`SecretValueRead` / `SecretValueRotated` /
+  `SecretValueRotateAttempted` / `SecretValueCleared` / `SecretValueWritten`)
+  lives in `data.action`.
+
+### Where to find audit events
+
+Per the `@cap-js/audit-logging` plugin's output target (configured in
+`package.json` `cds.requires['audit-log']`). Typically goes to the
+SAP Audit Log service on BTP; in DEV-only contexts may write to
+console. Query by `event: 'SecurityEvent'` AND
+`data.action: 'SecretValueRead'` (or the other action values).
+Check plugin docs for the canonical place to query in your env.
+
+### Vendor-side rotation runbook
+
+For `github-pat` / `service-key` / `smtp-credential` / `other`:
+
+1. Click **Rotate** in the admin tile → dialog opens.
+2. Click the **Rotation docs** link → vendor's UI (GitHub, BTP cockpit,
+   etc.).
+3. Mint a new credential at the vendor's UI.
+4. Click **Paste new value** in the dialog → sub-dialog with masked
+   input.
+5. Paste the new value, click Save.
+6. The tile stamps `lastRotatedAt`. The old credential should be
+   revoked at the vendor side independently — Phase 2-C doesn't
+   automate revocation.
+
+### Local hybrid dev
+
+Bind the credstore service for local development:
+
+```bash
+cds bind --to tutorials-credstore --kind credentials
+```
+
+This populates `VCAP_SERVICES` for `npm run dev:hybrid` so the credstore
+lib resolves a real binding instead of throwing.
+
+### Security trade-offs of Show Value (documented)
+
+The Show Value flow exposes plaintext to the admin's browser for ~30s.
+Three known leak paths, all bounded:
+
+1. **Browser DevTools network panel** logs the response body. Mitigated
+   by `Cache-Control: no-store, no-cache, must-revalidate, private` on
+   the response, plus audit-log entry on every reveal.
+2. **Screenshare** exposes the revealed field. MessageStrip displays
+   "Value visible for Ns. Logged in audit trail." to give admins pause.
+   Auto-hide bounds the exposure.
+3. **Browser autosave / password-manager extensions** could capture
+   revealed values. Out-of-band (admin's laptop hygiene).
+
+CAP audit-logging records every reveal with the calling admin's
+identity. Trade-off accepted for usability: admins need to copy
+current values (e.g. to test a token) without rotating.
+
+### Rotation owner notification (out of scope of #465)
+
+The daily expiry-check cron (#482) still fires expiry warnings via
+`/admin/Secrets` `secretWarnings()` function. Phase 2-C does NOT add
+programmatic vendor-rotation. That's a Phase 3+ follow-up if needed.
 
 ## Cross-links
 
