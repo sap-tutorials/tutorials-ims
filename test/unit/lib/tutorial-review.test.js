@@ -41,9 +41,9 @@ describe('tutorial-review module', () => {
     await expect(reviewTutorial('does-not-exist')).rejects.toThrow(/not found/i);
   });
 
-  it('snoozeTutorial sets lastNotificationDate days into the future', async () => {
+  it('snoozeTutorial sets notificationDate days into the future', async () => {
     const result = await snoozeTutorial('t-rev', 7);
-    const delta = Date.parse(result.lastNotificationDate) - Date.now();
+    const delta = Date.parse(result.notificationDate) - Date.now();
     expect(delta).toBeGreaterThan(6.5 * 86400000);
     expect(delta).toBeLessThan(7.5 * 86400000);
   });

@@ -86,4 +86,19 @@ export default cds.service.impl(async function () {
 
     return generateOsVariants({ sourceMarkdown, sourceOS, targetOSes, context: context ?? {}, userId });
   });
+
+  this.on('isSlugAvailable', async (req) => {
+    const { slug } = req.data;
+    if (!slug || typeof slug !== 'string') {
+      return req.reject(400, 'slug must be a non-empty string');
+    }
+    const { Tutorials } = cds.entities('com.sap.developers.ims');
+    // LOWER()-based case-insensitive match. Mirrors the publish-side upsert
+    // shape in srv/lib/content-publish-session.js so this UX check uses the
+    // same key space as @assert.unique.slug's enforcement at write time.
+    const row = await SELECT.one.from(Tutorials)
+      .columns('ID')
+      .where`LOWER(slug) = ${slug.toLowerCase()}`;
+    return !row;  // true = available
+  });
 });

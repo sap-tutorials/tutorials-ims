@@ -114,6 +114,7 @@ export default defineConfig({
         ]},
         { text: 'Architecture', items: [
           { text: 'Authentication and authorization', link: '/developers/architecture/authentication' },
+          { text: 'AuthorService',                    link: '/developers/architecture/author-service' },
           { text: 'Build pipeline',                   link: '/developers/architecture/build' },
           { text: 'CAP backend',                      link: '/developers/architecture/cap-backend' },
           { text: 'Frontend apps',                    link: '/developers/architecture/frontend-apps' },

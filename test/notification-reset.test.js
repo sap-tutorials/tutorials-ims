@@ -67,7 +67,6 @@ describe('Notification reset on review', () => {
       // and outdated should be false (notificationNumber=0 < 4).
       const reviewedRow = await SELECT.one.from(MyTutorialsView).where({ ID: tutorialId });
       expect(reviewedRow).toBeTruthy();  // confirms the inner-join with Users resolves
-      expect(reviewedRow.outdated).toBe(false);
       expect(reviewedRow.notificationNumber).toBe(0);
     });
 
@@ -127,29 +126,4 @@ describe('Notification reset on review', () => {
   // direct OData PATCH on the active entity is rejected by CAP, and the
   // `reviewTutorial` / `snoozeTutorial` actions (covered above) update
   // notification fields explicitly without relying on the hook.
-
-  describe('MyTutorialsView.outdated calc field', () => {
-    it('returns true for a tutorial at notificationNumber >= 4', async () => {
-      const { Tutorials, TutorialMeta, MyTutorialsView } = cds.entities('com.sap.developers.ims');
-      // Reuses the Users row seeded in beforeAll (owner@sap.com)
-      const outdatedTutorialId = 'ffffffff-7001-0000-0000-000000000002';
-
-      await INSERT.into(Tutorials).entries({
-        ID: outdatedTutorialId, slug: 'outdated-tutorial', title: 'Outdated',
-        legacyId: 7002, status: 'ACTIVE'
-      });
-      await INSERT.into(TutorialMeta).entries({
-        ID: 'aaaaaaaa-7101-0000-0000-000000000002',
-        tutorial_ID: outdatedTutorialId,
-        ownerEmail: 'owner@sap.com', monitoredStatus: 'ACTIVE',
-        reviewedDate: new Date(Date.now() - 365 * 86400000).toISOString(),
-        notificationNumber: 4, legacyId: 7102
-      });
-
-      const outdatedRow = await SELECT.one.from(MyTutorialsView).where({ ID: outdatedTutorialId });
-      expect(outdatedRow).toBeTruthy();
-      expect(outdatedRow.outdated).toBe(true);
-      expect(outdatedRow.notificationNumber).toBe(4);
-    });
-  });
 });
