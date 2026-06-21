@@ -41,12 +41,16 @@ describe('#385 PR-2 — post-migration data shape', () => {
   });
 
   it('End-to-end chain query (PR-1 pattern) returns a non-null email', async () => {
-    const row = await SELECT.one.from(TutorialMeta)
+    // PR-1 documented that some repository_owner_id FKs may be null in source.
+    // Filter to a TutorialMeta row whose entire chain resolves AND assert the
+    // email is non-null — guards against the failure mode where the chain
+    // syntactically returns a row but the JOIN produces { email: null }.
+    const rows = await SELECT.from(TutorialMeta)
       .columns('repository.repositoryOwner.email as email')
       .where('repository_ID IS NOT NULL');
-    expect(row).toBeTruthy();
-    // PR-1 documented that some repository_owner_id FKs may be null in source —
-    // assert that at least one chain through the table resolves to a real email.
+    const withEmail = rows.find(r => r && r.email);
+    expect(withEmail).toBeTruthy();
+    expect(withEmail.email).toMatch(/@/);
   });
 
   it('At least 1 Tags row has a non-null semaphoreId', async () => {
