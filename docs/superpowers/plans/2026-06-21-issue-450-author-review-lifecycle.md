@@ -179,7 +179,7 @@ This is a pure schema-additive change. No behavior yet. Must land before Tasks 3
   lastNotificationDate      : Timestamp;
   ```
 
-  (Match the surrounding 25-space indent — read the file first to confirm the exact whitespace; the existing block uses 2-space outer indent + column-aligned padding.)
+  (Match the surrounding indentation — read the file first to confirm the exact whitespace; the existing block uses 2-space outer indent with name-padding so the `:` column-aligns across fields.)
 
   Replace with:
 
