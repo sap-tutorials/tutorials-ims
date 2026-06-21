@@ -237,9 +237,9 @@ Cleanup in `afterAll` (existing `test/hybrid/_guard.js` enforces `ALLOW_HYBRID_W
 
 Acceptance criteria:
 
-- `db/src/com.sap.developers.ims.TutorialRepositories.hdbmigrationtable` contains `migration=3` with the DROP+ADD pair, manually-resolved (no `>>>>>` markers remaining).
+- `db/src/com.sap.developers.ims.TutorialRepositories.hdbmigrationtable` contains `migration=2` with the DROP+ADD pair, manually-resolved (no `>>>>>` markers remaining).
 - `db/src/com.sap.developers.ims.TutorialMeta.hdbmigrationtable` contains `migration=4` with `ADD (repository_ID NVARCHAR(36))`.
-- `db/src/com.sap.developers.ims.Tags.hdbmigrationtable` contains a new migration block with `ADD (semaphoreId NVARCHAR(255), isActualTag BOOLEAN DEFAULT FALSE, isInterestItem BOOLEAN DEFAULT FALSE)`.
+- `db/src/com.sap.developers.ims.Tags.hdbmigrationtable` contains `migration=4` with `ADD (semaphoreId NVARCHAR(255), isActualTag BOOLEAN DEFAULT FALSE, isInterestItem BOOLEAN DEFAULT FALSE)`.
 - `node --check srv/lib/contributor-notifications.js` passes.
 - All in-scope unit + hybrid tests green.
 
