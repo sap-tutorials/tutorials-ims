@@ -771,6 +771,8 @@ async function main() {
     completionPaths: new Map(),
     prizes: new Map(),
     accomplishments: new Map(),
+    contributors: new Map(),       // NEW (#385 PR-2)
+    repositories: new Map(),       // NEW (#385 PR-2)
   };
 
   const allTasks = await query(source, `SELECT "ID", "TASK_TYPE" FROM ${S}."IMS_TASK"`);
@@ -819,6 +821,21 @@ async function main() {
     const accs = await query(source, `SELECT "ID" FROM ${S}."IMS_ACCOMPLISHMENT"`);
     accs.forEach(a => uuidMap.accomplishments.set(a.ID, deriveUuid('accomplishment', a.ID)));
     console.log(`  Accomplishments: ${uuidMap.accomplishments.size}`);
+  } catch (e) { /* optional table */ }
+
+  // #385 PR-2: build contributor + repository uuidMaps. Both source tables are
+  // optional from the migrator's POV — if missing (e.g. older IMS instance),
+  // migration of dependent entities just skips silently.
+  try {
+    const contributors = await query(source, `SELECT "ID" FROM ${S}."IMS_TUTORIAL_AUTHOR"`);
+    contributors.forEach(c => uuidMap.contributors.set(c.ID, deriveUuid('tutorialcontributor', c.ID)));
+    console.log(`  TutorialContributors: ${uuidMap.contributors.size}`);
+  } catch (e) { /* optional table */ }
+
+  try {
+    const repositories = await query(source, `SELECT "ID" FROM ${S}."IMS_TUTORIAL_REPOSITORY"`);
+    repositories.forEach(r => uuidMap.repositories.set(r.ID, deriveUuid('tutorialrepository', r.ID)));
+    console.log(`  TutorialRepositories: ${uuidMap.repositories.size}`);
   } catch (e) { /* optional table */ }
 
   // Step parent mapping: step ID → { parentId (tutorial), order }
@@ -1073,6 +1090,34 @@ async function main() {
     } else if (audit.count > 0) {
       console.warn(`  ⚠️  ${audit.count} users have NULL SAP_ID. Wrote legacyIds to ${audit.path}.`);
     }
+  }
+
+  // 7c. TutorialContributors — global flat author table (#385 PR-2).
+  // Source IMS_TUTORIAL_AUTHOR has no tutorial_id FK; rows are the global pool
+  // of named authors. CAP TutorialContributors.tutorial is nullable so migrated
+  // rows land with tutorial_ID = NULL. PR-1 reshape made
+  // TutorialRepositories.repositoryOwner an Association to this entity, so
+  // these rows MUST exist before tutorialrepositories migrates.
+  if (uuidMap.contributors.size > 0) {
+    results.push(await migrateEntity(source, target, T, {
+      name: 'tutorialcontributors',
+      sourceQuery: `SELECT "ID", "NAME", "EMAIL" FROM ${S}."IMS_TUTORIAL_AUTHOR"`,
+      targetTable: 'COM_SAP_DEVELOPERS_IMS_TUTORIALCONTRIBUTORS',
+      mapRow: (row) => mapTutorialContributorRow(row),
+    }));
+  }
+
+  // 7d. TutorialRepositories — repo-group reference table (#385 PR-2).
+  // PR-1 reshape; source IMS_TUTORIAL_REPOSITORY =
+  // (id, repository_name UNIQUE, repository_owner_id).
+  // repositoryOwner_ID resolves through uuidMap.contributors built above.
+  if (uuidMap.repositories.size > 0) {
+    results.push(await migrateEntity(source, target, T, {
+      name: 'tutorialrepositories',
+      sourceQuery: `SELECT "ID", "REPOSITORY_NAME", "REPOSITORY_OWNER_ID" FROM ${S}."IMS_TUTORIAL_REPOSITORY"`,
+      targetTable: 'COM_SAP_DEVELOPERS_IMS_TUTORIALREPOSITORIES',
+      mapRow: (row) => mapTutorialRepositoryRow(row, uuidMap.contributors),
+    }));
   }
 
   // 7b. UserMetaData — INTENTIONALLY NOT MIGRATED.
