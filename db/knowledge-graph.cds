@@ -80,10 +80,35 @@ annotate ConceptEdges with @assert.unique.conceptEdge : [source, target, predica
 /**
  * Single-row projection metadata. Updated at the end of every graphRebuild.
  * Read by the query-layer cache to mint a graphVersion cache key.
+ *
+ * Predicate-count fields (#526): populated by graphRebuild() from the
+ * in-memory tally maintained during projection. Cheap signal for
+ * "did the last rebuild emit roughly the predicate cardinalities I expected?"
+ * — useful for catching extractor regressions before the next deploy.
+ * Source-of-truth for what predicates ARE projected is in
+ * srv/lib/kg-projection.js; the 9 fields below mirror that list 1:1.
  */
 entity GraphMetadata : cuid, managed {
-  graphVersion  : String(40);    // ULID minted on rebuild
-  lastRebuiltAt : Timestamp;
-  tripleCount   : Integer;
-  durationMs    : Integer;
+  graphVersion          : String(40);    // ULID minted on rebuild
+  lastRebuiltAt         : Timestamp;
+  tripleCount           : Integer;
+  durationMs            : Integer;
+  // High-level counts (the consolidator already knows these from its
+  // pre-projection passes; populating them here saves a round-trip for
+  // observability dashboards).
+  conceptCount          : Integer;       // ACTIVE Concepts at rebuild time
+  edgeCount             : Integer;       // ACTIVE ConceptEdges at rebuild time
+  // Per-predicate triple counts (9 predicates emitted by kg-projection.js).
+  // All Integer; default 0 (the consolidator writes them on every rebuild,
+  // but defaulting to 0 means a partial rebuild that crashed mid-projection
+  // leaves "0" rather than NULL — easier to graph).
+  teachesCount          : Integer default 0;
+  requiresCount         : Integer default 0;
+  relatedToCount        : Integer default 0;
+  extendsCount          : Integer default 0;
+  partOfCount           : Integer default 0;
+  taggedWithCount       : Integer default 0;
+  aboutProductCount     : Integer default 0;
+  inCategoryCount       : Integer default 0;
+  coCompletedWithCount  : Integer default 0;
 }

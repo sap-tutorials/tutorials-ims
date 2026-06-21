@@ -23,8 +23,10 @@
 //     3. CLEAR GRAPH <graphIri>.
 //     4. for-await each batch from projectTriples({ db }), wraps in
 //        INSERT DATA { GRAPH <graphIri> { ... } }, dispatches.
-//     5. Upserts the singleton GraphMetadata row.
-//     6. Returns { graphVersion, tripleCount, durationMs, predicateCounts }.
+//     5. Upserts the singleton GraphMetadata row (including the
+//        per-predicate counts + conceptCount/edgeCount — #526).
+//     6. Returns { graphVersion, tripleCount, durationMs, conceptCount,
+//        edgeCount, predicateCounts }.
 //
 //   Errors during the iteration propagate. We do NOT roll back partial
 //   inserts — the next call's CLEAR GRAPH will wipe any partial state.
@@ -66,6 +68,47 @@ export const GRAPH_METADATA_SINGLETON_ID = '00000000-0000-0000-0000-000000000001
 // line. The grammar guarantees subject + space + predicate as the first
 // two tokens; the predicate is the second <...> token.
 const PREDICATE_RE = /^\s*\S+\s+(<[^>]+>)\s+/;
+
+// Predicate IRIs emitted by kg-projection.js, mapped to the GraphMetadata
+// per-predicate-count column names. Keys are the EXACT N-Triples form
+// (`<...>` brackets included) that tallyPredicates() captures. Added with
+// #526 — the persisted breakdown saves a SPARQL round-trip when verifying
+// "did this rebuild emit roughly the right cardinality per predicate?".
+// Source-of-truth for this list is kg-projection.js; keep in sync.
+const PREDICATE_TO_COUNT_FIELD = Object.freeze({
+  '<https://developers.sap.com/kg/teaches>'         : 'teachesCount',
+  '<https://developers.sap.com/kg/requires>'        : 'requiresCount',
+  '<https://developers.sap.com/kg/relatedTo>'       : 'relatedToCount',
+  '<https://developers.sap.com/kg/extends>'         : 'extendsCount',
+  '<https://developers.sap.com/kg/partOf>'          : 'partOfCount',
+  '<https://developers.sap.com/kg/taggedWith>'      : 'taggedWithCount',
+  '<https://developers.sap.com/kg/aboutProduct>'    : 'aboutProductCount',
+  '<https://developers.sap.com/kg/inCategory>'      : 'inCategoryCount',
+  '<https://developers.sap.com/kg/coCompletedWith>' : 'coCompletedWithCount',
+});
+
+/**
+ * Project predicateCounts (Map keyed by full N-Triples IRI form) to the
+ * named GraphMetadata column fields. Unknown predicates (e.g.
+ * `<…/kg/slug>` literal-triple metadata that the projection ALSO emits
+ * for each concept) are silently ignored — they don't have dedicated
+ * count columns and aren't part of the user-facing predicate ontology.
+ *
+ * Returns a plain object with one key per known predicate, defaulting to
+ * 0 if the predicate didn't appear in this projection (e.g. a fresh
+ * environment with no co-completion data emits 0 `coCompletedWithCount`).
+ */
+export function projectPredicateCounts(predicateCounts) {
+  const out = {};
+  for (const field of Object.values(PREDICATE_TO_COUNT_FIELD)) {
+    out[field] = 0;
+  }
+  for (const [pred, n] of predicateCounts.entries()) {
+    const field = PREDICATE_TO_COUNT_FIELD[pred];
+    if (field) out[field] = n;
+  }
+  return out;
+}
 
 /** Tally a batch of N-Triples lines into a per-predicate Map. */
 function tallyPredicates(batch, counters) {
@@ -122,6 +165,8 @@ async function upsertGraphMetadata(db, fields) {
  *   graphVersion: string,
  *   tripleCount: number,
  *   durationMs: number,
+ *   conceptCount: number,
+ *   edgeCount: number,
  *   predicateCounts: Record<string, number>
  * }>}
  */
@@ -163,18 +208,47 @@ export async function graphRebuild({ db, log, graphIri, batchSize } = {}) {
 
   const durationMs = Date.now() - startedAt;
   const predicateCountsObj = Object.fromEntries(predicateCounts);
+  const predicateCountFields = projectPredicateCounts(predicateCounts);
 
-  // Step 4: persist metadata.
+  // High-level entity counts for GraphMetadata (#526). Cheap COUNT(*)
+  // queries — these only matter for the singleton metadata write and
+  // would otherwise cost a SPARQL round-trip per predicate when an
+  // observer wants to verify cardinality. Wrap in try/catch so a count
+  // failure doesn't poison the rebuild — the persisted graph is the
+  // source of truth, these are observability metadata.
+  let conceptCount = 0;
+  let edgeCount = 0;
+  try {
+    const [{ N }] = await db.run(
+      `SELECT COUNT(*) AS N FROM "COM_SAP_DEVELOPERS_IMS_CONCEPTS" WHERE STATUS = 'ACTIVE'`
+    );
+    conceptCount = Number(N) || 0;
+  } catch (err) {
+    logger.warn({ err: err?.message }, 'graphRebuild: conceptCount probe failed; defaulting to 0');
+  }
+  try {
+    const [{ N }] = await db.run(
+      `SELECT COUNT(*) AS N FROM "COM_SAP_DEVELOPERS_IMS_CONCEPTEDGES" WHERE STATUS = 'ACTIVE'`
+    );
+    edgeCount = Number(N) || 0;
+  } catch (err) {
+    logger.warn({ err: err?.message }, 'graphRebuild: edgeCount probe failed; defaulting to 0');
+  }
+
+  // Step 5: persist metadata.
   await upsertGraphMetadata(db, {
     ID: GRAPH_METADATA_SINGLETON_ID,
     graphVersion,
     lastRebuiltAt: new Date(),
     tripleCount,
     durationMs,
+    conceptCount,
+    edgeCount,
+    ...predicateCountFields,
   });
 
   logger.info(
-    { graphVersion, tripleCount, durationMs, predicateCounts: predicateCountsObj },
+    { graphVersion, tripleCount, durationMs, conceptCount, edgeCount, predicateCounts: predicateCountsObj },
     'graphRebuild complete'
   );
 
@@ -182,6 +256,8 @@ export async function graphRebuild({ db, log, graphIri, batchSize } = {}) {
     graphVersion,
     tripleCount,
     durationMs,
+    conceptCount,
+    edgeCount,
     predicateCounts: predicateCountsObj,
   };
 }
@@ -191,4 +267,5 @@ export const __TESTING__ = {
   buildInsertData,
   tallyPredicates,
   PREDICATE_RE,
+  PREDICATE_TO_COUNT_FIELD,
 };
