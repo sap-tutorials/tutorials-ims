@@ -151,6 +151,26 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.TUTORIALS_GITHUB_TOKEN || github.token }}
           CAP_BASE_URL: ${{ steps.cap-url.outputs.url }}
 
+      # Cache the Hugo binary download (~25MB tarball) across runs. mta.yaml's
+      # before-all curls hugo_extended_${HUGO_VERSION}_linux-amd64.tar.gz from
+      # GitHub on every run; that takes 5-10s warm, longer on a slow runner.
+      # The cache key is keyed off mta.yaml's hash so a Hugo version bump in
+      # mta.yaml line 32 automatically invalidates the cache (no manual sync
+      # required between the two files).
+      #
+      # mta.yaml's before-all now has a `[ -x /tmp/hugo ] || (curl ... && tar ...)`
+      # guard, so a cache hit short-circuits the download entirely. Local
+      # `mbt build` invocations fall through to the curl path (and re-extract
+      # to /tmp/hugo) since no cache restores them — small recurring cost on
+      # the dev side, big CI win.
+      - name: Cache Hugo binary
+        uses: actions/cache@v4
+        with:
+          path: /tmp/hugo
+          key: hugo-binary-${{ hashFiles('mta.yaml') }}-linux-amd64
+          restore-keys: |
+            hugo-binary-
+
       - name: Build MTA archive
         run: mbt build -e deploy/${{ steps.env.outputs.target }}.mtaext
         env:
