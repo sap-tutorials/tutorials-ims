@@ -8,15 +8,23 @@
 //     Task 4.4 — for the rebuild contract and audit-log fields.
 //   - docs/superpowers/specs/2026-06-17-knowledge-graph-design.md — for
 //     the graph IRI and predicate ontology.
+//   - #525 (2026-06-21) — added the bootstrap INSERT before CLEAR. HANA
+//     Cloud SPARQL does NOT support CREATE/DROP GRAPH DDL, and CLEAR on
+//     a never-created graph fails with "Object does not exist". The
+//     bootstrap INSERT auto-creates the graph (only `INSERT DATA` has
+//     that implicit-create behaviour on HANA Cloud); the immediate
+//     CLEAR then wipes the bootstrap triple and any prior state.
 //
 // CONTRACT:
 //   graphRebuild({ db, log, graphIri? })
 //     1. Mints a fresh graphVersion (UUID).
-//     2. CLEAR GRAPH <graphIri>.
-//     3. for-await each batch from projectTriples({ db }), wraps in
+//     2. Bootstrap INSERT to ensure the named graph exists (idempotent
+//        — wiped by the CLEAR in step 3 either way).
+//     3. CLEAR GRAPH <graphIri>.
+//     4. for-await each batch from projectTriples({ db }), wraps in
 //        INSERT DATA { GRAPH <graphIri> { ... } }, dispatches.
-//     4. Upserts the singleton GraphMetadata row.
-//     5. Returns { graphVersion, tripleCount, durationMs, predicateCounts }.
+//     5. Upserts the singleton GraphMetadata row.
+//     6. Returns { graphVersion, tripleCount, durationMs, predicateCounts }.
 //
 //   Errors during the iteration propagate. We do NOT roll back partial
 //   inserts — the next call's CLEAR GRAPH will wipe any partial state.
@@ -33,6 +41,21 @@ import { projectTriples } from './kg-projection.js';
 
 // Production graph IRI — must match the spec and the query-layer reader.
 export const DEFAULT_GRAPH_IRI = 'https://developers.sap.com/kg/tutorials';
+
+// Bootstrap triple used to ensure the named graph exists before CLEAR.
+// All three positions use the same "ghost" IRI so the triple is obviously
+// not real data to anyone debugging. The triple is wiped by the immediate
+// CLEAR that follows, so consumers never see it.
+//
+// Why we need this: HANA Cloud KGE doesn't support `CREATE GRAPH` /
+// `CREATE SILENT GRAPH` DDL ("Unsupported functionality: DDL not allowed"
+// — confirmed 2026-06-21 against the live runtime). Only `INSERT DATA`
+// has implicit-create semantics for named graphs. So we auto-create via
+// INSERT, then CLEAR. After the first successful run the graph
+// "registration" persists across CLEARs (verified in the same probe);
+// subsequent rebuilds make the bootstrap a no-op-equivalent (it inserts
+// + immediately clears a single triple, ~750ms cold / ~250ms warm).
+export const BOOTSTRAP_TRIPLE = '<urn:bootstrap:ignore> <urn:bootstrap:ignore> <urn:bootstrap:ignore> .';
 
 // Fixed singleton ID for the GraphMetadata row. Chosen as a stable UUID
 // so the upsert always targets the same row across rebuilds. Hardcoded
@@ -114,10 +137,20 @@ export async function graphRebuild({ db, log, graphIri, batchSize } = {}) {
   const startedAt = Date.now();
   logger.info({ graphVersion, graphIri: targetGraph }, 'graphRebuild start');
 
-  // Step 1: wipe the named graph.
+  // Step 1: bootstrap. Ensures the named graph exists so the CLEAR in
+  // step 2 doesn't fail "Object does not exist or is inaccessible" on
+  // first-ever invocation against a fresh HDI container. See
+  // BOOTSTRAP_TRIPLE comment for the HANA-specific rationale.
+  //
+  // The bootstrap triple is immediately wiped by CLEAR; readers never
+  // see it. On warm graphs this is ~250ms; on a cold graph it's the
+  // one-shot ~750ms cost of registering the named graph with KGE.
+  await sparqlExec(db, `INSERT DATA { GRAPH <${targetGraph}> { ${BOOTSTRAP_TRIPLE} } }`);
+
+  // Step 2: wipe the named graph (now guaranteed to exist).
   await sparqlExec(db, `CLEAR GRAPH <${targetGraph}>`);
 
-  // Step 2: stream batches from the projection generator.
+  // Step 3: stream batches from the projection generator.
   let tripleCount = 0;
   const predicateCounts = new Map();
   for await (const batch of projectTriples({ db, batchSize })) {
@@ -131,7 +164,7 @@ export async function graphRebuild({ db, log, graphIri, batchSize } = {}) {
   const durationMs = Date.now() - startedAt;
   const predicateCountsObj = Object.fromEntries(predicateCounts);
 
-  // Step 3: persist metadata.
+  // Step 4: persist metadata.
   await upsertGraphMetadata(db, {
     ID: GRAPH_METADATA_SINGLETON_ID,
     graphVersion,
