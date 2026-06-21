@@ -23,11 +23,21 @@
  * sources). Doesn't catch "schema didn't change but artifacts did" — that's
  * not a real failure mode here.
  *
+ * Noise-filter for db/last-dev/csn.json's top-level `"namespace"` field
+ * (added 2026-06-21 after PR #524 itself failed on this same flake and
+ * was merged with the failure ignored). The compiler picks ONE of the
+ * source-file namespaces to stamp at the root of csn.json — but the
+ * picker depends on file-walk order (which alphabetises `_content-shape.cds`
+ * first on linux, last on windows or vice-versa). The rest of csn.json
+ * fully qualifies every entity under `"definitions"`, so the top-level
+ * `"namespace"` line is informational only. We strip it from both sides
+ * of the diff before comparing.
+ *
  * Runs in CI via .github/workflows/cds-build-staging-check.yml.
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const RELEVANT_PATHS = [
@@ -57,6 +67,53 @@ function gitDiffNames(paths: string[]): string[] {
   return r.stdout.split(/\r?\n/).filter(Boolean);
 }
 
+/**
+ * For `db/last-dev/csn.json` only: parse the HEAD blob and the working
+ * tree, strip the top-level `"namespace"` key on both sides, and report
+ * whether the rest of the file is identical.
+ *
+ * Returns true when the file IS substantively unchanged (i.e. the only
+ * diff is the noise-prone namespace header). Returns false otherwise.
+ *
+ * Why this is necessary: cds-compiler's choice of "the" top-level
+ * namespace for a multi-file model depends on file-walk order. Linux
+ * + alphabetical may pick `com.sap.developers.ims.shared` (from
+ * `db/_content-shape.cds`), Windows may pick `com.sap.developers.ims`
+ * (from `db/schema.cds`). Either way the per-entity definitions inside
+ * `"definitions"` are fully qualified — the top-level namespace is
+ * informational only, not consumed by any deploy step.
+ */
+function isCsnNamespaceOnlyDrift(filePath: string): boolean {
+  const headBlob = run('git', ['show', `HEAD:${filePath}`]);
+  if (headBlob.status !== 0) return false;  // can't read HEAD — fall through to real-diff path
+  let headJson: any, workingJson: any;
+  try {
+    headJson = JSON.parse(headBlob.stdout);
+    workingJson = JSON.parse(readFileSync(filePath, 'utf-8'));
+  } catch {
+    return false;  // either side unparseable — let the standard diff fire
+  }
+  return isNamespaceOnlyDrift(headJson, workingJson);
+}
+
+/**
+ * Pure helper for the namespace-only-drift comparison. Exported (via
+ * __TESTING__) so the unit tests don't need to mock git/fs. Returns
+ * true if the two CSN objects are equal after stripping the top-level
+ * `"namespace"` key on both sides.
+ */
+export function isNamespaceOnlyDrift(headCsn: any, workingCsn: any): boolean {
+  if (!headCsn || !workingCsn || typeof headCsn !== 'object' || typeof workingCsn !== 'object') {
+    return false;
+  }
+  // Shallow-copy so we don't mutate caller objects.
+  const a = { ...headCsn };
+  const b = { ...workingCsn };
+  delete a.namespace;
+  delete b.namespace;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 function main(): void {
   process.stdout.write('Running `cds build --production` to regenerate CDS artifacts...\n');
 
@@ -78,7 +135,27 @@ function main(): void {
   }
   // Suppress the build's verbose stdout from CI logs — only surface if it failed.
 
-  const dirtyFiles = gitDiffNames(RELEVANT_PATHS);
+  const rawDirty = gitDiffNames(RELEVANT_PATHS);
+
+  // Filter out csn.json drift that's only a top-level-namespace header
+  // difference. The rest of the file (every per-entity definition) is
+  // fully namespace-qualified and unchanged — see isCsnNamespaceOnlyDrift
+  // comment for the failure-mode rationale.
+  const ignoredFiles: string[] = [];
+  const dirtyFiles = rawDirty.filter(f => {
+    if (f === 'db/last-dev/csn.json' && isCsnNamespaceOnlyDrift(f)) {
+      ignoredFiles.push(f);
+      return false;
+    }
+    return true;
+  });
+  for (const f of ignoredFiles) {
+    process.stdout.write(
+      `[cds-build-staging] note: ignoring ${f} drift — only the top-level ` +
+      `"namespace" field differs (compiler-pick varies by host file-walk order; ` +
+      `per-entity definitions are unchanged).\n`
+    );
+  }
 
   if (dirtyFiles.length === 0) {
     process.stdout.write('[cds-build-staging] OK — `cds build` produces no diff. Staged artifacts match the current schema.\n');
@@ -114,4 +191,12 @@ function main(): void {
   process.exit(1);
 }
 
-main();
+// Gate the entry point so `import { isNamespaceOnlyDrift } from '../scripts/check-cds-build-staging'`
+// from tests doesn't trigger the cds build. Vitest-via-tsx loads the
+// file as an ES module; `import.meta.url` matches `process.argv[1]`
+// only when invoked directly via `npx tsx scripts/check-cds-build-staging.ts`.
+import { pathToFileURL } from 'node:url';
+const invokedDirectly = process.argv[1]
+  ? import.meta.url === pathToFileURL(process.argv[1]).href
+  : false;
+if (invokedDirectly) main();
