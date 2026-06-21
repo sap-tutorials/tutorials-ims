@@ -36,6 +36,8 @@ import { scheduleRebuild, checkFeatureFlag as checkRebuildTriggerFeatureFlag } f
 import { handleUIEvent, checkFeatureFlag as checkUIEventFeatureFlag } from './lib/ui-event-handler.js';
 import { backfillUserProfile } from './lib/resolve-db-user.js';
 import { registerMigrationModeHandler } from './lib/migration-mode.js';
+import multer from 'multer';
+import { uploadAndUpsertAdvocatePhoto } from './lib/advocate-photo-upsert.js';
 
 // Late-bound POST /chat/stream handler. Registered in 'bootstrap' (before CAP
 // mounts ChatService at /chat, which would otherwise swallow /chat/stream as
@@ -269,6 +271,101 @@ cds.on('bootstrap', (app) => {
     _exportContextMw, _exportAuthMw,
     express.json({ limit: '100kb' }),
     (req, res, next) => Promise.resolve(exportSelectQueryHandler(req, res)).catch(next));
+
+  // Advocate photo upload — multipart/form-data REST endpoint (issue #417).
+  // Replaces the base64-over-OData $batch shape with a canonical binary
+  // upload, removing the ~25% base64 inflation and freeing the codebase
+  // from the @cds.server.body_parser.limit: '8mb' annotation on
+  // AdminService that the old path required.
+  //
+  // Reserved BEFORE CAP mounts AdminService at /admin (the OData adapter
+  // would otherwise intercept /admin/advocates/* and return 'Invalid
+  // resource path'). Same pattern as /admin/analytics/export above.
+  //
+  // Auth: cds.middlewares.auth() gates on the user being authenticated
+  // (XSUAA in prod, mocked admin in tests). AdminService.@requires('Admin')
+  // would normally enforce the scope at the service layer, but for a raw
+  // express route we have to gate explicitly. Done inside the handler:
+  // req.user.is('Admin') must be true. cds.middlewares.context() populates
+  // req.user with the authenticated identity.
+  //
+  // Multer config: 5 MB hard limit on the file size matches the existing
+  // client-side cap in AdvocatePhotoController.js. memoryStorage keeps the
+  // bytes in a Buffer for direct hand-off to the sharp pipeline — no
+  // /tmp/ files. Single 'photo' field.
+  const _photoContextMw = cds.middlewares?.context?.() || ((req, res, next) => next());
+  const _photoAuthMw    = cds.middlewares?.auth?.()    || ((req, res, next) => next());
+  const _photoUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 },
+  });
+  app.post('/admin/advocates/:slug/photo',
+    _photoContextMw, _photoAuthMw,
+    (req, res, next) => {
+      // Surface multer errors (oversize, bad MIME, missing field) as 400
+      // with the error.code visible so the client can distinguish 'too
+      // large' from 'no field'. Without this wrapper multer's MulterError
+      // bubbles to the global error handler and the response shape varies
+      // between CAP versions.
+      _photoUpload.single('photo')(req, res, (err) => {
+        if (err) {
+          // multer.MulterError has .code (e.g. 'LIMIT_FILE_SIZE'); plain
+          // Error doesn't. Both get message text echoed in the response.
+          const code = err.code || 'UPLOAD_ERROR';
+          return res.status(400).json({ error: code, message: err.message });
+        }
+        next();
+      });
+    },
+    async (req, res) => {
+      try {
+        // Admin scope check. AdminService.@requires('Admin') applies to
+        // OData ops served at /admin/<entity>; this REST route bypasses
+        // CAP's service-layer gate so we enforce here.
+        if (!req.user?.is?.('Admin')) {
+          return res.status(403).json({ error: 'FORBIDDEN', message: 'Admin scope required' });
+        }
+        if (!req.file) {
+          return res.status(400).json({ error: 'MISSING_FIELD', message: "missing 'photo' field in multipart body" });
+        }
+        const { slug } = req.params;
+        if (!slug || typeof slug !== 'string') {
+          return res.status(400).json({ error: 'BAD_SLUG', message: 'slug path param required' });
+        }
+        // Resolve slug → advocate ID. Service-level uniqueness is enforced
+        // elsewhere (see scripts/dedupe checks); we just need the FK to
+        // upsert against.
+        const db = await cds.connect.to('db');
+        const { Advocates } = cds.entities('com.sap.developers.ims');
+        const adv = await db.run(
+          SELECT.one.from(Advocates).columns('ID', 'slug').where({ slug: slug.toLowerCase() }),
+        );
+        if (!adv) {
+          return res.status(404).json({ error: 'NOT_FOUND', message: `no advocate with slug '${slug}'` });
+        }
+        const result = await uploadAndUpsertAdvocatePhoto({
+          advocateID: adv.ID,
+          slug: adv.slug,
+          buffer: req.file.buffer,
+          mimeType: req.file.mimetype,
+        });
+        return res.json({
+          slug: adv.slug,
+          sizeBytes: result.sizeBytes,
+          sha256: result.sha256,
+          photoUrl: result.photoUrl,
+        });
+      } catch (e) {
+        // processUpload throws on invalid MIME, oversize (extra defense
+        // beyond multer's limit), animated GIFs, unparseable bytes.
+        const code = /unsupported MIME/i.test(e.message) ? 'BAD_MIME'
+                   : /too large/i.test(e.message) ? 'TOO_LARGE'
+                   : /animated/i.test(e.message) ? 'ANIMATED'
+                   : /invalid image/i.test(e.message) ? 'BAD_IMAGE'
+                   : 'UPLOAD_FAILED';
+        return res.status(400).json({ error: code, message: e.message });
+      }
+    });
 
   // AnalyticsService at /admin/analytics (after this reservation), so calling next()
   // passes the request through to the AnalyticsService OData layer registered by CDS.

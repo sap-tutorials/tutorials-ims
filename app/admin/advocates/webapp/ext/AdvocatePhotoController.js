@@ -24,21 +24,6 @@ sap.ui.define([
 ], function (MessageToast, MessageBox) {
   "use strict";
 
-  // Read a File as a base64-encoded string (without the data: prefix).
-  function readFileAsBase64(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(new Error("Failed to read file"));
-      reader.onload = () => {
-        const result = reader.result || "";
-        // FileReader's data URL: "data:image/jpeg;base64,..." — strip prefix.
-        const idx = result.indexOf(",");
-        resolve(idx >= 0 ? result.slice(idx + 1) : result);
-      };
-      reader.readAsDataURL(file);
-    });
-  }
-
   // Resolve the binding context regardless of how FE V4 invoked the handler.
   function resolveCtx(arg) {
     if (!arg) return null;
@@ -59,14 +44,29 @@ sap.ui.define([
   return {
 
     /**
-     * Header action: prompt for a file, base64-encode, call the
-     * Advocates.uploadPhoto bound action. The server runs sharp →
-     * 256/64 WebP, upserts AdvocatePhotos, flips hasPhoto.
+     * Header action: prompt for a file, POST it via multipart/form-data
+     * to POST /admin/advocates/:slug/photo (issue #417). The server runs
+     * the sharp pipeline (256/64 WebP), upserts AdvocatePhotos, flips
+     * Advocates.hasPhoto + photoUrl + photoUpdatedAt.
+     *
+     * Replaces the prior base64-over-OData $batch shape that required
+     * an inflated body_parser limit on AdminService. Cleaner contract,
+     * ~25% smaller request body, no FileReader round-trip.
      */
     onUploadPhotoPress: function (arg) {
       const ctx = resolveCtx(arg);
       if (!ctx) {
         MessageToast.show("Open an advocate first");
+        return;
+      }
+      // We need the slug from the binding context to construct the URL.
+      // ctx.getObject() returns the current row's properties; slug is
+      // committed at draft-NEW (per advocate-handlers.js) so it's
+      // always present here.
+      const advocate = ctx.getObject ? ctx.getObject() : null;
+      const slug = advocate && advocate.slug;
+      if (!slug) {
+        MessageBox.error("Cannot upload: advocate has no slug yet. Save the draft first.");
         return;
       }
       // Build a transient <input type=file> so we don't need a fragment.
@@ -84,19 +84,33 @@ sap.ui.define([
             return;
           }
           MessageToast.show("Uploading…");
-          const photoBase64 = await readFileAsBase64(file);
-          const model = ctx.getModel();
-          // OData v4 bound-action invocation. The action lives on
-          // AdminService.Advocates as 'AdminService.uploadPhoto'.
-          const op = model.bindContext(
-            "AdminService.uploadPhoto(...)",
-            ctx
+          // FormData carries the file as a binary part — no base64 inflation,
+          // no FileReader. The approuter forwards XSUAA session cookies
+          // to /admin/* so credentials: 'same-origin' is sufficient.
+          const formData = new FormData();
+          formData.append("photo", file);
+          const resp = await fetch(
+            "/admin/advocates/" + encodeURIComponent(slug) + "/photo",
+            {
+              method: "POST",
+              body: formData,
+              credentials: "same-origin",
+              headers: { "Accept": "application/json" }
+            }
           );
-          op.setParameter("photoBase64", photoBase64);
-          op.setParameter("mimeType", file.type || "image/jpeg");
-          await op.execute();
+          if (!resp.ok) {
+            // Server returns { error: CODE, message: human-readable }.
+            // Parse defensively — a 502 from approuter would be HTML.
+            let detail = "HTTP " + resp.status;
+            try {
+              const body = await resp.json();
+              if (body && body.message) detail = body.message;
+            } catch (e) { /* ignore — keep HTTP code */ }
+            throw new Error(detail);
+          }
           MessageToast.show("Photo uploaded.");
-          // Refresh the OP so hasPhoto / photoUpdatedAt re-resolve.
+          // Refresh the OP so hasPhoto / photoUpdatedAt / photoUrl
+          // re-resolve and the header avatar re-renders.
           if (ctx.refresh) ctx.refresh();
         } catch (err) {
           MessageBox.error("Upload failed: " + (err && err.message ? err.message : err));
@@ -109,7 +123,9 @@ sap.ui.define([
 
     /**
      * Header action: confirm + call Advocates.clearPhoto. Drops the
-     * AdvocatePhotos row, flips hasPhoto=false.
+     * AdvocatePhotos row, flips hasPhoto=false. The action has no body
+     * payload so the OData binding shape is fine for it — no need to
+     * migrate to a REST endpoint.
      */
     onClearPhotoPress: function (arg) {
       const ctx = resolveCtx(arg);
