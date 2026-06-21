@@ -832,6 +832,10 @@ async function main() {
     console.log(`  TutorialContributors: ${uuidMap.contributors.size}`);
   } catch (e) { /* optional table */ }
 
+  // Note: uuidMap.repositories is built for symmetry with other entities and to
+  // give future migration code an FK-resolution hook. The current mapRow path
+  // re-derives the same UUID via deriveUuid() so the map isn't strictly required
+  // today, but populating it costs only one extra SELECT.
   try {
     const repositories = await query(source, `SELECT "ID" FROM ${S}."IMS_TUTORIAL_REPOSITORY"`);
     repositories.forEach(r => uuidMap.repositories.set(r.ID, deriveUuid('tutorialrepository', r.ID)));
@@ -1092,6 +1096,14 @@ async function main() {
     }
   }
 
+  // 7b. UserMetaData — INTENTIONALLY NOT MIGRATED.
+  // The CAP UserMetaData entity (db/schema.cds:127-131) models a per-user
+  // key/value store. The IMS source IMS_USER_META_DATA is a visitor-ID
+  // tracking table with completely different columns (USER_ID, VISITOR_ID,
+  // CREATED_BY, UPDATED_BY, CREATED_AT, UPDATED_AT — no ID/KEY/VALUE).
+  // The CDS entity is a v2 design IMS never used; nothing to migrate.
+  // See issue #330. Caught during 2026-06-15 cutover-rehearsal dry-run.
+
   // 7c. TutorialContributors — global flat author table (#385 PR-2).
   // Source IMS_TUTORIAL_AUTHOR has no tutorial_id FK; rows are the global pool
   // of named authors. CAP TutorialContributors.tutorial is nullable so migrated
@@ -1119,14 +1131,6 @@ async function main() {
       mapRow: (row) => mapTutorialRepositoryRow(row, uuidMap.contributors),
     }));
   }
-
-  // 7b. UserMetaData — INTENTIONALLY NOT MIGRATED.
-  // The CAP UserMetaData entity (db/schema.cds:127-131) models a per-user
-  // key/value store. The IMS source IMS_USER_META_DATA is a visitor-ID
-  // tracking table with completely different columns (USER_ID, VISITOR_ID,
-  // CREATED_BY, UPDATED_BY, CREATED_AT, UPDATED_AT — no ID/KEY/VALUE).
-  // The CDS entity is a v2 design IMS never used; nothing to migrate.
-  // See issue #330. Caught during 2026-06-15 cutover-rehearsal dry-run.
 
   // 8. Task Records — paginated by ID range to bypass the OOM that otherwise
   // hits at IMS prod scale (~10M+ rows). Issue #332.
