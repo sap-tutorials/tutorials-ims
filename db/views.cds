@@ -156,6 +156,8 @@ view MyTutorialsView as
         m.monitoredStatus,
         m.notificationNumber,
         m.lastNotificationDate,
+        m.firstNotificationDate,
+        m.notificationNumber >= 4 as outdated : Boolean,
         m.owner       as ownerName,
         m.ownerEmail  as ownerEmail,
         u.uuid        as ownerUserId
