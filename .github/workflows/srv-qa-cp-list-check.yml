@@ -1,0 +1,38 @@
+name: srv-qa cp-list check
+
+on:
+  pull_request:
+    # Run when anything that could change the QA bootable surface area
+    # changes — either a new srv/lib/ file (added/removed import), or a
+    # change to the cp list in .deploy/mta.yaml. The path filter keeps
+    # the action queue free for unrelated PRs.
+    #
+    # Background: today PR #520 added `srv/lib/catalog-mission-hierarchy.js`
+    # without extending the cp list, and tutorials-srv-qa crashed on
+    # boot with ERR_MODULE_NOT_FOUND. The check itself
+    # (scripts/check-srv-qa-cp-list.ts) already existed but only ran at
+    # deploy time via `postbuild:apps` — too late to act as a PR review
+    # signal. This workflow shifts that signal LEFT to PR time.
+    paths:
+      - 'srv/**'
+      - 'srv-qa/**'
+      - '.deploy/mta.yaml'
+      - 'scripts/check-srv-qa-cp-list.ts'
+
+jobs:
+  check-cp-list:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      # `npm ci` is overkill (we only need tsx + the source tree). The
+      # check has no runtime SAP deps and doesn't touch gen/. But ci
+      # is the safe choice; ~30s on a warm cache.
+      - run: npm ci
+      - name: Run srv-qa cp-list check
+        run: npx tsx scripts/check-srv-qa-cp-list.ts
