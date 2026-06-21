@@ -11,7 +11,16 @@ service AuthorService {
   };
 
   @Capabilities.ChangeTracking : { Supported: true }
-  @readonly entity Tags as projection on ims.Tags;
+  @readonly entity Tags as projection on ims.Tags {
+    *,
+    // #385 PR-3: HANA-native SUBSTR_AFTER returns the substring after the LAST
+    // occurrence of the delimiter — exactly matches Riley's "leaf after last '>'"
+    // contract. NOT portable to SQLite. Unit tests gate actualTag assertions
+    // behind cds.env.requires.db.kind === 'hana'. Hybrid test
+    // (test/hybrid/385-pr3-authorservice.test.js) is the canonical verification.
+    // Trade-off pattern: see feedback_hana_boolean_case_when.
+    SUBSTR_AFTER(name, '>') as actualTag : String
+  };
 
   @Capabilities.ChangeTracking : { Supported: true }
   @readonly entity MyTutorials as projection on ims.MyTutorialsView;

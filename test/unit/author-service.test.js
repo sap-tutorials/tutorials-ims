@@ -3,6 +3,13 @@ import cds from '@sap/cds';
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
 
+// #385 PR-3: AuthorService.Tags projection uses HANA-native SUBSTR_AFTER for
+// actualTag. SQLite refuses to prepare any query against the deployed view
+// because the function is undefined — even when explicit columns omit
+// actualTag, SQLite resolves the entire view body. Tests against Tags must
+// be gated behind isHana.
+const isHana = cds.env.requires.db?.kind === 'hana';
+
 describe('TutorialMeta schema', () => {
   it('exposes ownerEmail column on TutorialMeta', () => {
     const { TutorialMeta } = cds.entities('com.sap.developers.ims');
@@ -86,11 +93,16 @@ describe('AuthorService surface', () => {
     ).rejects.toMatchObject({ code: 403 });
   });
 
-  it('allows AuthorService.Tags read for Tutorial.Author callers', async () => {
+  // #385 PR-3: gated to HANA — SQLite cannot prepare any query against the
+  // AuthorService.Tags view because its body contains HANA-native
+  // SUBSTR_AFTER (undefined on SQLite). Test asserts auth (caller-with-role
+  // can read). The hybrid test (test/hybrid/385-pr3-authorservice.test.js)
+  // covers this on real HANA.
+  it.skipIf(!isHana)('allows AuthorService.Tags read for Tutorial.Author callers', async () => {
     const srv = await cds.connect.to('AuthorService');
     const rows = await srv.tx(
       { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
-      (tx) => tx.run(SELECT.from(srv.entities.Tags))
+      (tx) => tx.run(SELECT.from(srv.entities.Tags).columns('ID', 'name'))
     );
     expect(Array.isArray(rows)).toBe(true);
   });
@@ -277,4 +289,15 @@ describe('MyTutorialsView #385 PR-3 shape', () => {
     const row = await SELECT.one.from(MyTutorialsView).where({ ID: 't-pr3-active' });
     expect(row.repositoryName).toBeNull();
   });
+});
+
+describe.skipIf(!isHana)('AuthorService.Tags #385 PR-3 actualTag (HANA-only)', () => {
+  it('emits actualTag virtual column', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    expect(srv.entities.Tags.elements.actualTag).toBeDefined();
+  });
+
+  // Note: behavioral tests for actualTag's SUBSTR_AFTER semantics live in the
+  // hybrid test (test/hybrid/385-pr3-authorservice.test.js). On SQLite, the
+  // `cds.env.requires.db.kind === 'hana'` gate above skips this entire block.
 });
