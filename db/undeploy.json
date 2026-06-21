@@ -2,6 +2,7 @@
     "src/gen/**/*.hdbtrigger",
     "src/gen/AdminService.DashboardMonitoredRecords.hdbview",
     "src/gen/AdminService.TutorialMeta_drafts.hdbtable",
+    "src/gen/AnalyticsService.TutorialRepositories.hdbview",
     "src/gen/DisplayService.DashboardMonitoredRecords.hdbview",
     "src/gen/DisplayService.Prizes.hdbview",
     "src/gen/SAP_CHANGELOG_RESTORE_BACKLINKS.hdbprocedure",
