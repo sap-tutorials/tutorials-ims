@@ -160,7 +160,36 @@ Spec picks (a).
 
 **`test/unit/lib/tutorial-review.test.js`** — extend the existing `reviewTutorial` test to assert all 4 fields cleared, including `firstNotificationAt`. Bootstrap is `cds.deploy(dbDir).to('sqlite::memory:')` per the existing file (lighter than `cds.test('serve')` — pure-lib test doesn't need the HTTP stack).
 
-**`test/notification-reset.test.js`** — extend the OData `reviewTutorial` integration test. The reviewer flagged that querying `/author/MyTutorials` from this test would require seeding a `Users` row + authenticating as `Tutorial.Author`, which the existing test doesn't do. Workaround: query the underlying view directly via the CDS db connection (consistent with the existing test's `SELECT.one.from(TutorialMeta).where({ ID: metaId })` pattern at line ~55):
+**`test/notification-reset.test.js`** — extend the OData `reviewTutorial` integration test. The reviewer flagged that querying `/author/MyTutorials` from this test would require seeding a `Users` row + authenticating as `Tutorial.Author`, which the existing test doesn't do. Workaround: query the underlying view directly via the CDS db connection (consistent with the existing test's `SELECT.one.from(TutorialMeta).where({ ID: metaId })` pattern at line ~55).
+
+**Fixture amendment required (BLOCKING — verified 2026-06-21 iter-2 review).** The existing `beforeAll` at lines 10-35 seeds:
+
+```javascript
+await INSERT.into(TutorialMeta).entries({
+  ID: metaId, tutorial_ID: tutorialId,
+  reviewedDate: staleDate, owner: 'owner@sap.com',  // ← 'owner' is the DISPLAY-NAME column
+  monitoredStatus: 'ACTIVE', notificationNumber: 2,
+  lastNotificationDate: lastNotified, legacyId: 7101
+});
+```
+
+It populates the `owner` (String(255) display name) column with an email-shaped string, but leaves `ownerEmail` NULL and never inserts a matching `Users` row. `MyTutorialsView` does `inner join ims.Users as u on u.email = m.ownerEmail` — without an `ownerEmail` value AND a matching Users row, the reviewed tutorial is filtered out of the view entirely. The assertion `SELECT.one.from(MyTutorialsView).where({ ID: tutorialId })` would return `undefined` and `reviewedRow.outdated` would crash.
+
+The fixture must be amended to:
+
+1. Add `ownerEmail: 'owner@sap.com'` to the existing TutorialMeta insert (line ~22).
+2. Insert a matching Users row in the `beforeAll`:
+
+```javascript
+const { Users } = cds.entities('com.sap.developers.ims');
+await INSERT.into(Users).entries({
+  ID: 'cccccccc-7301-0000-0000-000000000001',
+  uuid: 'user-uuid-7301',
+  email: 'owner@sap.com',
+});
+```
+
+Then the assertion code:
 
 ```javascript
 const { MyTutorialsView } = cds.entities('com.sap.developers.ims');
@@ -170,7 +199,8 @@ const reviewedRow = await SELECT.one.from(MyTutorialsView).where({ ID: tutorialI
 expect(reviewedRow.outdated).toBe(false);
 expect(reviewedRow.notificationNumber).toBe(0);
 
-// Seed a separate tutorial at notification level 4; confirm outdated=true
+// Seed a separate tutorial at notification level 4; confirm outdated=true.
+// Reuses the same Users row (matches on ownerEmail = 'owner@sap.com').
 const outdatedTutorialId = 'ffffffff-7001-0000-0000-000000000002';
 await INSERT.into(Tutorials).entries({
   ID: outdatedTutorialId, slug: 'outdated-tutorial', title: 'Outdated',
@@ -183,15 +213,11 @@ await INSERT.into(TutorialMeta).entries({
   reviewedDate: new Date(Date.now() - 365 * 86400000).toISOString(),
   notificationNumber: 4, legacyId: 7102,
 });
-// Also seed a Users row so the inner-join in MyTutorialsView resolves
-await INSERT.into(Users).entries({
-  ID: '...', uuid: 'user-uuid-2', email: 'owner@sap.com',
-});
 const outdatedRow = await SELECT.one.from(MyTutorialsView).where({ ID: outdatedTutorialId });
 expect(outdatedRow.outdated).toBe(true);
 ```
 
-The view's inner-join on `Users.email = TutorialMeta.ownerEmail` means the seed needs a matching Users row, but this is a DB-level concern, not an auth scope concern. Use strict `.toBe(true)` / `.toBe(false)` (not truthy) — CAP normalizes SQLite's `0/1` to JS booleans only for declared `Boolean`-typed view columns.
+Use strict `.toBe(true)` / `.toBe(false)` (not truthy) — CAP normalizes SQLite's `0/1` to JS booleans only for declared `Boolean`-typed view columns.
 
 **`test/lib/contributor-notifications.test.js`** (extends existing — does NOT create parallel file): the file already has 2 tests covering `computeStaleNotifications(180)`. Update them and add 4 more for the new behaviors:
 
@@ -234,7 +260,7 @@ Bootstrap pattern: the existing file uses `cds.test('serve', '--project', '.', '
 - [ ] `srv/admin-service.js:356` `before('UPDATE', 'TutorialMeta')` hook also clears `firstNotificationAt` when `reviewedDate` is touched
 - [ ] Existing `test/unit/lib/tutorial-review.test.js` extended with `firstNotificationAt: null` assertion
 - [ ] Existing `test/notification-reset.test.js` extended with `MyTutorialsView.outdated` assertions via direct CDS db query (not OData `/author/MyTutorials`)
-- [ ] Existing `test/lib/contributor-notifications.test.js` updated for new threshold + 4 new tests added
+- [ ] Existing `test/lib/contributor-notifications.test.js` has **6 tests total** (2 updated + 4 new) and all pass
 - [ ] `npm run test` (unit suite) is green
 - [ ] HDI build emits a new `migration=3` block on `db/src/com.sap.developers.ims.TutorialMeta.hdbmigrationtable` with `ALTER TABLE ... ADD (firstNotificationAt TIMESTAMP)` — verify before pushing
 - [ ] HDI deploy succeeds (additive nullable column + view extension; no destructive operations per memory `[feedback_hdi_deploys_can_wipe_data]`)
