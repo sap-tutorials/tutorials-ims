@@ -13,6 +13,8 @@ import { classifyAndPersist } from './lib/category-classifier.js';
 import { makeAltGroupHandler } from './handlers/completion-path-items-altgroup.js';
 import * as advocateHandlers from './handlers/advocate-handlers.js';
 import { classifySeverity, daysUntil } from './jobs/secret-expiry-check.js';
+import { readSecret, writeSecret, deleteSecret } from './lib/credstore.js';
+import { randomBytes } from 'node:crypto';
 
 export default class AdminService extends cds.ApplicationService {
 
@@ -1011,6 +1013,204 @@ export default class AdminService extends cds.ApplicationService {
 
       warnings.sort((a, b) => a.daysRemaining - b.daysRemaining);
       return warnings;
+    });
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Phase 2-C (#465): Secret value operations via BTP Credential Store.
+    // Helpers + 4 handlers (3 actions + 1 function on Secrets).
+    // ──────────────────────────────────────────────────────────────────────
+
+    // ~30 second reveal window. Server-supplied; tile auto-hides on this expiry.
+    const REVEAL_WINDOW_MS = 30_000;
+
+    // Self-generate-able kinds — admin clicks Rotate, server mints + writes.
+    const SELF_GEN_KINDS = new Set(['salt', 'content-api-key']);
+
+    // Load the Secrets row by bound-action ID. All 4 handlers need this.
+    // IMPORTANT 7: defensive guard against missing req.params shape (e.g. if
+    // an action ever ends up wrongly bound to collection rather than instance,
+    // req.params is []).
+    const loadSecretRow = async (req) => {
+      const { Secrets } = cds.entities('com.sap.developers.ims');
+      const id = req.params?.[0]?.ID;
+      if (!id) return req.reject(400, 'Secret ID required (bound to instance, not collection)');
+      const row = await SELECT.one.from(Secrets).where({ ID: id });
+      if (!row) req.reject(404, 'Secret not found');
+      return row;
+    };
+
+    // Stamp lastRotatedAt on the row.
+    const stampRotated = async (id) => {
+      const { Secrets } = cds.entities('com.sap.developers.ims');
+      const ts = new Date();
+      await UPDATE(Secrets).set({ lastRotatedAt: ts }).where({ ID: id });
+      return ts;
+    };
+
+    // BLOCKING 1: audit-log helper. Verified against existing usage at
+    // srv/admin-service.js:1073 (canonical pattern: cds.connect.to('audit-log')
+    // + audit.log('SecurityEvent', { data: { action, ...} })) and the
+    // graceful-degradation pattern at srv/knowledge-graph-service.js:395-410
+    // (warn on bind failure, warn on each write failure — visible monitoring,
+    // not silent swallow).
+    //
+    // 'SecurityEvent' is the ONLY event name registered in the
+    // @cap-js/audit-logging plugin's CDS service definition (alongside
+    // SensitiveDataRead / PersonalDataModified / ConfigurationModified for
+    // other entity-semantics). Custom event names like 'SecretValueRead'
+    // are NOT registered and would silently drop or throw depending on
+    // plugin version. The action discriminator therefore goes into
+    // data.action — every call site stays ergonomic via this helper.
+    //
+    // cds.audit?.log?.(...) does NOT exist — optional-chaining would mean
+    // audit events silently never fire. Use this helper everywhere instead.
+    //
+    // Hoisted bind: a missing audit binding (mis-MTA-config / dropped
+    // binding after redeploy — feedback_cf_set_env_drops_on_redeploy) warns
+    // ONCE at boot, not silently per call. Per-event throws are caught and
+    // warned, NOT propagated — a successful credstore mutation must not
+    // become a 500 to the admin just because audit logging hiccuped.
+    const LOG = cds.log('admin-service');
+    let _auditLog = null;
+    try {
+      _auditLog = await cds.connect.to('audit-log');
+    } catch (err) {
+      LOG.warn(`admin-service: audit-log binding unavailable (${err.message ?? err}); Secrets value ops will not be audited`);
+    }
+    const auditEvent = async (action, data) => {
+      if (!_auditLog) return;
+      try {
+        await _auditLog.log('SecurityEvent', { data: { action, ...data } });
+      } catch (err) {
+        LOG.warn(`admin-service: audit log write failed for ${action} (${err.message ?? err})`);
+      }
+    };
+
+    // IMPORTANT 8: response-header helper using public API. req._.res is CAP
+    // internal and not guaranteed stable across minor versions. Prefer req.req.res
+    // (the Express req has .res back-ref), fall back to req._.res, and silently
+    // no-op if neither resolves. Action's return value carries the actual data
+    // either way; the header is defense-in-depth.
+    const setNoStoreHeaders = (req) => {
+      const res = req.req?.res ?? req._?.res;
+      if (res?.setHeader) {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+        res.setHeader('Pragma', 'no-cache');
+      }
+    };
+
+    // ────────────────────────────────────────────────────────────────────
+    this.on('setSecretValue', 'Secrets', async (req) => {
+      const row = await loadSecretRow(req);
+      const { value } = req.data;
+      if (!value || typeof value !== 'string') {
+        return req.reject(400, 'value (non-empty string) is required');
+      }
+      await writeSecret(row.key, value);
+      // IMPORTANT 2 (quality-review): emit audit event immediately after the
+      // external credstore mutation succeeds. The subsequent stampRotated() is
+      // a HANA UPDATE that may fail / abort — if it does, the credstore has
+      // the new value but the CRUD interceptor never fires (UPDATE didn't
+      // commit). Without this explicit event, a successful write would
+      // produce ZERO audit trail. Order: external mutation → audit → metadata.
+      await auditEvent('SecretValueWritten', {
+        user: req.user?.id,
+        secretKey: row.key,
+      });
+      const lastRotatedAt = await stampRotated(row.ID);
+      // CRUD interceptor on Secrets fires for the UPDATE on lastRotatedAt
+      // → captured by @PersonalData.EntitySemantics: 'Other'; no explicit
+      // audit event needed here.
+      return { written: true, lastRotatedAt };
+    });
+
+    // ────────────────────────────────────────────────────────────────────
+    this.on('rotateSecretValue', 'Secrets', async (req) => {
+      const row = await loadSecretRow(req);
+      const kindNormalized = String(row.kind ?? '').trim().toLowerCase();
+      if (!SELF_GEN_KINDS.has(kindNormalized)) {
+        // Vendor-side: emit audit event (no value mutation occurred but the
+        // user attempted a rotation, worth logging).
+        await auditEvent('SecretValueRotateAttempted', {
+          user: req.user?.id,
+          secretKey: row.key,
+          rotated: false,
+        });
+        return {
+          rotated: false,
+          reason: 'vendor-side',
+          newValue: '',
+          written: false,
+          lastRotatedAt: null,
+          revealExpiresAt: null,
+          rotationDocsUrl: row.rotationDocsUrl ?? '',
+        };
+      }
+      // 32 bytes hex = 64-char string. Strong enough for salt + api-key.
+      const newValue = randomBytes(32).toString('hex');
+      await writeSecret(row.key, newValue);
+      // IMPORTANT 2 (quality-review): see setSecretValue for the same race.
+      // Emit the write event BEFORE stampRotated in case HANA UPDATE fails.
+      // The 'SecretValueRotated' event below is still emitted (richer payload)
+      // but this one guarantees the external mutation appears in the audit
+      // trail even if everything after this line throws.
+      await auditEvent('SecretValueWritten', {
+        user: req.user?.id,
+        secretKey: row.key,
+      });
+      const lastRotatedAt = await stampRotated(row.ID);
+      const revealExpiresAt = new Date(Date.now() + REVEAL_WINDOW_MS);
+      // Custom action emitting plaintext — explicit audit event needed.
+      await auditEvent('SecretValueRotated', {
+        user: req.user?.id,
+        secretKey: row.key,
+        rotated: true,
+      });
+      return {
+        rotated: true,
+        reason: 'self-generated',
+        newValue,
+        written: true,
+        lastRotatedAt,
+        revealExpiresAt,
+        rotationDocsUrl: '',
+      };
+    });
+
+    // ────────────────────────────────────────────────────────────────────
+    this.on('clearSecretValue', 'Secrets', async (req) => {
+      const row = await loadSecretRow(req);
+      await deleteSecret(row.key);
+      // No HANA mutation; explicit audit event needed.
+      await auditEvent('SecretValueCleared', {
+        user: req.user?.id,
+        secretKey: row.key,
+      });
+      return { cleared: true };
+    });
+
+    // ────────────────────────────────────────────────────────────────────
+    this.on('revealSecretValue', 'Secrets', async (req) => {
+      const row = await loadSecretRow(req);
+      const value = await readSecret(row.key);
+      if (value == null) return req.reject(404, 'No value stored for this secret');
+
+      // Defense-in-depth: don't let proxies cache the response, even though
+      // /admin/* is XSUAA-gated. `private` for shared-cache defense.
+      // Best-effort: action's return value carries the data regardless.
+      setNoStoreHeaders(req);
+
+      // Function (read-only OData) — explicit audit event needed.
+      // The value is NOT logged; only the access event.
+      await auditEvent('SecretValueRead', {
+        user: req.user?.id,
+        secretKey: row.key,
+      });
+
+      return {
+        value,
+        expiresAt: new Date(Date.now() + REVEAL_WINDOW_MS),
+      };
     });
 
     await super.init();

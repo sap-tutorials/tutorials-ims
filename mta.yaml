@@ -84,6 +84,7 @@ modules:
       - name: tutorials-mail
       - name: tutorials-audit-log
       - name: tutorials-cloud-logging
+      - name: tutorials-credstore
 
   - name: tutorials-srv-qa
     type: nodejs
@@ -103,6 +104,7 @@ modules:
     requires:
       - name: tutorials-hana-qa
       - name: tutorials-xsuaa
+      - name: tutorials-credstore
 
   - name: tutorials-db-deployer
     type: hdb
@@ -217,3 +219,18 @@ resources:
     type: org.cloudfoundry.user-provided-service
     parameters:
       service-name: tutorials-kg-grantor-qa
+
+  # BTP Credential Store (Phase 2-C / #465). Holds the encrypted VALUES of the
+  # Secrets entity's metadata rows. Default plan + basic auth on the binding;
+  # responses are JWE-encrypted on the wire and decrypted in srv/lib/credstore.js
+  # using the binding's encryption.client_private_key. Per-environment instance
+  # (DEV/QA/PROD each get their own credstore). Provisioning runbook lives in
+  # docs/developers/operations/runtime-config.md (Phase 2-C section).
+  - name: tutorials-credstore
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: credstore
+      service-plan: default
+      service-name: tutorials-credstore
+      config:
+        authentication: basic

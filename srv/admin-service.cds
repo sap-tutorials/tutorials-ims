@@ -321,7 +321,58 @@ service AdminService {
   // Full CRUD over tracked-secret rows. NOT @odata.singleton — this is a list,
   // not a singleton (unlike ChatSettings / KnowledgeGraphSettings).
   @requires: 'Admin'
-  entity Secrets as projection on ims.Secrets;
+  entity Secrets as projection on ims.Secrets actions {
+
+    // Phase 2-C (#465): Set a secret's value in BTP Credential Store.
+    // Overwrites if value already exists. Stamps lastRotatedAt as a
+    // side-effect (admins see immediate feedback in the tile).
+    action setSecretValue(value: String) returns {
+      written : Boolean;
+      lastRotatedAt : Timestamp;
+    };
+
+    // Phase 2-C (#465): Generate a fresh value AND write it. For self-gen
+    // kinds (salt, content-api-key), mints 32 bytes hex via crypto.randomBytes.
+    // For vendor-side kinds (github-pat, service-key, smtp-credential, other),
+    // returns structured guidance instead of throwing — tile renders a
+    // friendly dialog with the rotationDocsUrl link.
+    //
+    // Discriminated by the `rotated` flag:
+    //   rotated=true  → newValue + written + lastRotatedAt + revealExpiresAt populated;
+    //                   rotationDocsUrl is absent/null.
+    //   rotated=false → reason='vendor-side' + rotationDocsUrl populated (echoed from row);
+    //                   newValue + written + revealExpiresAt are absent/null.
+    // Clients must inspect `rotated` first, then read the corresponding subset.
+    // CAP serializes unpopulated nullable fields as absent (not literal null) in JSON.
+    action rotateSecretValue() returns {
+      rotated : Boolean;
+      reason : String;          // 'self-generated' | 'vendor-side'
+      newValue : String;        // populated only when rotated=true
+      written : Boolean;        // populated only when rotated=true
+      lastRotatedAt : Timestamp;
+      revealExpiresAt : Timestamp;
+      rotationDocsUrl : String; // populated when rotated=false (echoed from row)
+    };
+
+    // Phase 2-C (#465): Delete the credstore entry. Keeps the HANA metadata
+    // row. Idempotent — clearing a non-existent value is a no-op.
+    action clearSecretValue() returns {
+      cleared : Boolean;
+    };
+
+    // Phase 2-C (#465): Reveal the current secret value for short-lived
+    // display in the admin tile. Returns plaintext + server-supplied
+    // expiresAt (~30s). Each invocation emits an audit event via
+    // `audit.log('SecurityEvent', { data: { action: 'SecretValueRead', ... } })`
+    // through the `auditEvent()` helper in srv/admin-service.js (custom
+    // OData functions don't fire CRUD interceptors; `'SecurityEvent'` is
+    // the only registered event name in the @cap-js/audit-logging plugin's
+    // CDS service definition — the discriminator lives in `data.action`).
+    function revealSecretValue() returns {
+      value : String;
+      expiresAt : Timestamp;
+    };
+  };
 
   // Severity-classified expiry warnings, used by the admin-shell notifications
   // popover. Read-only function (NOT action) — invokable via GET; no CSRF
