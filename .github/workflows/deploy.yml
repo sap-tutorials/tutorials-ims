@@ -86,13 +86,19 @@ jobs:
       # per-command timeout fires during the QA-channel fetch (the second of
       # two fetches in the build sequence). Mirrors rebuild-content.yml's
       # caching pattern.
+      # Cache key is keyed to the fetcher implementation (scripts/fetch-tutorials.ts
+      # + scripts/parsers/), NOT to deploy.yml. Workflow file edits don't change
+      # what's IN the cache; the fetcher does. Keying on deploy.yml meant every
+      # CI tweak today (PR #481-#495 chain) busted the cache and forced ~4 min
+      # cold metadata prefetches. The restore-keys cascade still catches drift
+      # via the broad 'tutorial-cache-deploy-' prefix.
       - name: Restore tutorial cache
         uses: actions/cache@v4
         with:
           path: .tutorial-cache
-          key: tutorial-cache-deploy-${{ hashFiles('.github/workflows/deploy.yml') }}-${{ github.run_id }}
+          key: tutorial-cache-deploy-${{ hashFiles('scripts/fetch-tutorials.ts', 'scripts/parsers/**') }}-${{ github.run_id }}
           restore-keys: |
-            tutorial-cache-deploy-${{ hashFiles('.github/workflows/deploy.yml') }}-
+            tutorial-cache-deploy-${{ hashFiles('scripts/fetch-tutorials.ts', 'scripts/parsers/**') }}-
             tutorial-cache-deploy-
             tutorial-cache-
 
@@ -105,9 +111,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .tutorial-cache-qa
-          key: tutorial-cache-qa-deploy-${{ hashFiles('.github/workflows/deploy.yml') }}-${{ github.run_id }}
+          key: tutorial-cache-qa-deploy-${{ hashFiles('scripts/fetch-tutorials.ts', 'scripts/parsers/**') }}-${{ github.run_id }}
           restore-keys: |
-            tutorial-cache-qa-deploy-${{ hashFiles('.github/workflows/deploy.yml') }}-
+            tutorial-cache-qa-deploy-${{ hashFiles('scripts/fetch-tutorials.ts', 'scripts/parsers/**') }}-
             tutorial-cache-qa-deploy-
             tutorial-cache-qa-
 
