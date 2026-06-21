@@ -71,4 +71,11 @@ service AuthorService {
   // (see srv/analytics-service.cds). Two surfaces, one shape.
   @readonly entity AnalyticsBranchPerformance as projection on ims.AnalyticsBranchPerformance;
   @readonly entity AnalyticsBranchTopPick     as projection on ims.AnalyticsBranchTopPick;
+
+  // #385 PR-3 — server-side case-insensitive slug uniqueness check.
+  // Sage calls this before creating a new tutorial to surface name conflicts
+  // before submitting the write. The check is intentionally a UX hint, not a
+  // lock: a benign TOCTOU window exists between the check and a subsequent
+  // insert. The write-side @assert.unique.slug constraint catches any race.
+  action isSlugAvailable(slug : String) returns Boolean;
 }

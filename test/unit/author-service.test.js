@@ -301,3 +301,48 @@ describe.skipIf(!isHana)('AuthorService.Tags #385 PR-3 actualTag (HANA-only)', (
   // hybrid test (test/hybrid/385-pr3-authorservice.test.js). On SQLite, the
   // `cds.env.requires.db.kind === 'hana'` gate above skips this entire block.
 });
+
+describe('AuthorService.isSlugAvailable #385 PR-3', () => {
+  it('returns true for a non-existent slug', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const result = await srv.tx(
+      { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.send('isSlugAvailable', { slug: 'definitely-not-real-slug-pr3' })
+    );
+    expect(result).toBe(true);
+  });
+
+  it('returns false for an existing slug (the fixture seeds tut-1)', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const result = await srv.tx(
+      { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.send('isSlugAvailable', { slug: 'tut-1' })
+    );
+    expect(result).toBe(false);
+  });
+
+  it('matches case-insensitively (TUT-1 matches existing tut-1)', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const result = await srv.tx(
+      { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.send('isSlugAvailable', { slug: 'TUT-1' })
+    );
+    expect(result).toBe(false);
+  });
+
+  it('returns 400 when slug is empty or null', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    await expect(
+      srv.tx(
+        { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+        (tx) => tx.send('isSlugAvailable', { slug: '' })
+      )
+    ).rejects.toMatchObject({ code: 400 });
+    await expect(
+      srv.tx(
+        { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+        (tx) => tx.send('isSlugAvailable', { slug: null })
+      )
+    ).rejects.toMatchObject({ code: 400 });
+  });
+});
