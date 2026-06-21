@@ -13,10 +13,11 @@
  *   1. Drop ContentFiles rows where slug starts with group-/mission-.
  *      Each is a duplicate of catalog data sourced from Groups/Missions.
  *   2. Drop Tutorials rows with the same slug shape, plus their dependents
- *      (Steps, TutorialMeta, TutorialContributors, TutorialRepositories,
- *       TutorialTags, TutorialEmbedding, TutorialBodyText,
- *       TutorialFeedback). These are the rows that show up in the Admin UI
- *      Tutorials list with empty Tutorial ID.
+ *      (Steps, TutorialMeta, TutorialContributors, TutorialTags,
+ *       TutorialEmbedding, TutorialBodyText, TutorialFeedback). These are
+ *      the rows that show up in the Admin UI Tutorials list with empty
+ *      Tutorial ID. (TutorialRepositories was removed in #385 PR-1; it's
+ *       now a repo-GROUP entity without a per-tutorial FK.)
  *   3. Print remaining counts so the operator can confirm the prod fix.
  *
  * It is safe to run multiple times.
@@ -163,7 +164,9 @@ async function cleanLocalHugoFiles() {
       'Steps',
       'TutorialMeta',
       'TutorialContributors',
-      'TutorialRepositories',
+      // TutorialRepositories removed (#385 PR-1): the entity is now a repo-GROUP
+      // table without a tutorial_ID FK; deleting it on per-tutorial cleanup is a
+      // category error.
       'TutorialTags',
       'TutorialEmbedding',
     ];

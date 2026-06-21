@@ -40,7 +40,6 @@ entity Tutorials : TaskBase {
   tags                      : Association to many TutorialTags on tags.tutorial = $self;
   meta                      : Composition of many TutorialMeta on meta.tutorial = $self;
   contributors              : Composition of many TutorialContributors on contributors.tutorial = $self;
-  repositories              : Composition of many TutorialRepositories on repositories.tutorial = $self;
   categories                : Composition of many TutorialCategories on categories.tutorial = $self;
 }
 
@@ -206,6 +205,9 @@ entity Tags : cuid, LegacyKeyed {
   label                     : String(255);
   titlePath                 : String(255);
   virtual mdFormat           : String;
+  semaphoreId               : String(255);                // NEW (PR-1 of #385): matches IMS_TAG.semaphore_id; nullable until PR-2 backfills
+  isActualTag               : Boolean default false;      // NEW: matches IMS_TAG.is_actual_tag
+  isInterestItem            : Boolean default false;      // NEW: matches IMS_TAG.is_interest_item
 }
 
 // Master taxonomy for the /browse/ Categories facet (#201). Seeded once
@@ -308,6 +310,7 @@ entity TutorialMeta : cuid, managed, LegacyKeyed {
   notificationNumber        : Integer default 0;
   lastNotificationDate      : Timestamp;
   firstNotificationDate       : Timestamp;
+  repository                  : Association to TutorialRepositories;
 }
 
 entity TutorialContributors : cuid, LegacyKeyed {
@@ -317,11 +320,10 @@ entity TutorialContributors : cuid, LegacyKeyed {
   role                      : String(50);
 }
 
+@assert.unique.name : [name]
 entity TutorialRepositories : cuid, LegacyKeyed {
-  tutorial                  : Association to Tutorials;
-  repoUrl                   : String(1000);
-  branch                    : String(255);
-  owner                     : String(255);
+  name                      : String(255);                          // matches IMS_TUTORIAL_REPOSITORY.repository_name
+  repositoryOwner           : Association to TutorialContributors;  // matches IMS_TUTORIAL_REPOSITORY.repository_owner_id
 }
 
 entity ActiveLearnerRecords : cuid, LegacyKeyed {
