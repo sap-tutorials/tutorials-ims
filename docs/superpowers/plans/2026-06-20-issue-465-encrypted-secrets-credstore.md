@@ -4,13 +4,43 @@
 
 **Goal:** Add encrypted-value storage to the existing `Secrets` HANA entity (metadata-only from #482) via BTP Credential Store. HANA stays metadata-only; values live in credstore keyed by `Secrets.key`. Admin tile gains Set / Rotate / Clear / Reveal operations with a 30-second auto-hide window.
 
-**Architecture:** Single chokepoint at `srv/lib/credstore.js` (globalThis-keyed cache, JWE-decrypt via `jose`, native fetch). 3 actions + 1 function on AdminService `Secrets` projection. Admin tile dialog gains a collapsible "Secret Value" Panel. CAP audit-logging via `@AuditLog.Operation` annotation on `Secrets` + explicit `cds.audit.log()` calls in revealSecretValue / rotateSecretValue handlers (custom OData functions don't fire CRUD interceptors). NO schema migration — HANA `Secrets` entity unchanged.
+**Architecture:** Single chokepoint at `srv/lib/credstore.js` (globalThis-keyed cache, JWE-decrypt via `jose`, native fetch). 3 actions + 1 function on AdminService `Secrets` projection. Admin tile dialog gains a collapsible "Secret Value" Panel. CAP audit-logging via `@AuditLog.Operation` annotation on `Secrets` + explicit `audit.log()` calls via `cds.connect.to('audit-log')` in the value-operation handlers (custom OData functions don't fire CRUD interceptors). NO schema migration — HANA `Secrets` entity unchanged.
 
 **Tech Stack:** SAP CAP Node.js, BTP Credential Store (default plan + JWE), `jose` (new dep), `@sap/xsenv` (already a dep), Vitest (unit-only), UI5 v1.136.
 
 **Spec:** [docs/superpowers/specs/2026-06-20-issue-465-encrypted-secrets-credstore-design.md](../specs/2026-06-20-issue-465-encrypted-secrets-credstore-design.md)
 
 **Branch:** `worktree-issue-465-encrypted-secrets-credstore` (already checked out in worktree).
+
+## Explicit out-of-scope (NICE-TO-HAVE callout, top-of-plan)
+
+This plan delivers **storage + UI** for encrypted secret values. Deliberately deferred:
+
+- **Rotation automation** — programmatic vendor-side rotation (e.g. auto-mint a fresh GitHub PAT via GitHub API) is Phase 3+.
+- **Key-versioning / history** — credstore writes overwrite; old values aren't kept for rollback. If a write goes wrong, fix-forward.
+- **Hybrid ciphertext-in-HANA** — values live ONLY in credstore. No fallback "encrypted blob in HANA" path. If credstore is unavailable, value operations fail loudly.
+- **Multi-namespace** — single `tutorials` namespace per env (DEV / QA / PROD each get their own service instance).
+- **`listSecrets()` from credstore** — HANA `Secrets` row table IS the inventory.
+- **mTLS for credstore binding** — `default` plan + basic auth + JWE-on-wire is sufficient per spec.
+
+## Commit-checkpoint reminders (NICE-TO-HAVE callout)
+
+Every Task below ends with a `git add ... && git commit -m "..."` step. Treat each Task's commit as a checkpoint:
+
+- Run the Task's verification (`node --check`, `npx vitest`, `npx cds compile`, etc.) BEFORE the commit.
+- If verification fails, fix forward — do NOT commit broken state.
+- After a successful commit, the worktree is recoverable to that point even if the next Task breaks.
+
+## Rollback notes (NICE-TO-HAVE callout)
+
+Each Task is independently revertable. If a Task lands but later proves wrong:
+
+- **Tasks 1-3 (deps + binding + audit annotation):** `git revert <task-commit-sha>` is safe; no runtime state created yet.
+- **Task 4 (credstore.js created):** revert is safe; no consumers yet.
+- **Tasks 5-6 (CDS + handlers):** revert pair together; partial revert (e.g. revert handlers but keep CDS) leaves the OData surface broken at boot.
+- **Task 2 mta.yaml edit:** if the bound credstore service instance was already provisioned in CF, `cf delete-service tutorials-credstore` is the cleanup. The mta.yaml revert by itself leaves the instance running but unbound.
+- **Task 9-11 (UI):** safe to revert independently; UI is consumer of backend, not the other way.
+- **End-of-flow:** if PR review demands a full retreat, `git reset --hard origin/main` on the worktree branch wipes all 12 commits cleanly.
 
 ---
 
@@ -46,19 +76,25 @@ Branched from main **AFTER** all 4 prior PRs merged. Verified via inspection:
 | --- | --- |
 | `package.json` | Add `jose ^5.x` dep. |
 | `mta.yaml` | Add `tutorials-credstore` managed-service instance + binding to srv module. |
+| `.deploy/mta.yaml` | Same `tutorials-credstore` resource + binding edits as root `mta.yaml` (CI builds from this file). ALSO add `../../srv/lib/credstore.js` to the srv-qa module's hand-curated cp chain. |
 | `db/audit-logging.cds` | Append `@AuditLog.Operation` annotation on `ims.Secrets` (security-purpose, NOT GDPR-purpose). |
 | `srv/admin-service.cds` | Add 3 actions + 1 function to existing `Secrets` projection. |
-| `srv/admin-service.js` | Add 4 handlers + explicit `cds.audit.log()` calls for revealSecretValue / rotateSecretValue. |
+| `srv/admin-service.js` | Add 4 handlers + explicit `audit.log()` calls (via `cds.connect.to('audit-log')`) for revealSecretValue / rotateSecretValue. |
 | `app/admin/secrets/webapp/view/SecretDialog.fragment.xml` | Add collapsible "Secret Value" Panel below metadata fields. |
 | `app/admin/secrets/webapp/controller/Secrets.controller.js` | Add 5 handlers + `_invokeBoundAction` helper + reveal countdown ticker. |
 | `app/admin/secrets/webapp/i18n/i18n.properties` | ~10 new keys (panel/button labels, dialog titles, confirm-clear). |
 | `docs/developers/operations/runtime-config.md` | Append "Phase 2-C" section (the existing doc is designed to be appendable). |
 
-### Worktree note
+### Worktree note: dual `mta.yaml` files + srv-qa cp-list (BLOCKING — verified)
 
-The `srv-qa` cp-list in `.deploy/mta.yaml` does NOT need updating: the new `srv/lib/credstore.js` lives at `srv/lib/credstore.js` (root of srv/lib/), and the cp chain already copies `srv/lib/*.js` files via the existing single-line cp. (Verified by checking the cp chain — it includes `../../srv/lib/content-store.js`, `../../srv/lib/chat-settings-resolver.js`, etc.; the new credstore.js is at the same nesting level.)
+There are **TWO** mta.yaml files in this repo, AND they have different content (`diff -q mta.yaml .deploy/mta.yaml` reports "differ" — verified via grep on 2026-06-21):
 
-Plan tasks DO NOT need to touch `.deploy/mta.yaml` srv-qa section.
+- Root `mta.yaml` — used for some local-dev deploys.
+- `.deploy/mta.yaml` — used by CI (`deploy.yml`) for production builds.
+
+**Both files must receive the `tutorials-credstore` resource + binding edits.** Task 2 below does both.
+
+Additionally, `.deploy/mta.yaml` has a `srv-qa` module whose `build-parameters.commands` step is **one long bash line** that hand-lists every individual file to `cp` from `srv/lib/`, `srv/handlers/`, and `srv/jobs/` (around line 97). The new `srv/lib/credstore.js` is NOT in that list — without an explicit cp edit, the QA channel crashes on boot trying to `require('./lib/credstore')`. Memory `feedback_srv_qa_cp_list_recurring` has fired 2-3× on this codebase already. Task 2 below appends `../../srv/lib/credstore.js` to the srv-qa cp chain.
 
 ---
 
@@ -172,24 +208,30 @@ Before any task, the implementer subagent runs these checks. Each should return 
 
 ---
 
-## Task 2: Add `tutorials-credstore` service binding (`mta.yaml`)
+## Task 2: Add `tutorials-credstore` service binding (BOTH `mta.yaml` files + srv-qa cp chain)
 
 **Files:**
 
-- Modify: `mta.yaml` (root, NOT `.deploy/mta.yaml`)
+- Modify: `mta.yaml` (root — local dev path)
+- Modify: `.deploy/mta.yaml` (CI build path)
 
-- [ ] **Step 2.1: Inspect current `tutorials-srv` module + resources block**
+Both `mta.yaml` files MUST receive the same `tutorials-credstore` resource + binding edits. Additionally, `.deploy/mta.yaml`'s `srv-qa` module needs `credstore.js` appended to its hand-curated cp chain.
+
+- [ ] **Step 2.1: Inspect both files' current shape**
 
   ```bash
+  diff -q mta.yaml .deploy/mta.yaml   # Expect: "Files mta.yaml and .deploy/mta.yaml differ"
   grep -n 'name: tutorials-srv' mta.yaml
-  grep -n '^  - name:' mta.yaml
+  grep -n 'name: tutorials-srv\|name: tutorials-srv-qa' .deploy/mta.yaml
+  grep -n '^  - name:' mta.yaml | tail -5
+  grep -n '^  - name:' .deploy/mta.yaml | tail -5
   ```
 
-  Note the line number of `tutorials-srv`'s `requires:` list AND the end of the `resources:` array (last `- name: ...` entry).
+  Note line numbers of: `tutorials-srv`'s `requires:` block in BOTH files; end of `resources:` array in BOTH files; the `srv-qa` module's `build-parameters.commands` long line in `.deploy/mta.yaml` (around line 97).
 
-- [ ] **Step 2.2: Add `tutorials-credstore` to the `tutorials-srv` `requires:` block**
+- [ ] **Step 2.2: Add `tutorials-credstore` to `tutorials-srv` `requires:` in `mta.yaml` (root)**
 
-  Use Edit. Anchor on `tutorials-srv` module's existing `requires:` list. Append a new entry:
+  Use Edit. Anchor on `tutorials-srv` module's existing `requires:` list. Append:
 
   ```yaml
       - name: tutorials-credstore
@@ -197,7 +239,7 @@ Before any task, the implementer subagent runs these checks. Each should return 
 
   Match existing indentation (4 spaces under `requires:` under `modules:`).
 
-- [ ] **Step 2.3: Add the `tutorials-credstore` resource definition**
+- [ ] **Step 2.3: Add the `tutorials-credstore` resource definition to `mta.yaml` (root)**
 
   At the end of the `resources:` array, add:
 
@@ -213,24 +255,72 @@ Before any task, the implementer subagent runs these checks. Each should return 
 
   Match existing indentation (2 spaces under `resources:`, 4 spaces for `parameters:`, 6 spaces for `config:`).
 
-- [ ] **Step 2.4: Validate YAML**
+- [ ] **Step 2.4: Repeat 2.2 and 2.3 in `.deploy/mta.yaml`**
+
+  Same edits, same YAML, same indentation. Also: if `.deploy/mta.yaml` has a `srv-qa` module with its own `requires:` list (it does — verified), append `- name: tutorials-credstore` to its requires list too. The QA channel needs the binding to boot.
+
+- [ ] **Step 2.5: Add `credstore.js` to srv-qa cp chain in `.deploy/mta.yaml`** (BLOCKING — verified)
+
+  Find the line in `.deploy/mta.yaml` that starts roughly:
+
+  ```yaml
+          - bash -c "mkdir -p srv/jobs && mkdir -p srv/handlers ... && cp ../../srv/lib/branch/...js srv/lib/branch/ && cp ../../srv/lib/runtime-config/...js srv/lib/runtime-config/ && cp ../../srv/lib/content-store.js ../../srv/lib/content-publish-session.js ../../srv/lib/_tutorials-table.js [...many more...] srv/lib/ && ..."
+  ```
+
+  This is one bash line in the `srv-qa` module's `build-parameters.commands` step (around line 97).
+
+  In the `srv/lib/` cp segment (the `cp ../../srv/lib/content-store.js ../../srv/lib/content-publish-session.js ... srv/lib/` chain), add `../../srv/lib/credstore.js` to the list of source files. Position it near `content-store.js` or alphabetically — anywhere before the destination `srv/lib/` token works.
+
+  Use Edit. The anchor is the literal substring `../../srv/lib/content-store.js` (unique on that long line). Insert `../../srv/lib/credstore.js` adjacent to it (with a space separator). Verification:
+
+  ```bash
+  grep -c "credstore\.js" .deploy/mta.yaml   # Expect: 1 (just the cp line we added)
+  ```
+
+- [ ] **Step 2.6: Check root `mta.yaml` for a same-shape srv-qa module**
+
+  ```bash
+  grep -n 'name: tutorials-srv-qa\|name: srv-qa' mta.yaml
+  ```
+
+  If root `mta.yaml` HAS a srv-qa module with a parallel hand-curated cp chain, repeat Step 2.5 on it. If root `mta.yaml` has no `srv-qa` module (the CI-only file is the canonical place for the QA channel), no edit needed — note this in the commit message.
+
+- [ ] **Step 2.7: Validate YAML in both files**
 
   ```bash
   yq '.modules[] | select(.name == "tutorials-srv") | .requires' mta.yaml | head -10
+  yq '.modules[] | select(.name == "tutorials-srv") | .requires' .deploy/mta.yaml | head -10
   yq '.resources[] | select(.name == "tutorials-credstore")' mta.yaml
+  yq '.resources[] | select(.name == "tutorials-credstore")' .deploy/mta.yaml
   ```
 
-  Expected: first command lists requires including `tutorials-credstore`; second emits the resource block.
+  Expected: in BOTH files, requires lists include `tutorials-credstore`; both resource definitions emit identically.
 
-- [ ] **Step 2.5: Commit**
+  Cross-file diff sanity check (matching resource definitions):
 
   ```bash
-  git add mta.yaml
-  git commit -m "feat(deploy): bind tutorials-credstore BTP service to srv (#465)
+  diff <(yq '.resources[] | select(.name == "tutorials-credstore")' mta.yaml) \
+       <(yq '.resources[] | select(.name == "tutorials-credstore")' .deploy/mta.yaml)
+  ```
 
-  default plan + basic auth → JWE-decryption with the binding's
-  encryption.client_private_key. Per-environment instance (DEV / QA /
-  PROD each get their own service instance bound to their srv app).
+  Expected: empty output (definitions match).
+
+- [ ] **Step 2.8: Commit**
+
+  ```bash
+  git add mta.yaml .deploy/mta.yaml
+  git commit -m "feat(deploy): bind tutorials-credstore BTP service (#465)
+
+  Adds the tutorials-credstore managed-service resource + binding to BOTH
+  mta.yaml files (CI uses .deploy/mta.yaml; local uses root mta.yaml).
+  Default plan + basic auth → JWE-decryption with the binding's
+  encryption.client_private_key. Per-environment instance.
+
+  Also appends ../../srv/lib/credstore.js to the .deploy/mta.yaml srv-qa
+  module's hand-curated cp chain — without this, the QA channel would
+  crash on boot when admin-service.js tries to require('./lib/credstore').
+  Memory feedback_srv_qa_cp_list_recurring has fired on this codebase
+  multiple times.
 
   Entitlement confirmed available in tutorial-system subaccount
   (Tom verified 2026-06-20)."
@@ -542,13 +632,31 @@ This is the single chokepoint for all BTP Credential Store I/O. ~140 lines. Uses
 
   Expected: `OK`. If compile fails, check the closing `};` after the actions block.
 
-- [ ] **Step 5.4: Smoke-test EDMX exposes the operations**
+- [ ] **Step 5.4: Smoke-test EDMX exposes the operations** (IMPORTANT 11)
+
+  Regenerate the OData V4 EDMX and confirm the 4 new operations appear. Without EDMX regeneration, the Fiori UI controller's `$metadata` HEAD won't see the new actions and FE's `$$inheritExpandSelect` / action-binding will fail at runtime:
 
   ```bash
-  npx cds compile srv/admin-service.cds --to edmx 2>&1 | grep -E 'setSecretValue|rotateSecretValue|clearSecretValue|revealSecretValue' | head -8
+  npx cds compile srv/admin-service.cds --to edmx-v4 > /tmp/admin.edmx 2>&1
+  grep -c -E 'setSecretValue|rotateSecretValue|clearSecretValue|revealSecretValue' /tmp/admin.edmx
   ```
 
-  Expected: each operation name appears.
+  Expected: count ≥ 4 (each operation appears at least once — possibly multiple times if FunctionImport / ActionImport blocks emit separately).
+
+  Also verify the binding parameter targets `AdminService.Secrets`:
+
+  ```bash
+  grep -E '<Action |<Function ' /tmp/admin.edmx | grep -iE 'secret' | head -8
+  ```
+
+  Expected: 4 entries (3 Action + 1 Function). Each should have an inner `<Parameter Name="_it" Type="AdminService.Secrets"/>` (or equivalent) marking it instance-bound.
+
+  If the project has a `cds build` step that emits EDMX into a known output path (check `package.json` `scripts.build`), run that too:
+
+  ```bash
+  grep -E '"build"|"cds:build"' package.json
+  # If present, e.g.: npm run build  →  produces gen/srv/ with edmx files
+  ```
 
 - [ ] **Step 5.5: Commit**
 
@@ -574,7 +682,7 @@ This is the single chokepoint for all BTP Credential Store I/O. ~140 lines. Uses
 
 - Modify: `srv/admin-service.js` (insert after existing `secretWarnings` handler at line ~990)
 
-This task adds 4 handlers + 2 helpers (loadSecretRow, stampRotated). ~120 lines. Each handler emits explicit `cds.audit.log()` calls where the standard CRUD interceptor wouldn't fire.
+This task adds 4 handlers + 3 helpers (loadSecretRow, stampRotated, auditEvent) + 1 response-header helper (setNoStoreHeaders). ~140 lines. Each handler emits explicit audit events via the `auditEvent()` helper (which uses `cds.connect.to('audit-log')` + `.log(name, { data })` per verified codebase patterns) where the standard CRUD interceptor wouldn't fire.
 
 - [ ] **Step 6.1: Locate insertion point**
 
@@ -617,9 +725,13 @@ This task adds 4 handlers + 2 helpers (loadSecretRow, stampRotated). ~120 lines.
       const SELF_GEN_KINDS = new Set(['salt', 'content-api-key']);
 
       // Load the Secrets row by bound-action ID. All 4 handlers need this.
+      // IMPORTANT 7: defensive guard against missing req.params shape (e.g. if
+      // an action ever ends up wrongly bound to collection rather than instance,
+      // req.params is []).
       const loadSecretRow = async (req) => {
         const { Secrets } = cds.entities('com.sap.developers.ims');
-        const id = req.params[0].ID;
+        const id = req.params?.[0]?.ID;
+        if (!id) return req.reject(400, 'Secret ID required (bound to instance, not collection)');
         const row = await SELECT.one.from(Secrets).where({ ID: id });
         if (!row) req.reject(404, 'Secret not found');
         return row;
@@ -633,6 +745,33 @@ This task adds 4 handlers + 2 helpers (loadSecretRow, stampRotated). ~120 lines.
         return ts;
       };
 
+      // BLOCKING 1: audit-log helper. Verified against existing usage at
+      // srv/admin-service.js:1072-1073 (canonical pattern: cds.connect.to('audit-log')
+      // + audit.log(eventName, { data: {...} })) and the graceful-degradation
+      // pattern at srv/knowledge-graph-service.js:395-401 (catch missing binding).
+      //
+      // cds.audit?.log?.(...) does NOT exist — optional-chaining would mean
+      // audit events silently never fire. Use this helper everywhere instead.
+      const auditEvent = async (eventName, data) => {
+        const audit = await cds.connect.to('audit-log').catch(() => null);
+        if (audit) {
+          await audit.log(eventName, { data });
+        }
+      };
+
+      // IMPORTANT 8: response-header helper using public API. req._.res is CAP
+      // internal and not guaranteed stable across minor versions. Prefer req.req.res
+      // (the Express req has .res back-ref), fall back to req._.res, and silently
+      // no-op if neither resolves. Action's return value carries the actual data
+      // either way; the header is defense-in-depth.
+      const setNoStoreHeaders = (req) => {
+        const res = req.req?.res ?? req._?.res;
+        if (res?.setHeader) {
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+          res.setHeader('Pragma', 'no-cache');
+        }
+      };
+
       // ────────────────────────────────────────────────────────────────────
       this.on('setSecretValue', 'Secrets', async (req) => {
         const row = await loadSecretRow(req);
@@ -643,7 +782,7 @@ This task adds 4 handlers + 2 helpers (loadSecretRow, stampRotated). ~120 lines.
         await writeSecret(row.key, value);
         const lastRotatedAt = await stampRotated(row.ID);
         // CRUD interceptor on Secrets fires for the UPDATE on lastRotatedAt
-        // → captured by @AuditLog.Operation; no explicit audit.log() needed here.
+        // → captured by @AuditLog.Operation; no explicit audit event needed here.
         return { written: true, lastRotatedAt };
       });
 
@@ -653,8 +792,10 @@ This task adds 4 handlers + 2 helpers (loadSecretRow, stampRotated). ~120 lines.
         if (!SELF_GEN_KINDS.has(row.kind)) {
           // Vendor-side: emit audit event (no value mutation occurred but the
           // user attempted a rotation, worth logging).
-          await cds.audit?.log?.('SecretValueRotateAttempted', {
-            user: req.user?.id, secretKey: row.key, rotated: false,
+          await auditEvent('SecretValueRotateAttempted', {
+            user: req.user?.id,
+            secretKey: row.key,
+            rotated: false,
           });
           return {
             rotated: false,
@@ -671,9 +812,11 @@ This task adds 4 handlers + 2 helpers (loadSecretRow, stampRotated). ~120 lines.
         await writeSecret(row.key, newValue);
         const lastRotatedAt = await stampRotated(row.ID);
         const revealExpiresAt = new Date(Date.now() + REVEAL_WINDOW_MS);
-        // Custom action emitting plaintext — explicit audit.log() needed.
-        await cds.audit?.log?.('SecretValueRotated', {
-          user: req.user?.id, secretKey: row.key, rotated: true,
+        // Custom action emitting plaintext — explicit audit event needed.
+        await auditEvent('SecretValueRotated', {
+          user: req.user?.id,
+          secretKey: row.key,
+          rotated: true,
         });
         return {
           rotated: true,
@@ -690,9 +833,10 @@ This task adds 4 handlers + 2 helpers (loadSecretRow, stampRotated). ~120 lines.
       this.on('clearSecretValue', 'Secrets', async (req) => {
         const row = await loadSecretRow(req);
         await deleteSecret(row.key);
-        // No HANA mutation; explicit audit.log() needed.
-        await cds.audit?.log?.('SecretValueCleared', {
-          user: req.user?.id, secretKey: row.key,
+        // No HANA mutation; explicit audit event needed.
+        await auditEvent('SecretValueCleared', {
+          user: req.user?.id,
+          secretKey: row.key,
         });
         return { cleared: true };
       });
@@ -705,15 +849,14 @@ This task adds 4 handlers + 2 helpers (loadSecretRow, stampRotated). ~120 lines.
 
         // Defense-in-depth: don't let proxies cache the response, even though
         // /admin/* is XSUAA-gated. `private` for shared-cache defense.
-        if (req._.res) {
-          req._.res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-          req._.res.setHeader('Pragma', 'no-cache');
-        }
+        // Best-effort: action's return value carries the data regardless.
+        setNoStoreHeaders(req);
 
-        // Function (read-only OData) — explicit audit.log() needed.
+        // Function (read-only OData) — explicit audit event needed.
         // The value is NOT logged; only the access event.
-        await cds.audit?.log?.('SecretValueRead', {
-          user: req.user?.id, secretKey: row.key,
+        await auditEvent('SecretValueRead', {
+          user: req.user?.id,
+          secretKey: row.key,
         });
 
         return {
@@ -723,7 +866,16 @@ This task adds 4 handlers + 2 helpers (loadSecretRow, stampRotated). ~120 lines.
       });
   ```
 
-  **Note on `cds.audit?.log?.(...)`:** the `?.` optional chaining defends against `cds.audit` being absent (e.g. in unit-test contexts where the plugin isn't loaded). The audit-log plugin's exact API surface MUST be verified against `node_modules/@cap-js/audit-logging/README.md` — the spec uses the documented shape but plugin minor versions may differ.
+  **BLOCKING 1 note (verified against codebase 2026-06-21):** Existing pattern at `srv/admin-service.js:1072-1073` uses:
+
+  ```javascript
+  const audit = await cds.connect.to('audit-log');
+  await audit.log('SecurityEvent', { /* data */ });
+  ```
+
+  Graceful-degradation pattern at `srv/knowledge-graph-service.js:395-401` wraps the connect in `try/catch` so missing-binding contexts (unit tests) don't break the handler. The `auditEvent()` helper above combines both. **`cds.audit?.log?.()` does NOT exist as an API** — optional chaining there means audit events would silently never fire.
+
+  **IMPORTANT 8 note:** `req._.res.setHeader` is CAP internal API and may change between minor versions. The `setNoStoreHeaders` helper above prefers `req.req?.res` (the Express request's `.res` back-reference, public) and falls back to `req._.res` only if needed. Best-effort: if header-setting fails entirely the action still returns the value, the cache header was defense-in-depth only.
 
 - [ ] **Step 6.4: Syntax check**
 
@@ -733,14 +885,22 @@ This task adds 4 handlers + 2 helpers (loadSecretRow, stampRotated). ~120 lines.
 
   Expected: `OK`.
 
-- [ ] **Step 6.5: Verify `cds.audit.log()` API surface**
+- [ ] **Step 6.5: Verify audit-log API pattern usage** (BLOCKING 1)
 
   ```bash
-  ls node_modules/@cap-js/audit-logging/README.md 2>&1
-  head -100 node_modules/@cap-js/audit-logging/README.md 2>&1 | grep -E 'cds\.audit|log\(' | head -10
+  grep -n "cds.connect.to('audit-log')" srv/admin-service.js | head -5
+  grep -n "cds\.audit\?" srv/admin-service.js   # Should return 0 matches — that API does NOT exist
   ```
 
-  If the README documents a different API (e.g. `cds.audit.event()` instead of `cds.audit.log()`, or `await req.audit(...)`), update the 4 handlers above to match. Optional-chaining means absent-API is safe-degraded but we should make it work.
+  Expected: at least one match for `cds.connect.to('audit-log')` (the `auditEvent` helper added in 6.3); zero matches for `cds.audit?`. If `cds.audit?` matches anywhere, the optional-chaining-as-API-feature mistake has slipped in — fix to use the `auditEvent` helper.
+
+  Cross-reference the canonical existing pattern:
+
+  ```bash
+  grep -n -B1 -A2 "cds\.connect\.to('audit-log')" srv/admin-service.js srv/knowledge-graph-service.js
+  ```
+
+  Expected: matches at admin-service.js:1072 (existing SecurityEvent call) and knowledge-graph-service.js:395-401 (existing graceful-degradation pattern).
 
 - [ ] **Step 6.6: Smoke boot to verify handlers register**
 
@@ -759,16 +919,19 @@ This task adds 4 handlers + 2 helpers (loadSecretRow, stampRotated). ~120 lines.
   setSecretValue / rotateSecretValue / clearSecretValue handlers
   fire @AuditLog.Operation CRUD interceptor via stampRotated()
   UPDATE on Secrets. revealSecretValue + the value-emit paths
-  emit explicit cds.audit.log() events (custom OData V4 actions/
-  functions don't trigger CRUD interceptors).
+  emit explicit audit events via auditEvent() helper (custom OData
+  V4 actions/functions don't trigger CRUD interceptors).
+
+  auditEvent() uses cds.connect.to('audit-log') wrapped in catch(()=>null)
+  per existing patterns at srv/admin-service.js:1072 + knowledge-graph-
+  service.js:395-401. The cds.audit?.log?.() shape from earlier drafts
+  was wrong — that API does NOT exist; optional chaining there means
+  audit events silently never fire.
 
   revealSecretValue handler sets Cache-Control: no-store, no-cache,
-  must-revalidate, private via req._.res.setHeader (CAP internal API;
-  fallback to srv-level middleware if this breaks on CAP version bump
-  — see spec risks table).
-
-  cds.audit?.log?.(...) optional-chaining defends against the plugin
-  not being loaded (test contexts)."
+  must-revalidate, private via setNoStoreHeaders helper (prefers
+  public req.req.res, falls back to req._.res for older CAP versions,
+  no-ops if neither resolves — best-effort defense-in-depth)."
   ```
 
 ---
@@ -942,13 +1105,34 @@ This task adds 4 handlers + 2 helpers (loadSecretRow, stampRotated). ~120 lines.
 
 8 tests. Mocks `srv/lib/credstore.js` via `vi.spyOn` (same pattern as #491's `rebuild-trigger.test.js`).
 
+**BLOCKING 2 note (verified against codebase 2026-06-21):** Bootstrap pattern at `test/unit/author-service.test.js:1-5` uses `cds.test('serve', '--project', '.', '--in-memory')` at **module top level** (NOT inside `beforeAll`), which auto-deploys schema + serves the OData runtime. Bound-action invocation is `srv.tx({ user }, tx => tx.send({ event, entity, params, data }))` — NOT the invented `callBoundAction({ query: { kind, target, action } })` shape from earlier drafts.
+
 - [ ] **Step 8.1: Inspect a sibling handler-test for bootstrap pattern**
 
   ```bash
-  head -40 test/unit/rebuild-trigger.test.js 2>&1 || head -40 srv/lib/__tests__/rebuild-trigger.test.js
+  head -10 test/unit/author-service.test.js
+  grep -n "cds.test\|srv.tx\|tx.send" test/unit/*.test.js | head -20
   ```
 
-  Note the bootstrap shape: `cds.test('serve', ...)`, `vi.spyOn`, etc.
+  Note the canonical bootstrap shape:
+
+  ```javascript
+  import { describe, it, expect, beforeAll } from 'vitest';
+  import cds from '@sap/cds';
+
+  const project = cds.test('serve', '--project', '.', '--in-memory');
+  ```
+
+  And bound-action call shapes (from grepping the unit-test directory):
+
+  ```javascript
+  // Simple action with positional args:
+  return srv.tx({ user }, (tx) => tx.send('reviewTutorial', { tutorialId: 't-1' }));
+
+  // Action with explicit event/entity shape (use this when binding to an
+  // instance with parameters):
+  return srv.tx({ user }, tx => tx.send({ event, entity: 'AdminService.Secrets', params: [{ ID }], data }));
+  ```
 
 - [ ] **Step 8.2: Write the test file**
 
@@ -959,30 +1143,45 @@ This task adds 4 handlers + 2 helpers (loadSecretRow, stampRotated). ~120 lines.
   // Phase 2-C (#465). 8 tests for the 4 OData handlers on Secrets.
 
   import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
-  import path from 'node:path';
   import cds from '@sap/cds';
   import * as credstore from '../../srv/lib/credstore.js';
 
-  beforeAll(async () => {
-    await cds.deploy(path.join(process.cwd(), 'db', 'schema.cds')).to('sqlite::memory:');
-  });
+  // BLOCKING 2 (verified against test/unit/author-service.test.js): module-top
+  // cds.test('serve', ...) auto-deploys schema + serves the OData runtime.
+  // Do NOT replace with cds.deploy(...).to('sqlite::memory:') inside beforeAll
+  // — that was the wrong-shape pattern from earlier plan drafts.
+  const project = cds.test('serve', '--project', '.', '--in-memory');
+
+  // IMPORTANT 10: @sap/xsenv mock. The credstore lib calls
+  // getServices({ credstore: { tag: 'credstore' } }) — without a real
+  // binding (no VCAP_SERVICES set in tests) this would throw at first
+  // call. Mock with the exact shape the lib reads (.url, .username,
+  // .password, .encryption.client_private_key). Note: the credstore
+  // tests in Task 7 set VCAP_SERVICES via process.env instead — pick
+  // the strategy that matches the test file. Here we use vi.mock
+  // because we're spying on the credstore lib (writeSecret etc.) and
+  // never actually exercise the binding lookup.
+  vi.mock('@sap/xsenv', () => ({
+    getServices: vi.fn(() => ({
+      credstore: {
+        url: 'https://mock-credstore.test',
+        username: 'mock-user',
+        password: 'mock-pass',
+        encryption: {
+          client_private_key: '-----BEGIN PRIVATE KEY-----\nMOCK\n-----END PRIVATE KEY-----\n',
+        },
+      },
+    })),
+    loadEnv: vi.fn(),
+  }));
+
+  const ADMIN_USER = { id: 'admin@test', roles: ['Admin'] };
 
   beforeEach(async () => {
     const { Secrets } = cds.entities('com.sap.developers.ims');
     await DELETE.from(Secrets);
     vi.restoreAllMocks();
   });
-
-  // Helper: invoke a bound action by simulating the OData V4 request shape.
-  // CAP's in-memory boot exposes the AdminService via cds.connect.to('AdminService').
-  async function callBoundAction(actionName, secretId, data = {}) {
-    const srv = await cds.connect.to('AdminService');
-    return srv.send({
-      query: { kind: 'action', target: 'Secrets', action: actionName },
-      params: [{ ID: secretId }],
-      data,
-    });
-  }
 
   async function seedSecret({ key, kind = 'salt', rotationDocsUrl = '' } = {}) {
     const { Secrets } = cds.entities('com.sap.developers.ims');
@@ -994,11 +1193,21 @@ This task adds 4 handlers + 2 helpers (loadSecretRow, stampRotated). ~120 lines.
     return { ID, key, kind };
   }
 
+  // Helper: invoke a bound action. Wraps the verified `tx.send({ event,
+  // entity, params, data })` pattern (the canonical CAP V4 shape — see
+  // BLOCKING 2 ground-truth in plan-review notes).
+  async function callAction(eventName, secretId, data = {}) {
+    const srv = await cds.connect.to('AdminService');
+    return srv.tx({ user: ADMIN_USER }, (tx) =>
+      tx.send({ event: eventName, entity: 'AdminService.Secrets', params: [{ ID: secretId }], data })
+    );
+  }
+
   describe('setSecretValue (#465)', () => {
     it('happy-path: writes credstore + stamps lastRotatedAt', async () => {
       const writeSpy = vi.spyOn(credstore, 'writeSecret').mockResolvedValue(true);
       const { ID, key } = await seedSecret({ key: 'TEST_SET_OK' });
-      const result = await callBoundAction('setSecretValue', ID, { value: 'newval' });
+      const result = await callAction('setSecretValue', ID, { value: 'newval' });
       expect(result.written).toBe(true);
       expect(result.lastRotatedAt).toBeTruthy();
       expect(writeSpy).toHaveBeenCalledWith('TEST_SET_OK', 'newval');
@@ -1006,7 +1215,7 @@ This task adds 4 handlers + 2 helpers (loadSecretRow, stampRotated). ~120 lines.
 
     it('rejects empty value with 400', async () => {
       const { ID } = await seedSecret({ key: 'TEST_SET_REJECT' });
-      await expect(callBoundAction('setSecretValue', ID, { value: '' }))
+      await expect(callAction('setSecretValue', ID, { value: '' }))
         .rejects.toMatchObject({ code: 400 });
     });
   });
@@ -1015,7 +1224,7 @@ This task adds 4 handlers + 2 helpers (loadSecretRow, stampRotated). ~120 lines.
     it('self-gen kind (salt): mints 64-char hex + writes', async () => {
       const writeSpy = vi.spyOn(credstore, 'writeSecret').mockResolvedValue(true);
       const { ID } = await seedSecret({ key: 'TEST_ROT_SALT', kind: 'salt' });
-      const result = await callBoundAction('rotateSecretValue', ID);
+      const result = await callAction('rotateSecretValue', ID);
       expect(result.rotated).toBe(true);
       expect(result.reason).toBe('self-generated');
       expect(result.newValue).toMatch(/^[0-9a-f]{64}$/);
@@ -1025,7 +1234,7 @@ This task adds 4 handlers + 2 helpers (loadSecretRow, stampRotated). ~120 lines.
     it('self-gen kind (content-api-key): same shape', async () => {
       vi.spyOn(credstore, 'writeSecret').mockResolvedValue(true);
       const { ID } = await seedSecret({ key: 'TEST_ROT_API', kind: 'content-api-key' });
-      const result = await callBoundAction('rotateSecretValue', ID);
+      const result = await callAction('rotateSecretValue', ID);
       expect(result.rotated).toBe(true);
       expect(result.newValue).toMatch(/^[0-9a-f]{64}$/);
     });
@@ -1036,7 +1245,7 @@ This task adds 4 handlers + 2 helpers (loadSecretRow, stampRotated). ~120 lines.
         key: 'TEST_ROT_GH', kind: 'github-pat',
         rotationDocsUrl: 'https://docs.example.com/rotate',
       });
-      const result = await callBoundAction('rotateSecretValue', ID);
+      const result = await callAction('rotateSecretValue', ID);
       expect(result.rotated).toBe(false);
       expect(result.reason).toBe('vendor-side');
       expect(result.rotationDocsUrl).toBe('https://docs.example.com/rotate');
@@ -1048,7 +1257,7 @@ This task adds 4 handlers + 2 helpers (loadSecretRow, stampRotated). ~120 lines.
     it('happy-path: deletes credstore entry', async () => {
       const deleteSpy = vi.spyOn(credstore, 'deleteSecret').mockResolvedValue(true);
       const { ID, key } = await seedSecret({ key: 'TEST_CLEAR' });
-      const result = await callBoundAction('clearSecretValue', ID);
+      const result = await callAction('clearSecretValue', ID);
       expect(result.cleared).toBe(true);
       expect(deleteSpy).toHaveBeenCalledWith(key);
     });
@@ -1058,11 +1267,7 @@ This task adds 4 handlers + 2 helpers (loadSecretRow, stampRotated). ~120 lines.
     it('happy-path: returns value + expiresAt ~30s ahead', async () => {
       vi.spyOn(credstore, 'readSecret').mockResolvedValue('secret-plaintext');
       const { ID } = await seedSecret({ key: 'TEST_REVEAL' });
-      const srv = await cds.connect.to('AdminService');
-      const result = await srv.send({
-        query: { kind: 'function', target: 'Secrets', action: 'revealSecretValue' },
-        params: [{ ID }],
-      });
+      const result = await callAction('revealSecretValue', ID);
       expect(result.value).toBe('secret-plaintext');
       const delta = new Date(result.expiresAt).getTime() - Date.now();
       expect(delta).toBeGreaterThan(25_000);
@@ -1072,11 +1277,8 @@ This task adds 4 handlers + 2 helpers (loadSecretRow, stampRotated). ~120 lines.
     it('when no value stored: rejects with 404', async () => {
       vi.spyOn(credstore, 'readSecret').mockResolvedValue(null);
       const { ID } = await seedSecret({ key: 'TEST_NO_VAL' });
-      const srv = await cds.connect.to('AdminService');
-      await expect(srv.send({
-        query: { kind: 'function', target: 'Secrets', action: 'revealSecretValue' },
-        params: [{ ID }],
-      })).rejects.toMatchObject({ code: 404 });
+      await expect(callAction('revealSecretValue', ID))
+        .rejects.toMatchObject({ code: 404 });
     });
   });
   ```
@@ -1087,14 +1289,9 @@ This task adds 4 handlers + 2 helpers (loadSecretRow, stampRotated). ~120 lines.
   npx vitest run test/unit/admin-secret-value-handlers.test.js 2>&1 | tail -20
   ```
 
-  Expected: `8 passed (8)`. If `srv.send({ query: ... })` shape fails, inspect how existing AdminService tests invoke bound actions (search `test/unit/` for `send({ query: { kind: 'action'` patterns). The exact shape varies slightly across CAP versions.
+  Expected: `8 passed (8)`. If the test fails with "service not found" or "action not registered", verify the `cds.test('serve', ...)` line is at MODULE TOP (not inside beforeAll) — CAP's test harness reads `package.json`'s `cds.requires` block at module load time.
 
-  **If 8.3 fails consistently with "action not found"**: confirm the AdminService is exposed via `cds.test()` style instead of `cds.connect.to(...)`. Alternative bootstrap:
-
-  ```javascript
-  const { GET, POST } = cds.test(path.join(process.cwd()));
-  // Then invoke via POST(`/admin/Secrets(${ID})/AdminService.setSecretValue`, { value })
-  ```
+  If `tx.send({ event, entity, params, data })` is rejected with a shape error, fall back to the simpler `tx.send(eventName, data)` form and target the entity by ID via `data.ID` (CAP versions differ on this signature). Cross-check against the canonical example at `test/unit/author-service.test.js`.
 
 - [ ] **Step 8.4: Commit**
 
@@ -1106,7 +1303,18 @@ This task adds 4 handlers + 2 helpers (loadSecretRow, stampRotated). ~120 lines.
   self-gen × 2 (salt, content-api-key) + vendor-side (github-pat);
   clearSecretValue happy; revealSecretValue happy (with expiresAt
   range check) + 404-on-no-value. Credstore lib mocked via vi.spyOn
-  (same pattern as #491 rebuild-trigger tests)."
+  (same pattern as #491 rebuild-trigger tests).
+
+  Bootstrap uses cds.test('serve', '--project', '.', '--in-memory') at
+  module top (verified canonical pattern from test/unit/author-service.
+  test.js:1-5). Bound actions invoked via srv.tx + tx.send({ event,
+  entity, params, data }) — NOT the wrong-shape callBoundAction
+  ({ query: { kind, target, action } }) from earlier draft.
+
+  @sap/xsenv mocked with vi.mock so the credstore lib's getServices
+  call resolves a fake binding (we vi.spyOn the lib's exported
+  read/write/deleteSecret functions, so the binding lookup never
+  actually fires)."
   ```
 
 ---
@@ -1123,60 +1331,97 @@ This task adds 4 handlers + 2 helpers (loadSecretRow, stampRotated). ~120 lines.
   cat app/admin/secrets/webapp/view/SecretDialog.fragment.xml
   ```
 
-  Note: the existing dialog (from #482) has form fields (key, description, kind, rotationOwner, rotationDocsUrl, expiresAt, lastRotatedAt) and Save/Cancel buttons in a `<beginButton>` / `<endButton>` block (or `<buttons>`). The new Panel goes BEFORE the buttons block (inside the form/content area).
-
-- [ ] **Step 9.2: Add the Panel**
-
-  Use Edit. Anchor on the closing tag of the metadata field block — typically a `</form:SimpleForm>` or `</f:SimpleForm>` close, or the closing `</Dialog>`-content area before `<beginButton>`. Append the Panel:
+  **BLOCKING 5 (verified against codebase 2026-06-21):** the actual fragment shape is:
 
   ```xml
-  <Panel headerText="{i18n>panelSecretValue}" expandable="true" expanded="false" class="sapUiSmallMarginTop">
-
-    <!-- Reveal area: hidden by default. When user clicks "Show Value",
-         fetch revealSecretValue() and populate. Auto-hide on revealExpiresAt. -->
-    <VBox visible="{= !!${dialog>/revealedValue}}" class="sapUiSmallMarginBottom">
-      <MessageStrip
-        text="{= 'Value visible for ' + ${dialog>/revealSecondsLeft} + 's. Logged in audit trail.' }"
-        type="Warning"
-        showIcon="true" />
-      <Input
-        value="{dialog>/revealedValue}"
-        editable="false"
-        class="sapUiSmallMarginTop" />
-    </VBox>
-
-    <!-- Action buttons. Disabled until metadata is saved (no ID to bind). -->
-    <HBox justifyContent="Start" alignItems="Center">
-      <Button
-        text="{i18n>buttonShowValue}"
-        icon="sap-icon://show"
-        press=".onRevealValue"
-        enabled="{= !${dialog>/isNew}}" />
-      <Button
-        text="{i18n>buttonSetValue}"
-        icon="sap-icon://edit"
-        press=".onSetValue"
-        enabled="{= !${dialog>/isNew}}"
-        class="sapUiTinyMarginBegin" />
-      <Button
-        text="{i18n>buttonRotate}"
-        icon="sap-icon://refresh"
-        press=".onRotate"
-        enabled="{= !${dialog>/isNew}}"
-        class="sapUiTinyMarginBegin" />
-      <Button
-        text="{i18n>buttonClear}"
-        icon="sap-icon://delete"
-        press=".onClearValue"
-        enabled="{= !${dialog>/isNew}}"
-        type="Reject"
-        class="sapUiTinyMarginBegin" />
-    </HBox>
-
-  </Panel>
+  <core:FragmentDefinition ...>
+    <Dialog ...>
+      <f:SimpleForm editable="true" layout="ResponsiveGridLayout">
+        <Label .../>
+        <Input .../>
+        ... 14 lines of field pairs ...
+      </f:SimpleForm>
+      <buttons>
+        <Button text="{i18n>buttonSave}" type="Emphasized" press=".onDialogSave" />
+        <Button text="{i18n>buttonCancel}" press=".onDialogCancel" />
+      </buttons>
+    </Dialog>
+  </core:FragmentDefinition>
   ```
 
-  Indent to match surrounding XML.
+  The new "Secret value" Panel MUST be inserted as a **sibling of `<f:SimpleForm>`** (i.e. direct child of `<Dialog>`), positioned **between `</f:SimpleForm>` and `<buttons>`**. Do NOT place it inside `<f:SimpleForm>` — that container uses a strict Label/Input pair layout in ResponsiveGridLayout, and a nested Panel breaks the form grid.
+
+- [ ] **Step 9.2: Add the Panel — TIGHT ANCHOR** (BLOCKING 5)
+
+  Use Edit with a literal two-line anchor. Find this EXACT pair of consecutive lines in the file:
+
+  ```xml
+      </f:SimpleForm>
+      <buttons>
+  ```
+
+  Replace with:
+
+  ```xml
+      </f:SimpleForm>
+
+      <Panel headerText="{i18n>panelSecretValue}" expandable="true" expanded="false" class="sapUiSmallMarginTop">
+
+        <!-- Reveal area: hidden by default. When user clicks "Show Value",
+             fetch revealSecretValue() and populate. Auto-hide on revealExpiresAt. -->
+        <VBox visible="{= !!${dialog>/revealedValue}}" class="sapUiSmallMarginBottom">
+          <MessageStrip
+            text="{= 'Value visible for ' + ${dialog>/revealSecondsLeft} + 's. Logged in audit trail.' }"
+            type="Warning"
+            showIcon="true" />
+          <Input
+            value="{dialog>/revealedValue}"
+            editable="false"
+            class="sapUiSmallMarginTop" />
+        </VBox>
+
+        <!-- Action buttons. Disabled until metadata is saved (no ID to bind). -->
+        <HBox justifyContent="Start" alignItems="Center">
+          <Button
+            text="{i18n>buttonShowValue}"
+            icon="sap-icon://show"
+            press=".onRevealValue"
+            enabled="{= !${dialog>/isNew}}" />
+          <Button
+            text="{i18n>buttonSetValue}"
+            icon="sap-icon://edit"
+            press=".onSetValue"
+            enabled="{= !${dialog>/isNew}}"
+            class="sapUiTinyMarginBegin" />
+          <Button
+            text="{i18n>buttonRotate}"
+            icon="sap-icon://refresh"
+            press=".onRotate"
+            enabled="{= !${dialog>/isNew}}"
+            class="sapUiTinyMarginBegin" />
+          <Button
+            text="{i18n>buttonClear}"
+            icon="sap-icon://delete"
+            press=".onClearValue"
+            enabled="{= !${dialog>/isNew}}"
+            type="Reject"
+            class="sapUiTinyMarginBegin" />
+        </HBox>
+
+      </Panel>
+
+      <buttons>
+  ```
+
+  Indent to match the surrounding XML (use 4-space indent on the Panel's outer attribute lines if the file uses 4-space; use 2-space if it does).
+
+  Verification — the Panel must be a sibling of SimpleForm, NOT nested inside:
+
+  ```bash
+  grep -n -B1 -A1 "<Panel" app/admin/secrets/webapp/view/SecretDialog.fragment.xml
+  ```
+
+  Expected: the line BEFORE `<Panel` is the closing `</f:SimpleForm>` (with a blank line between is fine); the line AFTER the `</Panel>` close is the opening `<buttons>` tag (blank line between is fine).
 
 - [ ] **Step 9.3: Run UI5 manifest validation**
 
@@ -1444,35 +1689,64 @@ Adds 5 handlers + 1 helper (`_invokeBoundAction`) + reveal-countdown ticker. ~15
 
   Expected: `OK`. Common pitfalls: missing comma between method blocks, mismatched `var self = this;` referencing, missing `sap.ui.define(...)` deps.
 
-- [ ] **Step 10.5: Verify sap.ui.define imports cover sap.m.Dialog / VBox / Button / Input / Text / Link / MessageBox**
+- [ ] **Step 10.5: Audit `sap.ui.define` dependency array** (IMPORTANT 6)
 
-  ```bash
-  head -20 app/admin/secrets/webapp/controller/Secrets.controller.js
-  ```
+  Verified against codebase: the existing controller's `sap.ui.define([...])` array currently lists (approx):
+  `Controller, Fragment, JSONModel, MessageToast, MessageBox`.
 
-  The existing controller's `sap.ui.define([...])` array should already include the dependencies you need (the existing `_withCsrf` + dialog code uses them). If a class is missing (e.g. `sap.m.Link` not previously used), add it to the deps array. Likely-needed deps:
+  The handler code from Step 10.3 references additional UI5 modules (`sap.m.Dialog`, `sap.m.Button`, `sap.m.Input`, `sap.m.Label`, `sap.m.VBox`, `sap.m.Text`, `sap.m.Link`). Two equally valid resolution strategies — pick one:
+
+  **Strategy A — keep `sap.m.X` global references in handler code**
+
+  If the existing handler code in the file (pre-edit) already uses `sap.m.MessageBox` global rather than the imported `MessageBox` identifier, keep that style. The `sap.ui.define` array does NOT need new entries — UI5 resolves global module aliases at runtime. Match the existing controller's style.
+
+  **Strategy B — add to the dependency array (cleaner)**
+
+  If the existing code uses imported identifiers (`MessageBox.error(...)` not `sap.m.MessageBox.error(...)`), extend the array:
 
   ```javascript
   sap.ui.define([
     "sap/ui/core/mvc/Controller",
+    "sap/ui/core/Fragment",
     "sap/ui/model/json/JSONModel",
     "sap/m/MessageBox",
     "sap/m/MessageToast",
-    "sap/m/Dialog",
-    "sap/m/Button",
-    "sap/m/Input",
-    "sap/m/Label",
-    "sap/m/VBox",
-    "sap/m/Text",
-    "sap/m/Link",
-  ], function (Controller, JSONModel, MessageBox, MessageToast, Dialog, Button, Input, Label, VBox, Text, Link) {
+    "sap/m/Dialog",          // NEW
+    "sap/m/Button",          // NEW
+    "sap/m/Input",           // NEW
+    "sap/m/Label",           // NEW
+    "sap/m/VBox",            // NEW
+    "sap/m/Text",            // NEW
+    "sap/m/Link",            // NEW
+  ], function (Controller, Fragment, JSONModel, MessageBox, MessageToast, Dialog, Button, Input, Label, VBox, Text, Link) {
     // ...
   }
   ```
 
-  Add any missing entries; ensure parameter order matches array order.
+  Then rewrite the handler code from Step 10.3 to use imported identifiers (`new Dialog({...})` instead of `new sap.m.Dialog({...})`, etc.).
 
-  **Note:** The handler code above uses `sap.m.Dialog`/etc. style global references for brevity. If the existing controller imports them as `Dialog`/`Button`/etc., switch the handler code to use the imported identifiers instead (cleaner). Pick the style that matches the existing controller.
+  **Audit script — run after Step 10.3 + 10.5:**
+
+  ```bash
+  # Extract the current sap.ui.define dependency array:
+  node -e "
+    const src = require('fs').readFileSync('app/admin/secrets/webapp/controller/Secrets.controller.js','utf8');
+    const m = src.match(/sap\.ui\.define\(\[([^\]]+)\]/s);
+    const deps = m ? m[1].split(',').map(s => s.trim().replace(/[\"']/g, '')).filter(Boolean) : [];
+    console.log('deps:', deps);
+    // List of sap.m.X references in the new handler code
+    const refs = [...src.matchAll(/new sap\.m\.(\w+)/g)].map(x => 'sap/m/' + x[1]);
+    console.log('sap.m refs:', [...new Set(refs)]);
+    // Anything in refs not in deps?
+    const depsSet = new Set(deps.map(d => d.replace(/^sap\./, 'sap/').replace(/\./g, '/')));
+    const missing = [...new Set(refs)].filter(r => !depsSet.has(r));
+    console.log('missing from define array:', missing);
+  "
+  ```
+
+  Expected: `missing from define array: []`. If anything is missing AND Strategy A is in use (global refs OK), this is informational only. If Strategy B is in use and `missing` is non-empty, add those modules to the `sap.ui.define` array.
+
+  Common pitfall: parameter order in the callback must match array order exactly. Use Edit on BOTH the array AND the function signature if changing this.
 
 - [ ] **Step 10.6: Commit**
 
@@ -1707,7 +1981,7 @@ Adds 5 handlers + 1 helper (`_invokeBoundAction`) + reveal-countdown ticker. ~15
   npx vitest run 2>&1 | tail -15
   ```
 
-  Expected: existing tests still pass + the 14 new ones (6 credstore lib + 8 handler) pass. Watch for any test that loads `srv/admin-service.js` end-to-end — if `cds.audit` is undefined in a test context AND the handler code lacks the optional-chaining guard, that test will fail. The `cds.audit?.log?.(...)` shape defends against this; verify.
+  Expected: existing tests still pass + the 14 new ones (6 credstore lib + 8 handler) pass. Watch for any test that loads `srv/admin-service.js` end-to-end — the `auditEvent()` helper added in Task 6 wraps `cds.connect.to('audit-log')` in `.catch(() => null)`, so test contexts without the audit-log binding are safely silent. If a test fails with "audit binding required" or similar, verify the helper's catch is intact.
 
 - [ ] **Step 13.2: Run admin-shell build**
 
