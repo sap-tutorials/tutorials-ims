@@ -120,6 +120,31 @@ jobs:
             prod) echo "url=${{ secrets.CAP_SRV_URL_PROD }}" >> "$GITHUB_OUTPUT" ;;
           esac
 
+      # Prefetch tutorials OUTSIDE the mbt before-all phase. mbt enforces a
+      # 10-minute timeout for the entire before-all sequence; cold-cache CI
+      # runs do TWO ~6-min full fetches (prod + QA) which blow past 10 min.
+      # Doing the fetches as separate workflow steps removes them from mbt's
+      # cap, AND populates the actions/cache@v4 directories for any future
+      # mbt invocation in the same job (mbt's own fetch step then hits a
+      # warm cache and finishes in seconds).
+      #
+      # Both fetches run sequentially since they share the GitHub API rate
+      # limit budget; in parallel they'd compete for tokens. Each is gated
+      # by `if: failure()` is NOT used — we WANT a hard failure if discovery
+      # breaks (otherwise mbt would re-fetch anyway and surface the same
+      # error inside the 10-min cap).
+      - name: Prefetch prod tutorials (warms .tutorial-cache)
+        run: npm install && npm run fetch-tutorials -- --target hugo
+        env:
+          GITHUB_TOKEN: ${{ secrets.TUTORIALS_GITHUB_TOKEN || github.token }}
+          CAP_BASE_URL: ${{ steps.cap-url.outputs.url }}
+
+      - name: Prefetch QA tutorials (warms .tutorial-cache-qa)
+        run: npm run fetch-tutorials -- --target hugo --channel qa
+        env:
+          GITHUB_TOKEN: ${{ secrets.TUTORIALS_GITHUB_TOKEN || github.token }}
+          CAP_BASE_URL: ${{ steps.cap-url.outputs.url }}
+
       - name: Build MTA archive
         run: mbt build -e deploy/${{ steps.env.outputs.target }}.mtaext
         env:
