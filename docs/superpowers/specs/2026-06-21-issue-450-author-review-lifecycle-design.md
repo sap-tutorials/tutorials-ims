@@ -26,7 +26,7 @@ The author-review nag system (Riley's legacy IMS rule: 1st nag at N days → mon
 1. **`MyTutorialsView.outdated` calc field** — Sage has no derived "tutorial has been ignored 4+ times" signal.
 2. **`firstNotificationAt` tracking** — current schema knows when the last nag fired but not when the first did, so Sage can't render "first nag sent on YYYY-MM-DD" context.
 3. **Threshold 180 → 90 days** — current `STALE_DAYS_DEFAULT = 180` is more lenient than Riley's IMS rule (90 or 120). Tightening to 90 matches the lower bound.
-4. **No unit tests for `srv/lib/contributor-notifications.js`** — the cron-feeding lib has zero direct test coverage today. Other paths (`reviewTutorial`, the OData action, the cron handler) are tested, but the stale-detection + recipient-escalation logic is not.
+4. **Thin unit tests for `srv/lib/contributor-notifications.js`** — [test/lib/contributor-notifications.test.js](../../../../test/lib/contributor-notifications.test.js) exists (2 tests covering `computeStaleNotifications(180)` stale + fresh cases) but hardcodes the old threshold and doesn't cover `markNotificationSent` at all. Extend the existing file rather than create a parallel one.
 5. **Reset of `firstNotificationAt`** — when `reviewTutorial()` clears the counter, it must also clear this new field.
 
 ## Settled decisions (from 2026-06-21 brainstorming)
@@ -114,26 +114,98 @@ Line 135:
 
 The `STALE_DAYS_DEFAULT` constant defaults the lib if called with no arg, but the scheduler currently passes 180 explicitly; both must move together.
 
+### 6. `srv/admin-service.js` — update second threshold call site
+
+Line 794 (inside the admin `sendContributorNotifications` action — the "send notifications now" button):
+```diff
+- const notifications = await computeStaleNotifications(180);
++ const notifications = await computeStaleNotifications(90);
+```
+
+The admin trigger fires the same logic ad-hoc; if only the scheduler is updated, the admin button stays on the old threshold and produces inconsistent results.
+
+### 7. `srv/admin-service.js` — update `before('UPDATE', 'TutorialMeta')` hook
+
+Around line 356, the existing hook resets `notificationNumber=0` + `lastNotificationDate=null` when `req.data.reviewedDate` is touched via direct Fiori UI edits. Extend it for symmetry with `reviewTutorial()`:
+
+```javascript
+this.before('UPDATE', 'TutorialMeta', (req) => {
+  if (req.data.reviewedDate) {
+    req.data.notificationNumber = 0;
+    req.data.lastNotificationDate = null;
+    req.data.firstNotificationAt = null;
+  }
+});
+```
+
+The hook is unreachable in production today (the test comment in [test/notification-reset.test.js](../../../../test/notification-reset.test.js):103-108 notes this), but keeping it symmetric with the canonical reset path prevents drift if it ever fires via a future admin UI direct-edit flow.
+
+### 8. `scripts/seed-tutorial-meta.js` — update dev-data seeder
+
+Two `180` literals at lines 50 and 60 hardcode the old threshold in dev-data generation. After the cron flips to 90, this seeder would produce dev data that drifts from prod semantics (tutorials with `reviewedDate` 91-180d old would seed `notificationNumber=0` but the cron would treat them as stale). Either:
+
+(a) **Recommended**: update both `180` literals to `90` AND extract to a module-level `const STALE_THRESHOLD_DAYS = 90` for clarity.
+
+(b) Document in a code comment that the seeder is intentionally seeding for a separate notion of "old" than what the cron uses, if Tom prefers to keep dev data more permissive.
+
+Spec picks (a).
+
+### Admin-service projection auto-propagation
+
+`srv/admin-service.cds:53` is `entity TutorialMeta as projection on ims.TutorialMeta;` (star projection — no explicit column list). CAP auto-propagates new columns, so `firstNotificationAt` flows through to `/admin/TutorialMeta` automatically. No edit needed there.
+
 ## Tests
 
-### Extend existing tests (additive)
+### Extend existing tests (additive — no new test files)
 
-**`test/unit/lib/tutorial-review.test.js`** — extend the existing `reviewTutorial` test to assert all 3 fields cleared, including `firstNotificationAt`.
+**`test/unit/lib/tutorial-review.test.js`** — extend the existing `reviewTutorial` test to assert all 4 fields cleared, including `firstNotificationAt`. Bootstrap is `cds.deploy(dbDir).to('sqlite::memory:')` per the existing file (lighter than `cds.test('serve')` — pure-lib test doesn't need the HTTP stack).
 
-**`test/notification-reset.test.js`** — extend the OData `reviewTutorial` integration test:
-- After review, assert `MyTutorials.outdated === false` (since `notificationNumber=0 < 4`).
-- Seed a separate tutorial with `notificationNumber=4`, query `MyTutorials`, assert that row's `outdated === true`.
+**`test/notification-reset.test.js`** — extend the OData `reviewTutorial` integration test. The reviewer flagged that querying `/author/MyTutorials` from this test would require seeding a `Users` row + authenticating as `Tutorial.Author`, which the existing test doesn't do. Workaround: query the underlying view directly via the CDS db connection (consistent with the existing test's `SELECT.one.from(TutorialMeta).where({ ID: metaId })` pattern at line ~55):
 
-### New test file
+```javascript
+const { MyTutorialsView } = cds.entities('com.sap.developers.ims');
 
-**`test/unit/lib/contributor-notifications.test.js`** (the lib has no tests today) — 4 tests:
+// After review, the reviewed row should have outdated=false
+const reviewedRow = await SELECT.one.from(MyTutorialsView).where({ ID: tutorialId });
+expect(reviewedRow.outdated).toBe(false);
+expect(reviewedRow.notificationNumber).toBe(0);
 
-1. `markNotificationSent` sets `firstNotificationAt` to a recent timestamp when called on a meta-row with `notificationNumber=0`. The meta's `lastNotificationDate` and `firstNotificationAt` are equal on the first call.
+// Seed a separate tutorial at notification level 4; confirm outdated=true
+const outdatedTutorialId = 'ffffffff-7001-0000-0000-000000000002';
+await INSERT.into(Tutorials).entries({
+  ID: outdatedTutorialId, slug: 'outdated-tutorial', title: 'Outdated',
+  legacyId: 7002, status: 'ACTIVE',
+});
+await INSERT.into(TutorialMeta).entries({
+  ID: 'aaaaaaaa-7101-0000-0000-000000000002',
+  tutorial_ID: outdatedTutorialId,
+  ownerEmail: 'owner@sap.com', monitoredStatus: 'ACTIVE',
+  reviewedDate: new Date(Date.now() - 365 * 86400000).toISOString(),
+  notificationNumber: 4, legacyId: 7102,
+});
+// Also seed a Users row so the inner-join in MyTutorialsView resolves
+await INSERT.into(Users).entries({
+  ID: '...', uuid: 'user-uuid-2', email: 'owner@sap.com',
+});
+const outdatedRow = await SELECT.one.from(MyTutorialsView).where({ ID: outdatedTutorialId });
+expect(outdatedRow.outdated).toBe(true);
+```
+
+The view's inner-join on `Users.email = TutorialMeta.ownerEmail` means the seed needs a matching Users row, but this is a DB-level concern, not an auth scope concern. Use strict `.toBe(true)` / `.toBe(false)` (not truthy) — CAP normalizes SQLite's `0/1` to JS booleans only for declared `Boolean`-typed view columns.
+
+**`test/lib/contributor-notifications.test.js`** (extends existing — does NOT create parallel file): the file already has 2 tests covering `computeStaleNotifications(180)`. Update them and add 4 more for the new behaviors:
+
+*Update existing 2 tests:*
+- Change the hardcoded `180` arg to `90` in the existing `computeStaleNotifications(180)` calls (both tests). Adjust fixture dates accordingly (stale-test fixture goes from "200 days ago" to "100 days ago" to keep the test meaningful under the new threshold).
+
+*Add 4 new tests* (in the same `describe('contributor-notifications', () => { ... })` block):
+
+1. `markNotificationSent` sets `firstNotificationAt` to a recent timestamp when called on a meta-row with `notificationNumber=0`. `lastNotificationDate` and `firstNotificationAt` are equal on this first call.
 2. `markNotificationSent` on a meta with `notificationNumber=2` increments to 3 and updates `lastNotificationDate` but leaves `firstNotificationAt` untouched (still its earlier value).
-3. `computeStaleNotifications(90)` returns tutorials with `reviewedDate < NOW() - 90d` AND `notificationNumber <= MAX_NOTIFICATION_LEVEL`. Seed 3 rows: one stale-and-eligible (returned), one stale-but-already-at-level-4 (NOT returned — the lib filters `notificationNumber <= 3`), one fresh (NOT returned).
-4. `computeStaleNotifications` filters by `monitoredStatus = 'ACTIVE'` and `tutorial.status = 'ACTIVE'` — seed an inactive tutorial; confirm it's filtered out.
+3. `computeStaleNotifications(90)` filters out rows with `notificationNumber >= 4` (the lib filters `notificationNumber <= MAX_NOTIFICATION_LEVEL` = 3). Seed one row at level 4; confirm absent from result.
+4. `computeStaleNotifications` filters by `monitoredStatus = 'ACTIVE'` and `tutorial.status = 'ACTIVE'`. Seed a tutorial with `tutorial.status = 'INACTIVE'`; confirm filtered out.
 
-Bootstrap pattern: `cds.test('serve', '--project', '.', '--in-memory')` at module top (per `[feedback_module_singletons_in_vitest_cds]` and the existing `test/unit/lib/tutorial-review.test.js` pattern).
+Bootstrap pattern: the existing file uses `cds.test('serve', '--project', '.', '--in-memory')` at module top — keep it (don't rewrite to `cds.deploy()` — both work, the existing pattern stays). The `[feedback_module_singletons_in_vitest_cds]` memory cited in the prior spec draft does NOT apply here since the lib calls `cds.entities()` lazily at function-call time, not at module-load time.
 
 ## Rollout
 
@@ -155,12 +227,16 @@ Bootstrap pattern: `cds.test('serve', '--project', '.', '--in-memory')` at modul
 
 - [ ] `TutorialMeta.firstNotificationAt` exists as a nullable Timestamp column
 - [ ] `MyTutorialsView` exposes `firstNotificationAt` and `outdated` (derived from `notificationNumber >= 4`)
-- [ ] `STALE_DAYS_DEFAULT = 90` in `srv/lib/contributor-notifications.js` AND `srv/jobs/scheduler.js` call site
+- [ ] `STALE_DAYS_DEFAULT = 90` in `srv/lib/contributor-notifications.js` AND `srv/jobs/scheduler.js:135` call site AND `srv/admin-service.js:794` call site
+- [ ] `scripts/seed-tutorial-meta.js` updated from `180` to `90` (or annotated if Tom chooses option b)
 - [ ] `markNotificationSent` sets `firstNotificationAt` ONLY when prior `notificationNumber === 0`
 - [ ] `reviewTutorial` clears all 4 review-state fields (`reviewedDate→now`, `notificationNumber→0`, `lastNotificationDate→null`, `firstNotificationAt→null`)
-- [ ] `test/unit/lib/contributor-notifications.test.js` exists with 4 passing tests
-- [ ] Extended assertions in `test/unit/lib/tutorial-review.test.js` and `test/notification-reset.test.js`
+- [ ] `srv/admin-service.js:356` `before('UPDATE', 'TutorialMeta')` hook also clears `firstNotificationAt` when `reviewedDate` is touched
+- [ ] Existing `test/unit/lib/tutorial-review.test.js` extended with `firstNotificationAt: null` assertion
+- [ ] Existing `test/notification-reset.test.js` extended with `MyTutorialsView.outdated` assertions via direct CDS db query (not OData `/author/MyTutorials`)
+- [ ] Existing `test/lib/contributor-notifications.test.js` updated for new threshold + 4 new tests added
 - [ ] `npm run test` (unit suite) is green
+- [ ] HDI build emits a new `migration=3` block on `db/src/com.sap.developers.ims.TutorialMeta.hdbmigrationtable` with `ALTER TABLE ... ADD (firstNotificationAt TIMESTAMP)` — verify before pushing
 - [ ] HDI deploy succeeds (additive nullable column + view extension; no destructive operations per memory `[feedback_hdi_deploys_can_wipe_data]`)
 - [ ] No new `cf set-env` required (no new env vars)
 
