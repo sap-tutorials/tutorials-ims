@@ -155,22 +155,35 @@ view MyTutorialsView as
         m.reviewedDate,
         m.monitoredStatus,
         m.notificationNumber,
-        m.lastNotificationDate,
+        // #385 PR-3 rename: lastNotificationDate → notificationDate (view alias only;
+        // underlying TutorialMeta column unchanged).
+        m.lastNotificationDate    as notificationDate,
         m.firstNotificationDate,
-        // HANA strict-SQL rejects bare boolean comparisons in SELECT
-        // projections ("incorrect syntax near >="). The CDS-side
-        // `expression as alias : Boolean` shape works on SQLite (unit
-        // tests) but the cds-to-HANA emitter passes through the raw
-        // `>=` operator unchanged, which HANA can't parse as a boolean
-        // value. Wrap in CASE WHEN ... THEN true ELSE false END to
-        // produce a portable expression. See memory
-        // feedback_hana_boolean_case_when (originally hit on AdminService
-        // view #213). Tom's local deploy on 2026-06-21 surfaced this on
-        // HDI sync against tutorial-system dev.
-        case when m.notificationNumber >= 4 then true else false end as outdated : Boolean,
-        m.owner       as ownerName,
-        m.ownerEmail  as ownerEmail,
-        u.uuid        as ownerUserId
+        // #385 PR-3 rename: ownerName → owner (the underlying TutorialMeta.owner
+        // column was already named `owner`; the previous view alias added a
+        // confusing `Name` suffix).
+        m.owner                   as owner,
+        m.ownerEmail              as ownerEmail,
+        u.uuid                    as ownerUserId,
+        // #385 PR-3 NEW: chain through PR-1's TutorialMeta.repository Association.
+        // NULL-safe — yields null when repository_ID is unset (the dominant case
+        // until PR-2's backfill runs on DEV).
+        m.repository.name         as repositoryName : String,
+        // #385 PR-3 NEW: HANA strict-SQL rejects bare boolean comparisons in
+        // SELECT projections (see feedback_hana_boolean_case_when). Wrap in
+        // CASE WHEN ... THEN true ELSE false END for portability.
+        case when m.monitoredStatus = 'ACTIVE'
+             then true else false end                       as monitored : Boolean,
+        // #385 PR-3 NEW: CAP-portable date arithmetic (HANA DAYS_BETWEEN,
+        // SQLite julianday). Sage filters on this server-side via OData
+        // $filter, so it must remain a CDS-side column (not a JS after-handler).
+        // Returns NULL when reviewedDate is NULL — standard SQL semantics; OData
+        // $filter automatically excludes NULL rows.
+        // Argument order is (past, $now) — both HANA DAYS_BETWEEN(start, end)
+        // and SQLite julianday(end) - julianday(start) need the past date
+        // FIRST to yield a positive integer for past reviews. The original
+        // PR-3 spec wrote the arguments reversed; this is the corrected order.
+        days_between(m.reviewedDate, $now)                  as daysSinceReview : Integer
   };
 
 // Analytics projection over TaskRecords with discriminated soft-link associations

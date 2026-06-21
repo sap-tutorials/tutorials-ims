@@ -174,7 +174,7 @@ describe('AuthorService.reviewTutorial/snoozeTutorial', () => {
       { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
       (tx) => tx.send('snoozeTutorial', { tutorialId: 't-1', days: 30 })
     );
-    expect(ok.lastNotificationDate).toBeDefined();
+    expect(ok.notificationDate).toBeDefined();
   });
 
   it('snoozeTutorial rejects out-of-range days', async () => {
@@ -191,5 +191,90 @@ describe('AuthorService.reviewTutorial/snoozeTutorial', () => {
         (tx) => tx.send('snoozeTutorial', { tutorialId: 't-1', days: 0 })
       )
     ).rejects.toMatchObject({ code: 400 });
+  });
+});
+
+describe('MyTutorialsView #385 PR-3 shape', () => {
+  let MyTutorialsView;
+
+  beforeAll(async () => {
+    MyTutorialsView = cds.entities('com.sap.developers.ims').MyTutorialsView;
+  });
+
+  it('emits new fields: repositoryName, monitored, daysSinceReview', () => {
+    expect(MyTutorialsView.elements.repositoryName).toBeDefined();
+    expect(MyTutorialsView.elements.monitored).toBeDefined();
+    expect(MyTutorialsView.elements.daysSinceReview).toBeDefined();
+  });
+
+  it('emits renamed fields: owner (not ownerName), notificationDate (not lastNotificationDate)', () => {
+    expect(MyTutorialsView.elements.owner).toBeDefined();
+    expect(MyTutorialsView.elements.notificationDate).toBeDefined();
+    expect(MyTutorialsView.elements.ownerName).toBeUndefined();
+    expect(MyTutorialsView.elements.lastNotificationDate).toBeUndefined();
+  });
+
+  it('does NOT emit the deleted outdated field', () => {
+    expect(MyTutorialsView.elements.outdated).toBeUndefined();
+  });
+
+  it('daysSinceReview is null when reviewedDate is null', async () => {
+    const { Tutorials, TutorialMeta, Users } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Users).entries(
+      { ID: 'u-pr3-1', uuid: 'uuid-pr3-1', email: 'nullreview@example.com', firstName: 'N', lastName: 'R', displayName: 'N R' }
+    );
+    await INSERT.into(Tutorials).entries(
+      { ID: 't-pr3-nullreview', slug: 'pr3-nullreview', title: 'No Review', status: 'ACTIVE' }
+    );
+    await INSERT.into(TutorialMeta).entries(
+      { ID: 'm-pr3-nullreview', tutorial_ID: 't-pr3-nullreview', owner: 'X', ownerEmail: 'nullreview@example.com', reviewedDate: null }
+    );
+    const row = await SELECT.one.from(MyTutorialsView).where({ ID: 't-pr3-nullreview' });
+    expect(row).toBeTruthy();
+    expect(row.daysSinceReview).toBeNull();
+  });
+
+  it('daysSinceReview is a positive integer when reviewedDate is in the past', async () => {
+    const { Tutorials, TutorialMeta, Users } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Users).entries(
+      { ID: 'u-pr3-2', uuid: 'uuid-pr3-2', email: 'oldreview@example.com', firstName: 'O', lastName: 'R', displayName: 'O R' }
+    );
+    await INSERT.into(Tutorials).entries(
+      { ID: 't-pr3-oldreview', slug: 'pr3-oldreview', title: 'Old Review', status: 'ACTIVE' }
+    );
+    const tenDaysAgo = new Date(Date.now() - 10 * 86400000).toISOString();
+    await INSERT.into(TutorialMeta).entries(
+      { ID: 'm-pr3-oldreview', tutorial_ID: 't-pr3-oldreview', owner: 'X', ownerEmail: 'oldreview@example.com', reviewedDate: tenDaysAgo }
+    );
+    const row = await SELECT.one.from(MyTutorialsView).where({ ID: 't-pr3-oldreview' });
+    expect(row).toBeTruthy();
+    expect(row.daysSinceReview).toBeGreaterThanOrEqual(10);
+    expect(row.daysSinceReview).toBeLessThanOrEqual(11); // allow 1-day tolerance for test timing
+  });
+
+  it('monitored is true when monitoredStatus is ACTIVE, false otherwise', async () => {
+    const { Tutorials, TutorialMeta, Users } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Users).entries([
+      { ID: 'u-pr3-3', uuid: 'uuid-pr3-3', email: 'active@example.com', firstName: 'A', lastName: 'C', displayName: 'A C' },
+      { ID: 'u-pr3-4', uuid: 'uuid-pr3-4', email: 'inactive@example.com', firstName: 'I', lastName: 'A', displayName: 'I A' }
+    ]);
+    await INSERT.into(Tutorials).entries([
+      { ID: 't-pr3-active', slug: 'pr3-active', title: 'Active', status: 'ACTIVE' },
+      { ID: 't-pr3-inactive', slug: 'pr3-inactive', title: 'Inactive', status: 'ACTIVE' }
+    ]);
+    await INSERT.into(TutorialMeta).entries([
+      { ID: 'm-pr3-active', tutorial_ID: 't-pr3-active', owner: 'X', ownerEmail: 'active@example.com', monitoredStatus: 'ACTIVE' },
+      { ID: 'm-pr3-inactive', tutorial_ID: 't-pr3-inactive', owner: 'X', ownerEmail: 'inactive@example.com', monitoredStatus: 'INACTIVE' }
+    ]);
+    const activeRow = await SELECT.one.from(MyTutorialsView).where({ ID: 't-pr3-active' });
+    const inactiveRow = await SELECT.one.from(MyTutorialsView).where({ ID: 't-pr3-inactive' });
+    expect(activeRow.monitored).toBe(true);
+    expect(inactiveRow.monitored).toBe(false);
+  });
+
+  it('repositoryName is null when TutorialMeta.repository_ID is unset (chain query NULL-safe)', async () => {
+    // Fixture above seeds rows without a repository_ID — chain returns null.
+    const row = await SELECT.one.from(MyTutorialsView).where({ ID: 't-pr3-active' });
+    expect(row.repositoryName).toBeNull();
   });
 });
