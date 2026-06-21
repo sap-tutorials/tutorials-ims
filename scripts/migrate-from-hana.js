@@ -307,6 +307,22 @@ export async function auditNullSapidUsers(source, sourceSchema, queryFn, fsImpl 
 // Mirrors the publish-side LOWER(slug)=? upsert in
 // srv/lib/content-publish-session.js so a re-run of the cutover migrator no
 // longer creates duplicates on top of already-published rows. Issue #338.
+// #385 PR-2: extracted for vitest reach-through. Source schema verified against
+// Tag.java 2026-06-21 — semaphore_id is NOT NULL in source but CAP stays
+// nullable; is_actual_tag is primitive bool (never null); is_interest_item is
+// Boolean boxed (nullable). HANA's hdb driver returns booleans as 1/0
+// integers — accept both 1 and true explicitly.
+export function mapTagRow(row, tagUuid) {
+  return {
+    ID: tagUuid,
+    LEGACYID: row.ID,
+    NAME: truncStr(row.NAME, 255),
+    SEMAPHOREID: truncStr(row.SEMAPHORE_ID, 255),
+    ISACTUALTAG:    row.IS_ACTUAL_TAG === 1 || row.IS_ACTUAL_TAG === true,
+    ISINTERESTITEM: row.IS_INTEREST_ITEM === 1 || row.IS_INTEREST_ITEM === true,
+  };
+}
+
 export function partitionBySlug(mapped, existingMap) {
   const inserts = [];
   const updates = [];
@@ -801,16 +817,12 @@ async function main() {
   // ─── Entity migrations (order matters for FK integrity) ─────────────────────
   const results = [];
 
-  // 1. Tags
+  // 1. Tags — extended for #385 PR-2 (3 new source columns).
   results.push(await migrateEntity(source, target, T, {
     name: 'tags',
-    sourceQuery: `SELECT "ID", "NAME" FROM ${S}."IMS_TAG"`,
+    sourceQuery: `SELECT "ID", "NAME", "SEMAPHORE_ID", "IS_ACTUAL_TAG", "IS_INTEREST_ITEM" FROM ${S}."IMS_TAG"`,
     targetTable: 'COM_SAP_DEVELOPERS_IMS_TAGS',
-    mapRow: (row) => ({
-      ID: uuidMap.tags.get(row.ID),
-      LEGACYID: row.ID,
-      NAME: truncStr(row.NAME, 255),
-    }),
+    mapRow: (row) => mapTagRow(row, uuidMap.tags.get(row.ID)),
   }));
 
   // 2. Events
