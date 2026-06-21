@@ -232,6 +232,73 @@ jobs:
       - name: Install CF MTA plugin
         run: cf install-plugin multiapps -f
 
+      - name: CF Login preflight (diagnose missing/malformed secrets)
+        # Prints structural info (lengths, presence, scheme of the api endpoint)
+        # for each CF_* secret WITHOUT echoing any value. GH Actions masks the
+        # full secret string, but bypassing the mask is easy with substrings or
+        # encodings, so this step deliberately uses only mask-safe operations:
+        #   - "${#VAR}" (length only)
+        #   - "[ -z ... ]" (empty boolean)
+        #   - "[ -n ... ]" (present boolean)
+        #   - scheme prefix of URL secrets via "${URL%%://*}" (only emits 'https' / 'http' / '')
+        #
+        # Step output makes it obvious which secret is empty or mis-shaped, so
+        # you can fix it in repo settings without trial-and-error rerunning
+        # the workflow.
+        env:
+          CF_API_ENDPOINT: ${{ secrets.CF_API_ENDPOINT }}
+          CF_USERNAME: ${{ secrets.CF_USERNAME }}
+          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
+          CF_ORG: ${{ secrets.CF_ORG }}
+        run: |
+          set +e   # don't abort on the conditional emits
+          echo "::group::CF_* secret structural check (no values printed)"
+
+          # 1. presence + length
+          for name in CF_API_ENDPOINT CF_USERNAME CF_PASSWORD CF_ORG; do
+            val="${!name}"
+            if [ -z "$val" ]; then
+              echo "::warning::$name is EMPTY (length 0) — secret missing or unset"
+            else
+              echo "$name: present, length=${#val}"
+            fi
+          done
+
+          # 2. api endpoint URL scheme check (must be https://, not http:// or
+          #    a bare host). cf login -a expects a full URL.
+          if [ -n "$CF_API_ENDPOINT" ]; then
+            scheme="${CF_API_ENDPOINT%%://*}"
+            if [ "$scheme" = "$CF_API_ENDPOINT" ]; then
+              echo "::warning::CF_API_ENDPOINT has NO scheme (no '://' separator) — cf login expects 'https://api.cf.<region>.hana.ondemand.com'"
+            elif [ "$scheme" != "https" ]; then
+              echo "::warning::CF_API_ENDPOINT scheme is '$scheme', expected 'https'"
+            else
+              echo "CF_API_ENDPOINT scheme: https (OK)"
+            fi
+          fi
+
+          # 3. trailing whitespace / newlines (a common copy-paste failure mode)
+          for name in CF_API_ENDPOINT CF_USERNAME CF_ORG; do
+            val="${!name}"
+            if [ -n "$val" ]; then
+              trimmed="$(printf '%s' "$val" | tr -d '[:space:]')"
+              if [ "$val" != "$trimmed" ]; then
+                echo "::warning::$name has trailing/leading whitespace — re-set the secret with no surrounding whitespace"
+              fi
+            fi
+          done
+          # (CF_PASSWORD intentionally NOT checked for whitespace — passwords
+          # legitimately may contain spaces. If a password has accidental
+          # whitespace, the error will surface as 'Credentials were rejected'
+          # which is unmistakable.)
+
+          # 4. CF_USERNAME shape: should look like an email (contains '@')
+          if [ -n "$CF_USERNAME" ] && [ "${CF_USERNAME#*@}" = "$CF_USERNAME" ]; then
+            echo "::notice::CF_USERNAME does not contain '@' — usually CF auth uses email addresses, but S-user IDs without '@' are valid in some BTP setups"
+          fi
+
+          echo "::endgroup::"
+
       - name: CF Login
         run: |
           cf login \
