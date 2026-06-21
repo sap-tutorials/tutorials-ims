@@ -43,12 +43,12 @@ on:
         default: false
         type: boolean
       publish-concurrency:
-        description: 'Number of /content/publish/append batches in flight at once. Lower if srv hits HeadersTimeoutError (event-loop saturation under 6x50 default). Defaults are conservative; raise only after monitoring srv memory + event-loop lag during a run.'
+        description: 'Number of /content/publish/append batches in flight at once. Default raised 2 → 4 in issue #434 PR 1 after stable runs at 2/25 post-#423 bulk-SQL fix. Next stage: 6/50 (PR 2). Lower below 4 if srv hits HeadersTimeoutError again.'
         required: false
-        default: '2'
+        default: '4'
         type: string
       publish-batch-size:
-        description: 'Slugs per /content/publish/append batch. Lower if srv hits HeadersTimeoutError. Multiplied by publish-concurrency gives total in-flight slugs (default 2x25 = 50). The whole catalog has ~1400 slugs so smaller batches just take longer linearly, not exponentially.'
+        description: 'Slugs per /content/publish/append batch. Lower if srv hits HeadersTimeoutError. Multiplied by publish-concurrency gives total in-flight slugs (current default 4x25 = 100). The whole catalog has ~1400 slugs so smaller batches just take longer linearly, not exponentially.'
         required: false
         default: '25'
         type: string
@@ -221,19 +221,25 @@ jobs:
 
       - name: Publish tutorial content to HANA
         # Concurrency / batch-size are tunable via workflow_dispatch inputs
-        # (default 2/25). The historical 6/50 default saturated srv's event
-        # loop on a 1G/1-instance app, producing HeadersTimeoutError on
-        # every parallel append batch (#382 phase E rerun 2026-06-18 +
-        # 2026-06-19). repository_dispatch events fall through to the
-        # safer defaults via the empty-string fallback expression below.
-        # See #420 for the planned worker_threads fix.
+        # (default raised 2/25 → 4/25 in issue #434 PR 1; staged toward
+        # the original pre-#422 6/50 in PR 2 once 4/25 has 2-3 stable runs).
+        # repository_dispatch events fall through to the same default via
+        # the empty-string fallback expression below.
+        #
+        # Historical: 6/50 was the original default until PR #422 (2026-06-18)
+        # dropped it to 2/25 while diagnosing publish timeouts that turned
+        # out to be the N+1 SQL pattern fixed in #423. Bulk MERGE in #423
+        # means HANA-side throughput is no longer the bottleneck; the srv
+        # event loop is, but at 4/25 (100 in-flight slugs) it still has
+        # plenty of headroom on the 1G/1-instance dev app.
+        # See #420 for the planned worker_threads fix that would unlock 6/50+.
         run: |
           npx tsx scripts/publish-content.ts \
             --hugo-dir hugo/public \
             --base-url "${{ steps.srv.outputs.srv_url }}" \
             --trigger "ci/${{ github.event_name }}@${{ github.sha }}" \
             --hugo-version "0.147.7" \
-            --concurrency "${{ inputs.publish-concurrency || '2' }}" \
+            --concurrency "${{ inputs.publish-concurrency || '4' }}" \
             --batch-size "${{ inputs.publish-batch-size || '25' }}" \
             --verbose
         env:
