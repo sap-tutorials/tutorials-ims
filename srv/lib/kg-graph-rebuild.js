@@ -41,8 +41,20 @@ import { randomUUID } from 'node:crypto';
 import { sparqlExec } from './kg-sparql-client.js';
 import { projectTriples } from './kg-projection.js';
 
-// Production graph IRI — must match the spec and the query-layer reader.
-export const DEFAULT_GRAPH_IRI = 'https://developers.sap.com/kg/tutorials';
+// Production graph IRI. Bumped from `https://developers.sap.com/kg/tutorials`
+// to `…/tutorials-v2` on 2026-06-21 (issue #533) because the original IRI
+// was ACL-locked under a non-runtime user — a prior debug session or
+// failed cf-task likely created the graph under a different identity,
+// and HANA's KGE applies per-graph ACL that the .hdbgrants flow does not
+// override. Probed live: INSERT to the old IRI returned "User is not
+// allowed (INSERT)" while INSERT to any other IRI (including
+// `…/tutorials-test`) succeeded under the same runtime user.
+//
+// MUST stay in sync with srv/lib/kg-queries.js `FROM <…>` clauses (3
+// places) and the named-query test in test/hybrid/kg-named-queries.test.js.
+// A grep on `developers.sap.com/kg/tutorials($|[^-])` should yield only
+// docs references after a coordinated rename.
+export const DEFAULT_GRAPH_IRI = 'https://developers.sap.com/kg/tutorials-v2';
 
 // Bootstrap triple used to ensure the named graph exists before CLEAR.
 // All three positions use the same "ghost" IRI so the triple is obviously

@@ -237,7 +237,7 @@ export function substitute(template, params = {}) {
 export const NEIGHBORHOOD_QUERY = `PREFIX kg: <https://developers.sap.com/kg/>
 
 SELECT DISTINCT ?type ?targetSlug ?targetLabel ?weight
-FROM <https://developers.sap.com/kg/tutorials>
+FROM <https://developers.sap.com/kg/tutorials-v2>
 WHERE {
   {
     # teaches: concepts the input tutorial directly teaches
@@ -286,7 +286,7 @@ export const PATH_BETWEEN_QUERY = `PREFIX kg: <https://developers.sap.com/kg/>
 # Phase 2 stub: PR 5 declares; PR 6+ implements.
 # Will be: SELECT shortest path of kg:requires between $FROM_SLUG and $TO_SLUG.
 SELECT ?placeholder
-FROM <https://developers.sap.com/kg/tutorials>
+FROM <https://developers.sap.com/kg/tutorials-v2>
 WHERE { ?placeholder ?p ?o }
 LIMIT 0
 `;
@@ -301,7 +301,7 @@ export const CONCEPTS_FOR_USER_QUERY = `PREFIX kg: <https://developers.sap.com/k
 # Phase 2 stub: PR 5 declares; PR 6+ implements.
 # Will be: SELECT concepts taught by tutorials completed by $USER_ID.
 SELECT ?placeholder
-FROM <https://developers.sap.com/kg/tutorials>
+FROM <https://developers.sap.com/kg/tutorials-v2>
 WHERE { ?placeholder ?p ?o }
 LIMIT 0
 `;
