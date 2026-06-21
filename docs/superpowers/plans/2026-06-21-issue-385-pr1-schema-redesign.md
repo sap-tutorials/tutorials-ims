@@ -981,6 +981,14 @@ The most important test in this PR — verifies the 2-level Association chain qu
 
 - [ ] **Step 5.4: Run the hybrid test (requires cf login + cds bind)**
 
+  **IMPORTANT — sync the chain query form with Task 3.** If Task 3 had to fall back from the dotted form `'repository.repositoryOwner.email as email'` to the underscore form `'repository_repositoryOwner_email as email'` (or the callback form), use the SAME form in this hybrid test. Otherwise this test will re-discover the same incompatibility. Before running, grep what Task 3 actually shipped:
+
+  ```bash
+  grep -n "repository.*repositoryOwner.*email\|repository_repositoryOwner_email" srv/lib/contributor-notifications.js
+  ```
+
+  If the actual form differs from the dotted-form examples in Step 5.2, edit the hybrid test's two chain queries to match before running.
+
   ```bash
   ALLOW_HYBRID_WRITES=true npx vitest run test/hybrid/385-schema-redesign.test.js 2>&1 | tail -20
   ```
