@@ -139,3 +139,83 @@ describe('mapTutorialRepositoryRow() (#385 PR-2)', () => {
     expect(out.LEGACYID).toBe(5);
   });
 });
+
+import backfillModule from '../../scripts/backfill-tutorial-meta-from-ims.cjs';
+const { buildBackfillUpdateParams } = backfillModule;
+
+describe('buildBackfillUpdateParams() — backfill row→params (#385 PR-2)', () => {
+  it('derives repoUuid via tutorialrepository namespace when REPO_LEGACY_ID is set', () => {
+    const out = buildBackfillUpdateParams({
+      TUT_LEGACY_ID: 100,
+      OWNER_EMAIL: 'alice@sap.com',
+      IS_REVIEWED: 1,
+      UPDATED_AT: '2026-06-01T00:00:00Z',
+      NOTIF_NUM: 2,
+      NOTIF_DATE: '2026-05-01T00:00:00Z',
+      REPO_LEGACY_ID: 42,
+    });
+    // Expected param order: [owner, reviewedDate, notifNum, notifDate, repoUuid, targetTutorialUuid]
+    expect(out.params[4]).toBe(uuidv5('42', NAMESPACES.tutorialrepository));
+    expect(out.params[5]).toBe(uuidv5('100', NAMESPACES.tutorial));
+    expect(out.skip).toBe(false);
+    expect(out.placeholderEmail).toBe(false);
+  });
+
+  it('emits null repoUuid when REPO_LEGACY_ID is null', () => {
+    const out = buildBackfillUpdateParams({
+      TUT_LEGACY_ID: 100,
+      OWNER_EMAIL: 'alice@sap.com',
+      IS_REVIEWED: 0,
+      UPDATED_AT: '2026-06-01T00:00:00Z',
+      NOTIF_NUM: 0,
+      NOTIF_DATE: null,
+      REPO_LEGACY_ID: null,
+    });
+    expect(out.params[4]).toBeNull();
+  });
+
+  it('does NOT skip a row that has only REPO_LEGACY_ID populated', () => {
+    // Defends against the regression where adding the new column to the
+    // SELECT but forgetting to extend the early-skip predicate would drop
+    // every row that only carries a repository reference.
+    const out = buildBackfillUpdateParams({
+      TUT_LEGACY_ID: 100,
+      OWNER_EMAIL: null,  // null/placeholder
+      IS_REVIEWED: 0,
+      UPDATED_AT: '2026-06-01T00:00:00Z',
+      NOTIF_NUM: 0,
+      NOTIF_DATE: null,
+      REPO_LEGACY_ID: 42,
+    });
+    expect(out.skip).toBe(false);
+    expect(out.params[4]).toBe(uuidv5('42', NAMESPACES.tutorialrepository));
+  });
+
+  it('still skips a row with NO useful data at all', () => {
+    const out = buildBackfillUpdateParams({
+      TUT_LEGACY_ID: 100,
+      OWNER_EMAIL: null,
+      IS_REVIEWED: 0,
+      UPDATED_AT: null,
+      NOTIF_NUM: 0,
+      NOTIF_DATE: null,
+      REPO_LEGACY_ID: null,
+    });
+    expect(out.skip).toBe(true);
+  });
+
+  it('flags placeholder emails and emits null for ownerEmail', () => {
+    const out = buildBackfillUpdateParams({
+      TUT_LEGACY_ID: 100,
+      OWNER_EMAIL: '12345+bob@users.noreply.github.com',
+      IS_REVIEWED: 0,
+      UPDATED_AT: null,
+      NOTIF_NUM: 0,
+      NOTIF_DATE: null,
+      REPO_LEGACY_ID: 42,
+    });
+    expect(out.placeholderEmail).toBe(true);
+    expect(out.params[0]).toBeNull();
+    expect(out.skip).toBe(false);  // REPO_LEGACY_ID keeps it alive
+  });
+});

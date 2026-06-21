@@ -107,7 +107,34 @@ function tutorialUuid(legacyId) {
   return uuidv5(String(legacyId), NAMESPACES.tutorial);
 }
 
-(async function main() {
+// #385 PR-2: extracted for vitest reach-through. Pure function — produces the
+// params array + decision flags for the UPDATE statement from a single source
+// row. `skip: true` short-circuits the loop's early-out path. `placeholderEmail`
+// is surfaced to the caller for the existing skippedPlaceholders counter.
+function buildBackfillUpdateParams(row) {
+  const isPlaceholderEmail =
+    row.OWNER_EMAIL && /(@users\.noreply\.github\.com|@sap-tutorials\.local)$/i.test(row.OWNER_EMAIL);
+  const ownerEmail = (row.OWNER_EMAIL && !isPlaceholderEmail) ? row.OWNER_EMAIL : null;
+  const reviewedDate = (row.IS_REVIEWED === 1 && row.UPDATED_AT) ? row.UPDATED_AT : null;
+  const notifNum  = (row.NOTIF_NUM != null && row.NOTIF_NUM !== 0) ? row.NOTIF_NUM : null;
+  const notifDate = row.NOTIF_DATE || null;
+  const repoUuid  = row.REPO_LEGACY_ID
+    ? uuidv5(String(row.REPO_LEGACY_ID), NAMESPACES.tutorialrepository)
+    : null;
+  const targetTutorialUuid = tutorialUuid(row.TUT_LEGACY_ID);
+
+  const skip = !ownerEmail && !reviewedDate && notifNum == null && notifDate == null && !repoUuid;
+
+  return {
+    skip,
+    placeholderEmail: !!isPlaceholderEmail,
+    params: [ownerEmail, reviewedDate, notifNum, notifDate, repoUuid, targetTutorialUuid],
+  };
+}
+
+module.exports = { buildBackfillUpdateParams };
+
+async function main() {
   const sourceCreds = resolveSourceCreds();
   const targetCreds = resolveTargetCreds();
 
@@ -131,7 +158,8 @@ function tutorialUuid(legacyId) {
       TM.IS_REVIEWED  AS IS_REVIEWED,
       TM.UPDATED_AT   AS UPDATED_AT,
       TM.NOTIFICATION_NUMBER AS NOTIF_NUM,
-      TM.NOTIFICATION_DATE   AS NOTIF_DATE
+      TM.NOTIFICATION_DATE   AS NOTIF_DATE,
+      TM.REPOSITORY_ID       AS REPO_LEGACY_ID
     FROM IMS_TUTORIAL_META TM
     JOIN IMS_TUTORIAL_AUTHOR A ON TM.OWNER_ID = A.ID
   `);
@@ -141,7 +169,7 @@ function tutorialUuid(legacyId) {
   console.log(`  - With email:  ${withEmail}`);
   console.log(`  - Reviewed:    ${reviewedCount}`);
 
-  let updatedOwner = 0, updatedReviewed = 0, updatedNotif = 0, missing = 0, errCount = 0, skippedPlaceholders = 0;
+  let updatedOwner = 0, updatedReviewed = 0, updatedNotif = 0, updatedRepo = 0, missing = 0, errCount = 0, skippedPlaceholders = 0;
   let stmt = null;
   if (!DRY_RUN) {
     stmt = await prepareStmt(target,
@@ -150,52 +178,41 @@ function tutorialUuid(legacyId) {
               REVIEWEDDATE         = COALESCE(?, REVIEWEDDATE),
               NOTIFICATIONNUMBER   = COALESCE(?, NOTIFICATIONNUMBER),
               LASTNOTIFICATIONDATE = COALESCE(?, LASTNOTIFICATIONDATE),
+              REPOSITORY_ID        = COALESCE(?, REPOSITORY_ID),
               MODIFIEDAT           = CURRENT_TIMESTAMP,
               MODIFIEDBY           = 'backfill-script'
         WHERE TUTORIAL_ID = ?`);
   }
 
   for (const row of sourceRows) {
-    const targetTutorialUuid = tutorialUuid(row.TUT_LEGACY_ID);
-    // Filter out placeholder emails. IMS_TUTORIAL_AUTHOR.EMAIL contains
-    // synthetic addresses for ~225 tutorials across 46 authors:
-    //   - "noreply-tutorial-cleanup@sap-tutorials.local"  (1 author, 68 tutorials)
-    //   - "<id>+<github-username>@users.noreply.github.com"  (45 authors,
-    //      ~155 tutorials; github-private-email convention)
-    // Carrying these forward as the OWNER value breaks the admin Tutorial
-    // Health "Monitored by me" filter for the affected authors — the filter
-    // compares OWNER to the authenticated user's real email. Leave OWNER
-    // NULL for these rows so admins can claim ownership cleanly via the UI
-    // (and so the lazy-self-heal user-profile path on /auth/user, PR #370,
-    // doesn't accidentally inherit a placeholder).
-    const isPlaceholderEmail =
-      row.OWNER_EMAIL && /(@users\.noreply\.github\.com|@sap-tutorials\.local)$/i.test(row.OWNER_EMAIL);
-    const ownerEmail = (row.OWNER_EMAIL && !isPlaceholderEmail) ? row.OWNER_EMAIL : null;
-    if (isPlaceholderEmail) skippedPlaceholders++;
-    const reviewedDate = (row.IS_REVIEWED === 1 && row.UPDATED_AT) ? row.UPDATED_AT : null;
-    const notifNum = (row.NOTIF_NUM != null && row.NOTIF_NUM !== 0) ? row.NOTIF_NUM : null;
-    const notifDate = row.NOTIF_DATE || null;
+    const decision = buildBackfillUpdateParams(row);
+    if (decision.placeholderEmail) skippedPlaceholders++;
 
-    if (!ownerEmail && !reviewedDate && notifNum == null && notifDate == null) {
+    if (decision.skip) {
       missing++;
       continue;
     }
 
+    const [ownerEmail, reviewedDate, notifNum, notifDate, repoUuid, targetTutorialUuid] = decision.params;
+
     if (DRY_RUN) {
-      if (VERBOSE) console.log(`  [dry-run] tut=${row.TUT_LEGACY_ID} owner=${ownerEmail||'-'} reviewed=${reviewedDate?'Y':'N'}`);
+      if (VERBOSE) {
+        console.log(`  [dry-run] tut=${row.TUT_LEGACY_ID} owner=${ownerEmail||'-'} reviewed=${reviewedDate?'Y':'N'} repo=${repoUuid?'Y':'-'}`);
+      }
       if (ownerEmail) updatedOwner++;
       if (reviewedDate) updatedReviewed++;
       if (notifNum != null || notifDate) updatedNotif++;
+      if (repoUuid) updatedRepo++;
       continue;
     }
 
     try {
-      const params = [ownerEmail, reviewedDate, notifNum, notifDate, targetTutorialUuid];
-      const affected = await runStmt(stmt, params);
+      const affected = await runStmt(stmt, decision.params);
       if (affected > 0) {
         if (ownerEmail) updatedOwner++;
         if (reviewedDate) updatedReviewed++;
         if (notifNum != null || notifDate) updatedNotif++;
+        if (repoUuid) updatedRepo++;
       } else {
         missing++;
       }
@@ -214,6 +231,7 @@ function tutorialUuid(legacyId) {
   console.log(`  ${DRY_RUN ? 'Would update' : 'Updated'} owner email:        ${updatedOwner}`);
   console.log(`  ${DRY_RUN ? 'Would update' : 'Updated'} reviewedDate:       ${updatedReviewed}`);
   console.log(`  ${DRY_RUN ? 'Would update' : 'Updated'} notification stats: ${updatedNotif}`);
+  console.log(`  ${DRY_RUN ? 'Would update' : 'Updated'} repository FK:      ${updatedRepo}`);
   console.log(`  Skipped (no data or no target row):  ${missing}`);
   console.log(`  Skipped placeholder emails:          ${skippedPlaceholders}`);
   console.log(`  Errors:                              ${errCount}`);
@@ -221,7 +239,11 @@ function tutorialUuid(legacyId) {
   source.end();
   target.end();
   process.exit(errCount > 0 ? 1 : 0);
-})().catch((e) => {
-  console.error('FATAL:', e.message);
-  process.exit(2);
-});
+}  // end of async function main()
+
+if (require.main === module) {
+  main().catch((e) => {
+    console.error('FATAL:', e.message);
+    process.exit(2);
+  });
+}
