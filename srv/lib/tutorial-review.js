@@ -28,5 +28,5 @@ export async function snoozeTutorial(tutorialId, days) {
   }
   const snoozeUntil = new Date(Date.now() + (days || 30) * 86400000).toISOString();
   await UPDATE(TutorialMeta, meta.ID).set({ lastNotificationDate: snoozeUntil });
-  return { lastNotificationDate: snoozeUntil, notificationNumber: meta.notificationNumber };
+  return { notificationDate: snoozeUntil, notificationNumber: meta.notificationNumber };
 }

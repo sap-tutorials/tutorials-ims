@@ -22,7 +22,7 @@ service AuthorService {
   };
 
   action snoozeTutorial(tutorialId : UUID, days : Integer) returns {
-    lastNotificationDate : Timestamp;
+    notificationDate     : Timestamp;   // #385 PR-3 rename (was lastNotificationDate)
     notificationNumber   : Integer;
   };
 
