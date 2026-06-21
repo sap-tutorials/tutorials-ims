@@ -30,13 +30,13 @@ build-parameters:
         - /tmp/hugo --source hugo --config ../hugo.qa.toml --minify
         - npx tsx scripts/verify-qa-build.ts hugo/public-qa
         - mkdir -p approuter/static/qa
-        - cp -r hugo/public-qa/* approuter/static/qa/
+        - cp -r hugo/public-qa/. approuter/static/qa/
         - rm -rf approuter/static/qa/tutorials
         - npx tsx scripts/highlight-cds.ts
         - npm --prefix app/display-app install
         - npm --prefix app/display-app run build
         - mkdir -p approuter/static
-        - cp -r hugo/public/* approuter/static/
+        - cp -r hugo/public/. approuter/static/
         - cp hugo/static/tutorials/_nav.json approuter/static/tutorials/_nav.json.bak
         - rm -rf approuter/static/tutorials
         - mkdir -p approuter/static/tutorials && mv approuter/static/tutorials/_nav.json.bak approuter/static/tutorials/_nav.json
