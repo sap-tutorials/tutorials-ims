@@ -1,0 +1,70 @@
+# =============================================================================
+# Example terraform.tfvars — copy to terraform.tfvars and fill in.
+# =============================================================================
+# Run this once:
+#   cp terraform.tfvars.example terraform.tfvars
+# Then edit the values below. terraform.tfvars is gitignored — never commit it.
+
+# The BTP subaccount that hosts your CI service principal. Find via:
+#   btp list accounts/subaccount --format json | jq '.value[] | {name, guid, subdomain}'
+subaccount_id = "00000000-0000-0000-0000-000000000000"
+
+# CF org name (used in role collection descriptions for audit clarity).
+cf_org_name = "tutorial-system"
+
+# Optional: short prefix for the BTP-side resource names. Becomes part of the
+# service instance, binding, and role collection names. Lowercase, kebab-case.
+name_prefix = "tutorials"
+
+# Per-environment service principals.
+#
+# Each map entry produces ONE service principal (XSUAA app + client credentials)
+# that can deploy MTAs into ONE CF space. Multiple environments => multiple
+# isolated principals; a leak in dev never grants prod-deploy.
+#
+# The map key (e.g. "dev") suffixes every generated resource name.
+environments = {
+  dev = {
+    cf_space = "dev"
+
+    # MTA Administrator subaccount role — required for `cf deploy mtar` because
+    # MTA deploys talk to the multiapps-controller, not just CF directly.
+    # Find role_template_app_id via:
+    #   btp list security/roles --subaccount <id> --format json \
+    #     | jq -r '.value[] | select(.name=="MtaDeployAdministrator")
+    #             | {role_template_app_id: .role_template_app_id, role_template_name: .role_template_name}'
+    # The app id is typically "mta_!t<n>" where <n> is per-subaccount.
+    extra_role_assignments = [
+      {
+        name                 = "MtaDeployAdministrator"
+        role_template_app_id = "mta_!t10" # ← verify in your subaccount
+        role_template_name   = "MtaDeployAdministrator"
+      },
+    ]
+  }
+
+  qa = {
+    cf_space = "qa"
+    extra_role_assignments = [
+      {
+        name                 = "MtaDeployAdministrator"
+        role_template_app_id = "mta_!t10"
+        role_template_name   = "MtaDeployAdministrator"
+      },
+    ]
+  }
+
+  # PRODUCTION — uncomment when you're ready, ideally in a SEPARATE Terraform
+  # workspace so dev/qa `terraform destroy` cannot wipe prod CI.
+  #
+  # prod = {
+  #   cf_space = "prod"
+  #   extra_role_assignments = [
+  #     {
+  #       name                 = "MtaDeployAdministrator"
+  #       role_template_app_id = "mta_!t10"
+  #       role_template_name   = "MtaDeployAdministrator"
+  #     },
+  #   ]
+  # }
+}
