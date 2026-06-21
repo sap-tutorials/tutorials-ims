@@ -157,7 +157,17 @@ view MyTutorialsView as
         m.notificationNumber,
         m.lastNotificationDate,
         m.firstNotificationDate,
-        m.notificationNumber >= 4 as outdated : Boolean,
+        // HANA strict-SQL rejects bare boolean comparisons in SELECT
+        // projections ("incorrect syntax near >="). The CDS-side
+        // `expression as alias : Boolean` shape works on SQLite (unit
+        // tests) but the cds-to-HANA emitter passes through the raw
+        // `>=` operator unchanged, which HANA can't parse as a boolean
+        // value. Wrap in CASE WHEN ... THEN true ELSE false END to
+        // produce a portable expression. See memory
+        // feedback_hana_boolean_case_when (originally hit on AdminService
+        // view #213). Tom's local deploy on 2026-06-21 surfaced this on
+        // HDI sync against tutorial-system dev.
+        case when m.notificationNumber >= 4 then true else false end as outdated : Boolean,
         m.owner       as ownerName,
         m.ownerEmail  as ownerEmail,
         u.uuid        as ownerUserId
