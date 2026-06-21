@@ -357,6 +357,7 @@ export default class AdminService extends cds.ApplicationService {
       if (req.data.reviewedDate) {
         req.data.notificationNumber = 0;
         req.data.lastNotificationDate = null;
+        req.data.firstNotificationDate = null;  // #450: clear all 3 fields atomically
       }
     });
 
