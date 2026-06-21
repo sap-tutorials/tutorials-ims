@@ -4,6 +4,23 @@ import { deriveSlug, suffixOnCollision } from '../lib/advocate-slug.js';
 import { processUpload, toBuffer } from '../lib/advocate-photo-store.js';
 
 /**
+ * Build the public REST URL for an advocate's photo.
+ *
+ * The same path served by srv/routes/advocates-public.js (`GET
+ * /api/advocates/:slug/photo`). Centralized here so all
+ * `hasPhoto`-toggling code paths emit consistent URLs and the route
+ * shape lives in one place — if we ever rename the route, only one
+ * spot + a backfill SQL needs to change.
+ *
+ * Lowercase the slug to match the route's `LOWER(SLUG)` lookup in
+ * advocate-photo-store.js (HANA SLUG column preserves case).
+ */
+export function urlForSlug(slug) {
+  if (!slug) return null;
+  return `/api/advocates/${String(slug).toLowerCase()}/photo`;
+}
+
+/**
  * Photo upload pipeline. Mutates `data` in place — replaces incoming bytes
  * with the processed 256/64 WebP outputs and stamps sha256/size/uploadedAt.
  * Exported separately so unit tests can exercise it without going through
@@ -79,25 +96,57 @@ export function register(srv) {
   }
 
   // Flip Advocates.hasPhoto + photoUpdatedAt after a successful photo write.
+  // Also sets photoUrl so the OP HeaderInfo.ImageUrl can resolve without a
+  // virtual element (issue #415).
   // CAP gives us the inserted/updated row in `data`; the FK column is
   // 'advocate_ID' (because the schema declared `key advocate : Association`).
   const flipHasPhoto = async (data) => {
     const advId = data?.advocate_ID || data?.advocate?.ID;
     if (!advId) return;
+    // Look up slug so we can compute the URL — the photo handler didn't
+    // see slug (it only knows the FK).
+    const adv = await SELECT.one.from(Advocates).columns('slug').where({ ID: advId });
     await UPDATE(Advocates)
-      .set({ hasPhoto: true, photoUpdatedAt: new Date().toISOString() })
+      .set({
+        hasPhoto: true,
+        photoUpdatedAt: new Date().toISOString(),
+        photoUrl: urlForSlug(adv?.slug),
+      })
       .where({ ID: advId });
   };
 
   srv.after(['CREATE', 'UPDATE'], AdvocatePhotos, flipHasPhoto);
 
-  // On photo delete, flip the flag back to false.
+  // On photo delete, flip the flag back to false AND clear photoUrl so the
+  // OP header avatar disappears in lockstep.
   srv.after('DELETE', AdvocatePhotos, async (_unused, req) => {
     const advId = req.data?.advocate_ID;
     if (!advId) return;
     await UPDATE(Advocates)
-      .set({ hasPhoto: false, photoUpdatedAt: new Date().toISOString() })
+      .set({
+        hasPhoto: false,
+        photoUpdatedAt: new Date().toISOString(),
+        photoUrl: null,
+      })
       .where({ ID: advId });
+  });
+
+  // Slug rename: when an Advocates UPDATE changes slug AND hasPhoto is true,
+  // photoUrl must be recomputed so the OP header points at the right route.
+  // Only fires if the incoming payload includes a 'slug' field (skips
+  // partial-updates that don't touch slug); reads the current row to get
+  // the latest hasPhoto state.
+  srv.after('UPDATE', Advocates, async (_unused, req) => {
+    const incomingSlug = req.data?.slug;
+    const advId = req.data?.ID || req.params?.[0]?.ID || req.params?.[0];
+    if (!incomingSlug || !advId) return;
+    const current = await SELECT.one.from(Advocates)
+      .columns('hasPhoto', 'photoUrl')
+      .where({ ID: advId });
+    if (!current?.hasPhoto) return;
+    const newUrl = urlForSlug(incomingSlug);
+    if (current.photoUrl === newUrl) return; // already in sync
+    await UPDATE(Advocates).set({ photoUrl: newUrl }).where({ ID: advId });
   });
 
   // Bound action: uploadPhoto. Admins call this from the Object Page
@@ -165,7 +214,18 @@ export function register(srv) {
       );
     }
     await db.run(
-      UPDATE(Advocates).set({ hasPhoto: true, photoUpdatedAt: now }).where({ ID: advocateID }),
+      UPDATE(Advocates).set({
+        hasPhoto: true,
+        photoUpdatedAt: now,
+        // photoUrl mirrors the public route shape; advocate's slug is already
+        // committed by the time uploadPhoto fires (it's set at draft-NEW).
+        // Fetch slug here rather than threading it through — keeps the
+        // invariant maintained in a single SQL even if the call site is
+        // racing with a slug rename (the slug-rename handler runs after).
+        photoUrl: urlForSlug(
+          (await db.run(SELECT.one.from(Advocates).columns('slug').where({ ID: advocateID })))?.slug,
+        ),
+      }).where({ ID: advocateID }),
     );
     // Return the refreshed advocate so Fiori re-renders the header avatar.
     return SELECT.one.from(Advocates).where({ ID: advocateID });
@@ -182,7 +242,11 @@ export function register(srv) {
     await db.run(DELETE.from(AP).where({ advocate_ID: advocateID }));
     await db.run(
       UPDATE(Advocates)
-        .set({ hasPhoto: false, photoUpdatedAt: new Date().toISOString() })
+        .set({
+          hasPhoto: false,
+          photoUpdatedAt: new Date().toISOString(),
+          photoUrl: null,
+        })
         .where({ ID: advocateID }),
     );
     return SELECT.one.from(Advocates).where({ ID: advocateID });

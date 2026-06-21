@@ -1439,20 +1439,25 @@ annotate AdminService.Advocates with {
   joinedDate   @Common.Label: 'Joined';
   hasPhoto     @Common.Label: 'Has photo'   @UI.HiddenFilter @Core.Computed;
   photoUpdatedAt @Common.Label: 'Photo updated' @UI.HiddenFilter @Core.Computed;
+  photoUrl     @Common.Label: 'Photo URL'   @UI.HiddenFilter @Core.Computed;
 };
 
 annotate AdminService.Advocates with @(
-  // Object Page header. The avatar (HeaderInfo.ImageUrl) is intentionally
-  // omitted in v1 — wiring it via a virtual photoIconUrl element confused
-  // OData v4 drill-down ("invalid segment: photoIconUrl" errors on every
-  // read). Photo display in the OP header is a v2 polish; the
-  // uploadPhoto / clearPhoto header actions still work and the photo
-  // shows correctly on the public /developer-advocates/ flip cards.
+  // Object Page header avatar restored in v2 (issue #415). Wires the OP
+  // HeaderInfo.ImageUrl to the persisted photoUrl column maintained by
+  // the after-handlers in srv/handlers/advocate-handlers.js. PR #404
+  // tried this with a virtual element and hit OData v4 'invalid segment'
+  // errors on $expand=DraftAdministrativeData — Advocates is draft-enabled,
+  // so the persisted-column form is the only shape known to survive
+  // drill-down. The trade-off (two sources of truth: hasPhoto + photoUrl)
+  // is contained by the handlers keeping them in sync on every
+  // photo-write / photo-delete / slug-rename path.
   UI.HeaderInfo: {
     TypeName: 'Advocate',
     TypeNamePlural: 'Advocates',
     Title: { Value: lastName },
-    Description: { Value: title }
+    Description: { Value: title },
+    ImageUrl: photoUrl
   },
   UI.SelectionFields: [ region, isActive, lastName ],
   UI.LineItem: [

@@ -16,6 +16,15 @@ entity Advocates : cuid, managed {
   joinedDate    : Date;
   hasPhoto      : Boolean default false;
   photoUpdatedAt: Timestamp;
+  // Public REST URL for the advocate's avatar (e.g. /api/advocates/thomas-jung/photo).
+  // Computed + maintained by the after-handlers in srv/handlers/advocate-handlers.js
+  // whenever hasPhoto flips or slug changes. Persisted (not virtual) because PR #404
+  // tried the virtual + after-READ approach and hit OData v4 'invalid segment:
+  // photoIconUrl' errors on $expand=DraftAdministrativeData reads (draft-enabled
+  // entities don't tolerate non-primitive virtuals on $expand paths). The
+  // persisted form survives drill-down at the cost of one DB column + a sync
+  // invariant the handlers maintain. Issue #415.
+  photoUrl      : String(200);
   topics        : Composition of many AdvocateTopics on topics.advocate = $self;
   links         : Composition of many AdvocateLinks  on links.advocate  = $self;
   // Inverse association — required so the admin Object Page can target
