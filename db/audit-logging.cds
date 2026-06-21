@@ -77,3 +77,27 @@ annotate ims.BranchDecisions with @PersonalData: {
 annotate ims.Concepts with @PersonalData: {
   EntitySemantics: 'Other'
 };
+
+// Phase 2-C (#465): security-purpose audit on Secrets metadata writes.
+// EntitySemantics: 'Other' is the documented annotation for entities that
+// need audit logging but are NOT DataSubjects (DataSubject / DataSubjectDetails
+// are for personal-data entities; 'Other' covers everything else). Per CAP
+// @PersonalData docs, 'Other' on Secrets registers the entity with the
+// @cap-js/audit-logging plugin so CRUD mutations on the standard projection
+// (description, expiresAt, rotationOwner changes via the admin tile's
+// metadata editor) emit audit events.
+//
+// The 4 custom OData V4 operations (setSecretValue, rotateSecretValue,
+// revealSecretValue, clearSecretValue) do NOT fire these CRUD interceptors
+// — their handlers in srv/admin-service.js call audit.log('SecurityEvent',
+// { data: { action: 'SecretValueRead', ... } }) explicitly via the
+// auditEvent() helper (Task 6). 'SecurityEvent' is the only registered
+// event name; custom event names like 'SecretValueRead' are NOT registered
+// in the plugin's CDS service definition and would silently drop or throw.
+// The action discriminator therefore lives in data.action.
+annotate ims.Secrets with @PersonalData: {
+  EntitySemantics: 'Other'
+} {
+  ![key]      @PersonalData.IsPotentiallyPersonal;
+  description @PersonalData.IsPotentiallyPersonal;
+};
