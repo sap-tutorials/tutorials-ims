@@ -7,6 +7,8 @@
 
 import cds from '@sap/cds';
 import { ensureDevtoberfestConfigSingleton } from '../lib/devtoberfest-singleton.js';
+import { resolveUser } from '../lib/resolve-user.js';
+import { resolveUserSapId } from '../lib/resolve-db-user.js';
 
 const LOG = cds.log('devtoberfest');
 
@@ -22,12 +24,29 @@ async function statusHandler(req, res) {
     }
 
     const event = await SELECT.one.from(Events).where({ ID: config.currentEvent_ID });
-    // TODO Task 4: resolve joined + termsRequired per caller.
+
+    const user = resolveUser(req, cds);
+    let joined = false;
+    if (user) {
+      const sapId = resolveUserSapId(user);
+      if (sapId) {
+        const { Users, EventRegistrations } = cds.entities('com.sap.developers.ims');
+        const dbUser = await SELECT.one.from(Users).columns('ID').where({ sapId });
+        if (dbUser) {
+          const reg = await SELECT.one.from(EventRegistrations).columns('ID').where({
+            user_ID: dbUser.ID,
+            event_ID: config.currentEvent_ID,
+          });
+          joined = Boolean(reg);
+        }
+      }
+    }
+
     return res.status(200).json({
       event: event ? { name: event.name, startDate: event.startDate, endDate: event.endDate } : null,
-      joined: false,
+      joined,
       termsVersion: config.termsVersion,
-      termsRequired: true,
+      termsRequired: !joined,
       contentRulesUrl: config.contentRulesUrl || '',
       faqUrl: config.faqUrl || '',
       gameboardUrl: config.gameboardUrl || '',
@@ -40,7 +59,14 @@ async function statusHandler(req, res) {
 }
 
 export function register(app) {
-  app.get('/api/devtoberfest/status', statusHandler);
+  // context+auth middlewares populate cds.context.user / req.user when
+  // a Bearer (XSUAA) or Basic credential is presented. The route stays
+  // anonymous-friendly — resolveUser returns null for unauthenticated
+  // callers, and the handler keeps joined=false in that case. Same
+  // pattern as the analytics export bridge (server.js).
+  const _contextMw = cds.middlewares?.context?.() || ((req, _res, next) => next());
+  const _authMw    = cds.middlewares?.auth?.()    || ((req, _res, next) => next());
+  app.get('/api/devtoberfest/status', _contextMw, _authMw, statusHandler);
   // /api/devtoberfest/terms wired in Task 5.
 }
 
