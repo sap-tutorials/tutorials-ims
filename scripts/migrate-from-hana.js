@@ -318,6 +318,15 @@ export function mapTagRow(row, tagUuid) {
     LEGACYID: row.ID,
     NAME: truncStr(row.NAME, 255),
     SEMAPHOREID: truncStr(row.SEMAPHORE_ID, 255),
+    // TITLEPATH added 2026-06-22 — fixes admin Tags tile's "Full Path"
+    // column showing empty for all 10,523 rows. Note: `label` (admin tile's
+    // "Display Label" column) is NOT IMS-sourced — it's a CAP-era field
+    // populated by the separate scripts/seed-tag-labels.ts harvester from
+    // AEM Solr. seed-tag-labels matches on titlePath, so it cannot do its
+    // job until this column is populated. Operational chain after deploy:
+    //   1. npm run migrate:hana            # populates titlePath
+    //   2. npm run seed-tag-labels         # populates label from AEM
+    TITLEPATH: truncStr(row.TITLE_PATH, 255),
     ISACTUALTAG:    row.IS_ACTUAL_TAG === 1 || row.IS_ACTUAL_TAG === true,
     ISINTERESTITEM: row.IS_INTEREST_ITEM === 1 || row.IS_INTEREST_ITEM === true,
   };
@@ -889,9 +898,13 @@ async function main() {
   const results = [];
 
   // 1. Tags — extended for #385 PR-2 (3 new source columns).
+  //    TITLE_PATH added 2026-06-22: was missing from the original migrator
+  //    so every CAP Tags row had a null titlePath (admin tile's "Full Path"
+  //    column blank for all 10,523 rows). Pure copy-over fix; the column
+  //    has existed on IMS Java Tag.titlePath since the schema's inception.
   results.push(await migrateEntity(source, target, T, {
     name: 'tags',
-    sourceQuery: `SELECT "ID", "NAME", "SEMAPHORE_ID", "IS_ACTUAL_TAG", "IS_INTEREST_ITEM" FROM ${S}."IMS_TAG"`,
+    sourceQuery: `SELECT "ID", "NAME", "SEMAPHORE_ID", "TITLE_PATH", "IS_ACTUAL_TAG", "IS_INTEREST_ITEM" FROM ${S}."IMS_TAG"`,
     targetTable: 'COM_SAP_DEVELOPERS_IMS_TAGS',
     mapRow: (row) => mapTagRow(row, uuidMap.tags.get(row.ID)),
   }));

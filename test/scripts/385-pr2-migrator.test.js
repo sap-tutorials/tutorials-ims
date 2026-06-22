@@ -54,6 +54,35 @@ describe('mapTagRow() — 3 new columns (#385 PR-2)', () => {
     );
     expect(out.SEMAPHOREID).toBeNull();
   });
+
+  // Regression tests for the TITLE_PATH bug (2026-06-22). Tom caught this on
+  // /admin-ui/#tags-display where the "Full Path" column was empty for all
+  // 10,523 rows — the original migrator's SELECT omitted TITLE_PATH so the
+  // column was never populated even though it exists on IMS Java Tag.titlePath.
+  it('emits TITLEPATH from the IMS TITLE_PATH source column', () => {
+    const out = mapTagRow(
+      { ID: 42, NAME: 'sap-s-4hana', SEMAPHORE_ID: 's', TITLE_PATH: 'software-product>sap-s-4hana', IS_ACTUAL_TAG: 1, IS_INTEREST_ITEM: 1 },
+      tagUuid,
+    );
+    expect(out.TITLEPATH).toBe('software-product>sap-s-4hana');
+  });
+
+  it('passes null TITLE_PATH through unchanged (CAP-side column is nullable)', () => {
+    const out = mapTagRow(
+      { ID: 42, NAME: 'x', SEMAPHORE_ID: 's', TITLE_PATH: null, IS_ACTUAL_TAG: 1, IS_INTEREST_ITEM: 1 },
+      tagUuid,
+    );
+    expect(out.TITLEPATH).toBeNull();
+  });
+
+  it('truncates TITLEPATH at 255 chars (CAP column width)', () => {
+    const longPath = 'a>'.repeat(200);  // 400 chars
+    const out = mapTagRow(
+      { ID: 42, NAME: 'x', SEMAPHORE_ID: 's', TITLE_PATH: longPath, IS_ACTUAL_TAG: 1, IS_INTEREST_ITEM: 1 },
+      tagUuid,
+    );
+    expect(out.TITLEPATH.length).toBe(255);
+  });
 });
 
 describe('mapTutorialContributorRow() (#385 PR-2)', () => {
