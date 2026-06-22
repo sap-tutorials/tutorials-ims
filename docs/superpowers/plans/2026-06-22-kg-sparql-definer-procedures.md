@@ -23,6 +23,98 @@ Before starting, confirm:
 
 ---
 
+## Discoveries from Task 1 implementation (read before Tasks 2-9)
+
+Task 1 (`KG_GRAPH_CLEAR`) was implemented on 2026-06-22 against DEV HANA. Five HANA-Cloud-specific facts that diverge from the plan's original code samples — all subsequent procedure tasks must follow these corrections:
+
+### 1. `SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '...'` does NOT compile
+
+HANA Cloud SQLScript rejects the bare `SQLSTATE` form. Use the CONDITION pattern instead:
+
+```sql
+DECLARE KG_INVALID_IRI CONDITION FOR SQL_ERROR_CODE 10001;
+-- ... later, when you want to raise:
+SIGNAL KG_INVALID_IRI;
+```
+
+**Error codes are in the user-defined range 10000-19999.** Each procedure should use a distinct error code so JS callers can distinguish (Task 1 used 10001 for `KG_INVALID_IRI`, 10002 for `KG_NOT_AVAILABLE_ON_QA` in the QA stub). JS-side detection: `err.code === 10001` (the numeric code propagates through the driver).
+
+**Task 2/3/4 error-code assignments:**
+
+| Procedure | Condition name | Code |
+|---|---|---|
+| `KG_GRAPH_CLEAR` | `KG_INVALID_IRI` | `10001` (in use) |
+| QA stub (all 4 procs) | `KG_NOT_AVAILABLE_ON_QA` | `10002` (in use) |
+| `KG_GRAPH_INSERT` | `KG_INVALID_IRI` | `10001` (reuse) |
+| `KG_GRAPH_INSERT` | `KG_EMPTY_TRIPLES` | `10003` |
+| `KG_GRAPH_INSERT` | `KG_TRIPLES_INVALID` | `10004` |
+| `KG_QUERY` | `KG_UNKNOWN_QUERY` | `10005` |
+| `KG_QUERY` | `KG_INVALID_TUTORIAL_IRI` | `10006` |
+| `KG_QUERY` | `KG_INVALID_USER_ID` | `10007` |
+| `KG_ADMIN_RUNSPARQL` | `KG_EMPTY_SPARQL` | `10008` |
+| `KG_ADMIN_RUNSPARQL` | `KG_INVALID_IS_UPDATE_FLAG` | `10009` |
+
+### 2. `CALL SYS.SPARQL_EXECUTE(...)` is rejected in DEFINER procedures (cross-schema)
+
+HDI refuses cross-schema references in DEFINER-security procedures. Workaround already shipped in Task 1: `db/src/SYS_SPARQL_EXECUTE.hdbsynonym` resolves `SYS_SPARQL_EXECUTE` → `SYS.SPARQL_EXECUTE`, and `db/src/.hdiconfig` registers the `hdbsynonym` plugin. **All procedure bodies in Tasks 2-4 must use `CALL SYS_SPARQL_EXECUTE(...)` (the synonym), NOT `CALL SYS.SPARQL_EXECUTE(...)`.** Same applies to the QA stubs (though they won't reach the CALL — they just SIGNAL).
+
+The synonym + .hdiconfig entry are already on `feat/kg-sparql-definer-procedures` from Task 1's commit `422c61e7`. Tasks 2-4 don't need to re-add them.
+
+### 3. `application_user.schema_privileges.EXECUTE` in `_grants.hdbgrants` was NOT needed
+
+The plan's Step 5 in Task 1 asked for `"schema_privileges": [{ "privileges": ["EXECUTE"] }]` under `application_user`. The implementer omitted it; HDI's `default_access_role` auto-grants EXECUTE on all container-owned procedures to bound runtime users. Verified empirically: the hybrid test's `cds bind --exec` user (which has zero explicit privileges on `KG_GRAPH_CLEAR` per `SYS.GRANTED_PRIVILEGES`) successfully invokes the procedure. **Tasks 2-4 should NOT add `schema_privileges.EXECUTE` to the grants files.**
+
+### 4. `object_owner.system_privileges.SPARQL_*` IS required
+
+Because the procedure runs `SQL SECURITY DEFINER`, the body executes as the HDI container's object-owner (`#OO`). `#OO` needs its own `SPARQL QUERY` / `SPARQL UPDATE` system privileges. **This addition is already in both `_grants.hdbgrants` files** (committed in Task 1's `422c61e7`); Tasks 2-4 don't need to re-add it.
+
+The grants file shape after Task 1 (for reference):
+
+```json
+{
+  "tutorials-kg-grantor": {
+    "application_user": {
+      "system_privileges": [
+        { "privileges": ["SPARQL QUERY", "SPARQL UPDATE"] }
+      ]
+    },
+    "object_owner": {
+      "system_privileges": [
+        { "privileges": ["SPARQL QUERY", "SPARQL UPDATE"] }
+      ]
+    }
+  }
+}
+```
+
+### 5. `db.run('CALL <proc>(?, ?, ?)', [...args, null, null])` does NOT work for OUT params
+
+The `@cap-js/hana` driver does not support OUT-param binding via `db.run`. Wrap every CALL in a `DO BEGIN ... END` block (matches the existing pattern in `scripts/spike/kg-probe.cjs:146-180` and `srv/lib/kg-sparql-client.js`'s legacy `SPARQL_DO_BLOCK`). For example, calling `KG_GRAPH_CLEAR(graph_iri, response, headers)`:
+
+```js
+const DO_CALL = `DO (IN p NVARCHAR(500) => ?) BEGIN
+  DECLARE response NCLOB;
+  DECLARE headers NVARCHAR(5000);
+  CALL KG_GRAPH_CLEAR(:p, response, headers);
+  SELECT :response AS response, :headers AS headers FROM DUMMY;
+END`;
+const rows = await db.run(DO_CALL, [graphIri]);
+// rows = [{ RESPONSE: '...', HEADERS: '...' }]
+```
+
+**Impact on Tasks 6 and the hybrid tests:**
+
+- The JS-side typed client in Task 6 (`srv/lib/kg-sparql-client.js`'s `callProcedure` private) must build per-procedure DO-block wrappers, NOT issue `db.run('CALL "<procname>"(?, ?, ?, ?)', [...inArgs, null, null])` as Task 6's original sketch said. Tasks 2-4's hybrid tests use this DO-block pattern; copy that pattern into the JS client.
+- A reasonable approach in Task 6: a private `wrapInDoBlock(procName, inArgTypes)` helper that generates the DO block per procedure shape. Or: just hard-code the 4 DO blocks (one per procedure) since there are only 4 — YAGNI on the generic builder.
+
+### Additional notes
+
+- **Happy-path test for `KG_GRAPH_CLEAR`** is intentionally weak (asserts `not.toMatchObject({ code: 328 })` — anything OTHER than "procedure not found"). This is because the test seeds the graph via raw `application_user`-bound SPARQL, then calls the procedure which runs as `#OO`; the actual CLEAR fails due to the very ACL collision the design is fixing. The test has a TODO comment marked for Task 2 — once `KG_GRAPH_INSERT` is deployed, update the happy path to use `KG_GRAPH_INSERT` for the seed (so the seed comes from `#OO`), then `KG_GRAPH_CLEAR` succeeds. **Task 2 implementer: tighten this test.**
+
+- **Deploy speed:** Task 1 took ~7 attempts to land due to the iterative discovery of these 5 issues. Tasks 2-4 should each take 1 attempt now that the corrections are documented here. If a task hits a new HANA-syntax wall not listed above, STOP and report — don't loop on iterations.
+
+---
+
 ## Task 0: Set up the procedures directory structure
 
 **Files:**
@@ -251,6 +343,8 @@ Refs #533, #525, #381."
 
 ## Task 2: `KG_GRAPH_INSERT` procedure
 
+> **⚠ Read `## Discoveries from Task 1 implementation` first (top of plan).** The code samples in this task's Step 3 below still show the original (incorrect) `SIGNAL SQLSTATE` form and `CALL SYS.SPARQL_EXECUTE` — both have been corrected in Task 1's actual code. Use the corrections from the Discoveries section: `DECLARE <cond> CONDITION FOR SQL_ERROR_CODE <n>; SIGNAL <cond>;` and `CALL SYS_SPARQL_EXECUTE(...)`. Step 5 (grants) is now a no-op — grants are already in place from Task 1.
+
 **Files:**
 - Create: `db/src/procedures/KG_GRAPH_INSERT.hdbprocedure`
 - Create: `db-qa/src/procedures/KG_GRAPH_INSERT.hdbprocedure` (stub)
@@ -361,6 +455,8 @@ Refs #533, #381."
 ---
 
 ## Task 3: `KG_QUERY` dispatcher procedure
+
+> **⚠ Read `## Discoveries from Task 1 implementation` first (top of plan).** The code samples in this task's Step 3 below still show the original (incorrect) `SIGNAL SQLSTATE` form and `CALL SYS.SPARQL_EXECUTE` — both have been corrected in Task 1's actual code. Use the corrections from the Discoveries section: `DECLARE <cond> CONDITION FOR SQL_ERROR_CODE <n>; SIGNAL <cond>;` and `CALL SYS_SPARQL_EXECUTE(...)`. Use the error-code assignments from the Discoveries table (10005-10007 for this procedure's conditions). No grants changes needed in this task.
 
 **Files:**
 - Create: `db/src/procedures/KG_QUERY.hdbprocedure`
@@ -502,6 +598,8 @@ Refs #533, #381."
 
 ## Task 4: `KG_ADMIN_RUNSPARQL` procedure
 
+> **⚠ Read `## Discoveries from Task 1 implementation` first (top of plan).** The code samples in this task's Step 3 below still show the original (incorrect) `SIGNAL SQLSTATE` form and `CALL SYS.SPARQL_EXECUTE` — both have been corrected in Task 1's actual code. Use the corrections from the Discoveries section: `DECLARE <cond> CONDITION FOR SQL_ERROR_CODE <n>; SIGNAL <cond>;` and `CALL SYS_SPARQL_EXECUTE(...)`. Use the error-code assignments from the Discoveries table (10008-10009 for this procedure's conditions). No grants changes needed in this task.
+
 **Files:**
 - Create: `db/src/procedures/KG_ADMIN_RUNSPARQL.hdbprocedure`
 - Create: `db-qa/src/procedures/KG_ADMIN_RUNSPARQL.hdbprocedure` (stub)
@@ -641,6 +739,8 @@ Refs #533."
 ---
 
 ## Task 6: Rewrite `kg-sparql-client.js` as a typed dispatch module
+
+> **⚠ Read `## Discoveries from Task 1 implementation` first (top of plan).** The `callProcedure(db, procName, [...inArgs, null, null])` pattern this task's body describes does NOT work — `db.run('CALL <proc>(?, ?, ?)', [...])` cannot bind OUT params via `@cap-js/hana`. The corrected approach: build per-procedure DO-block wrappers (one per procedure — there are only 4, so hard-code them; YAGNI on a generic builder). See the Discoveries section's "Impact on Tasks 6 and the hybrid tests" subsection for the working pattern, plus the existing reference at `srv/lib/kg-sparql-client.js`'s legacy `SPARQL_DO_BLOCK` constant (still present in this file pre-rewrite) and `scripts/spike/kg-probe.cjs:146-180`.
 
 **Files:**
 - Modify: `srv/lib/kg-sparql-client.js` (rewrite — keep only error classes, timeout helper, classifyAndThrow)
