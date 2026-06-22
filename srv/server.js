@@ -322,7 +322,21 @@ cds.on('bootstrap', (app) => {
         // Admin scope check. AdminService.@requires('Admin') applies to
         // OData ops served at /admin/<entity>; this REST route bypasses
         // CAP's service-layer gate so we enforce here.
-        if (!req.user?.is?.('Admin')) {
+        //
+        // Read user from cds.context first, fall back to req.user. Per CAP
+        // June-2024 release notes: `req.user` is "internal to authentication
+        // strategies and not public API" — the canonical source is
+        // `cds.context.user` (populated by cds.middlewares.auth()). The
+        // deployed XSUAA path does NOT reliably mirror onto req.user when
+        // multer sits between auth and the handler; the mocked-auth path
+        // (used by unit tests) DOES mirror, which masked this gap in #514.
+        // Same shape as srv/lib/analytics-export-handler.js:16.
+        // Issue #417 follow-up — Tom hit a false 403 on 2026-06-21.
+        const user = req.user || cds.context?.user;
+        if (!user || user.id === 'anonymous') {
+          return res.status(401).json({ error: 'UNAUTHENTICATED', message: 'Authentication required' });
+        }
+        if (typeof user.is === 'function' && !user.is('Admin')) {
           return res.status(403).json({ error: 'FORBIDDEN', message: 'Admin scope required' });
         }
         if (!req.file) {
