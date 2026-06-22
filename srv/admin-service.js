@@ -55,6 +55,21 @@ export default class AdminService extends cds.ApplicationService {
       { code: 'intermediate', label: 'Intermediate' },
       { code: 'advanced',     label: 'Advanced'     }
     ]);
+    // Pipeline / Job log dropdowns. PipelineTypes excludes SCHEDULED_JOB because
+    // the PipelineLog projection (admin-service.cds:115) filters it out — those
+    // rows land in JobExecutionLog instead. PipelineStatuses is shared by both
+    // projections.
+    this.on('READ', 'PipelineTypes', () => [
+      { code: 'CONTENT_PUBLISH',  label: 'Content Publish'  },
+      { code: 'HUGO_BUILD',       label: 'Hugo Build'       },
+      { code: 'MTA_DEPLOY',       label: 'MTA Deploy'       },
+      { code: 'GITHUB_DISPATCH',  label: 'GitHub Dispatch'  }
+    ]);
+    this.on('READ', 'PipelineStatuses', () => [
+      { code: 'RUNNING', label: 'Running' },
+      { code: 'SUCCESS', label: 'Success' },
+      { code: 'FAILED',  label: 'Failed'  }
+    ]);
 
     // Ensure singleton row exists for ChatSettings (defensive — seed CSV
     // populates this on cds deploy; this covers fresh in-memory test DBs).

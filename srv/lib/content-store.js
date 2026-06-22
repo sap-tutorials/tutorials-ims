@@ -1249,7 +1249,8 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
   async function beginHandler(req, res) {
     try {
       const { trigger, hugoVersion, expectedSlugCount } = req.body || {};
-      const result = await sessionHelpers.beginPublishSession({ trigger, hugoVersion, expectedSlugCount });
+      const initiator = req.headers['x-initiator'] || 'publish-script';
+      const result = await sessionHelpers.beginPublishSession({ trigger, hugoVersion, expectedSlugCount, initiator });
       LOG.info(`[content/publish/begin] sessionId=${result.sessionId} version=${result.version}`);
       res.status(201).json({ ...result, expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString() });
     } catch (err) {

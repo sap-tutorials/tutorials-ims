@@ -106,6 +106,13 @@ service AdminService {
   @readonly @cds.persistence.skip entity AnalyticsTaskTypes { key code : String(20);  label : String(50); }
   @readonly @cds.persistence.skip entity AnalyticsLevels    { key code : String(50);  label : String(50); }
 
+  // Pipeline / Job log dropdowns. PipelineTypes excludes SCHEDULED_JOB because
+  // the Pipeline Log projection already filters that out (scheduled jobs land
+  // in JobExecutionLog). Both lists carry display labels so the Type/Status
+  // filters render readable text instead of raw enum keys.
+  @readonly @cds.persistence.skip entity PipelineTypes      { key code : String(20);  label : String(50); }
+  @readonly @cds.persistence.skip entity PipelineStatuses   { key code : String(10);  label : String(20); }
+
   @readonly entity Tasks as projection on ims.Tasks;
 
   @readonly
