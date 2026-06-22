@@ -942,6 +942,7 @@ Create `srv/routes/devtoberfest-auth.js`:
 
 import cds from '@sap/cds';
 import { resolveUser } from '../lib/resolve-user.js';
+import { resolveUserSapId } from '../lib/resolve-db-user.js';
 
 const LOG = cds.log('devtoberfest');
 
@@ -949,6 +950,8 @@ async function meHandler(req, res) {
   try {
     const user = resolveUser(req, cds);
     if (!user) return res.status(401).json({ error: 'UNAUTHENTICATED' });
+    const sapId = resolveUserSapId(user);
+    if (!sapId) return res.status(401).json({ error: 'UNAUTHENTICATED' });
 
     await cds.connect.to('db');
     const { Users, DevtoberfestConfig, EventRegistrations } =
@@ -959,7 +962,7 @@ async function meHandler(req, res) {
       return res.status(503).json({ error: 'EVENT_NOT_CONFIGURED' });
     }
 
-    const dbUser = await SELECT.one.from(Users).where({ sapId: user.id });
+    const dbUser = await SELECT.one.from(Users).columns('ID').where({ sapId });
     if (!dbUser) {
       return res.status(200).json({ joined: false });
     }
@@ -1116,6 +1119,8 @@ async function joinHandler(req, res) {
   try {
     const user = resolveUser(req, cds);
     if (!user) return res.status(401).json({ error: 'UNAUTHENTICATED' });
+    const sapId = resolveUserSapId(user);
+    if (!sapId) return res.status(401).json({ error: 'UNAUTHENTICATED' });
 
     const submittedVersion = Number(req.body?.termsVersion);
     if (!Number.isInteger(submittedVersion)) {
@@ -1134,7 +1139,7 @@ async function joinHandler(req, res) {
       return res.status(412).json({ error: 'TERMS_OUTDATED', current: config.termsVersion });
     }
 
-    const dbUser = await SELECT.one.from(Users).where({ sapId: user.id });
+    const dbUser = await SELECT.one.from(Users).columns('ID').where({ sapId });
     if (!dbUser) {
       return res.status(403).json({ error: 'USER_NOT_IN_DB' });
     }
@@ -1163,7 +1168,7 @@ async function joinHandler(req, res) {
       await audit.log('SecurityEvent', {
         data: {
           action: 'DevtoberfestJoin',
-          sapId: user.id,
+          sapId,
           eventId: config.currentEvent_ID,
           termsVersion: submittedVersion,
         },
