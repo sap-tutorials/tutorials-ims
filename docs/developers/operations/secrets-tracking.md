@@ -65,3 +65,59 @@ Phase 3+ may add external notifiers (GitHub-issue-comment poster, email via mail
 - Phase 2-C encrypted values (gated): #465
 - Phase 3 long-tail env-var migration: #466
 - GitHub PAT rotation runbook: [github-dispatch-pat-rotation.md](github-dispatch-pat-rotation.md)
+
+---
+
+## Bootstrap: GITHUB_DISPATCH_TOKEN (#429)
+
+Admin writes to Missions/Groups/CompletionPaths/Tutorials/Steps/Tags/etc.
+dispatch a debounced `rebuild-content.yml` workflow run after a 60s quiet
+window. The dispatch is gated on a PAT stored in BTP Credential Store. To
+enable post-admin-write auto-rebuild:
+
+1. Generate a fine-scoped GitHub PAT with `workflow:write` only.
+   See [github-dispatch-pat-rotation.md](github-dispatch-pat-rotation.md)
+   for the rotation runbook.
+2. In the admin Secrets UI (`/admin-ui/#secrets-display`), click "Create"
+   and add a row with:
+   - `key = GITHUB_DISPATCH_TOKEN`
+   - `kind = pat`
+   - `rotationOwner = <your email>`
+   - `description = GitHub PAT for rebuild-content.yml workflow_dispatch (#429)`
+3. Click into the new row, then **Set Value** — paste the PAT.
+4. Verify: make a small admin edit to a Mission and watch the
+   `rebuild-content` Actions tab. Within 60-90s a new run should appear
+   with `trigger-source: admin-write` and `mode: catalog-only`.
+
+### What happens without the token
+
+If the secret is unset, `scheduleRebuild` silently no-ops on production
+and falls back to `process.env.GITHUB_DISPATCH_TOKEN` in local dev
+(useful for unit tests). The next admin save tries again, so there's no
+permanent stale state — just no auto-rebuild until the secret is set.
+
+### Rotation
+
+The credstore-backed read is cached for 5 minutes in-memory on each
+tutorials-srv instance. **Admin Secrets UI write handlers (setSecretValue,
+rotateSecretValue, clearSecretValue) call an invalidator immediately when
+the row's `key === 'GITHUB_DISPATCH_TOKEN'`, so a rotation via the UI
+takes effect on the next dispatch with near-zero lag — no restart
+needed.** The 5-min TTL is the upper bound when the cache flushes via
+other paths (e.g. a manual credstore CLI write).
+
+### Mode classification
+
+The dispatched workflow runs in one of three modes depending on what the
+admin saved:
+
+| Entity / action | Mode | Wall clock |
+|---|---|---|
+| Missions / Groups / CompletionPaths / CompletionPathItems / GroupPathItems / FeaturedTasks | catalog-only | 30-60s |
+| Tutorials (single row) | slug-targeted | 30-60s |
+| Steps (resolves to parent tutorial slug) | slug-targeted (fallback: full) | 30-60s |
+| Tags | full + force-cap-refetch | 3-5 min |
+| Bound action: classifyCategories, setFeaturedOrder | catalog-only | 30-60s |
+| Bound action: commitTagImport, cleanupUnusedTags | full + force-cap-refetch | 3-5 min |
+
+Mode classifier: `srv/lib/_classify-rebuild-mode.js`.
