@@ -182,6 +182,50 @@ export function rankNeighborhood(rows, slug, coCompletionMap, tutorialTeachesMap
 export const _internals = { GROUP_KEYS, TOP_N, DEFAULT_WEIGHT, coCompletionBoost, isFullySubset };
 
 // ---------------------------------------------------------------------------
+// Title-enrichment + dead-reference filter (PR #558 — KG sidebar UX)
+//
+// Background: the KG can reference tutorial slugs that no longer have a
+// matching row in Tutorials (rename, hard delete, or status-flip without
+// downstream cleanup). The original enrichment fell through to slug-as-title
+// silently, producing UI links that landed on 404. Now we filter out those
+// items entirely so the sidebar only surfaces live, ACTIVE tutorials.
+//
+// Both helpers are pure functions, exported for unit testing. They take
+// pre-fetched data so the caller controls the DB query.
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a slug→title map from Tutorials rows, KEEPING only ACTIVE rows.
+ * A NULL or missing `status` is treated as ACTIVE (the default before any
+ * admin edit). Rows with any other status (DELETED, INACTIVE) are dropped.
+ *
+ * @param {Array<{slug:string, title?:string, status?:string}>} titleRows
+ * @returns {Map<string, string>}
+ */
+export function buildLiveTitleMap(titleRows) {
+  const out = new Map();
+  for (const r of titleRows) {
+    if (r.status && r.status !== 'ACTIVE') continue;
+    out.set(r.slug, r.title ?? r.slug);
+  }
+  return out;
+}
+
+/**
+ * Enrich a list of ranked tutorial-targeted items with their titles AND
+ * filter out any item whose target slug isn't in the live-title map.
+ *
+ * @param {Array<{slug:string,...}>} items — ranked items from rankNeighborhood
+ * @param {Map<string, string>} titleBySlug — from buildLiveTitleMap
+ * @returns {Array<{slug, title, ...rest}>}
+ */
+export function enrichLiveTutorials(items, titleBySlug) {
+  return items
+    .filter((item) => titleBySlug.has(item.slug))
+    .map((item) => ({ ...item, title: titleBySlug.get(item.slug) }));
+}
+
+// ---------------------------------------------------------------------------
 // CAP service-impl — Task 5.3
 // ---------------------------------------------------------------------------
 //
@@ -573,6 +617,14 @@ export default cds.service.impl(async function () {
     const ranked = rankNeighborhood(rows, slug, coMap, tutorialTeachesMap);
 
     // 10. Enrich tutorial-targeted items with title from Tutorials table.
+    //     ALSO: drop items whose target tutorial doesn't exist or is marked
+    //     non-ACTIVE. The KG can hold stale references when a tutorial is
+    //     unpublished without invalidating downstream concept links —
+    //     verified 2026-06-22 on DEV, slug
+    //     `devtoberfest-2025-create-business-configuration-maintenance-object`
+    //     was referenced by neighborhood() but had zero rows in Tutorials,
+    //     so the sidebar surfaced a slug-as-title link with no destination.
+    //     Filtering here keeps the UI clean and the slug→404 trap closed.
     const candidateSlugs = new Set();
     for (const item of ranked.prerequisitesOf) candidateSlugs.add(item.slug);
     for (const item of ranked.sharedConcepts)  candidateSlugs.add(item.slug);
@@ -581,12 +633,11 @@ export default cds.service.impl(async function () {
     let titleBySlug = new Map();
     if (candidateSlugs.size > 0) {
       const titleRows = await SELECT.from(Tutorials)
-        .columns('slug', 'title')
+        .columns('slug', 'title', 'status')
         .where({ slug: { in: [...candidateSlugs] } });
-      titleBySlug = new Map(titleRows.map((r) => [r.slug, r.title ?? r.slug]));
+      titleBySlug = buildLiveTitleMap(titleRows);
     }
-    const enrich = (arr) =>
-      arr.map((item) => ({ ...item, title: titleBySlug.get(item.slug) ?? item.slug }));
+    const enrich = (arr) => enrichLiveTutorials(arr, titleBySlug);
 
     const result = {
       tutorial:        tutorialInfo,
