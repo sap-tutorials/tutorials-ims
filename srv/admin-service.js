@@ -116,6 +116,22 @@ export default class AdminService extends cds.ApplicationService {
       }
     });
 
+    // Ensure singleton row exists for DevtoberfestConfig (defensive — same
+    // shape as ChatSettings above). Hardcoded UUID matches the
+    // "one row per system" invariant. termsVersion defaults to 1; admin
+    // populates termsText + currentEvent via the Devtoberfest admin tile.
+    const DEVTOBERFEST_CONFIG_SINGLETON_ID = '00000000-0000-0000-0000-00d0fe57feed';
+    this.before('READ', 'DevtoberfestConfig', async () => {
+      const exists = await SELECT.one.from('com.sap.developers.ims.DevtoberfestConfig')
+        .where({ ID: DEVTOBERFEST_CONFIG_SINGLETON_ID });
+      if (!exists) {
+        await INSERT.into('com.sap.developers.ims.DevtoberfestConfig').entries({
+          ID: DEVTOBERFEST_CONFIG_SINGLETON_ID,
+          termsVersion: 1,
+        });
+      }
+    });
+
     // Auto-assign legacyId on creation for entities that need it
     const legacyKeyedEntities = [
       'Users', 'Tutorials', 'Missions', 'Groups', 'Events', 'TaskRecords',
@@ -123,7 +139,7 @@ export default class AdminService extends cds.ApplicationService {
       'PrizeRecords', 'TutorialMeta', 'TutorialContributors', 'TutorialRepositories',
       'FeaturedTasks', 'PrimaryAccounts', 'SecondaryAccounts', 'PrivacyProtectionActions',
       'CompletionPaths', 'CompletionPathItems',
-      'GroupPathItems'
+      'GroupPathItems', 'EventRegistrations'
     ];
     for (const entity of legacyKeyedEntities) {
       this.before('CREATE', entity, async (req) => {

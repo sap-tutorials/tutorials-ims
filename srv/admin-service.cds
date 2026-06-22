@@ -92,6 +92,13 @@ service AdminService {
   @requires: 'Admin'
   entity KnowledgeGraphSettings as projection on ims.KnowledgeGraphSettings;
 
+  @odata.singleton
+  @requires: 'Admin'
+  entity DevtoberfestConfig as projection on ims.DevtoberfestConfig;
+
+  @readonly
+  entity EventRegistrations as projection on ims.EventRegistrations;
+
   // Code list entities for enum dropdowns (no DB table needed)
   @readonly @cds.persistence.skip entity ExperienceLevels { key code : String(255); }
   @readonly @cds.persistence.skip entity TaskStatuses     { key code : String(50); }

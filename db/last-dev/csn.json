@@ -1836,135 +1836,6 @@
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CHATSETTINGS"
     },
-    "com.sap.developers.ims.Checkpoints": {
-      "kind": "entity",
-      "@cds.persistence.journal": true,
-      "elements": {
-        "ID": {
-          "key": true,
-          "type": "cds.String",
-          "length": 36,
-          "@cds.persistence.name": "ID"
-        },
-        "createdAt": {
-          "type": "cds.Timestamp",
-          "@cds.persistence.name": "CREATEDAT"
-        },
-        "createdBy": {
-          "type": "cds.String",
-          "length": 255,
-          "@cds.persistence.name": "CREATEDBY"
-        },
-        "modifiedAt": {
-          "type": "cds.Timestamp",
-          "@cds.persistence.name": "MODIFIEDAT"
-        },
-        "modifiedBy": {
-          "type": "cds.String",
-          "length": 255,
-          "@cds.persistence.name": "MODIFIEDBY"
-        },
-        "legacyId": {
-          "type": "cds.Integer",
-          "@cds.persistence.name": "LEGACYID"
-        },
-        "title": {
-          "type": "cds.String",
-          "length": 255,
-          "@cds.persistence.name": "TITLE"
-        },
-        "description": {
-          "type": "cds.LargeString",
-          "@cds.persistence.name": "DESCRIPTION"
-        },
-        "status": {
-          "type": "cds.String",
-          "length": 50,
-          "@cds.persistence.name": "STATUS"
-        },
-        "deletionReason": {
-          "type": "cds.String",
-          "length": 500,
-          "@cds.persistence.name": "DELETIONREASON"
-        },
-        "primaryTag": {
-          "type": "cds.String",
-          "length": 255,
-          "@cds.persistence.name": "PRIMARYTAG"
-        },
-        "experienceTag": {
-          "type": "cds.String",
-          "length": 255,
-          "@cds.persistence.name": "EXPERIENCETAG"
-        },
-        "averageTimeToComplete": {
-          "type": "cds.Integer",
-          "@cds.persistence.name": "AVERAGETIMETOCOMPLETE"
-        },
-        "primaryTagRef_ID": {
-          "type": "cds.String",
-          "length": 36,
-          "@odata.foreignKey4": "primaryTagRef",
-          "@cds.persistence.name": "PRIMARYTAGREF_ID"
-        }
-      },
-      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CHECKPOINTS"
-    },
-    "com.sap.developers.ims.UIEvent": {
-      "kind": "entity",
-      "@cds.persistence.journal": true,
-      "elements": {
-        "ID": {
-          "key": true,
-          "type": "cds.String",
-          "length": 36,
-          "@cds.persistence.name": "ID"
-        },
-        "sessionId": {
-          "type": "cds.String",
-          "length": 36,
-          "@cds.persistence.name": "SESSIONID"
-        },
-        "surface": {
-          "type": "cds.String",
-          "length": 32,
-          "@cds.persistence.name": "SURFACE"
-        },
-        "eventType": {
-          "type": "cds.String",
-          "length": 32,
-          "@cds.persistence.name": "EVENTTYPE"
-        },
-        "timestamp": {
-          "type": "cds.Timestamp",
-          "@cds.persistence.name": "TIMESTAMP"
-        },
-        "receivedAt": {
-          "type": "cds.Timestamp",
-          "default": {
-            "ref": [
-              "$now"
-            ]
-          },
-          "@cds.persistence.name": "RECEIVEDAT"
-        },
-        "payload": {
-          "type": "cds.LargeString",
-          "@cds.persistence.name": "PAYLOAD"
-        },
-        "userAgent": {
-          "type": "cds.String",
-          "length": 512,
-          "@cds.persistence.name": "USERAGENT"
-        },
-        "buildAt": {
-          "type": "cds.String",
-          "length": 32,
-          "@cds.persistence.name": "BUILDAT"
-        }
-      },
-      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_UIEVENT"
-    },
     "com.sap.developers.ims.DevtoberfestConfig": {
       "kind": "entity",
       "@cds.persistence.journal": true,
@@ -2100,6 +1971,135 @@
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_EVENTREGISTRATIONS"
+    },
+    "com.sap.developers.ims.Checkpoints": {
+      "kind": "entity",
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "legacyId": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "LEGACYID"
+        },
+        "title": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "TITLE"
+        },
+        "description": {
+          "type": "cds.LargeString",
+          "@cds.persistence.name": "DESCRIPTION"
+        },
+        "status": {
+          "type": "cds.String",
+          "length": 50,
+          "@cds.persistence.name": "STATUS"
+        },
+        "deletionReason": {
+          "type": "cds.String",
+          "length": 500,
+          "@cds.persistence.name": "DELETIONREASON"
+        },
+        "primaryTag": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "PRIMARYTAG"
+        },
+        "experienceTag": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "EXPERIENCETAG"
+        },
+        "averageTimeToComplete": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "AVERAGETIMETOCOMPLETE"
+        },
+        "primaryTagRef_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "primaryTagRef",
+          "@cds.persistence.name": "PRIMARYTAGREF_ID"
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CHECKPOINTS"
+    },
+    "com.sap.developers.ims.UIEvent": {
+      "kind": "entity",
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "sessionId": {
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "SESSIONID"
+        },
+        "surface": {
+          "type": "cds.String",
+          "length": 32,
+          "@cds.persistence.name": "SURFACE"
+        },
+        "eventType": {
+          "type": "cds.String",
+          "length": 32,
+          "@cds.persistence.name": "EVENTTYPE"
+        },
+        "timestamp": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "TIMESTAMP"
+        },
+        "receivedAt": {
+          "type": "cds.Timestamp",
+          "default": {
+            "ref": [
+              "$now"
+            ]
+          },
+          "@cds.persistence.name": "RECEIVEDAT"
+        },
+        "payload": {
+          "type": "cds.LargeString",
+          "@cds.persistence.name": "PAYLOAD"
+        },
+        "userAgent": {
+          "type": "cds.String",
+          "length": 512,
+          "@cds.persistence.name": "USERAGENT"
+        },
+        "buildAt": {
+          "type": "cds.String",
+          "length": 32,
+          "@cds.persistence.name": "BUILDAT"
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_UIEVENT"
     },
     "com.sap.developers.ims.GroupSlugRedirects": {
       "kind": "entity",
