@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 32" width="180" height="32" aria-label="Devtoberfest">
+  <rect width="180" height="32" rx="4" fill="#ff6b35"/>
+  <text x="90" y="22" text-anchor="middle" fill="#fff" font-size="14" font-weight="700"
+        font-family="'72',-apple-system,sans-serif" letter-spacing="1">DEVTOBERFEST</text>
+</svg>

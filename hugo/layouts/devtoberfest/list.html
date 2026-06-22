@@ -1,0 +1,18 @@
+{{ define "main" }}
+<main id="devtoberfest-mount"
+      data-api-status="/api/devtoberfest/status"
+      data-api-terms="/api/devtoberfest/terms"
+      data-api-join="/api/devtoberfest/join"
+      data-api-me="/api/devtoberfest/me"
+      data-img-kasimir="/images/devtoberfest/kasimir.svg"
+      data-img-teched="/images/devtoberfest/teched-logo.svg"
+      data-img-devtoberfest="/images/devtoberfest/devtoberfest-logo.svg"></main>
+<noscript>
+  <div class="ds-noscript-fallback">
+    <h1>Devtoberfest 2026</h1>
+    <p>Four weeks of tutorials, real prizes, and one cat in a witch hat.
+    JavaScript is required to join — please enable it and refresh.</p>
+  </div>
+</noscript>
+<script type="module" src="{{ "/js/devtoberfest.js" | relURL }}"></script>
+{{ end }}
