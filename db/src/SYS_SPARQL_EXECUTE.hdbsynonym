@@ -1,0 +1,8 @@
+{
+  "SYS_SPARQL_EXECUTE": {
+    "target": {
+      "object": "SPARQL_EXECUTE",
+      "schema": "SYS"
+    }
+  }
+}
