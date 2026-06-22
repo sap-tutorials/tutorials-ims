@@ -658,6 +658,7 @@ async function main() {
       ['11c', 'accomplishmentrecords', 'activity', 'IMS_ACCOMPLISHMENT_RECORD'],
       ['11d', 'prizerecords', 'activity', 'IMS_PRIZE_RECORD'],
       ['12', 'tutorialtags', 'reference', 'IMS_TAG_TO_TASK'],
+      ['13', 'featuredtasks', 'reference', 'IMS_TASK (FEATURED_ORDER > 0)'],
     ];
     console.log('Migration order (FK-correct):\n');
     for (const [n, name, klass, src] of order) {
@@ -1392,6 +1393,59 @@ async function main() {
     }));
   } catch (e) {
     console.log(`  ⊘ TutorialTags: ${e.message.split('\n')[0]}`);
+  }
+
+  // 13. FeaturedTasks (cross-ref for the "featured" rail at /build/catalog
+  //     and the /admin-ui/#operations-display list report).
+  //
+  // IMS Java stored featuredOrder INTEGER inline on every IMS_TASK row
+  // (Tutorial/Mission/Group share a single-table-inheritance shape with
+  // a TASK_TYPE discriminator). FEATURED_ORDER > 0 means featured.
+  //
+  // The CAP rewrite split this into a cross-ref entity (taskLegacyId,
+  // taskType, featuredOrder). The original migrator copied FEATURED_ORDER
+  // into the (now-unread) Tutorials.featuredOrder column but never wrote
+  // the cross-ref rows — so /build/catalog's featured rail and the admin
+  // Featured Tasks tile were both empty in DEV. Caught 2026-06-22.
+  try {
+    results.push(await migrateEntity(source, target, T, {
+      name: 'featuredtasks',
+      sourceQuery: `
+        SELECT "ID", "TASK_TYPE", "FEATURED_ORDER"
+          FROM ${S}."IMS_TASK"
+         WHERE "FEATURED_ORDER" IS NOT NULL
+           AND "FEATURED_ORDER" > 0
+           AND "TASK_TYPE" IN ('TUTORIAL', 'MISSION', 'GROUP')
+      `,
+      targetTable: 'COM_SAP_DEVELOPERS_IMS_FEATUREDTASKS',
+      mapRow: (row) => {
+        // Composite key (TASK_TYPE + ID) → stable UUIDv5 namespace so reruns
+        // produce the same row IDs. taskLegacyId is the IMS_TASK.id (i.e. the
+        // FK back to the underlying Tutorial/Mission/Group's legacyId).
+        const ID = deriveUuid('featuredtask', `${row.TASK_TYPE}:${row.ID}`);
+        // legacyId is the FeaturedTasks row's OWN business ID (LegacyKeyed
+        // aspect), distinct from taskLegacyId. There's no source-side legacyId
+        // for a featured-task row (the curation was inline on IMS_TASK), so
+        // derive a stable allocator from the first 9 hex chars of the UUID.
+        // The range (1..1e9) sits well below the LegacyKeyed sequence's
+        // max, and 1e9-modulo collisions across <1000 featured rows are
+        // negligible. Admin self-service rows continue using getNextLegacyId.
+        const legacyId = parseInt(ID.replace(/-/g, '').slice(0, 9), 16) % 1_000_000_000;
+        return {
+          ID,
+          LEGACYID: legacyId,
+          TASKLEGACYID: row.ID,
+          TASKTYPE: row.TASK_TYPE,
+          FEATUREDORDER: row.FEATURED_ORDER,
+          CREATEDAT: new Date().toISOString(),
+          MODIFIEDAT: new Date().toISOString(),
+          CREATEDBY: 'migration',
+          MODIFIEDBY: 'migration',
+        };
+      },
+    }));
+  } catch (e) {
+    console.log(`  ⊘ FeaturedTasks: ${e.message.split('\n')[0]}`);
   }
 
   // ─── Summary ────────────────────────────────────────────────────────────────

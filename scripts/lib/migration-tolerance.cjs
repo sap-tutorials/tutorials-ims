@@ -43,6 +43,8 @@ const REFERENCE_ENTITIES = [
   'completionpathitems',
   'steps',
   'accomplishments',
+  'featuredtasks',  // Added 2026-06-22; source filter (FEATURED_ORDER > 0)
+                    // is deterministic; zero-diff expected once migrated.
 ];
 
 // Reference tables with persistent source-data orphans that the migrator
