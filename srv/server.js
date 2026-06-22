@@ -16,6 +16,7 @@ import { basicAuthMiddleware } from './lib/tech-user-auth.js';
 import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, navHandler, rollbackHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler } from './lib/content-store.js';
 import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-catalog.js';
 import * as advocatesPublic from './routes/advocates-public.js';
+import * as devtoberfestPublic from './routes/devtoberfest-public.js';
 import { resolveUser, captureUserMiddleware } from './lib/resolve-user.js';
 import { buildSystemPrompt } from './lib/chat-context.js';
 import { createRateLimiter, RateLimitError } from './lib/chat-rate-limit.js';
@@ -183,6 +184,7 @@ cds.on('bootstrap', (app) => {
   // Public read for the developer-advocates page (Task 4.4 of advocates impl).
   // Spec: docs/superpowers/specs/2026-06-17-developer-advocates-design.md
   advocatesPublic.register(app);
+  devtoberfestPublic.register(app);
 
   // Content persistence endpoints
   app.get('/content/nav', navHandler);

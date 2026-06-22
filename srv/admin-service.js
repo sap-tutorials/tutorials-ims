@@ -15,6 +15,7 @@ import * as advocateHandlers from './handlers/advocate-handlers.js';
 import { classifySeverity, daysUntil } from './jobs/secret-expiry-check.js';
 import { readSecret, writeSecret, deleteSecret } from './lib/credstore.js';
 import { cleanupChangeLog } from './jobs/cleanup.js';
+import { ensureDevtoberfestConfigSingleton } from './lib/devtoberfest-singleton.js';
 import { randomBytes } from 'node:crypto';
 
 export default class AdminService extends cds.ApplicationService {
@@ -116,20 +117,12 @@ export default class AdminService extends cds.ApplicationService {
       }
     });
 
-    // Ensure singleton row exists for DevtoberfestConfig (defensive — same
-    // shape as ChatSettings above). Hardcoded UUID matches the
-    // "one row per system" invariant. termsVersion defaults to 1; admin
-    // populates termsText + currentEvent via the Devtoberfest admin tile.
-    const DEVTOBERFEST_CONFIG_SINGLETON_ID = '00000000-0000-0000-0000-00d0fe57feed';
+    // Ensure singleton row exists for DevtoberfestConfig. Shared with
+    // the public route at /api/devtoberfest/status — both call
+    // ensureDevtoberfestConfigSingleton() so the UUID + init logic
+    // have one source of truth (srv/lib/devtoberfest-singleton.js).
     this.before('READ', 'DevtoberfestConfig', async () => {
-      const exists = await SELECT.one.from('com.sap.developers.ims.DevtoberfestConfig')
-        .where({ ID: DEVTOBERFEST_CONFIG_SINGLETON_ID });
-      if (!exists) {
-        await INSERT.into('com.sap.developers.ims.DevtoberfestConfig').entries({
-          ID: DEVTOBERFEST_CONFIG_SINGLETON_ID,
-          termsVersion: 1,
-        });
-      }
+      await ensureDevtoberfestConfigSingleton();
     });
 
     // Auto-assign legacyId on creation for entities that need it
