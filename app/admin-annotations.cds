@@ -1105,6 +1105,57 @@ annotate AdminService.SecondaryAccounts with @(
   Capabilities.UpdateRestrictions.Updatable: false
 );
 
+// --- PrivacyProtectionActions (GDPR / DSR audit trail, read-only) ---
+// Surfaces the audit data behind /admin-ui/#privacy-audit-display so admins
+// can browse historical SEARCH / DOWNLOAD / ANONYMIZE actions. Wizard-style
+// privacy workflow stays at /admin-ui/#privacy-display; this tile is the
+// historical view of all completed actions across the lifetime of the
+// system (including migrated IMS PROD audit rows after PR #554's migration
+// step 16 runs).
+annotate AdminService.PrivacyProtectionActions with {
+  userUuid          @Common.Label: 'User UUID (PET / SAP ID)';
+  actionType        @Common.Label: 'Action'
+                    @Common.ValueListWithFixedValues
+                    @Common.ValueList: {
+                      CollectionPath: 'PrivacyActionTypes',
+                      Parameters: [
+                        { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: actionType, ValueListProperty: 'code'  },
+                        { $Type: 'Common.ValueListParameterDisplayOnly',                                ValueListProperty: 'label' }
+                      ]
+                    };
+  status            @Common.Label: 'Status';
+  requestedAt       @Common.Label: 'Requested At';
+  completedAt       @Common.Label: 'Completed At';
+  dsrRequestNumber  @Common.Label: 'DSR Request #';
+  createdBy         @Common.Label: 'Initiated By';
+};
+
+annotate AdminService.PrivacyProtectionActions with @(
+  UI: {
+    HeaderInfo: {
+      TypeName: 'Privacy Action', TypeNamePlural: 'Privacy Audit',
+      Title: { Value: actionType },
+      Description: { Value: userUuid }
+    },
+    SelectionFields: [ actionType, status, userUuid, dsrRequestNumber, createdBy, requestedAt ],
+    LineItem: [
+      { Value: requestedAt },
+      { Value: actionType },
+      { Value: userUuid },
+      { Value: dsrRequestNumber },
+      { Value: createdBy },
+      { Value: status },
+      { Value: completedAt }
+    ],
+    PresentationVariant: {
+      SortOrder: [{ Property: requestedAt, Descending: true }]
+    }
+  },
+  Capabilities.DeleteRestrictions.Deletable: false,
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable: false
+);
+
 // --- Completion Analytics (aggregated report, no user data) ---
 
 annotate AdminService.CompletionAnalytics with @(

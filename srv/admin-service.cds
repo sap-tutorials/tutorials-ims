@@ -125,6 +125,11 @@ service AdminService {
   // than the raw db-level enum codes.
   @readonly @cds.persistence.skip entity ChangeTypes { key code : String(8); label : String(8); }
 
+  // Privacy / DSR audit action type dropdown. Mirrors the enum on
+  // PrivacyProtectionActions.actionType (SEARCH/DOWNLOAD/ANONYMIZE), the
+  // three GDPR DSR fulfilment actions tracked by ims_privacy_protection_audit.
+  @readonly @cds.persistence.skip entity PrivacyActionTypes { key code : String(20); label : String(30); }
+
   @readonly entity Tasks as projection on ims.Tasks;
 
   @readonly

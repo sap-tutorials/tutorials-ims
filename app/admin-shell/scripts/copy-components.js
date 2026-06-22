@@ -19,6 +19,7 @@ const COMPONENTS = [
   'operations',
   'accounts',
   'changelog',
+  'privacy-audit',
   'analytics',
   'joule',
   'knowledgeGraph',

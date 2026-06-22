@@ -1675,6 +1675,16 @@
           "type": "cds.String",
           "length": 50,
           "@cds.persistence.name": "STATUS"
+        },
+        "dsrRequestNumber": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "DSRREQUESTNUMBER"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_PRIVACYPROTECTIONACTIONS"

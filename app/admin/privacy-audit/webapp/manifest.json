@@ -1,0 +1,63 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.privacyAudit",
+    "type": "application",
+    "title": "Privacy Audit",
+    "crossNavigation": {
+      "inbounds": {
+        "PrivacyAudit-view": {
+          "semanticObject": "PrivacyAudit",
+          "action": "view",
+          "title": "Privacy Audit"
+        }
+      }
+    },
+    "dataSources": {
+      "adminService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": {
+        "sap.m": {},
+        "sap.fe.templates": {}
+      }
+    },
+    "models": {
+      "": {
+        "dataSource": "adminService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      }
+    },
+    "routing": {
+      "routes": [
+        { "pattern": ":?query:", "name": "PrivacyProtectionActionsList", "target": "PrivacyProtectionActionsList" }
+      ],
+      "targets": {
+        "PrivacyProtectionActionsList": {
+          "type": "Component",
+          "id": "PrivacyProtectionActionsList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/PrivacyProtectionActions",
+              "initialLoad": "Enabled"
+            }
+          }
+        }
+      }
+    }
+  }
+}

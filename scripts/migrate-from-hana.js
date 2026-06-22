@@ -661,6 +661,7 @@ async function main() {
       ['13', 'featuredtasks', 'reference', 'IMS_TASK (FEATURED_ORDER > 0)'],
       ['14', 'primaryaccounts',   'reference', 'IMS_UUID_ACCOUNT'],
       ['15', 'secondaryaccounts', 'reference', 'IMS_UUID_MERGED_ACCOUNT'],
+      ['16', 'privacyprotectionactions', 'reference', 'IMS_PRIVACY_PROTECTION_AUDIT'],
     ];
     console.log('Migration order (FK-correct):\n');
     for (const [n, name, klass, src] of order) {
@@ -1528,6 +1529,41 @@ async function main() {
     }));
   } catch (e) {
     console.log(`  ⊘ SecondaryAccounts: ${e.message.split('\n')[0]}`);
+  }
+
+  // 16. PrivacyProtectionActions (IMS_PRIVACY_PROTECTION_AUDIT — GDPR/DSR
+  //     audit trail for SEARCH / DOWNLOAD / ANONYMIZE actions). Critical
+  //     compliance data — losing it on cutover is a compliance gap.
+  //
+  //     Source columns (Java `PrivacyProtectionAction`):
+  //       ID, PET_NUMBER, DSR_REQUEST_NUMBER, TYPE, CREATED_BY, CREATED_AT
+  //     Mapping:
+  //       PET_NUMBER         → userUuid   (PET number IS the SAP/C-number — same field)
+  //       TYPE               → actionType (SEARCH/DOWNLOAD/ANONYMIZE)
+  //       CREATED_AT         → requestedAt (audit point-in-time; no async flow on IMS side)
+  //       DSR_REQUEST_NUMBER → dsrRequestNumber  (new column in PR #554)
+  //       CREATED_BY         → createdBy         (new column in PR #554)
+  //       — completedAt = requestedAt (synchronous on IMS side, so request == complete)
+  //       — status = 'COMPLETED' (every IMS row represents a finished action)
+  try {
+    results.push(await migrateEntity(source, target, T, {
+      name: 'privacyprotectionactions',
+      sourceQuery: `SELECT "ID", "PET_NUMBER", "DSR_REQUEST_NUMBER", "TYPE", "CREATED_BY", "CREATED_AT" FROM ${S}."IMS_PRIVACY_PROTECTION_AUDIT" ORDER BY "ID"`,
+      targetTable: 'COM_SAP_DEVELOPERS_IMS_PRIVACYPROTECTIONACTIONS',
+      mapRow: (row) => ({
+        ID: deriveUuid('privacyprotectionaction', row.ID),
+        LEGACYID: row.ID,
+        USERUUID: row.PET_NUMBER,
+        ACTIONTYPE: row.TYPE,
+        REQUESTEDAT: toISOTimestamp(row.CREATED_AT),
+        COMPLETEDAT: toISOTimestamp(row.CREATED_AT),  // IMS is synchronous; request == complete
+        STATUS: 'COMPLETED',
+        DSRREQUESTNUMBER: row.DSR_REQUEST_NUMBER,
+        CREATEDBY: row.CREATED_BY,
+      }),
+    }));
+  } catch (e) {
+    console.log(`  ⊘ PrivacyProtectionActions: ${e.message.split('\n')[0]}`);
   }
 
   // ─── Summary ────────────────────────────────────────────────────────────────
