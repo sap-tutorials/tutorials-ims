@@ -113,6 +113,11 @@ service AdminService {
   @readonly @cds.persistence.skip entity PipelineTypes      { key code : String(20);  label : String(50); }
   @readonly @cds.persistence.skip entity PipelineStatuses   { key code : String(10);  label : String(20); }
 
+  // Account-merge status dropdown. Mirrors AccountMergeStatus enum from
+  // IMS Java (com.sap.developers.ims.model.account.AccountMergeStatus):
+  // CREATED, IN_PROGRESS, SCHEDULED, COMPLETED, FAILED.
+  @readonly @cds.persistence.skip entity AccountMergeStatuses { key code : String(20); label : String(30); }
+
   @readonly entity Tasks as projection on ims.Tasks;
 
   @readonly

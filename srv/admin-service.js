@@ -70,6 +70,19 @@ export default class AdminService extends cds.ApplicationService {
       { code: 'SUCCESS', label: 'Success' },
       { code: 'FAILED',  label: 'Failed'  }
     ]);
+    // Account-merge status (mirrors IMS Java AccountMergeStatus enum).
+    // CREATED     = user pair queued for merge, not yet picked up
+    // IN_PROGRESS = merge actively running (rare; usually flips fast)
+    // SCHEDULED   = waiting for the next account-merge-job cron tick
+    // COMPLETED   = merge finished, secondary's TaskRecords/etc reassigned to primary
+    // FAILED      = merge errored; row stays for forensic inspection
+    this.on('READ', 'AccountMergeStatuses', () => [
+      { code: 'CREATED',     label: 'Created'     },
+      { code: 'IN_PROGRESS', label: 'In Progress' },
+      { code: 'SCHEDULED',   label: 'Scheduled'   },
+      { code: 'COMPLETED',   label: 'Completed'   },
+      { code: 'FAILED',      label: 'Failed'      }
+    ]);
 
     // Ensure singleton row exists for ChatSettings (defensive — seed CSV
     // populates this on cds deploy; this covers fresh in-memory test DBs).
