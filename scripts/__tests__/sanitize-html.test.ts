@@ -11,7 +11,10 @@ describe('stripDangerousHtml', () => {
     expect(stripDangerousHtml(input)).toBe('Hello  world')
   })
 
-  it('removes iframe tags', () => {
+  it('removes iframe with off-allowlist host (#140 regression guard)', () => {
+    // After 2026-06-22 (iframe allowlist PR), iframes from allowlisted hosts
+    // survive sanitization. This negative case proves the host check still
+    // strips iframes pointing to arbitrary external hosts.
     const input = '<iframe src="https://evil.com"></iframe>'
     expect(stripDangerousHtml(input)).toBe('')
   })
@@ -265,5 +268,92 @@ describe('stripDangerousHtml', () => {
     // srcset isn't on img's allowed-attribute list; if an author starts using
     // it, this test will fail and we extend the allowlist intentionally.
     expect(stripDangerousHtml('<img src="x.png" srcset="x@2x.png 2x" alt="y">')).toBe('<img src="x.png" alt="y" />')
+  })
+
+  // Iframe host allowlist (#140 reintroduction, 2026-06-22)
+
+  describe('iframe host allowlist', () => {
+    it('preserves YouTube /embed/ iframe with full attribute set (spec 1)', () => {
+      const input = '<iframe width="560" height="315" src="https://www.youtube.com/embed/8obCwGEx1-Q" title="HANA Cloud CAP" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>'
+      const out = stripDangerousHtml(input)
+      // sanitize-html may reorder attrs; assert via substring matches.
+      expect(out).toMatch(/<iframe\b/)
+      expect(out).toMatch(/src="https:\/\/www\.youtube\.com\/embed\/8obCwGEx1-Q"/)
+      expect(out).toMatch(/width="560"/)
+      expect(out).toMatch(/height="315"/)
+      expect(out).toMatch(/frameborder="0"/)
+      expect(out).toMatch(/allow="[^"]*accelerometer/)
+      expect(out).toMatch(/allowfullscreen/)
+      expect(out).toMatch(/title="HANA Cloud CAP"/)
+      expect(out).toMatch(/<\/iframe>/)
+    })
+
+    it('preserves youtu.be short-link iframe with src intact (spec 2)', () => {
+      // Verifies youtu.be hostname is on the allowlist AND the original src
+      // URL is preserved verbatim (browsers evaluate CSP frame-src against the
+      // pre-redirect URL — see spec § "Why youtu.be needs an explicit entry").
+      const input = '<iframe src="https://youtu.be/dQw4w9WgXcQ"></iframe>'
+      const out = stripDangerousHtml(input)
+      expect(out).toMatch(/<iframe\b/)
+      expect(out).toMatch(/src="https:\/\/youtu\.be\/dQw4w9WgXcQ"/)
+    })
+
+    it('preserves microlearning.opensap.com iframe (spec 3)', () => {
+      const input = '<iframe src="https://microlearning.opensap.com/embed/secure/iframe/entryId/1_6448scfq/uiConfId/43091531"></iframe>'
+      const out = stripDangerousHtml(input)
+      expect(out).toMatch(/<iframe\b/)
+      expect(out).toMatch(/src="https:\/\/microlearning\.opensap\.com\/embed/)
+    })
+
+    it('preserves sapvideo.cfapps.eu10-004 iframe (spec 4)', () => {
+      const input = '<iframe src="https://sapvideo.cfapps.eu10-004.hana.ondemand.com/?entry_id=1_5r7r5h0n"></iframe>'
+      const out = stripDangerousHtml(input)
+      expect(out).toMatch(/<iframe\b/)
+      expect(out).toMatch(/src="https:\/\/sapvideo\.cfapps\.eu10-004\.hana\.ondemand\.com/)
+    })
+
+    it('strips iframe from off-allowlist host (vimeo) (spec 5)', () => {
+      const input = '<iframe src="https://player.vimeo.com/video/123456"></iframe>'
+      expect(stripDangerousHtml(input)).toBe('')
+    })
+
+    it('strips srcdoc attribute on allowlisted-host iframe (defense-in-depth, spec 6)', () => {
+      // An allowlisted-host iframe must NOT carry srcdoc — it would let an
+      // author inject arbitrary inline HTML that bypasses the host check.
+      const input = '<iframe src="https://www.youtube.com/embed/x" srcdoc="<script>alert(1)</script>"></iframe>'
+      const out = stripDangerousHtml(input)
+      expect(out).toMatch(/<iframe\b/)
+      expect(out).not.toMatch(/srcdoc/)
+    })
+
+    it('strips onload/onerror handlers on allowlisted-host iframe (spec 7)', () => {
+      const input = '<iframe src="https://www.youtube.com/embed/x" onload="alert(1)" onerror="alert(2)"></iframe>'
+      const out = stripDangerousHtml(input)
+      expect(out).toMatch(/<iframe\b/)
+      expect(out).not.toMatch(/onload/)
+      expect(out).not.toMatch(/onerror/)
+    })
+
+    it('strips relative-URL iframe (spec 8)', () => {
+      // allowedIframeRelativeUrls: false in the sanitizer config.
+      const input = '<iframe src="/api/foo"></iframe>'
+      expect(stripDangerousHtml(input)).toBe('')
+    })
+
+    it('strips javascript: scheme in iframe src (spec 9)', () => {
+      // The scheme allowlist (http/https/mailto) applies to src per
+      // allowedSchemesAppliedToAttributes.
+      const input = '<iframe src="javascript:alert(1)"></iframe>'
+      expect(stripDangerousHtml(input)).toBe('')
+    })
+
+    it('preserves pseudo-tag handling for unknown <iframe-like-thing> (spec 10)', () => {
+      // Hyphenated tag names that look like author placeholders should NOT
+      // be consumed as iframe elements. They get escaped to literal text.
+      const input = '<iframe-like-thing>placeholder</iframe-like-thing>'
+      const out = stripDangerousHtml(input)
+      expect(out).toContain('&lt;iframe-like-thing&gt;')
+      expect(out).toContain('placeholder')
+    })
   })
 })
