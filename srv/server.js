@@ -33,7 +33,7 @@ import { resolveTenantSettings } from './lib/runtime-config/tenant-settings.js';
 import { makeValidateAnswerHandler } from './lib/validate-answer-handler.js';
 import { defaultLoadQuestion } from './lib/validate-answer-question-loader.js';
 import { scheduleRebuild, checkFeatureFlag as checkRebuildTriggerFeatureFlag } from './lib/rebuild-trigger.js';
-import { classifyRebuildMode, resolveSlugForEntity } from './lib/_classify-rebuild-mode.js';
+import { classifyRebuildMode, resolveSlugForEntity, resolveSlugsForTagRename, TAG_REVERSE_LOOKUP_CAP } from './lib/_classify-rebuild-mode.js';
 import { handleUIEvent, checkFeatureFlag as checkUIEventFeatureFlag } from './lib/ui-event-handler.js';
 import { backfillUserProfile } from './lib/resolve-db-user.js';
 import { registerMigrationModeHandler } from './lib/migration-mode.js';
@@ -503,11 +503,36 @@ cds.on('served', async () => {
         console.error('[render-cache] cache invalidation failed', err);
       }
 
-      // [#174 PR 3, #429] Schedule a rebuild. classifyRebuildMode routes the
+      // [#174 PR 3, #429, #541] Schedule a rebuild. classifyRebuildMode routes the
       // entity to the cheapest valid mode (catalog-only/slug-targeted/full).
       const entityName = req.target?.name?.split('.').pop();
       if (!entityName) return;
-      const { mode, forceCapRefetch, needsSlug } = classifyRebuildMode(entityName, 'crud');
+      const { mode, forceCapRefetch, needsSlug, needsSlugsByTag } = classifyRebuildMode(entityName, 'crud');
+
+      // #541: Tag CRUD does a reverse-lookup to find affected tutorials. If
+      // 1..TAG_REVERSE_LOOKUP_CAP slugs come back, dispatch slug-targeted per
+      // slug (debounced into one workflow run with comma-separated `slugs`).
+      // Otherwise (0 or >cap) fall back to full+force-cap-refetch — the pre-#541
+      // behavior. Empty result usually means the tag has no tutorials yet.
+      if (needsSlugsByTag) {
+        const slugs = await resolveSlugsForTagRename(req.data?.ID);
+        if (slugs.length >= 1 && slugs.length <= TAG_REVERSE_LOOKUP_CAP) {
+          for (const s of slugs) {
+            scheduleRebuild('admin-write', { mode: 'slug-targeted', slug: s }).catch(err => {
+              console.error('[rebuild-trigger] scheduling failed', err);
+            });
+          }
+          return;
+        }
+        // 0 or >cap → log + fall through to full+force-cap-refetch.
+        if (slugs.length > TAG_REVERSE_LOOKUP_CAP) {
+          console.log(`[rebuild-trigger] Tag id=${req.data?.ID} affects ${slugs.length} tutorials (>${TAG_REVERSE_LOOKUP_CAP} cap); using full+force-cap-refetch instead of N slug-targeted dispatches`);
+        }
+        scheduleRebuild('admin-write', { mode: 'full', forceCapRefetch: true }).catch(err => {
+          console.error('[rebuild-trigger] scheduling failed', err);
+        });
+        return;
+      }
 
       let slug = null;
       if (needsSlug) {
