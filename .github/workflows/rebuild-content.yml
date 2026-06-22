@@ -43,14 +43,14 @@ on:
         default: false
         type: boolean
       publish-concurrency:
-        description: 'Number of /content/publish/append batches in flight at once. Default raised 2 → 4 in issue #434 PR 1 after stable runs at 2/25 post-#423 bulk-SQL fix. Next stage: 6/50 (PR 2). Lower below 4 if srv hits HeadersTimeoutError again.'
+        description: 'Number of /content/publish/append batches in flight at once. Default raised 4 → 6 in issue #434 PR 2 (final stage) after 9 stable runs at 4/25. Restores the original pre-#422 throughput now that bulk SQL (#423) makes it safe. Lower below 6 if srv hits HeadersTimeoutError again.'
         required: false
-        default: '4'
+        default: '6'
         type: string
       publish-batch-size:
-        description: 'Slugs per /content/publish/append batch. Lower if srv hits HeadersTimeoutError. Multiplied by publish-concurrency gives total in-flight slugs (current default 4x25 = 100). The whole catalog has ~1400 slugs so smaller batches just take longer linearly, not exponentially.'
+        description: 'Slugs per /content/publish/append batch. Default raised 25 → 50 in issue #434 PR 2 (final stage). Multiplied by publish-concurrency gives total in-flight slugs (current default 6x50 = 300). The whole catalog has ~1400 slugs so smaller batches just take longer linearly, not exponentially. Lower if srv hits HeadersTimeoutError.'
         required: false
-        default: '25'
+        default: '50'
         type: string
 
 env:
