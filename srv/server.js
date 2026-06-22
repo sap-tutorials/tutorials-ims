@@ -16,6 +16,7 @@ import { basicAuthMiddleware } from './lib/tech-user-auth.js';
 import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, navHandler, rollbackHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler } from './lib/content-store.js';
 import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-catalog.js';
 import * as advocatesPublic from './routes/advocates-public.js';
+import { resolveUser, captureUserMiddleware } from './lib/resolve-user.js';
 import { buildSystemPrompt } from './lib/chat-context.js';
 import { createRateLimiter, RateLimitError } from './lib/chat-rate-limit.js';
 import { createIpRateLimiter, ipRateLimitMiddleware } from './lib/ip-rate-limit.js';
@@ -302,6 +303,14 @@ cds.on('bootstrap', (app) => {
   });
   app.post('/admin/advocates/:slug/photo',
     _photoContextMw, _photoAuthMw,
+    // Capture the authenticated user onto req._capturedUser BEFORE multer
+    // runs. Tom hit a 401 "Authentication required" 2026-06-22 even with
+    // PR #535 in place — multer's busboy-based stream parser can drop the
+    // AsyncLocalStorage scope that cds.middlewares.context() establishes,
+    // so cds.context.user reads as null/anonymous AFTER multer fires its
+    // callback. Capturing here preserves the user across the stream parse.
+    // See srv/lib/resolve-user.js header for the full rationale.
+    captureUserMiddleware(cds),
     (req, res, next) => {
       // Surface multer errors (oversize, bad MIME, missing field) as 400
       // with the error.code visible so the client can distinguish 'too
@@ -324,17 +333,16 @@ cds.on('bootstrap', (app) => {
         // OData ops served at /admin/<entity>; this REST route bypasses
         // CAP's service-layer gate so we enforce here.
         //
-        // Read user from cds.context first, fall back to req.user. Per CAP
-        // June-2024 release notes: `req.user` is "internal to authentication
-        // strategies and not public API" — the canonical source is
-        // `cds.context.user` (populated by cds.middlewares.auth()). The
-        // deployed XSUAA path does NOT reliably mirror onto req.user when
-        // multer sits between auth and the handler; the mocked-auth path
-        // (used by unit tests) DOES mirror, which masked this gap in #514.
-        // Same shape as srv/lib/analytics-export-handler.js:16.
-        // Issue #417 follow-up — Tom hit a false 403 on 2026-06-21.
-        const user = req.user || cds.context?.user;
-        if (!user || user.id === 'anonymous') {
+        // Resolution order (see srv/lib/resolve-user.js):
+        //   1. req._capturedUser — stashed by captureUserMiddleware BEFORE
+        //      multer ran. Survives the AsyncLocalStorage scope drop that
+        //      busboy can cause.
+        //   2. cds.context.user — canonical CAP source, may have been lost
+        //      after multer fired its callback.
+        //   3. req.user — legacy fallback for mocked-auth / basic-auth.
+        // First candidate with a real (non-anonymous) id wins.
+        const user = resolveUser(req, cds);
+        if (!user) {
           return res.status(401).json({ error: 'UNAUTHENTICATED', message: 'Authentication required' });
         }
         if (typeof user.is === 'function' && !user.is('Admin')) {

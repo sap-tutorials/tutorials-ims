@@ -5,16 +5,18 @@
 import cds from '@sap/cds'
 import { createRequire } from 'node:module'
 import { streamCsv } from './analytics-export-stream.js'
+import { resolveUser } from './resolve-user.js'
 
 const require = createRequire(import.meta.url)
 const { validateSelect } = require('./analytics-sql-validator.cjs')
 
 export async function exportSelectQueryHandler(req, res) {
   try {
-    // CAP's contextMw populates cds.context.user; some adapters also mirror
-    // it onto req.user. Read whichever is available.
-    const user = req.user || cds.context?.user
-    if (!user || user.id === 'anonymous') {
+    // resolveUser tries every user surface (cds.context.user, req.user, and
+    // any captured-by-middleware user) and picks the first authenticated
+    // one. See srv/lib/resolve-user.js header.
+    const user = resolveUser(req, cds)
+    if (!user) {
       return res.status(401).json({ error: 'Authentication required' })
     }
     if (typeof user.is === 'function' && !user.is('Admin')) {
