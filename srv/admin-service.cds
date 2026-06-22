@@ -118,6 +118,13 @@ service AdminService {
   // CREATED, IN_PROGRESS, SCHEDULED, COMPLETED, FAILED.
   @readonly @cds.persistence.skip entity AccountMergeStatuses { key code : String(20); label : String(30); }
 
+  // ChangeView Change Type dropdown. Mirrors @cap-js/change-tracking's
+  // Changes.modification enum (Create/Update/Delete). ValueList ties to
+  // ChangeView.modificationLabel (the i18n-resolved label), so the
+  // dropdown values are literally 'Create' / 'Update' / 'Delete' rather
+  // than the raw db-level enum codes.
+  @readonly @cds.persistence.skip entity ChangeTypes { key code : String(8); label : String(8); }
+
   @readonly entity Tasks as projection on ims.Tasks;
 
   @readonly
@@ -146,6 +153,14 @@ service AdminService {
   action cleanupStepFailures(olderThanDays : Integer);
   action cleanupUnusedTags();
   action setFeaturedOrder(taskLegacyId : Integer, taskType : String, featuredOrder : Integer);
+  // Bulk-purge sap.changelog.Changes rows. Designed for admins to clear the
+  // 74k+ rows of migration-trigger noise from migrate-from-hana.js runs without
+  // waiting for the weekly cron. Defaults: olderThanDays=0 (purge all),
+  // migrationOnly=true (only createdBy='migration', leaves real admin-edit
+  // audit history intact). Set olderThanDays>0 to scope by date.
+  action clearChangeLog(olderThanDays : Integer, migrationOnly : Boolean) returns {
+    deleted : Integer;
+  };
 
   // Tutorial review & notification management
   action reviewTutorial(tutorialId : UUID) returns {

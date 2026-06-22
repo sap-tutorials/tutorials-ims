@@ -1003,7 +1003,32 @@ annotate AdminService.JobLogItems with @(
 // ReadRestrictions override is applied at runtime in srv/admin-service.js.
 // We add SelectionFields for the standalone ListReport filter bar.
 // Must target sap.changelog.ChangeView (the base) since AdminService.ChangeView is injected at runtime.
+//
+// Filter UX fixes (2026-06-22, after Tom's admin walkthrough):
+//   1. Explicit @Common.Label on each filterable column so FE V4 doesn't fall
+//      back to whatever the @title resolves to (was rendering the createdBy
+//      filter as "Change Type" — a duplicate-label clash with modificationLabel).
+//   2. Value-help dropdown on modificationLabel via the existing
+//      sap.changelog.ChangeView@UI.Identification + a code list of the 3
+//      enum codes (Create/Update/Delete).
+//   3. createdAt explicitly in the filter bar (date range — admins asked
+//      for date filtering during walkthrough).
 using { sap.changelog.ChangeView } from '@cap-js/change-tracking';
+annotate ChangeView with {
+  entityLabel       @Common.Label: 'Object Type';
+  modificationLabel @Common.Label: 'Change Type'
+                    @Common.ValueListWithFixedValues
+                    @Common.ValueList: {
+                      CollectionPath: 'ChangeTypes',
+                      Parameters: [
+                        { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: modificationLabel, ValueListProperty: 'label' },
+                        { $Type: 'Common.ValueListParameterDisplayOnly',                                       ValueListProperty: 'code'  }
+                      ]
+                    };
+  createdBy         @Common.Label: 'Changed By';
+  createdAt         @Common.Label: 'Changed At';
+};
+
 annotate ChangeView with @UI.SelectionFields: [
   entityLabel,
   modificationLabel,
