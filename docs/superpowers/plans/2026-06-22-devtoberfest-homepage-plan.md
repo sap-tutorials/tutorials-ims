@@ -515,7 +515,7 @@ async function statusHandler(req, res) {
       activitiesUrl: config.activitiesUrl || '',
     });
   } catch (err) {
-    LOG.error('[status]', err);
+    LOG.error('GET /api/devtoberfest/status failed:', err);
     return res.status(500).json({ error: 'INTERNAL' });
   }
 }
@@ -783,7 +783,7 @@ In `srv/routes/devtoberfest-public.js`, add after `statusHandler`:
 async function termsHandler(_req, res) {
   try {
     await cds.connect.to('db');
-    await ensureSingleton();
+    await ensureDevtoberfestConfigSingleton();
     const { DevtoberfestConfig } = cds.entities('com.sap.developers.ims');
     const config = await SELECT.one.from(DevtoberfestConfig);
     return res.status(200).json({
@@ -791,18 +791,20 @@ async function termsHandler(_req, res) {
       version: config?.termsVersion || 1,
     });
   } catch (err) {
-    LOG.error('[terms]', err);
+    LOG.error('GET /api/devtoberfest/terms failed:', err);
     return res.status(500).json({ error: 'INTERNAL' });
   }
 }
 ```
 
-Update `register` and the named exports:
+Update `register` and the named exports. **Reuse the `_contextMw` + `_authMw` variables already declared inside `register()` by Task 4** — the terms endpoint is anonymous-friendly but still flows through the same middleware chain so the implementation surface stays uniform:
 
 ```javascript
 export function register(app) {
-  app.get('/api/devtoberfest/status', statusHandler);
-  app.get('/api/devtoberfest/terms', termsHandler);
+  const _contextMw = cds.middlewares?.context?.() || ((req, _res, next) => next());
+  const _authMw    = cds.middlewares?.auth?.()    || ((req, _res, next) => next());
+  app.get('/api/devtoberfest/status', _contextMw, _authMw, statusHandler);
+  app.get('/api/devtoberfest/terms',  _contextMw, _authMw, termsHandler);
 }
 
 export { statusHandler, termsHandler };
@@ -974,13 +976,18 @@ async function meHandler(req, res) {
       termsVersion: reg.termsVersion,
     });
   } catch (err) {
-    LOG.error('[me]', err);
+    LOG.error('GET /api/devtoberfest/me failed:', err);
     return res.status(500).json({ error: 'INTERNAL' });
   }
 }
 
 export function register(app) {
-  app.get('/api/devtoberfest/me', meHandler);
+  // context+auth middlewares are REQUIRED — without them req.user / cds.context.user
+  // never gets populated and resolveUser would always return null (false 401s).
+  // Same idiom as srv/server.js:272-277 (analytics export) and devtoberfest-public.js.
+  const _contextMw = cds.middlewares?.context?.() || ((req, _res, next) => next());
+  const _authMw    = cds.middlewares?.auth?.()    || ((req, _res, next) => next());
+  app.get('/api/devtoberfest/me', _contextMw, _authMw, meHandler);
   // /api/devtoberfest/join wired in Task 7.
 }
 
@@ -1164,23 +1171,25 @@ async function joinHandler(req, res) {
     } catch (auditErr) {
       // Audit failure must not break the join (mirrors PR #554's
       // pattern — the join itself is the canonical record).
-      LOG.warn('[join] audit-log failed (non-fatal)', auditErr.message);
+      LOG.warn('audit-log failed for POST /api/devtoberfest/join (non-fatal):', auditErr.message);
     }
 
     return res.status(201).json({ joined: true, termsVersion: submittedVersion });
   } catch (err) {
-    LOG.error('[join]', err);
+    LOG.error('POST /api/devtoberfest/join failed:', err);
     return res.status(500).json({ error: 'INTERNAL' });
   }
 }
 ```
 
-Update `register`:
+Update `register` — the middleware variables already exist from Task 6's `register` body; just add the new `app.post` line to the chain:
 
 ```javascript
 export function register(app) {
-  app.get('/api/devtoberfest/me', meHandler);
-  app.post('/api/devtoberfest/join', joinHandler);
+  const _contextMw = cds.middlewares?.context?.() || ((req, _res, next) => next());
+  const _authMw    = cds.middlewares?.auth?.()    || ((req, _res, next) => next());
+  app.get('/api/devtoberfest/me',     _contextMw, _authMw, meHandler);
+  app.post('/api/devtoberfest/join',  _contextMw, _authMw, joinHandler);
 }
 
 export { meHandler, joinHandler };
