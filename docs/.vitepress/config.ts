@@ -162,6 +162,7 @@ export default defineConfig({
           { text: 'Cookie and storage analysis', link: '/developers/reference/cookie-and-storage-analysis' },
           { text: 'Design decisions',          link: '/developers/reference/design-decisions' },
           { text: 'External integrations',     link: '/developers/reference/external-integrations' },
+          { text: 'Iframe allowlist',          link: '/developers/reference/iframe-allowlist' },
           { text: 'Sage extension migration',  link: '/developers/reference/sage-extension-migration' },
           { text: 'Theme variants',            link: '/developers/reference/theme-variants' }
         ]}
