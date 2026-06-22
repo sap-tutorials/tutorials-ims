@@ -58,6 +58,22 @@ async function statusHandler(req, res) {
   }
 }
 
+async function termsHandler(_req, res) {
+  try {
+    await cds.connect.to('db');
+    await ensureDevtoberfestConfigSingleton();
+    const { DevtoberfestConfig } = cds.entities('com.sap.developers.ims');
+    const config = await SELECT.one.from(DevtoberfestConfig);
+    return res.status(200).json({
+      text: config?.termsText || '',
+      version: config?.termsVersion || 1,
+    });
+  } catch (err) {
+    LOG.error('GET /api/devtoberfest/terms failed:', err);
+    return res.status(500).json({ error: 'INTERNAL' });
+  }
+}
+
 export function register(app) {
   // context+auth middlewares populate cds.context.user / req.user when
   // a Bearer (XSUAA) or Basic credential is presented. The route stays
@@ -67,7 +83,7 @@ export function register(app) {
   const _contextMw = cds.middlewares?.context?.() || ((req, _res, next) => next());
   const _authMw    = cds.middlewares?.auth?.()    || ((req, _res, next) => next());
   app.get('/api/devtoberfest/status', _contextMw, _authMw, statusHandler);
-  // /api/devtoberfest/terms wired in Task 5.
+  app.get('/api/devtoberfest/terms',  _contextMw, _authMw, termsHandler);
 }
 
-export { statusHandler };
+export { statusHandler, termsHandler };
