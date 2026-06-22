@@ -31,6 +31,21 @@
     class="kg-sidebar"
     aria-label="Related concepts and tutorials"
   >
+    <!--
+      Panel header — answers "what is this panel?" for a reader who scrolled
+      past the first section H3. The intro line names the source (knowledge
+      graph) and the signal (shared concepts) without going into the
+      technical detail of how items are ranked.
+    -->
+    <header class="kg-sidebar-header">
+      <h2>Related learning</h2>
+      <p class="kg-sidebar-help">
+        Powered by the knowledge graph — surfaces tutorials that share
+        concepts with this one, plus what comes before and after on a
+        natural learning path. Hover any link to see why it appears here.
+      </p>
+    </header>
+
     <section v-if="data.teaches.length > 0">
       <h3>This tutorial teaches</h3>
       <ul>
@@ -51,6 +66,7 @@
         <li v-for="t in data.prerequisitesOf" :key="t.slug">
           <a
             :href="`/tutorials/${t.slug}/`"
+            :title="t.reason || ''"
             @click="onItemClick('prerequisitesOf', t.slug)"
           >{{ t.title || t.slug }}</a>
         </li>
@@ -63,6 +79,7 @@
         <li v-for="t in data.sharedConcepts" :key="t.slug">
           <a
             :href="`/tutorials/${t.slug}/`"
+            :title="t.reason || ''"
             @click="onItemClick('sharedConcepts', t.slug)"
           >{{ t.title || t.slug }}</a>
         </li>
@@ -75,6 +92,7 @@
         <li v-for="t in data.whatToLearnNext" :key="t.slug">
           <a
             :href="`/tutorials/${t.slug}/`"
+            :title="t.reason || ''"
             @click="onItemClick('whatToLearnNext', t.slug)"
           >{{ t.title || t.slug }}</a>
         </li>
@@ -275,6 +293,34 @@ onBeforeUnmount(() => {
   background: var(--sapList_Background, var(--sapBackgroundColor, #fff));
   border: 1px solid var(--sapList_BorderColor, #e5e5e5);
   border-radius: 0.5rem;
+}
+
+/* Panel header — one-shot context above the per-section H3s so a reader who
+   scrolls past the first section still knows what this panel is. */
+.kg-sidebar-header {
+  margin: 0 0 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--sapList_BorderColor, #e5e5e5);
+}
+
+.kg-sidebar-header h2 {
+  margin: 0 0 0.375rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--sapTextColor, #32363a);
+}
+
+.kg-sidebar-help {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--sapContent_LabelColor, #6a6d70);
+}
+
+/* The first section after the header doesn't need its own top-border —
+   the header already provides the separator. */
+.kg-sidebar-header + section h3 {
+  border-bottom: 1px solid var(--sapList_BorderColor, #e5e5e5);
 }
 
 .kg-sidebar h3 {
