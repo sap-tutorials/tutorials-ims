@@ -33,6 +33,7 @@ import { resolveTenantSettings } from './lib/runtime-config/tenant-settings.js';
 import { makeValidateAnswerHandler } from './lib/validate-answer-handler.js';
 import { defaultLoadQuestion } from './lib/validate-answer-question-loader.js';
 import { scheduleRebuild, checkFeatureFlag as checkRebuildTriggerFeatureFlag } from './lib/rebuild-trigger.js';
+import { classifyRebuildMode, resolveSlugForEntity } from './lib/_classify-rebuild-mode.js';
 import { handleUIEvent, checkFeatureFlag as checkUIEventFeatureFlag } from './lib/ui-event-handler.js';
 import { backfillUserProfile } from './lib/resolve-db-user.js';
 import { registerMigrationModeHandler } from './lib/migration-mode.js';
@@ -477,8 +478,17 @@ cds.on('served', async () => {
   // mission/group data after CRUD via AdminService.
   if (!globalThis.__navigatorCacheInvalidatorRegistered) {
     const admin = await cds.connect.to('AdminService');
-    const navInvalidatingEntities = ['Missions', 'Groups', 'CompletionPaths', 'CompletionPathItems', 'GroupPathItems', 'Tutorials', 'FeaturedTasks'];
-    admin.after(['CREATE', 'UPDATE', 'DELETE'], navInvalidatingEntities, () => {
+    // #429: classifier-driven rebuild. Each entity routes to a different
+    // mode via classifyRebuildMode(); Steps + Tags added so their CRUD
+    // also triggers a (slug-targeted or full+force-cap-refetch) rebuild.
+    const navInvalidatingEntities = ['Missions', 'Groups', 'CompletionPaths', 'CompletionPathItems', 'GroupPathItems', 'Tutorials', 'Steps', 'FeaturedTasks', 'Tags'];
+    admin.after(['CREATE', 'UPDATE', 'DELETE'], navInvalidatingEntities, async (_data, req) => {
+      // #429: migration-mode short-circuit. Bulk migration scripts set
+      // x-migration-mode: true and dispatch one final rebuild at end-of-run.
+      // Per-row triggers during a migration would dispatch hundreds of
+      // workflow runs (all debounced into one full, but still wasteful).
+      if (req.headers?.['x-migration-mode'] === 'true') return;
+
       try {
         invalidateNavigatorCache();
       } catch (err) {
@@ -492,13 +502,44 @@ cds.on('served', async () => {
       } catch (err) {
         console.error('[render-cache] cache invalidation failed', err);
       }
-      // [#174 PR 3] Also schedule a /browse/ SSR rebuild. Debounced 60s so a
-      // single admin bulk-edit (rename tag → 50 tutorials updated) collapses
-      // into one workflow_dispatch instead of 50.
-      scheduleRebuild('admin-write').catch(err => {
+
+      // [#174 PR 3, #429] Schedule a rebuild. classifyRebuildMode routes the
+      // entity to the cheapest valid mode (catalog-only/slug-targeted/full).
+      const entityName = req.target?.name?.split('.').pop();
+      if (!entityName) return;
+      const { mode, forceCapRefetch, needsSlug } = classifyRebuildMode(entityName, 'crud');
+
+      let slug = null;
+      if (needsSlug) {
+        slug = await resolveSlugForEntity(entityName, req.data);
+        if (!slug) {
+          console.warn(`[rebuild-trigger] slug lookup failed for ${entityName} (id=${req.data?.ID}); falling back to full mode`);
+          scheduleRebuild('admin-write', { mode: 'full' }).catch(err => {
+            console.error('[rebuild-trigger] scheduling failed', err);
+          });
+          return;
+        }
+      }
+
+      scheduleRebuild('admin-write', { mode, slug, forceCapRefetch }).catch(err => {
         console.error('[rebuild-trigger] scheduling failed', err);
       });
     });
+
+    // #429: bound-action hooks for catalog-affecting actions that don't go
+    // through standard CRUD. The classifier returns 'catalog-only' or
+    // 'full+force-cap-refetch' depending on the action; we don't need a slug
+    // because no bound action targets a specific tutorial.
+    const CATALOG_AFFECTING_ACTIONS = ['classifyCategories', 'setFeaturedOrder', 'commitTagImport', 'cleanupUnusedTags'];
+    for (const actionName of CATALOG_AFFECTING_ACTIONS) {
+      admin.after(actionName, async (_data, req) => {
+        if (req.headers?.['x-migration-mode'] === 'true') return;
+        const { mode, forceCapRefetch } = classifyRebuildMode(actionName, 'action');
+        scheduleRebuild(`admin-action:${actionName}`, { mode, forceCapRefetch }).catch(err => {
+          console.error('[rebuild-trigger] scheduling failed', err);
+        });
+      });
+    }
     globalThis.__navigatorCacheInvalidatorRegistered = true;
   }
 
