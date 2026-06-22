@@ -746,6 +746,19 @@ async function main() {
   console.log('\nConnecting to target HANA (RT user for DML)...');
   const target = await connect({ ...capCreds, hdi_user: null, hdi_password: null }, 'target');
   await execStmt(target, `SET SCHEMA "${capCreds.schema}"`);
+  // Suppress @cap-js/change-tracking writes for this session. Per
+  // docs/developers/operations/migration-from-ims.md §"changelog triggers
+  // mitigation", direct-HDB migrators bypass the HTTP-scoped x-migration-mode
+  // header that the REST migrators use, so without this every inserted row
+  // would fire a Changes-table trigger and bloat sap.changelog.Changes with
+  // 'migration' audit noise (74k+ rows observed pre-2026-06-22 on DEV).
+  // The session variable persists for the lifetime of this connection.
+  try {
+    await execStmt(target, `SET SESSION 'ct.skip' = 'true'`);
+    console.log('  ✓ Change-tracking suppression: SESSION_CONTEXT ct.skip=true');
+  } catch (err) {
+    console.warn(`  ⚠ Could not set ct.skip session var (non-fatal): ${err.message}`);
+  }
   console.log('  ✓ Connected to target');
 
   const S = `"${imsCreds.schema}"`;

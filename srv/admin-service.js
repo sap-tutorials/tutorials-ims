@@ -14,6 +14,7 @@ import { makeAltGroupHandler } from './handlers/completion-path-items-altgroup.j
 import * as advocateHandlers from './handlers/advocate-handlers.js';
 import { classifySeverity, daysUntil } from './jobs/secret-expiry-check.js';
 import { readSecret, writeSecret, deleteSecret } from './lib/credstore.js';
+import { cleanupChangeLog } from './jobs/cleanup.js';
 import { randomBytes } from 'node:crypto';
 
 export default class AdminService extends cds.ApplicationService {
@@ -82,6 +83,15 @@ export default class AdminService extends cds.ApplicationService {
       { code: 'SCHEDULED',   label: 'Scheduled'   },
       { code: 'COMPLETED',   label: 'Completed'   },
       { code: 'FAILED',      label: 'Failed'      }
+    ]);
+    // Change-tracking modification dropdown — values are the i18n-resolved
+    // ChangeView.modificationLabel strings (NOT the underlying db enum
+    // codes), so they match what FE displays in the list-report. The
+    // plugin's i18n hardcodes English Create/Update/Delete.
+    this.on('READ', 'ChangeTypes', () => [
+      { code: 'create', label: 'Create' },
+      { code: 'update', label: 'Update' },
+      { code: 'delete', label: 'Delete' }
     ]);
 
     // Ensure singleton row exists for ChatSettings (defensive — seed CSV
@@ -593,6 +603,19 @@ export default class AdminService extends cds.ApplicationService {
       const cutoff = new Date(Date.now() - days * 86400000).toISOString();
       const result = await DELETE.from(StepFailures).where({ failureDate: { '<': cutoff } });
       return result;
+    });
+
+    // clearChangeLog — bulk-purge sap.changelog.Changes rows. Designed for
+    // admins to clear migration-trigger noise (74k+ rows on DEV today from
+    // migrate-from-hana.js DB triggers) without waiting for the weekly cron.
+    // Both params have safe defaults: olderThanDays=0 (purge everything that
+    // matches), migrationOnly=true (only createdBy='migration' rows are
+    // touched, real admin-edit audit history is preserved).
+    this.on('clearChangeLog', async (req) => {
+      const olderThanDays = Number.isInteger(req.data.olderThanDays) ? req.data.olderThanDays : 0;
+      const migrationOnly = req.data.migrationOnly !== false; // default true
+      const deleted = await cleanupChangeLog({ retentionDays: olderThanDays, migrationOnly });
+      return { deleted };
     });
 
     this.on('cleanupUnusedTags', async (req) => {

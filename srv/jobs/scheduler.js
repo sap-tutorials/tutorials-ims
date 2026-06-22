@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { acquireLock, releaseLock } from './job-lock.js';
-import { cleanupStepFailures, cleanupUnusedTags, cleanupContentVersions, cleanupPipelineLog, cleanupStuckPublishing, pruneOrphanEmbeddings, pruneAnalyticsHistory } from './cleanup.js';
+import { cleanupStepFailures, cleanupUnusedTags, cleanupContentVersions, cleanupPipelineLog, cleanupStuckPublishing, pruneOrphanEmbeddings, pruneAnalyticsHistory, cleanupChangeLog } from './cleanup.js';
 import { retryNgds } from './ngds-retry.js';
 import { processAccountMerges } from './account-merge-job.js';
 import { runReconciliationJob } from './embedding-reconciliation.js';
@@ -98,6 +98,17 @@ export function registerJobs() {
   // Daily at 03:15 — prune pipeline log entries older than 30 days
   cron.schedule('15 3 * * *', () =>
     runWithLock('pipeline-log-gc', 600000, () => cleanupPipelineLog(30))
+  );
+
+  // Weekly Sunday at 03:23 — prune sap.changelog.Changes rows older than 90 days.
+  // Audit history > 90 days is rarely queried; the bulk of admin Change Log
+  // table volume on DEV is migration-trigger noise from migrate-from-hana.js
+  // runs. Off-minute (:23) to avoid the :15/:30 thundering herd. See
+  // docs/developers/operations/migration-from-ims.md §"changelog triggers
+  // mitigation" for the design context. Admins can also one-shot purge
+  // older noise via AdminService.clearChangeLog (#change-log-cleanup).
+  cron.schedule('23 3 * * 0', () =>
+    runWithLock('change-log-gc', 600000, () => cleanupChangeLog({ retentionDays: 90 }))
   );
 
   // Daily at 03:30 — prune embeddings for tutorials no longer in the active manifest
