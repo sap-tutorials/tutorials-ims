@@ -205,9 +205,10 @@ export const _internals = { GROUP_KEYS, TOP_N, DEFAULT_WEIGHT, coCompletionBoost
 // re-check on every request so a `cf set-env` + `cf restart` flips it cleanly.
 
 import cds from '@sap/cds';
-import { NEIGHBORHOOD_QUERY, SLUG_RE, substitute } from './lib/kg-queries.js';
+import { SLUG_RE } from './lib/kg-queries.js';
 import {
-  sparqlQuery,
+  kgQuery,
+  kgAdminRunSparql,
   SparqlPrivilegeError,
   SparqlSyntaxError,
   SparqlTimeoutError,
@@ -248,6 +249,14 @@ const _NEIGHBORHOOD_CACHE = null;
 
 function isHana(db) {
   return db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+}
+
+// Detect whether a SPARQL statement is a state-mutating UPDATE.
+// Used to flag the audit payload (KnowledgeGraphRunSparql.isUpdate)
+// and to set the procedure's audit flag.
+const SPARQL_UPDATE_RE = /^\s*(INSERT|DELETE|CLEAR|DROP|CREATE|LOAD|COPY|MOVE|ADD)\b/i;
+function detectUpdate(sparql) {
+  return SPARQL_UPDATE_RE.test(sparql);
 }
 
 /**
@@ -515,21 +524,20 @@ export default cds.service.impl(async function () {
 
     // 3. (Cache lookup would happen here — see _NEIGHBORHOOD_CACHE TODO.)
 
-    // 4. Substitute slug into the named query.
-    let sparql;
-    try {
-      sparql = substitute(NEIGHBORHOOD_QUERY, { SLUG: slug });
-    } catch (err) {
-      if (err.code === 'KG_QUERY_INVALID_SLUG') {
-        return req.error(400, err.message);
-      }
-      throw err;
+    // 4. Run the named query via the KG_QUERY procedure.
+    if (!SLUG_RE.test(slug)) {
+      return req.error(400, `Invalid tutorial slug: "${slug}"`);
     }
+    const tutorialIri = TUTORIAL_IRI_PREFIX + slug;
 
     // 5. Run the SPARQL query.
     let response;
     try {
-      ({ response } = await sparqlQuery(db, sparql));
+      ({ response } = await kgQuery({
+        db,
+        queryName: 'NEIGHBORHOOD',
+        params: { slug: tutorialIri },
+      }));
     } catch (err) {
       return mapSparqlError(err, req, log);
     }
@@ -622,16 +630,18 @@ export default cds.service.impl(async function () {
     }
 
     const truncatedForLog = query.length > 1024 ? query.slice(0, 1024) + '…' : query;
+    const isUpdate = detectUpdate(query);
     log.info(`kg-service: runSparql by ${req.user?.id ?? 'unknown'} (${query.length} chars)`);
     await audit('KnowledgeGraphRunSparql', {
       user: req.user?.id ?? 'unknown',
       queryLength: query.length,
       query: truncatedForLog,
+      isUpdate,
     });
 
     let response;
     try {
-      ({ response } = await sparqlQuery(db, query));
+      ({ response } = await kgAdminRunSparql({ db, sparql: query, isUpdate }));
     } catch (err) {
       return mapSparqlError(err, req, log);
     }

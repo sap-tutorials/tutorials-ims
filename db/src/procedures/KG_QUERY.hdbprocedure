@@ -1,0 +1,201 @@
+-- KG_QUERY.hdbprocedure
+-- ============================================================
+-- WHY DEFINER
+--   HANA Cloud KGE uses per-graph ACL: the first runtime user that executes a
+--   SPARQL UPDATE becomes the graph owner.  Subsequent runtime users — even
+--   those with the same system-level SPARQL QUERY privilege — may be affected.
+--
+--   By declaring SQL SECURITY DEFINER, the procedure body runs as the HDI
+--   container's object-owner (#OO) regardless of which binding invokes it.
+--   The object-owner identity is stable across all bindings and deploys.
+--
+--   Memory: hana_sparql_per_graph_acl_creator_owns
+--   Spec:   docs/superpowers/specs/2026-06-22-kg-sparql-definer-procedures-design.md
+--   Issue:  #533
+--
+-- DISPATCH TABLE
+--   :query_name  'NEIGHBORHOOD'      – concepts/tutorials adjacent to a tutorial
+--   :query_name  'PATH_BETWEEN'      – (Phase 2 stub) shortest path between two tutorials
+--   :query_name  'CONCEPTS_FOR_USER' – (Phase 2 stub) concepts learned by a user
+--   :query_name  <anything else>     – SIGNAL KG_UNKNOWN_QUERY (10005)
+--
+-- PARAMETERS
+--   query_name        – one of the three names above
+--   p1                – per-query: NEIGHBORHOOD=full tutorial IRI,
+--                       PATH_BETWEEN=from-tutorial IRI, CONCEPTS_FOR_USER=user UUID
+--   p2                – PATH_BETWEEN only: to-tutorial IRI; NULL for others
+--   p3                – reserved for future use; pass NULL
+--   override_graph_iri – when non-NULL, replaces the hardcoded production graph IRI.
+--                       Used by hybrid tests to target a TEST graph without touching
+--                       production data.  NULL → prod default (tutorials-v2).
+--   response          – OUT: SPARQL JSON result body (NCLOB)
+--   headers           – OUT: HTTP response headers from HANA SPARQL engine
+--
+-- ERROR CODES (user-defined range 10000–19999)
+--   10005  KG_UNKNOWN_QUERY        – :query_name not in dispatch table
+--   10006  KG_INVALID_TUTORIAL_IRI – IRI not matching expected pattern
+--   10007  KG_INVALID_USER_ID      – UUID not matching UUID pattern
+--
+-- HDI SCHEMA-LOCAL REFERENCE
+--   HDI refuses to compile DEFINER-security procedures that cross schema
+--   boundaries (e.g. CALL SYS.SPARQL_EXECUTE). The workaround is a synonym:
+--   db/src/SYS_SPARQL_EXECUTE.hdbsynonym maps the local name
+--   SYS_SPARQL_EXECUTE → SYS.SPARQL_EXECUTE.  No change to runtime behaviour.
+--
+-- QA NOTE
+--   db-qa/src/procedures/KG_QUERY.hdbprocedure contains a stub with the same
+--   signature but a SIGNAL KG_NOT_AVAILABLE_ON_QA body (see spec §"QA channel").
+--
+-- SPARQL SOURCES
+--   The three SPARQL bodies are copied verbatim from srv/lib/kg-queries.js
+--   (NEIGHBORHOOD_QUERY line 237, PATH_BETWEEN_QUERY line 284,
+--   CONCEPTS_FOR_USER_QUERY line 299).  The $SLUG / $FROM_SLUG / $TO_SLUG /
+--   $USER_ID placeholders are rewritten as SQL string-concat with the
+--   corresponding :pN parameter.  The hardcoded FROM <...> line is replaced
+--   by the from_clause variable (COALESCE on override_graph_iri).
+-- ============================================================
+
+PROCEDURE KG_QUERY (
+  IN  query_name        NVARCHAR(50),
+  IN  p1                NVARCHAR(500),
+  IN  p2                NVARCHAR(500),
+  IN  p3                NVARCHAR(500),
+  IN  override_graph_iri NVARCHAR(500),
+  OUT response          NCLOB,
+  OUT headers           NVARCHAR(5000)
+)
+LANGUAGE SQLSCRIPT
+SQL SECURITY DEFINER
+AS
+BEGIN
+  -- Error condition declarations.
+  -- HANA Cloud SQLScript SIGNAL syntax: DECLARE <name> CONDITION FOR SQL_ERROR_CODE <n>
+  -- The SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT form does NOT compile on HANA Cloud.
+  DECLARE KG_UNKNOWN_QUERY        CONDITION FOR SQL_ERROR_CODE 10005;
+  DECLARE KG_INVALID_TUTORIAL_IRI CONDITION FOR SQL_ERROR_CODE 10006;
+  DECLARE KG_INVALID_USER_ID      CONDITION FOR SQL_ERROR_CODE 10007;
+
+  DECLARE sparql     NCLOB;
+  DECLARE from_clause NVARCHAR(600);
+
+  -- Build the FROM clause.  When override_graph_iri is NULL (normal production
+  -- call), we use the hardcoded production graph IRI that MUST stay in sync
+  -- with srv/lib/kg-graph-rebuild.js DEFAULT_GRAPH_IRI.  When non-NULL (hybrid
+  -- tests, admin probe), the caller-supplied IRI is used instead.
+  from_clause := 'FROM <' ||
+    COALESCE(:override_graph_iri, 'https://developers.sap.com/kg/tutorials-v3') ||
+    '>';
+
+  -- Dispatch on query_name using IF/ELSEIF chain.
+  -- HANA SQLScript supports CASE as an expression but the statement form with
+  -- multiple statements per branch is less portable; IF/ELSEIF is unambiguous.
+
+  IF :query_name = 'NEIGHBORHOOD' THEN
+
+    -- Validate :p1 as a well-formed tutorial IRI.
+    -- Pattern: https://developers.sap.com/kg/tutorial/<slug>
+    -- where <slug> is 1–80 lowercase alphanumeric chars and hyphens.
+    -- JS caller checks err.code === 10006.
+    IF :p1 IS NULL OR
+       NOT (:p1 LIKE_REGEXPR '^https://developers\.sap\.com/kg/tutorial/[a-z0-9-]{1,80}$') THEN
+      SIGNAL KG_INVALID_TUTORIAL_IRI;
+    END IF;
+
+    -- NEIGHBORHOOD_QUERY — copied verbatim from srv/lib/kg-queries.js line 237.
+    -- $SLUG placeholder → :p1 (the full tutorial IRI, received verbatim from caller).
+    -- FROM <hardcoded> → from_clause (COALESCE override).
+    -- SPARQL double-quoted strings ("teaches", "prerequisitesOf", etc.) do not
+    -- conflict with SQL single-quote string delimiters.
+    sparql :=
+      'PREFIX kg: <https://developers.sap.com/kg/>' || CHAR(10) ||
+      '' || CHAR(10) ||
+      'SELECT DISTINCT ?type ?targetSlug ?targetLabel ?weight' || CHAR(10) ||
+      from_clause || CHAR(10) ||
+      'WHERE {' || CHAR(10) ||
+      '  {' || CHAR(10) ||
+      '    # teaches: concepts the input tutorial directly teaches' || CHAR(10) ||
+      '    <' || :p1 || '> kg:teaches ?concept .' || CHAR(10) ||
+      '    ?concept kg:slug ?targetSlug ; kg:name ?targetLabel .' || CHAR(10) ||
+      '    BIND("teaches" AS ?type) BIND(1.0 AS ?weight)' || CHAR(10) ||
+      '  } UNION {' || CHAR(10) ||
+      '    # prerequisitesOf: tutorials teaching concepts the input tutorial requires' || CHAR(10) ||
+      '    <' || :p1 || '> kg:teaches ?concept .' || CHAR(10) ||
+      '    ?concept kg:requires ?prereq .' || CHAR(10) ||
+      '    ?prereqTut kg:teaches ?prereq .' || CHAR(10) ||
+      '    FILTER(?prereqTut != <' || :p1 || '>)' || CHAR(10) ||
+      '    BIND(REPLACE(STR(?prereqTut), "https://developers.sap.com/kg/tutorial/", "") AS ?targetSlug)' || CHAR(10) ||
+      '    BIND("prerequisitesOf" AS ?type) BIND(0.9 AS ?weight)' || CHAR(10) ||
+      '  } UNION {' || CHAR(10) ||
+      '    # sharedConcepts: other tutorials teaching the same concepts' || CHAR(10) ||
+      '    <' || :p1 || '> kg:teaches ?sharedConcept .' || CHAR(10) ||
+      '    ?other kg:teaches ?sharedConcept .' || CHAR(10) ||
+      '    FILTER(?other != <' || :p1 || '>)' || CHAR(10) ||
+      '    BIND(REPLACE(STR(?other), "https://developers.sap.com/kg/tutorial/", "") AS ?targetSlug)' || CHAR(10) ||
+      '    BIND("sharedConcepts" AS ?type)' || CHAR(10) ||
+      '  } UNION {' || CHAR(10) ||
+      '    # whatToLearnNext: tutorials teaching concepts that require what the input teaches' || CHAR(10) ||
+      '    <' || :p1 || '> kg:teaches ?known .' || CHAR(10) ||
+      '    ?advanced kg:requires ?known .' || CHAR(10) ||
+      '    ?nextTut kg:teaches ?advanced .' || CHAR(10) ||
+      '    FILTER(?nextTut != <' || :p1 || '>)' || CHAR(10) ||
+      '    BIND(REPLACE(STR(?nextTut), "https://developers.sap.com/kg/tutorial/", "") AS ?targetSlug)' || CHAR(10) ||
+      '    BIND("whatToLearnNext" AS ?type)' || CHAR(10) ||
+      '  }' || CHAR(10) ||
+      '}' || CHAR(10) ||
+      'LIMIT 60';
+
+  ELSEIF :query_name = 'PATH_BETWEEN' THEN
+
+    -- Validate :p1 (from-tutorial IRI) and :p2 (to-tutorial IRI).
+    -- Both must match the tutorial IRI pattern.
+    IF :p1 IS NULL OR
+       NOT (:p1 LIKE_REGEXPR '^https://developers\.sap\.com/kg/tutorial/[a-z0-9-]{1,80}$') OR
+       :p2 IS NULL OR
+       NOT (:p2 LIKE_REGEXPR '^https://developers\.sap\.com/kg/tutorial/[a-z0-9-]{1,80}$') THEN
+      SIGNAL KG_INVALID_TUTORIAL_IRI;
+    END IF;
+
+    -- PATH_BETWEEN_QUERY — copied verbatim from srv/lib/kg-queries.js line 284.
+    -- Phase 2 stub: returns LIMIT 0 (no rows). $FROM_SLUG → :p1, $TO_SLUG → :p2.
+    -- FROM <hardcoded> → from_clause.
+    sparql :=
+      'PREFIX kg: <https://developers.sap.com/kg/>' || CHAR(10) ||
+      '' || CHAR(10) ||
+      '# Phase 2 stub: PR 5 declares; PR 6+ implements.' || CHAR(10) ||
+      '# Will be: SELECT shortest path of kg:requires between ' || :p1 || ' and ' || :p2 || '.' || CHAR(10) ||
+      'SELECT ?placeholder' || CHAR(10) ||
+      from_clause || CHAR(10) ||
+      'WHERE { ?placeholder ?p ?o }' || CHAR(10) ||
+      'LIMIT 0';
+
+  ELSEIF :query_name = 'CONCEPTS_FOR_USER' THEN
+
+    -- Validate :p1 as a UUID (lowercase hex digits with hyphens, 8-4-4-4-12 format).
+    -- JS caller checks err.code === 10007.
+    IF :p1 IS NULL OR
+       NOT (:p1 LIKE_REGEXPR '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') THEN
+      SIGNAL KG_INVALID_USER_ID;
+    END IF;
+
+    -- CONCEPTS_FOR_USER_QUERY — copied verbatim from srv/lib/kg-queries.js line 299.
+    -- Phase 2 stub: returns LIMIT 0 (no rows). $USER_ID → :p1.
+    -- FROM <hardcoded> → from_clause.
+    sparql :=
+      'PREFIX kg: <https://developers.sap.com/kg/>' || CHAR(10) ||
+      '' || CHAR(10) ||
+      '# Phase 2 stub: PR 5 declares; PR 6+ implements.' || CHAR(10) ||
+      '# Will be: SELECT concepts taught by tutorials completed by ' || :p1 || '.' || CHAR(10) ||
+      'SELECT ?placeholder' || CHAR(10) ||
+      from_clause || CHAR(10) ||
+      'WHERE { ?placeholder ?p ?o }' || CHAR(10) ||
+      'LIMIT 0';
+
+  ELSE
+
+    -- Unknown query name — signal before any SPARQL is assembled.
+    SIGNAL KG_UNKNOWN_QUERY;
+
+  END IF;
+
+  CALL SYS_SPARQL_EXECUTE(:sparql, '', response, headers);
+END;

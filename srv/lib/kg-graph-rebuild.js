@@ -3,7 +3,7 @@
 // CDS state into RDF triples via the projection generator + SPARQL client.
 //
 // Source-of-truth references:
-//   - PR 1 spike (#401) — established CALL SYS.SPARQL_EXECUTE access path.
+//   - PR 1 spike (#401) — established the DEFINER procedure access path.
 //   - docs/superpowers/plans/2026-06-17-knowledge-graph-implementation.md
 //     Task 4.4 — for the rebuild contract and audit-log fields.
 //   - docs/superpowers/specs/2026-06-17-knowledge-graph-design.md — for
@@ -14,6 +14,9 @@
 //     bootstrap INSERT auto-creates the graph (only `INSERT DATA` has
 //     that implicit-create behaviour on HANA Cloud); the immediate
 //     CLEAR then wipes the bootstrap triple and any prior state.
+//   - Task 8 — replaced direct sparqlExec calls with typed-client calls to
+//     the DEFINER procedures kgGraphClear + kgGraphInsert (see
+//     srv/lib/kg-sparql-client.js for the procedure boundary).
 //
 // CONTRACT:
 //   graphRebuild({ db, log, graphIri? })
@@ -38,7 +41,7 @@
 //   default is the production graph URI from the spec.
 
 import { randomUUID } from 'node:crypto';
-import { sparqlExec } from './kg-sparql-client.js';
+import { kgGraphClear, kgGraphInsert } from './kg-sparql-client.js';
 import { projectTriples } from './kg-projection.js';
 
 // Production graph IRI. Bumped from `https://developers.sap.com/kg/tutorials`
@@ -54,7 +57,7 @@ import { projectTriples } from './kg-projection.js';
 // places) and the named-query test in test/hybrid/kg-named-queries.test.js.
 // A grep on `developers.sap.com/kg/tutorials($|[^-])` should yield only
 // docs references after a coordinated rename.
-export const DEFAULT_GRAPH_IRI = 'https://developers.sap.com/kg/tutorials-v2';
+export const DEFAULT_GRAPH_IRI = 'https://developers.sap.com/kg/tutorials-v3';
 
 // Bootstrap triple used to ensure the named graph exists before CLEAR.
 // All three positions use the same "ghost" IRI so the triple is obviously
@@ -134,14 +137,6 @@ function tallyPredicates(batch, counters) {
 }
 
 /**
- * Wrap a batch of N-Triples lines in a SPARQL INSERT DATA { GRAPH <...> { ... } }
- * block. Lines from projectTriples already end in ` .` so we just newline-join.
- */
-function buildInsertData(graphIri, batch) {
-  return `INSERT DATA { GRAPH <${graphIri}> {\n${batch.join('\n')}\n} }`;
-}
-
-/**
  * Upsert the singleton GraphMetadata row. We use the codebase-wide
  * SELECT-then-INSERT-or-UPDATE idiom (per developer-service.js:593,
  * "zero direct UPSERT statements anywhere under srv/") rather than CDS
@@ -202,18 +197,17 @@ export async function graphRebuild({ db, log, graphIri, batchSize } = {}) {
   // The bootstrap triple is immediately wiped by CLEAR; readers never
   // see it. On warm graphs this is ~250ms; on a cold graph it's the
   // one-shot ~750ms cost of registering the named graph with KGE.
-  await sparqlExec(db, `INSERT DATA { GRAPH <${targetGraph}> { ${BOOTSTRAP_TRIPLE} } }`);
+  await kgGraphInsert({ db, graphIri: targetGraph, triples: BOOTSTRAP_TRIPLE });
 
   // Step 2: wipe the named graph (now guaranteed to exist).
-  await sparqlExec(db, `CLEAR GRAPH <${targetGraph}>`);
+  await kgGraphClear({ db, graphIri: targetGraph });
 
   // Step 3: stream batches from the projection generator.
   let tripleCount = 0;
   const predicateCounts = new Map();
   for await (const batch of projectTriples({ db, batchSize })) {
     if (!batch || batch.length === 0) continue;
-    const insertSparql = buildInsertData(targetGraph, batch);
-    await sparqlExec(db, insertSparql);
+    await kgGraphInsert({ db, graphIri: targetGraph, triples: batch.join('\n') });
     tripleCount += batch.length;
     tallyPredicates(batch, predicateCounts);
   }
@@ -276,7 +270,6 @@ export async function graphRebuild({ db, log, graphIri, batchSize } = {}) {
 
 // Test-only exports for the hybrid test to reuse the same constants.
 export const __TESTING__ = {
-  buildInsertData,
   tallyPredicates,
   PREDICATE_RE,
   PREDICATE_TO_COUNT_FIELD,

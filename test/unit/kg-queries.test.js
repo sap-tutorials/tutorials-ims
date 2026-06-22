@@ -2,78 +2,25 @@
 // Unit tests for srv/lib/kg-queries.js — pure-function module.
 //
 // The module exports:
-//   - NEIGHBORHOOD_QUERY   (Phase 1 flagship 4-way UNION SPARQL)
-//   - PATH_BETWEEN_QUERY   (Phase 2 stub)
-//   - CONCEPTS_FOR_USER_QUERY (Phase 2 stub)
+//   - SLUG_RE   (regex validator for kg-tutorial-slug shape)
+//   - SLUG, FROM_SLUG, TO_SLUG, USER_ID, LIMIT typed placeholders
 //   - substitute(template, params) — strict, allow-listed parameter
 //     substitution + injection guard. Throws synchronously on any input
 //     that fails validation; the HTTP layer maps to 400.
-//
-// The flagship NEIGHBORHOOD_QUERY deviates from the spec in two places (both
-// documented in the implementation file):
-//   1. Uses full IRI form <...kg/tutorial/$SLUG> instead of the prefixed-name
-//      `kg:tutorial/$SLUG` because HANA SPARQL rejects `/` inside PN_LOCAL.
-//   2. Drops `?targetLabel` projection on the three tutorial-targeted UNION
-//      branches because kg-projection.js emits no `kg:title` triples for
-//      tutorials. The JS handler enriches with Tutorials.title separately.
 
 import { describe, it, expect } from 'vitest';
 import {
-  NEIGHBORHOOD_QUERY,
-  PATH_BETWEEN_QUERY,
-  CONCEPTS_FOR_USER_QUERY,
   substitute,
 } from '../../srv/lib/kg-queries.js';
-
-// ---------------------------------------------------------------------------
-// Module-level: exported templates exist and are non-empty strings
-// ---------------------------------------------------------------------------
-
-describe('kg-queries — exported templates', () => {
-  it('NEIGHBORHOOD_QUERY is a non-empty string', () => {
-    expect(typeof NEIGHBORHOOD_QUERY).toBe('string');
-    expect(NEIGHBORHOOD_QUERY.length).toBeGreaterThan(50);
-  });
-
-  it('PATH_BETWEEN_QUERY exists as a non-empty string (Phase 2 stub)', () => {
-    expect(typeof PATH_BETWEEN_QUERY).toBe('string');
-    expect(PATH_BETWEEN_QUERY.length).toBeGreaterThan(0);
-  });
-
-  it('CONCEPTS_FOR_USER_QUERY exists as a non-empty string (Phase 2 stub)', () => {
-    expect(typeof CONCEPTS_FOR_USER_QUERY).toBe('string');
-    expect(CONCEPTS_FOR_USER_QUERY.length).toBeGreaterThan(0);
-  });
-
-  it('NEIGHBORHOOD_QUERY does NOT contain kg:title (regression — projection emits none)', () => {
-    // The spec's flagship SPARQL selected ?prereqTut kg:title ?targetLabel,
-    // but kg-projection.js never emits kg:title for tutorials. If anyone
-    // re-introduces kg:title in the template, this test fails loudly.
-    expect(NEIGHBORHOOD_QUERY).not.toMatch(/kg:title\b/);
-  });
-
-  it('NEIGHBORHOOD_QUERY uses full IRI form for the input tutorial (not prefixed kg:tutorial/$SLUG)', () => {
-    // HANA SPARQL parser rejects `/` inside PN_LOCAL. The template MUST use
-    // <https://developers.sap.com/kg/tutorial/$SLUG> not kg:tutorial/$SLUG.
-    expect(NEIGHBORHOOD_QUERY).toMatch(/<https:\/\/developers\.sap\.com\/kg\/tutorial\/\$SLUG>/);
-    expect(NEIGHBORHOOD_QUERY).not.toMatch(/\bkg:tutorial\//);
-  });
-
-  it('NEIGHBORHOOD_QUERY contains all four UNION branch type names', () => {
-    expect(NEIGHBORHOOD_QUERY).toMatch(/"teaches"/);
-    expect(NEIGHBORHOOD_QUERY).toMatch(/"prerequisitesOf"/);
-    expect(NEIGHBORHOOD_QUERY).toMatch(/"sharedConcepts"/);
-    expect(NEIGHBORHOOD_QUERY).toMatch(/"whatToLearnNext"/);
-  });
-});
 
 // ---------------------------------------------------------------------------
 // substitute() — happy path
 // ---------------------------------------------------------------------------
 
 describe('substitute — happy path', () => {
-  it('substitutes $SLUG into NEIGHBORHOOD_QUERY with full-IRI form', () => {
-    const sql = substitute(NEIGHBORHOOD_QUERY, { SLUG: 'cap-handlers' });
+  it('substitutes $SLUG into a template with full-IRI form', () => {
+    const tmpl = 'SELECT * WHERE { <https://developers.sap.com/kg/tutorial/$SLUG> ?p ?o }';
+    const sql = substitute(tmpl, { SLUG: 'cap-handlers' });
     expect(typeof sql).toBe('string');
     expect(sql).toContain('<https://developers.sap.com/kg/tutorial/cap-handlers>');
     // ensure no leftover placeholder
@@ -172,7 +119,7 @@ describe('substitute — placeholder discovery', () => {
   it('throws when a required placeholder ($SLUG) is missing from params', () => {
     let caught;
     try {
-      substitute(NEIGHBORHOOD_QUERY, {});
+      substitute('SELECT $SLUG WHERE { }', {});
     } catch (e) {
       caught = e;
     }
@@ -275,23 +222,3 @@ describe('substitute — additional typed placeholders', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Spec-bug-fix regression: NEIGHBORHOOD_QUERY substitution shape
-// ---------------------------------------------------------------------------
-
-describe('substitute — NEIGHBORHOOD_QUERY end-to-end shape', () => {
-  it('substituted SPARQL contains the full IRI for all four UNION branches', () => {
-    const sql = substitute(NEIGHBORHOOD_QUERY, { SLUG: 'cap-handlers' });
-    // Every reference to the input tutorial uses the full IRI form.
-    const matches = sql.match(/<https:\/\/developers\.sap\.com\/kg\/tutorial\/cap-handlers>/g) || [];
-    // 4 branches × at least 1 reference each, plus the FILTER != self in 3
-    // branches. Don't pin the exact count — just assert "many".
-    expect(matches.length).toBeGreaterThanOrEqual(4);
-  });
-
-  it('substituted SPARQL still contains REPLACE(STR(...)) BIND for the three tutorial-targeted branches', () => {
-    const sql = substitute(NEIGHBORHOOD_QUERY, { SLUG: 'cap-handlers' });
-    const replaceCount = (sql.match(/BIND\(REPLACE\(STR\(/g) || []).length;
-    expect(replaceCount).toBe(3);
-  });
-});

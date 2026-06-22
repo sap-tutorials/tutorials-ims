@@ -1,0 +1,67 @@
+-- KG_GRAPH_CLEAR.hdbprocedure
+-- ============================================================
+-- WHY DEFINER
+--   HANA Cloud KGE uses per-graph ACL: the first runtime user that
+--   executes INSERT DATA { GRAPH <iri> { ... } } becomes the graph
+--   owner.  Subsequent runtime users — even those with the same
+--   system-level SPARQL UPDATE privilege — get "User is not allowed
+--   to perform this action (INSERT)" on that graph.
+--
+--   By declaring SQL SECURITY DEFINER, the procedure body runs as the
+--   HDI container's object-owner (#OO) regardless of which binding
+--   (cds bind --exec probe, tutorials-srv, tutorials-srv-qa, …) invokes
+--   it.  The object-owner identity is stable across all bindings and
+--   deploys; per-graph ACL becomes a non-issue because every SPARQL
+--   invocation lands as the same logical identity.
+--
+--   Memory: hana_sparql_per_graph_acl_creator_owns
+--   Spec:   docs/superpowers/specs/2026-06-22-kg-sparql-definer-procedures-design.md
+--   Issue:  #533
+--
+-- HDI SCHEMA-LOCAL REFERENCE
+--   HDI refuses to compile DEFINER-security procedures that cross schema
+--   boundaries (e.g. CALL SYS.SPARQL_EXECUTE). The workaround is a synonym:
+--   db/src/SYS_SPARQL_EXECUTE.hdbsynonym maps the local name
+--   SYS_SPARQL_EXECUTE → SYS.SPARQL_EXECUTE, and the procedure calls
+--   the synonym. No change to runtime behaviour; HDI just needs a local
+--   name to resolve at compile time.
+--
+-- QA NOTE
+--   db-qa/src/procedures/KG_GRAPH_CLEAR.hdbprocedure contains a stub
+--   with the same signature but a SIGNAL KG_NOT_AVAILABLE_ON_QA body
+--   (see spec §"QA channel").
+-- ============================================================
+
+PROCEDURE KG_GRAPH_CLEAR (
+  IN graph_iri NVARCHAR(500),
+  OUT response NCLOB,
+  OUT headers  NVARCHAR(5000)
+)
+LANGUAGE SQLSCRIPT
+SQL SECURITY DEFINER
+AS
+BEGIN
+  -- Error condition for IRI validation failure.
+  -- HANA Cloud SQLScript SIGNAL syntax: DECLARE <name> CONDITION FOR SQL_ERROR_CODE <n>
+  -- The JS caller checks err.code === 10001 or err.message contains 'user-defined error'.
+  -- Error code 10001 is in the user-defined range (10000–19999); no built-in meaning.
+  DECLARE KG_INVALID_IRI CONDITION FOR SQL_ERROR_CODE 10001;
+
+  DECLARE iri_ok INTEGER;
+  DECLARE sparql NCLOB;
+
+  -- Validate IRI shape: http(s) or urn:; safe-chars only; length 1-500.
+  -- LIKE_REGEXPR returns 1 on match. Two separate checks (http/https vs
+  -- urn:) are clearer than one combined regex.
+  iri_ok := 0;
+  IF :graph_iri LIKE_REGEXPR '^https?://[A-Za-z0-9./_-]+$' OR
+     :graph_iri LIKE_REGEXPR '^urn:[A-Za-z0-9:_-]+$' THEN
+    iri_ok := 1;
+  END IF;
+  IF iri_ok = 0 OR LENGTH(:graph_iri) < 1 OR LENGTH(:graph_iri) > 500 THEN
+    SIGNAL KG_INVALID_IRI;
+  END IF;
+
+  sparql := 'CLEAR GRAPH <' || :graph_iri || '>';
+  CALL SYS_SPARQL_EXECUTE(:sparql, '', response, headers);
+END;

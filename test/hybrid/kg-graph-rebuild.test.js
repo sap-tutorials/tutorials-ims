@@ -30,7 +30,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import cds from '@sap/cds';
 import { graphRebuild, GRAPH_METADATA_SINGLETON_ID } from '../../srv/lib/kg-graph-rebuild.js';
-import { sparqlExec, sparqlQuery } from '../../srv/lib/kg-sparql-client.js';
+import { kgGraphClear, kgAdminRunSparql } from '../../srv/lib/kg-sparql-client.js';
 
 const TEST_PREFIX = `__TEST__kg-rebuild-`;
 const RUN_ID = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -107,7 +107,7 @@ describe('graphRebuild full round-trip (issue #381, KG PR 4)', () => {
 
     // Best-effort: wipe the test named graph so the KGE store is clean.
     try {
-      await sparqlExec(db, `CLEAR GRAPH <${TEST_GRAPH_IRI}>`);
+      await kgGraphClear({ db, graphIri: TEST_GRAPH_IRI });
     } catch (err) {
       // Surface but don't fail teardown — the SQL cleanup below is what
       // matters for repeatability of the suite.
@@ -159,7 +159,7 @@ describe('graphRebuild full round-trip (issue #381, KG PR 4)', () => {
   it('the graph is queryable via SPARQL SELECT and triple count matches', async () => {
     // ASSUMPTION: the previous test's graphRebuild already populated the graph.
     const sparql = `SELECT (COUNT(*) AS ?n) FROM <${TEST_GRAPH_IRI}> WHERE { ?s ?p ?o }`;
-    const { response } = await sparqlQuery(db, sparql);
+    const { response } = await kgAdminRunSparql({ db, sparql, isUpdate: false });
     // KGE returns SPARQL-results-JSON by default.
     const parsed = JSON.parse(response);
     const nLiteral = parsed.results?.bindings?.[0]?.n?.value;
@@ -177,7 +177,7 @@ describe('graphRebuild full round-trip (issue #381, KG PR 4)', () => {
         <${tutIri}> <${teachesIri}> ?o .
       }
     `;
-    const { response } = await sparqlQuery(db, sparql);
+    const { response } = await kgAdminRunSparql({ db, sparql, isUpdate: false });
     const parsed = JSON.parse(response);
     const objects = (parsed.results?.bindings ?? []).map((b) => b.o?.value);
     expect(objects).toContain(conceptIri);
@@ -195,7 +195,7 @@ describe('graphRebuild full round-trip (issue #381, KG PR 4)', () => {
         FILTER (?s = <${mergedIri}>)
       }
     `;
-    const { response } = await sparqlQuery(db, sparql);
+    const { response } = await kgAdminRunSparql({ db, sparql, isUpdate: false });
     const parsed = JSON.parse(response);
     const bindings = parsed.results?.bindings ?? [];
     expect(bindings).toHaveLength(0);

@@ -1,0 +1,34 @@
+-- KG_ADMIN_RUNSPARQL.hdbprocedure  (QA channel — stub)
+-- ============================================================
+-- This is the QA-channel stub for the KG_ADMIN_RUNSPARQL procedure.
+-- It has the same signature as db/src/procedures/KG_ADMIN_RUNSPARQL.hdbprocedure
+-- but intentionally raises KG_NOT_AVAILABLE_ON_QA instead of running the
+-- real SPARQL logic.
+--
+-- WHY A STUB
+--   The QA channel (tutorials-db-qa / tutorials-srv-qa) does not run KG
+--   cron jobs — the knowledge-graph consolidator and extractor only fire
+--   on the prod srv.  The stub exists so that:
+--     1. srv-qa code that imports the JS-side kg-sparql-client.js compiles
+--        against the same procedure signature as prod.
+--     2. Any accidental KG call in a QA runtime path fails loudly rather
+--        than silently producing wrong data.
+--
+-- Spec:   docs/superpowers/specs/2026-06-22-kg-sparql-definer-procedures-design.md
+--         §"QA channel"
+-- Issue:  #533
+-- ============================================================
+
+PROCEDURE KG_ADMIN_RUNSPARQL (
+  IN sparql NCLOB,
+  IN is_update NVARCHAR(1),
+  OUT response NCLOB,
+  OUT headers NVARCHAR(5000)
+)
+LANGUAGE SQLSCRIPT
+SQL SECURITY DEFINER
+AS
+BEGIN
+  DECLARE KG_NOT_AVAILABLE_ON_QA CONDITION FOR SQL_ERROR_CODE 10002;
+  SIGNAL KG_NOT_AVAILABLE_ON_QA;
+END;

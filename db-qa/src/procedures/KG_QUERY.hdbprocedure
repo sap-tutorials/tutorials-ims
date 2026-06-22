@@ -1,0 +1,33 @@
+-- KG_QUERY.hdbprocedure (QA channel stub)
+-- ============================================================
+-- QA CHANNEL POLICY
+--   The QA channel (tutorials-db-qa HDI) must never execute live SPARQL queries
+--   against the knowledge graph.  This stub provides the same procedure signature
+--   as the production implementation but immediately signals an error, so any
+--   accidental invocation from the QA-bound runtime fails loud rather than
+--   silently querying or modifying production graph data.
+--
+--   Spec:  docs/superpowers/specs/2026-06-22-kg-sparql-definer-procedures-design.md
+--          §"QA channel"
+--   Issue: #533
+--
+-- ERROR CODE
+--   10002  KG_NOT_AVAILABLE_ON_QA – shared with QA stubs for all 4 KG procedures
+-- ============================================================
+
+PROCEDURE KG_QUERY (
+  IN  query_name        NVARCHAR(50),
+  IN  p1                NVARCHAR(500),
+  IN  p2                NVARCHAR(500),
+  IN  p3                NVARCHAR(500),
+  IN  override_graph_iri NVARCHAR(500),
+  OUT response          NCLOB,
+  OUT headers           NVARCHAR(5000)
+)
+LANGUAGE SQLSCRIPT
+SQL SECURITY DEFINER
+AS
+BEGIN
+  DECLARE KG_NOT_AVAILABLE_ON_QA CONDITION FOR SQL_ERROR_CODE 10002;
+  SIGNAL KG_NOT_AVAILABLE_ON_QA;
+END;

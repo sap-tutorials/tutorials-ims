@@ -1,0 +1,68 @@
+-- KG_ADMIN_RUNSPARQL.hdbprocedure
+-- ============================================================
+-- WHY DEFINER
+--   HANA Cloud KGE uses per-graph ACL: the first runtime user that
+--   executes INSERT DATA { GRAPH <iri> { ... } } becomes the graph
+--   owner.  Subsequent runtime users — even those with the same
+--   system-level SPARQL UPDATE privilege — get "User is not allowed
+--   to perform this action (INSERT)" on that graph.
+--
+--   By declaring SQL SECURITY DEFINER, the procedure body runs as the
+--   HDI container's object-owner (#OO) regardless of which binding
+--   (cds bind --exec probe, tutorials-srv, tutorials-srv-qa, …) invokes
+--   it.  The object-owner identity is stable across all bindings and
+--   deploys; per-graph ACL becomes a non-issue because every SPARQL
+--   invocation lands as the same logical identity.
+--
+--   Memory: hana_sparql_per_graph_acl_creator_owns
+--   Spec:   docs/superpowers/specs/2026-06-22-kg-sparql-definer-procedures-design.md
+--   Issue:  #533
+--
+-- HDI SCHEMA-LOCAL REFERENCE
+--   HDI refuses to compile DEFINER-security procedures that cross schema
+--   boundaries (e.g. CALL SYS.SPARQL_EXECUTE). The workaround is a synonym:
+--   db/src/SYS_SPARQL_EXECUTE.hdbsynonym maps the local name
+--   SYS_SPARQL_EXECUTE → SYS.SPARQL_EXECUTE, and the procedure calls
+--   the synonym. No change to runtime behaviour; HDI just needs a local
+--   name to resolve at compile time.
+--
+-- ERROR CODES
+--   10008: KG_EMPTY_SPARQL — sparql parameter is null or empty string
+--   10009: KG_INVALID_IS_UPDATE_FLAG — is_update is not 'Y' or 'N'
+--
+-- QA NOTE
+--   db-qa/src/procedures/KG_ADMIN_RUNSPARQL.hdbprocedure contains a stub
+--   with the same signature but a SIGNAL KG_NOT_AVAILABLE_ON_QA body
+--   (see spec §"QA channel").
+-- ============================================================
+
+PROCEDURE KG_ADMIN_RUNSPARQL (
+  IN sparql NCLOB,
+  IN is_update NVARCHAR(1),
+  OUT response NCLOB,
+  OUT headers NVARCHAR(5000)
+)
+LANGUAGE SQLSCRIPT
+SQL SECURITY DEFINER
+AS
+BEGIN
+  DECLARE KG_EMPTY_SPARQL CONDITION FOR SQL_ERROR_CODE 10008;
+  DECLARE KG_INVALID_IS_UPDATE_FLAG CONDITION FOR SQL_ERROR_CODE 10009;
+
+  -- Validate sparql: must not be null or empty.
+  IF :sparql IS NULL OR LENGTH(:sparql) = 0 THEN
+    SIGNAL KG_EMPTY_SPARQL;
+  END IF;
+
+  -- Validate is_update: must be exactly 'Y' or 'N'.
+  IF :is_update IS NULL OR :is_update NOT IN ('Y', 'N') THEN
+    SIGNAL KG_INVALID_IS_UPDATE_FLAG;
+  END IF;
+
+  -- The :is_update flag is informational; we do NOT branch on it. Audit happens at the
+  -- JS layer (knowledge-graph-service.js:614-628 audit('KnowledgeGraphRunSparql')).
+  -- The flag exists so a future HANA-side audit hook can log INSERT vs SELECT
+  -- without re-parsing the SPARQL.
+
+  CALL SYS_SPARQL_EXECUTE(:sparql, '', response, headers);
+END;
