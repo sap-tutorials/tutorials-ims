@@ -1,42 +1,22 @@
 // srv/lib/kg-queries.js
-// Catalog of named SPARQL queries + strict parameter substitution.
 //
-// Why this module exists
-// ----------------------
-// The KnowledgeGraphService (PR 5 of issue #381) exposes typed named queries
-// rather than raw SPARQL on its public surface — same security model as
-// AnalyticsService.runSelectQuery. Each named query is a SPARQL template with
-// `$NAME` placeholders; `substitute(template, params)` validates each input
-// against an allow-list of typed slots (slug / UUID / integer) and throws
-// synchronously on failure. Anything that fails validation maps to HTTP 400
-// at the handler layer.
+// JS-side slug validation + substitute() helper.
 //
-// Two deliberate deviations from spec
-// -----------------------------------
-// The design spec (docs/superpowers/specs/2026-06-17-knowledge-graph-design.md
-// § "The flagship query — neighborhood(slug)") presents a 4-way UNION SPARQL
-// that uses `kg:tutorial/$SLUG` (a prefixed-name with a `/`) and selects
-// `kg:title` for tutorial-targeted UNION branches. Both are wrong:
+// Two responsibilities:
+//   1. Validate user-supplied slugs match the canonical kg-tutorial-slug shape
+//      via SLUG_RE before they're passed downstream.
+//   2. Provide a small substitute(template, vars) helper that JS callers use
+//      to pre-build tutorial IRIs (e.g. `<https://developers.sap.com/kg/tutorial/${slug}>`)
+//      from validated slugs before passing them to kgQuery() as `params.slug`.
 //
-//   1. HANA's SPARQL parser rejects `/` inside PN_LOCAL. The spike probe
-//      (scripts/spike/kg-probe.cjs, PR 1) verified that full angle-bracket
-//      IRIs are unambiguously valid. We use full IRIs throughout.
+// **What used to live here:** SPARQL template strings (NEIGHBORHOOD_QUERY,
+// PATH_BETWEEN_QUERY, CONCEPTS_FOR_USER_QUERY) — they moved into
+// db/src/procedures/KG_QUERY.hdbprocedure. The HDI procedure is now the single
+// source of truth for SPARQL shape; JS callers dispatch to it via kgQuery()
+// in srv/lib/kg-sparql-client.js. This module retains only the validators.
 //
-//   2. srv/lib/kg-projection.js does NOT emit `kg:title` triples for
-//      tutorials — only structural triples (teaches / extends / partOf /
-//      taggedWith / aboutProduct / coCompletedWith). Selecting `?x kg:title`
-//      would always return zero rows. For the three tutorial-targeted UNION
-//      branches (prerequisitesOf, sharedConcepts, whatToLearnNext) we drop
-//      the `?targetLabel` projection and instead extract the slug from the
-//      tutorial IRI via `BIND(REPLACE(STR(?iri), "<prefix>", "") AS ?targetSlug)`.
-//      The handler joins `Tutorials` separately to populate `title`.
-//
-// The result schema therefore varies by branch:
-//   teaches:           { type, targetSlug, targetLabel, weight }
-//   prerequisitesOf:   { type, targetSlug, weight }                — no label
-//   sharedConcepts:    { type, targetSlug }                        — no label, no weight
-//   whatToLearnNext:   { type, targetSlug }                        — no label, no weight
-// SPARQL SELECT DISTINCT emits unbound projection variables as null.
+// Spec: docs/superpowers/specs/2026-06-22-kg-sparql-definer-procedures-design.md
+// Issue: #533
 
 import { iriEscapeSegment } from './kg-projection.js';
 
@@ -206,102 +186,3 @@ export function substitute(template, params = {}) {
   return s.split(SENTINEL).join('$');
 }
 
-// ---------------------------------------------------------------------------
-// NEIGHBORHOOD_QUERY — Phase 1 flagship
-// ---------------------------------------------------------------------------
-
-/**
- * 4-way UNION emitting:
- *   - teaches:           concepts the input tutorial directly teaches
- *                        (?targetSlug + ?targetLabel from kg:slug + kg:name)
- *   - prerequisitesOf:   tutorials teaching concepts the input tutorial requires
- *                        (?targetSlug from IRI; ?targetLabel left unbound)
- *   - sharedConcepts:    other tutorials teaching the same concepts
- *                        (?targetSlug from IRI; ?targetLabel left unbound)
- *   - whatToLearnNext:   tutorials teaching concepts that REQUIRE concepts
- *                        the input tutorial teaches
- *                        (?targetSlug from IRI; ?targetLabel left unbound)
- *
- * Result schema: each row has `?type` and `?targetSlug`. `?targetLabel` is
- * bound only on the teaches branch; `?weight` is bound on teaches and
- * prerequisitesOf. SPARQL SELECT DISTINCT emits unbound vars as null;
- * the JS handler post-processes:
- *   - Tutorial-targeted rows (no label): join Tutorials.title separately
- *   - Missing weight: ranker assigns a default (1.0 for teaches semantics,
- *     0.5 for sharedConcepts/whatToLearnNext) before re-ranking by
- *     coCompletedWith on whatToLearnNext.
- *
- * LIMIT 60 is a coarse cap so a degenerate "popular concept" graph can't
- * blow the response size — the ranker trims to top-10 per group anyway.
- */
-export const NEIGHBORHOOD_QUERY = `PREFIX kg: <https://developers.sap.com/kg/>
-
-SELECT DISTINCT ?type ?targetSlug ?targetLabel ?weight
-FROM <https://developers.sap.com/kg/tutorials-v2>
-WHERE {
-  {
-    # teaches: concepts the input tutorial directly teaches
-    <https://developers.sap.com/kg/tutorial/$SLUG> kg:teaches ?concept .
-    ?concept kg:slug ?targetSlug ; kg:name ?targetLabel .
-    BIND("teaches" AS ?type) BIND(1.0 AS ?weight)
-  } UNION {
-    # prerequisitesOf: tutorials teaching concepts the input tutorial requires
-    <https://developers.sap.com/kg/tutorial/$SLUG> kg:teaches ?concept .
-    ?concept kg:requires ?prereq .
-    ?prereqTut kg:teaches ?prereq .
-    FILTER(?prereqTut != <https://developers.sap.com/kg/tutorial/$SLUG>)
-    BIND(REPLACE(STR(?prereqTut), "https://developers.sap.com/kg/tutorial/", "") AS ?targetSlug)
-    BIND("prerequisitesOf" AS ?type) BIND(0.9 AS ?weight)
-  } UNION {
-    # sharedConcepts: other tutorials teaching the same concepts
-    <https://developers.sap.com/kg/tutorial/$SLUG> kg:teaches ?sharedConcept .
-    ?other kg:teaches ?sharedConcept .
-    FILTER(?other != <https://developers.sap.com/kg/tutorial/$SLUG>)
-    BIND(REPLACE(STR(?other), "https://developers.sap.com/kg/tutorial/", "") AS ?targetSlug)
-    BIND("sharedConcepts" AS ?type)
-  } UNION {
-    # whatToLearnNext: tutorials teaching concepts that require what the input teaches
-    <https://developers.sap.com/kg/tutorial/$SLUG> kg:teaches ?known .
-    ?advanced kg:requires ?known .
-    ?nextTut kg:teaches ?advanced .
-    FILTER(?nextTut != <https://developers.sap.com/kg/tutorial/$SLUG>)
-    BIND(REPLACE(STR(?nextTut), "https://developers.sap.com/kg/tutorial/", "") AS ?targetSlug)
-    BIND("whatToLearnNext" AS ?type)
-  }
-}
-LIMIT 60
-`;
-
-// ---------------------------------------------------------------------------
-// Phase 2 stubs — declared so the service contract is stable across phases
-// ---------------------------------------------------------------------------
-
-/**
- * Phase 2 stub. Will become a SPARQL property-path query that finds the
- * shortest chain of `:requires` edges between two concepts/tutorials.
- * Not currently invoked — the service handler returns [] for Phase 1.
- */
-export const PATH_BETWEEN_QUERY = `PREFIX kg: <https://developers.sap.com/kg/>
-
-# Phase 2 stub: PR 5 declares; PR 6+ implements.
-# Will be: SELECT shortest path of kg:requires between $FROM_SLUG and $TO_SLUG.
-SELECT ?placeholder
-FROM <https://developers.sap.com/kg/tutorials-v2>
-WHERE { ?placeholder ?p ?o }
-LIMIT 0
-`;
-
-/**
- * Phase 2 stub. Will become a query that, given a user, computes the set
- * of concepts they have transitively learned via completed tutorials, plus
- * partials (concepts they've seen but not yet mastered).
- */
-export const CONCEPTS_FOR_USER_QUERY = `PREFIX kg: <https://developers.sap.com/kg/>
-
-# Phase 2 stub: PR 5 declares; PR 6+ implements.
-# Will be: SELECT concepts taught by tutorials completed by $USER_ID.
-SELECT ?placeholder
-FROM <https://developers.sap.com/kg/tutorials-v2>
-WHERE { ?placeholder ?p ?o }
-LIMIT 0
-`;
