@@ -805,8 +805,24 @@ annotate AdminService.FailedEmails with @(
 
 // --- PipelineLog (content pipeline only — excludes SCHEDULED_JOB) ---
 annotate AdminService.PipelineLog with {
-  pipelineType  @Common.Label: 'Type'  @Common.ValueListWithFixedValues;
-  status        @Common.Label: 'Status'  @Common.ValueListWithFixedValues;
+  pipelineType  @Common.Label: 'Type'
+                @Common.ValueListWithFixedValues
+                @Common.ValueList: {
+                  CollectionPath: 'PipelineTypes',
+                  Parameters: [
+                    { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: pipelineType, ValueListProperty: 'code'  },
+                    { $Type: 'Common.ValueListParameterDisplayOnly',                                  ValueListProperty: 'label' }
+                  ]
+                };
+  status        @Common.Label: 'Status'
+                @Common.ValueListWithFixedValues
+                @Common.ValueList: {
+                  CollectionPath: 'PipelineStatuses',
+                  Parameters: [
+                    { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: status, ValueListProperty: 'code'  },
+                    { $Type: 'Common.ValueListParameterDisplayOnly',                            ValueListProperty: 'label' }
+                  ]
+                };
   startedAt     @Common.Label: 'Started';
   finishedAt    @Common.Label: 'Finished';
   durationMs    @Common.Label: 'Duration (ms)';
@@ -846,7 +862,14 @@ annotate AdminService.PipelineLog with @(
       { Value: pipelineType },
       { Value: status, Criticality: statusCriticality },
       { Value: initiator },
-      { $Type: 'UI.DataFieldWithUrl', Label: 'CF Logs', Value: cfLogsUrl, Url: cfLogsUrl }
+      // CF Logs link: opens this run's window in the BTP Cloud Logging
+      // dashboard (Kibana-style Discover view filtered to ±10s/30s around
+      // startedAt/finishedAt). Auth is the same SAP IDP / XSUAA session
+      // that holds /admin-ui/ — clicking redirects through your active
+      // session, no separate login. Use for raw stdout/stderr drilldown;
+      // for THIS run's own details, see the Summary, Affected Tutorials,
+      // and Metadata facets below.
+      { $Type: 'UI.DataFieldWithUrl', Label: 'CF Logs (raw app stdout)', Value: cfLogsUrl, Url: cfLogsUrl }
     ]},
     FieldGroup #Timing: { Data: [
       { Value: startedAt },
@@ -887,7 +910,15 @@ annotate AdminService.PipelineLogItems with @(
 
 // --- JobExecutionLog (scheduled jobs only) ---
 annotate AdminService.JobExecutionLog with {
-  status        @Common.Label: 'Status'  @Common.ValueListWithFixedValues;
+  status        @Common.Label: 'Status'
+                @Common.ValueListWithFixedValues
+                @Common.ValueList: {
+                  CollectionPath: 'PipelineStatuses',
+                  Parameters: [
+                    { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: status, ValueListProperty: 'code'  },
+                    { $Type: 'Common.ValueListParameterDisplayOnly',                            ValueListProperty: 'label' }
+                  ]
+                };
   startedAt     @Common.Label: 'Started';
   finishedAt    @Common.Label: 'Finished';
   durationMs    @Common.Label: 'Duration (ms)';
@@ -926,7 +957,11 @@ annotate AdminService.JobExecutionLog with @(
       { Value: summary },
       { Value: status, Criticality: statusCriticality },
       { Value: initiator },
-      { $Type: 'UI.DataFieldWithUrl', Label: 'CF Logs', Value: cfLogsUrl, Url: cfLogsUrl }
+      // CF Logs link: opens this run's window in the BTP Cloud Logging
+      // dashboard. SAP IDP / XSUAA SSO (same session as /admin-ui/).
+      // Use for raw stdout/stderr drilldown; for THIS run's own details,
+      // see the Summary, Job Output, and Metadata facets below.
+      { $Type: 'UI.DataFieldWithUrl', Label: 'CF Logs (raw app stdout)', Value: cfLogsUrl, Url: cfLogsUrl }
     ]},
     FieldGroup #Timing: { Data: [
       { Value: startedAt },

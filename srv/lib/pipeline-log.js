@@ -4,10 +4,15 @@ const { randomUUID } = await import('node:crypto');
 
 /**
  * Start a pipeline log entry. Returns the log ID for later completion.
+ *
+ * Optional `id` parameter lets callers reuse an external correlation ID
+ * (e.g. ContentManifest.sessionId for the chunked publish path so the
+ * PipelineLog row 1:1's the manifest row). When omitted, a fresh UUID
+ * is allocated.
  */
-export async function logPipelineStart(pipelineType, initiator, metadata, namespace = 'com.sap.developers.ims') {
+export async function logPipelineStart(pipelineType, initiator, metadata, namespace = 'com.sap.developers.ims', { id } = {}) {
   const { PipelineLog } = cds.entities(namespace);
-  const ID = randomUUID();
+  const ID = id || randomUUID();
   const startedAt = new Date().toISOString();
 
   await INSERT.into(PipelineLog).entries({

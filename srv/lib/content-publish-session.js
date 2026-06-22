@@ -6,6 +6,7 @@ import { getNextLegacyId } from './legacy-id.js';
 import { toBuffer } from './content-store.js';
 import { recomputeTutorialProgressBulkSQL } from './recompute-tutorial-progress-bulk-sql.js';
 import { tutorialsTableInfo } from './_tutorials-table.js';
+import { logPipelineStart, logPipelineEnd, logPipelineItem } from './pipeline-log.js';
 
 const LOG = cds.log('content-publish');
 const LOCK_NAME = 'content-publish';
@@ -19,7 +20,7 @@ export function createSessionHelpers({ namespace }) {
     return (max?.v || 0) + 1;
   }
 
-  async function beginPublishSession({ trigger, hugoVersion, expectedSlugCount }) {
+  async function beginPublishSession({ trigger, hugoVersion, expectedSlugCount, initiator }) {
     const locked = await acquireLock(LOCK_NAME, INSTANCE_ID, LOCK_DURATION_MS, namespace);
     if (!locked) {
       const err = new Error('Another publish in progress');
@@ -43,6 +44,22 @@ export function createSessionHelpers({ namespace }) {
         hugoVersion: hugoVersion || null,
         lastAppendAt: new Date().toISOString()
       });
+
+      // Emit PipelineLog RUNNING row for the admin Pipeline Log tile. The
+      // PipelineLog.ID equals ContentManifest.sessionId so a publish session
+      // 1:1's its log row. Logging failures must NOT take down the publish
+      // (the user's content is more important than telemetry) — catch + warn.
+      try {
+        await logPipelineStart(
+          'CONTENT_PUBLISH',
+          initiator || 'publish-script',
+          { trigger, hugoVersion, expectedSlugCount, version, namespace },
+          namespace,
+          { id: sessionId }
+        );
+      } catch (logErr) {
+        LOG.warn(`[content/publish/begin] PipelineLog start failed (non-fatal): ${logErr.message}`);
+      }
 
       return { sessionId, version, expectedSlugCount: expectedSlugCount || 0 };
     } catch (err) {
@@ -232,6 +249,22 @@ export function createSessionHelpers({ namespace }) {
       });
     }
 
+    // Close the PipelineLog row started in beginPublishSession. The summary
+    // text is what shows in the Pipeline Logs list-report row; metadata
+    // captures the full structured result for the Object Page Metadata facet.
+    try {
+      const summary = `Published v${newVersion}: ${freshCount} new + ${carriedForward} carried = ${freshCount + carriedForward} slugs in ${durationMs}ms`;
+      await logPipelineEnd(
+        sessionId,
+        'SUCCESS',
+        summary,
+        null,
+        namespace
+      );
+    } catch (logErr) {
+      LOG.warn(`[content/publish/commit] PipelineLog end failed (non-fatal): ${logErr.message}`);
+    }
+
     return {
       version: newVersion,
       fileCount: freshCount + carriedForward,
@@ -254,6 +287,19 @@ export function createSessionHelpers({ namespace }) {
         .where({ sessionId })
         .set({ status: 'FAILED', trigger: ((existing.trigger || '') + ` [aborted: ${reason || 'unknown'}]`).slice(0, 500) });
       await releaseLock(LOCK_NAME, INSTANCE_ID, namespace).catch(() => {});
+
+      // Close the PipelineLog row started in beginPublishSession (FAILED).
+      try {
+        await logPipelineEnd(
+          sessionId,
+          'FAILED',
+          `Aborted v${existing.version}: ${reason || 'unknown'}`,
+          reason || null,
+          namespace
+        );
+      } catch (logErr) {
+        LOG.warn(`[content/publish/abort] PipelineLog end failed (non-fatal): ${logErr.message}`);
+      }
     }
     // FAILED, ACTIVE, SUPERSEDED → no-op, idempotent.
     return { aborted: true };
@@ -265,9 +311,10 @@ export function createSessionHelpers({ namespace }) {
 // ---------------------------------------------------------------------------
 // Module-private helpers — lifted verbatim from srv/lib/content-store.js
 // (the publishHandler metadata + body-text upsert loop). Parameterized on
-// namespace so prod and QA channels share the implementation. pipelineLogId
-// / logPipelineItem calls are intentionally omitted: they are route-layer
-// concerns added back in Task 3 (route wiring) if needed.
+// namespace so prod and QA channels share the implementation. PipelineLog
+// instrumentation lives at the session boundary (beginPublishSession /
+// commitSession / abortSession) — these helpers stay log-free for clean
+// composition.
 // ---------------------------------------------------------------------------
 
 async function upsertTutorialMetadata(namespace, metadata) {
