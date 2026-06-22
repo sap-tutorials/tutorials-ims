@@ -26,6 +26,27 @@ const SEMANTIC_TAGS = [
   'u', 'ul', 'var',
 ]
 
+// Iframe host allowlist — author-controlled embeds from trusted SAP video
+// hosts. Authors do NOT supply user input here; iframes come from tutorial
+// markdown checked into the sap-tutorials GitHub org. Re-introduces what
+// #140 (sanitize-html migration) intentionally stripped — narrowly, with
+// hostname enforcement that the previous regex sanitizer could not express.
+//
+// THREE PLACES MUST BE UPDATED TOGETHER when extending the allowlist:
+//   1. This constant
+//   2. approuter/xs-app.json — frame-src directive
+//   3. docs/developers/reference/iframe-allowlist.md — host table
+//
+// scripts/lint-rules/iframe-non-allowlisted-host.ts auto-updates because
+// it imports this constant.
+export const ALLOWED_IFRAME_HOSTNAMES = [
+  'www.youtube.com',
+  'youtube.com',
+  'youtu.be',
+  'microlearning.opensap.com',
+  'sapvideo.cfapps.eu10-004.hana.ondemand.com',
+] as const
+
 // Author placeholder pseudo-tags appear in tutorial markdown as freeform
 // tokens like <your_title_id>, <YOUR_SYSTEMS_ID>, <PATH_PREFIX_of_default>.
 // They're not real HTML elements — browsers render them as inline-transparent
@@ -95,7 +116,7 @@ function escapePseudoTags(line: string): string {
   })
 }
 
-const ALLOWED_TAGS = SEMANTIC_TAGS
+const ALLOWED_TAGS = [...SEMANTIC_TAGS, 'iframe']
 
 const ALLOWED_ATTRS: Record<string, Array<string | { name: string; multiple?: boolean; values?: string[] }>> = {
   // Common attributes on every allowed tag. Wildcard `data-*` / `aria-*`
@@ -109,6 +130,7 @@ const ALLOWED_ATTRS: Record<string, Array<string | { name: string; multiple?: bo
   ol: ['start', 'reversed', 'type'],
   table: ['summary'],
   abbr: ['title'],
+  iframe: ['src', 'width', 'height', 'frameborder', 'allow', 'allowfullscreen', 'title', 'loading', 'referrerpolicy'],
 }
 
 // Explicit URI-scheme allowlist replaces the scheme blocklist that issue
@@ -122,6 +144,8 @@ const SANITIZE_OPTS: sanitizeHtml.IOptions = {
   allowedSchemes: ALLOWED_SCHEMES,
   // No protocol-relative URLs (//evil.example/x.js).
   allowProtocolRelative: false,
+  allowedIframeHostnames: [...ALLOWED_IFRAME_HOSTNAMES],
+  allowedIframeRelativeUrls: false,
   // Strip the tag, keep the inner text (matches the previous regex's
   // behaviour for safe-but-unknown tags).
   disallowedTagsMode: 'discard',
@@ -141,6 +165,38 @@ const SANITIZE_OPTS: sanitizeHtml.IOptions = {
     // Pseudo-tag preservation happens BEFORE we hit the parser via
     // escapePseudoTags(), so this doesn't impact author placeholders.
     lowerCaseAttributeNames: false,
+  },
+  transformTags: {
+    iframe: (tagName, attribs) => {
+      // Validate iframe src before sanitize-html processes it.
+      // This ensures iframes from off-allowlist hosts or with dangerous
+      // schemes are completely removed (not left as empty shells).
+      // We return `{ tagName: '', attribs: {} }` to tell sanitize-html
+      // to remove the tag entirely.
+      const src = attribs.src
+      if (!src) {
+        // No src at all — drop the iframe.
+        return { tagName: '', attribs: {} }
+      }
+
+      try {
+        // Parse the URL to check the hostname. For relative URLs (e.g.,
+        // `/api/foo`), the URL constructor throws, which we catch below.
+        const parsed = new URL(src)
+        const isAllowedHost = ALLOWED_IFRAME_HOSTNAMES.includes(parsed.hostname)
+        if (!isAllowedHost) {
+          // Off-allowlist host — drop it.
+          return { tagName: '', attribs: {} }
+        }
+        // Host is allowlisted, proceed.
+        return { tagName, attribs }
+      } catch (e) {
+        // Relative URLs or malformed URLs fail to parse.
+        // allowedIframeRelativeUrls: false will strip them, but the
+        // empty tag would remain. Drop here to avoid the empty shell.
+        return { tagName: '', attribs: {} }
+      }
+    },
   },
 }
 
