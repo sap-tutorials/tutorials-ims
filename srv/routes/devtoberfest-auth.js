@@ -65,7 +65,7 @@ async function joinHandler(req, res) {
     if (!sapId) return res.status(401).json({ error: 'UNAUTHENTICATED' });
 
     const submittedVersion = Number(req.body?.termsVersion);
-    if (!Number.isInteger(submittedVersion)) {
+    if (!Number.isInteger(submittedVersion) || submittedVersion <= 0) {
       return res.status(400).json({ error: 'BAD_REQUEST', message: 'termsVersion required' });
     }
 
@@ -98,7 +98,7 @@ async function joinHandler(req, res) {
         legacyId: await getNextLegacyId('EventRegistrations', db),
       });
     } catch (err) {
-      if (/unique|duplicate/i.test(err.message)) {
+      if (err.code === 'UNIQUE_CONSTRAINT_VIOLATION' || /unique|duplicate/i.test(err.message || '')) {
         return res.status(409).json({ error: 'ALREADY_JOINED' });
       }
       throw err;
