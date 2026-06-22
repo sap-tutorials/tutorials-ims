@@ -15,6 +15,7 @@ describe('migration UUID namespaces', () => {
       'taskrecord', 'accomplishmentrecord', 'prizerecord', 'tutorialtag',
       'tutorialcontributor', 'tutorialrepository',
       'featuredtask',
+      'primaryaccount', 'secondaryaccount',
     ];
     for (const name of required) {
       expect(NAMESPACES[name], `missing namespace for ${name}`).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);

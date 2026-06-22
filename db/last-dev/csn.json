@@ -2233,16 +2233,6 @@
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CONTENTMANIFEST"
     }
   },
-  "extensions": [
-    {
-      "annotate": "AdminService.SecondaryAccounts",
-      "elements": {
-        "primaryAccount_ID": {
-          "@Common.Label": "Merged Into"
-        }
-      }
-    }
-  ],
   "meta": {
     "creator": "CDS Compiler v6.9.0",
     "compilerVersion": "6.9.0",

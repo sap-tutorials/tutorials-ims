@@ -45,6 +45,8 @@ const REFERENCE_ENTITIES = [
   'accomplishments',
   'featuredtasks',  // Added 2026-06-22; source filter (FEATURED_ORDER > 0)
                     // is deterministic; zero-diff expected once migrated.
+  'primaryaccounts',   // Added 2026-06-22 — IMS_UUID_ACCOUNT (every original primary)
+  'secondaryaccounts', // Added 2026-06-22 — IMS_UUID_MERGED_ACCOUNT (each merge event)
 ];
 
 // Reference tables with persistent source-data orphans that the migrator

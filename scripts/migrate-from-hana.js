@@ -659,6 +659,8 @@ async function main() {
       ['11d', 'prizerecords', 'activity', 'IMS_PRIZE_RECORD'],
       ['12', 'tutorialtags', 'reference', 'IMS_TAG_TO_TASK'],
       ['13', 'featuredtasks', 'reference', 'IMS_TASK (FEATURED_ORDER > 0)'],
+      ['14', 'primaryaccounts',   'reference', 'IMS_UUID_ACCOUNT'],
+      ['15', 'secondaryaccounts', 'reference', 'IMS_UUID_MERGED_ACCOUNT'],
     ];
     console.log('Migration order (FK-correct):\n');
     for (const [n, name, klass, src] of order) {
@@ -774,6 +776,7 @@ async function main() {
     accomplishments: new Map(),
     contributors: new Map(),       // NEW (#385 PR-2)
     repositories: new Map(),       // NEW (#385 PR-2)
+    primaryAccounts: new Map(),    // NEW 2026-06-22 (account-merge port)
   };
 
   const allTasks = await query(source, `SELECT "ID", "TASK_TYPE" FROM ${S}."IMS_TASK"`);
@@ -1446,6 +1449,72 @@ async function main() {
     }));
   } catch (e) {
     console.log(`  ⊘ FeaturedTasks: ${e.message.split('\n')[0]}`);
+  }
+
+  // 14. PrimaryAccounts (IMS_UUID_ACCOUNT — every UUID-issued account that
+  //     became a "primary" identity in the merge graph). Must precede
+  //     SecondaryAccounts (FK from secondary → primary).
+  //
+  //     IMS Java keeps a `sap_primary_id` column too; CAP's PrimaryAccounts
+  //     schema has only uuid + status, so sap_primary_id is dropped on the
+  //     migration. If that ever becomes a problem (e.g. forensic lookup by
+  //     SAP ID rather than UUID), add a sapPrimaryId column and re-run.
+  //
+  //     IMS_UUID_ACCOUNT has no `status` column (it's the parent — status
+  //     lives on SecondaryAccounts records). Default to 'ACTIVE' for the CAP
+  //     row so the admin UI's status dropdown displays sensibly.
+  try {
+    const primarySrcRows = await query(source, `SELECT "ID", "UUID" FROM ${S}."IMS_UUID_ACCOUNT"`);
+    primarySrcRows.forEach(r => uuidMap.primaryAccounts.set(r.ID, deriveUuid('primaryaccount', r.ID)));
+
+    results.push(await migrateEntity(source, target, T, {
+      name: 'primaryaccounts',
+      sourceQuery: `SELECT "ID", "UUID" FROM ${S}."IMS_UUID_ACCOUNT" ORDER BY "ID"`,
+      targetTable: 'COM_SAP_DEVELOPERS_IMS_PRIMARYACCOUNTS',
+      mapRow: (row) => ({
+        ID: uuidMap.primaryAccounts.get(row.ID),
+        LEGACYID: row.ID,
+        UUID: row.UUID,
+        STATUS: 'ACTIVE',
+      }),
+    }));
+  } catch (e) {
+    console.log(`  ⊘ PrimaryAccounts: ${e.message.split('\n')[0]}`);
+  }
+
+  // 15. SecondaryAccounts (IMS_UUID_MERGED_ACCOUNT — each merge event where
+  //     a duplicate identity was folded into a primary). FK to PrimaryAccounts
+  //     resolved through uuidMap.primaryAccounts populated by step 14.
+  //
+  //     IMS Java's `sap_id` column holds the secondary's SAP ID (the
+  //     identifier of the user whose account was merged away). CAP's
+  //     SecondaryAccounts.uuid is the closest target — same semantic role
+  //     (a stable identifier of the secondary entity).
+  //
+  //     Source `mergedAt` doesn't exist in IMS Java's schema, so leave the
+  //     CAP column null. Status migrates verbatim — IMS Java's
+  //     AccountMergeStatus enum (CREATED/IN_PROGRESS/SCHEDULED/COMPLETED/
+  //     FAILED) matches what the CAP account-merge-job already produces.
+  try {
+    results.push(await migrateEntity(source, target, T, {
+      name: 'secondaryaccounts',
+      sourceQuery: `SELECT "ID", "UUID_ID", "SAP_ID", "STATUS" FROM ${S}."IMS_UUID_MERGED_ACCOUNT" ORDER BY "ID"`,
+      targetTable: 'COM_SAP_DEVELOPERS_IMS_SECONDARYACCOUNTS',
+      mapRow: (row) => {
+        const primaryUuid = uuidMap.primaryAccounts.get(row.UUID_ID);
+        if (!primaryUuid) return null;  // orphan secondary; safe to drop
+        return {
+          ID: deriveUuid('secondaryaccount', row.ID),
+          LEGACYID: row.ID,
+          UUID: row.SAP_ID,
+          PRIMARYACCOUNT_ID: primaryUuid,
+          STATUS: row.STATUS || 'COMPLETED',
+          MERGEDAT: null,
+        };
+      },
+    }));
+  } catch (e) {
+    console.log(`  ⊘ SecondaryAccounts: ${e.message.split('\n')[0]}`);
   }
 
   // ─── Summary ────────────────────────────────────────────────────────────────

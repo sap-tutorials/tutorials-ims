@@ -39,6 +39,8 @@ const NAMESPACES = Object.freeze({
   tutorialcontributor:  'eb6d99e6-a274-41b0-84de-e19b376f3668',  // added 2026-06-21 for #385 PR-2
   tutorialrepository:   '7bea6f53-ae05-4daa-a205-75482fa7eec3',  // added 2026-06-21 for #385 PR-2
   featuredtask:         'bfaea3cb-aa11-4bcd-b27a-29f8813c84d3',  // added 2026-06-22 for FeaturedTasks port (IMS_TASK.featured_order → cross-ref table)
+  primaryaccount:       'f28954c6-7ce6-4f7f-b94f-8e5d0adf7713',  // added 2026-06-22 for Account Merges port (IMS_UUID_ACCOUNT)
+  secondaryaccount:     '390e513e-b5c8-457c-83a9-3e5c1f1620dc',  // added 2026-06-22 for Account Merges port (IMS_UUID_MERGED_ACCOUNT)
 });
 
 module.exports = { NAMESPACES };

@@ -1014,7 +1014,15 @@ annotate ChangeView with @UI.SelectionFields: [
 // --- PrimaryAccounts / SecondaryAccounts (account-merge audit log, read-only) ---
 annotate AdminService.PrimaryAccounts with {
   uuid   @Common.Label: 'Primary UUID';
-  status @Common.Label: 'Status';
+  status @Common.Label: 'Status'
+         @Common.ValueListWithFixedValues
+         @Common.ValueList: {
+           CollectionPath: 'AccountMergeStatuses',
+           Parameters: [
+             { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: status, ValueListProperty: 'code'  },
+             { $Type: 'Common.ValueListParameterDisplayOnly',                            ValueListProperty: 'label' }
+           ]
+         };
 };
 
 annotate AdminService.PrimaryAccounts with @(
@@ -1036,8 +1044,20 @@ annotate AdminService.PrimaryAccounts with @(
 
 annotate AdminService.SecondaryAccounts with {
   uuid              @Common.Label: 'Secondary UUID';
-  primaryAccount_ID @Common.Label: 'Merged Into';
-  status            @Common.Label: 'Status';
+  // The Association field itself (not the FK) — admins typically want the
+  // parent's UUID, which is reachable via `primaryAccount.uuid`. The raw
+  // `primaryAccount_ID` FK column exists in OData $metadata but is not a
+  // CSN element on the projection (caught by compiler warning).
+  primaryAccount    @Common.Label: 'Merged Into';
+  status            @Common.Label: 'Status'
+                    @Common.ValueListWithFixedValues
+                    @Common.ValueList: {
+                      CollectionPath: 'AccountMergeStatuses',
+                      Parameters: [
+                        { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: status, ValueListProperty: 'code'  },
+                        { $Type: 'Common.ValueListParameterDisplayOnly',                            ValueListProperty: 'label' }
+                      ]
+                    };
   mergedAt          @Common.Label: 'Merged At';
 };
 
@@ -1050,7 +1070,7 @@ annotate AdminService.SecondaryAccounts with @(
     SelectionFields: [ uuid, status ],
     LineItem: [
       { Value: uuid },
-      { Value: primaryAccount_ID },
+      { Value: primaryAccount.uuid, Label: 'Primary UUID' },
       { Value: status },
       { Value: mergedAt }
     ]
