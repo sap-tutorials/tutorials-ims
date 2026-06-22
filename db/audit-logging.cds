@@ -95,9 +95,18 @@ annotate ims.Concepts with @PersonalData: {
 // event name; custom event names like 'SecretValueRead' are NOT registered
 // in the plugin's CDS service definition and would silently drop or throw.
 // The action discriminator therefore lives in data.action.
+//
+// IMPORTANT: do NOT add field-level @PersonalData.IsPotentiallyPersonal
+// annotations to Secrets fields. Those annotations are only valid on
+// DataSubject / DataSubjectDetails entities — the @cap-js/audit-logging
+// plugin's addDataSubjectForDetailsEntity() walks the template to find
+// the parent DataSubject's identifying field, and crashes when called
+// on an 'Other' entity (TypeError: Cannot read properties of undefined
+// reading 'dataSubjectEntity'). The crash kills the worker, causing
+// HTTP 502 on the very POST that initializes the Secrets row. Caught
+// 2026-06-22 on first DEV bootstrap of the Secrets UI; the original
+// commit predates that test path. EntitySemantics: 'Other' on its own
+// is sufficient to register the entity for CRUD audit-event capture.
 annotate ims.Secrets with @PersonalData: {
   EntitySemantics: 'Other'
-} {
-  ![key]      @PersonalData.IsPotentiallyPersonal;
-  description @PersonalData.IsPotentiallyPersonal;
 };
