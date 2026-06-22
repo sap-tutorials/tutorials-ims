@@ -19,8 +19,7 @@ build-parameters:
         - npm --prefix .. install
         - bash -c "cd .. && npm run prebuild:parsers-bundle"
         - bash -c "cd .. && npx cds build --production"
-        - bash -c "cd ../gen/db/src/gen && jq '.file_suffixes.hdbprocedure={\"plugin_name\":\"com.sap.hana.di.procedure\"}' .hdiconfig > .hdiconfig.tmp && mv .hdiconfig.tmp .hdiconfig"
-        - bash -c "cd ../gen/db-qa/src/gen && jq '.file_suffixes.hdbprocedure={\"plugin_name\":\"com.sap.hana.di.procedure\"}' .hdiconfig > .hdiconfig.tmp && mv .hdiconfig.tmp .hdiconfig"
+        - bash -c "cd .. && node -e 'for (const p of [\"gen/db/src/gen/.hdiconfig\",\"gen/db-qa/src/gen/.hdiconfig\"]) { const fs=require(\"fs\"); const d=JSON.parse(fs.readFileSync(p,\"utf8\")); d.file_suffixes=d.file_suffixes||{}; d.file_suffixes.hdbprocedure={plugin_name:\"com.sap.hana.di.procedure\"}; fs.writeFileSync(p, JSON.stringify(d,null,2)+\"\\n\"); }'"
         - bash -c "rm -f ../gen/db-qa/src/gen/sap.changelog.*.hdbindex"
         - cp ../xs-security.json .
 
@@ -71,7 +70,6 @@ modules:
       - name: tutorials-hana
       - name: tutorials-xsuaa
       - name: tutorials-destination
-      - name: tutorials-mail
       - name: tutorials-audit-log
       - name: tutorials-cloud-logging
       - name: tutorials-aicore
@@ -193,14 +191,6 @@ resources:
       service-plan: lite
       service-name: tutorials-destination
 
-  - name: tutorials-mail
-    type: org.cloudfoundry.managed-service
-    parameters:
-      service: mail
-      service-plan: standard
-      service-name: tutorials-mail
-    optional: true
-
   - name: tutorials-audit-log
     type: org.cloudfoundry.managed-service
     optional: true
@@ -254,7 +244,5 @@ resources:
     type: org.cloudfoundry.managed-service
     parameters:
       service: credstore
-      service-plan: default
+      service-plan: standard
       service-name: tutorials-credstore
-      config:
-        authentication: basic

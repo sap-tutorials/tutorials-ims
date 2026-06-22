@@ -11,6 +11,9 @@
     },
     "hdbsequence": {
       "plugin_name": "com.sap.hana.di.sequence"
+    },
+    "hdbsynonym": {
+      "plugin_name": "com.sap.hana.di.synonym"
     }
   }
 }
