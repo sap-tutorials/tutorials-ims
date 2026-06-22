@@ -259,6 +259,53 @@ Expected wall-clock on DEV: ~3-5 minutes for reference data + a few
 minutes per million TaskRecords (paginated by 50,000 rows). Exit code
 0 on success.
 
+## Perf report (issue #474)
+
+Every successful run drops a per-entity timing report at:
+
+```text
+.migration-data/perf-history/<startedAt>-<env>.json
+```
+
+Shape (excerpt):
+
+```json
+{
+  "metadata": { "startedAt": "...", "env": "dev", "sourceHost": "...", "targetHost": "..." },
+  "summary": {
+    "totalDurationMin": 312.4,
+    "totalInserted": 11412588,
+    "overallRowsPerSec": 609,
+    "entityCount": 17
+  },
+  "entities": [
+    {
+      "name": "tags", "mode": "single-shot", "durationMs": 1240,
+      "durationSec": 1.2, "inserted": 482, "errors": 0, "rowsPerSec": 389
+    },
+    {
+      "name": "taskrecords", "mode": "paginated",
+      "durationMs": 18124000, "inserted": 10823412,
+      "pageSize": 50000, "pageCount": 217,
+      "pages": [
+        { "lo": 1, "hi": 50000, "sourceRowCount": 50000, "durationMs": 84120, "inserted": 50000 }
+      ]
+    }
+  ]
+}
+```
+
+Per-paginated-entity, the `pages[]` array lets you see whether
+throughput degrades at the tail (e.g., target MERGE INTO cost rising
+as the table grows). Compare reports across runs by diffing the
+summary block; the entities/pages arrays give the drill-down for
+investigating regressions.
+
+`.migration-data/` is gitignored — perf-history files stay local. Keep
+the JSON for any run that's interesting (corruption-fix validation,
+July cutover rehearsal, prod cutover itself); the file format is the
+baseline against which the #474 perf optimizations will be measured.
+
 ## Post-migration audit
 
 Re-run the **four corruption-shape queries** from the baseline section.

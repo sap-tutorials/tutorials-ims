@@ -63,7 +63,7 @@ our defaults), `on*` event handlers (always stripped by sanitize-html).
   the `sanitize-html` npm package. Iframes were deliberately stripped
   because the regex sanitizer couldn't enforce a hostname allowlist.
   YouTube embeds in ~65 catalog tutorials silently disappeared.
-- **PR #<this-PR>** (2026-06-22) - re-introduced a narrow iframe
+- **PR #560** (2026-06-22) - re-introduced a narrow iframe
   allowlist using `sanitize-html`'s `allowedIframeHostnames` option +
   the matching CSP `frame-src` directive + a lint rule that warns
   authors at PR time. Surfaced when Tom noticed the missing "Video
