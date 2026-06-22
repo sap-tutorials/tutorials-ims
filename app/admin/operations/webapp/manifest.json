@@ -3,7 +3,7 @@
   "sap.app": {
     "id": "sap.tutorials.admin.operations",
     "type": "application",
-    "title": "Operations",
+    "title": "Featured Tasks",
     "crossNavigation": {
       "inbounds": {
         "Operations-featured": {

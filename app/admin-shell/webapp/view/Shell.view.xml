@@ -97,7 +97,7 @@
             <tnt:NavigationListItem text="Data Export" key="dataExport" icon="sap-icon://download" />
           </tnt:NavigationListItem>
           <tnt:NavigationListItem text="System" icon="sap-icon://action-settings" expanded="{viewModel>/groupExpanded/system}">
-            <tnt:NavigationListItem text="Operations" key="operations" />
+            <tnt:NavigationListItem text="Featured Tasks" key="operations" />
             <tnt:NavigationListItem text="Pipeline Log" key="pipelinelog" />
             <tnt:NavigationListItem text="Job Log" key="joblog" />
             <tnt:NavigationListItem text="Account Merges" key="accounts" />

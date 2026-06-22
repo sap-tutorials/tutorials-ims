@@ -87,3 +87,4 @@ hugo/static/vendor/mediapipe/
 # Per-app package-lock.json — global npmrc has save-exact=true, so per-app
 # lock files just add diff noise (#381 PR 6 review feedback).
 app/admin/*/package-lock.json
+.git-pr-body.md
