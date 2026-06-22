@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
+import { dispatchFinalRebuild } from './lib/migration-final-rebuild.js';
 
 const IMS_BASE_URL = process.env.IMS_BASE_URL || 'https://imsprod-approuter.cfapps.us30.hana.ondemand.com';
 const CAP_BASE_URL = process.env.CAP_BASE_URL || 'http://localhost:4004';
@@ -126,9 +127,13 @@ const mode = process.argv[2] || 'export';
 if (mode === 'export') {
   exportData().catch(console.error);
 } else if (mode === 'import') {
-  importData().catch(console.error);
+  importData()
+    .then(() => dispatchFinalRebuild({ source: 'reference-data-import' }))
+    .catch(console.error);
 } else if (mode === 'populate-slugs') {
-  populateSlugs().catch(console.error);
+  populateSlugs()
+    .then(() => dispatchFinalRebuild({ source: 'reference-data-populate-slugs' }))
+    .catch(console.error);
 } else {
   console.log('Usage: node scripts/migrate-reference-data.js [export|import|populate-slugs]');
   console.log('  export          — Fetch from Java IMS and save as JSON');

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
+import { dispatchFinalRebuild } from './lib/migration-final-rebuild.js';
 
 const IMS_BASE_URL = process.env.IMS_BASE_URL || 'https://imsprod-approuter.cfapps.us30.hana.ondemand.com';
 const CAP_BASE_URL = process.env.CAP_BASE_URL || 'http://localhost:4004';
@@ -123,7 +124,9 @@ const mode = process.argv[2] || 'export';
 if (mode === 'export') {
   exportUsers().catch(console.error);
 } else if (mode === 'import') {
-  importUsers().catch(console.error);
+  importUsers()
+    .then(() => dispatchFinalRebuild({ source: 'user-progress-import' }))
+    .catch(console.error);
 } else {
   console.log('Usage: node scripts/migrate-user-progress.js [export|import]');
   process.exit(1);
