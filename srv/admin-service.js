@@ -93,6 +93,13 @@ export default class AdminService extends cds.ApplicationService {
       { code: 'update', label: 'Update' },
       { code: 'delete', label: 'Delete' }
     ]);
+    // Privacy DSR action types — mirrors PrivacyProtectionActions.actionType
+    // enum on the db side (SEARCH/DOWNLOAD/ANONYMIZE).
+    this.on('READ', 'PrivacyActionTypes', () => [
+      { code: 'SEARCH',    label: 'Search'    },
+      { code: 'DOWNLOAD',  label: 'Download'  },
+      { code: 'ANONYMIZE', label: 'Anonymize' }
+    ]);
 
     // Ensure singleton row exists for ChatSettings (defensive — seed CSV
     // populates this on cds deploy; this covers fresh in-memory test DBs).
@@ -1312,6 +1319,9 @@ export default class AdminService extends cds.ApplicationService {
     const db = await cds.connect.to('db');
     const { PrivacyProtectionActions } = cds.entities('com.sap.developers.ims');
     const { dsrRequestNumber } = opts;
+    // Identify the auditor for the audit row. Falls back to the audit-log
+    // pseudo-user when no human session is present (scripts / tests).
+    const auditor = cds.context?.user?.id || 'system';
 
     // 1. DSR-only: open the action row (idempotent — guard if it already exists).
     if (dsrRequestNumber) {
@@ -1324,6 +1334,8 @@ export default class AdminService extends cds.ApplicationService {
           actionType: 'ANONYMIZE',
           requestedAt: new Date().toISOString(),
           status: 'PROCESSING',
+          dsrRequestNumber,  // PR #554: was silently dropped before schema extension
+          createdBy: auditor,
           legacyId: await getNextLegacyId('PrivacyProtectionActions', db)
         });
       }

@@ -49,6 +49,7 @@
       "sap.tutorials.admin.operations": "./components/operations",
       "sap.tutorials.admin.accounts": "./components/accounts",
       "sap.tutorials.admin.changelog": "./components/changelog",
+      "sap.tutorials.admin.privacyAudit": "./components/privacy-audit",
       "sap.tutorials.admin.analytics": "./components/analytics",
       "sap.tutorials.admin.joule": "./components/joule",
       "sap.tutorials.admin.knowledgeGraph": "./components/knowledgeGraph",
@@ -154,6 +155,12 @@
         "componentData": {},
         "lazy": true
       },
+      "privacyAuditComponent": {
+        "name": "sap.tutorials.admin.privacyAudit",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
       "analyticsComponent": {
         "name": "sap.tutorials.admin.analytics",
         "settings": {},
@@ -251,6 +258,7 @@
         { "name": "joblog", "pattern": "joblog", "target": [{"name": "operationsTarget", "prefix": "op"}] },
         { "name": "accounts", "pattern": "accounts", "target": [{"name": "accountsTarget", "prefix": "au"}] },
         { "name": "changelog", "pattern": "changelog", "target": [{"name": "changelogTarget", "prefix": "cl"}] },
+        { "name": "privacyAudit", "pattern": "privacy-audit", "target": [{"name": "privacyAuditTarget", "prefix": "pa"}] },
         { "name": "analytics", "pattern": "analytics", "target": [{"name": "analyticsTarget", "prefix": "an"}] },
         { "name": "joule", "pattern": "joule", "target": [{"name": "jouleSettingsTarget", "prefix": "jo"}] },
         { "name": "knowledgeGraph", "pattern": "knowledgeGraph", "target": [{"name": "knowledgeGraphSettingsTarget", "prefix": "kg"}] },
@@ -359,6 +367,13 @@
           "id": "changelogTarget",
           "viewLevel": 1,
           "prefix": "cl"
+        },
+        "privacyAuditTarget": {
+          "type": "Component",
+          "usage": "privacyAuditComponent",
+          "id": "privacyAuditTarget",
+          "viewLevel": 1,
+          "prefix": "pa"
         },
         "analyticsTarget": {
           "type": "Component",

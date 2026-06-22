@@ -107,6 +107,7 @@
             <tnt:NavigationListItem text="Knowledge Graph" key="knowledgeGraph" />
             <tnt:NavigationListItem text="Secrets" key="secrets" />
             <tnt:NavigationListItem text="Privacy" key="privacy" />
+            <tnt:NavigationListItem text="Privacy Audit" key="privacyAudit" />
           </tnt:NavigationListItem>
           <tnt:NavigationListItem text="Runtime Settings" icon="sap-icon://settings" expanded="{viewModel>/groupExpanded/runtimeSettings}">
             <tnt:NavigationListItem text="UI Events" key="uiEvents" />

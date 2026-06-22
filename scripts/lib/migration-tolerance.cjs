@@ -47,6 +47,7 @@ const REFERENCE_ENTITIES = [
                     // is deterministic; zero-diff expected once migrated.
   'primaryaccounts',   // Added 2026-06-22 — IMS_UUID_ACCOUNT (every original primary)
   'secondaryaccounts', // Added 2026-06-22 — IMS_UUID_MERGED_ACCOUNT (each merge event)
+  'privacyprotectionactions',  // Added 2026-06-22 — IMS_PRIVACY_PROTECTION_AUDIT (GDPR DSR audit trail)
 ];
 
 // Reference tables with persistent source-data orphans that the migrator

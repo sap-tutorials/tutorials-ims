@@ -395,12 +395,32 @@ entity SecondaryAccounts : cuid, LegacyKeyed {
   mergedAt                  : Timestamp;
 }
 
+// GDPR / DSR audit trail. Mirrors the IMS Java ims_privacy_protection_audit
+// table (PrivacyProtectionAction + PrivacyProtectionActionType enum). Three
+// action kinds:
+//   SEARCH    — admin looked up a user's record (DSR access request)
+//   DOWNLOAD  — admin exported a user's data (DSR data-portability request)
+//   ANONYMIZE — admin anonymized a user (DSR erasure request)
+//
+// dsrRequestNumber and createdBy added 2026-06-22 to close the IMS-parity
+// gap (was silently dropping the DSR# input from anonymizeByDsrRequest
+// before the schema extension; createdBy was missing entirely).
 entity PrivacyProtectionActions : cuid, LegacyKeyed {
   userUuid                  : String(36);
-  actionType                : String(50);
+  actionType                : String(50) @assert.range enum {
+    SEARCH;
+    DOWNLOAD;
+    ANONYMIZE;
+  };
   requestedAt               : Timestamp;
   completedAt               : Timestamp;
   status                    : String(50);
+  // GDPR DSR request reference (audit ticket / case number). Required by IMS
+  // legacy for ANONYMIZE actions; CAP previously silently dropped it.
+  dsrRequestNumber          : String(255);
+  // Auditor identity. Auto-populated from req.user.id on UI-driven writes;
+  // migrator overrides for historical IMS rows.
+  createdBy                 : String(255);
 }
 
 entity FeaturedTasks : cuid, LegacyKeyed {
