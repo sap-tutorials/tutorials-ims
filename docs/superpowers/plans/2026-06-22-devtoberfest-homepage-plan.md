@@ -353,7 +353,7 @@ Find the `ChatSettings` defensive-init block at `srv/admin-service.js:104-117`. 
     // shape as ChatSettings above). Hardcoded UUID matches the
     // "one row per system" invariant. termsVersion defaults to 1; admin
     // populates termsText + currentEvent via the Devtoberfest admin tile.
-    const DEVTOBERFEST_CONFIG_SINGLETON_ID = '00000000-0000-0000-0000-0000devt0fest';
+    const DEVTOBERFEST_CONFIG_SINGLETON_ID = '00000000-0000-0000-0000-00d0fe57feed';
     this.before('READ', 'DevtoberfestConfig', async () => {
       const exists = await SELECT.one.from('com.sap.developers.ims.DevtoberfestConfig')
         .where({ ID: DEVTOBERFEST_CONFIG_SINGLETON_ID });
@@ -477,7 +477,7 @@ Create `srv/routes/devtoberfest-public.js`:
 import cds from '@sap/cds';
 
 const LOG = cds.log('devtoberfest');
-const DEVTOBERFEST_CONFIG_SINGLETON_ID = '00000000-0000-0000-0000-0000devt0fest';
+const DEVTOBERFEST_CONFIG_SINGLETON_ID = '00000000-0000-0000-0000-00d0fe57feed';
 
 async function ensureSingleton() {
   const { DevtoberfestConfig } = cds.entities('com.sap.developers.ims');
@@ -578,7 +578,7 @@ Add inside the existing `describe('GET /api/devtoberfest/status', ...)`, after t
 ```javascript
   describe('with event configured', () => {
     let Users;
-    const SINGLETON_ID = '00000000-0000-0000-0000-0000devt0fest';
+    const SINGLETON_ID = '00000000-0000-0000-0000-00d0fe57feed';
     const eventId = cds.utils.uuid();
 
     beforeAll(() => {
@@ -738,7 +738,7 @@ const project = cds.test('serve', '--project', '.', '--in-memory');
 
 describe('GET /api/devtoberfest/terms', () => {
   let DevtoberfestConfig;
-  const SINGLETON_ID = '00000000-0000-0000-0000-0000devt0fest';
+  const SINGLETON_ID = '00000000-0000-0000-0000-00d0fe57feed';
 
   beforeAll(() => {
     ({ DevtoberfestConfig } = cds.entities('com.sap.developers.ims'));
@@ -853,7 +853,7 @@ const project = cds.test('serve', '--project', '.', '--in-memory');
 
 describe('GET /api/devtoberfest/me', () => {
   let Users, Events, DevtoberfestConfig, EventRegistrations;
-  const SINGLETON_ID = '00000000-0000-0000-0000-0000devt0fest';
+  const SINGLETON_ID = '00000000-0000-0000-0000-00d0fe57feed';
   const eventId = cds.utils.uuid();
 
   beforeAll(() => {
@@ -1046,7 +1046,7 @@ const project = cds.test('serve', '--project', '.', '--in-memory');
 
 describe('POST /api/devtoberfest/join', () => {
   let Users, Events, DevtoberfestConfig, EventRegistrations;
-  const SINGLETON_ID = '00000000-0000-0000-0000-0000devt0fest';
+  const SINGLETON_ID = '00000000-0000-0000-0000-00d0fe57feed';
   const eventId = cds.utils.uuid();
 
   beforeAll(() => {
@@ -2857,7 +2857,7 @@ describe('Devtoberfest join — real HANA', () => {
   let project;
   let createdRegistrationId;
   const testSapId = '__TEST__devtoberfest_' + Date.now();
-  const SINGLETON_ID = '00000000-0000-0000-0000-0000devt0fest';
+  const SINGLETON_ID = '00000000-0000-0000-0000-00d0fe57feed';
   let savedConfig;
   let testEventId;
   let testUserId;
