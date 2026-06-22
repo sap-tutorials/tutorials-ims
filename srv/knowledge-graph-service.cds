@@ -24,7 +24,19 @@ service KnowledgeGraphService @(path : '/graph') {
   // before('UPDATE') guard in srv/knowledge-graph-service.js restrict the
   // write surface to those two fields. ConceptEdges and TutorialConceptLinks
   // remain read-only — status flips on edges happen via the `vetoEdge` action.
-  entity Concepts                       as projection on ims.Concepts;
+  //
+  // `embedding` (LargeBinary) is the per-concept centroid vector used for
+  // similarity-merge during extraction. It is internal-only — written by
+  // srv/jobs/extract-concepts-job.js via cds.entities() (db-level entity)
+  // and read by srv/lib/kg-concept-loader.js via raw SQL. Exposing it
+  // through OData breaks the FE V4 List Report at /admin-ui/#concepts:
+  // V4AnalyticsPropertyHelper throws "Unsupported arguments" during
+  // column-prep when it sees Edm.Binary properties on a writable entity,
+  // killing the table bind before any GET Concepts?$top=... fires.
+  // Excluding it here mirrors the established pattern for TutorialEmbedding
+  // (never projected) and the project's "LargeBinary stays off OData unless
+  // tagged @Core.MediaType" convention.
+  entity Concepts                       as projection on ims.Concepts excluding { embedding };
   @readonly entity ConceptEdges         as projection on ims.ConceptEdges;
   @readonly entity TutorialConceptLinks as projection on ims.TutorialConceptLinks;
 
