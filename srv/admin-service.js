@@ -1108,6 +1108,14 @@ export default class AdminService extends cds.ApplicationService {
         return req.reject(400, 'value (non-empty string) is required');
       }
       await writeSecret(row.key, value);
+      // Issue #429: if the rotated/cleared secret IS the dispatch token, flush
+      // the rebuild-trigger's in-memory cache so the next dispatch picks up
+      // the fresh value (or no-op if cleared) immediately, not after the
+      // 5-min TTL.
+      if (row.key === 'GITHUB_DISPATCH_TOKEN') {
+        const { invalidateDispatchTokenCache } = await import('./lib/rebuild-trigger.js');
+        invalidateDispatchTokenCache();
+      }
       // IMPORTANT 2 (quality-review): emit audit event immediately after the
       // external credstore mutation succeeds. The subsequent stampRotated() is
       // a HANA UPDATE that may fail / abort — if it does, the credstore has
@@ -1150,6 +1158,14 @@ export default class AdminService extends cds.ApplicationService {
       // 32 bytes hex = 64-char string. Strong enough for salt + api-key.
       const newValue = randomBytes(32).toString('hex');
       await writeSecret(row.key, newValue);
+      // Issue #429: if the rotated/cleared secret IS the dispatch token, flush
+      // the rebuild-trigger's in-memory cache so the next dispatch picks up
+      // the fresh value (or no-op if cleared) immediately, not after the
+      // 5-min TTL.
+      if (row.key === 'GITHUB_DISPATCH_TOKEN') {
+        const { invalidateDispatchTokenCache } = await import('./lib/rebuild-trigger.js');
+        invalidateDispatchTokenCache();
+      }
       // IMPORTANT 2 (quality-review): see setSecretValue for the same race.
       // Emit the write event BEFORE stampRotated in case HANA UPDATE fails.
       // The 'SecretValueRotated' event below is still emitted (richer payload)
@@ -1182,6 +1198,14 @@ export default class AdminService extends cds.ApplicationService {
     this.on('clearSecretValue', 'Secrets', async (req) => {
       const row = await loadSecretRow(req);
       await deleteSecret(row.key);
+      // Issue #429: if the rotated/cleared secret IS the dispatch token, flush
+      // the rebuild-trigger's in-memory cache so the next dispatch picks up
+      // the fresh value (or no-op if cleared) immediately, not after the
+      // 5-min TTL.
+      if (row.key === 'GITHUB_DISPATCH_TOKEN') {
+        const { invalidateDispatchTokenCache } = await import('./lib/rebuild-trigger.js');
+        invalidateDispatchTokenCache();
+      }
       // No HANA mutation; explicit audit event needed.
       await auditEvent('SecretValueCleared', {
         user: req.user?.id,

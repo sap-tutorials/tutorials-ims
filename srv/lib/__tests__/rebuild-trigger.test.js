@@ -29,7 +29,10 @@ describe('rebuild-trigger', () => {
     expect(dispatch).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(60_001)
     expect(dispatch).toHaveBeenCalledTimes(1)
-    expect(dispatch).toHaveBeenCalledWith({ 'trigger-source': 'admin-write', environment: 'dev' })
+    expect(dispatch).toHaveBeenCalledWith(
+      { 'trigger-source': 'admin-write', environment: 'dev', mode: 'full' },
+      'fake-token'
+    )
   })
 
   it('coalesces multiple triggers within the window into one dispatch', async () => {
@@ -79,7 +82,10 @@ describe('rebuild-trigger', () => {
     mockTenant('dev')
     await scheduleRebuild('admin-write')
     await vi.advanceTimersByTimeAsync(60_001)
-    expect(dispatch).toHaveBeenCalledWith({ 'trigger-source': 'admin-write', environment: 'dev' })
+    expect(dispatch).toHaveBeenCalledWith(
+      { 'trigger-source': 'admin-write', environment: 'dev', mode: 'full' },
+      'fake-token'
+    )
   })
 
   it('uses resolver value when set to qa', async () => {
@@ -87,7 +93,10 @@ describe('rebuild-trigger', () => {
     mockTenant('qa')
     await scheduleRebuild('admin-write')
     await vi.advanceTimersByTimeAsync(60_001)
-    expect(dispatch).toHaveBeenCalledWith({ 'trigger-source': 'admin-write', environment: 'qa' })
+    expect(dispatch).toHaveBeenCalledWith(
+      { 'trigger-source': 'admin-write', environment: 'qa', mode: 'full' },
+      'fake-token'
+    )
   })
 
   it('uses resolver value when set to prod', async () => {
@@ -95,6 +104,9 @@ describe('rebuild-trigger', () => {
     mockTenant('prod')
     await scheduleRebuild('admin-write')
     await vi.advanceTimersByTimeAsync(60_001)
-    expect(dispatch).toHaveBeenCalledWith({ 'trigger-source': 'admin-write', environment: 'prod' })
+    expect(dispatch).toHaveBeenCalledWith(
+      { 'trigger-source': 'admin-write', environment: 'prod', mode: 'full' },
+      'fake-token'
+    )
   })
 })
