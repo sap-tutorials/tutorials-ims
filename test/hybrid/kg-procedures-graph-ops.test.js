@@ -62,6 +62,21 @@ async function callKgGraphClear(db, graphIri) {
   return db.run(DO_CALL_KG_GRAPH_CLEAR, [graphIri]);
 }
 
+// Call the KG_GRAPH_INSERT procedure via a DO block.
+// Signature: KG_GRAPH_INSERT(graph_iri, triples, OUT response, OUT headers)
+// The DO block exposes the OUT params as a SELECT result-set for db.run().
+const DO_CALL_KG_GRAPH_INSERT = `DO (IN p NVARCHAR(500) => ?, IN t NCLOB => ?) BEGIN
+  DECLARE response NCLOB;
+  DECLARE headers NVARCHAR(5000);
+  CALL KG_GRAPH_INSERT(:p, :t, response, headers);
+  SELECT :response AS response, :headers AS headers FROM DUMMY;
+END`;
+
+// Call the KG_GRAPH_INSERT procedure. Returns the raw db.run result.
+async function callKgGraphInsert(db, graphIri, triples) {
+  return db.run(DO_CALL_KG_GRAPH_INSERT, [graphIri, triples]);
+}
+
 describe('KG_GRAPH_CLEAR procedure (issue #533, Phase 1.5)', () => {
   let db;
 
@@ -99,28 +114,21 @@ describe('KG_GRAPH_CLEAR procedure (issue #533, Phase 1.5)', () => {
     }
   });
 
-  it('happy path: KG_GRAPH_CLEAR reaches SPARQL engine (procedure compiled and #OO privileges work)', async () => {
-    // This test verifies the procedure exists, compiled correctly, and executes
-    // past the IRI-validation gate and into the SPARQL engine.
+  it('happy path: KG_GRAPH_INSERT seeds graph as #OO, then KG_GRAPH_CLEAR succeeds (full create+wipe cycle)', async () => {
+    // Tightened in Task 2: seed the graph via KG_GRAPH_INSERT (which runs as
+    // #OO via DEFINER) so the graph's per-graph ACL is owned by #OO — not by
+    // the raw application_user binding. KG_GRAPH_CLEAR then succeeds because
+    // both operations share the same #OO identity.
     //
-    // KNOWN LIMITATION (Task 1 only, resolved in Task 2):
-    // The test graph was seeded via raw SYS.SPARQL_EXECUTE (application_user),
-    // so the graph's per-graph ACL pins to application_user. The procedure runs
-    // as #OO (DEFINER); HANA KGE rejects #OO's CLEAR attempt on a graph it did
-    // not create. This error (code 129, message includes "User is not allowed")
-    // is the ACL collision the design is solving — it proves DEFINER mode is
-    // WORKING (if DEFINER weren't active, we'd see a different error or the
-    // clear would succeed using application_user's identity).
-    //
-    // Once KG_GRAPH_INSERT (Task 2) is deployed, update this test to:
-    //   1. Call KG_GRAPH_INSERT(TEST_GRAPH, '<urn:s> <urn:p> <urn:o> .') to seed
-    //      AS #OO, then
-    //   2. Call KG_GRAPH_CLEAR(TEST_GRAPH) and assert it resolves without error.
-    const result = callKgGraphClear(db, TEST_GRAPH);
-    // The call must NOT fail with "procedure not found" (code 328) or
-    // "invalid syntax" — those would indicate the procedure wasn't deployed.
-    // Any other error (including code 129 ACL) is acceptable for Task 1.
-    await expect(result).rejects.not.toMatchObject({ code: 328 });
+    // This is the core proof of the DEFINER design: KG_GRAPH_INSERT creates
+    // the graph as #OO → KG_GRAPH_CLEAR can clear it as #OO (no ACL collision).
+    const clearGraph = `${TEST_GRAPH}:clear-happy`;
+
+    // Seed via KG_GRAPH_INSERT (runs as #OO)
+    await expect(callKgGraphInsert(db, clearGraph, '<urn:s> <urn:p> <urn:o> .')).resolves.toBeDefined();
+
+    // CLEAR via KG_GRAPH_CLEAR — must succeed (no error)
+    await expect(callKgGraphClear(db, clearGraph)).resolves.toBeDefined();
   });
 
 
@@ -139,5 +147,83 @@ describe('KG_GRAPH_CLEAR procedure (issue #533, Phase 1.5)', () => {
     await expect(callKgGraphClear(db, longIri)).rejects.toSatisfy(
       (err) => err.code === 10001 || err.code === 359
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// KG_GRAPH_INSERT procedure (Task 2)
+// ---------------------------------------------------------------------------
+
+describe('KG_GRAPH_INSERT procedure (issue #533, Task 2)', () => {
+  let db;
+
+  beforeAll(async () => {
+    process.env.ALLOW_HYBRID_WRITES = 'true';
+
+    db = await cds.connect.to('db');
+
+    const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+    if (!isHana) {
+      throw new Error(
+        'kg-procedures-graph-ops.test.js must run against HANA. ' +
+        'Run via `npm run test:hybrid` after `cds bind` to the DEV space.'
+      );
+    }
+  });
+
+  afterAll(async () => {
+    if (!db) return;
+    // Best-effort cleanup of any graphs created during INSERT tests.
+    const graphsToClean = [
+      `${TEST_GRAPH}:insert-happy`,
+      `${TEST_GRAPH}:insert-cycle`,
+    ];
+    for (const g of graphsToClean) {
+      try {
+        await rawSparqlExec(db, `CLEAR GRAPH <${g}>`);
+      } catch {
+        // ignore — graph may not have been created
+      }
+    }
+  });
+
+  it('happy path: KG_GRAPH_INSERT creates graph as #OO; KG_GRAPH_CLEAR then succeeds (full create+wipe cycle)', async () => {
+    // Core proof of the DEFINER design: INSERT creates via #OO → CLEAR succeeds
+    // as #OO on the same graph. No per-graph ACL collision.
+    const insertGraph = `${TEST_GRAPH}:insert-happy`;
+
+    // Create the graph via KG_GRAPH_INSERT — runs as #OO (DEFINER)
+    await expect(
+      callKgGraphInsert(db, insertGraph, '<urn:a> <urn:b> <urn:c> .')
+    ).resolves.toBeDefined();
+
+    // CLEAR the same graph via KG_GRAPH_CLEAR — must succeed (same #OO owner)
+    await expect(callKgGraphClear(db, insertGraph)).resolves.toBeDefined();
+  });
+
+  it('invalid IRI rejection: "not-an-iri" raises error code 10001 (KG_INVALID_IRI)', async () => {
+    // Same IRI validation as KG_GRAPH_CLEAR — must reuse the same regex + error code.
+    await expect(
+      callKgGraphInsert(db, 'not-an-iri', '<urn:a> <urn:b> <urn:c> .')
+    ).rejects.toMatchObject({ code: 10001 });
+  });
+
+  it('empty triples rejection: empty string raises error code 10003 (KG_EMPTY_TRIPLES)', async () => {
+    // Passing an empty string for triples would produce a syntactically invalid
+    // SPARQL INSERT DATA statement — must be rejected before SPARQL execution.
+    await expect(
+      callKgGraphInsert(db, `${TEST_GRAPH}:empty-triples`, '')
+    ).rejects.toMatchObject({ code: 10003 });
+  });
+
+  it('defensive "} }" injection attempt raises error code 10004 (KG_TRIPLES_INVALID)', async () => {
+    // Attack payload: closes the INSERT DATA { GRAPH <iri> { block early, then
+    // injects a second INSERT DATA statement for a different graph.
+    // The procedure must detect the "} }" pattern and reject before executing.
+    const attackPayload =
+      '<urn:a> <urn:b> <urn:c> . } } INSERT DATA { GRAPH <urn:evil> { <urn:x> <urn:x> <urn:x> . ';
+    await expect(
+      callKgGraphInsert(db, `${TEST_GRAPH}:injection`, attackPayload)
+    ).rejects.toMatchObject({ code: 10004 });
   });
 });
