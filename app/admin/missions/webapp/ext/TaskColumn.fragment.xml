@@ -2,11 +2,26 @@
   xmlns:core="sap.ui.core"
   xmlns="sap.m"
   core:require="{ handler: 'sap/tutorials/admin/missions/ext/TaskColumnHandler' }">
+  <!--
+    Issue #426 — value-help icon was suppressed in the Path Items LineItem
+    table because the original bindings used `%{...}` syntax. Per memory
+    feedback_ui5_dollar_vs_percent_binding, `%{IsActiveEntity}` is for FE V4
+    Object Page TOP-LEVEL state; row-level cell bindings inside a LineItem
+    must use `${...}`. With the wrong syntax UI5's expression engine resolves
+    `%{taskType}` to nothing → `showValueHelp` collapses to false → no F4 icon
+    rendered. The `value` and `placeholder` bindings already used the correct
+    `path:` form, which is why the display text worked even though the icon
+    didn't. Switched both expression bindings to `${...}`.
+
+    Lint guard: test/scripts/check-fragment-binding-mode.test.ts will fail
+    if any fragment under app/admin/ reintroduces `%{...}` with a row-context
+    identifier.
+  -->
   <Input
     value="{parts: [{path: 'taskType'}, {path: 'tutorial/title'}, {path: 'group/title'}, {path: 'checkpointTitle'}], formatter: 'handler.formatTaskDisplay'}"
-    showValueHelp="{= %{taskType} !== 'CHECKPOINT' }"
+    showValueHelp="{= ${taskType} !== 'CHECKPOINT' }"
     valueHelpRequest="handler.onTaskValueHelp"
-    editable="{= !%{IsActiveEntity} }"
+    editable="{= !${IsActiveEntity} }"
     change="handler.onCheckpointChange"
     placeholder="{path: 'taskType', formatter: 'handler.formatPlaceholder'}"/>
 </core:FragmentDefinition>
