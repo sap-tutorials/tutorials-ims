@@ -1965,6 +1965,142 @@
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_UIEVENT"
     },
+    "com.sap.developers.ims.DevtoberfestConfig": {
+      "kind": "entity",
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "currentEvent_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "currentEvent",
+          "@cds.persistence.name": "CURRENTEVENT_ID"
+        },
+        "termsText": {
+          "type": "cds.LargeString",
+          "@cds.persistence.name": "TERMSTEXT"
+        },
+        "termsVersion": {
+          "type": "cds.Integer",
+          "default": {
+            "val": 1
+          },
+          "@cds.persistence.name": "TERMSVERSION"
+        },
+        "contentRulesUrl": {
+          "type": "cds.String",
+          "length": 500,
+          "@cds.persistence.name": "CONTENTRULESURL"
+        },
+        "faqUrl": {
+          "type": "cds.String",
+          "length": 500,
+          "@cds.persistence.name": "FAQURL"
+        },
+        "gameboardUrl": {
+          "type": "cds.String",
+          "length": 500,
+          "@cds.persistence.name": "GAMEBOARDURL"
+        },
+        "activitiesUrl": {
+          "type": "cds.String",
+          "length": 500,
+          "@cds.persistence.name": "ACTIVITIESURL"
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_DEVTOBERFESTCONFIG"
+    },
+    "com.sap.developers.ims.EventRegistrations": {
+      "kind": "entity",
+      "@assert.unique.userEvent": [
+        {
+          "=": "user"
+        },
+        {
+          "=": "event"
+        }
+      ],
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "legacyId": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "LEGACYID"
+        },
+        "user_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "user",
+          "@cds.persistence.name": "USER_ID"
+        },
+        "event_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "event",
+          "@cds.persistence.name": "EVENT_ID"
+        },
+        "joinedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "JOINEDAT"
+        },
+        "termsVersion": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "TERMSVERSION"
+        },
+        "termsAcceptedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "TERMSACCEPTEDAT"
+        }
+      },
+      "$tableConstraints": {
+        "unique": {
+          "userEvent": {
+            "paths": [
+              {
+                "ref": [
+                  "user_ID"
+                ]
+              },
+              {
+                "ref": [
+                  "event_ID"
+                ]
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.EventRegistrations"
+          }
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_EVENTREGISTRATIONS"
+    },
     "com.sap.developers.ims.GroupSlugRedirects": {
       "kind": "entity",
       "@cds.persistence.journal": true,
