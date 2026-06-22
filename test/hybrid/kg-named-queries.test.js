@@ -44,7 +44,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import crypto from 'node:crypto';
 import cds from '@sap/cds';
 import { graphRebuild } from '../../srv/lib/kg-graph-rebuild.js';
-import { sparqlExec, sparqlQuery } from '../../srv/lib/kg-sparql-client.js';
+import { kgGraphClear, kgAdminRunSparql } from '../../srv/lib/kg-sparql-client.js';
 
 const TEST_PREFIX = `__TEST__kg-named-`;
 const RUN_ID = `${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
@@ -179,7 +179,7 @@ describe('NEIGHBORHOOD_QUERY four-branch SPARQL (issue #381, KG PR 5)', () => {
     if (!db) return;
 
     try {
-      await sparqlExec(db, `CLEAR GRAPH <${TEST_GRAPH_IRI}>`);
+      await kgGraphClear({ db, graphIri: TEST_GRAPH_IRI });
     } catch (err) {
       // Don't fail teardown — the SQL cleanup below is what matters.
       // eslint-disable-next-line no-console
@@ -213,7 +213,7 @@ describe('NEIGHBORHOOD_QUERY four-branch SPARQL (issue #381, KG PR 5)', () => {
   // Helper: run the test-graph variant of NEIGHBORHOOD_QUERY and parse rows.
   async function runNeighborhood(slug) {
     const sparql = buildNeighborhoodSparql(slug, TEST_GRAPH_IRI);
-    const { response } = await sparqlQuery(db, sparql);
+    const { response } = await kgAdminRunSparql({ db, sparql, isUpdate: false });
     const parsed = JSON.parse(response);
     const bindings = parsed?.results?.bindings ?? [];
     return bindings.map((b) => ({
