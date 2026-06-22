@@ -28,6 +28,8 @@ import { join, dirname } from 'path';
 import { pathToFileURL } from 'node:url';
 import hdb from 'hdb';
 
+import { startRun, pushRecord, writeReport } from './migration-perf-recorder.js';
+
 // Issue #337: deterministic UUIDs derived from (entity_namespace, legacyId).
 // Re-running the migrator produces the same UUIDs for the same source rows,
 // so CAP-era tables that reference these entities by FK (TutorialMeta,
@@ -406,9 +408,25 @@ async function fetchExistingSlugMap(target, fullTable, slugs) {
 async function migrateEntity(source, target, targetSchema, config) {
   const { name, sourceQuery, targetTable, mapRow, preInsert, upsertOnSlug = false } = config;
 
+  // #474 perf instrumentation — capture wall-clock per entity. The _track
+  // helper wraps every return value with a pushRecord side-effect; original
+  // return shape is preserved verbatim.
+  const _entityStartMs = Date.now();
+  const _track = (r) => {
+    pushRecord({
+      name,
+      durationMs: Date.now() - _entityStartMs,
+      inserted: r.count ?? 0,
+      errors: r.errors ?? 0,
+      skipped: r.skipped === true,
+      mode: 'single-shot',
+    });
+    return r;
+  };
+
   if (ENTITY_FILTER && !ENTITY_FILTER.includes(name)) {
     console.log(`  ⊘ Skipping ${name} (not in filter)`);
-    return { name, count: 0, skipped: true };
+    return _track({ name, count: 0, skipped: true });
   }
 
   console.log(`\n─── Migrating: ${name} ───`);
@@ -416,7 +434,7 @@ async function migrateEntity(source, target, targetSchema, config) {
   const rows = await query(source, sourceQuery);
   console.log(`  Read ${rows.length} records from source`);
 
-  if (rows.length === 0) return { name, count: 0 };
+  if (rows.length === 0) return _track({ name, count: 0 });
 
   if (preInsert) await preInsert(target, targetSchema);
 
@@ -450,12 +468,12 @@ async function migrateEntity(source, target, targetSchema, config) {
     if (DRY_RUN) {
       mapped.slice(0, 3).forEach(m => console.log(`  [dry-run] Would insert:`, JSON.stringify(m).slice(0, 200)));
       console.log(`  ✓ ${mapped.length} inserted, 0 errors`);
-      return { name, count: mapped.length };
+      return _track({ name, count: mapped.length });
     }
 
     const result = await batchInsert(target, fullTable, mapped);
     console.log(`  ✓ ${result.inserted} inserted, ${result.errors} errors`);
-    return { name, count: result.inserted, errors: result.errors };
+    return _track({ name, count: result.inserted, errors: result.errors });
   }
 
   // Upsert-on-slug path: do NOT clear the target. Look up which slugs already
@@ -471,7 +489,7 @@ async function migrateEntity(source, target, targetSchema, config) {
   if (DRY_RUN) {
     mapped.slice(0, 3).forEach(m => console.log(`  [dry-run] Would upsert:`, JSON.stringify(m).slice(0, 200)));
     console.log(`  ✓ ${mapped.length} would be upserted (slug-keyed)`);
-    return { name, count: mapped.length };
+    return _track({ name, count: mapped.length });
   }
 
   const existingMap = await fetchExistingSlugMap(target, fullTable, slugs);
@@ -506,7 +524,7 @@ async function migrateEntity(source, target, targetSchema, config) {
     : { inserted: 0, errors: 0 };
 
   console.log(`  ✓ upsert: ${insertResult.inserted} inserted, ${updated} updated, ${insertResult.errors + updateErrors} errors`);
-  return { name, count: insertResult.inserted + updated, errors: insertResult.errors + updateErrors };
+  return _track({ name, count: insertResult.inserted + updated, errors: insertResult.errors + updateErrors });
 }
 
 // Batch-insert a list of mapped rows into `fullTable`. Falls back to row-by-row
@@ -560,9 +578,30 @@ async function batchInsert(target, fullTable, mapped) {
 async function migrateEntityPaginated(source, target, targetSchema, config) {
   const { name, idColumn, idMin, idMax, pageSize, sourceQueryForRange, targetTable, mapRow, preInsert } = config;
 
+  // #474 perf instrumentation — same _track shape as migrateEntity, plus a
+  // pages[] sub-array populated per page below so we can see whether
+  // throughput degrades at the tail (e.g., target MERGE INTO cost rising
+  // as the table grows).
+  const _entityStartMs = Date.now();
+  const _pages = [];
+  const _track = (r) => {
+    pushRecord({
+      name,
+      durationMs: Date.now() - _entityStartMs,
+      inserted: r.count ?? 0,
+      errors: r.errors ?? 0,
+      skipped: r.skipped === true,
+      mode: 'paginated',
+      pageSize,
+      pageCount: _pages.length,
+      pages: _pages,
+    });
+    return r;
+  };
+
   if (ENTITY_FILTER && !ENTITY_FILTER.includes(name)) {
     console.log(`  ⊘ Skipping ${name} (not in filter)`);
-    return { name, count: 0, skipped: true };
+    return _track({ name, count: 0, skipped: true });
   }
 
   console.log(`\n─── Migrating: ${name} (paginated by ${idColumn}) ───`);
@@ -587,6 +626,8 @@ async function migrateEntityPaginated(source, target, targetSchema, config) {
 
   for (let lo = idMin - 1; lo < idMax; lo += pageSize) {
     const hi = Math.min(lo + pageSize, idMax);
+    const _pageStartMs = Date.now();
+    const _insertedBefore = inserted;
     const pageSql = sourceQueryForRange(lo, hi);
     const pageRows = await query(source, pageSql);
     totalRead += pageRows.length;
@@ -605,10 +646,14 @@ async function migrateEntityPaginated(source, target, targetSchema, config) {
       }
       inserted += mapped.length;
       process.stdout.write(`  page ${lo + 1}..${hi}: read=${pageRows.length} mapped=${mapped.length} (running total mapped=${inserted})\r`);
+      _pages.push({ lo: lo + 1, hi, sourceRowCount: pageRows.length, durationMs: Date.now() - _pageStartMs, inserted: mapped.length, dryRun: true });
       continue;
     }
 
-    if (mapped.length === 0) continue;
+    if (mapped.length === 0) {
+      _pages.push({ lo: lo + 1, hi, sourceRowCount: pageRows.length, durationMs: Date.now() - _pageStartMs, inserted: 0, skipped: 'no-mapped' });
+      continue;
+    }
     if (!stmt) {
       cols = Object.keys(mapped[0]);
       const colNames = cols.map(c => `"${c}"`).join(', ');
@@ -633,11 +678,19 @@ async function migrateEntityPaginated(source, target, targetSchema, config) {
       }
     }
     process.stdout.write(`  page ${lo + 1}..${hi}: ${inserted} inserted, ${errors} errors\r`);
+    _pages.push({
+      lo: lo + 1,
+      hi,
+      sourceRowCount: pageRows.length,
+      mappedRowCount: mapped.length,
+      inserted: inserted - _insertedBefore,
+      durationMs: Date.now() - _pageStartMs,
+    });
   }
 
   if (stmt) stmt.drop();
   console.log(`\n  ✓ ${inserted} inserted, ${errors} errors (read ${totalRead} from source)`);
-  return { name, count: inserted, errors };
+  return _track({ name, count: inserted, errors });
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -773,6 +826,24 @@ async function main() {
 
   const S = `"${imsCreds.schema}"`;
   const T = capCreds.schema;
+
+  // #474 perf instrumentation: start the recorder now that we know both
+  // endpoints. Each entity's wrapper inside migrateEntity / migrateEntityPaginated
+  // appends a record; writeReport() below dumps the full report at the end.
+  // ENV is derived from the target schema's prefix when possible (e.g.
+  // tutorials-hana-dev → 'dev') and falls back to NODE_ENV or 'unknown'.
+  const envSlug = (() => {
+    const m = (capCreds.schema || '').match(/[_-](DEV|QA|PROD)[_-]?/i);
+    if (m) return m[1].toLowerCase();
+    return process.env.NODE_ENV || 'unknown';
+  })();
+  startRun({
+    env: envSlug,
+    sourceHost: imsCreds.host,
+    targetHost: capCreds.host,
+    schema: capCreds.schema,
+    args: process.argv.slice(2),
+  });
 
   // Build lookup maps
   console.log('\nBuilding lookup maps...');
@@ -1587,6 +1658,18 @@ async function main() {
     if (r.skipped) continue;
     const status = r.errors ? `✓ ${r.count} (${r.errors} errors)` : `✓ ${r.count}`;
     console.log(`  ${r.name.padEnd(20)} ${status}`);
+  }
+
+  // #474 perf report. Written to .migration-data/perf-history/<timestamp>-<env>.json
+  // so future runs can compare apples-to-apples. Don't let a recorder error
+  // mask a successful migration — log and continue. process.cwd() is the
+  // canonical "where the user ran the migrator from" — keeps Windows path
+  // quirks out of the URL→fs conversion.
+  try {
+    const reportPath = writeReport(process.cwd());
+    console.log(`\n  Perf report: ${reportPath}`);
+  } catch (err) {
+    console.warn(`  ⚠ Perf recorder write failed (non-fatal): ${err.message}`);
   }
 
   source.disconnect();
