@@ -212,3 +212,30 @@ describe('revealSecretValue (#465)', () => {
       .rejects.toMatchObject({ code: 404 });
   });
 });
+
+// Regression test for the 2026-06-22 DEV bootstrap crash. When the Secrets
+// metadata row was added via "Add Tracked Secret" in /admin-ui/#secrets-display,
+// POST /admin/Secrets returned 502 because @cap-js/audit-logging crashed in
+// addDataSubjectForDetailsEntity() — the stale @PersonalData.IsPotentiallyPersonal
+// field annotations on Secrets implied a DataSubject parent that doesn't exist.
+// Removing those annotations (keeping EntitySemantics: 'Other') silences the
+// crash. This test exercises the AdminService projection path that the UI
+// uses (NOT the raw entity INSERT path the other tests in this file use),
+// so the audit-logging plugin's CRUD interceptor fires.
+describe('Secrets entity CREATE (#465 regression)', () => {
+  it('POST /admin/Secrets succeeds without crashing audit-logging', async () => {
+    const srv = await cds.connect.to('AdminService');
+    const created = await srv.tx({ user: ADMIN_USER }, (tx) =>
+      tx.create('Secrets').entries({
+        key: 'TEST_NEW_SECRET',
+        description: 'created via projection — should not crash audit-logging',
+        kind: 'salt',
+        rotationOwner: 'admin@test',
+      })
+    );
+    expect(created).toBeDefined();
+    // Whether single-row or array depends on CAP version — accept both.
+    const row = Array.isArray(created) ? created[0] : created;
+    expect(row.key).toBe('TEST_NEW_SECRET');
+  });
+});
