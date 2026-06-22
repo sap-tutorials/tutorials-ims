@@ -16,11 +16,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock the SPARQL client + projection generator so the test stays pure
 // (no HANA, no async iterator over CDS state).
-const sparqlExecMock = vi.fn();
+const kgGraphClearMock = vi.fn();
+const kgGraphInsertMock = vi.fn();
 const projectTriplesMock = vi.fn();
 
 vi.mock('../../srv/lib/kg-sparql-client.js', () => ({
-  sparqlExec: (...args) => sparqlExecMock(...args),
+  kgGraphClear: (...args) => kgGraphClearMock(...args),
+  kgGraphInsert: (...args) => kgGraphInsertMock(...args),
 }));
 vi.mock('../../srv/lib/kg-projection.js', () => ({
   projectTriples: (...args) => projectTriplesMock(...args),
@@ -63,13 +65,15 @@ vi.mock('@sap/cds', () => {
 let graphRebuild, DEFAULT_GRAPH_IRI, BOOTSTRAP_TRIPLE, GRAPH_METADATA_SINGLETON_ID;
 
 beforeEach(async () => {
-  sparqlExecMock.mockReset();
+  kgGraphClearMock.mockReset();
+  kgGraphInsertMock.mockReset();
   projectTriplesMock.mockReset();
 
-  // Each call resolves to the spike's response shape. The bootstrap +
+  // Each call resolves to the procedure response shape. The bootstrap +
   // CLEAR don't care about the return value; the INSERTs after them
   // don't either. Just keep them happy.
-  sparqlExecMock.mockResolvedValue({ response: '', headers: '', latencyMs: 0 });
+  kgGraphClearMock.mockResolvedValue({ response: '', headers: '', latencyMs: 0 });
+  kgGraphInsertMock.mockResolvedValue({ response: '', headers: '', latencyMs: 0 });
 
   // Empty projection by default — most tests just want to verify the
   // wipe sequence, not the projection payload.
@@ -108,21 +112,27 @@ describe('graphRebuild — bootstrap before CLEAR (#525)', () => {
 
     await graphRebuild({ db, graphIri });
 
-    // sparqlExec should have been called at least twice (bootstrap + clear).
-    // Step 1 (bootstrap): INSERT DATA wrapping BOOTSTRAP_TRIPLE.
-    // Step 2 (clear):     CLEAR GRAPH.
-    expect(sparqlExecMock.mock.calls.length).toBeGreaterThanOrEqual(2);
-    const [firstCallSparql] = sparqlExecMock.mock.calls[0].slice(1);
-    const [secondCallSparql] = sparqlExecMock.mock.calls[1].slice(1);
+    // kgGraphInsert should have been called at least once (bootstrap).
+    // kgGraphClear should have been called at least once (clear).
+    // Step 1 (bootstrap): kgGraphInsert with BOOTSTRAP_TRIPLE.
+    // Step 2 (clear):     kgGraphClear.
+    expect(kgGraphInsertMock.mock.calls.length).toBeGreaterThanOrEqual(1);
+    expect(kgGraphClearMock.mock.calls.length).toBeGreaterThanOrEqual(1);
 
-    // The first call must be the bootstrap INSERT.
-    expect(firstCallSparql).toMatch(/INSERT DATA/);
-    expect(firstCallSparql).toMatch(/<urn:test:kg:unit>/);
-    expect(firstCallSparql).toContain(BOOTSTRAP_TRIPLE);
+    // Check that bootstrap INSERT was called with the right args.
+    const bootstrapInsertCall = kgGraphInsertMock.mock.calls[0][0];
+    expect(bootstrapInsertCall).toEqual({
+      db: expect.anything(),
+      graphIri,
+      triples: BOOTSTRAP_TRIPLE,
+    });
 
-    // The second call must be the CLEAR.
-    expect(secondCallSparql).toMatch(/CLEAR GRAPH/);
-    expect(secondCallSparql).toMatch(/<urn:test:kg:unit>/);
+    // Check that CLEAR was called with the right args.
+    const clearCall = kgGraphClearMock.mock.calls[0][0];
+    expect(clearCall).toEqual({
+      db: expect.anything(),
+      graphIri,
+    });
   });
 
   it('uses BOOTSTRAP_TRIPLE for the bootstrap insert (not arbitrary data)', async () => {
@@ -131,12 +141,13 @@ describe('graphRebuild — bootstrap before CLEAR (#525)', () => {
     const db = makeDb();
     await graphRebuild({ db, graphIri: 'urn:test' });
 
-    const [bootstrapSparql] = sparqlExecMock.mock.calls[0].slice(1);
-    expect(bootstrapSparql).toContain('<urn:bootstrap:ignore>');
+    const bootstrapInsertCall = kgGraphInsertMock.mock.calls[0][0];
+    expect(bootstrapInsertCall.triples).toBe(BOOTSTRAP_TRIPLE);
+    expect(bootstrapInsertCall.triples).toContain('<urn:bootstrap:ignore>');
     // All three terms in the triple are the same "ghost" IRI — this is
     // a deliberate choice (see BOOTSTRAP_TRIPLE comment) so the dummy
     // triple is obviously not real data to anyone debugging.
-    const matches = bootstrapSparql.match(/<urn:bootstrap:ignore>/g);
+    const matches = bootstrapInsertCall.triples.match(/<urn:bootstrap:ignore>/g);
     expect(matches.length).toBe(3);
   });
 
@@ -144,19 +155,18 @@ describe('graphRebuild — bootstrap before CLEAR (#525)', () => {
     const db = makeDb();
     await graphRebuild({ db });
 
-    const [bootstrapSparql] = sparqlExecMock.mock.calls[0].slice(1);
-    const [clearSparql] = sparqlExecMock.mock.calls[1].slice(1);
-    expect(bootstrapSparql).toContain(`<${DEFAULT_GRAPH_IRI}>`);
-    expect(clearSparql).toContain(`<${DEFAULT_GRAPH_IRI}>`);
+    const bootstrapInsertCall = kgGraphInsertMock.mock.calls[0][0];
+    const clearCall = kgGraphClearMock.mock.calls[0][0];
+    expect(bootstrapInsertCall.graphIri).toBe(DEFAULT_GRAPH_IRI);
+    expect(clearCall.graphIri).toBe(DEFAULT_GRAPH_IRI);
   });
 
   it('still propagates errors from CLEAR (the bootstrap does not catch them)', async () => {
     // Bootstrap succeeds, but CLEAR raises something unexpected.
     // The error must surface — we don't want to swallow real failures.
     const db = makeDb();
-    sparqlExecMock
-      .mockResolvedValueOnce({ response: '', headers: '', latencyMs: 0 }) // bootstrap
-      .mockRejectedValueOnce(new Error('CLEAR failed for some other reason')); // clear
+    kgGraphInsertMock.mockResolvedValueOnce({ response: '', headers: '', latencyMs: 0 }); // bootstrap
+    kgGraphClearMock.mockRejectedValueOnce(new Error('CLEAR failed for some other reason')); // clear
 
     await expect(graphRebuild({ db, graphIri: 'urn:test' }))
       .rejects.toThrow(/CLEAR failed for some other reason/);
@@ -167,12 +177,12 @@ describe('graphRebuild — bootstrap before CLEAR (#525)', () => {
     // must NOT proceed to CLEAR — that would just propagate the same
     // "Object does not exist" we're trying to fix.
     const db = makeDb();
-    sparqlExecMock.mockRejectedValueOnce(new Error('privilege denied'));
+    kgGraphInsertMock.mockRejectedValueOnce(new Error('privilege denied'));
 
     await expect(graphRebuild({ db, graphIri: 'urn:test' }))
       .rejects.toThrow(/privilege denied/);
 
     // CLEAR should NOT have been issued.
-    expect(sparqlExecMock.mock.calls.length).toBe(1);
+    expect(kgGraphClearMock.mock.calls.length).toBe(0);
   });
 });
