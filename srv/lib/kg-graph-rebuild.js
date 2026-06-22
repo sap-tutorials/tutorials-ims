@@ -57,7 +57,7 @@ import { projectTriples } from './kg-projection.js';
 // places) and the named-query test in test/hybrid/kg-named-queries.test.js.
 // A grep on `developers.sap.com/kg/tutorials($|[^-])` should yield only
 // docs references after a coordinated rename.
-export const DEFAULT_GRAPH_IRI = 'https://developers.sap.com/kg/tutorials-v2';
+export const DEFAULT_GRAPH_IRI = 'https://developers.sap.com/kg/tutorials-v3';
 
 // Bootstrap triple used to ensure the named graph exists before CLEAR.
 // All three positions use the same "ghost" IRI so the triple is obviously

@@ -83,7 +83,7 @@ BEGIN
   -- with srv/lib/kg-graph-rebuild.js DEFAULT_GRAPH_IRI.  When non-NULL (hybrid
   -- tests, admin probe), the caller-supplied IRI is used instead.
   from_clause := 'FROM <' ||
-    COALESCE(:override_graph_iri, 'https://developers.sap.com/kg/tutorials-v2') ||
+    COALESCE(:override_graph_iri, 'https://developers.sap.com/kg/tutorials-v3') ||
     '>';
 
   -- Dispatch on query_name using IF/ELSEIF chain.
