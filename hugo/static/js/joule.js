@@ -289,6 +289,18 @@
         } : null,
       };
     }
+
+    if (html.dataset.pageKind === 'advocates') {
+      // The advocates Vue island (hugo-apps/src/advocates/App.vue) stashes
+      // the loaded roster on window.__JOULE_ADVOCATES after /api/advocates
+      // resolves. We pass it through verbatim so the backend's advocatesLayer
+      // can format it into the system prompt.
+      return {
+        kind: 'advocates',
+        advocates: Array.isArray(window.__JOULE_ADVOCATES) ? window.__JOULE_ADVOCATES : [],
+      };
+    }
+
     const ctx = {
       kind: html.dataset.pageKind || 'generic',
       slug: html.dataset.pageSlug || undefined,
