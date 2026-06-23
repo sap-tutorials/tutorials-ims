@@ -102,6 +102,7 @@
             <tnt:NavigationListItem text="Job Log" key="joblog" />
             <tnt:NavigationListItem text="Account Merges" key="accounts" />
             <tnt:NavigationListItem text="Change Log" key="changelog" />
+            <tnt:NavigationListItem text="Devtoberfest" key="devtoberfest" icon="sap-icon://flag" />
             <tnt:NavigationListItem text="Board" key="board" />
             <tnt:NavigationListItem text="Joule Settings" key="joule" />
             <tnt:NavigationListItem text="Knowledge Graph" key="knowledgeGraph" />

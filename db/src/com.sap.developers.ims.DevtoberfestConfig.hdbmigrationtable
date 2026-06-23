@@ -1,0 +1,12 @@
+== version=1
+COLUMN TABLE com_sap_developers_ims_DevtoberfestConfig (
+  ID NVARCHAR(36) NOT NULL,
+  currentEvent_ID NVARCHAR(36),
+  termsText NCLOB,
+  termsVersion INTEGER DEFAULT 1,
+  contentRulesUrl NVARCHAR(500),
+  faqUrl NVARCHAR(500),
+  gameboardUrl NVARCHAR(500),
+  activitiesUrl NVARCHAR(500),
+  PRIMARY KEY(ID)
+)

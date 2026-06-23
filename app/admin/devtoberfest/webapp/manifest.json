@@ -1,0 +1,47 @@
+{
+  "_version": "1.59.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.devtoberfest",
+    "type": "application",
+    "title": "Devtoberfest",
+    "applicationVersion": { "version": "0.0.1" },
+    "dataSources": {
+      "mainService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    }
+  },
+  "sap.ui5": {
+    "rootView": {
+      "viewName": "sap.tutorials.admin.devtoberfest.view.Devtoberfest",
+      "type": "XML",
+      "id": "appView"
+    },
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": {
+        "sap.m": {},
+        "sap.ui.core": {},
+        "sap.ui.layout": {},
+        "sap.fe.core": {}
+      }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      },
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": { "bundleName": "sap.tutorials.admin.devtoberfest.i18n.i18n" }
+      }
+    }
+  }
+}

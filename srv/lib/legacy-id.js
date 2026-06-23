@@ -11,7 +11,8 @@ const VALID_ENTITIES = new Set([
   'TutorialMeta', 'TutorialContributors', 'TutorialRepositories',
   'StepFailures', 'NGDSFailedMessages', 'ImsConfig',
   'PrimaryAccounts', 'SecondaryAccounts',
-  'PrivacyProtectionActions', 'FeaturedTasks'
+  'PrivacyProtectionActions', 'FeaturedTasks',
+  'EventRegistrations'
 ]);
 
 let counters = {};

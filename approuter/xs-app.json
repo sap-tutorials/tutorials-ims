@@ -87,6 +87,26 @@
       "csrfProtection": false
     },
     {
+      "source": "^/api/devtoberfest/(status|terms)$",
+      "target": "/api/devtoberfest/$1",
+      "destination": "srv-api",
+      "authenticationType": "none",
+      "csrfProtection": false
+    },
+    {
+      "source": "^/api/devtoberfest/(join|me)$",
+      "target": "/api/devtoberfest/$1",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa",
+      "csrfProtection": false
+    },
+    {
+      "source": "^/devtoberfest(/.*)?$",
+      "target": "/devtoberfest$1",
+      "localDir": "static",
+      "authenticationType": "none"
+    },
+    {
       "source": "^/admin/exports/(.*)$",
       "target": "/admin/exports/$1",
       "destination": "srv-api",

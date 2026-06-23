@@ -1,0 +1,538 @@
+/* Devtoberfest homepage island styles.
+ * Uses Horizon tokens for base theme + explicit Joule gradient (#0070f2 → #7858ff)
+ * for the brand accent. CRT scanline overlay + arcade strip in monospace
+ * deliver the retro-arcade vibe per spec §7. */
+
+.dtf-home {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1rem;
+  color: var(--sapTextColor, #1d2d3e);
+  font-family: var(--sapFontFamily, "72", "72full", Arial, sans-serif);
+}
+
+/* ----------------------------- Header ----------------------------- */
+
+.dtf-header {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding: 1.5rem 1.75rem;
+  border-radius: 12px;
+  color: #fff;
+  background: linear-gradient(135deg, #0070f2 0%, #7858ff 100%);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* CRT scanline overlay */
+.dtf-header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.06) 0,
+    rgba(255, 255, 255, 0.06) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  mix-blend-mode: overlay;
+  z-index: 0;
+}
+
+.dtf-brand,
+.dtf-cta-wrap {
+  position: relative;
+  z-index: 1;
+}
+
+.dtf-brand {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.dtf-brand-logo {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+.dtf-brand-teched {
+  width: 64px;
+  height: auto;
+  flex: none;
+  opacity: 0.92;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+.dtf-brand-text {
+  min-width: 0;
+}
+
+.dtf-brand-title {
+  margin: 0;
+  font-size: 1.75rem;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+  font-weight: 700;
+}
+
+.dtf-brand-window {
+  margin: 0.15rem 0 0;
+  font-size: 0.9rem;
+  opacity: 0.92;
+  font-variant-numeric: tabular-nums;
+}
+
+/* CTA */
+
+.dtf-cta-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.dtf-cta {
+  appearance: none;
+  border: 0;
+  background: #fff;
+  color: #0a4ea8;
+  font-weight: 600;
+  font-size: 1rem;
+  line-height: 1.2;
+  padding: 0.7rem 1.4rem;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  transition: transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+}
+
+.dtf-cta:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+}
+
+.dtf-cta:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.dtf-cta:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.dtf-home[data-state="registered"] .dtf-cta {
+  background: #1ea672;
+  color: #fff;
+}
+
+.dtf-cta-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  background: rgba(0, 0, 0, 0.18);
+  color: #fff;
+  padding: 0.3rem 0.55rem;
+  border-radius: 6px;
+  max-width: 18rem;
+  text-align: right;
+}
+
+/* --------------------------- Arcade strip --------------------------- */
+
+.dtf-arcade-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.85rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sapNeutralColor, #6a6d70);
+  border-top: 1px dashed var(--sapPageHeader_BorderColor, #d5dadc);
+  border-bottom: 1px dashed var(--sapPageHeader_BorderColor, #d5dadc);
+}
+
+.dtf-arcade-chunk {
+  display: inline-block;
+}
+
+/* ------------------------------- Body ------------------------------- */
+
+.dtf-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px;
+  gap: 1.5rem;
+}
+
+@media (max-width: 720px) {
+  .dtf-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dtf-content {
+  background: var(--sapBackgroundColor, #fff);
+  border: 1px solid var(--sapTile_BorderColor, #e4e7ea);
+  border-radius: 10px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.dtf-welcome {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.dtf-msg {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--sapTextColor, #1d2d3e);
+}
+
+.dtf-kasimir {
+  width: 160px;
+  height: auto;
+  align-self: flex-end;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.12));
+}
+
+/* -------------------------------- Rail ------------------------------- */
+
+.dtf-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.dtf-rail-item {
+  --rail-colors: #0070f2, #7858ff, #1ea672, #f5a623;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem 0.85rem;
+  background: var(--sapBackgroundColor, #fff);
+  border: 1px solid var(--sapTile_BorderColor, #e4e7ea);
+  border-left: 4px solid var(--rail-color, #0070f2);
+  border-radius: 8px;
+  color: var(--sapLinkColor, #0a6ed1);
+  text-decoration: none;
+  font-size: 0.95rem;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.dtf-rail-item:nth-child(1) { --rail-color: #0070f2; }
+.dtf-rail-item:nth-child(2) { --rail-color: #7858ff; }
+.dtf-rail-item:nth-child(3) { --rail-color: #1ea672; }
+.dtf-rail-item:nth-child(4) { --rail-color: #f5a623; }
+
+.dtf-rail-item:hover {
+  transform: translateX(2px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.dtf-rail-item:focus-visible {
+  outline: 2px solid var(--sapContent_FocusColor, #0070f2);
+  outline-offset: 2px;
+}
+
+.dtf-rail-label {
+  font-weight: 500;
+}
+
+/* ----------------------------- Error state ----------------------------- */
+
+.dtf-error {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--sapErrorBackground, #ffeaea);
+  border-left: 3px solid var(--sapNegativeColor, #aa0808);
+  border-radius: 0 4px 4px 0;
+  font-size: 0.875rem;
+  color: var(--sapTextColor);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.dtf-error-retry {
+  padding: 0.25rem 0.75rem;
+  background: var(--sapButton_Background, #fff);
+  color: var(--sapButton_TextColor, var(--sapNegativeColor, #aa0808));
+  border: 1px solid var(--sapNegativeColor, #aa0808);
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+.dtf-error-retry:hover { background: var(--sapButton_Hover_Background, #f9f9f9); }
+
+/* ----------------------------- Dark mode ----------------------------- */
+
+@media (prefers-color-scheme: dark) {
+  .dtf-header {
+    background: linear-gradient(135deg, #1b90ff 0%, #9d83ff 100%);
+  }
+  .dtf-content {
+    background: var(--sapBackgroundColor, #1c2228);
+    border-color: var(--sapTile_BorderColor, #3a4149);
+  }
+  .dtf-rail-item {
+    background: var(--sapBackgroundColor, #1c2228);
+    border-color: var(--sapTile_BorderColor, #3a4149);
+  }
+}
+
+html[data-theme="sap_horizon_dark"] .dtf-header {
+  background: linear-gradient(135deg, #1b90ff 0%, #9d83ff 100%);
+}
+html[data-theme="sap_horizon_dark"] .dtf-content,
+html[data-theme="sap_horizon_dark"] .dtf-rail-item {
+  background: #1c2228;
+  border-color: #3a4149;
+}
+
+/* ============================== T&C Dialog ============================== */
+
+.dtf-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.dtf-dialog {
+  background: var(--sapBackgroundColor, #fff);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 640px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.dtf-dialog-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  color: #fff;
+  background: linear-gradient(135deg, #0070f2 0%, #7858ff 100%);
+}
+
+html[data-theme="sap_horizon_dark"] .dtf-dialog-header {
+  background: linear-gradient(135deg, #1b90ff 0%, #9d83ff 100%);
+}
+
+@media (prefers-color-scheme: dark) {
+  .dtf-dialog-header {
+    background: linear-gradient(135deg, #1b90ff 0%, #9d83ff 100%);
+  }
+}
+
+.dtf-dialog-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.dtf-dialog-kasimir {
+  width: 48px;
+  height: 48px;
+  flex: none;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.25));
+}
+
+.dtf-dialog-eyebrow {
+  margin: 0;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.dtf-dialog-title {
+  margin: 0.15rem 0 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.dtf-dialog-version {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  flex: none;
+}
+
+.dtf-dialog-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.25rem;
+  background: var(--sapBackgroundColor, #fff);
+}
+
+.dtf-dialog-msg {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--sapTextColor, #1d2d3e);
+}
+
+.dtf-dialog-error {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--sapNegativeColor, #aa0808);
+}
+
+.dtf-dialog-retry {
+  padding: 0.25rem 0.75rem;
+  background: var(--sapButton_Background, #fff);
+  color: var(--sapNegativeColor, #aa0808);
+  border: 1px solid var(--sapNegativeColor, #aa0808);
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.dtf-dialog-markdown {
+  margin: 0;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  color: var(--sapTextColor, #1d2d3e);
+}
+
+.dtf-dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1.25rem;
+  border-top: 1px solid var(--sapTile_BorderColor, #e4e7ea);
+  background: var(--sapBackgroundColor, #fff);
+}
+
+.dtf-dialog-progress {
+  position: relative;
+  width: 80px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--sapTile_BorderColor, #e4e7ea);
+  overflow: hidden;
+  flex: none;
+}
+
+.dtf-dialog-progress::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--dtf-progress, 0%);
+  background: linear-gradient(90deg, #0070f2 0%, #7858ff 100%);
+  border-radius: 3px;
+  transition: width 120ms ease;
+}
+
+.dtf-dialog-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.dtf-dialog-cancel,
+.dtf-dialog-accept {
+  appearance: none;
+  border: 0;
+  font-weight: 600;
+  font-size: 0.9rem;
+  line-height: 1.2;
+  padding: 0.55rem 1.1rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease, opacity 120ms ease;
+}
+
+.dtf-dialog-cancel {
+  background: transparent;
+  color: var(--sapTextColor, #1d2d3e);
+  border: 1px solid var(--sapTile_BorderColor, #d5dadc);
+}
+
+.dtf-dialog-cancel:hover:not(:disabled) {
+  background: var(--sapButton_Hover_Background, #f5f6f7);
+}
+
+.dtf-dialog-accept {
+  background: linear-gradient(135deg, #0070f2 0%, #7858ff 100%);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 112, 242, 0.3);
+}
+
+.dtf-dialog-accept:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 112, 242, 0.4);
+}
+
+.dtf-dialog-accept:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  box-shadow: none;
+}
+
+.dtf-dialog-cancel:focus-visible,
+.dtf-dialog-accept:focus-visible {
+  outline: 2px solid var(--sapContent_FocusColor, #0070f2);
+  outline-offset: 2px;
+}
+
+html[data-theme="sap_horizon_dark"] .dtf-dialog,
+html[data-theme="sap_horizon_dark"] .dtf-dialog-body,
+html[data-theme="sap_horizon_dark"] .dtf-dialog-footer {
+  background: #1c2228;
+  color: #eaecee;
+}
+
+html[data-theme="sap_horizon_dark"] .dtf-dialog-footer {
+  border-top-color: #3a4149;
+}
+
+html[data-theme="sap_horizon_dark"] .dtf-dialog-cancel {
+  color: #eaecee;
+  border-color: #3a4149;
+}

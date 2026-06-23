@@ -15,6 +15,7 @@ import * as advocateHandlers from './handlers/advocate-handlers.js';
 import { classifySeverity, daysUntil } from './jobs/secret-expiry-check.js';
 import { readSecret, writeSecret, deleteSecret } from './lib/credstore.js';
 import { cleanupChangeLog } from './jobs/cleanup.js';
+import { ensureDevtoberfestConfigSingleton } from './lib/devtoberfest-singleton.js';
 import { randomBytes } from 'node:crypto';
 
 export default class AdminService extends cds.ApplicationService {
@@ -116,6 +117,14 @@ export default class AdminService extends cds.ApplicationService {
       }
     });
 
+    // Ensure singleton row exists for DevtoberfestConfig. Shared with
+    // the public route at /api/devtoberfest/status — both call
+    // ensureDevtoberfestConfigSingleton() so the UUID + init logic
+    // have one source of truth (srv/lib/devtoberfest-singleton.js).
+    this.before('READ', 'DevtoberfestConfig', async () => {
+      await ensureDevtoberfestConfigSingleton();
+    });
+
     // Auto-assign legacyId on creation for entities that need it
     const legacyKeyedEntities = [
       'Users', 'Tutorials', 'Missions', 'Groups', 'Events', 'TaskRecords',
@@ -123,7 +132,7 @@ export default class AdminService extends cds.ApplicationService {
       'PrizeRecords', 'TutorialMeta', 'TutorialContributors', 'TutorialRepositories',
       'FeaturedTasks', 'PrimaryAccounts', 'SecondaryAccounts', 'PrivacyProtectionActions',
       'CompletionPaths', 'CompletionPathItems',
-      'GroupPathItems'
+      'GroupPathItems', 'EventRegistrations'
     ];
     for (const entity of legacyKeyedEntities) {
       this.before('CREATE', entity, async (req) => {

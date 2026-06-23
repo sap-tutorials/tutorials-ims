@@ -40,3 +40,5 @@ annotate ims.ChatSettings with @cds.persistence.journal;
 annotate ims.GroupSlugRedirects with @cds.persistence.journal;
 annotate ims.MissionSlugRedirects with @cds.persistence.journal;
 annotate ims.UIEvent with @cds.persistence.journal;
+annotate ims.DevtoberfestConfig with @cds.persistence.journal;
+annotate ims.EventRegistrations with @cds.persistence.journal;
