@@ -153,6 +153,7 @@ export default defineConfig({
           { text: 'Re-migration runbook',      link: '/developers/operations/re-migration-runbook' },
           { text: 'Runtime config',            link: '/developers/operations/runtime-config' },
           { text: 'Secrets tracking',          link: '/developers/operations/secrets-tracking' },
+          { text: 'SMTP credentials rotation', link: '/developers/operations/smtp-credentials-rotation' },
           { text: 'Testing endpoints',         link: '/developers/operations/testing-endpoints' },
           { text: 'Testing guide',             link: '/developers/operations/testing-guide' },
           { text: 'Tutorial markdown lint',    link: '/developers/operations/tutorial-markdown-lint' }
