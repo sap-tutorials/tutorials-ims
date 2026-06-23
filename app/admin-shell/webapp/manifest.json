@@ -266,7 +266,7 @@
         { "name": "accounts", "pattern": "accounts", "target": [{"name": "accountsTarget", "prefix": "au"}] },
         { "name": "changelog", "pattern": "changelog", "target": [{"name": "changelogTarget", "prefix": "cl"}] },
         { "name": "privacyAudit", "pattern": "privacy-audit", "target": [{"name": "privacyAuditTarget", "prefix": "pa"}] },
-        { "pattern": "devtoberfest", "name": "devtoberfest", "target": "devtoberfest" },
+        { "name": "devtoberfest", "pattern": "devtoberfest", "target": [{"name": "devtoberfestTarget", "prefix": "dt"}] },
         { "name": "analytics", "pattern": "analytics", "target": [{"name": "analyticsTarget", "prefix": "an"}] },
         { "name": "joule", "pattern": "joule", "target": [{"name": "jouleSettingsTarget", "prefix": "jo"}] },
         { "name": "knowledgeGraph", "pattern": "knowledgeGraph", "target": [{"name": "knowledgeGraphSettingsTarget", "prefix": "kg"}] },
@@ -383,11 +383,12 @@
           "viewLevel": 1,
           "prefix": "pa"
         },
-        "devtoberfest": {
+        "devtoberfestTarget": {
           "type": "Component",
           "usage": "devtoberfest",
           "id": "devtoberfestTarget",
-          "controlAggregation": "to"
+          "viewLevel": 1,
+          "prefix": "dt"
         },
         "analyticsTarget": {
           "type": "Component",
