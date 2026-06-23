@@ -222,6 +222,13 @@ async function markDone(btn: HTMLButtonElement) {
   const slug = document.querySelector('#progress-bar')?.getAttribute('data-slug')
   if (!slug) return
 
+  // Belt-and-suspenders for the code-check hard gate. The button's `disabled`
+  // state is the primary defence (set by initCodeCheckDoneGate), but a stale
+  // event handler or a console-driven click could slip through. Re-check the
+  // gate class right before we POST so we never persist a "done" for a step
+  // whose code-check the reader has not passed.
+  if (btn.classList.contains('is-codecheck-gated')) return
+
   btn.disabled = true
   btn.textContent = 'Saving...'
   const ok = await apiPost(`/completeStep`, { slug, stepNumber: parseInt(stepNum, 10) })
@@ -423,6 +430,48 @@ function initDoneButtonGate() {
   })
 }
 
+// --- Done-button code-check gate (hard gate, issue surfaced 2026-06-23) ---
+// Steps that opted into AI code-check (rendered via codecheck-mount.html) get
+// their Done button disabled until the reader posts a submission and the
+// grader returns verdict === 'pass'. Mirrors initDoneButtonGate() above but
+// uses the rendered `.step-codecheck-mount` div as the per-step signal (no
+// reliance on tutorial-data) and the `tutorial:codecheck-verdict` event
+// dispatched by hugo-apps/src/code-check/CodeCheck.vue on every submission.
+function initCodeCheckDoneGate() {
+  const mounts = document.querySelectorAll<HTMLElement>('.step-codecheck-mount')
+  if (mounts.length === 0) return
+
+  const gatedSteps = new Set<number>()
+  for (const mount of mounts) {
+    const stepNum = parseInt(mount.dataset.step || '0', 10)
+    if (!stepNum) continue
+    gatedSteps.add(stepNum)
+    const doneBtn = document.querySelector(
+      `button[data-action="mark-done"][data-step="${stepNum}"]`
+    ) as HTMLButtonElement | null
+    if (doneBtn) {
+      doneBtn.disabled = true
+      doneBtn.title = 'Pass the code-check to mark this step done'
+      doneBtn.classList.add('is-codecheck-gated')
+    }
+  }
+
+  document.addEventListener('tutorial:codecheck-verdict', (e) => {
+    const detail = (e as CustomEvent<{ stepNumber: number; verdict: string }>).detail
+    if (!detail || typeof detail.stepNumber !== 'number') return
+    if (!gatedSteps.has(detail.stepNumber)) return
+    if (detail.verdict !== 'pass') return
+    const doneBtn = document.querySelector(
+      `button[data-action="mark-done"][data-step="${detail.stepNumber}"]`
+    ) as HTMLButtonElement | null
+    if (doneBtn) {
+      doneBtn.disabled = false
+      doneBtn.title = ''
+      doneBtn.classList.remove('is-codecheck-gated')
+    }
+  })
+}
+
 // --- Init on DOMContentLoaded ---
 document.addEventListener('DOMContentLoaded', () => {
   initProgressBar()
@@ -434,6 +483,7 @@ document.addEventListener('DOMContentLoaded', () => {
     new Promise<void>((resolve) => setTimeout(() => { markHydrated(); resolve() }, 1500)),
   ])
   initDoneButtonGate()
+  initCodeCheckDoneGate()
   updateActiveTocItem()
   initAuthAwareButtons()
   initStepHashNavigation()
