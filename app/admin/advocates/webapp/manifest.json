@@ -83,13 +83,13 @@
                     "uploadPhoto": {
                       "press": "sap.tutorials.admin.advocates.ext.AdvocatePhotoController.onUploadPhotoPress",
                       "visible": true,
-                      "enabled": true,
+                      "enabled": "{= ${IsActiveEntity} === true }",
                       "text": "Upload Photo"
                     },
                     "clearPhoto": {
                       "press": "sap.tutorials.admin.advocates.ext.AdvocatePhotoController.onClearPhotoPress",
                       "visible": "{= !!${hasPhoto} }",
-                      "enabled": true,
+                      "enabled": "{= ${IsActiveEntity} === true }",
                       "text": "Clear Photo"
                     }
                   }
