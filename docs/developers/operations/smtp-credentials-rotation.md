@@ -106,7 +106,7 @@ tutorials-srv SMTP_PASS <value> && cf restart tutorials-srv`. Remove the env var
 once credstore is back: `cf unset-env tutorials-srv SMTP_PASS && cf restart`.
 The credstore value resumes precedence within 5 minutes.
 
-> **Memory caveat:** [feedback_cf_set_env_drops_on_redeploy](../../../C:\Users\I809764\.claude\projects\d--projects-tutorials-poc\memory\feedback_cf_set_env_drops_on_redeploy.md) — `cf set-env` values do NOT survive the next MTA redeploy. Use this only as a short-term emergency override.
+> **Caveat:** `cf set-env` values do NOT survive the next MTA redeploy. Use this only as a short-term emergency override.
 
 ## Related runbooks
 
