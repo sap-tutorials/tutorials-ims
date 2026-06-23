@@ -13,6 +13,27 @@ describe.skipIf(!BASE)('GET /developer-advocates/', () => {
     // attribute quotes when the value contains no special characters).
     expect(html).toMatch(/<main[^>]+id=["']?advocates-mount["']?/);
     expect(html).toMatch(/src=["']?[^"']*\/js\/advocates\.js["']?/);
+
+    // Joule advocates wiring (issue #564).
+    // 1. Hugo emits data-page-kind="advocates" on this page (baseof.html).
+    //    Tolerant of Hugo minifier's quote-stripping.
+    expect(html).toMatch(/data-page-kind=["']?advocates["']?/);
+    // 2. The joule-starters JSON literal contains an "advocates" key.
+    //    JSON string keys are NOT touched by the HTML minifier — quotes
+    //    stay literal inside the <script type="application/json"> block.
+    expect(html).toMatch(/<script[^>]+id=["']?joule-starters["']?[^>]*>[\s\S]*?"advocates"\s*:/);
+  });
+});
+
+describe.skipIf(!BASE)('GET /js/advocates.js bundle', () => {
+  it('contains the __JOULE_ADVOCATES handoff string', async () => {
+    // Regression guard: if a future refactor of App.vue drops the
+    // window.__JOULE_ADVOCATES publish, /developer-advocates/ still
+    // renders fine but Joule loses its grounding. Smoke catches it.
+    const res = await fetch(BASE + '/js/advocates.js');
+    expect(res.status).toBe(200);
+    const js = await res.text();
+    expect(js).toContain('__JOULE_ADVOCATES');
   });
 });
 
