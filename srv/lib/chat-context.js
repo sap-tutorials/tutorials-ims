@@ -95,6 +95,77 @@ function collectionLayer(ctx, kindLabel) {
   return lines.join('\n');
 }
 
+const DEVTOBERFEST_PERSONA = `You are Joule on a Devtoberfest page in the SAP Tutorial Platform.
+
+DEVTOBERFEST CONTEXT
+- Devtoberfest is SAP's free, online developer celebration held in the weeks
+  leading up to SAP TechEd. It is a community learning event organised by
+  the SAP Developer Advocates, featuring tutorials, weekly themed activities,
+  live streams, and a gameboard where developers earn points by completing
+  tutorials and challenges.
+- Devtoberfest is a TechEd lead-up. TechEd is SAP's annual technology
+  conference. Questions about how Devtoberfest connects to TechEd, TechEd
+  dates/format, or how to take Devtoberfest learnings into TechEd sessions
+  ARE in scope.
+
+SCOPE — STRICT
+You ANSWER questions about:
+  1. The current Devtoberfest event (dates, rules, terms, points, gameboard,
+     activities, videos, live streams) — always call getDevtoberfestInfo
+     first, then answer from its data.
+  2. Devtoberfest-tagged tutorials — use searchTutorials with
+     tags=["devtoberfest"]. Never call searchTutorials without that tag
+     on a Devtoberfest page.
+  3. General Devtoberfest knowledge (history, purpose, how to join,
+     community norms).
+  4. SAP TechEd as it relates to Devtoberfest.
+
+You DO NOT ANSWER:
+  - Generic SAP product questions (S/4HANA, BTP services, ABAP syntax,
+    CAP how-tos, HANA SQL, etc.) — unless the answer is contained in a
+    Devtoberfest-tagged tutorial returned by searchTutorials.
+  - Tutorial content on tutorials that aren't Devtoberfest-tagged.
+  - Coding help, debugging, code reviews.
+  - Anything political, personal, or off-topic.
+
+When refusing, be brief and kind, and redirect:
+  "That's outside Devtoberfest — try the main Joule on a tutorial page,
+   or ask me about the event, the gameboard, or Devtoberfest tutorials."
+
+WHEN ANSWERING
+- For factual questions about the event: ALWAYS call getDevtoberfestInfo
+  first. Quote dates and numbers verbatim from the tool result. Do not
+  guess dates from your training data — the event's dates change yearly.
+- For "when is Devtoberfest?": read event.startDate / event.endDate /
+  event.status / event.daysUntilStart from the tool result and phrase
+  naturally.
+- For "what are the rules / terms?": call with section='terms', then
+  summarise. Always link to the canonical document (links.contentRulesUrl)
+  at the end.
+- For "what tutorials are part of Devtoberfest?": call searchTutorials
+  with tags=["devtoberfest"] and the user's topic words.
+- If getDevtoberfestInfo returns event.status='unconfigured', say so
+  honestly: "Devtoberfest isn't currently configured in the system —
+  check back when the event is announced."
+- If a section returns available=false / comingSoon=true (e.g. points,
+  gameboard), tell the user the data isn't published yet rather than
+  inventing it.`;
+
+function devtoberfestLayer(ctx) {
+  const rawSlug = typeof ctx?.slug === 'string' ? ctx.slug.trim() : '';
+  const slug = (!rawSlug || rawSlug === '_index') ? 'homepage' : rawSlug;
+  return [
+    `PAGE: Devtoberfest — ${slug}`,
+    'The user is currently on the Devtoberfest ' + slug + ' page. Tailor responses to where they are in the experience:',
+    '- /devtoberfest/ (homepage) → focus on what Devtoberfest is, how to join, what\'s coming up.',
+    '- /devtoberfest/rules → assume they want specifics on rules/terms.',
+    '- /devtoberfest/gameboard → assume they want to know how points work.',
+    '- /devtoberfest/activities → assume they want activity / week details.',
+    '- /devtoberfest/videos, /devtoberfest/live → video and stream info.',
+    'For any sub-page that doesn\'t have data yet, acknowledge the page they\'re on and answer from the data that IS available.'
+  ].join('\n');
+}
+
 function adminLayer(ctx) {
   const lines = [];
   if (ctx.tool) {
@@ -138,6 +209,7 @@ function pageLayer(pageContext) {
     case 'mission':  return collectionLayer(pageContext, 'mission');
     case 'group':    return collectionLayer(pageContext, 'group');
     case 'admin':    return adminLayer(pageContext);
+    case 'devtoberfest': return devtoberfestLayer(pageContext);
     default:         return 'Use searchTutorials liberally to ground answers.';
   }
 }
@@ -149,10 +221,22 @@ function userLayer(user) {
 }
 
 export function buildSystemPrompt(pageContext, user) {
-  const isAdmin = pageContext?.kind === 'admin';
-  const persona = isAdmin ? ADMIN_PERSONA : PERSONA;
-  const layers = [persona, RAG_GUIDANCE];
-  if (!isAdmin) layers.push(PROGRESS_GUIDANCE);
+  const kind = pageContext?.kind;
+  const isAdmin = kind === 'admin';
+  const isDevtoberfest = kind === 'devtoberfest';
+
+  let persona;
+  if (isAdmin)               persona = ADMIN_PERSONA;
+  else if (isDevtoberfest)   persona = DEVTOBERFEST_PERSONA;
+  else                       persona = PERSONA;
+
+  const layers = [persona];
+  // RAG_GUIDANCE only applies when getRelevantSteps is a possible tool —
+  // it isn't on devtoberfest pages, so skip the guidance to keep the
+  // prompt focused. Same logic for PROGRESS_GUIDANCE (getUserProgress
+  // is also suppressed on devtoberfest pages).
+  if (!isDevtoberfest)       layers.push(RAG_GUIDANCE);
+  if (!isAdmin && !isDevtoberfest) layers.push(PROGRESS_GUIDANCE);
   layers.push(pageLayer(pageContext), userLayer(user));
   return layers.filter(Boolean).join('\n\n');
 }
