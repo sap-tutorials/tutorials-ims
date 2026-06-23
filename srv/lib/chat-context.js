@@ -48,6 +48,37 @@ Apply these rules to recommendations and search results:
 3. The searchTutorials tool annotates each hit with userStatus ('new' | 'in-progress' | 'completed'). Filter or downrank 'completed', boost 'in-progress', and prefer 'new' for fresh recommendations.
 4. If getUserProgress returns empty arrays the user is anonymous or has no history — suggest beginner content rather than asking them to log in.`;
 
+const ADVOCATES_PERSONA = `You are Joule, embedded on the SAP Developer Advocates page. Your scope is the developer advocates roster shown to
+the user (the JSON list below), the SAP topics those advocates cover,
+and the SAP tutorial content available on this platform.
+
+You can answer three kinds of question:
+  1. Who specializes in X / who works in region Y — answer from the
+     roster below. Cite the advocate's name and region. Mention their
+     topics and direct the user to their social links on the page.
+  2. Tell me about <named advocate> — answer verbatim from the roster
+     below. Do not invent bios, regions, links, or facts.
+  3. What tutorials cover X — call searchTutorials. Cite 1-3 tutorials
+     by slug. If any advocate's topics intersect the user's topic,
+     also name them with a one-line "for deeper questions, X covers
+     this area" bridge.
+
+When the question is about an SAP topic, answer ONLY from tutorial
+content via searchTutorials. Do NOT volunteer general SAP knowledge
+from your training data. If searchTutorials returns nothing relevant,
+say so and suggest the user reach out to a relevant advocate or
+explore /tutorials/ for the full catalog.
+
+For unrelated questions (weather, poetry, anything outside SAP and
+our advocates), redirect: "I can help with our developer advocates,
+the SAP topics they cover, and tutorials on this platform. Want me
+to find something in those areas?"
+
+Never invent advocate names, regions, or links — use ONLY the roster
+below. Never invent tutorial slugs.`;
+
+const MAX_ROSTER_ENTRIES = 50;
+
 const STEP_TEXT_BUDGET = 4000;
 
 function tutorialLayer(ctx) {
@@ -202,15 +233,52 @@ function adminLayer(ctx) {
   return lines.join('\n');
 }
 
+function advocatesLayer(ctx) {
+  const raw = Array.isArray(ctx?.advocates) ? ctx.advocates : [];
+  const advocates = raw.slice(0, MAX_ROSTER_ENTRIES);
+  if (!advocates.length) {
+    return [
+      'Current page: Developer Advocates roster.',
+      'The advocates list has not loaded yet on the user side.',
+      'For tutorial-content questions, call searchTutorials. For roster',
+      'questions, ask the user to wait a moment and retry.'
+    ].join('\n');
+  }
+  const lines = ['Current page: Developer Advocates roster.', ''];
+  lines.push('Roster (use ONLY these names and facts):');
+  for (const a of advocates) {
+    const topics = Array.isArray(a.topics) && a.topics.length
+      ? a.topics.map(t => t.label || t.slug).join(', ') : '—';
+    const links = Array.isArray(a.links) && a.links.length
+      ? a.links.map(l => l.kind).join(', ') : '—';
+    lines.push(`- ${a.firstName} ${a.lastName} (${a.region})`);
+    if (a.title)    lines.push(`    title: ${a.title}`);
+    if (a.location) lines.push(`    location: ${a.location}`);
+    if (a.bio)      lines.push(`    bio: ${a.bio}`);
+    lines.push(`    topics: ${topics}`);
+    lines.push(`    links available: ${links}`);
+  }
+  if (raw.length > MAX_ROSTER_ENTRIES) {
+    lines.push(`(${raw.length - MAX_ROSTER_ENTRIES} additional advocates not shown.)`);
+  }
+  lines.push('');
+  lines.push(
+    'When a tutorial topic the user asks about matches an advocate topic above,',
+    'bridge: "For deeper questions, <Name> covers <topic> — see their profile."'
+  );
+  return lines.join('\n');
+}
+
 function pageLayer(pageContext) {
   switch (pageContext?.kind) {
-    case 'tutorial': return tutorialLayer(pageContext);
-    case 'search':   return searchLayer(pageContext);
-    case 'mission':  return collectionLayer(pageContext, 'mission');
-    case 'group':    return collectionLayer(pageContext, 'group');
-    case 'admin':    return adminLayer(pageContext);
+    case 'tutorial':     return tutorialLayer(pageContext);
+    case 'search':       return searchLayer(pageContext);
+    case 'mission':      return collectionLayer(pageContext, 'mission');
+    case 'group':        return collectionLayer(pageContext, 'group');
+    case 'admin':        return adminLayer(pageContext);
+    case 'advocates':    return advocatesLayer(pageContext);
     case 'devtoberfest': return devtoberfestLayer(pageContext);
-    default:         return 'Use searchTutorials liberally to ground answers.';
+    default:             return 'Use searchTutorials liberally to ground answers.';
   }
 }
 
@@ -224,19 +292,26 @@ export function buildSystemPrompt(pageContext, user) {
   const kind = pageContext?.kind;
   const isAdmin = kind === 'admin';
   const isDevtoberfest = kind === 'devtoberfest';
+  const isAdvocates = kind === 'advocates';
 
   let persona;
-  if (isAdmin)               persona = ADMIN_PERSONA;
-  else if (isDevtoberfest)   persona = DEVTOBERFEST_PERSONA;
-  else                       persona = PERSONA;
+  if (isAdmin)             persona = ADMIN_PERSONA;
+  else if (isDevtoberfest) persona = DEVTOBERFEST_PERSONA;
+  else if (isAdvocates)    persona = ADVOCATES_PERSONA;
+  else                     persona = PERSONA;
 
+  // Layer ordering:
+  //   admin        -> [ADMIN_PERSONA,        RAG_GUIDANCE,                 adminLayer,        userLayer]
+  //   devtoberfest -> [DEVTOBERFEST_PERSONA,                               devtoberfestLayer, userLayer]
+  //   advocates    -> [ADVOCATES_PERSONA,                                  advocatesLayer,    userLayer]
+  //   learner      -> [PERSONA,              RAG_GUIDANCE, PROGRESS_GUIDANCE, pageLayer,      userLayer]
+  // RAG_GUIDANCE is skipped on devtoberfest + advocates because their tool
+  // sets don't include getRelevantSteps. PROGRESS_GUIDANCE is skipped on
+  // admin + devtoberfest + advocates — none of those kinds register the
+  // getUserProgress tool, so the guidance would dangle.
   const layers = [persona];
-  // RAG_GUIDANCE only applies when getRelevantSteps is a possible tool —
-  // it isn't on devtoberfest pages, so skip the guidance to keep the
-  // prompt focused. Same logic for PROGRESS_GUIDANCE (getUserProgress
-  // is also suppressed on devtoberfest pages).
-  if (!isDevtoberfest)       layers.push(RAG_GUIDANCE);
-  if (!isAdmin && !isDevtoberfest) layers.push(PROGRESS_GUIDANCE);
+  if (!isDevtoberfest && !isAdvocates) layers.push(RAG_GUIDANCE);
+  if (!isAdmin && !isDevtoberfest && !isAdvocates) layers.push(PROGRESS_GUIDANCE);
   layers.push(pageLayer(pageContext), userLayer(user));
   return layers.filter(Boolean).join('\n\n');
 }

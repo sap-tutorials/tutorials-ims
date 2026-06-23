@@ -13,6 +13,13 @@ describe('validate-answer prompt builder', () => {
     expect(PROMPT_VERSION.length).toBeGreaterThan(0);
   });
 
+  it('PROMPT_VERSION reflects the v2 semantics change (hint required on fail too)', () => {
+    // Bumped 2026-06-23: hint is REQUIRED on partial AND fail (was: partial only).
+    // Telemetry that aggregates submissions by promptVersion can distinguish
+    // pre/post-change verdict distributions to detect regression.
+    expect(PROMPT_VERSION).toBe('v2');
+  });
+
   it('system prompt mentions verdict scale + DO-NOT-QUOTE rule', () => {
     const sys = buildSystemPrompt();
     expect(sys).toMatch(/\bpass\b/i);
@@ -20,6 +27,28 @@ describe('validate-answer prompt builder', () => {
     expect(sys).toMatch(/\bfail\b/i);
     expect(sys).toMatch(/NEVER reveal/i);
     expect(sys).toMatch(/JSON/i);
+  });
+
+  it('system prompt requires hint on partial AND fail (v2 semantics)', () => {
+    // The v1 prompt said "hint: Populate ONLY for partial. Empty/omitted on
+    // pass and fail." The v2 prompt says "REQUIRED on partial AND fail" so
+    // the model surfaces a no-spoiler hint that gives the learner a path
+    // forward, rather than a bare "Not quite — try again" with no guidance.
+    const sys = buildSystemPrompt();
+    expect(sys).toMatch(/REQUIRED on\s+partial AND fail/i);
+    // The no-spoiler constraint must still survive — without it the v2
+    // relaxation could leak the expected answer on fail.
+    expect(sys).toMatch(/WITHOUT revealing the expected\s+answer/i);
+  });
+
+  it('system prompt prefers PARTIAL over fail on compound questions (v2)', () => {
+    // The v1 default "prefer fail" was too strict for multi-part questions
+    // like "explain X AND describe how Y" — a learner who explained X but
+    // not Y got 'fail' with no hint, no path forward. v2 explicitly favors
+    // partial-with-hint when SOME of the question is satisfied.
+    const sys = buildSystemPrompt();
+    expect(sys).toMatch(/prefer PARTIAL/i);
+    expect(sys).toMatch(/compound questions/i);
   });
 
   it('user message orders sections deterministically', () => {

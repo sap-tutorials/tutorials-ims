@@ -10,6 +10,10 @@ modules:
       CONTENT_API_KEY: ${CONTENT_API_KEY}
       GITHUB_DISPATCH_TOKEN: ${GITHUB_DISPATCH_TOKEN}
       REBUILD_TARGET_ENV: prod
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_FROM: ${SMTP_FROM}
 
   - name: tutorials-approuter
     parameters:

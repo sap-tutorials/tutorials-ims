@@ -9,7 +9,11 @@
 // in-memory Map<key, number[]> mechanism, same _resetRateLimitForTest()
 // test export. Differences: smaller body cap (5 KB vs 20 KB) and an extra
 // `questionId` body field.
+//
+// Auth: see the matching comment in code-check-handler.js — same bug (req.user
+// vs cds.context.user) fixed here in lockstep (issue surfaced 2026-06-23).
 
+import cds from '@sap/cds';
 import { dispatchValidateAnswer } from './validate-answer-tool.js';
 
 // ---------------------------------------------------------------------------
@@ -99,7 +103,10 @@ export function makeValidateAnswerHandler(deps = {}) {
 
   return async function validateAnswerHandler(req, res) {
     // ── 1. Auth guard (BEFORE body validation: don't reveal field names) ──
-    if (!req.user || req.user.id === 'anonymous') {
+    // Read `cds.context.user` (canonical) with `req.user` fallback so unit
+    // tests that inject a mock `req.user` keep passing without rewiring.
+    const user = cds.context?.user || req.user;
+    if (!user || !user.id || user.id === 'anonymous') {
       return res.status(401).json({ error: 'unauthenticated' });
     }
 
@@ -124,7 +131,7 @@ export function makeValidateAnswerHandler(deps = {}) {
 
     // ── 3. Rate-limit checks ──────────────────────────────────────────────
     const now     = Date.now();
-    const uid     = req.user.id;
+    const uid     = user.id;
     const stepKey = `${uid}|${tutorialSlug.toLowerCase()}|${stepNumber}`;
 
     if (overLimit(userCalls, uid, now, PER_USER_LIMIT)) {
@@ -139,7 +146,7 @@ export function makeValidateAnswerHandler(deps = {}) {
     try {
       verdict = await dispatchValidateAnswer(
         { tutorialSlug, stepNumber, questionId, submittedAnswer },
-        { user: req.user, callModel, loadQuestion }
+        { user, callModel, loadQuestion }
       );
     } catch (err) {
       return res.status(500).json({ error: 'internal' });

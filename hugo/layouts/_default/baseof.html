@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="light" data-api-base="{{ .Site.Params.apiBase }}" data-cap-base="{{ .Site.Params.capBase }}"
-  data-page-kind="{{ if eq (.Params.joule_scope | default "") "devtoberfest" }}devtoberfest{{ else if hasPrefix .RelPermalink "/devtoberfest/" }}devtoberfest{{ else if .IsHome }}search{{ else if eq .Type "tutorials" }}tutorial{{ else if eq .Type "missions" }}mission{{ else if eq .Type "groups" }}group{{ else }}generic{{ end }}"
+  data-page-kind="{{ if eq (.Params.joule_scope | default "") "devtoberfest" }}devtoberfest{{ else if hasPrefix .RelPermalink "/devtoberfest/" }}devtoberfest{{ else if .IsHome }}search{{ else if eq .Type "tutorials" }}tutorial{{ else if eq .Type "missions" }}mission{{ else if eq .Type "groups" }}group{{ else if eq .Type "developer-advocates" }}advocates{{ else }}generic{{ end }}"
   data-page-slug="{{ .Params.slug }}"
   data-page-title="{{ .Title }}"
   data-page-tags="{{ with .Params.tags }}{{ delimit . "," }}{{ end }}"

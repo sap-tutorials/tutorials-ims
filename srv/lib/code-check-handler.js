@@ -4,7 +4,18 @@
 // LLM caller and step-loader are injected at the call site (srv/server.js)
 // so unit tests run without network or HANA, and the closure can never
 // capture a stale null from a module-level variable.
+//
+// Auth: read `cds.context.user`, NOT `req.user`. The CAP June 2024 release
+// note (https://cap.cloud.sap/docs/releases/2024/jun24) clarifies that
+// `express.Request.user` is an internal of certain auth strategies and not
+// public API. The XSUAA JWT strategy used in DEV/PROD only populates
+// `cds.context.user`; it never sets `req.user`. The mocked basic-auth
+// strategy used by `cds watch` and unit tests sets both, which is why the
+// `req.user` shape silently worked locally and 401'd on every real deploy
+// (issue surfaced 2026-06-23). Falls back to `req.user` if `cds.context` is
+// unset so existing unit tests that inject `mockReq({ user })` keep working.
 
+import cds from '@sap/cds';
 import { dispatchCheckCode } from './code-check-tool.js';
 
 // ---------------------------------------------------------------------------
@@ -94,7 +105,10 @@ export function makeCodeCheckHandler(deps = {}) {
 
   return async function codeCheckHandler(req, res) {
     // ── 1. Auth guard (BEFORE body validation: don't reveal field names) ──
-    if (!req.user || req.user.id === 'anonymous') {
+    // Read `cds.context.user` (canonical) with `req.user` fallback so unit
+    // tests that inject a mock `req.user` keep passing without rewiring.
+    const user = cds.context?.user || req.user;
+    if (!user || !user.id || user.id === 'anonymous') {
       return res.status(401).json({ error: 'unauthenticated' });
     }
 
@@ -116,7 +130,7 @@ export function makeCodeCheckHandler(deps = {}) {
 
     // ── 3. Rate-limit checks ──────────────────────────────────────────────
     const now      = Date.now();
-    const uid      = req.user.id;
+    const uid      = user.id;
     const stepKey  = `${uid}|${tutorialSlug.toLowerCase()}|${stepNumber}`;
 
     if (overLimit(userCalls, uid, now, PER_USER_LIMIT)) {
@@ -131,7 +145,7 @@ export function makeCodeCheckHandler(deps = {}) {
     try {
       verdict = await dispatchCheckCode(
         { tutorialSlug, stepNumber, submittedCode, language },
-        { user: req.user, callModel, loadStepText }
+        { user, callModel, loadStepText }
       );
     } catch (err) {
       return res.status(500).json({ error: 'internal' });

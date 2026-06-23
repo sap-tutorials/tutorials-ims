@@ -129,6 +129,7 @@ interface VmExposed {
   pending: boolean
   hint: string
   submitted: boolean
+  perQuestionResults: Record<string, { verdict: string; hint?: string; summary?: string; errorReason?: string }>
   onSubmit: () => Promise<void>
   onTryAgain: () => void
   _testSetAnswers: (next: Record<string, string>) => void
@@ -237,6 +238,89 @@ describe('Validation.vue — #235 component flow', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(getVm(wrapper).result).toBe('incorrect')
     expect(getVm(wrapper).hint).toBe('')
+
+    // #239 v2 follow-up: even though aggregate is 'incorrect', the per-question
+    // map MUST be populated with Q1=pass + Q2=fail so the badges render
+    // correctly. Before the v2 fix, the loop would `break` on Q2's fail and
+    // Q1's pass-result would never be recorded (Q1 would render with no badge,
+    // giving the learner no signal that they got it right).
+    const pqr = getVm(wrapper).perQuestionResults
+    expect(pqr['q-ai']?.verdict).toBe('pass')
+    expect(pqr['q-ai-2']?.verdict).toBe('fail')
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // v2 Test: Q1 fail + Q2 pass — Q2 must still be graded (no break)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('v2: Q1 fail + Q2 pass — both questions graded (no short-circuit)', async () => {
+    // Pre-v2 the loop broke on Q1's fail and never called Q2's grader.
+    // Tom's 2026-06-23 report flagged this as the root UX bug — the learner
+    // had no way to tell which question(s) were wrong.
+    fetchMock
+      .mockResolvedValueOnce(mockFetchResponse({ verdict: 'fail', summary: 'Q1 wrong' }))
+      .mockResolvedValueOnce(mockFetchResponse({ verdict: 'pass', summary: 'Q2 right' }))
+
+    const wrapper = await submitWithAnswers(
+      [TEXT_AI, TEXT_AI_2],
+      { 'q-ai': 'wrong-1', 'q-ai-2': 'right-2' }
+    )
+
+    // Both AI questions hit the grader — no short-circuit
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    const pqr = getVm(wrapper).perQuestionResults
+    expect(pqr['q-ai']?.verdict).toBe('fail')
+    expect(pqr['q-ai-2']?.verdict).toBe('pass')
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // v2 Test: Fail-with-hint promotes aggregate to 'partial' (v2 prompt
+  // change — hint is required on fail too)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('v2: AI fail with hint → result=partial (so the friendlier strip + hint shows)', async () => {
+    // Under v1, a fail verdict came back with NO hint, so the aggregate
+    // landed on 'incorrect' (bare "Not quite" strip). v2 prompt requires
+    // hint on fail too, so when one comes back the UI promotes the
+    // aggregate to 'partial' so the learner sees the hint in the Information
+    // strip instead of staring at a hint-less Negative strip.
+    fetchMock.mockResolvedValueOnce(mockFetchResponse({
+      verdict: 'fail',
+      summary: 'Different concept',
+      hint: 'Think about what `cds.requires` does at compile time.'
+    }))
+
+    const wrapper = await submitWithAnswers(
+      [TEXT_AI],
+      { 'q-ai': 'wrong answer' }
+    )
+
+    expect(getVm(wrapper).result).toBe('partial')
+    expect(getVm(wrapper).hint).toContain('cds.requires')
+    // Per-question still shows fail (the AGGREGATE got promoted to partial
+    // for UX, but the per-Q verdict stays accurate).
+    const pqr = getVm(wrapper).perQuestionResults
+    expect(pqr['q-ai']?.verdict).toBe('fail')
+    expect(pqr['q-ai']?.hint).toContain('cds.requires')
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // v2 Test: Empty answer for an AI question fails fast with a hint
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('v2: empty AI answer surfaces as per-question fail with a "type an answer" hint', async () => {
+    // Pre-v2 path: empty submittedAnswer → `allPass=false; break` (skips the
+    // grader call AND records nothing). With v2 we populate a synthetic
+    // per-question result so the badge + hint render — saves the learner
+    // having to guess why their step isn't validating.
+    const wrapper = await submitWithAnswers(
+      [TEXT_AI, TEXT_AI_2],
+      { 'q-ai': '', 'q-ai-2': 'real answer' }
+    )
+
+    const pqr = getVm(wrapper).perQuestionResults
+    expect(pqr['q-ai']?.verdict).toBe('fail')
+    expect(pqr['q-ai']?.hint).toMatch(/type an answer/i)
   })
 
   // ─────────────────────────────────────────────────────────────────────────

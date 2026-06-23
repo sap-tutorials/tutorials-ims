@@ -38,6 +38,16 @@ const topics = computed(() => {
 
 const filtersActive = computed(() => state.value.region !== 'ALL' || state.value.topic !== 'ALL' || !!state.value.q);
 
+// Joule handoff: synchronous default so window.__JOULE_ADVOCATES is
+// never `undefined` when joule.js's readPageContext fires, even before
+// the /api/advocates fetch resolves. The load() function below then
+// overwrites this with the real roster (or [] on error). See spec
+// docs/superpowers/specs/2026-06-23-joule-advocates-page-design.md.
+if (typeof window !== 'undefined') {
+  (window as unknown as { __JOULE_ADVOCATES: unknown[] }).__JOULE_ADVOCATES =
+    (window as unknown as { __JOULE_ADVOCATES?: unknown[] }).__JOULE_ADVOCATES || [];
+}
+
 async function load() {
   loading.value = true; error.value = null;
   try {
@@ -45,8 +55,15 @@ async function load() {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const body = await res.json();
     advocates.value = Array.isArray(body.advocates) ? body.advocates : [];
+    // Joule handoff (issue #564): stash for joule.js readPageContext.
+    if (typeof window !== 'undefined') {
+      (window as unknown as { __JOULE_ADVOCATES: unknown }).__JOULE_ADVOCATES = advocates.value;
+    }
   } catch (e) {
     error.value = (e as Error).message;
+    if (typeof window !== 'undefined') {
+      (window as unknown as { __JOULE_ADVOCATES: unknown }).__JOULE_ADVOCATES = [];
+    }
   } finally {
     loading.value = false;
   }

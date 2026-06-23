@@ -4,17 +4,57 @@ const STALE_DAYS_DEFAULT = 90;
 const RESEND_INTERVAL_DAYS = 30;
 const MAX_NOTIFICATION_LEVEL = 3;
 
-export async function computeStaleNotifications(staleDaysThreshold = STALE_DAYS_DEFAULT) {
+const TIMING_KNOBS = [
+  { key: 'staleDaysThreshold',   field: 'staleDays',           defaultValue: STALE_DAYS_DEFAULT },
+  { key: 'resendIntervalDays',   field: 'resendIntervalDays',  defaultValue: RESEND_INTERVAL_DAYS },
+  { key: 'maxNotificationLevel', field: 'maxLevel',            defaultValue: MAX_NOTIFICATION_LEVEL },
+];
+
+/**
+ * Resolve the 3 author-nudge timing knobs from ImsConfig, falling back to
+ * hardcoded defaults on missing/invalid rows. Emits a WARN per bad non-empty
+ * value so ops can see the fallback in logs.
+ *
+ * @returns {Promise<{staleDays: number, resendIntervalDays: number, maxLevel: number}>}
+ */
+export async function resolveTimingKnobs() {
+  const { ImsConfig } = cds.entities('com.sap.developers.ims');
+  const out = {};
+  for (const { key, field, defaultValue } of TIMING_KNOBS) {
+    const row = await SELECT.one.from(ImsConfig).where({ key });
+    const raw = row?.value;
+    const parsed = raw != null && raw !== '' ? parseInt(raw, 10) : NaN;
+    if (Number.isFinite(parsed) && parsed > 0) {
+      out[field] = parsed;
+    } else {
+      if (raw != null && raw !== '') {
+        console.warn(`[contributor-notifications] ImsConfig.${key}="${raw}" is not a positive integer; using default ${defaultValue}`);
+      }
+      out[field] = defaultValue;
+    }
+  }
+  return out;
+}
+
+export async function computeStaleNotifications(optsOrStaleDays = {}) {
+  // Backward-compat: callers pre-#545 pass a single number (staleDays). Newer
+  // callers pass an opts object with all 3 knobs. Coerce both shapes here.
+  const opts = typeof optsOrStaleDays === 'number'
+    ? { staleDays: optsOrStaleDays }
+    : optsOrStaleDays;
+  const staleDaysThreshold = opts.staleDays ?? STALE_DAYS_DEFAULT;
+  const resendIntervalDays = opts.resendIntervalDays ?? RESEND_INTERVAL_DAYS;
+  const maxLevel = opts.maxLevel ?? MAX_NOTIFICATION_LEVEL;
   const { Tutorials, TutorialMeta, TutorialContributors } =
     cds.entities('com.sap.developers.ims');
 
   const cutoffDate = new Date(Date.now() - staleDaysThreshold * 86400000).toISOString();
-  const resendCutoff = new Date(Date.now() - RESEND_INTERVAL_DAYS * 86400000).toISOString();
+  const resendCutoff = new Date(Date.now() - resendIntervalDays * 86400000).toISOString();
 
   const allActive = await SELECT.from(TutorialMeta).where({
     monitoredStatus: 'ACTIVE',
     reviewedDate: { '<': cutoffDate },
-    notificationNumber: { '<=': MAX_NOTIFICATION_LEVEL }
+    notificationNumber: { '<=': maxLevel }
   });
 
   const staleMeta = allActive.filter(m =>

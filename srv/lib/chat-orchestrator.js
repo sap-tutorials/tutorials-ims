@@ -204,6 +204,17 @@ async function toolsForContext({ pageContext, isAdmin }) {
   }
 
   const tools = [SEARCH_TUTORIALS_TOOL];
+
+  // Advocates page: trimmed palette. searchTutorials + getUserProgress.
+  // ChatSettings-gated tools (getRelevantSteps, checkCode,
+  // getBranchRecommendation, findLearningPath) are intentionally excluded
+  // — off-scope on /developer-advocates/. Early return keeps the existing
+  // admin and learner branches below byte-identical.
+  if (pageContext?.kind === 'advocates') {
+    tools.push(GET_USER_PROGRESS_TOOL);
+    return tools;
+  }
+
   if (isAdmin && pageContext?.kind === 'admin') {
     tools.push(SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, GENERATE_ANALYTICS_QUERY_TOOL, EXPLAIN_ANALYTICS_RESULT_TOOL);
   } else {

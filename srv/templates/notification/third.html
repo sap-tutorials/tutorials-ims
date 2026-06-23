@@ -4,31 +4,25 @@
 </head>
 <body>
 <p>Dear Tutorial Owner,</p>
-<p>This is the third and final reminder to review and/or update the tutorial mentioned above.
-    If no action is taken within thirty days, the tutorial will be retired from production.</p>
-<p><strong>Why are you receiving this email?</strong></p>
-<p>You received this e-mail because you are marked as the author for the Tutorial appearing on the subject line of this message.
-    As such, you are the best judge of whether the Tutorial instructions are still correct.</p>
-<p><strong>What action do you need to take?</strong></p>
-<p>You have four options:</p>
-<ol type="1">
-    <li><strong>Review the tutorial.</strong> If changes are required, update the tutorial using processes
-        described <a href="https://developers.sap.com/tutorials/docs-tutorial-2a-updating-tutorialv2.html">in these instructions</a>.
-        If no changes were required, you can mark the tutorial as up to date
-        by clicking the appropriate "Reviewed" checkbox in the <a href="${dashboardUrl}">IMS Tutorial Dashboard</a>.
-        If you mark a Tutorial as "Reviewed", the review will be noted at the next periodic processing cycle.
-        <strong>If you perform this review on your own every 3-4 months, you will not receive these reminder messages.</strong></li>
-    <li><strong>Designate a new Tutorial author</strong> – if you are no longer responsible for maintaining
-        this content, you can either designate a new owner or contact the original owning team to designate
-        a new owner. Designating a new owner requires updating or adding "author_name:" and "author_profile:"
-        tags in the Tutorial's front matter section. You complete the process by submitting a Pull Request reflecting the change.</li>
-    <li><strong>Retire the Tutorial</strong> – in this case, you should submit a Pull Request to delete
-        the Tutorial's directory from the Production Tutorial repository.</li>
-    <li><strong>Contact me</strong> – if something about a Tutorial makes it unclear which of the previous
-        actions is appropriate, just contact me via e-mail and let's explore it.</li>
+<p>This is the third and final reminder before retirement for the tutorial
+   <strong>${tutorialTitle}</strong>, which was last reviewed on ${lastReviewedDate}.
+   If no action is taken within ${staleDaysThreshold} days, the tutorial will be retired
+   from production.</p>
+
+<p>The repository owner and the Tutorials Curation team have been copied on this message.
+   We are escalating because the previous two reminders went unanswered.</p>
+
+<p><strong>Please take action now via the <a href="${dashboardUrl}">Tutorial Dashboard</a>:</strong></p>
+<ol>
+    <li>Review and update the tutorial in its source GitHub repository.</li>
+    <li>Mark the tutorial as Reviewed in the Tutorial Dashboard.</li>
+    <li>Mark the tutorial as needing changes if you can't update it now.</li>
 </ol>
-<p>If you received this message by mistake, please let us know by replying to this email.</p>
-<p>Thanks for your support,<br/>Riley<br/>--</p>
-<p>Riley Rainey<br/>Developer Tutorial Curation and Author Support<br/>SAP Industries and Experience (SIX) Team</p>
+
+<p>If we don't hear from you, the next message about this tutorial will go to the Tutorials
+   Curation team for retirement processing.</p>
+
+<p>Thanks for your support,<br/>
+SAP Developers Tutorials Team</p>
 </body>
 </html>

@@ -91,6 +91,37 @@ describe('toolsForContext — checkCode gating', () => {
     // checkCode is additive — it arrives from the ChatSettings block
     expect(names).toContain('checkCode');
   });
+
+  // --- advocates kind (issue #564) ---
+  it('advocates kind bypasses ChatSettings tools even when all flags are on', async () => {
+    const { ChatSettings } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(ChatSettings).entries({
+      ID: '00000000-0000-0000-0000-000000000001',
+      enabled: true,
+      codeCheckEnabled: true,
+      ragEnabled: true,
+      branchingEnabled: true,
+      kgPathBetweenEnabled: true,
+    });
+
+    const tools = await toolsForContext({
+      pageContext: { kind: 'advocates' },
+      isAdmin: false
+    });
+    const names = tools.map(t => t.function.name);
+    expect(names).toEqual(['searchTutorials', 'getUserProgress']);
+  });
+
+  it('advocates kind does not change palette when isAdmin=true', async () => {
+    // A signed-in admin browsing /developer-advocates/ gets the same trimmed
+    // palette — page context wins over admin status here.
+    const tools = await toolsForContext({
+      pageContext: { kind: 'advocates' },
+      isAdmin: true
+    });
+    const names = tools.map(t => t.function.name);
+    expect(names).toEqual(['searchTutorials', 'getUserProgress']);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

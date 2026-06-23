@@ -7,7 +7,7 @@ import { runReconciliationJob } from './embedding-reconciliation.js';
 import { runExtractConcepts } from './extract-concepts-job.js';
 import { runConsolidateConcepts } from './consolidate-concepts-job.js';
 import { runSecretExpiryCheck } from './secret-expiry-check.js';
-import { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, isNotificationsEnabled } from '../lib/contributor-notifications.js';
+import { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, isNotificationsEnabled, resolveTimingKnobs } from '../lib/contributor-notifications.js';
 import { sendNotificationEmail, retryFailedEmails } from '../lib/mail-client.js';
 import { resolveDisplaySettings } from '../lib/runtime-config/display-settings.js';
 import { logPipelineStart, logPipelineEnd, logJobItem } from '../lib/pipeline-log.js';
@@ -145,8 +145,9 @@ export function registerJobs() {
         LOG.info('Contributor notifications disabled via config');
         return { enabled: false };
       }
+      const knobs = await resolveTimingKnobs();
       const adminEmails = await getAdminEmailList();
-      const notifications = await computeStaleNotifications(90);
+      const notifications = await computeStaleNotifications(knobs);
       const dashboardUrl = (await resolveDisplaySettings()).dashboardUrl;
 
       let sent = 0, skipped = 0, failed = 0;
@@ -166,7 +167,12 @@ export function registerJobs() {
           to, cc,
           subject: n.title,
           level: n.notificationLevel,
-          variables: { dashboardUrl }
+          variables: {
+            dashboardUrl,
+            tutorialTitle: n.title,
+            staleDaysThreshold: knobs.staleDays,
+            lastReviewedDate: n.reviewedDate,
+          }
         });
         if (result.success) {
           await markNotificationSent(n.tutorialId);
