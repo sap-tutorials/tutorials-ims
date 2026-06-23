@@ -84,6 +84,14 @@ import "@ui5/webcomponents-icons/dist/course-book.js";
 import "@ui5/webcomponents-icons/dist/flight.js";
 import "@ui5/webcomponents-icons/dist/sys-monitor.js";
 import "@ui5/webcomponents-icons/dist/complete.js";
+// Top-nav popover items added in PR #567 (Devtoberfest + Admin UI). Without
+// these the browser console logs:
+//   "Required icon is not registered. You can either import the icon as a
+//    module ... '@ui5/webcomponents-icons/dist/course-program.js'"
+// and the two list items render with an empty icon slot. Confirmed live on
+// DEV approuter 2026-06-23 via Playwright console capture.
+import "@ui5/webcomponents-icons/dist/course-program.js";
+import "@ui5/webcomponents-icons/dist/settings.js";
 import "@ui5/webcomponents-icons/dist/copy.js";
 import "@ui5/webcomponents-icons/dist/discussion-2.js";
 import "@ui5/webcomponents-icons/dist/write-new-document.js";

@@ -344,16 +344,19 @@ html[data-reader="on"][data-page-kind="tutorial"] .op-header:focus-within {
   html[data-reader="on"][data-page-kind="tutorial"] .op-header { transition: none; }
 }
 
-/* Dark-mode fix: <ui5-li> slotted text in shellbar popovers inherits color
-   from the document's `body { color: var(--sapTextColor) }` rule rather
-   than from UI5's shadow-DOM theme tokens. When the page is in dark mode,
-   --sapTextColor updates correctly but the inheritance chain doesn't always
-   pick up the new value on already-rendered slotted nodes. Forcing the
-   explicit --sapList_TextColor token (which UI5 provides for both light +
-   dark themes) keeps non-selected items readable in both modes.
-   Issue: dark-on-dark text in the nav/share/user popovers' list items. */
+/* Dark-mode fix for shellbar popover items (PR #575 + revised 2026-06-23).
+   ORIGINAL approach used `var(--sapList_TextColor)`. That was wrong:
+   `--sapList_TextColor` is an INSIDE-the-shadow-DOM UI5 list token, set on
+   ui5-list's shadow root, not on the document root. At document scope the
+   variable resolved to its LIGHT-theme default (#131e29 ≈ near-black) even
+   when `data-theme="dark"` was active. Result: dark-on-dark text — i.e.
+   the same bug it was trying to fix. (Confirmed live via Playwright +
+   getComputedStyle on /me/ in dark mode.)
+   `--sapTextColor` IS document-rooted (set by the theme switch on <html>)
+   and resolves to #eaecee in dark + #32363a in light — exactly what we
+   want. Same fix, correct variable. */
 #sb-nav-popover ui5-li,
 #sb-share-popover ui5-li,
 #sb-user-popover ui5-li {
-  color: var(--sapList_TextColor);
+  color: var(--sapTextColor);
 }

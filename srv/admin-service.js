@@ -144,6 +144,25 @@ export default class AdminService extends cds.ApplicationService {
       }
     });
 
+    // Ensure singleton row exists for UiEventsSettings. The seed CSV stays
+    // empty (HDI-clobbers-admin-edits footgun documented in
+    // [feedback_cap_csv_seeds_clobber_admin_data]), so on a fresh subaccount
+    // cutover (DevRel & Community Tools, 2026-06) the table is empty and
+    // every PATCH from the admin UI returned 404 because OData singleton
+    // semantics require the row to exist before write.
+    // UUID convention: one greater than KG_SETTINGS_SINGLETON_ID (c8a8).
+    const UI_EVENTS_SETTINGS_SINGLETON_ID = '00000000-0000-0000-0000-00000000c8a9';
+    this.before('READ', 'UiEventsSettings', async () => {
+      const exists = await SELECT.one.from('com.sap.developers.ims.UiEventsSettings')
+        .where({ ID: UI_EVENTS_SETTINGS_SINGLETON_ID });
+      if (!exists) {
+        await INSERT.into('com.sap.developers.ims.UiEventsSettings').entries({
+          ID: UI_EVENTS_SETTINGS_SINGLETON_ID,
+          enabled: true   // matches the admin tile's "ON" default
+        });
+      }
+    });
+
     // Auto-assign legacyId on creation for entities that need it
     const legacyKeyedEntities = [
       'Users', 'Tutorials', 'Missions', 'Groups', 'Events', 'TaskRecords',
