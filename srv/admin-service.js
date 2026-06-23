@@ -874,11 +874,12 @@ export default class AdminService extends cds.ApplicationService {
     });
 
     this.on('sendContributorNotifications', async (req) => {
-      const { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList } = await import('./lib/contributor-notifications.js');
+      const { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, resolveTimingKnobs } = await import('./lib/contributor-notifications.js');
       const { sendNotificationEmail } = await import('./lib/mail-client.js');
 
+      const knobs = await resolveTimingKnobs();
       const adminEmails = await getAdminEmailList();
-      const notifications = await computeStaleNotifications(90);
+      const notifications = await computeStaleNotifications(knobs);
       const dashboardUrl = (await resolveDisplaySettings()).dashboardUrl;
 
       let sent = 0;
@@ -888,7 +889,12 @@ export default class AdminService extends cds.ApplicationService {
         await sendNotificationEmail({
           to, cc, subject: n.title,
           level: n.notificationLevel,
-          variables: { dashboardUrl }
+          variables: {
+            dashboardUrl,
+            tutorialTitle: n.title,
+            staleDaysThreshold: knobs.staleDays,
+            lastReviewedDate: n.reviewedDate,
+          }
         });
         await markNotificationSent(n.tutorialId);
         sent++;
