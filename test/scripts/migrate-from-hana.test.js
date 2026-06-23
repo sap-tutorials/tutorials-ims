@@ -114,6 +114,68 @@ describe('partitionBySlug()', () => {
       LEGACYID: 42,
     });
   });
+
+  it('skips source rows when the target slug is held by a synthetic row (legacyId >= 10M)', () => {
+    // Reported 2026-06-23 after the IMS PROD → DEV migration noticed the
+    // synthetic showcase tutorials at legacyIds 10,000,043..46 were currently
+    // safe only because no IMS PROD row happened to share their slugs. A
+    // future IMS author could reuse e.g. slug "test" — which already exists
+    // as a synthetic row at legacyId 10,000,041 — and the migrator would
+    // silently overwrite the synthetic row's metadata. This test pins the
+    // belt-and-braces behavior: synthetic rows always win the slug.
+    const mapped = [
+      { ID: 'src-1', LEGACYID: 17000, SLUG: 'test', TITLE: 'Some IMS Tutorial' },
+      { ID: 'src-2', LEGACYID: 18000, SLUG: 'fresh-ims-slug', TITLE: 'New' },
+    ];
+    const existingMap = new Map([
+      ['test', { ID: 'synthetic-uuid', legacyId: 10_000_041 }],
+    ]);
+
+    const { inserts, updates, passthrough, skipped } = partitionBySlug(mapped, existingMap);
+
+    expect(skipped).toHaveLength(1);
+    expect(skipped[0].row.SLUG).toBe('test');
+    expect(skipped[0].reason).toBe('synthetic');
+    expect(skipped[0].existingLegacyId).toBe(10_000_041);
+    expect(updates).toHaveLength(0);              // synthetic NOT updated
+    expect(inserts).toHaveLength(1);              // fresh-ims-slug still inserts
+    expect(inserts[0].SLUG).toBe('fresh-ims-slug');
+    expect(passthrough).toHaveLength(0);
+  });
+
+  it('updates normally when existing row is non-synthetic (legacyId < 10M)', () => {
+    // Boundary check: the threshold is 10_000_000. A real IMS legacyId of
+    // 9_999_999 (still in IMS range) must NOT be treated as synthetic.
+    const mapped = [
+      { ID: 'src-1', LEGACYID: 100, SLUG: 'foo', TITLE: 'Updated' },
+    ];
+    const existingMap = new Map([
+      ['foo', { ID: 'existing-uuid', legacyId: 9_999_999 }],
+    ]);
+
+    const { updates, skipped } = partitionBySlug(mapped, existingMap);
+
+    expect(skipped).toHaveLength(0);
+    expect(updates).toHaveLength(1);
+    expect(updates[0].ID).toBe('existing-uuid');
+    expect(updates[0].TITLE).toBe('Updated');
+  });
+
+  it('handles existingMap with bare-string values (back-compat with older callers)', () => {
+    // The production caller (fetchExistingSlugMap) now emits {ID, legacyId}
+    // tuples, but the function should still accept the old shape (Map<slug, ID-string>)
+    // so existing call sites and prior unit tests don't break.
+    const mapped = [
+      { ID: 'src-1', LEGACYID: 42, SLUG: 'foo', TITLE: 'New' },
+    ];
+    const existingMap = new Map([['foo', 'existing-id-foo']]);  // bare string, no legacyId
+
+    const { updates, skipped } = partitionBySlug(mapped, existingMap);
+
+    expect(skipped).toHaveLength(0);       // no legacyId metadata means we can't tell — treat as non-synthetic
+    expect(updates).toHaveLength(1);
+    expect(updates[0].ID).toBe('existing-id-foo');
+  });
 });
 
 // ─── Issue #466 — corruption-source fixes ───────────────────────────────────
