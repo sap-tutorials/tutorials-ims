@@ -194,6 +194,15 @@ const GET_DEVTOBERFEST_INFO_TOOL = {
 };
 
 async function toolsForContext({ pageContext, isAdmin }) {
+  if (pageContext?.kind === 'devtoberfest') {
+    // Devtoberfest pages get a scoped tool set: catalog search (the persona
+    // instructs the model to pass tags=['devtoberfest']) + the dedicated
+    // event-data tool. Feature-flagged tools (RAG, branching, codecheck,
+    // findLearningPath) and getUserProgress are explicitly suppressed —
+    // their scopes don't apply to Devtoberfest event pages.
+    return [SEARCH_TUTORIALS_TOOL, GET_DEVTOBERFEST_INFO_TOOL];
+  }
+
   const tools = [SEARCH_TUTORIALS_TOOL];
   if (isAdmin && pageContext?.kind === 'admin') {
     tools.push(SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, GENERATE_ANALYTICS_QUERY_TOOL, EXPLAIN_ANALYTICS_RESULT_TOOL);
@@ -444,6 +453,16 @@ export async function dispatchTool(name, args, user) {
         });
       }
       return { error: 'rag_failed', hits: [] };
+    }
+  }
+
+  if (name === 'getDevtoberfestInfo') {
+    try {
+      const { getDevtoberfestInfo } = await import('./devtoberfest-joule-tool.js');
+      return await getDevtoberfestInfo(args, user);
+    } catch (err) {
+      LOG.warn('getDevtoberfestInfo dispatch failed', err.message);
+      return { error: 'devtoberfest_data_unavailable' };
     }
   }
 
