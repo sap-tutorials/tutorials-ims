@@ -57,6 +57,20 @@ modules:
       instances: 1
     properties:
       NODE_ENV: production
+      # Per-environment overrides (set via deploy/<env>.mtaext). MTA spec
+      # requires base mta.yaml to declare a property before an mtaext can
+      # override it — empty/safe defaults here so dev/qa/prod mtaext writes
+      # are valid descriptor merges. CI's `Build & Deploy` workflow has been
+      # failing at cf login since 2026-06-21 (UAA/OTP cutover) so this gap
+      # never surfaced; local deploys hit it on the descriptor-merge step.
+      EXPOSE_CAP_UI: false
+      CONTENT_API_KEY: ""
+      REBUILD_TARGET_ENV: ""
+      # GitHub fine-grained PAT for srv/lib/rebuild-trigger.js. Empty here
+      # means rebuild-trigger gracefully no-ops (logs one boot warning).
+      # Real value will be set via credstore + admin Secrets UI once Phase 2-C
+      # bootstrap completes; mtaext placeholder remains for CI-injected values.
+      GITHUB_DISPATCH_TOKEN: ""
       # Knowledge graph (PR 7+ of #381): default OFF; flip per-environment via cf set-env.
       # When 'false', `/graph/*` returns 503 (PR 5 gate) and the sidebar island renders nothing.
       KNOWLEDGE_GRAPH_ENABLED: 'false'
