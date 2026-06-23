@@ -19,7 +19,7 @@ function vec(values) {
 describe('makeBranchLoaders', () => {
   beforeAll(async () => {
     const { Users, Tutorials, TaskRecords } = cds.entities('com.sap.developers.ims');
-    await INSERT.into(Users).entries({ ID: USER_ID, uuid: 'xsuaa-9100', email: '__TEST__user@example.invalid' });
+    await INSERT.into(Users).entries({ ID: USER_ID, uuid: 'xsuaa-9100', sapId: 'xsuaa-9100', email: '__TEST__user@example.invalid' });
     await INSERT.into(Tutorials).entries({ ID: TUT_A_ID, legacyId: 99100, slug: '__test__-tut-a', title: '__TEST__ Tut A', status: 'ACTIVE' });
     await INSERT.into(TaskRecords).entries({
       user_ID: USER_ID, taskLegacyId: 99100, taskType: 'TUTORIAL', status: 'COMPLETED',
