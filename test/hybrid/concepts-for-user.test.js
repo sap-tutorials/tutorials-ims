@@ -53,20 +53,17 @@ describe('getConceptsForUser hybrid (issue #445)', () => {
     expect(r).toEqual({ learned: [], partial: [], truncatedAt500: false })
   })
 
-  it('returns { learned: [], partial: [], truncatedAt500: false } shape for a user with one COMPLETED tutorial', async () => {
+  it('returns non-empty learned for a user with one COMPLETED tutorial that teaches concepts', async () => {
     await db.run(
       `INSERT INTO COM_SAP_DEVELOPERS_IMS_TASKRECORDS (ID, USER_ID, TASKLEGACYID, TASKTYPE, STATUS, COMPLETIONDATE, CREATEDAT, MODIFIEDAT) VALUES (?, ?, ?, 'TUTORIAL', 'COMPLETED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
       [randomUUID(), TEST_USER_ID, TUT_A_LEGACY_ID]
     )
     const r = await getConceptsForUser({ db, userId: TEST_USER_ID })
-    // Helper returns the correct shape; if KG is empty, learned/partial will be [],
-    // which is a valid response. The shape itself is the contract.
-    expect(r).toHaveProperty('learned')
-    expect(r).toHaveProperty('partial')
-    expect(r).toHaveProperty('truncatedAt500')
-    expect(Array.isArray(r.learned)).toBe(true)
-    expect(Array.isArray(r.partial)).toBe(true)
-    expect(typeof r.truncatedAt500).toBe('boolean')
+    // TUT_A is a high-link-count tutorial with verified kg:teaches edges
+    // in the v3 graph; learned should be non-empty.
+    expect(r.learned.length).toBeGreaterThan(0)
+    expect(r.partial).toEqual([])
+    expect(r.truncatedAt500).toBe(false)
   })
 
   it('partitions COMPLETED and IN_PROGRESS statuses with no overlap', async () => {
@@ -80,7 +77,9 @@ describe('getConceptsForUser hybrid (issue #445)', () => {
       [randomUUID(), TEST_USER_2, TUT_B_LEGACY_ID]
     )
     const r = await getConceptsForUser({ db, userId: TEST_USER_2 })
-    // Invariant: no overlap between learned and partial
+    // Both tutorials teach concepts; learned must be non-empty
+    expect(r.learned.length).toBeGreaterThan(0)
+    // Invariant: no overlap between learned and partial (learned wins)
     const overlap = r.learned.filter(c => r.partial.includes(c))
     expect(overlap).toEqual([])
   })
