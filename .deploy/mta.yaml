@@ -62,6 +62,15 @@ modules:
       KNOWLEDGE_GRAPH_ENABLED: 'false'
       KG_EXTRACT_BUILD_CAP: '200'
       KG_MERGE_SIM_THRESHOLD: '0.92'
+      # Author-nudge SMTP transport (#545). Empty defaults mean the cron is
+      # dormant — mail-client.js's resolveSmtpConfig returns null, the
+      # sendNotificationEmail path queues to FailedEmails, and the 4-hour
+      # retry cron picks up once mtaext + credstore supply real values.
+      # Non-secret knobs ride here; SMTP_PASS lives in credstore (alias same name).
+      SMTP_HOST: ""
+      SMTP_PORT: "587"
+      SMTP_USER: ""
+      SMTP_FROM: "developers@sap.com"
     provides:
       - name: srv-api
         properties:
