@@ -175,7 +175,34 @@ const CHECK_CODE_TOOL = {
   }
 };
 
+const GET_DEVTOBERFEST_INFO_TOOL = {
+  type: 'function',
+  function: {
+    name: 'getDevtoberfestInfo',
+    description: "Fetch authoritative Devtoberfest event information. Call this for any factual question about the current Devtoberfest event — dates, rules, points, gameboard, activities, legal terms, videos, or live streams. Pass section='all' if unsure which slice is relevant.",
+    parameters: {
+      type: 'object',
+      properties: {
+        section: {
+          type: 'string',
+          enum: ['all', 'event', 'terms', 'links', 'points', 'gameboard', 'activities', 'videos'],
+          description: "Which slice of Devtoberfest data to return. Default 'all' returns event + links + a summary of every other section's availability."
+        }
+      }
+    }
+  }
+};
+
 async function toolsForContext({ pageContext, isAdmin }) {
+  if (pageContext?.kind === 'devtoberfest') {
+    // Devtoberfest pages get a scoped tool set: catalog search (the persona
+    // instructs the model to pass tags=['devtoberfest']) + the dedicated
+    // event-data tool. Feature-flagged tools (RAG, branching, codecheck,
+    // findLearningPath) and getUserProgress are explicitly suppressed —
+    // their scopes don't apply to Devtoberfest event pages.
+    return [SEARCH_TUTORIALS_TOOL, GET_DEVTOBERFEST_INFO_TOOL];
+  }
+
   const tools = [SEARCH_TUTORIALS_TOOL];
 
   // Advocates page: trimmed palette. searchTutorials + getUserProgress.
@@ -440,6 +467,16 @@ export async function dispatchTool(name, args, user) {
     }
   }
 
+  if (name === 'getDevtoberfestInfo') {
+    try {
+      const { getDevtoberfestInfo } = await import('./devtoberfest-joule-tool.js');
+      return await getDevtoberfestInfo(args, user);
+    } catch (err) {
+      LOG.warn('getDevtoberfestInfo dispatch failed', err.message);
+      return { error: 'devtoberfest_data_unavailable' };
+    }
+  }
+
   if (name === 'checkCode') {
     try {
       const { dispatchCheckCode } = await import('./code-check-tool.js');
@@ -628,4 +665,4 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
   }
 }
 
-export { SEARCH_TUTORIALS_TOOL, SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, GET_RELEVANT_STEPS_TOOL, GET_USER_PROGRESS_TOOL, CHECK_CODE_TOOL, GET_BRANCH_RECOMMENDATION_TOOL, FIND_LEARNING_PATH_TOOL, toolsForContext };
+export { SEARCH_TUTORIALS_TOOL, SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, GET_RELEVANT_STEPS_TOOL, GET_USER_PROGRESS_TOOL, CHECK_CODE_TOOL, GET_DEVTOBERFEST_INFO_TOOL, GET_BRANCH_RECOMMENDATION_TOOL, FIND_LEARNING_PATH_TOOL, toolsForContext };

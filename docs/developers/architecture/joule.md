@@ -341,6 +341,30 @@ turn 1: model produces final assistantText → emit {type:'done'} → return
 `<html data-page-kind="..." data-page-slug="..." ...>` attributes that Hugo's
 `baseof.html` sets on every page.
 
+### Devtoberfest scope
+
+On pages under `/devtoberfest/**` (or any page declaring frontmatter
+`joule_scope: devtoberfest`), `pageContext.kind` is `'devtoberfest'` and
+Joule switches to a scoped persona:
+
+- **Tools available:** `searchTutorials` (the persona instructs the model
+  to pass `tags: ['devtoberfest']`) and `getDevtoberfestInfo` (reads the
+  `DevtoberfestConfig` singleton + `currentEvent`).
+- **Tools suppressed on this kind regardless of `ChatSettings`:**
+  `getUserProgress`, `getRelevantSteps`, `checkCode`,
+  `getBranchRecommendation`, `findLearningPath`, and the admin analytics
+  tools.
+- **Scope policy:** Devtoberfest event + Devtoberfest-tagged tutorials +
+  general Devtoberfest knowledge + SAP TechEd as adjacent. Everything
+  else is politely refused.
+- **Forward-compat:** `getDevtoberfestInfo` returns
+  `{ available: false, comingSoon: true }` for points, gameboard,
+  activities, and videos sections. When schema fields land for those
+  data domains, the handler's section builder flips to a populated
+  shape — the tool's LLM-facing schema does not change.
+
+Spec: [docs/superpowers/specs/2026-06-23-565-joule-devtoberfest-design.md](../../superpowers/specs/2026-06-23-565-joule-devtoberfest-design.md).
+
 ### Tool: `searchTutorials`
 
 The single registered tool. Invoked when the model decides the user is asking
