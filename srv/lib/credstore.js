@@ -17,7 +17,7 @@ const NAMESPACE = 'tutorials';   // single namespace per env (Phase 2-C spec)
 // srv/lib/runtime-config/*-settings.js after #491 final-review fix. The memory
 // [feedback_module_singletons_in_vitest_cds] has fired 4× already — preempting here.
 const STATE_KEY = Symbol.for('com.sap.developers.ims:credstore');
-const _state = (globalThis[STATE_KEY] ??= { binding: null, privateKey: null });
+const _state = (globalThis[STATE_KEY] ??= { binding: null, privateKey: null, undiciAgent: null });
 
 function getBinding() {
   if (_state.binding) return _state.binding;
@@ -42,9 +42,31 @@ async function getPrivateKey() {
 }
 
 function authHeader() {
+  // Credstore can be provisioned with two auth styles depending on subaccount
+  // defaults:
+  //   - `basic` — binding ships `username` + `password`; legacy default.
+  //   - `mtls`  — binding ships `username` + `certificate` + `key`; `password`
+  //     is absent. New BTP subaccounts default to this. The TLS handshake
+  //     authenticates via the client cert; the username still rides as an
+  //     identity hint in the Authorization header (no secret part).
+  // Diagnosed 2026-06-23 in the DevRel & Community Tools subaccount cutover:
+  // `tutorials-credstore` is mTLS-provisioned, so `b.password` is undefined
+  // and `Basic <base64-of-username:undefined>` was rejected → every Secrets
+  // save 500'd in the admin UI.
   const b = getBinding();
-  const token = Buffer.from(`${b.username}:${b.password}`).toString('base64');
+  const secret = isMtlsBinding() ? '' : (b.password ?? '');
+  const token = Buffer.from(`${b.username}:${secret}`).toString('base64');
   return { Authorization: `Basic ${token}` };
+}
+
+/** Detect whether the current binding is mTLS-provisioned. New BTP
+ *  subaccounts default to mTLS; legacy ones default to basic auth. We treat
+ *  presence of `password` as the unambiguous signal — basic-auth bindings
+ *  always ship one, mTLS bindings never do. */
+function isMtlsBinding() {
+  const b = getBinding();
+  if (b.parameters?.authentication?.type) return b.parameters.authentication.type === 'mtls';
+  return !b.password;
 }
 
 const FETCH_TIMEOUT_MS = 15_000;
@@ -53,7 +75,28 @@ const FETCH_TIMEOUT_MS = 15_000;
  *  readable 'credstore <op> ${alias}: timeout' instead of a bare throw. */
 async function credFetch(url, init, opLabel) {
   try {
-    return await fetch(url, { ...init, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    const opts = { ...init, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) };
+    if (isMtlsBinding()) {
+      // mTLS path — credstore in new BTP subaccounts authenticates via a
+      // client cert during the TLS handshake instead of HTTP basic auth.
+      // undici's Agent accepts `connect: { cert, key }` for this; node's
+      // built-in fetch is undici under the hood and will use the dispatcher
+      // we pass. Lazy-import undici so basic-auth bindings don't pay the
+      // resolution cost.
+      if (!_state.undiciAgent) {
+        const b = getBinding();
+        if (!b.certificate || !b.key) {
+          throw new Error('credstore binding declares mtls but is missing certificate or key');
+        }
+        const { Agent: UndiciAgent } = await import('undici');
+        _state.undiciAgent = new UndiciAgent({
+          connect: { cert: b.certificate, key: b.key },
+          keepAliveTimeout: 30_000,
+        });
+      }
+      opts.dispatcher = _state.undiciAgent;
+    }
+    return await fetch(url, opts);
   } catch (err) {
     if (err.name === 'AbortError' || err.name === 'TimeoutError') {
       throw new Error(`credstore ${opLabel}: timeout after ${FETCH_TIMEOUT_MS}ms`);
@@ -148,4 +191,5 @@ export async function deleteSecret(alias) {
 export function _resetForTests() {
   _state.binding = null;
   _state.privateKey = null;
+  _state.undiciAgent = null;
 }

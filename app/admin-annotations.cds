@@ -1691,6 +1691,14 @@ annotate AdminService.AdvocatePhotos with @(
 //
 // Value-help dialog: ranks `label` first so admins search by the human
 // label, falls back to `name` (slug-equivalent) when label is missing.
+//
+// IMPORTANT (#573 regression, fixed 2026-06-23): the original PR annotated
+// only the `tag` association on the assumption that CAP's CDS compiler
+// would auto-propagate `@Common.Text` and `@Common.ValueList` onto the
+// generated `tag_ID` foreign-key element. Inspection of the deployed
+// `csn.json` showed that DID NOT happen — `tag_ID` came out with zero
+// annotations, so FE rendered the raw GUID. Annotating `tag_ID` directly
+// is the deterministic fix and what `GroupTags`/`MissionTags` actually do.
 annotate AdminService.AdvocateTopics with {
   tag @Common.Label: 'Topic'
       @Common.Text: tag.label
@@ -1703,6 +1711,17 @@ annotate AdminService.AdvocateTopics with {
           { $Type: 'Common.ValueListParameterDisplayOnly',                            ValueListProperty: 'name' }
         ]
       };
+  tag_ID @Common.Label: 'Topic'
+         @Common.Text: tag.label
+         @Common.TextArrangement: #TextOnly
+         @Common.ValueList: {
+           CollectionPath: 'Tags',
+           Parameters: [
+             { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: tag_ID, ValueListProperty: 'ID' },
+             { $Type: 'Common.ValueListParameterDisplayOnly',                            ValueListProperty: 'label' },
+             { $Type: 'Common.ValueListParameterDisplayOnly',                            ValueListProperty: 'name' }
+           ]
+         };
 };
 
 annotate AdminService.AdvocateTopics with @UI: {
