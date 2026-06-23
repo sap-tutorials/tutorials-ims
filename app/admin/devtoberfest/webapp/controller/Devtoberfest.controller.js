@@ -62,6 +62,8 @@ sap.ui.define([
           if (action === MessageBox.Action.OK) {
             oModel.resetChanges();
             oModel.refresh();
+            var strip = this.byId("versionWarning");
+            if (strip) strip.setVisible(false);
             MessageToast.show(bundle.getText("toastDiscarded"));
           }
         }

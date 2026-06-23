@@ -13,6 +13,7 @@ const dialogOpen = ref<boolean>(false)
 
 async function fetchStatus(): Promise<void> {
   state.value = 'loading'
+  ctaHint.value = ''
   errorMsg.value = ''
   try {
     const res = await fetch(props.config.apiStatus, {

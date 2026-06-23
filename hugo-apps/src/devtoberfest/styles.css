@@ -257,11 +257,6 @@
   outline-offset: 2px;
 }
 
-.dtf-rail-icon {
-  font-size: 1.15rem;
-  line-height: 1;
-}
-
 .dtf-rail-label {
   font-weight: 500;
 }
@@ -279,6 +274,7 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  flex-wrap: wrap;
 }
 .dtf-error-retry {
   padding: 0.25rem 0.75rem;
