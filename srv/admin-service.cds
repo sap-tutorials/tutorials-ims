@@ -199,6 +199,10 @@ service AdminService {
   action updateNotificationRecipients(emails : String) returns { updated : Boolean };
   action toggleNotifications(enabled : Boolean) returns { enabled : Boolean };
   function getNotificationConfig() returns { enabled : Boolean; recipients : String };
+  action testNotificationEmail(to: String, level: Integer) returns {
+    success : Boolean;
+    error   : String;
+  };
 
   // --- Statistics & export functions ---
 

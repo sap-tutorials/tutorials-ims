@@ -902,6 +902,30 @@ export default class AdminService extends cds.ApplicationService {
       return { notified: sent };
     });
 
+    this.on('testNotificationEmail', async (req) => {
+      const { sendNotificationEmail } = await import('./lib/mail-client.js');
+      const { to, level } = req.data;
+      if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+        return { success: false, error: 'Invalid "to" address' };
+      }
+      const lvl = Number.isInteger(level) && level >= 0 && level <= 3 ? level : 0;
+      const dashboardUrl = (await resolveDisplaySettings()).dashboardUrl;
+      const today = new Date().toISOString().slice(0, 10);
+      const result = await sendNotificationEmail({
+        to,
+        cc: [],
+        subject: '[TEST] CAP tutorials-srv SMTP transport check',
+        level: lvl,
+        variables: {
+          dashboardUrl,
+          tutorialTitle: 'Test Tutorial — please ignore',
+          staleDaysThreshold: 90,
+          lastReviewedDate: today,
+        },
+      });
+      return { success: result.success, error: result.error ?? '' };
+    });
+
     this.on('updateNotificationRecipients', async (req) => {
       const { ImsConfig } = cds.entities('com.sap.developers.ims');
       const { emails } = req.data;
