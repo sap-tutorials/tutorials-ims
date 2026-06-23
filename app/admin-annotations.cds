@@ -1825,3 +1825,51 @@ annotate KnowledgeGraphService.ConceptEdges with @UI: {
     { $Type: 'UI.DataField', Value: status,      Label: 'Status' }
   ]
 };
+
+// --- Devtoberfest (singleton config + read-only registrations audit) ---
+//
+// Spec: docs/superpowers/specs/2026-06-22-devtoberfest-homepage-design.md §9
+//
+// DevtoberfestConfig is @odata.singleton in srv/admin-service.cds — the
+// tile's OData URL is /admin/DevtoberfestConfig (no key in path). UI
+// annotations here are minimal because the tile uses a custom IconTabBar
+// view (not Fiori Elements ListReport/ObjectPage), so most layout lives
+// in the tile's XML fragments. We keep field labels here for the OData
+// $metadata, which various downstream consumers reflect.
+annotate AdminService.DevtoberfestConfig with {
+  currentEvent      @title: 'Current Devtoberfest Event'
+                    @Common.ValueList: {
+                      Label: 'Event',
+                      CollectionPath: 'Events',
+                      Parameters: [
+                        { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: currentEvent_ID, ValueListProperty: 'ID' },
+                        { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'name' },
+                        { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'startDate' },
+                        { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'endDate' }
+                      ]
+                    };
+  termsText         @title: 'Contents Rules (markdown)'
+                    @UI.MultiLineText;
+  termsVersion      @title: 'Terms Version';
+  contentRulesUrl   @title: 'Content Rules URL';
+  faqUrl            @title: 'FAQ URL';
+  gameboardUrl      @title: 'Gameboard URL';
+  activitiesUrl     @title: 'Activities URL';
+};
+
+// EventRegistrations — read-only audit table. Tile renders via a hand-
+// written Table fragment in RegistrationsTab.fragment.xml, so no full
+// @UI.LineItem block. Labels here for $metadata consumers.
+annotate AdminService.EventRegistrations with {
+  user             @title: 'User';
+  event            @title: 'Event';
+  joinedAt         @title: 'Joined At';
+  termsVersion     @title: 'Terms Version';
+  termsAcceptedAt  @title: 'Terms Accepted At';
+};
+
+annotate AdminService.EventRegistrations with @(
+  Capabilities.DeleteRestrictions.Deletable: false,
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable: false
+);
