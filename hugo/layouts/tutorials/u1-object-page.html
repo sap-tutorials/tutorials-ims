@@ -405,7 +405,7 @@
   <ui5-busy-indicator id="op-mobile-busy" delay="0">
     <ui5-list id="op-mobile-step-list" mode="None">
       {{ range .Params.steps }}
-      <ui5-li data-step-number="{{ .number }}" data-step-target="step-{{ .number }}" type="Active" icon="">{{ .number }}. {{ .title }}</ui5-li>
+      <ui5-li data-step-number="{{ .number }}" data-step-target="step-{{ .number }}" type="Active" icon=""{{ with .validation }} additional-text="Question" additional-text-state="Positive"{{ end }}>{{ .number }}. {{ .title }}</ui5-li>
       {{ end }}
     </ui5-list>
   </ui5-busy-indicator>
