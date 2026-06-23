@@ -67,6 +67,50 @@ describe('buildSystemPrompt', () => {
     const out = buildSystemPrompt({ kind: 'generic' }, user);
     expect(out).toMatch(/\n\n/);
   });
+
+  // --- advocates kind (issue #564) ---
+  const ADVOCATE_FIXTURE = {
+    firstName: 'Thomas', lastName: 'Jung', region: 'AMERICAS',
+    title: 'Developer Advocate', location: 'Jasper, IN',
+    bio: 'Builds CAP samples and decommissions Java IMS one endpoint at a time.',
+    topics: [{ slug: 'software-product>cap', label: 'SAP Cloud Application Programming Model' }],
+    links: [{ kind: 'LinkedIn', url: 'https://linkedin.com/in/thomas-jung' }]
+  };
+
+  it('uses ADVOCATES_PERSONA and includes roster details for kind=advocates', () => {
+    const out = buildSystemPrompt({ kind: 'advocates', advocates: [ADVOCATE_FIXTURE] }, user);
+    expect(out).toMatch(/Developer Advocates page/);
+    expect(out).toMatch(/Thomas Jung/);
+    expect(out).toMatch(/AMERICAS/);
+    expect(out).toMatch(/SAP Cloud Application Programming Model/);
+    // bridge-to-advocate instruction present
+    expect(out).toMatch(/bridge.*covers/i);
+  });
+
+  it('skips RAG_GUIDANCE and PROGRESS_GUIDANCE for kind=advocates', () => {
+    const out = buildSystemPrompt({ kind: 'advocates', advocates: [ADVOCATE_FIXTURE] }, user);
+    expect(out).not.toMatch(/getRelevantSteps/);
+    expect(out).not.toMatch(/getUserProgress tool/);
+  });
+
+  it('falls back to empty-roster guidance when advocates=[]', () => {
+    const out = buildSystemPrompt({ kind: 'advocates', advocates: [] }, user);
+    expect(out).toMatch(/has not loaded yet/);
+    expect(out).toMatch(/searchTutorials/);
+  });
+
+  it('does not throw when advocates is not an array', () => {
+    expect(() =>
+      buildSystemPrompt({ kind: 'advocates', advocates: 'not-an-array' }, user)
+    ).not.toThrow();
+    const out = buildSystemPrompt({ kind: 'advocates', advocates: 'not-an-array' }, user);
+    expect(out).toMatch(/has not loaded yet/);
+  });
+
+  it('regression: admin path still includes RAG_GUIDANCE', () => {
+    const out = buildSystemPrompt({ kind: 'admin', tool: 'analytics-builder' }, user);
+    expect(out).toMatch(/getRelevantSteps/);
+  });
 });
 
 describe('buildSystemPrompt — BRANCHING_GUIDANCE', () => {
