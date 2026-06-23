@@ -366,10 +366,26 @@ export function mapTutorialRepositoryRow(row, contributorMap) {
   };
 }
 
+// Threshold above which we treat a target row's LEGACYID as "synthetic" —
+// authored directly in DEV/PROD (e.g. via the admin UI or content-publish
+// path), not from IMS. The IMS source numbering tops out around 25,000;
+// synthetic rows are intentionally inserted at 10,000,000+ to make them
+// trivially recognisable. The migrator skips upsert against synthetic
+// rows so a re-run from IMS PROD can't accidentally clobber first-party
+// authored content that happens to share a slug.
+//
+// Discovered 2026-06-23 after the IMS PROD migration noticed the showcase
+// "tutorial-platform-feature-cookbook" + meta-tutorials rows lived at
+// legacyIds 10,000,043..46 — currently safe because IMS PROD has no rows
+// with those slugs, but a future IMS author could reuse one of the slugs
+// and silently overwrite the synthetic row's metadata.
+export const SYNTHETIC_LEGACY_ID_THRESHOLD = 10_000_000;
+
 export function partitionBySlug(mapped, existingMap) {
   const inserts = [];
   const updates = [];
   const passthrough = [];
+  const skipped = [];
   for (const row of mapped) {
     if (row.SLUG === undefined || row.SLUG === null || row.SLUG === '') {
       passthrough.push(row);
@@ -377,17 +393,30 @@ export function partitionBySlug(mapped, existingMap) {
     }
     const key = String(row.SLUG).toLowerCase();
     if (existingMap.has(key)) {
-      updates.push({ ...row, ID: existingMap.get(key) });
+      // Map entries can be either {ID, legacyId} (production callers via
+      // fetchExistingSlugMap) OR bare ID strings (existing unit tests + any
+      // future caller that doesn't need legacyId metadata). Normalise here.
+      const entry = existingMap.get(key);
+      const existingId = typeof entry === 'object' && entry !== null ? entry.ID : entry;
+      const existingLegacyId = typeof entry === 'object' && entry !== null ? entry.legacyId : null;
+      if (existingLegacyId !== null && existingLegacyId !== undefined &&
+          existingLegacyId >= SYNTHETIC_LEGACY_ID_THRESHOLD) {
+        skipped.push({ row, reason: 'synthetic', existingId, existingLegacyId });
+        continue;
+      }
+      updates.push({ ...row, ID: existingId });
     } else {
       inserts.push(row);
     }
   }
-  return { inserts, updates, passthrough };
+  return { inserts, updates, passthrough, skipped };
 }
 
 // Look up which lowercased slugs already exist in target. Chunks the IN-list
 // to keep individual statements under HANA's parameter cap (32k); 500 is a
-// friendlier round-trip size.
+// friendlier round-trip size. Values are {ID, legacyId} so partitionBySlug
+// can decide whether the existing row is synthetic (legacyId >= threshold)
+// and should be skipped rather than overwritten.
 async function fetchExistingSlugMap(target, fullTable, slugs) {
   const existingMap = new Map();
   if (slugs.length === 0) return existingMap;
@@ -397,10 +426,10 @@ async function fetchExistingSlugMap(target, fullTable, slugs) {
     const placeholders = slice.map(() => '?').join(',');
     const rows = await query(
       target,
-      `SELECT "ID", LOWER("SLUG") AS "S" FROM ${fullTable} WHERE LOWER("SLUG") IN (${placeholders})`,
+      `SELECT "ID", "LEGACYID", LOWER("SLUG") AS "S" FROM ${fullTable} WHERE LOWER("SLUG") IN (${placeholders})`,
       slice
     );
-    for (const r of rows) existingMap.set(r.S, r.ID);
+    for (const r of rows) existingMap.set(r.S, { ID: r.ID, legacyId: r.LEGACYID });
   }
   return existingMap;
 }
@@ -493,7 +522,21 @@ async function migrateEntity(source, target, targetSchema, config) {
   }
 
   const existingMap = await fetchExistingSlugMap(target, fullTable, slugs);
-  const { inserts, updates, passthrough } = partitionBySlug(mapped, existingMap);
+  const { inserts, updates, passthrough, skipped } = partitionBySlug(mapped, existingMap);
+
+  // Log synthetic-row skips so the operator sees that first-party authored
+  // content was preserved. The slug collisions surface as a sample list —
+  // surprising counts here are the signal that someone has authored a
+  // synthetic row whose slug now overlaps an IMS-source row, which is
+  // either a legitimate keep-the-author's-version case or a hint that the
+  // synthetic row's slug should be renamed.
+  if (skipped.length > 0) {
+    console.log(`  ⊘ Skipped ${skipped.length} source row(s) where target slug already exists as a synthetic (legacyId >= ${SYNTHETIC_LEGACY_ID_THRESHOLD}) row.`);
+    for (const s of skipped.slice(0, 5)) {
+      console.log(`     • slug="${s.row.SLUG}" sourceLegacyId=${s.row.LEGACYID} existingLegacyId=${s.existingLegacyId}`);
+    }
+    if (skipped.length > 5) console.log(`     ... and ${skipped.length - 5} more`);
+  }
 
   // Apply UPDATEs one row at a time. Updates set every column EXCEPT the
   // primary key (ID) and SLUG itself — overwriting ID would lose the existing
@@ -523,7 +566,8 @@ async function migrateEntity(source, target, targetSchema, config) {
     ? await batchInsert(target, fullTable, toInsert)
     : { inserted: 0, errors: 0 };
 
-  console.log(`  ✓ upsert: ${insertResult.inserted} inserted, ${updated} updated, ${insertResult.errors + updateErrors} errors`);
+  const skippedTag = skipped.length > 0 ? `, ${skipped.length} skipped(synthetic)` : '';
+  console.log(`  ✓ upsert: ${insertResult.inserted} inserted, ${updated} updated, ${insertResult.errors + updateErrors} errors${skippedTag}`);
   return _track({ name, count: insertResult.inserted + updated, errors: insertResult.errors + updateErrors });
 }
 
