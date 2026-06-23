@@ -405,7 +405,7 @@
   <ui5-busy-indicator id="op-mobile-busy" delay="0">
     <ui5-list id="op-mobile-step-list" mode="None">
       {{ range .Params.steps }}
-      <ui5-li data-step-number="{{ .number }}" data-step-target="step-{{ .number }}" type="Active" icon=""{{ with .validation }} additional-text="Question" additional-text-state="Positive"{{ end }}>{{ .number }}. {{ .title }}</ui5-li>
+      <ui5-li data-step-number="{{ .number }}" data-step-target="step-{{ .number }}" type="Active" icon="">{{ if or .validation .codeCheck .branchGroup }}<span class="step-badge-row" aria-hidden="true">{{ with .branchGroup }}<span class="step-badge step-badge--branch" title="This step has a branch point"></span>{{ end }}{{ with .codeCheck }}<span class="step-badge step-badge--codecheck" title="This step has a code check"></span>{{ end }}{{ with .validation }}<span class="step-badge step-badge--quiz" title="This step has a question"></span>{{ end }}</span>{{ end }}{{ .number }}. {{ .title }}</ui5-li>
       {{ end }}
     </ui5-list>
   </ui5-busy-indicator>
