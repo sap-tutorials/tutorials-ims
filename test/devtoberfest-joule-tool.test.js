@@ -56,6 +56,8 @@ describe('getDevtoberfestInfo', () => {
     const out = await getDevtoberfestInfo({ section: 'event' });
     expect(out.event.status).toBe('active');
     expect(out.event.daysUntilEnd).toBeGreaterThan(0);
+    // section='event' returns early but still includes generatedAt (parity with 'all').
+    expect(typeof out.generatedAt).toBe('string');
   });
 
   it('returns status=ended after endDate', async () => {
