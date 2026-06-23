@@ -35,13 +35,28 @@
 .adv-front .adv-hero::after {
   content:''; position:absolute; inset:0;
   background: radial-gradient(900px circle at 25% 0%, rgba(255,255,255,.32), transparent 55%);
+  pointer-events: none;
 }
-.adv-photo, .adv-front .adv-initials {
+/* Initials placeholder: gradient hero + centered circle (yearbook style) */
+.adv-front .adv-initials {
   position: absolute; left: 50%; bottom: -44px; transform: translateX(-50%);
   width: 130px; height: 130px; border-radius: 50%; border: 5px solid #fff;
   background-position: center; background-size: cover; background-color: #cfe3ff;
   box-shadow: 0 14px 28px rgba(0,40,100,.22);
 }
+/* Real photo: full-bleed across the hero, no gradient halo wasted */
+.adv-front .adv-photo {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover; object-position: center 20%;
+  border: 0; border-radius: 0; box-shadow: none;
+  z-index: 1;
+}
+/* When a photo is present, the radial highlight would just darken it — drop it */
+.adv-front .adv-hero:has(.adv-photo)::after { display: none; }
+/* Photo cards: bump hero a touch and remove the 60px chin reserved for the circle overhang */
+.adv-front:has(.adv-photo) .adv-hero { height: 62%; }
+.adv-front:has(.adv-photo) .adv-body { padding: 14px 18px; }
 
 .adv-front .adv-body { padding: 60px 18px 14px; text-align: center; flex: 1; display: flex; flex-direction: column; }
 .adv-name { margin: 0; font-size: 18px; }
