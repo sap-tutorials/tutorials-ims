@@ -49,7 +49,30 @@
 
 ## Task 0: Verify clean baseline + run the counted-property-path spike
 
-Before any code changes: confirm worktree is at baseline; run a 1-minute spike to verify HANA KGE accepts `(^kg:requires){1,5}` counted-path syntax. If unsupported, the procedure's ARM 1 falls back to `(^kg:requires)+` + JS-side depth cap.
+**RESOLVED — 2026-06-22 spike outcome: Variant C (fallback).** HANA KGE returned `"Unsupported functionality: Path repeat range"` for `{n,m}` syntax. Probe results:
+
+| Probe | Outcome |
+|---|---|
+| A. `(^kg:requires){1,3}` | FAIL "Unsupported functionality: Path repeat range" |
+| B. `(^kg:requires){1,5}` | FAIL (same error) |
+| C. `(^kg:requires)+` | SUCCESS — 5 results in 3.2s |
+| D. `(kg:coCompletedWith){1,3}` | FAIL (same error) |
+
+Realistic ARM-by-ARM probe from a production tutorial source:
+
+| ARM | Wall-clock | Result count |
+|---|---|---|
+| ARM 2 `(coCompletedWith)+` LIMIT 10 | 5.3s | 10 |
+| ARM 1 `teaches/(^requires)+/teaches` LIMIT 10 | 5.3s | 10 |
+| ARM 3 SHARED_CONCEPT LIMIT 10 | 0.9s | 10 |
+
+**All subsequent tasks use `+` (plus closure) not `{n,m}`.** The procedure body in Task 2 below already reflects the fallback variant.
+
+No commit on Task 0.
+
+## Task 0: Verify clean baseline + run the counted-property-path spike
+
+Before any code changes: confirm worktree is at baseline. The procedure body in Task 2 uses `+` (plus closure) — pre-spike confirmed HANA KGE does NOT support `{n,m}` counted-range syntax (`Unsupported functionality: Path repeat range`). The spike-probe table above is documented for traceability; implementer does not re-run.
 
 **Files:** none (verification only)
 
@@ -248,7 +271,7 @@ Find lines ~158-170 (the stub after the validator). Replace the `sparql := …` 
       '  {' || CHAR(10) ||
       '    # ARM 1: Prerequisite chain (preferred when data supports it)' || CHAR(10) ||
       '    <' || :p1 || '> kg:teaches ?c1 .' || CHAR(10) ||
-      '    ?c1 (^kg:requires){1,5} ?cN .' || CHAR(10) ||
+      '    ?c1 (^kg:requires)+ ?cN .' || CHAR(10) ||
       '    ?b kg:teaches ?cN .' || CHAR(10) ||
       '    FILTER(?b != <' || :p1 || '>)' || CHAR(10) ||
       '    BIND("PREREQ" AS ?pathType)' || CHAR(10) ||
@@ -256,7 +279,7 @@ Find lines ~158-170 (the stub after the validator). Replace the `sparql := …` 
       '    BIND(0 AS ?hopCount)' || CHAR(10) ||
       '  } UNION {' || CHAR(10) ||
       '    # ARM 2: Co-completion adjacency (behavioral signal, dense)' || CHAR(10) ||
-      '    <' || :p1 || '> (kg:coCompletedWith){1,3} ?b .' || CHAR(10) ||
+      '    <' || :p1 || '> (kg:coCompletedWith)+ ?b .' || CHAR(10) ||
       '    FILTER(?b != <' || :p1 || '>)' || CHAR(10) ||
       '    BIND("CO_COMPLETED" AS ?pathType)' || CHAR(10) ||
       '    BIND(2 AS ?pathTypeRank)' || CHAR(10) ||
@@ -275,7 +298,7 @@ Find lines ~158-170 (the stub after the validator). Replace the `sparql := …` 
       'LIMIT 10';
 ```
 
-**Task 0 fallback variant**: if `{1,5}` was unsupported, change `(^kg:requires){1,5}` → `(^kg:requires)+` and `(kg:coCompletedWith){1,3}` → `(kg:coCompletedWith)+`. JS-side handler in Task 5 will trim paths exceeding depth via the `?b` candidate list cap.
+**Note**: the procedure body uses `+` (plus closure) for both ARM 1 and ARM 2 transitive paths because the spike confirmed HANA KGE returns `Unsupported functionality: Path repeat range` for `{n,m}` syntax. Depth is bounded by `LIMIT 10` plus the 5s wall-clock budget — there is no SPARQL-level hop count cap. If a future tutorial source produces pathologically slow `(coCompletedWith)+` results (e.g. a hub-and-spoke node where the closure approaches the full 13k-edge graph), the `kgQuery()` typed client's `withTimeout` wrapper cuts it off at 5s and the handler returns a friendly error.
 
 - [ ] **Step 3: Rebuild + deploy db-deployer to DEV**
 

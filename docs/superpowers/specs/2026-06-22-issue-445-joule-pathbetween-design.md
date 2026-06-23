@@ -24,19 +24,23 @@ What IS there: rich `kg:coCompletedWith` (13k edges from real user behavior) and
 
 ## Spike findings (2026-06-22)
 
-HANA KGE supports the full SPARQL property-path vocabulary:
+**Initial property-path support spike (early 2026-06-22):** HANA KGE supports `/` sequence, `^` inverse, `*` transitive, `+` plus, `|` alternation, and multi-hop chains. Performance acceptable.
 
-| Path operator | Probe result |
-|---|---|
-| Sequence `/` (e.g. `kg:teaches/kg:requires`) | ✓ 5 rows in 0.6s |
-| Inverse `^` (e.g. `^kg:requires`) | ✓ 5 rows in 0.6s |
-| Transitive `*` (e.g. `kg:requires*`) | ✓ 10 rows in 3.0s |
-| Plus `+` (e.g. `kg:requires+`) | ✓ 5 rows in 2.9s |
-| Alternation `|` (e.g. `kg:teaches|kg:requires`) | ✓ 5 rows in 0.6s |
-| Canonical Phase-2 shape | ✓ 0 rows in 3.0s (data-sparse, not engine-sparse) |
-| 2-hop sequence `kg:requires/kg:requires` | ✓ 5 rows in 0.6s |
+**Implementation-time spike (2026-06-22, pre-Task 0):** HANA KGE does NOT support `{n,m}` counted-range property paths. Probing `(^kg:requires){1,3}` and `(^kg:requires){1,5}` returns:
 
-Property-path support is therefore **resolved as NOT a risk** for Phase 2. Data sparseness in the prereq sub-graph IS the design constraint.
+```
+Unsupported functionality: Path repeat range
+```
+
+Same for `(kg:coCompletedWith){1,3}`. **The plan and procedure body therefore use `+` (plus closure) instead of counted ranges**, accepting that path depth is bounded only by `LIMIT 10` and the wall-clock budget (≤5s per call), not by SPARQL-level hop count. Realistic per-arm probe results from a production source tutorial:
+
+| Arm | Wall-clock | Result count |
+|---|---|---|
+| ARM 1 `teaches/(^requires)+/teaches` LIMIT 10 | 5.3s | 10 |
+| ARM 2 `(coCompletedWith)+` LIMIT 10 | 5.3s | 10 |
+| ARM 3 SHARED_CONCEPT LIMIT 10 | 0.9s | 10 |
+
+Property-path support is therefore **resolved as NOT a risk** for Phase 2. Data sparseness in the prereq sub-graph + the lack of counted-range support together drive the design: `+` closure for transitive arms, JS-side ranking via the `pathTypeRank` ORDER BY (no per-hop SPARQL ranking available).
 
 ## Goals
 
@@ -73,8 +77,8 @@ User prompt → Joule orchestrator → findLearningPath tool dispatch
                                       ▼
                   KG_QUERY.hdbprocedure  ELSEIF :query_name = 'PATH_BETWEEN'
                   ─ Single SPARQL with three UNION arms:
-                      1. PREREQ:    ?a kg:teaches/^kg:requires{1,5}/kg:teaches ?b   (rank=1)
-                      2. CO_COMP:   ?a kg:coCompletedWith{1,3} ?b                   (rank=2)
+                      1. PREREQ:    ?a kg:teaches/(^kg:requires)+/kg:teaches ?b   (rank=1)
+                      2. CO_COMP:   ?a (kg:coCompletedWith)+ ?b                    (rank=2)
                       3. SHARED:    ?a kg:teaches ?c. ?b kg:teaches ?c.             (rank=3)
                   ─ ORDER BY pathTypeRank  LIMIT 10
                                       │
@@ -117,10 +121,13 @@ FROM <https://developers.sap.com/kg/tutorials-v3>
 WHERE {
   {
     # ── ARM 1: Prerequisite chain (preferred when data supports it)
-    # Tutorial A teaches concept c1; through up to 5 reverse-prereq hops
-    # we reach concept cN; tutorial B teaches cN.
+    # Tutorial A teaches concept c1; through one-or-more reverse-prereq
+    # hops we reach concept cN; tutorial B teaches cN.
+    # Note: HANA KGE doesn't support {n,m} counted-range syntax, so we
+    # use `+` (one-or-more closure). Depth is bounded by LIMIT 10 +
+    # the 5s wall-clock timeout.
     <FROM_IRI> kg:teaches ?c1 .
-    ?c1 (^kg:requires){1,5} ?cN .
+    ?c1 (^kg:requires)+ ?cN .
     ?b kg:teaches ?cN .
     FILTER(?b != <FROM_IRI>)
     BIND("PREREQ" AS ?pathType)
@@ -130,7 +137,8 @@ WHERE {
   UNION
   {
     # ── ARM 2: Co-completion adjacency (behavioral signal, dense)
-    <FROM_IRI> (kg:coCompletedWith){1,3} ?b .
+    # Same reasoning as ARM 1 — `+` not `{1,3}`.
+    <FROM_IRI> (kg:coCompletedWith)+ ?b .
     FILTER(?b != <FROM_IRI>)
     BIND("CO_COMPLETED" AS ?pathType)
     BIND(2 AS ?pathTypeRank)
@@ -151,11 +159,9 @@ ORDER BY ?pathTypeRank
 LIMIT 10
 ```
 
-### Counted property-path syntax verification
+### Counted property-path syntax was tested and is NOT supported
 
-The plan's first task is a 5-minute spike to verify HANA KGE accepts the `(^kg:requires){1,5}` counted property path syntax specifically (the initial spike tested `*` and `+` but not `{n,m}`).
-
-**Fallback if not supported:** use `(^kg:requires)*` (unrestricted transitive) and cap depth in the JS layer by inspecting the response size + JS-side BFS truncation. The query stays functionally correct; the depth cap just moves from SPARQL to JS.
+The implementation-time spike confirmed HANA KGE returns `Unsupported functionality: Path repeat range` for `{n,m}` syntax. The procedure body uses `+` (plus closure) for both ARM 1 and ARM 2 transitive paths. Depth is bounded by `LIMIT 10` and the 5s wall-clock budget, not by SPARQL-level hop count.
 
 ### `<TO_IRI>` is NOT in the SPARQL body
 
@@ -169,8 +175,8 @@ The existing `:p1` validator (`LIKE_REGEXPR '^https://developers\.sap\.com/kg/tu
 
 | Arm | Spike-measured | Production expectation |
 |---|---|---|
-| ARM 1 (PREREQ) | ~3s (returns 0 on v3) | Stays bounded by `{1,5}` regardless of data density |
-| ARM 2 (CO_COMP) | ~0.5-1s | Dense graph; bounded by `{1,3}` |
+| ARM 1 (PREREQ) | ~5.3s (measured from prod tutorial) | `(^kg:requires)+` closure; bounded by LIMIT 10 + 5s timeout |
+| ARM 2 (CO_COMP) | ~5.3s (measured from prod tutorial) | `(coCompletedWith)+` closure; bounded by LIMIT 10 + 5s timeout |
 | ARM 3 (SHARED) | ~0.5s | Single-hop join; bounded by `LIMIT 10` |
 | Total | ≤5s | Well within Joule's chat budget |
 
@@ -393,7 +399,7 @@ Used post-rollout to:
 1. Procedure dispatch works: `kgQuery({ queryName: 'PATH_BETWEEN', params: { fromSlug, toSlug } })` returns non-empty XML for a known DEV slug pair
 2. Co-completion arm fires: a slug with known `coCompletedWith` neighbors yields ARM 2 results
 3. Shared-concept arm fires: a slug with overlapping `kg:teaches` concepts yields ARM 3 results
-4. 5-hop cap enforced (or fallback if `{1,5}` syntax unsupported)
+4. LIMIT 10 + 5s wall-clock cap enforced (HANA KGE doesn't support `{n,m}`; closure with LIMIT is the implementation)
 5. DEFINER ACL preserved: `cds bind --exec` user successfully calls the procedure (regression guard for PR #555's claim)
 6. ORDER BY pathTypeRank: when multiple arms return the same slug, only the lowest-rank one survives (deduplication evidence at the SPARQL level)
 7. `LIMIT 10` enforced: never more than 10 candidates returned
