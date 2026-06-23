@@ -86,16 +86,38 @@ No new services, no new HTTP endpoints, no new database tables. The work is enti
 
 ### Frontend (Vue island)
 
-**[hugo-apps/src/advocates/main.ts](hugo-apps/src/advocates/main.ts)** — after the `/api/advocates` fetch resolves (success OR error), stash the result on `window`:
+**[hugo-apps/src/advocates/App.vue](hugo-apps/src/advocates/App.vue)** — the `/api/advocates` fetch lives in the `load()` async function (App.vue:41-53), NOT in `main.ts` (which only calls `createApp(App).mount(...)` and never touches the API). Add the handoff inside `load()`:
 
 ```ts
-// After fetch resolves
-window.__JOULE_ADVOCATES = response?.advocates ?? [];
-// In the error path
-window.__JOULE_ADVOCATES = [];
+// Top-of-module (after the script setup imports) — synchronous default
+// so window.__JOULE_ADVOCATES is NEVER undefined when readPageContext
+// runs (chat-context reviewer flagged the cold-open race as needing a
+// stronger guarantee than "self-heals on next message").
+if (typeof window !== 'undefined') {
+  (window as any).__JOULE_ADVOCATES = (window as any).__JOULE_ADVOCATES || [];
+}
+
+async function load() {
+  loading.value = true; error.value = null;
+  try {
+    const res = await fetch(props.apiUrl, { headers: { Accept: 'application/json' }});
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const body = await res.json();
+    advocates.value = Array.isArray(body.advocates) ? body.advocates : [];
+    // Stash for joule.js's readPageContext.
+    (window as any).__JOULE_ADVOCATES = advocates.value;
+  } catch (e) {
+    error.value = (e as Error).message;
+    (window as any).__JOULE_ADVOCATES = [];
+  } finally {
+    loading.value = false;
+  }
+}
 ```
 
 This is the *only* mildly clever bit in the design. The Vue island already has the roster; passing it to a vanilla-JS sibling (`joule.js`) via `window` is simpler than a duplicate `/api/advocates` fetch from `joule.js` itself. The two pieces are on the same page, run in the same tab, and don't share a module graph today — `window` is the agreed handoff surface.
+
+**[hugo-apps/src/advocates/main.ts](hugo-apps/src/advocates/main.ts)** — unchanged. Documented here only to record that we considered putting the stash there and rejected it (the fetch isn't in this file).
 
 ### Frontend (vanilla-JS Joule)
 
@@ -154,8 +176,14 @@ No bundle rebuild — `joule.js` is a hand-authored vanilla file, not Vite-bundl
 2. `advocatesLayer(pageContext)` function:
 
    ```js
+   const MAX_ROSTER_ENTRIES = 50;  // hard ceiling on what we render into
+                                    // the prompt. Server-side defense against
+                                    // an oversized client payload. Today's
+                                    // roster is ~5; raise if it grows past 30.
+
    function advocatesLayer(ctx) {
-     const advocates = Array.isArray(ctx.advocates) ? ctx.advocates : [];
+     const raw = Array.isArray(ctx?.advocates) ? ctx.advocates : [];
+     const advocates = raw.slice(0, MAX_ROSTER_ENTRIES);
      if (!advocates.length) {
        return [
          'Current page: Developer Advocates roster.',
@@ -177,6 +205,9 @@ No bundle rebuild — `joule.js` is a hand-authored vanilla file, not Vite-bundl
        if (a.bio)      lines.push(`    bio: ${a.bio}`);
        lines.push(`    topics: ${topics}`);
        lines.push(`    links available: ${links}`);
+     }
+     if (raw.length > MAX_ROSTER_ENTRIES) {
+       lines.push(`(${raw.length - MAX_ROSTER_ENTRIES} additional advocates not shown.)`);
      }
      lines.push('');
      lines.push(
@@ -208,48 +239,58 @@ No bundle rebuild — `joule.js` is a hand-authored vanilla file, not Vite-bundl
      const persona = isAdmin ? ADMIN_PERSONA
                    : isAdvocates ? ADVOCATES_PERSONA
                    : PERSONA;
-     // RAG_GUIDANCE and PROGRESS_GUIDANCE both reference learner workflows
-     // (resume, recommend, getRelevantSteps) that are off-scope on the
-     // advocates page. Skip them.
+     // Preserve existing layer ordering for admin (gets RAG_GUIDANCE
+     // today) and learner (gets RAG_GUIDANCE + PROGRESS_GUIDANCE).
+     // ONLY the new advocates kind opts out of both — getRelevantSteps
+     // and getUserProgress workflows aren't relevant on this page.
      const layers = [persona];
-     if (!isAdmin && !isAdvocates) {
-       layers.push(RAG_GUIDANCE);
-       layers.push(PROGRESS_GUIDANCE);
-     }
+     if (!isAdvocates) layers.push(RAG_GUIDANCE);
+     if (!isAdmin && !isAdvocates) layers.push(PROGRESS_GUIDANCE);
      layers.push(pageLayer(pageContext), userLayer(user));
      return layers.filter(Boolean).join('\n\n');
    }
    ```
 
+   Verified intent: today's admin path is `[ADMIN_PERSONA, RAG_GUIDANCE, adminLayer, userLayer]` (no PROGRESS_GUIDANCE). The rewrite preserves that exactly — admin still gets `RAG_GUIDANCE`. Only the new `advocates` path strips both `RAG_GUIDANCE` and `PROGRESS_GUIDANCE`. Existing learner / search / tutorial / mission / group prompts remain byte-identical.
+
 ### Backend (tool palette)
 
-**[srv/lib/chat-orchestrator.js](srv/lib/chat-orchestrator.js)** — extend `toolsForContext`:
+**[srv/lib/chat-orchestrator.js](srv/lib/chat-orchestrator.js)** — extend `toolsForContext`.
+
+**Key constraint** (caught in spec review iter 1): today the ChatSettings-gated block at orchestrator.js:187-204 runs UNCONDITIONALLY for both admin and learner kinds. The existing test at [test/unit/chat-orchestrator-codecheck.test.js:25-35](test/unit/chat-orchestrator-codecheck.test.js#L25-L35) asserts `kind: 'tutorial'` includes `checkCode` when `codeCheckEnabled=true`. Our change must preserve every existing kind's tool set EXACTLY; only the new `advocates` kind opts out.
+
+The minimal, side-effect-free diff is an early-return for the `advocates` branch:
 
 ```js
 async function toolsForContext({ pageContext, isAdmin }) {
   const tools = [SEARCH_TUTORIALS_TOOL];
+
+  // Advocates page: trimmed palette. searchTutorials + (optional)
+  // getUserProgress for signed-in users. ChatSettings-gated tools
+  // (getRelevantSteps, checkCode, getBranchRecommendation,
+  // findLearningPath) are intentionally excluded — off-scope on
+  // /developer-advocates/. Early return keeps the existing admin
+  // and learner branches below byte-identical.
+  if (pageContext?.kind === 'advocates') {
+    tools.push(GET_USER_PROGRESS_TOOL);
+    return tools;
+  }
+
+  // Existing logic — unchanged.
   if (isAdmin && pageContext?.kind === 'admin') {
     tools.push(SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, GENERATE_ANALYTICS_QUERY_TOOL, EXPLAIN_ANALYTICS_RESULT_TOOL);
-  } else if (pageContext?.kind === 'advocates') {
-    // Scoped palette for /developer-advocates/. searchTutorials is the
-    // only content lookup; getUserProgress remains conditional on auth
-    // (same as the learner kind). All other tools (getRelevantSteps,
-    // checkCode, getBranchRecommendation, findLearningPath) are
-    // off-scope on this page.
-    tools.push(GET_USER_PROGRESS_TOOL);
   } else {
     tools.push(GET_USER_PROGRESS_TOOL);
-    // ChatSettings-gated tools — skipped for advocates kind by design.
-    try {
-      const { ChatSettings } = cds.entities('com.sap.developers.ims');
-      const settings = await SELECT.one.from(ChatSettings);
-      if (settings?.ragEnabled)        tools.push(GET_RELEVANT_STEPS_TOOL);
-      if (settings?.codeCheckEnabled)  tools.push(CHECK_CODE_TOOL);
-      if (settings?.branchingEnabled)  tools.push(GET_BRANCH_RECOMMENDATION_TOOL);
-      if (settings?.kgPathBetweenEnabled) tools.push(FIND_LEARNING_PATH_TOOL);
-    } catch (err) {
-      LOG.warn('toolsForContext: could not read ChatSettings', err.message);
-    }
+  }
+  try {
+    const { ChatSettings } = cds.entities('com.sap.developers.ims');
+    const settings = await SELECT.one.from(ChatSettings);
+    if (settings?.ragEnabled)             tools.push(GET_RELEVANT_STEPS_TOOL);
+    if (settings?.codeCheckEnabled)       tools.push(CHECK_CODE_TOOL);
+    if (settings?.branchingEnabled)       tools.push(GET_BRANCH_RECOMMENDATION_TOOL);
+    if (settings?.kgPathBetweenEnabled)   tools.push(FIND_LEARNING_PATH_TOOL);
+  } catch (err) {
+    LOG.warn('toolsForContext: could not read ChatSettings', err.message);
   }
   return tools;
 }
@@ -282,25 +323,32 @@ Note: `getUserProgress` is included for `advocates` kind even though the persona
 
 ### Unit — backend
 
-**New: [srv/lib/__tests__/chat-context-advocates.test.js](srv/lib/__tests__/chat-context-advocates.test.js)**:
+**Extend: [test/chat-context.test.js](test/chat-context.test.js)** (16 existing `buildSystemPrompt` cases live here — keep the convention):
 - `buildSystemPrompt({ kind: 'advocates', advocates: [fixture] }, user)` includes the persona signature ("Developer Advocates page"), the fixture advocate's name, and the topic-bridge instruction.
 - Does NOT include `PROGRESS_GUIDANCE` substring ("getUserProgress tool") or `RAG_GUIDANCE` substring ("getRelevantSteps tool").
 - Empty-roster fallback: `buildSystemPrompt({ kind: 'advocates', advocates: [] }, user)` includes the "has not loaded yet" guidance.
+- Defensive shape: `buildSystemPrompt({ kind: 'advocates', advocates: 'not-an-array' }, user)` does NOT throw, falls back to the empty-roster prompt. (Guards against client-side payload shape regressions.)
+- Regression guard: `buildSystemPrompt({ kind: 'admin', tool: 'analytics-builder' }, user)` still contains `RAG_GUIDANCE` substring (admin path unchanged).
 
-**Extend: [srv/lib/__tests__/chat-orchestrator-analytics-tools.test.js](srv/lib/__tests__/chat-orchestrator-analytics-tools.test.js)** (or whichever test file owns `toolsForContext` shape today):
-- `toolsForContext({ pageContext: { kind: 'advocates' }, isAdmin: false })` returns exactly `[searchTutorials, getUserProgress]`. No `getRelevantSteps`, no `checkCode`, no `getBranchRecommendation`, no `findLearningPath` — even when ChatSettings flips those on.
+**Extend: [test/unit/chat-orchestrator-codecheck.test.js](test/unit/chat-orchestrator-codecheck.test.js)** (owns `toolsForContext` assertions):
+- `toolsForContext({ pageContext: { kind: 'advocates' }, isAdmin: false })` with `codeCheckEnabled=true` AND `ragEnabled=true` returns exactly `[searchTutorials, getUserProgress]`. (Confirms the early-return bypasses ALL ChatSettings tools, even when the flags are on.)
+- Same call with `isAdmin=true` (a signed-in admin browsing the advocates page) still returns the trimmed palette — admin status doesn't override the page-context scoping here.
+- Regression guard: `toolsForContext({ pageContext: { kind: 'tutorial' }, isAdmin: false })` with `codeCheckEnabled=true` still includes `checkCode` (the existing test stays green).
 
 ### Unit — frontend
 
-**New: [hugo-apps/src/advocates/__tests__/joule-handoff.test.ts](hugo-apps/src/advocates/__tests__/joule-handoff.test.ts)**:
-- Mock `fetch('/api/advocates')` → assert `window.__JOULE_ADVOCATES` equals the response's `advocates` array after the promise resolves.
-- Mock `fetch` rejection → assert `window.__JOULE_ADVOCATES` is `[]` after the error path runs.
+**New: [hugo-apps/src/advocates/__tests__/joule-handoff.test.ts](hugo-apps/src/advocates/__tests__/joule-handoff.test.ts)** (or alongside the existing `__tests__` if one exists for advocates):
+- Mount `App.vue` with a mocked `fetch('/api/advocates')` returning `{ advocates: [fixtureA, fixtureB] }`. Assert `window.__JOULE_ADVOCATES` equals `[fixtureA, fixtureB]` after `load()` resolves.
+- Mount with mocked `fetch` rejection. Assert `window.__JOULE_ADVOCATES === []` after the error path runs.
+- Synchronous default: import the module and assert `window.__JOULE_ADVOCATES` is `[]` BEFORE `load()` even starts (the top-of-module side-effect must run on import).
 
 ### Smoke
 
-**Extend: [test/smoke/](test/smoke/)** existing smoke that hits HTML pages:
-- `GET /developer-advocates/` response body includes `data-page-kind="advocates"`.
-- Same response contains `<script id="joule-starters"` with an `"advocates"` key (regex-tolerant of minifier-stripped attribute quotes per `feedback_hugo_minifier_strips_quotes` memory).
+**Extend: [test/smoke/advocates.smoke.test.js](test/smoke/advocates.smoke.test.js)** (already asserts `src="/js/advocates.js"`):
+- `GET /developer-advocates/` response body includes `data-page-kind="advocates"` (regex tolerates Hugo minifier's attribute-quote stripping per `feedback_hugo_minifier_strips_quotes` memory).
+- Same response contains a `<script id="joule-starters">` element (regex anchors on `id=` + `"joule-starters"`, with optional quote-stripping).
+- The actual `"advocates"` JSON key inside the starters block is a JSON literal — minifier preserves JSON string keys, so a literal substring match for `"advocates":` is reliable.
+- **Bundle regression guard**: assert the served `/js/advocates.js` bundle contains the string `__JOULE_ADVOCATES`. Catches a silent regression where someone refactors `App.vue` and forgets the handoff. Without this, the smoke test would still pass even if the Vue island stopped setting the window var. (Reviewer flagged this gap in iter 1.)
 
 ### Not tested
 
@@ -322,14 +370,15 @@ Note: `getUserProgress` is included for `advocates` kind even though the persona
 |---|---|
 | `hugo/layouts/_default/baseof.html` | Edit — extend `data-page-kind` ternary. |
 | `hugo/layouts/partials/joule-starters.html` | Edit — add `"advocates"` starter set. |
-| `hugo-apps/src/advocates/main.ts` | Edit — set `window.__JOULE_ADVOCATES`. |
+| `hugo-apps/src/advocates/App.vue` | Edit — synchronous default + `window.__JOULE_ADVOCATES` in `load()` success/error. |
+| `hugo-apps/src/advocates/main.ts` | **No change** (the fetch isn't here). Listed only for traceability. |
 | `hugo/static/js/joule.js` | Edit — `readPageContext` advocates branch. |
-| `srv/lib/chat-context.js` | Edit — `ADVOCATES_PERSONA`, `advocatesLayer`, switch, `buildSystemPrompt`. |
-| `srv/lib/chat-orchestrator.js` | Edit — `toolsForContext` advocates branch. |
-| `srv/lib/__tests__/chat-context-advocates.test.js` | New — backend prompt unit tests. |
-| `srv/lib/__tests__/chat-orchestrator-analytics-tools.test.js` | Edit — tool palette assertion for advocates kind. |
-| `hugo-apps/src/advocates/__tests__/joule-handoff.test.ts` | New — frontend handoff unit test. |
-| `test/smoke/` | Edit (one file) — assert `data-page-kind="advocates"` on the public page. |
+| `srv/lib/chat-context.js` | Edit — `ADVOCATES_PERSONA`, `MAX_ROSTER_ENTRIES`, `advocatesLayer`, switch case, `buildSystemPrompt` branch. |
+| `srv/lib/chat-orchestrator.js` | Edit — early-return advocates branch in `toolsForContext`. |
+| `test/chat-context.test.js` | Edit — new test cases for `kind: 'advocates'` + regression guard for `kind: 'admin'`. |
+| `test/unit/chat-orchestrator-codecheck.test.js` | Edit — assert advocates kind bypasses ChatSettings tools; existing tutorial test stays green. |
+| `hugo-apps/src/advocates/__tests__/joule-handoff.test.ts` | New — frontend handoff unit test (incl. synchronous default + error path). |
+| `test/smoke/advocates.smoke.test.js` | Edit — assert `data-page-kind="advocates"`, starters block contains `"advocates"`, AND served `/js/advocates.js` bundle contains the string `__JOULE_ADVOCATES`. |
 
 ## Rollout
 
@@ -347,5 +396,9 @@ Note: `getUserProgress` is included for `advocates` kind even though the persona
 | Risk | Mitigation |
 |---|---|
 | Model still volunteers training-data SAP answers despite the persona's "do NOT" clause | The persona language is direct. If model behavior drifts in practice, follow up with a stricter system-prompt review or expand the unit tests to assert specific substring presence in the prompt. Manual DEV testing in the rollout step catches regressions. |
-| Roster doesn't load → user sees a vague answer | The empty-roster prompt fragment instructs Joule to say so and retry on next message. Acceptable; the alternative (block sending until loaded) breaks the open-immediately UX the site established. |
+| Roster doesn't load → user sees a vague answer | The empty-roster prompt fragment instructs Joule to say so and retry on next message. The synchronous default `window.__JOULE_ADVOCATES = []` at the top of `App.vue` guarantees `readPageContext` never sees `undefined` — eliminates one race class. Acceptable; the alternative (block sending until loaded) breaks the open-immediately UX the site established. |
 | Advocate edits in admin take time to reach the roster (cache TTL) | The `/api/advocates` route caches 60 s by default. A fresh page load triggers a re-fetch; manually waiting 60 s suffices for new uploads. Not changing in this PR. |
+| Token cost: roster sent on every chat request from this page | Today: ~5 advocates × ~50 tokens = ~250 tokens system-prompt overhead per request, well within the model's context budget and not measurably cost-impactful at expected QPS. `MAX_ROSTER_ENTRIES = 50` caps growth. Re-evaluate if roster exceeds 30 advocates or if Joule QPS grows 100x. |
+| Privacy: bio + location + region + links in the system prompt | All fields are already public on the `/developer-advocates/` page (rendered on the cards Tom shipped in PRs #572-574). No incremental privacy surface area; we're just plumbing the page's own data into the same page's chat panel. The `/api/advocates` endpoint that supplies the data is itself unauthenticated and intended for public consumption. |
+| Cross-talk: stale `window.__JOULE_ADVOCATES` from a previous page | Hugo pages are full reloads, not SPA navigations — `window` is freshly minted on every visit. Even if a future SPA refactor changed this, `readPageContext` keys off `data-page-kind` first; the advocates branch wouldn't execute on a non-advocates page. Defense in depth. |
+| Descendant pages under `/developer-advocates/` (e.g. future `/developer-advocates/<slug>/`) inherit `.Type` | Hugo's `.Type` is inherited by descendants of the section. If we ever add per-advocate detail pages, they'll get `data-page-kind="advocates"` automatically — likely desirable (same persona) but worth re-reading this risk row before adding any. |
