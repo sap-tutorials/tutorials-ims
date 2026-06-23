@@ -301,7 +301,7 @@ Note: `getUserProgress` is included for `advocates` kind even though the persona
 ## Data flow
 
 1. User loads `/developer-advocates/`. Hugo's `baseof.html` emits `<html data-page-kind="advocates" ...>`.
-2. The advocates Vue island's `main.ts` mounts the app and calls `fetch('/api/advocates')`. On resolve, before mounting cards, it sets `window.__JOULE_ADVOCATES = response.advocates`. On error, it sets `window.__JOULE_ADVOCATES = []`.
+2. The advocates Vue island's `App.vue` mounts and runs `load()`, which calls `fetch('/api/advocates')`. On resolve, after assigning `advocates.value`, it sets `window.__JOULE_ADVOCATES = advocates.value`. On error, it sets `window.__JOULE_ADVOCATES = []`. A synchronous top-of-module default also initializes `window.__JOULE_ADVOCATES = []` so the variable is never `undefined`, even before `load()` has finished.
 3. User clicks the Joule shellbar item. Existing site-wide `joule.js` opens the panel.
 4. User sends a message. `readPageContext()` recognises `data-page-kind="advocates"` and emits `{ kind: 'advocates', advocates: window.__JOULE_ADVOCATES || [] }`.
 5. POST `/chat/stream` carries the page-context. CAP authenticates via XSUAA (existing behavior).
