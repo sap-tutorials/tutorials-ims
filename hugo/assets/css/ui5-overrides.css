@@ -343,3 +343,17 @@ html[data-reader="on"][data-page-kind="tutorial"] .op-header:focus-within {
   html[data-reader="on"][data-page-kind="tutorial"] ui5-shellbar,
   html[data-reader="on"][data-page-kind="tutorial"] .op-header { transition: none; }
 }
+
+/* Dark-mode fix: <ui5-li> slotted text in shellbar popovers inherits color
+   from the document's `body { color: var(--sapTextColor) }` rule rather
+   than from UI5's shadow-DOM theme tokens. When the page is in dark mode,
+   --sapTextColor updates correctly but the inheritance chain doesn't always
+   pick up the new value on already-rendered slotted nodes. Forcing the
+   explicit --sapList_TextColor token (which UI5 provides for both light +
+   dark themes) keeps non-selected items readable in both modes.
+   Issue: dark-on-dark text in the nav/share/user popovers' list items. */
+#sb-nav-popover ui5-li,
+#sb-share-popover ui5-li,
+#sb-user-popover ui5-li {
+  color: var(--sapList_TextColor);
+}
