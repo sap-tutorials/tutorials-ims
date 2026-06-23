@@ -970,6 +970,7 @@ blockquote {
   flex-shrink: 0;
   color: var(--sapContent_LabelColor, #556b82);
   transition: border-color 0.15s, color 0.15s;
+  position: relative;
 }
 
 .step-toc-list li.active .step-toc-circle {
@@ -982,6 +983,26 @@ blockquote {
   border-color: var(--sapPositiveColor, #30914c);
   background: var(--sapPositiveColor, #30914c);
   color: #fff;
+}
+
+/* Issue #568: notification-style dot on steps that include a [VALIDATE_N]
+   question block. Anchored to the top-right of the step-toc-circle. Uses the
+   Horizon Positive Green token (same family as `.completed` above) so the
+   meaning reads as "there's something to do here," not "warning." Border
+   matches the surrounding background so the dot reads as a separate badge
+   even when it overlaps an .active (blue-filled) or .completed (green-filled)
+   circle. */
+.step-toc-quiz-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sapPositiveColor, #30914c);
+  border: 1.5px solid var(--sapList_Background, var(--sapBackgroundColor, #fff));
+  box-sizing: content-box;
+  pointer-events: none;
 }
 
 /* ── Tutorial step accordion ── */

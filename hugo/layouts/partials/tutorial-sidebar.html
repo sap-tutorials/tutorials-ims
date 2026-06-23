@@ -3,9 +3,9 @@
     <h4>Steps</h4>
     <ul class="step-toc-list">
       {{ range .Params.steps }}
-      <li class="step-toc-item" data-toc-step="{{ .number }}">
+      <li class="step-toc-item" data-toc-step="{{ .number }}"{{ with .validation }} data-has-quiz="true"{{ end }}>
         <a href="#step-{{ .number }}">
-          <span class="step-toc-circle">{{ .number }}</span>
+          <span class="step-toc-circle">{{ .number }}{{ with .validation }}<span class="step-toc-quiz-dot" aria-label="This step has a question" title="This step has a question"></span>{{ end }}</span>
           <span class="step-toc-text"><span class="step-toc-label">Step {{ .number }}:</span> {{ .title }}</span>
         </a>
       </li>
