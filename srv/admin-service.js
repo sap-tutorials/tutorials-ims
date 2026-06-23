@@ -125,6 +125,25 @@ export default class AdminService extends cds.ApplicationService {
       await ensureDevtoberfestConfigSingleton();
     });
 
+    // Ensure singleton row exists for KnowledgeGraphSettings. The seed CSV is
+    // header-only (no data row); without this hook OData V4 returns 404 on the
+    // singleton's first read. Defaults mirror the admin form's placeholders.
+    // UUID is one greater than CHAT_SETTINGS_SINGLETON_ID (c8a7) by convention.
+    const KG_SETTINGS_SINGLETON_ID = '00000000-0000-0000-0000-00000000c8a8';
+    this.before('READ', 'KnowledgeGraphSettings', async () => {
+      const exists = await SELECT.one.from('com.sap.developers.ims.KnowledgeGraphSettings')
+        .where({ ID: KG_SETTINGS_SINGLETON_ID });
+      if (!exists) {
+        await INSERT.into('com.sap.developers.ims.KnowledgeGraphSettings').entries({
+          ID: KG_SETTINGS_SINGLETON_ID,
+          enabled: false,
+          extractBuildCap: 200,
+          mergeSimThreshold: 0.92,
+          mergeSimThresholdExtract: 0.85
+        });
+      }
+    });
+
     // Auto-assign legacyId on creation for entities that need it
     const legacyKeyedEntities = [
       'Users', 'Tutorials', 'Missions', 'Groups', 'Events', 'TaskRecords',
