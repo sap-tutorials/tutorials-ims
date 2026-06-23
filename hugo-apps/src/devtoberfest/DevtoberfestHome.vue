@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import type { HomeState, MountConfig, StatusResponse } from './types'
+import TermsDialog from './TermsDialog.vue'
 
 const props = defineProps<{ config: MountConfig }>()
 
@@ -8,6 +9,7 @@ const state = ref<HomeState>('loading')
 const status = ref<StatusResponse | null>(null)
 const errorMsg = ref<string>('')
 const ctaHint = ref<string>('')
+const dialogOpen = ref<boolean>(false)
 
 async function fetchStatus(): Promise<void> {
   state.value = 'loading'
@@ -137,12 +139,19 @@ function onCtaClick(): void {
     return
   }
   if (state.value === 'unregistered') {
-    // Task 12 will open the T&C dialog here.
-    console.warn('[devtoberfest] Join CTA clicked — T&C dialog wires in Task 12')
-    ctaHint.value = 'Terms & Conditions dialog will open here (coming soon).'
+    dialogOpen.value = true
     return
   }
   // registered/loading/event-missing — disabled
+}
+
+function onJoined(): void {
+  dialogOpen.value = false
+  state.value = 'registered'
+  // Optimistic update; status object also gets a partial refresh.
+  if (status.value) {
+    status.value = { ...status.value, joined: true, termsRequired: false }
+  }
 }
 
 onMounted(fetchStatus)
@@ -232,5 +241,14 @@ defineExpose({ fetchStatus })
         </a>
       </aside>
     </section>
+
+    <TermsDialog
+      :open="dialogOpen"
+      :api-terms="config.apiTerms"
+      :api-join="config.apiJoin"
+      :img-kasimir="config.imgKasimir"
+      @close="dialogOpen = false"
+      @joined="onJoined"
+    />
   </article>
 </template>
