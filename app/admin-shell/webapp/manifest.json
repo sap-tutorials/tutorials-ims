@@ -50,6 +50,7 @@
       "sap.tutorials.admin.accounts": "./components/accounts",
       "sap.tutorials.admin.changelog": "./components/changelog",
       "sap.tutorials.admin.privacyAudit": "./components/privacy-audit",
+      "sap.tutorials.admin.devtoberfest": "./components/devtoberfest",
       "sap.tutorials.admin.analytics": "./components/analytics",
       "sap.tutorials.admin.joule": "./components/joule",
       "sap.tutorials.admin.knowledgeGraph": "./components/knowledgeGraph",
@@ -161,6 +162,12 @@
         "componentData": {},
         "lazy": true
       },
+      "devtoberfest": {
+        "name": "sap.tutorials.admin.devtoberfest",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
       "analyticsComponent": {
         "name": "sap.tutorials.admin.analytics",
         "settings": {},
@@ -259,6 +266,7 @@
         { "name": "accounts", "pattern": "accounts", "target": [{"name": "accountsTarget", "prefix": "au"}] },
         { "name": "changelog", "pattern": "changelog", "target": [{"name": "changelogTarget", "prefix": "cl"}] },
         { "name": "privacyAudit", "pattern": "privacy-audit", "target": [{"name": "privacyAuditTarget", "prefix": "pa"}] },
+        { "pattern": "devtoberfest", "name": "devtoberfest", "target": "devtoberfest" },
         { "name": "analytics", "pattern": "analytics", "target": [{"name": "analyticsTarget", "prefix": "an"}] },
         { "name": "joule", "pattern": "joule", "target": [{"name": "jouleSettingsTarget", "prefix": "jo"}] },
         { "name": "knowledgeGraph", "pattern": "knowledgeGraph", "target": [{"name": "knowledgeGraphSettingsTarget", "prefix": "kg"}] },
@@ -374,6 +382,12 @@
           "id": "privacyAuditTarget",
           "viewLevel": 1,
           "prefix": "pa"
+        },
+        "devtoberfest": {
+          "type": "Component",
+          "usage": "devtoberfest",
+          "id": "devtoberfestTarget",
+          "controlAggregation": "to"
         },
         "analyticsTarget": {
           "type": "Component",
