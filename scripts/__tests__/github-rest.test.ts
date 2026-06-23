@@ -90,12 +90,12 @@ describe('REST API discovery + fallback', () => {
     it('paginates via Link header rel="next"', async () => {
       const fetchMock = vi.fn(async (url: string | URL) => {
         const u = String(url)
-        if (u.endsWith('/orgs/sap-tutorials/repos?per_page=100&type=public')) {
+        if (u.endsWith('/orgs/sap-tutorials/repos?per_page=100&type=all')) {
           return mkResponse(
             200,
             [{ name: 'repo-1', default_branch: 'main' }],
             {
-              link: '<https://api.github.com/orgs/sap-tutorials/repos?page=2&per_page=100&type=public>; rel="next"',
+              link: '<https://api.github.com/orgs/sap-tutorials/repos?page=2&per_page=100&type=all>; rel="next"',
             },
           )
         }
@@ -189,7 +189,7 @@ describe('REST API discovery + fallback', () => {
       expect(meta!.contributors[0]).toMatchObject({
         login: 'alice',
         name: 'Alice Author',
-        email: 'alice@example.com',
+        email: 'alice@users.noreply.github.com',
         avatarUrl: 'https://avatars.test/alice',
       })
       expect(meta!.contributors[2]).toMatchObject({
@@ -253,7 +253,7 @@ describe('REST API discovery + fallback', () => {
 
       expect(contribs).not.toBeNull()
       expect(contribs!.map(c => c.login)).toEqual(['doris', 'eve'])
-      expect(contribs![0]).toMatchObject({ login: 'doris', email: 'doris@example.com' })
+      expect(contribs![0]).toMatchObject({ login: 'doris', email: 'doris@users.noreply.github.com' })
       expect(contribs![1]).toMatchObject({ login: 'eve', email: '99999+eve@users.noreply.github.com' })
 
       const calledUrl = String(fetchMock.mock.calls[0][0])
@@ -424,13 +424,13 @@ describe('extractContributors (GraphQL path)', () => {
     expect(result[0]).toEqual({
       name: 'Alice Author',
       login: 'alice',
-      email: 'alice@example.com',
+      email: 'alice@users.noreply.github.com',
       avatarUrl: 'https://avatars.test/alice',
     })
     expect(result[1]).toEqual({
       name: 'Bob B',
       login: 'bob',
-      email: 'bob@example.com',
+      email: 'bob@users.noreply.github.com',
       avatarUrl: 'https://avatars.test/bob',
     })
   })
@@ -456,10 +456,10 @@ describe('extractContributors (GraphQL path)', () => {
     const result = extractContributors(nodes)
 
     expect(result).toHaveLength(1)
-    expect(result[0].email).toBe('alice@example.com')
+    expect(result[0].email).toBe('alice@users.noreply.github.com')
   })
 
-  it('falls back to empty string when email is missing from GraphQL response', () => {
+  it('synthesizes noreply email when email is missing from GraphQL response', () => {
     const nodes = [
       {
         author: {
@@ -472,7 +472,7 @@ describe('extractContributors (GraphQL path)', () => {
     const result = extractContributors(nodes)
 
     expect(result).toHaveLength(1)
-    expect(result[0].email).toBe('')
+    expect(result[0].email).toBe('carol@users.noreply.github.com')
   })
 
   it('passes through noreply GitHub emails without filtering', () => {

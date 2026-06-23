@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { buildQueries, shapeResults, formatMarkdown } from '../../scripts/lib/codecheck-eval/telemetry.js';
 
 describe('buildQueries', () => {
-  it('emits five named queries with the same single-element params (sinceIso)', () => {
+  it('emits named queries with the same single-element params (sinceIso)', () => {
     const q = buildQueries('2026-06-08T00:00:00Z');
-    const names = ['verdictDistribution', 'latency', 'tokens', 'errors', 'perStepCoverage'];
+    const names = ['verdictDistribution', 'latencyMinMax', 'latencyPercentiles', 'tokens', 'errors', 'perStepCoverage'];
     for (const n of names) {
       expect(q[n]).toBeDefined();
       expect(typeof q[n].sql).toBe('string');
@@ -13,8 +13,8 @@ describe('buildQueries', () => {
     }
   });
 
-  it('latency query references PERCENTILE_CONT (HANA-only)', () => {
-    expect(buildQueries('x').latency.sql).toMatch(/PERCENTILE_CONT/);
+  it('latencyPercentiles query references PERCENTILE_CONT (HANA-only)', () => {
+    expect(buildQueries('x').latencyPercentiles.sql).toMatch(/PERCENTILE_CONT/);
   });
 
   it('errors query filters by verdict = error (lowercase, source-faithful)', () => {

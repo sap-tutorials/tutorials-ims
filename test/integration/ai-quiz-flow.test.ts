@@ -47,10 +47,15 @@ describe('AI quiz flow — end to end (#208)', () => {
   it('synthetic rules.vr → expanded frontmatter → re-run hits cache', async () => {
     const rulesContent = `[AUTOAUTHOR_ALL:mcq]
 `
+    // [#311] Each step body must exceed MIN_SUBSTANTIVE_WORDS (50) substantive
+    // words or the AI-author guard will skip the step and no LLM call will fire.
+    // Padding with plausible-looking CAP tutorial prose keeps the guard happy
+    // without dragging in real fixtures.
+    const padding = 'In this step you will define a CAP service entity for the bookshop sample, deploy the schema to SAP HANA Cloud, and bind the destination service to the approuter so that the generated OData endpoints become reachable from the Fiori Elements preview, then run the unit tests locally to verify that the service handlers respond with the expected payload shape and authentication headers before pushing to Cloud Foundry.'
     const stepBodies = new Map<number, string>([
-      [1, 'body of step 1'],
-      [2, 'body of step 2'],
-      [3, 'body of step 3'],
+      [1, `body of step 1. ${padding}`],
+      [2, `body of step 2. ${padding}`],
+      [3, `body of step 3. ${padding}`],
     ])
 
     // First pass: empty cache, 3 LLM calls expected.
@@ -82,10 +87,12 @@ describe('AI quiz flow — end to end (#208)', () => {
 
   it('AI-authored text questions flow into aiGradedSpecs (#208 anti-leak chain)', async () => {
     const rulesContent = `[AUTOAUTHOR_ALL:text]\n`
+    // [#311] Pad each step body past the 50 substantive-word guard.
+    const padding = 'In this step you will define a CAP service entity for the bookshop sample, deploy the schema to SAP HANA Cloud, and bind the destination service to the approuter so that the generated OData endpoints become reachable from the Fiori Elements preview, then run the unit tests locally to verify that the service handlers respond with the expected payload shape and authentication headers before pushing to Cloud Foundry.'
     const stepBodies = new Map<number, string>([
-      [1, 'body of step 1'],
-      [2, 'body of step 2'],
-      [3, 'body of step 3'],
+      [1, `body of step 1. ${padding}`],
+      [2, `body of step 2. ${padding}`],
+      [3, `body of step 3. ${padding}`],
     ])
 
     const callModel = vi.fn().mockResolvedValue(MOCK_RESP_TEXT)

@@ -26,11 +26,11 @@ describe('SearchService', () => {
     ]);
 
     await INSERT.into(Missions).entries([
-      { ID: 'search-m1', legacyId: 90101, slug: 'full-stack-mission', title: 'Full-Stack CAP Application', description: 'Build end-to-end', primaryTag: 'SAP Cloud Application Programming Model', experienceTag: 'intermediate', averageTimeToComplete: 180, status: 'ACTIVE' },
+      { ID: 'search-m1', legacyId: 90101, slug: 'full-stack-mission', title: 'Full-Stack CAP Application', description: 'Build end-to-end', primaryTag: 'SAP Cloud Application Programming Model', experienceTag: 'intermediate', averageTimeToComplete: 180, status: 'ACTIVE', published: true },
     ]);
 
     await INSERT.into(Groups).entries([
-      { ID: 'search-g1', legacyId: 90201, title: 'HANA Basics Group', description: 'HANA fundamentals', primaryTag: 'SAP HANA Cloud', experienceTag: 'beginner', averageTimeToComplete: 90, status: 'ACTIVE' },
+      { ID: 'search-g1', legacyId: 90201, title: 'HANA Basics Group', description: 'HANA fundamentals', primaryTag: 'SAP HANA Cloud', experienceTag: 'beginner', averageTimeToComplete: 90, status: 'ACTIVE', published: true },
     ]);
 
     await INSERT.into(Tags).entries([

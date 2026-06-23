@@ -7,19 +7,19 @@ describe('mail-client', () => {
     it('loads first notification template', () => {
       const html = loadTemplate(0);
       expect(html).toContain('first reminder');
-      expect(html).toContain('ninety days');
+      expect(html).toContain('${staleDaysThreshold} days');
     });
 
     it('loads second notification template', () => {
       const html = loadTemplate(1);
       expect(html).toContain('second reminder');
-      expect(html).toContain('sixty days');
+      expect(html).toContain('repository owner has been copied');
     });
 
     it('loads third notification template', () => {
       const html = loadTemplate(2);
       expect(html).toContain('third and final reminder');
-      expect(html).toContain('thirty days');
+      expect(html).toContain('Tutorials Curation team');
     });
 
     it('loads final notification template', () => {

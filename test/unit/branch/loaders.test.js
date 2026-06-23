@@ -9,7 +9,7 @@ describe('loadProfile (PR 6 typed read)', () => {
     const { Users, UserLearningPreferences } = cds.entities('com.sap.developers.ims');
     const userUuid = '__test__-pr6-load-1';
     await INSERT.into(Users).entries({
-      uuid: userUuid, legacyId: 990001, email: '', firstName: '', lastName: '',
+      uuid: userUuid, sapId: userUuid, legacyId: 990001, email: '', firstName: '', lastName: '',
     });
     const dbUserId = (await SELECT.one.from(Users).where({ uuid: userUuid })).ID;
     await INSERT.into(UserLearningPreferences).entries({
