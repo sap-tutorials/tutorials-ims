@@ -59,6 +59,18 @@ Each runtime-tunable knob lives in a per-domain `*Settings` HANA entity, edited 
 - **Field:** `dashboardUrl` (String 500) — tutorial dashboard URL used in contributor-notification emails.
 - **Hardcoded default:** `https://tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/ui/tutorialDashboard` (the prod approuter URL).
 
+### Chat / Joule
+
+- **Endpoint:** `/admin/ChatSettings`
+- **Replaced env vars:** none (Joule is admin-tile-flipped end-to-end; no env-var equivalents)
+- **Per-tool registration flags** (each gates whether the corresponding Joule tool is registered in the LLM's tool list — when false, the LLM doesn't see the tool):
+  - `ragEnabled` (Boolean, default false) — gates `getRelevantSteps` (RAG tool for tutorial step-content lookup).
+  - `codeCheckEnabled` (Boolean, default false) — gates `checkCode` (AI code-grading tool; issue #171).
+  - `branchingEnabled` (Boolean, default false) — gates `getBranchRecommendation` (author-aware branch + skip recommender; issue #172 PR 4).
+  - `kgPathBetweenEnabled` (Boolean, default false) — gates `findLearningPath` (hybrid pathBetween Joule tool; issue #445 / Phase 2 of #381).
+  - `validateAnswerEnabled` (Boolean, default false) — gates the free-text quiz grader. See [architecture/free-text-grader.md](../architecture/free-text-grader.md).
+- **Flip procedure:** Joule Chat Settings tile in `/admin-ui/`. The runtime-config resolver picks up the change on the next chat request without restart (memory: `feedback_check_chatsettings_after_deploy` — toggling these flags is the known operational gotcha for missing tool availability).
+
 ### Tenant
 
 - **Endpoint:** `/admin/TenantSettings`

@@ -155,18 +155,54 @@ BEGIN
       SIGNAL KG_INVALID_TUTORIAL_IRI;
     END IF;
 
-    -- PATH_BETWEEN_QUERY — copied verbatim from srv/lib/kg-queries.js line 284.
-    -- Phase 2 stub: returns LIMIT 0 (no rows). $FROM_SLUG → :p1, $TO_SLUG → :p2.
-    -- FROM <hardcoded> → from_clause.
+    -- PATH_BETWEEN: three-arm UNION SPARQL.
+    -- See docs/superpowers/specs/2026-06-22-issue-445-joule-pathbetween-design.md
+    -- for the rationale (sparse kg:requires graph; coverage-fallback design).
+    --
+    -- NOTE: :p2 (toSlug IRI) is VALIDATED by the block above (defense-in-depth)
+    -- but is INTENTIONALLY NOT referenced in the SPARQL body. JS-layer
+    -- post-processing does the toSlug match. This produces graceful fallback
+    -- ('closest topical neighbors') when no exact path to toSlug exists,
+    -- rather than the 'no path found' answer the issue body originally
+    -- proposed. See spec § "Layer 1 — KG_QUERY procedure: PATH_BETWEEN branch".
+    --
+    -- HANA KGE does NOT support {n,m} counted-range property paths (Task 0
+    -- spike confirmed 'Unsupported functionality: Path repeat range'). We use
+    -- + (plus closure, one-or-more hops) instead. Depth bounded by LIMIT 10
+    -- and the 5s wall-clock timeout enforced by kgQuery()'s withTimeout wrapper.
     sparql :=
       'PREFIX kg: <https://developers.sap.com/kg/>' || CHAR(10) ||
-      '' || CHAR(10) ||
-      '# Phase 2 stub: PR 5 declares; PR 6+ implements.' || CHAR(10) ||
-      '# Will be: SELECT shortest path of kg:requires between ' || :p1 || ' and ' || :p2 || '.' || CHAR(10) ||
-      'SELECT ?placeholder' || CHAR(10) ||
+      'SELECT ?b ?pathType ?pathTypeRank ?hopCount' || CHAR(10) ||
       from_clause || CHAR(10) ||
-      'WHERE { ?placeholder ?p ?o }' || CHAR(10) ||
-      'LIMIT 0';
+      'WHERE {' || CHAR(10) ||
+      '  {' || CHAR(10) ||
+      '    # ARM 1: Prerequisite chain (preferred when data supports it)' || CHAR(10) ||
+      '    <' || :p1 || '> kg:teaches ?c1 .' || CHAR(10) ||
+      '    ?c1 (^kg:requires)+ ?cN .' || CHAR(10) ||
+      '    ?b kg:teaches ?cN .' || CHAR(10) ||
+      '    FILTER(?b != <' || :p1 || '>)' || CHAR(10) ||
+      '    BIND("PREREQ" AS ?pathType)' || CHAR(10) ||
+      '    BIND(1 AS ?pathTypeRank)' || CHAR(10) ||
+      '    BIND(0 AS ?hopCount)' || CHAR(10) ||
+      '  } UNION {' || CHAR(10) ||
+      '    # ARM 2: Co-completion adjacency (behavioral signal, dense)' || CHAR(10) ||
+      '    <' || :p1 || '> (kg:coCompletedWith)+ ?b .' || CHAR(10) ||
+      '    FILTER(?b != <' || :p1 || '>)' || CHAR(10) ||
+      '    BIND("CO_COMPLETED" AS ?pathType)' || CHAR(10) ||
+      '    BIND(2 AS ?pathTypeRank)' || CHAR(10) ||
+      '    BIND(0 AS ?hopCount)' || CHAR(10) ||
+      '  } UNION {' || CHAR(10) ||
+      '    # ARM 3: Shared-concept proximity (semantic, always-on)' || CHAR(10) ||
+      '    <' || :p1 || '> kg:teaches ?c .' || CHAR(10) ||
+      '    ?b kg:teaches ?c .' || CHAR(10) ||
+      '    FILTER(?b != <' || :p1 || '>)' || CHAR(10) ||
+      '    BIND("SHARED_CONCEPT" AS ?pathType)' || CHAR(10) ||
+      '    BIND(3 AS ?pathTypeRank)' || CHAR(10) ||
+      '    BIND(0 AS ?hopCount)' || CHAR(10) ||
+      '  }' || CHAR(10) ||
+      '}' || CHAR(10) ||
+      'ORDER BY ?pathTypeRank' || CHAR(10) ||
+      'LIMIT 10';
 
   ELSEIF :query_name = 'CONCEPTS_FOR_USER' THEN
 

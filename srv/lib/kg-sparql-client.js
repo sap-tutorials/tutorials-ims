@@ -170,6 +170,22 @@ export class SparqlTimeoutError extends Error {
  * spike probe.
  */
 function coerceRow(rows) {
+  // The @cap-js/hana driver wraps DO-block results as { changes: [{}, [rows]] }.
+  // The first `changes[0]` is the DO statement itself (no rows); `changes[1]`
+  // is the SELECT statement's row array. Unwrap to that array first, then
+  // fall through to the legacy flat-array path for tests that pass a plain
+  // [{RESPONSE: ...}] shape.
+  //
+  // (Latent bug from PR #555: original coerceRow used Array.isArray → false
+  // for the {changes:...} object → wrapped in [rows] → looked for .RESPONSE
+  // on the wrapper → got undefined → empty string. Caught when Phase 2's
+  // getConceptsForUser actually consumed the .response field. See #445.)
+  if (rows && typeof rows === 'object' && !Array.isArray(rows) && Array.isArray(rows.changes)) {
+    const selectRows = rows.changes[1];
+    if (Array.isArray(selectRows) && selectRows[0] && typeof selectRows[0] === 'object') {
+      return selectRows[0];
+    }
+  }
   const flat = Array.isArray(rows) ? rows.flat() : (rows ? [rows] : []);
   const row = flat[0] && typeof flat[0] === 'object' ? flat[0] : {};
   return row;

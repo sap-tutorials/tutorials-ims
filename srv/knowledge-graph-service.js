@@ -663,11 +663,29 @@ export default cds.service.impl(async function () {
     return [];
   });
 
-  // ─── conceptsForUser — Phase 2 stub ────────────────────────────────────
+  // ─── conceptsForUser — Phase 2 implementation (#445) ────────────────────
+  // Delegates to srv/lib/kg/concepts-for-user.js. Gated by
+  // ChatSettings.kgPathBetweenEnabled — when false, returns empty coverage
+  // so the pathBetween handler (and any direct CDS callers) short-circuit
+  // gracefully without hitting the SPARQL layer.
   this.on('conceptsForUser', async (req) => {
-    const { userId } = req.data;
-    log.warn(`kg-service: conceptsForUser(${userId}) — Phase 2 stub, returning empty coverage`);
-    return { learned: [], partial: [] };
+    const userId = req.data?.userId || req.user?.id;
+    if (!userId) {
+      return { learned: [], partial: [] };
+    }
+    try {
+      const { ChatSettings } = cds.entities('com.sap.developers.ims');
+      const settings = await SELECT.one.from(ChatSettings);
+      if (!settings?.kgPathBetweenEnabled) {
+        return { learned: [], partial: [] };
+      }
+      const { getConceptsForUser } = await import('./lib/kg/concepts-for-user.js');
+      const result = await getConceptsForUser({ db: cds.db, userId });
+      return { learned: result.learned, partial: result.partial };
+    } catch (err) {
+      log.warn(`kg-service: conceptsForUser failed: ${err.message}`);
+      return { learned: [], partial: [] };
+    }
   });
 
   // ─── runSparql — admin raw SPARQL passthrough ──────────────────────────

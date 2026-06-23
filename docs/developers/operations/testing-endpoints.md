@@ -287,6 +287,31 @@ Author-aware branch + skip recommender for tutorials and missions (issue #172 PR
 
 Implementation: [srv/lib/branch/joule-tool.js](../../../srv/lib/branch/joule-tool.js). Telemetry helper: [srv/lib/branch/branch-telemetry.js](../../../srv/lib/branch/branch-telemetry.js).
 
+### `findLearningPath`
+
+Hybrid pathBetween Joule tool — translates "I want to learn X" / "what should I learn next" / "show me a path to Y" prompts into an ordered tutorial sequence (issue #445 / Phase 2 of #381).
+
+- **Registration gate** — registered when `ChatSettings.enabled = true && ChatSettings.kgPathBetweenEnabled = true`. When `kgPathBetweenEnabled = false` (default), the tool is not registered and the LLM falls back to general guidance via `searchTutorials`.
+- **Params** — `toSlug` (string, required, lowercase alphanumeric + hyphens, 1-80 chars), `fromSlug?` (string, optional — same shape). If `fromSlug` is omitted, the handler infers it from the user's most-recent COMPLETED TaskRecord; if no completion history, the search is unanchored (uses `toSlug` as its own neighborhood center).
+- **Return shape** — rendered markdown string that the LLM paraphrases or quotes verbatim:
+
+  ```markdown
+  Here's a path from `<fromSlug>` to `<toSlug>`:
+
+  1. **<title>** — [<slug>](https://developers.sap.com/tutorials/<slug>.html)
+     ~<minutes> min · <reason>
+  ```
+
+  Where `<reason>` is one of `"Prerequisite chain"`, `"Often completed together"`, `"Shares concepts"`. Empty result set returns a friendly "couldn't find a path" message pointing at the catalog.
+- **Telemetry** — emits `kg.joule.path_requested` at dispatch start (`{ fromSlug, toSlug, hasUserId, fromSlugInferred, unanchored }`) and `kg.joule.path_returned` at dispatch end (`{ ..., resultCount, pathTypeBreakdown: { PREREQ, CO_COMPLETED, SHARED_CONCEPT }, latencyMs, exactTargetReached, error? }`). The `pathTypeBreakdown` lets ops see which arm produces results post-rollout — useful for validating the Phase 2.5 prereq-enrichment hypothesis.
+- **Error envelopes** — handler returns friendly strings for the LLM to paraphrase (never throws into the LLM-tool-result):
+  - Malformed `toSlug` / `fromSlug` — `"That tutorial slug doesn't look right…"`
+  - `SparqlTimeoutError` — `"I couldn't find a learning path right now — the query timed out…"` Telemetry tag: `error: 'timeout'`.
+  - `SparqlSyntaxError` / generic — `"Internal error finding a learning path…"` Telemetry tag: `error: 'syntax'` or `error: 'unknown'`.
+- **AI-judge fixture** — [test/hybrid/joule-tool-pick-find-path.test.js](../../../test/hybrid/joule-tool-pick-find-path.test.js) — 12-prompt fixture asserting the LLM picks the right tool (findLearningPath vs getRelevantSteps vs checkCode vs no-tool) at ≥90% accuracy. Gated by `HYBRID_AI_TESTS=true`. Regression guard against tool-descriptor changes.
+
+Implementation: [srv/lib/kg/joule-tool-find-path.js](../../../srv/lib/kg/joule-tool-find-path.js) + [srv/lib/kg/concepts-for-user.js](../../../srv/lib/kg/concepts-for-user.js) (user-coverage helper). Architecture details: [docs/developers/architecture/joule.md](../architecture/joule.md).
+
 ---
 
 ## Approuter-only Endpoints

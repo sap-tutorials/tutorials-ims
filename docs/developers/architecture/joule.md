@@ -507,6 +507,29 @@ Manual test plan:
 7. **Rate limit** — temporarily set `maxRequestsPerUser = 2`, send 3 messages — third must show "You've reached today's chat limit."
 8. **Kill switch** — set `enabled = false` mid-session — wait 60s — new page loads must not show trigger.
 
+### Tool: `findLearningPath` (Phase 2 of #381, issue #445)
+
+Hybrid pathBetween Joule tool. Translates natural-language prompts ("I want to build a CAP service with Fiori UI") into an ordered tutorial sequence by routing through `KG_QUERY.hdbprocedure`'s 3-arm UNION SPARQL.
+
+- **Registration gate** — registered when `ChatSettings.enabled = true && ChatSettings.kgPathBetweenEnabled = true`. When `kgPathBetweenEnabled = false` (default), the tool is not registered and the LLM won't see it.
+- **Tool descriptor** — explicit positive triggers (`LEARN`, `NEXT`, `path/order`) plus negative-space callouts ("DO NOT use this tool when... use `getRelevantSteps`... use `checkCode`") to push the LLM away from sibling tools. Full descriptor in [srv/lib/kg/joule-tool-find-path.js](../../../srv/lib/kg/joule-tool-find-path.js).
+- **Params** — `toSlug` (required), `fromSlug?` (optional — defaults to user's most-recent COMPLETED tutorial, or unanchored mode if no history). `userId` flows transparently from `req.user.id`; not an LLM-visible parameter.
+- **Hybrid SPARQL strategy** — three UNION arms in [db/src/procedures/KG_QUERY.hdbprocedure](../../../db/src/procedures/KG_QUERY.hdbprocedure):
+  1. **PREREQ** (rank 1) — `?a kg:teaches/(^kg:requires)+/kg:teaches ?b` — preferred when prereq edges exist
+  2. **CO_COMPLETED** (rank 2) — `?a (kg:coCompletedWith)+ ?b` — behavioral signal (dense, ~13k edges)
+  3. **SHARED_CONCEPT** (rank 3) — `?a kg:teaches ?c. ?b kg:teaches ?c.` — semantic, always-on
+  Results are merged + sorted by `pathTypeRank ASC`, capped at `LIMIT 10`.
+- **Why `+` not `{1,5}`** — HANA KGE doesn't support `{n,m}` counted-range property paths (returns `Unsupported functionality: Path repeat range`). Closure (`+`) plus `LIMIT 10` + the kgQuery 5s timeout bound depth indirectly. Probed and confirmed via Task 0 spike of #445.
+- **JS-side post-processing** — handler dedups by slug (lowest rank wins), promotes the LLM-named `toSlug` to position 1 if it appears in the candidate set ("exactTargetReached"), optionally filters out fully-user-covered candidates (except `toSlug` itself, which is never filtered), hydrates with `Tutorials.title` + `Tutorials.estimatedTimeMinutes`.
+- **Coverage filter** — when `user.id` is present, calls `getConceptsForUser({ db, userId })` ([srv/lib/kg/concepts-for-user.js](../../../srv/lib/kg/concepts-for-user.js)) which joins `TaskRecords WHERE taskType='TUTORIAL'` against `Tutorials.legacyId` and reads `kg:teaches` edges via `KG_ADMIN_RUNSPARQL` with a `VALUES` clause. Returns `{ learned: <concept-slugs>, partial: ... }`. The handler drops candidates whose ALL taught-concepts are in `learned`, never drops the `toSlug` itself even when fully covered.
+- **Return shape** — markdown numbered list rendered by the handler; LLM paraphrases or quotes verbatim. Format: `1. **<title>** — [<slug>](https://developers.sap.com/tutorials/<slug>.html)\n   ~<minutes> min · <reason>` where reason is `"Prerequisite chain"` / `"Often completed together"` / `"Shares concepts"`.
+- **Telemetry** — emits `kg.joule.path_requested` (`{ fromSlug, toSlug, hasUserId, fromSlugInferred, unanchored }`) at dispatch start, `kg.joule.path_returned` (`{ ..., resultCount, pathTypeBreakdown: { PREREQ, CO_COMPLETED, SHARED_CONCEPT }, latencyMs, fromSlugInferred, exactTargetReached, error? }`) at dispatch end including error paths.
+- **Error envelopes** — handler returns friendly strings for the LLM to paraphrase: malformed `toSlug` / `fromSlug` validation errors, `SparqlTimeoutError` (5s budget exceeded), `SparqlSyntaxError`, empty result set.
+- **Procedure layer** — the PATH_BETWEEN branch in `KG_QUERY.hdbprocedure` validates `:p1` and `:p2` as canonical tutorial IRIs but **only references `:p1` in the SPARQL body**. The `:p2` validation is defense-in-depth; JS-layer post-processing does the `toSlug` match for graceful fallback ("closest topical neighbors") when no exact path exists.
+- **AI-judge fixture** — [test/hybrid/joule-tool-pick-find-path.test.js](../../../test/hybrid/joule-tool-pick-find-path.test.js) — 12 prompts assert the LLM picks the right tool (findLearningPath vs getRelevantSteps vs checkCode vs no-tool). Pass threshold ≥90% (11/12). Gated by `HYBRID_AI_TESTS=true`; default test:hybrid runs at $0. Regression guard against descriptor changes.
+
+Implementation: [srv/lib/kg/joule-tool-find-path.js](../../../srv/lib/kg/joule-tool-find-path.js) (handler + descriptor) + [srv/lib/kg/concepts-for-user.js](../../../srv/lib/kg/concepts-for-user.js) (coverage helper).
+
 ### Recent Changes
 
 - **2026-05-19** — Migrated `OrchestrationClient` config to SDK 2.10.0 shape (`promptTemplating: { model, prompt: { template, tools } }`) + extracted `deploymentId` to 2nd constructor arg. Wrapped construction in try/catch to fix 502s. Switched streaming iteration to `await client.stream(...)` then `for await (...response.stream)`. Pulled tool calls from `response.getToolCalls()` post-stream. Enhanced error logging to include upstream response body.

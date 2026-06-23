@@ -528,6 +528,10 @@ entity ChatSettings : cuid, managed {
   //   - getBranchRecommendation chat tool not registered
   //   - Renderers degrade to "show all branches, no recommendation"
   branchingEnabled     : Boolean default false;
+
+  // Knowledge Graph pathBetween tool for Phase 2 learning paths (#445).
+  // When false, findLearningPath tool is not registered.
+  kgPathBetweenEnabled : Boolean default false;
 }
 
 // Phase 2-A foundation (#463). Mirrors the ChatSettings singleton pattern.
