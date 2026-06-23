@@ -1,0 +1,14 @@
+{
+  "name": "sap.tutorials.admin.devtoberfest",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Devtoberfest admin tile (Config + Registrations)",
+  "sapux": true,
+  "scripts": {
+    "build": "ui5 build --clean-dest"
+  },
+  "devDependencies": {
+    "@sap/ux-specification": "latest",
+    "@ui5/cli": "^4.0.0"
+  }
+}

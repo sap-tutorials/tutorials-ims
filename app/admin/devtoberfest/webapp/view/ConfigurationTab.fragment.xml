@@ -1,0 +1,59 @@
+<core:FragmentDefinition
+  xmlns="sap.m"
+  xmlns:core="sap.ui.core"
+  xmlns:l="sap.ui.layout"
+  xmlns:f="sap.ui.layout.form">
+  <Panel headerText="{i18n>panelEvent}" expandable="false" class="sapUiResponsiveMargin">
+    <f:SimpleForm editable="true" layout="ColumnLayout" columnsXL="1" columnsL="1" columnsM="1">
+      <Label text="{i18n>labelCurrentEvent}" />
+      <ComboBox
+        id="eventCombo"
+        items="{
+          path: '/Events',
+          parameters: { '$orderby': 'startDate desc' }
+        }"
+        selectedKey="{/DevtoberfestConfig/currentEvent_ID}">
+        <core:Item key="{ID}" text="{name} ({startDate} → {endDate})" />
+      </ComboBox>
+    </f:SimpleForm>
+  </Panel>
+
+  <Panel headerText="{i18n>panelTerms}" expandable="false" class="sapUiResponsiveMargin">
+    <f:SimpleForm editable="true" layout="ColumnLayout" columnsXL="1" columnsL="1" columnsM="1">
+      <Label text="{i18n>labelTermsVersion}" />
+      <StepInput id="termsVersionInput"
+        value="{/DevtoberfestConfig/termsVersion}"
+        min="1" max="9999" />
+      <MessageStrip id="versionWarning"
+        text="{i18n>warnTermsVersionBump}"
+        type="Warning" showIcon="true" visible="false"
+        class="sapUiSmallMarginTop" />
+      <Label id="termsTextLabel" text="{i18n>labelTermsText}" />
+      <TextArea
+        value="{/DevtoberfestConfig/termsText}"
+        rows="20"
+        growing="true"
+        growingMaxLines="40"
+        wrapping="Off"
+        ariaLabelledBy="termsTextLabel" />
+    </f:SimpleForm>
+  </Panel>
+
+  <Panel headerText="{i18n>panelSubPages}" expandable="false" class="sapUiResponsiveMargin">
+    <f:SimpleForm editable="true" layout="ColumnLayout" columnsXL="1" columnsL="1" columnsM="1">
+      <Label text="{i18n>labelContentRulesUrl}" />
+      <Input value="{/DevtoberfestConfig/contentRulesUrl}" placeholder="https://..." />
+      <Label text="{i18n>labelFaqUrl}" />
+      <Input value="{/DevtoberfestConfig/faqUrl}" placeholder="(empty = disabled)" />
+      <Label text="{i18n>labelGameboardUrl}" />
+      <Input value="{/DevtoberfestConfig/gameboardUrl}" placeholder="(empty = disabled)" />
+      <Label text="{i18n>labelActivitiesUrl}" />
+      <Input value="{/DevtoberfestConfig/activitiesUrl}" placeholder="(empty = disabled)" />
+    </f:SimpleForm>
+  </Panel>
+
+  <HBox justifyContent="End" class="sapUiResponsiveMargin">
+    <Button text="{i18n>buttonDiscard}" type="Transparent" press=".onDiscard" />
+    <Button text="{i18n>buttonSave}" type="Emphasized" press=".onSave" />
+  </HBox>
+</core:FragmentDefinition>
