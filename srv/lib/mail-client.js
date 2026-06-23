@@ -7,34 +7,83 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_DIR = join(__dirname, '..', 'templates', 'notification');
 const TEMPLATE_NAMES = ['first', 'second', 'third', 'final'];
+
+const SMTP_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_FROM = 'developers@sap.com';
 
-let transporter = null;
+// State on globalThis so the module-singleton-multiplicity issue on Vitest+CDS
+// (Windows) doesn't yield divergent caches. Same pattern as credstore.js.
+// See feedback_module_singletons_in_vitest_cds memory entry.
+const STATE_KEY = Symbol.for('com.sap.developers.ims:mail-client');
+const _state = (globalThis[STATE_KEY] ??= {
+  transporter: null,
+  resolvedAt: 0,
+  warnedWindowAt: 0,
+});
+
+/**
+ * Resolve the SMTP password with credstore-first + env fallback + 5-min TTL
+ * cache. Returns null if neither source has a value.
+ *
+ * Pattern mirrors srv/lib/rebuild-trigger.js:60-86's getDispatchToken().
+ */
+async function resolveSmtpPassword() {
+  let password = null;
+  try {
+    const { readSecret } = await import('./credstore.js');
+    password = await readSecret('SMTP_PASS');
+  } catch (err) {
+    // Credstore unavailable (no BTP binding / network blip / decryption failure).
+    // Log once per cache window so we see the gap without flooding.
+    const now = Date.now();
+    if (now - _state.warnedWindowAt > SMTP_TTL_MS) {
+      console.warn(`[mail] credstore lookup failed (falling back to env): ${err.message ?? err}`);
+      _state.warnedWindowAt = now;
+    }
+  }
+  if (!password) {
+    password = process.env.SMTP_PASS ?? null;
+  }
+  return password;
+}
 
 async function getTransporter() {
-  if (transporter) return transporter;
-
-  if (process.env.SMTP_HOST) {
-    transporter = createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT) || 1025,
-      secure: false,
-      auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined
-    });
-    return transporter;
+  if (_state.transporter && Date.now() - _state.resolvedAt < SMTP_TTL_MS) {
+    return _state.transporter;
   }
 
+  const host = process.env.SMTP_HOST;
+  if (host) {
+    const password = await resolveSmtpPassword();
+    if (!password) return null;
+    _state.transporter = createTransport({
+      host,
+      // Default port shifts from 1025 (MailHog dev default) to 587 (SMTP
+      // submission). Local dev still works by setting SMTP_PORT=1025 explicitly.
+      // Spec edge case #8 covers the MailHog flow.
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: Number(process.env.SMTP_PORT) === 465,
+      auth: { user: process.env.SMTP_USER, pass: password },
+    });
+    _state.resolvedAt = Date.now();
+    return _state.transporter;
+  }
+
+  // Legacy fallback: managed mail-service binding tagged 'mail'. No project
+  // today binds one — kept as an escape hatch if SAP Cloud Mail Service or a
+  // similar managed offering ever appears in the subaccount entitlements.
   try {
     const xsenv = await import('@sap/xsenv');
     xsenv.default.loadEnv();
     const creds = xsenv.default.serviceCredentials({ tag: 'mail' });
-    transporter = createTransport({
+    _state.transporter = createTransport({
       host: creds.mail_host,
       port: creds.mail_port,
       secure: creds.mail_port === 465,
-      auth: { user: creds.mail_user, pass: creds.mail_password }
+      auth: { user: creds.mail_user, pass: creds.mail_password },
     });
-    return transporter;
+    _state.resolvedAt = Date.now();
+    return _state.transporter;
   } catch {
     return null;
   }
@@ -55,7 +104,7 @@ export async function sendNotificationEmail({ to, cc, subject, level, variables 
   const html = resolveTemplate(loadTemplate(level), variables);
 
   const mailOptions = {
-    from: DEFAULT_FROM,
+    from: process.env.SMTP_FROM || DEFAULT_FROM,
     to: Array.isArray(to) ? to.join(', ') : to,
     cc: cc?.length ? (Array.isArray(cc) ? cc.join(', ') : cc) : undefined,
     subject,
@@ -108,7 +157,7 @@ export async function retryFailedEmails() {
     try {
       const transport = await getTransporter();
       await transport.sendMail({
-        from: DEFAULT_FROM,
+        from: process.env.SMTP_FROM || DEFAULT_FROM,
         to: msg.to,
         cc: msg.cc || undefined,
         subject: msg.subject,
@@ -126,4 +175,16 @@ export async function retryFailedEmails() {
   }
   LOG.info(`Retried ${retried}/${pending.length} failed emails`);
   return retried;
+}
+
+/** Test-only: clear cached transporter so unit tests can swap credstore mocks. */
+export function _resetForTests() {
+  _state.transporter = null;
+  _state.resolvedAt = 0;
+  _state.warnedWindowAt = 0;
+}
+
+/** Test-only: expose getTransporter so unit tests can assert on the resolved transport. */
+export async function _getTransporterForTests() {
+  return getTransporter();
 }

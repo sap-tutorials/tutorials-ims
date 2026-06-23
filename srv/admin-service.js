@@ -874,11 +874,12 @@ export default class AdminService extends cds.ApplicationService {
     });
 
     this.on('sendContributorNotifications', async (req) => {
-      const { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList } = await import('./lib/contributor-notifications.js');
+      const { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, resolveTimingKnobs } = await import('./lib/contributor-notifications.js');
       const { sendNotificationEmail } = await import('./lib/mail-client.js');
 
+      const knobs = await resolveTimingKnobs();
       const adminEmails = await getAdminEmailList();
-      const notifications = await computeStaleNotifications(90);
+      const notifications = await computeStaleNotifications(knobs);
       const dashboardUrl = (await resolveDisplaySettings()).dashboardUrl;
 
       let sent = 0;
@@ -888,12 +889,41 @@ export default class AdminService extends cds.ApplicationService {
         await sendNotificationEmail({
           to, cc, subject: n.title,
           level: n.notificationLevel,
-          variables: { dashboardUrl }
+          variables: {
+            dashboardUrl,
+            tutorialTitle: n.title,
+            staleDaysThreshold: knobs.staleDays,
+            lastReviewedDate: n.reviewedDate,
+          }
         });
         await markNotificationSent(n.tutorialId);
         sent++;
       }
       return { notified: sent };
+    });
+
+    this.on('testNotificationEmail', async (req) => {
+      const { sendNotificationEmail } = await import('./lib/mail-client.js');
+      const { to, level } = req.data;
+      if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+        return { success: false, error: 'Invalid "to" address' };
+      }
+      const lvl = Number.isInteger(level) && level >= 0 && level <= 3 ? level : 0;
+      const dashboardUrl = (await resolveDisplaySettings()).dashboardUrl;
+      const today = new Date().toISOString().slice(0, 10);
+      const result = await sendNotificationEmail({
+        to,
+        cc: [],
+        subject: '[TEST] CAP tutorials-srv SMTP transport check',
+        level: lvl,
+        variables: {
+          dashboardUrl,
+          tutorialTitle: 'Test Tutorial — please ignore',
+          staleDaysThreshold: 90,
+          lastReviewedDate: today,
+        },
+      });
+      return { success: result.success, error: result.error ?? '' };
     });
 
     this.on('updateNotificationRecipients', async (req) => {
