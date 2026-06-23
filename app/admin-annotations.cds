@@ -1674,9 +1674,23 @@ annotate AdminService.AdvocatePhotos with @(
 );
 
 // AdvocateTopics — inline table with Tag value-help.
-// The visible cell shows Tag.label (via @Common.Text on the association,
-// resolved through tag_ID -> Tags). The value-help dialog ranks 'label'
-// first so admins find topics by their human label, not by GUID.
+//
+// Bind the cell to the FK column `tag_ID` and use @Common.Text on the
+// `tag` association to display `Tag.label` instead of the GUID. CAP
+// (>= Feb 2025) automatically propagates association-level annotations
+// to the generated foreign-key element, so the @Common.Text and
+// @Common.ValueList here apply at both the navigation path AND the FK
+// column the LineItem renders.
+//
+// Why the FK and not `tag.label` directly? In Fiori Elements V4 inline
+// tables, binding the cell value to a deep navigation path (`tag.label`)
+// makes the cell render blank — `autoExpandSelect` doesn't always include
+// the deep $expand, and the cell has no FK to write back into so the
+// ValueList dialog never attaches. Pattern mirrors `GroupTags` (line ~363)
+// and `MissionTags` (line ~419) which have worked since their introduction.
+//
+// Value-help dialog: ranks `label` first so admins search by the human
+// label, falls back to `name` (slug-equivalent) when label is missing.
 annotate AdminService.AdvocateTopics with {
   tag @Common.Label: 'Topic'
       @Common.Text: tag.label
@@ -1693,7 +1707,7 @@ annotate AdminService.AdvocateTopics with {
 
 annotate AdminService.AdvocateTopics with @UI: {
   LineItem: [
-    { $Type: 'UI.DataField', Value: tag.label, Label: 'Topic' }
+    { $Type: 'UI.DataField', Value: tag_ID, Label: 'Topic' }
   ]
 };
 
