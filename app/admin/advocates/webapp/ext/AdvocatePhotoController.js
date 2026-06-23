@@ -52,6 +52,15 @@ sap.ui.define([
      * Replaces the prior base64-over-OData $batch shape that required
      * an inflated body_parser limit on AdminService. Cleaner contract,
      * ~25% smaller request body, no FileReader round-trip.
+     *
+     * Draft mode is gated OUT in the manifest (`enabled` expression
+     * checks IsActiveEntity === true). The defensive check below guards
+     * any programmatic invocation that bypasses the toolbar: the server
+     * endpoint resolves the slug against the ACTIVE Advocates row, so
+     * a draft-mode upload would succeed at the server level but appear
+     * "not persisted" in the OP until the draft was activated — a
+     * confusing UX that Tom flagged 2026-06-23. Photo is an out-of-band
+     * attribute, not part of the structured draft contract.
      */
     onUploadPhotoPress: function (arg) {
       const ctx = resolveCtx(arg);
@@ -67,6 +76,17 @@ sap.ui.define([
       const slug = advocate && advocate.slug;
       if (!slug) {
         MessageBox.error("Cannot upload: advocate has no slug yet. Save the draft first.");
+        return;
+      }
+      // Defensive guard — duplicates the manifest `enabled` expression.
+      // If we get here in draft mode, the upload would succeed against
+      // the active row but the user wouldn't see the change in the OP
+      // they're editing. Better to refuse with a clear message.
+      if (advocate.IsActiveEntity === false) {
+        MessageBox.warning(
+          "Save or cancel your current edits before uploading a photo. " +
+          "Photos apply to the saved record, not to the draft."
+        );
         return;
       }
       // Build a transient <input type=file> so we don't need a fragment.
@@ -126,11 +146,24 @@ sap.ui.define([
      * AdvocatePhotos row, flips hasPhoto=false. The action has no body
      * payload so the OData binding shape is fine for it — no need to
      * migrate to a REST endpoint.
+     *
+     * Same draft-mode rationale as onUploadPhotoPress: the action is
+     * bound to the active Advocate, so calling it on a draft would
+     * either fail at the OData layer or mutate state outside the
+     * draft envelope. Gated by `enabled: IsActiveEntity === true` in
+     * the manifest; defensive check duplicates that here.
      */
     onClearPhotoPress: function (arg) {
       const ctx = resolveCtx(arg);
       if (!ctx) {
         MessageToast.show("Open an advocate first");
+        return;
+      }
+      const advocate = ctx.getObject ? ctx.getObject() : null;
+      if (advocate && advocate.IsActiveEntity === false) {
+        MessageBox.warning(
+          "Save or cancel your current edits before clearing the photo."
+        );
         return;
       }
       MessageBox.confirm(
