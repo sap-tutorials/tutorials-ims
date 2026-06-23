@@ -200,6 +200,17 @@ async function submit() {
       }
       verdict.value = body as VerdictShape
       error.value = null
+      // Notify the page (tutorial.ts) so it can gate the step's Done button.
+      // Hard gate (2026-06-23): the Done button on a code-check step is
+      // disabled until the verdict is 'pass'. Per-step decision lives in
+      // tutorial.ts; we just publish the verdict here.
+      document.dispatchEvent(new CustomEvent('tutorial:codecheck-verdict', {
+        detail: {
+          slug: props.slug,
+          stepNumber: props.stepNumber,
+          verdict: body.verdict,
+        },
+      }))
     } else if (res.status === 401) {
       error.value = 'unauthenticated'
     } else if (res.status === 400) {

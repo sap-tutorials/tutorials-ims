@@ -194,6 +194,31 @@ describe('authentication guard', () => {
     await handler(req, res);
     expect(res.statusCode).toBe(401);
   });
+
+  // Regression guard (2026-06-23): the XSUAA `jwt-auth` middleware used in
+  // DEV/PROD populates `cds.context.user` but never `req.user`. See the
+  // matching test in code-check-handler.test.js for the full backstory.
+  it('honors cds.context.user when req.user is absent (XSUAA prod shape)', async () => {
+    const handler = makeValidateAnswerHandler({ callModel: passModel(), loadQuestion });
+    const req = {
+      body: {
+        tutorialSlug: 'sample',
+        stepNumber: 2,
+        questionId: 'validate-2',
+        submittedAnswer: 'x',
+      },
+    };
+    const res = mockRes();
+    const prev = cds.context;
+    try {
+      cds.context = { user: new cds.User({ id: 'u1' }) };
+      await handler(req, res);
+    } finally {
+      cds.context = prev;
+    }
+    expect(res.statusCode).toBe(200);
+    expect(res.jsonBody.verdict).toBe('pass');
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

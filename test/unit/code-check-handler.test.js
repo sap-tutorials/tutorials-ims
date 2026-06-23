@@ -164,6 +164,27 @@ describe('authentication guard', () => {
     await handler(req, res);
     expect(res.statusCode).toBe(401);
   });
+
+  // Regression guard (2026-06-23): the XSUAA `jwt-auth` middleware used in
+  // DEV/PROD populates `cds.context.user` but never `req.user`. The mocked
+  // basic-auth strategy used by `cds watch` and these unit tests sets both,
+  // which silently hid the bug for months. This test simulates the production
+  // shape — `req.user` absent, `cds.context.user` set — and asserts the
+  // handler reads from the canonical CAP context.
+  it('honors cds.context.user when req.user is absent (XSUAA prod shape)', async () => {
+    const handler = makeCodeCheckHandler({ callModel: passModel(), loadStepText });
+    const req = { body: { tutorialSlug: 'sample', stepNumber: 2, submittedCode: 'x' } };
+    const res = mockRes();
+    const prev = cds.context;
+    try {
+      cds.context = { user: new cds.User({ id: 'u1' }) };
+      await handler(req, res);
+    } finally {
+      cds.context = prev;
+    }
+    expect(res.statusCode).toBe(200);
+    expect(res.jsonBody.verdict).toBe('pass');
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
