@@ -21,7 +21,7 @@ cds.on('bootstrap', (app) => {
     }
   });
 
-  const { serveHandler, navHandler, hashesHandler, publishHandler, rollbackHandler, contentAuthMiddleware } =
+  const { serveHandler, navHandler, hashesHandler, publishHandler, rollbackHandler, beginHandler, appendHandler, commitHandler, abortHandler, contentAuthMiddleware } =
     createContentHandlers({ namespace: 'com.sap.developers.ims.qa', apiKeyEnv: 'CONTENT_API_KEY_QA', skipMetadataUpsert: true });
 
   // GET handlers serve in-flight author content from -Contribution repos. The
@@ -33,7 +33,14 @@ cds.on('bootstrap', (app) => {
   app.get('/content/nav', requireAuthorScope, navHandler);
   app.get('/content/hashes', requireAuthorScope, hashesHandler);
   app.get('/content/tutorials/*slug', requireAuthorScope, serveHandler);
-  app.post('/content/publish',  express.json({ limit: '100mb' }), contentAuthMiddleware, publishHandler);
+  // Legacy single-shot publish (kept for compatibility); CLI now uses the
+  // chunked begin/append/commit pipeline by default (publish-content.ts via
+  // scripts/lib/publish-client.ts). Spec: 2026-05-29-publish-content-hardening-design.md.
+  app.post('/content/publish',         express.json({ limit: '100mb' }), contentAuthMiddleware, publishHandler);
+  app.post('/content/publish/begin',   express.json({ limit: '1mb' }),   contentAuthMiddleware, beginHandler);
+  app.post('/content/publish/append',  express.json({ limit: '100mb' }), contentAuthMiddleware, appendHandler);
+  app.post('/content/publish/commit',  express.json({ limit: '1mb' }),   contentAuthMiddleware, commitHandler);
+  app.post('/content/publish/abort',   express.json({ limit: '1mb' }),   contentAuthMiddleware, abortHandler);
   app.post('/content/rollback', express.json(),                    contentAuthMiddleware, rollbackHandler);
 
   const previewSemaphore = createSemaphore(Number(process.env.PREVIEW_MAX_CONCURRENT ?? 4));
