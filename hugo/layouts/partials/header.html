@@ -18,7 +18,10 @@
     <ui5-li icon="course-book" data-href="/">Tutorials</ui5-li>
     <ui5-li icon="flight" data-href="/app-space">App Space</ui5-li>
     <ui5-li icon="sys-monitor" data-href="/event-display">Event Display</ui5-li>
+    <ui5-li icon="course-program" data-href="/devtoberfest">Devtoberfest</ui5-li>
+    <ui5-li icon="employee" data-href="/developer-advocates">Developer Advocates</ui5-li>
     <ui5-li class="nav-auth-only" icon="complete" data-href="/me" hidden>My Completions</ui5-li>
+    <ui5-li class="nav-admin-only" icon="settings" data-href="/admin-ui/" hidden>Admin UI</ui5-li>
   </ui5-list>
 </ui5-popover>
 
@@ -303,6 +306,9 @@
     avatar.setAttribute('accessible-name', userName.textContent);
     document.documentElement.dataset.user = JSON.stringify({ firstName: given });
     document.querySelectorAll('.nav-auth-only').forEach(el => el.removeAttribute('hidden'));
+    if (u.isAdmin) {
+      document.querySelectorAll('.nav-admin-only').forEach(el => el.removeAttribute('hidden'));
+    }
   }
 
   async function checkAuth() {
@@ -325,7 +331,7 @@
         if (cached) applyAuthenticatedUser(cached);
         return;
       }
-      const toCache = { firstName: user.givenName, givenName: user.givenName, familyName: user.familyName, email: user.email, id: user.id };
+      const toCache = { firstName: user.givenName, givenName: user.givenName, familyName: user.familyName, email: user.email, id: user.id, isAdmin: user.isAdmin === true };
       try { sessionStorage.setItem(USER_KEY, JSON.stringify({ ts: Date.now(), value: toCache })); } catch {}
       applyAuthenticatedUser(user);
     } catch (e) {

@@ -654,7 +654,8 @@ cds.on('served', async () => {
       id: user.id,
       email: user.attr?.email || '',
       givenName: user.attr?.given_name || user.attr?.givenName || '',
-      familyName: user.attr?.family_name || user.attr?.familyName || ''
+      familyName: user.attr?.family_name || user.attr?.familyName || '',
+      isAdmin: user.is?.('Admin') === true
     });
   });
 
