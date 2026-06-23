@@ -1832,6 +1832,13 @@
             "val": false
           },
           "@cds.persistence.name": "BRANCHINGENABLED"
+        },
+        "kgPathBetweenEnabled": {
+          "type": "cds.Boolean",
+          "default": {
+            "val": false
+          },
+          "@cds.persistence.name": "KGPATHBETWEENENABLED"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CHATSETTINGS"
