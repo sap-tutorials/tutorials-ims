@@ -28,10 +28,20 @@ The change touches 11 files (8 modify, 2 new test files, 1 new spec already comm
 | `srv/lib/chat-orchestrator.js` | Early-return `advocates` branch in `toolsForContext` | Modify |
 | `test/chat-context.test.js` | New test cases for `kind: 'advocates'` + regression guard for `kind: 'admin'` | Modify |
 | `test/unit/chat-orchestrator-codecheck.test.js` | Assert advocates kind bypasses ChatSettings tools; tutorial test stays green | Modify |
-| `hugo-apps/src/advocates/App.joule-handoff.test.ts` | Frontend handoff unit test (colocated per vitest unit project glob) | New |
+| `hugo-apps/src/advocates/App.joule-handoff.test.ts` | Frontend handoff unit test, **colocated** (matches the vitest unit project glob `hugo-apps/src/**/*.test.{js,ts}`, and the file-naming convention the existing `hugo-apps/` tests use). The spec listed `__tests__/joule-handoff.test.ts` — both paths resolve via the glob; colocated keeps the test next to the file it covers. | New |
 | `test/smoke/advocates.smoke.test.js` | Smoke: `data-page-kind`, starters key, bundle contains `__JOULE_ADVOCATES` | Modify |
 
 We're working on branch `spec/joule-advocates-page` (already created and pushed during brainstorming). Implementation commits land on the same branch.
+
+> **Per-task subagent safety (issue [memory: branch-slip-after-long-session](.claude/memory/feedback_branch_slip_after_long_session.md))** — if you're dispatching subagents per task, prefix each task's `git commit` step with a re-checkout in the SAME shell invocation as the commit:
+>
+> ```bash
+> git checkout spec/joule-advocates-page && \
+>   git -c core.autocrlf=false add ... && \
+>   git -c core.autocrlf=false commit -m "..."
+> ```
+>
+> The plan's commit blocks below show `git add` + `git commit` only — extend with the leading `git checkout` if running in a fresh subagent shell.
 
 ---
 
@@ -144,7 +154,9 @@ This is the biggest piece. We add a new persona, a roster formatter with a serve
 
 - [ ] **Step 1: Write failing tests for the new advocates kind**
 
-Open `test/chat-context.test.js`. After the last existing `it(...)` block but BEFORE the closing `});` of `describe('buildSystemPrompt', ...)`, add:
+Open `test/chat-context.test.js`. Insert the new cases **inside the FIRST `describe('buildSystemPrompt', …)` block** (the one starting at line 4 and ending at line 70), BEFORE its closing `});`. Do NOT add them to the second `describe('buildSystemPrompt — BRANCHING_GUIDANCE', …)` block that follows — those are scoped to a different concern.
+
+Append:
 
 ```js
   // --- advocates kind (issue #564) ---
@@ -197,13 +209,13 @@ Open `test/chat-context.test.js`. After the last existing `it(...)` block but BE
 ```bash
 npx vitest run --project unit test/chat-context.test.js
 ```
-Expected: 5 new tests FAIL (advocates kind not yet supported). The 16 existing tests should still PASS.
+Expected: the 5 new tests show failures (advocates kind not yet supported), and the 12 existing tests (8 in the first `describe`, 4 in the second BRANCHING_GUIDANCE describe) still pass. The new "regression: admin path still includes RAG_GUIDANCE" test should pass even before any source change, because the current `buildSystemPrompt` already adds `RAG_GUIDANCE` unconditionally for non-advocates kinds.
 
-If any existing test fails, STOP and inspect — the regression guard test on line ~50 above should already pass because we haven't changed anything yet.
+If any of the 12 existing tests fails, STOP and inspect.
 
 - [ ] **Step 3: Add `ADVOCATES_PERSONA` to `srv/lib/chat-context.js`**
 
-Open `srv/lib/chat-context.js`. After the `PROGRESS_GUIDANCE` constant (around line 49), add:
+Open `srv/lib/chat-context.js`. Insert AFTER the closing backtick of the `PROGRESS_GUIDANCE` const (line 49) and BEFORE the `STEP_TEXT_BUDGET` const (line 51) — i.e. on the empty line 50:
 
 ```js
 const ADVOCATES_PERSONA = `You are Joule, embedded on the SAP Developer
@@ -327,7 +339,7 @@ export function buildSystemPrompt(pageContext, user) {
 ```bash
 npx vitest run --project unit test/chat-context.test.js
 ```
-Expected: ALL tests pass (16 existing + 5 new = 21).
+Expected: ALL tests pass. The file should now have 12 existing + 5 new = **17 passing tests**.
 
 - [ ] **Step 8: Commit**
 
@@ -392,12 +404,12 @@ Open `test/unit/chat-orchestrator-codecheck.test.js`. Inside the existing `descr
   });
 ```
 
-- [ ] **Step 2: Run the tests, confirm 2 new tests fail and existing 3 pass**
+- [ ] **Step 2: Run the tests, confirm 2 new tests fail and existing tests still pass**
 
 ```bash
 npx vitest run --project unit test/unit/chat-orchestrator-codecheck.test.js
 ```
-Expected: the 3 existing tests PASS, the 2 new advocates tests FAIL (kind not yet handled). If any existing test fails, STOP.
+Expected: the 5 existing tests in `describe('toolsForContext — checkCode gating', …)` (lines 25, 38, 51, 58, 75) and the 3 existing tests in `describe('dispatchTool — checkCode dispatch', …)` (8 existing total) all PASS. The 2 new advocates tests FAIL because the kind isn't handled yet. If any existing test fails, STOP.
 
 - [ ] **Step 3: Add the early-return branch**
 
@@ -633,7 +645,9 @@ If "initializes synchronously" fails, the cause is usually that `vi.resetModules
 ```bash
 npm --prefix hugo-apps run build 2>&1 | tail -5
 ```
-Expected: build succeeds; `advocates.js` listed in the output with a non-zero size (~19-20 kB).
+Expected: build succeeds; `advocates.js` listed in the output (size may vary slightly from prior build — don't pin a number).
+
+> No new Vite entry was added (we only edited the existing `App.vue`), so the Hugo↔Vite collision check (`scripts/check-build-collisions.ts`, see [CLAUDE.md](../../CLAUDE.md) for context) has nothing new to evaluate.
 
 ```bash
 grep -o '__JOULE_ADVOCATES' hugo/static/js/advocates.js | head -1
@@ -774,6 +788,8 @@ describe.skipIf(!BASE)('GET /js/advocates.js bundle', () => {
 
 - [ ] **Step 3: Run the smoke suite against the local dev server**
 
+> **⚠ QA-build caveat**: the `<script id="joule-starters">` block in `hugo/layouts/partials/joule-starters.html` is gated by `{{ if and (not site.Params.qa) (not site.Params.previewMode) }}`. If `SMOKE_BASE_URL` points at the QA approuter (`tutorials-qa-…`), the script tag is absent and the starters-key assertion fails. **Always target the prod approuter** for this smoke run, OR run it locally against an unflagged Hugo build.
+
 You need an approuter URL serving the built Hugo + bundle. Two ways:
 
 **Option A — full local deploy** (most reliable but slowest):
@@ -829,7 +845,7 @@ If anything fails, inspect — the fix usually involves one of the test files we
 git log --oneline origin/main..HEAD
 ```
 
-Expected: 5-7 commits on `spec/joule-advocates-page` (1 spec, 1 review-fix, 1 nit-fix, plus the 5-7 implementation commits from Tasks 1-7).
+Expected: ~10-14 commits on `spec/joule-advocates-page` (4 spec/plan documents from brainstorm phase, plus the ~7-9 implementation commits from Tasks 1-7). Don't panic at the larger-than-feature count — the spec/plan history is intentionally preserved.
 
 ```bash
 git status --short
@@ -844,10 +860,10 @@ git push origin spec/joule-advocates-page
 
 - [ ] **Step 4: Open the PR**
 
+On Windows Git Bash, the `$(cat <<EOF...EOF)` heredoc pattern inside `gh pr create --body` is flaky (newline handling, here-doc nesting under MSYS2). Use `--body-file` against a temp file to avoid the issue:
+
 ```bash
-gh pr create --base main --head spec/joule-advocates-page \
-  --title "feat(joule-advocates): Joule scoped to roster + tutorials on /developer-advocates/ (#564)" \
-  --body "$(cat <<'EOF'
+cat > /tmp/joule-advocates-pr-body.md <<'EOF'
 ## Summary
 
 Wires Joule into the public `/developer-advocates/` page with a new
@@ -880,39 +896,34 @@ the existing chat infrastructure:
   [srv/lib/chat-orchestrator.js](srv/lib/chat-orchestrator.js)
   (preserves admin/learner branches byte-identical)
 
-## Spec
+## Spec & Plan
 
-[docs/superpowers/specs/2026-06-23-joule-advocates-page-design.md](docs/superpowers/specs/2026-06-23-joule-advocates-page-design.md)
-— approved by Tom, spec-reviewer-approved after 2 iterations.
+- Spec: [docs/superpowers/specs/2026-06-23-joule-advocates-page-design.md](docs/superpowers/specs/2026-06-23-joule-advocates-page-design.md)
+- Plan: [docs/superpowers/plans/2026-06-23-joule-advocates-page.md](docs/superpowers/plans/2026-06-23-joule-advocates-page.md)
+
+Both reviewed and approved.
 
 ## Test plan
 
-- [x] `test/chat-context.test.js` — 5 new cases (roster formatting,
-      empty-roster fallback, defensive shape, persona substring
-      checks, admin regression guard).
-- [x] `test/unit/chat-orchestrator-codecheck.test.js` — 2 new cases
-      (advocates kind bypasses ChatSettings tools; admin status
-      doesn't override).
-- [x] `hugo-apps/src/advocates/App.joule-handoff.test.ts` — new
-      file. Tests handoff on success, on error, and the synchronous
-      default.
-- [x] `test/smoke/advocates.smoke.test.js` — 3 new assertions:
-      `data-page-kind="advocates"`, starters key, bundle contains
-      `__JOULE_ADVOCATES`.
+- [x] `test/chat-context.test.js` — 5 new cases (roster formatting, empty-roster fallback, defensive shape, persona substring checks, admin regression guard).
+- [x] `test/unit/chat-orchestrator-codecheck.test.js` — 2 new cases (advocates kind bypasses ChatSettings tools; admin status doesn't override).
+- [x] `hugo-apps/src/advocates/App.joule-handoff.test.ts` — new file. Tests handoff on success, on error, and the synchronous default.
+- [x] `test/smoke/advocates.smoke.test.js` — 3 new assertions: `data-page-kind="advocates"`, starters key, bundle contains `__JOULE_ADVOCATES`.
 - [ ] DEV deploy manual exercise:
     - "Who covers CAP?" → grounded answer from roster.
     - "Tell me about Thomas Jung." → grounded bio + region.
-    - "What tutorials cover HANA Cloud?" → searchTutorials hits +
-      bridge to a matching advocate.
+    - "What tutorials cover HANA Cloud?" → searchTutorials hits + bridge to a matching advocate.
     - "What's the weather today?" → polite redirect.
-    - "Deploy a CAP app from scratch." → answer from
-      searchTutorials only, no training-data spillover.
+    - "Deploy a CAP app from scratch." → answer from searchTutorials only, no training-data spillover.
 
 ## Closes
 
 Closes #564.
 EOF
-)"
+
+gh pr create --base main --head spec/joule-advocates-page \
+  --title "feat(joule-advocates): Joule scoped to roster + tutorials on /developer-advocates/ (#564)" \
+  --body-file /tmp/joule-advocates-pr-body.md
 ```
 
 Expected: PR URL prints. Note it (will be e.g. https://github.com/sap-tutorials/tutorials-ims/pull/575).
