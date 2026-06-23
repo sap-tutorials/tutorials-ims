@@ -75,7 +75,7 @@ describe('dispatchValidateAnswer', () => {
     expect(rows[0].promptTokens).toBe(100);
     expect(rows[0].completionTokens).toBe(50);
     expect(rows[0].modelName).toBe('gpt-4o');
-    expect(rows[0].promptVersion).toBe('v1');
+    expect(rows[0].promptVersion).toBe('v2');
     expect(rows[0].tutorialSlug).toBe('sample');
     expect(rows[0].stepNumber).toBe(2);
     expect(rows[0].questionId).toBe('validate-2');
