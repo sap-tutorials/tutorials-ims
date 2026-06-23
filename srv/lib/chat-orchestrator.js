@@ -175,6 +175,24 @@ const CHECK_CODE_TOOL = {
   }
 };
 
+const GET_DEVTOBERFEST_INFO_TOOL = {
+  type: 'function',
+  function: {
+    name: 'getDevtoberfestInfo',
+    description: "Fetch authoritative Devtoberfest event information. Call this for any factual question about the current Devtoberfest event — dates, rules, points, gameboard, activities, legal terms, videos, or live streams. Pass section='all' if unsure which slice is relevant.",
+    parameters: {
+      type: 'object',
+      properties: {
+        section: {
+          type: 'string',
+          enum: ['all', 'event', 'terms', 'links', 'points', 'gameboard', 'activities', 'videos'],
+          description: "Which slice of Devtoberfest data to return. Default 'all' returns event + links + a summary of every other section's availability."
+        }
+      }
+    }
+  }
+};
+
 async function toolsForContext({ pageContext, isAdmin }) {
   const tools = [SEARCH_TUTORIALS_TOOL];
   if (isAdmin && pageContext?.kind === 'admin') {
@@ -617,4 +635,4 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
   }
 }
 
-export { SEARCH_TUTORIALS_TOOL, SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, GET_RELEVANT_STEPS_TOOL, GET_USER_PROGRESS_TOOL, CHECK_CODE_TOOL, GET_BRANCH_RECOMMENDATION_TOOL, FIND_LEARNING_PATH_TOOL, toolsForContext };
+export { SEARCH_TUTORIALS_TOOL, SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, GET_RELEVANT_STEPS_TOOL, GET_USER_PROGRESS_TOOL, CHECK_CODE_TOOL, GET_DEVTOBERFEST_INFO_TOOL, GET_BRANCH_RECOMMENDATION_TOOL, FIND_LEARNING_PATH_TOOL, toolsForContext };
