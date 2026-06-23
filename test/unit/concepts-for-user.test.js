@@ -33,7 +33,10 @@ function makeDb({ taskRecords = [], slugLookup = {} } = {}) {
       const sql = typeof sqlOrCqn === 'string' ? sqlOrCqn : String(sqlOrCqn)
       if (sql.includes('TASKRECORDS')) return taskRecords
       if (sql.includes('TUTORIALS')) {
-        return Object.entries(slugLookup).map(([ID, SLUG]) => ({ ID, SLUG }))
+        // The helper queries Tutorials by LEGACYID (not by ID) since
+        // TaskRecords.taskLegacyId is the join key. Mock returns rows
+        // shaped {LEGACYID, SLUG}.
+        return Object.entries(slugLookup).map(([LEGACYID, SLUG]) => ({ LEGACYID: Number(LEGACYID), SLUG }))
       }
       return []
     }),
@@ -60,10 +63,10 @@ describe('getConceptsForUser', () => {
   it('partitions concepts by STATUS (COMPLETED→learned; IN_PROGRESS→partial)', async () => {
     const db = makeDb({
       taskRecords: [
-        { TUTORIAL_ID: 'tut-1', STATUS: 'COMPLETED' },
-        { TUTORIAL_ID: 'tut-2', STATUS: 'IN_PROGRESS' },
+        { TASKLEGACYID: 100, STATUS: 'COMPLETED' },
+        { TASKLEGACYID: 200, STATUS: 'IN_PROGRESS' },
       ],
-      slugLookup: { 'tut-1': 'cap-handlers-tutorial', 'tut-2': 'cds-query-tutorial' },
+      slugLookup: { '100': 'cap-handlers-tutorial', '200': 'cds-query-tutorial' },
     })
     const r = await getConceptsForUser({ db, userId: '11111111-2222-3333-4444-555555555555' })
     expect(r.learned).toContain('cap-handlers')
@@ -71,8 +74,8 @@ describe('getConceptsForUser', () => {
   })
 
   it('sets truncatedAt500: true when TaskRecords exceed cap', async () => {
-    const taskRecords = Array.from({ length: 501 }, (_, i) => ({ TUTORIAL_ID: `t${i}`, STATUS: 'COMPLETED' }))
-    const slugLookup = Object.fromEntries(Array.from({ length: 501 }, (_, i) => [`t${i}`, `slug-${i}`]))
+    const taskRecords = Array.from({ length: 501 }, (_, i) => ({ TASKLEGACYID: i + 1, STATUS: 'COMPLETED' }))
+    const slugLookup = Object.fromEntries(Array.from({ length: 501 }, (_, i) => [`${i + 1}`, `slug-${i + 1}`]))
     const db = makeDb({ taskRecords, slugLookup })
     const r = await getConceptsForUser({ db, userId: '11111111-2222-3333-4444-555555555555' })
     expect(r.truncatedAt500).toBe(true)
@@ -80,8 +83,8 @@ describe('getConceptsForUser', () => {
 
   it('dedupes: a concept in both buckets resolves to learned only', async () => {
     const db = makeDb({
-      taskRecords: [{ TUTORIAL_ID: 't1', STATUS: 'COMPLETED' }, { TUTORIAL_ID: 't2', STATUS: 'IN_PROGRESS' }],
-      slugLookup: { 't1': 'cap', 't2': 'cap' },
+      taskRecords: [{ TASKLEGACYID: 1, STATUS: 'COMPLETED' }, { TASKLEGACYID: 2, STATUS: 'IN_PROGRESS' }],
+      slugLookup: { '1': 'cap', '2': 'cap' },
     })
     const r = await getConceptsForUser({ db, userId: '11111111-2222-3333-4444-555555555555' })
     const overlap = r.learned.filter(c => r.partial.includes(c))

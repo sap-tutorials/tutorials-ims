@@ -110,12 +110,15 @@ export async function findLearningPathHandler({ db, args, user, telemetry }) {
     effectiveFromSlug = rawFromSlug
     fromSlugInferred = false
   } else if (user?.id) {
-    // Try to infer from most-recently-completed TaskRecord
+    // Try to infer from most-recently-completed TaskRecord. The CAP
+    // TaskRecords entity uses (taskLegacyId, taskType) instead of a
+    // direct FK to Tutorials — join taskLegacyId → Tutorials.legacyId
+    // and filter taskType='TUTORIAL'.
     const rows = await db.run(
       `SELECT TOP 1 t.SLUG FROM COM_SAP_DEVELOPERS_IMS_TASKRECORDS r
-       JOIN COM_SAP_DEVELOPERS_IMS_TUTORIALS t ON t.ID = r.TUTORIAL_ID
-       WHERE r.USER_ID = ? AND r.STATUS = 'COMPLETED'
-       ORDER BY r.COMPLETEDAT DESC NULLS LAST`,
+       JOIN COM_SAP_DEVELOPERS_IMS_TUTORIALS t ON t.LEGACYID = r.TASKLEGACYID
+       WHERE r.USER_ID = ? AND r.TASKTYPE = 'TUTORIAL' AND r.STATUS = 'COMPLETED'
+       ORDER BY r.COMPLETIONDATE DESC NULLS LAST`,
       [user.id]
     )
     if (rows && rows.length > 0 && rows[0].SLUG) {

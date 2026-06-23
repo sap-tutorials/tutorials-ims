@@ -43,11 +43,14 @@ export async function getConceptsForUser({ db, userId }) {
     throw new TypeError('db must be a CDS service with a .run() method')
   }
 
-  // Step 1: read TaskRecords. Cap at MAX_TASK_RECORDS+1 to detect truncation.
+  // Step 1: read TaskRecords. The CAP TaskRecords entity uses
+  // (taskLegacyId, taskType) instead of a direct FK to Tutorials —
+  // taskType='TUTORIAL' rows have a taskLegacyId that joins to
+  // Tutorials.legacyId. Cap at MAX_TASK_RECORDS+1 to detect truncation.
   const taskRecords = await db.run(
-    `SELECT TUTORIAL_ID, STATUS FROM COM_SAP_DEVELOPERS_IMS_TASKRECORDS
-     WHERE USER_ID = ? AND STATUS IN ('COMPLETED', 'IN_PROGRESS')
-     ORDER BY COMPLETEDAT DESC NULLS LAST
+    `SELECT TASKLEGACYID, STATUS FROM COM_SAP_DEVELOPERS_IMS_TASKRECORDS
+     WHERE USER_ID = ? AND TASKTYPE = 'TUTORIAL' AND STATUS IN ('COMPLETED', 'IN_PROGRESS')
+     ORDER BY COMPLETIONDATE DESC NULLS LAST
      LIMIT ${MAX_TASK_RECORDS + 1}`,
     [userId]
   )
@@ -57,22 +60,23 @@ export async function getConceptsForUser({ db, userId }) {
   const truncatedAt500 = taskRecords.length > MAX_TASK_RECORDS
   const capped = truncatedAt500 ? taskRecords.slice(0, MAX_TASK_RECORDS) : taskRecords
 
-  // Step 2: look up slugs.
-  const tutorialIds = [...new Set(capped.map(r => r.TUTORIAL_ID).filter(Boolean))]
-  if (tutorialIds.length === 0) {
+  // Step 2: look up slugs by legacyId (NOT by ID — CAP TaskRecords carries
+  // the IMS legacy integer ID, not the CAP UUID).
+  const legacyIds = [...new Set(capped.map(r => r.TASKLEGACYID).filter(Boolean))]
+  if (legacyIds.length === 0) {
     return { learned: [], partial: [], truncatedAt500 }
   }
-  const placeholders = tutorialIds.map(() => '?').join(',')
+  const placeholders = legacyIds.map(() => '?').join(',')
   const slugRows = await db.run(
-    `SELECT ID, SLUG FROM COM_SAP_DEVELOPERS_IMS_TUTORIALS WHERE ID IN (${placeholders})`,
-    tutorialIds
+    `SELECT LEGACYID, SLUG FROM COM_SAP_DEVELOPERS_IMS_TUTORIALS WHERE LEGACYID IN (${placeholders})`,
+    legacyIds
   )
-  const idToSlug = new Map((slugRows || []).map(r => [r.ID, r.SLUG]))
+  const legacyIdToSlug = new Map((slugRows || []).map(r => [r.LEGACYID, r.SLUG]))
 
   // Build (iri, status) pairs with shape validation.
   const pairs = []
   for (const tr of capped) {
-    const slug = idToSlug.get(tr.TUTORIAL_ID)
+    const slug = legacyIdToSlug.get(tr.TASKLEGACYID)
     if (!slug) continue
     const slugLc = slug.toLowerCase()
     if (!/^[a-z0-9-]{1,80}$/.test(slugLc)) continue
