@@ -4,6 +4,7 @@ import { validateQuerySpec } from './query-spec-validator.mjs';
 import { specToSql } from './spec-to-sql.mjs';
 import { getAnalyticsContext } from './analytics-llm-context.js';
 import { GET_BRANCH_RECOMMENDATION_TOOL, getBranchRecommendationHandler } from './branch/joule-tool.js';
+import { FIND_LEARNING_PATH_TOOL, findLearningPathHandler } from './kg/joule-tool-find-path.js';
 
 const LOG = cds.log('chat');
 const MAX_TURNS = 5;
@@ -194,6 +195,9 @@ async function toolsForContext({ pageContext, isAdmin }) {
     }
     if (settings?.branchingEnabled) {
       tools.push(GET_BRANCH_RECOMMENDATION_TOOL);
+    }
+    if (settings?.kgPathBetweenEnabled) {
+      tools.push(FIND_LEARNING_PATH_TOOL);
     }
   } catch (err) {
     LOG.warn('toolsForContext: could not read ChatSettings', err.message);
@@ -441,6 +445,16 @@ export async function dispatchTool(name, args, user) {
     return await getBranchRecommendationHandler({ args, user });
   }
 
+  if (name === 'findLearningPath') {
+    try {
+      const db = await cds.connect.to('db');
+      return await findLearningPathHandler({ db, args, user });
+    } catch (err) {
+      LOG.warn('findLearningPath dispatch failed:', err.message);
+      return 'Internal error finding a learning path — please try a more specific question.';
+    }
+  }
+
   return { error: 'unknown_tool' };
 }
 
@@ -603,4 +617,4 @@ export async function streamChat({ res, system, messages, deploymentId, modelNam
   }
 }
 
-export { SEARCH_TUTORIALS_TOOL, SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, GET_RELEVANT_STEPS_TOOL, GET_USER_PROGRESS_TOOL, CHECK_CODE_TOOL, GET_BRANCH_RECOMMENDATION_TOOL, toolsForContext };
+export { SEARCH_TUTORIALS_TOOL, SEARCH_ADMIN_DOCS_TOOL, ANALYTICS_QUERY_TOOL, GET_RELEVANT_STEPS_TOOL, GET_USER_PROGRESS_TOOL, CHECK_CODE_TOOL, GET_BRANCH_RECOMMENDATION_TOOL, FIND_LEARNING_PATH_TOOL, toolsForContext };
