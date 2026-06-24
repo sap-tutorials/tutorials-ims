@@ -94,7 +94,7 @@ These came up in research but are not in this plan. We can pick them up if autho
 
 3. **Steps facet ordering.** **Sort by `stepOrder` asc** via `@UI.PresentationVariant.SortOrder`. Confirm at implementation that `stepOrder` is the canonical ordering field on `Steps` (not `stepNumber`).
 
-4. **Drift badge.** **Show only when `sourceHash != contentHash`.** Quiet UX otherwise; the badge functions as a "rebuild needed" alert.
+4. **Drift badge.** **Deferred from PR-2.** During implementation we realized that meaningful drift detection requires comparing local-source-bytes (in GitHub) vs the persisted `sourceHash` (in HANA). The admin tile only has the HANA side of that comparison, so it can't compute drift on its own. PR-2's Source Markdown facet ships with a "source captured" / "no source captured" status (binary signal), not a hash-comparison drift indicator. A real drift indicator would either need (a) a server-side endpoint that fetches GitHub HEAD and computes diff per tile load, or (b) a daily-computed `TutorialDriftStatus` entity that the existing `source-drift-check.yml` workflow populates. Both are out of scope for this 4-PR plan; left as a follow-up if author demand surfaces.
 
 ## Test plan
 

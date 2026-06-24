@@ -452,4 +452,28 @@ service AdminService {
 
   @odata.singleton @requires: 'Admin'
   entity TenantSettings as projection on ims.TenantSettings;
+
+  // Read the source markdown for a single tutorial.
+  // PR-2 of spec 2026-06-24-tutorials-admin-tile-expansion-design.
+  //
+  // Returns the decompressed upstream `.md` content from
+  // ContentFiles.sourceContent, plus the persisted sourceHash and
+  // contentHash (for future correlation work). Returns null markdown
+  // if the active ContentFiles row has no sourceContent (legacy rows
+  // pre-PR #591).
+  //
+  // Drift detection (compare local-source-bytes vs remote-sourceHash)
+  // is intentionally NOT done here — local source lives in GitHub,
+  // outside the admin tile's reach. The daily content-drift workflow
+  // (.github/workflows/source-drift-check.yml) owns that comparison.
+  //
+  // Why an action instead of a virtual field: ContentFiles.sourceContent
+  // is a LargeBinary BLOB and CDS QL on HANA can't safely SELECT it
+  // alongside metadata (LOB locator expiry). The action uses raw SQL
+  // to grab the BLOB, decompresses it, and returns plain text.
+  action getTutorialSource(slug: String) returns {
+    markdown    : String;     // decompressed upstream .md text (null if not captured)
+    sourceHash  : String;     // SHA-256 of the raw upstream bytes (null for legacy rows)
+    contentHash : String;     // SHA-256 of the rendered HTML
+  };
 }
