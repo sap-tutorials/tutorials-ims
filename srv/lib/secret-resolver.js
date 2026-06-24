@@ -109,3 +109,24 @@ export function invalidateSecret(alias) {
 export function _resetForTests() {
   _state.cache.clear();
 }
+
+/**
+ * Test-only: prime the cache for an alias without going through credstore.
+ * Use from `beforeEach` blocks instead of stubbing process.env, so tests
+ * don't leak state into other vitest workers.
+ *
+ * Pass `value: null` to explicitly mark "no value reachable" — the resolver
+ * will still fall through to env, so combine with `delete process.env[alias]`
+ * to assert "neither source has a value" paths.
+ */
+export function _primeForTests(alias, value, { ttlMs = DEFAULT_TTL_MS } = {}) {
+  if (value == null) {
+    _state.cache.delete(alias);
+    return;
+  }
+  _state.cache.set(alias, {
+    value,
+    expiresAt: Date.now() + ttlMs,
+    warnedWindowAt: 0,
+  });
+}

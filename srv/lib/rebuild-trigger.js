@@ -19,7 +19,12 @@
 // Issue: #429. Uses native fetch (Node >= 20) — no octokit dependency.
 
 import { resolveTenantSettings } from './runtime-config/tenant-settings.js';
-import { resolveSecret, invalidateSecret } from './secret-resolver.js';
+import {
+  resolveSecret,
+  invalidateSecret,
+  _resetForTests as _resetResolver,
+  _primeForTests as _primeResolver,
+} from './secret-resolver.js';
 
 const REPO_OWNER = 'sap-tutorials';
 const REPO_NAME = 'tutorials-ims';
@@ -201,23 +206,12 @@ export function _resetForTests({ dispatchFn, debounceMs, token } = {}) {
     pendingForceCapRefetch: false,
     dispatchFn: dispatchFn ?? defaultDispatch,
   };
-  // Seed the secret-resolver cache directly so existing tests that pass
-  // `token` continue to work without reaching into credstore/env.
+  // Seed (or clear) the shared resolver cache so existing tests that pass
+  // `token: 'fake-token'` keep working without reaching into credstore/env.
+  // Synchronous so it composes with vi.useFakeTimers() in the test suite.
   if (token !== undefined) {
-    // Lazy-require avoids a top-of-file circular dep concern in test setups
-    // that mock credstore.
-    import('./secret-resolver.js').then(({ _resetForTests: resetResolver, resolveSecret: r }) => {
-      resetResolver();
-      if (token) {
-        // Prime cache by routing through env var temporarily, then clear.
-        const prev = process.env.GITHUB_DISPATCH_TOKEN;
-        process.env.GITHUB_DISPATCH_TOKEN = token;
-        return r('GITHUB_DISPATCH_TOKEN').finally(() => {
-          if (prev === undefined) delete process.env.GITHUB_DISPATCH_TOKEN;
-          else process.env.GITHUB_DISPATCH_TOKEN = prev;
-        });
-      }
-    });
+    _resetResolver();
+    if (token) _primeResolver('GITHUB_DISPATCH_TOKEN', token);
   }
   _bootWarned = false;
 }
