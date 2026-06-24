@@ -117,7 +117,7 @@ export async function findLearningPathHandler({ db, args, user, telemetry }) {
     const rows = await db.run(
       `SELECT TOP 1 t.SLUG FROM COM_SAP_DEVELOPERS_IMS_TASKRECORDS r
        JOIN COM_SAP_DEVELOPERS_IMS_TUTORIALS t ON t.LEGACYID = r.TASKLEGACYID
-       WHERE r.USER_ID = ? AND r.TASKTYPE = 'TUTORIAL' AND r.STATUS = 'COMPLETED'
+       WHERE r.USER_ID = ? AND r.TASKTYPE = 'TUTORIAL' AND r.STATUS IN ('COMPLETED', 'SUPERSEDED')
        ORDER BY r.COMPLETIONDATE DESC NULLS LAST`,
       [user.id]
     )

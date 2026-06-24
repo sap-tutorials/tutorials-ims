@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import cds from '@sap/cds';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const __filename_t13 = fileURLToPath(import.meta.url);
+const __dirname_t13 = dirname(__filename_t13);
 
 // Boots CAP with in-memory SQLite, deploys the model, and exposes
 // SELECT/INSERT/UPDATE/DELETE as globals. Same pattern as
@@ -651,5 +657,36 @@ describe('Task 9 — admin-service SQL filters', () => {
     const joined = dataLines.join('\n');
     expect(joined).toContain('Carol');
     expect(joined).toContain('Dan');
+  });
+});
+
+// Task 13: KG raw-SQL filters must treat SUPERSEDED rows as completion signal
+// so reset users don't lose their concept knowledge / path-finder anchor.
+// These are lightweight source-string assertions — the real KG behavior is
+// hybrid-only (HANA SPARQL + KGE), so a regression guard here is enough.
+describe('Task 13 — KG raw-SQL filters honor SUPERSEDED', () => {
+  const conceptsForUserSource = fs.readFileSync(
+    join(__dirname_t13, '../../srv/lib/kg/concepts-for-user.js'), 'utf8'
+  );
+  const findPathSource = fs.readFileSync(
+    join(__dirname_t13, '../../srv/lib/kg/joule-tool-find-path.js'), 'utf8'
+  );
+
+  it('concepts-for-user.js SQL filter includes SUPERSEDED', () => {
+    expect(conceptsForUserSource).toMatch(
+      /STATUS\s+IN\s*\(\s*'COMPLETED'\s*,\s*'IN_PROGRESS'\s*,\s*'SUPERSEDED'\s*\)/
+    );
+  });
+
+  it('concepts-for-user.js classification treats SUPERSEDED as learned', () => {
+    expect(conceptsForUserSource).toMatch(
+      /status\s*===\s*'COMPLETED'\s*\|\|\s*status\s*===\s*'SUPERSEDED'/
+    );
+  });
+
+  it('joule-tool-find-path.js SQL filter includes SUPERSEDED', () => {
+    expect(findPathSource).toMatch(
+      /r\.STATUS\s+IN\s*\(\s*'COMPLETED'\s*,\s*'SUPERSEDED'\s*\)/
+    );
   });
 });
