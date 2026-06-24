@@ -1675,24 +1675,36 @@ annotate AdminService.AdvocatePhotos with @(
 
 // AdvocateTopics — inline table with Tag value-help.
 //
-// LineItem cell binds DIRECTLY to the navigation path `tag.label`, NOT to
-// the FK `tag_ID`. Editing still works: the @Common.ValueList on the
-// `tag` association (below) attaches a value-help dialog to the cell,
-// and the dialog's `ValueListParameterInOut` writes back to `tag_ID`.
+// LineItem binds to the FK `tag_ID`, NOT the navigation path `tag.label`.
+// Why: FE V4 renders an editable cell against a real local property, then
+// resolves the displayed text via `@Common.Text` and attaches value help
+// from `@Common.ValueList` — both inherited from the `tag` association
+// by the cds-compiler's "annotate managed association → propagate to FK"
+// behavior (Feb 2025 release, automatic for expression-valued annotations
+// referencing target properties — verified in the emitted EDMX).
 //
-// Two-bug history before this approach:
+// Three-bug history before this shape:
 //
-//   #573 (initial) — annotated only the `tag` association expecting FE V4
-//   to follow @Common.Text/@Common.TextArrangement onto the FK column.
-//   It did not. Table rendered the raw GUID in the Topic column.
+//   #573 (initial) — bound LineItem to `tag.label`. FE V4 read the
+//   navigation path without an $expand and rendered blank/GUID; editing
+//   surfaced an empty text box because the path is not writable from
+//   the cell directly.
 //
-//   #586 (claimed-fix-but-didn't-work) — added a second `annotate ...
-//   { tag_ID @... }` block on the assumption that CAP would emit those
-//   annotations onto the generated FK element. Inspection of the
-//   resulting csn.json on 2026-06-24 showed `elements.tag_ID` was STILL
-//   absent — annotations on the implicit FK of a projection-from-aspect
-//   are silently dropped by the compiler. So the table kept rendering
-//   the GUID despite the deploy.
+//   #586 (annotation-side patch) — added a second `annotate
+//   AdminService.AdvocateTopics with { tag_ID @... }` block thinking the
+//   FK annotations weren't reaching the client. They actually were
+//   (auto-propagated from the association), and the compiler silently
+//   dropped the second block with `Element "tag_ID" has not been found`
+//   because `tag_ID` isn't a declared element on the projection — it's
+//   generated. The dead block produced a compiler warning every build.
+//
+//   #588 (display-side workaround) — kept the `tag.label` binding and
+//   added the redundant FK annotate block in 1556, hoping FE V4 would
+//   pick up the FK path on render. It did not, because the LineItem
+//   was still pointing at the navigation path.
+//
+// This fix: bind LineItem to `tag_ID`, drop the dead `tag_ID @...` block,
+// rely on the propagated association annotations alone.
 //
 // Value-help dialog: ranks `label` first so admins search by the human
 // label, falls back to `name` (slug-equivalent) when label is missing.
@@ -1708,28 +1720,31 @@ annotate AdminService.AdvocateTopics with {
           { $Type: 'Common.ValueListParameterDisplayOnly',                            ValueListProperty: 'name' }
         ]
       };
-  tag_ID @Common.Label: 'Topic'
-         @Common.Text: tag.label
-         @Common.TextArrangement: #TextOnly
-         @Common.ValueList: {
-           CollectionPath: 'Tags',
-           Parameters: [
-             { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: tag_ID, ValueListProperty: 'ID' },
-             { $Type: 'Common.ValueListParameterDisplayOnly',                            ValueListProperty: 'label' },
-             { $Type: 'Common.ValueListParameterDisplayOnly',                            ValueListProperty: 'name' }
-           ]
-         };
 };
 
 annotate AdminService.AdvocateTopics with @UI: {
   LineItem: [
-    { $Type: 'UI.DataField', Value: tag.label, Label: 'Topic' }
+    { $Type: 'UI.DataField', Value: tag_ID, Label: 'Topic' }
   ]
 };
 
 // AdvocateLinks — inline table for the social-links facet.
+//
+// `kind` renders as a fixed-values dropdown (mirrors the pattern used by
+// Advocates.region → AdvocateRegions). The @assert.range enum on the
+// underlying field (db/advocates.cds) is the runtime guard for writes
+// that bypass the UI (CSV import, REST). The DDLB itself is driven by
+// AdvocateLinkKinds, seeded in srv/admin-service.js.
 annotate AdminService.AdvocateLinks with {
-  kind      @Common.Label: 'Kind';
+  kind      @Common.Label: 'Kind'
+            @Common.ValueListWithFixedValues
+            @Common.ValueList: {
+              CollectionPath: 'AdvocateLinkKinds',
+              Parameters: [
+                { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: kind, ValueListProperty: 'code' },
+                { $Type: 'Common.ValueListParameterDisplayOnly',                          ValueListProperty: 'label' }
+              ]
+            };
   url       @Common.Label: 'URL';
   label     @Common.Label: 'Label override';
   sortOrder @Common.Label: 'Sort';
