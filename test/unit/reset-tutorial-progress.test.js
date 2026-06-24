@@ -3,6 +3,7 @@ import cds from '@sap/cds';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { _resetForTests as resetRateLimitBuckets } from '../../srv/lib/per-user-rate-limit.js';
 
 const __filename_t13 = fileURLToPath(import.meta.url);
 const __dirname_t13 = dirname(__filename_t13);
@@ -13,6 +14,14 @@ const __dirname_t13 = dirname(__filename_t13);
 // it has to bind at module-load so the schema is deployed before
 // the describe blocks below try to read cds.entities(...).
 const project = cds.test('serve', '--project', '.', '--in-memory');
+
+// Per-user rate-limit state leaks across tests within this file (the
+// limiter is a module-level Map). Reset before each test so the Task 18
+// 5/hour quota only counts that test's own calls. Other tests run with
+// a fresh bucket too — that's the correct isolation behavior.
+beforeEach(() => {
+  resetRateLimitBuckets();
+});
 
 // Shared seed helper — reused by Tasks 3, 4, 5, 6, 7, 8 to avoid
 // duplicating the same 4-INSERT block. Pulls in the user / tutorial /
@@ -801,5 +810,41 @@ describe('Task 17 — TutorialProgressReset audit listener', () => {
     } finally {
       infoSpy.mockRestore();
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// Task 18 — resetTutorialProgress rate limit (5 / hour / user → 429).
+// Same per-user limiter shape as /api/codecheck and /api/validate-answer
+// (factored into srv/lib/per-user-rate-limit.js for reuse). Bucket key
+// prefixed 'reset:' so the limit is independent of those other features.
+// ─────────────────────────────────────────────────────────────────────
+describe('Task 18 — resetTutorialProgress rate limit', () => {
+  beforeEach(async () => {
+    await seedCompletedTutorial();
+    // (Top-level beforeEach already cleared the rate-limit buckets.)
+  });
+
+  it('6th reset within an hour returns 429', async () => {
+    const { DeveloperService } = cds.services;
+
+    // 5 resets should succeed; each one supersedes the previous attempt's
+    // live TUTORIAL row and inserts a fresh IN_PROGRESS at attempt N+1.
+    for (let i = 0; i < 5; i++) {
+      cds.context = { user: new cds.User({ id: 'sap-u1' }) };
+      await DeveloperService.send({
+        event: 'resetTutorialProgress',
+        data: { slug: 'reset-happy-path' },
+      });
+    }
+
+    // 6th must reject with 429 — quota exceeded within the 1-hour window.
+    cds.context = { user: new cds.User({ id: 'sap-u1' }) };
+    await expect(
+      DeveloperService.send({
+        event: 'resetTutorialProgress',
+        data: { slug: 'reset-happy-path' },
+      })
+    ).rejects.toMatchObject({ code: 429 });
   });
 });

@@ -5,6 +5,15 @@ import { hashIp } from './lib/feedback-salt.js';
 import { getMyCompletedTutorials } from './lib/user-progress.js';
 import { PROFILE_VOCAB } from './lib/branch/profile-fields.js';
 import { resolveUserSapId } from './lib/resolve-db-user.js';
+import { checkRateLimit } from './lib/per-user-rate-limit.js';
+
+// Per-user rate limit for resetTutorialProgress — same window as the
+// IP-based feedback limiter below (5/hr) but keyed by sapId via a shared
+// sliding-window helper (matches the in-memory Map shape used by
+// /api/codecheck and /api/validate-answer; lifted into a shared module
+// for reuse). Bucket key prefixed `reset:` so the quota is independent.
+const RESET_LIMIT_PER_HOUR = 5;
+const RESET_WINDOW_MS = 60 * 60 * 1000;
 
 const RATE_LIMIT = new Map();
 const RATE_WINDOW_MS = 60 * 60 * 1000;
@@ -200,6 +209,13 @@ export default class DeveloperService extends cds.ApplicationService {
 
       const sapId = resolveUserSapId(user);
       if (!sapId) return req.reject(401, 'Unauthenticated');
+
+      // Rate-limit BEFORE any DB work — protects against griefing and
+      // accidental client loops (e.g. an over-eager retry from the UI).
+      // 5 resets per hour is generous for legitimate re-completion flows.
+      if (!checkRateLimit(`reset:${sapId}`, RESET_LIMIT_PER_HOUR, RESET_WINDOW_MS)) {
+        return req.reject(429, 'You have reset too many tutorials recently — please wait a few minutes.');
+      }
 
       // 1. Resolve slug → tutorial
       const tutorial = await SELECT.one.from(dbTutorials).where({ slug });
