@@ -81,6 +81,25 @@
         </f:SimpleForm>
       </Panel>
 
+      <!-- Issue #172 pilot master flag. Default OFF in the schema
+           (db/schema.cds:530). When off, the public /api/ChatConfig
+           singleton reports branchingEnabled=false; the Learning
+           Preferences island in /me/ shows the "Branching is currently
+           disabled platform-wide" info strip, and the
+           getBranchRecommendation Joule tool is NOT registered. Flipping
+           on activates the branch recommender, the tool, and mission
+           alt-group rendering. Rollout procedure documented in
+           docs/authors/pilot-runbook.md (Phase 3). -->
+      <Panel headerText="{i18n>branchingSection}" expandable="true" expanded="true" class="sapUiSmallMarginBottom">
+        <f:SimpleForm editable="true" layout="ResponsiveGridLayout">
+          <Label text="{i18n>branchingEnabled}" />
+          <Switch state="{settings>/branchingEnabled}" />
+
+          <Label text="" />
+          <Text text="{i18n>branchingEnabledHelp}" wrapping="true" />
+        </f:SimpleForm>
+      </Panel>
+
       <HBox class="sapUiSmallMarginTop">
         <Button text="{i18n>btnSave}" press=".onSave" type="Emphasized" class="sapUiTinyMarginEnd" />
         <Button text="{i18n>btnReload}" press=".onReload" />

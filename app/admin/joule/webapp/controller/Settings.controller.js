@@ -24,7 +24,15 @@ sap.ui.define([
         // consumption per learner submission. The help text under each switch
         // in the view makes the cost trade-off explicit.
         validateAnswerEnabled: false,
-        codeCheckEnabled: false
+        codeCheckEnabled: false,
+        // Issue #172 pilot master flag. Default false to mirror the schema
+        // default (db/schema.cds:530). When off, the public /api/ChatConfig
+        // singleton reports branchingEnabled=false and the Learning
+        // Preferences island in /me/ shows the "Branching is currently
+        // disabled platform-wide" info strip. Flipping on activates the
+        // branch recommender, getBranchRecommendation Joule tool, and
+        // mission alt-group rendering (see docs/authors/pilot-runbook.md).
+        branchingEnabled: false
       });
       this.getView().setModel(oJSON, "settings");
       this._loadSettings();
@@ -66,7 +74,8 @@ sap.ui.define([
             embeddingTopK: data.embeddingTopK != null ? data.embeddingTopK : 5,
             embeddingMinScore: data.embeddingMinScore != null ? data.embeddingMinScore : 0.25,
             validateAnswerEnabled: !!data.validateAnswerEnabled,
-            codeCheckEnabled: !!data.codeCheckEnabled
+            codeCheckEnabled: !!data.codeCheckEnabled,
+            branchingEnabled: !!data.branchingEnabled
           });
         })
         .catch(function (err) {
@@ -96,7 +105,8 @@ sap.ui.define([
         embeddingTopK: parseInt(data.embeddingTopK, 10) || 5,
         embeddingMinScore: data.embeddingMinScore === "" || data.embeddingMinScore == null ? null : Number(data.embeddingMinScore),
         validateAnswerEnabled: !!data.validateAnswerEnabled,
-        codeCheckEnabled: !!data.codeCheckEnabled
+        codeCheckEnabled: !!data.codeCheckEnabled,
+        branchingEnabled: !!data.branchingEnabled
       };
 
       fetch("/admin/$metadata", {
