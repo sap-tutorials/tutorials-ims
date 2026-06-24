@@ -538,7 +538,7 @@ export default class DeveloperService extends cds.ApplicationService {
       // 3. Rate limit (before any DB I/O so unknown-slug floods don't hammer the DB)
       if (!d._clientIp) cds.log('feedback').warn('submitTutorialFeedback: _clientIp missing — rate limiting will share one bucket. Express bridge must inject it.');
       const ip = d._clientIp || 'unknown';
-      const hashedIp = hashIp(ip);
+      const hashedIp = await hashIp(ip);
       if (rateLimitExceeded(hashedIp)) return req.error(429, 'Too many submissions');
 
       // 4. Slug existence
