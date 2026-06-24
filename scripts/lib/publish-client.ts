@@ -11,6 +11,11 @@ export interface AppendInput {
   metadata: Record<string, any>;
   bodyTexts: Record<string, string>;
   branchSpecs?: Record<string, any>;
+  // PR #591: per-slug gzipped raw markdown for source-of-truth drift detection.
+  // Map keyed by the SAME slug as `files`. Values are base64(gzip(rawMarkdownBytes)).
+  // Optional + ignored by server when null/absent — back-compat with older
+  // clients and with payload entries (__shell__, __nav__) that have no source.
+  sources?: Record<string, string>;
 }
 export interface AppendResult { slugsAccepted: number; batchHash: string; totalSizeBytes: number }
 
@@ -46,7 +51,7 @@ export async function beginSession(i: BeginInput): Promise<BeginResult> {
 export async function appendBatch(i: AppendInput): Promise<AppendResult> {
   return postJson(`${i.baseUrl}/content/publish/append`, i.apiKey, {
     sessionId: i.sessionId, files: i.files, metadata: i.metadata, bodyTexts: i.bodyTexts,
-    branchSpecs: i.branchSpecs,
+    branchSpecs: i.branchSpecs, sources: i.sources,
   });
 }
 
@@ -70,6 +75,31 @@ export async function fetchRemoteHashes({ baseUrl }: { baseUrl: string }): Promi
   const res = await fetch(`${baseUrl}/content/hashes`);
   if (!res.ok) {
     if (res.status === 503) return {};
+    const err: any = new Error(`HTTP ${res.status}`);
+    err.status = res.status;
+    throw err;
+  }
+  return res.json() as Promise<Record<string, string>>;
+}
+
+/**
+ * Fetch the server's per-slug SOURCE markdown SHA-256 map (PR #591).
+ * `/content/source-hashes` returns the same shape as `/content/hashes` but
+ * keyed by sourceHash (markdown bytes) instead of contentHash (rendered HTML).
+ * Slugs whose sourceHash is null (e.g. published before PR #591) are omitted
+ * from the response — drift check skips those by design.
+ *
+ * Public-read like /content/hashes; no auth needed.
+ */
+export async function fetchRemoteSourceHashes({ baseUrl }: { baseUrl: string }): Promise<Record<string, string>> {
+  const res = await fetch(`${baseUrl}/content/source-hashes`);
+  if (!res.ok) {
+    if (res.status === 503) return {};
+    if (res.status === 404) {
+      // Endpoint not yet deployed on this server. Treat as empty (no source
+      // hashes known) so the caller can fall back or report a clean state.
+      return {};
+    }
     const err: any = new Error(`HTTP ${res.status}`);
     err.status = res.status;
     throw err;

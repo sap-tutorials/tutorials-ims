@@ -79,7 +79,7 @@ export function createSessionHelpers({ namespace }) {
     return row;
   }
 
-  async function appendToSession({ sessionId, files = {}, metadata = {}, bodyTexts = {}, branchSpecs = {} }) {
+  async function appendToSession({ sessionId, files = {}, metadata = {}, bodyTexts = {}, branchSpecs = {}, sources = {} }) {
     const session = await findActiveSession(sessionId);
     const { ContentFiles, ContentManifest } = cds.entities(namespace);
 
@@ -94,6 +94,20 @@ export function createSessionHelpers({ namespace }) {
       const contentHash = createHash('sha256').update(decompressed).digest('hex');
       batchHasher.update(slug).update(contentHash);
 
+      // PR #591: optional source-markdown side of the publish payload.
+      // `sources[slug]` (if present) is base64(gzip(rawMarkdownBytes)). We
+      // gunzip, hash, and store both the compressed bytes AND the hash on
+      // the same ContentFiles row. Both columns are nullable so legacy
+      // payloads (no `sources`) still produce valid rows.
+      let sourceContent = null;
+      let sourceHash = null;
+      if (sources && typeof sources[slug] === 'string') {
+        const srcCompressed = Buffer.from(sources[slug], 'base64');
+        const srcDecompressed = gunzipSync(srcCompressed);
+        sourceContent = srcCompressed;
+        sourceHash = createHash('sha256').update(srcDecompressed).digest('hex');
+      }
+
       entries.push({
         slug,
         version: session.version,
@@ -101,7 +115,9 @@ export function createSessionHelpers({ namespace }) {
         contentHash,
         sizeBytes: decompressed.length,
         compressedBytes: compressed.length,
-        mimeType: 'text/html'
+        mimeType: 'text/html',
+        sourceContent,
+        sourceHash,
       });
       totalSizeBytes += decompressed.length;
     }
@@ -577,7 +593,7 @@ async function carryForwardUnchanged(namespace, newVersion, hanaTableName, getAc
     // matching the same pattern used in the serve handler.
     const placeholders = slugs.length ? slugs.map(() => '?').join(',') : "''";
     carryRows = await db.run(
-      `SELECT "SLUG", "CONTENT", "CONTENTHASH", "SIZEBYTES", "COMPRESSEDBYTES", "MIMETYPE"
+      `SELECT "SLUG", "CONTENT", "CONTENTHASH", "SIZEBYTES", "COMPRESSEDBYTES", "MIMETYPE", "SOURCECONTENT", "SOURCEHASH"
          FROM "${hanaTableName()}"
         WHERE "VERSION" = ? AND "SLUG" NOT IN (${placeholders})`,
       [prevVersion, ...slugs]
@@ -588,15 +604,17 @@ async function carryForwardUnchanged(namespace, newVersion, hanaTableName, getAc
       contentHash: r.CONTENTHASH,
       sizeBytes: r.SIZEBYTES,
       compressedBytes: r.COMPRESSEDBYTES,
-      mimeType: r.MIMETYPE
+      mimeType: r.MIMETYPE,
+      sourceContent: r.SOURCECONTENT,
+      sourceHash: r.SOURCEHASH,
     }));
   } else {
     const sel = slugs.length
       ? SELECT.from(ContentFiles)
-          .columns('slug', 'content', 'contentHash', 'sizeBytes', 'compressedBytes', 'mimeType')
+          .columns('slug', 'content', 'contentHash', 'sizeBytes', 'compressedBytes', 'mimeType', 'sourceContent', 'sourceHash')
           .where`version = ${prevVersion} and slug not in ${slugs}`
       : SELECT.from(ContentFiles)
-          .columns('slug', 'content', 'contentHash', 'sizeBytes', 'compressedBytes', 'mimeType')
+          .columns('slug', 'content', 'contentHash', 'sizeBytes', 'compressedBytes', 'mimeType', 'sourceContent', 'sourceHash')
           .where({ version: prevVersion });
     carryRows = await sel;
   }
@@ -605,6 +623,14 @@ async function carryForwardUnchanged(namespace, newVersion, hanaTableName, getAc
   let carriedSize = 0;
   for (const row of carryRows) {
     const buf = Buffer.isBuffer(row.content) ? row.content : await toBuffer(row.content);
+    // PR #591: bring sourceContent forward too. Pre-PR-#591 rows have null
+    // sourceContent/sourceHash; we preserve those nulls unchanged. New rows
+    // carry forward intact so a 'no-op republish' keeps source hashes
+    // available for the drift workflow without re-uploading the markdown.
+    let srcBuf = null;
+    if (row.sourceContent != null) {
+      srcBuf = Buffer.isBuffer(row.sourceContent) ? row.sourceContent : await toBuffer(row.sourceContent);
+    }
     carryEntries.push({
       slug: row.slug,
       version: newVersion,
@@ -612,7 +638,9 @@ async function carryForwardUnchanged(namespace, newVersion, hanaTableName, getAc
       contentHash: row.contentHash,
       sizeBytes: row.sizeBytes,
       compressedBytes: row.compressedBytes,
-      mimeType: row.mimeType
+      mimeType: row.mimeType,
+      sourceContent: srcBuf,
+      sourceHash: row.sourceHash ?? null,
     });
     carriedSize += Number(row.sizeBytes) || 0;
   }

@@ -17,6 +17,28 @@ aspect ContentFilesAspect : managed {
   sizeBytes                 : Integer;
   compressedBytes           : Integer;
   mimeType                  : String(100) default 'text/html';
+  // Source-of-truth tracking for drift detection (PR #591).
+  //
+  // `content` is the RENDERED HTML and is volatile-by-design relative to upstream
+  // changes — it embeds CAP-derived data (recommendations rail, breadcrumb mission
+  // segments, related tutorials, syntax highlighting) that shift every time a
+  // user completes a tutorial or an admin tweaks mission membership. Hashing
+  // rendered HTML for drift detection produces daily false positives; PRs #589
+  // and #590 attempted to normalize them out and failed to scale because too
+  // many regions of the HTML are CAP-fed.
+  //
+  // `sourceContent` is the upstream tutorial MARKDOWN — the file the GitHub
+  // sap-tutorials repos serve, captured by `fetch-tutorials.ts` into
+  // `.tutorial-cache/<slug>.md`. It only changes when a tutorial author edits
+  // the tutorial. Hashing it gives a clean, monotonic drift signal regardless
+  // of what downstream rendering does. The daily drift workflow now compares
+  // `sourceHash`, not `contentHash`.
+  //
+  // Both nullable for back-compat — publishes prior to PR #591 wrote only
+  // `content` / `contentHash`. New publishes write both. The drift workflow
+  // skips slugs whose `sourceHash` is null on the server side.
+  sourceContent             : LargeBinary;
+  sourceHash                : Sha256;
 }
 
 aspect ContentManifestAspect : managed {
