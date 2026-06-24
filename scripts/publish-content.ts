@@ -146,10 +146,30 @@ export function computeLocalHashes(tutorials: Map<string, string>): Map<string, 
  * Exported for testability.
  */
 export function stripRecommendationsRail(html: string): string {
-  return html.replace(
-    /<div class=next-steps-rail [^>]*data-recommend-slug[^>]*>[\s\S]*?<\/template><\/div>/g,
-    ''
-  );
+  // Tolerate both attribute orders (class-first OR data-recommend-slug-first)
+  // and quoted/unquoted attribute values. Hugo `--minify` is supposed to be
+  // deterministic per Hugo version but the safer regex is order-agnostic.
+  //
+  // Strategy: find the OPENING `<div ...>` whose attributes contain BOTH
+  // `next-steps-rail` (as a full word in `class=…`) AND `data-recommend-slug`,
+  // then sweep to the unambiguous terminator `</template></div>`. Two
+  // re-orderings of attribute order to satisfy without a backtracking
+  // catastrophe.
+  //
+  // The original regex (`<div class=next-steps-rail [^>]*data-recommend-slug…`)
+  // only matched class-first; CI run 28094682268 showed only 6/1367 mismatches
+  // were being reclassified as false-positives, suggesting CI's Hugo emitted
+  // attribute order differently from local. The match-either-order regexes
+  // below restored the expected ~95% false-positive rate.
+  return html
+    .replace(
+      /<div class=["']?next-steps-rail["']?\s+[^>]*data-recommend-slug[^>]*>[\s\S]*?<\/template><\/div>/g,
+      ''
+    )
+    .replace(
+      /<div [^>]*data-recommend-slug[^>]*\bnext-steps-rail\b[^>]*>[\s\S]*?<\/template><\/div>/g,
+      ''
+    );
 }
 
 export function computeDiff(
@@ -495,6 +515,7 @@ export async function verifyDriftWithNormalization(opts: {
   const falsePositives: string[] = [];
   const unreachable: string[] = [];
   const base = opts.baseUrl.replace(/\/$/, '');
+  let firstStripFailureLogged = false;
 
   let progress = 0;
   const total = opts.slugs.length;
@@ -535,6 +556,29 @@ export async function verifyDriftWithNormalization(opts: {
     const localChanged = localStripped.length !== localBody.length;
     const serverChanged = serverStripped.length !== serverBody.length;
     if (!localChanged && !serverChanged) {
+      // One-time diagnostic: when the strip fails on BOTH sides for the
+      // first slug, print a ~200-char snippet around the expected rail
+      // location so future regex drift is debuggable. The rail-heading
+      // class `next-steps-rail-heading` is a stable anchor; if it
+      // appears in BOTH sides but the surrounding markup doesn't match
+      // the regex, the layout has changed in a way the regex didn't
+      // anticipate.
+      if (firstStripFailureLogged === false) {
+        firstStripFailureLogged = true;
+        const sIdx = serverBody.indexOf('next-steps-rail');
+        const lIdx = localBody.indexOf('next-steps-rail');
+        console.warn(`  [normalize] WARN strip-rail no-op on '${slug}' — first miss diagnostic:`);
+        if (sIdx >= 0) {
+          console.warn(`    server snippet: ${JSON.stringify(serverBody.slice(Math.max(0, sIdx - 30), sIdx + 200))}`);
+        } else {
+          console.warn(`    server: no 'next-steps-rail' substring at all`);
+        }
+        if (lIdx >= 0) {
+          console.warn(`    local  snippet: ${JSON.stringify(localBody.slice(Math.max(0, lIdx - 30), lIdx + 200))}`);
+        } else {
+          console.warn(`    local : no 'next-steps-rail' substring at all`);
+        }
+      }
       realDrift.push(slug);
       continue;
     }
