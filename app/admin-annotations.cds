@@ -611,6 +611,87 @@ annotate AdminService.Tutorials with {
   );
 };
 
+// --- Tutorials OP expansion (PR-1 of spec 2026-06-24-tutorials-admin-tile-expansion-design) ---
+// Tier-1: pure annotations of data that's already on AdminService.Tutorials
+// one association away but wasn't surfaced. Adds Contributors facet, Steps
+// facet, and brings the TutorialMeta review fields onto the Lifecycle tab.
+// The Repository link rides along inside the Lifecycle FieldGroup since
+// meta.repository.name is already navigable.
+
+annotate AdminService.TutorialContributors with {
+  name  @Common.Label: 'Name';
+  email @Common.Label: 'Email';
+  role  @Common.Label: 'Role';
+};
+
+annotate AdminService.TutorialContributors with @UI.LineItem: [
+  { Value: name },
+  { Value: email },
+  { Value: role }
+];
+
+annotate AdminService.Steps with {
+  stepOrder @Common.Label: 'Step #';
+  title     @Common.Label: 'Title';
+  status    @Common.Label: 'Status';
+};
+
+annotate AdminService.Steps with @UI: {
+  LineItem: [
+    { Value: stepOrder, @UI.Importance: #High },
+    { Value: title },
+    { Value: status }
+  ],
+  PresentationVariant: {
+    SortOrder: [ { Property: stepOrder, Descending: false } ]
+  }
+};
+
+// TutorialMeta review-tracking fields exposed on the Lifecycle tab.
+// owner is already annotated above; add the review trail next to it.
+annotate AdminService.TutorialMeta with {
+  reviewedDate         @Common.Label: 'Last Reviewed';
+  monitoredStatus      @Common.Label: 'Monitored Status';
+  notificationNumber   @Common.Label: 'Notifications Sent';
+  lastNotificationDate @Common.Label: 'Last Notification';
+  repository           @Common.Label: 'Source Repository'
+                       @Common.Text: repository.name
+                       @Common.TextArrangement: #TextOnly;
+};
+
+// Replace the Tutorials Facets + Lifecycle FieldGroup to add Contributors,
+// Steps, and the expanded Lifecycle. The earlier annotate-with block above
+// declared a narrower Lifecycle FieldGroup; this annotate-with overrides
+// just the bits we want to change while preserving the General / Categories
+// / Feedback facets verbatim.
+annotate AdminService.Tutorials with @UI: {
+  Facets: [
+    { $Type: 'UI.ReferenceFacet', ID: 'General',  Label: 'General',  Target: '@UI.FieldGroup#General' },
+    { $Type: 'UI.ReferenceFacet', ID: 'Lifecycle', Label: 'Lifecycle', Target: '@UI.FieldGroup#Lifecycle' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Categories', ID: 'CategoriesFacet', Target: 'categories/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Steps', ID: 'StepsFacet', Target: 'steps/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Contributors', ID: 'ContributorsFacet', Target: 'contributors/@UI.LineItem' },
+    { $Type: 'UI.CollectionFacet', ID: 'Feedback', Label: 'Feedback', Facets: [
+      { $Type: 'UI.ReferenceFacet', ID: 'FeedbackSummary',
+        Target: 'feedbackSummary/@UI.FieldGroup#FeedbackSummary',
+        Label:  'Summary' },
+      { $Type: 'UI.ReferenceFacet', ID: 'FeedbackItems',
+        Target: 'feedbackItems/@UI.LineItem#TutorialFeedback',
+        Label:  'Recent Submissions' }
+    ]}
+  ],
+  FieldGroup#Lifecycle: { Data: [
+    { Value: status },
+    { Value: deletionReason },
+    { Value: redirectTo_ID, Label: 'Redirect To' },
+    { Value: meta.reviewedDate, Label: 'Last Reviewed' },
+    { Value: meta.monitoredStatus, Label: 'Monitored Status' },
+    { Value: meta.notificationNumber, Label: 'Notifications Sent' },
+    { Value: meta.lastNotificationDate, Label: 'Last Notification' },
+    { Value: meta.repository.name, Label: 'Source Repository' }
+  ]}
+};
+
 // --- TutorialPickList (value-help target for redirectTo) ---
 annotate AdminService.TutorialPickList with {
   legacyIdStr   @Common.Label: 'Tutorial ID' @Common.IsDigitSequence: true;
