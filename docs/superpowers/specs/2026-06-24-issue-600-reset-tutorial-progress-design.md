@@ -116,7 +116,44 @@ const existing = await SELECT.one.from(dbTaskRecords).where({
 
 Without this, the lazy-insert path would false-positive on a superseded row from a prior attempt and skip the INSERT — leaving the new attempt unable to mark steps complete.
 
-When the INSERT does fire (no live row found), it must include `attemptNumber` — the value comes from the user's current tutorial-level attempt (look up `dbTaskRecords` `WHERE taskType: 'TUTORIAL' AND taskLegacyId: tutorial.legacyId AND status != 'SUPERSEDED'` and read its `attemptNumber`; default `1` if no row exists, matching today's default for first-time users).
+When the INSERT does fire (no live row found), it must include `attemptNumber` — the value comes from the user's current tutorial-level attempt: `SELECT.one.from(dbTaskRecords).columns('attemptNumber').where({ user_ID, taskLegacyId: tutorial.legacyId, taskType: 'TUTORIAL', status: { '!=': 'SUPERSEDED' } })`. `SELECT.one` returns `null` (not a `{attemptNumber: 1}` shape) when no row exists, so the code must default with `?? 1` — `const attemptNumber = (await SELECT.one...)?.attemptNumber ?? 1`. This matches today's default for first-time users on their first ever step completion.
+
+### Companion change to `_updateTutorialProgress` upsert lookup
+
+`_updateTutorialProgress` ([srv/developer-service.js:678](../../../srv/developer-service.js#L678)) does its own `SELECT.one ... WHERE taskType: 'TUTORIAL'` to upsert the tutorial-level row. Today's filter:
+
+```js
+const existing = await SELECT.one.from(dbTaskRecords).where({
+  user_ID: dbUser.ID,
+  taskLegacyId: tutorial.legacyId,
+  taskType: 'TUTORIAL'
+});
+```
+
+After SUPERSEDED ships, this `SELECT.one` returns an arbitrary row from `{SUPERSEDED attempt-1, IN_PROGRESS attempt-2}` and the subsequent UPDATE could mutate the SUPERSEDED row, **destroying its preserved `completionDate` — directly violating Tom's "keep past completions on /me/" requirement**. The fix is to add the same `status: { '!=': 'SUPERSEDED' }` filter here:
+
+```js
+const existing = await SELECT.one.from(dbTaskRecords).where({
+  user_ID: dbUser.ID,
+  taskLegacyId: tutorial.legacyId,
+  taskType: 'TUTORIAL',
+  status: { '!=': 'SUPERSEDED' }
+});
+```
+
+Without this, the bulk-SQL MERGE bug (below) and this in-process UPDATE share the same failure mode: silent mutation of the historical record.
+
+### Companion change to the bulk-SQL MERGE
+
+[`srv/lib/recompute-tutorial-progress-bulk-sql.js`](../../../srv/lib/recompute-tutorial-progress-bulk-sql.js) runs a HANA MERGE statement at publish time to recompute `(progress, status)` on TUTORIAL TaskRecords. Today the BASE selector reads:
+
+```sql
+SELECT ... FROM TASKRECORDS BASE
+WHERE BASE.TASKTYPE = 'TUTORIAL'
+  AND BASE.TASKLEGACYID IN (...)
+```
+
+After SUPERSEDED ships, this MERGE would spuriously update SUPERSEDED TUTORIAL rows (their step-count would be zero, their computed progress would flip to 0, their `completionDate` could be cleared). **This destroys historical truth.** Fix: add `AND BASE.STATUS != 'SUPERSEDED'` to the BASE filter, AND `AND SR.STATUS = 'COMPLETED'` on the joined step rows is already correct (naturally excludes SUPERSEDED step rows from the count). Also update the doc comment in that file that claims the MERGE is idempotent — it's only idempotent if SUPERSEDED is explicitly excluded.
 
 ### Rate limit
 
@@ -128,19 +165,45 @@ In `srv/admin-service.js` (the existing audit-event observer registers there), a
 
 ## Read-path updates
 
-Every site that reads `TaskRecords` needs review. The `SUPERSEDED` value is new; today's reads use implicit "all rows" semantics.
+Every site that reads `TaskRecords` needs review. The `SUPERSEDED` value is new; today's reads use implicit "all rows" or `status: 'COMPLETED'` semantics.
 
-| File | Function | Today | After |
-|---|---|---|---|
-| `srv/developer-service.js` | `getProgress` (line 71) | `status: 'COMPLETED'` filter | Same filter + scope to latest attempt for this user+tutorial (filter `attemptNumber: <latest>`). SUPERSEDED rows excluded naturally. |
-| `srv/developer-service.js` | `_updateTutorialProgress` (line 648) | Counts steps with `status: 'COMPLETED'` | Same, but scoped to current attempt's `attemptNumber`. |
-| `srv/developer-service.js` | `_getProgressForTutorial` (line 701) | Counts steps with `status: 'COMPLETED'` | Same, scoped to current attempt. |
-| `srv/developer-service.js` | `getMyCompletions` (line 271) / `srv/lib/getMyCompletedTutorials.js` | `status: 'COMPLETED'` filter | Expand to `status: { in: ['COMPLETED', 'SUPERSEDED'] }`, group by tutorial, return MAX(completionDate). SUPERSEDED rows DO surface here as past completions. |
-| `srv/admin-service.js` | Event progress + mission rollups (lines 507-602) | All COMPLETED rows | "User has at least one COMPLETED row for this task" — independent of `attemptNumber`. Re-completions don't inflate counts. |
-| `srv/scanner-service.js` | `getContestant` | All COMPLETED rows | Same "at least one COMPLETED row" semantic. Prize claims don't double-credit on re-completion. |
-| `srv/analytics-service.cds` | Read-only projections | (none) | Verify the saved-queries that read TaskRecords don't accidentally count SUPERSEDED rows as in-progress; document the new enum value in the saved-query comments. |
+### Definitions
 
-The "at least one COMPLETED row" semantic for scanner/missions is the right default because completing a tutorial twice shouldn't count as two completions for prize / mission-progress purposes — that would let a learner game any per-completion rewards. If we ever need a "completion count" metric, that's an explicit follow-up.
+Two distinct semantics apply across read sites:
+
+- **"Current-attempt"** semantic — only rows on the user's live attempt for this tutorial. Used by per-tutorial progress (the tutorial page, the lazy Done-button state, the `_updateTutorialProgress` upsert). Implemented as `status: { '!=': 'SUPERSEDED' }` AND, where multiple attempts could exist, scoped to the latest `attemptNumber`.
+- **"Has-ever-completed"** semantic — was this `(user, taskLegacyId)` pair completed at least once, on any attempt? Used by leaderboards, scanner prize claims, mission rollups, dashboards, /me/ history. Implemented as `status IN ('COMPLETED', 'SUPERSEDED')`, deduplicated by `(user_ID, taskLegacyId)` at the application layer (or via `DISTINCT` if a DB query).
+
+The "has-ever-completed" semantic is the operative answer for the scanner ambiguity the reviewer flagged: a user mid-attempt-2 (SUPERSEDED + IN_PROGRESS) **does count as a completer** for prize/mission/leaderboard purposes, because their attempt 1 stands as historical truth. Today's filter (`status: 'COMPLETED'`) needs to expand to `status IN ('COMPLETED', 'SUPERSEDED')` at every "has-ever-completed" site to preserve this behavior.
+
+### Read-site audit (exhaustive)
+
+| File | Function / location | Semantic | Today | After |
+|---|---|---|---|---|
+| `srv/developer-service.js` | `getProgress` (line 71) | current-attempt | `status: 'COMPLETED'` | `status: 'COMPLETED', attemptNumber: <latest for user+tutorial>` |
+| `srv/developer-service.js` | `_updateTutorialProgress` step count (line 655) | current-attempt | `status: 'COMPLETED'` | `status: 'COMPLETED', attemptNumber: <latest>` |
+| `srv/developer-service.js` | `_updateTutorialProgress` upsert lookup (line 678) | current-attempt | `taskType: 'TUTORIAL'` | `taskType: 'TUTORIAL', status: { '!=': 'SUPERSEDED' }` — see Companion change above |
+| `srv/developer-service.js` | `_getProgressForTutorial` (line 701) | current-attempt | `status: 'COMPLETED'` | `status: 'COMPLETED', attemptNumber: <latest>` |
+| `srv/developer-service.js` | `completeStep` existing-row lookup (line 147) | current-attempt | `taskType: 'STEP'` | `taskType: 'STEP', status: { '!=': 'SUPERSEDED' }` — see Companion change to completeStep above |
+| `srv/developer-service.js` | `getMyCompletions` / `srv/lib/user-progress.js` getMyCompletedTutorials | has-ever-completed | `status: 'COMPLETED'` | `status: { in: ['COMPLETED', 'SUPERSEDED'] }`, group by tutorial, `MAX(completionDate)` |
+| `srv/lib/user-progress.js` | `getUserProgress`, `getProgressLookup` (used by Joule chat) | mixed | filter by taskType only | Filter `status: { '!=': 'SUPERSEDED' }` for "in-progress" surfaces; `status: { in: ['COMPLETED', 'SUPERSEDED'] }` for "completed slugs" listings |
+| `srv/admin-service.js` | `getEventStatistics` (line 509) | has-ever-completed | No `status` filter | Filter `status: { '!=': 'SUPERSEDED' }` to exclude historical-only rows from in-progress counts; include SUPERSEDED in completion totals via the same `IN ('COMPLETED','SUPERSEDED')` rule |
+| `srv/admin-service.js` | Event progress + mission rollups (lines 516, 529, 543, 559, 573, 601) | has-ever-completed | `status: 'COMPLETED'` | `status: { in: ['COMPLETED', 'SUPERSEDED'] }` + DISTINCT by `(user_ID, taskLegacyId)` — completing twice doesn't inflate counts |
+| `srv/admin-service.js` | `avgProgressByTaskType` (line 996) | has-ever-completed | No status filter | Filter `status: { '!=': 'SUPERSEDED' }` from the average — SUPERSEDED rows represent superseded snapshots whose progress is misleading |
+| `srv/scanner-service.js` | `getContestant` | has-ever-completed | `status: 'COMPLETED'` | `status: { in: ['COMPLETED', 'SUPERSEDED'] }`, DISTINCT by `taskLegacyId` |
+| `srv/display-service.js` | `getEventBuckets`, `getEventBurnup`, `getEventTrackStats`, `getCompletionSpeed`, `getLeaderboard` | has-ever-completed | `status: 'COMPLETED'` | `status: { in: ['COMPLETED', 'SUPERSEDED'] }`, DISTINCT by `(user_ID, taskLegacyId)` per query |
+| `srv/event-stream-service.js` | `getEventBuckets` | has-ever-completed | `status: 'COMPLETED'` | Same as display-service.getEventBuckets |
+| `srv/lib/co-completion.js` | Co-completion pair builder | has-ever-completed | `status: 'COMPLETED'` | `status: { in: ['COMPLETED', 'SUPERSEDED'] }`, DISTINCT by `(user_ID, taskLegacyId)`. Failure mode without this: a user who reset and is mid-attempt-2 drops out of pair counts during the window between reset and re-completion. |
+| `srv/lib/recompute-tutorial-progress-bulk-sql.js` | HANA MERGE statement | current-attempt | `BASE.TASKTYPE = 'TUTORIAL'` (no status filter) | `BASE.TASKTYPE = 'TUTORIAL' AND BASE.STATUS != 'SUPERSEDED'` — see Companion change above |
+| `srv/exports/task-records.js` | Admin CSV export | mixed | All rows | No filter change required (admin export should show ALL rows including SUPERSEDED for audit). Add `attemptNumber` column to the export schema so reviewers can distinguish attempts. |
+| `srv/analytics-service.cds` | Read-only projections + saved queries | depends | No filter | Document the new enum value in saved-query comments; review the ad-hoc analytics SQL validator allowlist to confirm `SUPERSEDED` is acceptable in user-supplied `WHERE` clauses |
+| `srv/lib/account-merge.js` | TaskRecords `UPDATE` on account merge | (write path) | Status-agnostic | No change — walks rows by `user_ID`, status-agnostic. Note: any new rows created during the merged user's session retain the merged user's `attemptNumber` history. |
+
+### Why DISTINCT-by-(user, task) matters
+
+For "has-ever-completed" semantics, simply including SUPERSEDED in the filter is not sufficient — a user who completed a tutorial 3 times now has 1 IN_PROGRESS + 2 SUPERSEDED + 1 most-recent COMPLETED rows. Counting `WHERE status IN ('COMPLETED','SUPERSEDED')` returns 3, inflating leaderboards / prize counts / mission completion percentages. Every "has-ever-completed" query must DISTINCT by `(user_ID, taskLegacyId)` to count one logical completion regardless of attempt count.
+
+In CDS QL, this is `SELECT.distinct.columns('user_ID', 'taskLegacyId').from(dbTaskRecords).where(...)`. In raw HANA SQL (for the rollup queries that already use it), `SELECT DISTINCT USER_ID, TASKLEGACYID FROM ...`.
 
 ### `/me/` page dedupe rule
 
@@ -194,7 +257,7 @@ A small inline `<script>` (or a hook in the existing `validation.js` bundle) lis
 
 Without this cleanup, the validation widgets would re-mount in their persisted-correct state (the green "Correct! Well done." strip) from the previous attempt — contradicting the server-side reset.
 
-Because step 6 also does a full page reload, the localStorage cleanup MUST happen BEFORE reload — synchronously, in the same tick as the success response handler.
+Because step 6 also does a full page reload, the localStorage cleanup MUST happen BEFORE reload — synchronously, in the same tick as the success response handler. Specifically: the click handler must call `document.dispatchEvent(new CustomEvent('tutorial-reset', { detail: { slug } }))` and `window.location.reload()` in the same synchronous block with **no `await` between them**. Since `document.dispatchEvent` invokes listeners synchronously and `localStorage.removeItem` is also synchronous, the cleanup completes before `reload()` returns control to the event loop. If an `await` is introduced between dispatch and reload (e.g. to await an analytics ping), the browser could race the reload ahead of the listener queue on some engines — don't do that.
 
 #### Why reload, not in-place update
 
@@ -227,7 +290,14 @@ Trade-off: ~1 second flash of full page reload. Acceptable for an action the lea
 
 `test/hybrid/reset-tutorial-progress.test.js`:
 
-- End-to-end reset against the real DEV HANA: complete a test tutorial, reset, re-complete, verify both attempts coexist in the live DB. Cleanup in `afterAll` to leave no test data behind.
+- **End-to-end attempt cycle**: complete a test tutorial, reset, re-complete, verify both attempts coexist in the live DB with the correct status / attemptNumber / completionDate values. Cleanup in `afterAll` to leave no test data behind.
+- **Read-path regression suite** (the back-stop the reviewer flagged): after the reset-mid-attempt-2 state is set up, exercise every "has-ever-completed" surface and assert it still counts the user:
+  - `/api/getMyCompletions` — shows the tutorial with the original `completionDate`.
+  - Scanner-service `getContestant` (call the function directly) — counts the tutorial as completed for prize eligibility.
+  - Display-service `getLeaderboard` — user's leaderboard score includes this tutorial.
+  - User-progress lookup (the chat-side helper) — `completedSlugs` contains the tutorial; `inProgress` ALSO contains it (because attempt 2 is in progress).
+  - Bulk-SQL recompute — invoke `recompute-tutorial-progress-bulk-sql.js` manually after the reset and assert the SUPERSEDED TUTORIAL row's `completionDate` is UNCHANGED.
+  Pass criteria: every surface returns the same shape as if the user had simply never reset.
 
 ### Frontend test
 
