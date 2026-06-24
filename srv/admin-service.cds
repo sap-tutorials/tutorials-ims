@@ -520,3 +520,25 @@ service AdminService {
     contentHash : String;     // SHA-256 of the rendered HTML
   };
 }
+
+// ── Rebuild-button action (issue: rebuild-button, spec: 2026-06-24-admin-tutorial-rebuild-button) ──
+// Declared via `extend service` + `extend entity ... with actions` so the
+// existing Tutorials projection at lines 20-26 stays untouched. The split
+// form is required by the CDS compiler — `entity Tutorials actions { ... }`
+// inside a single `extend service` block parses as a new entity declaration
+// and conflicts with the existing projection. Handler implementation in
+// srv/admin-service.js.
+extend service AdminService with {
+  type RebuildContentResult {
+    dispatched : Boolean;
+    slug       : String;
+    debounced  : Boolean;
+    workflowUrl: String;
+  };
+}
+
+extend entity AdminService.Tutorials with actions {
+  @Core.OperationAvailable: true
+  @Common.IsActionCritical : true
+  action rebuildContent() returns AdminService.RebuildContentResult;
+};
