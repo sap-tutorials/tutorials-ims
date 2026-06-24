@@ -170,6 +170,20 @@ jobs:
             /tmp/hugo --source hugo --minify
           fi
         id: build
+
+      # IMPORTANT: this step is REQUIRED for the verify to produce sensible
+      # results. `scripts/highlight-cds.ts` is part of `npm run build:all`
+      # (the real publish path), and it post-processes CDS code blocks in
+      # the Hugo output with Shiki-rendered HTML. Without it, the local
+      # bytes use Chroma (Hugo's default) while the server bytes were
+      # published with Shiki — every tutorial with a CDS block shows up as
+      # "drift" even when content is identical. Caught 2026-06-24 run
+      # 28077660798: 1367 slugs reported as stale, ALL were false-positives
+      # from this missing step + the recommendations-rail churn handled in
+      # publish-content.ts's verify path.
+      - name: Apply CDS syntax highlighting (Shiki)
+        run: npm run build:highlight
+
       # publish-content.ts uses --hugo-dir to find the built HTML +
       # compute SHA-256s. For QA the dir is hugo/public-qa; for the
       # default channel it's hugo/public. Default in the script is

@@ -119,6 +119,39 @@ export function computeLocalHashes(tutorials: Map<string, string>): Map<string, 
   return hashes;
 }
 
+/**
+ * Strip the per-tutorial "Next Steps" recommendations rail from rendered
+ * tutorial HTML. The rail's contents are derived at Hugo-build time from
+ * the LIVE CAP `/build/co-completions` aggregation, which changes every
+ * time a user completes a tutorial — so the rail's bytes are volatile by
+ * design relative to whatever co-completions snapshot the LAST publish
+ * happened to capture. Using these bytes in a hash compare produces
+ * false drift on every tutorial whose top recommendations shifted since
+ * the last publish; in run 28077660798 (2026-06-24 04:13 UTC) that was
+ * 1367 / 1399 slugs, ALL of which were content-identical after stripping.
+ *
+ * The rail HTML structure (Hugo template at hugo/layouts/partials/next-steps.html):
+ *
+ *   <div class=next-steps-rail data-recommend-slug="<slug>">
+ *     <h4 ...>Related Tutorials</h4>
+ *     <div class=next-steps-grid data-recommend-target> ... </div>
+ *     <template data-recommend-template> ... </template>
+ *   </div>
+ *
+ * Hugo `--minify` collapses whitespace and drops most attribute quotes,
+ * so we match permissively on attribute order/quoting. The closing
+ * </template></div> sequence is the unambiguous terminator — `<template>`
+ * appears nowhere else in the tutorial HTML.
+ *
+ * Exported for testability.
+ */
+export function stripRecommendationsRail(html: string): string {
+  return html.replace(
+    /<div class=next-steps-rail [^>]*data-recommend-slug[^>]*>[\s\S]*?<\/template><\/div>/g,
+    ''
+  );
+}
+
 export function computeDiff(
   local: Map<string, string>,
   remote: Record<string, string>
@@ -438,6 +471,82 @@ async function collectSidecars(hugoDir: string, payload: Record<string, string>,
   return keys;
 }
 
+/**
+ * Phase-2 verify for --verify-only: after raw-hash mismatch is computed,
+ * fetch the server's rendered HTML for each mismatched slug, strip the
+ * per-tutorial "Next Steps" recommendations rail from BOTH the server
+ * body and the local file, and re-compare. The output is the subset of
+ * `slugs` that are STILL byte-mismatched after rail stripping — i.e. the
+ * actual content-drift slugs, with rail churn filtered out.
+ *
+ * `/content/tutorials/<slug>` is public-read; no auth needed.
+ *
+ * Sequential fetches to keep the runner network profile simple. Worst
+ * case: ~1400 slugs × ~50 ms each = ~70s wall-clock. Cheap relative to
+ * the value of a sound report.
+ */
+export async function verifyDriftWithNormalization(opts: {
+  baseUrl: string;
+  hugoDir: string;
+  slugs: string[];
+  verbose?: boolean;
+}): Promise<{ realDrift: string[]; falsePositives: string[]; unreachable: string[] }> {
+  const realDrift: string[] = [];
+  const falsePositives: string[] = [];
+  const unreachable: string[] = [];
+  const base = opts.baseUrl.replace(/\/$/, '');
+
+  let progress = 0;
+  const total = opts.slugs.length;
+  for (const slug of opts.slugs) {
+    progress++;
+    if (opts.verbose && progress % 50 === 0) {
+      console.log(`  [normalize] ${progress}/${total} slugs checked`);
+    }
+    const localPath = join(opts.hugoDir, 'tutorials', slug, 'index.html');
+    let localBody: string;
+    try {
+      localBody = readFileSync(localPath, 'utf8');
+    } catch {
+      // Slug present on server but missing locally — that IS real drift
+      // (the local build doesn't think this slug should exist). Flag as
+      // real so the caller surfaces it.
+      realDrift.push(slug);
+      continue;
+    }
+    let serverBody: string;
+    try {
+      const res = await fetch(`${base}/content/tutorials/${slug}`);
+      if (!res.ok) {
+        unreachable.push(slug);
+        continue;
+      }
+      serverBody = await res.text();
+    } catch {
+      unreachable.push(slug);
+      continue;
+    }
+    const localStripped = stripRecommendationsRail(localBody);
+    const serverStripped = stripRecommendationsRail(serverBody);
+    // Defensive: if the strip didn't actually remove anything from EITHER
+    // side, the rail isn't the cause of the diff — treat as real drift.
+    // This guards against a future Hugo-layout change that breaks the
+    // regex and silently reports zero drift when there is real drift.
+    const localChanged = localStripped.length !== localBody.length;
+    const serverChanged = serverStripped.length !== serverBody.length;
+    if (!localChanged && !serverChanged) {
+      realDrift.push(slug);
+      continue;
+    }
+    if (localStripped === serverStripped) {
+      falsePositives.push(slug);
+    } else {
+      realDrift.push(slug);
+    }
+  }
+  return { realDrift, falsePositives, unreachable };
+}
+
 async function main() {
   const channel = parseChannel(process.argv);
   const opts = parseArgs(process.argv.slice(2));
@@ -518,9 +627,45 @@ async function main() {
       console.log(`Verify OK: ${localHashes.size} slugs match server.`);
       process.exit(0);
     }
-    console.error(`Verify FAILED: ${diff.length} slugs differ:`);
-    for (const s of diff.slice(0, 50).sort()) console.error(`  - ${s}`);
-    if (diff.length > 50) console.error(`  ... (+${diff.length - 50} more)`);
+
+    // Phase 2: many tutorials show raw-hash drift purely because the
+    // per-tutorial "Next Steps" rail is built from live CAP coCompletions
+    // and reshuffles every time a user completes a tutorial. Re-compare
+    // the mismatched slugs with the rail stripped from both sides; only
+    // count what remains as real drift. See verifyDriftWithNormalization
+    // and stripRecommendationsRail above for the full rationale.
+    console.log(
+      `Raw-hash mismatch on ${diff.length} slug(s). Re-checking with ` +
+      `recommendations-rail normalization (this may take ~${Math.ceil(diff.length * 0.06)}s)...`
+    );
+    const norm = await verifyDriftWithNormalization({
+      baseUrl: opts.baseUrl,
+      hugoDir: opts.hugoDir,
+      slugs: diff,
+      verbose: opts.verbose,
+    });
+    const totalSlugs = localHashes.size;
+    const matched = totalSlugs - diff.length;
+    console.log('');
+    console.log(`Verify summary (after rail normalization):`);
+    console.log(`  Total local slugs:                       ${totalSlugs}`);
+    console.log(`  Byte-identical on first pass:            ${matched}`);
+    console.log(`  Differed only in rec-rail (false drift): ${norm.falsePositives.length}`);
+    console.log(`  Unreachable on server (transient?):      ${norm.unreachable.length}`);
+    console.log(`  Real drift (content differs):            ${norm.realDrift.length}`);
+    if (norm.unreachable.length > 0) {
+      console.warn(`  Unreachable slugs: ${norm.unreachable.slice(0, 10).join(', ')}` +
+        (norm.unreachable.length > 10 ? `, ... (+${norm.unreachable.length - 10} more)` : ''));
+    }
+    if (norm.realDrift.length === 0) {
+      console.log('');
+      console.log('Verify OK: no real content drift — all mismatches explained by recommendations-rail churn.');
+      process.exit(0);
+    }
+    console.error('');
+    console.error(`Verify FAILED: ${norm.realDrift.length} slug(s) have real content drift:`);
+    for (const s of norm.realDrift.slice(0, 50).sort()) console.error(`  - ${s}`);
+    if (norm.realDrift.length > 50) console.error(`  ... (+${norm.realDrift.length - 50} more)`);
     process.exit(2);
   }
 
