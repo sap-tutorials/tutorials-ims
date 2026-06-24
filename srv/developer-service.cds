@@ -31,6 +31,13 @@ service DeveloperService {
   };
 
   @(requires: 'authenticated-user')
+  action resetTutorialProgress(slug : String) returns {
+    newAttemptNumber           : Integer;
+    previousAttemptCompletedAt : DateTime;
+    supersededRecordCount      : Integer;
+  };
+
+  @(requires: 'authenticated-user')
   function getProgress(slug : String) returns {
     completedSteps : array of Integer;
     points         : Integer;
@@ -81,6 +88,7 @@ service DeveloperService {
     experienceTag         : String;
     averageTimeToComplete : Integer;
     completionDate        : DateTime;
+    attemptNumber         : Integer;
   };
 
   // App Space progress (replaces AEM /bin/sapdx/tutorials/v3/progress/series)

@@ -55,3 +55,17 @@ describe('TaskRecords schema (#600 reset-tutorial-progress)', () => {
     expect(TaskRecords.elements.status.enum).toHaveProperty('SUPERSEDED');
   });
 });
+
+describe('resetTutorialProgress action declaration', () => {
+  it('is registered on DeveloperService', async () => {
+    const { DeveloperService } = cds.services;
+    expect(DeveloperService.operations.resetTutorialProgress).toBeDefined();
+  });
+
+  it('getMyCompletions return shape includes attemptNumber', async () => {
+    const { DeveloperService } = cds.services;
+    const op = DeveloperService.operations.getMyCompletions;
+    expect(op.returns.items.elements.attemptNumber).toBeDefined();
+    expect(op.returns.items.elements.attemptNumber.type).toBe('cds.Integer');
+  });
+});
