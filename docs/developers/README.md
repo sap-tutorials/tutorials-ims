@@ -31,6 +31,7 @@ Runbooks and operational references. Read these when you need to deploy, test, o
 - [Deployment Topology](operations/deployment.md) — what runs where
 - [Testing Guide](operations/testing-guide.md) — unit, hybrid, smoke
 - [Testing Endpoints](operations/testing-endpoints.md) — UI + API endpoint reference
+- [Live Probing](operations/live-probing.md) — verify fixes against the real binding before deploying
 - [Production Readiness](operations/production-ready.md) — services and entitlements
 - [QA Channel Bootstrap](operations/qa-channel-bootstrap.md) — author preview channel
 - [Joule Chat Admin Settings](operations/joule-chat-admin-settings.md) — RAG and grounding
