@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import cds from '@sap/cds';
 
 // Boots CAP with in-memory SQLite, deploys the model, and exposes
@@ -67,5 +67,79 @@ describe('resetTutorialProgress action declaration', () => {
     const op = DeveloperService.operations.getMyCompletions;
     expect(op.returns.items.elements.attemptNumber).toBeDefined();
     expect(op.returns.items.elements.attemptNumber.type).toBe('cds.Integer');
+  });
+});
+
+describe('resetTutorialProgress handler — happy path', () => {
+  let testUser;
+  let testTutorial;
+  let testSteps;
+
+  beforeEach(async () => {
+    // Clean any data left over from prior tests in this describe block so the
+    // shared seed helper can re-INSERT without tripping UNIQUE constraints.
+    const { Users, Tutorials, Steps, TaskRecords } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(TaskRecords).where({ user_ID: 'u1' });
+    await DELETE.from(Steps).where({ tutorial_ID: 't1' });
+    await DELETE.from(Tutorials).where({ ID: 't1' });
+    await DELETE.from(Users).where({ ID: 'u1' });
+
+    // Use the shared seed helper defined in Task 1 (do NOT duplicate).
+    ({ testUser, testTutorial, testSteps } = await seedCompletedTutorial());
+  });
+
+  it('supersedes 4 rows, inserts a new attempt-2 TUTORIAL row, returns the right shape', async () => {
+    cds.context = { user: new cds.User({ id: 'sap-u1' }) };
+
+    const { DeveloperService } = cds.services;
+    const result = await DeveloperService.send({
+      event: 'resetTutorialProgress',
+      data: { slug: 'reset-happy-path' },
+    });
+
+    expect(result.newAttemptNumber).toBe(2);
+    expect(result.supersededRecordCount).toBe(4);
+    expect(result.previousAttemptCompletedAt).toBeTruthy();
+
+    // Verify DB state.
+    const { TaskRecords } = cds.entities('com.sap.developers.ims');
+    const rows = await SELECT.from(TaskRecords).where({ user_ID: 'u1' });
+
+    const superseded = rows.filter(r => r.status === 'SUPERSEDED');
+    expect(superseded).toHaveLength(4);
+    expect(superseded.every(r => r.completionDate !== null)).toBe(true);
+
+    const live = rows.filter(r => r.status === 'IN_PROGRESS');
+    expect(live).toHaveLength(1);
+    expect(live[0].taskType).toBe('TUTORIAL');
+    expect(live[0].attemptNumber).toBe(2);
+    expect(live[0].progress).toBe(0);
+  });
+
+  it('idempotent no-op when user has never touched the tutorial', async () => {
+    cds.context = { user: new cds.User({ id: 'sap-u1' }) };
+    const { DeveloperService } = cds.services;
+    // First call superseded everything; second call should be a no-op (only the new
+    // attempt-2 TUTORIAL row exists as live state, so it gets superseded into attempt-3 IN_PROGRESS).
+    await DeveloperService.send({ event: 'resetTutorialProgress', data: { slug: 'reset-happy-path' } });
+    const result2 = await DeveloperService.send({ event: 'resetTutorialProgress', data: { slug: 'reset-happy-path' } });
+    expect(result2.supersededRecordCount).toBe(1);
+    expect(result2.newAttemptNumber).toBe(3);
+  });
+
+  it('rejects unknown slug with 404', async () => {
+    cds.context = { user: new cds.User({ id: 'sap-u1' }) };
+    const { DeveloperService } = cds.services;
+    await expect(
+      DeveloperService.send({ event: 'resetTutorialProgress', data: { slug: 'does-not-exist' } })
+    ).rejects.toMatchObject({ code: 404 });
+  });
+
+  it('rejects unauthenticated with 401', async () => {
+    cds.context = { user: null };
+    const { DeveloperService } = cds.services;
+    await expect(
+      DeveloperService.send({ event: 'resetTutorialProgress', data: { slug: 'reset-happy-path' } })
+    ).rejects.toMatchObject({ code: 401 });
   });
 });

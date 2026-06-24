@@ -171,6 +171,83 @@ export default class DeveloperService extends cds.ApplicationService {
       return this._getProgressForTutorial(dbUser, tutorial, db);
     });
 
+    this.on('resetTutorialProgress', async (req) => {
+      const { slug } = req.data;
+      const user = req.user || cds.context?.user;
+      if (!user) return req.reject(401, 'Unauthenticated');
+
+      const sapId = resolveUserSapId(user);
+      if (!sapId) return req.reject(401, 'Unauthenticated');
+
+      // 1. Resolve slug → tutorial
+      const tutorial = await SELECT.one.from(dbTutorials).where({ slug });
+      if (!tutorial) return req.reject(404, `Tutorial not found: ${slug}`);
+
+      // 2. Resolve user (sapId → dbUser)
+      const dbUser = await SELECT.one.from(dbUsers).where({ sapId });
+      if (!dbUser) {
+        return { newAttemptNumber: 1, previousAttemptCompletedAt: null, supersededRecordCount: 0 };
+      }
+
+      // 3. Find live (non-SUPERSEDED) rows for this tutorial's steps + tutorial-level
+      const steps = await SELECT.from(dbSteps).where({ tutorial_ID: tutorial.ID });
+      const taskLegacyIds = [...steps.map(s => s.legacyId), tutorial.legacyId];
+
+      const liveRows = await SELECT.from(dbTaskRecords).where({
+        user_ID: dbUser.ID,
+        taskLegacyId: { in: taskLegacyIds },
+        status: { '!=': 'SUPERSEDED' },
+      });
+
+      if (liveRows.length === 0) {
+        return { newAttemptNumber: 1, previousAttemptCompletedAt: null, supersededRecordCount: 0 };
+      }
+
+      // 4. Determine next attempt number
+      const maxAttempt = Math.max(...liveRows.map(r => r.attemptNumber ?? 1));
+
+      // Capture the prior tutorial-level completion date BEFORE we update.
+      const priorTutorialRow = liveRows.find(
+        r => r.taskType === 'TUTORIAL' && r.status === 'COMPLETED'
+      );
+      const previousAttemptCompletedAt = priorTutorialRow?.completionDate ?? null;
+
+      // 5. Pre-allocate legacyId for the new row (fail-fast on sequence issues)
+      const newLegacyId = await getNextLegacyId('TaskRecords', db);
+
+      // 6. Supersede current rows in one UPDATE
+      await UPDATE(dbTaskRecords)
+        .set({ status: 'SUPERSEDED' })
+        .where({ ID: { in: liveRows.map(r => r.ID) } });
+
+      // 7. Insert fresh TUTORIAL-level row at attempt+1
+      await INSERT.into(dbTaskRecords).entries({
+        user_ID: dbUser.ID,
+        taskLegacyId: tutorial.legacyId,
+        taskType: 'TUTORIAL',
+        status: 'IN_PROGRESS',
+        progress: 0,
+        attemptNumber: maxAttempt + 1,
+        titleSnapshot: tutorial.title,
+        legacyId: newLegacyId,
+      });
+
+      // 8. Emit audit event for traceability
+      await cds.emit('TutorialProgressReset', {
+        user: dbUser.ID,
+        tutorialSlug: slug,
+        attemptNumber: maxAttempt + 1,
+        supersededRecordCount: liveRows.length,
+        previousAttemptCompletedAt,
+      });
+
+      return {
+        newAttemptNumber: maxAttempt + 1,
+        previousAttemptCompletedAt,
+        supersededRecordCount: liveRows.length,
+      };
+    });
+
     // --- Legacy IMS-compatible endpoints ---
 
     this.on('createTaskRecord', async (req) => {
