@@ -37,17 +37,54 @@ All `git commit` commands in this plan assume that worktree as cwd. No bypass en
 
 - [ ] **Step 1: Write the failing unit test**
 
-Create a placeholder test at `test/unit/reset-tutorial-progress.test.js` that asserts the new schema shape is reachable from CAP runtime:
+Create the test file at `test/unit/reset-tutorial-progress.test.js`. The canonical CAP unit-test bootstrap in this project lives at module top-level (NOT inside `beforeAll`); the pattern is used by [`test/unit/author-service.test.js:4`](../../../test/unit/author-service.test.js#L4), [`test/unit/admin-secret-value-handlers.test.js:59`](../../../test/unit/admin-secret-value-handlers.test.js#L59), and every other handler-level unit test. Reuse it:
 
 ```javascript
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import cds from '@sap/cds';
 
-describe('TaskRecords schema (#600 reset-tutorial-progress)', () => {
-  beforeAll(async () => {
-    await cds.test('test/unit/_fixtures').in(process.cwd()).run('npx cds-serve');
-  });
+// Boots CAP with in-memory SQLite, deploys the model, and exposes
+// SELECT/INSERT/UPDATE/DELETE as globals. Same pattern as
+// test/unit/author-service.test.js — do NOT move this inside beforeAll;
+// it has to bind at module-load so the schema is deployed before
+// the describe blocks below try to read cds.entities(...).
+const project = cds.test('serve', '--project', '.', '--in-memory');
 
+// Shared seed helper — reused by Tasks 3, 4, 5, 6, 7, 8 to avoid
+// duplicating the same 4-INSERT block. Pulls in the user / tutorial /
+// 3 steps / 3 STEP TaskRecords + 1 TUTORIAL TaskRecord (all COMPLETED
+// at attemptNumber=1) so the tests can start from a 'previously
+// completed' state.
+async function seedCompletedTutorial() {
+  const { Users, Tutorials, Steps, TaskRecords } = cds.entities('com.sap.developers.ims');
+  const testUser = { ID: 'u1', uuid: 'u1', sapId: 'sap-u1', legacyId: 1001 };
+  const testTutorial = { ID: 't1', slug: 'reset-happy-path', title: 'Reset Happy Path', legacyId: 2001, stepCount: 3 };
+  const testSteps = [
+    { ID: 's1', tutorial_ID: 't1', stepOrder: 1, legacyId: 3001, title: 'Step 1' },
+    { ID: 's2', tutorial_ID: 't1', stepOrder: 2, legacyId: 3002, title: 'Step 2' },
+    { ID: 's3', tutorial_ID: 't1', stepOrder: 3, legacyId: 3003, title: 'Step 3' },
+  ];
+
+  await INSERT.into(Users).entries(testUser);
+  await INSERT.into(Tutorials).entries(testTutorial);
+  await INSERT.into(Steps).entries(testSteps);
+
+  const now = new Date().toISOString();
+  await INSERT.into(TaskRecords).entries([
+    ...testSteps.map((s, i) => ({
+      ID: `tr-step-${i}`, user_ID: 'u1', taskLegacyId: s.legacyId, taskType: 'STEP',
+      status: 'COMPLETED', progress: 100, completionDate: now, attemptNumber: 1, legacyId: 4000 + i,
+    })),
+    {
+      ID: 'tr-tut', user_ID: 'u1', taskLegacyId: 2001, taskType: 'TUTORIAL',
+      status: 'COMPLETED', progress: 100, completionDate: now, attemptNumber: 1, legacyId: 4100,
+    },
+  ]);
+
+  return { testUser, testTutorial, testSteps };
+}
+
+describe('TaskRecords schema (#600 reset-tutorial-progress)', () => {
   it('TaskRecords entity has attemptNumber column with default 1', async () => {
     const { TaskRecords } = cds.entities('com.sap.developers.ims');
     expect(TaskRecords.elements.attemptNumber).toBeDefined();
@@ -61,6 +98,8 @@ describe('TaskRecords schema (#600 reset-tutorial-progress)', () => {
   });
 });
 ```
+
+The `seedCompletedTutorial()` helper is used by Tasks 3–8; each task's tests `beforeEach` calls it. **Do not duplicate this helper** — when a later task needs more seed data (e.g. Task 14's hybrid test), extract or extend, don't copy-paste.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -237,33 +276,8 @@ describe('resetTutorialProgress handler — happy path', () => {
   let testSteps;
 
   beforeEach(async () => {
-    // Seed: one user, one tutorial with 3 steps, all completed at attempt 1.
-    const { Users, Tutorials, Steps, TaskRecords } = cds.entities('com.sap.developers.ims');
-    const db = await cds.connect.to('db');
-
-    testUser = { ID: 'u1', uuid: 'u1', sapId: 'sap-u1', legacyId: 1001 };
-    testTutorial = { ID: 't1', slug: 'reset-happy-path', title: 'Reset Happy Path', legacyId: 2001, stepCount: 3 };
-    testSteps = [
-      { ID: 's1', tutorial_ID: 't1', stepOrder: 1, legacyId: 3001, title: 'Step 1' },
-      { ID: 's2', tutorial_ID: 't1', stepOrder: 2, legacyId: 3002, title: 'Step 2' },
-      { ID: 's3', tutorial_ID: 't1', stepOrder: 3, legacyId: 3003, title: 'Step 3' },
-    ];
-
-    await INSERT.into(Users).entries(testUser);
-    await INSERT.into(Tutorials).entries(testTutorial);
-    await INSERT.into(Steps).entries(testSteps);
-
-    const now = new Date().toISOString();
-    await INSERT.into(TaskRecords).entries([
-      ...testSteps.map((s, i) => ({
-        ID: `tr-step-${i}`, user_ID: 'u1', taskLegacyId: s.legacyId, taskType: 'STEP',
-        status: 'COMPLETED', progress: 100, completionDate: now, attemptNumber: 1, legacyId: 4000 + i,
-      })),
-      {
-        ID: 'tr-tut', user_ID: 'u1', taskLegacyId: 2001, taskType: 'TUTORIAL',
-        status: 'COMPLETED', progress: 100, completionDate: now, attemptNumber: 1, legacyId: 4100,
-      },
-    ]);
+    // Use the shared seed helper defined in Task 1 (do NOT duplicate).
+    ({ testUser, testTutorial, testSteps } = await seedCompletedTutorial());
   });
 
   it('supersedes 4 rows, inserts a new attempt-2 TUTORIAL row, returns the right shape', async () => {
@@ -1219,6 +1233,62 @@ git commit -m "fix(600): admin-analytics-schema baseFilter includes SUPERSEDED"
 
 ---
 
+## Task 16a: Admin CSV export — add `attemptNumber` column
+
+**Files:**
+- Modify: `srv/exports/task-records.js`
+
+Per the spec's read-path audit table (the `srv/exports/task-records.js` row), the admin CSV export must surface the new `attemptNumber` column so audit reviewers can distinguish attempts. The filter does NOT change (admin export should show ALL rows including SUPERSEDED for audit) — only the column list grows.
+
+- [ ] **Step 1: Find the existing column schema**
+
+```bash
+grep -nE "attemptNumber|columns|HEADER|csv" srv/exports/task-records.js | head -20
+```
+
+Locate the column-list / CSV-header definition (likely an array of objects with `key` + `label` or a `csv.stringify` config).
+
+- [ ] **Step 2: Write the failing test**
+
+```javascript
+import { describe, it, expect } from 'vitest';
+// Import the export builder. If the module exports the column list,
+// import that directly; otherwise invoke the handler with a stubbed
+// res and inspect the CSV header.
+
+describe('admin CSV export — attemptNumber column (#600)', () => {
+  it('emits an Attempt column in the CSV header', async () => {
+    // Either:
+    //   import { COLUMNS } from '../../srv/exports/task-records.js';
+    //   expect(COLUMNS.find(c => c.key === 'attemptNumber')).toBeDefined();
+    // OR drive the handler with a fake res and grep the first emitted line.
+  });
+});
+```
+
+(Pick the shape that matches the existing module's export — refactor minimally if needed to make the column list testable.)
+
+- [ ] **Step 3: Run to verify failure**
+
+- [ ] **Step 4: Add `attemptNumber` to the column list**
+
+Append `{ key: 'attemptNumber', label: 'Attempt' }` (or the equivalent in whatever shape the module uses) at the appropriate position in the column array.
+
+- [ ] **Step 5: Run to verify pass**
+
+- [ ] **Step 6: Commit**
+
+```bash
+git commit -m "fix(600): admin TaskRecords CSV export emits Attempt column
+
+Admin reviewers downloading the export need to distinguish rows by
+attempt number. The filter does NOT change — SUPERSEDED rows still
+appear in the export for audit traceability (per spec).
+"
+```
+
+---
+
 ## Task 17: Audit event listener
 
 **Files:**
@@ -1226,12 +1296,36 @@ git commit -m "fix(600): admin-analytics-schema baseFilter includes SUPERSEDED"
 
 - [ ] **Step 1: Write failing test**
 
+Audit-log emission is hard to spy directly via the audit-logging plugin. The clean approach is to spy on `cds.log('audit').info` (or whichever method the listener calls) before the action fires. Pattern:
+
 ```javascript
-it('TutorialProgressReset event is logged to audit-log', async () => {
-  // Spy on the audit log; call resetTutorialProgress; assert the event was emitted.
-  // ...
+import { vi } from 'vitest';
+
+it('TutorialProgressReset event reaches the audit listener', async () => {
+  // Boot order: cds.test('serve', ...) at top of file already booted CAP
+  // and registered the listener (via srv/admin-service.js' init). Spy on
+  // the log method the listener uses.
+  const auditLog = cds.log('audit');
+  const infoSpy = vi.spyOn(auditLog, 'info');
+
+  cds.context = { user: new cds.User({ id: 'sap-u1' }) };
+  await seedCompletedTutorial();
+  await cds.services.DeveloperService.send({
+    event: 'resetTutorialProgress',
+    data: { slug: 'reset-happy-path' },
+  });
+
+  // Listener should have been called with the event name + payload.
+  const matching = infoSpy.mock.calls.find(c =>
+    c[0] === 'TutorialProgressReset' || (c[1] && c[1].tutorialSlug === 'reset-happy-path')
+  );
+  expect(matching).toBeTruthy();
+
+  infoSpy.mockRestore();
 });
 ```
+
+If the existing audit-listener pattern in `srv/admin-service.js` uses a different log method or shape (e.g. it writes to an `AuditEvents` entity via SELECT/INSERT rather than `cds.log`), adapt the spy accordingly — read [test/unit/admin-secret-value-handlers.test.js](../../../test/unit/admin-secret-value-handlers.test.js) and search for `SecretValueWritten` to see the canonical assertion shape in this codebase.
 
 - [ ] **Step 2: Verify failure**
 
@@ -1337,6 +1431,8 @@ inspect historical attempts."
 ---
 
 ## Task 20: Frontend Vue island — `TutorialReset.vue`
+
+> **Depends on Task 21** for the `data-step-count` attribute on `<html>`. The island reads `document.documentElement.dataset.stepCount` to determine whether the tutorial is complete; without Task 21 it silently no-ops. Ship both tasks in the same PR / deploy.
 
 **Files:**
 - Create: `hugo-apps/src/tutorial-reset/index.ts`
@@ -1538,10 +1634,10 @@ Find a good place in the tutorial template — near the existing completion bann
 And ensure `documentElement.dataset.stepCount` is exposed:
 
 ```html
-<html data-page-slug="{{ .Params.slug }}" data-step-count="{{ .Params.totalSteps }}">
+<html data-page-slug="{{ .Params.slug }}" data-step-count="{{ .Params.stepCount }}">
 ```
 
-(Verify `.Params.totalSteps` is the right Hugo frontmatter key — grep `hugo/content/tutorials/*.md` if unsure.)
+The Hugo frontmatter key is `stepCount` (verified — every generated `hugo/content/tutorials/*.md` carries it, emitted by `scripts/fetch-tutorials.ts`). Do NOT use `.Params.totalSteps` (no such key exists in this project).
 
 - [ ] **Step 2: Add the script tag in `head.html`**
 
@@ -1664,7 +1760,13 @@ Expected: PASS everywhere. If anything regresses, investigate the cause (a read-
 cf logs tutorials-srv --recent | grep -iE 'error|throw|TaskRecords' | tail -30
 ```
 
-- [ ] **Step 3: Open the PR**
+- [ ] **Step 3: Push the branch**
+
+```bash
+git push -u origin feat/issue-600-reset-tutorial-progress
+```
+
+- [ ] **Step 4: Open the PR**
 
 ```bash
 gh pr create --base main \
@@ -1672,7 +1774,7 @@ gh pr create --base main \
   --body "Implements docs/superpowers/specs/2026-06-24-issue-600-reset-tutorial-progress-design.md. Closes #600. See spec for full design + read-path audit; this PR ships every task in docs/superpowers/plans/2026-06-24-issue-600-reset-tutorial-progress.md."
 ```
 
-- [ ] **Step 4: Note the schema-drift-check expectation in the PR body**
+- [ ] **Step 5: Note the schema-drift-check expectation in the PR body**
 
 The `db/views.cds` `CompletionAnalytics` change WILL trip the daily schema-drift-check workflow comparing prod vs QA HDI artefacts. This is expected — call it out in the PR body so the next reviewer doesn't chase a non-bug.
 
