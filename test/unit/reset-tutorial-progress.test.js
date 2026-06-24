@@ -199,4 +199,16 @@ describe('completeStep companion change', () => {
     });
     expect(supersededAfter.completionDate).toEqual(originalCompletionDate);
   });
+
+  it('getProgress returns empty completedSteps after reset (even though SUPERSEDED rows exist)', async () => {
+    cds.context = { user: new cds.User({ id: 'sap-u1' }) };
+    const { DeveloperService } = cds.services;
+
+    // After beforeEach reset, completedSteps should be empty for the live attempt.
+    const progress = await DeveloperService.send({
+      event: 'getProgress',
+      data: { slug: 'reset-happy-path' },
+    });
+    expect(progress.completedSteps).toEqual([]);
+  });
 });

@@ -68,10 +68,15 @@ export default class DeveloperService extends cds.ApplicationService {
       const dbUser = sapId ? await SELECT.one.from(dbUsers).where({ sapId }) : null;
       if (!dbUser) return { completedSteps: [], points: 0, badges: [] };
 
+      // Scope step records to the user's current (non-SUPERSEDED) attempt so a
+      // fresh attempt starts empty even though prior-attempt SUPERSEDED step
+      // rows still exist in the DB. See issue #600 Task 6.
+      const currentAttempt = await this._getCurrentTutorialAttempt(dbUser, tutorial);
       const stepRecords = await SELECT.from(dbTaskRecords).where({
         user_ID: dbUser.ID,
         taskType: 'STEP',
-        status: 'COMPLETED'
+        status: 'COMPLETED',
+        attemptNumber: currentAttempt,
       });
 
       // Filter to only steps belonging to this tutorial
@@ -739,6 +744,29 @@ export default class DeveloperService extends cds.ApplicationService {
     await super.init();
   }
 
+  /**
+   * Look up the user's current (non-SUPERSEDED) attempt number for a tutorial.
+   * Returns 1 when no live TUTORIAL row exists yet — matches the schema default
+   * and lets first-time users / new resets count their fresh attempt as 1.
+   *
+   * Used by Task 6 (#600) — getProgress, _getProgressForTutorial — to scope
+   * step counts to the current attempt and ignore SUPERSEDED rows from prior
+   * attempts.
+   */
+  async _getCurrentTutorialAttempt(dbUser, tutorial) {
+    const { TaskRecords: dbTaskRecords } = cds.entities('com.sap.developers.ims');
+    const row = await SELECT.one
+      .from(dbTaskRecords)
+      .columns('attemptNumber')
+      .where({
+        user_ID: dbUser.ID,
+        taskLegacyId: tutorial.legacyId,
+        taskType: 'TUTORIAL',
+        status: { '!=': 'SUPERSEDED' },
+      });
+    return row?.attemptNumber ?? 1;
+  }
+
   async _updateTutorialProgress(dbUser, tutorial, db) {
     const { Steps: dbSteps, TaskRecords: dbTaskRecords } =
       cds.entities('com.sap.developers.ims');
@@ -806,11 +834,15 @@ export default class DeveloperService extends cds.ApplicationService {
     const steps = await SELECT.from(dbSteps).where({ tutorial_ID: tutorial.ID });
     const stepLegacyIds = steps.map(s => s.legacyId);
 
+    // Scope to the user's current (non-SUPERSEDED) attempt; ignores prior-
+    // attempt SUPERSEDED step rows. See issue #600 Task 6.
+    const currentAttempt = await this._getCurrentTutorialAttempt(dbUser, tutorial);
     const completedStepRecords = await SELECT.from(dbTaskRecords).where({
       user_ID: dbUser.ID,
       taskType: 'STEP',
       status: 'COMPLETED',
-      taskLegacyId: { in: stepLegacyIds }
+      taskLegacyId: { in: stepLegacyIds },
+      attemptNumber: currentAttempt,
     });
 
     const completedSteps = completedStepRecords
