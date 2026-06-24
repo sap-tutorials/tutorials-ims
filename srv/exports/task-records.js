@@ -1,7 +1,11 @@
 import cds from '@sap/cds';
 
+// Issue #600 — ATTEMPT_NUMBER added so audit reviewers can distinguish
+// distinct attempts on the same tutorial. Filter is UNCHANGED — the admin
+// CSV export still shows ALL rows (including SUPERSEDED) for audit
+// traceability; only the column list grew.
 export const legacyHeader = [
-  'ID', 'USER_ID', 'TASK_ID', 'TASK_TYPE', 'STATUS', 'PROGRESS',
+  'ID', 'USER_ID', 'TASK_ID', 'TASK_TYPE', 'STATUS', 'PROGRESS', 'ATTEMPT_NUMBER',
   'COMPLETION_TIME', 'COMPLETION_DATE', 'CONTENT_LANGUAGE', 'SITE_LANGUAGE',
   'SUBMISSION_ID_STARTED', 'SUBMISSION_ID_COMPLETED', 'TITLE_SNAPSHOT',
   'PROGRESS_NOTE', 'EVENT', 'CREATED_AT', 'MODIFIED_AT'
@@ -14,7 +18,7 @@ export async function* rows(db, opts = {}) {
   while (true) {
     const page = await db.run(
       SELECT.from(TaskRecords)
-        .columns('ID','user_ID','taskLegacyId','taskType','status','progress',
+        .columns('ID','user_ID','taskLegacyId','taskType','status','progress','attemptNumber',
                  'completionTime','completionDate','contentLanguage','siteLanguage',
                  'submissionIdStarted','submissionIdCompleted','titleSnapshot',
                  'progressNote','event_ID','createdAt','modifiedAt','legacyId')
@@ -25,6 +29,7 @@ export async function* rows(db, opts = {}) {
     for (const r of page) {
       yield [
         r.ID, r.user_ID, r.taskLegacyId, r.taskType, r.status, r.progress ?? '',
+        r.attemptNumber ?? 1,
         r.completionTime ?? '', r.completionDate ?? '',
         r.contentLanguage ?? '', r.siteLanguage ?? '',
         r.submissionIdStarted ?? '', r.submissionIdCompleted ?? '',

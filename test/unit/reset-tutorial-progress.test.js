@@ -690,3 +690,57 @@ describe('Task 13 — KG raw-SQL filters honor SUPERSEDED', () => {
     );
   });
 });
+
+// Task 15 + 16 + 16a — saved-query analytics view + ad-hoc analytics schema
+// + admin CSV export. Saved-query and ad-hoc analytics surfaces must count
+// SUPERSEDED rows as completion signal (re-completion remains a completion);
+// CSV export adds attemptNumber so audit reviewers can distinguish attempts.
+describe('Task 15 — CompletionAnalytics view filter includes SUPERSEDED', () => {
+  const viewsSrc = fs.readFileSync(
+    join(__dirname_t13, '../../db/views.cds'), 'utf8'
+  );
+
+  it('CompletionAnalytics where clause uses status IN (COMPLETED, SUPERSEDED)', () => {
+    expect(viewsSrc).toMatch(
+      /where\s+tr\.status\s+in\s*\(\s*'COMPLETED'\s*,\s*'SUPERSEDED'\s*\)/i
+    );
+  });
+});
+
+describe('Task 16 — admin-analytics-schema completion baseFilter includes SUPERSEDED', async () => {
+  const { ANALYTICS_SCHEMA } = await import('../../srv/lib/admin-analytics-schema.js');
+
+  it('facts.completion.baseFilter widens to status IN [COMPLETED, SUPERSEDED]', () => {
+    expect(ANALYTICS_SCHEMA.facts.completion.baseFilter).toEqual({
+      status: { in: ['COMPLETED', 'SUPERSEDED'] },
+    });
+  });
+});
+
+describe('Task 16a — admin CSV task-records export adds attemptNumber column', async () => {
+  const { legacyHeader, rows } = await import('../../srv/exports/task-records.js');
+
+  it('legacyHeader array contains ATTEMPT_NUMBER', () => {
+    expect(legacyHeader).toContain('ATTEMPT_NUMBER');
+  });
+
+  it('rows generator yields attemptNumber in same position as header', async () => {
+    const fakePage = [{
+      ID: 'r1', user_ID: 'u1', taskLegacyId: 1, taskType: 'TUTORIAL',
+      status: 'COMPLETED', progress: 100, attemptNumber: 2,
+      completionTime: null, completionDate: null,
+      contentLanguage: null, siteLanguage: null,
+      submissionIdStarted: null, submissionIdCompleted: null,
+      titleSnapshot: 't', progressNote: null,
+      event_ID: null, createdAt: null, modifiedAt: null, legacyId: 1
+    }];
+    let calls = 0;
+    const fakeDb = { run: async () => (calls++ === 0 ? fakePage : []) };
+    const gen = rows(fakeDb, { pageSize: 5000 });
+    const out = [];
+    for await (const r of gen) out.push(r);
+    expect(out).toHaveLength(1);
+    const attemptIdx = legacyHeader.indexOf('ATTEMPT_NUMBER');
+    expect(out[0][attemptIdx]).toBe(2);
+  });
+});

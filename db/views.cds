@@ -114,6 +114,12 @@ view SearchableItems as
     ) as tagBag : String(5000)
   } where (g.status is null or g.status = 'ACTIVE') and g.published = true;
 
+// Issue #600 — saved-query analytics view. Filter widened to include
+// SUPERSEDED rows so a "reset and re-complete" cycle remains a completion
+// signal for analytics. NOTE for consumer queries: a user with N completions
+// on the same tutorial now contributes N rows to this view. Saved-query
+// consumers that want one-completion-per-user semantics MUST DISTINCT by
+// (user_ID, tutorial_ID) — otherwise re-completion inflates totals.
 view CompletionAnalytics as
   SELECT from ims.TaskRecords as tr
   left join Tasks as task on task.legacyId = tr.taskLegacyId and task.taskType = tr.taskType
@@ -134,7 +140,7 @@ view CompletionAnalytics as
     tr.completionTime as completionTimeMs : Int64,
     1 as completionCount : Integer
   }
-  where tr.status = 'COMPLETED';
+  where tr.status in ('COMPLETED', 'SUPERSEDED');
 
 view ActiveLearnersDaily as
   select from ims.TaskRecords {
