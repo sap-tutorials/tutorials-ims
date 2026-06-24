@@ -147,3 +147,34 @@ describe('resetTutorialProgress handler — happy path', () => {
     ).rejects.toMatchObject({ code: 401 });
   });
 });
+
+describe('completeStep companion change', () => {
+  beforeEach(async () => {
+    await seedCompletedTutorial();
+    cds.context = { user: new cds.User({ id: 'sap-u1' }) };
+    // Reset to attempt 2 so a fresh completeStep call hits the post-reset path.
+    await cds.services.DeveloperService.send({
+      event: 'resetTutorialProgress',
+      data: { slug: 'reset-happy-path' },
+    });
+  });
+
+  it('completeStep on attempt 2 inserts a new STEP row at attemptNumber 2', async () => {
+    const { DeveloperService } = cds.services;
+    cds.context = { user: new cds.User({ id: 'sap-u1' }) };
+    await DeveloperService.send({
+      event: 'completeStep',
+      data: { slug: 'reset-happy-path', stepNumber: 1 },
+    });
+
+    const { TaskRecords } = cds.entities('com.sap.developers.ims');
+    const stepRows = await SELECT.from(TaskRecords).where({
+      user_ID: 'u1', taskType: 'STEP', taskLegacyId: 3001,
+    });
+    expect(stepRows).toHaveLength(2);
+    const superseded = stepRows.find(r => r.status === 'SUPERSEDED');
+    const live = stepRows.find(r => r.status === 'COMPLETED');
+    expect(superseded.attemptNumber).toBe(1);
+    expect(live.attemptNumber).toBe(2);
+  });
+});

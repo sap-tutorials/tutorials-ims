@@ -143,14 +143,30 @@ export default class DeveloperService extends cds.ApplicationService {
         dbUser = await SELECT.one.from(dbUsers).where({ sapId });
       }
 
-      // Check if step already completed
+      // Check if step already completed (ignore SUPERSEDED rows from prior attempts)
       const existing = await SELECT.one.from(dbTaskRecords).where({
         user_ID: dbUser.ID,
         taskLegacyId: step.legacyId,
-        taskType: 'STEP'
+        taskType: 'STEP',
+        status: { '!=': 'SUPERSEDED' },
       });
 
       if (!existing) {
+        // Look up the user's current tutorial-level attempt number; default 1
+        // when no live TUTORIAL row exists yet (first-time user, first step ever).
+        // SELECT.one returns null (not {attemptNumber: 1}) when no row matches —
+        // must default with `?? 1` to handle that case.
+        const tutorialRow = await SELECT.one
+          .from(dbTaskRecords)
+          .columns('attemptNumber')
+          .where({
+            user_ID: dbUser.ID,
+            taskLegacyId: tutorial.legacyId,
+            taskType: 'TUTORIAL',
+            status: { '!=': 'SUPERSEDED' },
+          });
+        const attemptNumber = tutorialRow?.attemptNumber ?? 1;
+
         const now = new Date().toISOString();
         await INSERT.into(dbTaskRecords).entries({
           user_ID: dbUser.ID,
@@ -160,7 +176,8 @@ export default class DeveloperService extends cds.ApplicationService {
           progress: 100,
           completionDate: now,
           titleSnapshot: step.title,
-          legacyId: await getNextLegacyId('TaskRecords', db)
+          legacyId: await getNextLegacyId('TaskRecords', db),
+          attemptNumber,
         });
 
         // Recalculate tutorial progress
