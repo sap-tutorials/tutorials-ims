@@ -1,7 +1,14 @@
 // test/hybrid/devtoberfest-registration-hana.test.js
-// End-to-end against real HANA: create Event + Config, POST /join,
-// verify Registration row, idempotent re-join returns 409. Test data
-// prefixed __TEST__ per test/hybrid/_guard.js rules.
+// End-to-end against real HANA: create Event + active Config row, POST
+// /join, verify Registration row, idempotent re-join returns 409. Test
+// data prefixed __TEST__ per test/hybrid/_guard.js rules.
+//
+// Multi-row schema (spec 2026-06-24): the test inserts a fresh
+// DevtoberfestConfig row with isActive=true (an auto-deactivate
+// before-handler will flip any previously-active row to inactive in
+// the same transaction). After the test, the test row is deleted and
+// the previously-active row (if any) is re-flipped to isActive=true
+// so other tests / app behaviour aren't disturbed.
 //
 // Run with:
 //   ALLOW_HYBRID_WRITES=true npx vitest run test/hybrid/devtoberfest-registration-hana.test.js --project hybrid
@@ -15,9 +22,9 @@ import { isSafeForWrites } from './_guard.js';
 describe('Devtoberfest join — real HANA', () => {
   let project;
   let createdRegistrationId;
+  let testConfigId;
   const testSapId = '__TEST__devtoberfest_' + Date.now();
-  const SINGLETON_ID = '00000000-0000-0000-0000-00d0fe57feed';
-  let savedConfig;
+  let previouslyActiveConfigId = null;
   let testEventId;
   let testUserId;
 
@@ -35,11 +42,13 @@ describe('Devtoberfest join — real HANA', () => {
 
     const { Users, Events, DevtoberfestConfig } = cds.entities('com.sap.developers.ims');
 
-    // Snapshot existing config so we restore it in afterAll.
-    savedConfig = await SELECT.one.from(DevtoberfestConfig);
+    // Snapshot the currently-active row so we can restore it in afterAll.
+    const activeRow = await SELECT.one.from(DevtoberfestConfig).where({ isActive: true });
+    previouslyActiveConfigId = activeRow?.ID || null;
 
     testUserId = cds.utils.uuid();
     testEventId = cds.utils.uuid();
+    testConfigId = cds.utils.uuid();
     await INSERT.into(Users).entries({
       ID: testUserId, sapId: testSapId,
       email: '__test__@example.com', legacyId: 999999,
@@ -48,17 +57,17 @@ describe('Devtoberfest join — real HANA', () => {
       ID: testEventId, name: '__TEST__Devtoberfest', startDate: '2026-10-01T00:00:00Z',
       endDate: '2026-10-28T00:00:00Z', legacyId: 999998,
     });
-
-    // Set DevtoberfestConfig.currentEvent to the test event.
-    if (savedConfig) {
-      await UPDATE(DevtoberfestConfig).set({
-        currentEvent_ID: testEventId, termsVersion: 7,
-      }).where({ ID: SINGLETON_ID });
-    } else {
-      await INSERT.into(DevtoberfestConfig).entries({
-        ID: SINGLETON_ID, currentEvent_ID: testEventId, termsVersion: 7,
-      });
+    // Direct INSERT (bypasses the AdminService auto-deactivate handler).
+    // Flip the previously-active row to inactive ourselves so the
+    // invariant holds while the test row is the live one.
+    if (previouslyActiveConfigId) {
+      await UPDATE(DevtoberfestConfig)
+        .set({ isActive: false })
+        .where({ ID: previouslyActiveConfigId });
     }
+    await INSERT.into(DevtoberfestConfig).entries({
+      ID: testConfigId, isActive: true, currentEvent_ID: testEventId, termsVersion: 7,
+    });
   });
 
   afterAll(async () => {
@@ -70,11 +79,13 @@ describe('Devtoberfest join — real HANA', () => {
     await DELETE.from(EventRegistrations).where({ event_ID: testEventId });
     await DELETE.from(Events).where({ ID: testEventId });
     await DELETE.from(Users).where({ ID: testUserId });
-    if (savedConfig) {
-      await UPDATE(DevtoberfestConfig).set({
-        currentEvent_ID: savedConfig.currentEvent_ID,
-        termsVersion: savedConfig.termsVersion,
-      }).where({ ID: SINGLETON_ID });
+    // Remove the test config row.
+    await DELETE.from(DevtoberfestConfig).where({ ID: testConfigId });
+    // Re-flip the previously-active row to active (if any).
+    if (previouslyActiveConfigId) {
+      await UPDATE(DevtoberfestConfig)
+        .set({ isActive: true })
+        .where({ ID: previouslyActiveConfigId });
     }
   });
 

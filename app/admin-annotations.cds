@@ -1856,18 +1856,26 @@ annotate KnowledgeGraphService.ConceptEdges with @UI: {
   ]
 };
 
-// --- Devtoberfest (singleton config + read-only registrations audit) ---
+// --- Devtoberfest (multi-row config + read-only registrations audit) ---
 //
-// Spec: docs/superpowers/specs/2026-06-22-devtoberfest-homepage-design.md §9
+// Spec: docs/superpowers/specs/2026-06-24-devtoberfest-config-multi-row-draft-design.md
 //
-// DevtoberfestConfig is @odata.singleton in srv/admin-service.cds — the
-// tile's OData URL is /admin/DevtoberfestConfig (no key in path). UI
-// annotations here are minimal because the tile uses a custom IconTabBar
-// view (not Fiori Elements ListReport/ObjectPage), so most layout lives
-// in the tile's XML fragments. We keep field labels here for the OData
-// $metadata, which various downstream consumers reflect.
+// DevtoberfestConfig is multi-row + @odata.draft.enabled (one row per
+// Devtoberfest cycle). Exactly one row carries isActive=true at a
+// time — public handlers (statusHandler, termsHandler, joule tool,
+// join handler) select WHERE isActive=true. The CDS before-handler
+// in srv/admin-service.js auto-deactivates the previously-active row
+// on draft activation, preserving the invariant in one transaction.
+//
+// Admin tile is Fiori Elements List Report + Object Page at
+// /admin-ui/#/devtoberfest. Replaces the previous custom UI5 tile
+// (PR #598 / #599 / spec 2026-06-24).
 annotate AdminService.DevtoberfestConfig with {
+  isActive          @Common.Label: 'Active'
+                    @title: 'Active'
+                    @Core.Description: 'Exactly one config can be active at a time. Flipping this on will deactivate the previous active row.';
   currentEvent      @title: 'Current Devtoberfest Event'
+                    @Common.Label: 'Event'
                     @Common.ValueList: {
                       Label: 'Event',
                       CollectionPath: 'Events',
@@ -1877,19 +1885,71 @@ annotate AdminService.DevtoberfestConfig with {
                         { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'startDate' },
                         { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'endDate' }
                       ]
-                    };
-  termsText         @title: 'Contents Rules (markdown)'
+                    }
+                    @Common.Text: currentEvent.name @Common.TextArrangement: #TextOnly;
+  termsText         @title: 'Content Rules (markdown)'
+                    @Common.Label: 'Content Rules (markdown)'
                     @UI.MultiLineText;
-  termsVersion      @title: 'Terms Version';
-  contentRulesUrl   @title: 'Content Rules URL';
-  faqUrl            @title: 'FAQ URL';
-  gameboardUrl      @title: 'Gameboard URL';
-  activitiesUrl     @title: 'Activities URL';
+  termsVersion      @title: 'Terms Version' @Common.Label: 'Terms Version';
+  contentRulesUrl   @title: 'Content Rules URL' @Common.Label: 'Content Rules URL';
+  faqUrl            @title: 'FAQ URL' @Common.Label: 'FAQ URL';
+  gameboardUrl      @title: 'Gameboard URL' @Common.Label: 'Gameboard URL';
+  activitiesUrl     @title: 'Activities URL' @Common.Label: 'Activities URL';
 };
 
-// EventRegistrations — read-only audit table. Tile renders via a hand-
-// written Table fragment in RegistrationsTab.fragment.xml, so no full
-// @UI.LineItem block. Labels here for $metadata consumers.
+annotate AdminService.DevtoberfestConfig with @UI: {
+  HeaderInfo: {
+    TypeName: 'Devtoberfest Configuration', TypeNamePlural: 'Devtoberfest Configurations',
+    Title: { Value: currentEvent.name },
+    Description: { Value: termsVersion }
+  },
+  // Object Status for the active flag — green when active, neutral when not.
+  // Surface this in both the LineItem and HeaderFacets so admins can see
+  // at a glance which row is live.
+  DataPoint#ActiveStatus: {
+    Value: isActive,
+    Title: 'Active',
+    Criticality: isActive
+  },
+  SelectionFields: [ isActive, currentEvent_ID ],
+  LineItem: [
+    { Value: currentEvent.name,      Label: 'Event' },
+    { Value: currentEvent.startDate, Label: 'Start' },
+    { Value: currentEvent.endDate,   Label: 'End' },
+    { Value: termsVersion,           Label: 'Terms Ver' },
+    { $Type: 'UI.DataFieldForAnnotation',
+      Target: '@UI.DataPoint#ActiveStatus',
+      Label: 'Active' },
+    { Value: modifiedAt,             Label: 'Last Modified' }
+  ],
+  Facets: [
+    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#General',  Label: 'Event & Status' },
+    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#Terms',    Label: 'Content Rules / Terms' },
+    { $Type: 'UI.ReferenceFacet', Target: '@UI.FieldGroup#SubPages', Label: 'Sub-pages (leave blank to hide)' }
+  ],
+  FieldGroup#General: { Data: [
+    { Value: currentEvent_ID, Label: 'Event' },
+    { Value: isActive },
+    { Value: termsVersion }
+  ]},
+  FieldGroup#Terms: { Data: [
+    { Value: termsText }
+  ]},
+  FieldGroup#SubPages: { Data: [
+    { Value: contentRulesUrl },
+    { Value: faqUrl },
+    { Value: gameboardUrl },
+    { Value: activitiesUrl }
+  ]}
+};
+
+// EventRegistrations — read-only audit table.
+// Annotated for FE inclusion as a list-style entity. The Devtoberfest
+// admin tile currently doesn't surface registrations under each config
+// row (since the registration→event link is on Events, not on
+// DevtoberfestConfig directly); a future PR could expose them as a
+// facet via $expand on `currentEvent/registrations`. For now this
+// stays a standalone read-only entity — not bound into the tile UI.
 annotate AdminService.EventRegistrations with {
   user             @title: 'User';
   event            @title: 'Event';

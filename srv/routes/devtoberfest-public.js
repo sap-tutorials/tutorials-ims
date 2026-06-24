@@ -3,10 +3,16 @@
 // users see the page and the JOIN button (which is gated separately
 // by /api/devtoberfest/join requiring XSUAA).
 //
-// Spec: docs/superpowers/specs/2026-06-22-devtoberfest-homepage-design.md §6
+// DevtoberfestConfig is multi-row + draft-enabled (spec 2026-06-24).
+// Public handlers select WHERE isActive=true. If no row is active,
+// statusHandler returns 503 EVENT_NOT_CONFIGURED. The admin tile
+// at /admin-ui/#/devtoberfest is responsible for keeping exactly
+// one row active.
+//
+// Spec: docs/superpowers/specs/2026-06-24-devtoberfest-config-multi-row-draft-design.md
+// (supersedes singleton sections of 2026-06-22-devtoberfest-homepage-design.md §6)
 
 import cds from '@sap/cds';
-import { ensureDevtoberfestConfigSingleton } from '../lib/devtoberfest-singleton.js';
 import { resolveUser } from '../lib/resolve-user.js';
 import { resolveUserSapId } from '../lib/resolve-db-user.js';
 
@@ -15,10 +21,9 @@ const LOG = cds.log('devtoberfest');
 async function statusHandler(req, res) {
   try {
     await cds.connect.to('db');
-    await ensureDevtoberfestConfigSingleton();
     const { DevtoberfestConfig, Events } = cds.entities('com.sap.developers.ims');
 
-    const config = await SELECT.one.from(DevtoberfestConfig);
+    const config = await SELECT.one.from(DevtoberfestConfig).where({ isActive: true });
     if (!config?.currentEvent_ID) {
       return res.status(503).json({ error: 'EVENT_NOT_CONFIGURED' });
     }
@@ -61,12 +66,14 @@ async function statusHandler(req, res) {
 async function termsHandler(_req, res) {
   try {
     await cds.connect.to('db');
-    await ensureDevtoberfestConfigSingleton();
     const { DevtoberfestConfig } = cds.entities('com.sap.developers.ims');
-    const config = await SELECT.one.from(DevtoberfestConfig);
+    const config = await SELECT.one.from(DevtoberfestConfig).where({ isActive: true });
+    if (!config) {
+      return res.status(503).json({ error: 'EVENT_NOT_CONFIGURED' });
+    }
     return res.status(200).json({
-      text: config?.termsText || '',
-      version: config?.termsVersion || 1,
+      text: config.termsText || '',
+      version: config.termsVersion || 1,
     });
   } catch (err) {
     LOG.error('GET /api/devtoberfest/terms failed:', err);

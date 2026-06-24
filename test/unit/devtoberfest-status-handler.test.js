@@ -1,7 +1,8 @@
 // test/unit/devtoberfest-status-handler.test.js
-// Tests for GET /api/devtoberfest/status. Built incrementally across
-// Tasks 3, 4. Each slice adds one branch of the state machine in
-// spec §6.1.
+// Tests for GET /api/devtoberfest/status. Each slice covers one branch
+// of the state machine in spec §6.1, now adapted to the multi-row +
+// draft-enabled DevtoberfestConfig schema (spec 2026-06-24):
+// the active row is identified by isActive=true; no row active ⇒ 503.
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import cds from '@sap/cds';
@@ -20,7 +21,7 @@ describe('GET /api/devtoberfest/status', () => {
     await DELETE.from(Events);
   });
 
-  it('returns 503 EVENT_NOT_CONFIGURED when currentEvent is NULL', async () => {
+  it('returns 503 EVENT_NOT_CONFIGURED when no DevtoberfestConfig row is active', async () => {
     const res = await project.axios.get('/api/devtoberfest/status', {
       validateStatus: () => true,
     });
@@ -28,10 +29,25 @@ describe('GET /api/devtoberfest/status', () => {
     expect(res.data.error).toBe('EVENT_NOT_CONFIGURED');
   });
 
-  it('returns 503 idempotently across repeated calls (singleton race tolerance)', async () => {
-    // Two sequential GETs must BOTH return 503 with the same body.
-    // Verifies ensureDevtoberfestConfigSingleton's check-then-INSERT
-    // doesn't break on the second call (where the row already exists).
+  it('returns 503 EVENT_NOT_CONFIGURED when a config exists but isActive=false', async () => {
+    // Multi-row schema lets historic / inactive configs coexist — public
+    // handlers must reject when none are flipped active.
+    await INSERT.into(DevtoberfestConfig).entries({
+      ID: cds.utils.uuid(),
+      isActive: false,
+      currentEvent_ID: null,
+      termsVersion: 1,
+    });
+    const res = await project.axios.get('/api/devtoberfest/status', {
+      validateStatus: () => true,
+    });
+    expect(res.status).toBe(503);
+    expect(res.data.error).toBe('EVENT_NOT_CONFIGURED');
+  });
+
+  it('returns 503 idempotently across repeated calls', async () => {
+    // Two sequential GETs must BOTH return 503 with the same body —
+    // there's no implicit bootstrap; the active-row lookup is pure.
     const r1 = await project.axios.get('/api/devtoberfest/status', {
       validateStatus: () => true,
     });
@@ -44,9 +60,9 @@ describe('GET /api/devtoberfest/status', () => {
     expect(r2.data.error).toBe('EVENT_NOT_CONFIGURED');
   });
 
-  describe('with event configured', () => {
+  describe('with active config', () => {
     let Users;
-    const SINGLETON_ID = '00000000-0000-0000-0000-00d0fe57feed';
+    const configId = cds.utils.uuid();
     const eventId = cds.utils.uuid();
 
     beforeAll(() => {
@@ -65,7 +81,8 @@ describe('GET /api/devtoberfest/status', () => {
         legacyId: 9001,
       });
       await INSERT.into(DevtoberfestConfig).entries({
-        ID: SINGLETON_ID,
+        ID: configId,
+        isActive: true,
         currentEvent_ID: eventId,
         termsVersion: 3,
         contentRulesUrl: 'https://example.test/rules',
@@ -140,6 +157,29 @@ describe('GET /api/devtoberfest/status', () => {
       });
       expect(res.status).toBe(200);
       expect(res.data.joined).toBe(false);
+    });
+
+    it('two configs, only the isActive one wins', async () => {
+      // Insert a second config pointing at a different event with a
+      // distinct termsVersion. The active one must be the one returned.
+      const otherConfigId = cds.utils.uuid();
+      const otherEventId = cds.utils.uuid();
+      await INSERT.into(Events).entries({
+        ID: otherEventId, name: 'Devtoberfest 2025',
+        startDate: '2025-10-01T00:00:00Z', endDate: '2025-10-28T00:00:00Z',
+        legacyId: 9002,
+      });
+      await INSERT.into(DevtoberfestConfig).entries({
+        ID: otherConfigId,
+        isActive: false,
+        currentEvent_ID: otherEventId,
+        termsVersion: 99,
+        contentRulesUrl: 'https://example.test/old-rules',
+      });
+      const res = await project.axios.get('/api/devtoberfest/status');
+      expect(res.status).toBe(200);
+      expect(res.data.event.name).toBe('Devtoberfest 2026');   // the active row's event
+      expect(res.data.termsVersion).toBe(3);                   // active row's version
     });
   });
 });

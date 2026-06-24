@@ -16,7 +16,7 @@ import { classifySeverity, daysUntil } from './jobs/secret-expiry-check.js';
 import { readSecret, writeSecret, deleteSecret } from './lib/credstore.js';
 import { invalidateSecret } from './lib/secret-resolver.js';
 import { cleanupChangeLog } from './jobs/cleanup.js';
-import { ensureDevtoberfestConfigSingleton } from './lib/devtoberfest-singleton.js';
+import { ensureDevtoberfestActiveFlagInvariant } from './lib/devtoberfest-active-flag.js';
 import { randomBytes } from 'node:crypto';
 
 export default class AdminService extends cds.ApplicationService {
@@ -118,12 +118,13 @@ export default class AdminService extends cds.ApplicationService {
       }
     });
 
-    // Ensure singleton row exists for DevtoberfestConfig. Shared with
-    // the public route at /api/devtoberfest/status — both call
-    // ensureDevtoberfestConfigSingleton() so the UUID + init logic
-    // have one source of truth (srv/lib/devtoberfest-singleton.js).
-    this.before('READ', 'DevtoberfestConfig', async () => {
-      await ensureDevtoberfestConfigSingleton();
+    // DevtoberfestConfig is multi-row + draft-enabled (spec 2026-06-24).
+    // The `isActive` flag enforces "at most one active row" via a CDS
+    // handler instead of a DB-level partial index. When a draft is
+    // activated with isActive=true, deactivate every OTHER row in the
+    // same transaction so the invariant always holds.
+    this.before(['CREATE', 'UPDATE', 'NEW', 'PATCH'], 'DevtoberfestConfig', async (req) => {
+      await ensureDevtoberfestActiveFlagInvariant(req);
     });
 
     // Ensure singleton row exists for KnowledgeGraphSettings. The seed CSV is

@@ -22,6 +22,7 @@ async function seedEvent({ startOffsetDays, endOffsetDays }) {
   });
   await UPSERT.into(DevtoberfestConfig).entries({
     ID: CONFIG_ID,
+    isActive: true,
     currentEvent_ID: EVENT_ID,
     termsText: '## Rules\n\nBe excellent to each other.',
     termsVersion: 3,
@@ -67,9 +68,9 @@ describe('getDevtoberfestInfo', () => {
     expect(out.event.daysUntilStart).toBeLessThanOrEqual(-30);
   });
 
-  it('returns status=unconfigured when DevtoberfestConfig has no currentEvent', async () => {
+  it('returns status=unconfigured when active config has no currentEvent', async () => {
     const { DevtoberfestConfig } = cds.entities('com.sap.developers.ims');
-    await UPSERT.into(DevtoberfestConfig).entries({ ID: CONFIG_ID, currentEvent_ID: null });
+    await UPSERT.into(DevtoberfestConfig).entries({ ID: CONFIG_ID, isActive: true, currentEvent_ID: null });
     const out = await getDevtoberfestInfo({});
     expect(out.event.status).toBe('unconfigured');
     expect(out.event.name).toBeNull();
