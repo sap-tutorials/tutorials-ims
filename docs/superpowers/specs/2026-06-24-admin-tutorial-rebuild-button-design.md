@@ -115,8 +115,11 @@ The `@Common.IsActionCritical: true` annotation causes Fiori Elements to render 
 
 ### 2. `srv/admin-service.js` — handler registration
 
+Register inside the same `init()` closure as the existing handlers, where the closure-scoped `auditEvent` helper (defined at [srv/admin-service.js:1234](../../../srv/admin-service.js#L1234) as `auditEvent = async (action, data) => _auditLog.log('SecurityEvent', { data: { action, ...data } })`) and `scheduleRebuild` import are already in scope. Pattern matches every other `this.on(...)` registration in this file.
+
 ```js
-admin.on('rebuildContent', 'Tutorials', async (req) => {
+// Inside AdminService.init(), alongside other this.on(...) registrations:
+this.on('rebuildContent', 'Tutorials', async (req) => {
   const tutorialId = req.params[0].ID;
   const { Tutorials } = cds.entities('com.sap.developers.ims');
   const row = await SELECT.one.from(Tutorials).columns('slug', 'title').where({ ID: tutorialId });
@@ -124,6 +127,7 @@ admin.on('rebuildContent', 'Tutorials', async (req) => {
     return req.reject(400, 'Tutorial has no slug; cannot rebuild');
   }
 
+  // auditEvent(action, data) → emits 'SecurityEvent' with { data: { action, ...data } }
   await auditEvent('TutorialRebuildTriggered', {
     user: req.user?.id ?? 'anonymous',
     tutorialId,
@@ -145,7 +149,7 @@ admin.on('rebuildContent', 'Tutorials', async (req) => {
 });
 ```
 
-`scheduleRebuild` and `auditEvent` are already imported in `admin-service.js` for other actions. No new imports needed beyond confirming the locations.
+`scheduleRebuild` is already imported in `admin-service.js` (used by other paths). `auditEvent` is closure-scoped inside the same `init()` — see line 1234. No new imports needed.
 
 ### 3. `app/admin-annotations.cds` — UI action binding
 
@@ -246,7 +250,7 @@ Vitest, unit project, uses `cds.test()` + `_resetForTests({ dispatchFn })` to mo
 | Test | Asserts |
 |---|---|
 | dispatches with `mode=slug-targeted` + slug | scheduleRebuild called once; opts.mode='slug-targeted'; opts.slug equals row's slug |
-| emits `TutorialRebuildTriggered` audit event | mock auditLog.log called with `('SecurityEvent', { data: { action: 'TutorialRebuildTriggered', user, tutorialId, slug, source: 'admin-ui:tutorial-detail' }})` |
+| emits `TutorialRebuildTriggered` audit event | The closure-scoped `auditEvent` helper is called with first arg `'TutorialRebuildTriggered'` and second arg `{ user, tutorialId, slug, source: 'admin-ui:tutorial-detail' }`. (Under the hood it emits `_auditLog.log('SecurityEvent', { data: { action: 'TutorialRebuildTriggered', ...rest }})` — but the test should verify the helper call, not the underlying log call, to stay decoupled from the helper's internal shape.) |
 | reason string includes user id | scheduleRebuild reason arg matches `/^admin-ui:rebuild-button:.+/` |
 | rejects 400 when slug is null | scheduleRebuild NOT called; audit event NOT emitted; req.reject(400) |
 | rejects 400 when slug is empty string | same |
