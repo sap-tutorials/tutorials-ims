@@ -42,6 +42,7 @@ entity Tutorials : TaskBase {
   meta                      : Composition of many TutorialMeta on meta.tutorial = $self;
   contributors              : Composition of many TutorialContributors on contributors.tutorial = $self;
   categories                : Composition of many TutorialCategories on categories.tutorial = $self;
+  author                    : Association to Users;
 }
 
 @assert.unique.slug: [slug]
@@ -126,6 +127,8 @@ entity Users : cuid, managed, LegacyKeyed {
   accomplishments           : Composition of many AccomplishmentRecords on accomplishments.user = $self;
   metadata                  : Composition of many UserMetaData on metadata.user = $self;
   environmentTabs           : Composition of many DeveloperEnvironmentTabs on environmentTabs.user = $self;
+  authoredTutorials         : Association to many Tutorials            on authoredTutorials.author = $self;
+  tutorialContributions     : Association to many TutorialContributors on tutorialContributions.user = $self;
 }
 
 entity TaskRecords : cuid, managed, LegacyKeyed {
@@ -329,6 +332,7 @@ entity TutorialContributors : cuid, LegacyKeyed {
   name                      : String(255);
   email                     : String(255);
   role                      : String(50);
+  user                      : Association to Users;
 }
 
 @assert.unique.name : [name]

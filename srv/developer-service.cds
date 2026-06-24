@@ -5,10 +5,21 @@ using { com.sap.developers.ims as ims } from '../db/schema';
 service DeveloperService {
 
   // Exposed entities (restricted projections)
+  //
+  // Authorship surfacing (spec 2026-06-24-tutorial-authorship-fk):
+  // Public-authenticated fields are author email + displayName +
+  // firstName + lastName (already effectively public via tutorial
+  // bylines and /api/advocates). authorSapId is the internal JWT
+  // user_uuid claim and stays AdminService-only — the smoke test
+  // in test/smoke/tutorial-author-fk.smoke.test.js asserts this.
   @(requires: 'authenticated-user')
-  @readonly entity Tutorials as projection on ims.Tutorials excluding {
-    meta, contributors, repositories
-  };
+  @readonly entity Tutorials as projection on ims.Tutorials {
+    *,
+    author.email       as authorEmail       : String,
+    author.displayName as authorDisplayName : String,
+    author.firstName   as authorFirstName   : String,
+    author.lastName    as authorLastName    : String
+  } excluding { meta, contributors, repositories };
 
   @(requires: 'authenticated-user')
   entity TaskRecords as projection on ims.TaskRecords;

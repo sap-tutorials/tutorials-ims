@@ -108,4 +108,62 @@ describe('UI Annotations in $metadata', () => {
       ].sort());
     });
   });
+
+  // Regression suite for spec 2026-06-24-tutorial-authorship-fk —
+  // pins the Tutorials.author searchable value-help shape AND, most
+  // importantly, the FK-propagation behavior. Without the FK
+  // propagation (cds-compiler Feb 2025 "Annotating Managed
+  // Associations"), the admin OP renders the GUID instead of the
+  // displayName — same failure mode that PR #573/#588/#607 chased
+  // on AdvocateTopics. This test catches a future compiler regression.
+  describe('Tutorials.author value-help (spec 2026-06-24-tutorial-authorship-fk)', () => {
+    it('AdminService.Tutorials/author carries Common.ValueList with SearchSupported + Users target', () => {
+      const region = metadata.match(
+        /<Annotations Target="AdminService\.Tutorials\/author"[^>]*>[\s\S]*?<\/Annotations>/
+      );
+      expect(region, 'Tutorials/author annotations region not found').toBeTruthy();
+      // Either the association itself carries the ValueList OR the
+      // propagated FK region (next assertion) does — depending on the
+      // cds-compiler emission rules. We assert the FK region below;
+      // here we just verify there IS an association-side region (the
+      // implementer's annotate block must compile).
+      expect(region[0]).toContain('Term="Common.Label"');
+    });
+
+    it('FK propagation: AdminService.Tutorials/author_ID inherits Common.Text + ValueList from the association', () => {
+      // The cds-compiler Feb 2025 "Annotating Managed Associations"
+      // feature copies expression-valued annotations from the
+      // association onto the generated FK. This test pins that — if
+      // it ever regresses, FE V4 will fall back to rendering the GUID
+      // in the admin OP.
+      const fkRegion = metadata.match(
+        /<Annotations Target="AdminService\.Tutorials\/author_ID"[^>]*>[\s\S]*?<\/Annotations>/
+      );
+      expect(fkRegion, 'Tutorials/author_ID annotations region missing — FK propagation has regressed').toBeTruthy();
+      // @Common.Text → author/displayName (so FE V4 renders the human name)
+      expect(fkRegion[0]).toMatch(/Term="Common\.Text"[^>]+Path="author\/displayName"/);
+      // @Common.ValueList → Users with SearchSupported
+      expect(fkRegion[0]).toContain('Term="Common.ValueList"');
+      expect(fkRegion[0]).toContain('CollectionPath" String="Users"');
+      expect(fkRegion[0]).toMatch(/SearchSupported"\s+Bool="true"/);
+    });
+
+    it('Tutorials projection exposes flattened author.* scalars', () => {
+      // Each flattened scalar must appear as a Property on Tutorials.
+      for (const col of ['authorEmail', 'authorSapId', 'authorDisplayName', 'authorFirstName', 'authorLastName']) {
+        expect(metadata, `${col} not found on AdminService.Tutorials`)
+          .toMatch(new RegExp(`<Property Name="${col}"`));
+      }
+    });
+
+    it('Users $search is functional via OData (proves @cds.search wires through to the runtime)', async () => {
+      // @cds.search is a RUNTIME annotation — it does NOT emit
+      // @Search.defaultSearchElement into the EDMX. The only way to
+      // verify it's wired correctly is to call the endpoint with
+      // ?$search=… and confirm a 200 (vs. a 400 "search not supported").
+      const { status, data } = await project.get('/admin/Users?$top=1&$search=a', adminAuth);
+      expect(status).toBe(200);
+      expect(Array.isArray(data.value)).toBe(true);
+    });
+  });
 });

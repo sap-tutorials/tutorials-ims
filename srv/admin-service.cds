@@ -14,6 +14,11 @@ using from '../app/admin-annotations';
 service AdminService {
 
   // Full CRUD entity projections
+  // @cds.search declares searchable elements for OData $search → HANA
+  // CONTAINS. Wired through to the searchable Users value-help on
+  // Tutorials.author (see app/admin-annotations.cds). Spec
+  // 2026-06-24-tutorial-authorship-fk.
+  @cds.search: { displayName, firstName, lastName, email, sapId }
   entity Users as projection on ims.Users;
   @cds.redirection.target: true
   @Capabilities.ChangeTracking : { Supported: true }
@@ -22,7 +27,18 @@ service AdminService {
     cast(legacyId as String) as legacyIdStr : String,
     meta            : Association to TutorialMeta             on meta.tutorial.ID           = ID,
     feedbackSummary : Association to TutorialFeedbackAggregate on feedbackSummary.tutorialSlug = slug,
-    feedbackItems   : Association to many TutorialFeedback     on feedbackItems.tutorialSlug   = slug
+    feedbackItems   : Association to many TutorialFeedback     on feedbackItems.tutorialSlug   = slug,
+    // Read-only flattened User fields for the new Tutorials.author FK
+    // (spec 2026-06-24-tutorial-authorship-fk). Admin UI gets labeled
+    // cells without needing $expand; OData consumers see plain columns.
+    // Writes are silently no-op (derived via path expression through
+    // the nullable `author` association — null author_ID → null
+    // flattened columns, the desired blank-cell behavior).
+    author.email       as authorEmail       : String @Common.FieldControl: #ReadOnly,
+    author.sapId       as authorSapId       : String @Common.FieldControl: #ReadOnly,
+    author.displayName as authorDisplayName : String @Common.FieldControl: #ReadOnly,
+    author.firstName   as authorFirstName   : String @Common.FieldControl: #ReadOnly,
+    author.lastName    as authorLastName    : String @Common.FieldControl: #ReadOnly
   };
   // Filtered picklist for redirectTo value help — only ACTIVE tutorials can be redirect targets
   @readonly

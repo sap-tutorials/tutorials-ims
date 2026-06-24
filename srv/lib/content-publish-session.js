@@ -7,6 +7,7 @@ import { toBuffer } from './content-store.js';
 import { recomputeTutorialProgressBulkSQL } from './recompute-tutorial-progress-bulk-sql.js';
 import { tutorialsTableInfo } from './_tutorials-table.js';
 import { logPipelineStart, logPipelineEnd, logPipelineItem } from './pipeline-log.js';
+import { resolveTutorialAuthor } from './resolve-tutorial-author.js';
 
 const LOG = cds.log('content-publish');
 const LOCK_NAME = 'content-publish';
@@ -147,6 +148,15 @@ export function createSessionHelpers({ namespace }) {
       if (tutorialIds.length > 0) {
         const db = await cds.connect.to('db');
         await recomputeTutorialProgressBulkSQL(db, namespace, tutorialIds);
+      }
+      // Authorship FK auto-set (spec 2026-06-24-tutorial-authorship-fk).
+      // Best-effort: errors logged + swallowed so authorship resolution
+      // can't fail a content publish. `npm run migrate:authors` catches
+      // anything missed.
+      try {
+        await linkTutorialAuthorship(namespace, metadata);
+      } catch (err) {
+        LOG.warn('linkTutorialAuthorship failed; skipping', err);
       }
     }
     if (Object.keys(bodyTexts).length > 0) {
@@ -492,6 +502,122 @@ async function upsertTutorialMetadata(namespace, metadata) {
     console.log(`[content/publish] Upserted metadata for ${metaUpserted} tutorials`);
   }
   return { tutorialIds };
+}
+
+// Authorship FK auto-set (spec 2026-06-24-tutorial-authorship-fk).
+// Runs after upsertTutorialMetadata in every publish session. Uses the
+// same resolveTutorialAuthor() resolver as the offline backfill
+// (scripts/backfill-tutorial-authors.cjs) so the two paths can't
+// diverge.
+//
+// Resolution sources at publish time:
+//   - metadata[slug].primaryContributorEmail (single contributor — what
+//     the publish payload carries today; full TutorialContributors rows
+//     are seeded once by migrate-from-hana.js, not refreshed per publish)
+//   - TutorialMeta.ownerEmail (just-written by upsertTutorialMetadata
+//     above; typically === primaryContributorEmail)
+//   - any existing TutorialContributors rows on this tutorial (opportunistic
+//     contributor → user_ID link for rows that haven't been linked yet)
+//
+// Conservative: every UPDATE is gated by `…_ID IS NULL` so admin
+// corrections are preserved. Failure mode: caller wraps this in
+// try/catch — publish must not fail because of authorship resolution.
+async function linkTutorialAuthorship(namespace, metadata) {
+  const db = await cds.connect.to('db');
+  const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+
+  // Build email→user map ONCE per publish session. Skip the whole step
+  // gracefully if Users table is empty (fresh deploy before any user has
+  // logged in).
+  const usersTable = isHana
+    ? '"COM_SAP_DEVELOPERS_IMS_USERS"'
+    : 'com_sap_developers_ims_Users';
+  const userRows = await db.run(
+    `SELECT "ID" AS id, LOWER(TRIM("EMAIL")) AS email FROM ${usersTable} WHERE "EMAIL" IS NOT NULL AND LENGTH(TRIM("EMAIL")) > 0`
+  );
+  if (!userRows || userRows.length === 0) return;
+  const emailToUserId = new Map();
+  for (const r of userRows) {
+    const email = r.email || r.EMAIL;
+    const id = r.id || r.ID;
+    if (email && !emailToUserId.has(email)) emailToUserId.set(email, id);
+  }
+
+  const tutorialsTable = isHana
+    ? '"COM_SAP_DEVELOPERS_IMS_TUTORIALS"'
+    : 'com_sap_developers_ims_Tutorials';
+  const contributorsTable = isHana
+    ? '"COM_SAP_DEVELOPERS_IMS_TUTORIALCONTRIBUTORS"'
+    : 'com_sap_developers_ims_TutorialContributors';
+
+  let linkedAuthors = 0;
+  let linkedContributors = 0;
+
+  for (const [rawSlug, meta] of Object.entries(metadata)) {
+    const slug = rawSlug.toLowerCase();
+    try {
+      // Look up tutorial ID (case-insensitive). If the row didn't get
+      // upserted for some reason, skip — backfill will catch it later.
+      const tuts = await db.run(
+        `SELECT "ID" AS id FROM ${tutorialsTable} WHERE LOWER("SLUG") = ?`,
+        [slug]
+      );
+      const tutorialId = tuts?.[0]?.id ?? tuts?.[0]?.ID;
+      if (!tutorialId) continue;
+
+      // Fetch existing contributors (to opportunistically link their
+      // user_IDs AND to feed the resolver's "first contributor (any
+      // role)" fallback).
+      const contribRows = await db.run(
+        `SELECT "ID" AS id, "EMAIL" AS email, "ROLE" AS role FROM ${contributorsTable} WHERE "TUTORIAL_ID" = ?`,
+        [tutorialId]
+      );
+      const contribs = (contribRows || []).map(r => ({
+        id: r.id || r.ID,
+        email: r.email || r.EMAIL || null,
+        role: r.role || r.ROLE || null,
+      }));
+
+      // ownerEmail = TutorialMeta.ownerEmail (already written above) OR
+      // the publish payload's primaryContributorEmail as a fallback for
+      // the first publish.
+      const ownerEmail = meta.primaryContributorEmail || null;
+
+      const { authorUserId, contributorUserIds } = resolveTutorialAuthor({
+        contributors: contribs,
+        ownerEmail,
+        emailToUserId,
+      });
+
+      // Conservative: only set Tutorials.author_ID if currently NULL.
+      if (authorUserId) {
+        const res = await db.run(
+          `UPDATE ${tutorialsTable} SET "AUTHOR_ID" = ? WHERE "ID" = ? AND "AUTHOR_ID" IS NULL`,
+          [authorUserId, tutorialId]
+        );
+        // CAP's db.run for UPDATE returns affected rows on HANA as
+        // either a number or an object — count it loosely.
+        if (res && (typeof res === 'number' ? res : 1) > 0) linkedAuthors++;
+      }
+
+      // Opportunistic per-contributor link (only NULL user_ID rows).
+      for (const c of contributorUserIds) {
+        const cRow = contribs[c.contributorIndex];
+        if (!cRow?.id) continue;
+        await db.run(
+          `UPDATE ${contributorsTable} SET "USER_ID" = ? WHERE "ID" = ? AND "USER_ID" IS NULL`,
+          [c.userId, cRow.id]
+        );
+        linkedContributors++;
+      }
+    } catch (perSlugErr) {
+      LOG.warn(`linkTutorialAuthorship: ${slug} failed`, perSlugErr.message);
+    }
+  }
+
+  if (linkedAuthors || linkedContributors) {
+    LOG.info(`linkTutorialAuthorship: linked ${linkedAuthors} author(s), ${linkedContributors} contributor(s)`);
+  }
 }
 
 async function upsertBodyTexts(namespace, bodyTexts) {

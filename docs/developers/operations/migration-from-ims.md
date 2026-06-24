@@ -87,3 +87,38 @@ npx cds bind --exec -- node --input-type=module -e "
 - [BTP role migration](btp-role-migration.md)
 - Spec: `docs/superpowers/specs/2026-06-18-394-disable-change-tracking-during-migration-design.md`
 - Hybrid test (proves the suppression works on real HANA): [`test/hybrid/migration-mode.test.js`](../../../test/hybrid/migration-mode.test.js)
+
+## Step 4 — Backfill tutorial authorship
+
+After `migrate-user-progress.js` (Step 2) succeeds, the `Users` table is populated. Step 1 has already loaded `Tutorials`, `TutorialContributors`, and `TutorialMeta`. **Run the authorship backfill so existing tutorials and contributors get linked to the corresponding Users rows.**
+
+Spec: [`docs/superpowers/specs/2026-06-24-tutorial-authorship-fk-design.md`](../../superpowers/specs/2026-06-24-tutorial-authorship-fk-design.md).
+
+```bash
+# Dry run — review the orphans report at .migration-data/tutorial-author-backfill-<ts>.json
+npx cds bind --exec -- node scripts/backfill-tutorial-authors.cjs
+
+# Commit (npm script alias for --commit)
+npm run migrate:authors
+```
+
+What the backfill does:
+
+- Builds a `LOWER(TRIM(email)) → Users.ID` map once (warns on duplicate-email Users rows; picks lexicographically-first ID).
+- **Phase A** — for every `TutorialContributors` row with `user_ID IS NULL AND email IS NOT NULL`, looks up the email in the map. Hit → `UPDATE … SET user_ID = ? WHERE ID = ? AND user_ID IS NULL`. Miss → orphan entry in the report.
+- **Phase B** — for every `Tutorials` row with `author_ID IS NULL`, resolves the primary author via the shared [`srv/lib/resolve-tutorial-author.js`](../../../srv/lib/resolve-tutorial-author.js) resolver: (a) prefer contributors with `role IN ('author','owner')` ordered by `createdAt`, (b) fallback to first contributor, (c) fallback to `TutorialMeta.ownerEmail`. First map-hit wins.
+- Writes the full report to `.migration-data/tutorial-author-backfill-<ISO-timestamp>.json` — summary counts, warnings (duplicate user emails), orphan rows by contributor and by tutorial (with the candidate emails tried).
+
+The backfill is **idempotent** and **non-destructive**:
+
+- Every UPDATE is gated by `WHERE …_ID IS NULL`. Re-running with no schema changes produces zero updates.
+- Re-running after a fresh `migrate-user-progress.js` batch arrives picks up the new matches automatically.
+- Manual admin corrections (a future spec — admin UI for editing authorship) are NEVER overwritten by either the backfill or the live publish path's `linkTutorialAuthorship` step.
+
+Orphans (contributors / tutorials whose email isn't in `Users`) stay null and are listed in the JSON report for manual review.
+
+### See also (Step 4)
+
+- Hybrid test (pins the runbook order on real HANA): [`test/hybrid/migration-runbook-order.test.js`](../../../test/hybrid/migration-runbook-order.test.js)
+- Backfill script: [`scripts/backfill-tutorial-authors.cjs`](../../../scripts/backfill-tutorial-authors.cjs)
+- Pure resolver (shared with the live publish path): [`srv/lib/resolve-tutorial-author.js`](../../../srv/lib/resolve-tutorial-author.js)
