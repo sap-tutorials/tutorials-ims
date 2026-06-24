@@ -21,6 +21,8 @@ The immediate consumer is the upcoming Advocate ↔ User 1:1 feature (separate s
 - Add `Tutorials.author : Association to Users` — the **primary author** FK, single-valued. Nullable.
 - Add `TutorialContributors.user : Association to Users` — per-contributor FK, so co-authored tutorials appear in **every** contributor's "authored tutorials" list. Nullable.
 - Add inverse associations on `Users`: `authoredTutorials`, `tutorialContributions` — so consumers (notably the upcoming Object-Page facet) can navigate `user/authoredTutorials/...` instead of writing a custom join.
+- **Flatten read-only `author.*` columns** onto `AdminService.Tutorials` (and any public Tutorials projection) so API consumers and the admin UI see `authorEmail`, `authorSapId`, `authorDisplayName` etc. without `$expand`.
+- **Searchable Users value help** on `Tutorials.author` so admins can find an author by name / email / sapId — `Users` has ~1k+ rows so a fixed-values dropdown is impractical; uses `$search` with `@cds.search` on Users.
 - **Idempotent one-shot backfill script** that populates both FKs from existing data, with a dry-run-first / review-orphans / commit workflow.
 - **Auto-set on every publish** going forward, via shared resolver (`srv/lib/resolve-tutorial-author.js`) so backfill and publish never diverge.
 - **Migration runbook update** so the backfill is a documented step after every IMS user-progress import.
@@ -94,6 +96,90 @@ Two FKs give us both:
 - `WHERE TutorialContributors.user_ID = ?` → the "contributed in any role" path (might be 40 rows).
 
 The OP can show both as separate facets ("Authored" vs "Contributed to") in the follow-up spec.
+
+## Surfacing User fields read-only on Tutorials
+
+The new `Tutorials.author` FK is more useful if API consumers can read the author's `email` / `sapId` / `displayName` directly, without having to issue an `$expand=author` round-trip. Two changes:
+
+### Projection — flatten `author.*` as read-only scalars
+
+In `srv/admin-service.cds`, extend the existing `Tutorials` projection:
+
+```cds
+@cds.redirection.target: true
+@Capabilities.ChangeTracking : { Supported: true }
+entity Tutorials as projection on ims.Tutorials {
+  *,
+  cast(legacyId as String) as legacyIdStr : String,
+  // existing projections unchanged ...
+  // NEW — read-only flattened User fields. Admin UI gets labeled cells
+  // without needing $expand; OData consumers see plain columns. Writes
+  // are silently no-op (derived columns).
+  author.email       as authorEmail       @Common.FieldControl: #ReadOnly,
+  author.sapId       as authorSapId       @Common.FieldControl: #ReadOnly,
+  author.displayName as authorDisplayName @Common.FieldControl: #ReadOnly,
+  author.firstName   as authorFirstName   @Common.FieldControl: #ReadOnly,
+  author.lastName    as authorLastName    @Common.FieldControl: #ReadOnly
+};
+```
+
+The same flattening is added to any public projection that exposes Tutorials (e.g., the `/api/` developer-service projection if it surfaces tutorial metadata — implementer checks during the plan phase). Goal: a `GET /admin/Tutorials?$top=1` response includes `authorEmail` as a top-level field.
+
+### Admin-UI value help — searchable Users picker
+
+`Users` is already projected on AdminService (`srv/admin-service.cds:17`), so the value-help target exists. With ~1k+ rows we need a **search-enabled** value help, not a fixed-values dropdown. Annotation in `app/admin-annotations.cds`:
+
+```cds
+annotate AdminService.Tutorials with {
+  author @Common.Label: 'Author'
+         @Common.Text: author.displayName
+         @Common.TextArrangement: #TextOnly
+         @Common.ValueList: {
+           CollectionPath: 'Users',
+           SearchSupported: true,
+           Parameters: [
+             { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: author_ID, ValueListProperty: 'ID' },
+             { $Type: 'Common.ValueListParameterDisplayOnly',                               ValueListProperty: 'displayName' },
+             { $Type: 'Common.ValueListParameterDisplayOnly',                               ValueListProperty: 'email' },
+             { $Type: 'Common.ValueListParameterDisplayOnly',                               ValueListProperty: 'sapId' }
+           ]
+         };
+};
+```
+
+Two things make this work for a large `Users` table:
+
+- `SearchSupported: true` tells the FE V4 value-help dialog to issue `?$search=…` queries instead of loading everything. CAP's OData layer translates `$search` to a `CONTAINS` across all searchable columns.
+- The value help renders three columns (displayName, email, sapId) so admins can type "tom" → see "Thomas Jung / tom.jung@sap.com / I809764" → pick — solving the original "lots of users, need to search by name or email" requirement.
+
+`@Common.Text: author.displayName` makes the *display* of the picked author resolve to a human name (via the same Feb 2025 association-FK propagation that PR #607 exercised — annotations on the association copy onto the FK). So `LineItem` can bind `author_ID` (or `author`) and FE V4 renders "Thomas Jung", not the GUID.
+
+**FK-annotation propagation caveat:** `app/admin-annotations.cds:1683-1695` documents a pitfall — for `AdvocateTopics` (which is a projection from a composition aspect), annotations on the `tag` association did NOT propagate to the generated `tag_ID` FK, and a second `annotate ... { tag_ID @... }` block was rejected with `Element "tag_ID" has not been found`. PR #607's fix was to bind LineItem to `tag_ID` and rely on the (then-working) Feb 2025 association-propagation. The implementer should verify in the emitted EDMX (`npx cds compile srv/admin-service.cds --to edmx`) that `AdminService.Tutorials/author_ID` carries the propagated `@Common.Text` + `@Common.ValueList`. `Tutorials` is a **direct** projection on `ims.Tutorials` (not a projection-from-aspect like AdvocateTopics), so propagation should work — but the EDMX inspection is the proof, identical to what PR #607 did.
+
+### Path-through-nullable-FK behavior
+
+The flattened columns are path expressions through `author` — a nullable association. When `Tutorials.author_ID` is null (every tutorial whose author couldn't be matched during backfill), every flattened column (`authorEmail`, `authorSapId`, etc.) is null too. That's the desired behavior — admins see blank cells, not errors — and matches how every other association-path expression in this codebase behaves. No compile warning expected; the implementer should still smoke-check the first cold deploy that nullable rows don't trigger any 500-class errors on the OData feed.
+
+### `$search` requires entity searchable fields
+
+CAP's `$search` requires fields to be declared searchable via `@cds.search` (the canonical CAP annotation; `@Search.defaultSearchElement` is a different OData-vocabulary term used in legacy contexts). Add to `srv/admin-service.cds` on the `Users` projection:
+
+```cds
+@cds.search: { displayName, firstName, lastName, email, sapId }
+entity Users as projection on ims.Users;
+```
+
+This makes a query like `GET /admin/Users?$search=jung` match rows where any of those columns contain "jung" (case-insensitive on HANA). The FE V4 value-help dialog wires its search box to that.
+
+### Tests
+
+Extend `test/admin-annotations.test.js` (already touched by PR #607) with three assertions:
+
+1. `AdminService.Tutorials/author` has a `ValueList` targeting `Users` with `SearchSupported="true"` in `$metadata`.
+2. **FK propagation:** `AdminService.Tutorials/author_ID` carries `@Common.Text` and `@Common.ValueList` in the emitted EDMX (catches a future regression of the Feb 2025 association-propagation behavior).
+3. `GET /admin/Users?$search=__TEST__authorSeed` returns the seeded user (hybrid test, depends on `@cds.search` actually wiring through to the HANA `CONTAINS` clause).
+
+Plus one smoke assertion: `GET /admin/Tutorials?$top=1&$filter=author_ID ne null` returns a row whose `authorEmail` is non-null (i.e., the flattening works at the live HTTP surface). Note: this assertion can only pass **after** the migration runbook's backfill step has run — sequence the smoke run accordingly.
 
 ## Backfill script — `scripts/backfill-tutorial-authors.cjs`
 
@@ -291,6 +377,8 @@ The body of that memory points back to the runbook section, so a future agent he
 
 - [ ] `db/schema.cds` carries the three new associations (`Tutorials.author`, `TutorialContributors.user`, `Users.authoredTutorials` + `Users.tutorialContributions`).
 - [ ] `db/last-dev/csn.json` regenerated.
+- [ ] `srv/admin-service.cds` flattens `author.email` / `author.sapId` / `author.displayName` / `author.firstName` / `author.lastName` as read-only columns on the Tutorials projection. `Users` projection carries `@cds.search`.
+- [ ] `app/admin-annotations.cds` annotates `Tutorials.author` with a searchable `Users` value help (`SearchSupported: true`, three display columns).
 - [ ] `scripts/backfill-tutorial-authors.cjs` exists, runs idempotently, writes the orphans report.
 - [ ] `srv/lib/resolve-tutorial-author.js` exports the pure resolver.
 - [ ] `srv/lib/content-publish-session.js` calls the resolver in a try/catch and never lets publish fail because of it.
@@ -299,5 +387,6 @@ The body of that memory points back to the runbook section, so a future agent he
 - [ ] `MEMORY.md` carries the cross-link.
 - [ ] Unit tests pass (`test/unit/resolve-tutorial-author.test.js`).
 - [ ] Hybrid tests pass (`test/hybrid/tutorial-author-backfill.test.js`, `test/hybrid/migration-runbook-order.test.js`).
-- [ ] Smoke test guards post-deploy (`test/smoke/tutorial-author-fk.smoke.test.js`).
+- [ ] Smoke test guards post-deploy (`test/smoke/tutorial-author-fk.smoke.test.js`) — covers both the FK population AND the read-only flattened columns.
+- [ ] Admin-annotations regression test asserts `Tutorials/author` ValueList shape + `Users` `$search` works.
 - [ ] No regressions in `test/admin-annotations.test.js`, `test/admin-service.test.js`, `test/admin-drafts.test.js`, `test/admin-schema-ext.test.js`.
