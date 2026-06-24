@@ -1099,9 +1099,10 @@ Closes the manual-dispatch UX gap PR #610 partially closed at the CLI surface, b
 | app/admin-annotations.cds | New \`DataFieldForAction\` in Tutorials \`@UI.Identification\` |
 | app/admin/tutorials/webapp/manifest.json | Wire RebuildTutorial controller extension |
 | app/admin/tutorials/webapp/ext/RebuildTutorial.js | (new) confirm dialog + bound action call + toast |
-| app/admin/tutorials/webapp/i18n/i18n.properties | (new or extended) 5 strings for button + dialog + toasts |
-| srv/lib/__tests__/admin-rebuild-tutorial.test.js | (new) 7 unit tests |
-| test/smoke/admin-endpoints.test.js | 1 additive 403 assertion |
+| app/admin/tutorials/webapp/i18n/i18n.properties | (new) 5 strings for button + dialog + toasts |
+| app/admin/tutorials/webapp/manifest.json | Wire i18n model + RebuildTutorial controller extension |
+| srv/lib/__tests__/admin-rebuild-tutorial.test.js | (new) 7 tests total — 5 active + 2 .todo (manual verification at Task 10) |
+| test/smoke/auth-enforcement.test.js | 1 additive 401/403 assertion |
 
 ## Test results
 
