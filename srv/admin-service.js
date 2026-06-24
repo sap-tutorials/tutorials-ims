@@ -47,6 +47,22 @@ export default class AdminService extends cds.ApplicationService {
       { code: 'EMEA',     label: 'EMEA' },
       { code: 'APJ',      label: 'APJ' },
     ]);
+    // AdvocateLinks.kind DDLB. Keep in sync with the enum on
+    // db/advocates.cds:AdvocateLinks.kind — both are source-of-truth (the
+    // DDLB drives the admin UI, the @assert.range enum rejects out-of-band
+    // writes). Labels are display-only; the `code` is what's persisted.
+    this.on('READ', 'AdvocateLinkKinds', () => [
+      { code: 'LinkedIn',     label: 'LinkedIn'      },
+      { code: 'X',            label: 'X (Twitter)'   },
+      { code: 'Mastodon',     label: 'Mastodon'      },
+      { code: 'BlueSky',      label: 'BlueSky'       },
+      { code: 'GitHub',       label: 'GitHub'        },
+      { code: 'YouTube',      label: 'YouTube'       },
+      { code: 'Blog',         label: 'Blog'          },
+      { code: 'SapCommunity', label: 'SAP Community' },
+      { code: 'Email',        label: 'Email'         },
+      { code: 'Other',        label: 'Other'         },
+    ]);
     this.on('READ', 'AnalyticsTaskTypes', () => [
       { code: 'TUTORIAL', label: 'Tutorial' },
       { code: 'GROUP',    label: 'Group'    },

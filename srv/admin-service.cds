@@ -106,6 +106,14 @@ service AdminService {
   @readonly @cds.persistence.skip entity TaskTypes        { key code : String(20); }
   @readonly @cds.persistence.skip entity AdvocateRegions  { key code : String(16); label : String(40); }
 
+  // Code list for AdvocateLinks.kind — mirrors the enum on db/advocates.cds.
+  // The two are kept in sync by hand; this list is the source of truth for
+  // the admin DDLB (rendered via @Common.ValueListWithFixedValues), and the
+  // @assert.range enum on the underlying field rejects writes that bypass
+  // the dropdown (CSV import, REST, etc.). When you add a new social-link
+  // kind, edit BOTH (this list + db/advocates.cds:AdvocateLinks.kind).
+  @readonly @cds.persistence.skip entity AdvocateLinkKinds { key code : String(32); label : String(40); }
+
   // Analytics-specific code lists (label included for human-readable dropdowns).
   // taskType differs from TaskTypes above: analytics records carry TUTORIAL,
   // MISSION, GROUP — never CHECKPOINT — because completion is recorded against
