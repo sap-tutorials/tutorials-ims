@@ -161,12 +161,15 @@ export default defineConfig({
         ]},
         { text: 'Reference', collapsed: true, items: [
           { text: 'AI-friendly consumption',   link: '/developers/reference/ai-consumption' },
+          { text: 'CAP / CDS gotchas',         link: '/developers/reference/cap-cds-gotchas' },
           { text: 'Cookie and storage analysis', link: '/developers/reference/cookie-and-storage-analysis' },
           { text: 'Design decisions',          link: '/developers/reference/design-decisions' },
           { text: 'External integrations',     link: '/developers/reference/external-integrations' },
+          { text: 'HANA / HDI / SQL gotchas',  link: '/developers/reference/hana-hdi-gotchas' },
           { text: 'Iframe allowlist',          link: '/developers/reference/iframe-allowlist' },
           { text: 'Sage extension migration',  link: '/developers/reference/sage-extension-migration' },
-          { text: 'Theme variants',            link: '/developers/reference/theme-variants' }
+          { text: 'Theme variants',            link: '/developers/reference/theme-variants' },
+          { text: 'Vue islands / Hugo / Vite gotchas', link: '/developers/reference/vue-islands-gotchas' }
         ]}
       ],
 

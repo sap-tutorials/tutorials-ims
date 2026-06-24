@@ -179,3 +179,127 @@ Cross-references:
 - **Slugs missing after deploy**: Run `npx cds bind --exec -- node scripts/setup-dev-data.cjs`. The script assigns slugs from `.migration-data/slug-mapping.json`.
 - **Content 404s**: Content must be published to HANA after deploy. Run `npm run publish-content` with `CAP_BASE_URL` and `CONTENT_API_KEY` set.
 - **Role collection not working**: Role collections are created by XSUAA update, but user assignment is manual (BTP Cockpit → Security → Role Collections).
+
+## Gotchas (deploy-time pitfalls)
+
+A reference of pitfalls discovered while deploying this project's MTA. Each subsection is a single discovered failure mode with cause and fix. Originally maintained as agent-memory entries; promoted here 2026-06-24 so future deployers find them via the sidebar instead of re-discovering them.
+
+### `${VAR}` placeholders in mtaext are resolved server-side — envsubst locally first
+
+`${GITHUB_DISPATCH_TOKEN}` (and any other `${...}` placeholder) in `deploy/*.mtaext` is **not** substituted from the local shell's environment. The MTA deploy-service does the resolution server-side against MTA descriptor parameters, and `mta.yaml` doesn't declare these as parameters — so neither `GITHUB_DISPATCH_TOKEN=x cf deploy ...` nor `CF_VAR_github_dispatch_token=x cf deploy ...` work. `cf deploy` itself has no `--var` flag (verified 2026-06-20: returns "Unknown or wrong flags: --var").
+
+**Why:** deploy fails with `Error resolving merged descriptor properties and parameters: Unable to resolve "tutorials-srv#GITHUB_DISPATCH_TOKEN"`.
+
+**How to apply:** When deploying locally without the real PAT (e.g. when CI normally injects it), pre-resolve the mtaext with `envsubst` into a temp copy, deploy that, and delete it after:
+
+```bash
+cd d:/projects/tutorials-poc
+export GITHUB_DISPATCH_TOKEN=admin-rebuild-disabled-pending-pr   # or real PAT
+envsubst < deploy/dev.mtaext > .deploy/dev.mtaext.resolved
+cd .deploy && cf deploy mta_archives/tutorials-poc_1.0.0.mtar -e dev.mtaext.resolved -f
+rm .deploy/dev.mtaext.resolved
+```
+
+A placeholder PAT is safe for ad-hoc deploys: only [srv/lib/rebuild-trigger.js](../../../srv/lib/rebuild-trigger.js)'s admin-write debounce-dispatch consumes it (calling GitHub's `workflow_dispatches` endpoint with `Authorization: token <value>`). GitHub returns 401, the fetch wrapper catches, logs warn, returns — no propagation. So admin-save → auto-rebuild silently no-ops. Reading tutorials, learner progress, quiz submission, code-check, AI-author, search, all admin reads — none affected.
+
+CI uses `--var github-dispatch-token=...` per CLAUDE.md docs — but that's the GitHub Actions / `mbt` deploy step, not raw `cf deploy`. The `mbt deploy` plugin has the flag; `cf deploy` doesn't.
+
+### Empty-value placeholders become YAML `null` and MTA rejects them
+
+When `envsubst < dev.mtaext > dev.resolved.mtaext` substitutes a placeholder with an EMPTY env var (e.g. unset `GITHUB_DISPATCH_TOKEN=""`), the resulting line is `KEY:` followed by a single space and no value. YAML parses that as `null`, NOT as `""`. The MTA descriptor merger rejects null with `"The property X is not optional and has no value"` — even though the BASE mta.yaml declares the property with `KEY: ""` (empty string).
+
+**Why:** Any empty placeholder in dev/qa/prod.mtaext stops cf deploy at the descriptor-merge step.
+
+**How to apply:** When running a local deploy with no real value for a secret-bearing var, **strip the empty placeholder lines** from the resolved mtaext rather than letting them write a YAML-null override. One-liner:
+
+```bash
+GITHUB_DISPATCH_TOKEN="" SMTP_HOST="" ... envsubst '...' < deploy/dev.mtaext > deploy/dev.resolved.mtaext
+sed -E -i '/^[[:space:]]+[A-Z_]+:[[:space:]]*$/d' deploy/dev.resolved.mtaext
+```
+
+After the strip, the base mta.yaml's `KEY: ""` default takes effect. This matches the actual deploy intent ("don't override").
+
+### mtaext cannot introduce new properties — base mta.yaml must declare them first
+
+MTA spec requires the base `mta.yaml` to **declare** every property before a `.mtaext` extension descriptor can **override** it. An mtaext that adds a property not present on the base module fails with:
+
+```text
+Error merging descriptors: The property "tutorials-srv#X" is not optional and has no value.
+```
+
+**Caught 2026-06-23 DEV deploy:** `deploy/dev.mtaext` declared `CONTENT_API_KEY`, `EXPOSE_CAP_UI`, `REBUILD_TARGET_ENV`, `GITHUB_DISPATCH_TOKEN` on tutorials-srv, but `.deploy/mta.yaml`'s tutorials-srv module declared NONE of them. CI's Build & Deploy workflow had been failing at cf login (UAA/OTP cutover since 2026-06-21) before ever reaching descriptor-merge, so this bug had been hiding for days. Fixed in PR #584.
+
+**How to apply:** Before adding a new env var to any `deploy/<env>.mtaext`, **first** add it (with a safe default like `""`, `false`, or a benign string) to the matching module in `.deploy/mta.yaml` and source `mta.yaml`. Empty string for secrets, `false`/dormant defaults for flags, `"dev"` placeholder for env strings.
+
+### `cf set-env` doesn't survive MTA redeploys — use mtaext
+
+CF env vars set via `cf set-env tutorials-srv FOO bar` are dropped by every MTA redeploy. Symptom: a manually-set var works for a while, then a deploy ships and the runtime quietly loses it (#435: `GITHUB_DISPATCH_TOKEN` unset → admin-write rebuild dispatch silently no-ops; surfaced via #382 phase F1 manually-fired runs).
+
+**Why:** `cf deploy` materializes `tutorials-srv` env from the mtaext `properties:` block + the resource bindings. Anything set out-of-band via `cf set-env` is invisible to MTA and gets clobbered.
+
+**How to apply:** When asked "put X in env so it survives," default to the mtaext path:
+
+1. Add `FOO: ${foo}` to `deploy/<env>.mtaext` `tutorials-srv` properties for each env.
+2. If the value is the same across envs, use one placeholder + one CI secret.
+3. If per-env literal (like `REBUILD_TARGET_ENV: dev`/`qa`/`prod`), put the literal in each mtaext.
+4. Add `--var foo="${{ secrets.FOO }}"` to the `cf deploy` invocation in `.github/workflows/deploy.yml`.
+5. Document in [GitHub Dispatch PAT Rotation](github-dispatch-pat-rotation.md)-style runbook + add a CLAUDE.md gotcha for local manual deploys (`--var foo=...` on `cd .deploy && cf deploy ... -e ../deploy/dev.mtaext`).
+
+The existing pattern (`${content-api-key}`, `${rebuild-api-key}`, `${approuter-url}`) is the canonical reference — don't invent a new pattern unless ≥3 such tokens exist.
+
+**Safe failure mode:** if the GH Actions secret is missing at deploy, `cf deploy` passes empty `--var`, the property resolves to empty string, runtime falls back to existing graceful-degraded behavior. No outage.
+
+PR: #438. Spec: `docs/superpowers/specs/2026-06-19-github-dispatch-token-mtaext-design.md`.
+
+### `cf deploy` buffers stdout for 5+ minutes during stage transitions
+
+`cf deploy` (the MTA deployer plugin) does NOT stream stdout reliably. During heavy stage transitions (staging, binding, async upload), the output file can stay 0-bytes for 5+ minutes while the deploy is making real progress on the cluster. The CLI flushes its buffer only at major stage boundaries. Caught 2026-06-18 when `tail` of the task output file showed 0 bytes for 4+ minutes — but `cf apps` showed `tutorials-srv` had been started 5 minutes earlier.
+
+**Why:** The `cf deploy` plugin uses the CF API to trigger async build/staging tasks on the cluster. Those tasks run independently of the local CLI session. The CLI polls and prints status updates only when the cluster reports a stage transition (e.g., "Application X staged" → "Starting application X"). If the cluster spends 5 minutes binding services or running buildpack stages, the local CLI sits silent. There's no `--verbose` or `--stream-output` flag that fixes this — it's how the plugin works.
+
+**How to apply:**
+
+1. **NEVER trust an empty `cf deploy` task output file as evidence the deploy is hung.** It's almost certainly progressing on the cluster.
+2. **Before assuming a deploy is hung, probe live app state directly:**
+
+   ```bash
+   cf apps  # see which apps are started/stopped
+   curl -s -o /dev/null -w '%{http_code}\n' https://<app>.cfapps.<region>.hana.ondemand.com/health
+   cf events <app-name> | head -10  # recent stage events
+   ```
+
+   If `cf apps` shows `web:1/1` and `/health` returns 200, the deploy is effectively done — even if the local cf CLI is still spinning.
+3. **The deploy is only TRULY hung if:**
+   - `cf apps` shows the app is `stopped` 10+ minutes after `audit.app.start` event
+   - No events at all in `cf events <app>` for the last 10 minutes
+   - `cf logs <app> --recent` shows no activity
+4. **For agent workflows:** Don't `sleep N && tail` the task output. Probe the actual cluster state every 60s during a deploy.
+
+### `mbt build`'s `cp -r` adds files but never deletes — renames leave ghosts
+
+The `before-all` build hook in `.deploy/mta.yaml` copies app builds into the approuter's static directory:
+
+```yaml
+- npm --prefix ../app/admin-shell install
+- npm --prefix ../app/admin-shell run build
+- mkdir -p static/admin-ui
+- cp -r ../app/admin-shell/dist/. static/admin-ui/
+```
+
+`cp -r` is a UNION operation, not a sync. It ADDS files but never DELETES them. So when a source file is **renamed** (e.g. `AdvocatePhotoController.controller.js` → `AdvocatePhotoController.js` in PR #405), the OLD file persists in `approuter/static/admin-ui/` forever, and ships with every subsequent deploy alongside the new one. Diagnostic symptom: after a rename PR deploys cleanly, the OLD module still loads at runtime (browser caches lie too, but this is a real ghost). Caught 2026-06-18 by `unzip -l mta_archives/*.mtar | grep <name>` showing both files.
+
+**Why:** `mbt build` only ever invokes the hooks declared in `mta.yaml`. There's no implicit cleanup of the destination directory between builds — by design (some modules want manual additions to survive). Combined with the `.controller.js` / `.js` suffix collision in UI5 (FE V4 `press` bindings load plain `.js`; controller extensions load `.controller.js`), you get a deploy that LOOKS successful but ships TWO files for the same logical module.
+
+**How to apply:**
+
+1. After ANY rename of a file under `app/<X>/`, manually `rm` the old name from `approuter/static/<X>/` BEFORE running `mbt build`. There is no automated guard.
+2. Always verify the mtar contents before deploy on rename PRs:
+
+   ```bash
+   cd .deploy && mkdir -p ..deploy_mta_inspect && cd ..deploy_mta_inspect
+   unzip -p ../mta_archives/tutorials-poc_1.0.0.mtar tutorials-approuter/data.zip > approuter.zip
+   unzip -l approuter.zip | grep <renamed-file>
+   ```
+
+   Should show ONE file. Two = ghost.
+3. Long-term fix worth proposing: prepend the static-dir copy with `rm -rf static/admin-ui` (or per-component `rm -rf static/admin-ui/components/<X>`). Adds ~100ms to build, eliminates the ghost-file class of bug entirely. Same hazard exists for analytics-ui, scanner-ui, display-app cp lines.

@@ -42,6 +42,9 @@ Runbooks and operational references. Read these when you need to deploy, test, o
 
 Topics that aren't on a critical path but matter when you go looking.
 
+- [CAP / CDS Gotchas](reference/cap-cds-gotchas.md) — discovered failure modes in CAP services, CDS models, drafts, audit-logging, OData
+- [HANA / HDI / SQL Gotchas](reference/hana-hdi-gotchas.md) — discovered failure modes in HANA SQL, HDI deploy artifacts, SPARQL, hdbgrants
+- [Vue Islands / Hugo / Vite Gotchas](reference/vue-islands-gotchas.md) — discovered failure modes in the frontend pipeline
 - [Theme Variants](reference/theme-variants.md) — building event themes on Fiori Horizon
 - [AI Consumption](reference/ai-consumption.md) — making developers.sap.com AI-friendly
 - [Cookie & Storage Analysis](reference/cookie-and-storage-analysis.md) — auditor's reference
