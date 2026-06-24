@@ -23,6 +23,16 @@ async function seedCompletedTutorial() {
     { ID: 's3', tutorial_ID: 't1', stepOrder: 3, legacyId: 3003, title: 'Step 3' },
   ];
 
+  // Fixture-scoped cleanup — the in-memory SQLite from cds.test('serve', ...)
+  // persists across tests within a file, so a 2nd call to this helper would
+  // otherwise trip UNIQUE constraints (e.g. Users.sapId). Idempotent: DELETE
+  // on a missing row is a no-op. Order matters for FK satisfaction — children
+  // before parents.
+  await DELETE.from(TaskRecords).where({ user_ID: 'u1' });
+  await DELETE.from(Steps).where({ tutorial_ID: 't1' });
+  await DELETE.from(Tutorials).where({ ID: 't1' });
+  await DELETE.from(Users).where({ ID: 'u1' });
+
   await INSERT.into(Users).entries(testUser);
   await INSERT.into(Tutorials).entries(testTutorial);
   await INSERT.into(Steps).entries(testSteps);
@@ -76,15 +86,9 @@ describe('resetTutorialProgress handler — happy path', () => {
   let testSteps;
 
   beforeEach(async () => {
-    // Clean any data left over from prior tests in this describe block so the
-    // shared seed helper can re-INSERT without tripping UNIQUE constraints.
-    const { Users, Tutorials, Steps, TaskRecords } = cds.entities('com.sap.developers.ims');
-    await DELETE.from(TaskRecords).where({ user_ID: 'u1' });
-    await DELETE.from(Steps).where({ tutorial_ID: 't1' });
-    await DELETE.from(Tutorials).where({ ID: 't1' });
-    await DELETE.from(Users).where({ ID: 'u1' });
-
     // Use the shared seed helper defined in Task 1 (do NOT duplicate).
+    // Fixture-scoped cleanup is performed inside seedCompletedTutorial() so
+    // every caller (Tasks 3–8) gets test isolation for free.
     ({ testUser, testTutorial, testSteps } = await seedCompletedTutorial());
   });
 
