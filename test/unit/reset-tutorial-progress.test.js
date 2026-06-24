@@ -848,3 +848,34 @@ describe('Task 18 — resetTutorialProgress rate limit', () => {
     ).rejects.toMatchObject({ code: 429 });
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// Task 19 — admin TaskRecords list surfaces attemptNumber + SUPERSEDED-hidden
+// filter. The Fiori Elements LineItem in admin-annotations.cds should include
+// an Attempt column, and the default SelectionPresentationVariant should
+// exclude status=SUPERSEDED so admins debugging current state don't see
+// historical audit rows by default.
+// ─────────────────────────────────────────────────────────────────────
+describe('Task 19 — admin TaskRecords annotations (attemptNumber + SUPERSEDED-hidden)', () => {
+  const annotationsPath = join(__dirname_t13, '../../app/admin-annotations.cds');
+  const annotationsSrc = fs.readFileSync(annotationsPath, 'utf8');
+
+  it('admin-annotations.cds declares attemptNumber in the TaskRecords LineItem', () => {
+    // The Fiori Elements ListReport reads the @UI.LineItem array — adding
+    // attemptNumber there makes it a default column. We check the source
+    // string rather than the compiled CSN to keep this a fast unit test.
+    expect(annotationsSrc).toMatch(/AdminService\.TaskRecords/);
+    expect(annotationsSrc).toMatch(/Value:\s*attemptNumber/);
+    expect(annotationsSrc).toMatch(/Label:\s*'Attempt'/);
+  });
+
+  it('admin-annotations.cds declares a SUPERSEDED-excluding SelectionPresentationVariant', () => {
+    // Pattern: SelectionPresentationVariant#default with a SelectOptions
+    // range on status using Sign: #E (EXCLUDE) and Low: 'SUPERSEDED'.
+    // This is what makes SUPERSEDED hidden by default in the admin list.
+    expect(annotationsSrc).toMatch(/SelectionPresentationVariant\s*#default/);
+    expect(annotationsSrc).toMatch(/Sign:\s*#E/);
+    expect(annotationsSrc).toMatch(/Low:\s*'SUPERSEDED'/);
+    expect(annotationsSrc).toMatch(/PropertyName:\s*status/);
+  });
+});

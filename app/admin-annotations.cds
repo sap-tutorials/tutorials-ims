@@ -999,6 +999,64 @@ annotate AdminService.JobLogItems with @(
   Capabilities.UpdateRestrictions.Updatable: false
 );
 
+// --- TaskRecords (per-user progress audit; SUPERSEDED rows are historical
+// attempts kept for audit, hidden from the default list view per issue #600).
+// `attemptNumber` surfaces alongside status/progress so audit reviewers can
+// see which attempt a row belongs to. The default SelectionPresentationVariant
+// excludes status=SUPERSEDED — admins flip the status filter to see history.
+annotate AdminService.TaskRecords with {
+  taskType      @Common.Label: 'Task Type'  @Common.ValueListWithFixedValues;
+  status        @Common.Label: 'Status'     @Common.ValueListWithFixedValues;
+  progress      @Common.Label: 'Progress';
+  attemptNumber @Common.Label: 'Attempt';
+  completionDate @Common.Label: 'Completed';
+  titleSnapshot @Common.Label: 'Title';
+};
+
+annotate AdminService.TaskRecords with @(
+  UI: {
+    HeaderInfo: {
+      TypeName: 'Task Record', TypeNamePlural: 'Task Records',
+      Title: { Value: titleSnapshot },
+      Description: { Value: status }
+    },
+    SelectionFields: [ taskType, status, completionDate, attemptNumber ],
+    LineItem: [
+      { Value: completionDate },
+      { Value: taskType },
+      { Value: titleSnapshot },
+      { Value: status },
+      { Value: progress },
+      { $Type: 'UI.DataField', Value: attemptNumber, Label: 'Attempt' }
+    ],
+    // Default-hide SUPERSEDED rows so admins debugging current state aren't
+    // visually cluttered with historical audit attempts. Admins can flip the
+    // status filter to view SUPERSEDED rows when reviewing reset history.
+    SelectionPresentationVariant #default: {
+      $Type: 'UI.SelectionPresentationVariantType',
+      Text: 'Active (excludes SUPERSEDED)',
+      SelectionVariant: {
+        $Type: 'UI.SelectionVariantType',
+        SelectOptions: [{
+          $Type: 'UI.SelectOptionType',
+          PropertyName: status,
+          Ranges: [{
+            $Type: 'UI.SelectionRangeType',
+            Sign: #E,                 // EXCLUDE
+            Option: #EQ,
+            Low: 'SUPERSEDED'
+          }]
+        }]
+      },
+      PresentationVariant: { Visualizations: ['@UI.LineItem'] }
+    },
+    Sort: [{ Property: completionDate, Descending: true }]
+  },
+  Capabilities.DeleteRestrictions.Deletable: false,
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable: false
+);
+
 // ChangeView: plugin provides LineItem, PresentationVariant, FieldGroups, Hierarchy, Search.
 // ReadRestrictions override is applied at runtime in srv/admin-service.js.
 // We add SelectionFields for the standalone ListReport filter bar.
