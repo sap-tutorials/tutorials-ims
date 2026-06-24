@@ -730,6 +730,147 @@ annotate AdminService.Tutorials with {
          };
 };
 
+// --- PR-4 of spec 2026-06-24-tutorials-admin-tile-expansion-design ---
+// Annotations that wire PR-3's data (new view + projections + inverse
+// associations on Tutorials) into per-tutorial facets on the Tutorials
+// Object Page. Pure annotations; no schema or code changes.
+
+// TutorialCompletionStats — one row per tutorial slug, joined via the
+// `completionStats` association added in PR-3.
+annotate AdminService.TutorialCompletionStats with {
+  uniqueLearners  @Common.Label: 'Unique Learners';
+  completions     @Common.Label: 'Total Completions';
+  avgTimeMs       @Common.Label: 'Avg Time (ms)';
+  firstCompletion @Common.Label: 'First Completion';
+  lastCompletion  @Common.Label: 'Last Completion';
+};
+
+annotate AdminService.TutorialCompletionStats with @UI: {
+  // Inline FieldGroup so the Tutorials OP can ReferenceFacet into it.
+  FieldGroup#Stats: { Data: [
+    { Value: uniqueLearners },
+    { Value: completions },
+    { Value: avgTimeMs },
+    { Value: firstCompletion },
+    { Value: lastCompletion }
+  ]}
+};
+
+// ValidateAnswerSpecs — per-step, per-question validation rules
+// (free-text grader specs). Joined via `validationSpecs` association.
+annotate AdminService.ValidateAnswerSpecs with {
+  stepNumber    @Common.Label: 'Step';
+  questionId    @Common.Label: 'Question ID';
+  questionText  @Common.Label: 'Question';
+  correctAnswer @Common.Label: 'Correct Answer';
+  ruleType      @Common.Label: 'Rule Type';
+  aiGrading     @Common.Label: 'AI Grading';
+};
+
+annotate AdminService.ValidateAnswerSpecs with @UI: {
+  LineItem: [
+    { Value: stepNumber, @UI.Importance: #High },
+    { Value: questionId },
+    { Value: questionText },
+    { Value: ruleType },
+    { Value: aiGrading }
+  ],
+  PresentationVariant: {
+    SortOrder: [
+      { Property: stepNumber, Descending: false },
+      { Property: questionId, Descending: false }
+    ]
+  }
+};
+
+// CodeCheckSpecs — per-step code-check specs (goal + reference solution).
+// Joined via `codeCheckSpecs` association.
+annotate AdminService.CodeCheckSpecs with {
+  stepNumber   @Common.Label: 'Step';
+  goal         @Common.Label: 'Goal' @UI.MultiLineText;
+  language     @Common.Label: 'Language';
+  hasReference @Common.Label: 'Has Reference Solution';
+};
+
+annotate AdminService.CodeCheckSpecs with @UI: {
+  LineItem: [
+    { Value: stepNumber, @UI.Importance: #High },
+    { Value: language },
+    { Value: hasReference },
+    { Value: goal }
+  ],
+  PresentationVariant: {
+    SortOrder: [ { Property: stepNumber, Descending: false } ]
+  }
+};
+
+// AuthorAiRequests — per-tutorial AI-author telemetry (OS variant
+// generation today; future flows extend). Joined via `aiRequests`
+// association (PR-3 added the tutorial FK).
+annotate AdminService.AuthorAiRequests with {
+  feature        @Common.Label: 'Feature';
+  sourceOS       @Common.Label: 'Source OS';
+  targetOSes     @Common.Label: 'Target OSes';
+  model          @Common.Label: 'Model';
+  tokensUsed     @Common.Label: 'Tokens';
+  durationMs     @Common.Label: 'Duration (ms)';
+  errorCode      @Common.Label: 'Error';
+  authorId       @Common.Label: 'XSUAA Author ID';
+  sourceLength   @Common.Label: 'Source Length';
+  variantsLength @Common.Label: 'Variants Length';
+  variants       @Common.Label: 'Variants (JSON)' @UI.MultiLineText;
+};
+
+annotate AdminService.AuthorAiRequests with @UI: {
+  LineItem: [
+    { Value: createdAt },
+    { Value: feature },
+    { Value: sourceOS },
+    { Value: targetOSes },
+    { Value: model },
+    { Value: tokensUsed },
+    { Value: durationMs },
+    { Value: errorCode }
+  ],
+  PresentationVariant: {
+    SortOrder: [ { Property: createdAt, Descending: true } ]
+  }
+};
+
+// Append the four new facets to the Tutorials Object Page. This third
+// `annotate ... with @UI: { Facets: [...] }` block fully replaces the
+// prior list (CDS doesn't merge collection-valued annotations — the
+// 'Duplicate assignment' warning at cds build is intentional). Each
+// preceding facet (General, Lifecycle, Categories, Steps, Contributors,
+// SourceMarkdownFacet from PR-2, Feedback) is preserved verbatim, with
+// the four new ones tacked on between Contributors and Feedback so
+// the Source Markdown section from PR-2 still sits next to Feedback.
+annotate AdminService.Tutorials with @UI: {
+  Facets: [
+    { $Type: 'UI.ReferenceFacet', ID: 'General',  Label: 'General',  Target: '@UI.FieldGroup#General' },
+    { $Type: 'UI.ReferenceFacet', ID: 'Lifecycle', Label: 'Lifecycle', Target: '@UI.FieldGroup#Lifecycle' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Categories', ID: 'CategoriesFacet', Target: 'categories/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Steps', ID: 'StepsFacet', Target: 'steps/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Contributors', ID: 'ContributorsFacet', Target: 'contributors/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Completion Stats', ID: 'CompletionStatsFacet',
+      Target: 'completionStats/@UI.FieldGroup#Stats' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Validation Questions', ID: 'ValidationSpecsFacet',
+      Target: 'validationSpecs/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Code-Check Specs', ID: 'CodeCheckSpecsFacet',
+      Target: 'codeCheckSpecs/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', Label: 'AI-Author Requests', ID: 'AiRequestsFacet',
+      Target: 'aiRequests/@UI.LineItem' },
+    { $Type: 'UI.CollectionFacet', ID: 'Feedback', Label: 'Feedback', Facets: [
+      { $Type: 'UI.ReferenceFacet', ID: 'FeedbackSummary',
+        Target: 'feedbackSummary/@UI.FieldGroup#FeedbackSummary',
+        Label:  'Summary' },
+      { $Type: 'UI.ReferenceFacet', ID: 'FeedbackItems',
+        Target: 'feedbackItems/@UI.LineItem#TutorialFeedback',
+        Label:  'Recent Submissions' }
+    ]}
+  ]
+};
+
 // --- TutorialPickList (value-help target for redirectTo) ---
 annotate AdminService.TutorialPickList with {
   legacyIdStr   @Common.Label: 'Tutorial ID' @Common.IsDigitSequence: true;
