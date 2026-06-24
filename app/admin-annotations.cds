@@ -1675,30 +1675,27 @@ annotate AdminService.AdvocatePhotos with @(
 
 // AdvocateTopics — inline table with Tag value-help.
 //
-// Bind the cell to the FK column `tag_ID` and use @Common.Text on the
-// `tag` association to display `Tag.label` instead of the GUID. CAP
-// (>= Feb 2025) automatically propagates association-level annotations
-// to the generated foreign-key element, so the @Common.Text and
-// @Common.ValueList here apply at both the navigation path AND the FK
-// column the LineItem renders.
+// LineItem cell binds DIRECTLY to the navigation path `tag.label`, NOT to
+// the FK `tag_ID`. Editing still works: the @Common.ValueList on the
+// `tag` association (below) attaches a value-help dialog to the cell,
+// and the dialog's `ValueListParameterInOut` writes back to `tag_ID`.
 //
-// Why the FK and not `tag.label` directly? In Fiori Elements V4 inline
-// tables, binding the cell value to a deep navigation path (`tag.label`)
-// makes the cell render blank — `autoExpandSelect` doesn't always include
-// the deep $expand, and the cell has no FK to write back into so the
-// ValueList dialog never attaches. Pattern mirrors `GroupTags` (line ~363)
-// and `MissionTags` (line ~419) which have worked since their introduction.
+// Two-bug history before this approach:
+//
+//   #573 (initial) — annotated only the `tag` association expecting FE V4
+//   to follow @Common.Text/@Common.TextArrangement onto the FK column.
+//   It did not. Table rendered the raw GUID in the Topic column.
+//
+//   #586 (claimed-fix-but-didn't-work) — added a second `annotate ...
+//   { tag_ID @... }` block on the assumption that CAP would emit those
+//   annotations onto the generated FK element. Inspection of the
+//   resulting csn.json on 2026-06-24 showed `elements.tag_ID` was STILL
+//   absent — annotations on the implicit FK of a projection-from-aspect
+//   are silently dropped by the compiler. So the table kept rendering
+//   the GUID despite the deploy.
 //
 // Value-help dialog: ranks `label` first so admins search by the human
 // label, falls back to `name` (slug-equivalent) when label is missing.
-//
-// IMPORTANT (#573 regression, fixed 2026-06-23): the original PR annotated
-// only the `tag` association on the assumption that CAP's CDS compiler
-// would auto-propagate `@Common.Text` and `@Common.ValueList` onto the
-// generated `tag_ID` foreign-key element. Inspection of the deployed
-// `csn.json` showed that DID NOT happen — `tag_ID` came out with zero
-// annotations, so FE rendered the raw GUID. Annotating `tag_ID` directly
-// is the deterministic fix and what `GroupTags`/`MissionTags` actually do.
 annotate AdminService.AdvocateTopics with {
   tag @Common.Label: 'Topic'
       @Common.Text: tag.label
@@ -1726,7 +1723,7 @@ annotate AdminService.AdvocateTopics with {
 
 annotate AdminService.AdvocateTopics with @UI: {
   LineItem: [
-    { $Type: 'UI.DataField', Value: tag_ID, Label: 'Topic' }
+    { $Type: 'UI.DataField', Value: tag.label, Label: 'Topic' }
   ]
 };
 
