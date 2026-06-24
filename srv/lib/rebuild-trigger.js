@@ -10,25 +10,27 @@
 //   - 'slug-targeted'  → 30-60s, re-fetches only listed slug(s)
 //   - 'full'           → 10-13 min (or 3-5 min with force-cap-refetch on cache hit)
 //
-// Token sourcing: BTP Credential Store via srv/lib/credstore.js, with a
-// 5-min in-memory TTL cache and a process.env fallback for local dev / unit
-// tests. The Secrets row is bootstrapped manually via the admin Secrets UI;
-// see docs/developers/operations/secrets-tracking.md#bootstrap-github_dispatch_token.
+// Token sourcing: shared srv/lib/secret-resolver.js (credstore-first, env
+// fallback, 5-min TTL cache). The Secrets row is bootstrapped manually via
+// the admin Secrets UI; see
+// docs/developers/operations/secrets-tracking.md#bootstrap-github_dispatch_token.
 //
 // Spec: docs/superpowers/specs/2026-06-22-issue-429-targeted-rebuild-design.md
 // Issue: #429. Uses native fetch (Node >= 20) — no octokit dependency.
 
 import { resolveTenantSettings } from './runtime-config/tenant-settings.js';
+import {
+  resolveSecret,
+  invalidateSecret,
+  _resetForTests as _resetResolver,
+  _primeForTests as _primeResolver,
+} from './secret-resolver.js';
 
 const REPO_OWNER = 'sap-tutorials';
 const REPO_NAME = 'tutorials-ims';
 const WORKFLOW_FILE = 'rebuild-content.yml';
 const DEFAULT_DEBOUNCE_MS = 60_000;
 const GITHUB_API = 'https://api.github.com';
-
-// Token cache TTL — 5 min. Rotation via admin Secrets UI takes effect on
-// the next cache miss (or immediately after a tutorials-srv restart).
-const TOKEN_TTL_MS = 5 * 60 * 1000;
 
 // Mode-merge priority — higher rank wins during the debounce window.
 const RANK = { 'catalog-only': 1, 'slug-targeted': 2, 'full': 3 };
@@ -41,9 +43,6 @@ const RANK = { 'catalog-only': 1, 'slug-targeted': 2, 'full': 3 };
 const SLUG_ACCUMULATOR_CAP = 50;
 
 let _state = {
-  // Token resolution
-  cachedToken: null,
-  cachedTokenExpiresAt: 0,
   // Debounce
   debounceMs: DEFAULT_DEBOUNCE_MS,
   pendingTimer: null,
@@ -57,30 +56,12 @@ let _state = {
 };
 
 /**
- * Resolve the GITHUB_DISPATCH_TOKEN with credstore-first + env fallback +
- * 5-min TTL cache. Returns null if neither source has a value.
+ * Resolve the GITHUB_DISPATCH_TOKEN via the shared secret-resolver
+ * (credstore-first, env fallback, 5-min TTL cache). Returns null if neither
+ * source has a value.
  */
 async function getDispatchToken() {
-  if (_state.cachedToken && Date.now() < _state.cachedTokenExpiresAt) {
-    return _state.cachedToken;
-  }
-  let token = null;
-  try {
-    const { readSecret } = await import('./credstore.js');
-    token = await readSecret('GITHUB_DISPATCH_TOKEN');
-  } catch (err) {
-    // Credstore unavailable (no BTP binding / network blip / decryption
-    // failure). Log once per cache window so we see the gap without flooding.
-    console.warn(`[rebuild-trigger] credstore lookup failed (falling back to env): ${err.message ?? err}`);
-  }
-  if (!token) {
-    token = process.env.GITHUB_DISPATCH_TOKEN ?? null;
-  }
-  if (token) {
-    _state.cachedToken = token;
-    _state.cachedTokenExpiresAt = Date.now() + TOKEN_TTL_MS;
-  }
-  return token;
+  return resolveSecret('GITHUB_DISPATCH_TOKEN', { logTag: '[rebuild-trigger]' });
 }
 
 /**
@@ -217,8 +198,6 @@ export async function checkFeatureFlag() {
 export function _resetForTests({ dispatchFn, debounceMs, token } = {}) {
   if (_state.pendingTimer) clearTimeout(_state.pendingTimer);
   _state = {
-    cachedToken: token ?? null,
-    cachedTokenExpiresAt: token ? Date.now() + TOKEN_TTL_MS : 0,
     debounceMs: debounceMs ?? DEFAULT_DEBOUNCE_MS,
     pendingTimer: null,
     pendingReason: null,
@@ -227,6 +206,13 @@ export function _resetForTests({ dispatchFn, debounceMs, token } = {}) {
     pendingForceCapRefetch: false,
     dispatchFn: dispatchFn ?? defaultDispatch,
   };
+  // Seed (or clear) the shared resolver cache so existing tests that pass
+  // `token: 'fake-token'` keep working without reaching into credstore/env.
+  // Synchronous so it composes with vi.useFakeTimers() in the test suite.
+  if (token !== undefined) {
+    _resetResolver();
+    if (token) _primeResolver('GITHUB_DISPATCH_TOKEN', token);
+  }
   _bootWarned = false;
 }
 
@@ -235,8 +221,10 @@ export function _resetForTests({ dispatchFn, debounceMs, token } = {}) {
  * write handlers (setSecretValue / rotateSecretValue / clearSecretValue) so
  * a rotation via the UI takes effect on the next dispatch instead of waiting
  * up to 5 minutes for the TTL to expire.
+ *
+ * Thin shim over secret-resolver.invalidateSecret — kept as a separate
+ * export so admin-service.js callers stay stable.
  */
 export function invalidateDispatchTokenCache() {
-  _state.cachedToken = null;
-  _state.cachedTokenExpiresAt = 0;
+  invalidateSecret('GITHUB_DISPATCH_TOKEN');
 }

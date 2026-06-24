@@ -14,6 +14,7 @@ import { makeAltGroupHandler } from './handlers/completion-path-items-altgroup.j
 import * as advocateHandlers from './handlers/advocate-handlers.js';
 import { classifySeverity, daysUntil } from './jobs/secret-expiry-check.js';
 import { readSecret, writeSecret, deleteSecret } from './lib/credstore.js';
+import { invalidateSecret } from './lib/secret-resolver.js';
 import { cleanupChangeLog } from './jobs/cleanup.js';
 import { ensureDevtoberfestConfigSingleton } from './lib/devtoberfest-singleton.js';
 import { randomBytes } from 'node:crypto';
@@ -1243,14 +1244,14 @@ export default class AdminService extends cds.ApplicationService {
         return req.reject(400, 'value (non-empty string) is required');
       }
       await writeSecret(row.key, value);
-      // Issue #429: if the rotated/cleared secret IS the dispatch token, flush
-      // the rebuild-trigger's in-memory cache so the next dispatch picks up
-      // the fresh value (or no-op if cleared) immediately, not after the
-      // 5-min TTL.
-      if (row.key === 'GITHUB_DISPATCH_TOKEN') {
-        const { invalidateDispatchTokenCache } = await import('./lib/rebuild-trigger.js');
-        invalidateDispatchTokenCache();
-      }
+      // Hot-flush the shared secret-resolver cache so the next read picks up
+      // the fresh value immediately (or null after a clear) — symmetric for
+      // all credstore-fronted secrets (GITHUB_DISPATCH_TOKEN, SMTP_PASS,
+      // SUBMISSION_SALT_SECRET, CONTENT_API_KEY). Without this, a rotation via
+      // the admin UI would still be observed by callers up to the resolver's
+      // 5-min TTL window. The rebuild-trigger.js `invalidateDispatchTokenCache`
+      // export is a thin shim over this same call kept for direct callers.
+      invalidateSecret(row.key);
       // IMPORTANT 2 (quality-review): emit audit event immediately after the
       // external credstore mutation succeeds. The subsequent stampRotated() is
       // a HANA UPDATE that may fail / abort — if it does, the credstore has
@@ -1293,14 +1294,9 @@ export default class AdminService extends cds.ApplicationService {
       // 32 bytes hex = 64-char string. Strong enough for salt + api-key.
       const newValue = randomBytes(32).toString('hex');
       await writeSecret(row.key, newValue);
-      // Issue #429: if the rotated/cleared secret IS the dispatch token, flush
-      // the rebuild-trigger's in-memory cache so the next dispatch picks up
-      // the fresh value (or no-op if cleared) immediately, not after the
-      // 5-min TTL.
-      if (row.key === 'GITHUB_DISPATCH_TOKEN') {
-        const { invalidateDispatchTokenCache } = await import('./lib/rebuild-trigger.js');
-        invalidateDispatchTokenCache();
-      }
+      // See setSecretValue above — same universal hot-flush for any rotated
+      // secret, not just GITHUB_DISPATCH_TOKEN.
+      invalidateSecret(row.key);
       // IMPORTANT 2 (quality-review): see setSecretValue for the same race.
       // Emit the write event BEFORE stampRotated in case HANA UPDATE fails.
       // The 'SecretValueRotated' event below is still emitted (richer payload)
@@ -1333,14 +1329,10 @@ export default class AdminService extends cds.ApplicationService {
     this.on('clearSecretValue', 'Secrets', async (req) => {
       const row = await loadSecretRow(req);
       await deleteSecret(row.key);
-      // Issue #429: if the rotated/cleared secret IS the dispatch token, flush
-      // the rebuild-trigger's in-memory cache so the next dispatch picks up
-      // the fresh value (or no-op if cleared) immediately, not after the
-      // 5-min TTL.
-      if (row.key === 'GITHUB_DISPATCH_TOKEN') {
-        const { invalidateDispatchTokenCache } = await import('./lib/rebuild-trigger.js');
-        invalidateDispatchTokenCache();
-      }
+      // See setSecretValue above — universal hot-flush; the cleared secret
+      // becomes null on the next resolveSecret() call instead of returning
+      // the stale TTL'd value.
+      invalidateSecret(row.key);
       // No HANA mutation; explicit audit event needed.
       await auditEvent('SecretValueCleared', {
         user: req.user?.id,

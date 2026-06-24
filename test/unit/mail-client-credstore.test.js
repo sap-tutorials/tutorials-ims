@@ -37,6 +37,7 @@ vi.mock('@sap/cds', async () => {
 });
 
 import { _resetForTests, _getTransporterForTests } from '../../srv/lib/mail-client.js';
+import { _resetForTests as _resetResolver } from '../../srv/lib/secret-resolver.js';
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -49,6 +50,11 @@ describe('mail-client — Tier-0 credstore lookup', () => {
     process.env.SMTP_USER = 'notifier';
     process.env.SMTP_FROM = 'noreply@example.com';
     _resetForTests();
+    // Reset the shared resolver too — its cache is module-singleton state
+    // independent of mail-client's. Without this, a cached SMTP_PASS from a
+    // previous test masks credstore-mock behavior in the next one. See
+    // [feedback_module_singletons_in_vitest_cds].
+    _resetResolver();
     const nodemailer = await import('nodemailer');
     nodemailer.createTransport.mockClear();
     const credstore = await import('../../srv/lib/credstore.js');

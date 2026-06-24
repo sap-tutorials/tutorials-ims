@@ -3,6 +3,7 @@ import { createTransport } from 'nodemailer';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { resolveSecret } from './secret-resolver.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_DIR = join(__dirname, '..', 'templates', 'notification');
@@ -12,39 +13,20 @@ const SMTP_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_FROM = 'developers@sap.com';
 
 // State on globalThis so the module-singleton-multiplicity issue on Vitest+CDS
-// (Windows) doesn't yield divergent caches. Same pattern as credstore.js.
-// See feedback_module_singletons_in_vitest_cds memory entry.
+// (Windows) doesn't yield divergent caches. Same pattern as credstore.js +
+// secret-resolver.js. See feedback_module_singletons_in_vitest_cds memory entry.
 const STATE_KEY = Symbol.for('com.sap.developers.ims:mail-client');
 const _state = (globalThis[STATE_KEY] ??= {
   transporter: null,
   resolvedAt: 0,
-  warnedWindowAt: 0,
 });
 
 /**
- * Resolve the SMTP password with credstore-first + env fallback + 5-min TTL
- * cache. Returns null if neither source has a value.
- *
- * Pattern mirrors srv/lib/rebuild-trigger.js:60-86's getDispatchToken().
+ * Resolve the SMTP password via the shared secret-resolver (credstore-first,
+ * env fallback, 5-min TTL cache, warn-once-per-window logging).
  */
 async function resolveSmtpPassword() {
-  let password = null;
-  try {
-    const { readSecret } = await import('./credstore.js');
-    password = await readSecret('SMTP_PASS');
-  } catch (err) {
-    // Credstore unavailable (no BTP binding / network blip / decryption failure).
-    // Log once per cache window so we see the gap without flooding.
-    const now = Date.now();
-    if (now - _state.warnedWindowAt > SMTP_TTL_MS) {
-      console.warn(`[mail] credstore lookup failed (falling back to env): ${err.message ?? err}`);
-      _state.warnedWindowAt = now;
-    }
-  }
-  if (!password) {
-    password = process.env.SMTP_PASS ?? null;
-  }
-  return password;
+  return resolveSecret('SMTP_PASS', { ttlMs: SMTP_TTL_MS, logTag: '[mail]' });
 }
 
 async function getTransporter() {
@@ -181,7 +163,6 @@ export async function retryFailedEmails() {
 export function _resetForTests() {
   _state.transporter = null;
   _state.resolvedAt = 0;
-  _state.warnedWindowAt = 0;
 }
 
 /** Test-only: expose getTransporter so unit tests can assert on the resolved transport. */
