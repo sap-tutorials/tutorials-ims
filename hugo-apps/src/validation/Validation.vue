@@ -315,6 +315,10 @@ defineExpose({
   hint,
   submitted,
   perQuestionResults,
+  // `answers` exposed read-only for tests so they can verify the typed
+  // answer survives the lock (the template's :value bind on the textarea
+  // is the user-visible side).
+  answers,
   // Methods
   onSubmit,
   onTryAgain,
@@ -326,7 +330,13 @@ defineExpose({
 
 <template>
   <div class="validation-widget">
-    <!-- Persisted-success state: skip the form entirely -->
+    <!-- Persisted-success state: show success banner AND keep the form
+         mounted below in read-only mode, so the learner can re-read their
+         answer (Tom's UX feedback 2026-06-24 — hiding the answer entirely
+         on correct lost context the learner might want again). The form's
+         inputs are bound `disabled` when result === 'correct' (see
+         textarea / radio below) and the Submit button is hidden — there's
+         nothing to re-submit once the step is locked in. -->
     <ui5-message-strip
       v-if="submitted && result === 'correct'"
       design="Positive"
@@ -335,8 +345,11 @@ defineExpose({
       Correct! Well done.
     </ui5-message-strip>
 
-    <!-- Active form -->
-    <form v-else @submit.prevent="onSubmit">
+    <!-- Form: always mounted; disabled state controlled per-input by
+         `result === 'correct'`. NOT @submit.prevent-suppressed on correct
+         because the Submit button is conditionally rendered (and pressing
+         Enter inside a disabled textarea is a no-op anyway). -->
+    <form @submit.prevent="onSubmit">
       <fieldset
         v-for="(q, qi) in questions"
         :key="q.id"
@@ -369,19 +382,34 @@ defineExpose({
 
         <template v-if="q.type === 'multiple-choice' && q.options">
           <div v-for="opt in q.options" :key="opt" class="option-row">
+            <!-- Conditional disabled via v-bind because UI5 web components
+                 treat attribute *presence* as truthy regardless of value
+                 (disabled="false" still disables). See
+                 docs/developers/reference/vue-islands-gotchas.md § UI5
+                 boolean attr coercion. Same pattern as the Submit button
+                 and the textarea below. -->
             <ui5-radio-button
               :name="`q-${stepNumber}-${qi}`"
               :value="opt"
               :text="opt"
+              :checked="answers[q.id] === opt"
+              v-bind="result === 'correct' ? { disabled: true } : {}"
               @change="onRadioChange(q.id, opt)"
             />
           </div>
         </template>
 
+        <!-- :value binds the in-memory answer back into the textarea so
+             that on the locked read-only state the learner sees what they
+             wrote. v-bind={disabled: true} on correct locks edits; the
+             input handler stays mounted so re-grading flows (partial /
+             incorrect / error) can keep accepting input. -->
         <ui5-textarea
           v-else
           placeholder="Type your answer…"
           :rows="2"
+          :value="answers[q.id] || ''"
+          v-bind="result === 'correct' ? { disabled: true } : {}"
           @input="onTextInput(q.id, $event)"
         />
 
@@ -417,7 +445,14 @@ defineExpose({
         </div>
       </fieldset>
 
-      <div class="validation-actions">
+      <!-- Submit + busy indicator: hidden once result === 'correct'. The
+           submission is locked in (writePersisted fired on the all-pass
+           branch) — there's nothing left to re-submit, and showing a
+           disabled Submit button just adds noise to a happy-path view.
+           Partial / incorrect / disabled / error states keep the button
+           visible (those branches use the surrounding result-specific
+           strips below to drive Try Again instead of Submit). -->
+      <div v-if="result !== 'correct'" class="validation-actions">
         <ui5-button design="Emphasized" type="Submit" v-bind="pending ? { disabled: true } : {}">
           Submit Answer
         </ui5-button>
