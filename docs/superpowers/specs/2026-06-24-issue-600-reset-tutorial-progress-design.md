@@ -185,7 +185,7 @@ The "has-ever-completed" semantic is the operative answer for the scanner ambigu
 | `srv/developer-service.js` | `_updateTutorialProgress` upsert lookup (line 678) | current-attempt | `taskType: 'TUTORIAL'` | `taskType: 'TUTORIAL', status: { '!=': 'SUPERSEDED' }` — see Companion change above |
 | `srv/developer-service.js` | `_getProgressForTutorial` (line 701) | current-attempt | `status: 'COMPLETED'` | `status: 'COMPLETED', attemptNumber: <latest>` |
 | `srv/developer-service.js` | `completeStep` existing-row lookup (line 147) | current-attempt | `taskType: 'STEP'` | `taskType: 'STEP', status: { '!=': 'SUPERSEDED' }` — see Companion change to completeStep above |
-| `srv/developer-service.js` | `getMyCompletions` / `srv/lib/user-progress.js` getMyCompletedTutorials | has-ever-completed | `status: 'COMPLETED'` | `status: { in: ['COMPLETED', 'SUPERSEDED'] }`, group by tutorial, `MAX(completionDate)` |
+| `srv/developer-service.js` | `getMyCompletions` / `srv/lib/user-progress.js` getMyCompletedTutorials | has-ever-completed (NOT deduped) | `status: 'COMPLETED'` | `status: { in: ['COMPLETED', 'SUPERSEDED'] }`, sorted by `completionDate DESC`. **No dedupe** — one row per completion attempt, so a tutorial completed N times appears N times in the `/me/` history (per Tom's decision 2026-06-24). |
 | `srv/lib/user-progress.js` | `getUserProgress`, `getProgressLookup` (used by Joule chat) | mixed | filter by taskType only | Filter `status: { '!=': 'SUPERSEDED' }` for "in-progress" surfaces; `status: { in: ['COMPLETED', 'SUPERSEDED'] }` for "completed slugs" listings |
 | `srv/admin-service.js` | `getEventStatistics` (line 509) | has-ever-completed | No `status` filter | Filter `status: { '!=': 'SUPERSEDED' }` to exclude historical-only rows from in-progress counts; include SUPERSEDED in completion totals via the same `IN ('COMPLETED','SUPERSEDED')` rule |
 | `srv/admin-service.js` | Event progress + mission rollups (lines 516, 529, 543, 559, 573, 601) | has-ever-completed | `status: 'COMPLETED'` | `status: { in: ['COMPLETED', 'SUPERSEDED'] }` + DISTINCT by `(user_ID, taskLegacyId)` — completing twice doesn't inflate counts |
@@ -212,11 +212,37 @@ For "has-ever-completed" semantics, simply including SUPERSEDED in the filter is
 
 In CDS QL, this is `SELECT.distinct.columns('user_ID', 'taskLegacyId').from(dbTaskRecords).where(...)`. In raw HANA SQL (for the rollup queries that already use it), `SELECT DISTINCT USER_ID, TASKLEGACYID FROM ...`.
 
-### `/me/` page dedupe rule
+### `/me/` page rule (one row per completion)
 
-`getMyCompletedTutorials` returns one row per `(user, tutorialSlug)` pair, with `completionDate = MAX(completionDate WHERE status IN ('COMPLETED','SUPERSEDED'))`. The page already shows tutorials the user once completed; this preserves that contract even after reset.
+`getMyCompletedTutorials` returns one row per completed `(user, tutorialSlug, attemptNumber)` triple where `status IN ('COMPLETED', 'SUPERSEDED')`, sorted by `completionDate DESC`. **A tutorial completed N times appears N times** in the response — once for each completion.
 
-Edge case: a learner who reset and is mid-way through attempt 2 has a SUPERSEDED row (from attempt 1) AND an IN_PROGRESS row (attempt 2). The `/me/` page should still show this tutorial as a past completion (because attempt 1's COMPLETED status is real history) — but the learner can also see it on the tutorial page as "in progress."
+This was a deliberate decision (Tom 2026-06-24): the user's question intent on the /me/ page is "what have I done?" and "when did I do it?", not "how many distinct tutorials have I touched?". If a learner re-completes a tutorial six months later because the product updated, they want to see BOTH completions side by side in their history.
+
+Per-row fields on each /me/ entry:
+
+- `slug`, `title`, `primaryTag`, `experienceTag`, `averageTimeToComplete` — unchanged from today.
+- `completionDate` — the row's own completion date (the SUPERSEDED row's preserved date for older attempts, the COMPLETED row's date for the most recent).
+- `attemptNumber` — **NEW** field exposed in the action return shape so the UI can label rows ("First completion", "Most recent completion", "Attempt 3", or just an ordinal — the UI design is out of scope for this server-side change; the `/me/` page UI will be updated in a follow-up if richer labeling is needed).
+
+Edge case: a learner who reset and is mid-way through attempt 2 has a SUPERSEDED row (from attempt 1) AND an IN_PROGRESS row (attempt 2). The `/me/` page shows ONE row (attempt 1's SUPERSEDED record with its real completionDate) — the IN_PROGRESS attempt-2 row is excluded by the `status IN ('COMPLETED', 'SUPERSEDED')` filter. Once the learner completes attempt 2, a second row appears for that tutorial.
+
+### Server-action `getMyCompletions` return-shape change
+
+The CDS action signature in [`srv/developer-service.cds:77-84`](../../../srv/developer-service.cds#L77-L84) needs `attemptNumber` added to the return-row shape:
+
+```cds
+function getMyCompletions() returns many {
+  slug                  : String;
+  title                 : String;
+  primaryTag            : String;
+  experienceTag         : String;
+  averageTimeToComplete : Integer;
+  completionDate        : DateTime;
+  attemptNumber         : Integer;       // ← NEW
+};
+```
+
+This is the only public API surface change from "preserve past completions" to "show all completions." It's additive — existing /me/ page UI code that ignores `attemptNumber` continues to work; it just sees the tutorial appear multiple times.
 
 ## Frontend (Hugo + Vue island)
 
@@ -245,7 +271,7 @@ The mount script lives at `hugo-apps/src/tutorial-reset/index.ts` (new entry in 
 3. If complete, render a `<ui5-button design="Default" icon="restart">Reset progress and try again</ui5-button>` above the existing completion banner.
 4. Click → open `<ui5-dialog>` with:
    - Title: "Reset progress?"
-   - Body: *"Resetting will clear your progress on this tutorial so you can complete it again. Your previous completion will be preserved in your past completions on the /me/ page."*
+   - Body: *"Resetting will clear your progress on this tutorial so you can complete it again. Your previous completion stays in your past-completion history."*
    - Footer: `[Cancel]` (default), `[Reset progress]` (design="Negative" — orange/red, signals deliberate destructive action; NOT Emphasized which is primary-action blue).
 5. Confirm click → `POST /api/resetTutorialProgress` with `{ slug }`.
 6. On 200:
@@ -298,8 +324,8 @@ These are small additions to [`app/admin-annotations.cds`](../../../app/admin-an
 - **Mid-progress reset**: Tutorial with 2 of 3 STEP rows COMPLETED + 1 TUTORIAL row IN_PROGRESS. Call reset. Assert all 3 rows superseded, new TUTORIAL row inserted with attemptNumber: 2.
 - **completeStep after reset**: After a reset, complete step 1 of the new attempt. Assert new STEP row inserted with attemptNumber: 2, `status: COMPLETED`. Assert the prior attempt's STEP row (attemptNumber: 1, SUPERSEDED) is untouched.
 - **getProgress after reset**: Returns empty `completedSteps` even though SUPERSEDED rows exist for the user+tutorial.
-- **getMyCompletions after reset (before re-completion)**: Returns the tutorial with the original `completionDate` (the SUPERSEDED row's preserved date).
-- **getMyCompletions after reset AND re-completion**: Returns the tutorial with the MOST RECENT `completionDate` (the new attempt's completion). Dedupe rule.
+- **getMyCompletions after reset (before re-completion)**: Returns ONE row for the tutorial with the original `completionDate` (the SUPERSEDED row's preserved date) and `attemptNumber: 1`. The new IN_PROGRESS attempt-2 row is NOT included (its status disqualifies it).
+- **getMyCompletions after reset AND re-completion**: Returns TWO rows for the tutorial — attempt 1 (SUPERSEDED, original completionDate, `attemptNumber: 1`) AND attempt 2 (COMPLETED, new completionDate, `attemptNumber: 2`), sorted by `completionDate DESC`. No dedupe.
 - **Audit event**: Assert `cds.emit('TutorialProgressReset', ...)` was called with the expected payload.
 - **Rate limit**: 6th call within the hour returns 429.
 - **Unauthenticated**: Reject 401.
@@ -311,7 +337,7 @@ These are small additions to [`app/admin-annotations.cds`](../../../app/admin-an
 
 - **End-to-end attempt cycle**: complete a test tutorial, reset, re-complete, verify both attempts coexist in the live DB with the correct status / attemptNumber / completionDate values. Cleanup in `afterAll` to leave no test data behind.
 - **Read-path regression suite** (the back-stop the reviewer flagged): after the reset-mid-attempt-2 state is set up, exercise every "has-ever-completed" surface and assert it still counts the user:
-  - `/api/getMyCompletions` — shows the tutorial with the original `completionDate`.
+  - `/api/getMyCompletions` — shows the tutorial as ONE row with the original `completionDate` and `attemptNumber: 1` (the SUPERSEDED record). After the test then re-completes attempt 2, the same endpoint returns TWO rows for the tutorial (attempt 1 + attempt 2), sorted by completionDate DESC.
   - Scanner-service `getContestant` (call the function directly) — counts the tutorial as completed for prize eligibility.
   - Display-service `getLeaderboard` — user's leaderboard score includes this tutorial.
   - User-progress lookup (the chat-side helper) — `completedSlugs` contains the tutorial; `inProgress` ALSO contains it (because attempt 2 is in progress).
