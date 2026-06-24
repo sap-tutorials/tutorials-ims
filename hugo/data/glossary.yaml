@@ -2,6 +2,19 @@
 # in tutorial body text. Only the first occurrence per page is wrapped.
 # Keep `term` as the rendered label; `definition` is one-line max; `link` points
 # to a longer primer (relative for in-site, absolute for external SAP docs).
+#
+# Matching gotchas worth knowing when adding entries:
+#   - Case-sensitive. "Joule Studio" matches that exact casing; "Joule studio"
+#     does not. If a product name is consistently capitalized, one key is
+#     enough; otherwise add per-casing keys.
+#   - Multi-word keys work — \b boundaries fire at the literal word edges,
+#     spaces inside the key are matched literally.
+#   - Plain-English collisions: skip generic words like "Build" or "agent"
+#     even if SAP uses them as product names — first-mention-of-Build would
+#     fire on every "let's build a CAP service" passage. Use the qualified
+#     form ("SAP Build", "AI Agent") instead.
+#   - The runtime walker skips ancestors CODE/PRE/A/BUTTON/TEXTAREA/INPUT,
+#     so file names like `hdbtable` in fenced code blocks won't trigger.
 
 terms:
   BTP:
@@ -132,3 +145,192 @@ terms:
     term: SAP HANA Database
     definition: The HANA in-memory database engine itself — `hdb` is also the name of the Node.js driver.
     link: https://help.sap.com/docs/hana-cloud-database
+
+  # --- AI / Joule (expansion 2026-06-24) ---
+  # Newer SAP AI vocabulary. Joule + Joule Studio + Business AI Platform
+  # included regardless of current corpus frequency — these are increasingly
+  # central in SAP communications and Tom flagged them as must-have.
+  Joule:
+    term: SAP Joule
+    definition: SAP's generative AI copilot — embedded across the SAP suite to answer questions, draft content, and orchestrate actions in business context.
+    link: https://www.sap.com/products/artificial-intelligence/ai-assistant.html
+  Joule Studio:
+    term: Joule Studio
+    definition: Low-code authoring environment in SAP Build for designing custom Joule skills, prompts, and tool integrations.
+    link: https://help.sap.com/docs/joule-studio
+  Business AI Platform:
+    term: SAP Business AI Platform
+    definition: SAP's unified platform for embedding AI across business processes — packages AI Core, Generative AI Hub, AI Agents, and Joule together.
+    link: https://www.sap.com/products/artificial-intelligence.html
+  BAIP:
+    term: SAP Business AI Platform
+    definition: Acronym for SAP Business AI Platform — the unified AI platform bundling AI Core, Generative AI Hub, AI Agents, and Joule.
+    link: https://www.sap.com/products/artificial-intelligence.html
+  AI Core:
+    term: SAP AI Core
+    definition: BTP runtime for executing AI/ML workloads — model serving, fine-tuning jobs, and inference endpoints managed via Kyma under the hood.
+    link: https://help.sap.com/docs/sap-ai-core
+  AI Launchpad:
+    term: SAP AI Launchpad
+    definition: Web UI for managing SAP AI Core resources — deployments, scenarios, generative-AI hub configs, and content packages.
+    link: https://help.sap.com/docs/ai-launchpad
+  Generative AI Hub:
+    term: Generative AI Hub
+    definition: SAP's gateway to foundation LLMs (OpenAI, Anthropic, Google, open-source) — unified billing, prompt management, and governance under AI Core.
+    link: https://help.sap.com/docs/sap-ai-core/sap-ai-core-service-guide/generative-ai-hub
+  AI Foundation:
+    term: SAP AI Foundation
+    definition: Umbrella SAP-marketing term for the BTP AI capability stack — AI Core, AI Launchpad, Generative AI Hub, and the orchestration services they expose.
+    link: https://www.sap.com/products/technology-platform/business-technology-platform/ai-foundation.html
+  AI Agent:
+    term: AI Agent
+    definition: Autonomous LLM-driven program that uses tools (APIs, search, code execution) to accomplish multi-step tasks — SAP exposes these in Joule and AI Agents on BAIP.
+    link: https://www.anthropic.com/research/building-effective-agents
+  LLM:
+    term: Large Language Model
+    definition: Neural network trained on massive text corpora to predict and generate language — examples include Anthropic's Claude, OpenAI's GPT family, Google's Gemini.
+    link: https://en.wikipedia.org/wiki/Large_language_model
+  RAG:
+    term: Retrieval-Augmented Generation
+    definition: Pattern where an LLM is grounded by retrieving relevant documents (often via vector search) before generating a response — used to reduce hallucination.
+    link: https://en.wikipedia.org/wiki/Retrieval-augmented_generation
+  MCP:
+    term: Model Context Protocol
+    definition: Anthropic-authored open protocol for connecting LLMs to tools and data sources — SAP exposes increasing surface area (CAP, HANA, BTP) as MCP servers.
+    link: https://modelcontextprotocol.io/
+  Knowledge Graph:
+    term: SAP Knowledge Graph
+    definition: SAP's graph-database product line for modelling and querying interconnected business entities — pairs with HANA's SPARQL engine.
+    link: https://help.sap.com/docs/hana-cloud-knowledge-graph
+
+  # --- SAP Build family (expansion 2026-06-24) ---
+  SAP Build:
+    term: SAP Build
+    definition: SAP's low-code / pro-code unified platform — bundles Build Apps (low-code apps), Build Code (AI-assisted dev), Build Process Automation (workflow), and Build Work Zone (launchpad).
+    link: https://www.sap.com/products/technology-platform/build.html
+  SAP Build Apps:
+    term: SAP Build Apps
+    definition: Low-code visual app builder for web and mobile (formerly AppGyver) — drag-and-drop UIs backed by BTP services.
+    link: https://help.sap.com/docs/build-apps
+  SAP Build Code:
+    term: SAP Build Code
+    definition: AI-assisted developer environment for Fiori, CAP, and Java apps — combines Joule code generation with Business Application Studio.
+    link: https://help.sap.com/docs/build-code
+  SAP Build Process Automation:
+    term: SAP Build Process Automation
+    definition: Low-code workflow and RPA platform — visual process designer, decision tables, document AI, and bot automation in one product.
+    link: https://help.sap.com/docs/build-process-automation
+  SAP Build Work Zone:
+    term: SAP Build Work Zone
+    definition: BTP launchpad-as-a-service for aggregating Fiori apps, content, and integrations into a unified employee portal.
+    link: https://help.sap.com/docs/build-work-zone-standard-edition
+
+  # --- Foundational tooling (expansion 2026-06-24) ---
+  ABAP Cloud:
+    term: ABAP Cloud
+    definition: SAP's clean-core ABAP development model — only released (Tier-1) APIs, no modifications to SAP standard objects, enforced via the ABAP Test Cockpit.
+    link: https://help.sap.com/docs/abap-cloud
+  Visual Studio Code:
+    term: Visual Studio Code
+    definition: Microsoft's free, open-source code editor — SAP's recommended editor for CAP, UI5, and TypeScript development outside BAS.
+    link: https://code.visualstudio.com/
+  VS Code:
+    term: Visual Studio Code
+    definition: Common short name for Visual Studio Code — Microsoft's free editor used widely for CAP, UI5, and TypeScript development.
+    link: https://code.visualstudio.com/
+  VSCode:
+    term: Visual Studio Code
+    definition: Alternate spelling of VS Code — Microsoft's free editor used widely for CAP, UI5, and TypeScript development.
+    link: https://code.visualstudio.com/
+  HANA Cloud:
+    term: SAP HANA Cloud
+    definition: SAP's managed HANA database service on BTP — multi-tenant, auto-scaling, with built-in vector engine and knowledge graph features.
+    link: https://www.sap.com/products/technology-platform/hana.html
+  HANA Cockpit:
+    term: SAP HANA Cockpit
+    definition: Web-based admin UI for monitoring HANA databases — performance, sessions, threads, memory, alerts — replaces the legacy HANA Studio for ops.
+    link: https://help.sap.com/docs/hana-cockpit
+  MDK:
+    term: SAP Mobile Development Kit
+    definition: Low-code framework for building cross-platform mobile apps (iOS, Android) against SAP backends — metadata-driven, runs in the SAP Mobile Services client.
+    link: https://help.sap.com/docs/sap-mobile-services
+  TypeScript:
+    term: TypeScript
+    definition: Microsoft's typed superset of JavaScript — compiles to JS; preferred for new CAP and UI5 projects in this codebase.
+    link: https://www.typescriptlang.org/
+  Eclipse:
+    term: Eclipse IDE
+    definition: Open-source Java-based IDE — still the canonical home for ABAP Development Tools (ADT) and SAP HANA Studio (legacy).
+    link: https://www.eclipse.org/
+  Postman:
+    term: Postman
+    definition: Popular GUI tool for crafting, sending, and inspecting HTTP requests — widely used for testing REST and OData APIs.
+    link: https://www.postman.com/
+
+  # --- SAP Integration / Cloud / Identity (expansion 2026-06-24) ---
+  Integration Suite:
+    term: SAP Integration Suite
+    definition: SAP's iPaaS — combines Cloud Integration (formerly CPI), API Management, Event Mesh, and Open Connectors into one BTP-hosted integration platform.
+    link: https://help.sap.com/docs/integration-suite
+  CPI:
+    term: SAP Cloud Platform Integration
+    definition: Legacy name for what is now Cloud Integration inside SAP Integration Suite — process orchestration, mapping, and adapters for SAP and non-SAP systems.
+    link: https://help.sap.com/docs/integration-suite/sap-integration-suite/what-is-cloud-integration
+  Event Mesh:
+    term: SAP Event Mesh
+    definition: BTP messaging service for asynchronous event distribution (AMQP, MQTT, webhooks) — pairs with CAP's event handling and the AsyncAPI spec.
+    link: https://help.sap.com/docs/event-mesh
+  Cloud SDK:
+    term: SAP Cloud SDK
+    definition: Java and JavaScript SDKs for type-safe access to SAP S/4HANA APIs from BTP apps — handles destination service lookup, JWT propagation, and resilience.
+    link: https://sap.github.io/cloud-sdk/
+  Cloud ALM:
+    term: SAP Cloud ALM
+    definition: Cloud-native Application Lifecycle Management — implementation projects, change tracking, monitoring, and analytics across SAP cloud solutions.
+    link: https://help.sap.com/docs/cloud-alm
+  Datasphere:
+    term: SAP Datasphere
+    definition: SAP's business data fabric — federates data across SAP and non-SAP sources for analytics, planning, and AI workloads (successor to SAP Data Warehouse Cloud).
+    link: https://www.sap.com/products/technology-platform/datasphere.html
+  Steampunk:
+    term: SAP BTP ABAP Environment
+    definition: Internal SAP nickname (and widely-used community term) for the BTP-managed ABAP runtime — formerly "Steampunk", now officially BTP ABAP Environment.
+    link: https://help.sap.com/docs/btp/sap-business-technology-platform/abap-environment
+  Discovery Center:
+    term: SAP Discovery Center
+    definition: SAP's catalog for exploring BTP services, reference architectures, and hands-on missions — the go-to spot for "what can I build on BTP?".
+    link: https://discovery-center.cloud.sap/
+  Identity Authentication:
+    term: SAP Cloud Identity Services — Identity Authentication
+    definition: Long form of IAS — SAP's standalone IdP for SAML/OIDC authentication; complements or replaces the XSUAA tenant IdP.
+    link: https://help.sap.com/docs/identity-authentication
+  Destination Service:
+    term: SAP BTP Destination Service
+    definition: BTP service for managing connection details (URLs, credentials, certs) to back-end systems — apps retrieve destinations by name at runtime, never hardcode.
+    link: https://help.sap.com/docs/connectivity/sap-btp-connectivity-cf/destination-service
+  Connectivity Service:
+    term: SAP BTP Connectivity Service
+    definition: BTP service that enables secure tunnels from cloud apps to on-premise systems via the Cloud Connector — pairs with the Destination Service for principal propagation.
+    link: https://help.sap.com/docs/connectivity/sap-btp-connectivity-cf
+  Fiori Launchpad:
+    term: SAP Fiori Launchpad
+    definition: The home page / shell for Fiori apps — tile-based navigation, role-based content, single sign-on across S/4HANA and BTP apps.
+    link: https://help.sap.com/docs/fiori-launchpad
+  FLP:
+    term: SAP Fiori Launchpad
+    definition: Acronym for SAP Fiori Launchpad — the tile-based shell that hosts Fiori apps with single sign-on and role-based content.
+    link: https://help.sap.com/docs/fiori-launchpad
+
+  # --- Generic but SAP-relevant (expansion 2026-06-24) ---
+  REST API:
+    term: REST API
+    definition: HTTP-based API style following REST (Representational State Transfer) conventions — SAP exposes most modern APIs as REST/OData hybrids.
+    link: https://en.wikipedia.org/wiki/REST
+  Webhook:
+    term: Webhook
+    definition: HTTP callback fired by a server when an event occurs — SAP Event Mesh, GitHub, Slack, and others use webhooks to push notifications to subscribers.
+    link: https://en.wikipedia.org/wiki/Webhook
+  Kubernetes:
+    term: Kubernetes
+    definition: Open-source container orchestration platform — SAP BTP Kyma Runtime is built on Kubernetes; AI Core also uses K8s under the hood.
+    link: https://kubernetes.io/
