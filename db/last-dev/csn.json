@@ -2311,6 +2311,15 @@
             "val": "text/html"
           },
           "@cds.persistence.name": "MIMETYPE"
+        },
+        "sourceContent": {
+          "type": "cds.LargeBinary",
+          "@cds.persistence.name": "SOURCECONTENT"
+        },
+        "sourceHash": {
+          "type": "cds.String",
+          "length": 64,
+          "@cds.persistence.name": "SOURCEHASH"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CONTENTFILES"

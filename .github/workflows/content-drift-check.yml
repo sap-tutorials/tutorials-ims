@@ -68,8 +68,9 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Install Hugo
-        run: curl -fsSL https://github.com/gohugoio/hugo/releases/download/v0.147.7/hugo_extended_0.147.7_linux-amd64.tar.gz | tar -xz -C /tmp hugo
+      # PR #591: Hugo is no longer needed by this workflow. Source-markdown
+      # drift detection operates on `.tutorial-cache/<slug>.md` files directly
+      # (produced by `fetch-tutorials`), not on rendered Hugo HTML.
 
       - name: Resolve env-specific URLs + secrets
         id: env
@@ -127,9 +128,7 @@ jobs:
           esac
 
       - name: Install dependencies
-        run: |
-          npm ci
-          npm --prefix hugo-apps install
+        run: npm ci
 
       - name: Generate GitHub App token
         id: app-token
@@ -140,10 +139,15 @@ jobs:
           private-key: ${{ secrets.TUTORIALS_APP_PRIVATE_KEY }}
           owner: sap-tutorials
 
-      # Re-fetch tutorials so verify operates on what fetch-tutorials
-      # would publish today, not on a cached snapshot from days ago.
-      # Drift is an outcome of source vs server, not local cache vs
-      # server, so the source-of-truth must be re-derived.
+      # PR #591 redesign: drift compares SOURCE MARKDOWN hashes, not rendered
+      # HTML hashes. Workflow now needs only `fetch-tutorials` to produce
+      # `.tutorial-cache/<slug>.md` files; the CLI's --verify-only mode hashes
+      # those and compares against /content/source-hashes on the server.
+      #
+      # Pre-PR #591 the workflow ALSO built Hugo, ran build:highlight (Shiki),
+      # built the Vue apps, and copied Joule vendor bundles — all so the local
+      # bytes could match the rendered HTML on the server. None of that is
+      # necessary now and dropping it cuts the workflow from ~10 min to ~1-2 min.
       - name: Fetch tutorials
         run: |
           if [ "${{ steps.env.outputs.channel }}" = "qa" ]; then
@@ -155,49 +159,17 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.TUTORIALS_GITHUB_TOKEN }}
           CAP_BASE_URL: ${{ steps.env.outputs.srv_url }}
 
-      - name: Build Vue apps
-        run: npm --prefix hugo-apps run build
-
-      - name: Copy Joule vendor bundles
-        run: npm run copy-joule-vendor
-
-      - name: Build Hugo site
-        run: |
-          if [ "${{ steps.env.outputs.channel }}" = "qa" ]; then
-            /tmp/hugo --source hugo --config ../hugo.qa.toml --minify
-            echo "hugo_dir=hugo/public-qa" >> "$GITHUB_OUTPUT"
-          else
-            /tmp/hugo --source hugo --minify
-          fi
-        id: build
-
-      # IMPORTANT: this step is REQUIRED for the verify to produce sensible
-      # results. `scripts/highlight-cds.ts` is part of `npm run build:all`
-      # (the real publish path), and it post-processes CDS code blocks in
-      # the Hugo output with Shiki-rendered HTML. Without it, the local
-      # bytes use Chroma (Hugo's default) while the server bytes were
-      # published with Shiki — every tutorial with a CDS block shows up as
-      # "drift" even when content is identical. Caught 2026-06-24 run
-      # 28077660798: 1367 slugs reported as stale, ALL were false-positives
-      # from this missing step + the recommendations-rail churn handled in
-      # publish-content.ts's verify path.
-      - name: Apply CDS syntax highlighting (Shiki)
-        run: npm run build:highlight
-
-      # publish-content.ts uses --hugo-dir to find the built HTML +
-      # compute SHA-256s. For QA the dir is hugo/public-qa; for the
-      # default channel it's hugo/public. Default in the script is
-      # already hugo/public, so we only override for QA.
-      - name: Verify content hashes against ${{ matrix.environment }}
+      # The CLI's --verify-only path under PR #591 hashes
+      # `.tutorial-cache/<slug>.md` (or `.tutorial-cache-qa/<slug>.md`) directly
+      # and compares against `/content/source-hashes`. No --hugo-dir flag
+      # needed — leaving it as a defaulted no-op for back-compat with the CLI
+      # signature.
+      - name: Verify source-markdown hashes against ${{ matrix.environment }}
         id: verify
         run: |
           set +e
-          HUGO_DIR="hugo/public"
-          if [ "${{ steps.env.outputs.channel }}" = "qa" ]; then
-            HUGO_DIR="hugo/public-qa"
-          fi
           npx tsx scripts/publish-content.ts \
-            --hugo-dir "$HUGO_DIR" \
+            ${CHANNEL_FLAG} \
             --base-url "${{ steps.env.outputs.srv_url }}" \
             --verify-only \
             --verbose 2>&1 | tee verify.log
@@ -205,9 +177,9 @@ jobs:
           set -e
           echo "exit_code=$EXIT" >> "$GITHUB_OUTPUT"
           # Three meaningful exit codes from publish-content.ts:
-          #   0 = match
+          #   0 = match (or server has 0 source hashes — pre-#591 server)
           #   1 = connectivity / unexpected failure
-          #   2 = drift detected (slug list in stderr)
+          #   2 = source-markdown drift detected (slug list in stderr)
           # We let the workflow fail in both 1 and 2 cases — both
           # mean someone needs to look — but distinguish them in
           # the run summary below.
@@ -217,6 +189,7 @@ jobs:
           # be set so it can short-circuit politely. Pass an empty
           # string rather than leaving it unset.
           CONTENT_API_KEY: ''
+          CHANNEL_FLAG: ${{ steps.env.outputs.channel == 'qa' && '--channel qa' || '' }}
 
       - name: Upload verify log
         if: always()

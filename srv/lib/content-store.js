@@ -245,7 +245,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
 
   async function publishHandler(req, res) {
     LOG.warn('[content/publish] DEPRECATED single-shot endpoint — clients should migrate to /content/publish/begin|append|commit (spec: 2026-05-29-publish-content-hardening-design.md)');
-    const { trigger, hugoVersion, files, metadata, bodyTexts, branchSpecs } = req.body || {};
+    const { trigger, hugoVersion, files, metadata, bodyTexts, branchSpecs, sources } = req.body || {};
 
     if (!files || typeof files !== 'object' || Object.keys(files).length === 0) {
       return res.status(400).json({ error: 'Missing or empty "files" object' });
@@ -320,6 +320,20 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         const decompressed = gunzipSync(compressed);
         const hash = createHash('sha256').update(decompressed).digest('hex');
 
+        // PR #591: optional source-markdown side. Legacy publishHandler is
+        // deprecated but kept for back-compat; we still honor the new
+        // `sources` shape if present in the payload so a caller that
+        // hasn't migrated to begin/append/commit still gets sourceHash
+        // populated.
+        let sourceContent = null;
+        let sourceHash = null;
+        if (sources && typeof sources[slug] === 'string') {
+          const srcCompressed = Buffer.from(sources[slug], 'base64');
+          const srcDecompressed = gunzipSync(srcCompressed);
+          sourceContent = srcCompressed;
+          sourceHash = createHash('sha256').update(srcDecompressed).digest('hex');
+        }
+
         entries.push({
           slug,
           version: newVersion,
@@ -327,7 +341,9 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
           contentHash: hash,
           sizeBytes: decompressed.length,
           compressedBytes: compressed.length,
-          mimeType: 'text/html'
+          mimeType: 'text/html',
+          sourceContent,
+          sourceHash,
         });
         totalSize += decompressed.length;
       }
@@ -357,7 +373,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
           // matching the same pattern used in the serve handler.
           const placeholders = slugs.length ? slugs.map(() => '?').join(',') : "''";
           carryRows = await db.run(
-            `SELECT "SLUG", "CONTENT", "CONTENTHASH", "SIZEBYTES", "COMPRESSEDBYTES", "MIMETYPE"
+            `SELECT "SLUG", "CONTENT", "CONTENTHASH", "SIZEBYTES", "COMPRESSEDBYTES", "MIMETYPE", "SOURCECONTENT", "SOURCEHASH"
                FROM "${hanaTableName()}"
               WHERE "VERSION" = ? AND "SLUG" NOT IN (${placeholders})`,
             [prevVersion, ...slugs]
@@ -368,15 +384,17 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
             contentHash: r.CONTENTHASH,
             sizeBytes: r.SIZEBYTES,
             compressedBytes: r.COMPRESSEDBYTES,
-            mimeType: r.MIMETYPE
+            mimeType: r.MIMETYPE,
+            sourceContent: r.SOURCECONTENT,
+            sourceHash: r.SOURCEHASH,
           }));
         } else {
           const sel = slugs.length
             ? SELECT.from(ContentFiles)
-                .columns('slug', 'content', 'contentHash', 'sizeBytes', 'compressedBytes', 'mimeType')
+                .columns('slug', 'content', 'contentHash', 'sizeBytes', 'compressedBytes', 'mimeType', 'sourceContent', 'sourceHash')
                 .where`version = ${prevVersion} and slug not in ${slugs}`
             : SELECT.from(ContentFiles)
-                .columns('slug', 'content', 'contentHash', 'sizeBytes', 'compressedBytes', 'mimeType')
+                .columns('slug', 'content', 'contentHash', 'sizeBytes', 'compressedBytes', 'mimeType', 'sourceContent', 'sourceHash')
                 .where({ version: prevVersion });
           carryRows = await sel;
         }
@@ -384,6 +402,13 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         const carryEntries = [];
         for (const row of carryRows) {
           const buf = Buffer.isBuffer(row.content) ? row.content : await toBuffer(row.content);
+          // PR #591: carry sourceContent + sourceHash forward too. See
+          // content-publish-session.js for the rationale (drift workflow
+          // reads sourceHash; a no-op republish must not strand the hash).
+          let srcBuf = null;
+          if (row.sourceContent != null) {
+            srcBuf = Buffer.isBuffer(row.sourceContent) ? row.sourceContent : await toBuffer(row.sourceContent);
+          }
           carryEntries.push({
             slug: row.slug,
             version: newVersion,
@@ -391,7 +416,9 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
             contentHash: row.contentHash,
             sizeBytes: row.sizeBytes,
             compressedBytes: row.compressedBytes,
-            mimeType: row.mimeType
+            mimeType: row.mimeType,
+            sourceContent: srcBuf,
+            sourceHash: row.sourceHash ?? null,
           });
           carriedSize += Number(row.sizeBytes) || 0;
         }
@@ -1039,6 +1066,49 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     }
   }
 
+  // --- GET /content/source-hashes ---
+  //
+  // PR #591: per-slug SHA-256 of the raw UPSTREAM tutorial markdown.
+  // Public-read (no auth) — same access shape as /content/hashes. Used by
+  // the daily content-drift workflow to detect "the GitHub source markdown
+  // changed but we haven't republished" without any of the rendered-HTML
+  // volatility (recs rail, CAP-fed breadcrumbs, syntax highlighter, ...)
+  // that made #589/#590 unworkable.
+  //
+  // Slugs with null sourceHash (e.g. published before PR #591, or special
+  // slugs like __shell__ that have no upstream markdown) are OMITTED from
+  // the response. The drift workflow handles "missing on server" as
+  // "skip this slug for drift detection" — published-before-#591 rows
+  // will heal naturally on the next full republish.
+
+  async function sourceHashesHandler(req, res) {
+    const { ContentFiles } = cds.entities(namespace);
+
+    try {
+      const activeVersion = await getActiveVersion();
+      if (activeVersion === null) {
+        return res.json({});
+      }
+
+      const rows = await SELECT.from(ContentFiles)
+        .where({ version: activeVersion })
+        .columns('slug', 'sourceHash');
+
+      const map = {};
+      for (const row of rows) {
+        if (!row.sourceHash) continue; // skip nulls (legacy rows / special slugs)
+        if (row.slug === '__nav__' || row.slug === '__404__' || row.slug === '__shell__') continue;
+        map[row.slug] = row.sourceHash;
+      }
+
+      res.setHeader('Cache-Control', 'no-cache');
+      res.json(map);
+    } catch (err) {
+      console.error('[content/source-hashes]', err instanceof Error ? err.message : String(err));
+      res.status(500).json({ error: 'Source-hash retrieval failed' });
+    }
+  }
+
   // --- GET /content/nav ---
 
   async function navHandlerFallback(req, res, activeVersion) {
@@ -1314,6 +1384,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     publishHandler,
     serveHandler,
     hashesHandler,
+    sourceHashesHandler,
     navHandler,
     rollbackHandler,
     beginHandler,
@@ -1332,6 +1403,7 @@ export const contentAuthMiddleware = _defaults.contentAuthMiddleware;
 export const publishHandler = _defaults.publishHandler;
 export const serveHandler = _defaults.serveHandler;
 export const hashesHandler = _defaults.hashesHandler;
+export const sourceHashesHandler = _defaults.sourceHashesHandler;
 export const navHandler = _defaults.navHandler;
 export const rollbackHandler = _defaults.rollbackHandler;
 export const beginHandler = _defaults.beginHandler;

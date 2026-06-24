@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { parse as parseYaml } from 'yaml';
 import { parseChannel, type Channel } from './fetch-tutorials.js';
-import { beginSession, appendBatch, commitSession, abortSession, fetchRemoteHashes } from './lib/publish-client.js';
+import { beginSession, appendBatch, commitSession, abortSession, fetchRemoteHashes, fetchRemoteSourceHashes } from './lib/publish-client.js';
 import { withRetry, formatErrorChain } from './lib/publish-retry.js';
 import { chunk, runConcurrent } from './lib/publish-batcher.js';
 import { collectCodeCheckSpecs, publishCodeCheckSpecs } from './lib/publish-codecheck.js';
@@ -119,58 +119,6 @@ export function computeLocalHashes(tutorials: Map<string, string>): Map<string, 
   return hashes;
 }
 
-/**
- * Strip the per-tutorial "Next Steps" recommendations rail from rendered
- * tutorial HTML. The rail's contents are derived at Hugo-build time from
- * the LIVE CAP `/build/co-completions` aggregation, which changes every
- * time a user completes a tutorial — so the rail's bytes are volatile by
- * design relative to whatever co-completions snapshot the LAST publish
- * happened to capture. Using these bytes in a hash compare produces
- * false drift on every tutorial whose top recommendations shifted since
- * the last publish; in run 28077660798 (2026-06-24 04:13 UTC) that was
- * 1367 / 1399 slugs, ALL of which were content-identical after stripping.
- *
- * The rail HTML structure (Hugo template at hugo/layouts/partials/next-steps.html):
- *
- *   <div class=next-steps-rail data-recommend-slug="<slug>">
- *     <h4 ...>Related Tutorials</h4>
- *     <div class=next-steps-grid data-recommend-target> ... </div>
- *     <template data-recommend-template> ... </template>
- *   </div>
- *
- * Hugo `--minify` collapses whitespace and drops most attribute quotes,
- * so we match permissively on attribute order/quoting. The closing
- * </template></div> sequence is the unambiguous terminator — `<template>`
- * appears nowhere else in the tutorial HTML.
- *
- * Exported for testability.
- */
-export function stripRecommendationsRail(html: string): string {
-  // Tolerate both attribute orders (class-first OR data-recommend-slug-first)
-  // and quoted/unquoted attribute values. Hugo `--minify` is supposed to be
-  // deterministic per Hugo version but the safer regex is order-agnostic.
-  //
-  // Strategy: find the OPENING `<div ...>` whose attributes contain BOTH
-  // `next-steps-rail` (as a full word in `class=…`) AND `data-recommend-slug`,
-  // then sweep to the unambiguous terminator `</template></div>`. Two
-  // re-orderings of attribute order to satisfy without a backtracking
-  // catastrophe.
-  //
-  // The original regex (`<div class=next-steps-rail [^>]*data-recommend-slug…`)
-  // only matched class-first; CI run 28094682268 showed only 6/1367 mismatches
-  // were being reclassified as false-positives, suggesting CI's Hugo emitted
-  // attribute order differently from local. The match-either-order regexes
-  // below restored the expected ~95% false-positive rate.
-  return html
-    .replace(
-      /<div class=["']?next-steps-rail["']?\s+[^>]*data-recommend-slug[^>]*>[\s\S]*?<\/template><\/div>/g,
-      ''
-    )
-    .replace(
-      /<div [^>]*data-recommend-slug[^>]*\bnext-steps-rail\b[^>]*>[\s\S]*?<\/template><\/div>/g,
-      ''
-    );
-}
 
 export function computeDiff(
   local: Map<string, string>,
@@ -198,6 +146,40 @@ export function buildPayload(
     payload[slug] = compressed.toString('base64');
   }
   return payload;
+}
+
+/**
+ * Build the source-markdown side of the publish payload (PR #591). For each
+ * slug, reads `<cacheDir>/<slug>.md` (the raw upstream tutorial markdown that
+ * `fetch-tutorials.ts` populated), gzips it, base64-encodes, and stores under
+ * the same slug key. Slugs whose source file is missing are silently skipped
+ * — the server stores null sourceContent/sourceHash for those rows, and
+ * `/content/source-hashes` simply omits them. This is the right behavior for
+ * special slugs (`__shell__`, `__nav__`, `__404__`) that have no upstream
+ * markdown.
+ *
+ * Returns the gzipped-base64 map AND a parallel map of pre-gzip SHA-256
+ * hashes; the server independently re-hashes after gunzip and rejects on
+ * mismatch (defense against in-flight corruption), but exposing the hash
+ * locally lets the CLI auto-verify against `/content/source-hashes`
+ * without round-tripping through gzip.
+ */
+export function buildSourcePayload(
+  slugs: string[],
+  cacheDir: string
+): { sources: Record<string, string>; sourceHashes: Map<string, string> } {
+  const sources: Record<string, string> = {};
+  const sourceHashes = new Map<string, string>();
+  for (const slug of slugs) {
+    const mdPath = join(cacheDir, `${slug}.md`);
+    if (!existsSync(mdPath)) continue; // No source for this slug — special slugs etc.
+    const content = readFileSync(mdPath);
+    const hash = createHash('sha256').update(content).digest('hex');
+    const compressed = gzipSync(content);
+    sources[slug] = compressed.toString('base64');
+    sourceHashes.set(slug, hash);
+  }
+  return { sources, sourceHashes };
 }
 
 // --- Body text extraction (for HANA full-text search) ---
@@ -491,105 +473,6 @@ async function collectSidecars(hugoDir: string, payload: Record<string, string>,
   return keys;
 }
 
-/**
- * Phase-2 verify for --verify-only: after raw-hash mismatch is computed,
- * fetch the server's rendered HTML for each mismatched slug, strip the
- * per-tutorial "Next Steps" recommendations rail from BOTH the server
- * body and the local file, and re-compare. The output is the subset of
- * `slugs` that are STILL byte-mismatched after rail stripping — i.e. the
- * actual content-drift slugs, with rail churn filtered out.
- *
- * `/content/tutorials/<slug>` is public-read; no auth needed.
- *
- * Sequential fetches to keep the runner network profile simple. Worst
- * case: ~1400 slugs × ~50 ms each = ~70s wall-clock. Cheap relative to
- * the value of a sound report.
- */
-export async function verifyDriftWithNormalization(opts: {
-  baseUrl: string;
-  hugoDir: string;
-  slugs: string[];
-  verbose?: boolean;
-}): Promise<{ realDrift: string[]; falsePositives: string[]; unreachable: string[] }> {
-  const realDrift: string[] = [];
-  const falsePositives: string[] = [];
-  const unreachable: string[] = [];
-  const base = opts.baseUrl.replace(/\/$/, '');
-  let firstStripFailureLogged = false;
-
-  let progress = 0;
-  const total = opts.slugs.length;
-  for (const slug of opts.slugs) {
-    progress++;
-    if (opts.verbose && progress % 50 === 0) {
-      console.log(`  [normalize] ${progress}/${total} slugs checked`);
-    }
-    const localPath = join(opts.hugoDir, 'tutorials', slug, 'index.html');
-    let localBody: string;
-    try {
-      localBody = readFileSync(localPath, 'utf8');
-    } catch {
-      // Slug present on server but missing locally — that IS real drift
-      // (the local build doesn't think this slug should exist). Flag as
-      // real so the caller surfaces it.
-      realDrift.push(slug);
-      continue;
-    }
-    let serverBody: string;
-    try {
-      const res = await fetch(`${base}/content/tutorials/${slug}`);
-      if (!res.ok) {
-        unreachable.push(slug);
-        continue;
-      }
-      serverBody = await res.text();
-    } catch {
-      unreachable.push(slug);
-      continue;
-    }
-    const localStripped = stripRecommendationsRail(localBody);
-    const serverStripped = stripRecommendationsRail(serverBody);
-    // Defensive: if the strip didn't actually remove anything from EITHER
-    // side, the rail isn't the cause of the diff — treat as real drift.
-    // This guards against a future Hugo-layout change that breaks the
-    // regex and silently reports zero drift when there is real drift.
-    const localChanged = localStripped.length !== localBody.length;
-    const serverChanged = serverStripped.length !== serverBody.length;
-    if (!localChanged && !serverChanged) {
-      // One-time diagnostic: when the strip fails on BOTH sides for the
-      // first slug, print a ~200-char snippet around the expected rail
-      // location so future regex drift is debuggable. The rail-heading
-      // class `next-steps-rail-heading` is a stable anchor; if it
-      // appears in BOTH sides but the surrounding markup doesn't match
-      // the regex, the layout has changed in a way the regex didn't
-      // anticipate.
-      if (firstStripFailureLogged === false) {
-        firstStripFailureLogged = true;
-        const sIdx = serverBody.indexOf('next-steps-rail');
-        const lIdx = localBody.indexOf('next-steps-rail');
-        console.warn(`  [normalize] WARN strip-rail no-op on '${slug}' — first miss diagnostic:`);
-        if (sIdx >= 0) {
-          console.warn(`    server snippet: ${JSON.stringify(serverBody.slice(Math.max(0, sIdx - 30), sIdx + 200))}`);
-        } else {
-          console.warn(`    server: no 'next-steps-rail' substring at all`);
-        }
-        if (lIdx >= 0) {
-          console.warn(`    local  snippet: ${JSON.stringify(localBody.slice(Math.max(0, lIdx - 30), lIdx + 200))}`);
-        } else {
-          console.warn(`    local : no 'next-steps-rail' substring at all`);
-        }
-      }
-      realDrift.push(slug);
-      continue;
-    }
-    if (localStripped === serverStripped) {
-      falsePositives.push(slug);
-    } else {
-      realDrift.push(slug);
-    }
-  }
-  return { realDrift, falsePositives, unreachable };
-}
 
 async function main() {
   const channel = parseChannel(process.argv);
@@ -603,11 +486,11 @@ async function main() {
     opts.force = cfg.force;
   }
 
-  // --verify-only is a read-only call against the public /content/hashes
-  // endpoint — no auth needed, so the API key check is skipped. Without
-  // this exemption, the daily content-drift-check workflow could never
-  // succeed (it sets CONTENT_API_KEY="" deliberately), which broke every
-  // run since the workflow shipped on 2026-06-06 (latest 27397407654).
+  // --verify-only is a read-only call against the public /content/source-hashes
+  // endpoint (PR #591; pre-PR #591 it used /content/hashes — also public-read).
+  // No auth needed, so the API key check is skipped. Without this exemption,
+  // the daily content-drift-check workflow could never succeed (it sets
+  // CONTENT_API_KEY="" deliberately).
   if (!opts.apiKey && !opts.verifyOnly) {
     const envHint = channel === 'qa' ? 'CONTENT_API_KEY_QA' : 'CONTENT_API_KEY';
     console.error(`Error: No API key. Set ${envHint} env var or pass --api-key`);
@@ -658,58 +541,95 @@ async function main() {
   const localHashes = computeLocalHashes(tutorials);
 
   // --- verify-only short-circuit ---
+  //
+  // PR #591 design: --verify-only compares source-markdown hashes, NOT
+  // rendered-HTML hashes. The rendered HTML is volatile-by-design relative to
+  // upstream (recs rail + CAP-fed breadcrumbs + Shiki vs Chroma + ...), and
+  // every previous attempt to normalize those volatile regions out of the hash
+  // (#589, #590) failed to scale because there are too many. The source
+  // markdown changes only when an author edits the upstream tutorial — a
+  // monotonic, meaningful signal.
+  //
+  // The drift workflow now runs ONLY `npm run fetch-tutorials` before
+  // --verify-only — no Hugo build, no Shiki, no Vue. Fast (~1-2 min) and
+  // accurate.
   if (opts.verifyOnly) {
-    let remote: Record<string, string>;
-    try {
-      remote = await fetchRemoteHashes({ baseUrl: opts.baseUrl });
-    } catch (err) {
-      console.error('Verify failed: cannot reach /content/hashes:', formatErrorChain(err));
+    const cacheDir = channel === 'qa'
+      ? join(process.cwd(), '.tutorial-cache-qa')
+      : join(process.cwd(), '.tutorial-cache');
+
+    // 1) Discover slugs from the cache by listing *.md files (NOT from Hugo
+    //    output, which the workflow no longer builds).
+    let mdFiles: string[];
+    try { mdFiles = readdirSync(cacheDir).filter(f => f.endsWith('.md') && !f.startsWith('_')); }
+    catch (err) {
+      console.error(`Verify failed: cannot read tutorial-cache dir ${cacheDir}: ${formatErrorChain(err)}`);
       process.exit(1);
     }
-    const diff = computeDiff(localHashes, remote);
-    if (diff.length === 0) {
-      console.log(`Verify OK: ${localHashes.size} slugs match server.`);
+    const localHashes = new Map<string, string>();
+    for (const f of mdFiles) {
+      const slug = f.replace(/\.md$/, '');
+      const buf = readFileSync(join(cacheDir, f));
+      localHashes.set(slug, createHash('sha256').update(buf).digest('hex'));
+    }
+    log(`Hashed ${localHashes.size} source markdown files in ${cacheDir}`);
+
+    // 2) Fetch server's source-hash map.
+    let remote: Record<string, string>;
+    try {
+      remote = await fetchRemoteSourceHashes({ baseUrl: opts.baseUrl });
+    } catch (err) {
+      console.error('Verify failed: cannot reach /content/source-hashes:', formatErrorChain(err));
+      process.exit(1);
+    }
+    const serverSlugCount = Object.keys(remote).length;
+    log(`Fetched ${serverSlugCount} source hashes from ${opts.baseUrl}/content/source-hashes`);
+
+    // 3) Diff. Only count slugs the server actually KNOWS about — if the
+    //    server returned an empty/partial map (e.g. server pre-dates PR
+    //    #591 and never wrote source hashes), warn and exit 0. Otherwise
+    //    a fresh deploy would always look like 1400 slugs of "drift".
+    if (serverSlugCount === 0) {
+      console.warn('');
+      console.warn('Verify SKIPPED: server returned 0 source hashes.');
+      console.warn('  This is expected immediately after PR #591 deploys, before');
+      console.warn('  a new publish-content run has populated sourceHash. Re-run');
+      console.warn('  this verify after `npm run publish-content` completes.');
       process.exit(0);
     }
 
-    // Phase 2: many tutorials show raw-hash drift purely because the
-    // per-tutorial "Next Steps" rail is built from live CAP coCompletions
-    // and reshuffles every time a user completes a tutorial. Re-compare
-    // the mismatched slugs with the rail stripped from both sides; only
-    // count what remains as real drift. See verifyDriftWithNormalization
-    // and stripRecommendationsRail above for the full rationale.
-    console.log(
-      `Raw-hash mismatch on ${diff.length} slug(s). Re-checking with ` +
-      `recommendations-rail normalization (this may take ~${Math.ceil(diff.length * 0.06)}s)...`
-    );
-    const norm = await verifyDriftWithNormalization({
-      baseUrl: opts.baseUrl,
-      hugoDir: opts.hugoDir,
-      slugs: diff,
-      verbose: opts.verbose,
-    });
-    const totalSlugs = localHashes.size;
-    const matched = totalSlugs - diff.length;
-    console.log('');
-    console.log(`Verify summary (after rail normalization):`);
-    console.log(`  Total local slugs:                       ${totalSlugs}`);
-    console.log(`  Byte-identical on first pass:            ${matched}`);
-    console.log(`  Differed only in rec-rail (false drift): ${norm.falsePositives.length}`);
-    console.log(`  Unreachable on server (transient?):      ${norm.unreachable.length}`);
-    console.log(`  Real drift (content differs):            ${norm.realDrift.length}`);
-    if (norm.unreachable.length > 0) {
-      console.warn(`  Unreachable slugs: ${norm.unreachable.slice(0, 10).join(', ')}` +
-        (norm.unreachable.length > 10 ? `, ... (+${norm.unreachable.length - 10} more)` : ''));
+    const drifted: string[] = [];
+    const missingLocal: string[] = []; // present on server, missing in local cache
+    const missingServer: string[] = []; // present locally, no hash on server
+    for (const [slug, localHash] of localHashes) {
+      const serverHash = remote[slug];
+      if (!serverHash) {
+        missingServer.push(slug);
+        continue;
+      }
+      if (serverHash !== localHash) drifted.push(slug);
     }
-    if (norm.realDrift.length === 0) {
+    for (const slug of Object.keys(remote)) {
+      if (!localHashes.has(slug)) missingLocal.push(slug);
+    }
+
+    console.log('');
+    console.log('Verify summary (source-markdown hash compare):');
+    console.log(`  Total local source files:        ${localHashes.size}`);
+    console.log(`  Total server source hashes:      ${serverSlugCount}`);
+    console.log(`  Drifted (content differs):       ${drifted.length}`);
+    console.log(`  Missing on server (not yet published / pre-#591): ${missingServer.length}`);
+    console.log(`  Missing locally (server has, local doesn't): ${missingLocal.length}`);
+
+    if (drifted.length === 0) {
       console.log('');
-      console.log('Verify OK: no real content drift — all mismatches explained by recommendations-rail churn.');
+      console.log('Verify OK: no source-markdown drift detected.');
       process.exit(0);
     }
     console.error('');
-    console.error(`Verify FAILED: ${norm.realDrift.length} slug(s) have real content drift:`);
-    for (const s of norm.realDrift.slice(0, 50).sort()) console.error(`  - ${s}`);
-    if (norm.realDrift.length > 50) console.error(`  ... (+${norm.realDrift.length - 50} more)`);
+    console.error(`Verify FAILED: ${drifted.length} slug(s) have source-markdown drift:`);
+    for (const s of drifted.slice(0, 50).sort()) console.error(`  - ${s}`);
+    if (drifted.length > 50) console.error(`  ... (+${drifted.length - 50} more)`);
     process.exit(2);
   }
 
@@ -750,6 +670,20 @@ async function main() {
   const bodyTextsAll = extractAllBodyTexts(tutorials, targetSlugs);
   const branchSpecsAll = extractAllBranchSpecs(hugoContentDir, targetSlugs);
 
+  // PR #591: capture raw upstream markdown alongside rendered HTML. Each
+  // tutorial's source lives at `.tutorial-cache/<slug>.md` (or
+  // `.tutorial-cache-qa/<slug>.md` for QA), populated by fetch-tutorials.
+  // Special slugs (__shell__, __nav__, __404__) have no upstream source —
+  // buildSourcePayload silently skips them, and the server stores null
+  // sourceContent/sourceHash for those rows. The drift workflow uses these
+  // sourceHashes instead of contentHashes for clean drift detection.
+  const cacheDir = channel === 'qa'
+    ? join(process.cwd(), '.tutorial-cache-qa')
+    : join(process.cwd(), '.tutorial-cache');
+  const { sources: sourcesAll, sourceHashes: localSourceHashes } =
+    buildSourcePayload(targetSlugs, cacheDir);
+  log(`Source markdown payload: ${Object.keys(sourcesAll).length}/${targetSlugs.length} slugs have upstream .md files`);
+
   // __nav__ / __404__ / __shell__ ride along on the first batch (these are
   // small and the server happily accepts them mixed with regular slugs).
   const sidecarKeys = await collectSidecars(opts.hugoDir, payload, log, channel);
@@ -774,6 +708,10 @@ async function main() {
           metadata:  pickEntries(metadataAll,    batch),
           bodyTexts: pickEntries(bodyTextsAll,   batch),
           branchSpecs: pickEntries(branchSpecsAll, batch),
+          // Sidecar keys (__shell__ etc.) won't appear in sourcesAll —
+          // pickEntries returns {} for them, which the server treats as
+          // "no source for this batch" and skips the source-side INSERT.
+          sources:   pickEntries(sourcesAll,     batch),
         }),
         {
           attempts: 3, backoffMs: [1000, 3000, 9000],

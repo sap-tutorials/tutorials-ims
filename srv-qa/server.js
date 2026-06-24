@@ -23,7 +23,7 @@ cds.on('bootstrap', (app) => {
     }
   });
 
-  const { serveHandler, navHandler, hashesHandler, publishHandler, rollbackHandler, beginHandler, appendHandler, commitHandler, abortHandler, contentAuthMiddleware } =
+  const { serveHandler, navHandler, hashesHandler, sourceHashesHandler, publishHandler, rollbackHandler, beginHandler, appendHandler, commitHandler, abortHandler, contentAuthMiddleware } =
     createContentHandlers({ namespace: 'com.sap.developers.ims.qa', apiKeyEnv: 'CONTENT_API_KEY_QA', skipMetadataUpsert: true });
 
   // GET handlers serve in-flight author content from -Contribution repos. The
@@ -66,6 +66,10 @@ cds.on('bootstrap', (app) => {
 
   app.get('/content/nav', requireAuthorScope, navHandler);
   app.get('/content/hashes', hashesAuth, hashesHandler);
+  // PR #591: source-of-truth markdown hashes for the daily drift workflow.
+  // Same dual-auth shape as /content/hashes — drift workflow uses the bearer
+  // key, browser-shell callers come in with XSUAA Tutorial.Author scope.
+  app.get('/content/source-hashes', hashesAuth, sourceHashesHandler);
   app.get('/content/tutorials/*slug', requireAuthorScope, serveHandler);
   // Legacy single-shot publish (kept for compatibility); CLI now uses the
   // chunked begin/append/commit pipeline by default (publish-content.ts via

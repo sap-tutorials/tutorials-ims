@@ -13,7 +13,7 @@ import { decideHandler } from './lib/branch/decide.js';
 import { getTagLabelMap } from './lib/tag-label-map.js';
 import { myProgressHandler } from './lib/my-progress-handler.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
-import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, navHandler, rollbackHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler } from './lib/content-store.js';
+import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, sourceHashesHandler, navHandler, rollbackHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler } from './lib/content-store.js';
 import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-catalog.js';
 import * as advocatesPublic from './routes/advocates-public.js';
 import * as devtoberfestPublic from './routes/devtoberfest-public.js';
@@ -191,6 +191,10 @@ cds.on('bootstrap', (app) => {
   // Content persistence endpoints
   app.get('/content/nav', navHandler);
   app.get('/content/hashes', hashesHandler);
+  // PR #591: source-of-truth markdown hashes for the daily drift workflow.
+  // Public-read like /content/hashes; see srv/lib/content-store.js for the
+  // rationale (rendered HTML is volatile-by-design, source markdown isn't).
+  app.get('/content/source-hashes', sourceHashesHandler);
   app.get('/content/tutorials/*slug', serveHandler);
   app.post('/content/publish', express.json({ limit: '100mb' }), contentAuthMiddleware, publishHandler);
   app.post('/content/publish/begin',  express.json({ limit: '1mb' }),   contentAuthMiddleware, beginHandler);
