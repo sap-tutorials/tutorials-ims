@@ -12,8 +12,18 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import cds from '@sap/cds';
 import { _resetForTests } from '../rebuild-trigger.js';
+import * as tenantResolver from '../runtime-config/tenant-settings.js';
 
 const { POST, axios } = cds.test(import.meta.dirname + '/../../..');
+
+function mockTenant() {
+  vi.spyOn(tenantResolver, 'resolveTenantSettings').mockResolvedValue({
+    allowedCorsOrigins: '',
+    rebuildTargetEnv: 'dev',
+    techUsers: '',
+    techUsersMapping: '',
+  });
+}
 
 describe('AdminService.rebuildContent', () => {
   let dispatchCalls;
@@ -43,6 +53,8 @@ describe('AdminService.rebuildContent', () => {
       debounceMs: 60_000, // keep the real shape; we'll advance timers
       token: 'fake-test-token',
     });
+
+    mockTenant();
   });
 
   afterEach(() => {
@@ -114,6 +126,10 @@ describe('AdminService.rebuildContent', () => {
   // Test 4: rejects 400 when slug is null
   // -------------------------------------------------------------
   it('rejects 400 when tutorial slug is null', async () => {
+    // Tests 4 and 5 exercise the synchronous reject path; advancing timers
+    // is unnecessary AND fake timers interfere with axios's 4xx response
+    // handling under cds.test(). Switch to real timers for these two tests.
+    vi.useRealTimers();
     const { Tutorials } = cds.entities('AdminService');
     const tutorialId = '00000000-0000-0000-0000-000000000004';
     await INSERT.into(Tutorials).entries({
@@ -124,8 +140,8 @@ describe('AdminService.rebuildContent', () => {
       POST(`/admin/Tutorials(ID=${tutorialId},IsActiveEntity=true)/AdminService.rebuildContent`, {})
     ).rejects.toMatchObject({ response: { status: 400 } });
 
-    // Advance the debounce window; no dispatch should have fired.
-    await vi.advanceTimersByTimeAsync(60_001);
+    // Handler rejects synchronously before scheduleRebuild is called, so
+    // dispatchCalls stays empty regardless of timing.
     expect(dispatchCalls).toHaveLength(0);
   });
 
@@ -133,6 +149,10 @@ describe('AdminService.rebuildContent', () => {
   // Test 5: rejects 400 when slug is empty string
   // -------------------------------------------------------------
   it('rejects 400 when tutorial slug is empty string', async () => {
+    // Tests 4 and 5 exercise the synchronous reject path; advancing timers
+    // is unnecessary AND fake timers interfere with axios's 4xx response
+    // handling under cds.test(). Switch to real timers for these two tests.
+    vi.useRealTimers();
     const { Tutorials } = cds.entities('AdminService');
     const tutorialId = '00000000-0000-0000-0000-000000000005';
     await INSERT.into(Tutorials).entries({

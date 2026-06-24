@@ -15,6 +15,7 @@ import * as advocateHandlers from './handlers/advocate-handlers.js';
 import { classifySeverity, daysUntil } from './jobs/secret-expiry-check.js';
 import { readSecret, writeSecret, deleteSecret } from './lib/credstore.js';
 import { invalidateSecret } from './lib/secret-resolver.js';
+import { scheduleRebuild } from './lib/rebuild-trigger.js';
 import { cleanupChangeLog } from './jobs/cleanup.js';
 import { ensureDevtoberfestActiveFlagInvariant } from './lib/devtoberfest-active-flag.js';
 import { getTutorialSource } from './lib/content-store.js';
@@ -1397,6 +1398,44 @@ export default class AdminService extends cds.ApplicationService {
       return {
         value,
         expiresAt: new Date(Date.now() + REVEAL_WINDOW_MS),
+      };
+    });
+
+    // ── Rebuild-button action (issue: rebuild-button) ──
+    // Bound action on Tutorials. Resolves slug, audit-logs intent, dispatches
+    // a slug-targeted rebuild via scheduleRebuild's 60s debounce.
+    this.on('rebuildContent', 'Tutorials', async (req) => {
+      const tutorialId = req.params[0].ID;
+      const row = await SELECT.one
+        .from(Tutorials)
+        .columns('slug', 'title')
+        .where({ ID: tutorialId });
+      if (!row?.slug) {
+        return req.reject(400, 'Tutorial has no slug; cannot rebuild');
+      }
+
+      const userId = req.user?.id ?? 'anonymous';
+
+      // auditEvent is the closure-scoped helper at line 1234; it emits
+      // 'SecurityEvent' with { data: { action, ...rest } }. No-op when the
+      // audit-log binding is unavailable (mock-auth dev environment).
+      await auditEvent('TutorialRebuildTriggered', {
+        user: userId,
+        tutorialId,
+        slug: row.slug,
+        source: 'admin-ui:tutorial-detail',
+      });
+
+      await scheduleRebuild(`admin-ui:rebuild-button:${userId}`, {
+        mode: 'slug-targeted',
+        slug: row.slug,
+      });
+
+      return {
+        dispatched: true,
+        slug: row.slug,
+        debounced: true,
+        workflowUrl: 'https://github.com/sap-tutorials/tutorials-ims/actions/workflows/rebuild-content.yml',
       };
     });
 
