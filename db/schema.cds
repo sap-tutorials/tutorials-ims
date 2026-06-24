@@ -676,6 +676,17 @@ entity AuthorAiRequests : managed {
   tokensUsed        : Integer;
   durationMs        : Integer;
   errorCode         : String(200);         // null on success
+  // PR-3 of spec 2026-06-24-tutorials-admin-tile-expansion-design.
+  // Both FKs nullable + populated when the writer knows them. The
+  // tutorial association lets the admin Tutorials OP filter
+  // AuthorAiRequests for the currently-bound tutorial. The user
+  // association mirrors the FK pattern established in PR #618
+  // (Tutorials.author, TutorialContributors.user); the existing
+  // authorId String stays as the XSUAA-claim source-of-truth and
+  // can be backfilled into user_ID later by the same resolver path
+  // used in srv/lib/resolve-tutorial-author.js.
+  tutorial          : Association to Tutorials;
+  user              : Association to Users;
 }
 
 /**

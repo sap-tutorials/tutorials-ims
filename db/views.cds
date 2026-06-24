@@ -136,6 +136,31 @@ view CompletionAnalytics as
   }
   where tr.status = 'COMPLETED';
 
+// PR-3 of spec 2026-06-24-tutorials-admin-tile-expansion-design.
+// Pre-aggregated per-tutorial completion stats. CompletionAnalytics
+// above is row-per-completion (good for analytics drill-downs); this
+// view is one row per tutorial slug, designed for the Tutorials admin
+// OP's "Completion Stats" facet so the tile can render counters and
+// time stats without doing client-side aggregation.
+//
+// `uniqueLearners` counts distinct users — captures engagement breadth.
+// `completions` counts every successful completion event — captures
+// re-take signal (the same user can complete in different events).
+// Spec decision 2: both numbers shown side-by-side in the admin tile.
+view TutorialCompletionStats as
+  SELECT from ims.TaskRecords as tr
+  inner join ims.Tutorials as tut on tut.legacyId = tr.taskLegacyId
+  {
+    key tut.slug as tutorialSlug : String(255),
+    count(distinct tr.user.ID) as uniqueLearners : Integer,
+    count(*) as completions : Integer,
+    avg(tr.completionTime) as avgTimeMs : Decimal(18,2),
+    min(tr.completionDate) as firstCompletion : Timestamp,
+    max(tr.completionDate) as lastCompletion : Timestamp
+  }
+  where tr.status = 'COMPLETED' and tr.taskType = 'TUTORIAL'
+  group by tut.slug;
+
 view ActiveLearnersDaily as
   select from ims.TaskRecords {
     key cast(modifiedAt as Date) as recordDate : Date,
