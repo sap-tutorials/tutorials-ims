@@ -114,6 +114,46 @@ export function parseSlugFilter(slug?: string, slugs?: string): Set<string> | nu
   return set.size > 0 ? set : null
 }
 
+/**
+ * Plan the Phase 2 GitHub metadata prefetch — one task per repo, with the
+ * per-repo slug list narrowed to `tutorialSlugFilter` when set.
+ *
+ * Why this exists (#613): the old Phase 2 code called
+ * `fetchGitHubMetaBatch(repo, branch, slugs)` for every repo with every
+ * discovered slug, regardless of `tutorialSlugFilter`. For a one-slug
+ * rebuild that meant ~4m 40s of GraphQL traffic against ~1400 slugs
+ * across ~30 repos. The slug filter was honored at Phase 3 (per-tutorial
+ * loop) but never reached Phase 2.
+ *
+ * This pure helper applies the filter once, drops repos that contribute
+ * zero in-filter slugs, and returns the minimal plan. Repos that retain at
+ * least one slug pass through with the branch of the first retained
+ * tutorial — matching the existing `tuts[0].branch` idiom.
+ *
+ * @param allTutorials — full discovered tutorial list
+ * @param filter — `null` for full rebuild, or a non-null `Set<string>` of
+ *                  slugs to keep
+ * @returns array of `{ repo, branch, slugs[] }` — one entry per repo that
+ *           survived the filter
+ */
+export function planMetadataPrefetch(
+  allTutorials: DiscoveredTutorial[],
+  filter: Set<string> | null,
+): Array<{ repo: string; branch: string; slugs: string[] }> {
+  const byRepo = new Map<string, DiscoveredTutorial[]>()
+  for (const t of allTutorials) {
+    if (filter && !filter.has(t.slug)) continue
+    const list = byRepo.get(t.repo) ?? []
+    list.push(t)
+    byRepo.set(t.repo, list)
+  }
+  return Array.from(byRepo.entries()).map(([repo, tuts]) => ({
+    repo,
+    branch: tuts[0].branch,
+    slugs: tuts.map(t => t.slug),
+  }))
+}
+
 interface ErrorEntry {
   slug: string
   repo: string
@@ -630,19 +670,24 @@ async function main() {
     }
 
     // ── Phase 2: Batch prefetch GitHub metadata via GraphQL ──
+    // #613: scope the prefetch to `tutorialSlugFilter` when set. Without this
+    // filter, a one-slug rebuild paid ~4m 40s of GraphQL traffic against the
+    // full ~1400-slug catalog. The plan helper drops repos with no in-filter
+    // slugs entirely and narrows each retained repo's slug list. The Phase 3
+    // loop downstream still reads non-target slug metadata from the disk cache
+    // (`.tutorial-cache/github-meta.json`), with a per-call singleton fetch
+    // as the cache-miss fallback. Net effect: slug-targeted runs go from ~5m
+    // to a few seconds in this phase.
     console.log('Phase 2: Prefetching GitHub metadata (batched GraphQL)...\n')
     const metaStart = performance.now()
 
-    const byRepo = new Map<string, DiscoveredTutorial[]>()
-    for (const t of allTutorials) {
-      const list = byRepo.get(t.repo) ?? []
-      list.push(t)
-      byRepo.set(t.repo, list)
+    const repoPlan = planMetadataPrefetch(allTutorials, tutorialSlugFilter)
+    if (tutorialSlugFilter) {
+      const totalSlugs = repoPlan.reduce((n, p) => n + p.slugs.length, 0)
+      console.log(`  [slug-filter] scoped Phase 2 to ${repoPlan.length} repo(s) / ${totalSlugs} slug(s) — skipping ${allTutorials.length - totalSlugs} slug(s) outside the filter\n`)
     }
 
-    const metaTasks = Array.from(byRepo.entries()).map(([repo, tuts]) => async () => {
-      const branch = tuts[0].branch
-      const slugs = tuts.map(t => t.slug)
+    const metaTasks = repoPlan.map(({ repo, branch, slugs }) => async () => {
       console.log(`  ${repo}: ${slugs.length} tutorials...`)
       await fetchGitHubMetaBatch(repo, branch, slugs)
     })
