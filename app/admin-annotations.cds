@@ -597,7 +597,15 @@ annotate AdminService.Tutorials with @UI: {
     { Value: status },
     { Value: deletionReason },
     { Value: redirectTo_ID, Label: 'Redirect To' }
-  ]}
+  ]},
+  Identification: [
+    {
+      $Type            : 'UI.DataFieldForAction',
+      Label            : 'Rebuild this tutorial',
+      Action           : 'AdminService.rebuildContent',
+      ![@UI.Importance]: #High,
+    }
+  ]
 };
 
 annotate AdminService.Tutorials with {
