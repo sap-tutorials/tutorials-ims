@@ -54,10 +54,23 @@ on:
         type: string
       mode:
         description: |
-          Rebuild scope. 'full' (default) re-fetches all tutorials, rebuilds Vue apps, runs full publish.
-          'catalog-only' skips fetch + Vue + AI quiz; just rebuilds Hugo from cached markdown + new
-          browse.json and runs publish-content --heal. 30-60s wall clock. 'slug-targeted' uses the
-          existing `slug`/`slugs` inputs to re-fetch only those slugs; same 30-60s wall clock.
+          Rebuild scope (pick the SMALLEST that fits the change to keep wall-clock down).
+
+          - 'catalog-only' — admin Mission/Group/CompletionPath/FeaturedTask edits. Skips
+            fetch + Vue + AI quiz + display + admin SPAs + approuter push. Hugo + publish
+            only. Auto-selected by admin writes via _classify-rebuild-mode.js.
+
+          - 'slug-targeted' — one or a few tutorials changed (parser fix, content typo,
+            single-author edit). Uses `slug` / `slugs` inputs to narrow the fetch step.
+            Same skip list as catalog-only PLUS still refetches the listed slug(s).
+            Auto-selected by admin Tutorial/Step writes.
+
+          - 'full' — full catalog rebuild (e.g. dependency bump, Vue island change, AppRouter
+            asset change, scheduled nightly). Runs everything. 7-13 min wall clock.
+
+          UX: leaving this at the default 'full' AND setting `slug` / `slugs` will auto-infer
+          'slug-targeted' (the implicit user intent — see the 'Determine effective rebuild
+          mode' step). Issue: #609.
         required: false
         default: full
         type: choice
@@ -97,6 +110,45 @@ jobs:
           else
             echo "target=${{ inputs.environment }}" >> "$GITHUB_OUTPUT"
           fi
+
+      # #609: auto-infer the rebuild scope so manual hotfix dispatches don't
+      # silently fall through to `mode=full` and run for 10 minutes when the
+      # user only set the `slug` input. The admin-write path (srv/lib/
+      # rebuild-trigger.js + _classify-rebuild-mode.js) already classifies
+      # mode per entity, so we ONLY auto-infer on workflow_dispatch — never
+      # second-guess the admin classifier.
+      #
+      # Rules:
+      #   - workflow_dispatch + inputs.mode=full + (slug or slugs set)
+      #       → slug-targeted (the implicit user intent)
+      #   - everything else → pass inputs.mode through untouched
+      #
+      # The resolved value is echoed to STEP_SUMMARY so users see why the
+      # workflow ran the steps it did.
+      - name: Determine effective rebuild mode
+        id: mode
+        env:
+          # Pin all dispatch-controlled inputs into env vars first so the
+          # shell logic doesn't need to template-interpolate into bash
+          # conditionals (which is brittle when inputs are missing).
+          INPUT_MODE: ${{ inputs.mode || 'full' }}
+          INPUT_SLUG: ${{ inputs.slug }}
+          INPUT_SLUGS: ${{ inputs.slugs }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          EFFECTIVE="$INPUT_MODE"
+          REASON="explicit (inputs.mode=$INPUT_MODE)"
+
+          if [ "$EVENT" = "workflow_dispatch" ] \
+             && [ "$INPUT_MODE" = "full" ] \
+             && { [ -n "$INPUT_SLUG" ] || [ -n "$INPUT_SLUGS" ]; }; then
+            EFFECTIVE='slug-targeted'
+            REASON='auto-inferred (slug/slugs set, mode left at default)'
+          fi
+
+          echo "effective_mode=$EFFECTIVE" >> "$GITHUB_OUTPUT"
+          echo "effective_reason=$REASON" >> "$GITHUB_OUTPUT"
+          echo "::notice title=Rebuild mode::$EFFECTIVE ($REASON)"
 
       - name: Set approuter URL
         id: url
@@ -152,7 +204,7 @@ jobs:
       # Skipped when ai-author-enabled is false — keeps the env clean for
       # normal rebuilds.
       - name: Set up VCAP_SERVICES for AI authoring
-        if: ${{ inputs.ai-author-enabled == true && inputs.mode != 'catalog-only' }}
+        if: ${{ inputs.ai-author-enabled == true && steps.mode.outputs.effective_mode != 'catalog-only' }}
         env:
           AICORE_CREDENTIALS_JSON: ${{ secrets.AI_AUTHOR_AICORE_SERVICE_KEY }}
         run: |
@@ -170,7 +222,7 @@ jobs:
           echo "VCAP_SERVICES=${VCAP}" >> "$GITHUB_ENV"
 
       - name: Fetch tutorials
-        if: ${{ inputs.mode != 'catalog-only' }}
+        if: ${{ steps.mode.outputs.effective_mode != 'catalog-only' }}
         # [#357 followup] When force-cap-refetch is true, pass --force-cap so
         # fetch-tutorials.ts ignores the .tutorial-cache/ CAP catalog snapshot
         # (24h TTL) and pulls fresh from /build/catalog. Use after fixing data
@@ -202,7 +254,7 @@ jobs:
       # default — uploads a JSON report so we can track trends and chase
       # author-side fixes without breaking the rebuild.
       - name: Lint tutorial markdown
-        if: ${{ inputs.mode != 'catalog-only' }}
+        if: ${{ steps.mode.outputs.effective_mode != 'catalog-only' }}
         env:
           TUTORIAL_AUTHOR_TOKEN: ${{ secrets.TUTORIAL_AUTHOR_TOKEN }}
           ANALYTICS_BASE_URL: ${{ vars.ANALYTICS_BASE_URL || 'https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com/author' }}
@@ -214,7 +266,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload tutorial-markdown lint report
-        if: ${{ always() && inputs.mode != 'catalog-only' }}
+        if: ${{ always() && steps.mode.outputs.effective_mode != 'catalog-only' }}
         uses: actions/upload-artifact@v4
         with:
           name: tutorial-markdown-lint-${{ steps.env.outputs.target }}-${{ github.run_number }}
@@ -223,15 +275,15 @@ jobs:
           if-no-files-found: ignore
 
       - name: Validate tutorials
-        if: ${{ inputs.mode != 'catalog-only' }}
+        if: ${{ steps.mode.outputs.effective_mode != 'catalog-only' }}
         run: npm run validate-tutorials
 
       - name: Build Vue apps
-        if: ${{ inputs.mode == 'full' }}
+        if: ${{ steps.mode.outputs.effective_mode == 'full' }}
         run: npm --prefix hugo-apps run build
 
       - name: Copy Joule vendor bundles
-        if: ${{ inputs.mode == 'full' }}
+        if: ${{ steps.mode.outputs.effective_mode == 'full' }}
         run: npm run copy-joule-vendor
 
       - name: Build Hugo site
@@ -264,11 +316,11 @@ jobs:
           CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
 
       - name: Build display app
-        if: ${{ inputs.mode == 'full' }}
+        if: ${{ steps.mode.outputs.effective_mode == 'full' }}
         run: npm run build:display
 
       - name: Build admin SPAs
-        if: ${{ inputs.mode == 'full' }}
+        if: ${{ steps.mode.outputs.effective_mode == 'full' }}
         # Issue #350: the rebuild-content tarball must include admin-shell,
         # analytics-explorer, and scanner. The approuter's /admin/rebuild
         # handler atomically swaps STATIC_DIR with the tarball contents, so
@@ -283,7 +335,7 @@ jobs:
           npm --prefix app/analytics-explorer run build
 
       - name: Assemble static content
-        if: ${{ inputs.mode == 'full' }}
+        if: ${{ steps.mode.outputs.effective_mode == 'full' }}
         run: |
           mkdir -p approuter/static
           cp -r hugo/public/* approuter/static/
@@ -296,11 +348,11 @@ jobs:
           cp -r app/scanner/webapp approuter/static/scanner-ui
 
       - name: Create content tarball
-        if: ${{ inputs.mode == 'full' }}
+        if: ${{ steps.mode.outputs.effective_mode == 'full' }}
         run: tar czf content.tar.gz -C approuter/static .
 
       - name: Upload content artifact
-        if: ${{ inputs.mode == 'full' }}
+        if: ${{ steps.mode.outputs.effective_mode == 'full' }}
         uses: actions/upload-artifact@v4
         with:
           name: content-${{ steps.env.outputs.target }}-${{ github.run_number }}
@@ -308,7 +360,7 @@ jobs:
           retention-days: 7
 
       - name: Push content to AppRouter
-        if: ${{ inputs.mode == 'full' }}
+        if: ${{ steps.mode.outputs.effective_mode == 'full' }}
         run: |
           HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" \
             -X POST \
@@ -331,6 +383,7 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Environment:** ${{ steps.env.outputs.target }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Trigger:** ${{ github.event_name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Effective mode:** \`${{ steps.mode.outputs.effective_mode }}\` — ${{ steps.mode.outputs.effective_reason }}" >> "$GITHUB_STEP_SUMMARY"
           if [ -n "${{ inputs.slug }}" ] || [ -n "${{ inputs.slugs }}" ]; then
             FILTER="${{ inputs.slug }}"
             if [ -n "${{ inputs.slugs }}" ]; then
