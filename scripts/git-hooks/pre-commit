@@ -1,0 +1,97 @@
+#!/bin/sh
+# scripts/git-hooks/pre-commit
+#
+# Refuse commits in the PRIMARY worktree (d:/projects/tutorials-poc or the
+# canonical clone path) when on a feature branch. Forces parallel agents
+# to commit from their own `.claude/worktrees/<name>/` worktree so they
+# don't clobber each other's checked-out state.
+#
+# Bypass conditions:
+#   - On the `main` branch (commits to main from the primary tree are fine —
+#     they're rare and intentional, e.g. emergency hotfix after explicit
+#     human approval).
+#   - The cwd is somewhere under `.claude/worktrees/` (any worktree, including
+#     paths registered via `git worktree add` outside the .claude tree).
+#   - The env var AGENT_ISOLATION_BYPASS=1 is set (escape hatch for the
+#     rare case a human really does want to commit in the primary tree
+#     without setting up a worktree first).
+#
+# Why a hook and not just docs: docs are advisory; this is a tripwire. The
+# memories `feedback_parallel_agents_worktrees` + `feedback_branch_slip_after_long_session`
+# document the failure mode; this hook is the enforcement that prevents it.
+# See PR #604 for the full discussion.
+
+set -e
+
+# Resolve cwd + git common-dir. `git rev-parse --show-toplevel` returns the
+# worktree root; `git rev-parse --git-common-dir` returns the SHARED `.git`
+# dir (same for primary + every worktree). When toplevel == dirname of
+# common-dir, we're in the primary worktree.
+TOPLEVEL=$(git rev-parse --show-toplevel)
+COMMON_DIR=$(git rev-parse --git-common-dir)
+# Normalize both paths to absolute, forward-slash form (Windows-friendly).
+TOPLEVEL_ABS=$(cd "$TOPLEVEL" && pwd)
+COMMON_DIR_PARENT=$(cd "$(dirname "$COMMON_DIR")" && pwd)
+
+# Primary worktree: toplevel is the parent of .git (or .git itself if
+# git-common-dir resolved to a bare path). The `.claude/worktrees/X/` case
+# has common-dir pointing back into the primary's .git/worktrees/X/, so
+# COMMON_DIR_PARENT will be d:/projects/tutorials-poc/.git, NOT the same
+# as the worktree's toplevel.
+case "$TOPLEVEL_ABS" in
+  *.claude/worktrees/*)
+    # In an isolated worktree — allowed.
+    exit 0
+    ;;
+esac
+
+# We're in the primary tree. Allow if on main.
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "DETACHED")
+if [ "$BRANCH" = "main" ]; then
+  exit 0
+fi
+
+# Bypass escape hatch.
+if [ "${AGENT_ISOLATION_BYPASS:-}" = "1" ]; then
+  echo "[pre-commit] AGENT_ISOLATION_BYPASS=1 — allowing commit in primary tree on '$BRANCH' (you asked)" >&2
+  exit 0
+fi
+
+# Block.
+cat >&2 <<EOF
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║  pre-commit refused: commits to feature branches must come from a worktree ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+You're trying to commit on branch '$BRANCH' inside the PRIMARY worktree:
+  $TOPLEVEL_ABS
+
+Parallel agents in this repo share the primary tree's working directory.
+When two agents both check out feature branches in the primary tree, one
+agent's edits silently overwrite the other's. The 'parser drift' /
+'branch slip' / 'lost test file' failures across sessions 2026-06-24 all
+traced back to this pattern.
+
+The fix is one of:
+
+  1) Move to your own worktree before committing:
+
+       git worktree add .claude/worktrees/my-task -b $BRANCH
+       cd .claude/worktrees/my-task
+       # ... commit from there ...
+
+  2) If you're SURE you want to commit in the primary tree anyway
+     (rare — usually means you're a human, not an agent, and you have
+     a reason), set the escape hatch and re-run:
+
+       AGENT_ISOLATION_BYPASS=1 git commit ...
+
+The 'main' branch is exempt — commits to main from the primary tree
+are always allowed (intended for human-driven hotfixes after review).
+
+Memories that document the failure mode: feedback_parallel_agents_worktrees,
+feedback_branch_slip_after_long_session, feedback_subagent_writes_can_leak_to_parent_repo.
+
+EOF
+exit 1
