@@ -24,8 +24,7 @@
       "libs": {
         "sap.m": {},
         "sap.ui.core": {},
-        "sap.ui.layout": {},
-        "sap.fe.core": {}
+        "sap.ui.layout": {}
       }
     },
     "models": {
@@ -34,8 +33,7 @@
         "settings": {
           "synchronizationMode": "None",
           "operationMode": "Server",
-          "autoExpandSelect": true,
-          "earlyRequests": true
+          "autoExpandSelect": true
         }
       },
       "i18n": {
