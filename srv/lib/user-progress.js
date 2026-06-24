@@ -39,7 +39,7 @@ export async function getUserProgress(user, opts = {}) {
   const { TaskRecords, Tutorials, Missions, CompletionPaths } = cds.entities('com.sap.developers.ims');
 
   const records = await SELECT.from(TaskRecords)
-    .columns('taskLegacyId', 'taskType', 'status', 'progress', 'modifiedAt', 'completionDate', 'titleSnapshot')
+    .columns('taskLegacyId', 'taskType', 'status', 'progress', 'modifiedAt', 'completionDate', 'titleSnapshot', 'attemptNumber')
     .where({
       user_ID: dbUserId,
       taskType: { in: ['TUTORIAL', 'MISSION', 'GROUP'] }
@@ -84,7 +84,11 @@ export async function getUserProgress(user, opts = {}) {
       groupMeta.get(r.taskLegacyId);
     if (!meta?.slug) continue; // legacyId without a current slug → skip
 
-    if (r.status === 'COMPLETED') {
+    if (r.status === 'COMPLETED' || r.status === 'SUPERSEDED') {
+      // Task 8 (#600): SUPERSEDED rows preserve the historical completion —
+      // a user mid-attempt-2 has SUPERSEDED-from-attempt-1 + IN_PROGRESS
+      // attempt-2 rows; from the LLM's perspective they have "completed"
+      // the tutorial already, so surface it in completedSlugs.
       if (r.taskType === 'TUTORIAL') {
         // Capture completionDate so we can pick the most-recently-completed
         // tutorial slug downstream (recommendations rail anchor, issue #202).
@@ -119,7 +123,18 @@ export async function getUserProgress(user, opts = {}) {
     return bt - at;
   });
   const lastCompletedSlug = completedSlugs.length > 0 ? completedSlugs[0].slug : null;
-  const completedSlugList = completedSlugs.map(c => c.slug);
+  // Dedupe: a user with multiple completion attempts on the same tutorial
+  // (COMPLETED + SUPERSEDED rows post-Task-8) would otherwise see the slug
+  // twice in this list. The LLM only needs the as-a-set view ("has the user
+  // ever completed this?"); the row-per-attempt view lives in /me/ via
+  // getMyCompletedTutorials.
+  const seen = new Set();
+  const completedSlugList = [];
+  for (const c of completedSlugs) {
+    if (seen.has(c.slug)) continue;
+    seen.add(c.slug);
+    completedSlugList.push(c.slug);
+  }
 
   return {
     inProgress: inProgress.slice(0, limit),
@@ -131,10 +146,16 @@ export async function getUserProgress(user, opts = {}) {
 }
 
 // Returns the user's completed-tutorial history for the public /me page.
-// Each row is one TUTORIAL TaskRecord with status=COMPLETED, joined with
-// Tutorials by legacyId so we can render slug + title + tag/experience/time.
-// Anonymous users return an empty array. Skips records whose legacyId no
-// longer maps to a current Tutorial slug (legacy/orphaned data).
+// Each row is one TUTORIAL TaskRecord with status in (COMPLETED, SUPERSEDED),
+// joined with Tutorials by legacyId so we can render slug + title +
+// tag/experience/time. Anonymous users return an empty array. Skips records
+// whose legacyId no longer maps to a current Tutorial slug (legacy/orphaned
+// data).
+//
+// Task 7 (#600): SUPERSEDED rows count as historical completions. A user who
+// completed a tutorial, hit "Reset progress", and completed it again sees BOTH
+// completions in /me/ (sorted completionDate DESC). No dedupe — N completions
+// of the same tutorial show as N rows. attemptNumber is passed through.
 export async function getMyCompletedTutorials(user) {
   const dbUserId = await resolveDbUserId(user);
   if (!dbUserId) return [];
@@ -142,11 +163,11 @@ export async function getMyCompletedTutorials(user) {
   const { TaskRecords, Tutorials } = cds.entities('com.sap.developers.ims');
 
   const records = await SELECT.from(TaskRecords)
-    .columns('taskLegacyId', 'completionDate', 'modifiedAt', 'titleSnapshot')
+    .columns('taskLegacyId', 'completionDate', 'modifiedAt', 'titleSnapshot', 'attemptNumber')
     .where({
       user_ID: dbUserId,
       taskType: 'TUTORIAL',
-      status: 'COMPLETED'
+      status: { in: ['COMPLETED', 'SUPERSEDED'] }
     });
   if (records.length === 0) return [];
 
@@ -166,7 +187,8 @@ export async function getMyCompletedTutorials(user) {
       primaryTag: t.primaryTag || null,
       experienceTag: t.experienceTag || null,
       averageTimeToComplete: typeof t.averageTimeToComplete === 'number' ? t.averageTimeToComplete : null,
-      completionDate: r.completionDate || r.modifiedAt || null
+      completionDate: r.completionDate || r.modifiedAt || null,
+      attemptNumber: typeof r.attemptNumber === 'number' ? r.attemptNumber : 1
     });
   }
 
@@ -180,8 +202,17 @@ export async function getMyCompletedTutorials(user) {
 }
 
 // Lightweight lookup used by searchTutorials annotation. Returns a Map keyed
-// by `${taskType}:${slug}` → { status, progressPercent }. Uses the same
-// resolveDbUserId cache so the second call within a chat turn is cheap.
+// by `${taskType}:${slug}` → { status, progressPercent, attemptNumber }. Uses
+// the same resolveDbUserId cache so the second call within a chat turn is
+// cheap.
+//
+// Task 8 (#600): SUPERSEDED rows are filtered out — this map is consumed by
+// the searchTutorials annotation which renders a per-hit badge based on the
+// CURRENT user state ("in-progress", "completed", "new"). A user mid-attempt-2
+// has a SUPERSEDED-from-attempt-1 row AND an IN_PROGRESS attempt-2 row; the
+// hit should show as "in-progress", not "completed". Historical completions
+// for the LLM live in getUserProgress.completedSlugs (which DOES include
+// SUPERSEDED). Surface raw shape — callers decide what to display.
 export async function getProgressLookup(user) {
   const dbUserId = await resolveDbUserId(user);
   const lookup = new Map();
@@ -190,10 +221,11 @@ export async function getProgressLookup(user) {
   const { TaskRecords, Tutorials, Missions, CompletionPaths } = cds.entities('com.sap.developers.ims');
 
   const records = await SELECT.from(TaskRecords)
-    .columns('taskLegacyId', 'taskType', 'status', 'progress')
+    .columns('taskLegacyId', 'taskType', 'status', 'progress', 'attemptNumber')
     .where({
       user_ID: dbUserId,
-      taskType: { in: ['TUTORIAL', 'MISSION', 'GROUP'] }
+      taskType: { in: ['TUTORIAL', 'MISSION', 'GROUP'] },
+      status: { '!=': 'SUPERSEDED' }
     });
 
   if (records.length === 0) return lookup;
@@ -226,7 +258,8 @@ export async function getProgressLookup(user) {
     if (!slug) continue;
     lookup.set(`${r.taskType}:${slug}`, {
       status: r.status,
-      progressPercent: typeof r.progress === 'number' ? r.progress : 0
+      progressPercent: typeof r.progress === 'number' ? r.progress : 0,
+      attemptNumber: typeof r.attemptNumber === 'number' ? r.attemptNumber : 1
     });
   }
   return lookup;

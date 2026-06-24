@@ -212,3 +212,96 @@ describe('completeStep companion change', () => {
     expect(progress.completedSteps).toEqual([]);
   });
 });
+
+// --- Tasks 7 + 8 — user-progress lib treats SUPERSEDED as has-ever-completed ---
+//
+// These helpers compose on top of seedCompletedTutorial() to set up the two
+// states the lib functions must distinguish:
+//   1. seedTwoCompletions:    attempt 1 COMPLETED → reset → attempt 2 COMPLETED
+//   2. seedMidAttempt2:       attempt 1 COMPLETED → reset → attempt 2 IN_PROGRESS
+async function seedTwoCompletions() {
+  await seedCompletedTutorial(); // attempt 1 COMPLETED
+  cds.context = { user: new cds.User({ id: 'sap-u1' }) };
+  await cds.services.DeveloperService.send({
+    event: 'resetTutorialProgress', data: { slug: 'reset-happy-path' },
+  });
+  // Re-complete all 3 steps so attempt 2 also becomes COMPLETED.
+  for (const stepNumber of [1, 2, 3]) {
+    cds.context = { user: new cds.User({ id: 'sap-u1' }) };
+    await cds.services.DeveloperService.send({
+      event: 'completeStep', data: { slug: 'reset-happy-path', stepNumber },
+    });
+  }
+}
+
+async function seedMidAttempt2() {
+  await seedCompletedTutorial(); // attempt 1 COMPLETED
+  cds.context = { user: new cds.User({ id: 'sap-u1' }) };
+  await cds.services.DeveloperService.send({
+    event: 'resetTutorialProgress', data: { slug: 'reset-happy-path' },
+  });
+  // Don't re-complete anything. Attempt 2 IN_PROGRESS, attempt 1 rows are SUPERSEDED.
+}
+
+describe('Tasks 7+8 — getMyCompletions shows ALL completions', () => {
+  it('returns TWO rows for a tutorial completed twice, sorted by completionDate DESC', async () => {
+    await seedTwoCompletions();
+    cds.context = { user: new cds.User({ id: 'sap-u1' }) };
+    const result = await cds.services.DeveloperService.send({ event: 'getMyCompletions' });
+
+    const rowsForT1 = result.filter(r => r.slug === 'reset-happy-path');
+    expect(rowsForT1).toHaveLength(2);
+    expect(rowsForT1[0].attemptNumber).toBe(2);
+    expect(rowsForT1[1].attemptNumber).toBe(1);
+    expect(new Date(rowsForT1[0].completionDate).getTime())
+      .toBeGreaterThanOrEqual(new Date(rowsForT1[1].completionDate).getTime());
+  });
+
+  it('returns ONE row when only attempt 1 was completed (mid-attempt-2 state)', async () => {
+    await seedMidAttempt2();
+    cds.context = { user: new cds.User({ id: 'sap-u1' }) };
+    const result = await cds.services.DeveloperService.send({ event: 'getMyCompletions' });
+
+    const rowsForT1 = result.filter(r => r.slug === 'reset-happy-path');
+    expect(rowsForT1).toHaveLength(1);
+    expect(rowsForT1[0].attemptNumber).toBe(1);
+  });
+});
+
+describe('Task 8 — user-progress lib handles SUPERSEDED', () => {
+  it('getUserProgress on mid-attempt-2 state lists the tutorial in BOTH inProgress AND completedSlugs', async () => {
+    await seedMidAttempt2();
+    const { getUserProgress } = await import('../../srv/lib/user-progress.js');
+    const user = new cds.User({ id: 'sap-u1' });
+    const result = await getUserProgress(user);
+
+    // Historical completion is preserved via SUPERSEDED status.
+    expect(result.completedSlugs).toContain('reset-happy-path');
+    expect(result.lastCompletedSlug).toBe('reset-happy-path');
+    // The live attempt-2 IN_PROGRESS row surfaces as in-progress.
+    expect(result.inProgress.map(p => p.slug)).toContain('reset-happy-path');
+  });
+
+  it('getProgressLookup surfaces the LIVE (non-SUPERSEDED) status, not the historical one', async () => {
+    await seedMidAttempt2();
+    const { getProgressLookup } = await import('../../srv/lib/user-progress.js');
+    const user = new cds.User({ id: 'sap-u1' });
+    const lookup = await getProgressLookup(user);
+
+    const entry = lookup.get('TUTORIAL:reset-happy-path');
+    expect(entry).toBeDefined();
+    // Mid-attempt-2: the live row is IN_PROGRESS. SUPERSEDED must be filtered out.
+    expect(entry.status).toBe('IN_PROGRESS');
+  });
+
+  it('getUserProgress on twice-completed state lists the tutorial in completedSlugs but NOT in inProgress', async () => {
+    await seedTwoCompletions();
+    const { getUserProgress } = await import('../../srv/lib/user-progress.js');
+    const user = new cds.User({ id: 'sap-u1' });
+    const result = await getUserProgress(user);
+
+    expect(result.completedSlugs).toContain('reset-happy-path');
+    // Both attempts are terminal (COMPLETED or SUPERSEDED) — nothing live.
+    expect(result.inProgress.map(p => p.slug)).not.toContain('reset-happy-path');
+  });
+});
