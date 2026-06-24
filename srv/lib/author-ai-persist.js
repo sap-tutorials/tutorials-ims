@@ -9,6 +9,13 @@ const LOG = cds.log('author-ai');
 export async function persistAuthorAiRequest({
   requestId, userId, feature, sourceOS, targetOSes, sourceMarkdown, variants,
   tokensUsed, model, durationMs, errorCode,
+  // PR-3 of spec 2026-06-24-tutorials-admin-tile-expansion-design.
+  // Both optional — populated when caller can resolve them. tutorialId
+  // links the row to a specific tutorial for admin-tile drill-down;
+  // dbUserId (matching ims.Users.ID) ties to the Users-side FK pattern
+  // established in PR #618. Existing rows (and standalone use cases
+  // without a tutorial context) stay null.
+  tutorialId, dbUserId,
 }) {
   try {
     const db = await cds.connect.to('db');
@@ -38,6 +45,8 @@ export async function persistAuthorAiRequest({
       tokensUsed: tokensUsed ?? null,
       durationMs: durationMs ?? null,
       errorCode: errorCode ?? null,
+      tutorial_ID: tutorialId ?? null,
+      user_ID:     dbUserId   ?? null,
     }));
   } catch (err) {
     LOG.error('persistAuthorAiRequest failed', err);

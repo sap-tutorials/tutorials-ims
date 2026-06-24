@@ -89,6 +89,23 @@ export async function generateOsVariants({
   // resolved model (loses observability about which model was attempted otherwise).
   let resolvedModel = null;
 
+  // PR-3 of spec 2026-06-24-tutorials-admin-tile-expansion-design:
+  // resolve the tutorial FK upfront from context.tutorialSlug. Cheap
+  // single-row indexed lookup; failure to resolve is non-fatal (the
+  // persist falls back to null tutorial_ID and the row still records
+  // the AI request).
+  let tutorialId = null;
+  if (context?.tutorialSlug) {
+    try {
+      const lcSlug = String(context.tutorialSlug).toLowerCase();
+      const { Tutorials } = cds.entities('com.sap.developers.ims');
+      const row = await SELECT.one.from(Tutorials).columns('ID').where({ slug: lcSlug });
+      if (row) tutorialId = row.ID;
+    } catch (err) {
+      LOG.warn('tutorial slug lookup failed (continuing with null FK)', err.message);
+    }
+  }
+
   try {
     const { modelName, deploymentId } = await resolveSettings();
     resolvedModel = modelName;
@@ -125,6 +142,7 @@ export async function generateOsVariants({
       requestId, userId, sourceOS, targetOSes, sourceMarkdown, variants,
       tokensUsed, model: modelName,
       durationMs: Date.now() - startedAt, errorCode: null,
+      tutorialId,
     });
 
     return { variants, model: modelName, tokensUsed, requestId };
@@ -135,6 +153,7 @@ export async function generateOsVariants({
       tokensUsed: null, model: resolvedModel,
       durationMs: Date.now() - startedAt,
       errorCode: err.code ?? err.message?.slice(0, 200) ?? 'unknown',
+      tutorialId,
     });
     throw err;
   }

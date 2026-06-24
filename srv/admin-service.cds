@@ -28,6 +28,19 @@ service AdminService {
     meta            : Association to TutorialMeta             on meta.tutorial.ID           = ID,
     feedbackSummary : Association to TutorialFeedbackAggregate on feedbackSummary.tutorialSlug = slug,
     feedbackItems   : Association to many TutorialFeedback     on feedbackItems.tutorialSlug   = slug,
+    // PR-3 of spec 2026-06-24-tutorials-admin-tile-expansion-design.
+    // Inverse associations so the Tutorials admin OP can render per-tutorial
+    // facets for validation specs, code-check specs, AI authoring requests,
+    // and aggregated completion stats. Each projects a target entity
+    // already exposed on AdminService (or a new view, for stats).
+    // Specs use the existing tutorial Association FK; submissions and stats
+    // join by slug because they predate the FK pattern.
+    validationSpecs       : Association to many ValidateAnswerSpecs        on validationSpecs.tutorial = $self,
+    validationSubmissions : Association to many ValidateAnswerSubmissions  on validationSubmissions.tutorialSlug = slug,
+    codeCheckSpecs        : Association to many CodeCheckSpecs             on codeCheckSpecs.tutorial = $self,
+    codeCheckSubmissions  : Association to many CodeCheckSubmissions       on codeCheckSubmissions.tutorialSlug = slug,
+    aiRequests            : Association to many AuthorAiRequests           on aiRequests.tutorial = $self,
+    completionStats       : Association to TutorialCompletionStats         on completionStats.tutorialSlug = slug,
     // Read-only flattened User fields for the new Tutorials.author FK
     // (spec 2026-06-24-tutorial-authorship-fk). Admin UI gets labeled
     // cells without needing $expand; OData consumers see plain columns.
@@ -114,6 +127,20 @@ service AdminService {
 
   @readonly
   entity EventRegistrations as projection on ims.EventRegistrations;
+
+  // PR-3 of spec 2026-06-24-tutorials-admin-tile-expansion-design.
+  // Read-only projections of validation, code-check, and AI-author
+  // entities so the Tutorials admin Object Page can render per-tutorial
+  // facets (driven by inverse associations defined on the Tutorials
+  // projection above). Each entity already lives on AnalyticsService
+  // for query-side aggregation; surfacing on AdminService is purely
+  // for the tile's drill-down UI.
+  @readonly entity ValidateAnswerSpecs       as projection on ims.ValidateAnswerSpecs;
+  @readonly entity ValidateAnswerSubmissions as projection on ims.ValidateAnswerSubmissions;
+  @readonly entity CodeCheckSpecs            as projection on ims.CodeCheckSpecs;
+  @readonly entity CodeCheckSubmissions      as projection on ims.CodeCheckSubmissions;
+  @readonly entity AuthorAiRequests          as projection on ims.AuthorAiRequests;
+  @readonly entity TutorialCompletionStats   as projection on ims.TutorialCompletionStats;
 
   // Code list entities for enum dropdowns (no DB table needed)
   @readonly @cds.persistence.skip entity ExperienceLevels { key code : String(255); }
