@@ -611,6 +611,44 @@ annotate AdminService.Tutorials with {
   );
 };
 
+// AdminService.Tutorials.author — searchable Users value help.
+//
+// Spec: docs/superpowers/specs/2026-06-24-tutorial-authorship-fk-design.md
+//
+// With ~1k+ Users rows, a fixed-values dropdown is impractical.
+// SearchSupported: true tells FE V4 to issue ?$search=… queries
+// instead of loading the full collection. @cds.search on the Users
+// projection (srv/admin-service.cds) makes the CAP runtime translate
+// $search into HANA CONTAINS across displayName/firstName/lastName/
+// email/sapId.
+//
+// Three display columns (displayName, email, sapId) so admins can
+// type "tom" → see "Thomas Jung / tom.jung@sap.com / I809764" → pick.
+//
+// FK-propagation caveat: the @Common.Text and @Common.ValueList on
+// `author` should propagate to the generated `author_ID` FK via
+// cds-compiler's Feb 2025 "Annotating Managed Associations" feature
+// — verified for the analogous AdvocateTopics/tag case in PR #607
+// (see app/admin-annotations.cds:1683-1695 history). The admin
+// annotations regression test (Task 11) asserts the propagation
+// reaches $metadata; if it ever regresses (e.g., compiler change)
+// add a sibling annotate { author_ID @... } block as workaround.
+annotate AdminService.Tutorials with {
+  author @Common.Label: 'Author'
+         @Common.Text: author.displayName
+         @Common.TextArrangement: #TextOnly
+         @Common.ValueList: {
+           CollectionPath: 'Users',
+           SearchSupported: true,
+           Parameters: [
+             { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: author_ID, ValueListProperty: 'ID' },
+             { $Type: 'Common.ValueListParameterDisplayOnly',                               ValueListProperty: 'displayName' },
+             { $Type: 'Common.ValueListParameterDisplayOnly',                               ValueListProperty: 'email' },
+             { $Type: 'Common.ValueListParameterDisplayOnly',                               ValueListProperty: 'sapId' }
+           ]
+         };
+};
+
 // --- TutorialPickList (value-help target for redirectTo) ---
 annotate AdminService.TutorialPickList with {
   legacyIdStr   @Common.Label: 'Tutorial ID' @Common.IsDigitSequence: true;
