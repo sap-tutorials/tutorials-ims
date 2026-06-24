@@ -3,20 +3,28 @@ namespace com.sap.developers.ims;
 using { com.sap.developers.ims as ims, cuid, managed } from './schema';
 
 /**
- * Singleton config (one row, fixed UUID) for the Devtoberfest homepage.
+ * Per-Devtoberfest-event configuration row. Multi-row by design: one
+ * row per past/current/future Devtoberfest cycle, with exactly one row
+ * marked `isActive` at a time for public-facing queries.
  *
  * Lifecycle:
- *   - The entity has no inline @odata.singleton — that lives on the
- *     AdminService projection in srv/admin-service.cds.
- *   - Defensive insert lives in srv/admin-service.js as a
- *     before('READ', 'DevtoberfestConfig') handler — auto-creates the
- *     row on first access. Same shape as ChatSettings + KnowledgeGraphSettings.
+ *   - Admin creates one row per Devtoberfest cycle via Fiori Elements
+ *     LR/OP at /admin-ui/#/devtoberfest (draft-enabled).
+ *   - Exactly one row carries isActive=true. Toggling the flag on a
+ *     draft activation auto-deactivates the previously-active row in
+ *     the same transaction — enforced by a CDS handler in
+ *     srv/admin-service.js.
+ *   - Public handlers (statusHandler, termsHandler, joule tool, etc.)
+ *     query `WHERE isActive=true`. Zero active rows → 503
+ *     EVENT_NOT_CONFIGURED.
  *   - termsVersion bump forces re-acceptance for unregistered users
  *     mid-flow (via 412 from /api/devtoberfest/join).
  *
- * Spec: docs/superpowers/specs/2026-06-22-devtoberfest-homepage-design.md §5.1
+ * Spec: docs/superpowers/specs/2026-06-24-devtoberfest-config-multi-row-draft-design.md
+ * (supersedes singleton sections of 2026-06-22-devtoberfest-homepage-design.md §5.1)
  */
-entity DevtoberfestConfig : cuid {
+entity DevtoberfestConfig : cuid, managed {
+  isActive          : Boolean default false;
   currentEvent      : Association to ims.Events;
   termsText         : LargeString;          // markdown body
   termsVersion      : Integer default 1;

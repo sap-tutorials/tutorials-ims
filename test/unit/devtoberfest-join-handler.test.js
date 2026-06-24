@@ -10,7 +10,7 @@ const project = cds.test('serve', '--project', '.', '--in-memory');
 
 describe('POST /api/devtoberfest/join', () => {
   let Users, Events, DevtoberfestConfig, EventRegistrations;
-  const SINGLETON_ID = '00000000-0000-0000-0000-00d0fe57feed';
+  const configId = cds.utils.uuid();
   const eventId = cds.utils.uuid();
 
   beforeAll(() => {
@@ -29,7 +29,7 @@ describe('POST /api/devtoberfest/join', () => {
       legacyId: 9001,
     });
     await INSERT.into(DevtoberfestConfig).entries({
-      ID: SINGLETON_ID, currentEvent_ID: eventId, termsVersion: 3,
+      ID: configId, isActive: true, currentEvent_ID: eventId, termsVersion: 3,
     });
     await INSERT.into(Users).entries({
       ID: cds.utils.uuid(), sapId: 'admin', email: 'a@b', legacyId: 1,
@@ -88,10 +88,23 @@ describe('POST /api/devtoberfest/join', () => {
     expect(res.data.current).toBe(3);
   });
 
-  it('503 when currentEvent_ID NULL', async () => {
+  it('503 when no row is active (active row deleted before request)', async () => {
     await DELETE.from(DevtoberfestConfig);
     await INSERT.into(DevtoberfestConfig).entries({
-      ID: SINGLETON_ID, termsVersion: 3,
+      ID: cds.utils.uuid(), isActive: false, currentEvent_ID: eventId, termsVersion: 3,
+    });
+    const res = await project.axios.post('/api/devtoberfest/join',
+      { termsVersion: 3 },
+      { auth: { username: 'admin', password: 'admin' }, validateStatus: () => true },
+    );
+    expect(res.status).toBe(503);
+    expect(res.data.error).toBe('EVENT_NOT_CONFIGURED');
+  });
+
+  it('503 when active row has no currentEvent_ID', async () => {
+    await DELETE.from(DevtoberfestConfig);
+    await INSERT.into(DevtoberfestConfig).entries({
+      ID: cds.utils.uuid(), isActive: true, termsVersion: 3,
       // currentEvent_ID intentionally omitted
     });
     const res = await project.axios.post('/api/devtoberfest/join',

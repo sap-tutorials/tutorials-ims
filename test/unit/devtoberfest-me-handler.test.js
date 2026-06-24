@@ -10,7 +10,7 @@ const project = cds.test('serve', '--project', '.', '--in-memory');
 
 describe('GET /api/devtoberfest/me', () => {
   let Users, Events, DevtoberfestConfig, EventRegistrations;
-  const SINGLETON_ID = '00000000-0000-0000-0000-00d0fe57feed';
+  const configId = cds.utils.uuid();
   const eventId = cds.utils.uuid();
 
   beforeAll(() => {
@@ -29,7 +29,7 @@ describe('GET /api/devtoberfest/me', () => {
       legacyId: 9001,
     });
     await INSERT.into(DevtoberfestConfig).entries({
-      ID: SINGLETON_ID, currentEvent_ID: eventId, termsVersion: 3,
+      ID: configId, isActive: true, currentEvent_ID: eventId, termsVersion: 3,
     });
   });
 
@@ -40,12 +40,32 @@ describe('GET /api/devtoberfest/me', () => {
     expect(res.status).toBe(401);
   });
 
-  it('returns 503 EVENT_NOT_CONFIGURED when no current event is set', async () => {
-    // beforeEach inserts a singleton with currentEvent_ID — wipe it
-    // and reinsert without the FK so the handler hits the early-503.
+  it('returns 503 EVENT_NOT_CONFIGURED when no row is active', async () => {
+    // Replace the active row with an inactive one so the active-row
+    // lookup misses.
     await DELETE.from(DevtoberfestConfig);
     await INSERT.into(DevtoberfestConfig).entries({
-      ID: SINGLETON_ID,
+      ID: cds.utils.uuid(),
+      isActive: false,
+      currentEvent_ID: eventId,
+      termsVersion: 3,
+    });
+    await INSERT.into(Users).entries({
+      ID: cds.utils.uuid(), sapId: 'admin', email: 'a@b', legacyId: 1,
+    });
+    const res = await project.axios.get('/api/devtoberfest/me', {
+      auth: { username: 'admin', password: 'admin' },
+      validateStatus: () => true,
+    });
+    expect(res.status).toBe(503);
+    expect(res.data.error).toBe('EVENT_NOT_CONFIGURED');
+  });
+
+  it('returns 503 EVENT_NOT_CONFIGURED when active row has no currentEvent', async () => {
+    await DELETE.from(DevtoberfestConfig);
+    await INSERT.into(DevtoberfestConfig).entries({
+      ID: cds.utils.uuid(),
+      isActive: true,
       termsVersion: 3,
       // no currentEvent_ID
     });

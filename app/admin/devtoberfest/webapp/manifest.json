@@ -4,29 +4,30 @@
     "id": "sap.tutorials.admin.devtoberfest",
     "type": "application",
     "title": "Devtoberfest",
-    "applicationVersion": { "version": "0.0.1" },
+    "description": "Manage Devtoberfest configurations (multi-row + draft-enabled)",
+    "applicationVersion": { "version": "0.0.2" },
     "dataSources": {
       "mainService": {
         "uri": "/admin/",
         "type": "OData",
         "settings": { "odataVersion": "4.0" }
       }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "Devtoberfest-manage": {
+          "semanticObject": "Devtoberfest",
+          "action": "manage",
+          "title": "Devtoberfest",
+          "signature": { "parameters": {}, "additionalParameters": "allowed" }
+        }
+      }
     }
   },
   "sap.ui5": {
-    "rootView": {
-      "viewName": "sap.tutorials.admin.devtoberfest.view.Devtoberfest",
-      "type": "XML",
-      "id": "appView",
-      "async": true
-    },
     "dependencies": {
       "minUI5Version": "1.136.0",
-      "libs": {
-        "sap.m": {},
-        "sap.ui.core": {},
-        "sap.ui.layout": {}
-      }
+      "libs": { "sap.fe.templates": {} }
     },
     "contentDensities": {
       "compact": true,
@@ -35,15 +36,55 @@
     "models": {
       "": {
         "dataSource": "mainService",
+        "preload": true,
         "settings": {
           "synchronizationMode": "None",
           "operationMode": "Server",
-          "autoExpandSelect": true
+          "autoExpandSelect": true,
+          "earlyRequests": true
         }
-      },
-      "i18n": {
-        "type": "sap.ui.model.resource.ResourceModel",
-        "settings": { "bundleName": "sap.tutorials.admin.devtoberfest.i18n.i18n" }
+      }
+    },
+    "routing": {
+      "routes": [
+        {
+          "pattern": ":?query:",
+          "name": "DevtoberfestConfigList",
+          "target": "DevtoberfestConfigList"
+        },
+        {
+          "pattern": "DevtoberfestConfig({key}):?query:",
+          "name": "DevtoberfestConfigObjectPage",
+          "target": "DevtoberfestConfigObjectPage"
+        }
+      ],
+      "targets": {
+        "DevtoberfestConfigList": {
+          "type": "Component",
+          "id": "DevtoberfestConfigList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/DevtoberfestConfig",
+              "variantManagement": "Page",
+              "initialLoad": "Enabled",
+              "navigation": {
+                "DevtoberfestConfig": { "detail": { "route": "DevtoberfestConfigObjectPage" } }
+              }
+            }
+          }
+        },
+        "DevtoberfestConfigObjectPage": {
+          "type": "Component",
+          "id": "DevtoberfestConfigObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/DevtoberfestConfig",
+              "editableHeaderContent": false
+            }
+          }
+        }
       }
     }
   }

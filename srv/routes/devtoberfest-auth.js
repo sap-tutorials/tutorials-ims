@@ -28,7 +28,7 @@ async function meHandler(req, res) {
     const { Users, DevtoberfestConfig, EventRegistrations } =
       cds.entities('com.sap.developers.ims');
 
-    const config = await SELECT.one.from(DevtoberfestConfig);
+    const config = await SELECT.one.from(DevtoberfestConfig).where({ isActive: true });
     if (!config?.currentEvent_ID) {
       return res.status(503).json({ error: 'EVENT_NOT_CONFIGURED' });
     }
@@ -73,7 +73,7 @@ async function joinHandler(req, res) {
     const { Users, DevtoberfestConfig, EventRegistrations } =
       cds.entities('com.sap.developers.ims');
 
-    const config = await SELECT.one.from(DevtoberfestConfig);
+    const config = await SELECT.one.from(DevtoberfestConfig).where({ isActive: true });
     if (!config?.currentEvent_ID) {
       return res.status(503).json({ error: 'EVENT_NOT_CONFIGURED' });
     }

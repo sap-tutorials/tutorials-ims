@@ -92,7 +92,7 @@ service AdminService {
   @requires: 'Admin'
   entity KnowledgeGraphSettings as projection on ims.KnowledgeGraphSettings;
 
-  @odata.singleton
+  @odata.draft.enabled
   @requires: 'Admin'
   entity DevtoberfestConfig as projection on ims.DevtoberfestConfig;
 

@@ -93,8 +93,11 @@ export async function getDevtoberfestInfo(args, _user) {
   try {
     const { DevtoberfestConfig } = cds.entities('com.sap.developers.ims');
     // expand currentEvent — keeps name/dates/timeZone on the row directly.
+    // isActive=true filter: multi-row entity, exactly one row at a time
+    // is "live" — spec 2026-06-24.
     config = await SELECT.one
       .from(DevtoberfestConfig)
+      .where({ isActive: true })
       .columns(c => {
         c('ID'); c('currentEvent_ID');
         c('termsText'); c('termsVersion');
