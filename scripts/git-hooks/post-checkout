@@ -1,0 +1,73 @@
+#!/bin/sh
+# scripts/git-hooks/post-checkout
+#
+# Tripwire: if an agent (or human) checks out a feature branch in the
+# PRIMARY worktree, print a loud warning at the moment of damage. This
+# is the early-warning sibling of the pre-commit hook — by the time
+# pre-commit fires, the agent has already done work; this hook fires
+# AT the checkout, so the agent can switch course immediately.
+#
+# This hook never blocks. Git semantics don't allow blocking checkout
+# anyway. The point is visibility: the warning is loud enough that
+# subsequent agent reasoning will (hopefully) pick it up in the
+# session-start context and re-route to a worktree before damage.
+#
+# Hook args (per git docs):
+#   $1 = previous HEAD
+#   $2 = new HEAD
+#   $3 = branch checkout flag (1 = branch checkout, 0 = file checkout)
+
+set -e
+
+# File checkouts (git checkout <path>) — not our concern.
+if [ "${3:-0}" != "1" ]; then
+  exit 0
+fi
+
+# If the new HEAD is the same as the old HEAD, this is a same-branch
+# re-checkout (e.g. `git checkout main` while already on main) — skip noise.
+if [ "${1:-}" = "${2:-}" ]; then
+  exit 0
+fi
+
+TOPLEVEL=$(git rev-parse --show-toplevel)
+TOPLEVEL_ABS=$(cd "$TOPLEVEL" && pwd)
+
+# In a registered worktree — that's the right path. Stay silent.
+case "$TOPLEVEL_ABS" in
+  *.claude/worktrees/*)
+    exit 0
+    ;;
+esac
+
+# In the primary tree. Check the branch.
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "DETACHED")
+if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "DETACHED" ]; then
+  exit 0
+fi
+
+# Warn loudly.
+cat >&2 <<EOF
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│  ⚠  post-checkout warning: feature branch checked out in PRIMARY tree     │
+└────────────────────────────────────────────────────────────────────────────┘
+
+  Branch:   $BRANCH
+  Tree:     $TOPLEVEL_ABS
+
+  Other agents in this repo share the primary tree. Working on a feature
+  branch here will collide with them — your edits or theirs will be lost
+  silently. The 'parser drift' / 'branch slip' / 'lost test file' failures
+  on 2026-06-24 all came from this pattern.
+
+  Recommended:
+
+    git worktree add .claude/worktrees/$(echo "$BRANCH" | tr '/' '-') -b $BRANCH
+    cd .claude/worktrees/$(echo "$BRANCH" | tr '/' '-')
+
+  The pre-commit hook will refuse the commit anyway, so doing this now
+  saves you a round-trip.
+
+EOF
+exit 0
