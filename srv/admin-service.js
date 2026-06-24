@@ -17,6 +17,7 @@ import { readSecret, writeSecret, deleteSecret } from './lib/credstore.js';
 import { invalidateSecret } from './lib/secret-resolver.js';
 import { cleanupChangeLog } from './jobs/cleanup.js';
 import { ensureDevtoberfestActiveFlagInvariant } from './lib/devtoberfest-active-flag.js';
+import { getTutorialSource } from './lib/content-store.js';
 import { randomBytes } from 'node:crypto';
 
 export default class AdminService extends cds.ApplicationService {
@@ -1097,6 +1098,23 @@ export default class AdminService extends cds.ApplicationService {
       const controlValue = isSuperAdmin ? 7 : 1;
       for (const row of Array.isArray(data) ? data : [data]) {
         if (row) row.publishedFieldControl = controlValue;
+      }
+    });
+
+    // --- getTutorialSource(slug): admin-only source markdown read ---
+    // Custom UI5 section on the Tutorials Object Page calls this to display
+    // the upstream `.md` content + drift status. Implementation lives in
+    // srv/lib/content-store.js (uses raw HANA SQL to dodge LOB locator
+    // expiry on BLOB reads alongside metadata). Spec: PR-2 of
+    // docs/superpowers/specs/2026-06-24-tutorials-admin-tile-expansion-design.md
+    this.on('getTutorialSource', async (req) => {
+      const slug = req.data?.slug;
+      if (!slug) return req.error(400, 'slug parameter is required');
+      try {
+        return await getTutorialSource(slug);
+      } catch (err) {
+        cds.log('admin').error('getTutorialSource failed for slug=' + slug, err.message);
+        return req.error(500, 'failed to load tutorial source');
       }
     });
 

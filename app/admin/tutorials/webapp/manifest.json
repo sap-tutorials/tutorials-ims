@@ -86,9 +86,30 @@
                       "text": "Ask Joule for tutorial improvement suggestions"
                     }
                   }
+                },
+                "body": {
+                  "sections": {
+                    "SourceMarkdown": {
+                      "template": "sap.tutorials.admin.tutorials.ext.SourceMarkdownSection",
+                      "position": {
+                        "placement": "After",
+                        "anchor": "ContributorsFacet"
+                      },
+                      "title": "Source Markdown"
+                    }
+                  }
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "extends": {
+      "extensions": {
+        "sap.ui.controllerExtensions": {
+          "sap.fe.templates.ObjectPage.ObjectPageController": {
+            "controllerName": "sap.tutorials.admin.tutorials.ext.SourceMarkdownHandler"
           }
         }
       }
