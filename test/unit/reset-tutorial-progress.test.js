@@ -177,4 +177,26 @@ describe('completeStep companion change', () => {
     expect(superseded.attemptNumber).toBe(1);
     expect(live.attemptNumber).toBe(2);
   });
+
+  it('_updateTutorialProgress after reset does NOT mutate the SUPERSEDED tutorial row', async () => {
+    cds.context = { user: new cds.User({ id: 'sap-u1' }) };
+    const { DeveloperService } = cds.services;
+    const { TaskRecords } = cds.entities('com.sap.developers.ims');
+
+    const originalSuperseded = await SELECT.one.from(TaskRecords).where({
+      user_ID: 'u1', taskType: 'TUTORIAL', status: 'SUPERSEDED',
+    });
+    const originalCompletionDate = originalSuperseded.completionDate;
+    expect(originalCompletionDate).toBeTruthy(); // sanity: the seed completed the tutorial
+
+    await DeveloperService.send({
+      event: 'completeStep',
+      data: { slug: 'reset-happy-path', stepNumber: 1 },
+    });
+
+    const supersededAfter = await SELECT.one.from(TaskRecords).where({
+      user_ID: 'u1', taskType: 'TUTORIAL', status: 'SUPERSEDED',
+    });
+    expect(supersededAfter.completionDate).toEqual(originalCompletionDate);
+  });
 });

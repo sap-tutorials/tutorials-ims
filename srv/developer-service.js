@@ -746,11 +746,24 @@ export default class DeveloperService extends cds.ApplicationService {
     const steps = await SELECT.from(dbSteps).where({ tutorial_ID: tutorial.ID });
     const stepLegacyIds = steps.map(s => s.legacyId);
 
+    // Look up the user's CURRENT (non-SUPERSEDED) TUTORIAL task record first
+    // so we can scope step counts + new row inserts to its attemptNumber.
+    // Without the SUPERSEDED filter we'd risk reviving a historical row and
+    // miscounting step completions across attempts. See issue #600 Task 5.
+    const existing = await SELECT.one.from(dbTaskRecords).where({
+      user_ID: dbUser.ID,
+      taskLegacyId: tutorial.legacyId,
+      taskType: 'TUTORIAL',
+      status: { '!=': 'SUPERSEDED' },
+    });
+    const currentAttempt = existing?.attemptNumber ?? 1;
+
     const completedStepRecords = await SELECT.from(dbTaskRecords).where({
       user_ID: dbUser.ID,
       taskType: 'STEP',
       status: 'COMPLETED',
-      taskLegacyId: { in: stepLegacyIds }
+      taskLegacyId: { in: stepLegacyIds },
+      attemptNumber: currentAttempt,
     });
 
     // Prefer the authoritative stepCount from the parsed tutorial frontmatter
@@ -768,13 +781,6 @@ export default class DeveloperService extends cds.ApplicationService {
       completedStepRecords, totalSteps
     );
 
-    // Upsert tutorial-level task record
-    const existing = await SELECT.one.from(dbTaskRecords).where({
-      user_ID: dbUser.ID,
-      taskLegacyId: tutorial.legacyId,
-      taskType: 'TUTORIAL'
-    });
-
     if (existing) {
       await UPDATE(dbTaskRecords, existing.ID).set({
         progress, status,
@@ -787,7 +793,8 @@ export default class DeveloperService extends cds.ApplicationService {
         taskType: 'TUTORIAL',
         status, progress,
         titleSnapshot: tutorial.title,
-        legacyId: await getNextLegacyId('TaskRecords', db)
+        legacyId: await getNextLegacyId('TaskRecords', db),
+        attemptNumber: currentAttempt,
       });
     }
   }
