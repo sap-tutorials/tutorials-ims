@@ -88,7 +88,7 @@ In one transaction (CAP wraps each action handler in a tx by default; explicit `
 3. **Idempotent no-op.** If the result set is empty, return `{ newAttemptNumber: 1, previousAttemptCompletedAt: null, supersededRecordCount: 0 }`. No rows mutated.
 4. **Determine next attempt.** `maxAttempt = MAX(attemptNumber)` across the result set.
 5. **Supersede current rows.** `UPDATE` the result set with `{ status: 'SUPERSEDED' }`. Do NOT touch `completionDate`, `completionTime`, `submissionIdCompleted`, `progress` — those are historical truth. The `modifiedAt` field gets auto-updated by `managed` aspect (acceptable).
-6. **Insert fresh TUTORIAL-level row.** New row: `{ user_ID, taskLegacyId: tutorial.legacyId, taskType: 'TUTORIAL', status: 'IN_PROGRESS', progress: 0, attemptNumber: maxAttempt + 1, titleSnapshot: tutorial.title, legacyId: await getNextLegacyId('TaskRecords', db) }`.
+6. **Insert fresh TUTORIAL-level row.** Allocate the legacyId via `await getNextLegacyId('TaskRecords', db)` BEFORE step 5's UPDATE if you want to fail-fast on sequence exhaustion — otherwise a sequence allocation failure after step 5 leaves the rows SUPERSEDED with no fresh TUTORIAL row to follow (the action handler will throw and CAP rolls back the transaction, so this is recoverable; ordering it before step 5 is belt-and-braces). New row: `{ user_ID, taskLegacyId: tutorial.legacyId, taskType: 'TUTORIAL', status: 'IN_PROGRESS', progress: 0, attemptNumber: maxAttempt + 1, titleSnapshot: tutorial.title, legacyId: <pre-allocated> }`.
 7. **Step rows lazy-initialized.** Do NOT pre-create step rows for the new attempt. The existing lazy-insert in `completeStep` ([srv/developer-service.js:147-164](../../../srv/developer-service.js#L147-L164)) creates them naturally as the user progresses through the new attempt. (One small modification needed there — see "Companion change to completeStep" below.)
 8. **Emit audit event.** `await cds.emit('TutorialProgressReset', { user: dbUser.ID, tutorialSlug: slug, attemptNumber: maxAttempt + 1, supersededRecordCount, previousAttemptCompletedAt })`. The `@PersonalData.cascade: 'audit-only'` on `TaskRecords` already routes the UPDATE/INSERT writes to the audit-log infra; this supplemental event makes the *intent* discoverable in the audit stream (separate from N anonymous TaskRecord writes).
 9. **Return** `{ newAttemptNumber: maxAttempt + 1, previousAttemptCompletedAt: <COMPLETED row's completionDate from step 5's result set, or null>, supersededRecordCount: <count> }`.
@@ -195,6 +195,11 @@ The "has-ever-completed" semantic is the operative answer for the scanner ambigu
 | `srv/event-stream-service.js` | `getEventBuckets` | has-ever-completed | `status: 'COMPLETED'` | Same as display-service.getEventBuckets |
 | `srv/lib/co-completion.js` | Co-completion pair builder | has-ever-completed | `status: 'COMPLETED'` | `status: { in: ['COMPLETED', 'SUPERSEDED'] }`, DISTINCT by `(user_ID, taskLegacyId)`. Failure mode without this: a user who reset and is mid-attempt-2 drops out of pair counts during the window between reset and re-completion. |
 | `srv/lib/recompute-tutorial-progress-bulk-sql.js` | HANA MERGE statement | current-attempt | `BASE.TASKTYPE = 'TUTORIAL'` (no status filter) | `BASE.TASKTYPE = 'TUTORIAL' AND BASE.STATUS != 'SUPERSEDED'` — see Companion change above |
+| `srv/lib/content-store.js` | `recomputeTutorialProgress` (line 87) — per-row SQLite-portable variant, used both directly in tests and as the fallback shape imported by the bulk-SQL module | current-attempt | TUTORIAL rec SELECT at line 97 has no `status` filter; completed-step SELECT at line 105 filters `status: 'COMPLETED'`; UPDATE at line 108 sets `completionDate: null` when status flips off COMPLETED | Add `status: { '!=': 'SUPERSEDED' }` to BOTH the tutorialRecs SELECT (line 97) and the completed-step SELECT (line 105). **Same corruption mode as the bulk-SQL MERGE** — without the filter, this function will wipe `completionDate` on SUPERSEDED rows after a publish, destroying historical truth. The fallback path matters because the bulk-SQL module imports it and the test suite exercises it directly on SQLite. |
+| `db/views.cds` | `CompletionAnalytics` view (line 137) — projection over TaskRecords joined with users/tutorials; drives saved-query analytics and the AdminService's `analyticsQuery` runner | has-ever-completed | `where tr.status = 'COMPLETED'` | Expand to `where tr.status in ('COMPLETED', 'SUPERSEDED')`. Document in the saved-query SQL comments that consumer queries must `DISTINCT user_ID, tutorial_ID` to avoid inflating counts on re-completion. This is an HDI view change — coordinate with `.github/workflows/schema-drift-check.yml`; expect drift-check to flag the view as renamed/modified during the deploy. |
+| `srv/lib/admin-analytics-schema.js` | `facts.completion.baseFilter` (line 11) — defines the metric envelope for ad-hoc admin analytics | has-ever-completed | `baseFilter: { status: 'COMPLETED' }` | `baseFilter: { status: { in: ['COMPLETED', 'SUPERSEDED'] } }`. Add a top-of-file comment that any saved query using `facts.completion` must DISTINCT by `(user_ID, tutorial_ID)` (or the analytics-side equivalent) — without this, users with reset+re-complete inflate completion totals. |
+| `srv/lib/kg/concepts-for-user.js` | Raw SQL knowledge-graph "concepts user knows" derivation (line 52) | has-ever-completed | `STATUS IN ('COMPLETED', 'IN_PROGRESS')` | `STATUS IN ('COMPLETED', 'IN_PROGRESS', 'SUPERSEDED')`. Without this, a user mid-attempt-2 loses every concept their attempt 1 earned — Joule's recommendations would regress. The downstream classification at line 124 (`if (status === 'COMPLETED') learned.add(...)`) treats `SUPERSEDED` as not-learned; **change to `if (status === 'COMPLETED' \|\| status === 'SUPERSEDED')`** so historical completions still count as "knows X". |
+| `srv/lib/kg/joule-tool-find-path.js` | Raw SQL "where am I in my learning?" inference (line 120) | has-ever-completed | `r.STATUS = 'COMPLETED'` | `r.STATUS IN ('COMPLETED', 'SUPERSEDED')`. Joule's path-finder uses the user's most recent completion as the anchor for next-step recommendations; excluding SUPERSEDED would lose signal on every reset user. |
 | `srv/exports/task-records.js` | Admin CSV export | mixed | All rows | No filter change required (admin export should show ALL rows including SUPERSEDED for audit). Add `attemptNumber` column to the export schema so reviewers can distinguish attempts. |
 | `srv/analytics-service.cds` | Read-only projections + saved queries | depends | No filter | Document the new enum value in saved-query comments; review the ad-hoc analytics SQL validator allowlist to confirm `SUPERSEDED` is acceptable in user-supplied `WHERE` clauses |
 | `srv/lib/account-merge.js` | TaskRecords `UPDATE` on account merge | (write path) | Status-agnostic | No change — walks rows by `user_ID`, status-agnostic. Note: any new rows created during the merged user's session retain the merged user's `attemptNumber` history. |
@@ -202,6 +207,8 @@ The "has-ever-completed" semantic is the operative answer for the scanner ambigu
 ### Why DISTINCT-by-(user, task) matters
 
 For "has-ever-completed" semantics, simply including SUPERSEDED in the filter is not sufficient — a user who completed a tutorial 3 times now has 1 IN_PROGRESS + 2 SUPERSEDED + 1 most-recent COMPLETED rows. Counting `WHERE status IN ('COMPLETED','SUPERSEDED')` returns 3, inflating leaderboards / prize counts / mission completion percentages. Every "has-ever-completed" query must DISTINCT by `(user_ID, taskLegacyId)` to count one logical completion regardless of attempt count.
+
+**Important — DISTINCT is NEW behavior, not preserved behavior.** Today's code at admin-service.js lines 516/529/543/559/573 (and the parallel display-service / event-stream / co-completion sites) does plain `SELECT.from(TaskRecords).where({status: 'COMPLETED'})` with NO DISTINCT. There may already be users with two COMPLETED rows for the same task today (e.g. via legacy migration or some now-fixed code path) that today's code already double-counts. The DISTINCT clause this spec introduces will correct that latent pre-existing inflation in addition to handling re-completions correctly. Implementers should not assume DISTINCT is a no-op refactoring — it's a behavioral change worth calling out in the PR description and verifying via a hybrid spot-check (find any user with N=COUNT(COMPLETED+SUPERSEDED) > 1 for the same task, confirm dashboards still show them as 1 completion).
 
 In CDS QL, this is `SELECT.distinct.columns('user_ID', 'taskLegacyId').from(dbTaskRecords).where(...)`. In raw HANA SQL (for the rollup queries that already use it), `SELECT DISTINCT USER_ID, TASKLEGACYID FROM ...`.
 
@@ -265,6 +272,18 @@ The tutorial page has ~5 different reactive surfaces tracking completion state: 
 
 Trade-off: ~1 second flash of full page reload. Acceptable for an action the learner explicitly confirmed they wanted.
 
+### Admin UI (Fiori Elements over TaskRecords projection)
+
+[`srv/admin-service.cds:52`](../../../srv/admin-service.cds#L52) projects TaskRecords directly. After this PR, admins browsing that list will see two new visible attributes: the new `SUPERSEDED` enum value in the status column, and the `attemptNumber` column.
+
+UI guidance for the Fiori Elements list:
+
+- Default filter: show only non-SUPERSEDED rows (`status != 'SUPERSEDED'`). Admins are usually debugging current state, not history.
+- Add a chip or section-filter "Show superseded attempts" that flips the default. SUPERSEDED rows should be visually distinguished (greyed out, lower opacity, OR a "historical" badge in the status cell).
+- Add `attemptNumber` to the list-view default columns so admins can identify which attempt a row belongs to.
+
+These are small additions to [`app/admin-annotations.cds`](../../../app/admin-annotations.cds) — the `@UI.LineItem` and `@UI.SelectionFields` for TaskRecords. No new admin component needed.
+
 ## Testing
 
 ### Unit tests (vitest, in-memory SQLite)
@@ -297,6 +316,9 @@ Trade-off: ~1 second flash of full page reload. Acceptable for an action the lea
   - Display-service `getLeaderboard` — user's leaderboard score includes this tutorial.
   - User-progress lookup (the chat-side helper) — `completedSlugs` contains the tutorial; `inProgress` ALSO contains it (because attempt 2 is in progress).
   - Bulk-SQL recompute — invoke `recompute-tutorial-progress-bulk-sql.js` manually after the reset and assert the SUPERSEDED TUTORIAL row's `completionDate` is UNCHANGED.
+  - Per-row recompute (the SQLite-portable fallback) — invoke `content-store.js#recomputeTutorialProgress` directly after the reset and assert the SUPERSEDED TUTORIAL row's `completionDate` is UNCHANGED. This is a distinct code path from the bulk-SQL MERGE; the test must cover both.
+  - KG concepts-for-user — assert the user's concept set after reset (mid-attempt-2) still includes every concept earned via attempt 1.
+  - Joule path-finder — assert the path-finder still anchors on the attempt-1 completion.
   Pass criteria: every surface returns the same shape as if the user had simply never reset.
 
 ### Frontend test
@@ -336,6 +358,8 @@ Deploy order:
 3. Frontend island ships in the same Hugo build / mta deploy as the CAP changes.
 
 The CDS + frontend can ship in one MTA deploy — they don't have a deploy-order interdependency once the column exists in HANA.
+
+**Schema-drift-check coordination.** The `db/views.cds` `CompletionAnalytics` view change (expanding the `where tr.status = ...` filter) WILL trip [`.github/workflows/schema-drift-check.yml`](../../../.github/workflows/schema-drift-check.yml) when the workflow compares prod vs QA HDI artefacts. Expected behavior: the workflow will flag the view as modified during the deploy window. This is acceptable — drift-check is informational; the modification is intentional. Mention this in the deploy PR body so the reviewer knows the drift-check noise is expected. After both environments are on the new view shape, drift-check goes quiet again.
 
 ## Risk
 
