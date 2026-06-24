@@ -305,3 +305,178 @@ describe('Task 8 — user-progress lib handles SUPERSEDED', () => {
     expect(result.inProgress.map(p => p.slug)).not.toContain('reset-happy-path');
   });
 });
+
+// --- Task 9 — admin-service read-paths handle SUPERSEDED correctly ---
+//
+// Event stats + mission rollups: "has-ever-completed" — include SUPERSEDED,
+// DISTINCT by (user_ID, taskLegacyId) so re-completions don't inflate.
+//
+// avgProgressByTaskType (getBoardStatistics): "current-state-average" —
+// EXCLUDE SUPERSEDED, otherwise historical snapshots skew live progress.
+
+describe('Task 9 — event-statistics helpers count SUPERSEDED as a completion (deduped)', () => {
+  it('computeEventStatistics: user with SUPERSEDED + IN_PROGRESS of same tutorial = 1 completion, 1 user', async () => {
+    const { computeEventStatistics } = await import('../../srv/lib/event-statistics.js');
+
+    // User u1 has 2 attempts of tutorial 2001:
+    //   attempt 1 SUPERSEDED (historical truth — they DID complete it),
+    //   attempt 2 IN_PROGRESS (currently re-doing it).
+    // Expected: 1 tutorial completion, 1 unique user.
+    const rows = [
+      { user_ID: 'u1', taskLegacyId: 2001, taskType: 'TUTORIAL', status: 'SUPERSEDED', completionDate: '2026-01-01T00:00:00Z' },
+      { user_ID: 'u1', taskLegacyId: 2001, taskType: 'TUTORIAL', status: 'IN_PROGRESS', completionDate: null },
+    ];
+    const stats = computeEventStatistics(rows);
+    expect(stats.tutorials).toBe(1);
+    expect(stats.uniqueUsers).toBe(1);
+  });
+
+  it('computeEventStatistics: re-completer (SUPERSEDED + COMPLETED of same task) counts as 1 completion (DISTINCT by user+task)', async () => {
+    const { computeEventStatistics } = await import('../../srv/lib/event-statistics.js');
+    const rows = [
+      // u1 reset+re-did tutorial 2001: SUPERSEDED + COMPLETED
+      { user_ID: 'u1', taskLegacyId: 2001, taskType: 'TUTORIAL', status: 'SUPERSEDED', completionDate: '2026-01-01T00:00:00Z' },
+      { user_ID: 'u1', taskLegacyId: 2001, taskType: 'TUTORIAL', status: 'COMPLETED', completionDate: '2026-06-01T00:00:00Z' },
+      // u1 also reset+re-did mission 9001: SUPERSEDED + COMPLETED
+      { user_ID: 'u1', taskLegacyId: 9001, taskType: 'MISSION', status: 'SUPERSEDED', completionDate: '2026-01-01T00:00:00Z' },
+      { user_ID: 'u1', taskLegacyId: 9001, taskType: 'MISSION', status: 'COMPLETED', completionDate: '2026-06-01T00:00:00Z' },
+    ];
+    const stats = computeEventStatistics(rows);
+    // 1 distinct tutorial completion (not 2), 1 distinct mission completion (not 2), 1 unique user.
+    expect(stats.tutorials).toBe(1);
+    expect(stats.missions).toBe(1);
+    expect(stats.uniqueUsers).toBe(1);
+  });
+
+  it('computeTrackStats: SUPERSEDED counts as a completion; DISTINCT prevents double-count on re-completion', async () => {
+    const { computeTrackStats } = await import('../../srv/lib/event-statistics.js');
+    const missions = [{ legacyId: 9001, title: 'M1' }];
+    const rows = [
+      // u1 completed M1, reset, re-completed → 2 rows, must count as 1
+      { user_ID: 'u1', taskLegacyId: 9001, status: 'SUPERSEDED' },
+      { user_ID: 'u1', taskLegacyId: 9001, status: 'COMPLETED' },
+      // u2 only has SUPERSEDED (mid-attempt-2) — still counts as 1 completion (historical truth)
+      { user_ID: 'u2', taskLegacyId: 9001, status: 'SUPERSEDED' },
+      { user_ID: 'u2', taskLegacyId: 9001, status: 'IN_PROGRESS' },
+    ];
+    const stats = computeTrackStats(rows, missions);
+    expect(stats).toHaveLength(1);
+    expect(stats[0].uniqueUsers).toBe(2);
+    expect(stats[0].completions).toBe(2); // one logical completion per user
+  });
+
+  it('computeLeaderboard: counts DISTINCT (user, taskLegacyId) — SUPERSEDED + COMPLETED of same task = 1, not 2', async () => {
+    const { computeLeaderboard } = await import('../../srv/lib/event-statistics.js');
+    const users = [
+      { ID: 'u1', legacyId: 1, displayName: 'Alice' },
+      { ID: 'u2', legacyId: 2, displayName: 'Bob' },
+    ];
+    const rows = [
+      // u1: 1 tutorial completed twice (reset+re-do), 1 other tutorial only SUPERSEDED (mid-attempt-2)
+      { user_ID: 'u1', taskLegacyId: 2001, status: 'SUPERSEDED' },
+      { user_ID: 'u1', taskLegacyId: 2001, status: 'COMPLETED' },
+      { user_ID: 'u1', taskLegacyId: 2002, status: 'SUPERSEDED' },
+      { user_ID: 'u1', taskLegacyId: 2002, status: 'IN_PROGRESS' },
+      // u2: 1 tutorial completed once
+      { user_ID: 'u2', taskLegacyId: 2003, status: 'COMPLETED' },
+    ];
+    const board = computeLeaderboard(rows, users, 10);
+    // u1: 2 distinct completions (2001 + 2002), NOT 3 (would-be 2001x2 if SUPERSEDED double-counted) and NOT 1 (would-be if SUPERSEDED ignored)
+    const alice = board.find(b => b.displayName === 'Alice');
+    expect(alice.completions).toBe(2);
+    const bob = board.find(b => b.displayName === 'Bob');
+    expect(bob.completions).toBe(1);
+  });
+});
+
+describe('Task 9 — admin-service SQL filters', () => {
+  beforeEach(async () => {
+    const { Users, Tutorials, Missions, Steps, TaskRecords } = cds.entities('com.sap.developers.ims');
+    // Clean slate — getBoardStatistics is global (no event scope) and earlier
+    // tests in this file leave TaskRecords + Tutorials + Steps + Users rows
+    // around. Delete in FK order (children → parents).
+    await DELETE.from(TaskRecords);
+    await DELETE.from(Steps);
+    await DELETE.from(Tutorials);
+    await DELETE.from(Missions);
+    await DELETE.from(Users);
+  });
+
+  it('getBoardStatistics avgProgress EXCLUDES SUPERSEDED rows from the average', async () => {
+    const { Users, Tutorials, TaskRecords } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Users).entries({ ID: 'u9a', uuid: 'u9a', sapId: 'sap-u9a', legacyId: 9001 });
+    await INSERT.into(Tutorials).entries({ ID: 't9a', slug: 'task9-tut-a', title: 'T9A', legacyId: 7001, stepCount: 1 });
+
+    // Three TUTORIAL rows for the avg(progress) GROUP BY taskType:
+    //   SUPERSEDED at progress=100 (historical truth, must NOT count)
+    //   IN_PROGRESS at progress=50
+    //   COMPLETED at progress=100
+    // Pre-fix (where status='COMPLETED'): only the COMPLETED row counts → avg = 100.
+    // After-fix (where status != 'SUPERSEDED'): IN_PROGRESS (50) + COMPLETED (100) → avg = 75.
+    await INSERT.into(TaskRecords).entries([
+      { ID: 'tr-9a-sup', user_ID: 'u9a', taskLegacyId: 7001, taskType: 'TUTORIAL',
+        status: 'SUPERSEDED', progress: 100, attemptNumber: 1, legacyId: 9100 },
+      { ID: 'tr-9a-live', user_ID: 'u9a', taskLegacyId: 7001, taskType: 'TUTORIAL',
+        status: 'IN_PROGRESS', progress: 50, attemptNumber: 2, legacyId: 9101 },
+      { ID: 'tr-9a-comp', user_ID: 'u9a', taskLegacyId: 7002, taskType: 'TUTORIAL',
+        status: 'COMPLETED', progress: 100, attemptNumber: 1, legacyId: 9102 },
+    ]);
+
+    const admin = await cds.connect.to('AdminService');
+    const stats = await admin.tx({ user: new cds.User.Privileged() }, tx =>
+      tx.send({ event: 'getBoardStatistics' })
+    );
+    expect(stats.avgTutorialCompletion).toBe(75);
+  });
+
+  it('mission rollups: SUPERSEDED-only completions are returned AND re-completions are deduped', async () => {
+    // Pre-fix behavior (status='COMPLETED' only, no DISTINCT):
+    //   Carol contributes 1 row (the COMPLETED), Dan contributes 0 rows (only SUPERSEDED).
+    //   → 1 data row total.
+    // After-fix (status IN ('COMPLETED','SUPERSEDED'), DISTINCT by user+task):
+    //   Carol's SUPERSEDED+COMPLETED collapses to 1 row; Dan's SUPERSEDED stands.
+    //   → 2 data rows total (1 per user).
+    const { Users, Missions, TaskRecords } = cds.entities('com.sap.developers.ims');
+    const now = new Date().toISOString();
+    await DELETE.from(TaskRecords).where({ user_ID: { in: ['u9b', 'u9c'] } });
+    await DELETE.from(Missions).where({ ID: 'm9b' });
+    await DELETE.from(Users).where({ ID: { in: ['u9b', 'u9c'] } });
+
+    await INSERT.into(Users).entries([
+      { ID: 'u9b', uuid: 'u9b', sapId: 'sap-u9b', legacyId: 9002, displayName: 'Carol' },
+      { ID: 'u9c', uuid: 'u9c', sapId: 'sap-u9c', legacyId: 9003, displayName: 'Dan' },
+    ]);
+    await INSERT.into(Missions).entries({ ID: 'm9b', slug: 'task9-mission', title: 'T9M', legacyId: 5001 });
+
+    await INSERT.into(TaskRecords).entries([
+      // Carol re-completed the mission (reset+re-do)
+      { ID: 'tr-9b-sup', user_ID: 'u9b', taskLegacyId: 5001, taskType: 'MISSION',
+        status: 'SUPERSEDED', progress: 100, completionDate: now, attemptNumber: 1, legacyId: 9200 },
+      { ID: 'tr-9b-comp', user_ID: 'u9b', taskLegacyId: 5001, taskType: 'MISSION',
+        status: 'COMPLETED', progress: 100, completionDate: now, attemptNumber: 2, legacyId: 9201 },
+      // Dan completed it once, reset, and is now mid-attempt-2
+      { ID: 'tr-9c-sup', user_ID: 'u9c', taskLegacyId: 5001, taskType: 'MISSION',
+        status: 'SUPERSEDED', progress: 100, completionDate: now, attemptNumber: 1, legacyId: 9202 },
+      { ID: 'tr-9c-ip', user_ID: 'u9c', taskLegacyId: 5001, taskType: 'MISSION',
+        status: 'IN_PROGRESS', progress: 30, completionDate: null, attemptNumber: 2, legacyId: 9203 },
+    ]);
+
+    const admin = await cds.connect.to('AdminService');
+    const csv = await admin.tx({ user: new cds.User.Privileged() }, tx =>
+      tx.send({
+        event: 'exportMissionCompletions',
+        data: {
+          startDate: '2020-01-01T00:00:00Z',
+          endDate: '2099-01-01T00:00:00Z',
+          missionLegacyId: 5001,
+        },
+      })
+    );
+    const dataLines = csv.split('\n').slice(1).filter(Boolean);
+    // After-fix: exactly 1 row per user (DISTINCT), and Dan (SUPERSEDED-only) IS included.
+    expect(dataLines).toHaveLength(2);
+    const joined = dataLines.join('\n');
+    expect(joined).toContain('Carol');
+    expect(joined).toContain('Dan');
+  });
+});

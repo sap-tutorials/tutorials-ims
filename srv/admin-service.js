@@ -19,6 +19,30 @@ import { cleanupChangeLog } from './jobs/cleanup.js';
 import { ensureDevtoberfestActiveFlagInvariant } from './lib/devtoberfest-active-flag.js';
 import { randomBytes } from 'node:crypto';
 
+/**
+ * Dedupe TaskRecord rows by (user_ID, taskLegacyId), preferring rows on a
+ * later attemptNumber and (tiebreaker) rows with a populated completionDate.
+ * Used by "has-ever-completed" rollups in this service so a user with
+ * multiple attempts of the same task (one SUPERSEDED + one COMPLETED, or
+ * two SUPERSEDED + one IN_PROGRESS, etc.) counts as ONE logical completion.
+ * See issue #600 / spec read-site audit table.
+ */
+function dedupeByUserTaskRecords(rows) {
+  const best = new Map();
+  for (const r of rows) {
+    const key = `${r.user_ID} ${r.taskLegacyId}`;
+    const cur = best.get(key);
+    if (!cur) { best.set(key, r); continue; }
+    const curAttempt = cur.attemptNumber ?? 1;
+    const rAttempt = r.attemptNumber ?? 1;
+    if (rAttempt > curAttempt) { best.set(key, r); continue; }
+    if (rAttempt === curAttempt && !cur.completionDate && r.completionDate) {
+      best.set(key, r);
+    }
+  }
+  return [...best.values()];
+}
+
 export default class AdminService extends cds.ApplicationService {
 
   async init() {
@@ -515,10 +539,14 @@ export default class AdminService extends cds.ApplicationService {
       const event = await SELECT.one.from(Events).where({ legacyId: eventLegacyId });
       if (!event) return req.reject(404, `Event not found: ${eventLegacyId}`);
 
+      // Issue #600 — has-ever-completed: include SUPERSEDED (historical truth
+      // from a prior reset attempt). computeBurnup() dedupes by (user, task)
+      // keeping the earliest completionDate so a re-completion doesn't emit a
+      // new burnup point.
       const records = await SELECT.from(TaskRecords).where({
         event_ID: event.ID,
         taskType: 'TUTORIAL',
-        status: 'COMPLETED'
+        status: { in: ['COMPLETED', 'SUPERSEDED'] }
       });
       return computeBurnup(records, event.timeZone || '+00:00');
     });
@@ -528,10 +556,12 @@ export default class AdminService extends cds.ApplicationService {
       const event = await SELECT.one.from(Events).where({ legacyId: eventLegacyId });
       if (!event) return req.reject(404, `Event not found: ${eventLegacyId}`);
 
+      // Issue #600 — has-ever-completed: include SUPERSEDED. computeTrackStats
+      // dedupes by (user, task) so a re-completion counts once.
       const records = await SELECT.from(TaskRecords).where({
         event_ID: event.ID,
         taskType: 'MISSION',
-        status: 'COMPLETED'
+        status: { in: ['COMPLETED', 'SUPERSEDED'] }
       });
       const missions = await SELECT.from(Missions).columns('legacyId', 'title');
       return computeTrackStats(records, missions);
@@ -542,10 +572,12 @@ export default class AdminService extends cds.ApplicationService {
       const event = await SELECT.one.from(Events).where({ legacyId: eventLegacyId });
       if (!event) return req.reject(404, `Event not found: ${eventLegacyId}`);
 
+      // Issue #600 — has-ever-completed: include SUPERSEDED. computeCompletionSpeed
+      // dedupes by (user, task) keeping the earliest completionTime.
       const records = await SELECT.from(TaskRecords).where({
         event_ID: event.ID,
         taskType: 'TUTORIAL',
-        status: 'COMPLETED'
+        status: { in: ['COMPLETED', 'SUPERSEDED'] }
       });
       const tutorials = await SELECT.from(Tutorials).columns('legacyId', 'title');
       return computeCompletionSpeed(records, tutorials);
@@ -558,13 +590,17 @@ export default class AdminService extends cds.ApplicationService {
       const event = await SELECT.one.from(Events).where({ legacyId: eventLegacyId });
       if (!event) return req.reject(404, `Event not found: ${eventLegacyId}`);
 
+      // Issue #600 — has-ever-completed: include SUPERSEDED, then DISTINCT by
+      // (user_ID, taskLegacyId) so the export shows one row per logical
+      // completion (the latest attempt — see dedupeByUserTask logic below).
       const records = await SELECT.from(TaskRecords).where({
         event_ID: event.ID,
-        status: 'COMPLETED'
+        status: { in: ['COMPLETED', 'SUPERSEDED'] }
       });
+      const distinct = dedupeByUserTaskRecords(records);
 
-      if (format === 'json') return JSON.stringify(records, null, 2);
-      return formatTaskRecordsCSV(records);
+      if (format === 'json') return JSON.stringify(distinct, null, 2);
+      return formatTaskRecordsCSV(distinct);
     });
 
     this.on('exportAwardMissions', async (req) => {
@@ -572,13 +608,15 @@ export default class AdminService extends cds.ApplicationService {
       const event = await SELECT.one.from(Events).where({ legacyId: eventLegacyId });
       if (!event) return req.reject(404, `Event not found: ${eventLegacyId}`);
 
+      // Issue #600 — has-ever-completed: include SUPERSEDED, DISTINCT below.
       const missionRecords = await SELECT.from(TaskRecords).where({
         event_ID: event.ID,
         taskType: 'MISSION',
-        status: 'COMPLETED'
+        status: { in: ['COMPLETED', 'SUPERSEDED'] }
       });
+      const distinct = dedupeByUserTaskRecords(missionRecords);
 
-      const userIds = [...new Set(missionRecords.map(r => r.user_ID))];
+      const userIds = [...new Set(distinct.map(r => r.user_ID))];
       const users = userIds.length > 0
         ? await SELECT.from(Users).where({ ID: { in: userIds } })
         : [];
@@ -587,7 +625,7 @@ export default class AdminService extends cds.ApplicationService {
       const missions = await SELECT.from(Missions).columns('legacyId', 'title');
       const missionMap = new Map(missions.map(m => [m.legacyId, m.title]));
 
-      const awards = missionRecords.map(r => ({
+      const awards = distinct.map(r => ({
         userDisplayName: userMap.get(r.user_ID)?.displayName || '',
         missionTitle: missionMap.get(r.taskLegacyId) || '',
         completionDate: r.completionDate
@@ -600,13 +638,17 @@ export default class AdminService extends cds.ApplicationService {
       const { startDate, endDate, missionLegacyId } = req.data;
       if (!startDate || !endDate) return req.reject(400, 'startDate and endDate are required');
 
+      // Issue #600 — has-ever-completed: include SUPERSEDED, DISTINCT below.
+      // Note: completionDate IS populated on SUPERSEDED rows (we preserve it
+      // on reset to keep historical truth) so the date-window filter still
+      // applies meaningfully.
       let query = SELECT.from(TaskRecords)
-        .where({ taskType: 'MISSION', status: 'COMPLETED' })
+        .where({ taskType: 'MISSION', status: { in: ['COMPLETED', 'SUPERSEDED'] } })
         .and(`completionDate >=`, startDate)
         .and(`completionDate <=`, endDate);
       if (missionLegacyId) query = query.and({ taskLegacyId: missionLegacyId });
 
-      const records = await query;
+      const records = dedupeByUserTaskRecords(await query);
 
       const userIds = [...new Set(records.map(r => r.user_ID))];
       const users = userIds.length > 0
@@ -997,7 +1039,7 @@ export default class AdminService extends cds.ApplicationService {
 
       const avgByType = await SELECT.from(TaskRecords)
         .columns('taskType', 'avg(progress) as avgProgress')
-        .where({ status: 'COMPLETED' })
+        .where({ status: { '!=': 'SUPERSEDED' } })
         .groupBy('taskType');
       const avgMap = new Map(avgByType.map(r => [r.taskType, Math.round(r.avgProgress || 0)]));
 
