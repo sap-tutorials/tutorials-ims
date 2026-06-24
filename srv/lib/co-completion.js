@@ -18,9 +18,13 @@ export async function computeCoCompletions({ topN = 10, force = false } = {}) {
       .where(`status = 'ACTIVE' or status is null`)
     const slugById = new Map(tutorials.map(t => [t.legacyId, t.slug]).filter(([, s]) => !!s))
 
+    // "Has-ever-completed" semantic (issue #600): SUPERSEDED is a prior
+    // completion that was reset, so it still counts. The byUser Set below
+    // already dedupes by (user, slug), so re-completions don't inflate pair
+    // weight even though both the SUPERSEDED and COMPLETED row come back.
     const records = await SELECT.from(TaskRecords)
       .columns('user_ID', 'taskLegacyId')
-      .where({ taskType: 'TUTORIAL', status: 'COMPLETED' })
+      .where({ taskType: 'TUTORIAL', status: { in: ['COMPLETED', 'SUPERSEDED'] } })
 
     const byUser = new Map()
     for (const r of records) {

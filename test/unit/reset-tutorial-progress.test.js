@@ -389,6 +389,179 @@ describe('Task 9 — event-statistics helpers count SUPERSEDED as a completion (
   });
 });
 
+// --- Tasks 10 + 11 + 12 — scanner / display+event-stream / co-completion ---
+//
+// Same "has-ever-completed" pattern as Task 9: expand the status filter at the
+// SQL layer to include SUPERSEDED and dedupe by (user_ID, taskLegacyId) so a
+// user mid-attempt-2 still counts as ONE completer (not zero, not two).
+
+describe('Task 10 — ScannerService.getContestant counts SUPERSEDED as completed', () => {
+  beforeEach(async () => {
+    const { Users, Tutorials, TaskRecords } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(TaskRecords);
+    await DELETE.from(Tutorials);
+    await DELETE.from(Users);
+  });
+
+  it('returns 1 tutorial completed when user has SUPERSEDED + IN_PROGRESS of same tutorial', async () => {
+    const { Users, Tutorials, TaskRecords } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Users).entries({ ID: 'u10', uuid: 'u10', sapId: 'sap-u10', legacyId: 10001 });
+    await INSERT.into(Tutorials).entries({ ID: 't10', slug: 'task10-tut', title: 'T10', legacyId: 7100, stepCount: 1 });
+
+    await INSERT.into(TaskRecords).entries([
+      { ID: 'tr-10-sup', user_ID: 'u10', taskLegacyId: 7100, taskType: 'TUTORIAL',
+        status: 'SUPERSEDED', progress: 100, attemptNumber: 1, legacyId: 10100 },
+      { ID: 'tr-10-ip', user_ID: 'u10', taskLegacyId: 7100, taskType: 'TUTORIAL',
+        status: 'IN_PROGRESS', progress: 30, attemptNumber: 2, legacyId: 10101 },
+    ]);
+
+    const scanner = await cds.connect.to('ScannerService');
+    const result = await scanner.tx({ user: new cds.User.Privileged() }, tx =>
+      tx.send({ event: 'getContestant', data: { accountNumber: '10001' } })
+    );
+    // SUPERSEDED counts as a completion (historical truth). DISTINCT prevents
+    // double-count if there were also a fresh COMPLETED row.
+    expect(result.tutorialsCompleted).toBe(1);
+  });
+
+  it('returns 1 tutorial completed when user re-completed same tutorial (SUPERSEDED + COMPLETED)', async () => {
+    const { Users, Tutorials, TaskRecords } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Users).entries({ ID: 'u10b', uuid: 'u10b', sapId: 'sap-u10b', legacyId: 10002 });
+    await INSERT.into(Tutorials).entries({ ID: 't10b', slug: 'task10-tut-b', title: 'T10B', legacyId: 7101, stepCount: 1 });
+
+    await INSERT.into(TaskRecords).entries([
+      { ID: 'tr-10b-sup', user_ID: 'u10b', taskLegacyId: 7101, taskType: 'TUTORIAL',
+        status: 'SUPERSEDED', progress: 100, attemptNumber: 1, legacyId: 10110 },
+      { ID: 'tr-10b-comp', user_ID: 'u10b', taskLegacyId: 7101, taskType: 'TUTORIAL',
+        status: 'COMPLETED', progress: 100, attemptNumber: 2, legacyId: 10111 },
+    ]);
+
+    const scanner = await cds.connect.to('ScannerService');
+    const result = await scanner.tx({ user: new cds.User.Privileged() }, tx =>
+      tx.send({ event: 'getContestant', data: { accountNumber: '10002' } })
+    );
+    // 1 logical completion, NOT 2 (DISTINCT by user+taskLegacyId).
+    expect(result.tutorialsCompleted).toBe(1);
+  });
+});
+
+describe('Task 11 — computeBuckets helper handles SUPERSEDED', () => {
+  it('SUPERSEDED counts as a completion; DISTINCT prevents double-count', async () => {
+    const { computeBuckets } = await import('../../srv/lib/event-statistics.js');
+
+    // u1: 1 tutorial completed twice (SUPERSEDED + COMPLETED) → 1 distinct completion
+    // u2: 1 tutorial completed once (COMPLETED)
+    // u3: 1 tutorial mid-attempt-2 (SUPERSEDED + IN_PROGRESS) → 1 distinct completion
+    // Expected histogram: 3 users each with 1 tutorial → bucket "1 tutorial" has count 3.
+    const rows = [
+      { user_ID: 'u1', taskLegacyId: 2001, status: 'SUPERSEDED' },
+      { user_ID: 'u1', taskLegacyId: 2001, status: 'COMPLETED' },
+      { user_ID: 'u2', taskLegacyId: 2002, status: 'COMPLETED' },
+      { user_ID: 'u3', taskLegacyId: 2003, status: 'SUPERSEDED' },
+      { user_ID: 'u3', taskLegacyId: 2003, status: 'IN_PROGRESS' },
+    ];
+    const buckets = computeBuckets(rows);
+    expect(buckets).toHaveLength(1);
+    expect(buckets[0].bucketName).toBe('1 tutorial');
+    expect(buckets[0].count).toBe(3);
+  });
+});
+
+describe('Task 11 — DisplayService passes SUPERSEDED rows to event-statistics helpers', () => {
+  beforeEach(async () => {
+    const { Users, Events, Tutorials, Missions, TaskRecords } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(TaskRecords);
+    await DELETE.from(Events);
+    await DELETE.from(Tutorials);
+    await DELETE.from(Missions);
+    await DELETE.from(Users);
+  });
+
+  it('getEventBuckets: user with SUPERSEDED-only attempt is counted in the histogram', async () => {
+    const { Users, Events, Tutorials, TaskRecords } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Users).entries({ ID: 'u11', uuid: 'u11', sapId: 'sap-u11', legacyId: 11001 });
+    await INSERT.into(Events).entries({ ID: 'e11', legacyId: 11500, title: 'E11', timeZone: '+00:00' });
+    await INSERT.into(Tutorials).entries({ ID: 't11', slug: 'task11-tut', title: 'T11', legacyId: 7200, stepCount: 1 });
+
+    await INSERT.into(TaskRecords).entries([
+      { ID: 'tr-11-sup', user_ID: 'u11', event_ID: 'e11', taskLegacyId: 7200, taskType: 'TUTORIAL',
+        status: 'SUPERSEDED', progress: 100, attemptNumber: 1, legacyId: 11100 },
+      { ID: 'tr-11-ip', user_ID: 'u11', event_ID: 'e11', taskLegacyId: 7200, taskType: 'TUTORIAL',
+        status: 'IN_PROGRESS', progress: 25, attemptNumber: 2, legacyId: 11101 },
+    ]);
+
+    const display = await cds.connect.to('DisplayService');
+    const buckets = await display.tx({ user: new cds.User.Privileged() }, tx =>
+      tx.send({ event: 'getEventBuckets', data: { eventLegacyId: 11500 } })
+    );
+    // Pre-fix: SUPERSEDED filtered out → 0 buckets (no users counted).
+    // After-fix: SUPERSEDED counts; u11 has 1 completion → bucket "1 tutorial" count 1.
+    expect(buckets).toHaveLength(1);
+    expect(buckets[0].bucketName).toBe('1 tutorial');
+    expect(buckets[0].count).toBe(1);
+  });
+});
+
+describe('Task 12 — co-completion includes SUPERSEDED completions', () => {
+  beforeEach(async () => {
+    const { Users, Tutorials, TaskRecords } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(TaskRecords);
+    await DELETE.from(Tutorials);
+    await DELETE.from(Users);
+  });
+
+  it('user mid-attempt-2 (SUPERSEDED) still contributes their pair to the co-completion graph', async () => {
+    const { Users, Tutorials, TaskRecords } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Users).entries({ ID: 'u12', uuid: 'u12', sapId: 'sap-u12', legacyId: 12001 });
+    await INSERT.into(Tutorials).entries([
+      { ID: 't12a', slug: 'task12-a', title: 'A', legacyId: 7300, stepCount: 1, status: 'ACTIVE' },
+      { ID: 't12b', slug: 'task12-b', title: 'B', legacyId: 7301, stepCount: 1, status: 'ACTIVE' },
+    ]);
+    // u12 completed BOTH A and B, then reset A. Now: A is SUPERSEDED + IN_PROGRESS, B is still COMPLETED.
+    // Pre-fix: A's SUPERSEDED is filtered out → only B is in the user's set → NO pair.
+    // After-fix: both A and B are in the user's set → pair (a, b) with score 1.
+    await INSERT.into(TaskRecords).entries([
+      { ID: 'tr-12a-sup', user_ID: 'u12', taskLegacyId: 7300, taskType: 'TUTORIAL',
+        status: 'SUPERSEDED', progress: 100, attemptNumber: 1, legacyId: 12100 },
+      { ID: 'tr-12a-ip', user_ID: 'u12', taskLegacyId: 7300, taskType: 'TUTORIAL',
+        status: 'IN_PROGRESS', progress: 25, attemptNumber: 2, legacyId: 12101 },
+      { ID: 'tr-12b-comp', user_ID: 'u12', taskLegacyId: 7301, taskType: 'TUTORIAL',
+        status: 'COMPLETED', progress: 100, attemptNumber: 1, legacyId: 12102 },
+    ]);
+
+    const { computeCoCompletions } = await import('../../srv/lib/co-completion.js');
+    const result = await computeCoCompletions({ force: true });
+    expect(result['task12-a']).toBeDefined();
+    expect(result['task12-a'].find(p => p.slug === 'task12-b')?.score).toBe(1);
+    expect(result['task12-b']).toBeDefined();
+    expect(result['task12-b'].find(p => p.slug === 'task12-a')?.score).toBe(1);
+  });
+
+  it('re-completer (SUPERSEDED + COMPLETED of same tutorial) does NOT double-count pair weight', async () => {
+    const { Users, Tutorials, TaskRecords } = cds.entities('com.sap.developers.ims');
+    await INSERT.into(Users).entries({ ID: 'u12b', uuid: 'u12b', sapId: 'sap-u12b', legacyId: 12002 });
+    await INSERT.into(Tutorials).entries([
+      { ID: 't12c', slug: 'task12-c', title: 'C', legacyId: 7310, stepCount: 1, status: 'ACTIVE' },
+      { ID: 't12d', slug: 'task12-d', title: 'D', legacyId: 7311, stepCount: 1, status: 'ACTIVE' },
+    ]);
+    // u12b completed C twice (SUPERSEDED + COMPLETED) AND D once.
+    // The Set-per-user idiom in computeCoCompletions already dedupes by slug,
+    // so the pair (c, d) should have score 1 (not 2).
+    await INSERT.into(TaskRecords).entries([
+      { ID: 'tr-12c-sup', user_ID: 'u12b', taskLegacyId: 7310, taskType: 'TUTORIAL',
+        status: 'SUPERSEDED', progress: 100, attemptNumber: 1, legacyId: 12110 },
+      { ID: 'tr-12c-comp', user_ID: 'u12b', taskLegacyId: 7310, taskType: 'TUTORIAL',
+        status: 'COMPLETED', progress: 100, attemptNumber: 2, legacyId: 12111 },
+      { ID: 'tr-12d-comp', user_ID: 'u12b', taskLegacyId: 7311, taskType: 'TUTORIAL',
+        status: 'COMPLETED', progress: 100, attemptNumber: 1, legacyId: 12112 },
+    ]);
+
+    const { computeCoCompletions } = await import('../../srv/lib/co-completion.js');
+    const result = await computeCoCompletions({ force: true });
+    expect(result['task12-c'].find(p => p.slug === 'task12-d')?.score).toBe(1);
+  });
+});
+
 describe('Task 9 — admin-service SQL filters', () => {
   beforeEach(async () => {
     const { Users, Tutorials, Missions, Steps, TaskRecords } = cds.entities('com.sap.developers.ims');
