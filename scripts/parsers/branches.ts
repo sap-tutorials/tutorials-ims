@@ -11,6 +11,7 @@
 // context so fetch-tutorials.ts can surface them with file path.
 
 import { parseCondition, ConditionParseError } from '../../srv/lib/branch/condition.js';
+import { createFenceTracker } from './fence-tracker.js';
 
 export class BranchParseError extends Error {
   line: number;
@@ -91,16 +92,15 @@ function parseMarkerAttrs(raw: string, line: number, slug: string): MarkerAttrs 
 function sliceSubSteps(lines: string[], slug: string, baseLine: number): BranchSubStep[] {
   const steps: BranchSubStep[] = [];
   let current: BranchSubStep | null = null;
-  let inCodeFence = false;
+  const fence = createFenceTracker();
   for (const line of lines) {
-    if (/^```/.test(line)) {
-      inCodeFence = !inCodeFence;
+    if (fence(line)) {
       if (current) {
         current.body += (current.body ? '\n' : '') + line;
       }
       continue;
     }
-    const h3 = inCodeFence ? null : line.match(H3_RE);
+    const h3 = line.match(H3_RE);
     if (h3) {
       if (current) {
         current.body = current.body.replace(/^\n+|\n+$/g, '');
@@ -129,23 +129,22 @@ function countParentStepBefore(
   consumedRanges: Array<[number, number]>,
 ): number {
   let n = 0;
-  let inCodeFence = false;
+  const fence = createFenceTracker();
   for (let i = 0; i < beginIdx; i++) {
     // Skip lines inside any previously-consumed [BRANCH_BEGIN]…[BRANCH_END]
-    // block — their H3s belong to a sub-step, not the parent stream.
-    let inside = false;
+    // block — their H3s belong to a sub-step, not the parent stream. The
+    // fence tracker also doesn't advance over consumed lines, matching the
+    // original behavior: a malformed (unclosed) fence inside a consumed
+    // branch can't bleed into the outer stream.
+    let insideConsumed = false;
     for (const [start, end] of consumedRanges) {
       if (i >= start && i <= end) {
-        inside = true;
+        insideConsumed = true;
         break;
       }
     }
-    if (inside) continue;
-    if (/^```/.test(lines[i])) {
-      inCodeFence = !inCodeFence;
-      continue;
-    }
-    if (inCodeFence) continue;
+    if (insideConsumed) continue;
+    if (fence(lines[i])) continue;
     if (H3_RE.test(lines[i])) n++;
   }
   return n;
@@ -192,24 +191,15 @@ export function extractBranchGroups(body: string, slug: string): ExtractResult {
   }
 
   let i = 0;
-  let inCodeFence = false;
+  const fence = createFenceTracker();
   while (i < lines.length) {
     const line = lines[i];
 
-    // Toggle code-fence state on any line starting with ``` (with or without a language tag).
-    // Inside a code fence, skip ALL marker detection so meta-tutorials documenting the
-    // [BRANCH_BEGIN]/[BRANCH_END] syntax don't false-trigger.
-    if (/^```/.test(line)) {
-      inCodeFence = !inCodeFence;
-      if (pendingGroup && line.trim() !== '') {
-        flushGroup();
-      }
-      out.push(line);
-      i++;
-      continue;
-    }
-
-    if (inCodeFence) {
+    // Inside a fenced code block, skip ALL marker detection so meta-tutorials
+    // documenting the [BRANCH_BEGIN]/[BRANCH_END] syntax don't false-trigger.
+    // Uses the shared fence tracker (handles ``` and ~~~, run-length-aware
+    // close — see scripts/parsers/fence-tracker.ts).
+    if (fence(line)) {
       if (pendingGroup && line.trim() !== '') {
         flushGroup();
       }

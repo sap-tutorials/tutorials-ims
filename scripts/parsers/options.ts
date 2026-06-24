@@ -1,5 +1,6 @@
 import { classifyGroup, forceClassify, type OS, type ClassifyResult } from './os-classifier';
 import { slugify } from '../../srv/lib/slug-utils.js';
+import { createFenceTracker } from './fence-tracker.js';
 
 interface OptionEntry {
   matchIndex: number
@@ -35,14 +36,21 @@ export interface ConvertOptions {
   resolvedStepSlugsOut?: Set<string>;
 }
 
-/** Find the slugified ### heading immediately preceding `index` in `content`. */
+/** Find the slugified ### heading immediately preceding `index` in `content`.
+ *  Fenced code blocks are honored — an `### ` line quoted inside a code fence
+ *  is treated as literal content, not as a step heading. (Tutorials that
+ *  document authoring syntax embed H3s inside fences; see the matching
+ *  fence-awareness in v2.ts and branches.ts via fence-tracker.ts.) */
 function priorStepSlug(content: string, index: number): string | undefined {
   const before = content.slice(0, index);
-  const re = /^###\s+(.+?)\s*$/gm;
-  let last: RegExpExecArray | null = null;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(before)) !== null) last = m;
-  return last ? slugify(last[1]) : undefined;
+  const fence = createFenceTracker();
+  let last: string | undefined;
+  for (const line of before.split('\n')) {
+    if (fence(line)) continue;
+    const m = line.match(/^###\s+(.+?)\s*$/);
+    if (m) last = m[1];
+  }
+  return last ? slugify(last) : undefined;
 }
 
 export function convertOptionBlocks(

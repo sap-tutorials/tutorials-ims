@@ -1,4 +1,5 @@
 import type { TutorialStep } from './types.js'
+import { createFenceTracker } from './fence-tracker.js'
 
 const VALIDATE_LINE = /^\s*\[VALIDATE_\d+\]\s*$/
 const DONE_LINE = /^\s*\[DONE\]\s*$/
@@ -9,8 +10,18 @@ export function parseV2Steps(body: string): TutorialStep[] {
   let currentTitle = ''
   let currentLines: string[] = []
   let inStep = false
+  // Track fenced-code-block state so an H3 quoted inside a code block
+  // (e.g. a tutorial that demonstrates authoring syntax) is treated as
+  // literal content, not a step delimiter. Root cause of the cookbook
+  // tutorial's phantom-step bug.
+  const fence = createFenceTracker()
 
   for (const line of lines) {
+    if (fence(line)) {
+      if (inStep) currentLines.push(line)
+      continue
+    }
+
     const h3Match = line.match(/^### (.+)$/)
     if (h3Match) {
       if (inStep) {
