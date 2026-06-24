@@ -20,6 +20,10 @@
 //   3. WHEN MATCHED predicate skips no-op rows (4 already-correct rows had
 //      MODIFIEDAT unchanged after MERGE).
 //   4. Idempotent: re-running on converged state returns "Rows affected: 0".
+//      Note (Task 14, #600): idempotency only holds because the BASE selector
+//      explicitly excludes STATUS='SUPERSEDED'. Without that exclusion, every
+//      run would recompute prior-attempt rows and overwrite their preserved
+//      completionDate.
 //
 // Two alias renames vs the spec's example were applied for readability:
 //   - "OUTER" → "BASE" (avoids potential reserved-keyword collision)
@@ -68,6 +72,14 @@ USING (
     GROUP BY "SR"."USER_ID", "ST"."TUTORIAL_ID"
   ) "C" ON "C"."USER_ID" = "BASE"."USER_ID" AND "C"."TUTORIAL_ID" = "TU"."ID"
   WHERE "BASE"."TASKTYPE" = 'TUTORIAL'
+    -- Task 14 (#600): SUPERSEDED rows preserve historical completion timestamps
+    -- from prior attempts. They must NEVER be recomputed — doing so would
+    -- overwrite their completionDate every time the publish pipeline runs
+    -- (the WHEN MATCHED branch sets completionDate=NULL when computed status
+    -- is anything other than COMPLETED). Excluding SUPERSEDED here is the
+    -- canonical correctness fix for the /me/ page's "preserve past completions"
+    -- guarantee. Idempotency now depends on this exclusion.
+    AND "BASE"."STATUS" != 'SUPERSEDED'
     AND "TU"."ID" IN ( :tutorialIds )
 ) AS "SRC"
 ON "TGT"."ID" = "SRC"."TR_ID"

@@ -96,7 +96,13 @@ export async function recomputeTutorialProgress(db, namespace, tutorialId, stepC
 
   const tutorialRecs = await SELECT.from(TaskRecords).where({
     taskLegacyId: tutorial.legacyId,
-    taskType: 'TUTORIAL'
+    taskType: 'TUTORIAL',
+    // Task 14 (#600): SUPERSEDED rows preserve historical completion timestamps
+    // from prior attempts. They must never be recomputed — doing so would wipe
+    // their completionDate (line 115 sets completionDate=null on any newStatus
+    // !== 'COMPLETED', and a SUPERSEDED row has zero attempt-2 step completions
+    // by definition).
+    status: { '!=': 'SUPERSEDED' }
   });
   if (tutorialRecs.length === 0) return { rechecked: 0, updated: 0 };
 
