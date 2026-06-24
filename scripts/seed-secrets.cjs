@@ -95,12 +95,20 @@ function showBinding() {
 async function main() {
   const commit = process.argv.includes('--commit');
 
-  await cds.connect.to('db');
+  // Per [[feedback_cds_entities_runtime_only]], `cds.entities(...)` can be
+  // undefined in plain CJS scripts even after `cds bind --exec` has wired the
+  // DB binding. We don't fight it — use raw SQL like the other one-shots
+  // (setup-dev-data.cjs, repair-mixed-case-tutorial-duplicates.cjs). The HANA
+  // table name follows the namespace-to-uppercase-underscore convention.
+  const db = await cds.connect.to('db');
   showBinding();
 
-  const { Secrets } = cds.entities('com.sap.developers.ims');
-  const existing = await SELECT.from(Secrets).columns('key');
-  const existingKeys = new Set(existing.map(r => r.key));
+  const TABLE = 'COM_SAP_DEVELOPERS_IMS_SECRETS';
+  // HANA quotes "KEY" because it's a reserved word. The column name itself is
+  // just KEY (no trailing underscore — that would only happen if the CSV/CDS
+  // escape strategy added one; CAP's HANA emitter uses bare quoted "KEY").
+  const existing = await db.run(`SELECT "KEY" FROM ${TABLE}`);
+  const existingKeys = new Set(existing.map(r => r.KEY));
   const toInsert = INITIAL_SECRETS.filter(s => !existingKeys.has(s.key));
   const alreadyPresent = INITIAL_SECRETS.filter(s => existingKeys.has(s.key));
 
@@ -124,7 +132,19 @@ async function main() {
     return;
   }
 
-  await INSERT.into(Secrets).entries(toInsert);
+  // Raw-SQL INSERT (see comment above on cds.entities-not-callable). Generate
+  // UUIDs explicitly since cuid's auto-fill only fires through CDS QL.
+  // managed-aspect timestamps default to NULL when omitted — first admin write
+  // (set/rotate/clear value) updates lastRotatedAt + modifiedAt, which is
+  // exactly the audit story we want anyway.
+  const { randomUUID } = require('node:crypto');
+  for (const s of toInsert) {
+    await db.run(
+      `INSERT INTO ${TABLE} ("ID", "KEY", "DESCRIPTION", "KIND", "ROTATIONOWNER", "ROTATIONDOCSURL", "EXPIRESAT")
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [randomUUID(), s.key, s.description, s.kind, s.rotationOwner, s.rotationDocsUrl, s.expiresAt],
+    );
+  }
   console.log(`\nInserted ${toInsert.length} new tracked secrets.`);
   console.log('Next: visit /admin-ui/#secrets-display to set each row\'s value');
   console.log('and (optionally) expiresAt + lastRotatedAt. The daily 04:11 UTC');
