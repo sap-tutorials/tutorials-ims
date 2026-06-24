@@ -60,7 +60,7 @@ sap.ui.define([
     accounts: "Account Merges",
     changelog: "Change Log",
     privacyAudit: "Privacy Audit",
-    devtoberfest: "Devtoberfest",
+    devtoberfest: "Devtoberfest Event Edit",
     board: "Board",
     analytics: "Completion analytics",
     statistics: "Statistics",
@@ -79,7 +79,7 @@ sap.ui.define([
   };
 
   var NAV_GROUPS_STORAGE_KEY = "sap-tutorials-admin-nav-groups";
-  var NAV_GROUP_KEYS = ["content", "rewards", "feedback", "reporting", "system", "runtimeSettings"];
+  var NAV_GROUP_KEYS = ["content", "rewards", "feedback", "reporting", "system", "devtoberfest", "runtimeSettings"];
 
   return Controller.extend("sap.tutorials.admin.shell.controller.Shell", {
     onInit: function () {
