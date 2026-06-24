@@ -10,7 +10,7 @@
 There is no first-class "who authored this tutorial?" association in the schema. Authorship lives in two places, both as plain strings:
 
 - [`TutorialContributors`](../../../db/schema.cds#L327) `{ tutorial, name, email, role }` — one row per contributor per tutorial, sourced from tutorial markdown frontmatter at fetch time.
-- [`TutorialMeta`](../../../db/schema.cds#L814) `{ tutorial, owner, ownerEmail, ... }` — one row per tutorial.
+- [`TutorialMeta`](../../../db/schema.cds#L315) `{ tutorial, owner, ownerEmail, ... }` — one row per tutorial.
 
 Neither has a foreign key to [`Users`](../../../db/schema.cds#L116). Any feature that wants to answer "which tutorials did this user author?" has to email-match on a string column — fragile, case-sensitive, and incapable of expressing "this is the primary author" cleanly.
 
@@ -74,20 +74,22 @@ Both FKs are **nullable** by design: the schema must tolerate (a) historical tut
 
 ### HDI migration
 
-Two `ALTER TABLE ADD COLUMN` operations, both nullable, both safe to apply against an active DB. No DDL changes to `Users` (the new aspects are CDS-side inverse associations, not stored columns).
+Both new columns are nullable additions; the CDS compile + HDI deploy regenerates the tables additively — no hand-run SQL. The shape of the resulting DDL (shown here for review purposes only, *not* for hand-execution):
 
 ```sql
+-- Illustrative only — HDI deploy emits these via the regenerated .hdbtable artifacts.
 ALTER TABLE com_sap_developers_ims_Tutorials             ADD (author_ID NVARCHAR(36));
 ALTER TABLE com_sap_developers_ims_TutorialContributors  ADD (user_ID   NVARCHAR(36));
 ```
 
-Both columns get the standard CAP-generated NavigationProperty + ReferentialConstraint when CDS compiles. `db/last-dev/csn.json` is rebuilt as part of the PR (the `predocs:build` guard will catch unregistered changes).
+Both columns get the standard CAP-generated NavigationProperty + ReferentialConstraint when CDS compiles. The implementer must regenerate `db/last-dev/csn.json` (`cds compile srv/admin-service.cds --to csn -o db/last-dev/csn.json`) and commit it — there is no CI guard for CSN drift, so a stale CSN will silently desync from the live model.
 
 ### Why two FKs, not one
 
 A single `Tutorials.author` is enough for the most-common query ("show me the primary author") but cannot answer "show me every tutorial Alice contributed to" without joining through `TutorialContributors` and email-matching anyway — i.e., the exact problem this spec is trying to solve. Conversely, only adding `TutorialContributors.user` forces the OP facet to do a more expensive distinct-on-tutorial-via-contributor query for every render.
 
 Two FKs give us both:
+
 - `WHERE Tutorials.author_ID = ?` → the fast "primary author" path (4 rows for Tom, today).
 - `WHERE TutorialContributors.user_ID = ?` → the "contributed in any role" path (might be 40 rows).
 
@@ -121,6 +123,7 @@ npx cds bind --exec -- node scripts/backfill-tutorial-authors.cjs --phase=tutori
     c. Fallback 2: `TutorialMeta.ownerEmail` for this tutorial.
     Try (a), (b), (c) in order; first email that hits the map wins. Hit → `UPDATE Tutorials SET author_ID = ?`. All-miss → push to `orphans_tutorials` with the slug, the candidate emails tried, and which fallback level produced each.
 4. **Write report** — `.migration-data/tutorial-author-backfill-<ISO-timestamp>.json`:
+
     ```json
     {
       "ranAt": "2026-06-24T13:50:00Z",
@@ -132,6 +135,9 @@ npx cds bind --exec -- node scripts/backfill-tutorial-authors.cjs --phase=tutori
         "tutorials_matched": 156,
         "tutorials_orphaned": 12
       },
+      "warnings": [
+        { "kind": "duplicate_user_email", "email": "x@y.z", "userIds": ["…", "…"], "picked": "…" }
+      ],
       "orphans_contributors": [
         { "id": "…", "tutorialSlug": "…", "name": "…", "email": "…", "role": "author" }
       ],
@@ -226,7 +232,7 @@ A single post-deploy assertion: `GET /admin/Tutorials?$top=5&$expand=author($sel
 
 ### `docs/developers/operations/migration-from-ims.md` (edit)
 
-Add a new step between "import user progress" and "verify slugs":
+Append a new step **after** `## Step 2 — User progress`. Since `## Step 3` is the alternate HANA-to-HANA path, the new step becomes `## Step 4 — Backfill tutorial authorship`:
 
 > ### Step N — Backfill tutorial authorship
 >
@@ -262,7 +268,7 @@ The default-commit shape mirrors `migrate:reference` and `migrate:users` (the ex
 
 One line added to `MEMORY.md` under "Migration / QA / publish":
 
-```
+```text
 - [Tutorial author backfill is a migration step](feedback_tutorial_author_backfill_runs_after_user_migration.md) — npm run migrate:authors after migrate:users; logs orphans
 ```
 
