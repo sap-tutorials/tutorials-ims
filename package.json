@@ -146,6 +146,7 @@
     "qrcode": "^1.5.4",
     "sharp": "0.35.1",
     "socket.io": "^4.8.0",
+    "undici": "^6.19.5",
     "vue-virtual-scroller": "3.0.4"
   },
   "cds": {

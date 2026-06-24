@@ -1,12 +1,18 @@
 // srv/lib/credstore.js
 // BTP Credential Store integration. Phase 2-C (#465).
 //
-// Layered above @sap/xsenv (binding lookup) + native fetch + jose (JWE-decrypt).
-// Single chokepoint for all credstore I/O — keeps the security audit surface
-// small and makes mocking trivial in unit tests.
+// Layered above @sap/xsenv (binding lookup) + undici fetch (so we can pass
+// an mTLS-configured Agent via the dispatcher option) + jose (JWE-decrypt).
+// We import fetch from 'undici' explicitly rather than relying on the
+// global fetch because Node's global fetch wrapper strips the `dispatcher`
+// option for browser-spec compatibility. PR #586's mTLS path used the
+// global fetch and silently dropped the client cert, causing every
+// Secrets save to 500 against an mTLS-provisioned credstore (new BTP
+// subaccount default). See feedback_node_global_fetch_drops_dispatcher.
 
 import { getServices } from '@sap/xsenv';
 import { compactDecrypt, importPKCS8 } from 'jose';
+import { fetch as undiciFetch } from 'undici';
 import cds from '@sap/cds';
 
 const LOG = cds.log('credstore');
@@ -79,10 +85,15 @@ async function credFetch(url, init, opLabel) {
     if (isMtlsBinding()) {
       // mTLS path — credstore in new BTP subaccounts authenticates via a
       // client cert during the TLS handshake instead of HTTP basic auth.
-      // undici's Agent accepts `connect: { cert, key }` for this; node's
-      // built-in fetch is undici under the hood and will use the dispatcher
-      // we pass. Lazy-import undici so basic-auth bindings don't pay the
-      // resolution cost.
+      // undici's Agent accepts `connect: { cert, key }` for this. We MUST
+      // call undici's fetch directly (imported above as undiciFetch) —
+      // Node's global fetch wrapper strips the `dispatcher` option for
+      // browser-spec compatibility, silently dropping the client cert.
+      // PR #586 missed this and shipped using global fetch; the request
+      // went out without a client cert, the credstore TLS handshake
+      // failed, and the admin Secrets-save 500'd against every mTLS
+      // binding (the new BTP subaccount default since the DevRel &
+      // Community Tools cutover on 2026-06-21).
       if (!_state.undiciAgent) {
         const b = getBinding();
         if (!b.certificate || !b.key) {
@@ -95,7 +106,10 @@ async function credFetch(url, init, opLabel) {
         });
       }
       opts.dispatcher = _state.undiciAgent;
+      return await undiciFetch(url, opts);
     }
+    // Basic-auth path — legacy bindings without mTLS. Native global fetch
+    // is fine here (no dispatcher needed).
     return await fetch(url, opts);
   } catch (err) {
     if (err.name === 'AbortError' || err.name === 'TimeoutError') {

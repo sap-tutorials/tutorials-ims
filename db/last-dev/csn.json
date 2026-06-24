@@ -2386,6 +2386,40 @@
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_CONTENTMANIFEST"
     }
   },
+  "extensions": [
+    {
+      "annotate": "AdminService.AdvocateTopics",
+      "elements": {
+        "tag_ID": {
+          "@Common.Label": "Topic",
+          "@Common.Text": {
+            "=": "tag.label"
+          },
+          "@Common.TextArrangement": {
+            "#": "TextOnly"
+          },
+          "@Common.ValueList.CollectionPath": "Tags",
+          "@Common.ValueList.Parameters": [
+            {
+              "$Type": "Common.ValueListParameterInOut",
+              "LocalDataProperty": {
+                "=": "tag_ID"
+              },
+              "ValueListProperty": "ID"
+            },
+            {
+              "$Type": "Common.ValueListParameterDisplayOnly",
+              "ValueListProperty": "label"
+            },
+            {
+              "$Type": "Common.ValueListParameterDisplayOnly",
+              "ValueListProperty": "name"
+            }
+          ]
+        }
+      }
+    }
+  ],
   "meta": {
     "creator": "CDS Compiler v6.9.0",
     "compilerVersion": "6.9.0",
