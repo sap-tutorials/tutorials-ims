@@ -142,6 +142,7 @@ export default defineConfig({
           { text: 'IAS setup',                 link: '/developers/operations/ias-setup' },
           { text: 'Joule chat admin settings', link: '/developers/operations/joule-chat-admin-settings' },
           { text: 'KG grantor setup',          link: '/developers/operations/kg-grantor-setup' },
+          { text: 'Live probing',              link: '/developers/operations/live-probing' },
           { text: 'MTA deployment',            link: '/developers/operations/mta-deployment' },
           { text: 'Phase 4 code-check eval',   link: '/developers/operations/phase-4-codecheck-eval' },
           { text: 'Postmortems', collapsed: true, items: [
