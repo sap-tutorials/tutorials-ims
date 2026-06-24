@@ -59,6 +59,28 @@
         </VBox>
       </Panel>
 
+      <!-- AI grading toggles. Both default off in the schema (db/schema.cds:519,523).
+           Flipping either on starts AI Core token consumption per submission;
+           the help text under each label says so explicitly so an admin doesn't
+           switch them on without realizing. The two flags are surfaced together
+           because they share the same operator-decision shape: "are we paying
+           for AI-graded learner submissions on this channel?" -->
+      <Panel headerText="{i18n>aiGradingSection}" expandable="true" expanded="true" class="sapUiSmallMarginBottom">
+        <f:SimpleForm editable="true" layout="ResponsiveGridLayout">
+          <Label text="{i18n>validateAnswerEnabled}" />
+          <Switch state="{settings>/validateAnswerEnabled}" />
+
+          <Label text="" />
+          <Text text="{i18n>validateAnswerEnabledHelp}" wrapping="true" class="sapUiTinyMarginBottom" />
+
+          <Label text="{i18n>codeCheckEnabled}" />
+          <Switch state="{settings>/codeCheckEnabled}" />
+
+          <Label text="" />
+          <Text text="{i18n>codeCheckEnabledHelp}" wrapping="true" />
+        </f:SimpleForm>
+      </Panel>
+
       <HBox class="sapUiSmallMarginTop">
         <Button text="{i18n>btnSave}" press=".onSave" type="Emphasized" class="sapUiTinyMarginEnd" />
         <Button text="{i18n>btnReload}" press=".onReload" />

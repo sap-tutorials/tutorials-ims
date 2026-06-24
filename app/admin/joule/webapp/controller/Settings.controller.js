@@ -18,7 +18,13 @@ sap.ui.define([
         ragEnabled: false,
         embeddingModel: "",
         embeddingTopK: 5,
-        embeddingMinScore: 0.25
+        embeddingMinScore: 0.25,
+        // AI grading sibling flags. Default false to mirror the schema default
+        // (db/schema.cds:519,523) — flipping these on starts AI Core token
+        // consumption per learner submission. The help text under each switch
+        // in the view makes the cost trade-off explicit.
+        validateAnswerEnabled: false,
+        codeCheckEnabled: false
       });
       this.getView().setModel(oJSON, "settings");
       this._loadSettings();
@@ -58,7 +64,9 @@ sap.ui.define([
             ragEnabled: !!data.ragEnabled,
             embeddingModel: data.embeddingModel || "",
             embeddingTopK: data.embeddingTopK != null ? data.embeddingTopK : 5,
-            embeddingMinScore: data.embeddingMinScore != null ? data.embeddingMinScore : 0.25
+            embeddingMinScore: data.embeddingMinScore != null ? data.embeddingMinScore : 0.25,
+            validateAnswerEnabled: !!data.validateAnswerEnabled,
+            codeCheckEnabled: !!data.codeCheckEnabled
           });
         })
         .catch(function (err) {
@@ -86,7 +94,9 @@ sap.ui.define([
         ragEnabled: !!data.ragEnabled,
         embeddingModel: data.embeddingModel || null,
         embeddingTopK: parseInt(data.embeddingTopK, 10) || 5,
-        embeddingMinScore: data.embeddingMinScore === "" || data.embeddingMinScore == null ? null : Number(data.embeddingMinScore)
+        embeddingMinScore: data.embeddingMinScore === "" || data.embeddingMinScore == null ? null : Number(data.embeddingMinScore),
+        validateAnswerEnabled: !!data.validateAnswerEnabled,
+        codeCheckEnabled: !!data.codeCheckEnabled
       };
 
       fetch("/admin/$metadata", {
