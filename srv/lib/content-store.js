@@ -13,6 +13,7 @@ import { createShellLoader, ShellMarkerError, composeShell } from './chrome-shel
 import { createSessionHelpers } from './content-publish-session.js';
 import { recomputeTutorialProgressBulkSQL } from './recompute-tutorial-progress-bulk-sql.js';
 import { tutorialsTableInfo } from './_tutorials-table.js';
+import { resolveSecret } from './secret-resolver.js';
 
 const LOG = cds.log('content-store');
 const LOCK_NAME = 'content-publish';
@@ -203,21 +204,36 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
 
   // --- Auth Middleware ---
 
-  function contentAuthMiddleware(req, res, next) {
-    const token = process.env[apiKeyEnv];
-    if (!token) {
-      return res.status(503).json({ error: 'Content API not configured' });
+  // Async middleware: the bearer token is sourced via the shared
+  // secret-resolver (credstore-first, env fallback, 5-min TTL cache). This
+  // makes admin-UI rotations of CONTENT_API_KEY take effect on the next cache
+  // miss (≤5 min) without a `cf restart` — symmetric with the other
+  // credstore-fronted secrets (GITHUB_DISPATCH_TOKEN, SMTP_PASS,
+  // SUBMISSION_SALT_SECRET).
+  //
+  // Express handles async middlewares as long as we don't leak rejections:
+  // any throw inside the try block becomes `next(err)` so Express's
+  // error-handling chain (or the default handler) surfaces a 500 rather than
+  // hanging the connection.
+  async function contentAuthMiddleware(req, res, next) {
+    try {
+      const token = await resolveSecret(apiKeyEnv, { logTag: `[content-auth:${apiKeyEnv}]` });
+      if (!token) {
+        return res.status(503).json({ error: 'Content API not configured' });
+      }
+      const auth = req.headers.authorization;
+      if (!auth || !auth.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      const provided = Buffer.from(auth.slice(7));
+      const expected = Buffer.from(token);
+      if (provided.length !== expected.length || !timingSafeEqual(expected, provided)) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+      next();
+    } catch (err) {
+      next(err);
     }
-    const auth = req.headers.authorization;
-    if (!auth || !auth.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    const provided = Buffer.from(auth.slice(7));
-    const expected = Buffer.from(token);
-    if (provided.length !== expected.length || !timingSafeEqual(expected, provided)) {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
-    next();
   }
 
   // --- Helpers ---
