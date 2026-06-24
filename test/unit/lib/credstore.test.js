@@ -6,7 +6,7 @@
 // time (see plan Task 7.1). The fixtures are SAFE to commit: synthetic 2048-bit
 // RSA key with no production secret value (`test-secret-value`).
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // Fixtures generated once via:
 //   import { generateKeyPair, exportPKCS8, exportSPKI, CompactEncrypt, importSPKI } from 'jose';
@@ -111,6 +111,7 @@ describe('writeSecret (#465)', () => {
     expect(opts.method).toBe('POST');
     expect(opts.headers['sapcp-credstore-namespace']).toBe('tutorials');
     expect(opts.headers.Authorization).toMatch(/^Basic /);
+    expect(opts.headers['Content-Type']).toBe('application/json');
     expect(JSON.parse(opts.body)).toEqual({ name: 'TEST_KEY', value: 'new-value' });
   });
 
@@ -121,6 +122,156 @@ describe('writeSecret (#465)', () => {
     await expect(writeSecret('TEST_KEY', null)).rejects.toThrow(/empty or non-string/);
     await expect(writeSecret('TEST_KEY', 42)).rejects.toThrow(/empty or non-string/);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// Fixture keypair for the payload-encryption write path. Generated once via
+// jose's generateKeyPair('RSA-OAEP-256', { modulusLength: 2048 }). Safe to
+// commit — synthetic, used only by these tests, never touches a real binding.
+const FIXTURE_SERVER_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAypw0Amn0OygTh03EhJ87
+d4EPY2iV8tUYaCbJIz6mvJFcNx+/8edSkTRyypIR0ezh54b0ERn5+AagSxe4DWob
+q/zm1vhYTf/RYkafVb8I+KmTeV4InUA0TOsDsCVUXFJFMP6qDl3vO/TMkXkcAWSq
+oGmPtA3aR6+HdS85NfXnTMVb7Q/l5xZVMl0GSTMX0Po6iJpwk7eMHKOj/qB55XMO
+FqGr4BO49v3bs9KEPE2k+MrwSRgqZfao9YUD6NuKt3sELm8B6+EFVueTr8Vl07Cq
+jaPLKCIig6a293uvLpidgi5SyMxh7tyQOeJIQ/OCovJdzLTmzVR2kIriw/Cfspdb
+nQIDAQAB
+-----END PUBLIC KEY-----`;
+const FIXTURE_SERVER_PRIVATE_KEY_PEM = `-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDKnDQCafQ7KBOH
+TcSEnzt3gQ9jaJXy1RhoJskjPqa8kVw3H7/x51KRNHLKkhHR7OHnhvQRGfn4BqBL
+F7gNahur/ObW+FhN/9FiRp9Vvwj4qZN5XgidQDRM6wOwJVRcUkUw/qoOXe879MyR
+eRwBZKqgaY+0DdpHr4d1Lzk19edMxVvtD+XnFlUyXQZJMxfQ+jqImnCTt4wco6P+
+oHnlcw4WoavgE7j2/duz0oQ8TaT4yvBJGCpl9qj1hQPo24q3ewQubwHr4QVW55Ov
+xWXTsKqNo8soIiKDprb3e68umJ2CLlLIzGHu3JA54khD84Ki8l3MtObNVHaQiuLD
+8J+yl1udAgMBAAECggEAWkz+HSlN8eOtuHsfoCA758o8qoiddCong5vtv2iX9akv
+mV3sNYts0Ey48LHjgVV7Za5PLyQNtc52OKGspUXqaWABHkR3TuQ6VPu23geTnwgt
+M0WGv1czOCjybtpkW/VK40hNULPrASTc2+VHZxOPvIjvxEb8R0DjNYZDkFo1qY/t
+ovGmdA8Xb13LMtEZcC0EGLfL5t7HpudD7Yj3MS6RUfl0oZiDZaREa2q+RLCljx77
+CXeTj/LeDJI1/g6/4B1Ld1Y2CdRybBiV+doMX2aPfz/frjVroDE01E97wceqgD3R
+BcwwX/0kCHflNEun53v18sjID8wwmqqX9YtgzMXj/QKBgQDkPMKVNUPhjrp725xd
+jCqA2jYXlIpJnDAiJFyjs1EmVOG+tiRNmKJZwJ4TNxCD76OB9SWKjwgOdFd75nq1
+a64jlQnENNgUMvf9tvrrI/bFkS2EfZfZHi+8SYfKJYd1H9toEYdt+QZGQlDDWD2M
+RsGWffDqOW73xmBnuo1ZY15ghwKBgQDjQWu5ahtXUT0ULpHp6OdaEE8dYlTckwYT
+fiShBVJycLdAyyEUJMlyr2bf7jBo4Tf1k5ku5YnfwdkmuMtfxDIXshH1T82l/4vC
+KIEVgYnJlxtjvK6AtAfPpEPpys0FSsnkPgv5VNJEEDJ0U/k8feZSLGTVKLbSOm+7
+SZWP13WfuwKBgQCK19uXYTvWLzmKt2I8FlSU5ioZ1ib5+KXfXzdr7l3jb6eUmMEk
+40GAUAjZr5nAaTuSh0s7Kx+/i07c9KyZSNQ6mSPD1FHOl+L82R9zhAFO1q5V9wE0
+94QairCsbIAm5CZY/LDiWadTfmwbKcbnWvPRVPQFyMKUwH1NHNN4GVcEaQKBgGv8
+3FmhCBj365Q5hPCn0bfEZDPMVBL0ckC1AmbZhpIG6a2KWM+fo3Ix0yq5nptX2iWB
+25qjTF7dWHjD+zAopL0JyurM3yXwRtMeOCimA3mdqlA8ipdx9PxATF0+FypanZEt
+wrbaDYh2QeNxO8/464dEvS1lSWqghhNzJfTSJ3ydAoGBAIFHB+ED52JqDopuzTi2
+ofxacxFqbpWeey9kK+t+ZijPyCEyFCeSRJwP2uhYjm1OMK0T0ZC+DWxPmNotVa3V
+lxv6KSSp/9CCvYjBmzo2Cnk1u188L14Tj8yrA+TzHEb1iUhut3xfMQylGTXhjdP7
+dwRwdN3CBAx/muPrVuxFpSUB
+-----END PRIVATE KEY-----`;
+
+describe('writeSecret with payload encryption enabled (post-#588 follow-up)', () => {
+  // Mutate VCAP_SERVICES to a payload-encryption-enabled binding shape and
+  // reset the credstore module's cached binding so it re-reads. The module
+  // itself is the same instance (vitest doesn't allow dynamic re-imports
+  // with cache-busting query strings under its Vite-style import handling);
+  // _resetForTests() is the public seam.
+  const ORIGINAL_VCAP = process.env.VCAP_SERVICES;
+  beforeEach(() => {
+    process.env.VCAP_SERVICES = JSON.stringify({
+      credstore: [{
+        tags: ['credstore'],
+        credentials: {
+          url: 'https://credstore.example.com',
+          username: 'testuser',
+          password: 'testpass',
+          encryption: {
+            client_private_key: FIXTURE_PEM,
+            server_public_key: FIXTURE_SERVER_PUBLIC_KEY,
+          },
+          parameters: {
+            encryption: { payload: 'enabled' },
+          },
+        },
+      }],
+    });
+    // @sap/xsenv caches the parsed services on first call. Force re-read by
+    // clearing the credstore module's cache; @sap/xsenv reads from
+    // process.env.VCAP_SERVICES fresh each time when called with explicit
+    // {tag} (no internal cache for that path).
+    _resetForTests();
+  });
+  afterEach(() => {
+    process.env.VCAP_SERVICES = ORIGINAL_VCAP;
+    _resetForTests();
+  });
+
+  it('encrypts the body as a JWE compact string with Content-Type: application/jose', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ status: 201, ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await writeSecret('TEST_KEY', 'my-secret-value');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, opts] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://credstore.example.com/password');
+    expect(opts.method).toBe('POST');
+    expect(opts.headers['Content-Type']).toBe('application/jose');
+
+    // JWE compact serialization is 5 base64url segments separated by '.'
+    expect(typeof opts.body).toBe('string');
+    expect(opts.body.split('.').length).toBe(5);
+
+    // Decrypt with the fixture private key and verify the plaintext envelope.
+    const { compactDecrypt, importPKCS8 } = await import('jose');
+    const privKey = await importPKCS8(FIXTURE_SERVER_PRIVATE_KEY_PEM, 'RSA-OAEP-256');
+    const { plaintext, protectedHeader } = await compactDecrypt(opts.body, privKey, {
+      keyManagementAlgorithms: ['RSA-OAEP-256'],
+      contentEncryptionAlgorithms: ['A256GCM'],
+    });
+    expect(protectedHeader.alg).toBe('RSA-OAEP-256');
+    expect(protectedHeader.enc).toBe('A256GCM');
+    // Mandatory `iat` header, within 2 minutes of now.
+    expect(typeof protectedHeader.iat).toBe('number');
+    expect(Math.abs(Math.floor(Date.now() / 1000) - protectedHeader.iat)).toBeLessThan(120);
+
+    const envelope = JSON.parse(new TextDecoder().decode(plaintext));
+    expect(envelope).toEqual({ name: 'TEST_KEY', value: 'my-secret-value' });
+  });
+
+  it('surfaces the credstore 415 error verbatim when the body would be malformed', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      status: 415, ok: false,
+      text: () => Promise.resolve('{"errorCode":"wrong_content_type_for_jwe"}'),
+    }));
+    await expect(writeSecret('TEST_KEY', 'v')).rejects.toThrow(
+      /credstore write TEST_KEY: 415 .*wrong_content_type_for_jwe/,
+    );
+  });
+
+  it('accepts raw base64-DER keys without PEM headers (live-binding shape)', async () => {
+    // mTLS bindings in new BTP subaccounts ship encryption.* keys as bare
+    // base64 strings (no PEM headers). Verify both keys are PEM-wrapped
+    // internally so jose can import them.
+    const stripPem = (pem) =>
+      pem.replace(/-----BEGIN [^-]+-----|-----END [^-]+-----|\s/g, '');
+    process.env.VCAP_SERVICES = JSON.stringify({
+      credstore: [{
+        tags: ['credstore'],
+        credentials: {
+          url: 'https://credstore.example.com',
+          username: 'testuser',
+          password: 'testpass',
+          encryption: {
+            client_private_key: stripPem(FIXTURE_PEM),
+            server_public_key: stripPem(FIXTURE_SERVER_PUBLIC_KEY),
+          },
+          parameters: { encryption: { payload: 'enabled' } },
+        },
+      }],
+    });
+    _resetForTests();
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 201, ok: true }));
+    await expect(writeSecret('TEST_KEY', 'value-for-raw-keys')).resolves.toBe(true);
+    // If we got here without throwing on importSPKI / importPKCS8, the
+    // ensurePem wrapping worked.
   });
 });
 
