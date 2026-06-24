@@ -1408,6 +1408,27 @@ export default class AdminService extends cds.ApplicationService {
       };
     });
 
+    // Task 17 (#600) — audit listener for the TutorialProgressReset event
+    // declared in srv/developer-service.cds and emitted by the reset action
+    // in srv/developer-service.js. cds.emit + cds.on share the same in-process
+    // event bus, so the listener fires for every successful reset. This is
+    // SUPPLEMENTAL to the @PersonalData.cascade:'audit-only' annotations on
+    // TaskRecords (which audit the writes themselves) — it captures the
+    // INTENT of the reset (single semantic event) separate from N anonymous
+    // status mutations. Listener uses cds.log('audit').info(...) so it shows
+    // up in the structured-log stream alongside other audit observations
+    // without coupling to the @cap-js/audit-logging service binding (which
+    // would fail-open and silently drop in local dev without a binding).
+    // Defensive try/catch: listener never throws — the reset action must
+    // succeed regardless of observability outcome.
+    cds.on('TutorialProgressReset', (msg) => {
+      try {
+        cds.log('audit').info('TutorialProgressReset', msg.data ?? msg);
+      } catch (err) {
+        cds.log('admin-service').warn(`audit listener for TutorialProgressReset failed: ${err.message ?? err}`);
+      }
+    });
+
     await super.init();
 
     // Allow standalone read access to ChangeView (plugin sets Readable:false by default)

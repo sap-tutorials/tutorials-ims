@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import cds from '@sap/cds';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -742,5 +742,64 @@ describe('Task 16a — admin CSV task-records export adds attemptNumber column',
     expect(out).toHaveLength(1);
     const attemptIdx = legacyHeader.indexOf('ATTEMPT_NUMBER');
     expect(out[0][attemptIdx]).toBe(2);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// Task 17 — TutorialProgressReset event: explicit CDS declaration +
+// audit listener. Closes Task 3 reviewer's S1 recommendation.
+// ─────────────────────────────────────────────────────────────────────
+describe('Task 17 — TutorialProgressReset event declaration', () => {
+  it('TutorialProgressReset event is declared on DeveloperService', () => {
+    const { DeveloperService } = cds.services;
+    // CAP exposes service-scoped events via `.events`; the fully-qualified
+    // name lookup is a fallback for CSN versions that key by fqn.
+    const event = DeveloperService.events?.TutorialProgressReset
+              ?? DeveloperService.events?.['DeveloperService.TutorialProgressReset']
+              ?? DeveloperService.events?.['TutorialProgressReset'];
+    expect(event).toBeDefined();
+    // All 5 fields from the emit payload must be on the declaration so
+    // OData $metadata + ORD discovery see the contract.
+    expect(event.elements.user).toBeDefined();
+    expect(event.elements.tutorialSlug).toBeDefined();
+    expect(event.elements.attemptNumber).toBeDefined();
+    expect(event.elements.supersededRecordCount).toBeDefined();
+    expect(event.elements.previousAttemptCompletedAt).toBeDefined();
+  });
+});
+
+describe('Task 17 — TutorialProgressReset audit listener', () => {
+  beforeEach(async () => {
+    await seedCompletedTutorial();
+  });
+
+  it('TutorialProgressReset event reaches the audit listener', async () => {
+    // The listener registered in srv/admin-service.js calls
+    // cds.log('audit').info(...). Spy on the *singleton* logger instance
+    // (cds.log returns the same instance for a given tag) so we can
+    // observe the call regardless of when the listener resolves the
+    // logger reference.
+    const auditLog = cds.log('audit');
+    const infoSpy = vi.spyOn(auditLog, 'info');
+    try {
+      cds.context = { user: new cds.User({ id: 'sap-u1' }) };
+      await cds.services.DeveloperService.send({
+        event: 'resetTutorialProgress',
+        data: { slug: 'reset-happy-path' },
+      });
+
+      const matching = infoSpy.mock.calls.find(c =>
+        c[0] === 'TutorialProgressReset' ||
+        (c[1] && c[1].tutorialSlug === 'reset-happy-path')
+      );
+      expect(matching).toBeTruthy();
+      // The payload should carry the slug + new attempt number
+      // (attempt 2 since the seed left a single completed attempt at 1).
+      const payload = matching[1] ?? {};
+      expect(payload.tutorialSlug).toBe('reset-happy-path');
+      expect(payload.attemptNumber).toBe(2);
+    } finally {
+      infoSpy.mockRestore();
+    }
   });
 });
