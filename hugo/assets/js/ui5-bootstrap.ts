@@ -156,7 +156,29 @@ function currentTheme(): "sap_horizon" | "sap_horizon_dark" {
   return root.dataset.theme === "dark" ? "sap_horizon_dark" : "sap_horizon";
 }
 
+// Race fix (issue: dark text on dark background on /me/): the pre-paint script
+// in head.html sets html[data-theme=dark] synchronously in <head>, so the
+// MutationObserver below never fires for the initial paint. Meanwhile Vue
+// islands (e.g. me.js) <script type="module"> tags above this file import UI5
+// components like ui5-title / ui5-switch which register themselves BEFORE this
+// bootstrap module's top-level evaluates. Those components read the default
+// "sap_horizon" (light) theme and render with light --sapTextColor values
+// hardcoded in their shadow-DOM CSS — even though the document-level CSS
+// variables are correct. Calling setTheme() once at module-eval ALSO loses
+// the race because UI5's setTheme is synchronous against the registration
+// order at call-time only. The defensive fix: call setTheme on every
+// microtask we can think of — at module-eval, after the current event loop
+// tick, on DOMContentLoaded, and after first paint. Each call retroactively
+// restyles every registered component, so any island that has already booted
+// gets correctly themed. Cost is negligible (setTheme is idempotent and only
+// triggers a real re-style when the theme actually changes vs cached state).
 setTheme(currentTheme());
+queueMicrotask(() => setTheme(currentTheme()));
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => setTheme(currentTheme()), { once: true });
+} else {
+  requestAnimationFrame(() => setTheme(currentTheme()));
+}
 
 const observer = new MutationObserver(() => setTheme(currentTheme()));
 observer.observe(root, { attributes: true, attributeFilter: ["data-theme", "class"] });
