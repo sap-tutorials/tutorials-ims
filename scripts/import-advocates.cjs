@@ -167,7 +167,68 @@ function parseArgs(argv) {
       stats.advocates.inserted++;
     }
 
-    // ── TODO Task 6: topics, links, photo ───────────────────────────
+    // ── Replace topics ──────────────────────────────────────────────
+    await db.run(
+      `DELETE FROM ${T.topics} WHERE ${c.advocateFk} = ?`,
+      [advocateId]
+    );
+    for (const t of (adv.topics || [])) {
+      const tagRows = await db.run(
+        `SELECT ${c.id} AS "id" FROM ${T.tags} WHERE ${c.slug} = ?`,
+        [t.tagSlug]
+      );
+      if (tagRows.length === 0) {
+        stats.topics.skipped++;
+        stats.topics.missingTags.add(t.tagSlug);
+        console.warn(`[${adv.slug}] topic skipped: tag '${t.tagSlug}' missing in target`);
+        continue;
+      }
+      await db.run(
+        `INSERT INTO ${T.topics} (${c.id}, ${c.advocateFk}, ${c.tagFk})
+         VALUES (?, ?, ?)`,
+        [crypto.randomUUID(), advocateId, tagRows[0].id]
+      );
+      stats.topics.matched++;
+    }
+
+    // ── Replace links ───────────────────────────────────────────────
+    await db.run(
+      `DELETE FROM ${T.links} WHERE ${c.advocateFk} = ?`,
+      [advocateId]
+    );
+    for (const l of (adv.links || [])) {
+      if (!VALID_LINK_KINDS.has(l.kind)) {
+        throw new Error(`Advocate ${adv.slug} has link with invalid kind: ${l.kind}`);
+      }
+      await db.run(
+        `INSERT INTO ${T.links}
+           (${c.id}, ${c.advocateFk}, ${c.kind}, ${c.url}, ${c.label}, ${c.sortOrder})
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [crypto.randomUUID(), advocateId, l.kind, l.url, l.label, l.sortOrder]
+      );
+      stats.links.inserted++;
+    }
+
+    // ── Replace photo ───────────────────────────────────────────────
+    await db.run(
+      `DELETE FROM ${T.photos} WHERE ${c.advocateFk} = ?`,
+      [advocateId]
+    );
+    if (adv.photo) {
+      const photo256 = Buffer.from(adv.photo.photo256_b64, 'base64');
+      const photo64  = Buffer.from(adv.photo.photo64_b64,  'base64');
+      await db.run(
+        `INSERT INTO ${T.photos}
+           (${c.advocateFk}, ${c.photo256}, ${c.photo64}, ${c.photoMimeType},
+            ${c.sizeBytes},  ${c.sha256},   ${c.uploadedAt})
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [advocateId, photo256, photo64, adv.photo.photoMimeType,
+         adv.photo.sizeBytes, adv.photo.sha256, adv.photo.uploadedAt]
+      );
+      stats.photos.imported++;
+    } else {
+      stats.photos.absent++;
+    }
   }
 
   // ── Summary ──────────────────────────────────────────────────────
@@ -177,7 +238,16 @@ function parseArgs(argv) {
   if (stats.users.nulled > 0) {
     console.log(`                   (${[...stats.users.nulledEmails].join(', ')})`);
   }
-  console.log('[advocates-import] (topics/links/photos pending Task 6)');
+  if (stats.topics.skipped > 0) {
+    const tagsList = [...stats.topics.missingTags].join(', ');
+    console.log(`[advocates-import] Topics:  ${stats.topics.matched} matched, ${stats.topics.skipped} skipped`);
+    console.log(`                   (missing tags: ${tagsList})`);
+  } else {
+    console.log(`[advocates-import] Topics:  ${stats.topics.matched} matched, 0 skipped`);
+  }
+  console.log(`[advocates-import] Links:   ${stats.links.inserted} inserted`);
+  console.log(`[advocates-import] Photos:  ${stats.photos.imported} imported, ${stats.photos.absent} had no photo`);
+  console.log(`[advocates-import] Done.`);
 })().catch(err => {
   console.error('[advocates-import] FAILED:', err);
   process.exit(1);
