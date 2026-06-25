@@ -199,12 +199,15 @@ async function main() {
 
     let matched = 0;
     for (const t of tutRows) {
-      // Contributors for this tutorial — ordered by createdAt nulls first
-      // so newly-published rows with NULL createdAt still get evaluated.
+      // Contributors for this tutorial — ordered by ID for deterministic
+      // tie-breaks. (TutorialContributors doesn't have the `managed` aspect
+      // so there's no createdAt column to order by; resolveTutorialAuthor's
+      // (a) and (b) phases are first-match-wins, so a stable order is what
+      // matters, not chronology. See issue #620.)
       const contributors = await db.run(
         `SELECT "EMAIL", "ROLE" FROM ${T_CONTRIBUTORS} ` +
         `WHERE "TUTORIAL_ID" = ? ` +
-        `ORDER BY CASE WHEN "CREATEDAT" IS NULL THEN 0 ELSE 1 END, "CREATEDAT" ASC`,
+        `ORDER BY "ID" ASC`,
         [t.ID]
       );
 
