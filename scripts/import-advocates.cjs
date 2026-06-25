@@ -174,7 +174,7 @@ function parseArgs(argv) {
     );
     for (const t of (adv.topics || [])) {
       const tagRows = await db.run(
-        `SELECT ${c.id} AS "id" FROM ${T.tags} WHERE ${c.slug} = ?`,
+        `SELECT ${c.id} AS "id" FROM ${T.tags} WHERE ${c.tagSlugCol} = ?`,
         [t.tagSlug]
       );
       if (tagRows.length === 0) {
