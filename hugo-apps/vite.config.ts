@@ -164,6 +164,7 @@ export default defineConfig({
         'tutorial-referred': resolve(__dirname, 'src/tutorial-referred/main.ts'),
         advocates: resolve(__dirname, 'src/advocates/main.ts'),
         'related-graph': resolve(__dirname, 'src/related-graph/main.ts'),
+        'tutorial-reset': resolve(__dirname, 'src/tutorial-reset/main.ts'),
       },
       output: {
         entryFileNames: '[name].js',
