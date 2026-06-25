@@ -42,6 +42,18 @@ import "@ui5/webcomponents/dist/Switch.js";
 // for the global OS picker on tutorials with OS-conditional content.
 import "@ui5/webcomponents/dist/SegmentedButton.js";
 import "@ui5/webcomponents/dist/SegmentedButtonItem.js";
+// /me page (MyCompletions + LearningPreferences islands, PR #172). These MUST
+// be registered here, not from hugo-apps/src/me/main.ts — see comment in that
+// file. Direct imports from a Vite island entry pull a second copy of UI5 into
+// the island bundle with its own module-scoped Theme state, leaving the island
+// stuck on light theme regardless of setTheme() calls in this bootstrap. The
+// "dark-on-dark text on /me/" symptom that PR #575 / #627 tried to fix.
+import "@ui5/webcomponents/dist/Select.js";
+import "@ui5/webcomponents/dist/Option.js";
+import "@ui5/webcomponents/dist/Label.js";
+import "@ui5/webcomponents/dist/Text.js";
+import "@ui5/webcomponents-fiori/dist/Timeline.js";
+import "@ui5/webcomponents-fiori/dist/TimelineItem.js";
 import "@ui5/webcomponents-fiori/dist/ShellBar.js";
 import "@ui5/webcomponents-fiori/dist/ShellBarItem.js";
 import "@ui5/webcomponents-fiori/dist/Wizard.js";
@@ -70,6 +82,11 @@ import "@ui5/webcomponents-icons/dist/action-settings.js";
 // slot in the header — the button container is allocated but the icon glyph
 // fails to paint and UI5 logs "Required icon is not registered".
 import "@ui5/webcomponents-icons/dist/bbyd-active-sales.js";
+// Developer Advocates nav item — icon="employee" in header.html's
+// #sb-nav-popover ui5-list. Without this, the row glyph is empty and the
+// check-icon-imports postbuild guard fails. Same class of "missing UI5
+// registration" symptom this PR's primary fix addresses.
+import "@ui5/webcomponents-icons/dist/employee.js";
 // Icons referenced from Vue islands (cmd-palette, MyCompletions, code-check). Imported here so
 // they share the main bootstrap's icon registry rather than each island re-registering.
 import "@ui5/webcomponents-icons/dist/accept.js";
