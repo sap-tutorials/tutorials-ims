@@ -15,6 +15,12 @@ beforeAll(async () => {
   const existing = await db.run(SELECT.from(Advocates).columns('slug'));
   const slugs = new Set(existing.map((r) => r.slug));
   const rows = [];
+  // NOTE: seed rows use 'Fixture*' firstNames, NOT '__TEST__*'. The slug
+  // already carries the anti-shadow safety marker (no real advocate could
+  // get '__test__advocate-link-*'). firstName MUST stay out of the
+  // '__TEST__%' namespace because the afterAll cleanup below (line ~56)
+  // deletes rows matching that pattern — seed rows would get wiped between
+  // describe blocks and downstream tests would 404.
   if (!slugs.has('__test__advocate-link-amer-1')) {
     rows.push({
       ID: 'ADC00001-0000-0000-0000-000000000001',
