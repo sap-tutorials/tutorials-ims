@@ -13,7 +13,9 @@ reads all 5 fields via the shared
 [secret-resolver](../../../srv/lib/secret-resolver.js): credstore-first,
 process-env fallback (defense-in-depth, not normally used), 5-min TTL
 cache, warn-once-per-window logging. A rotation through the admin UI
-propagates within 5 minutes — no app restart needed.
+propagates within 5 minutes — the resolver cache hot-flushes immediately
+on save, but the mail-client's cached transporter is rebuilt on the next
+TTL refresh, not on the admin write.
 
 ## When to rotate
 
@@ -95,8 +97,8 @@ This is a one-time sequence for enabling author-nudge emails on a fresh deploy:
    `npx cds bind --exec -- node scripts/seed-secrets.cjs --commit` —
    idempotent on `key`, so re-running is safe.
 2. For each row in the admin Secrets UI: click → "Set Value" → paste the real
-   value → Save. The admin handler hot-flushes the resolver cache, so the next
-   send picks up the new values immediately.
+   value → Save. The admin handler hot-flushes the resolver cache on save; the
+   mail-client's transporter cache rebuilds within 5 minutes (its own TTL).
 3. Verify with the "Test Notification Email" action (Step 3 above).
 4. Flip the `isNotificationSendingAllowed` flag in `/admin-ui/#operations-display`.
 

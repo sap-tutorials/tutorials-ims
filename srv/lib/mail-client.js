@@ -101,19 +101,23 @@ export async function sendNotificationEmail({ to, cc, subject, level, variables 
   const LOG = cds.log('mail');
   const html = resolveTemplate(loadTemplate(level), variables);
 
-  // getTransporter() populates _state.fromAddress before returning. If we
-  // got here via the no-transport-configured path, fromAddress stays null
-  // and DEFAULT_FROM kicks in (matches pre-refactor behavior).
-  const transport = await getTransporter();
-  const mailOptions = {
-    from: _state.fromAddress || DEFAULT_FROM,
-    to: Array.isArray(to) ? to.join(', ') : to,
-    cc: cc?.length ? (Array.isArray(cc) ? cc.join(', ') : cc) : undefined,
-    subject,
-    html
-  };
-
+  // Build mailOptions inside the try so a throw from getTransporter() (e.g.
+  // OOM during transporter construction, unexpected xsenv crash) still funnels
+  // through the FailedEmails-queue path the rest of this function provides.
+  // _state.fromAddress is populated by getTransporter() in both the credstore
+  // path and the legacy mail-binding fallback path; null falls back to
+  // DEFAULT_FROM to match pre-refactor behavior.
+  let transport;
+  let mailOptions;
   try {
+    transport = await getTransporter();
+    mailOptions = {
+      from: _state.fromAddress || DEFAULT_FROM,
+      to: Array.isArray(to) ? to.join(', ') : to,
+      cc: cc?.length ? (Array.isArray(cc) ? cc.join(', ') : cc) : undefined,
+      subject,
+      html
+    };
     if (!transport) {
       LOG.warn('No mail transport configured — email queued for retry');
       const { FailedEmails } = cds.entities('com.sap.developers.ims');
@@ -130,9 +134,13 @@ export async function sendNotificationEmail({ to, cc, subject, level, variables 
   } catch (err) {
     LOG.error('Email send failed, storing for retry:', err.message);
     const { FailedEmails } = cds.entities('com.sap.developers.ims');
+    // mailOptions may be undefined if the throw came from getTransporter()
+    // before we built it. Fall back to the inputs in that case.
+    const queueTo = mailOptions?.to ?? (Array.isArray(to) ? to.join(', ') : to);
+    const queueCc = mailOptions?.cc ?? (cc?.length ? (Array.isArray(cc) ? cc.join(', ') : cc) : '');
     await INSERT.into(FailedEmails).entries({
-      to: mailOptions.to,
-      cc: mailOptions.cc || '',
+      to: queueTo,
+      cc: queueCc || '',
       subject,
       body: html,
       errorMessage: err.message,
