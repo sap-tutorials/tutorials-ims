@@ -217,7 +217,7 @@ That's the whole rotation. ~30 seconds, no human accounts involved, no MTA Admin
 ```bash
 # In the consumer repo:
 mkdir -p infrastructure
-cp -r /path/to/tutorials-poc/infrastructure/terraform-btp-ci-service-principal infrastructure/
+cp -r /path/to/tutorials-ims/infrastructure/terraform-btp-ci-service-principal infrastructure/
 
 cd infrastructure/terraform-btp-ci-service-principal
 cp terraform.tfvars.example terraform.tfvars

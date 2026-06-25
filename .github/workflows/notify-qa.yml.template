@@ -26,6 +26,6 @@ jobs:
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.TUTORIALS_POC_DISPATCH_TOKEN }}
-          repository: sap-tutorials/tutorials-poc
+          repository: sap-tutorials/tutorials-ims
           event-type: tutorial-qa-updated
           client-payload: '{"repo": "${{ github.repository }}", "slug": "${{ steps.slug.outputs.slug }}", "sha": "${{ github.sha }}"}'

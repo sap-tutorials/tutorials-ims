@@ -249,7 +249,7 @@ When using `node-sql-parser` to validate-and-re-emit SQL that will execute again
 
 **Why:** MySQL dialect emits backtick-quoted identifiers (`` `taskType` ``). HANA only accepts ANSI double-quote identifiers (`"taskType"`). Postgresql dialect emits double-quotes. The bug is silent for unquoted identifiers — only manifests when the parser quotes a column (reserved word, mixed case, special char). The hybrid happy-path test in the analytics-explorer caught nothing because it used `SELECT * FROM CompletionAnalytics` with no quoted identifiers; final code review caught it via inspection.
 
-**How to apply:** Any time a `node-sql-parser` `sqlify` call is added or copied from another project, check the `database` option matches the runtime DB's identifier-quoting style. The parsing side (the input dialect) is a separate concern — the emit side is what the DB actually receives. For the analytics validator, see `srv/lib/analytics-sql-validator.cjs` in tutorials-poc.
+**How to apply:** Any time a `node-sql-parser` `sqlify` call is added or copied from another project, check the `database` option matches the runtime DB's identifier-quoting style. The parsing side (the input dialect) is a separate concern — the emit side is what the DB actually receives. For the analytics validator, see `srv/lib/analytics-sql-validator.cjs` in tutorials-ims.
 
 Related: `project-admin-analytics-explorer` — the consumer.
 
@@ -271,7 +271,7 @@ Sources of truth (canonical examples on GitHub):
 - [SAP-samples/hana-shine-xsa CUSTOMER_NAME_IDX.hdbindex](https://github.com/SAP-samples/hana-shine-xsa/blob/main/core-db/src/data/CUSTOMER_NAME_IDX.hdbindex) — `INDEX "CUSTOMER_NAME_IDX" ON "Customers" (NAME)`
 - [muzeyr/sap-cap-node bookshop generated index](https://github.com/muzeyr/sap-cap-node/blob/main/db/src/gen/sap.capire.bookshop.Books.texts.locale.hdbindex) — `UNIQUE INVERTED INDEX sap_capire_bookshop_Books_texts_locale ON sap_capire_bookshop_Books_texts (locale, ID)` — note bare identifiers + underscored physical name.
 
-Verified on HANA: `INVERTED VALUE` (HANA's column-store secondary-index type) — perf-equivalent to B-tree for equality + range queries. Lives in [tutorials-poc db/src/IDX_UIEVENT_*.hdbindex](../../../db/src/) after PR #253. Related: `feedback_audit_all_callers_of_buggy_primitive` for why we now know all three syntax rules.
+Verified on HANA: `INVERTED VALUE` (HANA's column-store secondary-index type) — perf-equivalent to B-tree for equality + range queries. Lives in [tutorials-ims db/src/IDX_UIEVENT_*.hdbindex](../../../db/src/) after PR #253. Related: `feedback_audit_all_callers_of_buggy_primitive` for why we now know all three syntax rules.
 
 ---
 
