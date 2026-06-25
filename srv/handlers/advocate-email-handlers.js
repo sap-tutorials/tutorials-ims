@@ -52,15 +52,27 @@ async function hydrateEmailEdit(rows, srvEntities) {
 }
 
 /**
- * Pull the incoming emailEdit out of the raw request body. CAP filters
- * virtual elements from `req.data` before our handlers see them, so for
- * write paths we must consult the raw HTTP body that the OData parser
- * received. Returns undefined if the field wasn't sent at all (so we can
- * skip propagation for unrelated PATCHes); returns the raw value
- * otherwise — including null, which would map to a future "clear email"
- * UX once we decide what that should do (out of scope here).
+ * Pull the incoming emailEdit out of the request. CAP's behavior depends
+ * on the entry path:
+ *   - OData HTTP PATCH on a virtual element: CAP strips emailEdit from
+ *     req.data (virtuals aren't persistable). Field is only in the raw
+ *     HTTP body (req._.req.body).
+ *   - Programmatic srv.run(UPDATE(...).set({emailEdit: ...})): emailEdit
+ *     IS present in req.data because the programmatic builder doesn't
+ *     run the OData input parser that strips virtuals.
+ *
+ * We try req.data first (cheap, official API, works for programmatic
+ * callers including hybrid tests), then fall back to the raw body (the
+ * OData path). Returns undefined when neither carries the field so we
+ * can skip propagation on unrelated UPDATEs.
+ *
+ * Null returns through (intentional — would map to a future "clear email"
+ * UX; out of scope here, validator rejects with EMAIL_REQUIRED).
  */
 function readEmailEditFromBody(req) {
+  if (req.data && Object.prototype.hasOwnProperty.call(req.data, 'emailEdit')) {
+    return req.data.emailEdit;
+  }
   // TODO(CAP): replace req._.req.body reach with the supported API once
   // CAP exposes "read raw body for virtual fields" (not in the docs as of
   // CAP 9.9.1). The req._ namespace is a convention, not a contract.
