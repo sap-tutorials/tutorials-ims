@@ -1905,6 +1905,31 @@ annotate AdminService.Advocates with {
   hasPhoto     @Common.Label: 'Has photo'   @UI.HiddenFilter @Core.Computed;
   photoUpdatedAt @Common.Label: 'Photo updated' @UI.HiddenFilter @Core.Computed;
   photoUrl     @Common.Label: 'Photo URL'   @UI.HiddenFilter @Core.Computed;
+
+  // AdminService.Advocates.user — searchable Users value help.
+  //
+  // Spec: docs/superpowers/specs/2026-06-25-advocate-user-link-design.md §2
+  //
+  // Same SearchSupported pattern as Tutorials.author from PR #618. The
+  // @cds.search on the Users projection (srv/admin-service.cds) translates
+  // $search into HANA CONTAINS across displayName / firstName / lastName /
+  // email / sapId — admin types "thomas.jung@" and gets the row.
+  //
+  // Three display columns (displayName, email, sapId) match the Author
+  // value-help precedent (app/admin-annotations.cds:725-739).
+  user @Common.Label: 'Linked User'
+       @Common.Text: user.displayName
+       @Common.TextArrangement: #TextOnly
+       @Common.ValueList: {
+         CollectionPath: 'Users',
+         SearchSupported: true,
+         Parameters: [
+           { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: user_ID, ValueListProperty: 'ID' },
+           { $Type: 'Common.ValueListParameterDisplayOnly',                             ValueListProperty: 'displayName' },
+           { $Type: 'Common.ValueListParameterDisplayOnly',                             ValueListProperty: 'email' },
+           { $Type: 'Common.ValueListParameterDisplayOnly',                             ValueListProperty: 'sapId' }
+         ]
+       };
 };
 
 annotate AdminService.Advocates with @(
@@ -1960,8 +1985,19 @@ annotate AdminService.Advocates with @(
       { Value: slug }
     ]
   },
+  // Spec: 2026-06-25-advocate-user-link-design §2.
+  // Linked-User identity field group — picker + read-through email.
+  // Email row is read-only because Fiori Elements V4 won't edit a value
+  // off a foreign association inline (which is what we want).
+  UI.FieldGroup #IdentityLink: {
+    Data: [
+      { $Type: 'UI.DataField', Value: user_ID,    Label: 'Linked User' },
+      { $Type: 'UI.DataField', Value: user.email, Label: 'Email (from linked User)' }
+    ]
+  },
   UI.Facets: [
     { $Type: 'UI.ReferenceFacet', ID: 'Identity',   Label: 'Identity',     Target: '@UI.FieldGroup#Identity' },
+    { $Type: 'UI.ReferenceFacet', ID: 'IdentityLink', Label: 'Linked User', Target: '@UI.FieldGroup#IdentityLink' },
     { $Type: 'UI.ReferenceFacet', ID: 'Bio',        Label: 'Bio',          Target: '@UI.FieldGroup#Bio' },
     { $Type: 'UI.ReferenceFacet', ID: 'Visibility', Label: 'Visibility',   Target: '@UI.FieldGroup#Visibility' },
     // Photo facet intentionally omitted in v1: the Fiori UploadSet on a
@@ -1974,7 +2010,15 @@ annotate AdminService.Advocates with @(
     // For v2: a custom controller-extension that intercepts the upload
     // and POSTs to a new Advocates.uploadPhoto bound action.
     { $Type: 'UI.ReferenceFacet', ID: 'Topics',     Label: 'Topics',       Target: 'topics/@UI.LineItem' },
-    { $Type: 'UI.ReferenceFacet', ID: 'Links',      Label: 'Social links', Target: 'links/@UI.LineItem' }
+    { $Type: 'UI.ReferenceFacet', ID: 'Links',      Label: 'Social links', Target: 'links/@UI.LineItem' },
+    // Authored / contributed tutorials (spec §2). The targets resolve via
+    // the AdminService.Advocates projection aliases authoredTutorials and
+    // contributedTutorials → AdminService.Tutorials/TutorialContributors,
+    // which already carry @UI.LineItem from PR #618 + admin tile expansion.
+    // Both facets render empty (Fiori "no data" illustration) when no
+    // user is linked or the linked user has no tutorials — natural shape.
+    { $Type: 'UI.ReferenceFacet', ID: 'AuthoredTutorials',    Label: 'Authored Tutorials',    Target: 'authoredTutorials/@UI.LineItem' },
+    { $Type: 'UI.ReferenceFacet', ID: 'ContributedTutorials', Label: 'Contributed Tutorials', Target: 'contributedTutorials/@UI.LineItem' }
   ]
 );
 
