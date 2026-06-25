@@ -18,14 +18,23 @@ export default class ScannerService extends cds.ApplicationService {
       const user = await SELECT.one.from(Users).where({ legacyId });
       if (!user) return req.reject(404, `User not found: ${accountNumber}`);
 
+      // "Has-ever-completed" semantic (issue #600): a SUPERSEDED row is a prior
+      // completion that was reset, so it still counts. DISTINCT by
+      // (user_ID, taskLegacyId) so a user who reset + re-completed the same
+      // task is counted once, not twice.
       const taskRecords = await SELECT.from(TaskRecords).where({
         user_ID: user.ID,
-        status: 'COMPLETED'
+        status: { in: ['COMPLETED', 'SUPERSEDED'] }
       });
 
-      const tutorialsCompleted = taskRecords.filter(r => r.taskType === 'TUTORIAL').length;
-      const groupsCompleted = taskRecords.filter(r => r.taskType === 'GROUP').length;
-      const missionsCompleted = taskRecords.filter(r => r.taskType === 'MISSION').length;
+      const seenByType = { TUTORIAL: new Set(), GROUP: new Set(), MISSION: new Set() };
+      for (const r of taskRecords) {
+        const set = seenByType[r.taskType];
+        if (set) set.add(r.taskLegacyId);
+      }
+      const tutorialsCompleted = seenByType.TUTORIAL.size;
+      const groupsCompleted = seenByType.GROUP.size;
+      const missionsCompleted = seenByType.MISSION.size;
 
       const prizeRecs = await SELECT.from(PrizeRecords).where({
         user_ID: user.ID,

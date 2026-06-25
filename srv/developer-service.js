@@ -5,6 +5,15 @@ import { hashIp } from './lib/feedback-salt.js';
 import { getMyCompletedTutorials } from './lib/user-progress.js';
 import { PROFILE_VOCAB } from './lib/branch/profile-fields.js';
 import { resolveUserSapId } from './lib/resolve-db-user.js';
+import { checkRateLimit } from './lib/per-user-rate-limit.js';
+
+// Per-user rate limit for resetTutorialProgress — same window as the
+// IP-based feedback limiter below (5/hr) but keyed by sapId via a shared
+// sliding-window helper (matches the in-memory Map shape used by
+// /api/codecheck and /api/validate-answer; lifted into a shared module
+// for reuse). Bucket key prefixed `reset:` so the quota is independent.
+const RESET_LIMIT_PER_HOUR = 5;
+const RESET_WINDOW_MS = 60 * 60 * 1000;
 
 const RATE_LIMIT = new Map();
 const RATE_WINDOW_MS = 60 * 60 * 1000;
@@ -68,10 +77,15 @@ export default class DeveloperService extends cds.ApplicationService {
       const dbUser = sapId ? await SELECT.one.from(dbUsers).where({ sapId }) : null;
       if (!dbUser) return { completedSteps: [], points: 0, badges: [] };
 
+      // Scope step records to the user's current (non-SUPERSEDED) attempt so a
+      // fresh attempt starts empty even though prior-attempt SUPERSEDED step
+      // rows still exist in the DB. See issue #600 Task 6.
+      const currentAttempt = await this._getCurrentTutorialAttempt(dbUser, tutorial);
       const stepRecords = await SELECT.from(dbTaskRecords).where({
         user_ID: dbUser.ID,
         taskType: 'STEP',
-        status: 'COMPLETED'
+        status: 'COMPLETED',
+        attemptNumber: currentAttempt,
       });
 
       // Filter to only steps belonging to this tutorial
@@ -143,14 +157,30 @@ export default class DeveloperService extends cds.ApplicationService {
         dbUser = await SELECT.one.from(dbUsers).where({ sapId });
       }
 
-      // Check if step already completed
+      // Check if step already completed (ignore SUPERSEDED rows from prior attempts)
       const existing = await SELECT.one.from(dbTaskRecords).where({
         user_ID: dbUser.ID,
         taskLegacyId: step.legacyId,
-        taskType: 'STEP'
+        taskType: 'STEP',
+        status: { '!=': 'SUPERSEDED' },
       });
 
       if (!existing) {
+        // Look up the user's current tutorial-level attempt number; default 1
+        // when no live TUTORIAL row exists yet (first-time user, first step ever).
+        // SELECT.one returns null (not {attemptNumber: 1}) when no row matches —
+        // must default with `?? 1` to handle that case.
+        const tutorialRow = await SELECT.one
+          .from(dbTaskRecords)
+          .columns('attemptNumber')
+          .where({
+            user_ID: dbUser.ID,
+            taskLegacyId: tutorial.legacyId,
+            taskType: 'TUTORIAL',
+            status: { '!=': 'SUPERSEDED' },
+          });
+        const attemptNumber = tutorialRow?.attemptNumber ?? 1;
+
         const now = new Date().toISOString();
         await INSERT.into(dbTaskRecords).entries({
           user_ID: dbUser.ID,
@@ -160,7 +190,8 @@ export default class DeveloperService extends cds.ApplicationService {
           progress: 100,
           completionDate: now,
           titleSnapshot: step.title,
-          legacyId: await getNextLegacyId('TaskRecords', db)
+          legacyId: await getNextLegacyId('TaskRecords', db),
+          attemptNumber,
         });
 
         // Recalculate tutorial progress
@@ -169,6 +200,90 @@ export default class DeveloperService extends cds.ApplicationService {
 
       // Return updated progress
       return this._getProgressForTutorial(dbUser, tutorial, db);
+    });
+
+    this.on('resetTutorialProgress', async (req) => {
+      const { slug } = req.data;
+      const user = req.user || cds.context?.user;
+      if (!user) return req.reject(401, 'Unauthenticated');
+
+      const sapId = resolveUserSapId(user);
+      if (!sapId) return req.reject(401, 'Unauthenticated');
+
+      // Rate-limit BEFORE any DB work — protects against griefing and
+      // accidental client loops (e.g. an over-eager retry from the UI).
+      // 5 resets per hour is generous for legitimate re-completion flows.
+      if (!checkRateLimit(`reset:${sapId}`, RESET_LIMIT_PER_HOUR, RESET_WINDOW_MS)) {
+        return req.reject(429, 'You have reset too many tutorials recently — please wait a few minutes.');
+      }
+
+      // 1. Resolve slug → tutorial
+      const tutorial = await SELECT.one.from(dbTutorials).where({ slug });
+      if (!tutorial) return req.reject(404, `Tutorial not found: ${slug}`);
+
+      // 2. Resolve user (sapId → dbUser)
+      const dbUser = await SELECT.one.from(dbUsers).where({ sapId });
+      if (!dbUser) {
+        return { newAttemptNumber: 1, previousAttemptCompletedAt: null, supersededRecordCount: 0 };
+      }
+
+      // 3. Find live (non-SUPERSEDED) rows for this tutorial's steps + tutorial-level
+      const steps = await SELECT.from(dbSteps).where({ tutorial_ID: tutorial.ID });
+      const taskLegacyIds = [...steps.map(s => s.legacyId), tutorial.legacyId];
+
+      const liveRows = await SELECT.from(dbTaskRecords).where({
+        user_ID: dbUser.ID,
+        taskLegacyId: { in: taskLegacyIds },
+        status: { '!=': 'SUPERSEDED' },
+      });
+
+      if (liveRows.length === 0) {
+        return { newAttemptNumber: 1, previousAttemptCompletedAt: null, supersededRecordCount: 0 };
+      }
+
+      // 4. Determine next attempt number
+      const maxAttempt = Math.max(...liveRows.map(r => r.attemptNumber ?? 1));
+
+      // Capture the prior tutorial-level completion date BEFORE we update.
+      const priorTutorialRow = liveRows.find(
+        r => r.taskType === 'TUTORIAL' && r.status === 'COMPLETED'
+      );
+      const previousAttemptCompletedAt = priorTutorialRow?.completionDate ?? null;
+
+      // 5. Pre-allocate legacyId for the new row (fail-fast on sequence issues)
+      const newLegacyId = await getNextLegacyId('TaskRecords', db);
+
+      // 6. Supersede current rows in one UPDATE
+      await UPDATE(dbTaskRecords)
+        .set({ status: 'SUPERSEDED' })
+        .where({ ID: { in: liveRows.map(r => r.ID) } });
+
+      // 7. Insert fresh TUTORIAL-level row at attempt+1
+      await INSERT.into(dbTaskRecords).entries({
+        user_ID: dbUser.ID,
+        taskLegacyId: tutorial.legacyId,
+        taskType: 'TUTORIAL',
+        status: 'IN_PROGRESS',
+        progress: 0,
+        attemptNumber: maxAttempt + 1,
+        titleSnapshot: tutorial.title,
+        legacyId: newLegacyId,
+      });
+
+      // 8. Emit audit event for traceability
+      await cds.emit('TutorialProgressReset', {
+        user: dbUser.ID,
+        tutorialSlug: slug,
+        attemptNumber: maxAttempt + 1,
+        supersededRecordCount: liveRows.length,
+        previousAttemptCompletedAt,
+      });
+
+      return {
+        newAttemptNumber: maxAttempt + 1,
+        previousAttemptCompletedAt,
+        supersededRecordCount: liveRows.length,
+      };
     });
 
     // --- Legacy IMS-compatible endpoints ---
@@ -645,6 +760,29 @@ export default class DeveloperService extends cds.ApplicationService {
     await super.init();
   }
 
+  /**
+   * Look up the user's current (non-SUPERSEDED) attempt number for a tutorial.
+   * Returns 1 when no live TUTORIAL row exists yet — matches the schema default
+   * and lets first-time users / new resets count their fresh attempt as 1.
+   *
+   * Used by Task 6 (#600) — getProgress, _getProgressForTutorial — to scope
+   * step counts to the current attempt and ignore SUPERSEDED rows from prior
+   * attempts.
+   */
+  async _getCurrentTutorialAttempt(dbUser, tutorial) {
+    const { TaskRecords: dbTaskRecords } = cds.entities('com.sap.developers.ims');
+    const row = await SELECT.one
+      .from(dbTaskRecords)
+      .columns('attemptNumber')
+      .where({
+        user_ID: dbUser.ID,
+        taskLegacyId: tutorial.legacyId,
+        taskType: 'TUTORIAL',
+        status: { '!=': 'SUPERSEDED' },
+      });
+    return row?.attemptNumber ?? 1;
+  }
+
   async _updateTutorialProgress(dbUser, tutorial, db) {
     const { Steps: dbSteps, TaskRecords: dbTaskRecords } =
       cds.entities('com.sap.developers.ims');
@@ -652,11 +790,24 @@ export default class DeveloperService extends cds.ApplicationService {
     const steps = await SELECT.from(dbSteps).where({ tutorial_ID: tutorial.ID });
     const stepLegacyIds = steps.map(s => s.legacyId);
 
+    // Look up the user's CURRENT (non-SUPERSEDED) TUTORIAL task record first
+    // so we can scope step counts + new row inserts to its attemptNumber.
+    // Without the SUPERSEDED filter we'd risk reviving a historical row and
+    // miscounting step completions across attempts. See issue #600 Task 5.
+    const existing = await SELECT.one.from(dbTaskRecords).where({
+      user_ID: dbUser.ID,
+      taskLegacyId: tutorial.legacyId,
+      taskType: 'TUTORIAL',
+      status: { '!=': 'SUPERSEDED' },
+    });
+    const currentAttempt = existing?.attemptNumber ?? 1;
+
     const completedStepRecords = await SELECT.from(dbTaskRecords).where({
       user_ID: dbUser.ID,
       taskType: 'STEP',
       status: 'COMPLETED',
-      taskLegacyId: { in: stepLegacyIds }
+      taskLegacyId: { in: stepLegacyIds },
+      attemptNumber: currentAttempt,
     });
 
     // Prefer the authoritative stepCount from the parsed tutorial frontmatter
@@ -674,13 +825,6 @@ export default class DeveloperService extends cds.ApplicationService {
       completedStepRecords, totalSteps
     );
 
-    // Upsert tutorial-level task record
-    const existing = await SELECT.one.from(dbTaskRecords).where({
-      user_ID: dbUser.ID,
-      taskLegacyId: tutorial.legacyId,
-      taskType: 'TUTORIAL'
-    });
-
     if (existing) {
       await UPDATE(dbTaskRecords, existing.ID).set({
         progress, status,
@@ -693,7 +837,8 @@ export default class DeveloperService extends cds.ApplicationService {
         taskType: 'TUTORIAL',
         status, progress,
         titleSnapshot: tutorial.title,
-        legacyId: await getNextLegacyId('TaskRecords', db)
+        legacyId: await getNextLegacyId('TaskRecords', db),
+        attemptNumber: currentAttempt,
       });
     }
   }
@@ -705,11 +850,15 @@ export default class DeveloperService extends cds.ApplicationService {
     const steps = await SELECT.from(dbSteps).where({ tutorial_ID: tutorial.ID });
     const stepLegacyIds = steps.map(s => s.legacyId);
 
+    // Scope to the user's current (non-SUPERSEDED) attempt; ignores prior-
+    // attempt SUPERSEDED step rows. See issue #600 Task 6.
+    const currentAttempt = await this._getCurrentTutorialAttempt(dbUser, tutorial);
     const completedStepRecords = await SELECT.from(dbTaskRecords).where({
       user_ID: dbUser.ID,
       taskType: 'STEP',
       status: 'COMPLETED',
-      taskLegacyId: { in: stepLegacyIds }
+      taskLegacyId: { in: stepLegacyIds },
+      attemptNumber: currentAttempt,
     });
 
     const completedSteps = completedStepRecords

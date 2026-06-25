@@ -135,7 +135,7 @@ entity TaskRecords : cuid, managed, LegacyKeyed {
   user                      : Association to Users @mandatory;
   taskLegacyId              : Integer;
   taskType                  : String enum { TUTORIAL; MISSION; GROUP; STEP; CHECKPOINT; };
-  status                    : String enum { COMPLETED; IN_PROGRESS; };
+  status                    : String enum { COMPLETED; IN_PROGRESS; SUPERSEDED; };
   progress                  : Integer default 0;
   completionTime            : Int64;
   completionDate            : Timestamp;
@@ -146,6 +146,7 @@ entity TaskRecords : cuid, managed, LegacyKeyed {
   titleSnapshot             : String(255);
   progressNote              : String(1000);
   event                     : Association to Events;
+  attemptNumber             : Integer default 1;        // NEW (issue #600)
 }
 
 entity UserMetaData : cuid, LegacyKeyed {

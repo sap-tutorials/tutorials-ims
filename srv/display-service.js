@@ -1,8 +1,13 @@
 import cds from '@sap/cds';
-import { computeBurnup, computeTrackStats, computeCompletionSpeed, computeLeaderboard } from './lib/event-statistics.js';
+import { computeBuckets, computeBurnup, computeTrackStats, computeCompletionSpeed, computeLeaderboard } from './lib/event-statistics.js';
 import { cached } from './lib/ttl-cache.js';
 
 const CACHE_TTL = 600_000; // 600 seconds, matches IMS leaderboard cache
+
+// "Has-ever-completed" semantic (issue #600): SUPERSEDED is a prior completion
+// that was reset, so it still counts. Helpers in event-statistics.js dedupe
+// by (user_ID, taskLegacyId) and accept the widened input — see Task 9.
+const COMPLETION_STATUSES = ['COMPLETED', 'SUPERSEDED'];
 
 export default class DisplayService extends cds.ApplicationService {
 
@@ -24,28 +29,9 @@ export default class DisplayService extends cds.ApplicationService {
         const records = await SELECT.from(TaskRecords).where({
           event_ID: event.ID,
           taskType: 'TUTORIAL',
-          status: 'COMPLETED'
+          status: { in: COMPLETION_STATUSES }
         });
-
-        const userCounts = new Map();
-        for (const r of records) {
-          userCounts.set(r.user_ID, (userCounts.get(r.user_ID) || 0) + 1);
-        }
-
-        const buckets = new Map();
-        for (const count of userCounts.values()) {
-          const name = `${count} tutorial${count > 1 ? 's' : ''}`;
-          buckets.set(name, (buckets.get(name) || 0) + 1);
-        }
-
-        const totalUsers = userCounts.size;
-        return [...buckets.entries()]
-          .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
-          .map(([bucketName, count]) => ({
-            bucketName,
-            count,
-            percentage: totalUsers > 0 ? Math.round((count / totalUsers) * 10000) / 100 : 0
-          }));
+        return computeBuckets(records);
       });
     });
 
@@ -58,7 +44,7 @@ export default class DisplayService extends cds.ApplicationService {
         const records = await SELECT.from(TaskRecords).where({
           event_ID: event.ID,
           taskType: 'TUTORIAL',
-          status: 'COMPLETED'
+          status: { in: COMPLETION_STATUSES }
         });
         return computeBurnup(records, event.timeZone || '+00:00');
       });
@@ -73,7 +59,7 @@ export default class DisplayService extends cds.ApplicationService {
         const records = await SELECT.from(TaskRecords).where({
           event_ID: event.ID,
           taskType: 'MISSION',
-          status: 'COMPLETED'
+          status: { in: COMPLETION_STATUSES }
         });
         const missions = await SELECT.from(Missions).columns('legacyId', 'title');
         return computeTrackStats(records, missions);
@@ -89,7 +75,7 @@ export default class DisplayService extends cds.ApplicationService {
         const records = await SELECT.from(TaskRecords).where({
           event_ID: event.ID,
           taskType: 'TUTORIAL',
-          status: 'COMPLETED'
+          status: { in: COMPLETION_STATUSES }
         });
         const tutorials = await SELECT.from(Tutorials).columns('legacyId', 'title');
         return computeCompletionSpeed(records, tutorials);
@@ -105,7 +91,7 @@ export default class DisplayService extends cds.ApplicationService {
       return cached(`leaderboard:${eventLegacyId}:${limit}`, CACHE_TTL, async () => {
         const records = await SELECT.from(TaskRecords).where({
           event_ID: event.ID,
-          status: 'COMPLETED'
+          status: { in: COMPLETION_STATUSES }
         });
 
         const userIds = [...new Set(records.map(r => r.user_ID))];

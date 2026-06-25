@@ -5,10 +5,20 @@
 // fails on HANA's HDI schema. We target TaskRecordsAnalytics (db/views.cds) —
 // a projection over TaskRecords with discriminated unmanaged associations to
 // Tutorials/Missions/Groups so task-lookup dimensions resolve properly.
+//
+// Issue #600 — completion baseFilter widened to include SUPERSEDED rows so a
+// "reset and re-complete" cycle still counts as a completion. IMPORTANT for
+// ad-hoc analytics consumers: a user with N completions on the same tutorial
+// now contributes N rows. Queries that want one-completion-per-user semantics
+// MUST DISTINCT by (user_ID, tutorial_ID) — otherwise re-completion inflates
+// totals.
 const NS = 'com.sap.developers.ims.';
 export const ANALYTICS_SCHEMA = {
   facts: {
-    completion: { source: NS + 'TaskRecordsAnalytics', baseFilter: { status: 'COMPLETED' } },
+    completion: {
+      source: NS + 'TaskRecordsAnalytics',
+      baseFilter: { status: { in: ['COMPLETED', 'SUPERSEDED'] } },
+    },
     start:      { source: NS + 'TaskRecordsAnalytics', baseFilter: {} },
   },
   dimensions: {

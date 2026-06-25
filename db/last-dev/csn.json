@@ -193,6 +193,13 @@
           "length": 36,
           "@odata.foreignKey4": "event",
           "@cds.persistence.name": "EVENT_ID"
+        },
+        "attemptNumber": {
+          "type": "cds.Integer",
+          "default": {
+            "val": 1
+          },
+          "@cds.persistence.name": "ATTEMPTNUMBER"
         }
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_TASKRECORDS"

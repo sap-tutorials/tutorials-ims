@@ -42,6 +42,28 @@ service DeveloperService {
   };
 
   @(requires: 'authenticated-user')
+  action resetTutorialProgress(slug : String) returns {
+    newAttemptNumber           : Integer;
+    previousAttemptCompletedAt : DateTime;
+    supersededRecordCount      : Integer;
+  };
+
+  // Task 17 (#600) — explicit declaration for the audit event emitted by
+  // resetTutorialProgress. Makes the audit contract first-class (visible
+  // in OData $metadata, typed for downstream consumers, discoverable via
+  // ORD) instead of an ad-hoc `cds.emit` string. Payload shape MUST match
+  // the emit call in srv/developer-service.js (handler emits user,
+  // tutorialSlug, attemptNumber, supersededRecordCount,
+  // previousAttemptCompletedAt). `user` is dbUser.ID, NOT the email.
+  event TutorialProgressReset : {
+    user                       : String;
+    tutorialSlug               : String;
+    attemptNumber              : Integer;
+    supersededRecordCount      : Integer;
+    previousAttemptCompletedAt : DateTime;
+  };
+
+  @(requires: 'authenticated-user')
   function getProgress(slug : String) returns {
     completedSteps : array of Integer;
     points         : Integer;
@@ -92,6 +114,7 @@ service DeveloperService {
     experienceTag         : String;
     averageTimeToComplete : Integer;
     completionDate        : DateTime;
+    attemptNumber         : Integer;
   };
 
   // App Space progress (replaces AEM /bin/sapdx/tutorials/v3/progress/series)

@@ -49,7 +49,7 @@ export async function getConceptsForUser({ db, userId }) {
   // Tutorials.legacyId. Cap at MAX_TASK_RECORDS+1 to detect truncation.
   const taskRecords = await db.run(
     `SELECT TASKLEGACYID, STATUS FROM COM_SAP_DEVELOPERS_IMS_TASKRECORDS
-     WHERE USER_ID = ? AND TASKTYPE = 'TUTORIAL' AND STATUS IN ('COMPLETED', 'IN_PROGRESS')
+     WHERE USER_ID = ? AND TASKTYPE = 'TUTORIAL' AND STATUS IN ('COMPLETED', 'IN_PROGRESS', 'SUPERSEDED')
      ORDER BY COMPLETIONDATE DESC NULLS LAST
      LIMIT ${MAX_TASK_RECORDS + 1}`,
     [userId]
@@ -121,7 +121,7 @@ LIMIT 5000`
     const conceptSlug = conceptIri.startsWith(CONCEPT_IRI_PREFIX)
       ? conceptIri.slice(CONCEPT_IRI_PREFIX.length)
       : conceptIri
-    if (status === 'COMPLETED') learned.add(conceptSlug)
+    if (status === 'COMPLETED' || status === 'SUPERSEDED') learned.add(conceptSlug)
     else if (status === 'IN_PROGRESS') partial.add(conceptSlug)
   }
   // Dedupe: learned wins.

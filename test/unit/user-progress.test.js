@@ -222,10 +222,10 @@ describe('user-progress', () => {
 
     it('keys lookup by `${taskType}:${slug}` for all three task types', async () => {
       const lookup = await getProgressLookup({ id: USER_UUID });
-      expect(lookup.get('TUTORIAL:cap-getting-started')).toEqual({ status: 'COMPLETED', progressPercent: 100 });
-      expect(lookup.get('TUTORIAL:cap-events')).toEqual({ status: 'IN_PROGRESS', progressPercent: 57 });
-      expect(lookup.get('MISSION:cap-mission')).toEqual({ status: 'COMPLETED', progressPercent: 100 });
-      expect(lookup.get('GROUP:beginner-group')).toEqual({ status: 'COMPLETED', progressPercent: 100 });
+      expect(lookup.get('TUTORIAL:cap-getting-started')).toEqual({ status: 'COMPLETED', progressPercent: 100, attemptNumber: 1 });
+      expect(lookup.get('TUTORIAL:cap-events')).toEqual({ status: 'IN_PROGRESS', progressPercent: 57, attemptNumber: 1 });
+      expect(lookup.get('MISSION:cap-mission')).toEqual({ status: 'COMPLETED', progressPercent: 100, attemptNumber: 1 });
+      expect(lookup.get('GROUP:beginner-group')).toEqual({ status: 'COMPLETED', progressPercent: 100, attemptNumber: 1 });
     });
 
     it('does not include the untouched control tutorial', async () => {
