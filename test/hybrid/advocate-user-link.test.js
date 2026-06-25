@@ -9,6 +9,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import cds from '@sap/cds';
+import path from 'node:path';
 import { isSafeForWrites } from './_guard.js';
 
 const TEST_PREFIX = '__TEST__advocate-link';
@@ -22,8 +23,20 @@ describeIf('Advocates.user — HANA UNIQUE + cascade (hybrid)', () => {
   let createdUserIds = [];
 
   beforeAll(async () => {
+    // Load + activate the CDS model so the cascade module sees the
+    // @PersonalData annotations defined in db/audit-logging.cds. We
+    // explicitly load the whole `db` directory (which pulls in schema.cds
+    // AND audit-logging.cds AND advocates.cds) — not just schema.cds,
+    // which doesn't import audit-logging. Without audit-logging in the
+    // loaded model, executeAnonymizationCascade has no cascade plan
+    // entry for Advocates and silently no-ops.
+    //
+    // We avoid `cds.test('serve', ...)` because its server-bootstrap hook
+    // times out at 10s on Windows (the codebase's
+    // feedback_check_scripts_pool_flake_on_windows class of issue).
+    cds.model = await cds.load(['db/']);
     db = await cds.connect.to('db');
-  });
+  }, 60_000);
 
   afterAll(async () => {
     // Clean up — advocates first to release FK.
@@ -43,12 +56,17 @@ describeIf('Advocates.user — HANA UNIQUE + cascade (hybrid)', () => {
     }
   });
 
-  // TODO(advocate-user-link-unskip-after-deploy): unskip once HDI deploy provisions USER_ID column.
-  it.skip('HANA enforces UNIQUE on Advocates.user_ID at the DB level', async () => {
-    const { Advocates, Users } = cds.entities('com.sap.developers.ims');
+  it('HANA enforces UNIQUE on Advocates.user_ID at the DB level', async () => {
+    // Use string entity names (fully qualified) — cds.entities() is a
+    // runtime helper that's not available without cds.test('serve'); the
+    // string form works in db.run/INSERT/SELECT just as well.
+    const Advocates = 'com.sap.developers.ims.Advocates';
+    const Users = 'com.sap.developers.ims.Users';
 
-    const uuid = `${TEST_PREFIX}-u-${Date.now()}`;
-    await INSERT.into(Users).entries({ uuid, email: `${uuid}@test.example.com` });
+    // Users.uuid is String(36) — must fit a real UUID.
+    const uuid = crypto.randomUUID();
+    const email = `${TEST_PREFIX}-u-${Date.now()}@test.example.com`;
+    await INSERT.into(Users).entries({ uuid, email });
     const u = await SELECT.one.from(Users).where({ uuid });
     createdUserIds.push(u.ID);
 
@@ -63,13 +81,14 @@ describeIf('Advocates.user — HANA UNIQUE + cascade (hybrid)', () => {
     ).rejects.toThrow(/ASSERT_UNIQUE|UNIQUE|constraint violation/i);
   });
 
-  // TODO(advocate-user-link-unskip-after-deploy): unskip once HDI deploy provisions USER_ID column.
-  it.skip('cascadeNullPersonal NULLs Advocates.user_ID when User is anonymized', async () => {
-    const { Advocates, Users } = cds.entities('com.sap.developers.ims');
+  it('cascadeNullPersonal NULLs Advocates.user_ID when User is anonymized', async () => {
+    const Advocates = 'com.sap.developers.ims.Advocates';
+    const Users = 'com.sap.developers.ims.Users';
     const { executeAnonymizationCascade } = await import('../../srv/lib/anonymization-cascade.js');
 
-    const uuid = `${TEST_PREFIX}-u-cascade-${Date.now()}`;
-    await INSERT.into(Users).entries({ uuid, email: `${uuid}@test.example.com` });
+    const uuid = crypto.randomUUID();
+    const email = `${TEST_PREFIX}-u-cascade-${Date.now()}@test.example.com`;
+    await INSERT.into(Users).entries({ uuid, email });
     const u = await SELECT.one.from(Users).where({ uuid });
     createdUserIds.push(u.ID);
 
