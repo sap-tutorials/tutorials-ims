@@ -1930,6 +1930,18 @@ annotate AdminService.Advocates with {
            { $Type: 'Common.ValueListParameterDisplayOnly',                             ValueListProperty: 'sapId' }
          ]
        };
+
+  // Spec: docs/superpowers/specs/2026-06-25-advocate-admin-ui-fixes-design.md §4.4.
+  // Inverse-Association nav properties on the Advocates projection. Hide
+  // Create/Delete/edit affordances so admins don't accidentally try to
+  // mutate tutorials from the Advocate OP (these are read-through views,
+  // not Compositions). FE V4 honors @Capabilities.* on navigation aliases.
+  authoredTutorials    @Capabilities.InsertRestrictions: { Insertable: false }
+                       @Capabilities.UpdateRestrictions: { Updatable:  false }
+                       @Capabilities.DeleteRestrictions: { Deletable:  false };
+  contributedTutorials @Capabilities.InsertRestrictions: { Insertable: false }
+                       @Capabilities.UpdateRestrictions: { Updatable:  false }
+                       @Capabilities.DeleteRestrictions: { Deletable:  false };
 };
 
 annotate AdminService.Advocates with @(
