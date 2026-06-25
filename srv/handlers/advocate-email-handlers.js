@@ -36,17 +36,50 @@ import { validateEmail } from '../lib/email-validation.js';
 /**
  * Batch-hydrate emailEdit on a result set. Used by both the after-READ
  * handler and the after-UPDATE re-hydrate path.
+ *
+ * Looks up user_ID on the row first. FE V4 typically $selects user_ID
+ * on the OP context read, but a focused $select=emailEdit alone may not
+ * include it — in that case we lookup the advocate's user_ID by ID from
+ * whichever table (active or drafts) the read fired against.
  */
-async function hydrateEmailEdit(rows, srvEntities) {
+async function hydrateEmailEdit(rows, srvEntities, fromTable) {
   const arr = Array.isArray(rows) ? rows : [rows];
-  const userIds = [...new Set(arr.map((r) => r?.user_ID).filter(Boolean))];
-  if (userIds.length === 0) return;
-  const { Users } = srvEntities;
-  const users = await SELECT.from(Users).columns('ID', 'email').where({ ID: { in: userIds } });
-  const emailByUserId = new Map(users.map((u) => [u.ID, u.email]));
+  if (arr.length === 0) return;
+
+  const { Users, Advocates } = srvEntities;
+  const fromAdvocates = fromTable || Advocates;
+
+  // Rows where FE V4 already $selected user_ID can skip the lookup.
+  const idsNeedingUserLookup = arr
+    .filter((r) => r && !r.user_ID && r.ID)
+    .map((r) => r.ID);
+
+  let userIdByAdvId;
+  if (idsNeedingUserLookup.length > 0) {
+    const advs = await SELECT.from(fromAdvocates)
+      .columns('ID', 'user_ID')
+      .where({ ID: { in: idsNeedingUserLookup } });
+    userIdByAdvId = new Map(advs.map((a) => [a.ID, a.user_ID]));
+  }
+
+  const allUserIds = new Set();
   for (const row of arr) {
-    if (row?.user_ID) {
-      row.emailEdit = emailByUserId.get(row.user_ID) ?? null;
+    if (!row) continue;
+    const uid = row.user_ID || userIdByAdvId?.get(row.ID);
+    if (uid) allUserIds.add(uid);
+  }
+  if (allUserIds.size === 0) return;
+
+  const users = await SELECT.from(Users)
+    .columns('ID', 'email')
+    .where({ ID: { in: [...allUserIds] } });
+  const emailByUserId = new Map(users.map((u) => [u.ID, u.email]));
+
+  for (const row of arr) {
+    if (!row) continue;
+    const uid = row.user_ID || userIdByAdvId?.get(row.ID);
+    if (uid) {
+      row.emailEdit = emailByUserId.get(uid) ?? null;
     }
   }
 }
@@ -150,10 +183,23 @@ export function register(srv) {
   const { Advocates, Users } = srv.entities;
   const srvEntities = { Advocates, Users };
 
+  // Hydrate on READ of the active entity.
   srv.after('READ', Advocates, async (rows) => {
     if (!rows) return;
-    await hydrateEmailEdit(rows, srvEntities);
+    await hydrateEmailEdit(rows, srvEntities, Advocates);
   });
+
+  // Hydrate on READ of the draft companion too. Fiori OP opens drafts via
+  // `Advocates(...,IsActiveEntity=false)` which fires the .drafts event,
+  // NOT the active entity event. Without this hook the OP shows '-' in
+  // both display + edit because emailEdit stays null on draft load.
+  // Diagnosed 2026-06-25 via Playwright network capture (PR #648).
+  if (Advocates.drafts) {
+    srv.after('READ', Advocates.drafts, async (rows) => {
+      if (!rows) return;
+      await hydrateEmailEdit(rows, srvEntities, Advocates.drafts);
+    });
+  }
 
   // Direct UPDATE path (cds.fiori.direct_crud:true beta, off in this
   // service). Kept for defense-in-depth so a future flip can't silently
@@ -162,7 +208,7 @@ export function register(srv) {
 
   srv.after('UPDATE', Advocates, async (result) => {
     if (!result) return;
-    await hydrateEmailEdit(result, srvEntities);
+    await hydrateEmailEdit(result, srvEntities, Advocates);
   });
 
   // Fiori draft PATCH path — the ONLY path admins actually exercise
@@ -171,5 +217,10 @@ export function register(srv) {
   // SAVE (where it would be lost — see file-header note).
   if (Advocates.drafts) {
     srv.before('UPDATE', Advocates.drafts, (req) => propagateEmailEdit(req, srvEntities));
+    // Re-hydrate the draft response after PATCH so FE V4 sees the updated value.
+    srv.after('UPDATE', Advocates.drafts, async (result) => {
+      if (!result) return;
+      await hydrateEmailEdit(result, srvEntities, Advocates.drafts);
+    });
   }
 }
