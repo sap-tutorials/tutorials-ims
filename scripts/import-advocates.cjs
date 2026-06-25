@@ -76,8 +76,99 @@ function parseArgs(argv) {
   console.log(`[advocates-import] Target DB kind: ${db.kind} (isHana=${isHana})`);
   console.log(`[advocates-import] Advocates in payload: ${payload.advocateCount}`);
 
-  // ── TODO Task 5 onwards ───────────────────────────────────────────
-  process.exit(0);
+  const c = T.cols;
+  const stats = {
+    advocates: { inserted: 0, updated: 0 },
+    users:     { matched: 0, nulled: 0, nulledEmails: [] },
+    topics:    { matched: 0, skipped: 0, missingTags: new Set() },
+    links:     { inserted: 0 },
+    photos:    { imported: 0, absent: 0 },
+  };
+
+  for (const adv of payload.advocates) {
+    // ── Lightweight payload validation ──────────────────────────────
+    if (!adv.slug)      throw new Error(`Advocate missing slug: ${JSON.stringify(adv).slice(0, 200)}`);
+    if (!adv.firstName) throw new Error(`Advocate ${adv.slug} missing firstName`);
+    if (!adv.lastName)  throw new Error(`Advocate ${adv.slug} missing lastName`);
+    if (adv.region && !VALID_REGIONS.has(adv.region)) {
+      throw new Error(`Advocate ${adv.slug} has invalid region: ${adv.region}`);
+    }
+
+    // ── Resolve user_ID by email (case-insensitive) ────────────────
+    let userId = null;
+    if (adv.userEmail) {
+      const matches = await db.run(
+        `SELECT ${c.id} AS "id" FROM ${T.users}
+         WHERE LOWER(${c.email}) = LOWER(?)
+         ORDER BY ${c.createdAt} ASC`,
+        [adv.userEmail]
+      );
+      if (matches.length > 0) {
+        userId = matches[0].id;
+        stats.users.matched++;
+        if (matches.length > 1) {
+          console.warn(`[${adv.slug}] WARN: ${matches.length} Users rows match email ${adv.userEmail} — picking earliest createdAt`);
+        }
+      } else {
+        stats.users.nulled++;
+        stats.users.nulledEmails.push(adv.userEmail);
+        console.warn(`[${adv.slug}] user FK not resolved: ${adv.userEmail} missing in target — inserting with user_ID=NULL`);
+      }
+    }
+
+    // ── Upsert Advocates ────────────────────────────────────────────
+    const existing = await db.run(
+      `SELECT ${c.id} AS "id" FROM ${T.advocates} WHERE ${c.slug} = ?`,
+      [adv.slug]
+    );
+
+    const advocateId = existing.length > 0 ? existing[0].id : crypto.randomUUID();
+    const isUpdate = existing.length > 0;
+
+    // Column-list order is the source of truth for the parameter array below.
+    // Keep them in lock-step.
+    const updatableCols = [
+      c.firstName, c.lastName, c.title, c.pronouns, c.location, c.region,
+      c.bio, c.isActive, c.sortOverride, c.joinedDate,
+      c.hasPhoto, c.photoUpdatedAt, c.photoUrl, c.userFk,
+    ];
+    // SQLite (better-sqlite3) rejects JS booleans as bind values; coerce to
+    // 0/1 here. HANA accepts integers for BOOLEAN columns equally well.
+    const boolToInt = (v) => (v === true ? 1 : v === false ? 0 : v);
+    const updatableValues = [
+      adv.firstName, adv.lastName, adv.title, adv.pronouns, adv.location, adv.region,
+      adv.bio, boolToInt(adv.isActive), adv.sortOverride, adv.joinedDate,
+      boolToInt(adv.hasPhoto), adv.photoUpdatedAt, adv.photoUrl, userId,
+    ];
+
+    if (isUpdate) {
+      const setClause = updatableCols.map(col => `${col} = ?`).join(', ');
+      await db.run(
+        `UPDATE ${T.advocates} SET ${setClause} WHERE ${c.id} = ?`,
+        [...updatableValues, advocateId]
+      );
+      stats.advocates.updated++;
+    } else {
+      const allCols = [c.id, c.slug, ...updatableCols].join(', ');
+      const placeholders = ['?', '?', ...updatableCols.map(() => '?')].join(', ');
+      await db.run(
+        `INSERT INTO ${T.advocates} (${allCols}) VALUES (${placeholders})`,
+        [advocateId, adv.slug, ...updatableValues]
+      );
+      stats.advocates.inserted++;
+    }
+
+    // ── TODO Task 6: topics, links, photo ───────────────────────────
+  }
+
+  // ── Summary ──────────────────────────────────────────────────────
+  console.log('');
+  console.log(`[advocates-import] Imported ${payload.advocateCount} advocates: ${stats.advocates.updated} updated, ${stats.advocates.inserted} inserted`);
+  console.log(`[advocates-import] FK resolution: ${stats.users.matched} users matched, ${stats.users.nulled} NULLed`);
+  if (stats.users.nulled > 0) {
+    console.log(`                   (${stats.users.nulledEmails.join(', ')})`);
+  }
+  console.log('[advocates-import] (topics/links/photos pending Task 6)');
 })().catch(err => {
   console.error('[advocates-import] FAILED:', err);
   process.exit(1);
