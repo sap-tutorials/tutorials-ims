@@ -403,7 +403,7 @@ service AdminService {
     // user.email and the before-UPDATE / SAVE-on-drafts handlers propagate
     // it back to Users.email.
     // Spec: docs/superpowers/specs/2026-06-25-advocate-email-edit-design.md §4
-    virtual null as emailEdit : String(255),
+    virtual emailEdit : String(255),
   } actions {
     // Bound action for the Object Page photo-upload flow. The Fiori
     // UploadSet against the `photo` composition silently drops bytes
