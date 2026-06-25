@@ -126,6 +126,19 @@ describe('UI Annotations in $metadata', () => {
         expect(region[0]).toMatch(/Deletable" Bool="false"/);
       }
     });
+
+    it('AdvocateTopics.ID is hidden from the Topics inline table', () => {
+      // The projection has no explicit field list, so ID is auto-projected.
+      // FE V4's column-personalization dialog (or a default column set)
+      // surfaces the row's own GUID alongside the Topic FK — confusing for
+      // admins. @UI.Hidden suppresses the column entirely. Spec §4.2.
+      const region = metadata.match(
+        /<Annotations Target="AdminService\.AdvocateTopics\/ID"[\s\S]*?<\/Annotations>/
+      );
+      expect(region, 'AdvocateTopics/ID annotations region not found').toBeTruthy();
+      // @UI.Hidden serializes to Term="UI.Hidden" Bool="true" (default truth).
+      expect(region[0]).toMatch(/Term="UI\.Hidden"/);
+    });
   });
 
   // Regression suite for spec 2026-06-24-tutorial-authorship-fk —

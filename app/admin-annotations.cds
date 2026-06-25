@@ -2091,6 +2091,11 @@ annotate AdminService.AdvocatePhotos with @(
 // Value-help dialog: ranks `label` first so admins search by the human
 // label, falls back to `name` (slug-equivalent) when label is missing.
 annotate AdminService.AdvocateTopics with {
+  // Spec: 2026-06-25-advocate-admin-ui-fixes-design.md §4.2.
+  // Projection has no explicit field list, so the row's own ID is auto-
+  // projected and FE V4 may surface it in the inline Topics table or the
+  // column-personalization dialog. @UI.Hidden suppresses it cleanly.
+  ID  @UI.Hidden;
   tag @Common.Label: 'Topic'
       @Common.Text: tag.label
       @Common.TextArrangement: #TextOnly
