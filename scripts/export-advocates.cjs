@@ -153,6 +153,68 @@ function parseArgs(argv) {
     });
   }
 
+  // Photos — fetched in a SEPARATE query per advocate to dodge the HANA
+  // LOB-locator-expiry bug (locator returned by a multi-column SELECT
+  // expires before we can read the stream). Same workaround as
+  // srv/lib/content-store.js and srv/lib/advocate-photo-store.js.
+  // SQLite path uses CDS QL — no LOB locator concern there.
+  const photosByAdvocate = new Map();
+  const advocatesWithPhoto = advocateRows.filter(a => a.hasPhoto);
+  console.log(`[advocates-export] Fetching ${advocatesWithPhoto.length} photo(s)…`);
+
+  for (const a of advocatesWithPhoto) {
+    let photoMeta, photo256, photo64;
+    if (isHana) {
+      // HANA: raw SQL, UPPERCASE identifiers. Pull both BLOBs + metadata
+      // in one shot. HANA returns LargeBinary as Buffers.
+      const rows = await db.run(
+        `SELECT
+           ${c.photo256}      AS "photo256",
+           ${c.photo64}       AS "photo64",
+           ${c.photoMimeType} AS "photoMimeType",
+           ${c.sizeBytes}     AS "sizeBytes",
+           ${c.sha256}        AS "sha256",
+           ${c.uploadedAt}    AS "uploadedAt"
+         FROM ${T.photos}
+         WHERE ${c.advocateFk} = ?`,
+        [a.id]
+      );
+      if (rows.length === 0) continue;
+      photo256 = rows[0].photo256;
+      photo64  = rows[0].photo64;
+      photoMeta = {
+        photoMimeType: rows[0].photoMimeType,
+        sizeBytes: rows[0].sizeBytes,
+        sha256: rows[0].sha256,
+        uploadedAt: rows[0].uploadedAt,
+      };
+    } else {
+      // SQLite (unit/local). CDS QL is fine; no LOB locator issue.
+      const SELECT_ = cds.ql.SELECT;
+      const [row] = await db.run(
+        SELECT_.from('com.sap.developers.ims.AdvocatePhotos').where({ advocate_ID: a.id })
+      );
+      if (!row) continue;
+      photo256 = row.photo256;
+      photo64  = row.photo64;
+      photoMeta = {
+        photoMimeType: row.photoMimeType,
+        sizeBytes: row.sizeBytes,
+        sha256: row.sha256,
+        uploadedAt: row.uploadedAt,
+      };
+    }
+    photosByAdvocate.set(a.id, {
+      photoMimeType: photoMeta.photoMimeType,
+      sizeBytes: photoMeta.sizeBytes,
+      sha256: photoMeta.sha256,
+      uploadedAt: photoMeta.uploadedAt,
+      photo256_b64: Buffer.from(photo256).toString('base64'),
+      photo64_b64:  Buffer.from(photo64 ).toString('base64'),
+    });
+  }
+  console.log(`[advocates-export] Encoded ${photosByAdvocate.size} photo(s) as base64`);
+
   const payload = {
     schemaVersion: SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
@@ -176,7 +238,7 @@ function parseArgs(argv) {
       userEmail: a.userEmail || null,
       topics: topicsByAdvocate.get(a.id) || [],
       links:  linksByAdvocate.get(a.id)  || [],
-      photo:  null,  // filled in by the photo-export pass below
+      photo: photosByAdvocate.get(a.id) || null,
     })),
   };
 
