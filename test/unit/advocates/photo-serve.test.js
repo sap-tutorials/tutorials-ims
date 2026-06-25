@@ -18,19 +18,26 @@ beforeAll(async () => {
   const existing = await db.run(SELECT.from(Advocates).columns('slug'));
   const slugs = new Set(existing.map((r) => r.slug));
   const rows = [];
-  if (!slugs.has('thomas-jung')) {
+  // NOTE: seed rows use 'Fixture*' firstNames, NOT '__TEST__*'. The slug
+  // already carries the anti-shadow safety marker (no real advocate could
+  // get '__test__advocate-link-*'). firstName intentionally stays out of
+  // the '__TEST__%' namespace for cross-file consistency with
+  // api.test.js, whose afterAll cleanup deletes firstName LIKE
+  // '__TEST__%' — if both files ever run in the same vitest worker,
+  // shared IDs/slugs and shared firstName conventions matter.
+  if (!slugs.has('__test__advocate-link-amer-1')) {
     rows.push({
       ID: 'ADC00001-0000-0000-0000-000000000001',
-      slug: 'thomas-jung',
-      firstName: 'Thomas', lastName: 'Jung',
+      slug: '__test__advocate-link-amer-1',
+      firstName: 'FixtureAmer', lastName: 'One',
       region: 'AMERICAS', isActive: true,
     });
   }
-  if (!slugs.has('placeholder-emea')) {
+  if (!slugs.has('__test__advocate-link-emea-1')) {
     rows.push({
       ID: 'ADC00001-0000-0000-0000-000000000002',
-      slug: 'placeholder-emea',
-      firstName: 'Placeholder', lastName: 'EMEA',
+      slug: '__test__advocate-link-emea-1',
+      firstName: 'FixtureEmea', lastName: 'One',
       region: 'EMEA', isActive: true,
     });
   }
@@ -48,10 +55,10 @@ describe('fetchPhoto (read path)', () => {
   });
 
   it('returns null when advocate exists but has no photo row', async () => {
-    // The seeded thomas-jung row has hasPhoto=false initially and no
+    // The seeded amer fixture row has hasPhoto=false initially and no
     // AdvocatePhotos row exists for it before any test inserts one.
     // Run this BEFORE the round-trip test below.
-    const out = await fetchPhoto('placeholder-emea', 'full');
+    const out = await fetchPhoto('__test__advocate-link-emea-1', 'full');
     expect(out).toBeNull();
   });
 
@@ -63,7 +70,7 @@ describe('fetchPhoto (read path)', () => {
     const db = await cds.connect.to('db');
     const { Advocates, AdvocatePhotos } = cds.entities('com.sap.developers.ims');
     const advocate = await db.run(
-      SELECT.one.from(Advocates).where({ slug: 'thomas-jung' }),
+      SELECT.one.from(Advocates).where({ slug: '__test__advocate-link-amer-1' }),
     );
     expect(advocate).toBeTruthy();
 
@@ -83,7 +90,7 @@ describe('fetchPhoto (read path)', () => {
       }),
     );
 
-    const out = await fetchPhoto('thomas-jung', 'full');
+    const out = await fetchPhoto('__test__advocate-link-amer-1', 'full');
     expect(out).toBeTruthy();
     expect(out.mimeType).toBe('image/webp');
     expect(out.etag).toBe('"' + processed.sha256 + '"');
@@ -91,7 +98,7 @@ describe('fetchPhoto (read path)', () => {
   });
 
   it('returns 64 WebP bytes for size=thumb', async () => {
-    const out = await fetchPhoto('thomas-jung', 'thumb');
+    const out = await fetchPhoto('__test__advocate-link-amer-1', 'thumb');
     expect(out).toBeTruthy();
     expect(out.mimeType).toBe('image/webp');
     // 64x64 WebP for our solid-color fixture is well under 1 KB.
@@ -101,15 +108,15 @@ describe('fetchPhoto (read path)', () => {
   it('serves cached results on the second call (LRU)', async () => {
     // First call already cached the entry above. The second call should
     // return the SAME object reference (Map.get returns the stored object).
-    const a = await fetchPhoto('thomas-jung', 'full');
-    const b = await fetchPhoto('thomas-jung', 'full');
+    const a = await fetchPhoto('__test__advocate-link-amer-1', 'full');
+    const b = await fetchPhoto('__test__advocate-link-amer-1', 'full');
     expect(b).toBe(a);
   });
 
   it('treats unknown size values as full (defensive default)', async () => {
-    const full = await fetchPhoto('thomas-jung', 'full');
-    const thumb = await fetchPhoto('thomas-jung', 'thumb');
-    const fallback = await fetchPhoto('thomas-jung', 'gibberish');
+    const full = await fetchPhoto('__test__advocate-link-amer-1', 'full');
+    const thumb = await fetchPhoto('__test__advocate-link-amer-1', 'thumb');
+    const fallback = await fetchPhoto('__test__advocate-link-amer-1', 'gibberish');
     expect(fallback).toBeTruthy();
     // 'gibberish' must route to the same column as 'full', not 'thumb'.
     expect(Buffer.compare(fallback.buffer, full.buffer)).toBe(0);
