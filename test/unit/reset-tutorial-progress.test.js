@@ -879,3 +879,39 @@ describe('Task 19 — admin TaskRecords annotations (attemptNumber + SUPERSEDED-
     expect(annotationsSrc).toMatch(/PropertyName:\s*status/);
   });
 });
+
+describe('Task 21 — Hugo wiring', () => {
+  // Source-string assertions: Hugo templates can't be unit-tested through
+  // rendering inside vitest, so we check the static templates for the three
+  // wiring points the TutorialReset Vue island depends on at runtime.
+  const u1Path = join(__dirname_t13, '../../hugo/layouts/tutorials/u1-object-page.html');
+  const baseofPath = join(__dirname_t13, '../../hugo/layouts/_default/baseof.html');
+  const headPath = join(__dirname_t13, '../../hugo/layouts/partials/head.html');
+
+  it('u1-object-page.html has the tutorial-reset-mount node', () => {
+    const src = fs.readFileSync(u1Path, 'utf8');
+    expect(src).toMatch(/class="tutorial-reset-mount"/);
+    expect(src).toMatch(/data-slug="\{\{\s*\.Params\.slug\s*\}\}"/);
+  });
+
+  it('baseof.html exposes data-step-count on the <html> element', () => {
+    // The Vue island reads document.documentElement.dataset.stepCount.
+    // baseof.html owns the <html> open tag — see the data-page-slug pattern
+    // already there.
+    const src = fs.readFileSync(baseofPath, 'utf8');
+    expect(src).toMatch(/data-step-count="\{\{\s*\.Params\.stepCount\s*\}\}"/);
+  });
+
+  it('head.html loads the tutorial-reset.js bundle as a module', () => {
+    const src = fs.readFileSync(headPath, 'utf8');
+    expect(src).toMatch(/<script[^>]*type="module"[^>]*src="\/js\/tutorial-reset\.js"/);
+  });
+
+  it('head.html registers a tutorial-reset event listener that clears localStorage', () => {
+    const src = fs.readFileSync(headPath, 'utf8');
+    expect(src).toMatch(/addEventListener\(['"]tutorial-reset['"]/);
+    expect(src).toMatch(/tutorial-validation-/);
+    expect(src).toMatch(/localStorage/);
+    expect(src).toMatch(/data-validated/);
+  });
+});

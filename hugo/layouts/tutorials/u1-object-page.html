@@ -270,6 +270,11 @@
         <section id="op-overview" class="op-section" data-op-section>
           <h2 class="op-section__heading">Overview</h2>
           {{ partial "tutorial-banners.html" . }}
+          {{/* Issue #600 — TutorialReset Vue island mount. The island renders
+               nothing until the tutorial is marked complete (all steps + the
+               tutorial-level TaskRecord), at which point it surfaces a Reset
+               progress affordance next to the dynamic "completed" banner above. */}}
+          <div class="tutorial-reset-mount" data-slug="{{ .Params.slug }}"></div>
           {{ partial "tutorial-meta.html" . }}
           {{ with .Params.youWillLearn }}
           <div class="you-will-learn">
