@@ -116,13 +116,18 @@ function parseArgs(argv) {
   // one row per (advocate, tagSlug) pair. Inner join: if a Tag has been
   // deleted in source after the AdvocateTopic was created, the dangling
   // junction row is dropped from the export (it's already broken anyway).
+  //
+  // Aliases are AVT/TAG (not AT/T) because HANA treats AT as a reserved
+  // word (used in `AT TIMEZONE`) and rejects it as a table alias with
+  // "sql syntax error: incorrect syntax near AT". Discovered against
+  // DEV HANA on the first live export run.
   const topicRows = await db.run(`
     SELECT
-      AT.${c.advocateFk} AS "advocateId",
-      T.${c.slug}        AS "tagSlug"
-    FROM ${T.topics} AS AT
-    INNER JOIN ${T.tags} AS T ON T.${c.id} = AT.${c.tagFk}
-    ORDER BY AT.${c.advocateFk}, T.${c.slug}
+      AVT.${c.advocateFk} AS "advocateId",
+      TAG.${c.slug}       AS "tagSlug"
+    FROM ${T.topics} AS AVT
+    INNER JOIN ${T.tags} AS TAG ON TAG.${c.id} = AVT.${c.tagFk}
+    ORDER BY AVT.${c.advocateFk}, TAG.${c.slug}
   `);
 
   const linkRows = await db.run(`
