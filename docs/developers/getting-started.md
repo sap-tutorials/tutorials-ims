@@ -72,7 +72,7 @@ Deploy-time variables for the MTA modules (CF env, role collections, secrets) ar
 | `SEARCH_RATE_LIMIT_MAX` | No | `60` | Per-IP search request limit per window |
 | `SEARCH_RATE_LIMIT_WINDOW_MS` | No | `60000` | Search rate-limit window in ms |
 | `DASHBOARD_URL` | No | Production URL | Tutorial Dashboard URL injected into notification emails |
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | No | — | SMTP transport for local email testing (e.g., MailHog) |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_FROM` / `SMTP_PASS` | No | — | SMTP transport for local email testing (e.g., MailHog). In deployed environments these live in BTP Credential Store, managed via `/admin-ui/#secrets-display` — see [SMTP rotation runbook](operations/smtp-credentials-rotation.md). |
 
 ### Approuter (approuter/)
 

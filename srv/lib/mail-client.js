@@ -52,7 +52,8 @@ async function getTransporter() {
   if (cfg.SMTP_HOST) {
     if (!cfg.SMTP_PASS) return null;
     // Default port shifts from 1025 (MailHog dev default) to 587 (SMTP submission).
-    // Local dev still works by setting SMTP_PORT=1025 in the resolver source.
+    // Local dev still works by setting SMTP_PORT=1025 explicitly (env var or
+    // credstore row). Spec edge case #8 covers the MailHog flow.
     const port = Number(cfg.SMTP_PORT) || 587;
     _state.transporter = createTransport({
       host: cfg.SMTP_HOST,
