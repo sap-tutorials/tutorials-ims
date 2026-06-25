@@ -61,6 +61,9 @@ async function hydrateEmailEdit(rows, srvEntities) {
  * UX once we decide what that should do (out of scope here).
  */
 function readEmailEditFromBody(req) {
+  // TODO(CAP): replace req._.req.body reach with the supported API once
+  // CAP exposes "read raw body for virtual fields" (not in the docs as of
+  // CAP 9.9.1). The req._ namespace is a convention, not a contract.
   const body = req._?.req?.body;
   if (!body || typeof body !== 'object') return undefined;
   if (!Object.prototype.hasOwnProperty.call(body, 'emailEdit')) return undefined;
@@ -94,13 +97,15 @@ async function propagateEmailEdit(req, srvEntities) {
   if (!targetUserId) {
     const advId = req.params?.[0]?.ID || req.params?.[0];
     if (!advId) {
-      return req.reject(500, 'EMAIL_PROPAGATE_NO_KEY', 'emailEdit: cannot resolve advocate key');
+      return req.reject(400, 'EMAIL_PROPAGATE_NO_KEY', 'emailEdit: cannot resolve advocate key');
     }
     // Read user_ID from whichever projection the event fired against
     // (draft for PATCH on .drafts, active for UPDATE on the entity).
-    const target = req.target?.name === 'AdminService.Advocates'
+    // Identity-compare against the captured Advocates reference so a future
+    // rename of AdminService can't silently mis-route this lookup.
+    const target = req.target === Advocates
       ? Advocates
-      : Advocates.drafts || Advocates;
+      : (Advocates.drafts || Advocates);
     const adv = await SELECT.one.from(target).columns('user_ID').where({ ID: advId });
     targetUserId = adv?.user_ID || null;
   }

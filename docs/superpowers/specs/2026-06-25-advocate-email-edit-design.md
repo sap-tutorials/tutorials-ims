@@ -264,6 +264,16 @@ No data migration. The virtual element is non-persisted; removing it leaves no o
 | Concurrent admin patches to `user_ID` + `emailEdit` race | Low | Medium | Handler reads `req.data.user_ID` before falling back to active row, so the email lands on the intended target user — spelled out in §4.3 |
 | Test pollution returns via a different vector | Medium | Low | Out of scope per Tom's minimal preference; if it recurs, add the CI guard in a follow-up |
 
+### Live-edit semantic (implementation finding)
+
+CAP strips virtual elements from `req.data` before service-layer handlers fire — confirmed in CAP 9.9.1. The `emailEdit` value reaches the handler only via the raw HTTP body on each PATCH against `Advocates.drafts`. This means propagation happens **on each draft PATCH**, not at SAVE time.
+
+**Consequence:** if an admin opens a draft, types a new email, and then DISCARDS the draft, `Users.email` retains the patched value. The draft itself is rolled back; the email side-effect is not.
+
+**Why accepted:** Users is a logically separate resource from the Advocates draft. Email is a small scalar with no rollback complexity. The alternative — making `emailEdit` a real column on `Advocates` + propagating at SAVE — would require a schema change this spec explicitly committed to avoid (§9). A session-stash approach was also considered and rejected as over-complex for the value at stake.
+
+**Pinned by test:** `test/unit/advocates/email-edit.test.js` case 6 (`'email change persists even when the draft is discarded'`) enforces this contract. A future contributor wanting rollback symmetry must address the test, not silently change behavior.
+
 ## 12 — References
 
 - Issue: https://github.com/sap-tutorials/tutorials-ims/issues/638

@@ -146,32 +146,48 @@ describe('Advocates.emailEdit virtual field', () => {
     expect(JSON.stringify(res.data)).toMatch(/EMAIL_INVALID/);
   });
 
-  it('draft-activate propagates emailEdit (SAVE on .drafts)', async () => {
-    // 1. PUT (open draft) on the active row
+  it('email change persists even when the draft is discarded (live-edit semantics)', async () => {
+    // Live-edit semantic: emailEdit propagates to Users.email on each PATCH
+    // against Advocates.drafts, NOT on draftActivate (CAP strips virtuals
+    // from req.data before service handlers fire, and the SAVE-time payload
+    // doesn't carry virtuals either — see srv/handlers/advocate-email-handlers.js
+    // file header). Consequence: discarding the draft does NOT revert the
+    // Users.email side-effect. This test pins that contract so a future
+    // contributor reaching for "rollback symmetry" sees the deliberate
+    // design choice as a failing test, not silent behavior change.
+    // Spec: docs/superpowers/specs/2026-06-25-advocate-email-edit-design.md §11
+
+    // 1. Open draft on the active row
     const draftRes = await project.post(
       "/admin/Advocates(ID=" + advLinked + ",IsActiveEntity=true)/AdminService.draftEdit",
       {},
       adminAuth,
     );
     expect(draftRes.status).toBeLessThan(300);
-    // 2. PATCH the draft with a new emailEdit value
+
+    // 2. PATCH a new email value into the draft (propagation fires here)
     const patchRes = await project.patch(
       '/admin/Advocates(ID=' + advLinked + ',IsActiveEntity=false)',
-      { emailEdit: 'draft-saved@sap.com' },
+      { emailEdit: 'persisted-despite-discard@sap.com' },
       adminAuth,
     );
     expect(patchRes.status).toBeLessThan(300);
-    // 3. Activate (the SAVE-on-drafts path)
-    const activateRes = await project.post(
-      '/admin/Advocates(ID=' + advLinked + ',IsActiveEntity=false)/AdminService.draftActivate',
-      {},
-      adminAuth,
+
+    // 3. Discard the draft (canonical path: DELETE on the draft instance).
+    //    Also send the CANCEL action as belt-and-braces in case the DELETE
+    //    path differs across CAP versions.
+    const discardRes = await project.delete(
+      '/admin/Advocates(ID=' + advLinked + ',IsActiveEntity=false)',
+      { ...adminAuth, validateStatus: () => true },
     );
-    expect(activateRes.status).toBeLessThan(300);
-    // 4. Assert Users.email reflects the draft-saved value
+    expect(discardRes.status).toBeLessThan(400);
+
+    // 4. Assert Users.email reflects the PATCHed value — the draft was
+    //    discarded, but the email write happened on PATCH and is NOT
+    //    rolled back.
     const db = await cds.connect.to('db');
     const { Users } = cds.entities('com.sap.developers.ims');
     const row = await db.run(SELECT.one.from(Users).where({ ID: userID }));
-    expect(row.email).toBe('draft-saved@sap.com');
+    expect(row.email).toBe('persisted-despite-discard@sap.com');
   });
 });
