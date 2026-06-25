@@ -70,6 +70,12 @@ beforeEach(() => {
   setupFetch();
   setupReloadStub();
   clearStepCount();
+  // Wipe any residual DOM from a prior test — attachTo: document.body
+  // leaves elements behind on Vue Test Utils' unmount-by-default path,
+  // and the component's fallback DOM query (.tutorial-reset > ui5-dialog)
+  // can otherwise pick up a stale element instead of the freshly-mounted
+  // one. Belt-and-braces — most tests use stubs that don't trigger this.
+  while (document.body.firstChild) document.body.removeChild(document.body.firstChild);
 });
 
 afterEach(() => {
@@ -273,5 +279,85 @@ describe('TutorialReset.vue — confirmReset', () => {
 
     // Only ONE POST happened (the read path counts as the first fetch).
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// DOM regression — ui5-dialog `open` is set imperatively
+// ─────────────────────────────────────────────────────────────────────
+//
+// Regression coverage for the auto-open + Cancel-stuck bug observed in
+// DEV after PR #629 deployed. The earlier tests above stub <ui5-dialog>
+// entirely and only inspect the `dialogOpen` ref, so they pass regardless
+// of how the template wires the `open` state. These tests assert that:
+//
+//   1. On first mount with dialogOpen=false, the dialog element's `.open`
+//      property is NOT truthy (i.e. the dialog is NOT open). The original
+//      bug was a template binding `:open="dialogOpen"` that compiled to
+//      a bare `<ui5-dialog open>` attribute regardless of value.
+//   2. Calling openDialog() flips `.open` to true on the element.
+//   3. Calling closeDialog() flips `.open` back to false. The original
+//      Cancel-stuck bug was Vue keeping the attribute present even when
+//      bound to `false` for an unrecognized custom element.
+//
+// Fix: <script setup> uses watch(dialogOpen, …) to imperatively set
+// `.open` on the dialog ref. Matches browse/controller.ts's pattern.
+
+describe('TutorialReset.vue — ui5-dialog .open property (DOM regression)', () => {
+  // Mount WITHOUT the `ui5-dialog: true` stub so the real (unknown)
+  // custom element is reachable via the template ref and the watcher
+  // can imperatively flip its .open property.
+  async function mountResetNoDialogStub(slug: string = 'attr-tutorial') {
+    const wrapper = mount(TutorialReset, {
+      props: { slug },
+      attachTo: document.body,
+      global: {
+        stubs: {
+          'ui5-button': true,
+          'ui5-message-strip': true,
+        },
+      },
+    });
+    await flushPromises();
+    await wrapper.vm.$nextTick();
+    return wrapper;
+  }
+
+  it('leaves dialog closed on first mount (.open is NOT truthy)', async () => {
+    setStepCount(2);
+    fetchMock.mockResolvedValueOnce(mockFetchResponse({ completedSteps: [1, 2] }));
+
+    const wrapper = await mountResetNoDialogStub();
+    const dlg = wrapper.element.querySelector('ui5-dialog') as (HTMLElement & { open?: boolean }) | null;
+    expect(dlg).toBeTruthy();
+    // Neither attribute present NOR property truthy — the only state
+    // UI5 v2.x renders as "closed". The bug was both of these being true.
+    expect(dlg!.hasAttribute('open')).toBe(false);
+    expect(dlg!.open === true).toBe(false);
+  });
+
+  it('flips .open to true on openDialog() and back to false on closeDialog()', async () => {
+    setStepCount(2);
+    fetchMock.mockResolvedValueOnce(mockFetchResponse({ completedSteps: [1, 2] }));
+
+    const wrapper = await mountResetNoDialogStub();
+    const vm = getVm(wrapper);
+    const dlg = wrapper.element.querySelector('ui5-dialog') as HTMLElement & { open?: boolean };
+
+    // Initially closed — onMounted explicitly sets .open=false as a
+    // belt-and-braces against stale upgrades.
+    expect(dlg.open === true).toBe(false);
+
+    // Open — watcher fires, sets .open = true on the element
+    vm.openDialog();
+    await flushPromises();
+    await wrapper.vm.$nextTick();
+    expect(dlg.open).toBe(true);
+
+    // Cancel — watcher fires, sets .open = false
+    vm.closeDialog();
+    await flushPromises();
+    await wrapper.vm.$nextTick();
+    expect(dlg.open).toBe(false);
   });
 });

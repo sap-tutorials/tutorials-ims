@@ -1,6 +1,6 @@
 <!-- hugo-apps/src/tutorial-reset/TutorialReset.vue -->
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 
 interface Props {
   slug: string;
@@ -14,11 +14,43 @@ const props = defineProps<Props>();
 // attribute is emitted on <html> by the Hugo tutorial layout (Task 21).
 const showReset = ref(false);
 
-// Dialog open state — bound to `<ui5-dialog open>`. v2.x of UI5 web
-// components has `open` as a property (set true/false); the `:open` v-bind
-// pattern works because Vue's prop-vs-attr coercion sets the property on
-// the custom element when it exists.
+// Dialog open state — drives an imperative `.open` property write on the
+// underlying <ui5-dialog> via the watcher below (NOT a template binding).
+// UI5 web components treat the `open` attribute as presence-truthy — both
+// `:open="dialogOpen"` and `v-bind="{ open: dialogOpen }"` render
+// `<ui5-dialog open>` on first paint regardless of value (and Vue's
+// prop-vs-attr decision for unknown elements often results in NEITHER
+// attribute nor property being written reliably). Imperative `.open =
+// true/false` on the actual element is what UI5 v2.x's reactive observer
+// reads. See feedback_ui5_dialog_open_property +
+// feedback_vue_ui5_boolean_attr_coercion. Same pattern as
+// browse/controller.ts L178 (`(filterDrawer as any).open = true`).
 const dialogOpen = ref(false);
+
+// Component root ref — let Vue's reliable component-root mechanism give us
+// a handle, then walk DOWN to the dialog via querySelector. Template refs
+// on hoisted custom-element vnodes warn in Vue 3.5, and the callback-ref
+// timing for unknown elements in some test envs is unstable.
+const rootEl = ref<HTMLElement | null>(null);
+
+function getDialogEl(): (HTMLElement & { open?: boolean }) | null {
+  // Primary: scoped to this component instance via rootEl. Falls back to
+  // a document-wide query if rootEl hasn't captured yet (e.g. during the
+  // initial onMounted call on some test environments where Vue 3.5 hoists
+  // and ref capture races with onMounted).
+  const fromRoot = rootEl.value?.querySelector('ui5-dialog');
+  if (fromRoot) return fromRoot as HTMLElement & { open?: boolean };
+  // In production there's only one TutorialReset per page, so this is
+  // unambiguous. Tests that mount multiple components in the same DOM
+  // would need rootEl to work — they should.
+  return document.querySelector('.tutorial-reset > ui5-dialog') as
+    (HTMLElement & { open?: boolean }) | null;
+}
+
+watch(dialogOpen, (open) => {
+  const el = getDialogEl();
+  if (el) el.open = open;
+});
 
 // In-flight POST guard. While true the confirm button is disabled (via the
 // v-bind={disabled: true} pattern — see comment on the button below).
@@ -30,6 +62,13 @@ const submitting = ref(false);
 const errorMessage = ref<string | null>(null);
 
 onMounted(async () => {
+  // Belt-and-braces: ensure the dialog is closed at mount time regardless
+  // of what UI5 might have inferred from initial attribute rendering. UI5
+  // v2.x defaults `.open = false` but a stray attribute or earlier upgrade
+  // could leave it truthy.
+  const el = getDialogEl();
+  if (el) el.open = false;
+
   // Read step-count from <html data-step-count="N"> (Task 21 emits this).
   // If the attribute is missing or malformed, default to a large number so
   // we never wrongly surface the reset button on incomplete progress.
@@ -56,10 +95,17 @@ onMounted(async () => {
 function openDialog() {
   errorMessage.value = null;
   dialogOpen.value = true;
+  // Belt-and-braces: also write imperatively so we don't depend on the
+  // watcher's flush timing. The watcher above is the same write but on
+  // a different schedule; this duplicate is cheap and idempotent.
+  const el = getDialogEl();
+  if (el) el.open = true;
 }
 
 function closeDialog() {
   dialogOpen.value = false;
+  const el = getDialogEl();
+  if (el) el.open = false;
 }
 
 async function confirmReset() {
@@ -116,7 +162,7 @@ defineExpose({
 </script>
 
 <template>
-  <div class="tutorial-reset">
+  <div ref="rootEl" class="tutorial-reset">
     <!-- Rate-limit / error strip — always rendered above the button so a
          failed POST has somewhere to surface. The dialog closes first
          (closeDialog in confirmReset) so the strip is the only visible UX. -->
@@ -138,11 +184,13 @@ defineExpose({
       Reset progress and try again
     </ui5-button>
 
-    <!-- ui5-dialog uses :open as a property (UI5 v2.x). Bound directly via
-         :open here; Vue's prop-vs-attr coercion sets the property when the
-         custom element exposes one. See feedback_ui5_dialog_open_property. -->
+    <!-- ui5-dialog `open` is set imperatively via the `watch(dialogOpen)`
+         in <script setup> — NOT through a template binding. The watcher
+         queries `rootEl > ui5-dialog` and writes `.open` on the element,
+         which UI5 v2.x's reactive observer reads. The `close` event still
+         fires when UI5 flips open=false (Esc / backdrop / explicit set),
+         so we wire @close → closeDialog for that path too. -->
     <ui5-dialog
-      :open="dialogOpen"
       header-text="Reset progress?"
       @close="closeDialog"
     >
