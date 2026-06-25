@@ -12,9 +12,12 @@
 //   EMAIL_INVALID   — fails RFC-5322 shape check
 //   EMAIL_TOO_LONG  — exceeds 254 chars (max per RFC-5321)
 //
-// Normalization: trim, then lowercase. Lowercased writes are consistent
-// with srv/lib/resolve-db-user.js#backfillUserProfile — both paths
-// produce the same shape for the Users.email column.
+// Normalization: trim, then lowercase. Note: the JWT-backfill path at
+// srv/lib/resolve-db-user.js#backfillUserProfile writes the email claim
+// verbatim (no case folding) — admin-entered values flow through this
+// helper and get canonicalized; JIT-backfilled values do not. This is
+// intentional: admin writes are the authoritative shape; JWT writes
+// only fire when the column is null.
 
 // Pragmatic RFC-5322 shape — same posture as srv/lib/feedback-salt.js etc.
 // Requires: local@domain.tld with TLD length >= 2.
