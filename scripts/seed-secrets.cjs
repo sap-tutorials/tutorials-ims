@@ -58,6 +58,42 @@ const INITIAL_SECRETS = [
     rotationDocsUrl: '',
     expiresAt: null,
   },
+  // SMTP transport config — moved from mtaext env vars into credstore so all
+  // five SMTP fields live in one place. Admin UI becomes the sole source of
+  // truth; no redeploy needed to rotate the relay host/user/from-address.
+  // See docs/superpowers/plans/<dated>-credstore-runtime-config.md.
+  {
+    key: 'SMTP_HOST',
+    description: 'SMTP relay hostname for outbound contributor-notifications mail (e.g. smtpauth.mail.net.sap). Read at runtime by srv/lib/mail-client.js via the shared secret-resolver.',
+    kind: 'smtp-config',
+    rotationOwner: 'thomas.jung@sap.com',
+    rotationDocsUrl: '',
+    expiresAt: null,
+  },
+  {
+    key: 'SMTP_PORT',
+    description: 'SMTP relay port for outbound contributor-notifications mail. Typical values: 587 (submission, STARTTLS) or 465 (implicit TLS). Read at runtime by srv/lib/mail-client.js; defaults to 587 if unset or non-numeric.',
+    kind: 'smtp-config',
+    rotationOwner: 'thomas.jung@sap.com',
+    rotationDocsUrl: '',
+    expiresAt: null,
+  },
+  {
+    key: 'SMTP_USER',
+    description: 'SMTP relay username (authentication identity) for outbound contributor-notifications mail. Paired with SMTP_PASS. Read at runtime by srv/lib/mail-client.js.',
+    kind: 'smtp-config',
+    rotationOwner: 'thomas.jung@sap.com',
+    rotationDocsUrl: '',
+    expiresAt: null,
+  },
+  {
+    key: 'SMTP_FROM',
+    description: 'From-address used on outbound contributor-notifications mail (e.g. developers@sap.com). Must be an address the SMTP relay authorizes the SMTP_USER to send as. Read at runtime by srv/lib/mail-client.js.',
+    kind: 'smtp-config',
+    rotationOwner: 'thomas.jung@sap.com',
+    rotationDocsUrl: '',
+    expiresAt: null,
+  },
   {
     key: 'TUTORIALS_GITHUB_TOKEN',
     description: 'GitHub PAT for CI tutorial-fetcher (CI-only — not consumed by tutorials-srv). Tracked here for rotation/expiry visibility only.',
