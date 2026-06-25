@@ -29,7 +29,7 @@ There is no current way to ship Advocates between subaccounts. The existing migr
 Four tables in [db/advocates.cds](../../../db/advocates.cds):
 
 | Table | Key | Notes |
-|---|---|---|
+| --- | --- | --- |
 | `Advocates` | `ID` (UUID), `slug` unique | Parent. `user` association FK to `ims.Users`; `@assert.unique.user` enforces 1:1 |
 | `AdvocateTopics` | `ID` (UUID) | Child — `advocate` + `tag` FKs |
 | `AdvocateLinks` | `ID` (UUID) | Child — `advocate` FK, kind enum + url + label + sortOrder |
@@ -182,7 +182,7 @@ The replace-not-merge semantics for topics/links/photo make the import safely re
 
 End-of-run summary printed to stdout:
 
-```
+```text
 [advocates-import] Imported 42 advocates: 38 updated, 4 inserted
 [advocates-import] FK resolution: 40 users matched, 2 NULLed
                    (john.doe@sap.com, jane.smith@sap.com)
@@ -201,7 +201,6 @@ Per-row WARN logs go to stdout as encountered, not buffered. Errors throw and ab
 - **Target `Users` has two rows with the same email (case-insensitive collision)**: pick the first by `createdAt` ASC, log a warning. Should never happen — `Users.email` is `@assert.unique`.
 - **Target `Tags` has the same slug twice**: same fallback. `Tags.slug` is also unique-asserted; only the data-migration scripts that pre-date `@assert.unique` could produce this.
 - **`photo256` or `photo64` corrupt / not valid base64**: `Buffer.from(..., 'base64')` is forgiving (no throw on invalid chars), but `sha256` won't match. We do NOT re-verify sha256 on import — that's a separate concern; trust the export.
-- **CAP after-handlers running anyway?** They listen on service-level events (READ/CREATE/UPDATE on `AuthorService.Advocates`). Raw `cds.db.run()` against entity-level CQN bypasses them — that's the design and is well-trodden in `migrate-reference-data.js`.
 - **`@assert.unique.user` violation in target**: only possible if the exported set has the same `userEmail` twice. Pre-check at export time and refuse (`Two advocates have the same userEmail in source DB`), since the violation would be silent (UPDATE wouldn't fire it, INSERT would). Note that multiple advocates with `userEmail = null` are fine: HANA's UNIQUE on a nullable column treats NULLs as distinct (the schema comment at [db/advocates.cds:46-48](../../../db/advocates.cds#L46) calls this out), so any number of unlinked advocates coexist.
 
 ## How to use
