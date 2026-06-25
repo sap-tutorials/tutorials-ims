@@ -45,7 +45,7 @@ Joule narration: confirmed to ignore overrides; chat from the unmodified URL (th
 
 Curator + an admin work together to flip the master flag:
 
-1. Admin sets `ChatSettings.branchingEnabled = true` via `/admin-ui/#chatsettings-display` (DEV first, then PROD).
+1. Admin sets `ChatSettings.branchingEnabled = true` via `/admin-ui/#joule` (the **Tutorial Branching Pilot** panel in the Joule Chat Settings tile) — DEV first, then PROD.
 2. Curator monitors `/admin/analytics/AnalyticsBranchPerformance` (the [Branch Performance section in the Missions ObjectPage](./reading-branch-telemetry.md) — PR 5 surface) for the pilot mission's branch points.
 3. Curator watches for `branch-staleness` lint notices in the next `tutorial-markdown` lint run (PR 5 also added this lint rule).
 

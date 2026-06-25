@@ -3,6 +3,7 @@
   "sap.app": {
     "id": "sap.tutorials.admin.tutorials",
     "type": "application",
+    "i18n": "i18n/i18n.properties",
     "title": "Tutorials",
     "description": "View Tutorials",
     "applicationVersion": { "version": "0.0.1" },
@@ -38,6 +39,12 @@
           "operationMode": "Server",
           "autoExpandSelect": true,
           "earlyRequests": true
+        }
+      },
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": {
+          "bundleName": "sap.tutorials.admin.tutorials.i18n.i18n"
         }
       }
     },
@@ -86,9 +93,30 @@
                       "text": "Ask Joule for tutorial improvement suggestions"
                     }
                   }
+                },
+                "body": {
+                  "sections": {
+                    "SourceMarkdown": {
+                      "template": "sap.tutorials.admin.tutorials.ext.SourceMarkdownSection",
+                      "position": {
+                        "placement": "After",
+                        "anchor": "ContributorsFacet"
+                      },
+                      "title": "Source Markdown"
+                    }
+                  }
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "extends": {
+      "extensions": {
+        "sap.ui.controllerExtensions": {
+          "sap.fe.templates.ObjectPage.ObjectPageController": {
+            "controllerName": "sap.tutorials.admin.tutorials.ext.SourceMarkdownHandler"
           }
         }
       }

@@ -14,6 +14,11 @@ using from '../app/admin-annotations';
 service AdminService {
 
   // Full CRUD entity projections
+  // @cds.search declares searchable elements for OData $search → HANA
+  // CONTAINS. Wired through to the searchable Users value-help on
+  // Tutorials.author (see app/admin-annotations.cds). Spec
+  // 2026-06-24-tutorial-authorship-fk.
+  @cds.search: { displayName, firstName, lastName, email, sapId }
   entity Users as projection on ims.Users;
   @cds.redirection.target: true
   @Capabilities.ChangeTracking : { Supported: true }
@@ -22,7 +27,31 @@ service AdminService {
     cast(legacyId as String) as legacyIdStr : String,
     meta            : Association to TutorialMeta             on meta.tutorial.ID           = ID,
     feedbackSummary : Association to TutorialFeedbackAggregate on feedbackSummary.tutorialSlug = slug,
-    feedbackItems   : Association to many TutorialFeedback     on feedbackItems.tutorialSlug   = slug
+    feedbackItems   : Association to many TutorialFeedback     on feedbackItems.tutorialSlug   = slug,
+    // PR-3 of spec 2026-06-24-tutorials-admin-tile-expansion-design.
+    // Inverse associations so the Tutorials admin OP can render per-tutorial
+    // facets for validation specs, code-check specs, AI authoring requests,
+    // and aggregated completion stats. Each projects a target entity
+    // already exposed on AdminService (or a new view, for stats).
+    // Specs use the existing tutorial Association FK; submissions and stats
+    // join by slug because they predate the FK pattern.
+    validationSpecs       : Association to many ValidateAnswerSpecs        on validationSpecs.tutorial = $self,
+    validationSubmissions : Association to many ValidateAnswerSubmissions  on validationSubmissions.tutorialSlug = slug,
+    codeCheckSpecs        : Association to many CodeCheckSpecs             on codeCheckSpecs.tutorial = $self,
+    codeCheckSubmissions  : Association to many CodeCheckSubmissions       on codeCheckSubmissions.tutorialSlug = slug,
+    aiRequests            : Association to many AuthorAiRequests           on aiRequests.tutorial = $self,
+    completionStats       : Association to TutorialCompletionStats         on completionStats.tutorialSlug = slug,
+    // Read-only flattened User fields for the new Tutorials.author FK
+    // (spec 2026-06-24-tutorial-authorship-fk). Admin UI gets labeled
+    // cells without needing $expand; OData consumers see plain columns.
+    // Writes are silently no-op (derived via path expression through
+    // the nullable `author` association — null author_ID → null
+    // flattened columns, the desired blank-cell behavior).
+    author.email       as authorEmail       : String @Common.FieldControl: #ReadOnly,
+    author.sapId       as authorSapId       : String @Common.FieldControl: #ReadOnly,
+    author.displayName as authorDisplayName : String @Common.FieldControl: #ReadOnly,
+    author.firstName   as authorFirstName   : String @Common.FieldControl: #ReadOnly,
+    author.lastName    as authorLastName    : String @Common.FieldControl: #ReadOnly
   };
   // Filtered picklist for redirectTo value help — only ACTIVE tutorials can be redirect targets
   @readonly
@@ -99,12 +128,34 @@ service AdminService {
   @readonly
   entity EventRegistrations as projection on ims.EventRegistrations;
 
+  // PR-3 of spec 2026-06-24-tutorials-admin-tile-expansion-design.
+  // Read-only projections of validation, code-check, and AI-author
+  // entities so the Tutorials admin Object Page can render per-tutorial
+  // facets (driven by inverse associations defined on the Tutorials
+  // projection above). Each entity already lives on AnalyticsService
+  // for query-side aggregation; surfacing on AdminService is purely
+  // for the tile's drill-down UI.
+  @readonly entity ValidateAnswerSpecs       as projection on ims.ValidateAnswerSpecs;
+  @readonly entity ValidateAnswerSubmissions as projection on ims.ValidateAnswerSubmissions;
+  @readonly entity CodeCheckSpecs            as projection on ims.CodeCheckSpecs;
+  @readonly entity CodeCheckSubmissions      as projection on ims.CodeCheckSubmissions;
+  @readonly entity AuthorAiRequests          as projection on ims.AuthorAiRequests;
+  @readonly entity TutorialCompletionStats   as projection on ims.TutorialCompletionStats;
+
   // Code list entities for enum dropdowns (no DB table needed)
   @readonly @cds.persistence.skip entity ExperienceLevels { key code : String(255); }
   @readonly @cds.persistence.skip entity TaskStatuses     { key code : String(50); }
   @readonly @cds.persistence.skip entity MissionTypes     { key code : String(20); }
   @readonly @cds.persistence.skip entity TaskTypes        { key code : String(20); }
   @readonly @cds.persistence.skip entity AdvocateRegions  { key code : String(16); label : String(40); }
+
+  // Code list for AdvocateLinks.kind — mirrors the enum on db/advocates.cds.
+  // The two are kept in sync by hand; this list is the source of truth for
+  // the admin DDLB (rendered via @Common.ValueListWithFixedValues), and the
+  // @assert.range enum on the underlying field rejects writes that bypass
+  // the dropdown (CSV import, REST, etc.). When you add a new social-link
+  // kind, edit BOTH (this list + db/advocates.cds:AdvocateLinks.kind).
+  @readonly @cds.persistence.skip entity AdvocateLinkKinds { key code : String(32); label : String(40); }
 
   // Analytics-specific code lists (label included for human-readable dropdowns).
   // taskType differs from TaskTypes above: analytics records carry TUTORIAL,
@@ -444,4 +495,50 @@ service AdminService {
 
   @odata.singleton @requires: 'Admin'
   entity TenantSettings as projection on ims.TenantSettings;
+
+  // Read the source markdown for a single tutorial.
+  // PR-2 of spec 2026-06-24-tutorials-admin-tile-expansion-design.
+  //
+  // Returns the decompressed upstream `.md` content from
+  // ContentFiles.sourceContent, plus the persisted sourceHash and
+  // contentHash (for future correlation work). Returns null markdown
+  // if the active ContentFiles row has no sourceContent (legacy rows
+  // pre-PR #591).
+  //
+  // Drift detection (compare local-source-bytes vs remote-sourceHash)
+  // is intentionally NOT done here — local source lives in GitHub,
+  // outside the admin tile's reach. The daily content-drift workflow
+  // (.github/workflows/source-drift-check.yml) owns that comparison.
+  //
+  // Why an action instead of a virtual field: ContentFiles.sourceContent
+  // is a LargeBinary BLOB and CDS QL on HANA can't safely SELECT it
+  // alongside metadata (LOB locator expiry). The action uses raw SQL
+  // to grab the BLOB, decompresses it, and returns plain text.
+  action getTutorialSource(slug: String) returns {
+    markdown    : String;     // decompressed upstream .md text (null if not captured)
+    sourceHash  : String;     // SHA-256 of the raw upstream bytes (null for legacy rows)
+    contentHash : String;     // SHA-256 of the rendered HTML
+  };
 }
+
+// ── Rebuild-button action (issue: rebuild-button, spec: 2026-06-24-admin-tutorial-rebuild-button) ──
+// Declared via `extend service` + `extend entity ... with actions` so the
+// existing Tutorials projection at lines 20-26 stays untouched. The split
+// form is required by the CDS compiler — `entity Tutorials actions { ... }`
+// inside a single `extend service` block parses as a new entity declaration
+// and conflicts with the existing projection. Handler implementation in
+// srv/admin-service.js.
+extend service AdminService with {
+  type RebuildContentResult {
+    dispatched : Boolean;
+    slug       : String;
+    debounced  : Boolean;
+    workflowUrl: String;
+  };
+}
+
+extend entity AdminService.Tutorials with actions {
+  @Core.OperationAvailable: true
+  @Common.IsActionCritical : true
+  action rebuildContent() returns AdminService.RebuildContentResult;
+};

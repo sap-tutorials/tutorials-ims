@@ -15,8 +15,10 @@ import * as advocateHandlers from './handlers/advocate-handlers.js';
 import { classifySeverity, daysUntil } from './jobs/secret-expiry-check.js';
 import { readSecret, writeSecret, deleteSecret } from './lib/credstore.js';
 import { invalidateSecret } from './lib/secret-resolver.js';
+import { scheduleRebuild } from './lib/rebuild-trigger.js';
 import { cleanupChangeLog } from './jobs/cleanup.js';
 import { ensureDevtoberfestActiveFlagInvariant } from './lib/devtoberfest-active-flag.js';
+import { getTutorialSource } from './lib/content-store.js';
 import { randomBytes } from 'node:crypto';
 
 /**
@@ -71,6 +73,22 @@ export default class AdminService extends cds.ApplicationService {
       { code: 'AMERICAS', label: 'Americas' },
       { code: 'EMEA',     label: 'EMEA' },
       { code: 'APJ',      label: 'APJ' },
+    ]);
+    // AdvocateLinks.kind DDLB. Keep in sync with the enum on
+    // db/advocates.cds:AdvocateLinks.kind — both are source-of-truth (the
+    // DDLB drives the admin UI, the @assert.range enum rejects out-of-band
+    // writes). Labels are display-only; the `code` is what's persisted.
+    this.on('READ', 'AdvocateLinkKinds', () => [
+      { code: 'LinkedIn',     label: 'LinkedIn'      },
+      { code: 'X',            label: 'X (Twitter)'   },
+      { code: 'Mastodon',     label: 'Mastodon'      },
+      { code: 'BlueSky',      label: 'BlueSky'       },
+      { code: 'GitHub',       label: 'GitHub'        },
+      { code: 'YouTube',      label: 'YouTube'       },
+      { code: 'Blog',         label: 'Blog'          },
+      { code: 'SapCommunity', label: 'SAP Community' },
+      { code: 'Email',        label: 'Email'         },
+      { code: 'Other',        label: 'Other'         },
     ]);
     this.on('READ', 'AnalyticsTaskTypes', () => [
       { code: 'TUTORIAL', label: 'Tutorial' },
@@ -1126,6 +1144,23 @@ export default class AdminService extends cds.ApplicationService {
       }
     });
 
+    // --- getTutorialSource(slug): admin-only source markdown read ---
+    // Custom UI5 section on the Tutorials Object Page calls this to display
+    // the upstream `.md` content + drift status. Implementation lives in
+    // srv/lib/content-store.js (uses raw HANA SQL to dodge LOB locator
+    // expiry on BLOB reads alongside metadata). Spec: PR-2 of
+    // docs/superpowers/specs/2026-06-24-tutorials-admin-tile-expansion-design.md
+    this.on('getTutorialSource', async (req) => {
+      const slug = req.data?.slug;
+      if (!slug) return req.error(400, 'slug parameter is required');
+      try {
+        return await getTutorialSource(slug);
+      } catch (err) {
+        cds.log('admin').error('getTutorialSource failed for slug=' + slug, err.message);
+        return req.error(500, 'failed to load tutorial source');
+      }
+    });
+
     // --- classifyCategories: bulk AI category assignment with job-lock ---
     this.on('classifyCategories', async (req) => {
       const { kind, ids, force } = req.data;
@@ -1427,6 +1462,44 @@ export default class AdminService extends cds.ApplicationService {
       } catch (err) {
         cds.log('admin-service').warn(`audit listener for TutorialProgressReset failed: ${err.message ?? err}`);
       }
+    });
+
+    // ── Rebuild-button action (issue: rebuild-button) ──
+    // Bound action on Tutorials. Resolves slug, audit-logs intent, dispatches
+    // a slug-targeted rebuild via scheduleRebuild's 60s debounce.
+    this.on('rebuildContent', 'Tutorials', async (req) => {
+      const tutorialId = req.params[0].ID;
+      const row = await SELECT.one
+        .from(Tutorials)
+        .columns('slug', 'title')
+        .where({ ID: tutorialId });
+      if (!row?.slug) {
+        return req.reject(400, 'Tutorial has no slug; cannot rebuild');
+      }
+
+      const userId = req.user?.id ?? 'anonymous';
+
+      // auditEvent is the closure-scoped helper at line 1234; it emits
+      // 'SecurityEvent' with { data: { action, ...rest } }. No-op when the
+      // audit-log binding is unavailable (mock-auth dev environment).
+      await auditEvent('TutorialRebuildTriggered', {
+        user: userId,
+        tutorialId,
+        slug: row.slug,
+        source: 'admin-ui:tutorial-detail',
+      });
+
+      await scheduleRebuild(`admin-ui:rebuild-button:${userId}`, {
+        mode: 'slug-targeted',
+        slug: row.slug,
+      });
+
+      return {
+        dispatched: true,
+        slug: row.slug,
+        debounced: true,
+        workflowUrl: 'https://github.com/sap-tutorials/tutorials-ims/actions/workflows/rebuild-content.yml',
+      };
     });
 
     await super.init();

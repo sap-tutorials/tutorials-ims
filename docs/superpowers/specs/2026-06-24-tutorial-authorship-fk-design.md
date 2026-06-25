@@ -1,0 +1,392 @@
+# Tutorial authorship — `Tutorials.author` FK + `TutorialContributors.user` FK + backfill
+
+**Status:** Approved (Tom Jung, 2026-06-24)
+**Spec author:** Brainstorming session 2026-06-24
+**Predecessor:** PR [#607](https://github.com/sap-tutorials/tutorials-ims/pull/607) (Advocate value-help fixes)
+**Successor (separate spec, blocked on this one):** Advocate ↔ User 1:1 self-add + Object-Page history facets
+
+## Problem
+
+There is no first-class "who authored this tutorial?" association in the schema. Authorship lives in two places, both as plain strings:
+
+- [`TutorialContributors`](../../../db/schema.cds#L327) `{ tutorial, name, email, role }` — one row per contributor per tutorial, sourced from tutorial markdown frontmatter at fetch time.
+- [`TutorialMeta`](../../../db/schema.cds#L315) `{ tutorial, owner, ownerEmail, ... }` — one row per tutorial.
+
+Neither has a foreign key to [`Users`](../../../db/schema.cds#L116). Any feature that wants to answer "which tutorials did this user author?" has to email-match on a string column — fragile, case-sensitive, and incapable of expressing "this is the primary author" cleanly.
+
+The immediate consumer is the upcoming Advocate ↔ User 1:1 feature (separate spec) which wants a read-only **Authored tutorials** facet on the Advocate Object Page. That facet needs a clean ID-to-ID join path. This spec creates the foundation; the facet ships in the follow-up spec.
+
+## Goals (in scope)
+
+- Add `Tutorials.author : Association to Users` — the **primary author** FK, single-valued. Nullable.
+- Add `TutorialContributors.user : Association to Users` — per-contributor FK, so co-authored tutorials appear in **every** contributor's "authored tutorials" list. Nullable.
+- Add inverse associations on `Users`: `authoredTutorials`, `tutorialContributions` — so consumers (notably the upcoming Object-Page facet) can navigate `user/authoredTutorials/...` instead of writing a custom join.
+- **Flatten read-only `author.*` columns** onto `AdminService.Tutorials` (and any public Tutorials projection) so API consumers and the admin UI see `authorEmail`, `authorSapId`, `authorDisplayName` etc. without `$expand`.
+- **Searchable Users value help** on `Tutorials.author` so admins can find an author by name / email / sapId — `Users` has ~1k+ rows so a fixed-values dropdown is impractical; uses `$search` with `@cds.search` on Users.
+- **Idempotent one-shot backfill script** that populates both FKs from existing data, with a dry-run-first / review-orphans / commit workflow.
+- **Auto-set on every publish** going forward, via shared resolver (`srv/lib/resolve-tutorial-author.js`) so backfill and publish never diverge.
+- **Migration runbook update** so the backfill is a documented step after every IMS user-progress import.
+- Post-deploy smoke check that fails CI if no tutorial has a non-null `author` after migration.
+
+## Non-goals (yagni)
+
+- Admin UI for editing authorship. (Future; for now, authorship is data-driven.)
+- Multi-email Users (e.g., `sap.com` and `ext.sap.com` aliases). Documented as a known limitation in the orphans report.
+- Backfill orphan auto-creation of stub Users rows — orphans stay null, logged for human review.
+- Schema changes to `TutorialMeta.owner` / `ownerEmail` — those columns stay; they're a fallback source for the backfill, not the join target.
+- Any UI change. This spec is purely schema + backfill + publish-path + runbook.
+
+## Data model
+
+### `db/schema.cds`
+
+```cds
+@assert.unique.slug: [slug]
+entity Tutorials : TaskBase {
+  // ... existing fields unchanged ...
+  redirectTo     : Association to Tutorials;
+  steps          : Composition of many Steps           on steps.tutorial = $self;
+  tags           : Association  to many TutorialTags   on tags.tutorial = $self;
+  meta           : Composition of many TutorialMeta    on meta.tutorial = $self;
+  contributors   : Composition of many TutorialContributors on contributors.tutorial = $self;
+  categories     : Composition of many TutorialCategories   on categories.tutorial = $self;
+  author         : Association to Users;   // NEW — primary author FK, nullable
+}
+
+entity TutorialContributors : cuid, LegacyKeyed {
+  tutorial : Association to Tutorials;
+  name     : String(255);
+  email    : String(255);
+  role     : String(50);
+  user     : Association to Users;         // NEW — per-contributor FK, nullable
+}
+
+entity Users : cuid, managed, LegacyKeyed {
+  // ... existing fields unchanged ...
+  // Inverse associations — used by the upcoming Advocate Object-Page
+  // facets (separate spec) and by any future "my authored tutorials"
+  // query. Adding them here so the upcoming facet ships with a clean
+  // navigation path rather than a custom CQL join.
+  authoredTutorials      : Association to many Tutorials              on authoredTutorials.author = $self;
+  tutorialContributions  : Association to many TutorialContributors   on tutorialContributions.user = $self;
+}
+```
+
+Both FKs are **nullable** by design: the schema must tolerate (a) historical tutorials whose contributor emails don't match any `Users` row, and (b) new tutorials published before their author has logged in for the first time. Nullable FKs also keep the HDI deploy purely additive — no NOT NULL constraint, no risky DEFAULT-fill.
+
+### HDI migration
+
+Both new columns are nullable additions; the CDS compile + HDI deploy regenerates the tables additively — no hand-run SQL. The shape of the resulting DDL (shown here for review purposes only, *not* for hand-execution):
+
+```sql
+-- Illustrative only — HDI deploy emits these via the regenerated .hdbtable artifacts.
+ALTER TABLE com_sap_developers_ims_Tutorials             ADD (author_ID NVARCHAR(36));
+ALTER TABLE com_sap_developers_ims_TutorialContributors  ADD (user_ID   NVARCHAR(36));
+```
+
+Both columns get the standard CAP-generated NavigationProperty + ReferentialConstraint when CDS compiles. The implementer must regenerate `db/last-dev/csn.json` (`cds compile srv/admin-service.cds --to csn -o db/last-dev/csn.json`) and commit it — there is no CI guard for CSN drift, so a stale CSN will silently desync from the live model.
+
+### Why two FKs, not one
+
+A single `Tutorials.author` is enough for the most-common query ("show me the primary author") but cannot answer "show me every tutorial Alice contributed to" without joining through `TutorialContributors` and email-matching anyway — i.e., the exact problem this spec is trying to solve. Conversely, only adding `TutorialContributors.user` forces the OP facet to do a more expensive distinct-on-tutorial-via-contributor query for every render.
+
+Two FKs give us both:
+
+- `WHERE Tutorials.author_ID = ?` → the fast "primary author" path (4 rows for Tom, today).
+- `WHERE TutorialContributors.user_ID = ?` → the "contributed in any role" path (might be 40 rows).
+
+The OP can show both as separate facets ("Authored" vs "Contributed to") in the follow-up spec.
+
+## Surfacing User fields read-only on Tutorials
+
+The new `Tutorials.author` FK is more useful if API consumers can read the author's `email` / `sapId` / `displayName` directly, without having to issue an `$expand=author` round-trip. Two changes:
+
+### Projection — flatten `author.*` as read-only scalars
+
+In `srv/admin-service.cds`, extend the existing `Tutorials` projection:
+
+```cds
+@cds.redirection.target: true
+@Capabilities.ChangeTracking : { Supported: true }
+entity Tutorials as projection on ims.Tutorials {
+  *,
+  cast(legacyId as String) as legacyIdStr : String,
+  // existing projections unchanged ...
+  // NEW — read-only flattened User fields. Admin UI gets labeled cells
+  // without needing $expand; OData consumers see plain columns. Writes
+  // are silently no-op (derived columns).
+  author.email       as authorEmail       @Common.FieldControl: #ReadOnly,
+  author.sapId       as authorSapId       @Common.FieldControl: #ReadOnly,
+  author.displayName as authorDisplayName @Common.FieldControl: #ReadOnly,
+  author.firstName   as authorFirstName   @Common.FieldControl: #ReadOnly,
+  author.lastName    as authorLastName    @Common.FieldControl: #ReadOnly
+};
+```
+
+The same flattening is added to any public projection that exposes Tutorials (e.g., the `/api/` developer-service projection if it surfaces tutorial metadata — implementer checks during the plan phase). Goal: a `GET /admin/Tutorials?$top=1` response includes `authorEmail` as a top-level field.
+
+### Admin-UI value help — searchable Users picker
+
+`Users` is already projected on AdminService (`srv/admin-service.cds:17`), so the value-help target exists. With ~1k+ rows we need a **search-enabled** value help, not a fixed-values dropdown. Annotation in `app/admin-annotations.cds`:
+
+```cds
+annotate AdminService.Tutorials with {
+  author @Common.Label: 'Author'
+         @Common.Text: author.displayName
+         @Common.TextArrangement: #TextOnly
+         @Common.ValueList: {
+           CollectionPath: 'Users',
+           SearchSupported: true,
+           Parameters: [
+             { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: author_ID, ValueListProperty: 'ID' },
+             { $Type: 'Common.ValueListParameterDisplayOnly',                               ValueListProperty: 'displayName' },
+             { $Type: 'Common.ValueListParameterDisplayOnly',                               ValueListProperty: 'email' },
+             { $Type: 'Common.ValueListParameterDisplayOnly',                               ValueListProperty: 'sapId' }
+           ]
+         };
+};
+```
+
+Two things make this work for a large `Users` table:
+
+- `SearchSupported: true` tells the FE V4 value-help dialog to issue `?$search=…` queries instead of loading everything. CAP's OData layer translates `$search` to a `CONTAINS` across all searchable columns.
+- The value help renders three columns (displayName, email, sapId) so admins can type "tom" → see "Thomas Jung / tom.jung@sap.com / I809764" → pick — solving the original "lots of users, need to search by name or email" requirement.
+
+`@Common.Text: author.displayName` makes the *display* of the picked author resolve to a human name (via the same Feb 2025 association-FK propagation that PR #607 exercised — annotations on the association copy onto the FK). So `LineItem` can bind `author_ID` (or `author`) and FE V4 renders "Thomas Jung", not the GUID.
+
+**FK-annotation propagation caveat:** `app/admin-annotations.cds:1683-1695` documents a pitfall — for `AdvocateTopics` (which is a projection from a composition aspect), annotations on the `tag` association did NOT propagate to the generated `tag_ID` FK, and a second `annotate ... { tag_ID @... }` block was rejected with `Element "tag_ID" has not been found`. PR #607's fix was to bind LineItem to `tag_ID` and rely on the (then-working) Feb 2025 association-propagation. The implementer should verify in the emitted EDMX (`npx cds compile srv/admin-service.cds --to edmx`) that `AdminService.Tutorials/author_ID` carries the propagated `@Common.Text` + `@Common.ValueList`. `Tutorials` is a **direct** projection on `ims.Tutorials` (not a projection-from-aspect like AdvocateTopics), so propagation should work — but the EDMX inspection is the proof, identical to what PR #607 did.
+
+### Path-through-nullable-FK behavior
+
+The flattened columns are path expressions through `author` — a nullable association. When `Tutorials.author_ID` is null (every tutorial whose author couldn't be matched during backfill), every flattened column (`authorEmail`, `authorSapId`, etc.) is null too. That's the desired behavior — admins see blank cells, not errors — and matches how every other association-path expression in this codebase behaves. No compile warning expected; the implementer should still smoke-check the first cold deploy that nullable rows don't trigger any 500-class errors on the OData feed.
+
+### `$search` requires entity searchable fields
+
+CAP's `$search` requires fields to be declared searchable via `@cds.search` (the canonical CAP annotation; `@Search.defaultSearchElement` is a different OData-vocabulary term used in legacy contexts). Add to `srv/admin-service.cds` on the `Users` projection:
+
+```cds
+@cds.search: { displayName, firstName, lastName, email, sapId }
+entity Users as projection on ims.Users;
+```
+
+This makes a query like `GET /admin/Users?$search=jung` match rows where any of those columns contain "jung" (case-insensitive on HANA). The FE V4 value-help dialog wires its search box to that.
+
+### Tests
+
+Extend `test/admin-annotations.test.js` (already touched by PR #607) with three assertions:
+
+1. `AdminService.Tutorials/author` has a `ValueList` targeting `Users` with `SearchSupported="true"` in `$metadata`.
+2. **FK propagation:** `AdminService.Tutorials/author_ID` carries `@Common.Text` and `@Common.ValueList` in the emitted EDMX (catches a future regression of the Feb 2025 association-propagation behavior).
+3. `GET /admin/Users?$search=__TEST__authorSeed` returns the seeded user (hybrid test, depends on `@cds.search` actually wiring through to the HANA `CONTAINS` clause).
+
+Plus one smoke assertion: `GET /admin/Tutorials?$top=1&$filter=author_ID ne null` returns a row whose `authorEmail` is non-null (i.e., the flattening works at the live HTTP surface). Note: this assertion can only pass **after** the migration runbook's backfill step has run — sequence the smoke run accordingly.
+
+## Backfill script — `scripts/backfill-tutorial-authors.cjs`
+
+CommonJS, follows the pattern set by [`scripts/setup-dev-data.cjs`](../../../scripts/setup-dev-data.cjs) and [`scripts/merge-duplicate-slugs.cjs`](../../../scripts/merge-duplicate-slugs.cjs): dry-run by default, `--commit` to actually write, writes a JSON report to `.migration-data/`.
+
+### CLI
+
+```bash
+# Dry run — computes everything, writes report, zero writes
+npx cds bind --exec -- node scripts/backfill-tutorial-authors.cjs
+
+# Commit
+npx cds bind --exec -- node scripts/backfill-tutorial-authors.cjs --commit
+
+# Per-phase (debugging)
+npx cds bind --exec -- node scripts/backfill-tutorial-authors.cjs --phase=contributors --commit
+npx cds bind --exec -- node scripts/backfill-tutorial-authors.cjs --phase=tutorials   --commit
+```
+
+### Phases
+
+1. **Build email→user map** — `SELECT ID, LOWER(TRIM(email)) AS email FROM Users WHERE email IS NOT NULL` → in-memory `Map<lowerEmail, userId>`. ~1k entries today; ~50 KB. Cached for the lifetime of the script invocation.
+2. **Phase A — `TutorialContributors.user_ID`** — for every contributor row where `user_ID IS NULL AND email IS NOT NULL`, look up `LOWER(TRIM(email))` in the map. Hit → `UPDATE TutorialContributors SET user_ID = ? WHERE ID = ?`. Miss → push to `orphans_contributors`.
+3. **Phase B — `Tutorials.author_ID`** — for every tutorial where `author_ID IS NULL`:
+    a. Prefer `TutorialContributors` rows on this tutorial with `LOWER(role) IN ('author','owner')`, ordered by created-at (stable first-match).
+    b. Fallback: first contributor row on this tutorial (any role).
+    c. Fallback 2: `TutorialMeta.ownerEmail` for this tutorial.
+    Try (a), (b), (c) in order; first email that hits the map wins. Hit → `UPDATE Tutorials SET author_ID = ?`. All-miss → push to `orphans_tutorials` with the slug, the candidate emails tried, and which fallback level produced each.
+4. **Write report** — `.migration-data/tutorial-author-backfill-<ISO-timestamp>.json`:
+
+    ```json
+    {
+      "ranAt": "2026-06-24T13:50:00Z",
+      "committed": true,
+      "summary": {
+        "users_indexed": 1042,
+        "contributors_matched": 187,
+        "contributors_orphaned": 23,
+        "tutorials_matched": 156,
+        "tutorials_orphaned": 12
+      },
+      "warnings": [
+        { "kind": "duplicate_user_email", "email": "x@y.z", "userIds": ["…", "…"], "picked": "…" }
+      ],
+      "orphans_contributors": [
+        { "id": "…", "tutorialSlug": "…", "name": "…", "email": "…", "role": "author" }
+      ],
+      "orphans_tutorials": [
+        { "slug": "…", "candidatesTried": [
+            { "level": "contributor:author", "email": "x@y.z" },
+            { "level": "contributor:any",    "email": "a@b.c" },
+            { "level": "meta:ownerEmail",    "email": "p@q.r" }
+          ]
+        }
+      ]
+    }
+    ```
+
+### Idempotence
+
+Both UPDATEs are gated by `WHERE … IS NULL` predicates. Re-running with no schema changes produces zero updates. Re-running after new `Users` rows arrive (e.g., a fresh IMS user-progress migration batch) backfills exactly the rows the previous run skipped.
+
+### Manual-edit safety
+
+The backfill **never overwrites a non-null FK**. If an admin (in a future spec) corrects a tutorial's author via the admin UI, the backfill will not undo it.
+
+### Performance
+
+Single email→user map fetch + one `SELECT` of contributors and one of tutorials. With ~1.4k tutorials and a typical ~3-5 contributors each, the script runs in well under 30 s against DEV HANA — bounded by the count of UPDATEs, not by the join shape. No SQL functions involved beyond `LOWER`/`TRIM` at index time.
+
+## Shared resolver — `srv/lib/resolve-tutorial-author.js`
+
+Single pure function. Same input shape, same output, used by both backfill and publish — guarantees they cannot diverge.
+
+```js
+/**
+ * @param {object} input
+ * @param {Array<{email: string, role: string}>} input.contributors
+ *        Contributor rows for this tutorial (in publish order).
+ * @param {string|null} input.ownerEmail
+ *        TutorialMeta.ownerEmail for this tutorial (or null).
+ * @param {Map<string, string>} input.emailToUserId
+ *        LOWER(TRIM(email)) → Users.ID. Built once per run.
+ * @returns {{
+ *   authorUserId: string|null,
+ *   contributorUserIds: Array<{ contributorIndex: number, userId: string }>,
+ *   orphans: Array<{ kind: 'contributor'|'tutorial', email: string|null, reason: string }>
+ * }}
+ */
+export function resolveTutorialAuthor({ contributors, ownerEmail, emailToUserId }) { … }
+```
+
+Pure, no I/O, no DB. The caller is responsible for providing `emailToUserId` and persisting the result.
+
+## Publish-path integration
+
+[`srv/lib/content-publish-session.js`](../../../srv/lib/content-publish-session.js) already has an `upsertTutorialMetadata` step where it writes `TutorialMeta`. Add a sibling step `linkTutorialAuthorship` that:
+
+1. Builds the `emailToUserId` map **once per publish session** (cached on the session, not per slug).
+2. For each tutorial in the payload, calls `resolveTutorialAuthor()`.
+3. UPSERT `Tutorials.author_ID` (only if currently null — preserves manual corrections).
+4. UPSERT `TutorialContributors.user_ID` (only if currently null) for each row.
+
+Failure mode: any error in `linkTutorialAuthorship` is logged and **swallowed**. Content publishing must not fail because of an authorship-resolution glitch. The next publish or a manual `npm run migrate:authors` run recovers it.
+
+## Tests
+
+### Unit — `test/unit/resolve-tutorial-author.test.js` (new)
+
+Pure-function tests on `resolveTutorialAuthor()`, no DB. Covers:
+
+- Single contributor, role `author`, email in map → that user is `authorUserId`.
+- Multiple contributors, only one with role `author` → that one wins.
+- Multiple `author` roles → stable first match (lowest contributorIndex).
+- No role-match, falls through to "first contributor (any role)".
+- No contributors at all → falls through to `ownerEmail`.
+- Nothing matches → `authorUserId` null, all candidate emails reported as orphans.
+- Case-insensitive (`Tom.Jung@SAP.com` ↔ `tom.jung@sap.com`).
+- Whitespace trim (`"  tom@sap.com  "` matches `"tom@sap.com"`).
+- Empty contributors array — no throw.
+- Map miss never throws.
+
+### Hybrid — `test/hybrid/tutorial-author-backfill.test.js` (new)
+
+Three test cases exercising the **real HANA** pipeline. All writes gated by `ALLOW_HYBRID_WRITES=true`; all rows prefixed `__TEST__`; cleaned in `afterAll`.
+
+1. **Idempotency:** seed one tutorial + one contributor + one `Users` row whose email matches; run the backfill twice with `--commit`; assert the second run reports zero updates.
+2. **Inverse association works:** after seed + backfill, `SELECT * FROM Users` with `expand: { authoredTutorials: { ID, slug } }` returns the seeded tutorial. This is the exact join the Spec-2 OP facet will use — if it doesn't work here, it won't work there.
+3. **Publish-time auto-set:** seed a contributor + matching `Users` row, run `content-publish-session.publishTutorial(slug, html)` (the live publish path), assert `Tutorials.author_ID` ends up populated.
+
+### Smoke — `test/smoke/tutorial-author-fk.smoke.test.js` (new)
+
+A single post-deploy assertion: `GET /admin/Tutorials?$top=5&$expand=author($select=email)&$filter=author_ID ne null` returns at least one row. If migration was forgotten entirely, this fails the post-deploy gate.
+
+## Operations / runbook
+
+### `docs/developers/operations/migration-from-ims.md` (edit)
+
+Append a new step **after** `## Step 2 — User progress`. Since `## Step 3` is the alternate HANA-to-HANA path, the new step becomes `## Step 4 — Backfill tutorial authorship`:
+
+> ### Step N — Backfill tutorial authorship
+>
+> After `migrate-user-progress.js` succeeds, the `Users` table is populated. Run the authorship backfill so existing tutorials and contributors get linked to user rows:
+>
+> ```bash
+> # Dry run — review the orphans report at .migration-data/tutorial-author-backfill-<ts>.json
+> npm run migrate:authors -- --dry-run
+>
+> # Commit
+> npm run migrate:authors
+> ```
+>
+> Re-runnable. Won't overwrite manually-corrected FKs. Orphans (contributors whose email isn't in `Users`) stay null — see the report.
+
+### `package.json` script
+
+```json
+{
+  "scripts": {
+    "migrate:authors": "cds bind --exec -- node scripts/backfill-tutorial-authors.cjs --commit"
+  }
+}
+```
+
+The default-commit shape mirrors `migrate:reference` and `migrate:users` (the existing migrators all commit by default; the script itself accepts `--dry-run` to override).
+
+### Hybrid migration-order test
+
+`test/hybrid/migration-runbook-order.test.js` (new — or amend the existing migrate-from-hana test) seeds the pre-state, runs `migrate-user-progress.js --commit` then `backfill-tutorial-authors.cjs --commit`, and asserts the final FK population matches expectations. This pins the **order** as well as the result — if a future refactor reorders the runbook, this test fails.
+
+### MEMORY pointer
+
+One line added to `MEMORY.md` under "Migration / QA / publish":
+
+```text
+- [Tutorial author backfill is a migration step](feedback_tutorial_author_backfill_runs_after_user_migration.md) — npm run migrate:authors after migrate:users; logs orphans
+```
+
+The body of that memory points back to the runbook section, so a future agent helping with PROD cutover sees the step in its index.
+
+## Failure modes & rollback
+
+- **HDI deploy fails on the ADD COLUMN** — extremely unlikely (both columns nullable, no constraints), but the deploy is reversible by `ALTER TABLE … DROP COLUMN` (rollback DDL committed alongside the migration). No data loss.
+- **Backfill writes wrong values** — `WHERE … IS NULL` makes every write conservative; the worst case is a wrongly-linked author, which an admin can null out manually. The orphans report captures every decision so it's auditable.
+- **Publish-path resolver throws** — caught and logged, content publish proceeds. Next publish or `npm run migrate:authors` recovers.
+- **`Users.email` collisions** — multiple Users rows with the same email shouldn't exist (`Users.email` has no uniqueness constraint today; this is a latent data-quality issue). The map-build step warns if it sees duplicates and uses the lexicographically-first ID; the orphans report includes a `warnings` section listing colliding emails so the operator can deduplicate Users first if needed.
+
+## Out-of-scope follow-ups (informational)
+
+- **Advocate ↔ User 1:1 + self-add + Object-Page history facets** — separate spec, blocked on this one. Will consume `Users.authoredTutorials` (inverse of the FK added here) for the "Authored tutorials" facet on the Advocate Object Page.
+- **Multi-email Users** — a future `Users.aliases : Composition of many UserEmailAliases` would let one user match several historical contributor emails. Not needed v1.
+- **Tutorials.author admin-UI edit** — future. Today authorship is data-driven (from frontmatter + Users matches). When admin-side correction becomes useful (e.g., reassigning ownership after a developer leaves), the existing draft-enabled Tutorials projection in `AdminService` can surface the FK with a value-help on `Users` — the FK is already there.
+
+## Acceptance checklist
+
+- [ ] `db/schema.cds` carries the three new associations (`Tutorials.author`, `TutorialContributors.user`, `Users.authoredTutorials` + `Users.tutorialContributions`).
+- [ ] `db/last-dev/csn.json` regenerated.
+- [ ] `srv/admin-service.cds` flattens `author.email` / `author.sapId` / `author.displayName` / `author.firstName` / `author.lastName` as read-only columns on the Tutorials projection. `Users` projection carries `@cds.search`.
+- [ ] `app/admin-annotations.cds` annotates `Tutorials.author` with a searchable `Users` value help (`SearchSupported: true`, three display columns).
+- [ ] `scripts/backfill-tutorial-authors.cjs` exists, runs idempotently, writes the orphans report.
+- [ ] `srv/lib/resolve-tutorial-author.js` exports the pure resolver.
+- [ ] `srv/lib/content-publish-session.js` calls the resolver in a try/catch and never lets publish fail because of it.
+- [ ] `npm run migrate:authors` works.
+- [ ] `docs/developers/operations/migration-from-ims.md` documents the new step.
+- [ ] `MEMORY.md` carries the cross-link.
+- [ ] Unit tests pass (`test/unit/resolve-tutorial-author.test.js`).
+- [ ] Hybrid tests pass (`test/hybrid/tutorial-author-backfill.test.js`, `test/hybrid/migration-runbook-order.test.js`).
+- [ ] Smoke test guards post-deploy (`test/smoke/tutorial-author-fk.smoke.test.js`) — covers both the FK population AND the read-only flattened columns.
+- [ ] Admin-annotations regression test asserts `Tutorials/author` ValueList shape + `Users` `$search` works.
+- [ ] No regressions in `test/admin-annotations.test.js`, `test/admin-service.test.js`, `test/admin-drafts.test.js`, `test/admin-schema-ext.test.js`.

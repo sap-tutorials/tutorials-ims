@@ -45,6 +45,17 @@ npm run publish-content -- --verify-only  # Compare local hashes to server; exit
 npm run publish-content -- --heal       # Upload only slugs missing or hash-mismatched on the server
 npm run publish-content -- --dry-run    # Preview without uploading
 
+# Rebuild content workflow (one-tutorial hotfix republish — ~2 min wall-clock)
+# Auto-infers mode=slug-targeted from the slug input; no -f mode= needed.
+gh workflow run rebuild-content.yml --repo sap-tutorials/tutorials-ims --ref main \
+  -f slug=tutorial-platform-feature-cookbook
+# Multiple slugs (union with single-slug if both set):
+gh workflow run rebuild-content.yml --repo sap-tutorials/tutorials-ims --ref main \
+  -f slugs="foo,bar,baz"
+# Full rebuild (only when dependencies/Vue/admin changed — ~10 min):
+gh workflow run rebuild-content.yml --repo sap-tutorials/tutorials-ims --ref main \
+  -f mode=full
+
 # QA channel (author preview)
 npm run fetch-tutorials:qa     # fetch from -Contribution repos only (cache: .tutorial-cache-qa/)
 npm run build:qa               # Hugo build with QA flag, post-build verify
@@ -196,7 +207,7 @@ Set `IMS_BASE_URL`, `CAP_BASE_URL`, and `IMS_AUTH_TOKEN` env vars. Export files 
 ### CI/CD (.github/workflows/)
 
 - **`deploy.yml`** — Full MTA build + deploy to BTP Cloud Foundry, followed by smoke tests
-- **`rebuild-content.yml`** — Re-fetches tutorials, rebuilds Hugo, and publishes content to HANA (triggered manually or on tutorial source changes). Authors can force-refresh a single tutorial via the optional `slug` input, OR a comma-separated list via the `slugs` input (#433) — the fetch step honors `TUTORIAL_SLUG` + `TUTORIAL_SLUGS` env vars, busts those slugs' markdown caches, regenerates the rest from cache, and skips the HANA `RepoCatalog` upload so the partial run doesn't overwrite the catalog. If both `slug` and `slugs` are set, the union is used. Leave both blank for a full rebuild.
+- **`rebuild-content.yml`** — Re-fetches tutorials, rebuilds Hugo, and publishes content to HANA. Three scopes (`mode` input): `catalog-only` (~1 min, admin Mission/Group/etc. saves — auto-classified), `slug-targeted` (~2 min, one-tutorial fix — auto-inferred when `slug` / `slugs` set), `full` (~10 min, full catalog). Manual `gh workflow run -f slug=<slug>` auto-infers `slug-targeted` (since #610) — no need to pass `-f mode=slug-targeted`. Admin writes auto-classify per entity via [srv/lib/_classify-rebuild-mode.js](srv/lib/_classify-rebuild-mode.js). Full runbook: [docs/developers/operations/rebuild-content-workflow.md](docs/developers/operations/rebuild-content-workflow.md).
 - **`rebuild-content-qa.yml`** — QA-channel sibling of `rebuild-content.yml`; sources only `*-Contribution` repos and publishes to the `tutorials-srv-qa` srv via `CONTENT_API_KEY_QA`.
 - **`docs-deploy.yml`** — Builds the VitePress docs site (`npm run docs:build`) and deploys to GitHub Pages at <https://sap-tutorials.github.io/tutorials-ims/>.
 - **`schema-drift-check.yml`** — Compares the prod and QA HDI artefacts to catch unintended schema divergence; narrowed to `JobLocks` after the shared-aspects refactor (PR #52).
@@ -276,6 +287,7 @@ One-time setup for the QA author-preview channel — full procedure (CI secrets,
 - **Hugo vs VitePress** — The project migrated from VitePress to Hugo. The `site/.vitepress/` directory still exists (with a built `dist/`) but is legacy. Active frontend work targets `hugo/`.
 - **`CONTENT_API_KEY` env var** — Required for `POST /content/publish` and `POST /content/rollback`. Set in CI secrets and locally when testing publish. Without it, publish requests return 401.
 - **`GITHUB_DISPATCH_TOKEN` env var** — Read by `srv/lib/rebuild-trigger.js`; admin saves debounce-dispatch `rebuild-content.yml` after 60s when set. Sourced from the `DISPATCH_TOKEN` GitHub Actions secret (named `DISPATCH_TOKEN`, **not** `GITHUB_DISPATCH_TOKEN` — GitHub reserves the `GITHUB_` prefix for secret names). All four mtaext placeholders (`${CONTENT_API_KEY}`, `${REBUILD_API_KEY}`, `${APPROUTER_URL}`, `${GITHUB_DISPATCH_TOKEN}`) are resolved at deploy time by `envsubst` writing `deploy/<env>.resolved.mtaext`, which `cf deploy -e` then consumes. The `cf deploy --var` flag is **not** supported by the multiapps-cli-plugin — see #455. **Local manual deploy** (Git Bash on Windows or any *nix): `export GITHUB_DISPATCH_TOKEN=<PAT>` (plus the other three for qa/prod), `envsubst '$CONTENT_API_KEY $REBUILD_API_KEY $APPROUTER_URL $GITHUB_DISPATCH_TOKEN' < deploy/dev.mtaext > deploy/dev.resolved.mtaext`, then `cd .deploy && cf deploy mta_archives/*.mtar -e ../deploy/dev.resolved.mtaext -f`. The grep guard in CI's "Resolve mtaext placeholders" step fails the workflow loudly if any placeholder survives (typo or missing env var). Rotation runbook: [docs/developers/operations/github-dispatch-pat-rotation.md](docs/developers/operations/github-dispatch-pat-rotation.md).
+- **`rebuild-content.yml` mode auto-infer** — Manual `gh workflow run rebuild-content.yml -f slug=X` auto-infers `mode=slug-targeted` when `inputs.mode` is left at the default `full` AND a slug input is set (since #610). Don't add `-f mode=slug-targeted` — leave mode off entirely and let the workflow's `Determine effective rebuild mode` step resolve it. The `::notice::` annotation at the top of the run UI shows the resolved mode + reason. The auto-infer is `workflow_dispatch`-only — the `repository_dispatch` path (admin auto-trigger) is never overridden because the admin classifier in `srv/lib/_classify-rebuild-mode.js` is authoritative. Measured wall-clock by mode (2026-06-24, runs against `main` post-#615): `catalog-only` ~1 min, `slug-targeted` ~2 min, `full` ~10 min. Full runbook: [docs/developers/operations/rebuild-content-workflow.md](docs/developers/operations/rebuild-content-workflow.md).
 - **`SUBMISSION_SALT_SECRET` env var** — Required by `srv/lib/feedback-salt.js` for hashing submitter IPs on `POST /feedback/submit`. The Express bridge returns 503 if missing. Set in CI secrets and locally when testing the feedback form. Rotation invalidates in-memory rate-limit keys (acceptable).
 - **Tutorials are DB-only** — Tutorial HTML is served exclusively from HANA BLOBs. There is no static file fallback. If no content has been published to HANA, `/tutorials/*` returns 404.
 - **Content garbage collection** — A daily cron job (03:00) prunes `SUPERSEDED`/`ROLLED_BACK` content versions older than 7 days, keeping the 3 most recent for rollback. Never touches `ACTIVE` or `PUBLISHING` manifests.

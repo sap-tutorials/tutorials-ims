@@ -42,7 +42,11 @@ const RANK = { 'catalog-only': 1, 'slug-targeted': 2, 'full': 3 };
 // entirely via x-migration-mode.
 const SLUG_ACCUMULATOR_CAP = 50;
 
-let _state = {
+// State stored on globalThis so module-singleton multiplicity (Vitest+CDS
+// on Windows) doesn't produce divergent state across instances. Same pattern
+// as srv/lib/runtime-config/tenant-settings.js:14.
+const STATE_KEY = Symbol.for('com.sap.developers.ims:rebuild-trigger-state');
+const _state = (globalThis[STATE_KEY] ??= {
   // Debounce
   debounceMs: DEFAULT_DEBOUNCE_MS,
   pendingTimer: null,
@@ -53,7 +57,7 @@ let _state = {
   pendingForceCapRefetch: false,
   // Injection point for tests. @type {DispatchFn}
   dispatchFn: defaultDispatch,
-};
+});
 
 /**
  * Resolve the GITHUB_DISPATCH_TOKEN via the shared secret-resolver
@@ -197,15 +201,16 @@ export async function checkFeatureFlag() {
 // Test-only escape hatch.
 export function _resetForTests({ dispatchFn, debounceMs, token } = {}) {
   if (_state.pendingTimer) clearTimeout(_state.pendingTimer);
-  _state = {
-    debounceMs: debounceMs ?? DEFAULT_DEBOUNCE_MS,
-    pendingTimer: null,
-    pendingReason: null,
-    pendingMode: null,
-    pendingSlugs: new Set(),
-    pendingForceCapRefetch: false,
-    dispatchFn: dispatchFn ?? defaultDispatch,
-  };
+  // Mutate the existing _state object's properties instead of reassigning,
+  // so the globalThis-backed singleton reference stays stable across module
+  // instances (see STATE_KEY comment above).
+  _state.debounceMs = debounceMs ?? DEFAULT_DEBOUNCE_MS;
+  _state.pendingTimer = null;
+  _state.pendingReason = null;
+  _state.pendingMode = null;
+  _state.pendingSlugs = new Set();
+  _state.pendingForceCapRefetch = false;
+  _state.dispatchFn = dispatchFn ?? defaultDispatch;
   // Seed (or clear) the shared resolver cache so existing tests that pass
   // `token: 'fake-token'` keep working without reaching into credstore/env.
   // Synchronous so it composes with vi.useFakeTimers() in the test suite.

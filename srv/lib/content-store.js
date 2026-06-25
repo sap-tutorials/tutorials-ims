@@ -1131,6 +1131,80 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     }
   }
 
+  // --- getTutorialSource(slug) ---
+  //
+  // Used by the admin tile's Source Markdown facet (PR-2 of spec
+  // 2026-06-24-tutorials-admin-tile-expansion-design). Returns the
+  // decompressed upstream `.md` text + the persisted sourceHash +
+  // contentHash for display. Returns null markdown for legacy rows
+  // (published before PR #591) where sourceContent wasn't captured.
+  //
+  // Note: this helper does NOT compute drift. Drift is a function of
+  // (local source bytes vs remote sourceHash) and the local source
+  // lives in GitHub, not in the admin tile's reach. The admin tile
+  // only surfaces "source captured" vs "no source captured" — drift
+  // detection itself is the job of the daily content-drift workflow
+  // (.github/workflows/source-drift-check.yml).
+  //
+  // Why raw SQL on HANA: ContentFiles.sourceContent is a LargeBinary.
+  // CDS QL on HANA returns BLOBs as locator-bound streams that expire
+  // when mixed with metadata columns in the same SELECT. Same pattern
+  // as the carry-forward read at L390 and the serve handler at L780+.
+  async function getTutorialSource(slug) {
+    if (!slug || typeof slug !== 'string') {
+      return { markdown: null, sourceHash: null, contentHash: null };
+    }
+    const lcSlug = slug.toLowerCase();
+    const activeVersion = await getActiveVersion();
+    if (activeVersion === null) {
+      return { markdown: null, sourceHash: null, contentHash: null };
+    }
+
+    const db = await cds.connect.to('db');
+    const isHana = db.kind === 'hana';
+    let row;
+    if (isHana) {
+      const rows = await db.run(
+        `SELECT TOP 1 "SOURCECONTENT", "SOURCEHASH", "CONTENTHASH"
+           FROM "${hanaTableName()}"
+          WHERE LOWER("SLUG") = ? AND "VERSION" = ?`,
+        [lcSlug, activeVersion]
+      );
+      row = rows && rows[0] ? {
+        sourceContent: rows[0].SOURCECONTENT,
+        sourceHash:    rows[0].SOURCEHASH,
+        contentHash:   rows[0].CONTENTHASH,
+      } : null;
+    } else {
+      const { ContentFiles } = cds.entities(namespace);
+      row = await SELECT.one.from(ContentFiles)
+        .where`LOWER(slug) = ${lcSlug} and version = ${activeVersion}`
+        .columns('sourceContent', 'sourceHash', 'contentHash');
+    }
+
+    if (!row) {
+      return { markdown: null, sourceHash: null, contentHash: null };
+    }
+
+    let markdown = null;
+    if (row.sourceContent) {
+      try {
+        const buf = Buffer.isBuffer(row.sourceContent)
+          ? row.sourceContent
+          : await toBuffer(row.sourceContent);
+        markdown = gunzipSync(buf).toString('utf8');
+      } catch (err) {
+        console.error('[getTutorialSource] decompress failed for slug=' + lcSlug, err.message);
+      }
+    }
+
+    return {
+      markdown,
+      sourceHash:  row.sourceHash  ?? null,
+      contentHash: row.contentHash ?? null,
+    };
+  }
+
   // --- GET /content/nav ---
 
   async function navHandlerFallback(req, res, activeVersion) {
@@ -1411,6 +1485,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     serveHandler,
     hashesHandler,
     sourceHashesHandler,
+    getTutorialSource,
     navHandler,
     rollbackHandler,
     beginHandler,
@@ -1430,6 +1505,7 @@ export const publishHandler = _defaults.publishHandler;
 export const serveHandler = _defaults.serveHandler;
 export const hashesHandler = _defaults.hashesHandler;
 export const sourceHashesHandler = _defaults.sourceHashesHandler;
+export const getTutorialSource = _defaults.getTutorialSource;
 export const navHandler = _defaults.navHandler;
 export const rollbackHandler = _defaults.rollbackHandler;
 export const beginHandler = _defaults.beginHandler;

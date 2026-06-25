@@ -76,13 +76,31 @@ if (process.env.EXPOSE_CAP_UI === 'true') {
   if (!cds.env.swagger) cds.env.swagger = { basePath: '/$api-docs', diagram: true };
 }
 
-// Disable serve-static directory redirects globally. CAP serves app/ as static
-// content; on Windows the physical app/admin/tutorials/ directory matches OData
-// path /admin/Tutorials (case-insensitive), causing a 301 → /admin/Tutorials/
-// which OData parses as Tutorials('') → UUID validation error.
+// Scope express.static's directory-redirect disable to Windows only.
+//
+// Why: CAP serves app/ as static content via express.static. On Windows
+// the filesystem is case-insensitive, so /admin/Tutorials matches the
+// physical directory app/admin/tutorials/ and serve-static issues a 301
+// → /admin/Tutorials/ which OData parses as Tutorials('') → UUID
+// validation error (commit 5c1cdfb2).
+//
+// Why scoped: the original fix disabled redirects GLOBALLY for every
+// express.static() call in the process — including the one inside
+// swagger-ui-express. The swagger UI uses RELATIVE script src URLs
+// (e.g. <script src="./swagger-ui-bundle.js">), so its HTML page at
+// /$api-docs/admin needs the standard 301 → /$api-docs/admin/ redirect
+// to resolve assets correctly. Without it, `./swagger-ui-bundle.js`
+// resolves against the no-trailing-slash URL → /$api-docs/swagger-ui-bundle.js
+// (one level too shallow) → 404 → approuter catch-all serves index.html
+// → MIME mismatch errors in DevTools.
+//
+// Linux production doesn't have the case-insensitive-FS collision, so
+// scoping the disable to Windows is safe in prod and restores
+// swagger-ui-express on Cloud Foundry.
 const _static = express.static;
 express.static = function(root, options) {
-  return _static(root, { redirect: false, ...options });
+  const isWindows = process.platform === 'win32';
+  return _static(root, isWindows ? { redirect: false, ...options } : options);
 };
 
 cds.on('bootstrap', (app) => {

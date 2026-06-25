@@ -1,0 +1,70 @@
+<core:FragmentDefinition
+  xmlns="sap.m"
+  xmlns:core="sap.ui.core">
+  <!-- Source Markdown facet (PR-2 of spec 2026-06-24-tutorials-admin-tile-expansion-design)
+       Displays the upstream `.md` content for the current tutorial in two
+       tabs: a rendered HTML preview (via convertMarkdown) and the raw
+       text. A status badge surfaces whether source markdown has been
+       captured for this tutorial (post-PR #591 publishes) or whether
+       the tutorial predates source capture (legacy publish).
+
+       NOTE: actual drift detection (local-source-bytes vs
+       remote-sourceHash) lives in the daily content-drift workflow.
+       This facet only shows what HANA stores for this tutorial; the
+       drift workflow's status would be a separate future addition.
+
+       Data is fetched by SourceMarkdownHandler.controller.js on
+       onAfterBinding via the AdminService.getTutorialSource(slug) action,
+       and lives on the JSON model `sourceMd`. -->
+  <VBox class="sapUiSmallMargin" id="sourceMarkdownWrap">
+    <HBox alignItems="Center" class="sapUiTinyMarginBottom">
+      <Title text="Source Markdown" level="H3"/>
+      <ObjectStatus
+        text="Source captured"
+        state="Success"
+        icon="sap-icon://accept"
+        visible="{= !!${sourceMd>/sourceHash} }"
+        class="sapUiSmallMarginBegin"/>
+      <ObjectStatus
+        text="No source captured — republish to populate"
+        state="Information"
+        icon="sap-icon://information"
+        visible="{= ${sourceMd>/sourceHash} === null }"
+        class="sapUiSmallMarginBegin"/>
+    </HBox>
+
+    <IconTabBar
+      id="sourceMarkdownTabs"
+      expanded="true"
+      applyContentPadding="false"
+      visible="{= !!${sourceMd>/markdown} }">
+      <items>
+        <IconTabFilter key="rendered" text="Rendered" icon="sap-icon://document-text">
+          <ScrollContainer height="500px" vertical="true" focusable="false">
+            <FormattedText
+              htmlText="{sourceMd>/renderedHtml}"
+              class="sapUiSmallMargin"/>
+          </ScrollContainer>
+        </IconTabFilter>
+        <IconTabFilter key="raw" text="Raw Markdown" icon="sap-icon://syntax">
+          <ScrollContainer height="500px" vertical="true" focusable="false">
+            <TextArea
+              value="{sourceMd>/markdown}"
+              editable="false"
+              wrapping="Off"
+              growing="false"
+              width="100%"
+              rows="22"
+              class="sapUiSmallMargin"/>
+          </ScrollContainer>
+        </IconTabFilter>
+      </items>
+    </IconTabBar>
+
+    <IllustratedMessage
+      illustrationType="sapIllus-NoData"
+      title="No source markdown stored"
+      description="This tutorial was published before source capture was enabled (PR #591) or sourceContent is null. Republish to populate."
+      visible="{= !${sourceMd>/markdown} }"/>
+  </VBox>
+</core:FragmentDefinition>

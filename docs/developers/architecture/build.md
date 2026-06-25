@@ -128,7 +128,7 @@ flowchart TB
 
 - **Local dev** uses in-memory SQLite by default (`cds watch`); use `npm run dev:hybrid` for the full stack against real HANA via `cds bind`.
 - **`deploy.yml` does NOT publish content** — it deploys the apps and HDI schemas. The post-deploy step triggers `rebuild-content.yml` to populate HANA. This separation lets content rebuilds run independently of code deploys (a single tutorial fix doesn't require redeploying the srv).
-- **`rebuild-content.yml` honors `TUTORIAL_SLUG`** to bust the cache for one slug and skip the `RepoCatalog` upload — used by author-driven force-refresh.
+- **`rebuild-content.yml` runs in one of three scopes** — `catalog-only` (~1 min, admin Mission/Group/etc. saves), `slug-targeted` (~2 min, one-tutorial fix), `full` (~10 min, everything). Manual `gh workflow run ... -f slug=<slug>` auto-infers `slug-targeted`. Admin writes auto-classify per entity via [srv/lib/_classify-rebuild-mode.js](../../../srv/lib/_classify-rebuild-mode.js). Full runbook: [rebuild-content-workflow.md](../operations/rebuild-content-workflow.md).
 - **QA channel** is end-to-end isolated: separate fetch cache (`.tutorial-cache-qa/`), separate Hugo config (`hugo.qa.toml`), separate srv (`tutorials-srv-qa`), separate HDI (`tutorials-hana-qa`), separate API key (`CONTENT_API_KEY_QA`). It never touches prod tables.
 - **VSCode extension preview is in-process** — Hugo binary bundled into `tutorials-srv-qa`'s deploy artifact, shells out per request to render markdown into HTML using `preview-site/` layouts. No content is persisted; tmpdir is cleaned per call.
 
