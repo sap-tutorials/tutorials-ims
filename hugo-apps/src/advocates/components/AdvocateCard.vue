@@ -64,6 +64,34 @@ const ICON: Record<string, string> = {
         <h3 class="adv-name">{{ advocate.firstName }} {{ advocate.lastName }}</h3>
         <div class="adv-role">{{ advocate.title }} · {{ advocate.region }}</div>
         <div class="adv-bio">{{ advocate.bio || '' }}</div>
+        <!-- Spec 2026-06-25-advocate-user-link-design §3: mailto and
+             tutorial-count pill, both gated on the optional fields the
+             public /api/advocates emits only when the advocate is linked
+             to a User. Hidden entirely for unlinked advocates. -->
+        <a
+          v-if="advocate.email"
+          class="adv-email-link"
+          :href="`mailto:${advocate.email}`"
+          @click.stop
+        >
+          ✉ {{ advocate.email }}
+        </a>
+        <div
+          v-if="advocate.authoredTutorials?.length || advocate.contributedTutorials?.length"
+          class="adv-tutorials-pill"
+        >
+          <template v-if="advocate.authoredTutorials?.length">
+            {{ advocate.authoredTutorials.length }} authored
+          </template>
+          <template
+            v-if="advocate.authoredTutorials?.length && advocate.contributedTutorials?.length"
+          >
+            ·
+          </template>
+          <template v-if="advocate.contributedTutorials?.length">
+            {{ advocate.contributedTutorials.length }} contributed
+          </template>
+        </div>
         <div class="adv-links">
           <a v-for="l in advocate.links" :key="l.kind + l.url"
              class="adv-iconbtn"

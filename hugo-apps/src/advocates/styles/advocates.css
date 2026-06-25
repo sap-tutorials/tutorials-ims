@@ -82,6 +82,28 @@
 .adv-iconbtn:hover { background: rgba(255,255,255,.28); }
 .adv-profile { margin-top: 14px; font-size: 12px; color: #cfe3ff; text-decoration: underline; }
 
+/* Spec 2026-06-25-advocate-user-link-design §3:
+   mailto + tutorial-count affordances on the back of the card. Minimal
+   visual treatment intentional — Tom's spec §8 leaves polished UI for a
+   follow-up PR; this PR just plumbs the data and gates the render. */
+.adv-email-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin: 6px 0 10px; font-size: 13px;
+  color: #cfe3ff; text-decoration: underline;
+  word-break: break-all;
+}
+.adv-email-link:hover { color: #fff; }
+.adv-tutorials-pill {
+  display: inline-block;
+  margin: 0 0 10px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.12);
+  border: 1px solid rgba(255,255,255,.18);
+  font-size: 12px;
+  color: #fff;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .adv-card-inner { transition: opacity .25s ease; }
   .adv-flipwrap:hover .adv-card-inner,

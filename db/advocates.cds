@@ -25,12 +25,28 @@ entity Advocates : cuid, managed {
   // persisted form survives drill-down at the cost of one DB column + a sync
   // invariant the handlers maintain. Issue #415.
   photoUrl      : String(200);
+  // Optional 1:1 link to a User record. When set, unlocks:
+  //   - Read-through Users.email on /api/advocates output
+  //   - Tutorials authored/contributed via Users.authoredTutorials and
+  //     Users.tutorialContributions (the FKs PR #618 added)
+  // Nullable. Setting to null is a valid operation — the advocate stays
+  // on the roster; only the email and tutorials affordances disappear.
+  // Spec: docs/superpowers/specs/2026-06-25-advocate-user-link-design.md
+  user          : Association to ims.Users;
   topics        : Composition of many AdvocateTopics on topics.advocate = $self;
   links         : Composition of many AdvocateLinks  on links.advocate  = $self;
   // Inverse association — required so the admin Object Page can target
   // `photo/@UI.FieldGroup#Photo` for the UploadSet binding (see Phase 6 Task 6.2).
   photo         : Composition of one AdvocatePhotos on photo.advocate = $self;
 }
+
+// CAP generates the FK column as `user_ID`. The annotation uses the
+// ASSOCIATION NAME, not the generated column name — CAP resolves it to
+// `user_ID` at compile time and emits the HANA UNIQUE index on that
+// column. Precedent: db/devtoberfest.cds:45 `@assert.unique.userEvent: [user, event]`
+// and db/knowledge-graph.cds:77-78. NULLs are distinct in HANA's UNIQUE
+// semantics, so any number of unlinked advocates coexist.
+annotate Advocates with @assert.unique.user : [user];
 
 entity AdvocateTopics : cuid {
   advocate : Association to Advocates;

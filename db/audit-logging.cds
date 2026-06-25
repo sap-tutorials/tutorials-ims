@@ -110,3 +110,25 @@ annotate ims.Concepts with @PersonalData: {
 annotate ims.Secrets with @PersonalData: {
   EntitySemantics: 'Other'
 };
+
+// --- Advocates ↔ Users link (spec 2026-06-25-advocate-user-link-design) ---
+//
+// Advocates.user_ID is the ONE place in this codebase where we publicly
+// expose Users.email (via /api/advocates). Proactively NULL the FK on
+// User anonymization so the public endpoint immediately stops emitting
+// the (now-anonymized) email — stronger than relying on the email being
+// scrubbed to a placeholder.
+//
+// Intentionally divergent from PR #618 which did NOT annotate
+// Tutorials.author / TutorialContributors.user (those FKs are internal
+// authorship records, not a public-facing surface).
+//
+// cascade: 'null-personal' triggers cascadeNullPersonal in
+// srv/lib/anonymization-cascade.js → UPDATE Advocates SET user_ID = NULL
+// WHERE user_ID = <anonymized-user-id>.
+annotate ims.Advocates with @PersonalData: {
+  EntitySemantics: 'Other',
+  cascade        : 'null-personal'
+} {
+  user @PersonalData.FieldSemantics: 'DataSubjectID';
+};
