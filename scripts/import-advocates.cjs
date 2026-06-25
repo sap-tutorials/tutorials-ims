@@ -36,6 +36,10 @@ const {
   advocateTableInfo,
 } = require('./lib/advocate-io.cjs');
 
+// better-sqlite3 rejects JS booleans as bind values; coerce to 0/1.
+// HANA accepts integers for BOOLEAN columns equally well.
+const boolToInt = (v) => (v === true ? 1 : v === false ? 0 : v);
+
 function parseArgs(argv) {
   const args = { in: '.migration-data/advocates.json' };
   for (let i = 0; i < argv.length; i++) {
@@ -79,7 +83,7 @@ function parseArgs(argv) {
   const c = T.cols;
   const stats = {
     advocates: { inserted: 0, updated: 0 },
-    users:     { matched: 0, nulled: 0, nulledEmails: [] },
+    users:     { matched: 0, nulled: 0, nulledEmails: new Set() },
     topics:    { matched: 0, skipped: 0, missingTags: new Set() },
     links:     { inserted: 0 },
     photos:    { imported: 0, absent: 0 },
@@ -111,7 +115,7 @@ function parseArgs(argv) {
         }
       } else {
         stats.users.nulled++;
-        stats.users.nulledEmails.push(adv.userEmail);
+        stats.users.nulledEmails.add(adv.userEmail);
         console.warn(`[${adv.slug}] user FK not resolved: ${adv.userEmail} missing in target — inserting with user_ID=NULL`);
       }
     }
@@ -125,35 +129,40 @@ function parseArgs(argv) {
     const advocateId = existing.length > 0 ? existing[0].id : crypto.randomUUID();
     const isUpdate = existing.length > 0;
 
-    // Column-list order is the source of truth for the parameter array below.
-    // Keep them in lock-step.
-    const updatableCols = [
-      c.firstName, c.lastName, c.title, c.pronouns, c.location, c.region,
-      c.bio, c.isActive, c.sortOverride, c.joinedDate,
-      c.hasPhoto, c.photoUpdatedAt, c.photoUrl, c.userFk,
-    ];
-    // SQLite (better-sqlite3) rejects JS booleans as bind values; coerce to
-    // 0/1 here. HANA accepts integers for BOOLEAN columns equally well.
-    const boolToInt = (v) => (v === true ? 1 : v === false ? 0 : v);
-    const updatableValues = [
-      adv.firstName, adv.lastName, adv.title, adv.pronouns, adv.location, adv.region,
-      adv.bio, boolToInt(adv.isActive), adv.sortOverride, adv.joinedDate,
-      boolToInt(adv.hasPhoto), adv.photoUpdatedAt, adv.photoUrl, userId,
-    ];
+    // Single source of truth for column→value pairs. One array is fragile;
+    // an object literal can't drift. Pattern mirrors scripts/migrate-from-hana.js.
+    const updates = {
+      [c.firstName]:      adv.firstName,
+      [c.lastName]:       adv.lastName,
+      [c.title]:          adv.title,
+      [c.pronouns]:       adv.pronouns,
+      [c.location]:       adv.location,
+      [c.region]:         adv.region,
+      [c.bio]:            adv.bio,
+      [c.isActive]:       boolToInt(adv.isActive),
+      [c.sortOverride]:   adv.sortOverride,
+      [c.joinedDate]:     adv.joinedDate,
+      [c.hasPhoto]:       boolToInt(adv.hasPhoto),
+      [c.photoUpdatedAt]: adv.photoUpdatedAt,
+      [c.photoUrl]:       adv.photoUrl,
+      [c.userFk]:         userId,
+    };
+    const updateCols = Object.keys(updates);
+    const updateVals = Object.values(updates);
 
     if (isUpdate) {
-      const setClause = updatableCols.map(col => `${col} = ?`).join(', ');
+      const setClause = updateCols.map(col => `${col} = ?`).join(', ');
       await db.run(
         `UPDATE ${T.advocates} SET ${setClause} WHERE ${c.id} = ?`,
-        [...updatableValues, advocateId]
+        [...updateVals, advocateId]
       );
       stats.advocates.updated++;
     } else {
-      const allCols = [c.id, c.slug, ...updatableCols].join(', ');
-      const placeholders = ['?', '?', ...updatableCols.map(() => '?')].join(', ');
+      const allCols = [c.id, c.slug, ...updateCols].join(', ');
+      const placeholders = ['?', '?', ...updateCols.map(() => '?')].join(', ');
       await db.run(
         `INSERT INTO ${T.advocates} (${allCols}) VALUES (${placeholders})`,
-        [advocateId, adv.slug, ...updatableValues]
+        [advocateId, adv.slug, ...updateVals]
       );
       stats.advocates.inserted++;
     }
@@ -166,7 +175,7 @@ function parseArgs(argv) {
   console.log(`[advocates-import] Imported ${payload.advocateCount} advocates: ${stats.advocates.updated} updated, ${stats.advocates.inserted} inserted`);
   console.log(`[advocates-import] FK resolution: ${stats.users.matched} users matched, ${stats.users.nulled} NULLed`);
   if (stats.users.nulled > 0) {
-    console.log(`                   (${stats.users.nulledEmails.join(', ')})`);
+    console.log(`                   (${[...stats.users.nulledEmails].join(', ')})`);
   }
   console.log('[advocates-import] (topics/links/photos pending Task 6)');
 })().catch(err => {
