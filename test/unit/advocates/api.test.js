@@ -15,23 +15,23 @@ beforeAll(async () => {
   const existing = await db.run(SELECT.from(Advocates).columns('slug'));
   const slugs = new Set(existing.map((r) => r.slug));
   const rows = [];
-  if (!slugs.has('thomas-jung')) {
+  if (!slugs.has('__test__advocate-link-amer-1')) {
     rows.push({
       ID: 'ADC00001-0000-0000-0000-000000000001',
-      slug: 'thomas-jung',
-      firstName: 'Thomas', lastName: 'Jung',
-      title: 'Chief Developer Advocate',
-      pronouns: 'he/him', location: 'Houston, TX',
+      slug: '__test__advocate-link-amer-1',
+      firstName: 'FixtureAmer', lastName: 'One',
+      title: 'Unit test fixture',
+      pronouns: '', location: 'Test, TS',
       region: 'AMERICAS', isActive: true,
-      bio: 'Builds CAP samples and decommissions Java IMS one endpoint at a time.',
+      bio: 'Unit test fixture — safe to delete.',
     });
   }
-  if (!slugs.has('placeholder-emea')) {
+  if (!slugs.has('__test__advocate-link-emea-1')) {
     rows.push({
       ID: 'ADC00001-0000-0000-0000-000000000002',
-      slug: 'placeholder-emea',
-      firstName: 'Placeholder', lastName: 'EMEA',
-      title: 'Developer Advocate (EMEA)',
+      slug: '__test__advocate-link-emea-1',
+      firstName: 'FixtureEmea', lastName: 'One',
+      title: 'Unit test fixture',
       region: 'EMEA', isActive: true,
     });
   }
@@ -91,7 +91,7 @@ describe('GET /api/advocates', () => {
     expect(Array.isArray(res.data.advocates)).toBe(true);
     expect(res.data.advocates.length).toBeGreaterThan(0);
 
-    // Default placeholders sort by lastName: APJ, Americas, EMEA, Jung, Roving
+    // Active advocates are returned sorted by lastName (case-insensitive).
     const collator = new Intl.Collator('en', { sensitivity: 'base' });
     const lastNames = res.data.advocates.map((a) => a.lastName);
     const sorted = [...lastNames].sort((a, b) => collator.compare(a, b));
@@ -159,7 +159,7 @@ describe('GET /api/advocates/:slug/photo', () => {
     const db = await cds.connect.to('db');
     const { Advocates, AdvocatePhotos } = cds.entities('com.sap.developers.ims');
     const advocate = await db.run(
-      SELECT.one.from(Advocates).where({ slug: 'thomas-jung' }),
+      SELECT.one.from(Advocates).where({ slug: '__test__advocate-link-amer-1' }),
     );
     // Idempotent — the photo-serve.test.js suite may have inserted one already.
     await db.run(DELETE.from(AdvocatePhotos).where({ advocate_ID: advocate.ID }));
@@ -180,7 +180,7 @@ describe('GET /api/advocates/:slug/photo', () => {
   it('returns 404 when the advocate has no photo row', async () => {
     let status;
     try {
-      const res = await project.get('/api/advocates/placeholder-emea/photo', {
+      const res = await project.get('/api/advocates/__test__advocate-link-emea-1/photo', {
         validateStatus: (s) => s === 200 || s === 404,
         responseType: 'arraybuffer',
       });
@@ -206,7 +206,7 @@ describe('GET /api/advocates/:slug/photo', () => {
   });
 
   it('returns the WebP for a real photo with ETag and Cache-Control', async () => {
-    const res = await project.get('/api/advocates/thomas-jung/photo', {
+    const res = await project.get('/api/advocates/__test__advocate-link-amer-1/photo', {
       responseType: 'arraybuffer',
     });
     expect(res.status).toBe(200);
@@ -218,7 +218,7 @@ describe('GET /api/advocates/:slug/photo', () => {
   });
 
   it('returns ?size=thumb 64-px WebP', async () => {
-    const res = await project.get('/api/advocates/thomas-jung/photo?size=thumb', {
+    const res = await project.get('/api/advocates/__test__advocate-link-amer-1/photo?size=thumb', {
       responseType: 'arraybuffer',
     });
     expect(res.status).toBe(200);
@@ -226,7 +226,7 @@ describe('GET /api/advocates/:slug/photo', () => {
   });
 
   it('returns 304 when If-None-Match matches the photo sha256', async () => {
-    const first = await project.get('/api/advocates/thomas-jung/photo', {
+    const first = await project.get('/api/advocates/__test__advocate-link-amer-1/photo', {
       responseType: 'arraybuffer',
     });
     const etag = first.headers.etag;
@@ -234,7 +234,7 @@ describe('GET /api/advocates/:slug/photo', () => {
 
     let status;
     try {
-      const res = await project.get('/api/advocates/thomas-jung/photo', {
+      const res = await project.get('/api/advocates/__test__advocate-link-amer-1/photo', {
         headers: { 'If-None-Match': etag },
         validateStatus: (s) => s === 200 || s === 304,
         responseType: 'arraybuffer',
