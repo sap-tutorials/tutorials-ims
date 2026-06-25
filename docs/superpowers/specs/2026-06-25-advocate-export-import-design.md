@@ -53,18 +53,24 @@ Both use plain `cds.connect.to('db')` and execute via `cds bind --exec` so the r
 
 ## Why raw SQL, not the CAP service layer
 
-The advocate after-handlers in [srv/handlers/advocate-handlers.js](../../../srv/handlers/advocate-handlers.js) maintain a sync invariant: `Advocates.hasPhoto` ↔ `Advocates.photoUrl` ↔ presence of an `AdvocatePhotos` row, with `photoUrl` re-computed from `slug`. If we wrote through `AuthorService` or `AdminService`, every export-then-import round-trip would re-derive those fields in the target environment.
+The advocate handlers in [srv/handlers/advocate-handlers.js](../../../srv/handlers/advocate-handlers.js) are registered on **AdminService only** and do two distinct things we want to bypass:
 
-Two consequences:
-1. **Risk**: handler logic may differ subtly between DEV and PROD at import time (e.g. if the URL format changes mid-deploy), so the imported state could drift from the exported state.
-2. **Speed**: handler invocations serialize per-row; raw SQL batches in one transaction.
+1. **`before('CREATE'/'UPDATE', AdvocatePhotos)` → `processPhotoUpload`** — runs uploaded bytes through a sharp/WebP pipeline that re-encodes the image to 256px and 64px variants. If we wrote our exported (already-encoded) BLOBs through this path, the bytes would be decoded and re-encoded — wasteful at best, and a fidelity risk if sharp's defaults change between DEV and PROD deploys.
+2. **`after('CREATE'/'UPDATE'/'DELETE', AdvocatePhotos)` and `after('UPDATE', Advocates)`** — maintain the sync invariant `Advocates.hasPhoto` ↔ `Advocates.photoUrl` ↔ presence of an `AdvocatePhotos` row, re-deriving `photoUrl` from `slug` via `urlForSlug()`.
+
+If we wrote through AdminService, every export-then-import round-trip would re-encode photos and re-derive metadata in the target environment. Two consequences:
+
+1. **Fidelity**: handler logic may differ between DEV and PROD at import time (sharp version upgrade, URL format change). The imported state could drift from the exported state.
+2. **Speed**: handler invocations serialize per-row, and sharp re-encoding is the slowest step.
 
 Going through `cds.db.run()` (compiled CQN, not REST) gives us:
-- Exactly the bytes we exported, no rewrites.
+
+- Exactly the bytes we exported, no rewrites. `Advocates.photoUrl` is exported and re-inserted verbatim — we trust the source.
 - Single-transaction-per-advocate semantics.
 - No XSUAA / `@requires` interaction (no auth context needed).
+- Sidesteps the Fiori draft layer entirely. `Advocates` is draft-enabled in AdminService; raw writes target the `Advocates` active table, not `Advocates.drafts`, with no draft activation step.
 
-We do still rely on CAP's CQN builder to handle HANA quoting and parameter binding correctly. Raw `db.run(INSERT.into(...).entries(...))` is what `migrate-reference-data.js` already uses.
+The precedent for `cds.db.run()` against entity-level CQN in this repo is [scripts/migrate-from-hana.js](../../../scripts/migrate-from-hana.js) (raw `INSERT/UPDATE` SQL against HANA tables via a prepared-statement helper). Note that [scripts/migrate-reference-data.js](../../../scripts/migrate-reference-data.js), despite the similar name, is an HTTP migrator that POSTs to `/admin/<Entity>` endpoints — it goes **through** the service stack, not around it, and is NOT the pattern we're following here.
 
 ## Photo BLOB retrieval
 
@@ -196,7 +202,7 @@ Per-row WARN logs go to stdout as encountered, not buffered. Errors throw and ab
 - **Target `Tags` has the same slug twice**: same fallback. `Tags.slug` is also unique-asserted; only the data-migration scripts that pre-date `@assert.unique` could produce this.
 - **`photo256` or `photo64` corrupt / not valid base64**: `Buffer.from(..., 'base64')` is forgiving (no throw on invalid chars), but `sha256` won't match. We do NOT re-verify sha256 on import — that's a separate concern; trust the export.
 - **CAP after-handlers running anyway?** They listen on service-level events (READ/CREATE/UPDATE on `AuthorService.Advocates`). Raw `cds.db.run()` against entity-level CQN bypasses them — that's the design and is well-trodden in `migrate-reference-data.js`.
-- **`@assert.unique.user` violation in target**: only possible if the exported set has the same `userEmail` twice. Pre-check at export time and refuse (`Two advocates have the same userEmail in source DB`), since the violation would be silent (UPDATE wouldn't fire it, INSERT would).
+- **`@assert.unique.user` violation in target**: only possible if the exported set has the same `userEmail` twice. Pre-check at export time and refuse (`Two advocates have the same userEmail in source DB`), since the violation would be silent (UPDATE wouldn't fire it, INSERT would). Note that multiple advocates with `userEmail = null` are fine: HANA's UNIQUE on a nullable column treats NULLs as distinct (the schema comment at [db/advocates.cds:46-48](../../../db/advocates.cds#L46) calls this out), so any number of unlinked advocates coexist.
 
 ## How to use
 
