@@ -19,14 +19,28 @@ const STATE_KEY = Symbol.for('com.sap.developers.ims:mail-client');
 const _state = (globalThis[STATE_KEY] ??= {
   transporter: null,
   resolvedAt: 0,
+  fromAddress: null,
 });
 
+const SMTP_ALIASES = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_FROM', 'SMTP_PASS'];
+
 /**
- * Resolve the SMTP password via the shared secret-resolver (credstore-first,
- * env fallback, 5-min TTL cache, warn-once-per-window logging).
+ * Resolve all 5 SMTP transport fields via the shared secret-resolver (credstore-first,
+ * env fallback, 5-min TTL cache, warn-once-per-window logging). Returns `null` for any
+ * field the resolver couldn't find.
+ *
+ * Resolved sequentially (not Promise.all): the resolver's dynamic `import('./credstore.js')`
+ * races with vi.mock's module-resolution under concurrent calls, so unit tests would
+ * see only the first parallel alias hit the mocked credstore. Serial calls cost a
+ * fraction of a millisecond once the cache is warm, and the behavior is identical in
+ * production.
  */
-async function resolveSmtpPassword() {
-  return resolveSecret('SMTP_PASS', { ttlMs: SMTP_TTL_MS, logTag: '[mail]' });
+async function resolveSmtpConfig() {
+  const cfg = {};
+  for (const alias of SMTP_ALIASES) {
+    cfg[alias] = await resolveSecret(alias, { ttlMs: SMTP_TTL_MS, logTag: '[mail]' });
+  }
+  return cfg;
 }
 
 async function getTransporter() {
@@ -34,19 +48,19 @@ async function getTransporter() {
     return _state.transporter;
   }
 
-  const host = process.env.SMTP_HOST;
-  if (host) {
-    const password = await resolveSmtpPassword();
-    if (!password) return null;
+  const cfg = await resolveSmtpConfig();
+  if (cfg.SMTP_HOST) {
+    if (!cfg.SMTP_PASS) return null;
+    // Default port shifts from 1025 (MailHog dev default) to 587 (SMTP submission).
+    // Local dev still works by setting SMTP_PORT=1025 in the resolver source.
+    const port = Number(cfg.SMTP_PORT) || 587;
     _state.transporter = createTransport({
-      host,
-      // Default port shifts from 1025 (MailHog dev default) to 587 (SMTP
-      // submission). Local dev still works by setting SMTP_PORT=1025 explicitly.
-      // Spec edge case #8 covers the MailHog flow.
-      port: Number(process.env.SMTP_PORT) || 587,
-      secure: Number(process.env.SMTP_PORT) === 465,
-      auth: { user: process.env.SMTP_USER, pass: password },
+      host: cfg.SMTP_HOST,
+      port,
+      secure: port === 465,
+      auth: { user: cfg.SMTP_USER, pass: cfg.SMTP_PASS },
     });
+    _state.fromAddress = cfg.SMTP_FROM || DEFAULT_FROM;
     _state.resolvedAt = Date.now();
     return _state.transporter;
   }
@@ -64,6 +78,7 @@ async function getTransporter() {
       secure: creds.mail_port === 465,
       auth: { user: creds.mail_user, pass: creds.mail_password },
     });
+    _state.fromAddress = DEFAULT_FROM;
     _state.resolvedAt = Date.now();
     return _state.transporter;
   } catch {
@@ -85,8 +100,12 @@ export async function sendNotificationEmail({ to, cc, subject, level, variables 
   const LOG = cds.log('mail');
   const html = resolveTemplate(loadTemplate(level), variables);
 
+  // getTransporter() populates _state.fromAddress before returning. If we
+  // got here via the no-transport-configured path, fromAddress stays null
+  // and DEFAULT_FROM kicks in (matches pre-refactor behavior).
+  const transport = await getTransporter();
   const mailOptions = {
-    from: process.env.SMTP_FROM || DEFAULT_FROM,
+    from: _state.fromAddress || DEFAULT_FROM,
     to: Array.isArray(to) ? to.join(', ') : to,
     cc: cc?.length ? (Array.isArray(cc) ? cc.join(', ') : cc) : undefined,
     subject,
@@ -94,7 +113,6 @@ export async function sendNotificationEmail({ to, cc, subject, level, variables 
   };
 
   try {
-    const transport = await getTransporter();
     if (!transport) {
       LOG.warn('No mail transport configured — email queued for retry');
       const { FailedEmails } = cds.entities('com.sap.developers.ims');
@@ -139,7 +157,7 @@ export async function retryFailedEmails() {
     try {
       const transport = await getTransporter();
       await transport.sendMail({
-        from: process.env.SMTP_FROM || DEFAULT_FROM,
+        from: _state.fromAddress || DEFAULT_FROM,
         to: msg.to,
         cc: msg.cc || undefined,
         subject: msg.subject,
@@ -163,6 +181,7 @@ export async function retryFailedEmails() {
 export function _resetForTests() {
   _state.transporter = null;
   _state.resolvedAt = 0;
+  _state.fromAddress = null;
 }
 
 /** Test-only: expose getTransporter so unit tests can assert on the resolved transport. */
