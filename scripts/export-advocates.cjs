@@ -162,8 +162,11 @@ function parseArgs(argv) {
   const advocatesWithPhoto = advocateRows.filter(a => a.hasPhoto);
   console.log(`[advocates-export] Fetching ${advocatesWithPhoto.length} photo(s)…`);
 
+  // Hoist these out of the loop body so we resolve them once.
+  const { AdvocatePhotos } = isHana ? {} : cds.entities('com.sap.developers.ims');
+
   for (const a of advocatesWithPhoto) {
-    let photoMeta, photo256, photo64;
+    let src;
     if (isHana) {
       // HANA: raw SQL, UPPERCASE identifiers. Pull both BLOBs + metadata
       // in one shot. HANA returns LargeBinary as Buffers.
@@ -180,37 +183,20 @@ function parseArgs(argv) {
         [a.id]
       );
       if (rows.length === 0) continue;
-      photo256 = rows[0].photo256;
-      photo64  = rows[0].photo64;
-      photoMeta = {
-        photoMimeType: rows[0].photoMimeType,
-        sizeBytes: rows[0].sizeBytes,
-        sha256: rows[0].sha256,
-        uploadedAt: rows[0].uploadedAt,
-      };
+      src = rows[0];
     } else {
       // SQLite (unit/local). CDS QL is fine; no LOB locator issue.
-      const SELECT_ = cds.ql.SELECT;
-      const [row] = await db.run(
-        SELECT_.from('com.sap.developers.ims.AdvocatePhotos').where({ advocate_ID: a.id })
-      );
+      const [row] = await db.run(SELECT.from(AdvocatePhotos).where({ advocate_ID: a.id }));
       if (!row) continue;
-      photo256 = row.photo256;
-      photo64  = row.photo64;
-      photoMeta = {
-        photoMimeType: row.photoMimeType,
-        sizeBytes: row.sizeBytes,
-        sha256: row.sha256,
-        uploadedAt: row.uploadedAt,
-      };
+      src = row;
     }
     photosByAdvocate.set(a.id, {
-      photoMimeType: photoMeta.photoMimeType,
-      sizeBytes: photoMeta.sizeBytes,
-      sha256: photoMeta.sha256,
-      uploadedAt: photoMeta.uploadedAt,
-      photo256_b64: Buffer.from(photo256).toString('base64'),
-      photo64_b64:  Buffer.from(photo64 ).toString('base64'),
+      photoMimeType: src.photoMimeType,
+      sizeBytes: src.sizeBytes,
+      sha256: src.sha256,
+      uploadedAt: src.uploadedAt,
+      photo256_b64: Buffer.from(src.photo256).toString('base64'),
+      photo64_b64:  Buffer.from(src.photo64 ).toString('base64'),
     });
   }
   console.log(`[advocates-export] Encoded ${photosByAdvocate.size} photo(s) as base64`);
