@@ -12,6 +12,11 @@ export interface AdvocateTopic {
   label: string;
 }
 
+export interface AdvocateTutorial {
+  slug: string;
+  title: string;
+}
+
 export interface Advocate {
   ID: string;
   slug: string;
@@ -27,6 +32,12 @@ export interface Advocate {
   photoUpdatedAt?: string | null;
   topics: AdvocateTopic[];
   links: AdvocateLink[];
+  // Spec 2026-06-25-advocate-user-link-design §3: optional fields present
+  // only when the advocate is linked to a User AND the relevant data is
+  // non-empty. Each is OMITTED (not null / not []) when it would be empty.
+  email?: string;
+  authoredTutorials?: AdvocateTutorial[];
+  contributedTutorials?: AdvocateTutorial[];
 }
 
 export interface AdvocatesResponse {
