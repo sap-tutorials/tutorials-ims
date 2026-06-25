@@ -73,4 +73,20 @@ skipIfNoUrl('/api/advocates smoke — user-link', () => {
       }
     }
   });
+
+  // Issue #638: emailEdit virtual surfaces in AdminService $metadata.
+  // Skipped if SMOKE_SRV_URL isn't set (the smoke config keys the srv
+  // separately from the approuter BASE).
+  it('AdminService.Advocates exposes emailEdit virtual element on $metadata', async () => {
+    const SRV = process.env.SMOKE_SRV_URL;
+    if (!SRV) return;
+    const res = await fetch(`${SRV}/admin/$metadata`);
+    // The admin srv requires auth; the smoke env may or may not have it.
+    // Skip gracefully on 401/403 — the metadata assertion is for deployed
+    // verification, not security.
+    if (res.status === 401 || res.status === 403) return;
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toMatch(/Name="emailEdit"/);
+  });
 });
