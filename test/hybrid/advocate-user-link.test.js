@@ -105,4 +105,52 @@ describeIf('Advocates.user — HANA UNIQUE + cascade (hybrid)', () => {
     const after = await SELECT.one.from(Advocates).where({ ID: adv.ID });
     expect(after.user_ID).toBeNull();
   });
+
+  it('emailEdit round-trip — UPDATE propagates to Users.email on HANA', async () => {
+    // Verifies the Task 6 emailEdit virtual handler: an UPDATE on
+    // AdminService.Advocates with `emailEdit` flows into the linked
+    // Users.email column on real HANA.
+    //
+    // Route through AdminService so the before('UPDATE') handler chain
+    // actually fires. cds.connect.to('AdminService') returns a service
+    // instance whose .run() processes the request through registered
+    // handlers; db.run() would bypass them and turn this test into a
+    // tautology.
+    //
+    // KNOWN CONCERN: Task 6's handler reads emailEdit from
+    // req._.req.body (the raw HTTP body) because CAP strips virtuals
+    // from req.data on OData PATCH. Programmatic srv.run(UPDATE(...))
+    // does NOT carry a raw HTTP body — so this path may not exercise
+    // the propagation. If this assertion fails when Tom runs it against
+    // HANA, the honest finding is that the handler needs to also read
+    // from req.data.emailEdit as a fallback for programmatic callers.
+    const Advocates = 'com.sap.developers.ims.Advocates';
+    const Users = 'com.sap.developers.ims.Users';
+
+    const uuid = crypto.randomUUID();
+    const beforeEmail = `${TEST_PREFIX}-email-before-${Date.now()}@test.example.com`;
+    const afterEmail = `${TEST_PREFIX}-email-after-${Date.now()}@test.example.com`;
+
+    await INSERT.into(Users).entries({ uuid, email: beforeEmail });
+    const u = await SELECT.one.from(Users).where({ uuid });
+    createdUserIds.push(u.ID);
+
+    const slug = `${TEST_PREFIX}-email-rt-${Date.now()}`;
+    await INSERT.into(Advocates).entries({
+      slug,
+      firstName: '__TEST__',
+      lastName: 'EmailRT',
+      user_ID: u.ID,
+    });
+    const adv = await SELECT.one.from(Advocates).where({ slug });
+    createdAdvIds.push(adv.ID);
+
+    const adminSrv = await cds.connect.to('AdminService');
+    await adminSrv.run(
+      UPDATE(adminSrv.entities.Advocates, adv.ID).set({ emailEdit: afterEmail }),
+    );
+
+    const updated = await SELECT.one.from(Users).columns('email').where({ ID: u.ID });
+    expect(updated.email).toBe(afterEmail);
+  });
 });

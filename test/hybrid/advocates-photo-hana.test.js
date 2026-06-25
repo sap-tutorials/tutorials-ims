@@ -23,10 +23,14 @@ describe.runIf(isSafeForWrites() && process.env.ALLOW_HYBRID_WRITES === 'true')(
   'AdvocatePhotos round-trip on HANA',
   () => {
     let advId;
+    let noPhotoAdvId;
+    let noPhotoSlug;
     let processed;
 
     beforeAll(async () => {
       advId = randomUUID();
+      noPhotoAdvId = randomUUID();
+      noPhotoSlug = '__test__nophoto-' + Date.now().toString(36);
       processed = await processUpload(
         await readFile('test/unit/advocates/fixtures/portrait.jpg'),
         'image/jpeg',
@@ -45,6 +49,21 @@ describe.runIf(isSafeForWrites() && process.env.ALLOW_HYBRID_WRITES === 'true')(
           hasPhoto: true,
         }),
       );
+      // Second advocate with NO AdvocatePhotos row — used to assert
+      // fetchPhoto returns null on an existing advocate that has not
+      // uploaded a photo (the "no photo row" semantic, distinct from
+      // "advocate not found").
+      await db.run(
+        INSERT.into(Advocates).entries({
+          ID: noPhotoAdvId,
+          slug: noPhotoSlug,
+          firstName: '__TEST__',
+          lastName: 'NoPhoto',
+          region: 'EMEA',
+          isActive: true,
+          hasPhoto: false,
+        }),
+      );
       await db.run(
         INSERT.into(AdvocatePhotos).entries({
           advocate_ID: advId,
@@ -60,11 +79,15 @@ describe.runIf(isSafeForWrites() && process.env.ALLOW_HYBRID_WRITES === 'true')(
     });
 
     afterAll(async () => {
-      if (!advId) return;
       const db = await cds.connect.to('db');
       const { Advocates, AdvocatePhotos } = cds.entities('com.sap.developers.ims');
-      await db.run(DELETE.from(AdvocatePhotos).where({ advocate_ID: advId }));
-      await db.run(DELETE.from(Advocates).where({ ID: advId }));
+      if (advId) {
+        await db.run(DELETE.from(AdvocatePhotos).where({ advocate_ID: advId }));
+        await db.run(DELETE.from(Advocates).where({ ID: advId }));
+      }
+      if (noPhotoAdvId) {
+        await db.run(DELETE.from(Advocates).where({ ID: noPhotoAdvId }));
+      }
     });
 
     it('reads 256 photo back via raw SQL (LOB-locator workaround)', async () => {
@@ -90,8 +113,10 @@ describe.runIf(isSafeForWrites() && process.env.ALLOW_HYBRID_WRITES === 'true')(
     });
 
     it('returns null for an advocate with no photo row', async () => {
-      // The seeded `placeholder-emea` row has no AdvocatePhotos entry.
-      const out = await fetchPhoto('placeholder-emea', 'full');
+      // Uses the fresh '__test__nophoto-*' advocate created in beforeAll
+      // (no AdvocatePhotos row). Self-contained — does not depend on any
+      // pre-seeded data that the cleanup script may have removed.
+      const out = await fetchPhoto(noPhotoSlug, 'full');
       expect(out).toBeNull();
     });
   },

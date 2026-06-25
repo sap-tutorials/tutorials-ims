@@ -1985,14 +1985,14 @@ annotate AdminService.Advocates with @(
       { Value: slug }
     ]
   },
-  // Spec: 2026-06-25-advocate-user-link-design §2.
-  // Linked-User identity field group — picker + read-through email.
-  // Email row is read-only because Fiori Elements V4 won't edit a value
-  // off a foreign association inline (which is what we want).
+  // Spec: 2026-06-25-advocate-email-edit-design.md §4.2.
+  // Linked-User identity field group — picker + editable email mirror.
+  // emailEdit is a virtual element hydrated on-READ and propagated to
+  // Users.email on-UPDATE / SAVE-on-drafts; see srv/handlers/advocate-email-handlers.js.
   UI.FieldGroup #IdentityLink: {
     Data: [
-      { $Type: 'UI.DataField', Value: user_ID,    Label: 'Linked User' },
-      { $Type: 'UI.DataField', Value: user.email, Label: 'Email (from linked User)' }
+      { $Type: 'UI.DataField', Value: user_ID,   Label: 'Linked User' },
+      { $Type: 'UI.DataField', Value: emailEdit, Label: 'Email' }
     ]
   },
   UI.Facets: [

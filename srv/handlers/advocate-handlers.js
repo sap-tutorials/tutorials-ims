@@ -3,6 +3,7 @@
 import { deriveSlug, suffixOnCollision } from '../lib/advocate-slug.js';
 import { processUpload, toBuffer } from '../lib/advocate-photo-store.js';
 import { uploadAndUpsertAdvocatePhoto } from '../lib/advocate-photo-upsert.js';
+import * as emailHandlers from './advocate-email-handlers.js';
 
 /**
  * Build the public REST URL for an advocate's photo.
@@ -226,4 +227,9 @@ export function register(srv) {
     );
     return SELECT.one.from(Advocates).where({ ID: advocateID });
   });
+
+  // Email propagation hooks (hydrate-on-READ + propagate-on-UPDATE +
+  // propagate-on-SAVE-on-drafts). Kept in a sibling module to keep this
+  // file scoped to slug + photo concerns.
+  emailHandlers.register(srv);
 }
