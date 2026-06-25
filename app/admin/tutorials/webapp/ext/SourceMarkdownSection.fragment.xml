@@ -29,7 +29,13 @@
         text="No source captured — republish to populate"
         state="Information"
         icon="sap-icon://information"
-        visible="{= ${sourceMd>/sourceHash} === null }"
+        visible="{= !${sourceMd>/loading} &amp;&amp; !${sourceMd>/sourceHash} }"
+        class="sapUiSmallMarginBegin"/>
+      <ObjectStatus
+        text="Loading source…"
+        state="Information"
+        icon="sap-icon://pending"
+        visible="{= !!${sourceMd>/loading} }"
         class="sapUiSmallMarginBegin"/>
     </HBox>
 
@@ -61,10 +67,25 @@
       </items>
     </IconTabBar>
 
+    <!-- "Republish to populate" empty-state.
+         Visibility gated on `sourceHash`, NOT on `markdown`, because:
+           1. During the AJAX round-trip (after onAfterBinding fires the
+              fetch but before it resolves), `markdown` is null but the
+              row may very well have a sourceHash on the server. Using
+              `!markdown` showed this empty-state spuriously for ~100ms.
+           2. If sourceHash is set but the decompression failed (rare —
+              corrupt BLOB), `markdown` is null but the source IS
+              captured. The "Source captured" badge already shows; we
+              shouldn't contradict it with a "republish" prompt.
+         Also gated on !loading so it doesn't flash during the read.
+         Captured-but-decompression-failed shows neither this empty-state
+         nor the IconTabBar — just the green "Source captured" badge,
+         which is the truthful answer; a follow-up "Failed to decompress"
+         hint can come later if it proves a real failure mode. -->
     <IllustratedMessage
       illustrationType="sapIllus-NoData"
       title="No source markdown stored"
-      description="This tutorial was published before source capture was enabled (PR #591) or sourceContent is null. Republish to populate."
-      visible="{= !${sourceMd>/markdown} }"/>
+      description="This tutorial was published before source capture was enabled (PR #591). Republish to populate."
+      visible="{= !${sourceMd>/loading} &amp;&amp; !${sourceMd>/sourceHash} }"/>
   </VBox>
 </core:FragmentDefinition>
