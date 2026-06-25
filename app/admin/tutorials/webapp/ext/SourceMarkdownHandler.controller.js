@@ -1,7 +1,9 @@
 sap.ui.define([
   "sap/ui/core/mvc/ControllerExtension",
-  "sap/ui/model/json/JSONModel"
-], function (ControllerExtension, JSONModel) {
+  "sap/ui/model/json/JSONModel",
+  "sap/m/MessageBox",
+  "sap/m/MessageToast"
+], function (ControllerExtension, JSONModel, MessageBox, MessageToast) {
   "use strict";
 
   // Hand-rolled markdown → HTML converter for the rendered preview tab.
@@ -128,6 +130,66 @@ sap.ui.define([
         // operators can investigate from devtools.
         // eslint-disable-next-line no-console
         console.warn("SourceMarkdownHandler: failed to load source for", sSlug, err);
+      });
+    },
+
+    /**
+     * Press handler for the "Rebuild this tutorial" header action (issue:
+     * rebuild-button, spec: 2026-06-24-admin-tutorial-rebuild-button-design).
+     *
+     * Wired via the action's DataFieldForAction → AdminService.rebuildContent
+     * binding in the CDS annotations. Fiori Elements invokes this method
+     * (named after the action) on the controller extension when the user
+     * clicks the button.
+     *
+     * Flow:
+     *  1. Resolve the bound Tutorial row from the host view's binding context.
+     *  2. Confirm via MessageBox with the tutorial title interpolated.
+     *  3. On confirm, execute the bound action.
+     *  4. Show a toast on success / message-box on error.
+     *
+     * Co-located with _loadSource on this ControllerExtension because Fiori
+     * Elements V4 allows only one controller extension per parent
+     * ObjectPageController; consolidating both handlers here avoids the
+     * duplicate-extends-key trap in manifest.json.
+     */
+    onRebuildTutorial: function () {
+      var oView = this.base.getView();
+      var oContext = oView.getBindingContext();
+      if (!oContext) {
+        MessageBox.error("No tutorial bound to this view.");
+        return;
+      }
+      var oData = oContext.getObject() || {};
+      var sTitle = oData.title || oData.slug || "(this tutorial)";
+
+      var oResourceBundle = oView.getModel("i18n").getResourceBundle();
+      var sDialogTitle   = oResourceBundle.getText("RebuildTutorialDialogTitle");
+      var sDialogMessage = oResourceBundle.getText("RebuildTutorialDialogMessage", [sTitle]);
+      var sToastSuccess  = oResourceBundle.getText("RebuildTutorialToastSuccess",  [sTitle]);
+      var sToastError    = oResourceBundle.getText("RebuildTutorialToastError", [""]);
+
+      MessageBox.confirm(sDialogMessage, {
+        title: sDialogTitle,
+        actions: [MessageBox.Action.OK, MessageBox.Action.CANCEL],
+        emphasizedAction: MessageBox.Action.OK,
+        onClose: function (sResult) {
+          if (sResult !== MessageBox.Action.OK) return;
+
+          var oModel = oView.getModel();
+          var oAction = oModel.bindContext(
+            "AdminService.rebuildContent(...)",
+            oContext,
+            { $$inheritExpandSelect: true }
+          );
+
+          oAction.execute().then(function () {
+            MessageToast.show(sToastSuccess, { duration: 5000 });
+          }).catch(function (err) {
+            var msg = (err && err.message) ? err.message : String(err);
+            MessageBox.error(sToastError + msg);
+          });
+        }
       });
     }
   });
