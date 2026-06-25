@@ -202,7 +202,7 @@ async function fetchMarkdown(slug: string, repo: string, branch: string, current
   // which are private — so QA fetches without GITHUB_TOKEN look like missing
   // tutorials. Pass the token through when present; public repos work either way.
   const token = process.env.GITHUB_TOKEN ?? process.env.TUTORIALS_GITHUB_TOKEN
-  const headers: Record<string, string> = { 'User-Agent': 'tutorials-poc-build' }
+  const headers: Record<string, string> = { 'User-Agent': 'tutorials-ims-build' }
   if (token) headers.Authorization = `Bearer ${token}`
   const res = await fetchWithRetry(url, { headers }, { label: `raw:${slug}` })
   if (!res.ok) throw new Error(`Failed to fetch ${slug}: ${res.status}`)

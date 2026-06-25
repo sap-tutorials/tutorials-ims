@@ -1,7 +1,7 @@
 // scripts/install-qa-workflows.ts
 //
 // Installer for the per-repo `notify-qa.yml` workflow that fires
-// `repository_dispatch` events into tutorials-poc when a *-Contribution
+// `repository_dispatch` events into tutorials-ims when a *-Contribution
 // repo is pushed.
 //
 // Scope: this script generates the workflow YAML from the committed template

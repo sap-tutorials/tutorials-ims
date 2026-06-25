@@ -34,7 +34,7 @@ service DeveloperService {
   @readonly
   entity ChatConfig as projection on ims.ChatSettings { ID, enabled, bannerText, branchingEnabled };
 
-  // Frontend endpoints (slug-based, used by tutorials-poc UI)
+  // Frontend endpoints (slug-based, used by tutorials-ims UI)
   @(requires: 'authenticated-user')
   action completeStep(slug : String, stepNumber : Integer) returns {
     completedSteps : array of Integer;

@@ -210,7 +210,7 @@ async function graphqlRequest(query: string, opts: GraphqlRequestOptions = {}): 
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
-      'User-Agent': 'tutorials-poc-build',
+      'User-Agent': 'tutorials-ims-build',
     },
     body: JSON.stringify({ query }),
   }, { retries: opts.retries ?? MAX_RETRIES, label: 'graphql', failFastOn5xx: opts.failFastOn5xx })
@@ -235,7 +235,7 @@ function restAuthHeaders(): Record<string, string> {
     Authorization: `Bearer ${token}`,
     Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28',
-    'User-Agent': 'tutorials-poc-build',
+    'User-Agent': 'tutorials-ims-build',
   }
 }
 
@@ -392,7 +392,7 @@ async function loadDiscoveryFromHana(): Promise<DiscoveredTutorial[] | null> {
   }
   try {
     const res = await fetch(`${baseUrl.replace(/\/$/, '')}/build/repo-catalog`, {
-      headers: { 'User-Agent': 'tutorials-poc-build' },
+      headers: { 'User-Agent': 'tutorials-ims-build' },
     })
     if (!res.ok) return null
     const map = await res.json() as Record<string, DiscoveredTutorial>
@@ -418,7 +418,7 @@ export async function uploadDiscoveryToHana(tutorials: DiscoveredTutorial[]): Pr
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'User-Agent': 'tutorials-poc-build',
+        'User-Agent': 'tutorials-ims-build',
       },
       body: JSON.stringify({ entries }),
     })
@@ -901,7 +901,7 @@ export async function fetchRulesVr(slug: string, repo: string, branch: string): 
   const url = `https://raw.githubusercontent.com/${ORG}/${contribRepo}/${branch}/tutorials/${slug}/rules.vr`
   try {
     const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}`, 'User-Agent': 'tutorials-poc-build' },
+      headers: { Authorization: `Bearer ${token}`, 'User-Agent': 'tutorials-ims-build' },
     })
     if (!res.ok) return null
     const content = await res.text()
