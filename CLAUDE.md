@@ -198,6 +198,7 @@ Migration scripts in `scripts/` support parallel operation during cutover:
 - `migrate-btp-roles.js` — copy BTP role-collection user assignments from a source subaccount to the current target. See [docs/developers/operations/btp-role-migration.md](docs/developers/operations/btp-role-migration.md).
 - `migrate-reference-data.js` — export/import tutorials, missions, events, tags; `populate-slugs` mode patches slug fields from CAP catalog cache
 - `migrate-user-progress.js` — export/import users and task records (paged, resumable)
+- `export-advocates.cjs` / `import-advocates.cjs` — snapshot + restore the Developer Advocate roster (records + topics + links + photos) between subaccounts. Idempotent upsert by slug; FKs re-resolved by `Users.email` / `Tags.slug`. Runbook: [docs/developers/operations/advocate-export-import.md](docs/developers/operations/advocate-export-import.md).
 - `compare-systems.js` — endpoint-by-endpoint diff between Java IMS and CAP
 
 Set `IMS_BASE_URL`, `CAP_BASE_URL`, and `IMS_AUTH_TOKEN` env vars. Export files go to `.migration-data/` (gitignored).

@@ -131,6 +131,7 @@ export default defineConfig({
         ]},
         { text: 'Operations', items: [
           { text: 'A/B comparison runbook',    link: '/developers/operations/ab-comparison-runbook' },
+          { text: 'Advocate export/import',    link: '/developers/operations/advocate-export-import' },
           { text: 'Agent isolation hooks',     link: '/developers/operations/agent-isolation-hooks' },
           { text: 'AI-author CI setup',        link: '/developers/operations/ai-author-ci-setup' },
           { text: 'BTP destinations (SCI / NGDS)', link: '/developers/operations/btp-destinations' },

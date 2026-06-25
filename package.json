@@ -28,6 +28,8 @@
     "publish-content:qa": "tsx scripts/publish-content.ts --channel qa",
     "qa:full": "npm run fetch-tutorials:qa && npm run build:qa && npm run publish-content:qa",
     "setup-dev-data": "cds bind --exec -- node scripts/setup-dev-data.cjs",
+    "export:advocates": "cds bind --exec -- node scripts/export-advocates.cjs",
+    "import:advocates": "cds bind --exec -- node scripts/import-advocates.cjs",
     "backfill-categories": "node scripts/backfill-categories.cjs",
     "kg:reextract": "cross-env KG_EXTRACT_BUILD_CAP=10000 cds bind --exec -- node scripts/kg-reextract.cjs",
     "seed-tag-labels": "tsx scripts/seed-tag-labels.ts",
