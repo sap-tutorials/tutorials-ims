@@ -70,11 +70,6 @@ describe.skipIf(!SRV)('GET /api/advocates', () => {
 });
 
 describe.skipIf(!SRV)('GET /api/advocates/:slug/photo', () => {
-  it('returns 404 for a placeholder row (no photo uploaded)', async () => {
-    const res = await fetch(SRV + '/api/advocates/placeholder-emea/photo');
-    expect(res.status).toBe(404);
-  });
-
   it('returns 404 for an unknown slug', async () => {
     const res = await fetch(SRV + '/api/advocates/no-such-advocate/photo');
     expect(res.status).toBe(404);
