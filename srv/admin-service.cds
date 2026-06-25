@@ -388,7 +388,17 @@ service AdminService {
   // The header avatar is a v2 follow-up; primary use case is the
   // uploadPhoto / clearPhoto bound actions which work without the virtual.
   @odata.draft.enabled
-  entity Advocates as projection on ims.Advocates actions {
+  entity Advocates as projection on ims.Advocates {
+    *,
+    // Convenience aliases for FE V4 LineItem facets. FE V4 can't bind
+    // a LineItem to a 2-hop association path (advocate.user.authoredTutorials),
+    // so we surface them as 1-hop on the projection. The targets resolve to
+    // AdminService.Tutorials and AdminService.TutorialContributors, which both
+    // already carry @UI.LineItem annotations (PR #618 + admin tile expansion).
+    // Spec: docs/superpowers/specs/2026-06-25-advocate-user-link-design.md §2
+    user.authoredTutorials     as authoredTutorials,
+    user.tutorialContributions as contributedTutorials,
+  } actions {
     // Bound action for the Object Page photo-upload flow. The Fiori
     // UploadSet against the `photo` composition silently drops bytes
     // through the draft layer; this action is the explicit, working
