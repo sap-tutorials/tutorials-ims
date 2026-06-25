@@ -80,6 +80,20 @@
         color: inherit; padding: 0.25rem 0.5rem; }
       .consent-banner__close:hover { color: var(--sapLink_Color, #0070f3); }
 
+      /* Mobile portrait fix: the inner grid is "1fr auto auto", so two auto
+         button columns (min-width 7rem each) plus gaps leave the text column
+         around 70px on a ~390px viewport, wrapping one word per line and
+         making the banner taller than the screen. Collapse to a single column,
+         stretch buttons full-width, and re-anchor the X to the banner itself
+         (not the inner grid) so it stays in the corner. Landscape on the same
+         device is ~850px wide, so the desktop 3-column layout still applies. */
+      @media (max-width: 600px) {
+        .consent-banner { padding: 0.75rem 1rem 1rem; }
+        .consent-banner__inner { grid-template-columns: 1fr; gap: 0.75rem; padding-right: 2rem; }
+        .consent-banner__btn { width: 100%; min-width: 0; }
+        .consent-banner__close { top: 0.25rem; right: 0.5rem; }
+      }
+
       .consent-dialog__backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 10001;
         display: flex; align-items: center; justify-content: center; padding: 1rem; }
       .consent-dialog { background: var(--sapBaseColor, #fff); color: var(--sapTextColor, #1a1a1a);
