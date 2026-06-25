@@ -107,6 +107,38 @@ describe('UI Annotations in $metadata', () => {
         'Other', 'SapCommunity', 'X', 'YouTube',
       ].sort());
     });
+
+    it('Advocates/authoredTutorials + contributedTutorials disallow Insert/Update/Delete', () => {
+      // Inverse Associations (not Compositions) — Create/Delete on the inline
+      // table would error or create orphans. Capabilities annotation hides
+      // the FE V4 toolbar buttons cleanly. Spec §4.4.
+      for (const nav of ['authoredTutorials', 'contributedTutorials']) {
+        const region = metadata.match(
+          new RegExp(`<Annotations Target="AdminService\\.Advocates/${nav}"[\\s\\S]*?</Annotations>`)
+        );
+        expect(region, `Advocates/${nav} annotations region not found`).toBeTruthy();
+        expect(region[0]).toContain('Term="Capabilities.InsertRestrictions"');
+        expect(region[0]).toContain('Term="Capabilities.UpdateRestrictions"');
+        expect(region[0]).toContain('Term="Capabilities.DeleteRestrictions"');
+        // The Insertable/Updatable/Deletable values should be literal false.
+        expect(region[0]).toMatch(/Insertable" Bool="false"/);
+        expect(region[0]).toMatch(/Updatable" Bool="false"/);
+        expect(region[0]).toMatch(/Deletable" Bool="false"/);
+      }
+    });
+
+    it('AdvocateTopics.ID is hidden from the Topics inline table', () => {
+      // The projection has no explicit field list, so ID is auto-projected.
+      // FE V4's column-personalization dialog (or a default column set)
+      // surfaces the row's own GUID alongside the Topic FK — confusing for
+      // admins. @UI.Hidden suppresses the column entirely. Spec §4.2.
+      const region = metadata.match(
+        /<Annotations Target="AdminService\.AdvocateTopics\/ID"[\s\S]*?<\/Annotations>/
+      );
+      expect(region, 'AdvocateTopics/ID annotations region not found').toBeTruthy();
+      // @UI.Hidden serializes to Term="UI.Hidden" Bool="true" (default truth).
+      expect(region[0]).toMatch(/Term="UI\.Hidden"/);
+    });
   });
 
   // Regression suite for spec 2026-06-24-tutorial-authorship-fk —

@@ -192,3 +192,52 @@ is recorded as a memory entry for future me:
   `LargeBinary @Core.MediaType` columns are excluded from default
   `SELECT.*` projections AND returned as Node `Readable` streams, not
   `Buffer`s.
+
+## Admin OP data dependencies
+
+The Advocate Object Page has two data dependencies that, if violated, cause
+visible rendering issues. The bugs are documented in issue #638; the
+operational fixes are scripts that have already been run on DEV but may
+need re-running after future migrations or schema reseeding.
+
+### Topics column shows the tag GUID
+
+**Symptom:** The Topics inline table renders the tag's primary key (UUID)
+instead of the human label.
+
+**Root cause:** `Tags.label` is NULL for the referenced tag row.
+`@Common.Text: tag.label` on `AdvocateTopics.tag_ID` resolves to null, and
+FE V4 falls back to the FK GUID.
+
+**Fix (re-run as needed):**
+
+```bash
+ADMIN_BEARER_TOKEN=<admin-XSUAA-token> npm run seed-tag-labels
+```
+
+The seeder harvests labels from the legacy AEM Solr endpoint and writes
+them to `Tags.label`. See `scripts/seed-tag-labels.ts` for details.
+
+### Linked User field shows '-'
+
+**Symptom:** The Linked User field on the Identity tab shows a dash even
+when a user IS linked.
+
+**Root cause:** `Users.displayName` is NULL for the linked user. Migrated
+rows often have firstName + lastName populated but displayName=null
+(the IMS migrator never copied displayName). The OP's
+`@Common.Text: user/displayName` resolves to null and FE V4 renders the
+empty placeholder.
+
+**Fix (re-run as needed):**
+
+```bash
+# Dry-run preview
+npx cds bind --exec -- node scripts/backfill-users-displayname.cjs
+
+# After confirming output:
+npx cds bind --exec -- node scripts/backfill-users-displayname.cjs --commit
+```
+
+Script is idempotent. Safe to run any time displayName drift recurs (e.g.
+after a fresh migration batch where IDP backfill hasn't yet fired).

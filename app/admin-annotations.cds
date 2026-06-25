@@ -1930,6 +1930,18 @@ annotate AdminService.Advocates with {
            { $Type: 'Common.ValueListParameterDisplayOnly',                             ValueListProperty: 'sapId' }
          ]
        };
+
+  // Spec: docs/superpowers/specs/2026-06-25-advocate-admin-ui-fixes-design.md §4.4.
+  // Inverse-Association nav properties on the Advocates projection. Hide
+  // Create/Delete/edit affordances so admins don't accidentally try to
+  // mutate tutorials from the Advocate OP (these are read-through views,
+  // not Compositions). FE V4 honors @Capabilities.* on navigation aliases.
+  authoredTutorials    @Capabilities.InsertRestrictions: { Insertable: false }
+                       @Capabilities.UpdateRestrictions: { Updatable:  false }
+                       @Capabilities.DeleteRestrictions: { Deletable:  false };
+  contributedTutorials @Capabilities.InsertRestrictions: { Insertable: false }
+                       @Capabilities.UpdateRestrictions: { Updatable:  false }
+                       @Capabilities.DeleteRestrictions: { Deletable:  false };
 };
 
 annotate AdminService.Advocates with @(
@@ -2079,6 +2091,11 @@ annotate AdminService.AdvocatePhotos with @(
 // Value-help dialog: ranks `label` first so admins search by the human
 // label, falls back to `name` (slug-equivalent) when label is missing.
 annotate AdminService.AdvocateTopics with {
+  // Spec: 2026-06-25-advocate-admin-ui-fixes-design.md §4.2.
+  // Projection has no explicit field list, so the row's own ID is auto-
+  // projected and FE V4 may surface it in the inline Topics table or the
+  // column-personalization dialog. @UI.Hidden suppresses it cleanly.
+  ID  @UI.Hidden;
   tag @Common.Label: 'Topic'
       @Common.Text: tag.label
       @Common.TextArrangement: #TextOnly
