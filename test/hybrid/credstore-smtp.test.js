@@ -66,4 +66,51 @@ describe('credstore — live round-trip (mTLS + payload encryption)', () => {
       try { await credstore.deleteSecret(alias); } catch { /* */ }
     }
   });
+
+  it('write→read round-trips all 5 SMTP transport aliases (mail-client surface area)', async () => {
+    // Five aliases mirroring the production set (SMTP_HOST/PORT/USER/FROM/PASS).
+    // Using __TEST__ prefix + pid so these don't clash with real SMTP_* rows in
+    // the credstore that production tutorials-srv reads at startup.
+    //
+    // Purpose: prove platform plumbing (mTLS, JWE payload encryption, namespace
+    // scoping) works for ALL 5 aliases, not just the one historically-tested
+    // SMTP_PASS_HYBRID_TEST alias. The lesson from the 5-PR Secrets spiral
+    // (PRs #546/#547/#549/#586/#588) is that platform-default flips can affect
+    // one credstore code path while leaving another working — running this
+    // against the live binding is the back-stop.
+    const aliases = [
+      `__TEST__SMTP_HOST_${process.pid}`,
+      `__TEST__SMTP_PORT_${process.pid}`,
+      `__TEST__SMTP_USER_${process.pid}`,
+      `__TEST__SMTP_FROM_${process.pid}`,
+      `__TEST__SMTP_PASS_${process.pid}`,
+    ];
+    const values = [
+      'hybrid.smtp.example.com',
+      '2587',
+      'hybrid-user',
+      'hybrid-from@example.com',
+      'hybrid-pass-secret',
+    ];
+    try {
+      // Write all 5 sequentially. Parallel would shave a few hundred ms but
+      // would also exercise the credstore's per-account rate-limit; serial
+      // keeps this test boring and reliable.
+      for (let i = 0; i < aliases.length; i++) {
+        await credstore.writeSecret(aliases[i], values[i]);
+      }
+      // Read all 5 back; assert exact-match.
+      for (let i = 0; i < aliases.length; i++) {
+        const got = await credstore.readSecret(aliases[i]);
+        expect(got).toBe(values[i]);
+      }
+    } finally {
+      // Best-effort cleanup — even if an assertion above fails, we want the
+      // test aliases gone so the next run isn't polluted. deleteSecret is
+      // idempotent.
+      for (const alias of aliases) {
+        try { await credstore.deleteSecret(alias); } catch { /* swallow */ }
+      }
+    }
+  });
 });
