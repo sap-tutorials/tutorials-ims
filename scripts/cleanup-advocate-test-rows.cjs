@@ -41,19 +41,21 @@ async function main() {
 
   const db = await cds.connect.to('db');
 
-  // Identify candidate rows. HANA stores unquoted CDS identifiers as
-  // UPPERCASE; only quote mixed-case identifiers ("ID", "firstName").
+  // Identify candidate rows. The Advocates table's columns are UPPERCASE
+  // in HANA (verified 2026-06-25 on DEV — unquoted UPPERCASE identifiers
+  // match). The cleanup script's earlier "quote mixed-case" form was wrong
+  // for this schema's actual DDL.
   const rows = await db.run(
-    `SELECT "ID", SLUG, "firstName", "lastName", BIO
+    `SELECT ID, SLUG, FIRSTNAME, LASTNAME, BIO
        FROM COM_SAP_DEVELOPERS_IMS_ADVOCATES
       WHERE SLUG LIKE '__test__%'
-         OR "firstName" LIKE '__TEST__%'
+         OR FIRSTNAME LIKE '__TEST__%'
          OR SLUG = 'thomas-jung'`
   );
 
   console.log(`Found ${rows.length} test-fixture / shadow row(s):`);
   for (const r of rows.slice(0, 10)) {
-    console.log(`  ${r.ID}  slug=${r.SLUG}  ${r.firstName} ${r.lastName}`);
+    console.log(`  ${r.ID}  slug=${r.SLUG}  ${r.FIRSTNAME} ${r.LASTNAME}`);
   }
   if (rows.length > 10) {
     console.log(`  ...and ${rows.length - 10} more`);
@@ -77,7 +79,7 @@ async function main() {
   const placeholders = ids.map((_, i) => `?`).join(',');
   const result = await db.run(
     {
-      query: `DELETE FROM COM_SAP_DEVELOPERS_IMS_ADVOCATES WHERE "ID" IN (${placeholders})`,
+      query: `DELETE FROM COM_SAP_DEVELOPERS_IMS_ADVOCATES WHERE ID IN (${placeholders})`,
       values: ids,
     }
   );

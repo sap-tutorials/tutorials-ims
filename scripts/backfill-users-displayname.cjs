@@ -36,22 +36,24 @@ async function main() {
 
   const db = await cds.connect.to('db');
 
-  // Find candidate rows. HANA stores unquoted CDS identifiers as
-  // UPPERCASE; mixed-case identifiers must be quoted.
+  // Find candidate rows. The Users table's columns are UPPERCASE in HANA
+  // (verified 2026-06-25 on DEV — the table's DDL came from the legacy Java
+  // IMS migrator path, not cds-compiler-quoted hdbtable). Unquoted UPPERCASE
+  // identifiers match.
   const rows = await db.run(
-    `SELECT "ID", "firstName", "lastName", "displayName", EMAIL
+    `SELECT ID, FIRSTNAME, LASTNAME, DISPLAYNAME, EMAIL
        FROM COM_SAP_DEVELOPERS_IMS_USERS
-      WHERE "displayName" IS NULL
+      WHERE DISPLAYNAME IS NULL
         AND (
-          LENGTH(TRIM(COALESCE("firstName", ''))) > 0
-          OR LENGTH(TRIM(COALESCE("lastName", ''))) > 0
+          LENGTH(TRIM(COALESCE(FIRSTNAME, ''))) > 0
+          OR LENGTH(TRIM(COALESCE(LASTNAME, ''))) > 0
         )`
   );
 
   console.log(`Found ${rows.length} candidate row(s) with NULL displayName but non-empty name:`);
   for (const r of rows.slice(0, 10)) {
-    const newName = `${r.firstName || ''} ${r.lastName || ''}`.trim();
-    console.log(`  ${r.ID}  '${r.firstName ?? ''}' + '${r.lastName ?? ''}' → '${newName}'  (${r.EMAIL ?? '<no email>'})`);
+    const newName = `${r.FIRSTNAME || ''} ${r.LASTNAME || ''}`.trim();
+    console.log(`  ${r.ID}  '${r.FIRSTNAME ?? ''}' + '${r.LASTNAME ?? ''}' → '${newName}'  (${r.EMAIL ?? '<no email>'})`);
   }
   if (rows.length > 10) {
     console.log(`  ...and ${rows.length - 10} more`);
@@ -70,16 +72,16 @@ async function main() {
   // Run the UPDATE. The same WHERE clause is reapplied so the operation
   // remains idempotent — re-running after partial failure finds the
   // still-NULL rows. TRIM is double-applied (inner + the outer wrapping)
-  // to defend against rows where firstName is '   ' (whitespace-only).
+  // to defend against rows where FIRSTNAME is '   ' (whitespace-only).
   const result = await db.run(
     `UPDATE COM_SAP_DEVELOPERS_IMS_USERS
-        SET "displayName" = TRIM(
-              COALESCE("firstName", '') || ' ' || COALESCE("lastName", '')
+        SET DISPLAYNAME = TRIM(
+              COALESCE(FIRSTNAME, '') || ' ' || COALESCE(LASTNAME, '')
             )
-      WHERE "displayName" IS NULL
+      WHERE DISPLAYNAME IS NULL
         AND (
-          LENGTH(TRIM(COALESCE("firstName", ''))) > 0
-          OR LENGTH(TRIM(COALESCE("lastName", ''))) > 0
+          LENGTH(TRIM(COALESCE(FIRSTNAME, ''))) > 0
+          OR LENGTH(TRIM(COALESCE(LASTNAME, ''))) > 0
         )`
   );
   // hdb driver returns either a numeric affected-row count or an object
