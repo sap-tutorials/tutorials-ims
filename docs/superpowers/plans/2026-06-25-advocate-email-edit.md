@@ -397,11 +397,13 @@ entity Advocates as projection on ims.Advocates {
 ```bash
 npx cds compile srv/admin-service.cds -s AdminService -2 edmx 2>&1 | head -5
 # expect: <?xml version line, no Errors
-# Specifically check the new property landed:
-TMP="${TEMP:-/tmp}/email-edmx.xml"
-npx cds compile srv/admin-service.cds -s AdminService -2 edmx 2>/dev/null > "$TMP"
-grep -c 'Name="emailEdit"' "$TMP"
-# expect: 1 (or 2 if the draft companion also gets it — both acceptable)
+# Specifically check the new property landed (≥1 hit — draft-enabled entity
+# may emit it on the draft companion too):
+EDMX_TMP="${TEMP:-/tmp}/email-edmx.xml"
+npx cds compile srv/admin-service.cds -s AdminService -2 edmx 2>/dev/null > "$EDMX_TMP"
+HITS=$(grep -c 'Name="emailEdit"' "$EDMX_TMP" || echo 0)
+echo "emailEdit occurrences in EDMX: $HITS"
+# expect: HITS >= 1
 ```
 
 - [ ] **Step 5.4: Run existing advocate tests — expect still green**
@@ -438,9 +440,11 @@ Issue #638."
 
 - [ ] **Step 6.1: Write failing tests — six cases per spec §8.1**
 
+Test 3 mutates `Users.email` for `userID`; test 6 expects a specific value at the end. Vitest runs `it` blocks in order within a `describe`, but to harden against reorder and parallel-mode shifts, the test file uses a `beforeEach` that resets `Users.email = 'old@sap.com'` for `userID` before each case. This keeps the assertions in tests 4–6 valid regardless of execution order.
+
 ```js
 // test/unit/advocates/email-edit.test.js
-import { describe, expect, it, beforeAll, afterAll } from 'vitest';
+import { describe, expect, it, beforeAll, beforeEach, afterAll } from 'vitest';
 import cds from '@sap/cds';
 import { randomUUID } from 'node:crypto';
 
@@ -476,6 +480,17 @@ afterAll(async () => {
   const { Users, Advocates } = cds.entities('com.sap.developers.ims');
   await db.run(DELETE.from(Advocates).where({ ID: { in: [advLinked, advUnlinked] } }));
   await db.run(DELETE.from(Users).where({ ID: { in: [userID, userNoEmail] } }));
+});
+
+// Reset Users.email for userID before each test so test ordering / parallel
+// mode can't leak state between cases. test 3 mutates the column;
+// without this, test 6's assertion `email === 'draft-saved@sap.com'` could
+// pass for the wrong reason if test 3 ran first AND test 6 didn't actually
+// propagate.
+beforeEach(async () => {
+  const db = await cds.connect.to('db');
+  const { Users } = cds.entities('com.sap.developers.ims');
+  await db.run(UPDATE(Users).where({ ID: userID }).set({ email: 'old@sap.com' }));
 });
 
 describe('Advocates.emailEdit virtual field', () => {
@@ -627,6 +642,8 @@ async function propagateEmailEdit(req, srvEntities) {
   // Resolve target user_ID. Priority: explicit value in this payload, else
   // the active row's user_ID (read from DB). Active record lookup uses the
   // request's primary key from req.params.
+  // The `req.params?.[0]?.ID || req.params?.[0]` defensive form is needed
+  // for the CAP 10 `consistent_params` flag flip — see CLAUDE.md note.
   const { Advocates, Users } = srvEntities;
   let targetUserId = req.data.user_ID;
   if (!targetUserId) {
@@ -796,13 +813,13 @@ Replace with:
 - [ ] **Step 7.3: Verify CDS compiles cleanly**
 
 ```bash
-TMP="${TEMP:-/tmp}/email-fe-edmx.xml"
-npx cds compile srv/admin-service.cds -s AdminService -2 edmx 2>/dev/null > "$TMP"
+EDMX_TMP="${TEMP:-/tmp}/email-fe-edmx.xml"
+npx cds compile srv/admin-service.cds -s AdminService -2 edmx 2>/dev/null > "$EDMX_TMP"
 node -e "
-const x = require('fs').readFileSync(process.env.TMP, 'utf8');
+const x = require('fs').readFileSync(process.env.EDMX_TMP, 'utf8');
 const idLink = x.match(/UI.FieldGroup\".*?#IdentityLink[\\s\\S]*?Value=\"emailEdit\"/);
 console.log('emailEdit bound in #IdentityLink:', idLink ? 'OK' : 'MISSING');
-" TMP="$TMP"
+" EDMX_TMP="$EDMX_TMP"
 ```
 
 - [ ] **Step 7.4: Run advocate tests — expect green**
@@ -978,7 +995,9 @@ head -70 test/hybrid/advocate-user-link.test.js
 
 - [ ] **Step 9.2: Append the new test case at the end of the describe block**
 
-Use `Edit` to insert the new case before the final closing brace of `describeIf('Advocates.user — HANA UNIQUE + cascade (hybrid)', () => { ... });`. Anchor on the existing last `it(...)` block's closing `});`. The new case:
+Use `Edit` to insert the new case before the final closing brace of `describeIf('Advocates.user — HANA UNIQUE + cascade (hybrid)', () => { ... });`. Anchor on the existing last `it(...)` block's closing `});`. **Make sure `randomUUID` is imported at the top of the file** (`import { randomUUID } from 'node:crypto';`) — the existing PR #633 hybrid test may already import it; check first.
+
+The new case routes through the AdminService so the `before('UPDATE')` handler actually fires — direct `db.run(UPDATE(...))` would bypass service handlers and leave the test green-but-meaningless. Canonical pattern is `srv.run(UPDATE(srv.entities.Advocates, key).set({...}))` (verified against `srv/admin-service.js` callers — `db.run(UPDATE(...).set(...))` is the codebase's universal CAP-write shape; the `.with()` form does NOT exist in CAP Node.js).
 
 ```js
   it('emailEdit round-trip — UPDATE propagates to Users.email on HANA', async () => {
@@ -999,15 +1018,20 @@ Use `Edit` to insert the new case before the final closing brace of `describeIf(
 
     await INSERT.into('com.sap.developers.ims.Advocates').entries({
       ID: advIdHybrid,
-      slug: '__test__advocate-link-email-' + Date.now().toString(36),
+      slug: '__TEST__advocate-link-email-' + Date.now().toString(36),
       firstName: '__TEST__', lastName: 'EmailRT',
       region: 'AMERICAS', isActive: true,
       user_ID: userIdHybrid,
     });
 
-    // Direct service call (skip OData parsing; this is a hybrid integration test).
-    const srv = await cds.connect.to('AdminService');
-    await srv.update('com.sap.developers.ims.Advocates', advIdHybrid).with({ emailEdit: 'after@hybrid.test' });
+    // Route through AdminService so the before('UPDATE') handler actually
+    // fires. cds.connect.to('AdminService') returns a service instance whose
+    // .run() processes the request through the handler chain — db.run()
+    // would bypass handlers and the test would be green but meaningless.
+    const adminSrv = await cds.connect.to('AdminService');
+    await adminSrv.run(
+      UPDATE(adminSrv.entities.Advocates, advIdHybrid).set({ emailEdit: 'after@hybrid.test' })
+    );
 
     const updated = await SELECT.one.from('com.sap.developers.ims.Users')
       .columns('email')
@@ -1015,8 +1039,6 @@ Use `Edit` to insert the new case before the final closing brace of `describeIf(
     expect(updated.email).toBe('after@hybrid.test');
   });
 ```
-
-(Bring `randomUUID` into scope at the top of the file if not already imported.)
 
 - [ ] **Step 9.3: Skipped on local run; check syntax**
 
@@ -1152,7 +1174,7 @@ git push -u origin worktree-advocate-email-edit
 
 ```bash
 gh pr create \
-  --title "feat(advocates): editable email + test fixture lockdown (closes #638 partially)" \
+  --title "feat(advocates): editable email + test fixture lockdown (refs #638)" \
   --body "$(cat <<'PRBODY'
 Implements docs/superpowers/specs/2026-06-25-advocate-email-edit-design.md.
 
@@ -1185,9 +1207,9 @@ Then re-creates his real Advocates row via the admin UI.
 
 ## Sibling PR
 
-UI fixes for the same Advocate OP (Topics GUID rendering, Linked User '-' display, Tutorials Create button hiding) are covered by a separate spec + sibling worktree (\`.claude/worktrees/advocate-admin-ui-fixes\`) and will land in its own PR. Issue #638 stays open until both PRs merge.
+UI fixes for the same Advocate OP (Topics GUID rendering, Linked User '-' display, Tutorials Create button hiding) are covered by a separate spec + sibling worktree (\`.claude/worktrees/advocate-admin-ui-fixes\`) and will land in its own PR. Issue #638 stays open until both PRs merge; this PR intentionally does NOT use a GitHub close keyword (the sibling PR will).
 
-Closes #638 partially.
+Refs #638.
 PRBODY
 )"
 ```
