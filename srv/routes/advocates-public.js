@@ -22,22 +22,58 @@ function maxModified(rows) {
 async function handleAdvocates(req, res) {
   try {
     const db = await cds.connect.to('db');
-    const { Advocates, AdvocateTopics, AdvocateLinks, Tags } =
+    const { Advocates, AdvocateTopics, AdvocateLinks, Tags, Users, Tutorials, TutorialContributors } =
       cds.entities('com.sap.developers.ims');
 
     const advocates = await db.run(
       SELECT.from(Advocates).where({ isActive: true }),
     );
     const ids = advocates.map((a) => a.ID);
+    // Spec 2026-06-25-advocate-user-link-design §3: pull linked user data
+    // for advocates that have user_ID set. Separate query + JS-side join
+    // (matches the topics/links pattern below — no deep CQN expand).
+    const userIds = [...new Set(advocates.map((a) => a.user_ID).filter(Boolean))];
 
-    const [topics, links] = await Promise.all([
+    const [topics, links, users, authoredRows, contribRows] = await Promise.all([
       ids.length
         ? db.run(SELECT.from(AdvocateTopics).where({ advocate_ID: { in: ids } }))
         : [],
       ids.length
         ? db.run(SELECT.from(AdvocateLinks).where({ advocate_ID: { in: ids } }))
         : [],
+      // NEW — only fetch Users that an advocate links to.
+      userIds.length
+        ? db.run(SELECT.from(Users).columns('ID', 'email').where({ ID: { in: userIds } }))
+        : [],
+      // NEW — tutorials authored by any of those users.
+      userIds.length
+        ? db.run(
+            SELECT.from(Tutorials)
+              .columns('slug', 'title', 'author_ID')
+              .where({ author_ID: { in: userIds } }),
+          )
+        : [],
+      // NEW — contributor rows for any of those users; tutorial slug/title
+      // resolved in a second small query below to avoid CQN deep-expand.
+      userIds.length
+        ? db.run(
+            SELECT.from(TutorialContributors)
+              .columns('user_ID', 'tutorial_ID')
+              .where({ user_ID: { in: userIds } }),
+          )
+        : [],
     ]);
+
+    const contribTutorialIds = [
+      ...new Set(contribRows.map((r) => r.tutorial_ID).filter(Boolean)),
+    ];
+    const contribTutorials = contribTutorialIds.length
+      ? await db.run(
+          SELECT.from(Tutorials)
+            .columns('ID', 'slug', 'title')
+            .where({ ID: { in: contribTutorialIds } }),
+        )
+      : [];
 
     // Resolve topic tag → { slug, label }.
     // Note: the Tags entity has no `slug` column — its slug-equivalent is
@@ -85,6 +121,25 @@ async function handleAdvocates(req, res) {
       });
     }
 
+    // Spec 2026-06-25-advocate-user-link-design §3: build the linked-user
+    // / authored-tutorial / contributed-tutorial lookups so the response
+    // shaper below can conditionally surface them per advocate.
+    const userById = new Map(users.map((u) => [u.ID, u]));
+    const authoredByUserId = new Map();
+    for (const t of authoredRows) {
+      if (!t.slug || !t.title) continue;
+      if (!authoredByUserId.has(t.author_ID)) authoredByUserId.set(t.author_ID, []);
+      authoredByUserId.get(t.author_ID).push({ slug: t.slug, title: t.title });
+    }
+    const tutorialById = new Map(contribTutorials.map((t) => [t.ID, t]));
+    const contribByUserId = new Map();
+    for (const c of contribRows) {
+      const tut = tutorialById.get(c.tutorial_ID);
+      if (!tut || !tut.slug || !tut.title) continue;
+      if (!contribByUserId.has(c.user_ID)) contribByUserId.set(c.user_ID, []);
+      contribByUserId.get(c.user_ID).push({ slug: tut.slug, title: tut.title });
+    }
+
     // Collator-aware sort: sortOverride first (NULLS LAST), then lastName, then firstName.
     const collator = new Intl.Collator('en', { sensitivity: 'base' });
     advocates.sort((a, b) => {
@@ -112,6 +167,29 @@ async function handleAdvocates(req, res) {
         photoUpdatedAt: a.photoUpdatedAt,
         topics: topicsByAdv.get(a.ID) || [],
         links: linksByAdv.get(a.ID) || [],
+        // Spec 2026-06-25-advocate-user-link-design §3: conditionally
+        // include email + authored/contributed tutorial arrays. Each is
+        // omitted (not set to null / []) when it would carry no info, so
+        // the Vue island can use simple v-if="advocate.email" gates.
+        ...(a.user_ID && userById.get(a.user_ID)?.email
+          ? { email: userById.get(a.user_ID).email }
+          : {}),
+        ...(a.user_ID && authoredByUserId.get(a.user_ID)?.length
+          ? {
+              authoredTutorials: authoredByUserId
+                .get(a.user_ID)
+                .slice()
+                .sort((x, y) => x.title.localeCompare(y.title)),
+            }
+          : {}),
+        ...(a.user_ID && contribByUserId.get(a.user_ID)?.length
+          ? {
+              contributedTutorials: contribByUserId
+                .get(a.user_ID)
+                .slice()
+                .sort((x, y) => x.title.localeCompare(y.title)),
+            }
+          : {}),
       })),
     };
 
@@ -119,6 +197,11 @@ async function handleAdvocates(req, res) {
       maxModified(advocates),
       maxModified(topics),
       maxModified(links),
+      // Spec §3: bust the 60s cache when linked-user data changes.
+      maxModified(users),
+      maxModified(authoredRows),
+      maxModified(contribRows),
+      maxModified(contribTutorials),
     );
     const etag = '"' + max.toString(36) + '"';
 
