@@ -18,7 +18,7 @@
 | --- | --- | --- |
 | `scripts/export-advocates.cjs` | Create | Read all `Advocates` (+ topics/links/photos + resolved `Users.email`/`Tags.slug`) from currently-bound DB; serialise to `.migration-data/advocates.json` |
 | `scripts/import-advocates.cjs` | Create | Read `.migration-data/advocates.json`; upsert each advocate into currently-bound DB; re-resolve FKs by email/slug; replace topics/links/photo per row |
-| `scripts/lib/advocate-io.cjs` | Create | Shared helpers: `advocatesTableName(db)`, `runQuery(db, sql, params)`, `assertSchemaVersion(payload)`, region-validation constants. Keeps the two scripts thin and lets us unit-test the helpers without spinning up HANA. |
+| `scripts/lib/advocate-io.cjs` | Create | Shared helpers: `advocateTableInfo(isHana)` (table + quoted column names per DB kind, mirrors [srv/lib/_tutorials-table.js](../../../srv/lib/_tutorials-table.js)), `isHanaDb(db)`, `assertSchemaVersion(payload)`, region-validation and link-kind constants. Keeps the two scripts thin and lets us unit-test the helpers without spinning up HANA. |
 | `package.json` | Modify | Add `export:advocates` and `import:advocates` npm script aliases |
 | `.gitignore` | Verify | Confirm `.migration-data/` is already gitignored (it is — included as a defensive grep step) |
 | `test/unit/advocate-io.test.js` | Create | Unit tests for the helpers — schema-version assertion, table-name resolution, error messages |
@@ -49,6 +49,8 @@ import {
   assertSchemaVersion,
   VALID_REGIONS,
   VALID_LINK_KINDS,
+  advocateTableInfo,
+  isHanaDb,
 } from '../../scripts/lib/advocate-io.cjs';
 
 describe('advocate-io helpers', () => {
@@ -65,13 +67,13 @@ describe('advocate-io helpers', () => {
 
     it('rejects an older schema version with a clear message', () => {
       expect(() => assertSchemaVersion({ schemaVersion: 0 })).toThrow(
-        /schemaVersion 0 .* expected 1/i
+        /schemaVersion 0/
       );
     });
 
     it('rejects a future schema version with a clear message', () => {
       expect(() => assertSchemaVersion({ schemaVersion: 2 })).toThrow(
-        /schemaVersion 2 .* expected 1/i
+        /schemaVersion 2/
       );
     });
 
@@ -92,6 +94,57 @@ describe('advocate-io helpers', () => {
         'BlueSky', 'Blog', 'Email', 'GitHub', 'LinkedIn',
         'Mastodon', 'Other', 'SapCommunity', 'X', 'YouTube',
       ]);
+    });
+  });
+
+  describe('advocateTableInfo(isHana)', () => {
+    it('returns UPPERCASE unquoted-style identifiers for HANA', () => {
+      const t = advocateTableInfo(true);
+      expect(t.advocates).toBe('COM_SAP_DEVELOPERS_IMS_ADVOCATES');
+      expect(t.topics).toBe('COM_SAP_DEVELOPERS_IMS_ADVOCATETOPICS');
+      expect(t.links).toBe('COM_SAP_DEVELOPERS_IMS_ADVOCATELINKS');
+      expect(t.photos).toBe('COM_SAP_DEVELOPERS_IMS_ADVOCATEPHOTOS');
+      expect(t.users).toBe('COM_SAP_DEVELOPERS_IMS_USERS');
+      expect(t.tags).toBe('COM_SAP_DEVELOPERS_IMS_TAGS');
+      expect(t.cols.slug).toBe('SLUG');
+      expect(t.cols.firstName).toBe('FIRSTNAME');
+      expect(t.cols.userFk).toBe('USER_ID');
+      expect(t.cols.advocateFk).toBe('ADVOCATE_ID');
+      expect(t.cols.tagFk).toBe('TAG_ID');
+    });
+
+    it('returns mixed-case CDS-style identifiers for SQLite', () => {
+      const t = advocateTableInfo(false);
+      expect(t.advocates).toBe('com_sap_developers_ims_Advocates');
+      expect(t.topics).toBe('com_sap_developers_ims_AdvocateTopics');
+      expect(t.links).toBe('com_sap_developers_ims_AdvocateLinks');
+      expect(t.photos).toBe('com_sap_developers_ims_AdvocatePhotos');
+      expect(t.users).toBe('com_sap_developers_ims_Users');
+      expect(t.tags).toBe('com_sap_developers_ims_Tags');
+      expect(t.cols.slug).toBe('slug');
+      expect(t.cols.firstName).toBe('firstName');
+      expect(t.cols.userFk).toBe('user_ID');
+      expect(t.cols.advocateFk).toBe('advocate_ID');
+      expect(t.cols.tagFk).toBe('tag_ID');
+    });
+  });
+
+  describe('isHanaDb', () => {
+    it('returns true for { kind: "hana" }', () => {
+      expect(isHanaDb({ kind: 'hana' })).toBe(true);
+    });
+
+    it('returns true for { kind: "HANA" } (case-insensitive)', () => {
+      expect(isHanaDb({ kind: 'HANA' })).toBe(true);
+    });
+
+    it('returns false for { kind: "sqlite" }', () => {
+      expect(isHanaDb({ kind: 'sqlite' })).toBe(false);
+    });
+
+    it('returns false for null / undefined db', () => {
+      expect(isHanaDb(null)).toBe(false);
+      expect(isHanaDb(undefined)).toBe(false);
     });
   });
 });
@@ -117,8 +170,12 @@ Expected: FAIL — `Cannot find module .../scripts/lib/advocate-io.cjs`.
 /**
  * Shared helpers for scripts/export-advocates.cjs and scripts/import-advocates.cjs.
  *
- * Lives in CommonJS (.cjs) so both scripts can `require()` it directly.
- * Kept zero-dependency and HANA-free so it can be unit-tested without a DB.
+ * Lives in CommonJS (.cjs) so both scripts can `require()` it directly even
+ * though the repo's package.json declares "type": "module". Kept zero-dep
+ * and HANA-free so it can be unit-tested without a DB.
+ *
+ * The table-info resolver mirrors srv/lib/_tutorials-table.js so both
+ * scripts speak the right SQL dialect on either side of `cds bind --exec`.
  */
 
 const SCHEMA_VERSION = 1;
@@ -126,7 +183,6 @@ const SCHEMA_VERSION = 1;
 const VALID_REGIONS = new Set(['AMERICAS', 'EMEA', 'APJ']);
 
 // Mirrors the enum in db/advocates.cds (AdvocateLinks.kind).
-// Kept as a Set so import-side validation is O(1).
 const VALID_LINK_KINDS = new Set([
   'LinkedIn', 'X', 'Mastodon', 'BlueSky', 'GitHub',
   'YouTube', 'Blog', 'SapCommunity', 'Email', 'Other',
@@ -135,16 +191,113 @@ const VALID_LINK_KINDS = new Set([
 function assertSchemaVersion(payload) {
   if (!payload || typeof payload.schemaVersion === 'undefined') {
     throw new Error(
-      'advocates.json is missing schemaVersion — refusing to import. ' +
+      'advocates.json is missing schemaVersion - refusing to import. ' +
       'Re-run scripts/export-advocates.cjs against the source DB to regenerate.'
     );
   }
   if (payload.schemaVersion !== SCHEMA_VERSION) {
     throw new Error(
-      `advocates.json schemaVersion ${payload.schemaVersion} is not compatible — expected ${SCHEMA_VERSION}. ` +
+      `advocates.json schemaVersion ${payload.schemaVersion} is not compatible (expected ${SCHEMA_VERSION}). ` +
       `This script supports v${SCHEMA_VERSION} payloads only.`
     );
   }
+}
+
+/**
+ * @param {object|null} db - the cds.db handle, OR null/undefined
+ * @returns {boolean} true when the active DB is SAP HANA
+ *
+ * Mirrors the check used in srv/lib/advocate-photo-store.js. We don't trust
+ * db.kind to be cased consistently across CAP versions.
+ */
+function isHanaDb(db) {
+  if (!db) return false;
+  return (db.kind || '').toLowerCase() === 'hana';
+}
+
+/**
+ * Returns table and column identifiers correctly cased for the active DB.
+ *
+ * HANA case rules (learned the hard way in PR #404):
+ *   - HDI-deployed tables are stored UPPERCASE in HANA's catalog.
+ *   - Unquoted identifiers in SQL are folded to UPPERCASE by the parser,
+ *     so unquoted UPPERCASE works.
+ *   - Quoted lowercase ("com_sap_developers_ims_Advocates") FAILS with
+ *     "Could not find table/view" because HANA preserves case in quoted form.
+ *   - We therefore emit unquoted UPPERCASE table/column names for HANA.
+ *   - Column aliases that need mixed-case JS keys (e.g. `userEmail`) MUST
+ *     be quoted: `SELECT U.EMAIL AS "userEmail"`. Otherwise HANA returns
+ *     the alias UPPERCASED and the JS property lookup breaks.
+ *
+ * SQLite (unit/local) rules:
+ *   - CDS emits tables with dots-to-underscores, preserving the original
+ *     mixed case (e.g. com_sap_developers_ims_Advocates).
+ *   - Columns are stored in their original CDS casing (e.g. firstName).
+ *   - Identifiers can stay unquoted in raw SQL.
+ *
+ * @param {boolean} isHana
+ * @returns {{
+ *   advocates: string, topics: string, links: string, photos: string,
+ *   users: string, tags: string,
+ *   cols: {
+ *     id: string, slug: string, firstName: string, lastName: string,
+ *     title: string, pronouns: string, location: string, region: string,
+ *     bio: string, isActive: string, sortOverride: string, joinedDate: string,
+ *     hasPhoto: string, photoUpdatedAt: string, photoUrl: string,
+ *     userFk: string, advocateFk: string, tagFk: string,
+ *     kind: string, url: string, label: string, sortOrder: string,
+ *     email: string, createdAt: string,
+ *     photo256: string, photo64: string, photoMimeType: string,
+ *     sizeBytes: string, sha256: string, uploadedAt: string,
+ *   }
+ * }}
+ */
+function advocateTableInfo(isHana) {
+  if (isHana) {
+    return {
+      advocates: 'COM_SAP_DEVELOPERS_IMS_ADVOCATES',
+      topics:    'COM_SAP_DEVELOPERS_IMS_ADVOCATETOPICS',
+      links:     'COM_SAP_DEVELOPERS_IMS_ADVOCATELINKS',
+      photos:    'COM_SAP_DEVELOPERS_IMS_ADVOCATEPHOTOS',
+      users:     'COM_SAP_DEVELOPERS_IMS_USERS',
+      tags:      'COM_SAP_DEVELOPERS_IMS_TAGS',
+      cols: {
+        id: 'ID', slug: 'SLUG',
+        firstName: 'FIRSTNAME', lastName: 'LASTNAME',
+        title: 'TITLE', pronouns: 'PRONOUNS', location: 'LOCATION', region: 'REGION',
+        bio: 'BIO', isActive: 'ISACTIVE', sortOverride: 'SORTOVERRIDE',
+        joinedDate: 'JOINEDDATE',
+        hasPhoto: 'HASPHOTO', photoUpdatedAt: 'PHOTOUPDATEDAT', photoUrl: 'PHOTOURL',
+        userFk: 'USER_ID', advocateFk: 'ADVOCATE_ID', tagFk: 'TAG_ID',
+        kind: 'KIND', url: 'URL', label: 'LABEL', sortOrder: 'SORTORDER',
+        email: 'EMAIL', createdAt: 'CREATEDAT',
+        photo256: 'PHOTO256', photo64: 'PHOTO64', photoMimeType: 'PHOTOMIMETYPE',
+        sizeBytes: 'SIZEBYTES', sha256: 'SHA256', uploadedAt: 'UPLOADEDAT',
+      },
+    };
+  }
+  // SQLite — CDS-emitted mixed-case names.
+  return {
+    advocates: 'com_sap_developers_ims_Advocates',
+    topics:    'com_sap_developers_ims_AdvocateTopics',
+    links:     'com_sap_developers_ims_AdvocateLinks',
+    photos:    'com_sap_developers_ims_AdvocatePhotos',
+    users:     'com_sap_developers_ims_Users',
+    tags:      'com_sap_developers_ims_Tags',
+    cols: {
+      id: 'ID', slug: 'slug',
+      firstName: 'firstName', lastName: 'lastName',
+      title: 'title', pronouns: 'pronouns', location: 'location', region: 'region',
+      bio: 'bio', isActive: 'isActive', sortOverride: 'sortOverride',
+      joinedDate: 'joinedDate',
+      hasPhoto: 'hasPhoto', photoUpdatedAt: 'photoUpdatedAt', photoUrl: 'photoUrl',
+      userFk: 'user_ID', advocateFk: 'advocate_ID', tagFk: 'tag_ID',
+      kind: 'kind', url: 'url', label: 'label', sortOrder: 'sortOrder',
+      email: 'email', createdAt: 'createdAt',
+      photo256: 'photo256', photo64: 'photo64', photoMimeType: 'photoMimeType',
+      sizeBytes: 'sizeBytes', sha256: 'sha256', uploadedAt: 'uploadedAt',
+    },
+  };
 }
 
 module.exports = {
@@ -152,6 +305,8 @@ module.exports = {
   VALID_REGIONS,
   VALID_LINK_KINDS,
   assertSchemaVersion,
+  isHanaDb,
+  advocateTableInfo,
 };
 ```
 
@@ -163,7 +318,7 @@ module.exports = {
 npx vitest run test/unit/advocate-io.test.js
 ```
 
-Expected: PASS — 6 tests, 0 failures.
+Expected: PASS — all tests green.
 
 ### Step 5: Commit
 
@@ -173,9 +328,12 @@ Expected: PASS — 6 tests, 0 failures.
 git add scripts/lib/advocate-io.cjs test/unit/advocate-io.test.js
 git commit -m "feat(advocates): scaffold shared advocate-io helpers + unit tests
 
-Schema version, region enum, link-kind enum, and version-assertion helper
-used by export-advocates.cjs and import-advocates.cjs. CommonJS so both
-.cjs scripts can require() it. Zero-dep so unit-testable without HANA.
+Schema version, region enum, link-kind enum, version-assertion,
+isHanaDb check, and advocateTableInfo resolver (HANA UPPERCASE vs
+SQLite mixed-case) used by export-advocates.cjs and import-advocates.cjs.
+
+Mirrors srv/lib/_tutorials-table.js. CommonJS so both .cjs scripts can
+require() it. Zero-dep so unit-testable without HANA.
 
 Refs spec: docs/superpowers/specs/2026-06-25-advocate-export-import-design.md"
 ```
@@ -222,8 +380,8 @@ const fs = require('fs');
 const path = require('path');
 const {
   SCHEMA_VERSION,
-  VALID_REGIONS,
-  VALID_LINK_KINDS,
+  isHanaDb,
+  advocateTableInfo,
 } = require('./lib/advocate-io.cjs');
 
 function parseArgs(argv) {
@@ -231,9 +389,12 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--dry-run') args.dryRun = true;
-    else if (a === '--out') args.out = argv[++i];
+    else if (a === '--out') {
+      if (i + 1 >= argv.length) { console.error('--out requires a value'); process.exit(2); }
+      args.out = argv[++i];
+    }
     else if (a === '--help' || a === '-h') {
-      console.log(__filename, '— see header comment for usage');
+      console.log(__filename, '- see header comment for usage');
       process.exit(0);
     } else {
       console.error(`Unknown argument: ${a}`);
@@ -247,11 +408,13 @@ function parseArgs(argv) {
   const args = parseArgs(process.argv.slice(2));
   await cds.load('*');
   const db = await cds.connect.to('db');
+  const isHana = isHanaDb(db);
+  const T = advocateTableInfo(isHana);
 
   console.log(`[advocates-export] schemaVersion=${SCHEMA_VERSION}`);
-  console.log(`[advocates-export] DB kind: ${db.kind}`);
+  console.log(`[advocates-export] DB kind: ${db.kind} (isHana=${isHana})`);
 
-  // ── TODO Task 2 Step 2 onwards ─────────────────────────────────────
+  // ── TODO Task 2 Step 3 onwards ─────────────────────────────────────
   console.log('[advocates-export] (skeleton — fetch logic added in subsequent steps)');
   process.exit(0);
 })().catch(err => {
@@ -280,21 +443,39 @@ Expected:
 
 ### Step 3: Add the Advocates + email join query
 
-- [ ] Replace the `── TODO Task 2 Step 2 onwards ──` block with:
+- [ ] Replace the `── TODO Task 2 Step 3 onwards ──` block with:
 
 ```javascript
   // Fetch every Advocate, left-joining Users to resolve email at export time.
-  // Plain CDS QL works here — no LargeBinary columns in this query, so no LOB
-  // locator concern. We use raw SQL to spell out the LEFT JOIN cleanly.
+  // No LargeBinary columns here, so no LOB-locator concern. We DO include
+  // bio (LargeString / CLOB) — CLOBs return inline as JS strings on HANA,
+  // unlike LargeBinary.
+  //
+  // Column aliases are quoted with mixed case so the JS-side result objects
+  // expose `userEmail`, `firstName`, etc. — unquoted aliases come back
+  // UPPERCASED from HANA.
+  const c = T.cols;
   const advocateRows = await db.run(`
     SELECT
-      A.ID, A.slug, A.firstName, A.lastName, A.title, A.pronouns,
-      A.location, A.region, A.bio, A.isActive, A.sortOverride,
-      A.joinedDate, A.hasPhoto, A.photoUpdatedAt, A.photoUrl,
-      U.email AS userEmail
-    FROM com_sap_developers_ims_Advocates AS A
-    LEFT JOIN com_sap_developers_ims_Users AS U ON U.ID = A.user_ID
-    ORDER BY A.slug
+      A.${c.id}             AS "id",
+      A.${c.slug}           AS "slug",
+      A.${c.firstName}      AS "firstName",
+      A.${c.lastName}       AS "lastName",
+      A.${c.title}          AS "title",
+      A.${c.pronouns}       AS "pronouns",
+      A.${c.location}       AS "location",
+      A.${c.region}         AS "region",
+      A.${c.bio}            AS "bio",
+      A.${c.isActive}       AS "isActive",
+      A.${c.sortOverride}   AS "sortOverride",
+      A.${c.joinedDate}     AS "joinedDate",
+      A.${c.hasPhoto}       AS "hasPhoto",
+      A.${c.photoUpdatedAt} AS "photoUpdatedAt",
+      A.${c.photoUrl}       AS "photoUrl",
+      U.${c.email}          AS "userEmail"
+    FROM ${T.advocates} AS A
+    LEFT JOIN ${T.users} AS U ON U.${c.id} = A.${c.userFk}
+    ORDER BY A.${c.slug}
   `);
   console.log(`[advocates-export] Found ${advocateRows.length} advocate(s)`);
 
@@ -326,19 +507,26 @@ Expected:
   // deleted in source after the AdvocateTopic was created, the dangling
   // junction row is dropped from the export (it's already broken anyway).
   const topicRows = await db.run(`
-    SELECT AT.advocate_ID AS advocateId, T.slug AS tagSlug
-    FROM com_sap_developers_ims_AdvocateTopics AS AT
-    INNER JOIN com_sap_developers_ims_Tags AS T ON T.ID = AT.tag_ID
-    ORDER BY AT.advocate_ID, T.slug
+    SELECT
+      AT.${c.advocateFk} AS "advocateId",
+      T.${c.slug}        AS "tagSlug"
+    FROM ${T.topics} AS AT
+    INNER JOIN ${T.tags} AS T ON T.${c.id} = AT.${c.tagFk}
+    ORDER BY AT.${c.advocateFk}, T.${c.slug}
   `);
 
   const linkRows = await db.run(`
-    SELECT advocate_ID AS advocateId, kind, url, label, sortOrder
-    FROM com_sap_developers_ims_AdvocateLinks
-    ORDER BY advocate_ID, sortOrder, kind
+    SELECT
+      ${c.advocateFk} AS "advocateId",
+      ${c.kind}       AS "kind",
+      ${c.url}        AS "url",
+      ${c.label}      AS "label",
+      ${c.sortOrder}  AS "sortOrder"
+    FROM ${T.links}
+    ORDER BY ${c.advocateFk}, ${c.sortOrder}, ${c.kind}
   `);
 
-  // Index by advocate.ID for assembly.
+  // Index by advocate.id for assembly.
   const topicsByAdvocate = new Map();
   for (const t of topicRows) {
     if (!topicsByAdvocate.has(t.advocateId)) topicsByAdvocate.set(t.advocateId, []);
@@ -382,8 +570,8 @@ Expected:
       photoUpdatedAt: a.photoUpdatedAt,
       photoUrl: a.photoUrl,
       userEmail: a.userEmail || null,
-      topics: topicsByAdvocate.get(a.ID) || [],
-      links:  linksByAdvocate.get(a.ID)  || [],
+      topics: topicsByAdvocate.get(a.id) || [],
+      links:  linksByAdvocate.get(a.id)  || [],
       photo:  null,  // populated in Task 3
     })),
   };
@@ -447,34 +635,49 @@ Refs spec section 'Export payload'"
 
 ### Step 1: Add per-advocate photo fetch loop
 
-- [ ] Insert BEFORE the `const payload = { ... }` assembly block (so `photo: null` becomes `photo: photosByAdvocate.get(a.ID) || null`):
+- [ ] Insert BEFORE the `const payload = { ... }` assembly block (so the `photo: null` line you add later becomes `photo: photosByAdvocate.get(a.id) || null`):
 
 ```javascript
   // Photos — fetched in a SEPARATE query per advocate to dodge the HANA
   // LOB-locator-expiry bug (locator returned by a multi-column SELECT
   // expires before we can read the stream). Same workaround as
-  // srv/lib/content-store.js. SQLite path uses a single query — no LOB
-  // locator concern there.
+  // srv/lib/content-store.js and srv/lib/advocate-photo-store.js.
+  // SQLite path uses CDS QL — no LOB locator concern there.
   const photosByAdvocate = new Map();
   const advocatesWithPhoto = advocateRows.filter(a => a.hasPhoto);
   console.log(`[advocates-export] Fetching ${advocatesWithPhoto.length} photo(s)…`);
 
   for (const a of advocatesWithPhoto) {
     let photoMeta, photo256, photo64;
-    if (db.kind === 'hana') {
-      // Pull metadata + BLOBs in one shot; HANA returns Buffers for LargeBinary.
+    if (isHana) {
+      // HANA: raw SQL, UPPERCASE identifiers. Pull both BLOBs + metadata
+      // in one shot. HANA returns LargeBinary as Buffers.
       const rows = await db.run(
-        `SELECT photo256, photo64, photoMimeType, sizeBytes, sha256, uploadedAt
-         FROM com_sap_developers_ims_AdvocatePhotos
-         WHERE advocate_ID = ?`,
-        [a.ID]
+        `SELECT
+           ${c.photo256}      AS "photo256",
+           ${c.photo64}       AS "photo64",
+           ${c.photoMimeType} AS "photoMimeType",
+           ${c.sizeBytes}     AS "sizeBytes",
+           ${c.sha256}        AS "sha256",
+           ${c.uploadedAt}    AS "uploadedAt"
+         FROM ${T.photos}
+         WHERE ${c.advocateFk} = ?`,
+        [a.id]
       );
       if (rows.length === 0) continue;
-      ({ photo256, photo64, ...photoMeta } = rows[0]);
+      photo256 = rows[0].photo256;
+      photo64  = rows[0].photo64;
+      photoMeta = {
+        photoMimeType: rows[0].photoMimeType,
+        sizeBytes: rows[0].sizeBytes,
+        sha256: rows[0].sha256,
+        uploadedAt: rows[0].uploadedAt,
+      };
     } else {
       // SQLite (unit/local). CDS QL is fine; no LOB locator issue.
+      const SELECT_ = cds.ql.SELECT;
       const [row] = await db.run(
-        SELECT.from('com.sap.developers.ims.AdvocatePhotos').where({ advocate_ID: a.ID })
+        SELECT_.from('com.sap.developers.ims.AdvocatePhotos').where({ advocate_ID: a.id })
       );
       if (!row) continue;
       photo256 = row.photo256;
@@ -486,7 +689,7 @@ Refs spec section 'Export payload'"
         uploadedAt: row.uploadedAt,
       };
     }
-    photosByAdvocate.set(a.ID, {
+    photosByAdvocate.set(a.id, {
       photoMimeType: photoMeta.photoMimeType,
       sizeBytes: photoMeta.sizeBytes,
       sha256: photoMeta.sha256,
@@ -501,7 +704,7 @@ Refs spec section 'Export payload'"
 - [ ] Then change the `photo: null` line in the `.map(a => ({ ... }))` to:
 
 ```javascript
-      photo: photosByAdvocate.get(a.ID) || null,
+      photo: photosByAdvocate.get(a.id) || null,
 ```
 
 ### Step 2: Smoke-test with photos
@@ -593,15 +796,20 @@ const {
   VALID_REGIONS,
   VALID_LINK_KINDS,
   assertSchemaVersion,
+  isHanaDb,
+  advocateTableInfo,
 } = require('./lib/advocate-io.cjs');
 
 function parseArgs(argv) {
   const args = { in: '.migration-data/advocates.json' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === '--in') args.in = argv[++i];
+    if (a === '--in') {
+      if (i + 1 >= argv.length) { console.error('--in requires a value'); process.exit(2); }
+      args.in = argv[++i];
+    }
     else if (a === '--help' || a === '-h') {
-      console.log(__filename, '— see header comment for usage');
+      console.log(__filename, '- see header comment for usage');
       process.exit(0);
     } else {
       console.error(`Unknown argument: ${a}`);
@@ -624,10 +832,12 @@ function parseArgs(argv) {
 
   await cds.load('*');
   const db = await cds.connect.to('db');
+  const isHana = isHanaDb(db);
+  const T = advocateTableInfo(isHana);
 
   console.log(`[advocates-import] schemaVersion=${payload.schemaVersion}`);
   console.log(`[advocates-import] Source: ${payload.sourceDb || 'unknown'} (exported ${payload.exportedAt})`);
-  console.log(`[advocates-import] Target DB kind: ${db.kind}`);
+  console.log(`[advocates-import] Target DB kind: ${db.kind} (isHana=${isHana})`);
   console.log(`[advocates-import] Advocates in payload: ${payload.advocateCount}`);
 
   // ── TODO Task 5 onwards ───────────────────────────────────────────
@@ -692,6 +902,7 @@ Refs spec section 'Import behavior'"
 - [ ] Replace the `── TODO Task 5 onwards ──` block with:
 
 ```javascript
+  const c = T.cols;
   const stats = {
     advocates: { inserted: 0, updated: 0 },
     users:     { matched: 0, nulled: 0, nulledEmails: [] },
@@ -713,13 +924,13 @@ Refs spec section 'Import behavior'"
     let userId = null;
     if (adv.userEmail) {
       const matches = await db.run(
-        `SELECT ID FROM com_sap_developers_ims_Users
-         WHERE LOWER(email) = LOWER(?)
-         ORDER BY createdAt ASC`,
+        `SELECT ${c.id} AS "id" FROM ${T.users}
+         WHERE LOWER(${c.email}) = LOWER(?)
+         ORDER BY ${c.createdAt} ASC`,
         [adv.userEmail]
       );
       if (matches.length > 0) {
-        userId = matches[0].ID;
+        userId = matches[0].id;
         stats.users.matched++;
         if (matches.length > 1) {
           console.warn(`[${adv.slug}] WARN: ${matches.length} Users rows match email ${adv.userEmail} — picking earliest createdAt`);
@@ -733,37 +944,39 @@ Refs spec section 'Import behavior'"
 
     // ── Upsert Advocates ────────────────────────────────────────────
     const existing = await db.run(
-      `SELECT ID FROM com_sap_developers_ims_Advocates WHERE slug = ?`,
+      `SELECT ${c.id} AS "id" FROM ${T.advocates} WHERE ${c.slug} = ?`,
       [adv.slug]
     );
 
-    const advocateId = existing.length > 0 ? existing[0].ID : crypto.randomUUID();
+    const advocateId = existing.length > 0 ? existing[0].id : crypto.randomUUID();
     const isUpdate = existing.length > 0;
 
-    const columns = [
-      'firstName', 'lastName', 'title', 'pronouns', 'location', 'region',
-      'bio', 'isActive', 'sortOverride', 'joinedDate',
-      'hasPhoto', 'photoUpdatedAt', 'photoUrl', 'user_ID',
+    // Column-list order is the source of truth for the parameter array below.
+    // Keep them in lock-step.
+    const updatableCols = [
+      c.firstName, c.lastName, c.title, c.pronouns, c.location, c.region,
+      c.bio, c.isActive, c.sortOverride, c.joinedDate,
+      c.hasPhoto, c.photoUpdatedAt, c.photoUrl, c.userFk,
     ];
-    const values = [
+    const updatableValues = [
       adv.firstName, adv.lastName, adv.title, adv.pronouns, adv.location, adv.region,
       adv.bio, adv.isActive, adv.sortOverride, adv.joinedDate,
       adv.hasPhoto, adv.photoUpdatedAt, adv.photoUrl, userId,
     ];
 
     if (isUpdate) {
-      const setClause = columns.map(c => `${c} = ?`).join(', ');
+      const setClause = updatableCols.map(col => `${col} = ?`).join(', ');
       await db.run(
-        `UPDATE com_sap_developers_ims_Advocates SET ${setClause} WHERE ID = ?`,
-        [...values, advocateId]
+        `UPDATE ${T.advocates} SET ${setClause} WHERE ${c.id} = ?`,
+        [...updatableValues, advocateId]
       );
       stats.advocates.updated++;
     } else {
-      const colList = ['ID', 'slug', ...columns].join(', ');
-      const placeholders = ['?', '?', ...columns.map(() => '?')].join(', ');
+      const allCols = [c.id, c.slug, ...updatableCols].join(', ');
+      const placeholders = ['?', '?', ...updatableCols.map(() => '?')].join(', ');
       await db.run(
-        `INSERT INTO com_sap_developers_ims_Advocates (${colList}) VALUES (${placeholders})`,
-        [advocateId, adv.slug, ...values]
+        `INSERT INTO ${T.advocates} (${allCols}) VALUES (${placeholders})`,
+        [advocateId, adv.slug, ...updatableValues]
       );
       stats.advocates.inserted++;
     }
@@ -835,12 +1048,12 @@ Refs spec section 'Import behavior' steps 1-3"
 ```javascript
     // ── Replace topics ──────────────────────────────────────────────
     await db.run(
-      `DELETE FROM com_sap_developers_ims_AdvocateTopics WHERE advocate_ID = ?`,
+      `DELETE FROM ${T.topics} WHERE ${c.advocateFk} = ?`,
       [advocateId]
     );
     for (const t of (adv.topics || [])) {
       const tagRows = await db.run(
-        `SELECT ID FROM com_sap_developers_ims_Tags WHERE slug = ?`,
+        `SELECT ${c.id} AS "id" FROM ${T.tags} WHERE ${c.slug} = ?`,
         [t.tagSlug]
       );
       if (tagRows.length === 0) {
@@ -850,16 +1063,16 @@ Refs spec section 'Import behavior' steps 1-3"
         continue;
       }
       await db.run(
-        `INSERT INTO com_sap_developers_ims_AdvocateTopics (ID, advocate_ID, tag_ID)
+        `INSERT INTO ${T.topics} (${c.id}, ${c.advocateFk}, ${c.tagFk})
          VALUES (?, ?, ?)`,
-        [crypto.randomUUID(), advocateId, tagRows[0].ID]
+        [crypto.randomUUID(), advocateId, tagRows[0].id]
       );
       stats.topics.matched++;
     }
 
     // ── Replace links ───────────────────────────────────────────────
     await db.run(
-      `DELETE FROM com_sap_developers_ims_AdvocateLinks WHERE advocate_ID = ?`,
+      `DELETE FROM ${T.links} WHERE ${c.advocateFk} = ?`,
       [advocateId]
     );
     for (const l of (adv.links || [])) {
@@ -867,8 +1080,8 @@ Refs spec section 'Import behavior' steps 1-3"
         throw new Error(`Advocate ${adv.slug} has link with invalid kind: ${l.kind}`);
       }
       await db.run(
-        `INSERT INTO com_sap_developers_ims_AdvocateLinks
-           (ID, advocate_ID, kind, url, label, sortOrder)
+        `INSERT INTO ${T.links}
+           (${c.id}, ${c.advocateFk}, ${c.kind}, ${c.url}, ${c.label}, ${c.sortOrder})
          VALUES (?, ?, ?, ?, ?, ?)`,
         [crypto.randomUUID(), advocateId, l.kind, l.url, l.label, l.sortOrder]
       );
@@ -877,15 +1090,16 @@ Refs spec section 'Import behavior' steps 1-3"
 
     // ── Replace photo ───────────────────────────────────────────────
     await db.run(
-      `DELETE FROM com_sap_developers_ims_AdvocatePhotos WHERE advocate_ID = ?`,
+      `DELETE FROM ${T.photos} WHERE ${c.advocateFk} = ?`,
       [advocateId]
     );
     if (adv.photo) {
       const photo256 = Buffer.from(adv.photo.photo256_b64, 'base64');
       const photo64  = Buffer.from(adv.photo.photo64_b64,  'base64');
       await db.run(
-        `INSERT INTO com_sap_developers_ims_AdvocatePhotos
-           (advocate_ID, photo256, photo64, photoMimeType, sizeBytes, sha256, uploadedAt)
+        `INSERT INTO ${T.photos}
+           (${c.advocateFk}, ${c.photo256}, ${c.photo64}, ${c.photoMimeType},
+            ${c.sizeBytes},  ${c.sha256},   ${c.uploadedAt})
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [advocateId, photo256, photo64, adv.photo.photoMimeType,
          adv.photo.sizeBytes, adv.photo.sha256, adv.photo.uploadedAt]
@@ -926,7 +1140,7 @@ CDS_REQUIRES_DB_KIND=sqlite CDS_REQUIRES_DB_CREDENTIALS_URL=test.sqlite \
 
 Expected: all advocates inserted, every topic skipped (`(missing tags: ...)` — empty Tags in clean SQLite is expected), links all inserted, photos imported = number with photos in source.
 
-- [ ] Verify photo bytes round-trip:
+- [ ] Verify photo bytes round-trip (SQLite-specific verification — table names are CDS mixed-case, booleans stored as integers):
 
 ```bash
 node -e "
