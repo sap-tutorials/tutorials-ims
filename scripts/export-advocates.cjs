@@ -156,7 +156,7 @@ function parseArgs(argv) {
   const payload = {
     schemaVersion: SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
-    sourceDb: `${db.kind} (${process.env.CF_ORGANIZATION_NAME || 'unknown-org'}/${process.env.CF_SPACE_NAME || 'unknown-space'})`,
+    sourceDb: db.kind,
     advocateCount: advocateRows.length,
     advocates: advocateRows.map(a => ({
       slug: a.slug,
@@ -176,7 +176,7 @@ function parseArgs(argv) {
       userEmail: a.userEmail || null,
       topics: topicsByAdvocate.get(a.id) || [],
       links:  linksByAdvocate.get(a.id)  || [],
-      photo:  null,  // populated in Task 3
+      photo:  null,  // filled in by the photo-export pass below
     })),
   };
 
