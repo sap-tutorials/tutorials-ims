@@ -6,7 +6,12 @@
   --adv-back:    linear-gradient(160deg,#001a4f 0%,#0a3d91 50%,#0070f2 100%);
 }
 
-.adv-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; padding: 24px; }
+/* 5-up at desktop widths; the aspect-ratio keeps the card proportional, so a
+   narrower column auto-shrinks the height too. Bumps down to 4/3/2/1 at the
+   same physical viewport sizes as before — the header band is ~80px tall, so
+   5-up keeps card height closer to that reference. */
+.adv-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 18px; padding: 24px; }
+@media (max-width: 1400px) { .adv-grid { grid-template-columns: repeat(4, 1fr); } }
 @media (max-width: 1100px) { .adv-grid { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 800px)  { .adv-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 540px)  { .adv-grid { grid-template-columns: 1fr; } }
@@ -60,6 +65,11 @@
 
 .adv-front .adv-body { padding: 60px 18px 14px; text-align: center; flex: 1; display: flex; flex-direction: column; }
 .adv-name { margin: 0; font-size: 18px; }
+/* Front face has a white card background regardless of site theme, so anchor
+   the name color explicitly — without this, html.dark inherits near-white text
+   and produces white-on-white. Back face overrides with #fff below. */
+.adv-front .adv-name { color: #1a2733; }
+.adv-front .adv-pron { color: #6b7c93; }
 .adv-pron { font-size: 12px; color: #6b7c93; margin-left: 4px; font-weight: 400; }
 .adv-role { color: #5b738b; font-size: 13px; margin-top: 4px; }
 .adv-loc  { color: #8696a8; font-size: 12px; margin-top: 2px; }
