@@ -66,6 +66,7 @@ describe('advocate-io helpers', () => {
       expect(t.cols.userFk).toBe('USER_ID');
       expect(t.cols.advocateFk).toBe('ADVOCATE_ID');
       expect(t.cols.tagFk).toBe('TAG_ID');
+      expect(t.cols.tagSlugCol).toBe('NAME');
     });
 
     it('returns mixed-case CDS-style identifiers for SQLite', () => {
@@ -81,6 +82,7 @@ describe('advocate-io helpers', () => {
       expect(t.cols.userFk).toBe('user_ID');
       expect(t.cols.advocateFk).toBe('advocate_ID');
       expect(t.cols.tagFk).toBe('tag_ID');
+      expect(t.cols.tagSlugCol).toBe('name');
     });
   });
 

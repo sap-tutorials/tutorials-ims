@@ -124,10 +124,10 @@ function parseArgs(argv) {
   const topicRows = await db.run(`
     SELECT
       AVT.${c.advocateFk} AS "advocateId",
-      TAG.${c.slug}       AS "tagSlug"
+      TAG.${c.tagSlugCol} AS "tagSlug"
     FROM ${T.topics} AS AVT
     INNER JOIN ${T.tags} AS TAG ON TAG.${c.id} = AVT.${c.tagFk}
-    ORDER BY AVT.${c.advocateFk}, TAG.${c.slug}
+    ORDER BY AVT.${c.advocateFk}, TAG.${c.tagSlugCol}
   `);
 
   const linkRows = await db.run(`

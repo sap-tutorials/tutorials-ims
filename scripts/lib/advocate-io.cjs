@@ -92,6 +92,12 @@ function advocateTableInfo(isHana) {
         joinedDate: 'JOINEDDATE',
         hasPhoto: 'HASPHOTO', photoUpdatedAt: 'PHOTOUPDATEDAT', photoUrl: 'PHOTOURL',
         userFk: 'USER_ID', advocateFk: 'ADVOCATE_ID', tagFk: 'TAG_ID',
+        // Tags has no `slug` column — the path-style identifier
+        // (e.g. 'software-product>sap-build') lives in Tags.name.
+        // Kept as a separate dict key so the column-name quirk is
+        // isolated here and the JS-side payload key stays `tagSlug`.
+        // Cross-ref: srv/routes/advocates-public.js maps tag.name -> {slug, label}.
+        tagSlugCol: 'NAME',
         kind: 'KIND', url: 'URL', label: 'LABEL', sortOrder: 'SORTORDER',
         email: 'EMAIL', createdAt: 'CREATEDAT',
         photo256: 'PHOTO256', photo64: 'PHOTO64', photoMimeType: 'PHOTOMIMETYPE',
@@ -115,6 +121,7 @@ function advocateTableInfo(isHana) {
       joinedDate: 'joinedDate',
       hasPhoto: 'hasPhoto', photoUpdatedAt: 'photoUpdatedAt', photoUrl: 'photoUrl',
       userFk: 'user_ID', advocateFk: 'advocate_ID', tagFk: 'tag_ID',
+      tagSlugCol: 'name',
       kind: 'kind', url: 'url', label: 'label', sortOrder: 'sortOrder',
       email: 'email', createdAt: 'createdAt',
       photo256: 'photo256', photo64: 'photo64', photoMimeType: 'photoMimeType',
