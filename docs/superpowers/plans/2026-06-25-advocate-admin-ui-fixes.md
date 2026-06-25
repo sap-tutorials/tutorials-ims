@@ -422,7 +422,10 @@ async function main() {
           OR LENGTH(TRIM(COALESCE("lastName", ''))) > 0
         )`
   );
-  console.log(`\nUpdated row count reported by HANA: ${result}`);
+  // hdb driver returns either a numeric affected-row count or an object
+  // with affectedRows. Normalize for the log line.
+  const affected = typeof result === 'number' ? result : (result?.affectedRows ?? rows.length);
+  console.log(`\nUpdated row count reported by HANA: ${affected}`);
   console.log(`(Expected: ${rows.length}. Drift indicates concurrent writes during the run — re-run to converge.)`);
 }
 
