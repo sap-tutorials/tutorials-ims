@@ -133,6 +133,7 @@ export default defineConfig({
           { text: 'A/B comparison runbook',    link: '/developers/operations/ab-comparison-runbook' },
           { text: 'Agent isolation hooks',     link: '/developers/operations/agent-isolation-hooks' },
           { text: 'AI-author CI setup',        link: '/developers/operations/ai-author-ci-setup' },
+          { text: 'BTP destinations (SCI / NGDS)', link: '/developers/operations/btp-destinations' },
           { text: 'BTP role migration',        link: '/developers/operations/btp-role-migration' },
           { text: 'Dedupe Step rows',          link: '/developers/operations/dedupe-step-rows' },
           { text: 'Migration from IMS',        link: '/developers/operations/migration-from-ims' },

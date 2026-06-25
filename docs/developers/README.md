@@ -29,6 +29,7 @@ Runbooks and operational references. Read these when you need to deploy, test, o
 
 - [MTA Deployment](operations/mta-deployment.md) — full deploy procedure
 - [Deployment Topology](operations/deployment.md) — what runs where
+- [BTP Destinations (SCI / NGDS)](operations/btp-destinations.md) — destination names + PassVault links
 - [Testing Guide](operations/testing-guide.md) — unit, hybrid, smoke
 - [Testing Endpoints](operations/testing-endpoints.md) — UI + API endpoint reference
 - [Live Probing](operations/live-probing.md) — verify fixes against the real binding before deploying
