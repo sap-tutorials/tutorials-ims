@@ -94,6 +94,18 @@
                     }
                   }
                 }
+              },
+              "controlConfiguration": {
+                "authoredTutorials/@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "creationMode": { "name": "Disabled" }
+                  }
+                },
+                "contributedTutorials/@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "creationMode": { "name": "Disabled" }
+                  }
+                }
               }
             }
           }

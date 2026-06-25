@@ -33,6 +33,19 @@ entity Advocates : cuid, managed {
   // on the roster; only the email and tutorials affordances disappear.
   // Spec: docs/superpowers/specs/2026-06-25-advocate-user-link-design.md
   user          : Association to ims.Users;
+  // Direct inverse Associations to Tutorials/TutorialContributors, keyed by
+  // the linked user's ID. The projection-alias form (user.authoredTutorials
+  // as authoredTutorials) at srv/admin-service.cds:399-400 did NOT generate
+  // working OData paths — /Advocates(ID=...)/authoredTutorials returned
+  // count:0 in both draft and active modes despite valid data in HANA.
+  // Diagnosed 2026-06-25 via Playwright network capture against deployed DEV.
+  // These direct on-conditions join Tutorials.author_ID = Advocates.user_ID,
+  // which CAP can compile to a working OData traversal.
+  // Name choice: `contributedTutorials` (not `tutorialContributions`) so the
+  // existing FE V4 annotations in app/admin-annotations.cds still resolve.
+  // Spec: docs/superpowers/specs/2026-06-25-advocate-op-fixes-design.md §4.3
+  authoredTutorials    : Association to many ims.Tutorials            on authoredTutorials.author    = user;
+  contributedTutorials : Association to many ims.TutorialContributors on contributedTutorials.user  = user;
   topics        : Composition of many AdvocateTopics on topics.advocate = $self;
   links         : Composition of many AdvocateLinks  on links.advocate  = $self;
   // Inverse association — required so the admin Object Page can target

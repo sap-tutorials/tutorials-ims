@@ -390,20 +390,20 @@ service AdminService {
   @odata.draft.enabled
   entity Advocates as projection on ims.Advocates {
     *,
-    // Convenience aliases for FE V4 LineItem facets. FE V4 can't bind
-    // a LineItem to a 2-hop association path (advocate.user.authoredTutorials),
-    // so we surface them as 1-hop on the projection. The targets resolve to
-    // AdminService.Tutorials and AdminService.TutorialContributors, which both
-    // already carry @UI.LineItem annotations (PR #618 + admin tile expansion).
-    // Spec: docs/superpowers/specs/2026-06-25-advocate-user-link-design.md §2
-    user.authoredTutorials     as authoredTutorials,
-    user.tutorialContributions as contributedTutorials,
+    // Tutorials facets — the projection-alias form (user.authoredTutorials
+    // as authoredTutorials) did NOT generate working OData paths. PR
+    // 2026-06-25-advocate-op-fixes moved these to real Associations on
+    // ims.Advocates with explicit on-conditions joining via user_ID. The
+    // wildcard `*` above pulls them through; no rename needed.
     // Virtual editable mirror of user.email. Fiori V4 won't edit through a
     // foreign association inline; the after-READ handler hydrates this from
     // user.email and the before-UPDATE / SAVE-on-drafts handlers propagate
     // it back to Users.email.
+    // @Core.Computed: false overrides CAP's auto-tag of virtual elements
+    // as computed (which FE V4 honors as read-only, hiding the edit field).
     // Spec: docs/superpowers/specs/2026-06-25-advocate-email-edit-design.md §4
-    virtual emailEdit : String(255),
+    //   + 2026-06-25-advocate-op-fixes-design.md §4.1
+    virtual emailEdit : String(255) @Core.Computed: false,
   } actions {
     // Bound action for the Object Page photo-upload flow. The Fiori
     // UploadSet against the `photo` composition silently drops bytes
