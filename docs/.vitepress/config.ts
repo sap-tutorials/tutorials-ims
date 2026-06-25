@@ -155,6 +155,7 @@ export default defineConfig({
           { text: 'Re-migration runbook',      link: '/developers/operations/re-migration-runbook' },
           { text: 'Rebuild content workflow',  link: '/developers/operations/rebuild-content-workflow' },
           { text: 'Runtime config',            link: '/developers/operations/runtime-config' },
+          { text: 'SCI user-profile backfill', link: '/developers/operations/sci-user-profile-backfill' },
           { text: 'Secrets tracking',          link: '/developers/operations/secrets-tracking' },
           { text: 'SMTP credentials rotation', link: '/developers/operations/smtp-credentials-rotation' },
           { text: 'Testing endpoints',         link: '/developers/operations/testing-endpoints' },
