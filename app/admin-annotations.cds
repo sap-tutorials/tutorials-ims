@@ -2365,3 +2365,39 @@ annotate AdminService.EventRegistrations with @(
   Capabilities.InsertRestrictions.Insertable: false,
   Capabilities.UpdateRestrictions.Updatable: false
 );
+
+// ── Users Object Page — Khoros columns + Clear action (issue #566) ──
+// Read-only display of the 3 Khoros identity columns + a "Clear Khoros link"
+// bound action button on the Users Object Page in the Accounts admin tile.
+// khorosAvatarUrl is intentionally excluded from the FieldGroup (it's a URL,
+// not meaningful as an OP column). khorosLinkedAt is a timestamp, shown for
+// audit purposes.
+annotate AdminService.Users with {
+  khorosId        @Common.Label: 'Khoros ID'        @Common.FieldControl: #ReadOnly;
+  khorosLogin     @Common.Label: 'Khoros Login'     @Common.FieldControl: #ReadOnly;
+  khorosLinkedAt  @Common.Label: 'Khoros Linked At' @Common.FieldControl: #ReadOnly;
+};
+
+annotate AdminService.Users with @(UI: {
+  FieldGroup #KhorosLink: {
+    Data: [
+      { Value: khorosId       },
+      { Value: khorosLogin    },
+      { Value: khorosLinkedAt },
+    ]
+  },
+  Facets: [
+    {
+      $Type : 'UI.ReferenceFacet',
+      Label : 'SAP Community',
+      Target: '@UI.FieldGroup#KhorosLink'
+    }
+  ],
+  Identification: [
+    {
+      $Type : 'UI.DataFieldForAction',
+      Action: 'AdminService.clearKhorosLink',
+      Label : 'Clear Khoros link'
+    }
+  ]
+});

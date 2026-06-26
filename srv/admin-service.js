@@ -20,6 +20,7 @@ import { cleanupChangeLog } from './jobs/cleanup.js';
 import { ensureDevtoberfestActiveFlagInvariant } from './lib/devtoberfest-active-flag.js';
 import { getTutorialSource } from './lib/content-store.js';
 import { randomBytes } from 'node:crypto';
+import * as khorosCache from './lib/khoros-cache.js';
 
 /**
  * Dedupe TaskRecord rows by (user_ID, taskLegacyId), preferring rows on a
@@ -1585,6 +1586,27 @@ export default class AdminService extends cds.ApplicationService {
         debounced: true,
         workflowUrl: 'https://github.com/sap-tutorials/tutorials-ims/actions/workflows/rebuild-content.yml',
       };
+    });
+
+    // ── clearKhorosLink — admin on-behalf-of variant (issue #566) ──
+    // Bound action on Users. Nulls the 4 Khoros columns, evicts the
+    // in-process cache, and emits an INFO log for operational debugging.
+    // @cap-js/audit-logging captures the UPDATE automatically via the
+    // @PersonalData annotations on Users — no manual audit-row write needed.
+    this.on('clearKhorosLink', 'Users', async (req) => {
+      const userId = req.params?.[0]?.ID;
+      if (!userId) return req.reject(400, 'userId required');
+      const dbUser = await SELECT.one.from(Users).where({ ID: userId });
+      if (!dbUser) return req.reject(404, 'User not found');
+      const prevKhorosId = dbUser.khorosId;
+      await UPDATE(Users)
+        .set({ khorosId: null, khorosLogin: null, khorosAvatarUrl: null, khorosLinkedAt: null })
+        .where({ ID: userId });
+      if (prevKhorosId) khorosCache.evict(prevKhorosId);
+      cds.log('khoros').info('admin cleared khoros link', {
+        adminEmail: req.user?.id, targetUserId: userId, prevKhorosId
+      });
+      return { status: 'ok' };
     });
 
     await super.init();

@@ -5,6 +5,8 @@ import { hashIp } from './lib/feedback-salt.js';
 import { getMyCompletedTutorials } from './lib/user-progress.js';
 import { PROFILE_VOCAB } from './lib/branch/profile-fields.js';
 import { resolveUserSapId } from './lib/resolve-db-user.js';
+import { resolveUser as khorosResolveUser } from './lib/khoros-client.js';
+import * as khorosCache from './lib/khoros-cache.js';
 import { checkRateLimit } from './lib/per-user-rate-limit.js';
 
 // Per-user rate limit for resetTutorialProgress — same window as the
@@ -755,6 +757,106 @@ export default class DeveloperService extends cds.ApplicationService {
         });
       }
       return SELECT.one.from(UserLearningPreferences).where({ user_ID: dbUser.ID });
+    });
+
+    // ── Khoros community link handlers (issue #566) ──────────────────────────
+
+    const PROFILE_URL = (id) => `https://community.sap.com/t5/user/viewprofilepage/user-id/${id}`;
+
+    this.on('setKhorosLink', async (req) => {
+      const sapId = resolveUserSapId(req.user);
+      if (!sapId) return req.reject(401, 'Unauthenticated');
+      const input = String(req.data?.input ?? '').trim();
+      if (!input || input.length > 64) return { status: 'invalid-input' };
+      let profile;
+      try {
+        profile = await khorosResolveUser(input);
+      } catch (err) {
+        cds.log('khoros').warn('setKhorosLink upstream error', { sapId, input, err: err.message });
+        return { status: 'upstream-unavailable' };
+      }
+      if (!profile) return { status: 'not-found' };
+      try {
+        const dbUser = await SELECT.one.from(dbUsers).where({ sapId });
+        if (!dbUser) return req.reject(404, 'User row missing');
+        await UPDATE(dbUsers)
+          .set({
+            khorosId: profile.id,
+            khorosLogin: profile.login,
+            khorosAvatarUrl: profile.avatarUrl,
+            khorosLinkedAt: new Date()
+          })
+          .where({ ID: dbUser.ID });
+      } catch (err) {
+        // @assert.unique.khorosId violation surfaces as a CAP error with
+        // 'UNIQUE_CONSTRAINT_VIOLATION' code OR a message containing "unique"
+        // — match defensively because the exact code differs between
+        // SQLite (unit) and HANA (hybrid).
+        if (/unique/i.test(err.message) || err.code === 'UNIQUE_CONSTRAINT_VIOLATION') {
+          return { status: 'already-claimed' };
+        }
+        cds.log('khoros').error('setKhorosLink persist failed', { sapId, err: err.message });
+        return { status: 'persist-failed' };
+      }
+      // Seed cache with exactly the shape getKhorosProfile reads back.
+      khorosCache.set(profile.id, {
+        name: profile.name, rank: profile.rank, avatarUrl: profile.avatarUrl
+      });
+      cds.log('khoros').info('khoros linked', { sapId, khorosId: profile.id, khorosLogin: profile.login });
+      return { status: 'ok', khorosId: profile.id, khorosLogin: profile.login, name: profile.name };
+    });
+
+    this.on('clearKhorosLink', async (req) => {
+      const sapId = resolveUserSapId(req.user);
+      if (!sapId) return req.reject(401, 'Unauthenticated');
+      const dbUser = await SELECT.one.from(dbUsers).where({ sapId });
+      if (!dbUser) return { status: 'ok' };  // already unlinked
+      const prevKhorosId = dbUser.khorosId;
+      await UPDATE(dbUsers)
+        .set({ khorosId: null, khorosLogin: null, khorosAvatarUrl: null, khorosLinkedAt: null })
+        .where({ ID: dbUser.ID });
+      if (prevKhorosId) khorosCache.evict(prevKhorosId);
+      cds.log('khoros').info('khoros unlinked', { sapId, khorosId: prevKhorosId });
+      return { status: 'ok' };
+    });
+
+    this.on('getKhorosProfile', async (req) => {
+      const sapId = resolveUserSapId(req.user);
+      if (!sapId) return req.reject(401, 'Unauthenticated');
+      const dbUser = await SELECT.one
+        .from(dbUsers)
+        .columns('ID', 'khorosId', 'khorosLogin', 'khorosAvatarUrl')
+        .where({ sapId });
+      if (!dbUser?.khorosId) return { linked: false };
+      const persisted = {
+        linked: true,
+        khorosId: dbUser.khorosId,
+        khorosLogin: dbUser.khorosLogin,
+        avatarUrl: dbUser.khorosAvatarUrl || '',
+        profileUrl: PROFILE_URL(dbUser.khorosId),
+      };
+      const cached = khorosCache.get(dbUser.khorosId);
+      if (cached) {
+        return { ...persisted, name: cached.name, rank: cached.rank, avatarUrl: cached.avatarUrl || persisted.avatarUrl };
+      }
+      // Cache miss → refresh.
+      let upstream = null;
+      try {
+        upstream = await khorosResolveUser(dbUser.khorosId);
+      } catch (err) {
+        cds.log('khoros').warn('getKhorosProfile upstream error', { sapId, khorosId: dbUser.khorosId, err: err.message });
+      }
+      if (!upstream) {
+        // Last-known-good: render the chip with persisted data, blank rank.
+        cds.log('khoros').warn('getKhorosProfile upstream null', { sapId, khorosId: dbUser.khorosId });
+        return { ...persisted, name: dbUser.khorosLogin || '', rank: '' };
+      }
+      // Refresh cache + write back avatar if it drifted.
+      khorosCache.set(upstream.id, { name: upstream.name, rank: upstream.rank, avatarUrl: upstream.avatarUrl });
+      if (upstream.avatarUrl && upstream.avatarUrl !== dbUser.khorosAvatarUrl) {
+        await UPDATE(dbUsers).set({ khorosAvatarUrl: upstream.avatarUrl }).where({ ID: dbUser.ID });
+      }
+      return { ...persisted, name: upstream.name, rank: upstream.rank, avatarUrl: upstream.avatarUrl || persisted.avatarUrl };
     });
 
     await super.init();

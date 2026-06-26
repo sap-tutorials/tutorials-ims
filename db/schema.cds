@@ -113,7 +113,8 @@ entity Steps : TaskBase {
 
 entity Checkpoints : TaskBase { }
 
-@assert.unique.sapId : [sapId]
+@assert.unique.sapId     : [sapId]
+@assert.unique.khorosId  : [khorosId]
 entity Users : cuid, managed, LegacyKeyed {
   uuid                      : String(36) @mandatory;
   sapId                     : String(255);
@@ -122,6 +123,14 @@ entity Users : cuid, managed, LegacyKeyed {
   email                     : String(255);
   displayName               : String(255);
   avatarUrl                 : String(1000);
+  // Khoros (SAP Community) profile linkage — issue #566. khorosId is the
+  // stable numeric join key; khorosLogin is the human-readable slug refreshed
+  // lazily (Khoros has bulk-renamed slugs before). All 4 nullable; users
+  // start unlinked and self-claim via /api/setKhorosLink.
+  khorosId                  : String(32);
+  khorosLogin               : String(64);
+  khorosAvatarUrl           : String(1000);
+  khorosLinkedAt            : Timestamp;
   taskRecords               : Composition of many TaskRecords on taskRecords.user = $self;
   prizeRecords              : Composition of many PrizeRecords on prizeRecords.user = $self;
   accomplishments           : Composition of many AccomplishmentRecords on accomplishments.user = $self;

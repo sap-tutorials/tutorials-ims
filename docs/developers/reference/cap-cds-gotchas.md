@@ -29,6 +29,7 @@ Search (Ctrl-F) for the error message you're seeing, the API you're using, or th
 - [check-cds-build-staging fails on csn.json diff after annotation changes](#check-cds-build-staging-fails-on-csn-json-diff-after-annotation-changes)
 - [Commit cds build artifacts alongside schema.cds changes](#commit-cds-build-artifacts-alongside-schema-cds-changes)
 - [Module singletons load twice under vitest + cds.test on Windows](#module-singletons-load-twice-under-vitest-cds-test-on-windows)
+- [@assert.unique on nullable columns + why khorosLogin isn't unique](#assert-unique-on-nullable-columns-why-khoroslogin-isnt-unique)
 
 ---
 
@@ -627,5 +628,20 @@ Related: `feedback_deploy_cds_build_freshness.md`, `feedback_hugo_before_mbt.md`
 When writing helpers for CAP services that hold module-level state (caches, singletons) that tests need to reset between cases, prefer reading the state on demand instead of caching it. The `cds.test('serve', ...)` interaction with vitest's transformer can load the same ESM module twice — same `import.meta.url`, two separate module instances. The test's `resetCache()` reaches one instance; the after-READ/before-WRITE hook in the running CAP service uses the other, with the stale value.
 
 **Why:** Hit by `project_u14_skeletons.md`-style after-READ hook pattern in PR #29 (cfLogsUrl). `resetConfigCache()` from test file ran cleanly, but the admin-service's `buildCfLogsUrl()` saw a different `cachedConfig=null`, leaving cfLogsUrl null in OData responses. Confirmed via `console.log` at module top — file logged "MODULE LOADED" twice. Path normalization, vitest transformer, or CDS internals — root cause not isolated, but the workaround is reliable.
+
+---
+
+## `@assert.unique` on nullable columns + why khorosLogin isn't unique
+
+CAP's `@assert.unique` is nullable-aware: NULL values are treated as distinct,
+so a nullable column with `@assert.unique` permits any number of NULL rows
+but rejects duplicate non-NULL values. We rely on this for `khorosId` (#566) —
+unlinked users coexist freely, linked users can't collide.
+
+We deliberately do **not** put `@assert.unique` on `khorosLogin`. Khoros has
+bulk-renamed login slugs in the past (e.g. `thomas.jung` → `thomas_jung`).
+A second user who claims a renamed slug while the first user's old slug
+still sits in the DB would silently fail the join. `khorosId` is the stable
+key; `khorosLogin` is a display label refreshed lazily every 6h.
 
 **How to apply:** For helpers that wrap env-driven lookups (xsenv binding, env-var reads, file-based config) used by CAP service handlers and tested with `cds.test('serve', '--in-memory')`, default to re-reading on each call. xsenv itself doesn't cache — `serviceCredentials()` parses VCAP_SERVICES every call. The performance cost is negligible for admin-only after-READ hooks. If you genuinely need a cache (hot path, expensive lookup), use `globalThis` for the singleton — but try the no-cache version first. Also call `xsenv.loadEnv()` before `serviceCredentials()` to layer in any `default-env.json` (matches the `reference_cds_plugin_ui5.md` mail-client.js pattern).

@@ -199,6 +199,32 @@ service DeveloperService {
     cloud      : String
   ) returns LearningPreferences;
 
+  // Issue #566 — SAP Community (Khoros) profile linkage. Display-only unlock
+  // in v1; foundation for future Devtoberfest-style consumers.
+  @(requires: 'authenticated-user')
+  action setKhorosLink(input: String) returns {
+    status     : String;
+    khorosId   : String;
+    khorosLogin: String;
+    name       : String;
+  };
+
+  @(requires: 'authenticated-user')
+  action clearKhorosLink() returns {
+    status : String;
+  };
+
+  @(requires: 'authenticated-user')
+  function getKhorosProfile() returns {
+    linked     : Boolean;
+    khorosId   : String;
+    khorosLogin: String;
+    name       : String;
+    rank       : String;
+    avatarUrl  : String;
+    profileUrl : String;
+  };
+
   // Developer Advocates — public read. The hasPhoto flag is INCLUDED so the
   // Vue island can pick `<img>` vs InitialsAvatar without a wasted 404.
   // Public clients construct photo URLs as /api/advocates/:slug/photo from

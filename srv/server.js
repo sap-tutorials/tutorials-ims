@@ -39,7 +39,7 @@ import { defaultLoadQuestion } from './lib/validate-answer-question-loader.js';
 import { scheduleRebuild, checkFeatureFlag as checkRebuildTriggerFeatureFlag } from './lib/rebuild-trigger.js';
 import { classifyRebuildMode, resolveSlugForEntity, resolveSlugsForTagRename, TAG_REVERSE_LOOKUP_CAP } from './lib/_classify-rebuild-mode.js';
 import { handleUIEvent, checkFeatureFlag as checkUIEventFeatureFlag } from './lib/ui-event-handler.js';
-import { backfillUserProfile } from './lib/resolve-db-user.js';
+import { backfillUserProfile, resolveDbUser } from './lib/resolve-db-user.js';
 import { registerMigrationModeHandler } from './lib/migration-mode.js';
 import multer from 'multer';
 import { uploadAndUpsertAdvocatePhoto } from './lib/advocate-photo-upsert.js';
@@ -684,7 +684,7 @@ cds.on('served', async () => {
     }
   }
 
-  app.get('/auth/user', contextMw, authMw, (req, res) => {
+  app.get('/auth/user', contextMw, authMw, async (req, res) => {
     const user = cds.context?.user;
     if (!user?.id || user.id === 'anonymous') {
       return res.status(401).json({ authenticated: false });
@@ -697,13 +697,33 @@ cds.on('served', async () => {
     // never block the response on a write that's pure self-heal.
     backfillUserProfile(user).catch(err =>
       console.warn('[backfill-user-profile]', err.message));
+    // Issue #566: fetch Khoros link state from the Users row. We need a DB read
+    // here because the JWT never carries khorosId/khorosLogin/khorosAvatarUrl —
+    // those are stored in HANA. Null for unlinked users; always emits the keys
+    // so the frontend can distinguish null (unlinked) from undefined (old API).
+    let khorosId = null;
+    let khorosLogin = null;
+    let khorosAvatarUrl = null;
+    try {
+      const dbUser = await resolveDbUser(user, ['khorosId', 'khorosLogin', 'khorosAvatarUrl']);
+      if (dbUser) {
+        khorosId       = dbUser.khorosId       ?? null;
+        khorosLogin    = dbUser.khorosLogin    ?? null;
+        khorosAvatarUrl = dbUser.khorosAvatarUrl ?? null;
+      }
+    } catch (err) {
+      console.warn('[auth/user] khoros lookup failed (non-fatal):', err.message);
+    }
     res.json({
       authenticated: true,
       id: user.id,
       email: user.attr?.email || '',
       givenName: user.attr?.given_name || user.attr?.givenName || '',
       familyName: user.attr?.family_name || user.attr?.familyName || '',
-      isAdmin: user.is?.('Admin') === true
+      isAdmin: user.is?.('Admin') === true,
+      khorosId,
+      khorosLogin,
+      khorosAvatarUrl,
     });
   });
 

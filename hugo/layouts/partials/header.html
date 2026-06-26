@@ -70,6 +70,7 @@
     <a href="https://www.youtube.com/@sapdevs" class="user-popover__link" target="_blank" rel="noopener">SAP Developers &#x2197;</a>
     <a href="https://learning.sap.com" class="user-popover__link" target="_blank" rel="noopener">Learnings &#x2197;</a>
     <a href="https://community.sap.com" class="user-popover__link" target="_blank" rel="noopener">Community &#x2197;</a>
+    <a id="khoros-community-link" href="#" class="user-popover__link" target="_blank" rel="noopener" hidden>View community profile &#x2197;</a>
     <hr class="user-popover__separator">
     <ui5-button id="logout-btn" design="Negative">Logout</ui5-button>
   </div>
@@ -89,6 +90,7 @@
   const shareStatus = document.getElementById('share-status');
   const shareCopyBtn = document.getElementById('share-copy-btn');
   const logoutBtn = document.getElementById('logout-btn');
+  const khorosLink = document.getElementById('khoros-community-link');
   const themeItem = document.getElementById('sb-theme');
   let isAuthenticated = false;
 
@@ -279,6 +281,23 @@
     }
   }
 
+  function applyKhorosAvatar(khorosAvatarUrl, givenName) {
+    // Remove any previously injected khoros <img> children
+    [avatar, avatarLarge].forEach(el => {
+      const prev = el.querySelector('img.khoros-avatar');
+      if (prev) prev.remove();
+    });
+    if (!khorosAvatarUrl) return;
+    [avatar, avatarLarge].forEach(el => {
+      const img = document.createElement('img');
+      img.className = 'khoros-avatar';
+      img.src = khorosAvatarUrl;
+      img.alt = givenName || 'profile';
+      img.onerror = () => img.remove(); // broken URL falls back to initials
+      el.appendChild(img);
+    });
+  }
+
   const USER_KEY = 'joule.user.v1';
   const USER_TTL_MS = 60000;
 
@@ -303,11 +322,20 @@
     userEmail.textContent = u.email || '';
     document.documentElement.dataset.authenticated = 'true';
     applyInitials(given, family, id);
+    applyKhorosAvatar(u.khorosAvatarUrl || null, given);
     avatar.setAttribute('accessible-name', userName.textContent);
     document.documentElement.dataset.user = JSON.stringify({ firstName: given });
     document.querySelectorAll('.nav-auth-only').forEach(el => el.removeAttribute('hidden'));
     if (u.isAdmin) {
       document.querySelectorAll('.nav-admin-only').forEach(el => el.removeAttribute('hidden'));
+    }
+    if (khorosLink) {
+      if (u.khorosLogin && u.khorosId) {
+        khorosLink.href = `https://community.sap.com/t5/user/viewprofilepage/user-id/${u.khorosId}`;
+        khorosLink.removeAttribute('hidden');
+      } else {
+        khorosLink.setAttribute('hidden', '');
+      }
     }
   }
 
@@ -331,7 +359,7 @@
         if (cached) applyAuthenticatedUser(cached);
         return;
       }
-      const toCache = { firstName: user.givenName, givenName: user.givenName, familyName: user.familyName, email: user.email, id: user.id, isAdmin: user.isAdmin === true };
+      const toCache = { firstName: user.givenName, givenName: user.givenName, familyName: user.familyName, email: user.email, id: user.id, isAdmin: user.isAdmin === true, khorosId: user.khorosId ?? null, khorosLogin: user.khorosLogin ?? null, khorosAvatarUrl: user.khorosAvatarUrl ?? null };
       try { sessionStorage.setItem(USER_KEY, JSON.stringify({ ts: Date.now(), value: toCache })); } catch {}
       applyAuthenticatedUser(user);
     } catch (e) {

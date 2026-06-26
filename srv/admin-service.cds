@@ -19,7 +19,10 @@ service AdminService {
   // Tutorials.author (see app/admin-annotations.cds). Spec
   // 2026-06-24-tutorial-authorship-fk.
   @cds.search: { displayName, firstName, lastName, email, sapId }
-  entity Users as projection on ims.Users;
+  entity Users as projection on ims.Users actions {
+    @(requires: 'Admin')
+    action clearKhorosLink() returns { status: String };
+  };
   @cds.redirection.target: true
   @Capabilities.ChangeTracking : { Supported: true }
   entity Tutorials as projection on ims.Tutorials {
