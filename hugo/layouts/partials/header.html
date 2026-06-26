@@ -337,6 +337,11 @@
         khorosLink.setAttribute('hidden', '');
       }
     }
+    // Issue #548: signal alerts island (and any other auth-gated UI) that
+    // authentication has resolved. Fires from applyAuthenticatedUser so the
+    // authenticated path dispatches with detail.authenticated = true. The
+    // anonymous path is handled by the finally block in checkAuth().
+    document.dispatchEvent(new CustomEvent('auth-resolved', { detail: { authenticated: true } }));
   }
 
   async function checkAuth() {
@@ -366,6 +371,15 @@
       console.debug('[header/checkAuth] fetch failed, attempting cache fallback', e);
       const cached = readCachedUser();
       if (cached) applyAuthenticatedUser(cached);
+    } finally {
+      // Issue #548: ensure exactly one auth-resolved event fires per page load.
+      // applyAuthenticatedUser dispatches on the authenticated path; this
+      // guard fires the anonymous-fallback event only when no authenticated
+      // user was applied (i.e. data-authenticated is not 'true' yet).
+      if (document.documentElement.dataset.authenticated !== 'true') {
+        document.documentElement.dataset.authenticated = 'false';
+        document.dispatchEvent(new CustomEvent('auth-resolved', { detail: { authenticated: false } }));
+      }
     }
   }
 
