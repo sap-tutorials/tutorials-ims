@@ -213,9 +213,20 @@ When `envsubst < dev.mtaext > dev.resolved.mtaext` substitutes a placeholder wit
 **How to apply:** When running a local deploy with no real value for a secret-bearing var, **strip the empty placeholder lines** from the resolved mtaext rather than letting them write a YAML-null override. One-liner:
 
 ```bash
-GITHUB_DISPATCH_TOKEN="" SMTP_HOST="" ... envsubst '...' < deploy/dev.mtaext > deploy/dev.resolved.mtaext
+GITHUB_DISPATCH_TOKEN="$YOUR_PAT" \
+CONTENT_API_KEY="$YOUR_CONTENT_KEY" \
+REBUILD_API_KEY="$YOUR_REBUILD_KEY" \
+APPROUTER_URL="$YOUR_APPROUTER_URL" \
+envsubst '$GITHUB_DISPATCH_TOKEN $CONTENT_API_KEY $REBUILD_API_KEY $APPROUTER_URL' \
+  < deploy/dev.mtaext > deploy/dev.resolved.mtaext
 sed -E -i '/^[[:space:]]+[A-Z_]+:[[:space:]]*$/d' deploy/dev.resolved.mtaext
 ```
+
+> **Note (2026-06-26):** SMTP transport config (`SMTP_HOST/PORT/USER/FROM/PASS`)
+> and `REBUILD_TARGET_ENV` formerly rode through `envsubst` here. They now live
+> in BTP Credential Store / `TenantSettings` respectively and are managed via
+> the admin UI (`/admin-ui/#secrets-display`, `/#tenantsettings-display`). The
+> envsubst allowlist above is the complete remaining set.
 
 After the strip, the base mta.yaml's `KEY: ""` default takes effect. This matches the actual deploy intent ("don't override").
 
@@ -227,7 +238,7 @@ MTA spec requires the base `mta.yaml` to **declare** every property before a `.m
 Error merging descriptors: The property "tutorials-srv#X" is not optional and has no value.
 ```
 
-**Caught 2026-06-23 DEV deploy:** `deploy/dev.mtaext` declared `CONTENT_API_KEY`, `EXPOSE_CAP_UI`, `REBUILD_TARGET_ENV`, `GITHUB_DISPATCH_TOKEN` on tutorials-srv, but `.deploy/mta.yaml`'s tutorials-srv module declared NONE of them. CI's Build & Deploy workflow had been failing at cf login (UAA/OTP cutover since 2026-06-21) before ever reaching descriptor-merge, so this bug had been hiding for days. Fixed in PR #584.
+**Caught 2026-06-23 DEV deploy:** `deploy/dev.mtaext` declared `CONTENT_API_KEY`, `EXPOSE_CAP_UI`, `GITHUB_DISPATCH_TOKEN` (and previously `REBUILD_TARGET_ENV`, removed in the credstore-runtime-config follow-up) on tutorials-srv, but `.deploy/mta.yaml`'s tutorials-srv module declared NONE of them. CI's Build & Deploy workflow had been failing at cf login (UAA/OTP cutover since 2026-06-21) before ever reaching descriptor-merge, so this bug had been hiding for days. Fixed in PR #584.
 
 **How to apply:** Before adding a new env var to any `deploy/<env>.mtaext`, **first** add it (with a safe default like `""`, `false`, or a benign string) to the matching module in `.deploy/mta.yaml` and source `mta.yaml`. Empty string for secrets, `false`/dormant defaults for flags, `"dev"` placeholder for env strings.
 
@@ -241,7 +252,7 @@ CF env vars set via `cf set-env tutorials-srv FOO bar` are dropped by every MTA 
 
 1. Add `FOO: ${foo}` to `deploy/<env>.mtaext` `tutorials-srv` properties for each env.
 2. If the value is the same across envs, use one placeholder + one CI secret.
-3. If per-env literal (like `REBUILD_TARGET_ENV: dev`/`qa`/`prod`), put the literal in each mtaext.
+3. If per-env literal, put the literal in each mtaext. (Until 2026-06, `REBUILD_TARGET_ENV: dev`/`qa`/`prod` followed this pattern; it now lives in `TenantSettings` via the admin UI instead.)
 4. Add `--var foo="${{ secrets.FOO }}"` to the `cf deploy` invocation in `.github/workflows/deploy.yml`.
 5. Document in [GitHub Dispatch PAT Rotation](github-dispatch-pat-rotation.md)-style runbook + add a CLAUDE.md gotcha for local manual deploys (`--var foo=...` on `cd .deploy && cf deploy ... -e ../deploy/dev.mtaext`).
 
