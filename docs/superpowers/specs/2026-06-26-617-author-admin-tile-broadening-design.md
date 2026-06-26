@@ -47,6 +47,8 @@ Each of those forces a "file a ticket / ask an admin" round-trip. The [2026-06-2
 9. **Changelog filtered to Tutorials-only rows.** Hides Mission/Group/Event/Tag/Advocate change noise; hides admin operational signal (Prizes, ImsConfig, etc.).
 10. **Analytics tile: role-aware Vue SPA.** The existing `analytics-explorer` SPA at `/analytics-ui/` becomes role-aware. Entity browser works for authors against a new `AuthorService.Analytics*` curated subset. SQL tab is hidden for authors with a banner ("Ad-hoc SQL queries are admin-only.").
 
+11. **Enable `@cap-js/change-tracking` on `ims.Tutorials`.** Added during implementation (2026-06-26). `AuthorService.TutorialChanges` projects from `sap.changelog.Changes`, which only contains rows for `@changelog`-annotated entities. Tutorials was not previously tracked, so the projection would have returned zero rows out of the box. Side effect: the admin Changelog tile (which reads unfiltered `Changes`) now surfaces Tutorials edits going forward — accepted as a small functional improvement to the admin tile. Full-row tracking, no field allowlist (matches Advocates pattern); field allowlist deferred unless row volume becomes a problem.
+
 ## Architecture
 
 ```
