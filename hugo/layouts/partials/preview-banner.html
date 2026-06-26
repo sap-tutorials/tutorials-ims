@@ -1,0 +1,18 @@
+{{/* [#655] Preview-only banner. Renders only when site.Params.previewMode is true.
+     Controls:
+       - "Reset all answers" — wipes localStorage prefix
+                               tutorial-validation-__preview__-* and emits
+                               tutorial-preview:reset-answers event.
+       - "Reveal AI rules"   — toggles visibility of <PreviewAINotice> rules.vr
+                               <pre> blocks. Hidden when <body data-has-ai="false">.
+     Behavior is wired by /js/preview-banner.js. */}}
+{{ if site.Params.previewMode }}
+<aside data-preview-banner role="region" aria-label="Tutorial preview controls" class="preview-banner">
+  <span class="preview-banner__label">Preview mode</span>
+  <ui5-button id="preview-banner-reset" design="Transparent">Reset all answers</ui5-button>
+  <ui5-switch id="preview-banner-reveal-ai" data-reveal-ai
+              accessible-name="Reveal AI rules"
+              text-on="AI rules"
+              text-off="AI rules"></ui5-switch>
+</aside>
+{{ end }}

@@ -72,3 +72,24 @@ html[data-hydrated="false"] [data-action="mark-done"] {
   }
   .nav-progress-bar { transition: none; }
 }
+
+/* [#655] Preview-only banner. Selectors scoped to the data-attr so prod CSS
+   is unaffected if the file is shared. */
+[data-preview-banner] {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  background: var(--sapInformationBackground, #ebf8ff);
+  border-bottom: 1px solid var(--sapInformationBorderColor, #0a6ed1);
+  font-size: 0.875rem;
+}
+[data-preview-banner] .preview-banner__label {
+  font-weight: 600;
+}
+body[data-has-ai="false"] [data-preview-banner] [data-reveal-ai] {
+  display: none;
+}
