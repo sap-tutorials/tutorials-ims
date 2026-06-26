@@ -230,10 +230,12 @@ describe('getEventProgress event association', () => {
     await INSERT.into(Missions).entries([
       { ID: 'ev-m1', legacyId: 66001, slug: 'event-assoc-mission-1', title: 'Mission One' },
       { ID: 'ev-m2', legacyId: 66002, slug: 'event-assoc-mission-2', title: 'Mission Two' },
+      { ID: 'ev-m4', legacyId: 66004, slug: 'event-type-mission', title: 'Event Type Mission' },
     ]);
     await INSERT.into(CompletionPaths).entries([
       { ID: 'ev-p1', legacyId: 66101, slug: 'ev-path-1', name: 'Path 1', mission_ID: 'ev-m1' },
       { ID: 'ev-p2', legacyId: 66102, slug: 'ev-path-2', name: 'Path 2', mission_ID: 'ev-m2' },
+      { ID: 'ev-p4', legacyId: 66104, slug: 'ev-path-4', name: 'Path 4', mission_ID: 'ev-m4' },
     ]);
     await INSERT.into(Tutorials).entries([
       { ID: 'ev-t1', legacyId: 66201, slug: 'ev-tut-1', title: 'Tut 1', status: 'ACTIVE' },
@@ -241,6 +243,7 @@ describe('getEventProgress event association', () => {
     await INSERT.into(CompletionPathItems).entries([
       { ID: 'ev-cpi1', path_ID: 'ev-p1', taskLegacyId: 66201, taskType: 'TUTORIAL', itemOrder: 1 },
       { ID: 'ev-cpi2', path_ID: 'ev-p2', taskLegacyId: 66201, taskType: 'TUTORIAL', itemOrder: 1 },
+      { ID: 'ev-cpi4', path_ID: 'ev-p4', taskLegacyId: 66201, taskType: 'TUTORIAL', itemOrder: 1 },
     ]);
 
     // Event for mission 1 (older)
@@ -254,6 +257,13 @@ describe('getEventProgress event association', () => {
       ID: 'ev-e2', legacyId: 66302, name: 'Newer Event',
       startDate: '2026-06-01T00:00:00Z', endDate: '2026-06-05T00:00:00Z',
       timeZone: '+00:00', mission_ID: 'ev-m2'
+    });
+    // Third event for eventType round-trip coverage (#646)
+    await INSERT.into(Events).entries({
+      ID: 'ev-e3', legacyId: 66303, name: 'Devtoberfest 2026',
+      startDate: '2026-10-01T00:00:00Z', endDate: '2026-10-31T00:00:00Z',
+      timeZone: '+00:00', mission_ID: 'ev-m4',
+      eventType: 'DEVTOBERFEST'
     });
   });
 
@@ -282,5 +292,22 @@ describe('getEventProgress event association', () => {
       `/api/getEventProgress(missionLegacyId=66003)`, auth
     );
     expect(data.eventId).toBe(0);
+  });
+
+  it('returns eventType from the associated event (#646)', async () => {
+    const { data } = await project.get(
+      `/api/getEventProgress(missionLegacyId=66004)`, auth
+    );
+    expect(data.eventId).toBe(66303);
+    expect(data.eventType).toBe('DEVTOBERFEST');
+  });
+
+  it('returns eventType from getAppSpaceProgress (#646)', async () => {
+    const { data } = await project.get(
+      `/api/getAppSpaceProgress(eventLegacyId=66303)`, auth
+    );
+    expect(data.eventId).toBe(66303);
+    expect(data.eventName).toBe('Devtoberfest 2026');
+    expect(data.eventType).toBe('DEVTOBERFEST');
   });
 });
