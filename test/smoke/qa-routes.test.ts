@@ -106,3 +106,78 @@ describe.skipIf(!PREVIEW_OK)('POST /preview/render', () => {
   // Tracked as a follow-up; see project_qa_channel_smoke_token_scope_gap memory.
   it.todo('403 with bearer token lacking Tutorial.Author scope');
 });
+
+// [#655] Task 4: end-to-end contract for POST /preview/render with rulesVr.
+// Canonical rules.vr format — see scripts/parsers/__tests__/compose-rules-vr.test.ts
+// and test/srv-qa/preview-renderer.test.js: ###Rule + type on the following line,
+// MCQ options in ###Match, AI grading opt-in via ###Grading\nai-judged.
+//
+// Some assertions only turn green once Hugo + Vue island changes (Tasks 5-11)
+// ship: the validation banner + data-has-ai attribute + PreviewAINotice text
+// come from the preview layout, not the srv. They are still valid acceptance
+// checks for the full feature.
+describe.skipIf(!PREVIEW_OK)('POST /preview/render with rulesVr', () => {
+  const url = `${SRV_QA}/preview/render`;
+  const BASE_MD = '---\nparser: v2\ntitle: Test\ndescription: x\ntime: 5\n---\n\n## You will learn\n- thing\n\n## Prerequisites\n- none\n\n### Step 1\nBody of step 1.\n';
+
+  it('rulesVr with [VALIDATE_1] MCQ: HTML contains question text', async () => {
+    const rulesVr = '[VALIDATE_1]\n###Rule\nmultiple-choice\n###Question\nWhat is 2+2?\n###Match\n[X] 4\n[ ] 5\n[VALIDATE_END_1]\n';
+    const r = await fetchWithRetry(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({ markdown: BASE_MD, rulesVr }),
+    });
+    expect(r.status).toBe(200);
+    const html = await r.text();
+    expect(html).toContain('What is 2+2?');
+  });
+
+  it('rulesVr with [AUTOAUTHOR_ALL]: HTML contains AI notice text', async () => {
+    // [AUTOAUTHOR_ALL] is a directive (not a question block) — canonical syntax
+    // documented in CLAUDE.md "AI-authored quizzes" gotcha.
+    const rulesVr = '[AUTOAUTHOR_ALL]\n';
+    const r = await fetchWithRetry(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({ markdown: BASE_MD, rulesVr }),
+    });
+    expect(r.status).toBe(200);
+    const html = await r.text();
+    // PreviewAINotice text ships with Hugo Tasks 5/6 — assertion is the
+    // acceptance criterion for the full feature.
+    expect(html).toMatch(/AI[- ]?(authored|generated|involved)|automatically authored/i);
+  });
+
+  it('malformed rulesVr (missing [VALIDATE_END_1]): 200 (parser drops the block silently)', async () => {
+    const rulesVr = '[VALIDATE_1]\n###Question\nQ\n';
+    const r = await fetchWithRetry(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({ markdown: BASE_MD, rulesVr }),
+    });
+    expect(r.status).toBe(200);
+  });
+
+  it('markdown-only (no rulesVr field): 200 with banner + data-has-ai="false"', async () => {
+    const r = await fetchWithRetry(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({ markdown: BASE_MD }),
+    });
+    expect(r.status).toBe(200);
+    const html = await r.text();
+    // Banner + data-has-ai attribute ship via Hugo Tasks 5/6 — assertions are
+    // acceptance checks for the full feature, will pass post-deploy.
+    expect(html).toMatch(/preview|qa banner/i);
+    expect(html).toContain('data-has-ai="false"');
+  });
+
+  it('non-string rulesVr (number): 400', async () => {
+    const r = await fetchWithRetry(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({ markdown: BASE_MD, rulesVr: 42 }),
+    });
+    expect(r.status).toBe(400);
+  });
+});
