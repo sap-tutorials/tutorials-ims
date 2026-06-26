@@ -6,14 +6,18 @@ annotate ims.Users with @PersonalData: {
   EntitySemantics: 'DataSubject',
   cascade: 'identity-replace'
 } {
-  ID          @PersonalData.FieldSemantics: 'DataSubjectID';
-  uuid        @PersonalData.IsPotentiallyPersonal;
-  firstName   @PersonalData.IsPotentiallyPersonal;
-  lastName    @PersonalData.IsPotentiallyPersonal;
-  email       @PersonalData.IsPotentiallyPersonal;
-  displayName @PersonalData.IsPotentiallyPersonal;
-  avatarUrl   @PersonalData.IsPotentiallyPersonal;
-  sapId       @PersonalData.IsPotentiallyPersonal;
+  ID              @PersonalData.FieldSemantics: 'DataSubjectID';
+  uuid            @PersonalData.IsPotentiallyPersonal;
+  firstName       @PersonalData.IsPotentiallyPersonal;
+  lastName        @PersonalData.IsPotentiallyPersonal;
+  email           @PersonalData.IsPotentiallyPersonal;
+  displayName     @PersonalData.IsPotentiallyPersonal;
+  avatarUrl       @PersonalData.IsPotentiallyPersonal;
+  sapId           @PersonalData.IsPotentiallyPersonal;
+  khorosId        @PersonalData.IsPotentiallyPersonal;
+  khorosLogin     @PersonalData.IsPotentiallyPersonal;
+  khorosAvatarUrl @PersonalData.IsPotentiallyPersonal;
+  // khorosLinkedAt — not personal (just a timestamp), no annotation
 }
 
 annotate ims.UserMetaData with @PersonalData: {

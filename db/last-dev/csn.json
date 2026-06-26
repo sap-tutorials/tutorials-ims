@@ -8,6 +8,11 @@
           "=": "sapId"
         }
       ],
+      "@assert.unique.khorosId": [
+        {
+          "=": "khorosId"
+        }
+      ],
       "@cds.persistence.journal": true,
       "elements": {
         "ID": {
@@ -72,6 +77,25 @@
           "type": "cds.String",
           "length": 1000,
           "@cds.persistence.name": "AVATARURL"
+        },
+        "khorosId": {
+          "type": "cds.String",
+          "length": 32,
+          "@cds.persistence.name": "KHOROSID"
+        },
+        "khorosLogin": {
+          "type": "cds.String",
+          "length": 64,
+          "@cds.persistence.name": "KHOROSLOGIN"
+        },
+        "khorosAvatarUrl": {
+          "type": "cds.String",
+          "length": 1000,
+          "@cds.persistence.name": "KHOROSAVATARURL"
+        },
+        "khorosLinkedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "KHOROSLINKEDAT"
         }
       },
       "$tableConstraints": {
@@ -81,6 +105,17 @@
               {
                 "ref": [
                   "sapId"
+                ],
+                "isChecked": true
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.Users"
+          },
+          "khorosId": {
+            "paths": [
+              {
+                "ref": [
+                  "khorosId"
                 ],
                 "isChecked": true
               }
