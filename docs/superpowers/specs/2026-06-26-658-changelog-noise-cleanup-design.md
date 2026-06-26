@@ -121,7 +121,9 @@ New helper: [srv/lib/purge-stale-changelog.js](../../../srv/lib/purge-stale-chan
 ```js
 export async function purgeStaleChangelog({ entities, db } = {}) {
   // DELETE FROM sap.changelog.Changes WHERE entity IN (…)
-  // Returns count.
+  // Returns { deleted: <number>, alreadyRan?: true }.
+  // alreadyRan is set only when called via the auto-purge wrapper and the
+  // JobLocks sentinel already exists.
 }
 
 export const NOISE_ENTITIES = [
@@ -139,9 +141,12 @@ export const NOISE_ENTITIES = [
 
 Wired into [srv/server.js](../../../srv/server.js) inside the existing
 `cds.on('served', …)` handler, gated by a `JobLocks` sentinel row
-(`name='changelog-noise-purge-v1'`). First server to acquire the lock runs
-the purge; everyone else short-circuits. Re-running the deploy is a no-op
-because the lock row already exists.
+(`name='changelog-noise-purge-v1'`) acquired via the existing
+[srv/jobs/job-lock.js](../../../srv/jobs/job-lock.js) helper
+(`runWithLock` / `tryAcquireLock` — planner picks the right primitive).
+First server to acquire the lock runs the purge; everyone else
+short-circuits. Re-running the deploy is a no-op because the lock row
+already exists.
 
 The version suffix (`-v1`) lets us bump to `-v2` later if a new round of
 purge is needed without writing one-off SQL.
@@ -172,9 +177,15 @@ the purge from the admin UI.
 **`test/hybrid/changelog-noise.test.js`** (new — requires `cds bind` to DEV
 HANA):
 
-1. *No phantom rows on singleton READ.* Force-empty `TenantSettings` (via the
-   write-safety-guarded test prefix), then trigger a singleton READ. Assert
-   `sap.changelog.Changes WHERE entity='…TenantSettings'` count is zero.
+1. *Triggers dropped on un-tracked singletons.* After deploy, query HANA
+   `SYS.TRIGGERS WHERE SUBJECT_TABLE_NAME` for the un-tracked entities and
+   assert zero AFTER triggers remain. Then force-empty `TenantSettings`
+   (via the write-safety-guarded `__TEST__` test prefix pattern), trigger
+   a singleton READ via the auto-init handler, and assert
+   `sap.changelog.Changes WHERE entity LIKE '%TenantSettings'` count is
+   still zero. (The trigger check is the load-bearing assertion; the
+   count check guards against a future regression that re-adds
+   `@changelog`.)
 2. *Auto-purge fires once.* Seed two noise rows for `Concepts` directly into
    `sap.changelog.Changes`, then call the auto-purge helper. Assert both
    rows gone AND a `Secrets` row inserted for control is untouched.
