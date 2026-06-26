@@ -1,6 +1,7 @@
 <!-- hugo-apps/src/validation/Validation.vue -->
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
+import PreviewAINotice from './PreviewAINotice.vue';
 import {
   gradeAnswers,
   isAiGraded,
@@ -13,9 +14,23 @@ interface Props {
   stepNumber: number;
   slug: string;
   questions: ValidationQuestion[];
+  // [#655] Preview-mode signals from main.ts (read from host data-attrs).
+  // Defaults preserve prod behavior — absent in production tutorials.
+  isPreview?: boolean;
+  aiInvolved?: boolean;
+  rulesBlockId?: string;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  isPreview: false,
+  aiInvolved: false,
+  rulesBlockId: undefined,
+});
+
+// [#655] In preview mode, when the step involves AI, we render the
+// PreviewAINotice with the verbatim rules.vr block instead of the input
+// form — the runtime AI behavior can only be exercised after a real publish.
+const rulesBlockText = ref<string>('');
 
 const answers = ref<Record<string, string>>({});
 const submitted = ref(false);
@@ -59,6 +74,27 @@ const perQuestionResults = ref<Record<string, PerQuestionResult>>({});
 let inFlight: AbortController | null = null;
 
 onMounted(() => {
+  // [#655] Preview-mode: load the rules-vr-source <script> contents so
+  // PreviewAINotice can show the verbatim block when "Reveal AI rules" is on.
+  if (props.isPreview && props.rulesBlockId) {
+    const scriptEl = document.getElementById(props.rulesBlockId) as HTMLScriptElement | null;
+    if (scriptEl?.textContent) {
+      try {
+        rulesBlockText.value = JSON.parse(scriptEl.textContent);
+      } catch {
+        rulesBlockText.value = scriptEl.textContent;
+      }
+    }
+  }
+  // [#655] Preview-mode: listen for global reset event (from preview-banner).
+  if (props.isPreview) {
+    window.addEventListener('tutorial-preview:reset-answers', onPreviewReset);
+  }
+
+  // Prod-mode persistence rehydration. Skipped in preview — the preview
+  // banner owns the reset semantics and persistence would only confuse the
+  // author preview UX.
+  if (props.isPreview) return;
   const persisted = readPersisted(props.slug, props.stepNumber);
   if (persisted?.correct) {
     submitted.value = true;
@@ -71,6 +107,33 @@ onMounted(() => {
     emitStepValidated();
   }
 });
+
+onUnmounted(() => {
+  // Always remove — cheap, idempotent. We only added the listener in preview
+  // mode, but removeEventListener on a never-attached handler is a no-op.
+  window.removeEventListener('tutorial-preview:reset-answers', onPreviewReset);
+});
+
+function onPreviewReset(): void {
+  // [#655] Clear in-memory state.
+  answers.value = {};
+  submitted.value = false;
+  result.value = null;
+  pending.value = false;
+  hint.value = '';
+  perQuestionResults.value = {};
+  // Wipe persisted preview keys for this slug.
+  if (typeof localStorage !== 'undefined') {
+    const toRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(`tutorial-validation-${props.slug}-`)) {
+        toRemove.push(key);
+      }
+    }
+    for (const k of toRemove) localStorage.removeItem(k);
+  }
+}
 
 function emitStepValidated() {
   // Notify tutorial.ts that this step's validation passed.
@@ -105,6 +168,13 @@ function onTextInput(qid: string, event: Event) {
  *   other 4xx/5xx → generic http_<status> error
  */
 async function gradeAi(slug: string, stepNumber: number, questionId: string, submittedAnswer: string, signal?: AbortSignal) {
+  // [#655] Preview never calls the AI grader — AI-involved questions render
+  // as PreviewAINotice in the template, so this branch is only reached if
+  // a preview tutorial happens to mix aiGrading questions without aiInvolved
+  // set; defending here keeps the network surface zero in preview regardless.
+  if (props.isPreview) {
+    return { verdict: 'disabled' as const };
+  }
   try {
     const res = await fetch('/api/validate-answer', {
       method: 'POST',
@@ -330,6 +400,20 @@ defineExpose({
 
 <template>
   <div class="validation-widget">
+    <!-- [#655] Preview-mode AI takeover: when this step is flagged as
+         AI-involved by Task 5's data-attrs (free-text grading, AI-authored
+         quiz, code-check, Joule step help), the runtime AI behavior is not
+         reachable from Hugo dev mode. Render the PreviewAINotice with the
+         verbatim rules.vr block instead of the question form — the form
+         and its inputs are entirely skipped to make the limitation
+         unmistakable. The "Reveal AI rules" toggle in the preview banner
+         expands the <pre> inside the notice. -->
+    <PreviewAINotice
+      v-if="props.isPreview && props.aiInvolved"
+      :rules-block="rulesBlockText"
+    />
+
+    <template v-else>
     <!-- Persisted-success state: show success banner AND keep the form
          mounted below in read-only mode, so the learner can re-read their
          answer (Tom's UX feedback 2026-06-24 — hiding the answer entirely
@@ -534,6 +618,7 @@ defineExpose({
         </ui5-button>
       </template>
     </form>
+    </template>
   </div>
 </template>
 
