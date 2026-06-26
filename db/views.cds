@@ -36,6 +36,16 @@ view Tasks as
     primaryTag, experienceTag, averageTimeToComplete,
     'CHECKPOINT' as taskType : String(20),
     createdAt, modifiedAt
+  }
+  UNION ALL
+  // Issue #644 — Puzzles join the Tasks UNION so CompletionAnalytics' LEFT JOIN
+  // Tasks resolves taskTitle for PUZZLE TaskRecords (instead of falling back to
+  // titleSnapshot only). Column shape matches the other branches exactly.
+  SELECT from ims.Puzzles {
+    ID, legacyId, title, description, status, deletionReason,
+    primaryTag, experienceTag, averageTimeToComplete,
+    'PUZZLE' as taskType : String(20),
+    createdAt, modifiedAt
   };
 
 // MissionTutorialItems — a slice, NOT the full navigator catalog.
@@ -228,6 +238,10 @@ entity TaskRecordsAnalytics as projection on ims.TaskRecords {
   tutorial : Association to ims.Tutorials on tutorial.legacyId = taskLegacyId and taskType = 'TUTORIAL',
   mission  : Association to ims.Missions  on mission.legacyId  = taskLegacyId and taskType = 'MISSION',
   group    : Association to ims.Groups    on group.legacyId    = taskLegacyId and taskType = 'GROUP',
+  // Issue #644 — soft-link to Puzzles, mirroring the existing discriminated
+  // association pattern. Used by AdminService.PuzzleTaskRecords + admin
+  // analytics groupings.
+  puzzle   : Association to ims.Puzzles   on puzzle.legacyId   = taskLegacyId and taskType = 'PUZZLE',
 };
 
 entity TutorialFeedbackAggregate as

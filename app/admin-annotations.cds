@@ -1325,6 +1325,292 @@ annotate AdminService.TaskRecords with @(
   Capabilities.UpdateRestrictions.Updatable: false
 );
 
+// Issue #644 — per-taskType drill-down projections (six total: TUTORIAL,
+// MISSION, GROUP, STEP, CHECKPOINT, PUZZLE). Each reuses the same column
+// labels and SUPERSEDED-hiding default selection variant as the parent
+// TaskRecords entity, plus a single typed association column where one
+// exists. Read-only across the board (matches TaskRecords parent).
+annotate AdminService.TutorialTaskRecords with {
+  taskType       @Common.Label: 'Task Type'  @Common.ValueListWithFixedValues;
+  status         @Common.Label: 'Status'     @Common.ValueListWithFixedValues;
+  progress       @Common.Label: 'Progress';
+  attemptNumber  @Common.Label: 'Attempt';
+  completionDate @Common.Label: 'Completed';
+  titleSnapshot  @Common.Label: 'Title';
+  tutorial       @Common.Label: 'Tutorial';
+};
+annotate AdminService.TutorialTaskRecords with @(
+  UI: {
+    HeaderInfo: {
+      TypeName: 'Tutorial Completion', TypeNamePlural: 'Tutorial Completions',
+      Title: { Value: titleSnapshot },
+      Description: { Value: status }
+    },
+    SelectionFields: [ status, completionDate, attemptNumber ],
+    LineItem: [
+      { Value: completionDate },
+      { Value: titleSnapshot },
+      { Value: status },
+      { Value: progress },
+      { $Type: 'UI.DataField', Value: attemptNumber, Label: 'Attempt' }
+    ],
+    SelectionPresentationVariant #default: {
+      $Type: 'UI.SelectionPresentationVariantType',
+      Text: 'Active (excludes SUPERSEDED)',
+      SelectionVariant: {
+        $Type: 'UI.SelectionVariantType',
+        SelectOptions: [{
+          $Type: 'UI.SelectOptionType',
+          PropertyName: status,
+          Ranges: [{
+            $Type: 'UI.SelectionRangeType',
+            Sign: #E, Option: #EQ, Low: 'SUPERSEDED'
+          }]
+        }]
+      },
+      PresentationVariant: { Visualizations: ['@UI.LineItem'] }
+    },
+    Sort: [{ Property: completionDate, Descending: true }]
+  },
+  Capabilities.DeleteRestrictions.Deletable: false,
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable: false
+);
+
+annotate AdminService.MissionTaskRecords with {
+  taskType       @Common.Label: 'Task Type'  @Common.ValueListWithFixedValues;
+  status         @Common.Label: 'Status'     @Common.ValueListWithFixedValues;
+  progress       @Common.Label: 'Progress';
+  attemptNumber  @Common.Label: 'Attempt';
+  completionDate @Common.Label: 'Completed';
+  titleSnapshot  @Common.Label: 'Title';
+  mission        @Common.Label: 'Mission';
+};
+annotate AdminService.MissionTaskRecords with @(
+  UI: {
+    HeaderInfo: {
+      TypeName: 'Mission Completion', TypeNamePlural: 'Mission Completions',
+      Title: { Value: titleSnapshot },
+      Description: { Value: status }
+    },
+    SelectionFields: [ status, completionDate, attemptNumber ],
+    LineItem: [
+      { Value: completionDate },
+      { Value: titleSnapshot },
+      { Value: status },
+      { Value: progress },
+      { $Type: 'UI.DataField', Value: attemptNumber, Label: 'Attempt' }
+    ],
+    SelectionPresentationVariant #default: {
+      $Type: 'UI.SelectionPresentationVariantType',
+      Text: 'Active (excludes SUPERSEDED)',
+      SelectionVariant: {
+        $Type: 'UI.SelectionVariantType',
+        SelectOptions: [{
+          $Type: 'UI.SelectOptionType',
+          PropertyName: status,
+          Ranges: [{
+            $Type: 'UI.SelectionRangeType',
+            Sign: #E, Option: #EQ, Low: 'SUPERSEDED'
+          }]
+        }]
+      },
+      PresentationVariant: { Visualizations: ['@UI.LineItem'] }
+    },
+    Sort: [{ Property: completionDate, Descending: true }]
+  },
+  Capabilities.DeleteRestrictions.Deletable: false,
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable: false
+);
+
+annotate AdminService.GroupTaskRecords with {
+  taskType       @Common.Label: 'Task Type'  @Common.ValueListWithFixedValues;
+  status         @Common.Label: 'Status'     @Common.ValueListWithFixedValues;
+  progress       @Common.Label: 'Progress';
+  attemptNumber  @Common.Label: 'Attempt';
+  completionDate @Common.Label: 'Completed';
+  titleSnapshot  @Common.Label: 'Title';
+  group          @Common.Label: 'Group';
+};
+annotate AdminService.GroupTaskRecords with @(
+  UI: {
+    HeaderInfo: {
+      TypeName: 'Group Completion', TypeNamePlural: 'Group Completions',
+      Title: { Value: titleSnapshot },
+      Description: { Value: status }
+    },
+    SelectionFields: [ status, completionDate, attemptNumber ],
+    LineItem: [
+      { Value: completionDate },
+      { Value: titleSnapshot },
+      { Value: status },
+      { Value: progress },
+      { $Type: 'UI.DataField', Value: attemptNumber, Label: 'Attempt' }
+    ],
+    SelectionPresentationVariant #default: {
+      $Type: 'UI.SelectionPresentationVariantType',
+      Text: 'Active (excludes SUPERSEDED)',
+      SelectionVariant: {
+        $Type: 'UI.SelectionVariantType',
+        SelectOptions: [{
+          $Type: 'UI.SelectOptionType',
+          PropertyName: status,
+          Ranges: [{
+            $Type: 'UI.SelectionRangeType',
+            Sign: #E, Option: #EQ, Low: 'SUPERSEDED'
+          }]
+        }]
+      },
+      PresentationVariant: { Visualizations: ['@UI.LineItem'] }
+    },
+    Sort: [{ Property: completionDate, Descending: true }]
+  },
+  Capabilities.DeleteRestrictions.Deletable: false,
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable: false
+);
+
+annotate AdminService.StepTaskRecords with {
+  taskType       @Common.Label: 'Task Type'  @Common.ValueListWithFixedValues;
+  status         @Common.Label: 'Status'     @Common.ValueListWithFixedValues;
+  progress       @Common.Label: 'Progress';
+  attemptNumber  @Common.Label: 'Attempt';
+  completionDate @Common.Label: 'Completed';
+  titleSnapshot  @Common.Label: 'Title';
+  step           @Common.Label: 'Step';
+};
+annotate AdminService.StepTaskRecords with @(
+  UI: {
+    HeaderInfo: {
+      TypeName: 'Step Completion', TypeNamePlural: 'Step Completions',
+      Title: { Value: titleSnapshot },
+      Description: { Value: status }
+    },
+    SelectionFields: [ status, completionDate, attemptNumber ],
+    LineItem: [
+      { Value: completionDate },
+      { Value: titleSnapshot },
+      { Value: status },
+      { Value: progress },
+      { $Type: 'UI.DataField', Value: attemptNumber, Label: 'Attempt' }
+    ],
+    SelectionPresentationVariant #default: {
+      $Type: 'UI.SelectionPresentationVariantType',
+      Text: 'Active (excludes SUPERSEDED)',
+      SelectionVariant: {
+        $Type: 'UI.SelectionVariantType',
+        SelectOptions: [{
+          $Type: 'UI.SelectOptionType',
+          PropertyName: status,
+          Ranges: [{
+            $Type: 'UI.SelectionRangeType',
+            Sign: #E, Option: #EQ, Low: 'SUPERSEDED'
+          }]
+        }]
+      },
+      PresentationVariant: { Visualizations: ['@UI.LineItem'] }
+    },
+    Sort: [{ Property: completionDate, Descending: true }]
+  },
+  Capabilities.DeleteRestrictions.Deletable: false,
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable: false
+);
+
+annotate AdminService.CheckpointTaskRecords with {
+  taskType       @Common.Label: 'Task Type'  @Common.ValueListWithFixedValues;
+  status         @Common.Label: 'Status'     @Common.ValueListWithFixedValues;
+  progress       @Common.Label: 'Progress';
+  attemptNumber  @Common.Label: 'Attempt';
+  completionDate @Common.Label: 'Completed';
+  titleSnapshot  @Common.Label: 'Title';
+};
+annotate AdminService.CheckpointTaskRecords with @(
+  UI: {
+    HeaderInfo: {
+      TypeName: 'Checkpoint Completion', TypeNamePlural: 'Checkpoint Completions',
+      Title: { Value: titleSnapshot },
+      Description: { Value: status }
+    },
+    SelectionFields: [ status, completionDate, attemptNumber ],
+    LineItem: [
+      { Value: completionDate },
+      { Value: titleSnapshot },
+      { Value: status },
+      { Value: progress },
+      { $Type: 'UI.DataField', Value: attemptNumber, Label: 'Attempt' }
+    ],
+    SelectionPresentationVariant #default: {
+      $Type: 'UI.SelectionPresentationVariantType',
+      Text: 'Active (excludes SUPERSEDED)',
+      SelectionVariant: {
+        $Type: 'UI.SelectionVariantType',
+        SelectOptions: [{
+          $Type: 'UI.SelectOptionType',
+          PropertyName: status,
+          Ranges: [{
+            $Type: 'UI.SelectionRangeType',
+            Sign: #E, Option: #EQ, Low: 'SUPERSEDED'
+          }]
+        }]
+      },
+      PresentationVariant: { Visualizations: ['@UI.LineItem'] }
+    },
+    Sort: [{ Property: completionDate, Descending: true }]
+  },
+  Capabilities.DeleteRestrictions.Deletable: false,
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable: false
+);
+
+annotate AdminService.PuzzleTaskRecords with {
+  taskType       @Common.Label: 'Task Type'  @Common.ValueListWithFixedValues;
+  status         @Common.Label: 'Status'     @Common.ValueListWithFixedValues;
+  progress       @Common.Label: 'Progress';
+  attemptNumber  @Common.Label: 'Attempt';
+  completionDate @Common.Label: 'Completed';
+  titleSnapshot  @Common.Label: 'Title';
+  puzzle         @Common.Label: 'Puzzle';
+};
+annotate AdminService.PuzzleTaskRecords with @(
+  UI: {
+    HeaderInfo: {
+      TypeName: 'Puzzle Completion', TypeNamePlural: 'Puzzle Completions',
+      Title: { Value: titleSnapshot },
+      Description: { Value: status }
+    },
+    SelectionFields: [ status, completionDate, attemptNumber ],
+    LineItem: [
+      { Value: completionDate },
+      { Value: titleSnapshot },
+      { Value: status },
+      { Value: progress },
+      { $Type: 'UI.DataField', Value: attemptNumber, Label: 'Attempt' }
+    ],
+    SelectionPresentationVariant #default: {
+      $Type: 'UI.SelectionPresentationVariantType',
+      Text: 'Active (excludes SUPERSEDED)',
+      SelectionVariant: {
+        $Type: 'UI.SelectionVariantType',
+        SelectOptions: [{
+          $Type: 'UI.SelectOptionType',
+          PropertyName: status,
+          Ranges: [{
+            $Type: 'UI.SelectionRangeType',
+            Sign: #E, Option: #EQ, Low: 'SUPERSEDED'
+          }]
+        }]
+      },
+      PresentationVariant: { Visualizations: ['@UI.LineItem'] }
+    },
+    Sort: [{ Property: completionDate, Descending: true }]
+  },
+  Capabilities.DeleteRestrictions.Deletable: false,
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable: false
+);
+
 // ChangeView: plugin provides LineItem, PresentationVariant, FieldGroups, Hierarchy, Search.
 // ReadRestrictions override is applied at runtime in srv/admin-service.js.
 // We add SelectionFields for the standalone ListReport filter bar.
