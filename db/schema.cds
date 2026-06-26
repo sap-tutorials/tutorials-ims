@@ -128,7 +128,6 @@ entity Users : cuid, managed, LegacyKeyed {
   lastName                  : String(255);
   email                     : String(255);
   displayName               : String(255);
-  avatarUrl                 : String(1000);
   // Khoros (SAP Community) profile linkage — issue #566. khorosId is the
   // stable numeric join key; khorosLogin is the human-readable slug refreshed
   // lazily (Khoros has bulk-renamed slugs before). All 4 nullable; users

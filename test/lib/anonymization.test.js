@@ -11,8 +11,7 @@ describe('anonymization', () => {
         firstName: 'John',
         lastName: 'Doe',
         email: 'john@example.com',
-        displayName: 'John Doe',
-        avatarUrl: 'https://example.com/avatar.jpg'
+        displayName: 'John Doe'
       };
 
       const ops = buildAnonymizationOps(user);
@@ -23,8 +22,7 @@ describe('anonymization', () => {
         firstName: 'ANONYMIZED',
         lastName: 'ANONYMIZED',
         email: null,
-        displayName: 'ANONYMIZED',
-        avatarUrl: null
+        displayName: 'ANONYMIZED'
       });
       expect(ops.deleteMetadata).toBe(true);
       expect(ops.auditFieldsValue).toBe('ANONYMIZED');
@@ -37,8 +35,7 @@ describe('anonymization', () => {
         firstName: 'ANONYMIZED',
         lastName: 'ANONYMIZED',
         email: null,
-        displayName: 'ANONYMIZED',
-        avatarUrl: null
+        displayName: 'ANONYMIZED'
       };
 
       const ops = buildAnonymizationOps(user);

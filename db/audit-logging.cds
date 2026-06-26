@@ -12,7 +12,6 @@ annotate ims.Users with @PersonalData: {
   lastName        @PersonalData.IsPotentiallyPersonal;
   email           @PersonalData.IsPotentiallyPersonal;
   displayName     @PersonalData.IsPotentiallyPersonal;
-  avatarUrl       @PersonalData.IsPotentiallyPersonal;
   sapId           @PersonalData.IsPotentiallyPersonal;
   khorosId        @PersonalData.IsPotentiallyPersonal;
   khorosLogin     @PersonalData.IsPotentiallyPersonal;

@@ -22,7 +22,7 @@ describe('Audit Logging Annotations', () => {
 
   it('Users personal fields are annotated as IsPotentiallyPersonal', async () => {
     const { Users } = cds.entities('com.sap.developers.ims');
-    const personalFields = ['uuid', 'firstName', 'lastName', 'email', 'displayName', 'avatarUrl', 'sapId'];
+    const personalFields = ['uuid', 'firstName', 'lastName', 'email', 'displayName', 'sapId'];
     for (const field of personalFields) {
       expect(Users.elements[field]?.['@PersonalData.IsPotentiallyPersonal']).toBe(true,
         `Expected ${field} to have @PersonalData.IsPotentiallyPersonal`);

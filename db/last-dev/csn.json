@@ -73,11 +73,6 @@
           "length": 255,
           "@cds.persistence.name": "DISPLAYNAME"
         },
-        "avatarUrl": {
-          "type": "cds.String",
-          "length": 1000,
-          "@cds.persistence.name": "AVATARURL"
-        },
         "khorosId": {
           "type": "cds.String",
           "length": 32,
