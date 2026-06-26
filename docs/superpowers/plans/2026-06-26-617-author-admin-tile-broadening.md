@@ -612,7 +612,9 @@ Add to the same service body:
 
 Note: relies on the `AuthorTutorialChanges` view added in Task 4. Without that view this CDS won't compile.
 
-- [ ] **Step 4: Add the curated Analytics projections (8 entities)**
+- [ ] **Step 4: Add the curated Analytics projections (7 new entities)**
+
+Adds **7 NEW projections** below (Tasks, CompletionAnalytics, ActiveLearnersDaily, TaskRecords, CodeCheckSubmissions, ValidateAnswerSubmissions, UIEvents). The Analytics surface ALSO includes **2 EXISTING** projections already on AuthorService (`AnalyticsBranchPerformance`, `AnalyticsBranchTopPick`) — do NOT re-add. The author Analytics tile reads from 9 entities total.
 
 ```cds
 @readonly entity Tasks                  as projection on ims.Tasks;
@@ -1607,7 +1609,7 @@ git commit -m "feat(#617): NoAccess interstitial for users without Admin or Tuto
 
 **Files:**
 - Modify: [app/admin-shell/webapp/Component.js](../../../app/admin-shell/webapp/Component.js)
-- Modify: per-tile component manifest JSON in [app/admin-shell/webapp/components/](../../../app/admin-shell/webapp/components/) (if author-visible tiles bind their own component-local models).
+- Modify: per-tile authoritative source in [app/admin/](../../../app/admin/) (each tile lives at `app/admin/<name>/`; the admin-shell's `./components/<name>` resourceRoot is a build-time copy from there per [mta.yaml](../../../mta.yaml). Edit the source.).
 
 **Context:** The shell loads tiles as `componentUsages` (lazy). Each tile component has its own `manifest.json` that may define a `default` OData model. For author-visible tiles, when `userRole === 'author'`, we need to point the component's data calls at `/author/` instead of `/admin/`.
 
@@ -1620,8 +1622,8 @@ Approach 1 is simpler. Implement it for the **author-visible tiles only** (tutor
 - [ ] **Step 1: Identify author-visible tile components**
 
 ```bash
-ls app/admin-shell/webapp/components/{tutorials,tags,feedback,changelog} 2>/dev/null
-cat app/admin-shell/webapp/components/tutorials/manifest.json | head -40
+ls app/admin/{tutorials,tags,feedback,changelog} 2>/dev/null
+cat app/admin/tutorials/webapp/manifest.json | head -40
 ```
 
 Note how each tile's manifest declares its OData service path — that's what we need to make overridable.
@@ -1688,10 +1690,10 @@ npm run dev:hybrid
 
 ```bash
 git add app/admin-shell/webapp/controller/Shell.controller.js \
-        app/admin-shell/webapp/components/tutorials/Component.js \
-        app/admin-shell/webapp/components/tags/Component.js \
-        app/admin-shell/webapp/components/feedback/Component.js \
-        app/admin-shell/webapp/components/changelog/Component.js \
+        app/admin/tutorials/webapp/Component.js \
+        app/admin/tags/webapp/Component.js \
+        app/admin/feedback/webapp/Component.js \
+        app/admin/changelog/webapp/Component.js \
         app/admin-shell/webapp/model/navigation.json
 git commit -m "feat(#617): per-tile OData URL routing based on userRole
 
@@ -1977,6 +1979,8 @@ git commit -m "test(#617): smoke coverage for Tutorial.Author scope routes"
 ## Task 18: Open PR
 
 **Files:** None — process step.
+
+**Deploy authorization checkpoint:** Before opening the PR, confirm with Tom whether the smoke tests should run against an existing DEV deploy or whether a fresh deploy needs to be queued. Smoke tests pass-or-fail depends on whether the changes are deployed. Per memory `feedback_confirm_deploy_scope` and `feedback_merge_is_not_deploy`: merging the PR does NOT auto-deploy; the maintainer triggers MTA deploy explicitly. Don't kick off the deploy yourself unless authorized.
 
 - [ ] **Step 1: Confirm everything is committed**
 
