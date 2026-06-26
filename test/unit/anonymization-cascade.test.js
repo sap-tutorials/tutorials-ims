@@ -220,7 +220,7 @@ describe('cascade action helpers (in-memory SQLite)', () => {
     await INSERT.into(Users).entries({
       ID: '11111111-1111-1111-1111-111111111111',
       sapId: 'u1', firstName: 'Alice', lastName: 'Smith',
-      email: 'alice@example.com', displayName: 'Alice', avatarUrl: 'https://...'
+      email: 'alice@example.com', displayName: 'Alice'
     });
 
     await executeAnonymizationCascade(
@@ -234,7 +234,6 @@ describe('cascade action helpers (in-memory SQLite)', () => {
     expect(u.lastName).toBe('ANONYMIZED');
     expect(u.email).toBeNull();
     expect(u.displayName).toBe('ANONYMIZED');
-    expect(u.avatarUrl).toBeNull();
   });
 
   it('orchestrator end-to-end: dispatches all four cascade actions in order', async () => {

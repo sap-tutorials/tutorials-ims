@@ -12,8 +12,7 @@ export function buildAnonymizationOps(user) {
       firstName: ANON_VALUE,
       lastName: ANON_VALUE,
       email: null,
-      displayName: ANON_VALUE,
-      avatarUrl: null
+      displayName: ANON_VALUE
     },
     deleteMetadata: true,
     auditFieldsValue: ANON_VALUE

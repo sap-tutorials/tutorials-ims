@@ -106,7 +106,6 @@ export async function resolveDbUser(user, columns) {
  *   { backfilled: true,  fields: ['firstName', 'email', ...] }
  *
  * NOT covered:
- *   - avatarUrl (not in standard SAP ID Service JWT claims)
  *   - displayName (computed at read time from firstName + lastName)
  */
 export async function backfillUserProfile(user) {
