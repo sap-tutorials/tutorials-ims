@@ -1424,6 +1424,80 @@
       },
       "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_DEVELOPERENVIRONMENTLINKS"
     },
+    "com.sap.developers.ims.Puzzles": {
+      "kind": "entity",
+      "@cds.persistence.journal": true,
+      "elements": {
+        "ID": {
+          "key": true,
+          "type": "cds.String",
+          "length": 36,
+          "@cds.persistence.name": "ID"
+        },
+        "createdAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "CREATEDAT"
+        },
+        "createdBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "CREATEDBY"
+        },
+        "modifiedAt": {
+          "type": "cds.Timestamp",
+          "@cds.persistence.name": "MODIFIEDAT"
+        },
+        "modifiedBy": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "MODIFIEDBY"
+        },
+        "legacyId": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "LEGACYID"
+        },
+        "title": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "TITLE"
+        },
+        "description": {
+          "type": "cds.LargeString",
+          "@cds.persistence.name": "DESCRIPTION"
+        },
+        "status": {
+          "type": "cds.String",
+          "length": 50,
+          "@cds.persistence.name": "STATUS"
+        },
+        "deletionReason": {
+          "type": "cds.String",
+          "length": 500,
+          "@cds.persistence.name": "DELETIONREASON"
+        },
+        "primaryTag": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "PRIMARYTAG"
+        },
+        "experienceTag": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "EXPERIENCETAG"
+        },
+        "averageTimeToComplete": {
+          "type": "cds.Integer",
+          "@cds.persistence.name": "AVERAGETIMETOCOMPLETE"
+        },
+        "primaryTagRef_ID": {
+          "type": "cds.String",
+          "length": 36,
+          "@odata.foreignKey4": "primaryTagRef",
+          "@cds.persistence.name": "PRIMARYTAGREF_ID"
+        }
+      },
+      "@cds.persistence.name": "COM_SAP_DEVELOPERS_IMS_PUZZLES"
+    },
     "com.sap.developers.ims.ImsConfig": {
       "kind": "entity",
       "@cds.persistence.journal": true,

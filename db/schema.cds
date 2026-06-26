@@ -113,6 +113,12 @@ entity Steps : TaskBase {
 
 entity Checkpoints : TaskBase { }
 
+// Issue #644 — Puzzle tasks. First-class entity (peer of Tutorials/Missions/
+// Groups/Steps/Checkpoints) so a puzzle catalog can be administered, and so
+// TaskRecords with taskType='PUZZLE' can join back to a real content row via
+// legacyId (Tasks UNION view + TaskRecordsAnalytics association).
+entity Puzzles : TaskBase { }
+
 @assert.unique.sapId     : [sapId]
 @assert.unique.khorosId  : [khorosId]
 entity Users : cuid, managed, LegacyKeyed {
@@ -143,7 +149,11 @@ entity Users : cuid, managed, LegacyKeyed {
 entity TaskRecords : cuid, managed, LegacyKeyed {
   user                      : Association to Users @mandatory;
   taskLegacyId              : Integer;
-  taskType                  : String enum { TUTORIAL; MISSION; GROUP; STEP; CHECKPOINT; };
+  // Issue #644 — PUZZLE added as a recordable task type. Persisted column is
+  // NVARCHAR(5000); the enum is enforced at the CDS layer (@Common.ValueList
+  // dropdowns + admin write-paths) rather than as a DB constraint, so this
+  // change requires no .hdbmigrationtable ALTER.
+  taskType                  : String enum { TUTORIAL; MISSION; GROUP; STEP; CHECKPOINT; PUZZLE; };
   status                    : String enum { COMPLETED; IN_PROGRESS; SUPERSEDED; };
   progress                  : Integer default 0;
   completionTime            : Int64;

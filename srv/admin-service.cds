@@ -70,6 +70,9 @@ service AdminService {
   entity Missions as projection on ims.Missions { *, virtual null as publishedFieldControl : Integer, cast(legacyId as String) as legacyIdStr : String };
   entity Groups as projection on ims.Groups { *, virtual null as publishedFieldControl : Integer, cast(legacyId as String) as legacyIdStr : String };
   entity Steps as projection on ims.Steps;
+  // Issue #644 — Puzzles is a TaskBase peer of Tutorials/Missions/Groups,
+  // exposed for admin CRUD so puzzles can be authored and curated.
+  entity Puzzles as projection on ims.Puzzles { *, cast(legacyId as String) as legacyIdStr : String };
   entity Events as projection on ims.Events { *, cast(legacyId as String) as legacyIdStr : String };
   entity Prizes as projection on ims.Prizes { *, cast(legacyId as String) as legacyIdStr : String };
   entity PrizeRecords as projection on ims.PrizeRecords;
@@ -82,6 +85,54 @@ service AdminService {
   entity Accomplishments as projection on ims.Accomplishments { *, cast(legacyId as String) as legacyIdStr : String };
   entity AccomplishmentRecords as projection on ims.AccomplishmentRecords;
   entity TaskRecords as projection on ims.TaskRecords;
+
+  // Issue #644 — per-taskType drill-down projections. Each filters TaskRecords
+  // on one taskType and adds a typed association to the corresponding content
+  // entity by legacyId, so admin tiles can surface a typed "Title" column and
+  // a navigable link to the content row. SUPERSEDED filtering and other
+  // annotations come from the TaskRecords annotate block — admins flip filters
+  // identically across all six surfaces.
+  //
+  // Mirrors the discriminated-association pattern on db.TaskRecordsAnalytics
+  // (views.cds:226) but exposed as @readonly facets per type. Insert/Update/
+  // Delete restrictions are enforced via the shared annotation block in
+  // app/admin-annotations.cds (TaskRecords is read-only — these inherit).
+  @readonly @cds.redirection.target: false
+  entity TutorialTaskRecords as projection on ims.TaskRecords {
+    *,
+    tutorial : Association to ims.Tutorials on tutorial.legacyId = taskLegacyId
+  } where taskType = 'TUTORIAL';
+
+  @readonly @cds.redirection.target: false
+  entity MissionTaskRecords as projection on ims.TaskRecords {
+    *,
+    mission : Association to ims.Missions on mission.legacyId = taskLegacyId
+  } where taskType = 'MISSION';
+
+  @readonly @cds.redirection.target: false
+  entity GroupTaskRecords as projection on ims.TaskRecords {
+    *,
+    group : Association to ims.Groups on group.legacyId = taskLegacyId
+  } where taskType = 'GROUP';
+
+  @readonly @cds.redirection.target: false
+  entity StepTaskRecords as projection on ims.TaskRecords {
+    *,
+    step : Association to ims.Steps on step.legacyId = taskLegacyId
+  } where taskType = 'STEP';
+
+  // Checkpoints have no slug or content-store entry, so there is no useful
+  // typed association — titleSnapshot from the record itself is the display.
+  @readonly @cds.redirection.target: false
+  entity CheckpointTaskRecords as projection on ims.TaskRecords {
+    *
+  } where taskType = 'CHECKPOINT';
+
+  @readonly @cds.redirection.target: false
+  entity PuzzleTaskRecords as projection on ims.TaskRecords {
+    *,
+    puzzle : Association to ims.Puzzles on puzzle.legacyId = taskLegacyId
+  } where taskType = 'PUZZLE';
   entity TutorialMeta as projection on ims.TutorialMeta;
   entity TutorialContributors as projection on ims.TutorialContributors;
   entity TutorialRepositories as projection on ims.TutorialRepositories;
