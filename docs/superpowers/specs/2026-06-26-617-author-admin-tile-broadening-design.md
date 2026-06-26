@@ -129,7 +129,7 @@ Each of those forces a "file a ticket / ask an admin" round-trip. The [2026-06-2
 | Existing | `@readonly entity AnalyticsBranchPerformance` | Already on AuthorService. |
 | Existing | `@readonly entity AnalyticsBranchTopPick` | Already on AuthorService. |
 | New | `function listExposedEntities() returns array of { name; sqlName; label }` | Mirrors `AnalyticsService.listExposedEntities` but returns only the curated author subset. Drives the `analytics-explorer` entity-browser dropdown. |
-| New (action) | `extend entity AuthorService.Tutorials with actions { @Core.OperationAvailable: true @Common.IsActionCritical: true action rebuildContent() returns RebuildContentResult; }` | Symmetric with the admin button. Reuses `srv/lib/rebuild-trigger.js` `scheduleRebuild()`. Audit event: `auditEvent('TutorialRebuildTriggered', { user, tutorialId, slug, source: 'author-ui:rebuild-button' })`. The `RebuildContentResult` type is reused from `AdminService` via a shared types module OR re-declared on AuthorService (decision deferred to plan-writing — both are valid CAP patterns). |
+| New (action) | `extend entity AuthorService.Tutorials with actions { @Core.OperationAvailable: true @Common.IsActionCritical: true action rebuildContent() returns AdminService.RebuildContentResult; }` | Symmetric with the admin button. Reuses `srv/lib/rebuild-trigger.js` `scheduleRebuild()`. Audit event: `auditEvent('TutorialRebuildTriggered', { user, tutorialId, slug, source: 'author-ui:rebuild-button' })`. **Type-sharing decision (settled):** reuse `AdminService.RebuildContentResult` rather than re-declaring on AuthorService — CDS supports cross-service type references, the type is dispatch-result-only (no security surface), and any future shape change stays in one place. |
 
 ### What is NOT added
 
@@ -214,7 +214,15 @@ onInit: async function () {
 }
 ```
 
-`_filterNavigation(userRole)` walks `navigation.json` and removes entries where `requiredScope` is set and `userRole === 'author'` doesn't satisfy it. (`userRole === 'admin'` is a superset — admin sees all tiles.)
+`_filterNavigation(userRole)` walks `navigation.json` and removes entries where `requiredScope` is set and `userRole === 'author'` doesn't satisfy it. (`userRole === 'admin'` is a superset — admin sees all tiles.) Predicate, in one line:
+
+```javascript
+// Keep tile if: no scope requirement, OR caller is admin (sees everything),
+// OR caller is author AND tile's requiredScope is 'Tutorial.Author'.
+const keep = !entry.requiredScope
+          || userRole === 'admin'
+          || (userRole === 'author' && entry.requiredScope === 'Tutorial.Author');
+```
 
 When binding component data sources (existing `_wireAdminContextToHtml` pattern), the shell looks at the tile's `adminPath` / `authorPath` and binds the right URL.
 
@@ -368,7 +376,17 @@ Three layers, matching the project's `unit / hybrid / smoke` Vitest workspaces.
 
 ## Implementation pointers (not the plan — that comes next)
 
-- `srv/author-service.cds` — six new projections, one new function, one bound action.
+**First plan step (gate everything else):** verify the `/auth/user` response shape in `srv/server.js`. The boot pseudocode in §"UI shell wiring" assumes `{ scopes: [...], userName, email }` with scopes as bare strings (`'Tutorial.Author'`, not `'$XSAPPNAME.Tutorial.Author'`). If the actual shape differs, the role-derivation logic adjusts before any downstream task starts. This is the cheapest lock-in: one Read, then commit.
+
+**Natural plan-split (advisory for plan-writer):** the work decomposes cleanly into two PRs if the plan-writer wants to keep PRs small:
+- **PR A — Core 5 tiles** (Tutorial Health, Tutorials, Tags, Feedback, Changelog) + approuter relax on `/admin-ui/` only + shell role detection + NoAccess view + `rebuildContent` action.
+- **PR B — Analytics tile** (8 new projections on AuthorService, `listExposedEntities`, analytics-explorer role-awareness, `/analytics-ui/` approuter relax).
+
+PR A is the larger half (shell + new service surfaces + write action). PR B is contained (one file + Vue SPA changes). Either ships independently; a single PR also works.
+
+**Files touched:**
+
+- `srv/author-service.cds` — six new projections, one new function, one bound action, one `extend service` block for the type reference.
 - `srv/author-service.js` — `rebuildContent` handler (mirror of `AdminService.rebuildContent`); `TutorialChanges` filter wiring if the projection needs a `before READ` for SQLite/HANA portability.
 - `app/admin-shell/webapp/Component.js` — second `authorService` data-source.
 - `app/admin-shell/webapp/controller/Shell.controller.js` — boot sequence rewrite (auth/user → role → filter nav).
