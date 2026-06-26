@@ -108,11 +108,25 @@ cds.on('bootstrap', (app) => {
       try {
         const markdown = req.body?.markdown;
         if (typeof markdown !== 'string') {
-          res.status(400).json({ error: 'expected JSON body { markdown: string }' });
+          res.status(400).json({ error: 'expected JSON body { markdown: string, rulesVr?: string }' });
           return;
         }
-        const { html, status, durationMs, bytes } = await renderPreview(markdown);
-        console.log(JSON.stringify({ event: 'preview.render', status, ms: durationMs, bytes, totalMs: Date.now() - t0 }));
+        // [#655] Optional companion rules.vr content. Empty string treated
+        // as omitted. Non-string with field present is a hard 400.
+        const rulesVr = req.body?.rulesVr;
+        if (rulesVr !== undefined && typeof rulesVr !== 'string') {
+          res.status(400).json({ error: 'rulesVr must be a string when provided' });
+          return;
+        }
+        const { html, status, durationMs, bytes } = await renderPreview(markdown, rulesVr);
+        console.log(JSON.stringify({
+          event: 'preview.render',
+          status,
+          ms: durationMs,
+          bytes,
+          hasRulesVr: typeof rulesVr === 'string' && rulesVr.length > 0,
+          totalMs: Date.now() - t0,
+        }));
         res.set('Content-Type', 'text/html; charset=utf-8').status(200).send(html);
       } catch (err) {
         console.error(JSON.stringify({ event: 'preview.render', status: 'server_error', ms: Date.now() - t0, error: err.message }));

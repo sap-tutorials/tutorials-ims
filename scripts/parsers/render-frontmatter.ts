@@ -25,6 +25,20 @@ export interface RenderHugoFrontmatterArgs {
   registry?: TagLabelRegistry
   /** [#173] When true, page body contains at least one os-options shortcode. */
   hasOsOptions?: boolean
+  /**
+   * [#655] Verbatim rules.vr source. When set + non-empty, emitted as a top-level
+   * frontmatter field so Hugo's baseof.html can render
+   * `<script id="rules-vr-source" type="application/x-rules-vr">…</script>`
+   * for PreviewAINotice components. Preview path only — fetch-tutorials.ts
+   * doesn't set this.
+   */
+  rulesVrSource?: string
+  /**
+   * [#655] Precomputed flag: true when ANY step has aiInvolved set. Hugo uses
+   * this for `<body data-has-ai="…">` so the chrome layer can render a static
+   * "AI features previewable after publish" notice without re-walking steps.
+   */
+  hasAi?: boolean
 }
 
 export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
@@ -47,6 +61,8 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
     contributors,
     registry,
     hasOsOptions,
+    rulesVrSource,
+    hasAi,
   } = args
 
   const cleanTags = tags.map(t => t.replace(/\\/g, ''))
@@ -106,6 +122,12 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
   if (nav.missionAltGroups?.length) fm.missionAltGroups = nav.missionAltGroups
 
   if (hasOsOptions) fm.hasOsOptions = true
+
+  // [#655] Preview path: pass through verbatim rules.vr source + precomputed
+  // AI-involved flag so Hugo's baseof.html can emit a <script id="rules-vr-source">
+  // and <body data-has-ai="…"> without re-parsing in the template.
+  if (rulesVrSource && rulesVrSource.length > 0) fm.rulesVrSource = rulesVrSource
+  if (hasAi) fm.hasAi = true
 
   const frontmatter = `---\n${yamlStringify(fm).trimEnd()}\n---\n\n`
 

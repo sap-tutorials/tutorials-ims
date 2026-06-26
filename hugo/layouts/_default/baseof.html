@@ -8,12 +8,16 @@
   data-step-count="{{ .Params.stepCount }}"
   data-altgroups-count="{{ if eq .Type "tutorials" }}{{ with .Params.missionAltGroups }}{{ len . }}{{ else }}0{{ end }}{{ else if or (eq .Type "missions") (eq .Type "groups") }}{{ with .Params.altGroups }}{{ len . }}{{ else }}0{{ end }}{{ else }}0{{ end }}">
 <head>
+  {{ if and site.Params.previewMode .Params.rulesVrSource }}
+  <script type="application/json" id="rules-vr-source">{{ .Params.rulesVrSource | jsonify }}</script>
+  {{ end }}
   {{ partial "head.html" . }}
   {{ if not site.Params.qa }}<link rel="stylesheet" href="/css/joule.css">{{ end }}
   {{ partial "site-jsonld.html" . }}
 </head>
-<body>
+<body{{ if site.Params.previewMode }} data-has-ai="{{ if .Params.hasAi }}true{{ else }}false{{ end }}"{{ end }}>
   {{ partial "qa-banner.html" . }}
+  {{ partial "preview-banner.html" . }}
   {{ partial "header.html" . }}
   {{/* U14: top-of-viewport navigation progress indicator. */}}
   {{ partial "nav-progress.html" . }}
@@ -54,5 +58,8 @@
   {{ if eq .Type "tutorials" }}<script type="module" src="/js/tutorial-referred.js" defer></script>{{ end }}
   {{ $ui5 := resources.Get "js/ui5-bootstrap.ts" | js.Build (dict "minify" true "format" "esm" "target" "es2020") }}
   <script type="module" src="{{ $ui5.RelPermalink }}"></script>
+  {{ if site.Params.previewMode }}
+  <script type="module" src="/js/preview-banner.js" defer></script>
+  {{ end }}
 </body>
 </html>

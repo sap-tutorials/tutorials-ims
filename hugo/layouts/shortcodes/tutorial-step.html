@@ -14,17 +14,25 @@
   <div class="step-body"{{ if not $isFirst }} hidden{{ end }}>
     <hr class="step-divider" />
     <div class="step-content">{{ .Inner }}</div>
-    <div class="step-validation-mount" data-step="{{ $number }}"></div>
     {{- $codeCheck := false -}}
     {{- $branchPointId := "" -}}
     {{- $skipIf := "" -}}
+    {{- $aiInvolved := false -}}
     {{- range $.Page.Params.steps -}}
       {{- if eq (print .number) $number -}}
         {{- $codeCheck = .codeCheck -}}
         {{- $branchPointId = .branchPointId -}}
         {{- $skipIf = .skipIf -}}
+        {{- $aiInvolved = .aiInvolved -}}
       {{- end -}}
     {{- end -}}
+    <div class="step-validation-mount"
+         data-step="{{ $number }}"
+         {{- if site.Params.previewMode }}
+         data-preview="true"
+         data-ai-involved="{{ if $aiInvolved }}true{{ else }}false{{ end }}"
+         data-rules-block-id="rules-vr-source"
+         {{- end }}></div>
     {{- partial "codecheck-mount.html" (dict
       "slug"       $.Page.Params.slug
       "stepNumber" $number
