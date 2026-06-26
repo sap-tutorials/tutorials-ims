@@ -165,6 +165,7 @@ export default defineConfig({
         advocates: resolve(__dirname, 'src/advocates/main.ts'),
         'related-graph': resolve(__dirname, 'src/related-graph/main.ts'),
         'tutorial-reset': resolve(__dirname, 'src/tutorial-reset/main.ts'),
+        'preview-banner': resolve(__dirname, 'src/validation/preview-banner.ts'),
       },
       output: {
         entryFileNames: '[name].js',
