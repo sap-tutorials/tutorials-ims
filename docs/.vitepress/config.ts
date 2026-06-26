@@ -105,6 +105,9 @@ export default defineConfig({
           { text: 'Branching cookbook', link: '/authors/branching-cookbook' },
           { text: 'Reading branch telemetry', link: '/authors/reading-branch-telemetry' },
           { text: 'Pilot runbook',     link: '/authors/pilot-runbook' }
+        ]},
+        { text: 'Operations', items: [
+          { text: 'Scheduling alerts', link: '/authors/operations/scheduling-alerts' }
         ]}
       ],
 

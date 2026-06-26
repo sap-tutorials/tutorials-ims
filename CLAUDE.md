@@ -309,3 +309,8 @@ One-time setup for the QA author-preview channel — full procedure (CI secrets,
 - **Categories taxonomy is fixed in v1** — the 8 categories are seeded via `db/data/com.sap.developers.ims-Categories.csv` with stable UUIDs. Admins can edit `label`/`sortOrder`/`seedDescription` via the Categories Fiori app at `/admin-ui/#categories-display`, but cannot add or remove categories. Adding a new category is a v2 concern (master-list CRUD).
 - **Categories reclassify is destructive** — the admin `classifyCategories` action and the per-OP "Classify this item" button DELETE then INSERT junction rows. Manual category edits survive only until the next reclassify run. There is no provenance tracking (per spec decision #9). The Re-classify everything (force) button shows a destructive-confirm dialog before proceeding.
 - **`HYBRID_AI_TESTS=true` to opt into category-classifier hybrid test** — `npm run test:hybrid` runs are $0/run by default. Setting this env var enables `test/hybrid/categories-classifier.test.js` which consumes real AI Core quota (one classify call per mission fixture).
+- **Alert saves do NOT trigger rebuilds** — alerts are runtime-served via
+  `/api/alerts*`. The rebuild classifier returns `mode: 'none'` for the
+  `Alerts` entity ([srv/lib/_classify-rebuild-mode.js](srv/lib/_classify-rebuild-mode.js)).
+  Cache-bust on `AdminService.Alerts` save is the only freshness mechanism;
+  up-to-60 s delay between admin save and visitor seeing the new state is expected.

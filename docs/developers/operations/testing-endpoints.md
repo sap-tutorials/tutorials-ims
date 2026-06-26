@@ -176,6 +176,8 @@ When `EXPOSE_CAP_UI=true` is set on the CAP srv app, these are accessible throug
 | `/api/codecheck` | POST | AI code-check spike (issue #171, gated on `ChatSettings.codeCheckEnabled`). Body: `{ tutorialSlug, stepNumber, submittedCode, language? }`. Returns `{ verdict: 'pass'\|'partial'\|'fail', summary, suggestions[], correctAspects[] }`. 503 when flag off; 429 with `Retry-After` on per-user 30/hr or per-(user,slug,step) 5/5min cap. | XSUAA |
 | `/author/generateOsVariants` | POST | AI-assisted OS variant generation for the VS Code authoring plugin (issue #173). Body: `{ sourceMarkdown, sourceOS, targetOSes[], context? }`. Returns `{ variants[], model, tokensUsed, requestId }`. 60/hr per author. See spec [#173](../../superpowers/specs/2026-06-09-173-os-conditional-content-design.md) §5. | XSUAA + `Tutorial.Author` |
 | `/admin/embeddings/stats` | GET | Tutorial embedding coverage / drift statistics | XSUAA + `Admin` |
+| `/api/alerts` | GET | Active alerts with audience=ALL. 60 s cache. | None |
+| `/api/alerts/me` | GET | ALL + AUTHENTICATED + ADMIN (if admin). 30 s private cache. | XSUAA |
 
 > **`/build/navigator`** returns a shape with `missions[]`, `groups[]` (incl. standalone published Groups), `tutorialMappings[]`, and `checkpointMappings[]` (milestone markers). The 5-minute in-memory cache is automatically invalidated when the Admin UI saves changes to Missions, Groups, or CompletionPath entities — no `?nocache=1` needed. Implementation: [srv/lib/navigator-catalog.js](../../../srv/lib/navigator-catalog.js).
 >
