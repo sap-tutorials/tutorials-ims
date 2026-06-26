@@ -64,6 +64,17 @@ Each task follows: failing test → minimal impl → green → commit. The parse
 
 Each task ends with a commit.
 
+### Branch prep
+
+The feature branch `feature/655-preview-validation` already exists and the spec is committed to it (`d6f791b5`). All Task 1–12 commits land on this branch. Verify before starting:
+
+```bash
+cd d:/projects/tutorials-poc/.claude/worktrees/655-preview-validation
+git branch --show-current
+```
+
+Expected: `feature/655-preview-validation`.
+
 ---
 
 ## Task 1: Extend `composeTutorial` to accept `rulesVr` and merge into steps
@@ -399,20 +410,25 @@ export async function renderPreview(markdown, rulesVr) {
 
 (Leave the rest of the function intact.)
 
-Also: extend the frontmatter emit so the rules.vr source is available to Hugo as `Params.rulesVrSource`. Find the `renderHugoFrontmatter(...)` call in the renderer and add a sibling field:
+Also: extend the frontmatter emit so the rules.vr source AND a precomputed `hasAi` boolean are available to Hugo. Find the `renderHugoFrontmatter(...)` call in the renderer and add two sibling fields:
 
 ```javascript
+    const hasAi = composed.steps.some(s => s.aiInvolved === true);
     const fmMarkdown = renderHugoFrontmatter({
       slug: '__preview__',
       // ... existing fields ...
       hasOsOptions: composed.hasOsOptions,
-      // [#655] Pass through rules.vr source so the page-level <script id="rules-vr-source">
-      // tag in baseof.html can emit it for PreviewAINotice components to read.
+      // [#655] Pass through rules.vr source so baseof.html can emit
+      // <script id="rules-vr-source"> for PreviewAINotice components.
       rulesVrSource: rulesVr && rulesVr.trim() ? rulesVr : '',
+      // [#655] Precomputed flag — baseof.html uses this for <body data-has-ai="…">.
+      // Computing in the renderer (Node) avoids depending on Hugo's range
+      // semantics over a nested .Params.steps structure.
+      hasAi,
     });
 ```
 
-`renderHugoFrontmatter` will need to accept this field. Check `scripts/parsers/render-frontmatter.ts` and add `rulesVrSource` to its input type + write it to the YAML output (`params.rulesVrSource = <string>`). Rebuild the bundle after the change.
+`renderHugoFrontmatter` will need to accept both fields. Check `scripts/parsers/render-frontmatter.ts` and add `rulesVrSource: string` + `hasAi: boolean` to its input type. Write them under `params:` in the YAML output. Rebuild the bundle after the change.
 
 - [ ] **Step 6: Re-run bundle build (rules.vr passthrough needs the new field)**
 
@@ -676,16 +692,10 @@ grep -n "previewMode\|<body" hugo/layouts/_default/baseof.html | head -20
 
 Edit `hugo/layouts/_default/baseof.html`.
 
-At the `<body>` element, compute and emit `data-has-ai`:
+At the `<body>` element, emit `data-has-ai` from the precomputed param set in Task 2:
 
 ```go-html
-{{ $hasAi := false }}
-{{ if site.Params.previewMode }}
-  {{ range .Params.steps }}
-    {{ if .aiInvolved }}{{ $hasAi = true }}{{ end }}
-  {{ end }}
-{{ end }}
-<body {{ if site.Params.previewMode }}data-has-ai="{{ $hasAi }}"{{ end }} ...>
+<body {{ if site.Params.previewMode }}data-has-ai="{{ if .Params.hasAi }}true{{ else }}false{{ end }}"{{ end }} ...>
 ```
 
 (Match existing attribute conventions in the file. Slot `data-has-ai` alongside any existing `data-page-slug` etc.)
@@ -1080,9 +1090,16 @@ const rulesBlockText = ref<string>('')
 //   const rootEl = useTemplateRef<HTMLElement>('rootEl')
 
 onMounted(() => {
-  // Read preview-mode signals from the host element's data-attrs. The
-  // .step-validation-mount div is the host; its attrs propagate to the
-  // Vue root when mounted via createApp(...).mount(host).
+  // Read preview-mode signals from the mount-host element's data-attrs.
+  //
+  // IMPORTANT: Vue's createApp(...).mount(host) REPLACES the host element by
+  // default — its data-attrs are lost. Two ways to read them reliably:
+  //   1) Read attrs from the host BEFORE calling .mount() and pass as props.
+  //   2) Set the Vue root's template to <div ref="rootEl" v-bind="$attrs"> and
+  //      rely on attribute fallthrough.
+  // Check how the widget's existing .step-validation-mount integration reads
+  // data-step today — mirror that pattern. If unsure, look at main.ts to see
+  // the mount call site; the data-step path likely reads attrs before mount.
   const host = rootEl.value as HTMLElement | null
   if (host) {
     isPreview.value = host.dataset.preview === 'true'
