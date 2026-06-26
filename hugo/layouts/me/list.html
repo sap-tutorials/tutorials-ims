@@ -1,9 +1,42 @@
 {{ define "main" }}
-{{/* U17 + PR 6 — both panels gated; QA preview omits per-user data.
-     Also excluded by hugo.qa.toml ignoreFiles. */}}
+{{/* /me — three collapsible ui5-panels. Issue #566 + PR 6.
+     QA preview omits per-user data; also excluded by hugo.qa.toml ignoreFiles. */}}
 {{ if not site.Params.qa }}
-<div id="me-completions"></div>
-<div id="me-learning-preferences"></div>
+<div class="me-page-wrap">
+  <h1>My Profile</h1>
+
+  <ui5-panel header-text="Learning Preferences" data-panel="preferences">
+    <div id="me-learning-preferences"></div>
+    <div class="me-section-divider" aria-hidden="true"></div>
+    <div id="me-community-profile"></div>
+  </ui5-panel>
+
+  <ui5-panel header-text="Recent Activity" data-panel="recent">
+    <div id="me-recent-activity"></div>
+  </ui5-panel>
+
+  <ui5-panel header-text="All Completions" data-panel="all">
+    <div id="me-all-completions"></div>
+  </ui5-panel>
+</div>
+
 <script type="module" src="/js/me.js?v={{ now.Unix }}"></script>
+<script>
+  // Collapse-state persistence — runs once Panel is registered. Boolean attr
+  // is set imperatively (template binding to UI5 boolean attrs is unreliable
+  // per [feedback_ui5_dialog_open_imperative_only]).
+  customElements.whenDefined('ui5-panel').then(function () {
+    document.querySelectorAll('ui5-panel[data-panel]').forEach(function (p) {
+      var key = 'me.panel.' + p.dataset.panel;
+      if (localStorage.getItem(key) === 'collapsed') { p.collapsed = true; }
+      // ui5-panel emits `toggle` on chevron click; no detail payload — read
+      // p.collapsed after the event fires. UI5 v2.22 — contract unchanged
+      // from v1.x but worth re-confirming after a major ui5 bump.
+      p.addEventListener('toggle', function () {
+        localStorage.setItem(key, p.collapsed ? 'collapsed' : 'expanded');
+      });
+    });
+  });
+</script>
 {{ end }}
 {{ end }}
