@@ -55,6 +55,16 @@ export async function resolveDisplaySettings() {
   if (_state.cached && (now - _state.cachedAt) < TTL_MS) return _state.cached;
 
   const row = await readRow();
+  // Loud warning on missing row: with the env-fallback layer removed, a missing
+  // DisplaySettings row silently defaults dashboardUrl to the prod-approuter
+  // URL — which on a non-prod env would surface the wrong dashboard link in
+  // contributor-notification emails. Defense in depth for cold-boot drift.
+  if (row === null && _state.cached === null) {
+    LOG.warn(
+      'DisplaySettings row absent — using hardcoded DEFAULTS (dashboardUrl=prod-approuter). ' +
+      'Populate via /admin-ui/#displaysettings-display.',
+    );
+  }
   const settings = {
     dashboardUrl:
       pick(row, 'dashboardUrl', 'DASHBOARDURL')

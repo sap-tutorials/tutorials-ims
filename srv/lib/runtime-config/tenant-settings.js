@@ -58,6 +58,19 @@ export async function resolveTenantSettings() {
   if (_state.cached && (now - _state.cachedAt) < TTL_MS) return _state.cached;
 
   const row = await readRow();
+  // Loud warning on missing row at PROD/QA: with the env-fallback layer
+  // removed, a missing TenantSettings row silently defaults rebuildTargetEnv
+  // to 'dev' — which on PROD would mis-route rebuild dispatches to the DEV
+  // workflow. The pre-flight in the credstore-runtime-config plan is the
+  // primary mitigation; this log is defense in depth if the row gets wiped
+  // post-deploy (HDI clobber, admin DELETE, schema drift).
+  if (row === null && _state.cached === null) {
+    LOG.warn(
+      'TenantSettings row absent — using hardcoded DEFAULTS (rebuildTargetEnv=\'dev\'). ' +
+      'If this is QA or PROD, dispatches will mis-route to the DEV workflow. ' +
+      'Populate via /admin-ui/#tenantsettings-display.',
+    );
+  }
   const settings = {
     allowedCorsOrigins:
       pick(row, 'allowedCorsOrigins', 'ALLOWEDCORSORIGINS')
