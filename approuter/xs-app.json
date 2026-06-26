@@ -131,6 +131,14 @@
       "csrfProtection": false
     },
     {
+      "source": "^/author/(.*)$",
+      "target": "/author/$1",
+      "destination": "srv-api",
+      "authenticationType": "xsuaa",
+      "scope": "$XSAPPNAME.Tutorial.Author",
+      "csrfProtection": false
+    },
+    {
       "source": "^/graph/(neighborhood|Concepts|ConceptEdges|TutorialConceptLinks|pathBetween|conceptsForUser)(\\(.*\\))?(/.*)?(\\?.*)?$",
       "target": "/graph/$1$2$3$4",
       "destination": "srv-api",
