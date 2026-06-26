@@ -15,6 +15,7 @@ type ExperienceLevel : String(255) enum { beginner; intermediate; advanced; }
 type TaskStatus      : String(50)  enum { ACTIVE; INACTIVE; }
 type MissionType     : String(20)  enum { SEQUENTIAL; SET; }
 type TaskType        : String(20)  enum { TUTORIAL; GROUP; CHECKPOINT; }
+type EventType       : String(20)  enum { DEVTOBERFEST; TECHED; CODEJAM; CHALLENGE; OTHER; }
 
 aspect TaskBase : cuid, managed, LegacyKeyed {
   title                     : String(255) @mandatory;
@@ -215,6 +216,7 @@ entity Events : cuid, managed, LegacyKeyed {
   startDate                 : Timestamp;
   endDate                   : Timestamp;
   timeZone                  : String(50);
+  eventType                 : EventType default 'OTHER' @assert.range;
   mission                   : Association to Missions;
   taskRecords               : Association to many TaskRecords on taskRecords.event = $self;
   prizes                    : Association to many Prizes on prizes.event = $self;
