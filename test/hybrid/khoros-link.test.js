@@ -75,4 +75,23 @@ describeIf('khoros link — HANA', () => {
     expect(row.khorosAvatarUrl).toBeNull();
     expect(row.khorosLinkedAt).toBeNull();
   });
+
+  it('admin clearKhorosLink nulls the 4 columns + evicts cache', async () => {
+    // Seed a linked user.
+    await db.run(UPDATE(Users)
+      .set({ khorosId: '99003', khorosLogin: 'adm', khorosAvatarUrl: 'u', khorosLinkedAt: new Date() })
+      .where({ sapId: TEST_SAPID_A }));
+    const row = await db.run(SELECT.one.from(Users).where({ sapId: TEST_SAPID_A }));
+
+    // Drive the bound action via cds.connect to AdminService.
+    const admin = await cds.connect.to('AdminService');
+    const result = await admin.send('clearKhorosLink', row.ID, {});
+    expect(result?.status).toBe('ok');
+
+    const cleared = await db.run(SELECT.one.from(Users).where({ ID: row.ID }));
+    expect(cleared.khorosId).toBeNull();
+    expect(cleared.khorosLogin).toBeNull();
+    expect(cleared.khorosAvatarUrl).toBeNull();
+    expect(cleared.khorosLinkedAt).toBeNull();
+  });
 });
