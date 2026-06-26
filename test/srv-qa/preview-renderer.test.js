@@ -1,5 +1,5 @@
 // test/srv-qa/preview-renderer.test.js
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { existsSync } from 'node:fs';
 import { renderPreview } from '../../srv-qa/preview-renderer.js';
 
@@ -89,5 +89,66 @@ describe('renderPreview', () => {
     expect(r.html).toContain('&lt;script&gt;');
     expect(r.html).toContain('&quot;');
     expect(r.html).toContain('&amp;');
+  });
+});
+
+// [#655] Task 2: renderPreview accepts optional rulesVr arg.
+const BASE_MD_RULES = `---
+parser: v2
+title: Test
+description: x
+time: 5
+---
+## You will learn
+- thing
+
+## Prerequisites
+- none
+
+### Step 1
+Body of step 1.
+`;
+
+// Canonical rules.vr format — see scripts/parsers/__tests__/compose-rules-vr.test.ts.
+// ###Rule + type on the following line; MCQ options live in ###Match.
+const RULES_VR = `[VALIDATE_1]
+###Rule
+multiple-choice
+###Question
+What is 2+2?
+###Match
+[X] 4
+[ ] 5
+[VALIDATE_END_1]
+`;
+
+describe('renderPreview with rulesVr', () => {
+  it('rulesVr undefined: HTML does not contain question text', async () => {
+    process.env.HUGO_STUB_MODE = 'echo';
+    const { html, status } = await renderPreview(BASE_MD_RULES);
+    expect(status).toBe('ok');
+    expect(html).not.toContain('What is 2+2?');
+  });
+
+  it('rulesVr empty string: behaves like undefined', async () => {
+    process.env.HUGO_STUB_MODE = 'echo';
+    const { html, status } = await renderPreview(BASE_MD_RULES, '');
+    expect(status).toBe('ok');
+    expect(html).not.toContain('What is 2+2?');
+  });
+
+  it('valid rulesVr: rendered HTML contains the question text', async () => {
+    process.env.HUGO_STUB_MODE = 'echo';
+    const { html, status } = await renderPreview(BASE_MD_RULES, RULES_VR);
+    expect(status).toBe('ok');
+    expect(html).toContain('What is 2+2?');
+  });
+
+  it('zero outbound fetch calls during render with rulesVr', async () => {
+    process.env.HUGO_STUB_MODE = 'echo';
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    await renderPreview(BASE_MD_RULES, RULES_VR);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
   });
 });

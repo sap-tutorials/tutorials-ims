@@ -1,5 +1,5 @@
 // Cross-platform Hugo simulator. Mode chosen via HUGO_STUB_MODE env var.
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const mode = process.env.HUGO_STUB_MODE ?? 'ok';
@@ -24,6 +24,17 @@ if (mode === 'hang') {
   const dest = argMap.destination;
   const out = join(dest, 'tutorials', '__preview__');
   mkdirSync(out, { recursive: true });
-  writeFileSync(join(out, 'index.html'), '<!doctype html><html><head><title>Stub</title></head><body>preview-ok</body></html>');
+  // [#655] When mode === 'echo', include the source frontmatter in the body so
+  // tests can assert validation/codecheck/rulesVrSource threading without
+  // requiring a real Hugo binary. The source markdown is read from --contentDir.
+  let body = 'preview-ok';
+  if (mode === 'echo') {
+    const contentDir = argMap.contentDir;
+    const src = join(contentDir, 'tutorials', '__preview__', 'index.md');
+    if (existsSync(src)) {
+      body = `preview-ok\n<pre id="echo-src">${readFileSync(src, 'utf8').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c])}</pre>`;
+    }
+  }
+  writeFileSync(join(out, 'index.html'), `<!doctype html><html><head><title>Stub</title></head><body>${body}</body></html>`);
   process.exit(0);
 }

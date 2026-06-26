@@ -39,7 +39,7 @@ export function errorHtml(title, detail) {
   return `<!doctype html><html><head><title>${t}</title></head><body><section style="padding:2rem"><h1>${t}</h1><pre style="white-space:pre-wrap">${d}</pre></section></body></html>`;
 }
 
-export async function renderPreview(markdown) {
+export async function renderPreview(markdown, rulesVr) {
   const t0 = Date.now();
   if (!markdown || !markdown.trim()) {
     return { html: errorHtml('Preview error', 'Markdown payload is empty.'), status: 'parse_error', durationMs: Date.now() - t0, bytes: 0, _tmpDir: null };
@@ -54,6 +54,9 @@ export async function renderPreview(markdown) {
       composed = composeTutorial(markdown, {
         repo: '__preview__', branch: '__preview__', slug: '__preview__',
         target: 'hugo', rewriteImages: false,
+        // [#655] Thread the optional rules.vr payload through to the parser
+        // so validation + codecheck blocks merge into composed.steps.
+        rulesVr: rulesVr && rulesVr.trim() ? rulesVr : undefined,
       });
     } catch (err) {
       return {
@@ -62,6 +65,8 @@ export async function renderPreview(markdown) {
       };
     }
 
+    // [#655] Precomputed flag so Hugo's baseof.html can emit <body data-has-ai=…>.
+    const hasAi = (composed.steps || []).some(s => s.aiInvolved === true);
     const fmMarkdown = renderHugoFrontmatter({
       slug: '__preview__',
       title: composed.title || '',
@@ -80,6 +85,11 @@ export async function renderPreview(markdown) {
       createdAt: '',
       contributors: [],
       hasOsOptions: composed.hasOsOptions,
+      // [#655] Verbatim rules.vr source for baseof.html to emit as
+      // <script id="rules-vr-source"> so PreviewAINotice components can read it.
+      rulesVrSource: rulesVr && rulesVr.trim() ? rulesVr : '',
+      // [#655] Precomputed AI-involved flag for <body data-has-ai="…">.
+      hasAi,
     });
     const contentDir = join(tmpDirPath, 'content', 'tutorials', '__preview__');
     mkdirSync(contentDir, { recursive: true });
