@@ -36,6 +36,8 @@ annotate AdminService.Events with {
                 { $Type: 'Common.ValueListParameterDisplayOnly', ValueListProperty: 'utcOffset' }
               ]
             };
+  eventType @Common.Label: 'Event Type'
+            @Common.ValueListWithFixedValues;
 };
 
 annotate AdminService.Events with @UI: {
@@ -44,10 +46,11 @@ annotate AdminService.Events with @UI: {
     Title: { Value: name },
     Description: { Value: timeZone }
   },
-  SelectionFields: [ name, startDate, endDate ],
+  SelectionFields: [ name, eventType, startDate, endDate ],
   LineItem: [
     { Value: legacyIdStr },
     { Value: name },
+    { Value: eventType },
     { Value: startDate },
     { Value: endDate },
     { Value: timeZone }
@@ -58,6 +61,7 @@ annotate AdminService.Events with @UI: {
   ],
   FieldGroup#General: { Data: [
     { Value: name },
+    { Value: eventType },
     { Value: startDate },
     { Value: endDate },
     { Value: timeZone }
