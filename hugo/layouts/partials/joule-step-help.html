@@ -4,8 +4,15 @@
   Click handler in joule.js reads window.opGetCurrentStep() and calls
   window.joule.openWithStepContext({slug, n, heading}).
   QA preview strips the FAB entirely — no chat assistant on -Contribution drafts.
+
+  [#655] In preview mode, render a small inline notice instead of the FAB.
+  Authors should know step-help is published-only without seeing nothing.
 */}}
-{{ if and (not site.Params.qa) (not site.Params.previewMode) }}
+{{- if and (not site.Params.qa) site.Params.previewMode -}}
+<div role="note" class="preview-joule-notice" aria-label="Joule step help (preview)">
+  <small>Joule step help available after publish</small>
+</div>
+{{- else if and (not site.Params.qa) (not site.Params.previewMode) -}}
 <button
   id="joule-step-fab"
   class="joule-step-fab"
@@ -16,4 +23,4 @@
   {{ partial "joule-icon.html" (dict "size" "small") }}
   <span class="joule-step-fab__label">Help with this step</span>
 </button>
-{{ end }}
+{{- end -}}

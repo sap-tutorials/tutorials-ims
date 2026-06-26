@@ -3,10 +3,15 @@
   Reference solution NEVER appears here — it lives only in HANA.
   Wrapped in QA-gate so it is omitted from /tutorials-qa/ where
   ChatSettings/codeCheckEnabled does not apply.
+
+  [#655] In preview mode, render a static PreviewAINotice mount keyed off
+  the page-level rules-vr-source script. Prod path unchanged.
 */ -}}
-{{- if and (not site.Params.qa) (not site.Params.previewMode) -}}
 {{- $cc := .codeCheck -}}
-{{- if $cc -}}
+{{- if and site.Params.previewMode $cc -}}
+<div class="step-codecheck-preview-mount"
+     data-rules-block-id="rules-vr-source"></div>
+{{- else if and (not site.Params.qa) (not site.Params.previewMode) $cc -}}
 <div class="step-codecheck-mount"
      data-slug="{{ .slug }}"
      data-step="{{ .stepNumber }}"
@@ -14,5 +19,4 @@
      data-language="{{ default "" $cc.language }}"
      data-has-reference="{{ if $cc.hasReference }}true{{ else }}false{{ end }}"
      data-hints='{{ jsonify (default slice $cc.hints) }}'></div>
-{{- end -}}
 {{- end -}}
