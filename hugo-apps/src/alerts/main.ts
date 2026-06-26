@@ -6,12 +6,9 @@
 //
 // Spec: docs/superpowers/specs/2026-06-26-548-alert-system-design.md
 
-import '@ui5/webcomponents/dist/Popover.js';
-import '@ui5/webcomponents/dist/List.js';
-import '@ui5/webcomponents/dist/Button.js';
-import '@ui5/webcomponents-fiori/dist/NotificationListItem.js';
-import '@ui5/webcomponents-fiori/dist/IllustratedMessage.js';
-import '@ui5/webcomponents-fiori/dist/illustrations/NoNotifications.js';
+// UI5 components (Popover, List, Button, IllustratedMessage, NotificationListItem,
+// NoNotifications illustration) are registered globally by hugo/assets/js/ui5-bootstrap.ts.
+// Do NOT re-import them here — that would balloon the bundle (alerts.js budget is 12 KB gz).
 
 import { createApp, ref, reactive, computed } from 'vue';
 import Alerts from './Alerts.vue';

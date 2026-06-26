@@ -10,6 +10,7 @@ const MAX_VALIDATION_GZIP = 8 * 1024;
 const MAX_TUTORIAL_BRANCHES_GZIP = 12 * 1024;
 const MAX_ADVOCATES_GZIP = 30 * 1024;
 const MAX_RELATED_GRAPH_GZIP = 12 * 1024;
+const MAX_ALERTS_GZIP = 12 * 1024;
 
 function codeCheckBudget() {
   return {
@@ -101,6 +102,24 @@ function tutorialPrefsBudget() {
   };
 }
 
+function alertsBudget() {
+  return {
+    name: 'alerts-budget',
+    generateBundle(_opts: unknown, bundle: Record<string, any>) {
+      const chunk = bundle['alerts.js'];
+      if (!chunk || chunk.type !== 'chunk') return;
+      const gz = gzipSync(chunk.code).length;
+      if (gz > MAX_ALERTS_GZIP) {
+        // @ts-ignore — Rollup plugin context
+        this.error(`alerts.js is ${gz} bytes gzipped (> ${MAX_ALERTS_GZIP}). Move code to a lazy chunk.`);
+      } else {
+        // @ts-ignore — Rollup plugin context
+        this.warn(`alerts.js: ${gz} bytes gzipped (budget ${MAX_ALERTS_GZIP}).`);
+      }
+    }
+  };
+}
+
 function relatedGraphBudget() {
   return {
     name: 'related-graph-budget',
@@ -120,7 +139,7 @@ function relatedGraphBudget() {
 }
 
 export default defineConfig({
-  plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget(), codeCheckBudget(), validationBudget(), tutorialBranchesBudget(), advocatesBudget(), relatedGraphBudget()],
+  plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget(), codeCheckBudget(), validationBudget(), tutorialBranchesBudget(), advocatesBudget(), relatedGraphBudget(), alertsBudget()],
   // Approuter serves these bundles at /js/. Without `base`, Vite emits
   // dynamic-import paths as `./chunks/x.js` which the browser resolves
   // against the *document URL* (e.g. `/` → `/chunks/x.js` → 404). Setting
@@ -163,6 +182,7 @@ export default defineConfig({
         // clobbered by) this Vite entry depending on build order.
         'tutorial-referred': resolve(__dirname, 'src/tutorial-referred/main.ts'),
         advocates: resolve(__dirname, 'src/advocates/main.ts'),
+        alerts: resolve(__dirname, 'src/alerts/main.ts'),
         'related-graph': resolve(__dirname, 'src/related-graph/main.ts'),
         'tutorial-reset': resolve(__dirname, 'src/tutorial-reset/main.ts'),
         'preview-banner': resolve(__dirname, 'src/validation/preview-banner.ts'),
