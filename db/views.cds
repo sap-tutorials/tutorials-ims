@@ -1,6 +1,7 @@
 namespace com.sap.developers.ims;
 
 using { com.sap.developers.ims as ims } from './schema';
+using { sap.changelog.Changes } from '@cap-js/change-tracking';
 
 view Tasks as
   SELECT from ims.Tutorials {
@@ -301,3 +302,12 @@ view AnalyticsBranchTopPick as
     count(*) as pickedCount : Integer
   }
   group by missionSlug, tutorialSlug, branchPointId, surface, recommendedKey;
+
+// Issue #617 — Tutorials-only slice of the change-tracking log for AuthorService.
+// Filters by the literal projection name 'AdminService.Tutorials' because
+// @cap-js/change-tracking records the source service projection name on each
+// row. If AdminService.Tutorials is ever renamed, this filter goes blank —
+// caught via test/hybrid/617-author-changelog-filter.test.js.
+view AuthorTutorialChanges as
+  select from Changes
+  where entity = 'AdminService.Tutorials';
