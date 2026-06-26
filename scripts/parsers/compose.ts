@@ -5,6 +5,8 @@ import { parseV1Steps } from './v1.js'
 import { parseV2Steps } from './v2.js'
 import { extractBranchGroups, BranchParseError } from './branches.js'
 import type { BranchGroup } from './branches.js'
+import { parseRulesVrEnriched } from './rules.js'
+import { parseCodeCheckBlocks, attachCodeCheckSpecs } from './codecheck.js'
 import type { TutorialStep, TutorialFrontmatter } from './types.js'
 
 /**
@@ -32,6 +34,13 @@ export interface ComposeOpts {
   slug: string
   target: 'hugo' | 'vitepress'
   rewriteImages: boolean
+  /**
+   * [#655] Optional rules.vr companion content. When provided, this function
+   * parses it and merges validation + codecheck + AI flags into `steps`.
+   * The standard fetch-tutorials path does NOT use this — it merges separately
+   * because it also writes sidecar JSON files. Preview is the only consumer.
+   */
+  rulesVr?: string
 }
 
 export interface ComposeResult {
@@ -113,6 +122,34 @@ export function composeTutorial(rawMd: string, opts: ComposeOpts): ComposeResult
     parent.branchGroup = g.groupKey
     parent.branchPointId = g.id
     parent.branches = g.branches
+  }
+
+  // [#655] Preview-mode rules.vr merge. Only runs when rulesVr is supplied
+  // (preview path). Fetch-tutorials.ts has its own merge that also writes
+  // sidecar JSON files; this stays a separate code path.
+  if (opts.rulesVr && opts.rulesVr.trim()) {
+    const enriched = parseRulesVrEnriched(opts.rulesVr)
+    for (const [validateNum, questions] of enriched.map) {
+      if (!questions.length) continue
+      const target = steps.find(s => s.number === validateNum)
+      if (target) {
+        target.validation = [...(target.validation ?? []), ...questions]
+        if (questions.some(q => q.aiGrading)) target.aiInvolved = true
+      }
+    }
+    // AUTOAUTHOR_ALL marks every step AI-involved (we never expand the
+    // questions themselves in preview — the directive itself is shown via
+    // the AI notice).
+    if (enriched.allDirective) {
+      for (const step of steps) step.aiInvolved = true
+    }
+    const codeCheckMap = parseCodeCheckBlocks(opts.rulesVr)
+    if (codeCheckMap.size) {
+      attachCodeCheckSpecs(steps, codeCheckMap)
+      for (const step of steps) {
+        if (step.codeCheck) step.aiInvolved = true
+      }
+    }
   }
 
   return {

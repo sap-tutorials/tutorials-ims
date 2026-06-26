@@ -97,6 +97,15 @@ export interface TutorialStep {
   skipIf?: string               // condition expression
   skipLabel?: string            // optional override for the [Skip] button text
   skipReason?: string           // optional human-readable reason string
+
+  /**
+   * [#655] Preview-mode hint: true when this step's validation or codecheck
+   * block involves AI (free-text aiGrading, AUTOAUTHOR-expanded, or
+   * [CODECHECK_N] spec). Drives Hugo + widget rendering of the static
+   * "AI features previewable after publish" notice. Not present in non-preview
+   * builds — fetch-tutorials.ts doesn't set this field.
+   */
+  aiInvolved?: boolean
 }
 
 export interface ParsedTutorial {
