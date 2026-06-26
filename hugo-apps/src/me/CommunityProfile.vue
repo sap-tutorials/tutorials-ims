@@ -117,11 +117,11 @@ defineExpose({ profile, input, busy, status, errorStatus, errorMessage, errorDes
       <ui5-input
         :value="input"
         placeholder="thomas_jung or 123456"
-        :disabled="busy"
+        :disabled="busy || null"
         @input="(e: any) => (input = e.target.value)"
         @keydown.enter="onLink"
       />
-      <ui5-button design="Emphasized" @click="onLink" :disabled="busy || !input.trim()">
+      <ui5-button design="Emphasized" @click="onLink" :disabled="(busy || !input.trim()) || null">
         {{ busy ? 'Verifying…' : 'Link profile' }}
       </ui5-button>
       <details class="help">
@@ -150,7 +150,7 @@ defineExpose({ profile, input, busy, status, errorStatus, errorMessage, errorDes
         <span>@{{ profile.khorosLogin }}<template v-if="profile.rank"> · {{ profile.rank }}</template></span>
       </div>
       <a :href="profile.profileUrl" target="_blank">View profile ↗</a>
-      <ui5-button design="Transparent" @click="onUnlink" :disabled="busy">Unlink</ui5-button>
+      <ui5-button design="Transparent" @click="onUnlink" :disabled="busy || null">Unlink</ui5-button>
     </div>
 
     <div role="alert" aria-live="polite">
