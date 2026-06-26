@@ -128,8 +128,9 @@ service DeveloperService {
   // App Space progress (replaces AEM /bin/sapdx/tutorials/v3/progress/series)
   @(requires: 'authenticated-user')
   function getEventProgress(missionLegacyId : Integer) returns {
-    eventId : Integer;
-    type    : String;
+    eventId   : Integer;
+    eventType : String;
+    type      : String;
     paths   : many {
       id          : Integer;
       title       : String;
@@ -154,6 +155,7 @@ service DeveloperService {
   function getAppSpaceProgress(eventLegacyId : Integer) returns {
     eventId   : Integer;
     eventName : String;
+    eventType : String;
     type      : String;
     paths     : many {
       id          : Integer;
