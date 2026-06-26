@@ -1,7 +1,14 @@
 // srv/lib/runtime-config/display-settings.js
 // Resolves the dashboard URL used in contributor-notification emails.
+//
+// CHAIN: DB row -> hardcoded DEFAULTS. NO env-var fallback (deliberately
+// removed in the credstore-runtime-config follow-up PR). The admin UI at
+// /admin-ui/#displaysettings-display is the sole source of truth; env vars
+// would create a silent-shadow class of bug where a stale `cf set-env`
+// could mask a fresh admin-UI write until the next app restart.
+//
 // Default falls back to the prod approuter URL — same literal that
-// srv/admin-service.js:791 and srv/jobs/scheduler.js:134 used pre-migration.
+// srv/admin-service.js and srv/jobs/scheduler.js used pre-migration.
 
 import cds from '@sap/cds';
 
@@ -29,7 +36,7 @@ async function readRow() {
       );
       return rows?.[0] ?? null;
     } catch (sqlErr) {
-      LOG.warn('DisplaySettings read failed; using env-var defaults', sqlErr.message);
+      LOG.warn('DisplaySettings read failed; using hardcoded DEFAULTS', sqlErr.message);
       return null;
     }
   }
@@ -43,11 +50,6 @@ function pick(row, lower, upper) {
   return u !== undefined && u !== null ? u : null;
 }
 
-function envString(name) {
-  const v = process.env[name];
-  return v === undefined || v === '' ? null : v;
-}
-
 export async function resolveDisplaySettings() {
   const now = Date.now();
   if (_state.cached && (now - _state.cachedAt) < TTL_MS) return _state.cached;
@@ -56,7 +58,6 @@ export async function resolveDisplaySettings() {
   const settings = {
     dashboardUrl:
       pick(row, 'dashboardUrl', 'DASHBOARDURL')
-      ?? envString('DASHBOARD_URL')
       ?? DEFAULTS.dashboardUrl,
   };
 

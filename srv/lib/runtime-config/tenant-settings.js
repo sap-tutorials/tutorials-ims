@@ -2,6 +2,12 @@
 // Resolves the tenant-wide config bag: CORS origins, rebuild target env,
 // tech-user JSON config, tech-user mapping. Special-shape fields stored
 // as raw String/LargeString — consumers keep their existing parse logic.
+//
+// CHAIN: DB row -> hardcoded DEFAULTS. NO env-var fallback (deliberately
+// removed in the credstore-runtime-config follow-up PR). The admin UI at
+// /admin-ui/#tenantsettings-display is the sole source of truth; env vars
+// would create a silent-shadow class of bug where a stale `cf set-env`
+// could mask a fresh admin-UI write until the next app restart.
 
 import cds from '@sap/cds';
 
@@ -33,7 +39,7 @@ async function readRow() {
       );
       return rows?.[0] ?? null;
     } catch (sqlErr) {
-      LOG.warn('TenantSettings read failed; using env-var defaults', sqlErr.message);
+      LOG.warn('TenantSettings read failed; using hardcoded DEFAULTS', sqlErr.message);
       return null;
     }
   }
@@ -47,11 +53,6 @@ function pick(row, lower, upper) {
   return u !== undefined && u !== null ? u : null;
 }
 
-function envString(name) {
-  const v = process.env[name];
-  return v === undefined || v === '' ? null : v;
-}
-
 export async function resolveTenantSettings() {
   const now = Date.now();
   if (_state.cached && (now - _state.cachedAt) < TTL_MS) return _state.cached;
@@ -60,19 +61,15 @@ export async function resolveTenantSettings() {
   const settings = {
     allowedCorsOrigins:
       pick(row, 'allowedCorsOrigins', 'ALLOWEDCORSORIGINS')
-      ?? envString('ALLOWED_CORS_ORIGINS')
       ?? DEFAULTS.allowedCorsOrigins,
     rebuildTargetEnv:
       pick(row, 'rebuildTargetEnv', 'REBUILDTARGETENV')
-      ?? envString('REBUILD_TARGET_ENV')
       ?? DEFAULTS.rebuildTargetEnv,
     techUsers:
       pick(row, 'techUsers', 'TECHUSERS')
-      ?? envString('TECH_USERS')
       ?? DEFAULTS.techUsers,
     techUsersMapping:
       pick(row, 'techUsersMapping', 'TECHUSERSMAPPING')
-      ?? envString('TECH_USERS_MAPPING')
       ?? DEFAULTS.techUsersMapping,
   };
 

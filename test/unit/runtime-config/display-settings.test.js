@@ -1,4 +1,10 @@
 // test/unit/runtime-config/display-settings.test.js
+//
+// CHAIN AFTER credstore-runtime-config follow-up:
+//   DB row -> hardcoded DEFAULTS. NO env-var fallback.
+//
+// See tenant-settings.test.js for the same architectural note.
+
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import path from 'node:path';
 import cds from '@sap/cds';
@@ -21,20 +27,21 @@ beforeEach(async () => {
   _resetCacheForTests();
 });
 
-describe('resolveDisplaySettings (#466)', () => {
-  it('returns hardcoded default URL when DB empty + env unset', async () => {
+describe('resolveDisplaySettings (#466 + credstore-runtime-config follow-up)', () => {
+  it('returns hardcoded default URL when DB empty', async () => {
     const s = await resolveDisplaySettings();
     expect(s).toEqual({ dashboardUrl: HARDCODED_DEFAULT_URL });
   });
 
-  it('falls through to env var when DB row absent', async () => {
+  it('IGNORES env var when DB row absent — returns hardcoded DEFAULT', async () => {
+    // Pre-PR behavior: env wins. Post-PR: env is invisible to the resolver,
+    // because the admin UI is the sole source of truth. Regression guard.
     process.env.DASHBOARD_URL = 'https://custom-dashboard.example.com/ui/d';
     const s = await resolveDisplaySettings();
-    expect(s.dashboardUrl).toBe('https://custom-dashboard.example.com/ui/d');
+    expect(s.dashboardUrl).toBe(HARDCODED_DEFAULT_URL);
   });
 
-  it('DB row wins over env var (admin override)', async () => {
-    process.env.DASHBOARD_URL = 'https://from-env.example.com';
+  it('DB row wins over hardcoded DEFAULT (admin override)', async () => {
     const { DisplaySettings } = cds.entities('com.sap.developers.ims');
     await INSERT.into(DisplaySettings).entries({
       ID: 'dd000000-0000-0000-0000-000000000001',
