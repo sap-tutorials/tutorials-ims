@@ -55,6 +55,8 @@ Tom pointed at [`D:/projects/sap-community-activity-badges`](https://github.com/
 1. **The numeric-vs-slug fingerprint** in [`srv/util/khoros.js::callUserAPI`](https://github.com/SAP-samples/sap-community-activity-badges/blob/main/srv/util/khoros.js): try `author.id` first when input matches `/^\d+$/`; else try `author.login` with `dot→underscore` normalisation; else try the dotted form unchanged.
 2. **The `messages.author.*` field expansion**: as of mid-2026, anonymous direct user reads against `community.sap.com/khhcw49343/api/2.0/users/:id` return `404` (Khoros revoked `allow_restapi_call_read` for the anonymous user). The reference repo's workaround — `SELECT author.id, author.login, ... FROM messages WHERE author.id = '<id>' LIMIT 1` against `/api/2.0/search` — is the only public-tier surface and **the only path we can use without a Khoros service principal**.
 
+The host segment `khhcw49343` is a Khoros tenant prefix and has historically been rotated; `khoros-client.js` MUST hold it as a single named constant (e.g. `KHOROS_TENANT_PREFIX`) so a future rotation is a one-line change.
+
 **Critical implication:** users with zero community posts are unfindable. We surface this in the `not-found` error copy.
 
 The port from the reference repo also flips the HTTP client: `then-request` → Node.js native `fetch`, per the project's `[CLAUDE.md > Prefer Node.js native fetch]` rule.
@@ -63,7 +65,7 @@ The port from the reference repo also flips the HTTP client: `then-request` → 
 
 ### Component boundary diagram
 
-```
+```text
 ┌─────────────────────── Browser (/me) ───────────────────────┐
 │                                                              │
 │  Hugo layout (3 ui5-panels, collapse state in localStorage)  │
@@ -139,9 +141,8 @@ The port from the reference repo also flips the HTTP client: `then-request` → 
 | `hugo/layouts/me/list.html` | 3 `ui5-panel` wrappers + 4 mount points + inline collapse-state script. |
 | `hugo-apps/src/nav-dropdown/*` | Read `khorosAvatarUrl` + `khorosLogin` from `/auth/user`; render avatar `<img>` with onerror fallback to initials; add "View community profile ↗" menu item. |
 | `hugo/assets/js/ui5-bootstrap.ts` | Register `Avatar` (currently unregistered; required by `CommunityProfile.vue`). |
-| `docs/developers/reference/cap-cds-gotchas.md` | Append note on `@assert.unique` + nullable columns. |
+| `docs/developers/reference/cap-cds-gotchas.md` | Append note on `@assert.unique` + nullable columns AND on `khorosId` unique vs `khorosLogin` non-unique. |
 | `docs/.vitepress/config.ts` | Sidebar entry for new architecture + end-user pages. |
-| `CLAUDE.md` | One-line gotcha entry on the `khorosId` unique / `khorosLogin` non-unique choice. |
 
 ## Data model
 
@@ -205,7 +206,7 @@ action setKhorosLink(input: String) returns {
 6. Try `UPDATE Users SET khorosId=…, khorosLogin=…, khorosAvatarUrl=…, khorosLinkedAt=NOW() WHERE ID = $self`.
 7. On unique-constraint violation → `{ status: 'already-claimed' }`.
 8. On other DB error → `{ status: 'persist-failed' }`. Log ERROR.
-9. Seed `khoros-cache` with the fresh `{ rank, name, avatarUrl }` so the immediate chip render is cache-warm.
+9. Seed `khoros-cache` with the fresh profile object — same shape `getKhorosProfile` reads back (`{ name, rank, avatarUrl }`) so there's no field-name drift between writer and reader.
 10. Return `{ status: 'ok', khorosId, khorosLogin, name }`.
 
 ### `POST /api/clearKhorosLink()`
@@ -293,6 +294,10 @@ All three are `null` for unlinked users — Vue islands and nav-dropdown render 
     document.querySelectorAll('ui5-panel[data-panel]').forEach((p) => {
       const key = `me.panel.${p.dataset.panel}`
       if (localStorage.getItem(key) === 'collapsed') p.collapsed = true
+      // ui5-panel emits `toggle` when the user clicks the chevron; the event has
+      // no detail payload — read `p.collapsed` after the event fires.
+      // Verify against the @ui5/webcomponents version pinned in package.json
+      // during planning (event name has not changed in v1.x/v2.x but worth a check).
       p.addEventListener('toggle', () => {
         localStorage.setItem(key, p.collapsed ? 'collapsed' : 'expanded')
       })
@@ -531,9 +536,8 @@ Memory: `[feedback_skip_hybrid_test_costs_two_pr_cycles]` — the `@assert.uniqu
 
 1. **`docs/developers/architecture/khoros-link.md`** — schema, endpoints, cache, reference-repo lineage, the "`messages.author.*` is our only public surface" gotcha.
 2. **`docs/end-users/me-page.md`** — short user-facing page on what "Link your community profile" does, with the screenshot from the inline help expander.
-3. **`docs/developers/reference/cap-cds-gotchas.md`** — append note on `@assert.unique` + nullable columns.
-4. **`CLAUDE.md`** — one-line entry on why `khorosId` is unique and `khorosLogin` is not.
-5. **`docs/.vitepress/config.ts`** — sidebar entries for the two new pages (predocs:build will reject otherwise).
+3. **`docs/developers/reference/cap-cds-gotchas.md`** — append note on `@assert.unique` + nullable columns AND on why `khorosId` is unique but `khorosLogin` is not. Per memory `[feedback_platform_facts_belong_in_docs_not_memory]`, this stays in docs only — no `CLAUDE.md` edit.
+4. **`docs/.vitepress/config.ts`** — sidebar entries for the two new pages (predocs:build will reject otherwise).
 
 ## Decisions explicitly NOT made
 
