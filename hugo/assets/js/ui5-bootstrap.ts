@@ -52,6 +52,10 @@ import "@ui5/webcomponents/dist/Select.js";
 import "@ui5/webcomponents/dist/Option.js";
 import "@ui5/webcomponents/dist/Label.js";
 import "@ui5/webcomponents/dist/Text.js";
+// /me page (#566) — three collapsible ui5-panels wrap LearningPreferences,
+// RecentActivity, and AllCompletions. MUST be registered here, not from
+// hugo-apps/src/me/main.ts (see [feedback_ui5_duplicate_bundle_kills_settheme]).
+import "@ui5/webcomponents/dist/Panel.js";
 import "@ui5/webcomponents-fiori/dist/Timeline.js";
 import "@ui5/webcomponents-fiori/dist/TimelineItem.js";
 import "@ui5/webcomponents-fiori/dist/ShellBar.js";
