@@ -646,7 +646,9 @@ describe('changelog noise cleanup (#658)', () => {
 
   it('purgeStaleChangelog scopes to the entity list only', async () => {
     // Seed two rows — one noise, one control — under a TEST prefix so the
-    // write guard is happy. Roll back at the end.
+    // write guard is happy. The DELETE filter is by `entity` (not by ID),
+    // so other Concepts rows on shared DEV DB will also be swept; the
+    // load-bearing assertion is "control survives, noise row gone".
     const { Changes } = cds.entities('sap.changelog');
     const noiseId = cds.utils.uuid();
     const ctrlId = cds.utils.uuid();
@@ -674,12 +676,12 @@ describe('changelog noise cleanup (#658)', () => {
     ]);
 
     try {
-      const { deleted } = await purgeStaleChangelog({
+      await purgeStaleChangelog({
         entities: ['com.sap.developers.ims.Concepts'],
       });
-      // The deleted count includes any other Concepts rows already in the
-      // table; we only assert the noise row is gone and the control survives.
-      expect(deleted).toBeGreaterThanOrEqual(1);
+      // Load-bearing: control row (Advocates) survives, noise row (Concepts) gone.
+      // Other Concepts rows on shared DEV DB will also be deleted — that's
+      // intentional and matches production semantics.
       const survived = await SELECT.one.from(Changes).where({ ID: ctrlId });
       expect(survived).toBeDefined();
       const gone = await SELECT.one.from(Changes).where({ ID: noiseId });
