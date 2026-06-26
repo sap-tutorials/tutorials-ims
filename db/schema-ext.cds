@@ -84,6 +84,7 @@ annotate ims.Events with {
   name      @analytics.filter: { mode: 'enum', sample: true };
   startDate @analytics.filter: { mode: 'date' };
   endDate   @analytics.filter: { mode: 'date' };
+  eventType @analytics.filter: { mode: 'enum', sample: true };
 };
 
 // PII flags: client-side redaction in Joule sampleRows before send to LLM.
