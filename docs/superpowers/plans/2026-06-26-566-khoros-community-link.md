@@ -1015,7 +1015,17 @@ git commit -m "feat(566): expose khoros* on /auth/user + hybrid coverage for uni
 
 ## Task 7: Register `ui5-panel` in the bootstrap
 
-The frontend tasks build on the layout being able to use `<ui5-panel>`. `Avatar`, `MessageStrip`, `Title`, and `Text` are already registered in `hugo/assets/js/ui5-bootstrap.ts` (verified). `Panel` is not.
+The frontend tasks build on the layout being able to use `<ui5-panel>`. `Avatar`, `MessageStrip`, `Title`, and `Text` are already registered in `hugo/assets/js/ui5-bootstrap.ts` (verified during plan-writing). `Panel` is not.
+
+- [ ] **Step 0: Confirm Avatar is still registered**
+
+Before adding Panel, verify Avatar is still imported (the spec called this out as the one component that needed adding; it turned out to already be there at plan-writing time. Confirm at task time in case the file shifted):
+
+```bash
+grep -nE "Avatar\.js|Panel\.js" hugo/assets/js/ui5-bootstrap.ts
+```
+
+Expected: `Avatar.js` is present, `Panel.js` is missing. If Avatar is NOT present, add it alongside Panel in Step 1 below.
 
 **Files:**
 - Modify: `hugo/assets/js/ui5-bootstrap.ts`
@@ -2043,7 +2053,9 @@ git commit -m "feat(566): nav-dropdown — swap initials for khoros avatar + com
 ---
 ## Task 13: Admin UI — read-only columns + Clear action
 
-Adds three read-only columns to the Users Object Page in the Accounts admin tile, plus a "Clear Khoros link" action bound to a new `AdminService` action.
+Adds three read-only columns to the Users Object Page in the Accounts admin tile, plus a "Clear Khoros link" action.
+
+**Decision: use the BOUND-action form** (`actions { action clearKhorosLink() ... }` on `entity Users`) rather than the unbound `clearKhorosLink(userId: UUID)`. Fiori Elements V4 auto-passes the OP's key on a bound action; the unbound form needs custom JS wiring on the Accounts UI5 component. The two shapes are shown below for context, but **commit to the bound form before writing any code or tests** to avoid mid-task rework.
 
 **Files:**
 - Modify: `srv/admin-service.cds`
