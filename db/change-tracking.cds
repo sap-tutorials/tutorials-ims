@@ -14,25 +14,40 @@
 using { com.sap.developers.ims as ims } from './schema';
 using from './knowledge-graph';
 
-annotate ims.ChatSettings with @changelog;
-annotate ims.KnowledgeGraphSettings with @changelog;
+// =========================================================================
+// Audit-material entities — keep tracked.
+// =========================================================================
+// Human-edited content where edit history adds real audit value.
 annotate ims.Advocates       with @changelog;
 annotate ims.AdvocateTopics  with @changelog;
 annotate ims.AdvocateLinks   with @changelog;
-
-// Knowledge graph (#381). Track admin curation actions on Concepts (rename /
-// describe / veto) and ConceptEdges (veto). Mirrors the existing pattern.
-annotate ims.Concepts      with @changelog : ['name', 'description', 'status'];
-annotate ims.ConceptEdges  with @changelog : ['status'];
 
 // Phase 2-B (#464): track admin edits to tracked-secret metadata
 // (description, expiresAt, rotationOwner). Surfaces in /admin-ui/#changelog-display.
 annotate ims.Secrets with @changelog;
 
-
-// Phase 3 (#466): track admin edits to runtime-tunable settings.
-annotate ims.UiEventsSettings  with @changelog;
-annotate ims.SearchSettings    with @changelog;
-annotate ims.NavigatorSettings with @changelog;
-annotate ims.DisplaySettings   with @changelog;
-annotate ims.TenantSettings    with @changelog;
+// =========================================================================
+// Intentionally NOT @changelog-tracked — see issue #658.
+// =========================================================================
+// Two categories of entities are excluded from change-tracking:
+//
+//   1. Configuration singletons (@odata.singleton-projected). Each has a
+//      lazy `before('READ')` auto-init handler in srv/admin-service.js
+//      that idempotently INSERTs a default row when its backing table is
+//      empty (to avoid 404 on first read on a fresh subaccount). With
+//      @changelog active the INSERT trips the HANA AFTER trigger and
+//      writes a no-delta "Create" row attributed to whoever did the read.
+//      These entities are feature-flag / runtime-config shaped; pages of
+//      synthetic "Create" rows on first read are pure noise.
+//
+//      ChatSettings, KnowledgeGraphSettings, UiEventsSettings,
+//      TenantSettings, SearchSettings, NavigatorSettings, DisplaySettings.
+//
+//   2. AI-generated knowledge-graph tables (Concepts, ConceptEdges).
+//      The extract-concepts cron deletes-and-reinserts ConceptEdges and
+//      bumps Concepts.lastSeenAt/extractionCount on every run. With
+//      @changelog active the triggers fire thousands of empty-attribute
+//      rows per cron tick. Admin curation (rename/describe/veto) on
+//      Concepts is rare enough that the trade-off isn't worth it.
+//
+// Spec: docs/superpowers/specs/2026-06-26-658-changelog-noise-cleanup-design.md

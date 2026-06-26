@@ -224,6 +224,13 @@ service AdminService {
   action clearChangeLog(olderThanDays : Integer, migrationOnly : Boolean) returns {
     deleted : Integer;
   };
+  // Bulk-purge sap.changelog.Changes rows for entities whose @changelog
+  // tracking was retroactively dropped (configuration singletons +
+  // AI-generated KG tables — see #658). Pass an empty array (or omit) to
+  // use the NOISE_ENTITIES default list. Idempotent.
+  action purgeNoiseChangeLog(entities : array of String) returns {
+    deleted : Integer;
+  };
 
   // Tutorial review & notification management
   action reviewTutorial(tutorialId : UUID) returns {

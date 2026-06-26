@@ -55,6 +55,28 @@ npm run migrate:hana
 > after the run with a one-shot SQL `DELETE` scoped by `createdAt` or
 > `createdBy`. Followup ticket recommended; explicitly out-of-scope of #394.
 
+### Noise cleanup for un-tracked entities (#658)
+
+Nine entities had their `@changelog` annotation dropped after the admin
+Change History tile was flooded with no-delta entries:
+
+- Configuration singletons: `ChatSettings`, `KnowledgeGraphSettings`,
+  `UiEventsSettings`, `TenantSettings`, `DisplaySettings`,
+  `SearchSettings`, `NavigatorSettings` — each had a `before('READ')`
+  auto-init handler that INSERTed a default row on first read, tripping
+  the AFTER INSERT trigger.
+- AI-generated KG tables: `Concepts`, `ConceptEdges` — the
+  extract-concepts cron does delete-then-insert on every run, producing
+  thousands of trigger-fired rows per tick.
+
+Historical noise is purged automatically once per deploy via
+`autoPurgeOnce` in [srv/lib/purge-stale-changelog.js](../../../srv/lib/purge-stale-changelog.js),
+held behind a `JobLocks` sentinel. To re-run the purge ad-hoc (e.g. if
+the entity list grows in a future PR), call the
+`AdminService.purgeNoiseChangeLog(entities)` OData action.
+
+Spec: [2026-06-26-658-changelog-noise-cleanup-design.md](../../superpowers/specs/2026-06-26-658-changelog-noise-cleanup-design.md).
+
 ## Audit logging
 
 `Users` is `@PersonalData`-annotated (`db/audit-logging.cds`). The

@@ -2,6 +2,7 @@ import cds from '@sap/cds';
 import express from 'express';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { registerJobs } from './jobs/scheduler.js';
+import { autoPurgeOnce } from './lib/purge-stale-changelog.js';
 import { qrcodeHandler } from './lib/qrcode-handler.js';
 import { buildCatalogHandler } from './lib/build-catalog.js';
 import { coCompletionsHandler } from './lib/co-completion.js';
@@ -505,6 +506,31 @@ cds.on('served', async () => {
       if (ctx?.clientIp) req.data._clientIp = ctx.clientIp;
     });
     globalThis.__feedbackBeforeHookRegistered = true;
+  }
+
+  // #658 — one-shot purge of accumulated noise rows in sap.changelog.Changes
+  // for entities whose @changelog annotation was retroactively dropped. Held
+  // behind a JobLocks sentinel so it runs exactly once per CF deploy across
+  // all instances. Failure here MUST NOT crash boot — it's a housekeeping
+  // task, not a startup requirement.
+  if (!globalThis.__changelogNoisePurgeAttempted) {
+    globalThis.__changelogNoisePurgeAttempted = true;
+    autoPurgeOnce({ version: 'v1' })
+      .then((res) => {
+        if (res.alreadyRan) {
+          cds.log('purge-stale-changelog').debug('Purge sentinel already held');
+        } else {
+          cds.log('purge-stale-changelog').info(
+            `Auto-purged ${res.deleted} stale changelog rows on first boot`,
+          );
+        }
+      })
+      .catch((err) => {
+        cds.log('purge-stale-changelog').warn(
+          'Auto-purge failed (non-fatal):',
+          err.message,
+        );
+      });
   }
 
   // Bust the /build/navigator in-memory cache when admins write to entities that
