@@ -65,7 +65,6 @@ modules:
       # never surfaced; local deploys hit it on the descriptor-merge step.
       EXPOSE_CAP_UI: false
       CONTENT_API_KEY: ""
-      REBUILD_TARGET_ENV: ""
       # GitHub fine-grained PAT for srv/lib/rebuild-trigger.js. Empty here
       # means rebuild-trigger gracefully no-ops (logs one boot warning).
       # Real value will be set via credstore + admin Secrets UI once Phase 2-C
@@ -76,15 +75,12 @@ modules:
       KNOWLEDGE_GRAPH_ENABLED: 'false'
       KG_EXTRACT_BUILD_CAP: '200'
       KG_MERGE_SIM_THRESHOLD: '0.92'
-      # Author-nudge SMTP transport (#545). Empty defaults mean the cron is
-      # dormant — mail-client.js's resolveSmtpConfig returns null, the
-      # sendNotificationEmail path queues to FailedEmails, and the 4-hour
-      # retry cron picks up once mtaext + credstore supply real values.
-      # Non-secret knobs ride here; SMTP_PASS lives in credstore (alias same name).
-      SMTP_HOST: ""
-      SMTP_PORT: "587"
-      SMTP_USER: ""
-      SMTP_FROM: "developers@sap.com"
+      # NOTE: SMTP_HOST/PORT/USER/FROM and REBUILD_TARGET_ENV used to live here.
+      # Removed in the credstore-runtime-config follow-up: all 5 SMTP fields are
+      # now resolved from BTP Credential Store via srv/lib/secret-resolver.js;
+      # REBUILD_TARGET_ENV is resolved from TenantSettings via the admin UI.
+      # Admin /admin-ui/#secrets-display + /#tenantsettings-display are the
+      # sole sources of truth — env-var fallback was removed for both.
     provides:
       - name: srv-api
         properties:
