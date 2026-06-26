@@ -24,6 +24,14 @@ service DeveloperService {
   @(requires: 'authenticated-user')
   entity TaskRecords as projection on ims.TaskRecords;
 
+  // Public Events surface (#646). No associations exposed — admins manage
+  // mission/prize/registration linkage via AdminService; public callers only
+  // need the slim metadata to filter by type, date range, name.
+  @(requires: 'authenticated-user')
+  @readonly entity Events as projection on ims.Events {
+    ID, legacyId, name, startDate, endDate, timeZone, eventType
+  };
+
   // Singleton sentinel UUID; safe to expose — already in seed CSV, required because CDS projections need a key.
   // PR 6 — added branchingEnabled so /me/ can show the "branching is currently disabled"
   // info-strip when the master flag is off. ChatConfig keeps @requires: 'any' (anonymous-readable)
