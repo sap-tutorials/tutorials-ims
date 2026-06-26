@@ -159,6 +159,16 @@ composeTutorial(markdown, {
 - **Banner as a separate Vite entry, not part of validation.js** — banner needs to load and run *before* widgets hydrate (so auto-reset clears state first). Smaller, focused bundle; separate script tag with `defer` ordering.
 - **`tutorial-preview:` event namespace** — reserved for future preview-only signaling (e.g. branching simulation, language switch). Prevents collision with feature events.
 
+### Open implementation tactic — rules.vr block transport to `<PreviewAINotice>`
+
+The block text (especially `[CODECHECK_N]` reference solutions) can be sizeable and contains characters that double-escape awkwardly through HTML attributes. The planning step should pick between:
+
+1. **Attribute** (`data-rules-block="…"`) — simple, but uncomfortable for multi-line / code-heavy specs.
+2. **Sibling `<script type="application/json">`** with the block as a JSON string — escape semantics are predictable; the widget reads it on mount. Recommended.
+3. **Server-rendered Hugo child element** carrying the block as pre-formatted text inside the mount div — widget reads `innerHTML` of the slot.
+
+This is a planning-time call; functionally any of the three meets the contract.
+
 ## Security
 
 Unchanged from the original Preview API spec:
@@ -212,7 +222,7 @@ Add to `test/smoke/qa-routes.test.ts`:
 - `POST /preview/render` with `{ markdown, rulesVr }` containing `[VALIDATION_1]` → 200, response HTML contains the question text.
 - `POST /preview/render` with `{ markdown, rulesVr }` containing `[AUTOAUTHOR_*]` → 200, response HTML contains `<PreviewAINotice>` text.
 - `POST /preview/render` with malformed rulesVr → 200, body contains parse error message.
-- `POST /preview/render` with `markdown` only → 200, no preview banner if no AI involvement, no validation widgets.
+- `POST /preview/render` with `markdown` only → 200; preview banner still renders (since `previewMode` is on) but the "Reveal AI rules" toggle is hidden (no AI on page); no validation widgets.
 
 ### Accessibility
 
