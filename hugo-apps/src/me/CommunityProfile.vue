@@ -27,7 +27,7 @@ const errorMessage = computed(() => {
   switch (errorStatus.value) {
     case 'not-found':            return "We couldn't find that community user. The lookup needs at least one public post; lurkers can't be found.";
     case 'already-claimed':      return 'That community profile is already linked to another tutorial user.';
-    case 'invalid-input':        return 'Enter your community login (e.g. thomas_jung) or numeric ID.';
+    case 'invalid-input':        return 'Enter your community login (e.g. j_doe) or numeric ID.';
     case 'upstream-unavailable': return 'SAP Community is unreachable right now. Try again in a few minutes.';
     case 'persist-failed':       return "Couldn't save. Try again.";
     default:                     return '';
@@ -116,7 +116,7 @@ defineExpose({ profile, input, busy, status, errorStatus, errorMessage, errorDes
     <div v-if="!profile.linked" class="claim-row">
       <ui5-input
         :value="input"
-        placeholder="thomas_jung or 123456"
+        placeholder="your community login or numeric ID"
         :disabled="busy || null"
         @input="(e: any) => (input = e.target.value)"
         @keydown.enter="onLink"
@@ -128,7 +128,7 @@ defineExpose({ profile, input, busy, status, errorStatus, errorMessage, errorDes
         <summary>How do I find my community ID?</summary>
         <p>Open your profile at <a href="https://community.sap.com" target="_blank">community.sap.com</a>.
           The URL ends with either <code>/user-id/123456</code> (numeric ID) or
-          <code>/user/thomas_jung</code> (login slug). Either works — paste it here.</p>
+          <code>/user/your_login</code> (login slug). Either works — paste it here.</p>
         <a href="https://developers.sap.com/tutorials/community-profile.html" target="_blank">
           More about your community profile ↗
         </a>

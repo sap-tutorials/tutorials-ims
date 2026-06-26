@@ -15,7 +15,7 @@ state survives a refresh (saved per-device in your browser).
 
 Inside **Learning Preferences**, look for "SAP Community profile". Paste
 either your numeric community ID (e.g. `123456`) or your community
-login slug (e.g. `thomas_jung`), then click "Link profile".
+login slug (e.g. `j_doe`), then click "Link profile".
 
 Once linked, your community avatar replaces the initials in the top-right
 of every tutorial page, and a "View community profile ↗" link appears
