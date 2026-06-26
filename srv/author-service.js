@@ -2,6 +2,9 @@ import cds from '@sap/cds';
 import { reviewTutorial, snoozeTutorial } from './lib/tutorial-review.js';
 import { generateOsVariants } from './lib/os-variant-generator.js';
 import { createRateLimiter, RateLimitError } from './lib/chat-rate-limit.js';
+import { scheduleRebuild } from './lib/rebuild-trigger.js';
+import { createAuditEmitter } from './lib/audit-event.js';
+import { handleRebuildAction } from './lib/rebuild-action-handler.js';
 
 const OS_VALUES = ['Windows', 'macOS', 'Linux', 'BAS'];
 const OS_VARIANTS_LIMIT = 60;             // calls per hour per author
@@ -18,6 +21,51 @@ async function assertOwnership(tutorialId, userId) {
 
 export default cds.service.impl(async function () {
   const { MyTutorials } = this.entities;
+  const { Tutorials } = this.entities;
+
+  // Audit emitter — best-effort; tolerates missing binding in dev/mock-auth.
+  let _auditLog;
+  try {
+    _auditLog = await cds.connect.to('audit-log');
+  } catch (err) {
+    cds.log('author-service').warn(
+      `audit-log binding unavailable (${err?.message ?? err}); rebuild events will not be audited`
+    );
+  }
+  const auditEvent = createAuditEmitter(_auditLog, cds.log('author-service'));
+
+  // rebuildContent — symmetric with AdminService; differs only by source string.
+  // The shared helper in srv/lib/rebuild-action-handler.js derives the dispatch
+  // reason from the source prefix → 'author-ui:rebuild-button:<user>'.
+  this.on('rebuildContent', 'Tutorials', async (req) => {
+    return handleRebuildAction(req, {
+      source: 'author-ui:tutorial-detail',
+      selectOne: (id) =>
+        SELECT.one.from(Tutorials).columns('slug', 'title').where({ ID: id }),
+      audit: auditEvent,
+      schedule: scheduleRebuild,
+    });
+  });
+
+  // listExposedEntities — curated subset for the analytics-explorer entity dropdown.
+  //
+  // sqlName values are display-only: AuthorService deliberately omits the
+  // `runSelectQuery` ad-hoc SQL action (admin-only), so these strings never
+  // reach a query path. They're shown in the UI's entity picker for parity
+  // with the admin Analytics tile. If a future task adds an author SQL
+  // surface, switch to dialect-aware computation like analytics-service.js
+  // does (it uppercases on HANA).
+  this.on('listExposedEntities', () => [
+    { name: 'CompletionAnalytics',        sqlName: 'com_sap_developers_ims_CompletionAnalytics',        label: 'Completion analytics' },
+    { name: 'CodeCheckSubmissions',       sqlName: 'com_sap_developers_ims_CodeCheckSubmissions',       label: 'Code check submissions' },
+    { name: 'ValidateAnswerSubmissions',  sqlName: 'com_sap_developers_ims_ValidateAnswerSubmissions',  label: 'Validation submissions' },
+    { name: 'ActiveLearnersDaily',        sqlName: 'com_sap_developers_ims_ActiveLearnersDaily',        label: 'Active learners (daily)' },
+    { name: 'AnalyticsBranchPerformance', sqlName: 'com_sap_developers_ims_AnalyticsBranchPerformance', label: 'Branch performance' },
+    { name: 'AnalyticsBranchTopPick',     sqlName: 'com_sap_developers_ims_AnalyticsBranchTopPick',     label: 'Branch top pick' },
+    { name: 'Tasks',                      sqlName: 'com_sap_developers_ims_Tasks',                      label: 'Tasks' },
+    { name: 'TaskRecords',                sqlName: 'com_sap_developers_ims_TaskRecords',                label: 'Task records' },
+    { name: 'UIEvents',                   sqlName: 'com_sap_developers_ims_UIEvent',                    label: 'UI events' },
+  ]);
 
   this.before('READ', MyTutorials, (req) => {
     const userId = req.user?.id;
