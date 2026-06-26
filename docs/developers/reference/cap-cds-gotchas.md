@@ -639,7 +639,7 @@ but rejects duplicate non-NULL values. We rely on this for `khorosId` (#566) —
 unlinked users coexist freely, linked users can't collide.
 
 We deliberately do **not** put `@assert.unique` on `khorosLogin`. Khoros has
-bulk-renamed login slugs in the past (e.g. `thomas.jung` → `thomas_jung`).
+bulk-renamed login slugs in the past (e.g. `j.doe` → `j_doe`).
 A second user who claims a renamed slug while the first user's old slug
 still sits in the DB would silently fail the join. `khorosId` is the stable
 key; `khorosLogin` is a display label refreshed lazily every 6h.

@@ -38,8 +38,8 @@ describe('CommunityProfile.vue', () => {
         body: {
           linked: true,
           khorosId: '123',
-          khorosLogin: 'thomas_jung',
-          name: 'Thomas Jung',
+          khorosLogin: 'j_doe',
+          name: 'Jane Doe',
           rank: 'Star Blogger',
           avatarUrl: 'https://x/a.png',
           profileUrl: 'https://community.sap.com/t5/user/viewprofilepage/user-id/123',
@@ -49,8 +49,8 @@ describe('CommunityProfile.vue', () => {
     vi.stubGlobal('fetch', fetchMock);
     const wrapper = mount(CommunityProfile);
     await flushPromises();
-    expect(wrapper.text()).toContain('Thomas Jung');
-    expect(wrapper.text()).toContain('@thomas_jung');
+    expect(wrapper.text()).toContain('Jane Doe');
+    expect(wrapper.text()).toContain('@j_doe');
     expect(wrapper.text()).toContain('Star Blogger');
     expect(wrapper.find('.linked-chip').exists()).toBe(true);
   });
@@ -62,8 +62,8 @@ describe('CommunityProfile.vue', () => {
         body: {
           status: 'ok',
           khorosId: '123',
-          khorosLogin: 'thomas_jung',
-          name: 'Thomas Jung',
+          khorosLogin: 'j_doe',
+          name: 'Jane Doe',
         },
       }),
     });
@@ -72,10 +72,10 @@ describe('CommunityProfile.vue', () => {
     await flushPromises();
     // Drive the island's setup-exposed onLink directly to bypass UI5 input plumbing.
     const vm = wrapper.vm as any;
-    vm.input = 'thomas_jung';
+    vm.input = 'j_doe';
     await vm.onLink();
     await flushPromises();
-    expect(wrapper.text()).toContain('Thomas Jung');
+    expect(wrapper.text()).toContain('Jane Doe');
   });
 
   it('maps status:not-found to the lurker error copy', async () => {
@@ -139,8 +139,8 @@ describe('CommunityProfile.vue', () => {
               body: {
                 linked: true,
                 khorosId: '123',
-                khorosLogin: 'thomas_jung',
-                name: 'Thomas Jung',
+                khorosLogin: 'j_doe',
+                name: 'Jane Doe',
                 rank: '',
                 avatarUrl: '',
                 profileUrl: 'https://community.sap.com/t5/user/viewprofilepage/user-id/123',
