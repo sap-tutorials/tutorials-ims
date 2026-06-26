@@ -207,6 +207,78 @@ export default class AdminService extends cds.ApplicationService {
       }
     });
 
+    // Ensure singleton rows exist for the four remaining @odata.singleton
+    // projections (TenantSettings, DisplaySettings, SearchSettings, NavigatorSettings).
+    // Same root cause + fix pattern as UiEventsSettings above: empty backing
+    // table → OData v4 singleton READ returns 404 → admin-UI PATCH fails with
+    // 404 because the target singleton doesn't exist for the update to land on.
+    // Discovered 2026-06-26 when admin tiles for Tenant + Display silently
+    // failed to save. The Search + Navigator handlers preempt the same trap.
+    // Default values are lifted from each resolver's DEFAULTS object so an
+    // operator opening the tile sees the same values the runtime would have
+    // resolved anyway, then can edit-and-save without surprise.
+    //
+    // UUID convention continues sequentially from c8a9 (UiEvents).
+    const TENANT_SETTINGS_SINGLETON_ID    = '00000000-0000-0000-0000-00000000c8aa';
+    const DISPLAY_SETTINGS_SINGLETON_ID   = '00000000-0000-0000-0000-00000000c8ab';
+    const SEARCH_SETTINGS_SINGLETON_ID    = '00000000-0000-0000-0000-00000000c8ac';
+    const NAVIGATOR_SETTINGS_SINGLETON_ID = '00000000-0000-0000-0000-00000000c8ad';
+
+    this.before('READ', 'TenantSettings', async () => {
+      const exists = await SELECT.one.from('com.sap.developers.ims.TenantSettings')
+        .where({ ID: TENANT_SETTINGS_SINGLETON_ID });
+      if (!exists) {
+        await INSERT.into('com.sap.developers.ims.TenantSettings').entries({
+          ID: TENANT_SETTINGS_SINGLETON_ID,
+          // Mirrors srv/lib/runtime-config/tenant-settings.js DEFAULTS so the
+          // admin tile shows what the runtime would have resolved if the row
+          // were absent. Operators edit-from-defaults; they don't face empty
+          // fields and have to guess the right values.
+          allowedCorsOrigins: 'http://localhost:1313,http://localhost:5000,http://localhost:4004',
+          rebuildTargetEnv: 'dev',
+          techUsers: '',
+          techUsersMapping: ''
+        });
+      }
+    });
+
+    this.before('READ', 'DisplaySettings', async () => {
+      const exists = await SELECT.one.from('com.sap.developers.ims.DisplaySettings')
+        .where({ ID: DISPLAY_SETTINGS_SINGLETON_ID });
+      if (!exists) {
+        await INSERT.into('com.sap.developers.ims.DisplaySettings').entries({
+          ID: DISPLAY_SETTINGS_SINGLETON_ID,
+          // Mirrors srv/lib/runtime-config/display-settings.js DEFAULTS.
+          dashboardUrl: 'https://tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/ui/tutorialDashboard'
+        });
+      }
+    });
+
+    this.before('READ', 'SearchSettings', async () => {
+      const exists = await SELECT.one.from('com.sap.developers.ims.SearchSettings')
+        .where({ ID: SEARCH_SETTINGS_SINGLETON_ID });
+      if (!exists) {
+        await INSERT.into('com.sap.developers.ims.SearchSettings').entries({
+          ID: SEARCH_SETTINGS_SINGLETON_ID,
+          // Mirrors srv/lib/runtime-config/search-settings.js DEFAULTS.
+          rateLimitMax: 60,
+          rateLimitWindowMs: 60_000
+        });
+      }
+    });
+
+    this.before('READ', 'NavigatorSettings', async () => {
+      const exists = await SELECT.one.from('com.sap.developers.ims.NavigatorSettings')
+        .where({ ID: NAVIGATOR_SETTINGS_SINGLETON_ID });
+      if (!exists) {
+        await INSERT.into('com.sap.developers.ims.NavigatorSettings').entries({
+          ID: NAVIGATOR_SETTINGS_SINGLETON_ID,
+          // Mirrors srv/lib/runtime-config/navigator-settings.js DEFAULTS.
+          includeNestedGroups: false
+        });
+      }
+    });
+
     // Auto-assign legacyId on creation for entities that need it
     const legacyKeyedEntities = [
       'Users', 'Tutorials', 'Missions', 'Groups', 'Events', 'TaskRecords',
