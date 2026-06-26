@@ -39,6 +39,14 @@ const TAG_REVERSE_LOOKUP_ENTITIES = new Set([
   'Tags',
 ]);
 
+// #548: Entities served at runtime via dedicated endpoints (e.g. Alerts via
+// /api/alerts*). Admin CRUD on these MUST NOT trigger a Hugo rebuild
+// — the runtime endpoint serves fresh data within the cache TTL.
+// Returned mode='none' is a signal to the dispatch hook to short-circuit.
+const NO_REBUILD_ENTITIES = new Set([
+  'Alerts',
+]);
+
 // Bound actions on AdminService that mutate catalog state without going
 // through standard CRUD on the entities above. Each needs an explicit hook
 // because admin.after('CREATE'|'UPDATE'|'DELETE', ...) doesn't catch them.
@@ -77,7 +85,7 @@ export const TAG_REVERSE_LOOKUP_CAP = 50;
  *                                       bound action name (e.g. 'classifyCategories')
  * @param {'crud'|'action'} kind — defaults to 'crud'
  * @returns {{
- *   mode: 'catalog-only'|'slug-targeted'|'full',
+ *   mode: 'catalog-only'|'slug-targeted'|'full'|'none',
  *   forceCapRefetch: boolean,
  *   needsSlug: boolean,
  *   needsSlugsByTag: boolean,
@@ -85,6 +93,11 @@ export const TAG_REVERSE_LOOKUP_CAP = 50;
  */
 export function classifyRebuildMode(entityOrActionName, kind = 'crud') {
   if (kind === 'crud') {
+    if (NO_REBUILD_ENTITIES.has(entityOrActionName)) {
+      // #548: runtime-served entity (e.g. Alerts). Caller MUST short-circuit
+      // before dispatching any rebuild — see srv/server.js admin.after hook.
+      return { mode: 'none', forceCapRefetch: false, needsSlug: false, needsSlugsByTag: false };
+    }
     if (CATALOG_ONLY_ENTITIES.has(entityOrActionName)) {
       return { mode: 'catalog-only', forceCapRefetch: false, needsSlug: false, needsSlugsByTag: false };
     }

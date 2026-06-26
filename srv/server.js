@@ -569,6 +569,14 @@ cds.on('served', async () => {
       if (!entityName) return;
       const { mode, forceCapRefetch, needsSlug, needsSlugsByTag } = classifyRebuildMode(entityName, 'crud');
 
+      if (mode === 'none') {
+        // #548 defensive: entity is runtime-served (e.g. Alerts) and must never
+        // trigger a Hugo rebuild. Unreachable in v1 since such entities are not
+        // in navInvalidatingEntities — kept as a forward-compat contract so a
+        // later addition can't accidentally dispatch a rebuild.
+        return;
+      }
+
       // #541: Tag CRUD does a reverse-lookup to find affected tutorials. If
       // 1..TAG_REVERSE_LOOKUP_CAP slugs come back, dispatch slug-targeted per
       // slug (debounced into one workflow run with comma-separated `slugs`).

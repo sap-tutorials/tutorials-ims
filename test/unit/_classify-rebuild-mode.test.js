@@ -67,6 +67,17 @@ describe('classifyRebuildMode', () => {
   it('exports TAG_REVERSE_LOOKUP_CAP as 50', () => {
     expect(TAG_REVERSE_LOOKUP_CAP).toBe(50);
   });
+
+  // #548: runtime-served entities short-circuit the rebuild dispatch entirely.
+  // Alerts are served via /api/alerts* with a short cache TTL; admin CRUD must
+  // NOT trigger a Hugo rebuild.
+  it("returns mode='none' for entities in the NO_REBUILD set (Alerts)", () => {
+    const result = classifyRebuildMode('Alerts', 'crud');
+    expect(result.mode).toBe('none');
+    expect(result.forceCapRefetch).toBe(false);
+    expect(result.needsSlug).toBe(false);
+    expect(result.needsSlugsByTag).toBe(false);
+  });
 });
 
 describe('resolveSlugForEntity (pure paths)', () => {
