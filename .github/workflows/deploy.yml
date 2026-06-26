@@ -31,15 +31,11 @@ jobs:
           REBUILD_API_KEY: dummy-rebuild
           APPROUTER_URL: https://dummy.example.com
           GITHUB_DISPATCH_TOKEN: dummy-token
-          SMTP_HOST: dummy-smtp.example.com
-          SMTP_PORT: "587"
-          SMTP_USER: dummy-user
-          SMTP_FROM: dummy@example.com
         run: |
           set -euo pipefail
           for env in dev qa prod; do
             OUT=$(mktemp)
-            envsubst '$CONTENT_API_KEY $REBUILD_API_KEY $APPROUTER_URL $GITHUB_DISPATCH_TOKEN $SMTP_HOST $SMTP_PORT $SMTP_USER $SMTP_FROM' \
+            envsubst '$CONTENT_API_KEY $REBUILD_API_KEY $APPROUTER_URL $GITHUB_DISPATCH_TOKEN' \
               < deploy/${env}.mtaext > "$OUT"
             # The character class also catches hyphenated leftovers (e.g.
             # ${content-api-key}) so a half-finished rename surfaces here too.
@@ -355,10 +351,6 @@ jobs:
           REBUILD_API_KEY: ${{ secrets.REBUILD_API_KEY }}
           APPROUTER_URL: ${{ steps.deploy-vars.outputs.approuter_url }}
           GITHUB_DISPATCH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
-          SMTP_HOST: ${{ secrets.SMTP_HOST }}
-          SMTP_PORT: ${{ secrets.SMTP_PORT }}
-          SMTP_USER: ${{ secrets.SMTP_USER }}
-          SMTP_FROM: ${{ secrets.SMTP_FROM }}
         run: |
           set -euo pipefail
           IN=deploy/${{ steps.env.outputs.target }}.mtaext
