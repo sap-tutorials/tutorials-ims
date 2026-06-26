@@ -14,6 +14,7 @@ const COMPONENTS = [
   'categories',
   'concepts',
   'advocates',
+  'alerts',
   'accomplishments',
   'prizes',
   'operations',
