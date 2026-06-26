@@ -86,7 +86,8 @@ export default defineConfig({
           { text: 'Progress and completions', link: '/end-users/progress-and-completions' },
           { text: 'Privacy and cookies',      link: '/end-users/privacy-and-cookies' },
           { text: 'Accessibility',            link: '/end-users/accessibility' },
-          { text: 'Experimental features',   link: '/end-users/experimental-features' }
+          { text: 'Experimental features',   link: '/end-users/experimental-features' },
+          { text: 'Your profile page',        link: '/end-users/me-page' }
         ]}
       ],
 
@@ -127,7 +128,8 @@ export default defineConfig({
           { text: 'AI-authored quizzes',              link: '/developers/architecture/ai-authored-quizzes' },
           { text: 'Categories classifier',            link: '/developers/architecture/categories-classifier' },
           { text: 'Developer Advocates',              link: '/developers/architecture/advocates' },
-          { text: 'HANA KG Engine access',            link: '/developers/architecture/hana-kge-access' }
+          { text: 'HANA KG Engine access',            link: '/developers/architecture/hana-kge-access' },
+          { text: 'Khoros community link',            link: '/developers/architecture/khoros-link' }
         ]},
         { text: 'Operations', items: [
           { text: 'A/B comparison runbook',    link: '/developers/operations/ab-comparison-runbook' },
