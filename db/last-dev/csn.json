@@ -284,6 +284,14 @@
           "length": 50,
           "@cds.persistence.name": "TIMEZONE"
         },
+        "eventType": {
+          "type": "cds.String",
+          "length": 20,
+          "default": {
+            "val": "OTHER"
+          },
+          "@cds.persistence.name": "EVENTTYPE"
+        },
         "mission_ID": {
           "type": "cds.String",
           "length": 36,
