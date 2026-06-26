@@ -8,11 +8,6 @@ modules:
       EXPOSE_CAP_UI: true
       CONTENT_API_KEY: tutorials-content-publish-2024
       GITHUB_DISPATCH_TOKEN: ${GITHUB_DISPATCH_TOKEN}
-      REBUILD_TARGET_ENV: dev
-      SMTP_HOST: ${SMTP_HOST}
-      SMTP_PORT: ${SMTP_PORT}
-      SMTP_USER: ${SMTP_USER}
-      SMTP_FROM: ${SMTP_FROM}
       # KG Phase 1 flag flipped 2026-06-19 (#381 / #442). Override the
       # mta.yaml default ('false') so MTA redeploys preserve the DEV-only
       # flip — `cf set-env` overrides do NOT survive `cf deploy` of a new
