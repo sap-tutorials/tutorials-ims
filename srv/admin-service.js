@@ -16,6 +16,7 @@ import { classifySeverity, daysUntil } from './jobs/secret-expiry-check.js';
 import { readSecret, writeSecret, deleteSecret } from './lib/credstore.js';
 import { invalidateSecret } from './lib/secret-resolver.js';
 import { scheduleRebuild } from './lib/rebuild-trigger.js';
+import { createAuditEmitter } from './lib/audit-event.js';
 import { cleanupChangeLog } from './jobs/cleanup.js';
 import { ensureDevtoberfestActiveFlagInvariant } from './lib/devtoberfest-active-flag.js';
 import { getTutorialSource } from './lib/content-store.js';
@@ -1402,14 +1403,7 @@ export default class AdminService extends cds.ApplicationService {
     } catch (err) {
       LOG.warn(`admin-service: audit-log binding unavailable (${err.message ?? err}); Secrets value ops will not be audited`);
     }
-    const auditEvent = async (action, data) => {
-      if (!_auditLog) return;
-      try {
-        await _auditLog.log('SecurityEvent', { data: { action, ...data } });
-      } catch (err) {
-        LOG.warn(`admin-service: audit log write failed for ${action} (${err.message ?? err})`);
-      }
-    };
+    const auditEvent = createAuditEmitter(_auditLog, LOG);
 
     // IMPORTANT 8: response-header helper using public API. req._.res is CAP
     // internal and not guaranteed stable across minor versions. Prefer req.req.res
