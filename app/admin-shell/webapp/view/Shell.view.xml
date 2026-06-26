@@ -81,6 +81,7 @@
             <tnt:NavigationListItem text="Categories" key="categories" />
             <tnt:NavigationListItem text="Concepts" key="concepts" />
             <tnt:NavigationListItem text="Advocates" key="advocates" />
+            <tnt:NavigationListItem text="Alerts" icon="sap-icon://notification-2" key="alerts" />
           </tnt:NavigationListItem>
           <tnt:NavigationListItem text="Rewards" icon="sap-icon://present" expanded="{viewModel>/groupExpanded/rewards}">
             <tnt:NavigationListItem text="Accomplishments" key="accomplishments" />

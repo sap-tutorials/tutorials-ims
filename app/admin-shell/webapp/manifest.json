@@ -44,6 +44,7 @@
       "sap.tutorials.admin.categories": "./components/categories",
       "sap.tutorials.admin.concepts": "./components/concepts",
       "sap.tutorials.admin.advocates": "./components/advocates",
+      "sap.tutorials.admin.alerts": "./components/alerts",
       "sap.tutorials.admin.accomplishments": "./components/accomplishments",
       "sap.tutorials.admin.prizes": "./components/prizes",
       "sap.tutorials.admin.operations": "./components/operations",
@@ -122,6 +123,12 @@
       },
       "advocatesComponent": {
         "name": "sap.tutorials.admin.advocates",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "alertsComponent": {
+        "name": "sap.tutorials.admin.alerts",
         "settings": {},
         "componentData": {},
         "lazy": true
@@ -258,6 +265,7 @@
         { "name": "categories", "pattern": "categories", "target": [{"name": "categoriesTarget", "prefix": "ca"}] },
         { "name": "concepts", "pattern": "concepts", "target": [{"name": "conceptsTarget", "prefix": "co"}] },
         { "name": "advocates", "pattern": "advocates", "target": [{"name": "advocatesTarget", "prefix": "av"}] },
+        { "name": "alerts", "pattern": "alerts", "target": [{"name": "alertsTarget", "prefix": "al"}] },
         { "name": "accomplishments", "pattern": "accomplishments", "target": [{"name": "accomplishmentsTarget", "prefix": "ac"}] },
         { "name": "prizes", "pattern": "prizes", "target": [{"name": "prizesTarget", "prefix": "pr"}] },
         { "name": "operations", "pattern": "operations", "target": [{"name": "operationsTarget", "prefix": "op"}] },
@@ -340,6 +348,13 @@
           "id": "advocatesTarget",
           "viewLevel": 1,
           "prefix": "av"
+        },
+        "alertsTarget": {
+          "type": "Component",
+          "usage": "alertsComponent",
+          "id": "alertsTarget",
+          "viewLevel": 1,
+          "prefix": "al"
         },
         "accomplishmentsTarget": {
           "type": "Component",

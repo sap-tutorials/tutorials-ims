@@ -26,6 +26,10 @@ annotate ims.AdvocateLinks   with @changelog;
 // (description, expiresAt, rotationOwner). Surfaces in /admin-ui/#changelog-display.
 annotate ims.Secrets with @changelog;
 
+// #548: track admin edits to site-wide Alerts. Audit trail for who
+// scheduled / activated / changed wording on a banner.
+annotate ims.Alerts with @changelog: [title, severity, audience, startsAt, endsAt, active];
+
 // =========================================================================
 // Intentionally NOT @changelog-tracked — see issue #658.
 // =========================================================================

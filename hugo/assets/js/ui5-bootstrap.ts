@@ -62,6 +62,9 @@ import "@ui5/webcomponents-fiori/dist/ShellBar.js";
 import "@ui5/webcomponents-fiori/dist/ShellBarItem.js";
 import "@ui5/webcomponents-fiori/dist/Wizard.js";
 import "@ui5/webcomponents-fiori/dist/IllustratedMessage.js";
+// Issue #548: alerts notification popover.
+import "@ui5/webcomponents-fiori/dist/NotificationListItem.js";
+import "@ui5/webcomponents-fiori/dist/illustrations/NoNotifications.js";
 import "@ui5/webcomponents-fiori/dist/SideNavigation.js";
 import "@ui5/webcomponents-fiori/dist/SideNavigationItem.js";
 import "@ui5/webcomponents-fiori/dist/SideNavigationSubItem.js";

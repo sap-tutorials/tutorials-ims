@@ -28,6 +28,7 @@
   {{ partial "footer.html" . }}
   {{ partial "joule-panel.html" . }}
   {{ partial "joule-starters.html" . }}
+  {{ if and (not site.Params.qa) (not site.Params.previewMode) }}{{ partial "alerts-popover.html" . }}{{ end }}
   {{ if not site.Params.previewMode }}<div id="cmd-palette"></div>{{ end }}
 
   {{ if not site.Params.previewMode }}
@@ -58,6 +59,7 @@
   {{ if eq .Type "tutorials" }}<script type="module" src="/js/tutorial-referred.js" defer></script>{{ end }}
   {{ $ui5 := resources.Get "js/ui5-bootstrap.ts" | js.Build (dict "minify" true "format" "esm" "target" "es2020") }}
   <script type="module" src="{{ $ui5.RelPermalink }}"></script>
+  {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="/js/alerts.js" defer></script>{{ end }}
   {{ if site.Params.previewMode }}
   <script type="module" src="/js/preview-banner.js" defer></script>
   {{ end }}

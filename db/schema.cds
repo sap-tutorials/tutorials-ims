@@ -444,6 +444,22 @@ entity FeaturedTasks : cuid, LegacyKeyed {
   featuredOrder             : Integer;
 }
 
+entity Alerts : cuid, managed {
+  title                     : String(200)                              @mandatory;
+  body                      : String(2000);
+  severity                  : String(20) @mandatory enum {
+    Information; Success; Warning; Error;
+  } default 'Information';
+  audience                  : String(20) @mandatory enum { ![ALL]; AUTHENTICATED; ADMIN; }
+                                  default 'ALL';
+  startsAt                  : Timestamp                                @mandatory;
+  endsAt                    : Timestamp;
+  ctaLabel                  : String(60);
+  ctaUrl                    : String(500);
+  dismissible               : Boolean default true;
+  active                    : Boolean default true;
+}
+
 entity FailedEmails : cuid {
   to                        : String(2000);
   cc                        : String(2000);
