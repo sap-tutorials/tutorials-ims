@@ -1,5 +1,6 @@
 using { com.sap.developers.ims as ims } from '../db/schema';
 using from '../db/views';
+using { AdminService } from './admin-service';
 
 @path: '/author'
 @requires: 'Tutorial.Author'
@@ -7,7 +8,43 @@ service AuthorService {
 
   @Capabilities.ChangeTracking : { Supported: true }
   @readonly entity Tutorials as projection on ims.Tutorials {
-    ID, slug, title, primaryTag, status
+    *,
+    cast(legacyId as String) as legacyIdStr : String
+  };
+
+  @readonly entity TutorialFeedback          as projection on ims.TutorialFeedback;
+  @readonly entity TutorialFeedbackAggregate as projection on ims.TutorialFeedbackAggregate;
+
+  @readonly entity TutorialChanges as projection on ims.AuthorTutorialChanges;
+
+  // Curated analytics surface for the author Analytics tile (#617). Mirrors
+  // the corresponding AnalyticsService projections (srv/analytics-service.cds)
+  // minus the SQL ad-hoc playground (runSelectQuery is admin-only). The
+  // duplication is the unavoidable consequence of CAP's service-scoped
+  // @requires — same underlying ims.* views, two projections.
+  @readonly entity Tasks                  as projection on ims.Tasks;
+  @readonly entity CompletionAnalytics    as projection on ims.CompletionAnalytics;
+  @readonly entity ActiveLearnersDaily    as projection on ims.ActiveLearnersDaily;
+  @readonly entity TaskRecords            as projection on ims.TaskRecords;
+
+  @readonly entity CodeCheckSubmissions   as projection on ims.CodeCheckSubmissions {
+    ID, tutorialSlug, stepNumber, language, verdict, modelName,
+    promptTokens, completionTokens, latencyMs, errorReason,
+    createdAt, modifiedAt, user
+  };
+
+  @readonly entity ValidateAnswerSubmissions as projection on ims.ValidateAnswerSubmissions {
+    ID, tutorialSlug, stepNumber, questionId, verdict, modelName,
+    promptVersion, promptTokens, completionTokens, latencyMs,
+    errorReason, createdAt, modifiedAt, user
+  };
+
+  @readonly entity UIEvents as projection on ims.UIEvent;
+
+  function listExposedEntities() returns array of {
+    name    : String;
+    sqlName : String;
+    label   : String;
   };
 
   @Capabilities.ChangeTracking : { Supported: true }
@@ -79,3 +116,9 @@ service AuthorService {
   // insert. The write-side @assert.unique.slug constraint catches any race.
   action isSlugAvailable(slug : String) returns Boolean;
 }
+
+extend entity AuthorService.Tutorials with actions {
+  @Core.OperationAvailable: true
+  @Common.IsActionCritical : true
+  action rebuildContent() returns AdminService.RebuildContentResult;
+};
