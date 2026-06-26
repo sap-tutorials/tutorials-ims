@@ -806,6 +806,19 @@ export default class AdminService extends cds.ApplicationService {
       return { deleted };
     });
 
+    // purgeNoiseChangeLog — sibling of clearChangeLog. Deletes
+    // sap.changelog.Changes rows by `entity` allowlist. Empty / missing
+    // list ⇒ use NOISE_ENTITIES default. See srv/lib/purge-stale-changelog.js.
+    this.on('purgeNoiseChangeLog', async (req) => {
+      const { purgeStaleChangelog } = await import(
+        './lib/purge-stale-changelog.js'
+      );
+      const entities = Array.isArray(req.data.entities)
+        ? req.data.entities
+        : [];
+      return await purgeStaleChangelog({ entities });
+    });
+
     this.on('cleanupUnusedTags', async (req) => {
       const usedTagIds = await SELECT.from(TutorialTags).columns('tag_ID');
       const usedSet = new Set(usedTagIds.map(r => r.tag_ID));
