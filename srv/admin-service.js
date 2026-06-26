@@ -21,6 +21,7 @@ import { ensureDevtoberfestActiveFlagInvariant } from './lib/devtoberfest-active
 import { getTutorialSource } from './lib/content-store.js';
 import { randomBytes } from 'node:crypto';
 import * as khorosCache from './lib/khoros-cache.js';
+import { listCtaTargets } from './lib/alert-cta-targets.js';
 
 /**
  * Dedupe TaskRecord rows by (user_ID, taskLegacyId), preferring rows on a
@@ -145,6 +146,25 @@ export default class AdminService extends cds.ApplicationService {
       { code: 'DOWNLOAD',  label: 'Download'  },
       { code: 'ANONYMIZE', label: 'Anonymize' }
     ]);
+
+    // READ handler for the unbound in-memory AlertCtaTargets entity.
+    this.on('READ', 'AlertCtaTargets', () => listCtaTargets());
+
+    // Virtual severityCrit element (drives @UI.LineItem Criticality coloring).
+    // Information=3 (Neutral), Success=5 (Positive), Warning=2 (Critical), Error=1 (Negative)
+    this.after('READ', 'Alerts', rows => {
+      const arr = Array.isArray(rows) ? rows : [rows];
+      for (const r of arr) {
+        if (!r) continue;
+        switch (r.severity) {
+          case 'Success':     r.severityCrit = 5; break;
+          case 'Warning':     r.severityCrit = 2; break;
+          case 'Error':       r.severityCrit = 1; break;
+          case 'Information':
+          default:            r.severityCrit = 3; break;
+        }
+      }
+    });
 
     // Ensure singleton row exists for ChatSettings (defensive — seed CSV
     // populates this on cds deploy; this covers fresh in-memory test DBs).

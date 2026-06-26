@@ -90,6 +90,15 @@ service AdminService {
   entity NGDSFailedMessages as projection on ims.NGDSFailedMessages;
   entity DeveloperEnvironmentTabs as projection on ims.DeveloperEnvironmentTabs;
   entity FeaturedTasks as projection on ims.FeaturedTasks;
+
+  @odata.draft.enabled
+  entity Alerts as projection on ims.Alerts;
+
+  @readonly @cds.persistence.skip entity AlertCtaTargets {
+    key url   : String(500);
+        label : String(100);
+  }
+
   entity FailedEmails as projection on ims.FailedEmails;
   entity PrimaryAccounts as projection on ims.PrimaryAccounts;
   entity SecondaryAccounts as projection on ims.SecondaryAccounts;
