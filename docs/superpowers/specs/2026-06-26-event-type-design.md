@@ -127,11 +127,12 @@ Three additions to the existing Events annotation block at [app/admin-annotation
 
 ```cds
 eventType @Common.Label: 'Event Type'
-          @Common.ValueListWithFixedValues
-          @mandatory;
+          @Common.ValueListWithFixedValues;
 ```
 
 `@Common.ValueListWithFixedValues` makes Fiori Elements source the dropdown from the CDS enum metadata — no separate value-help entity needed. Same pattern as `Missions.missionType` at [app/admin-annotations.cds:78](../../../app/admin-annotations.cds#L78).
+
+`@mandatory` is intentionally omitted: with `default 'OTHER'` and the HDI ALTER … DEFAULT 'OTHER' back-populating every row, NULL is impossible by construction. A red-asterisk mandatory marker on a field that can never be empty would only confuse admins.
 
 **(b) LineItem column** — insert into the list-report table:
 
@@ -259,6 +260,8 @@ AnalyticsService groupby
 
 No changes to `srv/admin-service.cds` (existing `*` projection auto-picks up the new column), `srv/analytics-service.cds`, `srv/display-service.cds`, `db/persistence.cds`, `db/views.cds`, `db/devtoberfest.cds`, or any migration script — all are forward-compatible.
 
+**`srv-qa` impact: none.** The hand-curated `cp` list in `.deploy/mta.yaml` only mirrors files under `srv/lib/`, `srv/handlers/`, and `srv/jobs/`. This change touches `srv/developer-service.{cds,js}` (top-level `cds build` inputs, auto-picked up), `db/*.cds`, `app/admin-annotations.cds`, and a new `test/unit/` file — none of which require additions to the `cp` list. Verified per [feedback_srv_qa_cp_list](../../../../../C:/Users/I809764/.claude/projects/d--projects-tutorials-poc/memory/feedback_srv_qa_cp_list.md).
+
 ## Error handling
 
 - **Invalid enum value on PATCH/POST** — CAP's `@assert.range` rejects with HTTP 400 `ASSERT_RANGE` before the row reaches HANA. Same handler as every other enum on the platform; no custom code.
@@ -274,7 +277,7 @@ One new unit test, no hybrid test:
 1. `INSERT.into(Events).entries({ name: 'x', startDate, endDate })` succeeds and the resulting row has `eventType === 'OTHER'`.
 2. `INSERT.into(Events).entries({ name: 'x', ..., eventType: 'TECHED' })` succeeds.
 3. `INSERT.into(Events).entries({ name: 'x', ..., eventType: 'NOT_A_REAL_TYPE' })` rejects with `ASSERT_RANGE`.
-4. `getAppSpaceProgress` handler result includes `eventType` matching the source row.
+4. Boot the `DeveloperService` via `cds.test` (HTTP), seed one event row with `eventType: 'DEVTOBERFEST'` and a linked mission, then POST `/api/getAppSpaceProgress` with the event's legacyId. The response body must include `eventType: 'DEVTOBERFEST'`. Same scaffolding pattern as the existing `test/unit/getEventProgress.test.js` if present; otherwise minimal `cds.test(__dirname + '/../..')` setup with `await POST('/api/getAppSpaceProgress', { eventLegacyId })`.
 
 Why no hybrid test: the change is purely a column addition with `@assert.range` and a `default` clause. The existing `MissionType` enum exercises the exact same machinery in production today. The HDI migration is a single ALTER with DEFAULT — covered by the standard `cds bind --exec` deploy pipeline, no behavioral risk.
 
