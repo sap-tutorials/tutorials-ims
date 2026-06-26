@@ -449,6 +449,7 @@ export default class DeveloperService extends cds.ApplicationService {
 
       const result = {
         eventId: event?.legacyId ?? 0,
+        eventType: event?.eventType ?? 'OTHER',
         type: 'COMPLEX',
         paths: paths.map(p => {
           const items = allItems
@@ -540,6 +541,7 @@ export default class DeveloperService extends cds.ApplicationService {
       return {
         eventId: event.legacyId,
         eventName: event.name || '',
+        eventType: event.eventType ?? 'OTHER',
         type: 'COMPLEX',
         paths: paths.map(p => {
           const items = allItems
