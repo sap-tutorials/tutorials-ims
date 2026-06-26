@@ -2401,3 +2401,55 @@ annotate AdminService.Users with @(UI: {
     }
   ]
 });
+
+// --- Alerts (#548) ---
+// Site-wide banner / alert system. Virtual `severityCrit` is hydrated by the
+// AdminService after-READ handler (srv/admin-service.js) and feeds the LineItem
+// Criticality column so the severity cell renders in semantic color (3=green/info,
+// 2=yellow/warn, 1=red/critical).
+extend AdminService.Alerts with columns {
+  virtual severityCrit : Integer
+};
+
+annotate AdminService.Alerts with @(
+  UI.LineItem: [
+    { $Type: 'UI.DataField', Value: active,    Label: 'On' },
+    { $Type: 'UI.DataField', Value: severity,  Criticality: severityCrit },
+    { $Type: 'UI.DataField', Value: audience },
+    { $Type: 'UI.DataField', Value: title },
+    { $Type: 'UI.DataField', Value: startsAt,  Label: 'Start (UTC)' },
+    { $Type: 'UI.DataField', Value: endsAt,    Label: 'End (UTC)' },
+  ],
+  UI.SelectionFields: [ active, severity, audience ],
+  UI.HeaderInfo: {
+    TypeName: 'Alert', TypeNamePlural: 'Alerts',
+    Title: { Value: title }, Description: { Value: severity },
+  },
+  UI.Facets: [
+    { $Type: 'UI.ReferenceFacet', Label: 'General',        Target: '@UI.FieldGroup#General' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Scheduling',     Target: '@UI.FieldGroup#Scheduling' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Call to action', Target: '@UI.FieldGroup#Cta' },
+  ],
+  UI.FieldGroup #General: { Data: [
+    { Value: title }, { Value: body }, { Value: severity }, { Value: audience },
+    { Value: active }, { Value: dismissible }
+  ]},
+  UI.FieldGroup #Scheduling: { Data: [ { Value: startsAt }, { Value: endsAt } ] },
+  UI.FieldGroup #Cta: { Data: [ { Value: ctaLabel }, { Value: ctaUrl } ] },
+);
+
+annotate AdminService.Alerts {
+  severity @Common.ValueListWithFixedValues: true
+           @assert.range: true;
+  audience @Common.ValueListWithFixedValues: true
+           @assert.range: true;
+  ctaUrl   @Common.ValueList: {
+             CollectionPath: 'AlertCtaTargets',
+             SearchSupported: true,
+             Parameters: [
+               { $Type: 'Common.ValueListParameterInOut',        LocalDataProperty: ctaUrl, ValueListProperty: 'url' },
+               { $Type: 'Common.ValueListParameterDisplayOnly',                              ValueListProperty: 'label' }
+             ]
+           }
+           @Common.ValueListWithFixedValues: false;
+};
