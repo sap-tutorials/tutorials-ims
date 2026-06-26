@@ -201,6 +201,7 @@ None for v1. Preview reuses prod layouts which already have a11y coverage.
 - **F-5: WebSocket live-reload push.** v1 is request/response. The extension can debounce and re-call.
 - **F-6: VSCode extension itself.** Out of scope of this spec — separate work in a separate repo.
 - **F-7: Public (non-Author) preview link.** Not asked. Auth is `Tutorial.Author` only.
+- **F-8: Validation question support (rules.vr in preview).** Implemented in [2026-06-26-655-preview-validation-design.md](2026-06-26-655-preview-validation-design.md) — closes [#655](https://github.com/sap-tutorials/tutorials-ims/issues/655).
 
 ## Related memories / prior work
 
