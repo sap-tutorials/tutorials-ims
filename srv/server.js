@@ -19,6 +19,8 @@ import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-cata
 import * as advocatesPublic from './routes/advocates-public.js';
 import * as devtoberfestPublic from './routes/devtoberfest-public.js';
 import * as devtoberfestAuth from './routes/devtoberfest-auth.js';
+import * as alertsPublic from './routes/alerts-public.js';
+import { invalidate as invalidateAlertsCache } from './lib/alerts-cache.js';
 import { resolveUser, captureUserMiddleware } from './lib/resolve-user.js';
 import { buildSystemPrompt } from './lib/chat-context.js';
 import { createRateLimiter, RateLimitError } from './lib/chat-rate-limit.js';
@@ -206,6 +208,15 @@ cds.on('bootstrap', (app) => {
   advocatesPublic.register(app);
   devtoberfestPublic.register(app);
   devtoberfestAuth.register(app);
+
+  // /api/alerts (anonymous) + /api/alerts/me (authenticated).
+  // Spec: docs/superpowers/specs/2026-06-26-548-alert-system-design.md
+  // contextMw/authMw obtained lazily here (same pattern as
+  // /admin/analytics/export and /admin/advocates/:slug/photo above) so the
+  // /api/alerts/me handler sees cds.context.user populated by CAP's auth chain.
+  const _alertsContextMw = cds.middlewares?.context?.() || ((req, res, next) => next());
+  const _alertsAuthMw    = cds.middlewares?.auth?.()    || ((req, res, next) => next());
+  alertsPublic.register(app, { contextMw: _alertsContextMw, authMw: _alertsAuthMw });
 
   // Content persistence endpoints
   app.get('/content/nav', navHandler);
@@ -633,6 +644,17 @@ cds.on('served', async () => {
         });
       });
     }
+
+    // Alerts admin writes: invalidate the in-memory alerts cache so the
+    // next /api/alerts* fetch reflects the change within ~5s.
+    admin.after(['CREATE', 'UPDATE', 'DELETE'], 'Alerts', () => {
+      try {
+        invalidateAlertsCache();
+      } catch (err) {
+        console.error('[alerts] cache invalidation failed', err);
+      }
+    });
+
     globalThis.__navigatorCacheInvalidatorRegistered = true;
   }
 
