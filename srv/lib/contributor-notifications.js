@@ -3,37 +3,49 @@ import cds from '@sap/cds';
 const STALE_DAYS_DEFAULT = 90;
 const RESEND_INTERVAL_DAYS = 30;
 const MAX_NOTIFICATION_LEVEL = 3;
+const USE_DIGEST_DEFAULT = true;
+const LAST_CHANCE_MIN_LEVEL_DEFAULT = 3;
+const LAST_CHANCE_DORMANCY_DAYS_DEFAULT = 60;
 
 const TIMING_KNOBS = [
-  { key: 'staleDaysThreshold',   field: 'staleDays',           defaultValue: STALE_DAYS_DEFAULT },
-  { key: 'resendIntervalDays',   field: 'resendIntervalDays',  defaultValue: RESEND_INTERVAL_DAYS },
-  { key: 'maxNotificationLevel', field: 'maxLevel',            defaultValue: MAX_NOTIFICATION_LEVEL },
+  { key: 'staleDaysThreshold',     field: 'staleDays',              type: 'int',  defaultValue: STALE_DAYS_DEFAULT },
+  { key: 'resendIntervalDays',     field: 'resendIntervalDays',     type: 'int',  defaultValue: RESEND_INTERVAL_DAYS },
+  { key: 'maxNotificationLevel',   field: 'maxLevel',               type: 'int',  defaultValue: MAX_NOTIFICATION_LEVEL },
+  { key: 'useDigestNotifications', field: 'useDigest',              type: 'bool', defaultValue: USE_DIGEST_DEFAULT },
+  { key: 'lastChanceMinLevel',     field: 'lastChanceMinLevel',     type: 'int',  defaultValue: LAST_CHANCE_MIN_LEVEL_DEFAULT },
+  { key: 'lastChanceDormancyDays', field: 'lastChanceDormancyDays', type: 'int',  defaultValue: LAST_CHANCE_DORMANCY_DAYS_DEFAULT },
 ];
 
 /**
- * Resolve the 3 author-nudge timing knobs from ImsConfig, falling back to
- * hardcoded defaults on missing/invalid rows. Emits a WARN per bad non-empty
- * value so ops can see the fallback in logs.
- *
- * @returns {Promise<{staleDays: number, resendIntervalDays: number, maxLevel: number}>}
+ * Resolve timing knobs from ImsConfig. Type-aware: int knobs require a
+ * positive integer; bool knobs accept only "true"/"false" (case-insensitive).
+ * Invalid non-empty values WARN + fall back to default; missing rows fall
+ * back silently.
  */
 export async function resolveTimingKnobs() {
   const { ImsConfig } = cds.entities('com.sap.developers.ims');
   const out = {};
-  for (const { key, field, defaultValue } of TIMING_KNOBS) {
+  for (const { key, field, type, defaultValue } of TIMING_KNOBS) {
     const row = await SELECT.one.from(ImsConfig).where({ key });
     const raw = row?.value;
-    const parsed = raw != null && raw !== '' ? parseInt(raw, 10) : NaN;
-    if (Number.isFinite(parsed) && parsed > 0) {
-      out[field] = parsed;
-    } else {
-      if (raw != null && raw !== '') {
-        console.warn(`[contributor-notifications] ImsConfig.${key}="${raw}" is not a positive integer; using default ${defaultValue}`);
-      }
-      out[field] = defaultValue;
-    }
+    out[field] = parseKnob(key, raw, type, defaultValue);
   }
   return out;
+}
+
+function parseKnob(key, raw, type, defaultValue) {
+  if (raw == null || raw === '') return defaultValue;
+  if (type === 'bool') {
+    const lc = String(raw).toLowerCase();
+    if (lc === 'true') return true;
+    if (lc === 'false') return false;
+    console.warn(`[contributor-notifications] ImsConfig.${key}="${raw}" is not "true"/"false"; using default ${defaultValue}`);
+    return defaultValue;
+  }
+  const parsed = parseInt(raw, 10);
+  if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  console.warn(`[contributor-notifications] ImsConfig.${key}="${raw}" is not a positive integer; using default ${defaultValue}`);
+  return defaultValue;
 }
 
 export async function computeStaleNotifications(optsOrStaleDays = {}) {
