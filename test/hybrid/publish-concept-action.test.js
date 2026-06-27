@@ -21,6 +21,10 @@ describe.runIf(allowWrites)('publishConcept / unpublishConcept admin actions', (
     if (testIds.length) {
       await DELETE.from('com.sap.developers.ims.Concepts').where({ ID: { in: testIds } })
     }
+    // Belt-and-braces: clean any rows whose slug starts with our prefix in case
+    // a test died mid-INSERT before the ID was pushed to testIds. Without this,
+    // @assert.unique.slug on Concepts blocks reruns.
+    await DELETE.from('com.sap.developers.ims.Concepts').where({ slug: { like: TEST_PREFIX + '%' } })
   })
 
   it('publishConcept sets publishedAt + publishedBy; unpublishConcept clears both', async () => {
