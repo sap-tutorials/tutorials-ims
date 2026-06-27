@@ -848,6 +848,30 @@ export default cds.service.impl(async function () {
     }
   });
 
+  // ─── publishConcept — admin publication marker ─────────────────────────
+  this.on('publishConcept', async (req) => {
+    const { Concepts } = cds.entities(NAMESPACE);
+    const { conceptId } = req.data;
+    if (!conceptId) return req.error(400, 'conceptId required');
+    const user = req.user?.id ?? 'anonymous';
+    const now = new Date().toISOString();
+    const count = await UPDATE(Concepts)
+      .set({ publishedAt: now, publishedBy: user })
+      .where({ ID: conceptId });
+    if (!count) return req.reject(404, `Concept ${conceptId} not found`);
+  });
+
+  // ─── unpublishConcept — admin publication marker (clear) ───────────────
+  this.on('unpublishConcept', async (req) => {
+    const { Concepts } = cds.entities(NAMESPACE);
+    const { conceptId } = req.data;
+    if (!conceptId) return req.error(400, 'conceptId required');
+    const count = await UPDATE(Concepts)
+      .set({ publishedAt: null, publishedBy: null })
+      .where({ ID: conceptId });
+    if (!count) return req.reject(404, `Concept ${conceptId} not found`);
+  });
+
   // ─── triggerGraphRebuild — admin force-rebuild ─────────────────────────
   this.on('triggerGraphRebuild', async (req) => {
     log.info(`kg-service: triggerGraphRebuild by ${req.user?.id ?? 'unknown'}`);

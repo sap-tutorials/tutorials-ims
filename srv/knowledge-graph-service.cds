@@ -36,9 +36,20 @@ service KnowledgeGraphService @(path : '/graph') {
   // Excluding it here mirrors the established pattern for TutorialEmbedding
   // (never projected) and the project's "LargeBinary stays off OData unless
   // tagged @Core.MediaType" convention.
+  @cds.redirection.target
   entity Concepts                       as projection on ims.Concepts excluding { embedding };
   @readonly entity ConceptEdges         as projection on ims.ConceptEdges;
   @readonly entity TutorialConceptLinks as projection on ims.TutorialConceptLinks;
+
+  /**
+   * Publishable subset of Concepts — the projection the Hugo build script
+   * (PR 2/3) reads via /build/concepts. Excludes never-published rows,
+   * unpublished (publishedAt cleared by admin), VETOED, and MERGED.
+   */
+  @readonly
+  entity PublishedConcepts as projection on ims.Concepts {
+    ID, slug, name, description, publishedAt, publishedBy, status
+  } where publishedAt is not null and status = 'ACTIVE';
 
   // ─── Type definitions ──────────────────────────────────────────────────
   type ConceptRef {
@@ -121,4 +132,10 @@ service KnowledgeGraphService @(path : '/graph') {
 
   @requires : 'KnowledgeGraph.Admin'
   action triggerGraphRebuild() returns RebuildResult;
+
+  @requires : 'KnowledgeGraph.Admin'
+  action publishConcept(conceptId : UUID);
+
+  @requires : 'KnowledgeGraph.Admin'
+  action unpublishConcept(conceptId : UUID);
 }
