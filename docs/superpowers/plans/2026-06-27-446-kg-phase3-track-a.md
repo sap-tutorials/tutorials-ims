@@ -182,6 +182,9 @@ describe('publishConcept / unpublishConcept admin actions', () => {
       name: 'Publish Test A',
       status: 'ACTIVE',
     })
+    // NOTE: on HANA, INSERT.entries() may return `[{...}]` or `{results: [{...}]}`
+    // depending on driver version. If the destructure above fails, fall back to:
+    //   await SELECT.one.from(Concepts).columns('ID').where({ slug: TEST_PREFIX + 'a' })
     testIds.push(ID)
 
     // Initially: not published.
@@ -1037,17 +1040,21 @@ sections (teaches/requires/requiredBy/relatedTo). Breadcrumb to /concepts/."
 
 ### 2.3 Approuter route + content-store
 
-- [ ] **Step 43: Inspect the existing `/content/concepts/:slug` situation**
+- [ ] **Step 43: Inspect both the content-serve handler AND the publisher**
 
 ```bash
 grep -n "content/concepts\|content/tutorials" srv/lib/content-store.js | head -10
+grep -n "hugo/public/tutorials\|hugo/public/concepts\|tutorials/\\*" scripts/publish-content.ts | head -20
 ```
 
-If `serveHandler` is keyed only by slug (and doesn't distinguish "tutorials" vs "concepts" at the storage layer), the same handler can serve both as long as the publish pipeline writes concept files into `ContentFiles` under a slug that doesn't collide with a tutorial slug.
+**Two distinct surfaces need to know about concepts:**
 
-**Naming convention to avoid collision**: prefix concept slugs in `ContentFiles` with `concept-`. The `publish-content` CLI is the one that constructs file keys — see [scripts/publish-content.ts](../../../scripts/publish-content.ts). Inspect it before touching the publisher.
+1. **The publisher** ([scripts/publish-content.ts](../../../scripts/publish-content.ts)) — today scans `hugo/public/tutorials/*` and uploads to `ContentFiles`. It almost certainly does NOT walk `hugo/public/concepts/`. Expect a 30-60-minute exercise extending the discovery pass + the file-key generation. The plan **owes this work** (it's not free).
+2. **The serve handler** ([srv/lib/content-store.js:811+](../../../srv/lib/content-store.js#L811)) — keyed by slug; it needs to know whether to look up `concept-<slug>` or use a `kind` discriminator column.
 
-This step is **exploration**, not edit. The actual wiring choice (concept-prefix-in-ContentFiles vs separate ContentFilesConcepts entity) is the conclusion of Step 44.
+The simplest path: prefix concept slugs with `concept-` in `ContentFiles.slug`. Both surfaces then key by the same column; no schema change, no kind discriminator. Publisher walks `hugo/public/concepts/` and emits keys with the prefix; serve handler reads `/content/concepts/:slug` → looks up `concept-<slug>`.
+
+If that introduces collisions or trips the existing `tutorialsTableInfo` slug-lowercase helper, fall back to: add a `kind : String(20)` column to `ContentFiles` and pass `?kind=concept` in the serve path.
 
 - [ ] **Step 44: Decision point — record the result of Step 43**
 
@@ -1097,10 +1104,15 @@ app.get('/content/concepts/:slug', serveConceptHandler)
 # Make sure publishConcept has been called for at least one concept (Step 37)
 npm run fetch-concepts
 hugo
-# Publish to local CAP using the existing pipeline; concept slugs flow through the same publish path
-# (verify the actual command works against your local DB; tweak namespace per Step 44 decision):
-npm run publish-content -- --dry-run
+# Inspect what the publisher discovers — if it doesn't pick up concepts, extend it.
+npm run publish-content -- --dry-run | head -20
 ```
+
+If the dry-run output shows only `t:<tutorial-slug>` keys and no `concept-<slug>` keys, the publisher needs the extension described in Step 43. Pattern:
+
+1. In `scripts/publish-content.ts`, find the file-discovery walker (likely a glob over `hugo/public/tutorials/*/index.html`).
+2. Add a second walker over `hugo/public/concepts/*/index.html` that emits keys with the `concept-` prefix (or sets the `kind` discriminator per Step 44's decision).
+3. Verify with another `--dry-run` that both sets show up.
 
 Spot-check `/concepts/<slug>/` resolves to the rendered HTML. The Approuter doesn't run in `cds watch` mode — manual verification with `curl http://localhost:4004/content/concepts/<slug>` is the quickest validation.
 
@@ -1113,7 +1125,8 @@ import { describe, it, expect } from 'vitest'
 
 const BASE = process.env.SMOKE_BASE_URL
 if (!BASE) throw new Error('SMOKE_BASE_URL not set')
-const SRV = process.env.SMOKE_SRV_URL || BASE.replace('-approuter', '-tutorials-srv')
+const SRV = process.env.SMOKE_SRV_URL
+if (!SRV) throw new Error('SMOKE_SRV_URL not set — must be set explicitly per CLAUDE.md smoke test convention')
 
 describe('/concepts/<slug>/ route', () => {
   it('returns 404 for a non-existent concept slug', async () => {
@@ -1444,20 +1457,21 @@ invoke the publishConcept/unpublishConcept actions from PR 1/3."
 
 - [ ] **Step 72: Wire `kg.concept.viewed`** in the concept-page Hugo template
 
-Modify `hugo/layouts/concepts/single.html` — add a small inline script at the bottom of the `<article>`:
+Modify `hugo/layouts/concepts/single.html` — add a small inline script at the bottom of the `<article>`. **Use a `data-` attribute, not Hugo's `jsonify` filter inside the script body** — Hugo's HTML minifier strips quotes around `data-` values predictably but has bitten this project on `jsonify` output in inline scripts before (see [docs/developers/reference/vue-islands-gotchas.md](../../../docs/developers/reference/vue-islands-gotchas.md)).
 
 ```html
+<div data-concept-slug="{{ .Params.slug }}" id="concept-telemetry" hidden></div>
 <script>
 (function() {
   if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return
+  var el = document.getElementById('concept-telemetry')
+  if (!el) return
   window.dispatchEvent(new CustomEvent('kg.concept.viewed', {
-    detail: { slug: {{ .Params.slug | jsonify }} }
+    detail: { slug: el.dataset.conceptSlug }
   }))
 })()
 </script>
 ```
-
-(`{{ .Params.slug | jsonify }}` emits a properly JSON-escaped string literal.)
 
 - [ ] **Step 73: Wire `kg.concept.tutorial_clicked`** — already added in Step 56's `@click` handler. Verify it fires by reading the existing emit pattern; the event should bubble up to the same UIEvent bridge Phase 1 wires.
 
