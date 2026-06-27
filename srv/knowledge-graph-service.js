@@ -639,6 +639,18 @@ export default cds.service.impl(async function () {
     }
     const enrich = (arr) => enrichLiveTutorials(arr, titleBySlug);
 
+    // 10b. Look up which teaches[] concepts are currently published so the
+    //      sidebar island can render <a> vs <span> per concept (PR 2/3).
+    const teachesSlugs = ranked.teaches.map((c) => c.slug);
+    let publishedSet = new Set();
+    if (teachesSlugs.length) {
+      const { Concepts } = cds.entities(NAMESPACE);
+      const rows = await SELECT.from(Concepts)
+        .columns('slug')
+        .where({ slug: { in: teachesSlugs }, publishedAt: { '!=': null }, status: 'ACTIVE' });
+      publishedSet = new Set(rows.map((r) => r.slug));
+    }
+
     const result = {
       tutorial:        tutorialInfo,
       graphVersion,
@@ -646,6 +658,7 @@ export default cds.service.impl(async function () {
         slug: c.slug,
         name: c.name,
         description: '',  // Concepts.description not pulled by the ranker; left empty for Phase 1
+        published: publishedSet.has(c.slug),
       })),
       prerequisitesOf: enrich(ranked.prerequisitesOf),
       sharedConcepts:  enrich(ranked.sharedConcepts),
@@ -846,6 +859,34 @@ export default cds.service.impl(async function () {
       log.error(`kg-service: vetoEdge failed: ${err.message ?? err}`);
       return req.error(500, `Veto failed: ${err.message ?? 'unknown error'}`);
     }
+  });
+
+  // ─── publishConcept — admin publication marker (bound on Concepts) ─────
+  // Bound action: the entity key flows through req.params (one tuple per
+  // step in the binding chain). For a Concepts-bound action req.params[0]
+  // is the bound row's key object, e.g. { ID: '<uuid>' }. Same pattern as
+  // AdminService.Users.clearKhorosLink (srv/admin-service.js:1592).
+  this.on('publishConcept', 'Concepts', async (req) => {
+    const { Concepts } = cds.entities(NAMESPACE);
+    const conceptId = req.params?.[0]?.ID;
+    if (!conceptId) return req.reject(400, 'Bound action invoked without entity context');
+    const user = req.user?.id ?? 'anonymous';
+    const now = new Date().toISOString();
+    const count = await UPDATE(Concepts)
+      .set({ publishedAt: now, publishedBy: user })
+      .where({ ID: conceptId });
+    if (!count) return req.reject(404, `Concept ${conceptId} not found`);
+  });
+
+  // ─── unpublishConcept — admin publication marker (clear) ───────────────
+  this.on('unpublishConcept', 'Concepts', async (req) => {
+    const { Concepts } = cds.entities(NAMESPACE);
+    const conceptId = req.params?.[0]?.ID;
+    if (!conceptId) return req.reject(400, 'Bound action invoked without entity context');
+    const count = await UPDATE(Concepts)
+      .set({ publishedAt: null, publishedBy: null })
+      .where({ ID: conceptId });
+    if (!count) return req.reject(404, `Concept ${conceptId} not found`);
   });
 
   // ─── triggerGraphRebuild — admin force-rebuild ─────────────────────────

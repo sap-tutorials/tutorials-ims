@@ -1,6 +1,7 @@
 namespace com.sap.developers.ims;
 
 using { com.sap.developers.ims as ims } from './schema';
+using from './knowledge-graph';
 using { sap.changelog.Changes } from '@cap-js/change-tracking';
 
 view Tasks as
@@ -123,7 +124,35 @@ view SearchableItems as
        inner join ims.Tags as tg on tg.ID = gt.tag.ID
        where gt.group.ID = g.ID
     ) as tagBag : String(5000)
-  } where (g.status is null or g.status = 'ACTIVE') and g.published = true;
+  } where (g.status is null or g.status = 'ACTIVE') and g.published = true
+  // Phase 3 (#446) — published concepts as a fourth taskType. Gated on
+  // the same predicate as the PublishedConcepts view: publishedAt set
+  // AND status='ACTIVE'. Vetoed or unpublished concepts MUST NOT appear
+  // in search — the hybrid test in test/hybrid/search-includes-concepts
+  // asserts the negative case.
+  //
+  // Column-shape notes:
+  //  - Concepts.name → title (String(120) widened to String(255) to match
+  //    the Tutorials branch's title type for UNION compatibility).
+  //  - description is cast to LargeString to match.
+  //  - Concepts has no legacyId / primaryTag / experienceTag /
+  //    averageTimeToComplete — those NULL out in the CONCEPT branch.
+  UNION ALL
+  SELECT from ims.Concepts as c {
+    c.ID,
+    cast(null as Integer)        as legacyId             : Integer,
+    cast(c.name as String(255))  as title                : String(255),
+    cast(c.description as LargeString) as description    : LargeString,
+    c.slug,
+    cast(null as String(255))    as primaryTag           : String(255),
+    cast(null as String(255))    as experienceTag        : String(255),
+    cast(null as Integer)        as averageTimeToComplete: Integer,
+    c.status,
+    c.createdAt,
+    'CONCEPT' as taskType        : String(20),
+    null as bodyText             : LargeString,
+    cast(null as String(5000))   as tagBag               : String(5000)
+  } where c.publishedAt is not null and c.status = 'ACTIVE';
 
 // Issue #600 — saved-query analytics view. Filter widened to include
 // SUPERSEDED rows so a "reset and re-complete" cycle remains a completion

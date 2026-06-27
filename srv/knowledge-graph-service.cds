@@ -36,15 +36,27 @@ service KnowledgeGraphService @(path : '/graph') {
   // Excluding it here mirrors the established pattern for TutorialEmbedding
   // (never projected) and the project's "LargeBinary stays off OData unless
   // tagged @Core.MediaType" convention.
+  @cds.redirection.target
   entity Concepts                       as projection on ims.Concepts excluding { embedding };
   @readonly entity ConceptEdges         as projection on ims.ConceptEdges;
   @readonly entity TutorialConceptLinks as projection on ims.TutorialConceptLinks;
+
+  /**
+   * Publishable subset of Concepts — the projection the Hugo build script
+   * (PR 2/3) reads via /build/concepts. Excludes never-published rows,
+   * unpublished (publishedAt cleared by admin), VETOED, and MERGED.
+   */
+  @readonly
+  entity PublishedConcepts as projection on ims.Concepts {
+    ID, slug, name, description, publishedAt, publishedBy, status
+  } where publishedAt is not null and status = 'ACTIVE';
 
   // ─── Type definitions ──────────────────────────────────────────────────
   type ConceptRef {
     slug        : String;
     name        : String;
     description : String;
+    published   : Boolean;  // Phase 3 publication gate; true when /concepts/<slug>/ exists.
   }
   type TutorialRef {
     slug   : String;
@@ -122,3 +134,16 @@ service KnowledgeGraphService @(path : '/graph') {
   @requires : 'KnowledgeGraph.Admin'
   action triggerGraphRebuild() returns RebuildResult;
 }
+
+// publishConcept / unpublishConcept are BOUND actions on Concepts so Fiori
+// Elements V4 picks up the row context (clicked-row key) when an admin invokes
+// them from the OP toolbar or LR row — no parameter dialog. Pattern mirrors
+// AdminService.Tutorials.rebuildContent (srv/admin-service.cds:626-630) and
+// AdminService.Users.clearKhorosLink (srv/admin-service.cds:22-25).
+extend entity KnowledgeGraphService.Concepts with actions {
+  @requires : 'KnowledgeGraph.Admin'
+  action publishConcept();
+
+  @requires : 'KnowledgeGraph.Admin'
+  action unpublishConcept();
+};
