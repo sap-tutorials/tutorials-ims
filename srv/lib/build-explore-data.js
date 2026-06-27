@@ -33,6 +33,16 @@ export async function exploreDataHandler(req, res) {
     }
     const db = await cds.connect.to('db');
     const payload = await buildExplorePayload(db);
+    if (payload.droppedBindings > 0) {
+      // Non-zero means at least one SPARQL row had a non-empty IRI that
+      // didn't match any prefix in IRI_TYPE_MAP — usually schema drift
+      // (a new entity type added to kg-projection.js but not registered
+      // in kg-explore-data.js). Don't strip the field from the wire
+      // response; it's a small int and useful for client-side observability.
+      log.warn(
+        `dropped ${payload.droppedBindings} unparseable SPARQL bindings — investigate schema drift`
+      );
+    }
     cached = payload;
     cachedAt = now;
     res.setHeader('X-Cache', 'MISS');

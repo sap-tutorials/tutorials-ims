@@ -109,7 +109,7 @@ function parseExploreBindings(responseJson) {
  * @param {object} [opts]
  * @param {string} [opts.overrideGraphIri] — when set, query against this
  *   graph instead of the production default. Used by hybrid tests.
- * @returns {Promise<{nodes: Array, edges: Array, generatedAt: string}>}
+ * @returns {Promise<{nodes: Array, edges: Array, generatedAt: string, droppedBindings: number}>}
  */
 export async function buildExplorePayload(db, opts = {}) {
   const { overrideGraphIri } = opts;
@@ -124,11 +124,23 @@ export async function buildExplorePayload(db, opts = {}) {
 
   const nodesById = new Map();
   const edges = [];
+  // Track bindings that arrived from SPARQL but failed to parse into an
+  // entity IRI. A non-zero count signals schema drift (a new entity type
+  // was added to the projection but IRI_TYPE_MAP wasn't updated) — see
+  // memory [[feedback_silent_swallow_hides_dead_code]]. The Express
+  // wrapper in build-explore-data.js logs a warn when this is > 0.
+  let droppedBindings = 0;
 
   for (const r of rows) {
     const sParsed = parseEntityIri(r.s);
     const oParsed = parseEntityIri(r.o);
-    if (!sParsed || !oParsed) continue;
+    if (!sParsed || !oParsed) {
+      // Only count as "dropped" if the binding was actually present (the
+      // raw IRI was non-empty). Vacuous rows from a degenerate SPARQL
+      // response shouldn't inflate the counter.
+      if (r.s || r.o) droppedBindings++;
+      continue;
+    }
 
     if (!nodesById.has(sParsed.id)) {
       nodesById.set(sParsed.id, {
@@ -158,5 +170,6 @@ export async function buildExplorePayload(db, opts = {}) {
     nodes: Array.from(nodesById.values()),
     edges,
     generatedAt: new Date().toISOString(),
+    droppedBindings,
   };
 }

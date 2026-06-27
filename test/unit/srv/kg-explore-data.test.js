@@ -164,4 +164,54 @@ describe('buildExplorePayload', () => {
     const payload = await buildExplorePayload({});
     expect(payload.edges[0].p).toBe('coCompletedWith');
   });
+
+  it('counts dropped bindings when SPARQL returns unrecognized IRIs', async () => {
+    vi.doMock('../../../srv/lib/kg-sparql-client.js', () => ({
+      kgQuery: vi.fn().mockResolvedValue({
+        response: sparqlResponse([
+          // Valid binding — kept.
+          row({
+            s: `${KG}tutorial/a`,
+            p: `${KG}teaches`,
+            o: `${KG}concept/x`,
+          }),
+          // Unparseable subject (unknown IRI prefix) — dropped + counted.
+          row({
+            s: 'https://example.org/unknown/foo',
+            p: `${KG}teaches`,
+            o: `${KG}concept/x`,
+          }),
+          // Unparseable object — dropped + counted.
+          row({
+            s: `${KG}tutorial/a`,
+            p: `${KG}teaches`,
+            o: 'https://example.org/unknown/bar',
+          }),
+        ]),
+      }),
+    }));
+
+    const { buildExplorePayload } = await import('../../../srv/lib/kg-explore-data.js');
+    const payload = await buildExplorePayload({});
+    expect(payload.droppedBindings).toBe(2);
+    expect(payload.edges).toHaveLength(1);
+  });
+
+  it('reports zero dropped bindings when every row parses cleanly', async () => {
+    vi.doMock('../../../srv/lib/kg-sparql-client.js', () => ({
+      kgQuery: vi.fn().mockResolvedValue({
+        response: sparqlResponse([
+          row({
+            s: `${KG}tutorial/a`,
+            p: `${KG}teaches`,
+            o: `${KG}concept/x`,
+          }),
+        ]),
+      }),
+    }));
+
+    const { buildExplorePayload } = await import('../../../srv/lib/kg-explore-data.js');
+    const payload = await buildExplorePayload({});
+    expect(payload.droppedBindings).toBe(0);
+  });
 });
