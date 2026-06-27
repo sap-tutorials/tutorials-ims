@@ -19,6 +19,8 @@ describe('buildConceptsPayload', () => {
       { slug: 'cap-services', name: 'CAP services', description: 'desc 2',
         status: 'ACTIVE', publishedAt: new Date().toISOString(), publishedBy: 'admin@sap.com' },
       { slug: 'never', name: 'never', status: 'ACTIVE' },
+      { slug: 'vetoed-but-published', name: 'Vetoed', description: 'should be excluded',
+        status: 'VETOED', publishedAt: new Date().toISOString(), publishedBy: 'admin@sap.com' },
     ])
 
     await INSERT.into(Tutorials).entries({
@@ -75,5 +77,11 @@ describe('buildConceptsPayload', () => {
   it('includes generatedAt timestamp', async () => {
     const payload = await buildConceptsPayload(cds.db)
     expect(payload.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+  })
+
+  it('excludes VETOED concepts even when publishedAt is set', async () => {
+    const payload = await buildConceptsPayload(cds.db)
+    const slugs = payload.concepts.map(c => c.slug)
+    expect(slugs).not.toContain('vetoed-but-published')
   })
 })
