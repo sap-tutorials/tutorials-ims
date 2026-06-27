@@ -87,9 +87,19 @@ async function getTransporter() {
   }
 }
 
-export function loadTemplate(level) {
-  const name = TEMPLATE_NAMES[level];
-  if (!name) throw new Error(`Invalid notification level: ${level}`);
+export function loadTemplate(levelOrName) {
+  let name;
+  if (typeof levelOrName === 'number') {
+    name = TEMPLATE_NAMES[levelOrName];
+    if (!name) throw new Error(`Invalid notification level: ${levelOrName}`);
+  } else if (typeof levelOrName === 'string') {
+    if (levelOrName.includes('/') || levelOrName.includes('\\') || levelOrName.includes('..')) {
+      throw new Error(`Invalid template name: ${levelOrName}`);
+    }
+    name = levelOrName;
+  } else {
+    throw new Error(`loadTemplate requires a number or string, got ${typeof levelOrName}`);
+  }
   return readFileSync(join(TEMPLATE_DIR, `${name}.html`), 'utf-8');
 }
 
@@ -97,9 +107,12 @@ export function resolveTemplate(html, variables) {
   return html.replace(/\$\{(\w+)\}/g, (_, key) => variables[key] || '');
 }
 
-export async function sendNotificationEmail({ to, cc, subject, level, variables }) {
+export async function sendNotificationEmail({ to, cc, subject, level, variables, template }) {
   const LOG = cds.log('mail');
-  const html = resolveTemplate(loadTemplate(level), variables);
+  // template takes precedence over level when provided.
+  // Legacy callers passing only level get byte-identical behavior.
+  const templateKey = template ?? level;
+  const html = resolveTemplate(loadTemplate(templateKey), variables);
 
   // Build mailOptions inside the try so a throw from getTransporter() (e.g.
   // OOM during transporter construction, unexpected xsenv crash) still funnels
