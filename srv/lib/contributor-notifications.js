@@ -178,3 +178,18 @@ export function renderTutorialList(tutorials, dashboardUrl) {
   });
   return `<ul>${items.join('')}</ul>`;
 }
+
+/**
+ * Build the subject line for a digest email. Levels 0-2 use the
+ * "need review" wording; level 3 escalates to "FINAL NOTICE: pending
+ * retirement". Pluralizes noun + verb.
+ */
+export function digestSubject(digest) {
+  const count = digest.tutorials.length;
+  const noun = count === 1 ? 'tutorial' : 'tutorials';
+  if (digest.worstLevel === 3) {
+    return `FINAL NOTICE: ${count} stale ${noun} pending retirement`;
+  }
+  const verb = count === 1 ? 'needs' : 'need';
+  return `${count} stale ${noun} ${verb} review`;
+}
