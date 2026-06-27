@@ -224,16 +224,58 @@ export async function* projectFromFixtures(fixtures, batchSize = 5000) {
   // a named-graph carrier. PR 5's neighborhood SPARQL re-ranks externally,
   // so Phase 1 emits the bare connection only. Revisit when Phase 2 needs
   // the weight in-graph.
+  //
+  // Phase 3 (issue #446) adds k-anonymity at the projection layer
+  // (spec §2.3): drop edges whose raw co-completion count is below K=10.
+  // The predicate is a binary edge (no count carried in the triple), so
+  // the gate alone is sufficient protection — raw counts never reach RDF.
+  // Flatten the {source: [{slug, score}]} map into per-edge rows and
+  // delegate to buildCoCompletionTriples so the gate is unit-testable in
+  // isolation.
+  const coRows = [];
   for (const sourceSlug of Object.keys(coCompletions)) {
     for (const item of coCompletions[sourceSlug] || []) {
       const targetSlug = item && item.slug;
       if (!targetSlug) continue;
-      buffer.push(triple(iriTutorial(sourceSlug), iriPredicate('coCompletedWith'), iriTutorial(targetSlug)));
-      if (buffer.length >= batchSize) { yield buffer; buffer = []; }
+      coRows.push({ sourceSlug, targetSlug, count: item.score ?? 0 });
     }
+  }
+  for (const t of buildCoCompletionTriples(coRows)) {
+    buffer.push(t);
+    if (buffer.length >= batchSize) { yield buffer; buffer = []; }
   }
 
   if (buffer.length > 0) yield buffer;
+}
+
+// ---------------------------------------------------------------------------
+// Co-completion k-anonymity helper (exported for unit tests)
+// ---------------------------------------------------------------------------
+
+/**
+ * K-anonymity floor for :coCompletedWith projection (spec §2.3, K=10).
+ *
+ * Input rows: `[{ sourceSlug, targetSlug, count }, ...]`. Rows with
+ * `count < 10` are dropped — the raw count never reaches the RDF graph.
+ *
+ * The predicate is a binary edge in the current N-Triples shape (no count
+ * literal is emitted), so the drop gate alone is the structural protection.
+ * If a future change adds a reified count, the FLOOR-by-10 rounding goes
+ * here too.
+ *
+ * @param {Array<{sourceSlug: string, targetSlug: string, count: number}>} rows
+ * @returns {string[]} N-Triple strings, one per surviving edge.
+ */
+export function buildCoCompletionTriples(rows) {
+  const out = [];
+  for (const r of rows || []) {
+    if (!r || !r.sourceSlug || !r.targetSlug) continue;
+    if (typeof r.count !== 'number' || r.count < 10) continue;
+    out.push(
+      triple(iriTutorial(r.sourceSlug), iriPredicate('coCompletedWith'), iriTutorial(r.targetSlug))
+    );
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
