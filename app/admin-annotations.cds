@@ -2461,6 +2461,10 @@ annotate KnowledgeGraphService.Concepts with {
   extractionCount @Common.Label: 'Extractions'    @Common.FieldControl: #ReadOnly;
   firstSeenAt     @Common.Label: 'First Seen'     @Common.FieldControl: #ReadOnly;
   lastSeenAt      @Common.Label: 'Last Seen'      @Common.FieldControl: #ReadOnly;
+  // Phase 3 (#446) — admin curation marker. Set by publishConcept,
+  // cleared by unpublishConcept; never user-edited.
+  publishedAt     @Common.Label: 'Published'      @Common.FieldControl: #ReadOnly;
+  publishedBy     @Common.Label: 'Published By'   @Common.FieldControl: #ReadOnly;
 };
 
 annotate KnowledgeGraphService.Concepts with @(
@@ -2477,6 +2481,15 @@ annotate KnowledgeGraphService.Concepts with @(
     { $Type: 'UI.DataField', Value: slug,            Label: 'Slug' },
     { $Type: 'UI.DataField', Value: name,            Label: 'Name' },
     { $Type: 'UI.DataField', Value: status,          Label: 'Status' },
+    // Phase 3 (#446) — Published column. Criticality 3 (green) when set,
+    // 1 (neutral) when null. The $edmJson form mirrors the conditional
+    // pattern used by Alerts.severityCrit elsewhere in this file.
+    {
+      $Type: 'UI.DataField',
+      Value: publishedAt,
+      Label: 'Published',
+      Criticality: { $edmJson: { $If: [ { $Ne: [ { $Path: 'publishedAt' }, null ] }, 3, 1 ] } }
+    },
     { $Type: 'UI.DataField', Value: extractionCount, Label: 'Extractions' },
     { $Type: 'UI.DataField', Value: lastSeenAt,      Label: 'Last Seen' },
     // ID exposed last so admins can copy the canonical UUID for paste-into-mergeConcepts
@@ -2492,7 +2505,9 @@ annotate KnowledgeGraphService.Concepts with @(
       { $Type: 'UI.DataField', Value: status,          Label: 'Status' },
       { $Type: 'UI.DataField', Value: extractionCount, Label: 'Extractions' },
       { $Type: 'UI.DataField', Value: firstSeenAt,     Label: 'First Seen' },
-      { $Type: 'UI.DataField', Value: lastSeenAt,      Label: 'Last Seen' }
+      { $Type: 'UI.DataField', Value: lastSeenAt,      Label: 'Last Seen' },
+      { $Type: 'UI.DataField', Value: publishedAt,     Label: 'Published' },
+      { $Type: 'UI.DataField', Value: publishedBy,     Label: 'Published By' }
     ]
   },
 
@@ -2501,6 +2516,26 @@ annotate KnowledgeGraphService.Concepts with @(
     { $Type: 'UI.ReferenceFacet', Label: 'Tutorials',       Target: 'links/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Label: 'Outgoing edges',  Target: 'outgoingEdges/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Label: 'Incoming edges',  Target: 'incomingEdges/@UI.LineItem' }
+  ],
+
+  // Phase 3 (#446) — Publish / Unpublish toolbar actions.
+  // The actions are service-level unbound (take conceptId : UUID) so
+  // Fiori Elements renders them in the OP toolbar (and the LR toolbar
+  // via Identification surfacing) and prompts for the conceptId in a
+  // parameter dialog. Admins copy-paste from the ID column added to
+  // LineItem above. Bound-action follow-up is tracked as a future
+  // enhancement once we agree on the binding shape.
+  UI.Identification: [
+    {
+      $Type : 'UI.DataFieldForAction',
+      Action: 'KnowledgeGraphService.publishConcept',
+      Label : 'Publish'
+    },
+    {
+      $Type : 'UI.DataFieldForAction',
+      Action: 'KnowledgeGraphService.unpublishConcept',
+      Label : 'Unpublish'
+    }
   ],
 
   // Inline-edit only on `name` + `description`. The other fields are gated by
