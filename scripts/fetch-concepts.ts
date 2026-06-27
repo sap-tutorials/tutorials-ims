@@ -88,7 +88,7 @@ async function main() {
   }
 
   await fs.writeFile(path.join(OUT_DIR, '_index.md'),
-    `---\ntitle: Concepts\nlayout: concepts-index\n---\n`, 'utf8')
+    `---\ntitle: Concepts\n---\n`, 'utf8')
 
   console.log(`[fetch-concepts] wrote ${data.concepts.length} page(s) + _index.md to ${OUT_DIR}`)
 }
