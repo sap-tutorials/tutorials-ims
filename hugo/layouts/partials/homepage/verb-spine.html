@@ -1,0 +1,34 @@
+{{- /* verb-spine.html — spec §6 row 2.
+       Context: dict "shelves" $shelves (slice from homepage_shelves.json).
+       Renders 6 verb tiles; each shows verb label + icon + top-3 START_HERE items. */ -}}
+{{- $shelves := .shelves | default slice -}}
+{{- $verbDefs := slice
+  (dict "key" "LEARN"      "label" "Learn"          "href" "/learn/"      "icon" "📚")
+  (dict "key" "BUILD"      "label" "Build"          "href" "/build/"      "icon" "🔨")
+  (dict "key" "INTEGRATE"  "label" "Integrate"      "href" "/integrate/"  "icon" "🔗")
+  (dict "key" "OPERATE"    "label" "Operate"        "href" "/operate/"    "icon" "⚙️")
+  (dict "key" "AI"         "label" "Extend with AI" "href" "/ai/"         "icon" "🤖")
+  (dict "key" "CONNECT"    "label" "Connect"        "href" "/connect/"    "icon" "🤝")
+-}}
+<nav class="hp-verbs" aria-label="Developer paths">
+  {{- range $verbDefs -}}
+    {{- $vKey := .key -}}
+    {{- $vLabel := .label -}}
+    {{- $vHref := .href -}}
+    {{- $vIcon := .icon -}}
+    {{- $verbShelves := where $shelves "verb" $vKey -}}
+    {{- $startHere := where $verbShelves "tier" "START_HERE" -}}
+    {{- $preview := first 3 (sort $startHere "sortOrder") -}}
+    <a href="{{ $vHref }}" class="hp-verb">
+      <div class="hp-verb__icon" aria-hidden="true">{{ $vIcon }}</div>
+      <div class="hp-verb__label">{{ $vLabel }}</div>
+      {{- if gt (len $preview) 0 -}}
+        <ul class="hp-verb__preview" aria-label="{{ $vLabel }} highlights">
+          {{- range $preview -}}
+            <li>{{ .title }}</li>
+          {{- end -}}
+        </ul>
+      {{- end -}}
+    </a>
+  {{- end -}}
+</nav>

@@ -1,0 +1,12 @@
+{{- /* community-lane.html — spec §6 row 6.
+       Three-column placeholder. CommunityLane Vue island (Task 20) hydrates
+       on mount, fetching /api/advocates, /api/homepage/community-blogs,
+       and /api/homepage/news in parallel. */ -}}
+<section id="hp-community" class="hp-band" data-island="community" aria-labelledby="hp-community-title">
+  <h2 id="hp-community-title" class="hp-band__title">Community</h2>
+  <div class="hp-community__cols">
+    <div class="hp-community__col" data-community-col="advocates" aria-label="Developer advocates"></div>
+    <div class="hp-community__col" data-community-col="blogs" aria-label="Community blogs"></div>
+    <div class="hp-community__col" data-community-col="news" aria-label="Developer news"></div>
+  </div>
+</section>

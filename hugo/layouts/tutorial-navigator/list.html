@@ -1,0 +1,111 @@
+{{ define "main" }}
+{{- /* SSR card grid (#200, mirrors /browse/ Path C). When .Site.Data.browse is
+       populated by fetch-tutorials.ts, render the first 24 cards statically so
+       users see real content during the ~50-100ms before TutorialNavigator.vue
+       mounts and replaces #navigator-grid contents.
+
+       The Vue island reads the inlined browse-data JSON below
+       and seeds allCards from it synchronously, then the existing onMounted
+       fetches (_nav.json + /build/navigator + progress) enrich
+       tutorials/missionsMeta/groupsMeta refs for facet computation.
+
+       Empty-state: when browse.json is missing or empty (fresh deploy, recovery
+       in progress) the SSR'd grid renders nothing and Vue falls back to its
+       existing loading skeleton, then to whatever the fetches produce. The
+       outer page chrome (hero, search, filter rail) is always emitted. */ -}}
+{{- $browse := .Site.Data.browse | default (dict "all" slice "featured" slice "recent" slice "buildAt" "") -}}
+{{- $all := $browse.all | default slice -}}
+{{- $buildAt := $browse.buildAt | default "" -}}
+{{- $firstPageItems := first 24 $all -}}
+
+<article class="home">
+  {{ if not site.Params.qa }}
+  <div class="browse-pill-wrapper">
+    <a class="browse-pill" href="/browse/">
+      <span class="browse-pill__icon" aria-hidden="true">✨</span>
+      Try the new browse layout →
+    </a>
+  </div>
+  {{ end }}
+
+  <section aria-labelledby="search-tutorials" id="navigator-section" class="home-navigator">
+    <h1 id="search-tutorials" class="visually-hidden">Search and filter SAP developer tutorials</h1>
+    <div id="tutorial-navigator">
+      {{- /* SSR initial card grid. TutorialNavigator.vue mounts on
+             #tutorial-navigator (the outer container) and re-renders its full
+             template tree on mount, replacing this preview. The static markup
+             here exists only to eliminate the flash-of-empty-grid before the
+             Vue island bootstraps. Reuses the same partials as /browse/ to keep
+             card markup in lockstep across both surfaces. */ -}}
+      {{- if gt (len $firstPageItems) 0 -}}
+        <section class="navigator-grid navigator-grid--ssr-preview" aria-label="Initial tutorial preview">
+          {{- range $item := $firstPageItems -}}
+            {{- if eq $item.type "mission" -}}{{ partial "browse/_partials/card-mission.html" $item }}{{- end -}}
+            {{- if eq $item.type "group" -}}{{ partial "browse/_partials/card-group.html" $item }}{{- end -}}
+            {{- if eq $item.type "tutorial" -}}{{ partial "browse/_partials/card-tutorial.html" $item }}{{- end -}}
+          {{- end -}}
+        </section>
+      {{- end -}}
+      <noscript>
+        <p><a href="/missions/">Browse missions →</a></p>
+      </noscript>
+    </div>
+  </section>
+
+  <section class="home-hero">
+    <h2>Build on SAP — hands-on tutorials for developers</h2>
+    <p class="lede">{{ .Site.Params.heroDescription }}</p>
+    <div class="home-hero__ctas">
+      <a class="fd-button fd-button--emphasized" href="/missions/">Browse missions</a>
+      <a class="fd-button" href="/tags/">Browse by topic</a>
+    </div>
+  </section>
+
+  <section aria-labelledby="featured-missions">
+    <h2 id="featured-missions">Featured missions</h2>
+    <ul class="mission-grid">
+      {{ range first 6 (where .Site.RegularPages "Type" "missions") }}
+      <li>
+        <a href="{{ .RelPermalink }}">
+          <h3>{{ .Title }}</h3>
+          <p>{{ .Params.description | truncate 160 }}</p>
+        </a>
+      </li>
+      {{ end }}
+    </ul>
+  </section>
+
+  <section aria-labelledby="recent-tutorials">
+    <h2 id="recent-tutorials">Recently updated tutorials</h2>
+    <ul class="tutorial-grid">
+      {{ range first 12 (where .Site.RegularPages "Type" "tutorials").ByLastmod.Reverse }}
+      <li>
+        <a href="{{ .RelPermalink }}" data-vt-card="navigator">
+          <h3 class="nav-card__title">{{ .Title }}</h3>
+          <p>{{ .Params.description | truncate 140 }}</p>
+          <p class="meta">{{ .Params.level }} · {{ .Params.time }} min</p>
+        </a>
+      </li>
+      {{ end }}
+    </ul>
+  </section>
+
+  <section aria-labelledby="browse-by-topic">
+    <h2 id="browse-by-topic">Browse by topic</h2>
+    <ul class="topic-grid">
+      {{ range first 24 .Site.Taxonomies.tags.ByCount }}
+      <li><a href="/tags/{{ .Page.Title | urlize }}/">{{ .Page.Title }} ({{ .Count }})</a></li>
+      {{ end }}
+    </ul>
+    <p class="topic-grid__more"><a href="/tags/">See all topics →</a></p>
+  </section>
+</article>
+{{ $css := resources.Get "css/home.css" }}
+<link rel="stylesheet" href="{{ $css.RelPermalink }}">
+<script>window.__BROWSE_BUILD_AT = "{{ $buildAt }}";</script>
+{{- /* Inlined catalog payload — read by TutorialNavigator.vue at script-init
+       so the Vue island seeds allCards synchronously and renders cards in the
+       first paint after mount, no fetch wait. Same shape as /browse/'s. */ -}}
+<script id="browse-data" type="application/json">{{ $browse | jsonify | safeJS }}</script>
+<script type="module" src="/js/navigator.js?v={{ now.Unix }}"></script>
+{{ end }}

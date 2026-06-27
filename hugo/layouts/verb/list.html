@@ -1,0 +1,41 @@
+{{ define "main" }}
+{{- $verbKey := .Params.verbKey -}}
+{{- $allShelves := (.Site.Data.homepage_shelves.shelves) | default slice -}}
+{{- $verbShelves := where $allShelves "verb" $verbKey -}}
+
+<article class="verb-page" data-verb="{{ $verbKey | lower }}">
+  <header class="verb-page__hero">
+    <h1>{{ .Title }}</h1>
+    <p>{{ .Description }}</p>
+  </header>
+
+  {{- /* Four shelves in fixed order. */ -}}
+  {{ range $shelfKey := slice "START_HERE" "REFERENCE" "TOOLS" "KEEP_CURRENT" }}
+    {{- $items := where $verbShelves "shelf" $shelfKey -}}
+    {{- if gt (len $items) 0 -}}
+    <section class="verb-shelf verb-shelf--{{ $shelfKey | lower }}">
+      <h2>{{ index (dict "START_HERE" "Start here" "REFERENCE" "Reference" "TOOLS" "Tools & samples" "KEEP_CURRENT" "Keep current") $shelfKey }}</h2>
+      <ul class="verb-shelf__list">
+        {{ range sort $items "sortOrder" }}
+        <li>
+          <a href="{{ .url }}" {{ if .isExternal }}target="_blank" rel="noopener"{{ end }}>
+            <strong>{{ .title }}</strong>
+            {{- if .badge }} <span class="badge badge--{{ .badge | lower }}">{{ .badge }}</span>{{ end -}}
+            {{- if .description }}<p>{{ .description }}</p>{{ end -}}
+          </a>
+        </li>
+        {{ end }}
+      </ul>
+    </section>
+    {{- end -}}
+  {{ end }}
+
+  {{- /* Spec §17 resolution 2: 3 of 6 verbs get one extra section. */ -}}
+  {{- with .Params.extraSection -}}
+    {{ partial (printf "verb-extras/%s.html" .) (dict "ctx" $) }}
+  {{- end -}}
+</article>
+
+{{ $css := resources.Get "css/homepage.css" }}
+<link rel="stylesheet" href="{{ $css.RelPermalink }}">
+{{ end }}

@@ -122,6 +122,7 @@ export default defineConfig({
           { text: 'Build pipeline',                   link: '/developers/architecture/build' },
           { text: 'CAP backend',                      link: '/developers/architecture/cap-backend' },
           { text: 'Frontend apps',                    link: '/developers/architecture/frontend-apps' },
+          { text: 'Homepage',                         link: '/developers/architecture/homepage' },
           { text: 'Joule chat',                       link: '/developers/architecture/joule' },
           { text: 'Joule aurora background',          link: '/developers/architecture/joule-aurora' },
           { text: '@PersonalData cascade',            link: '/developers/architecture/anonymization-cascade' },

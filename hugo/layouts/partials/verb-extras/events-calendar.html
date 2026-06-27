@@ -1,0 +1,10 @@
+{{- /* events-calendar.html — extra section for /connect/.
+       Called as: partial "verb-extras/events-calendar.html" (dict "ctx" .)
+       Placeholder section; the EventsBand Vue island (Task 20) mounts here
+       and reads data-mode="full-calendar" to fetch more events.
+*/ -}}
+<section class="verb-extra verb-extra--events">
+  <h2>Events calendar</h2>
+  <p>Conferences, CodeJams, Devtoberfest, and community meetups.</p>
+  <div data-island="events" data-mode="full-calendar"></div>
+</section>

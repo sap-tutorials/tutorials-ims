@@ -1,0 +1,24 @@
+{{- /* curated-paths.html — extra section for /learn/.
+       Called as: partial "verb-extras/curated-paths.html" (dict "ctx" .)
+       Renders up to 6 missions from Site.Data.browse.
+*/ -}}
+{{- $ctx := .ctx -}}
+{{- $browse := $ctx.Site.Data.browse | default dict -}}
+{{- $missions := (index $browse "missions") | default (index $browse "featured") | default slice -}}
+{{- $picked := first 6 $missions -}}
+{{- if gt (len $picked) 0 -}}
+<section class="verb-extra verb-extra--curated-paths">
+  <h2>Curated paths</h2>
+  <p>Multi-tutorial missions that take you from zero to building.</p>
+  <ul class="verb-shelf__list">
+    {{ range $picked }}
+    <li>
+      <a href="{{ .url | default (printf "/missions/%s/" .slug) }}">
+        <strong>{{ .title | default .name }}</strong>
+        {{- if .description }}<p>{{ .description | truncate 160 }}</p>{{ end -}}
+      </a>
+    </li>
+    {{ end }}
+  </ul>
+</section>
+{{- end -}}

@@ -7,6 +7,7 @@ modules:
     properties:
       EXPOSE_CAP_UI: true
       CONTENT_API_KEY: ${CONTENT_API_KEY}
+      YOUTUBE_API_KEY: ${YOUTUBE_API_KEY}
       GITHUB_DISPATCH_TOKEN: ${GITHUB_DISPATCH_TOKEN}
 
   - name: tutorials-approuter
