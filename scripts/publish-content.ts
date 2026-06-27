@@ -89,6 +89,47 @@ export function discoverTutorials(hugoDir: string): Map<string, string> {
   return result;
 }
 
+// Concept landing pages (#446 Track 3-A). Walks hugo/public/concepts/<slug>/
+// and emits a map keyed by `concept-<slug>` so the rest of the publish
+// pipeline (hash, payload, session) handles them transparently alongside
+// tutorials. The `concept-` prefix lets the serve handler (srv/server.js)
+// and ContentFiles share one slug column without a schema change.
+export function discoverConcepts(hugoDir: string): Map<string, string> {
+  const conceptsDir = join(hugoDir, 'concepts');
+  const result = new Map<string, string>();
+
+  let entries: string[];
+  try {
+    entries = readdirSync(conceptsDir);
+  } catch {
+    // concepts/ directory missing entirely (no concepts published yet) —
+    // that's a normal state for fresh installs and the QA channel.
+    return result;
+  }
+
+  for (const entry of entries) {
+    const indexPath = join(conceptsDir, entry, 'index.html');
+    try {
+      const stat = statSync(indexPath);
+      if (stat.isFile()) {
+        result.set(`concept-${entry}`, indexPath);
+      }
+    } catch {
+      // not a concept directory
+    }
+  }
+
+  return result;
+}
+
+// Concept slug predicate — used to skip Tutorials-only metadata extraction
+// for concept landing pages (metadata, bodyText, branchSpecs, source markdown
+// are all keyed off Tutorials.slug; concept-* keys would orphan in those
+// tables).
+export function isConceptSlug(slug: string): boolean {
+  return typeof slug === 'string' && slug.startsWith('concept-');
+}
+
 // A slug points at a runtime-SSR'd catalog page (groups/missions) since PR
 // #115 (#91). Such slugs must NEVER reach the publish endpoint; the server
 // rejects them too, but we strip locally as well so payload size and CI
@@ -645,6 +686,15 @@ async function main() {
     );
   }
 
+  // #446 Track 3-A — concept landing pages. Merged into the same map so
+  // hash/payload/session orchestration treats them uniformly; the `concept-`
+  // prefix on each key is what lets the serve handler route correctly.
+  const concepts = discoverConcepts(opts.hugoDir);
+  if (concepts.size > 0) {
+    for (const [slug, path] of concepts) tutorials.set(slug, path);
+    log(`Found ${concepts.size} concept landing page(s) (concept-*) in ${opts.hugoDir}/concepts`);
+  }
+
   if (tutorials.size === 0) {
     console.error('Error: No tutorials found. Did you run the Hugo build?');
     process.exit(1);
@@ -737,9 +787,16 @@ async function main() {
   const startTime = Date.now();
   const payload    = buildPayload(targetSlugs, tutorials);
   const hugoContentDir = join(opts.hugoDir, '..', 'content', 'tutorials');
-  const metadataAll = extractMetadata(hugoContentDir, targetSlugs);
-  const bodyTextsAll = extractAllBodyTexts(tutorials, targetSlugs);
-  const branchSpecsAll = extractAllBranchSpecs(hugoContentDir, targetSlugs);
+  // Tutorials-only extractions: metadata, bodyText, branchSpecs, and source
+  // markdown all key off Tutorials.slug (or files that only exist for
+  // tutorials). Concept slugs (concept-<name>) would silently produce no
+  // metadata entries (no .md in hugo/content/tutorials/) but extractAllBodyTexts
+  // would happily emit a body-text row keyed `concept-<name>`, orphaning it in
+  // TutorialBodyText. Filter them out explicitly so the contract is clear.
+  const tutorialOnlySlugs = targetSlugs.filter(s => !isConceptSlug(s));
+  const metadataAll = extractMetadata(hugoContentDir, tutorialOnlySlugs);
+  const bodyTextsAll = extractAllBodyTexts(tutorials, tutorialOnlySlugs);
+  const branchSpecsAll = extractAllBranchSpecs(hugoContentDir, tutorialOnlySlugs);
 
   // PR #591: capture raw upstream markdown alongside rendered HTML. Each
   // tutorial's source lives at `.tutorial-cache/<slug>.md` (or
@@ -748,12 +805,13 @@ async function main() {
   // buildSourcePayload silently skips them, and the server stores null
   // sourceContent/sourceHash for those rows. The drift workflow uses these
   // sourceHashes instead of contentHashes for clean drift detection.
+  // Concept slugs are likewise tutorial-only — no upstream .md exists.
   const cacheDir = channel === 'qa'
     ? join(process.cwd(), '.tutorial-cache-qa')
     : join(process.cwd(), '.tutorial-cache');
   const { sources: sourcesAll, sourceHashes: localSourceHashes } =
-    buildSourcePayload(targetSlugs, cacheDir);
-  log(`Source markdown payload: ${Object.keys(sourcesAll).length}/${targetSlugs.length} slugs have upstream .md files`);
+    buildSourcePayload(tutorialOnlySlugs, cacheDir);
+  log(`Source markdown payload: ${Object.keys(sourcesAll).length}/${tutorialOnlySlugs.length} slugs have upstream .md files`);
 
   // __nav__ / __404__ / __shell__ ride along on the first batch (these are
   // small and the server happily accepts them mixed with regular slugs).

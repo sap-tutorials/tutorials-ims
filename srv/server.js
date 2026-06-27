@@ -228,6 +228,42 @@ cds.on('bootstrap', (app) => {
   // rationale (rendered HTML is volatile-by-design, source markdown isn't).
   app.get('/content/source-hashes', sourceHashesHandler);
   app.get('/content/tutorials/*slug', serveHandler);
+  // Concept landing pages (#446 Track 3-A). Concept HTML is stored in
+  // ContentFiles with slugs prefixed `concept-<slug>` so the same publish/
+  // serve plumbing handles both kinds without a schema change or kind
+  // discriminator column.
+  //
+  // The wrapper canonicalises inbound paths to lowercase + strips `.html`
+  // (mirroring the equivalent normalisation inside serveHandler) BEFORE
+  // delegating — otherwise serveHandler's redirect paths would 301 to
+  // `/tutorials/...` instead of `/concepts/...`. After canonicalisation
+  // the lookup just rewrites params.slug to the `concept-<slug>` form.
+  app.get('/content/concepts/:slug', (req, res) => {
+    const raw = String(req.params.slug || '');
+    // Strip .html suffix → 301 to canonical /concepts/<slug>
+    if (/\.html$/i.test(raw)) {
+      const stripped = raw.replace(/\.html$/i, '').toLowerCase();
+      if (/^[a-z0-9][a-z0-9-]*$/.test(stripped)) {
+        const qIdx = req.url.indexOf('?');
+        const query = qIdx >= 0 ? req.url.slice(qIdx) : '';
+        res.setHeader('Location', `/concepts/${stripped}${query}`);
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        return res.status(301).end();
+      }
+    }
+    // Mixed-case → 301 to canonical lowercase /concepts/<slug>
+    const lower = raw.toLowerCase();
+    if (raw && raw !== lower && /^[a-z0-9][a-z0-9-]*$/.test(lower)) {
+      const qIdx = req.url.indexOf('?');
+      const query = qIdx >= 0 ? req.url.slice(qIdx) : '';
+      res.setHeader('Location', `/concepts/${lower}${query}`);
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      return res.status(301).end();
+    }
+    // Canonical form — delegate to serveHandler with the concept- prefix.
+    req.params.slug = `concept-${lower}`;
+    return serveHandler(req, res);
+  });
   app.post('/content/publish', express.json({ limit: '100mb' }), contentAuthMiddleware, publishHandler);
   app.post('/content/publish/begin',  express.json({ limit: '1mb' }),   contentAuthMiddleware, beginHandler);
   app.post('/content/publish/append', express.json({ limit: '100mb' }), contentAuthMiddleware, appendHandler);

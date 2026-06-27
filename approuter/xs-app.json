@@ -304,6 +304,13 @@
       "csrfProtection": false
     },
     {
+      "source": "^/concepts/(.*)$",
+      "target": "/content/concepts/$1",
+      "destination": "srv-api",
+      "authenticationType": "none",
+      "csrfProtection": false
+    },
+    {
       "source": "^/tutorials/(.*)$",
       "target": "/content/tutorials/$1",
       "destination": "srv-api",
