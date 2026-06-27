@@ -249,7 +249,7 @@ ELSEIF :query_name = 'EXPLORE_GRAPH_BULK' THEN
 
 ```bash
 # After deploy:
-cf bind --exec -- node -e "
+npx cds bind --exec -- node -e "
   const cds = require('@sap/cds');
   cds.connect.to('db').then(async db => {
     const r = await db.run(\`CALL com.sap.developers.ims.KG_QUERY('EXPLORE_GRAPH_BULK', null, ?)\`)
@@ -372,13 +372,13 @@ const PREDICATE_SHORT = {
 }
 
 export async function buildExplorePayload(db) {
-  // kgQuery is the existing helper; if the helper doesn't already accept
-  // EXPLORE_GRAPH_BULK as a known query name, this call falls through to
-  // an error — confirm the helper's allowlist before assuming it works.
+  // Prefer the existing kgQuery() helper in srv/lib/kg-queries.js if it
+  // accepts the new EXPLORE_GRAPH_BULK query name — that's the canonical
+  // CALL+param-binding wrapper used by the rest of the codebase. If the
+  // helper has a hardcoded allowlist of query names, extend the allowlist
+  // OR fall back to db.run() with raw CALL syntax (shown below) as a
+  // localized exception.
   const rows = await db.run(`CALL com.sap.developers.ims.KG_QUERY('EXPLORE_GRAPH_BULK', null, ?)`)
-  // Adapt above to the project's actual kgQuery invocation pattern; the
-  // existing srv/lib/kg-queries.js may provide a wrapper that already
-  // handles CALL syntax + parameter binding.
 
   const nodesById = new Map()
   const edges = []
@@ -637,6 +637,7 @@ Mirror the structure for `app/explore/`. Don't pre-write everything — read the
 ```typescript
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { gzipSync } from 'node:zlib'
 
 const MAX_EXPLORE_GZIP = 150 * 1024 // 150KB budget — Sigma + graphology + ForceAtlas2 baseline ~65KB
 
@@ -645,7 +646,6 @@ function exploreBudget() {
     name: 'explore-budget',
     generateBundle(_opts: unknown, bundle: Record<string, any>) {
       let totalGzip = 0
-      const { gzipSync } = require('node:zlib')
       for (const [name, chunk] of Object.entries(bundle)) {
         if (chunk.type === 'chunk' && name.endsWith('.js')) {
           totalGzip += gzipSync(chunk.code).length
@@ -1016,7 +1016,7 @@ Slot in among the existing static UI routes (analytics-ui, admin-ui).
 - [ ] **Step 40: Commit**
 
 ```bash
-git add app/explore/ test/unit/scripts/ vitest.config.ts .deploy/mta.yaml approuter/xs-app.json
+git add app/explore/ vitest.config.ts .deploy/mta.yaml approuter/xs-app.json
 git commit -m "feat(#446): app/explore/ Vue+Vite scaffold + Sigma.js v3 wiring
 
 - New Vue 3 + Vite app peer of app/analytics-explorer/
@@ -1044,6 +1044,8 @@ git commit -m "feat(#446): app/explore/ Vue+Vite scaffold + Sigma.js v3 wiring
 - Modify: `approuter/xs-app.json` (add `/explore/` proxy route)
 
 ### 3.1 The HTML shell template
+
+> **Cache-coherence note:** `/graph/explore-data` is cached for 5 min in-process (Task 1); the `/explore/` shell renders `buildExplorePayload(db)` directly on every request (no cache). After a `graphRebuild`, users hitting `/explore/` for the first time get fresh data, but if their browser falls back to `fetchAsync` (Task 2 `useGraphData`), they may briefly see the cached `/graph/explore-data` payload. This is acceptable — the fallback is dev-mode only and the cache TTL is short. Document in 3-B-6 rollout note that an admin can hard-bust the cache by restarting `tutorials-srv` if needed.
 
 - [ ] **Step 42: Create `srv/templates/explore.html`**
 
@@ -1441,9 +1443,33 @@ describe('/graph/path (HTTP)', () => {
   })
 
   it('returns 200 + steps for a known-connected pair', async () => {
-    // Probe /build/concepts for a real published concept to use.
-    // If no concepts published: ctx.skip().
-    // ...
+    // Probe /graph/explore-data and find any edge — its endpoints are
+    // guaranteed to be connected (1-hop path). Use those slugs.
+    const probe = await fetch(`${baseUrl}/graph/explore-data`)
+    const { nodes, edges } = await probe.json()
+    if (!edges.length) {
+      // No graph data in this env — skip rather than fail.
+      console.log('SKIP: no edges in /graph/explore-data')
+      return
+    }
+    // Find an edge with both endpoints having slugs (some node types may
+    // not carry a slug). Use the first such edge.
+    const edge = edges.find(e => {
+      const s = nodes.find(n => n.id === e.s)?.slug
+      const o = nodes.find(n => n.id === e.o)?.slug
+      return s && o && /^[a-z0-9-]+$/.test(s) && /^[a-z0-9-]+$/.test(o)
+    })
+    if (!edge) {
+      console.log('SKIP: no edge with two slug-bearing endpoints')
+      return
+    }
+    const from = nodes.find(n => n.id === edge.s).slug
+    const to = nodes.find(n => n.id === edge.o).slug
+    const r = await fetch(`${baseUrl}/graph/path?from=${from}&to=${to}`)
+    expect(r.status).toBe(200)
+    const body = await r.json()
+    expect(Array.isArray(body.steps)).toBe(true)
+    expect(body.steps.length).toBeGreaterThan(0)
   })
 })
 ```
@@ -1522,8 +1548,20 @@ describe('/explore/ route', () => {
   })
 
   it('returns 200 for /graph/path with valid slugs', async () => {
-    // Probe /graph/explore-data for two real connected node slugs.
-    // ctx.skip() if no graph data.
+    // Probe /graph/explore-data for two slug-bearing endpoints of any edge.
+    const probe = await fetch(`${SRV}/graph/explore-data`)
+    if (!probe.ok) return
+    const { nodes, edges } = await probe.json()
+    const edge = edges.find(e => {
+      const s = nodes.find(n => n.id === e.s)?.slug
+      const o = nodes.find(n => n.id === e.o)?.slug
+      return s && o && /^[a-z0-9-]+$/.test(s) && /^[a-z0-9-]+$/.test(o)
+    })
+    if (!edge) return  // empty-env skip; no slugs to probe
+    const from = nodes.find(n => n.id === edge.s).slug
+    const to = nodes.find(n => n.id === edge.o).slug
+    const r = await fetch(`${SRV}/graph/path?from=${from}&to=${to}`)
+    expect(r.status).toBe(200)
   })
 })
 ```
