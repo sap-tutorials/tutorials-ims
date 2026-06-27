@@ -81,13 +81,15 @@ export async function computeStaleNotifications(optsOrStaleDays = {}) {
     const contributors = await SELECT.from(TutorialContributors)
       .where({ tutorial_ID: tutorial.ID });
 
-    // #385 PR-1: repo-group owner now lives on TutorialMeta.repository.repositoryOwner.
-    // 2-level Association chain compiles to a LEFT JOIN on HANA. NULL-safe — if
-    // meta.repository is null (no group assigned yet — common until PR-2 migrator
-    // runs), the chain returns { email: null } and notification level 1 falls
-    // through to owner-only recipients (existing behaviour).
-    const repoOwnerRow = await SELECT.one.from(TutorialMeta)
-      .columns('repository.repositoryOwner.email as email')
+    // Pull repo owner + author FK fields in a single SELECT. The Association
+    // chains compile to LEFT JOINs on HANA. NULL-safe — if any link is missing,
+    // the corresponding field is null.
+    const fkRow = await SELECT.one.from(TutorialMeta)
+      .columns(
+        'repository.repositoryOwner.email as repoOwnerEmail',
+        'tutorial.author.email as authorUserEmail',
+        'tutorial.author.displayName as authorUserName'
+      )
       .where({ tutorial_ID: tutorial.ID });
 
     notifications.push({
@@ -96,8 +98,11 @@ export async function computeStaleNotifications(optsOrStaleDays = {}) {
       title: tutorial.title,
       reviewedDate: meta.reviewedDate,
       notificationLevel: meta.notificationNumber || 0,
+      lastNotificationDate: meta.lastNotificationDate ?? null,
       contributors: contributors.map(c => ({ name: c.name, email: c.email, role: c.role })),
-      repoOwner: repoOwnerRow?.email ?? null
+      repoOwner: fkRow?.repoOwnerEmail ?? null,
+      authorUserEmail: fkRow?.authorUserEmail ?? null,
+      authorUserName: fkRow?.authorUserName ?? null,
     });
   }
 
