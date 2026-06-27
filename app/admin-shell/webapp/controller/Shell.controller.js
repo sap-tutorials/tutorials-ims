@@ -248,6 +248,14 @@ sap.ui.define([
       oViewModel.setProperty("/consoleTitle", oI18n.getText("consoleTitle." + role));
       document.title = oI18n.getText("documentTitle." + role);
 
+      // #617 Task 14 — Publish role + per-tile service-path lookup so that tile
+      // components (Fiori Elements V4 AppComponents created lazily by the UI5
+      // router from declarative componentUsages) can rewrite their
+      // `mainService.uri` from /admin/ to /author/ at init time. We can't pass
+      // componentData through the router for declarative componentUsages, so
+      // we expose a small global resolver instead.
+      this._publishRoleGlobals(role);
+
       if (role === "anonymous") {
         // NoAccess route — added in Task 13. Until then, navigate may no-op silently.
         var oRouter = this.getOwnerComponent().getRouter();
@@ -257,6 +265,36 @@ sap.ui.define([
         return;
       }
       this._filterNavigationByRole(role);
+    },
+
+    _publishRoleGlobals: function (role) {
+      // Build a navKey -> servicePath map from navigation.json. For each entry
+      // with adminPath/authorPath, role=author resolves to authorPath, anything
+      // else resolves to adminPath. Entries without these fields are omitted
+      // and the tile falls back to its manifest default.
+      var oNavModel = this.getOwnerComponent().getModel("nav");
+      var data = oNavModel ? oNavModel.getData() : { groups: [] };
+      var oPathByNavKey = {};
+      var walk = function (entry) {
+        if (entry && entry.key && (entry.adminPath || entry.authorPath)) {
+          var sPath = (role === "author" && entry.authorPath)
+            ? entry.authorPath
+            : (entry.adminPath || "/admin/");
+          oPathByNavKey[entry.key] = sPath;
+        }
+        if (entry && entry.items) {
+          entry.items.forEach(walk);
+        }
+      };
+      (data.groups || []).forEach(walk);
+
+      window.__tutorialPlatform = {
+        userRole: role,
+        servicePathByNavKey: oPathByNavKey,
+        getServicePath: function (sNavKey) {
+          return oPathByNavKey[sNavKey] || null;
+        }
+      };
     },
 
     _filterNavigationByRole: function (role) {

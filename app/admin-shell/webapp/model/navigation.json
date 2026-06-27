@@ -15,8 +15,8 @@
         { "key": "events", "title": "Events" },
         { "key": "missions", "title": "Missions" },
         { "key": "groups", "title": "Groups" },
-        { "key": "tutorials", "title": "Tutorials", "requiredScope": "Tutorial.Author" },
-        { "key": "tags", "title": "Tags", "requiredScope": "Tutorial.Author" },
+        { "key": "tutorials", "title": "Tutorials", "requiredScope": "Tutorial.Author", "adminPath": "/admin/", "authorPath": "/author/" },
+        { "key": "tags", "title": "Tags", "requiredScope": "Tutorial.Author", "adminPath": "/admin/", "authorPath": "/author/" },
         { "key": "categories", "title": "Categories" },
         { "key": "concepts", "title": "Concepts" },
         { "key": "advocates", "title": "Advocates" },
@@ -38,8 +38,8 @@
       "icon": "sap-icon://feedback",
       "requiredScope": "Tutorial.Author",
       "items": [
-        { "key": "feedbackList", "title": "All Submissions" },
-        { "key": "feedbackDashboard", "title": "Dashboard" }
+        { "key": "feedbackList", "title": "All Submissions", "adminPath": "/admin/", "authorPath": "/author/" },
+        { "key": "feedbackDashboard", "title": "Dashboard", "adminPath": "/admin/", "authorPath": "/author/" }
       ]
     },
     {
@@ -62,7 +62,7 @@
         { "key": "pipelinelog", "title": "Pipeline Log" },
         { "key": "joblog", "title": "Job Log" },
         { "key": "accounts", "title": "Account Merges" },
-        { "key": "changelog", "title": "Change Log", "requiredScope": "Tutorial.Author" },
+        { "key": "changelog", "title": "Change Log", "requiredScope": "Tutorial.Author", "adminPath": "/admin/", "authorPath": "/author/" },
         { "key": "board", "title": "Board" },
         { "key": "joule", "title": "Joule Settings" },
         { "key": "knowledgeGraph", "title": "Knowledge Graph" },
