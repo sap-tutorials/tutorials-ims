@@ -263,3 +263,58 @@
     transition: none;
   }
 }
+
+/* ===== Verb sub-pages (Task 19) ===== */
+.verb-page { max-width: 1200px; margin: 0 auto; padding: 2rem 1rem; }
+.verb-page__hero { padding: 2rem 0 1rem; border-bottom: 1px solid var(--sapList_BorderColor, #e5e5e5); margin-bottom: 2rem; }
+.verb-page__hero h1 { font-size: 2.5rem; font-weight: 600; color: var(--sapTextColor, #32363a); margin: 0 0 0.5rem; }
+.verb-page__hero p { font-size: 1.125rem; color: var(--sapContent_LabelColor, #6a6d70); margin: 0; max-width: 720px; }
+
+.verb-shelf { margin-bottom: 2.5rem; }
+.verb-shelf h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--sapContent_LabelColor, #6a6d70); font-weight: 700; margin: 0 0 1rem; }
+.verb-shelf__list { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.75rem; }
+.verb-shelf__list li a {
+  display: block;
+  padding: 1rem;
+  border: 1px solid var(--sapList_BorderColor, #e5e5e5);
+  border-radius: 6px;
+  background: var(--sapList_Background, #fff);
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.verb-shelf__list li a:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  border-color: var(--sapLinkColor, #0070f3);
+}
+.verb-shelf__list li strong { display: block; color: var(--sapLinkColor, #0070f3); font-weight: 600; margin-bottom: 0.25rem; }
+.verb-shelf__list li p { font-size: 0.85rem; color: var(--sapContent_LabelColor, #6a6d70); margin: 0.25rem 0 0; }
+
+.badge { display: inline-block; padding: 0.125rem 0.5rem; border-radius: 999px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+.badge--new          { background: #16a34a; color: white; }
+.badge--updated      { background: #2563eb; color: white; }
+.badge--hidden_gem   { background: #ca8a04; color: white; }
+.badge--third_party  { background: #6b7280; color: white; }
+
+/* ===== Verb extras ===== */
+.verb-extra { margin-top: 3rem; padding: 1.5rem; background: var(--sapList_HeaderBackground, #f5f6f7); border-radius: 8px; }
+.verb-extra h2 { font-size: 1.25rem; margin: 0 0 1rem; }
+
+.verb-extra__cta {
+  display: inline-block;
+  padding: 0.75rem 1.5rem;
+  background: var(--sapButton_Emphasized_Background, #0070f2);
+  color: var(--sapButton_Emphasized_TextColor, white);
+  text-decoration: none;
+  border-radius: 6px;
+  font-weight: 600;
+  margin-top: 0.5rem;
+}
+.verb-extra__cta:hover { opacity: 0.9; }
+
+@media (prefers-reduced-motion: reduce) {
+  .verb-shelf__list li a {
+    transition: none;
+  }
+}
