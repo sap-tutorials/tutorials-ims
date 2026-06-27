@@ -50,4 +50,15 @@ describe('coCompletedWith k-anonymity', () => {
       '<https://developers.sap.com/kg/tutorial/cap-quickstart> .',
     ]);
   });
+
+  it('rejects NaN counts (defensive: NaN comparisons always false in JS)', () => {
+    const rows = [
+      { sourceSlug: 'a', targetSlug: 'b', count: NaN },        // rejected
+      { sourceSlug: 'a', targetSlug: 'c', count: Infinity },   // rejected (belt-and-braces)
+      { sourceSlug: 'a', targetSlug: 'e', count: -Infinity },  // rejected
+      { sourceSlug: 'a', targetSlug: 'd', count: 15 },         // kept
+    ];
+    const triples = buildCoCompletionTriples(rows);
+    expect(triples).toHaveLength(1);
+  });
 });

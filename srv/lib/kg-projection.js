@@ -292,7 +292,10 @@ export function buildCoCompletionTriples(rows) {
   const out = [];
   for (const r of rows || []) {
     if (!r || !r.sourceSlug || !r.targetSlug) continue;
-    if (typeof r.count !== 'number' || r.count < 10) continue;
+    // `Number.isFinite` rejects NaN and ±Infinity (typeof both is 'number',
+    // and every comparison with NaN is false — so `NaN < 10` is false and a
+    // bare `r.count < 10` check would let NaN rows slip through).
+    if (typeof r.count !== 'number' || !Number.isFinite(r.count) || r.count < 10) continue;
     out.push(
       triple(iriTutorial(r.sourceSlug), iriPredicate('coCompletedWith'), iriTutorial(r.targetSlug))
     );
