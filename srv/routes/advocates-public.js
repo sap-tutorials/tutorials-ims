@@ -19,6 +19,44 @@ function maxModified(rows) {
   return max;
 }
 
+/**
+ * Map a raw Advocates row + pre-built lookup maps into the canonical
+ * JSON shape used by both /api/advocates (list) and /api/advocates/:slug
+ * (single). Optional fields (email, authoredTutorials, contributedTutorials)
+ * are omitted entirely when the advocate has no user link OR the linked
+ * user has no email / tutorials — same gating logic the existing list
+ * handler used inline.
+ */
+export function shapeAdvocateRow(a, ctx) {
+  const { topicsByAdv, linksByAdv, userById, authoredByUserId, contribByUserId } = ctx;
+  const linkedUser = a.user_ID ? userById.get(a.user_ID) : null;
+  const authored = a.user_ID ? authoredByUserId.get(a.user_ID) : null;
+  const contributed = a.user_ID ? contribByUserId.get(a.user_ID) : null;
+  return {
+    ID: a.ID,
+    slug: a.slug,
+    firstName: a.firstName,
+    lastName: a.lastName,
+    title: a.title,
+    pronouns: a.pronouns,
+    location: a.location,
+    region: a.region,
+    bio: a.bio,
+    joinedDate: a.joinedDate,
+    hasPhoto: !!a.hasPhoto,
+    photoUpdatedAt: a.photoUpdatedAt,
+    topics: topicsByAdv.get(a.ID) || [],
+    links: linksByAdv.get(a.ID) || [],
+    ...(linkedUser?.email ? { email: linkedUser.email } : {}),
+    ...(authored?.length
+      ? { authoredTutorials: authored.slice().sort((x, y) => x.title.localeCompare(y.title)) }
+      : {}),
+    ...(contributed?.length
+      ? { contributedTutorials: contributed.slice().sort((x, y) => x.title.localeCompare(y.title)) }
+      : {}),
+  };
+}
+
 async function handleAdvocates(req, res) {
   try {
     const db = await cds.connect.to('db');
@@ -151,47 +189,8 @@ async function handleAdvocates(req, res) {
       return collator.compare(a.firstName || '', b.firstName || '');
     });
 
-    const body = {
-      advocates: advocates.map((a) => ({
-        ID: a.ID,
-        slug: a.slug,
-        firstName: a.firstName,
-        lastName: a.lastName,
-        title: a.title,
-        pronouns: a.pronouns,
-        location: a.location,
-        region: a.region,
-        bio: a.bio,
-        joinedDate: a.joinedDate,
-        hasPhoto: !!a.hasPhoto,
-        photoUpdatedAt: a.photoUpdatedAt,
-        topics: topicsByAdv.get(a.ID) || [],
-        links: linksByAdv.get(a.ID) || [],
-        // Spec 2026-06-25-advocate-user-link-design §3: conditionally
-        // include email + authored/contributed tutorial arrays. Each is
-        // omitted (not set to null / []) when it would carry no info, so
-        // the Vue island can use simple v-if="advocate.email" gates.
-        ...(a.user_ID && userById.get(a.user_ID)?.email
-          ? { email: userById.get(a.user_ID).email }
-          : {}),
-        ...(a.user_ID && authoredByUserId.get(a.user_ID)?.length
-          ? {
-              authoredTutorials: authoredByUserId
-                .get(a.user_ID)
-                .slice()
-                .sort((x, y) => x.title.localeCompare(y.title)),
-            }
-          : {}),
-        ...(a.user_ID && contribByUserId.get(a.user_ID)?.length
-          ? {
-              contributedTutorials: contribByUserId
-                .get(a.user_ID)
-                .slice()
-                .sort((x, y) => x.title.localeCompare(y.title)),
-            }
-          : {}),
-      })),
-    };
+    const ctx = { topicsByAdv, linksByAdv, userById, authoredByUserId, contribByUserId };
+    const body = { advocates: advocates.map((a) => shapeAdvocateRow(a, ctx)) };
 
     const max = Math.max(
       maxModified(advocates),
