@@ -86,6 +86,8 @@ Flags: `--skip-cleanup` (skip autotest deletion), `--skip-slugs` (skip slug assi
 
 ### Content Publishing
 
+> **⚠️ Workstation publishes are emergency-only.** The canonical publish path is `gh workflow run rebuild-content.yml`. Until #672 shipped (this PR), a stale local `.tutorial-cache/` could silently regress live content. With #672 the server-side no-revert guard catches the worst case, but a workstation publish still skips the validation work CI does. Every publish now records its initiator on `ContentManifest.initiator` and `PipelineLog.initiator` so attribution is one query away.
+
 After Hugo builds, publish tutorial HTML to HANA. The publisher uses a chunked protocol (begin → append batches → commit) so a flaky TCP connection or a 53 MB JSON body no longer kills the run, and the server's commit step does carry-forward of unchanged slugs.
 
 ```bash
@@ -110,8 +112,18 @@ Flags:
 - `--concurrency N` — number of append batches in flight at once (default `6`).
 - `--batch-size N` — slugs per append batch (default `50`).
 - `--dry-run` — preview without uploading.
+- `--initiator <value>` — who issued this publish. Default: `${user}@${hostname}`. Override with the `INITIATOR` env var or this flag. CI passes `--initiator "ci/$GITHUB_RUN_ID"` from `rebuild-content.yml`. Persisted on `ContentManifest.initiator` + `PipelineLog.initiator`.
 
 `--force`, `--heal`, and `--verify-only` are mutually exclusive. The default targets ~90 s wall-clock for a full 1398-slug publish.
+
+#### Reverting content intentionally
+
+`--force` is a client-side performance shortcut (skips the `/content/hashes` round-trip and uploads everything). It does **not** bypass the server's no-revert guard. For a deliberate rollback:
+
+1. **Preferred:** `POST /content/rollback` (existing endpoint; reverts to the previous ACTIVE manifest). See [docs/developers/operations/rebuild-content-workflow.md](docs/developers/operations/rebuild-content-workflow.md).
+2. **Last resort:** if `/content/rollback` is insufficient (e.g. the slug you want to revert isn't in the immediately-prior manifest), null out the offending prior `sourceHash` in HANA via `UPDATE com_sap_developers_ims_contentfiles SET sourceHash = NULL WHERE version = <V> AND slug = <S>`. The next publish of that slug then appears "novel" to the guard and lands normally. This is the escape hatch; use it sparingly and log what you did.
+
+The guard rejects a slug if its incoming `sourceHash` appears in **any version older than the most recent prior hash that differs from incoming**. A legitimate flap (`A → B → A` where current upstream IS `A`) is permitted; a stale-cache regression (`A → B` where the workstation re-publishes the old `A` after the server has moved to `B`) is caught.
 
 If CONTENT_API_KEY is not set on the deployed srv app:
 

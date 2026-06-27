@@ -1,6 +1,8 @@
 export interface BeginInput {
   baseUrl: string; apiKey: string;
   trigger: string; hugoVersion: string; expectedSlugCount: number;
+  /** #672 — sent as `x-initiator` header; persisted on ContentManifest.initiator and PipelineLog.initiator. */
+  initiator?: string;
 }
 export interface BeginResult { sessionId: string; version: number; expiresAt: string }
 
@@ -23,12 +25,22 @@ export interface CommitInput { baseUrl: string; apiKey: string; sessionId: strin
 export interface CommitResult {
   version: number; fileCount: number; totalSizeBytes: number;
   durationMs: number; alreadyActive: boolean;
+  /** #672 — slugs whose incoming sourceHash matched a superseded version
+   * and were carry-forwarded instead of committed. Always present, often `[]`. */
+  rejectedReverts: string[];
+  /** Carry-forward count from the prior ACTIVE manifest (existing field, now declared). */
+  carriedForward?: number;
 }
 
-async function postJson<T>(url: string, apiKey: string, body: unknown): Promise<T> {
+async function postJson<T>(
+  url: string,
+  apiKey: string,
+  body: unknown,
+  extraHeaders: Record<string, string> = {}
+): Promise<T> {
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}`, ...extraHeaders },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -43,9 +55,14 @@ async function postJson<T>(url: string, apiKey: string, body: unknown): Promise<
 }
 
 export async function beginSession(i: BeginInput): Promise<BeginResult> {
-  return postJson(`${i.baseUrl}/content/publish/begin`, i.apiKey, {
-    trigger: i.trigger, hugoVersion: i.hugoVersion, expectedSlugCount: i.expectedSlugCount,
-  });
+  const headers: Record<string, string> = {};
+  if (i.initiator) headers['x-initiator'] = i.initiator;
+  return postJson(
+    `${i.baseUrl}/content/publish/begin`,
+    i.apiKey,
+    { trigger: i.trigger, hugoVersion: i.hugoVersion, expectedSlugCount: i.expectedSlugCount },
+    headers
+  );
 }
 
 export async function appendBatch(i: AppendInput): Promise<AppendResult> {

@@ -320,6 +320,7 @@ jobs:
             --base-url "${{ steps.srv.outputs.srv_url }}" \
             --trigger "ci/${{ github.event_name }}@${{ github.sha }}" \
             --hugo-version "0.147.7" \
+            --initiator "ci/${{ github.run_id }}" \
             --concurrency "${{ inputs.publish-concurrency || '4' }}" \
             --batch-size "${{ inputs.publish-batch-size || '25' }}" \
             --verbose

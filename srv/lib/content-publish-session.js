@@ -14,6 +14,15 @@ const LOCK_NAME = 'content-publish';
 const LOCK_DURATION_MS = 30 * 60 * 1000;
 const INSTANCE_ID = process.env.CF_INSTANCE_GUID || `local-${process.pid}`;
 
+// #672 — used when merging rejectedReverts into PipelineLog.metadata after
+// logPipelineEnd. The PipelineLog row's begin-time fields (trigger,
+// hugoVersion, etc.) are stored as a JSON string; we parse, merge, and
+// re-serialize. Defensive on malformed JSON so a corrupt row can't take
+// down the publish.
+function safeJsonParse(s) {
+  try { return JSON.parse(s); } catch { return {}; }
+}
+
 export function createSessionHelpers({ namespace }) {
   async function getNextVersion() {
     const { ContentManifest } = cds.entities(namespace);
@@ -39,6 +48,10 @@ export function createSessionHelpers({ namespace }) {
         status: 'PUBLISHING',
         sessionId,
         trigger: (trigger || 'unknown').slice(0, 500),
+        // #672 — clients pass initiator via x-initiator header; beginHandler
+        // forwards it as the `initiator` arg. Falls back to 'publish-script'
+        // when absent (legacy single-shot publishHandler still uses that).
+        initiator: (initiator || 'publish-script').slice(0, 255),
         fileCount: 0,
         totalSizeBytes: 0,
         changedSlugs: JSON.stringify([]),
@@ -188,6 +201,79 @@ export function createSessionHelpers({ namespace }) {
     return row?.version ?? null;
   }
 
+  /**
+   * #672 no-revert guard. For each slug freshly written in `newVersion`, check
+   * whether its sourceHash matches an *abandoned* hash from history — i.e. a
+   * hash older than the most recent prior hash that differs from the incoming
+   * one. If yes, the publish is trying to roll back content the server has
+   * since moved past, so we reject the slug (caller DELETEs it from this
+   * version; carryForwardUnchanged then re-pulls the current ACTIVE row).
+   *
+   * Legitimate flap `A → B → A` is permitted: when the *current upstream* IS
+   * A and the most-recent-prior-differing hash is B, A does NOT appear in
+   * "older than B" history → not a revert.
+   *
+   * Slugs without a sourceHash (pre-PR#591 legacy rows or special slugs like
+   * __shell__/__nav__/__404__) are skipped — nothing to compare against.
+   *
+   * Two SQL round-trips total (not per-slug). Runs inside the publish lock.
+   *
+   * @returns {Promise<string[]>} slugs to reject (carry-forward instead of commit)
+   */
+  async function detectReverts(newVersion, freshSlugs) {
+    if (!freshSlugs.length) return [];
+    const { ContentFiles } = cds.entities(namespace);
+
+    // 1. Incoming hashes for this version (only slugs that have a sourceHash
+    //    — null-sourceHash rows can't be checked).
+    const incoming = await SELECT.from(ContentFiles)
+      .columns('slug', 'sourceHash')
+      .where({ version: newVersion, slug: { in: freshSlugs } })
+      .and({ sourceHash: { '!=': null } });
+    if (!incoming.length) return [];
+
+    const incomingMap = new Map(incoming.map((r) => [r.slug, r.sourceHash]));
+    const slugsWithSrc = [...incomingMap.keys()];
+
+    // 2. All prior versions of those slugs (newest-first).
+    const priors = await SELECT.from(ContentFiles)
+      .columns('slug', 'sourceHash', 'version')
+      .where({ slug: { in: slugsWithSrc } })
+      .and({ version: { '<': newVersion } })
+      .and({ sourceHash: { '!=': null } })
+      .orderBy({ slug: 'asc', version: 'desc' });
+
+    // 3. Per slug, walk newest-first: find V_div (most recent prior hash that
+    //    differs from incoming). If incoming appears in any version older
+    //    than V_div, it's a revert.
+    const bySlug = new Map();
+    for (const r of priors) {
+      if (!bySlug.has(r.slug)) bySlug.set(r.slug, []);
+      bySlug.get(r.slug).push(r);
+    }
+
+    const rejected = [];
+    for (const slug of slugsWithSrc) {
+      const incomingHash = incomingMap.get(slug);
+      const history = bySlug.get(slug) || [];
+      // Find V_div index — the first entry whose hash differs from incoming.
+      let divIdx = -1;
+      for (let i = 0; i < history.length; i++) {
+        if (history[i].sourceHash !== incomingHash) { divIdx = i; break; }
+      }
+      if (divIdx === -1) continue; // every prior hash equals incoming — re-publish of unchanged content, not a revert
+      // Anything strictly older than V_div is "abandoned history". If
+      // incoming matches any of those, it's a revert.
+      for (let i = divIdx + 1; i < history.length; i++) {
+        if (history[i].sourceHash === incomingHash) {
+          rejected.push(slug);
+          break;
+        }
+      }
+    }
+    return rejected;
+  }
+
   async function commitSession({ sessionId }) {
     const { ContentManifest } = cds.entities(namespace);
 
@@ -222,7 +308,20 @@ export function createSessionHelpers({ namespace }) {
     const freshRows = await SELECT.from(ContentFiles)
       .columns('slug')
       .where({ version: newVersion });
-    const freshSlugs = freshRows.map((r) => r.slug);
+    let freshSlugs = freshRows.map((r) => r.slug);
+
+    // #672 — no-revert guard. Detect slugs whose incoming sourceHash matches a
+    // previously-superseded version (i.e. the publish would roll back content
+    // the server has moved past). DELETE rejected slugs from the in-flight
+    // version; carryForwardUnchanged below then re-pulls the current ACTIVE
+    // row for them, so the result is "we silently kept the existing content."
+    const rejectedReverts = await detectReverts(newVersion, freshSlugs);
+    if (rejectedReverts.length) {
+      LOG.warn(`[content/publish/commit] #672 rejecting ${rejectedReverts.length} revert(s): ${rejectedReverts.join(', ')}`);
+      await DELETE.from(ContentFiles).where({ version: newVersion, slug: { in: rejectedReverts } });
+      const rejectedSet = new Set(rejectedReverts);
+      freshSlugs = freshSlugs.filter((s) => !rejectedSet.has(s));
+    }
 
     // Carry forward unchanged slugs from the previously-ACTIVE manifest.
     // This logic is lifted verbatim from the legacy publishHandler at
@@ -279,14 +378,25 @@ export function createSessionHelpers({ namespace }) {
     // text is what shows in the Pipeline Logs list-report row; metadata
     // captures the full structured result for the Object Page Metadata facet.
     try {
-      const summary = `Published v${newVersion}: ${freshCount} new + ${carriedForward} carried = ${freshCount + carriedForward} slugs in ${durationMs}ms`;
+      const revertSuffix = rejectedReverts.length ? ` (${rejectedReverts.length} revert${rejectedReverts.length === 1 ? '' : 's'} rejected)` : '';
+      const summary = `Published v${newVersion}: ${freshCount} new + ${carriedForward} carried = ${freshCount + carriedForward} slugs in ${durationMs}ms${revertSuffix}`;
       await logPipelineEnd(
         sessionId,
         'SUCCESS',
         summary,
-        null,
+        null,  // errorDetails — none on SUCCESS
         namespace
       );
+      // #672 — surface rejected slugs on the PipelineLog row's metadata.
+      // logPipelineEnd's 4th arg is errorDetails (not metadata); metadata
+      // was set at logPipelineStart. We merge here rather than changing the
+      // shared pipeline-log.js API.
+      if (rejectedReverts.length) {
+        const { PipelineLog } = cds.entities(namespace);
+        const existing = await SELECT.one.from(PipelineLog, sessionId).columns('metadata');
+        const merged = { ...(existing?.metadata ? safeJsonParse(existing.metadata) : {}), rejectedReverts };
+        await UPDATE(PipelineLog, sessionId).set({ metadata: JSON.stringify(merged) });
+      }
     } catch (logErr) {
       LOG.warn(`[content/publish/commit] PipelineLog end failed (non-fatal): ${logErr.message}`);
     }
@@ -297,6 +407,11 @@ export function createSessionHelpers({ namespace }) {
       totalSizeBytes: freshSize + carriedSize,
       durationMs,
       carriedForward,
+      // #672 — empty array (not omitted) so clients can rely on the field
+      // being present in every commit response. Task 4 adds the summary
+      // suffix and PipelineLog metadata threading; the response field is
+      // here so Task 3's tests can assert cleanly.
+      rejectedReverts,
       alreadyActive: false
     };
   }
