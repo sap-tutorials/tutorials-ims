@@ -13,14 +13,7 @@ const photoUrl = computed(() => {
   return `${props.photoBase}/${props.advocate.slug}/photo${v}`;
 });
 
-const profileUrl = computed(() => {
-  const order = ['Blog','SapCommunity','LinkedIn','GitHub','X','BlueSky','Mastodon','YouTube','Email'];
-  for (const k of order) {
-    const link = props.advocate.links.find(l => l.kind === k);
-    if (link) return link.url;
-  }
-  return null;
-});
+const profileUrl = computed(() => `/developer-advocates/${props.advocate.slug}/`);
 
 const ICON: Record<string, string> = {
   LinkedIn: 'in', X: '𝕏', GitHub: 'gh', YouTube: '▶',
@@ -100,7 +93,7 @@ const ICON: Record<string, string> = {
             {{ ICON[l.kind] || l.kind.slice(0,2) }}
           </a>
         </div>
-        <a v-if="profileUrl" class="adv-profile" :href="profileUrl" target="_blank" rel="noopener">
+        <a v-if="profileUrl" class="adv-profile" :href="profileUrl">
           View profile →
         </a>
       </div>
