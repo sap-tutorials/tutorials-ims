@@ -1,19 +1,38 @@
 {{- /* tutorials-teaser.html — spec §6 row 5.
-       Reads .Site.Data.browse.featured (populated by fetch-tutorials.ts).
-       Renders up to 6 cards using the existing card-tutorial partial.
+       Reads .Site.Data.browse (populated by fetch-tutorials.ts → writeBrowseData).
+
+       browse.json is normalized:
+         - browse.all  — array of full card objects (id, type, title, …)
+         - browse.featured — array of string IDs that look up into all[]
+       This partial mirrors hugo/layouts/partials/browse/_partials/rail.html's
+       dereference: for each id, find the matching item in all, and dispatch
+       to the type-specific card partial.
+
+       browse.featured is currently the top mission cards (see writeBrowseData
+       in scripts/fetch-tutorials.ts), so the band heading reads "Featured
+       missions" to match the actual content. If a future caller passes a
+       featured list of tutorials, the type-dispatch below renders them too.
+
        Falls back gracefully when browse data is absent. */ -}}
-{{- $browse := .Site.Data.browse | default (dict "featured" slice) -}}
+{{- $browse := .Site.Data.browse | default (dict "all" slice "featured" slice) -}}
+{{- $all := $browse.all | default slice -}}
 {{- $featured := $browse.featured | default slice -}}
-{{- $cards := first 6 $featured -}}
+{{- $ids := first 6 $featured -}}
 <section class="hp-teaser" aria-labelledby="hp-teaser-title">
   <div class="hp-teaser__header">
-    <h2 id="hp-teaser-title" class="hp-band__title">Featured tutorials</h2>
-    <a class="hp-teaser__see-all" href="/tutorial-navigator/">Browse all tutorials →</a>
+    <h2 id="hp-teaser-title" class="hp-band__title">Featured missions</h2>
+    <a class="hp-teaser__see-all" href="/tutorial-navigator/">Browse all →</a>
   </div>
-  {{- if gt (len $cards) 0 -}}
+  {{- if gt (len $ids) 0 -}}
     <div class="hp-teaser__grid">
-      {{- range $cards -}}
-        {{ partial "browse/_partials/card-tutorial.html" . }}
+      {{- range $rid := $ids -}}
+        {{- range $item := $all -}}
+          {{- if eq $item.id $rid -}}
+            {{- if eq $item.type "mission" -}}{{ partial "browse/_partials/card-mission.html" $item }}{{- end -}}
+            {{- if eq $item.type "group" -}}{{ partial "browse/_partials/card-group.html" $item }}{{- end -}}
+            {{- if eq $item.type "tutorial" -}}{{ partial "browse/_partials/card-tutorial.html" $item }}{{- end -}}
+          {{- end -}}
+        {{- end -}}
       {{- end -}}
     </div>
   {{- end -}}
