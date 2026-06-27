@@ -156,7 +156,9 @@ describe('#672 publish staleness guard', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `npx vitest run test/unit/content-publish-guard.test.js -t 'writes initiator'`
-Expected: FAIL — assertion `ContentManifest.initiator should be set` fails because the column is set but never written to. (The exact failure message will be `expected null to be 'bob@laptop'` or `expected undefined to be 'bob@laptop'`.)
+Expected: FAIL on the `ContentManifest.initiator should be set` assertion specifically — the column is in the schema (after Task 1) but never written to. Note that the `PipelineLog.initiator` assertion further down the same test will likely PASS even before the implementation change, because [beginPublishSession](../../../srv/lib/content-publish-session.js#L24-L62) already forwards the `initiator` arg to `logPipelineStart`. That asymmetry is the whole point of Task 2: ContentManifest is the missing half.
+
+The exact failure message will be `expected null to be 'bob@laptop'` or `expected undefined to be 'bob@laptop'`.
 
 If the test errors with "column 'initiator' does not exist" instead, Task 1 wasn't completed — go back and add the column.
 
@@ -450,14 +452,16 @@ Expected: no failures introduced by this change. Pre-existing failures (the "che
 
 Surface the rejected list in the commit response body, the `summary` text, and `PipelineLog.metadata` so operators can see what was dropped without grepping CF logs.
 
+**Critical detail:** `logPipelineEnd` in [srv/lib/pipeline-log.js:33-49](../../../srv/lib/pipeline-log.js#L33-L49) has signature `(logId, status, summary, errorDetails, namespace)` — the 4th arg is `errorDetails`, **not** metadata. Metadata is set only at `logPipelineStart`. To carry `rejectedReverts` on the same row, we UPDATE `PipelineLog.metadata` directly after `logPipelineEnd` returns, merging the existing JSON with `{ rejectedReverts }`. We do **not** change `pipeline-log.js`'s shared signature.
+
 **Files:**
-- Modify: `srv/lib/content-publish-session.js` (commitSession return + summary + logPipelineEnd)
+- Modify: `srv/lib/content-publish-session.js` (commitSession return + summary + metadata merge UPDATE)
 - Modify: `scripts/lib/publish-client.ts:23-26` (CommitResult shape)
 - Test: existing tests in `test/unit/content-publish-guard.test.js` (uncomment if temporarily disabled in Task 3, Step 5)
 
-- [ ] **Step 1: Add `rejectedReverts` to the commit response and summary**
+- [ ] **Step 1: Add `rejectedReverts` to the commit response and summary; UPDATE PipelineLog.metadata separately**
 
-In [srv/lib/content-publish-session.js](../../../srv/lib/content-publish-session.js) `commitSession`, modify the closing return block and the summary message. Find the existing block (around line 282–301):
+In [srv/lib/content-publish-session.js](../../../srv/lib/content-publish-session.js) `commitSession`, modify the closing block. Find the existing block (around line 282–301):
 
 ```javascript
     try {
@@ -489,16 +493,23 @@ Replace with:
     try {
       const revertSuffix = rejectedReverts.length ? ` (${rejectedReverts.length} revert${rejectedReverts.length === 1 ? '' : 's'} rejected)` : '';
       const summary = `Published v${newVersion}: ${freshCount} new + ${carriedForward} carried = ${freshCount + carriedForward} slugs in ${durationMs}ms${revertSuffix}`;
-      // PipelineLog.metadata is LargeString JSON — attach the rejected slug
-      // list so admin Pipeline Log Object Page surfaces it under Metadata.
-      const logMetadata = rejectedReverts.length ? { rejectedReverts } : null;
       await logPipelineEnd(
         sessionId,
         'SUCCESS',
         summary,
-        logMetadata,
+        null,  // errorDetails — none on SUCCESS
         namespace
       );
+      // #672 — surface rejected slugs on the PipelineLog row's metadata.
+      // logPipelineEnd's 4th arg is errorDetails (not metadata); metadata
+      // was set at logPipelineStart. We merge here rather than changing the
+      // shared pipeline-log.js API.
+      if (rejectedReverts.length) {
+        const { PipelineLog } = cds.entities(namespace);
+        const existing = await SELECT.one.from(PipelineLog, sessionId).columns('metadata');
+        const merged = { ...(existing?.metadata ? safeJsonParse(existing.metadata) : {}), rejectedReverts };
+        await UPDATE(PipelineLog, sessionId).set({ metadata: JSON.stringify(merged) });
+      }
     } catch (logErr) {
       LOG.warn(`[content/publish/commit] PipelineLog end failed (non-fatal): ${logErr.message}`);
     }
@@ -516,13 +527,17 @@ Replace with:
     };
 ```
 
-- [ ] **Step 2: Check `logPipelineEnd`'s 4th argument shape**
+Add a small helper near the top of the same file (after the LOG/LOCK_NAME constants around line 16) if it doesn't already exist:
 
-The 4th positional arg to `logPipelineEnd` is `errorDetails` in some signatures. Verify by reading [srv/lib/pipeline-log.js](../../../srv/lib/pipeline-log.js). If the 4th arg is `errorDetails` and metadata is a separate arg, adapt the call accordingly. Look for the function signature: `export function logPipelineEnd(id, status, summary, ???, namespace)`.
+```javascript
+function safeJsonParse(s) {
+  try { return JSON.parse(s); } catch { return {}; }
+}
+```
 
-Run: `grep -n "export function logPipelineEnd\|export async function logPipelineEnd" srv/lib/pipeline-log.js`
+- [ ] **Step 2: (Removed — the design decision is now codified in Step 1.)**
 
-If the 4th arg is named `metadata`, the call above is correct. If it's named `errorDetails` (and metadata is appended differently — e.g. a 6th arg, or via a separate `UPDATE`), adjust the code to attach `{ rejectedReverts }` via whatever mechanism that file uses. Update the test below accordingly.
+This step previously asked the implementer to "verify" `logPipelineEnd`'s 4th arg shape. Step 1 now bakes in the right answer (errorDetails stays null on SUCCESS; metadata gets a separate UPDATE). Skip directly to Step 3.
 
 - [ ] **Step 3: Update the CommitResult TypeScript interface**
 
@@ -562,14 +577,16 @@ Append to `test/unit/content-publish-guard.test.js`:
     // Commit response field
     expect(v3SessionResult.rejectedReverts).toEqual(['thread-slug']);
 
-    // PipelineLog summary suffix + metadata
+    // PipelineLog summary suffix
     const active = await SELECT.one.from(ContentManifest).where({ status: 'ACTIVE' });
     const log = await SELECT.one.from(PipelineLog).where({ ID: active.sessionId });
     expect(log.summary).toMatch(/\(1 revert rejected\)$/);
+
+    // PipelineLog metadata gains rejectedReverts (merged, not replaced —
+    // the begin-time fields like `trigger` should still be there).
     const meta = JSON.parse(log.metadata || '{}');
-    // metadata.rejectedReverts populated by logPipelineEnd (Task 4 Step 2 may
-    // have you using a different field name; adjust if so).
     expect(meta.rejectedReverts).toEqual(['thread-slug']);
+    expect(meta.trigger, 'begin-time trigger should still be in metadata').toBe('unit-test');
   });
 ```
 
@@ -577,8 +594,6 @@ Append to `test/unit/content-publish-guard.test.js`:
 
 Run: `npx vitest run test/unit/content-publish-guard.test.js`
 Expected: all 6 tests pass.
-
-If the metadata assertion fails because `logPipelineEnd` stores metadata differently than expected, adjust either the call in Step 1 or the assertion in Step 4 to match the actual storage shape. Don't change the SQL — the contract is "rejected slugs are findable somewhere on the PipelineLog row."
 
 - [ ] **Step 6: Run the existing pipeline-log test for regression**
 
@@ -700,7 +715,13 @@ The split keeps the existing `buildSourcePayload` contract intact (so verify-onl
 
 - [ ] **Step 2: Add `--initiator` to `PublishOptions` and `parseArgs`**
 
-Modify [scripts/publish-content.ts:391-427](../../../scripts/publish-content.ts#L391-L427). Replace the interface and `parseArgs` body. After `hugoVersion: string;` and before `dryRun: boolean;` add:
+[scripts/publish-content.ts](../../../scripts/publish-content.ts) is strict ESM (only `import` statements at the top). Add to the imports at the very top of the file, near the other `node:` imports:
+
+```typescript
+import { userInfo, hostname } from 'node:os';
+```
+
+Then modify [scripts/publish-content.ts:391-427](../../../scripts/publish-content.ts#L391-L427). After `hugoVersion: string;` and before `dryRun: boolean;` in the `PublishOptions` interface, add:
 
 ```typescript
   initiator: string;
@@ -712,11 +733,11 @@ In `parseArgs`, after `hugoVersion: get('--hugo-version', ''),` add:
     initiator: get(
       '--initiator',
       process.env.INITIATOR
-        || `${(require('os').userInfo().username || 'unknown')}@${require('os').hostname()}`
+        || `${userInfo().username || 'unknown'}@${hostname()}`
     ),
 ```
 
-(`require('os')` works fine here even though the file is TS — the `tsx` runtime accepts CJS-style requires; if the file is strict ESM (`import` at top only), use a top-level `import { userInfo, hostname } from 'node:os'` instead and reference them directly.)
+Some CI runners' `userInfo().username` returns the runner's UID rather than a meaningful identity, which is why CI workflows in Task 5 Step 6 pass `--initiator` explicitly.
 
 - [ ] **Step 3: Wire `initiator` through to the begin call**
 
@@ -839,6 +860,8 @@ Replace with (note the added `cacheDir` resolution earlier — if it already exi
   //   --force: "upload everything regardless of server state"
   //   --heal : "fix slugs the client thinks are in sync"
   if (mode === 'delta' && targetSlugs.length > 0) {
+    // `channel` is defined earlier in main() as `const channel = parseChannel(process.argv)`
+    // (around line 478) — same value used by the existing verify-only path.
     const cacheDirForHashes = channel === 'qa'
       ? join(process.cwd(), '.tutorial-cache-qa')
       : join(process.cwd(), '.tutorial-cache');
@@ -1056,12 +1079,7 @@ Run: `ALLOW_HYBRID_WRITES=true npm run test:hybrid -- test/hybrid/content-publis
 
 Expected: both tests pass. The hybrid test requires `cf login` to the DEV space first; without it, the bind step will fail with a permission error.
 
-If it fails because `ContentManifest.initiator` doesn't exist on the deployed HANA schema, the schema change from Task 1 needs to be deployed first. Two paths:
-
-(a) Locally only (no deploy needed): `npx cds deploy --to hana --auto-undeploy` against the dev container will pick up the new column.
-(b) Run `cf push tutorials-db-deployer` if a recent build is staged.
-
-Either way, this is the same flow as any other schema-only change — see the [cf push db-deployer Fast Path memory](../../../C:/Users/I809764/.claude/projects/d--projects-tutorials-poc/memory/feedback-cf-push-db-deployer-fast-path.md).
+If it fails because `ContentManifest.initiator` doesn't exist on the deployed HANA schema, the schema change from Task 1 needs to be deployed first. The canonical fast path on this project is `cf push tutorials-db-deployer` (see the [cf push db-deployer Fast Path memory](../../../C:/Users/I809764/.claude/projects/d--projects-tutorials-poc/memory/feedback-cf-push-db-deployer-fast-path.md)) — it picks up the latest staged build and runs HDI deploy. Don't reach for `npx cds deploy --to hana --auto-undeploy` against a shared DEV container; it's destructive and unnecessary when `cf push` covers the same case safely.
 
 - [ ] **Step 3: Run the full hybrid suite to catch any regression**
 
