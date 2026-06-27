@@ -4,7 +4,7 @@ import { ref, computed, onMounted } from 'vue';
 interface VideoItem {
   videoId: string;
   title: string;
-  thumbnailUrl?: string;
+  thumbnail?: string;
   publishedAt?: string;
 }
 
@@ -19,8 +19,8 @@ const loading = ref(true);
 const error = ref<string | null>(null);
 
 function thumbUrl(item: VideoItem): string {
-  if (item.thumbnailUrl) return item.thumbnailUrl;
-  return `https://img.youtube.com/vi/${item.videoId}/hqdefault.jpg`;
+  if (item.thumbnail) return item.thumbnail;
+  return `https://i.ytimg.com/vi/${item.videoId}/hqdefault.jpg`;
 }
 
 function watchUrl(videoId: string): string {

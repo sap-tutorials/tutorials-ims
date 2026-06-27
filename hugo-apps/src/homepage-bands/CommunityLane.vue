@@ -73,7 +73,7 @@ onMounted(() => {
     .finally(() => { advLoading.value = false; });
 
   // Community blogs
-  fetch('/api/homepage/community-blogs')
+  fetch('/api/homepage/communityBlogs')
     .then(async (res) => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const body = await res.json();
