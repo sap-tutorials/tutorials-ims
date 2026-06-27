@@ -75,3 +75,68 @@ describe.skipIf(!SRV)('GET /api/advocates/:slug/photo', () => {
     expect(res.status).toBe(404);
   });
 });
+
+// Issue #601: per-advocate profile pages.
+describe.skipIf(!BASE || !SRV)('GET /developer-advocates/:slug/ profile page', () => {
+  it('returns 200 + og:type=profile + og:title (og:image only when an advocate has a photo)', async () => {
+    // Discover a live slug from the JSON API.
+    const listRes = await fetch(SRV + '/api/advocates');
+    expect(listRes.status).toBe(200);
+    const list = await listRes.json();
+    const photoAdvocate = (list.advocates || []).find((a) => a.hasPhoto);
+    const subject = photoAdvocate || list.advocates?.[0];
+    if (!subject) return; // empty roster — nothing to assert against
+
+    const res = await fetch(BASE + '/developer-advocates/' + subject.slug + '/');
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    // og:type=profile (tolerant of minifier quote-stripping)
+    expect(html).toMatch(/<meta[^>]+property=["']?og:type["']?[^>]*content=["']?profile["']?/);
+    expect(html).toMatch(/<meta[^>]+property=["']?og:title["']?/);
+    // og:image only asserted when the live roster has a photo'd advocate.
+    if (photoAdvocate) {
+      expect(html).toMatch(/<meta[^>]+property=["']?og:image["']?[^>]*content=["']?[^"']*\/api\/advocates\/[^/]+\/photo/);
+    }
+    // The Vue island mount point must be present so client-side hydration can fire.
+    expect(html).toMatch(/id=["']?advocate-profile-mount["']?/);
+    expect(html).toMatch(/src=["']?[^"']*\/js\/advocate-profile\.js["']?/);
+  });
+});
+
+describe.skipIf(!SRV)('GET /api/advocates/:slug single-advocate endpoint', () => {
+  it('returns 200 + correct single-object shape for a known slug', async () => {
+    const listRes = await fetch(SRV + '/api/advocates');
+    const list = await listRes.json();
+    const first = list.advocates?.[0];
+    if (!first) return; // empty roster
+
+    const res = await fetch(SRV + '/api/advocates/' + first.slug);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.slug).toBe(first.slug);
+    expect(body).toHaveProperty('topics');
+    expect(body).toHaveProperty('links');
+    expect(body).not.toHaveProperty('advocates'); // single object, not the list shape
+  });
+
+  it('returns 404 for an unknown slug', async () => {
+    const res = await fetch(SRV + '/api/advocates/__does-not-exist__601');
+    expect(res.status).toBe(404);
+  });
+
+  it('responds with ETag + Cache-Control and honors If-None-Match with 304', async () => {
+    const listRes = await fetch(SRV + '/api/advocates');
+    const first = (await listRes.json()).advocates?.[0];
+    if (!first) return;
+    const a = await fetch(SRV + '/api/advocates/' + first.slug);
+    expect(a.status).toBe(200);  // surface the deploy-state failure cleanly
+    expect(a.headers.get('cache-control')).toMatch(/max-age=60/);
+    expect(a.headers.get('cache-control')).toMatch(/stale-while-revalidate=600/);
+    const etag = a.headers.get('etag');
+    expect(etag).toBeTruthy();
+    const b = await fetch(SRV + '/api/advocates/' + first.slug, {
+      headers: { 'If-None-Match': etag },
+    });
+    expect(b.status).toBe(304);
+  });
+});
