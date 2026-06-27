@@ -2,6 +2,9 @@ node_modules/
 dist/
 site/tutorials/
 hugo/content/tutorials/
+# Generated per-advocate profile pages (issue #601). Only _index.md is tracked.
+hugo/content/developer-advocates/*.md
+!hugo/content/developer-advocates/_index.md
 hugo/static/tutorials/
 hugo/public/
 hugo/public-qa/

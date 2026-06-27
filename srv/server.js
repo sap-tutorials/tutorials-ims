@@ -552,7 +552,7 @@ cds.on('served', async () => {
     // #429: classifier-driven rebuild. Each entity routes to a different
     // mode via classifyRebuildMode(); Steps + Tags added so their CRUD
     // also triggers a (slug-targeted or full+force-cap-refetch) rebuild.
-    const navInvalidatingEntities = ['Missions', 'Groups', 'CompletionPaths', 'CompletionPathItems', 'GroupPathItems', 'Tutorials', 'Steps', 'FeaturedTasks', 'Tags'];
+    const navInvalidatingEntities = ['Missions', 'Groups', 'CompletionPaths', 'CompletionPathItems', 'GroupPathItems', 'Tutorials', 'Steps', 'FeaturedTasks', 'Tags', 'Advocates', 'AdvocateTopics', 'AdvocateLinks'];
     admin.after(['CREATE', 'UPDATE', 'DELETE'], navInvalidatingEntities, async (_data, req) => {
       // #429: migration-mode short-circuit. Bulk migration scripts set
       // x-migration-mode: true and dispatch one final rebuild at end-of-run.

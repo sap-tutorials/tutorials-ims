@@ -13,6 +13,14 @@ import cds from '@sap/cds';
 // /build/catalog) and is consumed by /browse/ + mission/group landing pages.
 // Tutorial-page breadcrumbs read from cached frontmatter at Hugo build time,
 // so a Hugo rebuild captures them without re-fetching markdown.
+//
+// #601: Advocates/AdvocateTopics/AdvocateLinks are treated as catalog-only
+// because the per-advocate profile page generator (scripts/fetch-advocates.ts)
+// runs at the same Hugo build step as catalog data and regenerates all
+// per-advocate .md files. The output is catalog-scale (one .md per advocate,
+// roughly the same order of magnitude as Missions/Groups), not tutorial-scale,
+// so the slug-targeted path is the wrong shape. catalog-only mode rebuilds
+// the full set in ~1 min wall-clock.
 const CATALOG_ONLY_ENTITIES = new Set([
   'Missions',
   'Groups',
@@ -20,6 +28,9 @@ const CATALOG_ONLY_ENTITIES = new Set([
   'CompletionPathItems',
   'GroupPathItems',
   'FeaturedTasks',
+  'Advocates',
+  'AdvocateTopics',
+  'AdvocateLinks',
 ]);
 
 // Entities whose CRUD targets a specific tutorial. Re-fetch one markdown,

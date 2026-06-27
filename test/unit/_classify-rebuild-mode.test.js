@@ -41,7 +41,9 @@ describe('classifyRebuildMode', () => {
     // 0 or >cap slugs.
     ['Tags',                  'crud', 'slug-targeted', true,  false, true],
     // Safe default: anything else → full, no force
-    ['Advocates',             'crud', 'full',          false, false, false],
+    ['Advocates',             'crud', 'catalog-only', false, false, false],
+    ['AdvocateTopics',        'crud', 'catalog-only', false, false, false],
+    ['AdvocateLinks',         'crud', 'catalog-only', false, false, false],
     ['SomeFutureEntity',      'crud', 'full',          false, false, false],
     // Bound actions
     ['classifyCategories',    'action', 'catalog-only', false, false, false],

@@ -248,6 +248,17 @@ jobs:
           AI_AUTHOR_BUILD_CAP: ${{ inputs.ai-author-build-cap }}
           CHAT_DEPLOYMENT_ID: ${{ secrets.CHAT_DEPLOYMENT_ID }}
 
+      # [#601] Generate per-advocate profile-page markdown into
+      # hugo/content/developer-advocates/ from /api/advocates. Runs on ALL
+      # modes (including catalog-only) so admin Advocates/AdvocateTopics/
+      # AdvocateLinks saves regenerate the per-advocate pages within the
+      # same rebuild cycle. fetch-advocates.ts is idempotent and bounded
+      # by the advocate count (catalog scale, not tutorial scale).
+      - name: Fetch advocates
+        run: npm run fetch-advocates
+        env:
+          CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
+
       # Author-side smell detector. Runs against raw tutorial markdown in
       # .tutorial-cache/ and warns on patterns that produce malformed DOM
       # downstream (see scripts/lint-tutorial-markdown.ts). Non-blocking by
