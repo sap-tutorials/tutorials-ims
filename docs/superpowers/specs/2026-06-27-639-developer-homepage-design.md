@@ -257,7 +257,7 @@ All endpoints are public (no auth). All have graceful empty-state fallbacks so a
 
 ### 11.3 New build-time endpoint
 
-- `GET /build/homepage-shelves` — full dump of all active shelves, consumed by Hugo's `fetch-tutorials.ts` (renamed `fetch-build-data.ts` if scope grows) to bake into `hugo/data/`.
+- `GET /build/homepage-shelves` — full dump of all active shelves, consumed by Hugo's existing `fetch-tutorials.ts` (no rename — adding one more fetch step alongside the catalog/nav/tag fetches it already does) to bake into `hugo/data/`.
 
 ### 11.4 YouTube integration (new module)
 
@@ -368,12 +368,14 @@ These are not blockers but want a quick decision when the implementation plan is
 4. **Initial high-traffic legacy URLs to pre-seed.** Optional list — Tom may have a few in mind. Otherwise, observability via `LegacyRedirects.hitCount` will surface them post-launch.
 5. **Admin app permission scope.** Reuse `Tutorial.Author` (matches the existing 14 apps) or introduce `Homepage.Admin`? Lean reuse for simplicity unless we have a reason to split.
 
+6. **`LegacyRedirects.hitCount` write path.** Spec §10.2 says approuter middleware bumps `hitCount` via async POST to `/api/redirects/hit`. The implementation plan should confirm the call path and whether per-request writes are worth the write amplification vs. a periodic log-scrape (or an in-process counter that flushes every N seconds). Either is defensible — pick one when implementing.
+
 ## 18. Success criteria
 
 The homepage is successful if, six months after cutover:
 
 1. **Discovery works.** Survey + analytics (page-depth + outbound-click) show users finding destinations they didn't know existed before.
-2. **The catalog is current.** `HomepageShelves.lastChecked` shows admin activity within the last 90 days; no shelf has been broken (`linkStatus = BROKEN`) for more than 14 days.
+2. **The catalog is current.** `HomepageShelves.modifiedAt` (from the `managed` aspect) shows admin activity within the last 90 days; no shelf has been broken (`linkStatus = BROKEN`) for more than 14 days. (`lastChecked` is set by the nightly link-health job, not by admin edits — that's a separate signal.)
 3. **No SEO regression.** Search Console shows preserved indexed-page count and stable or improved click-through for top 50 inbound queries.
 4. **Tutorial traffic preserved.** `/tutorials/*` page views are stable or growing — the homepage's role is gateway, not bottleneck.
 5. **No "where did the homepage go?" support tickets** after the first 4 weeks.
