@@ -140,7 +140,7 @@ jobs:
         run: PATH="/tmp:$PATH" npm run build:qa
 
       - name: Publish QA content to HANA
-        run: npm run publish-content:qa
+        run: npx tsx scripts/publish-content.ts --channel qa --initiator "ci/${{ github.run_id }}"
         env:
           CAP_QA_BASE_URL: ${{ secrets.CAP_SRV_URL_QA }}
           CONTENT_API_KEY_QA: ${{ secrets.CONTENT_API_KEY_QA }}

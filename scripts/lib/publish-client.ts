@@ -1,6 +1,8 @@
 export interface BeginInput {
   baseUrl: string; apiKey: string;
   trigger: string; hugoVersion: string; expectedSlugCount: number;
+  /** #672 — sent as `x-initiator` header; persisted on ContentManifest.initiator and PipelineLog.initiator. */
+  initiator?: string;
 }
 export interface BeginResult { sessionId: string; version: number; expiresAt: string }
 
@@ -30,10 +32,15 @@ export interface CommitResult {
   carriedForward?: number;
 }
 
-async function postJson<T>(url: string, apiKey: string, body: unknown): Promise<T> {
+async function postJson<T>(
+  url: string,
+  apiKey: string,
+  body: unknown,
+  extraHeaders: Record<string, string> = {}
+): Promise<T> {
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}`, ...extraHeaders },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -48,9 +55,14 @@ async function postJson<T>(url: string, apiKey: string, body: unknown): Promise<
 }
 
 export async function beginSession(i: BeginInput): Promise<BeginResult> {
-  return postJson(`${i.baseUrl}/content/publish/begin`, i.apiKey, {
-    trigger: i.trigger, hugoVersion: i.hugoVersion, expectedSlugCount: i.expectedSlugCount,
-  });
+  const headers: Record<string, string> = {};
+  if (i.initiator) headers['x-initiator'] = i.initiator;
+  return postJson(
+    `${i.baseUrl}/content/publish/begin`,
+    i.apiKey,
+    { trigger: i.trigger, hugoVersion: i.hugoVersion, expectedSlugCount: i.expectedSlugCount },
+    headers
+  );
 }
 
 export async function appendBatch(i: AppendInput): Promise<AppendResult> {
