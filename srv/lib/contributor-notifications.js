@@ -210,3 +210,58 @@ export function digestSubject(digest) {
   const verb = count === 1 ? 'needs' : 'need';
   return `${count} stale ${noun} ${verb} review`;
 }
+
+/**
+ * Per-tutorial author resolution.
+ * 1. Tutorials.author FK with non-empty Users.email → FK path
+ * 2. Else: contributors OWNER → AUTHOR priority → contributor path
+ * 3. Else: { authorEmail: null, authorSource: 'none' }
+ */
+function resolveAuthor(n) {
+  if (n.authorUserEmail && String(n.authorUserEmail).trim() !== '') {
+    return {
+      authorEmail: String(n.authorUserEmail).toLowerCase(),
+      authorSource: 'Tutorials.author',
+      authorName: n.authorUserName ?? null,
+    };
+  }
+  const owner = n.contributors?.find(c => c.role === 'OWNER')
+    ?? n.contributors?.find(c => c.role === 'AUTHOR');
+  if (owner?.email) {
+    return {
+      authorEmail: String(owner.email).toLowerCase(),
+      authorSource: 'TutorialContributors',
+      authorName: owner.name ?? null,
+    };
+  }
+  return { authorEmail: null, authorSource: 'none', authorName: null };
+}
+
+/**
+ * Group per-tutorial notification records by author email (case-insensitive).
+ * Tutorials with no resolvable author land in a single { authorEmail: null }
+ * bucket. Pure function — no DB calls.
+ *
+ * @param {Array} notifications  Output of computeStaleNotifications()
+ * @returns {Array<{authorEmail: string|null, authorSource: string,
+ *                  authorName: string|null, tutorials: Array,
+ *                  worstLevel: number, worstReviewedDate: string|null}>}
+ */
+export function groupNotificationsByAuthor(notifications) {
+  const map = new Map();
+  for (const n of notifications) {
+    const { authorEmail, authorSource, authorName } = resolveAuthor(n);
+    const key = authorEmail ?? '__null__';
+    let d = map.get(key);
+    if (!d) {
+      d = { authorEmail, authorSource, authorName, tutorials: [], worstLevel: 0, worstReviewedDate: null };
+      map.set(key, d);
+    }
+    d.tutorials.push(n);
+    if (n.notificationLevel > d.worstLevel) d.worstLevel = n.notificationLevel;
+    if (n.reviewedDate && (!d.worstReviewedDate || n.reviewedDate < d.worstReviewedDate)) {
+      d.worstReviewedDate = n.reviewedDate;
+    }
+  }
+  return Array.from(map.values());
+}
