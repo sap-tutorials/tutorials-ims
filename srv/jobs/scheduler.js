@@ -7,6 +7,7 @@ import { runReconciliationJob } from './embedding-reconciliation.js';
 import { runExtractConcepts } from './extract-concepts-job.js';
 import { runConsolidateConcepts } from './consolidate-concepts-job.js';
 import { runSecretExpiryCheck } from './secret-expiry-check.js';
+import { runHomepageLinkHealth } from './homepage-link-health.js';
 import { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, isNotificationsEnabled, resolveTimingKnobs } from '../lib/contributor-notifications.js';
 import { sendNotificationEmail, retryFailedEmails } from '../lib/mail-client.js';
 import { resolveDisplaySettings } from '../lib/runtime-config/display-settings.js';
@@ -226,6 +227,13 @@ export function registerJobs() {
   // SELECT + classification, well under a second.
   cron.schedule('11 4 * * *', () =>
     runWithLock('secret-expiry-check', 600000, runSecretExpiryCheck)
+  );
+
+  // Daily at 04:00 — nightly link-health check for HomepageShelves entries.
+  // Runs after content GC (03:00) but well before peak traffic.
+  // Spec §13.1 (#639).
+  cron.schedule('0 4 * * *', () =>
+    runWithLock('homepage-link-health', 30 * 60 * 1000, runHomepageLinkHealth)
   );
 
   LOG.info('All scheduled jobs registered');
