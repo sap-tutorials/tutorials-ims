@@ -173,6 +173,8 @@ entity PublishedConcepts as projection on db.Concepts {
 
 This codifies the publication gate decided in Q4: a concept is "publishable" if **either** an admin has reviewed-and-flipped its status to `ACTIVE`, **or** an admin has edited its `name` or `description` at least once. The OR keeps the workflow flexible (admins can publish either by approving as-is, or by polishing).
 
+> **3-A-1 verification step**: Phase 1 introduced `Concepts.lastEditedBy` + `Concepts.lastEditedAt` as part of the admin curation tool. The plan should grep for these fields before assuming the view compiles. If either is missing, 3-A-1 grows a small schema change (add the field + bump the deployer) — not a redesign, but a non-trivial planning addition.
+
 Anywhere downstream that needs "is this concept publishable" reads `PublishedConcepts`:
 
 - `/build/concepts` selects from it.
@@ -184,14 +186,14 @@ Anywhere downstream that needs "is this concept publishable" reads `PublishedCon
 Enforced at the **projection layer** — i.e. the nightly `graphRebuild` cron, when projecting `TaskRecord` co-completions into RDF triples, applies:
 
 ```sql
-SELECT a.tutorial_id, b.tutorial_id, ROUND(COUNT(DISTINCT user_id) / 10) * 10 AS cnt
+SELECT a.tutorial_id, b.tutorial_id, FLOOR(COUNT(DISTINCT user_id) / 10) * 10 AS cnt
 FROM TaskRecord a JOIN TaskRecord b ON a.user_id = b.user_id AND a.tutorial_id < b.tutorial_id
 WHERE a.status = 'COMPLETE' AND b.status = 'COMPLETE'
 GROUP BY a.tutorial_id, b.tutorial_id
 HAVING COUNT(DISTINCT user_id) >= 10
 ```
 
-The raw count never reaches the RDF graph; the raw `TaskRecord` remains `@PersonalData`-tagged and admin-access-only. By enforcing at the projection (not at the API), a query bug downstream **cannot** accidentally leak the raw count — the data isn't there to leak.
+Note: `FLOOR` (not `ROUND`) is the correct bucketing primitive for k-anonymity — a true count of 15 maps to `10` (a safe lower bound), not `20` (an overstatement that leaks back upward). The raw count never reaches the RDF graph; the raw `TaskRecord` remains `@PersonalData`-tagged and admin-access-only. By enforcing at the projection (not at the API), a query bug downstream **cannot** accidentally leak the raw count — the data isn't there to leak.
 
 ### 2.4 Endpoint contracts
 
@@ -375,7 +377,7 @@ For 3-B-2's PR — manual Playwright run loading `/explore/` against a synthetic
 | **3-B-2** | `feat(kg): app/explore/ Vue+Vite scaffold + Sigma.js wiring` | New peer of `app/analytics-explorer/`; bundles Sigma.js v3 + graphology + graphology-layout-forceatlas2; gzip-budgeted (≤150KB); reads `window.__INITIAL_GRAPH__` synchronously; canvas only, no chrome. Includes 5000-node synthetic benchmark in PR description. |
 | **3-B-3** | `feat(kg): /explore/ CAP-rendered shell with inline JSON` | `GET /explore/` express route; HTML template; approuter proxy `/explore/` → CAP. End-to-end: hitting `/explore/` renders the graph. |
 | **3-B-4** | `feat(kg): explore page chrome — header pickers, filters dropdown, side panel` | Vue components for Layout-D: search, find-path pickers (UI only — wires to the Phase 2 tool in next PR), filters dropdown, right side panel. Filters are client-side hide/show. Telemetry events 3-6 above. |
-| **3-B-5** | `feat(kg): /graph/path endpoint + find-path UI overlay` | Extract path-finding logic to `srv/lib/kg-path.js`; both Joule tool and new `/graph/path?from=X&to=Y` HTTP endpoint call it. UI wires header pickers to the endpoint; result overlays path edges + camera-fits bounding box + side panel shows steps. Telemetry `kg.explore.path_drawn`. |
+| **3-B-5** | `feat(kg): /graph/path endpoint + find-path UI overlay` | Extract path-finding logic to `srv/lib/kg-path.js`; both the existing Phase 2 Joule tool (PR #563) and new `/graph/path?from=X&to=Y` HTTP endpoint call it. **This PR modifies the Phase 2 Joule tool's import** — Phase 2 ships path-finding inline inside the tool; 3-B-5 refactors it out without changing tool behavior. UI wires header pickers to the endpoint; result overlays path edges + camera-fits bounding box + side panel shows steps. Telemetry `kg.explore.path_drawn`. |
 | **3-B-6** | `feat(kg): mobile typed-list fallback + smoke + rollout note` | Below ~768px, viz replaced by typed accordion list. Final smoke tests across all new routes. Rollout note in `docs/superpowers/done/`. |
 
 ### 6.3 Ship sequence: 3-A first
