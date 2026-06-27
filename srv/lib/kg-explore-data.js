@@ -21,20 +21,37 @@
 // .../tutorial/X → Tutorial). This helper derives type from the IRI prefix.
 
 import { kgQuery } from './kg-sparql-client.js';
+import { KG_IRI_PREFIXES } from './kg-projection.js';
 
 const KG_PREFIX = 'https://developers.sap.com/kg/';
 
-// IRI prefix → (entity type, short node-id prefix). Order matches the
-// projection. Keep in lockstep with iri* helpers in kg-projection.js.
-const IRI_TYPE_MAP = Object.freeze({
-  'tutorial/': { type: 'tutorial', short: 't' },
-  'concept/':  { type: 'concept',  short: 'c' },
-  'mission/':  { type: 'mission',  short: 'm' },
-  'group/':    { type: 'group',    short: 'g' },
-  'product/':  { type: 'product',  short: 'p' },
-  'category/': { type: 'category', short: 'k' },
-  'tag/':      { type: 'tag',      short: 'x' },
+// Short node-id prefixes used to disambiguate the per-type graph nodes
+// in {id} (e.g. 't:cap-handlers' vs 'c:cap-handlers'). Kept here because
+// they're a presentation concern of the explore endpoint, not part of the
+// canonical IRI registry in kg-projection.js.
+const SHORT_BY_TYPE = Object.freeze({
+  tutorial: 't',
+  concept:  'c',
+  mission:  'm',
+  group:    'g',
+  product:  'p',
+  category: 'k',
+  tag:      'x',
 });
+
+// IRI tail-segment → (entity type, short node-id prefix). Derived from
+// KG_IRI_PREFIXES in kg-projection.js — single source of truth, no manual
+// duplication. If a new entity type lands in the projection, this map
+// picks it up automatically; the matching SHORT_BY_TYPE entry must be
+// added by hand (caught by the lockstep test).
+const IRI_TYPE_MAP = Object.freeze(
+  Object.fromEntries(
+    Object.entries(KG_IRI_PREFIXES).map(([type, fullPrefix]) => {
+      const segment = fullPrefix.slice(KG_PREFIX.length); // e.g. 'tutorial/'
+      return [segment, { type, short: SHORT_BY_TYPE[type] }];
+    })
+  )
+);
 
 /**
  * Parse an entity IRI (e.g. https://developers.sap.com/kg/tutorial/cap-handlers)

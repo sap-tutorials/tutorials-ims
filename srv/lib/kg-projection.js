@@ -66,6 +66,28 @@ const iriCategory = (slug) => iri(`${KG}category/${iriEscapeSegment(slug)}`);
 const iriPredicate = (name) => iri(`${KG}${name}`);
 
 /**
+ * Single source of truth for the entity-IRI prefix registry. Every entity
+ * type emitted by the projection above has a matching entry here. Other
+ * modules (e.g. srv/lib/kg-explore-data.js) MUST derive their type maps
+ * from this constant rather than hard-coding the prefixes — otherwise a
+ * new entity type can be added to the projection but forgotten in the
+ * reverse-mapping at parse time, silently dropping rows (issue #446
+ * code-review Fix 3).
+ *
+ * A lockstep unit test in test/unit/srv/kg-explore-data-iri-types.test.js
+ * asserts the registry stays in sync with the 7 iri* helpers above.
+ */
+export const KG_IRI_PREFIXES = Object.freeze({
+  tutorial: `${KG}tutorial/`,
+  concept:  `${KG}concept/`,
+  mission:  `${KG}mission/`,
+  group:    `${KG}group/`,
+  product:  `${KG}product/`,
+  category: `${KG}category/`,
+  tag:      `${KG}tag/`,
+});
+
+/**
  * Escape a string literal per the N-Triples grammar. Returns the escaped
  * BODY (without the surrounding quotes). Order of replacements matters:
  * backslash MUST be escaped first.
