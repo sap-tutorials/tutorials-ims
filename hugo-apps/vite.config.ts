@@ -186,6 +186,7 @@ export default defineConfig({
         'related-graph': resolve(__dirname, 'src/related-graph/main.ts'),
         'tutorial-reset': resolve(__dirname, 'src/tutorial-reset/main.ts'),
         'preview-banner': resolve(__dirname, 'src/validation/preview-banner.ts'),
+        'homepage-bands': resolve(__dirname, 'src/homepage-bands/index.ts'),
       },
       output: {
         entryFileNames: '[name].js',
