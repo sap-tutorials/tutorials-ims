@@ -639,6 +639,18 @@ export default cds.service.impl(async function () {
     }
     const enrich = (arr) => enrichLiveTutorials(arr, titleBySlug);
 
+    // 10b. Look up which teaches[] concepts are currently published so the
+    //      sidebar island can render <a> vs <span> per concept (PR 2/3).
+    const teachesSlugs = ranked.teaches.map((c) => c.slug);
+    let publishedSet = new Set();
+    if (teachesSlugs.length) {
+      const { Concepts } = cds.entities(NAMESPACE);
+      const rows = await SELECT.from(Concepts)
+        .columns('slug')
+        .where({ slug: { in: teachesSlugs }, publishedAt: { '!=': null }, status: 'ACTIVE' });
+      publishedSet = new Set(rows.map((r) => r.slug));
+    }
+
     const result = {
       tutorial:        tutorialInfo,
       graphVersion,
@@ -646,6 +658,7 @@ export default cds.service.impl(async function () {
         slug: c.slug,
         name: c.name,
         description: '',  // Concepts.description not pulled by the ranker; left empty for Phase 1
+        published: publishedSet.has(c.slug),
       })),
       prerequisitesOf: enrich(ranked.prerequisitesOf),
       sharedConcepts:  enrich(ranked.sharedConcepts),

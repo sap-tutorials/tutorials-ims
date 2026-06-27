@@ -56,6 +56,7 @@ service KnowledgeGraphService @(path : '/graph') {
     slug        : String;
     name        : String;
     description : String;
+    published   : Boolean;  // Phase 3 publication gate; true when /concepts/<slug>/ exists.
   }
   type TutorialRef {
     slug   : String;
