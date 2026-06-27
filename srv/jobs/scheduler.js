@@ -7,7 +7,7 @@ import { runReconciliationJob } from './embedding-reconciliation.js';
 import { runExtractConcepts } from './extract-concepts-job.js';
 import { runConsolidateConcepts } from './consolidate-concepts-job.js';
 import { runSecretExpiryCheck } from './secret-expiry-check.js';
-import { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, isNotificationsEnabled, resolveTimingKnobs } from '../lib/contributor-notifications.js';
+import { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, isNotificationsEnabled, resolveTimingKnobs, groupNotificationsByAuthor, determineRecipientsForDigest, digestSubject, renderTutorialList } from '../lib/contributor-notifications.js';
 import { sendNotificationEmail, retryFailedEmails } from '../lib/mail-client.js';
 import { resolveDisplaySettings } from '../lib/runtime-config/display-settings.js';
 import { logPipelineStart, logPipelineEnd, logJobItem } from '../lib/pipeline-log.js';
@@ -48,6 +48,175 @@ export function formatJobSummary(jobName, result) {
     return parts.length ? `${jobName}: ${parts.join(', ')}` : jobName;
   }
   return jobName;
+}
+
+/**
+ * Weekly contributor-notifications cycle. Branches on `knobs.useDigest`:
+ *
+ * - digest path (default): groups stale tutorials by resolved author, sends
+ *   ONE digest email per author with a pre-rendered <ul> of tutorials. The
+ *   template is picked by digest.worstLevel (`digest-level-{0..3}`). On a
+ *   successful send, every tutorial in the digest is marked sent; on a
+ *   failed send, NONE are marked (the 4-hour email-retry cron will pick up
+ *   the FailedEmails row).
+ * - legacy path (`useDigest=false`): one email per tutorial, recipient
+ *   resolved via determineRecipients(), template picked by level number.
+ *   Behavior is byte-equivalent to the pre-#622 cron body.
+ *
+ * Exported so the unit test (test/unit/cron-digest-mode.test.js) can exercise
+ * the cron body with mocked dependencies.
+ *
+ * @param {string} logId  PipelineLog row id; the per-tutorial / per-digest
+ *                        outcomes are logged as JobLog items against this row.
+ * @returns {Promise<object>}  Summary suitable for formatJobSummary().
+ */
+export async function runContributorNotificationsCycle(logId) {
+  if (!await isNotificationsEnabled()) {
+    LOG.info('Contributor notifications disabled via config');
+    return { enabled: false };
+  }
+  const knobs = await resolveTimingKnobs();
+  const adminEmails = await getAdminEmailList();
+  const notifications = await computeStaleNotifications(knobs);
+  const dashboardUrl = (await resolveDisplaySettings()).dashboardUrl;
+
+  if (knobs.useDigest) {
+    return await runDigestCycle({ logId, knobs, adminEmails, notifications, dashboardUrl });
+  }
+  return await runLegacyCycle({ logId, knobs, adminEmails, notifications, dashboardUrl });
+}
+
+/**
+ * Digest path — one email per author. See runContributorNotificationsCycle.
+ */
+async function runDigestCycle({ logId, knobs, adminEmails, notifications, dashboardUrl }) {
+  const digests = groupNotificationsByAuthor(notifications);
+  let sent = 0, skipped = 0, failed = 0;
+
+  for (const d of digests) {
+    // No resolvable author → SKIPPED per tutorial, no send.
+    if (d.authorEmail == null) {
+      for (const t of d.tutorials) {
+        skipped++;
+        await logJobItem(logId, {
+          itemKey: t.slug || t.tutorialId,
+          itemKind: 'NOTIFICATION',
+          status: 'SKIPPED',
+          message: 'No resolvable author for digest'
+        });
+      }
+      continue;
+    }
+
+    const { to, cc } = determineRecipientsForDigest(d, adminEmails);
+    if (to.length === 0) {
+      for (const t of d.tutorials) {
+        skipped++;
+        await logJobItem(logId, {
+          itemKey: t.slug || t.tutorialId,
+          itemKind: 'NOTIFICATION',
+          status: 'SKIPPED',
+          message: 'No recipients resolved for digest'
+        });
+      }
+      continue;
+    }
+
+    const tutorialCount = d.tutorials.length;
+    const tutorialPlural = tutorialCount === 1 ? '' : 's';
+    const result = await sendNotificationEmail({
+      to, cc,
+      subject: digestSubject(d),
+      template: `digest-level-${d.worstLevel}`,
+      variables: {
+        authorName: d.authorName || 'Tutorial author',
+        tutorialCount,
+        tutorialPlural,
+        tutorialListHtml: renderTutorialList(d.tutorials, dashboardUrl),
+        staleDaysThreshold: knobs.staleDays,
+        dashboardUrl,
+      }
+    });
+
+    if (result.success) {
+      for (const t of d.tutorials) {
+        await markNotificationSent(t.tutorialId);
+        sent++;
+        await logJobItem(logId, {
+          itemKey: t.slug || t.tutorialId,
+          itemKind: 'NOTIFICATION',
+          status: 'SUCCESS',
+          message: `Digest sent to ${to.join(', ')} (level ${d.worstLevel})`
+        });
+      }
+    } else {
+      // Send failure → no tutorial in this digest gets advanced. The retry
+      // cron + FailedEmails queue picks up the actual email.
+      for (const t of d.tutorials) {
+        failed++;
+        await logJobItem(logId, {
+          itemKey: t.slug || t.tutorialId,
+          itemKind: 'NOTIFICATION',
+          status: 'ERROR',
+          message: result.error || 'sendNotificationEmail returned failure'
+        });
+      }
+    }
+  }
+
+  LOG.info(`Processed ${digests.length} digests covering ${notifications.length} stale tutorials, sent ${sent} (advanced)`);
+  return { digests: digests.length, sent, skipped, failed };
+}
+
+/**
+ * Legacy path — verbatim from the pre-#622 cron body. One email per tutorial.
+ */
+async function runLegacyCycle({ logId, knobs, adminEmails, notifications, dashboardUrl }) {
+  let sent = 0, skipped = 0, failed = 0;
+  for (const n of notifications) {
+    const { to, cc } = determineRecipients(n, adminEmails);
+    if (to.length === 0) {
+      skipped++;
+      await logJobItem(logId, {
+        itemKey: n.tutorialSlug || n.tutorialId,
+        itemKind: 'NOTIFICATION',
+        status: 'SKIPPED',
+        message: 'No recipients resolved'
+      });
+      continue;
+    }
+    const result = await sendNotificationEmail({
+      to, cc,
+      subject: n.title,
+      level: n.notificationLevel,
+      variables: {
+        dashboardUrl,
+        tutorialTitle: n.title,
+        staleDaysThreshold: knobs.staleDays,
+        lastReviewedDate: n.reviewedDate,
+      }
+    });
+    if (result.success) {
+      await markNotificationSent(n.tutorialId);
+      sent++;
+      await logJobItem(logId, {
+        itemKey: n.tutorialSlug || n.tutorialId,
+        itemKind: 'NOTIFICATION',
+        status: 'SUCCESS',
+        message: `Sent to ${to.join(', ')}`
+      });
+    } else {
+      failed++;
+      await logJobItem(logId, {
+        itemKey: n.tutorialSlug || n.tutorialId,
+        itemKind: 'NOTIFICATION',
+        status: 'ERROR',
+        message: result.error || 'sendNotificationEmail returned failure'
+      });
+    }
+  }
+  LOG.info(`Processed ${notifications.length} stale tutorials, sent ${sent} emails`);
+  return { stale: notifications.length, sent, skipped, failed };
 }
 
 export function registerJobs() {
@@ -140,62 +309,7 @@ export function registerJobs() {
 
   // Weekly Monday 09:00 — contributor notifications
   cron.schedule('0 9 * * 1', () =>
-    runWithLock('contributor-notifications', 1800000, async (logId) => {
-      if (!await isNotificationsEnabled()) {
-        LOG.info('Contributor notifications disabled via config');
-        return { enabled: false };
-      }
-      const knobs = await resolveTimingKnobs();
-      const adminEmails = await getAdminEmailList();
-      const notifications = await computeStaleNotifications(knobs);
-      const dashboardUrl = (await resolveDisplaySettings()).dashboardUrl;
-
-      let sent = 0, skipped = 0, failed = 0;
-      for (const n of notifications) {
-        const { to, cc } = determineRecipients(n, adminEmails);
-        if (to.length === 0) {
-          skipped++;
-          await logJobItem(logId, {
-            itemKey: n.tutorialSlug || n.tutorialId,
-            itemKind: 'NOTIFICATION',
-            status: 'SKIPPED',
-            message: 'No recipients resolved'
-          });
-          continue;
-        }
-        const result = await sendNotificationEmail({
-          to, cc,
-          subject: n.title,
-          level: n.notificationLevel,
-          variables: {
-            dashboardUrl,
-            tutorialTitle: n.title,
-            staleDaysThreshold: knobs.staleDays,
-            lastReviewedDate: n.reviewedDate,
-          }
-        });
-        if (result.success) {
-          await markNotificationSent(n.tutorialId);
-          sent++;
-          await logJobItem(logId, {
-            itemKey: n.tutorialSlug || n.tutorialId,
-            itemKind: 'NOTIFICATION',
-            status: 'SUCCESS',
-            message: `Sent to ${to.join(', ')}`
-          });
-        } else {
-          failed++;
-          await logJobItem(logId, {
-            itemKey: n.tutorialSlug || n.tutorialId,
-            itemKind: 'NOTIFICATION',
-            status: 'ERROR',
-            message: result.error || 'sendNotificationEmail returned failure'
-          });
-        }
-      }
-      LOG.info(`Processed ${notifications.length} stale tutorials, sent ${sent} emails`);
-      return { stale: notifications.length, sent, skipped, failed };
-    })
+    runWithLock('contributor-notifications', 1800000, (logId) => runContributorNotificationsCycle(logId))
   );
 
   // Every 4 hours — email retry
