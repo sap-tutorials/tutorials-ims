@@ -2517,6 +2517,11 @@
           "length": 500,
           "@cds.persistence.name": "TRIGGER"
         },
+        "initiator": {
+          "type": "cds.String",
+          "length": 255,
+          "@cds.persistence.name": "INITIATOR"
+        },
         "fileCount": {
           "type": "cds.Integer",
           "@cds.persistence.name": "FILECOUNT"

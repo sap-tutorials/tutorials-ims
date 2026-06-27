@@ -44,6 +44,93 @@ on `cds.on('bootstrap')` in [srv/server.js](../../../srv/server.js), and
 the approuter exposes them as `authenticationType: "none"` ahead of the
 otherwise XSUAA-gated `^/api/(.*)$` catch-all.
 
+## Per-advocate profile pages
+
+Spec: [2026-06-27 per-advocate-profile design](../../superpowers/specs/2026-06-27-601-advocate-profile-pages-design.md).
+Issue: [#601](https://github.com/sap-tutorials/tutorials-ims/issues/601).
+
+Each active advocate has a stable, sharable URL of the form
+`/developer-advocates/<slug>/` rendering a server-side HTML page (crawlable,
+og:profile meta tags) with a Vue island that hydrates a tutorial list
+fetched live from `/api/advocates/:slug`.
+
+- **Single-advocate endpoint** — `GET /api/advocates/:slug` mounted by
+  [srv/routes/advocates-public.js](../../../srv/routes/advocates-public.js)
+  on `cds.on('bootstrap')`. Returns the same row shape as a list item from
+  `/api/advocates` but as a single object (not wrapped in
+  `{ advocates: [...] }`). 404 on unknown slug or `isActive: false`.
+  `ETag` + `Cache-Control: public, max-age=60, stale-while-revalidate=600`.
+  Lowercase slug comparison so `Thomas-Jung` resolves the same as
+  `thomas-jung`. Both `handleAdvocates` and `handleSingle` share a
+  `buildAdvocateLookups()` helper so list-vs-single response shapes stay
+  in lockstep (and any future schema-driven field addition is a single edit).
+- **Build step** —
+  [scripts/fetch-advocates.ts](../../../scripts/fetch-advocates.ts)
+  pulls `GET /api/advocates` at build time, renders each `bio` via
+  `markdown-it` (`linkify: true`, `html: false`) and sanitizes via the
+  `sanitize-html` npm package, then emits one `<slug>.md` per active
+  advocate into `hugo/content/developer-advocates/`. Slugless rows are
+  skipped defensively. Trailing UTF-16 surrogate halves are trimmed before
+  emitting the 200-char `bioText` so emoji never split mid-codepoint.
+  Stale per-slug files are cleaned up against the live roster;
+  `_index.md` is never touched. The per-slug files are gitignored
+  (`.gitignore` line near the existing `hugo/content/tutorials/` entry).
+- **Wired into the build pipeline** — `npm run fetch-advocates` is a peer
+  of `npm run fetch-tutorials` in [package.json](../../../package.json);
+  `build:all` chains them. The CI `rebuild-content.yml` workflow runs a
+  "Fetch advocates" step unconditionally (all three modes
+  `catalog-only` / `slug-targeted` / `full`) so an admin advocate edit
+  classified as `catalog-only` still regenerates the per-advocate pages.
+- **Rebuild classifier** —
+  [srv/lib/_classify-rebuild-mode.js](../../../srv/lib/_classify-rebuild-mode.js)
+  treats CRUD on `Advocates`, `AdvocateTopics`, and `AdvocateLinks` as
+  `catalog-only`. Admin saves trigger a debounced workflow dispatch that
+  rebuilds the catalog + advocate pages within ~3-5 min.
+- **Page rendering** —
+  [hugo/layouts/developer-advocates/single.html](../../../hugo/layouts/developer-advocates/single.html)
+  server-renders the hero (photo or initials fallback, name, pronouns,
+  title, location, region, social-link icons) and bio (HTML from
+  markdown, emitted with `safeHTML` since sanitization ran at build time).
+  Topic chips link to `/developer-advocates/#topic=<slug>` so the
+  existing
+  [hugo-apps/src/advocates/composables/useAdvocateFilter.ts](../../../hugo-apps/src/advocates/composables/useAdvocateFilter.ts)
+  filter composable picks them up on initial mount. Meta tags
+  (`og:type=profile`, `og:title`, `og:description`, `og:image`,
+  `profile:first_name`, `profile:last_name`) come from the centralized
+  [head-og.html](../../../hugo/layouts/partials/head-og.html) partial
+  which now branches on `.Type == "developer-advocates"`.
+- **Hydration** —
+  [hugo-apps/src/advocate-profile/](../../../hugo-apps/src/advocate-profile/)
+  is a Vue 3 island bundled at `hugo/static/js/advocate-profile.js`
+  (≤ 25 KB gzip enforced by `advocateProfileBudget()` in
+  [hugo-apps/vite.config.ts](../../../hugo-apps/vite.config.ts); current
+  size is < 1 KB gzip). Fetches `GET /api/advocates/<slug>` and renders
+  the "Tutorials authored" + "Tutorials contributed to" sections.
+  On 404 (advocate deactivated since the last rebuild) shows a small
+  "no longer listed" banner. On generic 5xx error renders nothing —
+  the static Hugo page is still complete.
+- **Roster card → profile link** —
+  [hugo-apps/src/advocates/components/AdvocateCard.vue](../../../hugo-apps/src/advocates/components/AdvocateCard.vue)
+  "View profile →" button on the card back navigates to
+  `/developer-advocates/<slug>/` (was: first matching external profile URL).
+  External social-link icons on the card itself keep their original
+  `target="_blank"` behavior.
+
+### Out of scope for v1
+
+These were considered and explicitly deferred (see spec Non-goals):
+
+- **Missions and Groups attribution.** Only `Tutorials.author` exists in
+  the schema today. `Missions` and `Groups` inherit from `TaskBase` with
+  no `author` association. Surfacing "missions curated" or "groups
+  curated" on profile pages would require a schema migration + admin UI
+  + classifier wiring + backfill. Tracked as a follow-up.
+- **Events authored.** Same reason — `Events` has no `author`
+  association today.
+- RSS / Atom feeds.
+- Long-form embedded media in bios (videos, code samples) beyond what
+  markdown can express.
+
 ## Photo Pipeline
 
 [srv/lib/advocate-photo-store.js](../../../srv/lib/advocate-photo-store.js)

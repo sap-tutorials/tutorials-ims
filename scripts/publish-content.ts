@@ -2,6 +2,7 @@ import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
+import { userInfo, hostname } from 'node:os';
 import { parse as parseYaml } from 'yaml';
 import { parseChannel, type Channel } from './fetch-tutorials.js';
 import { beginSession, appendBatch, commitSession, abortSession, fetchRemoteHashes, fetchRemoteSourceHashes } from './lib/publish-client.js';
@@ -164,20 +165,42 @@ export function buildPayload(
  * locally lets the CLI auto-verify against `/content/source-hashes`
  * without round-tripping through gzip.
  */
+/**
+ * #672 short-circuit support: compute pre-gzip SHA-256 of each slug's source
+ * markdown WITHOUT building the gzip payload. Used in delta mode to drop slugs
+ * whose source bytes already match the server, before paying for buildPayload's
+ * Hugo-output re-read + gzip.
+ *
+ * Slugs whose source file is missing (special slugs: __shell__, __nav__, __404__)
+ * are silently skipped.
+ */
+export function computeLocalSourceHashes(
+  slugs: string[],
+  cacheDir: string
+): Map<string, string> {
+  const sourceHashes = new Map<string, string>();
+  for (const slug of slugs) {
+    const mdPath = join(cacheDir, `${slug}.md`);
+    if (!existsSync(mdPath)) continue;
+    const content = readFileSync(mdPath);
+    const hash = createHash('sha256').update(content).digest('hex');
+    sourceHashes.set(slug, hash);
+  }
+  return sourceHashes;
+}
+
 export function buildSourcePayload(
   slugs: string[],
   cacheDir: string
 ): { sources: Record<string, string>; sourceHashes: Map<string, string> } {
   const sources: Record<string, string> = {};
-  const sourceHashes = new Map<string, string>();
+  const sourceHashes = computeLocalSourceHashes(slugs, cacheDir);
   for (const slug of slugs) {
     const mdPath = join(cacheDir, `${slug}.md`);
-    if (!existsSync(mdPath)) continue; // No source for this slug — special slugs etc.
+    if (!existsSync(mdPath)) continue;
     const content = readFileSync(mdPath);
-    const hash = createHash('sha256').update(content).digest('hex');
     const compressed = gzipSync(content);
     sources[slug] = compressed.toString('base64');
-    sourceHashes.set(slug, hash);
   }
   return { sources, sourceHashes };
 }
@@ -394,6 +417,7 @@ interface PublishOptions {
   apiKey: string;
   trigger: string;
   hugoVersion: string;
+  initiator: string;
   dryRun: boolean;
   force: boolean;
   heal: boolean;
@@ -416,6 +440,11 @@ function parseArgs(argv: string[]): PublishOptions {
     apiKey:  get('--api-key',  process.env.CONTENT_API_KEY || ''),
     trigger: get('--trigger',  `manual@${process.env.GITHUB_SHA?.slice(0, 7) || 'local'}`),
     hugoVersion: get('--hugo-version', ''),
+    initiator: get(
+      '--initiator',
+      process.env.INITIATOR
+        || `${userInfo().username || 'unknown'}@${hostname()}`
+    ),
     dryRun:    has('--dry-run'),
     force:     has('--force'),
     heal:      has('--heal'),
@@ -654,7 +683,43 @@ async function main() {
     }
   }
 
-  const { targetSlugs } = computePublishPlan({ local: localHashes, remote: remoteHashes, mode });
+  const planResult = computePublishPlan({ local: localHashes, remote: remoteHashes, mode });
+  let targetSlugs = planResult.targetSlugs;
+
+  // #672 — client-side short-circuit. In delta mode only, drop slugs whose
+  // local sourceHash matches the server's. A slug whose upstream markdown is
+  // byte-identical to what the server already has would be carry-forwarded
+  // server-side anyway; skipping the upload saves the round-trip and
+  // protects against a stale local cache uploading old bytes on top of
+  // newer ones (the #672 regression mode).
+  //
+  // --force and --heal explicitly skip this layer:
+  //   --force: "upload everything regardless of server state"
+  //   --heal : "fix slugs the client thinks are in sync"
+  if (mode === 'delta' && targetSlugs.length > 0) {
+    // `channel` is defined earlier in main() as `const channel = parseChannel(process.argv)`
+    // (around line 478) — same value used by the existing verify-only path.
+    const cacheDirForHashes = channel === 'qa'
+      ? join(process.cwd(), '.tutorial-cache-qa')
+      : join(process.cwd(), '.tutorial-cache');
+    const localSourceHashes = computeLocalSourceHashes(targetSlugs, cacheDirForHashes);
+    let serverSourceHashes: Record<string, string> = {};
+    try {
+      serverSourceHashes = await fetchRemoteSourceHashes({ baseUrl: opts.baseUrl });
+    } catch (err) {
+      console.warn(`[publish-content] #672 short-circuit disengaged: cannot reach /content/source-hashes: ${formatErrorChain(err)}`);
+    }
+    const beforeCount = targetSlugs.length;
+    targetSlugs = targetSlugs.filter((slug) => {
+      const local = localSourceHashes.get(slug);
+      const server = serverSourceHashes[slug];
+      // Only short-circuit when both sides have a hash AND they match.
+      // Missing local hash (special slugs) or missing server hash (new slug) → keep.
+      return !(local && server && local === server);
+    });
+    const dropped = beforeCount - targetSlugs.length;
+    if (dropped > 0) log(`#672 short-circuit: dropped ${dropped} of ${beforeCount} slugs (source hash matches server)`);
+  }
   if (targetSlugs.length === 0) {
     console.log('No changes detected. Nothing to publish.');
     process.exit(0);
@@ -697,6 +762,7 @@ async function main() {
   const begin = await beginSession({
     baseUrl: opts.baseUrl, apiKey: opts.apiKey,
     trigger: opts.trigger, hugoVersion: opts.hugoVersion, expectedSlugCount: targetSlugs.length,
+    initiator: opts.initiator,
   });
   log(`Session ${begin.sessionId} version ${begin.version} (expires ${begin.expiresAt})`);
 
