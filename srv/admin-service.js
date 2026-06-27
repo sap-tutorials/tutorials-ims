@@ -49,6 +49,83 @@ function dedupeByUserTaskRecords(rows) {
   return [...best.values()];
 }
 
+/**
+ * Shared implementation for sendLastChanceEmail (per-author) and
+ * sendLastChanceEmailsAllDormant (bulk). Pure relative to `ctx` — the
+ * dynamically-imported helpers are passed in so this function is unit-
+ * testable in isolation.
+ *
+ * @param {string} authorEmail
+ * @param {boolean} dryRun
+ * @param {object} ctx  spread of contributor-notifications + mail-client exports
+ * @returns {Promise<{success: boolean, recipientTo: string, recipientCc: string[],
+ *                    tutorialsIncluded: number, tutorialSlugs: string[], error: string}>}
+ */
+async function sendLastChanceForAuthor(authorEmail, dryRun, ctx) {
+  const emptyPayload = {
+    recipientTo: '', recipientCc: [], tutorialsIncluded: 0, tutorialSlugs: [],
+  };
+  if (!authorEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(authorEmail)) {
+    return { success: false, error: 'Invalid authorEmail', ...emptyPayload };
+  }
+
+  const knobs = await ctx.resolveTimingKnobs();
+  const adminEmails = await ctx.getAdminEmailList();
+  const notifications = await ctx.computeStaleNotifications(knobs);
+  const digests = ctx.groupNotificationsByAuthor(notifications);
+  const target = digests.find(d => d.authorEmail?.toLowerCase() === authorEmail.toLowerCase());
+
+  if (!target) {
+    return {
+      success: false,
+      error: 'No stale tutorials found for that author',
+      ...emptyPayload,
+    };
+  }
+
+  const { to, cc } = ctx.determineRecipientsForDigest(target, adminEmails);
+  const dashboardUrl = (await resolveDisplaySettings()).dashboardUrl;
+  const count = target.tutorials.length;
+  const plural = count === 1 ? 'tutorial' : 'tutorials';
+  const payload = {
+    to, cc,
+    subject: `Final notice: ${count} ${plural} pending retirement`,
+    template: 'last-chance',
+    variables: {
+      authorName: target.authorName || 'Tutorial Owner',
+      tutorialCount: count,
+      tutorialPlural: plural,
+      tutorialListHtml: ctx.renderTutorialList(target.tutorials, dashboardUrl),
+      staleDaysThreshold: knobs.staleDays,
+      dashboardUrl,
+    },
+  };
+
+  if (dryRun) {
+    return {
+      success: true,
+      recipientTo: to[0] ?? '',
+      recipientCc: cc,
+      tutorialsIncluded: count,
+      tutorialSlugs: target.tutorials.map(t => t.slug),
+      error: '',
+    };
+  }
+
+  const result = await ctx.sendNotificationEmail(payload);
+  if (result.success) {
+    for (const t of target.tutorials) await ctx.markNotificationSent(t.tutorialId);
+  }
+  return {
+    success: result.success,
+    recipientTo: to[0] ?? '',
+    recipientCc: cc,
+    tutorialsIncluded: count,
+    tutorialSlugs: target.tutorials.map(t => t.slug),
+    error: result.error ?? '',
+  };
+}
+
 export default class AdminService extends cds.ApplicationService {
 
   async init() {
@@ -1120,74 +1197,63 @@ export default class AdminService extends cds.ApplicationService {
     });
 
     this.on('sendLastChanceEmail', async (req) => {
-      const { authorEmail, dryRun = false } = req.data;
-      const emptyPayload = {
-        recipientTo: '', recipientCc: [], tutorialsIncluded: 0, tutorialSlugs: [],
-      };
-      if (!authorEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(authorEmail)) {
-        return { success: false, error: 'Invalid authorEmail', ...emptyPayload };
-      }
-      const {
-        computeStaleNotifications, groupNotificationsByAuthor,
-        determineRecipientsForDigest, renderTutorialList,
-        resolveTimingKnobs, getAdminEmailList, markNotificationSent,
-      } = await import('./lib/contributor-notifications.js');
-      const { sendNotificationEmail } = await import('./lib/mail-client.js');
+      const cn = await import('./lib/contributor-notifications.js');
+      const mc = await import('./lib/mail-client.js');
+      return sendLastChanceForAuthor(
+        req.data.authorEmail,
+        req.data.dryRun ?? false,
+        { ...cn, ...mc },
+      );
+    });
 
-      const knobs = await resolveTimingKnobs();
-      const adminEmails = await getAdminEmailList();
-      const notifications = await computeStaleNotifications(knobs);
-      const digests = groupNotificationsByAuthor(notifications);
-      const target = digests.find(d => d.authorEmail?.toLowerCase() === authorEmail.toLowerCase());
+    this.on('sendLastChanceEmailsAllDormant', async (req) => {
+      const { dryRun = false } = req.data;
+      const cn = await import('./lib/contributor-notifications.js');
+      const mc = await import('./lib/mail-client.js');
+      const ctx = { ...cn, ...mc };
 
-      if (!target) {
-        return {
-          success: false,
-          error: 'No stale tutorials found for that author',
-          ...emptyPayload,
-        };
-      }
+      const knobs = await cn.resolveTimingKnobs();
+      const notifications = await cn.computeStaleNotifications(knobs);
+      const digests = cn.groupNotificationsByAuthor(notifications);
+      const dormancyCutoff = new Date(Date.now() - knobs.lastChanceDormancyDays * 86400000).toISOString();
 
-      const { to, cc } = determineRecipientsForDigest(target, adminEmails);
-      const dashboardUrl = (await resolveDisplaySettings()).dashboardUrl;
-      const count = target.tutorials.length;
-      const plural = count === 1 ? 'tutorial' : 'tutorials';
-      const payload = {
-        to, cc,
-        subject: `Final notice: ${count} ${plural} pending retirement`,
-        template: 'last-chance',
-        variables: {
-          authorName: target.authorName || 'Tutorial Owner',
-          tutorialCount: count,
-          tutorialPlural: plural,
-          tutorialListHtml: renderTutorialList(target.tutorials, dashboardUrl),
-          staleDaysThreshold: knobs.staleDays,
-          dashboardUrl,
-        },
-      };
+      const qualifying = digests.filter(d =>
+        d.authorEmail != null
+        && d.tutorials.some(t =>
+          t.notificationLevel >= knobs.lastChanceMinLevel
+          && t.lastNotificationDate
+          && t.lastNotificationDate < dormancyCutoff
+        )
+      );
 
       if (dryRun) {
         return {
-          success: true,
-          recipientTo: to[0] ?? '',
-          recipientCc: cc,
-          tutorialsIncluded: count,
-          tutorialSlugs: target.tutorials.map(t => t.slug),
-          error: '',
+          authorsProcessed: qualifying.length,
+          emailsSent: 0, emailsFailed: 0, authorsSkipped: 0, errors: [],
+          preview: qualifying.map(d => ({
+            authorEmail: d.authorEmail,
+            tutorialCount: d.tutorials.length,
+            worstLevel: d.worstLevel,
+          })),
         };
       }
 
-      const result = await sendNotificationEmail(payload);
-      if (result.success) {
-        for (const t of target.tutorials) await markNotificationSent(t.tutorialId);
+      let sent = 0, failed = 0;
+      const errors = [];
+      for (const d of qualifying) {
+        try {
+          const result = await sendLastChanceForAuthor(d.authorEmail, false, ctx);
+          if (result.success) sent++;
+          else { failed++; errors.push(`${d.authorEmail}: ${result.error}`); }
+        } catch (err) {
+          failed++;
+          errors.push(`${d.authorEmail}: ${err.message}`);
+        }
       }
       return {
-        success: result.success,
-        recipientTo: to[0] ?? '',
-        recipientCc: cc,
-        tutorialsIncluded: count,
-        tutorialSlugs: target.tutorials.map(t => t.slug),
-        error: result.error ?? '',
+        authorsProcessed: qualifying.length,
+        emailsSent: sent, emailsFailed: failed, authorsSkipped: 0, errors,
+        preview: [],
       };
     });
 

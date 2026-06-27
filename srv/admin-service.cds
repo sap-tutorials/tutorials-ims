@@ -335,6 +335,20 @@ service AdminService {
     tutorialSlugs     : array of String;
     error             : String;
   };
+  action sendLastChanceEmailsAllDormant(
+    dryRun : Boolean
+  ) returns {
+    authorsProcessed : Integer;
+    emailsSent       : Integer;
+    emailsFailed     : Integer;
+    authorsSkipped   : Integer;
+    errors           : array of String;
+    preview          : array of {
+      authorEmail   : String;
+      tutorialCount : Integer;
+      worstLevel    : Integer;
+    };
+  };
 
   // --- Statistics & export functions ---
 
