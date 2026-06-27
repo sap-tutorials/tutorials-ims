@@ -203,10 +203,9 @@ New TypeScript script that:
 4. Cleans up stale `<slug>.md` files when an advocate is deactivated or
    deleted — uses the roster as source of truth.
 
-The script is wired into `npm run fetch-tutorials` (or a sibling
-`fetch-advocates` script in `package.json`) so `npm run build:all` and
-`rebuild-content.yml` invoke it. Add a `pretest:hybrid` step? — No,
-keep build-time work in the build pipeline.
+The script is wired into the existing `npm run fetch-tutorials` chain in
+[package.json](../../../package.json) so `npm run build:all` and the
+`rebuild-content.yml` workflow invoke it automatically.
 
 ### 3. Hugo layout — `hugo/layouts/developer-advocates/single.html`
 
@@ -411,7 +410,6 @@ button now points internally. We also drop `target="_blank"` from the
 
 **Added:**
 
-- `srv/routes/advocates-public.js` — extend with `handleSingle()` + route registration
 - `scripts/fetch-advocates.ts` — build-time roster fetcher
 - `hugo/layouts/developer-advocates/single.html` — page layout
 - `hugo/layouts/developer-advocates/baseof.html` (only if list.html
@@ -425,9 +423,12 @@ button now points internally. We also drop `target="_blank"` from the
 
 **Modified:**
 
+- `srv/routes/advocates-public.js` — add `handleSingle()` + register `/api/advocates/:slug` route
 - `hugo-apps/vite.config.ts` — new entry + bundle budget
 - `hugo-apps/src/advocates/components/AdvocateCard.vue` — repoint `profileUrl`
 - `package.json` — wire `fetch-advocates` into the `fetch-tutorials` chain
+- `test/smoke/advocates.smoke.test.js` — three new assertions
+- `docs/developers/architecture/advocates.md` — document the new page + endpoint
 - `srv/routes/advocates-public.js` — new handler + route
 - `test/smoke/advocates.smoke.test.js` — three new assertions
 - `docs/developers/architecture/advocates.md` — document the new page + endpoint
@@ -455,6 +456,9 @@ button now points internally. We also drop `target="_blank"` from the
   still display correctly.
 - [ ] After hydration, the page lists tutorials authored and
   tutorials contributed to, each linked to `/tutorials/<slug>/`.
+- [ ] `GET /api/advocates/<slug>` returns `Cache-Control: public,
+  max-age=60, stale-while-revalidate=600` and a valid `ETag`; a
+  follow-up request with `If-None-Match: <etag>` returns 304.
 - [ ] The existing roster grid card's "View profile →" button
   navigates to the internal page (not the first external profile).
 - [ ] Topic chips on the profile page link back to the directory
