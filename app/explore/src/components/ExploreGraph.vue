@@ -3,7 +3,7 @@ import { ref, onMounted, onBeforeUnmount } from 'vue'
 import Graph from 'graphology'
 import Sigma from 'sigma'
 import forceAtlas2 from 'graphology-layout-forceatlas2'
-import type { ExploreNode, ExploreEdge } from '../types'
+import type { ExploreNode, ExploreEdge, NodeType, PredicateType } from '../types'
 
 const props = defineProps<{ nodes: ExploreNode[]; edges: ExploreEdge[] }>()
 const emit = defineEmits<{ nodeClick: [{ id: string; node: ExploreNode }] }>()
@@ -48,21 +48,35 @@ onBeforeUnmount(() => {
   graph = null
 })
 
-function colorForNodeType(t: string) {
-  switch (t) {
-    case 'tutorial': return '#0a6ed1'
-    case 'concept':  return '#107e3e'
-    case 'mission':  return '#df6e0c'
-    case 'product':  return '#a100c2'
-    case 'group':    return '#8c8c8c'
-    case 'category': return '#666666'
-    case 'tag':      return '#888888'
-    default:         return '#000'
-  }
+function colorForNodeType(t: NodeType): string {
+  return NODE_COLORS[t]
 }
 
-function edgeColorForType(p: string) {
-  return p === 'coCompletedWith' ? '#cccccc' : '#999999'
+function edgeColorForType(p: PredicateType): string {
+  return EDGE_COLORS[p]
+}
+
+// Drift-resistant: Record<NodeType, string> makes TS catch missing variants.
+const NODE_COLORS: Record<NodeType, string> = {
+  tutorial: '#0a6ed1',
+  concept:  '#107e3e',
+  mission:  '#df6e0c',
+  product:  '#a100c2',
+  group:    '#8c8c8c',
+  category: '#666666',
+  tag:      '#888888',
+}
+
+const EDGE_COLORS: Record<PredicateType, string> = {
+  teaches:         '#999999',
+  requires:        '#999999',
+  relatedTo:       '#999999',
+  extends:         '#999999',
+  partOf:          '#999999',
+  taggedWith:      '#999999',
+  aboutProduct:    '#999999',
+  inCategory:      '#999999',
+  coCompletedWith: '#cccccc',
 }
 </script>
 
