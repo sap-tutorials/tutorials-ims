@@ -9,6 +9,7 @@ const MAX_CODE_CHECK_GZIP = 8 * 1024;
 const MAX_VALIDATION_GZIP = 8 * 1024;
 const MAX_TUTORIAL_BRANCHES_GZIP = 12 * 1024;
 const MAX_ADVOCATES_GZIP = 30 * 1024;
+const MAX_ADVOCATE_PROFILE_GZIP = 25 * 1024;
 const MAX_RELATED_GRAPH_GZIP = 12 * 1024;
 const MAX_ALERTS_GZIP = 12 * 1024;
 
@@ -84,6 +85,24 @@ function advocatesBudget() {
   };
 }
 
+function advocateProfileBudget() {
+  return {
+    name: 'advocate-profile-budget',
+    generateBundle(_opts: unknown, bundle: Record<string, any>) {
+      const chunk = bundle['advocate-profile.js'];
+      if (!chunk || chunk.type !== 'chunk') return;
+      const gz = gzipSync(chunk.code).length;
+      if (gz > MAX_ADVOCATE_PROFILE_GZIP) {
+        // @ts-ignore — Rollup plugin context
+        this.error(`advocate-profile.js is ${gz} bytes gzipped (> ${MAX_ADVOCATE_PROFILE_GZIP}). Move code to a lazy chunk.`);
+      } else {
+        // @ts-ignore
+        this.warn(`advocate-profile.js: ${gz} bytes gzipped (budget ${MAX_ADVOCATE_PROFILE_GZIP}).`);
+      }
+    }
+  };
+}
+
 function tutorialPrefsBudget() {
   return {
     name: 'tutorial-prefs-budget',
@@ -139,7 +158,7 @@ function relatedGraphBudget() {
 }
 
 export default defineConfig({
-  plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget(), codeCheckBudget(), validationBudget(), tutorialBranchesBudget(), advocatesBudget(), relatedGraphBudget(), alertsBudget()],
+  plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget(), codeCheckBudget(), validationBudget(), tutorialBranchesBudget(), advocatesBudget(), relatedGraphBudget(), alertsBudget(), advocateProfileBudget()],
   // Approuter serves these bundles at /js/. Without `base`, Vite emits
   // dynamic-import paths as `./chunks/x.js` which the browser resolves
   // against the *document URL* (e.g. `/` → `/chunks/x.js` → 404). Setting
@@ -182,6 +201,7 @@ export default defineConfig({
         // clobbered by) this Vite entry depending on build order.
         'tutorial-referred': resolve(__dirname, 'src/tutorial-referred/main.ts'),
         advocates: resolve(__dirname, 'src/advocates/main.ts'),
+        'advocate-profile': resolve(__dirname, 'src/advocate-profile/main.ts'),
         alerts: resolve(__dirname, 'src/alerts/main.ts'),
         'related-graph': resolve(__dirname, 'src/related-graph/main.ts'),
         'tutorial-reset': resolve(__dirname, 'src/tutorial-reset/main.ts'),
