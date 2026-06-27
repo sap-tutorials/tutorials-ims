@@ -66,7 +66,8 @@
       "sap.tutorials.admin.search": "./components/search",
       "sap.tutorials.admin.navigator": "./components/navigator",
       "sap.tutorials.admin.display": "./components/display",
-      "sap.tutorials.admin.tenant": "./components/tenant"
+      "sap.tutorials.admin.tenant": "./components/tenant",
+      "sap.tutorials.admin.homepage": "./components/homepage"
     },
     "models": {
       "admin": {
@@ -248,6 +249,12 @@
         "settings": {},
         "componentData": {},
         "lazy": true
+      },
+      "homepageComponent": {
+        "name": "sap.tutorials.admin.homepage",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
       }
     },
     "services": {
@@ -300,6 +307,7 @@
         { "name": "navigator", "pattern": "navigator", "target": [{"name": "navigatorSettingsTarget", "prefix": "nv"}] },
         { "name": "display", "pattern": "display", "target": [{"name": "displaySettingsTarget", "prefix": "dp"}] },
         { "name": "tenant", "pattern": "tenant", "target": [{"name": "tenantSettingsTarget", "prefix": "tn"}] },
+        { "name": "homepage", "pattern": "homepage", "target": [{"name": "homepageTarget", "prefix": "hp"}] },
         { "name": "board", "pattern": "board", "target": "boardTarget" },
         { "name": "dashboard", "pattern": "", "target": "dashboardTarget" },
         { "name": "statistics", "pattern": "statistics", "target": "statisticsTarget" },
@@ -489,6 +497,13 @@
           "id": "tenantSettingsTarget",
           "viewLevel": 1,
           "prefix": "tn"
+        },
+        "homepageTarget": {
+          "type": "Component",
+          "usage": "homepageComponent",
+          "id": "homepageTarget",
+          "viewLevel": 1,
+          "prefix": "hp"
         },
         "feedbackDashboardTarget": {
           "viewName": "TutorialFeedbackDashboard",

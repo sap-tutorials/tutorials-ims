@@ -20,7 +20,8 @@
         { "key": "categories", "title": "Categories" },
         { "key": "concepts", "title": "Concepts" },
         { "key": "advocates", "title": "Advocates" },
-        { "key": "alerts", "title": "Alerts", "icon": "sap-icon://notification-2" }
+        { "key": "alerts", "title": "Alerts", "icon": "sap-icon://notification-2" },
+        { "key": "homepage", "title": "Homepage", "icon": "sap-icon://home" }
       ]
     },
     {

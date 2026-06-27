@@ -182,6 +182,14 @@ When `EXPOSE_CAP_UI=true` is set on the CAP srv app, these are accessible throug
 | `/admin/embeddings/stats` | GET | Tutorial embedding coverage / drift statistics | XSUAA + `Admin` |
 | `/api/alerts` | GET | Active alerts with audience=ALL. 60 s cache. | None |
 | `/api/alerts/me` | GET | ALL + AUTHENTICATED + ADMIN (if admin). 30 s private cache. | XSUAA |
+| `/api/homepage/events` | GET | 3-4 upcoming events (merged from DB + events calendar). 60 s cache. | None |
+| `/api/homepage/videos` | GET | @sapdevs video feed (Developer News + recent uploads). 15-min cache; requires `YOUTUBE_API_KEY`. | None |
+| `/api/homepage/communityBlogs` | GET | SAP Community blog RSS feed (latest posts). 30-min cache. | None |
+| `/api/homepage/news` | GET | SAP News headlines RSS feed. 30-min cache. | None |
+| `/api/homepage/shelves?verb=<v>` | GET | All active `HomepageShelves` entries for one verb (`LEARN`\|`BUILD`\|`INTEGRATE`\|`OPERATE`\|`AI`\|`CONNECT`). 5-min cache. | None |
+| `/api/homepage/redirectsActive` | GET | Active `LegacyRedirects` rows (approuter-only consumer; refreshes hourly). | None |
+| `/api/homepage/recordRedirectHits` | POST | Idempotent batch hit counter for legacy redirects (approuter-only writer). Body: `{ hits: [{ id, count }] }`. | None |
+| `/build/homepage-shelves` | GET | All `HomepageShelves` entries keyed by verb (Hugo build-time only; bakes `hugo/data/homepage_shelves.json`). | None |
 
 > **`/build/navigator`** returns a shape with `missions[]`, `groups[]` (incl. standalone published Groups), `tutorialMappings[]`, and `checkpointMappings[]` (milestone markers). The 5-minute in-memory cache is automatically invalidated when the Admin UI saves changes to Missions, Groups, or CompletionPath entities — no `?nocache=1` needed. Implementation: [srv/lib/navigator-catalog.js](../../../srv/lib/navigator-catalog.js).
 >
