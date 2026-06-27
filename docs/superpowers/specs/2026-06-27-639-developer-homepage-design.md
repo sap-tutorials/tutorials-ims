@@ -210,7 +210,7 @@ entity HomepageShelves : managed {
 ```
 
 - `@assert.unique.url` to prevent duplicate destinations within a verb.
-- `@PersonalData.EntitySemantics: 'DataSubject'` on createdBy/modifiedBy for audit-log compliance.
+- `@PersonalData.EntitySemantics` is intentionally **NOT** applied to `HomepageShelves`. The entity holds admin-curated catalog metadata (URLs, titles, descriptions) — not a data subject, not a data-subject's content, and not credentials. Project convention (audit 2026-06-27): `@PersonalData` is reserved for entities containing user PII or user-authored content (`Users`, `UserMetaData`, `UserLearningPreferences`, `TaskRecords`, `CodeCheckSubmissions`, `ValidateAnswerSubmissions`, `AuthorAiRequests`, `BranchDecisions`, `Concepts`, `Secrets`, `Advocates`). Other admin-curated platform metadata (`Alerts`, `Missions`, `Groups`, `Events`, `ChatSettings`, `Categories`, `Accomplishments`, `Prizes`) is NOT annotated — `HomepageShelves` follows that established pattern. The `managed` aspect's `createdBy`/`modifiedBy` are still audit-log inputs via the entity-edit hook; they don't need `@PersonalData` propagation.
 - `@cap-js/change-tracking` annotated per project convention.
 - CSV seed file (`db/data/com.sap.developers.ims-HomepageShelves.csv`) seeds the initial ~50-destination inventory from the discovery artifact.
 
