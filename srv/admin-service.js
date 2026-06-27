@@ -1119,6 +1119,78 @@ export default class AdminService extends cds.ApplicationService {
       return { success: result.success, error: result.error ?? '' };
     });
 
+    this.on('sendLastChanceEmail', async (req) => {
+      const { authorEmail, dryRun = false } = req.data;
+      const emptyPayload = {
+        recipientTo: '', recipientCc: [], tutorialsIncluded: 0, tutorialSlugs: [],
+      };
+      if (!authorEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(authorEmail)) {
+        return { success: false, error: 'Invalid authorEmail', ...emptyPayload };
+      }
+      const {
+        computeStaleNotifications, groupNotificationsByAuthor,
+        determineRecipientsForDigest, renderTutorialList,
+        resolveTimingKnobs, getAdminEmailList, markNotificationSent,
+      } = await import('./lib/contributor-notifications.js');
+      const { sendNotificationEmail } = await import('./lib/mail-client.js');
+
+      const knobs = await resolveTimingKnobs();
+      const adminEmails = await getAdminEmailList();
+      const notifications = await computeStaleNotifications(knobs);
+      const digests = groupNotificationsByAuthor(notifications);
+      const target = digests.find(d => d.authorEmail?.toLowerCase() === authorEmail.toLowerCase());
+
+      if (!target) {
+        return {
+          success: false,
+          error: 'No stale tutorials found for that author',
+          ...emptyPayload,
+        };
+      }
+
+      const { to, cc } = determineRecipientsForDigest(target, adminEmails);
+      const dashboardUrl = (await resolveDisplaySettings()).dashboardUrl;
+      const count = target.tutorials.length;
+      const plural = count === 1 ? 'tutorial' : 'tutorials';
+      const payload = {
+        to, cc,
+        subject: `Final notice: ${count} ${plural} pending retirement`,
+        template: 'last-chance',
+        variables: {
+          authorName: target.authorName || 'Tutorial Owner',
+          tutorialCount: count,
+          tutorialPlural: plural,
+          tutorialListHtml: renderTutorialList(target.tutorials, dashboardUrl),
+          staleDaysThreshold: knobs.staleDays,
+          dashboardUrl,
+        },
+      };
+
+      if (dryRun) {
+        return {
+          success: true,
+          recipientTo: to[0] ?? '',
+          recipientCc: cc,
+          tutorialsIncluded: count,
+          tutorialSlugs: target.tutorials.map(t => t.slug),
+          error: '',
+        };
+      }
+
+      const result = await sendNotificationEmail(payload);
+      if (result.success) {
+        for (const t of target.tutorials) await markNotificationSent(t.tutorialId);
+      }
+      return {
+        success: result.success,
+        recipientTo: to[0] ?? '',
+        recipientCc: cc,
+        tutorialsIncluded: count,
+        tutorialSlugs: target.tutorials.map(t => t.slug),
+        error: result.error ?? '',
+      };
+    });
+
     this.on('updateNotificationRecipients', async (req) => {
       const { ImsConfig } = cds.entities('com.sap.developers.ims');
       const { emails } = req.data;

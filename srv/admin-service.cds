@@ -324,6 +324,17 @@ service AdminService {
     success : Boolean;
     error   : String;
   };
+  action sendLastChanceEmail(
+    authorEmail : String,
+    dryRun      : Boolean
+  ) returns {
+    success           : Boolean;
+    recipientTo       : String;
+    recipientCc       : array of String;
+    tutorialsIncluded : Integer;
+    tutorialSlugs     : array of String;
+    error             : String;
+  };
 
   // --- Statistics & export functions ---
 
