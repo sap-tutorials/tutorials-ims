@@ -1,0 +1,20 @@
+{{ define "main" }}
+{{- /* Spec §6 page anatomy: 7 rows. Live data (events, videos, community
+       blogs, news) hydrates via Vue islands at /js/homepage-bands.js. Shelves
+       come from hugo/data/homepage_shelves.json baked at build time. */ -}}
+{{- $shelves := (.Site.Data.homepage_shelves.shelves) | default slice -}}
+
+<article class="developer-homepage">
+  {{ partial "homepage/hero.html" . }}
+  {{ partial "homepage/verb-spine.html" (dict "shelves" $shelves) }}
+  {{ partial "homepage/events-band.html" . }}
+  {{ partial "homepage/video-band.html" . }}
+  {{ partial "homepage/tutorials-teaser.html" . }}
+  {{ partial "homepage/community-lane.html" . }}
+  {{ partial "homepage/directory-footer.html" (dict "shelves" $shelves) }}
+</article>
+
+{{ $css := resources.Get "css/homepage.css" }}
+<link rel="stylesheet" href="{{ $css.RelPermalink }}">
+<script type="module" src="/js/homepage-bands.js?v={{ now.Unix }}"></script>
+{{ end }}

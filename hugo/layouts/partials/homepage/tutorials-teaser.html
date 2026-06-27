@@ -1,0 +1,20 @@
+{{- /* tutorials-teaser.html — spec §6 row 5.
+       Reads .Site.Data.browse.featured (populated by fetch-tutorials.ts).
+       Renders up to 6 cards using the existing card-tutorial partial.
+       Falls back gracefully when browse data is absent. */ -}}
+{{- $browse := .Site.Data.browse | default (dict "featured" slice) -}}
+{{- $featured := $browse.featured | default slice -}}
+{{- $cards := first 6 $featured -}}
+<section class="hp-teaser" aria-labelledby="hp-teaser-title">
+  <div class="hp-teaser__header">
+    <h2 id="hp-teaser-title" class="hp-band__title">Featured tutorials</h2>
+    <a class="hp-teaser__see-all" href="/tutorial-navigator/">Browse all tutorials →</a>
+  </div>
+  {{- if gt (len $cards) 0 -}}
+    <div class="hp-teaser__grid">
+      {{- range $cards -}}
+        {{ partial "browse/_partials/card-tutorial.html" . }}
+      {{- end -}}
+    </div>
+  {{- end -}}
+</section>
