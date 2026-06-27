@@ -100,7 +100,7 @@ export function discoverConcepts(hugoDir: string): Map<string, string> {
 
   let entries: string[];
   try {
-    entries = readdirSync(conceptsDir);
+    entries = readdirSync(conceptsDir).filter(e => !e.startsWith('_'));
   } catch {
     // concepts/ directory missing entirely (no concepts published yet) —
     // that's a normal state for fresh installs and the QA channel.
