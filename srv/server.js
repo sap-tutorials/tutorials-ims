@@ -5,6 +5,7 @@ import { registerJobs } from './jobs/scheduler.js';
 import { autoPurgeOnce } from './lib/purge-stale-changelog.js';
 import { qrcodeHandler } from './lib/qrcode-handler.js';
 import { buildCatalogHandler } from './lib/build-catalog.js';
+import { buildConceptsHandler } from './lib/build-concepts.js';
 import { coCompletionsHandler } from './lib/co-completion.js';
 import { recommendationsHandler } from './handlers/recommendations.js';
 import { navigatorCatalogHandler, invalidateNavigatorCache } from './lib/navigator-catalog.js';
@@ -181,6 +182,7 @@ cds.on('bootstrap', (app) => {
   app.get('/api/recommendations', recommendationsHandler);
   app.get('/api/branches/decide', decideHandler);
   app.get('/build/catalog', buildCatalogHandler);
+  app.get('/build/concepts', buildConceptsHandler);
   app.get('/build/co-completions', coCompletionsHandler);
   app.get('/build/mission/:slug', missionDetailHandler);
   app.get('/build/navigator', navigatorCatalogHandler);
