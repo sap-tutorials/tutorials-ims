@@ -194,7 +194,12 @@ entity UserLearningPreferences : managed {
   key user       : Association to Users;
   deployment     : String(20) @assert.range enum { cloud; onprem; };
   role           : String(20) @assert.range enum { developer; architect; sysadmin; student; };
-  cloud          : String(20) @assert.range enum { btp; aws; gcp; };
+  // Issue #669: extended cloud vocab to include the major providers.
+  // Drift-locked to srv/lib/branch/profile-fields.js via
+  // scripts/__tests__/profile-fields-sync.test.ts. Reminder: a HANA enum
+  // widen on a String(20) column is additive only — no data migration needed
+  // (existing 'btp'/'aws'/'gcp' rows stay valid).
+  cloud          : String(20) @assert.range enum { btp; aws; azure; gcp; alibaba; oracle; ibm; };
 }
 
 entity DeveloperEnvironmentTabs : cuid, LegacyKeyed {

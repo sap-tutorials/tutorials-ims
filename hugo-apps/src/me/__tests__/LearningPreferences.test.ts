@@ -118,4 +118,72 @@ describe('LearningPreferences.vue', () => {
     await new Promise(r => setTimeout(r, 0));
     expect((global as any).__post).toEqual({ deployment: null, role: 'developer', cloud: 'btp' });
   });
+
+  // Issue #669 regression: prior implementation set `:selected` per-option,
+  // which the UI5 Select misinterpreted (multiple options ended up with the
+  // `selected` attribute and UI5 picked the LAST one — onprem / student /
+  // ibm — making the form look like it had reverted to defaults on every
+  // reload even though the row in HANA was correct. Lock in the
+  // imperative-`value` path: after mount + fetch resolve, each <ui5-select>'s
+  // `.value` JS property must reflect the saved row.
+  it('6. issue #669: DOM <ui5-select>.value reflects the fetched row after mount', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith('LearningPreferences')) {
+        return { ok: true, json: async () => ({ value: [{ deployment: 'cloud', role: 'developer', cloud: 'btp' }] }) };
+      }
+      return { ok: true, json: async () => ({ branchingEnabled: true }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const wrapper = mount(LearningPreferences, { attachTo: document.body });
+    await flushPromises();
+    await wrapper.vm.$nextTick();
+    // happy-dom does not register UI5 custom elements, so `.value` is just a
+    // plain property — but the component's syncSelectValue() still sets it
+    // through (element as any).value = '<vocab value>'. That property write
+    // is exactly what UI5's connected lifecycle reads in production.
+    const deployment = wrapper.find('#deployment').element as any;
+    const role       = wrapper.find('#role').element as any;
+    const cloud      = wrapper.find('#cloud').element as any;
+    expect(deployment.value).toBe('cloud');
+    expect(role.value).toBe('developer');
+    expect(cloud.value).toBe('btp');
+  });
+
+  // Issue #669 regression: null/no-preference round-trips to the "__none__"
+  // sentinel option so the placeholder renders instead of the LAST option in
+  // the vocab.
+  it('7. issue #669: null prefs map to the "__none__" sentinel on the DOM select', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith('LearningPreferences')) {
+        return { ok: true, json: async () => ({ value: [] }) };
+      }
+      return { ok: true, json: async () => ({ branchingEnabled: true }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const wrapper = mount(LearningPreferences, { attachTo: document.body });
+    await flushPromises();
+    await wrapper.vm.$nextTick();
+    const deployment = wrapper.find('#deployment').element as any;
+    expect(deployment.value).toBe('__none__');
+  });
+
+  // Issue #669 vocab expansion guard: ensure new cloud providers reach the
+  // template so authors of new branches can target them. The Select renders a
+  // <ui5-option> per vocab entry — count = vocab length + 1 (the __none__
+  // sentinel).
+  it('8. issue #669: cloud Select renders all major providers from PROFILE_VOCAB', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith('LearningPreferences')) return { ok: true, json: async () => ({ value: [] }) };
+      return { ok: true, json: async () => ({ branchingEnabled: true }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const wrapper = mount(LearningPreferences);
+    await flushPromises();
+    const cloudOptions = wrapper.find('#cloud').findAll('ui5-option');
+    const values = cloudOptions.map(o => o.attributes('value'));
+    // Every major hyperscaler the issue called out, plus the __none__ sentinel.
+    expect(values).toEqual(expect.arrayContaining([
+      '__none__', 'btp', 'aws', 'azure', 'gcp', 'alibaba', 'oracle', 'ibm',
+    ]));
+  });
 });
