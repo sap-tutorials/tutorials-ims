@@ -429,9 +429,6 @@ button now points internally. We also drop `target="_blank"` from the
 - `package.json` — wire `fetch-advocates` into the `fetch-tutorials` chain
 - `test/smoke/advocates.smoke.test.js` — three new assertions
 - `docs/developers/architecture/advocates.md` — document the new page + endpoint
-- `srv/routes/advocates-public.js` — new handler + route
-- `test/smoke/advocates.smoke.test.js` — three new assertions
-- `docs/developers/architecture/advocates.md` — document the new page + endpoint
 
 ## Open questions and assumptions
 
