@@ -1,8 +1,13 @@
 {{- $brand := .Site.Params.brand -}}
 {{- $title := cond .IsHome $brand .Title -}}
 {{- $desc := .Params.description | default .Site.Params.defaultDescription -}}
-{{- $ogType := cond .IsPage "article" "website" -}}
-{{- $ogImage := .Params.image | default .Site.Params.defaultOgImage | absURL -}}
+{{- $ogType := cond .IsPage (cond (eq .Type "developer-advocates") "profile" "article") "website" -}}
+{{- $ogImage := "" -}}
+{{- if and (eq .Type "developer-advocates") .Params.advocate.hasPhoto -}}
+  {{- $ogImage = printf "/api/advocates/%s/photo" .Params.slug | absURL -}}
+{{- else -}}
+  {{- $ogImage = .Params.image | default .Site.Params.defaultOgImage | absURL -}}
+{{- end -}}
 
 <meta property="og:site_name" content="{{ $brand }}">
 <meta property="og:type" content="{{ $ogType }}">
@@ -23,6 +28,11 @@
 {{- with .Lastmod }}
 <meta property="article:modified_time" content="{{ .Format "2006-01-02T15:04:05Z07:00" }}">
 {{- end }}
+{{- end }}
+
+{{- if eq .Type "developer-advocates" }}
+{{- with .Params.advocate.firstName }}<meta property="profile:first_name" content="{{ . }}">{{ end }}
+{{- with .Params.advocate.lastName }}<meta property="profile:last_name" content="{{ . }}">{{ end }}
 {{- end }}
 
 <meta name="twitter:card" content="summary_large_image">

@@ -1,0 +1,59 @@
+{{ define "main" }}
+{{ $a := .Params.advocate }}
+{{ $slug := .Params.slug }}
+<section class="adv-profile" data-slug="{{ $slug }}">
+  <a class="adv-profile-back" href="/developer-advocates/">&larr; All advocates</a>
+
+  <section class="adv-profile-hero" data-region="{{ $a.region }}">
+    {{ if $a.hasPhoto }}
+      <img class="adv-profile-photo"
+           src="/api/advocates/{{ $slug }}/photo?v={{ $a.photoUpdatedAt }}"
+           alt="Photo of {{ $a.firstName }} {{ $a.lastName }}" />
+    {{ else }}
+      <div class="adv-profile-photo-fallback" aria-hidden="true">
+        {{ slicestr $a.firstName 0 1 }}{{ slicestr $a.lastName 0 1 }}
+      </div>
+    {{ end }}
+    <div class="adv-profile-id">
+      <h1>{{ $a.firstName }} {{ $a.lastName }}
+        {{ with $a.pronouns }}<span class="adv-pron">({{ . }})</span>{{ end }}
+      </h1>
+      {{ with $a.title }}<div class="adv-role">{{ . }}</div>{{ end }}
+      <div class="adv-loc">
+        {{ with $a.location }}{{ . }} &middot;{{ end }} {{ $a.region }}
+      </div>
+      {{ with $a.links }}
+      <ul class="adv-profile-links">
+        {{ range . }}
+          <li><a href="{{ .url }}" target="_blank" rel="noopener" title="{{ .label | default .kind }}">{{ .kind }}</a></li>
+        {{ end }}
+      </ul>
+      {{ end }}
+    </div>
+  </section>
+
+  {{ with $a.bioHtml }}
+  <section class="adv-profile-bio">
+    <h2>About</h2>
+    <div class="adv-bio-md">{{ . | safeHTML }}</div>
+  </section>
+  {{ end }}
+
+  {{ with $a.topics }}
+  <section class="adv-profile-topics">
+    <h2>Topics</h2>
+    <ul>
+      {{ range . }}
+        <li><a class="adv-chip" href="/developer-advocates/#topic={{ .slug }}">{{ .label }}</a></li>
+      {{ end }}
+    </ul>
+  </section>
+  {{ end }}
+
+  <div id="advocate-profile-mount"
+       data-slug="{{ $slug }}"
+       data-api="/api/advocates/{{ $slug }}"></div>
+</section>
+
+<script type="module" src="{{ "/js/advocate-profile.js" | relURL }}"></script>
+{{ end }}
