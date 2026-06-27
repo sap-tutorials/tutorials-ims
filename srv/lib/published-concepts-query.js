@@ -51,7 +51,7 @@ export async function buildConceptsPayload(db) {
       .where({ concept_ID: { in: ids }, predicate: 'teaches' })
   );
   const teachesByConcept = groupBy(teachesRows, 'concept_ID', r => ({
-    slug: r.tutorial_slug, title: r.tutorial_title
+    slug: r.tutorial_slug.toLowerCase(), title: r.tutorial_title
   }));
 
   // 3. Outgoing edges (requires + relatedTo) per concept.
@@ -79,22 +79,22 @@ export async function buildConceptsPayload(db) {
   const requiresByConcept = groupBy(
     outgoingRows.filter(r => r.predicate === 'requires'),
     'source_ID',
-    r => ({ slug: r.target_slug, name: r.target_name })
+    r => ({ slug: r.target_slug.toLowerCase(), name: r.target_name })
   );
   const relatedToByConcept = groupBy(
     outgoingRows.filter(r => r.predicate === 'relatedTo'),
     'source_ID',
-    r => ({ slug: r.target_slug, name: r.target_name })
+    r => ({ slug: r.target_slug.toLowerCase(), name: r.target_name })
   );
   const requiredByConcept = groupBy(
     incomingRows,
     'target_ID',
-    r => ({ slug: r.source_slug, name: r.source_name })
+    r => ({ slug: r.source_slug.toLowerCase(), name: r.source_name })
   );
 
   // 5. Stitch.
   const concepts = published.map(c => ({
-    slug: c.slug,
+    slug: c.slug.toLowerCase(),
     name: c.name,
     description: c.description || '',
     teaches: teachesByConcept[c.ID] || [],

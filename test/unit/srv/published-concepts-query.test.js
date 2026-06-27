@@ -84,4 +84,32 @@ describe('buildConceptsPayload', () => {
     const slugs = payload.concepts.map(c => c.slug)
     expect(slugs).not.toContain('vetoed-but-published')
   })
+
+  it('lowercases all emitted slugs (canonical form)', async () => {
+    const { Concepts, Tutorials, TutorialConceptLinks } =
+      cds.entities('com.sap.developers.ims')
+
+    await INSERT.into(Concepts).entries({
+      slug: 'Mixed-Case-Concept', name: 'Mixed', description: 'm',
+      status: 'ACTIVE', publishedAt: new Date().toISOString(), publishedBy: 'admin@sap.com',
+    })
+    await INSERT.into(Tutorials).entries({
+      slug: 'Mixed-Case-Tut', title: 'Mixed Tut', status: 'ACTIVE',
+    })
+
+    const cRow = await SELECT.one.from(Concepts).columns('ID')
+      .where({ slug: 'Mixed-Case-Concept' })
+    const tRow = await SELECT.one.from(Tutorials).columns('ID')
+      .where({ slug: 'Mixed-Case-Tut' })
+
+    await INSERT.into(TutorialConceptLinks).entries({
+      tutorial_ID: tRow.ID, concept_ID: cRow.ID, predicate: 'teaches',
+    })
+
+    const payload = await buildConceptsPayload(cds.db)
+    const got = payload.concepts.find(p => p.slug === 'mixed-case-concept')
+    expect(got).toBeTruthy()
+    expect(got.slug).toBe('mixed-case-concept')           // top-level
+    expect(got.teaches[0].slug).toBe('mixed-case-tut')    // nested
+  })
 })
