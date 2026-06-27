@@ -21,7 +21,7 @@
           icon="sap-icon://menu2"
           type="Transparent"
           press=".onToggleSideNav" />
-        <Title text="{viewModel>/headerTitle}" level="H5">
+        <Title text="{viewModel>/consoleTitle}" level="H5">
           <layoutData>
             <OverflowToolbarLayoutData priority="NeverOverflow" />
           </layoutData>

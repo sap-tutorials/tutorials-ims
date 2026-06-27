@@ -4,7 +4,8 @@
     {
       "key": "dashboard",
       "title": "Dashboard",
-      "icon": "sap-icon://monitor-payments"
+      "icon": "sap-icon://monitor-payments",
+      "requiredScope": "Tutorial.Author"
     },
     {
       "key": "content",
@@ -14,8 +15,8 @@
         { "key": "events", "title": "Events" },
         { "key": "missions", "title": "Missions" },
         { "key": "groups", "title": "Groups" },
-        { "key": "tutorials", "title": "Tutorials" },
-        { "key": "tags", "title": "Tags" },
+        { "key": "tutorials", "title": "Tutorials", "requiredScope": "Tutorial.Author" },
+        { "key": "tags", "title": "Tags", "requiredScope": "Tutorial.Author" },
         { "key": "categories", "title": "Categories" },
         { "key": "concepts", "title": "Concepts" },
         { "key": "advocates", "title": "Advocates" },
@@ -35,6 +36,7 @@
       "key": "feedback",
       "title": "Feedback",
       "icon": "sap-icon://feedback",
+      "requiredScope": "Tutorial.Author",
       "items": [
         { "key": "feedbackList", "title": "All Submissions" },
         { "key": "feedbackDashboard", "title": "Dashboard" }
@@ -45,7 +47,7 @@
       "title": "Reporting",
       "icon": "sap-icon://line-chart-time-axis",
       "items": [
-        { "key": "analyticsExternal", "title": "Analytics", "icon": "sap-icon://bar-chart", "href": "/analytics-ui/", "target": "_self" },
+        { "key": "analyticsExternal", "title": "Analytics", "icon": "sap-icon://bar-chart", "href": "/analytics-ui/", "target": "_self", "requiredScope": "Tutorial.Author" },
         { "key": "analytics", "title": "Completion analytics", "icon": "sap-icon://line-chart" },
         { "key": "statistics", "title": "Statistics" },
         { "key": "dataExport", "title": "Data Export", "icon": "sap-icon://download" }
@@ -60,7 +62,7 @@
         { "key": "pipelinelog", "title": "Pipeline Log" },
         { "key": "joblog", "title": "Job Log" },
         { "key": "accounts", "title": "Account Merges" },
-        { "key": "changelog", "title": "Change Log" },
+        { "key": "changelog", "title": "Change Log", "requiredScope": "Tutorial.Author" },
         { "key": "board", "title": "Board" },
         { "key": "joule", "title": "Joule Settings" },
         { "key": "knowledgeGraph", "title": "Knowledge Graph" },
