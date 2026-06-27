@@ -8,7 +8,7 @@
  *
  * Spec: docs/superpowers/specs/2026-06-27-601-advocate-profile-pages-design.md
  */
-import { writeFileSync, readdirSync, unlinkSync, existsSync, readFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, readdirSync, unlinkSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import MarkdownIt from 'markdown-it';
@@ -43,8 +43,11 @@ function renderBio(markdown: string): { html: string; text: string } {
       a: sanitizeHtml.simpleTransform('a', { rel: 'noopener', target: '_blank' }),
     },
   });
-  const plain = sanitizeHtml(html, { allowedTags: [], allowedAttributes: {} })
+  const sliced = sanitizeHtml(html, { allowedTags: [], allowedAttributes: {} })
     .replace(/\s+/g, ' ').trim().slice(0, 200);
+  // Drop a trailing lone high surrogate so we never split an emoji or
+  // supplementary-plane char mid-character.
+  const plain = /[\uD800-\uDBFF]$/.test(sliced) ? sliced.slice(0, -1) : sliced;
   return { html, text: plain };
 }
 
@@ -92,9 +95,10 @@ export async function runFetchAdvocates({ fetcher, contentDir, cacheDir }: RunOp
   writeFileSync(join(cacheDir, 'advocates-roster.json'), JSON.stringify({ sha, roster }, null, 2));
 
   const active = roster.filter((a) => a.isActive !== false);
-  const activeSlugs = new Set(active.map((a) => a.slug));
+  const activeSlugs = new Set(active.map((a) => a.slug).filter(Boolean));
 
   for (const a of active) {
+    if (!a.slug) continue;  // CAP /api/advocates contract guarantees slug, but be defensive at the build boundary
     const yaml = frontmatter(a);
     const out = `---\n${yaml}---\n`;
     writeFileSync(join(contentDir, `${a.slug}.md`), out);

@@ -84,4 +84,17 @@ describe('fetch-advocates', () => {
     const jung = readFileSync(join(contentDir, 'thomas-jung.md'), 'utf8');
     expect(jung).not.toMatch(/<script>/);
   });
+
+  it('skips advocates with no slug', async () => {
+    const fetcher = async () => ({
+      advocates: [
+        { ID: 'A1', firstName: 'No', lastName: 'Slug', region: 'EMEA' }, // no slug
+        SAMPLE.advocates[0],
+      ],
+    });
+    await runFetchAdvocates({ fetcher, contentDir, cacheDir });
+    // The slugless advocate must NOT produce a .md file (and definitely not 'undefined.md').
+    expect(existsSync(join(contentDir, 'undefined.md'))).toBe(false);
+    expect(existsSync(join(contentDir, 'thomas-jung.md'))).toBe(true);
+  });
 });
