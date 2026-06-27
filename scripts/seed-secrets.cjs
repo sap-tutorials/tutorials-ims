@@ -110,6 +110,14 @@ const INITIAL_SECRETS = [
     rotationDocsUrl: '',
     expiresAt: null,
   },
+  {
+    key: 'YOUTUBE_API_KEY',
+    description: 'YouTube Data API v3 key for the SAPDevs Video band on the new homepage (issue #639). Read at runtime by srv/lib/youtube-fetcher.js via the shared secret-resolver. Powers the featured Friday Developer News card + 3 most-recent uploads from the @sapdevs channel. Daily quota 10000 units; 15-min server cache keeps usage at ~500 units/day. Vendor-rotated via Google Cloud Console (no automatic expiry).',
+    kind: 'youtube-api-key',
+    rotationOwner: 'thomas.jung@sap.com',
+    rotationDocsUrl: '',
+    expiresAt: null,
+  },
 ];
 
 function showBinding() {
