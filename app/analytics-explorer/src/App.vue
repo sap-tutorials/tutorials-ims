@@ -11,18 +11,14 @@ import '@ui5/webcomponents/dist/ListItemStandard.js'
 import { useTheme, type ThemeMode } from './composables/useTheme'
 import JoulePanel from './components/joule/JoulePanel.vue'
 import { useQuerySpec } from './composables/useQuerySpec'
+import { useAuth } from './composables/useAuth'
 
 const { themeMode, cycleThemeMode, setThemeMode } = useTheme()
 
-type AuthUser = {
-  authenticated: boolean
-  id?: string
-  email?: string
-  givenName?: string
-  familyName?: string
-}
-
-const user = ref<AuthUser | null>(null)
+// Shared singleton — Analytics.vue + the API modules read the same role state.
+// We call load() here on mount; subsequent useAuth() consumers (already-mounted
+// or lazily-mounted) see `loaded.value` flip and reactively re-evaluate.
+const { user, userRole, loaded, load } = useAuth()
 
 const userInitials = computed(() => {
   const u = user.value
@@ -42,15 +38,7 @@ const userName = computed(() => {
 
 const userEmail = computed(() => user.value?.email || '')
 
-onMounted(async () => {
-  try {
-    const res = await fetch('/auth/user', { credentials: 'include' })
-    if (!res.ok) return
-    user.value = await res.json()
-  } catch {
-    // Local Vite dev or transient error — keep placeholder icon.
-  }
-})
+onMounted(() => { load() })
 
 // Single shellbar slot toggling between three modes keeps the bar compact.
 // The icon and tooltip reflect the active mode so the user can read state at
@@ -119,6 +107,7 @@ function onNotificationsClick() { /* TODO: notifications popover */ }
         :text="themeTooltip"
         @click="onThemeClick" />
       <ui5-shellbar-item
+        v-if="userRole === 'admin'"
         icon="da"
         text="Joule"
         data-test="shellbar-joule"
@@ -172,10 +161,19 @@ function onNotificationsClick() { /* TODO: notifications popover */ }
 
     <main class="content">
       <div class="content-col">
-        <router-view />
+        <!--
+          Wait for /auth/user before rendering routes — otherwise the entity
+          browser fires a request against /admin/analytics/ before we know
+          whether to flip to /author/, and the author would see a 403 flash.
+        -->
+        <div v-if="!loaded" class="auth-loading">Loading…</div>
+        <div v-else-if="userRole === 'anonymous'" class="no-access">
+          <a href="/admin-ui/#/noAccess">No access — request Tutorial.Author scope.</a>
+        </div>
+        <router-view v-else />
       </div>
       <JoulePanel
-        v-if="panelOpen"
+        v-if="panelOpen && userRole === 'admin'"
         @close="onJouleClose"
         @view-in-builder="onViewInBuilder"
       />
@@ -193,4 +191,19 @@ function onNotificationsClick() { /* TODO: notifications popover */ }
 }
 .profile-name { font-weight: 600; color: var(--sapTextColor); }
 .profile-email { font-size: 0.875rem; color: var(--sapContent_LabelColor); margin-top: 0.125rem; }
+.auth-loading {
+  padding: 2rem;
+  text-align: center;
+  color: var(--sapContent_LabelColor);
+}
+.no-access {
+  padding: 2rem;
+  text-align: center;
+}
+.no-access a {
+  color: var(--sapLinkColor);
+  text-decoration: none;
+  font-size: 1rem;
+}
+.no-access a:hover { text-decoration: underline; }
 </style>
