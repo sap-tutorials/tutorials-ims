@@ -218,6 +218,8 @@ prebuild (parsers bundle)
   → copy-joule-vendor → build:hugo → build:highlight → build:display
 ```
 
+During `build:all`, the fetch step calls `GET /build/homepage-shelves` from the CAP backend and bakes the result into `hugo/data/homepage_shelves.json`. This JSON drives the verb-spine previews, the comprehensive directory footer, and the per-verb sub-page shelf listings — the same pattern used by `/build/catalog` for missions and groups.
+
 Admin shell (`build:admin`) and QA pipeline (`fetch-tutorials:qa` → `build:qa` → `publish-content:qa`) are not in `build:all` — they're run independently or via `qa:full` for the QA loop. Tutorials must be fetched at least once before `dev` or `build:hugo` (otherwise `hugo/content/tutorials/` is empty).
 
 ### Parsers (scripts/parsers/)

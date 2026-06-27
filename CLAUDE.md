@@ -240,6 +240,7 @@ Most-referenced developer docs:
 - [docs/developers/architecture/authentication.md](docs/developers/architecture/authentication.md) — auth flow
 - [docs/developers/operations/mta-deployment.md](docs/developers/operations/mta-deployment.md) — deploy runbook
 - [docs/developers/reference/theme-variants.md](docs/developers/reference/theme-variants.md) — building event themes
+- [docs/developers/architecture/homepage.md](docs/developers/architecture/homepage.md) — developer-portal homepage architecture (#639)
 
 ### Parsers (scripts/parsers/)
 
