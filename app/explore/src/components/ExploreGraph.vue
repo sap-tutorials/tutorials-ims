@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import Graph from 'graphology'
 import Sigma from 'sigma'
 import forceAtlas2 from 'graphology-layout-forceatlas2'
@@ -9,6 +9,11 @@ const props = defineProps<{ nodes: ExploreNode[]; edges: ExploreEdge[] }>()
 const emit = defineEmits<{ nodeClick: [{ id: string; node: ExploreNode }] }>()
 
 const container = ref<HTMLDivElement | null>(null)
+// Defeat Vue 3.5 SFC template hoisting (which makes the container ref null
+// under @vue/test-utils 2.4.10 + happy-dom because the hoisted vnode is
+// never attached). The binding has no runtime effect; it just signals the
+// compiler to keep the vnode in the render function.
+const containerLabel = computed(() => `explore-graph-${props.nodes.length}`)
 let renderer: Sigma | null = null
 let graph: Graph | null = null
 
@@ -81,7 +86,7 @@ const EDGE_COLORS: Record<PredicateType, string> = {
 </script>
 
 <template>
-  <div ref="container" class="explore-graph" />
+  <div ref="container" class="explore-graph" :data-graph-id="containerLabel" />
 </template>
 
 <style scoped>
