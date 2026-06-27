@@ -2481,14 +2481,17 @@ annotate KnowledgeGraphService.Concepts with @(
     { $Type: 'UI.DataField', Value: slug,            Label: 'Slug' },
     { $Type: 'UI.DataField', Value: name,            Label: 'Name' },
     { $Type: 'UI.DataField', Value: status,          Label: 'Status' },
-    // Phase 3 (#446) — Published column. Criticality 3 (green) when set,
-    // 1 (neutral) when null. The $edmJson form mirrors the conditional
-    // pattern used by Alerts.severityCrit elsewhere in this file.
+    // Phase 3 (#446) — Published column. Criticality 3 (positive/green) when
+    // set, 0 (neutral) when null. Not-published is the default state — not an
+    // error — so it must render as neutral, not 1 (negative/red). OData V4
+    // CriticalityType: 0=Neutral, 1=Negative, 2=Critical, 3=Positive. The
+    // $edmJson form mirrors the conditional pattern used by Alerts.severityCrit
+    // elsewhere in this file.
     {
       $Type: 'UI.DataField',
       Value: publishedAt,
       Label: 'Published',
-      Criticality: { $edmJson: { $If: [ { $Ne: [ { $Path: 'publishedAt' }, null ] }, 3, 1 ] } }
+      Criticality: { $edmJson: { $If: [ { $Ne: [ { $Path: 'publishedAt' }, null ] }, 3, 0 ] } }
     },
     { $Type: 'UI.DataField', Value: extractionCount, Label: 'Extractions' },
     { $Type: 'UI.DataField', Value: lastSeenAt,      Label: 'Last Seen' },
