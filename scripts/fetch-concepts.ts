@@ -33,8 +33,13 @@ interface BuildConceptsResponse {
   generatedAt: string
 }
 
-function yamlEscape(s: string): string {
-  return `"${(s || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+export function yamlEscape(s: string): string {
+  return `"${(s || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+    .replace(/\t/g, '\\t')}"`
 }
 
 function frontmatter(c: ConceptPayload): string {
@@ -94,7 +99,12 @@ async function main() {
   console.log(`[fetch-concepts] wrote ${data.concepts.length} page(s) + _index.md to ${OUT_DIR}`)
 }
 
-main().catch((err) => {
-  console.error(err)
-  process.exit(1)
-})
+// Only run main() when invoked as a CLI — not when imported by tests.
+// Mirrors the pattern in scripts/lint-tutorial-markdown.ts.
+const isMain = process.argv[1] && import.meta.url === `file://${process.argv[1].replace(/\\/g, '/')}`
+if (isMain || import.meta.url.endsWith(process.argv[1]?.replace(/\\/g, '/') ?? '')) {
+  main().catch((err) => {
+    console.error(err)
+    process.exit(1)
+  })
+}
