@@ -63,15 +63,13 @@
       "source": "^/analytics-ui/(.*)$",
       "target": "/analytics-ui/$1",
       "localDir": "static",
-      "authenticationType": "xsuaa",
-      "scope": "$XSAPPNAME.Admin"
+      "authenticationType": "xsuaa"
     },
     {
       "source": "^/admin-ui/(.*)$",
       "target": "/admin-ui/$1",
       "localDir": "static",
-      "authenticationType": "xsuaa",
-      "scope": "$XSAPPNAME.Admin"
+      "authenticationType": "xsuaa"
     },
     {
       "source": "^/login(\\?.*)?$",
