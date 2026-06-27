@@ -77,16 +77,10 @@ async function main() {
   await fs.rm(OUT_DIR, { recursive: true, force: true })
   await fs.mkdir(OUT_DIR, { recursive: true })
 
-  let totalsLine = `[fetch-concepts] ${data.concepts.length} published concept(s) — writing pages`
-  try {
-    const totals = await fetch(`${CAP_BASE_URL}/graph/Concepts/$count?$filter=status%20eq%20%27ACTIVE%27`)
-    if (totals.ok) {
-      const total = parseInt(await totals.text(), 10)
-      const skipped = total - data.concepts.length
-      totalsLine = `[fetch-concepts] ${data.concepts.length} published concept(s), ${skipped} skipped (${total} ACTIVE concepts total)`
-    }
-  } catch {/* fall through to the simpler line */}
-  console.log(totalsLine)
+  // Counter enhancement (X published of Y total) deferred until /build/concepts
+  // exposes the total or a tech-user-authed graph probe is available. Out of
+  // scope for #446.
+  console.log(`[fetch-concepts] ${data.concepts.length} published concept(s) — writing pages`)
 
   for (const c of data.concepts) {
     const filename = `${c.slug.toLowerCase()}.md`
