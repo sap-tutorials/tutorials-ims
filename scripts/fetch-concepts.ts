@@ -43,9 +43,12 @@ function frontmatter(c: ConceptPayload): string {
       ? '[]'
       : '\n' + arr.map(r => `  - slug: ${yamlEscape(r.slug)}\n    title: ${yamlEscape(r.title ?? r.name ?? '')}`).join('\n')
 
+  // NOTE: deliberately no `type:` field — Hugo's type-based lookup is singular
+  // ("type: concept" → layouts/concept/), but our template lives at
+  // layouts/concepts/ (matching the section). Section-based lookup is what we
+  // want; setting `type` here would silently bypass it.
   return [
     '---',
-    'type: concept',
     `slug: ${yamlEscape(c.slug)}`,
     `name: ${yamlEscape(c.name)}`,
     `description: ${yamlEscape(c.description)}`,

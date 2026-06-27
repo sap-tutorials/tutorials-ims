@@ -1,0 +1,52 @@
+{{ define "main" }}
+{{/* The fetcher (scripts/fetch-concepts.ts) normalises all four related-entity
+     arrays to {slug, title} pairs, regardless of whether the source field on
+     the API payload was `title` (Tutorials.teaches) or `name` (Concept→Concept
+     edges). So we read `.title` consistently in all four sections. */}}
+{{ $name := .Params.name | default .Params.slug }}
+<article class="concept-page">
+  <header class="concept-page__header">
+    <nav class="concept-page__breadcrumb" aria-label="breadcrumb">
+      <a href="/">Home</a> &rsaquo; <a href="/concepts/">Concepts</a> &rsaquo; <span>{{ $name }}</span>
+    </nav>
+    <h1 class="concept-page__title">{{ $name }}</h1>
+    {{ with .Params.description }}<p class="concept-page__description">{{ . }}</p>{{ end }}
+  </header>
+
+  {{ with .Params.teaches }}
+  <section class="concept-page__section">
+    <h2>Tutorials that teach this</h2>
+    <ul>
+      {{ range . }}<li><a href="/tutorials/{{ .slug }}/">{{ .title }}</a></li>{{ end }}
+    </ul>
+  </section>
+  {{ end }}
+
+  {{ with .Params.requires }}
+  <section class="concept-page__section">
+    <h2>Prerequisites</h2>
+    <ul>
+      {{ range . }}<li><a href="/concepts/{{ .slug }}/">{{ .title }}</a></li>{{ end }}
+    </ul>
+  </section>
+  {{ end }}
+
+  {{ with .Params.requiredBy }}
+  <section class="concept-page__section">
+    <h2>Concepts that build on this</h2>
+    <ul>
+      {{ range . }}<li><a href="/concepts/{{ .slug }}/">{{ .title }}</a></li>{{ end }}
+    </ul>
+  </section>
+  {{ end }}
+
+  {{ with .Params.relatedTo }}
+  <section class="concept-page__section">
+    <h2>Related concepts</h2>
+    <ul>
+      {{ range . }}<li><a href="/concepts/{{ .slug }}/">{{ .title }}</a></li>{{ end }}
+    </ul>
+  </section>
+  {{ end }}
+</article>
+{{ end }}
