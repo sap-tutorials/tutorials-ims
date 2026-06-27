@@ -88,6 +88,7 @@ modules:
       # failing at cf login since 2026-06-21 (UAA/OTP cutover) so this gap
       # never surfaced; local deploys hit it on the descriptor-merge step.
       CONTENT_API_KEY: ""
+      YOUTUBE_API_KEY: ""
       # GitHub fine-grained PAT for srv/lib/rebuild-trigger.js. Empty here
       # means rebuild-trigger gracefully no-ops (logs one boot warning).
       # Real value will be set via credstore + admin Secrets UI once Phase 2-C
@@ -128,6 +129,7 @@ modules:
     properties:
       EXPOSE_CAP_UI: false
       NODE_ENV: production
+      YOUTUBE_API_KEY: ""
     provides:
       - name: srv-qa-api
         properties:
