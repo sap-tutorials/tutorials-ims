@@ -65,6 +65,14 @@ build-parameters:
         - mkdir -p approuter/static/tutorials && mv approuter/static/tutorials/_nav.json.bak approuter/static/tutorials/_nav.json
         - cp -r app/display-app/dist approuter/static/display-app
         - cp -r app/scanner/webapp approuter/static/scanner-ui
+        # Approuter and srv are separate CF apps in separate containers — the
+        # approuter cannot `import('../srv/lib/...')` at runtime (no shared FS).
+        # Mirror the shared resolver into approuter/lib/ at build time so the
+        # approuter's legacy-redirects loader can resolve it locally. Cross-
+        # module shared-source pattern; same shape as the srv-qa cp-list.
+        # (#639 / #679 follow-up.)
+        - mkdir -p approuter/lib
+        - cp srv/lib/legacy-redirects-resolver.js approuter/lib/legacy-redirects-resolver.js
 
 modules:
   - name: tutorials-srv
