@@ -145,6 +145,24 @@ service AdminService {
   @odata.draft.enabled
   entity Alerts as projection on ims.Alerts;
 
+  // Homepage redesign (#639). HomepageShelves is the source of truth for
+  // shelves on / and /<verb>/. LegacyRedirects feeds the approuter's
+  // dynamic redirect map. HomepageConfig is a singleton with the
+  // featured-playlist ID and per-band feature flags.
+  @cds.redirection.target: true
+  @Capabilities.ChangeTracking : { Supported: true }
+  @odata.draft.enabled
+  entity HomepageShelves as projection on ims.HomepageShelves;
+
+  @cds.redirection.target: true
+  @Capabilities.ChangeTracking : { Supported: true }
+  @odata.draft.enabled
+  entity LegacyRedirects as projection on ims.LegacyRedirects;
+
+  @odata.singleton
+  @Capabilities.ChangeTracking : { Supported: false }
+  entity HomepageConfig as projection on ims.HomepageConfig;
+
   @readonly @cds.persistence.skip entity AlertCtaTargets {
     key url   : String(500);
         label : String(100);

@@ -2753,3 +2753,94 @@ annotate AdminService.Alerts {
               }
               @Common.ValueListWithFixedValues: false;
 };
+
+// Homepage admin tile (#639)
+annotate AdminService.HomepageShelves with @(
+  UI.HeaderInfo : {
+    TypeName       : 'Shelf entry',
+    TypeNamePlural : 'Homepage shelves',
+    Title          : { Value : title }
+  },
+  UI.LineItem : [
+    { Value : verb,        Label : 'Verb' },
+    { Value : shelf,       Label : 'Shelf' },
+    { Value : sortOrder,   Label : 'Order' },
+    { Value : title,       Label : 'Title' },
+    { Value : url,         Label : 'URL' },
+    { Value : badge,       Label : 'Badge' },
+    { Value : linkStatus,  Label : 'Link health' },
+    { Value : isActive,    Label : 'Active' }
+  ],
+  UI.SelectionFields : [ verb, shelf, isActive, linkStatus ],
+  UI.Facets : [
+    { $Type: 'UI.ReferenceFacet', Label: 'General', Target: '@UI.FieldGroup#Main' }
+  ],
+  UI.FieldGroup #Main : { Data : [
+    { Value : verb },
+    { Value : shelf },
+    { Value : sortOrder },
+    { Value : title },
+    { Value : url },
+    { Value : description },
+    { Value : badge },
+    { Value : isExternal },
+    { Value : isActive }
+  ]}
+);
+
+annotate AdminService.HomepageShelves {
+  verb       @Common.ValueListWithFixedValues @Common.Label: 'Verb';
+  shelf      @Common.ValueListWithFixedValues @Common.Label: 'Shelf';
+  badge      @Common.ValueListWithFixedValues @Common.Label: 'Badge';
+  linkStatus @Common.ValueListWithFixedValues @Common.Label: 'Link health';
+};
+
+annotate AdminService.LegacyRedirects with @(
+  UI.HeaderInfo : {
+    TypeName       : 'Redirect',
+    TypeNamePlural : 'Legacy redirects',
+    Title          : { Value : fromPath }
+  },
+  UI.LineItem : [
+    { Value : fromPath,   Label : 'From' },
+    { Value : toPath,     Label : 'To' },
+    { Value : statusCode, Label : 'Status' },
+    { Value : isPattern,  Label : 'Regex?' },
+    { Value : hitCount,   Label : 'Hits' },
+    { Value : isActive,   Label : 'Active' }
+  ],
+  UI.SelectionFields : [ isActive, isPattern ],
+  UI.Facets : [
+    { $Type: 'UI.ReferenceFacet', Label: 'General', Target: '@UI.FieldGroup#Main' }
+  ],
+  UI.FieldGroup #Main : { Data : [
+    { Value : fromPath },
+    { Value : toPath },
+    { Value : statusCode },
+    { Value : isPattern },
+    { Value : isActive },
+    // hitCount is observability-only; surface in the OP read-only.
+    { Value : hitCount, @Common.FieldControl: #ReadOnly }
+  ]}
+);
+
+annotate AdminService.LegacyRedirects {
+  statusCode @Common.Label: 'HTTP status';
+  fromPath   @Common.Label: 'From path';
+  toPath     @Common.Label: 'To path';
+  isPattern  @Common.Label: 'Regex pattern?';
+  hitCount   @Common.Label: 'Hits';
+};
+
+annotate AdminService.HomepageConfig with @(
+  UI.HeaderInfo : {
+    TypeName       : 'Homepage config',
+    TypeNamePlural : 'Homepage configs'
+  },
+  UI.FieldGroup #Main : { Data : [
+    { Value : developerNewsPlaylistId, Label : 'Developer News playlist ID (YouTube)' },
+    { Value : videoBandEnabled,        Label : 'Show video band' },
+    { Value : eventsBandEnabled,       Label : 'Show events band' },
+    { Value : communityLaneEnabled,    Label : 'Show community lane' }
+  ]}
+);
