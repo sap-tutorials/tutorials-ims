@@ -2729,17 +2729,27 @@ annotate AdminService.Alerts with @(
 );
 
 annotate AdminService.Alerts {
-  severity @Common.ValueListWithFixedValues: true
-           @assert.range: true;
-  audience @Common.ValueListWithFixedValues: true
-           @assert.range: true;
-  ctaUrl   @Common.ValueList: {
-             CollectionPath: 'AlertCtaTargets',
-             SearchSupported: true,
-             Parameters: [
-               { $Type: 'Common.ValueListParameterInOut',        LocalDataProperty: ctaUrl, ValueListProperty: 'url' },
-               { $Type: 'Common.ValueListParameterDisplayOnly',                              ValueListProperty: 'label' }
-             ]
-           }
-           @Common.ValueListWithFixedValues: false;
+  title       @Common.Label: 'Title';
+  body        @Common.Label: 'Body';
+  severity    @Common.Label: 'Severity'
+              @Common.ValueListWithFixedValues: true
+              @assert.range: true;
+  audience    @Common.Label: 'Audience'
+              @Common.ValueListWithFixedValues: true
+              @assert.range: true;
+  startsAt    @Common.Label: 'Start (UTC)';
+  endsAt      @Common.Label: 'End (UTC)';
+  active      @Common.Label: 'Active';
+  dismissible @Common.Label: 'Dismissible';
+  ctaLabel    @Common.Label: 'CTA label';
+  ctaUrl      @Common.Label: 'CTA URL'
+              @Common.ValueList: {
+                CollectionPath: 'AlertCtaTargets',
+                SearchSupported: true,
+                Parameters: [
+                  { $Type: 'Common.ValueListParameterInOut',        LocalDataProperty: ctaUrl, ValueListProperty: 'url' },
+                  { $Type: 'Common.ValueListParameterDisplayOnly',                              ValueListProperty: 'label' }
+                ]
+              }
+              @Common.ValueListWithFixedValues: false;
 };
