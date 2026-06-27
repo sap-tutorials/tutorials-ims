@@ -222,6 +222,108 @@ async function handleAdvocates(req, res) {
   }
 }
 
+async function handleSingle(req, res) {
+  try {
+    const slug = String(req.params.slug || '').toLowerCase();
+    if (!slug) { res.status(404).end(); return; }
+
+    const db = await cds.connect.to('db');
+    const { Advocates, AdvocateTopics, AdvocateLinks, Tags, Users, Tutorials, TutorialContributors } =
+      cds.entities('com.sap.developers.ims');
+
+    // Lowercase compare so 'Thomas-Jung' resolves the same as 'thomas-jung'.
+    const matches = await db.run(SELECT.from(Advocates).where({ isActive: true }));
+    const advocate = matches.find((a) => String(a.slug || '').toLowerCase() === slug);
+    if (!advocate) { res.status(404).end(); return; }
+
+    const userIds = advocate.user_ID ? [advocate.user_ID] : [];
+
+    const [topics, links, users, authoredRows, contribRows] = await Promise.all([
+      db.run(SELECT.from(AdvocateTopics).where({ advocate_ID: advocate.ID })),
+      db.run(SELECT.from(AdvocateLinks).where({ advocate_ID: advocate.ID })),
+      userIds.length ? db.run(SELECT.from(Users).columns('ID', 'email').where({ ID: { in: userIds } })) : [],
+      userIds.length
+        ? db.run(SELECT.from(Tutorials).columns('slug', 'title', 'author_ID').where({ author_ID: { in: userIds } }))
+        : [],
+      userIds.length
+        ? db.run(SELECT.from(TutorialContributors).columns('user_ID', 'tutorial_ID').where({ user_ID: { in: userIds } }))
+        : [],
+    ]);
+
+    const contribTutorialIds = [...new Set(contribRows.map((r) => r.tutorial_ID).filter(Boolean))];
+    const contribTutorials = contribTutorialIds.length
+      ? await db.run(SELECT.from(Tutorials).columns('ID', 'slug', 'title').where({ ID: { in: contribTutorialIds } }))
+      : [];
+
+    const tagIds = [...new Set(topics.map((t) => t.tag_ID).filter(Boolean))];
+    const tagRows = tagIds.length
+      ? await db.run(SELECT.from(Tags).columns('ID', 'name', 'label').where({ ID: { in: tagIds } }))
+      : [];
+    const tagById = new Map(tagRows.map((t) => [t.ID, t]));
+
+    const topicsByAdv = new Map();
+    for (const t of topics) {
+      const tag = tagById.get(t.tag_ID);
+      if (!tag) continue;
+      const label = (tag.label && String(tag.label).trim())
+        || (tag.name && String(tag.name).trim()) || null;
+      if (!label) continue;
+      if (!topicsByAdv.has(t.advocate_ID)) topicsByAdv.set(t.advocate_ID, []);
+      topicsByAdv.get(t.advocate_ID).push({ slug: tag.name, label });
+    }
+
+    const linksByAdv = new Map();
+    const sortedLinks = [...links].sort(
+      (a, b) => (a.sortOrder ?? 100) - (b.sortOrder ?? 100) || String(a.kind).localeCompare(String(b.kind))
+    );
+    for (const l of sortedLinks) {
+      if (!linksByAdv.has(l.advocate_ID)) linksByAdv.set(l.advocate_ID, []);
+      linksByAdv.get(l.advocate_ID).push({ kind: l.kind, url: l.url, label: l.label, sortOrder: l.sortOrder });
+    }
+
+    const userById = new Map(users.map((u) => [u.ID, u]));
+    const authoredByUserId = new Map();
+    for (const t of authoredRows) {
+      if (!t.slug || !t.title) continue;
+      if (!authoredByUserId.has(t.author_ID)) authoredByUserId.set(t.author_ID, []);
+      authoredByUserId.get(t.author_ID).push({ slug: t.slug, title: t.title });
+    }
+    const tutorialById = new Map(contribTutorials.map((t) => [t.ID, t]));
+    const contribByUserId = new Map();
+    for (const c of contribRows) {
+      const tut = tutorialById.get(c.tutorial_ID);
+      if (!tut || !tut.slug || !tut.title) continue;
+      if (!contribByUserId.has(c.user_ID)) contribByUserId.set(c.user_ID, []);
+      contribByUserId.get(c.user_ID).push({ slug: tut.slug, title: tut.title });
+    }
+
+    const body = shapeAdvocateRow(advocate, {
+      topicsByAdv, linksByAdv, userById, authoredByUserId, contribByUserId,
+    });
+
+    const max = Math.max(
+      maxModified([advocate]),
+      maxModified(topics),
+      maxModified(links),
+      maxModified(users),
+      maxModified(authoredRows),
+      maxModified(contribRows),
+      maxModified(contribTutorials),
+    );
+    const etag = '"' + max.toString(36) + '"';
+
+    res.setHeader('ETag', etag);
+    res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=600');
+
+    if (req.headers['if-none-match'] === etag) { res.status(304).end(); return; }
+
+    res.json(body);
+  } catch (err) {
+    log.error(err);
+    res.status(500).json({ error: 'advocate_unavailable' });
+  }
+}
+
 async function handlePhoto(req, res) {
   try {
     const size = req.query.size === 'thumb' ? 'thumb' : 'full';
@@ -246,5 +348,6 @@ async function handlePhoto(req, res) {
 
 export function register(app) {
   app.get('/api/advocates', handleAdvocates);
+  app.get('/api/advocates/:slug', handleSingle);
   app.get('/api/advocates/:slug/photo', handlePhoto);
 }
