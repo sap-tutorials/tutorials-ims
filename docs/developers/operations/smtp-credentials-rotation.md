@@ -132,6 +132,39 @@ the first admin-UI save after credstore returns).
 > **Caveat:** `cf set-env` values do NOT survive the next MTA redeploy. Use
 > only as a short-term emergency override.
 
+## Per-author "Last Chance" emails (#622)
+
+In addition to `testNotificationEmail` (single-recipient SMTP check),
+`/admin-ui/#operations-display` exposes two admin-triggered actions for
+authors whose tutorials have not responded to the weekly cron's
+escalating reminders:
+
+- **Per-author send** (`sendLastChanceEmail`) — surgical "last chance"
+  email to one author covering all their stale tutorials. Use
+  `dryRun: true` first to verify the recipient list, then `dryRun: false`
+  to send.
+- **Bulk sweep** (`sendLastChanceEmailsAllDormant`) — fires per-author
+  last-chance emails to every author whose worst tutorial is at
+  `lastChanceMinLevel` (default 3, in `ImsConfig`) AND whose last
+  notification is older than `lastChanceDormancyDays` (default 60, also
+  `ImsConfig`). Both knobs are admin-tunable. `dryRun: true` returns a
+  preview of qualifying authors; `dryRun: false` fans out the sends
+  serially.
+
+Both actions use a dedicated [`last-chance.html`](../../../srv/templates/notification/last-chance.html)
+template distinct from the cron's automated level-3 — Riley/Tom can
+edit the human-tone copy without disturbing the weekly cron's tone
+progression. Same SMTP path (credstore-fronted resolver); same
+`FailedEmails` retry queue.
+
+The weekly cron itself now also defaults to per-author **digest** mode
+(one email per author per cycle, grouping all of their stale tutorials,
+escalating to the worst-case level present). Controlled by
+`ImsConfig.useDigestNotifications` (default `true`); flip to `false` for
+one-click rollback to the legacy per-tutorial loop. See the
+[#622 design spec](../../superpowers/specs/2026-06-27-622-author-digest-last-chance-design.md)
+for the full rationale.
+
 ## Related runbooks
 
 - [GitHub Dispatch PAT rotation](github-dispatch-pat-rotation.md) — same credstore-first pattern for the GitHub workflow_dispatch token.
