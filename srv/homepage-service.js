@@ -170,5 +170,34 @@ export default class HomepageService extends cds.ApplicationService {
       _state.shelves.set(cacheKey, { at: now, value: rows });
       return rows;
     });
+
+    // (#639) redirectsActive() — approuter polls hourly to refresh its in-memory redirect map.
+    // Returns only isActive=true rows from LegacyRedirects; no cache (polling cadence is low).
+    this.on('redirectsActive', async () => {
+      const db = await cds.connect.to('db');
+      return db.run(SELECT.from('com.sap.developers.ims.LegacyRedirects')
+        .where({ isActive: true })
+        .columns('ID', 'fromPath', 'toPath', 'statusCode', 'isPattern'));
+    });
+
+    // (#639) recordRedirectHits(hits) — approuter batches hit counters and flushes every 60s.
+    // Increments hitCount for each valid { id, count } entry. Returns the number of rows updated.
+    // Per CLAUDE.md "Never write raw SQL — use cds.ql or CQL"; read-then-update pattern used.
+    this.on('recordRedirectHits', async (req) => {
+      const hits = Array.isArray(req.data?.hits) ? req.data.hits : [];
+      if (hits.length === 0) return 0;
+      const db = await cds.connect.to('db');
+      let updated = 0;
+      for (const { id, count } of hits) {
+        if (!id || !Number.isFinite(count) || count <= 0) continue;
+        const row = await db.run(SELECT.one`hitCount`.from('com.sap.developers.ims.LegacyRedirects').where({ ID: id }));
+        if (!row) continue;
+        await db.run(UPDATE('com.sap.developers.ims.LegacyRedirects')
+          .set({ hitCount: (row.hitCount || 0) + count })
+          .where({ ID: id }));
+        updated++;
+      }
+      return updated;
+    });
   }
 }
