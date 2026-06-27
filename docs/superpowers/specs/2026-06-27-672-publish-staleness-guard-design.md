@@ -49,7 +49,7 @@ The server guard is the line that must hold; clients can be misconfigured, bypas
 
 **Location.** `commitPublishSession` in [srv/lib/content-publish-session.js](../../../srv/lib/content-publish-session.js), inserted between line 225 (`freshSlugs` capture) and line 230 (`carryForwardUnchanged` call).
 
-**Algorithm.** Two SQL round-trips total (not per-slug):
+**Algorithm.** Two SQL round-trips total (not per-slug). The append-phase has already INSERTed the in-flight rows for `$newVersion`; the guard reads them back rather than threading the in-memory `entries[]` from `appendToSession` through to commit:
 
 1. `SELECT slug, sourceHash FROM ContentFiles WHERE version = $newVersion AND slug IN (...freshSlugs) AND sourceHash IS NOT NULL` — the incoming `(slug, sourceHash)` pairs that have a hash to check. Slugs without a `sourceHash` (e.g. pre-PR#591 legacy rows or special slugs `__shell__`, `__nav__`, `__404__`) are skipped: there's nothing to compare against.
 
@@ -174,9 +174,9 @@ PipelineLog tile already shows `initiator` — once `beginPublishSession` fills 
 4. `commit ignores slugs with null sourceHash` — pre-PR#591 rows don't false-positive.
 5. `initiator written to ContentManifest and PipelineLog symmetrically` — begin with `initiator: 'bob@laptop'`, verify both columns.
 
-**Hybrid ([test/hybrid/content-publish-guard.test.js](../../../test/hybrid/content-publish-guard.test.js), new).** Real HANA. Behind the existing `ALLOW_HYBRID_WRITES` write-safety guard, with `__TEST__` slug prefix and `afterAll` cleanup matching the pattern in [test/hybrid/content-publish-chunked.test.js](../../../test/hybrid/content-publish-chunked.test.js). Two cases:
+**Hybrid ([test/hybrid/content-publish-guard.test.js](../../../test/hybrid/content-publish-guard.test.js), new).** Real HANA. Behind the existing `ALLOW_HYBRID_WRITES` write-safety guard, with `__TEST__` slug prefix and `afterAll` cleanup matching the pattern in [test/hybrid/content-publish-chunked.test.js](../../../test/hybrid/content-publish-chunked.test.js) — copy that file's `beforeAll`/`afterAll` harness verbatim, the slug-prefix cleanup is non-obvious. Two cases:
 
-1. **Canonical regression.** Three sequential begin/append/commit cycles. First: v=N, slug `__TEST__-drift-672`, sourceHash `H1`. Second: same slug, sourceHash `H2`. Third: same slug, sourceHash `H1` (the revert) → assert `rejectedReverts` contains the slug AND the active row retains `H2`.
+1. **Canonical regression.** Three sequential begin/append/commit cycles in one test (same pattern as `'runs begin → 3 parallel appends → commit'` in the chunked-publish test). First: v=N, slug `__TEST__-drift-672`, sourceHash `H1`. Second: same slug, sourceHash `H2`. Third: same slug, sourceHash `H1` (the revert) → assert `rejectedReverts` contains the slug AND the active row retains `H2`.
 2. **Initiator round-trip.** Begin with `initiator: '__TEST__-bob@laptop'`, commit, verify both `ContentManifest.initiator` and `PipelineLog.initiator` are `'__TEST__-bob@laptop'`.
 
 No client unit test for the short-circuit beyond what `computePublishPlan` already covers — the short-circuit is a thin filter; the integration is exercised end-to-end by the hybrid chunked-publish test.
@@ -199,5 +199,5 @@ Verification post-deploy: the next daily drift workflow run (05:44 UTC) should r
 | `os.userInfo().username` returns runner-UID on some CI environments. | CI explicitly overrides with `--initiator "ci/$GITHUB_RUN_ID"`; the auto-default never runs in CI. Documented in runbook. |
 | `/content/source-hashes` 404s on QA or fresh deploy → short-circuit silently disables. | Acceptable. Optimization-only; server guard still runs. Warn-log names the disengaged layer. |
 | HANA schema migration fails mid-deploy. | Additive nullable column = idempotent `ALTER TABLE ADD COLUMN`. CAP handles missing columns gracefully on managed-entity INSERTs, so a partial deploy still boots. |
-| `schema-drift-check.yml` failure when prod/QA artifacts diverge. | Schema is shared between `srv` and `srv-qa` (aspect lives in `db/_content-shape.cds`). The workflow is currently scoped to `JobLocks` (per CLAUDE.md note), so ContentManifest changes don't trip it. Verify the workflow's narrowing pattern still excludes ContentManifest before submitting. |
+| `schema-drift-check.yml` failure when prod/QA artifacts diverge. | Schema is shared between `srv` and `srv-qa` (aspect lives in `db/_content-shape.cds`). [`.github/workflows/schema-drift-check.yml`](../../../.github/workflows/schema-drift-check.yml) is currently scoped to `JobLocks` (per CLAUDE.md note), so ContentManifest changes don't trip it. Verify the workflow's narrowing pattern still excludes ContentManifest before submitting. |
 | Long-tail: incident response after a future regression that the guard *correctly* blocks but operator wants to override. | `/content/rollback` is the supported path. As a last resort, `UPDATE com_sap_developers_ims_contentfiles SET sourceHash = NULL WHERE version=<X> AND slug=<Y>` makes the guard treat the next publish of that slug as novel. Document both. |
