@@ -113,9 +113,12 @@ END`;
 // the positional order in which those keys map to p1/p2/p3 in KG_QUERY.
 
 const QUERY_PARAM_SHAPES = Object.freeze({
-  NEIGHBORHOOD:      Object.freeze({ required: ['slug'],               order: ['slug'] }),
-  PATH_BETWEEN:      Object.freeze({ required: ['fromSlug', 'toSlug'], order: ['fromSlug', 'toSlug'] }),
-  CONCEPTS_FOR_USER: Object.freeze({ required: ['userId'],             order: ['userId'] }),
+  NEIGHBORHOOD:        Object.freeze({ required: ['slug'],               order: ['slug'] }),
+  PATH_BETWEEN:        Object.freeze({ required: ['fromSlug', 'toSlug'], order: ['fromSlug', 'toSlug'] }),
+  CONCEPTS_FOR_USER:   Object.freeze({ required: ['userId'],             order: ['userId'] }),
+  // EXPLORE_GRAPH_BULK (issue #446) takes no per-query parameters; the
+  // optional overrideGraphIri (passed separately to kgQuery()) still works.
+  EXPLORE_GRAPH_BULK:  Object.freeze({ required: [],                     order: [] }),
 });
 
 // ---------------------------------------------------------------------------

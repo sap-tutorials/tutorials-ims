@@ -269,8 +269,8 @@ describe('__TESTING__ exports', () => {
     expect(Object.isFrozen(__TESTING__.QUERY_PARAM_SHAPES)).toBe(true);
   });
 
-  it('QUERY_PARAM_SHAPES has the three expected keys', () => {
-    expect(Object.keys(__TESTING__.QUERY_PARAM_SHAPES)).toEqual(['NEIGHBORHOOD', 'PATH_BETWEEN', 'CONCEPTS_FOR_USER']);
+  it('QUERY_PARAM_SHAPES has the four expected keys', () => {
+    expect(Object.keys(__TESTING__.QUERY_PARAM_SHAPES)).toEqual(['NEIGHBORHOOD', 'PATH_BETWEEN', 'CONCEPTS_FOR_USER', 'EXPLORE_GRAPH_BULK']);
   });
 
   it('each QUERY_PARAM_SHAPES entry is frozen', () => {
