@@ -23,6 +23,11 @@ export interface CommitInput { baseUrl: string; apiKey: string; sessionId: strin
 export interface CommitResult {
   version: number; fileCount: number; totalSizeBytes: number;
   durationMs: number; alreadyActive: boolean;
+  /** #672 — slugs whose incoming sourceHash matched a superseded version
+   * and were carry-forwarded instead of committed. Always present, often `[]`. */
+  rejectedReverts: string[];
+  /** Carry-forward count from the prior ACTIVE manifest (existing field, now declared). */
+  carriedForward?: number;
 }
 
 async function postJson<T>(url: string, apiKey: string, body: unknown): Promise<T> {

@@ -45,6 +45,10 @@ aspect ContentManifestAspect : managed {
   key version               : Integer;
   status                    : String(20) enum { PUBLISHING; ACTIVE; SUPERSEDED; ROLLED_BACK; FAILED; };
   trigger                   : String(500);
+  // #672 — who initiated this publish. Format: "<user>@<hostname>" for
+  // workstation publishes; "ci/<run_id>" for CI. NULL on rows created before
+  // PR #680 lands.
+  initiator                 : String(255);
   fileCount                 : Integer;
   totalSizeBytes            : Int64;
   changedSlugs              : LargeString;
