@@ -1,0 +1,61 @@
+ID;verb;shelf;sortOrder;title;url;description;badge;isExternal;isActive
+66333900-0001-0001-0001-000000000001;LEARN;START_HERE;10;Tutorial Navigator;/tutorial-navigator/;Browse and filter 1 400+ hands-on tutorials across all SAP topics;;false;true
+66333900-0001-0001-0001-000000000002;LEARN;START_HERE;20;SAP Learning Journeys;https://learning.sap.com/learning-journeys;Curated multi-course paths toward certifications and role mastery;;true;true
+66333900-0001-0001-0001-000000000003;LEARN;START_HERE;30;New to Cloud SAP?;/missions/;Guided mission paths for developers moving from on-prem to cloud and AI;;false;true
+66333900-0001-0001-0001-000000000004;LEARN;REFERENCE;40;learning.sap.com;https://learning.sap.com;Free and paid learning journeys, self-paced courses, and certification prep;;true;true
+66333900-0001-0001-0001-000000000005;LEARN;REFERENCE;50;SAP Help Portal;https://help.sap.com;Centralized product documentation for all SAP products;;true;true
+66333900-0001-0001-0001-000000000006;LEARN;REFERENCE;60;Certifications;https://www.sap.com/training-certification.html;Official SAP certification paths and instructor-led training;;true;true
+66333900-0001-0001-0001-000000000007;LEARN;TOOLS;70;BTP Free Tier Signup;https://cockpit.btp.cloud.sap;Start building on SAP BTP with a free tier account — no credit card required;;true;true
+66333900-0001-0001-0001-000000000008;LEARN;TOOLS;80;SAP-samples on GitHub;https://github.com/SAP-samples;Hundreds of sample apps, tutorials, and workshop repos from SAP;;true;true
+66333900-0001-0001-0001-000000000009;LEARN;KEEP_CURRENT;90;SAP Developer News;https://youtube.com/@sapdevs;Weekly Friday show covering the latest developer news, tutorials, and events;;true;true
+66333900-0001-0002-0001-000000000001;BUILD;START_HERE;10;SAP CAP;https://cap.cloud.sap;Official docs for the Cloud Application Programming Model — Node.js + Java;;true;true
+66333900-0001-0002-0001-000000000002;BUILD;START_HERE;20;ABAP Cloud + RAP;https://help.sap.com/docs/abap-cloud;Clean-core ABAP development with RAP, ADT, and the BTP ABAP environment;;true;true
+66333900-0001-0002-0001-000000000003;BUILD;START_HERE;30;Fiori / UI5;https://ui5.sap.com;SAP UI5 Demo Kit — API reference, samples, and interactive demos;;true;true
+66333900-0001-0002-0001-000000000004;BUILD;START_HERE;40;SAP Build;https://www.sap.com/products/technology-platform/build.html;Low-code app, automation, and website suite on BTP for faster delivery;;true;true
+66333900-0001-0002-0001-000000000005;BUILD;START_HERE;50;SAP Build Code;https://www.sap.com/products/technology-platform/build-code.html;AI-assisted pro-code development tooling on BTP with Joule co-pilot;;true;true
+66333900-0001-0002-0001-000000000006;BUILD;REFERENCE;60;SAP Cloud SDK;https://sap.github.io/cloud-sdk/;Java + JavaScript SDKs for consuming SAP APIs from any cloud app;;true;true
+66333900-0001-0002-0001-000000000007;BUILD;REFERENCE;70;Fiori Design System;https://www.sap.com/design-system/;SAP Fiori design guidelines for web, mobile, and Build apps;;true;true
+66333900-0001-0002-0001-000000000008;BUILD;REFERENCE;80;Business Application Studio;https://help.sap.com/docs/SAP_BUSINESS_APPLICATION_STUDIO;Official docs for the cloud IDE purpose-built for SAP development;;true;true
+66333900-0001-0002-0001-000000000009;BUILD;TOOLS;90;SAP Development Tools;https://tools.hana.ondemand.com;Download portal for Eclipse plugins, CLIs, HANA client, and SDKs;;true;true
+66333900-0001-0002-0001-000000000010;BUILD;TOOLS;100;UI5 Web Components for React;https://sap.github.io/ui5-webcomponents-react/;React wrappers for UI5 web components — enterprise-grade UI in React;;true;true
+66333900-0001-0002-0001-000000000011;BUILD;KEEP_CURRENT;110;SAP Tech Bytes;https://youtube.com/@sapdevs;Short-form, code-focused SAP Developers YouTube videos;;true;true
+66333900-0001-0002-0001-000000000012;BUILD;KEEP_CURRENT;120;CAP Community Blogs;https://community.sap.com/t5/all-sap-community-blogs/ct-p/all-blogs;Latest community articles on CAP, ABAP, Fiori, and BTP development;;true;true
+66333900-0001-0002-0001-000000000013;BUILD;KEEP_CURRENT;130;CodeJams;/tutorial-navigator/;Hands-on in-person and virtual workshops delivered by SAP experts;;false;true
+66333900-0001-0003-0001-000000000001;INTEGRATE;START_HERE;10;SAP Business Accelerator Hub;https://api.sap.com;Browse and test SAP APIs across S/4HANA, SuccessFactors, Ariba, and more;;true;true
+66333900-0001-0003-0001-000000000002;INTEGRATE;START_HERE;20;SAP Integration Suite;https://help.sap.com/docs/integration-suite;Docs for Cloud Integration, API Management, and Event Mesh on BTP;;true;true
+66333900-0001-0003-0001-000000000003;INTEGRATE;START_HERE;30;Your First Integration Flow;/tutorial-navigator/;Step-by-step tutorials for building your first integration on SAP BTP;;false;true
+66333900-0001-0003-0001-000000000004;INTEGRATE;REFERENCE;40;SAP Event Mesh;https://help.sap.com/docs/event-mesh;Managed message broker for event-driven architectures on BTP;;true;true
+66333900-0001-0003-0001-000000000005;INTEGRATE;REFERENCE;50;SAP Destination Service;https://help.sap.com/docs/destination-service;BTP service that brokers credentials to external endpoints securely;;true;true
+66333900-0001-0003-0001-000000000006;INTEGRATE;REFERENCE;60;Open Resource Discovery;https://open-resource-discovery.org;Open protocol for publishing and discovering application + service metadata;;true;true
+66333900-0001-0003-0001-000000000007;INTEGRATE;REFERENCE;70;SAP OData Vocabularies;https://sap.github.io/odata-vocabularies/;OData annotation term definitions across SAP business domains;;true;true
+66333900-0001-0003-0001-000000000008;INTEGRATE;TOOLS;80;Project Piper;https://www.project-piper.io/;Pre-built CI/CD pipelines and shared library for SAP application delivery;;true;true
+66333900-0001-0003-0001-000000000009;INTEGRATE;TOOLS;90;Integration Samples;https://github.com/SAP-samples;Integration flow samples, API patterns, and event-driven architecture demos;;true;true
+66333900-0001-0004-0001-000000000001;OPERATE;START_HERE;10;SAP BTP Cockpit;https://cockpit.btp.cloud.sap;Browser console for managing BTP global accounts, subaccounts, and spaces;;true;true
+66333900-0001-0004-0001-000000000002;OPERATE;START_HERE;20;BTP CLI;https://help.sap.com/docs/btp-cli;Command-line reference for the `btp` tool — automate BTP account management;;true;true
+66333900-0001-0004-0001-000000000003;OPERATE;START_HERE;30;BTP Getting Started;https://help.sap.com/docs/btp/sap-business-technology-platform/getting-started;Onboarding entry point and checklist for SAP Business Technology Platform;;true;true
+66333900-0001-0004-0001-000000000004;OPERATE;REFERENCE;40;SAP BTP Documentation;https://help.sap.com/docs/btp;Canonical reference docs for SAP Business Technology Platform;;true;true
+66333900-0001-0004-0001-000000000005;OPERATE;REFERENCE;50;SAP Discovery Center;https://discovery-center.cloud.sap;BTP service catalog, guided missions, estimator, and pricing;;true;true
+66333900-0001-0004-0001-000000000006;OPERATE;REFERENCE;60;Kyma;https://kyma-project.io;Open-source Kubernetes platform for cloud-native BTP extensions;;true;true
+66333900-0001-0004-0001-000000000007;OPERATE;REFERENCE;70;SAP HANA Cloud;https://help.sap.com/docs/SAP_HANA_CLOUD;Canonical docs for HANA Cloud in-memory database with vector engine;;true;true
+66333900-0001-0004-0001-000000000008;OPERATE;TOOLS;80;Business Application Studio;https://help.sap.com/docs/SAP_BUSINESS_APPLICATION_STUDIO;Cloud IDE purpose-built for CAP, Fiori, mobile, and full-stack BTP development;;true;true
+66333900-0001-0004-0001-000000000009;OPERATE;TOOLS;90;SAP Development Tools;https://tools.hana.ondemand.com;Download Eclipse plugins, CLIs, HANA client, and SDKs;;true;true
+66333900-0001-0005-0001-000000000001;AI;START_HERE;10;BTP AI Best Practices;https://btp-ai-bp.docs.sap/;Curated guides and architecture patterns for building AI apps on BTP;;true;true
+66333900-0001-0005-0001-000000000002;AI;START_HERE;20;AI Skills Library;https://skills.cloud.sap/;Searchable catalog of certified AI skills built on SAP BTP;;true;true
+66333900-0001-0005-0001-000000000003;AI;START_HERE;30;Your First Joule Extension;/tutorial-navigator/;Tutorial series for building custom Joule extensions with the AI SDK;;false;true
+66333900-0001-0005-0001-000000000004;AI;REFERENCE;40;SAP Joule;https://help.sap.com/docs/joule;Docs for SAP's generative-AI copilot embedded across SAP products;;true;true
+66333900-0001-0005-0001-000000000005;AI;REFERENCE;50;SAP AI Core;https://help.sap.com/docs/sap-ai-core;Runtime for training and serving ML + GenAI models on BTP;;true;true
+66333900-0001-0005-0001-000000000006;AI;REFERENCE;60;SAP AI Launchpad;https://help.sap.com/docs/sap-ai-launchpad;Web UI to manage AI scenarios, models, and deployments on BTP;;true;true
+66333900-0001-0005-0001-000000000007;AI;TOOLS;70;AI4U Use Case Repository;https://ai4u-website.cfapps.eu10-004.hana.ondemand.com;50+ real-world AI projects built on SAP BTP — searchable by scenario;;true;true
+66333900-0001-0005-0001-000000000008;AI;TOOLS;80;RAG on HANA Cookbook;https://github.com/SAP-samples;Retrieval-augmented generation patterns using HANA Cloud vector engine;;true;true
+66333900-0001-0006-0001-000000000001;CONNECT;START_HERE;10;SAP Community;https://community.sap.com;Networking, Q&A, blogs, and groups for all SAP developer roles;;true;true
+66333900-0001-0006-0001-000000000002;CONNECT;START_HERE;20;SAP Developers YouTube;https://youtube.com/@sapdevs;Tutorial videos, Tech Bytes, Developer News, and live streams;;true;true
+66333900-0001-0006-0001-000000000003;CONNECT;START_HERE;30;Devtoberfest;https://community.sap.com/t5/devtoberfest/gh-p/Devtoberfest;Annual open developer celebration with sessions, challenges, and prizes;;true;true
+66333900-0001-0006-0001-000000000004;CONNECT;REFERENCE;40;SAP News Center;https://news.sap.com;Official corporate news, customer stories, and product announcements;;true;true
+66333900-0001-0006-0001-000000000005;CONNECT;REFERENCE;50;Community Blogs;https://community.sap.com/t5/all-sap-community-blogs/ct-p/all-blogs;Aggregated blog stream from the SAP Community;;true;true
+66333900-0001-0006-0001-000000000006;CONNECT;REFERENCE;60;Developer Advocates;/developer-advocates/;Meet the SAP Developer Advocate team and find their content;;false;true
+66333900-0001-0006-0001-000000000007;CONNECT;TOOLS;70;SAP on GitHub;https://github.com/SAP;SAP's open-source projects and repositories on GitHub;;true;true
+66333900-0001-0006-0001-000000000008;CONNECT;TOOLS;80;SAP-samples on GitHub;https://github.com/SAP-samples;Sample code, tutorial repos, and workshop materials from SAP;;true;true
+66333900-0001-0006-0001-000000000009;CONNECT;TOOLS;90;SAP-docs on GitHub;https://github.com/SAP-docs;Markdown sources for BTP/UI5/ABAP docs — public PRs welcome;HIDDEN_GEM;true;true
+66333900-0001-0006-0001-000000000010;CONNECT;KEEP_CURRENT;100;SAP TechEd;https://www.sap.com/about/events/sap-teched.html;Annual developer conference with sessions, workshops, and hands-on labs;;true;true
+66333900-0001-0006-0001-000000000011;CONNECT;KEEP_CURRENT;110;ASUG;https://www.asug.com;North America's largest SAP user community — events and networking;THIRD_PARTY;true;true
+66333900-0001-0006-0001-000000000012;CONNECT;KEEP_CURRENT;120;SAPinsider;https://sapinsider.org;Independent SAP professional community publication and events;THIRD_PARTY;true;true
