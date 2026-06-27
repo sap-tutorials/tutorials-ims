@@ -42,7 +42,12 @@ startAutoFlush(SRV_URL)
 // synchronous wrapper that delegates to the pre-loaded dynamic import.
 // The handler guards against the resolver not yet being ready (returns null).
 let _resolveRedirect = null
-import('../srv/lib/legacy-redirects-resolver.js').then(m => { _resolveRedirect = m.resolveRedirect })
+// resolver is a pure-function ESM module copied from srv/lib/ at MTA build time
+// (see mta.yaml's before-all `cp` for tutorials-approuter). Self-contained in
+// /home/vcap/app/lib/ on Cloud Foundry — DO NOT change to ../srv/lib/ (that
+// path works locally but doesn't exist when approuter and srv are separate CF
+// apps, which crashes the approuter on staging — see #639 / #679 follow-up).
+import('./lib/legacy-redirects-resolver.js').then(m => { _resolveRedirect = m.resolveRedirect })
 
 // Conservative *.html catch-all: 301 to */ only if Hugo emitted a static
 // target. Spec §17 resolution 1.

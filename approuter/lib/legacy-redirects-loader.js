@@ -22,8 +22,12 @@ let _resolverModule = null
 
 async function loadResolver() {
   if (_resolverModule) return _resolverModule
-  // Dynamic import bridges the CJS→ESM boundary.
-  _resolverModule = await import('../../srv/lib/legacy-redirects-resolver.js')
+  // Dynamic import bridges the CJS→ESM boundary. The resolver is a pure-function
+  // ESM module copied from srv/lib/ at MTA build time (see mta.yaml's before-all
+  // `cp` for tutorials-approuter). Self-contained in /home/vcap/app/lib/ on
+  // Cloud Foundry — DO NOT change to ../../srv/lib/ (that path works locally
+  // but doesn't exist when approuter and srv are separate CF apps).
+  _resolverModule = await import('./legacy-redirects-resolver.js')
   return _resolverModule
 }
 
