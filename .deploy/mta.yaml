@@ -140,7 +140,7 @@ modules:
         # Wipe each static dir BEFORE cp'ing fresh content. Hugo public, qa, admin-ui,
         # analytics-ui, scanner-ui all need this; everything not under static/ here
         # (e.g. node_modules, package.json) is preserved.
-        - rm -rf static/admin-ui static/analytics-ui static/scanner-ui static/qa
+        - rm -rf static/admin-ui static/analytics-ui static/scanner-ui static/explore-ui static/qa
         - cp -r ../hugo/public/. static/
         - rm -rf static/tutorials
         - mkdir -p static/qa
@@ -154,6 +154,10 @@ modules:
         - npm --prefix ../app/analytics-explorer run build
         - mkdir -p static/analytics-ui
         - cp -r ../app/analytics-explorer/dist/. static/analytics-ui/
+        - npm --prefix ../app/explore install
+        - npm --prefix ../app/explore run build
+        - mkdir -p static/explore-ui
+        - cp -r ../app/explore/dist/. static/explore-ui/
         - cp -r ../app/scanner/webapp static/scanner-ui
       ignore:
         - default-env.json

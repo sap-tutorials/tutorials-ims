@@ -1,0 +1,10 @@
+:root {
+  --sap-horizon-bg: #fafafa;
+  --sap-horizon-text: #32363a;
+}
+body {
+  margin: 0;
+  font-family: '72', '72full', Arial, Helvetica, sans-serif;
+  background: var(--sap-horizon-bg);
+  color: var(--sap-horizon-text);
+}

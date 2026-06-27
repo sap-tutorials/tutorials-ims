@@ -66,6 +66,12 @@
       "authenticationType": "xsuaa"
     },
     {
+      "source": "^/explore-ui/(.*)$",
+      "target": "/explore-ui/$1",
+      "localDir": "static",
+      "authenticationType": "none"
+    },
+    {
       "source": "^/admin-ui/(.*)$",
       "target": "/admin-ui/$1",
       "localDir": "static",
