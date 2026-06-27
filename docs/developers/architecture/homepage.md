@@ -157,3 +157,35 @@ Managed via the `LegacyRedirects` CDS entity. The approuter middleware (`approut
 | Approuter → srv unavailable at startup | Legacy-redirects resolver skips load and logs a warning; middleware retries on the next request. No boot crash. |
 | `HomepageConfig` missing | Admin auto-init handler creates the singleton on first READ with safe defaults (`videoBandEnabled: true`, `eventsBandEnabled: true`, `communityLaneEnabled: true`). Consistent with the pattern used by `ChatSettings`, `DisplaySettings`, etc. |
 | `YOUTUBE_API_KEY` not set | `youtube-fetcher.js` returns an empty array; video band degrades gracefully to the static link card. |
+
+---
+
+## Site Integration
+
+The new pages live inside the same Hugo site shell as the rest of `developers.sap.com`. Header (`<ui5-shellbar>`), footer, Joule panel, alerts popover, command palette, cookies banner, and theme switcher all render unchanged via `hugo/layouts/_default/baseof.html`.
+
+**Page-kind dispatch** drives per-page Joule starters + behaviour. `baseof.html` writes `data-page-kind="..."` on `<html>`:
+
+| Page                          | `data-page-kind`        |
+|-------------------------------|-------------------------|
+| `/`                           | `homepage`              |
+| `/learn/`                     | `verb-learn`            |
+| `/build/`                     | `verb-build`            |
+| `/integrate/`                 | `verb-integrate`        |
+| `/operate/`                   | `verb-operate`          |
+| `/ai/`                        | `verb-ai`               |
+| `/connect/`                   | `verb-connect`          |
+| `/tutorial-navigator/`        | `tutorial-navigator`    |
+| `/tutorials/<slug>/`          | `tutorial` (unchanged)  |
+
+**Joule starters per page-kind** live in `hugo/layouts/partials/joule-starters.html`. The new homepage's set is *concierge-shaped* — "where can I find …?" prompts that nudge users toward the right destination in the SAP developer landscape. Per-verb sets nudge deeper into each lane.
+
+**Navigate popover** (`hugo/layouts/partials/header.html`) was reorganised on the cutover to surface the new lanes: Home → 6 verb pages → Tutorial navigator → existing sub-pages (App Space, Event Display, Devtoberfest, Developer Advocates) → conditional Me / Admin UI.
+
+### Deferred enhancement — Joule chat handler routes to catalog
+
+The current implementation provides **discovery-shaped starter prompts** but the underlying Joule chat handler (`srv/chat-service.js` + `srv/lib/chat-orchestrator.js`) is the same tutorial-RAG handler used elsewhere on the site. It can answer "where can I find SAP BTP AI best practices?" reasonably because BTP-AI Best Practices is in the tutorial corpus, but it has no first-class knowledge of the `HomepageShelves` catalog.
+
+A future enhancement would teach the chat orchestrator to call `/api/homepage/shelves?verb=<v>` and `/api/homepage/redirectsActive`, treating the catalog rows as first-class retrieval sources alongside tutorial content. On a `homepage` or `verb-<key>` page-kind, the handler would prioritise catalog-shelf citations over tutorial-step citations and link out to the appropriate destination URL.
+
+That work is out of scope for issue #639 and lives as a future follow-up. The infrastructure (catalog data + endpoint + admin-curated content) is already in place.
