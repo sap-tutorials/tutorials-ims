@@ -6,11 +6,12 @@ import { BASE_URL, SRV_URL, fetchWithRetry } from './smoke.config.js';
 // Tests that:
 //   1. /concepts/<unknown-slug>/ returns 404 (approuter forwards, srv 404s)
 //   2. If at least one concept is published (visible in /build/concepts), the
-//      approuter route renders its name in the response HTML.
+//      approuter route renders that slug's concept page.
 //
-// The "200 for a published concept" leg is conditionally skipped when no
-// concepts are published in the target env — this is the expected state on
-// the QA channel and on fresh deploys before the first concept publish.
+// The "200 for a published concept" leg calls `ctx.skip()` at runtime when
+// no concepts are published in the target env (e.g. QA channel or fresh
+// deploys before the first publish). Vitest then reports a VISIBLE skip in
+// test output — the previous shape `return`-ed silently and counted as PASS.
 
 describe('/concepts/<slug>/ route', () => {
   it('returns 404 for a non-existent concept slug', async () => {
@@ -18,18 +19,22 @@ describe('/concepts/<slug>/ route', () => {
     expect(r.status).toBe(404);
   });
 
-  it('returns 200 for at least one published concept (when any exist)', async () => {
+  it('returns 200 for a known published concept', async (ctx) => {
     const probe = await fetchWithRetry(`${SRV_URL}/build/concepts`);
     expect(probe.status).toBe(200);
     const { concepts } = await probe.json();
     if (!Array.isArray(concepts) || concepts.length === 0) {
-      console.warn('No published concepts in this env; concept-route smoke test skipped.');
+      // Visible skip — distinct from a passing assertion. Surfaces in CI as
+      // a skipped test, not a silent PASS.
+      ctx.skip();
       return;
     }
     const sample = concepts[0];
     const r = await fetchWithRetry(`${BASE_URL}/concepts/${sample.slug}/`);
     expect(r.status).toBe(200);
     const html = await r.text();
-    expect(html).toContain(sample.name);
+    // Assert on slug (unescaped in <a href>), not name (HTML-escaped by Hugo
+    // template — would break for names with & < > etc).
+    expect(html).toContain(`/concepts/${sample.slug}/`);
   });
 });
