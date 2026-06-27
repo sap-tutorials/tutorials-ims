@@ -35,6 +35,12 @@ annotate ims.Alerts with @changelog: [title, severity, audience, startsAt, endsA
 // (db/views.cds:AuthorTutorialChanges → filters Changes to AdminService.Tutorials).
 annotate ims.Tutorials with @changelog;
 
+// #639: track admin edits to homepage shelves + redirect map.
+// HomepageConfig is intentionally NOT tracked — it's a config singleton
+// (see issue #658 — singletons produce no-delta phantom rows).
+annotate ims.HomepageShelves  with @changelog;
+annotate ims.LegacyRedirects  with @changelog;
+
 // =========================================================================
 // Intentionally NOT @changelog-tracked — see issue #658.
 // =========================================================================
