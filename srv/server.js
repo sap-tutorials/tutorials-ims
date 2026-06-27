@@ -203,6 +203,22 @@ cds.on('bootstrap', (app) => {
   app.get('/build/repo-catalog', repoCatalogReadHandler);
   app.post('/build/repo-catalog', express.json({ limit: '10mb' }), contentAuthMiddleware, repoCatalogWriteHandler);
 
+  // (#639) Build-time data for Hugo homepage shelves — consumed by fetch-tutorials.ts at build time.
+  // Public, unauthenticated. Cache-Control 60s (Hugo fetches once per build, not per request).
+  app.get('/build/homepage-shelves', async (_req, res) => {
+    try {
+      const db = await cds.connect.to('db');
+      const rows = await db.run(SELECT.from('com.sap.developers.ims.HomepageShelves')
+        .where({ isActive: true })
+        .orderBy('verb', 'shelf', 'sortOrder'));
+      res.set('Cache-Control', 'public, max-age=60');
+      res.json({ shelves: rows, buildAt: new Date().toISOString() });
+    } catch (err) {
+      console.error('[build/homepage-shelves]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Public read for the developer-advocates page (Task 4.4 of advocates impl).
   // Spec: docs/superpowers/specs/2026-06-17-developer-advocates-design.md
   advocatesPublic.register(app);
