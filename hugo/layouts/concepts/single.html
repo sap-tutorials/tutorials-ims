@@ -48,5 +48,30 @@
     </ul>
   </section>
   {{ end }}
+
+  {{/*
+    Phase 3 (#446) telemetry — fires kg.concept.viewed on page load.
+    The companion kg.concept.tutorial_clicked event is dispatched from
+    the sidebar island (hugo-apps/src/related-graph/RelatedGraph.vue)
+    when a reader follows a concept link FROM a tutorial; this event
+    measures the inverse — eyeballs landing on a concept page directly.
+
+    Pattern: read the slug from a hidden data-attribute, NOT from
+    Hugo's `jsonify` filter inline — the minifier has historical
+    issues with `jsonify` output in inline scripts.
+  */}}
+  <div data-concept-slug="{{ .Params.slug }}" id="concept-telemetry" hidden></div>
+  <script>
+    (function () {
+      if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+      var el = document.getElementById('concept-telemetry');
+      if (!el) return;
+      try {
+        window.dispatchEvent(new CustomEvent('kg.concept.viewed', {
+          detail: { slug: el.dataset.conceptSlug }
+        }));
+      } catch (e) { /* never let telemetry break the page */ }
+    })();
+  </script>
 </article>
 {{ end }}
