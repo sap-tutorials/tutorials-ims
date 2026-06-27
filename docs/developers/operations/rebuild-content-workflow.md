@@ -1,5 +1,7 @@
 # Rebuild Content Workflow
 
+> **⚠️ Always use this workflow — never `npm run publish-content` from a workstation.** Until #672 shipped, a stale local `.tutorial-cache/` silently regressed CI-published content. With the staleness guard in place the worst case is caught server-side, but a workstation publish still skips fetch, Hugo build, and validation. Use `gh workflow run rebuild-content.yml -f mode=full` (or `-f slug=…` for one-tutorial fixes).
+
 GitHub Actions workflow that fetches tutorial markdown, builds Hugo, and publishes HTML to HANA. Three rebuild scopes (modes), each tuned for a different write pattern. Auto-classified by admin writes; manual dispatches auto-infer when a slug is set.
 
 Workflow file: [.github/workflows/rebuild-content.yml](../../../.github/workflows/rebuild-content.yml)
@@ -116,6 +118,32 @@ The dispatcher's mode-classification matrix lives in [`srv/lib/_classify-rebuild
 | Anything else | `full` (defensive default) | |
 
 If an admin save fires a rebuild, you'll see it on the workflow's run list within ~60s with `trigger-source: admin-write:the reason`. The notice at the top of the run UI confirms the resolved mode.
+
+## Drift attribution
+
+Every publish now records its initiator on `ContentManifest.initiator` and `PipelineLog.initiator`. Format:
+
+- Workstation: `<user>@<hostname>` (auto-computed from `os.userInfo()` + `os.hostname()`)
+- CI: `ci/<github_run_id>` (passed explicitly from `rebuild-content.yml` / `rebuild-content-qa.yml`)
+
+To see who did the most recent N publishes:
+
+```sql
+SELECT VERSION, STATUS, TRIGGER, INITIATOR, MODIFIEDAT
+  FROM COM_SAP_DEVELOPERS_IMS_CONTENTMANIFEST
+ ORDER BY VERSION DESC
+ LIMIT 20;
+```
+
+Or via the admin Pipeline Log tile (`/admin-ui/#pipelinelog-display`) — the `Initiator` column shows the same value joined by `PipelineLog.ID = ContentManifest.sessionId`.
+
+If a daily content-drift check reports drifted slugs, the first forensic step is:
+
+1. Find the publish that introduced the regression: `SELECT VERSION, INITIATOR FROM COM_SAP_DEVELOPERS_IMS_CONTENTMANIFEST ORDER BY VERSION DESC LIMIT 10`.
+2. If `INITIATOR` is `ci/<run_id>`, the regression came from CI — pull the workflow log.
+3. If `INITIATOR` is `<user>@<hostname>`, talk to that person. The most likely cause is a workstation publish from a stale `.tutorial-cache/`.
+
+Historical rows (pre-#672) have `INITIATOR = NULL` and are not attributable — that's intentional, not a bug.
 
 ## Manual dispatch — UX gotchas
 
