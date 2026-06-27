@@ -12,7 +12,7 @@ Phase 3 adds the two remaining knowledge-graph surfaces deferred from Phase 1:
 1. **`/concepts/<slug>/`** — Hugo-generated static landing pages per concept, indexed by site search, linked from the Phase 1 tutorial sidebar.
 2. **`/explore/`** — a public interactive viz of the entire knowledge graph (Sigma.js v3 + WebGL), with a "find a path from A to B" feature, telemetry, and a mobile fallback.
 
-Both surfaces read the Phase 1 graph backend (`KnowledgeGraphService`, `/graph/*` OData, RDF projection in HANA KGE) without schema changes. The only schema-adjacent addition is a read-only CDS view `PublishedConcepts` that codifies the publication gate.
+Both surfaces read the Phase 1 graph backend (`KnowledgeGraphService`, `/graph/*` OData, RDF projection in HANA KGE) without runtime-schema changes. The only schema-adjacent addition is two new columns on `Concepts` — `publishedAt : Timestamp` and `publishedBy : String(255)` — codifying the publication gate as an explicit admin action (the read-only CDS view `PublishedConcepts` reads them).
 
 ## Scope
 
@@ -160,20 +160,44 @@ Reason: force-directed graphs are a well-known anti-pattern on phones (pinch-zoo
 
 Phase 3 reads from Phase 1's tables (`Concepts`, `ConceptEdges`, `TutorialConceptLinks`) and the existing `Tutorials`, `Missions`, `Groups`, `Products` tables via existing CDS associations and SPARQL named queries. The Phase 1 projection of all of these into HANA KGE as RDF triples (graph `<urn:sap:tutorials:kg>`) is also reused as-is.
 
-### 2.2 New CDS view — `PublishedConcepts`
+### 2.2 Schema change — explicit `publishedAt` / `publishedBy` on `Concepts`
 
-In `srv/knowledge-graph-service.cds`:
+Q4's "publishable" gate decided in brainstorming was *intent*: an admin has explicitly approved this concept for public display. Phase 1's real schema doesn't carry that bit — `Concepts` uses the `managed` aspect (so `modifiedBy` / `modifiedAt` exist but are populated on every save, including the nightly extractor cron's INSERT) and the `status` enum is `ACTIVE | MERGED | VETOED` with `ACTIVE` as the default for newly-extracted rows. An ACTIVE concept is "alive in the graph," not "ready for the public website."
+
+3-A-1 therefore adds an explicit publication marker to `db/knowledge-graph.cds`:
+
+```cds
+entity Concepts : cuid, managed {
+  // ... existing fields ...
+  publishedAt : Timestamp;            // null = not published; non-null = live at /concepts/<slug>/
+  publishedBy : String(255);          // upn / email of the admin who published; audit only
+}
+```
+
+The new CDS view `PublishedConcepts` in `srv/knowledge-graph-service.cds`:
 
 ```cds
 @readonly
-entity PublishedConcepts as projection on db.Concepts {
+entity PublishedConcepts as projection on ims.Concepts {
   *
-} where status = 'ACTIVE' or lastEditedBy is not null;
+} where publishedAt is not null and status = 'ACTIVE';
 ```
 
-This codifies the publication gate decided in Q4: a concept is "publishable" if **either** an admin has reviewed-and-flipped its status to `ACTIVE`, **or** an admin has edited its `name` or `description` at least once. The OR keeps the workflow flexible (admins can publish either by approving as-is, or by polishing).
+The gate is `publishedAt IS NOT NULL AND status = 'ACTIVE'` — i.e. an admin explicitly published it AND a later VETO hasn't taken it offline. (VETOED or MERGED concepts are excluded even if previously published, so VETOing un-publishes.)
 
-> **3-A-1 verification step**: Phase 1 introduced `Concepts.lastEditedBy` + `Concepts.lastEditedAt` as part of the admin curation tool. The plan should grep for these fields before assuming the view compiles. If either is missing, 3-A-1 grows a small schema change (add the field + bump the deployer) — not a redesign, but a non-trivial planning addition.
+Admin workflow (wired in 3-A-3):
+
+- A new "Publish" toolbar button on the Fiori Concepts List Report sets `publishedAt = $now` and `publishedBy = cds.context.user.id` via a new `publishConcept(id)` action (KnowledgeGraph.Admin scope).
+- A sibling "Unpublish" button sets both back to `null` (without VETOing the underlying concept).
+- The Concepts list grows a new "Published" Boolean column, bound to `publishedAt is not null`.
+
+This codifies Q4's intent: a concept appears at `/concepts/<slug>/` only when an admin has explicitly published it. The OR semantics from the brainstorm ("status OR edited") collapse to a single explicit action — admins can publish either after reviewing the LLM output as-is, or after polishing the name/description — and the publish action is the same in either case.
+
+Anywhere downstream that needs "is this concept publishable" reads `PublishedConcepts`:
+
+- `/build/concepts` selects from it.
+- `SearchService` joins against it for the concept-search-results path.
+- `/graph/concept-bundle/:tutorialSlug` joins to populate the `published: boolean` per sidebar concept.
 
 Anywhere downstream that needs "is this concept publishable" reads `PublishedConcepts`:
 
@@ -313,7 +337,7 @@ Eight new `UIEvent` events, reusing the Phase 1 dispatcher:
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
 | Sigma.js perf at the issue's "5000-node" worst case | Medium — Sigma is built for this but it's not free | High if it misses the <2s TTI | 3-B-2 PR includes a 5000-node synthetic-fixture benchmark before commit. ForceAtlas2 iterations capped at 50. Fallback: `displayedNodes = top-200 by degree centrality` + "show all" toggle. |
-| LLM-extracted concept content on public pages exposes garbage | Medium — Phase 1 saw a ~30% "needs admin review" rate at extraction | High — public-facing bad copy hurts trust | Q4's edit-OR-status gate **is** the mitigation. 3-A-3 admin "Public" badge surfaces what's live. Hugo build prints `X published, Y skipped` counter. Admin can VETO and the page auto-disappears next build. |
+| LLM-extracted concept content on public pages exposes garbage | Medium — Phase 1 saw a ~30% "needs admin review" rate at extraction | High — public-facing bad copy hurts trust | The explicit publish gate **is** the mitigation: nothing reaches `/concepts/<slug>/` without an admin clicking Publish. 3-A-3 surfaces the published/unpublished state in the Concepts list. Hugo build prints `X published, Y skipped` counter. Admin can VETO (or Unpublish) and the page auto-disappears next build. |
 | Viz library lock-in | Low — Sigma v3 is small + stable | Medium if we want to swap | graphology (data) is library-agnostic; Sigma (renderer) is isolated to one `<ExploreGraph>` component. Swap = rewrite one component. |
 | Concept pages compete with tutorial pages for SEO | Low — concept pages are derived/aggregated | Medium if Google ranks `/concepts/X/` over the actual tutorial | Concept-page internal link graph drives PageRank to tutorials. Sitemap submission de-prioritizes concept pages. Monitor first month; add `<meta name="robots" content="noindex,follow">` if SERP cannibalization shows up. |
 | First-paint regression on `/explore/` (inline JSON balloons HTML > 200KB) | Medium — depends on graph size growth | Medium — slow LCP hurts perceived perf | `/graph/explore-data` size measured in 3-B-1 PR; if >200KB gzip, trim to top-N by degree centrality and lazy-load the long-tail. Acceptance: p95 LCP for `/explore/` <1.5s on DEV. |
@@ -326,7 +350,8 @@ Phase 3 reuses the three-tier (unit / hybrid / smoke) `vitest` workspace establi
 
 ### 5.1 Unit (in-memory SQLite)
 
-- `PublishedConcepts` view: returns rows for `status=ACTIVE`, returns rows for `lastEditedBy IS NOT NULL`, excludes both-conditions-false rows.
+- `PublishedConcepts` view: returns concept rows iff `publishedAt IS NOT NULL AND status = 'ACTIVE'`; excludes never-published, unpublished (publishedAt cleared), VETOED, and MERGED concepts.
+- `publishConcept(id)` / `unpublishConcept(id)` actions: require KnowledgeGraph.Admin scope; set/clear `publishedAt` + `publishedBy`; idempotent.
 - `/build/concepts` payload shape: matches contract in Section 2.4.
 - Hugo frontmatter generator: emits valid YAML for representative concepts (no special-char escapes broken); slug lowercase-normalized.
 - `searchAll(q)`: returns concept rows with `type: 'concept'` matching `PublishedConcepts.name`; excludes unpublished concepts.
@@ -337,7 +362,7 @@ Phase 3 reuses the three-tier (unit / hybrid / smoke) `vitest` workspace establi
 
 Under `test/hybrid/`:
 
-- `concepts-published-view.test.js` — seed three concepts (PENDING, ACTIVE, PENDING-but-edited); assert `PublishedConcepts` returns exactly the second and third. Cleans up.
+- `concepts-published-view.test.js` — seed four concepts (ACTIVE-never-published, ACTIVE-published, ACTIVE-published-then-unpublished, VETOED-but-published); assert `PublishedConcepts` returns only the second. Cleans up.
 - `build-concepts.test.js` — HTTP probe against the hybrid CAP server; assert shape and SPARQL-resolved related-tutorials/concepts.
 - `graph-explore-data.test.js` — probe `/graph/explore-data` against real DEV data; assert k-anonymity invariant holds.
 - `graph-path.test.js` — probe `/graph/path?from=X&to=Y`; assert same path as Phase 2 Joule tool returns for representative inputs.
@@ -365,9 +390,9 @@ For 3-B-2's PR — manual Playwright run loading `/explore/` against a synthetic
 
 | PR | Title | What it lands |
 |---|---|---|
-| **3-A-1** | `feat(kg): /build/concepts endpoint + PublishedConcepts view` | The `PublishedConcepts` CDS view; the `/build/concepts` Express route on CAP; unit + hybrid tests. No front-end change. |
+| **3-A-1** | `feat(kg): publishedAt schema + PublishedConcepts view + /build/concepts endpoint` | Adds `publishedAt`/`publishedBy` columns to `Concepts`; the `PublishedConcepts` CDS view; the `publishConcept(id)` / `unpublishConcept(id)` admin actions; the `/build/concepts` Express route on CAP; unit + hybrid tests. Db deployer bumped. No front-end change. |
 | **3-A-2** | `feat(kg): concept landing pages — Hugo template + build wiring` | `hugo/content/concepts/` generator (`scripts/fetch-concepts.ts`); `layouts/concepts/single.html`; pages publish via existing `/content/publish` to `/content/concepts/:slug`; approuter route `/concepts/*` → CAP. Smoke test for one slug. Hugo build prints `X published, Y skipped` counter. |
-| **3-A-3** | `feat(kg): sidebar concept links + search + admin "Public" badge` | Phase 1 sidebar island flips to `<a>` when `published=true`; `SearchService` indexes `PublishedConcepts`; admin Concepts list adds "Public" column; telemetry `kg.concept.viewed`, `kg.concept.tutorial_clicked` wired. |
+| **3-A-3** | `feat(kg): sidebar concept links + search + admin Publish action UI` | Phase 1 sidebar island flips to `<a>` when `published=true`; `SearchService` indexes `PublishedConcepts`; admin Concepts list adds "Published" column + "Publish"/"Unpublish" toolbar buttons bound to the actions from 3-A-1; telemetry `kg.concept.viewed`, `kg.concept.tutorial_clicked` wired. |
 
 ### 6.2 Track 3-B — `/explore/` interactive viz (6 PRs, ~2-3 weeks)
 
@@ -398,10 +423,10 @@ The two surfaces are read-only static-or-cached content. Worst-case rollback is 
 
 Phase 3 is "shipped" when **all** of these are true:
 
-- [ ] `/concepts/<slug>/` exists for every concept satisfying the edit-OR-status gate.
+- [ ] `/concepts/<slug>/` exists for every concept satisfying the gate (`publishedAt IS NOT NULL AND status = 'ACTIVE'`).
 - [ ] Phase 1 sidebar concept items are `<a>` (published) or `<span>` (unpublished).
 - [ ] Site search returns concept results with a `type: 'concept'` discriminator.
-- [ ] Admin Concepts list shows a "Public" badge per row.
+- [ ] Admin Concepts list shows a "Published" column + "Publish"/"Unpublish" toolbar buttons bound to `publishConcept` / `unpublishConcept` actions.
 - [ ] Hugo build emits a `X published concepts, Y skipped` counter at deploy time.
 - [ ] `/explore/` route serves the viz; loads to interactive in <2s on broadband DEV.
 - [ ] Click a tutorial node → graph re-centers; click again → navigates to `/tutorials/<slug>/`.
@@ -419,7 +444,7 @@ Phase 3 is "shipped" when **all** of these are true:
 | 1 | Single spec covering 3-A (concept pages) + 3-B (explore viz) | They share a data source and ship cleanly in either order; decompose at PR-plan time, not at spec time. |
 | 2 | `coCompletedWith` k-anonymity floor K=10, rounded to nearest 10 | Enforced at the projection layer (graphRebuild cron). Below-K edges omitted; raw counts never reach RDF. |
 | 3 | Concept URL: `/concepts/<slug>/` top-level | Concept pages are static-rendered Hugo content (peer of `/tutorials/<slug>/`), not "explore mode" content. Decouples 3-A from 3-B shipping order. |
-| 4 | Concept page gate: `status='ACTIVE' OR lastEditedBy IS NOT NULL` | Permissive — admins can publish either by flipping status or by polishing content; both surfaces are visible in the admin UI's new "Public" badge. |
+| 4 | Concept page gate: explicit `publishedAt IS NOT NULL AND status = 'ACTIVE'` (new admin "Publish"/"Unpublish" actions) | Phase 1 schema lacks a clean discriminator between extractor writes and admin-curated content (every save touches `managed.modifiedBy`); an explicit `publishedAt` timestamp is the smallest, clearest fix. Q4's "edit OR status" intent collapses to a single admin action: review the LLM output (optionally polish name/description), then click Publish. |
 | 5 | Mobile fallback: typed accordion list (no viz) | Force-directed viz is a known anti-pattern on phones; honest collapse to a list is better than fighting touch pinch-zoom. |
 | 6 | First-paint: inline JSON blob, CAP-rendered `/explore/`, synchronous client hydration | Zero network round-trip for graph data. Pre-rendered PNG snapshot pipeline (issue's suggestion) deferred. |
 | 7 | Viz library: Sigma.js v3 + graphology + graphology-layout-forceatlas2 | Only WebGL candidate that scales cleanly past ~1000 nodes; smallest bundle of the four shortlisted libraries. |
