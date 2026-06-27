@@ -135,3 +135,46 @@ export async function isNotificationsEnabled() {
   const config = await SELECT.one.from(ImsConfig).where({ key: 'isNotificationSendingAllowed' });
   return config?.value === 'true';
 }
+
+/**
+ * HTML-escape a string for safe embedding in attribute or text contexts.
+ * Defense-in-depth — tutorial titles come from controlled sources, but
+ * the cost is negligible.
+ */
+export function escapeHtml(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Pre-render the per-tutorial <ul> for digest + last-chance emails.
+ * Returns the HTML string for substitution as ${tutorialListHtml}.
+ * Avoids extending resolveTemplate() to support iteration.
+ *
+ * @param {Array<{title:string, slug:string, reviewedDate:string|Date|null}>} tutorials
+ *   reviewedDate is normally an ISO timestamp string from CDS, but a JS Date
+ *   instance is also accepted (normalized via .toISOString()).
+ * @param {string} dashboardUrl
+ * @returns {string}
+ */
+export function renderTutorialList(tutorials, dashboardUrl) {
+  const safeDashboardUrl = escapeHtml(dashboardUrl);
+  const items = tutorials.map(t => {
+    const title = escapeHtml(t.title);
+    const slug = encodeURIComponent(t.slug);
+    let date = '—';
+    if (t.reviewedDate) {
+      const iso = t.reviewedDate instanceof Date
+        ? t.reviewedDate.toISOString()
+        : String(t.reviewedDate);
+      date = iso.slice(0, 10);
+    }
+    return `<li><a href="${safeDashboardUrl}#/tutorial/${slug}">${title}</a> — last reviewed ${date}</li>`;
+  });
+  return `<ul>${items.join('')}</ul>`;
+}
