@@ -70,55 +70,20 @@
 
     <tnt:sideContent>
       <tnt:SideNavigation id="sideNav" selectedKey="{nav>/selectedNavKey}" itemSelect=".onNavItemSelect">
-        <tnt:NavigationList>
-          <tnt:NavigationListItem text="Dashboard" icon="sap-icon://monitor-payments" key="dashboard" />
-          <tnt:NavigationListItem text="Content" icon="sap-icon://folder-blank" expanded="{viewModel>/groupExpanded/content}">
-            <tnt:NavigationListItem text="Events" key="events" />
-            <tnt:NavigationListItem text="Missions" key="missions" />
-            <tnt:NavigationListItem text="Groups" key="groups" />
-            <tnt:NavigationListItem text="Tutorials" key="tutorials" />
-            <tnt:NavigationListItem text="Tags" key="tags" />
-            <tnt:NavigationListItem text="Categories" key="categories" />
-            <tnt:NavigationListItem text="Concepts" key="concepts" />
-            <tnt:NavigationListItem text="Advocates" key="advocates" />
-            <tnt:NavigationListItem text="Alerts" icon="sap-icon://notification-2" key="alerts" />
-          </tnt:NavigationListItem>
-          <tnt:NavigationListItem text="Rewards" icon="sap-icon://present" expanded="{viewModel>/groupExpanded/rewards}">
-            <tnt:NavigationListItem text="Accomplishments" key="accomplishments" />
-            <tnt:NavigationListItem text="Prizes" key="prizes" />
-          </tnt:NavigationListItem>
-          <tnt:NavigationListItem text="Feedback" icon="sap-icon://feedback" expanded="{viewModel>/groupExpanded/feedback}">
-            <tnt:NavigationListItem text="All Submissions" key="feedbackList" />
-            <tnt:NavigationListItem text="Dashboard" key="feedbackDashboard" />
-          </tnt:NavigationListItem>
-          <tnt:NavigationListItem text="Reporting" icon="sap-icon://line-chart-time-axis" expanded="{viewModel>/groupExpanded/reporting}">
-            <tnt:NavigationListItem text="Analytics" key="analyticsExternal" icon="sap-icon://bar-chart" href="/analytics-ui/" target="_self" />
-            <tnt:NavigationListItem text="Completion analytics" icon="sap-icon://line-chart" key="analytics" />
-            <tnt:NavigationListItem text="Statistics" key="statistics" />
-            <tnt:NavigationListItem text="Data Export" key="dataExport" icon="sap-icon://download" />
-          </tnt:NavigationListItem>
-          <tnt:NavigationListItem text="System" icon="sap-icon://action-settings" expanded="{viewModel>/groupExpanded/system}">
-            <tnt:NavigationListItem text="Featured Tasks" key="operations" />
-            <tnt:NavigationListItem text="Pipeline Log" key="pipelinelog" />
-            <tnt:NavigationListItem text="Job Log" key="joblog" />
-            <tnt:NavigationListItem text="Account Merges" key="accounts" />
-            <tnt:NavigationListItem text="Change Log" key="changelog" />
-            <tnt:NavigationListItem text="Board" key="board" />
-            <tnt:NavigationListItem text="Joule Settings" key="joule" />
-            <tnt:NavigationListItem text="Knowledge Graph" key="knowledgeGraph" />
-            <tnt:NavigationListItem text="Secrets" key="secrets" />
-            <tnt:NavigationListItem text="Privacy" key="privacy" />
-            <tnt:NavigationListItem text="Privacy Audit" key="privacyAudit" />
-          </tnt:NavigationListItem>
-          <tnt:NavigationListItem text="Devtoberfest" icon="sap-icon://flag" expanded="{viewModel>/groupExpanded/devtoberfest}">
-            <tnt:NavigationListItem text="Devtoberfest Event Edit" key="devtoberfest" />
-          </tnt:NavigationListItem>
-          <tnt:NavigationListItem text="Runtime Settings" icon="sap-icon://settings" expanded="{viewModel>/groupExpanded/runtimeSettings}">
-            <tnt:NavigationListItem text="UI Events" key="uiEvents" />
-            <tnt:NavigationListItem text="Search" key="search" />
-            <tnt:NavigationListItem text="Navigator" key="navigator" />
-            <tnt:NavigationListItem text="Display" key="display" />
-            <tnt:NavigationListItem text="Tenant" key="tenant" />
+        <tnt:NavigationList items="{nav>/groups}">
+          <tnt:NavigationListItem
+              text="{nav>title}"
+              icon="{nav>icon}"
+              key="{nav>key}"
+              href="{nav>href}"
+              target="{nav>target}"
+              items="{nav>items}">
+            <tnt:NavigationListItem
+                text="{nav>title}"
+                key="{nav>key}"
+                icon="{nav>icon}"
+                href="{nav>href}"
+                target="{nav>target}" />
           </tnt:NavigationListItem>
         </tnt:NavigationList>
       </tnt:SideNavigation>
