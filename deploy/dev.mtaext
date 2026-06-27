@@ -7,7 +7,6 @@ modules:
     properties:
       EXPOSE_CAP_UI: true
       CONTENT_API_KEY: tutorials-content-publish-2024
-      YOUTUBE_API_KEY: ${YOUTUBE_API_KEY}
       GITHUB_DISPATCH_TOKEN: ${GITHUB_DISPATCH_TOKEN}
       # KG Phase 1 flag flipped 2026-06-19 (#381 / #442). Override the
       # mta.yaml default ('false') so MTA redeploys preserve the DEV-only
