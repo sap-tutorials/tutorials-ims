@@ -337,7 +337,7 @@ export async function kgGraphInsert({ db, graphIri, triples, timeoutMs } = {}) {
  *
  * @param {object} opts
  * @param {object}  opts.db                  — CAP db service
- * @param {string}  opts.queryName            — one of NEIGHBORHOOD / PATH_BETWEEN / CONCEPTS_FOR_USER
+ * @param {string}  opts.queryName            — one of NEIGHBORHOOD / PATH_BETWEEN / CONCEPTS_FOR_USER / EXPLORE_GRAPH_BULK
  * @param {object}  opts.params               — per-query typed parameters (see QUERY_PARAM_SHAPES)
  * @param {string}  [opts.overrideGraphIri]   — when set, replaces the production graph IRI (used by hybrid tests)
  * @param {number}  [opts.timeoutMs]          — override the default 30s timeout

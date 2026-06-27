@@ -167,6 +167,25 @@ describe('kgQuery validation', () => {
       .resolves.toBeDefined();
   });
 
+  it('accepts EXPLORE_GRAPH_BULK with empty params (no required keys)', async () => {
+    await expect(kgQuery({ db: stubDb, queryName: 'EXPLORE_GRAPH_BULK', params: {} }))
+      .resolves.toBeDefined();
+  });
+
+  it('rejects EXPLORE_GRAPH_BULK with unexpected keys', async () => {
+    await expect(kgQuery({ db: stubDb, queryName: 'EXPLORE_GRAPH_BULK', params: { extra: 'foo' } }))
+      .rejects.toThrow(/unexpected keys: extra/);
+  });
+
+  it('accepts EXPLORE_GRAPH_BULK with overrideGraphIri (hybrid-test use case)', async () => {
+    await expect(kgQuery({
+      db: stubDb,
+      queryName: 'EXPLORE_GRAPH_BULK',
+      params: {},
+      overrideGraphIri: 'urn:test:g',
+    })).resolves.toBeDefined();
+  });
+
   it('accepts valid overrideGraphIri', async () => {
     await expect(kgQuery({
       db: stubDb,
