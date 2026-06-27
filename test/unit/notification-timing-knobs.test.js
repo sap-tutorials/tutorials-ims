@@ -44,13 +44,16 @@ describe('resolveTimingKnobs', () => {
       maxNotificationLevel: '5',
     });
     const knobs = await resolveTimingKnobs();
-    expect(knobs).toEqual({ staleDays: 120, resendIntervalDays: 14, maxLevel: 5 });
+    // #622 added bool useDigest + lastChance{MinLevel,DormancyDays} knobs;
+    // assert the 3 original knobs via toMatchObject so this test stays focused
+    // on the int-parser behavior it was written for.
+    expect(knobs).toMatchObject({ staleDays: 120, resendIntervalDays: 14, maxLevel: 5 });
   });
 
   it('falls back to hardcoded defaults when rows are missing', async () => {
     await seedImsConfig({});
     const knobs = await resolveTimingKnobs();
-    expect(knobs).toEqual({ staleDays: 90, resendIntervalDays: 30, maxLevel: 3 });
+    expect(knobs).toMatchObject({ staleDays: 90, resendIntervalDays: 30, maxLevel: 3 });
   });
 
   it('falls back to defaults and logs WARN on unparseable values', async () => {

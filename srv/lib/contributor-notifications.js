@@ -3,37 +3,49 @@ import cds from '@sap/cds';
 const STALE_DAYS_DEFAULT = 90;
 const RESEND_INTERVAL_DAYS = 30;
 const MAX_NOTIFICATION_LEVEL = 3;
+const USE_DIGEST_DEFAULT = true;
+const LAST_CHANCE_MIN_LEVEL_DEFAULT = 3;
+const LAST_CHANCE_DORMANCY_DAYS_DEFAULT = 60;
 
 const TIMING_KNOBS = [
-  { key: 'staleDaysThreshold',   field: 'staleDays',           defaultValue: STALE_DAYS_DEFAULT },
-  { key: 'resendIntervalDays',   field: 'resendIntervalDays',  defaultValue: RESEND_INTERVAL_DAYS },
-  { key: 'maxNotificationLevel', field: 'maxLevel',            defaultValue: MAX_NOTIFICATION_LEVEL },
+  { key: 'staleDaysThreshold',     field: 'staleDays',              type: 'int',  defaultValue: STALE_DAYS_DEFAULT },
+  { key: 'resendIntervalDays',     field: 'resendIntervalDays',     type: 'int',  defaultValue: RESEND_INTERVAL_DAYS },
+  { key: 'maxNotificationLevel',   field: 'maxLevel',               type: 'int',  defaultValue: MAX_NOTIFICATION_LEVEL },
+  { key: 'useDigestNotifications', field: 'useDigest',              type: 'bool', defaultValue: USE_DIGEST_DEFAULT },
+  { key: 'lastChanceMinLevel',     field: 'lastChanceMinLevel',     type: 'int',  defaultValue: LAST_CHANCE_MIN_LEVEL_DEFAULT },
+  { key: 'lastChanceDormancyDays', field: 'lastChanceDormancyDays', type: 'int',  defaultValue: LAST_CHANCE_DORMANCY_DAYS_DEFAULT },
 ];
 
 /**
- * Resolve the 3 author-nudge timing knobs from ImsConfig, falling back to
- * hardcoded defaults on missing/invalid rows. Emits a WARN per bad non-empty
- * value so ops can see the fallback in logs.
- *
- * @returns {Promise<{staleDays: number, resendIntervalDays: number, maxLevel: number}>}
+ * Resolve timing knobs from ImsConfig. Type-aware: int knobs require a
+ * positive integer; bool knobs accept only "true"/"false" (case-insensitive).
+ * Invalid non-empty values WARN + fall back to default; missing rows fall
+ * back silently.
  */
 export async function resolveTimingKnobs() {
   const { ImsConfig } = cds.entities('com.sap.developers.ims');
   const out = {};
-  for (const { key, field, defaultValue } of TIMING_KNOBS) {
+  for (const { key, field, type, defaultValue } of TIMING_KNOBS) {
     const row = await SELECT.one.from(ImsConfig).where({ key });
     const raw = row?.value;
-    const parsed = raw != null && raw !== '' ? parseInt(raw, 10) : NaN;
-    if (Number.isFinite(parsed) && parsed > 0) {
-      out[field] = parsed;
-    } else {
-      if (raw != null && raw !== '') {
-        console.warn(`[contributor-notifications] ImsConfig.${key}="${raw}" is not a positive integer; using default ${defaultValue}`);
-      }
-      out[field] = defaultValue;
-    }
+    out[field] = parseKnob(key, raw, type, defaultValue);
   }
   return out;
+}
+
+function parseKnob(key, raw, type, defaultValue) {
+  if (raw == null || raw === '') return defaultValue;
+  if (type === 'bool') {
+    const lc = String(raw).toLowerCase();
+    if (lc === 'true') return true;
+    if (lc === 'false') return false;
+    console.warn(`[contributor-notifications] ImsConfig.${key}="${raw}" is not "true"/"false"; using default ${defaultValue}`);
+    return defaultValue;
+  }
+  const parsed = parseInt(raw, 10);
+  if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  console.warn(`[contributor-notifications] ImsConfig.${key}="${raw}" is not a positive integer; using default ${defaultValue}`);
+  return defaultValue;
 }
 
 export async function computeStaleNotifications(optsOrStaleDays = {}) {
@@ -69,13 +81,15 @@ export async function computeStaleNotifications(optsOrStaleDays = {}) {
     const contributors = await SELECT.from(TutorialContributors)
       .where({ tutorial_ID: tutorial.ID });
 
-    // #385 PR-1: repo-group owner now lives on TutorialMeta.repository.repositoryOwner.
-    // 2-level Association chain compiles to a LEFT JOIN on HANA. NULL-safe — if
-    // meta.repository is null (no group assigned yet — common until PR-2 migrator
-    // runs), the chain returns { email: null } and notification level 1 falls
-    // through to owner-only recipients (existing behaviour).
-    const repoOwnerRow = await SELECT.one.from(TutorialMeta)
-      .columns('repository.repositoryOwner.email as email')
+    // Pull repo owner + author FK fields in a single SELECT. The Association
+    // chains compile to LEFT JOINs on HANA. NULL-safe — if any link is missing,
+    // the corresponding field is null.
+    const fkRow = await SELECT.one.from(TutorialMeta)
+      .columns(
+        'repository.repositoryOwner.email as repoOwnerEmail',
+        'tutorial.author.email as authorUserEmail',
+        'tutorial.author.displayName as authorUserName'
+      )
       .where({ tutorial_ID: tutorial.ID });
 
     notifications.push({
@@ -84,8 +98,11 @@ export async function computeStaleNotifications(optsOrStaleDays = {}) {
       title: tutorial.title,
       reviewedDate: meta.reviewedDate,
       notificationLevel: meta.notificationNumber || 0,
+      lastNotificationDate: meta.lastNotificationDate ?? null,
       contributors: contributors.map(c => ({ name: c.name, email: c.email, role: c.role })),
-      repoOwner: repoOwnerRow?.email ?? null
+      repoOwner: fkRow?.repoOwnerEmail ?? null,
+      authorUserEmail: fkRow?.authorUserEmail ?? null,
+      authorUserName: fkRow?.authorUserName ?? null,
     });
   }
 
@@ -134,4 +151,159 @@ export async function isNotificationsEnabled() {
   const { ImsConfig } = cds.entities('com.sap.developers.ims');
   const config = await SELECT.one.from(ImsConfig).where({ key: 'isNotificationSendingAllowed' });
   return config?.value === 'true';
+}
+
+/**
+ * HTML-escape a string for safe embedding in attribute or text contexts.
+ * Defense-in-depth — tutorial titles come from controlled sources, but
+ * the cost is negligible.
+ */
+export function escapeHtml(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Pre-render the per-tutorial <ul> for digest + last-chance emails.
+ * Returns the HTML string for substitution as ${tutorialListHtml}.
+ * Avoids extending resolveTemplate() to support iteration.
+ *
+ * @param {Array<{title:string, slug:string, reviewedDate:string|Date|null}>} tutorials
+ *   reviewedDate is normally an ISO timestamp string from CDS, but a JS Date
+ *   instance is also accepted (normalized via .toISOString()).
+ * @param {string} dashboardUrl
+ * @returns {string}
+ */
+export function renderTutorialList(tutorials, dashboardUrl) {
+  const safeDashboardUrl = escapeHtml(dashboardUrl);
+  const items = tutorials.map(t => {
+    const title = escapeHtml(t.title);
+    const slug = encodeURIComponent(t.slug);
+    let date = '—';
+    if (t.reviewedDate) {
+      const iso = t.reviewedDate instanceof Date
+        ? t.reviewedDate.toISOString()
+        : String(t.reviewedDate);
+      date = iso.slice(0, 10);
+    }
+    return `<li><a href="${safeDashboardUrl}#/tutorial/${slug}">${title}</a> — last reviewed ${date}</li>`;
+  });
+  return `<ul>${items.join('')}</ul>`;
+}
+
+/**
+ * Build the subject line for a digest email. Levels 0-2 use the
+ * "need review" wording; level 3 escalates to "FINAL NOTICE: pending
+ * retirement". Pluralizes noun + verb.
+ */
+export function digestSubject(digest) {
+  const count = digest.tutorials.length;
+  const noun = count === 1 ? 'tutorial' : 'tutorials';
+  if (digest.worstLevel === 3) {
+    return `FINAL NOTICE: ${count} stale ${noun} pending retirement`;
+  }
+  const verb = count === 1 ? 'needs' : 'need';
+  return `${count} stale ${noun} ${verb} review`;
+}
+
+/**
+ * Per-tutorial author resolution.
+ * 1. Tutorials.author FK with non-empty Users.email → FK path
+ * 2. Else: contributors OWNER → AUTHOR priority → contributor path
+ * 3. Else: { authorEmail: null, authorSource: 'none' }
+ */
+function resolveAuthor(n) {
+  if (n.authorUserEmail && String(n.authorUserEmail).trim() !== '') {
+    return {
+      authorEmail: String(n.authorUserEmail).toLowerCase(),
+      authorSource: 'Tutorials.author',
+      authorName: n.authorUserName ?? null,
+    };
+  }
+  const owner = n.contributors?.find(c => c.role === 'OWNER')
+    ?? n.contributors?.find(c => c.role === 'AUTHOR');
+  if (owner?.email) {
+    return {
+      authorEmail: String(owner.email).toLowerCase(),
+      authorSource: 'TutorialContributors',
+      authorName: owner.name ?? null,
+    };
+  }
+  return { authorEmail: null, authorSource: 'none', authorName: null };
+}
+
+/**
+ * Group per-tutorial notification records by author email (case-insensitive).
+ * Tutorials with no resolvable author land in a single { authorEmail: null }
+ * bucket. Pure function — no DB calls.
+ *
+ * @param {Array} notifications  Output of computeStaleNotifications()
+ * @returns {Array<{authorEmail: string|null, authorSource: string,
+ *                  authorName: string|null, tutorials: Array,
+ *                  worstLevel: number, worstReviewedDate: string|null}>}
+ */
+export function groupNotificationsByAuthor(notifications) {
+  const map = new Map();
+  for (const n of notifications) {
+    const { authorEmail, authorSource, authorName } = resolveAuthor(n);
+    const key = authorEmail ?? '__null__';
+    let d = map.get(key);
+    if (!d) {
+      d = { authorEmail, authorSource, authorName, tutorials: [], worstLevel: 0, worstReviewedDate: null };
+      map.set(key, d);
+    }
+    d.tutorials.push(n);
+    if (n.notificationLevel > d.worstLevel) d.worstLevel = n.notificationLevel;
+    if (n.reviewedDate && (!d.worstReviewedDate || n.reviewedDate < d.worstReviewedDate)) {
+      d.worstReviewedDate = n.reviewedDate;
+    }
+  }
+  return Array.from(map.values());
+}
+
+/**
+ * Build to/cc recipient lists for a digest email.
+ * Synthesizes a notification-shaped record and delegates to determineRecipients
+ * so the level→audience mapping stays single-sourced. Unions repoOwner emails
+ * across all tutorials in the digest, dedupes CC, drops CC entries that
+ * duplicate the to list (case-insensitive).
+ *
+ * @param {{authorEmail: string|null, worstLevel: number,
+ *          tutorials: Array<{repoOwner: string|null}>}} digest
+ * @param {string[]} adminEmails
+ * @returns {{to: string[], cc: string[]}}
+ */
+export function determineRecipientsForDigest(digest, adminEmails = []) {
+  const synthetic = {
+    notificationLevel: digest.worstLevel,
+    contributors: [{ email: digest.authorEmail, role: 'OWNER' }],
+    repoOwner: digest.tutorials.find(t => t.repoOwner)?.repoOwner ?? null,
+  };
+  const { to, cc } = determineRecipients(synthetic, adminEmails);
+
+  // Union additional repo owners (multi-tutorial digests may span repos).
+  // Only relevant at levels that include the repoOwner in CC (1 and 2);
+  // levels 0 and 3 leave repoOwners out entirely.
+  if (synthetic.repoOwner && cc.some(e => e.toLowerCase() === synthetic.repoOwner.toLowerCase())) {
+    const extraRepoOwners = [
+      ...new Set(digest.tutorials.map(t => t.repoOwner).filter(Boolean))
+    ];
+    const ccCaseFolded = new Set(cc.map(e => e.toLowerCase()));
+    for (const owner of extraRepoOwners) {
+      if (!ccCaseFolded.has(owner.toLowerCase())) {
+        cc.push(owner);
+        ccCaseFolded.add(owner.toLowerCase());
+      }
+    }
+  }
+
+  // Drop CC entries duplicating to (case-insensitive).
+  const toCaseFolded = new Set(to.map(e => e.toLowerCase()));
+  const dedupedCc = cc.filter(e => !toCaseFolded.has(e.toLowerCase()));
+  return { to, cc: dedupedCc };
 }

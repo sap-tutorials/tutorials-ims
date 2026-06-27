@@ -2,3 +2,6 @@ ID;legacyId;key;value
 aaaaaaaa-aaaa-4aaa-8aaa-000000000001;;staleDaysThreshold;90
 aaaaaaaa-aaaa-4aaa-8aaa-000000000002;;resendIntervalDays;30
 aaaaaaaa-aaaa-4aaa-8aaa-000000000003;;maxNotificationLevel;3
+aaaaaaaa-aaaa-4aaa-8aaa-000000000004;;useDigestNotifications;true
+aaaaaaaa-aaaa-4aaa-8aaa-000000000005;;lastChanceMinLevel;3
+aaaaaaaa-aaaa-4aaa-8aaa-000000000006;;lastChanceDormancyDays;60

@@ -1,0 +1,29 @@
+<html>
+<head><meta http-equiv="content-type" content="text/html; charset=UTF-8"></head>
+<body>
+<p>Dear ${authorName},</p>
+<p>This is a <strong>final notice</strong> from the SAP Developers Tutorials Team.
+   The following ${tutorialCount} ${tutorialPlural} you author have been flagged for retirement
+   because they have been stale for more than ${staleDaysThreshold} days and have not
+   responded to multiple reminders:</p>
+
+${tutorialListHtml}
+
+<p>We would prefer not to retire these tutorials — they have value to our developer
+   community. If you intend to keep authoring them, please take action within the next
+   2 weeks via the <a href="${dashboardUrl}">Tutorial Dashboard</a>:</p>
+
+<ol>
+    <li><strong>Review and update</strong> each tutorial in its source GitHub repository,
+        then mark it as Reviewed.</li>
+    <li><strong>Hand off authorship</strong> to a colleague by updating the
+        <code>author</code> in the tutorial's frontmatter.</li>
+    <li><strong>Reply to this email</strong> if you need more time or want to discuss.</li>
+</ol>
+
+<p>If we don't hear from you, these tutorials will be retired.</p>
+
+<p>Thanks for your support,<br/>
+SAP Developers Tutorials Team</p>
+</body>
+</html>

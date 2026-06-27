@@ -340,3 +340,29 @@ view AnalyticsBranchTopPick as
 view AuthorTutorialChanges as
   select from Changes
   where entity = 'AdminService.Tutorials';
+
+// Issue #622 — Last-chance email recipient list.
+// One row per FK-resolved author who owns ≥1 ACTIVE tutorial whose meta is
+// still in ACTIVE monitored status. Powers the admin "Last Chance Emails"
+// section in the Operations app and is consumed by the
+// sendLastChanceEmailsAllDormant action (Task 12) to enumerate dropdown
+// candidates and bulk-sweep targets.
+//
+// Caveat: only enumerates FK-resolved authors (Tutorials.author_ID is set).
+// Contributors-only authors won't appear here — admin can still POST
+// sendLastChanceEmail({authorEmail}) directly with any email address.
+view DormantAuthors as
+  select from ims.TutorialMeta as m
+    inner join ims.Tutorials as t on m.tutorial.ID = t.ID
+    inner join ims.Users      as u on t.author.ID  = u.ID
+  {
+    key u.email                   as authorEmail        : String(255),
+        u.displayName             as authorName         : String(255),
+        count(*)                  as tutorialCount      : Integer,
+        max(m.notificationNumber) as worstLevel         : Integer,
+        min(m.reviewedDate)       as oldestReviewedDate : Timestamp
+  }
+  where m.monitoredStatus = 'ACTIVE'
+    and t.status          = 'ACTIVE'
+    and u.email is not null
+  group by u.email, u.displayName;

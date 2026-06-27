@@ -12,7 +12,11 @@ import { join } from 'node:path';
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..');
 const TEMPLATE_DIR = join(REPO_ROOT, 'srv/templates/notification');
-const FILES = ['first.html', 'second.html', 'third.html', 'final.html'];
+const FILES = [
+  'first.html', 'second.html', 'third.html', 'final.html',
+  'digest-level-0.html', 'digest-level-1.html', 'digest-level-2.html', 'digest-level-3.html',
+  'last-chance.html',
+];
 
 const FORBIDDEN_LITERALS = [
   'ninety days',
@@ -34,6 +38,12 @@ const REQUIRED_PLACEHOLDERS_PER_FILE = {
   'third.html':  ['${dashboardUrl}', '${tutorialTitle}', '${staleDaysThreshold}', '${lastReviewedDate}'],
   // final.html addresses admins; tutorialTitle suffices.
   'final.html':  ['${tutorialTitle}'],
+  // Digest templates take a pre-rendered <ul> instead of per-tutorial title/date.
+  'digest-level-0.html': ['${authorName}', '${tutorialCount}', '${tutorialPlural}', '${tutorialListHtml}', '${dashboardUrl}', '${staleDaysThreshold}'],
+  'digest-level-1.html': ['${authorName}', '${tutorialCount}', '${tutorialPlural}', '${tutorialListHtml}', '${dashboardUrl}', '${staleDaysThreshold}'],
+  'digest-level-2.html': ['${authorName}', '${tutorialCount}', '${tutorialPlural}', '${tutorialListHtml}', '${dashboardUrl}', '${staleDaysThreshold}'],
+  'digest-level-3.html': ['${authorName}', '${tutorialCount}', '${tutorialPlural}', '${tutorialListHtml}'],
+  'last-chance.html':    ['${authorName}', '${tutorialCount}', '${tutorialPlural}', '${tutorialListHtml}', '${dashboardUrl}', '${staleDaysThreshold}'],
 };
 
 describe('notification templates — rot detection', () => {

@@ -223,6 +223,13 @@ service AdminService {
   @readonly entity AuthorAiRequests          as projection on ims.AuthorAiRequests;
   @readonly entity TutorialCompletionStats   as projection on ims.TutorialCompletionStats;
 
+  // Issue #622 — read-only recipient list for the "Last Chance Emails"
+  // admin section. Powers the dropdown for sendLastChanceEmail and the
+  // preview list for sendLastChanceEmailsAllDormant. One row per
+  // FK-resolved author with ≥1 stale active tutorial. Underlying view
+  // definition + caveats in db/views.cds.
+  @readonly entity DormantAuthors            as projection on ims.DormantAuthors;
+
   // Code list entities for enum dropdowns (no DB table needed)
   @readonly @cds.persistence.skip entity ExperienceLevels { key code : String(255); }
   @readonly @cds.persistence.skip entity TaskStatuses     { key code : String(50); }
@@ -341,6 +348,31 @@ service AdminService {
   action testNotificationEmail(to: String, level: Integer) returns {
     success : Boolean;
     error   : String;
+  };
+  action sendLastChanceEmail(
+    authorEmail : String,
+    dryRun      : Boolean
+  ) returns {
+    success           : Boolean;
+    recipientTo       : String;
+    recipientCc       : array of String;
+    tutorialsIncluded : Integer;
+    tutorialSlugs     : array of String;
+    error             : String;
+  };
+  action sendLastChanceEmailsAllDormant(
+    dryRun : Boolean
+  ) returns {
+    authorsProcessed : Integer;
+    emailsSent       : Integer;
+    emailsFailed     : Integer;
+    authorsSkipped   : Integer;
+    errors           : array of String;
+    preview          : array of {
+      authorEmail   : String;
+      tutorialCount : Integer;
+      worstLevel    : Integer;
+    };
   };
 
   // --- Statistics & export functions ---

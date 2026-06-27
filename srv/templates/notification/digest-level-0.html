@@ -1,0 +1,26 @@
+<html>
+<head><meta http-equiv="content-type" content="text/html; charset=UTF-8"></head>
+<body>
+<p>Dear ${authorName},</p>
+<p>This is a reminder that the following ${tutorialCount} ${tutorialPlural} you author
+   have not been reviewed in over ${staleDaysThreshold} days.
+   If no action is taken, they will be retired from production.</p>
+
+${tutorialListHtml}
+
+<p><strong>What action do you need to take?</strong></p>
+<ol>
+    <li><strong>Review each tutorial.</strong> If changes are needed, update the
+        tutorial in its source GitHub repository. If no changes are needed,
+        mark it as Reviewed in the <a href="${dashboardUrl}">Tutorial Dashboard</a>.</li>
+    <li><strong>Mark tutorials as needing changes.</strong> If you know a tutorial is
+        out of date but can't fix it now, flag it in the Tutorial Dashboard.</li>
+    <li><strong>Defer the review.</strong> If you need more time, mark a tutorial as
+        deferred. You won't be reminded again for 30 days.</li>
+</ol>
+<p>If you perform a review every 3-4 months you won't receive these reminders.</p>
+
+<p>Thanks for your support,<br/>
+SAP Developers Tutorials Team</p>
+</body>
+</html>
