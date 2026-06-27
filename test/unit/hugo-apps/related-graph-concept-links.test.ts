@@ -28,25 +28,24 @@ function makePayload(overrides: {
 
 describe('RelatedGraph sidebar — concept links honor `published` flag', () => {
   let originalFetch: typeof globalThis.fetch;
-  let originalIO: typeof globalThis.IntersectionObserver;
 
   beforeEach(() => {
     originalFetch = globalThis.fetch;
-    originalIO = globalThis.IntersectionObserver;
     // Set the page-slug the component reads from <html>
     document.documentElement.dataset.pageSlug = 'demo-tutorial';
     // Force the "no IntersectionObserver" branch so the component fetches
-    // immediately on mount instead of waiting for a scroll trigger.
-    // The component checks `typeof IntersectionObserver === 'undefined'`,
-    // so we need to actually remove it (vi.stubGlobal with undefined still
-    // leaves typeof as 'undefined' in happy-dom).
-    // @ts-expect-error — intentional removal for the test
-    delete globalThis.IntersectionObserver;
+    // immediately on mount instead of waiting for a scroll trigger. The
+    // component checks `typeof IntersectionObserver === 'undefined'`; setting
+    // the global to `undefined` satisfies that check (typeof undefined ===
+    // 'undefined'). Using vi.stubGlobal is robust against happy-dom adding
+    // an IntersectionObserver shim in a future release — `delete` would
+    // silently stop working in that case.
+    vi.stubGlobal('IntersectionObserver', undefined);
   });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
-    globalThis.IntersectionObserver = originalIO;
+    vi.unstubAllGlobals();
     delete document.documentElement.dataset.pageSlug;
     vi.restoreAllMocks();
     // Clear sessionStorage so prior tests' ETag cache doesn't bleed in.
@@ -94,7 +93,11 @@ describe('RelatedGraph sidebar — concept links honor `published` flag', () => 
 
     // No anchor to /concepts/draft-concept/
     expect(wrapper.find('a[href="/concepts/draft-concept/"]').exists()).toBe(false);
-    // But the name is still in the DOM (as plain text).
+    // But the name is still in the DOM (as plain text in the v-else <span>).
+    // Explicit assertion guards against a future regression where v-else
+    // renders nothing — wrapper.text() alone would still pass if the name
+    // leaked into a sibling slot. Class matches RelatedGraph.vue:71.
+    expect(wrapper.find('span.kg-sidebar-concept-text').exists()).toBe(true);
     expect(wrapper.text()).toContain('Draft Concept');
   });
 
@@ -114,6 +117,9 @@ describe('RelatedGraph sidebar — concept links honor `published` flag', () => 
     await flushPromises();
 
     expect(wrapper.find('a[href="/concepts/legacy-concept/"]').exists()).toBe(false);
+    // v-else <span> renders the name; guards against future regression where
+    // missing `published` accidentally drops the element entirely.
+    expect(wrapper.find('span.kg-sidebar-concept-text').exists()).toBe(true);
     expect(wrapper.text()).toContain('Legacy Concept');
   });
 });
