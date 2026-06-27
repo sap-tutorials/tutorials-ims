@@ -304,7 +304,8 @@
         { "name": "dashboard", "pattern": "", "target": "dashboardTarget" },
         { "name": "statistics", "pattern": "statistics", "target": "statisticsTarget" },
         { "name": "dataExport", "pattern": "dataExport", "target": "dataExportTarget" },
-        { "name": "privacy", "pattern": "privacy", "target": "privacyTarget" }
+        { "name": "privacy", "pattern": "privacy", "target": "privacyTarget" },
+        { "name": "noAccess", "pattern": "noAccess", "target": "noAccessTarget" }
       ],
       "targets": {
         "eventsTarget": {
@@ -511,6 +512,10 @@
         },
         "privacyTarget": {
           "viewName": "Privacy",
+          "viewLevel": 1
+        },
+        "noAccessTarget": {
+          "viewName": "NoAccess",
           "viewLevel": 1
         }
       },
