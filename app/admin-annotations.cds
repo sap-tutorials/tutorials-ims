@@ -2519,12 +2519,10 @@ annotate KnowledgeGraphService.Concepts with @(
   ],
 
   // Phase 3 (#446) — Publish / Unpublish toolbar actions.
-  // The actions are service-level unbound (take conceptId : UUID) so
-  // Fiori Elements renders them in the OP toolbar (and the LR toolbar
-  // via Identification surfacing) and prompts for the conceptId in a
-  // parameter dialog. Admins copy-paste from the ID column added to
-  // LineItem above. Bound-action follow-up is tracked as a future
-  // enhancement once we agree on the binding shape.
+  // BOUND actions on Concepts so Fiori Elements V4 uses the selected-row
+  // context — no parameter dialog. The Action reference matches the canonical
+  // form used by AdminService.Tutorials/rebuildContent at line 609 above
+  // (`<Service>.<actionName>`; FE V4 resolves the binding from context).
   UI.Identification: [
     {
       $Type : 'UI.DataFieldForAction',

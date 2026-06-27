@@ -133,10 +133,17 @@ service KnowledgeGraphService @(path : '/graph') {
 
   @requires : 'KnowledgeGraph.Admin'
   action triggerGraphRebuild() returns RebuildResult;
-
-  @requires : 'KnowledgeGraph.Admin'
-  action publishConcept(conceptId : UUID);
-
-  @requires : 'KnowledgeGraph.Admin'
-  action unpublishConcept(conceptId : UUID);
 }
+
+// publishConcept / unpublishConcept are BOUND actions on Concepts so Fiori
+// Elements V4 picks up the row context (clicked-row key) when an admin invokes
+// them from the OP toolbar or LR row — no parameter dialog. Pattern mirrors
+// AdminService.Tutorials.rebuildContent (srv/admin-service.cds:626-630) and
+// AdminService.Users.clearKhorosLink (srv/admin-service.cds:22-25).
+extend entity KnowledgeGraphService.Concepts with actions {
+  @requires : 'KnowledgeGraph.Admin'
+  action publishConcept();
+
+  @requires : 'KnowledgeGraph.Admin'
+  action unpublishConcept();
+};

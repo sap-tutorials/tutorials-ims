@@ -861,11 +861,15 @@ export default cds.service.impl(async function () {
     }
   });
 
-  // ─── publishConcept — admin publication marker ─────────────────────────
-  this.on('publishConcept', async (req) => {
+  // ─── publishConcept — admin publication marker (bound on Concepts) ─────
+  // Bound action: the entity key flows through req.params (one tuple per
+  // step in the binding chain). For a Concepts-bound action req.params[0]
+  // is the bound row's key object, e.g. { ID: '<uuid>' }. Same pattern as
+  // AdminService.Users.clearKhorosLink (srv/admin-service.js:1592).
+  this.on('publishConcept', 'Concepts', async (req) => {
     const { Concepts } = cds.entities(NAMESPACE);
-    const { conceptId } = req.data;
-    if (!conceptId) return req.error(400, 'conceptId required');
+    const conceptId = req.params?.[0]?.ID;
+    if (!conceptId) return req.reject(400, 'Bound action invoked without entity context');
     const user = req.user?.id ?? 'anonymous';
     const now = new Date().toISOString();
     const count = await UPDATE(Concepts)
@@ -875,10 +879,10 @@ export default cds.service.impl(async function () {
   });
 
   // ─── unpublishConcept — admin publication marker (clear) ───────────────
-  this.on('unpublishConcept', async (req) => {
+  this.on('unpublishConcept', 'Concepts', async (req) => {
     const { Concepts } = cds.entities(NAMESPACE);
-    const { conceptId } = req.data;
-    if (!conceptId) return req.error(400, 'conceptId required');
+    const conceptId = req.params?.[0]?.ID;
+    if (!conceptId) return req.reject(400, 'Bound action invoked without entity context');
     const count = await UPDATE(Concepts)
       .set({ publishedAt: null, publishedBy: null })
       .where({ ID: conceptId });

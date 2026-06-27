@@ -49,12 +49,12 @@ describe.runIf(allowWrites)('publishConcept / unpublishConcept admin actions', (
     expect(row.publishedAt).toBeNull()
     expect(row.publishedBy).toBeNull()
 
-    await kg.send('publishConcept', { conceptId: ID })
+    await kg.send('publishConcept', ID, {})
     row = await SELECT.one.from(Concepts).columns('publishedAt', 'publishedBy').where({ ID })
     expect(row.publishedAt).toBeTruthy()
     expect(row.publishedBy).toBeTruthy()
 
-    await kg.send('unpublishConcept', { conceptId: ID })
+    await kg.send('unpublishConcept', ID, {})
     row = await SELECT.one.from(Concepts).columns('publishedAt', 'publishedBy').where({ ID })
     expect(row.publishedAt).toBeNull()
     expect(row.publishedBy).toBeNull()
@@ -84,10 +84,10 @@ describe.runIf(allowWrites)('publishConcept / unpublishConcept admin actions', (
     testIds.push(...resolvedIds)
 
     // Publish the last three; then unpublish the unpub one; veto stays as VETOED.
-    await kg.send('publishConcept', { conceptId: resolvedIds[1] })
-    await kg.send('publishConcept', { conceptId: resolvedIds[2] })
-    await kg.send('publishConcept', { conceptId: resolvedIds[3] })
-    await kg.send('unpublishConcept', { conceptId: resolvedIds[2] })
+    await kg.send('publishConcept', resolvedIds[1], {})
+    await kg.send('publishConcept', resolvedIds[2], {})
+    await kg.send('publishConcept', resolvedIds[3], {})
+    await kg.send('unpublishConcept', resolvedIds[2], {})
 
     const visible = await kg.read('PublishedConcepts')
       .where({ slug: { like: TEST_PREFIX + '%' } })
