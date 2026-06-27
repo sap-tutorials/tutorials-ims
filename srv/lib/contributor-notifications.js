@@ -265,3 +265,45 @@ export function groupNotificationsByAuthor(notifications) {
   }
   return Array.from(map.values());
 }
+
+/**
+ * Build to/cc recipient lists for a digest email.
+ * Synthesizes a notification-shaped record and delegates to determineRecipients
+ * so the level→audience mapping stays single-sourced. Unions repoOwner emails
+ * across all tutorials in the digest, dedupes CC, drops CC entries that
+ * duplicate the to list (case-insensitive).
+ *
+ * @param {{authorEmail: string|null, worstLevel: number,
+ *          tutorials: Array<{repoOwner: string|null}>}} digest
+ * @param {string[]} adminEmails
+ * @returns {{to: string[], cc: string[]}}
+ */
+export function determineRecipientsForDigest(digest, adminEmails = []) {
+  const synthetic = {
+    notificationLevel: digest.worstLevel,
+    contributors: [{ email: digest.authorEmail, role: 'OWNER' }],
+    repoOwner: digest.tutorials.find(t => t.repoOwner)?.repoOwner ?? null,
+  };
+  const { to, cc } = determineRecipients(synthetic, adminEmails);
+
+  // Union additional repo owners (multi-tutorial digests may span repos).
+  // Only relevant at levels that include the repoOwner in CC (1 and 2);
+  // levels 0 and 3 leave repoOwners out entirely.
+  if (synthetic.repoOwner && cc.some(e => e.toLowerCase() === synthetic.repoOwner.toLowerCase())) {
+    const extraRepoOwners = [
+      ...new Set(digest.tutorials.map(t => t.repoOwner).filter(Boolean))
+    ];
+    const ccCaseFolded = new Set(cc.map(e => e.toLowerCase()));
+    for (const owner of extraRepoOwners) {
+      if (!ccCaseFolded.has(owner.toLowerCase())) {
+        cc.push(owner);
+        ccCaseFolded.add(owner.toLowerCase());
+      }
+    }
+  }
+
+  // Drop CC entries duplicating to (case-insensitive).
+  const toCaseFolded = new Set(to.map(e => e.toLowerCase()));
+  const dedupedCc = cc.filter(e => !toCaseFolded.has(e.toLowerCase()));
+  return { to, cc: dedupedCc };
+}
