@@ -14,6 +14,7 @@ approuter/static/*
 .tutorial-cache/
 .tutorial-cache-qa/
 hugo/data/image_dimensions.json
+hugo/data/homepage_shelves.json
 hugo/data-qa/
 hugo/static-qa/
 .comparison-results/

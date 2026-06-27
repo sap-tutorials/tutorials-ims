@@ -1,0 +1,142 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.homepage",
+    "type": "application",
+    "title": "{{appTitle}}",
+    "description": "{{appDescription}}",
+    "applicationVersion": { "version": "0.0.1" },
+    "i18n": "i18n/i18n.properties",
+    "dataSources": {
+      "mainService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "Homepage-manage": {
+          "semanticObject": "Homepage",
+          "action": "manage",
+          "title": "{{appTitle}}",
+          "signature": { "parameters": {}, "additionalParameters": "allowed" }
+        }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": { "sap.fe.templates": {} }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      },
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": { "bundleName": "sap.tutorials.admin.homepage.i18n.i18n" }
+      }
+    },
+    "routing": {
+      "routes": [
+        {
+          "pattern": ":?query:",
+          "name": "ShelvesList",
+          "target": "ShelvesList"
+        },
+        {
+          "pattern": "HomepageShelves({key}):?query:",
+          "name": "ShelfOP",
+          "target": "ShelfOP"
+        },
+        {
+          "pattern": "Redirects:?query:",
+          "name": "RedirectsList",
+          "target": "RedirectsList"
+        },
+        {
+          "pattern": "LegacyRedirects({key}):?query:",
+          "name": "RedirectOP",
+          "target": "RedirectOP"
+        },
+        {
+          "pattern": "Config:?query:",
+          "name": "ConfigOP",
+          "target": "ConfigOP"
+        }
+      ],
+      "targets": {
+        "ShelvesList": {
+          "type": "Component",
+          "id": "ShelvesList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/HomepageShelves",
+              "variantManagement": "Page",
+              "initialLoad": "Enabled",
+              "navigation": {
+                "HomepageShelves": { "detail": { "route": "ShelfOP" } }
+              }
+            }
+          }
+        },
+        "ShelfOP": {
+          "type": "Component",
+          "id": "ShelfOP",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/HomepageShelves",
+              "editableHeaderContent": false
+            }
+          }
+        },
+        "RedirectsList": {
+          "type": "Component",
+          "id": "RedirectsList",
+          "name": "sap.fe.templates.ListReport",
+          "options": {
+            "settings": {
+              "contextPath": "/LegacyRedirects",
+              "variantManagement": "Page",
+              "initialLoad": "Enabled",
+              "navigation": {
+                "LegacyRedirects": { "detail": { "route": "RedirectOP" } }
+              }
+            }
+          }
+        },
+        "RedirectOP": {
+          "type": "Component",
+          "id": "RedirectOP",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/LegacyRedirects"
+            }
+          }
+        },
+        "ConfigOP": {
+          "type": "Component",
+          "id": "ConfigOP",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "contextPath": "/HomepageConfig"
+            }
+          }
+        }
+      }
+    }
+  }
+}

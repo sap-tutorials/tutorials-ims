@@ -19,6 +19,72 @@ const { createGunzip } = require('zlib')
 const tar = require('tar')
 const serveStatic = require('serve-static')
 const { isAuthorizedBearer } = require('./lib/bearer-auth')
+const { getIndex, startAutoRefresh } = require('./lib/legacy-redirects-loader')
+const { bump, startAutoFlush } = require('./lib/hit-counter')
+
+// srv-api URL: in CF it's provided via the `destinations` env var (JSON
+// array) injected by the approuter framework when mta.yaml declares
+// `requires: { name: srv-api, group: destinations }`. Locally it's
+// localhost:4004 via default-env.json or the SRV_API_URL override.
+function srvUrlFromDestinations() {
+  try {
+    const dests = JSON.parse(process.env.destinations || '[]')
+    const srv = dests.find(d => d.name === 'srv-api')
+    if (srv?.url) return srv.url
+  } catch { /* fall through */ }
+  return process.env.SRV_API_URL || 'http://localhost:4004'
+}
+const SRV_URL = srvUrlFromDestinations()
+startAutoRefresh(SRV_URL)
+startAutoFlush(SRV_URL)
+
+// ESM resolver is loaded lazily inside legacy-redirects-loader; expose a
+// synchronous wrapper that delegates to the pre-loaded dynamic import.
+// The handler guards against the resolver not yet being ready (returns null).
+let _resolveRedirect = null
+import('../srv/lib/legacy-redirects-resolver.js').then(m => { _resolveRedirect = m.resolveRedirect })
+
+// Conservative *.html catch-all: 301 to */ only if Hugo emitted a static
+// target. Spec §17 resolution 1.
+const STATIC_DIR_ABS = join(__dirname, 'static')
+function hugoTargetExists(path) {
+  // path looks like '/foo/' — we look for static/foo/index.html
+  const rel = path.replace(/^\/+/, '').replace(/\/+$/, '/')
+  const candidate = join(STATIC_DIR_ABS, rel, 'index.html')
+  return existsSync(candidate)
+}
+
+function legacyRedirectsHandler(req, res, next) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next()
+  const url = req.url || '/'
+  const idx = getIndex()
+  if (_resolveRedirect) {
+    const hit = _resolveRedirect(idx, url)
+    if (hit) {
+      bump(hit.id)
+      res.writeHead(hit.statusCode || 301, {
+        Location: hit.toPath,
+        'Cache-Control': 'public, max-age=86400'
+      })
+      res.end()
+      return
+    }
+  }
+  // Catch-all *.html → */ if the slug-folder exists in Hugo output
+  const m = url.match(/^(\/[^?#]*?)\.html(\?.*)?$/i)
+  if (m) {
+    const candidate = m[1] + '/'  // /foo.html → /foo/
+    if (hugoTargetExists(candidate)) {
+      res.writeHead(301, {
+        Location: candidate + (m[2] || ''),
+        'Cache-Control': 'public, max-age=86400'
+      })
+      res.end()
+      return
+    }
+  }
+  next()
+}
 
 let _sharp
 function getSharp() {
@@ -112,32 +178,6 @@ async function imgCdnHandler(req, res, next) {
   }
 }
 
-// Legacy URL redirects preserved at cutover from AEM/Akamai. See
-// docs/historic/aem-gap-analysis.md §15. Each entry matches the *path*; the captured
-// group is the query string (with leading ?), appended verbatim to the target.
-const LEGACY_REDIRECTS = [
-  {
-    match: /^\/trials-downloads\.html(\?.*)?$/,
-    target: 'https://www.sap.com/products/try-sap/trials-downloads.html'
-  }
-]
-
-function redirectsHandler(req, res, next) {
-  if (req.method !== 'GET' && req.method !== 'HEAD') return next()
-  for (const { match, target } of LEGACY_REDIRECTS) {
-    const m = req.url.match(match)
-    if (m) {
-      res.writeHead(301, {
-        Location: target + (m[1] || ''),
-        'Cache-Control': 'public, max-age=86400'
-      })
-      res.end()
-      return
-    }
-  }
-  next()
-}
-
 const STATIC_DIR = join(__dirname, 'static')
 const TEMP_DIR = join(__dirname, 'static-new')
 const OLD_DIR = join(__dirname, 'static-old')
@@ -157,6 +197,7 @@ const APP_MOUNTS = {
   '/admin-ui/components/accounts': join(__dirname, '..', 'app', 'admin', 'accounts', 'webapp'),
   '/admin-ui/components/changelog': join(__dirname, '..', 'app', 'admin', 'changelog', 'webapp'),
   '/admin-ui/components/feedback': join(__dirname, '..', 'app', 'admin', 'feedback', 'webapp'),
+  '/admin-ui/components/homepage': join(__dirname, '..', 'app', 'admin', 'homepage', 'webapp'),
   '/analytics-ui': join(__dirname, '..', 'app', 'analytics-explorer', 'dist'),
   '/admin-ui': join(__dirname, '..', 'app', 'admin-shell', 'webapp')
 }
@@ -387,7 +428,7 @@ ar.start({
         first: [
           { path: '/admin/rebuild', handler: rebuildHandler },
           { path: '/', handler: imgCdnHandler },
-          { path: '/', handler: redirectsHandler },
+          { path: '/', handler: legacyRedirectsHandler },
           { path: '/', handler: adminAppsHandler },
           { path: '/', handler: staticHandler },
           { path: '/', handler: proxyHandler }

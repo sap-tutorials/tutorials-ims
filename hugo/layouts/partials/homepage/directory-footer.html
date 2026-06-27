@@ -1,0 +1,42 @@
+{{- /* directory-footer.html — spec §6 row 7.
+       Pure Hugo, no JS. Groups all active shelves by verb into 6 columns.
+       Plus utility links and the footer-only sap.com door.
+       Context: dict "shelves" $shelves */ -}}
+{{- $shelves := .shelves | default slice -}}
+{{- $verbKeys := slice "LEARN" "BUILD" "INTEGRATE" "OPERATE" "AI" "CONNECT" -}}
+{{- $verbLabels := dict
+  "LEARN"     "Learn"
+  "BUILD"     "Build"
+  "INTEGRATE" "Integrate"
+  "OPERATE"   "Operate"
+  "AI"        "Extend with AI"
+  "CONNECT"   "Connect"
+-}}
+<footer class="hp-directory" aria-label="Site directory">
+  {{- range $verbKeys -}}
+    {{- $vKey := . -}}
+    {{- $vLabel := index $verbLabels $vKey -}}
+    {{- $verbShelves := where $shelves "verb" $vKey -}}
+    <div class="hp-directory__col">
+      <h3>{{ $vLabel }}</h3>
+      {{- if gt (len $verbShelves) 0 -}}
+        <ul>
+          {{- range sort $verbShelves "sortOrder" -}}
+            <li>
+              <a href="{{ .url }}"{{ if .isExternal }} target="_blank" rel="noopener"{{ end }}>{{ .title }}</a>
+            </li>
+          {{- end -}}
+        </ul>
+      {{- end -}}
+    </div>
+  {{- end -}}
+
+  <div class="hp-directory__utility">
+    <ul>
+      <li><a href="/privacy/">Privacy</a></li>
+      <li><a href="/accessibility/">Accessibility</a></li>
+      <li><a href="https://github.com/sap-tutorials" target="_blank" rel="noopener">GitHub</a></li>
+      <li><a href="https://www.sap.com" target="_blank" rel="noopener">SAP corporate site →</a></li>
+    </ul>
+  </div>
+</footer>

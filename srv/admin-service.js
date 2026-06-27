@@ -383,6 +383,24 @@ export default class AdminService extends cds.ApplicationService {
       }
     });
 
+    // #639: HomepageConfig is a singleton; auto-init a default row on first
+    // READ so a fresh subaccount doesn't 404. Pattern matches ChatSettings.
+    // UUID convention: one greater than NAVIGATOR_SETTINGS_SINGLETON_ID (c8ad).
+    const HOMEPAGE_CONFIG_SINGLETON_ID = '00000000-0000-0000-0000-00000000c8ae';
+    this.before('READ', 'HomepageConfig', async () => {
+      const exists = await SELECT.one.from('com.sap.developers.ims.HomepageConfig')
+        .where({ ID: HOMEPAGE_CONFIG_SINGLETON_ID });
+      if (!exists) {
+        await INSERT.into('com.sap.developers.ims.HomepageConfig').entries({
+          ID: HOMEPAGE_CONFIG_SINGLETON_ID,
+          developerNewsPlaylistId: null,
+          videoBandEnabled: true,
+          eventsBandEnabled: true,
+          communityLaneEnabled: true
+        });
+      }
+    });
+
     // Auto-assign legacyId on creation for entities that need it
     const legacyKeyedEntities = [
       'Users', 'Tutorials', 'Missions', 'Groups', 'Events', 'TaskRecords',

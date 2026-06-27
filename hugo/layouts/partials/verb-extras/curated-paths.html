@@ -1,0 +1,42 @@
+{{- /* curated-paths.html — extra section for /learn/.
+       Called as: partial "verb-extras/curated-paths.html" (dict "ctx" .)
+       Renders up to 6 missions from Site.Data.browse.
+
+       browse.json is normalized:
+         - browse.all  — array of full card objects (id, type, title, …)
+         - browse.featured — array of string IDs that look up into all[]
+       This partial dereferences the featured IDs and filters to missions
+       (the prose below says "Multi-tutorial missions"). Mirrors the pattern
+       in hugo/layouts/partials/browse/_partials/rail.html.
+
+       Falls back to an empty section when browse data is absent.
+*/ -}}
+{{- $ctx := .ctx -}}
+{{- $browse := $ctx.Site.Data.browse | default dict -}}
+{{- $all := (index $browse "all") | default slice -}}
+{{- $ids := (index $browse "featured") | default slice -}}
+{{- $missions := slice -}}
+{{- range $rid := $ids -}}
+  {{- range $item := $all -}}
+    {{- if and (eq $item.id $rid) (eq $item.type "mission") -}}
+      {{- $missions = $missions | append $item -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- $picked := first 6 $missions -}}
+{{- if gt (len $picked) 0 -}}
+<section class="verb-extra verb-extra--curated-paths">
+  <h2>Curated paths</h2>
+  <p>Multi-tutorial missions that take you from zero to building.</p>
+  <ul class="verb-shelf__list">
+    {{ range $picked }}
+    <li>
+      <a href="{{ .href | default (printf "/missions/%s/" .id) }}">
+        <strong>{{ .title }}</strong>
+        {{- if .description }}<p>{{ .description | truncate 160 }}</p>{{ end -}}
+      </a>
+    </li>
+    {{ end }}
+  </ul>
+</section>
+{{- end -}}

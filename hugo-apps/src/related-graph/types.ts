@@ -9,6 +9,11 @@ export type ConceptRef = {
   slug: string
   name: string
   description?: string | null
+  // Phase 3 (#446): true when a public /concepts/<slug>/ landing page
+  // exists for this concept. The neighborhood handler sets it from the
+  // PublishedConcepts view; the sidebar uses it to flip the rendering
+  // from <span> to <a>.
+  published?: boolean
 }
 
 export type TutorialRef = {

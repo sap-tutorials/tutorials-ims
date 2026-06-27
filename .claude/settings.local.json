@@ -21,7 +21,9 @@
       "Bash(git commit *)",
       "Bash(rm .git/COMMIT_MSG_TMP.txt)",
       "Bash(gh pr *)",
-      "Bash(rm .git/PR_BODY.md)"
+      "Bash(rm .git/PR_BODY.md)",
+      "Read(//d//**)",
+      "Bash(rmdir D:/projects/tutorials-poc/.claude/worktrees/672-publish-staleness-guard)"
     ]
   }
 }

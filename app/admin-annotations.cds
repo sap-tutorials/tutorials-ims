@@ -2461,6 +2461,10 @@ annotate KnowledgeGraphService.Concepts with {
   extractionCount @Common.Label: 'Extractions'    @Common.FieldControl: #ReadOnly;
   firstSeenAt     @Common.Label: 'First Seen'     @Common.FieldControl: #ReadOnly;
   lastSeenAt      @Common.Label: 'Last Seen'      @Common.FieldControl: #ReadOnly;
+  // Phase 3 (#446) — admin curation marker. Set by publishConcept,
+  // cleared by unpublishConcept; never user-edited.
+  publishedAt     @Common.Label: 'Published'      @Common.FieldControl: #ReadOnly;
+  publishedBy     @Common.Label: 'Published By'   @Common.FieldControl: #ReadOnly;
 };
 
 annotate KnowledgeGraphService.Concepts with @(
@@ -2477,6 +2481,18 @@ annotate KnowledgeGraphService.Concepts with @(
     { $Type: 'UI.DataField', Value: slug,            Label: 'Slug' },
     { $Type: 'UI.DataField', Value: name,            Label: 'Name' },
     { $Type: 'UI.DataField', Value: status,          Label: 'Status' },
+    // Phase 3 (#446) — Published column. Criticality 3 (positive/green) when
+    // set, 0 (neutral) when null. Not-published is the default state — not an
+    // error — so it must render as neutral, not 1 (negative/red). OData V4
+    // CriticalityType: 0=Neutral, 1=Negative, 2=Critical, 3=Positive. The
+    // $edmJson form mirrors the conditional pattern used by Alerts.severityCrit
+    // elsewhere in this file.
+    {
+      $Type: 'UI.DataField',
+      Value: publishedAt,
+      Label: 'Published',
+      Criticality: { $edmJson: { $If: [ { $Ne: [ { $Path: 'publishedAt' }, null ] }, 3, 0 ] } }
+    },
     { $Type: 'UI.DataField', Value: extractionCount, Label: 'Extractions' },
     { $Type: 'UI.DataField', Value: lastSeenAt,      Label: 'Last Seen' },
     // ID exposed last so admins can copy the canonical UUID for paste-into-mergeConcepts
@@ -2492,7 +2508,9 @@ annotate KnowledgeGraphService.Concepts with @(
       { $Type: 'UI.DataField', Value: status,          Label: 'Status' },
       { $Type: 'UI.DataField', Value: extractionCount, Label: 'Extractions' },
       { $Type: 'UI.DataField', Value: firstSeenAt,     Label: 'First Seen' },
-      { $Type: 'UI.DataField', Value: lastSeenAt,      Label: 'Last Seen' }
+      { $Type: 'UI.DataField', Value: lastSeenAt,      Label: 'Last Seen' },
+      { $Type: 'UI.DataField', Value: publishedAt,     Label: 'Published' },
+      { $Type: 'UI.DataField', Value: publishedBy,     Label: 'Published By' }
     ]
   },
 
@@ -2501,6 +2519,24 @@ annotate KnowledgeGraphService.Concepts with @(
     { $Type: 'UI.ReferenceFacet', Label: 'Tutorials',       Target: 'links/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Label: 'Outgoing edges',  Target: 'outgoingEdges/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', Label: 'Incoming edges',  Target: 'incomingEdges/@UI.LineItem' }
+  ],
+
+  // Phase 3 (#446) — Publish / Unpublish toolbar actions.
+  // BOUND actions on Concepts so Fiori Elements V4 uses the selected-row
+  // context — no parameter dialog. The Action reference matches the canonical
+  // form used by AdminService.Tutorials/rebuildContent at line 609 above
+  // (`<Service>.<actionName>`; FE V4 resolves the binding from context).
+  UI.Identification: [
+    {
+      $Type : 'UI.DataFieldForAction',
+      Action: 'KnowledgeGraphService.publishConcept',
+      Label : 'Publish'
+    },
+    {
+      $Type : 'UI.DataFieldForAction',
+      Action: 'KnowledgeGraphService.unpublishConcept',
+      Label : 'Unpublish'
+    }
   ],
 
   // Inline-edit only on `name` + `description`. The other fields are gated by
@@ -2794,4 +2830,95 @@ annotate AdminService.DormantAuthors with @(
   Capabilities.InsertRestrictions.Insertable: false,
   Capabilities.UpdateRestrictions.Updatable: false,
   Capabilities.DeleteRestrictions.Deletable: false
+);
+
+// Homepage admin tile (#639)
+annotate AdminService.HomepageShelves with @(
+  UI.HeaderInfo : {
+    TypeName       : 'Shelf entry',
+    TypeNamePlural : 'Homepage shelves',
+    Title          : { Value : title }
+  },
+  UI.LineItem : [
+    { Value : verb,        Label : 'Verb' },
+    { Value : shelf,       Label : 'Shelf' },
+    { Value : sortOrder,   Label : 'Order' },
+    { Value : title,       Label : 'Title' },
+    { Value : url,         Label : 'URL' },
+    { Value : badge,       Label : 'Badge' },
+    { Value : linkStatus,  Label : 'Link health' },
+    { Value : isActive,    Label : 'Active' }
+  ],
+  UI.SelectionFields : [ verb, shelf, isActive, linkStatus ],
+  UI.Facets : [
+    { $Type: 'UI.ReferenceFacet', Label: 'General', Target: '@UI.FieldGroup#Main' }
+  ],
+  UI.FieldGroup #Main : { Data : [
+    { Value : verb },
+    { Value : shelf },
+    { Value : sortOrder },
+    { Value : title },
+    { Value : url },
+    { Value : description },
+    { Value : badge },
+    { Value : isExternal },
+    { Value : isActive }
+  ]}
+);
+
+annotate AdminService.HomepageShelves {
+  verb       @Common.ValueListWithFixedValues @Common.Label: 'Verb';
+  shelf      @Common.ValueListWithFixedValues @Common.Label: 'Shelf';
+  badge      @Common.ValueListWithFixedValues @Common.Label: 'Badge';
+  linkStatus @Common.ValueListWithFixedValues @Common.Label: 'Link health';
+};
+
+annotate AdminService.LegacyRedirects with @(
+  UI.HeaderInfo : {
+    TypeName       : 'Redirect',
+    TypeNamePlural : 'Legacy redirects',
+    Title          : { Value : fromPath }
+  },
+  UI.LineItem : [
+    { Value : fromPath,   Label : 'From' },
+    { Value : toPath,     Label : 'To' },
+    { Value : statusCode, Label : 'Status' },
+    { Value : isPattern,  Label : 'Regex?' },
+    { Value : hitCount,   Label : 'Hits' },
+    { Value : isActive,   Label : 'Active' }
+  ],
+  UI.SelectionFields : [ isActive, isPattern ],
+  UI.Facets : [
+    { $Type: 'UI.ReferenceFacet', Label: 'General', Target: '@UI.FieldGroup#Main' }
+  ],
+  UI.FieldGroup #Main : { Data : [
+    { Value : fromPath },
+    { Value : toPath },
+    { Value : statusCode },
+    { Value : isPattern },
+    { Value : isActive },
+    // hitCount is observability-only; surface in the OP read-only.
+    { Value : hitCount, @Common.FieldControl: #ReadOnly }
+  ]}
+);
+
+annotate AdminService.LegacyRedirects {
+  statusCode @Common.Label: 'HTTP status';
+  fromPath   @Common.Label: 'From path';
+  toPath     @Common.Label: 'To path';
+  isPattern  @Common.Label: 'Regex pattern?';
+  hitCount   @Common.Label: 'Hits';
+};
+
+annotate AdminService.HomepageConfig with @(
+  UI.HeaderInfo : {
+    TypeName       : 'Homepage config',
+    TypeNamePlural : 'Homepage configs'
+  },
+  UI.FieldGroup #Main : { Data : [
+    { Value : developerNewsPlaylistId, Label : 'Developer News playlist ID (YouTube)' },
+    { Value : videoBandEnabled,        Label : 'Show video band' },
+    { Value : eventsBandEnabled,       Label : 'Show events band' },
+    { Value : communityLaneEnabled,    Label : 'Show community lane' }
+  ]}
 );

@@ -55,7 +55,20 @@
           :title="concept.description || ''"
           @mouseenter="onConceptHover(concept.slug)"
         >
-          {{ concept.name }}
+          <!--
+            Phase 3 (#446): when a public /concepts/<slug>/ landing page
+            exists, render the concept as an in-site link so readers can
+            follow it. Otherwise the name renders as plain text — the
+            sidebar still surfaces what the tutorial teaches, just
+            without a navigable destination.
+          -->
+          <a
+            v-if="concept.published"
+            :href="`/concepts/${concept.slug}/`"
+            class="kg-sidebar-concept-link"
+            @click="onConceptClick(concept.slug)"
+          >{{ concept.name }}</a>
+          <span v-else class="kg-sidebar-concept-text">{{ concept.name }}</span>
         </li>
       </ul>
     </section>
@@ -161,6 +174,15 @@ function onItemClick(
 
 function onConceptHover(conceptSlug: string): void {
   emit('kg.sidebar.hover_concept', { slug, conceptSlug })
+}
+
+// Phase 3 (#446): readers can now click through to a concept landing
+// page. This emits a distinct event from kg.sidebar.click (which is
+// tutorial→tutorial) so dashboards can measure concept-page CTR
+// separately. Fires synchronously with the navigation; the <a> still
+// follows its href normally (no preventDefault).
+function onConceptClick(conceptSlug: string): void {
+  emit('kg.concept.tutorial_clicked', { conceptSlug, tutorialSlug: slug })
 }
 
 // ── Empty / fetch helpers ────────────────────────────────────────────

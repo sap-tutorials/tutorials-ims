@@ -1,0 +1,7 @@
+{{- /* hero.html — spec §6 row 1.
+       Data: .Title and .Description from hugo/content/_index.md front matter.
+       No CTA buttons. No search bar. */ -}}
+<section class="hp-hero" aria-labelledby="hp-hero-title">
+  <h1 id="hp-hero-title">{{ .Title }}</h1>
+  <p>{{ .Description }}</p>
+</section>

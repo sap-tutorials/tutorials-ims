@@ -1,0 +1,4 @@
+ID;fromPath;toPath;statusCode;isPattern;isActive
+66333900-1eaa-0001-0001-000000000001;/tutorial-navigator.html;/tutorial-navigator/;301;false;true
+66333900-1eaa-0001-0001-000000000002;/index.html;/;301;false;true
+66333900-1eaa-0001-0001-000000000003;/groups.html;/missions/;301;false;true

@@ -1,0 +1,77 @@
+{{ define "main" }}
+{{/* The fetcher (scripts/fetch-concepts.ts) normalises all four related-entity
+     arrays to {slug, title} pairs, regardless of whether the source field on
+     the API payload was `title` (Tutorials.teaches) or `name` (Concept→Concept
+     edges). So we read `.title` consistently in all four sections. */}}
+{{ $name := .Params.name | default .Params.slug }}
+<article class="concept-page">
+  <header class="concept-page__header">
+    <nav class="concept-page__breadcrumb" aria-label="breadcrumb">
+      <a href="/">Home</a> &rsaquo; <a href="/concepts/">Concepts</a> &rsaquo; <span>{{ $name }}</span>
+    </nav>
+    <h1 class="concept-page__title">{{ $name }}</h1>
+    {{ with .Params.description }}<p class="concept-page__description">{{ . }}</p>{{ end }}
+  </header>
+
+  {{ with .Params.teaches }}
+  <section class="concept-page__section">
+    <h2>Tutorials that teach this</h2>
+    <ul>
+      {{ range . }}<li><a href="/tutorials/{{ .slug }}/">{{ .title }}</a></li>{{ end }}
+    </ul>
+  </section>
+  {{ end }}
+
+  {{ with .Params.requires }}
+  <section class="concept-page__section">
+    <h2>Prerequisites</h2>
+    <ul>
+      {{ range . }}<li><a href="/concepts/{{ .slug }}/">{{ .title }}</a></li>{{ end }}
+    </ul>
+  </section>
+  {{ end }}
+
+  {{ with .Params.requiredBy }}
+  <section class="concept-page__section">
+    <h2>Concepts that build on this</h2>
+    <ul>
+      {{ range . }}<li><a href="/concepts/{{ .slug }}/">{{ .title }}</a></li>{{ end }}
+    </ul>
+  </section>
+  {{ end }}
+
+  {{ with .Params.relatedTo }}
+  <section class="concept-page__section">
+    <h2>Related concepts</h2>
+    <ul>
+      {{ range . }}<li><a href="/concepts/{{ .slug }}/">{{ .title }}</a></li>{{ end }}
+    </ul>
+  </section>
+  {{ end }}
+
+  {{/*
+    Phase 3 (#446) telemetry — fires kg.concept.viewed on page load.
+    The companion kg.concept.tutorial_clicked event is dispatched from
+    the sidebar island (hugo-apps/src/related-graph/RelatedGraph.vue)
+    when a reader follows a concept link FROM a tutorial; this event
+    measures the inverse — eyeballs landing on a concept page directly.
+
+    Pattern: read the slug from a hidden data-attribute, NOT from
+    Hugo's `jsonify` filter inline — the minifier has historical
+    issues with `jsonify` output in inline scripts.
+  */}}
+  <div data-concept-slug="{{ .Params.slug }}" id="concept-telemetry" hidden></div>
+  <script>
+    (function () {
+      if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+      var el = document.getElementById('concept-telemetry');
+      if (!el) return;
+      try {
+        window.dispatchEvent(new CustomEvent('kg.concept.viewed', {
+          detail: { slug: el.dataset.conceptSlug }
+        }));
+      } catch (e) { /* never let telemetry break the page */ }
+    })();
+  </script>
+</article>
+{{ end }}
