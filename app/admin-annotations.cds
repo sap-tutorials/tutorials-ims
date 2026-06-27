@@ -2753,3 +2753,45 @@ annotate AdminService.Alerts {
               }
               @Common.ValueListWithFixedValues: false;
 };
+
+// --- DormantAuthors (issue #622) ---
+// Read-only recipient list backing the "Last Chance Emails" section. One
+// row per FK-resolved author with >=1 stale active tutorial. Used both as
+// a list/picker and (in a follow-up PR) as the surface for the
+// sendLastChanceEmail / sendLastChanceEmailsAllDormant admin actions.
+annotate AdminService.DormantAuthors with {
+  authorEmail        @Common.Label: 'Email';
+  authorName         @Common.Label: 'Author';
+  tutorialCount      @Common.Label: 'Stale Tutorials';
+  worstLevel         @Common.Label: 'Worst Level';
+  oldestReviewedDate @Common.Label: 'Oldest Reviewed';
+};
+
+annotate AdminService.DormantAuthors with @(
+  UI: {
+    HeaderInfo: {
+      TypeName       : 'Dormant Author',
+      TypeNamePlural : 'Dormant Authors',
+      Title          : { Value: authorName },
+      Description    : { Value: authorEmail }
+    },
+    Identification: [ { Value: authorEmail } ],
+    SelectionFields: [ worstLevel ],
+    LineItem: [
+      { Value: authorName,         Label: 'Author' },
+      { Value: authorEmail,        Label: 'Email' },
+      { Value: tutorialCount,      Label: 'Stale Tutorials' },
+      { Value: worstLevel,         Label: 'Worst Level' },
+      { Value: oldestReviewedDate, Label: 'Oldest Reviewed' }
+    ],
+    PresentationVariant: {
+      SortOrder: [
+        { Property: worstLevel,         Descending: true  },
+        { Property: oldestReviewedDate, Descending: false }
+      ]
+    }
+  },
+  Capabilities.InsertRestrictions.Insertable: false,
+  Capabilities.UpdateRestrictions.Updatable: false,
+  Capabilities.DeleteRestrictions.Deletable: false
+);
