@@ -19,7 +19,7 @@
 | 3 | Developer News playlist ID | **Runtime config** via new `HomepageConfig` singleton entity, admin-editable | Decouples deploy from the playlist ID Tom needs to fill in |
 | 4 | Pre-baked legacy URLs | **3 named at launch:** `/tutorial-navigator.html`, `/index.html`, `/groups.html`. Rest observed post-launch | Adds named coverage without speculating |
 | 5 | Admin app permission scope | **Reuse existing `Admin` scope** | Matches the 14 existing admin apps |
-| 6 | `LegacyRedirects.hitCount` write path | **In-memory counter, batched flush every 60s** via single `POST /api/redirects/hits` | No per-request write amplification; tolerates approuter restart loss |
+| 6 | `LegacyRedirects.hitCount` write path | **In-memory counter, batched flush every 60s** via single `POST /api/homepage/recordRedirectHits` | No per-request write amplification; tolerates approuter restart loss |
 
 ---
 
@@ -874,7 +874,7 @@ describe('youtube-fetcher', () => {
 npx vitest run test/unit/youtube-fetcher.test.js
 ```
 
-- [ ] **Step 6.3 — Implement** — see the full file in the appendix of this plan (Appendix B § Task 6 implementation). Key contract:
+- [ ] **Step 6.3 — Implement** `srv/lib/youtube-fetcher.js` per this contract:
 
 - Function signature: `fetchSapDevsVideos({ apiKey, playlistId, channelHandle })` → `{ featured, recent, error }`.
 - 15-min TTL cache keyed on `${channelHandle}|${playlistId||''}`.
@@ -882,6 +882,8 @@ npx vitest run test/unit/youtube-fetcher.test.js
 - Graceful empty payload + `error` string on any failure — never throws.
 - `_resetForTests()` exported for vitest.
 - Module-singleton via `globalThis[Symbol.for(...)]` per `feedback_module_singletons_in_vitest_cds` memory.
+- Three HTTP calls per cache miss: (1) `GET /channels?part=id&forHandle=` to resolve the channel ID (cached forever in module scope), (2) `GET /playlistItems?playlistId=...&maxResults=1` for the featured slot if `playlistId` is set, (3) `GET /search?channelId=...&order=date&type=video&maxResults=3` for recent uploads.
+- If `apiKey` is empty → return `{ featured: null, recent: [], error: 'no-api-key' }` immediately, no HTTP.
 
 - [ ] **Step 6.4 — Run; PASS. Commit.**
 
@@ -1061,6 +1063,8 @@ gh pr create --title "feat(#639): Phase 2 — HomepageService + live data fetche
 
 ## Task 12 — Pure-function redirect resolver (`srv/lib/legacy-redirects-resolver.js`)
 
+> **Note on numbering:** Task 11 was originally a separate "open Phase 2 PR" task but the PR-creation step folded into the final commit of Task 10 (Step 10.5). No gap in content — Phase 2 ends with Task 10 and Phase 3 begins with Task 12.
+
 **Files:**
 
 - Create: `srv/lib/legacy-redirects-resolver.js`
@@ -1211,9 +1215,15 @@ this.on('recordRedirectHits', async (req) => {
   let updated = 0;
   for (const { id, count } of hits) {
     if (!id || !Number.isFinite(count) || count <= 0) continue;
-    await db.run(`UPDATE com_sap_developers_ims_LegacyRedirects
-                   SET hitCount = COALESCE(hitCount, 0) + ?
-                   WHERE ID = ?`, [count, id]);
+    // Per CLAUDE.md "Never write raw SQL — use cds.ql or CQL"; use the
+    // compound-update pattern with an in-flight read then INSERT/UPDATE.
+    // (cds.ql does not have a portable atomic increment, so we read+write;
+    //  contention is tolerable — hit-counts are observability, not billing.)
+    const row = await db.run(SELECT.one`hitCount`.from('com.sap.developers.ims.LegacyRedirects').where({ ID: id }));
+    if (!row) continue;
+    await db.run(UPDATE('com.sap.developers.ims.LegacyRedirects')
+      .set({ hitCount: (row.hitCount || 0) + count })
+      .where({ ID: id }));
     updated++;
   }
   return updated;
@@ -1324,13 +1334,14 @@ module.exports = { bump, flush, startAutoFlush };
 
 - [ ] **Step 14.3 — Replace `LEGACY_REDIRECTS` and `redirectsHandler` in `approuter/server.js`**
 
-Delete lines 118–138 (the static array + handler). Add at the top of the file, after the existing requires:
+Delete lines 118–138 (the static array + handler). Add at the top of the file, after the existing requires (the file already has `const { join } = require('path')` and `const { existsSync } = require('fs')` aliased into named binds — verify both are imported before pasting):
 
 ```js
 const { getIndex, startAutoRefresh } = require('./lib/legacy-redirects-loader')
 const { bump, startAutoFlush } = require('./lib/hit-counter')
 const { resolveRedirect } = require('../srv/lib/legacy-redirects-resolver.js')
-const fs = require('fs')
+// `join` and `existsSync` are already imported at the top of approuter/server.js
+// (lines ~14-15). If not, add: const { join } = require('path'); const { existsSync } = require('fs');
 
 // srv-api URL: in CF it's a bound service via VCAP_SERVICES; locally it's localhost:4004.
 function srvUrlFromVcap() {
@@ -1593,6 +1604,8 @@ Per spec §17 resolution 2, three verbs get an extra section flagged in front ma
 - `learn`: add `extraSection: "curated-paths"` to render multi-tutorial missions as a "Curated paths" block.
 - `operate`: add `extraSection: "btp-service-catalog"` to render a single hero link to Discovery Center.
 - `connect`: add `extraSection: "events-calendar"` to render a full events list (vs. the homepage band's 3-4 next-up).
+
+The other three verbs (`build`, `integrate`, `ai`) intentionally **omit** the `extraSection` key — the verb layout's `with .Params.extraSection` block (Task 19.1) is a no-op when the key is absent, so they ship 4-shelf-only as designed.
 
 - [ ] **Step 16.3 — Create `hugo/content/tutorial-navigator/_index.md`**
 
@@ -1867,7 +1880,7 @@ mount('[data-island="events-calendar"]', EventsBand);  // reused on /connect/
 
 - [ ] **Step 20.3 — `EventsBand.vue`**
 
-Minimal Composition API SFC. On mount, fetch `/api/homepage/events`. Render 3-4 cards (event name, date, location, format chip, register link). Empty state: link to community.sap.com events. Detect `mode="full-calendar"` from the host element's `data-mode` attribute and fetch a longer list when set.
+Minimal Composition API SFC. On mount, fetch `/api/homepage/events`. Render 3-4 cards (event name, date, location, format chip, register link). Empty state: link to community.sap.com events. Detect `mode="full-calendar"` from the host element's `data-mode` attribute and fetch a longer list when set. The `startsAt` field arrives as an ISO 8601 string (OData v4 serialization of `Timestamp`); use `new Date(startsAt).toLocaleDateString()` for display.
 
 - [ ] **Step 20.4 — `VideoBand.vue`**
 
@@ -2188,9 +2201,9 @@ export async function runHomepageLinkHealth(opts = {}) {
       if (status === 'OK') okCount++;
       else if (status === 'SLOW') slowCount++;
       else brokenCount++;
-      await db.run(`UPDATE com_sap_developers_ims_HomepageShelves
-                     SET linkStatus = ?, lastChecked = ?
-                     WHERE ID = ?`, [status, new Date().toISOString(), row.ID]);
+      await db.run(UPDATE('com.sap.developers.ims.HomepageShelves')
+        .set({ linkStatus: status, lastChecked: new Date().toISOString() })
+        .where({ ID: row.ID }));
     }
   }
 
