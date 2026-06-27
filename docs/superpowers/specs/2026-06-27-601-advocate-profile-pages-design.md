@@ -13,7 +13,7 @@ sharable per-advocate URL — an advocate who wants to use the site as
 their public profile (e.g. in a LinkedIn / X / email-signature link)
 has nothing to point to. The grid is also a poor surface for browsing
 everything an advocate has produced: only counts are shown, not the
-actual tutorial / mission / group titles.
+actual tutorial titles.
 
 Issue [#601](https://github.com/sap-tutorials/tutorials-ims/issues/601)
 asks for a unique slug-keyed URL per advocate that opens a full page
@@ -26,8 +26,8 @@ showing all of their content and details.
 2. The URL renders a server-side HTML page (crawlable, has og:image and
    og:description meta, works without JavaScript for the hero / bio /
    links).
-3. The page surfaces tutorial / mission / group content actually
-   authored or contributed to by the advocate, not just counts.
+3. The page surfaces tutorial content actually authored or contributed
+   to by the advocate, not just counts.
 4. The existing roster grid stays intact. A click on the card's
    "View profile →" navigates to the internal page.
 5. The bio supports formatting (paragraphs, links, lists) via
@@ -35,8 +35,16 @@ showing all of their content and details.
 
 ## Non-goals
 
-- Events. `Events` has no `author` association today. Adding one is a
-  separate schema change tracked outside this issue.
+- **Missions and Groups attribution.** Only `Tutorials.author` exists in
+  the schema today (added by [db/schema.cds:46](../../../db/schema.cds#L46)).
+  `Missions` and `Groups` inherit from the `TaskBase` aspect, which has
+  no `author` association. Surfacing "missions curated" or "groups
+  curated" on the profile page would require an `Association to Users`
+  on both entities plus admin UI exposure, change-tracking, classifier
+  wiring, and migration backfill. Out of scope for v1; tracked as a
+  follow-up to issue [#601](https://github.com/sap-tutorials/tutorials-ims/issues/601).
+- **Events authored.** `Events` has no `author` association today
+  either. Same reasoning as Missions/Groups; deferred.
 - RSS / Atom subscription feeds. Future-friendly but out of scope for v1.
 - Long-form embedded media in bios (videos, code samples). Markdown is
   enough for v1; richer content can come later.
@@ -45,7 +53,7 @@ showing all of their content and details.
   markdown — admins just author with markdown syntax.
 - A separate `bioMarkdown` column. The existing `Advocates.bio`
   `LargeString` is treated as markdown. Plain-text bios already on
-  record continue to render fine through `marked` (line breaks and
+  record continue to render fine through `markdown-it` (line breaks and
   URLs survive unchanged).
 
 ## Architecture
@@ -58,7 +66,7 @@ showing all of their content and details.
   already use.
 - **Rendering:** Hybrid — Hugo emits a static HTML page per active
   advocate at build time, and a small Vue island hydrates the
-  tutorial / mission / group lists from a live endpoint on load.
+  tutorial lists from a live endpoint on load.
 - **SEO:** Build-time HTML includes `<title>`, `<meta name="description">`,
   `og:title`, `og:description`, `og:image` (pointing to
   `/api/advocates/<slug>/photo`), and `og:type=profile`. The fully-
@@ -80,12 +88,12 @@ fetch-advocates.ts                          browser hits
                                             ↓
                                             GET /api/advocates/:slug
                                             ↓
-                                            list sections (tutorials,
-                                            missions, groups) populate
+                                            list sections (authored +
+                                            contributed tutorials) populate
 ```
 
 The static page is fully usable even if the runtime fetch fails — only
-the tutorial / mission / group sections are missing. The hero, bio,
+the tutorial sections are missing. The hero, bio,
 social links, and topic chips come from build-time frontmatter.
 
 ### Trigger for stale pages
@@ -105,10 +113,12 @@ roster grid still picks up edits within ~1 minute without a rebuild.
 New handler in
 [srv/routes/advocates-public.js](../../../srv/routes/advocates-public.js)
 that returns a single advocate's full profile with authored /
-contributed tutorials and authored missions + groups.
+contributed tutorials.
 
-**Response shape** (delta from the existing `/api/advocates` list shape
-is the addition of `authoredMissions` and `authoredGroups`):
+**Response shape** (same row shape as the existing `/api/advocates` list
+items emit per row — see
+[srv/routes/advocates-public.js](../../../srv/routes/advocates-public.js) —
+just returned as a single object instead of inside `{ advocates: [...] }`):
 
 ```json
 {
@@ -128,9 +138,7 @@ is the addition of `authoredMissions` and `authoredGroups`):
   "links":  [{ "kind": "LinkedIn", "url": "...", "label": "...", "sortOrder": 100 }],
   "email":  "...",
   "authoredTutorials":    [{ "slug": "...", "title": "..." }],
-  "contributedTutorials": [{ "slug": "...", "title": "..." }],
-  "authoredMissions":     [{ "slug": "...", "title": "..." }],
-  "authoredGroups":       [{ "slug": "...", "title": "..." }]
+  "contributedTutorials": [{ "slug": "...", "title": "..." }]
 }
 ```
 
@@ -140,29 +148,17 @@ is the addition of `authoredMissions` and `authoredGroups`):
   404 as "no longer listed" and shows a small banner.
 - **Caching:** `ETag` derived from `MAX(modifiedAt)` across the
   advocate's row + its `AdvocateTopics`, `AdvocateLinks`, linked
-  `Users` row, and joined `Tutorials` + `TutorialContributors` +
-  `Missions` + `Groups`. `Cache-Control: public, max-age=60,
-  stale-while-revalidate=600`.
+  `Users` row, and joined `Tutorials` + `TutorialContributors`.
+  `Cache-Control: public, max-age=60, stale-while-revalidate=600`.
 - **HANA reads:** Same plain CDS QL pattern the list handler already
   uses. No new LOB locator concern — bio is `LargeString`, not
   `LargeBinary`.
 
-**Join logic for missions + groups:**
-
-```js
-authoredMissions = await db.run(
-  SELECT.from(Missions)
-    .columns('slug', 'title', 'published', 'author_ID', 'modifiedAt')
-    .where({ author_ID: user.ID, published: true })
-);
-authoredGroups = await db.run(
-  SELECT.from(Groups)
-    .columns('slug', 'title', 'published', 'author_ID', 'modifiedAt')
-    .where({ author_ID: user.ID, published: true })
-);
-```
-
-Only `published: true` rows surface. Unpublished work stays internal.
+**Implementation note:** the list handler already does all the joins this
+endpoint needs. The simplest implementation extracts the per-advocate
+row shaper into a helper used by both handlers, then the new handler
+becomes "find the active advocate by slug, run that helper, return
+404 if missing".
 
 ### 2. Build-time roster fetcher — `scripts/fetch-advocates.ts`
 
@@ -171,11 +167,13 @@ New TypeScript script that:
 1. Calls `GET ${CAP_BASE_URL}/api/advocates` (same env var the rest of
    `scripts/parsers/cap.ts` uses; defaults to `http://localhost:4004`).
 2. For each advocate where `isActive: true`:
-   - Renders `bio` through `marked` (already in the project's deps; used
-     by tutorial parsers) into HTML.
-   - Sanitizes the rendered HTML using the project's existing sanitize
-     helper (`srv/lib/_sanitize-html.cjs` pattern, or `scripts/parsers/sanitize-html.ts`
-     if a build-side variant fits better).
+   - Renders `bio` through `markdown-it` (already in
+     [package.json](../../../package.json) at `^14.1.1`; used by tutorial
+     parsers) into HTML.
+   - Sanitizes the rendered HTML using
+     [scripts/parsers/sanitize-html.ts](../../../scripts/parsers/sanitize-html.ts)
+     — the same allow-list sanitizer the tutorial pipeline uses for
+     untrusted HTML.
    - Writes `hugo/content/developer-advocates/<slug>.md` with frontmatter:
      ```yaml
      ---
@@ -256,7 +254,7 @@ Server-renders the page from frontmatter:
     <h2>Topics</h2>
     <ul>
       {{ range . }}
-        <li><a class="adv-chip" href="/developer-advocates/?topic={{ .slug }}">{{ .label }}</a></li>
+        <li><a class="adv-chip" href="/developer-advocates/#topic={{ .slug }}">{{ .label }}</a></li>
       {{ end }}
     </ul>
   </section>
@@ -283,12 +281,12 @@ Meta tags emitted from frontmatter in `hugo/layouts/partials/head.html`
 {{ if $a.hasPhoto }}<meta property="og:image" content="https://developers.sap.com/api/advocates/{{ .Params.slug }}/photo">{{ end }}
 ```
 
-Topic chips link back to the directory page with a `?topic=<slug>` query
-that the existing
+Topic chips link back to the directory page with a `#topic=<slug>` URL
+hash. The existing
 [hugo-apps/src/advocates/composables/useAdvocateFilter.ts](../../../hugo-apps/src/advocates/composables/useAdvocateFilter.ts)
-already understands (it reads filter state from URL hash; we add query
-parameter parity in the same composable so direct links from profile
-chips work — see Task notes below).
+already reads filter state from URL hash, so no composable change is
+needed — the hash is consumed on initial mount and the matching topic
+filter applies automatically.
 
 ### 4. Vue island — `hugo-apps/src/advocate-profile/`
 
@@ -296,7 +294,7 @@ A new entry in
 [hugo-apps/vite.config.ts](../../../hugo-apps/vite.config.ts) that emits
 `hugo/static/js/advocate-profile.js`. Mounts on
 `#advocate-profile-mount`. Fetches `data-api` (the
-`/api/advocates/<slug>` route), then renders three sections:
+`/api/advocates/<slug>` route), then renders two sections:
 
 ```
 Tutorials authored (N)
@@ -304,14 +302,7 @@ Tutorials authored (N)
   ...
 
 Tutorials contributed to (N)
-  • ...
-
-Missions curated (N)
-  • Title — link to /build/missions/<slug>/   (existing mission page)
-  ...
-
-Groups curated (N)
-  • Title — link to /build/groups/<slug>/
+  • Title — link to /tutorials/<slug>/
   ...
 ```
 
@@ -358,9 +349,9 @@ button now points internally. We also drop `target="_blank"` from the
 | Step | Source | Trigger |
 | --- | --- | --- |
 | Build static page | `fetch-advocates.ts` → `/api/advocates` | `npm run fetch-tutorials`, CI `rebuild-content.yml` |
-| Live tutorial / mission / group list | `/api/advocates/<slug>` | Browser hits the page |
+| Live tutorial list | `/api/advocates/<slug>` | Browser hits the page |
 | Photo | `/api/advocates/<slug>/photo` | Browser renders `<img src>` (cached 24h) |
-| Bio render | `marked` + sanitizer at build time | Build step |
+| Bio render | `markdown-it` + sanitizer at build time | Build step |
 
 ## Failure modes
 
@@ -370,7 +361,7 @@ button now points internally. We also drop `target="_blank"` from the
 | New advocate created in admin, no rebuild yet | Page returns Hugo 404. Mitigation: admin dispatches `rebuild-content` from the admin UI; expected ~10 min wall-clock for full rebuild. The grid card still shows them inside 60s though, and the "View profile →" 404 is recoverable. |
 | Advocate deactivated since last rebuild | Static page still renders; live fetch 404s; island shows "no longer listed" banner. |
 | `/api/advocates/:slug` returns 5xx | Island renders no extra sections; static page is still complete. |
-| Bio is plain text (no markdown formatting) | `marked` returns plain `<p>` text. Links auto-detect via the markdown spec. Looks fine. |
+| Bio is plain text (no markdown formatting) | `markdown-it` returns plain `<p>` text. Auto-link extension picks up URLs. Looks fine. |
 | Bio contains script injection attempt | Sanitizer strips it at build time. The Hugo `safeHTML` only sees the sanitized form. |
 
 ## Testing
@@ -380,9 +371,8 @@ button now points internally. We also drop `target="_blank"` from the
 `test/unit/advocates/`:
 
 - `advocate-single-route.test.js` — new. SQLite seed of one advocate
-  + linked user + 3 tutorials + 1 mission + 1 group. Hit
-  `/api/advocates/<slug>` and verify shape, ETag, 304, 404 for unknown
-  slug, 404 for inactive.
+  + linked user + 3 tutorials. Hit `/api/advocates/<slug>` and verify
+  shape, ETag, 304, 404 for unknown slug, 404 for inactive.
 - `fetch-advocates.test.js` — new. Mock `/api/advocates`; assert
   `<slug>.md` files emitted with expected frontmatter, including
   rendered `bioHtml`. Test cache hit (no re-fetch when SHA matches).
@@ -397,7 +387,7 @@ button now points internally. We also drop `target="_blank"` from the
 `hugo-apps/src/advocate-profile/`:
 
 - `App.test.ts` — new. Vue Testing Library. Mock `fetch`, render with
-  one advocate including all sections, assert each list renders.
+  one advocate including both list sections, assert each renders.
 - `App.empty-state.test.ts` — fetch returns 404 → "no longer listed"
   banner.
 
@@ -405,7 +395,7 @@ button now points internally. We also drop `target="_blank"` from the
 
 - `advocate-profile-route.test.js` — new, gated by
   `ALLOW_HYBRID_WRITES=true`. Seeds an advocate + linked user + one
-  authored tutorial + one mission + one group on real HANA, hits
+  authored tutorial + one contributed tutorial on real HANA, hits
   `/api/advocates/<slug>`, asserts shape. Cleans up in `afterAll`
   using `__TEST__`-prefixed slugs.
 
@@ -437,35 +427,18 @@ button now points internally. We also drop `target="_blank"` from the
 
 - `hugo-apps/vite.config.ts` — new entry + bundle budget
 - `hugo-apps/src/advocates/components/AdvocateCard.vue` — repoint `profileUrl`
-- `hugo-apps/src/advocates/composables/useAdvocateFilter.ts` — accept
-  `?topic=<slug>` query parameter on initial load (for profile-page topic chip links)
-- `package.json` — add `fetch-advocates` script if separate; otherwise
-  wire into `fetch-tutorials` chain
+- `package.json` — wire `fetch-advocates` into the `fetch-tutorials` chain
 - `srv/routes/advocates-public.js` — new handler + route
 - `test/smoke/advocates.smoke.test.js` — three new assertions
 - `docs/developers/architecture/advocates.md` — document the new page + endpoint
 
 ## Open questions and assumptions
 
-1. **`marked` availability.** The build pipeline already uses
-   markdown parsing for tutorial steps. Confirm `marked` is in
-   `package.json` (or pick the same library the existing tutorial
-   parser uses). If not, add it as a `devDependency`.
-2. **Topic chip target URL.** Spec assumes
-   `/developer-advocates/?topic=<slug>` parses as a filter. The
-   existing filter composable reads from URL hash (`#topic=`);
-   adding query-parameter support is a small composable change
-   covered in the file list. Alternatively, link to
-   `/developer-advocates/#topic=<slug>` and accept the `#` in the URL.
-3. **Mission / Group "View" URLs.** The spec assumes
-   `/build/missions/<slug>/` and `/build/groups/<slug>/` work as
-   public URLs. Verify against the existing Hugo nav and the
-   `/build/navigator` data shape during implementation; adjust to
-   whatever the canonical public URL turns out to be.
-4. **og:image absolute URL.** Build-time emit hardcodes
+1. **og:image absolute URL.** Build-time emit hardcodes
    `https://developers.sap.com` in the meta tag. Make this a
-   Hugo site param so QA and DEV emit their own canonical hosts.
-5. **Photo size on profile page.** Spec calls for the 256×256 source
+   Hugo site param (`hugo.toml` `baseURL` or a custom `params.canonicalHost`)
+   so QA and DEV emit their own canonical hosts.
+2. **Photo size on profile page.** Spec calls for the 256×256 source
    displayed at ~200×200. If that's too small for a hero, we ship the
    same source and let CSS scale it; the existing `photo256` resize
    is the only artifact in HANA. A larger source variant is a
@@ -480,13 +453,12 @@ button now points internally. We also drop `target="_blank"` from the
   title, location, region, social-link icons — all in static HTML.
 - [ ] The bio renders as HTML (formatted markdown). Plain-text bios
   still display correctly.
-- [ ] After hydration, the page lists tutorials authored, tutorials
-  contributed to, missions curated, and groups curated, each linked
-  to the corresponding canonical URL.
+- [ ] After hydration, the page lists tutorials authored and
+  tutorials contributed to, each linked to `/tutorials/<slug>/`.
 - [ ] The existing roster grid card's "View profile →" button
   navigates to the internal page (not the first external profile).
 - [ ] Topic chips on the profile page link back to the directory
-  page with that topic pre-filtered.
+  page with that topic pre-filtered (via the `#topic=<slug>` hash).
 - [ ] `GET /api/advocates/__does-not-exist__` returns 404.
 - [ ] Deactivating an advocate hides their profile page on next
   `rebuild-content` run; visiting the stale URL between
