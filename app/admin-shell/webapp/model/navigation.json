@@ -2,38 +2,54 @@
   "selectedNavKey": "dashboard",
   "groups": [
     {
+      "key": "dashboard",
+      "title": "Dashboard",
+      "icon": "sap-icon://monitor-payments",
+      "requiredScope": "Tutorial.Author"
+    },
+    {
       "key": "content",
       "title": "Content",
       "icon": "sap-icon://folder-blank",
-      "expanded": true,
       "items": [
-        { "key": "dashboard", "title": "Tutorial Health", "icon": "sap-icon://activities" },
-        { "key": "events", "title": "Events", "icon": "sap-icon://calendar" },
-        { "key": "missions", "title": "Missions", "icon": "sap-icon://target-group" },
-        { "key": "groups", "title": "Groups", "icon": "sap-icon://group" },
-        { "key": "tutorials", "title": "Tutorials", "icon": "sap-icon://education" },
-        { "key": "tags", "title": "Tags", "icon": "sap-icon://tags" }
+        { "key": "events", "title": "Events" },
+        { "key": "missions", "title": "Missions" },
+        { "key": "groups", "title": "Groups" },
+        { "key": "tutorials", "title": "Tutorials", "requiredScope": "Tutorial.Author", "adminPath": "/admin/", "authorPath": "/author/" },
+        { "key": "tags", "title": "Tags", "requiredScope": "Tutorial.Author", "adminPath": "/admin/", "authorPath": "/author/" },
+        { "key": "categories", "title": "Categories" },
+        { "key": "concepts", "title": "Concepts" },
+        { "key": "advocates", "title": "Advocates" },
+        { "key": "alerts", "title": "Alerts", "icon": "sap-icon://notification-2" }
       ]
     },
     {
       "key": "rewards",
       "title": "Rewards",
       "icon": "sap-icon://present",
-      "expanded": true,
       "items": [
-        { "key": "accomplishments", "title": "Accomplishments", "icon": "sap-icon://competitor" },
-        { "key": "prizes", "title": "Prizes", "icon": "sap-icon://money-bills" }
+        { "key": "accomplishments", "title": "Accomplishments" },
+        { "key": "prizes", "title": "Prizes" }
+      ]
+    },
+    {
+      "key": "feedback",
+      "title": "Feedback",
+      "icon": "sap-icon://feedback",
+      "requiredScope": "Tutorial.Author",
+      "items": [
+        { "key": "feedbackList", "title": "All Submissions", "adminPath": "/admin/", "authorPath": "/author/" },
+        { "key": "feedbackDashboard", "title": "Dashboard", "adminPath": "/admin/", "authorPath": "/author/" }
       ]
     },
     {
       "key": "reporting",
       "title": "Reporting",
       "icon": "sap-icon://line-chart-time-axis",
-      "expanded": true,
       "items": [
-        { "key": "analyticsExternal", "title": "Analytics", "icon": "sap-icon://bar-chart" },
+        { "key": "analyticsExternal", "title": "Analytics", "icon": "sap-icon://bar-chart", "href": "/analytics-ui/", "target": "_self", "requiredScope": "Tutorial.Author" },
         { "key": "analytics", "title": "Completion analytics", "icon": "sap-icon://line-chart" },
-        { "key": "statistics", "title": "Statistics", "icon": "sap-icon://bar-chart" },
+        { "key": "statistics", "title": "Statistics" },
         { "key": "dataExport", "title": "Data Export", "icon": "sap-icon://download" }
       ]
     },
@@ -41,16 +57,38 @@
       "key": "system",
       "title": "System",
       "icon": "sap-icon://action-settings",
-      "expanded": true,
       "items": [
-        { "key": "operations", "title": "Operations", "icon": "sap-icon://action-settings" },
-        { "key": "pipelinelog", "title": "Pipeline Log", "icon": "sap-icon://pipeline-analysis" },
-        { "key": "joblog", "title": "Job Log", "icon": "sap-icon://technical-object" },
-        { "key": "joule", "title": "Joule Settings", "icon": "sap-icon://da" },
-        { "key": "accounts", "title": "Account Merges", "icon": "sap-icon://family-care" },
-        { "key": "changelog", "title": "Change Log", "icon": "sap-icon://history" },
-        { "key": "board", "title": "Board", "icon": "sap-icon://overview-chart" },
-        { "key": "privacy", "title": "Privacy", "icon": "sap-icon://shield" }
+        { "key": "operations", "title": "Featured Tasks" },
+        { "key": "pipelinelog", "title": "Pipeline Log" },
+        { "key": "joblog", "title": "Job Log" },
+        { "key": "accounts", "title": "Account Merges" },
+        { "key": "changelog", "title": "Change Log", "requiredScope": "Tutorial.Author", "adminPath": "/admin/", "authorPath": "/author/" },
+        { "key": "board", "title": "Board" },
+        { "key": "joule", "title": "Joule Settings" },
+        { "key": "knowledgeGraph", "title": "Knowledge Graph" },
+        { "key": "secrets", "title": "Secrets" },
+        { "key": "privacy", "title": "Privacy" },
+        { "key": "privacyAudit", "title": "Privacy Audit" }
+      ]
+    },
+    {
+      "key": "devtoberfestGroup",
+      "title": "Devtoberfest",
+      "icon": "sap-icon://flag",
+      "items": [
+        { "key": "devtoberfest", "title": "Devtoberfest Event Edit" }
+      ]
+    },
+    {
+      "key": "runtimeSettings",
+      "title": "Runtime Settings",
+      "icon": "sap-icon://settings",
+      "items": [
+        { "key": "uiEvents", "title": "UI Events" },
+        { "key": "search", "title": "Search" },
+        { "key": "navigator", "title": "Navigator" },
+        { "key": "display", "title": "Display" },
+        { "key": "tenant", "title": "Tenant" }
       ]
     }
   ]

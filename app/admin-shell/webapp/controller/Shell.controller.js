@@ -80,52 +80,20 @@ sap.ui.define([
     tenant: "Tenant"
   };
 
-  var NAV_GROUPS_STORAGE_KEY = "sap-tutorials-admin-nav-groups";
-  var NAV_GROUP_KEYS = ["content", "rewards", "feedback", "reporting", "system", "devtoberfest", "runtimeSettings"];
-
   return Controller.extend("sap.tutorials.admin.shell.controller.Shell", {
     onInit: function () {
       var oComponent = this.getOwnerComponent();
       var oViewModel = oComponent.getShellViewModel();
       var bExpanded = localStorage.getItem("sap-tutorials-admin-nav-expanded") !== "false";
       oViewModel.setProperty("/sideExpanded", bExpanded);
-      oViewModel.setProperty("/groupExpanded", this._loadGroupExpanded());
       oViewModel.setProperty("/userInitials", "");
       oViewModel.setProperty("/userName", "");
       oViewModel.setProperty("/userEmail", "");
       this.getView().setModel(oViewModel, "viewModel");
 
-      oViewModel.attachPropertyChange(this._onViewModelPropertyChange, this);
-
       oComponent.getRouter().attachRouteMatched(this._onRouteMatched, this);
       this._attachHashChangeDetection();
       this._loadUserProfile();
-    },
-
-    _loadGroupExpanded: function () {
-      var oDefault = {};
-      NAV_GROUP_KEYS.forEach(function (sKey) { oDefault[sKey] = true; });
-      try {
-        var sRaw = localStorage.getItem(NAV_GROUPS_STORAGE_KEY);
-        if (!sRaw) return oDefault;
-        var oStored = JSON.parse(sRaw);
-        NAV_GROUP_KEYS.forEach(function (sKey) {
-          if (typeof oStored[sKey] === "boolean") oDefault[sKey] = oStored[sKey];
-        });
-      } catch (e) { /* fall through to defaults */ }
-      return oDefault;
-    },
-
-    _onViewModelPropertyChange: function (oEvent) {
-      var sPath = oEvent.getParameter("path");
-      var sContextPath = oEvent.getParameter("context") ? oEvent.getParameter("context").getPath() : "";
-      var sFullPath = (sContextPath || "") + (sPath || "");
-      if (sFullPath.indexOf("/groupExpanded/") !== 0) return;
-      var oModel = this.getView().getModel("viewModel");
-      var oGroups = oModel.getProperty("/groupExpanded") || {};
-      try {
-        localStorage.setItem(NAV_GROUPS_STORAGE_KEY, JSON.stringify(oGroups));
-      } catch (e) { /* ignore quota errors */ }
     },
 
     onNavBack: function () {
@@ -249,21 +217,116 @@ sap.ui.define([
 
     _loadUserProfile: function () {
       var oViewModel = this.getView().getModel("viewModel");
+      var that = this;
       fetch("/auth/user", { credentials: "include" })
-        .then(function (res) {
-          if (!res.ok) return null;
-          return res.json();
-        })
+        .then(function (res) { return res.ok ? res.json() : null; })
         .then(function (user) {
-          if (!user || !user.authenticated) return;
+          if (!user || !user.authenticated) {
+            oViewModel.setProperty("/userRole", "anonymous");
+            that._applyRole("anonymous");
+            return;
+          }
           var sName = ((user.givenName || "") + " " + (user.familyName || "")).trim() || user.id || "";
           var sInitials = ((user.givenName || "")[0] || "") + ((user.familyName || "")[0] || "");
           if (!sInitials && user.id) sInitials = user.id[0];
           oViewModel.setProperty("/userName", sName);
           oViewModel.setProperty("/userEmail", user.email || "");
           oViewModel.setProperty("/userInitials", sInitials.toUpperCase());
+          // #617 — derive role from auth claims
+          var role = user.isAdmin  ? "admin"
+                   : user.isAuthor ? "author"
+                   : "anonymous";
+          oViewModel.setProperty("/userRole", role);
+          that._applyRole(role);
         })
-        .catch(function () {});
+        .catch(function () { that._applyRole("anonymous"); });
+    },
+
+    _applyRole: function (role) {
+      var oI18n = this.getView().getModel("i18n").getResourceBundle();
+      var oViewModel = this.getView().getModel("viewModel");
+      oViewModel.setProperty("/consoleTitle", oI18n.getText("consoleTitle." + role));
+      document.title = oI18n.getText("documentTitle." + role);
+
+      // #617 Task 14 — Publish role + per-tile service-path lookup so that tile
+      // components (Fiori Elements V4 AppComponents created lazily by the UI5
+      // router from declarative componentUsages) can rewrite their
+      // `mainService.uri` from /admin/ to /author/ at init time. We can't pass
+      // componentData through the router for declarative componentUsages, so
+      // we expose a small global resolver instead.
+      this._publishRoleGlobals(role);
+
+      if (role === "anonymous") {
+        // NoAccess route — added in Task 13. Until then, navigate may no-op silently.
+        var oRouter = this.getOwnerComponent().getRouter();
+        if (oRouter.getRoute("noAccess")) {
+          oRouter.navTo("noAccess");
+        }
+        return;
+      }
+      this._filterNavigationByRole(role);
+    },
+
+    _publishRoleGlobals: function (role) {
+      // Build a navKey -> servicePath map from navigation.json. For each entry
+      // with adminPath/authorPath, role=author resolves to authorPath, anything
+      // else resolves to adminPath. Entries without these fields are omitted
+      // and the tile falls back to its manifest default.
+      var oNavModel = this.getOwnerComponent().getModel("nav");
+      var data = oNavModel ? oNavModel.getData() : { groups: [] };
+      var oPathByNavKey = {};
+      var walk = function (entry) {
+        if (entry && entry.key && (entry.adminPath || entry.authorPath)) {
+          var sPath = (role === "author" && entry.authorPath)
+            ? entry.authorPath
+            : (entry.adminPath || "/admin/");
+          oPathByNavKey[entry.key] = sPath;
+        }
+        if (entry && entry.items) {
+          entry.items.forEach(walk);
+        }
+      };
+      (data.groups || []).forEach(walk);
+
+      window.__tutorialPlatform = {
+        userRole: role,
+        servicePathByNavKey: oPathByNavKey,
+        getServicePath: function (sNavKey) {
+          return oPathByNavKey[sNavKey] || null;
+        }
+      };
+    },
+
+    _filterNavigationByRole: function (role) {
+      var oNavModel = this.getOwnerComponent().getModel("nav");
+      var data = oNavModel.getData();
+
+      // Predicate for a leaf entry (or for testing a group's own scope).
+      var keepLeaf = function (entry) {
+        return !entry.requiredScope
+            || role === "admin"
+            || (role === "author" && entry.requiredScope === "Tutorial.Author");
+      };
+
+      // Walk groups: top-level leaves use keepLeaf; container groups are kept
+      // if the group itself satisfies the role (children inherit) OR if at
+      // least one child survives the leaf filter.
+      var filtered = (data.groups || []).map(function (g) {
+        if (!g.items) {
+          // top-level leaf (e.g. dashboard) — apply keepLeaf
+          return keepLeaf(g) ? g : null;
+        }
+        // If the group itself has requiredScope that satisfies the role, keep ALL children.
+        if (keepLeaf(g) && g.requiredScope) {
+          return g; // children inherit visibility from the matching group
+        }
+        // Otherwise, filter children; keep the group only if any child survives.
+        var keptChildren = g.items.filter(keepLeaf);
+        if (keptChildren.length === 0) return null;
+        return Object.assign({}, g, { items: keptChildren });
+      }).filter(function (g) { return g !== null; });
+
+      oNavModel.setData({ selectedNavKey: data.selectedNavKey, groups: filtered });
     },
 
     _attachHashChangeDetection: function () {
@@ -334,7 +397,8 @@ sap.ui.define([
 
       var oViewModel = this.getView().getModel("viewModel");
       var sPageTitle = NAV_KEY_TO_TITLE[sNavKey] || "";
-      var sHeader = sPageTitle ? "Admin Console — " + sPageTitle : "Admin Console";
+      var sConsoleTitle = oViewModel.getProperty("/consoleTitle") || "Admin Console";
+      var sHeader = sPageTitle ? sConsoleTitle + " — " + sPageTitle : sConsoleTitle;
       oViewModel.setProperty("/headerTitle", sHeader);
       this._wireAdminContextToHtml(sNavKey, sPageTitle);
     }

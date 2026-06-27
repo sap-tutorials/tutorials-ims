@@ -16,6 +16,8 @@ import { classifySeverity, daysUntil } from './jobs/secret-expiry-check.js';
 import { readSecret, writeSecret, deleteSecret } from './lib/credstore.js';
 import { invalidateSecret } from './lib/secret-resolver.js';
 import { scheduleRebuild } from './lib/rebuild-trigger.js';
+import { createAuditEmitter } from './lib/audit-event.js';
+import { handleRebuildAction } from './lib/rebuild-action-handler.js';
 import { cleanupChangeLog } from './jobs/cleanup.js';
 import { ensureDevtoberfestActiveFlagInvariant } from './lib/devtoberfest-active-flag.js';
 import { getTutorialSource } from './lib/content-store.js';
@@ -1402,14 +1404,7 @@ export default class AdminService extends cds.ApplicationService {
     } catch (err) {
       LOG.warn(`admin-service: audit-log binding unavailable (${err.message ?? err}); Secrets value ops will not be audited`);
     }
-    const auditEvent = async (action, data) => {
-      if (!_auditLog) return;
-      try {
-        await _auditLog.log('SecurityEvent', { data: { action, ...data } });
-      } catch (err) {
-        LOG.warn(`admin-service: audit log write failed for ${action} (${err.message ?? err})`);
-      }
-    };
+    const auditEvent = createAuditEmitter(_auditLog, LOG);
 
     // IMPORTANT 8: response-header helper using public API. req._.res is CAP
     // internal and not guaranteed stable across minor versions. Prefer req.req.res
@@ -1576,40 +1571,16 @@ export default class AdminService extends cds.ApplicationService {
 
     // ── Rebuild-button action (issue: rebuild-button) ──
     // Bound action on Tutorials. Resolves slug, audit-logs intent, dispatches
-    // a slug-targeted rebuild via scheduleRebuild's 60s debounce.
+    // a slug-targeted rebuild via scheduleRebuild's 60s debounce. Shared body
+    // lives in srv/lib/rebuild-action-handler.js so AuthorService can reuse it
+    // (#617) with only the `source` string differing.
     this.on('rebuildContent', 'Tutorials', async (req) => {
-      const tutorialId = req.params[0].ID;
-      const row = await SELECT.one
-        .from(Tutorials)
-        .columns('slug', 'title')
-        .where({ ID: tutorialId });
-      if (!row?.slug) {
-        return req.reject(400, 'Tutorial has no slug; cannot rebuild');
-      }
-
-      const userId = req.user?.id ?? 'anonymous';
-
-      // auditEvent is the closure-scoped helper at line 1234; it emits
-      // 'SecurityEvent' with { data: { action, ...rest } }. No-op when the
-      // audit-log binding is unavailable (mock-auth dev environment).
-      await auditEvent('TutorialRebuildTriggered', {
-        user: userId,
-        tutorialId,
-        slug: row.slug,
+      return handleRebuildAction(req, {
         source: 'admin-ui:tutorial-detail',
+        selectOne: (id) => SELECT.one.from(Tutorials).columns('slug', 'title').where({ ID: id }),
+        audit: auditEvent,
+        schedule: scheduleRebuild,
       });
-
-      await scheduleRebuild(`admin-ui:rebuild-button:${userId}`, {
-        mode: 'slug-targeted',
-        slug: row.slug,
-      });
-
-      return {
-        dispatched: true,
-        slug: row.slug,
-        debounced: true,
-        workflowUrl: 'https://github.com/sap-tutorials/tutorials-ims/actions/workflows/rebuild-content.yml',
-      };
     });
 
     // ── clearKhorosLink — admin on-behalf-of variant (issue #566) ──

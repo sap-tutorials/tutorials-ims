@@ -1,3 +1,5 @@
+import { useAuth } from '../composables/useAuth'
+
 export interface DimensionConfig { column: string; dataType: string }
 export interface MeasureConfig { column: string; aggregation: 'SUM' | 'AVG' | 'MIN' | 'MAX' | 'COUNT'; alias: string }
 export interface FilterConfig { column: string; operator: string; value: string | number }
@@ -64,7 +66,11 @@ export function buildApplyUrl(cfg: ChartConfigInput): string {
     parts.push(`top(${cfg.topN})`)
   }
   const apply = parts.join('/')
-  return `/admin/analytics/${cfg.entity}?$apply=${encodeURIComponent(apply)}`
+  // Role-aware base path: admins hit /admin/analytics/<Entity>, authors hit
+  // /author/<Entity>. The author surface exposes the same curated entities
+  // with the same $apply semantics (groupby/aggregate/orderby/top).
+  const { servicePath } = useAuth()
+  return `${servicePath.value}${cfg.entity}?$apply=${encodeURIComponent(apply)}`
 }
 
 function formatFilter(f: FilterConfig): string {

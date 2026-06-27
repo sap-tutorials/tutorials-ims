@@ -751,6 +751,7 @@ cds.on('served', async () => {
       givenName: user.attr?.given_name || user.attr?.givenName || '',
       familyName: user.attr?.family_name || user.attr?.familyName || '',
       isAdmin: user.is?.('Admin') === true,
+      isAuthor: user.is?.('Tutorial.Author') === true,
       khorosId,
       khorosLogin,
       khorosAvatarUrl,

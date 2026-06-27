@@ -1,0 +1,17 @@
+<mvc:View
+  controllerName="sap.tutorials.admin.shell.controller.NoAccess"
+  xmlns:mvc="sap.ui.core.mvc"
+  xmlns="sap.m"
+  xmlns:layout="sap.ui.layout">
+  <Page showHeader="false">
+    <content>
+      <layout:VerticalLayout class="sapUiLargeMargin" width="100%">
+        <Title text="{i18n>noAccess.heading}" level="H1" />
+        <Text text="{i18n>noAccess.body}" class="sapUiMediumMarginTop" />
+        <Link text="{i18n>noAccess.requestAccess}"
+              href="mailto:tutorials-admin@example.sap?subject=Request%20Tutorial.Author%20access"
+              class="sapUiMediumMarginTop" />
+      </layout:VerticalLayout>
+    </content>
+  </Page>
+</mvc:View>

@@ -15,6 +15,11 @@
         "uri": "/admin/",
         "type": "OData",
         "settings": { "odataVersion": "4.0" }
+      },
+      "authorService": {
+        "uri": "/author/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
       }
     }
   },
@@ -66,6 +71,15 @@
     "models": {
       "admin": {
         "dataSource": "adminService",
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": false
+        }
+      },
+      "author": {
+        "dataSource": "authorService",
         "settings": {
           "synchronizationMode": "None",
           "operationMode": "Server",
@@ -290,7 +304,8 @@
         { "name": "dashboard", "pattern": "", "target": "dashboardTarget" },
         { "name": "statistics", "pattern": "statistics", "target": "statisticsTarget" },
         { "name": "dataExport", "pattern": "dataExport", "target": "dataExportTarget" },
-        { "name": "privacy", "pattern": "privacy", "target": "privacyTarget" }
+        { "name": "privacy", "pattern": "privacy", "target": "privacyTarget" },
+        { "name": "noAccess", "pattern": "noAccess", "target": "noAccessTarget" }
       ],
       "targets": {
         "eventsTarget": {
@@ -497,6 +512,10 @@
         },
         "privacyTarget": {
           "viewName": "Privacy",
+          "viewLevel": 1
+        },
+        "noAccessTarget": {
+          "viewName": "NoAccess",
           "viewLevel": 1
         }
       },

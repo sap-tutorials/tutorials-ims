@@ -30,6 +30,11 @@ annotate ims.Secrets with @changelog;
 // scheduled / activated / changed wording on a banner.
 annotate ims.Alerts with @changelog: [title, severity, audience, startsAt, endsAt, active];
 
+// #617: track admin edits to tutorials so the author Changelog tile
+// surfaces real history. Used by AuthorService.TutorialChanges projection
+// (db/views.cds:AuthorTutorialChanges → filters Changes to AdminService.Tutorials).
+annotate ims.Tutorials with @changelog;
+
 // =========================================================================
 // Intentionally NOT @changelog-tracked — see issue #658.
 // =========================================================================
