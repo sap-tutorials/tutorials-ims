@@ -2,17 +2,29 @@ import { ref, computed } from 'vue'
 import type { ExplorePayload } from '../types'
 
 export function useGraphData() {
-  // Server-rendered HTML inlines the JSON; read synchronously.
-  const payload = ref<ExplorePayload | null>(window.__INITIAL_GRAPH__ ?? null)
+  // SSR / no-window guard
+  const initial = typeof window !== 'undefined' ? window.__INITIAL_GRAPH__ : null
+  const payload = ref<ExplorePayload | null>(initial ?? null)
+  const error = ref<Error | null>(null)
   const hasData = computed(() => !!payload.value)
 
-  // Fallback: if HTML wasn't server-rendered (e.g., dev server), fetch.
   async function fetchAsync() {
-    const r = await fetch('/graph/explore-data')
-    if (r.ok) payload.value = await r.json()
+    try {
+      const r = await fetch('/graph/explore-data')
+      if (!r.ok) {
+        error.value = new Error(`HTTP ${r.status}`)
+        return
+      }
+      payload.value = await r.json()
+    } catch (err) {
+      console.error('[explore] failed to fetch graph data', err)
+      error.value = err instanceof Error ? err : new Error(String(err))
+    }
   }
 
-  if (!payload.value) fetchAsync()
+  if (!payload.value && typeof window !== 'undefined') {
+    fetchAsync()
+  }
 
-  return { payload, hasData }
+  return { payload, hasData, error }
 }
