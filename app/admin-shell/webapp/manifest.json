@@ -15,6 +15,11 @@
         "uri": "/admin/",
         "type": "OData",
         "settings": { "odataVersion": "4.0" }
+      },
+      "authorService": {
+        "uri": "/author/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
       }
     }
   },
@@ -66,6 +71,15 @@
     "models": {
       "admin": {
         "dataSource": "adminService",
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": false
+        }
+      },
+      "author": {
+        "dataSource": "authorService",
         "settings": {
           "synchronizationMode": "None",
           "operationMode": "Server",
