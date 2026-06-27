@@ -14,6 +14,6 @@ export async function buildConceptsHandler(req, res) {
     res.json(payload);
   } catch (err) {
     log.error('failed to build /build/concepts payload', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Build concepts query failed' });
   }
 }
