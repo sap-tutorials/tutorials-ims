@@ -17,6 +17,12 @@ entity LearningJourneys : cuid, managed {
   url           : String(500);
   sourceId      : String(120);
   contentHash   : String(64);
+  // lastExtractedHash decouples upstream-data tracking (contentHash) from
+  // extraction-completion tracking (#708). The cron sets contentHash on
+  // upsert and lastExtractedHash only AFTER successful link persist. If the
+  // cron is killed between DELETE and INSERT, lastExtractedHash stays at the
+  // PREVIOUS extracted hash so the next cycle correctly re-extracts.
+  lastExtractedHash : String(64);
   firstSeenAt   : Timestamp @cds.on.insert: $now;
   lastSeenAt    : Timestamp;
   pinUntil      : Timestamp;
