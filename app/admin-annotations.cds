@@ -37,7 +37,20 @@ annotate AdminService.Events with {
               ]
             };
   eventType @Common.Label: 'Event Type'
-            @Common.ValueListWithFixedValues;
+            @Common.ValueListWithFixedValues
+            // Issue #715 — Value-list backing for the DDLB. Code list served by
+            // srv/admin-service.js → 'EventTypes'. With ValueListWithFixedValues
+            // + a DisplayOnly label parameter, Fiori Elements V4 renders the
+            // label ("Devtoberfest") in both the dropdown and the read-only
+            // list-report / OP cells, so no separate @Common.Text needed.
+            // Mirrors AdvocateRegions (app/admin-annotations.cds:2182).
+            @Common.ValueList: {
+              CollectionPath: 'EventTypes',
+              Parameters: [
+                { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: eventType, ValueListProperty: 'code'  },
+                { $Type: 'Common.ValueListParameterDisplayOnly',                              ValueListProperty: 'label' }
+              ]
+            };
 };
 
 annotate AdminService.Events with @UI: {

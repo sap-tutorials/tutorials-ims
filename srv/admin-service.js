@@ -150,6 +150,16 @@ export default class AdminService extends cds.ApplicationService {
     this.on('READ', 'TaskTypes', () => [
       { code: 'TUTORIAL' }, { code: 'GROUP' }, { code: 'CHECKPOINT' }
     ]);
+    // Issue #715 — EventTypes DDLB. Codes mirror the EventType enum in
+    // db/schema.cds:19 exactly (drift would surface as @assert.range
+    // rejection on write). Labels are display-only.
+    this.on('READ', 'EventTypes', () => [
+      { code: 'DEVTOBERFEST', label: 'Devtoberfest' },
+      { code: 'TECHED',       label: 'TechEd'       },
+      { code: 'CODEJAM',      label: 'CodeJam'      },
+      { code: 'CHALLENGE',    label: 'Challenge'    },
+      { code: 'OTHER',        label: 'Other'        },
+    ]);
     this.on('READ', 'AdvocateRegions', () => [
       { code: 'AMERICAS', label: 'Americas' },
       { code: 'EMEA',     label: 'EMEA' },

@@ -235,6 +235,10 @@ service AdminService {
   @readonly @cds.persistence.skip entity TaskStatuses     { key code : String(50); }
   @readonly @cds.persistence.skip entity MissionTypes     { key code : String(20); }
   @readonly @cds.persistence.skip entity TaskTypes        { key code : String(20); }
+  // Issue #715 — Event Type dropdown. Mirrors the EventType enum in
+  // db/schema.cds:19 (DEVTOBERFEST/TECHED/CODEJAM/CHALLENGE/OTHER); label
+  // surfaces a friendly display ("Devtoberfest") in place of the all-caps code.
+  @readonly @cds.persistence.skip entity EventTypes       { key code : String(20); label : String(40); }
   @readonly @cds.persistence.skip entity AdvocateRegions  { key code : String(16); label : String(40); }
 
   // Code list for AdvocateLinks.kind — mirrors the enum on db/advocates.cds.
