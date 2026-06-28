@@ -12,10 +12,11 @@ import { KG_IRI_PREFIXES } from '../../../srv/lib/kg-projection.js';
 const KG = 'https://developers.sap.com/kg/';
 
 describe('IRI prefix lockstep', () => {
-  const expectedTypes = ['tutorial', 'concept', 'mission', 'group', 'product', 'category', 'tag'];
+  const expectedTypes = ['tutorial', 'concept', 'mission', 'group', 'product', 'category', 'tag', 'learning-journey'];
 
   it('every prefix in KG_IRI_PREFIXES has a corresponding helper export', () => {
-    // Sanity: the registry covers exactly the 7 known entity types.
+    // Sanity: the registry covers exactly the 8 known entity types
+    // (7 Phase 1-3 types + learning-journey from Phase 4.1, #447).
     expect(Object.keys(KG_IRI_PREFIXES).sort()).toEqual([...expectedTypes].sort());
   });
 
@@ -39,5 +40,14 @@ describe('IRI prefix lockstep', () => {
 
   it('KG_IRI_PREFIXES is frozen (single source of truth — immutable)', () => {
     expect(Object.isFrozen(KG_IRI_PREFIXES)).toBe(true);
+  });
+});
+
+describe('iriLearningJourney helper (#447)', () => {
+  it('builds an IRI from the registry prefix', async () => {
+    const { iriLearningJourney } = await import('../../../srv/lib/kg-projection.js');
+    expect(iriLearningJourney('joule-across-landscape')).toBe(
+      `${KG}learning-journey/joule-across-landscape`
+    );
   });
 });

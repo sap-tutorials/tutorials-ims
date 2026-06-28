@@ -85,7 +85,17 @@ export const KG_IRI_PREFIXES = Object.freeze({
   product:  `${KG}product/`,
   category: `${KG}category/`,
   tag:      `${KG}tag/`,
+  'learning-journey': `${KG}learning-journey/`,
 });
+
+/**
+ * Phase 4 (#447) IRI helper for learning-journey content. Emission is
+ * deferred to Phase 4.1 Task 2 — the helper is registered now so the
+ * lockstep test and projection downstream wiring stay in sync.
+ */
+export function iriLearningJourney(slug) {
+  return KG_IRI_PREFIXES['learning-journey'] + slug;
+}
 
 /**
  * Escape a string literal per the N-Triples grammar. Returns the escaped

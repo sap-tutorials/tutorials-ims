@@ -563,6 +563,7 @@ export default cds.service.impl(async function () {
         prerequisitesOf: [],
         sharedConcepts:  [],
         whatToLearnNext: [],
+        otherResources:  [],  // Phase 4 chassis (#447). Empty in PR-1; PR-2 populates from journey overlap.
       };
     }
 
@@ -663,6 +664,7 @@ export default cds.service.impl(async function () {
       prerequisitesOf: enrich(ranked.prerequisitesOf),
       sharedConcepts:  enrich(ranked.sharedConcepts),
       whatToLearnNext: enrich(ranked.whatToLearnNext),
+      otherResources:  [],  // Phase 4 chassis (#447). Empty in PR-1; PR-2 populates from journey overlap.
     };
 
     // 11. (Cache-store would happen here — see _NEIGHBORHOOD_CACHE TODO.)
