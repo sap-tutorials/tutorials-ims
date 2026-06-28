@@ -1,11 +1,11 @@
 {
   "verdict": {
     "covers": [
-      { "slug": "cap-service-handlers", "confidence": 0.92 },
-      { "slug": "cds-modeling", "confidence": 0.85 },
-      { "slug": "hana-cloud-integration", "confidence": 0.78 },
-      { "slug": "btp-deployment", "confidence": 0.72 },
-      { "slug": "low-confidence-concept", "confidence": 0.45 }
+      { "slug": "cap-service-handlers", "name": "CAP service handlers", "confidence": 0.92 },
+      { "slug": "cds-modeling", "name": "CDS modeling", "confidence": 0.85 },
+      { "slug": "hana-cloud-integration", "name": "HANA Cloud integration", "confidence": 0.78 },
+      { "slug": "btp-deployment", "name": "BTP deployment", "confidence": 0.72 },
+      { "slug": "low-confidence-concept", "name": "Low confidence concept", "confidence": 0.45 }
     ],
     "journeyPrerequisites": [
       {

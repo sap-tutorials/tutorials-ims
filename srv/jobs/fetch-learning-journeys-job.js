@@ -14,30 +14,32 @@
 //    b. Pre-fetch K=25 (or K=15 for metadata tier) concepts as registry hint.
 //    c. Pre-fetch K=10 nearest journeys as prereq candidates.
 //    d. Call extractConceptsFromLearningJourney(...).
-//    e. Persist LearningJourneyConceptLinks + LearningJourneyPrerequisites.
-//    f. Mark lastExtractedHash = newHash. This MUST be the final step per
+//    e. Resolve covers via shared merge-on-write helper: exact-match, or
+//       embed + cosine-match to existing concepts (sim > threshold → merge),
+//       or mint a fresh Concept row.
+//    f. Persist LearningJourneyConceptLinks + LearningJourneyPrerequisites.
+//    g. Mark lastExtractedHash = newHash. This MUST be the final step per
 //       journey — if the cron crashes earlier, lastExtractedHash stays at
 //       its previous value and the next cycle re-extracts (#708 fix).
-//    g. (Deferred) Merge-on-write new concepts (#707).
 // 4. Log per-tier scrape counts, token spend, row counts.
 //
 // Budget: ChatSettings.learningJourneyExtractBudgetPerDay (default 500).
 //
-// IMPLEMENTATION NOTES (deferred items per the Task 2 plan):
+// IMPLEMENTATION NOTES:
 //
 //   1. `nearestConcepts` uses a simplified "ordered by modifiedAt desc"
 //      ranking rather than true embedding-similarity ranking. Acceptable
 //      for the 4.1 MVP per the spec. The embedding step is deliberately
-//      NOT computed (dead-code removal — opted out of `defaultEmbed` import).
-//      Upgrade to similarity-ranking is tracked as a follow-up issue.
+//      NOT computed (dead-code removal — opted out of the early defaultEmbed
+//      import). Upgrade to similarity-ranking is tracked as a follow-up issue.
 //
-//   2. Merge-on-write for new concepts is DEFERRED to follow-up issue #707:
-//      the current code skips covers whose concept slug isn't already in
-//      the registry (counted in summary.skippedUnknownConcept). Spec §2.1
-//      lists this as in-scope; deferring keeps the PR scoped tight (the
-//      merge path lives in srv/jobs/extract-concepts-job.js around the
-//      consolidator and is a separate, well-tested code path that needs
-//      to be factored out into a shared helper before reuse).
+//   2. Merge-on-write for new concepts is IMPLEMENTED (#707, post-4.1).
+//      Novel slugs found in result.covers are embedded via the shared
+//      srv/lib/kg-merge-on-write.js helper; matched to a near-duplicate
+//      ACTIVE concept above mergeSimThresholdExtract (default 0.85) or
+//      minted as a fresh Concept row. summary.mergedAtExtract +
+//      summary.mintedAtExtract + summary.skippedNoEmbed track per-cycle
+//      activity (replaced the legacy skippedUnknownConcept counter).
 //
 // Spec: docs/superpowers/specs/2026-06-28-447-phase4.1-learning-journeys.md §2.4
 // Pattern reference: srv/jobs/extract-concepts-job.js (Phase 1)
@@ -48,6 +50,12 @@ import { sapDevsClient } from '../lib/sap-devs-client.js';
 import { fetchJourneyBody } from '../lib/learning-journey-body-fetcher.js';
 import { extractConceptsFromLearningJourney } from '../lib/learning-journey-extract.js';
 import { defaultCallModel } from '../lib/code-check-llm.js';
+import { embed as defaultEmbed } from '../lib/embedding-client.js';
+import {
+  loadConceptRegistry,
+  resolveConceptCandidates,
+} from '../lib/kg-merge-on-write.js';
+import { resolveKnowledgeGraphSettings } from '../lib/runtime-config/kg-settings.js';
 
 const NAMESPACE_EXT = 'com.sap.developers.ims.external';
 const NAMESPACE_KG = 'com.sap.developers.ims';
@@ -55,6 +63,7 @@ const K_CONCEPTS = 25;
 const K_CONCEPTS_METADATA_TIER = 15;
 const K_PREREQS = 10;
 const DEFAULT_BUDGET = 500;
+const DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small';
 const LOG = cds.log('fetch-learning-journeys');
 
 function sha256Hex(s) {
@@ -64,9 +73,14 @@ function sha256Hex(s) {
 /**
  * Main entry point — invoked by srv/jobs/scheduler.js via runWithLock.
  *
+ * @param {object} [deps]
+ * @param {Function} [deps.embed]  embedding client (inputs[], model) → Float32Array[]
+ * @param {Function} [deps.extractFn]  override for the LLM extract call (test seam)
  * @returns {Promise<object>} summary object surfaced into pipeline log
  */
-export async function runFetchLearningJourneys() {
+export async function runFetchLearningJourneys(deps = {}) {
+  const embed = deps.embed ?? defaultEmbed;
+  const extractFn = deps.extractFn ?? extractConceptsFromLearningJourney;
   const db = cds.db ?? await cds.connect.to('db');
   const summary = {
     fetched: 0,
@@ -78,7 +92,10 @@ export async function runFetchLearningJourneys() {
     skippedNoChange: 0,
     coversWritten: 0,
     prereqsWritten: 0,
-    skippedUnknownConcept: 0,
+    // #707 merge-on-write counters (replaced legacy skippedUnknownConcept).
+    mergedAtExtract: 0,
+    mintedAtExtract: 0,
+    skippedNoEmbed: 0,
     promptTokens: 0,
     completionTokens: 0,
     errors: 0,
@@ -123,6 +140,25 @@ export async function runFetchLearningJourneys() {
   const { LearningJourneys, LearningJourneyConceptLinks, LearningJourneyPrerequisites } =
     cds.entities(NAMESPACE_EXT);
   const { Concepts } = cds.entities(NAMESPACE_KG);
+
+  // #707: load merge-on-write configuration + concept registry once per cycle.
+  // Same primitive as srv/jobs/extract-concepts-job.js — the per-cover loop
+  // below resolves slugs against this registry and mints (or merges) novel
+  // concepts via embedding-similarity matching.
+  let mergeThreshold = 0.85;
+  let embeddingModel = DEFAULT_EMBEDDING_MODEL;
+  try {
+    const kg = await resolveKnowledgeGraphSettings();
+    if (typeof kg?.mergeSimThresholdExtract === 'number') {
+      mergeThreshold = kg.mergeSimThresholdExtract;
+    }
+    const { ChatSettings } = cds.entities(NAMESPACE_KG);
+    const settings = await SELECT.one.from(ChatSettings).columns('embeddingModel');
+    if (settings?.embeddingModel) embeddingModel = settings.embeddingModel;
+  } catch (err) {
+    LOG.warn(`Could not resolve KG/Chat settings; using defaults: ${err.message}`);
+  }
+  const registry = await loadConceptRegistry(db);
 
   const existingJourneySlugs = new Set(
     (await SELECT.from(LearningJourneys).columns('slug')).map(r => r.slug)
@@ -238,7 +274,7 @@ export async function runFetchLearningJourneys() {
         .orderBy('modifiedAt desc')
         .limit(K_PREREQS);
 
-      const result = await extractConceptsFromLearningJourney({
+      const result = await extractFn({
         callModel: defaultCallModel,
         journey: j,
         body,
@@ -269,21 +305,61 @@ export async function runFetchLearningJourneys() {
       // needsExtraction check (gated on lastExtractedHash) re-fires.
       await DELETE.from(LearningJourneyConceptLinks).where({ journey_ID: journeyRow.ID });
 
-      for (const c of result.covers) {
-        const conceptRow = await SELECT.one
-          .from(Concepts)
-          .columns('ID')
-          .where({ slug: c.slug });
-        if (!conceptRow) {
-          // Merge-on-write deferred to follow-up issue #707.
-          summary.skippedUnknownConcept++;
-          continue;
+      // #707: resolve covers via shared merge-on-write helper. Novel slugs
+      // are embedded and either merged into a near-dup ACTIVE concept (sim
+      // > mergeThreshold) or minted as a fresh Concept row. Pending mints
+      // MUST be INSERTed BEFORE the link rows that FK-reference them.
+      const resolution = await resolveConceptCandidates({
+        candidates: result.covers,  // [{slug, name, confidence}]
+        registry,
+        embed,
+        embeddingModel,
+        mergeThreshold,
+        log: {
+          warn: (msg) => LOG.warn(`[${j.slug}] ${msg}`),
+          info: (msg) => LOG.info(`[${j.slug}] ${msg}`),
+        },
+      });
+      summary.mergedAtExtract += resolution.counters.merged;
+      summary.mintedAtExtract += resolution.counters.minted;
+      summary.skippedNoEmbed += resolution.counters.skippedNoEmbed;
+
+      // Mint any newly-resolved concepts FIRST so the link INSERTs have a
+      // valid FK target. Warm the in-memory registry so subsequent journeys
+      // in this cycle see the freshly-minted concepts.
+      for (const pc of resolution.pendingMints) {
+        await INSERT.into(Concepts).entries({
+          ID: pc.ID,
+          slug: pc.slug,
+          name: pc.name,
+          description: '',
+          embedding: pc.embeddingBuf,
+          status: 'ACTIVE',
+          extractionCount: 0,
+          lastSeenAt: now,
+        });
+        registry.bySlug.set(pc.slug, { ID: pc.ID, slug: pc.slug, name: pc.name });
+        registry.embeddings.set(pc.ID, pc.embeddingVec);
+      }
+
+      // Dedup by conceptId: two distinct LLM-emitted slugs can resolve to
+      // the same concept (one exact, one merged), but @assert.unique.journey
+      // Concept rejects duplicate (journey, concept) pairs. Keep the highest-
+      // confidence resolution per concept.
+      const bestByConceptId = new Map();
+      for (const r of resolution.resolved) {
+        const prior = bestByConceptId.get(r.conceptId);
+        if (!prior || r.confidence > prior.confidence) {
+          bestByConceptId.set(r.conceptId, r);
         }
+      }
+
+      for (const r of bestByConceptId.values()) {
         await INSERT.into(LearningJourneyConceptLinks).entries({
           journey_ID: journeyRow.ID,
-          concept_ID: conceptRow.ID,
+          concept_ID: r.conceptId,
           predicate: 'covers',
-          confidence: c.confidence,
+          confidence: r.confidence,
           extractedAt: now,
           modelVersion,
         });
