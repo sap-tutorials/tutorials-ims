@@ -64,6 +64,17 @@ describe('GET /graph/path (HTTP)', () => {
     expect(r.data.error).toMatch(/invalid slug/i);
   });
 
+  it('returns 400 when from === to (same-slug guard)', async () => {
+    let r;
+    try {
+      r = await project.get(`/graph/path?from=${FROM_SLUG}&to=${FROM_SLUG}`);
+    } catch (err) {
+      r = err.response;
+    }
+    expect(r.status).toBe(400);
+    expect(r.data.error).toMatch(/must differ/i);
+  });
+
   it('returns 200 with {from, to, steps} for a real slug pair', async () => {
     let r;
     try {

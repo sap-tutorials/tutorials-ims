@@ -32,6 +32,9 @@ export async function graphPathHandler(req, res) {
     if (!SLUG_RE.test(from) || !SLUG_RE.test(to)) {
       return res.status(400).json({ error: 'invalid slug format' });
     }
+    if (from === to) {
+      return res.status(400).json({ error: 'from and to must differ' });
+    }
 
     const db = await cds.connect.to('db');
     const steps = await findPath({ db, fromSlug: from, toSlug: to });

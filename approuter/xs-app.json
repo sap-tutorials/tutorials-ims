@@ -150,7 +150,7 @@
       "csrfProtection": false
     },
     {
-      "source": "^/graph/(neighborhood|Concepts|ConceptEdges|TutorialConceptLinks|pathBetween|conceptsForUser)(\\(.*\\))?(/.*)?(\\?.*)?$",
+      "source": "^/graph/(neighborhood|Concepts|ConceptEdges|TutorialConceptLinks|pathBetween|conceptsForUser|explore-data|path)(\\(.*\\))?(/.*)?(\\?.*)?$",
       "target": "/graph/$1$2$3$4",
       "destination": "srv-api",
       "authenticationType": "xsuaa",

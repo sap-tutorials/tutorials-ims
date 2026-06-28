@@ -16,6 +16,10 @@ vi.mock('sigma', () => ({
       return this
     }
     kill() {}
+    refresh() {}
+    getCamera() {
+      return { animatedReset: vi.fn(), animate: vi.fn() }
+    }
   }
 }))
 
@@ -33,6 +37,28 @@ vi.mock('graphology', () => ({
     }
     hasEdge(key: string) { return this.edges.has(key) }
     getNodeAttributes(id: string) { return this.nodes.get(id) }
+    forEachEdge(...args: any[]) {
+      // If 1 arg: callback over all edges. If 3 args: source, target, callback.
+      const callback = args[args.length - 1]
+      if (typeof callback !== 'function') return
+      if (args.length === 1) {
+        for (const [key, attrs] of this.edges) callback(key, attrs)
+      } else {
+        const [s, o, cb] = args
+        for (const [key, edge] of this.edges) {
+          if (edge.s === s && edge.o === o) {
+            cb(key, edge)
+          }
+        }
+      }
+    }
+    setEdgeAttribute(key: string, attr: string, value: any) {
+      const edge = this.edges.get(key)
+      if (edge) edge[attr] = value
+    }
+    getEdgeAttribute(key: string, attr: string) {
+      return this.edges.get(key)?.[attr]
+    }
   }
 }))
 
@@ -82,5 +108,24 @@ describe('ExploreGraph', () => {
       id: 't:a',
       node: expect.objectContaining({ id: 't:a', type: 'tutorial', label: 'A', slug: 'a' })
     }])
+  })
+
+  it('overlays path edges in highlight color when path prop is set', () => {
+    const pathFixture = {
+      nodes: [
+        { id: 't:a', type: 'tutorial' as const, label: 'A', slug: 'a' },
+        { id: 't:b', type: 'tutorial' as const, label: 'B', slug: 'b' },
+      ],
+      edges: [{ s: 't:a', p: 'teaches' as const, o: 't:b' }],
+      path: ['t:a', 't:b'],
+    }
+    mount(ExploreGraph, { props: pathFixture })
+    // The single edge connects t:a → t:b and is on the path; it should be
+    // recolored to the SAP-orange highlight color (#ff6b35) with size 3.
+    const graph = mockGraphInstances[0]
+    expect(graph.edges.size).toBe(1)
+    const [, attrs] = [...graph.edges.entries()][0]
+    expect(attrs.color).toBe('#ff6b35')
+    expect(attrs.size).toBe(3)
   })
 })

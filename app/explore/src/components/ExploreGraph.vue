@@ -124,7 +124,8 @@ function applyPathOverlay(path: string[] | null): void {
   // a "fit to subset of nodes" helper out of the box; an animatedReset()
   // re-centers on the full graph, which at least guarantees the path is
   // visible. Finer-grained fit (compute min/max x,y of path nodes and
-  // call camera.animate({x, y, ratio})) is a follow-up — see PR 6.
+  // call camera.animate({x, y, ratio})) is tracked as a follow-up — see
+  // issue #693.
   try {
     renderer?.getCamera?.()?.animatedReset?.()
   } catch {
