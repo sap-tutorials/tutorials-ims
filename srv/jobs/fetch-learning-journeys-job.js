@@ -26,12 +26,13 @@
 //      NOT computed (dead-code removal — opted out of `defaultEmbed` import).
 //      Upgrade to similarity-ranking is tracked as a follow-up issue.
 //
-//   2. Merge-on-write for new concepts is DEFERRED to a follow-up issue:
+//   2. Merge-on-write for new concepts is DEFERRED to follow-up issue #707:
 //      the current code skips covers whose concept slug isn't already in
-//      the registry. Spec §2.1 lists this as in-scope; deferring keeps
-//      the PR scoped tight (the merge path lives in
-//      srv/jobs/extract-concepts-job.js around the consolidator and is a
-//      separate, well-tested code path).
+//      the registry (counted in summary.skippedUnknownConcept). Spec §2.1
+//      lists this as in-scope; deferring keeps the PR scoped tight (the
+//      merge path lives in srv/jobs/extract-concepts-job.js around the
+//      consolidator and is a separate, well-tested code path that needs
+//      to be factored out into a shared helper before reuse).
 //
 // Spec: docs/superpowers/specs/2026-06-28-447-phase4.1-learning-journeys.md §2.4
 // Pattern reference: srv/jobs/extract-concepts-job.js (Phase 1)
@@ -237,7 +238,7 @@ export async function runFetchLearningJourneys() {
           .columns('ID')
           .where({ slug: c.slug });
         if (!conceptRow) {
-          // Merge-on-write deferred to follow-up issue.
+          // Merge-on-write deferred to follow-up issue #707.
           summary.skippedUnknownConcept++;
           continue;
         }
