@@ -56,11 +56,20 @@ onMounted(async () => {
       <div v-for="i in 4" :key="i" class="hb-events-band__skel"></div>
     </div>
 
-    <!-- Error / empty state -->
-    <div v-else-if="error || !events.length" class="hb-events-band__empty">
-      <p class="hb-events-band__empty-msg">
-        {{ error ? 'Could not load upcoming events.' : 'No upcoming events.' }}
-      </p>
+    <!-- Error state: fetch rejected / non-2xx -->
+    <div v-else-if="error" class="hb-events-band__empty">
+      <p class="hb-events-band__empty-msg">Could not load upcoming events.</p>
+      <a
+        href="https://community.sap.com/t5/sap-events/ct-p/events"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="hb-events-band__fallback-link"
+      >View all SAP events &rarr;</a>
+    </div>
+
+    <!-- Empty state: fetch succeeded but DB returned zero rows -->
+    <div v-else-if="!events.length" class="hb-events-band__empty">
+      <p class="hb-events-band__empty-msg">No upcoming events scheduled.</p>
       <a
         href="https://community.sap.com/t5/sap-events/ct-p/events"
         target="_blank"
