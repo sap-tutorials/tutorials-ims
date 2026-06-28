@@ -4,15 +4,18 @@ import { useGraphData } from './composables/useGraphData'
 import { useFilters } from './composables/useFilters'
 import { useTelemetry, dispatchPathDrawn } from './composables/useTelemetry'
 import { useSelectedNode } from './composables/useSelectedNode'
+import { useViewport } from './composables/useViewport'
 import ExploreHeader from './components/ExploreHeader.vue'
 import ExploreGraph from './components/ExploreGraph.vue'
 import NodeDetailPanel from './components/NodeDetailPanel.vue'
+import MobileTypedList from './components/MobileTypedList.vue'
 import { fetchPath } from './api/path'
 import type { ExploreNode } from './types'
 
 const { payload, hasData, error } = useGraphData()
 const { enabledNodeTypes, enabledPredicates, toggleNodeType, togglePredicate } = useFilters()
 const { selectedNode, selectNode } = useSelectedNode()
+const { isMobile } = useViewport()
 useTelemetry()
 
 // Active path overlay — null when no path is drawn. Stored as the ordered
@@ -99,30 +102,35 @@ async function onFindPath(p: { from: string; to: string }) {
     <p v-if="error" class="explore__error">Failed to load graph: {{ error.message }}</p>
     <p v-else-if="!hasData" class="explore__empty">Loading graph…</p>
     <template v-else>
-      <ExploreHeader
-        :allNodes="payload!.nodes"
-        :enabledNodeTypes="enabledNodeTypes"
-        :enabledPredicates="enabledPredicates"
-        @toggleNodeType="toggleNodeType"
-        @togglePredicate="togglePredicate"
-        @findPath="onFindPath"
-      />
-      <p v-if="pathError" class="explore__path-status" role="status">{{ pathError }}</p>
-      <div class="explore__body">
-        <div class="explore__canvas">
-          <ExploreGraph
-            :nodes="filteredNodes"
-            :edges="filteredEdges"
-            :path="pathNodeIds"
-            @nodeClick="onNodeClick"
+      <!-- Mobile fallback: typed list grouped by node type, no canvas/Sigma. -->
+      <MobileTypedList v-if="isMobile" :nodes="payload!.nodes" />
+      <!-- Desktop chrome: header + canvas + side panel. -->
+      <template v-else>
+        <ExploreHeader
+          :allNodes="payload!.nodes"
+          :enabledNodeTypes="enabledNodeTypes"
+          :enabledPredicates="enabledPredicates"
+          @toggleNodeType="toggleNodeType"
+          @togglePredicate="togglePredicate"
+          @findPath="onFindPath"
+        />
+        <p v-if="pathError" class="explore__path-status" role="status">{{ pathError }}</p>
+        <div class="explore__body">
+          <div class="explore__canvas">
+            <ExploreGraph
+              :nodes="filteredNodes"
+              :edges="filteredEdges"
+              :path="pathNodeIds"
+              @nodeClick="onNodeClick"
+            />
+          </div>
+          <NodeDetailPanel
+            class="explore__side"
+            :selectedNode="selectedNode"
+            :edges="payload!.edges"
           />
         </div>
-        <NodeDetailPanel
-          class="explore__side"
-          :selectedNode="selectedNode"
-          :edges="payload!.edges"
-        />
-      </div>
+      </template>
     </template>
   </main>
 </template>
