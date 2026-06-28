@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useGraphData } from './composables/useGraphData'
 import { useFilters } from './composables/useFilters'
 import { useTelemetry, dispatchPathDrawn } from './composables/useTelemetry'
@@ -26,6 +26,14 @@ const pathNodeIds = ref<string[] | null>(null)
 // (button state lives in ExploreHeader; we expose this for future use and
 // to make the "in-flight" state observable in tests).
 const pathError = ref<string | null>(null)
+
+// Clear path overlay state when viewport mode changes so we don't
+// leak stale state across desktop ↔ mobile transitions. Without this,
+// a path drawn on desktop silently re-renders after a mobile detour.
+watch(isMobile, () => {
+  pathNodeIds.value = null
+  pathError.value = null
+})
 
 // Apply filters before passing to the graph. Edges keep an edge only when both
 // endpoints survive the node-type filter AND the predicate itself is enabled.

@@ -240,6 +240,23 @@ at deploy time) or for the smoke test's empty-env skips (working as
 designed — they short-circuit when there's no slug-bearing edge to
 walk).
 
+## Post-deploy checklist
+
+This doc was committed BEFORE the live DEV deploy. The following sections contain `TBD post-deploy` placeholders that must be filled in once soak observations are available:
+
+- [ ] **Telemetry baseline** (after ≥1h of organic browsing) — fill in counts for `kg.concept.viewed`, `kg.concept.tutorial_clicked`, `kg.explore.viewed`, `kg.explore.node_clicked`, `kg.explore.node_navigated`, `kg.explore.search`, `kg.explore.filter`, `kg.explore.path_drawn`.
+- [ ] **Cron health** (48h window) — fill in graphRebuild runs/failures + the predicate-count breakdown from GraphMetadata.
+- [ ] **HTTP health** (48h window) — fill in p50/p95 latencies + cache HIT ratio for `/graph/explore-data`.
+- [ ] **Manual probe** — confirm one published concept renders at `/concepts/<slug>/` and one path overlays correctly at `/explore/`.
+
+Verify zero TBDs remain with:
+
+```bash
+grep -c 'TBD post-deploy' docs/superpowers/done/2026-06-27-knowledge-graph-phase3-shipped.md
+```
+
+Expected: `0` once all four sections are filled in.
+
 ## Lessons captured
 
 - **Static-data-island pattern worked.** Inlining `/graph/explore-data`'s
