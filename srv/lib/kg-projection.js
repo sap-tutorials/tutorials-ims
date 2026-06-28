@@ -301,6 +301,17 @@ export async function* projectFromFixtures(fixtures, batchSize = 5000) {
     }
   }
 
+  // Section 8 — Phase 4.2 (#447) blog-post triples. Same optional shape
+  // as section 7: when the fixture omits blog posts, emission is skipped.
+  const { posts: blogPosts = [], links: blogPostLinks = [] } =
+    (fixtures && fixtures.blogPosts) || {};
+  if (blogPosts.length > 0) {
+    for (const t of buildBlogPostTriples({ posts: blogPosts, links: blogPostLinks })) {
+      buffer.push(t);
+      if (buffer.length >= batchSize) { yield buffer; buffer = []; }
+    }
+  }
+
   if (buffer.length > 0) yield buffer;
 }
 
@@ -403,6 +414,57 @@ export function buildLearningJourneyTriples({ journeys = [], links = [], prereqs
  */
 function iriLearningJourneyNoBrackets(slug) {
   return iriLearningJourney(slug);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4.2 (#447) — Blog Post triple builder
+// ---------------------------------------------------------------------------
+
+const KG_BLOG_POST = `${KG}BlogPost`;
+
+/**
+ * Emit N-Triples for BlogPosts + their concept-discusses edges. Gated by
+ * `isWithinTTL('blog-post', lastSeenAt)` so stale rows silently drop.
+ * Triples for links whose endpoints aren't visible (TTL-filtered or not
+ * present in the input) are also silently dropped.
+ *
+ * @param {object} args
+ * @param {Array<{slug, title, postedAt, authorName, lastSeenAt}>} args.posts
+ * @param {Array<{postSlug, conceptSlug, predicate?}>} args.links
+ * @returns {string[]} N-Triples
+ */
+export function buildBlogPostTriples({ posts = [], links = [] } = {}) {
+  const triples = [];
+  const visiblePostSlugs = new Set();
+
+  for (const p of posts) {
+    if (!p || !p.slug) continue;
+    if (!isWithinTTL('blog-post', p.lastSeenAt)) continue;
+    visiblePostSlugs.add(p.slug);
+    const subj = iriBlogPost(p.slug);
+    triples.push(triple(iri(subj), iri(RDF_TYPE), iri(KG_BLOG_POST)));
+    triples.push(literalTriple(iri(subj), iriPredicate('title'), p.title ?? ''));
+    triples.push(literalTriple(iri(subj), iriPredicate('slug'), p.slug));
+    if (p.postedAt != null) {
+      triples.push(literalTriple(iri(subj), iriPredicate('postedAt'),
+        p.postedAt instanceof Date ? p.postedAt.toISOString() : String(p.postedAt)));
+    }
+    if (p.authorName) {
+      triples.push(literalTriple(iri(subj), iriPredicate('author'), p.authorName));
+    }
+  }
+
+  for (const link of links) {
+    if (!link || !link.postSlug || !link.conceptSlug) continue;
+    if (!visiblePostSlugs.has(link.postSlug)) continue;
+    triples.push(triple(
+      iri(iriBlogPost(link.postSlug)),
+      iriPredicate(link.predicate || 'discusses'),
+      iriConcept(link.conceptSlug)
+    ));
+  }
+
+  return triples;
 }
 
 // ---------------------------------------------------------------------------
@@ -625,6 +687,41 @@ async function loadFixtures(db) {
     );
   }
 
+  // Phase 4.2 (#447) — Blog posts + concept-discusses link rows. Same best-
+  // effort pattern as Learning Journeys above.
+  let blogPosts = { posts: [], links: [] };
+  try {
+    const { BlogPosts, BlogPostConceptLinks } = cds.entities('com.sap.developers.ims.external');
+    const postRows = await db.run(
+      SELECT.from(BlogPosts).columns('ID', 'slug', 'title', 'postedAt', 'authorName', 'lastSeenAt')
+    );
+    const postSlugById = new Map(postRows.map((p) => [p.ID, p.slug]));
+
+    const linkRows = await db.run(
+      SELECT.from(BlogPostConceptLinks).columns('post_ID', 'concept_ID', 'predicate')
+    );
+    const blogLinks = [];
+    for (const l of linkRows) {
+      const postSlug = postSlugById.get(l.post_ID);
+      const conceptSlug = conceptById.get(l.concept_ID);
+      if (!postSlug || !conceptSlug) continue;
+      blogLinks.push({ postSlug, conceptSlug, predicate: l.predicate || 'discusses' });
+    }
+
+    blogPosts = {
+      posts: postRows.map((p) => ({
+        slug: p.slug, title: p.title, postedAt: p.postedAt,
+        authorName: p.authorName, lastSeenAt: p.lastSeenAt,
+      })),
+      links: blogLinks,
+    };
+  } catch (err) {
+    const log = cds.log('kg-projection');
+    log.warn(
+      `kg-projection: BlogPosts load failed; blog-post triples will be empty. err=${err && err.message ? err.message : String(err)}`
+    );
+  }
+
   return {
     concepts: concepts.map((c) => ({
       slug: c.slug, name: c.name, description: c.description, status: c.status,
@@ -635,5 +732,6 @@ async function loadFixtures(db) {
     missions: missionsOut,
     coCompletions,
     learningJourneys,
+    blogPosts,
   };
 }
