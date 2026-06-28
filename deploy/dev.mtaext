@@ -21,3 +21,11 @@ modules:
     properties:
       XS_APP_LOG_LEVEL: debug
       DEBUG: "xs-approuter:*"
+      # Bearer-token gate on POST /admin/rebuild — consumed by rebuild-content.yml
+      # workflow's final "Push content to AppRouter" step. Resolved by envsubst
+      # against deploy.yml's $REBUILD_API_KEY env (line ~38). qa.mtaext +
+      # prod.mtaext already inject; dev was the missing leg of the triple
+      # (surfaced by rebuild-content run 28324486225).
+      REBUILD_API_KEY: ${REBUILD_API_KEY}
+      # Self-URL of this approuter app. Same envsubst plumbing as REBUILD_API_KEY.
+      APPROUTER_URL: ${APPROUTER_URL}
