@@ -68,6 +68,20 @@ service KnowledgeGraphService @(path : '/graph') {
     slug  : String;
     title : String;
   }
+  // OtherResource — chassis-level wire shape for the "other resources"
+  // sidebar rail (issue #447 Phase 4). PR-1 wires the empty contract; PR-2
+  // (learning journeys) populates it; 4.3-4.6 widen `type` to news/videos/
+  // samples/discovery/resources. The shape unions the columns each
+  // sub-phase needs — fields not relevant to a given type are left null.
+  type OtherResource {
+    type          : String(20);   // 'learning-journey' | future sub-phase types
+    slug          : String;
+    title         : String;
+    url           : String;
+    level         : String;
+    durationHours : Decimal(5, 2);
+    overlapCount  : Integer;
+  }
   type NeighborhoodResult {
     tutorial        : TutorialInfo;
     graphVersion    : String;
@@ -75,6 +89,7 @@ service KnowledgeGraphService @(path : '/graph') {
     prerequisitesOf : array of TutorialRef;
     sharedConcepts  : array of TutorialRef;
     whatToLearnNext : array of TutorialRef;
+    otherResources  : array of OtherResource;  // Phase 4 chassis (#447); empty in PR-1, populated in PR-2.
   }
   type ConceptCoverage {
     learned : array of ConceptRef;
