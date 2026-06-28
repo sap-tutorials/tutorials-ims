@@ -105,6 +105,11 @@ import "@ui5/webcomponents-icons/dist/person-placeholder.js";
 import "@ui5/webcomponents-icons/dist/dark-mode.js";
 import "@ui5/webcomponents-icons/dist/light-mode.js";
 import "@ui5/webcomponents-icons/dist/course-book.js";
+// Knowledge Graph shellbar nav item — icon="org-chart" added in #726 KG
+// public reader cutover. Caught by the postbuild check-icon-imports guard
+// (#713 wired it into CI). Without this import the menu row's glyph slot
+// is allocated but never paints.
+import "@ui5/webcomponents-icons/dist/org-chart.js";
 import "@ui5/webcomponents-icons/dist/flight.js";
 import "@ui5/webcomponents-icons/dist/sys-monitor.js";
 import "@ui5/webcomponents-icons/dist/complete.js";
