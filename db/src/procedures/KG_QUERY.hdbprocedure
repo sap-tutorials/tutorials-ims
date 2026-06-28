@@ -14,10 +14,12 @@
 --   Issue:  #533
 --
 -- DISPATCH TABLE
---   :query_name  'NEIGHBORHOOD'      – concepts/tutorials adjacent to a tutorial
---   :query_name  'PATH_BETWEEN'      – (Phase 2 stub) shortest path between two tutorials
---   :query_name  'CONCEPTS_FOR_USER' – (Phase 2 stub) concepts learned by a user
---   :query_name  <anything else>     – SIGNAL KG_UNKNOWN_QUERY (10005)
+--   :query_name  'NEIGHBORHOOD'        – concepts/tutorials adjacent to a tutorial
+--   :query_name  'PATH_BETWEEN'        – (Phase 2 stub) shortest path between two tutorials
+--   :query_name  'CONCEPTS_FOR_USER'   – (Phase 2 stub) concepts learned by a user
+--   :query_name  'EXPLORE_GRAPH_BULK'  – (Phase 3, #446) all edges in the graph as
+--                                        (s, p, o, sName, oName) rows for /graph/explore-data
+--   :query_name  <anything else>       – SIGNAL KG_UNKNOWN_QUERY (10005)
 --
 -- PARAMETERS
 --   query_name        – one of the three names above
@@ -225,6 +227,44 @@ BEGIN
       from_clause || CHAR(10) ||
       'WHERE { ?placeholder ?p ?o }' || CHAR(10) ||
       'LIMIT 0';
+
+  ELSEIF :query_name = 'EXPLORE_GRAPH_BULK' THEN
+
+    -- EXPLORE_GRAPH_BULK — return all (subject, predicate, object) triples
+    -- in the named graph that participate in entity-to-entity edges, with
+    -- the optional kg:name literal for the subject and object resolved into
+    -- the same row when available.
+    --
+    -- WHY: the /graph/explore-data endpoint (issue #446 PR 4/9) needs the
+    -- complete graph as JSON for client-side Sigma.js rendering. The
+    -- projection in srv/lib/kg-projection.js emits only Concepts with an
+    -- explicit rdf:type; Tutorials/Missions/Groups/Products/Categories/Tags
+    -- carry no type triple — their entity-type is encoded in the IRI prefix
+    -- (e.g. .../tutorial/X). The JS helper (srv/lib/kg-explore-data.js)
+    -- derives the type from the IRI prefix; this query just returns
+    -- (s, p, o) with optional names.
+    --
+    -- Filter: skip the literal-emitting predicates (kg:slug, kg:name) and
+    -- the rdf:type triple — those carry no graph-shape information that the
+    -- explore UI needs. Keep only the 9 edge predicates.
+    --
+    -- p1/p2/p3 are unused for this query name. No validation needed beyond
+    -- the dispatch — the body has no caller-supplied substitution.
+    sparql :=
+      'PREFIX kg: <https://developers.sap.com/kg/>' || CHAR(10) ||
+      'PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>' || CHAR(10) ||
+      'SELECT ?s ?p ?o ?sName ?oName' || CHAR(10) ||
+      from_clause || CHAR(10) ||
+      'WHERE {' || CHAR(10) ||
+      '  ?s ?p ?o .' || CHAR(10) ||
+      '  FILTER(?p IN (' || CHAR(10) ||
+      '    kg:teaches, kg:requires, kg:relatedTo, kg:extends,' || CHAR(10) ||
+      '    kg:partOf, kg:taggedWith, kg:aboutProduct,' || CHAR(10) ||
+      '    kg:inCategory, kg:coCompletedWith' || CHAR(10) ||
+      '  ))' || CHAR(10) ||
+      '  OPTIONAL { ?s kg:name ?sName }' || CHAR(10) ||
+      '  OPTIONAL { ?o kg:name ?oName }' || CHAR(10) ||
+      '}';
 
   ELSE
 

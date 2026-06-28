@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Knowledge Graph Explorer · SAP Tutorials</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="__META_DESCRIPTION__" />
+  <link rel="stylesheet" href="/explore-ui/assets/__BUNDLE_CSS__" />
+</head>
+<body>
+  <div id="app"></div>
+  <script type="application/json" id="initial-graph">__INITIAL_GRAPH_JSON__</script>
+  <script>
+    try {
+      var el = document.getElementById('initial-graph')
+      window.__INITIAL_GRAPH__ = JSON.parse(el.textContent || el.innerText)
+    } catch (e) {
+      // Fall through; the Vue app will fetch /graph/explore-data instead.
+    }
+  </script>
+  <script type="module" src="/explore-ui/main-__BUNDLE_HASH__.js"></script>
+</body>
+</html>

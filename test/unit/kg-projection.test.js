@@ -321,11 +321,15 @@ describe('projectFromFixtures — batching', () => {
 // ---------------------------------------------------------------------------
 
 describe('projectFromFixtures — coCompletedWith', () => {
-  it('emits :coCompletedWith Tutorial → Tutorial for each entry in the map', async () => {
+  it('emits :coCompletedWith Tutorial → Tutorial for each entry above the K=10 floor', async () => {
+    // Phase 3 (issue #446) added k-anonymity at the projection layer
+    // (spec §2.3). Bump scores ≥ 10 so the gate keeps the edges; the
+    // separate test/unit/srv/kg-projection-k-anonymity.test.js exercises
+    // the drop side.
     const fixtures = {
       ...EMPTY_FIXTURES,
       coCompletions: {
-        a: [{ slug: 'b', score: 5 }, { slug: 'c', score: 3 }],
+        a: [{ slug: 'b', score: 15 }, { slug: 'c', score: 12 }],
       },
     };
     const { triples } = await collectAll(fixtures);

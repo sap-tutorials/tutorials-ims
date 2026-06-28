@@ -167,6 +167,25 @@ describe('kgQuery validation', () => {
       .resolves.toBeDefined();
   });
 
+  it('accepts EXPLORE_GRAPH_BULK with empty params (no required keys)', async () => {
+    await expect(kgQuery({ db: stubDb, queryName: 'EXPLORE_GRAPH_BULK', params: {} }))
+      .resolves.toBeDefined();
+  });
+
+  it('rejects EXPLORE_GRAPH_BULK with unexpected keys', async () => {
+    await expect(kgQuery({ db: stubDb, queryName: 'EXPLORE_GRAPH_BULK', params: { extra: 'foo' } }))
+      .rejects.toThrow(/unexpected keys: extra/);
+  });
+
+  it('accepts EXPLORE_GRAPH_BULK with overrideGraphIri (hybrid-test use case)', async () => {
+    await expect(kgQuery({
+      db: stubDb,
+      queryName: 'EXPLORE_GRAPH_BULK',
+      params: {},
+      overrideGraphIri: 'urn:test:g',
+    })).resolves.toBeDefined();
+  });
+
   it('accepts valid overrideGraphIri', async () => {
     await expect(kgQuery({
       db: stubDb,
@@ -269,8 +288,8 @@ describe('__TESTING__ exports', () => {
     expect(Object.isFrozen(__TESTING__.QUERY_PARAM_SHAPES)).toBe(true);
   });
 
-  it('QUERY_PARAM_SHAPES has the three expected keys', () => {
-    expect(Object.keys(__TESTING__.QUERY_PARAM_SHAPES)).toEqual(['NEIGHBORHOOD', 'PATH_BETWEEN', 'CONCEPTS_FOR_USER']);
+  it('QUERY_PARAM_SHAPES has the four expected keys', () => {
+    expect(Object.keys(__TESTING__.QUERY_PARAM_SHAPES)).toEqual(['NEIGHBORHOOD', 'PATH_BETWEEN', 'CONCEPTS_FOR_USER', 'EXPLORE_GRAPH_BULK']);
   });
 
   it('each QUERY_PARAM_SHAPES entry is frozen', () => {

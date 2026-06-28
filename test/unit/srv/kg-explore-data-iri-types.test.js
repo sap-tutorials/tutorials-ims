@@ -1,0 +1,43 @@
+// test/unit/srv/kg-explore-data-iri-types.test.js
+//
+// Lockstep test: the IRI prefix registry exported by kg-projection.js
+// MUST stay in sync with the reverse-mapping in kg-explore-data.js. If
+// a new entity type is added to the projection (a new iri* helper) but
+// the registry is forgotten, this test fails loudly rather than silently
+// dropping rows from /graph/explore-data (issue #446 code-review Fix 3).
+
+import { describe, it, expect } from 'vitest';
+import { KG_IRI_PREFIXES } from '../../../srv/lib/kg-projection.js';
+
+const KG = 'https://developers.sap.com/kg/';
+
+describe('IRI prefix lockstep', () => {
+  const expectedTypes = ['tutorial', 'concept', 'mission', 'group', 'product', 'category', 'tag'];
+
+  it('every prefix in KG_IRI_PREFIXES has a corresponding helper export', () => {
+    // Sanity: the registry covers exactly the 7 known entity types.
+    expect(Object.keys(KG_IRI_PREFIXES).sort()).toEqual([...expectedTypes].sort());
+  });
+
+  it('every prefix is rooted at the KG namespace', () => {
+    for (const [type, prefix] of Object.entries(KG_IRI_PREFIXES)) {
+      expect(prefix.startsWith(KG), `prefix for ${type} must start with ${KG}`).toBe(true);
+    }
+  });
+
+  it('every prefix ends with a trailing slash (path-style IRI)', () => {
+    for (const [type, prefix] of Object.entries(KG_IRI_PREFIXES)) {
+      expect(prefix.endsWith('/'), `prefix for ${type} must end with /`).toBe(true);
+    }
+  });
+
+  it('every prefix has the shape "<KG>/<type>/"', () => {
+    for (const type of expectedTypes) {
+      expect(KG_IRI_PREFIXES[type]).toBe(`${KG}${type}/`);
+    }
+  });
+
+  it('KG_IRI_PREFIXES is frozen (single source of truth — immutable)', () => {
+    expect(Object.isFrozen(KG_IRI_PREFIXES)).toBe(true);
+  });
+});

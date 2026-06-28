@@ -66,6 +66,19 @@
       "authenticationType": "xsuaa"
     },
     {
+      "source": "^/explore-ui/(.*)$",
+      "target": "/explore-ui/$1",
+      "localDir": "static",
+      "authenticationType": "none"
+    },
+    {
+      "source": "^/explore/?$",
+      "target": "/explore/",
+      "destination": "srv-api",
+      "authenticationType": "none",
+      "csrfProtection": false
+    },
+    {
       "source": "^/admin-ui/(.*)$",
       "target": "/admin-ui/$1",
       "localDir": "static",
@@ -137,7 +150,7 @@
       "csrfProtection": false
     },
     {
-      "source": "^/graph/(neighborhood|Concepts|ConceptEdges|TutorialConceptLinks|pathBetween|conceptsForUser)(\\(.*\\))?(/.*)?(\\?.*)?$",
+      "source": "^/graph/(neighborhood|Concepts|ConceptEdges|TutorialConceptLinks|pathBetween|conceptsForUser|explore-data|path)(\\(.*\\))?(/.*)?(\\?.*)?$",
       "target": "/graph/$1$2$3$4",
       "destination": "srv-api",
       "authenticationType": "xsuaa",
