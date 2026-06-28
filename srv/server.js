@@ -8,6 +8,7 @@ import { buildCatalogHandler } from './lib/build-catalog.js';
 import { buildConceptsHandler } from './lib/build-concepts.js';
 import { exploreDataHandler } from './lib/build-explore-data.js';
 import { exploreHandler } from './lib/explore-route.js';
+import { graphPathHandler } from './lib/graph-path-route.js';
 import { coCompletionsHandler } from './lib/co-completion.js';
 import { recommendationsHandler } from './handlers/recommendations.js';
 import { navigatorCatalogHandler, invalidateNavigatorCache } from './lib/navigator-catalog.js';
@@ -186,6 +187,7 @@ cds.on('bootstrap', (app) => {
   app.get('/build/catalog', buildCatalogHandler);
   app.get('/build/concepts', buildConceptsHandler);
   app.get('/graph/explore-data', exploreDataHandler);
+  app.get('/graph/path', graphPathHandler);
   app.get('/explore/?', exploreHandler);
   app.get('/build/co-completions', coCompletionsHandler);
   app.get('/build/mission/:slug', missionDetailHandler);

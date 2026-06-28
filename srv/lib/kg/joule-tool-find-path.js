@@ -10,14 +10,13 @@
 //
 // Spec: docs/superpowers/specs/2026-06-22-issue-445-joule-pathbetween-design.md
 
-import { kgQuery, SparqlTimeoutError } from '../kg-sparql-client.js'
+import { SparqlTimeoutError } from '../kg-sparql-client.js'
+import { findPath } from '../kg-path.js'
 import { getConceptsForUser } from './concepts-for-user.js'
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-const TUTORIAL_IRI_PREFIX = 'https://developers.sap.com/kg/tutorial/'
 
 // Canonical slug shape: lowercase alnum + hyphen, 1-80 chars.
 // Must match the validation in kg-queries.js SLUG_RE and the KG_QUERY
@@ -149,19 +148,13 @@ export async function findLearningPathHandler({ db, args, user, telemetry }) {
   // Step 5: Record t0
   const t0 = Date.now()
 
-  // Step 6: Call kgQuery
-  // kgQuery params for PATH_BETWEEN use fromSlug/toSlug as the IRI values passed
-  // to the procedure's p1/p2. The procedure validates these as full tutorial IRIs.
-  const fromIri = `${TUTORIAL_IRI_PREFIX}${effectiveFromSlug}`
-  const toIri = `${TUTORIAL_IRI_PREFIX}${toSlug}`
-
-  let sparqlResult
+  // Step 6: Call findPath (extracted to srv/lib/kg-path.js — same module
+  // used by GET /graph/path. The shared helper handles slug→IRI conversion,
+  // kgQuery dispatch, and XML parse; we keep telemetry + dedup + hydration
+  // + markdown rendering here.)
+  let rawCandidates
   try {
-    sparqlResult = await kgQuery({
-      db,
-      queryName: 'PATH_BETWEEN',
-      params: { fromSlug: fromIri, toSlug: toIri },
-    })
+    rawCandidates = await findPath({ db, fromSlug: effectiveFromSlug, toSlug })
   } catch (err) {
     if (err instanceof SparqlTimeoutError || err?.name === 'SparqlTimeoutError') {
       telemetry?.emit?.('kg.joule.path_returned', {
@@ -183,35 +176,12 @@ export async function findLearningPathHandler({ db, args, user, telemetry }) {
     return 'Internal error finding a learning path — please try a more specific question.'
   }
 
-  // Step 7: Parse SPARQL XML response
-  const xml = sparqlResult?.response || ''
-  const rawCandidates = []
+  // Step 7: Count per-arm breakdown for telemetry (findPath returns the
+  // already-parsed rows; we tally PathType for the path_returned event).
   const pathTypeBreakdown = { PREREQ: 0, CO_COMPLETED: 0, SHARED_CONCEPT: 0 }
-
-  for (const m of xml.matchAll(/<result>([\s\S]*?)<\/result>/g)) {
-    const block = m[1]
-    const bMatch = block.match(/<binding name="b">\s*<uri>([^<]+)<\/uri>/)
-    const ptMatch = block.match(/<binding name="pathType">\s*<literal[^>]*>([^<]+)</)
-    const rankMatch = block.match(/<binding name="pathTypeRank">\s*<literal[^>]*>([^<]+)</)
-    const hopMatch = block.match(/<binding name="hopCount">\s*<literal[^>]*>([^<]+)</)
-
-    if (!bMatch || !ptMatch || !rankMatch) continue
-
-    const tutorialIri = bMatch[1].trim()
-    const pathType = ptMatch[1].trim()
-    const pathTypeRank = parseInt(rankMatch[1].trim(), 10)
-    const hopCount = hopMatch ? parseInt(hopMatch[1].trim(), 10) : 0
-
-    // Convert tutorial IRI to bare slug
-    const slug = tutorialIri.startsWith(TUTORIAL_IRI_PREFIX)
-      ? tutorialIri.slice(TUTORIAL_IRI_PREFIX.length)
-      : tutorialIri
-
-    rawCandidates.push({ slug, pathType, pathTypeRank, hopCount })
-
-    // Count per arm for telemetry
-    if (pathType in pathTypeBreakdown) {
-      pathTypeBreakdown[pathType]++
+  for (const c of rawCandidates) {
+    if (c.pathType in pathTypeBreakdown) {
+      pathTypeBreakdown[c.pathType]++
     }
   }
 
