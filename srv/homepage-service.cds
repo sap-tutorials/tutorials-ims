@@ -1,8 +1,14 @@
 using { com.sap.developers.ims as ims } from '../db/schema';
 using { com.sap.developers.ims.HomepageShelves } from '../db/homepage';
 
-// Public homepage data service — no @requires, all endpoints are anonymous. (#639)
+// Public homepage data service — all endpoints are anonymous. (#639)
 // Spec: docs/superpowers/specs/2026-06-27-639-developer-homepage-design.md
+//
+// Auth note: @requires: 'any' is CAP's idiom for "anonymous-readable
+// service". Without an explicit @requires, the cds-served app's xsuaa
+// middleware gates every request and returns 401 — that's how CAP
+// fails-secure by default. Sibling public services (DeveloperService,
+// EventStreamService, SearchService) all use the same 'any' marker.
 //
 // Path note: declared at /homepage (NOT /api/homepage) to avoid Express
 // prefix-match collision with DeveloperService (@path '/api'). CAP mounts
@@ -14,6 +20,7 @@ using { com.sap.developers.ims.HomepageShelves } from '../db/homepage';
 // `^/homepage/(.*)$` (authenticationType: 'none') is the public ingress.
 
 @path: '/homepage'
+@requires: 'any'
 service HomepageService {
 
   // EventCard maps from ims.Events (startDate/name) to the homepage shape.
