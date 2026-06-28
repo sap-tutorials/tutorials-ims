@@ -129,11 +129,16 @@ export async function runFetchLearningJourneys() {
 
   for (const j of journeys) {
     try {
+      // Lowercase the slug at every write/lookup site (defense-in-depth per
+      // CLAUDE.md slug-canonicalization convention). The read path (e.g.
+      // published-concepts-query.js) already lowercases; doing it here too
+      // means an upstream listing with capitalised slugs can't drift the DB.
+      const journeySlug = (j.slug || '').toLowerCase();
       const newHash = sha256Hex(`${j.title}|${j.level}|${j.duration}`);
       const existing = await SELECT.one
         .from(LearningJourneys)
         .columns('ID', 'contentHash')
-        .where({ slug: j.slug });
+        .where({ slug: journeySlug });
 
       const levelNormalized = (j.level ?? '').toLowerCase();
       const durationParsed = parseFloat(j.duration);
@@ -152,23 +157,23 @@ export async function runFetchLearningJourneys() {
           .where({ ID: existing.ID });
       } else {
         await INSERT.into(LearningJourneys).entries({
-          slug: j.slug,
+          slug: journeySlug,
           title: j.title,
           level: levelNormalized,
           durationHours,
           url: j.url,
-          sourceId: j.slug,
+          sourceId: journeySlug,
           contentHash: newHash,
           lastSeenAt: now,
         });
-        existingJourneySlugs.add(j.slug);
+        existingJourneySlugs.add(journeySlug);
       }
       summary.upserted++;
 
       const needsExtraction = !existing || existing.contentHash !== newHash;
       if (needsExtraction) {
         toExtract.push({
-          slug: j.slug,
+          slug: journeySlug,
           title: j.title,
           level: levelNormalized,
           durationHours,
@@ -248,6 +253,11 @@ export async function runFetchLearningJourneys() {
       const modelVersion = process.env.LLM_MODEL_NAME ?? 'unknown';
 
       // Replace existing links for this journey (full re-extract pattern).
+      // Note: this DELETE-then-INSERT is not crash-safe. If the cron is killed
+      // between the DELETE and the INSERT, the journey row has stale contentHash
+      // + zero links until next cycle (which will skip because contentHash matches).
+      // Tracked as #708 — proposed fix: add a separate `lastExtractedHash` column
+      // and gate `needsExtraction` on lastExtractedHash !== contentHash.
       await DELETE.from(LearningJourneyConceptLinks).where({ journey_ID: journeyRow.ID });
 
       for (const c of result.covers) {
