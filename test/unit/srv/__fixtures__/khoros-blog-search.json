@@ -1,0 +1,50 @@
+{
+  "status": "success",
+  "data": {
+    "items": [
+      {
+        "message_id": "13412493",
+        "subject": "CAP Service Handlers — A Practical Walkthrough",
+        "body": "<p>In this post we explore how to register before, on, and after handlers in SAP CAP using the Node.js runtime. The handler API lets you intercept entity reads, validate inputs, and shape responses.</p><p>We'll cover three patterns...</p>",
+        "post_time": "2026-05-15T09:32:11.000Z",
+        "view_href": "https://community.sap.com/t5/technology-blog-posts-by-members/cap-service-handlers/ba-p/13412493",
+        "board": { "id": "technology-blog-posts-by-members" },
+        "author": {
+          "login": "test.author.one",
+          "first_name": "Test",
+          "last_name": "Author One",
+          "avatar": { "profile": "https://community.sap.com/legacyfs/online/avatars/test-author-one.png" }
+        }
+      },
+      {
+        "message_id": "13412494",
+        "subject": "Minimal Body Test Post",
+        "body": "<p>Short.</p>",
+        "post_time": "2026-05-16T10:00:00.000Z",
+        "view_href": "https://community.sap.com/t5/blog/minimal/ba-p/13412494",
+        "board": { "id": "technology-blog-posts-by-members" },
+        "author": {
+          "login": "test.author.two",
+          "first_name": "Test",
+          "last_name": "Author Two",
+          "avatar": { "profile": "https://community.sap.com/legacyfs/online/avatars/test-author-two.png" }
+        }
+      },
+      {
+        "message_id": "13412495",
+        "subject": "Deleted-Author Edge Case",
+        "body": "<p>The author of this post has been removed; login string is empty.</p>",
+        "post_time": "2026-05-17T11:15:00.000Z",
+        "view_href": "https://community.sap.com/t5/blog/deleted-author/ba-p/13412495",
+        "board": { "id": "technology-blog-posts-by-members" },
+        "author": {
+          "login": "",
+          "first_name": "",
+          "last_name": "",
+          "avatar": { "profile": "" }
+        }
+      }
+    ],
+    "next_cursor": null
+  }
+}
