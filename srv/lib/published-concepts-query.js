@@ -18,7 +18,8 @@ import cds from '@sap/cds';
  *     requires: Array<{slug:string,name:string}>,
  *     requiredBy: Array<{slug:string,name:string}>,
  *     relatedTo: Array<{slug:string,name:string}>,
- *     learningJourneys: Array<{slug:string,title:string,url:string,level:string,durationHours:number}>
+ *     learningJourneys: Array<{slug:string,title:string,url:string,level:string,durationHours:number}>,
+ *     blogPosts: Array<{slug:string,title:string,url:string,authorName:string,postedAt:string}>
  *   }>,
  *   generatedAt: string
  * }>}
@@ -29,7 +30,7 @@ export async function buildConceptsPayload(db) {
   // srv/knowledge-graph-service.cds — single source of truth.
   const { ConceptEdges, TutorialConceptLinks } =
     cds.entities('com.sap.developers.ims');
-  const { LearningJourneyConceptLinks } =
+  const { LearningJourneyConceptLinks, BlogPosts, BlogPostConceptLinks } =
     cds.entities('com.sap.developers.ims.external');
   const { PublishedConcepts } = cds.entities('KnowledgeGraphService');
 
@@ -126,6 +127,41 @@ export async function buildConceptsPayload(db) {
     })
   );
 
+  // 5b. Phase 4.2 (#447 §2.6): blog posts discussing each concept.
+  // Guarded by ids.length > 0 — WHERE concept_ID IN () is invalid on some
+  // dialects. Newest 8 posts per concept (post-grouping cap).
+  let blogPostsByConcept = {};
+  if (ids.length > 0) {
+    const blogRows = await db.run(
+      SELECT.from(BlogPostConceptLinks)
+        .columns(
+          'concept_ID',
+          'post.slug as post_slug',
+          'post.title as post_title',
+          'post.url as post_url',
+          'post.authorName as post_authorName',
+          'post.postedAt as post_postedAt'
+        )
+        .where({ concept_ID: { in: ids } })
+    );
+    // Group then cap at 8 newest per concept (postedAt desc).
+    const grouped = groupBy(blogRows, 'concept_ID', r => ({
+      slug: (r.post_slug || '').toLowerCase(),
+      title: r.post_title,
+      url: r.post_url,
+      authorName: r.post_authorName,
+      postedAt: r.post_postedAt,
+    }));
+    for (const [conceptId, rows] of Object.entries(grouped)) {
+      rows.sort((a, b) => {
+        const ta = a.postedAt ? new Date(a.postedAt).getTime() : 0;
+        const tb = b.postedAt ? new Date(b.postedAt).getTime() : 0;
+        return tb - ta;
+      });
+      blogPostsByConcept[conceptId] = rows.slice(0, 8);
+    }
+  }
+
   // 6. Stitch.
   const concepts = published.map(c => ({
     slug: c.slug.toLowerCase(),
@@ -136,6 +172,7 @@ export async function buildConceptsPayload(db) {
     requiredBy: requiredByConcept[c.ID] || [],
     relatedTo: relatedToByConcept[c.ID] || [],
     learningJourneys: learningJourneysByConcept[c.ID] || [],
+    blogPosts: blogPostsByConcept[c.ID] || [],
   }));
 
   return { concepts, generatedAt: new Date().toISOString() };

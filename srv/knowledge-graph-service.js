@@ -263,6 +263,7 @@ import { mergeConceptPair } from './lib/kg-merge-pair.js';
 import { findNearDuplicates } from './lib/kg-similarity.js';
 import { loadConceptsWithEmbeddings } from './lib/kg-concept-loader.js';
 import { resolveKnowledgeGraphSettings } from './lib/runtime-config/kg-settings.js';
+import { mergeOtherResources, MAX_OTHER_RESOURCES } from './lib/kg-neighborhood-merge.js';
 
 const NAMESPACE = 'com.sap.developers.ims';
 
@@ -662,6 +663,9 @@ export default cds.service.impl(async function () {
 
     // Phase 4.1 (#447 §2.6): enrich otherResources with learning journeys
     // covering any concept the tutorial teaches. Ranked by overlap count.
+    // Phase 4.2 (#447 §9): also widens to include blog-post overlap rows;
+    // both arrays merge and cap top-5 total across types (no per-type
+    // diversity quota).
     //
     // Implementation choices:
     // - Resolve teaches→concept_ID first (so we can filter the link table by
@@ -672,8 +676,10 @@ export default cds.service.impl(async function () {
     let otherResources = [];
     try {
       const teachesSlugs = ranked.teaches.map((c) => c.slug);
+      let journeyOtherResources = [];
+      let blogOtherResources = [];
       if (teachesSlugs.length > 0) {
-        const { LearningJourneys, LearningJourneyConceptLinks } =
+        const { LearningJourneys, LearningJourneyConceptLinks, BlogPosts, BlogPostConceptLinks } =
           cds.entities('com.sap.developers.ims.external');
         const { Concepts } = cds.entities(NAMESPACE);
 
@@ -698,7 +704,7 @@ export default cds.service.impl(async function () {
           if (overlapByJourney.size > 0) {
             const topJourneyIds = [...overlapByJourney.entries()]
               .sort(([, a], [, b]) => b - a)
-              .slice(0, 5)
+              .slice(0, MAX_OTHER_RESOURCES)
               .map(([id]) => id);
 
             const journeys = await SELECT.from(LearningJourneys)
@@ -708,7 +714,7 @@ export default cds.service.impl(async function () {
             const byId = new Map(journeys.map((j) => [j.ID, j]));
             // Preserve overlap-count ordering (the SELECT may return rows
             // in a different order than topJourneyIds).
-            otherResources = topJourneyIds
+            journeyOtherResources = topJourneyIds
               .map((id) => byId.get(id))
               .filter(Boolean)
               .map((j) => ({
@@ -721,8 +727,47 @@ export default cds.service.impl(async function () {
                 overlapCount: overlapByJourney.get(j.ID),
               }));
           }
+
+          // Phase 4.2 (#447): blog-post overlap rows.
+          const blogOverlaps = await SELECT.from(BlogPostConceptLinks)
+            .columns('post_ID', 'concept_ID')
+            .where({ concept_ID: { in: conceptIds } });
+
+          const overlapByPost = new Map();
+          for (const row of blogOverlaps) {
+            overlapByPost.set(row.post_ID, (overlapByPost.get(row.post_ID) ?? 0) + 1);
+          }
+
+          if (overlapByPost.size > 0) {
+            const topPostIds = [...overlapByPost.entries()]
+              .sort(([, a], [, b]) => b - a)
+              .slice(0, MAX_OTHER_RESOURCES)
+              .map(([id]) => id);
+
+            const posts = await SELECT.from(BlogPosts)
+              .columns('ID', 'slug', 'title', 'url', 'authorName', 'postedAt')
+              .where({ ID: { in: topPostIds } });
+
+            const byPostId = new Map(posts.map((p) => [p.ID, p]));
+            blogOtherResources = topPostIds
+              .map((id) => byPostId.get(id))
+              .filter(Boolean)
+              .map((p) => ({
+                type: 'blog-post',
+                slug: p.slug,
+                title: p.title,
+                url: p.url,
+                authorName: p.authorName,
+                postedAt: p.postedAt,
+                overlapCount: overlapByPost.get(p.ID),
+              }));
+          }
         }
       }
+
+      // Merge journey + blog rows; sort by overlap desc; cap top-5 TOTAL.
+      // Top-5 is across BOTH types (no per-type diversity quota) per spec §9.
+      otherResources = mergeOtherResources(journeyOtherResources, blogOtherResources);
     } catch (err) {
       log.warn(`kg-service: neighborhood otherResources enrichment failed: ${err.message ?? err}`);
       otherResources = [];

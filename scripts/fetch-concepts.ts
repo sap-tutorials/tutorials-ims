@@ -35,6 +35,17 @@ export interface ConceptPayload {
     level?: string
     durationHours?: number
   }>
+  // Phase 4.2 (#447 §9): SAP Community blog posts discussing this concept.
+  // Empty until the daily fetch-blog-posts cron has populated
+  // BlogPostConceptLinks. Shape mirrors the per-concept array emitted by
+  // srv/lib/published-concepts-query.js (Task 2's extension).
+  blogPosts?: Array<{
+    slug: string
+    title: string
+    url: string
+    authorName: string
+    postedAt: string    // ISO timestamp
+  }>
 }
 
 interface BuildConceptsResponse {
@@ -76,6 +87,27 @@ export function frontmatter(c: ConceptPayload): string {
       })()
     : null
 
+  // Phase 4.2 (#447 §9): emit `blogPosts` only when non-empty. Same omit-when-
+  // empty discipline as learningJourneys above — the Hugo `{{ with }}` guard
+  // would already hide the section, but omitting the key keeps generated
+  // frontmatter tidy.
+  // Shape matches /build/concepts payload: {slug,title,url,authorName,postedAt}.
+  // All five fields are required on the wire (Task 2 always populates them
+  // from BlogPosts.{authorName,postedAt}); no `if` guards inside the loop.
+  const blogPosts = (c.blogPosts && c.blogPosts.length > 0)
+    ? (() => {
+        const lines = ['blogPosts:']
+        for (const b of c.blogPosts!) {
+          lines.push(`  - slug: ${yamlEscape(b.slug)}`)
+          lines.push(`    title: ${yamlEscape(b.title)}`)
+          lines.push(`    url: ${yamlEscape(b.url)}`)
+          lines.push(`    authorName: ${yamlEscape(b.authorName)}`)
+          lines.push(`    postedAt: ${yamlEscape(b.postedAt)}`)
+        }
+        return lines.join('\n')
+      })()
+    : null
+
   // NOTE: deliberately no `type:` field — Hugo's type-based lookup is singular
   // ("type: concept" → layouts/concept/), but our template lives at
   // layouts/concepts/ (matching the section). Section-based lookup is what we
@@ -91,6 +123,7 @@ export function frontmatter(c: ConceptPayload): string {
     `relatedTo:${refs(c.relatedTo)}`,
   ]
   if (journeys) parts.push(journeys)
+  if (blogPosts) parts.push(blogPosts)
   parts.push('---', '')
   return parts.join('\n')
 }

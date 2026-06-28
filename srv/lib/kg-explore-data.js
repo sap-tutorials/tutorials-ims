@@ -43,6 +43,7 @@ export const SHORT_BY_TYPE = Object.freeze({
   'learning-journey': 'lj',  // Phase 4.1 (#447). Without this entry,
   // parseEntityIri() would return id 'undefined:slug' once the projection
   // starts emitting learning-journey triples — caught by Task 2 lockstep.
+  'blog-post': 'bp',  // Phase 4.2 (#447).
 });
 
 // IRI tail-segment → (entity type, short node-id prefix). Derived from

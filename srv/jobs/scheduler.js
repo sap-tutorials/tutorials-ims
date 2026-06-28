@@ -10,6 +10,7 @@ import { runSecretExpiryCheck } from './secret-expiry-check.js';
 import { runHomepageLinkHealth } from './homepage-link-health.js';
 import { runGcExternalContent } from './gc-external-content-job.js';
 import { runFetchLearningJourneys } from './fetch-learning-journeys-job.js';
+import { runFetchBlogPosts } from './fetch-blog-posts-job.js';
 import { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, isNotificationsEnabled, resolveTimingKnobs, groupNotificationsByAuthor, determineRecipientsForDigest, digestSubject, renderTutorialList } from '../lib/contributor-notifications.js';
 import { sendNotificationEmail, retryFailedEmails } from '../lib/mail-client.js';
 import { resolveDisplaySettings } from '../lib/runtime-config/display-settings.js';
@@ -343,6 +344,15 @@ export function registerJobs() {
   // or ~30s/journey (full extract path).
   cron.schedule('13 3 * * 0', () =>
     runWithLock('fetch-learning-journeys', 30 * 60 * 1000, runFetchLearningJourneys)
+  );
+
+  // Daily at 04:23 — Phase 4.2 Blog Posts extraction (#447).
+  // Off-minute (:23) per the project's cron-collision-avoidance convention.
+  // 30-min TTL covers a full pass of ~200 posts at ~5s/post LLM call.
+  // Operator must run scripts/seed-blog-posts.cjs once first; the cron
+  // refuses to self-bootstrap on an empty BlogPosts table.
+  cron.schedule('23 4 * * *', () =>
+    runWithLock('fetch-blog-posts', 30 * 60 * 1000, runFetchBlogPosts)
   );
 
   // Weekly Sunday at 04:07 — Phase 4 cross-type GC.

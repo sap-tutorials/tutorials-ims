@@ -1,0 +1,13 @@
+{
+  "verdict": {
+    "discusses": [
+      { "slug": "cap-service-handlers", "name": "CAP service handlers", "confidence": 0.92 },
+      { "slug": "cds-modeling", "name": "CDS modeling", "confidence": 0.78 },
+      { "slug": "low-confidence-concept", "name": "Low Confidence", "confidence": 0.45 },
+      { "slug": "no-name", "confidence": 0.85 },
+      { "slug": "valid-novel", "name": "Valid Novel Concept", "confidence": 0.81 },
+      { "slug": "another-valid", "name": "Another Valid", "confidence": 0.73 }
+    ]
+  },
+  "usage": { "prompt_tokens": 2800, "completion_tokens": 380 }
+}
