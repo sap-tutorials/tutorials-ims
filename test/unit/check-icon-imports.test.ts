@@ -176,4 +176,30 @@ describe('scripts/check-icon-imports.ts', () => {
     expect(r.stderr).toMatch(/header\.html:1/);
     expect(r.stderr).toMatch(/footer\.html:1/);
   });
+
+  // The Hugo `dict "icon" "<name>"` pattern (verb-spine.html shape).
+  // Icon names declared inside Hugo template data don't surface to the
+  // attribute-style ICON_RE because Hugo evaluates the template AFTER
+  // the static guard runs. These two cases lock in HUGO_DICT_ICON_RE.
+  it('passes when Hugo dict "icon" "<name>" has a matching import', () => {
+    writeFile(root, 'hugo/layouts/partials/homepage/verb-spine.html',
+      `{{- \$verbDefs := slice (dict "key" "FOO" "icon" "learning-assistant") -}}\n`);
+    writeFile(root, 'hugo/assets/js/ui5-bootstrap.ts',
+      `import "@ui5/webcomponents-icons/dist/learning-assistant.js";\n`);
+    const r = run(root);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/1 unique icon\(s\) referenced/);
+  });
+
+  it('fails when Hugo dict "icon" "<name>" has no matching import', () => {
+    writeFile(root, 'hugo/layouts/partials/homepage/verb-spine.html',
+      `{{- \$verbDefs := slice (dict "key" "FOO" "icon" "learning-assistant") -}}\n`);
+    writeFile(root, 'hugo/assets/js/ui5-bootstrap.ts',
+      `import "@ui5/webcomponents-icons/dist/dark-mode.js";\n`);
+    const r = run(root);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/icon="learning-assistant" is not imported/);
+    expect(r.stderr).toMatch(/verb-spine\.html:1/);
+    expect(r.stderr).toMatch(/import "@ui5\/webcomponents-icons\/dist\/learning-assistant\.js"/);
+  });
 });
