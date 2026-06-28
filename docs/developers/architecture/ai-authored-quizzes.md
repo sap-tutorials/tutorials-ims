@@ -180,16 +180,16 @@ Three follow-ups graduated alongside the eval, all merged 2026-06-13:
   words skip generation; the build summary line gained an
   `<n> empty-step skipped` token.
 - **[#312](https://github.com/sap-tutorials/tutorials-ims/issues/312)**:
-  2-week soft-rollout window. The `AI_AUTHOR_ENABLED` flag stays in code
-  during the soak — fast kill-switch if a model regression sneaks in.
-  After clean signal across 2 weeks of CI rebuilds, a follow-up PR will
-  remove the flag check entirely.
+  2-week soft-rollout window (2026-06-13 → 2026-06-27). The
+  `AI_AUTHOR_ENABLED` flag stayed in code during the soak as a fast
+  kill-switch. Telemetry across ~20 rebuilds: zero errors, zero
+  empty-step skips, zero author quality complaints. Flag removed on
+  close-out; AI-quiz expansion is now always-on for every non-
+  `catalog-only` rebuild.
 - **[#313](https://github.com/sap-tutorials/tutorials-ims/issues/313)**:
-  CI wiring. Both `rebuild-content.yml` and `rebuild-content-qa.yml` now
-  default `ai-author-enabled=true` for `workflow_dispatch` triggers.
-  `repository_dispatch` (admin-write debounce rebuilds from PR #220) is
-  deliberately left at the empty-string fallback — debounce rebuilds
-  shouldn't burn LLM dollars per content tweak.
+  CI wiring. Both `rebuild-content.yml` and `rebuild-content-qa.yml`
+  defaulted `ai-author-enabled=true` for `workflow_dispatch` triggers
+  during the soak; the input was removed in #312.
 
 ## CI integration
 

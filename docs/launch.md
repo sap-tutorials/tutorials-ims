@@ -203,7 +203,7 @@ This is the single biggest author quality-of-life improvement.
 
 Add `[AUTOAUTHOR_QUIZ:mcq]` or `[AUTOAUTHOR_QUIZ:text]` directives to your tutorial frontmatter, and the build pipeline calls an LLM at fetch time to generate a step-level (or tutorial-wide) quiz from your prose.
 
-- **Default-OFF.** Set `AI_AUTHOR_ENABLED=true` in the build environment to opt in.
+- **Author opt-in per tutorial.** Only tutorials with an `[AUTOAUTHOR_*]` directive in their `rules.vr` generate anything — no directive, no LLM calls. As of [#312](https://github.com/sap-tutorials/tutorials-ims/issues/312) (2026-06-27) the CI side is always-on, so the moment your directive lands upstream the next rebuild picks it up.
 - **Cached** — once generated, a quiz lives in `.tutorial-cache/<slug>.ai-quiz-cache.json` and only regenerates on content change.
 - **Capped** — default 200 LLM calls per build, configurable.
 - **Indistinguishable** from hand-authored quizzes at runtime — same `ValidationQuestion` shape, same widget, same grading.

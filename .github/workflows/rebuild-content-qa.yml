@@ -9,11 +9,6 @@ on:
         description: Refresh a single tutorial slug only (leave blank for full QA rebuild)
         required: false
         type: string
-      ai-author-enabled:
-        description: 'Enable AI-quiz generation for this run (#208 spike, graduated #275 + #311). Default true post-graduation; flip to false only to bypass during incident triage. Requires AI_AUTHOR_AICORE_SERVICE_KEY + CHAT_DEPLOYMENT_ID secrets. See docs/developers/operations/ai-author-ci-setup.md.'
-        required: false
-        default: true
-        type: boolean
       ai-author-build-cap:
         description: 'Hard cap on AI-quiz LLM calls per build (overrides default 200). Use 10000 for first-time bulk seed.'
         required: false
@@ -69,17 +64,18 @@ jobs:
           private-key: ${{ secrets.TUTORIALS_APP_PRIVATE_KEY }}
           owner: sap-tutorials
 
-      # [#208] Construct VCAP_SERVICES for the AI-quiz fetch path. The
+      # [#208/#312] Construct VCAP_SERVICES for the AI-quiz fetch path. The
       # @sap-ai-sdk/orchestration SDK reads aicore credentials from
       # VCAP_SERVICES.aicore[0].credentials when no cds bind is in effect.
       # See docs/developers/operations/ai-author-ci-setup.md.
+      # Always-on as of #312 (soak window 2026-06-13..2026-06-27 completed
+      # clean). Kill-switch: set AI_AUTHOR_AICORE_SERVICE_KEY secret to empty.
       - name: Set up VCAP_SERVICES for AI authoring
-        if: ${{ inputs.ai-author-enabled == true }}
         env:
           AICORE_CREDENTIALS_JSON: ${{ secrets.AI_AUTHOR_AICORE_SERVICE_KEY }}
         run: |
           if [ -z "${AICORE_CREDENTIALS_JSON}" ]; then
-            echo "::error::ai-author-enabled=true requires AI_AUTHOR_AICORE_SERVICE_KEY secret. See docs/developers/operations/ai-author-ci-setup.md."
+            echo "::error::AI_AUTHOR_AICORE_SERVICE_KEY secret is unset or empty. AI-quiz authoring is always-on post-#312 — see docs/developers/operations/ai-author-ci-setup.md."
             exit 1
           fi
           echo "${AICORE_CREDENTIALS_JSON}" | jq empty || { echo "::error::AI_AUTHOR_AICORE_SERVICE_KEY is not valid JSON"; exit 1; }
@@ -100,12 +96,11 @@ jobs:
           # source repos via ONLY_CONTRIBUTION_REPOS=true).
           CAP_BASE_URL: ${{ secrets.CAP_SRV_URL_DEV }}
           TUTORIAL_SLUG: ${{ github.event.client_payload.slug || inputs.slug }}
-          # [#208/#275] AI-quiz authoring on the QA channel. Default true
-          # post-graduation (#311 flipped the workflow_dispatch default).
-          # The QA channel is gated by Tutorial.Author XSUAA scope so AI
-          # questions land somewhere safe to preview before they reach the
-          # public site.
-          AI_AUTHOR_ENABLED: ${{ inputs.ai-author-enabled == true && 'true' || '' }}
+          # [#208/#275/#312] AI-quiz authoring on the QA channel. Always-on
+          # post-#312 (2026-06-27). The QA channel is gated by Tutorial.Author
+          # XSUAA scope so AI questions land somewhere safe to preview before
+          # they reach the public site. Cost is bounded by author opt-in
+          # (presence of [AUTOAUTHOR_*] directives) plus AI_AUTHOR_BUILD_CAP.
           AI_AUTHOR_BUILD_CAP: ${{ inputs.ai-author-build-cap }}
           CHAT_DEPLOYMENT_ID: ${{ secrets.CHAT_DEPLOYMENT_ID }}
 
@@ -158,6 +153,4 @@ jobs:
           if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
             echo "- **Source repo:** ${{ github.event.client_payload.repository }}" >> "$GITHUB_STEP_SUMMARY"
           fi
-          if [ "${{ inputs.ai-author-enabled }}" = "true" ]; then
-            echo "- **AI authoring:** enabled (cap=${{ inputs.ai-author-build-cap }})" >> "$GITHUB_STEP_SUMMARY"
-          fi
+          echo "- **AI authoring:** enabled (cap=${{ inputs.ai-author-build-cap }})" >> "$GITHUB_STEP_SUMMARY"

@@ -4,7 +4,7 @@
 //
 // Samples a fraction of the tutorial catalog, spawns
 // `cds bind --exec -- npm run fetch-tutorials -- --target hugo` per slug
-// with `AI_AUTHOR_ENABLED=true TUTORIAL_SLUG=<slug>`, then runs the five
+// with `TUTORIAL_SLUG=<slug>`, then runs the five
 // invariant helpers from `lib/ai-quiz-invariants` against each tutorial's
 // `.tutorial-cache/<slug>.ai-quiz-cache.json`.
 //
@@ -151,7 +151,6 @@ export async function runOneSlug(slug: string, opts: RunOptions): Promise<PerTut
   if (!opts.skipSubprocess) {
     const env = {
       ...process.env,
-      AI_AUTHOR_ENABLED: 'true',
       TUTORIAL_SLUG: slug,
       AI_AUTHOR_BUILD_CAP: String(opts.buildCap),
     }
