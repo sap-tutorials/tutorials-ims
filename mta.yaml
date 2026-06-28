@@ -178,6 +178,23 @@ modules:
       app-name: tutorials-approuter
     properties:
       XS_APP_LOG_LEVEL: info
+      # Bearer-token gate for POST /admin/rebuild (approuter/server.js:230 →
+      # bearer-auth.js). Empty default here so per-environment overrides in
+      # deploy/<env>.mtaext can merge — MTA spec requires base declaration
+      # before mtaext can override. Same pattern as CONTENT_API_KEY at
+      # tutorials-srv (lines ~90-98). Missing this declaration meant
+      # qa.mtaext and prod.mtaext's `REBUILD_API_KEY: ${REBUILD_API_KEY}`
+      # injections were silent no-ops on all three envs — surfaced by
+      # rebuild-content workflow run 28324486225 (2026-06-28) failing at
+      # "Push content to AppRouter" with HTTP 503 "REBUILD_API_KEY not
+      # configured" after the rest of the publish flow finally went green.
+      REBUILD_API_KEY: ""
+      # Self-URL of this approuter app (used for in-cluster callbacks).
+      # Same base-declaration story — qa/prod inject via mtaext, dev needs
+      # it too. No code path reads it today (grep -rn 'process.env.APPROUTER_URL'
+      # finds nothing), but the placeholder is documented in deploy.yml's
+      # envsubst step (line ~38) so we keep the wiring consistent.
+      APPROUTER_URL: ""
     requires:
       - name: tutorials-xsuaa
       - name: srv-api
