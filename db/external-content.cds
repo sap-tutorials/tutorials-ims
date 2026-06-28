@@ -23,6 +23,19 @@ entity LearningJourneys : cuid, managed {
 
   level         : String(20);
   durationHours : Decimal(5, 2);
+
+  // Compositions for cascade-delete semantics (#447 Task 1 review fix).
+  // When the GC cron deletes a stale journey row, CAP cascades the DELETE
+  // through these compositions to the link entities. LearningJourneyPrerequisites
+  // references LearningJourneys twice (journey + prerequisite); only the
+  // journey side is the composition parent — the `prerequisite` association
+  // on the sibling side still requires explicit cleanup in the GC job
+  // (dangling-prereq sweep) for rows where a prerequisite_ID points at a
+  // separately-deleted journey.
+  links         : Composition of many LearningJourneyConceptLinks
+                    on links.journey = $self;
+  requires      : Composition of many LearningJourneyPrerequisites
+                    on requires.journey = $self;
 }
 
 entity LearningJourneyConceptLinks : cuid, managed {

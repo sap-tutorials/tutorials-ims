@@ -6,6 +6,14 @@
 // AND pinUntil IS NULL OR pinUntil < NOW(). Double-TTL grace prevents
 // accidental GC of rows about to be re-seen on the next fetch cycle.
 //
+// Cascade semantics:
+//   - LearningJourneys → LearningJourneyConceptLinks (Composition; auto-cascade)
+//   - LearningJourneys → LearningJourneyPrerequisites (Composition on the
+//     `journey` side; auto-cascade)
+//   - LearningJourneyPrerequisites.prerequisite — sibling Association, NOT
+//     part of the composition tree. We sweep dangling prereq-side rows
+//     explicitly before the parent DELETE so the schema invariant holds.
+//
 // 4.1 scans only LearningJourneys. 4.2-4.6 extend the ITERATION_SET.
 //
 // Spec: docs/superpowers/specs/2026-06-28-447-knowledge-graph-phase4-architecture.md §5.4
@@ -44,10 +52,8 @@ export async function runGcExternalContent() {
     const cutoff = new Date(cutoffMs).toISOString();
     const now = new Date().toISOString();
 
-    // Delete via CDS QL — no raw SQL.
-    // Pattern: destructure the named entity from cds.entities(namespace) —
-    // matches how the rest of the codebase accesses CDS entities. Direct
-    // dynamic indexing (cds.entities(ns)[name]) isn't a documented API.
+    // Look up entities via cds.entities(namespace). Destructuring keeps the
+    // call path symmetric with the rest of the codebase.
     const entities = cds.entities(NAMESPACE);
     const entity = entities[entityName];
     if (!entity) {
@@ -55,18 +61,49 @@ export async function runGcExternalContent() {
       continue;
     }
 
-    const deleted = await DELETE.from(entity).where({
-      and: [
-        { lastSeenAt: { '<': cutoff } },
-        { or: [
-          { pinUntil: null },
-          { pinUntil: { '<': now } },
-        ]},
-      ],
-    });
+    // 1. Collect the IDs of stale rows.
+    //    The nested-object form (`{ and: [...] }` / `{ or: [...] }`) generates
+    //    malformed SQL on SQLite and is brittle on HANA. Tagged-template
+    //    spelling with parameters is the safe, idiomatic CDS QL form.
+    const stale = await SELECT.from(entity).columns('ID').where`
+      lastSeenAt < ${cutoff} and (pinUntil is null or pinUntil < ${now})
+    `;
+
+    if (stale.length === 0) {
+      summary[contentType] = 'deleted=0';
+      LOG.debug(`gc-external-content: ${contentType} (${entityName}) — no rows to prune (cutoff=${cutoff})`);
+      continue;
+    }
+
+    const staleIds = stale.map((r) => r.ID);
+
+    // 2. Sweep dangling sibling-Association references. Compositions cascade
+    //    the `journey` side, but the `prerequisite` side of
+    //    LearningJourneyPrerequisites is a sibling Association — a journey
+    //    that's GC-eligible may still be referenced as a prerequisite by
+    //    OTHER (non-stale) journeys, which would leave dangling FK refs.
+    //    Hand-coded sweeps live here per content-type; 4.2-4.6 add their
+    //    own branches as needed.
+    if (entityName === 'LearningJourneys') {
+      const { LearningJourneyPrerequisites } = entities;
+      if (LearningJourneyPrerequisites) {
+        await DELETE.from(LearningJourneyPrerequisites).where({
+          prerequisite_ID: { in: staleIds },
+        });
+      }
+    }
+
+    // 3. Delete the parent rows. CAP cascades the journey-side compositions
+    //    (LearningJourneyConceptLinks rows + LearningJourneyPrerequisites
+    //    rows where journey_ID is in staleIds).
+    const deleted = await DELETE.from(entity).where({ ID: { in: staleIds } });
 
     summary[contentType] = `deleted=${deleted ?? 0}`;
-    LOG.info(`gc-external-content: ${contentType} (${entityName}) — deleted ${deleted ?? 0} rows (cutoff=${cutoff})`);
+    if (deleted > 0) {
+      LOG.info(`gc-external-content: ${contentType} (${entityName}) — deleted ${deleted} rows (cutoff=${cutoff})`);
+    } else {
+      LOG.debug(`gc-external-content: ${contentType} (${entityName}) — no rows to prune (cutoff=${cutoff})`);
+    }
   }
 
   return summary;

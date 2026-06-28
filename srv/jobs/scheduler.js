@@ -338,7 +338,9 @@ export function registerJobs() {
 
   // Weekly Sunday at 04:07 — Phase 4 cross-type GC.
   // Prunes content rows past lastSeenAt + 2×TTL when not pinned. Cascade-deletes
-  // link entity rows via CDS associations.
+  // link entity rows via CDS Compositions on the parent entity, plus an explicit
+  // sweep of sibling Associations (e.g. LearningJourneyPrerequisites.prerequisite)
+  // in the GC job itself — see srv/jobs/gc-external-content-job.js.
   // Off-minute (:07) avoids the :00 thundering-herd. Lightweight job; 10-min TTL.
   cron.schedule('7 4 * * 0', () =>
     runWithLock('gc-external-content', 10 * 60 * 1000, runGcExternalContent)
