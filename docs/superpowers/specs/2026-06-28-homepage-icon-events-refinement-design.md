@@ -10,7 +10,7 @@ The new developer-portal homepage (PR [#446], spec [2026-06-27-639-developer-hom
 
 1. **Inconsistent icons.** Four shellbar menu items (Learn, Build, Integrate, Connect) render with empty icon slots; three verb tiles (Learn, Build, Integrate) on the homepage do the same. The icon names ARE in the templates — the icons are simply not registered in the UI5 bootstrap.
 2. **Events band shows "Could not load upcoming events"** even when the DB is just empty.
-3. **Build-time icon guard didn't catch (1)** — for two distinct reasons: the deploy that shipped the broken icons appears to have bypassed `postbuild:apps`, AND the guard regex only matches `icon="…"` attributes, missing the verb-spine pattern `<ui5-icon name="…">`.
+3. **Build-time icon guard didn't catch (1)** — for two distinct reasons: the deploy that shipped the broken icons appears to have bypassed `postbuild:apps`, AND the guard regex only sees `icon="…"` attribute literals — it can't see icon names that live inside Hugo template data structures. Specifically, verb-spine.html stores the six tile icons in a `slice (dict … "icon" "learning-assistant" …)` block, then expands them at build time via `<ui5-icon name="{{ $vIcon }}">`. The static guard runs against pre-expansion source, so the literal `"learning-assistant"` etc. are invisible to today's regex.
 
 This PR fixes the user-visible regressions (1 + 2) and closes the regex gap in (3). The "why did postbuild:apps get bypassed" question is a separate investigation tracked in [#706].
 
@@ -19,7 +19,7 @@ This PR fixes the user-visible regressions (1 + 2) and closes the regex gap in (
 - All six verb tiles + all twelve shellbar menu items render their icons.
 - Build and Connect use the same icon on the tile and the menu (decision below).
 - EventsBand distinguishes "fetch failed" from "DB is empty" with appropriate copy.
-- `check-icon-imports.ts` catches `<ui5-icon name="…">` usages, not just `icon="…"`.
+- `check-icon-imports.ts` catches icon names that appear as literal strings inside Hugo `dict` blocks (e.g. `"icon" "learning-assistant"`), so the verb-spine bug class is statically detectable on every build going forward.
 
 ## Non-goals
 
@@ -37,7 +37,7 @@ This PR fixes the user-visible regressions (1 + 2) and closes the regex gap in (
 |---|---|---|
 | Build icon (tile + menu) | `developer-settings` | Domain-specific "developer tooling". Tile already uses this. |
 | Connect icon (tile + menu) | `customer-and-contacts` | Reads as "community" (people silhouette). Tile already uses this. |
-| Guard regex scope | Broaden to also match `<ui5-icon name="…">` | Verb-spine slipped past today's `icon="…"`-only pattern. Same script, one extra regex. |
+| Guard regex scope | Add a second pattern for Hugo `dict`-literal icon entries (e.g. `"icon" "learning-assistant"`) | Verb-spine.html stores the six tile icons in a `dict` block, then expands them at runtime via `<ui5-icon name="{{ $vIcon }}">` — invisible to today's `icon="…"`-only regex. A regex on `"icon"\s+"<name>"` catches all six in source with zero false positives in the current tree. |
 | Empty-state copy | `"No upcoming events scheduled."` | Authoritative, matches dashboard tone. |
 | Verification depth | Local unit + guard run only | CI smoke + check-icon-imports cover the rest. |
 | Test additions | Guard regression test + EventsBand component test | Cheap, lock in both fixes against future regressions. |
@@ -94,40 +94,50 @@ After the change, both the verb tile and the shellbar menu item for Build/Connec
 
 The fallback link is preserved in both states (community.sap.com is a useful destination whether we failed or just have no data).
 
-### 4. Broaden `check-icon-imports.ts` to match `<ui5-icon name="…">`
+### 4. Broaden `check-icon-imports.ts` to catch Hugo `dict`-literal icon entries
 
 [scripts/check-icon-imports.ts](../../../scripts/check-icon-imports.ts) — add a second regex alongside `ICON_RE`:
 
 ```ts
 /**
- * Match `<ui5-icon name="…">` — the embedded-glyph form used by verb-spine.html.
- * The leading `<ui5-icon\b` anchor prevents matching unrelated `name="…"`
- * attributes (e.g. <input name="x">, <a name="anchor">).
+ * Match Hugo `dict` literal entries of the form `"icon" "<name>"`. This is
+ * the verb-spine pattern: hugo/layouts/partials/homepage/verb-spine.html
+ * stores its six tile icons in a `slice (dict … "icon" "<name>" …)` block
+ * (lines 7-12) and expands them via `<ui5-icon name="{{ $vIcon }}">` at
+ * render time. The static guard runs against pre-expansion source, so the
+ * literal names are only visible inside the dict.
+ *
+ * The pattern requires `"icon"` followed by whitespace and a quoted UI5
+ * icon-shaped name. False-positive surface area was checked at design
+ * time: `grep -rE '"icon"\s+"[a-z]' hugo/` returned only the six expected
+ * verb-spine lines.
  */
-const UI5_ICON_NAME_RE = /<ui5-icon\b[^>]*\sname="([a-z][a-z0-9-]*)"/g;
+const HUGO_DICT_ICON_RE = /"icon"\s+"([a-z][a-z0-9-]*)"/g;
 ```
 
 Update `parseIconUsages()` to run both patterns and union their results. The block comment at the top of the script gains a line under "Scope (deliberate)":
 
 ```
-//   - `<ui5-icon name="…">` element in Hugo layouts (verb-spine pattern)
+//   - Hugo `dict "icon" "<name>"` literal in .html layouts (verb-spine pattern)
 ```
+
+This catches all six verb-spine tile icons (`learning-assistant`, `developer-settings`, `chain-link`, `settings`, `da`, `customer-and-contacts`) on every build. Any future tile added with a forgotten import will fail postbuild instead of shipping broken.
+
+> **Note on `<ui5-icon name="…">`:** An earlier draft proposed a regex anchored on `<ui5-icon name="…">`. That literal form does not currently appear anywhere in the tree (verb-spine uses the template-expansion form `name="{{ $vIcon }}"`). The Hugo-dict regex is what actually closes the bug class. Adding `<ui5-icon name="…">` matching too would be defensive but currently dead — deferred until a literal callsite appears.
 
 ### 5. Tests
 
 **a. Guard regression test** — [test/unit/check-icon-imports.test.ts](../../../test/unit/check-icon-imports.test.ts) gains two cases:
 
-- `passes when <ui5-icon name="..."> has a matching import` — fixture writes a layout with `<ui5-icon name="bell"></ui5-icon>` and a bootstrap with `import "@ui5/webcomponents-icons/dist/bell.js";`, asserts exit 0.
-- `fails when <ui5-icon name="..."> has no matching import` — fixture writes only the layout, asserts exit 1 with the missing icon and file:line in stderr.
+- `passes when Hugo dict-style "icon" "name" has a matching import` — fixture writes a layout containing `(dict "key" "FOO" "icon" "bell")` and a bootstrap with `import "@ui5/webcomponents-icons/dist/bell.js";`, asserts exit 0.
+- `fails when Hugo dict-style "icon" "name" has no matching import` — fixture writes only the layout, asserts exit 1 with the missing icon and file:line in stderr.
 
-**b. EventsBand component test** — new file `hugo-apps/src/homepage-bands/__tests__/EventsBand.test.ts`. Uses Vue Test Utils + `vi.spyOn(global, 'fetch')`. Covers:
+**b. EventsBand component test** — new file `hugo-apps/src/homepage-bands/EventsBand.test.ts` (adjacent to the component, matching the [advocate-profile/App.test.ts](../../../hugo-apps/src/advocate-profile/App.test.ts) convention; Vitest's unit glob `hugo-apps/src/**/*.test.{js,ts}` picks both adjacent and `__tests__/`-nested files). Uses `@vue/test-utils` + happy-dom + `globalThis.fetch` mocks (already in root devDeps). Covers:
 
 - Loading skeleton renders 4 placeholder divs while `loading=true`.
 - Fetch rejection → "Could not load upcoming events." text + fallback link.
 - Fetch resolves with `[]` → "No upcoming events scheduled." text + fallback link.
 - Fetch resolves with non-empty array → renders one `.hb-events-band__card` per event with `format` chip class wired correctly (`virtual` → `hb-chip--virtual`, etc.).
-
-Test file lives under `__tests__/` so [check-icon-imports.ts:150](../../../scripts/check-icon-imports.ts#L150) excludes it from layout scanning (existing convention).
 
 ## Architecture / data flow
 
@@ -153,7 +163,7 @@ hugo-apps/src/homepage-bands/
 |---|---|---|
 | Bundle-size impact from 3 added icons | Negligible | ~1-2 KB minified per icon; total << 10 KB. |
 | Removing `action`/`discussion` from header silently breaks a reference elsewhere | Very low | Grep confirmed zero occurrences in `hugo/`, `hugo-apps/` outside the lines being changed. |
-| Guard regex broadening introduces false positives | Low | Pattern is anchored to `<ui5-icon\b` element start; only matches well-formed UI5 names (`[a-z][a-z0-9-]*`). |
+| Guard regex broadening introduces false positives | Low | Pattern `"icon"\s+"<name>"` requires the JSON-style key+value adjacency typical of Hugo `dict` calls. Sweep of `hugo/` at design time found zero matches outside verb-spine's 6 expected lines. Only matches well-formed UI5 names (`[a-z][a-z0-9-]*`). |
 | EventsBand snapshot/visual tests fail on copy change | Low | No snapshot tests on EventsBand today. Smoke covers structural presence, not copy. |
 
 ## Verification plan
