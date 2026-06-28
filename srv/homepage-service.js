@@ -40,8 +40,14 @@ export function _resetForTests() {
   _state.shelves.clear();
 }
 
-// (#639) SAP community blogs RSS — plan's URL (unverified at build time; see Task 9 spec-review note)
-const COMMUNITY_BLOGS_RSS_URL = 'https://community.sap.com/t5/s/Y09vMI/rss/Community?interaction.style=blog';
+// (#639, #703) SAP Community RSS — blog posts feed. The Khoros endpoint
+// migrated from the legacy `/t5/s/<id>/rss/...` path to the new
+// `/khhcw49343/rss/Community?interaction.style=<style>` path (verified
+// 2026-06-28). The previous URL returned 404 from both workstation and
+// CF egress, which was indistinguishable from a working-but-empty feed
+// because the RSS fetcher swallows errors and returns []. Other styles
+// available from this endpoint: qanda, forum, occasion, tkb.
+const COMMUNITY_BLOGS_RSS_URL = 'https://community.sap.com/khhcw49343/rss/Community?interaction.style=blog';
 // (#639) SAP News RSS
 const SAP_NEWS_RSS_URL = 'https://news.sap.com/feed/';
 
