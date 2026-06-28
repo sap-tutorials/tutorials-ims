@@ -18,85 +18,22 @@
 import cds from '@sap/cds';
 import { createHash } from 'node:crypto';
 import { extractConceptsFromTutorial } from '../lib/kg-extract.js';
-import { cosineSim } from '../lib/kg-similarity.js';
 import { defaultCallModel } from '../lib/code-check-llm.js';
 import { embed as defaultEmbed } from '../lib/embedding-client.js';
 import { resolveChatLlmSettings } from '../lib/chat-settings-resolver.js';
 import { resolveKnowledgeGraphSettings } from '../lib/runtime-config/kg-settings.js';
+import {
+  loadConceptRegistry,
+  resolveConceptCandidates,
+} from '../lib/kg-merge-on-write.js';
 
 const NAMESPACE = 'com.sap.developers.ims';
 const PAGE_SIZE = 50;
-const MERGE_AT_EXTRACT_THRESHOLD = 0.85;
 const DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small';
 
 /** SHA-256 hex digest of the tutorial body markdown. */
 function sha256Hex(input) {
   return createHash('sha256').update(input ?? '', 'utf8').digest('hex');
-}
-
-/**
- * Detect whether the bound DB is HANA (vs SQLite, used in unit tests).
- * Mirrors the convention used in srv/lib/embedding-query.js.
- */
-function isHana(db) {
-  return db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
-}
-
-/**
- * Load every ACTIVE concept's embedding via raw SQL, returning a Map keyed by
- * concept ID with both the canonical-row metadata and a Float32Array view of
- * the embedding LOB.
- *
- * Why raw SQL: HANA returns LargeBinary columns as a Readable stream backed by
- * a LOB locator that expires before consumption when SELECTed alongside scalar
- * columns in CDS QL. The raw-SQL escape hatch here mirrors the established
- * pattern in srv/lib/embedding-query.js + srv/lib/content-store.js.
- */
-async function loadConceptEmbeddings(db) {
-  const out = new Map();
-  if (isHana(db)) {
-    const rows = await db.run(
-      `SELECT "ID", "EMBEDDING" FROM "COM_SAP_DEVELOPERS_IMS_CONCEPTS" WHERE "STATUS" = 'ACTIVE'`,
-    );
-    for (const r of rows) {
-      const id = r.ID ?? r.id;
-      const buf = r.EMBEDDING ?? r.embedding;
-      if (!id || !buf) continue;
-      const b = Buffer.isBuffer(buf) ? buf : Buffer.from(buf);
-      out.set(id, new Float32Array(b.buffer, b.byteOffset, b.byteLength / 4));
-    }
-    return out;
-  }
-  // SQLite test path — CDS QL is fine on plain BLOB columns.
-  const { Concepts } = cds.entities(NAMESPACE);
-  const rows = await SELECT.from(Concepts).columns('ID', 'embedding').where({ status: 'ACTIVE' });
-  for (const r of rows) {
-    if (!r.ID || !r.embedding) continue;
-    const buf = Buffer.isBuffer(r.embedding) ? r.embedding : Buffer.from(r.embedding);
-    out.set(r.ID, new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4));
-  }
-  return out;
-}
-
-/**
- * Find the highest-cosine-similarity ACTIVE concept for a candidate embedding.
- *
- * @param {Float32Array} candidateVec
- * @param {Map<string, Float32Array>} registryEmbeddings  conceptID → vector
- * @returns {{ conceptId: string|null, sim: number }}
- */
-function findBestMatch(candidateVec, registryEmbeddings) {
-  let bestId = null;
-  let best = -Infinity;
-  for (const [id, vec] of registryEmbeddings) {
-    if (vec.length !== candidateVec.length) continue;
-    const s = cosineSim(candidateVec, vec);
-    if (s > best) {
-      best = s;
-      bestId = id;
-    }
-  }
-  return { conceptId: bestId, sim: best === -Infinity ? 0 : best };
 }
 
 /**
@@ -109,6 +46,10 @@ function findBestMatch(candidateVec, registryEmbeddings) {
  *   - callModel : the constrained-output LLM (forced tool-call wrapper)
  *   - embed     : embedding client (inputs[], model) → Float32Array[]
  *   - log       : cds.log
+ *
+ * Registry loading and per-candidate merge-on-write decisions are factored
+ * into srv/lib/kg-merge-on-write.js so the same primitive serves the
+ * Phase 4.x crons (#707).
  *
  * @param {object} [deps]
  * @returns {Promise<object>} structured summary for formatJobSummary
@@ -185,14 +126,20 @@ export async function runExtractConcepts(deps = {}) {
     if (!page || page.length === 0) break;
     totalTutorials += page.length;
 
-    // Refresh registry once per page. Two queries by design:
-    //   1. scalar columns via CDS QL (safe shape for the LLM prompt)
-    //   2. embedding column via raw SQL (LOB-locator workaround)
-    const registry = await SELECT.from(Concepts)
-      .columns('ID', 'slug', 'name', 'description')
-      .where({ status: 'ACTIVE' });
-    const registryBySlug = new Map(registry.map((c) => [c.slug, c]));
-    const registryEmbeddings = await loadConceptEmbeddings(db);
+    // Refresh registry once per page via the shared helper. Mutated below
+    // (lines marked "post-tx" near the bottom of the loop) when new concepts
+    // are minted, so that subsequent tutorials in the same page see them
+    // without re-issuing the registry SELECTs.
+    const { bySlug: registryBySlug, embeddings: registryEmbeddings } =
+      await loadConceptRegistry(db);
+    // The legacy `registry` array (used as the LLM prompt's `existingConcepts`
+    // hint) is rebuilt from the Map. Same shape as before.
+    const registry = [...registryBySlug.values()].map((c) => ({
+      ID: c.ID,
+      slug: c.slug,
+      name: c.name,
+      description: '',  // descriptions are admin-curated post-hoc; LLM doesn't need them
+    }));
 
     for (const tutorial of page) {
       if (llmCalls >= buildCap) {
@@ -257,77 +204,27 @@ export async function runExtractConcepts(deps = {}) {
         // inside the per-tutorial tx so a failed tx does NOT leave orphan
         // concepts in HANA. Registry mutations happen AFTER the tx commits
         // — see `pendingRegistryMutations` below.
-        const teachesResolved = []; // [{ conceptId, confidence }]
-        const pendingNewConcepts = []; // [{ ID, slug, name, embeddingBuf, embeddingVec, confidence }]
-        const newSlugToPendingId = new Map(); // slug → pending newId, so dup teaches in same tutorial collapse
-        for (const t of extraction.teaches) {
-          const exact = registryBySlug.get(t.slug);
-          if (exact) {
-            teachesResolved.push({ conceptId: exact.ID, confidence: t.confidence });
-            continue;
-          }
-
-          // If we already minted this slug earlier in THIS tutorial's loop,
-          // reuse the pending ID — don't embed/mint twice.
-          const alreadyPending = newSlugToPendingId.get(t.slug);
-          if (alreadyPending) {
-            teachesResolved.push({ conceptId: alreadyPending, confidence: t.confidence });
-            continue;
-          }
-
-          // New slug. Embed name to check for near-duplicate before minting.
-          // Description is empty at this point (LLM doesn't emit it; concept
-          // descriptions are admin-curated post-hoc), so we embed `name` only.
-          const embedInput = `${t.name}`;
-          let candidateVec;
-          try {
-            const [vec] = await embed([embedInput], embeddingModel);
-            candidateVec = vec;
-          } catch (e) {
-            log.warn(
-              `[${tutorial.slug}] embedding failed for new concept "${t.slug}": ${e.message}`,
-            );
-            errors++;
-            continue;
-          }
-          if (!candidateVec) {
-            errors++;
-            continue;
-          }
-
-          const match = findBestMatch(candidateVec, registryEmbeddings);
-          if (match.conceptId && match.sim > MERGE_THRESHOLD) {
-            mergedAtExtract++;
-            log.warn(
-              `[${tutorial.slug}] merged new concept "${t.slug}" into existing ` +
-                `${match.conceptId} (sim=${match.sim.toFixed(3)})`,
-            );
-            teachesResolved.push({
-              conceptId: match.conceptId,
-              confidence: t.confidence,
-            });
-            continue;
-          }
-
-          // Defer the mint. Pre-allocate the UUID + embedding buffer so the
-          // tx body is just a synchronous-ish write. The actual INSERT and
-          // any registry mutation happen inside / after the tx, respectively.
-          const newId = cds.utils.uuid();
-          const embeddingBuf = Buffer.from(
-            candidateVec.buffer,
-            candidateVec.byteOffset,
-            candidateVec.byteLength,
-          );
-          pendingNewConcepts.push({
-            ID: newId,
-            slug: t.slug,
-            name: t.name,
-            embeddingBuf,
-            embeddingVec: candidateVec,
-          });
-          newSlugToPendingId.set(t.slug, newId);
-          teachesResolved.push({ conceptId: newId, confidence: t.confidence });
-        }
+        //
+        // Shared helper (#707): srv/lib/kg-merge-on-write.js. Same primitive
+        // is used by srv/jobs/fetch-learning-journeys-job.js.
+        const candidateResolution = await resolveConceptCandidates({
+          candidates: extraction.teaches,
+          registry: { bySlug: registryBySlug, embeddings: registryEmbeddings },
+          embed,
+          embeddingModel,
+          mergeThreshold: MERGE_THRESHOLD,
+          log: {
+            warn: (msg) => log.warn(`[${tutorial.slug}] ${msg}`),
+            info: (msg) => log.info(`[${tutorial.slug}] ${msg}`),
+          },
+        });
+        const teachesResolved = candidateResolution.resolved.map((r) => ({
+          conceptId: r.conceptId,
+          confidence: r.confidence,
+        }));
+        const pendingNewConcepts = candidateResolution.pendingMints;
+        errors += candidateResolution.counters.skippedNoEmbed;
+        mergedAtExtract += candidateResolution.counters.merged;
 
         // ---- Resolve `extends` (tutorial → tutorial) --------------------
         let extendsTutorialId = null;

@@ -100,7 +100,7 @@ describe('extractConceptsFromLearningJourney', () => {
   it('caps covers at 8 by descending confidence', async () => {
     const verdict = {
       covers: Array.from({ length: 20 }, (_, i) => ({
-        slug: `concept-${i}`, confidence: 0.6 + i * 0.01,
+        slug: `concept-${i}`, name: `Concept ${i}`, confidence: 0.6 + i * 0.01,
       })),
       journeyPrerequisites: [],
     };
@@ -111,5 +111,22 @@ describe('extractConceptsFromLearningJourney', () => {
     expect(result.covers.length).toBeLessThanOrEqual(8);
     // Highest confidence first
     expect(result.covers[0].confidence).toBeGreaterThan(result.covers[7].confidence);
+  });
+
+  it('#707: drops covers missing the name field (cannot embed without it)', async () => {
+    const verdict = {
+      covers: [
+        { slug: 'valid', name: 'Valid Concept', confidence: 0.9 },
+        { slug: 'no-name', confidence: 0.9 },           // missing name
+        { slug: 'empty-name', name: '   ', confidence: 0.9 },  // whitespace-only
+      ],
+      journeyPrerequisites: [],
+    };
+    const callModel = vi.fn().mockResolvedValue({ verdict });
+    const result = await extractConceptsFromLearningJourney({
+      callModel, journey, body, bodySource, nearestConcepts, prereqCandidates, existingJourneySlugs,
+    });
+    expect(result.covers).toHaveLength(1);
+    expect(result.covers[0].slug).toBe('valid');
   });
 });

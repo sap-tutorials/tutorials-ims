@@ -26,7 +26,14 @@ Your job is to identify:
 
 1. covers — Concepts the journey discusses or teaches across its modules.
    Aim for 4-8 concepts (journeys are broader than tutorials). Each comes
-   with a confidence in 0.0-1.0; floor 0.6.
+   with:
+     - slug: stable kebab-case identifier. Reuse from the REGISTRY HINT
+             when it fits.
+     - name: human-readable label (e.g. "CAP service handlers"). Required
+             for merge-on-write — the cron embeds this when checking
+             whether a novel slug is a near-duplicate of an existing
+             concept (#707).
+     - confidence: 0.0-1.0; floor 0.6.
 
 2. journeyPrerequisites — OTHER learning journeys this journey assumes
    the learner has already taken. Only emit a prerequisite when the
@@ -54,9 +61,10 @@ export const LEARNING_JOURNEY_EXTRACT_SCHEMA = {
       type: 'array',
       items: {
         type: 'object',
-        required: ['slug', 'confidence'],
+        required: ['slug', 'name', 'confidence'],
         properties: {
           slug: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,78}[a-z0-9]$' },
+          name: { type: 'string', minLength: 2, maxLength: 120 },
           confidence: { type: 'number', minimum: 0, maximum: 1 },
         },
       },
@@ -141,6 +149,9 @@ export async function extractConceptsFromLearningJourney({
   // Post-LLM validation
   const covers = (verdict?.covers ?? [])
     .filter(c => typeof c?.confidence === 'number' && c.confidence >= COVERS_CONFIDENCE_FLOOR)
+    // #707: merge-on-write requires a name to embed. The schema requires it,
+    // but defend against LLM drift.
+    .filter(c => typeof c?.name === 'string' && c.name.trim().length > 0)
     .sort((a, b) => b.confidence - a.confidence)
     .slice(0, COVERS_MAX);
 
