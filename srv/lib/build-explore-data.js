@@ -27,6 +27,9 @@ let cachedAt = 0;
 export async function exploreDataHandler(req, res) {
   try {
     const now = Date.now();
+    // 5-min Cache-Control matches the in-process TTL — lets browsers/CDNs
+    // cache the response too, not just this Node process.
+    res.setHeader('Cache-Control', 'public, max-age=300');
     if (cached && now - cachedAt < TTL_MS) {
       res.setHeader('X-Cache', 'HIT');
       return res.json(cached);

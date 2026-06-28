@@ -35,6 +35,9 @@ watch(isMobile, () => {
   pathError.value = null
 })
 
+// Defeat Vue 3.5 SFC template hoisting (which breaks refs under @vue/test-utils).
+const appLabel = computed(() => `explore-app-${isMobile.value ? 'mobile' : 'desktop'}`)
+
 // Apply filters before passing to the graph. Edges keep an edge only when both
 // endpoints survive the node-type filter AND the predicate itself is enabled.
 const filteredNodes = computed(() => {
@@ -106,7 +109,7 @@ async function onFindPath(p: { from: string; to: string }) {
 </script>
 
 <template>
-  <main class="explore">
+  <main class="explore" :data-app-id="appLabel">
     <p v-if="error" class="explore__error">Failed to load graph: {{ error.message }}</p>
     <p v-else-if="!hasData" class="explore__empty">Loading graph…</p>
     <template v-else>

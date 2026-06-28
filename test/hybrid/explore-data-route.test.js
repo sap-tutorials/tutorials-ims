@@ -61,4 +61,9 @@ describe('/graph/explore-data (HTTP)', () => {
     const r = await project.get('/graph/explore-data');
     expect(r.status).toBe(200);
   });
+
+  it('sets Cache-Control: public, max-age=300', async () => {
+    const r = await project.get('/graph/explore-data');
+    expect(r.headers['cache-control']).toContain('max-age=300');
+  });
 });

@@ -52,6 +52,9 @@ const enabledCount = computed(
 )
 const totalCount = ALL_NODE_TYPES.length + ALL_PREDICATES.length
 
+// Defeat Vue 3.5 SFC template hoisting (which breaks refs under @vue/test-utils).
+const dropdownLabel = computed(() => `filter-dropdown-${open.value ? 'open' : 'closed'}`)
+
 function onNodeTypeChange(t: NodeType) {
   emit('toggleNodeType', t)
 }
@@ -61,7 +64,7 @@ function onPredicateChange(p: PredicateType) {
 </script>
 
 <template>
-  <div class="filter-dropdown">
+  <div class="filter-dropdown" :data-dropdown-id="dropdownLabel">
     <button
       class="filter-dropdown__toggle"
       type="button"
