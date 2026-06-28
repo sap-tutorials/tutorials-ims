@@ -1,8 +1,12 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi } from 'vitest'
-import { useFilters } from '../composables/useFilters'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { useFilters, _resetFilters } from '../composables/useFilters'
 
 describe('useFilters', () => {
+  beforeEach(() => {
+    _resetFilters()
+  })
+
   it('starts with all node types and predicates enabled', () => {
     const { enabledNodeTypes, enabledPredicates } = useFilters()
     expect(enabledNodeTypes.value.size).toBeGreaterThan(0)
@@ -44,5 +48,13 @@ describe('useFilters', () => {
     const detail = (listener.mock.calls[0][0] as CustomEvent).detail
     expect(detail).toMatchObject({ filter: 'requires', kind: 'predicate' })
     window.removeEventListener('kg.explore.filter', listener)
+  })
+
+  it('shares state across multiple consumers (singleton)', () => {
+    const a = useFilters()
+    const b = useFilters()
+    a.toggleNodeType('tutorial')
+    expect(a.enabledNodeTypes.value.has('tutorial')).toBe(false)
+    expect(b.enabledNodeTypes.value.has('tutorial')).toBe(false)
   })
 })

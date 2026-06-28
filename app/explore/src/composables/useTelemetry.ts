@@ -8,9 +8,16 @@ import { onMounted } from 'vue'
  *
  * kg.explore.path_drawn is intentionally deferred to Task 5 (find-path wiring).
  */
+
+// Module-level guard: kg.explore.viewed is a "page-view" event and should fire
+// exactly once per page load, even if multiple components call useTelemetry().
+let viewedDispatched = false
+
 export function useTelemetry() {
   onMounted(() => {
     if (typeof window === 'undefined') return
+    if (viewedDispatched) return
+    viewedDispatched = true
     const initial = window.__INITIAL_GRAPH__
     const nodeCount = initial?.nodes.length ?? 0
     const edgeCount = initial?.edges.length ?? 0
@@ -18,4 +25,9 @@ export function useTelemetry() {
       detail: { nodeCount, edgeCount },
     }))
   })
+}
+
+/** Test hook to reset the one-shot guard between tests. */
+export function _resetTelemetry() {
+  viewedDispatched = false
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onBeforeUnmount, onMounted, getCurrentInstance } from 'vue'
 import type { NodeType, PredicateType } from '../types'
 import { ALL_NODE_TYPES, ALL_PREDICATES } from '../composables/useFilters'
 
@@ -14,10 +14,38 @@ const emit = defineEmits<{
 }>()
 
 const open = ref(false)
+// Vue 3.5's SFC compiler hoists static root vnodes and template refs on
+// hoisted vnodes silently stay null ("Missing ref owner context" warn).
+// Workaround: read $el on mount via the component instance.
+const rootEl = ref<HTMLElement | null>(null)
+const instance = getCurrentInstance()
+onMounted(() => {
+  rootEl.value = (instance?.proxy?.$el as HTMLElement) ?? null
+})
 
 function toggle() {
   open.value = !open.value
 }
+
+function onDocMousedown(e: MouseEvent) {
+  if (!open.value || !rootEl.value) return
+  if (rootEl.value.contains(e.target as Node)) return
+  open.value = false
+}
+
+watch(open, (isOpen) => {
+  if (typeof document === 'undefined') return
+  if (isOpen) {
+    document.addEventListener('mousedown', onDocMousedown)
+  } else {
+    document.removeEventListener('mousedown', onDocMousedown)
+  }
+}, { flush: 'sync' })
+
+onBeforeUnmount(() => {
+  if (typeof document === 'undefined') return
+  document.removeEventListener('mousedown', onDocMousedown)
+})
 
 const enabledCount = computed(
   () => props.enabledNodeTypes.size + props.enabledPredicates.size,
