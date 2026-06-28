@@ -1,14 +1,15 @@
 {{- /* verb-spine.html — spec §6 row 2.
        Context: dict "shelves" $shelves (slice from homepage_shelves.json).
-       Renders 6 verb tiles; each shows verb label + icon + top-3 START_HERE items. */ -}}
+       Renders 6 verb tiles; each shows verb label + icon + top-3 START_HERE items.
+       Uses UI5 Fiori icons (matches header.html shellbar icon pattern). */ -}}
 {{- $shelves := .shelves | default slice -}}
 {{- $verbDefs := slice
-  (dict "key" "LEARN"      "label" "Learn"          "href" "/learn/"      "icon" "📚")
-  (dict "key" "BUILD"      "label" "Build"          "href" "/build/"      "icon" "🔨")
-  (dict "key" "INTEGRATE"  "label" "Integrate"      "href" "/integrate/"  "icon" "🔗")
-  (dict "key" "OPERATE"    "label" "Operate"        "href" "/operate/"    "icon" "⚙️")
-  (dict "key" "AI"         "label" "Extend with AI" "href" "/ai/"         "icon" "🤖")
-  (dict "key" "CONNECT"    "label" "Connect"        "href" "/connect/"    "icon" "🤝")
+  (dict "key" "LEARN"      "label" "Learn"          "href" "/learn/"      "icon" "learning-assistant")
+  (dict "key" "BUILD"      "label" "Build"          "href" "/build/"      "icon" "developer-settings")
+  (dict "key" "INTEGRATE"  "label" "Integrate"      "href" "/integrate/"  "icon" "chain-link")
+  (dict "key" "OPERATE"    "label" "Operate"        "href" "/operate/"    "icon" "settings")
+  (dict "key" "AI"         "label" "Extend with AI" "href" "/ai/"         "icon" "da")
+  (dict "key" "CONNECT"    "label" "Connect"        "href" "/connect/"    "icon" "customer-and-contacts")
 -}}
 <nav class="hp-verbs" aria-label="Developer paths">
   {{- range $verbDefs -}}
@@ -17,10 +18,13 @@
     {{- $vHref := .href -}}
     {{- $vIcon := .icon -}}
     {{- $verbShelves := where $shelves "verb" $vKey -}}
-    {{- $startHere := where $verbShelves "tier" "START_HERE" -}}
+    {{- /* Field on HomepageShelves is `shelf` (enum START_HERE|REFERENCE|TOOLS|KEEP_CURRENT),
+           NOT `tier` — the original spec implementation had a typo here, so the START_HERE
+           preview list was always empty until this fix. */ -}}
+    {{- $startHere := where $verbShelves "shelf" "START_HERE" -}}
     {{- $preview := first 3 (sort $startHere "sortOrder") -}}
     <a href="{{ $vHref }}" class="hp-verb">
-      <div class="hp-verb__icon" aria-hidden="true">{{ $vIcon }}</div>
+      <div class="hp-verb__icon" aria-hidden="true"><ui5-icon name="{{ $vIcon }}"></ui5-icon></div>
       <div class="hp-verb__label">{{ $vLabel }}</div>
       {{- if gt (len $preview) 0 -}}
         <ul class="hp-verb__preview" aria-label="{{ $vLabel }} highlights">
