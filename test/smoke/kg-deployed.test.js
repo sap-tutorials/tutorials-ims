@@ -60,10 +60,10 @@ describe.runIf(APPROUTER && SRV)('KG runtime smoke (issue #381/#533, deployed)',
     expect(body.graphVersion).toMatch(UUID_RE);
   }, 90_000);
 
-  it.runIf(AUTH_TOKEN)(`GET /graph/neighborhood?slug=${TUTORIAL_SLUG} returns rows`, async () => {
+  it(`GET /graph/neighborhood?slug=${TUTORIAL_SLUG} returns rows`, async () => {
+    // 90s timeout — cold-cache query against rebuilt graph.
     const res = await fetchWithRetry(
-      `${SRV}/graph/neighborhood?slug=${encodeURIComponent(TUTORIAL_SLUG)}`,
-      { headers: { Authorization: `Bearer ${AUTH_TOKEN}` } }
+      `${SRV}/graph/neighborhood?slug=${encodeURIComponent(TUTORIAL_SLUG)}`
     );
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -84,10 +84,10 @@ describe.runIf(APPROUTER && SRV)('KG runtime smoke (issue #381/#533, deployed)',
     expect(totalItems).toBeGreaterThanOrEqual(1);
   });
 
-  if (!KG_ADMIN_TOKEN || !AUTH_TOKEN) {
+  if (!KG_ADMIN_TOKEN) {
     // eslint-disable-next-line no-console
     console.warn(
-      '[kg-deployed smoke] Skipping at least one case — set SMOKE_KG_ADMIN_TOKEN and/or SMOKE_AUTH_TOKEN to exercise. ' +
+      '[kg-deployed smoke] Skipping triggerGraphRebuild — set SMOKE_KG_ADMIN_TOKEN to exercise. ' +
       'Refs #381, #533.'
     );
   }

@@ -65,6 +65,16 @@ build-parameters:
         - mkdir -p approuter/static/tutorials && mv approuter/static/tutorials/_nav.json.bak approuter/static/tutorials/_nav.json
         - cp -r app/display-app/dist approuter/static/display-app
         - cp -r app/scanner/webapp approuter/static/scanner-ui
+        # Build app/explore + emit the bundle manifest. The manifest is
+        # read at request time by srv/lib/explore-route.js to inject the
+        # hashed JS/CSS filenames into /explore's HTML. Approuter and srv
+        # live in separate CF containers, so the manifest must ship inside
+        # the srv pod.
+        - npm --prefix app/explore install
+        - npm --prefix app/explore run build
+        - npx tsx scripts/build-explore-manifest.ts app/explore/dist gen/srv/lib/explore-bundle-manifest.json
+        - mkdir -p approuter/static/explore-ui
+        - cp -r app/explore/dist/. approuter/static/explore-ui/
         # Approuter and srv are separate CF apps in separate containers — the
         # approuter cannot `import('../srv/lib/...')` at runtime (no shared FS).
         # Mirror the shared resolver into approuter/lib/ at build time so the

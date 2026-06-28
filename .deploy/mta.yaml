@@ -21,6 +21,17 @@ build-parameters:
         - bash -c "cd .. && npx cds build --production"
         - bash -c "cd .. && node -e 'for (const p of [\"gen/db/src/gen/.hdiconfig\",\"gen/db-qa/src/gen/.hdiconfig\"]) { const fs=require(\"fs\"); const d=JSON.parse(fs.readFileSync(p,\"utf8\")); d.file_suffixes=d.file_suffixes||{}; d.file_suffixes.hdbprocedure={plugin_name:\"com.sap.hana.di.procedure\"}; fs.writeFileSync(p, JSON.stringify(d,null,2)+\"\\n\"); }'"
         - bash -c "rm -f ../gen/db-qa/src/gen/sap.changelog.*.hdbindex"
+        # Build app/explore + emit the bundle manifest into the srv module's
+        # source tree (gen/srv/lib/). The deployed srv pod reads this at
+        # request time (srv/lib/explore-route.js) to inject hashed bundle
+        # filenames into /explore's HTML. Approuter and srv live in separate
+        # CF containers; the runtime can't probe approuter's filesystem, so
+        # the manifest must ship inside the srv pod. MUST run in global
+        # before-all (not the approuter module's commands) because mbt packs
+        # the srv module before the approuter module's commands fire.
+        - bash -c "cd .. && npm --prefix app/explore install --no-audit --no-fund"
+        - bash -c "cd .. && npm --prefix app/explore run build"
+        - bash -c "cd .. && npx tsx scripts/build-explore-manifest.ts app/explore/dist gen/srv/lib/explore-bundle-manifest.json"
         - cp ../xs-security.json .
 
 modules:
@@ -154,8 +165,6 @@ modules:
         - npm --prefix ../app/analytics-explorer run build
         - mkdir -p static/analytics-ui
         - cp -r ../app/analytics-explorer/dist/. static/analytics-ui/
-        - npm --prefix ../app/explore install
-        - npm --prefix ../app/explore run build
         - mkdir -p static/explore-ui
         - cp -r ../app/explore/dist/. static/explore-ui/
         - cp -r ../app/scanner/webapp static/scanner-ui
