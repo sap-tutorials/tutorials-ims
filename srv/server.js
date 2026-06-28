@@ -188,7 +188,8 @@ cds.on('bootstrap', (app) => {
   app.get('/build/concepts', buildConceptsHandler);
   app.get('/graph/explore-data', exploreDataHandler);
   app.get('/graph/path', graphPathHandler);
-  app.get('/explore/?', exploreHandler);
+  app.get('/explore', exploreHandler);
+  app.get('/explore/', exploreHandler);
   app.get('/build/co-completions', coCompletionsHandler);
   app.get('/build/mission/:slug', missionDetailHandler);
   app.get('/build/navigator', navigatorCatalogHandler);
