@@ -263,7 +263,7 @@ import { mergeConceptPair } from './lib/kg-merge-pair.js';
 import { findNearDuplicates } from './lib/kg-similarity.js';
 import { loadConceptsWithEmbeddings } from './lib/kg-concept-loader.js';
 import { resolveKnowledgeGraphSettings } from './lib/runtime-config/kg-settings.js';
-import { mergeOtherResources } from './lib/kg-neighborhood-merge.js';
+import { mergeOtherResources, MAX_OTHER_RESOURCES } from './lib/kg-neighborhood-merge.js';
 
 const NAMESPACE = 'com.sap.developers.ims';
 
@@ -696,7 +696,7 @@ export default cds.service.impl(async function () {
           if (overlapByJourney.size > 0) {
             const topJourneyIds = [...overlapByJourney.entries()]
               .sort(([, a], [, b]) => b - a)
-              .slice(0, 5)
+              .slice(0, MAX_OTHER_RESOURCES)
               .map(([id]) => id);
 
             const journeys = await SELECT.from(LearningJourneys)
@@ -733,7 +733,7 @@ export default cds.service.impl(async function () {
           if (overlapByPost.size > 0) {
             const topPostIds = [...overlapByPost.entries()]
               .sort(([, a], [, b]) => b - a)
-              .slice(0, 5)
+              .slice(0, MAX_OTHER_RESOURCES)
               .map(([id]) => id);
 
             const posts = await SELECT.from(BlogPosts)

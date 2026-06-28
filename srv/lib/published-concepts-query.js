@@ -146,7 +146,7 @@ export async function buildConceptsPayload(db) {
     );
     // Group then cap at 8 newest per concept (postedAt desc).
     const grouped = groupBy(blogRows, 'concept_ID', r => ({
-      slug: r.post_slug,
+      slug: (r.post_slug || '').toLowerCase(),
       title: r.post_title,
       url: r.post_url,
       authorName: r.post_authorName,

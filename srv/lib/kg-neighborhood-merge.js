@@ -10,6 +10,18 @@
 // TOTAL across both types (no per-type diversity quota — spec §9).
 
 /**
+ * Cap on the number of "Other resources" surfaced in tutorial-OP sidebars.
+ * Applied AFTER the cross-type merge — i.e., top-5 TOTAL across all content
+ * types, not top-5 per type. Spec §9: "top-5 total across types"
+ * (no type-diversity quota).
+ *
+ * Also used as the per-type intermediate cap in
+ * srv/knowledge-graph-service.js to bound the candidate set fed into
+ * mergeOtherResources (current behavior: 5 journeys + 5 blogs → top-5).
+ */
+export const MAX_OTHER_RESOURCES = 5;
+
+/**
  * Merge journey + blog rows; sort by overlapCount desc; cap top-5.
  *
  * @param {Array<object>} journeyRows
@@ -19,5 +31,5 @@
 export function mergeOtherResources(journeyRows = [], blogRows = []) {
   return [...journeyRows, ...blogRows]
     .sort((a, b) => (b.overlapCount ?? 0) - (a.overlapCount ?? 0))
-    .slice(0, 5);
+    .slice(0, MAX_OTHER_RESOURCES);
 }

@@ -224,6 +224,13 @@ export async function runFetchBlogPosts(deps = {}) {
   }
 
   // 6. Extract loop, bounded by budget.
+  // nearestConcepts is sampled ONCE before the loop. New concepts minted by
+  // resolveConceptCandidates during this cycle aren't surfaced as registry
+  // hints to the LLM for later posts in the same cycle — they ARE used by
+  // the merge probe (resolveConceptCandidates reads the live registry.embeddings
+  // map which is warmed below when each new concept is minted), so correctness
+  // is preserved. The hint freshness degradation is acceptable for v1; revisit
+  // if the per-cycle mint rate makes this material.
   const nearestConcepts = [...registry.bySlug.values()].slice(0, K_CONCEPTS);
   let extracted = 0;
 
