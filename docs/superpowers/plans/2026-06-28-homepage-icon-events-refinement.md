@@ -99,7 +99,7 @@ If hits appear in other files, the broadened guard in Task 4 will subject those 
 | `test/unit/check-icon-imports.test.ts` | Modify | Two new cases proving the dict regex catches the verb-spine pattern. |
 | `hugo-apps/src/homepage-bands/EventsBand.test.ts` | Create | Vue Test Utils test for 4 component states. |
 
-Tasks are ordered so each commit leaves the tree green. Task 1 lands the three new icon imports first; this resolves the four FAIL entries the existing guard reports today (Steps 2 and 4 verify the count progression). Task 4 then teaches the guard about the Hugo `dict` pattern — at that point all six verb-spine icons become visible as "used" to the guard, but all six are already imported (3 from Task 1 + 3 that were always there), so the guard stays green. Reversing the order would briefly leave the broadened guard red.
+Tasks are ordered so each commit leaves the tree green. Task 1 lands the three new icon imports first; this resolves the four FAIL entries the existing guard reports today. Task 4 then teaches the guard about the Hugo `dict` pattern — at that point all six verb-spine icons become visible as "used" to the guard, but all six are already imported (3 from Task 1 + 3 that were always there), so the guard stays green. Reversing the order would briefly leave the broadened guard red.
 
 ---
 
@@ -438,13 +438,23 @@ echo "---exit: $?"
 
 Expected: `OK — N unique icon(s) referenced, all registered (…).` Exit 0.
 
-The unique-icon count should be HIGHER than the count printed in Step 2.4. Specifically, six new names are now visible to the guard (`learning-assistant`, `developer-settings`, `chain-link`, `settings`, `da`, `customer-and-contacts`) — all already imported. If the count is unchanged from Step 2.4 the new regex isn't matching; STOP and inspect verb-spine.html.
+**A note on icon counts:** Don't read into the printed unique-icon count. All six verb-spine dict-icons (`chain-link`, `customer-and-contacts`, `da`, `developer-settings`, `learning-assistant`, `settings`) ALREADY appear elsewhere in `hugo/` as `icon="<name>"` attributes (in header.html after Task 2, and in tutorial share popovers, shellbar items, etc.), so the de-duplicated unique-icon count after Task 4 is identical to Step 2.4. That's expected — what we're verifying here is exit 0 (no icon left unregistered) and the next step's positive probe that the new regex is actually firing.
 
-Note `learning-assistant`, `developer-settings`, `chain-link` were already visible via the header.html `icon="…"` form (the existing regex), so the de-duplicated count grows by exactly the three icons unique to verb-spine: `settings` (already present in the menu too, so deduped — net 0), `da` (already imported, but new to the usage list), `customer-and-contacts` (header.html now uses this too post-Task-2, so deduped — net 0). The exact arithmetic isn't important; the assertion is "count goes UP, exit 0".
+- [ ] **Step 4.5: Positive probe that `HUGO_DICT_ICON_RE` is actually matching verb-spine.html**
 
-If exit code is 1, read the stderr carefully: the broadened regex may have unmasked an icon used in verb-spine that wasn't already covered. Step 0.4's sweep should have caught this, but worth re-checking.
+Because the icon-count check can't tell us anything (every dict-icon overlaps with an existing `icon="…"` reference), use a one-liner to inspect the raw usages list:
 
-- [ ] **Step 4.5: Run the existing test suite for the script (unchanged tests must still pass)**
+```bash
+npx tsx -e "import('./scripts/check-icon-imports.ts').then(m => { const r = m.checkIconImports(); const vs = r.usages.filter(u => u.file.endsWith('verb-spine.html')); console.log('verb-spine usages:', vs.length); vs.forEach(u => console.log('  ', u.name, u.file + ':' + u.line)); });"
+```
+
+Expected:
+- `verb-spine usages: 6`
+- One line each for `learning-assistant`, `developer-settings`, `chain-link`, `settings`, `da`, `customer-and-contacts`, all at lines 7-12 of `hugo/layouts/partials/homepage/verb-spine.html`.
+
+If `verb-spine usages: 0`, the regex isn't matching the dict block — STOP and inspect.
+
+- [ ] **Step 4.6: Run the existing test suite for the script (unchanged tests must still pass)**
 
 ```bash
 npx vitest run test/unit/check-icon-imports.test.ts 2>&1 | tail -25
@@ -452,7 +462,7 @@ npx vitest run test/unit/check-icon-imports.test.ts 2>&1 | tail -25
 
 Expected: all existing tests pass. No new failures from the regex addition. (The 9 existing tests in the file at design time all stay green; we add 2 more in Task 5.)
 
-- [ ] **Step 4.6: Commit the script-only change (tests added next task)**
+- [ ] **Step 4.7: Commit the script-only change (tests added next task)**
 
 ```bash
 git add scripts/check-icon-imports.ts
