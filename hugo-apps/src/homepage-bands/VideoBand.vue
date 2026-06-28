@@ -31,7 +31,7 @@ const recentSlice = computed(() => recent.value.slice(0, 3));
 
 onMounted(async () => {
   try {
-    const res = await fetch('/api/homepage/videos');
+    const res = await fetch('/homepage/videos');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const body: VideosResponse = await res.json();
     // Support both shaped response {featured, recent:[...]} and flat array

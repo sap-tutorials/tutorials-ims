@@ -202,6 +202,13 @@
       "csrfProtection": false
     },
     {
+      "source": "^/api/alerts$",
+      "target": "/api/alerts",
+      "destination": "srv-api",
+      "authenticationType": "none",
+      "csrfProtection": false
+    },
+    {
       "source": "^/api/(.*)$",
       "target": "/api/$1",
       "destination": "srv-api",
@@ -239,6 +246,13 @@
     {
       "source": "^/build/(.*)$",
       "target": "/build/$1",
+      "destination": "srv-api",
+      "authenticationType": "none",
+      "csrfProtection": false
+    },
+    {
+      "source": "^/homepage/(.*)$",
+      "target": "/homepage/$1",
       "destination": "srv-api",
       "authenticationType": "none",
       "csrfProtection": false

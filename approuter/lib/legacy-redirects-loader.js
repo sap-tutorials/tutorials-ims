@@ -1,5 +1,5 @@
 // Dynamic legacy-redirects loader for the approuter (#639).
-// Fetches /api/homepage/redirectsActive from the srv app at startup, then
+// Fetches /homepage/redirectsActive from the srv app at startup, then
 // hourly. Falls back to a bundled minimal map on first-boot fetch failure
 // so a broken srv never breaks user-facing redirects.
 // Spec §9.3 + §17 resolution 6.
@@ -10,7 +10,7 @@ const REFRESH_MS = 60 * 60 * 1000  // 1 hour
 const TIMEOUT_MS = 5000
 
 // Fallback if srv is unreachable on first boot — keeps the 3 named seed
-// redirects working even if /api/homepage/redirectsActive 503s.
+// redirects working even if /homepage/redirectsActive 503s.
 const BOOTSTRAP_MAP = [
   { id: 'b1', fromPath: '/tutorial-navigator.html', toPath: '/tutorial-navigator/', statusCode: 301, isPattern: false, isActive: true },
   { id: 'b2', fromPath: '/index.html',              toPath: '/',                    statusCode: 301, isPattern: false, isActive: true },
@@ -57,7 +57,7 @@ let _index = { exactMap: new Map(), patterns: [] }
 async function refresh(srvUrl, logger = console) {
   try {
     const { buildIndex } = await loadResolver()
-    const res = await fetch(`${srvUrl}/api/homepage/redirectsActive`, {
+    const res = await fetch(`${srvUrl}/homepage/redirectsActive`, {
       signal: AbortSignal.timeout(TIMEOUT_MS)
     })
     if (!res.ok) throw new Error(`status ${res.status}`)
