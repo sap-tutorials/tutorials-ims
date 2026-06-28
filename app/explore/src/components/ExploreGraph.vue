@@ -120,14 +120,47 @@ function applyPathOverlay(path: string[] | null): void {
     }
   })
 
-  // Camera-fit to the bounding box of path nodes. Sigma v3 doesn't expose
-  // a "fit to subset of nodes" helper out of the box; an animatedReset()
-  // re-centers on the full graph, which at least guarantees the path is
-  // visible. Finer-grained fit (compute min/max x,y of path nodes and
-  // call camera.animate({x, y, ratio})) is tracked as a follow-up — see
-  // issue #693.
+  // Camera-fit to the bounding box of path nodes (#693). Compute the min/max
+  // x/y across all path-node graphology attributes, then animate the camera
+  // to the center with a `ratio` derived from the bounding-box span so the
+  // path occupies most of the viewport. `ratio` < 1 zooms in; 0 is fully
+  // zoomed in. We pad by ~30% (multiplier 0.7) so the highlighted edges
+  // aren't pressed against the viewport edges. Falls back to animatedReset()
+  // if any path node lacks numeric x/y (test mocks, malformed nodes).
   try {
-    renderer?.getCamera?.()?.animatedReset?.()
+    const camera = renderer?.getCamera?.()
+    if (!camera || typeof g.getNodeAttribute !== 'function') {
+      camera?.animatedReset?.()
+    } else {
+      const xs: number[] = []
+      const ys: number[] = []
+      for (const id of path) {
+        const x = g.getNodeAttribute(id, 'x')
+        const y = g.getNodeAttribute(id, 'y')
+        if (Number.isFinite(x)) xs.push(x as number)
+        if (Number.isFinite(y)) ys.push(y as number)
+      }
+      if (xs.length >= 2 && ys.length >= 2) {
+        const minX = Math.min(...xs)
+        const maxX = Math.max(...xs)
+        const minY = Math.min(...ys)
+        const maxY = Math.max(...ys)
+        const centerX = (minX + maxX) / 2
+        const centerY = (minY + maxY) / 2
+        // ratio is roughly half the span — with the 0.7 padding multiplier the
+        // path fills ~70% of the viewport. Floor at 0.1 so tightly-clustered
+        // paths don't zoom in past Sigma's default minCameraRatio.
+        const span = Math.max(maxX - minX, maxY - minY)
+        const ratio = Math.max(0.1, (span / 2) * 0.7)
+        // Sigma v3's `camera.animate({x, y, ratio}, {duration})` returns a
+        // promise; we don't await it because the next reactive change should
+        // be allowed to interrupt the animation cleanly.
+        camera.animate?.({ x: centerX, y: centerY, ratio }, { duration: 600 })
+      } else {
+        // Not enough numeric coords (likely a test mock); use the safe fallback.
+        camera.animatedReset?.()
+      }
+    }
   } catch {
     // No-op if Sigma's camera API isn't available in the current test mock.
   }

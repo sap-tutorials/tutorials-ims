@@ -2,6 +2,9 @@ node_modules/
 dist/
 site/tutorials/
 hugo/content/tutorials/
+# Generated per-concept landing pages (issue #446 Track 3-A). Written by
+# scripts/fetch-concepts.ts at build time.
+hugo/content/concepts/
 # Generated per-advocate profile pages (issue #601). Only _index.md is tracked.
 hugo/content/developer-advocates/*.md
 !hugo/content/developer-advocates/_index.md

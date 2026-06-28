@@ -716,6 +716,34 @@ cds.on('served', async () => {
       }
     });
 
+    // #685: KnowledgeGraphService.Concepts writes trigger a catalog-only
+    // rebuild so the /concepts/<slug>/ Hugo page generation + /build/concepts
+    // payload pick up admin Publish/Unpublish (the bound actions) and inline
+    // name/description edits (the UPDATE path). Lives on KG service, not
+    // AdminService, so it needs its own hook. Pattern mirrors the admin.after
+    // dispatch above — same x-migration-mode short-circuit, same classifier.
+    const kg = await cds.connect.to('KnowledgeGraphService');
+    kg.after(['CREATE', 'UPDATE', 'DELETE'], 'Concepts', async (_data, req) => {
+      if (req.headers?.['x-migration-mode'] === 'true') return;
+      const entityName = req.target?.name?.split('.').pop();
+      if (!entityName) return;
+      const { mode, forceCapRefetch } = classifyRebuildMode(entityName, 'crud');
+      if (mode === 'none') return;
+      scheduleRebuild('kg-write', { mode, forceCapRefetch }).catch(err => {
+        console.error('[rebuild-trigger] scheduling failed', err);
+      });
+    });
+    const KG_CATALOG_ACTIONS = ['publishConcept', 'unpublishConcept'];
+    for (const actionName of KG_CATALOG_ACTIONS) {
+      kg.after(actionName, async (_data, req) => {
+        if (req.headers?.['x-migration-mode'] === 'true') return;
+        const { mode, forceCapRefetch } = classifyRebuildMode(actionName, 'action');
+        scheduleRebuild(`kg-action:${actionName}`, { mode, forceCapRefetch }).catch(err => {
+          console.error('[rebuild-trigger] scheduling failed', err);
+        });
+      });
+    }
+
     globalThis.__navigatorCacheInvalidatorRegistered = true;
   }
 

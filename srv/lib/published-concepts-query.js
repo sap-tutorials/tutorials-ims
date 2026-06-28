@@ -23,14 +23,17 @@ import cds from '@sap/cds';
  * }>}
  */
 export async function buildConceptsPayload(db) {
-  const { Concepts, ConceptEdges, TutorialConceptLinks } =
+  // The publish gate (`publishedAt IS NOT NULL AND status = 'ACTIVE'`) is
+  // declared exactly once, in the PublishedConcepts CDS view at
+  // srv/knowledge-graph-service.cds — single source of truth.
+  const { ConceptEdges, TutorialConceptLinks } =
     cds.entities('com.sap.developers.ims');
+  const { PublishedConcepts } = cds.entities('KnowledgeGraphService');
 
   // 1. Pull the publishable concepts.
   const published = await db.run(
-    SELECT.from(Concepts)
+    SELECT.from(PublishedConcepts)
       .columns('ID', 'slug', 'name', 'description')
-      .where({ publishedAt: { '!=': null }, status: 'ACTIVE' })
       .orderBy('slug')
   );
 
