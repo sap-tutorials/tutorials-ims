@@ -59,7 +59,7 @@ The label for severities mirrors the code (the codes are already human-readable)
 
 ### 3. `app/admin-annotations.cds`
 
-Replace the existing minimal annotation on `severity` and `audience` (around line 2770) with the canonical pattern — keep `@Common.ValueListWithFixedValues: true` (renders as a Select rather than the search-style F4 dialog), add `@Common.ValueList` pointing at the new collections, and add `@Common.Text: label` with `#TextOnly` arrangement so the user sees the friendly label in the dropdown items:
+Replace the existing minimal annotation on `severity` and `audience` (around line 2770) with the canonical pattern — keep `@Common.ValueListWithFixedValues: true` (renders as a Select rather than the search-style F4 dialog) and add `@Common.ValueList` pointing at the new collections. The friendly label appears in the dropdown items via the `Common.ValueListParameterDisplayOnly` `label` parameter — no separate `@Common.Text` / `@Common.TextArrangement` on the field is needed (matches the `Events.eventType → EventTypes` precedent at [app/admin-annotations.cds:39-40](../../../app/admin-annotations.cds#L39-L40); contrasts with FK fields like `Missions.primaryTagRef` that need `@Common.Text` because their stored value is a hidden UUID):
 
 ```cds
 severity    @Common.Label: 'Severity'
@@ -105,6 +105,7 @@ Nothing public moves:
 - The in-memory alerts cache ([srv/lib/alerts-cache.js](../../../srv/lib/alerts-cache.js)) is keyed on `Alerts` and continues to bust on save.
 - The rebuild classifier already returns `mode: 'none'` for `Alerts` ([srv/lib/_classify-rebuild-mode.js](../../../srv/lib/_classify-rebuild-mode.js)) — no Hugo rebuild triggered.
 - DB schema unchanged → no HDI deploy needed.
+- `srv-qa` has no `admin-service` module (only search-service and preview-renderer live there) → no parallel change required, no `srv-qa` cp-list update.
 
 ## Testing
 
