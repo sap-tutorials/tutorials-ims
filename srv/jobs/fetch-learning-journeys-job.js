@@ -101,9 +101,13 @@ export async function runFetchLearningJourneys() {
     if (settings && Number.isFinite(settings.learningJourneyExtractBudgetPerDay)) {
       budgetRemaining = settings.learningJourneyExtractBudgetPerDay;
     }
-  } catch {
+  } catch (err) {
     // ChatSettings doesn't have the new column yet, or table missing —
     // fall through with default. Follow-up issue can add the column.
+    // Log at warn so operators can see when the gate is using the default
+    // (silent swallow previously masked schema drift, per
+    // [[feedback_silent_swallow_hides_dead_code]]).
+    LOG.warn(`ChatSettings.learningJourneyExtractBudgetPerDay unavailable; using default=${DEFAULT_BUDGET}: ${err.message}`);
   }
   if (budgetRemaining <= 0) {
     LOG.info(`fetch-learning-journeys: budget exhausted (${budgetRemaining}); skipping cycle`);
@@ -180,7 +184,21 @@ export async function runFetchLearningJourneys() {
   }
 
   // 3. For each journey needing extraction, run the pipeline.
+  // Enforce the per-cycle budget by decrementing per successful extraction
+  // attempt. The previous version read `budgetRemaining` at cron start and
+  // only short-circuited when configured `<= 0` — useless once a non-zero
+  // budget was in place. Each journey costs 1 unit (we budget journeys, not
+  // tokens; matches the daily cadence).
+  let journeysExtracted = 0;
   for (const j of toExtract) {
+    if (journeysExtracted >= budgetRemaining) {
+      LOG.warn(
+        `fetch-learning-journeys: budget exhausted (${budgetRemaining} journeys); ` +
+        `deferring ${toExtract.length - journeysExtracted} to next cycle`
+      );
+      summary.budgetExhausted = true;
+      break;
+    }
     try {
       const { body, source } = await fetchJourneyBody(j.url);
       // Increment the right per-tier counter.
@@ -271,11 +289,13 @@ export async function runFetchLearningJourneys() {
         });
         summary.prereqsWritten++;
       }
+      journeysExtracted++;
     } catch (err) {
       LOG.error(`Journey ${j.slug} extraction failed: ${err.message}`);
       summary.errors++;
     }
   }
+  summary.journeysExtracted = journeysExtracted;
 
   LOG.info(`fetch-learning-journeys cycle done: ${JSON.stringify(summary)}`);
   return summary;
