@@ -6,7 +6,10 @@ import { onMounted } from 'vue'
  * node_navigated, search, filter) are dispatched directly by the components
  * that own the user interaction — same pattern as Phase 1.
  *
- * kg.explore.path_drawn is intentionally deferred to Task 5 (find-path wiring).
+ * kg.explore.path_drawn is exposed as a module-level dispatcher
+ * (dispatchPathDrawn) — matches the pattern used elsewhere in the explore
+ * app for component-owned events. Called by App.vue after fetchPath()
+ * returns a non-empty result.
  */
 
 // Module-level guard: kg.explore.viewed is a "page-view" event and should fire
@@ -25,6 +28,16 @@ export function useTelemetry() {
       detail: { nodeCount, edgeCount },
     }))
   })
+}
+
+/**
+ * Fire kg.explore.path_drawn — emitted once per successful find-path
+ * overlay render. detail.stepCount counts the steps actually drawn
+ * (i.e. after server-side dedup), not the slugs the user typed.
+ */
+export function dispatchPathDrawn(detail: { from: string; to: string; stepCount: number }) {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent('kg.explore.path_drawn', { detail }))
 }
 
 /** Test hook to reset the one-shot guard between tests. */

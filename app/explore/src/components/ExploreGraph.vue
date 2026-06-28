@@ -1,19 +1,29 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import Graph from 'graphology'
 import Sigma from 'sigma'
 import forceAtlas2 from 'graphology-layout-forceatlas2'
 import type { ExploreNode, ExploreEdge, NodeType, PredicateType } from '../types'
 
-const props = defineProps<{ nodes: ExploreNode[]; edges: ExploreEdge[] }>()
+const props = defineProps<{
+  nodes: ExploreNode[]
+  edges: ExploreEdge[]
+  /** Ordered list of node IDs on the active find-path overlay. null = no overlay. */
+  path?: string[] | null
+}>()
 const emit = defineEmits<{ nodeClick: [{ id: string; node: ExploreNode }] }>()
+
+// Path-overlay styling. Kept here next to the edge-default palette so a
+// future themer touches one file.
+const PATH_EDGE_COLOR = '#ff6b35'   // SAP-friendly orange — high contrast vs the grey edges
+const PATH_EDGE_SIZE = 3
 
 const container = ref<HTMLDivElement | null>(null)
 // Defeat Vue 3.5 SFC template hoisting (which makes the container ref null
 // under @vue/test-utils 2.4.10 + happy-dom because the hoisted vnode is
 // never attached). The binding has no runtime effect; it just signals the
 // compiler to keep the vnode in the render function.
-const containerLabel = computed(() => `explore-graph-${props.nodes.length}`)
+const containerLabel = computed(() => `explore-graph-${props.nodes.length}-${props.path?.length ?? 0}`)
 let renderer: Sigma | null = null
 let graph: Graph | null = null
 
@@ -45,6 +55,9 @@ onMounted(() => {
     if (!graph) return
     emit('nodeClick', { id: node, node: graph.getNodeAttributes(node) as ExploreNode })
   })
+  // Apply any initial path overlay (when path prop is already set on first
+  // render — e.g. SSR/hydration).
+  applyPathOverlay(props.path ?? null)
 })
 
 onBeforeUnmount(() => {
@@ -52,6 +65,73 @@ onBeforeUnmount(() => {
   renderer = null
   graph = null
 })
+
+// Re-apply path overlay whenever the prop changes. The watcher fires on
+// both set (paint highlight) and clear (reset to default colors).
+watch(() => props.path, (next) => {
+  applyPathOverlay(next ?? null)
+})
+
+function applyPathOverlay(path: string[] | null): void {
+  if (!graph) return
+  const g = graph
+
+  // No path → reset every edge to its default predicate color/size.
+  if (!path || path.length < 2) {
+    if (typeof g.forEachEdge !== 'function') return
+    g.forEachEdge((key: string, attrs: any) => {
+      const type = attrs?.type as PredicateType | undefined
+      g.setEdgeAttribute(key, 'color', type ? edgeColorForType(type) : '#999999')
+      g.setEdgeAttribute(key, 'size', 1)
+    })
+    renderer?.refresh?.()
+    return
+  }
+
+  // Collect the edge keys connecting consecutive path-node pairs. Use
+  // forEachEdge(s, o, cb) so the lookup tolerates parallel edges between
+  // the same two nodes (multiple predicate types).
+  const pathEdgeKeys = new Set<string>()
+  for (let i = 0; i < path.length - 1; i++) {
+    const s = path[i]
+    const o = path[i + 1]
+    if (typeof g.forEachEdge !== 'function') break
+    // graphology forEachEdge(source, target, cb) iterates both directions
+    // on undirected graphs and source→target only on directed graphs;
+    // explore graphs are directed (subject → object), so also probe the
+    // reverse direction for predicates that surface as the inverse.
+    g.forEachEdge(s, o, (key: string) => {
+      pathEdgeKeys.add(key)
+    })
+    g.forEachEdge(o, s, (key: string) => {
+      pathEdgeKeys.add(key)
+    })
+  }
+
+  if (typeof g.forEachEdge !== 'function') return
+  g.forEachEdge((key: string, attrs: any) => {
+    if (pathEdgeKeys.has(key)) {
+      g.setEdgeAttribute(key, 'color', PATH_EDGE_COLOR)
+      g.setEdgeAttribute(key, 'size', PATH_EDGE_SIZE)
+    } else {
+      const type = attrs?.type as PredicateType | undefined
+      g.setEdgeAttribute(key, 'color', type ? edgeColorForType(type) : '#999999')
+      g.setEdgeAttribute(key, 'size', 1)
+    }
+  })
+
+  // Camera-fit to the bounding box of path nodes. Sigma v3 doesn't expose
+  // a "fit to subset of nodes" helper out of the box; an animatedReset()
+  // re-centers on the full graph, which at least guarantees the path is
+  // visible. Finer-grained fit (compute min/max x,y of path nodes and
+  // call camera.animate({x, y, ratio})) is a follow-up — see PR 6.
+  try {
+    renderer?.getCamera?.()?.animatedReset?.()
+  } catch {
+    // No-op if Sigma's camera API isn't available in the current test mock.
+  }
+  renderer?.refresh?.()
+}
 
 function colorForNodeType(t: NodeType): string {
   return NODE_COLORS[t]
