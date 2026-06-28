@@ -111,6 +111,39 @@
         </li>
       </ul>
     </section>
+
+    <!--
+      Phase 4.1 (#447 §2.6): cross-corpus "Other resources" rail.
+      Renders learning-journey rows joined by overlap on the tutorial's
+      teaches concepts. The server-side handler in
+      srv/knowledge-graph-service.js sorts by overlapCount and caps at
+      the top 5; the client just renders what arrived.
+
+      Hidden when empty — no empty placeholder. Future sub-phases (4.2-
+      4.6) will widen the `type` discriminant; the `onOtherResourceClick`
+      handler branches on `r.type` so each sub-phase can emit its own
+      telemetry event.
+
+      External links: `target="_blank" rel="noopener"` because journey
+      URLs are on learning.sap.com (different origin).
+    -->
+    <section v-if="otherResources.length > 0" class="kg-section-other">
+      <h3>Other resources</h3>
+      <ul>
+        <li v-for="r in otherResources" :key="r.slug">
+          <a
+            :href="r.url"
+            target="_blank"
+            rel="noopener"
+            @click="onOtherResourceClick(r)"
+          >{{ r.title }}</a>
+          <span v-if="r.level || r.durationHours" class="kg-sidebar-meta">
+            <template v-if="r.level"> · {{ formatLevel(r.level) }}</template>
+            <template v-if="r.durationHours"> · {{ r.durationHours }}h</template>
+          </span>
+        </li>
+      </ul>
+    </section>
   </aside>
 
   <!--
@@ -128,8 +161,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref } from 'vue'
-import type { NeighborhoodResult, SidebarState } from './types'
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import type { NeighborhoodResult, OtherResource, SidebarState } from './types'
 
 const slug = (typeof document !== 'undefined' &&
   document.documentElement?.dataset?.pageSlug) || ''
@@ -138,6 +171,13 @@ const state = ref<SidebarState>('loading')
 const data = ref<NeighborhoodResult | null>(null)
 const rootEl = ref<HTMLElement | null>(null)
 const fetchTriggered = ref(false)
+
+// Phase 4.1 (#447 §2.6): the cross-corpus rail reads from
+// `data.otherResources`. The field is optional on the wire (older cached
+// payloads may not have it), so we coalesce to [] for the template guard.
+const otherResources = computed<OtherResource[]>(
+  () => data.value?.otherResources ?? [],
+)
 
 let observer: IntersectionObserver | null = null
 
@@ -183,6 +223,26 @@ function onConceptHover(conceptSlug: string): void {
 // follows its href normally (no preventDefault).
 function onConceptClick(conceptSlug: string): void {
   emit('kg.concept.tutorial_clicked', { conceptSlug, tutorialSlug: slug })
+}
+
+// Phase 4.1 (#447 §2.6 + Q5): cross-corpus rail telemetry. Branches on
+// `r.type` so each Phase 4 sub-phase can emit its own event without
+// renaming this handler. Today only 'learning-journey' is populated;
+// 4.2-4.6 will add 'news', 'video', 'sample', 'discovery', 'resource'.
+function formatLevel(level: string | null | undefined): string {
+  if (!level) return ''
+  return level.charAt(0).toUpperCase() + level.slice(1).toLowerCase()
+}
+
+function onOtherResourceClick(r: OtherResource): void {
+  if (typeof window === 'undefined') return
+  if (r.type === 'learning-journey') {
+    emit('kg.learning_journey.linked_from_sidebar', {
+      tutorialSlug: slug,
+      journeySlug: r.slug,
+    })
+  }
+  // Future sub-phases branch here for their own telemetry events.
 }
 
 // ── Empty / fetch helpers ────────────────────────────────────────────
