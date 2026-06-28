@@ -67,3 +67,48 @@ annotate LearningJourneyConceptLinks with
 
 annotate LearningJourneyPrerequisites with
   @assert.unique.journeyPrereq : [journey, prerequisite];
+
+/**
+ * Phase 4.2 (#447): SAP Community blog posts.
+ *
+ * - khorosMessageId is the natural key from upstream; slug is derived as
+ *   `bp-${khorosMessageId}` for IRI namespace-safety.
+ * - excerpt is the first 280 chars of body, captured at upsert time so the
+ *   sidebar otherResources card doesn't have to fetch the body.
+ * - No `body` column: body is fetched fresh during extraction and discarded
+ *   (Khoros returns full body in every search response).
+ * - pinUntil reserved on-entity for chassis uniformity; no admin surface
+ *   writes to it in 4.2 (per spec §3 GC note).
+ */
+entity BlogPosts : cuid, managed {
+  slug              : String(120) @assert.unique;
+  title             : String(400);
+  excerpt           : String(1000);
+  url               : String(500);
+  khorosMessageId   : String(40);
+  postedAt          : Timestamp;
+  authorLogin       : String(80);
+  authorName        : String(200);
+  authorAvatarUrl   : String(500);
+
+  sourceId          : String(120);
+  contentHash       : String(64);
+  lastExtractedHash : String(64);
+  firstSeenAt       : Timestamp @cds.on.insert: $now;
+  lastSeenAt        : Timestamp;
+  pinUntil          : Timestamp;
+
+  links : Composition of many BlogPostConceptLinks on links.post = $self;
+}
+
+entity BlogPostConceptLinks : cuid, managed {
+  post         : Association to BlogPosts @assert.notNull;
+  concept      : Association to ims.Concepts @assert.notNull;
+  predicate    : String(20) default 'discusses';
+  confidence   : Decimal(3, 2);
+  extractedAt  : Timestamp;
+  modelVersion : String(40);
+}
+
+annotate BlogPostConceptLinks with
+  @assert.unique.postConcept : [post, concept];
