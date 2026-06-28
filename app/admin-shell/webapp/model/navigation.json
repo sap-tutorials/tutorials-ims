@@ -20,8 +20,8 @@
         { "key": "categories", "title": "Categories" },
         { "key": "concepts", "title": "Concepts" },
         { "key": "advocates", "title": "Advocates" },
-        { "key": "alerts", "title": "Alerts", "icon": "sap-icon://notification-2" },
-        { "key": "homepage", "title": "Homepage", "icon": "sap-icon://home" }
+        { "key": "alerts", "title": "Alerts" },
+        { "key": "homepage", "title": "Homepage" }
       ]
     },
     {
@@ -48,10 +48,10 @@
       "title": "Reporting",
       "icon": "sap-icon://line-chart-time-axis",
       "items": [
-        { "key": "analyticsExternal", "title": "Analytics", "icon": "sap-icon://bar-chart", "href": "/analytics-ui/", "target": "_self", "requiredScope": "Tutorial.Author" },
-        { "key": "analytics", "title": "Completion analytics", "icon": "sap-icon://line-chart" },
+        { "key": "analyticsExternal", "title": "Analytics", "href": "/analytics-ui/", "target": "_self", "requiredScope": "Tutorial.Author" },
+        { "key": "analytics", "title": "Completion analytics" },
         { "key": "statistics", "title": "Statistics" },
-        { "key": "dataExport", "title": "Data Export", "icon": "sap-icon://download" }
+        { "key": "dataExport", "title": "Data Export" }
       ]
     },
     {
