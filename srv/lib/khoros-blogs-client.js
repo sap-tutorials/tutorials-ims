@@ -38,10 +38,13 @@ function getTransport() {
           headers: { Accept: 'application/json' },
           signal: ctrl.signal,
         });
-        if (!r.ok) throw new Error(`khoros HTTP ${r.status}`);
-        const json = JSON.parse(await r.text());
+        if (!r.ok) {
+          const body = await r.text().catch(() => '');
+          throw new Error(`khoros HTTP ${r.status}: ${body.slice(0, 500)}`);
+        }
+        const json = await r.json();
         if (json.status !== 'success') {
-          throw new Error(`khoros search failed: ${json.message || JSON.stringify(json)}`);
+          throw new Error(`khoros search failed: ${json.message || JSON.stringify(json).slice(0, 500)}`);
         }
         return json;
       } finally {
@@ -81,6 +84,22 @@ function writeDiskCache(hash, entry) {
   }
 }
 
+/**
+ * Build the LiQL search query for SAP Community blog messages.
+ *
+ * Columns selected:
+ *   - message_id   : Khoros's stable numeric ID; used as slug suffix `bp-${id}`
+ *   - subject      : post title (BlogPosts.title)
+ *   - body         : full HTML; truncated to 8000 chars by extractor
+ *   - post_time    : ISO timestamp (BlogPosts.postedAt)
+ *   - view_href    : canonical community.sap.com URL (BlogPosts.url)
+ *   - board.id     : informational only; not persisted in 4.2
+ *   - author.*     : login + first_name + last_name + avatar.profile
+ *                    (BlogPosts.authorLogin / authorName / authorAvatarUrl)
+ *
+ * @param {{sinceIso: string|null, pageSize: number}} opts
+ * @returns {string} LiQL query string
+ */
 function buildLiQL({ sinceIso, pageSize }) {
   // Injection-safety: sinceIso is validated by caller (ISO regex) and never
   // user-controlled. See spec §5 "Injection safety".
@@ -150,29 +169,22 @@ export async function searchBlogPosts({
   const transport = getTransport();
   const liql = buildLiQL({ sinceIso, pageSize });
 
-  // Single-page mode (no caller-supplied limit, or limit ≤ pageSize)
-  const allPosts = [];
-  let nextCursor = null;
-  let pagesFetched = 0;
-  const MAX_PAGES = 200; // backstop against runaway pagination
-
-  do {
-    const response = await transport.call(liql);
-    if (!response?.data || !Array.isArray(response.data.items)) {
-      throw new Error(`khoros-blogs-client: response.data.items missing or non-array`);
-    }
-    for (const row of response.data.items) {
-      validateRow(row);
-    }
-    allPosts.push(...response.data.items);
-    nextCursor = response.data.next_cursor ?? null;
-    pagesFetched++;
-    if (limit !== null && allPosts.length >= limit) {
-      allPosts.length = limit;  // truncate to requested limit
-      break;
-    }
-    if (pagesFetched >= MAX_PAGES) break;
-  } while (nextCursor !== null);
+  // Single-page fetch: Khoros LiQL doesn't natively support cursor-based
+  // pagination (no `WHERE cursor > '...'` analog). Phase 4.2's usage is
+  // sinceIso-driven (daily cron) or sinceIsoOverride-driven (backfill) —
+  // each invocation pulls one bounded page. nextPageToken is surfaced for
+  // future use but not consumed today. See spec §5.
+  const response = await transport.call(liql);
+  if (!response?.data || !Array.isArray(response.data.items)) {
+    throw new Error(`khoros-blogs-client: response.data.items missing or non-array`);
+  }
+  for (const row of response.data.items) {
+    validateRow(row);
+  }
+  const allPosts = limit !== null
+    ? response.data.items.slice(0, limit)
+    : response.data.items;
+  const nextCursor = response.data.next_cursor ?? null;
 
   const payload = {
     posts: allPosts,

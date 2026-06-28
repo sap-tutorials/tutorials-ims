@@ -96,7 +96,7 @@ entity BlogPosts : cuid, managed {
   lastExtractedHash : String(64);
   firstSeenAt       : Timestamp @cds.on.insert: $now;
   lastSeenAt        : Timestamp;
-  pinUntil          : Timestamp;
+  pinUntil          : Timestamp;     // chassis-uniformity column; no admin surface writes it in 4.2 (see §3 GC note)
 
   links : Composition of many BlogPostConceptLinks on links.post = $self;
 }

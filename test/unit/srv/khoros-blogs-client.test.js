@@ -109,34 +109,20 @@ describe('khoros-blogs-client.searchBlogPosts', () => {
     expect(callCount).toBe(2);  // both calls hit transport
   });
 
-  it('paginates via nextPageToken until limit or null cursor', async () => {
-    const pages = [
-      { status: 'success', data: { items: FIXTURE_OK.data.items.slice(0, 2), next_cursor: 'CURSOR_2' } },
-      { status: 'success', data: { items: FIXTURE_OK.data.items.slice(2), next_cursor: null } },
-    ];
-    let pageIndex = 0;
+  it('respects limit: truncates response.data.items to the requested count', async () => {
     _setMockTransport({
-      async call() { return pages[pageIndex++]; },
+      async call() {
+        return {
+          status: 'success',
+          data: {
+            items: FIXTURE_OK.data.items,  // 3 rows
+            next_cursor: null,
+          },
+        };
+      },
     });
-
-    const result = await searchBlogPosts({ sinceIso: null, limit: 10 });
-    expect(result.posts).toHaveLength(3);
-    expect(result.totalReturned).toBe(3);
-    expect(pageIndex).toBe(2);
-  });
-
-  it('respects limit: stops paging when totalReturned >= limit', async () => {
-    const pages = [
-      { status: 'success', data: { items: FIXTURE_OK.data.items.slice(0, 2), next_cursor: 'CURSOR_2' } },
-      { status: 'success', data: { items: FIXTURE_OK.data.items.slice(2), next_cursor: null } },
-    ];
-    let pageIndex = 0;
-    _setMockTransport({
-      async call() { return pages[pageIndex++]; },
-    });
-
     const result = await searchBlogPosts({ sinceIso: null, limit: 2 });
     expect(result.posts).toHaveLength(2);
-    expect(pageIndex).toBe(1);  // 2nd page never fetched
+    expect(result.totalReturned).toBe(2);
   });
 });
