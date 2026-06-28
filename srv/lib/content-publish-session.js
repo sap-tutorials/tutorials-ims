@@ -256,6 +256,25 @@ export function createSessionHelpers({ namespace }) {
     for (const slug of slugsWithSrc) {
       const incomingHash = incomingMap.get(slug);
       const history = bySlug.get(slug) || [];
+
+      // No-op republish fast-path. If the most-recent prior version already
+      // has this exact sourceHash, the server's current ACTIVE state IS the
+      // incoming content — re-uploading the same bytes cannot semantically
+      // be a revert, regardless of what older history looks like.
+      //
+      // Without this fast-path the deep-history scan below can false-positive
+      // on multi-flip patterns like `[X, X, Y, X]` (e.g., a slug that was
+      // freshly published with hash X, carry-forwarded across several
+      // versions (still X), briefly republished as Y, then back to X).
+      // Walking newest-first finds Y at divIdx>0, then matches the older X
+      // as "abandoned" and rejects — even though X IS the current state.
+      //
+      // Surfaced by rebuild-content workflow run 28322396467 (2026-06-28):
+      // after PR #692 fixed the source-only short-circuit, 7 slugs whose
+      // upstream markdown was unchanged for many versions but had a single
+      // transient flip somewhere in their history were spuriously rejected.
+      if (history.length > 0 && history[0].sourceHash === incomingHash) continue;
+
       // Find V_div index — the first entry whose hash differs from incoming.
       let divIdx = -1;
       for (let i = 0; i < history.length; i++) {

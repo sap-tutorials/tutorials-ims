@@ -152,4 +152,64 @@ describe('#672 publish staleness guard', () => {
     expect(meta.rejectedReverts).toEqual(['thread-slug']);
     expect(meta.trigger, 'begin-time trigger should still be in metadata').toBe('unit-test');
   });
+
+  // ─────────────────────────────────────────────────────────────────────
+  // No-op republish fast-path (2026-06-28 follow-up to #672 — surfaced by
+  // rebuild-content workflow run 28322396467 after PR #692 fixed the
+  // source-only short-circuit). When `history[0].sourceHash === incomingHash`
+  // the server's current ACTIVE state already IS the incoming content, so
+  // re-uploading the same bytes cannot semantically be a revert — regardless
+  // of what older history looks like.
+  //
+  // Without the fast-path, the deep-history scan in detectReverts spuriously
+  // rejects multi-flip patterns like `[X, X, Y, X]` (incoming X). The flow
+  // is: walk newest-first, history[0]=X matches incoming and is skipped by
+  // line 262 (which only sets divIdx on a DIFFERING entry), then the older
+  // Y at index 2 becomes divIdx, then the X at index 3 is treated as
+  // "abandoned history" and triggers a rejection — even though X IS the
+  // current server state.
+  // ─────────────────────────────────────────────────────────────────────
+
+  it('accepts a no-op republish when history[0].sourceHash matches incoming', async () => {
+    // Sequence: v1 X (fresh) → v2 Y (fresh) → v3 X (rejected; carry-forwards Y)
+    // → manually overwrite v3's row to simulate the multi-flip case where the
+    // most-recent prior actually has the incoming hash (e.g., after an admin
+    // `/content/rollback` or a manual sourceHash null-out + re-publish).
+    await publishOne('hist0-match-slug', 'X');
+    await publishOne('hist0-match-slug', 'Y');
+    const v3Reject = await publishOne('hist0-match-slug', 'X');
+    expect(v3Reject.rejectedReverts).toContain('hist0-match-slug');
+    // After v3, the row is Y (carry-forwarded from v2 after v3's X was rejected).
+    // Force the row's sourceHash back to X to simulate a fresh-publish that
+    // succeeded after history rewriting. This matches the production state
+    // where the same slug has been republished across many versions with the
+    // same source-md, then briefly flipped, then back — leaving history[0]
+    // matching incoming.
+    const activeAfterV3 = await SELECT.one.from(ContentManifest).where({ status: 'ACTIVE' });
+    await UPDATE(ContentFiles)
+      .set({ sourceHash: sha256('X') })
+      .where({ slug: 'hist0-match-slug', version: activeAfterV3.version });
+
+    // Now v4 incoming X. history (newest-first): v3=X (just-overwritten),
+    // v2=Y (fresh), v1=X (fresh). Without the fast-path, the deep scan finds
+    // v2 as divIdx and v1 as the older-matching X → rejected.
+    const v4 = await publishOne('hist0-match-slug', 'X');
+    expect(v4.rejectedReverts, 'no-op republish (history[0] already matches incoming) must NOT be rejected').toEqual([]);
+
+    // The fresh row should now be in the new ACTIVE manifest (not carry-forwarded).
+    const activeAfterV4 = await SELECT.one.from(ContentManifest).where({ status: 'ACTIVE' });
+    expect(activeAfterV4.version, 'v4 must be the new ACTIVE').toBeGreaterThan(activeAfterV3.version);
+    const row = await SELECT.one.from(ContentFiles).where({ slug: 'hist0-match-slug', version: activeAfterV4.version });
+    expect(row.sourceHash).toBe(sha256('X'));
+  });
+
+  it('still rejects when history[0] differs (existing flap-rejection behavior preserved)', async () => {
+    // Standard A → B → A pattern. history[0] after v2 is B (≠ incoming A),
+    // so the fast-path does NOT fire. The deep scan finds A in older history
+    // and rejects — matching the original PR #675 design.
+    await publishOne('flap-preserved-slug', 'A');
+    await publishOne('flap-preserved-slug', 'B');
+    const v3 = await publishOne('flap-preserved-slug', 'A');
+    expect(v3.rejectedReverts).toContain('flap-preserved-slug');
+  });
 });
