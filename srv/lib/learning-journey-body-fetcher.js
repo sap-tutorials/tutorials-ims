@@ -19,6 +19,12 @@ const TIMEOUT_MS = 5000;
 
 let mockFetcher = null;
 
+// Injectable delay function so unit tests can replace real setTimeout with a
+// no-op (or vi.useFakeTimers-controlled clock) WITHOUT coupling production
+// retry behavior to the mock-fetcher branch (#709 fix). Default is the real
+// setTimeout-based delay; tests call _setDelayFn(() => Promise.resolve()).
+let delayFn = (ms) => new Promise(r => setTimeout(r, ms));
+
 async function fetchHtml(url) {
   if (mockFetcher) return mockFetcher(url);
   const controller = new AbortController();
@@ -36,17 +42,11 @@ async function fetchWithRetry(url, maxAttempts = 3) {
   let lastErr;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     if (attempt > 0) {
-      // When a mock fetcher is installed (unit-test path), skip the backoff
-      // so retry tests don't add seconds of real wait. Production paths
-      // always exercise the real delays.
-      //
-      // Note: backoff is skipped under the mock fetcher to keep unit tests fast.
-      // This couples test-harness state to production retry behavior — a future
-      // refactor exposing _setMockFetcher in CI could silently disable backoff.
-      // Tracked as #709 — proposed fix: inject the delay function or use vi.useFakeTimers.
-      if (!mockFetcher) {
-        await new Promise(r => setTimeout(r, RETRY_DELAYS_MS[attempt - 1]));
-      }
+      // Backoff via injectable delayFn. In production this is the real
+      // setTimeout-based delay; tests inject a no-op to keep retry assertions
+      // sub-millisecond. No conditional on mockFetcher — production retry
+      // behavior is identical whether the test harness is loaded or not.
+      await delayFn(RETRY_DELAYS_MS[attempt - 1]);
     }
     try {
       return await fetchHtml(url);
@@ -108,4 +108,11 @@ export async function fetchJourneyBody(url) {
 // Test hook
 export function _setMockFetcher(fn) {
   mockFetcher = fn;
+}
+
+// Test hook (#709): swap the retry-delay implementation. Default is real
+// setTimeout; tests inject `() => Promise.resolve()` to elide backoff.
+// Pass `null` (or omit) to restore the default.
+export function _setDelayFn(fn) {
+  delayFn = fn ?? ((ms) => new Promise(r => setTimeout(r, ms)));
 }
