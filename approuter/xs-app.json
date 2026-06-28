@@ -72,6 +72,13 @@
       "authenticationType": "none"
     },
     {
+      "source": "^/explore/?$",
+      "target": "/explore/",
+      "destination": "srv-api",
+      "authenticationType": "none",
+      "csrfProtection": false
+    },
+    {
       "source": "^/admin-ui/(.*)$",
       "target": "/admin-ui/$1",
       "localDir": "static",
