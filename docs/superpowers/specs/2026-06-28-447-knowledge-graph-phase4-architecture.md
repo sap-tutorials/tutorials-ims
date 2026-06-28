@@ -4,6 +4,7 @@
 - **Issue:** [#447](https://github.com/sap-tutorials/tutorials-ims/issues/447) (parent: [#381](https://github.com/sap-tutorials/tutorials-ims/issues/381))
 - **Predecessor specs:**
   - [`2026-06-17-knowledge-graph-design.md`](./2026-06-17-knowledge-graph-design.md) (Phase 1)
+  - Phase 2 (Joule path-finding) shipped via PR [#563](https://github.com/sap-tutorials/tutorials-ims/pull/563) — no architectural carry-over to Phase 4; pure feature add.
   - [`2026-06-27-446-knowledge-graph-phase3-design.md`](./2026-06-27-446-knowledge-graph-phase3-design.md) (Phase 3)
 - **Successor specs** (one per sub-phase, written separately):
   - 4.1 Learning Journeys (next)
@@ -94,6 +95,8 @@ annotate LearningJourneyConceptLinks with
 ```
 
 **Chassis-owned columns** (every per-type entity): `slug`, `title`, `description`, `url`, `sourceId`, `contentHash`, `firstSeenAt`, `lastSeenAt`, `pinUntil`.
+
+**`pinUntil` semantic per-type override:** Trials carry the column for chassis-uniformity but its value is ignored by the projection filter — `endDate` is the authoritative lifecycle signal. Sub-phase 4.3 does NOT need to re-decide; the chassis is uniform, the per-type filter logic in `isWithinTTL` (Section 5.2) skips the pin check for trial-type rows.
 
 **Per-content-type columns**: anything else the content type needs (`LearningJourneys.level`, `BlogPosts.publishedAt`, `Videos.youtubeId`, `Trials.endDate`, etc.). Each sub-phase spec lists its specific columns.
 
@@ -222,7 +225,7 @@ The chassis defines extension points; each sub-phase fills them in:
 | Surface | Phase 4 delta |
 |---|---|
 | **Concept landing page** (`hugo/layouts/concepts/single.html`) | One new section per sub-phase. Order follows `KG_IRI_PREFIXES`. Section hidden when empty. Section heading copy is per-sub-phase. |
-| **Tutorial-OP sidebar** (`hugo-apps/src/related-graph/RelatedGraph.vue`) | Single new section "Other resources" (capped at 5 items, mixed types). Reads from extension to `/graph/neighborhood` or a new sibling endpoint. Lands incrementally — 4.1 ships the section + endpoint; 4.2-4.6 just add rows to it. |
+| **Tutorial-OP sidebar** (`hugo-apps/src/related-graph/RelatedGraph.vue`) | Single new section "Other resources" (capped at 5 items, mixed types). **Locked decision: extend the existing `/graph/neighborhood` response** with an optional `otherResources` array. This prevents 4.1 from picking a sibling-endpoint shape that 4.2-4.6 can't extend cleanly. 4.1 ships the section + the response-shape extension; 4.2-4.6 just contribute rows to the same array. |
 | **Explore viz** (`app/explore/`) | Automatic. New node types appear once `KG_IRI_PREFIXES` is extended + the projection emits them. `FilterDropdown` enumerates entries from the registry. |
 | **Mobile typed-list** (`app/explore/src/components/MobileTypedList.vue`) | Automatic via `SECTION_ORDER` array (currently 7 entries; widens with each sub-phase). |
 | **`NodeType` + `PredicateType` unions** (`hugo-apps/src/related-graph/types.ts` + `app/explore/src/types.ts`) | Widen per sub-phase as new node + edge types ship. |
@@ -330,6 +333,19 @@ Note: this is the **MCP-tool cache TTL** (how often the client re-fetches from `
 
 Three sub-phases use `sap-devs` MCP directly (4.1, 4.2, 4.4). Three use other sources or hand-curation (4.3 partly, 4.5 mostly, 4.6 from GitHub directly). A shared client gives the MCP-using sub-phases one consistent retry/cache/validation story. Three+ is the threshold where the abstraction starts paying.
 
+### 3.8 Method-to-sub-phase mapping
+
+| Sub-phase | Client method(s) consumed | Direct (non-MCP) sources |
+|---|---|---|
+| 4.1 Learning Journeys | `searchLearningJourneys` | — |
+| 4.2 Blog posts | `getRecentNews`, `getNewsDetail` | — |
+| 4.3 Discovery missions + Trials | `searchDiscovery` (missions); trials lifecycle via discovery + manual curation | discovery-center.cloud.sap for trial-window metadata |
+| 4.4 Videos | `searchVideos` | — |
+| 4.5 API docs | `searchResources` (for SAP-curated doc index) | api.sap.com hand-curated seed file |
+| 4.6 Code samples | `getSamples` | github.com/SAP-samples direct (for repo-level metadata) |
+
+The 7th client method `getNewsDetail` is consumed in 4.2 alongside `getRecentNews` (fetch the index, then enrich top-N entries with full body via the detail method).
+
 ## 4. Concept-registry coherence strategy
 
 Per Q6, all content types share `com.sap.developers.ims.Concepts`. The strategy here ensures cross-content extraction doesn't blow up the registry with synonym-duplicates.
@@ -354,7 +370,7 @@ Before each LLM extraction call, the cron job:
 
 - Context budget: 15 hints × ~50 tokens each = ~750 tokens. Small fraction of the typical extraction prompt.
 - Coverage: at ~150 concepts in the post-Phase-1 registry, 15 = 10% — enough to cover the semantic neighborhood of nearly any new content.
-- Tunable per-sub-phase via the adapter signature (learning journeys may want K=25 for breadth; videos K=5 for narrow focus).
+- Tunable per-sub-phase via the adapter signature: **K is passed in by the cron job, not hardcoded inside each adapter.** Adapter signature is `extractConceptsFromX({ callModel, content, nearestConcepts })` where `nearestConcepts` is the K-sized array the cron job has already fetched. The adapter doesn't know K; the cron job does. Sub-phase 4.1 will document the cron-job-side K constant (e.g. `const K_NEAREST_CONCEPTS = 25` for journeys).
 
 ### 4.4 Reuse-priority hint in the prompt
 
@@ -518,6 +534,16 @@ Each sub-phase brainstorm focuses on:
 - **Sub-phase test fixtures** (canonical MCP response shapes)
 
 A sub-phase brainstorm should be **5-8 questions max** vs. the architecture spec's 9. The chassis carries the complexity; each sub-phase is a focused content-type concern.
+
+### 6.2.1 Chassis-level obligations inherited by sub-phase 4.1
+
+Because 4.1 is the first sub-phase, it inherits a few **cross-cutting chassis artifacts** that benefit all subsequent sub-phases. Sub-phase 4.1's brainstorm + spec should scope these explicitly — they are NOT optional or per-sub-phase:
+
+- **`srv/lib/sap-devs-client.js`** (Section 3) — the shared MCP wrapper. Lands in 4.1 (4.1 uses `searchLearningJourneys`), but the implementation must cover all 7 public methods or at least scaffold them with TODO-throws so 4.2-4.6 just fill them in.
+- **`srv/lib/external-content-ttl.js`** (Section 5) — the shared TTL table + `isWithinTTL` helper. 4.1 ships with at least the `learning-journey` and `trial` entries; subsequent sub-phases add their own.
+- **`srv/jobs/gc-external-content-job.js`** (Section 5.4) — the cross-type weekly GC cron. 4.1 ships it as a multi-table iterator (currently scanning only `LearningJourneys`); each subsequent sub-phase adds its entity to the GC's iteration set.
+- **`/graph/neighborhood` `otherResources` array extension** (Section 2.6) — the sidebar feeds off a single response field; 4.1 ships the field shape + populates it with learning-journey rows; 4.2-4.6 contribute additional rows to the same array.
+- **`db/external-content.cds`** (Section 2.1) — the new CDS file. 4.1 creates it; subsequent sub-phases append entities to it.
 
 ### 6.3 Spec-reviewer scope note
 
