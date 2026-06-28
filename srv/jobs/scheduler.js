@@ -8,6 +8,7 @@ import { runExtractConcepts } from './extract-concepts-job.js';
 import { runConsolidateConcepts } from './consolidate-concepts-job.js';
 import { runSecretExpiryCheck } from './secret-expiry-check.js';
 import { runHomepageLinkHealth } from './homepage-link-health.js';
+import { runGcExternalContent } from './gc-external-content-job.js';
 import { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, isNotificationsEnabled, resolveTimingKnobs, groupNotificationsByAuthor, determineRecipientsForDigest, digestSubject, renderTutorialList } from '../lib/contributor-notifications.js';
 import { sendNotificationEmail, retryFailedEmails } from '../lib/mail-client.js';
 import { resolveDisplaySettings } from '../lib/runtime-config/display-settings.js';
@@ -333,6 +334,14 @@ export function registerJobs() {
   // SPARQL projection. 30-min TTL matches extractConcepts.
   cron.schedule('47 3 * * 0', () =>
     runWithLock('consolidateConcepts', 30 * 60 * 1000, runConsolidateConcepts)
+  );
+
+  // Weekly Sunday at 04:07 — Phase 4 cross-type GC.
+  // Prunes content rows past lastSeenAt + 2×TTL when not pinned. Cascade-deletes
+  // link entity rows via CDS associations.
+  // Off-minute (:07) avoids the :00 thundering-herd. Lightweight job; 10-min TTL.
+  cron.schedule('7 4 * * 0', () =>
+    runWithLock('gc-external-content', 10 * 60 * 1000, runGcExternalContent)
   );
 
   // Phase 2-B (#464): Daily expiry check for tracked secrets.
