@@ -122,6 +122,15 @@ import "@ui5/webcomponents-icons/dist/write-new-document.js";
 import "@ui5/webcomponents-icons/dist/email.js";
 import "@ui5/webcomponents-icons/dist/post.js";
 import "@ui5/webcomponents-icons/dist/customer-and-contacts.js";
+// Verb tile + shellbar menu icons (homepage refinement, spec 2026-06-28).
+// Callsites: hugo/layouts/partials/header.html shellbar list + the
+// hugo/layouts/partials/homepage/verb-spine.html (dict … "icon" "<name>")
+// block that drives <ui5-icon name="{{ $vIcon }}"> at render time.
+// Without these imports the icon slots paint but the glyph never
+// renders — silent UX regression.
+import "@ui5/webcomponents-icons/dist/learning-assistant.js";
+import "@ui5/webcomponents-icons/dist/developer-settings.js";
+import "@ui5/webcomponents-icons/dist/chain-link.js";
 import "@ui5/webcomponents-icons/dist/favorite.js";
 import "@ui5/webcomponents-icons/dist/unfavorite.js";
 // U12: reader-mode toggle in shellbar (documents → decline on activation).
