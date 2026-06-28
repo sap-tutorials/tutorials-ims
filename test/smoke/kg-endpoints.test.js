@@ -50,11 +50,13 @@ function authHeaders(token = AUTH_TOKEN) {
 
 describe.runIf(APPROUTER && SRV)('Knowledge Graph endpoints smoke', () => {
   // ─── Anonymous-access checks (no token required) ────────────────────────
-  it('GET /graph/neighborhood without auth is rejected', async () => {
+  it('GET /graph/neighborhood without auth returns 200', async () => {
     const res = await fetchWithRetry(
       `${SRV_URL}/graph/neighborhood(slug='${KG_TUTORIAL_SLUG}')`
     );
-    expect([401, 403]).toContain(res.status);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toHaveProperty('teaches');
   });
 
   it('POST /graph/runSparql without auth is rejected', async () => {
