@@ -452,6 +452,52 @@ export function computePublishPlan(opts: {
   return { targetSlugs: computeDiff(opts.local, opts.remote) };
 }
 
+/**
+ * #672 short-circuit: drop slugs from `targetSlugs` whose state is already in
+ * sync with the server. A slug is in sync when BOTH:
+ *   - source-markdown hash matches the server's stored sourceHash, AND
+ *   - rendered-HTML hash matches the server's stored contentHash.
+ *
+ * The double-hash check is critical. The original #672 design (PR #675) only
+ * compared source-markdown — which works for the regression mode it was built
+ * to catch (stale workstation cache re-uploads old bytes) but silently hides
+ * the much more common case where Hugo's templates change without any source-
+ * markdown change. In that case every rendered HTML differs from the server
+ * but every source-md matches, so a source-only short-circuit drops every
+ * slug from the publish payload, the server carries forward stale HTML, and
+ * post-publish auto-verify fails (rebuild-content workflow run 28304515829,
+ * the first run after #675 merged, hit exactly this).
+ *
+ * Pure function: no I/O. The caller is responsible for fetching the server
+ * source-hash map and computing the local source-hash map.
+ *
+ * @param targetSlugs   slugs that `computePublishPlan` selected for upload
+ * @param localSource   slug → SHA-256 of source markdown (from cache)
+ * @param serverSource  slug → SHA-256 of source markdown (from /content/source-hashes)
+ * @param localHtml     slug → SHA-256 of rendered HTML (from hugo/public)
+ * @param serverHtml    slug → SHA-256 of rendered HTML (from /content/hashes)
+ * @returns the filtered target slug list (a slug is kept unless BOTH hashes match)
+ */
+export function applySourceHashShortCircuit(opts: {
+  targetSlugs: string[];
+  localSource: Map<string, string>;
+  serverSource: Record<string, string>;
+  localHtml: Map<string, string>;
+  serverHtml: Record<string, string>;
+}): string[] {
+  return opts.targetSlugs.filter((slug) => {
+    const localSrc = opts.localSource.get(slug);
+    const serverSrc = opts.serverSource[slug];
+    const localHtml = opts.localHtml.get(slug);
+    const serverHtml = opts.serverHtml[slug];
+    // Drop only when BOTH source-md AND rendered-HTML match the server.
+    // Missing local hash (special slug) or missing server hash (new slug) → keep.
+    const sourceInSync = !!(localSrc && serverSrc && localSrc === serverSrc);
+    const htmlInSync = !!(localHtml && serverHtml && localHtml === serverHtml);
+    return !(sourceInSync && htmlInSync);
+  });
+}
+
 interface PublishOptions {
   hugoDir: string;
   baseUrl: string;
@@ -737,11 +783,9 @@ async function main() {
   let targetSlugs = planResult.targetSlugs;
 
   // #672 — client-side short-circuit. In delta mode only, drop slugs whose
-  // local sourceHash matches the server's. A slug whose upstream markdown is
-  // byte-identical to what the server already has would be carry-forwarded
-  // server-side anyway; skipping the upload saves the round-trip and
-  // protects against a stale local cache uploading old bytes on top of
-  // newer ones (the #672 regression mode).
+  // upstream state is already in sync with the server's stored state.
+  // Detailed rationale + the source-md-only-was-buggy story lives on
+  // `applySourceHashShortCircuit`.
   //
   // --force and --heal explicitly skip this layer:
   //   --force: "upload everything regardless of server state"
@@ -760,15 +804,15 @@ async function main() {
       console.warn(`[publish-content] #672 short-circuit disengaged: cannot reach /content/source-hashes: ${formatErrorChain(err)}`);
     }
     const beforeCount = targetSlugs.length;
-    targetSlugs = targetSlugs.filter((slug) => {
-      const local = localSourceHashes.get(slug);
-      const server = serverSourceHashes[slug];
-      // Only short-circuit when both sides have a hash AND they match.
-      // Missing local hash (special slugs) or missing server hash (new slug) → keep.
-      return !(local && server && local === server);
+    targetSlugs = applySourceHashShortCircuit({
+      targetSlugs,
+      localSource: localSourceHashes,
+      serverSource: serverSourceHashes,
+      localHtml: localHashes,
+      serverHtml: remoteHashes,
     });
     const dropped = beforeCount - targetSlugs.length;
-    if (dropped > 0) log(`#672 short-circuit: dropped ${dropped} of ${beforeCount} slugs (source hash matches server)`);
+    if (dropped > 0) log(`#672 short-circuit: dropped ${dropped} of ${beforeCount} slugs (source + html hash both match server)`);
   }
   if (targetSlugs.length === 0) {
     console.log('No changes detected. Nothing to publish.');
