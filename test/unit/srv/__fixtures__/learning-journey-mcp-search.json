@@ -1,0 +1,27 @@
+{
+  "count": 3,
+  "total": 19,
+  "results": [
+    {
+      "slug": "discovering-new-ai-capabilities-for-sap-finance",
+      "title": "Discovering SAP Business AI Capabilities for SAP Finance",
+      "level": "BEGINNER",
+      "duration": "3.00",
+      "url": "https://learning.sap.com/learning-journeys/discovering-new-ai-capabilities-for-sap-finance"
+    },
+    {
+      "slug": "implementing-joule-across-your-organizational-system-landscape",
+      "title": "Implementing Joule Across your Organizational System Landscape",
+      "level": "INTERMEDIATE",
+      "duration": "7.25",
+      "url": "https://learning.sap.com/learning-journeys/implementing-joule-across-your-organizational-system-landscape"
+    },
+    {
+      "slug": "becoming-a-certified-data-engineer-sap-hana-cloud",
+      "title": "Becoming a Certified Data Engineer - SAP HANA Cloud",
+      "level": "INTERMEDIATE",
+      "duration": "17.00",
+      "url": "https://learning.sap.com/learning-journeys/becoming-a-certified-data-engineer-sap-hana-cloud"
+    }
+  ]
+}

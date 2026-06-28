@@ -95,3 +95,6 @@ hugo/static/vendor/mediapipe/
 # lock files just add diff noise (#381 PR 6 review feedback).
 app/admin/*/package-lock.json
 .git-pr-body.md
+
+# Phase 4 sap-devs MCP cache (sap-devs-client.js)
+.cache/
