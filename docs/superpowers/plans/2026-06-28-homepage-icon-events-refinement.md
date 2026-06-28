@@ -76,15 +76,15 @@ Expected:
 
 If the failure list differs, the codebase has drifted since the spec was written — STOP and surface to user.
 
-- [ ] **Step 0.4: Confirm only one file uses `<ui5-icon name="…">` in layouts**
+- [ ] **Step 0.4: Confirm only verb-spine.html uses the Hugo `"icon" "<name>"` dict pattern**
 
 ```bash
-grep -rn '<ui5-icon\s\+name=' hugo/layouts/
+grep -rEn '"icon"\s+"[a-z][a-z0-9-]*"' hugo/
 ```
 
-Expected: exactly one hit, `hugo/layouts/partials/homepage/verb-spine.html:27`.
+Expected: exactly six hits, all in `hugo/layouts/partials/homepage/verb-spine.html` lines 7-12 (one per verb tile: `learning-assistant`, `developer-settings`, `chain-link`, `settings`, `da`, `customer-and-contacts`).
 
-If more than one file matches, list them and STOP — the broadened guard will trip on every unregistered icon in those files. Tom will need to triage them before we proceed.
+If hits appear in other files, the broadened guard in Task 4 will subject those callsites to the import check too. List them and STOP so we can confirm those icons are already imported (or add them) before proceeding.
 
 ---
 
@@ -95,13 +95,11 @@ If more than one file matches, list them and STOP — the broadened guard will t
 | `hugo/assets/js/ui5-bootstrap.ts` | Modify | Register 3 icons that the layouts already reference. |
 | `hugo/layouts/partials/header.html` | Modify | Align Build + Connect shellbar icons with verb-tile icons. |
 | `hugo-apps/src/homepage-bands/EventsBand.vue` | Modify | Split combined empty-OR-error branch into two distinct states. |
-| `scripts/check-icon-imports.ts` | Modify | Add second regex for `<ui5-icon name="…">`; update header comment. |
-| `test/unit/check-icon-imports.test.ts` | Modify | Two new cases proving the new regex catches the verb-spine pattern. |
+| `scripts/check-icon-imports.ts` | Modify | Add second regex for Hugo `"icon" "<name>"` dict literals; update header comment. |
+| `test/unit/check-icon-imports.test.ts` | Modify | Two new cases proving the dict regex catches the verb-spine pattern. |
 | `hugo-apps/src/homepage-bands/EventsBand.test.ts` | Create | Vue Test Utils test for 4 component states. |
 
-Tasks are ordered to commit each change in a self-contained step. The icon-import additions land first because they're the user-visible win; the guard-broadening lands last because it'd otherwise reject our intermediate commits (a tile naming `learning-assistant` with no import).
-
-Actually — let me re-check that. We're adding the imports FIRST (Task 1), so after Task 1 the static guard is green. The guard-broadening in Task 4 then adds the verb-spine icon names (`learning-assistant`, `developer-settings`, `chain-link`, `settings`, `da`, `customer-and-contacts`) to the usage list. All six are now imported (3 from Task 1 + 3 already present), so the broadened guard also passes. Safe ordering.
+Tasks are ordered so each commit leaves the tree green. Task 1 lands the three new icon imports first; this resolves the four FAIL entries the existing guard reports today (Steps 2 and 4 verify the count progression). Task 4 then teaches the guard about the Hugo `dict` pattern — at that point all six verb-spine icons become visible as "used" to the guard, but all six are already imported (3 from Task 1 + 3 that were always there), so the guard stays green. Reversing the order would briefly leave the broadened guard red.
 
 ---
 
@@ -135,10 +133,11 @@ import "@ui5/webcomponents-icons/dist/favorite.js";
 new_string:
 import "@ui5/webcomponents-icons/dist/customer-and-contacts.js";
 // Verb tile + shellbar menu icons (homepage refinement, spec 2026-06-28).
-// The matching `<ui5-icon name="…">` / `icon="…"` callsites live in
-// hugo/layouts/partials/homepage/verb-spine.html and
-// hugo/layouts/partials/header.html. Without these imports the icon
-// slots paint but the glyph never renders (silent UX regression).
+// Callsites: hugo/layouts/partials/header.html shellbar list + the
+// hugo/layouts/partials/homepage/verb-spine.html (dict … "icon" "<name>")
+// block that drives <ui5-icon name="{{ $vIcon }}"> at render time.
+// Without these imports the icon slots paint but the glyph never
+// renders — silent UX regression.
 import "@ui5/webcomponents-icons/dist/learning-assistant.js";
 import "@ui5/webcomponents-icons/dist/developer-settings.js";
 import "@ui5/webcomponents-icons/dist/chain-link.js";
@@ -327,10 +326,12 @@ Refs spec 2026-06-28-homepage-icon-events-refinement-design.md"
 
 ---
 
-## Task 4: Broaden the icon-imports guard to also catch `<ui5-icon name="…">`
+## Task 4: Broaden the icon-imports guard to scan Hugo `dict` patterns
 
 **Files:**
 - Modify: `scripts/check-icon-imports.ts` (regex constant + `parseIconUsages()` + header block comment)
+
+**Background.** Step 0.4 confirmed: the verb-spine icons live inside a Hugo `slice (dict … "icon" "<name>" …)` block (verb-spine.html:7-12), then expand at render time via `<ui5-icon name="{{ $vIcon }}">`. The existing `ICON_RE` only scans `icon="<literal>"` attributes — Hugo's `{{ }}` template expression is rejected by the `[a-z][a-z0-9-]*` constraint, so those six literal names are invisible to today's guard. Adding `HUGO_DICT_ICON_RE = /"icon"\s+"([a-z][a-z0-9-]*)"/g` catches all six in source with zero false positives across `hugo/` (verified at design time and again in Step 0.4).
 
 - [ ] **Step 4.1: Add the new regex constant after `ICON_RE`**
 
@@ -346,16 +347,21 @@ new_string:
 const ICON_RE = /(?<![-\w:])icon="([a-z][a-z0-9-]*)"/g;
 
 /**
- * Match `<ui5-icon name="…">` — the embedded-glyph form used by
- * hugo/layouts/partials/homepage/verb-spine.html (verb tile icons).
+ * Match Hugo `dict` literal entries of the form `"icon" "<name>"`.
  *
- * The leading `<ui5-icon\b` element anchor prevents matching unrelated
- * `name="…"` attributes (e.g. <input name="x">, <a name="anchor">).
- * The intervening `[^>]*` allows other attributes before `name=`, and
- * `\s` before `name=` ensures we don't match an attribute that just
- * happens to end in `name` (e.g. `data-display-name="…"`).
+ * Verb-spine.html (hugo/layouts/partials/homepage/verb-spine.html lines 7-12)
+ * stores its six tile icons in a `slice (dict … "icon" "<name>" …)` block
+ * and expands them via `<ui5-icon name="{{ $vIcon }}">` at render time.
+ * The static guard runs against pre-expansion source, so the literal
+ * names are only visible inside the dict — ICON_RE never sees them.
+ *
+ * The pattern requires `"icon"` followed by whitespace and a quoted
+ * UI5 icon-shaped name. Sweep of `hugo/` at design time found zero
+ * matches outside verb-spine's 6 expected lines. The `"icon" "<name>"`
+ * shape is specific enough to JSON-style key+value adjacency that
+ * narrative prose, CSS, etc. don't collide.
  */
-const UI5_ICON_NAME_RE = /<ui5-icon\b[^>]*\sname="([a-z][a-z0-9-]*)"/g;
+const HUGO_DICT_ICON_RE = /"icon"\s+"([a-z][a-z0-9-]*)"/g;
 
 export function parseIconUsages(file: string, content: string): IconUsage[] {
 ```
@@ -387,7 +393,7 @@ export function parseIconUsages(file: string, content: string): IconUsage[] {
     for (const m of lines[i].matchAll(ICON_RE)) {
       out.push({ name: m[1], file, line: i + 1 });
     }
-    for (const m of lines[i].matchAll(UI5_ICON_NAME_RE)) {
+    for (const m of lines[i].matchAll(HUGO_DICT_ICON_RE)) {
       out.push({ name: m[1], file, line: i + 1 });
     }
   }
@@ -412,9 +418,10 @@ old_string:
 new_string:
 // Scope (deliberate): STATIC literals only.
 //   - `icon="some-name"` in .html (Hugo layouts) and .vue (islands)
-//   - `<ui5-icon name="some-name">` element in .html and .vue (verb-spine
-//     pattern, hugo/layouts/partials/homepage/verb-spine.html). Anchored
-//     on `<ui5-icon\b` so unrelated name="…" attributes don't match.
+//   - Hugo `dict` entries of the form `"icon" "some-name"` in .html
+//     layouts (verb-spine pattern — the icon name lives in template
+//     data, expanded at render time as `<ui5-icon name="{{ $vIcon }}">`,
+//     so it's invisible to the attribute-style regex above).
 //   - Names matching /^[a-z][a-z0-9-]*$/ (the UI5 icon-name shape;
 //     skips `icon=""`, `icon="1"`, `icon="{{ .Foo }}"`, `:icon="x"`)
 //   - HTML comments + Hugo `{{/* … */}}` are stripped before scanning
@@ -422,7 +429,7 @@ new_string:
 //     it's a snapshot of layouts we already lint
 ```
 
-- [ ] **Step 4.4: Run the guard against the live tree to prove it still passes**
+- [ ] **Step 4.4: Run the guard against the live tree to prove it now sees verb-spine AND still passes**
 
 ```bash
 npx tsx scripts/check-icon-imports.ts 2>&1 | head -5
@@ -431,7 +438,11 @@ echo "---exit: $?"
 
 Expected: `OK — N unique icon(s) referenced, all registered (…).` Exit 0.
 
-The number of unique icons should INCREASE compared to Step 2.4 (the broadened regex now sees the six verb-spine icons: `learning-assistant`, `developer-settings`, `chain-link`, `settings`, `da`, `customer-and-contacts`). All six were already imported by end of Task 1, so still green.
+The unique-icon count should be HIGHER than the count printed in Step 2.4. Specifically, six new names are now visible to the guard (`learning-assistant`, `developer-settings`, `chain-link`, `settings`, `da`, `customer-and-contacts`) — all already imported. If the count is unchanged from Step 2.4 the new regex isn't matching; STOP and inspect verb-spine.html.
+
+Note `learning-assistant`, `developer-settings`, `chain-link` were already visible via the header.html `icon="…"` form (the existing regex), so the de-duplicated count grows by exactly the three icons unique to verb-spine: `settings` (already present in the menu too, so deduped — net 0), `da` (already imported, but new to the usage list), `customer-and-contacts` (header.html now uses this too post-Task-2, so deduped — net 0). The exact arithmetic isn't important; the assertion is "count goes UP, exit 0".
+
+If exit code is 1, read the stderr carefully: the broadened regex may have unmasked an icon used in verb-spine that wasn't already covered. Step 0.4's sweep should have caught this, but worth re-checking.
 
 - [ ] **Step 4.5: Run the existing test suite for the script (unchanged tests must still pass)**
 
@@ -439,46 +450,52 @@ The number of unique icons should INCREASE compared to Step 2.4 (the broadened r
 npx vitest run test/unit/check-icon-imports.test.ts 2>&1 | tail -25
 ```
 
-Expected: all 9 (or however many) existing tests pass. No new failures from the regex addition.
+Expected: all existing tests pass. No new failures from the regex addition. (The 9 existing tests in the file at design time all stay green; we add 2 more in Task 5.)
 
 - [ ] **Step 4.6: Commit the script-only change (tests added next task)**
 
 ```bash
 git add scripts/check-icon-imports.ts
-git -c core.autocrlf=false commit -m "feat(build-guard): catch <ui5-icon name='…'> usages too
+git -c core.autocrlf=false commit -m "feat(build-guard): scan Hugo dict patterns for icon literals
 
-scripts/check-icon-imports.ts previously only matched the icon='…'
-attribute form. The verb-spine homepage tile uses the embedded form
-<ui5-icon name='…'></ui5-icon>, which the regex missed — that's how
-the verb-tile icons shipped unregistered without the guard catching
-it.
+Verb-spine.html stores its six tile icons in a Hugo dict block at
+lines 7-12 and renders them via <ui5-icon name=\"{{ \$vIcon }}\">.
+The static guard runs against pre-expansion source, so today's
+ICON_RE (which only matches icon=\"<literal>\" attributes) never
+sees those names — that's how the verb-tile icons shipped
+unregistered.
 
-Adds UI5_ICON_NAME_RE anchored on <ui5-icon\\b to avoid matching
-unrelated name= attributes (e.g. <input name='x'>, <a name='anchor'>).
+Adds HUGO_DICT_ICON_RE = /\"icon\"\\s+\"<name>\"/g. Sweep of hugo/
+at design time confirmed zero false positives outside verb-spine's
+6 expected lines.
+
+The earlier <ui5-icon name=\"…\"> regex idea was dead — verb-spine
+doesn't use that literal form anywhere. Hugo dict scanning is what
+actually closes the bug class.
+
 parseIconUsages() now runs both regexes per line and unions results.
-
-Existing tests unchanged; new tests covering the broadened pattern
-land in the next commit.
+Existing tests unchanged; new tests covering the dict pattern land
+in the next commit.
 
 Refs spec 2026-06-28-homepage-icon-events-refinement-design.md"
 ```
 
 ---
 
-## Task 5: Test cases for the broadened guard
+## Task 5: Test cases for the Hugo-dict regex
 
 **Files:**
-- Modify: `test/unit/check-icon-imports.test.ts` (append two cases inside the existing `describe` block, before the closing `});` on line 179)
+- Modify: `test/unit/check-icon-imports.test.ts` (append two cases inside the existing `describe` block, before the final closing `});` on the file's last non-blank line)
 
-- [ ] **Step 5.1: Write the two failing cases first (TDD)**
-
-Insert before the closing `});` of the `describe(...)` block (currently line 179 — verify by reading first):
+- [ ] **Step 5.1: Locate the insertion point**
 
 ```bash
-tail -5 test/unit/check-icon-imports.test.ts
+tail -10 test/unit/check-icon-imports.test.ts
 ```
 
-Then use Edit to insert. Pick the unique closing context:
+Confirm the file ends with the "groups multiple call-sites" test followed by `});` (closing the describe) — that's our anchor.
+
+- [ ] **Step 5.2: Insert the two new cases**
 
 ```
 File: test/unit/check-icon-imports.test.ts
@@ -494,13 +511,13 @@ new_string:
     expect(r.stderr).toMatch(/footer\.html:1/);
   });
 
-  // The `<ui5-icon name="…">` form (the verb-spine pattern). The original
-  // regex only matched `icon="…"` attributes, so the homepage verb-tile
-  // icons slipped past the guard and shipped unregistered. These two
-  // cases lock in the broadened behaviour.
-  it('passes when <ui5-icon name="..."> has a matching import', () => {
+  // The Hugo `dict "icon" "<name>"` pattern (verb-spine.html shape).
+  // Icon names declared inside Hugo template data don't surface to the
+  // attribute-style ICON_RE because Hugo evaluates the template AFTER
+  // the static guard runs. These two cases lock in HUGO_DICT_ICON_RE.
+  it('passes when Hugo dict "icon" "<name>" has a matching import', () => {
     writeFile(root, 'hugo/layouts/partials/homepage/verb-spine.html',
-      `<ui5-icon name="learning-assistant"></ui5-icon>\n`);
+      `{{- \$verbDefs := slice (dict "key" "FOO" "icon" "learning-assistant") -}}\n`);
     writeFile(root, 'hugo/assets/js/ui5-bootstrap.ts',
       `import "@ui5/webcomponents-icons/dist/learning-assistant.js";\n`);
     const r = run(root);
@@ -508,9 +525,9 @@ new_string:
     expect(r.stdout).toMatch(/1 unique icon\(s\) referenced/);
   });
 
-  it('fails when <ui5-icon name="..."> has no matching import', () => {
+  it('fails when Hugo dict "icon" "<name>" has no matching import', () => {
     writeFile(root, 'hugo/layouts/partials/homepage/verb-spine.html',
-      `<ui5-icon name="learning-assistant"></ui5-icon>\n`);
+      `{{- \$verbDefs := slice (dict "key" "FOO" "icon" "learning-assistant") -}}\n`);
     writeFile(root, 'hugo/assets/js/ui5-bootstrap.ts',
       `import "@ui5/webcomponents-icons/dist/dark-mode.js";\n`);
     const r = run(root);
@@ -522,19 +539,21 @@ new_string:
 });
 ```
 
-Note the error message keeps the `icon="…"` shape even though the source was `name="…"` — that's a downstream simplification (existing code emits `icon="${name}"` from the IconUsage record). Confirming this from [check-icon-imports.ts:231](../../../scripts/check-icon-imports.ts#L231): the loop writes `icon="${name}"`, regardless of which regex matched. So the assertion `icon="learning-assistant" is not imported` is correct even for the `<ui5-icon name=...>` form.
+The error message keeps the `icon="<name>"` shape even though the source pattern was Hugo-dict — that's because the existing reporter in `scripts/check-icon-imports.ts:231` formats every missing IconUsage as `icon="${name}"` regardless of which regex matched. The assertion is correct as-written.
 
-- [ ] **Step 5.2: Run just the new cases (they should PASS — Task 4 already shipped the implementation)**
+The `{{- … -}}` Hugo whitespace markers are included so the fixture content looks like real verb-spine source (and proves the stripComments() handling doesn't accidentally drop our dict).
+
+- [ ] **Step 5.3: Run just the new cases**
 
 ```bash
-npx vitest run test/unit/check-icon-imports.test.ts -t "ui5-icon" 2>&1 | tail -15
+npx vitest run test/unit/check-icon-imports.test.ts -t "Hugo dict" 2>&1 | tail -15
 ```
 
 Expected: 2 passing tests under that filter.
 
-This is "test-after-implementation" rather than strict TDD because the implementation landed in Task 4. That's deliberate — Task 4's commit needed to leave the script green-on-live-tree, and the regex addition stands on its own. Treat Task 5 as proving the implementation is correctly scoped (the second case fails on missing-import; the first case passes on present-import).
+This is "test-after-implementation" rather than strict TDD because the implementation landed in Task 4. That's deliberate — Task 4's commit needed to leave the script green on the live tree, and the regex addition stands on its own. Task 5 proves the implementation is correctly scoped: the second case fails on missing-import; the first case passes on present-import.
 
-- [ ] **Step 5.3: Run the full existing test file to confirm no regressions**
+- [ ] **Step 5.4: Run the full existing test file to confirm no regressions**
 
 ```bash
 npx vitest run test/unit/check-icon-imports.test.ts 2>&1 | tail -15
@@ -542,16 +561,16 @@ npx vitest run test/unit/check-icon-imports.test.ts 2>&1 | tail -15
 
 Expected: all tests pass (9 existing + 2 new = 11 typically).
 
-- [ ] **Step 5.4: Commit**
+- [ ] **Step 5.5: Commit**
 
 ```bash
 git add test/unit/check-icon-imports.test.ts
-git -c core.autocrlf=false commit -m "test(build-guard): cases for <ui5-icon name='…'> matching
+git -c core.autocrlf=false commit -m "test(build-guard): cases for Hugo dict 'icon' '<name>' matching
 
 Two fixture-based cases lock in the regex broadening from the
 previous commit:
 
-- Passes when <ui5-icon name='learning-assistant'> has a matching import
+- Passes when (dict ... 'icon' 'learning-assistant') has a matching import
 - Fails (with correct file:line + suggested fix) when the import is missing
 
 Refs spec 2026-06-28-homepage-icon-events-refinement-design.md"
@@ -808,7 +827,7 @@ Do NOT deploy from this worktree (memory: `feedback_always_deploy_from_main_prim
 
 ## Decision log
 
-- **Why imports first, guard-broadening last:** The broadened guard would reject any intermediate commit where verb-spine names lack their imports. Task 1 lands all three needed imports first, so the broadening in Task 4 stays green on live tree.
+- **Why imports first, guard-broadening last:** After Task 4 the guard will see six additional icon names (`learning-assistant`, `developer-settings`, `chain-link`, `settings`, `da`, `customer-and-contacts`). All six must be imported by the time Task 4's commit lands or the guard fails red. Task 1 covers the three new ones; the other three were already imported in `ui5-bootstrap.ts` from earlier work. Reversing the order would mean Task 4's commit ships a red postbuild.
 - **Why test file lives at `hugo-apps/src/homepage-bands/EventsBand.test.ts`, not in a `__tests__/` subdir:** Matches the convention in [hugo-apps/src/advocate-profile/App.test.ts](../../../hugo-apps/src/advocate-profile/App.test.ts) — adjacent file. Both patterns are picked up by the Vitest unit glob `hugo-apps/src/**/*.test.{js,ts}` (vitest.config.ts:20).
 - **Why not add the icon imports as one commit and the header.html change as a second:** They're conceptually one refinement (icon consistency) but their commits are clean enough on their own that splitting makes review easier. Each commit leaves the tree in a working state.
 - **Why no separate test for the post-Task-2 grep result:** That's a verification step within Task 2, not a permanent regression test. The static guard (which Task 4 broadens) IS the permanent check.
