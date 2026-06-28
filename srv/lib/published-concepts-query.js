@@ -118,7 +118,7 @@ export async function buildConceptsPayload(db) {
     journeyRows,
     'concept_ID',
     r => ({
-      slug: r.journey_slug,
+      slug: (r.journey_slug || '').toLowerCase(),
       title: r.journey_title,
       url: r.journey_url,
       level: r.journey_level,

@@ -43,13 +43,19 @@
     <h2>Learning journeys covering this</h2>
     <ul>
       {{ range . }}
+        {{ $url := .url }}
+        {{ $isSafe := or (hasPrefix $url "https://") (hasPrefix $url "http://") }}
         <li>
+          {{ if $isSafe }}
           <a
-            href="{{ .url }}"
+            href="{{ $url }}"
             target="_blank"
             rel="noopener"
             data-journey-slug="{{ .slug }}"
           >{{ .title }}</a>
+          {{ else }}
+          <span data-journey-slug="{{ .slug }}">{{ .title }}</span>
+          {{ end }}
           · {{ title .level }} · {{ .durationHours }}h
         </li>
       {{ end }}
