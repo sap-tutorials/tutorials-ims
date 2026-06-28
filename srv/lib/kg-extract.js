@@ -238,6 +238,42 @@ function extractTokenUsage(response) {
 }
 
 /**
+ * Generic LLM-call + verdict extraction. Content-type-agnostic.
+ *
+ * Phase 4 chassis (arch §2.3 + Q2): Phase 4 sub-phase adapters (learning
+ * journeys, blog posts, etc.) call this core. The tutorial adapter
+ * `extractConceptsFromTutorial` below also delegates to it.
+ *
+ * Tolerates both verdict-wrapped responses (`{ verdict, usage }`) and flat
+ * responses where the verdict IS the top-level object — Phase 1 callers
+ * sometimes hand back either shape.
+ *
+ * @param {object} args
+ * @param {string} args.system — system prompt
+ * @param {string} args.user — user prompt
+ * @param {object} args.schema — forced-tool-call JSON schema
+ * @param {Function} args.callModel — ({system, user, schema}) => Promise<response>
+ * @returns {Promise<{ verdict: object, tokenUsage: {prompt: number, completion: number} }>}
+ */
+export async function extractConceptsCore({ system, user, schema, callModel }) {
+  if (typeof callModel !== 'function') {
+    throw new Error('extractConceptsCore: `callModel` is required and must be a function');
+  }
+
+  const response = await callModel({ system, user, schema });
+
+  // Tolerate flat shapes (callers that pre-extract).
+  const verdict =
+    response && typeof response === 'object' && 'verdict' in response
+      ? response.verdict
+      : response;
+
+  const tokenUsage = extractTokenUsage(response);
+
+  return { verdict, tokenUsage };
+}
+
+/**
  * Extract concepts from a single tutorial via constrained LLM call.
  *
  * Validation order (after callModel returns):
@@ -268,24 +304,17 @@ export async function extractConceptsFromTutorial({
   registry,
   callModel,
 }) {
-  if (typeof callModel !== 'function') {
-    throw new Error('extractConceptsFromTutorial: `callModel` is required and must be a function');
-  }
-
   const system = SYSTEM_PROMPT;
   const user = buildUserPrompt(tutorialTitle ?? '', tutorialBody ?? '', registry ?? []);
 
-  const response = await callModel({ system, user, schema: KG_EXTRACT_SCHEMA });
-
-  // The verdict shape mirrors code-check-llm: response.verdict holds the
-  // tool-call arguments JSON. Tolerate flat shapes (callers that pre-extract).
-  const verdict =
-    response && typeof response === 'object' && 'verdict' in response
-      ? response.verdict
-      : response;
+  const { verdict, tokenUsage } = await extractConceptsCore({
+    system,
+    user,
+    schema: KG_EXTRACT_SCHEMA,
+    callModel,
+  });
 
   const shaped = validateAndShape(verdict);
-  const tokenUsage = extractTokenUsage(response);
 
   return {
     teaches: shaped.teaches,
