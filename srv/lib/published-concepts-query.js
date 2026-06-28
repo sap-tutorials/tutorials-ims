@@ -17,7 +17,8 @@ import cds from '@sap/cds';
  *     teaches: Array<{slug:string,title:string}>,
  *     requires: Array<{slug:string,name:string}>,
  *     requiredBy: Array<{slug:string,name:string}>,
- *     relatedTo: Array<{slug:string,name:string}>
+ *     relatedTo: Array<{slug:string,name:string}>,
+ *     learningJourneys: Array<{slug:string,title:string,url:string,level:string,durationHours:number}>
  *   }>,
  *   generatedAt: string
  * }>}
@@ -28,6 +29,8 @@ export async function buildConceptsPayload(db) {
   // srv/knowledge-graph-service.cds — single source of truth.
   const { ConceptEdges, TutorialConceptLinks } =
     cds.entities('com.sap.developers.ims');
+  const { LearningJourneyConceptLinks } =
+    cds.entities('com.sap.developers.ims.external');
   const { PublishedConcepts } = cds.entities('KnowledgeGraphService');
 
   // 1. Pull the publishable concepts.
@@ -95,7 +98,35 @@ export async function buildConceptsPayload(db) {
     r => ({ slug: r.source_slug.toLowerCase(), name: r.source_name })
   );
 
-  // 5. Stitch.
+  // 5. Phase 4.1 (#447 §2.6): learning journeys covering each concept.
+  // Pull all journey links for the published-concept IDs in one query and
+  // group server-side. Empty when the cron hasn't yet populated journeys —
+  // each concept then gets an empty array (preserves shape).
+  const journeyRows = await db.run(
+    SELECT.from(LearningJourneyConceptLinks)
+      .columns(
+        'concept_ID',
+        'journey.slug as journey_slug',
+        'journey.title as journey_title',
+        'journey.url as journey_url',
+        'journey.level as journey_level',
+        'journey.durationHours as journey_durationHours'
+      )
+      .where({ concept_ID: { in: ids } })
+  );
+  const learningJourneysByConcept = groupBy(
+    journeyRows,
+    'concept_ID',
+    r => ({
+      slug: (r.journey_slug || '').toLowerCase(),
+      title: r.journey_title,
+      url: r.journey_url,
+      level: r.journey_level,
+      durationHours: r.journey_durationHours,
+    })
+  );
+
+  // 6. Stitch.
   const concepts = published.map(c => ({
     slug: c.slug.toLowerCase(),
     name: c.name,
@@ -104,6 +135,7 @@ export async function buildConceptsPayload(db) {
     requires: requiresByConcept[c.ID] || [],
     requiredBy: requiredByConcept[c.ID] || [],
     relatedTo: relatedToByConcept[c.ID] || [],
+    learningJourneys: learningJourneysByConcept[c.ID] || [],
   }));
 
   return { concepts, generatedAt: new Date().toISOString() };

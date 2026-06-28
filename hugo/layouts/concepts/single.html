@@ -22,6 +22,47 @@
   </section>
   {{ end }}
 
+  {{/*
+    Phase 4.1 (#447 §2.6): "Learning journeys covering this" — section #2
+    on the concept landing page, between Tutorials and Prerequisites.
+
+    External links use target="_blank" + rel="noopener". Telemetry is wired
+    up by the page-bottom delegated script (not inline onclick — see CSP
+    posture in approuter/xs-app.json; we keep the no-inline-handler pattern
+    used elsewhere on the site so this works even if the policy tightens).
+
+    Hide-when-empty: the surrounding `{{ with }}` guard ensures the H2 and
+    UL are NEVER emitted for concepts that have no covering journey.
+  */}}
+  {{ with .Params.learningJourneys }}
+  <section
+    class="concept-page__section"
+    data-kg-section="learning-journeys"
+    data-concept-slug="{{ $.Params.slug }}"
+  >
+    <h2>Learning journeys covering this</h2>
+    <ul>
+      {{ range . }}
+        {{ $url := .url }}
+        {{ $isSafe := or (hasPrefix $url "https://") (hasPrefix $url "http://") }}
+        <li>
+          {{ if $isSafe }}
+          <a
+            href="{{ $url }}"
+            target="_blank"
+            rel="noopener"
+            data-journey-slug="{{ .slug }}"
+          >{{ .title }}</a>
+          {{ else }}
+          <span data-journey-slug="{{ .slug }}">{{ .title }}</span>
+          {{ end }}
+          · {{ title .level }} · {{ .durationHours }}h
+        </li>
+      {{ end }}
+    </ul>
+  </section>
+  {{ end }}
+
   {{ with .Params.requires }}
   <section class="concept-page__section">
     <h2>Prerequisites</h2>
@@ -66,11 +107,37 @@
       if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
       var el = document.getElementById('concept-telemetry');
       if (!el) return;
+      var conceptSlug = el.dataset.conceptSlug;
       try {
         window.dispatchEvent(new CustomEvent('kg.concept.viewed', {
-          detail: { slug: el.dataset.conceptSlug }
+          detail: { slug: conceptSlug }
         }));
       } catch (e) { /* never let telemetry break the page */ }
+
+      // Phase 4.1 (#447 §2.6 + Q5): delegated click listener on the
+      // "Learning journeys covering this" section. CSP-safe — no inline
+      // onclick="..." attributes (the policy in approuter/xs-app.json
+      // tolerates 'unsafe-inline' today, but the existing concept-page
+      // pattern is "server-rendered <script> + addEventListener" so we
+      // keep that convention to stay correct under any future tightening).
+      var section = document.querySelector('[data-kg-section="learning-journeys"]');
+      if (!section) return;
+      var sectionConceptSlug = section.getAttribute('data-concept-slug');
+      var links = section.querySelectorAll('a[data-journey-slug]');
+      for (var i = 0; i < links.length; i++) {
+        (function (a) {
+          a.addEventListener('click', function () {
+            try {
+              window.dispatchEvent(new CustomEvent('kg.learning_journey.linked_from_concept_page', {
+                detail: {
+                  conceptSlug: sectionConceptSlug,
+                  journeySlug: a.getAttribute('data-journey-slug')
+                }
+              }));
+            } catch (e) { /* never let telemetry break the page */ }
+          });
+        })(links[i]);
+      }
     })();
   </script>
 </article>

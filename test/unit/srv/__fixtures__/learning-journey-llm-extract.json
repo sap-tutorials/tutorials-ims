@@ -1,0 +1,29 @@
+{
+  "verdict": {
+    "covers": [
+      { "slug": "cap-service-handlers", "confidence": 0.92 },
+      { "slug": "cds-modeling", "confidence": 0.85 },
+      { "slug": "hana-cloud-integration", "confidence": 0.78 },
+      { "slug": "btp-deployment", "confidence": 0.72 },
+      { "slug": "low-confidence-concept", "confidence": 0.45 }
+    ],
+    "journeyPrerequisites": [
+      {
+        "slug": "btp-fundamentals",
+        "reason": "Journey body explicitly references BTP service basics as prior knowledge.",
+        "confidence": 0.85
+      },
+      {
+        "slug": "low-confidence-prereq",
+        "reason": "Speculative inference from level only.",
+        "confidence": 0.55
+      },
+      {
+        "slug": "this-journey-self-reference",
+        "reason": "Self-reference (should be filtered).",
+        "confidence": 0.95
+      }
+    ]
+  },
+  "usage": { "prompt_tokens": 1500, "completion_tokens": 400 }
+}

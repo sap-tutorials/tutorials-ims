@@ -563,6 +563,7 @@ export default cds.service.impl(async function () {
         prerequisitesOf: [],
         sharedConcepts:  [],
         whatToLearnNext: [],
+        otherResources:  [],  // Phase 4 chassis (#447). Empty in PR-1; PR-2 populates from journey overlap.
       };
     }
 
@@ -651,6 +652,74 @@ export default cds.service.impl(async function () {
       publishedSet = new Set(rows.map((r) => r.slug));
     }
 
+    // Phase 4.1 (#447 §2.6): enrich otherResources with learning journeys
+    // covering any concept the tutorial teaches. Ranked by overlap count.
+    //
+    // Implementation choices:
+    // - Resolve teaches→concept_ID first (so we can filter the link table by
+    //   FK rather than by deep-association — sidesteps CDS QL deep-assoc
+    //   quirks on SQLite the plan flagged for Task 2).
+    // - JS-side group-by + sort; fewer round trips than per-journey rank.
+    // - Graceful fallback to empty array on any error.
+    let otherResources = [];
+    try {
+      const teachesSlugs = ranked.teaches.map((c) => c.slug);
+      if (teachesSlugs.length > 0) {
+        const { LearningJourneys, LearningJourneyConceptLinks } =
+          cds.entities('com.sap.developers.ims.external');
+        const { Concepts } = cds.entities(NAMESPACE);
+
+        const conceptRows = await SELECT.from(Concepts)
+          .columns('ID', 'slug')
+          .where({ slug: { in: teachesSlugs } });
+        const conceptIds = conceptRows.map((c) => c.ID);
+
+        if (conceptIds.length > 0) {
+          const overlapRows = await SELECT.from(LearningJourneyConceptLinks)
+            .columns('journey_ID', 'concept_ID')
+            .where({ concept_ID: { in: conceptIds } });
+
+          const overlapByJourney = new Map();
+          for (const row of overlapRows) {
+            overlapByJourney.set(
+              row.journey_ID,
+              (overlapByJourney.get(row.journey_ID) ?? 0) + 1
+            );
+          }
+
+          if (overlapByJourney.size > 0) {
+            const topJourneyIds = [...overlapByJourney.entries()]
+              .sort(([, a], [, b]) => b - a)
+              .slice(0, 5)
+              .map(([id]) => id);
+
+            const journeys = await SELECT.from(LearningJourneys)
+              .columns('ID', 'slug', 'title', 'url', 'level', 'durationHours')
+              .where({ ID: { in: topJourneyIds } });
+
+            const byId = new Map(journeys.map((j) => [j.ID, j]));
+            // Preserve overlap-count ordering (the SELECT may return rows
+            // in a different order than topJourneyIds).
+            otherResources = topJourneyIds
+              .map((id) => byId.get(id))
+              .filter(Boolean)
+              .map((j) => ({
+                type: 'learning-journey',
+                slug: j.slug,
+                title: j.title,
+                url: j.url,
+                level: j.level,
+                durationHours: j.durationHours,
+                overlapCount: overlapByJourney.get(j.ID),
+              }));
+          }
+        }
+      }
+    } catch (err) {
+      log.warn(`kg-service: neighborhood otherResources enrichment failed: ${err.message ?? err}`);
+      otherResources = [];
+    }
+
     const result = {
       tutorial:        tutorialInfo,
       graphVersion,
@@ -663,6 +732,7 @@ export default cds.service.impl(async function () {
       prerequisitesOf: enrich(ranked.prerequisitesOf),
       sharedConcepts:  enrich(ranked.sharedConcepts),
       whatToLearnNext: enrich(ranked.whatToLearnNext),
+      otherResources,  // Phase 4.1 (#447) — populated from journey overlap.
     };
 
     // 11. (Cache-store would happen here — see _NEIGHBORHOOD_CACHE TODO.)

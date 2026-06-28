@@ -18,7 +18,7 @@ const OUT_DIR = path.join(ROOT, 'hugo', 'content', 'concepts')
 
 const CAP_BASE_URL = process.env.CAP_BASE_URL || 'http://localhost:4004'
 
-interface ConceptPayload {
+export interface ConceptPayload {
   slug: string
   name: string
   description: string
@@ -26,6 +26,15 @@ interface ConceptPayload {
   requires: { slug: string; name: string }[]
   requiredBy: { slug: string; name: string }[]
   relatedTo: { slug: string; name: string }[]
+  // Phase 4.1 (#447): learning journeys covering this concept. Empty until the
+  // weekly fetch-learning-journeys cron has populated LearningJourneyConceptLinks.
+  learningJourneys?: Array<{
+    slug: string
+    title: string
+    url: string
+    level?: string
+    durationHours?: number
+  }>
 }
 
 interface BuildConceptsResponse {
@@ -42,17 +51,36 @@ export function yamlEscape(s: string): string {
     .replace(/\t/g, '\\t')}"`
 }
 
-function frontmatter(c: ConceptPayload): string {
+export function frontmatter(c: ConceptPayload): string {
   const refs = (arr: { slug: string; title?: string; name?: string }[]) =>
     arr.length === 0
       ? '[]'
       : '\n' + arr.map(r => `  - slug: ${yamlEscape(r.slug)}\n    title: ${yamlEscape(r.title ?? r.name ?? '')}`).join('\n')
 
+  // Phase 4.1 (#447): emit `learningJourneys` only when non-empty. The Hugo
+  // concept template at layouts/concepts/single.html guards on `{{ with
+  // .Params.learningJourneys }}`, which is falsy for both missing and empty
+  // arrays — but we omit the key entirely for cleaner generated frontmatter.
+  // Shape matches /build/concepts payload: {slug,title,url,level,durationHours}.
+  const journeys = (c.learningJourneys && c.learningJourneys.length > 0)
+    ? (() => {
+        const lines = ['learningJourneys:']
+        for (const j of c.learningJourneys!) {
+          lines.push(`  - slug: ${yamlEscape(j.slug)}`)
+          lines.push(`    title: ${yamlEscape(j.title)}`)
+          lines.push(`    url: ${yamlEscape(j.url)}`)
+          if (j.level) lines.push(`    level: ${yamlEscape(j.level)}`)
+          if (j.durationHours != null) lines.push(`    durationHours: ${j.durationHours}`)
+        }
+        return lines.join('\n')
+      })()
+    : null
+
   // NOTE: deliberately no `type:` field — Hugo's type-based lookup is singular
   // ("type: concept" → layouts/concept/), but our template lives at
   // layouts/concepts/ (matching the section). Section-based lookup is what we
   // want; setting `type` here would silently bypass it.
-  return [
+  const parts = [
     '---',
     `slug: ${yamlEscape(c.slug)}`,
     `name: ${yamlEscape(c.name)}`,
@@ -61,9 +89,10 @@ function frontmatter(c: ConceptPayload): string {
     `requires:${refs(c.requires)}`,
     `requiredBy:${refs(c.requiredBy)}`,
     `relatedTo:${refs(c.relatedTo)}`,
-    '---',
-    ''
-  ].join('\n')
+  ]
+  if (journeys) parts.push(journeys)
+  parts.push('---', '')
+  return parts.join('\n')
 }
 
 async function main() {
