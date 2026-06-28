@@ -44,12 +44,17 @@ describe('classifyRebuildMode', () => {
     ['Advocates',             'crud', 'catalog-only', false, false, false],
     ['AdvocateTopics',        'crud', 'catalog-only', false, false, false],
     ['AdvocateLinks',         'crud', 'catalog-only', false, false, false],
+    // #685: KG Concepts publish/unpublish
+    ['Concepts',              'crud', 'catalog-only', false, false, false],
     ['SomeFutureEntity',      'crud', 'full',          false, false, false],
     // Bound actions
     ['classifyCategories',    'action', 'catalog-only', false, false, false],
     ['setFeaturedOrder',      'action', 'catalog-only', false, false, false],
     ['commitTagImport',       'action', 'full',         true,  false, false],
     ['cleanupUnusedTags',     'action', 'full',         true,  false, false],
+    // #685: KG bound actions
+    ['publishConcept',        'action', 'catalog-only', false, false, false],
+    ['unpublishConcept',      'action', 'catalog-only', false, false, false],
     // Unrecognized action → safe default
     ['rotateSecretValue',     'action', 'full',         false, false, false],
     ['uploadPhoto',           'action', 'full',         false, false, false],

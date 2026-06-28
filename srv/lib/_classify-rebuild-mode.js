@@ -21,6 +21,14 @@ import cds from '@sap/cds';
 // roughly the same order of magnitude as Missions/Groups), not tutorial-scale,
 // so the slug-targeted path is the wrong shape. catalog-only mode rebuilds
 // the full set in ~1 min wall-clock.
+//
+// #685: KnowledgeGraphService.Concepts is included because admin Publish/
+// Unpublish (and inline name/description edits) change the /build/concepts
+// payload + which /concepts/<slug>/ Hugo pages get generated, but don't
+// touch tutorial markdown. catalog-only rebuilds the full set in ~1 min.
+// NOTE: Concepts lives on KnowledgeGraphService (not AdminService), so the
+// classifier match here is keyed on the bare entity name only — srv/server.js
+// wires a kg.after hook separately to feed the entity name into this fn.
 const CATALOG_ONLY_ENTITIES = new Set([
   'Missions',
   'Groups',
@@ -31,6 +39,7 @@ const CATALOG_ONLY_ENTITIES = new Set([
   'Advocates',
   'AdvocateTopics',
   'AdvocateLinks',
+  'Concepts',
 ]);
 
 // Entities whose CRUD targets a specific tutorial. Re-fetch one markdown,
@@ -64,6 +73,11 @@ const NO_REBUILD_ENTITIES = new Set([
 const CATALOG_ONLY_ACTIONS = new Set([
   'classifyCategories',  // mutates MissionCategories/GroupCategories junctions
   'setFeaturedOrder',    // changes /browse/ featured ordering
+  // #685: KG Concept publish/unpublish — sets/clears publishedAt + publishedBy
+  // on a Concept, which gates the /concepts/<slug>/ Hugo page generation
+  // and the /build/concepts payload.
+  'publishConcept',
+  'unpublishConcept',
 ]);
 
 const FULL_FORCE_CAP_REFETCH_ACTIONS = new Set([
