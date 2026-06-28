@@ -3,8 +3,17 @@ using { com.sap.developers.ims.HomepageShelves } from '../db/homepage';
 
 // Public homepage data service — no @requires, all endpoints are anonymous. (#639)
 // Spec: docs/superpowers/specs/2026-06-27-639-developer-homepage-design.md
+//
+// Path note: declared at /homepage (NOT /api/homepage) to avoid Express
+// prefix-match collision with DeveloperService (@path '/api'). CAP mounts
+// services in alphabetical filename order, so developer-service.cds is
+// mounted at /api BEFORE homepage-service.cds gets its turn — and Express
+// `app.use('/api', …)` is a prefix match that swallows /api/homepage/*
+// before this service ever sees the request. Moving HomepageService out of
+// the /api namespace removes the overlap entirely. The approuter route
+// `^/homepage/(.*)$` (authenticationType: 'none') is the public ingress.
 
-@path: '/api/homepage'
+@path: '/homepage'
 service HomepageService {
 
   // EventCard maps from ims.Events (startDate/name) to the homepage shape.

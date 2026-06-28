@@ -36,7 +36,7 @@ async function flush(srvUrl, logger = console) {
   _counts = new Map()
   const hits = [...snapshot.entries()].map(([id, count]) => ({ id, count }))
   try {
-    const r = await fetch(`${srvUrl}/api/homepage/recordRedirectHits`, {
+    const r = await fetch(`${srvUrl}/homepage/recordRedirectHits`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ hits }),

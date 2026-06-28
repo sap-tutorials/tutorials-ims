@@ -37,7 +37,7 @@ function formatChipClass(format: string): string {
 onMounted(async () => {
   try {
     const limit = props.mode === 'full-calendar' ? 20 : 4;
-    const res = await fetch(`/api/homepage/events?$top=${limit}`);
+    const res = await fetch(`/homepage/events?$top=${limit}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const body = await res.json();
     events.value = Array.isArray(body.value) ? body.value : Array.isArray(body) ? body : [];

@@ -6,7 +6,11 @@
 //
 // URL spelling: CDS function names map verbatim to the URL path.
 // HomepageService exposes `function communityBlogs()` (camelCase) in
-// srv/homepage-service.cds, so the URL is /api/homepage/communityBlogs.
+// srv/homepage-service.cds, so the URL is /homepage/communityBlogs.
+//
+// Path note: HomepageService was moved from /api/homepage to /homepage
+// to avoid an Express prefix-match collision with DeveloperService
+// (@path '/api'). See srv/homepage-service.cds comment for context.
 //
 // All assertions are shape-only (Array.isArray / typeof === 'object') so
 // the suite stays green on a fresh deploy before any content is published
@@ -21,12 +25,12 @@ const SRV = process.env.SMOKE_SRV_URL;
 
 describe.skipIf(!SRV)('Homepage API smoke', () => {
   it.each([
-    ['/api/homepage/events',          'array'],
-    ['/api/homepage/videos',          'object'],
-    ['/api/homepage/communityBlogs',  'array'],
-    ['/api/homepage/news',            'array'],
-    ['/api/homepage/shelves?verb=LEARN', 'array'],
-    ['/api/homepage/redirectsActive', 'array']
+    ['/homepage/events',          'array'],
+    ['/homepage/videos',          'object'],
+    ['/homepage/communityBlogs',  'array'],
+    ['/homepage/news',            'array'],
+    ['/homepage/shelves?verb=LEARN', 'array'],
+    ['/homepage/redirectsActive', 'array']
   ])('GET %s returns %s', async (path, kind) => {
     const res = await fetch(SRV + path);
     expect(res.ok).toBe(true);
