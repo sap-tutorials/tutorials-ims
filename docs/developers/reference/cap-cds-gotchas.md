@@ -151,7 +151,7 @@ When a feature ships behind a `ChatSettings.codeCheckEnabled = false` (or simila
 
 **The two production bugs this surfaced** (`project_210_phase4_blocked_by_314_315.md`): #314 (route shadowing) and #315 (`cds.entities` not initialized in `cds bind --exec`). Both shipped 2026-06-02 / 2026-06-08 and weren't caught for 11+ days because nothing exercised the deployed code path.
 
-Pattern repeats anywhere flag-gated features ship: branch features off `ChatSettings.branchingEnabled`, AI quizzes off `AI_AUTHOR_ENABLED`, etc.
+Pattern repeats anywhere flag-gated features ship: branch features off `ChatSettings.branchingEnabled`, AI quizzes off `AI_AUTHOR_ENABLED` (removed on close-out of #312, but the lesson stands), etc.
 
 ---
 

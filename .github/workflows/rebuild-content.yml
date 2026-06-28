@@ -27,11 +27,6 @@ on:
         required: false
         default: 'manual'
         type: string
-      ai-author-enabled:
-        description: 'Enable AI-quiz generation for this run (#208 spike, graduated #275 + #311). Default true post-graduation; flip to false only to bypass during incident triage. Requires AI_AUTHOR_AICORE_SERVICE_KEY + CHAT_DEPLOYMENT_ID secrets. See docs/developers/operations/ai-author-ci-setup.md.'
-        required: false
-        default: true
-        type: boolean
       ai-author-build-cap:
         description: 'Hard cap on AI-quiz LLM calls per build (overrides default 200). Use 10000 for first-time bulk seed.'
         required: false
@@ -195,21 +190,22 @@ jobs:
           private-key: ${{ secrets.TUTORIALS_APP_PRIVATE_KEY }}
           owner: sap-tutorials
 
-      # [#208] Construct VCAP_SERVICES for the AI-quiz fetch path. The
+      # [#208/#312] Construct VCAP_SERVICES for the AI-quiz fetch path. The
       # @sap-ai-sdk/orchestration SDK reads aicore credentials from
       # VCAP_SERVICES.aicore[0].credentials when no cds bind is in effect.
       # The secret holds ONLY the inner `credentials` JSON (rotated via
       # `cf delete-service-key tutorials-aicore <key> &&
       #  cf create-service-key tutorials-aicore <key>`).
-      # Skipped when ai-author-enabled is false — keeps the env clean for
-      # normal rebuilds.
+      # Skipped for catalog-only rebuilds (fetch-tutorials.ts doesn't run).
+      # If a model regression sneaks in, set the AI_AUTHOR_AICORE_SERVICE_KEY
+      # secret to empty — the SDK then fails fast on first LLM call.
       - name: Set up VCAP_SERVICES for AI authoring
-        if: ${{ inputs.ai-author-enabled == true && steps.mode.outputs.effective_mode != 'catalog-only' }}
+        if: ${{ steps.mode.outputs.effective_mode != 'catalog-only' }}
         env:
           AICORE_CREDENTIALS_JSON: ${{ secrets.AI_AUTHOR_AICORE_SERVICE_KEY }}
         run: |
           if [ -z "${AICORE_CREDENTIALS_JSON}" ]; then
-            echo "::error::ai-author-enabled=true requires AI_AUTHOR_AICORE_SERVICE_KEY secret. See docs/developers/operations/ai-author-ci-setup.md."
+            echo "::error::AI_AUTHOR_AICORE_SERVICE_KEY secret is unset or empty. AI-quiz authoring is always-on post-#312 — see docs/developers/operations/ai-author-ci-setup.md."
             exit 1
           fi
           # Wrap the credentials JSON in the outer aicore[] structure the SDK expects.
@@ -235,16 +231,17 @@ jobs:
           CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
           TUTORIAL_SLUG: ${{ inputs.slug }}
           TUTORIAL_SLUGS: ${{ inputs.slugs }}
-          # [#208/#275] AI-quiz authoring. Default true post-graduation
-          # (#311 flipped the workflow_dispatch default). When the flag is
-          # set, fetch-tutorials.ts wakes up the AI generator on tutorials
-          # carrying [AUTOAUTHOR_*] directives in their rules.vr. The
-          # VCAP_SERVICES env (set by the prior step) carries the aicore
-          # binding the orchestration SDK needs.
-          # NOTE: repository_dispatch events (admin-write triggers from PR
-          # #220) deliberately fall through to the empty-string fallback —
-          # admin debounce rebuilds shouldn't burn LLM dollars per tweak.
-          AI_AUTHOR_ENABLED: ${{ inputs.ai-author-enabled == true && 'true' || '' }}
+          # [#208/#275/#312] AI-quiz authoring. Always-on post-#312
+          # (2026-06-27 — soak window completed clean). fetch-tutorials.ts
+          # wakes the AI generator on tutorials carrying [AUTOAUTHOR_*]
+          # directives in their rules.vr. VCAP_SERVICES (set by the prior
+          # step) carries the aicore binding the orchestration SDK needs.
+          # Cost is bounded by (a) author opt-in for the directive and
+          # (b) AI_AUTHOR_BUILD_CAP per-build worst-case ceiling.
+          # Kill-switch: set AI_AUTHOR_AICORE_SERVICE_KEY secret to empty
+          # — the SDK fails fast on first call, falling back to skipping
+          # AI expansion. The summary step still emits the [ai-author]
+          # telemetry line so the CI invariant regex keeps matching.
           AI_AUTHOR_BUILD_CAP: ${{ inputs.ai-author-build-cap }}
           CHAT_DEPLOYMENT_ID: ${{ secrets.CHAT_DEPLOYMENT_ID }}
 
@@ -408,6 +405,6 @@ jobs:
           if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
             echo "- **Source repo:** ${{ github.event.client_payload.repository }}" >> "$GITHUB_STEP_SUMMARY"
           fi
-          if [ "${{ inputs.ai-author-enabled }}" = "true" ]; then
+          if [ "${{ steps.mode.outputs.effective_mode }}" != "catalog-only" ]; then
             echo "- **AI authoring:** enabled (cap=${{ inputs.ai-author-build-cap }})" >> "$GITHUB_STEP_SUMMARY"
           fi

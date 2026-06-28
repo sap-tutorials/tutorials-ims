@@ -770,30 +770,37 @@ async function main() {
       if (rulesContent) {
         const { map: validationMap, ruleTypeByStepAndId, correctAnswerByStepAndId, allDirective, handAuthoredSteps } = parseRulesVrEnriched(rulesContent)
 
-        // [#208] AI-authored quiz expansion. Behind AI_AUTHOR_ENABLED env flag;
-        // hard-capped at AI_AUTHOR_BUILD_CAP per build. Cache lives at
-        // .tutorial-cache/<slug>.ai-quiz-cache.json. See:
+        // [#208/#312] AI-authored quiz expansion. Always-on as of #312
+        // (2026-06-27 — soak window 2026-06-13..2026-06-27 produced 0 errors /
+        // 0 empty-step skips across ~20 rebuilds). Still hard-capped by
+        // AI_AUTHOR_BUILD_CAP per build; cache lives at
+        // .tutorial-cache/<slug>.ai-quiz-cache.json. Tutorials without any
+        // [AUTOAUTHOR_*] directives are no-ops (validationMap stays empty),
+        // so the cost is bounded by author opt-in, not by enablement. See:
         // docs/superpowers/specs/2026-06-05-208-ai-authored-quizzes-design.md
-        if (process.env.AI_AUTHOR_ENABLED === 'true') {
-          // TutorialStep type has `.number` + `.content` fields (per
-          // scripts/parsers/types.ts — verified during plan review). Use
-          // `s.content`, NOT `s.body`.
-          const stepBodies = new Map<number, string>(
-            steps.map(s => [s.number, s.content ?? '']),
-          )
-          const aiCache = loadAiQuizCache(t.slug)
-          await expandAiAuthoredQuestions(validationMap, stepBodies, {
-            cache: aiCache,
-            callModel: callQuizModel,
-            onCallStats: globalCallStats,
-            allDirective,
-            // [#208 precedence-fix] forward the set of hand-authored steps
-            // so AI never fires on top of regex-substring or other [VALIDATE_N]
-            // blocks where parseBlock returned [].
-            handAuthoredSteps,
-          })
-          saveAiQuizCache(t.slug, aiCache)
-        }
+        //
+        // Kill-switch if a model regression sneaks in: set repo secret
+        // AI_AUTHOR_AICORE_SERVICE_KEY to empty (the SDK then fails fast on
+        // first call) or revert this commit.
+        //
+        // TutorialStep type has `.number` + `.content` fields (per
+        // scripts/parsers/types.ts — verified during plan review). Use
+        // `s.content`, NOT `s.body`.
+        const stepBodies = new Map<number, string>(
+          steps.map(s => [s.number, s.content ?? '']),
+        )
+        const aiCache = loadAiQuizCache(t.slug)
+        await expandAiAuthoredQuestions(validationMap, stepBodies, {
+          cache: aiCache,
+          callModel: callQuizModel,
+          onCallStats: globalCallStats,
+          allDirective,
+          // [#208 precedence-fix] forward the set of hand-authored steps
+          // so AI never fires on top of regex-substring or other [VALIDATE_N]
+          // blocks where parseBlock returned [].
+          handAuthoredSteps,
+        })
+        saveAiQuizCache(t.slug, aiCache)
 
         // [#208] Populate sibling maps for AI-authored text questions so
         // collectAiGradedSpecs (below) emits the validate-answer-spec
@@ -1223,16 +1230,18 @@ async function main() {
     console.log('─'.repeat(60))
   }
 
-  if (process.env.AI_AUTHOR_ENABLED === 'true') {
-    console.log(
-      `[ai-author] expanded directives across all tutorials: ` +
-      `${globalCallStats.calls} cache miss (LLM call), ` +
-      `${globalCallStats.hits} cache hit, ` +
-      `${globalCallStats.errors} errors, ` +
-      `${globalCallStats.skips ?? 0} empty-step skipped. ` +
-      `Build cap: ${process.env.AI_AUTHOR_BUILD_CAP ?? '200'}.`,
-    )
-  }
+  // [#312] AI-author summary line is always emitted post-graduation. CI
+  // regex-matches this shape to assert `0 errors` / `0 empty-step skipped`
+  // across the catalog. Tutorials without [AUTOAUTHOR_*] directives
+  // contribute 0/0/0/0 to the totals — harmless.
+  console.log(
+    `[ai-author] expanded directives across all tutorials: ` +
+    `${globalCallStats.calls} cache miss (LLM call), ` +
+    `${globalCallStats.hits} cache hit, ` +
+    `${globalCallStats.errors} errors, ` +
+    `${globalCallStats.skips ?? 0} empty-step skipped. ` +
+    `Build cap: ${process.env.AI_AUTHOR_BUILD_CAP ?? '200'}.`,
+  )
 
   console.log('═'.repeat(60))
 }
