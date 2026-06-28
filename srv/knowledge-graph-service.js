@@ -513,6 +513,14 @@ export default cds.service.impl(async function () {
   // smoke test (positive path only — negative-path testing is a TODO).
   const CONCEPTS_PATCH_ALLOWLIST = new Set(['name', 'description']);
   this.before('UPDATE', 'Concepts', (req) => {
+    // Defence-in-depth: the CDS service-level @requires was dropped to make
+    // the read surface public (Task 1 of the KG public-reader PR,
+    // 2026-06-28). The writable Concepts projection still needs the admin
+    // scope; assert it imperatively here so anonymous PATCH returns 403
+    // before the field allowlist runs.
+    if (!req.user?.is?.('KnowledgeGraph.Admin')) {
+      return req.reject(403, 'KnowledgeGraph.Admin scope required to write Concepts.');
+    }
     const data = req.data || {};
     for (const key of Object.keys(data)) {
       // CAP includes the entity key + audit fields automatically; skip those.

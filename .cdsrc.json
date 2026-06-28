@@ -33,7 +33,7 @@
         },
         "admin": {
           "password": "admin",
-          "roles": ["Admin", "DeveloperApp", "DisplayApp", "ContentAuthor", "ConsolidationScope", "Tutorial.Author", "authenticated-user"]
+          "roles": ["Admin", "KnowledgeGraph.Admin", "DeveloperApp", "DisplayApp", "ContentAuthor", "ConsolidationScope", "Tutorial.Author", "authenticated-user"]
         },
         "superadmin": {
           "password": "superadmin",

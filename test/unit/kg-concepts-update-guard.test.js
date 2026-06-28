@@ -6,9 +6,11 @@
 // @Common.FieldControl: #ReadOnly to keep the other fields uneditable; the
 // service's before('UPDATE','Concepts') guard is the defense-in-depth fallback.
 //
-// LIMITATION: We test the positive path here (PATCH name/description
-// succeeds end-to-end). Negative-path testing (PATCH slug/status/extraction
-// returns 403) is harder than it looks:
+// LIMITATION: We test the positive path here (admin PATCH of name/description
+// succeeds end-to-end). Anonymous PATCH is covered by the dedicated
+// kg-concepts-write-guard.test.js suite. Negative-path testing FOR THE
+// FIELD ALLOWLIST (PATCH of slug/status/extraction returns 403) remains
+// harder than it looks:
 //   - Over OData PATCH: the FieldControl metadata strips read-only fields
 //     before the before-handler runs, so the request silently no-ops.
 //   - Programmatic srv.run(UPDATE(...)): in @sap/cds 8 the before-handler
@@ -28,7 +30,7 @@ import cds from '@sap/cds';
 process.env.KNOWLEDGE_GRAPH_ENABLED = 'true';
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
-const developerAuth = { auth: { username: 'developer', password: 'developer' } };
+const adminAuth = { auth: { username: 'admin', password: 'admin' } };
 
 const TEST_ID = 'C0000001-0000-0000-0000-000000000001';
 
@@ -51,7 +53,7 @@ describe('PATCH /graph/Concepts — editable surface', () => {
     const res = await project.patch(
       `/graph/Concepts(${TEST_ID})`,
       { name: 'Updated Name' },
-      developerAuth,
+      adminAuth,
     );
     expect([200, 204]).toContain(res.status);
 
@@ -64,7 +66,7 @@ describe('PATCH /graph/Concepts — editable surface', () => {
     const res = await project.patch(
       `/graph/Concepts(${TEST_ID})`,
       { description: 'New description' },
-      developerAuth,
+      adminAuth,
     );
     expect([200, 204]).toContain(res.status);
 
@@ -77,7 +79,7 @@ describe('PATCH /graph/Concepts — editable surface', () => {
     const res = await project.patch(
       `/graph/Concepts(${TEST_ID})`,
       { name: null },
-      developerAuth,
+      adminAuth,
     );
     expect([200, 204]).toContain(res.status);
 
@@ -95,7 +97,7 @@ describe('PATCH /graph/Concepts — editable surface', () => {
     const res = await project.patch(
       `/graph/Concepts(${TEST_ID})`,
       { slug: 'attempted-mutation' },
-      { ...developerAuth, validateStatus: () => true },
+      { ...adminAuth, validateStatus: () => true },
     );
     expect([200, 204]).toContain(res.status);
 
