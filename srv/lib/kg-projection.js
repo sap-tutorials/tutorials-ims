@@ -88,6 +88,7 @@ export const KG_IRI_PREFIXES = Object.freeze({
   category: `${KG}category/`,
   tag:      `${KG}tag/`,
   'learning-journey': `${KG}learning-journey/`,
+  'blog-post': `${KG}blog-post/`,
 });
 
 /**
@@ -97,6 +98,13 @@ export const KG_IRI_PREFIXES = Object.freeze({
  */
 export function iriLearningJourney(slug) {
   return KG_IRI_PREFIXES['learning-journey'] + slug;
+}
+
+/**
+ * Phase 4.2 (#447): IRI helper for blog posts.
+ */
+export function iriBlogPost(slug) {
+  return `${KG_IRI_PREFIXES['blog-post']}${iriEscapeSegment(slug)}`;
 }
 
 /**
