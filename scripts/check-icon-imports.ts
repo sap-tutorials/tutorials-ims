@@ -21,6 +21,10 @@
 //
 // Scope (deliberate): STATIC literals only.
 //   - `icon="some-name"` in .html (Hugo layouts) and .vue (islands)
+//   - Hugo `dict` entries of the form `"icon" "some-name"` in .html
+//     layouts (verb-spine pattern — the icon name lives in template
+//     data, expanded at render time as `<ui5-icon name="{{ $vIcon }}">`,
+//     so it's invisible to the attribute-style regex above).
 //   - Names matching /^[a-z][a-z0-9-]*$/ (the UI5 icon-name shape;
 //     skips `icon=""`, `icon="1"`, `icon="{{ .Foo }}"`, `:icon="x"`)
 //   - HTML comments + Hugo `{{/* … */}}` are stripped before scanning
@@ -102,12 +106,32 @@ export function stripComments(src: string): string {
  */
 const ICON_RE = /(?<![-\w:])icon="([a-z][a-z0-9-]*)"/g;
 
+/**
+ * Match Hugo `dict` literal entries of the form `"icon" "<name>"`.
+ *
+ * Verb-spine.html (hugo/layouts/partials/homepage/verb-spine.html lines 7-12)
+ * stores its six tile icons in a `slice (dict … "icon" "<name>" …)` block
+ * and expands them via `<ui5-icon name="{{ $vIcon }}">` at render time.
+ * The static guard runs against pre-expansion source, so the literal
+ * names are only visible inside the dict — ICON_RE never sees them.
+ *
+ * The pattern requires `"icon"` followed by whitespace and a quoted
+ * UI5 icon-shaped name. Sweep of `hugo/` at design time found zero
+ * matches outside verb-spine's 6 expected lines. The `"icon" "<name>"`
+ * shape is specific enough to JSON-style key+value adjacency that
+ * narrative prose, CSS, etc. don't collide.
+ */
+const HUGO_DICT_ICON_RE = /"icon"\s+"([a-z][a-z0-9-]*)"/g;
+
 export function parseIconUsages(file: string, content: string): IconUsage[] {
   const stripped = stripComments(content);
   const lines = stripped.split('\n');
   const out: IconUsage[] = [];
   for (let i = 0; i < lines.length; i++) {
     for (const m of lines[i].matchAll(ICON_RE)) {
+      out.push({ name: m[1], file, line: i + 1 });
+    }
+    for (const m of lines[i].matchAll(HUGO_DICT_ICON_RE)) {
       out.push({ name: m[1], file, line: i + 1 });
     }
   }
