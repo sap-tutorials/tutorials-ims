@@ -7,13 +7,18 @@
 // 1. Pull listing from sap-devs MCP (cached client-side, 24h TTL).
 // 2. Upsert into LearningJourneys; touch lastSeenAt on every row;
 //    update contentHash on diff.
-// 3. For each journey whose contentHash changed since last extraction:
+// 3. For each journey whose lastExtractedHash differs from the new
+//    contentHash (i.e. either upstream changed OR last extraction didn't
+//    complete cleanly — see crash-safety note in step 4f):
 //    a. Fetch body (tiered: structured → readability → metadata).
 //    b. Pre-fetch K=25 (or K=15 for metadata tier) concepts as registry hint.
 //    c. Pre-fetch K=10 nearest journeys as prereq candidates.
 //    d. Call extractConceptsFromLearningJourney(...).
 //    e. Persist LearningJourneyConceptLinks + LearningJourneyPrerequisites.
-//    f. (Deferred) Merge-on-write new concepts.
+//    f. Mark lastExtractedHash = newHash. This MUST be the final step per
+//       journey — if the cron crashes earlier, lastExtractedHash stays at
+//       its previous value and the next cycle re-extracts (#708 fix).
+//    g. (Deferred) Merge-on-write new concepts (#707).
 // 4. Log per-tier scrape counts, token spend, row counts.
 //
 // Budget: ChatSettings.learningJourneyExtractBudgetPerDay (default 500).
@@ -137,7 +142,7 @@ export async function runFetchLearningJourneys() {
       const newHash = sha256Hex(`${j.title}|${j.level}|${j.duration}`);
       const existing = await SELECT.one
         .from(LearningJourneys)
-        .columns('ID', 'contentHash')
+        .columns('ID', 'contentHash', 'lastExtractedHash')
         .where({ slug: journeySlug });
 
       const levelNormalized = (j.level ?? '').toLowerCase();
@@ -170,7 +175,12 @@ export async function runFetchLearningJourneys() {
       }
       summary.upserted++;
 
-      const needsExtraction = !existing || existing.contentHash !== newHash;
+      // Gate extraction on lastExtractedHash, NOT contentHash (#708).
+      // contentHash is set in step 2 above; lastExtractedHash is set in
+      // step 4 below ONLY after a successful link persist. This ensures that
+      // a crash between DELETE and INSERT leaves lastExtractedHash at the
+      // PREVIOUS value, so the next cycle re-extracts instead of skipping.
+      const needsExtraction = !existing || existing.lastExtractedHash !== newHash;
       if (needsExtraction) {
         toExtract.push({
           slug: journeySlug,
@@ -178,6 +188,7 @@ export async function runFetchLearningJourneys() {
           level: levelNormalized,
           durationHours,
           url: j.url,
+          newHash,
         });
       } else {
         summary.skippedNoChange++;
@@ -253,11 +264,9 @@ export async function runFetchLearningJourneys() {
       const modelVersion = process.env.LLM_MODEL_NAME ?? 'unknown';
 
       // Replace existing links for this journey (full re-extract pattern).
-      // Note: this DELETE-then-INSERT is not crash-safe. If the cron is killed
-      // between the DELETE and the INSERT, the journey row has stale contentHash
-      // + zero links until next cycle (which will skip because contentHash matches).
-      // Tracked as #708 — proposed fix: add a separate `lastExtractedHash` column
-      // and gate `needsExtraction` on lastExtractedHash !== contentHash.
+      // Crash-safety: lastExtractedHash is updated below only AFTER the
+      // INSERTs complete. If the cron crashes mid-loop, the next cycle's
+      // needsExtraction check (gated on lastExtractedHash) re-fires.
       await DELETE.from(LearningJourneyConceptLinks).where({ journey_ID: journeyRow.ID });
 
       for (const c of result.covers) {
@@ -299,6 +308,14 @@ export async function runFetchLearningJourneys() {
         });
         summary.prereqsWritten++;
       }
+
+      // Mark this journey as fully extracted (#708 crash-safety gate). MUST
+      // come after BOTH the covers loop AND the prereqs loop — if the cron
+      // crashes before this UPDATE, the next cycle re-extracts.
+      await UPDATE(LearningJourneys)
+        .set({ lastExtractedHash: j.newHash })
+        .where({ ID: journeyRow.ID });
+
       journeysExtracted++;
     } catch (err) {
       LOG.error(`Journey ${j.slug} extraction failed: ${err.message}`);
