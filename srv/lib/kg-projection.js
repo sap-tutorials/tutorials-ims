@@ -14,6 +14,8 @@
 // batch in `INSERT DATA { GRAPH <kg:tutorials> { ... } }` and dispatches
 // to the SPARQL client.
 
+import { isWithinTTL } from './external-content-ttl.js';
+
 // ---------------------------------------------------------------------------
 // IRI prefixes
 // ---------------------------------------------------------------------------
@@ -277,6 +279,20 @@ export async function* projectFromFixtures(fixtures, batchSize = 5000) {
     if (buffer.length >= batchSize) { yield buffer; buffer = []; }
   }
 
+  // Section 7 — Phase 4.1 (#447) learning-journey triples. Optional input:
+  // when the fixture omits the learning-journey sections (Phase 1-3 tests),
+  // emission is silently skipped.
+  const { journeys = [], links: journeyLinks = [], prereqs: journeyPrereqs = [] } =
+    (fixtures && fixtures.learningJourneys) || {};
+  if (journeys.length > 0) {
+    for (const t of buildLearningJourneyTriples({
+      journeys, links: journeyLinks, prereqs: journeyPrereqs,
+    })) {
+      buffer.push(t);
+      if (buffer.length >= batchSize) { yield buffer; buffer = []; }
+    }
+  }
+
   if (buffer.length > 0) yield buffer;
 }
 
@@ -311,6 +327,74 @@ export function buildCoCompletionTriples(rows) {
     );
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4.1 (#447) — Learning Journey triple builder
+// ---------------------------------------------------------------------------
+
+const KG_LEARNING_JOURNEY = `${KG}LearningJourney`;
+const RDFS_LABEL = 'http://www.w3.org/2000/01/rdf-schema#label';
+
+/**
+ * Emit N-Triples for Learning Journeys + their concept-cover + prerequisite
+ * edges. Gated by `isWithinTTL('learning-journey', lastSeenAt)` so stale
+ * rows silently drop. Triples for links/prereqs whose endpoints aren't
+ * visible (TTL-filtered or not present in the input) are also silently
+ * dropped.
+ *
+ * @param {object} args
+ * @param {Array<{slug, title, lastSeenAt}>} args.journeys
+ * @param {Array<{journeySlug, conceptSlug, predicate?}>} args.links
+ * @param {Array<{journeySlug, prereqSlug}>} args.prereqs
+ * @returns {string[]} N-Triples
+ */
+export function buildLearningJourneyTriples({ journeys = [], links = [], prereqs = [] } = {}) {
+  const triples = [];
+  const visibleJourneySlugs = new Set();
+
+  for (const j of journeys) {
+    if (!j || !j.slug) continue;
+    if (!isWithinTTL('learning-journey', j.lastSeenAt)) continue;
+    visibleJourneySlugs.add(j.slug);
+    const subj = iriLearningJourneyNoBrackets(j.slug);
+    triples.push(triple(iri(subj), iri(RDF_TYPE), iri(KG_LEARNING_JOURNEY)));
+    triples.push(literalTriple(iri(subj), iri(RDFS_LABEL), j.title ?? ''));
+    triples.push(literalTriple(iri(subj), iriPredicate('slug'), j.slug));
+  }
+
+  for (const link of links) {
+    if (!link || !link.journeySlug || !link.conceptSlug) continue;
+    if (!visibleJourneySlugs.has(link.journeySlug)) continue;
+    triples.push(triple(
+      iri(iriLearningJourneyNoBrackets(link.journeySlug)),
+      iriPredicate(link.predicate || 'covers'),
+      iriConcept(link.conceptSlug)
+    ));
+  }
+
+  for (const p of prereqs) {
+    if (!p || !p.journeySlug || !p.prereqSlug) continue;
+    if (!visibleJourneySlugs.has(p.journeySlug)) continue;
+    if (!visibleJourneySlugs.has(p.prereqSlug)) continue;
+    triples.push(triple(
+      iri(iriLearningJourneyNoBrackets(p.journeySlug)),
+      iriPredicate('journeyPrerequisite'),
+      iri(iriLearningJourneyNoBrackets(p.prereqSlug))
+    ));
+  }
+
+  return triples;
+}
+
+/**
+ * Inner helper: returns the raw IRI string (no surrounding `<>` brackets).
+ * The existing iriLearningJourney() helper returns the bare string; the
+ * `triple()` helper expects pre-bracketed strings. Wrapping with iri()
+ * keeps the call sites uniform with the other sections in this file.
+ */
+function iriLearningJourneyNoBrackets(slug) {
+  return iriLearningJourney(slug);
 }
 
 // ---------------------------------------------------------------------------
@@ -478,6 +562,61 @@ async function loadFixtures(db) {
   const coCompletionsMod = await import('./co-completion.js');
   const coCompletions = await coCompletionsMod.computeCoCompletions({ topN: 10 });
 
+  // Phase 4.1 (#447) — Learning Journeys + cover/prereq link rows. The
+  // load is best-effort: when the LearningJourneys table is empty (cron
+  // hasn't run yet) or absent (Phase 1-3 test DBs), an empty bundle is
+  // returned and the projection emits zero learning-journey triples.
+  let learningJourneys = { journeys: [], links: [], prereqs: [] };
+  try {
+    const {
+      LearningJourneys,
+      LearningJourneyConceptLinks,
+      LearningJourneyPrerequisites,
+    } = cds.entities('com.sap.developers.ims.external');
+
+    const journeyRows = await db.run(
+      SELECT.from(LearningJourneys).columns('ID', 'slug', 'title', 'lastSeenAt')
+    );
+    const journeySlugById = new Map(journeyRows.map((j) => [j.ID, j.slug]));
+
+    const linkRows = await db.run(
+      SELECT.from(LearningJourneyConceptLinks)
+        .columns('journey_ID', 'concept_ID', 'predicate')
+    );
+    const links = [];
+    for (const l of linkRows) {
+      const journeySlug = journeySlugById.get(l.journey_ID);
+      const conceptSlug = conceptById.get(l.concept_ID);
+      if (!journeySlug || !conceptSlug) continue;
+      links.push({ journeySlug, conceptSlug, predicate: l.predicate || 'covers' });
+    }
+
+    const prereqRows = await db.run(
+      SELECT.from(LearningJourneyPrerequisites)
+        .columns('journey_ID', 'prerequisite_ID')
+    );
+    const prereqs = [];
+    for (const p of prereqRows) {
+      const journeySlug = journeySlugById.get(p.journey_ID);
+      const prereqSlug = journeySlugById.get(p.prerequisite_ID);
+      if (!journeySlug || !prereqSlug) continue;
+      prereqs.push({ journeySlug, prereqSlug });
+    }
+
+    learningJourneys = {
+      journeys: journeyRows.map((j) => ({
+        slug: j.slug, title: j.title, lastSeenAt: j.lastSeenAt,
+      })),
+      links,
+      prereqs,
+    };
+  } catch (err) {
+    const log = cds.log('kg-projection');
+    log.warn(
+      `kg-projection: LearningJourneys load failed; journey triples will be empty. err=${err && err.message ? err.message : String(err)}`
+    );
+  }
+
   return {
     concepts: concepts.map((c) => ({
       slug: c.slug, name: c.name, description: c.description, status: c.status,
@@ -487,5 +626,6 @@ async function loadFixtures(db) {
     tutorials,
     missions: missionsOut,
     coCompletions,
+    learningJourneys,
   };
 }

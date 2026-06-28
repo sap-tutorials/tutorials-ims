@@ -51,3 +51,20 @@ describe('iriLearningJourney helper (#447)', () => {
     );
   });
 });
+
+describe('SHORT_BY_TYPE lockstep (#447)', () => {
+  it('has a short prefix for every type in KG_IRI_PREFIXES', async () => {
+    const { SHORT_BY_TYPE } = await import('../../../srv/lib/kg-explore-data.js');
+    for (const type of Object.keys(KG_IRI_PREFIXES)) {
+      expect(
+        SHORT_BY_TYPE[type],
+        `SHORT_BY_TYPE is missing an entry for "${type}"; explore-data would emit "undefined:<slug>"`,
+      ).toBeTruthy();
+    }
+  });
+
+  it('learning-journey shortcut is "lj"', async () => {
+    const { SHORT_BY_TYPE } = await import('../../../srv/lib/kg-explore-data.js');
+    expect(SHORT_BY_TYPE['learning-journey']).toBe('lj');
+  });
+});

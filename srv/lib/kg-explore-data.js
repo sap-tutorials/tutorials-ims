@@ -29,7 +29,10 @@ const KG_PREFIX = 'https://developers.sap.com/kg/';
 // in {id} (e.g. 't:cap-handlers' vs 'c:cap-handlers'). Kept here because
 // they're a presentation concern of the explore endpoint, not part of the
 // canonical IRI registry in kg-projection.js.
-const SHORT_BY_TYPE = Object.freeze({
+//
+// Exported so a lockstep test in kg-explore-data-iri-types.test.js can
+// assert this map stays in sync with KG_IRI_PREFIXES.
+export const SHORT_BY_TYPE = Object.freeze({
   tutorial: 't',
   concept:  'c',
   mission:  'm',
@@ -37,6 +40,9 @@ const SHORT_BY_TYPE = Object.freeze({
   product:  'p',
   category: 'k',
   tag:      'x',
+  'learning-journey': 'lj',  // Phase 4.1 (#447). Without this entry,
+  // parseEntityIri() would return id 'undefined:slug' once the projection
+  // starts emitting learning-journey triples — caught by Task 2 lockstep.
 });
 
 // IRI tail-segment → (entity type, short node-id prefix). Derived from
