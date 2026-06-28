@@ -66,6 +66,45 @@ describe('sapDevsClient.searchLearningJourneys', () => {
     await expect(sapDevsClient.searchLearningJourneys({ limit: 3 }))
       .rejects.toThrow();
   });
+
+  it('rejects row missing level', async () => {
+    _setMockTransport({
+      call: vi.fn().mockResolvedValue({
+        results: [
+          { slug: 's', title: 't', /* level missing */ duration: '1.00', url: 'https://x' },
+        ],
+      }),
+    });
+    _resetCache();
+    await expect(sapDevsClient.searchLearningJourneys({ limit: 1 }))
+      .rejects.toThrow(/missing level/i);
+  });
+
+  it('rejects row missing duration', async () => {
+    _setMockTransport({
+      call: vi.fn().mockResolvedValue({
+        results: [
+          { slug: 's', title: 't', level: 'BEGINNER', /* duration missing */ url: 'https://x' },
+        ],
+      }),
+    });
+    _resetCache();
+    await expect(sapDevsClient.searchLearningJourneys({ limit: 1 }))
+      .rejects.toThrow(/missing duration/i);
+  });
+
+  it('rejects row missing url', async () => {
+    _setMockTransport({
+      call: vi.fn().mockResolvedValue({
+        results: [
+          { slug: 's', title: 't', level: 'BEGINNER', duration: '1.00' /* url missing */ },
+        ],
+      }),
+    });
+    _resetCache();
+    await expect(sapDevsClient.searchLearningJourneys({ limit: 1 }))
+      .rejects.toThrow(/missing url/i);
+  });
 });
 
 describe('sapDevsClient — other methods (scaffolded)', () => {

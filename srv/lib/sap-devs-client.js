@@ -134,6 +134,15 @@ function validateSearchLearningJourneys(response) {
     if (typeof row.title !== 'string') {
       throw new Error(`sap-devs.searchLearningJourneys: row missing title — ${row.slug}`);
     }
+    if (typeof row.level !== 'string') {
+      throw new Error(`sap-devs.searchLearningJourneys: row missing level — ${row.slug}`);
+    }
+    if (typeof row.duration !== 'string') {
+      throw new Error(`sap-devs.searchLearningJourneys: row missing duration — ${row.slug}`);
+    }
+    if (typeof row.url !== 'string') {
+      throw new Error(`sap-devs.searchLearningJourneys: row missing url — ${row.slug}`);
+    }
   }
   return response;
 }
@@ -141,6 +150,24 @@ function validateSearchLearningJourneys(response) {
 // ─── Public API ─────────────────────────────────────────────────────────
 
 export const sapDevsClient = {
+  /**
+   * Search SAP learning journeys via the sap-devs MCP server.
+   *
+   * Returns rows with shape `{ slug, title, level, duration, url }`.
+   * Note: `duration` is a stringified decimal of hours (e.g. "3.00", "17.00").
+   * Task 2's cron job parses this into the `LearningJourneys.durationHours`
+   * Decimal column.
+   *
+   * The schema is validated against `validateSearchLearningJourneys` —
+   * if the MCP renames fields (e.g. `duration` → `durationHours`) on a
+   * future server release, this throws loudly rather than silently letting
+   * malformed rows through to the projection layer.
+   *
+   * @param {object} args
+   * @param {number} [args.limit=200]
+   * @param {string} [args.query='']
+   * @returns {Promise<Array<{slug: string, title: string, level: string, duration: string, url: string}>>}
+   */
   async searchLearningJourneys({ limit = 200, query = '' } = {}) {
     const response = await callCached('search_learning_journeys', { limit, query });
     validateSearchLearningJourneys(response);
