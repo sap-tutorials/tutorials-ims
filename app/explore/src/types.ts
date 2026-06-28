@@ -1,6 +1,7 @@
-// Phase 4 (#447): widened to include 'learning-journey'. Mirror of
-// hugo-apps/src/related-graph/types.ts. Sub-phases 4.2-4.6 will add more
-// values; keep these two NodeType unions in sync.
+// Phase 4 (#447): widened to include 'learning-journey'. Phase 4.2 (#447 §9)
+// adds 'blog-post'. Mirror of hugo-apps/src/related-graph/types.ts.
+// Sub-phases 4.3-4.6 will add more values; keep these two NodeType unions
+// in sync.
 export type NodeType =
   | 'tutorial'
   | 'concept'
@@ -10,6 +11,7 @@ export type NodeType =
   | 'category'
   | 'tag'
   | 'learning-journey'
+  | 'blog-post'
 export type PredicateType =
   | 'teaches' | 'requires' | 'relatedTo' | 'extends'
   | 'partOf' | 'taggedWith' | 'aboutProduct' | 'inCategory' | 'coCompletedWith'

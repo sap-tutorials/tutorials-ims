@@ -137,9 +137,13 @@
             rel="noopener"
             @click="onOtherResourceClick(r)"
           >{{ r.title }}</a>
-          <span v-if="r.level || r.durationHours" class="kg-sidebar-meta">
+          <span v-if="r.type === 'learning-journey' && (r.level || r.durationHours)" class="kg-sidebar-meta">
             <template v-if="r.level"> · {{ formatLevel(r.level) }}</template>
             <template v-if="r.durationHours"> · {{ r.durationHours }}h</template>
+          </span>
+          <span v-else-if="r.type === 'blog-post' && (r.authorName || r.postedAt)" class="kg-sidebar-meta">
+            <template v-if="r.authorName"> · by {{ r.authorName }}</template>
+            <template v-if="r.postedAt"> · {{ formatDate(r.postedAt) }}</template>
           </span>
         </li>
       </ul>
@@ -227,11 +231,27 @@ function onConceptClick(conceptSlug: string): void {
 
 // Phase 4.1 (#447 §2.6 + Q5): cross-corpus rail telemetry. Branches on
 // `r.type` so each Phase 4 sub-phase can emit its own event without
-// renaming this handler. Today only 'learning-journey' is populated;
-// 4.2-4.6 will add 'news', 'video', 'sample', 'discovery', 'resource'.
+// renaming this handler. Phase 4.2 adds the 'blog-post' branch. 4.3-4.6
+// will add 'news', 'video', 'sample', 'discovery', 'resource'.
 function formatLevel(level: string | null | undefined): string {
   if (!level) return ''
   return level.charAt(0).toUpperCase() + level.slice(1).toLowerCase()
+}
+
+// Phase 4.2 (#447 §9): blog-post `postedAt` is an ISO timestamp. Render it
+// as a short month-day-year string ('en-US') matching the Hugo concept-page
+// section's `dateFormat "Jan 2, 2006"` convention. On parse failure we fall
+// back to the first 10 chars (YYYY-MM-DD prefix) so the row still renders
+// something legible rather than 'Invalid Date'.
+function formatDate(iso: string | null | undefined): string {
+  if (!iso) return ''
+  try {
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return iso.slice(0, 10)
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+  } catch {
+    return (iso || '').slice(0, 10)
+  }
 }
 
 function onOtherResourceClick(r: OtherResource): void {
@@ -240,6 +260,13 @@ function onOtherResourceClick(r: OtherResource): void {
     emit('kg.learning_journey.linked_from_sidebar', {
       tutorialSlug: slug,
       journeySlug: r.slug,
+    })
+  } else if (r.type === 'blog-post') {
+    // Phase 4.2 (#447 §9): mirror of the learning-journey branch — same
+    // shape modulo the per-type slug field name.
+    emit('kg.blog_post.linked_from_sidebar', {
+      tutorialSlug: slug,
+      blogSlug: r.slug,
     })
   }
   // Future sub-phases branch here for their own telemetry events.
