@@ -1,4 +1,4 @@
-<ui5-shellbar id="app-shellbar" primary-title="Tutorial Platform" show-notifications notifications-count="">
+<ui5-shellbar id="app-shellbar" primary-title="SAP Developer Center" show-notifications notifications-count="">
   <img slot="logo" src="/img/sap-logo.svg" alt="SAP" height="24">
 
   <ui5-shellbar-item id="sb-search" icon="search" text="Search ⌘K"></ui5-shellbar-item>
@@ -108,7 +108,7 @@
   // primary-title. Register both event-name spellings (prefixed/unprefixed)
   // for version-skew safety across UI5 minor releases.
   shellbar.accessibilityAttributes = {
-    logo: { role: 'link', name: 'SAP Tutorial Platform — home' }
+    logo: { role: 'link', name: 'SAP Developer Center — home' }
   };
   const goHome = () => { window.location.href = '/'; };
   shellbar.addEventListener('ui5-logo-click', goHome);

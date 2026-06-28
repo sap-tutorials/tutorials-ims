@@ -1,12 +1,12 @@
 baseURL = 'https://developers.sap.com/'
 languageCode = 'en-us'
-title = 'SAP Developers Tutorials'
+title = 'SAP Developer Center'
 enableRobotsTXT = false  # we ship our own via the robots output format
 
 [params]
   apiBase = '/api'
   capBase = ''
-  brand = 'SAP Developers Tutorials'
+  brand = 'SAP Developer Center'
   defaultDescription = 'Hands-on tutorials for SAP technologies — SAP BTP, ABAP Cloud, CAP, Fiori, HANA Cloud, and integration. Build, learn, and ship on SAP.'
   heroDescription = 'Step-by-step tutorials, multi-tutorial missions, and reference content for every SAP developer technology. Tested, maintained, and free to use.'
   twitterHandle = '@sapdevs'
