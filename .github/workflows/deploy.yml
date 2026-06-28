@@ -177,6 +177,22 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.TUTORIALS_GITHUB_TOKEN || github.token }}
           CAP_BASE_URL: ${{ steps.cap-url.outputs.url }}
 
+      # Run the postbuild static guards before mbt build. These were defined
+      # as `postbuild:apps` (lifecycle hook on root `npm run build:apps`), but
+      # CI never invokes root `build:apps` — `mbt build` walks straight to
+      # `npm --prefix hugo-apps run build` per mta.yaml's before-all, which
+      # only fires hugo-apps' own (empty) postbuild. The eight guards were
+      # therefore never gating CI deploys — they only ran for contributors
+      # who happened to invoke `npm run build:all` locally before pushing.
+      # Confirmed via issue #706 investigation.
+      #
+      # Running them here, BEFORE mbt build, fail-fasts in seconds instead
+      # of after the ~10 min MTA build. The guards are read-only static
+      # checks (regex sweeps over source); they need npm install (done in
+      # the prefetch step above) but no extra credentials.
+      - name: Run postbuild guards (icons, build collisions, srv-qa, slug lookups, …)
+        run: npm run postbuild:apps
+
       # Cache the Hugo binary download (~25MB tarball) across runs. mta.yaml's
       # before-all curls hugo_extended_${HUGO_VERSION}_linux-amd64.tar.gz from
       # GitHub on every run; that takes 5-10s warm, longer on a slow runner.
