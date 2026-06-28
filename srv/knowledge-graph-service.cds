@@ -1,12 +1,21 @@
 // srv/knowledge-graph-service.cds
 // Knowledge-graph query + curation surface — PR 5 of issue #381.
 //
-// Service-level @requires is `authenticated-user`: the read surface (the
-// three @readonly entity projections + the three named functions) is open to
-// any signed-in developer because it backs the public neighborhood rail. The
-// admin actions below carry an additional @requires : 'KnowledgeGraph.Admin'
-// so curation (mergeConcepts, vetoConcept, vetoEdge, runSparql,
-// triggerGraphRebuild) requires the dedicated scope from xs-security.json.
+// Auth posture (revised 2026-06-28): the read surface is PUBLIC. Anonymous
+// readers must reach `neighborhood` (powers the tutorial sidebar at
+// /tutorials/*/) and the three projections (PublishedConcepts powers the
+// /explore page's node list). Admin actions carry their own
+// @requires : 'KnowledgeGraph.Admin'.
+//
+// What protects the writable `Concepts` projection now that the
+// service-level @requires is gone:
+//   1. CREATE/DELETE are blocked at the OData layer by
+//      Capabilities.InsertRestrictions/DeleteRestrictions in
+//      app/admin-annotations.cds (search for `KnowledgeGraphService.Concepts`).
+//      CAP returns 405 on POST/DELETE attempts.
+//   2. UPDATE is policed imperatively by the before('UPDATE', 'Concepts')
+//      handler in srv/knowledge-graph-service.js, which (after Task 2)
+//      asserts the admin scope BEFORE the field-allowlist check runs.
 //
 // Phase 1 ships `neighborhood`; `pathBetween` and `conceptsForUser` declare
 // the Phase 2 contract so clients can compile against a stable surface, but
@@ -14,7 +23,6 @@
 
 using { com.sap.developers.ims as ims } from '../db/knowledge-graph';
 
-@requires : 'authenticated-user'
 service KnowledgeGraphService @(path : '/graph') {
 
   // ─── Projections (curation introspection + admin tooling) ─────────────
