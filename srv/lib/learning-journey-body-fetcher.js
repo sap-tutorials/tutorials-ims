@@ -39,6 +39,11 @@ async function fetchWithRetry(url, maxAttempts = 3) {
       // When a mock fetcher is installed (unit-test path), skip the backoff
       // so retry tests don't add seconds of real wait. Production paths
       // always exercise the real delays.
+      //
+      // Note: backoff is skipped under the mock fetcher to keep unit tests fast.
+      // This couples test-harness state to production retry behavior — a future
+      // refactor exposing _setMockFetcher in CI could silently disable backoff.
+      // Tracked as #709 — proposed fix: inject the delay function or use vi.useFakeTimers.
       if (!mockFetcher) {
         await new Promise(r => setTimeout(r, RETRY_DELAYS_MS[attempt - 1]));
       }
