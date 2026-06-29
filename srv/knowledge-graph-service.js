@@ -682,10 +682,12 @@ export default cds.service.impl(async function () {
       let blogOtherResources = [];
       let missionOtherResources = [];
       let videoOtherResources = [];
+      let apiDocOtherResources = [];
       if (teachesSlugs.length > 0) {
         const { LearningJourneys, LearningJourneyConceptLinks, BlogPosts, BlogPostConceptLinks,
           DiscoveryMissions, DiscoveryMissionConceptLinks,
-          Videos, VideoConceptLinks } =
+          Videos, VideoConceptLinks,
+          ApiDocs, ApiDocConceptLinks } =
           cds.entities('com.sap.developers.ims.external');
         const { Concepts } = cds.entities(NAMESPACE);
 
@@ -847,18 +849,60 @@ export default cds.service.impl(async function () {
                 overlapCount: overlapByVideo.get(v.ID),
               }));
           }
+
+          // Phase 4.5 (#746): api-doc overlap rows.
+          // NOTE: ApiDocs.description is LargeString (NCLOB) — DO NOT include
+          // it here (LOB-locator safety, spec §10.1, 4th read site). The
+          // sidebar payload only needs slug/title/url/category/apiType.
+          const apiDocOverlaps = await SELECT.from(ApiDocConceptLinks)
+            .columns('apiDoc_ID', 'concept_ID')
+            .where({ concept_ID: { in: conceptIds } });
+
+          const overlapByApiDoc = new Map();
+          for (const row of apiDocOverlaps) {
+            overlapByApiDoc.set(
+              row.apiDoc_ID,
+              (overlapByApiDoc.get(row.apiDoc_ID) ?? 0) + 1
+            );
+          }
+
+          if (overlapByApiDoc.size > 0) {
+            const topApiDocIds = [...overlapByApiDoc.entries()]
+              .sort(([, a], [, b]) => b - a)
+              .slice(0, MAX_OTHER_RESOURCES)
+              .map(([id]) => id);
+
+            const apiDocs = await SELECT.from(ApiDocs)
+              .columns('ID', 'slug', 'title', 'url', 'category', 'apiType')
+              .where({ ID: { in: topApiDocIds } });
+
+            const byApiDocId = new Map(apiDocs.map((a) => [a.ID, a]));
+            apiDocOtherResources = topApiDocIds
+              .map((id) => byApiDocId.get(id))
+              .filter(Boolean)
+              .map((a) => ({
+                type: 'api-doc',
+                slug: a.slug,
+                title: a.title,
+                url: a.url,
+                category: a.category,
+                apiType: a.apiType,
+                overlapCount: overlapByApiDoc.get(a.ID),
+              }));
+          }
         }
       }
 
-      // Merge journey + blog + mission + video rows; sort by overlap desc;
-      // cap top-5 TOTAL. Top-5 is across ALL FOUR types (no per-type diversity
-      // quota) per spec §9. Phase 4.4 widens to a 4-array merge — the
-      // mergeOtherResources helper is already variadic (Phase 4.3 widening).
+      // Merge journey + blog + mission + video + api-doc rows; sort by overlap
+      // desc; cap top-5 TOTAL across ALL FIVE types (no per-type diversity
+      // quota) per spec §9. Phase 4.5 widens to a 5-array merge — the
+      // mergeOtherResources helper is already variadic.
       otherResources = mergeOtherResources(
         journeyOtherResources,
         blogOtherResources,
         missionOtherResources,
         videoOtherResources,
+        apiDocOtherResources,
       );
     } catch (err) {
       log.warn(`kg-service: neighborhood otherResources enrichment failed: ${err.message ?? err}`);
