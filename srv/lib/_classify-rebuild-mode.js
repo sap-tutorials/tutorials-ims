@@ -39,7 +39,19 @@ const CATALOG_ONLY_ENTITIES = new Set([
   'Advocates',
   'AdvocateTopics',
   'AdvocateLinks',
+  // #639: HomepageShelves admin saves rebuild hugo/data/homepage_shelves.json
+  // via /build/homepage-shelves — same pattern as Missions/Groups/Advocates.
+  // (Was missing from the set; admin saves to HomepageShelves were
+  // triggering 'full' rebuilds via the default fallthrough — wasteful
+  // but not incorrect. Discovered while implementing #759 Task 15.)
+  'HomepageShelves',
   'Concepts',
+  // #759: homepage explainer entities. Admin writes affect the baked
+  // hugo/data/*.json feeds served from /build/verb-definitions and
+  // /build/shelf-definitions, not slug-keyed tutorial HTML. catalog-only
+  // mode rebuilds the full set of /build/* feeds in ~1 min wall-clock.
+  'VerbDefinitions',
+  'ShelfDefinitions',
 ]);
 
 // Entities whose CRUD targets a specific tutorial. Re-fetch one markdown,

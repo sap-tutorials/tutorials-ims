@@ -21,6 +21,15 @@ type HomepageLinkStatus : String enum {
   OK; BROKEN; SLOW; UNKNOWN;
 }
 
+// (#759) Authoring lifecycle for explainer content. AI bulk-fill skips
+// REVIEWED rows; per-row regenerate works on all statuses (with confirm
+// dialog for REVIEWED). Spec §2.1.
+type AuthoringStatus : String enum {
+  BLANK;      // never seeded
+  AI_SEEDED;  // last write was the AI generator
+  REVIEWED;   // human has confirmed; bulk-fill skips
+}
+
 @assert.unique.verbUrl: [verb, url]
 entity HomepageShelves : cuid, managed {
   verb        : HomepageVerb       @mandatory @assert.range;
@@ -34,6 +43,12 @@ entity HomepageShelves : cuid, managed {
   isActive    : Boolean            default true;
   lastChecked : Timestamp;
   linkStatus  : HomepageLinkStatus default 'UNKNOWN' @assert.range;
+  // (#759) Explainer content — see spec §2.4. tagline + whyItMatters
+  // fill the popover; description stays as a third paragraph for
+  // graceful fallback during phased rollout.
+  tagline         : String(140);
+  whyItMatters    : String(800);
+  authoringStatus : AuthoringStatus default 'BLANK' @assert.range;
 }
 
 // Hand-curated map of legacy URLs → new URLs. Approuter fetches via
@@ -57,4 +72,34 @@ entity HomepageConfig : cuid, managed {
   videoBandEnabled        : Boolean default true;
   eventsBandEnabled       : Boolean default true;
   communityLaneEnabled    : Boolean default true;
+}
+
+// (#759) Per-verb explainer content. Cardinality is fixed (6 rows, one
+// per HomepageVerb enum value). The admin Fiori app (PR 3) hides
+// Create/Delete actions and renders verbKey read-only; the DB schema
+// itself is open and admin-mutable. Spec §2.2.
+@assert.unique.verbKey: [verbKey]
+entity VerbDefinitions : cuid, managed {
+  verbKey         : HomepageVerb @mandatory @assert.range;
+  label           : String(40)   @mandatory;
+  iconName        : String(40);
+  sortOrder       : Integer      default 100;
+  tagline         : String(140);
+  whyItMatters    : String(800);
+  authoringStatus : AuthoringStatus default 'BLANK' @assert.range;
+}
+
+// (#759) Per-shelf-category explainer content. Cardinality is fixed
+// (4 rows, one per HomepageShelf enum value). Content is shared across
+// all 6 verb sub-pages — REFERENCE means the same thing on /learn/ and
+// /operate/. The admin Fiori app (PR 3) enforces the fixed cardinality;
+// the DB schema itself is open. Spec §2.3.
+@assert.unique.shelfKey: [shelfKey]
+entity ShelfDefinitions : cuid, managed {
+  shelfKey        : HomepageShelf @mandatory @assert.range;
+  label           : String(40)    @mandatory;
+  sortOrder       : Integer       default 100;
+  tagline         : String(140);
+  whyItMatters    : String(800);
+  authoringStatus : AuthoringStatus default 'BLANK' @assert.range;
 }

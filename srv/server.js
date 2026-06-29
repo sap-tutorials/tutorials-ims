@@ -225,6 +225,46 @@ cds.on('bootstrap', (app) => {
     }
   });
 
+  // (#759) Build-time data for the homepage explainer popovers. Mirrors
+  // /build/homepage-shelves above — unauthenticated, 60s Cache-Control,
+  // structured payload. Consumed by scripts/fetch-verb-definitions.ts
+  // and scripts/fetch-shelf-definitions.ts at build time.
+  //
+  // NOTE: reads direct from raw entity, NOT through AdminService. The
+  // route is anonymous; routing through AdminService would trip its
+  // @requires: 'Admin' chain. Auto-init handlers (srv/admin-service.js)
+  // are admin-side only — fresh subaccount with no seed import + no
+  // admin read = empty array here. The fetcher script (next task)
+  // treats empty-array as a warn-and-continue, matching the
+  // /build/homepage-shelves precedent (plan Decision 6).
+  app.get('/build/verb-definitions', async (_req, res) => {
+    try {
+      const db = await cds.connect.to('db');
+      const rows = await db.run(
+        SELECT.from('com.sap.developers.ims.VerbDefinitions').orderBy('sortOrder')
+      );
+      res.set('Cache-Control', 'public, max-age=60');
+      res.json({ verbs: rows, buildAt: new Date().toISOString() });
+    } catch (err) {
+      console.error('[build/verb-definitions]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/build/shelf-definitions', async (_req, res) => {
+    try {
+      const db = await cds.connect.to('db');
+      const rows = await db.run(
+        SELECT.from('com.sap.developers.ims.ShelfDefinitions').orderBy('sortOrder')
+      );
+      res.set('Cache-Control', 'public, max-age=60');
+      res.json({ shelves: rows, buildAt: new Date().toISOString() });
+    } catch (err) {
+      console.error('[build/shelf-definitions]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Public read for the developer-advocates page (Task 4.4 of advocates impl).
   // Spec: docs/superpowers/specs/2026-06-17-developer-advocates-design.md
   advocatesPublic.register(app);

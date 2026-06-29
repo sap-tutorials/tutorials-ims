@@ -163,6 +163,19 @@ service AdminService {
   @Capabilities.ChangeTracking : { Supported: false }
   entity HomepageConfig as projection on ims.HomepageConfig;
 
+  // (#759) Per-verb and per-shelf explainer content. Both have fixed
+  // cardinality (6 verbs / 4 shelves); CRUD lockdown lives in the
+  // Fiori admin app annotations (PR 3). Projection itself is
+  // unconstrained — same shape as HomepageConfig. Change-tracking is
+  // off (matches HomepageConfig — singleton-set config, not a catalog).
+  @Capabilities.ChangeTracking : { Supported: false }
+  @odata.draft.enabled
+  entity VerbDefinitions as projection on ims.VerbDefinitions;
+
+  @Capabilities.ChangeTracking : { Supported: false }
+  @odata.draft.enabled
+  entity ShelfDefinitions as projection on ims.ShelfDefinitions;
+
   @readonly @cds.persistence.skip entity AlertCtaTargets {
     key url   : String(500);
         label : String(100);
