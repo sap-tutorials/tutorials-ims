@@ -173,6 +173,23 @@
               badge instead.
             --> · Official reference<template v-if="r.category"> · {{ r.category }}</template>
           </span>
+          <span v-else-if="r.type === 'sample'" class="kg-sidebar-meta">
+            <!--
+              Phase 4.6 (#747 §5): sample branch. Row format
+              `title · Language · N stars · Updated Mon YYYY` — no
+              thumbnail, no ↗ icon (sidebar visual rhythm). Each meta
+              segment is independently conditional — the row stays
+              clean whether or not the wire payload includes
+              language / stars / lastCommitAt. `lastCommitAt` is an
+              ISO timestamp; `formatRelativeMonth` renders it as a
+              compact "Mon YYYY" string (matches the concept page's
+              Hugo `dateFormat "Jan 2006"` output). The concept page
+              DOES render the ↗ link-out icon + a .kg-language badge.
+            -->
+            <template v-if="r.language"> · {{ r.language }}</template>
+            <template v-if="r.stars"> · {{ r.stars }} stars</template>
+            <template v-if="r.lastCommitAt"> · Updated {{ formatRelativeMonth(r.lastCommitAt) }}</template>
+          </span>
         </li>
       </ul>
     </section>
@@ -195,6 +212,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import type { NeighborhoodResult, OtherResource, SidebarState } from './types'
+import { formatRelativeMonth } from './related-graph-helpers'
 
 const slug = (typeof document !== 'undefined' &&
   document.documentElement?.dataset?.pageSlug) || ''
@@ -317,6 +335,15 @@ function onOtherResourceClick(r: OtherResource): void {
     emit('kg.api-doc.linked_from_sidebar', {
       tutorialSlug: slug,
       apiDocSlug: r.slug,
+    })
+  } else if (r.type === 'sample') {
+    // Phase 4.6 (#747 §6): sixth branch — same shape modulo the per-type
+    // slug field name. Telemetry event per spec §6:
+    // `kg.sample.linked_from_sidebar` with detail
+    // { tutorialSlug, sampleSlug }.
+    emit('kg.sample.linked_from_sidebar', {
+      tutorialSlug: slug,
+      sampleSlug: r.slug,
     })
   }
   // Future sub-phases branch here for their own telemetry events.

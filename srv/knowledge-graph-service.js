@@ -683,11 +683,13 @@ export default cds.service.impl(async function () {
       let missionOtherResources = [];
       let videoOtherResources = [];
       let apiDocOtherResources = [];
+      let sampleOtherResources = [];
       if (teachesSlugs.length > 0) {
         const { LearningJourneys, LearningJourneyConceptLinks, BlogPosts, BlogPostConceptLinks,
           DiscoveryMissions, DiscoveryMissionConceptLinks,
           Videos, VideoConceptLinks,
-          ApiDocs, ApiDocConceptLinks } =
+          ApiDocs, ApiDocConceptLinks,
+          Samples, SampleConceptLinks } =
           cds.entities('com.sap.developers.ims.external');
         const { Concepts } = cds.entities(NAMESPACE);
 
@@ -890,19 +892,62 @@ export default cds.service.impl(async function () {
                 overlapCount: overlapByApiDoc.get(a.ID),
               }));
           }
+
+          // Phase 4.6 (#747): sample overlap rows.
+          // NOTE: Samples.description is LargeString (NCLOB) — DO NOT include
+          // it here (LOB-locator safety, spec §10.1, 4th read site). The
+          // sidebar payload only needs slug/title/url/language/stars/lastCommitAt.
+          const sampleOverlaps = await SELECT.from(SampleConceptLinks)
+            .columns('sample_ID', 'concept_ID')
+            .where({ concept_ID: { in: conceptIds } });
+
+          const overlapBySample = new Map();
+          for (const row of sampleOverlaps) {
+            overlapBySample.set(
+              row.sample_ID,
+              (overlapBySample.get(row.sample_ID) ?? 0) + 1
+            );
+          }
+
+          if (overlapBySample.size > 0) {
+            const topSampleIds = [...overlapBySample.entries()]
+              .sort(([, a], [, b]) => b - a)
+              .slice(0, MAX_OTHER_RESOURCES)
+              .map(([id]) => id);
+
+            const samples = await SELECT.from(Samples)
+              .columns('ID', 'slug', 'title', 'url', 'language', 'stars', 'lastCommitAt')
+              .where({ ID: { in: topSampleIds } });
+
+            const bySampleId = new Map(samples.map((s) => [s.ID, s]));
+            sampleOtherResources = topSampleIds
+              .map((id) => bySampleId.get(id))
+              .filter(Boolean)
+              .map((s) => ({
+                type: 'sample',
+                slug: s.slug,
+                title: s.title,
+                url: s.url,
+                language: s.language,
+                stars: s.stars,
+                lastCommitAt: s.lastCommitAt,
+                overlapCount: overlapBySample.get(s.ID),
+              }));
+          }
         }
       }
 
-      // Merge journey + blog + mission + video + api-doc rows; sort by overlap
-      // desc; cap top-5 TOTAL across ALL FIVE types (no per-type diversity
-      // quota) per spec §9. Phase 4.5 widens to a 5-array merge — the
-      // mergeOtherResources helper is already variadic.
+      // Merge journey + blog + mission + video + api-doc + sample rows; sort
+      // by overlap desc; cap top-5 TOTAL across ALL SIX types (no per-type
+      // diversity quota) per spec §9. Phase 4.6 widens to a 6-array merge —
+      // the mergeOtherResources helper is already variadic.
       otherResources = mergeOtherResources(
         journeyOtherResources,
         blogOtherResources,
         missionOtherResources,
         videoOtherResources,
         apiDocOtherResources,
+        sampleOtherResources,
       );
     } catch (err) {
       log.warn(`kg-service: neighborhood otherResources enrichment failed: ${err.message ?? err}`);

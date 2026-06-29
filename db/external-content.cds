@@ -300,3 +300,57 @@ entity ApiDocConceptLinks : cuid, managed {
 
 annotate ApiDocConceptLinks with
   @assert.unique.apiDocConcept : [apiDoc, concept, predicate];
+
+// ============================================================================
+// Phase 4.6 (#747): SAP-samples GitHub repositories as graph nodes.
+// One row per repo (whole-repo granularity per spec §3 Q1).
+// Predicate 'embodies' — semantically distinct from 'teaches'.
+//
+// - sourceId is '<org>/<repo>' from GitHub (e.g. 'SAP-samples/cloud-cap-samples');
+//   slug is derived as 'sa-<canonicalizedSourceId>' for IRI namespace-safety.
+//   Canonicalization lives in srv/lib/sap-samples-fetcher.js (Task 2 derives
+//   the slug; Task 1's fetcher returns sourceId only).
+// - description is LargeString (NCLOB). NEVER SELECT it alongside non-LOB
+//   metadata via CDS QL on HANA — LOB locators expire before consumption when
+//   mixed with scalar columns (§10.1). Task 1 itself doesn't read description;
+//   it's reserved for Task 2's extractor.
+// - language + stars + lastCommitAt are sub-phase-specific columns rendered on
+//   the sidebar otherResources card (OtherResource CDS type widened in 4.6 —
+//   see srv/knowledge-graph-service.cds).
+// - pinUntil reserved on-entity for chassis uniformity; no admin surface writes
+//   to it in 4.6.
+//
+// Spec: docs/superpowers/specs/2026-06-29-747-phase4.6-code-samples.md §4.1
+// ============================================================================
+
+entity Samples : cuid, managed {
+  slug              : String(120) @assert.unique;     // 'sa-<canonicalizedSourceId>'
+  title             : String(255);                    // repo full_name or display label
+  description       : LargeString;                    // README first 2000 chars (NCLOB — §10.1)
+  url               : String(500);                    // https://github.com/<org>/<repo>
+  sourceId          : String(120);                    // <org>/<repo> (e.g. 'SAP-samples/cloud-cap-samples')
+  contentHash       : String(64);                     // SHA-256(description+language+lastCommitAt+stars+sorted(topics))
+  lastExtractedHash : String(64);                     // #708 crash-safety gate
+  firstSeenAt       : Timestamp @cds.on.insert: $now;
+  lastSeenAt        : Timestamp;
+  pinUntil          : Timestamp;                      // chassis admin override
+
+  // Sample-specific (per spec §3 Q7):
+  language          : String(40);                     // GitHub primary language
+  stars             : Integer;                        // star count at last fetch
+  lastCommitAt      : Timestamp;                      // GitHub pushed_at
+
+  links             : Composition of many SampleConceptLinks on links.sample = $self;
+}
+
+entity SampleConceptLinks : cuid, managed {
+  sample       : Association to Samples @assert.notNull;
+  concept      : Association to ims.Concepts @assert.notNull;
+  predicate    : String(40);                          // 'embodies'
+  confidence   : Decimal(3, 2);                       // LLM floor 0.7
+  extractedAt  : Timestamp;
+  modelVersion : String(40);
+}
+
+annotate SampleConceptLinks with
+  @assert.unique.sampleConcept : [sample, concept, predicate];

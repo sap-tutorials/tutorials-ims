@@ -221,6 +221,13 @@ service AdminService {
       planned   : Integer;
       committed : Integer;
     };
+    // Phase 4.6 (#747): operator-grade SAP-samples corpus bootstrap.
+    // Fire-and-forget invocation of the weekly fetch-samples cron with
+    // sinceIsoOverride to bypass the MAX-or-abort first-run gate.
+    action seedSamples(commit: Boolean) returns {
+      started : Boolean;
+      reason  : String;
+    };
   };
 
   // Phase 4.5 (#746): per-cron last-run health surface for the admin

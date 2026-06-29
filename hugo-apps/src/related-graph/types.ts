@@ -8,8 +8,8 @@
 // Phase 4 (#447): widened from the original tutorial-OP sidebar set to
 // include 'learning-journey'. Phase 4.2 (#447 §9) adds 'blog-post'.
 // Phase 4.3 (#447 §8) adds 'discovery-mission'. Phase 4.4 (#447 §9) adds
-// 'video'. Phase 4.5 (#746) adds 'api-doc'. Sub-phase 4.6 will add more
-// values ('news', 'sample', 'resource').
+// 'video'. Phase 4.5 (#746) adds 'api-doc'. Phase 4.6 (#747) adds
+// 'sample'.
 export type NodeType =
   | 'tutorial'
   | 'concept'
@@ -23,6 +23,7 @@ export type NodeType =
   | 'discovery-mission'
   | 'video'
   | 'api-doc'
+  | 'sample'
 
 export type ConceptRef = {
   slug: string
@@ -51,11 +52,11 @@ export type TutorialInfo = {
 // resources" sidebar rail. PR-1 wired the empty contract; PR-2 (learning
 // journeys) populated it. Phase 4.2 (#447 §9) widens the discriminant to
 // include 'blog-post' rows; Phase 4.3 (#447 §8) adds 'discovery-mission';
-// Phase 4.4 (#447 §9) adds 'video'; Phase 4.5 (#746) adds 'api-doc'.
-// Future sub-phase 4.6 adds more types.
+// Phase 4.4 (#447 §9) adds 'video'; Phase 4.5 (#746) adds 'api-doc';
+// Phase 4.6 (#747) adds 'sample'.
 // Mirrors the OtherResource type in srv/knowledge-graph-service.cds.
 export type OtherResource = {
-  type: 'learning-journey' | 'blog-post' | 'discovery-mission' | 'video' | 'api-doc'   // widens per sub-phase
+  type: 'learning-journey' | 'blog-post' | 'discovery-mission' | 'video' | 'api-doc' | 'sample'   // widens per sub-phase
   slug: string
   title: string
   url: string
@@ -82,6 +83,14 @@ export type OtherResource = {
   // The concept page DOES render the ↗ link-out icon + apiType badge.
   category?: string | null
   apiType?: string | null
+  // sample only (Phase 4.6 #747): the sidebar renders
+  // "title · Language · N stars · Updated Mon YYYY" (no thumbnail, no
+  // ↗ icon). The concept page DOES render the ↗ link-out icon + a
+  // .kg-language badge. `lastCommitAt` is an ISO timestamp formatted
+  // client-side via formatRelativeMonth (related-graph-helpers.ts).
+  language?: string | null
+  stars?: number | null
+  lastCommitAt?: string | null   // ISO timestamp
   overlapCount?: number | null
 }
 

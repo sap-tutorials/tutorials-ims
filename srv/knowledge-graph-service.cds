@@ -99,6 +99,11 @@ service KnowledgeGraphService @(path : '/graph') {
     // instead of channel/published/thumbnail (videos).
     category      : String;             // api-doc only (Phase 4.5)
     apiType       : String;             // api-doc only (Phase 4.5)
+    // Phase 4.6 (#747): sample rows carry language + stars + lastCommitAt
+    // instead of channel/published/thumbnail (videos) or category/apiType (api-docs).
+    language      : String;             // sample only (Phase 4.6)
+    stars         : Integer;            // sample only (Phase 4.6)
+    lastCommitAt  : Timestamp;          // sample only (Phase 4.6)
     overlapCount  : Integer;
   }
   type NeighborhoodResult {
