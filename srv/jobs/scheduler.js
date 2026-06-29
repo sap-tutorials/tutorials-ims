@@ -72,19 +72,87 @@ export function _setJobFn(jobName, mockFn) {
   JOB_REGISTRY.set(jobName, { ...existing, fn: mockFn });
 }
 
-async function runWithLock(jobName, durationMs, fn) {
-  if (await acquireLock(jobName, instanceId, durationMs)) {
-    const logId = await logPipelineStart('SCHEDULED_JOB', 'system', { jobName });
-    try {
-      const result = await fn(logId);
-      const summary = formatJobSummary(jobName, result);
-      await logPipelineEnd(logId, 'SUCCESS', summary);
-    } catch (err) {
-      LOG.error(`Job ${jobName} failed:`, err.message);
-      await logPipelineEnd(logId, 'FAILED', jobName, err.message);
-    } finally {
-      await releaseLock(jobName, instanceId);
+/**
+ * Distributed-lock wrapper around a cron job's runner function. Acquires
+ * a DB-backed lock via JobLocks, runs fn(logId), records JobLastRun on
+ * completion (success or error), and releases the lock.
+ *
+ * #756 (Task 1) extensions vs the previous 3-arg signature:
+ *  - 4th opts arg {manualTrigger, user} for the admin-triggered path
+ *  - Always invokes recordJobLastRun(jobName, outcome, errorMessage) in
+ *    finally block — Phase 4.1-4.5 + future cron retrofit
+ *  - When manualTrigger=true, emits SecurityEvent audit events
+ *    (lockheld OR success/error) via emitJobAudit (lazily imported from
+ *    admin-service.js to avoid circular import)
+ *  - Returns a structured response shape: {skipped, outcome, result,
+ *    errorMessage, reason} — old void return is now a return value
+ *
+ * Lock-held behavior: emits ONE audit event (outcome='lockheld') when
+ * manualTrigger=true. Success/error paths emit TWO events (started
+ * synchronously from runJob handler + completion from this finally
+ * block). Spec §5 + §9.
+ *
+ * Backward-compat: existing 3-arg callers continue working. opts is
+ * optional with sensible defaults.
+ *
+ * Spec: docs/superpowers/specs/2026-06-29-756-admin-cron-trigger.md §4.3
+ */
+async function runWithLock(jobName, durationMs, fn, opts = {}) {
+  // instanceId is module-level const at scheduler.js:20 — do NOT redeclare.
+  const acquired = await acquireLock(jobName, instanceId, durationMs);
+  if (!acquired) {
+    if (opts.manualTrigger) {
+      await emitJobAuditSafely({ jobName, user: opts.user, outcome: 'lockheld' });
     }
+    return { skipped: true, reason: 'lock-held' };
+  }
+
+  let outcome = 'success';
+  let errorMessage = null;
+  let result = null;
+  const startedAt = new Date();
+  const logId = await logPipelineStart('SCHEDULED_JOB', 'system', { jobName });
+  try {
+    result = await fn(logId);
+    const summary = formatJobSummary(jobName, result);
+    await logPipelineEnd(logId, 'SUCCESS', summary);
+  } catch (err) {
+    outcome = 'error';
+    errorMessage = err.message ?? String(err);
+    LOG.error(`Job ${jobName} failed:`, errorMessage);
+    await logPipelineEnd(logId, 'FAILED', jobName, errorMessage);
+  } finally {
+    await releaseLock(jobName, instanceId);
+    try {
+      await recordJobLastRun(jobName, outcome, errorMessage);
+    } catch (err) {
+      LOG.warn(`recordJobLastRun ${jobName} failed: ${err.message}`);
+    }
+    if (opts.manualTrigger) {
+      await emitJobAuditSafely({
+        jobName,
+        user: opts.user,
+        outcome,
+        durationMs: Date.now() - startedAt.getTime(),
+      });
+    }
+  }
+  return { skipped: false, outcome, result, errorMessage };
+}
+
+/**
+ * Lazy + safe audit emission. Imports from admin-service.js only when
+ * needed (avoids circular import scheduler.js <-> admin-service.js).
+ * Swallows all errors — audit emission must never fail the cron.
+ */
+async function emitJobAuditSafely(opts) {
+  try {
+    const mod = await import('../admin-service.js');
+    if (typeof mod.emitJobAudit === 'function') {
+      await mod.emitJobAudit(opts);
+    }
+  } catch (err) {
+    LOG.warn(`emitJobAudit failed: ${err.message}`);
   }
 }
 
