@@ -1,4 +1,7 @@
 // hugo-apps/src/kg-stats-counter/__tests__/App.spec.ts
+//
+// @vitest-environment happy-dom
+//
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import App from '../App.vue';
