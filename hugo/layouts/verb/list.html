@@ -1,7 +1,22 @@
 {{ define "main" }}
+{{- /* verb/list.html — verb sub-page layout (#639) + #759 PR 2.
+
+       PR 2 additions:
+       - Shelf-section <h2> wrapped with data-island="verb-flip-tile" mount
+       - Each link card wrapped with data-island="link-explainer-popover"
+       - Shelf labels + explainer content read from site.Data.shelf_definitions
+         with graceful fallback to the hard-coded label dict. */ -}}
 {{- $verbKey := .Params.verbKey -}}
 {{- $allShelves := (.Site.Data.homepage_shelves.shelves) | default slice -}}
 {{- $verbShelves := where $allShelves "verb" $verbKey -}}
+{{- $shelfDefs := slice -}}
+{{- with site.Data.shelf_definitions }}{{ $shelfDefs = .shelves | default slice }}{{ end -}}
+{{- /* Hard-coded fallback labels (used if site.Data.shelf_definitions is empty). */ -}}
+{{- $fallbackLabels := dict
+    "START_HERE"   "Start here"
+    "REFERENCE"    "Reference"
+    "TOOLS"        "Tools & samples"
+    "KEEP_CURRENT" "Keep current" -}}
 
 <article class="verb-page" data-verb="{{ $verbKey | lower }}">
   <header class="verb-page__hero">
@@ -9,15 +24,41 @@
     <p>{{ .Description }}</p>
   </header>
 
-  {{- /* Four shelves in fixed order. */ -}}
   {{ range $shelfKey := slice "START_HERE" "REFERENCE" "TOOLS" "KEEP_CURRENT" }}
     {{- $items := where $verbShelves "shelf" $shelfKey -}}
     {{- if gt (len $items) 0 -}}
+      {{- /* Look up shelf-level tagline + whyItMatters + label from baked data,
+             with fallback to the hard-coded label dict. */ -}}
+      {{- $shelfDef := index (where $shelfDefs "shelfKey" $shelfKey) 0 -}}
+      {{- $shelfLabel := "" -}}
+      {{- $shelfTagline := "" -}}
+      {{- $shelfWhy := "" -}}
+      {{- with $shelfDef -}}
+        {{- $shelfLabel = .label -}}
+        {{- $shelfTagline = .tagline | default "" -}}
+        {{- $shelfWhy = .whyItMatters | default "" -}}
+      {{- end -}}
+      {{- if not $shelfLabel -}}{{ $shelfLabel = index $fallbackLabels $shelfKey }}{{- end -}}
     <section class="verb-shelf verb-shelf--{{ $shelfKey | lower }}">
-      <h2>{{ index (dict "START_HERE" "Start here" "REFERENCE" "Reference" "TOOLS" "Tools & samples" "KEEP_CURRENT" "Keep current") $shelfKey }}</h2>
+      <div data-island="verb-flip-tile"
+           data-shelf-key="{{ $shelfKey }}"
+           data-label="{{ $shelfLabel }}"
+           data-tagline="{{ $shelfTagline }}"
+           data-why-it-matters="{{ $shelfWhy }}"
+           class="verb-shelf__header-island">
+        <h2>{{ $shelfLabel }}</h2>
+      </div>
       <ul class="verb-shelf__list">
         {{ range sort $items "sortOrder" }}
-        <li>
+        <li data-island="link-explainer-popover"
+            data-entry-id="{{ .ID }}"
+            data-title="{{ .title }}"
+            data-tagline="{{ .tagline | default "" }}"
+            data-why-it-matters="{{ .whyItMatters | default "" }}"
+            data-description="{{ .description | default "" }}"
+            data-href="{{ .url }}"
+            {{- with .badge }} data-badge="{{ . }}"{{ end }}
+            class="verb-shelf__item">
           <a href="{{ .url }}" {{ if .isExternal }}target="_blank" rel="noopener"{{ end }}>
             <strong>{{ .title }}</strong>
             {{- if .badge }} <span class="badge badge--{{ .badge | lower }}">{{ .badge }}</span>{{ end -}}
@@ -30,7 +71,6 @@
     {{- end -}}
   {{ end }}
 
-  {{- /* Spec §17 resolution 2: 3 of 6 verbs get one extra section. */ -}}
   {{- with .Params.extraSection -}}
     {{ partial (printf "verb-extras/%s.html" .) (dict "ctx" $) }}
   {{- end -}}
