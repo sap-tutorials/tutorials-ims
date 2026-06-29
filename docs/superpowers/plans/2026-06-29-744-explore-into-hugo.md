@@ -25,7 +25,7 @@
 ### Modified files
 
 - `scripts/build-explore-manifest.ts` — default output path moves from `srv/lib/explore-bundle-manifest.json` to `hugo/data/explore_bundle.json`.
-- `package.json` — `build:explore-manifest` script (already exists, unchanged); `build:all` orchestrates manifest existence before Hugo runs (new freshness guard).
+- `package.json` — `build:explore` script (already exists, unchanged). `build:all` adds an explicit `npm run build:explore` step BEFORE `npm run build:hugo` (today's `build:all` chain runs `build:apps` which is `vendor:mediapipe + hugo-apps build` — neither produces the explore manifest, so the new `prebuild:hugo` guard would fail without this orchestration fix). Add new `prebuild:hugo` script for the freshness guard.
 - `srv/server.js:10` — remove `import { exploreHandler }`.
 - `srv/server.js:191-192` — remove both `/explore` and `/explore/` registrations.
 - `app/explore/src/main.ts` — `.mount('#app')` → `.mount('#explore-app')`.
@@ -35,7 +35,8 @@
 - `mta.yaml:82-86` — change `gen/srv/srv/lib/explore-bundle-manifest.json` to `hugo/data/explore_bundle.json`. The step stays in the same global before-all block; sequencing rule: must run BEFORE the Hugo build line on `mta.yaml:46` (today's `bash -c '... /tmp/hugo --source hugo --minify ...'`). So the manifest emit moves UP, above the Hugo build invocation.
 - `.deploy/mta.yaml:43` — symmetric change, preserving the `bash -c "cd .. && ..."` wrapper; target becomes `hugo/data/explore_bundle.json`. Move BEFORE Hugo build in the same global before-all.
 - `.gitignore` — add `hugo/data/explore_bundle.json` (it's a build artifact).
-- `test/smoke/explore-route.smoke.test.js` — rewrite. The current test asserts inline-graph-JSON presence (gone), Vite-hashed JS asset (kept), CSS asset (kept). Add: shellbar markup present, `data-theme` attribute on `<html>`, `/graph/explore-data` returns valid payload (kept).
+- Modified: `test/smoke/explore-route.smoke.test.js` — rewrite the first `it` block. The current test asserts inline-graph-JSON presence (gone), Vite-hashed JS asset (kept), CSS asset (kept). Add: shellbar markup present, `data-theme` attribute on `<html>`, `/graph/explore-data` returns valid payload (kept).
+  - **Spec drift note:** Spec §5.2 cites `test/smoke/public-endpoints.test.js`, but a `grep -n '/explore' test/smoke/public-endpoints.test.js` returns no matches — the actual `/explore` smoke coverage lives in `test/smoke/explore-route.smoke.test.js`. The plan modifies the real file; this divergence is intentional, not an oversight.
 - `test/unit/scripts/build-explore-manifest.test.ts` — update the default-output-path assertion in the "writes manifest to disk" case.
 
 ### Deleted files
@@ -409,7 +410,7 @@ Change to:
         - npx tsx scripts/build-explore-manifest.ts app/explore/dist hugo/data/explore_bundle.json
 ```
 
-**(b) Move the three lines `npm --prefix app/explore install` / `... run build` / `npx tsx scripts/build-explore-manifest.ts ...` UP, so they sit BEFORE the parallel Hugo build invocation at `mta.yaml:46` (`bash -c 'set -e; /tmp/hugo --source hugo --minify & p1=$!; ...'`). The `mkdir + cp` steps for `approuter/static/explore-ui/` can stay where they are (they only need to happen before mbt packs the approuter module).
+**(b) Move the three lines `npm --prefix app/explore install` / `... run build` / `npx tsx scripts/build-explore-manifest.ts ...` UP, so they sit BEFORE the parallel Hugo build invocation at `mta.yaml:46` (`bash -c 'set -e; /tmp/hugo --source hugo --minify & p1=$!; ...'`). Concretely: insert the three lines (and their explanatory comment block) immediately above the `bash -c 'set -e; /tmp/hugo ...'` line, right after the parallel install block on `mta.yaml:46`'s predecessor. The Task 5 Step 1 test's `manifestIdx < hugoIdx` assertion catches any placement that fails this rule. The `mkdir + cp` steps for `approuter/static/explore-ui/` can stay where they are (they only need to happen before mbt packs the approuter module).
 
 Also update the comment block to describe the new role: the manifest is now read by Hugo (`site.Data.explore_bundle`) at build time, not by srv at request time.
 
@@ -469,7 +470,7 @@ Run:
 cd D:/projects/tutorials-poc/.claude/worktrees/744-explore-into-hugo
 grep -rn 'id="app"' hugo/layouts/ 2>&1
 ```
-Expected: no matches. If matches appear, STOP and report — the rename may now be reactive instead of precautionary, and we need to discuss.
+Expected: no matches. The `id="explore-app"` in `hugo/layouts/explore/single.html` (created in Task 4) does NOT match the regex anchor `id="app"` (the closing quote excludes the suffix). If matches appear, STOP and report — the rename may now be reactive instead of precautionary, and we need to discuss.
 
 - [ ] **Step 2: Edit `app/explore/src/main.ts`**
 
@@ -584,7 +585,9 @@ Expected: pass. If tests reference `window.__INITIAL_GRAPH__`, update them to mo
 - [ ] **Step 5: Commit**
 
 ```bash
-git add app/explore/src/composables/useGraphData.ts app/explore/src/types.ts
+git add app/explore/src/composables/useGraphData.ts
+# Only add types.ts if it was modified (the declaration may not exist in the first place):
+git diff --quiet app/explore/src/types.ts || git add app/explore/src/types.ts
 git -c core.autocrlf=false commit -m "refactor(#744): drop __INITIAL_GRAPH__ branch from useGraphData
 
 The /explore/ page no longer SSR-injects the graph payload; the
@@ -731,61 +734,120 @@ static route for the Vite bundle is unchanged."
 
 ---
 
-## Task 10: Add freshness guard to `build:all`
+## Task 10: Wire `build:explore` into `build:all` AND add `prebuild:hugo` freshness guard
 
 **Files:**
-- Modify: `package.json` (`build:all` script + add a `prebuild:hugo` guard)
+- Create: `scripts/check-explore-bundle-manifest.cjs`
+- Modify: `package.json` (`build:all` chain + new `prebuild:hugo` script)
 
 The orchestrator should fail loudly if `hugo/data/explore_bundle.json` doesn't exist by the time Hugo runs. This is the "belt" half of the Section 4.1 belt-and-braces error-handling design.
 
-- [ ] **Step 1: Decide where the guard runs**
+**Two orchestration gaps fixed in this task:**
 
-`build:all` script today: `npm run prebuild && npm run fetch-tutorials -- --regenerate && npm run fetch-concepts && npm run fetch-advocates && npm run fetch-homepage-shelves && npm run build:css && npm run build:apps && npm run build:analytics-explorer && npm run copy-joule-vendor && npm run build:hugo && ...`
+1. Today's `build:all` chain is `... && npm run build:apps && npm run build:analytics-explorer && npm run copy-joule-vendor && npm run build:hugo && ...`. `build:apps` is `npm run vendor:mediapipe && npm --prefix hugo-apps run build` — it does NOT run `build:explore`. So `npm run build:all` on a clean checkout never produces `hugo/data/explore_bundle.json`. We add `npm run build:explore` to `build:all` before `npm run build:hugo`.
 
-We add the guard as `prebuild:hugo` so it runs automatically just before `build:hugo`.
+2. We also add the `prebuild:hugo` lifecycle hook so the failure mode is loud and immediate, not a silent fall-through to the `{{ else }}` branch.
 
-- [ ] **Step 2: Edit `package.json`**
+- [ ] **Step 1: Create the guard script (avoids fragile JSON-in-package.json escaping)**
 
-Add the new script (insert near the existing `build:hugo` line):
+Create `scripts/check-explore-bundle-manifest.cjs`:
 
-```json
-"prebuild:hugo": "node -e \"if (!require('fs').existsSync('hugo/data/explore_bundle.json')) { console.error('\\n[prebuild:hugo] hugo/data/explore_bundle.json missing. Run \\\"npm run build:explore\\\" before \\\"hugo\\\".\\n'); process.exit(1); }\"",
+```js
+// Build-time guard wired in as `prebuild:hugo`. Fails loudly if the
+// Vite-emitted explore manifest is absent before Hugo's template render.
+// See docs/superpowers/specs/2026-06-29-744-explore-into-hugo-design.md
+// Section 4.1.
+const fs = require('node:fs');
+const path = require('node:path');
+
+const MANIFEST = path.resolve(__dirname, '..', 'hugo/data/explore_bundle.json');
+if (!fs.existsSync(MANIFEST)) {
+  console.error('');
+  console.error('[prebuild:hugo] hugo/data/explore_bundle.json missing.');
+  console.error('               Run `npm run build:explore` before `hugo` (or use `npm run build:all`).');
+  console.error('');
+  process.exit(1);
+}
+
+
 ```
 
-npm's lifecycle convention runs `prebuild:hugo` automatically before `build:hugo`. Both `npm run build:hugo` and `npm run build:all` (which calls `build:hugo`) get the guard for free.
+- [ ] **Step 2: Add the npm scripts**
 
-- [ ] **Step 3: Test the guard fires**
+In `package.json`, do TWO edits:
+
+**(a)** Add `prebuild:hugo` so it fires before `build:hugo` via npm's lifecycle convention:
+
+```json
+"prebuild:hugo": "node scripts/check-explore-bundle-manifest.cjs",
+```
+
+**(b)** Insert `npm run build:explore` into the `build:all` chain BEFORE `npm run build:hugo`. The existing chain is:
+
+```
+npm run prebuild && npm run fetch-tutorials -- --regenerate && npm run fetch-concepts && npm run fetch-advocates && npm run fetch-homepage-shelves && npm run build:css && npm run build:apps && npm run build:analytics-explorer && npm run copy-joule-vendor && npm run build:hugo && npm run build:highlight && npm run build:display
+```
+
+Change to (inserting `&& npm run build:explore` immediately before `&& npm run build:hugo`):
+
+```
+npm run prebuild && npm run fetch-tutorials -- --regenerate && npm run fetch-concepts && npm run fetch-advocates && npm run fetch-homepage-shelves && npm run build:css && npm run build:apps && npm run build:analytics-explorer && npm run copy-joule-vendor && npm run build:explore && npm run build:hugo && npm run build:highlight && npm run build:display
+```
+
+- [ ] **Step 3: Test the guard fires when manifest is missing**
 
 Run:
+
 ```bash
 rm -f hugo/data/explore_bundle.json
 npm run prebuild:hugo 2>&1 | tail -5
+echo "exit=$?"
 ```
-Expected: process exits 1, stderr message names the missing file and the script that produces it.
+
+Expected: process exits 1, stderr names the missing file and the script that produces it.
 
 - [ ] **Step 4: Test the guard passes when manifest exists**
 
 Run:
+
 ```bash
 mkdir -p hugo/data && echo '{"hash":"test","css":"index-test.css"}' > hugo/data/explore_bundle.json
 npm run prebuild:hugo 2>&1 | tail -3
+echo "exit=$?"
 ```
-Expected: process exits 0, no output.
 
-Clean up: `rm -f hugo/data/explore_bundle.json` (will be re-generated by Task 11's verification).
+Expected: process exits 0, no output. Clean up: `rm -f hugo/data/explore_bundle.json` (Task 11 will regenerate it for real).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Test that `npm run build:hugo` invokes the guard via npm lifecycle**
+
+Run:
 
 ```bash
-git add package.json
-git -c core.autocrlf=false commit -m "feat(#744): add prebuild:hugo guard for explore manifest
+rm -f hugo/data/explore_bundle.json
+npm run build:hugo 2>&1 | tail -10
+echo "exit=$?"
+```
 
-prebuild:hugo fails loudly if hugo/data/explore_bundle.json is
-missing when 'hugo' would run, naming both the missing file and
-the script that produces it (npm run build:explore). The 'else'
-branch in hugo/layouts/explore/single.html handles the at-build-
-time slip; this guard handles the local-dev case where someone
-ran 'hugo' without 'npm run build:all' first."
+Expected: exits non-zero. stderr should include `[prebuild:hugo] hugo/data/explore_bundle.json missing.` — proves the npm-lifecycle wiring actually fires. (We're not testing Hugo itself here; we're testing the guard is wired correctly.)
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add scripts/check-explore-bundle-manifest.cjs package.json
+git -c core.autocrlf=false commit -m "feat(#744): wire build:explore into build:all + add prebuild:hugo guard
+
+Two orchestration changes:
+
+1. Insert 'npm run build:explore' into 'build:all' before
+   'npm run build:hugo'. Before this change, 'build:all' on a
+   clean checkout never produced hugo/data/explore_bundle.json
+   (build:apps is hugo-apps only; build:explore is its own script).
+
+2. Add 'prebuild:hugo' npm-lifecycle guard that fails loudly when
+   hugo/data/explore_bundle.json is missing. Naming the missing
+   file + the producing script in the error keeps the next dev
+   on the happy path. Implementation is a tiny .cjs file (not
+   inline 'node -e') to avoid four-level JSON/shell escaping."
 ```
 
 ---
@@ -817,10 +879,12 @@ cat hugo/data/explore_bundle.json
 ```
 Expected: `{ "hash": "<vite-hash>", "css": "index-<hash>.css" }` (real hash, not `"dev"`).
 
-- [ ] **Step 4: Run Hugo standalone**
+- [ ] **Step 4: Run Hugo via the npm lifecycle (exercises the prebuild:hugo guard)**
 
-Run: `hugo --source hugo --minify 2>&1 | tail -15` (or `/tmp/hugo --source hugo --minify` on Linux).
-Expected: build succeeds.
+Run: `npm run build:hugo 2>&1 | tail -15`
+Expected: build succeeds. The `prebuild:hugo` script (Task 10) fires invisibly first, finds the manifest from Step 2, exits 0, and Hugo runs.
+
+(Why `npm run build:hugo` instead of `hugo` directly: the npm lifecycle hook only fires when invoked via npm. Running raw `hugo --source hugo --minify` bypasses the guard, which defeats the verification purpose for this task.)
 
 - [ ] **Step 5: Inspect the emitted page**
 
@@ -1089,7 +1153,7 @@ EOF
 )"
 ```
 
-- [ ] **Step 2 alt: Verify CI green**
+- [ ] **Step 3: Verify CI green**
 
 After the PR opens, watch for the standard CI run. Expected: green. If anything fails, address before merging.
 
