@@ -149,6 +149,8 @@ The MTA creates its own service instances (prefixed `tutorials-*`). Legacy IMS s
 
 ## Scaling Constraints
 
+> **Broader context:** [`docs/developers/architecture/scaling-playbook.md`](../architecture/scaling-playbook.md). This section covers only the three in-process rate limiters (playbook row #2).
+
 **`tutorials-srv` is pinned to `instances: 1` in both `mta.yaml` and `.deploy/mta.yaml`. Do not raise this without first replacing the in-process rate limiters with a shared store.**
 
 Three rate limiters in `tutorials-srv` keep state in process-local memory:
