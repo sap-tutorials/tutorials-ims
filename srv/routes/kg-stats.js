@@ -7,12 +7,16 @@ import cds from '@sap/cds';
 const log = cds.log('kg-stats');
 
 const TTL_MS = 60_000;
+const MAX_AGE_S = TTL_MS / 1000;
 
-// Cache stored on the shared cds object so that test resets via
-// _resetKgStatsCache() reach the same instance as the running HTTP handler
-// (in cds.test('serve') the server loads this module via CJS interop,
-// creating a separate module registry from the test's ESM imports; the cds
-// singleton is the one shared reference between both sides).
+// Cache is anchored on the cds singleton rather than module-local state because
+// cds.test('serve') boots the server in a CJS module realm (via @sap/cds's
+// cds.server() bootstrap, which uses require()), while this file's test imports
+// it as ESM. Node's CJS and ESM module caches are separate registries, so
+// module-local `let current` would be different variables in the two contexts —
+// `_resetKgStatsCache()` from the test side would silently no-op. The `cds`
+// object is the one thing resolved at the @sap/cds package boundary and shared
+// across both registries.
 function getCache() {
   if (!cds._kgStatsCache) {
     cds._kgStatsCache = { current: null, lastGood: null };
@@ -67,7 +71,7 @@ export async function kgStatsHandler(req, res) {
   const cache = getCache();
   const now = Date.now();
   if (cache.current && cache.current.expiresAt > now) {
-    res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+    res.setHeader('Cache-Control', `public, max-age=${MAX_AGE_S}, stale-while-revalidate=300`);
     res.json(cache.current.payload);
     return;
   }
@@ -76,13 +80,13 @@ export async function kgStatsHandler(req, res) {
     const payload = await computePayload();
     cache.current = { payload, expiresAt: now + TTL_MS };
     cache.lastGood = payload;
-    res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+    res.setHeader('Cache-Control', `public, max-age=${MAX_AGE_S}, stale-while-revalidate=300`);
     res.json(payload);
   } catch (err) {
-    log.error('kg-stats compute failed', err.message);
+    log.error('kg-stats compute failed', err);
     if (cache.lastGood) {
       // Graceful degradation: return previous good payload with same caching.
-      res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+      res.setHeader('Cache-Control', `public, max-age=${MAX_AGE_S}, stale-while-revalidate=300`);
       res.json(cache.lastGood);
       return;
     }
