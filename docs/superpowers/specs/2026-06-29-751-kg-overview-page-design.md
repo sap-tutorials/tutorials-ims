@@ -110,7 +110,7 @@ Top-to-bottom order locked during brainstorming as **"Hero → Diagram → Corpu
   1. **Live graph at `/explore/`** *(primary, top-left)* — visually elevated (slightly larger image, primary-blue button "Open the live graph →" instead of secondary-text "See it on …" links).
   2. **On every tutorial page** — tutorial-page sidebar with prereq / related / next-step links. CTA → a representative tutorial.
   3. **Concept landing pages** — `/concepts/<slug>/`. CTA → the concepts index.
-  4. **Joule learning paths** — "Find me the shortest path between two tutorials." CTA opens the Joule shellbar with a pre-filled prompt via a query parameter (~10 lines of JS).
+  4. **Joule learning paths** — "Find me the shortest path between two tutorials." CTA opens the Joule shellbar with a pre-filled prompt via a query parameter. The existing `joule.js` already handles `?joule=open` (see [hugo/static/js/joule.js:742](../../../hugo/static/js/joule.js#L742)); the pre-fill is a small extension next to that block (~5–10 lines) that reads a second query parameter and calls the panel's send path before the hero renders. Lands in PR 2 alongside the page.
 - **Surface screenshots are single-theme (light)** framed by theme-aware containers using existing `--sap*` tokens. The same single PNG/WebP is shown in both light and dark mode, with the container's background and shadow adapting. (One-screenshot-per-theme was considered and rejected as 4x the maintenance cost for marginal benefit.)
 - **Narrative arc** baked into the card order: **discover** (sidebar) → **explore** (live viz, elevated) → **deepen** (concept page) → **converse** (Joule). Not just four screenshots; the user journey in four boxes.
 - The RAG-backed `getRelevantSteps` tool (Joule backstage) is deliberately omitted — invisible to the user, nothing screenshot-worthy. May be added later if the page feels missing-a-piece in practice.
@@ -177,7 +177,7 @@ One new endpoint, no schema changes, no service changes.
   ```
 
 - **Implementation:**
-  - Four `COUNT(*)` queries via `cds.ql` against the existing entities — `Tutorials`, `Concepts` (where `status = 'PUBLISHED'`), `ConceptEdges`, and `Missions` + `CompletionPaths` (summed).
+  - Four `COUNT(*)` queries via `cds.ql` against the existing entities — `Tutorials`, `Concepts` (where `status = 'PUBLISHED'`), `ConceptEdges`, and `Missions` + `Groups` (summed for the `missionsAndGroups` field; `Groups` is the entity name in [db/schema.cds](../../../db/schema.cds), not `CompletionPaths`).
   - One `MAX(extractedAt)` on `Concepts` for `lastExtractedAt`.
   - No SPARQL — these are projection-input counts; the underlying CDS entities are the truth.
 - **Caching:** 60-second in-memory TTL inside the handler + `Cache-Control: public, max-age=60, stale-while-revalidate=300`. Same pattern as `/api/advocates`.
@@ -320,7 +320,7 @@ Ships the page assembly.
 | Architecture SVG looks amateur in dark mode | Med | High | CSS-variable approach is well-trodden in the codebase (joule-shellbar uses it). Manual dark-mode pass before merge is the catch. |
 | Live counter shows zeros after a fresh `db deploy --with-mock-data=0` | Low | Low | Static fallback already covers the 5xx case; for a "zeros, but valid" response the page degrades gracefully (just shows zeros, no broken UI). Acceptable. |
 | 60-second cache feels stale during a freshly-completed extraction run | Low | Low | Documented in the Cache-Control header (`stale-while-revalidate=300`); the visitor sees fresh data within ~60 s of the next page load. Acceptable for a marketing page. |
-| Joule pre-fill query parameter doesn't exist in `joule.js` today | Low | Low | If it doesn't, ~10 lines of JS in `joule.js` land alongside PR 2. Small, low-risk delta. |
+| Joule pre-fill query parameter doesn't exist in `joule.js` today | None | None | Confirmed during spec review: `joule.js` already wires `?joule=open` via `URLSearchParams` ([hugo/static/js/joule.js:742](../../../hugo/static/js/joule.js#L742)). The pre-fill is a small extension next to that block (~5–10 lines). Risk closed at spec time. |
 | Screenshot drift: surface UI changes after the page is built; screenshots get stale | Med | Low | Manual re-capture in a 1-PR follow-up when caught. Surfaces grid is the most-likely section to need maintenance updates over time. |
 | Phase 4 sub-phase ships before this page does, adding a content type whose tile isn't on the corpus grid | Low | Low | One-bullet follow-up PR per sub-phase, per §Out of scope. The layout accommodates it. |
 
