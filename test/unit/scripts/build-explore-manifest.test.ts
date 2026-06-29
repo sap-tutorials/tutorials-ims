@@ -2,9 +2,10 @@
 //
 // The build-explore-manifest script parses app/explore/dist/index.html
 // (Vite emits the hashed asset names there) and writes
-// srv/lib/explore-bundle-manifest.json with `{ hash, css }`. The srv's
-// /explore handler reads that manifest in deployed environments where
-// fs-probing approuter/static/ won't work (separate CF container).
+// hugo/data/explore_bundle.json with `{ hash, css }`. Hugo loads it as
+// `site.Data.explore_bundle` at template-render time so the /explore/
+// page can emit the correct hashed <script>/<link> tags. Pre-#744 the
+// manifest was read by srv at request time; that path is gone.
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync, writeFileSync, readFileSync, rmSync, mkdirSync } from 'node:fs'
@@ -61,10 +62,22 @@ describe('buildExploreManifest', () => {
     writeFileSync(join(tmp, 'dist', 'index.html'),
       `<script src="/explore-ui/main-abcdef.js"></script>
        <link rel="stylesheet" href="/explore-ui/assets/index-xyz.css">`)
-    const outPath = join(tmp, 'srv-lib', 'explore-bundle-manifest.json')
-    mkdirSync(join(tmp, 'srv-lib'), { recursive: true })
+    const outPath = join(tmp, 'hugo-data', 'explore_bundle.json')
+    mkdirSync(join(tmp, 'hugo-data'), { recursive: true })
     buildExploreManifest(join(tmp, 'dist'), outPath)
     const written = JSON.parse(readFileSync(outPath, 'utf8'))
     expect(written).toEqual({ hash: 'abcdef', css: 'index-xyz.css' })
+  })
+
+  it('default CLI output path is hugo/data/explore_bundle.json (not srv/lib/...)', async () => {
+    // Read the script's source and assert the default outPath constant.
+    // We can't easily run the CLI without invoking tsx in a subprocess;
+    // text-asserting the default in the source is the cheapest pin.
+    const src = readFileSync(
+      join(import.meta.dirname, '../../../scripts/build-explore-manifest.ts'),
+      'utf8',
+    )
+    expect(src).toMatch(/hugo\/data\/explore_bundle\.json/)
+    expect(src).not.toMatch(/srv\/lib\/explore-bundle-manifest\.json/)
   })
 })
