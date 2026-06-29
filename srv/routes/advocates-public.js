@@ -72,7 +72,7 @@ export function shapeAdvocateRow(a, ctx) {
  * `modifiedSources` — each caller picks the right scope for its own ETag.
  */
 async function buildAdvocateLookups(db, advocates) {
-  const { AdvocateTopics, AdvocateLinks, Tags, Users, Tutorials, TutorialContributors } =
+  const { AdvocateTopics, AdvocateLinks, Tags, Users, Tutorials, TutorialContributors, MyTutorialsView } =
     cds.entities('com.sap.developers.ims');
 
   const ids = advocates.map((a) => a.ID);
@@ -80,6 +80,15 @@ async function buildAdvocateLookups(db, advocates) {
   // for advocates that have user_ID set. Separate query + JS-side join
   // (matches the topics/links pattern below — no deep CQN expand).
   const userIds = [...new Set(advocates.map((a) => a.user_ID).filter(Boolean))];
+
+  // Issue #777: the new MyTutorialsView exposes userUuid as userId
+  // (matches req.user.id), but advocate.user_ID is the Users.ID FK.
+  // Translate the set so we can query MyTutorialsView.
+  const userIdToUuidRows = userIds.length
+    ? await db.run(SELECT.from(Users).columns('ID', 'uuid').where({ ID: { in: userIds } }))
+    : [];
+  const userIdToUuid = new Map(userIdToUuidRows.map((u) => [u.ID, u.uuid]));
+  const userUuids = userIdToUuidRows.map((u) => u.uuid);
 
   const [topics, links, users, authoredRows, contribRows] = await Promise.all([
     ids.length
@@ -92,12 +101,14 @@ async function buildAdvocateLookups(db, advocates) {
     userIds.length
       ? db.run(SELECT.from(Users).columns('ID', 'email').where({ ID: { in: userIds } }))
       : [],
-    // Tutorials authored by any of those users.
-    userIds.length
+    // Issue #777: query MyTutorialsView (4-source UNION) instead of
+    // Tutorials.author_ID alone, so advocates see all their tutorials
+    // (authored + contributed + ownerEmail-matched + legacy-text).
+    userUuids.length
       ? db.run(
-          SELECT.from(Tutorials)
-            .columns('slug', 'title', 'author_ID')
-            .where({ author_ID: { in: userIds } }),
+          SELECT.from(MyTutorialsView)
+            .columns('slug', 'title', 'userId')
+            .where({ userId: { in: userUuids } }),
         )
       : [],
     // Contributor rows for any of those users; tutorial slug/title resolved
@@ -172,11 +183,18 @@ async function buildAdvocateLookups(db, advocates) {
   // / authored-tutorial / contributed-tutorial lookups so the response
   // shaper can conditionally surface them per advocate.
   const userById = new Map(users.map((u) => [u.ID, u]));
+  // Issue #777: authoredRows now comes from MyTutorialsView with userId
+  // (= Users.uuid). Translate back to Users.ID so authoredByUserId stays
+  // keyed by the same value shapeAdvocateRow expects (a.user_ID).
+  const uuidToUserId = new Map(userIdToUuidRows.map((u) => [u.uuid, u.ID]));
   const authoredByUserId = new Map();
-  for (const t of authoredRows) {
-    if (!t.slug || !t.title) continue;
-    if (!authoredByUserId.has(t.author_ID)) authoredByUserId.set(t.author_ID, []);
-    authoredByUserId.get(t.author_ID).push({ slug: t.slug, title: t.title });
+  for (const row of authoredRows) {
+    if (!row.slug || !row.title) continue;
+    const usersId = uuidToUserId.get(row.userId);
+    if (!usersId) continue;
+    const arr = authoredByUserId.get(usersId) || [];
+    arr.push({ slug: row.slug, title: row.title });
+    authoredByUserId.set(usersId, arr);
   }
   const tutorialById = new Map(contribTutorials.map((t) => [t.ID, t]));
   const contribByUserId = new Map();
