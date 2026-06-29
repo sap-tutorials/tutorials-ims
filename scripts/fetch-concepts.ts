@@ -10,6 +10,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { categoryLabel } from '../srv/lib/discovery-mission-categories.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -45,6 +46,20 @@ export interface ConceptPayload {
     url: string
     authorName: string
     postedAt: string    // ISO timestamp
+  }>
+  // Phase 4.3 (#447 §8): SAP Discovery Center missions teaching this concept.
+  // Empty until the weekly fetch-discovery-missions cron has populated
+  // DiscoveryMissionConceptLinks. Shape mirrors the per-concept array
+  // emitted by srv/lib/published-concepts-query.js. The backend ships
+  // `categorySlug` (raw short-code from the MCP); frontmatter() resolves
+  // it to a user-facing English `categoryLabel` at emission time via the
+  // shared srv/lib/discovery-mission-categories.js helper.
+  discoveryMissions?: Array<{
+    slug: string
+    title: string
+    url: string
+    effortLevel?: number
+    categorySlug?: string
   }>
 }
 
@@ -108,6 +123,29 @@ export function frontmatter(c: ConceptPayload): string {
       })()
     : null
 
+  // Phase 4.3 (#447 §8): emit `discoveryMissions` only when non-empty.
+  // The backend ships a raw `categorySlug` short-code; we resolve it
+  // to a user-facing English `categoryLabel` at emission time via the
+  // shared srv/lib/discovery-mission-categories.js helper (known slugs
+  // map to canonical English; unknown slugs fall back to title-case).
+  // Per-field guards: `effortLevel` and `categorySlug` are both optional
+  // on the wire, so the loop only emits those lines when present.
+  const discoveryMissions = (c.discoveryMissions && c.discoveryMissions.length > 0)
+    ? (() => {
+        const lines = ['discoveryMissions:']
+        for (const m of c.discoveryMissions!) {
+          lines.push(`  - slug: ${yamlEscape(m.slug)}`)
+          lines.push(`    title: ${yamlEscape(m.title)}`)
+          lines.push(`    url: ${yamlEscape(m.url)}`)
+          if (m.effortLevel != null) lines.push(`    effortLevel: ${m.effortLevel}`)
+          if (m.categorySlug) {
+            lines.push(`    categoryLabel: ${yamlEscape(categoryLabel(m.categorySlug))}`)
+          }
+        }
+        return lines.join('\n')
+      })()
+    : null
+
   // NOTE: deliberately no `type:` field — Hugo's type-based lookup is singular
   // ("type: concept" → layouts/concept/), but our template lives at
   // layouts/concepts/ (matching the section). Section-based lookup is what we
@@ -124,6 +162,7 @@ export function frontmatter(c: ConceptPayload): string {
   ]
   if (journeys) parts.push(journeys)
   if (blogPosts) parts.push(blogPosts)
+  if (discoveryMissions) parts.push(discoveryMissions)
   parts.push('---', '')
   return parts.join('\n')
 }
