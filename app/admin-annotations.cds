@@ -2878,7 +2878,8 @@ annotate AdminService.HomepageShelves with @(
   ],
   UI.SelectionFields : [ verb, shelf, isActive, linkStatus ],
   UI.Facets : [
-    { $Type: 'UI.ReferenceFacet', Label: 'General', Target: '@UI.FieldGroup#Main' }
+    { $Type: 'UI.ReferenceFacet', Label: 'General',   Target: '@UI.FieldGroup#Main' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Explainer', Target: '@UI.FieldGroup#Explainer' }
   ],
   UI.FieldGroup #Main : { Data : [
     { Value : verb },
@@ -2890,14 +2891,20 @@ annotate AdminService.HomepageShelves with @(
     { Value : badge },
     { Value : isExternal },
     { Value : isActive }
+  ]},
+  UI.FieldGroup #Explainer : { Data : [
+    { Value : tagline,         Label : 'Tagline' },
+    { Value : whyItMatters,    Label : 'Why it matters' },
+    { Value : authoringStatus, Label : 'Authoring status' }
   ]}
 );
 
 annotate AdminService.HomepageShelves {
-  verb       @Common.ValueListWithFixedValues @Common.Label: 'Verb';
-  shelf      @Common.ValueListWithFixedValues @Common.Label: 'Shelf';
-  badge      @Common.ValueListWithFixedValues @Common.Label: 'Badge';
-  linkStatus @Common.ValueListWithFixedValues @Common.Label: 'Link health';
+  verb            @Common.ValueListWithFixedValues @Common.Label: 'Verb';
+  shelf           @Common.ValueListWithFixedValues @Common.Label: 'Shelf';
+  badge           @Common.ValueListWithFixedValues @Common.Label: 'Badge';
+  linkStatus      @Common.ValueListWithFixedValues @Common.Label: 'Link health';
+  authoringStatus @Common.FieldControl: #ReadOnly @Common.Label: 'Authoring status';
 };
 
 annotate AdminService.LegacyRedirects with @(
