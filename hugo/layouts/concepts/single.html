@@ -212,6 +212,54 @@
   </section>
   {{ end }}
 
+  {{/*
+    Phase 4.5 (#746 §5): "Official reference documentation" — section #6
+    on the concept landing page, between Videos and Prerequisites.
+
+    api.sap.com authority docs. Row format:
+        `title ↗ · category · apiType`
+
+    Mirrors the Phase 4.1/4.2/4.3/4.4 hardening: external links open in a
+    new tab (target=_blank rel=noopener); a URL scheme guard (`$isSafe`)
+    falls back to a plain <span> for anything that isn't http(s).
+
+    No thumbnail rendering — api-docs don't have them. Instead, an inline
+    `↗` (link-out) icon signals external authority. `category` + `apiType`
+    are conditional meta fields rendered verbatim from the wire payload.
+
+    Hide-when-empty: the surrounding `{{ with }}` guard ensures the H2 and
+    UL are NEVER emitted for concepts that have no covering api-doc.
+  */}}
+  {{ with .Params.apiDocs }}
+  <section
+    class="concept-page__section"
+    data-kg-section="api-docs"
+    data-concept-slug="{{ $.Params.slug }}"
+  >
+    <h2>Official reference documentation</h2>
+    <ul>
+      {{ range . }}
+        {{ $url := .url }}
+        {{ $isSafe := or (hasPrefix $url "https://") (hasPrefix $url "http://") }}
+        <li>
+          {{ if $isSafe }}
+          <a
+            href="{{ $url }}"
+            target="_blank"
+            rel="noopener"
+            data-api-doc-slug="{{ .slug }}"
+          >{{ .title }} <span class="kg-link-out" aria-hidden="true">↗</span></a>
+          {{ else }}
+          <span data-api-doc-slug="{{ .slug }}">{{ .title }}</span>
+          {{ end }}
+          {{ if .category }} · {{ .category }}{{ end }}
+          {{ if .apiType }} · <span class="kg-api-type">{{ .apiType }}</span>{{ end }}
+        </li>
+      {{ end }}
+    </ul>
+  </section>
+  {{ end }}
+
   {{ with .Params.requires }}
   <section class="concept-page__section">
     <h2>Prerequisites</h2>
@@ -359,6 +407,31 @@
               } catch (e) { /* never let telemetry break the page */ }
             });
           })(videoLinks[m]);
+        }
+      }
+
+      // Phase 4.5 (#746 §6): delegated click listener on the
+      // "Official reference documentation" section. CSP-safe —
+      // addEventListener only, no inline onclick. Parallels the five
+      // prior blocks above; only the event name + detail field name
+      // differ.
+      var apiDocSection = document.querySelector('[data-kg-section="api-docs"]');
+      if (apiDocSection) {
+        var apiDocSectionConceptSlug = apiDocSection.getAttribute('data-concept-slug');
+        var apiDocLinks = apiDocSection.querySelectorAll('a[data-api-doc-slug]');
+        for (var n = 0; n < apiDocLinks.length; n++) {
+          (function (a) {
+            a.addEventListener('click', function () {
+              try {
+                window.dispatchEvent(new CustomEvent('kg.api-doc.linked_from_concept_page', {
+                  detail: {
+                    conceptSlug: apiDocSectionConceptSlug,
+                    apiDocSlug: a.getAttribute('data-api-doc-slug')
+                  }
+                }));
+              } catch (e) { /* never let telemetry break the page */ }
+            });
+          })(apiDocLinks[n]);
         }
       }
     })();

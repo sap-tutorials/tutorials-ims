@@ -75,6 +75,20 @@ export interface ConceptPayload {
     channelTitle?: string
     publishedAt?: string    // ISO timestamp
   }>
+  // Phase 4.5 (#746 §5): api.sap.com authority documentation referencing this
+  // concept. Empty until the monthly fetch-api-docs cron has populated
+  // ApiDocConceptLinks. Shape mirrors the per-concept array emitted by
+  // srv/lib/published-concepts-query.js. Pass-through: `category` and
+  // `apiType` flow through verbatim (no helper transformation). The
+  // `description` LOB column is deliberately NOT in the wire payload
+  // (LOB-locator safety, see spec §3).
+  apiDocs?: Array<{
+    slug: string
+    title: string
+    url: string
+    category?: string
+    apiType?: string
+  }>
 }
 
 interface BuildConceptsResponse {
@@ -180,6 +194,27 @@ export function frontmatter(c: ConceptPayload): string {
       })()
     : null
 
+  // Phase 4.5 (#746 §5): emit `apiDocs` only when non-empty. Pass-through —
+  // no helper transformation. `category` and `apiType` are optional on the
+  // wire; per-field guards skip emission when absent. The Hugo template's
+  // surrounding `{{ with .Params.apiDocs }}` hides the entire section when
+  // the key is missing — omitting at the emitter keeps generated
+  // frontmatter tidy. `description` is deliberately NOT in this shape (LOB
+  // locator safety — see spec §3).
+  const apiDocs = (c.apiDocs && c.apiDocs.length > 0)
+    ? (() => {
+        const lines = ['apiDocs:']
+        for (const a of c.apiDocs!) {
+          lines.push(`  - slug: ${yamlEscape(a.slug)}`)
+          lines.push(`    title: ${yamlEscape(a.title)}`)
+          lines.push(`    url: ${yamlEscape(a.url)}`)
+          if (a.category) lines.push(`    category: ${yamlEscape(a.category)}`)
+          if (a.apiType) lines.push(`    apiType: ${yamlEscape(a.apiType)}`)
+        }
+        return lines.join('\n')
+      })()
+    : null
+
   // NOTE: deliberately no `type:` field — Hugo's type-based lookup is singular
   // ("type: concept" → layouts/concept/), but our template lives at
   // layouts/concepts/ (matching the section). Section-based lookup is what we
@@ -198,6 +233,7 @@ export function frontmatter(c: ConceptPayload): string {
   if (blogPosts) parts.push(blogPosts)
   if (discoveryMissions) parts.push(discoveryMissions)
   if (videos) parts.push(videos)
+  if (apiDocs) parts.push(apiDocs)
   parts.push('---', '')
   return parts.join('\n')
 }
