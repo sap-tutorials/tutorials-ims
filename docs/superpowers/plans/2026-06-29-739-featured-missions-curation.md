@@ -84,6 +84,22 @@ interface CapCacheData {
 }
 ```
 
+Then add a staleness guard to `loadCapCache` so pre-#739 caches force a refetch. Locate the existing guard for `standaloneGroups` (~line 25):
+
+```ts
+    // Treat caches missing the new field as stale to force refetch.
+    if (!Array.isArray(data.standaloneGroups)) return null
+```
+
+Add a parallel guard for `featured` immediately after it:
+
+```ts
+    if (!Array.isArray(data.standaloneGroups)) return null
+    if (!Array.isArray(data.featured)) return null
+```
+
+Without this guard, an in-TTL cache (<24h old) from before this PR would return `cached.featured === undefined`, the fallback path would silently fire for the next 24h, and the new picker wouldn't take effect until either the cache expired or someone deleted `.tutorial-cache/`. Mirrors the precedent set when `standaloneGroups` was added.
+
 - [ ] **Step 4: Extend `saveCapCache` signature to accept `featured`**
 
 Locate the existing `saveCapCache` function (~lines 32-42). Update the signature and the persisted object:
@@ -809,22 +825,28 @@ Expected: build succeeds.
 
 - [ ] **Step 2: Verify the built navigation.json has the new structure**
 
-Run:
+Locate the built navigation.json (the dist path varies between flat and namespaced UI5 layouts — use `find` to discover it):
+
 ```bash
-find app/admin-shell/dist -name navigation.json -not -path "*/node_modules/*" 2>/dev/null
-NAV_PATH="app/admin-shell/dist/model/navigation.json"  # adjust if find returned a different path
+NAV_PATH=$(find app/admin-shell/dist -name navigation.json -not -path "*/node_modules/*" 2>/dev/null | head -1)
+echo "Using: $NAV_PATH"
+test -n "$NAV_PATH" || { echo "ERROR: built navigation.json not found"; exit 1; }
+
 node -e "
 const n = JSON.parse(require('fs').readFileSync('$NAV_PATH','utf8'));
 const content = n.groups.find(g => g.key === 'content');
-console.log('Content group last entry:', content.items[content.items.length - 1].key);
+const system = n.groups.find(g => g.key === 'system');
+console.log('Content last entry:', content.items[content.items.length - 1].key);
 console.log('Operations under content?', content.items.some(i => i.key === 'operations'));
+console.log('Operations still in system?', system.items.some(i => i.key === 'operations'));
 "
 ```
 
 Expected:
 ```
-Content group last entry: operations
+Content last entry: operations
 Operations under content? true
+Operations still in system? false
 ```
 
 - [ ] **Step 3: No commit (verification only)**
@@ -926,9 +948,13 @@ Watch the standard CI run. If anything fails, address before merging.
 
 ## Task 7: Post-merge deploy + verify
 
-After PR merge, deploy from `main` in the primary tree (per memory [[feedback_always_deploy_from_main_primary_tree.md]]):
+After PR merge, deploy from `main` in the primary tree (per memory [[feedback_always_deploy_from_main_primary_tree.md]]). **This task only runs after Tom explicitly signals he wants the deploy** — per memory [[feedback_merge_confirmation_not_deploy_authorization.md]] and [[feedback_confirm_deploy_scope.md]], merging is not deploy authorization.
 
-- [ ] **Step 1: Switch to primary tree, pull main**
+- [ ] **Step 1: Confirm deploy scope with Tom**
+
+Ask: "Ready to deploy #739 to DEV? Scope is admin-shell (nav.json move) + srv-script (`scripts/fetch-tutorials.ts`, `scripts/parsers/cap.ts`) — no schema, no srv-runtime, no DB changes. Anything else queued I should bundle in?" Wait for explicit yes before continuing.
+
+- [ ] **Step 2: Switch to primary tree, pull main**
 
 ```bash
 cd D:/projects/tutorials-poc
@@ -936,7 +962,7 @@ git checkout main
 git pull --ff-only origin main
 ```
 
-- [ ] **Step 2: Verify CF target**
+- [ ] **Step 3: Verify CF target**
 
 ```bash
 cf target
@@ -944,15 +970,39 @@ cf target
 
 Expected: DEV space. If wrong, surface and STOP.
 
-- [ ] **Step 3: Build + deploy (full MTA)**
+- [ ] **Step 4: Resolve mtaext placeholders BEFORE `cf deploy`**
+
+Per CLAUDE.md's "Local manual deploy" instruction and memory [[feedback_mtaext_envsubst_empty_quote_required.md]], `cf deploy -e dev.mtaext` does NOT interpolate `${VAR}` references. We must `envsubst` first:
+
+```bash
+cd D:/projects/tutorials-poc
+# Source the four secrets from your local env (must be exported beforehand).
+# Empty values MUST be quoted as "''" to avoid YAML-null parsing.
+test -n "$CONTENT_API_KEY" || { echo "ERROR: CONTENT_API_KEY not set"; exit 1; }
+test -n "$REBUILD_API_KEY" || { echo "ERROR: REBUILD_API_KEY not set"; exit 1; }
+test -n "$APPROUTER_URL"   || { echo "ERROR: APPROUTER_URL not set"; exit 1; }
+test -n "$GITHUB_DISPATCH_TOKEN" || { echo "ERROR: GITHUB_DISPATCH_TOKEN not set"; exit 1; }
+
+envsubst '$CONTENT_API_KEY $REBUILD_API_KEY $APPROUTER_URL $GITHUB_DISPATCH_TOKEN' \
+  < deploy/dev.mtaext > deploy/dev.resolved.mtaext
+
+# Verify no placeholder survived:
+grep -E '\$\{?[A-Z_]+\}?' deploy/dev.resolved.mtaext && \
+  { echo "ERROR: unresolved placeholder in dev.resolved.mtaext"; exit 1; } || \
+  echo "OK: all placeholders resolved"
+```
+
+- [ ] **Step 5: Build + deploy**
 
 ```bash
 cd D:/projects/tutorials-poc
 npm run build:all
-cd .deploy && mbt build && cf deploy mta_archives/*.mtar -e ../deploy/dev.mtaext -f
+cd .deploy && mbt build && cf deploy mta_archives/*.mtar -e ../deploy/dev.resolved.mtaext -f
 ```
 
-- [ ] **Step 4: Probe the deployed admin shell + homepage**
+Note `-e ../deploy/dev.resolved.mtaext` (NOT `dev.mtaext`) — the resolved file is what `cf deploy` needs.
+
+- [ ] **Step 6: Probe the deployed admin shell + homepage**
 
 ```bash
 curl -s https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/admin-ui/ -o /dev/null -w "admin-ui status=%{http_code}\n"
@@ -961,7 +1011,7 @@ curl -s https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ond
 
 Expected: both return 200 or 302 (XSUAA redirect for admin).
 
-- [ ] **Step 5: Manual smoke per PR body**
+- [ ] **Step 7: Manual smoke per PR body**
 
 Walk Tom through the 7-item manual smoke. Confirm before closing.
 
