@@ -30,7 +30,12 @@ const reduced = useReducedMotion();
 const { handleEnter, handleLeave } = useHoverIntent({
   delayMs: 250,
   reducedMotion: reduced,
-  onEnter: () => { if (!openedViaClick.value) open.value = true; },
+  onEnter: () => {
+    if (!openedViaClick.value) {
+      open.value = true;
+      recompute();  // position before first paint to avoid viewport-edge overflow
+    }
+  },
   onLeave: () => { if (!openedViaClick.value) open.value = false; },
 });
 
@@ -64,7 +69,7 @@ function onKey(e: KeyboardEvent) {
   }
 }
 
-function onDocClick(e: MouseEvent) {
+function onDocClick(e: Event) {
   if (!open.value || !openedViaClick.value) return;
   const target = e.target as Node | null;
   if (anchorEl.value && !anchorEl.value.contains(target)) {
@@ -86,6 +91,11 @@ onBeforeUnmount(() => {
 <template>
   <div ref="anchorEl" class="hp-popover-anchor">
     <slot />
+    <!--
+      Hover handler is on the ⓘ button (not the anchor div) so hovering
+      the link slot content stays bare — only explicit ⓘ-hover triggers
+      the popover. Discoverability is the ⓘ icon itself.
+    -->
     <button
       v-if="hasContent"
       ref="iconBtnEl"
@@ -107,7 +117,7 @@ onBeforeUnmount(() => {
       v-if="open && hasContent"
       ref="popoverEl"
       class="hp-popover"
-      :role="openedViaClick ? 'dialog' : 'tooltip'"
+      role="tooltip"
       :data-placement="placement"
       :data-alignment="alignment"
       tabindex="-1"

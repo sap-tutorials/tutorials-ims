@@ -37,7 +37,7 @@ describe('LinkExplainerPopover', () => {
       slots: { default: `<a href="${BASE_PROPS.href}">SAP Joule</a>` } });
     await wrapper.find('[aria-label*="More about"]').trigger('click');
     await nextTick();
-    const popover = wrapper.find('[role="dialog"]');
+    const popover = wrapper.find('[role="tooltip"]');
     expect(popover.exists()).toBe(true);
     const html = popover.html();
     // Order: tagline first, then whyItMatters, then description
@@ -53,17 +53,17 @@ describe('LinkExplainerPopover', () => {
     const wrapper = mount(LinkExplainerPopover, { props: BASE_PROPS,
       slots: { default: `<a href="${BASE_PROPS.href}">SAP Joule</a>` } });
     await wrapper.find('[aria-label*="More about"]').trigger('click');
-    expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
-    await wrapper.find('[role="dialog"]').trigger('keydown', { key: 'Escape' });
+    expect(wrapper.find('[role="tooltip"]').exists()).toBe(true);
+    await wrapper.find('[role="tooltip"]').trigger('keydown', { key: 'Escape' });
     await nextTick();
-    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+    expect(wrapper.find('[role="tooltip"]').exists()).toBe(false);
   });
 
   it('hover-intent opens popover after 250 ms', async () => {
     const wrapper = mount(LinkExplainerPopover, { props: BASE_PROPS,
       slots: { default: `<a href="${BASE_PROPS.href}">SAP Joule</a>` } });
     await wrapper.find('[aria-label*="More about"]').trigger('pointerenter');
-    expect(wrapper.find('[role="tooltip"], [role="dialog"]').exists()).toBe(false);
+    expect(wrapper.find('[role="tooltip"]').exists()).toBe(false);
     vi.advanceTimersByTime(250);
     await nextTick();
     expect(wrapper.find('[role="tooltip"]').exists()).toBe(true);
@@ -76,9 +76,25 @@ describe('LinkExplainerPopover', () => {
     });
     await wrapper.find('[aria-label*="More about"]').trigger('click');
     await nextTick();
-    const popover = wrapper.find('[role="dialog"]');
+    const popover = wrapper.find('[role="tooltip"]');
     expect(popover.text()).toContain(BASE_PROPS.tagline);
     expect(popover.text()).not.toContain(BASE_PROPS.whyItMatters);
     expect(popover.text()).not.toContain(BASE_PROPS.description);
+  });
+
+  it('outside click closes click-opened popover', async () => {
+    const wrapper = mount(LinkExplainerPopover, {
+      props: BASE_PROPS,
+      slots: { default: `<a href="${BASE_PROPS.href}">SAP Joule</a>` },
+      attachTo: document.body,
+    });
+    await wrapper.find('[aria-label*="More about"]').trigger('click');
+    await nextTick();
+    expect(wrapper.find('[role="tooltip"]').exists()).toBe(true);
+    // Simulate a click outside the popover anchor
+    document.body.click();
+    await nextTick();
+    expect(wrapper.find('[role="tooltip"]').exists()).toBe(false);
+    wrapper.unmount();
   });
 });
