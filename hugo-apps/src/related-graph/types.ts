@@ -7,8 +7,8 @@
 
 // Phase 4 (#447): widened from the original tutorial-OP sidebar set to
 // include 'learning-journey'. Phase 4.2 (#447 §9) adds 'blog-post'.
-// Sub-phases 4.3-4.6 will add more values ('news', 'video', 'sample',
-// 'discovery', 'resource').
+// Phase 4.3 (#447 §8) adds 'discovery-mission'. Sub-phases 4.4-4.6 will
+// add more values ('news', 'video', 'sample', 'resource').
 export type NodeType =
   | 'tutorial'
   | 'concept'
@@ -19,6 +19,7 @@ export type NodeType =
   | 'tag'
   | 'learning-journey'
   | 'blog-post'
+  | 'discovery-mission'
 
 export type ConceptRef = {
   slug: string
@@ -46,10 +47,11 @@ export type TutorialInfo = {
 // Phase 4 chassis (#447): wire shape for the cross-corpus "Other
 // resources" sidebar rail. PR-1 wired the empty contract; PR-2 (learning
 // journeys) populated it. Phase 4.2 (#447 §9) widens the discriminant to
-// include 'blog-post' rows; future sub-phases 4.3-4.6 add more types.
+// include 'blog-post' rows; Phase 4.3 (#447 §8) adds 'discovery-mission'.
+// Future sub-phases 4.4-4.6 add more types.
 // Mirrors the OtherResource type in srv/knowledge-graph-service.cds.
 export type OtherResource = {
-  type: 'learning-journey' | 'blog-post'   // widens per sub-phase
+  type: 'learning-journey' | 'blog-post' | 'discovery-mission'   // widens per sub-phase
   slug: string
   title: string
   url: string
@@ -59,6 +61,9 @@ export type OtherResource = {
   // blog-post only (Phase 4.2):
   authorName?: string | null
   postedAt?: string | null    // ISO timestamp
+  // discovery-mission only (Phase 4.3):
+  effortLevel?: number | null
+  categoryLabel?: string | null
   overlapCount?: number | null
 }
 

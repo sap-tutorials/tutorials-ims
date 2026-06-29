@@ -145,6 +145,10 @@
             <template v-if="r.authorName"> · by {{ r.authorName }}</template>
             <template v-if="r.postedAt"> · {{ formatDate(r.postedAt) }}</template>
           </span>
+          <span v-else-if="r.type === 'discovery-mission' && (r.effortLevel || r.categoryLabel)" class="kg-sidebar-meta">
+            <template v-if="r.effortLevel"> · effort {{ r.effortLevel }}</template>
+            <template v-if="r.categoryLabel"> · {{ r.categoryLabel }}</template>
+          </span>
         </li>
       </ul>
     </section>
@@ -267,6 +271,13 @@ function onOtherResourceClick(r: OtherResource): void {
     emit('kg.blog_post.linked_from_sidebar', {
       tutorialSlug: slug,
       blogSlug: r.slug,
+    })
+  } else if (r.type === 'discovery-mission') {
+    // Phase 4.3 (#447 §8): third branch — same shape modulo the per-type
+    // slug field name.
+    emit('kg.discovery_mission.linked_from_sidebar', {
+      tutorialSlug: slug,
+      missionSlug: r.slug,
     })
   }
   // Future sub-phases branch here for their own telemetry events.
