@@ -1,10 +1,16 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import cds from '@sap/cds';
 import { isSafeForWrites } from './_guard.js';
 
 describe.runIf(isSafeForWrites())('VerbDefinitions — admin CRUD on HANA (#759 PR 1)', () => {
   let db;
   beforeAll(async () => { db = await cds.connect.to('db'); });
+  afterAll(async () => {
+    await db.run(
+      DELETE.from('com.sap.developers.ims.VerbDefinitions')
+        .where("label like '__TEST__%'")
+    );
+  });
 
   it('AdminService.VerbDefinitions returns 6 rows after auto-init', async () => {
     const admin = await cds.connect.to('AdminService');
