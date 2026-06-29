@@ -1,6 +1,6 @@
 # Issue #739 — Curate Homepage Featured Missions via existing `FeaturedTasks`
 
-- **Status:** Approved (2026-06-29), pending spec-reviewer pass
+- **Status:** Approved (2026-06-29), spec-reviewer pass complete
 - **Issue:** [#739](https://github.com/sap-tutorials/tutorials-ims/issues/739)
 - **Predecessor PR:** [#738](https://github.com/sap-tutorials/tutorials-ims/pull/738) — added the `EVENT_MISSION_RE` regex sieve that this spec promotes from "primary picker" to "fallback only."
 - **Related issue:** [#734](https://github.com/sap-tutorials/tutorials-ims/issues/734) — same architectural family (admin curation infrastructure exists but the surfacing/wiring is incomplete).
@@ -119,6 +119,17 @@ Admin → /admin-ui/#operations  (now under Content group, was System)
             └─ Homepage shows curated set on next page load
 ```
 
+### 1.5 Two `FEATURED_*` constants exist; reconcile in implementation
+
+The codebase has two limits with similar names:
+
+- `srv/lib/build-catalog.js:5` — `const FEATURED_LIMIT = 6` (server-side cap applied to the `SELECT ... LIMIT 6` query against `FeaturedTasks`).
+- `scripts/fetch-tutorials.ts:1262` — `const FEATURED_MAX = 10` (client-side cap applied by the picker's `.slice(0, FEATURED_MAX)`).
+
+Today's homepage `hp-teaser` renders whatever `browse.featured` contains. Because `FEATURED_LIMIT < FEATURED_MAX`, the picker can never receive more than 6 curated mission slugs — the `.slice(0, FEATURED_MAX)` line is unreachable on the curated branch.
+
+**Implementation guidance:** keep both constants as-is. The unreachable slice is a cheap safety net (server-side cap could change without breaking the client), and the picker unit test mocks the helper input directly so it can still cover the "15 missions → returns 10" case with synthetic inputs even though that exact shape can't reach the helper at runtime today. Do not reconcile the constants to one value — they have different purposes (server-side query cap vs. client-side defensive trim).
+
 ## 2. Components
 
 ### 2.1 Modified
@@ -133,7 +144,7 @@ Admin → /admin-ui/#operations  (now under Content group, was System)
 
 | File | Purpose |
 |---|---|
-| `test/unit/scripts/featured-mission-picker.test.ts` | Six-case unit test for the extracted picker (see §5.1). Mocks `BrowseCardItem[]` and `BrowseFeaturedEntry[]` inputs; asserts the returned `string[]` against expectations. |
+| `test/unit/scripts/featured-mission-picker.test.ts` | Seven-case unit test for the extracted picker (see §5.1). Mocks `BrowseCardItem[]` and `BrowseFeaturedEntry[]` inputs; asserts the returned `string[]` against expectations. |
 
 ### 2.3 NOT modified
 
