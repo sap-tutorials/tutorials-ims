@@ -22,8 +22,8 @@
         { "key": "advocates", "title": "Advocates" },
         { "key": "alerts", "title": "Alerts" },
         { "key": "operations", "title": "Featured Tasks" },
-        { "key": "verb-definitions",  "title": "Verb definitions" },
-        { "key": "shelf-definitions", "title": "Shelf definitions" }
+        { "key": "verbDefinitions",  "title": "Verb definitions" },
+        { "key": "shelfDefinitions", "title": "Shelf definitions" }
       ]
     },
     {

@@ -1,6 +1,6 @@
 specVersion: "3.0"
 metadata:
-  name: sap.tutorials.admin.verb-definitions
+  name: sap.tutorials.admin.verbDefinitions
 type: application
 framework:
   name: SAPUI5

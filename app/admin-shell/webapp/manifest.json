@@ -68,8 +68,8 @@
       "sap.tutorials.admin.display": "./components/display",
       "sap.tutorials.admin.tenant": "./components/tenant",
       "sap.tutorials.admin.homepage": "./components/homepage",
-      "sap.tutorials.admin.shelf-definitions": "./components/shelf-definitions",
-      "sap.tutorials.admin.verb-definitions": "./components/verb-definitions"
+      "sap.tutorials.admin.shelfDefinitions": "./components/shelf-definitions",
+      "sap.tutorials.admin.verbDefinitions": "./components/verb-definitions"
     },
     "models": {
       "admin": {
@@ -259,13 +259,13 @@
         "lazy": true
       },
       "shelfDefinitionsComponent": {
-        "name": "sap.tutorials.admin.shelf-definitions",
+        "name": "sap.tutorials.admin.shelfDefinitions",
         "settings": {},
         "componentData": {},
         "lazy": true
       },
       "verbDefinitionsComponent": {
-        "name": "sap.tutorials.admin.verb-definitions",
+        "name": "sap.tutorials.admin.verbDefinitions",
         "settings": {},
         "componentData": {},
         "lazy": true
@@ -329,8 +329,8 @@
         { "name": "homepageShelves", "pattern": "homepage", "target": [{"name": "homepageTarget", "prefix": "hp"}] },
         { "name": "homepageRedirects", "pattern": "homepageRedirects", "target": [{"name": "homepageTarget", "prefix": "hp"}] },
         { "name": "homepageConfig", "pattern": "homepageConfig", "target": [{"name": "homepageTarget", "prefix": "hp"}] },
-        { "name": "verb-definitions",  "pattern": "verb-definitions",  "target": [{"name": "verbDefinitionsTarget",  "prefix": "vd"}] },
-        { "name": "shelf-definitions", "pattern": "shelf-definitions", "target": [{"name": "shelfDefinitionsTarget", "prefix": "sd"}] },
+        { "name": "verbDefinitions",  "pattern": "verb-definitions",  "target": [{"name": "verbDefinitionsTarget",  "prefix": "vd"}] },
+        { "name": "shelfDefinitions", "pattern": "shelf-definitions", "target": [{"name": "shelfDefinitionsTarget", "prefix": "sd"}] },
         { "name": "board", "pattern": "board", "target": "boardTarget" },
         { "name": "dashboard", "pattern": "", "target": "dashboardTarget" },
         { "name": "statistics", "pattern": "statistics", "target": "statisticsTarget" },

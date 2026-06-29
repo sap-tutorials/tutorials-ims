@@ -127,8 +127,8 @@ sap.ui.define([
       const row = ctx.getObject();
       const isReviewed = row.authoringStatus === 'REVIEWED';
       const msg = isReviewed
-        ? `This row is REVIEWED. Regenerating will OVERWRITE it. Cost: ${fmtUsd(EST_COST_PER_ROW_CENTS)}. Continue?`
-        : `Regenerate this row with AI? Cost: ${fmtUsd(EST_COST_PER_ROW_CENTS)}.`;
+        ? `This row is REVIEWED. Regenerating will OVERWRITE it. Cost: ${fmtUsd(Math.ceil(EST_COST_PER_ROW_CENTS))}. Continue?`
+        : `Regenerate this row with AI? Cost: ${fmtUsd(Math.ceil(EST_COST_PER_ROW_CENTS))}.`;
       MessageBox.warning(msg, {
         title: isReviewed ? "Regenerate — overwrites REVIEWED" : "Regenerate",
         actions: [MessageBox.Action.OK, MessageBox.Action.CANCEL],
