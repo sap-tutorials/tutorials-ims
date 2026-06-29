@@ -246,17 +246,32 @@ sed -n '845,890p' srv/server.js
 
 Expected: see the existing GET `/auth/user` handler. It returns `{authenticated, id, email, givenName, familyName, isAdmin, isAuthor, khorosId, khorosLogin, khorosAvatarUrl}`.
 
-- [ ] **Step 2: Add `userId` to the response**
+- [ ] **Step 2: Verify `req.user.id === Users.uuid` for the current handler, then add `userId` to the response**
 
 `req.user.id` already === `Users.uuid` (the established invariant per spec §4.4). Today's handler returns `id: user.id` — this IS the UUID. So we just need to expose it under a clearer key.
 
-Locate the `res.json({...})` call (around line 877-887) and add `userId: user.id`:
+Quick verification before editing — confirm the running srv really populates `user.id` from the XSUAA `sub` (= `Users.uuid`) on DEV:
+
+```bash
+# Hit /auth/user via the deployed approuter as Tom; compare returned `id` against Tom's Users.uuid:
+curl -s -b "$YOUR_AUTH_COOKIE" https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/auth/user | node -e "
+let s = ''; process.stdin.on('data', d => s += d); process.stdin.on('end', () => {
+  const r = JSON.parse(s);
+  console.log('auth/user.id =', r.id);
+});
+"
+# Expected: a UUID matching Users.uuid for Tom (b7559332-... per the live probe).
+# If it doesn't match (e.g. it returns Users.ID instead), STOP — the spec §4.4 invariant
+# is wrong and §4.4 + this task both need rework.
+```
+
+If verification passes, locate the `res.json({...})` call (around line 877-887) and add `userId: user.id`:
 
 ```js
     res.json({
       authenticated: true,
       id: user.id,
-      userId: user.id,  // #777: explicit alias of id, kept stable as the Users.uuid value (req.user.id === Users.uuid established invariant)
+      userId: user.id,  // #777: explicit alias of id, kept stable as the Users.uuid value (req.user.id === Users.uuid established invariant — verified per spec §4.4)
       email: user.attr?.email || '',
       givenName: user.attr?.given_name || user.attr?.givenName || '',
       familyName: user.attr?.family_name || user.attr?.familyName || '',
@@ -268,7 +283,7 @@ Locate the `res.json({...})` call (around line 877-887) and add `userId: user.id
     });
 ```
 
-Note: we're NOT doing a DB lookup. The existing `id` field already holds the right value; we just give it a more discoverable name (`userId`) that the controller can use without confusing it with `email`.
+Note: we're NOT doing a DB lookup (spec §2.3 originally prescribed one). The existing `id` field already holds the right value when the invariant holds; we just give it a more discoverable name (`userId`) that the controller can use without confusing it with `email`. If verification above failed, fall back to the spec's prescribed `SELECT.one.from(Users).where({ email }).columns('uuid')` pattern instead.
 
 - [ ] **Step 3: Commit**
 
@@ -511,6 +526,14 @@ Insert after `_loadUserEmail` (so it sits near related auth-loading code):
     // MyTutorialsView (4-source UNION). Returns a Promise resolving to
     // an array of tutorial_ID strings. Falls back to [] on any error
     // so the admin tile degrades gracefully (no toggle works, no crash).
+    //
+    // $top=1000 cap: practical ceiling well above the expected per-user
+    // count. Tom on DEV has ~77; the most prolific real-world author is
+    // unlikely to exceed a few hundred. If anyone ever does, the filter
+    // truncates silently — the toggle still works, just shows the top 1000.
+    // For thousands-of-tutorials users this approach hits OData URL length
+    // limits before $top does; the right fix at that scale is a server-side
+    // bound endpoint (e.g. /admin/MyTutorialIds), out of scope here.
     _fetchMyTutorialIds: function () {
       if (!this._sUserId) return Promise.resolve([]);
       // AuthorService exposes MyTutorials; use it directly. Other paths
