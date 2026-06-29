@@ -588,6 +588,10 @@ service AdminService {
   action generateShelfExplainers      (ids : array of String, mode : String) returns ExplainerActionResult;
   action generateShelfEntryExplainers (ids : array of String, mode : String) returns ExplainerActionResult;
 
+  action markVerbExplainerReviewed       (id : String) returns ExplainerActionResult;
+  action markShelfExplainerReviewed      (id : String) returns ExplainerActionResult;
+  action markShelfEntryExplainerReviewed (id : String) returns ExplainerActionResult;
+
   // PR 6 — Pilot enablement. Read-only support surface; admins read all rows
   // (no per-row filter — inherits Admin gate from the service level). UI annotations
   // live in app/admin-annotations.cds (Task 8). Edit-on-behalf is out of scope for v1.
