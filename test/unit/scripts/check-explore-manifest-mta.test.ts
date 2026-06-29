@@ -1,11 +1,19 @@
 // test/unit/scripts/check-explore-manifest-mta.test.ts
 //
-// Both mta.yaml files must emit srv/lib/explore-bundle-manifest.json into
-// the gen/srv tree BEFORE mbt packs the srv module. Without this, the
-// deployed srv pod has no manifest and /explore's HTML emits the dev
-// sentinel (main-dev.js → 404).
+// Both mta.yaml files must emit explore-bundle-manifest.json next to
+// the srv module's lib/ tree (gen/srv/srv/lib/, NOT gen/srv/lib/) BEFORE
+// mbt packs the srv module. Without this, the deployed srv pod has no
+// manifest and /explore's HTML emits the dev sentinel
+// (main-dev.js → 404).
 //
-// CRITICAL: the emission MUST live in the global `before-all` block,
+// Path note: `cds build --production` stages the srv module into
+// gen/srv/srv/ (yes, the inner `srv/` is intentional — that's where the
+// runtime srv/lib/* lives in the deployed container). Writing to
+// gen/srv/lib/ leaves the manifest OUTSIDE the packaged module and the
+// MTAR slice ships without it. Earlier iterations of this test asserted
+// the broken path and silently approved the bug.
+//
+// CRITICAL: the emission MUST also live in the global `before-all` block,
 // not in a module's `build-parameters.commands`. mbt packs modules in
 // declaration order; the srv module sits before the approuter module
 // in .deploy/mta.yaml, so an approuter-module-scoped command runs AFTER
@@ -31,20 +39,33 @@ function findBeforeAllCommands(mta: any): string[] {
   return beforeAll.flatMap((b: any) => Array.isArray(b?.commands) ? b.commands : [])
 }
 
-const MANIFEST_RE = /tsx (?:\.\.\/)?scripts\/build-explore-manifest\.ts.+gen\/srv\/lib\/explore-bundle-manifest\.json/
+// Path note in regex: gen/srv/srv/lib/, NOT gen/srv/lib/. The inner srv/
+// is what makes the manifest land inside the packaged srv module so the
+// deployed container can read it at /home/vcap/app/srv/lib/.
+const MANIFEST_RE = /tsx (?:\.\.\/)?scripts\/build-explore-manifest\.ts.+gen\/srv\/srv\/lib\/explore-bundle-manifest\.json/
 
 describe('explore-bundle-manifest.json is emitted in MTA global before-all', () => {
-  it('.deploy/mta.yaml emits the manifest in before-all (not module commands)', () => {
+  it('.deploy/mta.yaml emits the manifest in before-all (not module commands), into gen/srv/srv/lib/', () => {
     const mta = loadMta(DEPLOY_MTA)
     const cmds = findBeforeAllCommands(mta)
     const hit = cmds.find((c: string) => MANIFEST_RE.test(c))
-    expect(hit, 'manifest emission line in .deploy/mta.yaml before-all').toBeTruthy()
+    expect(hit, 'manifest emission line in .deploy/mta.yaml before-all targeting gen/srv/srv/lib/').toBeTruthy()
   })
 
-  it('mta.yaml emits the manifest in before-all (not module commands)', () => {
+  it('mta.yaml emits the manifest in before-all (not module commands), into gen/srv/srv/lib/', () => {
     const mta = loadMta(LOCAL_MTA)
     const cmds = findBeforeAllCommands(mta)
     const hit = cmds.find((c: string) => MANIFEST_RE.test(c))
-    expect(hit, 'manifest emission line in mta.yaml before-all').toBeTruthy()
+    expect(hit, 'manifest emission line in mta.yaml before-all targeting gen/srv/srv/lib/').toBeTruthy()
+  })
+
+  it('rejects the legacy gen/srv/lib/ path (missing inner srv/, ships outside the packaged module)', () => {
+    const BAD_PATH_RE = /tsx (?:\.\.\/)?scripts\/build-explore-manifest\.ts.+gen\/srv\/lib\/explore-bundle-manifest\.json/
+    for (const [label, p] of [['.deploy/mta.yaml', DEPLOY_MTA], ['mta.yaml', LOCAL_MTA]] as const) {
+      const mta = loadMta(p)
+      const cmds = findBeforeAllCommands(mta)
+      const bad = cmds.find((c: string) => BAD_PATH_RE.test(c))
+      expect(bad, `${label} must not target gen/srv/lib/ (missing inner srv/)`).toBeFalsy()
+    }
   })
 })

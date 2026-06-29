@@ -22,16 +22,25 @@ build-parameters:
         - bash -c "cd .. && node -e 'for (const p of [\"gen/db/src/gen/.hdiconfig\",\"gen/db-qa/src/gen/.hdiconfig\"]) { const fs=require(\"fs\"); const d=JSON.parse(fs.readFileSync(p,\"utf8\")); d.file_suffixes=d.file_suffixes||{}; d.file_suffixes.hdbprocedure={plugin_name:\"com.sap.hana.di.procedure\"}; fs.writeFileSync(p, JSON.stringify(d,null,2)+\"\\n\"); }'"
         - bash -c "rm -f ../gen/db-qa/src/gen/sap.changelog.*.hdbindex"
         # Build app/explore + emit the bundle manifest into the srv module's
-        # source tree (gen/srv/lib/). The deployed srv pod reads this at
-        # request time (srv/lib/explore-route.js) to inject hashed bundle
-        # filenames into /explore's HTML. Approuter and srv live in separate
-        # CF containers; the runtime can't probe approuter's filesystem, so
-        # the manifest must ship inside the srv pod. MUST run in global
-        # before-all (not the approuter module's commands) because mbt packs
-        # the srv module before the approuter module's commands fire.
+        # staged source tree (gen/srv/srv/lib/ — note the inner srv/ where
+        # `cds build --production` mirrors srv/lib/ so it ends up at
+        # /home/vcap/app/srv/lib/ in the deployed container). The deployed
+        # srv pod reads this at request time (srv/lib/explore-route.js) to
+        # inject hashed bundle filenames into /explore's HTML. Approuter and
+        # srv live in separate CF containers; the runtime can't probe
+        # approuter's filesystem, so the manifest must ship inside the srv
+        # pod. MUST run in global before-all (not the approuter module's
+        # commands) because mbt packs the srv module before the approuter
+        # module's commands fire.
+        #
+        # Writing to gen/srv/lib/ (missing the inner srv/) — the original
+        # path — left the file outside the packaged srv module and the
+        # deploy shipped without it, causing the route to fall back to its
+        # DEV sentinel ({hash:'dev',css:'index.css'}) and the browser to
+        # 404 on /explore-ui/main-dev.js.
         - bash -c "cd .. && npm --prefix app/explore install --no-audit --no-fund"
         - bash -c "cd .. && npm --prefix app/explore run build"
-        - bash -c "cd .. && npx tsx scripts/build-explore-manifest.ts app/explore/dist gen/srv/lib/explore-bundle-manifest.json"
+        - bash -c "cd .. && npx tsx scripts/build-explore-manifest.ts app/explore/dist gen/srv/srv/lib/explore-bundle-manifest.json"
         - cp ../xs-security.json .
 
 modules:

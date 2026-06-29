@@ -69,10 +69,17 @@ build-parameters:
         # read at request time by srv/lib/explore-route.js to inject the
         # hashed JS/CSS filenames into /explore's HTML. Approuter and srv
         # live in separate CF containers, so the manifest must ship inside
-        # the srv pod.
+        # the srv pod — specifically next to the route module at
+        # gen/srv/srv/lib/ (where `cds build --production` mirrors srv/lib/
+        # so it lands at /home/vcap/app/srv/lib/ in the deployed container).
+        # Writing to gen/srv/lib/ (missing the inner srv/) leaves the file
+        # outside the packaged srv module and the deploy ships without it,
+        # which manifests as the route falling back to its DEV sentinel
+        # ({hash:'dev',css:'index.css'}) and the browser 404'ing on
+        # /explore-ui/main-dev.js.
         - npm --prefix app/explore install
         - npm --prefix app/explore run build
-        - npx tsx scripts/build-explore-manifest.ts app/explore/dist gen/srv/lib/explore-bundle-manifest.json
+        - npx tsx scripts/build-explore-manifest.ts app/explore/dist gen/srv/srv/lib/explore-bundle-manifest.json
         - mkdir -p approuter/static/explore-ui
         - cp -r app/explore/dist/. approuter/static/explore-ui/
         # Approuter and srv are separate CF apps in separate containers — the
