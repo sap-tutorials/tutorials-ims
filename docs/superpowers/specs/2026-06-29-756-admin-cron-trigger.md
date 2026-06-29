@@ -388,7 +388,7 @@ async function emitJobAudit({ jobName, user, outcome, durationMs = null, started
 }
 ```
 
-**Note on the seedApiDocs precedent:** Phase 4.5's `seedApiDocs` handler at `srv/admin-service.js:1765` passes `'SecurityEvent'` as the first arg with a nested `action: 'kg.api-docs.seed'` in the data — that pattern accidentally results in `data.action = 'kg.api-docs.seed'` (from the spread) overriding `data.action = 'SecurityEvent'` (from the first arg), which works by luck but is confusing. **The correct pattern is the one shown above** (action as first arg, no `action` key in data). Filed as #768 to fix retroactively. The implementer should NOT lift the seedApiDocs precedent literally.
+**Note on the seedApiDocs precedent:** Phase 4.5's `seedApiDocs` handler at `srv/admin-service.js:1765` passes `'SecurityEvent'` as the first arg with a nested `action: 'kg.api-docs.seed'` in the data — that pattern accidentally results in `data.action = 'kg.api-docs.seed'` (from the spread) overriding `data.action = 'SecurityEvent'` (from the first arg), which works by luck but is confusing. **The correct pattern is the one shown above** (action as first arg, no `action` key in data). Filed as #769 to fix retroactively. The implementer should NOT lift the seedApiDocs precedent literally.
 
 `auditEvent` is the closure produced by `createAuditEmitter(auditLog, LOG)` already wired up in `srv/admin-service.js`'s service init (verified at line 1582). If the audit-log binding is unavailable (some test environments), the closure logs a warning and returns. No new audit-event infrastructure.
 
@@ -652,7 +652,7 @@ The spec-document-reviewer (round 1) found 4 critical + 6 important issues. All 
 
 **Critical:**
 1. **Wrong pipeline-log function names** (was: `startPipelineLog` / `endPipelineLog`) → corrected to `logPipelineStart` / `logPipelineEnd` per actual `srv/lib/pipeline-log.js` exports. §4.3 example now mirrors the existing `runWithLock` body verbatim.
-2. **`emitJobAudit` shape note added** (§4.8) — explicit JSDoc-correct call pattern + footnote that the existing `seedApiDocs` precedent has a subtle bug (passing `'SecurityEvent'` as action with nested `action:` in data); filed as #768 to fix retroactively. Implementer should NOT lift seedApiDocs literally.
+2. **`emitJobAudit` shape note added** (§4.8) — explicit JSDoc-correct call pattern + footnote that the existing `seedApiDocs` precedent has a subtle bug (passing `'SecurityEvent'` as action with nested `action:` in data); filed as #769 to fix retroactively. Implementer should NOT lift seedApiDocs literally.
 3. **`fetch-api-docs` inline `recordJobLastRun` removal** (§4.3.1) — explicit callout that the chassis retrofit makes the inline call dead code that would double-write. Implementer must delete it.
 4. **Lazy-import cron pattern** (§4.2) — separated into 3 patterns (eager / lazy / fn-with-logId-arg) since 3 of 24 crons use dynamic import for boot perf. Avoids the implementer accidentally refactoring them to eager.
 
