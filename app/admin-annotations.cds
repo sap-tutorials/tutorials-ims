@@ -2956,3 +2956,85 @@ annotate AdminService.HomepageConfig with @(
     { Value : communityLaneEnabled,    Label : 'Show community lane' }
   ]}
 );
+
+// (#759 PR 3b) Verb Definitions admin app annotations.
+// CRUD locked down: cardinality is fixed at 6 (one per HomepageVerb
+// enum value). Admins edit content fields (label, iconName, sortOrder,
+// tagline, whyItMatters) but cannot Create or Delete rows. The
+// verbKey + authoringStatus fields are read-only.
+annotate AdminService.VerbDefinitions with @(
+  Capabilities.InsertRestrictions.Insertable : false,
+  Capabilities.DeleteRestrictions.Deletable  : false,
+  Capabilities.UpdateRestrictions.Updatable  : true,
+  UI.HeaderInfo : {
+    TypeName: 'Verb',
+    TypeNamePlural: 'Verb definitions',
+    Title: { Value: label }
+  },
+  UI.LineItem : [
+    { Value: verbKey,         Label: 'Verb key' },
+    { Value: label,           Label: 'Label' },
+    { Value: iconName,        Label: 'Icon' },
+    { Value: sortOrder,       Label: 'Sort order' },
+    { Value: authoringStatus, Label: 'Status', Criticality: authoringStatus }
+  ],
+  UI.Facets : [
+    { $Type: 'UI.ReferenceFacet', Label: 'Identity',  Target: '@UI.FieldGroup#Identity' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Explainer', Target: '@UI.FieldGroup#Explainer' }
+  ],
+  UI.FieldGroup #Identity : { Data : [
+    { Value: verbKey,    Label: 'Verb key' },
+    { Value: label,      Label: 'Label' },
+    { Value: iconName,   Label: 'Icon' },
+    { Value: sortOrder,  Label: 'Sort order' }
+  ]},
+  UI.FieldGroup #Explainer : { Data : [
+    { Value: tagline,         Label: 'Tagline' },
+    { Value: whyItMatters,    Label: 'Why it matters' },
+    { Value: authoringStatus, Label: 'Authoring status' }
+  ]}
+);
+
+annotate AdminService.VerbDefinitions {
+  verbKey         @Common.FieldControl: #ReadOnly @Common.Label: 'Verb key';
+  authoringStatus @Common.FieldControl: #ReadOnly @Common.Label: 'Authoring status';
+};
+
+// (#759 PR 3b) Shelf Definitions admin app annotations.
+// CRUD locked down: cardinality is fixed at 4 (one per HomepageShelf
+// enum value). Same conventions as VerbDefinitions above.
+annotate AdminService.ShelfDefinitions with @(
+  Capabilities.InsertRestrictions.Insertable : false,
+  Capabilities.DeleteRestrictions.Deletable  : false,
+  Capabilities.UpdateRestrictions.Updatable  : true,
+  UI.HeaderInfo : {
+    TypeName: 'Shelf category',
+    TypeNamePlural: 'Shelf definitions',
+    Title: { Value: label }
+  },
+  UI.LineItem : [
+    { Value: shelfKey,        Label: 'Shelf key' },
+    { Value: label,           Label: 'Label' },
+    { Value: sortOrder,       Label: 'Sort order' },
+    { Value: authoringStatus, Label: 'Status', Criticality: authoringStatus }
+  ],
+  UI.Facets : [
+    { $Type: 'UI.ReferenceFacet', Label: 'Identity',  Target: '@UI.FieldGroup#Identity' },
+    { $Type: 'UI.ReferenceFacet', Label: 'Explainer', Target: '@UI.FieldGroup#Explainer' }
+  ],
+  UI.FieldGroup #Identity : { Data : [
+    { Value: shelfKey,   Label: 'Shelf key' },
+    { Value: label,      Label: 'Label' },
+    { Value: sortOrder,  Label: 'Sort order' }
+  ]},
+  UI.FieldGroup #Explainer : { Data : [
+    { Value: tagline,         Label: 'Tagline' },
+    { Value: whyItMatters,    Label: 'Why it matters' },
+    { Value: authoringStatus, Label: 'Authoring status' }
+  ]}
+);
+
+annotate AdminService.ShelfDefinitions {
+  shelfKey        @Common.FieldControl: #ReadOnly @Common.Label: 'Shelf key';
+  authoringStatus @Common.FieldControl: #ReadOnly @Common.Label: 'Authoring status';
+};
