@@ -12,6 +12,7 @@
 // docs/developers/operations/migration-from-ims.md.
 
 using { com.sap.developers.ims as ims } from './schema';
+using { com.sap.developers.ims.external as ext } from './external-content';
 using from './knowledge-graph';
 
 // =========================================================================
@@ -40,6 +41,13 @@ annotate ims.Tutorials with @changelog;
 // (see issue #658 — singletons produce no-delta phantom rows).
 annotate ims.HomepageShelves  with @changelog;
 annotate ims.LegacyRedirects  with @changelog;
+
+// Phase 4.5 (#746): track admin edits to api.sap.com api-doc rows
+// (description / category / apiType). Cron upserts bump lastSeenAt and
+// fire the same trigger; per the @changelog noise-cleanup posture, the
+// projection is narrowed to the fields admins actually edit so a cron
+// upsert with unchanged title/category/apiType doesn't produce noise.
+annotate ext.ApiDocs with @changelog: [slug, title, category, apiType];
 
 // =========================================================================
 // Intentionally NOT @changelog-tracked — see issue #658.

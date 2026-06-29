@@ -37,6 +37,33 @@ async function runWithLock(jobName, durationMs, fn) {
 }
 
 /**
+ * Phase 4.5 (#746): record per-cron last-run state for the admin UI tile.
+ * Sibling to runWithLock; called by individual cron bodies after each cycle.
+ * Surfaced via AdminService.JobLastRun on the Cron health admin tile.
+ *
+ * Phase 4.1-4.4 cron retrofit is OUT OF SCOPE — only fetch-api-docs writes
+ * JobLastRun rows in this PR (Phase 4.5 spec §4.6).
+ */
+async function recordJobLastRun(jobName, outcome, errorMessage = null) {
+  try {
+    const { JobLastRun } = cds.entities('com.sap.developers.ims');
+    const now = new Date();
+    const fields = outcome === 'success'
+      ? { lastSuccessAt: now, lastErrorAt: null, lastErrorMessage: null }
+      : { lastErrorAt: now, lastErrorMessage: errorMessage ?? 'unspecified error' };
+
+    const existing = await SELECT.one.from(JobLastRun).columns('jobName').where({ jobName });
+    if (existing) {
+      await UPDATE(JobLastRun).set(fields).where({ jobName });
+    } else {
+      await INSERT.into(JobLastRun).entries({ jobName, ...fields });
+    }
+  } catch (err) {
+    LOG.warn(`recordJobLastRun(${jobName}) failed: ${err.message}`);
+  }
+}
+
+/**
  * Render a job's return value as a single-line summary stored on the
  * PipelineLog row. Numbers become "processed N", objects become a key=value
  * list, strings pass through, and null/undefined falls back to the job name.
@@ -380,6 +407,27 @@ export function registerJobs() {
     await runWithLock('fetch-videos', 30 * 60 * 1000, async () => {
       const { runFetchVideos } = await import('./fetch-videos-job.js');
       return runFetchVideos();
+    });
+  });
+
+  // Monthly at 04:23 on day 1 — Phase 4.5 api.sap.com api-doc extraction (#746).
+  // Off-minute (:23) shared with daily blog cron — they collide only once
+  // every 1st-of-month; the second arrival waits for the lock to release.
+  // Operator must run scripts/seed-api-docs.cjs once first (or click the
+  // admin UI Seed button); the cron refuses to self-bootstrap on an empty
+  // ApiDocs table (MAX-or-abort gate).
+  // 30-min TTL covers a steady-state pass of ~60 packages from the
+  // hand-curated YAML seed. Lazy-import keeps boot fast.
+  cron.schedule('23 4 1 * *', async () => {
+    await runWithLock('fetch-api-docs', 30 * 60 * 1000, async () => {
+      const { runFetchApiDocs } = await import('./fetch-api-docs-job.js');
+      const summary = await runFetchApiDocs();
+      await recordJobLastRun(
+        'fetch-api-docs',
+        summary.errors === 0 ? 'success' : 'error',
+        summary.errors > 0 ? `${summary.errors} errors during cycle` : null,
+      );
+      return summary;
     });
   });
 

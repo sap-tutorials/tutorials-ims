@@ -161,6 +161,18 @@
             <template v-if="r.channelTitle"> · by {{ r.channelTitle }}</template>
             <template v-if="r.publishedAt"> · {{ formatDate(r.publishedAt) }}</template>
           </span>
+          <span v-else-if="r.type === 'api-doc'" class="kg-sidebar-meta">
+            <!--
+              Phase 4.5 (#746 §5): api-doc branch. Row format
+              `title · Official reference · Category` — no thumbnail,
+              no ↗ icon (sidebar visual rhythm). The "· Official
+              reference" lead is unconditional (every api.sap.com row
+              IS an official reference); `category` is optional and
+              prefixed by ` · `. apiType deliberately NOT rendered in
+              the sidebar — the concept page surfaces the apiType
+              badge instead.
+            --> · Official reference<template v-if="r.category"> · {{ r.category }}</template>
+          </span>
         </li>
       </ul>
     </section>
@@ -297,6 +309,14 @@ function onOtherResourceClick(r: OtherResource): void {
     emit('kg.video.linked_from_sidebar', {
       tutorialSlug: slug,
       videoSlug: r.slug,
+    })
+  } else if (r.type === 'api-doc') {
+    // Phase 4.5 (#746 §6): fifth branch — same shape modulo the per-type
+    // slug field name. Telemetry event uses the canonical dotted name
+    // `kg.api-doc.linked_from_sidebar` per spec §6.
+    emit('kg.api-doc.linked_from_sidebar', {
+      tutorialSlug: slug,
+      apiDocSlug: r.slug,
     })
   }
   // Future sub-phases branch here for their own telemetry events.

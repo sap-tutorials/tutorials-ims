@@ -1,0 +1,12 @@
+{
+  "verdict": {
+    "officialReferenceFor": [
+      { "slug": "cap-cqn", "name": "CAP Core Query Notation", "confidence": 0.95 },
+      { "slug": "cap-cds", "name": "CAP CDS Modeling", "confidence": 0.82 },
+      { "slug": "odata-v4", "name": "OData v4", "confidence": 0.71 },
+      { "slug": "low-confidence", "name": "Low Confidence", "confidence": 0.55 },
+      { "slug": "no-name", "confidence": 0.85 }
+    ]
+  },
+  "tokenUsage": { "prompt": 2400, "completion": 280 }
+}

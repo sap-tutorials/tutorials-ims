@@ -200,7 +200,21 @@ service AdminService {
 
   @odata.singleton
   @requires: 'Admin'
-  entity KnowledgeGraphSettings as projection on ims.KnowledgeGraphSettings;
+  entity KnowledgeGraphSettings as projection on ims.KnowledgeGraphSettings actions {
+    // Phase 4.5 (#746): operator-grade api.sap.com seed trigger.
+    // Single source of truth with scripts/seed-api-docs.cjs (both call
+    // srv/lib/seed-api-docs.js's runSeedApiDocs). Dry-run when commit=false.
+    action seedApiDocs(commit: Boolean) returns {
+      planned   : Integer;
+      committed : Integer;
+    };
+  };
+
+  // Phase 4.5 (#746): per-cron last-run health surface for the admin
+  // "Cron health" tile on the Board view. Only fetch-api-docs currently
+  // writes rows here; Phase 4.1-4.4 retrofit is out of scope.
+  @readonly @requires: 'Admin'
+  entity JobLastRun as projection on ims.JobLastRun;
 
   @odata.draft.enabled
   @requires: 'Admin'

@@ -2446,3 +2446,25 @@ html.dark .chroma .nd { color: #e2c5ff; font-weight: bold; }
   vertical-align: middle;
   object-fit: cover;
 }
+
+
+/* Phase 4.5 (#746 §5): concept-page "Official reference documentation"
+   inline link-out icon (↗) + apiType badge. No thumbnail — api-docs
+   don't have them; the ↗ signals "external authority" instead. The
+   sidebar branch in RelatedGraph.vue likewise renders no thumbnail to
+   preserve the existing visual rhythm. */
+.concept-page__section .kg-link-out {
+  display: inline-block;
+  margin-left: 0.25em;
+  font-size: 0.85em;
+  opacity: 0.7;
+}
+
+.concept-page__section .kg-api-type {
+  display: inline-block;
+  padding: 0.1em 0.5em;
+  font-family: var(--sapFontFamily, monospace);
+  font-size: 0.85em;
+  background: var(--sapNeutralBackground, rgba(0, 0, 0, 0.05));
+  border-radius: 3px;
+}

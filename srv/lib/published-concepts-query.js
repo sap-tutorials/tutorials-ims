@@ -32,7 +32,8 @@ export async function buildConceptsPayload(db) {
     cds.entities('com.sap.developers.ims');
   const { LearningJourneyConceptLinks, BlogPosts, BlogPostConceptLinks,
     DiscoveryMissions, DiscoveryMissionConceptLinks,
-    Videos, VideoConceptLinks } =
+    Videos, VideoConceptLinks,
+    ApiDocs, ApiDocConceptLinks } =
     cds.entities('com.sap.developers.ims.external');
   const { PublishedConcepts } = cds.entities('KnowledgeGraphService');
 
@@ -230,6 +231,40 @@ export async function buildConceptsPayload(db) {
     }
   }
 
+  // 5e. Phase 4.5 (#746): api.sap.com api-docs referencing each concept.
+  // Same conceptIds-guard pattern; per-concept 8-row cap; ordered by
+  // apiDoc.category asc, apiDoc.title asc.
+  // CRITICAL: ApiDocs.description is LargeString (NCLOB) and NOT pulled here —
+  // payload only needs slug/title/url/category/apiType (LOB-locator safety,
+  // §10.1).
+  let apiDocsByConcept = {};
+  if (ids.length > 0) {
+    const apiDocLinks = await db.run(
+      SELECT.from(ApiDocConceptLinks)
+        .columns(
+          'concept_ID',
+          'apiDoc.slug as apiDocSlug',
+          'apiDoc.title as title',
+          'apiDoc.url as url',
+          'apiDoc.category as category',
+          'apiDoc.apiType as apiType',
+        )
+        .where({ concept_ID: { in: ids } })
+        .orderBy('apiDoc.category asc', 'apiDoc.title asc')
+        .limit(8 * ids.length)
+    );
+    const groupedApiDocs = groupBy(apiDocLinks, 'concept_ID', r => ({
+      slug: r.apiDocSlug,
+      title: r.title,
+      url: r.url,
+      category: r.category,
+      apiType: r.apiType,
+    }));
+    for (const [conceptId, rows] of Object.entries(groupedApiDocs)) {
+      apiDocsByConcept[conceptId] = rows.slice(0, 8);
+    }
+  }
+
   // 6. Stitch.
   const concepts = published.map(c => ({
     slug: c.slug.toLowerCase(),
@@ -243,6 +278,7 @@ export async function buildConceptsPayload(db) {
     blogPosts: blogPostsByConcept[c.ID] || [],
     discoveryMissions: discoveryMissionsByConcept[c.ID] || [],
     videos: videosByConcept[c.ID] || [],
+    apiDocs: apiDocsByConcept[c.ID] || [],
   }));
 
   return { concepts, generatedAt: new Date().toISOString() };

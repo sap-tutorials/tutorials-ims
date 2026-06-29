@@ -1,0 +1,31 @@
+name: Validate api-docs YAML
+
+on:
+  pull_request:
+    paths:
+      # The YAML seed itself.
+      - 'db/data/api-docs.yaml'
+      # The schema sidecar.
+      - 'db/data/api-docs.schema.yaml'
+      # The validator + its npm wrapper, so a regression in either surfaces
+      # on PRs that touch them.
+      - 'scripts/validate-api-docs-yaml.cjs'
+      - 'package.json'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Validate api-docs.yaml schema
+        # Phase 4.5 (#746). Schema-only check (no DB hit; ~1 sec).
+        # Rejects any PR that edits db/data/api-docs.yaml in a way that
+        # breaks db/data/api-docs.schema.yaml.
+        run: npm run validate-api-docs-yaml

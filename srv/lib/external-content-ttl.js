@@ -11,7 +11,7 @@ export const PER_TYPE_TTL_DAYS = Object.freeze({
   'discovery-mission': 180, // 4.3
   'trial': null,            // 4.3 — date-aware via endDate
   'video': 730,             // 4.4
-  'api-doc': 3650,          // 4.5
+  'api-doc': 1095,          // 4.5 — 3 years; spec §3 Q8 compromise (was speculative 3650)
   'sample': 365,            // 4.6
 });
 
