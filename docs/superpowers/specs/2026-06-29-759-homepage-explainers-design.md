@@ -1,6 +1,6 @@
 # Issue #759 — Explainer popovers for homepage and verb sub-pages
 
-- **Status:** Draft
+- **Status:** Approved (2026-06-29, spec-reviewer pass complete)
 - **Issue:** [#759](https://github.com/sap-tutorials/tutorials-ims/issues/759)
 - **Related spec:** [`2026-06-27-639-developer-homepage-design.md`](./2026-06-27-639-developer-homepage-design.md) (the spec that introduced the homepage redesign these popovers extend)
 - **Related architecture doc:** [`docs/developers/architecture/homepage.md`](../../developers/architecture/homepage.md)
@@ -337,7 +337,10 @@ async function generateExplainer({ kind, row, context }) {
 }
 ```
 
+**Module reuse.** `srv/lib/aicore-service-key.js` already exists (used by #208 AI-authored quizzes and #234 free-text grader); no new module needed. The AI Core SDK is already in `package.json`.
+
 **System prompts** live in `srv/lib/prompts/explainer-{verb,shelf,shelf-entry}.md` and are version-controlled. Each prompt is ≤ 1000 tokens and includes:
+
 - audience cue (newcomer to SAP; assume technical literacy)
 - length guidance (tagline ≤ 140 chars; whyItMatters one-to-three short paragraphs)
 - the row identity fields as variables
@@ -349,7 +352,7 @@ async function generateExplainer({ kind, row, context }) {
 
 ### 4.1 Vue island bundle
 
-```
+```text
 hugo-apps/src/homepage-explainers/
   main.ts                      # registers both web components
   verb-flip-tile.vue           # the flip card
@@ -402,11 +405,13 @@ The slot pattern means Hugo continues to own the SEO-relevant markup (the `<a>` 
 ### 4.3 CSS
 
 New file `hugo-apps/src/homepage-explainers/shared/flip-card.css`:
+
 - `.flip-card`: `perspective: 800px`, `transform-style: preserve-3d`
 - `.flip-card[data-flipped="true"]`: `transform: rotateY(180deg)`
 - `@media (prefers-reduced-motion: reduce) .flip-card { transition: none; }` + JS-side toggling of `display` instead of `transform`
 
 New file `hugo-apps/src/homepage-explainers/shared/popover.css`:
+
 - `.explainer-popover`: 320 px wide, max-height 280 px with internal scroll, SAP Fundamental `--sapShellColor` shadow tokens
 - `.explainer-popover__tagline`: `--sapTitleColor`, font-weight 600
 - `.explainer-popover__description`: `--sapNeutralTextColor`, smaller font
@@ -415,28 +420,33 @@ Theme tokens already provided by the existing `sap_horizon` / `sap_horizon_dark`
 
 ### 4.4 Admin UI
 
-**New apps:**
+#### New apps
+
 - `app/admin/verb-definitions/` — Fiori Elements list-report + object-page; standard `manifest.json` + `Component.js`; minimal annotations in `app/admin-annotations.cds`.
 - `app/admin/shelf-definitions/` — same shape.
 
 Both register as `componentUsages` in `app/admin-shell/webapp/manifest.json` and `Component.js`. New side-nav grouping "Explainers" contains: Verb Definitions, Shelf Definitions, Homepage Shelves (existing app moved under this group).
 
-**Existing app updates:**
+#### Existing app updates
+
 - `app/admin/homepage/` (existing) gains an "Explainer" facet on the `HomepageShelves` object page showing tagline + whyItMatters + authoringStatus + AI action buttons.
 
-**List-report features (all three apps):**
+#### List-report features (all three apps)
+
 - Toolbar: "Generate for blank rows" button (calls `generate*Explainers(mode: 'fill-blanks')` with confirm dialog showing count + cost estimate)
 - Row action: "Regenerate with AI" (calls `generate*Explainers(ids: [row.ID], mode: 'regenerate-selected')`)
 - Multi-select toolbar action: "Regenerate selected" (same action with multiple ids)
 - `authoringStatus` column with criticality colors (red BLANK / amber AI_SEEDED / green REVIEWED)
 - Filter chip presets: "Blank rows", "AI-seeded — needs review", "Reviewed"
 
-**Object-page features:**
+#### Object-page features
+
 - Authoring facet shows current `authoringStatus`
 - "Mark as reviewed" button transitions `AI_SEEDED → REVIEWED` (manual editorial sign-off)
 - Inline edit of `tagline` and `whyItMatters` with character counters (140 / 800)
 
-**CRUD lockdown** (Verb Definitions and Shelf Definitions only):
+#### CRUD lockdown (Verb Definitions and Shelf Definitions only)
+
 - New entry creation hidden in list report
 - Delete action hidden in list and on object page
 - `verbKey` / `shelfKey` rendered read-only on object page
@@ -467,6 +477,7 @@ Per [memory: build:all needs CAP_BASE_URL]: fresh-shell builds require the env v
 ### 5.2 Rebuild classification
 
 `srv/lib/_classify-rebuild-mode.js` gains three case branches:
+
 - `VerbDefinitions` write → `mode: 'catalog-only'`
 - `ShelfDefinitions` write → `mode: 'catalog-only'`
 - `HomepageShelves` write on the new fields → unchanged (`catalog-only`; same as today's writes on this entity)
@@ -475,7 +486,7 @@ Visitor freshness after admin save: ~1 minute (60 s debounce → `rebuild-conten
 
 ### 5.3 mta.yaml changes
 
-`srv-qa` cp-list audit per [memory: srv-qa cp-list Transitive Deps]: `srv/lib/explainer-generator.js` and `srv/lib/prompts/explainer-*.md` must be added to the srv-qa module's `cp` list in `.deploy/mta.yaml`. Audit step is part of the implementation plan.
+`srv-qa` cp-list audit per [memory: srv-qa cp-list Transitive Deps]: `srv/lib/explainer-generator.js` must be added to the srv-qa module's `cp` list in `.deploy/mta.yaml`. The prompt files under `srv/lib/prompts/explainer-*.md` are **data files, not JS modules** — the transitive-import walker that the cp-list audit normally uses will not find them via `import` statements. They must be added to the cp list **manually**. Audit step is part of the implementation plan and explicitly covers both the JS and the `.md` data files.
 
 ### 5.4 Rollback
 
@@ -547,7 +558,8 @@ No PII. No user identifier — these are anonymous interaction counters.
 
 The work splits into five PRs, each independently shippable:
 
-**PR 1 — Schema and build feeds (foundation)**
+### PR 1 — Schema and build feeds (foundation)
+
 - Add `AuthoringStatus` type, `VerbDefinitions` and `ShelfDefinitions` entities, three new fields on `HomepageShelves` in `db/homepage.cds`
 - Add seed CSVs with labels filled, content blank
 - Add `/build/verb-definitions` and `/build/shelf-definitions` routes; extend `/build/homepage-shelves` payload
@@ -555,7 +567,8 @@ The work splits into five PRs, each independently shippable:
 - Hugo templates still hard-coded — no visitor-observable change
 - Tests: unit (build-feeds), hybrid (CRUD for both new entities, new-fields on shelves), smoke (build-feeds)
 
-**PR 2 — Vue islands and Hugo wiring**
+### PR 2 — Vue islands and Hugo wiring
+
 - Add `hugo-apps/src/homepage-explainers/` with `verb-flip-tile` + `link-explainer-popover`
 - Wire into `verb-spine.html`, `directory-footer.html`, `verb/list.html`
 - Drop hard-coded `$verbDefs` slice and shelf-label dict; read from baked JSON
@@ -563,7 +576,8 @@ The work splits into five PRs, each independently shippable:
 - Visitor-observable change: ⓘ icons appear and tile flips work, but content is empty fallback (graceful — only labels visible on back face)
 - Tests: Playwright E2E, vitest island unit tests
 
-**PR 3 — Admin UI and AI generation**
+### PR 3 — Admin UI and AI generation
+
 - Add `app/admin/verb-definitions/` and `app/admin/shelf-definitions/` Fiori apps
 - Add new "Explainers" side-nav grouping to admin shell
 - Extend `app/admin/homepage/` with the Explainer facet
@@ -573,15 +587,19 @@ The work splits into five PRs, each independently shippable:
 - Visitor-observable change: none (rows still BLANK)
 - Tests: unit (orchestrator, actions), hybrid AI test (gated)
 
-**PR 4 — Content seed and editorial pass**
-- Run bulk-fill-blanks against DEV for all three entities (~6 + 4 + 60 = 70 AI calls, ~$1)
+### PR 4 — Content seed and editorial pass
+
+- Run bulk-fill-blanks against DEV for all three entities. Each entity is its own action call (verbs / shelves / shelf-entries) and each is well under the 100-row hard cap from §3.3: 6 verbs + 4 shelves + 60 entries = 70 total, in three batches of 6 / 4 / 60. No batching logic needed beyond the per-entity action boundary. Estimated cost ~$1.
 - Editorial review of the 6 verb explainers (most-seen surface); transition `AI_SEEDED → REVIEWED` for verbs
 - Optional editorial review of the 4 shelf explainers
 - Spot-check ~10 directory-footer entries; leave the rest as `AI_SEEDED`
 - Visitor-observable change: verb tiles get flip back faces; shelf headers flip; directory footer + verb sub-page link cards gain working popovers
 - Tests: visual regression spot check via Playwright trace
 
-**PR 5 — PROD cutover** (post PROD spinup, ≥ July 2026 per [memory: PROD cutover July 2026])
+### PR 5 — PROD cutover (post PROD spinup, ≥ July 2026)
+
+Per [memory: PROD cutover July 2026]:
+
 - Schema deploy to PROD
 - Export `VerbDefinitions` / `ShelfDefinitions` from DEV via `scripts/migrate-reference-data.js` (extend the script to cover the two new entity types — `HomepageShelves` is already covered)
 - Import to PROD
@@ -590,6 +608,7 @@ The work splits into five PRs, each independently shippable:
 ## 10. Documentation
 
 New page `docs/developers/architecture/homepage-explainers.md` covering:
+
 - Data model summary
 - The two Vue components and where they attach
 - The three Admin Service actions and their modes
@@ -598,6 +617,7 @@ New page `docs/developers/architecture/homepage-explainers.md` covering:
 - Authoring-status workflow
 
 Updated:
+
 - `docs/developers/architecture/homepage.md` — add a "Explainer popovers" section linking to the new doc
 - `docs/developers/operations/testing-endpoints.md` — add `/build/verb-definitions` and `/build/shelf-definitions` rows
 - `CLAUDE.md` — add `AICORE_EXPLAINER_GENERATOR_DISABLED` to the env-vars gotchas list
