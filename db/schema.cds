@@ -415,6 +415,17 @@ entity JobLocks {
   expiresAt                 : Timestamp;
 }
 
+// Phase 4.5 (#746): per-job last-run health tracking. Sibling to JobLocks.
+// Written by scheduler after each cron cycle (success or failure).
+// Surfaced on admin UI tile as last-run-age per cron name.
+// Spec: docs/superpowers/specs/2026-06-29-746-phase4.5-api-docs.md §4.6
+entity JobLastRun {
+  key jobName       : String(100);
+      lastSuccessAt : Timestamp;
+      lastErrorAt   : Timestamp;
+      lastErrorMessage : String(2000);
+}
+
 entity PrimaryAccounts : cuid, LegacyKeyed {
   uuid                      : String(36);
   status                    : String(50);

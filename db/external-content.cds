@@ -247,3 +247,56 @@ annotate VideoConceptLinks with
 
 annotate VideoServices with
   @assert.unique.videoService : [video, serviceName];
+
+// ----------------------------------------------------------------------------
+// Phase 4.5 (#746): api.sap.com API documentation packages.
+// Sixth content type under the Phase 4 chassis.
+//
+// - sourceId is the api.sap.com package identifier (e.g. 'SAP_CAP_NodeJS_API')
+//   from the hand-curated YAML seed; slug is derived as
+//   `ad-${canonicalizedSourceId}` for IRI namespace-safety (canonicalization
+//   lives in srv/lib/seed-api-docs.js).
+// - description is LargeString (NCLOB). NEVER SELECT it alongside non-LOB
+//   metadata via CDS QL on HANA — LOB locators expire before consumption when
+//   mixed with scalar columns (§10.1; see srv/lib/content-store.js for the
+//   established escape hatch pattern). Task 1 itself doesn't read description;
+//   it's reserved for Task 2's extractor.
+// - category + apiType are sub-phase-specific columns rendered on the sidebar
+//   otherResources card (OtherResource CDS type widened in 4.5 — see
+//   srv/knowledge-graph-service.cds).
+// - pinUntil reserved on-entity for chassis uniformity; no admin surface
+//   writes to it in 4.5.
+//
+// Spec: docs/superpowers/specs/2026-06-29-746-phase4.5-api-docs.md §4.1
+// ----------------------------------------------------------------------------
+
+entity ApiDocs : cuid, managed {
+  slug              : String(80) @assert.unique;
+  title             : String(255);
+  description       : LargeString;             // NCLOB — see §10.1 LOB-locator note
+  url               : String(500);
+  sourceId          : String(120);
+  contentHash       : String(64);
+  lastExtractedHash : String(64);
+  firstSeenAt       : Timestamp @cds.on.insert: $now;
+  lastSeenAt        : Timestamp;
+  pinUntil          : Timestamp;
+
+  // API-doc-specific:
+  category          : String(80);
+  apiType           : String(40);
+
+  links             : Composition of many ApiDocConceptLinks on links.apiDoc = $self;
+}
+
+entity ApiDocConceptLinks : cuid, managed {
+  apiDoc       : Association to ApiDocs @assert.notNull;
+  concept      : Association to ims.Concepts @assert.notNull;
+  predicate    : String(40);                  // 'officialReferenceFor'
+  confidence   : Decimal(3, 2);
+  extractedAt  : Timestamp;
+  modelVersion : String(40);
+}
+
+annotate ApiDocConceptLinks with
+  @assert.unique.apiDocConcept : [apiDoc, concept, predicate];

@@ -91,6 +91,7 @@ export const KG_IRI_PREFIXES = Object.freeze({
   'blog-post': `${KG}blog-post/`,
   'discovery-mission': `${KG}discovery-mission/`,
   'video': `${KG}video/`,
+  'api-doc': `${KG}api-doc/`,
 });
 
 /**
@@ -121,6 +122,17 @@ export function iriDiscoveryMission(slug) {
  */
 export function iriVideo(slug) {
   return `${KG_IRI_PREFIXES['video']}${iriEscapeSegment(slug)}`;
+}
+
+/**
+ * Phase 4.5 (#746): IRI helper for api-doc content. Slug is escaped per
+ * iriEscapeSegment to handle unusual api.sap.com sourceId formats (the
+ * canonicalizer in srv/lib/seed-api-docs.js already lowercases and replaces
+ * non-[a-z0-9_-] chars with underscore; iriEscapeSegment is defense-in-depth
+ * in case a future YAML loader emits a slug with reserved IRI chars).
+ */
+export function iriApiDoc(slug) {
+  return `${KG_IRI_PREFIXES['api-doc']}${iriEscapeSegment(slug)}`;
 }
 
 /**

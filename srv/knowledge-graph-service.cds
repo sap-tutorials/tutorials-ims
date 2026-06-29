@@ -95,6 +95,10 @@ service KnowledgeGraphService @(path : '/graph') {
     channelTitle  : String;             // video only (Phase 4.4)
     publishedAt   : Timestamp;          // video only (Phase 4.4) — DIFFERENT FROM blog's postedAt
     thumbnailUrl  : String;             // video only (Phase 4.4)
+    // Phase 4.5 (#746): api-doc rows on the sidebar carry category + apiType
+    // instead of channel/published/thumbnail (videos).
+    category      : String;             // api-doc only (Phase 4.5)
+    apiType       : String;             // api-doc only (Phase 4.5)
     overlapCount  : Integer;
   }
   type NeighborhoodResult {
