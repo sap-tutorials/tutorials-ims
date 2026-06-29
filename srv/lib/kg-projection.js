@@ -98,9 +98,14 @@ export const KG_IRI_PREFIXES = Object.freeze({
  * Phase 4 (#447) IRI helper for learning-journey content. Emission is
  * deferred to Phase 4.1 Task 2 — the helper is registered now so the
  * lockstep test and projection downstream wiring stay in sync.
+ *
+ * Slug is escaped per iriEscapeSegment (matches iriBlogPost / iriVideo /
+ * iriDiscoveryMission / iriApiDoc and the 7 Phase 1-3 helpers above).
+ * Latent today since learning-journey slugs are lowercase-only by
+ * @assert.unique constraint, but defense-in-depth — see #725.
  */
 export function iriLearningJourney(slug) {
-  return KG_IRI_PREFIXES['learning-journey'] + slug;
+  return KG_IRI_PREFIXES['learning-journey'] + iriEscapeSegment(slug);
 }
 
 /**

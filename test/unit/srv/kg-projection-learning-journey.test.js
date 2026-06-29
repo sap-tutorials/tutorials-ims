@@ -86,4 +86,29 @@ describe('buildLearningJourneyTriples', () => {
     expect(triples.some((t) => t.includes('/learning-journey/main>'))).toBe(true);
     expect(triples.some((t) => t.includes('/learning-journey/older>'))).toBe(false);
   });
+
+  // #725 — iriLearningJourney was the only Phase 4 IRI helper that didn't
+  // apply iriEscapeSegment to the slug. Latent today (learning-journey
+  // slugs are lowercase-only by @assert.unique constraint), but defense-
+  // in-depth matches the other 8 helpers and protects against a future
+  // bulk feed-pivot landing slugs with reserved IRI characters.
+  it('escapes reserved IRI characters in a learning-journey slug (#725)', () => {
+    const triples = buildLearningJourneyTriples({
+      journeys: [
+        // Synthetic slug with `>` (reserved IRI char). Without the escape
+        // fix, the emitted IRI would close at `>` and produce broken SPARQL.
+        { slug: 'topic>foo', title: 'Topic Foo', lastSeenAt: IN_WINDOW },
+      ],
+      links: [],
+      prereqs: [],
+    });
+    // Subject IRI is escaped; the slug literal preserves the raw value.
+    expect(triples).toContain(
+      '<https://developers.sap.com/kg/learning-journey/topic%3Efoo> ' +
+      '<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ' +
+      '<https://developers.sap.com/kg/LearningJourney> .'
+    );
+    // Defensive: the unescaped form must NOT appear anywhere.
+    expect(triples.every((t) => !t.includes('learning-journey/topic>'))).toBe(true);
+  });
 });
