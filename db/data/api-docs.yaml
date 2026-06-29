@@ -1,0 +1,634 @@
+# Phase 4.5 (#746): hand-curated api.sap.com starter corpus.
+# 60 entries on day 1; cron extends from here.
+# Edit + open PR + merge + redeploy + run seed-api-docs.cjs --commit (or admin UI button).
+# Schema: db/data/api-docs.schema.yaml — validated by CI via `npm run validate-api-docs-yaml`.
+#
+# Coverage matrix (per spec §7.1):
+#   - CAP (8) — framework reference + cloud-sdk + cds
+#   - S/4HANA Cloud (15) — public OData v2 APIs (Business Partner, Sales Order, etc.)
+#   - BTP services (15) — Connectivity, Destination, Identity Authentication, Audit Log, etc.
+#   - SAP Build / Workflow / Process Automation (4)
+#   - Integration Suite (5) — Cloud Integration, Open Connectors, API Management
+#   - Cloud SDK (4) — Java + JavaScript
+#   - SAP HANA Cloud (3)
+#   - SAP AI Core / Joule (3)
+#   - ABAP Cloud / RAP (3)
+# Total: 60 entries.
+
+# ============================================================================
+# CAP — SAP Cloud Application Programming Model
+# ============================================================================
+
+- sourceId: SAP_CAP_NodeJS_API
+  title: SAP Cloud Application Programming Model — Node.js Runtime API
+  url: https://api.sap.com/package/SAP_CAP_NodeJS_API
+  description: |
+    Reference documentation for the SAP CAP Node.js runtime API. Covers the
+    cds.Service base class, request lifecycle (before/on/after handlers),
+    transactional context, and the cds.ql query API.
+  category: CAP
+  apiType: reference
+
+- sourceId: SAP_CAP_Java_API
+  title: SAP Cloud Application Programming Model — Java Runtime API
+  url: https://api.sap.com/package/SAP_CAP_Java_API
+  description: |
+    Reference documentation for the SAP CAP Java runtime API. Covers
+    EventHandlers, CqnService, Application Services, persistence services,
+    and the @On/@Before/@After annotation model for custom logic.
+  category: CAP
+  apiType: reference
+
+- sourceId: SAP_CAP_CDS_Reference
+  title: SAP CAP — CDS Language Reference
+  url: https://api.sap.com/package/SAP_CAP_CDS_Reference
+  description: |
+    Reference for the CDS (Core Data Services) modeling language used by CAP.
+    Covers entity definitions, associations, compositions, annotations,
+    aspects, services, and the projection/restriction syntax.
+  category: CAP
+  apiType: reference
+
+- sourceId: SAP_CAP_CQN_Reference
+  title: SAP CAP — Core Query Notation (CQN) Reference
+  url: https://api.sap.com/package/SAP_CAP_CQN_Reference
+  description: |
+    Reference for SAP CAP's Core Query Notation — the canonical query DSL
+    used by the CAP runtime. Covers SELECT, INSERT, UPDATE, DELETE, joins,
+    projections, and the fluent cds.ql builder API.
+  category: CAP
+  apiType: reference
+
+- sourceId: SAP_CAP_OData_V4_Reference
+  title: SAP CAP — OData v4 Protocol Reference
+  url: https://api.sap.com/package/SAP_CAP_OData_V4_Reference
+  description: |
+    Documentation for OData v4 protocol behavior when exposed via CAP
+    services. Covers $expand, $select, $filter, $orderby, deep inserts,
+    drafts, and the @cds.draft.enabled / @restrict annotation interactions.
+  category: CAP
+  apiType: odata-v4
+
+- sourceId: SAP_CAP_REST_Adapter
+  title: SAP CAP — REST Protocol Adapter
+  url: https://api.sap.com/package/SAP_CAP_REST_Adapter
+  description: |
+    Reference for the CAP REST adapter — exposes CAP services over plain
+    JSON+HTTP without OData conventions. Covers payload shape, custom path
+    mapping, and the @rest service annotation.
+  category: CAP
+  apiType: rest
+
+- sourceId: SAP_CAP_Authentication
+  title: SAP CAP — Authentication & Authorization Reference
+  url: https://api.sap.com/package/SAP_CAP_Authentication
+  description: |
+    Reference for the CAP authentication model — @requires, @restrict,
+    XSUAA + IAS integration, JWT validation, and the req.user object.
+    Covers passport strategies and the mock authentication for local dev.
+  category: CAP
+  apiType: reference
+
+- sourceId: SAP_CAP_Audit_Logging
+  title: SAP CAP — Audit Logging Integration
+  url: https://api.sap.com/package/SAP_CAP_Audit_Logging
+  description: |
+    Reference for the @cap-js/audit-logging plugin. Covers @PersonalData
+    annotations, automatic Audit Log Service emission on personal-data
+    reads/writes, and the SecurityEvent emission pattern.
+  category: CAP
+  apiType: reference
+
+# ============================================================================
+# S/4HANA Cloud — Public OData v2 APIs
+# ============================================================================
+
+- sourceId: API_BUSINESS_PARTNER
+  title: SAP S/4HANA Cloud — Business Partner API
+  url: https://api.sap.com/api/API_BUSINESS_PARTNER
+  description: |
+    OData v2 service for managing business partners. Read/create/update/delete
+    operations on customers, suppliers, employees, contacts. Covers role
+    assignment, address management, banking, and tax identification.
+  category: S/4HANA
+  apiType: odata-v2
+
+- sourceId: API_SALES_ORDER_SRV
+  title: SAP S/4HANA Cloud — Sales Order API
+  url: https://api.sap.com/api/API_SALES_ORDER_SRV
+  description: |
+    OData v2 service for managing sales orders, including order items,
+    pricing conditions, schedule lines, and partner roles.
+  category: S/4HANA
+  apiType: odata-v2
+
+- sourceId: API_PURCHASEORDER_PROCESS_SRV
+  title: SAP S/4HANA Cloud — Purchase Order API
+  url: https://api.sap.com/api/API_PURCHASEORDER_PROCESS_SRV
+  description: |
+    OData v2 service for purchase order management. Covers create, update,
+    item line management, approval flow, and confirmation.
+  category: S/4HANA
+  apiType: odata-v2
+
+- sourceId: API_PRODUCT_SRV
+  title: SAP S/4HANA Cloud — Product Master Data API
+  url: https://api.sap.com/api/API_PRODUCT_SRV
+  description: |
+    OData v2 service for product master data — materials, articles, services.
+    Covers descriptions, units of measure, classifications, and plant data.
+  category: S/4HANA
+  apiType: odata-v2
+
+- sourceId: API_OUTBOUND_DELIVERY_SRV
+  title: SAP S/4HANA Cloud — Outbound Delivery API
+  url: https://api.sap.com/api/API_OUTBOUND_DELIVERY_SRV
+  description: |
+    OData v2 service for managing outbound deliveries in shipping. Covers
+    creation, picking, packing, and goods issue posting.
+  category: S/4HANA
+  apiType: odata-v2
+
+- sourceId: API_BILLING_DOCUMENT_SRV
+  title: SAP S/4HANA Cloud — Billing Document API
+  url: https://api.sap.com/api/API_BILLING_DOCUMENT_SRV
+  description: |
+    OData v2 service for invoice/billing-document management — creation,
+    cancellation, FI posting status, output management.
+  category: S/4HANA
+  apiType: odata-v2
+
+- sourceId: API_JOURNALENTRYITEMBASIC_SRV
+  title: SAP S/4HANA Cloud — Journal Entry API
+  url: https://api.sap.com/api/API_JOURNALENTRYITEMBASIC_SRV
+  description: |
+    OData v2 service for general-ledger journal entries. Read journal entry
+    line items, debits/credits, account assignments, and posting metadata.
+  category: S/4HANA
+  apiType: odata-v2
+
+- sourceId: API_CHARTOFACCOUNTS
+  title: SAP S/4HANA Cloud — Chart of Accounts API
+  url: https://api.sap.com/api/API_CHARTOFACCOUNTS
+  description: |
+    OData v2 service for chart-of-accounts master data. Covers G/L accounts,
+    hierarchies, and language-specific descriptions.
+  category: S/4HANA
+  apiType: odata-v2
+
+- sourceId: API_COSTCENTER_SRV
+  title: SAP S/4HANA Cloud — Cost Center API
+  url: https://api.sap.com/api/API_COSTCENTER_SRV
+  description: |
+    OData v2 service for cost center master data — hierarchy, attributes,
+    validity periods, and responsible person assignment.
+  category: S/4HANA
+  apiType: odata-v2
+
+- sourceId: API_BUS_EVT_ENT_S4HCLOUD
+  title: SAP S/4HANA Cloud — Business Events
+  url: https://api.sap.com/event/CE_BUSINESSEVENTS_ENTERPRISE_PLAYBOOK
+  description: |
+    Event-driven integration catalog for S/4HANA Cloud — CloudEvents
+    published on entity state changes (BusinessPartner.Created,
+    SalesOrder.Changed, etc.). Subscribe via the Advanced Event Mesh or
+    Event Mesh services.
+  category: S/4HANA
+  apiType: reference
+
+- sourceId: API_MAINTNOTIFICATION_SRV
+  title: SAP S/4HANA Cloud — Maintenance Notification API
+  url: https://api.sap.com/api/API_MAINTNOTIFICATION
+  description: |
+    OData v2 service for plant maintenance notifications. Covers creation,
+    status transitions, items, activities, and priorities.
+  category: S/4HANA
+  apiType: odata-v2
+
+- sourceId: API_PROJECT_SRV
+  title: SAP S/4HANA Cloud — Project (PS) API
+  url: https://api.sap.com/api/API_PROJECT_SRV
+  description: |
+    OData v2 service for project-system master data — projects, WBS
+    elements, network activities, and milestones.
+  category: S/4HANA
+  apiType: odata-v2
+
+- sourceId: API_WORK_ORDER_SRV
+  title: SAP S/4HANA Cloud — Work Order API
+  url: https://api.sap.com/api/API_WORKORDER
+  description: |
+    OData v2 service for production work orders. Covers operations,
+    components, status management, and confirmations.
+  category: S/4HANA
+  apiType: odata-v2
+
+- sourceId: API_TIMESHEET_SRV
+  title: SAP S/4HANA Cloud — Time Sheet API
+  url: https://api.sap.com/api/API_TIMESHEET_SRV
+  description: |
+    OData v2 service for time-sheet entries — record working hours
+    against WBS elements, internal orders, or projects.
+  category: S/4HANA
+  apiType: odata-v2
+
+- sourceId: API_EMPLOYEE_SRV
+  title: SAP SuccessFactors — Employee Central OData v2
+  url: https://api.sap.com/api/employeeCentralOData
+  description: |
+    OData v2 service for SAP SuccessFactors Employee Central — read
+    employee master, employment, compensation, and position data.
+  category: SuccessFactors
+  apiType: odata-v2
+
+# ============================================================================
+# BTP Services
+# ============================================================================
+
+- sourceId: SAP_Cloud_Connector_Connectivity
+  title: SAP BTP — Connectivity Service API
+  url: https://api.sap.com/package/SAPBTPConnectivityService
+  description: |
+    REST API and SDK for the SAP BTP Connectivity Service. Manage Cloud
+    Connector tunnels, on-premise system mappings, and principal propagation
+    configuration. Used to reach S/4HANA or other on-premise systems from
+    BTP-hosted applications.
+  category: BTP
+  apiType: rest
+
+- sourceId: SAP_BTP_Destination_Service
+  title: SAP BTP — Destination Service API
+  url: https://api.sap.com/package/SAPBTPDestinationService
+  description: |
+    REST API for the SAP BTP Destination Service. Configure HTTP, RFC, or
+    MAIL destinations with authentication tokens, certificates, and
+    location-based routing. Consumed by approuter and CAP applications.
+  category: BTP
+  apiType: rest
+
+- sourceId: SAP_XSUAA_Authorization
+  title: SAP BTP — XSUAA Authentication & Authorization
+  url: https://api.sap.com/package/SAPXSUAA
+  description: |
+    Reference for the XSUAA service (Cloud Foundry UAA fork). Covers JWT
+    bearer tokens, OAuth2 flows, scope checks via @requires, role
+    collection mapping, and the xs-security.json contract.
+  category: BTP
+  apiType: reference
+
+- sourceId: SAP_BTP_IdentityAuth
+  title: SAP Cloud Identity Services — Identity Authentication
+  url: https://api.sap.com/package/SAPIdentityAuthService
+  description: |
+    REST API for the SAP Cloud Identity Services — Identity Authentication
+    (IAS). Manage users, groups, SAML/OIDC trust configurations, and
+    branding. Used as the primary IdP for SAP BTP applications.
+  category: BTP
+  apiType: rest
+
+- sourceId: SAP_BTP_AuditLog
+  title: SAP BTP — Audit Log Service
+  url: https://api.sap.com/package/SAPAuditLogService
+  description: |
+    REST API for the SAP BTP Audit Log Service. Write security events,
+    personal-data accesses, and configuration changes. Reads via the Audit
+    Log Retrieval API.
+  category: BTP
+  apiType: rest
+
+- sourceId: SAP_BTP_Credstore
+  title: SAP BTP — Credential Store Service
+  url: https://api.sap.com/package/SAPCredstore
+  description: |
+    REST API for the SAP BTP Credential Store. Securely store, rotate,
+    and retrieve secrets (passwords, keys, OAuth tokens) for applications
+    bound to a credstore service instance. Supports JWE-encrypted payloads.
+  category: BTP
+  apiType: rest
+
+- sourceId: SAP_BTP_AlertNotification
+  title: SAP BTP — Alert Notification Service
+  url: https://api.sap.com/package/SAPAlertNotificationService
+  description: |
+    REST API for the SAP BTP Alert Notification Service. Send operational
+    events to channels (email, Slack, webhook, ServiceNow) with subscription
+    + filter management.
+  category: BTP
+  apiType: rest
+
+- sourceId: SAP_BTP_FeatureFlags
+  title: SAP BTP — Feature Flags Service
+  url: https://api.sap.com/package/SAPFeatureFlagsService
+  description: |
+    REST API for the SAP BTP Feature Flags service. Define boolean and
+    string-typed flags with rollout rules; consume via the SAP Cloud SDK
+    or direct REST.
+  category: BTP
+  apiType: rest
+
+- sourceId: SAP_BTP_BusinessRules
+  title: SAP BTP — Business Rules Service
+  url: https://api.sap.com/package/SAPBusinessRulesService
+  description: |
+    REST API for the SAP BTP Business Rules service. Author decision
+    tables and rule sets in the rules editor; execute via runtime API
+    from CAP or other applications.
+  category: BTP
+  apiType: rest
+
+- sourceId: SAP_BTP_DocumentInformation
+  title: SAP BTP — Document Information Extraction
+  url: https://api.sap.com/package/SAPDocumentInformationExtraction
+  description: |
+    REST API for the Document Information Extraction service. Submit PDFs
+    or images of invoices, payment advices, etc. to extract structured
+    fields via ML models.
+  category: BTP
+  apiType: rest
+
+- sourceId: SAP_BTP_DocumentClassification
+  title: SAP BTP — Document Classification
+  url: https://api.sap.com/package/SAPDocumentClassification
+  description: |
+    REST API for the SAP BTP Document Classification service. Submit
+    documents for ML-driven classification into custom-trained categories.
+  category: BTP
+  apiType: rest
+
+- sourceId: SAP_BTP_PrintService
+  title: SAP BTP — Print Service
+  url: https://api.sap.com/package/SAPPrintService
+  description: |
+    REST API for the SAP BTP Print Service. Submit print jobs to network
+    printers via SAP-managed queue infrastructure.
+  category: BTP
+  apiType: rest
+
+- sourceId: SAP_BTP_TranslationHub
+  title: SAP Translation Hub
+  url: https://api.sap.com/package/SAPTranslationHub
+  description: |
+    REST API for the SAP Translation Hub. Submit text bundles for
+    professional/ML translation across SAP-supported languages.
+  category: BTP
+  apiType: rest
+
+- sourceId: SAP_BTP_Mobile_Services
+  title: SAP BTP — Mobile Services API
+  url: https://api.sap.com/package/SAPMobileServices
+  description: |
+    REST API and SDK for SAP BTP Mobile Services. Manage mobile app
+    registrations, push-notification dispatch, offline OData sync, and
+    feature flags scoped per-app.
+  category: BTP
+  apiType: rest
+
+- sourceId: SAP_BTP_HtmlSrv
+  title: SAP BTP — HTML5 Application Repository Service
+  url: https://api.sap.com/package/SAPHTMLApplicationRepositoryService
+  description: |
+    REST API for managing static HTML5 application bundles deployed via
+    the HTML5 Application Repository. Used by approuter to serve cached
+    SPA bundles.
+  category: BTP
+  apiType: rest
+
+# ============================================================================
+# SAP Build / Workflow / Process Automation
+# ============================================================================
+
+- sourceId: SAP_BTP_Workflow
+  title: SAP Build Process Automation — Workflow API
+  url: https://api.sap.com/package/SAPCPWorkflowAPIs
+  description: |
+    REST API for managing workflow instances, definitions, user tasks, and
+    workflow context in SAP Build Process Automation (formerly Cloud
+    Workflow). Start, suspend, resume, and complete workflow instances.
+  category: SAP Build
+  apiType: rest
+
+- sourceId: SAP_BTP_BuildWorkZone
+  title: SAP Build Work Zone — Site Engagement API
+  url: https://api.sap.com/package/SAPBuildWorkZone
+  description: |
+    REST API for SAP Build Work Zone (formerly Launchpad Service). Manage
+    sites, spaces, pages, tile catalogs, and user role assignments.
+  category: SAP Build
+  apiType: rest
+
+- sourceId: SAP_BTP_BuildApps
+  title: SAP Build Apps Runtime
+  url: https://api.sap.com/package/SAPBuildAppsRuntime
+  description: |
+    Reference for the SAP Build Apps (formerly AppGyver) runtime. Covers
+    Composer Pro logic, data resources, REST integration patterns, and
+    deployment via SAP BTP.
+  category: SAP Build
+  apiType: reference
+
+- sourceId: SAP_BTP_BuildCode
+  title: SAP Build Code — AI-Powered Code Assistant
+  url: https://api.sap.com/package/SAPBuildCode
+  description: |
+    Reference for SAP Build Code — AI-assisted code generation for SAP
+    cloud development. Covers Joule integration, CAP scaffolding, and
+    test-case suggestions.
+  category: SAP Build
+  apiType: reference
+
+# ============================================================================
+# Integration Suite
+# ============================================================================
+
+- sourceId: SAP_CPI_CloudIntegration
+  title: SAP Integration Suite — Cloud Integration API
+  url: https://api.sap.com/package/SAPCloudPlatformIntegration
+  description: |
+    REST API for SAP Cloud Integration (CPI). Manage integration packages,
+    iFlows, message processing logs, and runtime artifact deployment.
+  category: Integration Suite
+  apiType: rest
+
+- sourceId: SAP_APIManagement
+  title: SAP Integration Suite — API Management
+  url: https://api.sap.com/package/APIManagement
+  description: |
+    REST API for SAP API Management. Manage API proxies, products,
+    developer apps, key-value maps, and analytics. Built on Apigee Edge.
+  category: Integration Suite
+  apiType: rest
+
+- sourceId: SAP_OpenConnectors
+  title: SAP Integration Suite — Open Connectors
+  url: https://api.sap.com/package/SAPOpenConnectors
+  description: |
+    REST API for SAP Open Connectors — pre-built integration to 200+
+    third-party SaaS APIs (Salesforce, Slack, Stripe, etc.) with unified
+    authentication and discovery semantics.
+  category: Integration Suite
+  apiType: rest
+
+- sourceId: SAP_EventMesh
+  title: SAP Event Mesh — REST + AMQP API
+  url: https://api.sap.com/package/SAPEventMesh
+  description: |
+    REST and AMQP 1.0 API for SAP Event Mesh. Publish events on topics,
+    create durable queues, manage subscriptions, and consume via push or
+    pull. Foundation for event-driven architecture on BTP.
+  category: Integration Suite
+  apiType: rest
+
+- sourceId: SAP_AdvancedEventMesh
+  title: SAP Advanced Event Mesh
+  url: https://api.sap.com/package/SAPAdvancedEventMesh
+  description: |
+    REST and protocol APIs (AMQP, MQTT, SMF) for SAP Advanced Event Mesh
+    (Solace-powered). Multi-broker event streaming, dynamic topic
+    routing, and global event mesh fabric.
+  category: Integration Suite
+  apiType: rest
+
+# ============================================================================
+# Cloud SDK
+# ============================================================================
+
+- sourceId: SAP_CloudSDK_JavaScript
+  title: SAP Cloud SDK for JavaScript & TypeScript
+  url: https://api.sap.com/package/SAPCloudSDKforJavaScript
+  description: |
+    Reference for the SAP Cloud SDK for JavaScript/TypeScript. Provides
+    typed clients for S/4HANA APIs, Destination Service integration,
+    resilience patterns (retry, circuit-breaker), and OAuth flows.
+  category: Cloud SDK
+  apiType: reference
+
+- sourceId: SAP_CloudSDK_Java
+  title: SAP Cloud SDK for Java
+  url: https://api.sap.com/package/SAPCloudSDKforJava
+  description: |
+    Reference for the SAP Cloud SDK for Java. Provides typed clients for
+    SAP cloud APIs, Spring Boot integration, multi-tenant context handling,
+    and S/4HANA-specific abstractions.
+  category: Cloud SDK
+  apiType: reference
+
+- sourceId: SAP_CloudSDK_AI
+  title: SAP Cloud SDK for AI (JavaScript)
+  url: https://api.sap.com/package/SAPCloudSDKforAI
+  description: |
+    Reference for the SAP Cloud SDK for AI (JS) — typed access to AI Core,
+    Joule, and LLM-orchestration patterns. Wraps OpenAI/Anthropic/Mistral
+    deployments hosted by AI Core.
+  category: Cloud SDK
+  apiType: reference
+
+- sourceId: SAP_CloudSDK_AI_Java
+  title: SAP Cloud SDK for AI (Java)
+  url: https://api.sap.com/package/SAPCloudSDKforAIJava
+  description: |
+    Reference for the SAP Cloud SDK for AI (Java). Equivalent of the JS
+    SDK for Spring Boot / CAP Java applications.
+  category: Cloud SDK
+  apiType: reference
+
+# ============================================================================
+# SAP HANA Cloud
+# ============================================================================
+
+- sourceId: SAP_HANACloud_Admin
+  title: SAP HANA Cloud — Admin REST API
+  url: https://api.sap.com/package/SAPHANACloud
+  description: |
+    REST API for SAP HANA Cloud lifecycle management. Provision, start,
+    stop, scale, snapshot HANA Cloud instances. Manage allowlists and
+    backup policies.
+  category: HANA Cloud
+  apiType: rest
+
+- sourceId: SAP_HANACloud_SQL
+  title: SAP HANA Cloud — SQL Reference
+  url: https://api.sap.com/package/SAPHANASQL
+  description: |
+    SQL reference for SAP HANA Cloud. Covers DDL/DML/DCL, HANA-specific
+    extensions (calculation views, AFL, spatial, JSON document store),
+    and SQLScript procedural extensions.
+  category: HANA Cloud
+  apiType: reference
+
+- sourceId: SAP_HANACloud_HDI
+  title: SAP HANA Cloud — HDI Deployment Reference
+  url: https://api.sap.com/package/SAPHANAHDI
+  description: |
+    Reference for HDI (HANA Deployment Infrastructure) — schema-isolated
+    artifact deployment. Covers .hdbtable, .hdbview, .hdbprocedure,
+    .hdbrole, and the cross-container access pattern via synonyms.
+  category: HANA Cloud
+  apiType: reference
+
+# ============================================================================
+# SAP AI / Joule
+# ============================================================================
+
+- sourceId: SAP_AICore
+  title: SAP AI Core — Inference & Deployment API
+  url: https://api.sap.com/package/SAPAICore
+  description: |
+    REST API for SAP AI Core. Manage ML model deployments, run inference,
+    submit training jobs, and orchestrate generative-AI prompts via
+    AI Launchpad-managed deployments.
+  category: AI
+  apiType: rest
+
+- sourceId: SAP_Joule_Agent
+  title: SAP Joule — Agent Framework API
+  url: https://api.sap.com/package/SAPJouleAgent
+  description: |
+    Reference for the SAP Joule agent framework. Build composite agents
+    that orchestrate skills, retrieve context from BTP services, and
+    converse with users via the Joule shell or embedded experiences.
+  category: AI
+  apiType: reference
+
+- sourceId: SAP_GenAIHub
+  title: SAP Generative AI Hub
+  url: https://api.sap.com/package/SAPGenerativeAIHub
+  description: |
+    REST API for the SAP Generative AI Hub (part of AI Core). Provides
+    a unified inference endpoint across OpenAI, Anthropic, Mistral,
+    Google, and Meta hosted models with content-filtering and grounding.
+  category: AI
+  apiType: rest
+
+# ============================================================================
+# ABAP Cloud / RAP
+# ============================================================================
+
+- sourceId: SAP_ABAP_Cloud_API
+  title: SAP ABAP Cloud — Released API Catalog
+  url: https://api.sap.com/package/SAPABAPCloudReleasedAPIs
+  description: |
+    Reference catalog for ABAP Cloud released (Tier-1) APIs. The only
+    APIs an ABAP Cloud / Steampunk developer may consume; clean-core
+    compliance requires staying within this set.
+  category: ABAP
+  apiType: reference
+
+- sourceId: SAP_RAP_Reference
+  title: SAP RAP — Business Object Reference
+  url: https://api.sap.com/package/SAPRAPBusinessObject
+  description: |
+    Reference for the SAP RESTful Application Programming (RAP) Model.
+    Covers business-object definitions, behavior implementations, draft
+    handling, and service binding to OData V2/V4 + V4 SAP-extended.
+  category: ABAP
+  apiType: reference
+
+- sourceId: SAP_ABAP_SQL_Reference
+  title: SAP — ABAP SQL Reference
+  url: https://api.sap.com/package/SAPABAPSQL
+  description: |
+    Reference for ABAP SQL — the SQL dialect available in ABAP Cloud.
+    Covers SELECT, INSERT, UPDATE, MODIFY, DELETE, joins, common table
+    expressions, and CDS-view-based access patterns.
+  category: ABAP
+  apiType: reference
