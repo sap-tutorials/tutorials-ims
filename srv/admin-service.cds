@@ -239,6 +239,11 @@ service AdminService {
   // db/schema.cds:19 (DEVTOBERFEST/TECHED/CODEJAM/CHALLENGE/OTHER); label
   // surfaces a friendly display ("Devtoberfest") in place of the all-caps code.
   @readonly @cds.persistence.skip entity EventTypes       { key code : String(20); label : String(40); }
+  // Issue #718 — Alerts severity & audience dropdowns. Codes mirror the
+  // inline enums on db/schema.cds:467-471 exactly; @assert.range on the
+  // underlying fields rejects writes that bypass the dropdown.
+  @readonly @cds.persistence.skip entity AlertSeverities  { key code : String(20); label : String(40); }
+  @readonly @cds.persistence.skip entity AlertAudiences   { key code : String(20); label : String(40); }
   @readonly @cds.persistence.skip entity AdvocateRegions  { key code : String(16); label : String(40); }
 
   // Code list for AdvocateLinks.kind — mirrors the enum on db/advocates.cds.
