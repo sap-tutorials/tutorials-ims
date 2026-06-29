@@ -47,6 +47,11 @@
     // the pattern in scripts/spike/kg-probe.cjs.
     const cdsMod = await import('@sap/cds');
     const cds = cdsMod.default || cdsMod;
+    // Load the CDS model so `cds.entities(NAMESPACE)` is callable inside the
+    // dynamically-imported extractor (srv/jobs/extract-concepts-job.js). The
+    // serving lifecycle (`cds-serve`) populates `cds.model` automatically; a
+    // bare `cds.connect.to('db')` under `cds bind --exec` does not. See #757.
+    cds.model = await cds.load('*');
     const db = await cds.connect.to('db');
     if (db.kind !== 'hana') {
       console.error(
