@@ -20,7 +20,8 @@
         { "key": "categories", "title": "Categories" },
         { "key": "concepts", "title": "Concepts" },
         { "key": "advocates", "title": "Advocates" },
-        { "key": "alerts", "title": "Alerts" }
+        { "key": "alerts", "title": "Alerts" },
+        { "key": "operations", "title": "Featured Tasks" }
       ]
     },
     {
@@ -68,7 +69,6 @@
       "title": "System",
       "icon": "sap-icon://action-settings",
       "items": [
-        { "key": "operations", "title": "Featured Tasks" },
         { "key": "pipelinelog", "title": "Pipeline Log" },
         { "key": "joblog", "title": "Job Log" },
         { "key": "accounts", "title": "Account Merges" },
