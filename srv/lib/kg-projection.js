@@ -394,6 +394,17 @@ export async function* projectFromFixtures(fixtures, batchSize = 5000) {
     }
   }
 
+  // Section 12 — Phase 4.6 (#747) sample triples. Same optional shape as
+  // sections 7-11: when the fixture omits samples, emission is skipped.
+  const { samples: sampleRows = [], links: sampleLinks = [] } =
+    (fixtures && fixtures.samples) || {};
+  if (sampleRows.length > 0) {
+    for (const t of buildSampleTriples({ samples: sampleRows, links: sampleLinks })) {
+      buffer.push(t);
+      if (buffer.length >= batchSize) { yield buffer; buffer = []; }
+    }
+  }
+
   if (buffer.length > 0) yield buffer;
 }
 
@@ -700,6 +711,62 @@ export function buildApiDocTriples({ apiDocs = [], links = [] } = {}) {
     triples.push(triple(
       iri(iriApiDoc(link.apiDocSlug)),
       iriPredicate(link.predicate || 'officialReferenceFor'),
+      iriConcept(link.conceptSlug)
+    ));
+  }
+
+  return triples;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4.6 (#747) — Sample triple builder
+// ---------------------------------------------------------------------------
+
+const KG_SAMPLE = `${KG}Sample`;
+
+/**
+ * Emit N-Triples for an array of Sample rows + their concept-embodies edges.
+ * Mirrors buildApiDocTriples / buildVideoTriples — per-sample TTL gate via
+ * isWithinTTL('sample', sample.lastSeenAt). Emits :rdf:type, :title, :slug,
+ * :language, :stars, :lastCommitAt and :embodies for each link.
+ *
+ * Phase 4.6 (#747).
+ *
+ * @param {object} args
+ * @param {Array<{slug, title, language?, stars?, lastCommitAt?, lastSeenAt}>} args.samples
+ * @param {Array<{sampleSlug, conceptSlug, predicate?}>} args.links
+ * @returns {string[]} N-Triples
+ */
+export function buildSampleTriples({ samples = [], links = [] } = {}) {
+  const triples = [];
+  const visibleSampleSlugs = new Set();
+
+  for (const s of samples) {
+    if (!s || !s.slug) continue;
+    if (!isWithinTTL('sample', s.lastSeenAt)) continue;
+    visibleSampleSlugs.add(s.slug);
+    const subj = iriSample(s.slug);
+    triples.push(triple(iri(subj), iri(RDF_TYPE), iri(KG_SAMPLE)));
+    triples.push(literalTriple(iri(subj), iriPredicate('title'), s.title ?? ''));
+    triples.push(literalTriple(iri(subj), iriPredicate('slug'), s.slug));
+    if (s.language) {
+      triples.push(literalTriple(iri(subj), iriPredicate('language'), s.language));
+    }
+    if (s.stars != null) {
+      triples.push(literalTriple(iri(subj), iriPredicate('stars'), String(s.stars)));
+    }
+    if (s.lastCommitAt != null) {
+      triples.push(literalTriple(iri(subj), iriPredicate('lastCommitAt'),
+        s.lastCommitAt instanceof Date ? s.lastCommitAt.toISOString() : String(s.lastCommitAt)));
+    }
+  }
+
+  for (const link of links) {
+    if (!link || !link.sampleSlug || !link.conceptSlug) continue;
+    if (!visibleSampleSlugs.has(link.sampleSlug)) continue;
+    triples.push(triple(
+      iri(iriSample(link.sampleSlug)),
+      iriPredicate(link.predicate || 'embodies'),
       iriConcept(link.conceptSlug)
     ));
   }
@@ -1076,6 +1143,45 @@ async function loadFixtures(db) {
     );
   }
 
+  // Phase 4.6 (#747) — Samples + concept-embodies link rows.
+  // Same best-effort pattern as sibling external content types above.
+  // CRITICAL: Samples.description is LargeString (NCLOB) on HANA — DO NOT
+  // include it in the SELECT here (LOB locator may expire before triple
+  // emission). The projection doesn't need description anyway; it only emits
+  // title, slug, language, stars, lastCommitAt.
+  let samples = { samples: [], links: [] };
+  try {
+    const { Samples, SampleConceptLinks } = cds.entities('com.sap.developers.ims.external');
+    const sampleRows = await db.run(
+      SELECT.from(Samples).columns('ID', 'slug', 'title', 'language', 'stars', 'lastCommitAt', 'lastSeenAt')
+    );
+    const sampleSlugById = new Map(sampleRows.map((s) => [s.ID, s.slug]));
+
+    const sLinkRows = await db.run(
+      SELECT.from(SampleConceptLinks).columns('sample_ID', 'concept_ID', 'predicate')
+    );
+    const sLinks = [];
+    for (const l of sLinkRows) {
+      const sampleSlug = sampleSlugById.get(l.sample_ID);
+      const conceptSlug = conceptById.get(l.concept_ID);
+      if (!sampleSlug || !conceptSlug) continue;
+      sLinks.push({ sampleSlug, conceptSlug, predicate: l.predicate || 'embodies' });
+    }
+
+    samples = {
+      samples: sampleRows.map((s) => ({
+        slug: s.slug, title: s.title, language: s.language,
+        stars: s.stars, lastCommitAt: s.lastCommitAt, lastSeenAt: s.lastSeenAt,
+      })),
+      links: sLinks,
+    };
+  } catch (err) {
+    const log = cds.log('kg-projection');
+    log.warn(
+      `kg-projection: Samples load failed; sample triples will be empty. err=${err && err.message ? err.message : String(err)}`
+    );
+  }
+
   return {
     concepts: concepts.map((c) => ({
       slug: c.slug, name: c.name, description: c.description, status: c.status,
@@ -1090,5 +1196,6 @@ async function loadFixtures(db) {
     discoveryMissions,
     videos,
     apiDocs,
+    samples,
   };
 }

@@ -33,7 +33,8 @@ export async function buildConceptsPayload(db) {
   const { LearningJourneyConceptLinks, BlogPosts, BlogPostConceptLinks,
     DiscoveryMissions, DiscoveryMissionConceptLinks,
     Videos, VideoConceptLinks,
-    ApiDocs, ApiDocConceptLinks } =
+    ApiDocs, ApiDocConceptLinks,
+    Samples, SampleConceptLinks } =
     cds.entities('com.sap.developers.ims.external');
   const { PublishedConcepts } = cds.entities('KnowledgeGraphService');
 
@@ -265,6 +266,42 @@ export async function buildConceptsPayload(db) {
     }
   }
 
+  // 5f. Phase 4.6 (#747): SAP-samples GitHub repos embodying each concept.
+  // Same conceptIds-guard pattern; per-concept 8-row cap; ordered by
+  // sample.stars desc, sample.lastCommitAt desc (highest-impact / freshest first).
+  // CRITICAL: Samples.description is LargeString (NCLOB) and NOT pulled here —
+  // payload only needs slug/title/url/language/stars/lastCommitAt (LOB-locator
+  // safety, §10.1, 3rd of 4 read sites).
+  let samplesByConcept = {};
+  if (ids.length > 0) {
+    const sampleLinks = await db.run(
+      SELECT.from(SampleConceptLinks)
+        .columns(
+          'concept_ID',
+          'sample.slug as sampleSlug',
+          'sample.title as title',
+          'sample.url as url',
+          'sample.language as language',
+          'sample.stars as stars',
+          'sample.lastCommitAt as lastCommitAt',
+        )
+        .where({ concept_ID: { in: ids } })
+        .orderBy('sample.stars desc', 'sample.lastCommitAt desc')
+        .limit(8 * ids.length)
+    );
+    const groupedSamples = groupBy(sampleLinks, 'concept_ID', r => ({
+      slug: r.sampleSlug,
+      title: r.title,
+      url: r.url,
+      language: r.language,
+      stars: r.stars,
+      lastCommitAt: r.lastCommitAt,
+    }));
+    for (const [conceptId, rows] of Object.entries(groupedSamples)) {
+      samplesByConcept[conceptId] = rows.slice(0, 8);
+    }
+  }
+
   // 6. Stitch.
   const concepts = published.map(c => ({
     slug: c.slug.toLowerCase(),
@@ -279,6 +316,7 @@ export async function buildConceptsPayload(db) {
     discoveryMissions: discoveryMissionsByConcept[c.ID] || [],
     videos: videosByConcept[c.ID] || [],
     apiDocs: apiDocsByConcept[c.ID] || [],
+    samples: samplesByConcept[c.ID] || [],
   }));
 
   return { concepts, generatedAt: new Date().toISOString() };
