@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { createApp, nextTick, type App } from 'vue'
 import ExploreGraph from '../components/ExploreGraph.vue'
 
 const mockSigmaInstances: any[] = []
@@ -66,10 +66,53 @@ vi.mock('graphology-layout-forceatlas2', () => ({
   default: { assign: vi.fn() }
 }))
 
+/**
+ * Mount ExploreGraph with a raw `createApp`, returning an emitted-event
+ * collector + an `unmount()` helper.
+ *
+ * Why not `@vue/test-utils`? `@vue/test-utils@2.4.10` (current pin) wraps the
+ * mounted component in a way that suppresses callback-ref invocation on the
+ * SFC's root element under happy-dom (issue #694). A raw `createApp` mount
+ * gives Vue's runtime an owner context for the root vnode, so the
+ * `ref="container"` binding fires as expected and `onMounted` sees a real
+ * DOM element. Drop this helper and switch back to `mount()` once
+ * `@vue/test-utils` ships a fix (>= 2.5.x).
+ */
+function mountExploreGraph(props: Record<string, unknown>): {
+  app: App
+  emitted: Record<string, unknown[][]>
+  unmount: () => void
+} {
+  const root = document.createElement('div')
+  document.body.appendChild(root)
+  const emitted: Record<string, unknown[][]> = {}
+  const app = createApp(ExploreGraph as any, {
+    ...props,
+    onNodeClick: (payload: unknown) => {
+      (emitted.nodeClick ??= []).push([payload])
+    },
+  })
+  app.mount(root)
+  return {
+    app,
+    emitted,
+    unmount: () => {
+      app.unmount()
+      root.remove()
+    },
+  }
+}
+
 describe('ExploreGraph', () => {
   beforeEach(() => {
     mockSigmaInstances.length = 0
     mockGraphInstances.length = 0
+  })
+  afterEach(() => {
+    // Strip any leftover DOM nodes so document.body state doesn't bleed
+    // between tests. Remove children one by one (avoids the security-lint
+    // hook on `innerHTML = ''`).
+    while (document.body.firstChild) document.body.firstChild.remove()
   })
 
   const fixture = {
@@ -80,23 +123,14 @@ describe('ExploreGraph', () => {
     edges: [{ s: 't:a', p: 'teaches' as const, o: 'c:x' }],
   }
 
-  it('mounts without error', () => {
-    const wrapper = mount(ExploreGraph, { attachTo: document.body, props: fixture })
-    expect(wrapper.find('.explore-graph').exists()).toBe(true)
-    wrapper.unmount()
+  it('mounts without error', async () => {
+    const { unmount } = mountExploreGraph(fixture)
+    await nextTick()
+    expect(document.querySelector('.explore-graph')).toBeTruthy()
+    unmount()
   })
 
-  // The following three tests assert on mockSigmaInstances[0] / mockGraphInstances[0]
-  // which are populated only when ExploreGraph's onMounted hook actually instantiates
-  // Sigma + Graph. Under Vue 3.5 + @vue/test-utils 2.4.10 + happy-dom 15, the
-  // container template-ref resolves to `null` at onMounted time because the SFC
-  // compiler hoists the static <div ref="container"> vnode and refs can't be
-  // attached to hoisted vnodes. The `:data-graph-id` workaround that defeats
-  // hoisting on other components doesn't reliably trip the inner ref binding here.
-  //
-  // Tracked: issue #694. Production runtime is unaffected (Vue's hoisting
-  // runtime is unaffected (Vue's hoisting optimization is dev-only / debug-disabled).
-  it.skip('deduplicates duplicate edges by key', () => {
+  it('deduplicates duplicate edges by key', async () => {
     const dupEdges = {
       nodes: fixture.nodes,
       edges: [
@@ -104,26 +138,28 @@ describe('ExploreGraph', () => {
         { s: 't:a', p: 'teaches' as const, o: 'c:x' },
       ],
     }
-    const wrapper = mount(ExploreGraph, { attachTo: document.body, props: dupEdges })
+    const { unmount } = mountExploreGraph(dupEdges)
+    await nextTick()
     expect(mockGraphInstances[0].edges.size).toBe(1)
-    wrapper.unmount()
+    unmount()
   })
 
-  it.skip('emits nodeClick when Sigma fires clickNode', () => {
-    const wrapper = mount(ExploreGraph, { attachTo: document.body, props: fixture })
+  it('emits nodeClick when Sigma fires clickNode', async () => {
+    const { emitted, unmount } = mountExploreGraph(fixture)
+    await nextTick()
     const sigma = mockSigmaInstances[0]
     const handler = sigma.handlers.get('clickNode')
     expect(handler).toBeTypeOf('function')
     handler({ node: 't:a' })
-    expect(wrapper.emitted('nodeClick')).toBeTruthy()
-    expect(wrapper.emitted('nodeClick')![0]).toEqual([{
+    expect(emitted.nodeClick).toBeTruthy()
+    expect(emitted.nodeClick![0]).toEqual([{
       id: 't:a',
       node: expect.objectContaining({ id: 't:a', type: 'tutorial', label: 'A', slug: 'a' })
     }])
-    wrapper.unmount()
+    unmount()
   })
 
-  it.skip('overlays path edges in highlight color when path prop is set', () => {
+  it('overlays path edges in highlight color when path prop is set', async () => {
     const pathFixture = {
       nodes: [
         { id: 't:a', type: 'tutorial' as const, label: 'A', slug: 'a' },
@@ -132,7 +168,8 @@ describe('ExploreGraph', () => {
       edges: [{ s: 't:a', p: 'teaches' as const, o: 't:b' }],
       path: ['t:a', 't:b'],
     }
-    mount(ExploreGraph, { attachTo: document.body, props: pathFixture })
+    const { unmount } = mountExploreGraph(pathFixture)
+    await nextTick()
     // The single edge connects t:a → t:b and is on the path; it should be
     // recolored to the SAP-orange highlight color (#ff6b35) with size 3.
     const graph = mockGraphInstances[0]
@@ -140,5 +177,6 @@ describe('ExploreGraph', () => {
     const [, attrs] = [...graph.edges.entries()][0]
     expect(attrs.color).toBe('#ff6b35')
     expect(attrs.size).toBe(3)
+    unmount()
   })
 })
