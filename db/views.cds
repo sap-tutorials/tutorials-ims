@@ -213,48 +213,84 @@ view ActiveLearnersDaily as
     count(distinct user.ID)      as count      : Integer
   } group by cast(modifiedAt as Date);
 
-view MyTutorialsView as
-  select from ims.Tutorials as t
-    inner join ims.TutorialMeta as m on m.tutorial.ID = t.ID
-    inner join ims.Users        as u on u.email       = m.ownerEmail
+// --- Issue #777: three-layer canonical author/owner view ----------------
+// Layer 1 UNION ALL of 4 sources; Layer 2 dedup with MIN(priority);
+// Layer 3 joins back to Tutorials + TutorialMeta for rich fields.
+// See docs/superpowers/specs/2026-06-29-777-author-owner-reconciliation-design.md
+// §1.1. The view's userId column is u.uuid (NOT u.ID) — matches req.user.id
+// per the established CAP invariant (see §4.4 of the spec).
+
+view MyTutorialsRaw as
+  // Source 1: strict author FK — priority 1 (highest confidence)
+  SELECT from ims.Tutorials as t
+    inner join ims.Users as u on u.ID = t.author.ID
   {
-    key t.ID,
-        t.slug,
-        t.title,
-        t.primaryTag,
-        t.status,
-        m.reviewedDate,
-        m.monitoredStatus,
-        m.notificationNumber,
-        // #385 PR-3 rename: lastNotificationDate → notificationDate (view alias only;
-        // underlying TutorialMeta column unchanged).
-        m.lastNotificationDate    as notificationDate,
-        m.firstNotificationDate,
-        // #385 PR-3 rename: ownerName → owner (the underlying TutorialMeta.owner
-        // column was already named `owner`; the previous view alias added a
-        // confusing `Name` suffix).
-        m.owner                   as owner,
-        m.ownerEmail              as ownerEmail,
-        u.uuid                    as ownerUserId,
-        // #385 PR-3 NEW: chain through PR-1's TutorialMeta.repository Association.
-        // NULL-safe — yields null when repository_ID is unset (the dominant case
-        // until PR-2's backfill runs on DEV).
-        m.repository.name         as repositoryName : String,
-        // #385 PR-3 NEW: HANA strict-SQL rejects bare boolean comparisons in
-        // SELECT projections (see feedback_hana_boolean_case_when). Wrap in
-        // CASE WHEN ... THEN true ELSE false END for portability.
-        case when m.monitoredStatus = 'ACTIVE'
-             then true else false end                       as monitored : Boolean,
-        // #385 PR-3 NEW: CAP-portable date arithmetic (HANA DAYS_BETWEEN,
-        // SQLite julianday). Sage filters on this server-side via OData
-        // $filter, so it must remain a CDS-side column (not a JS after-handler).
-        // Returns NULL when reviewedDate is NULL — standard SQL semantics; OData
-        // $filter automatically excludes NULL rows.
-        // Argument order is (past, $now) — both HANA DAYS_BETWEEN(start, end)
-        // and SQLite julianday(end) - julianday(start) need the past date
-        // FIRST to yield a positive integer for past reviews. The original
-        // PR-3 spec wrote the arguments reversed; this is the corrected order.
-        days_between(m.reviewedDate, $now)                  as daysSinceReview : Integer
+    key t.ID            as tutorial_ID,
+    key u.uuid          as userUuid,
+    1                   as priority : Integer
+  }
+  UNION ALL
+  // Source 2: contributor FK — priority 2
+  SELECT from ims.TutorialContributors as c
+    inner join ims.Users as u on u.ID = c.user.ID
+  {
+    key c.tutorial.ID   as tutorial_ID,
+    key u.uuid          as userUuid,
+    2                   as priority : Integer
+  }
+  UNION ALL
+  // Source 3: post-publish ownerEmail match — priority 3
+  SELECT from ims.TutorialMeta as m
+    inner join ims.Users as u on u.email = m.ownerEmail
+  {
+    key m.tutorial.ID   as tutorial_ID,
+    key u.uuid          as userUuid,
+    3                   as priority : Integer
+  }
+  UNION ALL
+  // Source 4: legacy free-text owner match — priority 4 (lowest)
+  // Equality not LIKE — see spec §1.2 rationale.
+  SELECT from ims.TutorialMeta as m
+    inner join ims.Users as u
+      on m.owner = u.email
+      or m.owner = u.firstName || ' ' || u.lastName
+  {
+    key m.tutorial.ID   as tutorial_ID,
+    key u.uuid          as userUuid,
+    4                   as priority : Integer
+  };
+
+view MyTutorialsBestPriority as
+  select from MyTutorialsRaw {
+    key tutorial_ID,
+    key userUuid,
+    min(priority)       as bestPriority : Integer
+  }
+  group by tutorial_ID, userUuid;
+
+view MyTutorialsView as
+  select from MyTutorialsBestPriority as b
+    inner join ims.Tutorials      as t on t.ID = b.tutorial_ID
+    inner join ims.TutorialMeta   as m on m.tutorial.ID = t.ID
+  {
+    key t.ID                                as tutorial_ID,
+    key b.userUuid                          as userId,
+    b.bestPriority,
+    t.slug,
+    t.title,
+    t.primaryTag,
+    t.status,
+    m.reviewedDate,
+    m.monitoredStatus,
+    m.notificationNumber,
+    m.lastNotificationDate                  as notificationDate,
+    m.firstNotificationDate,
+    m.owner                                 as owner,
+    m.ownerEmail                            as ownerEmail,
+    m.repository.name                       as repositoryName : String,
+    case when m.monitoredStatus = 'ACTIVE'
+         then true else false end           as monitored : Boolean,
+    days_between(m.reviewedDate, $now)      as daysSinceReview : Integer
   };
 
 // Analytics projection over TaskRecords with discriminated soft-link associations

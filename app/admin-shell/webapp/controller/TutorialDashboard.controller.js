@@ -57,8 +57,18 @@ sap.ui.define([
       if (this._sSearchQuery) {
         aUser.push(new Filter("tutorial/title", FilterOperator.Contains, this._sSearchQuery));
       }
-      if (this._bFilterMonitored && this._sUserEmail) {
-        aUser.push(new Filter("owner", FilterOperator.EQ, this._sUserEmail));
+      if (this._bFilterMonitored && Array.isArray(this._aMyTutorialIds) && this._aMyTutorialIds.length > 0) {
+        // Filter against the cached "my tutorials" set fetched via
+        // /author/MyTutorials (the canonical 4-source UNION view) — #777.
+        // Empty list means no rows match, which is the right semantic.
+        var aIdFilters = this._aMyTutorialIds.map(function (id) {
+          return new Filter("tutorial_ID", FilterOperator.EQ, id);
+        });
+        aUser.push(new Filter({ filters: aIdFilters, and: false }));
+      } else if (this._bFilterMonitored && Array.isArray(this._aMyTutorialIds) && this._aMyTutorialIds.length === 0) {
+        // Toggle is ON but the user has zero tutorials — apply a
+        // never-match filter so the table renders empty (not unfiltered).
+        aUser.push(new Filter("tutorial_ID", FilterOperator.EQ, "__NO_MATCH__"));
       }
       if (this._bFilterOutdated) {
         var dCutoff = new Date(Date.now() - OUTDATED_DAYS * 86400000).toISOString();
@@ -88,8 +98,34 @@ sap.ui.define([
         .then(function (res) { return res.ok ? res.json() : null; })
         .then(function (data) {
           if (data && data.email) { this._sUserEmail = data.email; }
+          if (data && data.userId) { this._sUserId = data.userId; }
         }.bind(this))
         .catch(function () { /* filter will fall back to no-op */ });
+    },
+
+    // Issue #777: fetch the user's "mine" tutorial IDs via the canonical
+    // MyTutorialsView (4-source UNION). Returns a Promise resolving to
+    // an array of tutorial_ID strings. Falls back to [] on any error
+    // so the admin tile degrades gracefully (no toggle works, no crash).
+    //
+    // $top=1000 cap: practical ceiling well above the expected per-user
+    // count. Tom on DEV has ~77; the most prolific real-world author is
+    // unlikely to exceed a few hundred. If anyone ever does, the filter
+    // truncates silently — the toggle still works, just shows the top 1000.
+    // For thousands-of-tutorials users this approach hits OData URL length
+    // limits before $top does; the right fix at that scale is a server-side
+    // bound endpoint (e.g. /admin/MyTutorialIds), out of scope here.
+    _fetchMyTutorialIds: function () {
+      if (!this._sUserId) return Promise.resolve([]);
+      // AuthorService exposes MyTutorials; use it directly. Other paths
+      // (admin OData expand) would require AdminService to project
+      // MyTutorialsView, which is heavier than needed here.
+      return fetch("/author/MyTutorials?$select=tutorial_ID&$top=1000", { credentials: "include" })
+        .then(function (res) { return res.ok ? res.json() : { value: [] }; })
+        .then(function (data) {
+          return (data.value || []).map(function (r) { return r.tutorial_ID; });
+        })
+        .catch(function () { return []; });
     },
 
     _loadNotificationConfig: function () {
@@ -217,7 +253,16 @@ sap.ui.define([
 
     onFilterMonitored: function (oEvent) {
       this._bFilterMonitored = oEvent.getParameter("selected");
-      this._applyFilters();
+      if (this._bFilterMonitored) {
+        // Refresh the "mine" tutorial-ID list each time the toggle is
+        // turned ON — keeps the data fresh after admin writes.
+        this._fetchMyTutorialIds().then(function (ids) {
+          this._aMyTutorialIds = ids;
+          this._applyFilters();
+        }.bind(this));
+      } else {
+        this._applyFilters();
+      }
     },
 
     onFilterOutdated: function (oEvent) {
