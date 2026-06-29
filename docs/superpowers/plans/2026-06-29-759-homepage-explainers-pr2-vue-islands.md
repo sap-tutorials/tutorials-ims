@@ -4,9 +4,9 @@
 
 **Goal:** Ship the visitor-facing components for homepage explainer popovers — two Vue 3 islands (a flip-card tile and a hover-popover anchor) that hydrate the verb spine, directory footer, and verb sub-pages with explainer content baked from the PR 1 build feeds. **First PR with visitor-observable change** — but the empty-content fallback designed in spec §1.3 means a fresh render with `BLANK` content is visually identical to today's site.
 
-**Architecture:** Single Vite entry `hugo-apps/src/homepage-explainers/index.ts` emits `hugo/static/js/homepage-explainers.js`. The bundle mounts via the project's existing `[data-island="..."]` pattern (NOT custom elements — that's a spec drift; see Decision 1 below). The Hugo verb-spine partial drops its hard-coded `$verbDefs` slice in favor of reading `site.Data.verb_definitions` (baked in PR 1); the verb-sub-page layout reads `site.Data.shelf_definitions`; the directory footer wraps each link with a popover anchor. Reuses the existing `useFlipCard` composable from the developer-advocates island. Playwright E2E pins the keyboard contract and reduced-motion behavior.
+**Architecture:** Single Vite entry `hugo-apps/src/homepage-explainers/index.ts` emits `hugo/static/js/homepage-explainers.js`. The bundle mounts via the project's existing `[data-island="..."]` pattern (NOT custom elements — that's a spec drift; see Decision 1 below). The Hugo verb-spine partial drops its hard-coded `$verbDefs` slice in favor of reading `site.Data.verb_definitions` (baked in PR 1); the verb-sub-page layout reads `site.Data.shelf_definitions`; the directory footer wraps each link with a popover anchor. Reuses the existing `useFlipCard` composable from the developer-advocates island. Component-level vitest+happy-dom tests pin the interaction contract; a full Playwright E2E is deferred to a follow-up issue (Decision 11).
 
-**Tech Stack:** Vue 3.5 (Composition API + `<script setup>`), Vite 6, TypeScript 5.5, Hugo 0.147 (templates only), Vitest + happy-dom + @vue/test-utils for component unit tests, Playwright for E2E, SAP Fundamental Styles / `sap_horizon` theme tokens via existing CSS variables.
+**Tech Stack:** Vue 3.5 (Composition API + `<script setup>`), Vite 6, TypeScript 5.5, Hugo 0.147 (templates only), Vitest + happy-dom + @vue/test-utils for component unit tests, SAP Fundamental Styles / `sap_horizon` theme tokens via existing CSS variables.
 
 **Spec:** [`docs/superpowers/specs/2026-06-29-759-homepage-explainers-design.md`](../specs/2026-06-29-759-homepage-explainers-design.md) §1.2–1.5, §4.1–4.3
 
@@ -34,7 +34,6 @@
 - `hugo-apps/src/homepage-explainers/styles/popover.css` — popover positioning + theme tokens.
 - `hugo-apps/src/homepage-explainers/VerbFlipTile.test.ts` — vitest+happy-dom unit tests for the flip-card component (hover/click/keyboard/empty-content/reduced-motion).
 - `hugo-apps/src/homepage-explainers/LinkExplainerPopover.test.ts` — vitest unit tests for the popover (hover-intent timing, ESC close, click-vs-link, empty-content fallback, body order).
-- `test/e2e/homepage-explainers.spec.ts` — Playwright E2E for the keyboard contract + reduced-motion. Runs in CI alongside other Playwright specs.
 
 ### Modified files
 
@@ -64,6 +63,7 @@ None — pure additive PR.
 | 8 | Should the Hugo template degrade gracefully if `hugo/data/verb_definitions.json` is missing? | Yes — the partial falls back to the hard-coded `$verbDefs` slice for label/icon/href. Tagline/whyItMatters fields are simply empty (handled by Decision 7's component fallback). | Lets local dev work without running `npm run fetch-verb-definitions` first. Removes a "didn't read the docs" footgun. |
 | 9 | Should the popover ⓘ icon match the existing UI5 `<ui5-icon name="information">` or be inline SVG? | Inline SVG. Reasons: (a) the icon is decorative-but-accessible (has `aria-label`), not a UI5 button; (b) `<ui5-icon>` requires the UI5 bootstrap to have loaded, but our island may render before bootstrap finishes — race condition risk; (c) inline SVG keeps the gzip budget tight. | Plain `<svg>` with `aria-hidden` on a wrapper that has `aria-label="More about <title>"`. |
 | 10 | Should we add Vitest workspace config changes? | No — the existing `unit` workspace already includes `hugo-apps/**/*.test.ts` and the new test files match that pattern. No vitest config changes needed. | Verified by inspecting `vitest.config.ts` — existing pattern picks up Vue tests. |
+| 11 | Spec §6 lists a Playwright E2E spec as a requirement, but the project has no `@playwright/test` runner configured | Defer the Playwright E2E to a follow-up issue; Task 11 is now a "no commit" planning note. The component unit tests in Tasks 4-5 already cover the contract that matters at the unit level. | Adding Playwright would mean: new runner dep, new `playwright.config.ts`, new `test/e2e/` directory, new `test:e2e` script, new CI job. That's a tooling addition larger than this PR's scope. See Task 11 for the deferred-issue ask. |
 
 ---
 
@@ -689,7 +689,7 @@ describe('VerbFlipTile', () => {
 // VerbFlipTile.vue — flip card on verb-spine tiles + verb-sub-page shelf headers.
 // Spec: #759 §1.3 / §4.1
 
-import { computed, useTemplateRef } from 'vue';
+import { computed } from 'vue';
 import { useFlipCard } from '../advocates/composables/useFlipCard';
 import { useHoverIntent } from './composables/useHoverIntent';
 import { useReducedMotion } from './composables/useReducedMotion';
@@ -705,6 +705,9 @@ const props = defineProps<{
   href?: string;
 }>();
 
+// cardEl from useFlipCard is a regular Vue ref<HTMLElement|null>; binding
+// `ref="cardEl"` on the root <component :is="..."> in setup-script syntax
+// auto-wires it (Vue 3.5's <script setup> template-ref convention).
 const { flipped, cardEl, toggle, unflip } = useFlipCard();
 const reduced = useReducedMotion();
 const { handleEnter, handleLeave } = useHoverIntent({
@@ -1030,9 +1033,21 @@ const { placement, alignment, recompute } = usePopoverPosition({ anchorEl });
 function onIconClick(e: MouseEvent) {
   e.preventDefault();
   e.stopPropagation();
-  openedViaClick.value = !open.value || !openedViaClick.value;
-  open.value = !open.value || openedViaClick.value;
-  if (open.value) recompute();
+  // Four-case state machine:
+  //   closed + click           → open as dialog (pinned)
+  //   open-as-tooltip + click  → upgrade to dialog (pinned)
+  //   open-as-dialog + click   → close
+  //   (closed + outside-click handled by onDocClick)
+  if (!open.value) {
+    open.value = true;
+    openedViaClick.value = true;
+    recompute();
+  } else if (!openedViaClick.value) {
+    openedViaClick.value = true;  // upgrade tooltip → dialog
+  } else {
+    open.value = false;
+    openedViaClick.value = false;
+  }
 }
 
 function onKey(e: KeyboardEvent) {
@@ -1543,8 +1558,10 @@ Expected: see `<script type="module" src="/js/alerts.js" defer></script>` etc. �
 Find the line `{{ if and (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="/js/alerts.js" defer></script>{{ end }}` (around line 62). Immediately after it, insert:
 
 ```go-html-template
-  {{ if or .IsHome (eq .Type "verb") }}<script type="module" src="/js/homepage-explainers.js" defer></script>{{ end }}
+  {{ if and (or .IsHome (eq .Type "verb")) (not site.Params.qa) (not site.Params.previewMode) }}<script type="module" src="/js/homepage-explainers.js" defer></script>{{ end }}
 ```
+
+The `(not site.Params.qa) (not site.Params.previewMode)` guards match the `alerts.js` line and the `reading-progress` div elsewhere in the file — the same conventions apply: the QA channel renders the verb-spine + directory-footer chrome but should NOT load the explainer interactivity (explainer DB rows are PROD-only). Preview mode (used by tutorial authors at draft time) also doesn't need this island.
 
 - [ ] **Step 3: Verify Hugo builds**
 
@@ -1582,125 +1599,35 @@ of <body> (alerts.js, joule.js, cmd-palette.js, tutorial-*.js)."
 
 ---
 
-## Task 11: Playwright E2E spec
+## Task 11: Component-level interaction coverage (no Playwright)
 
-**Files:**
+**Files:** none (planning note — coverage delivered by Tasks 4-5)
 
-- Create: `test/e2e/homepage-explainers.spec.ts`
+**Background.** The spec §6 lists a Playwright E2E spec as a requirement. The plan-reviewer flagged that the project does NOT have a full Playwright runner configured — only `@axe-core/playwright` + `playwright-core` for the single a11y test (`test/a11y/axe.test.js`). There is no `@playwright/test`, no `playwright.config.ts`, no `test/e2e/` directory. Adding a Playwright spec would implicitly add a runner + config + CI plumbing — a meaningfully larger surface change than this PR's scope.
 
-**Background.** Component unit tests pin the contract in isolation. The Playwright E2E pins the contract **end-to-end against a real browser** — flip animation timing, focus trap, reduced-motion. Catches regressions that pass unit tests but break in actual browser CSS.
+**Decision (Decision 11 added during plan review):** Defer the Playwright E2E to a follow-up issue. The component unit tests from Tasks 4-5 already cover:
 
-- [ ] **Step 1: Locate existing Playwright spec convention**
+- ✅ Verb tile flips on Space (Task 4 test "flips on Space when focused")
+- ✅ Esc unflips (Task 4 test "Esc unflips when flipped")
+- ✅ Empty-content fallback (Task 4 test + Task 5 test "does NOT render ⓘ icon when all three content fields are empty")
+- ✅ Popover ESC close (Task 5 test "Esc closes the popover after click-open")
+- ✅ Hover-intent timing (Task 4 + Task 5 hover-intent tests)
+- ✅ Body order tagline → whyItMatters → description (Task 5 test "popover opens on ⓘ click and shows ... in order")
 
-```bash
-ls test/e2e/ 2>&1 | head -10 || echo "no e2e dir yet"
-find test/ -name '*.spec.ts' -path '*/e2e/*' 2>&1 | head -3
-```
+What `vitest + happy-dom` CAN'T cover (and would need real-browser Playwright for):
 
-If no `test/e2e/` directory exists, this spec will be the first. Check `playwright.config.ts` (or similar) at the repo root for the testDir setting and adjust path accordingly.
+- CSS-transition timing (the `prefers-reduced-motion: reduce` CSS works, but happy-dom doesn't run real CSS so `getComputedStyle().transitionDuration` returns `'0s'` by default — a Playwright spec would actually verify the media-query CSS rule fires)
+- Real focus model (happy-dom's focus is approximate)
+- Inter-tile pointer behavior (e.g., quick hover from tile A to tile B — the project has no precedent for these)
 
-```bash
-fd -e ts 'playwright.config'
-```
+These are real gaps but small risk. File a follow-up issue: **"Playwright E2E for homepage explainers (#759)"** with three asks:
+1. Add `@playwright/test` + `playwright.config.ts` + `test/e2e/` directory
+2. Wire `test:e2e` script in `package.json` + CI job in `.github/workflows/deploy.yml`
+3. Author the three specs the plan-reviewer outlined (Space-flip / Esc-unflip / reduced-motion)
 
-- [ ] **Step 2: Write the spec**
+**No commit for Task 11.** Move on to Task 12.
 
-Create `test/e2e/homepage-explainers.spec.ts`:
-
-```ts
-// Playwright E2E for #759 PR 2: homepage explainer interactions
-// across a real browser. Catches CSS-transition / focus / reduced-motion
-// regressions that vitest+happy-dom can't.
-
-import { test, expect } from '@playwright/test';
-
-const BASE = process.env.SMOKE_BASE_URL || 'http://localhost:1313';
-
-test.describe('Homepage explainers — verb spine', () => {
-  test('verb tile flips on Space and unflips on Esc', async ({ page }) => {
-    await page.goto(BASE + '/');
-    // Find the first verb-tile island
-    const tile = page.locator('[data-island="verb-flip-tile"]').first();
-    await tile.focus();
-    await expect(tile).toHaveAttribute('data-flipped', 'false');
-    await page.keyboard.press('Space');
-    await expect(tile).toHaveAttribute('data-flipped', 'true');
-    await page.keyboard.press('Escape');
-    await expect(tile).toHaveAttribute('data-flipped', 'false');
-  });
-
-  test('verb tile front-face click navigates to /<verb>/', async ({ page }) => {
-    await page.goto(BASE + '/');
-    const learnTile = page.locator('[data-island="verb-flip-tile"][data-verb-key="LEARN"]').first();
-    await learnTile.click();
-    await expect(page).toHaveURL(/\/learn\/?$/);
-  });
-
-  test('reduced-motion disables flip animation', async ({ page }) => {
-    await page.emulateMedia({ reducedMotion: 'reduce' });
-    await page.goto(BASE + '/');
-    const tile = page.locator('[data-island="verb-flip-tile"]').first();
-    await tile.focus();
-    await page.keyboard.press('Space');
-    const transitionProp = await tile.locator('.hp-flip__inner').evaluate(
-      el => window.getComputedStyle(el).transitionDuration
-    );
-    expect(transitionProp).toBe('0s');
-  });
-});
-
-test.describe('Homepage explainers — directory footer popover', () => {
-  test('ⓘ click opens popover with tagline + whyItMatters', async ({ page }) => {
-    await page.goto(BASE + '/');
-    // Find first link-explainer-popover that has content (the ⓘ button renders only
-    // when at least one field is non-empty).
-    const icon = page.locator('button.hp-popover-icon').first();
-    if (await icon.count() === 0) {
-      test.skip(true, 'no popover with content available — content seed not run');
-    }
-    await icon.click();
-    const popover = page.locator('[role="dialog"]');
-    await expect(popover).toBeVisible();
-    // Esc closes
-    await page.keyboard.press('Escape');
-    await expect(popover).toBeHidden();
-  });
-});
-```
-
-- [ ] **Step 3: Confirm Playwright config picks this up**
-
-If `playwright.config.ts` has a `testDir`, ensure `test/e2e/` is included. If a different path convention exists for the project, place the spec there instead and rename. (See `test:e2e` or `test:smoke` scripts in `package.json` for hints.)
-
-- [ ] **Step 4: Run the spec locally (best-effort)**
-
-```bash
-npx playwright test test/e2e/homepage-explainers.spec.ts 2>&1 | tail -20
-```
-
-Acceptable outcomes:
-- **PASS** if a local Hugo dev server is up at `:1313`
-- **SKIP / FAIL** if no local server is running — that's fine; CI runs it with the deployed approuter URL
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add test/e2e/homepage-explainers.spec.ts
-git -c core.autocrlf=false commit -m "test(#759): Playwright E2E for homepage explainer interactions
-
-Three specs covering verb-spine + directory-footer interactions in a
-real browser:
-
-- Verb tile keyboard: Space flips, Esc unflips
-- Verb tile click: front-face click navigates to /<verb>/
-- Reduced-motion: flip animation duration = 0s when
-  prefers-reduced-motion: reduce is set
-- Popover ⓘ click opens role=dialog; Esc closes (skipped when no
-  content seed has run; covered when PR 4 lands)
-
-Catches CSS-transition / focus / reduced-motion regressions that
-vitest+happy-dom can't (no real CSSOM, no real focus model)."
-```
+> **Note for the implementer:** If during implementation you decide the Playwright E2E is critical-enough to land in this PR, file the tooling addition as its own small commit BEFORE writing the spec. Don't bundle "add Playwright runner" + "add specs" into one commit — they're separate concerns and a reviewer should be able to look at each.
 
 ---
 
@@ -1772,12 +1699,12 @@ Stop the dev server.
 
 ## Definition of done
 
-- [ ] All 12 tasks committed with their tests passing locally
+- [ ] All 12 tasks reviewed; commits committed (Tasks 6, 11, and 12 are verification-only — no commit. Expect **10 commits** total)
 - [ ] `npm test` passes (no regressions on the existing 4000+ unit tests; known-flaky tests per project memory are acceptable)
 - [ ] `npm run build:apps` produces `hugo/static/js/homepage-explainers.js` within the 12KB gzipped budget
 - [ ] `npm run build:hugo` renders the new mount points on `/`, `/learn/`, `/build/`, etc.
 - [ ] Visiting the dev server `/` shows tiles flipping on hover (with placeholder content until PR 4 seeds)
-- [ ] `git log --oneline` shows ~11 commits, each with a `feat(#759)` / `test(#759)` prefix
+- [ ] `git log --oneline` shows ~10 commits, each with a `feat(#759)` / `test(#759)` prefix
 - [ ] `git status --short` is clean
 - [ ] Plan reviewer subagent approves
 - [ ] PR opened against `main` with the standard PR body, spec doc + PR 1 PR linked in description
