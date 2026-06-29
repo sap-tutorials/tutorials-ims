@@ -2782,9 +2782,23 @@ annotate AdminService.Alerts {
   body        @Common.Label: 'Body';
   severity    @Common.Label: 'Severity'
               @Common.ValueListWithFixedValues: true
+              @Common.ValueList: {
+                CollectionPath: 'AlertSeverities',
+                Parameters: [
+                  { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: severity, ValueListProperty: 'code'  },
+                  { $Type: 'Common.ValueListParameterDisplayOnly',                              ValueListProperty: 'label' }
+                ]
+              }
               @assert.range: true;
   audience    @Common.Label: 'Audience'
               @Common.ValueListWithFixedValues: true
+              @Common.ValueList: {
+                CollectionPath: 'AlertAudiences',
+                Parameters: [
+                  { $Type: 'Common.ValueListParameterInOut',       LocalDataProperty: audience, ValueListProperty: 'code'  },
+                  { $Type: 'Common.ValueListParameterDisplayOnly',                              ValueListProperty: 'label' }
+                ]
+              }
               @assert.range: true;
   startsAt    @Common.Label: 'Start (UTC)';
   endsAt      @Common.Label: 'End (UTC)';
