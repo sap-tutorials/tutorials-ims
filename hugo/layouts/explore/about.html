@@ -1,0 +1,183 @@
+{{ define "main" }}
+{{ $css := resources.Get "css/kg-overview.css" }}
+<link rel="stylesheet" href="{{ $css.RelPermalink }}">
+
+<main class="kg-overview" data-page-kind="explore-about">
+
+  <!-- ============================================================
+       1. HERO
+       ============================================================ -->
+  <section class="kg-overview__hero">
+    <h1>The SAP Developer Knowledge Graph</h1>
+    <p class="lede">
+      A live graph of the tutorials, missions, and concepts that make up
+      developers.sap.com, built by AI and powered by SAP HANA Cloud.
+    </p>
+    <div id="kg-stats-counter" aria-live="polite"></div>
+  </section>
+
+  <!-- ============================================================
+       2. ARCHITECTURE DIAGRAM (the "wow")
+       ============================================================ -->
+  <section class="kg-overview__section kg-overview__diagram" aria-labelledby="kg-arch">
+    <h2 id="kg-arch">How it's built</h2>
+    {{ readFile "static/img/knowledge-graph/architecture.svg" | safeHTML }}
+    <p>
+      Every night, a CAP cron job hands each tutorial's markdown to
+      <strong>SAP AI Core</strong>. The model extracts concepts (e.g. <em>CAP</em>,
+      <em>SAPUI5</em>, <em>HANA Cloud</em>) and the edges between them — what a
+      tutorial <em>teaches</em>, what it <em>requires</em>. Those facts are stored
+      as canonical CDS entities in <strong>SAP HANA Cloud</strong> and projected
+      into the database's built-in <strong>Knowledge Graph Engine</strong>, where
+      SPARQL queries answer "what should I learn next?" in single-digit milliseconds.
+    </p>
+  </section>
+
+  <!-- ============================================================
+       3. CORPUS BREAKDOWN
+       ============================================================ -->
+  <section class="kg-overview__section" aria-labelledby="kg-corpus">
+    <h2 id="kg-corpus">What's in the graph</h2>
+    <div class="kg-overview__corpus">
+      <div class="kg-overview__corpus-card">
+        <div class="icon" aria-hidden="true">📚</div>
+        <h3>Tutorials</h3>
+        <span class="count" data-kg-count="tutorials">—</span>
+        <p>Every tutorial in the <code>sap-tutorials/*</code> GitHub org. Edges: <em>teaches Concept</em>, <em>requires Concept</em>.</p>
+      </div>
+      <div class="kg-overview__corpus-card">
+        <div class="icon" aria-hidden="true">🧠</div>
+        <h3>Concepts</h3>
+        <span class="count" data-kg-count="concepts">—</span>
+        <p>AI-extracted topics — CAP, SAPUI5, HANA Cloud, … Edges: <em>requires Concept</em>, <em>relatedTo Concept</em>.</p>
+      </div>
+      <div class="kg-overview__corpus-card">
+        <div class="icon" aria-hidden="true">🛤️</div>
+        <h3>Missions &amp; groups</h3>
+        <span class="count" data-kg-count="missionsAndGroups">—</span>
+        <p>Curated learning paths. Edges: <em>containsTutorial</em>.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       4. TECH BADGE GRID
+       ============================================================ -->
+  <section class="kg-overview__section" aria-labelledby="kg-tech">
+    <h2 id="kg-tech">The tech behind it</h2>
+    <div class="kg-overview__tech">
+      <a class="kg-overview__tech-badge is-hana" href="https://help.sap.com/docs/hana-cloud-database/sap-hana-cloud-sap-hana-database-administration-guide/knowledge-graph-engine" target="_blank" rel="noopener">
+        <h3>SAP HANA Cloud Knowledge Graph Engine</h3>
+        <p>RDF triple store; SPARQL via <code>SYS.SPARQL_EXECUTE</code>.</p>
+      </a>
+      <a class="kg-overview__tech-badge is-hana" href="https://help.sap.com/docs/hana-cloud-database/sap-hana-cloud-sap-hana-database-vector-engine-guide/sap-hana-cloud-sap-hana-database-vector-engine-guide" target="_blank" rel="noopener">
+        <h3>SAP HANA Cloud Vector Engine</h3>
+        <p>Embedding similarity. Powers concept consolidation.</p>
+      </a>
+      <a class="kg-overview__tech-badge is-hana" href="https://help.sap.com/docs/hana-cloud/multi-model" target="_blank" rel="noopener">
+        <h3>SAP HANA Cloud Multi-Model</h3>
+        <p>Graph, vector, and relational data — one database, no ETL.</p>
+      </a>
+      <a class="kg-overview__tech-badge" href="https://help.sap.com/docs/sap-ai-core" target="_blank" rel="noopener">
+        <h3>SAP AI Core / Generative AI Hub</h3>
+        <p>LLM extracts concepts from tutorial markdown nightly; a weekly consolidator merges near-duplicates.</p>
+      </a>
+      <a class="kg-overview__tech-badge" href="https://cap.cloud.sap/docs/" target="_blank" rel="noopener">
+        <h3>SAP Cloud Application Programming Model (CAP)</h3>
+        <p>Service layer, scheduler, and the cron jobs that build the graph.</p>
+      </a>
+      <a class="kg-overview__tech-badge" href="https://help.sap.com/docs/btp/sap-business-technology-platform/cloud-foundry-environment" target="_blank" rel="noopener">
+        <h3>SAP BTP Cloud Foundry</h3>
+        <p>The runtime.</p>
+      </a>
+      <p class="kg-overview__tech-callout">
+        All three HANA tiles run on the same SAP HANA Cloud instance — that's the multi-model story.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       5. SURFACES GRID
+       ============================================================ -->
+  <section class="kg-overview__section" aria-labelledby="kg-surfaces">
+    <h2 id="kg-surfaces">Where you see it in action</h2>
+    <div class="kg-overview__surfaces">
+      <article class="kg-overview__surface-card">
+        <div class="img-frame">
+          <img src="/img/knowledge-graph/surfaces/explore.png" alt="The /explore/ interactive visualization with a force-directed layout of concepts and tutorials.">
+        </div>
+        <div class="body">
+          <h3>Live graph at <code>/explore/</code></h3>
+          <p>Force-directed interactive visualization of the whole graph. Search for a concept, click a node, follow the edges.</p>
+          <a class="primary" href="/explore/">Open the live graph →</a>
+        </div>
+      </article>
+      <article class="kg-overview__surface-card">
+        <div class="img-frame">
+          <img src="/img/knowledge-graph/surfaces/sidebar.png" alt="A tutorial-page sidebar listing prerequisites, related tutorials, and suggested next steps.">
+        </div>
+        <div class="body">
+          <h3>On every tutorial page</h3>
+          <p>A sidebar surfaces prerequisites, related tutorials, and suggested next steps based on the concepts a tutorial teaches.</p>
+          <a class="secondary" href="/tutorials/abap-cloud-getting-started/">See it on a tutorial →</a>
+        </div>
+      </article>
+      <article class="kg-overview__surface-card">
+        <div class="img-frame">
+          <img src="/img/knowledge-graph/surfaces/concepts.png" alt="A concept landing page describing CAP with sections for tutorials that teach, require, and relate.">
+        </div>
+        <div class="body">
+          <h3>Concept landing pages</h3>
+          <p>One page per concept — what it teaches, what requires it, what relates. Indexed by site search.</p>
+          <a class="secondary" href="/concepts/">Browse concepts →</a>
+        </div>
+      </article>
+      <article class="kg-overview__surface-card">
+        <div class="img-frame">
+          <img src="/img/knowledge-graph/surfaces/joule.png" alt="Joule chat panel showing a learning path between two tutorials with three intermediate tutorials.">
+        </div>
+        <div class="body">
+          <h3>Joule learning paths</h3>
+          <p>"Find me the shortest path between two tutorials." Joule queries the graph and returns the steps.</p>
+          <a class="secondary" href="/?joule=open&joule_prompt=Find%20the%20shortest%20learning%20path%20between%20two%20tutorials">Ask Joule →</a>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       6. CTA STRIP
+       ============================================================ -->
+  <section class="kg-overview__cta-strip" aria-label="Try the knowledge graph">
+    <div class="kg-overview__cta-strip-inner">
+      <a class="primary" href="/explore/">Explore the live graph →</a>
+      <ul>
+        <li><a href="https://help.sap.com/docs/hana-cloud-database/sap-hana-cloud-sap-hana-database-administration-guide/knowledge-graph-engine" target="_blank" rel="noopener">Read the SAP HANA Cloud KG docs →</a></li>
+        <li><a href="https://github.com/sap-tutorials/tutorials-ims" target="_blank" rel="noopener">View the source on GitHub →</a></li>
+      </ul>
+    </div>
+  </section>
+
+</main>
+
+<!-- Hero live-counter island bundle (built by PR 1's kg-stats-counter Vue island). -->
+<script type="module" src="/js/kg-stats-counter.js" defer></script>
+
+<!-- Light-weight inline script: populates the corpus-card counts.
+     No island needed for these three numbers; we just text-content them in. -->
+<script>
+  (async function () {
+    try {
+      const res = await fetch('/build/kg-stats');
+      if (!res.ok) return;
+      const data = await res.json();
+      document.querySelectorAll('[data-kg-count]').forEach((el) => {
+        const key = el.getAttribute('data-kg-count');
+        const v = data[key];
+        if (typeof v === 'number') el.textContent = new Intl.NumberFormat('en-US').format(v);
+      });
+    } catch { /* leave the em-dash placeholder */ }
+  })();
+</script>
+
+{{ end }}
