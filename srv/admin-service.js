@@ -1762,9 +1762,14 @@ export default class AdminService extends cds.ApplicationService {
       if (commit && result.committed > 0) {
         const userId = req.user?.id;
         setImmediate(() => {
-          auditEvent('SecurityEvent', {
+          // First arg is the action name (becomes data.action inside the
+          // audit emitter; the SecurityEvent type is hardcoded inside the
+          // closure). Pre-#769 this passed 'SecurityEvent' as the first arg
+          // and relied on object-spread last-wins to overwrite data.action —
+          // accidentally producing the correct row shape but emitting a
+          // useless 'emit failed for SecurityEvent' warn line on failure.
+          auditEvent('kg.api-docs.seed', {
             user: userId,
-            action: 'kg.api-docs.seed',
             committed: result.committed,
             planned: result.planned,
           }).catch((err) => {
