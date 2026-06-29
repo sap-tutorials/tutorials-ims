@@ -1262,6 +1262,22 @@ const BROWSE_DATA_FILE = join(HUGO_DATA_DIR, 'browse.json')
 const FEATURED_MAX = 10
 const RECENT_MAX = 10
 const BROWSE_NEW_WINDOW_MS = 31 * 24 * 60 * 60 * 1000
+
+// Featured-missions filter (homepage hp-teaser). The catalog ordering
+// that backs browse.featured isn't editorial — it falls out of GitHub
+// repo discovery — so without a filter the top of the homepage tends to
+// surface whichever event-bound missions happen to be processed first.
+// We exclude:
+//   - Devtoberfest YYYY (covers #ABCDEF-prefixed 2024 batch + plain 2025)
+//   - App Space (TechEd App Space, Developer Garage App Space, etc.)
+//   - TechEd YYYY (the rare title that mentions a TechEd year without "App Space")
+// Exported so test/unit/scripts/featured-mission-filter.test.ts can lock
+// the behaviour in. Replace with a proper Mission.featuredOrder admin
+// column when curation requirements outgrow this allowlist.
+export const EVENT_MISSION_RE = /(Devtoberfest\s*\d{4}|App\s*Space|TechEd\s*\d{4})/i
+export function isFeaturedMissionCandidate(title: string): boolean {
+  return !EVENT_MISSION_RE.test(title)
+}
 const BROWSE_LEVEL_ORDER: Record<string, number> = { beginner: 0, intermediate: 1, advanced: 2 }
 
 interface BrowseCardItem {
@@ -1450,9 +1466,14 @@ function writeBrowseData(
   )
   const all: BrowseCardItem[] = buildAllCards(tuts, missions, hierarchies, standaloneGroups, tutorialMetaMap)
 
-  // Featured: first FEATURED_MAX mission cards, in catalog order.
+  // Featured: first FEATURED_MAX mission cards in catalog order, excluding
+  // event-specific missions (Devtoberfest / App Space / TechEd YYYY) via
+  // isFeaturedMissionCandidate(). See EVENT_MISSION_RE comment above for
+  // rationale. Catalog ordering itself isn't editorial — it falls out of
+  // GitHub repo discovery — so this filter is a sieve, not a curation.
+  // Track replacement with proper Mission.featuredOrder admin column.
   const featured = all
-    .filter(c => c.type === 'mission')
+    .filter(c => c.type === 'mission' && isFeaturedMissionCandidate(c.title))
     .slice(0, FEATURED_MAX)
     .map(c => c.id)
 
