@@ -1,38 +1,62 @@
-{{- /* verb-spine.html — spec §6 row 2.
+{{- /* verb-spine.html — spec §6 row 2 + #759 PR 2.
        Context: dict "shelves" $shelves (slice from homepage_shelves.json).
-       Renders 6 verb tiles; each shows verb label + icon + top-3 START_HERE items.
-       Uses UI5 Fiori icons (matches header.html shellbar icon pattern). */ -}}
+
+       PR 2 (#759): tile flips on hover/keyboard to reveal explainer content.
+       Reads verb definitions from site.Data.verb_definitions (baked by
+       scripts/fetch-verb-definitions.ts at build time). Falls back to the
+       hard-coded slice if the baked JSON is missing — keeps local dev
+       working without the fetcher step. */ -}}
 {{- $shelves := .shelves | default slice -}}
-{{- $verbDefs := slice
-  (dict "key" "LEARN"      "label" "Learn"          "href" "/learn/"      "icon" "learning-assistant")
-  (dict "key" "BUILD"      "label" "Build"          "href" "/build/"      "icon" "developer-settings")
-  (dict "key" "INTEGRATE"  "label" "Integrate"      "href" "/integrate/"  "icon" "chain-link")
-  (dict "key" "OPERATE"    "label" "Operate"        "href" "/operate/"    "icon" "settings")
-  (dict "key" "AI"         "label" "Extend with AI" "href" "/ai/"         "icon" "da")
-  (dict "key" "CONNECT"    "label" "Connect"        "href" "/connect/"    "icon" "customer-and-contacts")
+{{- $bakedVerbs := slice -}}
+{{- with site.Data.verb_definitions }}
+  {{- $bakedVerbs = .verbs | default slice -}}
+{{- end -}}
+{{- /* Hard-coded fallback (used when site.Data.verb_definitions.verbs is empty). */ -}}
+{{- $fallbackVerbs := slice
+  (dict "verbKey" "LEARN"      "label" "Learn"          "iconName" "learning-assistant"    "href" "/learn/"     "sortOrder" 10)
+  (dict "verbKey" "BUILD"      "label" "Build"          "iconName" "developer-settings"    "href" "/build/"     "sortOrder" 20)
+  (dict "verbKey" "INTEGRATE"  "label" "Integrate"      "iconName" "chain-link"            "href" "/integrate/" "sortOrder" 30)
+  (dict "verbKey" "OPERATE"    "label" "Operate"        "iconName" "settings"              "href" "/operate/"   "sortOrder" 40)
+  (dict "verbKey" "AI"         "label" "Extend with AI" "iconName" "da"                    "href" "/ai/"        "sortOrder" 50)
+  (dict "verbKey" "CONNECT"    "label" "Connect"        "iconName" "customer-and-contacts" "href" "/connect/"   "sortOrder" 60)
 -}}
+{{- $verbDefs := cond (gt (len $bakedVerbs) 0) $bakedVerbs $fallbackVerbs -}}
+{{- /* For baked entries, supply href since the build feed doesn't include it. */ -}}
+{{- $hrefMap := dict "LEARN" "/learn/" "BUILD" "/build/" "INTEGRATE" "/integrate/" "OPERATE" "/operate/" "AI" "/ai/" "CONNECT" "/connect/" -}}
 <nav class="hp-verbs" aria-label="Developer paths">
-  {{- range $verbDefs -}}
-    {{- $vKey := .key -}}
+  {{- range sort $verbDefs "sortOrder" -}}
+    {{- $vKey := .verbKey -}}
     {{- $vLabel := .label -}}
+    {{- $vIcon := .iconName -}}
     {{- $vHref := .href -}}
-    {{- $vIcon := .icon -}}
+    {{- if not $vHref -}}{{- $vHref = index $hrefMap $vKey -}}{{- end -}}
+    {{- $tagline := .tagline | default "" -}}
+    {{- $whyItMatters := .whyItMatters | default "" -}}
     {{- $verbShelves := where $shelves "verb" $vKey -}}
-    {{- /* Field on HomepageShelves is `shelf` (enum START_HERE|REFERENCE|TOOLS|KEEP_CURRENT),
-           NOT `tier` — the original spec implementation had a typo here, so the START_HERE
-           preview list was always empty until this fix. */ -}}
     {{- $startHere := where $verbShelves "shelf" "START_HERE" -}}
     {{- $preview := first 3 (sort $startHere "sortOrder") -}}
-    <a href="{{ $vHref }}" class="hp-verb">
-      <div class="hp-verb__icon" aria-hidden="true"><ui5-icon name="{{ $vIcon }}"></ui5-icon></div>
-      <div class="hp-verb__label">{{ $vLabel }}</div>
-      {{- if gt (len $preview) 0 -}}
-        <ul class="hp-verb__preview" aria-label="{{ $vLabel }} highlights">
-          {{- range $preview -}}
-            <li>{{ .title }}</li>
-          {{- end -}}
-        </ul>
-      {{- end -}}
-    </a>
+    <div data-island="verb-flip-tile"
+         data-verb-key="{{ $vKey }}"
+         data-label="{{ $vLabel }}"
+         data-icon-name="{{ $vIcon }}"
+         data-tagline="{{ $tagline }}"
+         data-why-it-matters="{{ $whyItMatters }}"
+         data-href="{{ $vHref }}"
+         class="hp-verb-island">
+      {{- /* First-paint fallback content. Renders identically to today's
+             static markup; Vue island replaces it on hydration. If Vue
+             fails to load, this stays as a working link. */ -}}
+      <a href="{{ $vHref }}" class="hp-verb">
+        <div class="hp-verb__icon" aria-hidden="true"><ui5-icon name="{{ $vIcon }}"></ui5-icon></div>
+        <div class="hp-verb__label">{{ $vLabel }}</div>
+        {{- if gt (len $preview) 0 -}}
+          <ul class="hp-verb__preview" aria-label="{{ $vLabel }} highlights">
+            {{- range $preview -}}
+              <li>{{ .title }}</li>
+            {{- end -}}
+          </ul>
+        {{- end -}}
+      </a>
+    </div>
   {{- end -}}
 </nav>
