@@ -208,6 +208,7 @@ export default defineConfig({
         'preview-banner': resolve(__dirname, 'src/validation/preview-banner.ts'),
         'homepage-bands': resolve(__dirname, 'src/homepage-bands/index.ts'),
         'kg-stats-counter': resolve(__dirname, 'src/kg-stats-counter/main.ts'),
+        'homepage-explainers': resolve(__dirname, 'src/homepage-explainers/index.ts'),
       },
       output: {
         entryFileNames: '[name].js',
