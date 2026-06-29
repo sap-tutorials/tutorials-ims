@@ -15,7 +15,10 @@
 //   2) GET /playlistItems?...     — single "featured" entry from a playlist (if playlistId set)
 //   3) GET /search?...            — 3 most-recent uploads from the channel
 //
-// Cache: 15-min TTL keyed on "${channelHandle}|${playlistId||''}".
+// Cache (#740): 15-min TTL on success, 1-min TTL on failure. Failures still
+// get cached briefly to throttle retry storms on real quota exhaustion, but
+// the user-visible damage of a transient 4xx/5xx is capped at 1 minute
+// instead of 15. Keyed on "${channelHandle}|${playlistId||''}".
 // Module-singleton via globalThis Symbol per feedback_module_singletons_in_vitest_cds.
 
 import cds from '@sap/cds';
@@ -23,7 +26,8 @@ import cds from '@sap/cds';
 const log = cds.log('youtube-fetcher');
 
 const API_BASE = 'https://www.googleapis.com/youtube/v3';
-const TTL_MS   = 15 * 60 * 1000;  // 15 minutes
+const TTL_MS         = 15 * 60 * 1000;  // 15 minutes for successful results
+const FAILURE_TTL_MS = 60 * 1000;       // 1 minute for failed results (#740)
 const TIMEOUT_MS = 5000;
 
 // --- Module-singleton state (#639) -----------------------------------------
@@ -134,8 +138,16 @@ export async function fetchSapDevsVideos({ apiKey, playlistId, channelHandle }) 
     if (!error) error = `YouTube API ${err.status ?? err.message}`;
   }
 
-  // Store result (even failures — prevents retry storms on quota exhaustion)
+  // Cache policy (#740):
+  //   - Success: 15 min. Keeps quota use sane (~96 calls/day vs the 10 000
+  //     unit limit; /search is 100 units/call).
+  //   - Failure: 1 min. The cache still throttles retry storms on real
+  //     quota exhaustion (60 calls/hr instead of unbounded) but recovers
+  //     from transient 403 / 5xx / network blips in one minute. Was 15 min
+  //     for both, which poisoned the rail for 14 min on any one-shot
+  //     YouTube hiccup — see commit message for the live diagnosis.
+  const cacheTtlMs = error ? FAILURE_TTL_MS : TTL_MS;
   const value = { featured, recent, error };
-  _state.cache.set(cacheKey, { value, expiresAt: Date.now() + TTL_MS });
+  _state.cache.set(cacheKey, { value, expiresAt: Date.now() + cacheTtlMs });
   return value;
 }
