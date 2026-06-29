@@ -89,6 +89,7 @@ export const KG_IRI_PREFIXES = Object.freeze({
   tag:      `${KG}tag/`,
   'learning-journey': `${KG}learning-journey/`,
   'blog-post': `${KG}blog-post/`,
+  'discovery-mission': `${KG}discovery-mission/`,
 });
 
 /**
@@ -105,6 +106,13 @@ export function iriLearningJourney(slug) {
  */
 export function iriBlogPost(slug) {
   return `${KG_IRI_PREFIXES['blog-post']}${iriEscapeSegment(slug)}`;
+}
+
+/**
+ * Phase 4.3 (#447): IRI helper for Discovery Center missions.
+ */
+export function iriDiscoveryMission(slug) {
+  return `${KG_IRI_PREFIXES['discovery-mission']}${iriEscapeSegment(slug)}`;
 }
 
 /**
