@@ -1,6 +1,6 @@
 # Issue #734 — Surface `HomepageConfig` (+ Redirects) in the admin shell
 
-- **Status:** Approved (2026-06-29), pending spec-reviewer pass
+- **Status:** Approved (2026-06-29), spec-reviewer pass complete
 - **Issue:** [#734](https://github.com/sap-tutorials/tutorials-ims/issues/734)
 - **Predecessor specs:** [`2026-06-27-639-developer-homepage-design.md`](./2026-06-27-639-developer-homepage-design.md) (Phase 4 cutover that introduced `HomepageConfig` + `LegacyRedirects` but only surfaced `HomepageShelves`)
 - **Predecessor PRs:** [#701](https://github.com/sap-tutorials/tutorials-ims/pull/701) (YouTube config — exposed the gap by forcing a `cds bind --exec` workaround to set `developerNewsPlaylistId`)
@@ -122,7 +122,7 @@ Icon: `sap-icon://home`. Symmetric with other group icons (`folder-blank` for Co
 | `srv/admin-service.cds` | `HomepageConfig` already exposed as `@odata.singleton`. |
 | `srv/admin-service.js` | Singleton auto-init `before('READ')` handler already in place (line 409-422). |
 | `app/admin-annotations.cds` | `HomepageConfig` already has `@UI.FieldGroup#Main` + `@UI.HeaderInfo` annotations (line 2940-2952). |
-| `app/admin-shell/webapp/i18n/i18n.properties` | Verify during implementation whether `navigation.json` titles are pulled from i18n or used as literals. If i18n, add three new keys; if literals, no change. |
+| `app/admin-shell/webapp/i18n/i18n.properties` | No change. The side-nav binds `{nav>title}` directly to the JSON model values (`app/admin-shell/webapp/view/Shell.view.xml:75,82`) — titles are literal strings, not i18n keys. |
 
 ## 3. Data flow
 
@@ -177,7 +177,11 @@ No new code needed.
 
 `Shell.controller.js:117` is `if (sRoute) { ... }` — undefined route names fall through silently. If `navigation.json` and `NAV_KEY_TO_ROUTE` drift (e.g. a future contributor adds a nav entry without the controller mapping), the click is a no-op. Implementation step: confirm an `else` branch with `console.warn` exists, or add one — surfaces drift instead of failing silently.
 
-### 4.4 PATCH /admin/HomepageConfig fails
+### 4.4 `_onRouteMatched` hash-sniffing asymmetry (no symmetric branch needed)
+
+The existing `_onRouteMatched` (lines 381-394) has a hash-sniffing branch for `sRouteName === "operations"` that re-maps `sNavKey` to `pipelinelog` / `joblog` based on the inner hash. That's needed there because operations/pipelinelog/joblog share ONE shell route name with three URL patterns dispatched by inner hash. **The new homepage routes don't need a symmetric branch**: each surface has its OWN outer route name (`homepageShelves`, `homepageRedirects`, `homepageConfig`), so `_onRouteMatched` sets `sNavKey` correctly from the matched route name without sniffing. No change to `_onRouteMatched` required.
+
+### 4.5 PATCH /admin/HomepageConfig fails
 
 Standard Fiori Elements behavior shows the framework error toast. No custom handling needed. CSRF, authentication, server errors — all already covered by the admin-shell's auth wiring.
 
