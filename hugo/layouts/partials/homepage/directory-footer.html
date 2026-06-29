@@ -1,6 +1,8 @@
 {{- /* directory-footer.html — spec §6 row 7.
        Pure Hugo, no JS. Groups all active shelves by verb into 6 columns.
-       Plus utility links and the footer-only sap.com door.
+       Plus content-y utility links (GitHub + the labeled door to sap.com).
+       Privacy + Accessibility live in the site-wide footer.html below — no
+       duplicates here.
        Context: dict "shelves" $shelves */ -}}
 {{- $shelves := .shelves | default slice -}}
 {{- $verbKeys := slice "LEARN" "BUILD" "INTEGRATE" "OPERATE" "AI" "CONNECT" -}}
@@ -33,8 +35,6 @@
 
   <div class="hp-directory__utility">
     <ul>
-      <li><a href="/privacy/">Privacy</a></li>
-      <li><a href="/accessibility/">Accessibility</a></li>
       <li><a href="https://github.com/sap-tutorials" target="_blank" rel="noopener">GitHub</a></li>
       <li><a href="https://www.sap.com" target="_blank" rel="noopener">SAP corporate site →</a></li>
     </ul>
