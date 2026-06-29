@@ -44,4 +44,14 @@ describe('db/homepage.cds — explainer additions (issue #759 PR 1)', () => {
       expect(SCHEMA).toMatch(/sortOrder\s*:\s*Integer\s+default\s+100\s*;/);
     });
   });
+
+  describe('ShelfDefinitions entity', () => {
+    it('declares the entity with shelfKey unique constraint', () => {
+      expect(SCHEMA).toMatch(/@assert\.unique\.shelfKey:\s*\[shelfKey\]/);
+      expect(SCHEMA).toMatch(/entity\s+ShelfDefinitions\s*:\s*cuid,\s*managed\s*\{/);
+    });
+    it('declares shelfKey : HomepageShelf mandatory with @assert.range', () => {
+      expect(SCHEMA).toMatch(/shelfKey\s*:\s*HomepageShelf\s+@mandatory\s+@assert\.range\s*;/);
+    });
+  });
 });

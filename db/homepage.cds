@@ -87,3 +87,17 @@ entity VerbDefinitions : cuid, managed {
   whyItMatters    : String(800);
   authoringStatus : AuthoringStatus default 'BLANK' @assert.range;
 }
+
+// (#759) Per-shelf-category explainer content. Cardinality is fixed
+// (4 rows, one per HomepageShelf enum value). Content is shared across
+// all 6 verb sub-pages — REFERENCE means the same thing on /learn/ and
+// /operate/. Spec §2.3.
+@assert.unique.shelfKey: [shelfKey]
+entity ShelfDefinitions : cuid, managed {
+  shelfKey        : HomepageShelf @mandatory @assert.range;
+  label           : String(40)    @mandatory;
+  sortOrder       : Integer       default 100;
+  tagline         : String(140);
+  whyItMatters    : String(800);
+  authoringStatus : AuthoringStatus default 'BLANK' @assert.range;
+}
