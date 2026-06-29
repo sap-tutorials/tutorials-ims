@@ -54,4 +54,35 @@ describe('db/homepage.cds — explainer additions (issue #759 PR 1)', () => {
       expect(SCHEMA).toMatch(/shelfKey\s*:\s*HomepageShelf\s+@mandatory\s+@assert\.range\s*;/);
     });
   });
+
+  describe('VerbDefinitions seed CSV', () => {
+    const csv = readFileSync(
+      join(import.meta.dirname, '../../../db/data/com.sap.developers.ims-VerbDefinitions.csv'),
+      'utf8'
+    );
+    const lines = csv.trim().split(/\r?\n/);
+    it('has header + 6 rows', () => {
+      expect(lines.length).toBe(7);
+    });
+    it('header uses ID;verbKey;label;iconName;sortOrder;tagline;whyItMatters;authoringStatus', () => {
+      expect(lines[0]).toBe('ID;verbKey;label;iconName;sortOrder;tagline;whyItMatters;authoringStatus');
+    });
+    it.each([
+      ['LEARN', 'Learn', 'learning-assistant', 10],
+      ['BUILD', 'Build', 'developer-settings', 20],
+      ['INTEGRATE', 'Integrate', 'chain-link', 30],
+      ['OPERATE', 'Operate', 'settings', 40],
+      ['AI', 'Extend with AI', 'da', 50],
+      ['CONNECT', 'Connect', 'customer-and-contacts', 60],
+    ])('row for %s has correct label + icon + sortOrder', (verbKey, label, icon, sort) => {
+      const row = lines.find(l => l.includes(`;${verbKey};`));
+      expect(row).toBeDefined();
+      expect(row).toContain(`;${verbKey};${label};${icon};${sort};`);
+    });
+    it('every row has authoringStatus=BLANK and empty tagline/whyItMatters', () => {
+      lines.slice(1).forEach(line => {
+        expect(line).toMatch(/;;;BLANK$/);
+      });
+    });
+  });
 });
