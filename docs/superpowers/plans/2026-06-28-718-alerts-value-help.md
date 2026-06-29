@@ -23,7 +23,7 @@
 **Modify**
 - `srv/admin-service.cds` (around line 241, right after the `EventTypes` stub) — add two `@readonly @cds.persistence.skip` entities.
 - `srv/admin-service.js` (around line 162, right after the `EventTypes` READ handler) — add two READ handlers calling the new getters.
-- `app/admin-annotations.cds` (lines 2770-2775, the existing `severity` + `audience` annotation block) — add `@Common.ValueList` clauses pointing at the new collections.
+- `app/admin-annotations.cds` (lines 2783-2788, the existing `severity` + `audience` annotation block) — add `@Common.ValueList` clauses pointing at the new collections.
 
 **Files NOT touched** (state once, do not re-derive)
 - `db/schema.cds` — inline enums on `Alerts.severity` / `Alerts.audience` stay as-is; `@assert.range` continues to enforce values.
@@ -281,7 +281,7 @@ git commit -m "feat(#718): READ handlers for AlertSeverities & AlertAudiences"
 ## Task 5: Wire the value help on the admin annotations
 
 **Files:**
-- Modify: `app/admin-annotations.cds:2770-2775` (replace the `severity` and `audience` annotation blocks)
+- Modify: `app/admin-annotations.cds:2783-2788` (replace the `severity` and `audience` annotation blocks)
 
 - [ ] **Step 1: Read context.**
 
@@ -293,7 +293,7 @@ Confirm you see the `annotate AdminService.Alerts { … }` block with `title`, `
 
 - [ ] **Step 2: Replace the `severity` and `audience` annotation entries.**
 
-Find this exact block (currently lines 2770-2775):
+Find this exact block (currently lines 2783-2788):
 ```cds
   severity    @Common.Label: 'Severity'
               @Common.ValueListWithFixedValues: true
