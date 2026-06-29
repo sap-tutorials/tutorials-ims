@@ -46,6 +46,18 @@ export async function exploreDataHandler(req, res) {
         `dropped ${payload.droppedBindings} unparseable SPARQL bindings — investigate schema drift`
       );
     }
+    // Canary for the XML-response regression (2026-06-28). A populated KG
+    // (look it up via GraphMetadata.tripleCount) but 0 nodes here means
+    // parseExploreBindings silently returned []. The most likely cause is
+    // a missing Accept header in KG_QUERY.hdbprocedure's SYS_SPARQL_EXECUTE
+    // call — it ships XML by default and the JSON.parse fails. See PR #742.
+    if (payload.nodes.length === 0 && payload.edges.length === 0) {
+      log.warn(
+        '/graph/explore-data returned 0 nodes and 0 edges — if the KG was just rebuilt, ' +
+        'check KG_QUERY.hdbprocedure has \'Accept: application/sparql-results+json\' on ' +
+        'its SYS_SPARQL_EXECUTE call.',
+      );
+    }
     cached = payload;
     cachedAt = now;
     res.setHeader('X-Cache', 'MISS');
