@@ -421,6 +421,52 @@ export default class AdminService extends cds.ApplicationService {
       }
     });
 
+    // #759: VerbDefinitions auto-init. Cardinality is exactly 6 — one
+    // per HomepageVerb enum value. Seed CSV in
+    // db/data/com.sap.developers.ims-VerbDefinitions.csv is canonical;
+    // this handler is the defensive runtime fallback (matches
+    // HomepageConfig pattern above). Values MUST agree with the CSV.
+    const VERB_DEFAULTS = [
+      { verbKey: 'LEARN',     label: 'Learn',          iconName: 'learning-assistant',    sortOrder: 10 },
+      { verbKey: 'BUILD',     label: 'Build',          iconName: 'developer-settings',    sortOrder: 20 },
+      { verbKey: 'INTEGRATE', label: 'Integrate',      iconName: 'chain-link',            sortOrder: 30 },
+      { verbKey: 'OPERATE',   label: 'Operate',        iconName: 'settings',              sortOrder: 40 },
+      { verbKey: 'AI',        label: 'Extend with AI', iconName: 'da',                    sortOrder: 50 },
+      { verbKey: 'CONNECT',   label: 'Connect',        iconName: 'customer-and-contacts', sortOrder: 60 },
+    ];
+    this.before('READ', 'VerbDefinitions', async () => {
+      const existing = await SELECT.from('com.sap.developers.ims.VerbDefinitions').columns('verbKey');
+      if (existing.length >= 6) return;
+      const have = new Set(existing.map(r => r.verbKey));
+      const missing = VERB_DEFAULTS
+        .filter(d => !have.has(d.verbKey))
+        .map(d => ({ ...d, authoringStatus: 'BLANK' }));
+      if (missing.length > 0) {
+        await INSERT.into('com.sap.developers.ims.VerbDefinitions').entries(missing);
+      }
+    });
+
+    // #759: ShelfDefinitions auto-init. Cardinality is exactly 4.
+    // Same pattern as VerbDefinitions. Values MUST agree with
+    // db/data/com.sap.developers.ims-ShelfDefinitions.csv.
+    const SHELF_DEFAULTS = [
+      { shelfKey: 'START_HERE',   label: 'Start here',      sortOrder: 10 },
+      { shelfKey: 'REFERENCE',    label: 'Reference',       sortOrder: 20 },
+      { shelfKey: 'TOOLS',        label: 'Tools & samples', sortOrder: 30 },
+      { shelfKey: 'KEEP_CURRENT', label: 'Keep current',    sortOrder: 40 },
+    ];
+    this.before('READ', 'ShelfDefinitions', async () => {
+      const existing = await SELECT.from('com.sap.developers.ims.ShelfDefinitions').columns('shelfKey');
+      if (existing.length >= 4) return;
+      const have = new Set(existing.map(r => r.shelfKey));
+      const missing = SHELF_DEFAULTS
+        .filter(d => !have.has(d.shelfKey))
+        .map(d => ({ ...d, authoringStatus: 'BLANK' }));
+      if (missing.length > 0) {
+        await INSERT.into('com.sap.developers.ims.ShelfDefinitions').entries(missing);
+      }
+    });
+
     // Auto-assign legacyId on creation for entities that need it
     const legacyKeyedEntities = [
       'Users', 'Tutorials', 'Missions', 'Groups', 'Events', 'TaskRecords',
