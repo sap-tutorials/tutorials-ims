@@ -10,7 +10,7 @@
 // NoNotifications illustration) are registered globally by hugo/assets/js/ui5-bootstrap.ts.
 // Do NOT re-import them here — that would balloon the bundle (alerts.js budget is 12 KB gz).
 
-import { createApp, ref, reactive, computed } from 'vue';
+import { createApp, h, ref, reactive, computed } from 'vue';
 import Alerts from './Alerts.vue';
 import { fetchAlerts } from './api';
 import { filterVisible, readDismissedSet, dismiss } from './dismiss-filter';
@@ -30,24 +30,28 @@ async function boot() {
   const dismissed = reactive(readDismissedSet());
   const visible = computed(() => filterVisible(alerts.value, dismissed));
 
-  // Mount the Vue island into the popover.
+  function onDismiss(id: string) {
+    dismiss(id);
+    dismissed.add(id);
+    updateBadge();
+  }
+  function onCta(url: string) {
+    if (url.startsWith('/')) window.location.href = url;
+    else window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
+  // Mount the Vue island into the popover. Use a render function (not an
+  // inline `template:` string) because Vite ships the runtime-only Vue
+  // build by default — string templates need the compiler, which isn't
+  // bundled. A `template:` config in production silently renders <!---->
+  // (no warning, no error). This bit us live on DEV: the bell badge updated
+  // imperatively via updateBadge(), but the popover stayed empty.
   const app = createApp({
-    components: { Alerts },
-    setup() {
-      return { visible };
-    },
-    template: `<Alerts :alerts="visible" @dismiss="onDismiss" @cta="onCta" />`,
-    methods: {
-      onDismiss(id: string) {
-        dismiss(id);
-        dismissed.add(id);
-        updateBadge();
-      },
-      onCta(url: string) {
-        if (url.startsWith('/')) window.location.href = url;
-        else window.open(url, '_blank', 'noopener,noreferrer');
-      },
-    },
+    render: () => h(Alerts, {
+      alerts: visible.value,
+      onDismiss,
+      onCta,
+    }),
   });
   app.mount(slot);
 
