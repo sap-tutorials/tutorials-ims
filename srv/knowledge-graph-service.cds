@@ -90,6 +90,8 @@ service KnowledgeGraphService @(path : '/graph') {
     durationHours : Decimal(5, 2);
     authorName    : String;             // blog-post only (Phase 4.2)
     postedAt      : Timestamp;          // blog-post only (Phase 4.2)
+    effortLevel   : Integer;            // discovery-mission only (Phase 4.3)
+    categoryLabel : String;             // discovery-mission only (Phase 4.3)
     overlapCount  : Integer;
   }
   type NeighborhoodResult {
