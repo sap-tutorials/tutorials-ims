@@ -225,6 +225,38 @@ cds.on('bootstrap', (app) => {
     }
   });
 
+  // (#759) Build-time data for the homepage explainer popovers. Mirrors
+  // /build/homepage-shelves above — unauthenticated, 60s Cache-Control,
+  // structured payload. Consumed by scripts/fetch-verb-definitions.ts
+  // and scripts/fetch-shelf-definitions.ts at build time.
+  app.get('/build/verb-definitions', async (_req, res) => {
+    try {
+      const db = await cds.connect.to('db');
+      const rows = await db.run(
+        SELECT.from('com.sap.developers.ims.VerbDefinitions').orderBy('sortOrder')
+      );
+      res.set('Cache-Control', 'public, max-age=60');
+      res.json({ verbs: rows, buildAt: new Date().toISOString() });
+    } catch (err) {
+      console.error('[build/verb-definitions]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/build/shelf-definitions', async (_req, res) => {
+    try {
+      const db = await cds.connect.to('db');
+      const rows = await db.run(
+        SELECT.from('com.sap.developers.ims.ShelfDefinitions').orderBy('sortOrder')
+      );
+      res.set('Cache-Control', 'public, max-age=60');
+      res.json({ shelves: rows, buildAt: new Date().toISOString() });
+    } catch (err) {
+      console.error('[build/shelf-definitions]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Public read for the developer-advocates page (Task 4.4 of advocates impl).
   // Spec: docs/superpowers/specs/2026-06-17-developer-advocates-design.md
   advocatesPublic.register(app);
