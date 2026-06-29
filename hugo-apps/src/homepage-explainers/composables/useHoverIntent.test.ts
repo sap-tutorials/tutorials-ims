@@ -53,4 +53,42 @@ describe('useHoverIntent', () => {
     vi.advanceTimersByTime(0);
     expect(onEnter).toHaveBeenCalledTimes(1);
   });
+
+  it('does NOT fire onEnter if component unmounts while timer is pending', async () => {
+    // Mount the composable inside a fake component so onBeforeUnmount fires.
+    const { mount } = await import('@vue/test-utils');
+    const { defineComponent, h } = await import('vue');
+    const onEnter = vi.fn();
+    const TestHost = defineComponent({
+      setup() {
+        const { handleEnter } = useHoverIntent({ delayMs: 250, onEnter });
+        handleEnter();
+        return () => h('div');
+      },
+    });
+    const wrapper = mount(TestHost);
+    // Timer is pending; unmount before it fires.
+    vi.advanceTimersByTime(100);
+    expect(onEnter).not.toHaveBeenCalled();
+    wrapper.unmount();
+    vi.advanceTimersByTime(500);
+    expect(onEnter).not.toHaveBeenCalled();
+  });
+
+  it('idempotent on rapid re-enter — onEnter fires once per enter/leave cycle', () => {
+    const onEnter = vi.fn();
+    const { handleEnter, handleLeave } = useHoverIntent({ delayMs: 250, onEnter });
+    handleEnter();
+    vi.advanceTimersByTime(300);
+    expect(onEnter).toHaveBeenCalledTimes(1);
+    // Second handleEnter without intervening leave: should NOT re-fire.
+    handleEnter();
+    vi.advanceTimersByTime(300);
+    expect(onEnter).toHaveBeenCalledTimes(1);
+    // After leave + enter again, fires once more.
+    handleLeave();
+    handleEnter();
+    vi.advanceTimersByTime(300);
+    expect(onEnter).toHaveBeenCalledTimes(2);
+  });
 });

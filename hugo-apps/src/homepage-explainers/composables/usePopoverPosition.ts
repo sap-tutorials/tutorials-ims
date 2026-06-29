@@ -32,9 +32,10 @@ export function usePopoverPosition(opts: {
 
     // Horizontal: center on anchor unless it would overflow.
     const anchorCenter = rect.left + rect.width / 2;
-    if (anchorCenter - popoverW / 2 < 8) {
+    const VIEWPORT_MARGIN_PX = 8;
+    if (anchorCenter - popoverW / 2 < VIEWPORT_MARGIN_PX) {
       alignment.value = 'left';
-    } else if (anchorCenter + popoverW / 2 > vw - 8) {
+    } else if (anchorCenter + popoverW / 2 > vw - VIEWPORT_MARGIN_PX) {
       alignment.value = 'right';
     } else {
       alignment.value = 'center';
