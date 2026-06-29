@@ -2,7 +2,7 @@
 
 > **Sibling files:** [Index](./2026-06-29-756-admin-cron-trigger.md) · [Task 1](./2026-06-29-756-task1-scheduler.md) · [Task 3](./2026-06-29-756-task3-ui.md)
 
-**Goal:** Add the `AdminService.JobControls` singleton with `listJobs()` + `runJob(jobName)` actions. Implement the `emitJobAudit` helper (exported for `scheduler.js` lazy-import). Add `cron-parser` dependency. Wire 8 unit tests + 1 hybrid sanity test.
+**Goal:** Add the `AdminService.JobControls` singleton with `listJobs()` + `runJob(jobName)` actions. Implement the `emitJobAudit` helper (exported for `scheduler.js` lazy-import). Add `cron-parser` dependency. Wire 6 unit tests + 1 hybrid sanity test.
 
 **Prerequisites:** Task 1 merged or stacked. The `JOB_REGISTRY`, `runJobByName`, and pre-seed chassis are assumed present.
 

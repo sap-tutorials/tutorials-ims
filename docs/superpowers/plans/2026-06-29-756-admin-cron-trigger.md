@@ -7,7 +7,7 @@
 **Architecture:** Three tasks land as commit ranges on a single shared branch and a SINGLE PR (squash-merged; matches Phase 4.1-4.5 actual shipping pattern):
 
 1. **Scheduler refactor + JobLastRun retrofit (Task 1)** — `JOB_REGISTRY: Map<jobName, JobDef>` + `registerJob({...})` declarations replace inline `cron.schedule()` calls (24 jobs). `runWithLock` extended with optional 4th opts arg `{manualTrigger, user}`; `recordJobLastRun` invoked unconditionally in finally-block. Pre-seed JobLastRun via UPSERT at end of `registerJobs()`. Remove inline `recordJobLastRun` call from `fetch-api-docs` cron body (now dead code).
-2. **`AdminService.JobControls` singleton + handlers (Task 2)** — new singleton, `listJobs()` + `runJob(jobName)` actions, `emitJobAudit` helper, `cron-parser` dep, 8 unit tests + 1 hybrid.
+2. **`AdminService.JobControls` singleton + handlers (Task 2)** — new singleton, `listJobs()` + `runJob(jobName)` actions, `emitJobAudit` helper, `cron-parser` dep, 6 unit tests + 1 hybrid.
 3. **Admin UI tile extension (Task 3)** — Board.view.xml gets 3 new columns (Schedule / Next run / Run now button) + the existing 3 columns. Board.controller.js gets `_loadJobControls()` JOIN logic + `onRunJob()` press handler + 5-min poll-after-trigger.
 
 **Tech Stack:** SAP CAP (Node.js 22), HANA Cloud, vitest (unit + hybrid), UI5/Fiori (admin shell), `cron-parser` for next-run computation.

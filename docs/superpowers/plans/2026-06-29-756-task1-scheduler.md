@@ -216,7 +216,7 @@ registerJob({
 });
 ```
 
-**With `(logId)` arg (5 jobs: `ngds-retry`, `account-merge-batch`, `contributor-notifications`, `email-retry`, `embedding-reconciliation`):**
+**With `(logId)` arg (4 jobs: `ngds-retry`, `account-merge-batch`, `contributor-notifications`, `embedding-reconciliation`):**
 ```javascript
 // Before:
 cron.schedule('0 */2 * * *', () =>
