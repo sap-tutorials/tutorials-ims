@@ -1,6 +1,6 @@
 # Issue #744 — Fold `/explore/` into Hugo (shellbar + theme support)
 
-- **Status:** Approved (2026-06-29), pending spec-reviewer pass
+- **Status:** Approved (2026-06-29), spec-reviewer pass complete
 - **Issue:** [#744](https://github.com/sap-tutorials/tutorials-ims/issues/744)
 - **Predecessor PRs:** [#726](https://github.com/sap-tutorials/tutorials-ims/pull/726) (KG public reader), [#737](https://github.com/sap-tutorials/tutorials-ims/pull/737) (manifest path fix), [#743](https://github.com/sap-tutorials/tutorials-ims/pull/743) (SPARQL Accept header)
 - **Related spec:** [`2026-06-27-446-knowledge-graph-phase3-design.md`](./2026-06-27-446-knowledge-graph-phase3-design.md) (the spec that introduced the standalone `/explore/` template this proposal replaces)
@@ -17,7 +17,7 @@ This spec folds `/explore/` into the Hugo build pipeline. Hugo's `baseof.html` c
 
 - Replace `srv/templates/explore.html` + `srv/lib/explore-route.js` + `srv/lib/build-explore-html.js` with a Hugo content page + layout.
 - Move the build-time manifest target from `gen/srv/srv/lib/explore-bundle-manifest.json` to `hugo/data/explore_bundle.json`.
-- Remove the Express handler registration at `srv/server.js:192` and the import on line 10.
+- Remove the Express handler registrations at `srv/server.js:191` (`/explore`) and `srv/server.js:192` (`/explore/`), and the `import { exploreHandler }` on line 10.
 - Remove the approuter route `^/explore/?$` → `srv-api` from `approuter/xs-app.json`; default static-serving picks up `approuter/static/explore/index.html` instead.
 - Update the four unit tests that pin the old SSR path; add one new unit test that pins the new build-sequencing requirement.
 - Tighten the existing smoke assertion on `/explore` to verify shellbar markup is present.
@@ -111,7 +111,7 @@ Hugo's `head.html` runs a pre-paint script that reads `localStorage.theme` and s
 | File | Change |
 |---|---|
 | `scripts/build-explore-manifest.ts` | Default output path moves from `srv/lib/explore-bundle-manifest.json` to `hugo/data/explore_bundle.json`. CLI args unchanged; both mta.yaml files pass the new path explicitly. |
-| `srv/server.js` | Remove the `import { exploreHandler } from './lib/explore-route.js'` line and the `app.get('/explore/', exploreHandler)` registration. |
+| `srv/server.js` | Remove the `import { exploreHandler } from './lib/explore-route.js'` on line 10 and BOTH `app.get('/explore', exploreHandler)` (line 191) and `app.get('/explore/', exploreHandler)` (line 192) registrations. |
 | `app/explore/src/main.ts` | `.mount('#app')` → `.mount('#explore-app')`. The rename avoids any potential collision with `<div id="app">` markup in Hugo's chrome. |
 | `app/explore/src/composables/useGraphData.ts` | Delete the `window.__INITIAL_GRAPH__` window-global branch; the function unconditionally fetches `/graph/explore-data` on mount. Reduces the composable from ~30 lines to ~20. |
 | `approuter/xs-app.json` | Remove the `^/explore/?$` → `destination: srv-api` entry. The `^/explore-ui/(.*)$` static route stays. The default static-serving catch-all picks up `/explore/`. |
@@ -122,17 +122,31 @@ Hugo's `head.html` runs a pre-paint script that reads `localStorage.theme` and s
 
 ## 3. Build sequencing
 
-### 3.1 Old order (in `mta.yaml` srv before-all)
+### 3.1 Old order
+
+The current `mta.yaml:82` step (DEV/test) runs as part of the srv module's before-all *after* `cds build`:
 
 ```text
-1. npm ci
-2. cds build --production
-3. npx tsx scripts/build-explore-manifest.ts \
-     app/explore/dist gen/srv/srv/lib/explore-bundle-manifest.json
-4. (manifest packs into srv MTAR via gen/srv/srv/ convention)
+mta.yaml:82
+  - npx tsx scripts/build-explore-manifest.ts \
+      app/explore/dist gen/srv/srv/lib/explore-bundle-manifest.json
 ```
 
-### 3.2 New order (in `mta.yaml` approuter before-all)
+The `.deploy/mta.yaml:43` (standalone-approuter variant) wraps the same call in `bash -c "cd .. && ..."` because that module's before-all runs from a sibling directory; the prefix preserves the relative path semantics:
+
+```text
+.deploy/mta.yaml:43
+  - bash -c "cd .. && npx tsx scripts/build-explore-manifest.ts \
+      app/explore/dist gen/srv/srv/lib/explore-bundle-manifest.json"
+```
+
+Both variants pack the resulting manifest into the srv MTAR slice via the `gen/srv/srv/` convention (see memory [[feedback_cap_gen_srv_srv_path_for_runtime_files]]).
+
+### 3.2 New order
+
+Both mta variants move the manifest-emit step to *before* the Hugo build step, with the target path changed to `hugo/data/explore_bundle.json`. The `.deploy/mta.yaml` variant keeps its `bash -c "cd .. && ..."` prefix because the cwd constraint is unchanged. Concretely:
+
+`mta.yaml` (DEV/test) — approuter module before-all:
 
 ```text
 1. npm ci
@@ -142,6 +156,13 @@ Hugo's `head.html` runs a pre-paint script that reads `localStorage.theme` and s
 4. npm run build:all                                    (fetch-tutorials + hugo + apps; Hugo reads hugo/data/explore_bundle.json)
 5. mbt copy of hugo/public into approuter/static/       (existing)
 6. mkdir + cp app/explore/dist into approuter/static/explore-ui/  (existing, unchanged)
+```
+
+`.deploy/mta.yaml` (standalone approuter) — symmetric move with the `bash -c "cd .. && ..."` prefix preserved:
+
+```text
+3. bash -c "cd .. && npx tsx scripts/build-explore-manifest.ts \
+     app/explore/dist hugo/data/explore_bundle.json"
 ```
 
 `npm run build:all` already orchestrates fetch + hugo-apps + Hugo. We add a freshness guard inside `build:all` (or as a script step that runs first): if `hugo/data/explore_bundle.json` doesn't exist by the time `build:all` invokes Hugo, fail loudly and name the script that produces it.
@@ -180,7 +201,7 @@ The current `^/explore/?$` route in `approuter/xs-app.json` sends `/explore` to 
 
 ### 4.5 Vue mount-target collision
 
-The rename `#app` → `#explore-app` matters because Hugo's chrome may include `<div id="app">` somewhere (the joule panel renders into its own mount; the shellbar is `<ui5-shellbar id="app-shellbar">` — close but not a collision; nothing else is known). Implementation step: grep all Hugo partials for `id="app"` before locking in the new ID.
+The rename `#app` → `#explore-app` matters because Hugo's chrome could in principle render a `<div id="app">` somewhere. Verification at spec time: `grep -rn 'id="app"' hugo/layouts/` returns no matches in either `partials/*.html` or `_default/*.html`. The shellbar uses `id="app-shellbar"` (close but not a collision). The rename is precautionary — defends against a future Hugo chrome change adding `<div id="app">` without anyone noticing the SPA mount collision. Implementation step: re-run the grep before the implementation lands in case chrome changed since spec time.
 
 ## 5. Testing
 
