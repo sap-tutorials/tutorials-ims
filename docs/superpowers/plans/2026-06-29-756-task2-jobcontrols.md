@@ -185,6 +185,8 @@ The `_moduleAuditEvent` indirection is the trickiest part of this task — it le
 1. Keep `emitJobAudit` at module scope (so `scheduler.js` can dynamic-import it via the chassis path Task 1 established).
 2. Still benefit from the service init's audit-log binding resolution (which happens once at boot, inside `init()`).
 
+**Test isolation concern (round-2 plan-reviewer flag):** `_moduleAuditEvent` is module-scoped state — a vitest test that doesn't reset it between cases could observe stale state from a prior test's service init. The unit tests in §2.4 below all run `cds.test()` in `beforeAll` (once per describe block), so the service-init runs once and `_moduleAuditEvent` is set for the entire run. Within a single suite this is fine. Tests across multiple `describe` blocks share the same module — if a future test imports `srv/admin-service.js` and asserts `_moduleAuditEvent === null` BEFORE the service init has run, it will fail. Document this limitation in the module-level doc-comment of `emitJobAudit`.
+
 - [ ] **Step 10: In the service `init()` method, wire `_moduleAuditEvent` after `auditEvent` is created.** Find the existing line `const auditEvent = createAuditEmitter(_auditLog, LOG);` (around line 1583) and immediately after it, add:
 
 ```javascript
@@ -318,16 +320,32 @@ describe('AdminService.JobControls', () => {
   });
 
   it('runJob rejects with 400 for an unknown jobName', async () => {
+    // Spy on the module-level audit pointer to assert no emission on reject.
+    const adminMod = await import('../../../srv/admin-service.js');
+    const emitSpy = vi.spyOn(adminMod, 'emitJobAudit').mockResolvedValue(undefined);
+
     await expect(
       admin.send('runJob', { jobName: 'no-such-job' }, { entity: 'JobControls' })
     ).rejects.toMatchObject({ code: '400' });
+
+    // Wait briefly to ensure any errant setImmediate didn't fire.
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(emitSpy).not.toHaveBeenCalled();
+    emitSpy.mockRestore();
   });
 
   it('runJob rejects with 400 for an oversized jobName payload', async () => {
+    const adminMod = await import('../../../srv/admin-service.js');
+    const emitSpy = vi.spyOn(adminMod, 'emitJobAudit').mockResolvedValue(undefined);
+
     const huge = 'a'.repeat(101);
     await expect(
       admin.send('runJob', { jobName: huge }, { entity: 'JobControls' })
     ).rejects.toMatchObject({ code: '400' });
+
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(emitSpy).not.toHaveBeenCalled();
+    emitSpy.mockRestore();
   });
 
   it('runJob invokes the registered fn (verified via _setJobFn mock)', async () => {

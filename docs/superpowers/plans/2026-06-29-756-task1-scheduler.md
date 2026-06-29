@@ -233,33 +233,46 @@ registerJob({
 });
 ```
 
-**The 24 expected job names** (from existing scheduler.js — verify against your grep before declaring done):
+**The 24 expected job names** (verified against actual scheduler.js via `grep -c "cron.schedule"`):
 
-1. `cleanup-step-failures` (eager, no logId)
-2. `ngds-retry` (eager, logId)
-3. `account-merge-batch` (eager, logId)
-4. `tag-cleanup` (eager, no logId)
-5. `content-gc` (eager, no logId)
-6. `publish-stuck-manifest-watchdog` (eager, no logId)
-7. `embedding-reconciliation` (eager, logId)
-8. `pipeline-log-gc` (eager, no logId)
-9. `change-log-gc` (eager, no logId)
-10. `embedding-orphan-prune` (eager, no logId)
-11. `analytics-history-prune` (eager, no logId)
-12. `tutorial-metadata-review` (eager, no logId)
-13. `contributor-notifications` (eager, logId)
-14. `email-retry` (eager, no logId — verify; if it takes logId, mark accordingly)
-15. `extractConcepts` (eager, no logId — verify)
-16. `consolidateConcepts` (eager, no logId — verify)
-17. `fetch-learning-journeys` (eager, no logId — verify)
-18. `fetch-blog-posts` (eager, no logId — verify)
-19. `fetch-discovery-missions` (lazy-import)
-20. `fetch-videos` (lazy-import)
-21. `fetch-api-docs` (lazy-import — AND has inline recordJobLastRun call to delete, see Step 7)
-22. `gc-external-content` (eager, no logId — verify)
-23. `homepage-link-health` (eager, no logId — verify)
+1. `cleanup-step-failures` (eager, no logId, `'0 0 * * *'`, ttl 3600000)
+2. `ngds-retry` (eager, **logId**, `'0 */2 * * *'`, ttl 1800000)
+3. `account-merge-batch` (eager, **logId**, `'0 1 * * *'`, ttl 7200000)
+4. `tag-cleanup` (eager, no logId, `'0 0 2 1,7 *'`, ttl 3600000)
+5. `content-gc` (eager, no logId, `'0 3 * * *'`, ttl 600000)
+6. `publish-stuck-manifest-watchdog` (eager, no logId, `'3-58/5 * * * *'`, ttl 300000)
+7. `embedding-reconciliation` (eager, **logId**, `'17 * * * *'`, ttl 1800000)
+8. `pipeline-log-gc` (eager, no logId, `'15 3 * * *'`, ttl 600000)
+9. `change-log-gc` (eager, no logId, `'23 3 * * 0'`, ttl 600000)
+10. `embedding-orphan-prune` (eager, no logId, `'30 3 * * *'`, ttl 300000)
+11. `analytics-history-prune` (eager, no logId, `'45 3 * * *'`, ttl 600000)
+12. `tutorial-metadata-review` (eager, no logId, `'0 2 * * 0'`, ttl 3600000)
+13. `contributor-notifications` (eager, **logId**, `'0 9 * * 1'`, ttl 1800000)
+14. `email-retry` (eager, no logId — bare `retryFailedEmails` ref, `'0 */4 * * *'`, ttl 900000)
+15. `extractConcepts` (eager, no logId, daily 02:13, ttl 1800000)
+16. `consolidateConcepts` (eager, no logId, weekly Sunday 03:47, ttl 1800000)
+17. `fetch-learning-journeys` (eager, no logId, weekly Sunday 03:13, ttl 1800000)
+18. `fetch-blog-posts` (eager, no logId, daily 04:23, ttl 1800000)
+19. `fetch-discovery-missions` (**lazy-import**, weekly Sunday 03:07, ttl 1800000)
+20. `fetch-videos` (**lazy-import**, Sun+Wed 03:11, ttl 1800000)
+21. `fetch-api-docs` (**lazy-import** — AND has inline recordJobLastRun call to delete, see Step 7, monthly 1st 04:23, ttl 1800000)
+22. `gc-external-content` (eager, no logId, weekly Sunday 04:07, ttl 600000)
+23. `secret-expiry-check` (eager, no logId, daily 04:11, ttl 600000 — Phase 2-B #464)
+24. `homepage-link-health` (eager, no logId, daily 04:00, ttl 1800000 — Spec §13.1 #639)
 
-That's 23. The 24th is whichever I missed in the survey — confirm via `grep -c "cron.schedule" srv/jobs/scheduler.js`. The lockstep test (case 3) fails if the count is off.
+**logId crons count: 4** (`ngds-retry`, `account-merge-batch`, `embedding-reconciliation`, `contributor-notifications`). The plan's earlier mention of "5 logId crons" is corrected — `email-retry` passes `retryFailedEmails` as a bare reference, not a `(logId) => retryFailedEmails(logId)` wrapper. JavaScript silently ignores the extra arg, so the existing behavior continues working either way, but the `fn:` slot uses the bare reference shape:
+
+```javascript
+registerJob({
+  jobName: 'email-retry',
+  schedule: '0 */4 * * *',
+  ttlMs: 900000,
+  description: 'Retry FailedEmails queue',
+  fn: retryFailedEmails,
+});
+```
+
+**Lazy-import crons count: 3** (`fetch-discovery-missions`, `fetch-videos`, `fetch-api-docs`).
 
 **Verification helper:** before starting the refactor, dump the existing schedules:
 
@@ -516,12 +529,19 @@ Expected: 3 FAIL — `runWithLock` doesn't yet return a structured `{skipped, ou
  *  - Returns a structured response shape: {skipped, outcome, result,
  *    errorMessage, reason} — old void return is now a return value
  *
+ * Lock-held behavior: emits ONE audit event (outcome='lockheld') when
+ * manualTrigger=true. Success/error paths emit TWO events (started
+ * synchronously from runJob handler + completion from this finally
+ * block). Spec §5 + §9.
+ *
  * Backward-compat: existing 3-arg callers continue working. opts is
  * optional with sensible defaults.
  *
  * Spec: docs/superpowers/specs/2026-06-29-756-admin-cron-trigger.md §4.3
  */
 async function runWithLock(jobName, durationMs, fn, opts = {}) {
+  // instanceId is module-level const at scheduler.js:20 — do NOT redeclare:
+  //   const instanceId = process.env.CF_INSTANCE_INDEX || '0';
   const acquired = await acquireLock(jobName, instanceId, durationMs);
   if (!acquired) {
     if (opts.manualTrigger) {
@@ -776,7 +796,7 @@ npx vitest run test/unit/srv/job-controls-boot-seed.test.js
 npx vitest run test/unit/srv/
 ```
 
-Expected: 224/224 pass (219 baseline + 5 new). Adjust the expected count if the round-2 reviewer's small items added or modified existing tests.
+Expected: 229/229 pass (219 baseline + 10 new — 5 registry + 3 runWithLock + 2 pre-seed). Adjust the expected count if the round-2 reviewer's small items added or modified existing tests.
 
 - [ ] **Step 22: Commit the pre-seed chassis.**
 

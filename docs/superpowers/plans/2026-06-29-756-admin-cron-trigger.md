@@ -71,11 +71,11 @@
 
 ## Task decomposition
 
-- **[Task 1 — Scheduler refactor + JobLastRun retrofit](./2026-06-29-756-task1-scheduler.md)** — ~22 steps, 4 commits, ~350 LoC
-- **[Task 2 — JobControls singleton + handlers](./2026-06-29-756-task2-jobcontrols.md)** — ~18 steps, 3 commits, ~280 LoC
-- **[Task 3 — Admin UI tile extension](./2026-06-29-756-task3-ui.md)** — ~14 steps, 2 commits, ~180 LoC
+- **[Task 1 — Scheduler refactor + JobLastRun retrofit](./2026-06-29-756-task1-scheduler.md)** — ~22 steps, 4 commits, ~350 LoC, **10 unit tests** (5 registry + 3 runWithLock + 2 pre-seed)
+- **[Task 2 — JobControls singleton + handlers](./2026-06-29-756-task2-jobcontrols.md)** — ~18 steps, 3 commits, ~280 LoC, **6 unit tests + 1 hybrid**
+- **[Task 3 — Admin UI tile extension](./2026-06-29-756-task3-ui.md)** — ~14 steps, 2 commits, ~180 LoC, **9 unit tests** (2 join + 4 next-run + 3 relative-time)
 
-Total: ~54 steps / 9 commits / ~810 LoC.
+Total: ~54 steps / 9 commits / ~810 LoC. **25 unit tests + 1 hybrid** (vs spec §7's "18 unit + 1 hybrid" — the increase is the Task 3 pivot from controller-method-in-UI5-context tests, 2 cases, to pure-helper tests, 9 cases. Helper extraction is more thorough but easier to maintain; the spec's count predates this pivot. Spec §7 is a non-binding estimate, not a budget cap).
 
 ---
 
