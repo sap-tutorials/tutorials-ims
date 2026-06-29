@@ -89,6 +89,21 @@ export interface ConceptPayload {
     category?: string
     apiType?: string
   }>
+  // Phase 4.6 (#747 §5): SAP-samples GitHub repositories embodying this
+  // concept. Empty until the weekly fetch-samples-job has populated
+  // SampleConceptLinks. Shape mirrors the per-concept array emitted by
+  // srv/lib/published-concepts-query.js (Task 2's extension). Pass-through:
+  // `language`, `stars`, `lastCommitAt` flow through verbatim. The
+  // `description` LOB column is deliberately NOT in the wire payload
+  // (LOB-locator safety, see spec §3).
+  samples?: Array<{
+    slug: string
+    title: string
+    url: string
+    language?: string
+    stars?: number
+    lastCommitAt?: string    // ISO timestamp
+  }>
 }
 
 interface BuildConceptsResponse {
@@ -215,6 +230,30 @@ export function frontmatter(c: ConceptPayload): string {
       })()
     : null
 
+  // Phase 4.6 (#747 §5): emit `samples` only when non-empty. Pass-through —
+  // no helper transformation. `language`, `stars`, and `lastCommitAt` are
+  // optional on the wire; per-field guards skip emission when absent. The
+  // Hugo template's surrounding `{{ with .Params.samples }}` hides the
+  // entire section when the key is missing — omitting at the emitter keeps
+  // generated frontmatter tidy. `description` is deliberately NOT in this
+  // shape (LOB locator safety — see spec §3). Note: `stars != null` (not
+  // truthy) so `stars: 0` still emits the line — defensive against newly
+  // forked repos.
+  const samples = (c.samples && c.samples.length > 0)
+    ? (() => {
+        const lines = ['samples:']
+        for (const s of c.samples!) {
+          lines.push(`  - slug: ${yamlEscape(s.slug)}`)
+          lines.push(`    title: ${yamlEscape(s.title)}`)
+          lines.push(`    url: ${yamlEscape(s.url)}`)
+          if (s.language) lines.push(`    language: ${yamlEscape(s.language)}`)
+          if (s.stars != null) lines.push(`    stars: ${s.stars}`)
+          if (s.lastCommitAt) lines.push(`    lastCommitAt: ${yamlEscape(s.lastCommitAt)}`)
+        }
+        return lines.join('\n')
+      })()
+    : null
+
   // NOTE: deliberately no `type:` field — Hugo's type-based lookup is singular
   // ("type: concept" → layouts/concept/), but our template lives at
   // layouts/concepts/ (matching the section). Section-based lookup is what we
@@ -234,6 +273,7 @@ export function frontmatter(c: ConceptPayload): string {
   if (discoveryMissions) parts.push(discoveryMissions)
   if (videos) parts.push(videos)
   if (apiDocs) parts.push(apiDocs)
+  if (samples) parts.push(samples)
   parts.push('---', '')
   return parts.join('\n')
 }

@@ -2468,3 +2468,19 @@ html.dark .chroma .nd { color: #e2c5ff; font-weight: bold; }
   background: var(--sapNeutralBackground, rgba(0, 0, 0, 0.05));
   border-radius: 3px;
 }
+
+/* Phase 4.6 (#747 §5): concept-page "Code samples embodying this"
+   inline language badge. Same shape as .kg-api-type — the language
+   token (e.g. "JavaScript", "Java", "ABAP") renders as a small
+   monospaced pill. The .kg-link-out icon (↗) is reused from Phase
+   4.5 to signal external authority. No thumbnail rendering — samples
+   are GitHub repos and don't have them; the badge + ↗ carry the
+   visual weight instead. */
+.concept-page__section .kg-language {
+  display: inline-block;
+  padding: 0.1em 0.5em;
+  font-family: var(--sapFontFamily, monospace);
+  font-size: 0.85em;
+  background: var(--sapNeutralBackground, rgba(0, 0, 0, 0.05));
+  border-radius: 3px;
+}
