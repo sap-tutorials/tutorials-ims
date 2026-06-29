@@ -244,8 +244,8 @@
       "csrfProtection": false
     },
     {
-      "source": "^/build/(.*)$",
-      "target": "/build/$1",
+      "source": "^/build/(breadcrumb-context|catalog|co-completions|concepts|homepage-shelves|mission|my-progress|navigator|repo-catalog|slug-mapping|tag-labels)(/.*)?$",
+      "target": "/build/$1$2",
       "destination": "srv-api",
       "authenticationType": "none",
       "csrfProtection": false
