@@ -108,5 +108,10 @@ describe('db/homepage.cds — explainer additions (issue #759 PR 1)', () => {
       expect(row).toBeDefined();
       expect(row).toContain(`;${shelfKey};${label};${sort};`);
     });
+    it('every row has authoringStatus=BLANK and empty tagline/whyItMatters', () => {
+      lines.slice(1).forEach(line => {
+        expect(line).toMatch(/;;;BLANK$/);
+      });
+    });
   });
 });
