@@ -42,6 +42,7 @@
     "migrate:users": "node scripts/migrate-user-progress.js",
     "migrate:hana": "node scripts/migrate-from-hana.js",
     "migrate:authors": "cds bind --exec -- node scripts/backfill-tutorial-authors.cjs --commit",
+    "migrate:meta-authors": "cds bind --exec -- node scripts/backfill-tutorial-meta-author.cjs --commit",
     "migrate:btp-roles": "node scripts/migrate-btp-roles.js",
     "cutover:rehearsal": "node scripts/cutover-rehearsal.cjs",
     "verify:rowcounts": "node scripts/verify-migration-rowcounts.cjs",
