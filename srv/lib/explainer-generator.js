@@ -28,7 +28,11 @@ const TOOL_NAME = 'submit_explainer';
 const TEMPERATURE = 0.4;   // some creativity for variety, but bounded
 const MAX_TOKENS = 600;
 
-// Default model — overridable via ChatSettings.modelName (looked up per call).
+// Default model. Currently hardcoded — if/when a future PR wants
+// ChatSettings.modelName / CHAT_MODEL_NAME env override (matching the
+// pattern from category-classifier-llm.js / chat-orchestrator.js),
+// remember to also add the new model's rates to _token-cost.js RATES
+// or tokensToCents will throw "no rates for model 'X'".
 const DEFAULT_MODEL = 'anthropic--claude-4.6-sonnet';
 
 // Load all three prompt files once at module-init time. They're small
