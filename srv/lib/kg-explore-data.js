@@ -106,6 +106,13 @@ function bindingValue(binding, name) {
 /**
  * Parse the EXPLORE_GRAPH_BULK SPARQL JSON response into rows of
  * { s, p, o, sName, oName } (raw strings).
+ *
+ * Returns [] for any non-JSON response — including XML, which is what
+ * HANA SPARQL_EXECUTE emits if the DEFINER procedure forgets the
+ * Accept: application/sparql-results+json header (caught 2026-06-28, see
+ * db/src/procedures/KG_QUERY.hdbprocedure). The build-explore-data.js
+ * wrapper logs a warn when the resulting payload has 0 nodes despite
+ * a populated GraphMetadata.tripleCount — the canary for that regression.
  */
 function parseExploreBindings(responseJson) {
   if (typeof responseJson !== 'string' || responseJson.length === 0) return [];

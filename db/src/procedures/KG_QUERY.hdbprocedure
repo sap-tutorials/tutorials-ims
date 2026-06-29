@@ -273,5 +273,14 @@ BEGIN
 
   END IF;
 
-  CALL SYS_SPARQL_EXECUTE(:sparql, '', response, headers);
+  -- Request JSON response format from the HANA SPARQL engine. Without this
+  -- Accept header, SPARQL_EXECUTE defaults to XML (application/sparql-results+xml)
+  -- and every JS caller's JSON.parse(response) throws silently — the
+  -- per-query parser falls through to `return []`, so the explore graph
+  -- shows zero nodes and the tutorial sidebar shows zero neighborhood concepts.
+  -- The bug shipped because no test exercised the live SPARQL_EXECUTE call
+  -- (hybrid tests mock kgQuery; unit tests pre-supply a JSON response string).
+  -- Diagnosed 2026-06-28: KG_QUERY('EXPLORE_GRAPH_BULK') returned a valid XML
+  -- body of 36 091 triples that parseExploreBindings silently dropped.
+  CALL SYS_SPARQL_EXECUTE(:sparql, 'Accept: application/sparql-results+json', response, headers);
 END;

@@ -64,5 +64,10 @@ BEGIN
   -- The flag exists so a future HANA-side audit hook can log INSERT vs SELECT
   -- without re-parsing the SPARQL.
 
-  CALL SYS_SPARQL_EXECUTE(:sparql, '', response, headers);
+  -- Request JSON response format from the HANA SPARQL engine — same fix as
+  -- KG_QUERY. The admin runSparql action's response is rendered as a table
+  -- in the Knowledge Graph admin UI; without this Accept header the body
+  -- comes back as XML and the JS layer's JSON parse returns an empty
+  -- bindings array. See KG_QUERY for full diagnosis.
+  CALL SYS_SPARQL_EXECUTE(:sparql, 'Accept: application/sparql-results+json', response, headers);
 END;
