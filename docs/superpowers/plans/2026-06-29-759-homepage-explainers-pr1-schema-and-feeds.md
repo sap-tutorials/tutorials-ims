@@ -686,7 +686,7 @@ Expected: FAIL — both regex misses.
 
 - [ ] **Step 4: Add the two projections**
 
-In `srv/admin-service.cds`, after the existing `entity HomepageConfig as projection on ims.HomepageConfig;` line, insert:
+In `srv/admin-service.cds`, after the existing `entity HomepageConfig as projection on ims.HomepageConfig;` line, insert. **Verify the insertion point is inside the same `service { ... }` block** — a stray `}` between `HomepageConfig` and end-of-service would silently push the new projections out of the service. Sanity-check by running `grep -n '^service\|^}' srv/admin-service.cds | tail -10` after editing.
 
 ```cds
 
@@ -1650,10 +1650,10 @@ Expected: `LEARN,BUILD,INTEGRATE,OPERATE,AI,CONNECT` (in some sort order).
 - [ ] **Step 3: Confirm Hugo can read the new data files (smoke)**
 
 ```bash
-cd hugo && /tmp/hugo --quiet --renderToMemory 2>&1 | tail -5; cd ..
+npm run build:hugo 2>&1 | tail -10
 ```
 
-(Or substitute the appropriate Hugo invocation per your local setup — the goal is to verify Hugo doesn't error on the presence of the new `hugo/data/*.json` files. Since PR 1 doesn't change any templates, success = Hugo emits its usual stats and exits 0.)
+(The `build:hugo` script wraps the project's Hugo binary invocation — see `package.json#scripts`. Goal is to verify Hugo doesn't error on the presence of the new `hugo/data/*.json` files. Since PR 1 doesn't change any templates, success = Hugo emits its usual stats and exits 0.)
 
 Expected: no errors; Hugo logs page count + build time. The new JSON files are present but unread by templates (PR 2 wires them in).
 
