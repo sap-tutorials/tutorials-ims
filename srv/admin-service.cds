@@ -558,6 +558,29 @@ service AdminService {
     processed : Integer;
   };
 
+  // (#759 PR 3a) Homepage explainer AI generation actions.
+  // One action per kind (verb / shelf / shelf-entry) so Fiori list-report
+  // actions stay scoped to the entity their list displays (FE V4 doesn't
+  // handle polymorphic actions cleanly). Shared return shape; shared
+  // orchestrator in srv/lib/explainer-generator.js.
+  //
+  // mode 'fill-blanks'         → process only rows where authoringStatus='BLANK'; ids ignored
+  // mode 'regenerate-selected' → process exactly the ids supplied, regardless of status
+  //
+  // Hard cap: ids.length > 100 returns HTTP 400 (CAP_EXCEEDED).
+  // Kill-switch: env AICORE_EXPLAINER_GENERATOR_DISABLED=true → HTTP 503.
+  //
+  // cost is a USD string like '$0.62' for surfacing in the admin success toast.
+  type ExplainerActionResult : {
+    processed : Integer;
+    skipped   : Integer;
+    cost      : String;
+  };
+
+  action generateVerbExplainers       (ids : array of String, mode : String) returns ExplainerActionResult;
+  action generateShelfExplainers      (ids : array of String, mode : String) returns ExplainerActionResult;
+  action generateShelfEntryExplainers (ids : array of String, mode : String) returns ExplainerActionResult;
+
   // PR 6 — Pilot enablement. Read-only support surface; admins read all rows
   // (no per-row filter — inherits Admin gate from the service level). UI annotations
   // live in app/admin-annotations.cds (Task 8). Edit-on-behalf is out of scope for v1.
