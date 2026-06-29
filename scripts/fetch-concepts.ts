@@ -61,6 +61,20 @@ export interface ConceptPayload {
     effortLevel?: number
     categorySlug?: string
   }>
+  // Phase 4.4 (#447 §9): SAP Developers YouTube videos teaching this concept.
+  // Empty until the daily fetch-videos cron has populated
+  // VideoConceptLinks. Shape mirrors the per-concept array emitted by
+  // srv/lib/published-concepts-query.js (Task 2's extension). Pass-through:
+  // `thumbnailUrl` is already a CDN URL (i.ytimg.com); `channelTitle` +
+  // `publishedAt` flow through unchanged. CSP `img-src` allows i.ytimg.com.
+  videos?: Array<{
+    slug: string
+    title: string
+    url: string
+    thumbnailUrl?: string
+    channelTitle?: string
+    publishedAt?: string    // ISO timestamp
+  }>
 }
 
 interface BuildConceptsResponse {
@@ -146,6 +160,26 @@ export function frontmatter(c: ConceptPayload): string {
       })()
     : null
 
+  // Phase 4.4 (#447 §9): emit `videos` only when non-empty. Pass-through —
+  // no helper transformation. `thumbnailUrl` is already a CDN URL from
+  // i.ytimg.com (allowed by approuter CSP `img-src`); `channelTitle` and
+  // `publishedAt` (ISO timestamp) flow through unchanged. Per-field guards
+  // because all three are optional on the wire.
+  const videos = (c.videos && c.videos.length > 0)
+    ? (() => {
+        const lines = ['videos:']
+        for (const v of c.videos!) {
+          lines.push(`  - slug: ${yamlEscape(v.slug)}`)
+          lines.push(`    title: ${yamlEscape(v.title)}`)
+          lines.push(`    url: ${yamlEscape(v.url)}`)
+          if (v.thumbnailUrl) lines.push(`    thumbnailUrl: ${yamlEscape(v.thumbnailUrl)}`)
+          if (v.channelTitle) lines.push(`    channelTitle: ${yamlEscape(v.channelTitle)}`)
+          if (v.publishedAt) lines.push(`    publishedAt: ${yamlEscape(v.publishedAt)}`)
+        }
+        return lines.join('\n')
+      })()
+    : null
+
   // NOTE: deliberately no `type:` field — Hugo's type-based lookup is singular
   // ("type: concept" → layouts/concept/), but our template lives at
   // layouts/concepts/ (matching the section). Section-based lookup is what we
@@ -163,6 +197,7 @@ export function frontmatter(c: ConceptPayload): string {
   if (journeys) parts.push(journeys)
   if (blogPosts) parts.push(blogPosts)
   if (discoveryMissions) parts.push(discoveryMissions)
+  if (videos) parts.push(videos)
   parts.push('---', '')
   return parts.join('\n')
 }

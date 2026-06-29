@@ -177,3 +177,73 @@ annotate DiscoveryMissionConceptLinks with
 
 annotate DiscoveryMissionServices with
   @assert.unique.missionService : [mission, serviceName];
+
+/**
+ * Phase 4.4 (#447): SAP Developers YouTube videos.
+ *
+ * - youtubeVideoId is the natural key from upstream; slug is derived as
+ *   `vd-${youtubeVideoId}` for IRI namespace-safety.
+ * - description is captured at upsert time (no body-fetch on render); empty
+ *   descriptions are allowed (some Tech Bytes have none).
+ * - publishedAt mirrors YouTube's snippet.publishedAt (NOT semantically
+ *   identical to BlogPosts.postedAt; kept distinct columns by design).
+ * - channelTitle is denormalized at upsert time so the sidebar otherResources
+ *   card can render the channel name without an extra join.
+ * - thumbnailUrl is the high-quality variant from snippet.thumbnails.high.url;
+ *   empty allowed (validator permits empty string).
+ * - pinUntil reserved for chassis uniformity; no admin surface writes it in 4.4.
+ *
+ * Second sub-phase with TWO link tables per source entity (mirrors 4.3):
+ *   - VideoConceptLinks (predicate='teaches', merge-on-write)
+ *   - VideoServices (free-form BTP service names, case-sensitive @assert.unique
+ *     guarded by cron's case-insensitive dedup)
+ */
+entity Videos : cuid, managed {
+  slug              : String(120) @assert.unique;
+  title             : String(400);
+  description       : LargeString;  // YouTube descriptions: observed max ~4500, no body cap policy
+  url               : String(500);
+  youtubeVideoId    : String(20);
+  publishedAt       : Timestamp;
+  channelTitle      : String(200);
+  thumbnailUrl      : String(500);
+
+  sourceId          : String(120);
+  contentHash       : String(64);
+  lastExtractedHash : String(64);
+  firstSeenAt       : Timestamp @cds.on.insert: $now;
+  lastSeenAt        : Timestamp;
+  pinUntil          : Timestamp;
+
+  links    : Composition of many VideoConceptLinks on links.video = $self;
+  services : Composition of many VideoServices    on services.video = $self;
+}
+
+entity VideoConceptLinks : cuid, managed {
+  video        : Association to Videos       @assert.notNull;
+  concept      : Association to ims.Concepts @assert.notNull;
+  predicate    : String(20) default 'teaches';
+  confidence   : Decimal(3, 2);
+  extractedAt  : Timestamp;
+  modelVersion : String(40);
+}
+
+/**
+ * Free-form BTP service names captured per video. NOT FK to Products.
+ * @assert.unique.videoService is case-sensitive on HANA; the cron's
+ * case-insensitive dedup at fetch-videos-job.js (serviceName.toLowerCase())
+ * is the canonical guard.
+ */
+entity VideoServices : cuid, managed {
+  video        : Association to Videos @assert.notNull;
+  serviceName  : String(120);
+  confidence   : Decimal(3, 2);
+  extractedAt  : Timestamp;
+  modelVersion : String(40);
+}
+
+annotate VideoConceptLinks with
+  @assert.unique.videoConcept : [video, concept];
+
+annotate VideoServices with
+  @assert.unique.videoService : [video, serviceName];

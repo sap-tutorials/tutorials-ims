@@ -92,6 +92,9 @@ service KnowledgeGraphService @(path : '/graph') {
     postedAt      : Timestamp;          // blog-post only (Phase 4.2)
     effortLevel   : Integer;            // discovery-mission only (Phase 4.3)
     categoryLabel : String;             // discovery-mission only (Phase 4.3)
+    channelTitle  : String;             // video only (Phase 4.4)
+    publishedAt   : Timestamp;          // video only (Phase 4.4) — DIFFERENT FROM blog's postedAt
+    thumbnailUrl  : String;             // video only (Phase 4.4)
     overlapCount  : Integer;
   }
   type NeighborhoodResult {

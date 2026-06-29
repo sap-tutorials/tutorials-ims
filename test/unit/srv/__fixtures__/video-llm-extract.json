@@ -1,0 +1,20 @@
+{
+  "verdict": {
+    "teaches": [
+      { "slug": "cap-service-handlers", "name": "CAP service handlers", "confidence": 0.92 },
+      { "slug": "cds-modeling", "name": "CDS modeling", "confidence": 0.85 },
+      { "slug": "hana-cloud-integration", "name": "HANA Cloud integration", "confidence": 0.78 },
+      { "slug": "btp-trial-account", "name": "BTP Trial Account", "confidence": 0.72 },
+      { "slug": "low-confidence-concept", "name": "Low Confidence", "confidence": 0.45 },
+      { "slug": "no-name", "confidence": 0.85 }
+    ],
+    "featuresService": [
+      { "name": "SAP Build Apps", "confidence": 0.92 },
+      { "name": "SAP Integration Suite", "confidence": 0.85 },
+      { "name": "SAP HANA Cloud", "confidence": 0.78 },
+      { "name": "weak-service", "confidence": 0.55 },
+      { "name": "X", "confidence": 0.85 }
+    ]
+  },
+  "tokenUsage": { "prompt": 2800, "completion": 380 }
+}

@@ -681,9 +681,11 @@ export default cds.service.impl(async function () {
       let journeyOtherResources = [];
       let blogOtherResources = [];
       let missionOtherResources = [];
+      let videoOtherResources = [];
       if (teachesSlugs.length > 0) {
         const { LearningJourneys, LearningJourneyConceptLinks, BlogPosts, BlogPostConceptLinks,
-          DiscoveryMissions, DiscoveryMissionConceptLinks } =
+          DiscoveryMissions, DiscoveryMissionConceptLinks,
+          Videos, VideoConceptLinks } =
           cds.entities('com.sap.developers.ims.external');
         const { Concepts } = cds.entities(NAMESPACE);
 
@@ -804,12 +806,60 @@ export default cds.service.impl(async function () {
                 overlapCount: overlapByMission.get(m.ID),
               }));
           }
+
+          // Phase 4.4 (#447): video overlap rows.
+          // NOTE: Videos.description is LargeString (NCLOB) — DO NOT include
+          // it here. The sidebar payload only needs scalar metadata.
+          const videoOverlaps = await SELECT.from(VideoConceptLinks)
+            .columns('video_ID', 'concept_ID')
+            .where({ concept_ID: { in: conceptIds } });
+
+          const overlapByVideo = new Map();
+          for (const row of videoOverlaps) {
+            overlapByVideo.set(
+              row.video_ID,
+              (overlapByVideo.get(row.video_ID) ?? 0) + 1
+            );
+          }
+
+          if (overlapByVideo.size > 0) {
+            const topVideoIds = [...overlapByVideo.entries()]
+              .sort(([, a], [, b]) => b - a)
+              .slice(0, MAX_OTHER_RESOURCES)
+              .map(([id]) => id);
+
+            const videos = await SELECT.from(Videos)
+              .columns('ID', 'slug', 'title', 'url', 'channelTitle', 'publishedAt', 'thumbnailUrl')
+              .where({ ID: { in: topVideoIds } });
+
+            const byVideoId = new Map(videos.map((v) => [v.ID, v]));
+            videoOtherResources = topVideoIds
+              .map((id) => byVideoId.get(id))
+              .filter(Boolean)
+              .map((v) => ({
+                type: 'video',
+                slug: v.slug,
+                title: v.title,
+                url: v.url,
+                channelTitle: v.channelTitle,
+                publishedAt: v.publishedAt,
+                thumbnailUrl: v.thumbnailUrl,
+                overlapCount: overlapByVideo.get(v.ID),
+              }));
+          }
         }
       }
 
-      // Merge journey + blog + mission rows; sort by overlap desc; cap top-5 TOTAL.
-      // Top-5 is across ALL THREE types (no per-type diversity quota) per spec §9.
-      otherResources = mergeOtherResources(journeyOtherResources, blogOtherResources, missionOtherResources);
+      // Merge journey + blog + mission + video rows; sort by overlap desc;
+      // cap top-5 TOTAL. Top-5 is across ALL FOUR types (no per-type diversity
+      // quota) per spec §9. Phase 4.4 widens to a 4-array merge — the
+      // mergeOtherResources helper is already variadic (Phase 4.3 widening).
+      otherResources = mergeOtherResources(
+        journeyOtherResources,
+        blogOtherResources,
+        missionOtherResources,
+        videoOtherResources,
+      );
     } catch (err) {
       log.warn(`kg-service: neighborhood otherResources enrichment failed: ${err.message ?? err}`);
       otherResources = [];

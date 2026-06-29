@@ -2430,3 +2430,19 @@ html.dark .chroma .nd { color: #e2c5ff; font-weight: bold; }
   }
 }
 
+
+/* Phase 4.4 (#447 §9): concept-page "Videos teaching this" inline
+   thumbnail. 120×68 hot-linked from i.ytimg.com (CSP `img-src` already
+   allows). Sits inline with the row text — title + meta render to the
+   right of the thumbnail on the same baseline. The sidebar branch in
+   RelatedGraph.vue intentionally does NOT render a thumbnail to
+   preserve visual rhythm (spec §9). */
+.concept-page__section .kg-video-thumb {
+  display: inline-block;
+  width: 120px;
+  height: 68px;
+  border-radius: 4px;
+  margin-right: 0.5em;
+  vertical-align: middle;
+  object-fit: cover;
+}
