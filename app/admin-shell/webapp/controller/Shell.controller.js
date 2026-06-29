@@ -17,7 +17,9 @@ sap.ui.define([
     concepts: "concepts",
     advocates: "advocates",
     alerts: "alerts",
-    homepage: "homepage",
+    homepageShelves: "homepageShelves",
+    homepageRedirects: "homepageRedirects",
+    homepageConfig: "homepageConfig",
     accomplishments: "accomplishments",
     prizes: "prizes",
     operations: "operations",
@@ -55,7 +57,9 @@ sap.ui.define([
     concepts: "Concepts",
     advocates: "Advocates",
     alerts: "Alerts",
-    homepage: "Homepage",
+    homepageShelves: "Homepage Shelves",
+    homepageRedirects: "Homepage Redirects",
+    homepageConfig: "Homepage Config",
     accomplishments: "Accomplishments",
     prizes: "Prizes",
     operations: "Operations",
@@ -121,6 +125,12 @@ sap.ui.define([
         }
         if (sKey === "joblog") {
           HashChanger.getInstance().setHash("joblog&/op/JobExecutionLog");
+        }
+        if (sKey === "homepageRedirects") {
+          HashChanger.getInstance().setHash("homepageRedirects&/hp/Redirects");
+        }
+        if (sKey === "homepageConfig") {
+          HashChanger.getInstance().setHash("homepageConfig&/hp/Config");
         }
       }
     },
