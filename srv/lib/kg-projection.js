@@ -340,6 +340,17 @@ export async function* projectFromFixtures(fixtures, batchSize = 5000) {
     }
   }
 
+  // Section 10 — Phase 4.4 (#447) video triples. Same optional shape as
+  // sections 7-9: when the fixture omits videos, emission is skipped.
+  const { videos: videoRows = [], links: videoLinks = [] } =
+    (fixtures && fixtures.videos) || {};
+  if (videoRows.length > 0) {
+    for (const t of buildVideoTriples({ videos: videoRows, links: videoLinks })) {
+      buffer.push(t);
+      if (buffer.length >= batchSize) { yield buffer; buffer = []; }
+    }
+  }
+
   if (buffer.length > 0) yield buffer;
 }
 
@@ -540,6 +551,59 @@ export function buildDiscoveryMissionTriples({ missions = [], links = [] } = {})
     if (!visibleMissionSlugs.has(link.missionSlug)) continue;
     triples.push(triple(
       iri(iriDiscoveryMission(link.missionSlug)),
+      iriPredicate(link.predicate || 'teaches'),
+      iriConcept(link.conceptSlug)
+    ));
+  }
+
+  return triples;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4.4 (#447) — Video triple builder
+// ---------------------------------------------------------------------------
+
+const KG_VIDEO = `${KG}Video`;
+
+/**
+ * Emit N-Triples for an array of Video rows + their concept-teaches edges.
+ * Mirrors buildDiscoveryMissionTriples — per-video TTL gate via
+ * isWithinTTL('video', video.lastSeenAt). Emits :rdf:type, :title, :slug,
+ * :publishedAt, :channelTitle, and :teaches for each link.
+ *
+ * Phase 4.4 (#447).
+ *
+ * @param {object} args
+ * @param {Array<{slug, title, publishedAt?, channelTitle?, lastSeenAt}>} args.videos
+ * @param {Array<{videoSlug, conceptSlug, predicate?}>} args.links
+ * @returns {string[]} N-Triples
+ */
+export function buildVideoTriples({ videos = [], links = [] } = {}) {
+  const triples = [];
+  const visibleVideoSlugs = new Set();
+
+  for (const v of videos) {
+    if (!v || !v.slug) continue;
+    if (!isWithinTTL('video', v.lastSeenAt)) continue;
+    visibleVideoSlugs.add(v.slug);
+    const subj = iriVideo(v.slug);
+    triples.push(triple(iri(subj), iri(RDF_TYPE), iri(KG_VIDEO)));
+    triples.push(literalTriple(iri(subj), iriPredicate('title'), v.title ?? ''));
+    triples.push(literalTriple(iri(subj), iriPredicate('slug'), v.slug));
+    if (v.publishedAt != null) {
+      triples.push(literalTriple(iri(subj), iriPredicate('publishedAt'),
+        v.publishedAt instanceof Date ? v.publishedAt.toISOString() : String(v.publishedAt)));
+    }
+    if (v.channelTitle) {
+      triples.push(literalTriple(iri(subj), iriPredicate('channelTitle'), v.channelTitle));
+    }
+  }
+
+  for (const link of links) {
+    if (!link || !link.videoSlug || !link.conceptSlug) continue;
+    if (!visibleVideoSlugs.has(link.videoSlug)) continue;
+    triples.push(triple(
+      iri(iriVideo(link.videoSlug)),
       iriPredicate(link.predicate || 'teaches'),
       iriConcept(link.conceptSlug)
     ));
@@ -838,6 +902,45 @@ async function loadFixtures(db) {
     );
   }
 
+  // Phase 4.4 (#447) — Videos + concept-teaches link rows. Same best-effort
+  // pattern as Learning Journeys / Blog Posts / Discovery Missions above.
+  // CRITICAL: Videos.description is LargeString (NCLOB) on HANA — DO NOT
+  // include it in the SELECT here (LOB locator may expire before triple
+  // emission). The projection doesn't need description anyway; it only emits
+  // title, slug, publishedAt, channelTitle.
+  let videos = { videos: [], links: [] };
+  try {
+    const { Videos, VideoConceptLinks } = cds.entities('com.sap.developers.ims.external');
+    const videoRows = await db.run(
+      SELECT.from(Videos).columns('ID', 'slug', 'title', 'publishedAt', 'channelTitle', 'lastSeenAt')
+    );
+    const videoSlugById = new Map(videoRows.map((v) => [v.ID, v.slug]));
+
+    const vLinkRows = await db.run(
+      SELECT.from(VideoConceptLinks).columns('video_ID', 'concept_ID', 'predicate')
+    );
+    const vLinks = [];
+    for (const l of vLinkRows) {
+      const videoSlug = videoSlugById.get(l.video_ID);
+      const conceptSlug = conceptById.get(l.concept_ID);
+      if (!videoSlug || !conceptSlug) continue;
+      vLinks.push({ videoSlug, conceptSlug, predicate: l.predicate || 'teaches' });
+    }
+
+    videos = {
+      videos: videoRows.map((v) => ({
+        slug: v.slug, title: v.title, publishedAt: v.publishedAt,
+        channelTitle: v.channelTitle, lastSeenAt: v.lastSeenAt,
+      })),
+      links: vLinks,
+    };
+  } catch (err) {
+    const log = cds.log('kg-projection');
+    log.warn(
+      `kg-projection: Videos load failed; video triples will be empty. err=${err && err.message ? err.message : String(err)}`
+    );
+  }
+
   return {
     concepts: concepts.map((c) => ({
       slug: c.slug, name: c.name, description: c.description, status: c.status,
@@ -850,5 +953,6 @@ async function loadFixtures(db) {
     learningJourneys,
     blogPosts,
     discoveryMissions,
+    videos,
   };
 }

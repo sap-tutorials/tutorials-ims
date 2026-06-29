@@ -31,7 +31,8 @@ export async function buildConceptsPayload(db) {
   const { ConceptEdges, TutorialConceptLinks } =
     cds.entities('com.sap.developers.ims');
   const { LearningJourneyConceptLinks, BlogPosts, BlogPostConceptLinks,
-    DiscoveryMissions, DiscoveryMissionConceptLinks } =
+    DiscoveryMissions, DiscoveryMissionConceptLinks,
+    Videos, VideoConceptLinks } =
     cds.entities('com.sap.developers.ims.external');
   const { PublishedConcepts } = cds.entities('KnowledgeGraphService');
 
@@ -194,6 +195,41 @@ export async function buildConceptsPayload(db) {
     }
   }
 
+  // 5d. Phase 4.4 (#447 §9): videos teaching each concept.
+  // Same conceptIds-guard pattern; per-concept 8-row cap; ordered by
+  // video.publishedAt desc (newest videos first — matches 4.2 blog ordering).
+  // NOTE: Videos.description is LargeString (NCLOB) and NOT pulled here —
+  // payload only needs title/url/thumbnailUrl/channelTitle/publishedAt.
+  let videosByConcept = {};
+  if (ids.length > 0) {
+    const videoLinks = await db.run(
+      SELECT.from(VideoConceptLinks)
+        .columns(
+          'concept_ID',
+          'video.slug as videoSlug',
+          'video.title as title',
+          'video.url as url',
+          'video.thumbnailUrl as thumbnailUrl',
+          'video.channelTitle as channelTitle',
+          'video.publishedAt as publishedAt',
+        )
+        .where({ concept_ID: { in: ids } })
+        .orderBy('video.publishedAt desc')
+        .limit(8 * ids.length)
+    );
+    const groupedVideos = groupBy(videoLinks, 'concept_ID', r => ({
+      slug: r.videoSlug,
+      title: r.title,
+      url: r.url,
+      thumbnailUrl: r.thumbnailUrl,
+      channelTitle: r.channelTitle,
+      publishedAt: r.publishedAt,
+    }));
+    for (const [conceptId, rows] of Object.entries(groupedVideos)) {
+      videosByConcept[conceptId] = rows.slice(0, 8);
+    }
+  }
+
   // 6. Stitch.
   const concepts = published.map(c => ({
     slug: c.slug.toLowerCase(),
@@ -206,6 +242,7 @@ export async function buildConceptsPayload(db) {
     learningJourneys: learningJourneysByConcept[c.ID] || [],
     blogPosts: blogPostsByConcept[c.ID] || [],
     discoveryMissions: discoveryMissionsByConcept[c.ID] || [],
+    videos: videosByConcept[c.ID] || [],
   }));
 
   return { concepts, generatedAt: new Date().toISOString() };
