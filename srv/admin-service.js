@@ -21,6 +21,7 @@ import { handleRebuildAction } from './lib/rebuild-action-handler.js';
 import { cleanupChangeLog } from './jobs/cleanup.js';
 import { ensureDevtoberfestActiveFlagInvariant } from './lib/devtoberfest-active-flag.js';
 import { getTutorialSource } from './lib/content-store.js';
+import { runSeedApiDocs } from './lib/seed-api-docs.js';
 import { randomBytes } from 'node:crypto';
 import * as khorosCache from './lib/khoros-cache.js';
 import { listCtaTargets } from './lib/alert-cta-targets.js';
@@ -1742,6 +1743,36 @@ export default class AdminService extends cds.ApplicationService {
       } catch (err) {
         cds.log('admin-service').warn(`audit listener for TutorialProgressReset failed: ${err.message ?? err}`);
       }
+    });
+
+    // Phase 4.5 (#746): operator-grade api.sap.com seed trigger. Calls into
+    // the same runSeedApiDocs() the CLI script (scripts/seed-api-docs.cjs)
+    // uses — single source of truth. Dry-run when commit=false. Emits an
+    // audit SecurityEvent on commit so the action shows up in the audit
+    // trail alongside other admin writes.
+    // Handler is placed AFTER the auditEvent closure (declared at the top of
+    // init()) so the `auditEvent` reference resolves; placing it earlier
+    // would TDZ-error at first call.
+    // Audit emission is fire-and-forget via setImmediate to avoid coupling
+    // the action response to outbox queue availability — same posture as
+    // seedEmbeddings' embedSlugs invocation.
+    this.on('seedApiDocs', async (req) => {
+      const commit = !!req.data?.commit;
+      const result = await runSeedApiDocs({ commit });
+      if (commit && result.committed > 0) {
+        const userId = req.user?.id;
+        setImmediate(() => {
+          auditEvent('SecurityEvent', {
+            user: userId,
+            action: 'kg.api-docs.seed',
+            committed: result.committed,
+            planned: result.planned,
+          }).catch((err) => {
+            cds.log('admin-service').warn(`seedApiDocs audit emit failed: ${err.message ?? err}`);
+          });
+        });
+      }
+      return result;
     });
 
     // ── Rebuild-button action (issue: rebuild-button) ──
