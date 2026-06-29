@@ -320,6 +320,18 @@ export async function* projectFromFixtures(fixtures, batchSize = 5000) {
     }
   }
 
+  // Section 9 — Phase 4.3 (#447) discovery-mission triples. Same optional
+  // shape as sections 7-8: when the fixture omits discovery missions,
+  // emission is skipped.
+  const { missions: dmRows = [], links: dmLinks = [] } =
+    (fixtures && fixtures.discoveryMissions) || {};
+  if (dmRows.length > 0) {
+    for (const t of buildDiscoveryMissionTriples({ missions: dmRows, links: dmLinks })) {
+      buffer.push(t);
+      if (buffer.length >= batchSize) { yield buffer; buffer = []; }
+    }
+  }
+
   if (buffer.length > 0) yield buffer;
 }
 
@@ -468,6 +480,59 @@ export function buildBlogPostTriples({ posts = [], links = [] } = {}) {
     triples.push(triple(
       iri(iriBlogPost(link.postSlug)),
       iriPredicate(link.predicate || 'discusses'),
+      iriConcept(link.conceptSlug)
+    ));
+  }
+
+  return triples;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4.3 (#447) — Discovery Mission triple builder
+// ---------------------------------------------------------------------------
+
+const KG_DISCOVERY_MISSION = `${KG}DiscoveryMission`;
+
+/**
+ * Emit N-Triples for an array of DiscoveryMission rows + their concept-teaches
+ * edges. Mirrors buildBlogPostTriples — takes arrays of all missions + all
+ * links, iterates internally. Per-mission TTL gate via
+ * isWithinTTL('discovery-mission', mission.lastSeenAt). Emits :rdf:type,
+ * :title, :slug, :effortLevel, :categorySlug, and :teaches for each link.
+ *
+ * Phase 4.3 (#447).
+ *
+ * @param {object} args
+ * @param {Array<{slug, title, effortLevel?, categorySlug?, lastSeenAt}>} args.missions
+ * @param {Array<{missionSlug, conceptSlug, predicate?}>} args.links
+ * @returns {string[]} N-Triples
+ */
+export function buildDiscoveryMissionTriples({ missions = [], links = [] } = {}) {
+  const triples = [];
+  const visibleMissionSlugs = new Set();
+
+  for (const m of missions) {
+    if (!m || !m.slug) continue;
+    if (!isWithinTTL('discovery-mission', m.lastSeenAt)) continue;
+    visibleMissionSlugs.add(m.slug);
+    const subj = iriDiscoveryMission(m.slug);
+    triples.push(triple(iri(subj), iri(RDF_TYPE), iri(KG_DISCOVERY_MISSION)));
+    triples.push(literalTriple(iri(subj), iriPredicate('title'), m.title ?? ''));
+    triples.push(literalTriple(iri(subj), iriPredicate('slug'), m.slug));
+    if (m.effortLevel != null) {
+      triples.push(literalTriple(iri(subj), iriPredicate('effortLevel'), String(m.effortLevel)));
+    }
+    if (m.categorySlug) {
+      triples.push(literalTriple(iri(subj), iriPredicate('categorySlug'), m.categorySlug));
+    }
+  }
+
+  for (const link of links) {
+    if (!link || !link.missionSlug || !link.conceptSlug) continue;
+    if (!visibleMissionSlugs.has(link.missionSlug)) continue;
+    triples.push(triple(
+      iri(iriDiscoveryMission(link.missionSlug)),
+      iriPredicate(link.predicate || 'teaches'),
       iriConcept(link.conceptSlug)
     ));
   }
@@ -730,6 +795,41 @@ async function loadFixtures(db) {
     );
   }
 
+  // Phase 4.3 (#447) — Discovery missions + concept-teaches link rows. Same
+  // best-effort pattern as Learning Journeys + Blog Posts above.
+  let discoveryMissions = { missions: [], links: [] };
+  try {
+    const { DiscoveryMissions, DiscoveryMissionConceptLinks } = cds.entities('com.sap.developers.ims.external');
+    const missionRows = await db.run(
+      SELECT.from(DiscoveryMissions).columns('ID', 'slug', 'title', 'effortLevel', 'categorySlug', 'lastSeenAt')
+    );
+    const missionSlugById = new Map(missionRows.map((m) => [m.ID, m.slug]));
+
+    const dmLinkRows = await db.run(
+      SELECT.from(DiscoveryMissionConceptLinks).columns('mission_ID', 'concept_ID', 'predicate')
+    );
+    const dmLinks = [];
+    for (const l of dmLinkRows) {
+      const missionSlug = missionSlugById.get(l.mission_ID);
+      const conceptSlug = conceptById.get(l.concept_ID);
+      if (!missionSlug || !conceptSlug) continue;
+      dmLinks.push({ missionSlug, conceptSlug, predicate: l.predicate || 'teaches' });
+    }
+
+    discoveryMissions = {
+      missions: missionRows.map((m) => ({
+        slug: m.slug, title: m.title, effortLevel: m.effortLevel,
+        categorySlug: m.categorySlug, lastSeenAt: m.lastSeenAt,
+      })),
+      links: dmLinks,
+    };
+  } catch (err) {
+    const log = cds.log('kg-projection');
+    log.warn(
+      `kg-projection: DiscoveryMissions load failed; discovery-mission triples will be empty. err=${err && err.message ? err.message : String(err)}`
+    );
+  }
+
   return {
     concepts: concepts.map((c) => ({
       slug: c.slug, name: c.name, description: c.description, status: c.status,
@@ -741,5 +841,6 @@ async function loadFixtures(db) {
     coCompletions,
     learningJourneys,
     blogPosts,
+    discoveryMissions,
   };
 }
