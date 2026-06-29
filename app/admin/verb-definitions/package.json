@@ -1,0 +1,12 @@
+{
+  "name": "sap.tutorials.admin.verbDefinitions",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "start": "ui5 serve",
+    "build": "ui5 build --clean-dest --include-task=generateManifestBundle"
+  },
+  "devDependencies": {
+    "@ui5/cli": "^4.0.0"
+  }
+}

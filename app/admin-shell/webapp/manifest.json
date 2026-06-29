@@ -67,7 +67,9 @@
       "sap.tutorials.admin.navigator": "./components/navigator",
       "sap.tutorials.admin.display": "./components/display",
       "sap.tutorials.admin.tenant": "./components/tenant",
-      "sap.tutorials.admin.homepage": "./components/homepage"
+      "sap.tutorials.admin.homepage": "./components/homepage",
+      "sap.tutorials.admin.shelfDefinitions": "./components/shelf-definitions",
+      "sap.tutorials.admin.verbDefinitions": "./components/verb-definitions"
     },
     "models": {
       "admin": {
@@ -255,6 +257,18 @@
         "settings": {},
         "componentData": {},
         "lazy": true
+      },
+      "shelfDefinitionsComponent": {
+        "name": "sap.tutorials.admin.shelfDefinitions",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
+      },
+      "verbDefinitionsComponent": {
+        "name": "sap.tutorials.admin.verbDefinitions",
+        "settings": {},
+        "componentData": {},
+        "lazy": true
       }
     },
     "services": {
@@ -315,6 +329,8 @@
         { "name": "homepageShelves", "pattern": "homepage", "target": [{"name": "homepageTarget", "prefix": "hp"}] },
         { "name": "homepageRedirects", "pattern": "homepageRedirects", "target": [{"name": "homepageTarget", "prefix": "hp"}] },
         { "name": "homepageConfig", "pattern": "homepageConfig", "target": [{"name": "homepageTarget", "prefix": "hp"}] },
+        { "name": "verbDefinitions",  "pattern": "verb-definitions",  "target": [{"name": "verbDefinitionsTarget",  "prefix": "vd"}] },
+        { "name": "shelfDefinitions", "pattern": "shelf-definitions", "target": [{"name": "shelfDefinitionsTarget", "prefix": "sd"}] },
         { "name": "board", "pattern": "board", "target": "boardTarget" },
         { "name": "dashboard", "pattern": "", "target": "dashboardTarget" },
         { "name": "statistics", "pattern": "statistics", "target": "statisticsTarget" },
@@ -511,6 +527,20 @@
           "id": "homepageTarget",
           "viewLevel": 1,
           "prefix": "hp"
+        },
+        "verbDefinitionsTarget": {
+          "type": "Component",
+          "usage": "verbDefinitionsComponent",
+          "id": "verbDefinitionsTarget",
+          "viewLevel": 1,
+          "prefix": "vd"
+        },
+        "shelfDefinitionsTarget": {
+          "type": "Component",
+          "usage": "shelfDefinitionsComponent",
+          "id": "shelfDefinitionsTarget",
+          "viewLevel": 1,
+          "prefix": "sd"
         },
         "feedbackDashboardTarget": {
           "viewName": "TutorialFeedbackDashboard",

@@ -1715,6 +1715,32 @@ export default class AdminService extends cds.ApplicationService {
       });
     });
 
+    // (#759 PR 3b) Mark-reviewed actions — flip authoringStatus to REVIEWED.
+    // authoringStatus is @Common.FieldControl: #ReadOnly on the projections
+    // so a plain OData PATCH is rejected; these dedicated actions write
+    // direct SQL via cds.connect.to('db') and bypass the FieldControl
+    // (the read-only constraint exists to prevent admins from free-form
+    // editing status via the object-page form — they go through this
+    // explicit "Mark as reviewed" button instead).
+    async function runMarkReviewed({ entityName, id, req }) {
+      const db = await cds.connect.to('db');
+      const row = await db.run(SELECT.one.from(entityName).where({ ID: id }));
+      if (!row) {
+        req.reject(404, `not found: ${id}`);
+        return;
+      }
+      await db.run(UPDATE(entityName).set({ authoringStatus: 'REVIEWED' }).where({ ID: id }));
+      return { processed: 1, skipped: 0, cost: '$0.00' };
+    }
+
+    this.on('markVerbExplainerReviewed', (req) =>
+      runMarkReviewed({ entityName: 'com.sap.developers.ims.VerbDefinitions', id: req.data.id, req }));
+    this.on('markShelfExplainerReviewed', (req) =>
+      runMarkReviewed({ entityName: 'com.sap.developers.ims.ShelfDefinitions', id: req.data.id, req }));
+    this.on('markShelfEntryExplainerReviewed', (req) =>
+      runMarkReviewed({ entityName: 'com.sap.developers.ims.HomepageShelves', id: req.data.id, req }));
+
+
     // Phase 2-B (#464): Severity-classified expiry warnings for the
     // admin-shell notifications popover. Read-only — no DB writes.
     // Imports daysUntil + classifySeverity from the cron module to share

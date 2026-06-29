@@ -43,7 +43,9 @@ sap.ui.define([
     search: "search",
     navigator: "navigator",
     display: "display",
-    tenant: "tenant"
+    tenant: "tenant",
+    verbDefinitions: "verbDefinitions",
+    shelfDefinitions: "shelfDefinitions"
   };
 
   var NAV_KEY_TO_TITLE = {
@@ -83,7 +85,9 @@ sap.ui.define([
     search: "Search",
     navigator: "Navigator",
     display: "Display",
-    tenant: "Tenant"
+    tenant: "Tenant",
+    verbDefinitions: "Verb definitions",
+    shelfDefinitions: "Shelf definitions"
   };
 
   return Controller.extend("sap.tutorials.admin.shell.controller.Shell", {
