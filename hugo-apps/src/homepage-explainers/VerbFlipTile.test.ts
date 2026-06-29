@@ -48,7 +48,7 @@ describe('VerbFlipTile', () => {
       props: { verbKey: 'LEARN', label: 'Learn', iconName: 'learning-assistant',
                tagline: 'T', whyItMatters: 'W', href: '/learn/' },
     });
-    const tile = wrapper.find('[role="button"]');
+    const tile = wrapper.find('.hp-flip');
     await tile.trigger('keydown', { key: ' ' });
     await nextTick();
     expect(wrapper.find('[data-flipped="true"]').exists()).toBe(true);
@@ -59,7 +59,7 @@ describe('VerbFlipTile', () => {
       props: { verbKey: 'LEARN', label: 'Learn', iconName: 'learning-assistant',
                tagline: 'T', whyItMatters: 'W', href: '/learn/' },
     });
-    const tile = wrapper.find('[role="button"]');
+    const tile = wrapper.find('.hp-flip');
     await tile.trigger('keydown', { key: ' ' });
     expect(wrapper.find('[data-flipped="true"]').exists()).toBe(true);
     await tile.trigger('keydown', { key: 'Escape' });
@@ -75,7 +75,7 @@ describe('VerbFlipTile', () => {
     });
     // Component renders without error; flip toggling still works
     expect(wrapper.text()).toContain('Learn');
-    expect(wrapper.find('[role="button"]').exists()).toBe(true);
+    expect(wrapper.find('.hp-flip').exists()).toBe(true);
   });
 
   it('hover-intent fires flip after 250 ms', async () => {
@@ -83,11 +83,46 @@ describe('VerbFlipTile', () => {
       props: { verbKey: 'LEARN', label: 'Learn', iconName: 'learning-assistant',
                tagline: 'T', whyItMatters: 'W', href: '/learn/' },
     });
-    const tile = wrapper.find('[role="button"]');
+    const tile = wrapper.find('.hp-flip');
     await tile.trigger('pointerenter');
     expect(wrapper.find('[data-flipped="false"]').exists()).toBe(true);
     vi.advanceTimersByTime(250);
     await nextTick();
     expect(wrapper.find('[data-flipped="true"]').exists()).toBe(true);
+  });
+
+  it('Enter on verb tile does NOT preventDefault (allows <a> navigation)', async () => {
+    const wrapper = mount(VerbFlipTile, {
+      props: { verbKey: 'LEARN', label: 'Learn', iconName: 'learning-assistant',
+               tagline: 'T', whyItMatters: 'W', href: '/learn/' },
+    });
+    // Manually construct + dispatch a KeyboardEvent to inspect preventDefault.
+    const evt = new KeyboardEvent('keydown', { key: 'Enter', cancelable: true, bubbles: true });
+    wrapper.element.dispatchEvent(evt);
+    expect(evt.defaultPrevented).toBe(false);
+    // And: state is unchanged (no flip from Enter).
+    expect(wrapper.find('[data-flipped="false"]').exists()).toBe(true);
+  });
+
+  it('verb tile renders as <a> with role NOT equal to button', () => {
+    const wrapper = mount(VerbFlipTile, {
+      props: { verbKey: 'LEARN', label: 'Learn', iconName: 'learning-assistant',
+               tagline: 'T', whyItMatters: 'W', href: '/learn/' },
+    });
+    // Root is <a> — implicit link semantic; explicit role is undefined.
+    const a = wrapper.find('a');
+    expect(a.exists()).toBe(true);
+    expect(a.attributes('role')).toBeUndefined();
+    expect(a.attributes('tabindex')).toBeUndefined();
+  });
+
+  it('shelf-header mode keeps role="button" + tabindex=0', () => {
+    const wrapper = mount(VerbFlipTile, {
+      props: { shelfKey: 'START_HERE', label: 'Start here', tagline: 'T', whyItMatters: 'W' },
+    });
+    const root = wrapper.find('div.hp-flip');
+    expect(root.exists()).toBe(true);
+    expect(root.attributes('role')).toBe('button');
+    expect(root.attributes('tabindex')).toBe('0');
   });
 });

@@ -2,8 +2,7 @@
 // VerbFlipTile.vue — flip card on verb-spine tiles + verb-sub-page shelf headers.
 // Spec: #759 §1.3 / §4.1
 
-import { computed } from 'vue';
-import { useFlipCard } from '../advocates/composables/useFlipCard';
+import { computed, ref } from 'vue';
 import { useHoverIntent } from './composables/useHoverIntent';
 import { useReducedMotion } from './composables/useReducedMotion';
 import './styles/flip-card.css';
@@ -18,10 +17,14 @@ const props = defineProps<{
   href?: string;
 }>();
 
-// cardEl from useFlipCard is a regular Vue ref<HTMLElement|null>; binding
-// `ref="cardEl"` on the root <component :is="..."> in setup-script syntax
-// auto-wires it (Vue 3.5's <script setup> template-ref convention).
-const { flipped, cardEl, toggle, unflip } = useFlipCard();
+// Local flip state — we don't reuse advocates/useFlipCard because that
+// composable conflates Space + Enter (both toggle), and our spec §1.3
+// requires Enter to NAVIGATE on verb tiles. The keyboard contract is
+// short enough to inline; reuse here would have leaked the wrong
+// semantics.
+const flipped = ref(false);
+const cardEl = ref<HTMLElement | null>(null);
+
 const reduced = useReducedMotion();
 const { handleEnter, handleLeave } = useHoverIntent({
   delayMs: 250,
@@ -34,16 +37,41 @@ const isVerb = computed(() => !!props.verbKey);
 const hasBackContent = computed(() => !!(props.tagline || props.whyItMatters));
 
 function onClick(e: MouseEvent) {
-  // If the tile has an href and we're on the front face, navigate.
-  // If we're on the back face, toggle back to front (the user clicked away).
-  // If no href (shelf-header mode), toggle.
-  if (!flipped.value && props.href) {
-    // Allow default <a> navigation; nothing else needed.
-    return;
-  }
+  // Front face + has href → allow default <a> navigation.
+  // Back face (any) → flip back to front.
+  // Front face + no href (shelf header) → flip to back.
+  if (!flipped.value && props.href) return;
   e.preventDefault();
-  toggle();
+  flipped.value = !flipped.value;
 }
+
+function onKeydown(e: KeyboardEvent) {
+  // Spec §1.3 keyboard contract:
+  //   Space        → toggle flip (always)
+  //   Enter        → navigate (verbs); no-op (shelf headers — no href anyway)
+  //   Escape       → unflip when currently flipped
+  if (e.key === ' ') {
+    e.preventDefault();
+    flipped.value = !flipped.value;
+  } else if (e.key === 'Enter') {
+    // Allow default <a> navigation; do NOT call preventDefault().
+    // For shelf-header mode (no href), the default Enter on a focusable
+    // div is a no-op, which matches the spec.
+  } else if (e.key === 'Escape' && flipped.value) {
+    e.preventDefault();
+    flipped.value = false;
+    cardEl.value?.focus();
+  }
+}
+
+// aria-label varies by mode:
+//   verb tile: emphasises the link action ("Go to <label> or press Space for details")
+//   shelf header: classic toggle-button label
+const ariaLabel = computed(() =>
+  props.href
+    ? `Go to ${props.label}, or press Space for details`
+    : `Toggle details for ${props.label}`
+);
 </script>
 
 <template>
@@ -53,12 +81,13 @@ function onClick(e: MouseEvent) {
     class="hp-flip"
     :class="{ 'hp-flip--verb': isVerb, 'hp-flip--shelf': !isVerb }"
     :href="props.href || undefined"
-    role="button"
-    :tabindex="0"
+    :role="props.href ? undefined : 'button'"
+    :tabindex="props.href ? undefined : 0"
     :aria-pressed="flipped"
-    :aria-label="`Toggle details for ${label}`"
+    :aria-label="ariaLabel"
     :data-flipped="flipped.toString()"
     @click="onClick"
+    @keydown="onKeydown"
     @pointerenter="handleEnter"
     @pointerleave="handleLeave"
   >
