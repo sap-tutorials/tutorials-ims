@@ -1,10 +1,13 @@
 import { ref, computed } from 'vue'
 import type { ExplorePayload } from '../types'
 
+// Fetches the bulk graph payload from /graph/explore-data on mount.
+// Pre-#744 this composable also accepted an inline payload via
+// window.__INITIAL_GRAPH__ (SSR-injected by the standalone srv template).
+// That code path is gone — /explore/ is now a Hugo page with no SSR.
+
 export function useGraphData() {
-  // SSR / no-window guard
-  const initial = typeof window !== 'undefined' ? window.__INITIAL_GRAPH__ : null
-  const payload = ref<ExplorePayload | null>(initial ?? null)
+  const payload = ref<ExplorePayload | null>(null)
   const error = ref<Error | null>(null)
   const hasData = computed(() => !!payload.value)
 
@@ -22,7 +25,7 @@ export function useGraphData() {
     }
   }
 
-  if (!payload.value && typeof window !== 'undefined') {
+  if (typeof window !== 'undefined') {
     fetchAsync()
   }
 
