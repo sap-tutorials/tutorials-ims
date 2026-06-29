@@ -20,6 +20,58 @@ import cds from '@sap/cds';
 const instanceId = process.env.CF_INSTANCE_INDEX || '0';
 const LOG = cds.log('scheduler');
 
+// #756: JOB_REGISTRY is the single source of truth for all scheduled jobs.
+// Both cron.schedule() (in registerJobs() below) and the new
+// AdminService.JobControls.runJob() handler read from this map.
+//
+// Spec: docs/superpowers/specs/2026-06-29-756-admin-cron-trigger.md §4.1
+const JOB_REGISTRY = new Map();
+
+/**
+ * @typedef {Object} JobDef
+ * @property {string} jobName
+ * @property {string} schedule         cron expression — e.g. '23 4 1 * *'
+ * @property {number} ttlMs            lock duration in milliseconds
+ * @property {string} description      human-readable, shown in admin tile
+ * @property {Function} fn             async () => Promise<unknown> | async (logId) => Promise<unknown>
+ */
+
+/**
+ * Register a job in the JOB_REGISTRY AND schedule it via node-cron.
+ * Both invocation paths (scheduled and manual) read from the registry.
+ */
+export function registerJob({ jobName, schedule, ttlMs, description, fn }) {
+  if (JOB_REGISTRY.has(jobName)) {
+    throw new Error(`Duplicate jobName: ${jobName}`);
+  }
+  JOB_REGISTRY.set(jobName, { jobName, schedule, ttlMs, description, fn });
+  // Schedule the cron alongside registration.
+  cron.schedule(schedule, () => runJobByName(jobName));
+}
+
+/**
+ * Runner used by BOTH scheduled cron invocations AND manual admin triggers.
+ * Looks up the job in JOB_REGISTRY and delegates to runWithLock.
+ *
+ * @param {string} jobName
+ * @param {{manualTrigger?: boolean, user?: string}} [opts]
+ * @returns {Promise<{skipped: boolean, outcome?: string, result?: unknown, errorMessage?: string, reason?: string}>}
+ */
+export async function runJobByName(jobName, opts = {}) {
+  const job = JOB_REGISTRY.get(jobName);
+  if (!job) throw new Error(`Unknown jobName: ${jobName}`);
+  return runWithLock(job.jobName, job.ttlMs, job.fn, opts);
+}
+
+// Test seams (production code MUST NOT use these).
+export function _getJobRegistry() { return JOB_REGISTRY; }
+export function _resetJobRegistry() { JOB_REGISTRY.clear(); }
+export function _setJobFn(jobName, mockFn) {
+  const existing = JOB_REGISTRY.get(jobName);
+  if (!existing) throw new Error(`Cannot mock unknown job: ${jobName}`);
+  JOB_REGISTRY.set(jobName, { ...existing, fn: mockFn });
+}
+
 async function runWithLock(jobName, durationMs, fn) {
   if (await acquireLock(jobName, instanceId, durationMs)) {
     const logId = await logPipelineStart('SCHEDULED_JOB', 'system', { jobName });
@@ -254,29 +306,49 @@ export function registerJobs() {
   LOG.info(`Registering scheduled jobs on instance ${instanceId}`);
 
   // Daily at 00:00 — cleanup step failures
-  cron.schedule('0 0 * * *', () =>
-    runWithLock('cleanup-step-failures', 3600000, () => cleanupStepFailures(90))
-  );
+  registerJob({
+    jobName: 'cleanup-step-failures',
+    schedule: '0 0 * * *',
+    ttlMs: 3600000,
+    description: 'Delete StepFailures older than 90 days',
+    fn: () => cleanupStepFailures(90),
+  });
 
   // Every 2 hours — NGDS retry
-  cron.schedule('0 */2 * * *', () =>
-    runWithLock('ngds-retry', 1800000, (logId) => retryNgds(logId))
-  );
+  registerJob({
+    jobName: 'ngds-retry',
+    schedule: '0 */2 * * *',
+    ttlMs: 1800000,
+    description: 'Retry NGDS failed messages',
+    fn: (logId) => retryNgds(logId),
+  });
 
   // Daily at 01:00 — account merge batch
-  cron.schedule('0 1 * * *', () =>
-    runWithLock('account-merge-batch', 7200000, (logId) => processAccountMerges(logId))
-  );
+  registerJob({
+    jobName: 'account-merge-batch',
+    schedule: '0 1 * * *',
+    ttlMs: 7200000,
+    description: 'Process pending account merges',
+    fn: (logId) => processAccountMerges(logId),
+  });
 
   // Jan 2 and Jul 2 at 00:00 — tag cleanup
-  cron.schedule('0 0 2 1,7 *', () =>
-    runWithLock('tag-cleanup', 3600000, cleanupUnusedTags)
-  );
+  registerJob({
+    jobName: 'tag-cleanup',
+    schedule: '0 0 2 1,7 *',
+    ttlMs: 3600000,
+    description: 'Prune unused Tag rows (semi-annual)',
+    fn: cleanupUnusedTags,
+  });
 
   // Daily at 03:00 — prune old content versions (keep last 3, older than 7 days)
-  cron.schedule('0 3 * * *', () =>
-    runWithLock('content-gc', 600000, () => cleanupContentVersions(3, 7))
-  );
+  registerJob({
+    jobName: 'content-gc',
+    schedule: '0 3 * * *',
+    ttlMs: 600000,
+    description: 'Prune old ContentManifest versions',
+    fn: () => cleanupContentVersions(3, 7),
+  });
 
   // Every 5 minutes — mark stuck PUBLISHING manifests as FAILED. This is a
   // janitor/watchdog job (NOT the content-publish event itself — those are
@@ -286,19 +358,31 @@ export function registerJobs() {
   // still reaped on the original 60-min threshold via createdAt. Off-minute
   // (every 5m starting at :03) to avoid the :00/:30 thundering herd. Spec:
   // 2026-05-29-publish-content-hardening.
-  cron.schedule('3-58/5 * * * *', () =>
-    runWithLock('publish-stuck-manifest-watchdog', 300000, () => cleanupStuckPublishing(30, 60))
-  );
+  registerJob({
+    jobName: 'publish-stuck-manifest-watchdog',
+    schedule: '3-58/5 * * * *',
+    ttlMs: 300000,
+    description: 'Mark stuck PUBLISHING manifests as FAILED',
+    fn: () => cleanupStuckPublishing(30, 60),
+  });
 
   // Hourly at :17 — re-embed tutorial steps whose content drifted (offset to avoid :00 thundering herd; multi-instance safe via lock)
-  cron.schedule('17 * * * *', () =>
-    runWithLock('embedding-reconciliation', 1800000, (logId) => runReconciliationJob(logId))
-  );
+  registerJob({
+    jobName: 'embedding-reconciliation',
+    schedule: '17 * * * *',
+    ttlMs: 1800000,
+    description: 'Re-embed tutorial steps whose content drifted',
+    fn: (logId) => runReconciliationJob(logId),
+  });
 
   // Daily at 03:15 — prune pipeline log entries older than 30 days
-  cron.schedule('15 3 * * *', () =>
-    runWithLock('pipeline-log-gc', 600000, () => cleanupPipelineLog(30))
-  );
+  registerJob({
+    jobName: 'pipeline-log-gc',
+    schedule: '15 3 * * *',
+    ttlMs: 600000,
+    description: 'Prune PipelineLog rows older than 30 days',
+    fn: () => cleanupPipelineLog(30),
+  });
 
   // Weekly Sunday at 03:23 — prune sap.changelog.Changes rows older than 90 days.
   // Audit history > 90 days is rarely queried; the bulk of admin Change Log
@@ -307,25 +391,41 @@ export function registerJobs() {
   // docs/developers/operations/migration-from-ims.md §"changelog triggers
   // mitigation" for the design context. Admins can also one-shot purge
   // older noise via AdminService.clearChangeLog (#change-log-cleanup).
-  cron.schedule('23 3 * * 0', () =>
-    runWithLock('change-log-gc', 600000, () => cleanupChangeLog({ retentionDays: 90 }))
-  );
+  registerJob({
+    jobName: 'change-log-gc',
+    schedule: '23 3 * * 0',
+    ttlMs: 600000,
+    description: 'Prune sap.changelog.Changes rows older than 90 days',
+    fn: () => cleanupChangeLog({ retentionDays: 90 }),
+  });
 
   // Daily at 03:30 — prune embeddings for tutorials no longer in the active manifest
-  cron.schedule('30 3 * * *', () =>
-    runWithLock('embedding-orphan-prune', 300000, pruneOrphanEmbeddings)
-  );
+  registerJob({
+    jobName: 'embedding-orphan-prune',
+    schedule: '30 3 * * *',
+    ttlMs: 300000,
+    description: 'Prune embeddings for tutorials not in active manifest',
+    fn: pruneOrphanEmbeddings,
+  });
 
   // Daily at 03:45 — prune analytics history to last 200 entries per user.
   // Off-minute (:45) to keep cleanup window staggered; admin-only feature
   // with low write volume so single daily pass is plenty.
-  cron.schedule('45 3 * * *', () =>
-    runWithLock('analytics-history-prune', 600000, () => pruneAnalyticsHistory(200))
-  );
+  registerJob({
+    jobName: 'analytics-history-prune',
+    schedule: '45 3 * * *',
+    ttlMs: 600000,
+    description: 'Prune analytics history to last 200 entries per user',
+    fn: () => pruneAnalyticsHistory(200),
+  });
 
   // Weekly Sunday 02:00 — tutorial metadata review
-  cron.schedule('0 2 * * 0', () =>
-    runWithLock('tutorial-metadata-review', 3600000, async () => {
+  registerJob({
+    jobName: 'tutorial-metadata-review',
+    schedule: '0 2 * * 0',
+    ttlMs: 3600000,
+    description: 'Tutorial review sync — backfill missing TutorialMeta',
+    fn: async () => {
       // Tutorial review sync — self-healing backfill of missing TutorialMeta.
       // Publish handles the happy path; this catches drift.
       try {
@@ -335,52 +435,76 @@ export function registerJobs() {
       } catch (e) {
         LOG.error('tutorial-meta scheduler failed:', e);
       }
-    })
-  );
+    },
+  });
 
   // Weekly Monday 09:00 — contributor notifications
-  cron.schedule('0 9 * * 1', () =>
-    runWithLock('contributor-notifications', 1800000, (logId) => runContributorNotificationsCycle(logId))
-  );
+  registerJob({
+    jobName: 'contributor-notifications',
+    schedule: '0 9 * * 1',
+    ttlMs: 1800000,
+    description: 'Weekly contributor notifications for stale tutorials',
+    fn: (logId) => runContributorNotificationsCycle(logId),
+  });
 
   // Every 4 hours — email retry
-  cron.schedule('0 */4 * * *', () =>
-    runWithLock('email-retry', 900000, retryFailedEmails)
-  );
+  registerJob({
+    jobName: 'email-retry',
+    schedule: '0 */4 * * *',
+    ttlMs: 900000,
+    description: 'Retry FailedEmails queue',
+    fn: retryFailedEmails,
+  });
 
   // Daily at 02:13 — knowledge-graph concept extraction (#381 PR 3).
   // Off-minute (:13) to avoid the :00/:30 thundering herd. 30-min TTL covers
   // a full pass of ~1400 tutorials at ~1s/tutorial cache-hit + ~3s/tutorial
   // LLM call up to KG_EXTRACT_BUILD_CAP (default 200/tick).
-  cron.schedule('13 2 * * *', () =>
-    runWithLock('extractConcepts', 30 * 60 * 1000, runExtractConcepts)
-  );
+  registerJob({
+    jobName: 'extractConcepts',
+    schedule: '13 2 * * *',
+    ttlMs: 30 * 60 * 1000,
+    description: 'Knowledge-graph concept extraction (daily)',
+    fn: runExtractConcepts,
+  });
 
   // Weekly Sunday at 03:47 — knowledge-graph consolidation (#381 PR 4).
   // Off-minute (:47) and weekly cadence so the merge-on-write path during
   // extraction is the steady-state mechanism; this run mops up cross-batch
   // duplicates, auto-VETOes cycle-causing :requires edges, and rebuilds the
   // SPARQL projection. 30-min TTL matches extractConcepts.
-  cron.schedule('47 3 * * 0', () =>
-    runWithLock('consolidateConcepts', 30 * 60 * 1000, runConsolidateConcepts)
-  );
+  registerJob({
+    jobName: 'consolidateConcepts',
+    schedule: '47 3 * * 0',
+    ttlMs: 30 * 60 * 1000,
+    description: 'Knowledge-graph consolidation (weekly)',
+    fn: runConsolidateConcepts,
+  });
 
   // Weekly Sunday at 03:13 — Phase 4.1 Learning Journeys extraction (#447).
   // Off-minute (:13) per the project's cron-collision-avoidance convention.
   // 30-min TTL covers a full pass of ~200 journeys at ~5s/journey (cache hits)
   // or ~30s/journey (full extract path).
-  cron.schedule('13 3 * * 0', () =>
-    runWithLock('fetch-learning-journeys', 30 * 60 * 1000, runFetchLearningJourneys)
-  );
+  registerJob({
+    jobName: 'fetch-learning-journeys',
+    schedule: '13 3 * * 0',
+    ttlMs: 30 * 60 * 1000,
+    description: 'Fetch SAP Learning Journeys + extract concepts (weekly)',
+    fn: runFetchLearningJourneys,
+  });
 
   // Daily at 04:23 — Phase 4.2 Blog Posts extraction (#447).
   // Off-minute (:23) per the project's cron-collision-avoidance convention.
   // 30-min TTL covers a full pass of ~200 posts at ~5s/post LLM call.
   // Operator must run scripts/seed-blog-posts.cjs once first; the cron
   // refuses to self-bootstrap on an empty BlogPosts table.
-  cron.schedule('23 4 * * *', () =>
-    runWithLock('fetch-blog-posts', 30 * 60 * 1000, runFetchBlogPosts)
-  );
+  registerJob({
+    jobName: 'fetch-blog-posts',
+    schedule: '23 4 * * *',
+    ttlMs: 30 * 60 * 1000,
+    description: 'Fetch SAP Community blog posts + extract concepts (daily)',
+    fn: runFetchBlogPosts,
+  });
 
   // Weekly Sunday at 03:07 — Phase 4.3 Discovery Missions extraction (#447).
   // Off-minute (:07) per the project's cron-collision-avoidance convention
@@ -388,11 +512,15 @@ export function registerJobs() {
   // 30-min TTL covers a full pass of ~100-200 missions at ~5s/mission LLM call.
   // Full catalog upserts every cycle; contentHash gates per-mission LLM
   // extraction. Lazy-import keeps boot fast.
-  cron.schedule('7 3 * * 0', async () => {
-    await runWithLock('fetch-discovery-missions', 30 * 60 * 1000, async () => {
+  registerJob({
+    jobName: 'fetch-discovery-missions',
+    schedule: '7 3 * * 0',
+    ttlMs: 30 * 60 * 1000,
+    description: 'Fetch BTP Discovery Center missions + extract concepts (weekly)',
+    fn: async () => {
       const { runFetchDiscoveryMissions } = await import('./fetch-discovery-missions-job.js');
       return runFetchDiscoveryMissions();
-    });
+    },
   });
 
   // Sunday + Wednesday at 03:11 — Phase 4.4 YouTube Videos extraction (#447).
@@ -403,11 +531,15 @@ export function registerJobs() {
   // self-bootstrap on an empty Videos table (MAX-or-abort gate).
   // 30-min TTL covers a steady-state pass of ~10 new videos. Lazy-import
   // keeps boot fast.
-  cron.schedule('11 3 * * 0,3', async () => {
-    await runWithLock('fetch-videos', 30 * 60 * 1000, async () => {
+  registerJob({
+    jobName: 'fetch-videos',
+    schedule: '11 3 * * 0,3',
+    ttlMs: 30 * 60 * 1000,
+    description: 'Fetch SAP Developers YouTube videos + extract concepts (twice weekly)',
+    fn: async () => {
       const { runFetchVideos } = await import('./fetch-videos-job.js');
       return runFetchVideos();
-    });
+    },
   });
 
   // Monthly at 04:23 on day 1 — Phase 4.5 api.sap.com api-doc extraction (#746).
@@ -418,17 +550,18 @@ export function registerJobs() {
   // ApiDocs table (MAX-or-abort gate).
   // 30-min TTL covers a steady-state pass of ~60 packages from the
   // hand-curated YAML seed. Lazy-import keeps boot fast.
-  cron.schedule('23 4 1 * *', async () => {
-    await runWithLock('fetch-api-docs', 30 * 60 * 1000, async () => {
+  //
+  // #756: inline recordJobLastRun() removed — runWithLock chassis now
+  // writes JobLastRun unconditionally in its finally block.
+  registerJob({
+    jobName: 'fetch-api-docs',
+    schedule: '23 4 1 * *',
+    ttlMs: 30 * 60 * 1000,
+    description: 'Fetch api.sap.com api-doc catalog + extract concepts (monthly)',
+    fn: async () => {
       const { runFetchApiDocs } = await import('./fetch-api-docs-job.js');
-      const summary = await runFetchApiDocs();
-      await recordJobLastRun(
-        'fetch-api-docs',
-        summary.errors === 0 ? 'success' : 'error',
-        summary.errors > 0 ? `${summary.errors} errors during cycle` : null,
-      );
-      return summary;
-    });
+      return runFetchApiDocs();
+    },
   });
 
   // Weekly Sunday at 04:07 — Phase 4 cross-type GC.
@@ -437,24 +570,36 @@ export function registerJobs() {
   // sweep of sibling Associations (e.g. LearningJourneyPrerequisites.prerequisite)
   // in the GC job itself — see srv/jobs/gc-external-content-job.js.
   // Off-minute (:07) avoids the :00 thundering-herd. Lightweight job; 10-min TTL.
-  cron.schedule('7 4 * * 0', () =>
-    runWithLock('gc-external-content', 10 * 60 * 1000, runGcExternalContent)
-  );
+  registerJob({
+    jobName: 'gc-external-content',
+    schedule: '7 4 * * 0',
+    ttlMs: 10 * 60 * 1000,
+    description: 'GC external content past lastSeenAt + 2×TTL (weekly)',
+    fn: runGcExternalContent,
+  });
 
   // Phase 2-B (#464): Daily expiry check for tracked secrets.
   // Off-minute (04:11) avoids the :00 thundering-herd spike. 10-minute
   // lock matches similar lightweight jobs; the actual run is a single
   // SELECT + classification, well under a second.
-  cron.schedule('11 4 * * *', () =>
-    runWithLock('secret-expiry-check', 600000, runSecretExpiryCheck)
-  );
+  registerJob({
+    jobName: 'secret-expiry-check',
+    schedule: '11 4 * * *',
+    ttlMs: 600000,
+    description: 'Daily expiry check for tracked secrets',
+    fn: runSecretExpiryCheck,
+  });
 
   // Daily at 04:00 — nightly link-health check for HomepageShelves entries.
   // Runs after content GC (03:00) but well before peak traffic.
   // Spec §13.1 (#639).
-  cron.schedule('0 4 * * *', () =>
-    runWithLock('homepage-link-health', 30 * 60 * 1000, runHomepageLinkHealth)
-  );
+  registerJob({
+    jobName: 'homepage-link-health',
+    schedule: '0 4 * * *',
+    ttlMs: 30 * 60 * 1000,
+    description: 'Nightly link-health check for HomepageShelves entries',
+    fn: runHomepageLinkHealth,
+  });
 
   LOG.info('All scheduled jobs registered');
 }
