@@ -1598,6 +1598,123 @@ export default class AdminService extends cds.ApplicationService {
       return { processed: map.size };
     });
 
+    // --- (#759 PR 3a) Homepage explainer AI generation actions ---
+    //
+    // Three near-identical action handlers; the only differences are:
+    //   - which entity table (VerbDefinitions / ShelfDefinitions / HomepageShelves)
+    //   - which kind passed to generateExplainer ('verb' / 'shelf' / 'shelf-entry')
+    //   - whether contextLookup is needed (shelf-entry needs verb context)
+    //
+    // Shared concerns: cap-check, kill-switch, mode dispatch, batch with
+    // Promise.allSettled at CONCURRENCY=4, status-transition rules per
+    // spec §3.3, structured return shape with USD-cent cost.
+    const EXPLAINER_GENERATOR_CONCURRENCY = 4;
+    const EXPLAINER_HARD_CAP = 100;
+
+    async function runExplainerAction({ kind, entityName, ids, mode, contextLookup, req }) {
+      if (process.env.AICORE_EXPLAINER_GENERATOR_DISABLED === 'true') {
+        req.reject(503, 'AI_GENERATION_DISABLED');
+        return;
+      }
+      const idsArr = Array.isArray(ids) ? ids : [];
+      if (idsArr.length > EXPLAINER_HARD_CAP) {
+        req.reject(400, `CAP_EXCEEDED: limit ${EXPLAINER_HARD_CAP}`);
+        return;
+      }
+
+      const { generateExplainer } = await import('./lib/explainer-generator.js');
+      const { centsToUsdString } = await import('./lib/_token-cost.js');
+      const db = await cds.connect.to('db');
+
+      // Select target rows by mode.
+      let rows;
+      if (mode === 'fill-blanks') {
+        rows = await db.run(
+          SELECT.from(entityName).where({ authoringStatus: 'BLANK' })
+        );
+      } else if (mode === 'regenerate-selected') {
+        if (idsArr.length === 0) return { processed: 0, skipped: 0, cost: '$0.00' };
+        rows = await db.run(
+          SELECT.from(entityName).where({ ID: { in: idsArr } })
+        );
+      } else {
+        req.reject(400, `unknown mode: ${mode}`);
+        return;
+      }
+
+      // Process in batches of CONCURRENCY=4, accumulate.
+      let totalCents = 0;
+      let processed = 0;
+      let skipped = 0;
+      for (let i = 0; i < rows.length; i += EXPLAINER_GENERATOR_CONCURRENCY) {
+        const batch = rows.slice(i, i + EXPLAINER_GENERATOR_CONCURRENCY);
+        const results = await Promise.allSettled(batch.map(async (row) => {
+          const context = contextLookup ? await contextLookup(row) : undefined;
+          const result = await generateExplainer({ kind, row, context });
+          if (!result) return null;
+          await db.run(
+            UPDATE(entityName)
+              .set({
+                tagline:         result.tagline,
+                whyItMatters:    result.whyItMatters,
+                authoringStatus: 'AI_SEEDED',
+              })
+              .where({ ID: row.ID })
+          );
+          return result.costCents;
+        }));
+        for (const r of results) {
+          if (r.status === 'fulfilled' && r.value !== null) {
+            processed++;
+            totalCents += r.value;
+          } else {
+            skipped++;
+          }
+        }
+      }
+      return {
+        processed,
+        skipped,
+        cost: centsToUsdString(totalCents),
+      };
+    }
+
+    this.on('generateVerbExplainers', async (req) => {
+      const { ids, mode } = req.data;
+      return runExplainerAction({
+        kind: 'verb',
+        entityName: 'com.sap.developers.ims.VerbDefinitions',
+        ids, mode, req,
+      });
+    });
+
+    this.on('generateShelfExplainers', async (req) => {
+      const { ids, mode } = req.data;
+      return runExplainerAction({
+        kind: 'shelf',
+        entityName: 'com.sap.developers.ims.ShelfDefinitions',
+        ids, mode, req,
+      });
+    });
+
+    this.on('generateShelfEntryExplainers', async (req) => {
+      const { ids, mode } = req.data;
+      // shelf-entry needs verb context: look up VerbDefinitions[verbKey == row.verb] per row.
+      return runExplainerAction({
+        kind: 'shelf-entry',
+        entityName: 'com.sap.developers.ims.HomepageShelves',
+        ids, mode, req,
+        contextLookup: async (row) => {
+          const db = await cds.connect.to('db');
+          const verbDef = await db.run(
+            SELECT.one.from('com.sap.developers.ims.VerbDefinitions')
+              .where({ verbKey: row.verb })
+          );
+          return verbDef ? { verbDefinition: { label: verbDef.label, tagline: verbDef.tagline } } : undefined;
+        },
+      });
+    });
+
     // Phase 2-B (#464): Severity-classified expiry warnings for the
     // admin-shell notifications popover. Read-only — no DB writes.
     // Imports daysUntil + classifySeverity from the cron module to share

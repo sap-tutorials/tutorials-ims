@@ -87,6 +87,18 @@ export async function generateExplainer({ kind, row, context }) {
     return null;
   }
 
+  // Test-only injection hook (#759 PR 3a). When admin-service.js's action
+  // handler tests run under cds.test('serve'), the cds loader pre-resolves
+  // this module before vitest can install vi.mock interceptors — so
+  // mocking @sap-ai-sdk/orchestration at the SDK level does NOT propagate
+  // to the admin-service handler. As a workaround, allow tests to set
+  // `globalThis.__EXPLAINER_GENERATOR_TEST_IMPL__` to a function with the
+  // same signature, which short-circuits the AI Core call entirely.
+  // Production code paths never set this global, so it's a no-op there.
+  if (typeof globalThis.__EXPLAINER_GENERATOR_TEST_IMPL__ === 'function') {
+    return globalThis.__EXPLAINER_GENERATOR_TEST_IMPL__({ kind, row, context });
+  }
+
   if (!PROMPTS[kind]) {
     throw new Error(`unknown kind: ${kind}`);
   }
