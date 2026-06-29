@@ -1,6 +1,6 @@
 # Issue #777 — Reconcile author/owner semantics across MyTutorials, advocate page, and admin Tutorial Health
 
-- **Status:** Approved (2026-06-29), pending spec-reviewer pass
+- **Status:** Approved (2026-06-29), spec-reviewer pass complete
 - **Issue:** [#777](https://github.com/sap-tutorials/tutorials-ims/issues/777)
 - **Predecessor spec:** [`2026-06-24-tutorial-authorship-fk-design.md`](./2026-06-24-tutorial-authorship-fk-design.md) — added the `Tutorials.author` and `TutorialContributors.user` FKs that source #1 + #2 of this spec rely on
 - **Related:** AuthorService spec [`2026-06-21-issue-385-pr3-authorservice-design.md`](./2026-06-21-issue-385-pr3-authorservice-design.md) — introduced `MyTutorialsView` with the email-only inner-join we're broadening
@@ -61,64 +61,119 @@ The backfill script does the inverse work on the data side: re-resolves source #
 
 ## 1. Architecture
 
-### 1.1 The new `MyTutorialsView`
+### 1.1 The new `MyTutorialsView` (two-stage shape)
+
+**Critical context — what `userId` actually means.** Today's `MyTutorialsView` (db/views.cds:216) exposes `u.uuid as ownerUserId` and the AuthorService before-handler filters on `req.user.id`. This is the established CAP invariant on this codebase: **`req.user.id === Users.uuid`** (the XSUAA `sub` claim, which the migrator stamped into `Users.uuid`). FK columns (`Tutorials.author_ID`, `TutorialContributors.user_ID`) target `Users.ID` — a DIFFERENT UUID from `Users.uuid`. Sources 1 and 2 of the UNION therefore JOIN `Users` to translate `Users.ID` → `Users.uuid` so every UNION branch emits the same `userUuid` field. The outer view exposes this as `userId` for consistency with the existing API. **No code path requires `Users.ID` to leak out of the view; every consumer compares `userId` to `req.user.id` directly.**
+
+The view follows the established codebase pattern of TOP-LEVEL `UNION ALL` of equally-shaped SELECTs (see `db/views.cds:7-51` `Tasks` for precedent). Each branch emits exactly three columns: `tutorial_ID`, `userUuid`, `priority`. A separate aggregate view groups + picks `MIN(priority)`. A final view joins back to `Tutorials` + `TutorialMeta` to expose the rich field set without GROUP BY constraints.
+
+**Layer 1: `MyTutorialsRaw` (UNION ALL of 4 sources, narrow columns)**
+
+```cds
+view MyTutorialsRaw as
+  // Source 1: strict author FK — priority 1 (highest confidence).
+  // Join Users so the branch emits Users.uuid (matches req.user.id), not Users.ID.
+  SELECT from ims.Tutorials as t
+    inner join ims.Users as u on u.ID = t.author_ID
+  {
+    key t.ID            as tutorial_ID,
+    key u.uuid          as userUuid,
+    1                   as priority : Integer
+  }
+  UNION ALL
+  // Source 2: contributor FK — priority 2.
+  SELECT from ims.TutorialContributors as c
+    inner join ims.Users as u on u.ID = c.user_ID
+  {
+    key c.tutorial.ID   as tutorial_ID,
+    key u.uuid          as userUuid,
+    2                   as priority : Integer
+  }
+  UNION ALL
+  // Source 3: post-publish ownerEmail match — priority 3.
+  SELECT from ims.TutorialMeta as m
+    inner join ims.Users as u on u.email = m.ownerEmail
+  {
+    key m.tutorial.ID   as tutorial_ID,
+    key u.uuid          as userUuid,
+    3                   as priority : Integer
+  }
+  UNION ALL
+  // Source 4: legacy free-text owner match — priority 4 (lowest).
+  // Equality, NOT LIKE — see §1.2 rationale.
+  SELECT from ims.TutorialMeta as m
+    inner join ims.Users as u
+      on m.owner = u.email
+      or m.owner = u.firstName || ' ' || u.lastName
+  {
+    key m.tutorial.ID   as tutorial_ID,
+    key u.uuid          as userUuid,
+    4                   as priority : Integer
+  };
+```
+
+**Layer 2: `MyTutorialsBestPriority` (dedup with MIN priority)**
+
+```cds
+view MyTutorialsBestPriority as
+  select from MyTutorialsRaw {
+    key tutorial_ID,
+    key userUuid,
+    min(priority)       as bestPriority : Integer
+  }
+  group by tutorial_ID, userUuid;
+```
+
+One row per `(tutorial, user)` pair, with `bestPriority` = the highest-confidence source (lowest number).
+
+**Layer 3: `MyTutorialsView` (rich field set, no GROUP BY)**
 
 ```cds
 view MyTutorialsView as
-  select from (
-      // Source 1: strict author FK — priority 1 (highest confidence)
-      select key t.ID                  as tutorial_ID,
-                 t.author_ID           as userId,
-                 1                     as priority
-        from ims.Tutorials as t
-        where t.author_ID is not null
-    union
-      // Source 2: contributor FK — priority 2
-      select key c.tutorial_ID,
-                 c.user_ID             as userId,
-                 2                     as priority
-        from ims.TutorialContributors as c
-        where c.user_ID is not null
-    union
-      // Source 3: post-publish ownerEmail match — priority 3
-      select key m.tutorial_ID,
-                 u.ID                  as userId,
-                 3                     as priority
-        from ims.TutorialMeta as m
-          inner join ims.Users as u on u.email = m.ownerEmail
-    union
-      // Source 4: legacy free-text owner match — priority 4 (lowest)
-      // Matches BOTH email-shape (e.g. "thomas.jung@sap.com") and
-      // name-shape (e.g. "Thomas Jung") legacy values.
-      select key m.tutorial_ID,
-                 u.ID                  as userId,
-                 4                     as priority
-        from ims.TutorialMeta as m
-          inner join ims.Users as u
-            on m.owner = u.email
-            or m.owner = u.firstName || ' ' || u.lastName
-  ) {
-      tutorial_ID,
-      userId,
-      min(priority) as bestPriority : Integer,
-      // Outer join back to Tutorials + TutorialMeta so OData consumers
-      // get the existing fields (title, slug, primaryTag, status,
-      // reviewedDate, monitoredStatus, notificationNumber, daysSinceReview).
-  }
-  group by tutorial_ID, userId;
+  select from MyTutorialsBestPriority as b
+    inner join ims.Tutorials      as t on t.ID = b.tutorial_ID
+    inner join ims.TutorialMeta   as m on m.tutorial.ID = t.ID  // outer? see §4.7
+  {
+    key t.ID                                as tutorial_ID,
+    key b.userUuid                          as userId,
+    b.bestPriority,
+    // Existing fields preserved from today's MyTutorialsView:
+    t.slug,
+    t.title,
+    t.primaryTag,
+    t.status,
+    m.reviewedDate,
+    m.monitoredStatus,
+    m.notificationNumber,
+    m.lastNotificationDate                  as notificationDate,
+    m.firstNotificationDate,
+    m.owner                                 as owner,
+    m.ownerEmail                            as ownerEmail,
+    m.repository.name                       as repositoryName : String,
+    case when m.monitoredStatus = 'ACTIVE'
+         then true else false end           as monitored : Boolean,
+    days_between(m.reviewedDate, $now)      as daysSinceReview : Integer
+  };
 ```
 
-The outer SELECT joins back to `Tutorials` and `TutorialMeta` to expose the columns Sage and the admin tile currently consume. Exact field list during implementation; the existing `MyTutorialsView` field surface is the baseline (Section 2.1 of this spec).
+The outer Layer 3 view has no GROUP BY because Layer 2 already deduped. The non-aggregate fields from `Tutorials` and `TutorialMeta` flow through cleanly. The OData consumer's `$filter`, `$orderby`, `$expand` all work as today.
 
-### 1.2 Why `m.owner = u.firstName || ' ' || u.lastName` instead of `LIKE`
+**TutorialMeta join — INNER vs LEFT (§4.7).** Today's view INNER joins TutorialMeta — so tutorials without a TutorialMeta row never appear. Sources 1 (author FK on Tutorials) and 2 (contributor FK) don't actually require TutorialMeta to match. We have a choice:
 
-The original probe showed 77 matches using `LIKE '%Thomas Jung%'`. Most of those 77 are exact value `"Thomas Jung"` (from frontmatter `author_name`). Exact equality is safer:
+- **(a) INNER JOIN TutorialMeta** — preserves today's behavior (tutorials without TutorialMeta drop out). Simplest. Implementation default.
+- **(b) LEFT JOIN TutorialMeta** — exposes tutorials that have author/contributor FK but no TutorialMeta yet. Rich field set is partially NULL for those rows.
 
-- **Avoids false positives:** "Tom" doesn't accidentally match "Tom Smith" or "Thomas Jr".
-- **No SQL injection / LIKE-escaping concerns:** no `%` or `_` to escape.
-- **Predictable count:** the dedup gives one row per tutorial regardless of how the legacy `owner` string was formatted.
+The implementation picks (a) for the first PR (matches today's contract). If users surface "I authored this but it doesn't appear in MyTutorials" cases due to missing TutorialMeta, switch to (b) in a follow-up. The decision is reversible — pure SQL change.
 
-If equality misses cases that `LIKE` would have caught, the backfill script catches them (it has more sophisticated string parsing). The view stays conservative.
+### 1.2 Why `m.owner = u.firstName || ' ' || u.lastName` (equality, not LIKE)
+
+The original probe showed 77 matches using `LIKE '%Thomas Jung%'`. Most are exact value `"Thomas Jung"` from frontmatter `author_name`. Exact equality:
+
+- **Avoids false positives:** "Tom" doesn't accidentally match "Tom Smith".
+- **No SQL injection / LIKE-escaping concerns.**
+- **Predictable count.**
+
+If equality undercounts vs. LIKE, the backfill script's more sophisticated parsing (§1.4) catches the misses on-disk by writing FK + ownerEmail; subsequent reads find them via sources 1+3.
 
 ### 1.3 Read-time data flow
 
@@ -126,18 +181,20 @@ If equality misses cases that `LIKE` would have caught, the backfill script catc
 Sage / Author UI / Admin Tutorial Health
   └─ GET /author/MyTutorials (CAP-managed OData over MyTutorialsView)
        └─ srv/author-service.js before('READ') injects WHERE userId = req.user.id
-       └─ HANA executes the four-source UNION + GROUP BY dedup
+          (req.user.id === Users.uuid; matches MyTutorialsView.userId by design)
+       └─ HANA executes the layered view (UNION ALL → GROUP BY → outer join)
        └─ OData layer applies $filter, $orderby, $expand on the result
 
 Advocate page
   └─ GET /api/advocates (advocates-public.js)
        └─ For each advocate with linked user_ID:
-            └─ SELECT from MyTutorialsView WHERE userId = advocate.user_ID
+            └─ Lookup the linked Users row's uuid (already needed for email today)
+            └─ SELECT from MyTutorialsView WHERE userId = advocate.user.uuid
        └─ Returns Tutorial rows; response shape unchanged
 
 Admin Tutorial Health "monitored by me" toggle
   └─ /admin/MyTutorials filtered by userId (NOT email)
-       └─ Same view, same backend; just a different OData consumer
+       └─ Same view, same backend; different OData consumer
 ```
 
 ### 1.4 Backfill flow
@@ -152,8 +209,13 @@ scripts/backfill-tutorial-meta-author.cjs --dry-run (default)
   └─ Print: "X rows proposed, Y orphans (Z ambiguous, W unmatched)"
 
 scripts/backfill-tutorial-meta-author.cjs --commit
-  └─ Same resolution + UPDATEs TutorialMeta.ownerEmail + Tutorials.author_ID
-  └─ Idempotent — re-runs skip rows where ownerEmail IS NOT NULL
+  └─ Same resolution. Writes ONLY TutorialMeta.ownerEmail.
+  └─ Tutorials.author_ID is NOT written by this script (avoids competing with
+     scripts/backfill-tutorial-authors.cjs from the 2026-06-24 spec, which
+     owns the author_ID write path). After this script's --commit, re-run
+     backfill-tutorial-authors.cjs to pick up the newly-populated ownerEmail
+     rows via its existing resolver (resolveTutorialAuthor's Phase B-c).
+  └─ Idempotent — skips rows where ownerEmail IS NOT NULL.
 ```
 
 ## 2. Components
@@ -206,17 +268,19 @@ Today's `MyTutorialsView` does `INNER JOIN Users ON u.email = m.ownerEmail`. The
 
 If the original author is still in `TutorialMeta.owner` text (source #4) but the new author is in `Tutorials.author_ID` (source #1), BOTH users see the tutorial in their "mine" list. **Intentional** — the C-strict policy. Until the backfill runs, this is the right behavior (the original author shouldn't be silently dropped from their attribution). After backfill, the legacy text rows are resolved to current authors, so only the current author sees it.
 
-### 4.4 The `userId` resolution question (implementation TBD)
+### 4.4 The `userId` resolution (locked: `Users.uuid`, not `Users.ID`)
 
-Three candidate UUIDs in the system:
+`req.user.id` in this codebase resolves to the XSUAA `sub` claim, which the IMS migrator stamped into `Users.uuid` (NOT `Users.ID` — those are two distinct UUIDs). Today's `db/views.cds:238` exposes `u.uuid as ownerUserId` and `srv/author-service.js:73` filters on `req.user.id` — that's why the existing single-source path works.
 
-- **`Users.ID`** — CAP cuid primary key, used by FK columns (`author_ID`, `user_ID`).
-- **`Users.uuid`** — distinct UUID stored alongside; legacy from IMS migration.
-- **`req.user.id`** — the XSUAA `sub` claim; per CAP convention maps to one of the above.
+The new layered view (§1.1) is **explicitly designed to preserve this invariant**. Every UNION ALL branch JOINs `Users` to translate any `Users.ID` references into `u.uuid`, and the final outer view exposes `userUuid as userId`. The before-handler filter remains exactly `req.query.where({ userId: req.user.id })` — same shape as today, broader semantics.
 
-The view's UNION uses `Users.ID` (it's the FK target). The before-handler filter must match `req.user.id` against `Users.ID`. If `req.user.id` resolves to `Users.uuid` instead of `Users.ID`, the filter mismatches and returns 0 rows.
+Implementation steps to verify in the hybrid test (§5.2):
 
-**Implementation step:** verify the mapping during the AuthorService refactor. If `req.user.id === Users.uuid`, the before-handler must look up `Users.ID` via `Users.uuid`. If `req.user.id === Users.email` (some XSUAA configs), do the email → ID lookup. The right answer is one `SELECT.one.from(Users).columns('ID').where({ uuid: req.user.id })` (or by email) once per request, cached on `req.context` if needed.
+- Insert a synthetic Users row with both `ID` and `uuid` set.
+- Insert four synthetic tutorials covering all four sources for that user.
+- Query `MyTutorialsView WHERE userId = synthetic_uuid` — expect all four rows.
+
+If the test passes, the contract is correct. If the test fails (zero rows returned), the column projection in the view is wrong — likely a source forgot to JOIN Users or projected `Users.ID` instead of `Users.uuid`.
 
 ### 4.5 Backfill ambiguous match
 
@@ -226,9 +290,24 @@ Two users share the same firstName + lastName (e.g. two `John Smith` rows). Back
 
 E.g. `owner = "former-author@example.com"` for someone who left the company and whose `Users` row was deleted. Orphan. Logged with the parsed email. Operator decides: either leave NULL (source #4 still surfaces it via the `m.owner = u.email` test, but no user matches now) or manually delete the row.
 
-### 4.7 HANA query plan concerns
+### 4.7 HANA query plan + TutorialMeta join semantics
 
-The UNION view does 4 sub-selects, GROUP BY, and a final outer join. Concrete worry: HANA may not push down a `WHERE userId = ?` filter efficiently through the UNION + GROUP BY. **Mitigation during implementation:** measure `EXPLAIN PLAN` for `SELECT * FROM MyTutorialsView WHERE userId = ?`. If the filter doesn't push down (full-table scan + late filter), restructure the view so the filter applies per-source-subselect.
+The layered view (§1.1) is built so HANA can push down a `WHERE userId = ?` filter through each UNION ALL branch independently. Each branch's `userUuid` comes from `Users.uuid` via an INNER JOIN — HANA's optimizer pushes the filter onto that JOIN before the UNION runs. Layer 2 (`MyTutorialsBestPriority`) then groups the much smaller filtered result. Layer 3 joins back to `Tutorials` / `TutorialMeta` on the (already-filtered) primary keys.
+
+This shape is the same as the existing `Tasks` UNION ALL view (`db/views.cds:7-51`) which HANA executes efficiently with per-user filters today. We're following the established pattern.
+
+**TutorialMeta join — INNER vs LEFT.** Today's view INNER joins TutorialMeta. The new Layer 3 view defaults to INNER (matches today's contract). Sources 1 and 2 don't require TutorialMeta to match — they came from `Tutorials.author_ID` / `TutorialContributors.user_ID` directly. So a user who authored a tutorial that has NO TutorialMeta row will see it in sources 1 or 2 (Layer 1 + 2) but get filtered OUT by the INNER JOIN at Layer 3.
+
+For the first PR, this matches today's behavior (these tutorials don't appear in `MyTutorialsView` today either, because today's view also INNER joins TutorialMeta). If users surface complaints, switch Layer 3 to LEFT JOIN in a follow-up — pure SQL change, reversible.
+
+**Implementation EXPLAIN PLAN spike (mandatory).** Before merging, the implementer must:
+
+1. Build the three-layer view in DEV.
+2. Run `EXPLAIN PLAN FOR SELECT * FROM MyTutorialsView WHERE "userId" = '<test-uuid>'`.
+3. Confirm the plan shows the `userId = ?` filter applied EARLY (within each UNION ALL branch's JOIN, not after the GROUP BY).
+4. If filter is late, restructure to push it into each Layer-1 branch's `where` clause.
+
+The Layer 1 branches don't have a `where` clause today — the filter comes from the OData consumer. If HANA's optimizer doesn't push it down through the GROUP BY in Layer 2, the workaround is to add a parameterized Layer-1 wrapping function or expose the filter at Layer 2. Both are CDS view changes; no JS code change.
 
 ## 5. Testing
 
@@ -279,16 +358,24 @@ The UNION view does 4 sub-selects, GROUP BY, and a final outer join. Concrete wo
 
 ## 6. Migration / rollout
 
-Single PR. No schema migration. The CDS view change requires a redeploy of the srv module (HANA reads the updated view definition at next query). The backfill script runs as a separate post-deploy step.
+Single PR. No schema migration. The CDS view changes require a redeploy of the srv module (HANA reads the updated view definitions at next query). The backfill script runs as a separate post-deploy step.
+
+**Two backfill scripts — distinct write columns.** This PR adds `scripts/backfill-tutorial-meta-author.cjs` which writes ONLY `TutorialMeta.ownerEmail`. The existing `scripts/backfill-tutorial-authors.cjs` (from the 2026-06-24 spec) owns the `Tutorials.author_ID` write path. The intended sequence after PR-merge deploy:
+
+1. Run new script `--dry-run` → review CSVs → `--commit`. Populates `TutorialMeta.ownerEmail` for 66 legacy rows.
+2. Re-run existing `scripts/backfill-tutorial-authors.cjs --commit`. Its resolver (`srv/lib/resolve-tutorial-author.js` Phase B-c — "ownerEmail fallback") now finds matches in the just-populated rows and sets `Tutorials.author_ID`.
+
+After both scripts run, sources 1 (FK) and 3 (ownerEmail) cover what source 4 (legacy text) had been catching alone, and source 4 becomes a redundancy guard.
 
 **Rollout sequence:**
 
-1. Merge + deploy the view + service refactor + admin tile change. Tom + Sage see ~77 tutorials across all three surfaces immediately, sourced through the UNION view (legacy text-match contributes most of the rows).
-2. Run backfill `--dry-run` on DEV. Review CSVs.
-3. Run backfill `--commit` on DEV. The 66 legacy text-only rows resolve to `ownerEmail` + `author_ID`.
-4. After PROD cutover (separate timeline), repeat 2-3 on PROD.
+1. Merge + deploy the view + service refactor + admin tile change. Tom + Sage see ~77 tutorials across all three surfaces immediately, sourced through the UNION view (legacy text-match contributes most of the rows on DEV today).
+2. Run `npm run backfill-tutorial-meta-author -- --dry-run` on DEV. Review CSVs.
+3. Run `--commit`. The 66 legacy text-only rows resolve to `ownerEmail`.
+4. Re-run `npx cds bind --exec -- node scripts/backfill-tutorial-authors.cjs --commit` to pick up the newly-populated `ownerEmail` rows and write `author_ID`.
+5. After PROD cutover (separate timeline), repeat 2-4 on PROD.
 
-**Rollback:** `git revert` + redeploy. Reverts the view to its previous shape. Counts drop back to 11/7/0 across surfaces. No data corruption — the backfill script only adds data (writes to currently-NULL `ownerEmail` / `author_ID`).
+**Rollback:** `git revert` + redeploy. Reverts the view to its previous shape. Counts drop back to 11/7/0 across surfaces. No data corruption — both backfill scripts only write to currently-NULL columns.
 
 ## 7. References
 
