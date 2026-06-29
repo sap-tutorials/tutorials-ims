@@ -2011,6 +2011,49 @@ export default class AdminService extends cds.ApplicationService {
       return result;
     });
 
+    // Phase 4.6 (#747): operator-grade SAP-samples corpus bootstrap.
+    // Unlike seedApiDocs (which invokes runSeedApiDocs synchronously and
+    // returns planned/committed counts), seedSamples is fire-and-forget:
+    // it kicks the fetch-samples cron in setImmediate with sinceIsoOverride
+    // to bypass the MAX-or-abort gate exactly once, then returns
+    // { started, reason } synchronously. The cron itself writes JobLastRun
+    // + chassis audit events (cron.manual-trigger.*) as it runs — same
+    // posture as the JobControls.runJob path at line 1934.
+    //
+    // Audit emission uses the post-#769 canonical pattern: first arg is the
+    // ACTION NAME ('kg.samples.seed'), NOT 'SecurityEvent'. The
+    // SecurityEvent audit type is hardcoded inside the createAuditEmitter
+    // closure (see srv/lib/audit-event.js).
+    this.on('seedSamples', async (req) => {
+      const commit = !!req.data?.commit;
+      if (!commit) {
+        return { started: false, reason: 'dry-run (pass commit=true to actually seed)' };
+      }
+      const userId = req.user?.id;
+      // Fire-and-forget: invoke the cron with sinceIsoOverride to bypass
+      // the MAX-or-abort first-run gate. Budget override 1000 ensures the
+      // initial seed isn't truncated by the per-cycle 50-extraction cap.
+      setImmediate(() => {
+        runJobByName('fetch-samples', {
+          manualTrigger: true,
+          user: userId,
+          sinceIsoOverride: '1970-01-01T00:00:00Z',
+          budgetOverride: 1000,
+        }).catch((err) => {
+          cds.log('admin-service').error(`seedSamples cron failed: ${err.message ?? err}`);
+        });
+      });
+      setImmediate(() => {
+        auditEvent('kg.samples.seed', {
+          user: userId,
+          committed: true,
+        }).catch((err) => {
+          cds.log('admin-service').warn(`seedSamples audit emit failed: ${err.message ?? err}`);
+        });
+      });
+      return { started: true, reason: null };
+    });
+
     // ─────────────────────────────────────────────────────────────────
     // #756: AdminService.JobControls actions.
     //
