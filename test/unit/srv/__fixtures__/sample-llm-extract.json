@@ -1,0 +1,11 @@
+{
+  "verdict": {
+    "embodies": [
+      { "slug": "cap-service-handlers", "name": "CAP service handlers", "confidence": 0.92 },
+      { "slug": "cap-cds-modeling", "name": "CAP CDS modeling", "confidence": 0.78 },
+      { "slug": "low-confidence-concept", "name": "Low Confidence", "confidence": 0.55 },
+      { "slug": "x", "name": "X", "confidence": 0.88 }
+    ]
+  },
+  "tokenUsage": { "prompt": 2400, "completion": 220 }
+}
