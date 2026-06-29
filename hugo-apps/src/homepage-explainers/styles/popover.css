@@ -1,0 +1,75 @@
+/* hugo-apps/src/homepage-explainers/styles/popover.css
+ * Spec: #759 §4.3
+ */
+
+.hp-popover-anchor {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hp-popover-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--sapNeutralTextColor, #6a6d70);
+  opacity: 0.6;
+  transition: opacity 0.15s ease-out;
+}
+
+.hp-popover-icon:hover,
+.hp-popover-icon:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--sapButton_Selected_BorderColor, #0070f2);
+  outline-offset: 2px;
+}
+
+.hp-popover {
+  position: absolute;
+  z-index: 1000;
+  width: 320px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 12px 16px;
+  background: var(--sapContent_ForegroundColor, #fff);
+  border: 1px solid var(--sapContent_BorderColor, #d5dae0);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.hp-popover[data-placement="above"] { bottom: 100%; margin-bottom: 8px; }
+.hp-popover[data-placement="below"] { top: 100%; margin-top: 8px; }
+.hp-popover[data-alignment="left"]   { left: 0; }
+.hp-popover[data-alignment="center"] { left: 50%; transform: translateX(-50%); }
+.hp-popover[data-alignment="right"]  { right: 0; }
+
+.hp-popover__tagline {
+  margin: 0 0 8px;
+  color: var(--sapTitleColor, #32363a);
+  font-weight: 600;
+}
+
+.hp-popover__why {
+  margin: 0 0 8px;
+  color: var(--sapTextColor, #32363a);
+}
+
+.hp-popover__description {
+  margin: 0;
+  color: var(--sapNeutralTextColor, #6a6d70);
+  font-size: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hp-popover-icon { transition: none; }
+}
