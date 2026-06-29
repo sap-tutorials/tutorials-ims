@@ -44,6 +44,18 @@ build-parameters:
         # Version bumps to this URL automatically invalidate the CI cache too
         # (deploy.yml's cache key is hashFiles('mta.yaml')).
         - 'bash -c ''set -e; npm run validate-tutorials & p1=$!; npm --prefix hugo-apps run build & p2=$!; npm run copy-joule-vendor & p3=$!; { [ -x /tmp/hugo ] || (curl -fsSL https://github.com/gohugoio/hugo/releases/download/v0.147.7/hugo_extended_0.147.7_linux-amd64.tar.gz -o /tmp/hugo.tar.gz && tar -xzf /tmp/hugo.tar.gz -C /tmp hugo); } & p4=$!; wait $p1; wait $p2; wait $p3; wait $p4'''
+        # Build app/explore + emit the bundle manifest into hugo/data/.
+        # Hugo reads site.Data.explore_bundle at template-render time to
+        # inject the hashed JS/CSS filenames into /explore's HTML. This
+        # MUST run BEFORE the Hugo build below — otherwise Hugo's data
+        # lookup returns nothing and the template falls through to the
+        # {{ else }} "Explore bundle missing" branch in the deployed page.
+        # The mkdir + cp into approuter/static/explore-ui/ stays further
+        # down (it only needs to happen before mbt packs the approuter
+        # module, not before Hugo).
+        - npm --prefix app/explore install
+        - npm --prefix app/explore run build
+        - npx tsx scripts/build-explore-manifest.ts app/explore/dist hugo/data/explore_bundle.json
         # Run prod + QA Hugo builds in parallel. They write to different
         # output dirs (hugo/public/ vs hugo/public-qa/) so they don't collide
         # on output. They DO share hugo/resources/_gen/ for image-resize
@@ -65,21 +77,10 @@ build-parameters:
         - mkdir -p approuter/static/tutorials && mv approuter/static/tutorials/_nav.json.bak approuter/static/tutorials/_nav.json
         - cp -r app/display-app/dist approuter/static/display-app
         - cp -r app/scanner/webapp approuter/static/scanner-ui
-        # Build app/explore + emit the bundle manifest. The manifest is
-        # read at request time by srv/lib/explore-route.js to inject the
-        # hashed JS/CSS filenames into /explore's HTML. Approuter and srv
-        # live in separate CF containers, so the manifest must ship inside
-        # the srv pod — specifically next to the route module at
-        # gen/srv/srv/lib/ (where `cds build --production` mirrors srv/lib/
-        # so it lands at /home/vcap/app/srv/lib/ in the deployed container).
-        # Writing to gen/srv/lib/ (missing the inner srv/) leaves the file
-        # outside the packaged srv module and the deploy ships without it,
-        # which manifests as the route falling back to its DEV sentinel
-        # ({hash:'dev',css:'index.css'}) and the browser 404'ing on
-        # /explore-ui/main-dev.js.
-        - npm --prefix app/explore install
-        - npm --prefix app/explore run build
-        - npx tsx scripts/build-explore-manifest.ts app/explore/dist gen/srv/srv/lib/explore-bundle-manifest.json
+        # Copy the already-built app/explore bundle into the approuter's
+        # static dir. The Vite build + manifest emit already happened
+        # earlier in before-all (before Hugo) — we only need the file
+        # copy here, before mbt packs the approuter module.
         - mkdir -p approuter/static/explore-ui
         - cp -r app/explore/dist/. approuter/static/explore-ui/
         # Approuter and srv are separate CF apps in separate containers — the
