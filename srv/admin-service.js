@@ -24,6 +24,10 @@ import { getTutorialSource } from './lib/content-store.js';
 import { randomBytes } from 'node:crypto';
 import * as khorosCache from './lib/khoros-cache.js';
 import { listCtaTargets } from './lib/alert-cta-targets.js';
+import {
+  listAlertSeverities,
+  listAlertAudiences,
+} from './lib/alert-enums.js';
 
 /**
  * Dedupe TaskRecord rows by (user_ID, taskLegacyId), preferring rows on a
@@ -160,6 +164,11 @@ export default class AdminService extends cds.ApplicationService {
       { code: 'CHALLENGE',    label: 'Challenge'    },
       { code: 'OTHER',        label: 'Other'        },
     ]);
+    // Issue #718 — Alerts severity & audience DDLBs. Codes mirror the
+    // inline enums on db/schema.cds:467-471 exactly (drift would surface
+    // as @assert.range rejection on write). Labels are display-only.
+    this.on('READ', 'AlertSeverities', () => listAlertSeverities());
+    this.on('READ', 'AlertAudiences',  () => listAlertAudiences());
     this.on('READ', 'AdvocateRegions', () => [
       { code: 'AMERICAS', label: 'Americas' },
       { code: 'EMEA',     label: 'EMEA' },
