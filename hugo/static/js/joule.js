@@ -739,12 +739,21 @@
 
     // Auto-open after login redirect: _openImpl() appends ?joule=open to returnTo,
     // so when XSUAA bounces the user back here, we re-enter the panel.
+    // Also: ?joule_prompt=<text> opens Joule with a pre-filled prompt (used by
+    // /explore/about/ #751). _openImpl's existing opts.autoSendText path skips
+    // the hero/starters and sends the prompt immediately.
     const params = new URLSearchParams(location.search);
     if (params.get('joule') === 'open') {
+      const prefillPrompt = params.get('joule_prompt') || null;
       params.delete('joule');
+      params.delete('joule_prompt');
       const cleaned = params.toString();
       history.replaceState(null, '', location.pathname + (cleaned ? '?' + cleaned : '') + location.hash);
-      _openImpl();
+      if (prefillPrompt) {
+        _openImpl({ autoSendText: prefillPrompt });
+      } else {
+        _openImpl();
+      }
     }
 
     window.joule._ready = true;

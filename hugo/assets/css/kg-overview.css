@@ -1,0 +1,330 @@
+/* hugo/assets/css/kg-overview.css
+   Styles for /explore/about/ — scoped under .kg-overview. */
+
+.kg-overview {
+  /* ============================================================
+     Theme-aware CSS variables for the architecture SVG.
+     Same SVG, different colors per data-theme.
+     ============================================================ */
+  --kg-arrow-fill: #0a6ed1;
+  --kg-connector-stroke: #5b738b;
+  --kg-connector-text: #5b738b;
+
+  --kg-box-source-bg: #fff;
+  --kg-box-source-border: #5b738b;
+  --kg-box-source-text: #1c478a;
+  --kg-box-source-sub: #5b738b;
+
+  --kg-box-build-bg: #e8f1fb;
+  --kg-box-build-border: #0a6ed1;
+  --kg-box-build-text: #1c478a;
+  --kg-box-build-sub: #5078a8;
+
+  --kg-box-store-bg: #1c478a;
+  --kg-box-store-border: #1c478a;
+  --kg-box-store-text: #fff;
+  --kg-box-store-sub: #a8c6e8;
+
+  --kg-chip-bg: #fff;
+  --kg-chip-border: #cbd5e3;
+  --kg-chip-text: #5b738b;
+
+  --kg-hero-grad-from: #0a6ed1;
+  --kg-hero-grad-to: #1c478a;
+}
+
+[data-theme="dark"] .kg-overview {
+  --kg-arrow-fill: #58a6ff;
+  --kg-connector-stroke: #7d8590;
+  --kg-connector-text: #7d8590;
+
+  --kg-box-source-bg: #1c2028;
+  --kg-box-source-border: #7d8590;
+  --kg-box-source-text: #c9d1d9;
+  --kg-box-source-sub: #7d8590;
+
+  --kg-box-build-bg: #0d2233;
+  --kg-box-build-border: #58a6ff;
+  --kg-box-build-text: #c9d1d9;
+  --kg-box-build-sub: #7da8d6;
+
+  --kg-box-store-bg: #0a4a8e;
+  --kg-box-store-border: #58a6ff;
+  --kg-box-store-text: #fff;
+  --kg-box-store-sub: #a8c6e8;
+
+  --kg-chip-bg: #1c2028;
+  --kg-chip-border: #30363d;
+  --kg-chip-text: #c9d1d9;
+
+  --kg-hero-grad-from: #0a4a8e;
+  --kg-hero-grad-to: #0a1e3c;
+}
+
+/* ============================================================
+   Layout
+   ============================================================ */
+
+.kg-overview {
+  color: var(--sapTextColor);
+}
+
+.kg-overview__hero {
+  background: linear-gradient(180deg, var(--kg-hero-grad-from) 0%, var(--kg-hero-grad-to) 100%);
+  color: #fff;
+  padding: 4rem 1.5rem 3rem;
+  text-align: center;
+}
+.kg-overview__hero h1 {
+  font-size: 2.5rem;
+  margin: 0 0 .5rem;
+  font-weight: 600;
+}
+.kg-overview__hero p.lede {
+  max-width: 48rem;
+  margin: 0 auto 2rem;
+  font-size: 1.125rem;
+  opacity: .92;
+}
+
+.kg-stats-counter {
+  display: flex;
+  gap: 3rem;
+  justify-content: center;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.kg-stats-counter__cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.kg-stats-counter__num {
+  font-size: 2.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.kg-stats-counter__label {
+  font-size: .875rem;
+  opacity: .85;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  margin-top: .25rem;
+}
+.kg-stats-counter__skeleton {
+  display: flex;
+  gap: 3rem;
+  justify-content: center;
+}
+.kg-stats-counter__skeleton-cell {
+  display: block;
+  width: 4rem;
+  height: 2.5rem;
+  background: rgba(255,255,255,.18);
+  border-radius: .25rem;
+  animation: kg-shimmer 1.4s linear infinite;
+}
+@keyframes kg-shimmer {
+  0%,100% { opacity: .4; }
+  50%     { opacity: .8; }
+}
+.kg-stats-counter__fallback {
+  color: rgba(255,255,255,.85);
+  font-size: .9rem;
+}
+
+@media (max-width: 480px) {
+  .kg-stats-counter,
+  .kg-stats-counter__skeleton { flex-direction: column; gap: 1.5rem; }
+}
+
+/* Section shells */
+.kg-overview__section {
+  padding: 3rem 1.5rem;
+  max-width: 80rem;
+  margin: 0 auto;
+}
+.kg-overview__section > h2 {
+  font-size: 1.5rem;
+  margin: 0 0 1.5rem;
+  font-weight: 600;
+}
+
+/* Diagram section */
+.kg-overview__diagram {
+  background: var(--sapPageBackground, transparent);
+}
+.kg-overview__diagram svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 56rem;
+  margin: 0 auto;
+}
+.kg-overview__diagram p {
+  max-width: 48rem;
+  margin: 1.5rem auto 0;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+/* Corpus grid */
+.kg-overview__corpus {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+.kg-overview__corpus-card {
+  background: var(--sapTile_Background);
+  border: 1px solid var(--sapList_BorderColor);
+  border-radius: .5rem;
+  padding: 1.5rem;
+  text-align: center;
+}
+.kg-overview__corpus-card .icon { font-size: 2rem; line-height: 1; margin-bottom: .5rem; }
+.kg-overview__corpus-card h3 { margin: 0 0 .25rem; font-size: 1.125rem; }
+.kg-overview__corpus-card .count {
+  display: block;
+  font-size: 1.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--sapBrandColor, #0a6ed1);
+  margin: .5rem 0;
+}
+@media (max-width: 768px) { .kg-overview__corpus { grid-template-columns: 1fr; } }
+
+/* Tech badge grid */
+.kg-overview__tech {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+.kg-overview__tech-badge {
+  background: var(--sapTile_Background);
+  border: 1px solid var(--sapList_BorderColor);
+  border-radius: .5rem;
+  padding: 1rem 1.25rem;
+  text-decoration: none;
+  color: var(--sapTextColor);
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+}
+.kg-overview__tech-badge h3 { font-size: 1rem; margin: 0; font-weight: 600; }
+.kg-overview__tech-badge p { font-size: .875rem; margin: 0; color: var(--sapContent_LabelColor); }
+.kg-overview__tech-badge.is-hana {
+  /* Visual cue that the three HANA tiles share a HANA Cloud instance. */
+  border-color: var(--sapBrandColor, #0a6ed1);
+  box-shadow: 0 0 0 1px var(--sapBrandColor, #0a6ed1);
+}
+.kg-overview__tech-callout {
+  grid-column: 1 / -1;
+  font-size: .875rem;
+  color: var(--sapContent_LabelColor);
+  font-style: italic;
+  text-align: center;
+  margin-top: .5rem;
+}
+@media (max-width: 768px) { .kg-overview__tech { grid-template-columns: repeat(2, 1fr); } }
+
+/* Surfaces grid */
+.kg-overview__surfaces {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+}
+.kg-overview__surface-card {
+  background: var(--sapTile_Background);
+  border: 1px solid var(--sapList_BorderColor);
+  border-radius: .5rem;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.kg-overview__surface-card .img-frame {
+  background: #fafafa;          /* Light frame around the always-light screenshots */
+  padding: 1rem;
+}
+[data-theme="dark"] .kg-overview__surface-card .img-frame {
+  background: #1c2028;
+  border-bottom: 1px solid var(--sapList_BorderColor);
+}
+.kg-overview__surface-card .img-frame img { width: 100%; height: auto; display: block; border-radius: .25rem; }
+.kg-overview__surface-card .body { padding: 1rem 1.25rem 1.25rem; }
+.kg-overview__surface-card h3 { margin: 0 0 .25rem; font-size: 1.125rem; }
+.kg-overview__surface-card p  { margin: 0 0 1rem; font-size: .9375rem; color: var(--sapContent_LabelColor); }
+.kg-overview__surface-card .primary {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  background: var(--sapBrandColor, #0a6ed1);
+  color: #fff;
+  padding: .5rem 1rem;
+  border-radius: .25rem;
+  text-decoration: none;
+  font-weight: 500;
+}
+.kg-overview__surface-card .secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  color: var(--sapLinkColor, #0a6ed1);
+  text-decoration: none;
+  font-weight: 500;
+}
+@media (max-width: 768px) { .kg-overview__surfaces { grid-template-columns: 1fr; } }
+
+/* CTA strip */
+.kg-overview__cta-strip {
+  background: var(--sapBackgroundColor, #f5f6f7);
+  border-top: 1px solid var(--sapList_BorderColor);
+  padding: 2rem 1.5rem;
+}
+.kg-overview__cta-strip-inner {
+  max-width: 80rem;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+.kg-overview__cta-strip a.primary {
+  background: var(--sapBrandColor, #0a6ed1);
+  color: #fff;
+  padding: .75rem 1.5rem;
+  border-radius: .25rem;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 1.0625rem;
+}
+.kg-overview__cta-strip ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 1.5rem;
+  font-size: .9375rem;
+}
+.kg-overview__cta-strip ul a {
+  color: var(--sapLinkColor, #0a6ed1);
+  text-decoration: none;
+}
+.kg-overview__cta-strip ul a:hover { text-decoration: underline; }
+
+/* "About this graph →" chrome link on /explore/ */
+.explore-page__about-link {
+  position: absolute;
+  top: .75rem;
+  right: 1rem;
+  z-index: 10;
+  color: var(--sapLinkColor, #0a6ed1);
+  text-decoration: none;
+  font-size: .9375rem;
+  background: var(--sapTile_Background);
+  border: 1px solid var(--sapList_BorderColor);
+  border-radius: .25rem;
+  padding: .375rem .75rem;
+}
+.explore-page__about-link:hover { text-decoration: underline; }

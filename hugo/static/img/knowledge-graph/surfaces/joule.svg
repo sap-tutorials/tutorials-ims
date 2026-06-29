@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 480" role="img" aria-label="Joule chat showing a learning path between two tutorials">
+  <rect x="0" y="0" width="600" height="480" fill="#fafbfd"/>
+  <!-- Joule panel chrome -->
+  <rect x="20" y="20" width="560" height="60" rx="8" fill="url(#joule-aurora)"/>
+  <defs>
+    <linearGradient id="joule-aurora" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a6ed1"/>
+      <stop offset="100%" style="stop-color:#1c478a"/>
+    </linearGradient>
+  </defs>
+  <circle cx="50" cy="50" r="15" fill="#fff"/>
+  <path d="M 42 45 L 50 38 L 58 45 L 58 58 L 42 58 Z" fill="#0a6ed1"/>
+  <text x="80" y="46" font-family="system-ui, sans-serif" font-size="16" font-weight="600" fill="#fff">Joule</text>
+  <text x="80" y="64" font-family="system-ui, sans-serif" font-size="12" fill="#a8c6e8">AI Assistant</text>
+
+  <!-- User message -->
+  <rect x="180" y="100" width="400" height="48" rx="8" fill="#e8f1fb"/>
+  <text x="195" y="123" font-family="system-ui, sans-serif" font-size="13" fill="#1c478a">Find the shortest learning path from</text>
+  <text x="195" y="140" font-family="system-ui, sans-serif" font-size="13" font-weight="600" fill="#1c478a">abap-getting-started → cap-getting-started</text>
+
+  <!-- Joule response -->
+  <rect x="20" y="170" width="500" height="20" rx="2" fill="#cbd5e3"/>
+  <text x="25" y="186" font-family="system-ui, sans-serif" font-size="13" fill="#5b738b">Here's a 4-step path through the graph:</text>
+
+  <!-- Path steps -->
+  <g transform="translate(20, 210)">
+    <circle cx="15" cy="15" r="12" fill="#0a6ed1"/>
+    <text x="15" y="19" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#fff">1</text>
+    <rect x="40" y="0" width="400" height="30" rx="4" fill="#fff" stroke="#cbd5e3"/>
+    <text x="50" y="20" font-family="system-ui, sans-serif" font-size="13" fill="#1c478a" font-weight="500">ABAP RAP — Getting Started</text>
+    <line x1="15" y1="30" x2="15" y2="50" stroke="#0a6ed1" stroke-width="2" stroke-dasharray="2,3"/>
+  </g>
+  <g transform="translate(20, 260)">
+    <circle cx="15" cy="15" r="12" fill="#0a6ed1"/>
+    <text x="15" y="19" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#fff">2</text>
+    <rect x="40" y="0" width="400" height="30" rx="4" fill="#fff" stroke="#cbd5e3"/>
+    <text x="50" y="20" font-family="system-ui, sans-serif" font-size="13" fill="#1c478a" font-weight="500">Node.js Fundamentals</text>
+    <line x1="15" y1="30" x2="15" y2="50" stroke="#0a6ed1" stroke-width="2" stroke-dasharray="2,3"/>
+  </g>
+  <g transform="translate(20, 310)">
+    <circle cx="15" cy="15" r="12" fill="#0a6ed1"/>
+    <text x="15" y="19" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#fff">3</text>
+    <rect x="40" y="0" width="400" height="30" rx="4" fill="#fff" stroke="#cbd5e3"/>
+    <text x="50" y="20" font-family="system-ui, sans-serif" font-size="13" fill="#1c478a" font-weight="500">CDS — Core Data Services Basics</text>
+    <line x1="15" y1="30" x2="15" y2="50" stroke="#0a6ed1" stroke-width="2" stroke-dasharray="2,3"/>
+  </g>
+  <g transform="translate(20, 360)">
+    <circle cx="15" cy="15" r="12" fill="#3fb950"/>
+    <text x="15" y="19" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="700" fill="#fff">4</text>
+    <rect x="40" y="0" width="400" height="30" rx="4" fill="#e8f1fb" stroke="#0a6ed1"/>
+    <text x="50" y="20" font-family="system-ui, sans-serif" font-size="13" fill="#1c478a" font-weight="700">CAP — Getting Started</text>
+  </g>
+
+  <!-- Footer prompt -->
+  <rect x="20" y="430" width="560" height="36" rx="18" fill="#fff" stroke="#cbd5e3"/>
+  <text x="35" y="453" font-family="system-ui, sans-serif" font-size="12" fill="#a8b5c5">Message Joule…</text>
+</svg>
