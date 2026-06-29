@@ -1,0 +1,45 @@
+/* hugo-apps/src/homepage-explainers/styles/flip-card.css
+ * Spec: #759 §4.3
+ */
+
+.hp-flip {
+  position: relative;
+  display: block;
+  perspective: 800px;
+  cursor: pointer;
+  outline: none;
+}
+
+.hp-flip:focus-visible {
+  outline: 2px solid var(--sapButton_Selected_BorderColor, #0070f2);
+  outline-offset: 2px;
+}
+
+.hp-flip__inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.3s ease-in-out;
+  transform-style: preserve-3d;
+}
+
+.hp-flip[data-flipped="true"] .hp-flip__inner {
+  transform: rotateY(180deg);
+}
+
+.hp-flip__face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.hp-flip__face--front { transform: rotateY(0deg); }
+.hp-flip__face--back  { transform: rotateY(180deg); }
+
+@media (prefers-reduced-motion: reduce) {
+  .hp-flip__inner { transition: none; }
+  /* Instant content swap — show whichever face is requested without rotation. */
+  .hp-flip[data-flipped="false"] .hp-flip__face--back { display: none; }
+  .hp-flip[data-flipped="true"]  .hp-flip__face--front { display: none; }
+}
