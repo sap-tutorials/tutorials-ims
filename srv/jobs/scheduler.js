@@ -184,6 +184,34 @@ async function recordJobLastRun(jobName, outcome, errorMessage = null) {
 }
 
 /**
+ * Idempotent UPSERT of one JobLastRun row per registered job.
+ *
+ * Called at the END of registerJobs() so all jobs are visible on the
+ * admin Cron health tile from day 1 — even before any cron has fired.
+ *
+ * Race-safe for multi-instance CF deploys: UPSERT translates to
+ * INSERT...ON CONFLICT DO NOTHING semantics on HANA via CDS QL. Two
+ * instances racing to seed both succeed without primary-key violation.
+ *
+ * Best-effort — if HANA is briefly unreachable at boot, warn-log and
+ * return. The admin tile will show 0 rows until the first cron actually
+ * fires and writes a JobLastRun row via the chassis path.
+ *
+ * Spec: docs/superpowers/specs/2026-06-29-756-admin-cron-trigger.md §4.4
+ */
+export async function preSeedJobLastRun() {
+  try {
+    const { JobLastRun } = cds.entities('com.sap.developers.ims');
+    const knownJobs = Array.from(JOB_REGISTRY.keys());
+    if (knownJobs.length === 0) return;
+    await UPSERT.into(JobLastRun).entries(knownJobs.map(jobName => ({ jobName })));
+    LOG.info(`pre-seeded ${knownJobs.length} JobLastRun rows (idempotent)`);
+  } catch (err) {
+    LOG.warn(`JobLastRun pre-seed failed: ${err.message}`);
+  }
+}
+
+/**
  * Render a job's return value as a single-line summary stored on the
  * PipelineLog row. Numbers become "processed N", objects become a key=value
  * list, strings pass through, and null/undefined falls back to the job name.
@@ -670,4 +698,8 @@ export function registerJobs() {
   });
 
   LOG.info('All scheduled jobs registered');
+
+  // #756 (Task 1): pre-seed JobLastRun so the admin Cron health tile shows
+  // all 24 jobs from day 1, even before any cron has fired.
+  preSeedJobLastRun().catch(() => {/* already logged inside */});
 }
