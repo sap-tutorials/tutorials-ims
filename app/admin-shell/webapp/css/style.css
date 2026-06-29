@@ -1,0 +1,6 @@
+/* #756: cron schedule strings in monospace for readability on the
+   Board view's Cron health tile. */
+.kg-mono {
+  font-family: "SAP-icons-mono", Consolas, "Courier New", monospace;
+  font-size: 0.9em;
+}

@@ -216,6 +216,34 @@ service AdminService {
   @readonly @requires: 'Admin'
   entity JobLastRun as projection on ims.JobLastRun;
 
+  // ─────────────────────────────────────────────────────────────────
+  // #756: generic admin trigger for any registered cron job.
+  // Operators can list all 24 registered jobs (with computed next-run
+  // timestamp) and trigger any of them manually. Trigger is fire-and-forget;
+  // completion observed via JobLastRun + the SecurityEvent audit log.
+  // ─────────────────────────────────────────────────────────────────
+  @odata.singleton
+  @requires: 'Admin'
+  entity JobControls {
+    key label : String default 'Job controls';
+  } actions {
+    action listJobs() returns array of {
+      jobName     : String;
+      schedule    : String;
+      ttlMs       : Integer;
+      description : String;
+      nextRunIso  : String;
+    };
+
+    action runJob(jobName: String) returns {
+      jobName   : String;
+      started   : Boolean;
+      skipped   : Boolean;
+      reason    : String;
+      startedAt : Timestamp;
+    };
+  };
+
   @odata.draft.enabled
   @requires: 'Admin'
   entity DevtoberfestConfig as projection on ims.DevtoberfestConfig;

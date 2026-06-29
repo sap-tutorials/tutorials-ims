@@ -72,27 +72,32 @@
 
       </l:Grid>
 
-      <!-- Phase 4.5 (#746): Cron health tile. Reads AdminService.JobLastRun
-           via the same OData "admin" model used by _loadMetrics(). Only the
-           Phase 4.5 fetch-api-docs cron currently writes rows here; Phase
-           4.1-4.4 retrofit is out-of-scope for this PR. Visual highlight on
-           age > 35 days is a post-merge polish; this commit lands the
-           data wiring. -->
+      <!-- #756: Cron health tile extended from the Phase 4.5 (#746) baseline.
+           Schedule + Next run columns sourced from AdminService.JobControls.listJobs(),
+           Last success + Last error sourced from AdminService.JobLastRun.
+           Controller does the JOIN client-side into a JSONModel at
+           jobControls>/jobs; the Run now button invokes runJob(jobName) and
+           optimistically flips isRunning for the busy spinner. -->
       <Panel headerText="Cron health" expandable="true" expanded="true" class="sapUiSmallMargin">
-        <Table id="cronHealthTable" items="{admin>/JobLastRun}" growing="true" growingThreshold="20">
+        <Table id="cronHealthTable" items="{jobControls>/jobs}" growing="true" growingThreshold="40">
           <columns>
             <Column><Text text="Job" /></Column>
+            <Column><Text text="Schedule" /></Column>
+            <Column><Text text="Next run" /></Column>
             <Column><Text text="Last success" /></Column>
-            <Column><Text text="Last error at" /></Column>
             <Column><Text text="Last error" /></Column>
+            <Column hAlign="End"><Text text="Trigger" /></Column>
           </columns>
           <items>
             <ColumnListItem>
               <cells>
-                <Text text="{admin>jobName}" />
-                <Text text="{admin>lastSuccessAt}" />
-                <Text text="{admin>lastErrorAt}" />
-                <Text text="{admin>lastErrorMessage}" />
+                <Text text="{jobControls>jobName}" tooltip="{jobControls>description}" />
+                <Text text="{jobControls>schedule}" class="kg-mono" />
+                <Text text="{path: 'jobControls>nextRunIso', formatter: '.formatNextRun'}" />
+                <Text text="{path: 'jobControls>lastSuccessAt', formatter: '.formatRelativeTime'}" />
+                <Text text="{jobControls>lastErrorMessage}" tooltip="{jobControls>lastErrorMessage}" />
+                <Button text="Run now" type="Emphasized" press=".onRunJob"
+                        busy="{jobControls>isRunning}" busyIndicatorDelay="0" />
               </cells>
             </ColumnListItem>
           </items>

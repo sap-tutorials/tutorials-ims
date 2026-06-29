@@ -29,6 +29,70 @@ import {
   listAlertSeverities,
   listAlertAudiences,
 } from './lib/alert-enums.js';
+import { _getJobRegistry, runJobByName } from './jobs/scheduler.js';
+import { CronExpressionParser } from 'cron-parser';
+
+// #756: max jobName payload length. Matches JobLocks.jobName : String(100)
+// column width verified in db/schema.cds:412.
+const MAX_JOB_NAME_LEN = 100;
+
+/**
+ * Emit a SecurityEvent audit row for the manual-trigger lifecycle.
+ *
+ * Two invocations per click: one with outcome='started' synchronously
+ * on the runJob action; one with outcome ∈ {success, error, lockheld}
+ * after the cron resolves (or the lock is held).
+ *
+ * Exported so srv/jobs/scheduler.js can lazy-import this from inside
+ * runWithLock's emitJobAuditSafely wrapper (circular-import-safe).
+ *
+ * The first arg to auditEvent is the ACTION NAME (per
+ * srv/lib/audit-event.js JSDoc) — NOT 'SecurityEvent', which is the
+ * audit-log event type hardcoded inside the createAuditEmitter closure.
+ * Do NOT lift the seedApiDocs precedent literally (admin-service.js:1765)
+ * — it has a subtle bug (filed as #769) where 'SecurityEvent' is passed
+ * as the first arg with a nested action: in data, working only by
+ * spread-override luck.
+ *
+ * Module-state caveat: `_moduleAuditEvent` is set inside the service
+ * init() once at boot. Tests that import this module BEFORE the service
+ * init has run will observe `_moduleAuditEvent === null` and the warn-
+ * log degraded path. Tests inside a single `describe` block using
+ * cds.test() / cds.deploy() in beforeAll boot the service once and the
+ * pointer is set for the rest of the run.
+ *
+ * Spec: docs/superpowers/specs/2026-06-29-756-admin-cron-trigger.md §4.8
+ *
+ * @param {{jobName: string, user?: string, outcome: 'started'|'success'|'error'|'lockheld', durationMs?: number, startedAt?: Date}} opts
+ * @returns {Promise<void>}
+ */
+export async function emitJobAudit({ jobName, user, outcome, durationMs = null, startedAt = null }) {
+  const auditEvent = _moduleAuditEvent;
+  if (!auditEvent) {
+    // Service not yet initialized OR audit-log binding unavailable.
+    // Log + return — never fail the cron because of audit emission.
+    console.warn('emitJobAudit: auditEvent not initialized; skipping');
+    return;
+  }
+  try {
+    await auditEvent('cron.manual-trigger', {
+      jobName,
+      user,
+      outcome,
+      ...(durationMs != null && { durationMs }),
+      ...(startedAt != null && { startedAt: startedAt.toISOString() }),
+    });
+  } catch (err) {
+    console.warn(`emitJobAudit ${jobName}/${outcome} failed: ${err.message}`);
+  }
+}
+
+// Module-level closure pointer. Set by the service init() right after
+// auditEvent = createAuditEmitter(...). Allows emitJobAudit to be a
+// module-level export (so scheduler.js can dynamic-import it) while
+// still benefiting from the service-init's audit-log binding
+// resolution.
+let _moduleAuditEvent = null;
 
 /**
  * Dedupe TaskRecord rows by (user_ID, taskLegacyId), preferring rows on a
@@ -1582,6 +1646,10 @@ export default class AdminService extends cds.ApplicationService {
     }
     const auditEvent = createAuditEmitter(_auditLog, LOG);
 
+    // #756: expose the audit closure to the module-level emitJobAudit helper
+    // so srv/jobs/scheduler.js can lazy-import it (circular-import-safe).
+    _moduleAuditEvent = auditEvent;
+
     // IMPORTANT 8: response-header helper using public API. req._.res is CAP
     // internal and not guaranteed stable across minor versions. Prefer req.req.res
     // (the Express req has .res back-ref), fall back to req._.res, and silently
@@ -1778,6 +1846,80 @@ export default class AdminService extends cds.ApplicationService {
         });
       }
       return result;
+    });
+
+    // ─────────────────────────────────────────────────────────────────
+    // #756: AdminService.JobControls actions.
+    //
+    // listJobs() — iterate the in-process JOB_REGISTRY and compute
+    // nextRunIso via cron-parser. Failed parses log-and-skip (no 500
+    // on a single malformed schedule).
+    //
+    // runJob(jobName) — validate length + registry membership BEFORE
+    // any audit emission (so malformed payloads can't spam the audit
+    // log). Then fire-and-forget the 'started' audit event + the
+    // background runJobByName call. The runWithLock chassis (Task 1)
+    // emits the completion audit event after the fn resolves or the
+    // lock is held.
+    //
+    // Spec: docs/superpowers/specs/2026-06-29-756-admin-cron-trigger.md §4.5-4.8
+    // ─────────────────────────────────────────────────────────────────
+    this.on('listJobs', 'JobControls', async () => {
+      const registry = _getJobRegistry();
+      return Array.from(registry.values()).map(job => {
+        let nextRunIso = null;
+        try {
+          nextRunIso = CronExpressionParser.parse(job.schedule, { tz: 'UTC' })
+            .next()
+            .toISOString();
+        } catch (err) {
+          LOG.warn(`listJobs: cron-parser failed on '${job.schedule}': ${err.message}`);
+        }
+        return {
+          jobName: job.jobName,
+          schedule: job.schedule,
+          ttlMs: job.ttlMs,
+          description: job.description,
+          nextRunIso,
+        };
+      });
+    });
+
+    this.on('runJob', 'JobControls', async (req) => {
+      const { jobName } = req.data;
+      // Validation FIRST — before any audit emission — to avoid log spam
+      // from malformed payloads.
+      if (typeof jobName !== 'string' || jobName.length === 0 || jobName.length > MAX_JOB_NAME_LEN) {
+        return req.reject(400, `Invalid jobName (must be non-empty string <=${MAX_JOB_NAME_LEN} chars)`);
+      }
+      const registry = _getJobRegistry();
+      if (!registry.has(jobName)) {
+        return req.reject(400, `Unknown jobName: ${jobName}`);
+      }
+      const user = req.user?.id ?? 'unknown';
+      const startedAt = new Date();
+
+      // Audit "started" event (fire-and-forget).
+      setImmediate(() => {
+        emitJobAudit({ jobName, user, outcome: 'started', startedAt })
+          .catch(err => LOG.warn(`runJob audit (started) failed: ${err.message}`));
+      });
+
+      // Fire the cron run in the background — handler returns immediately.
+      // runJobByName invokes runWithLock which (Task 1) emits the completion
+      // audit event after the fn resolves or the lock is held.
+      setImmediate(() => {
+        runJobByName(jobName, { manualTrigger: true, user })
+          .catch(err => LOG.error(`runJob ${jobName} failed: ${err.message}`));
+      });
+
+      return {
+        jobName,
+        started: true,
+        skipped: false,
+        reason: null,
+        startedAt,
+      };
     });
 
     // ── Rebuild-button action (issue: rebuild-button) ──

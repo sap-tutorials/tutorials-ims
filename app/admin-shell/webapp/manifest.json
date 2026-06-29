@@ -262,6 +262,11 @@
         "factoryName": "sap.tutorials.admin.shell.services.ShellUIService"
       }
     },
+    "resources": {
+      "css": [
+        { "uri": "css/style.css" }
+      ]
+    },
     "rootView": {
       "viewName": "sap.tutorials.admin.shell.view.Shell",
       "type": "XML",
