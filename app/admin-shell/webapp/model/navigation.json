@@ -20,8 +20,17 @@
         { "key": "categories", "title": "Categories" },
         { "key": "concepts", "title": "Concepts" },
         { "key": "advocates", "title": "Advocates" },
-        { "key": "alerts", "title": "Alerts" },
-        { "key": "homepage", "title": "Homepage" }
+        { "key": "alerts", "title": "Alerts" }
+      ]
+    },
+    {
+      "key": "homepageGroup",
+      "title": "Homepage",
+      "icon": "sap-icon://home",
+      "items": [
+        { "key": "homepageShelves",   "title": "Shelves" },
+        { "key": "homepageRedirects", "title": "Redirects" },
+        { "key": "homepageConfig",    "title": "Config" }
       ]
     },
     {
