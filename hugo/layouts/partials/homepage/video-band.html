@@ -1,6 +1,11 @@
 {{- /* video-band.html — spec §6 row 4.
-       Placeholder section. VideoBand Vue island (Task 20) hydrates on mount.
-       The heading gives fold-of-the-page visibility before JS loads. */ -}}
-<section id="hp-videos" class="hp-band" data-island="videos" aria-labelledby="hp-videos-title">
+       VideoBand Vue island (Task 20) hydrates on mount.
+
+       The <h2> heading lives in the OUTER <section> wrapper so it
+       survives Vue's mount (createApp(...).mount(el) replaces el's
+       innerHTML, which would wipe a placeholder heading inside the
+       data-island element). Vue mounts into the inner <div>. */ -}}
+<section id="hp-videos" class="hp-band" aria-labelledby="hp-videos-title">
   <h2 id="hp-videos-title" class="hp-band__title">Latest videos</h2>
+  <div data-island="videos"></div>
 </section>
