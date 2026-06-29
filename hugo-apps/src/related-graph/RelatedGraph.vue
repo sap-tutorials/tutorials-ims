@@ -149,6 +149,18 @@
             <template v-if="r.effortLevel"> · effort {{ r.effortLevel }}</template>
             <template v-if="r.categoryLabel"> · {{ r.categoryLabel }}</template>
           </span>
+          <span v-else-if="r.type === 'video' && (r.channelTitle || r.publishedAt)" class="kg-sidebar-meta">
+            <!--
+              Phase 4.4 (#447 §9): video branch. Same "· by X · Date"
+              shape as the blog-post branch (both surfaces are
+              person/channel-authored content). Sidebar intentionally
+              does NOT render `thumbnailUrl` — preserves the existing
+              title-only visual rhythm. The concept page DOES render
+              the thumbnail inline (120×68).
+            -->
+            <template v-if="r.channelTitle"> · by {{ r.channelTitle }}</template>
+            <template v-if="r.publishedAt"> · {{ formatDate(r.publishedAt) }}</template>
+          </span>
         </li>
       </ul>
     </section>
@@ -278,6 +290,13 @@ function onOtherResourceClick(r: OtherResource): void {
     emit('kg.discovery_mission.linked_from_sidebar', {
       tutorialSlug: slug,
       missionSlug: r.slug,
+    })
+  } else if (r.type === 'video') {
+    // Phase 4.4 (#447 §9): fourth branch — same shape modulo the per-type
+    // slug field name.
+    emit('kg.video.linked_from_sidebar', {
+      tutorialSlug: slug,
+      videoSlug: r.slug,
     })
   }
   // Future sub-phases branch here for their own telemetry events.

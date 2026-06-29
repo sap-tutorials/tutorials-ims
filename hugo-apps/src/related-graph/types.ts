@@ -7,8 +7,9 @@
 
 // Phase 4 (#447): widened from the original tutorial-OP sidebar set to
 // include 'learning-journey'. Phase 4.2 (#447 §9) adds 'blog-post'.
-// Phase 4.3 (#447 §8) adds 'discovery-mission'. Sub-phases 4.4-4.6 will
-// add more values ('news', 'video', 'sample', 'resource').
+// Phase 4.3 (#447 §8) adds 'discovery-mission'. Phase 4.4 (#447 §9) adds
+// 'video'. Sub-phases 4.5-4.6 will add more values ('news', 'sample',
+// 'resource').
 export type NodeType =
   | 'tutorial'
   | 'concept'
@@ -20,6 +21,7 @@ export type NodeType =
   | 'learning-journey'
   | 'blog-post'
   | 'discovery-mission'
+  | 'video'
 
 export type ConceptRef = {
   slug: string
@@ -47,11 +49,12 @@ export type TutorialInfo = {
 // Phase 4 chassis (#447): wire shape for the cross-corpus "Other
 // resources" sidebar rail. PR-1 wired the empty contract; PR-2 (learning
 // journeys) populated it. Phase 4.2 (#447 §9) widens the discriminant to
-// include 'blog-post' rows; Phase 4.3 (#447 §8) adds 'discovery-mission'.
-// Future sub-phases 4.4-4.6 add more types.
+// include 'blog-post' rows; Phase 4.3 (#447 §8) adds 'discovery-mission';
+// Phase 4.4 (#447 §9) adds 'video'. Future sub-phases 4.5-4.6 add more
+// types.
 // Mirrors the OtherResource type in srv/knowledge-graph-service.cds.
 export type OtherResource = {
-  type: 'learning-journey' | 'blog-post' | 'discovery-mission'   // widens per sub-phase
+  type: 'learning-journey' | 'blog-post' | 'discovery-mission' | 'video'   // widens per sub-phase
   slug: string
   title: string
   url: string
@@ -64,6 +67,15 @@ export type OtherResource = {
   // discovery-mission only (Phase 4.3):
   effortLevel?: number | null
   categoryLabel?: string | null
+  // video only (Phase 4.4): channelTitle + publishedAt drive the
+  // sidebar's "· by Channel · Date" meta row. `thumbnailUrl` is carried
+  // on the wire (it ships with the same payload that feeds the concept
+  // page) but is intentionally NOT rendered in the sidebar — preserves
+  // the existing visual rhythm of title-only sidebar rows. The concept
+  // page DOES render the thumbnail inline (120×68).
+  channelTitle?: string | null
+  publishedAt?: string | null    // ISO timestamp
+  thumbnailUrl?: string | null
   overlapCount?: number | null
 }
 
