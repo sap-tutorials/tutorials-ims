@@ -36,6 +36,9 @@ if (!DRY_RUN && !COMMIT) {
 }
 
 (async () => {
+  // Load the CDS model so `cds.entities(...)` is callable. The serving
+  // lifecycle does this for you; `cds bind --exec` does not. See #757.
+  cds.model = await cds.load('*');
   await cds.connect.to('db');
 
   const { runFetchBlogPosts } = await import('../srv/jobs/fetch-blog-posts-job.js');

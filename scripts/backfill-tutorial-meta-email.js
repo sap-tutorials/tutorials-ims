@@ -12,6 +12,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export async function backfill({ dryRun = false } = {}) {
+  // Load the CDS model so `cds.entities(...)` is callable. The serving
+  // lifecycle does this for you; `cds bind --exec` does not. See #757.
+  cds.model = await cds.load('*');
   const db = await cds.connect.to('db');
   const { TutorialMeta, Users } = cds.entities('com.sap.developers.ims');
 
