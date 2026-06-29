@@ -1835,3 +1835,85 @@ curl -s -o /dev/null -w '%{http_code}\n' https://tutorial-system-dev-tutorials-a
 Expected: `200`.
 
 Visit the URL in a browser. Confirm everything looks right post-deploy. If anything regressed against the local-DEV behavior (CSP issues, font loading, etc.), open a hot-fix PR rather than reverting.
+
+---
+
+# Cross-cutting notes
+
+## Commit hygiene reminders
+
+- **Verify branch before every commit** ([feedback_verify_branch_before_commit](C:/Users/I809764/.claude/projects/d--projects-tutorials-poc/memory/feedback_verify_branch_before_commit.md)). Run `git branch --show-current` in the same Bash invocation as the commit; long sessions silently revert HEAD.
+- **CRLF on Windows** ([feedback_crlf_regression_on_windows](C:/Users/I809764/.claude/projects/d--projects-tutorials-poc/memory/feedback_crlf_regression_on_windows.md)). Spawned subagents have flipped LF → CRLF on file edits in this repo. Periodically check `file path/to/changed/file.js` (Git Bash on Windows). If it says `CRLF line terminators`, fix with `sed -i 's/\r$//' <file>`.
+- **`.claude/settings.local.json` drift is noise.** The harness rewrites it on every session. `git restore .claude/settings.local.json` before each commit if it shows as modified.
+- **Never run `npm run publish-content` from this worktree.** Content publishing is CI-driven; running it locally can roll back deployed content ([feedback_never_run_publish_content_from_workstation](C:/Users/I809764/.claude/projects/d--projects-tutorials-poc/memory/feedback_never_run_publish_content_from_workstation.md)).
+
+## CDS / CAP guardrails
+
+- All four `COUNT(*)` queries in the handler use `cds.ql` (`SELECT.from(...)` with `count(*) as n`). **Never raw SQL.**
+- Entity names are pinned in the spec and lock at plan time: `Tutorials`, `Concepts` (status='PUBLISHED'), `ConceptEdges`, `Missions`, `Groups`. **Not `CompletionPaths`** — see spec amendments and [db/schema.cds](../../../db/schema.cds:68) where `Groups` is the entity name.
+- Use `cds.log('kg-stats')` for the route's logger (matches the surrounding code).
+- Before changing any CDS shape, search via cds-mcp; the project rule (CLAUDE.md global rules) is: prefer `cds-mcp__search_model` over reading `*.cds` files manually.
+
+## Hugo / island guardrails
+
+- The `kg-stats-counter` Vite entry MUST be unique against Hugo's `js.Build` outputs ([feedback list lookup in the gotchas section of CLAUDE.md, issue #251 hit this once with `tutorial.js`]). The post-build collision check in [scripts/check-build-collisions.ts](../../../scripts/check-build-collisions.ts) will fail the build with a file:line ref if there's a clash. If it fails: rename the entry.
+- The island uses `defineProperty(window, 'matchMedia', ...)` mocks in tests. If your test environment is jsdom-based (it is — Vitest workspace `unit` uses jsdom), this works. **Do NOT switch the test environment to node.**
+- Hugo's `readFile` directive in the layout (`{{ readFile "static/img/knowledge-graph/architecture.svg" | safeHTML }}`) inlines the SVG so CSS variables apply. **Never use `<img src>` for the architecture SVG** — that breaks the theme treatment because variables defined on the parent page don't reach into a child document.
+
+## Smoke-test env vars
+
+The two smoke tests both require env vars to know what URL to hit:
+- `SMOKE_BASE_URL` — the approuter URL. For DEV: `https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com`.
+- `SMOKE_SRV_URL` — the srv URL. For DEV: `https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com`.
+
+These are set automatically in CI's deploy-then-smoke job (see `.github/workflows/deploy.yml`). Locally you must `export` them before `npm run test:smoke`.
+
+## Effort estimate (recap from spec)
+
+- **PR 1:** ~1 day. Mechanical endpoint + small island. Most of the time is reading the canonical patterns referenced in Prerequisites.
+- **PR 2:** ~2-3 days. Page assembly is a few hours. The four real screenshots take ~1 hour. The architecture SVG plus a dark-mode visual pass is the bulk — budget half a day for iteration.
+
+---
+
+# Out of scope — these are NOT this plan's job
+
+If you find yourself doing any of the below, stop. They are explicitly deferred or off the table per the spec.
+
+- **Phase 4 corpus types** (learning journeys, blog posts, videos, API docs, code samples). Each lands as a 1-bullet follow-up PR per sub-phase as those phases ship.
+- **A top-level nav entry / global IA change.** The page is reachable via `/explore/`'s chrome link, slide URLs, README links, tweets, Google. Adding it to the top nav clutters it and isn't worth it.
+- **A page-scoped theme toggle.** The site-wide shellbar theme toggle governs this page.
+- **Visual-regression / screenshot-diff tests.** Adding an infrastructure for one marketing page is over-engineering.
+- **A mini-viz teaser inside the page** (a degraded Sigma.js render of 20 nodes). Duplicating a degraded `/explore/` on the showcase page confuses visitors about which is "real."
+- **A second screenshot set for dark theme.** The single light screenshots framed by theme-aware containers is the right cost trade.
+- **The RAG-backed `getRelevantSteps` Joule tool as a fifth surface card.** Invisible to the user; nothing screenshot-worthy. May be added later if the page feels missing-a-piece in practice — that's a follow-up.
+- **A `/build/kg-stats` extension to `KnowledgeGraphService`'s OData surface.** The stats endpoint is the hand-curated `/build/*` family; do not add it to the OData service.
+
+---
+
+# Acceptance checklist (read this before either PR opens)
+
+When all of these are true, the PR is ready:
+
+- [ ] All unit tests pass: `npm test -- test/unit/build-kg-stats.test.js`
+- [ ] All Vue island tests pass: `npx vitest run hugo-apps/src/kg-stats-counter/__tests__/`
+- [ ] Hybrid test passes locally: `npx cds bind --exec -- npx vitest run test/hybrid/kg-stats-endpoint.test.js`
+- [ ] Smoke tests pass against DEV: `npm run test:smoke -- <both smoke files>` (PR 2 only — PR 1's smoke runs in CI post-deploy)
+- [ ] `npm run build:apps` produces `hugo/static/js/kg-stats-counter.js` (PR 1)
+- [ ] `npm run build:all` finishes clean (PR 2; this also runs the PostCSS pipeline)
+- [ ] Branch name matches the convention: `751-pr1-...` / `751-pr2-...`
+- [ ] Commit messages all reference `#751` and use `feat(#751)`, `test(#751)`, `fix(#751)` prefixes
+- [ ] No `.claude/settings.local.json` drift in the commit list
+- [ ] CRLF check passed on every modified file
+- [ ] PR body cites the spec path and the manual verification matrix from Task 2.9 (PR 2 only)
+- [ ] Page works in **both** light and dark mode (PR 2 only)
+- [ ] Page is readable on mobile at 375 px (PR 2 only)
+- [ ] Lighthouse a11y ≥ 95 (PR 2 only)
+
+When the issue closes:
+
+- [ ] PR 1 merged to main
+- [ ] PR 2 merged to main
+- [ ] Issue #751 auto-closes via `Closes #751` in PR 2 (PR 1 used `Closes #751 partially.` — that doesn't auto-close)
+- [ ] Memory entry written (`admin_shell_*` style — a `reference` memory naming `/explore/about/` and explaining the live-counter trick, so future maintainers find it when changing `/build/kg-stats`)
+- [ ] Architecture doc touched if the page becomes a documented dependency of `/explore/` (probably not — it's a sibling marketing page; pure narrative, no other surface depends on it)
+
