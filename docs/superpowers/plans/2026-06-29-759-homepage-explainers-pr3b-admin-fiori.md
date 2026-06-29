@@ -684,6 +684,10 @@ KEEP_CURRENT) shared across all six verb sub-pages."
 
 ## Task 5: Wire ActionsController to PR 3a's actions (cost-dialog + status)
 
+> **IMPORTANT — Execution-order note (added during plan review):** Task 5 depends on Task 7's backend actions (the dedicated `markVerbExplainerReviewed` / `markShelfExplainerReviewed` bound actions) being available. **Execute Task 7 BEFORE Task 5.** The controllers shipped here call those actions directly — no intermediate broken-PATCH state. (Rationale: `authoringStatus` is `@Common.FieldControl: #ReadOnly` from Task 1; a plain OData PATCH would be rejected server-side. A dedicated action that internally bypasses the FieldControl is the right path.)
+>
+> If you're a subagent executing tasks in order, **skip Task 5 for now**, execute Task 7 first, then come back to Task 5.
+
 **Files:**
 
 - Modify: `app/admin/verb-definitions/webapp/ext/ActionsController.js` (full implementation)
@@ -719,10 +723,16 @@ sap.ui.define([
   }
 
   async function postAdminAction(actionName, payload) {
-    const url = `/admin/${actionName}`;
-    const res = await fetch(url, {
+    // CAP OData V4 + XSUAA approuter requires CSRF token on action invocations.
+    // Same pattern as app/admin/categories/webapp/ext/CategoryActionsController.js.
+    const csrfResp = await fetch('/admin/', { headers: { 'x-csrf-token': 'fetch' } });
+    const csrf = csrfResp.headers.get('x-csrf-token');
+    const res = await fetch(`/admin/${actionName}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-csrf-token': csrf || 'fetch'
+      },
       credentials: 'include',
       body: JSON.stringify(payload),
     });
@@ -854,15 +864,10 @@ sap.ui.define([
       if (!ctx) return;
       const row = ctx.getObject();
       try {
-        // Mark-reviewed has no dedicated AdminService action yet — uses direct PATCH.
-        // See Task 7 below for the (small) backend addition if we want a bound action.
-        const res = await fetch(`/admin/VerbDefinitions(${row.ID})`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ authoringStatus: 'REVIEWED' })
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        // Calls the dedicated markVerbExplainerReviewed action (added in
+        // Task 7). Plain OData PATCH would be rejected because
+        // authoringStatus is @Common.FieldControl: #ReadOnly (Task 1).
+        await postAdminAction("markVerbExplainerReviewed", { id: row.ID });
         MessageToast.show("Marked as reviewed.");
         await refreshContext(oEvent);
       } catch (e) {
