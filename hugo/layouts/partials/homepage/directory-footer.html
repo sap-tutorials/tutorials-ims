@@ -1,9 +1,8 @@
-{{- /* directory-footer.html — spec §6 row 7.
-       Pure Hugo, no JS. Groups all active shelves by verb into 6 columns.
-       Plus content-y utility links (GitHub + the labeled door to sap.com).
-       Privacy + Accessibility live in the site-wide footer.html below — no
-       duplicates here.
-       Context: dict "shelves" $shelves */ -}}
+{{- /* directory-footer.html — spec §6 row 7 + #759 PR 2.
+       Pure Hugo, no JS for the link tree itself. Each <li> gets a
+       data-island="link-explainer-popover" wrapper that hydrates
+       client-side to add the ⓘ + popover affordance. The inner <a>
+       stays as first-paint fallback. */ -}}
 {{- $shelves := .shelves | default slice -}}
 {{- $verbKeys := slice "LEARN" "BUILD" "INTEGRATE" "OPERATE" "AI" "CONNECT" -}}
 {{- $verbLabels := dict
@@ -24,7 +23,15 @@
       {{- if gt (len $verbShelves) 0 -}}
         <ul>
           {{- range sort $verbShelves "sortOrder" -}}
-            <li>
+            <li data-island="link-explainer-popover"
+                data-entry-id="{{ .ID }}"
+                data-title="{{ .title }}"
+                data-tagline="{{ .tagline | default "" }}"
+                data-why-it-matters="{{ .whyItMatters | default "" }}"
+                data-description="{{ .description | default "" }}"
+                data-href="{{ .url }}"
+                {{- with .badge }} data-badge="{{ . }}"{{ end }}
+                class="hp-directory__item">
               <a href="{{ .url }}"{{ if .isExternal }} target="_blank" rel="noopener"{{ end }}>{{ .title }}</a>
             </li>
           {{- end -}}
