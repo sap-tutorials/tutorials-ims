@@ -765,3 +765,1073 @@ rm $TMPDIR/PR1_BODY.md
 Expected: PR URL printed.
 
 - [ ] **Step 3: Wait for review / merge.** PR 2 cannot proceed until this is merged (PR 2's smoke test depends on `/build/kg-stats` being live).
+
+---
+
+# PR 2 — `feat(#751): /explore/about/ knowledge-graph overview page`
+
+## Task 2.0 — Branch off main for PR 2
+
+Assumes PR 1 has been merged to `main`. The PR 2 branch starts from the new `main` so PR 2 sees the live `/build/kg-stats` endpoint.
+
+**Files:** none yet.
+
+- [ ] **Step 1: Sync main and branch for PR 2**
+
+```bash
+cd D:/projects/tutorials-poc/.claude/worktrees/751-kg-overview-page-spec
+git checkout main
+git pull --ff-only
+git checkout -b 751-pr2-explore-about-page
+```
+
+- [ ] **Step 2: Confirm `/build/kg-stats` is reachable in DEV**
+
+```bash
+curl -s https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com/build/kg-stats | head -c 300
+```
+
+Expected: JSON output with `tutorials`, `concepts`, `relationships`, `missionsAndGroups`. If the DEV deploy of PR 1 hasn't completed yet, wait for it (see deploy.yml in CI) — do NOT proceed otherwise; the smoke test will fail.
+
+---
+
+## Task 2.1 — Create the content stub
+
+**Files:**
+- Create: `hugo/content/explore/about/_index.md`
+
+- [ ] **Step 1: Write the frontmatter stub**
+
+```markdown
+---
+title: The SAP Developer Knowledge Graph
+description: A live graph of the tutorials, missions, and concepts that power developers.sap.com — built by AI, queried by SPARQL, and ready to explore.
+type: explore
+layout: about
+slug: about
+---
+```
+
+- [ ] **Step 2: Verify Hugo recognizes the page (it'll 404 until the layout exists, but the page should at least be in the dev server's known list)**
+
+```bash
+# Start the dev server in a separate terminal:
+#   npm run dev
+# Then check:
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:1313/explore/about/
+```
+
+Expected: 404 for now (layout missing — that's the next task). The 404 means Hugo discovered the content. A 500 here would indicate a frontmatter syntax error.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add hugo/content/explore/about/_index.md
+git commit -m "feat(#751): content stub for /explore/about/"
+```
+
+---
+
+## Task 2.2 — Hand-author the architecture SVG
+
+This is the biggest visual asset. Authoring it before the layout lets you focus on it without page-template noise.
+
+**Files:**
+- Create: `hugo/static/img/knowledge-graph/architecture.svg`
+
+- [ ] **Step 1: Write the SVG**
+
+Authoring approach: every `fill` / `stroke` is a CSS custom property so the same SVG renders in both light and dark. The variables are defined later in `_kg-overview.postcss` under `[data-theme="light"]` and `[data-theme="dark"]` scopes.
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 360" role="img" aria-labelledby="kg-arch-title kg-arch-desc">
+  <title id="kg-arch-title">Knowledge Graph architecture</title>
+  <desc id="kg-arch-desc">
+    Pipeline: tutorial markdown from GitHub flows through the SAP AI Core concept extractor,
+    is stored as canonical CDS entities by CAP, and is projected into the SAP HANA Cloud
+    Knowledge Graph Engine where it is queried by SPARQL. Four consumers read the graph:
+    the tutorial sidebar, the /explore/ visualization, the per-concept landing pages, and
+    the Joule learning-path assistant.
+  </desc>
+
+  <defs>
+    <marker id="kg-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" style="fill: var(--kg-arrow-fill)"/>
+    </marker>
+  </defs>
+
+  <!-- Pipeline row: four boxes left-to-right -->
+  <g class="kg-pipeline">
+    <!-- Box 1: Tutorial markdown -->
+    <rect x="20"  y="80"  width="160" height="100" rx="8"
+          style="fill: var(--kg-box-source-bg); stroke: var(--kg-box-source-border); stroke-width: 1.5"/>
+    <text x="100" y="120" text-anchor="middle" font-family="system-ui, sans-serif" font-size="16" font-weight="600"
+          style="fill: var(--kg-box-source-text)">Tutorial markdown</text>
+    <text x="100" y="142" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13"
+          style="fill: var(--kg-box-source-sub)">GitHub</text>
+
+    <!-- Arrow 1 -->
+    <line x1="180" y1="130" x2="220" y2="130" stroke-width="2"
+          style="stroke: var(--kg-arrow-fill)" marker-end="url(#kg-arrow)"/>
+
+    <!-- Box 2: Concept extractor -->
+    <rect x="220" y="80"  width="160" height="100" rx="8"
+          style="fill: var(--kg-box-build-bg); stroke: var(--kg-box-build-border); stroke-width: 1.5"/>
+    <text x="300" y="115" text-anchor="middle" font-family="system-ui, sans-serif" font-size="16" font-weight="600"
+          style="fill: var(--kg-box-build-text)">Concept extractor</text>
+    <text x="300" y="138" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13"
+          style="fill: var(--kg-box-build-sub)">SAP AI Core</text>
+    <text x="300" y="158" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13"
+          style="fill: var(--kg-box-build-sub)">nightly cron</text>
+
+    <!-- Arrow 2 -->
+    <line x1="380" y1="130" x2="420" y2="130" stroke-width="2"
+          style="stroke: var(--kg-arrow-fill)" marker-end="url(#kg-arrow)"/>
+
+    <!-- Box 3: CDS entities -->
+    <rect x="420" y="80"  width="160" height="100" rx="8"
+          style="fill: var(--kg-box-build-bg); stroke: var(--kg-box-build-border); stroke-width: 1.5"/>
+    <text x="500" y="115" text-anchor="middle" font-family="system-ui, sans-serif" font-size="16" font-weight="600"
+          style="fill: var(--kg-box-build-text)">CDS entities</text>
+    <text x="500" y="138" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13"
+          style="fill: var(--kg-box-build-sub)">CAP · HANA</text>
+    <text x="500" y="158" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13"
+          style="fill: var(--kg-box-build-sub)">canonical state</text>
+
+    <!-- Arrow 3 -->
+    <line x1="580" y1="130" x2="620" y2="130" stroke-width="2"
+          style="stroke: var(--kg-arrow-fill)" marker-end="url(#kg-arrow)"/>
+
+    <!-- Box 4: KG projection -->
+    <rect x="620" y="80"  width="160" height="100" rx="8"
+          style="fill: var(--kg-box-store-bg); stroke: var(--kg-box-store-border); stroke-width: 1.5"/>
+    <text x="700" y="115" text-anchor="middle" font-family="system-ui, sans-serif" font-size="16" font-weight="600"
+          style="fill: var(--kg-box-store-text)">KG projection</text>
+    <text x="700" y="138" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13"
+          style="fill: var(--kg-box-store-sub)">HANA KGE</text>
+    <text x="700" y="158" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13"
+          style="fill: var(--kg-box-store-sub)">SPARQL</text>
+  </g>
+
+  <!-- Connector: from KG projection down to the consumer row -->
+  <line x1="700" y1="180" x2="700" y2="230" stroke-width="1.5" stroke-dasharray="4,4"
+        style="stroke: var(--kg-connector-stroke)"/>
+  <text x="700" y="220" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12"
+        style="fill: var(--kg-connector-text)">consumed by</text>
+
+  <!-- Consumer row: four chips -->
+  <g class="kg-consumers">
+    <rect x="100" y="250" width="120" height="50" rx="25"
+          style="fill: var(--kg-chip-bg); stroke: var(--kg-chip-border); stroke-width: 1"/>
+    <text x="160" y="280" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14"
+          style="fill: var(--kg-chip-text)">Tutorial sidebar</text>
+
+    <rect x="260" y="250" width="120" height="50" rx="25"
+          style="fill: var(--kg-chip-bg); stroke: var(--kg-chip-border); stroke-width: 1"/>
+    <text x="320" y="280" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14"
+          style="fill: var(--kg-chip-text)">/explore/</text>
+
+    <rect x="420" y="250" width="120" height="50" rx="25"
+          style="fill: var(--kg-chip-bg); stroke: var(--kg-chip-border); stroke-width: 1"/>
+    <text x="480" y="280" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14"
+          style="fill: var(--kg-chip-text)">Concept pages</text>
+
+    <rect x="580" y="250" width="120" height="50" rx="25"
+          style="fill: var(--kg-chip-bg); stroke: var(--kg-chip-border); stroke-width: 1"/>
+    <text x="640" y="280" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14"
+          style="fill: var(--kg-chip-text)">Joule</text>
+  </g>
+
+  <!-- Dashed connector splays from KG projection (top center of consumer row) to each chip -->
+  <line x1="700" y1="230" x2="160" y2="250" stroke-width="1" stroke-dasharray="2,3"
+        style="stroke: var(--kg-connector-stroke); opacity: .6"/>
+  <line x1="700" y1="230" x2="320" y2="250" stroke-width="1" stroke-dasharray="2,3"
+        style="stroke: var(--kg-connector-stroke); opacity: .6"/>
+  <line x1="700" y1="230" x2="480" y2="250" stroke-width="1" stroke-dasharray="2,3"
+        style="stroke: var(--kg-connector-stroke); opacity: .6"/>
+  <line x1="700" y1="230" x2="640" y2="250" stroke-width="1" stroke-dasharray="2,3"
+        style="stroke: var(--kg-connector-stroke); opacity: .6"/>
+</svg>
+```
+
+- [ ] **Step 2: Sanity-check the SVG renders standalone**
+
+Open the file in a browser: `file:///D:/projects/tutorials-poc/.claude/worktrees/751-kg-overview-page-spec/hugo/static/img/knowledge-graph/architecture.svg`.
+
+Note: it will render with all elements **invisible** because the CSS variables aren't defined outside the page context. That's correct — the SVG is theme-bound. Open DevTools Elements panel and verify the structure: 4 rects in `.kg-pipeline`, 4 rects in `.kg-consumers`, dashed lines between.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add hugo/static/img/knowledge-graph/architecture.svg
+git commit -m "feat(#751): architecture SVG for /explore/about/ (theme-aware via CSS vars)"
+```
+
+---
+
+## Task 2.3 — Add the CSS partial with theme-aware tokens
+
+**Files:**
+- Create: `hugo/assets/css/pages/_kg-overview.postcss`
+- Modify: `hugo/assets/css/main.postcss` (one `@import` line)
+
+- [ ] **Step 1: Write the CSS partial**
+
+```postcss
+/* hugo/assets/css/pages/_kg-overview.postcss
+   Styles for /explore/about/ — scoped under .kg-overview. */
+
+.kg-overview {
+  /* ============================================================
+     Theme-aware CSS variables for the architecture SVG.
+     Same SVG, different colors per data-theme.
+     ============================================================ */
+  --kg-arrow-fill: #0a6ed1;
+  --kg-connector-stroke: #5b738b;
+  --kg-connector-text: #5b738b;
+
+  --kg-box-source-bg: #fff;
+  --kg-box-source-border: #5b738b;
+  --kg-box-source-text: #1c478a;
+  --kg-box-source-sub: #5b738b;
+
+  --kg-box-build-bg: #e8f1fb;
+  --kg-box-build-border: #0a6ed1;
+  --kg-box-build-text: #1c478a;
+  --kg-box-build-sub: #5078a8;
+
+  --kg-box-store-bg: #1c478a;
+  --kg-box-store-border: #1c478a;
+  --kg-box-store-text: #fff;
+  --kg-box-store-sub: #a8c6e8;
+
+  --kg-chip-bg: #fff;
+  --kg-chip-border: #cbd5e3;
+  --kg-chip-text: #5b738b;
+
+  --kg-hero-grad-from: #0a6ed1;
+  --kg-hero-grad-to: #1c478a;
+}
+
+[data-theme="dark"] .kg-overview {
+  --kg-arrow-fill: #58a6ff;
+  --kg-connector-stroke: #7d8590;
+  --kg-connector-text: #7d8590;
+
+  --kg-box-source-bg: #1c2028;
+  --kg-box-source-border: #7d8590;
+  --kg-box-source-text: #c9d1d9;
+  --kg-box-source-sub: #7d8590;
+
+  --kg-box-build-bg: #0d2233;
+  --kg-box-build-border: #58a6ff;
+  --kg-box-build-text: #c9d1d9;
+  --kg-box-build-sub: #7da8d6;
+
+  --kg-box-store-bg: #0a4a8e;
+  --kg-box-store-border: #58a6ff;
+  --kg-box-store-text: #fff;
+  --kg-box-store-sub: #a8c6e8;
+
+  --kg-chip-bg: #1c2028;
+  --kg-chip-border: #30363d;
+  --kg-chip-text: #c9d1d9;
+
+  --kg-hero-grad-from: #0a4a8e;
+  --kg-hero-grad-to: #0a1e3c;
+}
+
+/* ============================================================
+   Layout
+   ============================================================ */
+
+.kg-overview {
+  color: var(--sapTextColor);
+}
+
+.kg-overview__hero {
+  background: linear-gradient(180deg, var(--kg-hero-grad-from) 0%, var(--kg-hero-grad-to) 100%);
+  color: #fff;
+  padding: 4rem 1.5rem 3rem;
+  text-align: center;
+}
+.kg-overview__hero h1 {
+  font-size: 2.5rem;
+  margin: 0 0 .5rem;
+  font-weight: 600;
+}
+.kg-overview__hero p.lede {
+  max-width: 48rem;
+  margin: 0 auto 2rem;
+  font-size: 1.125rem;
+  opacity: .92;
+}
+
+.kg-stats-counter {
+  display: flex;
+  gap: 3rem;
+  justify-content: center;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.kg-stats-counter__cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.kg-stats-counter__num {
+  font-size: 2.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.kg-stats-counter__label {
+  font-size: .875rem;
+  opacity: .85;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  margin-top: .25rem;
+}
+.kg-stats-counter__skeleton {
+  display: flex;
+  gap: 3rem;
+  justify-content: center;
+}
+.kg-stats-counter__skeleton-cell {
+  display: block;
+  width: 4rem;
+  height: 2.5rem;
+  background: rgba(255,255,255,.18);
+  border-radius: .25rem;
+  animation: kg-shimmer 1.4s linear infinite;
+}
+@keyframes kg-shimmer {
+  0%,100% { opacity: .4; }
+  50%     { opacity: .8; }
+}
+.kg-stats-counter__fallback {
+  color: rgba(255,255,255,.85);
+  font-size: .9rem;
+}
+
+@media (max-width: 480px) {
+  .kg-stats-counter,
+  .kg-stats-counter__skeleton { flex-direction: column; gap: 1.5rem; }
+}
+
+/* Section shells */
+.kg-overview__section {
+  padding: 3rem 1.5rem;
+  max-width: 80rem;
+  margin: 0 auto;
+}
+.kg-overview__section > h2 {
+  font-size: 1.5rem;
+  margin: 0 0 1.5rem;
+  font-weight: 600;
+}
+
+/* Diagram section */
+.kg-overview__diagram {
+  background: var(--sapPageBackground, transparent);
+}
+.kg-overview__diagram svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 56rem;
+  margin: 0 auto;
+}
+.kg-overview__diagram p {
+  max-width: 48rem;
+  margin: 1.5rem auto 0;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+/* Corpus grid */
+.kg-overview__corpus {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+.kg-overview__corpus-card {
+  background: var(--sapTile_Background);
+  border: 1px solid var(--sapList_BorderColor);
+  border-radius: .5rem;
+  padding: 1.5rem;
+  text-align: center;
+}
+.kg-overview__corpus-card .icon { font-size: 2rem; line-height: 1; margin-bottom: .5rem; }
+.kg-overview__corpus-card h3 { margin: 0 0 .25rem; font-size: 1.125rem; }
+.kg-overview__corpus-card .count {
+  display: block;
+  font-size: 1.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--sapBrandColor, #0a6ed1);
+  margin: .5rem 0;
+}
+@media (max-width: 768px) { .kg-overview__corpus { grid-template-columns: 1fr; } }
+
+/* Tech badge grid */
+.kg-overview__tech {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+.kg-overview__tech-badge {
+  background: var(--sapTile_Background);
+  border: 1px solid var(--sapList_BorderColor);
+  border-radius: .5rem;
+  padding: 1rem 1.25rem;
+  text-decoration: none;
+  color: var(--sapTextColor);
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+}
+.kg-overview__tech-badge h3 { font-size: 1rem; margin: 0; font-weight: 600; }
+.kg-overview__tech-badge p { font-size: .875rem; margin: 0; color: var(--sapContent_LabelColor); }
+.kg-overview__tech-badge.is-hana {
+  /* Visual cue that the three HANA tiles share a HANA Cloud instance. */
+  border-color: var(--sapBrandColor, #0a6ed1);
+  box-shadow: 0 0 0 1px var(--sapBrandColor, #0a6ed1);
+}
+.kg-overview__tech-callout {
+  grid-column: 1 / -1;
+  font-size: .875rem;
+  color: var(--sapContent_LabelColor);
+  font-style: italic;
+  text-align: center;
+  margin-top: .5rem;
+}
+@media (max-width: 768px) { .kg-overview__tech { grid-template-columns: repeat(2, 1fr); } }
+
+/* Surfaces grid */
+.kg-overview__surfaces {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+}
+.kg-overview__surface-card {
+  background: var(--sapTile_Background);
+  border: 1px solid var(--sapList_BorderColor);
+  border-radius: .5rem;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.kg-overview__surface-card .img-frame {
+  background: #fafafa;          /* Light frame around the always-light screenshots */
+  padding: 1rem;
+}
+[data-theme="dark"] .kg-overview__surface-card .img-frame {
+  background: #1c2028;
+  border-bottom: 1px solid var(--sapList_BorderColor);
+}
+.kg-overview__surface-card .img-frame img { width: 100%; height: auto; display: block; border-radius: .25rem; }
+.kg-overview__surface-card .body { padding: 1rem 1.25rem 1.25rem; }
+.kg-overview__surface-card h3 { margin: 0 0 .25rem; font-size: 1.125rem; }
+.kg-overview__surface-card p  { margin: 0 0 1rem; font-size: .9375rem; color: var(--sapContent_LabelColor); }
+.kg-overview__surface-card .primary {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  background: var(--sapBrandColor, #0a6ed1);
+  color: #fff;
+  padding: .5rem 1rem;
+  border-radius: .25rem;
+  text-decoration: none;
+  font-weight: 500;
+}
+.kg-overview__surface-card .secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  color: var(--sapLinkColor, #0a6ed1);
+  text-decoration: none;
+  font-weight: 500;
+}
+@media (max-width: 768px) { .kg-overview__surfaces { grid-template-columns: 1fr; } }
+
+/* CTA strip */
+.kg-overview__cta-strip {
+  background: var(--sapBackgroundColor, #f5f6f7);
+  border-top: 1px solid var(--sapList_BorderColor);
+  padding: 2rem 1.5rem;
+}
+.kg-overview__cta-strip-inner {
+  max-width: 80rem;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+.kg-overview__cta-strip a.primary {
+  background: var(--sapBrandColor, #0a6ed1);
+  color: #fff;
+  padding: .75rem 1.5rem;
+  border-radius: .25rem;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 1.0625rem;
+}
+.kg-overview__cta-strip ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 1.5rem;
+  font-size: .9375rem;
+}
+.kg-overview__cta-strip ul a {
+  color: var(--sapLinkColor, #0a6ed1);
+  text-decoration: none;
+}
+.kg-overview__cta-strip ul a:hover { text-decoration: underline; }
+```
+
+- [ ] **Step 2: Import the partial in main.postcss**
+
+Open `hugo/assets/css/main.postcss`. Find the existing `@import './pages/...'` block. Add:
+
+```postcss
+@import './pages/kg-overview';
+```
+
+- [ ] **Step 3: Verify Hugo builds**
+
+```bash
+# In a separate terminal, npm run dev should already be running. Reload, look for css errors in the dev server output.
+# Alternatively:
+npm run build:all
+```
+
+Expected: no PostCSS errors.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add hugo/assets/css/pages/_kg-overview.postcss hugo/assets/css/main.postcss
+git commit -m "feat(#751): theme-aware CSS for /explore/about/"
+```
+
+---
+
+## Task 2.4 — Write the page template
+
+**Files:**
+- Create: `hugo/layouts/explore/about.html`
+
+- [ ] **Step 1: Write the template**
+
+```html
+{{ define "main" }}
+<main class="kg-overview" data-page-kind="explore-about">
+
+  <!-- ============================================================
+       1. HERO
+       ============================================================ -->
+  <section class="kg-overview__hero">
+    <h1>The SAP Developer Knowledge Graph</h1>
+    <p class="lede">
+      A live graph of the tutorials, missions, and concepts that make up
+      developers.sap.com, built by AI and powered by SAP HANA Cloud.
+    </p>
+    <div id="kg-stats-counter" aria-live="polite"></div>
+  </section>
+
+  <!-- ============================================================
+       2. ARCHITECTURE DIAGRAM (the "wow")
+       ============================================================ -->
+  <section class="kg-overview__section kg-overview__diagram" aria-labelledby="kg-arch">
+    <h2 id="kg-arch">How it's built</h2>
+    {{ readFile "static/img/knowledge-graph/architecture.svg" | safeHTML }}
+    <p>
+      Every night, a CAP cron job hands each tutorial's markdown to
+      <strong>SAP AI Core</strong>. The model extracts concepts (e.g. <em>CAP</em>,
+      <em>SAPUI5</em>, <em>HANA Cloud</em>) and the edges between them — what a
+      tutorial <em>teaches</em>, what it <em>requires</em>. Those facts are stored
+      as canonical CDS entities in <strong>SAP HANA Cloud</strong> and projected
+      into the database's built-in <strong>Knowledge Graph Engine</strong>, where
+      SPARQL queries answer "what should I learn next?" in single-digit milliseconds.
+    </p>
+  </section>
+
+  <!-- ============================================================
+       3. CORPUS BREAKDOWN
+       ============================================================ -->
+  <section class="kg-overview__section" aria-labelledby="kg-corpus">
+    <h2 id="kg-corpus">What's in the graph</h2>
+    <div class="kg-overview__corpus">
+      <div class="kg-overview__corpus-card">
+        <div class="icon" aria-hidden="true">📚</div>
+        <h3>Tutorials</h3>
+        <span class="count" data-kg-count="tutorials">—</span>
+        <p>Every tutorial in the <code>sap-tutorials/*</code> GitHub org. Edges: <em>teaches Concept</em>, <em>requires Concept</em>.</p>
+      </div>
+      <div class="kg-overview__corpus-card">
+        <div class="icon" aria-hidden="true">🧠</div>
+        <h3>Concepts</h3>
+        <span class="count" data-kg-count="concepts">—</span>
+        <p>AI-extracted topics — CAP, SAPUI5, HANA Cloud, … Edges: <em>requires Concept</em>, <em>relatedTo Concept</em>.</p>
+      </div>
+      <div class="kg-overview__corpus-card">
+        <div class="icon" aria-hidden="true">🛤️</div>
+        <h3>Missions &amp; groups</h3>
+        <span class="count" data-kg-count="missionsAndGroups">—</span>
+        <p>Curated learning paths. Edges: <em>containsTutorial</em>.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       4. TECH BADGE GRID
+       ============================================================ -->
+  <section class="kg-overview__section" aria-labelledby="kg-tech">
+    <h2 id="kg-tech">The tech behind it</h2>
+    <div class="kg-overview__tech">
+      <a class="kg-overview__tech-badge is-hana" href="https://help.sap.com/docs/hana-cloud-database/sap-hana-cloud-sap-hana-database-administration-guide/knowledge-graph-engine" target="_blank" rel="noopener">
+        <h3>SAP HANA Cloud Knowledge Graph Engine</h3>
+        <p>RDF triple store; SPARQL via <code>SYS.SPARQL_EXECUTE</code>.</p>
+      </a>
+      <a class="kg-overview__tech-badge is-hana" href="https://help.sap.com/docs/hana-cloud-database/sap-hana-cloud-sap-hana-database-vector-engine-guide/sap-hana-cloud-sap-hana-database-vector-engine-guide" target="_blank" rel="noopener">
+        <h3>SAP HANA Cloud Vector Engine</h3>
+        <p>Embedding similarity. Powers concept consolidation.</p>
+      </a>
+      <a class="kg-overview__tech-badge is-hana" href="https://help.sap.com/docs/hana-cloud/multi-model" target="_blank" rel="noopener">
+        <h3>SAP HANA Cloud Multi-Model</h3>
+        <p>Graph, vector, and relational data — one database, no ETL.</p>
+      </a>
+      <a class="kg-overview__tech-badge" href="https://help.sap.com/docs/sap-ai-core" target="_blank" rel="noopener">
+        <h3>SAP AI Core / Generative AI Hub</h3>
+        <p>LLM extracts concepts from tutorial markdown nightly; a weekly consolidator merges near-duplicates.</p>
+      </a>
+      <a class="kg-overview__tech-badge" href="https://cap.cloud.sap/docs/" target="_blank" rel="noopener">
+        <h3>SAP Cloud Application Programming Model (CAP)</h3>
+        <p>Service layer, scheduler, and the cron jobs that build the graph.</p>
+      </a>
+      <a class="kg-overview__tech-badge" href="https://help.sap.com/docs/btp/sap-business-technology-platform/cloud-foundry-environment" target="_blank" rel="noopener">
+        <h3>SAP BTP Cloud Foundry</h3>
+        <p>The runtime.</p>
+      </a>
+      <p class="kg-overview__tech-callout">
+        All three HANA tiles run on the same SAP HANA Cloud instance — that's the multi-model story.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       5. SURFACES GRID
+       ============================================================ -->
+  <section class="kg-overview__section" aria-labelledby="kg-surfaces">
+    <h2 id="kg-surfaces">Where you see it in action</h2>
+    <div class="kg-overview__surfaces">
+      <article class="kg-overview__surface-card">
+        <div class="img-frame">
+          <img src="/img/knowledge-graph/surfaces/explore.png" alt="The /explore/ interactive visualization with a force-directed layout of concepts and tutorials.">
+        </div>
+        <div class="body">
+          <h3>Live graph at <code>/explore/</code></h3>
+          <p>Force-directed interactive visualization of the whole graph. Search for a concept, click a node, follow the edges.</p>
+          <a class="primary" href="/explore/">Open the live graph →</a>
+        </div>
+      </article>
+      <article class="kg-overview__surface-card">
+        <div class="img-frame">
+          <img src="/img/knowledge-graph/surfaces/sidebar.png" alt="A tutorial-page sidebar listing prerequisites, related tutorials, and suggested next steps.">
+        </div>
+        <div class="body">
+          <h3>On every tutorial page</h3>
+          <p>A sidebar surfaces prerequisites, related tutorials, and suggested next steps based on the concepts a tutorial teaches.</p>
+          <a class="secondary" href="/tutorials/abap-cloud-getting-started/">See it on a tutorial →</a>
+        </div>
+      </article>
+      <article class="kg-overview__surface-card">
+        <div class="img-frame">
+          <img src="/img/knowledge-graph/surfaces/concepts.png" alt="A concept landing page describing CAP with sections for tutorials that teach, require, and relate.">
+        </div>
+        <div class="body">
+          <h3>Concept landing pages</h3>
+          <p>One page per concept — what it teaches, what requires it, what relates. Indexed by site search.</p>
+          <a class="secondary" href="/concepts/">Browse concepts →</a>
+        </div>
+      </article>
+      <article class="kg-overview__surface-card">
+        <div class="img-frame">
+          <img src="/img/knowledge-graph/surfaces/joule.png" alt="Joule chat panel showing a learning path between two tutorials with three intermediate tutorials.">
+        </div>
+        <div class="body">
+          <h3>Joule learning paths</h3>
+          <p>"Find me the shortest path between two tutorials." Joule queries the graph and returns the steps.</p>
+          <a class="secondary" href="/?joule=open&joule_prompt=Find%20the%20shortest%20learning%20path%20between%20two%20tutorials">Ask Joule →</a>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       6. CTA STRIP
+       ============================================================ -->
+  <section class="kg-overview__cta-strip" aria-label="Try the knowledge graph">
+    <div class="kg-overview__cta-strip-inner">
+      <a class="primary" href="/explore/">Explore the live graph →</a>
+      <ul>
+        <li><a href="https://help.sap.com/docs/hana-cloud-database/sap-hana-cloud-sap-hana-database-administration-guide/knowledge-graph-engine" target="_blank" rel="noopener">Read the SAP HANA Cloud KG docs →</a></li>
+        <li><a href="https://github.com/sap-tutorials/tutorials-ims" target="_blank" rel="noopener">View the source on GitHub →</a></li>
+      </ul>
+    </div>
+  </section>
+
+</main>
+
+<!-- After PR 1's island bundle is built, this script tag wires up the hero counter. -->
+<script type="module" src="/js/kg-stats-counter.js" defer></script>
+
+<!-- Light-weight inline script: also populate the corpus counts (no Vue island needed for these three numbers). -->
+<script>
+  (async function () {
+    try {
+      const res = await fetch('/build/kg-stats');
+      if (!res.ok) return;
+      const data = await res.json();
+      document.querySelectorAll('[data-kg-count]').forEach((el) => {
+        const key = el.getAttribute('data-kg-count');
+        const v = data[key];
+        if (typeof v === 'number') el.textContent = new Intl.NumberFormat('en-US').format(v);
+      });
+    } catch { /* leave the em-dash placeholder */ }
+  })();
+</script>
+
+{{ end }}
+```
+
+- [ ] **Step 2: Build and view the page locally**
+
+```bash
+npm run build:all   # or rely on npm run dev being live
+```
+
+Visit `http://localhost:1313/explore/about/`. You should see:
+- Hero with the title + lede + three live counters (animating from 0 → final).
+- Architecture diagram rendering correctly (CSS variables wired).
+- Three corpus tiles with counts.
+- Six tech badges (three with the HANA shared-border treatment).
+- Four surface cards with light-framed screenshots (the screenshot files don't exist yet — they'll show broken-image icons; that's Task 2.5).
+- CTA strip at the bottom.
+
+- [ ] **Step 3: Toggle the theme via the shellbar — confirm both modes look right**
+
+The shellbar's `#sb-theme` button toggles `data-theme` on `<html>`. Verify the diagram, hero, and badge grid all adapt. The four surface screenshots stay light, framed by a darker container in dark mode — that's by design.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add hugo/layouts/explore/about.html
+git commit -m "feat(#751): page template for /explore/about/"
+```
+
+---
+
+## Task 2.5 — Capture the four surface screenshots
+
+Real product screenshots, normalized dimensions, light-themed. These can be `.png` or `.webp` — `.png` is fine for screenshots with text (sharper).
+
+**Files:**
+- Create: `hugo/static/img/knowledge-graph/surfaces/sidebar.png`
+- Create: `hugo/static/img/knowledge-graph/surfaces/explore.png`
+- Create: `hugo/static/img/knowledge-graph/surfaces/concepts.png`
+- Create: `hugo/static/img/knowledge-graph/surfaces/joule.png`
+
+- [ ] **Step 1: Capture each surface**
+
+Sources:
+1. **explore.png** — Visit `https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/explore/`. Wait for the viz to settle. Capture roughly the visible viewport, ~1400×900 px.
+2. **sidebar.png** — Visit a representative tutorial that has a healthy KG sidebar (e.g. `/tutorials/abap-cloud-getting-started/` if it has one, or whichever tutorial has the most populated sidebar). Capture the sidebar element plus a small slice of the tutorial body for context. ~700×900 px.
+3. **concepts.png** — Visit `/concepts/cap/` (or whichever concept slug has the richest landing page). Capture roughly the same dimensions as `explore.png`.
+4. **joule.png** — Open Joule shellbar from any page, ask "Find the shortest learning path from `abap-cloud-getting-started` to `cap-getting-started`," wait for the response, screenshot the Joule panel + the path output. ~480×800 px.
+
+Normalize all four to a similar aspect ratio (~3:2 looks balanced in the 2×2 grid). Use a tool like ImageMagick or your screenshot app's crop function. Optimize file size with `pngquant` or `cwebp` — target ~80-150 KB per image. **Strip EXIF metadata** if your screenshot tool includes location data.
+
+- [ ] **Step 2: Place them under `hugo/static/img/knowledge-graph/surfaces/`**
+
+Filename matches the `<img src>` in the template.
+
+- [ ] **Step 3: Reload `/explore/about/` and confirm the surfaces grid renders**
+
+Each card should show a real screenshot, no broken-image icons.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add hugo/static/img/knowledge-graph/surfaces/
+git commit -m "feat(#751): real product screenshots for /explore/about/ surfaces grid"
+```
+
+---
+
+## Task 2.6 — Add the `/explore/` cross-link
+
+The cross-link from `/explore/` to `/explore/about/` is the one change outside the new files.
+
+**Files:**
+- Modify: `hugo/layouts/explore/single.html`
+
+- [ ] **Step 1: Add the link**
+
+Open `hugo/layouts/explore/single.html`. The current layout is a single `<div id="explore-app">`. Add a small chrome link above that div, **inside `{{ define "main" }}`**:
+
+```html
+{{ define "main" }}
+<div id="explore-app" class="explore-page">
+  <a class="explore-page__about-link" href="/explore/about/">About this graph →</a>
+  {{ with site.Data.explore_bundle }}
+  ... (rest unchanged)
+```
+
+And add the corresponding minimal CSS — into `_kg-overview.postcss` is fine (the class is page-adjacent), or add to a new tiny partial. Recommended: a few lines at the bottom of `_kg-overview.postcss`:
+
+```postcss
+.explore-page__about-link {
+  position: absolute;
+  top: .75rem;
+  right: 1rem;
+  z-index: 10;
+  color: var(--sapLinkColor, #0a6ed1);
+  text-decoration: none;
+  font-size: .9375rem;
+  background: var(--sapTile_Background);
+  border: 1px solid var(--sapList_BorderColor);
+  border-radius: .25rem;
+  padding: .375rem .75rem;
+}
+.explore-page__about-link:hover { text-decoration: underline; }
+```
+
+- [ ] **Step 2: Verify locally**
+
+Visit `http://localhost:1313/explore/`. The "About this graph →" link is in the top-right of the explore page. Click it; you should land on `/explore/about/`.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add hugo/layouts/explore/single.html hugo/assets/css/pages/_kg-overview.postcss
+git commit -m "feat(#751): cross-link from /explore/ → /explore/about/"
+```
+
+---
+
+## Task 2.7 — Extend joule.js to handle `?joule_prompt=...`
+
+The Joule surface card's CTA opens Joule with a pre-filled prompt. The existing `joule.js` handles `?joule=open` at line 742 — extend that block to also read `?joule_prompt`.
+
+**Files:**
+- Modify: `hugo/static/js/joule.js`
+
+- [ ] **Step 1: Find the existing block**
+
+```bash
+grep -n "joule.*open\|URLSearchParams" hugo/static/js/joule.js | head -10
+```
+
+You're looking for the block around line 742 where `params.get('joule') === 'open'` triggers `_openImpl()`.
+
+- [ ] **Step 2: Extend the block**
+
+Replace the auto-open block with one that also reads `joule_prompt`:
+
+```js
+// Auto-open after login redirect: _openImpl() appends ?joule=open to returnTo,
+// so when XSUAA bounces the user back here, we re-enter the panel.
+// Also: ?joule_prompt=<text> opens Joule with a pre-filled prompt (used by
+// /explore/about/ #751).
+const params = new URLSearchParams(location.search);
+if (params.get('joule') === 'open') {
+  const prefillPrompt = params.get('joule_prompt') || null;
+  params.delete('joule');
+  params.delete('joule_prompt');
+  const cleaned = params.toString();
+  history.replaceState(null, '', location.pathname + (cleaned ? '?' + cleaned : '') + location.hash);
+  if (prefillPrompt) {
+    // _openImpl accepts an optional seeded prompt and skips the hero/starters
+    // (see the existing `window.joule._pendingOpen` handling just below).
+    _openImpl(prefillPrompt);
+  } else {
+    _openImpl();
+  }
+}
+```
+
+- [ ] **Step 3: Verify locally**
+
+Reload `/explore/about/`. Click the Joule surface card's "Ask Joule →" link. Joule should open with the pre-filled prompt "Find the shortest learning path between two tutorials" auto-sent.
+
+(If the card link works locally but the auto-send doesn't happen, the `_openImpl` function's seeded-prompt path needs a quick look — search for `_openImpl` definition; it already accepts an optional prompt argument per the surrounding code's "skip hero/starters and send the seeded prompt immediately" comment near line 587.)
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add hugo/static/js/joule.js
+git commit -m "feat(#751): joule.js handles ?joule_prompt for pre-filled prompts"
+```
+
+---
+
+## Task 2.8 — Smoke test for the page
+
+**Files:**
+- Create: `test/smoke/explore-about.smoke.test.js`
+
+- [ ] **Step 1: Write the smoke test**
+
+```js
+// test/smoke/explore-about.smoke.test.js
+import { describe, it, expect } from 'vitest';
+
+const BASE_URL = process.env.SMOKE_BASE_URL;
+if (!BASE_URL) {
+  throw new Error('SMOKE_BASE_URL not set — set it to the deployed approuter URL');
+}
+
+describe('smoke: /explore/about/', () => {
+  it('returns 200 with HTML content-type', async () => {
+    const res = await fetch(`${BASE_URL}/explore/about/`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/text\/html/);
+  });
+
+  it('HTML body contains the expected hero title', async () => {
+    const res = await fetch(`${BASE_URL}/explore/about/`);
+    const html = await res.text();
+    expect(html).toContain('The SAP Developer Knowledge Graph');
+    expect(html).toContain('id="kg-stats-counter"');
+  });
+});
+```
+
+- [ ] **Step 2: Sanity-check the syntax**
+
+```bash
+node --check test/smoke/explore-about.smoke.test.js
+```
+
+Expected: no output.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add test/smoke/explore-about.smoke.test.js
+git commit -m "test(#751): smoke test for /explore/about/"
+```
+
+---
+
+## Task 2.9 — Manual one-time pass
+
+Before opening PR 2, walk through the manual checklist from spec §Testing strategy → "Manual one-time pass at merge".
+
+- [ ] **Step 1: Lighthouse a11y audit**
+
+Open `http://localhost:1313/explore/about/` in Chrome. Open DevTools → Lighthouse. Run a "Best practices + Accessibility" audit. Score target: a11y ≥ 95.
+
+If anything flags: fix it before opening the PR. Common issues for this kind of page: missing alt text on images (the SVG has `<title>`/`<desc>`; the surface images already have `alt=`), insufficient color contrast on the badge tiles in one of the themes.
+
+- [ ] **Step 2: Dark-mode walkthrough**
+
+Toggle the shellbar theme. Walk every section:
+- Hero gradient: white text on the deeper dark gradient — readable?
+- Architecture SVG: all eight boxes/rects visible against the dark background? Arrows visible?
+- Corpus cards: legible against the dark `--sapTile_Background`?
+- Tech badges: HANA shared-border visible in dark?
+- Surface cards: light screenshots framed by dark wrapper — does this look intentional or jarring?
+- CTA strip: contrast holds?
+
+- [ ] **Step 3: Mobile walkthrough**
+
+DevTools mobile emulator at 375 px width. Walk every section. Architecture SVG should scale down (the `viewBox` handles that automatically). Hero counters should stack. Corpus / surfaces grids should be 1-col.
+
+- [ ] **Step 4: Cross-browser**
+
+Spot-check the page in Safari and Firefox (Chrome was your dev browser). The Vue island uses standard `fetch` + Vue 3; no exotic APIs. Worth a 30-second check.
+
+- [ ] **Step 5: Run all the unit + hybrid + smoke tests local-against-DEV**
+
+```bash
+# Make sure nothing regressed.
+npm test
+SMOKE_BASE_URL=https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com \
+SMOKE_SRV_URL=https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com \
+  npm run test:smoke -- test/smoke/explore-about.smoke.test.js test/smoke/kg-stats.smoke.test.js
+```
+
+Expected: everything green.
+
+- [ ] **Step 6: (no commit — manual review notes go in the PR body)**
+
+---
+
+## Task 2.10 — Open PR 2
+
+- [ ] **Step 1: Push the branch**
+
+```bash
+git push -u origin 751-pr2-explore-about-page
+```
+
+- [ ] **Step 2: Open the PR**
+
+```bash
+cat > $TMPDIR/PR2_BODY.md <<'EOF'
+## What
+
+PR 2 of 2 for #751.
+
+Adds the public Hugo page at `/explore/about/` — the narrative companion to `/explore/`. Hero with live stats counter, architecture diagram (the "wow"), corpus breakdown, six SAP tech badges, 2×2 surfaces grid, CTA strip. Theme-aware (light + dark) from day one. Closes #751.
+
+## Spec
+
+[docs/superpowers/specs/2026-06-29-751-kg-overview-page-design.md](docs/superpowers/specs/2026-06-29-751-kg-overview-page-design.md).
+
+## What's in this PR
+
+- `hugo/content/explore/about/_index.md` — frontmatter stub.
+- `hugo/layouts/explore/about.html` — page template (six sections per spec).
+- `hugo/assets/css/pages/_kg-overview.postcss` — page styles + theme-aware CSS variables for the architecture SVG. `@import`-ed by `main.postcss`.
+- `hugo/static/img/knowledge-graph/architecture.svg` — hand-authored SVG; theme-bound via CSS vars.
+- `hugo/static/img/knowledge-graph/surfaces/{sidebar,explore,concepts,joule}.png` — real product screenshots.
+- `hugo/layouts/explore/single.html` — added "About this graph →" link.
+- `hugo/static/js/joule.js` — extended `?joule=open` handler to also accept `?joule_prompt=...` for pre-filled prompts.
+- `test/smoke/explore-about.smoke.test.js` — 2 smoke tests.
+
+## Verification
+
+- Manual checklist (Lighthouse a11y, dark-mode walkthrough, mobile, cross-browser) — all passed locally per Task 2.9.
+- All unit + hybrid + smoke tests green locally against DEV.
+
+## Visual
+
+[attach 2-3 screenshots in the PR — light hero, dark hero, mobile]
+
+Closes #751.
+EOF
+gh pr create --base main --title "feat(#751): /explore/about/ knowledge-graph overview page (PR 2 of 2)" --body-file $TMPDIR/PR2_BODY.md
+rm $TMPDIR/PR2_BODY.md
+```
+
+Expected: PR URL printed.
+
+- [ ] **Step 3: After merge, verify the deployed page**
+
+Once PR 2 deploys to DEV:
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com/explore/about/
+```
+
+Expected: `200`.
+
+Visit the URL in a browser. Confirm everything looks right post-deploy. If anything regressed against the local-DEV behavior (CSP issues, font loading, etc.), open a hot-fix PR rather than reverting.
