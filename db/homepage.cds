@@ -73,3 +73,17 @@ entity HomepageConfig : cuid, managed {
   eventsBandEnabled       : Boolean default true;
   communityLaneEnabled    : Boolean default true;
 }
+
+// (#759) Per-verb explainer content. Cardinality is fixed (6 rows, one
+// per HomepageVerb enum value). CRUD lockdown in admin UI prevents
+// row creation/deletion; only content fields are mutable. Spec §2.2.
+@assert.unique.verbKey: [verbKey]
+entity VerbDefinitions : cuid, managed {
+  verbKey         : HomepageVerb @mandatory @assert.range;
+  label           : String(40)   @mandatory;
+  iconName        : String(40);
+  sortOrder       : Integer      default 100;
+  tagline         : String(140);
+  whyItMatters    : String(800);
+  authoringStatus : AuthoringStatus default 'BLANK' @assert.range;
+}
