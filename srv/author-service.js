@@ -14,8 +14,8 @@ const osVariantsLimiter = createRateLimiter({ windowMs: OS_VARIANTS_WINDOW_MS })
 async function assertOwnership(tutorialId, userId) {
   const { MyTutorialsView } = cds.entities('com.sap.developers.ims');
   const row = await SELECT.one.from(MyTutorialsView)
-    .columns('ID')
-    .where({ ID: tutorialId, ownerUserId: userId });
+    .columns('tutorial_ID')
+    .where({ tutorial_ID: tutorialId, userId });
   return !!row;
 }
 
@@ -70,7 +70,7 @@ export default cds.service.impl(async function () {
   this.before('READ', MyTutorials, (req) => {
     const userId = req.user?.id;
     if (!userId || userId === 'anonymous') return req.reject(401, 'Authentication required');
-    req.query.where({ ownerUserId: userId });
+    req.query.where({ userId });
   });
 
   this.on('reviewTutorial', async (req) => {
