@@ -47,7 +47,7 @@ describe.runIf(isSafeForWrites())('HomepageShelves new fields on HANA (#759 PR 1
     }));
     const row = await db.run(SELECT.one.from('com.sap.developers.ims.HomepageShelves')
       .where({ title: TEST_TITLE_PREFIX + 'tagline-140' }));
-    expect(row.tagline?.length).toBe(140);
+    expect(row.tagline).toBe(ok140);
   });
 
   it('@assert.range rejects bogus authoringStatus', async () => {
