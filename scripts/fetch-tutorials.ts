@@ -964,6 +964,7 @@ async function main() {
   let standaloneGroups: StandaloneGroup[] = []
   let categories: CategoryMeta[] = []
   let tutorialMetas: CatalogTutorialMeta[] = []
+  let featured: BrowseFeaturedEntry[] = []
   let capCacheUsed = false
   let coCompletions: Map<string, Map<string, number>> = new Map()
 
@@ -976,6 +977,7 @@ async function main() {
     standaloneGroups = cached.standaloneGroups ?? []
     categories = cached.categories ?? []
     tutorialMetas = cached.tutorialMetas ?? []
+    featured = cached.featured ?? []
     capCacheUsed = true
     console.log(`  [cap] Using cached data (${missions.length} missions, ${standaloneGroups.length} standalone groups)`)
   } else {
@@ -987,7 +989,8 @@ async function main() {
       standaloneGroups = catalog.standaloneGroups
       categories = catalog.categories
       tutorialMetas = catalog.tutorialMetas
-      saveCapCache(missions, hierarchies, standaloneGroups, categories, tutorialMetas)
+      featured = catalog.featured
+      saveCapCache(missions, hierarchies, standaloneGroups, categories, tutorialMetas, featured)
       console.log(`  [cap] Fetched ${missions.length} missions, ${standaloneGroups.length} standalone groups`)
       coCompletions = await fetchCoCompletions(capBaseUrl)
       console.log(`  [cap] co-completion map: ${coCompletions.size} source slugs`)
@@ -1155,7 +1158,7 @@ async function main() {
   // ship an empty rail file from a deliberately-degraded build.
   if (missions.length > 0) {
     try {
-      writeBrowseData(navEntries, missions, hierarchies, standaloneGroups, categories, tutorialMetas)
+      writeBrowseData(navEntries, missions, hierarchies, standaloneGroups, categories, tutorialMetas, featured)
     } catch (err) {
       // Non-fatal — don't block the existing build pipeline on this.
       console.warn(`  [browse] writeBrowseData failed: ${err instanceof Error ? err.message : err}`)
@@ -1502,22 +1505,18 @@ function writeBrowseData(
   standaloneGroups: StandaloneGroup[],
   categories: CategoryMeta[],
   tutorialMetas: CatalogTutorialMeta[],
+  catalogFeatured: BrowseFeaturedEntry[],
 ): void {
   const tutorialMetaMap = new Map<string, CatalogTutorialMeta>(
     tutorialMetas.map(m => [m.slug, m]),
   )
   const all: BrowseCardItem[] = buildAllCards(tuts, missions, hierarchies, standaloneGroups, tutorialMetaMap)
 
-  // Featured: first FEATURED_MAX mission cards in catalog order, excluding
-  // event-specific missions (Devtoberfest / App Space / TechEd YYYY) via
-  // isFeaturedMissionCandidate(). See EVENT_MISSION_RE comment above for
-  // rationale. Catalog ordering itself isn't editorial — it falls out of
-  // GitHub repo discovery — so this filter is a sieve, not a curation.
-  // Track replacement with proper Mission.featuredOrder admin column.
-  const featured = all
-    .filter(c => c.type === 'mission' && isFeaturedMissionCandidate(c.title))
-    .slice(0, FEATURED_MAX)
-    .map(c => c.id)
+  // Featured: prefer admin-curated FeaturedTasks (top 10 missions ordered by
+  // featuredOrder); fall back to the regex-sieved catalog-order picker
+  // (PR #738) when no admin has curated any mission rows yet. See
+  // pickFeaturedMissions for the full semantics (#739).
+  const featured = pickFeaturedMissions(catalogFeatured, all)
 
   // Recent: top RECENT_MAX tutorial cards by createdAt desc.
   const recent = all
