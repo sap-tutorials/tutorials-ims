@@ -1,0 +1,125 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.verb-definitions",
+    "type": "application",
+    "title": "{{appTitle}}",
+    "description": "{{appDescription}}",
+    "applicationVersion": { "version": "0.0.1" },
+    "i18n": "i18n/i18n.properties",
+    "dataSources": {
+      "mainService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "VerbDefinition-display": {
+          "semanticObject": "VerbDefinition",
+          "action": "display",
+          "title": "{{appTitle}}",
+          "signature": { "parameters": {}, "additionalParameters": "allowed" }
+        }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": { "sap.fe.templates": {} }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      },
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": { "bundleName": "sap.tutorials.admin.verb-definitions.i18n.i18n" }
+      }
+    },
+    "extends": {
+      "extensions": {
+        "sap.ui.controllerExtensions": {
+          "sap.fe.templates.ListReport.ListReportController": {
+            "controllerName": "sap.tutorials.admin.verb-definitions.ext.ActionsController"
+          }
+        }
+      }
+    },
+    "routing": {
+      "routes": [
+        { "name": "VerbsList", "pattern": ":?query:", "target": "VerbsListTarget" },
+        { "name": "VerbOP",    "pattern": "VerbDefinitions({key}):?query:", "target": "VerbOPTarget" }
+      ],
+      "targets": {
+        "VerbsListTarget": {
+          "type": "Component",
+          "name": "sap.fe.templates.ListReport",
+          "id": "VerbsListTarget",
+          "options": {
+            "settings": {
+              "contextPath": "/VerbDefinitions",
+              "navigation": {
+                "VerbDefinitions": { "detail": { "route": "VerbOP" } }
+              },
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "actions": {
+                    "generateForBlanks": {
+                      "press": "sap.tutorials.admin.verb-definitions.ext.ActionsController.onGenerateForBlanks",
+                      "visible": true,
+                      "enabled": true,
+                      "text": "Generate for blank rows"
+                    },
+                    "regenerateSelected": {
+                      "press": "sap.tutorials.admin.verb-definitions.ext.ActionsController.onRegenerateSelected",
+                      "visible": true,
+                      "enabled": true,
+                      "text": "Regenerate selected with AI",
+                      "requiresSelection": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "VerbOPTarget": {
+          "type": "Component",
+          "name": "sap.fe.templates.ObjectPage",
+          "id": "VerbOPTarget",
+          "options": {
+            "settings": {
+              "contextPath": "/VerbDefinitions",
+              "editableHeaderContent": false,
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.Identification": {
+                  "actions": {
+                    "regenerateOne": {
+                      "press": "sap.tutorials.admin.verb-definitions.ext.ActionsController.onRegenerateOne",
+                      "text": "Regenerate with AI"
+                    },
+                    "markReviewed": {
+                      "press": "sap.tutorials.admin.verb-definitions.ext.ActionsController.onMarkReviewed",
+                      "text": "Mark as reviewed",
+                      "visible": "{= ${authoringStatus} === 'AI_SEEDED' }"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
