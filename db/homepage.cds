@@ -21,6 +21,15 @@ type HomepageLinkStatus : String enum {
   OK; BROKEN; SLOW; UNKNOWN;
 }
 
+// (#759) Authoring lifecycle for explainer content. AI bulk-fill skips
+// REVIEWED rows; per-row regenerate works on all statuses (with confirm
+// dialog for REVIEWED). Spec §2.1.
+type AuthoringStatus : String enum {
+  BLANK;      // never seeded
+  AI_SEEDED;  // last write was the AI generator
+  REVIEWED;   // human has confirmed; bulk-fill skips
+}
+
 @assert.unique.verbUrl: [verb, url]
 entity HomepageShelves : cuid, managed {
   verb        : HomepageVerb       @mandatory @assert.range;
