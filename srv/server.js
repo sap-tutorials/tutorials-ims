@@ -875,6 +875,7 @@ cds.on('served', async () => {
     res.json({
       authenticated: true,
       id: user.id,
+      userId: user.id,  // #777: explicit alias of id, kept stable as the Users.uuid value. The existing MyTutorialsView (db/views.cds) has empirically worked with `req.user.id === Users.uuid` for the email-only filter, so the new UNION view's `userId` column (also Users.uuid) accepts the same value.
       email: user.attr?.email || '',
       givenName: user.attr?.given_name || user.attr?.givenName || '',
       familyName: user.attr?.family_name || user.attr?.familyName || '',
