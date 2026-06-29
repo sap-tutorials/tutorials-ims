@@ -177,8 +177,8 @@ One new endpoint, no schema changes, no service changes.
   ```
 
 - **Implementation:**
-  - Four `COUNT(*)` queries via `cds.ql` against the existing entities — `Tutorials`, `Concepts` (where `status = 'PUBLISHED'`), `ConceptEdges`, and `Missions` + `Groups` (summed for the `missionsAndGroups` field; `Groups` is the entity name in [db/schema.cds](../../../db/schema.cds), not `CompletionPaths`).
-  - One `MAX(extractedAt)` on `Concepts` for `lastExtractedAt`.
+  - Four `COUNT(*)` queries via `cds.ql` against the existing entities — `Tutorials`, `Concepts` (filtered to the published gate, i.e. `where({ status: 'ACTIVE' })` AND `publishedAt IS NOT NULL` — per [db/knowledge-graph.cds](../../../db/knowledge-graph.cds) the `Concepts.status` enum is `ACTIVE | MERGED | VETOED` (no `PUBLISHED`); the public-published gate is the documented `publishedAt IS NOT NULL AND status = 'ACTIVE'`), `ConceptEdges` (filter to `status = 'ACTIVE'`), and `Missions` + `Groups` (summed for the `missionsAndGroups` field; `Groups` is the entity name in [db/schema.cds](../../../db/schema.cds), not `CompletionPaths`).
+  - One `MAX(extractedAt)` on `ConceptEdges` for `lastExtractedAt` — `extractedAt` lives on the link/edge entities, **not** on `Concepts` itself. Using `ConceptEdges.extractedAt` gives "when was the graph last rebuilt" which is what visitors care about.
   - No SPARQL — these are projection-input counts; the underlying CDS entities are the truth.
 - **Caching:** 60-second in-memory TTL inside the handler + `Cache-Control: public, max-age=60, stale-while-revalidate=300`. Same pattern as `/api/advocates`.
 - **Defensive fallback:**

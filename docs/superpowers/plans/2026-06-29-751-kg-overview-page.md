@@ -130,22 +130,29 @@ describe('GET /build/kg-stats', () => {
       { ID: '00000000-0000-0000-0000-000000000t03', slug: 'three', title: 'Three' },
     ]);
     await INSERT.into(Concepts).entries([
-      { ID: '00000000-0000-0000-0000-000000000c01', slug: 'cap',   name: 'CAP',   status: 'PUBLISHED', extractedAt: '2026-06-28T03:17:42.000Z' },
-      { ID: '00000000-0000-0000-0000-000000000c02', slug: 'sapui5', name: 'SAPUI5', status: 'PUBLISHED', extractedAt: '2026-06-27T03:17:42.000Z' },
-      { ID: '00000000-0000-0000-0000-000000000c03', slug: 'draft', name: 'Draft', status: 'DRAFT',     extractedAt: '2026-06-29T03:17:42.000Z' },
+      // Concepts.status is ACTIVE | MERGED | VETOED (per db/knowledge-graph.cds:28).
+      // The public-published gate is `status='ACTIVE' AND publishedAt IS NOT NULL`.
+      { ID: '00000000-0000-0000-0000-000000000c01', slug: 'cap',    name: 'CAP',    status: 'ACTIVE', publishedAt: '2026-06-28T03:17:42.000Z' },
+      { ID: '00000000-0000-0000-0000-000000000c02', slug: 'sapui5', name: 'SAPUI5', status: 'ACTIVE', publishedAt: '2026-06-27T03:17:42.000Z' },
+      { ID: '00000000-0000-0000-0000-000000000c03', slug: 'unpub',  name: 'Unpub',  status: 'ACTIVE', publishedAt: null }, // not yet published — excluded
+      { ID: '00000000-0000-0000-0000-000000000c04', slug: 'merged', name: 'Merged', status: 'MERGED', publishedAt: '2026-06-28T03:17:42.000Z' }, // merged — excluded
     ]);
     await INSERT.into(ConceptEdges).entries([
-      { ID: '00000000-0000-0000-0000-000000000e01', source_ID: '00000000-0000-0000-0000-000000000c01', target_ID: '00000000-0000-0000-0000-000000000c02', kind: 'relatedTo' },
-      { ID: '00000000-0000-0000-0000-000000000e02', source_ID: '00000000-0000-0000-0000-000000000c02', target_ID: '00000000-0000-0000-0000-000000000c01', kind: 'requires' },
-      { ID: '00000000-0000-0000-0000-000000000e03', source_ID: '00000000-0000-0000-0000-000000000c01', target_ID: '00000000-0000-0000-0000-000000000c01', kind: 'teaches' },
-      { ID: '00000000-0000-0000-0000-000000000e04', source_ID: '00000000-0000-0000-0000-000000000c02', target_ID: '00000000-0000-0000-0000-000000000c02', kind: 'teaches' },
+      // ConceptEdges.predicate (per db/knowledge-graph.cds:77), status='ACTIVE' default.
+      // extractedAt is on the edge (NOT on Concepts) — that's the source for MAX in the handler.
+      { ID: '00000000-0000-0000-0000-000000000e01', source_ID: '00000000-0000-0000-0000-000000000c01', target_ID: '00000000-0000-0000-0000-000000000c02', predicate: 'relatedTo', status: 'ACTIVE', extractedAt: '2026-06-28T03:17:42.000Z' },
+      { ID: '00000000-0000-0000-0000-000000000e02', source_ID: '00000000-0000-0000-0000-000000000c02', target_ID: '00000000-0000-0000-0000-000000000c01', predicate: 'requires',  status: 'ACTIVE', extractedAt: '2026-06-27T03:17:42.000Z' },
+      { ID: '00000000-0000-0000-0000-000000000e03', source_ID: '00000000-0000-0000-0000-000000000c01', target_ID: '00000000-0000-0000-0000-000000000c01', predicate: 'teaches',   status: 'ACTIVE', extractedAt: '2026-06-26T03:17:42.000Z' },
+      { ID: '00000000-0000-0000-0000-000000000e04', source_ID: '00000000-0000-0000-0000-000000000c02', target_ID: '00000000-0000-0000-0000-000000000c02', predicate: 'teaches',   status: 'VETOED', extractedAt: '2026-06-25T03:17:42.000Z' }, // vetoed — excluded
     ]);
     await INSERT.into(Missions).entries([
-      { ID: '00000000-0000-0000-0000-000000000m01', slug: 'm1', name: 'Mission 1', published: true },
-      { ID: '00000000-0000-0000-0000-000000000m02', slug: 'm2', name: 'Mission 2', published: true },
+      // Missions extends TaskBase (db/schema.cds:21) — required field is `title`, not `name`.
+      { ID: '00000000-0000-0000-0000-000000000m01', slug: 'm1', title: 'Mission 1', published: true, missionType: 'SEQUENTIAL' },
+      { ID: '00000000-0000-0000-0000-000000000m02', slug: 'm2', title: 'Mission 2', published: true, missionType: 'SET' },
     ]);
     await INSERT.into(Groups).entries([
-      { ID: '00000000-0000-0000-0000-000000000g01', slug: 'g1', name: 'Group 1' },
+      // Groups also extends TaskBase — required field is `title`.
+      { ID: '00000000-0000-0000-0000-000000000g01', slug: 'g1', title: 'Group 1' },
     ]);
   });
 
@@ -158,10 +165,10 @@ describe('GET /build/kg-stats', () => {
     expect(status).toBe(200);
     expect(data).toEqual({
       tutorials: 3,
-      concepts: 2,          // draft excluded
-      relationships: 4,
+      concepts: 2,          // ACTIVE + publishedAt NOT NULL (excludes 'unpub' AND 'merged')
+      relationships: 3,     // ACTIVE only (excludes the VETOED edge)
       missionsAndGroups: 3, // 2 missions + 1 group
-      lastExtractedAt: '2026-06-28T03:17:42.000Z', // MAX over PUBLISHED concepts
+      lastExtractedAt: '2026-06-28T03:17:42.000Z', // MAX over ACTIVE ConceptEdges.extractedAt
       generatedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
     });
     expect(headers['cache-control']).toMatch(/public/);
@@ -270,14 +277,31 @@ async function computePayload() {
     cds.entities('com.sap.developers.ims');
 
   // Four COUNT queries + one MAX. Run in parallel — they're independent.
+  // Concepts: status='ACTIVE' AND publishedAt IS NOT NULL is the documented
+  // public-published gate (db/knowledge-graph.cds:36-39).
+  // ConceptEdges: only ACTIVE edges count; VETOED edges are admin-suppressed.
+  // lastExtractedAt comes from ConceptEdges.extractedAt — Concepts itself
+  // has firstSeenAt/lastSeenAt/publishedAt but NOT extractedAt.
   const [tutCount, conCount, edgeCount, misCount, grpCount, maxExtracted] =
     await Promise.all([
       db.run(SELECT.from(Tutorials).columns('count(*) as n')),
-      db.run(SELECT.from(Concepts).where({ status: 'PUBLISHED' }).columns('count(*) as n')),
-      db.run(SELECT.from(ConceptEdges).columns('count(*) as n')),
+      db.run(
+        SELECT.from(Concepts)
+          .where({ status: 'ACTIVE', publishedAt: { '!=': null } })
+          .columns('count(*) as n')
+      ),
+      db.run(
+        SELECT.from(ConceptEdges)
+          .where({ status: 'ACTIVE' })
+          .columns('count(*) as n')
+      ),
       db.run(SELECT.from(Missions).columns('count(*) as n')),
       db.run(SELECT.from(Groups).columns('count(*) as n')),
-      db.run(SELECT.from(Concepts).where({ status: 'PUBLISHED' }).columns('max(extractedAt) as t')),
+      db.run(
+        SELECT.from(ConceptEdges)
+          .where({ status: 'ACTIVE' })
+          .columns('max(extractedAt) as t')
+      ),
     ]);
 
   return {
@@ -615,8 +639,7 @@ function animateTo(target: number, setter: (v: number) => void, durationMs: numb
 }
 
 onMounted(async () => {
-  const prefersReducedMotion = window.matchMedia?.('(prefers-color-scheme: reduce)')?.matches
-    || window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+  const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
   try {
     const res = await fetch('/build/kg-stats');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1643,13 +1666,14 @@ You're looking for the block around line 742 where `params.get('joule') === 'ope
 
 - [ ] **Step 2: Extend the block**
 
-Replace the auto-open block with one that also reads `joule_prompt`:
+Replace the auto-open block with one that also reads `joule_prompt`. Note that `_openImpl` already accepts an `opts` object with an `autoSendText` string field (see [hugo/static/js/joule.js:587-590](../../../hugo/static/js/joule.js#L587-L590) — `if (opts && typeof opts.autoSendText === 'string' && opts.autoSendText.length > 0) { send(opts.autoSendText); return; }`). Pass an object, NOT a bare string:
 
 ```js
 // Auto-open after login redirect: _openImpl() appends ?joule=open to returnTo,
 // so when XSUAA bounces the user back here, we re-enter the panel.
 // Also: ?joule_prompt=<text> opens Joule with a pre-filled prompt (used by
-// /explore/about/ #751).
+// /explore/about/ #751). _openImpl's existing opts.autoSendText path skips
+// the hero/starters and sends the prompt immediately.
 const params = new URLSearchParams(location.search);
 if (params.get('joule') === 'open') {
   const prefillPrompt = params.get('joule_prompt') || null;
@@ -1658,9 +1682,7 @@ if (params.get('joule') === 'open') {
   const cleaned = params.toString();
   history.replaceState(null, '', location.pathname + (cleaned ? '?' + cleaned : '') + location.hash);
   if (prefillPrompt) {
-    // _openImpl accepts an optional seeded prompt and skips the hero/starters
-    // (see the existing `window.joule._pendingOpen` handling just below).
-    _openImpl(prefillPrompt);
+    _openImpl({ autoSendText: prefillPrompt });
   } else {
     _openImpl();
   }
@@ -1669,9 +1691,7 @@ if (params.get('joule') === 'open') {
 
 - [ ] **Step 3: Verify locally**
 
-Reload `/explore/about/`. Click the Joule surface card's "Ask Joule →" link. Joule should open with the pre-filled prompt "Find the shortest learning path between two tutorials" auto-sent.
-
-(If the card link works locally but the auto-send doesn't happen, the `_openImpl` function's seeded-prompt path needs a quick look — search for `_openImpl` definition; it already accepts an optional prompt argument per the surrounding code's "skip hero/starters and send the seeded prompt immediately" comment near line 587.)
+Reload `/explore/about/`. Click the Joule surface card's "Ask Joule →" link. Joule should open AND immediately send the pre-filled prompt "Find the shortest learning path between two tutorials" — you'll see the transcript appear with the user message at the top, no hero/starter cards.
 
 - [ ] **Step 4: Commit**
 
