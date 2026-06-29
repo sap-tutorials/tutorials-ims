@@ -3,6 +3,20 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { CatalogTutorialMeta, CategoryMeta, Mission, MissionHierarchy, StandaloneGroup } from './types.js'
 
+/**
+ * Shape of one entry in /build/catalog's `featured` array. Matches the
+ * server-side `resolveFeatured()` output in srv/lib/build-catalog.js.
+ * Top-6 by FeaturedTasks.featuredOrder, resolved across mission/group/
+ * tutorial taskTypes. Consumed by scripts/fetch-tutorials.ts to curate
+ * the homepage hp-teaser band (issue #739).
+ */
+export interface BrowseFeaturedEntry {
+  type: 'mission' | 'group' | 'tutorial'
+  slug: string
+  title: string
+  description: string
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const CACHE_FILE = join(__dirname, '..', '..', '.tutorial-cache', 'cap-catalog.json')
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
@@ -14,6 +28,7 @@ interface CapCacheData {
   standaloneGroups?: StandaloneGroup[]     // optional — older caches won't have it
   categories?: CategoryMeta[]              // optional — older caches won't have it
   tutorialMetas?: CatalogTutorialMeta[]    // optional — older caches won't have it
+  featured?: BrowseFeaturedEntry[]         // optional — pre-#739 caches won't have it
 }
 
 export function loadCapCache(): CapCacheData | null {
@@ -23,6 +38,7 @@ export function loadCapCache(): CapCacheData | null {
     if (Date.now() - data.timestamp > CACHE_TTL_MS) return null
     // Treat caches missing the new field as stale to force refetch.
     if (!Array.isArray(data.standaloneGroups)) return null
+    if (!Array.isArray(data.featured)) return null
     return data
   } catch {
     return null
@@ -35,9 +51,10 @@ export function saveCapCache(
   standaloneGroups: StandaloneGroup[],
   categories: CategoryMeta[] = [],
   tutorialMetas: CatalogTutorialMeta[] = [],
+  featured: BrowseFeaturedEntry[] = [],
 ): void {
   mkdirSync(dirname(CACHE_FILE), { recursive: true })
-  const data: CapCacheData = { timestamp: Date.now(), missions, hierarchies, standaloneGroups, categories, tutorialMetas }
+  const data: CapCacheData = { timestamp: Date.now(), missions, hierarchies, standaloneGroups, categories, tutorialMetas, featured }
   writeFileSync(CACHE_FILE, JSON.stringify(data, null, 2), 'utf-8')
 }
 
@@ -47,6 +64,7 @@ export async function fetchBuildCatalog(baseUrl: string): Promise<{
   standaloneGroups: StandaloneGroup[]
   categories: CategoryMeta[]
   tutorialMetas: CatalogTutorialMeta[]
+  featured: BrowseFeaturedEntry[]
 }> {
   const url = `${baseUrl}/build/catalog`
   const res = await fetch(url, {
@@ -63,6 +81,7 @@ export async function fetchBuildCatalog(baseUrl: string): Promise<{
     standaloneGroups?: StandaloneGroup[]
     categories?: CategoryMeta[]
     tutorials?: Array<{ slug: string; categorySlugs?: string[] }>
+    featured?: BrowseFeaturedEntry[]
   }
   const tutorialMetas: CatalogTutorialMeta[] = (data.tutorials ?? []).map(t => ({
     slug: t.slug,
@@ -74,6 +93,7 @@ export async function fetchBuildCatalog(baseUrl: string): Promise<{
     standaloneGroups: data.standaloneGroups ?? [],
     categories: data.categories ?? [],
     tutorialMetas,
+    featured: data.featured ?? [],
   }
 }
 
