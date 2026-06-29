@@ -235,15 +235,19 @@ Expected: shows a block with entries like `{ text: 'Authentication and authoriza
 
 - [ ] **Step 2: Add the playbook entry**
 
-The architecture items are alphabetized by `text`. Locate the closest neighbor — `Scaling playbook` should sit between whatever comes alphabetically before and after it. Most likely position: between `'Joule aurora background'` (line ~128) and the next item.
+The architecture items are alphabetized by `text`. Find the correct alphabetical neighbor first:
 
-Insert (with the same indentation as siblings):
+```bash
+grep -n "developers/architecture" docs/.vitepress/config.ts
+```
+
+This lists all architecture-section entries. `Scaling playbook` starts with "S" — locate the alphabetically-adjacent entries (likely between something like `'Joule …'` / `'Knowledge graph …'` and whatever sorts after "S…").
+
+Insert (with the same indentation as siblings — match the existing column alignment of `link:` if there's a column-align convention):
 
 ```ts
           { text: 'Scaling playbook',                link: '/developers/architecture/scaling-playbook' },
 ```
-
-Match the existing column alignment of `link:` if there's a column-align convention in the file (the surrounding lines use a fixed column for `link:`).
 
 - [ ] **Step 3: Verify the sidebar guard passes**
 
@@ -554,7 +558,7 @@ A future refactor could extract via mtaext; out of scope here."
 
 ---
 
-## Task 6: Verify CI green
+## Task 6: Push, create PR, verify CI green
 
 **Files:** none
 
@@ -702,9 +706,12 @@ test -n "$GITHUB_DISPATCH_TOKEN" || { echo "ERROR: GITHUB_DISPATCH_TOKEN not set
 envsubst '$CONTENT_API_KEY $REBUILD_API_KEY $APPROUTER_URL $GITHUB_DISPATCH_TOKEN' \
   < deploy/dev.mtaext > deploy/dev.resolved.mtaext
 
-grep -E '\$\{?[A-Z_]+\}?' deploy/dev.resolved.mtaext && \
-  { echo "ERROR: unresolved placeholder"; exit 1; } || \
+if grep -qE '\$\{?[A-Z_]+\}?' deploy/dev.resolved.mtaext; then
+  echo "ERROR: unresolved placeholder"
+  exit 1
+else
   echo "OK: all placeholders resolved"
+fi
 ```
 
 - [ ] **Step 6: Build + deploy**
