@@ -6,7 +6,7 @@ import { stringify as yamlStringify } from 'yaml'
 import { flushDimensionsCache, populateImageDimensions, exportDimensionsForHugo } from './parsers/image-dimensions.js'
 import { composeTutorial } from './parsers/compose.js'
 import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, EXCLUDED_REPOS, type DiscoveredTutorial } from './parsers/github.js'
-import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache } from './parsers/cap.js'
+import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache, type BrowseFeaturedEntry } from './parsers/cap.js'
 import { parseRulesVrEnriched, collectAiGradedSpecs } from './parsers/rules.js'
 import { expandAiAuthoredQuestions, populateAiAuthoredSiblingMaps, type ExpandStats } from './lib/expand-ai-authored.js'
 import { loadAiQuizCache, saveAiQuizCache } from './lib/ai-quiz-cache.js'
@@ -1259,7 +1259,7 @@ async function main() {
 const HUGO_DATA_DIR = join(__dirname, '..', 'hugo', 'data')
 const BROWSE_DATA_FILE = join(HUGO_DATA_DIR, 'browse.json')
 
-const FEATURED_MAX = 10
+export const FEATURED_MAX = 10
 const RECENT_MAX = 10
 const BROWSE_NEW_WINDOW_MS = 31 * 24 * 60 * 60 * 1000
 
@@ -1278,9 +1278,51 @@ export const EVENT_MISSION_RE = /(Devtoberfest\s*\d{4}|App\s*Space|TechEd\s*\d{4
 export function isFeaturedMissionCandidate(title: string): boolean {
   return !EVENT_MISSION_RE.test(title)
 }
+
+/**
+ * Pick the homepage hp-teaser band's mission slugs (issue #739).
+ *
+ * Two-path picker:
+ *   1. If `catalogFeatured` contains any type==='mission' entries, return
+ *      their slugs in order (already sorted by FeaturedTasks.featuredOrder
+ *      by the server-side query), trimmed to FEATURED_MAX. This is the
+ *      "explicit curation wins" semantic — admins setting exactly 3 missions
+ *      get exactly 3 cards on the homepage, NOT padded by the fallback.
+ *   2. Otherwise (curated set empty or only TUTORIAL/GROUP entries), fall
+ *      back to the catalog-order picker with the EVENT_MISSION_RE sieve
+ *      applied (PR #738's behavior, preserved for pre-curation states).
+ *
+ * Defensively drops any curated slug that doesn't resolve to a card in
+ * `all[]` — guards against the rare case where resolveFeatured() emitted
+ * a slug that didn't survive buildAllCards()'s downstream filtering
+ * (e.g. unpublished mission).
+ *
+ * Exported for unit testing.
+ */
+export function pickFeaturedMissions(
+  catalogFeatured: BrowseFeaturedEntry[],
+  all: BrowseCardItem[],
+): string[] {
+  const allMissionSlugs = new Set(
+    all.filter(c => c.type === 'mission').map(c => c.id),
+  )
+  const curatedMissionSlugs = catalogFeatured
+    .filter(f => f.type === 'mission')
+    .map(f => f.slug)
+    .filter(slug => allMissionSlugs.has(slug))
+
+  if (curatedMissionSlugs.length > 0) {
+    return curatedMissionSlugs.slice(0, FEATURED_MAX)
+  }
+  // No curation — fall back to the regex-sieved catalog-order top FEATURED_MAX.
+  return all
+    .filter(c => c.type === 'mission' && isFeaturedMissionCandidate(c.title))
+    .slice(0, FEATURED_MAX)
+    .map(c => c.id)
+}
 const BROWSE_LEVEL_ORDER: Record<string, number> = { beginner: 0, intermediate: 1, advanced: 2 }
 
-interface BrowseCardItem {
+export interface BrowseCardItem {
   type: 'mission' | 'group' | 'tutorial'
   id: string
   title: string
