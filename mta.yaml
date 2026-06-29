@@ -194,6 +194,7 @@ modules:
       disk-quota: 2048M
       memory: 512M
       app-name: tutorials-approuter
+      instances: 1                  # Lower bound; Autoscaler manages up to instance_max_count via binding-level config in requires below (#749)
     properties:
       XS_APP_LOG_LEVEL: info
       # Bearer-token gate for POST /admin/rebuild (approuter/server.js:230 →
@@ -227,6 +228,28 @@ modules:
           name: srv-qa-api
           url: ~{srv-url}
           forwardAuthToken: true
+      # CF Autoscaler binding (#749 phase-1). Policy is inlined here per
+      # SAP BTP convention — putting it on the resource block via path: is
+      # silently ignored. Range 1..4, CPU 70% / 30% thresholds. Memory metric
+      # not included — approuter is CPU-bound. See scaling-playbook.md row #1.
+      - name: tutorials-autoscaler
+        parameters:
+          config:
+            instance_min_count: 1
+            instance_max_count: 4
+            scaling_rules:
+              - metric_type: cpu
+                threshold: 70
+                operator: ">="
+                adjustment: "+1"
+                breach_duration_secs: 120
+                cool_down_secs: 180
+              - metric_type: cpu
+                threshold: 30
+                operator: "<"
+                adjustment: "-1"
+                breach_duration_secs: 300
+                cool_down_secs: 300
 
 resources:
   - name: tutorials-hana
@@ -308,3 +331,14 @@ resources:
       service-name: tutorials-credstore
       config:
         authentication: basic
+
+  # CF Application Autoscaler (#749 phase-1). Binds to tutorials-approuter
+  # with policy inlined at the requires block above. The resource declares
+  # ONLY service + plan; policy lives at the binding level. Pre-deploy guard:
+  # `cf marketplace | grep -iE 'autoscaler'` must return ≥1 plan.
+  - name: tutorials-autoscaler
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: autoscaler
+      service-plan: standard
+      service-name: tutorials-autoscaler
