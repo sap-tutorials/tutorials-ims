@@ -75,8 +75,9 @@ entity HomepageConfig : cuid, managed {
 }
 
 // (#759) Per-verb explainer content. Cardinality is fixed (6 rows, one
-// per HomepageVerb enum value). CRUD lockdown in admin UI prevents
-// row creation/deletion; only content fields are mutable. Spec §2.2.
+// per HomepageVerb enum value). The admin Fiori app (PR 3) hides
+// Create/Delete actions and renders verbKey read-only; the DB schema
+// itself is open and admin-mutable. Spec §2.2.
 @assert.unique.verbKey: [verbKey]
 entity VerbDefinitions : cuid, managed {
   verbKey         : HomepageVerb @mandatory @assert.range;
@@ -91,7 +92,8 @@ entity VerbDefinitions : cuid, managed {
 // (#759) Per-shelf-category explainer content. Cardinality is fixed
 // (4 rows, one per HomepageShelf enum value). Content is shared across
 // all 6 verb sub-pages — REFERENCE means the same thing on /learn/ and
-// /operate/. Spec §2.3.
+// /operate/. The admin Fiori app (PR 3) enforces the fixed cardinality;
+// the DB schema itself is open. Spec §2.3.
 @assert.unique.shelfKey: [shelfKey]
 entity ShelfDefinitions : cuid, managed {
   shelfKey        : HomepageShelf @mandatory @assert.range;
