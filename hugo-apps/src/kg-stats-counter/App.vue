@@ -12,7 +12,6 @@ interface KgStats {
 }
 
 const state = ref<'loading' | 'ready' | 'error'>('loading');
-const stats = ref<KgStats | null>(null);
 // Displayed values (drive the count-up animation).
 const displayTutorials = ref(0);
 const displayConcepts = ref(0);
@@ -42,25 +41,18 @@ onMounted(async () => {
     const res = await fetch('/build/kg-stats');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = (await res.json()) as KgStats;
-    stats.value = data;
     state.value = 'ready';
     if (prefersReducedMotion) {
       displayTutorials.value = data.tutorials;
       displayConcepts.value = data.concepts;
       displayRelationships.value = data.relationships;
     } else {
-      // Set final values synchronously so test environments (and no-rAF contexts)
-      // see the correct counts immediately. The rAF animation loop below then runs
-      // from 0 → target for browsers that support it; the first rAF frame fires
-      // before the browser paints so there is no visible flash.
-      displayTutorials.value = data.tutorials;
-      displayConcepts.value = data.concepts;
-      displayRelationships.value = data.relationships;
       animateTo(data.tutorials,    v => (displayTutorials.value    = v), 600);
       animateTo(data.concepts,     v => (displayConcepts.value     = v), 600);
       animateTo(data.relationships,v => (displayRelationships.value= v), 600);
     }
-  } catch {
+  } catch (err) {
+    console.warn('[kg-stats-counter] fetch failed:', err);
     state.value = 'error';
   }
 });

@@ -23,6 +23,14 @@ describe('KgStatsCounter', () => {
       writable: true,
       value: vi.fn().mockReturnValue({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
     });
+    // Drive rAF synchronously so animation completes within flushPromises().
+    // (happy-dom doesn't auto-fire rAF.)
+    // Use one-shot variant: fire callback with start + 700ms so t >= 1 immediately,
+    // avoiding a recursive tight-loop that would exhaust the call stack.
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      cb(performance.now() + 700);
+      return 0;
+    });
   });
 
   afterEach(() => { vi.restoreAllMocks(); });
@@ -64,11 +72,13 @@ describe('KgStatsCounter', () => {
       tutorials: 100, concepts: 50, relationships: 200,
       missionsAndGroups: 10, lastExtractedAt: null, generatedAt: new Date().toISOString(),
     }));
+    const rafSpy = vi.spyOn(window, 'requestAnimationFrame');
     const wrapper = mount(App);
     await flushPromises();
     // The final value should be present immediately (no count-up).
     expect(wrapper.text()).toContain('100');
     expect(wrapper.text()).toContain('50');
     expect(wrapper.text()).toContain('200');
+    expect(rafSpy).not.toHaveBeenCalled(); // confirm animation was skipped
   });
 });
