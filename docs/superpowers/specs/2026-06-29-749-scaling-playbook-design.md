@@ -37,7 +37,7 @@ The doc is the long-lived artifact — future scaling PRs each crack off one row
 
 The phase-1 PR is intentionally tiny: deploy-config only, zero code risk, single deploy-time entitlement check. The playbook documents the rest so subsequent PRs have a known shape and don't need to re-derive the analysis.
 
-The 12 playbook constraints fall into three buckets:
+The 15 playbook constraints fall into three buckets:
 
 - **Already scales** (no work) — sequence generators, Hugo build pipeline, AppRouter sessions after this PR.
 - **Bounded effort, well-understood fix** — rate limiters, cron separation, content publish race, HANA pool tuning.
@@ -149,13 +149,15 @@ No runtime data-flow change. The build-time flow:
 ```
 mta.yaml (and .deploy/mta.yaml)
   └── declares tutorials-autoscaler managed-service resource
-       with path: ./deploy/autoscaler-policy.json
+       (just service: autoscaler / service-plan: standard)
+  └── declares the policy inline under tutorials-approuter's
+       requires[*].parameters.config block
   ↓
-mbt build packages deploy/autoscaler-policy.json into the MTAR slice
+mbt build embeds both into the MTA descriptor (no separate JSON file)
   ↓
 cf deploy creates/updates the tutorials-autoscaler service instance
   └── service binds to tutorials-approuter
-       └── Autoscaler reads policy → applies scaling rules
+       └── Autoscaler reads the binding-time config → applies scaling rules
 ```
 
 At runtime: AppRouter instances behave identically to today. The only observable difference is CF spawning additional instances under sustained CPU load, then reaping them after CPU drops.
@@ -166,9 +168,9 @@ At runtime: AppRouter instances behave identically to today. The only observable
 
 Deploy fails at MTA validation. Pre-deploy guard: `cf marketplace -e autoscaler` must return at least one plan offering. If not entitled, surface the gap to the BTP admin team and fall back to `instances: 1` static (revert this PR).
 
-### 4.2 Policy JSON malformed
+### 4.2 Policy YAML malformed
 
-The Autoscaler service rejects on bind; deploy errors. Local guard: a `node -e "JSON.parse(require('fs').readFileSync('deploy/autoscaler-policy.json'))"` step in the build pipeline catches syntax errors before deploy.
+The Autoscaler service rejects on bind; deploy errors. `mbt build` validates the MTA descriptor's YAML syntax. The `config:` block under `requires[*].parameters` is part of the descriptor — no separate JSON file to validate.
 
 ### 4.3 Stuck-scaling-up loop
 
@@ -194,8 +196,8 @@ CF restarts the failing instance automatically; healthy instances continue servi
 
 ### 5.3 Pre-deploy validation
 
-- `cf marketplace -e autoscaler` returns ≥1 plan.
-- `node -e "JSON.parse(require('fs').readFileSync('deploy/autoscaler-policy.json'))"` succeeds.
+- `cf marketplace | grep -iE 'autoscaler'` returns ≥1 plan (confirms service name + entitlement). Use whichever name appears (`autoscaler` or `application-autoscaler`) in the resource block.
+- `mbt build` succeeds — validates the inline policy block's YAML syntax as part of descriptor parsing.
 
 ### 5.4 Post-deploy verification
 
