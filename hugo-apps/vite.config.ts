@@ -12,6 +12,7 @@ const MAX_ADVOCATES_GZIP = 30 * 1024;
 const MAX_ADVOCATE_PROFILE_GZIP = 25 * 1024;
 const MAX_RELATED_GRAPH_GZIP = 12 * 1024;
 const MAX_ALERTS_GZIP = 12 * 1024;
+const MAX_HOMEPAGE_EXPLAINERS_GZIP = 12 * 1024;
 
 function codeCheckBudget() {
   return {
@@ -139,6 +140,24 @@ function alertsBudget() {
   };
 }
 
+function homepageExplainersBudget() {
+  return {
+    name: 'homepage-explainers-budget',
+    generateBundle(_opts: unknown, bundle: Record<string, any>) {
+      const chunk = bundle['homepage-explainers.js'];
+      if (!chunk || chunk.type !== 'chunk') return;
+      const gz = gzipSync(chunk.code).length;
+      if (gz > MAX_HOMEPAGE_EXPLAINERS_GZIP) {
+        // @ts-ignore — Rollup plugin context
+        this.error(`homepage-explainers.js is ${gz} bytes gzipped (> ${MAX_HOMEPAGE_EXPLAINERS_GZIP}). Move code to a lazy chunk.`);
+      } else {
+        // @ts-ignore
+        this.warn(`homepage-explainers.js: ${gz} bytes gzipped (budget ${MAX_HOMEPAGE_EXPLAINERS_GZIP}).`);
+      }
+    }
+  };
+}
+
 function relatedGraphBudget() {
   return {
     name: 'related-graph-budget',
@@ -158,7 +177,7 @@ function relatedGraphBudget() {
 }
 
 export default defineConfig({
-  plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget(), codeCheckBudget(), validationBudget(), tutorialBranchesBudget(), advocatesBudget(), relatedGraphBudget(), alertsBudget(), advocateProfileBudget()],
+  plugins: [vue(), cssInjectedByJsPlugin({ relativeCSSInjection: true }), tutorialPrefsBudget(), codeCheckBudget(), validationBudget(), tutorialBranchesBudget(), advocatesBudget(), relatedGraphBudget(), alertsBudget(), homepageExplainersBudget(), advocateProfileBudget()],
   // Approuter serves these bundles at /js/. Without `base`, Vite emits
   // dynamic-import paths as `./chunks/x.js` which the browser resolves
   // against the *document URL* (e.g. `/` → `/chunks/x.js` → 404). Setting
