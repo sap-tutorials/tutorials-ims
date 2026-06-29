@@ -78,7 +78,8 @@
     "test:a11y": "vitest run --project a11y",
     "test:a11y:lighthouse": "lhci autorun --config=test/a11y/lighthouserc.json",
     "test:a11y:summary": "node test/a11y/summary.js",
-    "test:all": "cds bind --exec -- npx vitest run"
+    "test:all": "cds bind --exec -- npx vitest run",
+    "validate-api-docs-yaml": "node scripts/validate-api-docs-yaml.cjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.1",
@@ -138,6 +139,7 @@
     "@sap/cds": "^9.9.0",
     "@sap/xsenv": "^6.2.0",
     "@sap/xssec": "^4.13.0",
+    "ajv": "8.20.0",
     "archiver": "8.0.0",
     "cds-swagger-ui-express": "^0.11.0",
     "cheerio": "^1.2.0",
@@ -146,6 +148,7 @@
     "exceljs": "4.4.0",
     "hdb": "^2.27.1",
     "jose": "^5.10.0",
+    "js-yaml": "5.2.0",
     "markdown-it": "^14.1.1",
     "mermaid": "^11.15.0",
     "multer": "2.2.0",
