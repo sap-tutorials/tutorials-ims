@@ -85,6 +85,23 @@ describe('classifyRebuildMode', () => {
     expect(result.needsSlug).toBe(false);
     expect(result.needsSlugsByTag).toBe(false);
   });
+
+  describe('explainer entities (#759 PR 1)', () => {
+    it('VerbDefinitions write → catalog-only', () => {
+      const result = classifyRebuildMode('VerbDefinitions', 'crud');
+      expect(result.mode).toBe('catalog-only');
+      expect(result.forceCapRefetch).toBe(false);
+      expect(result.needsSlug).toBe(false);
+      expect(result.needsSlugsByTag).toBe(false);
+    });
+    it('ShelfDefinitions write → catalog-only', () => {
+      const result = classifyRebuildMode('ShelfDefinitions', 'crud');
+      expect(result.mode).toBe('catalog-only');
+      expect(result.forceCapRefetch).toBe(false);
+      expect(result.needsSlug).toBe(false);
+      expect(result.needsSlugsByTag).toBe(false);
+    });
+  });
 });
 
 describe('resolveSlugForEntity (pure paths)', () => {

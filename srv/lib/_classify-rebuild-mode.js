@@ -40,6 +40,12 @@ const CATALOG_ONLY_ENTITIES = new Set([
   'AdvocateTopics',
   'AdvocateLinks',
   'Concepts',
+  // #759: homepage explainer entities. Admin writes affect the baked
+  // hugo/data/*.json feeds served from /build/verb-definitions and
+  // /build/shelf-definitions, not slug-keyed tutorial HTML. catalog-only
+  // mode rebuilds the full set of /build/* feeds in ~1 min wall-clock.
+  'VerbDefinitions',
+  'ShelfDefinitions',
 ]);
 
 // Entities whose CRUD targets a specific tutorial. Re-fetch one markdown,
