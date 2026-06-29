@@ -133,7 +133,8 @@ export default defineConfig({
           { text: 'Categories classifier',            link: '/developers/architecture/categories-classifier' },
           { text: 'Developer Advocates',              link: '/developers/architecture/advocates' },
           { text: 'HANA KG Engine access',            link: '/developers/architecture/hana-kge-access' },
-          { text: 'Khoros community link',            link: '/developers/architecture/khoros-link' }
+          { text: 'Khoros community link',            link: '/developers/architecture/khoros-link' },
+          { text: 'Scaling playbook',                 link: '/developers/architecture/scaling-playbook' }
         ]},
         { text: 'Operations', items: [
           { text: 'A/B comparison runbook',    link: '/developers/operations/ab-comparison-runbook' },
