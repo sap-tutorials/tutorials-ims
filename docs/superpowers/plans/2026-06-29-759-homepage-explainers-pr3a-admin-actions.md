@@ -52,7 +52,7 @@ None — pure additive PR.
 | 1 | Spec §3.3 says actions return `{ processed, skipped, cost }` (cost as USD-cent string). Project has no precedent for cost reporting in action returns — `classifyCategories` returns `{ processed, succeeded, failed, skipped }`. | Match the spec exactly: return `{ processed, skipped, cost }` where `cost` is a string like `"$0.62"`. Add `succeeded` and `failed` counters internally for logging but don't expose them in the OData return type. | Spec was explicit. The user-facing "cost: \$X.XX" string in the success toast (PR 3b) is the load-bearing UX promise. |
 | 2 | Spec §3.4 says `generateExplainer` returns `{ tagline, whyItMatters, costCents }` from the AI Core SDK. Token-to-USD conversion has no precedent in runtime code. | Add a small `srv/lib/_token-cost.js` helper. Constants for per-1k-token prices (input + output) per model. Default model: `anthropic--claude-4.6-sonnet` (the project's current chat model). Rates as of 2026-06: \$3/1M input, \$15/1M output (round up to next cent). | The numbers live in code with a clear "edit me when rates change" comment. PR 3b's confirm dialog uses a hard-coded `1.5 cents/call` estimate per the spec; this lib gives actual post-call cost. |
 | 3 | Spec §3.3 says hard cap: 100 entries per call. Plan needs to enforce this server-side. | Validate at handler entry: if `ids.length > 100`, return HTTP 400 `{ error: 'CAP_EXCEEDED', limit: 100 }`. CAP's `req.reject(400, message)` is the idiomatic way. | Spec was explicit. Test pin in the action-handler unit test. |
-| 4 | Three system prompts as `.md` files vs. JS string constants. | `.md` files in `srv/lib/prompts/`. Imported at runtime via `readFileSync` (synchronous, once per process — these are <1KB each). Allows non-developer editing if needed; cleaner diffs. | Trivial to switch later if it causes deploy-time issues. The srv-qa cp-list audit needs these manually added (they're data files, not JS imports — the transitive-import walker won't find them). |
+| 4 | Three system prompts as `.md` files vs. JS string constants. | `.md` files in `srv/lib/prompts/`. Imported at runtime via `readFileSync` (synchronous, once per process — these are <1KB each). | Cleaner diffs when revising prompt tone (git history isolates "ship a better verb prompt" from any JS change). The srv-qa cp-list audit needs these manually added (they're data files, not JS imports — the transitive-import walker won't find them). |
 | 5 | Should the kill-switch env var be `AICORE_EXPLAINER_GENERATOR_DISABLED` (spec) or follow the project's existing `AI_AUTHOR_AICORE_SERVICE_KEY=empty` pattern? | Use a NEW dedicated env var `AICORE_EXPLAINER_GENERATOR_DISABLED=true` (spec). Don't reuse the AI_AUTHOR key because that controls #208 quizzes and we don't want one switch to affect both subsystems. | Spec was explicit. Tested in the orchestrator unit test (returns 503). |
 | 6 | Mode `fill-blanks` skips `AI_SEEDED` and `REVIEWED`; mode `regenerate-selected` operates on supplied ids regardless of status. The status transition table has subtleties. | Implement per the spec §3.3 status transition table. The "skipped" counter in the return value distinguishes "AI returned malformed output" (logged + skipped) from "status disqualified the row" (silent skip — not counted). Per-row outcome is logged at debug level for forensics. | The spec's `skipped` definition (AI failure) is the more useful one for the admin UI; the status-disqualified count is implicit (`ids.length` vs `processed` rows). |
 | 7 | The `regenerate-selected` mode operating on a `REVIEWED` row sets `authoringStatus = 'AI_SEEDED'` (overwriting the human-reviewed flag). | Match spec §3.3 transition table. The admin UI (PR 3b) shows a confirm dialog before invoking `regenerate-selected` on any REVIEWED row. Server-side, no extra guard — explicit caller intent overrides protection. | Per Decision 3 of the PR 1 plan + spec §3.3. Hybrid test pins this behavior. |
@@ -470,26 +470,24 @@ Create `srv/lib/_token-cost.js`:
 // (anthropic--claude-4.6-sonnet via SAP Generative AI Hub):
 //   input:  $3 per 1M tokens
 //   output: $15 per 1M tokens
-// Rates ARE different per model; if ChatSettings.modelName changes, update
-// the RATES map below. This is intentionally simple — a few-line update
-// when SAP changes pricing is preferable to a config-table indirection.
+// Rates ARE different per model; if a future PR runs explainer generation
+// on a different model, add it to the RATES map below. Single-model
+// today — no fallback indirection needed. Update when SAP pricing changes.
 
 const RATES = {
   'anthropic--claude-4.6-sonnet': { inputPerMillion: 3.00, outputPerMillion: 15.00 },
-  // Fallback when modelName is unknown — use the conservative (highest)
-  // rate so we never under-report cost.
-  '__default__':                   { inputPerMillion: 3.00, outputPerMillion: 15.00 },
 };
 
 /**
  * @param {object} usage
  * @param {number} usage.promptTokens
  * @param {number} usage.completionTokens
- * @param {string} [usage.modelName] - falls back to '__default__' rates
+ * @param {string} usage.modelName - must be present in RATES; throws if unknown
  * @returns {number} cost in cents, rounded UP to next integer cent
  */
 export function tokensToCents(usage) {
-  const rates = RATES[usage.modelName] ?? RATES.__default__;
+  const rates = RATES[usage.modelName];
+  if (!rates) throw new Error(`tokensToCents: no rates for model '${usage.modelName}'`);
   const inputCost  = (usage.promptTokens     / 1_000_000) * rates.inputPerMillion;
   const outputCost = (usage.completionTokens / 1_000_000) * rates.outputPerMillion;
   return Math.ceil((inputCost + outputCost) * 100);
@@ -618,8 +616,11 @@ export async function generateExplainer({ kind, row, context }) {
             max_tokens: MAX_TOKENS,
             temperature: TEMPERATURE,
             tool_choice: { type: 'function', function: { name: TOOL_NAME } },
-            tools: [TOOL_SPEC],
           },
+        },
+        prompt: {
+          template: [{ role: 'system', content: systemPrompt }],
+          tools: [TOOL_SPEC],
         },
       },
     },
@@ -630,8 +631,7 @@ export async function generateExplainer({ kind, row, context }) {
   try {
     response = await client.chatCompletion({
       messagesHistory: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user',   content: userMessage },
+        { role: 'user', content: userMessage },
       ],
     });
   } catch (err) {
@@ -1060,39 +1060,67 @@ git -c core.autocrlf=false commit -m "docs(#759): document AICORE_EXPLAINER_GENE
 
 **Files:**
 
-- Modify: `.deploy/mta.yaml` (the `tutorials-srv-qa` module's `cp` command)
+- Modify: `.deploy/mta.yaml` (the `tutorials-srv-qa` module's `cp` command, around line 125)
 
-### Step 1: Find the current srv-qa cp-list
+### Step 1: Read the current cp command
 
-```bash
-grep -n 'srv-qa\|cp.*srv/lib' .deploy/mta.yaml | head -20
-```
-
-Look for the `tutorials-srv-qa` module block; find the `cp` line that copies `srv/lib/*` files.
-
-### Step 2: Add the new files
-
-Edit `.deploy/mta.yaml`. Find the existing cp command (probably a long bash one-liner copying srv/lib/*.js files). Add:
-
-- `srv/lib/explainer-generator.js`
-- `srv/lib/_token-cost.js`
-- `srv/lib/prompts/explainer-verb.md`
-- `srv/lib/prompts/explainer-shelf.md`
-- `srv/lib/prompts/explainer-shelf-entry.md`
-
-**Note**: the prompts are `.md` files (data, not JS). The check-srv-qa-cp-list audit (existing unit test) walks transitive JS imports — it WILL find `srv/lib/_token-cost.js` (imported by `explainer-generator.js`) but it WILL NOT find the `.md` files. The mta.yaml manual addition is the only safety net.
-
-You may need to use `mkdir -p` to create `srv-qa/srv/lib/prompts/` before copying, depending on how the existing cp command is structured. Mirror the surrounding pattern exactly.
-
-### Step 3: Verify the audit test still passes (the JS files are tracked)
+The cp command is a single long `bash -c "..."` line near line 125 in `.deploy/mta.yaml`. Confirm it:
 
 ```bash
-npx vitest run test/unit/check-srv-qa-cp-list.test.js 2>&1 | tail -5
+sed -n '120,130p' .deploy/mta.yaml
 ```
 
-Expected: still passes. If it fails listing `explainer-generator.js` or `_token-cost.js` as missing, the mta.yaml addition wasn't picked up — re-check.
+Expected: a `bash -c "mkdir -p srv/jobs && mkdir -p srv/handlers && mkdir -p srv/lib/branch && mkdir -p srv/lib/runtime-config && cp ../../srv/lib/branch/... cp ../../srv/lib/runtime-config/... cp ../../srv/lib/credstore.js ../../srv/lib/secret-resolver.js ... srv/lib/ && cp ../../srv/handlers/... srv/handlers/ && cp ../../srv/jobs/... srv/jobs/"` shape.
 
-### Step 4: Commit
+### Step 2: Add three pieces to the cp command
+
+Three modifications:
+
+**(a)** Add a new `mkdir -p srv/lib/prompts` to the leading `mkdir` chain (or chain in front of the matching `cp` command):
+
+Find: `mkdir -p srv/jobs && mkdir -p srv/handlers && mkdir -p srv/lib/branch && mkdir -p srv/lib/runtime-config`
+
+Append: ` && mkdir -p srv/lib/prompts`
+
+So the chain becomes: `mkdir -p srv/jobs && mkdir -p srv/handlers && mkdir -p srv/lib/branch && mkdir -p srv/lib/runtime-config && mkdir -p srv/lib/prompts`
+
+**(b)** Append the two new `srv/lib/*.js` files to the existing big `cp ../../srv/lib/*.js ... srv/lib/` command. Find the substring `../../srv/lib/homepage-rss-fetcher.js srv/lib/` (the existing last file before the closing `srv/lib/`) and replace with `../../srv/lib/homepage-rss-fetcher.js ../../srv/lib/explainer-generator.js ../../srv/lib/_token-cost.js srv/lib/`.
+
+**(c)** Add a new `cp` clause for the prompts. After the existing `cp ../../srv/jobs/... srv/jobs/` clause, append: ` && cp ../../srv/lib/prompts/explainer-verb.md ../../srv/lib/prompts/explainer-shelf.md ../../srv/lib/prompts/explainer-shelf-entry.md srv/lib/prompts/`
+
+### Step 3: Verify the resulting cp command is syntactically intact
+
+```bash
+sed -n '125p' .deploy/mta.yaml | head -c 500
+```
+
+Expected: see the `mkdir -p srv/lib/prompts` in the chain, the two new .js paths in the main `cp`, and the new prompts `cp` clause at the end.
+
+The full resulting block is long. Sanity-check by counting: the original `cp` block has ~50 source files; the new one has ~52 source files (+2 .js) plus 3 .md files in a new clause.
+
+### Step 4: Run the cp-list audit test to confirm coverage
+
+```bash
+fd 'check-srv-qa' test/unit/ 2>&1 | head -3
+```
+
+Find the audit test (likely `test/unit/check-srv-qa-cp-list.test.js`). Run it:
+
+```bash
+npx vitest run test/unit/check-srv-qa-cp-list.test.js 2>&1 | tail -10
+```
+
+Expected: PASS. The audit walks `import` statements from `srv/lib/content-store.js` transitively and asserts every reached `.js` file appears in the mta.yaml cp-list. Both `explainer-generator.js` (imported by admin-service.js) and `_token-cost.js` (imported by explainer-generator.js) should be covered after Step 2(b).
+
+**Note**: the `.md` prompts are data files, not JS modules — the audit walker does NOT find them. They're invisible to this test. The mta.yaml manual addition in Step 2(c) is the only safety net; verify by:
+
+```bash
+grep -c 'explainer-verb.md\|explainer-shelf.md\|explainer-shelf-entry.md' .deploy/mta.yaml
+```
+
+Expected: 3 (one per prompt).
+
+### Step 5: Commit
 
 ```bash
 git add .deploy/mta.yaml
@@ -1100,17 +1128,19 @@ git -c core.autocrlf=false commit -m "build(#759): add explainer-generator + pro
 
 Per memory [srv-qa cp-list Transitive Deps], srv/lib/*.js files
 imported by content-store.js need explicit cp in .deploy/mta.yaml
-for the tutorials-srv-qa module. Adds:
+for the tutorials-srv-qa module. Adds three pieces:
 
-- srv/lib/explainer-generator.js
-- srv/lib/_token-cost.js (imported by explainer-generator)
-- srv/lib/prompts/explainer-verb.md
-- srv/lib/prompts/explainer-shelf.md
-- srv/lib/prompts/explainer-shelf-entry.md
+(a) mkdir -p srv/lib/prompts (new subdir)
+(b) explainer-generator.js + _token-cost.js added to the srv/lib/
+    cp clause (audited by test/unit/check-srv-qa-cp-list.test.js
+    via transitive-import walk)
+(c) explainer-verb.md + explainer-shelf.md + explainer-shelf-entry.md
+    added to a new srv/lib/prompts/ cp clause — these are data files
+    the audit walker does NOT find, so the mta.yaml is the only
+    safety net.
 
-The .md prompts are data files, not JS modules — the transitive-import
-walker in check-srv-qa-cp-list will not find them. They must stay in
-the mta.yaml manual list."
+Verified: check-srv-qa-cp-list.test.js passes (audited JS files);
+grep confirms the 3 .md files appear in the cp clause."
 ```
 
 ---
