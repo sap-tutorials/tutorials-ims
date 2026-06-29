@@ -60,7 +60,13 @@ export function registerJob({ jobName, schedule, ttlMs, description, fn }) {
 export async function runJobByName(jobName, opts = {}) {
   const job = JOB_REGISTRY.get(jobName);
   if (!job) throw new Error(`Unknown jobName: ${jobName}`);
-  return runWithLock(job.jobName, job.ttlMs, job.fn, opts);
+  // #747 (Phase 4.6): thread opts through to the cron fn as a second
+  // positional arg, while preserving logId as the first. The 4 logId
+  // crons declared `(logId) => fn(logId)` ignore the second arg silently
+  // (arrow-function arity is fixed at declaration). Zero-arg crons
+  // declared `() => fn()` ignore both. Phase 4.6's runFetchSamples
+  // consumes `opts` as its second positional.
+  return runWithLock(job.jobName, job.ttlMs, (logId) => job.fn(logId, opts), opts);
 }
 
 // Test seams (production code MUST NOT use these).
