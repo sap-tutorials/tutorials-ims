@@ -75,7 +75,7 @@ Without the QA build, `static/qa/` will be empty after `mbt build` and `/tutoria
 ```bash
 cd .deploy
 mbt build
-cf deploy mta_archives/tutorials-poc_1.0.0.mtar -e ../deploy/dev.mtaext
+cf deploy mta_archives/tutorials-ims_1.0.0.mtar -e ../deploy/dev.mtaext
 ```
 
 Both `tutorials-srv` and `tutorials-srv-qa` apps should be healthy; HDI containers `tutorials-hana` and `tutorials-hana-qa` deployed.

@@ -74,7 +74,7 @@ Validate via the boot log line: `[rebuild-trigger] active — admin writes will 
      < deploy/dev.mtaext > deploy/dev.resolved.mtaext
 
    cd .deploy && mbt build
-   cf deploy mta_archives/tutorials-poc_*.mtar -e ../deploy/dev.resolved.mtaext -f
+   cf deploy mta_archives/tutorials-ims_*.mtar -e ../deploy/dev.resolved.mtaext -f
    ```
 
    `deploy/*.resolved.mtaext` is gitignored — leave it on disk or `rm` after the deploy.

@@ -48,7 +48,7 @@ flowchart TB
     subgraph mta[MTA assembly]
         CdsBuild["cds build --production<br/>→ gen/srv, gen/srv-qa,<br/>gen/db, gen/db-qa"]
         ApprouterBuild["approuter build<br/>(copies hugo/public + qa<br/>+ admin-ui + analytics-ui<br/>+ scanner-ui into static/)"]
-        Mbt["mbt build<br/>→ mta_archives/<br/>tutorials-poc_*.mtar"]
+        Mbt["mbt build<br/>→ mta_archives/<br/>tutorials-ims_*.mtar"]
     end
 
     subgraph publish[Content publish]

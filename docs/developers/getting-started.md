@@ -160,7 +160,7 @@ When CI is broken or you need a quick iterative deploy, build and push from `.de
 cf target -s <dev-space>
 cd .deploy
 mbt build
-cf deploy mta_archives/tutorials-poc_1.0.0.mtar -e ../deploy/dev.mtaext -f
+cf deploy mta_archives/tutorials-ims_1.0.0.mtar -e ../deploy/dev.mtaext -f
 ```
 
 ### Optional env vars
