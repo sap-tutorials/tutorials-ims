@@ -368,6 +368,21 @@ export function registerJobs() {
     });
   });
 
+  // Sunday + Wednesday at 03:11 — Phase 4.4 YouTube Videos extraction (#447).
+  // Off-minute (:11) per cron-collision-avoidance convention (well-separated
+  // from :07 discovery, :13 journey, :23 blog crons). Twice-weekly cadence
+  // catches Developer News + Tech Bytes within 3 days of publish. Operator
+  // must run scripts/seed-videos.cjs once first; the cron refuses to
+  // self-bootstrap on an empty Videos table (MAX-or-abort gate).
+  // 30-min TTL covers a steady-state pass of ~10 new videos. Lazy-import
+  // keeps boot fast.
+  cron.schedule('11 3 * * 0,3', async () => {
+    await runWithLock('fetch-videos', 30 * 60 * 1000, async () => {
+      const { runFetchVideos } = await import('./fetch-videos-job.js');
+      return runFetchVideos();
+    });
+  });
+
   // Weekly Sunday at 04:07 — Phase 4 cross-type GC.
   // Prunes content rows past lastSeenAt + 2×TTL when not pinned. Cascade-deletes
   // link entity rows via CDS Compositions on the parent entity, plus an explicit
