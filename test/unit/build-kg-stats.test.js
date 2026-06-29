@@ -1,11 +1,13 @@
 // test/unit/build-kg-stats.test.js
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import cds from '@sap/cds';
+import { _resetKgStatsCache } from '../../srv/routes/kg-stats.js';
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
 
 describe('GET /build/kg-stats', () => {
   beforeEach(async () => {
+    _resetKgStatsCache();
     const { Tutorials, Concepts, ConceptEdges, Missions, Groups } =
       cds.entities('com.sap.developers.ims');
     // Wipe everything the handler reads.

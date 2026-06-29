@@ -19,6 +19,7 @@ import { myProgressHandler } from './lib/my-progress-handler.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
 import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, sourceHashesHandler, navHandler, rollbackHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler } from './lib/content-store.js';
 import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-catalog.js';
+import { kgStatsHandler } from './routes/kg-stats.js';
 import * as advocatesPublic from './routes/advocates-public.js';
 import * as devtoberfestPublic from './routes/devtoberfest-public.js';
 import * as devtoberfestAuth from './routes/devtoberfest-auth.js';
@@ -184,6 +185,7 @@ cds.on('bootstrap', (app) => {
   app.get('/api/recommendations', recommendationsHandler);
   app.get('/api/branches/decide', decideHandler);
   app.get('/build/catalog', buildCatalogHandler);
+  app.get('/build/kg-stats', kgStatsHandler);
   app.get('/build/concepts', buildConceptsHandler);
   app.get('/graph/explore-data', exploreDataHandler);
   app.get('/graph/path', graphPathHandler);
