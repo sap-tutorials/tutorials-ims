@@ -92,6 +92,7 @@ export const KG_IRI_PREFIXES = Object.freeze({
   'discovery-mission': `${KG}discovery-mission/`,
   'video': `${KG}video/`,
   'api-doc': `${KG}api-doc/`,
+  'sample': `${KG}sample/`,           // Phase 4.6 (#747)
 });
 
 /**
@@ -138,6 +139,20 @@ export function iriVideo(slug) {
  */
 export function iriApiDoc(slug) {
   return `${KG_IRI_PREFIXES['api-doc']}${iriEscapeSegment(slug)}`;
+}
+
+/**
+ * Phase 4.6 (#747): IRI helper for code-sample content. Emission is
+ * deferred to Phase 4.6 Task 2 — the helper is registered now so the
+ * lockstep test and projection downstream wiring stay in sync.
+ *
+ * Slug is escaped per iriEscapeSegment to handle unusual GitHub
+ * org/repo formats (canonicalization in srv/lib/sap-samples-fetcher.js
+ * lowercases and replaces non-[a-z0-9_] chars with underscore;
+ * iriEscapeSegment is defense-in-depth).
+ */
+export function iriSample(slug) {
+  return `${KG_IRI_PREFIXES['sample']}${iriEscapeSegment(slug)}`;
 }
 
 /**

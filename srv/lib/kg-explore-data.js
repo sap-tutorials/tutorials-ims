@@ -47,6 +47,7 @@ export const SHORT_BY_TYPE = Object.freeze({
   'discovery-mission': 'dm',  // Phase 4.3 (#447).
   'video': 'vd',  // Phase 4.4 (#447).
   'api-doc': 'ad',  // Phase 4.5 (#746).
+  'sample': 'sa',  // Phase 4.6 (#747).
 });
 
 // IRI tail-segment → (entity type, short node-id prefix). Derived from
