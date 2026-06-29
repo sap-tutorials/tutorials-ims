@@ -6,7 +6,7 @@ import { stringify as yamlStringify } from 'yaml'
 import { flushDimensionsCache, populateImageDimensions, exportDimensionsForHugo } from './parsers/image-dimensions.js'
 import { composeTutorial } from './parsers/compose.js'
 import { discoverAllTutorials, fetchGitHubMetaBatch, fetchGitHubMeta, fetchRulesVr, fetchWithRetry, uploadDiscoveryToHana, saveDiscoveryBaseline, EXCLUDED_REPOS, type DiscoveredTutorial } from './parsers/github.js'
-import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache } from './parsers/cap.js'
+import { fetchBuildCatalog, fetchCoCompletions, loadCapCache, saveCapCache, type BrowseFeaturedEntry } from './parsers/cap.js'
 import { parseRulesVrEnriched, collectAiGradedSpecs } from './parsers/rules.js'
 import { expandAiAuthoredQuestions, populateAiAuthoredSiblingMaps, type ExpandStats } from './lib/expand-ai-authored.js'
 import { loadAiQuizCache, saveAiQuizCache } from './lib/ai-quiz-cache.js'
@@ -964,6 +964,7 @@ async function main() {
   let standaloneGroups: StandaloneGroup[] = []
   let categories: CategoryMeta[] = []
   let tutorialMetas: CatalogTutorialMeta[] = []
+  let featured: BrowseFeaturedEntry[] = []
   let capCacheUsed = false
   let coCompletions: Map<string, Map<string, number>> = new Map()
 
@@ -976,6 +977,7 @@ async function main() {
     standaloneGroups = cached.standaloneGroups ?? []
     categories = cached.categories ?? []
     tutorialMetas = cached.tutorialMetas ?? []
+    featured = cached.featured ?? []
     capCacheUsed = true
     console.log(`  [cap] Using cached data (${missions.length} missions, ${standaloneGroups.length} standalone groups)`)
   } else {
@@ -987,7 +989,8 @@ async function main() {
       standaloneGroups = catalog.standaloneGroups
       categories = catalog.categories
       tutorialMetas = catalog.tutorialMetas
-      saveCapCache(missions, hierarchies, standaloneGroups, categories, tutorialMetas)
+      featured = catalog.featured
+      saveCapCache(missions, hierarchies, standaloneGroups, categories, tutorialMetas, featured)
       console.log(`  [cap] Fetched ${missions.length} missions, ${standaloneGroups.length} standalone groups`)
       coCompletions = await fetchCoCompletions(capBaseUrl)
       console.log(`  [cap] co-completion map: ${coCompletions.size} source slugs`)
@@ -1155,7 +1158,7 @@ async function main() {
   // ship an empty rail file from a deliberately-degraded build.
   if (missions.length > 0) {
     try {
-      writeBrowseData(navEntries, missions, hierarchies, standaloneGroups, categories, tutorialMetas)
+      writeBrowseData(navEntries, missions, hierarchies, standaloneGroups, categories, tutorialMetas, featured)
     } catch (err) {
       // Non-fatal — don't block the existing build pipeline on this.
       console.warn(`  [browse] writeBrowseData failed: ${err instanceof Error ? err.message : err}`)
@@ -1259,7 +1262,7 @@ async function main() {
 const HUGO_DATA_DIR = join(__dirname, '..', 'hugo', 'data')
 const BROWSE_DATA_FILE = join(HUGO_DATA_DIR, 'browse.json')
 
-const FEATURED_MAX = 10
+export const FEATURED_MAX = 10
 const RECENT_MAX = 10
 const BROWSE_NEW_WINDOW_MS = 31 * 24 * 60 * 60 * 1000
 
@@ -1278,9 +1281,51 @@ export const EVENT_MISSION_RE = /(Devtoberfest\s*\d{4}|App\s*Space|TechEd\s*\d{4
 export function isFeaturedMissionCandidate(title: string): boolean {
   return !EVENT_MISSION_RE.test(title)
 }
+
+/**
+ * Pick the homepage hp-teaser band's mission slugs (issue #739).
+ *
+ * Two-path picker:
+ *   1. If `catalogFeatured` contains any type==='mission' entries, return
+ *      their slugs in order (already sorted by FeaturedTasks.featuredOrder
+ *      by the server-side query), trimmed to FEATURED_MAX. This is the
+ *      "explicit curation wins" semantic — admins setting exactly 3 missions
+ *      get exactly 3 cards on the homepage, NOT padded by the fallback.
+ *   2. Otherwise (curated set empty or only TUTORIAL/GROUP entries), fall
+ *      back to the catalog-order picker with the EVENT_MISSION_RE sieve
+ *      applied (PR #738's behavior, preserved for pre-curation states).
+ *
+ * Defensively drops any curated slug that doesn't resolve to a card in
+ * `all[]` — guards against the rare case where resolveFeatured() emitted
+ * a slug that didn't survive buildAllCards()'s downstream filtering
+ * (e.g. unpublished mission).
+ *
+ * Exported for unit testing.
+ */
+export function pickFeaturedMissions(
+  catalogFeatured: BrowseFeaturedEntry[],
+  all: BrowseCardItem[],
+): string[] {
+  const allMissionSlugs = new Set(
+    all.filter(c => c.type === 'mission').map(c => c.id),
+  )
+  const curatedMissionSlugs = catalogFeatured
+    .filter(f => f.type === 'mission')
+    .map(f => f.slug)
+    .filter(slug => allMissionSlugs.has(slug))
+
+  if (curatedMissionSlugs.length > 0) {
+    return curatedMissionSlugs.slice(0, FEATURED_MAX)
+  }
+  // No curation — fall back to the regex-sieved catalog-order top FEATURED_MAX.
+  return all
+    .filter(c => c.type === 'mission' && isFeaturedMissionCandidate(c.title))
+    .slice(0, FEATURED_MAX)
+    .map(c => c.id)
+}
 const BROWSE_LEVEL_ORDER: Record<string, number> = { beginner: 0, intermediate: 1, advanced: 2 }
 
-interface BrowseCardItem {
+export interface BrowseCardItem {
   type: 'mission' | 'group' | 'tutorial'
   id: string
   title: string
@@ -1460,22 +1505,18 @@ function writeBrowseData(
   standaloneGroups: StandaloneGroup[],
   categories: CategoryMeta[],
   tutorialMetas: CatalogTutorialMeta[],
+  catalogFeatured: BrowseFeaturedEntry[],
 ): void {
   const tutorialMetaMap = new Map<string, CatalogTutorialMeta>(
     tutorialMetas.map(m => [m.slug, m]),
   )
   const all: BrowseCardItem[] = buildAllCards(tuts, missions, hierarchies, standaloneGroups, tutorialMetaMap)
 
-  // Featured: first FEATURED_MAX mission cards in catalog order, excluding
-  // event-specific missions (Devtoberfest / App Space / TechEd YYYY) via
-  // isFeaturedMissionCandidate(). See EVENT_MISSION_RE comment above for
-  // rationale. Catalog ordering itself isn't editorial — it falls out of
-  // GitHub repo discovery — so this filter is a sieve, not a curation.
-  // Track replacement with proper Mission.featuredOrder admin column.
-  const featured = all
-    .filter(c => c.type === 'mission' && isFeaturedMissionCandidate(c.title))
-    .slice(0, FEATURED_MAX)
-    .map(c => c.id)
+  // Featured: prefer admin-curated FeaturedTasks (top 10 missions ordered by
+  // featuredOrder); fall back to the regex-sieved catalog-order picker
+  // (PR #738) when no admin has curated any mission rows yet. See
+  // pickFeaturedMissions for the full semantics (#739).
+  const featured = pickFeaturedMissions(catalogFeatured, all)
 
   // Recent: top RECENT_MAX tutorial cards by createdAt desc.
   const recent = all
