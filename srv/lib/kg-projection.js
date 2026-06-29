@@ -363,6 +363,17 @@ export async function* projectFromFixtures(fixtures, batchSize = 5000) {
     }
   }
 
+  // Section 11 — Phase 4.5 (#746) api-doc triples. Same optional shape as
+  // sections 7-10: when the fixture omits api-docs, emission is skipped.
+  const { apiDocs: apiDocRows = [], links: apiDocLinks = [] } =
+    (fixtures && fixtures.apiDocs) || {};
+  if (apiDocRows.length > 0) {
+    for (const t of buildApiDocTriples({ apiDocs: apiDocRows, links: apiDocLinks })) {
+      buffer.push(t);
+      if (buffer.length >= batchSize) { yield buffer; buffer = []; }
+    }
+  }
+
   if (buffer.length > 0) yield buffer;
 }
 
@@ -617,6 +628,58 @@ export function buildVideoTriples({ videos = [], links = [] } = {}) {
     triples.push(triple(
       iri(iriVideo(link.videoSlug)),
       iriPredicate(link.predicate || 'teaches'),
+      iriConcept(link.conceptSlug)
+    ));
+  }
+
+  return triples;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4.5 (#746) — Api-Doc triple builder
+// ---------------------------------------------------------------------------
+
+const KG_API_DOC = `${KG}ApiDoc`;
+
+/**
+ * Emit N-Triples for an array of ApiDoc rows + their concept-officialReferenceFor
+ * edges. Mirrors buildVideoTriples — per-api-doc TTL gate via
+ * isWithinTTL('api-doc', apiDoc.lastSeenAt). Emits :rdf:type, :title, :slug,
+ * :category, :apiType, and :officialReferenceFor for each link.
+ *
+ * Phase 4.5 (#746).
+ *
+ * @param {object} args
+ * @param {Array<{slug, title, category?, apiType?, lastSeenAt}>} args.apiDocs
+ * @param {Array<{apiDocSlug, conceptSlug, predicate?}>} args.links
+ * @returns {string[]} N-Triples
+ */
+export function buildApiDocTriples({ apiDocs = [], links = [] } = {}) {
+  const triples = [];
+  const visibleApiDocSlugs = new Set();
+
+  for (const a of apiDocs) {
+    if (!a || !a.slug) continue;
+    if (!isWithinTTL('api-doc', a.lastSeenAt)) continue;
+    visibleApiDocSlugs.add(a.slug);
+    const subj = iriApiDoc(a.slug);
+    triples.push(triple(iri(subj), iri(RDF_TYPE), iri(KG_API_DOC)));
+    triples.push(literalTriple(iri(subj), iriPredicate('title'), a.title ?? ''));
+    triples.push(literalTriple(iri(subj), iriPredicate('slug'), a.slug));
+    if (a.category) {
+      triples.push(literalTriple(iri(subj), iriPredicate('category'), a.category));
+    }
+    if (a.apiType) {
+      triples.push(literalTriple(iri(subj), iriPredicate('apiType'), a.apiType));
+    }
+  }
+
+  for (const link of links) {
+    if (!link || !link.apiDocSlug || !link.conceptSlug) continue;
+    if (!visibleApiDocSlugs.has(link.apiDocSlug)) continue;
+    triples.push(triple(
+      iri(iriApiDoc(link.apiDocSlug)),
+      iriPredicate(link.predicate || 'officialReferenceFor'),
       iriConcept(link.conceptSlug)
     ));
   }
@@ -953,6 +1016,46 @@ async function loadFixtures(db) {
     );
   }
 
+  // Phase 4.5 (#746) — ApiDocs + concept-officialReferenceFor link rows.
+  // Same best-effort pattern as Learning Journeys / Blog Posts / Discovery
+  // Missions / Videos above.
+  // CRITICAL: ApiDocs.description is LargeString (NCLOB) on HANA — DO NOT
+  // include it in the SELECT here (LOB locator may expire before triple
+  // emission). The projection doesn't need description anyway; it only emits
+  // title, slug, category, apiType.
+  let apiDocs = { apiDocs: [], links: [] };
+  try {
+    const { ApiDocs, ApiDocConceptLinks } = cds.entities('com.sap.developers.ims.external');
+    const apiDocRows = await db.run(
+      SELECT.from(ApiDocs).columns('ID', 'slug', 'title', 'category', 'apiType', 'lastSeenAt')
+    );
+    const apiDocSlugById = new Map(apiDocRows.map((a) => [a.ID, a.slug]));
+
+    const aLinkRows = await db.run(
+      SELECT.from(ApiDocConceptLinks).columns('apiDoc_ID', 'concept_ID', 'predicate')
+    );
+    const aLinks = [];
+    for (const l of aLinkRows) {
+      const apiDocSlug = apiDocSlugById.get(l.apiDoc_ID);
+      const conceptSlug = conceptById.get(l.concept_ID);
+      if (!apiDocSlug || !conceptSlug) continue;
+      aLinks.push({ apiDocSlug, conceptSlug, predicate: l.predicate || 'officialReferenceFor' });
+    }
+
+    apiDocs = {
+      apiDocs: apiDocRows.map((a) => ({
+        slug: a.slug, title: a.title, category: a.category,
+        apiType: a.apiType, lastSeenAt: a.lastSeenAt,
+      })),
+      links: aLinks,
+    };
+  } catch (err) {
+    const log = cds.log('kg-projection');
+    log.warn(
+      `kg-projection: ApiDocs load failed; api-doc triples will be empty. err=${err && err.message ? err.message : String(err)}`
+    );
+  }
+
   return {
     concepts: concepts.map((c) => ({
       slug: c.slug, name: c.name, description: c.description, status: c.status,
@@ -966,5 +1069,6 @@ async function loadFixtures(db) {
     blogPosts,
     discoveryMissions,
     videos,
+    apiDocs,
   };
 }
