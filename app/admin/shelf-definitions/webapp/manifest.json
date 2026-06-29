@@ -1,0 +1,125 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "sap.tutorials.admin.shelf-definitions",
+    "type": "application",
+    "title": "{{appTitle}}",
+    "description": "{{appDescription}}",
+    "applicationVersion": { "version": "0.0.1" },
+    "i18n": "i18n/i18n.properties",
+    "dataSources": {
+      "mainService": {
+        "uri": "/admin/",
+        "type": "OData",
+        "settings": { "odataVersion": "4.0" }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "ShelfDefinition-display": {
+          "semanticObject": "ShelfDefinition",
+          "action": "display",
+          "title": "{{appTitle}}",
+          "signature": { "parameters": {}, "additionalParameters": "allowed" }
+        }
+      }
+    }
+  },
+  "sap.ui5": {
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": { "sap.fe.templates": {} }
+    },
+    "models": {
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "synchronizationMode": "None",
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      },
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": { "bundleName": "sap.tutorials.admin.shelf-definitions.i18n.i18n" }
+      }
+    },
+    "extends": {
+      "extensions": {
+        "sap.ui.controllerExtensions": {
+          "sap.fe.templates.ListReport.ListReportController": {
+            "controllerName": "sap.tutorials.admin.shelf-definitions.ext.ActionsController"
+          }
+        }
+      }
+    },
+    "routing": {
+      "routes": [
+        { "name": "ShelvesList", "pattern": ":?query:", "target": "ShelvesListTarget" },
+        { "name": "ShelfOP",    "pattern": "ShelfDefinitions({key}):?query:", "target": "ShelfOPTarget" }
+      ],
+      "targets": {
+        "ShelvesListTarget": {
+          "type": "Component",
+          "name": "sap.fe.templates.ListReport",
+          "id": "ShelvesListTarget",
+          "options": {
+            "settings": {
+              "contextPath": "/ShelfDefinitions",
+              "navigation": {
+                "ShelfDefinitions": { "detail": { "route": "ShelfOP" } }
+              },
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "actions": {
+                    "generateForBlanks": {
+                      "press": "sap.tutorials.admin.shelf-definitions.ext.ActionsController.onGenerateForBlanks",
+                      "visible": true,
+                      "enabled": true,
+                      "text": "Generate for blank rows"
+                    },
+                    "regenerateSelected": {
+                      "press": "sap.tutorials.admin.shelf-definitions.ext.ActionsController.onRegenerateSelected",
+                      "visible": true,
+                      "enabled": true,
+                      "text": "Regenerate selected with AI",
+                      "requiresSelection": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "ShelfOPTarget": {
+          "type": "Component",
+          "name": "sap.fe.templates.ObjectPage",
+          "id": "ShelfOPTarget",
+          "options": {
+            "settings": {
+              "contextPath": "/ShelfDefinitions",
+              "editableHeaderContent": false,
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.Identification": {
+                  "actions": {
+                    "regenerateOne": {
+                      "press": "sap.tutorials.admin.shelf-definitions.ext.ActionsController.onRegenerateOne",
+                      "text": "Regenerate with AI"
+                    },
+                    "markReviewed": {
+                      "press": "sap.tutorials.admin.shelf-definitions.ext.ActionsController.onMarkReviewed",
+                      "text": "Mark as reviewed",
+                      "visible": "{= ${authoringStatus} === 'AI_SEEDED' }"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
