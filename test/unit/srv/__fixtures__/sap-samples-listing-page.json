@@ -1,0 +1,76 @@
+{
+  "items": [
+    {
+      "name": "cloud-cap-samples",
+      "full_name": "SAP-samples/cloud-cap-samples",
+      "archived": false,
+      "fork": false,
+      "pushed_at": "2026-06-15T14:32:11Z",
+      "stargazers_count": 423,
+      "language": "JavaScript",
+      "topics": ["cap", "cds", "sap-btp"],
+      "description": "Samples for CAP — Cloud Application Programming Model",
+      "html_url": "https://github.com/SAP-samples/cloud-cap-samples"
+    },
+    {
+      "name": "s4hana-cloud-extension-business-partner-mdk",
+      "full_name": "SAP-samples/s4hana-cloud-extension-business-partner-mdk",
+      "archived": false,
+      "fork": false,
+      "pushed_at": "2026-03-20T09:15:22Z",
+      "stargazers_count": 12,
+      "language": "Java",
+      "topics": ["s4hana", "mdk", "extension"],
+      "description": "MDK extension app for S/4HANA Cloud Business Partner API",
+      "html_url": "https://github.com/SAP-samples/s4hana-cloud-extension-business-partner-mdk"
+    },
+    {
+      "name": "abap-cloud-developer-extensibility-starter-pack",
+      "full_name": "SAP-samples/abap-cloud-developer-extensibility-starter-pack",
+      "archived": false,
+      "fork": false,
+      "pushed_at": "2025-11-05T16:48:00Z",
+      "stargazers_count": 87,
+      "language": "ABAP",
+      "topics": ["abap", "btp", "extensibility"],
+      "description": "Starter pack for ABAP developer extensibility scenarios",
+      "html_url": "https://github.com/SAP-samples/abap-cloud-developer-extensibility-starter-pack"
+    },
+    {
+      "name": "archived-old-sample",
+      "full_name": "SAP-samples/archived-old-sample",
+      "archived": true,
+      "fork": false,
+      "pushed_at": "2022-01-15T10:00:00Z",
+      "stargazers_count": 5,
+      "language": "JavaScript",
+      "topics": [],
+      "description": "Old sample, archived",
+      "html_url": "https://github.com/SAP-samples/archived-old-sample"
+    },
+    {
+      "name": "forked-sample",
+      "full_name": "SAP-samples/forked-sample",
+      "archived": false,
+      "fork": true,
+      "pushed_at": "2026-05-01T12:00:00Z",
+      "stargazers_count": 2,
+      "language": "Python",
+      "topics": [],
+      "description": "A fork; should be filtered out",
+      "html_url": "https://github.com/SAP-samples/forked-sample"
+    },
+    {
+      "name": "stale-sample",
+      "full_name": "SAP-samples/stale-sample",
+      "archived": false,
+      "fork": false,
+      "pushed_at": "2022-01-15T10:00:00Z",
+      "stargazers_count": 50,
+      "language": "Go",
+      "topics": ["legacy"],
+      "description": "Stale; pushed >24 months ago",
+      "html_url": "https://github.com/SAP-samples/stale-sample"
+    }
+  ]
+}
