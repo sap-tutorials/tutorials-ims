@@ -264,6 +264,7 @@ import { findNearDuplicates } from './lib/kg-similarity.js';
 import { loadConceptsWithEmbeddings } from './lib/kg-concept-loader.js';
 import { resolveKnowledgeGraphSettings } from './lib/runtime-config/kg-settings.js';
 import { mergeOtherResources, MAX_OTHER_RESOURCES } from './lib/kg-neighborhood-merge.js';
+import { categoryLabel } from './lib/discovery-mission-categories.js';
 
 const NAMESPACE = 'com.sap.developers.ims';
 
@@ -663,9 +664,10 @@ export default cds.service.impl(async function () {
 
     // Phase 4.1 (#447 §2.6): enrich otherResources with learning journeys
     // covering any concept the tutorial teaches. Ranked by overlap count.
-    // Phase 4.2 (#447 §9): also widens to include blog-post overlap rows;
-    // both arrays merge and cap top-5 total across types (no per-type
-    // diversity quota).
+    // Phase 4.2 (#447 §9): also widens to include blog-post overlap rows.
+    // Phase 4.3 (#447 §8): also widens to include discovery-mission overlap
+    // rows. All three arrays merge and cap top-5 total across types (no
+    // per-type diversity quota).
     //
     // Implementation choices:
     // - Resolve teaches→concept_ID first (so we can filter the link table by
@@ -678,8 +680,10 @@ export default cds.service.impl(async function () {
       const teachesSlugs = ranked.teaches.map((c) => c.slug);
       let journeyOtherResources = [];
       let blogOtherResources = [];
+      let missionOtherResources = [];
       if (teachesSlugs.length > 0) {
-        const { LearningJourneys, LearningJourneyConceptLinks, BlogPosts, BlogPostConceptLinks } =
+        const { LearningJourneys, LearningJourneyConceptLinks, BlogPosts, BlogPostConceptLinks,
+          DiscoveryMissions, DiscoveryMissionConceptLinks } =
           cds.entities('com.sap.developers.ims.external');
         const { Concepts } = cds.entities(NAMESPACE);
 
@@ -762,12 +766,50 @@ export default cds.service.impl(async function () {
                 overlapCount: overlapByPost.get(p.ID),
               }));
           }
+
+          // Phase 4.3 (#447): discovery-mission overlap rows.
+          const missionOverlaps = await SELECT.from(DiscoveryMissionConceptLinks)
+            .columns('mission_ID', 'concept_ID')
+            .where({ concept_ID: { in: conceptIds } });
+
+          const overlapByMission = new Map();
+          for (const row of missionOverlaps) {
+            overlapByMission.set(
+              row.mission_ID,
+              (overlapByMission.get(row.mission_ID) ?? 0) + 1
+            );
+          }
+
+          if (overlapByMission.size > 0) {
+            const topMissionIds = [...overlapByMission.entries()]
+              .sort(([, a], [, b]) => b - a)
+              .slice(0, MAX_OTHER_RESOURCES)
+              .map(([id]) => id);
+
+            const missions = await SELECT.from(DiscoveryMissions)
+              .columns('ID', 'slug', 'title', 'url', 'effortLevel', 'categorySlug')
+              .where({ ID: { in: topMissionIds } });
+
+            const byMissionId = new Map(missions.map((m) => [m.ID, m]));
+            missionOtherResources = topMissionIds
+              .map((id) => byMissionId.get(id))
+              .filter(Boolean)
+              .map((m) => ({
+                type: 'discovery-mission',
+                slug: m.slug,
+                title: m.title,
+                url: m.url,
+                effortLevel: m.effortLevel,
+                categoryLabel: categoryLabel(m.categorySlug),
+                overlapCount: overlapByMission.get(m.ID),
+              }));
+          }
         }
       }
 
-      // Merge journey + blog rows; sort by overlap desc; cap top-5 TOTAL.
-      // Top-5 is across BOTH types (no per-type diversity quota) per spec §9.
-      otherResources = mergeOtherResources(journeyOtherResources, blogOtherResources);
+      // Merge journey + blog + mission rows; sort by overlap desc; cap top-5 TOTAL.
+      // Top-5 is across ALL THREE types (no per-type diversity quota) per spec §9.
+      otherResources = mergeOtherResources(journeyOtherResources, blogOtherResources, missionOtherResources);
     } catch (err) {
       log.warn(`kg-service: neighborhood otherResources enrichment failed: ${err.message ?? err}`);
       otherResources = [];

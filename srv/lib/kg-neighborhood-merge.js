@@ -22,14 +22,18 @@
 export const MAX_OTHER_RESOURCES = 5;
 
 /**
- * Merge journey + blog rows; sort by overlapCount desc; cap top-5.
+ * Merge N row arrays; sort by overlapCount desc; cap top-MAX_OTHER_RESOURCES.
  *
- * @param {Array<object>} journeyRows
- * @param {Array<object>} blogRows
+ * Phase 4.2 took (journeyRows, blogRows). Phase 4.3 widens to variadic
+ * (...rowArrays) so the 3rd content type (discovery-mission) can be added
+ * without further signature churn. All call sites pass row arrays positionally.
+ *
+ * @param {...Array<object>} rowArrays — each array carries OtherResource-shape rows
  * @returns {Array<object>} merged + sorted + capped
  */
-export function mergeOtherResources(journeyRows = [], blogRows = []) {
-  return [...journeyRows, ...blogRows]
+export function mergeOtherResources(...rowArrays) {
+  return rowArrays
+    .flat()
     .sort((a, b) => (b.overlapCount ?? 0) - (a.overlapCount ?? 0))
     .slice(0, MAX_OTHER_RESOURCES);
 }
