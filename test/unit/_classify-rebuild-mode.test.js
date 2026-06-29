@@ -102,6 +102,11 @@ describe('classifyRebuildMode', () => {
       expect(result.needsSlugsByTag).toBe(false);
     });
   });
+
+  it('HomepageShelves write → catalog-only (pre-existing gap fix)', () => {
+    const result = classifyRebuildMode('HomepageShelves', 'crud');
+    expect(result.mode).toBe('catalog-only');
+  });
 });
 
 describe('resolveSlugForEntity (pure paths)', () => {
