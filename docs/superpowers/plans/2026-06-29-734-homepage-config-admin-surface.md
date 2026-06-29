@@ -414,6 +414,12 @@ describe('admin-shell homepage nav surfaces Shelves + Redirects + Config (#734)'
     })
 
     it('has titles for the three new nav-keys', () => {
+      // Note: NAV_KEY_TO_TITLE uses "Homepage Shelves" / "Homepage Redirects" /
+      // "Homepage Config" (used as the page-header / document title), while
+      // navigation.json uses the shorter "Shelves" / "Redirects" / "Config"
+      // (used as the side-nav leaf label). The divergence is intentional:
+      // the parent "Homepage" group label in the nav already provides the
+      // prefix context, whereas the page header stands alone.
       expect(ctrl).toMatch(/homepageShelves:\s*"Homepage Shelves"/)
       expect(ctrl).toMatch(/homepageRedirects:\s*"Homepage Redirects"/)
       expect(ctrl).toMatch(/homepageConfig:\s*"Homepage Config"/)
@@ -436,6 +442,27 @@ describe('admin-shell homepage nav surfaces Shelves + Redirects + Config (#734)'
       expect(ctrl).not.toMatch(/^\s+homepage:\s+"Homepage"\s*,?\s*$/m)
     })
   })
+
+  describe('cross-file consistency', () => {
+    // The side-nav highlight requires `selectedNavKey` (set by
+    // _onRouteMatched from the matched route name) to match a key that
+    // exists somewhere in navigation.json's items. Drift between the
+    // three files breaks the highlight silently — pin that the three
+    // route names appearing in manifest.json all exist as nav-keys.
+    const nav = JSON.parse(readFileSync(path.join(SHELL_DIR, 'model/navigation.json'), 'utf8'))
+    const manifest = JSON.parse(readFileSync(path.join(SHELL_DIR, 'manifest.json'), 'utf8'))
+
+    it('every homepage* route name has a matching nav-key in navigation.json', () => {
+      const navKeys = new Set(
+        nav.groups.flatMap((g: any) => [g.key, ...(g.items || []).map((i: any) => i.key)])
+      )
+      const homepageRoutes = manifest['sap.ui5'].routing.routes
+        .filter((r: any) => r.name.startsWith('homepage'))
+      for (const r of homepageRoutes) {
+        expect(navKeys, `route name "${r.name}" must exist as a nav-key for the side-nav highlight to work`).toContain(r.name)
+      }
+    })
+  })
 })
 ```
 
@@ -446,7 +473,7 @@ Run:
 npx vitest run test/unit/admin-shell-homepage-nav.test.ts
 ```
 
-Expected: all 11 cases pass. (Tasks 1-3 already made the assertions true.)
+Expected: all 12 cases pass (3 in navigation.json describe, 4 in manifest.json describe, 4 in Shell.controller.js describe, 1 in cross-file consistency describe). (Tasks 1-3 already made the assertions true.)
 
 If any case fails, the fix lives in the corresponding modified file — DO NOT relax the assertion; fix the structural mismatch.
 
@@ -463,6 +490,8 @@ Shell.controller.js asserting:
 - homepageShelves keeps the legacy 'homepage' URL pattern.
 - The two setHash calls for Redirects + Config are wired.
 - The legacy single 'homepage' nav-key is gone.
+- Every homepage* shell-route name has a matching nav-key
+  (catches drift that would break the side-nav highlight).
 
 UI5 has no runtime test harness in this repo; text-pinning the
 shape catches future drift the same way the explore-layout test
@@ -508,11 +537,11 @@ describe.runIf(APPROUTER && SRV)('admin homepage config smoke (#734)', () => {
     }
   });
 
-  it('rejects anonymous request to srv /admin/HomepageConfig (401, 302, or JS-redirect)', async () => {
-    // Singleton URL on the OData v4 service. Whichever XSUAA shape the
-    // approuter is configured for, anonymous must NOT receive a 200 with
-    // data — we confirm the route is gated, not what it returns.
-    const res = await fetch(`${APPROUTER}/admin/HomepageConfig`, { redirect: 'manual' });
+  it('rejects anonymous request to /admin/HomepageConfig (401, 302, or JS-redirect)', async () => {
+    // Hit srv directly. The OData v4 singleton URL must not return 200 with
+    // data for an anonymous client. We confirm the route is gated, not what
+    // it returns when authenticated.
+    const res = await fetch(`${SRV}/admin/HomepageConfig`, { redirect: 'manual' });
     if (res.status === 200) {
       const body = await res.text();
       expect(body).toMatch(/\/oauth\/authorize/);
@@ -591,25 +620,38 @@ npm run build:admin 2>&1 | tail -10
 
 Expected: build succeeds. If a UI5 manifest validator runs during the build, it will catch JSON schema violations in our edits.
 
-- [ ] **Step 2: Inspect the built manifest**
+- [ ] **Step 2: Locate the built manifest**
 
-Run:
+UI5 builds sometimes nest the manifest under `dist/resources/<namespace>/`. Find it:
+
 ```bash
-node -e "const m=JSON.parse(require('fs').readFileSync('app/admin-shell/dist/manifest.json','utf8')); console.log(m['sap.ui5'].routing.routes.filter(r=>r.name.startsWith('homepage')).map(r=>r.name).sort().join(','))"
+find app/admin-shell/dist -name manifest.json -not -path "*/node_modules/*" 2>/dev/null
+```
+
+Expected: one or more lines pointing at the built manifest(s). Pick the one that's a direct copy of `webapp/manifest.json` — it'll be either `app/admin-shell/dist/manifest.json` (typical) or `app/admin-shell/dist/resources/sap/tutorials/admin/shell/manifest.json` (nested namespace layout). Set `MANIFEST_PATH` to that path for the next step.
+
+- [ ] **Step 3: Inspect the built manifest's homepage routes**
+
+Substitute the path from Step 2:
+
+```bash
+MANIFEST_PATH="app/admin-shell/dist/manifest.json"   # or the nested path from Step 2
+node -e "const m=JSON.parse(require('fs').readFileSync('$MANIFEST_PATH','utf8')); console.log(m['sap.ui5'].routing.routes.filter(r=>r.name.startsWith('homepage')).map(r=>r.name).sort().join(','))"
 ```
 
 Expected: `homepageConfig,homepageRedirects,homepageShelves`
 
-- [ ] **Step 3: Verify the built navigation.json**
+- [ ] **Step 4: Verify the built navigation.json**
 
-Run:
 ```bash
-node -e "const n=JSON.parse(require('fs').readFileSync('app/admin-shell/dist/model/navigation.json','utf8')); const g=n.groups.find(x=>x.key==='homepageGroup'); console.log(g && g.items.map(i=>i.key).join(','));"
+find app/admin-shell/dist -name navigation.json -not -path "*/node_modules/*" 2>/dev/null
+NAV_PATH="app/admin-shell/dist/model/navigation.json"  # or the discovered path
+node -e "const n=JSON.parse(require('fs').readFileSync('$NAV_PATH','utf8')); const g=n.groups.find(x=>x.key==='homepageGroup'); console.log(g && g.items.map(i=>i.key).join(','));"
 ```
 
 Expected: `homepageShelves,homepageRedirects,homepageConfig`
 
-- [ ] **Step 4: No commit (verification only)**
+- [ ] **Step 5: No commit (verification only)**
 
 If anything fails, fix the source (Tasks 1-3) and re-run. Otherwise proceed.
 
@@ -625,19 +667,12 @@ If anything fails, fix the source (Tasks 1-3) and re-run. Otherwise proceed.
 git push -u origin 734-homepage-config-ui
 ```
 
-- [ ] **Step 2: Create the PR**
+- [ ] **Step 2: Write the PR body file**
+
+First, write `PR_BODY.md` at the repo root (we'll delete it after the PR opens; it isn't committed):
 
 ```bash
-gh pr create --base main --head 734-homepage-config-ui \
-  --title "feat(#734): surface HomepageConfig + Redirects in admin shell" \
-  --body-file ./PR_BODY.md
-```
-
-Where `PR_BODY.md` is a freshly-written file with the contents below. Write the file first (avoids embedded-heredoc-escape mess), then delete it after the PR is created.
-
-PR body content:
-
-```markdown
+cat > PR_BODY.md << 'PR_BODY_EOF'
 Closes #734.
 
 ## What
@@ -664,7 +699,7 @@ The old `/admin-ui/#homepage` URL still resolves — the new `homepageShelves` r
 
 ## Tests
 
-- New: `test/unit/admin-shell-homepage-nav.test.ts` — 11 text-grep assertions pinning the structural invariants across all three modified files.
+- New: `test/unit/admin-shell-homepage-nav.test.ts` — 12 text-grep assertions pinning the structural invariants across all three modified files, including a cross-file consistency check that every shell-route name has a matching nav-key.
 - New: `test/smoke/admin-homepage-config.smoke.test.js` — XSUAA-gate assertions on `/admin-ui/` and `/admin/HomepageConfig`, plus a tech-token-gated assertion on the singleton's four-field shape.
 
 ## Rollback
@@ -678,15 +713,32 @@ The old `/admin-ui/#homepage` URL still resolves — the new `homepageShelves` r
 3. On Config: edit `developerNewsPlaylistId`, save, refresh — value persists.
 4. Wait ~15 min, reload `/` — new playlist drives the YouTube band on the homepage.
 5. Toggle `videoBandEnabled` off, wait ~60s, reload `/` — band disappears. Toggle back, verify restoration.
+PR_BODY_EOF
 ```
 
-After PR opens, delete `PR_BODY.md` (don't commit it):
+Verify the file exists:
+
+```bash
+ls -l PR_BODY.md && wc -l PR_BODY.md
+```
+
+Expected: a non-empty file with ~40 lines.
+
+- [ ] **Step 3: Create the PR**
+
+```bash
+gh pr create --base main --head 734-homepage-config-ui \
+  --title "feat(#734): surface HomepageConfig + Redirects in admin shell" \
+  --body-file ./PR_BODY.md
+```
+
+- [ ] **Step 4: Remove the body file (do NOT commit it)**
 
 ```bash
 rm PR_BODY.md
 ```
 
-- [ ] **Step 3: Verify CI green**
+- [ ] **Step 5: Verify CI green**
 
 Watch the standard CI run. Expected: green. If anything fails, address before merging.
 
