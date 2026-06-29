@@ -108,6 +108,53 @@
   </section>
   {{ end }}
 
+  {{/*
+    Phase 4.3 (#447 §8): "Discovery missions teaching this" — section #4
+    on the concept landing page, between Blog Posts and Prerequisites.
+
+    Mirrors the Phase 4.1/4.2 hardening: external links open in a new tab
+    (target=_blank rel=noopener); a URL scheme guard (`$isSafe`) falls back
+    to a plain <span> for anything that isn't http(s). `categoryLabel` is
+    the user-facing English label resolved by scripts/fetch-concepts.ts
+    at frontmatter emission time via srv/lib/discovery-mission-categories.js.
+
+    Hide-when-empty: the surrounding `{{ with }}` guard ensures the H2 and
+    UL are NEVER emitted for concepts that have no covering mission.
+
+    Row format: `title · effort N · CategoryLabel`. Both meta fields are
+    conditional — a mission with no effortLevel or no categorySlug on the
+    wire still renders the title.
+  */}}
+  {{ with .Params.discoveryMissions }}
+  <section
+    class="concept-page__section"
+    data-kg-section="discovery-missions"
+    data-concept-slug="{{ $.Params.slug }}"
+  >
+    <h2>Discovery missions teaching this</h2>
+    <ul>
+      {{ range . }}
+        {{ $url := .url }}
+        {{ $isSafe := or (hasPrefix $url "https://") (hasPrefix $url "http://") }}
+        <li>
+          {{ if $isSafe }}
+          <a
+            href="{{ $url }}"
+            target="_blank"
+            rel="noopener"
+            data-mission-slug="{{ .slug }}"
+          >{{ .title }}</a>
+          {{ else }}
+          <span data-mission-slug="{{ .slug }}">{{ .title }}</span>
+          {{ end }}
+          {{ if .effortLevel }} · effort {{ .effortLevel }}{{ end }}
+          {{ if .categoryLabel }} · {{ .categoryLabel }}{{ end }}
+        </li>
+      {{ end }}
+    </ul>
+  </section>
+  {{ end }}
+
   {{ with .Params.requires }}
   <section class="concept-page__section">
     <h2>Prerequisites</h2>
@@ -206,6 +253,31 @@
               } catch (e) { /* never let telemetry break the page */ }
             });
           })(blogLinks[j]);
+        }
+      }
+
+      // Phase 4.3 (#447 §8): delegated click listener on the
+      // "Discovery missions teaching this" section. CSP-safe —
+      // addEventListener only, no inline onclick. Parallels the
+      // learning-journeys + blog-posts blocks above; only the event
+      // name + detail field name differ.
+      var missionSection = document.querySelector('[data-kg-section="discovery-missions"]');
+      if (missionSection) {
+        var missionSectionConceptSlug = missionSection.getAttribute('data-concept-slug');
+        var missionLinks = missionSection.querySelectorAll('a[data-mission-slug]');
+        for (var k = 0; k < missionLinks.length; k++) {
+          (function (a) {
+            a.addEventListener('click', function () {
+              try {
+                window.dispatchEvent(new CustomEvent('kg.discovery_mission.linked_from_concept_page', {
+                  detail: {
+                    conceptSlug: missionSectionConceptSlug,
+                    missionSlug: a.getAttribute('data-mission-slug')
+                  }
+                }));
+              } catch (e) { /* never let telemetry break the page */ }
+            });
+          })(missionLinks[k]);
         }
       }
     })();

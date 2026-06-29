@@ -147,6 +147,22 @@ function validateSearchLearningJourneys(response) {
   return response;
 }
 
+function validateSearchDiscovery(response) {
+  if (!response || typeof response !== 'object') {
+    throw new Error('sap-devs.searchDiscovery: response is not an object');
+  }
+  if (!Array.isArray(response.results)) {
+    throw new Error('sap-devs.searchDiscovery: results is not an array');
+  }
+  for (const row of response.results) {
+    for (const field of ['id', 'name', 'effort', 'category', 'description']) {
+      if (typeof row?.[field] !== 'string' || row[field] === '') {
+        throw new Error(`sap-devs.searchDiscovery: row missing ${field} — ${JSON.stringify(row).slice(0, 200)}`);
+      }
+    }
+  }
+}
+
 // ─── Public API ─────────────────────────────────────────────────────────
 
 export const sapDevsClient = {
@@ -179,7 +195,25 @@ export const sapDevsClient = {
   async getRecentNews() { throw new Error('getRecentNews not implemented in 4.1'); },
   async getNewsDetail() { throw new Error('getNewsDetail not implemented in 4.1'); },
   async searchVideos() { throw new Error('searchVideos not implemented in 4.1'); },
-  async searchDiscovery() { throw new Error('searchDiscovery not implemented in 4.1'); },
+  /**
+   * Search SAP Discovery Center missions via the sap-devs MCP.
+   *
+   * Phase 4.3 (#447): first sub-phase to actually wire this method.
+   *
+   * @param {object} [opts]
+   * @param {string} [opts.query]   — optional keyword filter
+   * @param {string} [opts.type]    — 'missions' (default); trials NOT supported in 4.3
+   * @param {number} [opts.limit]   — max results (default 200; MCP hard cap)
+   * @returns {Promise<Array<object>>} array of mission rows (envelope dropped, matching searchLearningJourneys shape)
+   */
+  async searchDiscovery({ query = '', type = 'missions', limit = 200 } = {}) {
+    if (type !== 'missions') {
+      throw new Error(`searchDiscovery: type=${type} not supported in Phase 4.3 (trials deferred)`);
+    }
+    const response = await callCached('search_discovery', { query, type, limit });
+    validateSearchDiscovery(response);
+    return response.results;
+  },
   async getSamples() { throw new Error('getSamples not implemented in 4.1'); },
   async searchResources() { throw new Error('searchResources not implemented in 4.1'); },
 };

@@ -112,3 +112,68 @@ entity BlogPostConceptLinks : cuid, managed {
 
 annotate BlogPostConceptLinks with
   @assert.unique.postConcept : [post, concept];
+
+/**
+ * Phase 4.3 (#447): SAP Discovery Center missions.
+ *
+ * - mcpId is the natural key (numeric `id` field from search_discovery, e.g. '3019').
+ *   slug is derived as `dm-${mcpId}` for IRI namespace-safety.
+ * - description is the mission's blurb captured at upsert time (matches 4.2's
+ *   excerpt role — sidebar card needs it without re-fetching).
+ * - effortLevel: 1-5 numeric (MCP returns as string; cron parseInt-coerces).
+ * - categorySlug: short code from MCP (e.g. 'onboard', 'intgn'); label resolution
+ *   happens at render time via srv/lib/discovery-mission-categories.js.
+ * - pinUntil reserved for chassis uniformity; no admin surface writes it in 4.3.
+ *
+ * First sub-phase with TWO link tables per source entity:
+ *   - DiscoveryMissionConceptLinks (predicate='teaches', merge-on-write via #707)
+ *   - DiscoveryMissionServices (free-form BTP service names, no FK)
+ */
+entity DiscoveryMissions : cuid, managed {
+  slug              : String(120) @assert.unique;
+  title             : String(400);
+  description       : String(2000);
+  url               : String(500);
+  mcpId             : String(40);
+  effortLevel       : Integer;
+  categorySlug      : String(40);
+
+  sourceId          : String(120);
+  contentHash       : String(64);
+  lastExtractedHash : String(64);
+  firstSeenAt       : Timestamp @cds.on.insert: $now;
+  lastSeenAt        : Timestamp;
+  pinUntil          : Timestamp;
+
+  links    : Composition of many DiscoveryMissionConceptLinks on links.mission = $self;
+  services : Composition of many DiscoveryMissionServices    on services.mission = $self;
+}
+
+entity DiscoveryMissionConceptLinks : cuid, managed {
+  mission      : Association to DiscoveryMissions @assert.notNull;
+  concept      : Association to ims.Concepts     @assert.notNull;
+  predicate    : String(20) default 'teaches';
+  confidence   : Decimal(3, 2);
+  extractedAt  : Timestamp;
+  modelVersion : String(40);
+}
+
+/**
+ * Free-form BTP service names captured per mission. NOT FK to Products.
+ * @assert.unique.missionService is case-sensitive on HANA; the cron's
+ * case-insensitive dedup at fetch-discovery-missions-job.js (serviceName.toLowerCase())
+ * is the canonical guard.
+ */
+entity DiscoveryMissionServices : cuid, managed {
+  mission      : Association to DiscoveryMissions @assert.notNull;
+  serviceName  : String(120);
+  confidence   : Decimal(3, 2);
+  extractedAt  : Timestamp;
+  modelVersion : String(40);
+}
+
+annotate DiscoveryMissionConceptLinks with
+  @assert.unique.missionConcept : [mission, concept];
+
+annotate DiscoveryMissionServices with
+  @assert.unique.missionService : [mission, serviceName];

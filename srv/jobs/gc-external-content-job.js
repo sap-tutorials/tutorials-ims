@@ -30,6 +30,7 @@ const NAMESPACE = 'com.sap.developers.ims.external';
 const ITERATION_SET = {
   'learning-journey': 'LearningJourneys',
   'blog-post': 'BlogPosts',  // Phase 4.2 (#447)
+  'discovery-mission': 'DiscoveryMissions',  // Phase 4.3 (#447)
 };
 
 export async function runGcExternalContent() {

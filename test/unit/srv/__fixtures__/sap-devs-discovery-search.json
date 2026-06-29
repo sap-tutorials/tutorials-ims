@@ -1,0 +1,26 @@
+{
+  "missions": [
+    {
+      "id": "3019",
+      "name": "Get Started with SAP BTP Enterprise Account",
+      "effort": "2",
+      "category": "onboard",
+      "description": "This mission walks you through setting up an SAP BTP Enterprise Account from scratch. You will configure your global account, create subaccounts, and entitle services for your team. By the end you will be able to onboard new developers and provision foundational services."
+    },
+    {
+      "id": "3258",
+      "name": "Get Started with SAP Integration Suite",
+      "effort": "1",
+      "category": "develop",
+      "description": "Brief intro to SAP Integration Suite."
+    },
+    {
+      "id": "3585",
+      "name": "Build a Custom Extension with SAP AI Core",
+      "effort": "3",
+      "category": "iot",
+      "description": "Hands-on extension scenario combining SAP AI Core and SAP Build Apps. Covers prompt design, model deployment, and Build Apps integration. Uses the SAP AI Foundation and SAP Build platforms throughout."
+    }
+  ],
+  "totalReturned": 3
+}

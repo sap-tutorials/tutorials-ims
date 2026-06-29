@@ -30,7 +30,8 @@ export async function buildConceptsPayload(db) {
   // srv/knowledge-graph-service.cds — single source of truth.
   const { ConceptEdges, TutorialConceptLinks } =
     cds.entities('com.sap.developers.ims');
-  const { LearningJourneyConceptLinks, BlogPosts, BlogPostConceptLinks } =
+  const { LearningJourneyConceptLinks, BlogPosts, BlogPostConceptLinks,
+    DiscoveryMissions, DiscoveryMissionConceptLinks } =
     cds.entities('com.sap.developers.ims.external');
   const { PublishedConcepts } = cds.entities('KnowledgeGraphService');
 
@@ -162,6 +163,37 @@ export async function buildConceptsPayload(db) {
     }
   }
 
+  // 5c. Phase 4.3 (#447 §8): discovery missions teaching each concept.
+  // Same conceptIds-guard pattern as blogPosts; per-concept 8-row cap;
+  // ordered by mission.effortLevel asc (easier missions first).
+  let discoveryMissionsByConcept = {};
+  if (ids.length > 0) {
+    const missionLinks = await db.run(
+      SELECT.from(DiscoveryMissionConceptLinks)
+        .columns(
+          'concept_ID',
+          'mission.slug as missionSlug',
+          'mission.title as title',
+          'mission.url as url',
+          'mission.effortLevel as effortLevel',
+          'mission.categorySlug as categorySlug',
+        )
+        .where({ concept_ID: { in: ids } })
+        .orderBy('mission.effortLevel asc')
+        .limit(8 * ids.length)
+    );
+    const groupedMissions = groupBy(missionLinks, 'concept_ID', r => ({
+      slug: r.missionSlug,
+      title: r.title,
+      url: r.url,
+      effortLevel: r.effortLevel,
+      categorySlug: r.categorySlug,
+    }));
+    for (const [conceptId, rows] of Object.entries(groupedMissions)) {
+      discoveryMissionsByConcept[conceptId] = rows.slice(0, 8);
+    }
+  }
+
   // 6. Stitch.
   const concepts = published.map(c => ({
     slug: c.slug.toLowerCase(),
@@ -173,6 +205,7 @@ export async function buildConceptsPayload(db) {
     relatedTo: relatedToByConcept[c.ID] || [],
     learningJourneys: learningJourneysByConcept[c.ID] || [],
     blogPosts: blogPostsByConcept[c.ID] || [],
+    discoveryMissions: discoveryMissionsByConcept[c.ID] || [],
   }));
 
   return { concepts, generatedAt: new Date().toISOString() };

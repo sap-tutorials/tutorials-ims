@@ -109,11 +109,11 @@ describe('sapDevsClient.searchLearningJourneys', () => {
 
 describe('sapDevsClient — other methods (scaffolded)', () => {
   // 4.1 scaffolds these with TODO-throws; 4.2-4.6 implement them.
+  // 4.3 (#447) implemented searchDiscovery — removed from scaffold list.
   it.each([
     'getRecentNews',
     'getNewsDetail',
     'searchVideos',
-    'searchDiscovery',
     'getSamples',
     'searchResources',
   ])('%s throws "not implemented in 4.1"', async (methodName) => {

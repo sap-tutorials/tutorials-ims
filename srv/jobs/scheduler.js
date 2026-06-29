@@ -355,6 +355,19 @@ export function registerJobs() {
     runWithLock('fetch-blog-posts', 30 * 60 * 1000, runFetchBlogPosts)
   );
 
+  // Weekly Sunday at 03:07 — Phase 4.3 Discovery Missions extraction (#447).
+  // Off-minute (:07) per the project's cron-collision-avoidance convention
+  // (well-separated from :13 journey and :23 blog crons).
+  // 30-min TTL covers a full pass of ~100-200 missions at ~5s/mission LLM call.
+  // Full catalog upserts every cycle; contentHash gates per-mission LLM
+  // extraction. Lazy-import keeps boot fast.
+  cron.schedule('7 3 * * 0', async () => {
+    await runWithLock('fetch-discovery-missions', 30 * 60 * 1000, async () => {
+      const { runFetchDiscoveryMissions } = await import('./fetch-discovery-missions-job.js');
+      return runFetchDiscoveryMissions();
+    });
+  });
+
   // Weekly Sunday at 04:07 — Phase 4 cross-type GC.
   // Prunes content rows past lastSeenAt + 2×TTL when not pinned. Cascade-deletes
   // link entity rows via CDS Compositions on the parent entity, plus an explicit
