@@ -12,12 +12,12 @@ import { KG_IRI_PREFIXES } from '../../../srv/lib/kg-projection.js';
 const KG = 'https://developers.sap.com/kg/';
 
 describe('IRI prefix lockstep', () => {
-  const expectedTypes = ['tutorial', 'concept', 'mission', 'group', 'product', 'category', 'tag', 'learning-journey', 'blog-post', 'discovery-mission'];
+  const expectedTypes = ['tutorial', 'concept', 'mission', 'group', 'product', 'category', 'tag', 'learning-journey', 'blog-post', 'discovery-mission', 'video'];
 
   it('every prefix in KG_IRI_PREFIXES has a corresponding helper export', () => {
-    // Sanity: the registry covers exactly the 10 known entity types
+    // Sanity: the registry covers exactly the 11 known entity types
     // (7 Phase 1-3 types + learning-journey from Phase 4.1 + blog-post from
-    // Phase 4.2 + discovery-mission from Phase 4.3, #447).
+    // Phase 4.2 + discovery-mission from Phase 4.3 + video from Phase 4.4, #447).
     expect(Object.keys(KG_IRI_PREFIXES).sort()).toEqual([...expectedTypes].sort());
   });
 

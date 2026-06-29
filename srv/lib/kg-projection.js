@@ -90,6 +90,7 @@ export const KG_IRI_PREFIXES = Object.freeze({
   'learning-journey': `${KG}learning-journey/`,
   'blog-post': `${KG}blog-post/`,
   'discovery-mission': `${KG}discovery-mission/`,
+  'video': `${KG}video/`,
 });
 
 /**
@@ -113,6 +114,13 @@ export function iriBlogPost(slug) {
  */
 export function iriDiscoveryMission(slug) {
   return `${KG_IRI_PREFIXES['discovery-mission']}${iriEscapeSegment(slug)}`;
+}
+
+/**
+ * Phase 4.4 (#447): IRI helper for SAP Developers YouTube videos.
+ */
+export function iriVideo(slug) {
+  return `${KG_IRI_PREFIXES['video']}${iriEscapeSegment(slug)}`;
 }
 
 /**
