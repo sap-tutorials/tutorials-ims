@@ -360,3 +360,14 @@ html[data-reader="on"][data-page-kind="tutorial"] .op-header:focus-within {
 #sb-user-popover ui5-li {
   color: var(--sapTextColor);
 }
+
+/* Shellbar nav-menu group separators (header.html sb-nav-popover).
+   Visually divide the verb-pages group from the apps group, and apps
+   from the auth-gated tail. Mirrors the user-popover__separator idiom
+   in the sibling popover. aria-hidden on the <hr> so screen-readers
+   don't announce a list-item-shaped pause. */
+#sb-nav-popover .nav-list__separator {
+  border: none;
+  border-top: 1px solid var(--sapGroup_TitleBorderColor);
+  margin: 0.25rem 0;
+}
