@@ -71,6 +71,33 @@
         </GenericTile>
 
       </l:Grid>
+
+      <!-- Phase 4.5 (#746): Cron health tile. Reads AdminService.JobLastRun
+           via the same OData "admin" model used by _loadMetrics(). Only the
+           Phase 4.5 fetch-api-docs cron currently writes rows here; Phase
+           4.1-4.4 retrofit is out-of-scope for this PR. Visual highlight on
+           age > 35 days is a post-merge polish; this commit lands the
+           data wiring. -->
+      <Panel headerText="Cron health" expandable="true" expanded="true" class="sapUiSmallMargin">
+        <Table id="cronHealthTable" items="{admin>/JobLastRun}" growing="true" growingThreshold="20">
+          <columns>
+            <Column><Text text="Job" /></Column>
+            <Column><Text text="Last success" /></Column>
+            <Column><Text text="Last error at" /></Column>
+            <Column><Text text="Last error" /></Column>
+          </columns>
+          <items>
+            <ColumnListItem>
+              <cells>
+                <Text text="{admin>jobName}" />
+                <Text text="{admin>lastSuccessAt}" />
+                <Text text="{admin>lastErrorAt}" />
+                <Text text="{admin>lastErrorMessage}" />
+              </cells>
+            </ColumnListItem>
+          </items>
+        </Table>
+      </Panel>
     </content>
   </Page>
 </mvc:View>
