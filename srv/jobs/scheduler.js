@@ -666,6 +666,25 @@ export function registerJobs() {
     },
   });
 
+  // Phase 4.6 (#747): weekly SAP-samples corpus refresh + concept-link extraction.
+  // Operator must run scripts/seed-samples.cjs once first (or click the
+  // admin UI Seed button); the cron refuses to self-bootstrap on an empty
+  // Samples table (MAX-or-abort gate).
+  // 30-min TTL covers a steady-state pass. Lazy-import keeps boot fast.
+  // opts is threaded through #747's runJobByName extension as the 2nd
+  // positional arg, enabling manual-trigger overrides (sinceIsoOverride,
+  // budgetOverride) via admin action + scripts/seed-samples.cjs.
+  registerJob({
+    jobName: 'fetch-samples',
+    schedule: '43 4 * * 0',
+    ttlMs: 30 * 60 * 1000,
+    description: 'Fetch SAP-samples GitHub repos + extract embodies concepts (weekly)',
+    fn: async (logId, opts) => {
+      const { runFetchSamples } = await import('./fetch-samples-job.js');
+      return runFetchSamples(logId, opts);
+    },
+  });
+
   // Weekly Sunday at 04:07 — Phase 4 cross-type GC.
   // Prunes content rows past lastSeenAt + 2×TTL when not pinned. Cascade-deletes
   // link entity rows via CDS Compositions on the parent entity, plus an explicit

@@ -39,12 +39,12 @@ describe('scheduler — JOB_REGISTRY chassis', () => {
     expect(() => registerJob({ jobName: 'dup', schedule: '0 1 * * *', ttlMs: 1000, description: 'x', fn: async () => 'b' })).toThrow(/Duplicate jobName/);
   });
 
-  it('registerJobs() registers exactly 24 jobs (lockstep)', async () => {
+  it('registerJobs() registers exactly 25 jobs (lockstep)', async () => {
     // The full registerJobs() schedules crons against node-cron. We run it
     // in a fresh test context; the test isolates by resetting the registry
     // in beforeEach and again in afterAll (below).
     registerJobs();
-    expect(_getJobRegistry().size).toBe(24);
+    expect(_getJobRegistry().size).toBe(25);    // Phase 4.6 (#747) adds fetch-samples
   });
 
   it('runJobByName(unknownName) throws', async () => {
