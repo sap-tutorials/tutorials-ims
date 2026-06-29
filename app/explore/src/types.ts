@@ -39,9 +39,3 @@ export interface ExplorePayload {
   generatedAt: string
   droppedBindings?: number  // observability counter from Task 1's buildExplorePayload
 }
-
-declare global {
-  interface Window {
-    __INITIAL_GRAPH__?: ExplorePayload
-  }
-}

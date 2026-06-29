@@ -1,33 +1,34 @@
 import { describe, it, expect } from 'vitest';
 import { BASE_URL, SRV_URL, fetchWithRetry } from './smoke.config.js';
 
-// #446 Track 3-B — /explore/ end-to-end smoke test.
+// #744 — /explore/ end-to-end smoke test.
 //
-// Task 3 (CSS-discovery) verified that the HTML page references hashed JS/CSS
-// asset URLs the approuter can actually serve. Task 6 extends this to the
-// underlying CAP endpoints that power the page:
-//   1. /explore/ returns 200 HTML with inline graph JSON.
+// Post-#744 the page is Hugo-rendered with full chrome (shellbar + theme)
+// and the Vue/Sigma SPA fetches graph data client-side from /graph/explore-data.
+// Assertions:
+//   1. /explore/ returns 200 HTML with shellbar + theme markup + #explore-app mount.
 //   2. The referenced JS bundle resolves to 200.
 //   3. The referenced CSS file resolves to 200.
 //   4. /graph/explore-data returns the bulk payload.
 //   5. /graph/path returns 200 for a real edge pair (skipped if empty env).
-//   6. /graph/path returns 400 for same-slug query (extracted from Phase 2).
+//   6. /graph/path returns 400 for same-slug query.
 
 describe('/explore/ route', () => {
   let html = null;
 
-  it('returns 200 with valid HTML containing the inline graph JSON', async () => {
+  it('returns 200 with shellbar + theme markup (Hugo-rendered chrome)', async () => {
     const r = await fetchWithRetry(`${BASE_URL}/explore/`);
     expect(r.status).toBe(200);
     expect(r.headers.get('content-type')).toMatch(/text\/html/);
     html = await r.text();
-    expect(html).toContain('<script type="application/json" id="initial-graph">');
-    const match = html.match(/<script type="application\/json" id="initial-graph">([\s\S]*?)<\/script>/);
-    expect(match).toBeTruthy();
-    const json = JSON.parse(match[1]);
-    expect(json).toHaveProperty('nodes');
-    expect(json).toHaveProperty('edges');
-    expect(json).toHaveProperty('generatedAt');
+    // Section 5.2 of the spec: assert the shellbar + theme markup so a
+    // regression that re-introduces a standalone template fails loudly.
+    expect(html).toContain('app-shellbar');
+    expect(html).toMatch(/data-theme=/);
+    // The Vue island mount point (Task 6 renamed #app → #explore-app).
+    expect(html).toMatch(/id="?explore-app"?/);
+    // Defensive: confirm the OLD SSR script-tag JSON shape is GONE.
+    expect(html).not.toContain('<script type="application/json" id="initial-graph">');
   });
 
   it('references a real JS bundle (main-<hash>.js) that returns 200', async () => {

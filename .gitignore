@@ -18,6 +18,9 @@ approuter/static/*
 .tutorial-cache-qa/
 hugo/data/image_dimensions.json
 hugo/data/homepage_shelves.json
+# Build artifact written by scripts/build-explore-manifest.ts; consumed by
+# Hugo as site.Data.explore_bundle (issue #744).
+hugo/data/explore_bundle.json
 hugo/data-qa/
 hugo/static-qa/
 .comparison-results/

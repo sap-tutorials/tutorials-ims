@@ -16,7 +16,7 @@ const { payload, hasData, error } = useGraphData()
 const { enabledNodeTypes, enabledPredicates, toggleNodeType, togglePredicate } = useFilters()
 const { selectedNode, selectNode } = useSelectedNode()
 const { isMobile } = useViewport()
-useTelemetry()
+useTelemetry({ payload })
 
 // Active path overlay — null when no path is drawn. Stored as the ordered
 // list of node IDs the graph already uses (t:<slug> / c:<slug>) so

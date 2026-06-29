@@ -1,0 +1,20 @@
+{{ define "main" }}
+<div id="explore-app" class="explore-page">
+  {{ with site.Data.explore_bundle }}
+    <link rel="stylesheet" href="/explore-ui/assets/{{ .css }}">
+    <script type="module" src="/explore-ui/main-{{ .hash }}.js"></script>
+  {{ else }}
+    <div class="explore-build-error" role="alert">
+      <h2>Explore bundle missing</h2>
+      <p>The explore Vue bundle manifest <code>hugo/data/explore_bundle.json</code>
+         was not present at Hugo build time. Run <code>npm run build:explore</code>
+         before <code>hugo</code> to regenerate it.</p>
+    </div>
+  {{ end }}
+</div>
+<noscript>
+  <div class="ds-noscript-fallback">
+    <p>JavaScript is required to view the Knowledge Graph explorer.</p>
+  </div>
+</noscript>
+{{ end }}
