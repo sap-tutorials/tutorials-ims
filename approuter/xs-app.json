@@ -202,6 +202,13 @@
       "csrfProtection": false
     },
     {
+      "source": "^/api/ui-event$",
+      "target": "/api/ui-event",
+      "destination": "srv-api",
+      "authenticationType": "none",
+      "csrfProtection": false
+    },
+    {
       "source": "^/api/(.*)$",
       "target": "/api/$1",
       "destination": "srv-api",
