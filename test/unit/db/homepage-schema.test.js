@@ -13,4 +13,16 @@ describe('db/homepage.cds — explainer additions (issue #759 PR 1)', () => {
       expect(SCHEMA).toMatch(/REVIEWED\s*;/);
     });
   });
+
+  describe('HomepageShelves new fields', () => {
+    it('declares tagline : String(140) nullable', () => {
+      expect(SCHEMA).toMatch(/tagline\s*:\s*String\(140\)\s*;/);
+    });
+    it('declares whyItMatters : String(800) nullable', () => {
+      expect(SCHEMA).toMatch(/whyItMatters\s*:\s*String\(800\)\s*;/);
+    });
+    it('declares authoringStatus with default BLANK and @assert.range', () => {
+      expect(SCHEMA).toMatch(/authoringStatus\s*:\s*AuthoringStatus\s+default\s+'BLANK'\s+@assert\.range\s*;/);
+    });
+  });
 });

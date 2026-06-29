@@ -43,6 +43,12 @@ entity HomepageShelves : cuid, managed {
   isActive    : Boolean            default true;
   lastChecked : Timestamp;
   linkStatus  : HomepageLinkStatus default 'UNKNOWN' @assert.range;
+  // (#759) Explainer content — see spec §2.4. tagline + whyItMatters
+  // fill the popover; description stays as a third paragraph for
+  // graceful fallback during phased rollout.
+  tagline         : String(140);
+  whyItMatters    : String(800);
+  authoringStatus : AuthoringStatus default 'BLANK' @assert.range;
 }
 
 // Hand-curated map of legacy URLs → new URLs. Approuter fetches via
