@@ -85,4 +85,28 @@ describe('db/homepage.cds — explainer additions (issue #759 PR 1)', () => {
       });
     });
   });
+
+  describe('ShelfDefinitions seed CSV', () => {
+    const csv = readFileSync(
+      join(import.meta.dirname, '../../../db/data/com.sap.developers.ims-ShelfDefinitions.csv'),
+      'utf8'
+    );
+    const lines = csv.trim().split(/\r?\n/);
+    it('has header + 4 rows', () => {
+      expect(lines.length).toBe(5);
+    });
+    it('header uses ID;shelfKey;label;sortOrder;tagline;whyItMatters;authoringStatus', () => {
+      expect(lines[0]).toBe('ID;shelfKey;label;sortOrder;tagline;whyItMatters;authoringStatus');
+    });
+    it.each([
+      ['START_HERE', 'Start here', 10],
+      ['REFERENCE', 'Reference', 20],
+      ['TOOLS', 'Tools & samples', 30],
+      ['KEEP_CURRENT', 'Keep current', 40],
+    ])('row for %s has correct label + sortOrder', (shelfKey, label, sort) => {
+      const row = lines.find(l => l.includes(`;${shelfKey};`));
+      expect(row).toBeDefined();
+      expect(row).toContain(`;${shelfKey};${label};${sort};`);
+    });
+  });
 });
