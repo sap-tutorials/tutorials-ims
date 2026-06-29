@@ -1,0 +1,35 @@
+{
+  "items": [
+    {
+      "snippet": {
+        "title": "SAP Developer News for the Week of June 28, 2026",
+        "description": "Tom Jung covers this week's SAP developer announcements. 00:00 Intro. 00:45 SAP CAP 9 release. 03:21 SAP Build Code GA. 07:15 BTP Trial updates. Subscribe for weekly updates.",
+        "publishedAt": "2026-06-28T15:00:00Z",
+        "channelTitle": "SAP Developers",
+        "thumbnails": { "high": { "url": "https://i.ytimg.com/vi/abc12345DEF/hqdefault.jpg" } },
+        "resourceId": { "videoId": "abc12345DEF" }
+      }
+    },
+    {
+      "snippet": {
+        "title": "Tech Bytes: SAP Build Apps custom logic in 60 seconds",
+        "description": "Quick tip on adding custom logic to SAP Build Apps.",
+        "publishedAt": "2026-06-26T12:00:00Z",
+        "channelTitle": "SAP Developers",
+        "thumbnails": { "high": { "url": "https://i.ytimg.com/vi/xyz67890GHI/hqdefault.jpg" } },
+        "resourceId": { "videoId": "xyz67890GHI" }
+      }
+    },
+    {
+      "snippet": {
+        "title": "Empty description edge case",
+        "description": "",
+        "publishedAt": "2026-06-20T09:00:00Z",
+        "channelTitle": "SAP Developers",
+        "thumbnails": { "high": { "url": "" } },
+        "resourceId": { "videoId": "jkl11122MNO" }
+      }
+    }
+  ],
+  "nextPageToken": null
+}
