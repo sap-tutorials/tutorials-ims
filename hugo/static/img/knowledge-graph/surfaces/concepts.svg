@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" role="img" aria-label="Coming soon: per-concept landing page mockup">
+  <rect x="0" y="0" width="600" height="400" fill="#fafbfd"/>
+  <!-- Title -->
+  <rect x="40" y="40" width="260" height="32" rx="4" fill="#1c478a"/>
+  <text x="50" y="62" font-family="system-ui, sans-serif" font-size="20" font-weight="700" fill="#fff">CAP</text>
+  <text x="100" y="62" font-family="system-ui, sans-serif" font-size="16" fill="#e8f1fb">— a concept</text>
+  <!-- Description -->
+  <rect x="40" y="92" width="520" height="10" rx="2" fill="#cbd5e3"/>
+  <rect x="40" y="108" width="500" height="10" rx="2" fill="#cbd5e3"/>
+  <rect x="40" y="124" width="380" height="10" rx="2" fill="#cbd5e3"/>
+  <!-- Section: teaches → tutorials -->
+  <text x="40" y="174" font-family="system-ui, sans-serif" font-size="14" font-weight="600" fill="#5b738b">TAUGHT BY</text>
+  <rect x="40" y="184" width="160" height="40" rx="6" fill="#fff" stroke="#cbd5e3"/>
+  <rect x="50" y="195" width="80" height="8" rx="2" fill="#5b738b"/>
+  <rect x="50" y="208" width="60" height="6" rx="2" fill="#a8b5c5"/>
+  <rect x="210" y="184" width="160" height="40" rx="6" fill="#fff" stroke="#cbd5e3"/>
+  <rect x="220" y="195" width="100" height="8" rx="2" fill="#5b738b"/>
+  <rect x="220" y="208" width="70" height="6" rx="2" fill="#a8b5c5"/>
+  <rect x="380" y="184" width="160" height="40" rx="6" fill="#fff" stroke="#cbd5e3"/>
+  <rect x="390" y="195" width="90" height="8" rx="2" fill="#5b738b"/>
+  <rect x="390" y="208" width="50" height="6" rx="2" fill="#a8b5c5"/>
+  <!-- Section: requires -->
+  <text x="40" y="264" font-family="system-ui, sans-serif" font-size="14" font-weight="600" fill="#5b738b">REQUIRES</text>
+  <rect x="40" y="274" width="120" height="28" rx="14" fill="#e8f1fb" stroke="#0a6ed1"/>
+  <text x="100" y="293" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13" fill="#1c478a">Node.js</text>
+  <rect x="170" y="274" width="100" height="28" rx="14" fill="#e8f1fb" stroke="#0a6ed1"/>
+  <text x="220" y="293" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13" fill="#1c478a">CDS</text>
+  <!-- Section: relatedTo -->
+  <text x="40" y="334" font-family="system-ui, sans-serif" font-size="14" font-weight="600" fill="#5b738b">RELATED CONCEPTS</text>
+  <rect x="40" y="344" width="100" height="28" rx="14" fill="#fff" stroke="#cbd5e3"/>
+  <text x="90" y="363" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13" fill="#5b738b">SAPUI5</text>
+  <rect x="150" y="344" width="120" height="28" rx="14" fill="#fff" stroke="#cbd5e3"/>
+  <text x="210" y="363" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13" fill="#5b738b">HANA Cloud</text>
+  <rect x="280" y="344" width="100" height="28" rx="14" fill="#fff" stroke="#cbd5e3"/>
+  <text x="330" y="363" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13" fill="#5b738b">OData</text>
+  <!-- "Coming soon" pill (top right) -->
+  <rect x="430" y="40" width="130" height="28" rx="14" fill="#d29922"/>
+  <text x="495" y="59" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#fff">Coming soon</text>
+</svg>
