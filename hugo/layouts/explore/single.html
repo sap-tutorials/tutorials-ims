@@ -1,5 +1,8 @@
 {{ define "main" }}
+{{ $kgCss := resources.Get "css/kg-overview.css" }}
+<link rel="stylesheet" href="{{ $kgCss.RelPermalink }}">
 <div id="explore-app" class="explore-page">
+  <a class="explore-page__about-link" href="/explore/about/">About this graph →</a>
   {{ with site.Data.explore_bundle }}
     <link rel="stylesheet" href="/explore-ui/assets/{{ .css }}">
     <script type="module" src="/explore-ui/main-{{ .hash }}.js"></script>
