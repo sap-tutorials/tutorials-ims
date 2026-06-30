@@ -342,6 +342,7 @@ docs/superpowers/specs/2026-06-30-orphan-purge-design.md §Architecture-1."
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import cds from '@sap/cds';
 import { randomUUID } from 'node:crypto';
+import { _resetForTests as resetSecretResolver } from '../../srv/lib/secret-resolver.js';
 
 const project = cds.test('serve', '--project', '.', '--in-memory');
 
@@ -358,9 +359,13 @@ describe('POST /content/orphan-purge', () => {
   const headers = { 'authorization': `Bearer ${process.env.CONTENT_API_KEY || 'test-key'}`, 'x-initiator': 'test/unit-1' };
 
   beforeAll(async () => {
-    // contentAuthMiddleware reads CONTENT_API_KEY via secret-resolver;
-    // for the unit test we set the env var so the resolver short-circuits.
+    // contentAuthMiddleware reads CONTENT_API_KEY via secret-resolver,
+    // which caches in a globalThis singleton (5-min TTL). If another test
+    // in the same worker primed the cache to null or a different value,
+    // setting process.env here won't take effect. Reset explicitly —
+    // matches the precedent at test/unit/mail-client-credstore.test.js.
     process.env.CONTENT_API_KEY = 'test-key';
+    resetSecretResolver();
     const { Tutorials } = cds.entities(ns);
     const targetID = randomUUID();
     await INSERT.into(Tutorials).entries([
@@ -694,10 +699,12 @@ describeIf('POST /content/orphan-purge — hybrid (real HANA)', () => {
 });
 ```
 
-- [ ] **Step 2: Run against DEV (requires `cf login` to DEV)**
+- [ ] **Step 2: Run against DEV (requires `cf login` to DEV; `CONTENT_API_KEY` must be set in the calling shell — `cds bind` does NOT inject it, only service-binding env vars)**
 
 ```bash
-ALLOW_HYBRID_WRITES=true npx cds bind --exec -- npx vitest run test/hybrid/orphan-purge.test.js
+CONTENT_API_KEY="tutorials-content-publish-2024" \
+ALLOW_HYBRID_WRITES=true \
+  npx cds bind --exec -- npx vitest run test/hybrid/orphan-purge.test.js
 ```
 
 Expected: three tests PASS against real HANA.
@@ -886,7 +893,7 @@ The next 04:13 UTC `content-drift-check` run should still report the same 24 mis
 grep -rE "from\s+['\"]\\./lib/" scripts/publish-content.ts | head -3
 ```
 
-Use whatever extension convention you find (`.js` vs `.ts` vs none).
+Confirmed convention: project uses `.js` extension for all `./lib/*` imports in `scripts/publish-content.ts` (e.g. `./lib/publish-client.js`). Use `.js` in the snippets below.
 
 - [ ] **Step 2: Write the helper module**
 
@@ -984,7 +991,7 @@ branch (next commit) imports them."
  * No HTTP, no DB.
  */
 import { describe, it, expect } from 'vitest';
-import { computeOrphans, enforceCap, formatStepSummary } from '../../scripts/lib/purge-orphans.ts';
+import { computeOrphans, enforceCap, formatStepSummary } from '../../scripts/lib/purge-orphans.js';
 
 describe('computeOrphans', () => {
   it('returns slugs in server but not in local', () => {
@@ -1337,7 +1344,7 @@ Add after the existing imports:
 
 ```ts
 import { appendFileSync } from 'node:fs';
-import { computeOrphans, enforceCap, formatStepSummary } from './lib/purge-orphans.ts';
+import { computeOrphans, enforceCap, formatStepSummary } from './lib/purge-orphans.js';
 ```
 
 (If `readdirSync` isn't already imported, add it — `import { readdirSync, appendFileSync } from 'node:fs'`.)
