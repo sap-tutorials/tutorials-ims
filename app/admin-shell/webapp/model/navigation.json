@@ -21,9 +21,7 @@
         { "key": "concepts", "title": "Concepts" },
         { "key": "advocates", "title": "Advocates" },
         { "key": "alerts", "title": "Alerts" },
-        { "key": "operations", "title": "Featured Tasks" },
-        { "key": "verbDefinitions",  "title": "Verb definitions" },
-        { "key": "shelfDefinitions", "title": "Shelf definitions" }
+        { "key": "operations", "title": "Featured Tasks" }
       ]
     },
     {
@@ -31,7 +29,9 @@
       "title": "Homepage",
       "icon": "sap-icon://home",
       "items": [
-        { "key": "homepageShelves",   "title": "Shelves" },
+        { "key": "homepageShelves",   "title": "Shelf Entries (Links)" },
+        { "key": "verbDefinitions",   "title": "Verb Explainers" },
+        { "key": "shelfDefinitions",  "title": "Shelf Explainers" },
         { "key": "homepageRedirects", "title": "Redirects" },
         { "key": "homepageConfig",    "title": "Config" }
       ]

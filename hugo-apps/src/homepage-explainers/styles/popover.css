@@ -2,17 +2,24 @@
  * Spec: #759 §4.3
  */
 
+/* #759 hotfix — multi-line wrap.
+ * The original anchor was `display: inline-flex; align-items: center`, which
+ * made the link grow vertically (because the link wrapped inside its own flex
+ * slot) and the icon vertically-centered against the now-tall link → icon
+ * visually anchored at the first line's right edge with empty space below the
+ * wrapped second line. Plain `display: inline` lets the link wrap naturally
+ * and puts the icon inline after the link's last character. `position: relative`
+ * still works on inline boxes in modern browsers, so the absolute-positioned
+ * popover continues to anchor correctly. */
 .hp-popover-anchor {
   position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  display: inline;
 }
 
 .hp-popover-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 4px;
   width: 16px;
   height: 16px;
   border-radius: 50%;
@@ -23,6 +30,10 @@
   color: var(--sapNeutralTextColor, #6a6d70);
   opacity: 0.6;
   transition: opacity 0.15s ease-out;
+}
+
+.hp-popover-icon > svg {
+  display: block;
 }
 
 .hp-popover-icon:hover,

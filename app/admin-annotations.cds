@@ -2876,6 +2876,14 @@ annotate AdminService.HomepageShelves with @(
     { Value : linkStatus,  Label : 'Link health' },
     { Value : isActive,    Label : 'Active' }
   ],
+  // (#759 hotfix) OP-header buttons for the per-link explainer workflow.
+  // BOUND actions on the entity (srv/admin-service.cds) — FE V4 reads
+  // UI.Identification and renders DataFieldForAction entries automatically.
+  // Replaces PR 3b's broken manifest controlConfiguration[Identification].
+  UI.Identification : [
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.HomepageShelves/regenerate',   Label: 'Regenerate explainer with AI' },
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.HomepageShelves/markReviewed', Label: 'Mark explainer as reviewed' }
+  ],
   UI.SelectionFields : [ verb, shelf, isActive, linkStatus ],
   UI.Facets : [
     { $Type: 'UI.ReferenceFacet', Label: 'General',   Target: '@UI.FieldGroup#Main' },
@@ -2978,6 +2986,14 @@ annotate AdminService.VerbDefinitions with @(
     { Value: sortOrder,       Label: 'Sort order' },
     { Value: authoringStatus, Label: 'Status', Criticality: authoringStatus }
   ],
+  // (#759 hotfix) OP-header buttons via BOUND actions. FE V4 renders these
+  // automatically as DataFieldForAction entries in the OP header — no
+  // manifest `controlConfiguration[Identification]` needed. Same precedent
+  // as KnowledgeGraphService.Concepts.publishConcept (admin-annotations.cds:2542).
+  UI.Identification : [
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.VerbDefinitions/regenerate',   Label: 'Regenerate with AI' },
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.VerbDefinitions/markReviewed', Label: 'Mark as reviewed' }
+  ],
   UI.Facets : [
     { $Type: 'UI.ReferenceFacet', Label: 'Identity',  Target: '@UI.FieldGroup#Identity' },
     { $Type: 'UI.ReferenceFacet', Label: 'Explainer', Target: '@UI.FieldGroup#Explainer' }
@@ -3017,6 +3033,10 @@ annotate AdminService.ShelfDefinitions with @(
     { Value: label,           Label: 'Label' },
     { Value: sortOrder,       Label: 'Sort order' },
     { Value: authoringStatus, Label: 'Status', Criticality: authoringStatus }
+  ],
+  UI.Identification : [
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.ShelfDefinitions/regenerate',   Label: 'Regenerate with AI' },
+    { $Type: 'UI.DataFieldForAction', Action: 'AdminService.ShelfDefinitions/markReviewed', Label: 'Mark as reviewed' }
   ],
   UI.Facets : [
     { $Type: 'UI.ReferenceFacet', Label: 'Identity',  Target: '@UI.FieldGroup#Identity' },

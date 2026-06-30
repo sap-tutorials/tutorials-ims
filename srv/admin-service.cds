@@ -149,10 +149,20 @@ service AdminService {
   // shelves on / and /<verb>/. LegacyRedirects feeds the approuter's
   // dynamic redirect map. HomepageConfig is a singleton with the
   // featured-playlist ID and per-band feature flags.
+  //
+  // (#759 hotfix) `markReviewed` + `regenerate` are bound to HomepageShelves
+  // so Fiori Elements V4 can wire them as OP-header DataFieldForAction
+  // entries with auto-bound row context. PR 3b's unbound versions stay
+  // on the service level for ListReport bulk fan-out; the bound singletons
+  // here power the per-row OP buttons. Return shape is inlined to dodge
+  // forward-ref against `type ExplainerActionResult` below.
   @cds.redirection.target: true
   @Capabilities.ChangeTracking : { Supported: true }
   @odata.draft.enabled
-  entity HomepageShelves as projection on ims.HomepageShelves;
+  entity HomepageShelves as projection on ims.HomepageShelves actions {
+    action markReviewed() returns { processed : Integer; skipped : Integer; cost : String };
+    action regenerate()   returns { processed : Integer; skipped : Integer; cost : String };
+  };
 
   @cds.redirection.target: true
   @Capabilities.ChangeTracking : { Supported: true }
@@ -170,11 +180,17 @@ service AdminService {
   // off (matches HomepageConfig — singleton-set config, not a catalog).
   @Capabilities.ChangeTracking : { Supported: false }
   @odata.draft.enabled
-  entity VerbDefinitions as projection on ims.VerbDefinitions;
+  entity VerbDefinitions as projection on ims.VerbDefinitions actions {
+    action markReviewed() returns { processed : Integer; skipped : Integer; cost : String };
+    action regenerate()   returns { processed : Integer; skipped : Integer; cost : String };
+  };
 
   @Capabilities.ChangeTracking : { Supported: false }
   @odata.draft.enabled
-  entity ShelfDefinitions as projection on ims.ShelfDefinitions;
+  entity ShelfDefinitions as projection on ims.ShelfDefinitions actions {
+    action markReviewed() returns { processed : Integer; skipped : Integer; cost : String };
+    action regenerate()   returns { processed : Integer; skipped : Integer; cost : String };
+  };
 
   @readonly @cds.persistence.skip entity AlertCtaTargets {
     key url   : String(500);

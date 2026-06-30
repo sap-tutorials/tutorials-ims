@@ -1740,6 +1740,71 @@ export default class AdminService extends cds.ApplicationService {
     this.on('markShelfEntryExplainerReviewed', (req) =>
       runMarkReviewed({ entityName: 'com.sap.developers.ims.HomepageShelves', id: req.data.id, req }));
 
+    // (#759 hotfix) Bound versions of `markReviewed` + `regenerate` on each
+    // explainer entity. Fiori Elements V4 won't render an OP-header action
+    // for an unbound service-level action without forcing a parameter dialog
+    // first — and the original manifest `controlConfiguration[Identification]`
+    // pattern silently no-op'd because the entity had no `UI.Identification`
+    // annotation for FE to discover. Bound actions + `UI.DataFieldForAction`
+    // in CDS annotations is the working precedent (KnowledgeGraphService /
+    // Concepts.publishConcept). Row ID arrives via `req.params[0].ID` — the
+    // canonical bound-action pattern. The unbound handlers above stay for
+    // ListReport bulk fan-out (`generate*Explainers` / `mark*Reviewed`).
+    function pickBoundId(req) {
+      return req.params?.[0]?.ID;
+    }
+
+    this.on('markReviewed', 'VerbDefinitions', async (req) => {
+      const id = pickBoundId(req);
+      if (!id) return req.reject(400, 'Bound markReviewed invoked without entity context');
+      return runMarkReviewed({ entityName: 'com.sap.developers.ims.VerbDefinitions', id, req });
+    });
+    this.on('markReviewed', 'ShelfDefinitions', async (req) => {
+      const id = pickBoundId(req);
+      if (!id) return req.reject(400, 'Bound markReviewed invoked without entity context');
+      return runMarkReviewed({ entityName: 'com.sap.developers.ims.ShelfDefinitions', id, req });
+    });
+    this.on('markReviewed', 'HomepageShelves', async (req) => {
+      const id = pickBoundId(req);
+      if (!id) return req.reject(400, 'Bound markReviewed invoked without entity context');
+      return runMarkReviewed({ entityName: 'com.sap.developers.ims.HomepageShelves', id, req });
+    });
+
+    this.on('regenerate', 'VerbDefinitions', async (req) => {
+      const id = pickBoundId(req);
+      if (!id) return req.reject(400, 'Bound regenerate invoked without entity context');
+      return runExplainerAction({
+        kind: 'verb',
+        entityName: 'com.sap.developers.ims.VerbDefinitions',
+        ids: [id], mode: 'regenerate-selected', req,
+      });
+    });
+    this.on('regenerate', 'ShelfDefinitions', async (req) => {
+      const id = pickBoundId(req);
+      if (!id) return req.reject(400, 'Bound regenerate invoked without entity context');
+      return runExplainerAction({
+        kind: 'shelf',
+        entityName: 'com.sap.developers.ims.ShelfDefinitions',
+        ids: [id], mode: 'regenerate-selected', req,
+      });
+    });
+    this.on('regenerate', 'HomepageShelves', async (req) => {
+      const id = pickBoundId(req);
+      if (!id) return req.reject(400, 'Bound regenerate invoked without entity context');
+      return runExplainerAction({
+        kind: 'shelf-entry',
+        entityName: 'com.sap.developers.ims.HomepageShelves',
+        ids: [id], mode: 'regenerate-selected', req,
+        contextLookup: async (row) => {
+          const db = await cds.connect.to('db');
+          const verbDef = await db.run(
+            SELECT.one.from('com.sap.developers.ims.VerbDefinitions').where({ verbKey: row.verb })
+          );
+          return verbDef ? { verbDefinition: { label: verbDef.label, tagline: verbDef.tagline } } : undefined;
+        },
+      });
+    });
+
 
     // Phase 2-B (#464): Severity-classified expiry warnings for the
     // admin-shell notifications popover. Read-only — no DB writes.
