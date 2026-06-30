@@ -146,6 +146,21 @@ Managed via the `LegacyRedirects` CDS entity. The approuter middleware (`approut
 
 ---
 
+## Explainer popovers
+
+Issue #759 adds progressive-disclosure explainers to the homepage verb spine, the directory footer, and the verb sub-page link cards. The data model (`VerbDefinitions`, `ShelfDefinitions`, plus three new fields on `HomepageShelves`), build feeds, AI-generation actions, Vue islands, and admin workflow are documented separately to keep this file focused.
+
+See **[Homepage explainer popovers](homepage-explainers.md)** for:
+
+- Data model (3 entities + the `AuthoringStatus` lifecycle)
+- New build feeds (`/build/verb-definitions`, `/build/shelf-definitions`)
+- AI-generation actions on `AdminService` and the `AICORE_EXPLAINER_GENERATOR_DISABLED` kill switch
+- Vue islands (`verb-flip-tile`, `link-explainer-popover`) and their Hugo attach points
+- Admin UI surfaces under `/admin-ui/#verb-definitions`, `/admin-ui/#shelf-definitions`, and the Explainer facet on the Homepage Shelves Object Page
+- Authoring workflow for new BTP environments
+
+---
+
 ## Failure Modes
 
 | Failure | Behaviour |

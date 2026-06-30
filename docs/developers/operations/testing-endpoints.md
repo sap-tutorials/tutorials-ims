@@ -192,7 +192,9 @@ When `EXPOSE_CAP_UI=true` is set on the CAP srv app, these are accessible throug
 | `/api/homepage/shelves?verb=<v>` | GET | All active `HomepageShelves` entries for one verb (`LEARN`\|`BUILD`\|`INTEGRATE`\|`OPERATE`\|`AI`\|`CONNECT`). 5-min cache. | None |
 | `/api/homepage/redirectsActive` | GET | Active `LegacyRedirects` rows (approuter-only consumer; refreshes hourly). | None |
 | `/api/homepage/recordRedirectHits` | POST | Idempotent batch hit counter for legacy redirects (approuter-only writer). Body: `{ hits: [{ id, count }] }`. | None |
-| `/build/homepage-shelves` | GET | All `HomepageShelves` entries keyed by verb (Hugo build-time only; bakes `hugo/data/homepage_shelves.json`). | None |
+| `/build/homepage-shelves` | GET | All `HomepageShelves` entries keyed by verb (Hugo build-time only; bakes `hugo/data/homepage_shelves.json`). Payload includes `tagline` / `whyItMatters` / `authoringStatus` (#759). | None |
+| `/build/verb-definitions` | GET | All `VerbDefinitions` rows (6 verbs) — labels, icons, taglines, "why it matters" copy for the homepage verb-spine flip tiles (#759). Bakes `hugo/data/verb_definitions.json`. | None |
+| `/build/shelf-definitions` | GET | All `ShelfDefinitions` rows (4 shelf categories: `LEARN` / `START` / `REFERENCE` / `COMMUNITY`) — taglines + "why it matters" copy for verb sub-page shelf headers (#759). Bakes `hugo/data/shelf_definitions.json`. | None |
 
 > **`/build/navigator`** returns a shape with `missions[]`, `groups[]` (incl. standalone published Groups), `tutorialMappings[]`, and `checkpointMappings[]` (milestone markers). The 5-minute in-memory cache is automatically invalidated when the Admin UI saves changes to Missions, Groups, or CompletionPath entities — no `?nocache=1` needed. Implementation: [srv/lib/navigator-catalog.js](../../../srv/lib/navigator-catalog.js).
 >
