@@ -17,7 +17,7 @@ import { decideHandler } from './lib/branch/decide.js';
 import { getTagLabelMap } from './lib/tag-label-map.js';
 import { myProgressHandler } from './lib/my-progress-handler.js';
 import { basicAuthMiddleware } from './lib/tech-user-auth.js';
-import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, sourceHashesHandler, navHandler, rollbackHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler } from './lib/content-store.js';
+import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, sourceHashesHandler, navHandler, rollbackHandler, orphanPurgeHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler } from './lib/content-store.js';
 import { repoCatalogReadHandler, repoCatalogWriteHandler } from './lib/repo-catalog.js';
 import { kgStatsHandler } from './routes/kg-stats.js';
 import * as advocatesPublic from './routes/advocates-public.js';
@@ -336,6 +336,8 @@ cds.on('bootstrap', (app) => {
   // bootstrap block (after contextMw/authMw are defined) so req.user is
   // populated by CAP's auth chain before the handler runs.
   app.post('/content/rollback', express.json(), contentAuthMiddleware, rollbackHandler);
+  // Issue #orphan-purge — CI-only batched soft-delete. Same auth as /content/publish.
+  app.post('/content/orphan-purge', express.json({ limit: '1mb' }), contentAuthMiddleware, orphanPurgeHandler);
   app.post('/content/code-check-specs', express.json({ limit: '5mb' }), contentAuthMiddleware, codeCheckSpecPublishHandler);
 
   // Validate-answer specs publish endpoint (issue #209). Now uses
