@@ -86,6 +86,25 @@
               "initialLoad": "Enabled",
               "navigation": {
                 "HomepageShelves": { "detail": { "route": "ShelfOP" } }
+              },
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.LineItem": {
+                  "actions": {
+                    "generateForBlanks": {
+                      "press": "sap.tutorials.admin.homepage.ext.ActionsController.onGenerateForBlanks",
+                      "visible": true,
+                      "enabled": true,
+                      "text": "Generate for blank rows"
+                    },
+                    "regenerateSelected": {
+                      "press": "sap.tutorials.admin.homepage.ext.ActionsController.onRegenerateSelected",
+                      "visible": true,
+                      "enabled": true,
+                      "text": "Regenerate selected with AI",
+                      "requiresSelection": true
+                    }
+                  }
+                }
               }
             }
           }
@@ -97,7 +116,22 @@
           "options": {
             "settings": {
               "contextPath": "/HomepageShelves",
-              "editableHeaderContent": false
+              "editableHeaderContent": false,
+              "controlConfiguration": {
+                "@com.sap.vocabularies.UI.v1.Identification": {
+                  "actions": {
+                    "regenerateOne": {
+                      "press": "sap.tutorials.admin.homepage.ext.ActionsController.onRegenerateOne",
+                      "text": "Regenerate with AI"
+                    },
+                    "markReviewed": {
+                      "press": "sap.tutorials.admin.homepage.ext.ActionsController.onMarkReviewed",
+                      "text": "Mark as reviewed",
+                      "visible": "{= ${authoringStatus} === 'AI_SEEDED' }"
+                    }
+                  }
+                }
+              }
             }
           }
         },
@@ -134,6 +168,15 @@
             "settings": {
               "contextPath": "/HomepageConfig"
             }
+          }
+        }
+      }
+    },
+    "extends": {
+      "extensions": {
+        "sap.ui.controllerExtensions": {
+          "sap.fe.templates.ListReport.ListReportController": {
+            "controllerName": "sap.tutorials.admin.homepage.ext.ActionsController"
           }
         }
       }
