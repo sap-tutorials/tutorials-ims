@@ -747,6 +747,14 @@ async function main() {
       process.exit(1);
     }
 
+    // 1b. Validate cap is a positive finite integer — guards against
+    //     PURGE_CAP_ABS=fifty or --purge-cap-abs=-1, both of which would
+    //     otherwise produce an unhelpful "exceeds cap (N > NaN abs)" later.
+    if (!Number.isFinite(opts.purgeCapAbs) || opts.purgeCapAbs <= 0) {
+      console.error(`Invalid --purge-cap-abs / PURGE_CAP_ABS: "${process.env.PURGE_CAP_ABS ?? '(unset)'}" — must be a positive integer`);
+      process.exit(1);
+    }
+
     // 2. Load local hashes (same readdir as --verify-only)
     const cacheDir = channel === 'qa'
       ? join(process.cwd(), '.tutorial-cache-qa')
