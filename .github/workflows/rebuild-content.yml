@@ -73,6 +73,11 @@ on:
           - full
           - catalog-only
           - slug-targeted
+      purge-orphans:
+        description: 'After publish, soft-delete tutorials no longer present in any upstream repo. CI-only, 50-slug safety cap (override via PURGE_CAP_ABS env).'
+        required: false
+        type: boolean
+        default: false
 
 env:
   NODE_VERSION: '22'
@@ -129,6 +134,7 @@ jobs:
           INPUT_MODE: ${{ inputs.mode || 'full' }}
           INPUT_SLUG: ${{ inputs.slug }}
           INPUT_SLUGS: ${{ inputs.slugs }}
+          INPUT_PURGE_ORPHANS: ${{ inputs.purge-orphans }}
           EVENT: ${{ github.event_name }}
         run: |
           EFFECTIVE="$INPUT_MODE"
@@ -139,6 +145,16 @@ jobs:
              && { [ -n "$INPUT_SLUG" ] || [ -n "$INPUT_SLUGS" ]; }; then
             EFFECTIVE='slug-targeted'
             REASON='auto-inferred (slug/slugs set, mode left at default)'
+          fi
+
+          # Issue #orphan-purge — reject purge-orphans=true with anything
+          # other than effective_mode=full. slug-targeted/catalog-only
+          # deliberately don't fetch the whole catalog, so 1392+ slugs
+          # would falsely appear as orphans. Fail loud (operator clearly
+          # intended the purge).
+          if [ "${INPUT_PURGE_ORPHANS:-false}" = "true" ] && [ "$EFFECTIVE" != "full" ]; then
+            echo "::error title=purge-orphans requires mode=full::Got effective_mode=$EFFECTIVE. Re-run with -f mode=full -f purge-orphans=true."
+            exit 1
           fi
 
           echo "effective_mode=$EFFECTIVE" >> "$GITHUB_OUTPUT"
@@ -298,6 +314,7 @@ jobs:
         run: /tmp/hugo --source hugo --minify
 
       - name: Publish tutorial content to HANA
+        id: publish
         # Concurrency / batch-size are tunable via workflow_dispatch inputs
         # (default raised 2/25 → 4/25 in issue #434 PR 1; staged toward
         # the original pre-#422 6/50 in PR 2 once 4/25 has 2-3 stable runs).
@@ -323,6 +340,19 @@ jobs:
             --verbose
         env:
           CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
+
+      - name: Purge orphan tutorials
+        id: purge
+        if: |
+          inputs.purge-orphans == true &&
+          steps.mode.outputs.effective_mode == 'full' &&
+          steps.publish.outcome == 'success'
+        env:
+          CAP_BASE_URL:    ${{ steps.srv.outputs.srv_url }}
+          CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
+          PURGE_CAP_ABS:   '50'
+          INITIATOR:       "ci/${{ github.run_id }}"
+        run: npx tsx scripts/publish-content.ts --purge-orphans
 
       - name: Build display app
         if: ${{ steps.mode.outputs.effective_mode == 'full' }}
