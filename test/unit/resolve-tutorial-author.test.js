@@ -175,3 +175,121 @@ describe('resolveTutorialAuthor (spec 2026-06-24-tutorial-authorship-fk)', () =>
     ]);
   });
 });
+
+describe('resolveTutorialAuthor — Phase 0 (frontmatter)', () => {
+  it('frontmatter githubLogin beats every email-based phase', () => {
+    // Riley is the most recent committer; Tom is the frontmatter-declared author.
+    const result = resolveTutorialAuthor({
+      contributors: [{ email: 'riley@sap.com', role: 'author' }],
+      ownerEmail: 'riley@sap.com',
+      emailToUserId: new Map([['riley@sap.com', 'USER-RILEY']]),
+      frontmatterGithubLogin: 'jung-thomas',
+      loginToUserId: new Map([['jung-thomas', 'USER-TOM']]),
+    });
+    expect(result.authorUserId).toBe('USER-TOM');
+    expect(result.source).toBe('frontmatter');
+  });
+
+  it('falls through to existing Phase B (a) when frontmatter login is unknown', () => {
+    const result = resolveTutorialAuthor({
+      contributors: [{ email: 'riley@sap.com', role: 'author' }],
+      ownerEmail: null,
+      emailToUserId: new Map([['riley@sap.com', 'USER-RILEY']]),
+      frontmatterGithubLogin: 'ghost-login',
+      loginToUserId: new Map(),
+    });
+    expect(result.authorUserId).toBe('USER-RILEY');
+    expect(result.source).toBe('role-match');
+  });
+
+  it('falls through to existing Phase B (b) — any contributor — when no role=author', () => {
+    const result = resolveTutorialAuthor({
+      contributors: [{ email: 'riley@sap.com', role: null }],
+      ownerEmail: null,
+      emailToUserId: new Map([['riley@sap.com', 'USER-RILEY']]),
+      frontmatterGithubLogin: null,
+      loginToUserId: new Map(),
+    });
+    expect(result.authorUserId).toBe('USER-RILEY');
+    expect(result.source).toBe('any-contributor');
+  });
+
+  it('falls through to ownerEmail (Phase B c)', () => {
+    const result = resolveTutorialAuthor({
+      contributors: [{ email: 'noone@sap.com' }],
+      ownerEmail: 'tom@sap.com',
+      emailToUserId: new Map([['tom@sap.com', 'USER-TOM']]),
+      frontmatterGithubLogin: null,
+      loginToUserId: new Map(),
+    });
+    expect(result.authorUserId).toBe('USER-TOM');
+    expect(result.source).toBe('owner-email');
+  });
+
+  it('source is null when nothing matches', () => {
+    const result = resolveTutorialAuthor({
+      contributors: [],
+      ownerEmail: null,
+      emailToUserId: new Map(),
+      frontmatterGithubLogin: null,
+      loginToUserId: new Map(),
+    });
+    expect(result.authorUserId).toBeNull();
+    expect(result.source).toBeNull();
+  });
+
+  it('login comparison is case-insensitive (Phase 0 normalizes input)', () => {
+    const result = resolveTutorialAuthor({
+      contributors: [],
+      ownerEmail: null,
+      emailToUserId: new Map(),
+      frontmatterGithubLogin: 'Jung-Thomas',  // mixed case
+      loginToUserId: new Map([['jung-thomas', 'USER-TOM']]),  // map key is lower
+    });
+    expect(result.authorUserId).toBe('USER-TOM');
+    expect(result.source).toBe('frontmatter');
+  });
+
+  it('empty/whitespace frontmatterGithubLogin is treated as null', () => {
+    const result = resolveTutorialAuthor({
+      contributors: [{ email: 'tom@sap.com', role: 'author' }],
+      ownerEmail: null,
+      emailToUserId: new Map([['tom@sap.com', 'USER-TOM']]),
+      frontmatterGithubLogin: '   ',
+      loginToUserId: new Map([['something', 'someuser']]),
+    });
+    // Should fall through to Phase B (a) role-match.
+    expect(result.authorUserId).toBe('USER-TOM');
+    expect(result.source).toBe('role-match');
+  });
+
+  it('backward-compat: callers that omit frontmatterGithubLogin + loginToUserId still work', () => {
+    // This is the call shape used by scripts/backfill-tutorial-authors.cjs today.
+    const result = resolveTutorialAuthor({
+      contributors: [{ email: 'tom@sap.com', role: 'author' }],
+      ownerEmail: null,
+      emailToUserId: new Map([['tom@sap.com', 'USER-TOM']]),
+    });
+    expect(result.authorUserId).toBe('USER-TOM');
+    expect(result.source).toBe('role-match');
+    expect(result.contributorUserIds).toEqual([{ contributorIndex: 0, userId: 'USER-TOM' }]);
+  });
+
+  it('emits a frontmatter-login orphan when login is non-null but unresolved', () => {
+    const result = resolveTutorialAuthor({
+      contributors: [{ email: 'riley@sap.com', role: 'author' }],
+      ownerEmail: null,
+      emailToUserId: new Map([['riley@sap.com', 'USER-RILEY']]),
+      frontmatterGithubLogin: 'jung-thomas',
+      loginToUserId: new Map(),  // no match
+    });
+    // Falls through to Phase B (a) — that's still the right behavior
+    expect(result.authorUserId).toBe('USER-RILEY');
+    expect(result.source).toBe('role-match');
+    // But the orphan record tells us frontmatter intent was lost
+    const fmOrphan = result.orphans.find(o => o.kind === 'frontmatter-login');
+    expect(fmOrphan).toBeDefined();
+    expect(fmOrphan.login).toBe('jung-thomas');
+    expect(fmOrphan.reason).toContain('frontmatterGithubLogin');
+  });
+});
