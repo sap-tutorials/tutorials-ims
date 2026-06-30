@@ -8,13 +8,24 @@
  * The `run` function executes when the action is selected. It receives the
  * dialog-close callback so actions can dismiss the palette before performing
  * navigation/side-effects (avoids visual flicker of palette during transition).
+ *
+ * Actions are tagged with a `group` so the palette can render them under
+ * distinct headings (ACTIONS vs EXPLORE). The order below is the display
+ * order within each group when the filter is empty. Issue #817 added the
+ * EXPLORE group covering the homepage verb-spine + the Knowledge Graph
+ * Explorer — those routes are otherwise reachable only from the homepage's
+ * primary nav and were missing from ⌘K.
  */
+export type PaletteGroup = 'actions' | 'explore'
+
 export interface PaletteAction {
   id: string
   label: string
   hint?: string
   icon?: string
   keywords?: string[]
+  /** Display group. Defaults to 'actions' when omitted. */
+  group?: PaletteGroup
   /** Tutorial slug — present only on rows produced by searchTutorials. */
   slug?: string
   run: (close: () => void) => void
@@ -124,6 +135,69 @@ export const PALETTE_ACTIONS: PaletteAction[] = [
       const url = `https://github.com/sap-tutorials/Tutorials/issues/new?title=${encodeURIComponent(title)}${slug ? `&body=Slug:%20${encodeURIComponent(slug)}` : ''}`
       window.open(url, '_blank', 'noopener,noreferrer')
     },
+  },
+
+  // EXPLORE group — the 6 homepage verb-spine routes plus the Knowledge
+  // Graph Explorer. Order matches the verb-spine partial at
+  // hugo/layouts/partials/homepage/verb-spine.html (LEARN, BUILD,
+  // INTEGRATE, OPERATE, AI, CONNECT). Keep this list in sync if the spine
+  // ever gains a seventh verb; otherwise the palette will be out of date
+  // with the homepage's own primary nav.
+  {
+    id: 'explore-learn',
+    label: 'Learn — getting started with SAP for developers',
+    icon: 'learning-assistant',
+    keywords: ['learn', 'learning', 'getting started', 'beginner', 'fundamentals', 'onboard', 'verb'],
+    group: 'explore',
+    run: navTo('/learn/'),
+  },
+  {
+    id: 'explore-build',
+    label: 'Build — apps and services (CAP, ABAP Cloud, Fiori, UI5)',
+    icon: 'wrench',
+    keywords: ['build', 'cap', 'abap', 'fiori', 'ui5', 'app', 'service', 'verb'],
+    group: 'explore',
+    run: navTo('/build/'),
+  },
+  {
+    id: 'explore-integrate',
+    label: 'Integrate — connect SAP to non-SAP, APIs, events',
+    icon: 'chain-link',
+    keywords: ['integrate', 'integration', 'api', 'events', 'connectivity', 'destination', 'verb'],
+    group: 'explore',
+    run: navTo('/integrate/'),
+  },
+  {
+    id: 'explore-operate',
+    label: 'Operate — deploy, run, secure, govern on BTP',
+    icon: 'shield',
+    keywords: ['operate', 'deploy', 'run', 'btp', 'security', 'govern', 'devops', 'verb'],
+    group: 'explore',
+    run: navTo('/operate/'),
+  },
+  {
+    id: 'explore-ai',
+    label: 'Extend with AI — Joule, AI Core, ground-truth patterns',
+    icon: 'da',
+    keywords: ['ai', 'joule', 'ai core', 'genai', 'ml', 'agent', 'verb'],
+    group: 'explore',
+    run: navTo('/ai/'),
+  },
+  {
+    id: 'explore-connect',
+    label: 'Connect — events, advocates, community',
+    icon: 'group',
+    keywords: ['connect', 'community', 'events', 'advocates', 'codejam', 'devtoberfest', 'verb'],
+    group: 'explore',
+    run: navTo('/connect/'),
+  },
+  {
+    id: 'explore-knowledge-graph',
+    label: 'Knowledge Graph Explorer',
+    icon: 'org-chart',
+    keywords: ['knowledge graph', 'kg', 'graph', 'concepts', 'map', 'network', 'explore', 'visualization'],
+    group: 'explore',
+    run: navTo('/explore/'),
   },
 ]
 
