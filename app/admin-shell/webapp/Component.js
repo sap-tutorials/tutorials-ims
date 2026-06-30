@@ -250,6 +250,36 @@ sap.ui.define([
     _initNavModel: function () {
       var oNavModel = new JSONModel();
       oNavModel.loadData(sap.ui.require.toUrl("sap/tutorials/admin/shell/model/navigation.json"));
+      // #829 — restore each group's expanded state from localStorage as soon as
+      // the JSON is in. Groups without an items[] (top-level leaves like
+      // dashboard) keep the property undefined; UI5 NavigationListItem treats
+      // missing `expanded` as the default (open), which is the right behavior
+      // for leaf items that have no expand chevron.
+      oNavModel.attachRequestCompleted(function () {
+        var groups = oNavModel.getProperty("/groups") || [];
+        groups.forEach(function (g) {
+          if (!g.items || !g.items.length) return;
+          var sStored = localStorage.getItem("sap-tutorials-admin-nav-group-" + g.key);
+          // Default to open (true) when no preference is stored; only set to
+          // false when explicitly remembered as collapsed.
+          g.expanded = (sStored === null) ? true : (sStored !== "false");
+        });
+        oNavModel.setProperty("/groups", groups);
+      });
+      // Persist any user-driven change to `expanded` via two-way binding.
+      // The NavigationListItem writes through `nav>expanded` on chevron
+      // click; the resulting propertyChange fires here. Restoring the same
+      // value from localStorage on init also produces a propertyChange, but
+      // writing the same value back is a no-op so the loop is self-stable.
+      oNavModel.attachPropertyChange(function (oEvent) {
+        var sPath = oEvent.getParameter("path");
+        if (!sPath || !/\/groups\/\d+\/expanded$/.test(sPath)) return;
+        var sParentPath = sPath.replace(/\/expanded$/, "");
+        var oGroup = oNavModel.getProperty(sParentPath);
+        if (!oGroup || !oGroup.key) return;
+        var bValue = oEvent.getParameter("value");
+        localStorage.setItem("sap-tutorials-admin-nav-group-" + oGroup.key, String(!!bValue));
+      });
       this.setModel(oNavModel, "nav");
     }
   });

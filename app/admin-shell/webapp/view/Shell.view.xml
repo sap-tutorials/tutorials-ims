@@ -77,7 +77,8 @@
               key="{nav>key}"
               href="{nav>href}"
               target="{nav>target}"
-              items="{nav>items}">
+              items="{nav>items}"
+              expanded="{nav>expanded}">
             <tnt:NavigationListItem
                 text="{nav>title}"
                 key="{nav>key}"
