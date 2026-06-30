@@ -107,9 +107,9 @@ The `initiator` field is **not** in the body. Operator attribution is captured i
 
 **Initiator persistence:** the endpoint receives the bearer token's identity as `req.user.id`, which for a CI caller is the technical SAP user that backs `CONTENT_API_KEY` — same value for every CI run. To preserve per-run attribution (so two CI runs in the same minute are distinguishable in audit), the endpoint wraps its work in [`logPipeline(...)`](../../../srv/lib/pipeline-log.js#L55) — the existing helper that handles start+end+error symmetrically. Arguments:
 
-- `pipelineType = 'GITHUB_DISPATCH'` (the existing enum value closest to "CI-driven workflow_dispatch"; the enum is closed at [db/schema.cds:519-533](../../../db/schema.cds#L519-L533) so this avoids a schema change)
+- `pipelineType = 'SCHEDULED_JOB'` (already in use by `srv/jobs/scheduler.js`, so the admin Pipeline Log tile's chip label / icon / criticality coloring are known-good for this value — workflow_dispatch is a manual cron in spirit, and the `stage` discriminator in `metadata` still distinguishes purge from other scheduled jobs. Avoids using `GITHUB_DISPATCH` which is a pre-declared but dead enum value that would also create grep noise against the unrelated `GITHUB_DISPATCH_TOKEN` credstore key)
 - `initiator = req.headers['x-initiator']` (set by the CLI from `INITIATOR` env var, default `ci/$GITHUB_RUN_ID`)
-- `metadata = { stage: 'purge-orphans', slugCount, runId }` — `stage` is the discriminator the rollback queries use (via `JSON_VALUE(metadata, '$.stage')`) because `pipelineType` is over-broad
+- `metadata = { stage: 'purge-orphans', slugCount, runId }` — `stage` is the discriminator the rollback queries match against (`pipelineType='SCHEDULED_JOB'` is over-broad because it groups purge with cron jobs)
 
 This mirrors how `/content/publish/commit` records initiator on `ContentManifest.initiator` and `PipelineLog` ([srv/lib/content-publish-session.js:62-75](../../../srv/lib/content-publish-session.js#L62-L75) is the canonical example).
 
@@ -389,12 +389,12 @@ If a Phase 2 dispatch mis-purges:
     WHERE c.entity     = 'AdminService.Tutorials'
       AND c.attribute  = 'status'
       AND c.valueChangedTo = 'INACTIVE'
-      AND p.pipelineType = 'GITHUB_DISPATCH'
-      AND JSON_VALUE(p.metadata, '$.stage') = 'purge-orphans'
+      AND p.pipelineType = 'SCHEDULED_JOB'
+      AND p.metadata LIKE '%"stage":"purge-orphans"%'
       AND p.initiator  = 'ci/<run_id>';
    ```
 
-   The `COALESCE(finishedAt, CURRENT_TIMESTAMP)` guards against an in-flight or crashed run where `finishedAt` is still NULL — the join still produces a usable row instead of all-NULLs filtering everything out. `JSON_VALUE` is the HANA function for extracting JSON fields; on SQLite use `json_extract(metadata, '$.stage')`.
+   The `COALESCE(finishedAt, CURRENT_TIMESTAMP)` guards against an in-flight or crashed run where `finishedAt` is still NULL — the join still produces a usable row instead of all-NULLs filtering everything out. The `LIKE '%"stage":"purge-orphans"%'` predicate matches the project's established cross-dialect pattern for querying JSON-as-string `LargeString`/NCLOB columns ([srv/lib/ui-event-saved-queries.js:12](../../../srv/lib/ui-event-saved-queries.js#L12) explains the convention: "both HANA and SQLite without JSON_VALUE"). `JSON.stringify` on a small object literal produces deterministic key ordering, so the LIKE pattern is reliable for the `{ stage, slugCount, runId }` shape.
 
    **(b) Time-window only** (no PipelineLog dependency):
 
