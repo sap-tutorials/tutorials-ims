@@ -73,6 +73,12 @@ const C4 = `${TEST_PREFIX}${RUN_ID}-c4`;
 // in a `{ SELECT ... LIMIT n }` subquery so the expensive whatToLearnNext
 // arm can't starve the cheap teaches arm. See the regression test below
 // (`per-arm LIMITs prevent whatToLearnNext from starving teaches`).
+//
+// Per-arm projection scoping: each inner SELECT projects only variables
+// its WHERE actually binds. The teaches arm binds ?targetLabel (via
+// `kg:name`) and ?weight; the other three arms project only what they
+// bind. The outer DISTINCT fills UNBOUND for missing variables and the
+// JS-side ranker tolerates them (DEFAULT_WEIGHT fallback, slug-as-label).
 function buildNeighborhoodSparql(slug, graphIri) {
   return `PREFIX kg: <https://developers.sap.com/kg/>
 
@@ -86,7 +92,7 @@ WHERE {
       BIND("teaches" AS ?type) BIND(1.0 AS ?weight)
     } LIMIT 15
   } UNION {
-    SELECT ?type ?targetSlug ?targetLabel ?weight WHERE {
+    SELECT ?type ?targetSlug ?weight WHERE {
       <https://developers.sap.com/kg/tutorial/${slug}> kg:teaches ?concept .
       ?concept kg:requires ?prereq .
       ?prereqTut kg:teaches ?prereq .
@@ -95,7 +101,7 @@ WHERE {
       BIND("prerequisitesOf" AS ?type) BIND(0.9 AS ?weight)
     } LIMIT 15
   } UNION {
-    SELECT ?type ?targetSlug ?targetLabel ?weight WHERE {
+    SELECT ?type ?targetSlug WHERE {
       <https://developers.sap.com/kg/tutorial/${slug}> kg:teaches ?sharedConcept .
       ?other kg:teaches ?sharedConcept .
       FILTER(?other != <https://developers.sap.com/kg/tutorial/${slug}>)
@@ -103,7 +109,7 @@ WHERE {
       BIND("sharedConcepts" AS ?type)
     } LIMIT 15
   } UNION {
-    SELECT ?type ?targetSlug ?targetLabel ?weight WHERE {
+    SELECT ?type ?targetSlug WHERE {
       <https://developers.sap.com/kg/tutorial/${slug}> kg:teaches ?known .
       ?advanced kg:requires ?known .
       ?nextTut kg:teaches ?advanced .
