@@ -346,13 +346,12 @@ Insert the following block inside the `describe('AdminService.JobControls', ...)
     expect(row.nextRunIso).toMatch(/^\d{4}-01-01T00:00:00\.\d{3}Z$/);
   });
 
-  it('listJobs.nextRunsIso never exceeds 50 entries even for a per-minute schedule', async () => {
+  it('listJobs.nextRunsIso has exactly 50 entries for a per-minute schedule (cap, not 1440)', async () => {
     const jobName = nextJobName();
     registerWithSchedule(jobName, '* * * * *');
     const rows = await callListJobs();
     const row = rows.find(r => r.jobName === jobName);
-    expect(row.nextRunsIso.length).toBeLessThanOrEqual(50);
-    expect(row.nextRunsIso.length).toBeGreaterThanOrEqual(50); // the cap is exactly 50 for */1
+    expect(row.nextRunsIso.length).toBe(50);
   });
 ```
 
@@ -1229,9 +1228,7 @@ Run:
 npm --prefix app/admin-shell run build 2>&1 | tail -20
 ```
 
-Expected: the `vite build` completes without an XML / UI5 manifest error. The Board.view.xml is copied to `dist/view/Board.view.xml`. Warnings related to other apps are tolerable; an XML parse error on Board.view.xml is a hard failure.
-
-If the build is slow or noisy, an alternative validation is `npx tsx -e "const fs=require('node:fs'); const xml=fs.readFileSync('app/admin-shell/webapp/view/Board.view.xml','utf8'); console.log('lines:', xml.split('\n').length, 'has core:HTML:', xml.includes('<core:HTML'))"` — confirms the file is well-formed and contains the new element.
+Expected: the `vite build` completes without an XML / UI5 manifest error. The Board.view.xml is copied to `dist/view/Board.view.xml`. Warnings related to other apps are tolerable; an XML parse error on Board.view.xml is a hard failure. **This is the load-bearing check — do not skip.** A malformed XML is only caught at view-load time otherwise, and would manifest as a silent broken tile in production.
 
 - [ ] **Step 6: Commit**
 
