@@ -5,6 +5,7 @@ import { createRateLimiter, RateLimitError } from './lib/chat-rate-limit.js';
 import { scheduleRebuild } from './lib/rebuild-trigger.js';
 import { createAuditEmitter } from './lib/audit-event.js';
 import { handleRebuildAction } from './lib/rebuild-action-handler.js';
+import { applyMdFormat } from './lib/tag-md-format.js';
 
 const OS_VALUES = ['Windows', 'macOS', 'Linux', 'BAS'];
 const OS_VARIANTS_LIMIT = 60;             // calls per hour per author
@@ -72,6 +73,13 @@ export default cds.service.impl(async function () {
     if (!userId || userId === 'anonymous') return req.reject(401, 'Authentication required');
     req.query.where({ userId });
   });
+
+  // Tags.mdFormat is a virtual field (no DB column) — populated on the way out
+  // so OData consumers (Sage tag-search, #824) get the legacy IMS markdown-ready
+  // key, e.g. titlePath "Topic : SAP Community" → mdFormat "topic>sap-community".
+  // Algorithm parity with com.sap.developers.ims.util.TagUtil; symmetric with
+  // the identical handler on AdminService.Tags so both surfaces agree.
+  this.after('READ', 'Tags', (rows) => applyMdFormat(rows));
 
   this.on('reviewTutorial', async (req) => {
     const userId = req.user?.id;

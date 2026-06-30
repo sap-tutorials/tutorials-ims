@@ -18,6 +18,7 @@ import { invalidateSecret } from './lib/secret-resolver.js';
 import { scheduleRebuild } from './lib/rebuild-trigger.js';
 import { createAuditEmitter } from './lib/audit-event.js';
 import { handleRebuildAction } from './lib/rebuild-action-handler.js';
+import { applyMdFormat } from './lib/tag-md-format.js';
 import { cleanupChangeLog } from './jobs/cleanup.js';
 import { ensureDevtoberfestActiveFlagInvariant } from './lib/devtoberfest-active-flag.js';
 import { getTutorialSource } from './lib/content-store.js';
@@ -1168,11 +1169,7 @@ export default class AdminService extends cds.ApplicationService {
       return result;
     });
 
-    this.after('READ', 'Tags', (rows) => {
-      for (const row of Array.isArray(rows) ? rows : [rows]) {
-        row.mdFormat = titlePathToMdFormat(row.titlePath);
-      }
-    });
+    this.after('READ', 'Tags', (rows) => applyMdFormat(rows));
 
     this.on('setFeaturedOrder', async (req) => {
       const { taskLegacyId, taskType, featuredOrder } = req.data;
@@ -2320,15 +2317,6 @@ export default class AdminService extends cds.ApplicationService {
       data: { action: 'AnonymizeUser', sapId: user.sapId, dsrRequestNumber: dsrRequestNumber ?? null }
     });
   }
-}
-
-function titlePathToMdFormat(titlePath) {
-  if (!titlePath) return '';
-  const parts = titlePath.split(/[:/]/);
-  if (parts.length === 1) return parts[0].trim().replace(/[^A-Za-z\d]/g, '-').toLowerCase();
-  const first = parts[0].trim().replace(/[^A-Za-z\d]/g, '-').toLowerCase();
-  const last = parts[parts.length - 1].trim().replace(/[^A-Za-z\d]/g, '-').toLowerCase();
-  return `${first}>${last}`;
 }
 
 function csvEscape(value) {
