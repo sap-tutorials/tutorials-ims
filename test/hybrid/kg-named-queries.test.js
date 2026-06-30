@@ -67,6 +67,12 @@ const C4 = `${TEST_PREFIX}${RUN_ID}-c4`;
 // SPARQL template that mirrors NEIGHBORHOOD_QUERY but with the FROM clause
 // pointing at our test graph. Inputs (slugs) are concatenated by the test —
 // safe because they are TEST_PREFIX-derived constants, not user input.
+//
+// Per-arm LIMITs (kg-widget-ux-polish, 2026-06-30): mirrors the procedure
+// fix in db/src/procedures/KG_QUERY.hdbprocedure. Each UNION arm is wrapped
+// in a `{ SELECT ... LIMIT n }` subquery so the expensive whatToLearnNext
+// arm can't starve the cheap teaches arm. See the regression test below
+// (`per-arm LIMITs prevent whatToLearnNext from starving teaches`).
 function buildNeighborhoodSparql(slug, graphIri) {
   return `PREFIX kg: <https://developers.sap.com/kg/>
 
@@ -74,32 +80,39 @@ SELECT DISTINCT ?type ?targetSlug ?targetLabel ?weight
 FROM <${graphIri}>
 WHERE {
   {
-    <https://developers.sap.com/kg/tutorial/${slug}> kg:teaches ?concept .
-    ?concept kg:slug ?targetSlug ; kg:name ?targetLabel .
-    BIND("teaches" AS ?type) BIND(1.0 AS ?weight)
+    SELECT ?type ?targetSlug ?targetLabel ?weight WHERE {
+      <https://developers.sap.com/kg/tutorial/${slug}> kg:teaches ?concept .
+      ?concept kg:slug ?targetSlug ; kg:name ?targetLabel .
+      BIND("teaches" AS ?type) BIND(1.0 AS ?weight)
+    } LIMIT 15
   } UNION {
-    <https://developers.sap.com/kg/tutorial/${slug}> kg:teaches ?concept .
-    ?concept kg:requires ?prereq .
-    ?prereqTut kg:teaches ?prereq .
-    FILTER(?prereqTut != <https://developers.sap.com/kg/tutorial/${slug}>)
-    BIND(REPLACE(STR(?prereqTut), "https://developers.sap.com/kg/tutorial/", "") AS ?targetSlug)
-    BIND("prerequisitesOf" AS ?type) BIND(0.9 AS ?weight)
+    SELECT ?type ?targetSlug ?targetLabel ?weight WHERE {
+      <https://developers.sap.com/kg/tutorial/${slug}> kg:teaches ?concept .
+      ?concept kg:requires ?prereq .
+      ?prereqTut kg:teaches ?prereq .
+      FILTER(?prereqTut != <https://developers.sap.com/kg/tutorial/${slug}>)
+      BIND(REPLACE(STR(?prereqTut), "https://developers.sap.com/kg/tutorial/", "") AS ?targetSlug)
+      BIND("prerequisitesOf" AS ?type) BIND(0.9 AS ?weight)
+    } LIMIT 15
   } UNION {
-    <https://developers.sap.com/kg/tutorial/${slug}> kg:teaches ?sharedConcept .
-    ?other kg:teaches ?sharedConcept .
-    FILTER(?other != <https://developers.sap.com/kg/tutorial/${slug}>)
-    BIND(REPLACE(STR(?other), "https://developers.sap.com/kg/tutorial/", "") AS ?targetSlug)
-    BIND("sharedConcepts" AS ?type)
+    SELECT ?type ?targetSlug ?targetLabel ?weight WHERE {
+      <https://developers.sap.com/kg/tutorial/${slug}> kg:teaches ?sharedConcept .
+      ?other kg:teaches ?sharedConcept .
+      FILTER(?other != <https://developers.sap.com/kg/tutorial/${slug}>)
+      BIND(REPLACE(STR(?other), "https://developers.sap.com/kg/tutorial/", "") AS ?targetSlug)
+      BIND("sharedConcepts" AS ?type)
+    } LIMIT 15
   } UNION {
-    <https://developers.sap.com/kg/tutorial/${slug}> kg:teaches ?known .
-    ?advanced kg:requires ?known .
-    ?nextTut kg:teaches ?advanced .
-    FILTER(?nextTut != <https://developers.sap.com/kg/tutorial/${slug}>)
-    BIND(REPLACE(STR(?nextTut), "https://developers.sap.com/kg/tutorial/", "") AS ?targetSlug)
-    BIND("whatToLearnNext" AS ?type)
+    SELECT ?type ?targetSlug ?targetLabel ?weight WHERE {
+      <https://developers.sap.com/kg/tutorial/${slug}> kg:teaches ?known .
+      ?advanced kg:requires ?known .
+      ?nextTut kg:teaches ?advanced .
+      FILTER(?nextTut != <https://developers.sap.com/kg/tutorial/${slug}>)
+      BIND(REPLACE(STR(?nextTut), "https://developers.sap.com/kg/tutorial/", "") AS ?targetSlug)
+      BIND("whatToLearnNext" AS ?type)
+    } LIMIT 30
   }
 }
-LIMIT 60
 `;
 }
 
@@ -292,4 +305,111 @@ describe('NEIGHBORHOOD_QUERY four-branch SPARQL (issue #381, KG PR 5)', () => {
     const rows = await runNeighborhood(ghostSlug);
     expect(rows).toHaveLength(0);
   });
+
+  // ── Regression: per-arm LIMITs prevent starvation (kg-widget-ux-polish) ──
+  //
+  // History: on DEV 2026-06-30, publishing 100 concepts blew the original
+  // `LIMIT 60` budget. The whatToLearnNext arm alone produced more than 60
+  // rows because it scales as O(concepts × :requires × :teaches), and HANA's
+  // SPARQL engine returned 60 rows from that arm + 0 from the other three.
+  // The widget's `isEmpty(teaches.length === 0)` check then collapsed the
+  // panel even though :teaches triples existed in the graph.
+  //
+  // This test seeds a fan-out chain (1 prereq concept → 30 derived concepts,
+  // each taught by a distinct tutorial) so the whatToLearnNext arm produces
+  // >15 candidates. With per-arm LIMITs the teaches arm still gets its own
+  // 15-row budget; without them (pre-fix) it would starve to zero.
+  it('per-arm LIMITs prevent whatToLearnNext from starving teaches', async () => {
+    process.env.ALLOW_HYBRID_WRITES = 'true';
+    const { Tutorials, Concepts, TutorialConceptLinks, ConceptEdges } =
+      cds.entities('com.sap.developers.ims');
+
+    // Use a NESTED RUN_ID so the seeded rows are namespaced apart from the
+    // outer-describe rows and the afterAll's LIKE-pattern cleanup still
+    // sweeps them. Both share TEST_PREFIX `__TEST__kg-named-`.
+    const REG_ID = `${RUN_ID}-reg`;
+    const INPUT  = `${TEST_PREFIX}${REG_ID}-input`;
+    const SHARED = `${TEST_PREFIX}${REG_ID}-shared-concept`;
+    const FANOUT = 25; // > 15 (per-arm LIMIT) so the arm overflows pre-fix.
+
+    // Tutorials: 1 input + 25 derived-tutorials.
+    const tutEntries = [{ slug: INPUT, title: 'Regression input' }];
+    for (let i = 0; i < FANOUT; i++) {
+      tutEntries.push({ slug: `${TEST_PREFIX}${REG_ID}-deriv-${i}`, title: `Derived ${i}` });
+    }
+    await INSERT.into(Tutorials).entries(tutEntries);
+
+    // Concepts: 1 shared (taught by input) + 25 advanced (each requires the shared one).
+    const conEntries = [
+      { slug: SHARED, name: 'Shared regression concept', status: 'ACTIVE' },
+    ];
+    for (let i = 0; i < FANOUT; i++) {
+      conEntries.push({
+        slug: `${TEST_PREFIX}${REG_ID}-adv-${i}`,
+        name: `Advanced concept ${i}`,
+        status: 'ACTIVE',
+      });
+    }
+    await INSERT.into(Concepts).entries(conEntries);
+
+    // FK lookups.
+    const tutRows = await SELECT.from(Tutorials)
+      .columns('ID', 'slug')
+      .where({ slug: { like: `${TEST_PREFIX}${REG_ID}-%` } });
+    const tutId = Object.fromEntries(tutRows.map((r) => [r.slug, r.ID]));
+    const conRows = await SELECT.from(Concepts)
+      .columns('ID', 'slug')
+      .where({ slug: { like: `${TEST_PREFIX}${REG_ID}-%` } });
+    const conId = Object.fromEntries(conRows.map((r) => [r.slug, r.ID]));
+
+    // input teaches the shared concept (powers the teaches arm).
+    const tclEntries = [
+      { tutorial_ID: tutId[INPUT], predicate: 'teaches', concept_ID: conId[SHARED], confidence: 0.9 },
+    ];
+    // Each derived tutorial teaches its own advanced concept.
+    for (let i = 0; i < FANOUT; i++) {
+      tclEntries.push({
+        tutorial_ID: tutId[`${TEST_PREFIX}${REG_ID}-deriv-${i}`],
+        predicate: 'teaches',
+        concept_ID: conId[`${TEST_PREFIX}${REG_ID}-adv-${i}`],
+        confidence: 0.8,
+      });
+    }
+    await INSERT.into(TutorialConceptLinks).entries(tclEntries);
+
+    // Each advanced concept :requires the shared concept — this is the
+    // edge that builds the chain `input → shared ← requires ← adv-i ← deriv-i`,
+    // which the whatToLearnNext arm walks. With FANOUT=25 advanced concepts,
+    // the arm produces 25 candidate tutorials.
+    const edgeEntries = [];
+    for (let i = 0; i < FANOUT; i++) {
+      edgeEntries.push({
+        source_ID: conId[`${TEST_PREFIX}${REG_ID}-adv-${i}`],
+        target_ID: conId[SHARED],
+        predicate: 'requires',
+        confidence: 0.85,
+        status: 'ACTIVE',
+      });
+    }
+    await INSERT.into(ConceptEdges).entries(edgeEntries);
+
+    // Re-project to the test graph so the new rows become triples.
+    await graphRebuild({ db, graphIri: TEST_GRAPH_IRI });
+
+    const rows = await runNeighborhood(INPUT);
+
+    const teaches = rows.filter((r) => r.type === 'teaches');
+    const next    = rows.filter((r) => r.type === 'whatToLearnNext');
+
+    // The whatToLearnNext arm must be at its per-arm cap (30) — confirms the
+    // arm did overflow what a single `LIMIT 15` would have allowed; without
+    // per-arm subqueries this would have eaten the LIMIT 60 budget.
+    expect(next.length).toBeGreaterThanOrEqual(15);
+    expect(next.length).toBeLessThanOrEqual(30);
+
+    // The critical assertion: teaches did NOT starve. Pre-fix this was 0.
+    expect(teaches.length).toBeGreaterThanOrEqual(1);
+    // And specifically the SHARED concept that input teaches.
+    expect(teaches.map((r) => r.targetSlug)).toContain(SHARED);
+  }, 120_000);
 });
