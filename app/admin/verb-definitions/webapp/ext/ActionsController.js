@@ -117,6 +117,25 @@ sap.ui.define([
       });
     },
 
+    onMarkReviewedSelected: async function (oEvent) {
+      const selectedContexts = oEvent.getParameter?.("selectedContexts") ?? [];
+      const ids = selectedContexts.map(c => c.getObject().ID);
+      if (ids.length === 0) {
+        MessageToast.show("Select one or more rows first.");
+        return;
+      }
+      try {
+        const result = await postAdminAction("bulkMarkVerbExplainerReviewed", { ids });
+        const msg = result.skipped > 0
+          ? `Marked ${result.processed} reviewed (${result.skipped} skipped — already reviewed or still blank).`
+          : `Marked ${result.processed} reviewed.`;
+        MessageToast.show(msg);
+        await refreshContext(oEvent);
+      } catch (e) {
+        MessageBox.error(`Mark-reviewed failed: ${e.message}`);
+      }
+    },
+
     onRegenerateOne: async function (oEvent) {
       // Object-page button — operates on the current row's context.
       const ctx = oEvent.getSource().getBindingContext();
