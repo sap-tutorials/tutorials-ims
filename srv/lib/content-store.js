@@ -1112,9 +1112,36 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         return res.json({});
       }
 
-      const rows = await SELECT.from(ContentFiles)
-        .where({ version: activeVersion })
-        .columns('slug', 'sourceHash');
+      // Exclude soft-deleted tutorials so the daily drift workflow stops re-
+      // reporting them as "missing locally" forever. Carry-forward keeps
+      // INACTIVE rows in the manifest for snapshot integrity; this filter
+      // only affects this external-facing endpoint and matches the serve
+      // handler's NULL-tolerant behavior at content-store.js around line 978.
+      //
+      // LOWER() on both sides because Tutorials.slug may be mixed-case in
+      // legacy rows even though new slugs are lowercase canonical
+      // (CLAUDE.md > "Tutorial slugs are lowercase canonical").
+      const db = await cds.connect.to('db');
+      const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+      const rows = isHana
+        ? (await db.run(
+            `SELECT cf."SLUG" AS "slug", cf."SOURCEHASH" AS "sourceHash"
+               FROM "COM_SAP_DEVELOPERS_IMS_CONTENTFILES" AS cf
+               LEFT JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" AS t
+                 ON LOWER(cf."SLUG") = LOWER(t."SLUG")
+              WHERE cf."VERSION" = ?
+                AND (t."STATUS" IS NULL OR t."STATUS" != 'INACTIVE')`,
+            [activeVersion]
+          ))
+        : (await db.run(
+            `SELECT cf.slug AS slug, cf.sourceHash AS sourceHash
+               FROM com_sap_developers_ims_contentfiles AS cf
+               LEFT JOIN com_sap_developers_ims_tutorials AS t
+                 ON LOWER(cf.slug) = LOWER(t.slug)
+              WHERE cf.version = ?
+                AND (t.status IS NULL OR t.status != 'INACTIVE')`,
+            [activeVersion]
+          ));
 
       const map = {};
       for (const row of rows) {
