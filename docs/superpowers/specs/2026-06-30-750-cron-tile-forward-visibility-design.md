@@ -11,7 +11,7 @@
 
 ## Summary
 
-Extend the existing **Cron health** Panel on the admin Board ([app/admin-shell/webapp/view/Board.view.xml:82](../../../app/admin-shell/webapp/view/Board.view.xml#L82)) with two forward-looking improvements:
+Extend the existing **Cron health** Panel on the admin Board ([app/admin-shell/webapp/view/Board.view.xml:81](../../../app/admin-shell/webapp/view/Board.view.xml#L81)) with two forward-looking improvements:
 
 1. **Chronological sort + "next N runs" per job** — table rows ordered by `nextRunIso` ascending, plus a new column showing the next 3 firings stacked per job.
 2. **24-hour timeline ribbon** — a single-row horizontal SVG strip above the table, with one tick per firing in the next 24 hours, color-coded by job category.
@@ -63,38 +63,50 @@ Old clients ignore the new field. New clients use it.
 
 #### Handler change
 
-[srv/admin-service.js:2164-2185](../../../srv/admin-service.js#L2164-L2185) — extend the existing `this.on('listJobs', 'JobControls', ...)` handler to populate `nextRunsIso`:
+[srv/admin-service.js:2161-2180](../../../srv/admin-service.js#L2161-L2180) — extend the existing `this.on('listJobs', 'JobControls', ...)` handler to populate `nextRunsIso`. The current implementation already wraps the cron-parser call in try/catch with `LOG.warn` for resilience against bad `JOB_REGISTRY` schedules — **preserve that guard**:
 
 ```js
 import { enumerateFiringsWithinWindow, nextRunIsoFrom } from './lib/cron-firings.js';
 
 this.on('listJobs', 'JobControls', async () => {
-  const reg = _getJobRegistry();
+  const registry = _getJobRegistry();
   const now = new Date();
   const horizon = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
-  return [...reg.values()].map(def => {
-    const fires = enumerateFiringsWithinWindow(def.schedule, now, horizon, 50);
+  return Array.from(registry.values()).map(job => {
+    let nextRunsIso = [];
+    let nextRunIso = null;
+    try {
+      nextRunsIso = enumerateFiringsWithinWindow(job.schedule, now, horizon, 50);
+      // fires[0] when the next firing is in-window; fallback only when empty
+      // (monthly cron like '23 4 1 * *' has zero in-window firings but still
+      // has a real next time we want to surface in the Table column).
+      nextRunIso = nextRunsIso.length > 0
+        ? nextRunsIso[0]
+        : nextRunIsoFrom(job.schedule, now);
+    } catch (err) {
+      LOG.warn(`listJobs: cron-parser failed on '${job.schedule}': ${err.message}`);
+    }
     return {
-      jobName: def.jobName,
-      schedule: def.schedule,
-      ttlMs: def.ttlMs,
-      description: def.description,
-      nextRunIso: fires[0] ?? nextRunIsoFrom(def.schedule, now),
-      nextRunsIso: fires,
+      jobName: job.jobName,
+      schedule: job.schedule,
+      ttlMs: job.ttlMs,
+      description: job.description,
+      nextRunIso,
+      nextRunsIso,
     };
   });
 });
 ```
 
-The `nextRunIso` fallback handles jobs whose next firing is >24h out (monthly crons like `23 4 1 * *`): `nextRunsIso` is `[]` but `nextRunIso` still shows the actual next firing far out.
+Failure semantics: if a schedule fails to parse, both `nextRunIso` (null) and `nextRunsIso` (`[]`) reflect that, matching the existing #756 contract — the row still renders, just without forward visibility for that job.
 
 #### New helper module
 
-[srv/lib/cron-firings.js](../../../srv/lib/cron-firings.js) (new) — pure functions, testable in isolation:
+[srv/lib/cron-firings.js](../../../srv/lib/cron-firings.js) (new) — pure functions, testable in isolation. Uses the **same `cron-parser` v5 API** already used by [srv/admin-service.js:34](../../../srv/admin-service.js#L34) — `import { CronExpressionParser } from 'cron-parser'` then `CronExpressionParser.parse(schedule, { tz: 'UTC', currentDate: from })`:
 
 ```js
-import cronParser from 'cron-parser';
+import { CronExpressionParser } from 'cron-parser';
 
 /**
  * Enumerate cron firings within a time window.
@@ -103,9 +115,12 @@ import cronParser from 'cron-parser';
  * @param to        Window end (inclusive).
  * @param cap       Hard limit on returned timestamps.
  * @returns         ISO timestamp strings (UTC), oldest to newest.
+ *
+ * NOTE: matches the v5 API used elsewhere in the codebase. `tz: 'UTC'`
+ * matches CF's UTC runtime and the existing #756 handler.
  */
 export function enumerateFiringsWithinWindow(schedule, from, to, cap) {
-  const iter = cronParser.parseExpression(schedule, { currentDate: from });
+  const iter = CronExpressionParser.parse(schedule, { tz: 'UTC', currentDate: from });
   const out = [];
   while (out.length < cap) {
     const next = iter.next().toDate();
@@ -121,11 +136,12 @@ export function enumerateFiringsWithinWindow(schedule, from, to, cap) {
  * outside the 24h window enumerated by enumerateFiringsWithinWindow().
  */
 export function nextRunIsoFrom(schedule, from) {
-  return cronParser.parseExpression(schedule, { currentDate: from }).next().toDate().toISOString();
+  return CronExpressionParser.parse(schedule, { tz: 'UTC', currentDate: from })
+    .next().toDate().toISOString();
 }
 ```
 
-**Why `cron-parser`, not `node-cron`:** `node-cron` is a scheduler — it fires callbacks but doesn't expose a "give me the next N timestamps" API. `cron-parser` is the canonical Node library for forward enumeration. Small dep (~30 KB), MIT, widely used. If it's not already in `package.json`, the PR adds it.
+**Why `cron-parser`, not `node-cron`:** `node-cron` is a scheduler — it fires callbacks but doesn't expose a "give me the next N timestamps" API. `cron-parser` is the canonical Node library for forward enumeration. Already pinned at `cron-parser@5.6.1` in `package.json` (used by the existing #756 handler), so no new dependency.
 
 **Cap rationale (`min(50, next-24h)`)**:
 - 24h matches the timeline ribbon's horizon.
@@ -141,11 +157,11 @@ All in the existing Cron health Panel — no new view or controller files at the
 
 [app/admin-shell/webapp/controller/Board.controller.js](../../../app/admin-shell/webapp/controller/Board.controller.js) — in the existing `_loadJobControls()`, after `JobControlsHelpers.joinJobsWithLastRuns(aJobs, aLastRuns)`, sort by `nextRunIso` ascending. Null (no upcoming run) sorts to the bottom.
 
-Sort function extracted to a pure helper at [app/admin-shell/webapp/controller/job-controls-sort.js](../../../app/admin-shell/webapp/controller/job-controls-sort.js) (or inlined into the existing `job-controls-helpers.js`) so the sort is unit-testable independently of the controller.
+Sort function extracted to a new pure helper at [app/admin-shell/webapp/controller/job-controls-sort.js](../../../app/admin-shell/webapp/controller/job-controls-sort.js) (new file, sibling of the existing `job-controls-helpers.js` — keeps the sort independently unit-testable).
 
 #### 3.2 "Next 3 runs" column
 
-[Board.view.xml:84-100](../../../app/admin-shell/webapp/view/Board.view.xml#L84) — one new `<Column>` in the `<columns>` list and one new `VBox` cell in the `<ColumnListItem>`. Renders first three items of `nextRunsIso` stacked vertically, formatted as relative time ("in 4h 12m") via the existing/extended `formatRelativeFuture` helper.
+[Board.view.xml:81-105](../../../app/admin-shell/webapp/view/Board.view.xml#L81) — one new `<Column>` in the `<columns>` list and one new `VBox` cell in the `<ColumnListItem>`. Renders first three items of `nextRunsIso` stacked vertically, formatted as relative time ("in 4h 12m") via the existing/extended `formatRelativeFuture` helper.
 
 For jobs whose `nextRunsIso.length < 3`, the missing rows render as empty strings (no layout shift).
 
@@ -212,7 +228,7 @@ function categoryForJob(jobName) {
 - `categoryForJob(jobName: string): string`
 - Export `CATEGORY_COLORS` as a const
 
-[app/admin-shell/webapp/controller/job-controls-sort.js](../../../app/admin-shell/webapp/controller/job-controls-sort.js) (or extension of `job-controls-helpers.js`):
+[app/admin-shell/webapp/controller/job-controls-sort.js](../../../app/admin-shell/webapp/controller/job-controls-sort.js) (new file — keeps the sort independently unit-testable):
 - `sortJobsByNextRun(jobs: Array): Array` — sorts in place by `nextRunIso` ascending, nulls last.
 
 ## Testing strategy
@@ -271,7 +287,8 @@ After PR deploys:
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| `cron-parser` not already a dependency | Med | Low | Implementation step 1: `grep "cron-parser" package.json`. If absent, `npm install cron-parser` (~30 KB, MIT, stable). |
+| `cron-parser` v5 API surface changes between minor versions | Low | Low | `cron-parser@5.6.1` is already pinned (used by #756 handler). Helper uses the exact same `CronExpressionParser.parse(schedule, { tz: 'UTC' })` pattern — symmetric with the existing call site, so any future v5→v6 upgrade fixes both at once. |
+| Bad cron expression in `JOB_REGISTRY` throws inside `listJobs()` | Low | Med | Handler preserves the existing `try/catch` with `LOG.warn` (matches #756). Both `nextRunIso` and `nextRunsIso` default to `null` / `[]` for the offending job — row still renders. |
 | `cron-parser` disagrees with `node-cron` on edge cases (DST, last-Sun-of-month) | Low | Low | Schedules in `JOB_REGISTRY` use standard 5-field syntax with no uncommon escapes. CF runs UTC (no DST). |
 | Bumping `listJobs()` return shape breaks existing callers | Low | Low | Only one caller: `Board.controller.js _callListJobs()`. UI5 OData binding ignores unknown fields. |
 | SVG ribbon renders weirdly on small/large viewports | Med | Low | Default 800 px width; `<core:HTML>` is full Panel width. CSS sets `svg { width: 100%; height: 80px; }`. Geometry is data-driven from `widthPx`. |
@@ -299,12 +316,11 @@ If only one piece misbehaves (e.g., ribbon renders wrong but sort + Next-3-runs 
 
 | File | Change |
 |---|---|
-| `package.json` | (Conditional) +1 line if `cron-parser` not already a dep |
-| `srv/lib/cron-firings.js` (new) | Pure helper, ~25 lines |
+| `srv/lib/cron-firings.js` (new) | Pure helper using cron-parser v5 `CronExpressionParser.parse` API, ~25 lines |
 | `srv/admin-service.cds:266-272` | +1 line: `nextRunsIso : array of String` |
-| `srv/admin-service.js:2164-2185` | Handler extended to populate `nextRunsIso`. ~10 line delta |
+| `srv/admin-service.js:2161-2180` | Handler extended to populate `nextRunsIso`. ~15 line delta (preserves try/catch). |
 | `app/admin-shell/webapp/controller/cron-timeline-helpers.js` (new) | `buildTimelineSvg()` + `categoryForJob()` + color map. ~80 lines |
-| `app/admin-shell/webapp/controller/job-controls-sort.js` (new, or extend existing helpers) | Pure sort function. ~15 lines |
+| `app/admin-shell/webapp/controller/job-controls-sort.js` (new) | Pure sort function. ~15 lines |
 | `app/admin-shell/webapp/controller/Board.controller.js` | Sort in `_loadJobControls()`, compute timelineHtml. ~25 lines delta |
 | `app/admin-shell/webapp/view/Board.view.xml:82` | Add `<core:HTML>` ribbon, add `Next 3 runs` column. ~10 lines |
 | `test/unit/cron-firings.test.js` (new) | 5 server-side tests, ~60 lines |
