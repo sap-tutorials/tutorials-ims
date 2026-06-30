@@ -116,22 +116,7 @@
           "options": {
             "settings": {
               "contextPath": "/HomepageShelves",
-              "editableHeaderContent": false,
-              "controlConfiguration": {
-                "@com.sap.vocabularies.UI.v1.Identification": {
-                  "actions": {
-                    "regenerateOne": {
-                      "press": "sap.tutorials.admin.homepage.ext.ActionsController.onRegenerateOne",
-                      "text": "Regenerate with AI"
-                    },
-                    "markReviewed": {
-                      "press": "sap.tutorials.admin.homepage.ext.ActionsController.onMarkReviewed",
-                      "text": "Mark as reviewed",
-                      "visible": "{= ${authoringStatus} === 'AI_SEEDED' }"
-                    }
-                  }
-                }
-              }
+              "editableHeaderContent": false
             }
           }
         },
