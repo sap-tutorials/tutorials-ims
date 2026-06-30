@@ -33,6 +33,7 @@ describe('POST /content/orphan-purge', () => {
   const slugInactive  = `test-purge-inactive-${ts}`;
   const slugRedirect  = `test-purge-redirect-${ts}`;   // INACTIVE + redirectTo_ID set
   const slugRedirectTarget = `test-purge-redirect-target-${ts}`;
+  const slugActiveWithRedirect = `test-purge-active-redirect-${ts}`;
   const slugMissing   = `test-purge-missing-${ts}`;     // not in Tutorials at all
 
   const headers = { 'authorization': `Bearer ${process.env.CONTENT_API_KEY || 'test-key'}`, 'x-initiator': 'test/unit-1' };
@@ -53,12 +54,13 @@ describe('POST /content/orphan-purge', () => {
       { ID: randomUUID(),         slug: slugInactive,       status: 'INACTIVE', title: 'Inactive' },
       { ID: targetID,             slug: slugRedirectTarget, status: 'ACTIVE',   title: 'Redirect target' },
       { ID: randomUUID(),         slug: slugRedirect,       status: 'INACTIVE', title: 'With redirect', redirectTo_ID: targetID },
+      { ID: randomUUID(),         slug: slugActiveWithRedirect, status: 'ACTIVE', title: 'Active with redirect (test only)', redirectTo_ID: targetID },
     ]);
   });
 
   afterAll(async () => {
     const { Tutorials } = cds.entities(ns);
-    await DELETE.from(Tutorials).where({ slug: { in: [slugActive, slugActive2, slugInactive, slugRedirect, slugRedirectTarget] } });
+    await DELETE.from(Tutorials).where({ slug: { in: [slugActive, slugActive2, slugInactive, slugRedirect, slugRedirectTarget, slugActiveWithRedirect] } });
   });
 
   it('buckets slugs by per-slug behavior', async () => {
@@ -71,6 +73,23 @@ describe('POST /content/orphan-purge', () => {
     expect(res.data.totalAttempted).toBe(5);
     expect(res.data.totalPurged).toBe(2);
     expect(typeof res.data.version).toBe('number');
+
+    // Bucket assertions above. Verify the redirect TARGET wasn't touched —
+    // the handler should not follow the redirectTo_ID FK to its target row.
+    const { Tutorials } = cds.entities(ns);
+    const [target] = await SELECT.from(Tutorials).where({ slug: slugRedirectTarget }).columns('status');
+    expect(target.status).toBe('ACTIVE');
+  });
+
+  it('redirects bucket takes precedence over status — ACTIVE row with redirectTo_ID lands in redirected[], not purged[]', async () => {
+    const res = await project.post('/content/orphan-purge', { slugs: [slugActiveWithRedirect] }, { headers });
+    expect(res.status).toBe(200);
+    expect(res.data.redirected).toEqual([slugActiveWithRedirect]);
+    expect(res.data.purged).toEqual([]);
+    // Sanity: status must NOT have been flipped — the handler skipped the UPDATE.
+    const { Tutorials } = cds.entities(ns);
+    const [row] = await SELECT.from(Tutorials).where({ slug: slugActiveWithRedirect }).columns('status');
+    expect(row.status).toBe('ACTIVE');
   });
 
   it('flips Tutorials.status to INACTIVE for purged slugs', async () => {

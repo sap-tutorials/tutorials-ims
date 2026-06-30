@@ -1455,6 +1455,8 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     }
 
     const initiator = req.headers['x-initiator'] || 'system';
+    // CI runs send 'ci/<github-run-id>' via x-initiator; surface the bare
+    // run-id in PipelineLog.metadata for run-attribution queries.
     const runId = typeof initiator === 'string' && initiator.startsWith('ci/') ? initiator.slice(3) : null;
 
     try {
@@ -1462,13 +1464,13 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
         'SCHEDULED_JOB',
         initiator,
         async () => {
-          const { Tutorials, ContentManifest } = cds.entities(namespace);
+          const { Tutorials } = cds.entities(namespace);
 
           if (slugs.length === 0) {
-            const [m] = await SELECT.from(ContentManifest).where({ status: 'ACTIVE' }).columns('version').orderBy('version desc').limit(1);
             return {
               purged: [], alreadyInactive: [], notFound: [], redirected: [],
-              totalAttempted: 0, totalPurged: 0, version: m?.version ?? 0
+              totalAttempted: 0, totalPurged: 0,
+              version: (await getActiveVersion()) ?? 0
             };
           }
 
@@ -1481,6 +1483,10 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
           const bySlug = new Map(rows.map(r => [String(r.slug).toLowerCase(), r]));
           const purged = [], alreadyInactive = [], notFound = [], redirected = [];
 
+          // Sequential awaits (not Promise.all or a bulk UPDATE) so a mid-loop
+          // failure leaves the `purged` array reflecting exactly which rows were
+          // committed. Per-slug transaction = partial-failure semantics. Spec:
+          // docs/superpowers/specs/2026-06-30-orphan-purge-design.md §Architecture-2.
           for (const original of slugs) {
             const key = String(original).toLowerCase();
             const row = bySlug.get(key);
@@ -1494,12 +1500,6 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
             purged.push(original);
           }
 
-          const [activeManifest] = await SELECT.from(ContentManifest)
-            .where({ status: 'ACTIVE' })
-            .columns('version')
-            .orderBy('version desc')
-            .limit(1);
-
           return {
             purged,
             alreadyInactive,
@@ -1507,7 +1507,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
             redirected,
             totalAttempted: slugs.length,
             totalPurged: purged.length,
-            version: activeManifest?.version ?? 0
+            version: (await getActiveVersion()) ?? 0
           };
         },
         { stage: 'purge-orphans', slugCount: slugs.length, runId }
