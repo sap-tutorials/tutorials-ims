@@ -24,7 +24,7 @@
    - Yesterday's temp-script pattern (in [reference_local_deploy_process](C:/Users/I809764/.claude/projects/d--projects-tutorials-poc/memory/project_local_deploy_process.md)) for `npx cds bind --exec -- node scripts/_*.cjs` followed by `rm`.
 4. **Test runners:**
    - Unit: `npm test -- test/unit/build-concepts.test.js`
-   - Hybrid: `cf login` to DEV space first, then `npm run test:hybrid -- test/hybrid/kg-tutorial-conceptlinks-cascade.test.js` (or `npx cds bind --exec -- npx vitest run test/hybrid/kg-tutorial-conceptlinks-cascade.test.js` for the targeted single-test form).
+   - Hybrid (targeted single file): `cf login` to DEV space first, then `npx cds bind --exec -- npx vitest run test/hybrid/kg-tutorial-conceptlinks-cascade.test.js`. **Do NOT use `npm run test:hybrid -- <file>`** — the script's existing `cds bind --exec --` separator collides with the `npm run -- <args>` pattern; the file arg won't reach vitest. (`npm run test:hybrid` with no args is fine for running the entire hybrid suite.)
 5. **Do NOT** silently restructure `db/schema.cds` or `db/knowledge-graph.cds` beyond what this plan calls for. The schema file is large but this change is one new field on one entity — keep the diff tight.
 
 ---
@@ -438,7 +438,7 @@ git push -u origin 787-tutorial-link-cascade-fix 2>&1 | tail -5
 
 - [ ] **Step 2: Write the PR body**
 
-Create `D:/projects/tutorials-poc/.git/worktrees/787-tcl-cascade-fix/PR_BODY.md` with the content below.
+Create `D:/projects/tutorials-poc/.claude/worktrees/787-tcl-cascade-fix/PR_BODY.md` with the content below.
 
 ```markdown
 ## What
@@ -487,8 +487,8 @@ Closes #787.
 ```bash
 gh pr create --base main \
   --title "fix(#787): cascade-delete TutorialConceptLinks on Tutorial DELETE + orphan-row guard" \
-  --body-file D:/projects/tutorials-poc/.git/worktrees/787-tcl-cascade-fix/PR_BODY.md
-rm D:/projects/tutorials-poc/.git/worktrees/787-tcl-cascade-fix/PR_BODY.md
+  --body-file D:/projects/tutorials-poc/.claude/worktrees/787-tcl-cascade-fix/PR_BODY.md
+rm D:/projects/tutorials-poc/.claude/worktrees/787-tcl-cascade-fix/PR_BODY.md
 ```
 
 Expected: PR URL printed.
