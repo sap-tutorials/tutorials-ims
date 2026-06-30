@@ -108,6 +108,19 @@ BEGIN
     -- FROM <hardcoded> → from_clause (COALESCE override).
     -- SPARQL double-quoted strings ("teaches", "prerequisitesOf", etc.) do not
     -- conflict with SQL single-quote string delimiters.
+    --
+    -- Per-arm LIMITs (kg-widget-ux-polish, 2026-06-30): the original SPARQL
+    -- shared a single `LIMIT 60` across all four UNION arms. With small
+    -- published-concept counts (~10) the math worked out. Once DEV hit 110
+    -- published concepts, the whatToLearnNext arm — which scales as
+    -- O(concepts × :requires × :teaches) — alone filled the entire 60-row
+    -- budget, starving teaches/prereqsOf/sharedConcepts to zero rows. The
+    -- handler then saw `teaches: []` and the widget collapsed.
+    --
+    -- Fix: each arm is wrapped in a `{ SELECT ... LIMIT n }` subquery so the
+    -- expensive whatToLearnNext arm can't starve the cheap teaches arm. The
+    -- JS-side rankNeighborhood caps each bucket at TOP_N = 10 after dedup,
+    -- so 15/15/15/30 gives the ranker headroom without bloating payloads.
     sparql :=
       'PREFIX kg: <https://developers.sap.com/kg/>' || CHAR(10) ||
       '' || CHAR(10) ||
@@ -115,36 +128,43 @@ BEGIN
       from_clause || CHAR(10) ||
       'WHERE {' || CHAR(10) ||
       '  {' || CHAR(10) ||
-      '    # teaches: concepts the input tutorial directly teaches' || CHAR(10) ||
-      '    <' || :p1 || '> kg:teaches ?concept .' || CHAR(10) ||
-      '    ?concept kg:slug ?targetSlug ; kg:name ?targetLabel .' || CHAR(10) ||
-      '    BIND("teaches" AS ?type) BIND(1.0 AS ?weight)' || CHAR(10) ||
+      '    SELECT ?type ?targetSlug ?targetLabel ?weight WHERE {' || CHAR(10) ||
+      '      # teaches: concepts the input tutorial directly teaches' || CHAR(10) ||
+      '      <' || :p1 || '> kg:teaches ?concept .' || CHAR(10) ||
+      '      ?concept kg:slug ?targetSlug ; kg:name ?targetLabel .' || CHAR(10) ||
+      '      BIND("teaches" AS ?type) BIND(1.0 AS ?weight)' || CHAR(10) ||
+      '    } LIMIT 15' || CHAR(10) ||
       '  } UNION {' || CHAR(10) ||
-      '    # prerequisitesOf: tutorials teaching concepts the input tutorial requires' || CHAR(10) ||
-      '    <' || :p1 || '> kg:teaches ?concept .' || CHAR(10) ||
-      '    ?concept kg:requires ?prereq .' || CHAR(10) ||
-      '    ?prereqTut kg:teaches ?prereq .' || CHAR(10) ||
-      '    FILTER(?prereqTut != <' || :p1 || '>)' || CHAR(10) ||
-      '    BIND(REPLACE(STR(?prereqTut), "https://developers.sap.com/kg/tutorial/", "") AS ?targetSlug)' || CHAR(10) ||
-      '    BIND("prerequisitesOf" AS ?type) BIND(0.9 AS ?weight)' || CHAR(10) ||
+      '    SELECT ?type ?targetSlug ?targetLabel ?weight WHERE {' || CHAR(10) ||
+      '      # prerequisitesOf: tutorials teaching concepts the input tutorial requires' || CHAR(10) ||
+      '      <' || :p1 || '> kg:teaches ?concept .' || CHAR(10) ||
+      '      ?concept kg:requires ?prereq .' || CHAR(10) ||
+      '      ?prereqTut kg:teaches ?prereq .' || CHAR(10) ||
+      '      FILTER(?prereqTut != <' || :p1 || '>)' || CHAR(10) ||
+      '      BIND(REPLACE(STR(?prereqTut), "https://developers.sap.com/kg/tutorial/", "") AS ?targetSlug)' || CHAR(10) ||
+      '      BIND("prerequisitesOf" AS ?type) BIND(0.9 AS ?weight)' || CHAR(10) ||
+      '    } LIMIT 15' || CHAR(10) ||
       '  } UNION {' || CHAR(10) ||
-      '    # sharedConcepts: other tutorials teaching the same concepts' || CHAR(10) ||
-      '    <' || :p1 || '> kg:teaches ?sharedConcept .' || CHAR(10) ||
-      '    ?other kg:teaches ?sharedConcept .' || CHAR(10) ||
-      '    FILTER(?other != <' || :p1 || '>)' || CHAR(10) ||
-      '    BIND(REPLACE(STR(?other), "https://developers.sap.com/kg/tutorial/", "") AS ?targetSlug)' || CHAR(10) ||
-      '    BIND("sharedConcepts" AS ?type)' || CHAR(10) ||
+      '    SELECT ?type ?targetSlug ?targetLabel ?weight WHERE {' || CHAR(10) ||
+      '      # sharedConcepts: other tutorials teaching the same concepts' || CHAR(10) ||
+      '      <' || :p1 || '> kg:teaches ?sharedConcept .' || CHAR(10) ||
+      '      ?other kg:teaches ?sharedConcept .' || CHAR(10) ||
+      '      FILTER(?other != <' || :p1 || '>)' || CHAR(10) ||
+      '      BIND(REPLACE(STR(?other), "https://developers.sap.com/kg/tutorial/", "") AS ?targetSlug)' || CHAR(10) ||
+      '      BIND("sharedConcepts" AS ?type)' || CHAR(10) ||
+      '    } LIMIT 15' || CHAR(10) ||
       '  } UNION {' || CHAR(10) ||
-      '    # whatToLearnNext: tutorials teaching concepts that require what the input teaches' || CHAR(10) ||
-      '    <' || :p1 || '> kg:teaches ?known .' || CHAR(10) ||
-      '    ?advanced kg:requires ?known .' || CHAR(10) ||
-      '    ?nextTut kg:teaches ?advanced .' || CHAR(10) ||
-      '    FILTER(?nextTut != <' || :p1 || '>)' || CHAR(10) ||
-      '    BIND(REPLACE(STR(?nextTut), "https://developers.sap.com/kg/tutorial/", "") AS ?targetSlug)' || CHAR(10) ||
-      '    BIND("whatToLearnNext" AS ?type)' || CHAR(10) ||
+      '    SELECT ?type ?targetSlug ?targetLabel ?weight WHERE {' || CHAR(10) ||
+      '      # whatToLearnNext: tutorials teaching concepts that require what the input teaches' || CHAR(10) ||
+      '      <' || :p1 || '> kg:teaches ?known .' || CHAR(10) ||
+      '      ?advanced kg:requires ?known .' || CHAR(10) ||
+      '      ?nextTut kg:teaches ?advanced .' || CHAR(10) ||
+      '      FILTER(?nextTut != <' || :p1 || '>)' || CHAR(10) ||
+      '      BIND(REPLACE(STR(?nextTut), "https://developers.sap.com/kg/tutorial/", "") AS ?targetSlug)' || CHAR(10) ||
+      '      BIND("whatToLearnNext" AS ?type)' || CHAR(10) ||
+      '    } LIMIT 30' || CHAR(10) ||
       '  }' || CHAR(10) ||
-      '}' || CHAR(10) ||
-      'LIMIT 60';
+      '}';
 
   ELSEIF :query_name = 'PATH_BETWEEN' THEN
 
