@@ -239,10 +239,18 @@ jobs:
               } > "$REPORT"
               ;;
             2)
-              # Count drifted slugs from the verify.log line
-              # 'Verify FAILED: N slugs differ:' so the title carries
-              # the magnitude without a click.
-              DRIFT_COUNT=$(grep -oE 'Verify FAILED: [0-9]+ slugs? differ' verify.log | grep -oE '[0-9]+' | head -1)
+              # Count drifted slugs from the verify.log line so the
+              # title carries the magnitude without a click. The CLI
+              # has emitted this in two shapes over time — pre-#591
+              # 'Verify FAILED: N slugs differ' and current
+              # 'Verify FAILED: N slug(s) have source-markdown drift'.
+              # Match the common 'Verify FAILED: N' prefix to stay
+              # robust if the message text drifts again. (The earlier
+              # narrow regex silently fell through to '?' and made
+              # every drift run look size-unknown in the run UI —
+              # caught reading run 28422871998 where the artifact
+              # showed 4 but the summary said '?'.)
+              DRIFT_COUNT=$(grep -oE 'Verify FAILED: [0-9]+' verify.log | grep -oE '[0-9]+' | head -1)
               DRIFT_COUNT=${DRIFT_COUNT:-?}
               {
                 echo "### ⚠️ Content drift on $ENVIRONMENT — $DRIFT_COUNT slug(s) stale on the server"
