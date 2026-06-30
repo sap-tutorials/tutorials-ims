@@ -2,12 +2,31 @@
 // scripts/seed-secrets.cjs
 //
 // Seed the Secrets HANA entity with the known tracked-secret registry.
-// Run via: npx cds bind --exec -- node scripts/seed-secrets.cjs [--commit]
+// Run via: npx cds bind --exec -- node scripts/seed-secrets.cjs [--commit] [--sync-metadata] [--keys K1,K2]
 //
 // Safe-by-default: WITHOUT --commit this script is a dry-run — it only
-// reports which rows would be inserted and which already exist. Use
-// --commit to actually write. Idempotent on `key`, so re-running is safe
-// even after admin edits.
+// reports which rows would be inserted/patched and which are already in
+// sync. Use --commit to actually write. Idempotent on `key`, so re-running
+// is safe even after admin edits.
+//
+// Two write modes:
+//   1) INSERT new rows for keys missing from the table (default behaviour).
+//   2) PATCH metadata drift on existing rows (opt-in via --sync-metadata).
+//      Optionally scope the patch to specific keys with
+//      `--sync-metadata --keys FOO,BAR` so an unrelated admin-UI edit on
+//      key BAZ isn't trampled by a targeted sync of FOO + BAR.
+//
+// Drift is detected unconditionally and surfaced in the dry-run output as
+// an early warning. Without --sync-metadata, existing rows are NEVER
+// modified — admin-UI edits to description / rotation* fields are
+// preserved. Pass --sync-metadata when this file is the intended source of
+// truth (e.g. a PR changes the runtime contract and updates the
+// description here; rerun with `--commit --sync-metadata` to propagate to
+// DEV / QA / PROD).
+//
+// Values (in credstore, not HANA) and admin-owned timestamps
+// (lastRotatedAt, expiresAt) are NEVER touched by this script regardless
+// of flags.
 //
 // The Secrets CSV seed (db/data/com.sap.developers.ims-Secrets.csv) is
 // intentionally empty to avoid HDI clobbering admin-edited rows on every
@@ -96,7 +115,7 @@ const INITIAL_SECRETS = [
   },
   {
     key: 'TUTORIALS_GITHUB_TOKEN',
-    description: 'GitHub PAT for CI tutorial-fetcher (CI-only — not consumed by tutorials-srv). Tracked here for rotation/expiry visibility only.',
+    description: 'GitHub PAT for the sap-tutorials org. Runtime: srv/jobs/fetch-samples-job.js (Phase 4.6 cron) reads via resolveSecret() — credstore-first, env fallback to GITHUB_TOKEN / TUTORIALS_GITHUB_TOKEN. CI workflows (deploy.yml, rebuild-content*.yml, content-drift-check.yml) consume the same PAT as a GitHub Actions secret. Local CLI scripts (scripts/parsers/github.ts) read .env only.',
     kind: 'github-pat',
     rotationOwner: 'thomas.jung@sap.com',
     rotationDocsUrl: '',
@@ -138,6 +157,15 @@ function showBinding() {
 
 async function main() {
   const commit = process.argv.includes('--commit');
+  const syncMetadata = process.argv.includes('--sync-metadata');
+  // Optional `--keys foo,bar,baz` scope so a targeted sync (#796) can patch
+  // ONLY the listed keys instead of every drifted row in the table. Unknown
+  // keys are silently ignored (so a stale list left in CI doesn't fail the
+  // job).
+  const keysIdx = process.argv.indexOf('--keys');
+  const keysFilter = keysIdx >= 0 && process.argv[keysIdx + 1]
+    ? new Set(process.argv[keysIdx + 1].split(',').map(s => s.trim()).filter(Boolean))
+    : null;
 
   // Per [[feedback_cds_entities_runtime_only]], `cds.entities(...)` can be
   // undefined in plain CJS scripts even after `cds bind --exec` has wired the
@@ -151,28 +179,88 @@ async function main() {
   // HANA quotes "KEY" because it's a reserved word. The column name itself is
   // just KEY (no trailing underscore — that would only happen if the CSV/CDS
   // escape strategy added one; CAP's HANA emitter uses bare quoted "KEY").
-  const existing = await db.run(`SELECT "KEY" FROM ${TABLE}`);
-  const existingKeys = new Set(existing.map(r => r.KEY));
-  const toInsert = INITIAL_SECRETS.filter(s => !existingKeys.has(s.key));
-  const alreadyPresent = INITIAL_SECRETS.filter(s => existingKeys.has(s.key));
+  // Pull the full metadata row (not just the key) so we can detect drift
+  // between the registry above and the seeded rows on this environment.
+  const existing = await db.run(
+    `SELECT "KEY", "DESCRIPTION", "KIND", "ROTATIONOWNER", "ROTATIONDOCSURL", "EXPIRESAT" FROM ${TABLE}`,
+  );
+  const existingByKey = new Map(existing.map(r => [r.KEY, r]));
+  const toInsert = INITIAL_SECRETS.filter(s => !existingByKey.has(s.key));
+  const alreadyPresent = INITIAL_SECRETS.filter(s => existingByKey.has(s.key));
+
+  // #796 — reconcile description / kind / rotation metadata drift. Detected
+  // unconditionally so the dry-run report surfaces drift (early-warning),
+  // but only APPLIED when --sync-metadata is passed alongside --commit. This
+  // preserves the original INSERT-only semantics for re-runs — admins can
+  // edit description / rotation fields in the UI and a vanilla
+  // `seed-secrets.cjs --commit` won't trample those edits. Use
+  // `--sync-metadata --commit` when this file is the intended source of
+  // truth (e.g. a runtime contract changed and the description here was
+  // updated in the same PR).
+  //
+  // Values live in credstore (not in this row) and lastRotatedAt /
+  // expiresAt are admin-owned — neither is ever touched by this script.
+  const SYNCABLE_FIELDS = [
+    { reg: 'description',     col: 'DESCRIPTION' },
+    { reg: 'kind',            col: 'KIND' },
+    { reg: 'rotationOwner',   col: 'ROTATIONOWNER' },
+    { reg: 'rotationDocsUrl', col: 'ROTATIONDOCSURL' },
+  ];
+  const drifted = [];
+  for (const s of alreadyPresent) {
+    const row = existingByKey.get(s.key);
+    const diff = SYNCABLE_FIELDS.filter(f => (row[f.col] ?? '') !== (s[f.reg] ?? ''));
+    if (diff.length > 0) {
+      drifted.push({ secret: s, fields: diff });
+    }
+  }
+  const toUpdate = syncMetadata
+    ? (keysFilter ? drifted.filter(d => keysFilter.has(d.secret.key)) : drifted)
+    : [];
 
   if (alreadyPresent.length > 0) {
     console.log(`\nAlready present (${alreadyPresent.length}/${INITIAL_SECRETS.length}):`);
-    alreadyPresent.forEach(s => console.log(`  ✓ ${s.key}`));
+    alreadyPresent.forEach(s => {
+      const drift = drifted.find(u => u.secret.key === s.key);
+      if (drift) {
+        console.log(`  ~ ${s.key.padEnd(36)} (metadata drift in: ${drift.fields.map(d => d.reg).join(', ')})`);
+      } else {
+        console.log(`  ✓ ${s.key}`);
+      }
+    });
   }
 
-  if (toInsert.length === 0) {
-    console.log(`\nAll ${INITIAL_SECRETS.length} known secrets already present — nothing to do.`);
+  // Surface drift even when --sync-metadata is off, so a vanilla run still
+  // tells you the registry has diverged from the DB — early-warning only,
+  // no action taken without the explicit flag.
+  if (drifted.length > 0 && !syncMetadata) {
+    console.log(`\n${drifted.length} row(s) have metadata drift from this file's registry.`);
+    console.log('Drift is NOT applied by default (preserves admin-UI edits).');
+    console.log('Pass --sync-metadata to overwrite description / kind / rotation*');
+    console.log('with the registry values above (values + lastRotatedAt / expiresAt');
+    console.log('are never touched, regardless of flags).');
+  }
+
+  if (toInsert.length === 0 && toUpdate.length === 0) {
+    console.log(`\nNothing to write — ${toInsert.length === 0 ? 'all known secrets present' : ''}${toInsert.length === 0 && drifted.length === 0 ? ' and in sync' : ''}.`);
     return;
   }
 
-  console.log(`\nWould insert ${toInsert.length} row(s):`);
-  toInsert.forEach(s => console.log(`  + ${s.key.padEnd(36)} kind=${s.kind}`));
+  if (toInsert.length > 0) {
+    console.log(`\nWould insert ${toInsert.length} row(s):`);
+    toInsert.forEach(s => console.log(`  + ${s.key.padEnd(36)} kind=${s.kind}`));
+  }
+  if (toUpdate.length > 0) {
+    console.log(`\nWould patch ${toUpdate.length} row(s) (metadata-only — no values touched):`);
+    toUpdate.forEach(u => console.log(`  ~ ${u.secret.key.padEnd(36)} fields: ${u.fields.map(d => d.reg).join(', ')}`));
+  }
 
   if (!commit) {
     console.log('\nDry-run mode — no rows written.');
-    console.log('Re-run with --commit to actually insert:');
-    console.log('  npx cds bind --exec -- node scripts/seed-secrets.cjs --commit');
+    console.log('Re-run with --commit to actually apply:');
+    const tail = (syncMetadata ? ' --sync-metadata' : '')
+      + (syncMetadata && keysFilter ? ` --keys ${[...keysFilter].join(',')}` : '');
+    console.log('  npx cds bind --exec -- node scripts/seed-secrets.cjs --commit' + tail);
     return;
   }
 
@@ -189,7 +277,24 @@ async function main() {
       [randomUUID(), s.key, s.description, s.kind, s.rotationOwner, s.rotationDocsUrl, s.expiresAt],
     );
   }
-  console.log(`\nInserted ${toInsert.length} new tracked secrets.`);
+
+  // #796 — apply metadata drift updates only when --sync-metadata opt-in. The
+  // value lives in credstore (not in this row); lastRotatedAt + expiresAt are
+  // admin-owned (set via the UI when the value is rotated). Neither is
+  // touched here.
+  for (const { secret: s } of toUpdate) {
+    await db.run(
+      `UPDATE ${TABLE} SET "DESCRIPTION" = ?, "KIND" = ?, "ROTATIONOWNER" = ?, "ROTATIONDOCSURL" = ? WHERE "KEY" = ?`,
+      [s.description, s.kind, s.rotationOwner, s.rotationDocsUrl, s.key],
+    );
+  }
+
+  if (toInsert.length > 0) {
+    console.log(`\nInserted ${toInsert.length} new tracked secrets.`);
+  }
+  if (toUpdate.length > 0) {
+    console.log(`Patched ${toUpdate.length} existing row(s) — metadata-only, values unchanged.`);
+  }
   console.log('Next: visit /admin-ui/#secrets-display to set each row\'s value');
   console.log('and (optionally) expiresAt + lastRotatedAt. The daily 04:11 UTC');
   console.log('expiry-check cron surfaces warnings via the bell-icon popover.');
