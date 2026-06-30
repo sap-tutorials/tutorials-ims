@@ -16,6 +16,7 @@ import { computeRecommendations } from './parsers/recommendations.js'
 import { humanizeTag, splitPrerequisites } from './parsers/frontmatter-utils.js'
 import type { TagLabelRegistry } from './parsers/frontmatter-utils.js'
 import { renderHugoFrontmatter } from './parsers/render-frontmatter.js'
+import { extractGithubLoginFromProfile } from './parsers/github-login-from-profile.js'
 import type { CatalogTutorialMeta, CategoryMeta, Mission, MissionHierarchy, HierarchyGroup, StandaloneGroup, TutorialStep, TutorialNavEntry, NavData, MissionMeta, GroupRef } from './parsers/types.js'
 import { QUESTION_TYPE_TEXT } from './parsers/types.js'
 
@@ -399,6 +400,7 @@ export function writeHugoPage(
   lastUpdated: string,
   createdAt: string,
   contributors: Array<{ name: string; login: string; email: string; avatarUrl: string }>,
+  githubLogin: string | null,
   outputDir: string,
   registry: TagLabelRegistry = {},
   hasOsOptions: boolean = false,
@@ -420,6 +422,7 @@ export function writeHugoPage(
     lastUpdated,
     createdAt,
     contributors,
+    githubLogin,
     registry,
     hasOsOptions,
   })
@@ -893,6 +896,7 @@ async function main() {
       }
 
       if (target === 'hugo') {
+        const githubLogin = extractGithubLoginFromProfile(frontmatter.author_profile ?? '')
         writeHugoPage(
           t.slug,
           title,
@@ -910,6 +914,7 @@ async function main() {
           lastUpdated,
           createdAt,
           contributors,
+          githubLogin,
           OUTPUT_DIR,
           tagRegistry,
           composed.hasOsOptions,
