@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, existsSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
@@ -10,6 +10,7 @@ import { withRetry, formatErrorChain } from './lib/publish-retry.js';
 import { chunk, runConcurrent } from './lib/publish-batcher.js';
 import { collectCodeCheckSpecs, publishCodeCheckSpecs } from './lib/publish-codecheck.js';
 import { publishValidateAnswerSpecs } from './lib/publish-validate-answer.js';
+import { computeOrphans, enforceCap, formatStepSummary } from './lib/purge-orphans.js';
 
 export type { Channel };
 
@@ -434,8 +435,24 @@ export function extractMetadata(
 
 // --- CLI ---
 
-export function validateFlagCombo(flags: { force: boolean; heal: boolean; verifyOnly: boolean }) {
-  const modes = [flags.force && 'force', flags.heal && 'heal', flags.verifyOnly && 'verify-only'].filter(Boolean);
+/** Append a markdown block to $GITHUB_STEP_SUMMARY if set. No-op locally. */
+function writeStepSummary(markdown: string) {
+  const target = process.env.GITHUB_STEP_SUMMARY;
+  if (!target) return;
+  try {
+    appendFileSync(target, markdown + '\n');
+  } catch (err) {
+    console.error(`[purge-orphans] Failed to append $GITHUB_STEP_SUMMARY: ${formatErrorChain(err)}`);
+  }
+}
+
+export function validateFlagCombo(flags: { force: boolean; heal: boolean; verifyOnly: boolean; purgeOrphans?: boolean }) {
+  const modes = [
+    flags.force && 'force',
+    flags.heal && 'heal',
+    flags.verifyOnly && 'verify-only',
+    flags.purgeOrphans && 'purge-orphans'
+  ].filter(Boolean);
   if (modes.length > 1) {
     throw new Error(`Flags ${modes.join(', ')} are mutually exclusive`);
   }
@@ -512,6 +529,8 @@ interface PublishOptions {
   verbose: boolean;
   concurrency: number;
   batchSize: number;
+  purgeOrphans: boolean;
+  purgeCapAbs: number;
 }
 
 function parseArgs(argv: string[]): PublishOptions {
@@ -539,6 +558,8 @@ function parseArgs(argv: string[]): PublishOptions {
     verbose:   has('--verbose'),
     concurrency: parseInt(get('--concurrency', '6'), 10),
     batchSize:   parseInt(get('--batch-size', '50'), 10),
+    purgeOrphans: has('--purge-orphans'),
+    purgeCapAbs:  parseInt(get('--purge-cap-abs', process.env.PURGE_CAP_ABS ?? '50'), 10),
   };
 }
 
@@ -714,6 +735,169 @@ async function main() {
     process.exit(2);
   }
 
+  // --- --purge-orphans short-circuit ---
+  // CI-only batched soft-delete of tutorials whose source markdown is no
+  // longer in any upstream repo. Spec:
+  //   docs/superpowers/specs/2026-06-30-orphan-purge-design.md
+  if (opts.purgeOrphans) {
+    // 1. CI-only guard
+    if (!process.env.GITHUB_ACTIONS) {
+      console.error('purge-orphans is CI-only; run via:');
+      console.error('  gh workflow run rebuild-content.yml -f mode=full -f purge-orphans=true');
+      process.exit(1);
+    }
+
+    // 1b. Validate cap is a positive finite integer — guards against
+    //     PURGE_CAP_ABS=fifty or --purge-cap-abs=-1, both of which would
+    //     otherwise produce an unhelpful "exceeds cap (N > NaN abs)" later.
+    if (!Number.isFinite(opts.purgeCapAbs) || opts.purgeCapAbs <= 0) {
+      console.error(`Invalid --purge-cap-abs / PURGE_CAP_ABS: "${process.env.PURGE_CAP_ABS ?? '(unset)'}" — must be a positive integer`);
+      process.exit(1);
+    }
+
+    // 2. Load local hashes (same readdir as --verify-only)
+    const cacheDir = channel === 'qa'
+      ? join(process.cwd(), '.tutorial-cache-qa')
+      : join(process.cwd(), '.tutorial-cache');
+    let mdFiles: string[];
+    try { mdFiles = readdirSync(cacheDir).filter(f => f.endsWith('.md') && !f.startsWith('_')); }
+    catch (err) {
+      console.error(`purge-orphans: cannot read tutorial-cache dir ${cacheDir}: ${formatErrorChain(err)}`);
+      process.exit(1);
+    }
+    const localSlugs = new Set(mdFiles.map(f => f.replace(/\.md$/, '')));
+    log(`[purge-orphans] Hashed ${localSlugs.size} local source markdown files in ${cacheDir}`);
+
+    // 3. Fetch /content/source-hashes
+    let remote: Record<string, string>;
+    try { remote = await fetchRemoteSourceHashes({ baseUrl: opts.baseUrl }); }
+    catch (err) {
+      console.error('purge-orphans: cannot reach /content/source-hashes:', formatErrorChain(err));
+      process.exit(1);
+    }
+    const serverSlugs = Object.keys(remote);
+    log(`[purge-orphans] Fetched ${serverSlugs.length} server slugs`);
+
+    // 4. Compute orphans
+    const orphans = computeOrphans(serverSlugs, localSlugs);
+    const pctInfo = serverSlugs.length ? ((orphans.length / serverSlugs.length) * 100).toFixed(1) : '0.0';
+    log(`[purge-orphans] Computed ${orphans.length} orphans (${pctInfo}% of server — informational)`);
+
+    // 5. Cap check
+    const capErr = enforceCap(orphans.length, opts.purgeCapAbs);
+    if (capErr) {
+      console.error(`[purge-orphans] ${capErr}`);
+      console.error(`[purge-orphans] First 20 orphans:`);
+      for (const s of orphans.slice(0, 20)) console.error(`  - ${s}`);
+      writeStepSummary(formatStepSummary({
+        mode: 'failed', serverCount: serverSlugs.length, orphanCount: orphans.length, errorMessage: capErr
+      }));
+      process.exit(1);
+    }
+    log(`[purge-orphans] Cap check: ${orphans.length} <= ${opts.purgeCapAbs} abs → passes`);
+
+    // 6. Sample
+    const sample = orphans.slice(0, 10).join(', ');
+    log(`[purge-orphans] Sample orphans: ${sample}${orphans.length > 10 ? ` ... (+${orphans.length - 10} more)` : ''}`);
+
+    // 7. Dry-run short-circuit
+    if (opts.dryRun) {
+      log(`[purge-orphans] --dry-run: would have purged ${orphans.length} slug(s); exiting`);
+      writeStepSummary(formatStepSummary({
+        mode: 'dry-run', serverCount: serverSlugs.length, orphanCount: orphans.length
+      }));
+      process.exit(0);
+    }
+
+    // 8. POST /content/orphan-purge
+    const initiator = opts.initiator;
+    const purgeUrl = `${opts.baseUrl.replace(/\/$/, '')}/content/orphan-purge`;
+    log(`[purge-orphans] POST ${purgeUrl} (${orphans.length} slugs, initiator=${initiator})`);
+
+    let resp: Response;
+    try {
+      resp = await fetch(purgeUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.CONTENT_API_KEY ?? ''}`,
+          'Content-Type':  'application/json',
+          'x-initiator':   initiator
+        },
+        body: JSON.stringify({ slugs: orphans })
+      });
+    } catch (err) {
+      const msg = `Connectivity error — verify CAP_BASE_URL: ${formatErrorChain(err)}`;
+      console.error(`[purge-orphans] ${msg}`);
+      writeStepSummary(formatStepSummary({
+        mode: 'failed', serverCount: serverSlugs.length, orphanCount: orphans.length, errorMessage: msg
+      }));
+      process.exit(1);
+    }
+
+    // 9. Error handling
+    if (!resp.ok) {
+      const bodyText = await resp.text();
+      let msg: string;
+      if (resp.status === 401 || resp.status === 403) {
+        msg = `Auth failure — check CONTENT_API_KEY secret for this environment`;
+      } else if (resp.status === 400) {
+        msg = `Server rejected payload — ${bodyText}`;
+      } else if (resp.status >= 500) {
+        msg = `Server error — retry once with same INITIATOR; endpoint is idempotent. Body: ${bodyText}`;
+      } else {
+        msg = `Unexpected status ${resp.status}: ${bodyText}`;
+      }
+      console.error(`[purge-orphans] ${msg}`);
+      writeStepSummary(formatStepSummary({
+        mode: 'failed', serverCount: serverSlugs.length, orphanCount: orphans.length, errorMessage: msg
+      }));
+      process.exit(1);
+    }
+
+    // 10. Parse + sanity check
+    const result = await resp.json() as {
+      purged: string[]; alreadyInactive: string[]; notFound: string[]; redirected: string[];
+      totalAttempted: number; totalPurged: number; version: number;
+    };
+    const bucketSum = result.purged.length + result.alreadyInactive.length + result.notFound.length + result.redirected.length;
+    if (bucketSum !== result.totalAttempted) {
+      const msg = `Server returned malformed response: bucket sum ${bucketSum} != totalAttempted ${result.totalAttempted}`;
+      console.error(`[purge-orphans] ${msg}`);
+      writeStepSummary(formatStepSummary({
+        mode: 'failed', serverCount: serverSlugs.length, orphanCount: orphans.length, errorMessage: msg
+      }));
+      process.exit(1);
+    }
+
+    // 11. Print summary to stdout
+    console.log(`[purge-orphans] Response:`);
+    console.log(`  purged:          ${result.purged.length}`);
+    console.log(`  alreadyInactive: ${result.alreadyInactive.length}`);
+    console.log(`  notFound:        ${result.notFound.length}`);
+    if (result.notFound.length > 0) {
+      console.log(`    ⚠️  These slugs have no Tutorials parent row (phantom). Operator action required — file one issue per slug:`);
+      for (const s of result.notFound) console.log(`      - ${s}`);
+    }
+    console.log(`  redirected:      ${result.redirected.length}${result.redirected.length ? ` (preserved: ${result.redirected.slice(0, 5).join(', ')})` : ''}`);
+    console.log(`  manifest version: ${result.version}`);
+
+    // 12. Step summary
+    writeStepSummary(formatStepSummary({
+      mode: 'committed',
+      serverCount: serverSlugs.length,
+      orphanCount: orphans.length,
+      purged: result.purged.length,
+      alreadyInactive: result.alreadyInactive.length,
+      notFound: result.notFound.length,
+      redirected: result.redirected.length,
+      redirectedSamples: result.redirected,
+      version: result.version
+    }));
+
+    log(`[purge-orphans] Done — ${result.purged.length} slugs soft-deleted`);
+    process.exit(0);
+  }
+
   log(`Discovering tutorials in ${opts.hugoDir}...`);
   const tutorials = discoverTutorials(opts.hugoDir);
 
@@ -759,7 +943,7 @@ async function main() {
   }
   log('Production build validation passed');
 
-  validateFlagCombo({ force: opts.force, heal: opts.heal, verifyOnly: opts.verifyOnly });
+  validateFlagCombo({ force: opts.force, heal: opts.heal, verifyOnly: opts.verifyOnly, purgeOrphans: opts.purgeOrphans });
 
   log('Computing local hashes...');
   const localHashes = computeLocalHashes(tutorials);
