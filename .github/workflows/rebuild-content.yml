@@ -352,11 +352,11 @@ jobs:
         run: npm run validate-tutorials
 
       - name: Build Vue apps
-        if: ${{ steps.mode.outputs.effective_mode == 'full' }}
+        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
         run: npm --prefix hugo-apps run build
 
       - name: Copy Joule vendor bundles
-        if: ${{ steps.mode.outputs.effective_mode == 'full' }}
+        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
         run: npm run copy-joule-vendor
 
       - name: Build Hugo site
@@ -404,11 +404,11 @@ jobs:
         run: npx tsx scripts/publish-content.ts --purge-orphans
 
       - name: Build display app
-        if: ${{ steps.mode.outputs.effective_mode == 'full' }}
+        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
         run: npm run build:display
 
       - name: Build admin SPAs
-        if: ${{ steps.mode.outputs.effective_mode == 'full' }}
+        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
         # Issue #350: the rebuild-content tarball must include admin-shell,
         # analytics-explorer, and scanner. The approuter's /admin/rebuild
         # handler atomically swaps STATIC_DIR with the tarball contents, so
@@ -423,7 +423,7 @@ jobs:
           npm --prefix app/analytics-explorer run build
 
       - name: Assemble static content
-        if: ${{ steps.mode.outputs.effective_mode == 'full' }}
+        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
         run: |
           mkdir -p approuter/static
           cp -r hugo/public/* approuter/static/
@@ -436,11 +436,11 @@ jobs:
           cp -r app/scanner/webapp approuter/static/scanner-ui
 
       - name: Create content tarball
-        if: ${{ steps.mode.outputs.effective_mode == 'full' }}
+        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
         run: tar czf content.tar.gz -C approuter/static .
 
       - name: Upload content artifact
-        if: ${{ steps.mode.outputs.effective_mode == 'full' }}
+        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
         uses: actions/upload-artifact@v4
         with:
           name: content-${{ steps.env.outputs.target }}-${{ github.run_number }}
@@ -448,7 +448,7 @@ jobs:
           retention-days: 7
 
       - name: Push content to AppRouter
-        if: ${{ steps.mode.outputs.effective_mode == 'full' }}
+        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
         run: |
           HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" \
             -X POST \
