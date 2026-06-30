@@ -121,9 +121,17 @@ export function yamlEscape(s: string): string {
 }
 
 export function frontmatter(c: ConceptPayload): string {
+  // Empty arrays emit ` []` (leading space). The caller concatenates as
+  // `relatedTo:${refs(c.relatedTo)}`, so without the leading space the
+  // result is `relatedTo:[]` (no space after colon) — invalid YAML, fails
+  // Hugo's frontmatter parser. Surfaced when the first batch of published
+  // concepts ran through rebuild-content.yml on 2026-06-30 (workflow run
+  // 28445308441). Discovered because PR #802 newly invoked fetch-concepts
+  // in CI; the bug had been latent in #685's emission code since no real
+  // data had reached this code path until then.
   const refs = (arr: { slug: string; title?: string; name?: string }[]) =>
     arr.length === 0
-      ? '[]'
+      ? ' []'
       : '\n' + arr.map(r => `  - slug: ${yamlEscape(r.slug)}\n    title: ${yamlEscape(r.title ?? r.name ?? '')}`).join('\n')
 
   // Phase 4.1 (#447): emit `learningJourneys` only when non-empty. The Hugo
