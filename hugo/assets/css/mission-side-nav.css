@@ -10,8 +10,23 @@
   overflow: hidden;
 }
 
+/* Section label — answers "what is this thing?" for readers who scrolled
+   past the breadcrumb. Mirrors the visual weight of .kg-sidebar-header h2
+   (small, muted, no border) so the two right-rail panels feel like siblings.
+   The bold title link below provides the heavier anchor. */
+.msn-section-label {
+  margin: 0;
+  padding: 0.5rem 0.75rem 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sapContent_LabelColor, #6a6d70);
+  background: var(--sapList_HeaderBackground, #f5f6f7);
+}
+
 .msn-header {
-  padding: 0.5rem 0.75rem;
+  padding: 0.25rem 0.75rem 0.5rem;
   font-weight: 600;
   font-size: 0.875rem;
   background: var(--sapList_HeaderBackground, #f5f6f7);

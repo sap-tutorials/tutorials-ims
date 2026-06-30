@@ -52,7 +52,6 @@
         <li
           v-for="concept in data.teaches"
           :key="concept.slug"
-          :title="concept.description || ''"
           @mouseenter="onConceptHover(concept.slug)"
         >
           <!--
@@ -60,15 +59,18 @@
             exists, render the concept as an in-site link so readers can
             follow it. Otherwise the name renders as plain text — the
             sidebar still surfaces what the tutorial teaches, just
-            without a navigable destination.
+            without a navigable destination. KgReasonPopover handles
+            both cases: with `href` set it renders <a>, without it
+            renders a focusable <span>. The popover body carries the
+            concept description (when present).
           -->
-          <a
-            v-if="concept.published"
-            :href="`/concepts/${concept.slug}/`"
-            class="kg-sidebar-concept-link"
+          <KgReasonPopover
+            :text="concept.name"
+            :reason="concept.description || null"
+            :href="concept.published ? `/concepts/${concept.slug}/` : null"
+            :link-class="concept.published ? 'kg-sidebar-concept-link' : 'kg-sidebar-concept-text'"
             @click="onConceptClick(concept.slug)"
-          >{{ concept.name }}</a>
-          <span v-else class="kg-sidebar-concept-text">{{ concept.name }}</span>
+          />
         </li>
       </ul>
     </section>
@@ -77,11 +79,12 @@
       <h3>Prerequisites you might want first</h3>
       <ul>
         <li v-for="t in data.prerequisitesOf" :key="t.slug">
-          <a
+          <KgReasonPopover
+            :text="t.title || t.slug"
+            :reason="t.reason || null"
             :href="`/tutorials/${t.slug}/`"
-            :title="t.reason || ''"
             @click="onItemClick('prerequisitesOf', t.slug)"
-          >{{ t.title || t.slug }}</a>
+          />
         </li>
       </ul>
     </section>
@@ -90,11 +93,12 @@
       <h3>Tutorials covering related concepts</h3>
       <ul>
         <li v-for="t in data.sharedConcepts" :key="t.slug">
-          <a
+          <KgReasonPopover
+            :text="t.title || t.slug"
+            :reason="t.reason || null"
             :href="`/tutorials/${t.slug}/`"
-            :title="t.reason || ''"
             @click="onItemClick('sharedConcepts', t.slug)"
-          >{{ t.title || t.slug }}</a>
+          />
         </li>
       </ul>
     </section>
@@ -103,11 +107,12 @@
       <h3>What to learn next</h3>
       <ul>
         <li v-for="t in data.whatToLearnNext" :key="t.slug">
-          <a
+          <KgReasonPopover
+            :text="t.title || t.slug"
+            :reason="t.reason || null"
             :href="`/tutorials/${t.slug}/`"
-            :title="t.reason || ''"
             @click="onItemClick('whatToLearnNext', t.slug)"
-          >{{ t.title || t.slug }}</a>
+          />
         </li>
       </ul>
     </section>
@@ -196,6 +201,51 @@
   </aside>
 
   <!--
+    Skeleton loading state. Renders the same panel chrome as the real
+    widget (header + 4 ghost sections) while /graph/neighborhood resolves
+    (~2-3 s typical). Replaces the invisible 1 px anchor used in earlier
+    revisions; without this, readers thought the widget didn't exist.
+
+    Branch fires only when:
+      - state === 'loading' AND
+      - fetchTriggered (IntersectionObserver has armed the fetch)
+    so it doesn't render before the user scrolls anywhere near it.
+    state === 'error' / 'disabled' / 'empty' fall through to the 1 px
+    anchor — those paths must stay silent per the existing spec.
+
+    Layout is dimensioned to match the real widget so there's no shift
+    when state flips to 'ready'. Concept-section gets ~3 lines (5 px
+    short reasonable concept-count for tutorials with teaches); each
+    tutorial section gets ~5 lines (also realistic — sharedConcepts and
+    whatToLearnNext routinely return 8-10 rows, but 5 keeps the skeleton
+    height bounded and the shift is small).
+  -->
+  <aside
+    v-else-if="state === 'loading' && fetchTriggered"
+    ref="rootEl"
+    class="kg-sidebar kg-sidebar--skeleton"
+    aria-busy="true"
+    aria-label="Loading related concepts and tutorials"
+  >
+    <header class="kg-sidebar-header">
+      <h2>Related learning</h2>
+      <p class="kg-sidebar-help">
+        Powered by the knowledge graph — surfaces tutorials that share
+        concepts with this one, plus what comes before and after on a
+        natural learning path. Hover any link to see why it appears here.
+      </p>
+    </header>
+    <section v-for="(rows, idx) in SKELETON_SECTIONS" :key="idx">
+      <div class="kg-sidebar-skel-heading skeleton skeleton--text-line"></div>
+      <ul>
+        <li v-for="n in rows" :key="n">
+          <div class="skeleton skeleton--text-line"></div>
+        </li>
+      </ul>
+    </section>
+  </aside>
+
+  <!--
     Hidden anchor used by IntersectionObserver before content arrives.
     aria-hidden + 1px footprint keep it out of accessibility tree
     and out of layout. Once data loads it's replaced by the <aside>
@@ -213,6 +263,16 @@
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import type { NeighborhoodResult, OtherResource, SidebarState } from './types'
 import { formatRelativeMonth } from './related-graph-helpers'
+import KgReasonPopover from './KgReasonPopover.vue'
+import '../../../hugo/assets/css/skeletons.css'
+
+// Skeleton row counts per section, in render order. The first section
+// (concept teaches) is intentionally shorter — most tutorials teach 2-4
+// concepts, not 8-10. The three tutorial sections each show ~5 rows;
+// underrunning the real result is fine (no layout jolt downward), but
+// over-running leaves visible empty rows on tutorials with sparse
+// data. 5 is the empirical median across the populated tutorials on DEV.
+const SKELETON_SECTIONS = [3, 5, 5, 5] as const
 
 const slug = (typeof document !== 'undefined' &&
   document.documentElement?.dataset?.pageSlug) || ''
@@ -550,4 +610,47 @@ onBeforeUnmount(() => {
   margin: 0;
   padding: 0;
 }
+
+/* ── Skeleton loading state ──────────────────────────────────────────
+ * Sized to match the real `.kg-sidebar`: same border + padding so the
+ * panel doesn't reflow when state flips to 'ready'. The shimmer comes
+ * from the shared `.skeleton` / `@keyframes skeleton-shimmer` rules
+ * imported above (hugo/assets/css/skeletons.css), so the loading state
+ * matches every other skeleton on the site.
+ *
+ * The heading bars get a narrower width than the body rows so they read
+ * as "headings" rather than "first row of a list". Body rows shrink
+ * slightly per row to suggest variable-length titles.
+ */
+.kg-sidebar--skeleton section + section {
+  margin-top: 1rem;
+}
+.kg-sidebar--skeleton section {
+  /* Drop the section's bottom-border in skeleton mode — the shimmer bars
+     already provide visual delimiters. Without this rule, the existing
+     `.kg-sidebar h3 { border-bottom }` rule (which targets H3 elements
+     specifically) wouldn't apply to our <div>-shaped heading anyway,
+     but this keeps the rhythm clean. */
+}
+.kg-sidebar-skel-heading {
+  width: 60%;
+  height: 0.875rem;
+  margin: 0 0 0.75rem;
+}
+.kg-sidebar--skeleton ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.kg-sidebar--skeleton li {
+  padding: 0.25rem 0;
+}
+.kg-sidebar--skeleton li .skeleton {
+  height: 0.875rem;
+  /* Variable row widths suggest variable-length titles — looks more
+     organic than uniform 100%-width bars. Pure cosmetic. */
+  width: 92%;
+}
+.kg-sidebar--skeleton li:nth-child(even) .skeleton { width: 78%; }
+.kg-sidebar--skeleton li:nth-child(3n)   .skeleton { width: 85%; }
 </style>

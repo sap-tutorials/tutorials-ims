@@ -316,4 +316,109 @@ describe('<RelatedGraph>', () => {
     expect(disconnectSpy).toHaveBeenCalled()
     wrapper.unmount()
   })
+
+  // ── Skeleton loading state (KG widget UX polish) ─────────────────────
+  // The skeleton aside renders between observer-fire and fetch-resolve so
+  // readers see something while /graph/neighborhood is in flight. Pre-fire
+  // the placeholder is still the 1 px anchor (the IO hasn't even armed
+  // the fetch). Post-resolve the skeleton swaps for the real <aside> (or
+  // collapses if the payload is empty / 503 / errored).
+
+  it('renders the 1 px anchor BEFORE the observer fires (no skeleton yet)', async () => {
+    fetchMock.mockResolvedValueOnce(makeResponse(POPULATED))
+    const wrapper = mount(RelatedGraph)
+    await flushPromises()
+    // No fetch yet, no skeleton yet — just the anchor.
+    expect(wrapper.find('aside.kg-sidebar').exists()).toBe(false)
+    expect(wrapper.find('aside.kg-sidebar--skeleton').exists()).toBe(false)
+    expect(wrapper.find('div.kg-sidebar-anchor').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('renders the skeleton aside while the fetch is in flight', async () => {
+    // Resolve fetch on the next tick so we can observe the in-flight state.
+    let resolveFetch!: (r: Response) => void
+    const pending = new Promise<Response>(r => { resolveFetch = r })
+    fetchMock.mockReturnValueOnce(pending)
+
+    const wrapper = mount(RelatedGraph)
+    fireIntersect(true)
+    // Microtask drain — fetchTriggered flips true, state stays 'loading'.
+    await flushPromises()
+
+    expect(wrapper.find('aside.kg-sidebar--skeleton').exists()).toBe(true)
+    // The skeleton header carries the same H2 as the real widget so the
+    // header doesn't pop in at swap time.
+    const h2 = wrapper.find('aside.kg-sidebar--skeleton h2')
+    expect(h2.exists()).toBe(true)
+    expect(h2.text()).toMatch(/related learning/i)
+    // Section structure mirrors SKELETON_SECTIONS=[3,5,5,5] = 18 rows total.
+    expect(wrapper.findAll('aside.kg-sidebar--skeleton section').length).toBe(4)
+    expect(wrapper.findAll('aside.kg-sidebar--skeleton li').length).toBe(3 + 5 + 5 + 5)
+    // aria-busy is set so screen readers announce the loading state.
+    expect(
+      wrapper.find('aside.kg-sidebar--skeleton').attributes('aria-busy'),
+    ).toBe('true')
+
+    // Resolve the fetch — skeleton should swap for the real aside.
+    resolveFetch(makeResponse(POPULATED))
+    await flushPromises()
+    expect(wrapper.find('aside.kg-sidebar--skeleton').exists()).toBe(false)
+    expect(wrapper.find('aside.kg-sidebar:not(.kg-sidebar--skeleton)').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('collapses the skeleton to the 1 px anchor when the fetch returns empty', async () => {
+    let resolveFetch!: (r: Response) => void
+    const pending = new Promise<Response>(r => { resolveFetch = r })
+    fetchMock.mockReturnValueOnce(pending)
+
+    const wrapper = mount(RelatedGraph)
+    fireIntersect(true)
+    await flushPromises()
+    expect(wrapper.find('aside.kg-sidebar--skeleton').exists()).toBe(true)
+
+    resolveFetch(makeResponse(EMPTY))
+    await flushPromises()
+    expect(wrapper.find('aside.kg-sidebar--skeleton').exists()).toBe(false)
+    expect(wrapper.find('aside.kg-sidebar').exists()).toBe(false)
+    expect(wrapper.find('div.kg-sidebar-anchor').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('collapses the skeleton to the 1 px anchor when the service returns 503', async () => {
+    let resolveFetch!: (r: Response) => void
+    const pending = new Promise<Response>(r => { resolveFetch = r })
+    fetchMock.mockReturnValueOnce(pending)
+
+    const wrapper = mount(RelatedGraph)
+    fireIntersect(true)
+    await flushPromises()
+    expect(wrapper.find('aside.kg-sidebar--skeleton').exists()).toBe(true)
+
+    resolveFetch(makeResponse({}, 503))
+    await flushPromises()
+    expect(wrapper.find('aside.kg-sidebar--skeleton').exists()).toBe(false)
+    expect(wrapper.find('aside.kg-sidebar').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  // ── Popover replaces native title= (item 4) ──────────────────────────
+  // The KgReasonPopover child renders the link with NO `title=` attribute
+  // — the per-link reason copy is now carried on the popover body, not
+  // the native browser tooltip. Anchor still works as a link.
+
+  it('does not set the native title= attribute on tutorial links', async () => {
+    fetchMock.mockResolvedValueOnce(makeResponse(POPULATED))
+    const wrapper = mount(RelatedGraph)
+    fireIntersect(true)
+    await flushPromises()
+    const links = wrapper.findAll('aside.kg-sidebar a[href^="/tutorials/"]')
+    expect(links.length).toBeGreaterThan(0)
+    for (const a of links) {
+      // No native tooltip — the popover carries the reason now.
+      expect(a.attributes('title')).toBeUndefined()
+    }
+    wrapper.unmount()
+  })
 })
