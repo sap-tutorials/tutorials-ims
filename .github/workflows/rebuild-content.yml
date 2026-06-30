@@ -256,6 +256,20 @@ jobs:
         env:
           CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
 
+      # [Phase 3-A] Fetch published-concept payload from CAP and write
+      # one hugo/content/concepts/<slug>.md per published concept. Runs on
+      # `full` and `catalog-only`; skipped on `slug-targeted` (a single-tutorial
+      # rebuild does not need concept landing-page regeneration). The Hugo
+      # build picks up the new .md files in the subsequent build step.
+      # All other Phase 3-A wiring (classifier, kg.after hook, Hugo layout,
+      # publish-content concept support, AppRouter route, CAP serve handler)
+      # shipped in #685 — only this workflow invocation was missing.
+      - name: Fetch published concepts
+        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
+        run: npm run fetch-concepts
+        env:
+          CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
+
       # Author-side smell detector. Runs against raw tutorial markdown in
       # .tutorial-cache/ and warns on patterns that produce malformed DOM
       # downstream (see scripts/lint-tutorial-markdown.ts). Non-blocking by
