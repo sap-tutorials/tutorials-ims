@@ -13,8 +13,8 @@ Related issues: #429 (3-mode classifier), #433 (multi-slug filter), #609 (auto-i
 | You want to | Run | Wall-clock |
 |---|---|---|
 | Republish one tutorial (parser fix, content typo) | `gh workflow run rebuild-content.yml --ref main -f slug=$SLUG` | ~2 min |
-| Rebuild after admin Mission / Group / etc. save | Nothing — admin auto-triggers `mode=catalog-only` after a 60s debounce | ~1 min |
-| Full rebuild (dependency bump, Vue island change) | `gh workflow run rebuild-content.yml --ref main -f mode=full` | ~10 min |
+| Rebuild after admin Mission / Group / Homepage / VerbDefinitions / etc. save | Nothing — admin auto-triggers `mode=catalog-only` after a 60s debounce | ~5 min |
+| Full rebuild (tutorial fetch + dependency bump + Vue island change) | `gh workflow run rebuild-content.yml --ref main -f mode=full` | ~10 min |
 
 Manual `gh workflow run ... -f slug=X` calls auto-infer `mode=slug-targeted` since #610 — you do NOT need to also pass `-f mode=slug-targeted`. The `::notice::` annotation at the top of the run UI reads `slug-targeted (auto-inferred (slug/slugs set, mode left at default))` when this fires.
 
@@ -22,13 +22,15 @@ Manual `gh workflow run ... -f slug=X` calls auto-infer `mode=slug-targeted` sin
 
 ### `catalog-only`
 
-For admin saves of catalog data (Missions, Groups, CompletionPaths, FeaturedTasks, etc.) — these mutate `/build/catalog` outputs which feed `hugo/data/browse.json` and the mission/group landing pages. Tutorial-page content does not change.
+For admin saves of catalog data (Missions, Groups, CompletionPaths, FeaturedTasks, HomepageShelves, VerbDefinitions, ShelfDefinitions, Advocates, Concepts, etc.) — these mutate the `/build/*` outputs Hugo bakes into `hugo/data/` and the homepage / mission / group landing pages. Tutorial-page content does not change.
 
-**Steps that run:** Install deps → Restore cache → Build Hugo → Publish to HANA.
+**Steps that run:** Install deps → Restore cache → Fetch concepts → Fetch homepage shelves → Fetch verb definitions → Fetch shelf definitions → Build Hugo → Publish to HANA → Build Vue apps → Joule vendor → Build display → Build admin SPAs → Assemble static content → AppRouter push.
 
-**Steps that skip:** Fetch (no GitHub round-trip), Lint, Validate, Build Vue apps, Joule vendor, Build display, Build admin SPAs, Assemble static content, AppRouter push.
+**Steps that skip:** Fetch tutorials (no GitHub round-trip for tutorial markdown), Lint, Validate, AI VCAP, Purge orphan tutorials.
 
-**When to dispatch manually:** rare. Admin writes auto-classify to this mode via the entity sets in [`srv/lib/_classify-rebuild-mode.js`](../../../srv/lib/_classify-rebuild-mode.js): `Missions`, `Groups`, `CompletionPaths`, `CompletionPathItems`, `GroupPathItems`, `FeaturedTasks`, plus the bound actions `classifyCategories` and `setFeaturedOrder`.
+**Why the Vue/admin/display/push steps run on catalog-only as of 2026-06-30:** the visitor-observable result of an admin save (e.g. HomepageShelves edit) is the homepage HTML in the approuter's static dir. That dir is replaced atomically by the AppRouter push step. Before 2026-06-30 those steps were `full`-only, so admin saves updated the DB but never reached visitors until someone manually ran a `full` rebuild. Broadening to `catalog-only` costs ~4 min wall-clock per admin save but actually delivers the change.
+
+**When to dispatch manually:** rare. Admin writes auto-classify to this mode via the entity sets in [`srv/lib/_classify-rebuild-mode.js`](../../../srv/lib/_classify-rebuild-mode.js).
 
 ### `slug-targeted`
 
