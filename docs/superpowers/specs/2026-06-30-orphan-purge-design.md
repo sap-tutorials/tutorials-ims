@@ -5,6 +5,12 @@
 **Author:** Tom Jung (with Claude Code)
 **Related:** PR #795 (drift-count grep fix); run [28422871998](https://github.com/sap-tutorials/tutorials-ims/actions/runs/28422871998) (drift report that surfaced the 24 ghosts); [docs/developers/operations/rebuild-content-workflow.md](../../developers/operations/rebuild-content-workflow.md)
 
+## Terminology
+
+- **Orphan** — a tutorial whose `ContentFiles` row exists in the ACTIVE manifest but whose source markdown is no longer present in any upstream repo. Detected as a slug in `serverSlugs` but not in `localSlugs` after a `full`-mode `fetch-tutorials`. This is what `--purge-orphans` acts on.
+- **Phantom ContentFiles row** — a `ContentFiles` row whose `slug` has no matching `Tutorials` parent row. NOT an orphan in the sense above; landed via a publish-path bug or hand-SQL. Reported in `notFound[]` and requires investigation, not auto-cleanup.
+- **Missing-locally** — the broader label used by the daily drift report; in `full`-mode it equals "orphan", in `slug-targeted`/`catalog-only` it's an artifact of partial fetch (which is exactly why `--purge-orphans` is `full`-mode-only).
+
 ## Problem
 
 The daily [content-drift-check](../../../.github/workflows/content-drift-check.yml) workflow reports two signals from `scripts/publish-content.ts --verify-only`:
@@ -48,7 +54,14 @@ Today it returns `{ slug: sourceHash }` for every row in the ACTIVE manifest. Ad
 // date the status column aren't soft-deleted, they're just unflagged.
 ```
 
-Implementation shape: the existing SELECT already joins `ContentFiles` ⨯ `ContentManifest`. Add a LEFT JOIN to `Tutorials` on `LOWER(slug)` (since [Tutorial slugs are lowercase canonical](../../../CLAUDE.md) — joins must lower-case both sides) and a `WHERE status != 'INACTIVE' OR status IS NULL`.
+Implementation shape: the existing SELECT joins `ContentFiles` ⨯ `ContentManifest`. Add a LEFT JOIN to `Tutorials` on `LOWER(slug)` (since [Tutorial slugs are lowercase canonical](../../../CLAUDE.md) — joins must lower-case both sides) and a `WHERE status != 'INACTIVE'` clause.
+
+> **Pre-deploy data check (HIGH from review round 1, issue #9):** before relying on `WHERE status != 'INACTIVE'`, the implementation plan must verify the answer to `SELECT COUNT(*) FROM Tutorials WHERE status IS NULL` against DEV and PROD. The `Tutorials.status` column is `TaskStatus` enum with `@assert.range` ([db/schema.cds:24](../../../db/schema.cds#L24)) — new rows can't be NULL — but pre-existing rows from before the column was added may be. Two outcomes:
+>
+> - **Count = 0** → no defensive `OR status IS NULL` clause needed; ship the plain `!= 'INACTIVE'` filter. This is the design's preferred branch.
+> - **Count > 0** → one-shot DB migration script seeds the orphans to `'ACTIVE'` (`UPDATE Tutorials SET status='ACTIVE' WHERE status IS NULL`) before the filter ships, so the filter's semantics are unambiguous.
+>
+> Picking the branch is a plan-time decision, not a spec-time one. The serve handler already treats NULL as not-INACTIVE ([content-store.js:978](../../../srv/lib/content-store.js#L978)); the new filter must match that semantics on whichever data state lands in the DB.
 
 **Companion benefit:** once a slug flips to INACTIVE via the new endpoint (or via the admin Fiori app), the drift workflow stops re-reporting it the next day — without this filter, the cleanup would be invisible and would keep generating noise.
 
@@ -64,11 +77,11 @@ Routed through `AdminService` (not the bare-Express layer that hosts `/content/p
 
 ```json
 {
-  "slugs": ["appgyver-fetch-data", "codejam-0-prerequisites", "..."],
-  "initiator": "ci/28442602262",
-  "dryRun": false
+  "slugs": ["appgyver-fetch-data", "codejam-0-prerequisites", "..."]
 }
 ```
+
+The `initiator` field is **not** in the body. Operator attribution is captured in a `PipelineLog` row (see "Initiator persistence" below) symmetric with how `/content/publish` records initiator. The `dryRun` flag from earlier drafts is removed — dry-run is handled client-side by `--dry-run`, which gates the POST call entirely. No untested server-side branch.
 
 **Response body:**
 
@@ -88,16 +101,20 @@ Routed through `AdminService` (not the bare-Express layer that hosts `/content/p
 
 | Condition | Bucket | Server action |
 |---|---|---|
-| Slug missing from `Tutorials` (phantom ContentFiles row) | `notFound[]` | None — logged for follow-up GC |
+| Slug missing from `Tutorials` (phantom row — see Terminology) | `notFound[]` | None — **operator action required** (not auto-remediated). Indicates a publish-path bug or hand-SQL; file an issue. |
 | `Tutorials.status` already `INACTIVE` | `alreadyInactive[]` | None (idempotent re-run) |
 | `Tutorials.redirectTo` is set | `redirected[]` | None — admin set up redirect deliberately; honor intent |
 | Otherwise | `purged[]` | `UPDATE Tutorials SET status='INACTIVE' WHERE ID = ?` |
 
+**Initiator persistence:** the endpoint receives the bearer token's identity as `req.user.id`, which for a CI caller is the technical SAP user that backs `CONTENT_API_KEY` — same value for every CI run. To preserve per-run attribution (so two CI runs in the same minute are distinguishable in audit), the endpoint writes a `PipelineLog` row at start-of-call with `stage='purge-orphans'` and `initiator` taken from the `x-initiator` request header (set by the CLI from `INITIATOR` env var, default `ci/$GITHUB_RUN_ID`). This mirrors how `/content/publish/commit` records initiator on `ContentManifest` and `PipelineLog` (see CLAUDE.md > "Content publishing").
+
+**Change-tracking interaction:** `Tutorials` is `@changelog`-tracked through AdminService ([db/change-tracking.cds:37](../../../db/change-tracking.cds#L37)). Each `UPDATE Tutorials SET status='INACTIVE'` writes a row to `sap.changelog.Changes` with `entity = 'AdminService.Tutorials'` (the projection name, per [db/views.cds:373-378](../../../db/views.cds#L373-L378)), `attribute = 'status'`, `valueChangedTo = 'INACTIVE'`, `createdAt = <ts>`, `createdBy = <ci-technical-user>`. The `createdBy` is the technical user, NOT the `initiator` string — for run-level attribution, join `Changes` against `PipelineLog` on `createdAt`-window + `stage='purge-orphans'`. See the Rollback section for the canonical join.
+
 **Transaction scope:** each slug's UPDATE runs in its own implicit CAP transaction. Partial failure is reported in the response; one failure doesn't roll back the whole batch. Matches the existing batch-admin shape (e.g. `cleanupAutotestData`).
 
-**Server-side cap (defense in depth):** reject 400 if `slugs.length > 100`. The client should already have refused at 50; this protects against a future CLI version loosening its own cap.
+**Server-side cap (defense in depth):** reject 400 if `slugs.length > 100`. The client should already have refused at the absolute cap (50 by default); this protects against a future CLI version loosening its own cap. See "Cap design" under CLI mode for the relationship between the percent cap, the absolute cap, and this server ceiling.
 
-**Returned `version`:** the current ACTIVE `ContentManifest.version`. Doesn't get bumped by the purge — the manifest stays unchanged, only `Tutorials.status` flips. Included so the operator can correlate the purge with the manifest in change-tracking queries.
+**Returned `version`:** the current ACTIVE `ContentManifest.version` at the time of the call. The manifest is **not** bumped by purge — only `Tutorials.status` flips. Included so the operator knows which publish state the purge ran against.
 
 ### 3. CLI mode + workflow input
 
@@ -114,12 +131,24 @@ Details for both in **CLI mode** and **Workflow integration** sections below.
 | Flag | Env var | Default | Purpose |
 |---|---|---|---|
 | `--purge-orphans` | — | off | Activates this mode |
-| `--purge-cap-pct N` | `PURGE_CAP_PCT` | `5` | Refuse if orphans > N% of server slugs |
 | `--purge-cap-abs N` | `PURGE_CAP_ABS` | `50` | Refuse if orphans > N (absolute) |
-| `--dry-run` | — | (existing) | Compute + print, don't call the endpoint |
-| `--initiator <value>` | `INITIATOR` | `${user}@${hostname}` | (existing) — workflow passes `ci/$GITHUB_RUN_ID` |
+| `--dry-run` | — | (existing) | Print what would happen, don't call the endpoint |
+| `--initiator <value>` | `INITIATOR` | `${user}@${hostname}` | (existing) — workflow passes `ci/$GITHUB_RUN_ID`; sent as `x-initiator` header |
 
 `--purge-orphans` is mutually exclusive with `--force`, `--heal`, `--verify-only`.
+
+### Cap design
+
+**Round 1 of this spec had two caps (5% percent + 50 absolute, both must pass).** Spec review (HIGH issue #4) flagged that a percent cap is redundant once an absolute cap is set: for any realistic catalog size, 50 is already small enough to catch "fetch dropped half the catalog" (50/1396 = 3.6%). On a 5000-slug catalog the percent cap would let 250 through, exceeding the server's 100-slug ceiling — so the percent cap doesn't add safety, it adds confusing edge cases.
+
+**Resolved design: absolute cap only.** Default `PURGE_CAP_ABS=50`. The relationship between client and server caps:
+
+| Cap | Default | Purpose |
+|---|---|---|
+| Client `--purge-cap-abs` | 50 | First gate — refuses the call before any HTTP traffic |
+| Server hardcoded ceiling | 100 | Last-resort gate — protects against future CLI versions that loosen their own cap |
+
+If an operator deliberately raises `--purge-cap-abs` above 100 (e.g. after a known one-time bulk cleanup), the server rejects with `400 "batch too large; orphan purge enforces a 100-slug ceiling per call"`. The operator splits the work into multiple calls, or files a separate change to raise the server ceiling.
 
 ### Execution flow
 
@@ -136,29 +165,52 @@ Details for both in **CLI mode** and **Workflow integration** sections below.
    (same call as --verify-only at scripts/publish-content.ts:661)
 
 4. Compute orphans = serverSlugs.filter(s => !localHashes.has(s))
+   (set membership, NOT hash equality — a slug appearing in BOTH sets is
+    never an orphan even if local hash is corrupted/empty)
 
-5. Cap check (both must pass)
-   pct = orphans.length / serverSlugs.length * 100
-   if (pct > capPct || orphans.length > capAbs) {
-     log error with both gate values and the first 20 orphans
+5. Cap check
+   if (orphans.length > capAbs) {
+     log error: "Orphan count <N> exceeds cap (<N> > <capAbs> abs).
+                 Investigate fetch output before raising --purge-cap-abs."
+     log first 20 orphans
      exit 1
    }
 
-6. Print summary (slug count, % of catalog, sample of 10)
+6. Print summary (slug count, % of catalog informational only, sample of 10)
 
-7. If --dry-run → exit 0
+7. If --dry-run → write $GITHUB_STEP_SUMMARY block with "would have purged"
+   counts, exit 0
 
-8. POST /admin/orphan-purge with { slugs, initiator, dryRun: false }
-   Authorization: Bearer ${CONTENT_API_KEY}
+8. POST /admin/orphan-purge
+   - Body: { slugs }
+   - Headers:
+       Authorization: Bearer ${CONTENT_API_KEY}
+       x-initiator:   ${INITIATOR}
+       Content-Type:  application/json
 
-9. Print response summary (purged / alreadyInactive / notFound /
-   redirected counts, sample of redirected slugs for operator review)
+9. Error handling (always writes $GITHUB_STEP_SUMMARY, even on failure):
+   - Non-2xx → log response body + status, write summary marking step
+     as failed, exit 1 (distinct exit codes for clarity):
+       401/403 → "Auth failure — check CONTENT_API_KEY secret for $env"
+       400     → "Server rejected payload — see response body"
+       5xx     → "Server error — retry once with same INITIATOR; idempotent"
+   - Network error (DNS, timeout) → "Connectivity error — verify CAP_BASE_URL", exit 1
 
-10. Sanity check: assert purged + alreadyInactive + notFound + redirected
-    == totalAttempted. Mismatch → exit 1 (server returned a malformed
-    response; do not silently treat as success).
+10. On 2xx response, sanity check:
+    assert purged + alreadyInactive + notFound + redirected == totalAttempted
+    Mismatch → exit 1 (malformed response; do NOT silently treat as success)
 
-11. Exit 0
+11. Print response summary:
+    - purged: N
+    - alreadyInactive: N
+    - notFound: N (REQUIRES OPERATOR ACTION if > 0 — phantom rows;
+                   list all slugs in output, file an issue per slug)
+    - redirected: N (sample of redirected slugs)
+    - manifest version: V
+
+12. Write $GITHUB_STEP_SUMMARY block (see "Run summary" under Workflow integration)
+
+13. Exit 0
 ```
 
 ### Output
@@ -218,22 +270,24 @@ No silent override.
 
 ### New step
 
-Runs after the existing `Publish content` step:
+Runs after the existing `Publish tutorial content to HANA` step ([rebuild-content.yml:300](../../../.github/workflows/rebuild-content.yml#L300)). **The plan must add `id: publish` to that existing step** — it has no id today, so `steps.publish.outcome` would evaluate empty without this change. The CAP srv URL is exposed by `steps.srv.outputs.srv_url` ([rebuild-content.yml:158](../../../.github/workflows/rebuild-content.yml#L158)), NOT `steps.env.outputs`. Secrets are referenced directly:
 
 ```yaml
 - name: Purge orphan tutorials
+  id: purge
   if: |
     inputs.purge-orphans == true &&
-    steps.determine-mode.outputs.effective_mode == 'full' &&
+    steps.mode.outputs.effective_mode == 'full' &&
     steps.publish.outcome == 'success'
   env:
-    CAP_BASE_URL:    ${{ steps.env.outputs.srv_url }}
-    CONTENT_API_KEY: ${{ secrets[steps.env.outputs.api_key_secret] }}
-    PURGE_CAP_PCT:   '5'
+    CAP_BASE_URL:    ${{ steps.srv.outputs.srv_url }}
+    CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
     PURGE_CAP_ABS:   '50'
     INITIATOR:       "ci/${{ github.run_id }}"
   run: npx tsx scripts/publish-content.ts --purge-orphans
 ```
+
+The `effective_mode` is published by the existing `id: mode` step ([rebuild-content.yml:124](../../../.github/workflows/rebuild-content.yml#L124)). The secret name `CONTENT_API_KEY` is correct for `dev`/`prod`; the plan must thread `CONTENT_API_KEY_QA` for the QA environment if it's ever invoked there (today this workflow's QA sibling is `rebuild-content-qa.yml`, so this concern is theoretical, but cover it in the plan).
 
 **Why gated on `steps.publish.outcome == 'success'`:** if the publish failed (network blip, validator error), the server's `/content/source-hashes` might be in a transient state. Don't compound a failure with a destructive operation. Operator reruns with `purge-orphans=true` after the publish issue is fixed.
 
@@ -265,7 +319,7 @@ No change. The workflow already has the API key for `/content/publish`; the same
 
 | File | Coverage |
 |---|---|
-| [test/unit/purge-orphans-cap.test.js](../../../test/unit/purge-orphans-cap.test.js) | Percent cap, absolute cap, both-fail, both-pass; edge cases (0 server slugs, 0 local slugs, exactly-at-threshold). Pure math — no HTTP, no DB. |
+| [test/unit/purge-orphans-cap.test.js](../../../test/unit/purge-orphans-cap.test.js) | Absolute cap pass/fail; edge cases (0 server slugs, 0 local slugs, exactly-at-threshold, capAbs=0 special-case). Pure math — no HTTP, no DB. |
 | [test/unit/purge-orphans-cli-guard.test.js](../../../test/unit/purge-orphans-cli-guard.test.js) | `GITHUB_ACTIONS` unset → exit 1; set → proceeds. Mutual exclusion vs `--force`/`--heal`/`--verify-only`. |
 | [test/unit/orphan-purge-endpoint.test.js](../../../test/unit/orphan-purge-endpoint.test.js) | `AdminService.orphanPurge` against in-memory SQLite seeded with `ACTIVE` + `INACTIVE` + `redirectTo`-set + missing rows. Asserts the four bucket arrays. |
 
@@ -317,26 +371,52 @@ If a Phase 2 dispatch mis-purges:
 
 1. **Single row:** flip `status` back from `INACTIVE → ACTIVE` in the Tutorials Fiori app at `/admin-ui/#tutorials-display`.
 2. **Bulk (>5 rows):** one-off `UPDATE Tutorials SET status='ACTIVE' WHERE ID IN (...)` via `cds bind --exec` against DEV — same shape as the existing `setup-dev-data.cjs` script.
-3. **Reconstructing the "before" set:** the `@cap-js/change-tracking` table records every `status` flip; query:
+3. **Reconstructing the "before" set:** the `@cap-js/change-tracking` table records every `status` flip. Two queries — pick by what you have:
+
+   **(a) If you have the CI `run_id`** — join `Changes` against `PipelineLog` on the time window, filtered by `stage='purge-orphans'` and the matching initiator:
+
    ```sql
-   SELECT entityKey FROM ChangeView
-    WHERE entity='Tutorials'
-      AND attribute='status'
-      AND valueChangedTo='INACTIVE'
-      AND modifiedAt > '<ci-run-start>';
+   SELECT c.entityKey, c.createdAt
+     FROM "sap.changelog.Changes" AS c
+     INNER JOIN com_sap_developers_ims_pipelinelog AS p
+       ON c.createdAt BETWEEN p.startedAt AND p.finishedAt
+    WHERE c.entity     = 'AdminService.Tutorials'
+      AND c.attribute  = 'status'
+      AND c.valueChangedTo = 'INACTIVE'
+      AND p.stage      = 'purge-orphans'
+      AND p.initiator  = 'ci/<run_id>';
    ```
+
+   **(b) Time-window only** (no PipelineLog dependency):
+
+   ```sql
+   SELECT entityKey, createdAt, createdBy
+     FROM "sap.changelog.Changes"
+    WHERE entity     = 'AdminService.Tutorials'   -- projection name, not DB entity
+      AND attribute  = 'status'
+      AND valueChangedTo = 'INACTIVE'
+      AND createdAt > '<ci-run-start-iso>';
+   ```
+
+   The `entity` filter is `'AdminService.Tutorials'` (the projection name) — `@cap-js/change-tracking` records the source service projection on each row ([db/views.cds:371-378](../../../db/views.cds#L371-L378) is the working precedent). The schema uses `createdAt`/`createdBy`, NOT `modifiedAt` ([node_modules/@cap-js/change-tracking/index.cds:207](../../../node_modules/@cap-js/change-tracking/index.cds#L207)).
+
+4. **Re-activate:** feed the `entityKey` list from query (a) or (b) into the bulk UPDATE in step 2.
 
 ## Risks & mitigations
 
 | Risk | Mitigation |
 |---|---|
-| Fetch-tutorials silently drops a repo → mass purge | 5% / 50-slug client cap; 100-slug server cap as defense in depth |
+| Fetch-tutorials silently drops a repo → mass purge | 50-slug client absolute cap; 100-slug server cap as defense in depth |
 | Operator runs from workstation against stale cache | `GITHUB_ACTIONS` hard-block in CLI |
 | Operator runs with `slug-targeted` mode by mistake | Workflow `if:` skips cleanly (not fails); CLI errors with explicit redo command |
 | Soft-delete hits a slug with a deliberate redirect | Per-slug `redirectTo` check skips; reports in `redirected[]` |
 | Purge endpoint abused (mass soft-delete by non-CI) | Same XSUAA bearer as `/content/publish`; server-side 100-slug ceiling |
-| `Tutorials.status` has null/legacy rows | `status != 'INACTIVE' OR status IS NULL` in source-hashes filter; UPDATE is idempotent |
+| `Tutorials.status` has NULL rows from legacy data | Pre-deploy data check (see Architecture §1); if any NULL rows exist, plan seeds them to `'ACTIVE'` as a one-shot migration step before the filter ships |
 | Server returns malformed response (bucket sum ≠ total) | CLI sanity check at step 10 exits 1 instead of silently treating as success |
+| Concurrent publish during purge race | Benign by design. Sequence: purge flips `Tutorials.status='INACTIVE'`. A mid-flight publish's `carryForwardUnchanged` copies the ContentFiles row into manifest V+1 (manifests are ContentFiles snapshots, not Tutorials snapshots), but the new `/content/source-hashes` filter checks `Tutorials.status` at read time, so the purged slug stays suppressed. Serve handler enforces the same INACTIVE filter ([content-store.js:978](../../../srv/lib/content-store.js#L978)). The status flag wins because it's on `Tutorials`, not on `ContentFiles`. No locking needed. |
+| Corrupted/empty local hash causes false-positive orphan | Cannot happen by construction — orphan detection is SET MEMBERSHIP (`serverSlugs.filter(s => !localHashes.has(s))`), NOT hash equality. A slug present in BOTH sets is never an orphan regardless of hash value. Drift slugs go through `--heal`, not `--purge-orphans`. |
+| Operator sees `notFound[]` and assumes auto-cleanup | Per-slug behavior table explicitly says "operator action required". CLI step 11 prints all `notFound[]` slugs (not a sample) and instructs the operator to file an issue. |
+| CONTENT_API_KEY rotation drift between publish + purge | Both routes use the same secret. Publish step would fail first; gated `if: steps.publish.outcome == 'success'` skips purge. Purge-only auth failure → distinct CLI exit message (see Execution flow step 9). |
 
 ## Open questions
 
