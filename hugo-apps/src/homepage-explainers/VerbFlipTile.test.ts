@@ -9,7 +9,7 @@ describe('VerbFlipTile', () => {
   beforeEach(() => { vi.useFakeTimers({ shouldAdvanceTime: true }); });
   afterEach(() => { vi.useRealTimers(); });
 
-  it('renders verb-tile mode with label, icon, and front-face preview slot', () => {
+  it('renders verb-tile mode with label, icon, and front-face preview list (from data-preview prop)', () => {
     const wrapper = mount(VerbFlipTile, {
       props: {
         verbKey: 'LEARN',
@@ -18,12 +18,11 @@ describe('VerbFlipTile', () => {
         tagline: 'Pick up SAP for the first time',
         whyItMatters: 'Tutorials, learning journeys, and missions',
         href: '/learn/',
-      },
-      slots: {
-        default: '<ul class="hp-verb__preview"><li>Tutorial 1</li></ul>',
+        preview: JSON.stringify(['Tutorial 1', 'Tutorial 2']),
       },
     });
     expect(wrapper.text()).toContain('Learn');
+    expect(wrapper.text()).toContain('Tutorial 1');
     expect(wrapper.find('.hp-verb__preview').exists()).toBe(true);
     expect(wrapper.find('[data-flipped="false"]').exists()).toBe(true);
   });

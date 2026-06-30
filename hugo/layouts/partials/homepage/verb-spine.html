@@ -35,6 +35,13 @@
     {{- $verbShelves := where $shelves "verb" $vKey -}}
     {{- $startHere := where $verbShelves "shelf" "START_HERE" -}}
     {{- $preview := first 3 (sort $startHere "sortOrder") -}}
+    {{- /* Extract just the titles for the data-preview JSON. Vue island
+           parses this and renders the <ul> from props — the inner <a>
+           below is first-paint fallback only (Vue replaces it on
+           hydration). #759 hotfix: <slot /> wasn't preserving the <ul>
+           after createApp.mount(). */ -}}
+    {{- $previewTitles := slice -}}
+    {{- range $preview -}}{{- $previewTitles = $previewTitles | append .title -}}{{- end -}}
     <div data-island="verb-flip-tile"
          data-verb-key="{{ $vKey }}"
          data-label="{{ $vLabel }}"
@@ -42,6 +49,7 @@
          data-tagline="{{ $tagline }}"
          data-why-it-matters="{{ $whyItMatters }}"
          data-href="{{ $vHref }}"
+         data-preview="{{ $previewTitles | jsonify }}"
          class="hp-verb-island">
       {{- /* First-paint fallback content. Renders identically to today's
              static markup; Vue island replaces it on hydration. If Vue

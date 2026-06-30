@@ -57,6 +57,7 @@
             data-why-it-matters="{{ .whyItMatters | default "" }}"
             data-description="{{ .description | default "" }}"
             data-href="{{ .url }}"
+            data-is-external="{{ if .isExternal }}true{{ else }}false{{ end }}"
             {{- with .badge }} data-badge="{{ . }}"{{ end }}
             class="verb-shelf__item">
           <a href="{{ .url }}" {{ if .isExternal }}target="_blank" rel="noopener"{{ end }}>
