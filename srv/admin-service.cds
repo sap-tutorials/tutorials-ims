@@ -269,6 +269,10 @@ service AdminService {
       ttlMs       : Integer;
       description : String;
       nextRunIso  : String;
+      // #750: ISO timestamps of cron firings in (now, now+24h], capped at 50
+      // per job. Empty for monthly crons whose next firing falls outside the
+      // window — nextRunIso still populated via fallback.
+      nextRunsIso : array of String;
     };
 
     action runJob(jobName: String) returns {
