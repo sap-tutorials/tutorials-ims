@@ -286,6 +286,41 @@ jobs:
         env:
           CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
 
+      # [#759] Homepage data feeds — homepage-shelves (60 link cards),
+      # verb-definitions (6 verb tile back-faces), shelf-definitions
+      # (4 shelf-header explainers). All three are read by Hugo at build
+      # time via site.Data.* and rendered into the homepage / verb sub-page
+      # templates (hugo/layouts/partials/homepage/verb-spine.html,
+      # directory-footer.html, verb/list.html).
+      #
+      # MUST run on `full` AND `catalog-only` — homepage content is what
+      # both surfaces are FOR. The verb-spine template's fallback at
+      # verb-spine.html:14-22 only carries label/icon/href, NOT tagline or
+      # whyItMatters, so omitting these fetchers produces a visibly-broken
+      # homepage with empty flip-card back faces (caught after a clean
+      # post-merge rebuild on 2026-06-30 wiped the homepage's explainer
+      # content even though the DB was intact). The fix is to mirror
+      # `npm run build:all`'s fetcher chain (package.json line 65) which
+      # always runs all three before Hugo. Slug-targeted skips them
+      # because a single-tutorial rebuild doesn't touch the homepage.
+      - name: Fetch homepage shelves
+        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
+        run: npm run fetch-homepage-shelves
+        env:
+          CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
+
+      - name: Fetch verb definitions
+        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
+        run: npm run fetch-verb-definitions
+        env:
+          CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
+
+      - name: Fetch shelf definitions
+        if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
+        run: npm run fetch-shelf-definitions
+        env:
+          CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
+
       # Author-side smell detector. Runs against raw tutorial markdown in
       # .tutorial-cache/ and warns on patterns that produce malformed DOM
       # downstream (see scripts/lint-tutorial-markdown.ts). Non-blocking by
