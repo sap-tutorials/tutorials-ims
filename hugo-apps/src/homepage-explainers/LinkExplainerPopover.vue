@@ -31,6 +31,11 @@ const iconBtnEl = ref<HTMLButtonElement | null>(null);
 const reduced = useReducedMotion();
 const { handleEnter, handleLeave } = useHoverIntent({
   delayMs: 250,
+  // Defer close ~180 ms so the cursor can bridge the 8 px gap between
+  // the ⓘ icon and the popover (or move onto the popover's scrollbar)
+  // without the popover being torn down mid-traverse. Re-entering the
+  // ⓘ button OR the popover body cancels the pending leave.
+  leaveDelayMs: 180,
   reducedMotion: reduced,
   onEnter: () => {
     if (!openedViaClick.value) {
@@ -143,6 +148,8 @@ onBeforeUnmount(() => {
       :data-alignment="alignment"
       tabindex="-1"
       @keydown="onKey"
+      @pointerenter="handleEnter"
+      @pointerleave="handleLeave"
     >
       <p v-if="tagline" class="hp-popover__tagline">{{ tagline }}</p>
       <p v-if="whyItMatters" class="hp-popover__why">{{ whyItMatters }}</p>

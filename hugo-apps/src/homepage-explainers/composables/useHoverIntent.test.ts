@@ -91,4 +91,53 @@ describe('useHoverIntent', () => {
     vi.advanceTimersByTime(300);
     expect(onEnter).toHaveBeenCalledTimes(2);
   });
+
+  // #759 follow-up: hover-bridge regression — moving the cursor off the
+  // ⓘ icon must not tear down the popover before the user can reach the
+  // popover body / its scrollbar. The leave-delay window is the cushion;
+  // a re-enter inside the window must cancel the pending close.
+  it('defers onLeave by leaveDelayMs and cancels it on re-enter (hover-bridge)', () => {
+    const onEnter = vi.fn();
+    const onLeave = vi.fn();
+    const { handleEnter, handleLeave } = useHoverIntent({
+      delayMs: 250,
+      leaveDelayMs: 180,
+      onEnter,
+      onLeave,
+    });
+    handleEnter();
+    vi.advanceTimersByTime(250);
+    expect(onEnter).toHaveBeenCalledTimes(1);
+    // Pointer leaves the icon — onLeave should NOT fire immediately.
+    handleLeave();
+    vi.advanceTimersByTime(100);
+    expect(onLeave).not.toHaveBeenCalled();
+    // Cursor arrives at the popover body (simulated by a second enter on
+    // a shared composable instance). The pending leave must be cancelled.
+    handleEnter();
+    vi.advanceTimersByTime(500);
+    expect(onLeave).not.toHaveBeenCalled();
+    // entered.value stayed true, so a fresh enter inside the leave-window
+    // is a no-op (idempotent). onEnter is still 1.
+    expect(onEnter).toHaveBeenCalledTimes(1);
+  });
+
+  it('fires onLeave after leaveDelayMs elapses with no re-enter', () => {
+    const onEnter = vi.fn();
+    const onLeave = vi.fn();
+    const { handleEnter, handleLeave } = useHoverIntent({
+      delayMs: 250,
+      leaveDelayMs: 180,
+      onEnter,
+      onLeave,
+    });
+    handleEnter();
+    vi.advanceTimersByTime(250);
+    expect(onEnter).toHaveBeenCalledTimes(1);
+    handleLeave();
+    vi.advanceTimersByTime(179);
+    expect(onLeave).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(onLeave).toHaveBeenCalledTimes(1);
+  });
 });
