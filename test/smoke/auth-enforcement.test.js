@@ -24,4 +24,16 @@ describe('Auth enforcement', () => {
     const res = await fetchWithRetry(`${SRV_URL}/display/getLeaderboard`);
     expect([401, 403]).toContain(res.status);
   });
+
+  it('POST /content/orphan-purge without auth is rejected', async () => {
+    // The new orphan-purge endpoint is gated by contentAuthMiddleware
+    // (same model as /content/publish). CI uses CONTENT_API_KEY as the
+    // bearer; an unauthenticated call must be rejected at the auth layer.
+    const res = await fetchWithRetry(`${SRV_URL}/content/orphan-purge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slugs: [] })
+    });
+    expect([401, 403]).toContain(res.status);
+  });
 });
