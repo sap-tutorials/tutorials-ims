@@ -2,8 +2,14 @@
 {{/* The fetcher (scripts/fetch-concepts.ts) normalises all four related-entity
      arrays to {slug, title} pairs, regardless of whether the source field on
      the API payload was `title` (Tutorials.teaches) or `name` (Concept→Concept
-     edges). So we read `.title` consistently in all four sections. */}}
-{{ $name := .Params.name | default .Params.slug }}
+     edges). So we read `.title` consistently in all four sections.
+
+     [#813] Page name comes from .Title (frontmatter `title:`), which also
+     drives Hugo's site-wide <title>, og:title, twitter:title meta. The
+     `default .Params.name` fallback supports pages built before the #813
+     fix landed (those have `name:` only) — safe to drop once the next
+     rebuild has rolled all concepts forward. */}}
+{{ $name := .Title | default .Params.name | default .Params.slug }}
 <article class="concept-page">
   <header class="concept-page__header">
     <nav class="concept-page__breadcrumb" aria-label="breadcrumb">
