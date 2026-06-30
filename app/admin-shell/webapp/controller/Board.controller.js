@@ -3,8 +3,10 @@ sap.ui.define([
   "sap/ui/model/json/JSONModel",
   "sap/m/MessageToast",
   "sap/m/MessageBox",
-  "sap/tutorials/admin/shell/controller/job-controls-helpers"
-], function (Controller, JSONModel, MessageToast, MessageBox, JobControlsHelpers) {
+  "sap/tutorials/admin/shell/controller/job-controls-helpers",
+  "sap/tutorials/admin/shell/controller/job-controls-sort",
+  "sap/tutorials/admin/shell/controller/cron-timeline-helpers"
+], function (Controller, JSONModel, MessageToast, MessageBox, JobControlsHelpers, JobControlsSort, CronTimelineHelpers) {
   "use strict";
   return Controller.extend("sap.tutorials.admin.shell.controller.Board", {
     onInit: function () {
@@ -23,7 +25,10 @@ sap.ui.define([
       this.getView().setModel(oModel, "board");
       // #756: empty JSONModel for the Cron health tile; populated by
       // _loadJobControls() once the OData JOIN resolves.
-      this.getView().setModel(new JSONModel({ jobs: [] }), "jobControls");
+      // #750: timelineHtml drives the <core:HTML> ribbon control. Empty
+      // string until _loadJobControls() resolves; never null (UI5 HTML
+      // control treats null as "use the previous content").
+      this.getView().setModel(new JSONModel({ jobs: [], timelineHtml: '' }), "jobControls");
       this._loadMetrics();
       this._loadJobControls();
     },
@@ -76,7 +81,17 @@ sap.ui.define([
         var aJobs = results[0];
         var aLastRuns = results[1];
         var aJoined = JobControlsHelpers.joinJobsWithLastRuns(aJobs, aLastRuns);
-        oJobControlsModel.setProperty("/jobs", aJoined);
+        // #750: chronological sort (nextRunIso ascending, nulls last) so the
+        // table reads top-to-bottom as "soonest first."
+        var aSorted = JobControlsSort.sortJobsByNextRun(aJoined);
+        // #750: build the SVG ribbon from the same array.
+        var sTimelineHtml = CronTimelineHelpers.buildTimelineSvg(aSorted, {
+          now: new Date(),
+          widthPx: 800,
+          heightPx: 80
+        });
+        oJobControlsModel.setProperty("/jobs", aSorted);
+        oJobControlsModel.setProperty("/timelineHtml", sTimelineHtml);
       }).catch(function (err) {
         // Best-effort — the tile renders 0 rows, the rest of the Board still works.
         // eslint-disable-next-line no-console
