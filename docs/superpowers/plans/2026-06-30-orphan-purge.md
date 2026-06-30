@@ -2,15 +2,18 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a CI-only `--purge-orphans` mode to `scripts/publish-content.ts` that soft-deletes tutorials whose source markdown no longer exists in any upstream repo. Backed by a new `AdminService.orphanPurge` action and a `purge-orphans` workflow input on `rebuild-content.yml`.
+**Goal:** Add a CI-only `--purge-orphans` mode to `scripts/publish-content.ts` that soft-deletes tutorials whose source markdown no longer exists in any upstream repo. Backed by a new `POST /content/orphan-purge` bare-Express endpoint (CONTENT_API_KEY-authenticated, same auth model as `/content/publish`) and a `purge-orphans` workflow input on `rebuild-content.yml`.
 
 **Architecture:** Three changes in two PRs.
-- **PR-1 (server + companion fix):** filter `Tutorials.status='INACTIVE'` out of `GET /content/source-hashes`; add `AdminService.orphanPurge` action with soft-delete batching + `logPipeline` attribution; unit + hybrid tests.
+
+- **PR-1 (server + companion fix):** filter `Tutorials.status='INACTIVE'` out of `GET /content/source-hashes`; add `orphanPurgeHandler` in `srv/lib/content-store.js` with soft-delete batching + `logPipeline` attribution; route as `POST /content/orphan-purge` (NOT `/admin/`) with `contentAuthMiddleware` so the CI's existing `CONTENT_API_KEY` works; unit + hybrid tests.
 - **PR-2 (CLI + workflow):** `--purge-orphans` flag on `publish-content.ts` with 50-slug absolute cap and CI-only `GITHUB_ACTIONS` hard-block; `purge-orphans` boolean input on `rebuild-content.yml` gated on `effective_mode=='full' && publish.outcome=='success'`; mode-determine step rejects `slug-targeted + purge-orphans=true` combo.
 
 **Tech Stack:** Node.js (CAP), TypeScript (CLI script), CDS / SQL, GitHub Actions YAML, Vitest.
 
 **Spec:** [docs/superpowers/specs/2026-06-30-orphan-purge-design.md](../specs/2026-06-30-orphan-purge-design.md)
+
+**Auth-model note (resolves spec ambiguity):** the spec's phrase "Same XSUAA bearer as `/content/publish`" is misleading — `/content/publish` is bare-Express + `contentAuthMiddleware` + static `CONTENT_API_KEY`, NOT XSUAA. AdminService is XSUAA-scope-gated (`@requires: 'Admin'`). To keep the existing CI auth model (single `CONTENT_API_KEY` secret already wired into `rebuild-content.yml`), the new endpoint is **routed as bare Express under `/content/`**, NOT as a CAP action on AdminService.
 
 ---
 
@@ -20,34 +23,33 @@
 
 | File | Action | Responsibility |
 |---|---|---|
-| `srv/lib/content-store.js` | Modify around line 1107 (`sourceHashesHandler`) | Add LEFT JOIN to `Tutorials` and `WHERE status != 'INACTIVE'` filter (with optional `OR status IS NULL` gate decided by Task 1). |
-| `srv/admin-service.cds` | Modify near line 392 (`cleanupUnusedTags` declaration) | Declare `orphanPurge` action signature: input `slugs: array of String`, returns the four-bucket response. |
-| `srv/admin-service.js` | Modify near line 1074 (`cleanupUnusedTags` handler) | Implement `this.on('orphanPurge', ...)` handler — wrap in `logPipeline('SCHEDULED_JOB', ...)` with `metadata.stage='purge-orphans'`; per-slug bucket dispatch; 100-slug server cap. |
-| `scripts/check-null-status-rows.cjs` | Create | One-shot pre-deploy script run via `cds bind --exec` to count `Tutorials.status IS NULL` against DEV + PROD, decide whether the filter needs `OR status IS NULL` or whether a migration UPDATE seeds them to `'ACTIVE'`. |
-| `test/unit/source-hashes-filter.test.js` | Create | Verifies `sourceHashesHandler` excludes INACTIVE rows. Pure CDS in-memory. |
-| `test/unit/orphan-purge-endpoint.test.js` | Create | Seeds ACTIVE + INACTIVE + redirectTo-set + missing-row scenarios; asserts four bucket arrays. |
-| `test/hybrid/orphan-purge.test.js` | Create | E2E against HANA; seeds `__TEST__purge-orphan-*` rows; asserts status flip + source-hashes exclusion + catalog exclusion; cleans up in `afterAll`. |
-| `test/hybrid/source-hashes-filters-inactive.test.js` | Create | Hybrid companion-fix coverage; one seeded INACTIVE row + assert source-hashes excludes it. |
-| `test/smoke/admin-auth.test.js` | Modify | Add `/admin/orphanPurge` 401-without-bearer assertion. |
+| `srv/lib/content-store.js` | Modify `sourceHashesHandler` (line 1107) + add new `orphanPurgeHandler` near `rollbackHandler` (~line 1360) + export it from `createContentHandlers` (line 1480-ish) | INACTIVE filter on source-hashes; new bare-Express POST handler with bucket dispatch, 100-slug server cap, logPipeline integration. |
+| `srv/server.js` | Modify near line 338 (next to `rollbackHandler` route) | Register `POST /content/orphan-purge` with `express.json` + `contentAuthMiddleware`. |
+| `scripts/check-null-status-rows.cjs` | Create | One-shot diagnostic — counts `Tutorials.status IS NULL` rows for the source-hashes filter design. |
+| `test/unit/source-hashes-filter.test.js` | Create | Unit test for the INACTIVE filter on the public source-hashes endpoint. |
+| `test/unit/orphan-purge-endpoint.test.js` | Create | Unit test for the `/content/orphan-purge` handler buckets. |
+| `test/hybrid/orphan-purge.test.js` | Create | E2E against HANA; seeds `__TEST__purge-orphan-*` rows; asserts status flip, source-hashes exclusion, PipelineLog row. |
+| `test/hybrid/source-hashes-filters-inactive.test.js` | Create | Independent hybrid regression test for the source-hashes companion fix. |
+| `test/smoke/auth-enforcement.test.js` | Modify | Add `/content/orphan-purge` 401-without-bearer assertion. |
 
 ### PR-2: CLI + workflow (separate PR, after PR-1 in DEV)
 
 | File | Action | Responsibility |
 |---|---|---|
-| `scripts/publish-content.ts` | Modify `validateFlagCombo` (line 437) + add new mode branch in `main` (after the `--verify-only` short-circuit ~line 618) | New `--purge-orphans` flag; CI-only guard; absolute cap; POST `/admin/orphanPurge`; error-handling + step summary writer. |
-| `scripts/lib/purge-orphans.ts` | Create | Pure helpers extracted from `publish-content.ts` for testability: `computeOrphans`, `enforceCap`, `formatStepSummary`. |
-| `.github/workflows/rebuild-content.yml` | Modify | Add `purge-orphans` boolean input; add `id: publish` to existing "Publish tutorial content to HANA" step (line 300); extend mode-determine step to reject `slug-targeted + purge-orphans=true`; add new "Purge orphan tutorials" step. |
-| `test/unit/purge-orphans-cap.test.js` | Create | Pure-math tests for absolute cap. |
-| `test/unit/purge-orphans-cli-guard.test.js` | Create | `GITHUB_ACTIONS` guard + mutex with `--force`/`--heal`/`--verify-only`. |
-| `docs/developers/operations/rebuild-content-workflow.md` | Modify | New "When to run purge-orphans" subsection with command + caveats. |
+| `scripts/lib/purge-orphans.ts` | Create | Pure helpers: `computeOrphans`, `enforceCap`, `formatStepSummary`. |
+| `scripts/publish-content.ts` | Modify `validateFlagCombo` (line 437), extend `parseArgs` flag-parse (~line 533), extend `PublishOptions` interface (lines 501-515), add new `--purge-orphans` branch in `main` after the `--verify-only` short-circuit's closing brace (line 715) | New flag, CI-only guard, cap, POST `/content/orphan-purge`, error handling, step summary. |
+| `.github/workflows/rebuild-content.yml` | Modify | New `purge-orphans` input; extend mode-determine step to reject `slug-targeted + purge-orphans=true`; add `id: publish` to existing "Publish tutorial content to HANA" step; new gated "Purge orphan tutorials" step. |
+| `test/unit/purge-orphans-cap.test.js` | Create | Unit tests for pure helpers. |
+| `test/unit/purge-orphans-cli-guard.test.js` | Create | `GITHUB_ACTIONS` guard + mutex tests. |
+| `docs/developers/operations/rebuild-content-workflow.md` | Modify | Operator-facing "When to run purge-orphans" section. |
 
 ---
 
 # PR-1 — Server + companion fix
 
-## Task 1: Pre-deploy NULL-status row check (decision gate)
+## Task 1: Pre-deploy NULL-status row check (diagnostic only)
 
-**Why first:** Tasks 2-3 both depend on whether the source-hashes filter needs the `OR status IS NULL` clause. Per spec §1 "Pre-deploy data check," this is a data fact we have to look up, not assume.
+**Why:** Get evidence for the data state before shipping the source-hashes filter. The filter in Task 3 ships with `OR status IS NULL` defensively in either case (matches the serve handler's existing NULL semantics at [content-store.js:978](../../../srv/lib/content-store.js#L978)), so this task is a sanity check that informs the PR description, not a branch point. If count > 0, no migration is required — the OR-NULL preserves visibility.
 
 **Files:**
 - Create: `scripts/check-null-status-rows.cjs`
@@ -57,26 +59,31 @@
 ```js
 #!/usr/bin/env node
 // One-shot diagnostic — run via `cds bind --exec -- node scripts/check-null-status-rows.cjs`
-// against DEV and PROD. Prints the count of Tutorials rows with status IS NULL.
-// Used by the orphan-purge plan (PR-1 Task 1) to decide whether the new
-// /content/source-hashes filter needs an `OR status IS NULL` defensive clause.
+// against DEV (and optionally PROD). Reports Tutorials rows with status IS NULL.
+//
+// Used by docs/superpowers/plans/2026-06-30-orphan-purge.md Task 1 to validate
+// the assumption that NULL-status rows are rare. The source-hashes filter in
+// Task 3 already handles both cases (ships with OR-NULL clause), so this is
+// a sanity check, not a decision branch.
 
 const cds = require('@sap/cds');
 
 (async () => {
   await cds.connect.to('db');
   const db = await cds.connect.to('db');
-  const result = await db.run(
-    `SELECT COUNT(*) AS NULL_COUNT FROM com_sap_developers_ims_tutorials WHERE STATUS IS NULL`
-  );
-  const count = result[0]?.NULL_COUNT ?? result[0]?.null_count ?? 0;
+  const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+  const sql = isHana
+    ? `SELECT COUNT(*) AS NULL_COUNT FROM "COM_SAP_DEVELOPERS_IMS_TUTORIALS" WHERE "STATUS" IS NULL`
+    : `SELECT COUNT(*) AS NULL_COUNT FROM com_sap_developers_ims_tutorials WHERE status IS NULL`;
+  const result = await db.run(sql);
+  const count = result[0]?.NULL_COUNT ?? result[0]?.null_count ?? result[0]?.['COUNT(*)'] ?? 0;
   console.log(`Tutorials with status IS NULL: ${count}`);
   if (count > 0) {
-    console.log(`\n→ Filter MUST include 'OR status IS NULL', OR you must run:`);
-    console.log(`  UPDATE com_sap_developers_ims_tutorials SET status='ACTIVE' WHERE status IS NULL;`);
-    console.log(`  (then re-run this script to confirm count=0)`);
+    console.log(`\n→ The new /content/source-hashes filter ships with`);
+    console.log(`  WHERE (t.status IS NULL OR t.status != 'INACTIVE')`);
+    console.log(`  so these NULL rows continue to be returned (matches the serve handler).`);
   } else {
-    console.log(`→ Filter ships as plain WHERE status != 'INACTIVE' (no OR-NULL clause needed)`);
+    console.log(`→ Filter's OR-NULL clause is currently defensive (no rows match it today).`);
   }
   process.exit(0);
 })().catch((err) => {
@@ -85,42 +92,25 @@ const cds = require('@sap/cds');
 });
 ```
 
-- [ ] **Step 2: Run against DEV (requires `cf login` to DEV space)**
+- [ ] **Step 2: Run against DEV**
 
 ```bash
-cd d:/projects/tutorials-poc
+cd /d/projects/tutorials-poc
+cf login   # if not already logged into DEV space
 npx cds bind --exec -- node scripts/check-null-status-rows.cjs
 ```
 
-Expected: prints either "count = 0 → no OR-NULL clause" OR "count > 0 → must include OR-NULL".
+Expected: prints a count (probably 0). Record it for the PR description.
 
-- [ ] **Step 3: Run against PROD via `cf target -s prod` (if Phase 3 prep started early)**
-
-If PROD access isn't available yet, defer the PROD check to Phase 3 and assume DEV is representative; document the assumption in the PR description.
-
-- [ ] **Step 4: Record the decision**
-
-In this plan file, add a line at the top of Task 2 stating "NULL-row count = N; clause [include / omit]." This is the decision input for Task 2.
-
-- [ ] **Step 5: If count > 0, run the seeding UPDATE**
-
-```sql
-UPDATE com_sap_developers_ims_tutorials SET status='ACTIVE' WHERE status IS NULL;
-```
-
-Via `npx cds bind --exec -- node -e "(async()=>{const cds=require('@sap/cds');await cds.connect.to('db');const db=await cds.connect.to('db');await db.run(\"UPDATE com_sap_developers_ims_tutorials SET status='ACTIVE' WHERE status IS NULL\");console.log('done');})()"` — or hand-execute via hana-cli.
-
-Then re-run Step 2; expected output: count=0.
-
-- [ ] **Step 6: Commit (only the script — diagnostic stays in repo)**
+- [ ] **Step 3: Commit**
 
 ```bash
 git add scripts/check-null-status-rows.cjs
 git commit -m "scripts: add NULL-status row check for orphan-purge plan
 
-Pre-deploy diagnostic used by docs/superpowers/plans/2026-06-30-orphan-purge.md
-Task 1 to decide whether the new /content/source-hashes filter needs a
-defensive OR-NULL clause. One-shot; safe to keep in repo for future audits."
+One-shot diagnostic for docs/superpowers/plans/2026-06-30-orphan-purge.md
+Task 1. Records evidence for the data state of Tutorials.status NULL
+rows before shipping the new /content/source-hashes INACTIVE filter."
 ```
 
 ## Task 2: Source-hashes filter — write the failing test
@@ -133,31 +123,28 @@ defensive OR-NULL clause. One-shot; safe to keep in repo for future audits."
 ```js
 /**
  * Verifies GET /content/source-hashes excludes Tutorials.status='INACTIVE'
- * rows from the returned map. Pre-existing behavior keeps INACTIVE rows
- * in carry-forward (snapshot integrity); this filter only affects the
- * external-facing source-hashes endpoint so drift workflow stops
- * re-reporting purged slugs forever.
+ * rows from the returned map.
+ *
+ * Carry-forward keeps INACTIVE rows in the manifest for snapshot integrity;
+ * this filter only affects the external-facing endpoint so the daily drift
+ * workflow stops re-reporting purged slugs forever.
  *
  * Spec: docs/superpowers/specs/2026-06-30-orphan-purge-design.md §Architecture-1
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import cds from '@sap/cds';
 
-cds.test('serve', '--project', '.', '--in-memory');
+const project = cds.test('serve', '--project', '.', '--in-memory');
 
 describe('GET /content/source-hashes — INACTIVE filter', () => {
-  let db;
   const namespace = 'com.sap.developers.ims';
   const testManifestVersion = 99999;
-  const activeSlug = 'test-active-' + Date.now();
-  const inactiveSlug = 'test-inactive-' + Date.now();
+  const ts = Date.now();
+  const activeSlug = `test-active-${ts}`;
+  const inactiveSlug = `test-inactive-${ts}`;
 
   beforeAll(async () => {
-    db = await cds.connect.to('db');
     const { ContentFiles, ContentManifest, Tutorials } = cds.entities(namespace);
-
-    // Seed a fresh ACTIVE manifest with two files. Mark any pre-existing
-    // ACTIVE manifest as SUPERSEDED to keep this isolated.
     await UPDATE(ContentManifest).where({ status: 'ACTIVE' }).set({ status: 'SUPERSEDED' });
     await INSERT.into(ContentManifest).entries({
       version: testManifestVersion,
@@ -183,89 +170,110 @@ describe('GET /content/source-hashes — INACTIVE filter', () => {
   });
 
   it('includes ACTIVE-status slug in the response map', async () => {
-    const res = await fetch(`http://localhost:${cds.test.server.address().port}/content/source-hashes`);
+    const res = await project.get('/content/source-hashes');
     expect(res.status).toBe(200);
-    const map = await res.json();
-    expect(map[activeSlug]).toBe('aaa');
+    expect(res.data[activeSlug]).toBe('aaa');
   });
 
   it('excludes INACTIVE-status slug from the response map', async () => {
-    const res = await fetch(`http://localhost:${cds.test.server.address().port}/content/source-hashes`);
+    const res = await project.get('/content/source-hashes');
     expect(res.status).toBe(200);
-    const map = await res.json();
-    expect(map[inactiveSlug]).toBeUndefined();
+    expect(res.data[inactiveSlug]).toBeUndefined();
   });
 });
 ```
 
-- [ ] **Step 2: Run the test to confirm it fails**
+- [ ] **Step 2: Run — expect failure on the second test**
 
 ```bash
 npx vitest run test/unit/source-hashes-filter.test.js
 ```
 
-Expected: the second test (`excludes INACTIVE-status slug`) FAILS — currently `sourceHashesHandler` does NOT filter by `Tutorials.status`, so `inactiveSlug` will be present in the map.
+Expected: second test FAILS (`inactiveSlug` is currently in the map).
 
 ## Task 3: Source-hashes filter — implement
 
 **Files:**
-- Modify: `srv/lib/content-store.js` around line 1107 (`sourceHashesHandler`)
+- Modify: `srv/lib/content-store.js` `sourceHashesHandler` (~line 1107)
 
-- [ ] **Step 1: Read the current handler**
+- [ ] **Step 1: Read the current handler (lines 1107-1132) so the diff is clear**
 
-Read `srv/lib/content-store.js` lines 1107-1135 to confirm the current SELECT shape.
+The existing body:
 
-- [ ] **Step 2: Replace the SELECT with a Tutorials-aware filter**
+```js
+async function sourceHashesHandler(req, res) {
+  const { ContentFiles } = cds.entities(namespace);
+  try {
+    const activeVersion = await getActiveVersion();
+    if (activeVersion === null) {
+      return res.json({});
+    }
+    const rows = await SELECT.from(ContentFiles)
+      .where({ version: activeVersion })
+      .columns('slug', 'sourceHash');
+    const map = {};
+    for (const row of rows) {
+      if (!row.sourceHash) continue;
+      if (row.slug === '__nav__' || row.slug === '__404__' || row.slug === '__shell__') continue;
+      map[row.slug] = row.sourceHash;
+    }
+    res.setHeader('Cache-Control', 'no-cache');
+    res.json(map);
+  } catch (err) {
+    console.error('[content/source-hashes]', err instanceof Error ? err.message : String(err));
+    res.status(500).json({ error: 'Source-hash retrieval failed' });
+  }
+}
+```
+
+- [ ] **Step 2: Replace ONLY the SELECT chain (3 lines) with a Tutorials-aware JOIN; leave the rows-iteration loop unchanged**
 
 Replace:
 
 ```js
-const rows = await SELECT.from(ContentFiles)
-  .where({ version: activeVersion })
-  .columns('slug', 'sourceHash');
+    const rows = await SELECT.from(ContentFiles)
+      .where({ version: activeVersion })
+      .columns('slug', 'sourceHash');
 ```
 
-With (assuming Task 1 found NULL count = 0; if count > 0 was unresolvable, use the `OR-NULL` variant in the alternate code block at the end of this step):
+With:
 
 ```js
-// Issue #orphan-purge — exclude soft-deleted tutorials from the public
-// source-hashes map so the daily drift workflow stops re-reporting purged
-// slugs forever. Carry-forward keeps INACTIVE rows in the manifest for
-// snapshot integrity; this filter only affects external-facing endpoints.
-// See docs/superpowers/specs/2026-06-30-orphan-purge-design.md §Architecture-1.
-//
-// LOWER() on both sides because Tutorials.slug may be mixed-case in legacy
-// rows even though new slugs are lowercase canonical (CLAUDE.md > Tutorial
-// slugs are lowercase canonical).
-const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
-const rows = isHana
-  ? await db.run(
-      `SELECT cf."SLUG" AS "slug", cf."SOURCEHASH" AS "sourceHash"
-         FROM "com_sap_developers_ims_contentfiles" AS cf
-         LEFT JOIN "com_sap_developers_ims_tutorials" AS t
-           ON LOWER(cf."SLUG") = LOWER(t."SLUG")
-        WHERE cf."VERSION" = ?
-          AND (t."STATUS" IS NULL OR t."STATUS" != 'INACTIVE')`,
-      [activeVersion]
-    )
-  : await cds.ql`
-      SELECT cf.slug AS slug, cf.sourceHash AS sourceHash
-        FROM ${ContentFiles} AS cf
-        LEFT JOIN ${cds.entities(namespace).Tutorials} AS t
-          ON LOWER(cf.slug) = LOWER(t.slug)
-       WHERE cf.version = ${activeVersion}
-         AND (t.status IS NULL OR t.status != 'INACTIVE')`;
+    // Exclude soft-deleted tutorials so the daily drift workflow stops re-
+    // reporting them as "missing locally" forever. Carry-forward keeps
+    // INACTIVE rows in the manifest for snapshot integrity; this filter
+    // only affects this external-facing endpoint and matches the serve
+    // handler's NULL-tolerant behavior at content-store.js:978.
+    //
+    // LOWER() on both sides because Tutorials.slug may be mixed-case in
+    // legacy rows even though new slugs are lowercase canonical
+    // (CLAUDE.md > "Tutorial slugs are lowercase canonical").
+    const db = await cds.connect.to('db');
+    const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+    const rows = isHana
+      ? (await db.run(
+          `SELECT cf."SLUG" AS "slug", cf."SOURCEHASH" AS "sourceHash"
+             FROM "COM_SAP_DEVELOPERS_IMS_CONTENTFILES" AS cf
+             LEFT JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" AS t
+               ON LOWER(cf."SLUG") = LOWER(t."SLUG")
+            WHERE cf."VERSION" = ?
+              AND (t."STATUS" IS NULL OR t."STATUS" != 'INACTIVE')`,
+          [activeVersion]
+        ))
+      : (await db.run(
+          `SELECT cf.slug AS slug, cf.sourceHash AS sourceHash
+             FROM com_sap_developers_ims_contentfiles AS cf
+             LEFT JOIN com_sap_developers_ims_tutorials AS t
+               ON LOWER(cf.slug) = LOWER(t.slug)
+            WHERE cf.version = ?
+              AND (t.status IS NULL OR t.status != 'INACTIVE')`,
+          [activeVersion]
+        ));
 ```
 
-Note: the `OR status IS NULL` clause matches the existing serve handler's NULL-tolerant behavior ([content-store.js:978](../../../srv/lib/content-store.js#L978)). Even if Task 1 found NULL count = 0 today, keeping the OR-NULL preserves the invariant cheaply and matches the spec's "must match the serve handler's NULL semantics on whichever data state lands in the DB."
+Keep the rows-iteration loop and `res.setHeader` / `res.json(map)` calls below unchanged — they still need to skip `__nav__/__404__/__shell__` and null `sourceHash`.
 
-The `db` connection is already in scope inside the handler (used by other functions in this file). If not, add `const db = await cds.connect.to('db');` at the top of `sourceHashesHandler`.
-
-- [ ] **Step 3: Re-fetch the connection if it's not already in scope**
-
-Confirm `db` is accessible inside `sourceHashesHandler`. If not (open the file and check), add `const db = await cds.connect.to('db');` at the top of the function body.
-
-- [ ] **Step 4: Run the failing test from Task 2 — it should now pass**
+- [ ] **Step 3: Run the failing test from Task 2**
 
 ```bash
 npx vitest run test/unit/source-hashes-filter.test.js
@@ -273,34 +281,37 @@ npx vitest run test/unit/source-hashes-filter.test.js
 
 Expected: both tests PASS.
 
-- [ ] **Step 5: Run the full unit suite to confirm no regression**
+- [ ] **Step 4: Run the full unit suite to confirm no regression**
 
 ```bash
-npm test -- --run 2>&1 | tail -50
+npm test -- --run 2>&1 | grep -E "FAIL|✗|Test Files|Tests " | tail -20
 ```
 
-Expected: all previously-passing tests still pass; new tests pass.
+Expected: no new failures.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add srv/lib/content-store.js test/unit/source-hashes-filter.test.js
 git commit -m "feat(content-store): exclude INACTIVE tutorials from /content/source-hashes
 
-Adds a LEFT JOIN to Tutorials with WHERE (status IS NULL OR status != 'INACTIVE')
-so the daily content-drift workflow stops re-reporting soft-deleted slugs as
-'missing locally' forever. The carry-forward path keeps INACTIVE rows in the
-manifest for snapshot integrity — this filter only affects the external-facing
-endpoint, matching how the serve handler treats INACTIVE rows.
+Adds a LEFT JOIN to Tutorials with
+  WHERE (t.status IS NULL OR t.status != 'INACTIVE')
+so the daily content-drift workflow stops re-reporting soft-deleted slugs
+as 'missing locally' forever. The carry-forward path keeps INACTIVE rows
+in the manifest for snapshot integrity — this filter only affects the
+external-facing endpoint, matching how the serve handler treats INACTIVE
+rows (content-store.js:978).
 
-OR-NULL clause preserves the existing serve-handler invariant (content-store.js:978)
-that NULL-status legacy rows are treated as not-INACTIVE.
+The OR-NULL clause preserves the existing invariant that NULL-status
+legacy rows are treated as not-INACTIVE; Task 1's diagnostic in the same
+PR records how many such rows exist today.
 
-Companion to the orphan-purge endpoint (next commit). Spec:
+Companion fix to the orphan-purge endpoint (next commit). Spec:
 docs/superpowers/specs/2026-06-30-orphan-purge-design.md §Architecture-1."
 ```
 
-## Task 4: AdminService.orphanPurge — write the failing test
+## Task 4: orphan-purge endpoint — write the failing test
 
 **Files:**
 - Create: `test/unit/orphan-purge-endpoint.test.js`
@@ -309,60 +320,73 @@ docs/superpowers/specs/2026-06-30-orphan-purge-design.md §Architecture-1."
 
 ```js
 /**
- * Unit tests for AdminService.orphanPurge.
+ * Unit tests for POST /content/orphan-purge.
+ *
+ * The endpoint is bare-Express (not an AdminService action) — same auth
+ * model as /content/publish (contentAuthMiddleware + CONTENT_API_KEY).
+ * The CI's existing CONTENT_API_KEY secret authenticates the call.
  *
  * Spec: docs/superpowers/specs/2026-06-30-orphan-purge-design.md §Architecture-2
  *
  * Per-slug bucket dispatch:
- *   - slug in Tutorials with status=ACTIVE  → purged[]
- *   - slug in Tutorials with status=INACTIVE → alreadyInactive[]
- *   - slug in Tutorials with redirectTo set  → redirected[]
- *   - slug NOT in Tutorials                   → notFound[]
+ *   - slug in Tutorials with status=ACTIVE                  → purged[]
+ *   - slug in Tutorials with status=INACTIVE                → alreadyInactive[]
+ *   - slug in Tutorials with redirectTo_ID set              → redirected[]
+ *     (the validator at admin-service.js:837-843 enforces these are
+ *      always already-INACTIVE — the bucket exists so the operator
+ *      sees them in the response instead of them silently landing in
+ *      alreadyInactive)
+ *   - slug NOT in Tutorials                                  → notFound[]
+ *     (phantom ContentFiles row; requires operator action)
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import cds from '@sap/cds';
+import { randomUUID } from 'node:crypto';
 
-const { POST } = cds.test('serve', '--project', '.', '--in-memory');
+const project = cds.test('serve', '--project', '.', '--in-memory');
 
-describe('AdminService.orphanPurge', () => {
+describe('POST /content/orphan-purge', () => {
   const ns = 'com.sap.developers.ims';
   const ts = Date.now();
   const slugActive    = `test-purge-active-${ts}`;
-  const slugInactive  = `test-purge-inactive-${ts}`;
-  const slugRedirect  = `test-purge-redirect-${ts}`;
-  const slugMissing   = `test-purge-missing-${ts}`;     // not in Tutorials
   const slugActive2   = `test-purge-active2-${ts}`;
+  const slugInactive  = `test-purge-inactive-${ts}`;
+  const slugRedirect  = `test-purge-redirect-${ts}`;   // INACTIVE + redirectTo_ID set
+  const slugRedirectTarget = `test-purge-redirect-target-${ts}`;
+  const slugMissing   = `test-purge-missing-${ts}`;     // not in Tutorials at all
+
+  const headers = { 'authorization': `Bearer ${process.env.CONTENT_API_KEY || 'test-key'}`, 'x-initiator': 'test/unit-1' };
 
   beforeAll(async () => {
+    // contentAuthMiddleware reads CONTENT_API_KEY via secret-resolver;
+    // for the unit test we set the env var so the resolver short-circuits.
+    process.env.CONTENT_API_KEY = 'test-key';
     const { Tutorials } = cds.entities(ns);
+    const targetID = randomUUID();
     await INSERT.into(Tutorials).entries([
-      { slug: slugActive,    status: 'ACTIVE',   title: 'Active 1' },
-      { slug: slugActive2,   status: 'ACTIVE',   title: 'Active 2' },
-      { slug: slugInactive,  status: 'INACTIVE', title: 'Inactive' },
-      { slug: slugRedirect,  status: 'ACTIVE',   title: 'With redirect', redirectTo: 'somewhere-else' },
+      { ID: randomUUID(),         slug: slugActive,         status: 'ACTIVE',   title: 'Active 1' },
+      { ID: randomUUID(),         slug: slugActive2,        status: 'ACTIVE',   title: 'Active 2' },
+      { ID: randomUUID(),         slug: slugInactive,       status: 'INACTIVE', title: 'Inactive' },
+      { ID: targetID,             slug: slugRedirectTarget, status: 'ACTIVE',   title: 'Redirect target' },
+      { ID: randomUUID(),         slug: slugRedirect,       status: 'INACTIVE', title: 'With redirect', redirectTo_ID: targetID },
     ]);
   });
 
   afterAll(async () => {
     const { Tutorials } = cds.entities(ns);
-    await DELETE.from(Tutorials).where({ slug: { in: [slugActive, slugActive2, slugInactive, slugRedirect] } });
+    await DELETE.from(Tutorials).where({ slug: { in: [slugActive, slugActive2, slugInactive, slugRedirect, slugRedirectTarget] } });
   });
 
   it('buckets slugs by per-slug behavior', async () => {
-    const res = await POST(
-      '/odata/v4/admin/orphanPurge',
-      { slugs: [slugActive, slugActive2, slugInactive, slugRedirect, slugMissing] },
-      { headers: { 'x-initiator': 'test/unit-1' } }
-    );
+    const res = await project.post('/content/orphan-purge', { slugs: [slugActive, slugActive2, slugInactive, slugRedirect, slugMissing] }, { headers });
     expect(res.status).toBe(200);
-    const body = res.data;
-    expect(body.purged.sort()).toEqual([slugActive, slugActive2].sort());
-    expect(body.alreadyInactive).toEqual([slugInactive]);
-    expect(body.redirected).toEqual([slugRedirect]);
-    expect(body.notFound).toEqual([slugMissing]);
-    expect(body.totalAttempted).toBe(5);
-    expect(body.totalPurged).toBe(2);
-    expect(typeof body.version).toBe('number');
+    expect(res.data.purged.sort()).toEqual([slugActive, slugActive2].sort());
+    expect(res.data.alreadyInactive).toEqual([slugInactive]);
+    expect(res.data.redirected).toEqual([slugRedirect]);
+    expect(res.data.notFound).toEqual([slugMissing]);
+    expect(res.data.totalAttempted).toBe(5);
+    expect(res.data.totalPurged).toBe(2);
+    expect(typeof res.data.version).toBe('number');
   });
 
   it('flips Tutorials.status to INACTIVE for purged slugs', async () => {
@@ -371,23 +395,20 @@ describe('AdminService.orphanPurge', () => {
     expect(rows.every(r => r.status === 'INACTIVE')).toBe(true);
   });
 
+  it('returns 401 without bearer token', async () => {
+    const res = await project.post('/content/orphan-purge', { slugs: [] }, { validateStatus: () => true });
+    expect(res.status).toBe(401);
+  });
+
   it('rejects > 100 slugs with 400', async () => {
     const tooMany = Array.from({ length: 101 }, (_, i) => `test-purge-bulk-${ts}-${i}`);
-    const res = await POST(
-      '/odata/v4/admin/orphanPurge',
-      { slugs: tooMany },
-      { headers: { 'x-initiator': 'test/unit-2' }, validateStatus: () => true }
-    );
+    const res = await project.post('/content/orphan-purge', { slugs: tooMany }, { headers, validateStatus: () => true });
     expect(res.status).toBe(400);
-    expect(String(res.data.error?.message || res.data)).toMatch(/100-slug ceiling/i);
+    expect(String(res.data.error?.message || res.data.error || res.data)).toMatch(/100-slug ceiling/i);
   });
 
   it('is idempotent — re-running yields all alreadyInactive', async () => {
-    const res = await POST(
-      '/odata/v4/admin/orphanPurge',
-      { slugs: [slugActive, slugActive2] },
-      { headers: { 'x-initiator': 'test/unit-3' } }
-    );
+    const res = await project.post('/content/orphan-purge', { slugs: [slugActive, slugActive2] }, { headers });
     expect(res.status).toBe(200);
     expect(res.data.alreadyInactive.sort()).toEqual([slugActive, slugActive2].sort());
     expect(res.data.purged).toEqual([]);
@@ -395,96 +416,78 @@ describe('AdminService.orphanPurge', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test — expect failure**
+- [ ] **Step 2: Run — expect failure**
 
 ```bash
 npx vitest run test/unit/orphan-purge-endpoint.test.js
 ```
 
-Expected: FAIL with "action 'orphanPurge' not defined" or similar 404.
+Expected: 404 on POST `/content/orphan-purge` (route doesn't exist yet).
 
-## Task 5: AdminService.orphanPurge — declare action
+## Task 5: orphan-purge endpoint — implement the handler
 
 **Files:**
-- Modify: `srv/admin-service.cds` near line 392
+- Modify: `srv/lib/content-store.js` — add `orphanPurgeHandler` next to `rollbackHandler` (~line 1410), then add to the returned object and to the top-level `_defaults` re-export (~lines 1483-1505)
 
-- [ ] **Step 1: Declare the action**
+- [ ] **Step 1: Add the `logPipeline` import at the top of the file**
 
-After line 392 (`action cleanupUnusedTags();`), add:
+Top of `srv/lib/content-store.js`. After existing imports, add:
 
-```cds
-  // Issue #orphan-purge — CI-only batched soft-delete of tutorials whose
-  // source markdown is no longer present in any upstream repo. Spec:
-  // docs/superpowers/specs/2026-06-30-orphan-purge-design.md
+```js
+import { logPipeline } from './pipeline-log.js';
+```
+
+(Match the import style — top of file uses ESM `import` statements.)
+
+- [ ] **Step 2: Add the handler immediately after `rollbackHandler`'s closing brace (~line 1410)**
+
+```js
+  // --- POST /content/orphan-purge ---
   //
-  // Called by scripts/publish-content.ts --purge-orphans (CI-only via
-  // GITHUB_ACTIONS env hard-block). Server enforces a 100-slug ceiling
-  // as defense in depth against a client that loosens its own cap.
-  action orphanPurge(
-    slugs : array of String
-  ) returns {
-    purged          : array of String;
-    alreadyInactive : array of String;
-    notFound        : array of String;
-    redirected      : array of String;
-    totalAttempted  : Integer;
-    totalPurged     : Integer;
-    version         : Integer;
-  };
-```
+  // CI-only batched soft-delete of tutorials whose source markdown is no
+  // longer present in any upstream repo. Bare-Express + contentAuthMiddleware
+  // (same auth model as /content/publish) so the existing CONTENT_API_KEY
+  // secret authenticates the call — NOT routed through AdminService because
+  // AdminService is XSUAA-scope-gated and CI doesn't carry an XSUAA bearer.
+  //
+  // Spec: docs/superpowers/specs/2026-06-30-orphan-purge-design.md
+  // Per-slug bucket dispatch — see spec §Architecture-2.
+  // Server-side 100-slug ceiling — defense in depth; client refuses at 50.
+  // Initiator captured via x-initiator header; persisted as PipelineLog with
+  // metadata.stage='purge-orphans'.
 
-- [ ] **Step 2: Re-run the test (still expected to fail)**
+  async function orphanPurgeHandler(req, res) {
+    const slugs = Array.isArray(req.body?.slugs) ? req.body.slugs : null;
+    if (!slugs) {
+      return res.status(400).json({ error: 'Request body must include { slugs: array of String }' });
+    }
+    if (slugs.length > 100) {
+      return res.status(400).json({ error: 'batch too large; orphan purge enforces a 100-slug ceiling per call' });
+    }
 
-```bash
-npx vitest run test/unit/orphan-purge-endpoint.test.js
-```
+    const initiator = req.headers['x-initiator'] || 'system';
+    const runId = typeof initiator === 'string' && initiator.startsWith('ci/') ? initiator.slice(3) : null;
 
-Expected: still fails — action is declared but no handler.
-
-## Task 6: AdminService.orphanPurge — implement handler
-
-**Files:**
-- Modify: `srv/admin-service.js` near line 1083 (after `cleanupUnusedTags` handler closes)
-
-- [ ] **Step 1: Add import at top of file (if `logPipeline` not already imported)**
-
-Check the top of `srv/admin-service.js`. If `logPipeline` isn't imported, add:
-
-```js
-import { logPipeline } from './lib/pipeline-log.js';
-```
-
-(Match existing import style — CommonJS `require` vs ESM `import`.)
-
-- [ ] **Step 2: Add the handler after `cleanupUnusedTags` (after line 1083)**
-
-```js
-    this.on('orphanPurge', async (req) => {
-      const { Tutorials, ContentManifest } = cds.entities('com.sap.developers.ims');
-      const slugs = Array.isArray(req.data.slugs) ? req.data.slugs : [];
-
-      // Server-side cap (defense in depth) — client should already have refused at 50.
-      if (slugs.length > 100) {
-        return req.error(400, 'batch too large; orphan purge enforces a 100-slug ceiling per call');
-      }
-      if (slugs.length === 0) {
-        return { purged: [], alreadyInactive: [], notFound: [], redirected: [], totalAttempted: 0, totalPurged: 0, version: 0 };
-      }
-
-      // Initiator from x-initiator header; falls back to req.user.id for symmetry
-      // with how /content/publish records initiator on ContentManifest.initiator.
-      const initiator = req.req?.headers?.['x-initiator'] || req.user?.id || 'system';
-      const runId = initiator.startsWith('ci/') ? initiator.slice(3) : null;
-
-      return await logPipeline(
+    try {
+      const result = await logPipeline(
         'SCHEDULED_JOB',
         initiator,
         async () => {
-          // Bucket dispatch — fetch in one round trip so we can classify before any writes.
+          const { Tutorials, ContentManifest } = cds.entities(namespace);
+
+          if (slugs.length === 0) {
+            const [m] = await SELECT.from(ContentManifest).where({ status: 'ACTIVE' }).columns('version').orderBy('version desc').limit(1);
+            return {
+              purged: [], alreadyInactive: [], notFound: [], redirected: [],
+              totalAttempted: 0, totalPurged: 0, version: m?.version ?? 0
+            };
+          }
+
+          // Bucket dispatch — fetch in one round trip, classify, then write.
           const lowered = slugs.map(s => String(s).toLowerCase());
           const rows = await SELECT.from(Tutorials)
             .where({ slug: { in: lowered } })
-            .columns('ID', 'slug', 'status', 'redirectTo');
+            .columns('ID', 'slug', 'status', 'redirectTo_ID');
 
           const bySlug = new Map(rows.map(r => [String(r.slug).toLowerCase(), r]));
           const purged = [], alreadyInactive = [], notFound = [], redirected = [];
@@ -493,23 +496,20 @@ import { logPipeline } from './lib/pipeline-log.js';
             const key = String(original).toLowerCase();
             const row = bySlug.get(key);
             if (!row) { notFound.push(original); continue; }
-            if (row.redirectTo) { redirected.push(original); continue; }
+            if (row.redirectTo_ID) { redirected.push(original); continue; }
             if (row.status === 'INACTIVE') { alreadyInactive.push(original); continue; }
-            // Soft-delete — change-tracking on Tutorials records the status flip via
-            // @cap-js/change-tracking (db/change-tracking.cds:37). entity column on
-            // the Changes row will be 'AdminService.Tutorials' (the projection name).
+            // Soft-delete — @cap-js/change-tracking records the status flip
+            // via the annotation at db/change-tracking.cds:37. The Changes
+            // row gets entity='AdminService.Tutorials' (projection name).
             await UPDATE(Tutorials).set({ status: 'INACTIVE' }).where({ ID: row.ID });
             purged.push(original);
           }
 
-          // Read current ACTIVE manifest version — not bumped by purge, just reported
-          // so the operator knows which publish state the purge ran against.
           const [activeManifest] = await SELECT.from(ContentManifest)
             .where({ status: 'ACTIVE' })
             .columns('version')
-            .orderBy({ version: 'desc' })
+            .orderBy('version desc')
             .limit(1);
-          const version = activeManifest?.version ?? 0;
 
           return {
             purged,
@@ -518,47 +518,88 @@ import { logPipeline } from './lib/pipeline-log.js';
             redirected,
             totalAttempted: slugs.length,
             totalPurged: purged.length,
-            version
+            version: activeManifest?.version ?? 0
           };
         },
         { stage: 'purge-orphans', slugCount: slugs.length, runId }
       );
-    });
+
+      res.json(result);
+    } catch (err) {
+      console.error('[content/orphan-purge]', err instanceof Error ? err.message : String(err));
+      res.status(500).json({ error: 'Orphan purge failed' });
+    }
+  }
 ```
 
-- [ ] **Step 3: Run the test from Task 4**
+- [ ] **Step 3: Add `orphanPurgeHandler` to the returned object in `createContentHandlers` (~line 1483)**
+
+Find the returned object that exposes the handlers (look for the `return { contentAuthMiddleware, publishHandler, ... }` block near line 1480). Add `orphanPurgeHandler,` to the list.
+
+- [ ] **Step 4: Add the top-level re-export at the end of the file (~line 1505)**
+
+After the other `export const ... = _defaults.X` lines, add:
+
+```js
+export const orphanPurgeHandler = _defaults.orphanPurgeHandler;
+```
+
+- [ ] **Step 5: Register the route in `srv/server.js` (next to the existing `/content/rollback` route at line 338)**
+
+Find the line:
+
+```js
+app.post('/content/rollback', express.json(), contentAuthMiddleware, rollbackHandler);
+```
+
+Add immediately after:
+
+```js
+// Issue #orphan-purge — CI-only batched soft-delete. Same auth as /content/publish.
+app.post('/content/orphan-purge', express.json({ limit: '1mb' }), contentAuthMiddleware, orphanPurgeHandler);
+```
+
+And add `orphanPurgeHandler` to the import at the top of `srv/server.js` (line 20):
+
+```js
+import { contentAuthMiddleware, publishHandler, serveHandler, hashesHandler, sourceHashesHandler, navHandler, rollbackHandler, invalidateRenderCache, beginHandler, appendHandler, commitHandler, abortHandler, orphanPurgeHandler } from './lib/content-store.js';
+```
+
+- [ ] **Step 6: Run the failing test from Task 4**
 
 ```bash
 npx vitest run test/unit/orphan-purge-endpoint.test.js
 ```
 
-Expected: ALL tests PASS (buckets, status flip, 400 over-100, idempotent).
+Expected: all PASS (buckets, status flip, 401 without auth, 400 over-100, idempotent).
 
-- [ ] **Step 4: Run the full unit suite — confirm no regression**
+- [ ] **Step 7: Run full unit suite — confirm no regression**
 
 ```bash
-npm test -- --run 2>&1 | tail -50
+npm test -- --run 2>&1 | grep -E "FAIL|✗|Test Files|Tests " | tail -20
 ```
 
-Expected: all previously-passing tests still pass.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add srv/admin-service.cds srv/admin-service.js test/unit/orphan-purge-endpoint.test.js
-git commit -m "feat(admin): add AdminService.orphanPurge for batched soft-delete
+git add srv/lib/content-store.js srv/server.js test/unit/orphan-purge-endpoint.test.js
+git commit -m "feat(content-store): add POST /content/orphan-purge for batched soft-delete
 
-POST /admin/orphanPurge accepts an array of slugs and dispatches them into
-four buckets:
+Bare-Express endpoint (NOT an AdminService action) — same auth model as
+/content/publish (contentAuthMiddleware + CONTENT_API_KEY) so the
+existing CI secret authenticates the call. Routed under /content/ rather
+than /admin/ because AdminService is XSUAA-scope-gated and CI doesn't
+carry an XSUAA bearer.
+
+Per-slug bucket dispatch:
 - purged          — Tutorials.status flipped ACTIVE → INACTIVE
 - alreadyInactive — idempotent re-run, no DB write
-- redirected      — admin set up redirectTo deliberately, honored
+- redirected      — redirectTo_ID set; honor admin's deliberate redirect
 - notFound        — slug has no Tutorials parent row (phantom; operator action)
 
 Wraps work in logPipeline('SCHEDULED_JOB', ...) with metadata.stage='purge-orphans'
 so per-run attribution is queryable via PipelineLog without inventing a new
-pipelineType enum value. The 'stage' discriminator lives in metadata because
-SCHEDULED_JOB also covers cron jobs.
+pipelineType enum value.
 
 Server-side 100-slug ceiling as defense in depth; client refuses at 50.
 
@@ -568,7 +609,7 @@ Change-tracking on Tutorials.status flip is automatic via @cap-js/change-trackin
 Spec: docs/superpowers/specs/2026-06-30-orphan-purge-design.md §Architecture-2"
 ```
 
-## Task 7: Hybrid test — orphan-purge end-to-end against HANA
+## Task 6: Hybrid test — orphan-purge end-to-end against HANA
 
 **Files:**
 - Create: `test/hybrid/orphan-purge.test.js`
@@ -577,7 +618,7 @@ Spec: docs/superpowers/specs/2026-06-30-orphan-purge-design.md §Architecture-2"
 
 ```js
 /**
- * Hybrid test — exercises AdminService.orphanPurge against real HANA.
+ * Hybrid test — exercises /content/orphan-purge against real HANA.
  * Gated by ALLOW_HYBRID_WRITES=true per test/hybrid/_guard.js.
  *
  * Spec: docs/superpowers/specs/2026-06-30-orphan-purge-design.md §Testing
@@ -589,17 +630,19 @@ import { isSafeForWrites } from './_guard.js';
 const writesAllowed = process.env.ALLOW_HYBRID_WRITES === 'true' && isSafeForWrites();
 const describeIf = writesAllowed ? describe : describe.skip;
 
-describeIf('AdminService.orphanPurge — hybrid (real HANA)', () => {
+describeIf('POST /content/orphan-purge — hybrid (real HANA)', () => {
   const ns = 'com.sap.developers.ims';
   const ts = Date.now();
   const slugA = `__TEST__purge-orphan-a-${ts}`;
   const slugB = `__TEST__purge-orphan-b-${ts}`;
-  let server, port;
+  let srvUrl;
+  let apiKey;
 
   beforeAll(async () => {
-    server = await cds.test.run({ project: '.' });
-    port = server.address().port;
-    const db = await cds.connect.to('db');
+    srvUrl = process.env.CAP_BASE_URL || `http://localhost:${cds.server?.address?.()?.port ?? 4004}`;
+    apiKey = process.env.CONTENT_API_KEY;
+    if (!apiKey) throw new Error('CONTENT_API_KEY env var required for hybrid orphan-purge test');
+
     const { Tutorials } = cds.entities(ns);
     await INSERT.into(Tutorials).entries([
       { slug: slugA, status: 'ACTIVE', title: '__TEST__ Active A' },
@@ -613,13 +656,10 @@ describeIf('AdminService.orphanPurge — hybrid (real HANA)', () => {
   });
 
   it('flips both seeded slugs from ACTIVE to INACTIVE', async () => {
-    const adminBearer = process.env.ADMIN_BEARER_TOKEN;
-    if (!adminBearer) throw new Error('ADMIN_BEARER_TOKEN env var required for hybrid admin test');
-
-    const res = await fetch(`http://localhost:${port}/odata/v4/admin/orphanPurge`, {
+    const res = await fetch(`${srvUrl}/content/orphan-purge`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${adminBearer}`,
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type':  'application/json',
         'x-initiator':   `test/hybrid-${ts}`
       },
@@ -636,7 +676,7 @@ describeIf('AdminService.orphanPurge — hybrid (real HANA)', () => {
   });
 
   it('removes purged slugs from /content/source-hashes', async () => {
-    const res = await fetch(`http://localhost:${port}/content/source-hashes`);
+    const res = await fetch(`${srvUrl}/content/source-hashes`);
     const map = await res.json();
     expect(map[slugA]).toBeUndefined();
     expect(map[slugB]).toBeUndefined();
@@ -654,30 +694,30 @@ describeIf('AdminService.orphanPurge — hybrid (real HANA)', () => {
 });
 ```
 
-- [ ] **Step 2: Run the hybrid test (requires `cf login` to DEV space)**
+- [ ] **Step 2: Run against DEV (requires `cf login` to DEV)**
 
 ```bash
 ALLOW_HYBRID_WRITES=true npx cds bind --exec -- npx vitest run test/hybrid/orphan-purge.test.js
 ```
 
-Expected: all three tests PASS against real HANA.
+Expected: three tests PASS against real HANA.
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add test/hybrid/orphan-purge.test.js
-git commit -m "test(hybrid): orphan-purge end-to-end against real HANA
+git commit -m "test(hybrid): /content/orphan-purge end-to-end against real HANA
 
-Seeds two __TEST__ slugs, calls /odata/v4/admin/orphanPurge, asserts:
+Seeds two __TEST__ ACTIVE slugs, calls /content/orphan-purge with
+CONTENT_API_KEY, asserts:
 - status flips ACTIVE → INACTIVE
 - /content/source-hashes excludes the purged slugs (companion-fix integration)
 - PipelineLog row records the run with metadata.stage='purge-orphans'
 
-Gated by ALLOW_HYBRID_WRITES=true; cleans up in afterAll. Spec:
-docs/superpowers/specs/2026-06-30-orphan-purge-design.md §Testing-hybrid"
+Gated by ALLOW_HYBRID_WRITES=true; afterAll cleans up by slug prefix."
 ```
 
-## Task 8: Hybrid test — source-hashes INACTIVE filter
+## Task 7: Hybrid test — source-hashes INACTIVE filter (standalone)
 
 **Files:**
 - Create: `test/hybrid/source-hashes-filters-inactive.test.js`
@@ -687,7 +727,6 @@ docs/superpowers/specs/2026-06-30-orphan-purge-design.md §Testing-hybrid"
 ```js
 /**
  * Hybrid coverage for the /content/source-hashes companion fix.
- * Spec: docs/superpowers/specs/2026-06-30-orphan-purge-design.md §Architecture-1
  *
  * Independent of orphan-purge.test.js so a regression in the filter
  * surfaces here even when the purge endpoint test is green.
@@ -703,16 +742,12 @@ describeIf('/content/source-hashes — INACTIVE filter (hybrid)', () => {
   const ns = 'com.sap.developers.ims';
   const ts = Date.now();
   const slug = `__TEST__sourcehashes-inactive-${ts}`;
-  let server, port;
+  let srvUrl;
 
   beforeAll(async () => {
-    server = await cds.test.run({ project: '.' });
-    port = server.address().port;
+    srvUrl = process.env.CAP_BASE_URL || `http://localhost:${cds.server?.address?.()?.port ?? 4004}`;
     const { Tutorials } = cds.entities(ns);
     await INSERT.into(Tutorials).entries({ slug, status: 'INACTIVE', title: '__TEST__ Inactive' });
-    // Note: we don't seed a ContentFiles row — the filter operates on the
-    // Tutorials JOIN side. Verifying absence in the returned map is the
-    // contract we care about.
   });
 
   afterAll(async () => {
@@ -721,7 +756,7 @@ describeIf('/content/source-hashes — INACTIVE filter (hybrid)', () => {
   });
 
   it('does not return an INACTIVE slug from /content/source-hashes', async () => {
-    const res = await fetch(`http://localhost:${port}/content/source-hashes`);
+    const res = await fetch(`${srvUrl}/content/source-hashes`);
     expect(res.status).toBe(200);
     const map = await res.json();
     expect(map[slug]).toBeUndefined();
@@ -729,7 +764,7 @@ describeIf('/content/source-hashes — INACTIVE filter (hybrid)', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test**
+- [ ] **Step 2: Run**
 
 ```bash
 ALLOW_HYBRID_WRITES=true npx cds bind --exec -- npx vitest run test/hybrid/source-hashes-filters-inactive.test.js
@@ -743,57 +778,51 @@ Expected: PASS.
 git add test/hybrid/source-hashes-filters-inactive.test.js
 git commit -m "test(hybrid): /content/source-hashes excludes INACTIVE Tutorials
 
-Independent regression test for the companion fix shipped with the
-orphan-purge endpoint. Catches a regression in the source-hashes filter
-even if the orphan-purge endpoint test is green for other reasons.
-
-Spec: docs/superpowers/specs/2026-06-30-orphan-purge-design.md §Testing-hybrid"
+Independent regression test for the companion fix. Catches filter
+regressions even if the orphan-purge endpoint test is green for other
+reasons."
 ```
 
-## Task 9: Smoke test — admin auth gate on orphanPurge
+## Task 8: Smoke — add `/content/orphan-purge` auth-gate assertion
 
 **Files:**
-- Modify: `test/smoke/admin-auth.test.js` (or whichever existing file covers admin auth — `grep -l "401" test/smoke/*.test.js`)
+- Modify: `test/smoke/auth-enforcement.test.js`
 
-- [ ] **Step 1: Find the existing admin-auth smoke file**
+- [ ] **Step 1: Read the existing file shape**
 
 ```bash
-grep -lE "(/admin/|admin.auth|401)" test/smoke/*.test.js
+cat test/smoke/auth-enforcement.test.js
 ```
 
-- [ ] **Step 2: Add a new `it()` block in the appropriate file**
+It uses `import { SRV_URL, fetchWithRetry } from './smoke.config.js'` and asserts `expect([401, 403]).toContain(res.status)`.
+
+- [ ] **Step 2: Add a new `it()` block before the closing `});` of `describe('Auth enforcement', ...)`**
 
 ```js
-it('POST /odata/v4/admin/orphanPurge returns 401 without bearer', async () => {
-  const res = await fetch(`${process.env.SMOKE_SRV_URL}/odata/v4/admin/orphanPurge`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ slugs: [] })
+  it('POST /content/orphan-purge without auth is rejected', async () => {
+    const res = await fetchWithRetry(`${SRV_URL}/content/orphan-purge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slugs: [] })
+    });
+    expect([401, 403]).toContain(res.status);
   });
-  expect(res.status).toBe(401);
-});
 ```
 
-- [ ] **Step 3: Run smoke test against DEV (after PR-1 is deployed; this step pins to the deploy gate)**
+- [ ] **Step 3: Run smoke (after PR-1 is deployed; this step pins to the deploy gate in Task 9)**
 
-```bash
-SMOKE_BASE_URL="https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com" \
-SMOKE_SRV_URL="https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com" \
-  npx vitest run test/smoke/admin-auth.test.js
-```
-
-Expected: PASS.
+Defer running this until after Task 9 deploys to DEV.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add test/smoke/admin-auth.test.js
-git commit -m "test(smoke): /admin/orphanPurge requires admin bearer
+git add test/smoke/auth-enforcement.test.js
+git commit -m "test(smoke): /content/orphan-purge requires CONTENT_API_KEY bearer
 
-Anti-regression for the XSUAA scope gate on the new admin action."
+Anti-regression for the contentAuthMiddleware gate on the new endpoint."
 ```
 
-## Task 10: Deploy PR-1 to DEV + verify
+## Task 9: Deploy PR-1 to DEV + verify
 
 - [ ] **Step 1: Open PR**
 
@@ -802,21 +831,20 @@ gh pr create --base main --head <branch> \
   --title "feat(orphan-purge): server endpoint + /content/source-hashes INACTIVE filter (PR 1/2)" \
   --body "Phase 1 of orphan-purge per docs/superpowers/specs/2026-06-30-orphan-purge-design.md.
 
-  This PR is server-side only. PR 2/2 will add the CLI + workflow.
+  Server-side only. PR 2/2 will add the CLI + workflow.
 
-  - GET /content/source-hashes now filters Tutorials.status='INACTIVE' (drift workflow stops re-reporting purged slugs forever; behavior is no-op until something flips a slug to INACTIVE)
-  - POST /admin/orphanPurge new action for batched soft-delete with PipelineLog attribution + 100-slug server ceiling
+  - GET /content/source-hashes now filters Tutorials.status='INACTIVE' (drift workflow stops re-reporting purged slugs forever; no-op until something flips a slug to INACTIVE)
+  - POST /content/orphan-purge new bare-Express endpoint for batched soft-delete with PipelineLog attribution + 100-slug server ceiling
+  - Same auth model as /content/publish (contentAuthMiddleware + CONTENT_API_KEY); NOT routed through AdminService because AdminService requires XSUAA Admin scope and CI doesn't carry an XSUAA bearer
   - Unit tests for the filter + endpoint; hybrid tests against real HANA; smoke 401-without-bearer
 
-  Pre-deploy data check (Task 1) result: NULL-status row count = <N>; filter ships with OR-NULL clause."
+  Task 1 diagnostic result: Tutorials.status IS NULL row count = <N>."
 ```
 
-- [ ] **Step 2: Wait for CI + merge, then deploy DEV**
-
-After merge to main:
+- [ ] **Step 2: After merge to main, deploy DEV from the primary tree**
 
 ```bash
-cd /d/projects/tutorials-poc          # NOT the worktree — primary tree, per feedback_always_deploy_from_main_primary_tree.md
+cd /d/projects/tutorials-poc          # primary tree, NOT a worktree (memory: feedback_always_deploy_from_main_primary_tree.md)
 git checkout main && git pull
 npm run build:all
 cd .deploy && mbt build && cf deploy mta_archives/*.mtar -e ../deploy/dev.mtaext -f
@@ -825,55 +853,66 @@ cd .deploy && mbt build && cf deploy mta_archives/*.mtar -e ../deploy/dev.mtaext
 - [ ] **Step 3: Smoke-verify deployed endpoint**
 
 ```bash
-# 401 path — confirms auth gate is wired
-curl -i -X POST "https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com/odata/v4/admin/orphanPurge" \
+curl -i -X POST "https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com/content/orphan-purge" \
   -H "Content-Type: application/json" -d '{"slugs":[]}'
 ```
 
 Expected: HTTP/2 401.
 
-- [ ] **Step 4: Wait one day, check the drift workflow**
+Then run the smoke test from Task 8:
 
-The next 04:13 UTC `content-drift-check` run should still report the same 24 missing-locally slugs. The filter is wired but inert (nothing has been flipped to INACTIVE yet). Confirms the filter is not over-filtering live content.
+```bash
+SMOKE_BASE_URL="https://tutorial-system-dev-tutorials-approuter.cfapps.eu10-005.hana.ondemand.com" \
+SMOKE_SRV_URL="https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com" \
+  npx vitest run test/smoke/auth-enforcement.test.js
+```
+
+- [ ] **Step 4: Wait one day, check drift workflow**
+
+The next 04:13 UTC `content-drift-check` run should still report the same 24 missing-locally slugs. The filter is wired but inert (nothing has been flipped to INACTIVE yet). Confirms not over-filtering.
 
 ---
 
 # PR-2 — CLI + workflow
 
-## Task 11: Extract pure helpers into a new module
-
-**Why:** keep `publish-content.ts` from growing past its current ~1000 lines and make the cap + summary helpers testable without HTTP boot.
+## Task 10: Extract pure helpers into a new module
 
 **Files:**
 - Create: `scripts/lib/purge-orphans.ts`
 
-- [ ] **Step 1: Write the helper module**
+- [ ] **Step 1: Confirm the import path style other scripts use**
+
+```bash
+grep -rE "from\s+['\"]\\./lib/" scripts/publish-content.ts | head -3
+```
+
+Use whatever extension convention you find (`.js` vs `.ts` vs none).
+
+- [ ] **Step 2: Write the helper module**
 
 ```ts
 /**
  * Pure helpers for the --purge-orphans mode of scripts/publish-content.ts.
  *
- * Spec: docs/superpowers/specs/2026-06-30-orphan-purge-design.md §CLI-mode
+ * Module is import-only — no top-level side effects, no HTTP, no fs.
+ * Orchestration (env reading, fetch, exit codes) lives in publish-content.ts.
  *
- * Module is import-only — no top-level side effects, no HTTP, no fs. The
- * orchestration (env-var reading, fetch, exit codes) lives in
- * scripts/publish-content.ts under the `--purge-orphans` branch.
+ * Spec: docs/superpowers/specs/2026-06-30-orphan-purge-design.md §CLI-mode
  */
 
 /**
  * Compute the set of orphan slugs: server has it, local doesn't.
  *
  * Set membership only — never hash equality — so a corrupted/empty local
- * hash never causes a false-positive orphan. Drift slugs go through
- * --heal, not --purge-orphans.
+ * hash never causes a false-positive orphan. Drift slugs go through --heal.
  */
 export function computeOrphans(serverSlugs: string[], localSlugs: Set<string>): string[] {
   return serverSlugs.filter(s => !localSlugs.has(s));
 }
 
 /**
- * Enforce the absolute cap.
- * Returns null on pass; returns an error message on fail.
+ * Enforce the absolute cap. Returns null on pass; returns an error message on fail.
+ * Uses <= (at-cap passes; over-cap fails) — matches spec wording "Refuse if orphans > N".
  */
 export function enforceCap(orphanCount: number, capAbs: number): string | null {
   if (orphanCount <= capAbs) return null;
@@ -881,11 +920,9 @@ export function enforceCap(orphanCount: number, capAbs: number): string | null {
          `Investigate fetch output before raising --purge-cap-abs.`;
 }
 
-/**
- * Build the markdown block for $GITHUB_STEP_SUMMARY.
- */
+/** Build the markdown block for $GITHUB_STEP_SUMMARY. */
 export function formatStepSummary(opts: {
-  mode: 'dry-run' | 'committed' | 'failed' | 'skipped';
+  mode: 'dry-run' | 'committed' | 'failed';
   serverCount: number;
   orphanCount: number;
   purged?: number;
@@ -923,19 +960,18 @@ export function formatStepSummary(opts: {
 }
 ```
 
-- [ ] **Step 2: Commit the helper (tests come in Task 12)**
+- [ ] **Step 3: Commit**
 
 ```bash
 git add scripts/lib/purge-orphans.ts
-git commit -m "feat(publish-content): extract pure purge-orphans helpers
+git commit -m "feat(publish-content): pure helpers for --purge-orphans
 
-computeOrphans, enforceCap, formatStepSummary lifted into scripts/lib/
-so they can be unit-tested without booting CDS or fetching anything.
-publish-content.ts orchestration (next commit) imports them under the
-new --purge-orphans branch."
+computeOrphans, enforceCap, formatStepSummary extracted so they can be
+unit-tested without booting CDS or fetching anything. The --purge-orphans
+branch (next commit) imports them."
 ```
 
-## Task 12: Unit test the pure helpers
+## Task 11: Unit test the pure helpers
 
 **Files:**
 - Create: `test/unit/purge-orphans-cap.test.js`
@@ -944,10 +980,8 @@ new --purge-orphans branch."
 
 ```js
 /**
- * Tests for the pure helpers in scripts/lib/purge-orphans.ts.
- * No HTTP, no DB — just function-input → function-output.
- *
- * Spec: docs/superpowers/specs/2026-06-30-orphan-purge-design.md §CLI-mode-cap-design
+ * Tests for scripts/lib/purge-orphans.ts pure helpers.
+ * No HTTP, no DB.
  */
 import { describe, it, expect } from 'vitest';
 import { computeOrphans, enforceCap, formatStepSummary } from '../../scripts/lib/purge-orphans.ts';
@@ -971,7 +1005,7 @@ describe('enforceCap', () => {
   it('passes when count below cap', () => {
     expect(enforceCap(22, 50)).toBeNull();
   });
-  it('passes at exactly the cap', () => {
+  it('passes at exactly the cap (at-cap is OK; spec "refuse > N")', () => {
     expect(enforceCap(50, 50)).toBeNull();
   });
   it('fails when count exceeds cap by one', () => {
@@ -982,26 +1016,22 @@ describe('enforceCap', () => {
   it('fails when count is very large', () => {
     expect(enforceCap(500, 50)).toMatch(/500 > 50/);
   });
-  it('with capAbs=0, only zero orphans passes', () => {
+  it('with capAbs=0 only zero orphans passes', () => {
     expect(enforceCap(0, 0)).toBeNull();
     expect(enforceCap(1, 0)).toMatch(/1 > 0 abs/);
   });
 });
 
 describe('formatStepSummary', () => {
-  it('dry-run mode renders the "would have purged" line', () => {
+  it('dry-run mode renders "would have purged" line', () => {
     const out = formatStepSummary({ mode: 'dry-run', serverCount: 1396, orphanCount: 22 });
     expect(out).toMatch(/Dry run/);
     expect(out).toMatch(/would have purged 22 slug/);
   });
   it('committed mode lists soft-deleted + redirect samples', () => {
     const out = formatStepSummary({
-      mode: 'committed',
-      serverCount: 1396,
-      orphanCount: 24,
-      purged: 21,
-      alreadyInactive: 0,
-      redirected: 3,
+      mode: 'committed', serverCount: 1396, orphanCount: 24,
+      purged: 21, alreadyInactive: 0, redirected: 3,
       redirectedSamples: ['btp-ea-onboard-04-subm', 'btp-ea-onboard-06-abapm'],
       version: 218
     });
@@ -1009,7 +1039,7 @@ describe('formatStepSummary', () => {
     expect(out).toMatch(/Preserved \(redirect\): 3 — btp-ea-onboard-04-subm/);
     expect(out).toMatch(/Manifest version:\s+218/);
   });
-  it('failed mode includes the error message', () => {
+  it('failed mode includes error message', () => {
     const out = formatStepSummary({
       mode: 'failed', serverCount: 1396, orphanCount: 24,
       errorMessage: 'Auth failure — check CONTENT_API_KEY'
@@ -1027,22 +1057,20 @@ describe('formatStepSummary', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests**
+- [ ] **Step 2: Run — expect PASS**
 
 ```bash
 npx vitest run test/unit/purge-orphans-cap.test.js
 ```
 
-Expected: all PASS (helper code already exists from Task 11).
-
 - [ ] **Step 3: Commit**
 
 ```bash
 git add test/unit/purge-orphans-cap.test.js
-git commit -m "test(unit): pure helpers for --purge-orphans (cap + summary + orphan-set)"
+git commit -m "test(unit): pure helpers for --purge-orphans"
 ```
 
-## Task 13: CLI guard + flag-combo test
+## Task 12: Write the CLI-guard + flag-mutex failing test
 
 **Files:**
 - Create: `test/unit/purge-orphans-cli-guard.test.js`
@@ -1051,10 +1079,8 @@ git commit -m "test(unit): pure helpers for --purge-orphans (cap + summary + orp
 
 ```js
 /**
- * Tests for the --purge-orphans CLI flag's CI-only guard and mutex with
+ * Tests for the --purge-orphans flag's CI-only guard and mutex with
  * the other publish modes.
- *
- * Spec: docs/superpowers/specs/2026-06-30-orphan-purge-design.md §CLI-mode-execution-flow
  */
 import { describe, it, expect } from 'vitest';
 import { validateFlagCombo } from '../../scripts/publish-content.ts';
@@ -1078,22 +1104,31 @@ describe('validateFlagCombo with --purge-orphans', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test — expect failure (validateFlagCombo hasn't been extended yet)**
+- [ ] **Step 2: Run — expect FAIL (signature doesn't accept purgeOrphans yet)**
 
 ```bash
 npx vitest run test/unit/purge-orphans-cli-guard.test.js
 ```
 
-Expected: FAIL — `purgeOrphans` isn't in `validateFlagCombo`'s signature.
-
-## Task 14: Extend `validateFlagCombo` + add `--purge-orphans` branch in publish-content.ts
+## Task 13: Extend `validateFlagCombo` and add `--purge-orphans` branch
 
 **Files:**
-- Modify: `scripts/publish-content.ts` line 437 (validateFlagCombo) + branch after `--verify-only` short-circuit (~line 715)
+- Modify: `scripts/publish-content.ts`
 
-- [ ] **Step 1: Update `validateFlagCombo` to accept `purgeOrphans`**
+- [ ] **Step 1: Update `validateFlagCombo` (line 437)**
 
-Replace the existing function at line 437:
+Replace:
+
+```ts
+export function validateFlagCombo(flags: { force: boolean; heal: boolean; verifyOnly: boolean }) {
+  const modes = [flags.force && 'force', flags.heal && 'heal', flags.verifyOnly && 'verify-only'].filter(Boolean);
+  if (modes.length > 1) {
+    throw new Error(`Flags ${modes.join(', ')} are mutually exclusive`);
+  }
+}
+```
+
+With:
 
 ```ts
 export function validateFlagCombo(flags: { force: boolean; heal: boolean; verifyOnly: boolean; purgeOrphans?: boolean }) {
@@ -1109,18 +1144,35 @@ export function validateFlagCombo(flags: { force: boolean; heal: boolean; verify
 }
 ```
 
-- [ ] **Step 2: Add the flag-parsing for `--purge-orphans` and the env-driven cap**
+- [ ] **Step 2: Add `purgeOrphans` + `purgeCapAbs` to `PublishOptions` interface (lines 501-515)**
 
-Find the `has = ...` flag-parse block (currently around line 533-540). Add:
+Find the `interface PublishOptions { ... }` block (or `type PublishOptions = { ... }`) and add:
 
 ```ts
-purgeOrphans: has('--purge-orphans'),
-purgeCapAbs:  Number(process.env.PURGE_CAP_ABS ?? readFlagArg('--purge-cap-abs') ?? 50),
+  purgeOrphans: boolean;
+  purgeCapAbs: number;
 ```
 
-If `readFlagArg` doesn't exist, use the same pattern other flags use — search for how `--concurrency` is read.
+- [ ] **Step 3: Add to `parseArgs` (~line 533)**
 
-- [ ] **Step 3: Add the `--purge-orphans` branch in `main()` near line 618 (after `--verify-only` short-circuit)**
+Find the `return { ... }` at the bottom of `parseArgs`. Add to the returned object:
+
+```ts
+    purgeOrphans: has('--purge-orphans'),
+    purgeCapAbs:  parseInt(get('--purge-cap-abs', process.env.PURGE_CAP_ABS ?? '50'), 10),
+```
+
+(`get` and `has` are the closures defined at the top of `parseArgs`; verify they exist — search for `function parseArgs` and read its first 20 lines.)
+
+- [ ] **Step 4: Update the `validateFlagCombo` call site (~line 762)**
+
+```ts
+validateFlagCombo({ force: opts.force, heal: opts.heal, verifyOnly: opts.verifyOnly, purgeOrphans: opts.purgeOrphans });
+```
+
+- [ ] **Step 5: Add the `--purge-orphans` branch in `main`**
+
+Find the closing `}` of the `if (opts.verifyOnly) { ... }` block — should be around line 715 (the `process.exit(2)` is at line 714, closing brace at 715). Insert the new branch between the closing `}` of `verifyOnly` and the next statement `log(\`Discovering tutorials in...\`)` (~line 717).
 
 ```ts
   // --- --purge-orphans short-circuit ---
@@ -1160,8 +1212,8 @@ If `readFlagArg` doesn't exist, use the same pattern other flags use — search 
 
     // 4. Compute orphans
     const orphans = computeOrphans(serverSlugs, localSlugs);
-    const pctInformational = serverSlugs.length ? ((orphans.length / serverSlugs.length) * 100).toFixed(1) : '0.0';
-    log(`[purge-orphans] Computed ${orphans.length} orphans (${pctInformational}% of server — informational)`);
+    const pctInfo = serverSlugs.length ? ((orphans.length / serverSlugs.length) * 100).toFixed(1) : '0.0';
+    log(`[purge-orphans] Computed ${orphans.length} orphans (${pctInfo}% of server — informational)`);
 
     // 5. Cap check
     const capErr = enforceCap(orphans.length, opts.purgeCapAbs);
@@ -1170,14 +1222,13 @@ If `readFlagArg` doesn't exist, use the same pattern other flags use — search 
       console.error(`[purge-orphans] First 20 orphans:`);
       for (const s of orphans.slice(0, 20)) console.error(`  - ${s}`);
       writeStepSummary(formatStepSummary({
-        mode: 'failed', serverCount: serverSlugs.length, orphanCount: orphans.length,
-        errorMessage: capErr
+        mode: 'failed', serverCount: serverSlugs.length, orphanCount: orphans.length, errorMessage: capErr
       }));
       process.exit(1);
     }
-    log(`[purge-orphans] Cap check: ${orphans.length} < ${opts.purgeCapAbs} abs → passes`);
+    log(`[purge-orphans] Cap check: ${orphans.length} <= ${opts.purgeCapAbs} abs → passes`);
 
-    // 6. Print sample
+    // 6. Sample
     const sample = orphans.slice(0, 10).join(', ');
     log(`[purge-orphans] Sample orphans: ${sample}${orphans.length > 10 ? ` ... (+${orphans.length - 10} more)` : ''}`);
 
@@ -1190,9 +1241,9 @@ If `readFlagArg` doesn't exist, use the same pattern other flags use — search 
       process.exit(0);
     }
 
-    // 8. POST /odata/v4/admin/orphanPurge
+    // 8. POST /content/orphan-purge
     const initiator = opts.initiator;
-    const purgeUrl = `${opts.baseUrl.replace(/\/$/, '')}/odata/v4/admin/orphanPurge`;
+    const purgeUrl = `${opts.baseUrl.replace(/\/$/, '')}/content/orphan-purge`;
     log(`[purge-orphans] POST ${purgeUrl} (${orphans.length} slugs, initiator=${initiator})`);
 
     let resp: Response;
@@ -1250,7 +1301,7 @@ If `readFlagArg` doesn't exist, use the same pattern other flags use — search 
       process.exit(1);
     }
 
-    // 11. Print response summary
+    // 11. Print summary to stdout
     console.log(`[purge-orphans] Response:`);
     console.log(`  purged:          ${result.purged.length}`);
     console.log(`  alreadyInactive: ${result.alreadyInactive.length}`);
@@ -1262,7 +1313,7 @@ If `readFlagArg` doesn't exist, use the same pattern other flags use — search 
     console.log(`  redirected:      ${result.redirected.length}${result.redirected.length ? ` (preserved: ${result.redirected.slice(0, 5).join(', ')})` : ''}`);
     console.log(`  manifest version: ${result.version}`);
 
-    // 12. Write step summary
+    // 12. Step summary
     writeStepSummary(formatStepSummary({
       mode: 'committed',
       serverCount: serverSlugs.length,
@@ -1280,77 +1331,68 @@ If `readFlagArg` doesn't exist, use the same pattern other flags use — search 
   }
 ```
 
-- [ ] **Step 4: Add the imports + writeStepSummary helper at top**
+- [ ] **Step 6: Add imports at the top of `scripts/publish-content.ts`**
 
-Top-of-file imports — add `computeOrphans`, `enforceCap`, `formatStepSummary`:
+Add after the existing imports:
 
 ```ts
+import { appendFileSync } from 'node:fs';
 import { computeOrphans, enforceCap, formatStepSummary } from './lib/purge-orphans.ts';
 ```
 
-Add a `writeStepSummary` helper near other utility functions:
+(If `readdirSync` isn't already imported, add it — `import { readdirSync, appendFileSync } from 'node:fs'`.)
+
+- [ ] **Step 7: Add the `writeStepSummary` helper near other utility functions in the file**
 
 ```ts
+/** Append a markdown block to $GITHUB_STEP_SUMMARY if set. No-op locally. */
 function writeStepSummary(markdown: string) {
   const target = process.env.GITHUB_STEP_SUMMARY;
   if (!target) return;
   try {
-    const fs = require('fs');
-    fs.appendFileSync(target, markdown + '\n');
+    appendFileSync(target, markdown + '\n');
   } catch (err) {
-    console.error(`[purge-orphans] Failed to append $GITHUB_STEP_SUMMARY: ${err}`);
+    console.error(`[purge-orphans] Failed to append $GITHUB_STEP_SUMMARY: ${formatErrorChain(err)}`);
   }
 }
 ```
 
-- [ ] **Step 5: Update `validateFlagCombo` call site (line 762)**
-
-```ts
-validateFlagCombo({ force: opts.force, heal: opts.heal, verifyOnly: opts.verifyOnly, purgeOrphans: opts.purgeOrphans });
-```
-
-- [ ] **Step 6: Run the failing test from Task 13 — it should now pass**
+- [ ] **Step 8: Run the failing test from Task 12 — should now PASS**
 
 ```bash
 npx vitest run test/unit/purge-orphans-cli-guard.test.js
 ```
 
-Expected: all PASS.
-
-- [ ] **Step 7: Run the full unit suite to confirm no regression**
+- [ ] **Step 9: Full unit suite**
 
 ```bash
-npm test -- --run 2>&1 | tail -50
+npm test -- --run 2>&1 | grep -E "FAIL|✗|Test Files|Tests " | tail -20
 ```
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add scripts/publish-content.ts test/unit/purge-orphans-cli-guard.test.js
 git commit -m "feat(publish-content): add --purge-orphans CI-only mode
 
-Adds the --purge-orphans branch to publish-content.ts:
 - GITHUB_ACTIONS env-var hard-block (refuses to run from workstation)
-- Mutex with --force/--heal/--verify-only via validateFlagCombo
+- Mutex with --force/--heal/--verify-only
 - Absolute cap (default 50, env PURGE_CAP_ABS) — refuses before HTTP
-- Set-membership orphan detection (never hash equality — corrupted local
-  hash never causes false-positive orphan)
-- POST /odata/v4/admin/orphanPurge with x-initiator header
-- Error handling with distinct exit messages for 401/403/400/5xx/network
-- Bucket-sum sanity check (malformed response → exit 1, never silent success)
-- \$GITHUB_STEP_SUMMARY block always written (committed / dry-run / failed)
-
-Spec: docs/superpowers/specs/2026-06-30-orphan-purge-design.md §CLI-mode"
+- Set-membership orphan detection (never hash equality)
+- POST /content/orphan-purge with CONTENT_API_KEY bearer + x-initiator header
+- Distinct error messages for 401/403/400/5xx/network
+- Bucket-sum sanity check (malformed response → exit 1)
+- \$GITHUB_STEP_SUMMARY block always written (committed / dry-run / failed)"
 ```
 
-## Task 15: Workflow — add input + extend mode-determine step
+## Task 14: Workflow — add input, mode rejection, gated step
 
 **Files:**
 - Modify: `.github/workflows/rebuild-content.yml`
 
-- [ ] **Step 1: Add the `purge-orphans` input near the other workflow_dispatch inputs**
+- [ ] **Step 1: Add the `purge-orphans` input under `workflow_dispatch.inputs:`**
 
-Find the `workflow_dispatch:` block (top of file) and add:
+Find the `workflow_dispatch:` block near the top of the file. Add (sibling of existing inputs like `mode`, `slug`, `slugs`):
 
 ```yaml
       purge-orphans:
@@ -1360,9 +1402,15 @@ Find the `workflow_dispatch:` block (top of file) and add:
         default: false
 ```
 
-- [ ] **Step 2: Extend the `Determine effective rebuild mode` step (line ~123-148)**
+- [ ] **Step 2: Extend the `Determine effective rebuild mode` step (id: mode, line ~123)**
 
-Replace the body of the step's `run:` with:
+In its `env:` block, add:
+
+```yaml
+          INPUT_PURGE_ORPHANS: ${{ inputs.purge-orphans }}
+```
+
+In its `run:` block, replace the existing body with:
 
 ```bash
           EFFECTIVE="$INPUT_MODE"
@@ -1378,8 +1426,7 @@ Replace the body of the step's `run:` with:
           # Issue #orphan-purge — reject purge-orphans=true with anything other
           # than effective_mode=full. slug-targeted/catalog-only deliberately
           # don't fetch the whole catalog, so 1392+ slugs would falsely appear
-          # as orphans. Fail loud, don't silently skip — operator clearly
-          # intended the purge.
+          # as orphans. Fail loud (operator clearly intended the purge).
           if [ "${INPUT_PURGE_ORPHANS:-false}" = "true" ] && [ "$EFFECTIVE" != "full" ]; then
             echo "::error title=purge-orphans requires mode=full::Got effective_mode=$EFFECTIVE. Re-run with -f mode=full -f purge-orphans=true."
             exit 1
@@ -1389,8 +1436,6 @@ Replace the body of the step's `run:` with:
           echo "effective_reason=$REASON" >> "$GITHUB_OUTPUT"
           echo "::notice title=Rebuild mode::$EFFECTIVE ($REASON)"
 ```
-
-And add `INPUT_PURGE_ORPHANS: ${{ inputs.purge-orphans }}` to the step's `env:` block.
 
 - [ ] **Step 3: Add `id: publish` to the existing "Publish tutorial content to HANA" step (line ~300)**
 
@@ -1409,7 +1454,7 @@ Change to:
         # Concurrency / batch-size are tunable...
 ```
 
-- [ ] **Step 4: Add the new "Purge orphan tutorials" step (right after the Publish step finishes — find its closing `env:` block around line 340)**
+- [ ] **Step 4: Add the new "Purge orphan tutorials" step (right after Publish's env block ~line 340)**
 
 ```yaml
       - name: Purge orphan tutorials
@@ -1426,13 +1471,11 @@ Change to:
         run: npx tsx scripts/publish-content.ts --purge-orphans
 ```
 
-- [ ] **Step 5: Lint the workflow file locally (catches YAML errors before push)**
+- [ ] **Step 5: Lint YAML locally**
 
 ```bash
 npx js-yaml .github/workflows/rebuild-content.yml > /dev/null && echo "YAML valid"
 ```
-
-Expected: prints "YAML valid". If it errors, fix indentation.
 
 - [ ] **Step 6: Commit**
 
@@ -1441,25 +1484,23 @@ git add .github/workflows/rebuild-content.yml
 git commit -m "ci(rebuild-content): add purge-orphans input + gated step
 
 - New workflow_dispatch input \`purge-orphans\` (default false)
-- Mode-determine step rejects purge-orphans=true with anything other than
-  effective_mode=full, with a clear ::error annotation
+- Mode-determine step rejects purge-orphans=true with anything other
+  than effective_mode=full, via ::error annotation
 - Existing 'Publish tutorial content to HANA' step gains id: publish so
   the new step can gate on steps.publish.outcome == 'success'
-- New 'Purge orphan tutorials' step runs ONLY when all three conjuncts
-  hold (input + mode + publish-succeeded). Clean skip on mode mismatch,
-  not a failed run.
-
-Spec: docs/superpowers/specs/2026-06-30-orphan-purge-design.md §Workflow-integration"
+- New 'Purge orphan tutorials' step runs ONLY when the three-conjunct
+  if: holds (input + mode + publish-succeeded). Clean skip on mode
+  mismatch, not a failed run."
 ```
 
-## Task 16: Update operator-facing docs
+## Task 15: Operator docs
 
 **Files:**
 - Modify: `docs/developers/operations/rebuild-content-workflow.md`
 
-- [ ] **Step 1: Add the "When to run purge-orphans" section**
+- [ ] **Step 1: Append the new section**
 
-Append (near the end of the file, after the existing mode-selection content):
+Near the end of the file (after existing mode-selection content):
 
 ```markdown
 ## When to run `purge-orphans`
@@ -1468,23 +1509,21 @@ The `purge-orphans=true` workflow input batches the soft-delete operation the ad
 
 ### When to use it
 
-- The drift report consistently shows N missing-locally slugs (e.g. 20+).
-- You've inspected the list (artifact `content-drift-<env>-<run_number>` on the drift run) and confirmed they are genuinely orphaned, not the result of a fetch regression.
+- The drift report consistently shows ≥20 missing-locally slugs.
+- You've inspected the list (artifact `content-drift-<env>-<run_number>`) and confirmed they are genuinely orphaned, not the result of a fetch regression.
 - You want a one-shot cleanup rather than 20+ clicks in the admin Tutorials app.
 
 ### When NOT to use it
 
-- `fetch-tutorials` recently changed — verify the discovery output before purging.
-- The drift count jumped from ~24 to ~200 overnight — that's a fetch problem, not real orphans. Fix the fetch first.
-- You're trying to "unpublish" a single tutorial — use the admin Tutorials app (`/admin-ui/#tutorials-display`) instead; soft-delete one row at a time.
+- `fetch-tutorials` recently changed — verify the discovery output first.
+- The drift count jumped overnight — that's a fetch problem, not real orphans. Fix the fetch first.
+- You're trying to "unpublish" a single tutorial — use the admin Tutorials app at `/admin-ui/#tutorials-display`.
 
 ### How
 
 ```bash
-# Dry-run first (lists what would be purged; no DB write):
 gh workflow run rebuild-content.yml --repo sap-tutorials/tutorials-ims --ref main \
   -f mode=full -f purge-orphans=true
-# Wait for the run to land; check the run summary's "Orphan purge" section.
 ```
 
 The workflow:
@@ -1494,97 +1533,93 @@ The workflow:
 
 ### Safety caps
 
-- **Client**: 50 absolute orphans. If the count exceeds this, the step fails before any HTTP traffic. Override via `PURGE_CAP_ABS` env in the workflow file.
-- **Server**: 100-slug ceiling. Server returns 400 if the client cap was loosened past this point. Operator splits the work into multiple calls (or files a separate change to raise the server ceiling).
+- **Client:** 50 absolute orphans. If exceeded, the step fails before any HTTP traffic. Override via `PURGE_CAP_ABS` env in the workflow file.
+- **Server:** 100-slug ceiling. Server returns 400 if the client cap was loosened past this point. Split into multiple calls (or file a separate change to raise the server ceiling).
+
+### Auth
+
+The CLI sends `Authorization: Bearer $CONTENT_API_KEY` — same secret as `/content/publish`. The endpoint is `POST /content/orphan-purge` (bare-Express + contentAuthMiddleware), NOT a CAP AdminService action.
 
 ### Rollback
 
-If the purge mis-soft-deletes, see the [orphan-purge design § Rollback](../../superpowers/specs/2026-06-30-orphan-purge-design.md#rollback) — the SQL there uses change-tracking + PipelineLog to enumerate exactly which rows flipped.
+See the [orphan-purge design § Rollback](../../superpowers/specs/2026-06-30-orphan-purge-design.md#rollback) — uses change-tracking + PipelineLog to enumerate which rows flipped.
 ```
 
 - [ ] **Step 2: Commit**
 
 ```bash
 git add docs/developers/operations/rebuild-content-workflow.md
-git commit -m "docs(operations): add 'When to run purge-orphans' section
-
-Operator-facing instructions for the new --purge-orphans CLI flag and the
-rebuild-content workflow's purge-orphans input. Includes when to use it,
-when NOT to use it, the dispatch command, the safety caps, and a pointer
-to the spec's rollback SQL."
+git commit -m "docs(operations): add 'When to run purge-orphans' section"
 ```
 
-## Task 17: Deploy PR-2 to DEV + exercise the workflow
+## Task 16: Deploy PR-2 + verify against DEV
 
-- [ ] **Step 1: Open the PR**
+- [ ] **Step 1: Open PR**
 
 ```bash
 gh pr create --base main --head <branch> \
   --title "feat(orphan-purge): CLI + workflow input (PR 2/2)" \
   --body "Phase 2 of orphan-purge per docs/superpowers/specs/2026-06-30-orphan-purge-design.md.
 
-  Requires PR 1/2 (server side) to be merged and deployed first.
+  Requires PR 1/2 (server-side) merged + deployed first.
 
-  - scripts/publish-content.ts gains --purge-orphans mode (CI-only via GITHUB_ACTIONS env hard-block; 50-slug client cap; POST /admin/orphanPurge)
-  - scripts/lib/purge-orphans.ts new pure helpers (computeOrphans, enforceCap, formatStepSummary)
-  - .github/workflows/rebuild-content.yml new \`purge-orphans\` input; mode-determine step rejects slug-targeted+purge-orphans=true with ::error; new gated 'Purge orphan tutorials' step
-  - Unit tests for pure helpers + CLI guard + mutex; docs update with operator runbook
+  - scripts/publish-content.ts gains --purge-orphans mode (CI-only via GITHUB_ACTIONS env hard-block; 50-slug client cap; POST /content/orphan-purge)
+  - scripts/lib/purge-orphans.ts new pure helpers
+  - .github/workflows/rebuild-content.yml new \`purge-orphans\` input; mode-determine step rejects slug-targeted + purge-orphans=true with ::error; new gated 'Purge orphan tutorials' step
+  - Unit tests for pure helpers + CLI guard + mutex
   - id: publish added to the existing 'Publish tutorial content to HANA' step so the new step can gate on steps.publish.outcome=='success'"
 ```
 
-- [ ] **Step 2: After merge + DEV deploy, run the workflow manually against DEV**
+- [ ] **Step 2: After merge + DEV deploy, dispatch the workflow**
 
 ```bash
 gh workflow run rebuild-content.yml --repo sap-tutorials/tutorials-ims --ref main \
   -f mode=full -f purge-orphans=true
 ```
 
-Watch via `gh run watch` or check the run UI.
-
 - [ ] **Step 3: Verify the run summary**
 
-The run's "Purge orphan tutorials" step should land a `🧹 Orphan purge — full mode` block in `$GITHUB_STEP_SUMMARY` with the expected counts (~21 purged, ~3 redirected as preserved, depending on current drift state).
+The run's `Purge orphan tutorials` step should land a `🧹 Orphan purge — full mode` block in `$GITHUB_STEP_SUMMARY` (~21 purged, depending on current drift state).
 
-- [ ] **Step 4: Verify the database reflects the purge**
+- [ ] **Step 4: Verify DB reflects the purge**
 
 ```bash
 curl -s "https://tutorial-system-dev-tutorials-srv.cfapps.eu10-005.hana.ondemand.com/content/source-hashes" | \
   node -e "const m=JSON.parse(require('fs').readFileSync(0,'utf8'));console.log('server slug count:',Object.keys(m).length);"
 ```
 
-Expected: count drops from 1396 → ~1375 (24 orphans minus 3 redirected = 21 purged).
+Expected: count drops from ~1396 to ~1375.
 
-- [ ] **Step 5: Re-run the daily drift workflow manually**
+- [ ] **Step 5: Re-run drift workflow**
 
 ```bash
 gh workflow run content-drift-check.yml --repo sap-tutorials/tutorials-ims -f environment=dev
 ```
 
-Expected outcome: "missing locally" count drops from 24 to 3 (just the `redirectTo`-preserved ones).
+Expected: "missing locally" count drops from 24 to ≤3.
 
 - [ ] **Step 6: Reject-on-misconfig sanity check**
 
 ```bash
-# Intentionally pass slug-targeted with purge-orphans=true — should fail loud.
 gh workflow run rebuild-content.yml --repo sap-tutorials/tutorials-ims --ref main \
   -f mode=full -f slugs=appgyver-fetch-data -f purge-orphans=true
 ```
 
-Expected: the mode-determine step emits the `::error::` annotation "purge-orphans requires mode=full" and exits non-zero before any fetch/publish runs. Auto-infer would have flipped this to `slug-targeted`; our new check catches that.
+Expected: mode-determine step emits `::error title=purge-orphans requires mode=full` and exits 1 before any work runs.
 
 ---
 
 ## Phase 3 — PROD rollout (no code)
 
-After ≥24 h of DEV soak with no regressions:
+After ≥24 h of DEV soak:
 
-- [ ] **Step 1: Refresh the drift report against PROD**
+- [ ] **Step 1: Refresh drift report against PROD**
 
 ```bash
 gh workflow run content-drift-check.yml --repo sap-tutorials/tutorials-ims -f environment=prod
 ```
 
-Inspect the `verify.log` artifact; confirm count is within `24 ± 5`. If wildly different, **STOP** and investigate.
+Confirm count is within `24 ± 5`. If wildly different, **STOP** and investigate.
 
 - [ ] **Step 2: Dispatch against PROD**
 
@@ -1595,7 +1630,7 @@ gh workflow run rebuild-content.yml --repo sap-tutorials/tutorials-ims --ref mai
 
 - [ ] **Step 3: Confirm via source-hashes count + next drift run**
 
-Same checks as Task 17 Steps 4-5 but against the PROD srv URL.
+Same checks as Task 16 Steps 4-5 but against PROD srv URL.
 
 ---
 
@@ -1603,9 +1638,9 @@ Same checks as Task 17 Steps 4-5 but against the PROD srv URL.
 
 | Risk | Mitigation |
 |---|---|
-| `cds bind --exec` not available locally for Task 1 | Defer to CI or have a maintainer with PROD CF login run it; record the number in the PR description |
-| Hybrid test floods the DEV DB with `__TEST__` rows if `afterAll` fails | `afterAll` runs always (even on test failure) per Vitest contract; the seeded slugs all share the `__TEST__purge-orphan-*` prefix so manual cleanup is `DELETE FROM tutorials WHERE slug LIKE '__TEST__purge-orphan-%'` |
-| `scripts/lib/purge-orphans.ts` imports break if tsx config doesn't resolve `./lib/` | Mirror the import path style of an existing `scripts/lib/` import — `grep "from './lib/" scripts/publish-content.ts` and copy the form |
-| Workflow YAML indentation regression breaks all rebuilds | Local `js-yaml` lint at Task 15 Step 5; don't push until valid |
-| PR-1 deploys but PR-2 doesn't (server has filter but no CI cleanup) | Acceptable — the filter is no-op until something flips a slug to INACTIVE. Drift reports still surface 24 ghosts in this intermediate state |
-| PR-2 deploys but PR-1 didn't (CI tries to POST to a missing endpoint) | 404 from `/admin/orphanPurge` → CLI's error-handling step (9) reports `Unexpected status 404` and exits 1; no data damage, just a failed CI run |
+| Hybrid test floods DEV DB with `__TEST__` rows if `afterAll` fails | `afterAll` runs on test failure too per Vitest contract; manual cleanup is `DELETE FROM com_sap_developers_ims_tutorials WHERE slug LIKE '__TEST__purge-orphan-%'` |
+| `scripts/lib/purge-orphans.ts` import path style mismatch | Task 10 Step 1 grep confirms project convention before writing |
+| Workflow YAML indentation regression | Task 14 Step 5 local lint |
+| PR-1 deploys but PR-2 doesn't | Acceptable — filter is no-op until something flips a slug to INACTIVE |
+| PR-2 deploys but PR-1 didn't | CI's POST gets 404 → CLI's error-handling step reports `Unexpected status 404` and exits 1 |
+| AdminService 401 from older spec wording | Resolved by routing through bare-Express `/content/orphan-purge` instead of `/admin/orphanPurge` — same auth model as `/content/publish` |
