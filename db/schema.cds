@@ -121,8 +121,9 @@ entity Checkpoints : TaskBase { }
 // legacyId (Tasks UNION view + TaskRecordsAnalytics association).
 entity Puzzles : TaskBase { }
 
-@assert.unique.sapId     : [sapId]
-@assert.unique.khorosId  : [khorosId]
+@assert.unique.sapId       : [sapId]
+@assert.unique.khorosId    : [khorosId]
+@assert.unique.githubLogin : [githubLogin]
 entity Users : cuid, managed, LegacyKeyed {
   uuid                      : String(36) @mandatory;
   sapId                     : String(255);
@@ -138,6 +139,12 @@ entity Users : cuid, managed, LegacyKeyed {
   khorosLogin               : String(64);
   khorosAvatarUrl           : String(1000);
   khorosLinkedAt            : Timestamp;
+  // GitHub login (e.g. "jung-thomas") — canonical signal for Tutorials.author
+  // resolution at publish time (issue #777 followup). Source: parsed from
+  // author_profile URL in tutorial markdown frontmatter. Backfilled from
+  // TutorialContributors.login for historical Users. Nullable; null users
+  // fall through to the legacy email-based contributor resolution path.
+  githubLogin               : String(64);
   taskRecords               : Composition of many TaskRecords on taskRecords.user = $self;
   prizeRecords              : Composition of many PrizeRecords on prizeRecords.user = $self;
   accomplishments           : Composition of many AccomplishmentRecords on accomplishments.user = $self;
