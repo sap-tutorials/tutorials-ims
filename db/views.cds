@@ -293,6 +293,41 @@ view MyTutorialsView as
     days_between(m.reviewedDate, $now)      as daysSinceReview : Integer
   };
 
+// #777 followup (2026-06-30) — bridge entity needed by db/advocates.cds's
+// `ownedTutorials` association. MyTutorialsView.userId = Users.uuid (the
+// CAP req.user.id-compatible field) but Advocates.user is a managed
+// association whose FK is Users.ID (the cuid PK). CAP only allows
+// managed-association navigation to KEY elements in on-conditions, so
+// `on ownedTutorials.userId = user.uuid` (non-key) fails to compile.
+// This bridge re-keys the same data by Users.ID so the Advocates
+// on-condition `on ownedTutorials.user_ID = $self.user.ID` can resolve.
+// Declared as a projection entity (not a view) so it participates in
+// the OData model as a navigable target.
+// Consumers that need userId (= Users.uuid) still get it as a plain column.
+entity MyTutorialsByUserId as
+  select from MyTutorialsView as m
+    inner join ims.Users as u on u.uuid = m.userId
+  {
+    key u.ID              as user_ID,
+    key m.tutorial_ID,
+    m.userId,
+    m.bestPriority,
+    m.slug,
+    m.title,
+    m.primaryTag,
+    m.status,
+    m.reviewedDate,
+    m.monitoredStatus,
+    m.notificationNumber,
+    m.notificationDate,
+    m.firstNotificationDate,
+    m.owner,
+    m.ownerEmail,
+    m.repositoryName,
+    m.monitored,
+    m.daysSinceReview
+  };
+
 // Analytics projection over TaskRecords with discriminated soft-link associations
 // to Tutorials/Missions/Groups. TaskRecords stores content references as a
 // (taskType, taskLegacyId) pair instead of a typed FK, so each unmanaged

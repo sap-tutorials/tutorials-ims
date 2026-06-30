@@ -665,6 +665,18 @@ service AdminService {
   entity AdvocateLinks   as projection on ims.AdvocateLinks;
   entity AdvocatePhotos  as projection on ims.AdvocatePhotos;
 
+  // #777 followup (2026-06-30) — admin-facing projection on the canonical
+  // 4-source author/owner view, bridged through Users.ID for association
+  // compatibility (see db/views.cds:MyTutorialsByUserId).
+  // Sourced by the Advocate Object Page's ownedTutorials facet
+  // (db/advocates.cds). Read-only by construction; the AdminService is
+  // already @requires:'Admin' at service level, making any extra guard
+  // redundant — but admin-service.js adds a belt-and-suspenders
+  // before('READ') check anyway.
+  @readonly
+  @cds.autoexpose: false
+  entity MyTutorials as projection on ims.MyTutorialsByUserId;
+
   // Phase 2-B (#464): Secrets-visibility metadata-only.
   // Full CRUD over tracked-secret rows. NOT @odata.singleton — this is a list,
   // not a singleton (unlike ChatSettings / KnowledgeGraphSettings).
