@@ -37,6 +37,11 @@ on:
         required: false
         default: false
         type: boolean
+      force-publish:
+        description: 'Skip the /content/hashes delta-detection round-trip and upload every slug as if changed. Default behavior (--force off) only invokes linkTutorialAuthorship / TutorialMeta upsert for slugs whose Hugo HTML hash differs from the prior manifest. Set true to force every slug through the publish path — necessary after merging any change to publish-time per-slug logic (resolver phases, FK updates, side-effect bootstraps in srv/lib/content-publish-session.js). Adds ~10-20s to wall-clock (full payload upload vs delta).'
+        required: false
+        default: false
+        type: boolean
       publish-concurrency:
         description: 'Number of /content/publish/append batches in flight at once. Default raised 4 → 6 in issue #434 PR 2 (final stage) after 9 stable runs at 4/25. Restores the original pre-#422 throughput now that bulk SQL (#423) makes it safe. Lower below 6 if srv hits HeadersTimeoutError again.'
         required: false
@@ -386,6 +391,7 @@ jobs:
             --initiator "ci/${{ github.run_id }}" \
             --concurrency "${{ inputs.publish-concurrency || '4' }}" \
             --batch-size "${{ inputs.publish-batch-size || '25' }}" \
+            ${{ inputs.force-publish == true && '--force' || '' }} \
             --verbose
         env:
           CONTENT_API_KEY: ${{ secrets.CONTENT_API_KEY }}
