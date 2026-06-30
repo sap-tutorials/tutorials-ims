@@ -85,6 +85,16 @@ entity ConceptEdges : cuid, managed {
 annotate TutorialConceptLinks with @assert.unique.tutorialConcept : [tutorial, concept, predicate];
 annotate ConceptEdges with @assert.unique.conceptEdge : [source, target, predicate];
 
+// [#787] Cascade-delete TCL rows on Tutorial DELETE. Mirrors the Phase 4
+// pattern in db/external-content.cds (LearningJourneys.links, etc.).
+// Without this, deleted Tutorials leave orphan link rows that crash
+// /build/concepts and other KG read handlers (see #787 root cause).
+// Declared here (not in schema.cds) to avoid a circular using dependency.
+extend entity base.Tutorials with {
+  conceptLinks              : Composition of many TutorialConceptLinks
+                              on conceptLinks.tutorial = $self;
+}
+
 /**
  * Single-row projection metadata. Updated at the end of every graphRebuild.
  * Read by the query-layer cache to mint a graphVersion cache key.
