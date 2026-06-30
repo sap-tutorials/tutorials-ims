@@ -43,6 +43,22 @@
           </button>
         </template>
 
+        <template v-if="exploreResults.length">
+          <div class="cmdk__group-label">Explore</div>
+          <button
+            v-for="(item, i) in exploreResults"
+            :key="`e-${item.id}`"
+            :class="['cmdk__item', { 'cmdk__item--active': activeIndex === actionResults.length + i }]"
+            role="option"
+            :aria-selected="activeIndex === actionResults.length + i"
+            @mouseenter="activeIndex = actionResults.length + i"
+            @click="runItem(item)"
+          >
+            <span class="cmdk__item-icon" :data-icon="item.icon || 'circle-task'" aria-hidden="true"></span>
+            <span class="cmdk__item-label">{{ item.label }}</span>
+          </button>
+        </template>
+
         <template v-if="tutorialResults.length">
           <div class="cmdk__group-label">Tutorials</div>
           <a
@@ -50,11 +66,11 @@
             :key="`t-${item.id}`"
             :ref="(el) => { if (el) tutorialRefs[i] = el as HTMLAnchorElement }"
             :href="`/tutorials/${item.slug}`"
-            :class="['cmdk__item', 'cmdk__item--link', { 'cmdk__item--active': activeIndex === actionResults.length + i }]"
+            :class="['cmdk__item', 'cmdk__item--link', { 'cmdk__item--active': activeIndex === actionResults.length + exploreResults.length + i }]"
             data-vt-card="navigator"
             role="option"
-            :aria-selected="activeIndex === actionResults.length + i"
-            @mouseenter="activeIndex = actionResults.length + i"
+            :aria-selected="activeIndex === actionResults.length + exploreResults.length + i"
+            @mouseenter="activeIndex = actionResults.length + exploreResults.length + i"
             @click="close()"
           >
             <span class="cmdk__item-icon" data-icon="course-book" aria-hidden="true"></span>
@@ -65,7 +81,7 @@
           </a>
         </template>
 
-        <div v-if="!actionResults.length && !tutorialResults.length" class="cmdk__empty">
+        <div v-if="!actionResults.length && !exploreResults.length && !tutorialResults.length" class="cmdk__empty">
           <template v-if="searching">Searching…</template>
           <template v-else-if="query.trim().length < 2">Type to search tutorials, or pick an action.</template>
           <template v-else>No matches.</template>
@@ -106,10 +122,24 @@ function fuzzyMatch(item: PaletteAction, q: string): boolean {
   return q.toLowerCase().split(/\s+/).every(token => haystack.includes(token))
 }
 
-const actionResults = computed<PaletteAction[]>(() => {
+// Filtered list of every static action that matches the current query —
+// includes both the 'actions' group (default) and the 'explore' group
+// (verb-spine + Knowledge Graph, added in issue #817). Step-jump actions
+// produced by buildStepActions() have no `group`, so they default to
+// 'actions'.
+const filteredStatic = computed<PaletteAction[]>(() => {
   const q = query.value.trim()
-  return allStaticActions.value.filter(a => fuzzyMatch(a, q)).slice(0, 8)
+  return allStaticActions.value.filter(a => fuzzyMatch(a, q))
 })
+
+// Cap each group at 8 entries — keeps the unfiltered open compact while
+// still surfacing every match when the user types a specific keyword.
+const actionResults = computed<PaletteAction[]>(() =>
+  filteredStatic.value.filter(a => (a.group ?? 'actions') === 'actions').slice(0, 8)
+)
+const exploreResults = computed<PaletteAction[]>(() =>
+  filteredStatic.value.filter(a => a.group === 'explore').slice(0, 8)
+)
 
 function close() {
   open.value = false
@@ -125,7 +155,7 @@ function show() {
 }
 
 function move(delta: number) {
-  const total = actionResults.value.length + tutorialResults.value.length
+  const total = actionResults.value.length + exploreResults.value.length + tutorialResults.value.length
   if (!total) return
   activeIndex.value = (activeIndex.value + delta + total) % total
   scrollActiveIntoView()
@@ -140,11 +170,17 @@ function scrollActiveIntoView() {
 
 function runActive() {
   const i = activeIndex.value
-  if (i < actionResults.value.length) {
+  const aLen = actionResults.value.length
+  const eLen = exploreResults.value.length
+  if (i < aLen) {
     runItem(actionResults.value[i])
     return
   }
-  const tIndex = i - actionResults.value.length
+  if (i < aLen + eLen) {
+    runItem(exploreResults.value[i - aLen])
+    return
+  }
+  const tIndex = i - aLen - eLen
   const anchor = tutorialRefs.value[tIndex]
   if (anchor) {
     close()
