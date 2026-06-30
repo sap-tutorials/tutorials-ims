@@ -50,8 +50,7 @@ Today it returns `{ slug: sourceHash }` for every row in the ACTIVE manifest. Ad
 // (drift workflow, --verify-only) should not see them — otherwise the
 // daily drift report keeps re-reporting them as "missing locally" forever.
 //
-// status IS NULL preserves legacy data behavior — older rows that pre-
-// date the status column aren't soft-deleted, they're just unflagged.
+// See "Pre-deploy data check" below for the OR-NULL clause decision.
 ```
 
 Implementation shape: the existing SELECT joins `ContentFiles` ⨯ `ContentManifest`. Add a LEFT JOIN to `Tutorials` on `LOWER(slug)` (since [Tutorial slugs are lowercase canonical](../../../CLAUDE.md) — joins must lower-case both sides) and a `WHERE status != 'INACTIVE'` clause.
@@ -106,7 +105,13 @@ The `initiator` field is **not** in the body. Operator attribution is captured i
 | `Tutorials.redirectTo` is set | `redirected[]` | None — admin set up redirect deliberately; honor intent |
 | Otherwise | `purged[]` | `UPDATE Tutorials SET status='INACTIVE' WHERE ID = ?` |
 
-**Initiator persistence:** the endpoint receives the bearer token's identity as `req.user.id`, which for a CI caller is the technical SAP user that backs `CONTENT_API_KEY` — same value for every CI run. To preserve per-run attribution (so two CI runs in the same minute are distinguishable in audit), the endpoint writes a `PipelineLog` row at start-of-call with `stage='purge-orphans'` and `initiator` taken from the `x-initiator` request header (set by the CLI from `INITIATOR` env var, default `ci/$GITHUB_RUN_ID`). This mirrors how `/content/publish/commit` records initiator on `ContentManifest` and `PipelineLog` (see CLAUDE.md > "Content publishing").
+**Initiator persistence:** the endpoint receives the bearer token's identity as `req.user.id`, which for a CI caller is the technical SAP user that backs `CONTENT_API_KEY` — same value for every CI run. To preserve per-run attribution (so two CI runs in the same minute are distinguishable in audit), the endpoint wraps its work in [`logPipeline(...)`](../../../srv/lib/pipeline-log.js#L55) — the existing helper that handles start+end+error symmetrically. Arguments:
+
+- `pipelineType = 'GITHUB_DISPATCH'` (the existing enum value closest to "CI-driven workflow_dispatch"; the enum is closed at [db/schema.cds:519-533](../../../db/schema.cds#L519-L533) so this avoids a schema change)
+- `initiator = req.headers['x-initiator']` (set by the CLI from `INITIATOR` env var, default `ci/$GITHUB_RUN_ID`)
+- `metadata = { stage: 'purge-orphans', slugCount, runId }` — `stage` is the discriminator the rollback queries use (via `JSON_VALUE(metadata, '$.stage')`) because `pipelineType` is over-broad
+
+This mirrors how `/content/publish/commit` records initiator on `ContentManifest.initiator` and `PipelineLog` ([srv/lib/content-publish-session.js:62-75](../../../srv/lib/content-publish-session.js#L62-L75) is the canonical example).
 
 **Change-tracking interaction:** `Tutorials` is `@changelog`-tracked through AdminService ([db/change-tracking.cds:37](../../../db/change-tracking.cds#L37)). Each `UPDATE Tutorials SET status='INACTIVE'` writes a row to `sap.changelog.Changes` with `entity = 'AdminService.Tutorials'` (the projection name, per [db/views.cds:373-378](../../../db/views.cds#L373-L378)), `attribute = 'status'`, `valueChangedTo = 'INACTIVE'`, `createdAt = <ts>`, `createdBy = <ci-technical-user>`. The `createdBy` is the technical user, NOT the `initiator` string — for run-level attribution, join `Changes` against `PipelineLog` on `createdAt`-window + `stage='purge-orphans'`. See the Rollback section for the canonical join.
 
@@ -114,7 +119,7 @@ The `initiator` field is **not** in the body. Operator attribution is captured i
 
 **Server-side cap (defense in depth):** reject 400 if `slugs.length > 100`. The client should already have refused at the absolute cap (50 by default); this protects against a future CLI version loosening its own cap. See "Cap design" under CLI mode for the relationship between the percent cap, the absolute cap, and this server ceiling.
 
-**Returned `version`:** the current ACTIVE `ContentManifest.version` at the time of the call. The manifest is **not** bumped by purge — only `Tutorials.status` flips. Included so the operator knows which publish state the purge ran against.
+**Returned `version`:** the current ACTIVE `ContentManifest.version` at the time of the call. The manifest is **not** bumped by purge — only `Tutorials.status` flips. Included so the operator knows which publish state the purge ran against. The version may be SUPERSEDED by a concurrent publish by the time the operator reads it; the purge's effect on `Tutorials.status` is independent of manifest version per the concurrent-publish race entry in the Risks table.
 
 ### 3. CLI mode + workflow input
 
@@ -217,8 +222,8 @@ If an operator deliberately raises `--purge-cap-abs` above 100 (e.g. after a kno
 
 ```text
 [purge-orphans] Fetched 1396 server slugs, 1374 local slugs
-[purge-orphans] Computed 22 orphans (1.6% of server)
-[purge-orphans] Cap check: 1.6% < 5% pct AND 22 < 50 abs → passes
+[purge-orphans] Computed 22 orphans (1.6% of server — informational)
+[purge-orphans] Cap check: 22 < 50 abs → passes
 [purge-orphans] Sample orphans: appgyver-configure-camera,
                   appgyver-connect-publicapi, btp-ea-onboard-04-subm,
                   codejam-0-prerequisites, ... (+18 more)
@@ -246,7 +251,7 @@ Kept in `publish-content.ts` (not a new script) because:
 
 ```yaml
 purge-orphans:
-  description: 'After publish, soft-delete tutorials no longer present in any upstream repo. CI-only, ~5%/50-slug safety cap.'
+  description: 'After publish, soft-delete tutorials no longer present in any upstream repo. CI-only, 50-slug safety cap (override via PURGE_CAP_ABS env).'
   required: false
   type: boolean
   default: false
@@ -373,19 +378,23 @@ If a Phase 2 dispatch mis-purges:
 2. **Bulk (>5 rows):** one-off `UPDATE Tutorials SET status='ACTIVE' WHERE ID IN (...)` via `cds bind --exec` against DEV — same shape as the existing `setup-dev-data.cjs` script.
 3. **Reconstructing the "before" set:** the `@cap-js/change-tracking` table records every `status` flip. Two queries — pick by what you have:
 
-   **(a) If you have the CI `run_id`** — join `Changes` against `PipelineLog` on the time window, filtered by `stage='purge-orphans'` and the matching initiator:
+   **(a) If you have the CI `run_id`** — join `Changes` against `PipelineLog` on the time window, filtered by the stage discriminator in `metadata` and the matching initiator:
 
    ```sql
    SELECT c.entityKey, c.createdAt
      FROM "sap.changelog.Changes" AS c
      INNER JOIN com_sap_developers_ims_pipelinelog AS p
-       ON c.createdAt BETWEEN p.startedAt AND p.finishedAt
+       ON c.createdAt >= p.startedAt
+      AND c.createdAt <= COALESCE(p.finishedAt, CURRENT_TIMESTAMP)
     WHERE c.entity     = 'AdminService.Tutorials'
       AND c.attribute  = 'status'
       AND c.valueChangedTo = 'INACTIVE'
-      AND p.stage      = 'purge-orphans'
+      AND p.pipelineType = 'GITHUB_DISPATCH'
+      AND JSON_VALUE(p.metadata, '$.stage') = 'purge-orphans'
       AND p.initiator  = 'ci/<run_id>';
    ```
+
+   The `COALESCE(finishedAt, CURRENT_TIMESTAMP)` guards against an in-flight or crashed run where `finishedAt` is still NULL — the join still produces a usable row instead of all-NULLs filtering everything out. `JSON_VALUE` is the HANA function for extracting JSON fields; on SQLite use `json_extract(metadata, '$.stage')`.
 
    **(b) Time-window only** (no PipelineLog dependency):
 
@@ -401,6 +410,8 @@ If a Phase 2 dispatch mis-purges:
    The `entity` filter is `'AdminService.Tutorials'` (the projection name) — `@cap-js/change-tracking` records the source service projection on each row ([db/views.cds:371-378](../../../db/views.cds#L371-L378) is the working precedent). The schema uses `createdAt`/`createdBy`, NOT `modifiedAt` ([node_modules/@cap-js/change-tracking/index.cds:207](../../../node_modules/@cap-js/change-tracking/index.cds#L207)).
 
 4. **Re-activate:** feed the `entityKey` list from query (a) or (b) into the bulk UPDATE in step 2.
+
+> **When reconstructing what happened:** start with `PipelineLog.metadata` for the run-level audit (who, when, why, how many slugs). Use the `version` returned by the purge response only if you need to correlate the purge with a specific publish snapshot for diff purposes — the version is informational, not authoritative.
 
 ## Risks & mitigations
 
