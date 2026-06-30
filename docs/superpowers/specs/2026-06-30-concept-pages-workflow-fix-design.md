@@ -47,7 +47,7 @@ Insert one new step in [.github/workflows/rebuild-content.yml](../../../.github/
       - name: Fetch published concepts → hugo/content/concepts/
         if: ${{ steps.mode.outputs.effective_mode != 'slug-targeted' }}
         env:
-          CAP_BASE_URL: ${{ secrets.CAP_BASE_URL }}
+          CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}
         run: npm run fetch-concepts
 ```
 
@@ -55,7 +55,7 @@ Insert one new step in [.github/workflows/rebuild-content.yml](../../../.github/
 
 **`if:` rationale:** `slug-targeted` rebuilds are for one-tutorial hotfixes; they bypass catalog-rebuild paths entirely for wall-clock optimization. Concept landing pages are catalog-scale content, not slug-targeted content. Skipping on slug-targeted matches the pattern fetch-advocates already uses.
 
-**Env rationale:** `fetch-concepts.ts` reads `CAP_BASE_URL` (defaults to `http://localhost:4004`). The workflow already has `CAP_BASE_URL` available as a repo secret (used by other steps like `validate-tutorials`). Step-level `env:` propagates it correctly.
+**Env rationale:** `fetch-concepts.ts` reads `CAP_BASE_URL` (defaults to `http://localhost:4004`). The workflow's `srv` step (lines 161-163) sets `srv_url` based on the target environment (`secrets.CAP_SRV_URL_DEV` for DEV, `_QA` for QA, `_PROD` for PROD). Other steps consume it via `${{ steps.srv.outputs.srv_url }}` (lines 230, 257, 317). The new step uses the same expression — explicit, environment-aware, matches established pattern.
 
 ### Why no other code changes
 
@@ -129,11 +129,11 @@ Spot-check 2-3 of the 10 slugs (from `SELECT slug FROM com_sap_developers_ims_Co
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| `CAP_BASE_URL` secret not actually available to this step | Med | Med | Repo secret is already used by other workflow steps (`validate-tutorials`, etc.). Step-level `env:` makes the dependency explicit. If somehow missing, `fetch-concepts.ts` falls back to `localhost:4004` and fails noisily with a 404 — easy to diagnose in one log line. |
+| `CAP_BASE_URL` env var not propagated to this step | Low | Med | Use `${{ steps.srv.outputs.srv_url }}` per the established pattern (lines 230, 257, 317 of the existing workflow). The `srv` step at line 156-163 sets `srv_url` from `secrets.CAP_SRV_URL_DEV/QA/PROD` based on the target environment. If the expression is wrong or `srv` step output is empty, `fetch-concepts.ts` falls back to `localhost:4004` and fails noisily with a network error — diagnosable in one log line. |
 | Hugo build fails on the new `concepts/<slug>.md` files (e.g., layout regression) | Low | Med | The layout `hugo/layouts/concepts/single.html` is shipped + tested by #685's hybrid tests. The per-concept template path is exercised at every Hugo build that finds matching content. If it fails, the workflow aborts cleanly and we iterate. |
 | 10 concepts produce 10 `concept-<slug>` ContentFiles rows that collide with an existing slug | Low | Low | The `concept-` prefix is namespaced specifically to avoid tutorial-slug collisions (per [publish-content.ts:92-98](../../../scripts/publish-content.ts#L92) comments). No collision risk. |
 | Workflow run conflicts with concurrent CI publish | Low | Low | `rebuild-content.yml` uses job-level concurrency control. Concurrent runs queue, don't conflict. |
-| The `gh secret` named `CAP_BASE_URL` doesn't exist in the repo | Low | Med | Verified during plan-time exploration (other steps reference it). If absent, swap to a literal value in the workflow env block — DEV URL is non-sensitive. |
+| The `gh secret` named `CAP_SRV_URL_DEV` (or QA/PROD) doesn't exist in the repo | Low | Med | Verified during plan-time exploration — lines 161-163 of the existing workflow already use these secrets. If somehow absent, swap to a literal value in the workflow env block — DEV URL is non-sensitive. |
 
 ### Rollback
 
