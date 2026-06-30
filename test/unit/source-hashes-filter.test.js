@@ -19,6 +19,7 @@ describe('GET /content/source-hashes — INACTIVE filter', () => {
   const ts = Date.now();
   const activeSlug = `test-active-${ts}`;
   const inactiveSlug = `test-inactive-${ts}`;
+  const mixedCaseSlug = `test-mixed-case-${ts}`;
 
   beforeAll(async () => {
     const { ContentFiles, ContentManifest, Tutorials } = cds.entities(namespace);
@@ -32,10 +33,12 @@ describe('GET /content/source-hashes — INACTIVE filter', () => {
     await INSERT.into(ContentFiles).entries([
       { slug: activeSlug,   version: testManifestVersion, sourceHash: 'aaa', content: Buffer.from('x'), contentHash: 'h1', sizeBytes: 1, compressedBytes: 1, mimeType: 'text/html' },
       { slug: inactiveSlug, version: testManifestVersion, sourceHash: 'bbb', content: Buffer.from('y'), contentHash: 'h2', sizeBytes: 1, compressedBytes: 1, mimeType: 'text/html' },
+      { slug: mixedCaseSlug, version: testManifestVersion, sourceHash: 'ccc', content: Buffer.from('z'), contentHash: 'h3', sizeBytes: 1, compressedBytes: 1, mimeType: 'text/html' },
     ]);
     await INSERT.into(Tutorials).entries([
       { slug: activeSlug,   status: 'ACTIVE',   title: 'Active test' },
       { slug: inactiveSlug, status: 'INACTIVE', title: 'Inactive test' },
+      { slug: `Test-Mixed-Case-${ts}`, status: 'INACTIVE', title: 'Mixed-case test' },
     ]);
   });
 
@@ -43,7 +46,7 @@ describe('GET /content/source-hashes — INACTIVE filter', () => {
     const { ContentFiles, ContentManifest, Tutorials } = cds.entities(namespace);
     await DELETE.from(ContentFiles).where({ version: testManifestVersion });
     await DELETE.from(ContentManifest).where({ version: testManifestVersion });
-    await DELETE.from(Tutorials).where({ slug: { in: [activeSlug, inactiveSlug] } });
+    await DELETE.from(Tutorials).where({ slug: { in: [activeSlug, inactiveSlug, `Test-Mixed-Case-${ts}`] } });
   });
 
   it('includes ACTIVE-status slug in the response map', async () => {
@@ -56,5 +59,11 @@ describe('GET /content/source-hashes — INACTIVE filter', () => {
     const res = await project.get('/content/source-hashes');
     expect(res.status).toBe(200);
     expect(res.data[inactiveSlug]).toBeUndefined();
+  });
+
+  it('excludes mixed-case-slug INACTIVE row (locks in LOWER() join)', async () => {
+    const res = await project.get('/content/source-hashes');
+    expect(res.status).toBe(200);
+    expect(res.data[mixedCaseSlug]).toBeUndefined();
   });
 });

@@ -1104,8 +1104,6 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
   // will heal naturally on the next full republish.
 
   async function sourceHashesHandler(req, res) {
-    const { ContentFiles } = cds.entities(namespace);
-
     try {
       const activeVersion = await getActiveVersion();
       if (activeVersion === null) {
