@@ -331,6 +331,12 @@
       "csrfProtection": false
     },
     {
+      "source": "^/concepts/?$",
+      "target": "/concepts/index.html",
+      "localDir": "static",
+      "authenticationType": "none"
+    },
+    {
       "source": "^/concepts/(.*)$",
       "target": "/content/concepts/$1",
       "destination": "srv-api",
