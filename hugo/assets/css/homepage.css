@@ -291,6 +291,39 @@
 .verb-shelf__list li strong { display: block; color: var(--sapLinkColor, #0070f3); font-weight: 600; margin-bottom: 0.25rem; }
 .verb-shelf__list li p { font-size: 0.85rem; color: var(--sapContent_LabelColor, #6a6d70); margin: 0.25rem 0 0; }
 
+/* #794 — The link-explainer-popover Vue island (hugo-apps/src/homepage-explainers/
+ * LinkExplainerPopover.vue) renders an .hp-popover-anchor wrapper containing
+ * the card link (<a class="hp-popover-link">) followed by a sibling ⓘ button
+ * (<button class="hp-popover-icon">). The component's default styling makes
+ * the anchor `display: inline` so multi-line link text wraps naturally in
+ * the directory-footer surface (popover.css comment #759 hotfix).
+ *
+ * On the verb-page, the verb-shelf__list li a rule above makes the inner <a>
+ * `display: block` to form the card chrome. An inline-block sibling button
+ * after a block-level <a> wraps to the next line → the ⓘ icon visually
+ * dangles below the card.
+ *
+ * Fix: scope the popover-anchor to `display: block` and anchor-position the
+ * ⓘ in the card's top-right corner ON THIS SURFACE ONLY. The directory-footer
+ * surface keeps the inline icon flow. */
+.verb-shelf__list .hp-popover-anchor {
+  display: block;
+}
+/* Reserve room for the absolute-positioned ⓘ at top-right so long titles
+ * don't run into the icon. Applied to every card on the verb page; harmless
+ * (small extra right-whitespace) on the few cards whose entry has no
+ * explainer content and therefore no rendered icon. */
+.verb-shelf__list .hp-popover-link {
+  padding-right: 2rem;
+}
+.verb-shelf__list .hp-popover-icon {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  margin-left: 0;
+  z-index: 1;
+}
+
 .badge { display: inline-block; padding: 0.125rem 0.5rem; border-radius: 999px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
 .badge--new          { background: #16a34a; color: white; }
 .badge--updated      { background: #2563eb; color: white; }
