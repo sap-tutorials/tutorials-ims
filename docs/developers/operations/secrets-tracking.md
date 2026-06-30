@@ -27,6 +27,14 @@ Two paths converge on the same DB row:
 2. Run: `npx cds bind --exec -- node scripts/seed-secrets.cjs`
 3. The script is idempotent on `key` — existing rows are not touched.
 
+**Path C — updating metadata for an EXISTING row** (e.g. a runtime contract change makes the description stale, [#796](https://github.com/sap-tutorials/tutorials-ims/issues/796)):
+
+1. Edit the entry in `scripts/seed-secrets.cjs`.
+2. Run `npx cds bind --exec -- node scripts/seed-secrets.cjs` (no flags) — the dry-run output surfaces metadata drift between this file and the DB row.
+3. Re-run with `--commit --sync-metadata --keys KEY1[,KEY2]` to overwrite the listed rows' description / kind / rotationOwner / rotationDocsUrl. **Values + lastRotatedAt + expiresAt are NEVER touched.** Use `--keys` to scope the patch and avoid trampling unrelated admin-UI edits on other rows.
+
+Run against each environment (`cf target -s dev`, `cf target -s qa`, `cf target -s prod`) followed by `npx cds bind` to re-bind, then the seed-secrets command above.
+
 ## How rotation owners receive warnings
 
 - **Bell icon notifications popover** in `/admin-ui/`. Live query on every open. Shows secrets with `daysRemaining ≤ 14`.
