@@ -30,7 +30,7 @@
       {{ range $pages }}
       <li class="concepts-index__item">
         <a class="concepts-index__link" href="{{ .RelPermalink }}">
-          <span class="concepts-index__name">{{ .Params.name | default .Title }}</span>
+          <span class="concepts-index__name">{{ .Title | default .Params.name }}</span>
           {{ with .Params.description }}<span class="concepts-index__description">{{ . | truncate 140 }}</span>{{ end }}
         </a>
       </li>

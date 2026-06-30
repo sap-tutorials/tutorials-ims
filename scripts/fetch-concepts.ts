@@ -269,7 +269,15 @@ export function frontmatter(c: ConceptPayload): string {
   const parts = [
     '---',
     `slug: ${yamlEscape(c.slug)}`,
-    `name: ${yamlEscape(c.name)}`,
+    // [#813] Emit `title:` so Hugo's .Title is populated. Hugo's
+    // site-wide head partial (<title>, og:title, twitter:title) reads
+    // .Title — without this, every concept page rendered with an empty
+    // <title>, hurting SEO and breaking social shares.
+    // The concept-specific layout at layouts/concepts/single.html now
+    // reads .Title for the H1 too; list.html uses
+    // `.Title | default .Params.name` so both old (pre-#813) and new
+    // frontmatter render correctly during the rollout.
+    `title: ${yamlEscape(c.name)}`,
     `description: ${yamlEscape(c.description)}`,
     `teaches:${refs(c.teaches)}`,
     `requires:${refs(c.requires)}`,
