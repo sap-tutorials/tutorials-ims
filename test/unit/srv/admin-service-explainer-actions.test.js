@@ -140,3 +140,79 @@ describe('AdminService.generate*Explainers — action handlers (#759 PR 3a)', ()
     });
   });
 });
+
+describe('AdminService — bulk Mark-reviewed actions (issue #790)', () => {
+  const project = cds.test('serve', '--project', '.', '--in-memory');
+
+  beforeAll(async () => { await project; });
+
+  beforeEach(async () => {
+    const db = await cds.connect.to('db');
+    // Wipe before each test so our explicit fixture is the only state.
+    await db.run(DELETE.from('com.sap.developers.ims.VerbDefinitions'));
+    await db.run(DELETE.from('com.sap.developers.ims.ShelfDefinitions'));
+    await db.run(DELETE.from('com.sap.developers.ims.HomepageShelves'));
+    // Seed three VerbDefinitions rows: one BLANK, one AI_SEEDED, one REVIEWED.
+    await db.run(INSERT.into('com.sap.developers.ims.VerbDefinitions').entries([
+      { ID: '11111111-1111-1111-1111-111111111111', verbKey: 'LEARN',     label: 'L', authoringStatus: 'BLANK'     },
+      { ID: '22222222-2222-2222-2222-222222222222', verbKey: 'BUILD',     label: 'B', authoringStatus: 'AI_SEEDED' },
+      { ID: '33333333-3333-3333-3333-333333333333', verbKey: 'INTEGRATE', label: 'I', authoringStatus: 'REVIEWED'  },
+    ]));
+  });
+
+  it('flips only AI_SEEDED rows to REVIEWED, skipping BLANK and REVIEWED', async () => {
+    const db = await cds.connect.to('db');
+    const res = await project.post('/admin/bulkMarkVerbExplainerReviewed', {
+      ids: [
+        '11111111-1111-1111-1111-111111111111',
+        '22222222-2222-2222-2222-222222222222',
+        '33333333-3333-3333-3333-333333333333',
+      ],
+    }, ADMIN_AUTH);
+    expect(res.status).toBe(200);
+    expect(res.data.processed).toBe(1);
+    expect(res.data.skipped).toBe(2);
+    expect(res.data.cost).toBe('$0.00');
+
+    const rows = await db.run(SELECT.from('com.sap.developers.ims.VerbDefinitions').orderBy('verbKey'));
+    const status = Object.fromEntries(rows.map(r => [r.verbKey, r.authoringStatus]));
+    expect(status).toEqual({ BUILD: 'REVIEWED', INTEGRATE: 'REVIEWED', LEARN: 'BLANK' });
+  });
+
+  it('returns processed=0 when ids array is empty', async () => {
+    const res = await project.post('/admin/bulkMarkVerbExplainerReviewed', { ids: [] }, ADMIN_AUTH);
+    expect(res.data.processed).toBe(0);
+    expect(res.data.skipped).toBe(0);
+  });
+
+  it('counts unknown UUIDs as skipped (rows not found in DB)', async () => {
+    const res = await project.post('/admin/bulkMarkVerbExplainerReviewed', {
+      ids: ['ffffffff-ffff-ffff-ffff-ffffffffffff'],
+    }, ADMIN_AUTH);
+    expect(res.data.processed).toBe(0);
+    expect(res.data.skipped).toBe(1);
+  });
+
+  it('routes to ShelfDefinitions for bulkMarkShelfExplainerReviewed', async () => {
+    const db = await cds.connect.to('db');
+    await db.run(INSERT.into('com.sap.developers.ims.ShelfDefinitions').entries([
+      { ID: '44444444-4444-4444-4444-444444444444', shelfKey: 'START_HERE', label: 'S', authoringStatus: 'AI_SEEDED' },
+    ]));
+    const res = await project.post('/admin/bulkMarkShelfExplainerReviewed', {
+      ids: ['44444444-4444-4444-4444-444444444444'],
+    }, ADMIN_AUTH);
+    expect(res.data.processed).toBe(1);
+  });
+
+  it('routes to HomepageShelves for bulkMarkShelfEntryExplainerReviewed', async () => {
+    const db = await cds.connect.to('db');
+    const ID = '55555555-5555-5555-5555-555555555555';
+    await db.run(INSERT.into('com.sap.developers.ims.HomepageShelves').entries([
+      { ID, verb: 'LEARN', shelf: 'START_HERE',
+        title: 'Bulk-790 unit', url: 'https://example.com/790-unit',
+        sortOrder: 1, authoringStatus: 'AI_SEEDED' },
+    ]));
+    const res = await project.post('/admin/bulkMarkShelfEntryExplainerReviewed', { ids: [ID] }, ADMIN_AUTH);
+    expect(res.data.processed).toBe(1);
+  });
+});

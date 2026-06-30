@@ -1746,6 +1746,46 @@ export default class AdminService extends cds.ApplicationService {
     this.on('markShelfEntryExplainerReviewed', (req) =>
       runMarkReviewed({ entityName: 'com.sap.developers.ims.HomepageShelves', id: req.data.id, req }));
 
+    // (#790) Bulk Mark-reviewed — flip every AI_SEEDED row in `ids` to
+    // REVIEWED in one round-trip. BLANK rows are skipped (no content to
+    // review yet); REVIEWED rows are skipped (no-op); IDs not present in
+    // the DB are also counted as skipped (the SELECT silently drops them,
+    // so `ids.length - aiSeededIds.length` rolls them into one bucket
+    // with BLANK + REVIEWED). Callers see a single "skipped" total that
+    // matches the issue's toast wording. Same authoringStatus FieldControl
+    // bypass as runMarkReviewed.
+    async function runBulkMarkReviewed({ entityName, ids }) {
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return { processed: 0, skipped: 0, cost: '$0.00' };
+      }
+      const db = await cds.connect.to('db');
+      // SELECT current statuses to compute processed vs skipped accurately.
+      // A blind UPDATE would only return affectedRows (driver-dependent on
+      // HANA via @sap/hana-client) and we'd lose the BLANK/REVIEWED breakdown.
+      const rows = await db.run(
+        SELECT.from(entityName).columns('ID', 'authoringStatus').where({ ID: { in: ids } })
+      );
+      const aiSeededIds = rows.filter(r => r.authoringStatus === 'AI_SEEDED').map(r => r.ID);
+      if (aiSeededIds.length === 0) {
+        return { processed: 0, skipped: ids.length, cost: '$0.00' };
+      }
+      await db.run(
+        UPDATE(entityName).set({ authoringStatus: 'REVIEWED' }).where({ ID: { in: aiSeededIds } })
+      );
+      return {
+        processed: aiSeededIds.length,
+        skipped: ids.length - aiSeededIds.length,
+        cost: '$0.00',
+      };
+    }
+
+    this.on('bulkMarkVerbExplainerReviewed', (req) =>
+      runBulkMarkReviewed({ entityName: 'com.sap.developers.ims.VerbDefinitions', ids: req.data.ids }));
+    this.on('bulkMarkShelfExplainerReviewed', (req) =>
+      runBulkMarkReviewed({ entityName: 'com.sap.developers.ims.ShelfDefinitions', ids: req.data.ids }));
+    this.on('bulkMarkShelfEntryExplainerReviewed', (req) =>
+      runBulkMarkReviewed({ entityName: 'com.sap.developers.ims.HomepageShelves', ids: req.data.ids }));
+
     // (#759 hotfix) Bound versions of `markReviewed` + `regenerate` on each
     // explainer entity. Fiori Elements V4 won't render an OP-header action
     // for an unbound service-level action without forcing a parameter dialog

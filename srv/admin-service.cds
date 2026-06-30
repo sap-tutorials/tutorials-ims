@@ -612,6 +612,16 @@ service AdminService {
   action markShelfExplainerReviewed      (id : String) returns ExplainerActionResult;
   action markShelfEntryExplainerReviewed (id : String) returns ExplainerActionResult;
 
+  // (#790) Bulk Mark-reviewed actions — flip every AI_SEEDED row in `ids`
+  // to REVIEWED in one round-trip. BLANK and REVIEWED rows are filtered
+  // out server-side (see srv/admin-service.js:runBulkMarkReviewed). No
+  // confirm dialog on the UI side because the flip is reversible by
+  // re-generating. Used by the multi-select LineItem action in
+  // app/admin/{verb,shelf,homepage}/webapp/manifest.json.
+  action bulkMarkVerbExplainerReviewed(ids       : array of String) returns ExplainerActionResult;
+  action bulkMarkShelfExplainerReviewed(ids      : array of String) returns ExplainerActionResult;
+  action bulkMarkShelfEntryExplainerReviewed(ids : array of String) returns ExplainerActionResult;
+
   // PR 6 — Pilot enablement. Read-only support surface; admins read all rows
   // (no per-row filter — inherits Admin gate from the service level). UI annotations
   // live in app/admin-annotations.cds (Task 8). Edit-on-behalf is out of scope for v1.

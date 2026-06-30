@@ -32,6 +32,7 @@ All three surfaces gracefully degrade to the existing label or description when 
 | **Fetcher** | `scripts/fetch-verb-definitions.ts` → `hugo/data/verb_definitions.json` | Build pipeline |
 | **Fetcher** | `scripts/fetch-shelf-definitions.ts` → `hugo/data/shelf_definitions.json` | Build pipeline |
 | **Admin actions** | `AdminService.generateVerbExplainers`, `generateShelfExplainers`, `generateShelfEntryExplainers` | [srv/admin-service.cds](../../../srv/admin-service.cds), [srv/admin-service.js](../../../srv/admin-service.js) |
+| **Bulk Mark-reviewed** | `AdminService.bulkMarkVerbExplainerReviewed`, `bulkMarkShelfExplainerReviewed`, `bulkMarkShelfEntryExplainerReviewed` (#790) | [srv/admin-service.cds](../../../srv/admin-service.cds), [srv/admin-service.js](../../../srv/admin-service.js) |
 | **AI orchestrator** | `srv/lib/explainer-generator.js` (SAP AI Core + structured prompts) | [srv/lib/explainer-generator.js](../../../srv/lib/explainer-generator.js) |
 | **System prompts** | `srv/lib/prompts/explainer-{verb,shelf,shelf-entry}.txt` | [srv/lib/prompts/](../../../srv/lib/prompts/) |
 | **Vue islands** | `verb-flip-tile`, `link-explainer-popover` | [hugo-apps/src/homepage-explainers/](../../../hugo-apps/src/homepage-explainers/) |
@@ -204,6 +205,18 @@ The existing Homepage Object Page app gains an **Explainer** facet (per shelf-en
 - **Regenerate this entry** — per-row action on the Object Page (Object Page header level — appears on a single shelf-entry's Object Page).
 
 The admin **shell** ([app/admin-shell/](../../../app/admin-shell/)) groups the three apps under a new **Explainers** side-nav heading containing **Verb Definitions** / **Shelf Definitions** / **Homepage Shelves**.
+
+### Bulk Mark-reviewed actions (#790)
+
+For clearing a backlog of `AI_SEEDED` rows after a bulk regeneration, the ListReport of all three explainer apps exposes a **Mark selected as reviewed** multi-select action (`requiresSelection: true`). It calls one of three unbound `AdminService` actions:
+
+| Action | Entity |
+|---|---|
+| `bulkMarkVerbExplainerReviewed`       | `VerbDefinitions`  |
+| `bulkMarkShelfExplainerReviewed`      | `ShelfDefinitions` |
+| `bulkMarkShelfEntryExplainerReviewed` | `HomepageShelves`  |
+
+Each accepts `{ ids: string[] }` and returns `{ processed, skipped, cost: "$0.00" }`. The server-side filter in [`srv/admin-service.js`](../../../srv/admin-service.js) (`runBulkMarkReviewed`) selects the requested IDs, keeps only the rows with `authoringStatus = 'AI_SEEDED'`, and updates them to `'REVIEWED'` in a single `UPDATE … WHERE ID IN (…)`. `BLANK` rows (no content to review yet), already-`REVIEWED` rows (no-op), and IDs not present in the DB all roll into one `skipped` count. No confirm dialog — the flip is reversible via per-row Regenerate.
 
 ### Cost surfacing
 

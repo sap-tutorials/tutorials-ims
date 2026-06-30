@@ -77,6 +77,13 @@
                       "enabled": true,
                       "text": "Regenerate selected with AI",
                       "requiresSelection": true
+                    },
+                    "markReviewedSelected": {
+                      "press": "sap.tutorials.admin.shelfDefinitions.ext.ActionsController.onMarkReviewedSelected",
+                      "visible": true,
+                      "enabled": true,
+                      "text": "Mark selected as reviewed",
+                      "requiresSelection": true
                     }
                   }
                 }
