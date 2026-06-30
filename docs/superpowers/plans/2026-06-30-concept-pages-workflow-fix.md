@@ -51,10 +51,10 @@ grep -nE "name: Fetch advocates|name: Lint tutorial markdown" .github/workflows/
 Expected output:
 ```
 254:      - name: Fetch advocates
-266:      - name: Lint tutorial markdown
+264:      - name: Lint tutorial markdown
 ```
 
-The new step goes after line 258 (the end of `Fetch advocates`'s `env:` block) and before line 260 (the comment block for `Lint tutorial markdown`).
+The `Fetch advocates` step runs from line 254 through line 257 (`CAP_BASE_URL: ...`). Line 258 is a blank separator. Lines 259-263 are the comment block for `Lint tutorial markdown`. The new step goes between line 257 (end of `Fetch advocates`'s `env:` block) and line 258 — i.e., the new step's leading blank line REPLACES the existing blank-line separator at 258, and the existing comment block stays at 259+ but shifts down.
 
 - [ ] **Step 2: Read the existing fetch-advocates step shape (to mirror it correctly)**
 
@@ -105,27 +105,23 @@ Immediately AFTER it (between the closing of `env:` for `Fetch advocates` and th
 - The `env: CAP_BASE_URL: ${{ steps.srv.outputs.srv_url }}` expression is verbatim from the fetch-advocates step at line 258, the validate-tutorials step at line 230, and the publish-content step at line 317. Established pattern.
 - One blank line BEFORE the new step (separating it from `Fetch advocates`). No blank line between the new step and the next comment block — match the existing density.
 
-- [ ] **Step 4: Verify the YAML parses**
+- [ ] **Step 4: Verify the YAML parses (LOCAL file, not the remote fetched copy)**
 
-```bash
-gh workflow view .github/workflows/rebuild-content.yml --yaml > /dev/null && echo "valid"
-```
+**Important:** `gh workflow view rebuild-content.yml --yaml` fetches the YAML from the GitHub remote, NOT the local edited copy. It cannot catch local indentation errors. Use the local YAML parser instead.
 
-Expected: `valid`. If `gh workflow view` errors, check the indentation (YAML is sensitive to spaces vs. tabs — match the surrounding 6-space indent).
-
-If `gh workflow view` is unavailable (e.g., not logged in), fall back to:
-
-```bash
-node -e "const yaml = require('js-yaml'); const fs = require('fs'); try { yaml.load(fs.readFileSync('.github/workflows/rebuild-content.yml', 'utf8')); console.log('valid'); } catch (e) { console.error('INVALID:', e.message); process.exit(1); }"
-```
-
-If `js-yaml` isn't installed, simplest fallback:
+Try Python first (almost always available on Windows + macOS + Linux):
 
 ```bash
 python -c "import yaml; yaml.safe_load(open('.github/workflows/rebuild-content.yml'))" && echo "valid"
 ```
 
-Any of the three commands should output `valid`. If none do, recheck indentation.
+If Python isn't on PATH, fall back to Node + js-yaml (already a transitive dependency):
+
+```bash
+node -e "const yaml = require('js-yaml'); const fs = require('fs'); try { yaml.load(fs.readFileSync('.github/workflows/rebuild-content.yml', 'utf8')); console.log('valid'); } catch (e) { console.error('INVALID:', e.message); process.exit(1); }"
+```
+
+Either command should output `valid`. If neither does, recheck indentation — YAML is 6-space-indent-sensitive at the step level.
 
 - [ ] **Step 5: Confirm the diff scope**
 
@@ -426,7 +422,7 @@ Future admin Publish/Unpublish clicks in `/admin-ui/#concepts-display` will now 
 
 # Acceptance checklist (before merging the PR)
 
-- [ ] `gh workflow view .github/workflows/rebuild-content.yml --yaml > /dev/null` returns no error
+- [ ] `python -c "import yaml; yaml.safe_load(open('.github/workflows/rebuild-content.yml'))" && echo "valid"` returns `valid` (validates the LOCAL file; `gh workflow view --yaml` does not)
 - [ ] `git diff --stat .github/workflows/rebuild-content.yml` shows insertions only, no deletions
 - [ ] Commit message includes `feat(kg):` prefix and references #685
 - [ ] No `.claude/settings.local.json` drift in the commit list
