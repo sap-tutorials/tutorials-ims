@@ -3,6 +3,7 @@
   xmlns:mvc="sap.ui.core.mvc"
   xmlns="sap.m"
   xmlns:l="sap.ui.layout"
+  xmlns:core="sap.ui.core"
   xmlns:suite="sap.suite.ui.microchart">
   <Page title="Board" enableScrolling="true">
     <content>
@@ -79,11 +80,20 @@
            jobControls>/jobs; the Run now button invokes runJob(jobName) and
            optimistically flips isRunning for the busy spinner. -->
       <Panel headerText="Cron health" expandable="true" expanded="true" class="sapUiSmallMargin">
+        <!-- #750: 24-hour SVG timeline ribbon. Built client-side in
+             Board.controller.js _loadJobControls() via CronTimelineHelpers.
+             sanitizeContent="false" because the SVG is hand-emitted by our
+             own pure helper (no untrusted content). -->
+        <core:HTML content="{jobControls>/timelineHtml}" sanitizeContent="false" />
         <Table id="cronHealthTable" items="{jobControls>/jobs}" growing="true" growingThreshold="40">
           <columns>
             <Column><Text text="Job" /></Column>
             <Column><Text text="Schedule" /></Column>
             <Column><Text text="Next run" /></Column>
+            <!-- #750: forward-visibility column. Renders the first 3 entries
+                 of nextRunsIso stacked vertically; missing slots render as
+                 empty strings (no layout shift). -->
+            <Column><Text text="Next 3 runs" /></Column>
             <Column><Text text="Last success" /></Column>
             <Column><Text text="Last error" /></Column>
             <Column hAlign="End"><Text text="Trigger" /></Column>
@@ -94,6 +104,13 @@
                 <Text text="{jobControls>jobName}" tooltip="{jobControls>description}" />
                 <Text text="{jobControls>schedule}" class="kg-mono" />
                 <Text text="{path: 'jobControls>nextRunIso', formatter: '.formatNextRun'}" />
+                <!-- #750: three stacked relative-time lines. Missing slots render
+                     empty (no layout shift). Formatter handles undefined safely. -->
+                <VBox>
+                  <Text text="{path: 'jobControls>nextRunsIso/0', formatter: '.formatNextRun'}" />
+                  <Text text="{path: 'jobControls>nextRunsIso/1', formatter: '.formatNextRun'}" />
+                  <Text text="{path: 'jobControls>nextRunsIso/2', formatter: '.formatNextRun'}" />
+                </VBox>
                 <Text text="{path: 'jobControls>lastSuccessAt', formatter: '.formatRelativeTime'}" />
                 <Text text="{jobControls>lastErrorMessage}" tooltip="{jobControls>lastErrorMessage}" />
                 <Button text="Run now" type="Emphasized" press=".onRunJob"
