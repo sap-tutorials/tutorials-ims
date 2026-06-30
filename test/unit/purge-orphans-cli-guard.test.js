@@ -1,6 +1,13 @@
 /**
- * Tests for the --purge-orphans flag's CI-only guard and mutex with
- * the other publish modes.
+ * Tests for the --purge-orphans flag's mutex with the other publish modes
+ * (--force / --heal / --verify-only).
+ *
+ * The CI-only `GITHUB_ACTIONS` guard is NOT covered here — it lives inside
+ * main() and would require spawning the script, which is better served by
+ * smoke (test/smoke/auth-enforcement.test.js asserts the deployed
+ * /content/orphan-purge endpoint rejects unauthenticated calls) and hybrid
+ * (test/hybrid/orphan-purge.test.js asserts end-to-end behavior with a
+ * real CONTENT_API_KEY). If the guard regresses, those layers catch it.
  *
  * Spec: docs/superpowers/specs/2026-06-30-orphan-purge-design.md §CLI-mode-execution-flow
  */
