@@ -64,6 +64,45 @@ export function getHugoContentDir(channel: Channel): string {
     : join(__dirname, '..', 'hugo', 'content')
 }
 
+/**
+ * Prune stale `<slug>.md` files from `cacheDir` — any whose slug is NOT in
+ * `discoveredSlugs` gets unlinked. Used at the end of a fetch run to
+ * reconcile `actions/cache@v4` restorations against the current discovery
+ * set. See the comment block at the call site in `main()` for the full
+ * rationale (and the 2026-06-30 orphan-purge regression that prompted it).
+ *
+ * Pure-ish (no logging — caller decides whether/how to log). Returns the
+ * list of pruned slugs and any failures. Sidecar files (`.sha`, `.rules.vr`,
+ * `.ai-quiz-cache.json`, etc.) are not touched here — they have independent
+ * lifecycles. Special `_*` files are skipped via the same prefix check the
+ * downstream consumers use.
+ *
+ * Slug matching is case-insensitive on both sides to handle the rare legacy
+ * cache file that landed in mixed case (CLAUDE.md > "Tutorial slugs are
+ * lowercase canonical").
+ */
+export function pruneStaleTutorialCache(
+  cacheDir: string,
+  discoveredSlugs: Set<string>
+): { stale: string[]; failed: Array<{ slug: string; error: string }> } {
+  if (!existsSync(cacheDir)) return { stale: [], failed: [] }
+  const cachedMdFiles = readdirSync(cacheDir).filter(f => f.endsWith('.md') && !f.startsWith('_'))
+  const stale: string[] = []
+  const failed: Array<{ slug: string; error: string }> = []
+  for (const f of cachedMdFiles) {
+    const slug = f.replace(/\.md$/, '')
+    if (discoveredSlugs.has(slug.toLowerCase())) continue
+    try {
+      unlinkSync(join(cacheDir, f))
+      stale.push(slug)
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err)
+      failed.push({ slug, error })
+    }
+  }
+  return { stale, failed }
+}
+
 export type BuildTarget = 'vitepress' | 'hugo'
 
 export function parseTarget(argv: string[]): BuildTarget {
@@ -1194,6 +1233,40 @@ async function main() {
     const errorPath = join(CACHE_DIR, 'errors.json')
     writeFileSync(errorPath, JSON.stringify(errors, null, 2), 'utf-8')
     console.log(`\nError log written to ${errorPath}`)
+  }
+
+  // ── Prune stale tutorial-cache entries ──
+  // actions/cache@v4 in CI restores the entire `.tutorial-cache/` dir from a
+  // prior run — including `<slug>.md` files for tutorials whose upstream
+  // sources have since been deleted from the sap-tutorials GitHub org. Those
+  // stale files satisfy `localSlugs.has(s)` despite no upstream source,
+  // which (a) breaks `publish-content.ts --purge-orphans`'s
+  // `serverSlugs.filter(s => !localSlugs.has(s))` orphan detection
+  // (caught 2026-06-30: 21 of 24 ghosts purged; 3 survived because their
+  // stale cache files persisted across many CI runs), and (b) leaks stale
+  // bytes into any downstream consumer that walks the cache dir.
+  //
+  // Reconcile here so the cache always reflects the current discovery set:
+  // any `<slug>.md` file whose slug is NOT in `allTutorials` gets deleted.
+  // Operates on `.md` files only — sidecar files (`<slug>.sha`,
+  // `<slug>.rules.vr`, `<slug>.ai-quiz-cache.json`, `<slug>.parser-validation.json`)
+  // have independent lifecycles and aren't pruned here.
+  //
+  // Skipped in --regenerate (cache IS the source of truth) and --discover-only
+  // (no fetching happened, can't infer staleness).
+  if (!regenerateMode && !discoverOnly && existsSync(CACHE_DIR)) {
+    const discoveredSlugs = new Set(allTutorials.map(t => t.slug.toLowerCase()))
+    const { stale, failed } = pruneStaleTutorialCache(CACHE_DIR, discoveredSlugs)
+    if (stale.length > 0) {
+      console.log(`\nPruned ${stale.length} stale .tutorial-cache entries (slug no longer in discovery):`)
+      for (const slug of stale) console.log(`  ✗ ${slug}`)
+      if (failed.length > 0) {
+        console.warn(`  ! ${failed.length} prune failures:`)
+        for (const { slug, error } of failed) console.warn(`    ${slug}: ${error}`)
+      }
+    } else {
+      console.log(`\nNo stale cache entries to prune`)
+    }
   }
 
   // ── Timing Summary ──
