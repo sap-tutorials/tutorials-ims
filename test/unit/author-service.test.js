@@ -36,8 +36,15 @@ describe('MyTutorialsView', () => {
     await DELETE.from(Users);
 
     await INSERT.into(Users).entries([
-      { ID: 'u-A', uuid: 'uuid-A', email: 'alice@example.com', firstName: 'Alice', lastName: 'A', displayName: 'Alice A' },
-      { ID: 'u-B', uuid: 'uuid-B', email: 'bob@example.com',   firstName: 'Bob',   lastName: 'B', displayName: 'Bob B' }
+      // #777-followup: tests pass `req.user.id` as the sapId surface (the
+      // value that resolveUserSapId(user) returns when the user has no
+      // authInfo.token — which is true for mock contexts). To keep the
+      // `req.user.id === Users.uuid` test invariant working AFTER the
+      // AuthorService handler routes through resolveDbUser (which selects
+      // WHERE sapId = resolveUserSapId(user)), we set sapId = uuid here so
+      // the resolver can navigate id → sapId match → Users row → uuid.
+      { ID: 'u-A', uuid: 'uuid-A', sapId: 'uuid-A', email: 'alice@example.com', firstName: 'Alice', lastName: 'A', displayName: 'Alice A' },
+      { ID: 'u-B', uuid: 'uuid-B', sapId: 'uuid-B', email: 'bob@example.com',   firstName: 'Bob',   lastName: 'B', displayName: 'Bob B' }
     ]);
     await INSERT.into(Tutorials).entries([
       { ID: 't-1', slug: 'tut-1', title: 'Tutorial 1', status: 'ACTIVE' },

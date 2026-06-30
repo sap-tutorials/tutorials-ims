@@ -6,17 +6,28 @@ import { scheduleRebuild } from './lib/rebuild-trigger.js';
 import { createAuditEmitter } from './lib/audit-event.js';
 import { handleRebuildAction } from './lib/rebuild-action-handler.js';
 import { applyMdFormat } from './lib/tag-md-format.js';
+import { resolveDbUser } from './lib/resolve-db-user.js';
 
 const OS_VALUES = ['Windows', 'macOS', 'Linux', 'BAS'];
 const OS_VARIANTS_LIMIT = 60;             // calls per hour per author
 const OS_VARIANTS_WINDOW_MS = 60 * 60 * 1000;
 const osVariantsLimiter = createRateLimiter({ windowMs: OS_VARIANTS_WINDOW_MS });
 
-async function assertOwnership(tutorialId, userId) {
+// #777 followup (2026-06-30) — MyTutorialsView keys on Users.uuid (the
+// CAP-context-friendly identifier exposed as MyTutorialsView.userId).
+// `req.user.id` from XSUAA tokens against SAP IDP is the user's email
+// (per srv/lib/resolve-db-user.js — confirmed in IMS Java sources), NOT
+// the uuid. Filtering the view on `req.user.id` returns 0 rows for every
+// authenticated request. Resolve to the Users row first, then filter on
+// its uuid. Pattern matches every other authenticated handler in this
+// codebase (developer-service.js, admin-service.js, server.js#/auth/user).
+async function assertOwnership(tutorialId, user) {
+  const dbUser = await resolveDbUser(user, ['uuid']);
+  if (!dbUser?.uuid) return false;
   const { MyTutorialsView } = cds.entities('com.sap.developers.ims');
   const row = await SELECT.one.from(MyTutorialsView)
     .columns('tutorial_ID')
-    .where({ tutorial_ID: tutorialId, userId });
+    .where({ tutorial_ID: tutorialId, userId: dbUser.uuid });
   return !!row;
 }
 
@@ -68,10 +79,24 @@ export default cds.service.impl(async function () {
     { name: 'UIEvents',                   sqlName: 'com_sap_developers_ims_UIEvent',                    label: 'UI events' },
   ]);
 
-  this.before('READ', MyTutorials, (req) => {
-    const userId = req.user?.id;
-    if (!userId || userId === 'anonymous') return req.reject(401, 'Authentication required');
-    req.query.where({ userId });
+  this.before('READ', MyTutorials, async (req) => {
+    if (!req.user?.id || req.user.id === 'anonymous') {
+      return req.reject(401, 'Authentication required');
+    }
+    // See assertOwnership above for the req.user.id-vs-Users.uuid rationale.
+    // resolveDbUser falls back to req.user.id for non-JWT auth contexts
+    // (basic-auth tech users, tests, mock contexts) so old behavior is
+    // preserved there.
+    const dbUser = await resolveDbUser(req.user, ['uuid']);
+    if (!dbUser?.uuid) {
+      // No Users row for this caller — could be a fresh-login user whose
+      // row hasn't been auto-provisioned yet, or a test context with no
+      // matching sapId. Return zero rows rather than 401: the user IS
+      // authenticated; they simply own no tutorials.
+      req.query.where({ userId: '__NO_USERS_ROW__' });
+      return;
+    }
+    req.query.where({ userId: dbUser.uuid });
   });
 
   // Tags.mdFormat is a virtual field (no DB column) — populated on the way out
@@ -82,9 +107,8 @@ export default cds.service.impl(async function () {
   this.after('READ', 'Tags', (rows) => applyMdFormat(rows));
 
   this.on('reviewTutorial', async (req) => {
-    const userId = req.user?.id;
     const { tutorialId } = req.data;
-    if (!(await assertOwnership(tutorialId, userId))) {
+    if (!(await assertOwnership(tutorialId, req.user))) {
       return req.reject(403, 'Not the owner of this tutorial');
     }
     try {
@@ -96,12 +120,11 @@ export default cds.service.impl(async function () {
   });
 
   this.on('snoozeTutorial', async (req) => {
-    const userId = req.user?.id;
     const { tutorialId, days } = req.data;
     if (!Number.isInteger(days) || days < 1 || days > 365) {
       return req.reject(400, 'days must be an integer in [1, 365]');
     }
-    if (!(await assertOwnership(tutorialId, userId))) {
+    if (!(await assertOwnership(tutorialId, req.user))) {
       return req.reject(403, 'Not the owner of this tutorial');
     }
     try {
