@@ -8,6 +8,12 @@ export interface TutorialFrontmatter {
   title?: string
   description?: string
   /**
+   * Computed during fetch (not present in source markdown). Extracted from
+   * author_profile when it is a github.com URL. Null when the URL is not
+   * GitHub. Used by the publish pipeline to resolve the canonical owner.
+   */
+  githubLogin?: string | null
+  /**
    * [#173] Per-step overrides for the OS-classifier in
    * `scripts/parsers/options.ts`. Keyed by slugified step heading.
    * `'os'` forces the OS picker (lookup label via classifier rules);

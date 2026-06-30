@@ -8,18 +8,25 @@
 // diverge.
 //
 // Resolution algorithm:
+//   Phase 0 — frontmatter author_profile → Users.githubLogin (BEATS all below).
+//     If frontmatterGithubLogin normalizes to a non-empty string AND is found
+//     in loginToUserId, that user wins immediately. source = 'frontmatter'.
 //   Phase A — per-contributor email lookup. For every contributor whose
 //     normalized email is in the map, emit a contributorUserIds entry.
 //     Run unconditionally, regardless of role.
 //   Phase B — primary author resolution, in priority order:
 //     (a) first contributor with role in {author, owner} whose email matches
+//         source = 'role-match'
 //     (b) first contributor (any role) whose email matches
+//         source = 'any-contributor'
 //     (c) ownerEmail if it matches the map
-//     First hit wins. All-miss → authorUserId null + orphans list.
+//         source = 'owner-email'
+//     First hit wins. All-miss → authorUserId null + orphans list. source = null.
 //
 // Email comparison: LOWER(TRIM(email)). The caller MUST pre-normalize the
 // Map's keys to LOWER(TRIM(email)) — this function does NOT re-normalize
 // the map, only the inputs it looks up.
+// Login comparison: LOWER(TRIM(login)). loginToUserId map keys MUST be lower.
 
 const AUTHOR_ROLES = new Set(['author', 'owner']);
 
@@ -29,20 +36,44 @@ function normalize(email) {
   return s.length === 0 ? null : s;
 }
 
+function normalizeLogin(login) {
+  if (typeof login !== 'string') return null;
+  const s = login.trim().toLowerCase();
+  return s.length === 0 ? null : s;
+}
+
 /**
  * @param {object} input
  * @param {Array<{email: string|null, role: string|null}>} input.contributors
  * @param {string|null} input.ownerEmail
  * @param {Map<string, string>} input.emailToUserId  LOWER(TRIM(email)) → Users.ID
+ * @param {string|null} [input.frontmatterGithubLogin]  raw login from tutorial frontmatter
+ *   (author_profile field). When this resolves via loginToUserId, it wins over all
+ *   email-based phases. Defaults to null (safe for existing callers).
+ * @param {Map<string, string>} [input.loginToUserId]  LOWER(TRIM(login)) → Users.ID.
+ *   Defaults to empty Map (safe for existing callers).
  * @returns {{
  *   authorUserId: string|null,
+ *   source: 'frontmatter'|'role-match'|'any-contributor'|'owner-email'|null,
  *   contributorUserIds: Array<{ contributorIndex: number, userId: string }>,
- *   orphans: Array<{ kind: 'contributor'|'tutorial', email: string|null, reason: string }>
+ *   orphans: Array<{
+ *     kind: 'contributor'|'tutorial'|'frontmatter-login',
+ *     email: string|null,
+ *     login?: string,
+ *     reason: string
+ *   }>
  * }}
  */
-export function resolveTutorialAuthor({ contributors, ownerEmail, emailToUserId } = {}) {
+export function resolveTutorialAuthor({
+  contributors,
+  ownerEmail,
+  emailToUserId,
+  frontmatterGithubLogin = null,
+  loginToUserId,
+} = {}) {
   const contribs = Array.isArray(contributors) ? contributors : [];
   const map = emailToUserId instanceof Map ? emailToUserId : new Map();
+  const loginMap = loginToUserId instanceof Map ? loginToUserId : new Map();
 
   const contributorUserIds = [];
   const orphans = [];
@@ -70,18 +101,46 @@ export function resolveTutorialAuthor({ contributors, ownerEmail, emailToUserId 
 
   // Phase B — primary author resolution (3-level fallback).
   let authorUserId = null;
+  let source = null;
 
-  // (a) first contributor with role in {author, owner} whose email matches
-  for (let i = 0; i < contribs.length; i++) {
-    const c = contribs[i] || {};
-    const role = c.role ? String(c.role).trim().toLowerCase() : '';
-    if (!AUTHOR_ROLES.has(role)) continue;
-    const norm = normalize(c.email);
-    if (!norm) continue;
-    const userId = map.get(norm);
+  // Phase 0 — frontmatter author_profile → Users.githubLogin.
+  // BEATS every email-based phase below. This makes the tutorial's source
+  // markdown the durable signal for ownership: even if Riley made the last
+  // commit and contributors[0] is Riley, the frontmatter's author_profile
+  // determines who owns the tutorial in HANA.
+  const fmLogin = normalizeLogin(frontmatterGithubLogin);
+  if (fmLogin) {
+    const userId = loginMap.get(fmLogin);
     if (userId) {
       authorUserId = userId;
-      break;
+      source = 'frontmatter';
+    } else {
+      // Frontmatter declared an author but no Users row matched the login.
+      // Record for debuggability — this is exactly the case where we'd
+      // otherwise silently fall through to "Riley was last committer".
+      orphans.push({
+        kind: 'frontmatter-login',
+        email: null,
+        login: fmLogin,
+        reason: 'frontmatterGithubLogin not found in loginToUserId map',
+      });
+    }
+  }
+
+  // (a) first contributor with role in {author, owner} whose email matches
+  if (!authorUserId) {
+    for (let i = 0; i < contribs.length; i++) {
+      const c = contribs[i] || {};
+      const role = c.role ? String(c.role).trim().toLowerCase() : '';
+      if (!AUTHOR_ROLES.has(role)) continue;
+      const norm = normalize(c.email);
+      if (!norm) continue;
+      const userId = map.get(norm);
+      if (userId) {
+        authorUserId = userId;
+        source = 'role-match';
+        break;
+      }
     }
   }
 
@@ -94,6 +153,7 @@ export function resolveTutorialAuthor({ contributors, ownerEmail, emailToUserId 
       const userId = map.get(norm);
       if (userId) {
         authorUserId = userId;
+        source = 'any-contributor';
         break;
       }
     }
@@ -106,6 +166,7 @@ export function resolveTutorialAuthor({ contributors, ownerEmail, emailToUserId 
       const userId = map.get(norm);
       if (userId) {
         authorUserId = userId;
+        source = 'owner-email';
       }
     }
   }
@@ -132,5 +193,5 @@ export function resolveTutorialAuthor({ contributors, ownerEmail, emailToUserId 
     }
   }
 
-  return { authorUserId, contributorUserIds, orphans };
+  return { authorUserId, source, contributorUserIds, orphans };
 }

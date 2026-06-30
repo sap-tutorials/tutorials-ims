@@ -1,6 +1,8 @@
 namespace com.sap.developers.ims;
 
 using { com.sap.developers.ims as ims, cuid, managed } from './schema';
+// #777 followup — needed for the ownedTutorials association target
+using from './views';
 
 entity Advocates : cuid, managed {
   slug          : String(64) @mandatory;
@@ -46,6 +48,17 @@ entity Advocates : cuid, managed {
   // Spec: docs/superpowers/specs/2026-06-25-advocate-op-fixes-design.md §4.3
   authoredTutorials    : Association to many ims.Tutorials            on authoredTutorials.author    = user;
   contributedTutorials : Association to many ims.TutorialContributors on contributedTutorials.user  = user;
+  // #777 followup (2026-06-30) — read-side reconciliation for the admin
+  // Advocate Object Page. Joins through MyTutorialsByUserId (a bridge view
+  // over MyTutorialsView keyed by Users.ID) so the admin tile count matches
+  // the public /api/advocates page (~77 for Tom, not ~7).
+  // MyTutorialsView.userId = Users.uuid (not Users.ID), so a direct
+  // on-condition `ownedTutorials.userId = user.uuid` fails (CDS only allows
+  // managed-association navigation to KEY elements). The bridge view adds
+  // Users.ID as a key so CAP can compile the join correctly.
+  // Authored/contributed FK paths above remain available for any code
+  // that needs the strict-Sources-1-and-2 view.
+  ownedTutorials : Association to many ims.MyTutorialsByUserId on ownedTutorials.user_ID = $self.user.ID;
   topics        : Composition of many AdvocateTopics on topics.advocate = $self;
   links         : Composition of many AdvocateLinks  on links.advocate  = $self;
   // Inverse association — required so the admin Object Page can target

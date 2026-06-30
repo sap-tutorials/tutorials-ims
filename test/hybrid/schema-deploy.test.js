@@ -69,6 +69,16 @@ describe('HANA schema deployment', () => {
       }
     });
 
+    it('Users has expected columns including githubLogin (#777 followup)', async () => {
+      const { Users } = cds.entities('com.sap.developers.ims');
+      const row = await SELECT.one.from(Users);
+      if (row) {
+        expect(row).toHaveProperty('ID');
+        expect(row).toHaveProperty('email');
+        expect(row).toHaveProperty('githubLogin');
+      }
+    });
+
     it('TaskRecords has expected columns', async () => {
       const { TaskRecords } = cds.entities('com.sap.developers.ims');
       const row = await SELECT.one.from(TaskRecords);

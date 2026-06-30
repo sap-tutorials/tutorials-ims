@@ -39,6 +39,13 @@ export interface RenderHugoFrontmatterArgs {
    * "AI features previewable after publish" notice without re-walking steps.
    */
   hasAi?: boolean
+  /**
+   * GitHub login extracted from authorProfile by extractGithubLoginFromProfile().
+   * When set, becomes the canonical owner signal that drives Tutorials.author_ID
+   * at publish time. Null/undefined/empty → omitted from frontmatter so non-GitHub
+   * author_profile values don't produce stray keys in built Hugo pages.
+   */
+  githubLogin?: string | null
 }
 
 export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
@@ -63,6 +70,7 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
     hasOsOptions,
     rulesVrSource,
     hasAi,
+    githubLogin,
   } = args
 
   const cleanTags = tags.map(t => t.replace(/\\/g, ''))
@@ -128,6 +136,10 @@ export function renderHugoFrontmatter(args: RenderHugoFrontmatterArgs): string {
   // and <body data-has-ai="…"> without re-parsing in the template.
   if (rulesVrSource && rulesVrSource.length > 0) fm.rulesVrSource = rulesVrSource
   if (hasAi) fm.hasAi = true
+
+  if (typeof githubLogin === 'string' && githubLogin.length > 0) {
+    fm.githubLogin = githubLogin
+  }
 
   const frontmatter = `---\n${yamlStringify(fm).trimEnd()}\n---\n\n`
 

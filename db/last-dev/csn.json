@@ -13,6 +13,11 @@
           "=": "khorosId"
         }
       ],
+      "@assert.unique.githubLogin": [
+        {
+          "=": "githubLogin"
+        }
+      ],
       "@cds.persistence.journal": true,
       "elements": {
         "ID": {
@@ -91,6 +96,11 @@
         "khorosLinkedAt": {
           "type": "cds.Timestamp",
           "@cds.persistence.name": "KHOROSLINKEDAT"
+        },
+        "githubLogin": {
+          "type": "cds.String",
+          "length": 64,
+          "@cds.persistence.name": "GITHUBLOGIN"
         }
       },
       "$tableConstraints": {
@@ -111,6 +121,17 @@
               {
                 "ref": [
                   "khorosId"
+                ],
+                "isChecked": true
+              }
+            ],
+            "parentTable": "com.sap.developers.ims.Users"
+          },
+          "githubLogin": {
+            "paths": [
+              {
+                "ref": [
+                  "githubLogin"
                 ],
                 "isChecked": true
               }

@@ -656,7 +656,15 @@ async function upsertTutorialMetadata(namespace, metadata) {
 // Conservative: every UPDATE is gated by `…_ID IS NULL` so admin
 // corrections are preserved. Failure mode: caller wraps this in
 // try/catch — publish must not fail because of authorship resolution.
-async function linkTutorialAuthorship(namespace, metadata) {
+//
+// #777 followup — frontmatter-authoritative ownership (2026-06-30):
+//   * Builds loginToUserId map from Users.githubLogin
+//   * Per slug: bootstraps Users.githubLogin from frontmatter when null
+//   * Calls resolver with the new frontmatterGithubLogin + loginToUserId args
+//   * When resolver returns source='frontmatter', OVERWRITES Tutorials.author_ID
+//     (frontmatter is durable signal). Otherwise: fills NULL only (admin
+//     corrections preserved for commit-history fallback hits).
+export async function linkTutorialAuthorship(namespace, metadata) {
   const db = await cds.connect.to('db');
   const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
 
@@ -675,6 +683,20 @@ async function linkTutorialAuthorship(namespace, metadata) {
     const email = r.email || r.EMAIL;
     const id = r.id || r.ID;
     if (email && !emailToUserId.has(email)) emailToUserId.set(email, id);
+  }
+
+  // Build login→user map ONCE per publish session. Used by resolver Phase 0
+  // (#777 followup): frontmatterGithubLogin → Users.ID. Only rows with a
+  // populated githubLogin contribute; NULL githubLogin users fall through to
+  // the email-based phases.
+  const loginRows = await db.run(
+    `SELECT "ID" AS id, LOWER(TRIM("GITHUBLOGIN")) AS login FROM ${usersTable} WHERE "GITHUBLOGIN" IS NOT NULL AND LENGTH(TRIM("GITHUBLOGIN")) > 0`
+  );
+  const loginToUserId = new Map();
+  for (const r of (loginRows || [])) {
+    const login = r.login || r.LOGIN;
+    const id = r.id || r.ID;
+    if (login && !loginToUserId.has(login)) loginToUserId.set(login, id);
   }
 
   const tutorialsTable = isHana
@@ -717,21 +739,82 @@ async function linkTutorialAuthorship(namespace, metadata) {
       // the first publish.
       const ownerEmail = meta.primaryContributorEmail || null;
 
-      const { authorUserId, contributorUserIds } = resolveTutorialAuthor({
+      // Bootstrap pass: populate Users.githubLogin from frontmatter on the
+      // first publish of each tutorial. Only runs when:
+      //   - frontmatter declared a GitHub login for this tutorial
+      //   - the primary contributor's email matches an existing Users row
+      //   - that Users row has NULL githubLogin (idempotent — never overwrites
+      //     an admin correction or a value set by an earlier bootstrap pass)
+      //
+      // After this fires, the loginToUserId map needs to be updated so the
+      // resolver below can see the newly-populated mapping in the same loop
+      // iteration.
+      const fmLogin = (typeof meta.frontmatterGithubLogin === 'string' && meta.frontmatterGithubLogin.trim().length > 0)
+        ? meta.frontmatterGithubLogin.trim()
+        : null;
+      if (fmLogin && ownerEmail) {
+        const normEmail = String(ownerEmail).trim().toLowerCase();
+        const bootstrapUserId = emailToUserId.get(normEmail);
+        if (bootstrapUserId) {
+          const res = await db.run(
+            `UPDATE ${usersTable} SET "GITHUBLOGIN" = ? WHERE "ID" = ? AND ("GITHUBLOGIN" IS NULL OR LENGTH(TRIM("GITHUBLOGIN")) = 0)`,
+            [fmLogin, bootstrapUserId]
+          );
+          if (res && (typeof res === 'number' ? res : 1) > 0) {
+            // Reflect the new mapping in the session map so Phase 0 below can
+            // hit it on this same iteration. Use the lowercased key — match
+            // the loginToUserId map's normalization.
+            loginToUserId.set(fmLogin.toLowerCase(), bootstrapUserId);
+          }
+        }
+      }
+
+      const { authorUserId, source, contributorUserIds } = resolveTutorialAuthor({
         contributors: contribs,
         ownerEmail,
         emailToUserId,
+        frontmatterGithubLogin: fmLogin,  // NEW
+        loginToUserId,                     // NEW
       });
 
-      // Conservative: only set Tutorials.author_ID if currently NULL.
       if (authorUserId) {
-        const res = await db.run(
-          `UPDATE ${tutorialsTable} SET "AUTHOR_ID" = ? WHERE "ID" = ? AND "AUTHOR_ID" IS NULL`,
-          [authorUserId, tutorialId]
-        );
-        // CAP's db.run for UPDATE returns affected rows on HANA as
-        // either a number or an object — count it loosely.
-        if (res && (typeof res === 'number' ? res : 1) > 0) linkedAuthors++;
+        if (source === 'frontmatter') {
+          // Frontmatter is authoritative — overwrite any existing author_ID.
+          // This is the architectural switch: previously, contributors[0] (the
+          // most recent committer) latched into author_ID and was never corrected.
+          // Now, the tutorial markdown's author_profile wins on every publish.
+
+          // Read the existing author_ID first so we can log if we're actually
+          // changing it. The extra round-trip is cheap (microseconds vs the
+          // existing per-slug HANA calls) and gives us debuggability when ops
+          // notices a tutorial's owner suddenly changed.
+          const existing = await db.run(
+            `SELECT "AUTHOR_ID" AS id FROM ${tutorialsTable} WHERE "ID" = ?`,
+            [tutorialId]
+          );
+          const existingAuthorId = existing?.[0]?.id ?? existing?.[0]?.ID ?? null;
+
+          const res = await db.run(
+            `UPDATE ${tutorialsTable} SET "AUTHOR_ID" = ? WHERE "ID" = ?`,
+            [authorUserId, tutorialId]
+          );
+          if (res && (typeof res === 'number' ? res : 1) > 0) {
+            linkedAuthors++;
+            if (existingAuthorId && existingAuthorId !== authorUserId) {
+              LOG.info(`linkTutorialAuthorship: ${slug}: frontmatter overrode author_ID (was: ${existingAuthorId}, now: ${authorUserId})`);
+            }
+          }
+        } else {
+          // Commit-history fallback (role-match / any-contributor / owner-email)
+          // — preserve admin corrections by only filling NULL.
+          const res = await db.run(
+            `UPDATE ${tutorialsTable} SET "AUTHOR_ID" = ? WHERE "ID" = ? AND "AUTHOR_ID" IS NULL`,
+            [authorUserId, tutorialId]
+          );
+          // CAP's db.run for UPDATE returns affected rows on HANA as
+          // either a number or an object — count it loosely.
+          if (res && (typeof res === 'number' ? res : 1) > 0) linkedAuthors++;
+        }
       }
 
       // Opportunistic per-contributor link (only NULL user_ID rows).

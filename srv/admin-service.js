@@ -468,6 +468,15 @@ export default class AdminService extends cds.ApplicationService {
       }
     });
 
+    // #777 followup (2026-06-30) — belt-and-suspenders Admin guard for the
+    // MyTutorials entity (Advocate Object Page ownedTutorials facet source).
+    // AdminService is already @requires:'Admin' at service level so this is
+    // redundant in practice, but makes the intent explicit and mirrors the
+    // pattern used for other sensitive admin-only reads in this file.
+    this.before('READ', 'MyTutorials', (req) => {
+      if (!req.user.is('Admin')) return req.reject(403);
+    });
+
     // #639: HomepageConfig is a singleton; auto-init a default row on first
     // READ so a fresh subaccount doesn't 404. Pattern matches ChatSettings.
     // UUID convention: one greater than NAVIGATOR_SETTINGS_SINGLETON_ID (c8ad).

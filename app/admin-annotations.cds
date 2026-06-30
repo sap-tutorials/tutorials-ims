@@ -2245,6 +2245,11 @@ annotate AdminService.Advocates with {
   contributedTutorials @Capabilities.InsertRestrictions: { Insertable: false }
                        @Capabilities.UpdateRestrictions: { Updatable:  false }
                        @Capabilities.DeleteRestrictions: { Deletable:  false };
+  // #777 followup — ownedTutorials is a read-only view; prevent accidental
+  // create/update/delete affordances in the Fiori Object Page facet.
+  ownedTutorials       @Capabilities.InsertRestrictions: { Insertable: false }
+                       @Capabilities.UpdateRestrictions: { Updatable:  false }
+                       @Capabilities.DeleteRestrictions: { Deletable:  false };
 };
 
 annotate AdminService.Advocates with @(
@@ -2326,14 +2331,13 @@ annotate AdminService.Advocates with @(
     // and POSTs to a new Advocates.uploadPhoto bound action.
     { $Type: 'UI.ReferenceFacet', ID: 'Topics',     Label: 'Topics',       Target: 'topics/@UI.LineItem' },
     { $Type: 'UI.ReferenceFacet', ID: 'Links',      Label: 'Social links', Target: 'links/@UI.LineItem' },
-    // Authored / contributed tutorials (spec §2). The targets resolve via
-    // the AdminService.Advocates projection aliases authoredTutorials and
-    // contributedTutorials → AdminService.Tutorials/TutorialContributors,
-    // which already carry @UI.LineItem from PR #618 + admin tile expansion.
-    // Both facets render empty (Fiori "no data" illustration) when no
-    // user is linked or the linked user has no tutorials — natural shape.
-    { $Type: 'UI.ReferenceFacet', ID: 'AuthoredTutorials',    Label: 'Authored Tutorials',    Target: 'authoredTutorials/@UI.LineItem' },
-    { $Type: 'UI.ReferenceFacet', ID: 'ContributedTutorials', Label: 'Contributed Tutorials', Target: 'contributedTutorials/@UI.LineItem' }
+    // #777 followup (2026-06-30) — replaced the prior Authored/Contributed
+    // dual facet with a single Owned facet reading through MyTutorialsByUserId
+    // (the canonical 4-source UNION bridged by Users.ID).
+    // Sources 1 (author FK) + 2 (contributor FK) + 3 (TutorialMeta.ownerEmail)
+    // + 4 (legacy free-text owner) all surface here; the per-row `bestPriority`
+    // column shows which source matched. Count matches /api/advocates (~77 vs ~7).
+    { $Type: 'UI.ReferenceFacet', ID: 'OwnedTutorials', Label: 'Owned Tutorials', Target: 'ownedTutorials/@UI.LineItem' }
   ]
 );
 
@@ -2357,6 +2361,32 @@ annotate AdminService.AdvocatePhotos with @(
     ]
   }
 );
+
+// #777 followup (2026-06-30) — minimal LineItem for the Advocate Object Page
+// ownedTutorials facet. Read-only display; shown inside the OwnedTutorials
+// reference facet (Target: 'ownedTutorials/@UI.LineItem').
+// bestPriority encodes the source: 1=author FK, 2=contributor, 3=ownerEmail, 4=legacy text.
+annotate AdminService.MyTutorials with @(
+  UI.LineItem: [
+    { $Type: 'UI.DataField', Value: slug,            Label: 'Slug' },
+    { $Type: 'UI.DataField', Value: title,           Label: 'Title' },
+    { $Type: 'UI.DataField', Value: bestPriority,    Label: 'Source' },
+    { $Type: 'UI.DataField', Value: monitoredStatus, Label: 'Status' }
+  ],
+  UI.PresentationVariant: {
+    SortOrder: [
+      { Property: bestPriority, Descending: false },
+      { Property: title,        Descending: false }
+    ]
+  }
+);
+
+annotate AdminService.MyTutorials with {
+  bestPriority    @Common.Label: 'Source';
+  slug            @Common.Label: 'Slug';
+  title           @Common.Label: 'Title';
+  monitoredStatus @Common.Label: 'Status';
+};
 
 // AdvocateTopics — inline table with Tag value-help.
 //
