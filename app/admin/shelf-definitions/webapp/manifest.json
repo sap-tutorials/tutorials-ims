@@ -46,15 +46,6 @@
         "settings": { "bundleName": "sap.tutorials.admin.shelfDefinitions.i18n.i18n" }
       }
     },
-    "extends": {
-      "extensions": {
-        "sap.ui.controllerExtensions": {
-          "sap.fe.templates.ListReport.ListReportController": {
-            "controllerName": "sap.tutorials.admin.shelfDefinitions.ext.ActionsController"
-          }
-        }
-      }
-    },
     "routing": {
       "routes": [
         { "name": "ShelvesList", "pattern": ":?query:", "target": "ShelvesListTarget" },

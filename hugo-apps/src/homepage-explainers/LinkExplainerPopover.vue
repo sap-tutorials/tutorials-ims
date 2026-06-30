@@ -16,9 +16,11 @@ const props = defineProps<{
   description?: string;
   href: string;
   badge?: string;
+  isExternal?: string;  // 'true' / 'false' / undefined — Hugo writes it as a string in data-*
 }>();
 
 const hasContent = computed(() => !!(props.tagline || props.whyItMatters || props.description));
+const isExternalLink = computed(() => props.isExternal === 'true' || props.isExternal === '1');
 
 const open = ref(false);
 const openedViaClick = ref(false);  // role=dialog if clicked, role=tooltip if hovered
@@ -90,10 +92,29 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="anchorEl" class="hp-popover-anchor">
-    <slot />
+    <!--
+      Vue's createApp(component).mount(el) REPLACES el's children. The
+      first-paint <a>Title</a> rendered by Hugo gets wiped on hydration,
+      so we MUST render the link from props here — a <slot /> would be
+      empty and the link text would vanish. (#759 hotfix — link-wipe bug.)
+
+      Renders the rich form (strong title + optional badge) used by the
+      verb-sub-page list. The directory footer uses the same component
+      and inherits the same rendering — looks slightly bolder than before
+      but reads cleanly in both contexts.
+    -->
+    <a
+      class="hp-popover-link"
+      :href="href"
+      :target="isExternalLink ? '_blank' : undefined"
+      :rel="isExternalLink ? 'noopener' : undefined"
+    >
+      <strong>{{ title }}</strong>
+      <span v-if="badge" :class="['badge', 'badge--' + badge.toLowerCase()]">{{ badge }}</span>
+    </a>
     <!--
       Hover handler is on the ⓘ button (not the anchor div) so hovering
-      the link slot content stays bare — only explicit ⓘ-hover triggers
+      the link text stays bare — only explicit ⓘ-hover triggers
       the popover. Discoverability is the ⓘ icon itself.
     -->
     <button

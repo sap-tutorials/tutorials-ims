@@ -46,15 +46,6 @@
         "settings": { "bundleName": "sap.tutorials.admin.verbDefinitions.i18n.i18n" }
       }
     },
-    "extends": {
-      "extensions": {
-        "sap.ui.controllerExtensions": {
-          "sap.fe.templates.ListReport.ListReportController": {
-            "controllerName": "sap.tutorials.admin.verbDefinitions.ext.ActionsController"
-          }
-        }
-      }
-    },
     "routing": {
       "routes": [
         { "name": "VerbsList", "pattern": ":?query:", "target": "VerbsListTarget" },

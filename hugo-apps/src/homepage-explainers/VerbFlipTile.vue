@@ -15,7 +15,21 @@ const props = defineProps<{
   tagline?: string;
   whyItMatters?: string;
   href?: string;
+  /**
+   * JSON-encoded array of START_HERE preview titles for verb-spine tiles.
+   * E.g. data-preview="[\"Tutorial 1\",\"Tutorial 2\"]". Empty / missing
+   * for shelf-header mode and verbs with no START_HERE items.
+   * (#759 hotfix — Vue createApp.mount(el) wipes el's children, so the
+   * Hugo first-paint <ul> doesn't survive hydration; pass via JSON instead.)
+   */
+  preview?: string;
 }>();
+
+const previewItems = computed<string[]>(() => {
+  if (!props.preview) return [];
+  try { return JSON.parse(props.preview) as string[]; }
+  catch { return []; }
+});
 
 // Local flip state — we don't reuse advocates/useFlipCard because that
 // composable conflates Space + Enter (both toggle), and our spec §1.3
@@ -97,7 +111,9 @@ const ariaLabel = computed(() =>
           <ui5-icon :name="iconName"></ui5-icon>
         </div>
         <div class="hp-verb__label">{{ label }}</div>
-        <slot />
+        <ul v-if="previewItems.length > 0" class="hp-verb__preview" :aria-label="`${label} highlights`">
+          <li v-for="(item, i) in previewItems" :key="i">{{ item }}</li>
+        </ul>
       </div>
       <div class="hp-flip__face hp-flip__face--back">
         <h3 class="hp-flip__back-label">{{ label }}</h3>
