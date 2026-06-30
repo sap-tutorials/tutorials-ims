@@ -22,6 +22,18 @@ implementation silently emitted nothing. This rewrite hoists $missionTitle
 and $groups outside the `with` block so the side-nav still renders even
 when the mission page lookup fails. altGroups are read from THIS tutorial
 page's frontmatter, not the (non-existent) mission page.
+
+Title fallback chain (KG-widget-ux-polish, 2026-06-30):
+  1. THIS tutorial page's own `.Params.missionTitle` — the canonical source
+     (emitted by scripts/parsers/render-frontmatter.ts, same source the
+     breadcrumb at layouts/partials/breadcrumbs.html uses). Reliable because
+     it's stamped onto every tutorial-page frontmatter at fetch time, not
+     derived from a non-existent SSR mission page.
+  2. The (usually-nil) mission SSR page's title — only useful if mission
+     pages are ever materialized as static .md files in the future.
+  3. The slug, as a last resort.
+The previous order had the slug as #2, which is what made the right-rail
+render `mission-slug-text` as a link instead of the human title (#kg-widget-ux).
 */}}
 {{ if not site.Params.previewMode }}
 {{ $missionId        := .Params.missionId }}
@@ -31,13 +43,17 @@ page's frontmatter, not the (non-existent) mission page.
 
 {{ if and $missionId $missionSlug }}
   {{ $missionPage := site.GetPage (printf "/tutorials/mission-%s" $missionSlug) }}
-  {{ $missionTitle := $missionSlug }}
+  {{/* Prefer this tutorial's own frontmatter title — same source the
+       breadcrumb uses. Falls back through the mission SSR page (rarely
+       resolved) then to the slug only as a last resort. */}}
+  {{ $missionTitle := .Params.missionTitle | default $missionSlug }}
   {{ $groups := slice }}
   {{ with $missionPage }}
-    {{ $missionTitle = .Params.missionTitle | default .Title }}
+    {{ $missionTitle = $.Params.missionTitle | default .Params.missionTitle | default .Title | default $missionSlug }}
     {{ $groups = .Params.groups }}
   {{ end }}
-  <aside class="mission-side-nav-wrap">
+  <aside class="mission-side-nav-wrap" aria-labelledby="msn-section-label">
+    <h2 id="msn-section-label" class="msn-section-label">In this mission</h2>
     <div class="msn-header">
       <a href="/tutorials/mission-{{ $missionSlug }}/">{{ $missionTitle }}</a>
     </div>
