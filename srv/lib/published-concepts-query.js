@@ -61,9 +61,15 @@ export async function buildConceptsPayload(db) {
       )
       .where({ concept_ID: { in: ids }, predicate: 'teaches' })
   );
-  const teachesByConcept = groupBy(teachesRows, 'concept_ID', r => ({
-    slug: r.tutorial_slug.toLowerCase(), title: r.tutorial_title
-  }));
+  const teachesByConcept = groupBy(
+    // Defensive: drop orphan rows where the joined Tutorial side is null.
+    // The schema cascade (#787) makes this impossible going forward; the
+    // filter is belt-and-suspenders for any future orphan-creating path
+    // (manual SQL, migrations, schema regressions — see #789).
+    teachesRows.filter(r => r.tutorial_slug != null && r.tutorial_title != null),
+    'concept_ID',
+    r => ({ slug: r.tutorial_slug.toLowerCase(), title: r.tutorial_title })
+  );
 
   // 3. Outgoing edges (requires + relatedTo) per concept.
   const outgoingRows = await db.run(
