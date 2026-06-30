@@ -4,7 +4,7 @@ import { gunzipSync } from 'node:zlib';
 import { timingSafeEqual } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { acquireLock, releaseLock } from '../jobs/job-lock.js';
-import { logPipelineStart, logPipelineEnd, logPipelineItem } from './pipeline-log.js';
+import { logPipelineStart, logPipelineEnd, logPipelineItem, logPipeline } from './pipeline-log.js';
 import { getNextLegacyId } from './legacy-id.js';
 import { embedSlugs } from './embedding-pipeline.js';
 import { renderCatalogPage } from './catalog-renderer.js';
@@ -1104,17 +1104,42 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
   // will heal naturally on the next full republish.
 
   async function sourceHashesHandler(req, res) {
-    const { ContentFiles } = cds.entities(namespace);
-
     try {
       const activeVersion = await getActiveVersion();
       if (activeVersion === null) {
         return res.json({});
       }
 
-      const rows = await SELECT.from(ContentFiles)
-        .where({ version: activeVersion })
-        .columns('slug', 'sourceHash');
+      // Exclude soft-deleted tutorials so the daily drift workflow stops re-
+      // reporting them as "missing locally" forever. Carry-forward keeps
+      // INACTIVE rows in the manifest for snapshot integrity; this filter
+      // only affects this external-facing endpoint and matches the serve
+      // handler's NULL-tolerant behavior at content-store.js around line 978.
+      //
+      // LOWER() on both sides because Tutorials.slug may be mixed-case in
+      // legacy rows even though new slugs are lowercase canonical
+      // (CLAUDE.md > "Tutorial slugs are lowercase canonical").
+      const db = await cds.connect.to('db');
+      const isHana = db.options?.kind === 'hana' || db.constructor?.name === 'HANAService';
+      const rows = isHana
+        ? (await db.run(
+            `SELECT cf."SLUG" AS "slug", cf."SOURCEHASH" AS "sourceHash"
+               FROM "COM_SAP_DEVELOPERS_IMS_CONTENTFILES" AS cf
+               LEFT JOIN "COM_SAP_DEVELOPERS_IMS_TUTORIALS" AS t
+                 ON LOWER(cf."SLUG") = LOWER(t."SLUG")
+              WHERE cf."VERSION" = ?
+                AND (t."STATUS" IS NULL OR t."STATUS" != 'INACTIVE')`,
+            [activeVersion]
+          ))
+        : (await db.run(
+            `SELECT cf.slug AS slug, cf.sourceHash AS sourceHash
+               FROM com_sap_developers_ims_contentfiles AS cf
+               LEFT JOIN com_sap_developers_ims_tutorials AS t
+                 ON LOWER(cf.slug) = LOWER(t.slug)
+              WHERE cf.version = ?
+                AND (t.status IS NULL OR t.status != 'INACTIVE')`,
+            [activeVersion]
+          ));
 
       const map = {};
       for (const row of rows) {
@@ -1406,6 +1431,95 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     }
   }
 
+  // --- POST /content/orphan-purge ---
+  //
+  // CI-only batched soft-delete of tutorials whose source markdown is no
+  // longer present in any upstream repo. Bare-Express + contentAuthMiddleware
+  // (same auth model as /content/publish) so the existing CONTENT_API_KEY
+  // secret authenticates the call — NOT routed through AdminService because
+  // AdminService is XSUAA-scope-gated and CI doesn't carry an XSUAA bearer.
+  //
+  // Spec: docs/superpowers/specs/2026-06-30-orphan-purge-design.md
+  // Per-slug bucket dispatch — see spec §Architecture-2.
+  // Server-side 100-slug ceiling — defense in depth; client refuses at 50.
+  // Initiator captured via x-initiator header; persisted as PipelineLog with
+  // metadata.stage='purge-orphans'.
+
+  async function orphanPurgeHandler(req, res) {
+    const slugs = Array.isArray(req.body?.slugs) ? req.body.slugs : null;
+    if (!slugs) {
+      return res.status(400).json({ error: 'Request body must include { slugs: array of String }' });
+    }
+    if (slugs.length > 100) {
+      return res.status(400).json({ error: 'batch too large; orphan purge enforces a 100-slug ceiling per call' });
+    }
+
+    const initiator = req.headers['x-initiator'] || 'system';
+    // CI runs send 'ci/<github-run-id>' via x-initiator; surface the bare
+    // run-id in PipelineLog.metadata for run-attribution queries.
+    const runId = typeof initiator === 'string' && initiator.startsWith('ci/') ? initiator.slice(3) : null;
+
+    try {
+      const result = await logPipeline(
+        'SCHEDULED_JOB',
+        initiator,
+        async () => {
+          const { Tutorials } = cds.entities(namespace);
+
+          if (slugs.length === 0) {
+            return {
+              purged: [], alreadyInactive: [], notFound: [], redirected: [],
+              totalAttempted: 0, totalPurged: 0,
+              version: (await getActiveVersion()) ?? 0
+            };
+          }
+
+          // Bucket dispatch — fetch in one round trip, classify, then write.
+          const lowered = slugs.map(s => String(s).toLowerCase());
+          const rows = await SELECT.from(Tutorials)
+            .where({ slug: { in: lowered } })
+            .columns('ID', 'slug', 'status', 'redirectTo_ID');
+
+          const bySlug = new Map(rows.map(r => [String(r.slug).toLowerCase(), r]));
+          const purged = [], alreadyInactive = [], notFound = [], redirected = [];
+
+          // Sequential awaits (not Promise.all or a bulk UPDATE) so a mid-loop
+          // failure leaves the `purged` array reflecting exactly which rows were
+          // committed. Per-slug transaction = partial-failure semantics. Spec:
+          // docs/superpowers/specs/2026-06-30-orphan-purge-design.md §Architecture-2.
+          for (const original of slugs) {
+            const key = String(original).toLowerCase();
+            const row = bySlug.get(key);
+            if (!row) { notFound.push(original); continue; }
+            if (row.redirectTo_ID) { redirected.push(original); continue; }
+            if (row.status === 'INACTIVE') { alreadyInactive.push(original); continue; }
+            // Soft-delete — @cap-js/change-tracking records the status flip
+            // via the annotation at db/change-tracking.cds:37. The Changes
+            // row gets entity='AdminService.Tutorials' (projection name).
+            await UPDATE(Tutorials).set({ status: 'INACTIVE' }).where({ ID: row.ID });
+            purged.push(original);
+          }
+
+          return {
+            purged,
+            alreadyInactive,
+            notFound,
+            redirected,
+            totalAttempted: slugs.length,
+            totalPurged: purged.length,
+            version: (await getActiveVersion()) ?? 0
+          };
+        },
+        { stage: 'purge-orphans', slugCount: slugs.length, runId }
+      );
+
+      res.json(result);
+    } catch (err) {
+      console.error('[content/orphan-purge]', err instanceof Error ? err.message : String(err));
+      res.status(500).json({ error: 'Orphan purge failed' });
+    }
+  }
+
   // --- Chunked publish session handlers (begin/append/commit/abort) ---
   // Thin Express wrappers around the session helpers. Catalog slugs are
   // dropped at the route layer for parity with publishHandler.
@@ -1488,6 +1602,7 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
     getTutorialSource,
     navHandler,
     rollbackHandler,
+    orphanPurgeHandler,
     beginHandler,
     appendHandler,
     commitHandler,
@@ -1508,6 +1623,7 @@ export const sourceHashesHandler = _defaults.sourceHashesHandler;
 export const getTutorialSource = _defaults.getTutorialSource;
 export const navHandler = _defaults.navHandler;
 export const rollbackHandler = _defaults.rollbackHandler;
+export const orphanPurgeHandler = _defaults.orphanPurgeHandler;
 export const beginHandler = _defaults.beginHandler;
 export const appendHandler = _defaults.appendHandler;
 export const commitHandler = _defaults.commitHandler;
