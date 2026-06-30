@@ -31,7 +31,7 @@ import {
   listAlertAudiences,
 } from './lib/alert-enums.js';
 import { _getJobRegistry, runJobByName } from './jobs/scheduler.js';
-import { CronExpressionParser } from 'cron-parser';
+import { enumerateFiringsWithinWindow, nextRunIsoFrom } from './lib/cron-firings.js';
 
 // #756: max jobName payload length. Matches JobLocks.jobName : String(100)
 // column width verified in db/schema.cds:412.
@@ -2160,12 +2160,20 @@ export default class AdminService extends cds.ApplicationService {
     // ─────────────────────────────────────────────────────────────────
     this.on('listJobs', 'JobControls', async () => {
       const registry = _getJobRegistry();
+      const now = new Date();
+      const horizon = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
       return Array.from(registry.values()).map(job => {
+        let nextRunsIso = [];
         let nextRunIso = null;
         try {
-          nextRunIso = CronExpressionParser.parse(job.schedule, { tz: 'UTC' })
-            .next()
-            .toISOString();
+          nextRunsIso = enumerateFiringsWithinWindow(job.schedule, now, horizon, 50);
+          // #750: fallback only when the 24h window is empty (monthly crons).
+          // Explicit length check — NOT `??` — to make the intent unambiguous:
+          // we only invoke nextRunIsoFrom() in the empty case, not always.
+          nextRunIso = nextRunsIso.length > 0
+            ? nextRunsIso[0]
+            : nextRunIsoFrom(job.schedule, now);
         } catch (err) {
           LOG.warn(`listJobs: cron-parser failed on '${job.schedule}': ${err.message}`);
         }
@@ -2175,6 +2183,7 @@ export default class AdminService extends cds.ApplicationService {
           ttlMs: job.ttlMs,
           description: job.description,
           nextRunIso,
+          nextRunsIso,
         };
       });
     });

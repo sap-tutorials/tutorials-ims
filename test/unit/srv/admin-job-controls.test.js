@@ -162,4 +162,75 @@ describe('AdminService.JobControls', () => {
     expect(row).toBeTruthy();
     expect(row.lastSuccessAt).toBeTruthy();
   });
+
+  // ─────────────────────────────────────────────────────────────────
+  // #750: nextRunsIso (forward-visibility window for the Board tile)
+  // ─────────────────────────────────────────────────────────────────
+
+  // Helper: register a job with a specific schedule. Variant of registerOne()
+  // above that takes the schedule, so we can test window math without
+  // colliding with the default '0 0 1 1 *' yearly cron.
+  function registerWithSchedule(jobName, schedule) {
+    sched.registerJob({
+      jobName,
+      schedule,
+      ttlMs: 60000,
+      description: 'unit test #750',
+      fn: async () => ({ processed: 1 }),
+    });
+  }
+
+  it('listJobs response includes nextRunsIso as an array', async () => {
+    const jobName = nextJobName();
+    registerWithSchedule(jobName, '*/5 * * * *');
+    const rows = await callListJobs();
+    const row = rows.find(r => r.jobName === jobName);
+    expect(row).toBeTruthy();
+    expect(Array.isArray(row.nextRunsIso)).toBe(true);
+  });
+
+  it('listJobs.nextRunsIso entries are all within the next 24 hours', async () => {
+    const jobName = nextJobName();
+    registerWithSchedule(jobName, '*/15 * * * *'); // every 15 minutes
+    const rows = await callListJobs();
+    const row = rows.find(r => r.jobName === jobName);
+    expect(row.nextRunsIso.length).toBeGreaterThan(0);
+    const now = Date.now();
+    const horizon = now + 24 * 60 * 60 * 1000;
+    for (const iso of row.nextRunsIso) {
+      const t = new Date(iso).getTime();
+      expect(t).toBeGreaterThan(now);
+      // Allow ±1s slack for handler-clock vs. test-clock skew.
+      expect(t).toBeLessThanOrEqual(horizon + 1000);
+    }
+  });
+
+  it('listJobs.nextRunsIso[0] equals nextRunIso when the next run is in-window', async () => {
+    const jobName = nextJobName();
+    registerWithSchedule(jobName, '*/5 * * * *');
+    const rows = await callListJobs();
+    const row = rows.find(r => r.jobName === jobName);
+    expect(row.nextRunsIso.length).toBeGreaterThan(0);
+    expect(row.nextRunsIso[0]).toBe(row.nextRunIso);
+  });
+
+  it('listJobs.nextRunsIso is [] for a monthly cron whose next firing is >24h away', async () => {
+    // Pick a day-of-month so far in the future that no firing lands in (now, now+24h].
+    // First of next year @ 00:00 UTC is always >24h out from any test run.
+    const jobName = nextJobName();
+    registerWithSchedule(jobName, '0 0 1 1 *'); // 00:00 on 1 Jan
+    const rows = await callListJobs();
+    const row = rows.find(r => r.jobName === jobName);
+    expect(row.nextRunsIso).toEqual([]);
+    // But nextRunIso must still be populated via the fallback.
+    expect(row.nextRunIso).toMatch(/^\d{4}-01-01T00:00:00\.\d{3}Z$/);
+  });
+
+  it('listJobs.nextRunsIso has exactly 50 entries for a per-minute schedule (cap, not 1440)', async () => {
+    const jobName = nextJobName();
+    registerWithSchedule(jobName, '* * * * *');
+    const rows = await callListJobs();
+    const row = rows.find(r => r.jobName === jobName);
+    expect(row.nextRunsIso.length).toBe(50);
+  });
 });
