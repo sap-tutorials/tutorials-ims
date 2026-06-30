@@ -197,6 +197,54 @@ Check:
 3. Was the 60s debounce window already pending? Repeated admin saves within the window merge into one dispatch — check the next workflow run for your edit.
 4. Did the admin save use `x-migration-mode: true` header? Migrator REST calls deliberately skip the trigger to avoid burst-dispatching during bulk imports.
 
+## When to run `purge-orphans`
+
+The `purge-orphans=true` workflow input batches the soft-delete operation the admin Tutorials Fiori app performs one-at-a-time. It targets tutorials whose source markdown is no longer present in any upstream repo — the daily [content-drift workflow](../../../.github/workflows/content-drift-check.yml) surfaces these as "missing locally" slugs.
+
+### When to use it
+
+- The drift report consistently shows ≥20 missing-locally slugs.
+- You've inspected the list (artifact `content-drift-<env>-<run_number>`) and confirmed they are genuinely orphaned, not the result of a fetch regression.
+- You want a one-shot cleanup rather than 20+ clicks in the admin Tutorials app.
+
+### When NOT to use it
+
+- `fetch-tutorials` recently changed — verify the discovery output first.
+- The drift count jumped overnight — that's a fetch problem, not real orphans. Fix the fetch first.
+- You're trying to "unpublish" a single tutorial — use the admin Tutorials app at `/admin-ui/#tutorials-display`.
+
+### How
+
+```bash
+gh workflow run rebuild-content.yml --repo sap-tutorials/tutorials-ims --ref main \
+  -f mode=full -f purge-orphans=true
+```
+
+The workflow:
+
+1. Runs `full`-mode fetch + publish first (the cache is what defines "orphan").
+2. Then the gated `Purge orphan tutorials` step runs `publish-content.ts --purge-orphans`.
+3. Result lands in `$GITHUB_STEP_SUMMARY` as a "🧹 Orphan purge — full mode" block.
+
+The step is gated on three conditions:
+
+- `inputs.purge-orphans == true`
+- `steps.mode.outputs.effective_mode == 'full'` — `slug-targeted` / `catalog-only` modes are rejected at the mode-determine step with an explicit `::error` annotation, so misconfigurations fail fast instead of silently no-op-ing
+- `steps.publish.outcome == 'success'` — if publish fails (network blip, validator error), the server's `/content/source-hashes` may be in a transient state; skip purge until the operator fixes the underlying issue and re-runs
+
+### Safety caps
+
+- **Client:** 50 absolute orphans. If exceeded, the step fails before any HTTP traffic. Override via `PURGE_CAP_ABS` env in the workflow file.
+- **Server:** 100-slug ceiling. Server returns 400 if the client cap was loosened past this point. Split into multiple calls (or raise the server ceiling in a separate change).
+
+### Auth
+
+The CLI sends `Authorization: Bearer $CONTENT_API_KEY` — same secret as `/content/publish`. The endpoint is `POST /content/orphan-purge` (bare-Express + contentAuthMiddleware), NOT a CAP AdminService action. AdminService is XSUAA-scope-gated and CI doesn't carry an XSUAA bearer.
+
+### Rollback
+
+See the [orphan-purge design § Rollback](../../superpowers/specs/2026-06-30-orphan-purge-design.md#rollback) — uses change-tracking + PipelineLog to enumerate which rows flipped during a given CI run, so a mis-purge can be reversed by re-flipping those exact rows back to `ACTIVE`.
+
 ## Related runbooks
 
 - [secrets-tracking.md](secrets-tracking.md) — token bootstrap
