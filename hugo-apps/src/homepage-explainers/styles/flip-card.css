@@ -1,5 +1,28 @@
 /* hugo-apps/src/homepage-explainers/styles/flip-card.css
  * Spec: #759 §4.3
+ *
+ * #793 — overflow containment.
+ *
+ * The flip-card pattern uses `position: absolute; inset: 0` on each face
+ * inside a min-height-controlled container. That's the right primitive for
+ * the 3D rotation animation (both faces occupy the same box and rotate
+ * around it), but it has one rough edge: if the back-face's prose
+ * (tagline + whyItMatters, up to several paragraphs) is taller than the
+ * card's min-height, the absolutely-positioned content overflows the card
+ * boundary and visually punches through sibling content. The symptoms
+ * reported in #793 were:
+ *   - homepage verb-spine on mobile: 'text over text, goes off the page'
+ *     (back content overruns the 140px tile when it narrows to ~110px wide
+ *     in the 2-column mobile grid)
+ *   - verb-page shelf-header: 'flip card is below the other content'
+ *     (back content overruns the 48px tile and visually flows down into
+ *     the shelf list below it)
+ *
+ * Fix: keep the absolute-positioned faces (so the card stays uniform size
+ * when not flipped), but bound them with `overflow-y: auto` on the back
+ * face plus `overflow: hidden` on the card itself. Long back-face content
+ * now scrolls inside the card instead of escaping; the rounded card border
+ * is also no longer overdrawn by the rotating faces during animation.
  */
 
 .hp-flip {
@@ -15,6 +38,8 @@
   text-decoration: none;
   color: inherit;
   outline: none;
+  /* #793 — clip rotating faces so back-face overflow can't escape the card. */
+  overflow: hidden;
 }
 
 .hp-flip:focus-visible {
@@ -37,9 +62,14 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
-/* Shelf-header mode: inline above the shelf list, no card chrome. */
+/* Shelf-header mode: inline above the shelf list, no card chrome.
+ * Bumped the min-height from 48px → 96px in #793: the shelf-header back
+ * face commonly contains tagline + multi-paragraph whyItMatters, and 48px
+ * was nowhere near enough to hold even the first line of that. 96px gives
+ * the back face a reasonable amount of breathing room before its
+ * overflow-y kicks in. */
 .hp-flip--shelf {
-  min-height: 48px;
+  min-height: 96px;
   padding: 8px 0;
   background: transparent;
   border: none;
@@ -72,6 +102,12 @@
   background: var(--sapTile_Background, #fff);
   padding: 12px;
   text-align: left;
+  /* #793 — long whyItMatters prose now scrolls inside the card instead of
+   * spilling out onto sibling content. `overscroll-behavior: contain` keeps
+   * the page from scrolling when the user reaches the scroll-end inside
+   * the back face. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 /* Back-face typography */
