@@ -322,7 +322,7 @@ If only one piece misbehaves (e.g., ribbon renders wrong but sort + Next-3-runs 
 | `app/admin-shell/webapp/controller/cron-timeline-helpers.js` (new) | `buildTimelineSvg()` + `categoryForJob()` + color map. ~80 lines |
 | `app/admin-shell/webapp/controller/job-controls-sort.js` (new) | Pure sort function. ~15 lines |
 | `app/admin-shell/webapp/controller/Board.controller.js` | Sort in `_loadJobControls()`, compute timelineHtml. ~25 lines delta |
-| `app/admin-shell/webapp/view/Board.view.xml:82` | Add `<core:HTML>` ribbon, add `Next 3 runs` column. ~10 lines |
+| `app/admin-shell/webapp/view/Board.view.xml:81` | Add `<core:HTML>` ribbon, add `Next 3 runs` column. ~10 lines |
 | `test/unit/cron-firings.test.js` (new) | 5 server-side tests, ~60 lines |
 | `test/unit/admin-listJobs.test.js` (extend or new) | 5 handler tests, ~80 lines |
 | `app/admin-shell/test/unit/cron-timeline-helpers.test.js` (new) | 5 client helper tests, ~70 lines |
