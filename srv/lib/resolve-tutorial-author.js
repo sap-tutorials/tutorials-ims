@@ -19,9 +19,12 @@
 //         source = 'role-match'
 //     (b) first contributor (any role) whose email matches
 //         source = 'any-contributor'
-//     (c) ownerEmail if it matches the map
-//         source = 'owner-email'
-//     First hit wins. All-miss → authorUserId null + orphans list. source = null.
+//     All-miss → authorUserId null + orphans list. source = null.
+//
+// Phase (c) `ownerEmail` fallback was removed in the #862 reopen because
+// TutorialMeta.ownerEmail encodes a *monitoring* signal (who watches for
+// staleness), not authorship. See the block comment at the removed call
+// site for the full rationale.
 //
 // Email comparison: LOWER(TRIM(email)). The caller MUST pre-normalize the
 // Map's keys to LOWER(TRIM(email)) — this function does NOT re-normalize
@@ -54,7 +57,7 @@ function normalizeLogin(login) {
  *   Defaults to empty Map (safe for existing callers).
  * @returns {{
  *   authorUserId: string|null,
- *   source: 'frontmatter'|'role-match'|'any-contributor'|'owner-email'|null,
+ *   source: 'frontmatter'|'role-match'|'any-contributor'|null,
  *   contributorUserIds: Array<{ contributorIndex: number, userId: string }>,
  *   orphans: Array<{
  *     kind: 'contributor'|'tutorial'|'frontmatter-login',
@@ -159,17 +162,21 @@ export function resolveTutorialAuthor({
     }
   }
 
-  // (c) ownerEmail fallback
-  if (!authorUserId) {
-    const norm = normalize(ownerEmail);
-    if (norm) {
-      const userId = map.get(norm);
-      if (userId) {
-        authorUserId = userId;
-        source = 'owner-email';
-      }
-    }
-  }
+  // (c) ownerEmail fallback — REMOVED in #862 (reopen). TutorialMeta.ownerEmail
+  // is a *monitoring* signal (who watches this tutorial for staleness), not
+  // an authorship signal. Promoting it to author_ID via Phase (c) meant a
+  // single stale monitoring assignment (e.g. from the legacy IMS migration)
+  // would silently promote that user to "author" on every tutorial they
+  // watched. In DEV that hit 36 tutorials for Riley, none of which he wrote.
+  //
+  // If no frontmatter author is declared (Phase 0) and no contributor's
+  // email matches a Users row (Phase a/b), author_ID stays NULL. The
+  // MyAuthoredTutorials endpoint returns fewer false positives; the broader
+  // MyTutorials endpoint still shows the tutorial because MyTutorialsView
+  // source #3 (TutorialMeta.ownerEmail = Users.email) still contributes.
+  // Watchers still show up in the broad list; they just no longer get
+  // promoted to strict authors.
+  // The `owner-email` value is no longer a valid `source` return value.
 
   // All-miss → report a tutorial-level orphan with the candidate emails tried.
   if (!authorUserId) {

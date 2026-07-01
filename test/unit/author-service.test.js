@@ -219,6 +219,24 @@ describe('AuthorService.MyAuthoredTutorials filtering (#862)', () => {
     expect(rows[0].bestPriority).toBe(1);
   });
 
+  it('exposes tutorial_ID also as ID for OData clients (#862 reopen)', async () => {
+    // Regression guard: Sage's imsApiClient reads `row.ID` on the client
+    // side. The underlying MyTutorialsView aliases t.ID as tutorial_ID
+    // (to avoid a name clash with the outer OData key logic in #777); the
+    // projection now re-exposes tutorial_ID as ID so `row.ID` isn't
+    // undefined at the client.
+    const srv = await cds.connect.to('AuthorService');
+    const rows = await srv.tx(
+      { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.run(SELECT.from(srv.entities.MyAuthoredTutorials))
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].ID).toBe('t-A1');
+    // Both aliases coexist on the wire so no consumer breaks.
+    expect(rows[0].tutorial_ID).toBe('t-A1');
+    expect(rows[0].ID).toBe(rows[0].tutorial_ID);
+  });
+
   it('does NOT leak other users authored tutorials', async () => {
     const srv = await cds.connect.to('AuthorService');
     const rows = await srv.tx(

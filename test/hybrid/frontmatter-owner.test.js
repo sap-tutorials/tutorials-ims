@@ -119,13 +119,16 @@ describe.runIf(isSafeForWrites() && process.env.ALLOW_HYBRID_WRITES === 'true')(
     }, 60_000);
 
     // -------------------------------------------------------------------------
-    // Test 2 — fill-NULL guard preserved for non-frontmatter fallback
+    // Test 2 — publish-time author resolution no longer promotes ownerEmail
+    // (#862 reopen)
     //
-    // No frontmatterGithubLogin. author_ID is NULL. The resolver falls through
-    // to owner-email fallback. author_ID MUST be populated (fill-NULL path).
+    // No frontmatterGithubLogin. No matching contributor. author_ID stays NULL.
+    // Phase (c) ownerEmail fallback was removed because it conflated
+    // TutorialMeta.ownerEmail (monitoring signal) with authorship. See the
+    // block comment in srv/lib/resolve-tutorial-author.js for full rationale.
     // -------------------------------------------------------------------------
-    it('Test 2 — fallback fill-NULL: author_ID populated when no frontmatter login', async () => {
-      const slug = TEST_PREFIX + 'fillnull-' + Date.now();
+    it('Test 2 — no-Phase-c: author_ID stays NULL when only ownerEmail matches', async () => {
+      const slug = TEST_PREFIX + 'nophasec-' + Date.now();
 
       const userId = cds.utils.uuid();
       const tutId = cds.utils.uuid();
@@ -153,23 +156,28 @@ describe.runIf(isSafeForWrites() && process.env.ALLOW_HYBRID_WRITES === 'true')(
       await linkTutorialAuthorship(NS, {
         [slug]: {
           primaryContributorEmail: email,
-          // No frontmatterGithubLogin — should fall through to owner-email
+          // No frontmatterGithubLogin. No TutorialContributors row inserted.
+          // Under the old resolver Phase (c) would set author_ID = userId here
+          // via the ownerEmail fallback. Under the new resolver it must stay NULL.
         },
       });
 
       const t = await SELECT.one.from(Tutorials).where({ ID: tutId }).columns('author_ID');
-      expect(t.author_ID).toBe(userId);
+      expect(t.author_ID).toBeNull();
     }, 60_000);
 
     // -------------------------------------------------------------------------
-    // Test 3 — fill-NULL guard preserved: admin-set author_ID NOT overwritten by
-    // non-frontmatter fallback
+    // Test 3 — fill-NULL guard preserved: admin-set author_ID NOT overwritten
     //
-    // author_ID is already set to adminUserId. No frontmatterGithubLogin. The
-    // resolver would resolve via owner-email to a different user, but the
-    // IS NULL gate must prevent overwriting the admin-set value.
+    // author_ID is already set to adminUserId. No frontmatterGithubLogin.
+    // No contributor rows (so Phase (a)/(b) miss). The publish payload's
+    // primaryContributorEmail could match commitUserId, but the fill-NULL
+    // gate must prevent it from overwriting the admin-set adminUserId.
+    // Additionally, with Phase (c) removed (#862 reopen), the resolver never
+    // returns commitUserId here anyway — the test now doubly-guards the
+    // admin-correction invariant.
     // -------------------------------------------------------------------------
-    it('Test 3 — fill-NULL guard: admin-set author_ID not overwritten by email fallback', async () => {
+    it('Test 3 — fill-NULL guard: admin-set author_ID not overwritten by publish', async () => {
       const slug = TEST_PREFIX + 'guard-' + Date.now();
 
       const adminUserId = cds.utils.uuid();

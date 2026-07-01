@@ -166,13 +166,12 @@ describe.runIf(isSafeForWrites())('tutorial-author backfill (#authorship) [hybri
     // exporting — instead we exercise it end-to-end by simulating
     // a publish payload through the public chunked helper.
     //
-    // Practical approach: invoke a minimal end-to-end by using
-    // upsertTutorialMetadata's already-published TutorialMeta side
-    // effect — TutorialMeta.ownerEmail being present after the
-    // existing publish path runs is enough for the resolver to
-    // find the user via owner-email fallback. But the cheapest
-    // assertion here is to confirm that the backfill (the same
-    // resolver, run against the same DB state) produces the link.
+    // Practical approach: invoke a minimal end-to-end by running the
+    // backfill script. seedTriplet creates a Users row + a matching
+    // TutorialContributors row with role='author', so Phase (a) role-match
+    // resolves the author. (Phase (c) ownerEmail fallback was removed in
+    // #862 reopen; if someone regresses that we'd catch it here because
+    // this test's TutorialMeta is never seeded.)
     execFileSync('node', ['scripts/backfill-tutorial-authors.cjs', '--commit'], {
       encoding: 'utf8',
       stdio: 'pipe',
