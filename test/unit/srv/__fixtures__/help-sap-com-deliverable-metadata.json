@@ -1,0 +1,16 @@
+{
+  "status": "OK",
+  "data": {
+    "deliverable": {
+      "id": 1234567,
+      "buildNo": 987654,
+      "url": "sap-business-technology-platform"
+    },
+    "topicLoio": "loio-landing",
+    "filePath": "landing.html",
+    "readableUrls": {
+      "productReadableUrl": "btp",
+      "deliverableReadableUrl": "sap-business-technology-platform"
+    }
+  }
+}

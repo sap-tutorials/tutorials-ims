@@ -1,0 +1,12 @@
+{
+  "sha": "abc123",
+  "truncated": false,
+  "tree": [
+    { "path": "docs/node.js/handlers.md", "type": "blob", "size": 24000, "sha": "h1" },
+    { "path": "docs/node.js/services.md", "type": "blob", "size": 18000, "sha": "h2" },
+    { "path": "docs/cds/cdl.md", "type": "blob", "size": 30000, "sha": "h3" },
+    { "path": "README.md", "type": "blob", "size": 500, "sha": "h4" },
+    { "path": "docs/assets/logo.png", "type": "blob", "size": 12000, "sha": "h5" },
+    { "path": "docs/_config.js", "type": "blob", "size": 1000, "sha": "h6" }
+  ]
+}

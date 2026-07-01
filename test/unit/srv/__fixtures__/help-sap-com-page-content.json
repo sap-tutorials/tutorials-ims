@@ -1,0 +1,32 @@
+{
+  "status": "OK",
+  "data": {
+    "deliverable": {
+      "id": 1234567,
+      "buildNo": 987654,
+      "fullToc": [
+        {
+          "t": "Getting Started with SAP BTP",
+          "u": "landing.html",
+          "c": []
+        },
+        {
+          "t": "Administration",
+          "u": "administration.html",
+          "c": [
+            { "t": "Managing Subaccounts", "u": "administration/subaccounts.html", "c": [] },
+            { "t": "Entitlements and Quotas", "u": "administration/entitlements.html", "c": [] },
+            { "t": "Short Stub", "u": "administration/short-stub.html", "c": [] },
+            { "t": "", "u": "administration/no-title.html", "c": [] }
+          ]
+        }
+      ]
+    },
+    "currentPage": {
+      "readableUrls": {
+        "topicReadableUrl": "sap-business-technology-platform"
+      }
+    },
+    "body": "<html><body><p>Landing body content for SAP BTP. Lorem ipsum dolor sit amet consectetur adipiscing elit, this string is intentionally padded to comfortably exceed the 200-char minimum-body filter so the landing row survives.</p></body></html>"
+  }
+}
