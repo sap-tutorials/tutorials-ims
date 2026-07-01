@@ -81,3 +81,128 @@ describe.runIf(isSafeForWrites())('Tutorial DELETE cascades to TutorialConceptLi
     expect(concept.slug).toBe('__test__-789-cascade-concept-tut');
   });
 });
+
+// ────────────────────────────────────────────────────────────────────
+// Rows 2/3/4: LearningJourneys → LearningJourneyConceptLinks
+//                              + LearningJourneyPrerequisites (dual composition + negative)
+// ────────────────────────────────────────────────────────────────────
+describe.runIf(isSafeForWrites())('LearningJourney DELETE cascades correctly (with deliberate non-cascade on prerequisite side)', () => {
+  // Two parent rows (A + B) because Prerequisites references LJ twice.
+  const journeyIdA = '00000000-0000-0000-0000-789000000010';
+  const journeyIdB = '00000000-0000-0000-0000-789000000011';
+  const conceptId  = '00000000-0000-0000-0000-789000000012';
+  const linkId     = '00000000-0000-0000-0000-789000000013';  // journey A → concept
+  const prereqId1  = '00000000-0000-0000-0000-789000000014';  // A requires B (deleted via A)
+  const prereqId2  = '00000000-0000-0000-0000-789000000015';  // A requires B (deleted via B — negative)
+
+  beforeAll(async () => {
+    const db = await cds.connect.to('db');
+    assertHanaKind(db);
+  });
+
+  afterAll(async () => {
+    const {
+      LearningJourneys, LearningJourneyConceptLinks, LearningJourneyPrerequisites,
+    } = cds.entities('com.sap.developers.ims.external');
+    const { Concepts } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(LearningJourneyConceptLinks).where({ ID: linkId });
+    await DELETE.from(LearningJourneyPrerequisites).where({ ID: prereqId1 });
+    await DELETE.from(LearningJourneyPrerequisites).where({ ID: prereqId2 });
+    await DELETE.from(Concepts).where({ ID: conceptId });
+    await DELETE.from(LearningJourneys).where({ ID: journeyIdA });
+    await DELETE.from(LearningJourneys).where({ ID: journeyIdB });
+  });
+
+  it('deletes LearningJourneyConceptLinks rows when the parent LearningJourney is deleted', async () => {
+    const { LearningJourneys, LearningJourneyConceptLinks } =
+      cds.entities('com.sap.developers.ims.external');
+    const { Concepts } = cds.entities('com.sap.developers.ims');
+
+    await INSERT.into(LearningJourneys).entries({
+      ID: journeyIdA,
+      slug: '__test__-789-lj-a',
+      title: '__test__ Journey A',
+    });
+    await INSERT.into(Concepts).entries({
+      ID: conceptId,
+      slug: '__test__-789-cascade-concept-lj',
+      name: '__test__ Cascade Concept (lj)',
+      status: 'ACTIVE',
+    });
+    await INSERT.into(LearningJourneyConceptLinks).entries({
+      ID: linkId,
+      journey_ID: journeyIdA,
+      concept_ID: conceptId,
+      predicate: 'covers',
+    });
+
+    await DELETE.from(LearningJourneys).where({ ID: journeyIdA });
+
+    const orphan = await SELECT.one.from(LearningJourneyConceptLinks).where({ ID: linkId });
+    expect(orphan).toBeUndefined();
+
+    const concept = await SELECT.one.from(Concepts).where({ ID: conceptId });
+    expect(concept).toBeDefined();
+  });
+
+  it('deletes LearningJourneyPrerequisites rows when the journey-side parent is deleted', async () => {
+    const { LearningJourneys, LearningJourneyPrerequisites } =
+      cds.entities('com.sap.developers.ims.external');
+
+    // Fresh A + B (previous test deleted A).
+    await INSERT.into(LearningJourneys).entries([
+      { ID: journeyIdA, slug: '__test__-789-lj-a', title: '__test__ Journey A' },
+      { ID: journeyIdB, slug: '__test__-789-lj-b', title: '__test__ Journey B' },
+    ]);
+    await INSERT.into(LearningJourneyPrerequisites).entries({
+      ID: prereqId1,
+      journey_ID: journeyIdA,
+      prerequisite_ID: journeyIdB,
+    });
+
+    // Delete A (the composition parent). Cascade should fire.
+    await DELETE.from(LearningJourneys).where({ ID: journeyIdA });
+
+    const orphan = await SELECT.one.from(LearningJourneyPrerequisites).where({ ID: prereqId1 });
+    expect(orphan).toBeUndefined();
+
+    // B survives (it's on the non-composition prerequisite side).
+    const survivorB = await SELECT.one.from(LearningJourneys).where({ ID: journeyIdB });
+    expect(survivorB).toBeDefined();
+    expect(survivorB.slug).toBe('__test__-789-lj-b');
+  });
+
+  it('does NOT cascade LearningJourneyPrerequisites when the prerequisite-side parent is deleted (documents GC-sweep asymmetry)', async () => {
+    // This is the LOAD-BEARING NEGATIVE TEST for the audit.
+    // Cascade fires on `journey` (composition), NOT on `prerequisite` (association).
+    // Dangling-prereq rows are cleaned up by the GC sweep, NOT by DELETE cascade.
+    // See db/external-content.cds:36-40 for the schema comment documenting this.
+    // If a future PR "simplifies" LearningJourneyPrerequisites by adding a
+    // Composition on the `prerequisite` side, this test will fail loudly.
+    const { LearningJourneys, LearningJourneyPrerequisites } =
+      cds.entities('com.sap.developers.ims.external');
+
+    // Re-insert A; B still exists from previous test's survivor assertion.
+    await INSERT.into(LearningJourneys).entries({
+      ID: journeyIdA, slug: '__test__-789-lj-a', title: '__test__ Journey A',
+    });
+    await INSERT.into(LearningJourneyPrerequisites).entries({
+      ID: prereqId2,
+      journey_ID: journeyIdA,
+      prerequisite_ID: journeyIdB,
+    });
+
+    // Delete B (the prerequisite side, NOT the journey side).
+    await DELETE.from(LearningJourneys).where({ ID: journeyIdB });
+
+    // Assert the prereq row SURVIVES — no cascade on this side.
+    const stillThere = await SELECT.one.from(LearningJourneyPrerequisites).where({ ID: prereqId2 });
+    expect(stillThere).toBeDefined();
+    expect(stillThere.journey_ID).toBe(journeyIdA);
+    expect(stillThere.prerequisite_ID).toBe(journeyIdB);
+
+    // Assert A (the composition-side parent) SURVIVES — we deleted B, not A.
+    const survivorA = await SELECT.one.from(LearningJourneys).where({ ID: journeyIdA });
+    expect(survivorA).toBeDefined();
+  });
+});
