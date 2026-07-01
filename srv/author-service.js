@@ -5,7 +5,7 @@ import { createRateLimiter, RateLimitError } from './lib/chat-rate-limit.js';
 import { scheduleRebuild } from './lib/rebuild-trigger.js';
 import { createAuditEmitter } from './lib/audit-event.js';
 import { handleRebuildAction } from './lib/rebuild-action-handler.js';
-import { applyMdFormat } from './lib/tag-md-format.js';
+import { attachTagsMdFormatHandlers } from './lib/tag-md-format-handlers.js';
 import { resolveDbUser } from './lib/resolve-db-user.js';
 
 const OS_VALUES = ['Windows', 'macOS', 'Linux', 'BAS'];
@@ -103,8 +103,14 @@ export default cds.service.impl(async function () {
   // so OData consumers (Sage tag-search, #824) get the legacy IMS markdown-ready
   // key, e.g. titlePath "Topic : SAP Community" → mdFormat "topic>sap-community".
   // Algorithm parity with com.sap.developers.ims.util.TagUtil; symmetric with
-  // the identical handler on AdminService.Tags so both surfaces agree.
-  this.after('READ', 'Tags', (rows) => applyMdFormat(rows));
+  // the identical wiring on AdminService.Tags so both surfaces agree.
+  //
+  // The attached handlers also translate any `$filter` predicate over the
+  // virtual `mdFormat` field into a titlePath predicate for SQL push-down,
+  // then re-apply the original predicate in JS after applyMdFormat runs
+  // (#837 — Sage complex filter expression returning 500). Without this
+  // the DB errors on the missing column and CAP surfaces a generic 500.
+  attachTagsMdFormatHandlers(this, 'Tags');
 
   this.on('reviewTutorial', async (req) => {
     const { tutorialId } = req.data;

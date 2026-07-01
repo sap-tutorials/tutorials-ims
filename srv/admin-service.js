@@ -18,7 +18,7 @@ import { invalidateSecret } from './lib/secret-resolver.js';
 import { scheduleRebuild } from './lib/rebuild-trigger.js';
 import { createAuditEmitter } from './lib/audit-event.js';
 import { handleRebuildAction } from './lib/rebuild-action-handler.js';
-import { applyMdFormat } from './lib/tag-md-format.js';
+import { attachTagsMdFormatHandlers } from './lib/tag-md-format-handlers.js';
 import { cleanupChangeLog } from './jobs/cleanup.js';
 import { ensureDevtoberfestActiveFlagInvariant } from './lib/devtoberfest-active-flag.js';
 import { getTutorialSource } from './lib/content-store.js';
@@ -1178,7 +1178,9 @@ export default class AdminService extends cds.ApplicationService {
       return result;
     });
 
-    this.after('READ', 'Tags', (rows) => applyMdFormat(rows));
+    // Tags.mdFormat is a virtual field (populated on read) + $filter over
+    // it must not blow up. See srv/lib/tag-md-format-handlers.js — #837.
+    attachTagsMdFormatHandlers(this, 'Tags');
 
     this.on('setFeaturedOrder', async (req) => {
       const { taskLegacyId, taskType, featuredOrder } = req.data;
