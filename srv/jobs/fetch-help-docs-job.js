@@ -34,6 +34,7 @@ import {
   resolveConceptCandidates,
 } from '../lib/kg-merge-on-write.js';
 import { resolveKnowledgeGraphSettings } from '../lib/runtime-config/kg-settings.js';
+import { resolveSecret } from '../lib/secret-resolver.js';
 
 const NAMESPACE_EXT = 'com.sap.developers.ims.external';
 const NAMESPACE_KG = 'com.sap.developers.ims';
@@ -58,6 +59,7 @@ function computeSnippet(description) {
 /**
  * @param {string|null} logId — passed from runWithLock; ignored here.
  * @param {object} [opts]
+ * @param {string}   [opts.apiKeyOverride]       — bypass credstore (test seam; '' = empty → triggers MISSING path)
  * @param {Function} [opts.embed]                — embedding client
  * @param {Function} [opts.extractFn]            — LLM extract fn (test seam)
  * @param {Function} [opts.callModel]            — LLM call fn (test seam)
@@ -135,9 +137,27 @@ export async function runFetchHelpDocs(logId, opts = {}) {
     // The orchestrator handles per-source failures internally (Promise.allSettled)
     // and always returns { rows, perSource } — the perSource shape is locked in
     // Task 1's orchestrator unit test.
+    //
+    // API key: TUTORIALS_GITHUB_TOKEN (credstore) → env fallbacks. Used by the
+    // cap-cloud-sap fetcher (GitHub tree + raw endpoints); help.sap.com and
+    // ui5.sap.com endpoints are unauthenticated. If missing, we still fetch —
+    // cap-cloud-sap will 401 out and get logged as a fetcher rejection; the
+    // other two sources still yield a partial catalog.
+    let apiKey = opts.apiKeyOverride;
+    if (apiKey === undefined) {
+      apiKey = await resolveSecret('TUTORIALS_GITHUB_TOKEN', { logTag: 'fetch-help-docs' })
+        .catch(() => null)
+        || process.env.GITHUB_TOKEN
+        || process.env.TUTORIALS_GITHUB_TOKEN
+        || null;
+    }
+    if (!apiKey) {
+      LOG.warn('fetch-help-docs: TUTORIALS_GITHUB_TOKEN unavailable; cap-cloud-sap fetcher will fail (help.sap.com + ui5.sap.com still fetch).');
+    }
+
     let orchResult;
     try {
-      orchResult = await fetchAllHelpDocs({ limit: DEFAULT_LIMIT });
+      orchResult = await fetchAllHelpDocs({ apiKey, limit: DEFAULT_LIMIT });
     } catch (err) {
       LOG.error(`fetch-help-docs: orchestrator failed: ${err.message}`);
       summary.errors++;
@@ -331,7 +351,14 @@ export async function runFetchHelpDocs(logId, opts = {}) {
       linksWritten: summary.linksWritten,
       hasAnchorCount: summary.hasAnchorCount,
       nullAnchorCount: summary.nullAnchorCount,
+      mergedAtExtract: summary.mergedAtExtract,
+      mintedAtExtract: summary.mintedAtExtract,
+      skippedNoEmbed: summary.skippedNoEmbed,
+      skippedNoChange: summary.skippedNoChange,
+      promptTokens: summary.promptTokens,
+      completionTokens: summary.completionTokens,
       budgetExhausted: summary.budgetExhausted,
+      errors: summary.errors,
       perSource: summary.perSource,
     })}`);
 

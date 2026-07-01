@@ -81,20 +81,62 @@ describe('help-doc-extract', () => {
 });
 
 describe('KG_HELP_DOC_EXTRACT_SCHEMA', () => {
+  // Schema is intentionally minimal per Bug 2 fix (2026-07-01): tight constraints
+  // (slug pattern, name/desc length caps, confidence floor, anchor pattern) moved
+  // into applyPostValidation because gpt-4o-mini structured-output was returning
+  // empty tool calls when schema constraints rejected a single item. See
+  // srv/lib/help-doc-extract.js comment block for rationale.
+
   it('declares optional anchor field (nullable string)', () => {
     const anchorSpec = KG_HELP_DOC_EXTRACT_SCHEMA.parameters.properties.concepts.items.properties.anchor;
     expect(anchorSpec).toBeDefined();
-    // anchor may be null OR a slug-format string
+    // anchor may be null OR a string (pattern enforced downstream in applyPostValidation)
     expect(anchorSpec.type).toEqual(['string', 'null']);
-    expect(anchorSpec.pattern).toBe('^[a-z0-9-]+$');
   });
 
-  it('caps concepts array at 8', () => {
-    expect(KG_HELP_DOC_EXTRACT_SCHEMA.parameters.properties.concepts.maxItems).toBe(8);
+  it('caps concepts array at 8 via post-validation (schema has no maxItems)', async () => {
+    // Verify behavior end-to-end: LLM returns 10, filtered to 8.
+    const ten = Array.from({ length: 10 }, (_, i) => ({
+      slug: `slug-${i}`, name: `Concept ${i}`, description: 'x',
+      confidence: 0.9, anchor: null,
+    }));
+    const callModel = vi.fn().mockResolvedValue({
+      verdict: { concepts: ten },
+      tokenUsage: { prompt: 100, completion: 10 },
+    });
+    const result = await extractConceptsFromHelpDoc({
+      callModel,
+      helpDoc: {
+        title: 't', description: 'd', source: 'cap-cloud-sap',
+        product: 'cap', section: null, url: 'https://x/y',
+      },
+      nearestConcepts: [],
+    });
+    expect(result.concepts).toHaveLength(8);
   });
 
-  it('enforces floor 0.7 on confidence', () => {
+  it('enforces floor 0.7 on confidence via post-validation (schema accepts 0-1)', async () => {
+    // Confidence floor lives in post-validation. Schema accepts 0-1 broadly
+    // (so a single-below-floor concept doesn't crash the tool call).
     const confSpec = KG_HELP_DOC_EXTRACT_SCHEMA.parameters.properties.concepts.items.properties.confidence;
-    expect(confSpec.minimum).toBe(0.7);
+    expect(confSpec.minimum).toBe(0);
+    expect(confSpec.maximum).toBe(1);
+    // End-to-end: a below-floor entry is dropped.
+    const callModel = vi.fn().mockResolvedValue({
+      verdict: { concepts: [
+        { slug: 'below', name: 'Below', description: 'x', confidence: 0.5, anchor: null },
+        { slug: 'above', name: 'Above', description: 'x', confidence: 0.85, anchor: null },
+      ]},
+      tokenUsage: { prompt: 100, completion: 10 },
+    });
+    const result = await extractConceptsFromHelpDoc({
+      callModel,
+      helpDoc: {
+        title: 't', description: 'd', source: 'cap-cloud-sap',
+        product: 'cap', section: null, url: 'https://x/y',
+      },
+      nearestConcepts: [],
+    });
+    expect(result.concepts.map(c => c.slug)).toEqual(['above']);
   });
 });
