@@ -87,7 +87,7 @@ the same three-step shape:
 | 1 | `Tutorials` | `TutorialConceptLinks` | `teaches` | primary cascade (moved from #792) |
 | 2 | `LearningJourneys` | `LearningJourneyConceptLinks` | `covers` | primary cascade |
 | 3 | `LearningJourneys` | `LearningJourneyPrerequisites` (journey side) | — | secondary cascade — insert A + B + prereq(A→B); delete A; assert prereq row gone, B survives |
-| 4 | `LearningJourneys` | `LearningJourneyPrerequisites` (prerequisite side) | — | **negative** — insert A + B + prereq(A→B); delete B; assert prereq row **survives** (documents non-cascade); comment links to GC sweep |
+| 4 | `LearningJourneys` | `LearningJourneyPrerequisites` (prerequisite side) | — | **negative** — insert A + B + prereq(A→B); delete B; assert prereq row **survives** AND A survives (documents non-cascade); comment links to GC sweep |
 | 5 | `BlogPosts` | `BlogPostConceptLinks` | `discusses` | primary cascade |
 | 6 | `DiscoveryMissions` | `DiscoveryMissionConceptLinks` | `teaches` | primary cascade |
 | 7 | `DiscoveryMissions` | `DiscoveryMissionServices` | — | secondary cascade (free-form service name, no concept side) |
@@ -144,6 +144,14 @@ Every fixture row has a stable, greppable ID; ranges leave headroom for
 future growth without renumbering. `SELECT * WHERE ID LIKE '%789%'` on
 DEV surfaces any test-artefact leak immediately.
 
+Only the LearningJourneys block currently allocates a 10-wide range because
+it needs parent A + parent B (rows 3 and 4 require two parents). The three
+other dual-composition blocks (`DiscoveryMissions`, `Videos`) get away with
+a 3-wide range because their secondary tables — `DiscoveryMissionServices`
+and `VideoServices` — need only one parent each. If a future assertion
+requires two parents in one of the 3-wide ranges, expand the range at that
+time; the `789NNN` namespace has ample room.
+
 ### 3. `__test__-789-*` slug prefix
 
 Matches the `test/hybrid/_guard.js` write-safety convention.
@@ -197,6 +205,12 @@ Reads ten counts (one per composition-side FK across the Phase 4 link
 tables plus the two `LearningJourneyPrerequisites` sides) and prints them.
 **Not committed** — same pattern as #792's `_kg-orphan-cleanup.cjs`. Lives
 in the PR description as a runbook step, not in the tree.
+
+**Exit code contract** — the script exits `1` if any of the nine
+composition-side counts is > 0 (blocks a copy-paste PR checklist workflow
+without manual output inspection). Exits `0` otherwise. The
+`LearningJourneyPrerequisites.prerequisite_ID` count is printed but never
+affects the exit code (informational only per the decision matrix below).
 
 ### Probed tables
 
