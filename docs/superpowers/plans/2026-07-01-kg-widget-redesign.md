@@ -209,7 +209,7 @@ Expected: PASS (existing + new cases).
 
 Run: `npx vitest run --project unit test/unit/kg-*.test.js test/unit/kg-*.test.ts`
 
-Expected: PASS across the suite.
+Expected: PASS across the suite. If anything downstream fails, invoke @superpowers:systematic-debugging — a default-arg cache-signature extension shouldn't ripple, and if it does, there's usually a mock somewhere that pinned the old two-arg shape.
 
 - [ ] **Step 3.7: Commit**
 
@@ -312,6 +312,47 @@ git commit -m "feat(kg): additive typeConfig + metaText on neighborhood response
 
 ---
 
+## Task 5a: Extract per-corpus loader (prerequisite refactor for Task 5)
+
+**Rationale:** The block at `srv/knowledge-graph-service.js:638-784` — six parallel overlap-tallies + metadata SELECTs + row shaping — is called once today (by `neighborhood`) and needs to be called again by `neighborhoodFull` with different limits. Extract to a reusable module BEFORE the new handler lands, so Task 5's RED test can be written against the extracted loader and the refactor diff stays behavior-preserving in isolation.
+
+**Files:**
+- Create: `srv/lib/kg-other-resources-loader.js`
+- Modify: `srv/knowledge-graph-service.js`
+
+- [ ] **Step 5a.1: Read the block to extract**
+
+`srv/knowledge-graph-service.js:638-784`. Note the closures over `cds.entities(...)` at line 630, the `MAX_OTHER_RESOURCES` cap in the `tally` helper, and the `categoryLabel` import used only by the mission branch.
+
+- [ ] **Step 5a.2: Design the extracted function signature**
+
+```js
+export async function loadOtherResourcesByType(cds, conceptIds, perTypeLimit)
+```
+
+Returns `Map<string, Array<row>>` keyed by `type` (each row already in wire shape minus `metaText`). Callers decide whether to merge (sidebar) or group + rank across types (expanded).
+
+- [ ] **Step 5a.3: Extract; keep every existing unit + hybrid test green (pure refactor)**
+
+Move the block into `srv/lib/kg-other-resources-loader.js`. Update the `neighborhood` handler to call it, then flatten + `mergeOtherResources(...byType.values())` for the sidebar's flat top-5. No RED test needed — behavior must not change, and the existing suite pins it.
+
+- [ ] **Step 5a.4: Run all KG unit tests**
+
+Run: `npx vitest run --project unit test/unit/kg-*.test.js`
+
+Expected: PASS across the board.
+
+- [ ] **Step 5a.5: Commit**
+
+```bash
+git add srv/lib/kg-other-resources-loader.js srv/knowledge-graph-service.js
+git commit -m "refactor(kg): extract per-corpus loader (task 5a of #850, prep for neighborhoodFull)"
+```
+
+`kg-other-resources-loader.js` MUST be added to the srv-qa cp list — Task 7 already lists it.
+
+---
+
 ## Task 5: New `neighborhoodFull` CDS function + handler
 
 **Rationale:** Fresh endpoint powering the expanded panel — per-type buckets, larger caps, still anonymous-readable. Own cache bucket. Rank + shape logic reuses the per-corpus loaders written in the existing handler; the new handler returns them un-merged.
@@ -339,16 +380,16 @@ Expected: exit 0.
 
 - [ ] **Step 5.2: Write failing test `test/unit/kg-neighborhood-full.test.js` (RED)**
 
-Cover:
+Cover (each in its own `it()`):
 - Given a fixture slug with overlap in all 6 types, response has `otherResourcesByType.length === 6`, ordered by `config.priority` ascending.
 - Each entry's `items` is capped at `KG_NEIGHBORHOOD_FULL_PER_TYPE_LIMIT` (default 15).
 - Empty types omitted from the array (not present with `items: []`).
 - `typeConfig` and per-row `metaText` present (same as `neighborhood`).
 - `tutorial`, `graphVersion`, `prerequisitesOf`, `sharedConcepts`, `whatToLearnNext` populated.
-- No `teaches` field.
-- Feature-flag off → 503 (reuse the pattern from the existing 503 test on `neighborhood`).
+- No `teaches` field on the response envelope.
+- **Kill-switch path:** with `KNOWLEDGE_GRAPH_ENABLED=false` in the mocked env, the handler rejects with 503. Follow the same env-toggle pattern used by the existing kill-switch test on `neighborhood`.
 
-Use the same fixture harness as existing `kg-neighborhood.test.js` — read that first to understand how the ranker is mocked in unit tests.
+Use the same fixture harness as existing `kg-neighborhood.test.js` — read that first to understand how the ranker + loader are mocked. Task 5a's extracted loader is now importable as `loadOtherResourcesByType` for mock replacement.
 
 - [ ] **Step 5.3: Confirm RED**
 
@@ -361,35 +402,15 @@ Expected: FAIL — action not implemented.
 Add `this.on('neighborhoodFull', async (req) => { … })` to `srv/knowledge-graph-service.js`. Structure:
 
 1. Slug validation via `SLUG_RE` (same as `neighborhood`).
-2. Feature-flag gate (same `before('*')` already gates it; nothing new to add).
+2. Feature-flag gate — already handled by `before('*')`; nothing new here.
 3. Read `graphVersion` from `GraphMetadata`; return empty envelope if null.
 4. `getCachedNeighborhood(slug, graphVersion, 'full')` — return early on hit.
-5. Reuse the ranker from `rankNeighborhood` but pass a bumped `maxResults` (from 10 to 30 for `prerequisitesOf`, `sharedConcepts`, `whatToLearnNext`).
-6. Reuse the six per-corpus overlap-tally loaders from the existing handler — factor them out into a helper `loadOtherResourcesByType(conceptIds, perTypeLimit)` that returns `Map<type, Array<row>>`. Both handlers call this helper; `neighborhood` follows with `mergeOtherResources`; `neighborhoodFull` builds `otherResourcesByType` from the map by joining against `RESOURCE_TYPE_CONFIG`, filtering empty types, sorting by priority.
-7. Stamp `metaText` on every row (same map lookup as task 4).
-8. Assemble `result`, set ETag `` `${slug}:${graphVersion}:full` ``, cache it under `'full'`, return.
+5. Reuse the ranker from `rankNeighborhood`; pass a bumped `maxResults` (30, up from 10) for `prerequisitesOf`, `sharedConcepts`, `whatToLearnNext`.
+6. Call `loadOtherResourcesByType(cds, conceptIds, KG_NEIGHBORHOOD_FULL_PER_TYPE_LIMIT)` from Task 5a; join against `RESOURCE_TYPE_CONFIG`; filter empty types; sort by `config.priority`.
+7. Stamp `metaText` on every row via `configByType.get(row.type)?.renderMeta(row)`.
+8. Assemble result, set ETag `` `${slug}:${graphVersion}:full` ``, cache under `'full'`, return.
 
-The refactor to extract `loadOtherResourcesByType` should be done in a **separate commit** BEFORE this step, so the diff is easier to review. See Step 5.4a below.
-
-- [ ] **Step 5.4a: Refactor per-corpus loader into `loadOtherResourcesByType`**
-
-Move the block at lines 638-784 of `srv/knowledge-graph-service.js` into a new module `srv/lib/kg-other-resources-loader.js`. It exports:
-
-```js
-export async function loadOtherResourcesByType(cds, conceptIds, perTypeLimit)
-```
-
-Returns a `Map<string, Array<{...OtherResourceShape, overlapCount}>>` keyed by `type`. Existing `neighborhood` handler calls it, then either merges (sidebar) or groups (full).
-
-Commit this refactor separately BEFORE step 5.4 lands the new handler:
-```bash
-git add srv/lib/kg-other-resources-loader.js srv/knowledge-graph-service.js test/unit/*.test.js
-git commit -m "refactor(kg): extract per-corpus loader into kg-other-resources-loader (task 5 prep)"
-```
-
-Run the full KG unit-test suite after the refactor to confirm no behavior change: `npx vitest run --project unit test/unit/kg-*.test.js` — expected PASS across the board (this is a pure refactor).
-
-Add `kg-other-resources-loader.js` to the srv-qa cp-list decision in Task 9 (tracked below).
+Read `KG_NEIGHBORHOOD_FULL_PER_TYPE_LIMIT` from `process.env` with default 15. Log the default at boot.
 
 - [ ] **Step 5.5: Confirm GREEN on the new handler**
 
@@ -433,23 +454,29 @@ git commit -m "feat(kg): /graph/neighborhoodFull for expanded panel data (task 5
 
 - [ ] **Step 6.1: Extend the approuter route unit test (RED)**
 
-In `test/unit/approuter/xs-app-graph-routes.test.js`, add a case:
+In `test/unit/approuter/xs-app-graph-routes.test.js`, add cases pinned by exact `source` prefix (defensive against multi-match on `.find`):
 
 ```js
-it('allowlist regex matches /graph/neighborhoodFull for anonymous access', () => {
+it('anonymous /graph/ allowlist regex matches neighborhoodFull (issue #850)', () => {
+  // Pin by the exact allowlist prefix, not a substring match — future
+  // routes could contain 'neighborhood' too.
   const allowlist = xsApp.routes.find(
     (r) => typeof r.source === 'string' &&
-           r.source.includes('neighborhood') &&
+           r.source.startsWith('^/graph/(neighborhood') &&
            r.authenticationType === 'none'
   );
+  expect(allowlist, 'anon-allowlist /graph route').toBeTruthy();
   const re = new RegExp(allowlist.source);
+  // Regression guard: existing case still passes.
+  expect(re.test("/graph/neighborhood(slug='x')")).toBe(true);
+  // The new case.
   expect(re.test("/graph/neighborhoodFull(slug='x')")).toBe(true);
 });
 ```
 
 Run: `npx vitest run --project unit test/unit/approuter/xs-app-graph-routes.test.js`
 
-Expected: FAIL (current regex doesn't match `neighborhoodFull`).
+Expected: FAIL — new assertion (`neighborhoodFull` case) fails; existing case passes.
 
 - [ ] **Step 6.2: Update the regex**
 
@@ -821,6 +848,12 @@ Create `test/unit/hugo-apps/related-graph-expanded-panel.test.ts`. Given a mocke
 - Widen (⤢) button toggles a data attribute `data-wide="true|false"` on the dialog root.
 - On mount with no `props.data` yet, shows the fetching skeleton.
 - On mount with `props.data === null` (fetch error), shows the retry message.
+- **Telemetry emission** (one `it()` per event; spy on `window.dispatchEvent` with `vi.spyOn`):
+  - Mounting the panel with data emits `kg.expanded.opened` with `{ slug }`.
+  - ESC / clicking ✕ emits `kg.expanded.closed` with `{ slug, dwellMs }` where dwellMs is a positive number.
+  - Clicking the ⤢ widen button emits `kg.expanded.widened` with `{ slug, wider: true }` on first click, `{ wider: false }` on second.
+  - Clicking a row link emits `kg.expanded.click` with `{ slug, resourceType, targetSlug, source: 'expanded' }`.
+  - Toggling a `<details>` section emits `kg.expanded.section_toggled` with `{ slug, resourceType, open }`.
 
 Mock `fetch` at the module level with `vi.spyOn(window, 'fetch')`.
 
@@ -945,10 +978,17 @@ Remove the per-type `formatLevel` / `formatDate` / `v-else-if` chain entirely (t
 - [ ] **Step 13.4: Run all existing related-graph tests to confirm no regression**
 
 ```bash
-npx vitest run --project unit test/unit/related-graph-main.test.ts test/unit/related-graph-island.test.ts test/unit/kg-reason-popover.test.ts test/unit/hugo-apps/related-graph-*.test.ts
+npx vitest run --project unit \
+  test/unit/related-graph-main.test.ts \
+  test/unit/related-graph-island.test.ts \
+  test/unit/kg-reason-popover.test.ts \
+  test/unit/hugo-apps/related-graph-resource-row.test.ts \
+  test/unit/hugo-apps/related-graph-sidebar-panel.test.ts \
+  test/unit/hugo-apps/related-graph-expanded-panel.test.ts \
+  test/unit/hugo-apps/related-graph-helpers.formatrelativemonth.test.ts
 ```
 
-Expected: PASS across the suite. If any test relied on internal rendering that moved to `SidebarPanel`, update the test's target — do NOT change the behavior it's asserting.
+Expected: PASS across all. Enumerated (not globbed) because Windows Bash glob expansion can silently miss files. If any test relied on internal rendering that moved to `SidebarPanel`, update the test's target — do NOT change the behavior it's asserting.
 
 - [ ] **Step 13.5: Commit**
 
@@ -1051,7 +1091,7 @@ Determine whether the sidebar styles live in `sap-fundamental.css` or a dedicate
 }
 ```
 
-Note the `@container` query: the grid switches to 2 columns based on the `.kg-expanded__body` inline size (which flexes when the user widens the dialog), not the viewport. This is exactly the "2 columns at ≥720px dialog width, 1 column below" behavior from the spec.
+Note the `@container` query: the grid switches to 2 columns based on the `.kg-expanded__body` inline size (which flexes when the user widens the dialog), not the viewport. This is the "2 columns at ≥720px dialog width, 1 column below" behavior from the spec. Container queries are baseline-2023 (Chrome/Firefox/Safari all support them; Edge ≥105); on older engines the grid stays single-column at all widths — a graceful degradation, not a bug. If PROD analytics show a meaningful cohort on unsupported browsers, revisit with a `@media (min-width: 720px)` fallback matched to the widened-dialog width.
 
 - [ ] **Step 14.4: Sidebar-fade-during-expand**
 
@@ -1099,11 +1139,10 @@ Gate matches the existing `data-vue-island="related-graph"` mount conditions at 
 - [ ] **Step 15.2: Rebuild Hugo to confirm no template errors**
 
 ```bash
-npm run fetch-tutorials 2>&1 | tail -5   # or ensure .tutorial-cache/ already populated
-hugo -s hugo --minify 2>&1 | tail -10
+npm run build:hugo 2>&1 | tail -10
 ```
 
-Expected: Hugo build exits 0.
+Expected: Hugo build exits 0. (`build:hugo` is a subset of `build:all`; the full pipeline runs the `postbuild:apps` collision guard — worth running once as a final check with `npm run build:all` before task 16.6's PR push. Verify `build:hugo` exists in `package.json`; if not, use `cd hugo && hugo --minify`.)
 
 - [ ] **Step 15.3: Grep the rendered HTML to confirm the target lands**
 
