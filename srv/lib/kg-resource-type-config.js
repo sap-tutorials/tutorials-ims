@@ -57,7 +57,7 @@ export const RESOURCE_TYPE_CONFIG = [
   },
   {
     type: 'discovery-mission',
-    icon: '🎯',
+    icon: '🔍',
     singular: 'Discovery mission',
     plural: 'Discovery missions',
     priority: 30,
@@ -71,7 +71,7 @@ export const RESOURCE_TYPE_CONFIG = [
   },
   {
     type: 'video',
-    icon: '🎬',
+    icon: '▶️',
     singular: 'Video',
     plural: 'Videos',
     priority: 40,
@@ -86,8 +86,8 @@ export const RESOURCE_TYPE_CONFIG = [
   {
     type: 'api-doc',
     icon: '📖',
-    singular: 'API doc',
-    plural: 'API docs',
+    singular: 'API reference',
+    plural: 'API references',
     priority: 50,
     metaTemplate: 'Official reference · Category',
     renderMeta(r) {
@@ -102,7 +102,7 @@ export const RESOURCE_TYPE_CONFIG = [
   },
   {
     type: 'sample',
-    icon: '💻',
+    icon: '🧪',
     singular: 'Sample',
     plural: 'Samples',
     priority: 60,

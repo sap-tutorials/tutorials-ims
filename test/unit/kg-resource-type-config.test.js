@@ -64,6 +64,28 @@ describe('RESOURCE_TYPE_CONFIG — registry shape', () => {
       'sample',
     ]);
   });
+
+  it('every entry has the spec-canonical icon and labels', () => {
+    const byType = new Map(RESOURCE_TYPE_CONFIG.map((e) => [e.type, e]));
+    expect(byType.get('learning-journey')).toMatchObject({
+      icon: '🎓', singular: 'Learning journey', plural: 'Learning journeys',
+    });
+    expect(byType.get('blog-post')).toMatchObject({
+      icon: '📝', singular: 'Blog post', plural: 'Blog posts',
+    });
+    expect(byType.get('discovery-mission')).toMatchObject({
+      icon: '🔍', singular: 'Discovery mission', plural: 'Discovery missions',
+    });
+    expect(byType.get('video')).toMatchObject({
+      icon: '▶️', singular: 'Video', plural: 'Videos',
+    });
+    expect(byType.get('api-doc')).toMatchObject({
+      icon: '📖', singular: 'API reference', plural: 'API references',
+    });
+    expect(byType.get('sample')).toMatchObject({
+      icon: '🧪', singular: 'Sample', plural: 'Samples',
+    });
+  });
 });
 
 // Helper: pluck an entry by type key.
