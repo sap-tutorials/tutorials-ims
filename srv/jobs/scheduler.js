@@ -11,6 +11,7 @@ import { runHomepageLinkHealth } from './homepage-link-health.js';
 import { runGcExternalContent } from './gc-external-content-job.js';
 import { runFetchLearningJourneys } from './fetch-learning-journeys-job.js';
 import { runFetchBlogPosts } from './fetch-blog-posts-job.js';
+import { runMaterializeCoCompletions } from './materialize-co-completions.js';
 import { computeStaleNotifications, determineRecipients, markNotificationSent, getAdminEmailList, isNotificationsEnabled, resolveTimingKnobs, groupNotificationsByAuthor, determineRecipientsForDigest, digestSubject, renderTutorialList } from '../lib/contributor-notifications.js';
 import { sendNotificationEmail, retryFailedEmails } from '../lib/mail-client.js';
 import { resolveDisplaySettings } from '../lib/runtime-config/display-settings.js';
@@ -519,6 +520,19 @@ export function registerJobs() {
     ttlMs: 600000,
     description: 'Prune analytics history to last 200 entries per user',
     fn: () => pruneAnalyticsHistory(200),
+  });
+
+  // Daily 04:33 UTC — rebuild the CoCompletions materialized table.
+  // Runtime hot path (neighborhood handler) reads this table with a
+  // single indexed lookup instead of paying a ~60s TaskRecords scan on
+  // cold start. See srv/lib/co-completion.js and
+  // srv/jobs/materialize-co-completions.js.
+  registerJob({
+    jobName: 'materialize-co-completions',
+    schedule: '33 4 * * *',
+    ttlMs: 900000,
+    description: 'Rebuild CoCompletions table for fast neighborhood lookups',
+    fn: () => runMaterializeCoCompletions(),
   });
 
   // Weekly Sunday 02:00 — tutorial metadata review

@@ -73,6 +73,41 @@ export async function computeCoCompletions({ topN = 10, force = false } = {}) {
   }
 }
 
+// ── Fast-path reader ──────────────────────────────────────────────────
+//
+// loadCoCompletionsFor(slug, opts) — reads the pre-materialized CoCompletions
+// table (populated nightly by srv/jobs/materialize-co-completions.js) with a
+// single indexed SELECT. Cost is O(topN) rows returned; typical latency
+// ~10-30ms against HANA vs ~60s for the JIT computeCoCompletions().
+//
+// Callers get an Array<{slug, score}> already sorted DESC. When the table
+// is empty (fresh deploy pre-bootstrap), returns []. The graceful-empty
+// path preserves the neighborhood handler's downstream behavior (it treats
+// a missing entry as "no co-completion boost").
+//
+// Note: this is NOT a drop-in replacement for computeCoCompletions() —
+// that function returns the ENTIRE map for all slugs. The reader is only
+// useful for callers that want ONE slug's neighbors (like neighborhood()).
+export async function loadCoCompletionsFor(slug, { topN = 10, db: dbOverride } = {}) {
+  if (typeof slug !== 'string' || !slug) return []
+  const db = dbOverride ?? await cds.connect.to('db')
+  const { CoCompletions } = cds.entities('com.sap.developers.ims')
+  try {
+    const rows = await SELECT.from(CoCompletions)
+      .columns('targetSlug', 'score')
+      .where({ sourceSlug: slug })
+      .orderBy('score desc')
+      .limit(topN)
+    return rows.map(r => ({ slug: r.targetSlug ?? r.TARGETSLUG, score: r.score ?? r.SCORE }))
+  } catch (err) {
+    // Table doesn't exist yet, or transient DB blip — return empty so the
+    // caller (typically the neighborhood handler) treats this as "no boost".
+    // Aligns with the try/catch guard the handler already wraps around
+    // computeCoCompletions at knowledge-graph-service.js:610-616.
+    return []
+  }
+}
+
 export async function coCompletionsHandler(req, res) {
   try {
     const result = await computeCoCompletions()
