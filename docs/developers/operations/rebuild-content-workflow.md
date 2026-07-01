@@ -243,12 +243,15 @@ The step is gated on three conditions:
 
 The CLI sends `Authorization: Bearer $CONTENT_API_KEY` — same secret as `/content/publish`. The endpoint is `POST /content/orphan-purge` (bare-Express + contentAuthMiddleware), NOT a CAP AdminService action. AdminService is XSUAA-scope-gated and CI doesn't carry an XSUAA bearer.
 
-### Rollback
+### Rollback (orphan-purge)
+
+**This section covers orphan-purge rollback only** — reversing a mis-purge (bad soft-delete). For rolling back a content publish (reverting `ContentManifest.status` to a prior `SUPERSEDED` version), see the [content-rollback runbook](content-rollback.md) — different endpoint (`/content/rollback`), different lifecycle.
 
 See the [orphan-purge design § Rollback](../../superpowers/specs/2026-06-30-orphan-purge-design.md#rollback) — uses change-tracking + PipelineLog to enumerate which rows flipped during a given CI run, so a mis-purge can be reversed by re-flipping those exact rows back to `ACTIVE`.
 
 ## Related runbooks
 
+- [content-rollback.md](content-rollback.md) — deliberate revert of a `/content/publish` (manifest lifecycle rollback), separate from orphan-purge rollback above
 - [secrets-tracking.md](secrets-tracking.md) — token bootstrap
 - [github-dispatch-pat-rotation.md](github-dispatch-pat-rotation.md) — PAT rotation procedure
 - [github-app-setup.md](github-app-setup.md) — preferred alternative to PAT

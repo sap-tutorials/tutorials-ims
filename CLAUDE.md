@@ -118,12 +118,11 @@ Flags:
 
 #### Reverting content intentionally
 
-`--force` is a client-side performance shortcut (skips the `/content/hashes` round-trip and uploads everything). It does **not** bypass the server's no-revert guard. For a deliberate rollback:
+`--force` is a client-side performance shortcut (skips the `/content/hashes` round-trip and uploads everything). It does **not** bypass the server's no-revert guard.
 
-1. **Preferred:** `POST /content/rollback` (existing endpoint; reverts to the previous ACTIVE manifest). See [docs/developers/operations/rebuild-content-workflow.md](docs/developers/operations/rebuild-content-workflow.md).
-2. **Last resort:** if `/content/rollback` is insufficient (e.g. the slug you want to revert isn't in the immediately-prior manifest), null out the offending prior `sourceHash` in HANA via `UPDATE com_sap_developers_ims_contentfiles SET sourceHash = NULL WHERE version = <V> AND slug = <S>`. The next publish of that slug then appears "novel" to the guard and lands normally. This is the escape hatch; use it sparingly and log what you did.
+For a deliberate rollback (revert to a prior `ContentManifest`) or the HANA escape hatch when the no-revert guard blocks a legitimate re-publish, see the [content-rollback runbook](docs/developers/operations/content-rollback.md).
 
-The guard rejects a slug if its incoming `sourceHash` appears in **any version older than the most recent prior hash that differs from incoming**. A legitimate flap (`A → B → A` where current upstream IS `A`) is permitted; a stale-cache regression (`A → B` where the workstation re-publishes the old `A` after the server has moved to `B`) is caught.
+The no-revert guard rejects a slug if its incoming `sourceHash` appears in **any version older than the most recent prior hash that differs from incoming**. A legitimate flap (`A → B → A` where current upstream IS `A`) is permitted; a stale-cache regression (`A → B` where the workstation re-publishes the old `A` after the server has moved to `B`) is caught.
 
 If CONTENT_API_KEY is not set on the deployed srv app:
 
