@@ -59,6 +59,18 @@ describe.runIf(APPROUTER && SRV)('Knowledge Graph endpoints smoke', () => {
     expect(body).toHaveProperty('teaches');
   });
 
+  it('GET /graph/neighborhoodFull without auth returns 200 (issue #850)', async () => {
+    const res = await fetchWithRetry(
+      `${SRV_URL}/graph/neighborhoodFull(slug='${KG_TUTORIAL_SLUG}')`
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toHaveProperty('otherResourcesByType');
+    expect(body).toHaveProperty('typeConfig');
+    expect(Array.isArray(body.otherResourcesByType)).toBe(true);
+    expect(Array.isArray(body.typeConfig)).toBe(true);
+  });
+
   // Whole /graph/* reader surface must be anonymous. #853 was caused by
   // `neighborhood` being the only endpoint the widget hits, but the four
   // projections back the /explore page + admin tooling — if we ever drop

@@ -42,4 +42,18 @@ describe('approuter /graph/* routes', () => {
     expect(catchAll.authenticationType).toBe('xsuaa')
     expect(catchAll.scope).toBe('$XSAPPNAME.Admin')
   })
+
+  it('anonymous /graph/ allowlist regex matches neighborhoodFull (issue #850)', () => {
+    const allowlist = xsApp.routes.find(
+      (r) => typeof r.source === 'string' &&
+             r.source.startsWith('^/graph/(neighborhood') &&
+             r.authenticationType === 'none'
+    );
+    expect(allowlist, 'anon-allowlist /graph route').toBeTruthy();
+    const re = new RegExp(allowlist.source);
+    // Regression guard: existing sidebar case still passes.
+    expect(re.test("/graph/neighborhood(slug='x')")).toBe(true);
+    // The new expanded case.
+    expect(re.test("/graph/neighborhoodFull(slug='x')")).toBe(true);
+  });
 })

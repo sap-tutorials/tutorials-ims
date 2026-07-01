@@ -143,7 +143,7 @@
       "csrfProtection": false
     },
     {
-      "source": "^/graph/(neighborhood|Concepts|ConceptEdges|TutorialConceptLinks|pathBetween|conceptsForUser|explore-data|path)(\\(.*\\))?(/.*)?(\\?.*)?$",
+      "source": "^/graph/(neighborhood(Full)?|Concepts|ConceptEdges|TutorialConceptLinks|pathBetween|conceptsForUser|explore-data|path)(\\(.*\\))?(/.*)?(\\?.*)?$",
       "target": "/graph/$1$2$3$4",
       "destination": "srv-api",
       "authenticationType": "none",
