@@ -478,3 +478,60 @@ describe.runIf(isSafeForWrites())('ApiDoc DELETE cascades to ApiDocConceptLinks'
     expect(concept).toBeDefined();
   });
 });
+
+// ────────────────────────────────────────────────────────────────────
+// Row 11: Samples → SampleConceptLinks
+// NOTE: Samples.description is LargeString (NCLOB). Never SELECT it
+// alongside scalar metadata (LOB-locator gotcha).
+// ────────────────────────────────────────────────────────────────────
+describe.runIf(isSafeForWrites())('Sample DELETE cascades to SampleConceptLinks', () => {
+  const sampleId  = '00000000-0000-0000-0000-789000000060';
+  const conceptId = '00000000-0000-0000-0000-789000000061';
+  const linkId    = '00000000-0000-0000-0000-789000000062';
+
+  beforeAll(async () => {
+    const db = await cds.connect.to('db');
+    assertHanaKind(db);
+  });
+
+  afterAll(async () => {
+    const { Samples, SampleConceptLinks } =
+      cds.entities('com.sap.developers.ims.external');
+    const { Concepts } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(SampleConceptLinks).where({ ID: linkId });
+    await DELETE.from(Concepts).where({ ID: conceptId });
+    await DELETE.from(Samples).where({ ID: sampleId });
+  });
+
+  it('deletes SampleConceptLinks rows when the parent Sample is deleted', async () => {
+    const { Samples, SampleConceptLinks } =
+      cds.entities('com.sap.developers.ims.external');
+    const { Concepts } = cds.entities('com.sap.developers.ims');
+
+    await INSERT.into(Samples).entries({
+      ID: sampleId,
+      slug: '__test__-789-sa',
+      title: '__test__ Sample 789',
+    });
+    await INSERT.into(Concepts).entries({
+      ID: conceptId,
+      slug: '__test__-789-cascade-concept-sa',
+      name: '__test__ Cascade Concept (sa)',
+      status: 'ACTIVE',
+    });
+    await INSERT.into(SampleConceptLinks).entries({
+      ID: linkId,
+      sample_ID: sampleId,
+      concept_ID: conceptId,
+      predicate: 'embodies',
+      confidence: 0.75,
+    });
+
+    await DELETE.from(Samples).where({ ID: sampleId });
+
+    const orphan = await SELECT.one.from(SampleConceptLinks).where({ ID: linkId });
+    expect(orphan).toBeUndefined();
+    const concept = await SELECT.one.from(Concepts).where({ ID: conceptId });
+    expect(concept).toBeDefined();
+  });
+});
