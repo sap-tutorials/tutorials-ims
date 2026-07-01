@@ -33,9 +33,15 @@ export function stampMetaText(rows) {
 /**
  * Returns the RESOURCE_TYPE_CONFIG entries with `renderMeta` stripped —
  * shape suitable for shipping on the neighborhood response's `typeConfig`
- * envelope field. Sorted by `priority` ascending (same order as the source
- * registry, which is already priority-sorted).
+ * envelope field. Sorted by `priority` ascending.
+ *
+ * The source registry is currently already priority-sorted, but we sort
+ * defensively so a future author reordering the RESOURCE_TYPE_CONFIG array
+ * literal can't silently break the wire contract (the client relies on
+ * ascending priority for rail rendering order).
  */
 export function typeConfigForWire() {
-  return RESOURCE_TYPE_CONFIG.map(({ renderMeta, ...rest }) => rest);
+  return RESOURCE_TYPE_CONFIG
+    .map(({ renderMeta, ...rest }) => rest)
+    .sort((a, b) => a.priority - b.priority);
 }
