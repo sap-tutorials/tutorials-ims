@@ -2,12 +2,14 @@
 //
 // test/unit/hugo-apps/related-graph-concept-links.test.ts
 //
-// Phase 3 #446 — sidebar concept-rendering test.
-// When the neighborhood payload's `teaches[i].published` is true, the
-// sidebar must render the concept as an <a href="/concepts/<slug>/">.
-// When `published` is false (or absent), it renders as a non-link
-// element (a <span>) with the concept name. The negative case must
-// NOT contain any `/concepts/<slug>/` href for that concept.
+// Phase 3 #446 — concept-link rendering test. ORIGINALLY covered the sidebar
+// rendering: published concepts became <a href="/concepts/<slug>/">, others
+// rendered as <span>. Task 11 of #850 REMOVED the "This tutorial teaches"
+// section from the sidebar entirely, so these tests now assert the opposite:
+// no concept link (published or not) appears in the sidebar. The published-
+// concept link-out lives on the ExpandedPanel's teaches section and on the
+// tutorial's own concept chip strip — separate surfaces with their own
+// tests.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -26,7 +28,7 @@ function makePayload(overrides: {
   };
 }
 
-describe('RelatedGraph sidebar — concept links honor `published` flag', () => {
+describe('RelatedGraph sidebar — concept links are no longer rendered (post-#850)', () => {
   let originalFetch: typeof globalThis.fetch;
 
   beforeEach(() => {
@@ -52,7 +54,7 @@ describe('RelatedGraph sidebar — concept links honor `published` flag', () => 
     try { sessionStorage.clear(); } catch { /* ignore */ }
   });
 
-  it('renders a published concept as <a href="/concepts/<slug>/">', async () => {
+  it('does NOT render a published concept as a link in the sidebar (teaches section removed)', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -69,12 +71,14 @@ describe('RelatedGraph sidebar — concept links honor `published` flag', () => 
     await flushPromises();
     await flushPromises();
 
-    const link = wrapper.find('a[href="/concepts/cap-handlers/"]');
-    expect(link.exists()).toBe(true);
-    expect(link.text()).toBe('CAP handlers');
+    // Task 11 of #850 removed the teaches section from the sidebar; the
+    // concept must not render as a link OR as a span here.
+    expect(wrapper.find('a[href="/concepts/cap-handlers/"]').exists()).toBe(false);
+    expect(wrapper.find('span.kg-sidebar-concept-text').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('CAP handlers');
   });
 
-  it('renders an unpublished concept as a non-link with no /concepts/ href', async () => {
+  it('does NOT render an unpublished concept in the sidebar', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -91,17 +95,12 @@ describe('RelatedGraph sidebar — concept links honor `published` flag', () => 
     await flushPromises();
     await flushPromises();
 
-    // No anchor to /concepts/draft-concept/
     expect(wrapper.find('a[href="/concepts/draft-concept/"]').exists()).toBe(false);
-    // But the name is still in the DOM (as plain text in the v-else <span>).
-    // Explicit assertion guards against a future regression where v-else
-    // renders nothing — wrapper.text() alone would still pass if the name
-    // leaked into a sibling slot. Class matches RelatedGraph.vue:71.
-    expect(wrapper.find('span.kg-sidebar-concept-text').exists()).toBe(true);
-    expect(wrapper.text()).toContain('Draft Concept');
+    expect(wrapper.find('span.kg-sidebar-concept-text').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Draft Concept');
   });
 
-  it('treats a missing `published` field as unpublished (backward compat)', async () => {
+  it('does NOT render a legacy concept (missing published field) in the sidebar', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -117,9 +116,7 @@ describe('RelatedGraph sidebar — concept links honor `published` flag', () => 
     await flushPromises();
 
     expect(wrapper.find('a[href="/concepts/legacy-concept/"]').exists()).toBe(false);
-    // v-else <span> renders the name; guards against future regression where
-    // missing `published` accidentally drops the element entirely.
-    expect(wrapper.find('span.kg-sidebar-concept-text').exists()).toBe(true);
-    expect(wrapper.text()).toContain('Legacy Concept');
+    expect(wrapper.find('span.kg-sidebar-concept-text').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Legacy Concept');
   });
 });
