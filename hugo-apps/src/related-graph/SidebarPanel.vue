@@ -105,6 +105,19 @@
             <template v-if="r.stars"> · {{ r.stars }} stars</template>
             <template v-if="r.lastCommitAt"> · Updated {{ formatRelativeMonth(r.lastCommitAt) }}</template>
           </span>
+          <!--
+            Phase 4.7 (#748 §4.8.2): help-doc legacy-fallback branch. Row
+            shape per §3 Q10: `Title ↗ · <sourceLabel>`. Snippet + anchor
+            label deliberately NOT rendered here (concept page only —
+            space budget in the sidebar). The happy path routes through
+            ResourceRow driven by the server's RESOURCE_TYPE_CONFIG entry
+            for `help-doc` (priority 70, icon 📚, metaTemplate 'Source ·
+            Anchor'); this branch only fires against cached responses
+            older than Task 2 that lack `typeConfig` on the wire.
+          -->
+          <span v-else-if="r.type === 'help-doc'" class="kg-sidebar-meta">
+            <template v-if="r.sourceLabel"> · <span class="kg-help-source" :class="`kg-help-source--${r.source}`">{{ r.sourceLabel }}</span></template>
+          </span>
         </li>
       </ul>
     </section>
