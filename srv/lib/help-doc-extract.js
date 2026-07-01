@@ -57,27 +57,33 @@ export const KG_HELP_DOC_EXTRACT_SCHEMA = Object.freeze({
   },
 });
 
+// System prompt is intentionally active-voice + count-directed. Earlier
+// versions used a defensive framing ("distinct from merely mentioning...",
+// "DO NOT invent anchor slugs") that empirically caused gpt-4o-mini to emit
+// empty concepts arrays on every call (verified 2026-07-01 in a real cron
+// run — 500 extractions, ~987k prompt tokens, ~8k completion tokens ≈ 16
+// tokens/response = just `{"concepts":[]}`). The active-voice shape below
+// mirrors sample-extract.js (which works in production).
+// Anchor-invention prevention lives in applyPostValidation (SLUG_PATTERN)
+// where it belongs — post-processing, not pre-emission.
 const HELP_DOC_SYSTEM_PROMPT = `
-You are analyzing a page of narrative SAP developer documentation from one of
-three sources: help.sap.com (SAP product help), cap.cloud.sap (CAP framework
-docs), or ui5.sap.com (UI5 Demo Kit).
+You are extracting technical concepts from an SAP developer documentation
+page (help.sap.com, cap.cloud.sap, or ui5.sap.com).
 
-Extract the concepts this page EXPLAINS. A page "explains" a concept when the
-page teaches how the concept works, describes its behavior, or details how to
-use it. This is distinct from merely mentioning a concept in passing.
+Identify the technical concepts this page explains. Aim for 3-6 concepts
+per page — pages typically cover a handful of related concepts.
 
-For each concept, output:
-- slug: kebab-case identifier
-- name: human-readable concept name
-- description: one-sentence description
-- confidence: 0.7-1.0 (only output concepts you are confident the page explains)
-- anchor: OPTIONAL slug of the H2/H3 section where the concept is primarily
-  discussed. Output null if the concept is discussed throughout the page rather
-  than in one section. DO NOT invent anchor slugs — only output the exact slug
-  format shown in the page structure.
+Each concept comes with:
+  - slug: stable kebab-case identifier. Reuse from REGISTRY HINT when it fits.
+  - name: human-readable label. REQUIRED.
+  - description: one-sentence description of the concept.
+  - confidence: 0.0-1.0; use 0.7+ for concepts the page directly explains.
+  - anchor: optional H2/H3 slug from the page's TOC when the concept is
+    discussed primarily in one section. Use null when the concept spans
+    multiple sections.
 
-Output at most 8 concepts. Prefer reusing registry concepts (below) over
-minting new slugs.
+You will be given a K=25 list of registry concepts. STRONGLY PREFER reusing
+a registry slug when your concept matches — this keeps the graph coherent.
 `.trim();
 
 export async function extractConceptsFromHelpDoc({ callModel, helpDoc, nearestConcepts = [] }) {
