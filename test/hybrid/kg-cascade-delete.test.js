@@ -206,3 +206,57 @@ describe.runIf(isSafeForWrites())('LearningJourney DELETE cascades correctly (wi
     expect(survivorA).toBeDefined();
   });
 });
+
+// ────────────────────────────────────────────────────────────────────
+// Row 5: BlogPosts → BlogPostConceptLinks
+// ────────────────────────────────────────────────────────────────────
+describe.runIf(isSafeForWrites())('BlogPost DELETE cascades to BlogPostConceptLinks', () => {
+  const postId    = '00000000-0000-0000-0000-789000000020';
+  const conceptId = '00000000-0000-0000-0000-789000000021';
+  const linkId    = '00000000-0000-0000-0000-789000000022';
+
+  beforeAll(async () => {
+    const db = await cds.connect.to('db');
+    assertHanaKind(db);
+  });
+
+  afterAll(async () => {
+    const { BlogPosts, BlogPostConceptLinks } =
+      cds.entities('com.sap.developers.ims.external');
+    const { Concepts } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(BlogPostConceptLinks).where({ ID: linkId });
+    await DELETE.from(Concepts).where({ ID: conceptId });
+    await DELETE.from(BlogPosts).where({ ID: postId });
+  });
+
+  it('deletes BlogPostConceptLinks rows when the parent BlogPost is deleted', async () => {
+    const { BlogPosts, BlogPostConceptLinks } =
+      cds.entities('com.sap.developers.ims.external');
+    const { Concepts } = cds.entities('com.sap.developers.ims');
+
+    await INSERT.into(BlogPosts).entries({
+      ID: postId,
+      slug: '__test__-789-bp',
+      title: '__test__ Blog Post 789',
+    });
+    await INSERT.into(Concepts).entries({
+      ID: conceptId,
+      slug: '__test__-789-cascade-concept-bp',
+      name: '__test__ Cascade Concept (bp)',
+      status: 'ACTIVE',
+    });
+    await INSERT.into(BlogPostConceptLinks).entries({
+      ID: linkId,
+      post_ID: postId,
+      concept_ID: conceptId,
+      predicate: 'discusses',
+    });
+
+    await DELETE.from(BlogPosts).where({ ID: postId });
+
+    const orphan = await SELECT.one.from(BlogPostConceptLinks).where({ ID: linkId });
+    expect(orphan).toBeUndefined();
+    const concept = await SELECT.one.from(Concepts).where({ ID: conceptId });
+    expect(concept).toBeDefined();
+  });
+});
