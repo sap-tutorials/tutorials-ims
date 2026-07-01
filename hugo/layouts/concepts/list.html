@@ -1,14 +1,20 @@
 {{ define "main" }}
 {{/* List layout for /concepts/ — renders all published concept landing pages
-     as a simple alphabetical grid. Filled by scripts/fetch-concepts.ts at
+     as a searchable/filterable grid. Filled by scripts/fetch-concepts.ts at
      Hugo build time (which writes one page per publishable concept under
      hugo/content/concepts/<slug>.md + this _index.md). Closes #686.
+
+     The grid is fully static in the DOM; the concepts-filter Vue island
+     (hugo-apps/src/concepts-filter/) progressively enhances it with a
+     search box, A-Z jump strip, and sort controls. Non-JS visitors still
+     see the same grid — the island only ADDS filtering, never gates
+     visibility. See issue #859.
 
      Layout chosen by Hugo section lookup: pages live under content/concepts/,
      this file is at layouts/concepts/list.html — no `type:` or `layout:`
      directive needed in _index.md (matching the convention single.html
      already documents). */}}
-<article class="concepts-index">
+<article class="concepts-index" id="concepts-filter-root">
   <header class="concepts-index__header">
     <nav class="concepts-index__breadcrumb" aria-label="breadcrumb">
       <a href="/">Home</a> &rsaquo; <span>Concepts</span>
@@ -25,17 +31,41 @@
   {{ $pages = $pages.ByTitle }}
 
   {{ if $pages }}
-    <p class="concepts-index__count">{{ len $pages }} concept{{ if ne (len $pages) 1 }}s{{ end }}</p>
-    <ul class="concepts-index__list">
+    {{/* Slot for the Vue island's controls. Empty here so the layout doesn't
+         jump when the island mounts. Hidden with the `hidden` attribute so
+         no-JS visitors don't see a bare skeleton; the island removes hidden
+         after it inserts content. */}}
+    <div class="concepts-index__controls" id="concepts-filter-controls" hidden></div>
+
+    <p class="concepts-index__count" id="concepts-filter-count">{{ len $pages }} concept{{ if ne (len $pages) 1 }}s{{ end }}</p>
+    <ul class="concepts-index__list" id="concepts-filter-list">
       {{ range $pages }}
-      <li class="concepts-index__item">
+        {{/* Serialize the `teaches[]` length as a data attribute so the
+             filter island can sort by coverage without a second fetch.
+             Frontmatter is authored by scripts/fetch-concepts.ts.
+             data-first-letter powers the A-Z jump bar; upper() so 'CAP'
+             and 'cds' both bucket under 'C'. */}}
+        {{ $title := .Title | default .Params.name }}
+        {{ $letter := substr $title 0 1 | upper }}
+        {{ $teaches := len (.Params.teaches | default slice) }}
+      <li class="concepts-index__item"
+          data-slug="{{ .Params.slug | default (path.Base .RelPermalink) }}"
+          data-name="{{ $title }}"
+          data-description="{{ .Params.description | default "" }}"
+          data-first-letter="{{ $letter }}"
+          data-tutorial-count="{{ $teaches }}">
         <a class="concepts-index__link" href="{{ .RelPermalink }}">
-          <span class="concepts-index__name">{{ .Title | default .Params.name }}</span>
+          <span class="concepts-index__name">{{ $title }}</span>
           {{ with .Params.description }}<span class="concepts-index__description">{{ . | truncate 140 }}</span>{{ end }}
+          {{ if gt $teaches 0 }}<span class="concepts-index__meta">{{ $teaches }} tutorial{{ if ne $teaches 1 }}s{{ end }}</span>{{ end }}
         </a>
       </li>
       {{ end }}
     </ul>
+    {{/* Empty-state message the island shows when a filter yields no matches. */}}
+    <p class="concepts-index__empty" id="concepts-filter-empty" hidden>
+      No concepts match the current filters. <button type="button" id="concepts-filter-clear" class="concepts-index__clear-inline">Clear all filters</button>.
+    </p>
   {{ else }}
     <p class="concepts-index__empty">
       No published concepts yet. Concepts are reviewed and published by SAP
@@ -43,6 +73,10 @@
     </p>
   {{ end }}
 </article>
+
+{{/* Filter island script. Deferred; safe to load even when the list is
+     empty (the island bails on mount if the root has no cards). */}}
+<script type="module" src="/js/concepts-filter.js" defer></script>
 
 <style>
 .concepts-index {
@@ -89,6 +123,7 @@
   background: #fff;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
+.concepts-index__item[hidden] { display: none; }
 .concepts-index__item:hover {
   border-color: #0070f2;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
@@ -109,12 +144,26 @@
   font-size: 0.875rem;
   color: #515559;
 }
+.concepts-index__meta {
+  font-size: 0.75rem;
+  color: #7a8085;
+  margin-top: 0.15rem;
+}
 .concepts-index__empty {
   color: #515559;
   padding: 2rem;
   text-align: center;
   background: #f5f6f7;
   border-radius: 6px;
+}
+.concepts-index__clear-inline {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: #0070f2;
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
 }
 </style>
 {{ end }}
