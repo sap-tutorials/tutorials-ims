@@ -90,13 +90,17 @@ Run: `npx vitest run --project unit test/unit/kg-meta-formatters.test.js`
 
 Expected: PASS.
 
-- [ ] **Step 1.9: Wire mirror guard into `npm run lint`**
+- [ ] **Step 1.9: Wire mirror guard into `postbuild:apps`**
 
-Read `package.json` `scripts.lint`. Append ` && npx tsx scripts/check-kg-meta-formatters-mirror.ts` to it. Follow the same style as existing `check-public-endpoints.ts` wiring.
+Read `package.json` `scripts.postbuild:apps`. It's the chain that already runs `check-public-endpoints.ts`, `check-srv-qa-cp-list.ts`, etc. Append `&& tsx scripts/check-kg-meta-formatters-mirror.ts` at the end. No separate `lint` script exists in this project — `postbuild:apps` is where the CI-style checks live.
 
-Run: `npm run lint 2>&1 | tail -5`
+Run:
+```bash
+npm run postbuild:apps 2>&1 | tail -10
+```
 
-Expected: `[check-kg-meta-formatters-mirror] OK` line + lint exits 0.
+Expected: `[check-kg-meta-formatters-mirror] OK` line + exit 0.
+
 
 - [ ] **Step 1.10: Commit**
 
