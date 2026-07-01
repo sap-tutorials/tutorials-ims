@@ -32,7 +32,7 @@ async function assertOwnership(tutorialId, user) {
 }
 
 export default cds.service.impl(async function () {
-  const { MyTutorials } = this.entities;
+  const { MyTutorials, MyAuthoredTutorials } = this.entities;
   const { Tutorials } = this.entities;
 
   // Audit emitter — best-effort; tolerates missing binding in dev/mock-auth.
@@ -93,6 +93,23 @@ export default cds.service.impl(async function () {
       // row hasn't been auto-provisioned yet, or a test context with no
       // matching sapId. Return zero rows rather than 401: the user IS
       // authenticated; they simply own no tutorials.
+      req.query.where({ userId: '__NO_USERS_ROW__' });
+      return;
+    }
+    req.query.where({ userId: dbUser.uuid });
+  });
+
+  // #862 — MyAuthoredTutorials uses the same caller-scoping semantics as
+  // MyTutorials. The bestPriority=1 filter is baked into the CDS projection
+  // (srv/author-service.cds) so all we do here is stamp the userId. That's
+  // what makes GET /author/MyAuthoredTutorials return strict-authorship-only
+  // rows without any client-side filtering.
+  this.before('READ', MyAuthoredTutorials, async (req) => {
+    if (!req.user?.id || req.user.id === 'anonymous') {
+      return req.reject(401, 'Authentication required');
+    }
+    const dbUser = await resolveDbUser(req.user, ['uuid']);
+    if (!dbUser?.uuid) {
       req.query.where({ userId: '__NO_USERS_ROW__' });
       return;
     }

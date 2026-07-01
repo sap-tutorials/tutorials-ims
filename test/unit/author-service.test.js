@@ -168,6 +168,101 @@ describe('AuthorService.MyTutorials filtering', () => {
   });
 });
 
+// #862 — MyAuthoredTutorials returns ONLY strict-authorship rows
+// (bestPriority = 1, source-1 in db/views.cds MyTutorialsRaw).
+//
+// Fixture strategy: augment the shared `describe('MyTutorialsView')` fixture
+// above rather than replace it (the review/snooze suite below depends on
+// t-1 / t-2). We ADD two Alice tutorials that distinguish the two ownership
+// sources:
+//   tut-A1  — Alice as strict author (Tutorials.author_ID = u-A) AND
+//             ownerEmail match. bestPriority = 1 → visible in BOTH endpoints.
+//   tut-A2  — Alice as ownerEmail only (no author FK).
+//             bestPriority = 3 → visible in MyTutorials, NOT MyAuthoredTutorials.
+// Plus t-1 already has Alice as ownerEmail (source 3) — she'll now see both
+// t-1 and tut-A2 in MyTutorials (both source-3-only) and just tut-A1 in
+// MyAuthoredTutorials.
+describe('AuthorService.MyAuthoredTutorials filtering (#862)', () => {
+  beforeAll(async () => {
+    const { Tutorials, TutorialMeta } = cds.entities('com.sap.developers.ims');
+    // Additive INSERTs — the parent `describe('MyTutorialsView')` beforeAll
+    // has already populated Users, Tutorials, TutorialMeta and we want to
+    // leave those rows in place for the review/snooze suite below.
+    await INSERT.into(Tutorials).entries([
+      { ID: 't-A1', slug: 'tut-A1', title: 'Alice authored', status: 'ACTIVE', author_ID: 'u-A' },
+      { ID: 't-A2', slug: 'tut-A2', title: 'Alice ownerEmail only', status: 'ACTIVE' },
+      { ID: 't-B1', slug: 'tut-B1', title: 'Bob authored', status: 'DRAFT', author_ID: 'u-B' }
+    ]);
+    await INSERT.into(TutorialMeta).entries([
+      { ID: 'm-A1', tutorial_ID: 't-A1', owner: 'Alice A', ownerEmail: 'alice@example.com' },
+      { ID: 'm-A2', tutorial_ID: 't-A2', owner: 'Alice A', ownerEmail: 'alice@example.com' },
+      { ID: 'm-B1', tutorial_ID: 't-B1', owner: 'Bob B',   ownerEmail: 'bob@example.com' }
+    ]);
+  });
+
+  it('exposes MyAuthoredTutorials as a readable entity', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    expect(srv.entities.MyAuthoredTutorials).toBeDefined();
+  });
+
+  it('returns only strict-author rows (bestPriority = 1) for the caller', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const rows = await srv.tx(
+      { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.run(SELECT.from(srv.entities.MyAuthoredTutorials))
+    );
+    // Alice sees tut-A1 (author FK). She must NOT see:
+    //   - tut-A2 (ownerEmail only → priority 3)
+    //   - tut-1 (from the parent fixture — ownerEmail only → priority 3)
+    //   - tut-B1 (Bob's authored tutorial)
+    expect(rows.map((r) => r.slug)).toEqual(['tut-A1']);
+    expect(rows[0].bestPriority).toBe(1);
+  });
+
+  it('does NOT leak other users authored tutorials', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const rows = await srv.tx(
+      { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.run(SELECT.from(srv.entities.MyAuthoredTutorials))
+    );
+    // Bob authored tut-B1 (bestPriority=1) — must not appear for Alice.
+    expect(rows.map((r) => r.slug)).not.toContain('tut-B1');
+  });
+
+  it('MyTutorials (broad) still returns Alices ownerEmail-only rows alongside her authored one', async () => {
+    // Regression guard: this PR must NOT narrow MyTutorials' semantics —
+    // #777 wants it broad for advocate/admin surfaces. Alice sees three:
+    //   tut-1 (parent-fixture ownerEmail-only), tut-A1 (author FK), tut-A2 (ownerEmail-only).
+    const srv = await cds.connect.to('AuthorService');
+    const rows = await srv.tx(
+      { user: { id: 'uuid-A', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.run(SELECT.from(srv.entities.MyTutorials).orderBy('slug'))
+    );
+    expect(rows.map((r) => r.slug)).toEqual(['tut-1', 'tut-A1', 'tut-A2']);
+  });
+
+  it('rejects anonymous callers (403 at the service-level @requires gate)', async () => {
+    // Service-level @requires: 'Tutorial.Author' rejects anonymous callers
+    // with 403 BEFORE the before-READ handler fires. Mirrors the existing
+    // AuthorService.Tags anonymous-caller test at line ~96.
+    const srv = await cds.connect.to('AuthorService');
+    await expect(
+      srv.tx({ user: { id: 'anonymous', roles: {} } }, (tx) =>
+        tx.run(SELECT.from(srv.entities.MyAuthoredTutorials))
+      )
+    ).rejects.toMatchObject({ code: 403 });
+  });
+
+  it('returns empty when req.user.id matches no Users.uuid', async () => {
+    const srv = await cds.connect.to('AuthorService');
+    const rows = await srv.tx(
+      { user: { id: 'unknown-uuid', roles: { 'Tutorial.Author': true } } },
+      (tx) => tx.run(SELECT.from(srv.entities.MyAuthoredTutorials))
+    );
+    expect(rows).toHaveLength(0);
+  });
+});
+
 describe('AuthorService.reviewTutorial/snoozeTutorial', () => {
   it('reviewTutorial succeeds when caller owns the tutorial', async () => {
     const srv = await cds.connect.to('AuthorService');
