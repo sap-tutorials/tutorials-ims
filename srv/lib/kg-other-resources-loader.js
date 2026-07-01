@@ -22,6 +22,7 @@
 
 import cds from '@sap/cds';
 import { categoryLabel } from './discovery-mission-categories.js';
+import { HELP_DOC_SOURCE_LABEL, anchorToLabel } from './published-concepts-query.js';
 
 /**
  * Tally overlap-link rows keyed by an FK column, sort by overlap desc,
@@ -66,11 +67,16 @@ export async function loadOtherResourcesByType(cds, conceptIds, perTypeLimit) {
     Videos, VideoConceptLinks,
     ApiDocs, ApiDocConceptLinks,
     Samples, SampleConceptLinks,
+    HelpDocs, HelpDocConceptLinks,
   } = cds.entities('com.sap.developers.ims.external');
 
-  // Step 1: fetch all 6 overlap-link tables in parallel. Each returns
+  // Step 1: fetch all 7 overlap-link tables in parallel. Each returns
   // Array<{fkID, concept_ID}>. Small rows, cheap network.
-  const [journeyLinks, blogLinks, missionLinks, videoLinks, apiDocLinks, sampleLinks] =
+  //
+  // Phase 4.7 (#748) note: HelpDocConceptLinks also carries `anchor` per
+  // link; we tally by helpDoc_ID to bucket rows, then look up the anchor
+  // from the top-overlap row in Step 4 below.
+  const [journeyLinks, blogLinks, missionLinks, videoLinks, apiDocLinks, sampleLinks, helpDocLinks] =
     await Promise.all([
       SELECT.from(LearningJourneyConceptLinks)
         .columns('journey_ID', 'concept_ID')
@@ -90,6 +96,9 @@ export async function loadOtherResourcesByType(cds, conceptIds, perTypeLimit) {
       SELECT.from(SampleConceptLinks)
         .columns('sample_ID', 'concept_ID')
         .where({ concept_ID: { in: conceptIds } }),
+      SELECT.from(HelpDocConceptLinks)
+        .columns('helpDoc_ID', 'concept_ID', 'anchor')
+        .where({ concept_ID: { in: conceptIds } }),
     ]);
 
   // Step 2: JS-side per-corpus overlap tallies (microseconds).
@@ -99,15 +108,26 @@ export async function loadOtherResourcesByType(cds, conceptIds, perTypeLimit) {
   const videoT   = tally(videoLinks,   'video_ID',   perTypeLimit);
   const apiDocT  = tally(apiDocLinks,  'apiDoc_ID',  perTypeLimit);
   const sampleT  = tally(sampleLinks,  'sample_ID',  perTypeLimit);
+  const helpDocT = tally(helpDocLinks, 'helpDoc_ID', perTypeLimit);
+
+  // Anchor lookup: pick the first non-null anchor per helpDoc_ID for the
+  // meta-text renderer. If none, anchor is null and only sourceLabel shows.
+  const anchorByHelpDocId = new Map();
+  for (const l of helpDocLinks) {
+    if (l.anchor && !anchorByHelpDocId.has(l.helpDoc_ID)) {
+      anchorByHelpDocId.set(l.helpDoc_ID, l.anchor);
+    }
+  }
 
   // Step 3: fetch metadata for each top-N set in parallel. Guarded
   // per-corpus: if a corpus has zero overlap we skip its SELECT so the
   // empty-corpus case doesn't cost a round-trip.
   //
-  // NOTE on LOB safety (spec §10.1): Videos/ApiDocs/Samples all have
-  // LargeString `description` columns — we deliberately exclude them
+  // NOTE on LOB safety (spec §10.1): Videos/ApiDocs/Samples/HelpDocs all
+  // have LargeString `description` columns — we deliberately exclude them
   // from the projection to keep the sidebar payload scalar-only.
-  const [journeys, posts, missions, videos, apiDocs, samples] = await Promise.all([
+  // HelpDocs is the 4th (final) LOB-locator read-site per spec §10.1.
+  const [journeys, posts, missions, videos, apiDocs, samples, helpDocs] = await Promise.all([
     journeyT.topIds.length
       ? SELECT.from(LearningJourneys)
           .columns('ID', 'slug', 'title', 'url', 'level', 'durationHours')
@@ -137,6 +157,11 @@ export async function loadOtherResourcesByType(cds, conceptIds, perTypeLimit) {
       ? SELECT.from(Samples)
           .columns('ID', 'slug', 'title', 'url', 'language', 'stars', 'lastCommitAt')
           .where({ ID: { in: sampleT.topIds } })
+      : Promise.resolve([]),
+    helpDocT.topIds.length
+      ? SELECT.from(HelpDocs)
+          .columns('ID', 'slug', 'title', 'url', 'source', 'product')
+          .where({ ID: { in: helpDocT.topIds } })
       : Promise.resolve([]),
   ]);
 
@@ -202,6 +227,23 @@ export async function loadOtherResourcesByType(cds, conceptIds, perTypeLimit) {
       language: s.language, stars: s.stars, lastCommitAt: s.lastCommitAt,
       overlapCount: sampleT.overlapByFk.get(s.ID),
     }));
+  const helpDocById = new Map(helpDocs.map((h) => [h.ID, h]));
+  const helpDocOtherResources = helpDocT.topIds
+    .map((id) => helpDocById.get(id))
+    .filter(Boolean)
+    .map((h) => {
+      const anchor = anchorByHelpDocId.get(h.ID) ?? null;
+      return {
+        type: 'help-doc',
+        slug: h.slug, title: h.title, url: h.url,
+        source: h.source,
+        sourceLabel: HELP_DOC_SOURCE_LABEL[h.source] ?? h.source,
+        anchor,
+        anchorLabel: anchorToLabel(anchor),
+        product: h.product,
+        overlapCount: helpDocT.overlapByFk.get(h.ID),
+      };
+    });
 
   // Return a Map keyed by wire `type` string. Callers either flatten the
   // values for a global top-N merge (sidebar) or keep the grouping (full
@@ -213,5 +255,6 @@ export async function loadOtherResourcesByType(cds, conceptIds, perTypeLimit) {
   byType.set('video',             videoOtherResources);
   byType.set('api-doc',           apiDocOtherResources);
   byType.set('sample',            sampleOtherResources);
+  byType.set('help-doc',          helpDocOtherResources);
   return byType;
 }

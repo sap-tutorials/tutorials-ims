@@ -139,4 +139,22 @@ export const RESOURCE_TYPE_CONFIG = [
       return joinMeta(parts);
     },
   },
+  {
+    type: 'help-doc',
+    icon: '📚',
+    singular: 'Help doc',
+    plural: 'Help docs',
+    priority: 70,
+    metaTemplate: 'Source · Anchor',
+    renderMeta(r) {
+      // Phase 4.7 (#748): sourceLabel is precomputed at payload time from a
+      // constant map (cap-cloud-sap → 'CAP', help-sap-com → 'SAP Help',
+      // ui5-sap-com → 'UI5'). anchorLabel is a title-cased anchor slug.
+      const row = r || {};
+      const parts = [];
+      if (row.sourceLabel) parts.push(row.sourceLabel);
+      if (row.anchorLabel) parts.push(row.anchorLabel);
+      return joinMeta(parts);
+    },
+  },
 ];

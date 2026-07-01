@@ -32,6 +32,7 @@ function makeByType({
   video = 0,
   apiDoc = 0,
   sample = 0,
+  helpDoc = 0,
 } = {}) {
   const m = new Map();
   m.set(
@@ -108,11 +109,26 @@ function makeByType({
       overlapCount: sample - i,
     })),
   );
+  m.set(
+    'help-doc',
+    Array.from({ length: helpDoc }, (_, i) => ({
+      type: 'help-doc',
+      slug: `hd-${i}`,
+      title: `HelpDoc ${i}`,
+      url: `https://example.com/hd-${i}`,
+      source: 'cap-cloud-sap',
+      sourceLabel: 'CAP',
+      anchor: null,
+      anchorLabel: null,
+      product: 'cap',
+      overlapCount: helpDoc - i,
+    })),
+  );
   return m;
 }
 
 describe('buildOtherResourcesByType — Task 5 of #850', () => {
-  it('returns 6 entries when all corpora have rows, ordered by priority ascending', () => {
+  it('returns 7 entries when all corpora have rows, ordered by priority ascending', () => {
     const byType = makeByType({
       learningJourney: 2,
       blogPost: 2,
@@ -120,11 +136,12 @@ describe('buildOtherResourcesByType — Task 5 of #850', () => {
       video: 2,
       apiDoc: 2,
       sample: 2,
+      helpDoc: 2,
     });
     const result = buildOtherResourcesByType(byType, 15);
-    expect(result).toHaveLength(6);
+    expect(result).toHaveLength(7);
     const priorities = result.map((e) => e.config.priority);
-    expect(priorities).toEqual([10, 20, 30, 40, 50, 60]);
+    expect(priorities).toEqual([10, 20, 30, 40, 50, 60, 70]);
   });
 
   it('each entry has shape { type, config, items }; config lacks renderMeta', () => {
