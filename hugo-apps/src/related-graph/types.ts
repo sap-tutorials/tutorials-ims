@@ -92,6 +92,43 @@ export type OtherResource = {
   stars?: number | null
   lastCommitAt?: string | null   // ISO timestamp
   overlapCount?: number | null
+  // Phase 5 (#850): server-rendered meta string, e.g. " · by Alice · Jun 3, 2026".
+  // Consumers (ResourceRow / SidebarPanel / ExpandedPanel) should render this
+  // verbatim instead of computing meta client-side from per-type fields.
+  metaText?: string | null
+}
+
+// Phase 5 (#850): TypeConfigEntry mirrors the server's kg-resource-type-config.js
+// (minus renderMeta, which is server-only). Received on the wire as the
+// `typeConfig` field on NeighborhoodResult / NeighborhoodFullResult.
+export type TypeConfigEntry = {
+  type: string
+  icon: string
+  singular: string
+  plural: string
+  priority: number
+  metaTemplate: string
+}
+
+// Phase 5 (#850): per-type buckets for the expanded panel dialog. One entry
+// per external type with ≥1 result, sorted by config.priority ascending.
+// Empty types omitted entirely.
+export type OtherResourcesByTypeEntry = {
+  type: string
+  config: TypeConfigEntry
+  items: OtherResource[]
+}
+
+// Phase 5 (#850): response type for GET /graph/neighborhoodFull. Does NOT
+// carry `teaches` (that section removed from the redesign).
+export type NeighborhoodFullResult = {
+  tutorial: TutorialInfo
+  graphVersion: string | null
+  prerequisitesOf: TutorialRef[]
+  sharedConcepts: TutorialRef[]
+  whatToLearnNext: TutorialRef[]
+  otherResourcesByType: OtherResourcesByTypeEntry[]
+  typeConfig: TypeConfigEntry[]
 }
 
 export type NeighborhoodResult = {
@@ -104,6 +141,9 @@ export type NeighborhoodResult = {
   // Phase 4.1 (#447 §2.6): cross-corpus rail. Optional on the wire so
   // older cached responses without it still parse cleanly.
   otherResources?: OtherResource[]
+  // Phase 5 (#850): additive typeConfig array on the sidebar wire shape.
+  // Optional because older cached responses may lack it.
+  typeConfig?: TypeConfigEntry[]
 }
 
 export type SidebarState = 'loading' | 'empty' | 'disabled' | 'error' | 'ready'
