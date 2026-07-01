@@ -397,6 +397,14 @@
         {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<div data-vue-island="related-graph" class="kg-sidebar-desktop"></div>{{ end }}
       </aside>
     </main>
+    {{/* Teleport target for the KG "Related learning — deep dive" dialog
+         (issue #850). The ExpandedPanel.vue component teleports its DOM
+         here on mount so the dialog overlays the whole viewport without
+         inheriting the tutorial-right-col stacking context. Gated by the
+         same QA / preview rules as the other Vue islands — non-tutorial
+         pages don't ship this element because it lives in the tutorial-
+         specific layout. */}}
+    {{ if and (not site.Params.qa) (not site.Params.previewMode) }}<div id="kg-expanded-root"></div>{{ end }}
   </div>
 </div>
 

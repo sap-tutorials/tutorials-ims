@@ -53,7 +53,7 @@
     "build:css": "postcss hugo/assets/css/sap-fundamental.css --config hugo/ --no-map -o hugo/static/css/sap-fundamental.css",
     "vendor:mediapipe": "node scripts/vendor-mediapipe.cjs",
     "build:apps": "npm run vendor:mediapipe && npm --prefix hugo-apps run build",
-    "postbuild:apps": "tsx scripts/check-build-collisions.ts && tsx scripts/check-icon-imports.ts && tsx scripts/check-island-ui5-imports.ts && tsx scripts/check-xs-app-mta.ts && tsx scripts/check-public-endpoints.ts && tsx scripts/check-srv-qa-cp-list.ts && tsx scripts/check-srv-qa-route-drift.ts && tsx scripts/check-slug-lookups.ts && tsx scripts/check-ui5-controller-extensions.ts",
+    "postbuild:apps": "tsx scripts/check-build-collisions.ts && tsx scripts/check-icon-imports.ts && tsx scripts/check-island-ui5-imports.ts && tsx scripts/check-xs-app-mta.ts && tsx scripts/check-public-endpoints.ts && tsx scripts/check-srv-qa-cp-list.ts && tsx scripts/check-srv-qa-route-drift.ts && tsx scripts/check-slug-lookups.ts && tsx scripts/check-ui5-controller-extensions.ts && tsx scripts/check-kg-meta-formatters-mirror.ts",
     "build:explore-manifest": "tsx scripts/build-explore-manifest.ts",
     "build:explore": "npm --prefix app/explore install --no-audit --no-fund && npm --prefix app/explore run build && npm run build:explore-manifest",
     "build:analytics-explorer": "npm --prefix app/analytics-explorer install && npm --prefix app/analytics-explorer run build",

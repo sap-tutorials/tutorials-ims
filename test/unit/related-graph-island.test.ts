@@ -187,7 +187,15 @@ describe('<RelatedGraph>', () => {
     warnSpy.mockRestore()
   })
 
-  it('renders four sections with the expected item counts on populated data', async () => {
+  // Task 13 of #850: SidebarPanel dropped the "This tutorial teaches"
+  // section entirely (see test/unit/hugo-apps/related-graph-sidebar-panel.test.ts).
+  // The new section order is Prereq → Other resources → Shared → Next; when
+  // POPULATED (below) carries no `otherResources`, only 3 sections render.
+  // Concept hover / concept click are still wired at the RelatedGraph
+  // orchestrator level (defensive), but SidebarPanel does not emit them
+  // on the happy path so those two tests were removed. Per-target coverage
+  // of SidebarPanel's own rendering lives in the sidebar-panel test file.
+  it('renders three sections (Prereq, Shared, Next) with the expected item counts on populated data', async () => {
     fetchMock.mockResolvedValueOnce(makeResponse(POPULATED))
     const wrapper = mount(RelatedGraph)
     fireIntersect(true)
@@ -197,20 +205,17 @@ describe('<RelatedGraph>', () => {
     expect(aside.exists()).toBe(true)
 
     const sections = aside.findAll('section')
-    expect(sections.length).toBe(4)
+    // No otherResources on POPULATED → Other section hidden.
+    expect(sections.length).toBe(3)
 
-    // Headings: order matches spec (teaches, prerequisitesOf, sharedConcepts, whatToLearnNext)
     const headingTexts = sections.map(s => s.find('h3').text())
-    expect(headingTexts[0]).toMatch(/teach/i)
-    expect(headingTexts[1]).toMatch(/prerequisite/i)
-    expect(headingTexts[2]).toMatch(/related concept|covering related/i)
-    expect(headingTexts[3]).toMatch(/learn next/i)
+    expect(headingTexts[0]).toMatch(/prerequisite/i)
+    expect(headingTexts[1]).toMatch(/related concept|covering related/i)
+    expect(headingTexts[2]).toMatch(/learn next/i)
 
-    // Item counts per section
-    expect(sections[0].findAll('li').length).toBe(POPULATED.teaches.length)
-    expect(sections[1].findAll('li').length).toBe(POPULATED.prerequisitesOf.length)
-    expect(sections[2].findAll('li').length).toBe(POPULATED.sharedConcepts.length)
-    expect(sections[3].findAll('li').length).toBe(POPULATED.whatToLearnNext.length)
+    expect(sections[0].findAll('li').length).toBe(POPULATED.prerequisitesOf.length)
+    expect(sections[1].findAll('li').length).toBe(POPULATED.sharedConcepts.length)
+    expect(sections[2].findAll('li').length).toBe(POPULATED.whatToLearnNext.length)
 
     wrapper.unmount()
   })
@@ -222,8 +227,8 @@ describe('<RelatedGraph>', () => {
     await flushPromises()
 
     const sections = wrapper.findAll('aside.kg-sidebar section')
-    // Second section is prerequisitesOf
-    const link = sections[1].find('a')
+    // First section is now prerequisitesOf (teaches was dropped in #850).
+    const link = sections[0].find('a')
     await link.trigger('click')
 
     const click = dispatchedEvents.find(e => e.type === 'kg.sidebar.click')
@@ -231,24 +236,6 @@ describe('<RelatedGraph>', () => {
     expect(click!.detail.type).toBe('prerequisitesOf')
     expect(click!.detail.targetSlug).toBe('cap-first-service')
     expect(click!.detail.slug).toBe('cap-handlers')
-
-    wrapper.unmount()
-  })
-
-  it('emits kg.sidebar.hover_concept on concept hover', async () => {
-    fetchMock.mockResolvedValueOnce(makeResponse(POPULATED))
-    const wrapper = mount(RelatedGraph)
-    fireIntersect(true)
-    await flushPromises()
-
-    const sections = wrapper.findAll('aside.kg-sidebar section')
-    const firstConceptItem = sections[0].find('li')
-    await firstConceptItem.trigger('mouseenter')
-
-    const hover = dispatchedEvents.find(e => e.type === 'kg.sidebar.hover_concept')
-    expect(hover).toBeDefined()
-    expect(hover!.detail.slug).toBe('cap-handlers')
-    expect(hover!.detail.conceptSlug).toBe('concept-cap-service-handlers')
 
     wrapper.unmount()
   })

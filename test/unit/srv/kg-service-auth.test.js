@@ -16,11 +16,14 @@ describe('KnowledgeGraphService auth annotations', () => {
     csn = await cds.load(path.resolve(import.meta.dirname, '../../../srv/knowledge-graph-service.cds'))
   })
 
-  it('drops the service-level @requires', () => {
+  it('keeps the service-level @requires open to anonymous readers', () => {
     const svc = csn.definitions['KnowledgeGraphService']
-    // The annotation is removed entirely; the only @requires entries
-    // sit on the individual admin actions.
-    expect(svc['@requires']).toBeUndefined()
+    // PR #857 pinned the service-level annotation to CAP's `'any'` pseudo-role,
+    // which means "no authentication required" — i.e. the public read surface
+    // stays open while admin actions carry their own KnowledgeGraph.Admin
+    // requirement below. This is equivalent in posture to dropping the
+    // annotation entirely, but makes the "public read" intent explicit in CDS.
+    expect(svc['@requires']).toBe('any')
   })
 
   it('keeps KnowledgeGraph.Admin on every curation action', () => {
