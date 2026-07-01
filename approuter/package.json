@@ -2,8 +2,10 @@
   "name": "tutorials-approuter",
   "dependencies": {
     "@sap/approuter": "^16.0.0",
+    "jose": "^5.10.0",
     "sharp": "0.34.5",
-    "tar": "^7.0.0"
+    "tar": "^7.0.0",
+    "undici": "^6.19.5"
   },
   "scripts": {
     "start": "node server.js"

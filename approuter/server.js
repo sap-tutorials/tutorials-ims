@@ -19,6 +19,7 @@ const { createGunzip } = require('zlib')
 const tar = require('tar')
 const serveStatic = require('serve-static')
 const { isAuthorizedBearer } = require('./lib/bearer-auth')
+const { resolveSecret } = require('./lib/credstore-secret')
 const { getIndex, startAutoRefresh } = require('./lib/legacy-redirects-loader')
 const { bump, startAutoFlush } = require('./lib/hit-counter')
 
@@ -227,7 +228,12 @@ function adminAppsHandler(req, res, next) {
 async function rebuildHandler(req, res, next) {
   if (req.method !== 'POST') return next()
 
-  const apiKey = process.env.REBUILD_API_KEY
+  // Credstore-first, env fallback — mirrors srv/lib/secret-resolver.js so the
+  // rebuild-content.yml workflow's "Push content to AppRouter" step keeps
+  // working after we removed REBUILD_API_KEY from the envsubst allowlist.
+  // Issue #867. The 5-min TTL cache inside resolveSecret means rebuild bursts
+  // don't hammer the credstore.
+  const apiKey = await resolveSecret('REBUILD_API_KEY', { logTag: '[rebuild]' })
   if (!apiKey) {
     res.writeHead(503, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ error: 'REBUILD_API_KEY not configured' }))
