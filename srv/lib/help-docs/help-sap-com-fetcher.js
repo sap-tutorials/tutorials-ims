@@ -164,11 +164,14 @@ export async function fetchHelpSapComCorpus({
       rows.push({
         source: 'help-sap-com',
         sourceId,
-        title: node.t,
+        title: String(node.t || '').slice(0, 255),
         description: stripped.slice(0, DESCRIPTION_MAX_CHARS),
         url,
         product,
-        section: node.parentTitle,
+        // Truncate section defensively — HANA column is String(500) per
+        // db/external-content.cds, and rare deep-TOC BTP deliverables emit
+        // ~400-char parent titles (verified via cron error 2026-07-01).
+        section: node.parentTitle ? String(node.parentTitle).slice(0, 500) : null,
       });
     }
   }

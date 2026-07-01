@@ -377,7 +377,7 @@ entity HelpDocs : cuid, managed {
 
   // Help-doc-specific:
   product           : String(80);                    // 'btp'/'cap'/'hana-cloud'/... or 'cap' or 'ui5'
-  section           : String(120);                   // TOC parent section (help.sap.com only)
+  section           : String(500);                   // TOC parent section (help.sap.com only). 500 chars — help.sap.com deliverable TOCs occasionally exceed 120 (e.g. 'Creating Business Configuration and Rolling out Cross-Company Standardization to Subsidiaries — Post-Merger Integration for Enterprise Structures'). Truncate defensively in the fetcher too.
 
   links             : Composition of many HelpDocConceptLinks on links.helpDoc = $self;
 }
