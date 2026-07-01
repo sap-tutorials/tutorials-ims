@@ -354,3 +354,44 @@ entity SampleConceptLinks : cuid, managed {
 
 annotate SampleConceptLinks with
   @assert.unique.sampleConcept : [sample, concept, predicate];
+
+// ============================================================================
+// Phase 4.7 (#748): narrative documentation pages as graph nodes.
+// Multi-source: help.sap.com + cap.cloud.sap + ui5.sap.com feed one entity.
+// Distinguished by `source` column. Slug format `hd-<source>__<canonicalPath>`.
+// Spec: docs/superpowers/specs/2026-07-01-748-phase4.7-help-docs.md §4.1
+// ============================================================================
+
+entity HelpDocs : cuid, managed {
+  slug              : String(150) @assert.unique;    // 'hd-<source>__<canonicalizedPath>'
+  source            : String(20);                    // 'help-sap-com' | 'cap-cloud-sap' | 'ui5-sap-com'
+  title             : String(255);
+  description       : LargeString;                   // NCLOB — page body first ~2000 chars (§10.1)
+  url               : String(500);                   // canonical URL for the page
+  sourceId          : String(200);                   // per-source stable id (URL path or blob path)
+  contentHash       : String(64);                    // SHA-256(title+description+source+product+section)
+  lastExtractedHash : String(64);                    // #708 crash-safety gate
+  firstSeenAt       : Timestamp @cds.on.insert: $now;
+  lastSeenAt        : Timestamp;
+  pinUntil          : Timestamp;                     // chassis admin override
+
+  // Help-doc-specific:
+  product           : String(80);                    // 'btp'/'cap'/'hana-cloud'/... or 'cap' or 'ui5'
+  section           : String(120);                   // TOC parent section (help.sap.com only)
+
+  links             : Composition of many HelpDocConceptLinks on links.helpDoc = $self;
+}
+
+entity HelpDocConceptLinks : cuid, managed {
+  helpDoc      : Association to HelpDocs @assert.notNull;
+  concept      : Association to ims.Concepts @assert.notNull;
+  predicate    : String(40);                         // 'explains'
+  confidence   : Decimal(3, 2);                      // LLM floor 0.7
+  anchor       : String(120);                        // optional H2/H3 slug; null-safe
+  snippet      : String(200);                        // precomputed first ~120 chars for LOB-safe reads
+  extractedAt  : Timestamp;
+  modelVersion : String(40);
+}
+
+annotate HelpDocConceptLinks with
+  @assert.unique.helpDocConceptAnchor : [helpDoc, concept, predicate, anchor];

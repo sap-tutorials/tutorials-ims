@@ -34,6 +34,7 @@ const ITERATION_SET = {
   'video': 'Videos',  // Phase 4.4 (#447)
   'api-doc': 'ApiDocs',  // Phase 4.5 (#746)
   'sample': 'Samples',  // Phase 4.6 (#747)
+  'help-doc': 'HelpDocs',  // Phase 4.7 (#748)
 };
 
 export async function runGcExternalContent() {
