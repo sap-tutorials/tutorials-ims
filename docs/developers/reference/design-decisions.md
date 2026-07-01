@@ -7,6 +7,8 @@ description: Architectural, CAP runtime, data/identity, and operational decision
 
 > Source: extracted from project README, 2026-05-25.
 
+> **This page is the fast-scan aggregate — a one-liner per architectural rule the platform runs under.** For the *why* behind an individual decision, its trade-offs, and what you'd have to redo to change it, see the [Architecture Decision Records](../../decisions/README.md). ADRs are the canonical form for decisions with dedicated records; this page remains the quick tour.
+
 #### Architecture
 
 - **Tutorial HTML lives in HANA, not on disk.** Hugo builds HTML, `publish-content.ts` gzip-compresses + SHA-256-hashes per slug, then uploads only the changed slugs as BLOBs to `ContentFiles` + `ContentManifest`. AppRouter rewrites `/tutorials/{slug}` → `/content/tutorials/{slug}` on the srv, which decompresses and serves with ETag + bounded LRU. Consequence: `approuter/static/tutorials/` is explicitly removed during build — there is no static fallback. If nothing has been published, `/tutorials/*` returns 404.

@@ -52,3 +52,4 @@ Topics that aren't on a critical path but matter when you go looking.
 - [Sage Extension Migration](reference/sage-extension-migration.md) — VS Code extension coupling
 - [External Integrations](reference/external-integrations.md) — what we integrate with
 - [Key Design Decisions](reference/design-decisions.md) — why the platform looks the way it does
+- [Architecture Decision Records](../decisions/README.md) — canonical, single-topic records with status and consequences
