@@ -140,9 +140,20 @@ Two endpoints, one shared type-config module.
     `neighborhood`)
 - No `teaches` (we removed that section entirely).
 - **Caching:** same LRU cache module as `neighborhood`
-  ([srv/lib/kg-neighborhood-cache.js](../../../srv/lib/kg-neighborhood-cache.js)) but a separate
-  bucket keyed by `(slug, graphVersion, 'full')`. Same TTL/eviction policy.
-  Cache bust on graph rebuild busts both buckets.
+  ([srv/lib/kg-neighborhood-cache.js](../../../srv/lib/kg-neighborhood-cache.js)) — but the
+  module today has a fixed two-arg signature:
+  `getCachedNeighborhood(slug, graphVersion)` /
+  `setCachedNeighborhood(slug, graphVersion, value)` with `makeKey(slug,
+  graphVersion)` at line 26. **Required change:** extend to three-arg
+  `getCachedNeighborhood(slug, graphVersion, bucket = 'default')` /
+  `setCachedNeighborhood(slug, graphVersion, value, bucket = 'default')` so
+  the existing sidebar path is untouched (default bucket) and
+  `neighborhoodFull` uses `bucket = 'full'`. `makeKey` becomes
+  `` `${bucket}:${slug}:${graphVersion}` ``. `bustNeighborhoodCache()` stays
+  a global wipe (correct for graph rebuild — both buckets are invalidated
+  together). Add a unit test asserting bucket isolation: writing under
+  `'full'` must not be readable under `'default'`. Extension is trivial
+  (~10 LoC change).
 
 ### `TypeConfigEntry` (new CDS type, shared by both responses)
 
@@ -247,14 +258,43 @@ This is the one server ↔ hugo-apps coupling the design introduces; it's
 deliberate — otherwise the "server ships pre-rendered metaText" idea can't
 survive a client-side date-format tweak. Tests pin the exact string shapes.
 
+**Timezone discipline for the shared formatters.** `related-graph-helpers.ts`
+today uses `Intl.DateTimeFormat` and `Date` methods that respect the browser's
+local timezone. On the server, Node's timezone is whatever
+`process.env.TZ` says (in Cloud Foundry: UTC). So a reader in
+Australia/Sydney could see a `"Jun 3"` on the client where the server
+already stamped `"Jun 4"` for the same ISO timestamp — the "byte-for-byte
+match" promise breaks silently at day boundaries. The shared module
+**pins itself to UTC** on both surfaces:
+
+```js
+// srv/lib/kg-meta-formatters.js
+export function formatDate(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+```
+
+Client re-exports the same function verbatim so it sees the same UTC-anchored
+result regardless of the reader's timezone. Vitest snapshot pins fixture
+timestamps (e.g. `2026-06-03T00:00:00Z`) so the day-boundary case is a
+regression test, not a hope.
+
 **Why teleport for the expanded panel.** The tutorial page uses a right-column
 aside inside a stacking context with the sticky step-TOC + `z-index` on
 various sub-elements. If the expanded panel mounts inside that aside, it
 inherits the stacking context and can't overlay the whole viewport. Vue 3's
 `<Teleport to="body">` moves the DOM to a top-level position at render time
-without changing component ownership. Same technique the code-check dialog
-already uses ([hugo-apps/src/code-check/CodeCheck.vue](../../../hugo-apps/src/code-check/CodeCheck.vue) —
-verify pattern).
+without changing component ownership. This is the **first** Vue 3
+`<Teleport>` in `hugo-apps/` (verified: `grep -r "<Teleport"
+hugo-apps/src/` returns zero hits at spec time — earlier drafts of this
+design claimed CodeCheck.vue used the pattern; that was wrong). SSR-safety:
+`data-vue-island="related-graph"` hydrates client-only via the island
+runtime, so Teleport has no SSR concerns here. The dialog root that
+Teleport targets (`<div id="kg-expanded-root">`) is added to
+[hugo/layouts/_default/baseof.html](../../../hugo/layouts/_default/baseof.html) as an empty
+mount point below `<body>`.
 
 ---
 
@@ -383,13 +423,15 @@ unchanged. Nothing that watches those today breaks.
   both.
 - **Content rebuild:** none needed. Wire-shape additions are additive; a
   slug's HTML in HANA doesn't change.
-- **Approuter routes:** `/graph/neighborhoodFull(…)` matches the existing
-  allowlist regex in [approuter/xs-app.json:146](../../../approuter/xs-app.json#L146)
-  (`neighborhood` prefix). Confirmed manually against the regex —
-  `neighborhoodFull` still matches `^/graph/(neighborhood|Concepts|…)` at the
-  captured-group boundary. **A minor regex update is needed** to make
-  `neighborhoodFull` match exactly — plan to change to
-  `neighborhood(Full)?|Concepts|…`.
+- **Approuter routes:** `/graph/neighborhoodFull(…)` does **not** match the
+  existing allowlist regex at [approuter/xs-app.json:146](../../../approuter/xs-app.json#L146)
+  (verified: `/graph/neighborhoodFull(slug='x')` returns `false` against
+  `^/graph/(neighborhood|Concepts|…)…`). Without a regex update it falls
+  through to the next `/graph/` route (line 153), which is xsuaa-protected —
+  anonymous callers would 401. **Required change:** update the allowlist to
+  `neighborhood(Full)?|Concepts|ConceptEdges|TutorialConceptLinks|pathBetween|conceptsForUser|explore-data|path`.
+  Smoke test in `test/smoke/kg-endpoints.test.js` gets a new case asserting
+  anonymous 200 on `/graph/neighborhoodFull(...)`.
 - **Deployment sequence:** srv change deploys first (adds
   `/graph/neighborhoodFull`; sidebar unchanged wire-side except for additive
   `typeConfig`); approuter change deploys with the same MTA; hugo-apps
@@ -398,7 +440,33 @@ unchanged. Nothing that watches those today breaks.
   fields ignored). A new client hitting an old server is what to guard: the
   client feature-detects `typeConfig` presence in the response and falls
   back to the legacy `v-else-if` renderer if missing. Fallback removed in a
-  follow-up deploy cycle.
+  follow-up deploy cycle. The fallback is genuinely needed here because
+  vite entry filenames are unhashed (`entryFileNames: '[name].js'` at
+  [hugo-apps/vite.config.ts:233](../../../hugo-apps/vite.config.ts#L233)), so
+  the CDN + browser cache can serve stale `related-graph.js` for up to the
+  approuter's max-age window after a deploy. Removal criterion: 24 h after
+  deploy, or when Cache-Control inspection shows the new bundle is being
+  served ≥99% of the time.
+
+- **`srv-qa` cp list.** The `tutorials-srv-qa` module in
+  [.deploy/mta.yaml:107](../../../.deploy/mta.yaml#L107) hand-curates every
+  `srv/lib/` file it needs (the whole `bash -c "…cp…"` block). Today's list
+  is **missing** `kg-neighborhood-cache.js` and `kg-neighborhood-merge.js`
+  even though `knowledge-graph-service.js` imports them — meaning the QA
+  channel already can't serve `/graph/neighborhood`. This is a pre-existing
+  bug, tracked under [[feedback_srv_qa_cp_list]] in Tom's memory. This
+  design closes that gap **at the same time it lands** so we don't inherit
+  the bug: append to the srv-qa cp list —
+    * `kg-neighborhood-cache.js` (pre-existing dep)
+    * `kg-neighborhood-merge.js` (pre-existing dep)
+    * `kg-resource-type-config.js` (new)
+    * `kg-meta-formatters.js` (new)
+  Verify after implementation by re-walking transitive `./` imports from
+  `srv/knowledge-graph-service.js` and confirming every hop is in the
+  cp list. Do this **before** the QA deploy step of the same MTA, otherwise
+  QA boot crashes on first `/graph/*` hit ([[feedback_srv_qa_cp_list]] and
+  [[feedback_srv_qa_route_drift_not_caught_by_lint]] both describe this
+  failure mode).
 
 ---
 
@@ -436,7 +504,21 @@ unchanged. Nothing that watches those today breaks.
   tweak in another can drift silently until a user notices. Mitigated by the
   shared `srv/lib/kg-meta-formatters.js` module (server IS the canonical
   formatter; client imports the same source for any client-side computed
-  strings).
+  strings) and by the UTC-pinning + snapshot fixture in the Data-flow
+  section above.
+- **DB query fanout at cold cache for `neighborhoodFull`.** The expanded
+  path can materialise up to 6 × `KG_NEIGHBORHOOD_FULL_PER_TYPE_LIMIT`
+  = 6 × 15 = 90 rows across 6 corpora, versus 5 in the sidebar. On cold
+  cache the 12 parallel queries (6 link-tables + 6 metadata SELECTs) are
+  the same order-of-magnitude wall-clock as `neighborhood` today (~500ms
+  per the KG-widget-perf PR #854) but with a bigger metadata payload.
+  Not a scaling concern at DEV load; may need a
+  `KG_NEIGHBORHOOD_FULL_PER_TYPE_LIMIT` bump-down if PROD reveals a
+  hot-tutorial bottleneck. The `mergeOtherResources` helper in
+  [srv/lib/kg-neighborhood-merge.js](../../../srv/lib/kg-neighborhood-merge.js)
+  is NOT reused by the expanded path — the expanded path returns per-type
+  buckets un-merged. No signature change needed on the merge helper; the
+  sidebar continues to call it with the same variadic shape.
 
 ---
 
@@ -457,15 +539,24 @@ unchanged. Nothing that watches those today breaks.
 - `srv/knowledge-graph-service.js` — new handler for `neighborhoodFull`;
   existing `neighborhood` handler grows a `typeConfig` field on the response
   and stamps `metaText` on each Other-resources row.
-- `srv/lib/kg-neighborhood-cache.js` — accept a bucket parameter so
-  `neighborhood` and `neighborhoodFull` cache independently.
+- `srv/lib/kg-neighborhood-cache.js` — three-arg signature extension
+  (`bucket = 'default'`) so `neighborhood` and `neighborhoodFull` cache
+  independently. Details in the Data-flow section above.
 - `hugo-apps/src/related-graph/RelatedGraph.vue` — becomes the thin
   orchestrator; most rendering moves to child components.
 - `hugo-apps/src/related-graph/types.ts` — new types.
 - `hugo-apps/src/related-graph/related-graph-helpers.ts` — re-exports the
   shared formatter module.
-- `approuter/xs-app.json` — regex tweak so `neighborhoodFull` matches the
-  anonymous allowlist branch cleanly.
+- `hugo/layouts/_default/baseof.html` — add empty
+  `<div id="kg-expanded-root"></div>` below `<body>` as the Teleport target.
+- `approuter/xs-app.json` — regex change from `neighborhood|Concepts|…`
+  to `neighborhood(Full)?|Concepts|…` on line 146 so `neighborhoodFull`
+  matches the anonymous allowlist branch.
+- `.deploy/mta.yaml` — append `kg-neighborhood-cache.js`,
+  `kg-neighborhood-merge.js`, `kg-resource-type-config.js`,
+  `kg-meta-formatters.js` to the `tutorials-srv-qa` cp list (line 125).
+  First two are pre-existing bugs fixed here; last two are new to this
+  design.
 - Extended existing tests as listed.
 
 Nothing else.
