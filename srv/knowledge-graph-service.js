@@ -82,13 +82,20 @@ function isFullySubset(inputTeaches, candidateTeaches) {
  *   concept-slugs the tutorial teaches. When provided, sharedConcepts items
  *   whose teaches-set is fully a subset of `slug`'s teaches-set are pushed
  *   to the bottom (no learning value). Skipped when undefined.
+ * @param {number} [maxResults] — per-section cap. Defaults to TOP_N (10)
+ *   for the sidebar path; the /graph/neighborhoodFull handler passes 30
+ *   for the expanded panel (Task 5 of #850).
  * @returns {{teaches:Array, prerequisitesOf:Array, sharedConcepts:Array, whatToLearnNext:Array}}
  *   - teaches items:           { slug, name }
  *   - tutorial-targeted items: { slug, weight, reason }
  *     (`title` is left undefined; the handler enriches via Tutorials.title)
  */
-export function rankNeighborhood(rows, slug, coCompletionMap, tutorialTeachesMap) {
+export function rankNeighborhood(rows, slug, coCompletionMap, tutorialTeachesMap, maxResults) {
   const coMap = coCompletionMap instanceof Map ? coCompletionMap : new Map();
+  const capN =
+    typeof maxResults === 'number' && Number.isFinite(maxResults) && maxResults > 0
+      ? Math.floor(maxResults)
+      : TOP_N;
 
   // Bucket by type, deduped by (type, targetSlug). Skip rows with unknown
   // type or missing slug. Defense-in-depth self-filter.
@@ -169,12 +176,13 @@ export function rankNeighborhood(rows, slug, coCompletionMap, tutorialTeachesMap
   }
   whatToLearnNext.sort((a, b) => (b.weight - a.weight) || a.slug.localeCompare(b.slug));
 
-  // Cap each group at TOP_N.
+  // Cap each group at capN (defaults to TOP_N; /graph/neighborhoodFull
+  // passes 30 for the expanded panel — Task 5 of #850).
   return {
-    teaches:         teaches.slice(0, TOP_N),
-    prerequisitesOf: prerequisitesOf.slice(0, TOP_N),
-    sharedConcepts:  sharedConcepts.slice(0, TOP_N),
-    whatToLearnNext: whatToLearnNext.slice(0, TOP_N),
+    teaches:         teaches.slice(0, capN),
+    prerequisitesOf: prerequisitesOf.slice(0, capN),
+    sharedConcepts:  sharedConcepts.slice(0, capN),
+    whatToLearnNext: whatToLearnNext.slice(0, capN),
   };
 }
 
@@ -266,10 +274,42 @@ import { resolveKnowledgeGraphSettings } from './lib/runtime-config/kg-settings.
 import { mergeOtherResources, MAX_OTHER_RESOURCES } from './lib/kg-neighborhood-merge.js';
 import { stampMetaText, typeConfigForWire } from './lib/kg-stamp-meta-text.js';
 import { loadOtherResourcesByType } from './lib/kg-other-resources-loader.js';
+import {
+  buildOtherResourcesByType,
+  KG_NEIGHBORHOOD_FULL_PER_TYPE_LIMIT_DEFAULT,
+} from './lib/kg-neighborhood-full-helpers.js';
 import { getTutorialTeachesMap } from './lib/kg-tutorial-teaches-map.js';
 import { getCachedNeighborhood, setCachedNeighborhood } from './lib/kg-neighborhood-cache.js';
 
 const NAMESPACE = 'com.sap.developers.ims';
+
+// Task 5 of #850: per-type cap for /graph/neighborhoodFull's expanded
+// panel. Overridable via env; falls back to the module default (15) on
+// invalid / missing values, logging at boot so operators see the fallback.
+function resolveNeighborhoodFullPerTypeLimit() {
+  const raw = process.env.KG_NEIGHBORHOOD_FULL_PER_TYPE_LIMIT;
+  if (raw === undefined || raw === null || raw === '') {
+    return KG_NEIGHBORHOOD_FULL_PER_TYPE_LIMIT_DEFAULT;
+  }
+  const n = Number.parseInt(raw, 10);
+  if (Number.isNaN(n) || n < 1) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[kg] KG_NEIGHBORHOOD_FULL_PER_TYPE_LIMIT=${JSON.stringify(raw)} invalid; ` +
+        `falling back to ${KG_NEIGHBORHOOD_FULL_PER_TYPE_LIMIT_DEFAULT}`,
+    );
+    return KG_NEIGHBORHOOD_FULL_PER_TYPE_LIMIT_DEFAULT;
+  }
+  return n;
+}
+const KG_NEIGHBORHOOD_FULL_PER_TYPE_LIMIT = resolveNeighborhoodFullPerTypeLimit();
+// eslint-disable-next-line no-console
+console.log(`[kg] KG_NEIGHBORHOOD_FULL_PER_TYPE_LIMIT = ${KG_NEIGHBORHOOD_FULL_PER_TYPE_LIMIT}`);
+
+// Task 5 of #850: raised per-section cap for the expanded panel (vs the
+// sidebar's TOP_N=10). Passed to rankNeighborhood via the new maxResults
+// arg; falls back to TOP_N for the sidebar path.
+const NEIGHBORHOOD_FULL_MAX_PER_SECTION = 30;
 
 // SPARQL response IRI prefix for tutorials (from kg-projection.js +
 // kg-queries.js). The neighborhood query already strips this via
@@ -674,6 +714,178 @@ export default cds.service.impl(async function () {
     //     tutorial with the same graphVersion hits the cache and skips ALL
     //     the DB work above. See srv/lib/kg-neighborhood-cache.js.
     setCachedNeighborhood(slug, graphVersion, result);
+    return result;
+  });
+
+  // ─── neighborhoodFull(slug) — Task 5 of #850 ─────────────────────────────
+  // Sibling of `neighborhood`. Same feature-flag, ranker, loader, and
+  // cache — but returns per-type buckets (not merged top-5) with larger
+  // caps for the ExpandedPanel dialog. Response envelope carries no
+  // `teaches` (redesign concentrates the concept list in the sidebar
+  // only). Cached in the 'full' bucket so the sidebar and expanded
+  // panel don't shadow each other.
+  this.on('neighborhoodFull', async (req) => {
+    const { slug } = req.data;
+    if (typeof slug !== 'string' || !SLUG_RE.test(slug)) {
+      return req.error(400, 'Invalid slug');
+    }
+
+    // 1. graphVersion + input tutorial title.
+    const { GraphMetadata, Tutorials } = cds.entities(NAMESPACE);
+    const meta = await SELECT.one.from(GraphMetadata).columns('graphVersion');
+    const graphVersion = meta?.graphVersion ?? null;
+
+    // Empty-but-valid envelope helper. Used when graphVersion is null,
+    // when the tutorial isn't found, or when no teaches[] concepts exist
+    // so the loader has nothing to overlap against. Every branch ships
+    // the same fields the wire schema declares so clients can render
+    // unconditionally.
+    const emptyEnvelope = (tutorialInfo, gv) => ({
+      tutorial:              tutorialInfo,
+      graphVersion:          gv,
+      prerequisitesOf:       [],
+      sharedConcepts:        [],
+      whatToLearnNext:       [],
+      otherResourcesByType:  [],
+      typeConfig:            typeConfigForWire(),
+    });
+
+    if (graphVersion) {
+      setResponseHeader(req, 'ETag', `"${slug}:${graphVersion}:full"`);
+    }
+
+    // 2. Look up input tutorial title.
+    const inputTutorial = await SELECT.one
+      .from(Tutorials)
+      .columns('slug', 'title')
+      .where({ slug });
+    const tutorialInfo = {
+      slug,
+      title: inputTutorial?.title ?? slug,
+    };
+
+    if (!graphVersion) {
+      log.info(
+        `kg-service: neighborhoodFull(${slug}) — no graphVersion yet; returning empty envelope`,
+      );
+      return emptyEnvelope(tutorialInfo, null);
+    }
+
+    // 3. Cache lookup — 'full' bucket so we don't collide with the sidebar.
+    const cached = getCachedNeighborhood(slug, graphVersion, 'full');
+    if (cached) return cached;
+
+    const tutorialIri = TUTORIAL_IRI_PREFIX + slug;
+
+    // 4. Run SPARQL.
+    let response;
+    try {
+      ({ response } = await kgQuery({
+        db,
+        queryName: 'NEIGHBORHOOD',
+        params: { slug: tutorialIri },
+      }));
+    } catch (err) {
+      return mapSparqlError(err, req, log);
+    }
+
+    // 5. Parse.
+    let rows;
+    try {
+      rows = parseNeighborhoodSparqlResponse(response, slug);
+    } catch (err) {
+      log.error(`kg-service: malformed SPARQL response: ${err.message}`);
+      return req.error(500, 'Internal knowledge-graph query error');
+    }
+
+    // 6. Co-completion boost + tutorial-teaches map (best-effort).
+    let coMap = new Map();
+    try {
+      const neighbors = await loadCoCompletionsFor(slug, { db });
+      coMap = new Map(neighbors.map((e) => [e.slug, e.score]));
+    } catch (err) {
+      log.warn(
+        `kg-service: loadCoCompletionsFor failed (${err.message ?? err}); proceeding without boost`,
+      );
+    }
+    let tutorialTeachesMap;
+    try {
+      tutorialTeachesMap = await getTutorialTeachesMap(db, log);
+    } catch (err) {
+      log.warn(
+        `kg-service: getTutorialTeachesMap failed (${err.message ?? err}); proceeding without subset suppression`,
+      );
+      tutorialTeachesMap = undefined;
+    }
+
+    // 7. Rank with raised per-section cap (30 vs the sidebar's 10).
+    const ranked = rankNeighborhood(
+      rows,
+      slug,
+      coMap,
+      tutorialTeachesMap,
+      NEIGHBORHOOD_FULL_MAX_PER_SECTION,
+    );
+
+    // 8. Enrichment lookups: tutorial titles for prereq/shared/next,
+    //    concept IDs for the loader. Same pattern as `neighborhood`.
+    const candidateSlugs = new Set();
+    for (const item of ranked.prerequisitesOf) candidateSlugs.add(item.slug);
+    for (const item of ranked.sharedConcepts)  candidateSlugs.add(item.slug);
+    for (const item of ranked.whatToLearnNext) candidateSlugs.add(item.slug);
+    const teachesSlugs = ranked.teaches.map((c) => c.slug);
+    const { Concepts } = cds.entities(NAMESPACE);
+
+    const [titleRows, conceptRows] = await Promise.all([
+      candidateSlugs.size > 0
+        ? SELECT.from(Tutorials)
+            .columns('slug', 'title', 'status')
+            .where({ slug: { in: [...candidateSlugs] } })
+        : Promise.resolve([]),
+      teachesSlugs.length > 0
+        ? SELECT.from(Concepts)
+            .columns('ID', 'slug')
+            .where({ slug: { in: teachesSlugs } })
+        : Promise.resolve([]),
+    ]);
+    const titleBySlug = buildLiveTitleMap(titleRows);
+    const enrich = (arr) => enrichLiveTutorials(arr, titleBySlug);
+    const conceptIds = conceptRows.map((c) => c.ID);
+
+    // 9. Per-type buckets. Loader stays shared with the sidebar; the
+    //    difference is the larger `perTypeLimit` and that we keep the
+    //    grouping instead of merging. Empty-teaches path short-circuits.
+    let otherResourcesByType = [];
+    if (conceptIds.length > 0) {
+      try {
+        const byType = await loadOtherResourcesByType(
+          cds,
+          conceptIds,
+          KG_NEIGHBORHOOD_FULL_PER_TYPE_LIMIT,
+        );
+        otherResourcesByType = buildOtherResourcesByType(
+          byType,
+          KG_NEIGHBORHOOD_FULL_PER_TYPE_LIMIT,
+        );
+      } catch (err) {
+        log.warn(
+          `kg-service: neighborhoodFull otherResourcesByType enrichment failed: ${err.message ?? err}`,
+        );
+        otherResourcesByType = [];
+      }
+    }
+
+    const result = {
+      tutorial:              tutorialInfo,
+      graphVersion,
+      prerequisitesOf:       enrich(ranked.prerequisitesOf),
+      sharedConcepts:        enrich(ranked.sharedConcepts),
+      whatToLearnNext:       enrich(ranked.whatToLearnNext),
+      otherResourcesByType,
+      typeConfig:            typeConfigForWire(),
+    };
+
+    setCachedNeighborhood(slug, graphVersion, result, 'full');
     return result;
   });
 

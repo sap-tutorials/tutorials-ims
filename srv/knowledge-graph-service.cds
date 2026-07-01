@@ -146,6 +146,33 @@ service KnowledgeGraphService @(path : '/graph') {
     // the `renderMeta` function (see TypeConfigEntry).
     typeConfig      : array of TypeConfigEntry;
   }
+  // Task 5 of #850 (KG-widget redesign): per-type bucket for the
+  // ExpandedPanel dialog. Instead of the sidebar's merged flat top-5, the
+  // full-panel handler returns each of the 6 external-resource corpora as
+  // its own bucket with a larger per-type cap
+  // (KG_NEIGHBORHOOD_FULL_PER_TYPE_LIMIT, default 15). Empty corpora are
+  // omitted from the array — the client renders only sections with rows.
+  type OtherResourcesByTypeEntry {
+    type   : String(30);
+    config : TypeConfigEntry;
+    items  : array of OtherResource;
+  }
+  // Task 5 of #850: response envelope for /graph/neighborhoodFull. Same
+  // gating and shared ranker as /graph/neighborhood; larger per-section
+  // caps (up to 30 tutorial refs vs the sidebar's 10) and per-type
+  // buckets for external resources rather than a merged top-5. Notably
+  // does NOT carry `teaches` — the redesign moves the concept list into
+  // the sidebar only; the expanded panel focuses on tutorial + external
+  // resource neighbourhoods.
+  type NeighborhoodFullResult {
+    tutorial              : TutorialInfo;
+    graphVersion          : String;
+    prerequisitesOf       : array of TutorialRef;
+    sharedConcepts        : array of TutorialRef;
+    whatToLearnNext       : array of TutorialRef;
+    otherResourcesByType  : array of OtherResourcesByTypeEntry;
+    typeConfig            : array of TypeConfigEntry;
+  }
   type ConceptCoverage {
     learned : array of ConceptRef;
     partial : array of ConceptRef;
@@ -178,6 +205,9 @@ service KnowledgeGraphService @(path : '/graph') {
 
   // ─── Phase 1 + Phase 2 typed query functions (open to authenticated) ──
   function neighborhood(slug : String)                        returns NeighborhoodResult;
+  // Task 5 of #850: expanded-panel data source. Per-type buckets with
+  // larger caps for the /tutorials/*/ ExpandedPanel dialog.
+  function neighborhoodFull(slug : String)                    returns NeighborhoodFullResult;
   function pathBetween(fromSlug : String, toSlug : String)    returns array of String;     // Phase 2 stub
   function conceptsForUser(userId : String)                   returns ConceptCoverage;     // Phase 2 stub
 
