@@ -268,7 +268,18 @@ approuter container anyway).
 - New CI guard: `scripts/check-kg-meta-formatters-mirror.ts` diffs the two
   files (raw byte compare after `\r\n → \n` normalization) and fails
   `npm run lint` if they drift. Runs in the same npm-test lane as
-  `check-public-endpoints.ts`. Guard is ~20 LoC.
+  `check-public-endpoints.ts`. Guard is ~20 LoC. **Also wired into the
+  deploy workflow's `check-*` step** (not only `lint`) so a developer who
+  skips local lint can't drift the mirror past a CI-gated deploy. Guard
+  ships with its own self-test in `test/unit/check-kg-meta-formatters-mirror.test.ts`
+  — a fixture pair where the two files intentionally differ must produce a
+  non-zero exit + specific error message. Absent the self-test, the
+  guard silently no-ops if its own regex breaks.
+- **TypeScript-side note:** the mirror is `.js` living beside `.ts` files.
+  `hugo-apps/tsconfig.json` needs `"allowJs": true` (if not already set)
+  so `related-graph-helpers.ts` can import from the mirror with types
+  inferred from JSDoc. If `allowJs` is off in the current config, this
+  design's implementation adds it in the same PR.
 
 This mirrors the pattern the project already uses for the "explore" bundle
 manifest (a mirror-into-gen step from #726 Task 6). Simpler than a shared
@@ -409,6 +420,11 @@ unchanged. Nothing that watches those today breaks.
 - `related-graph-sidebar-order.test.ts` — new component: given fixture,
   asserts section order is Prereq → Other → Shared → Next; no "teaches"
   section renders even if the wire still carries `teaches: [...]`.
+- `check-kg-meta-formatters-mirror.test.ts` — self-test for the mirror
+  guard: given a fixture pair where server + client copies intentionally
+  differ, the guard exits non-zero with an error message naming both
+  paths. Ensures the guard doesn't silently no-op if its own diff logic
+  breaks.
 - Extends existing `test/unit/hugo-apps/related-graph-*.test.ts` suite.
 
 ### Hybrid tests (`test/hybrid/`, real HANA via `cds bind --exec`)
