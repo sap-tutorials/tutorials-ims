@@ -536,7 +536,7 @@ Append these to the end of the `cp` list going to `srv/lib/`:
 - `../../srv/lib/kg-neighborhood-merge.js` (pre-existing bug)
 - `../../srv/lib/kg-resource-type-config.js` (new)
 - `../../srv/lib/kg-meta-formatters.js` (new)
-- `../../srv/lib/kg-other-resources-loader.js` (new, from task 5.4a refactor)
+- `../../srv/lib/kg-other-resources-loader.js` (new, from task 5a refactor)
 
 - [ ] **Step 7.3: Transitive-import audit**
 
@@ -1233,7 +1233,7 @@ If something goes wrong post-deploy:
 
 ## Notes on execution posture
 
-- **DRY:** the six-corpus loader is factored out in Task 5.4a so both `neighborhood` and `neighborhoodFull` share it.
+- **DRY:** the six-corpus loader is factored out in Task 5a so both `neighborhood` and `neighborhoodFull` share it.
 - **YAGNI:** no filter UI, no persistence across sessions, no per-type sorting UI. All out per spec Non-goals.
 - **TDD:** every task pair-writes a test before code. Every task ends with a commit.
 - **Frequent commits:** 16 tasks × 1-3 commits each = ~25 commits on the branch. Squash-merge at PR time (this repo's convention).
