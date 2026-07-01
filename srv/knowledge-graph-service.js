@@ -265,7 +265,7 @@ import { loadConceptsWithEmbeddings } from './lib/kg-concept-loader.js';
 import { resolveKnowledgeGraphSettings } from './lib/runtime-config/kg-settings.js';
 import { mergeOtherResources, MAX_OTHER_RESOURCES } from './lib/kg-neighborhood-merge.js';
 import { stampMetaText, typeConfigForWire } from './lib/kg-stamp-meta-text.js';
-import { categoryLabel } from './lib/discovery-mission-categories.js';
+import { loadOtherResourcesByType } from './lib/kg-other-resources-loader.js';
 import { getTutorialTeachesMap } from './lib/kg-tutorial-teaches-map.js';
 import { getCachedNeighborhood, setCachedNeighborhood } from './lib/kg-neighborhood-cache.js';
 
@@ -624,175 +624,21 @@ export default cds.service.impl(async function () {
     try {
       const teachesSlugs = ranked.teaches.map((c) => c.slug);
       if (teachesSlugs.length > 0) {
-        const { LearningJourneys, LearningJourneyConceptLinks, BlogPosts, BlogPostConceptLinks,
-          DiscoveryMissions, DiscoveryMissionConceptLinks,
-          Videos, VideoConceptLinks,
-          ApiDocs, ApiDocConceptLinks,
-          Samples, SampleConceptLinks } =
-          cds.entities('com.sap.developers.ims.external');
-
         const conceptRows = await SELECT.from(Concepts)
           .columns('ID', 'slug')
           .where({ slug: { in: teachesSlugs } });
         const conceptIds = conceptRows.map((c) => c.ID);
 
         if (conceptIds.length > 0) {
-          // Step 1: fetch all 6 overlap-link tables in parallel. Each
-          // returns Array<{fkID, concept_ID}>. Small rows, cheap network.
-          const [journeyLinks, blogLinks, missionLinks, videoLinks, apiDocLinks, sampleLinks] =
-            await Promise.all([
-              SELECT.from(LearningJourneyConceptLinks)
-                .columns('journey_ID', 'concept_ID')
-                .where({ concept_ID: { in: conceptIds } }),
-              SELECT.from(BlogPostConceptLinks)
-                .columns('post_ID', 'concept_ID')
-                .where({ concept_ID: { in: conceptIds } }),
-              SELECT.from(DiscoveryMissionConceptLinks)
-                .columns('mission_ID', 'concept_ID')
-                .where({ concept_ID: { in: conceptIds } }),
-              SELECT.from(VideoConceptLinks)
-                .columns('video_ID', 'concept_ID')
-                .where({ concept_ID: { in: conceptIds } }),
-              SELECT.from(ApiDocConceptLinks)
-                .columns('apiDoc_ID', 'concept_ID')
-                .where({ concept_ID: { in: conceptIds } }),
-              SELECT.from(SampleConceptLinks)
-                .columns('sample_ID', 'concept_ID')
-                .where({ concept_ID: { in: conceptIds } }),
-            ]);
+          // Load the per-corpus wire-shape rows grouped by type. The
+          // loader is a pure extraction of the 6-corpus overlap query +
+          // shape logic — extracted so the (upcoming Task 5) full-panel
+          // handler can call it with a larger `perTypeLimit` and keep the
+          // grouping instead of merging.
+          const byType = await loadOtherResourcesByType(cds, conceptIds, MAX_OTHER_RESOURCES);
 
-          // Step 2: JS-side per-corpus overlap tallies (microseconds).
-          const tally = (rows, fkField) => {
-            const overlapByFk = new Map();
-            for (const row of rows) {
-              overlapByFk.set(row[fkField], (overlapByFk.get(row[fkField]) ?? 0) + 1);
-            }
-            const topIds = [...overlapByFk.entries()]
-              .sort(([, a], [, b]) => b - a)
-              .slice(0, MAX_OTHER_RESOURCES)
-              .map(([id]) => id);
-            return { overlapByFk, topIds };
-          };
-          const journeyT  = tally(journeyLinks, 'journey_ID');
-          const blogT     = tally(blogLinks,    'post_ID');
-          const missionT  = tally(missionLinks, 'mission_ID');
-          const videoT    = tally(videoLinks,   'video_ID');
-          const apiDocT   = tally(apiDocLinks,  'apiDoc_ID');
-          const sampleT   = tally(sampleLinks,  'sample_ID');
-
-          // Step 3: fetch metadata for each top-N set in parallel.
-          // Guarded per-corpus: if a corpus has zero overlap we skip its
-          // SELECT so the empty-corpus case doesn't cost a round-trip.
-          //
-          // NOTE on LOB safety (spec §10.1): Videos/ApiDocs/Samples all
-          // have LargeString `description` columns — we deliberately
-          // exclude them from the projection to keep the sidebar payload
-          // scalar-only.
-          const [journeys, posts, missions, videos, apiDocs, samples] = await Promise.all([
-            journeyT.topIds.length
-              ? SELECT.from(LearningJourneys)
-                  .columns('ID', 'slug', 'title', 'url', 'level', 'durationHours')
-                  .where({ ID: { in: journeyT.topIds } })
-              : Promise.resolve([]),
-            blogT.topIds.length
-              ? SELECT.from(BlogPosts)
-                  .columns('ID', 'slug', 'title', 'url', 'authorName', 'postedAt')
-                  .where({ ID: { in: blogT.topIds } })
-              : Promise.resolve([]),
-            missionT.topIds.length
-              ? SELECT.from(DiscoveryMissions)
-                  .columns('ID', 'slug', 'title', 'url', 'effortLevel', 'categorySlug')
-                  .where({ ID: { in: missionT.topIds } })
-              : Promise.resolve([]),
-            videoT.topIds.length
-              ? SELECT.from(Videos)
-                  .columns('ID', 'slug', 'title', 'url', 'channelTitle', 'publishedAt', 'thumbnailUrl')
-                  .where({ ID: { in: videoT.topIds } })
-              : Promise.resolve([]),
-            apiDocT.topIds.length
-              ? SELECT.from(ApiDocs)
-                  .columns('ID', 'slug', 'title', 'url', 'category', 'apiType')
-                  .where({ ID: { in: apiDocT.topIds } })
-              : Promise.resolve([]),
-            sampleT.topIds.length
-              ? SELECT.from(Samples)
-                  .columns('ID', 'slug', 'title', 'url', 'language', 'stars', 'lastCommitAt')
-                  .where({ ID: { in: sampleT.topIds } })
-              : Promise.resolve([]),
-          ]);
-
-          // Step 4: shape each corpus's rows into the OtherResource wire
-          // shape, preserving overlap-count ordering.
-          const journeyById = new Map(journeys.map((j) => [j.ID, j]));
-          const journeyOtherResources = journeyT.topIds
-            .map((id) => journeyById.get(id))
-            .filter(Boolean)
-            .map((j) => ({
-              type: 'learning-journey',
-              slug: j.slug, title: j.title, url: j.url,
-              level: j.level, durationHours: j.durationHours,
-              overlapCount: journeyT.overlapByFk.get(j.ID),
-            }));
-          const postById = new Map(posts.map((p) => [p.ID, p]));
-          const blogOtherResources = blogT.topIds
-            .map((id) => postById.get(id))
-            .filter(Boolean)
-            .map((p) => ({
-              type: 'blog-post',
-              slug: p.slug, title: p.title, url: p.url,
-              authorName: p.authorName, postedAt: p.postedAt,
-              overlapCount: blogT.overlapByFk.get(p.ID),
-            }));
-          const missionById = new Map(missions.map((m) => [m.ID, m]));
-          const missionOtherResources = missionT.topIds
-            .map((id) => missionById.get(id))
-            .filter(Boolean)
-            .map((m) => ({
-              type: 'discovery-mission',
-              slug: m.slug, title: m.title, url: m.url,
-              effortLevel: m.effortLevel, categoryLabel: categoryLabel(m.categorySlug),
-              overlapCount: missionT.overlapByFk.get(m.ID),
-            }));
-          const videoById = new Map(videos.map((v) => [v.ID, v]));
-          const videoOtherResources = videoT.topIds
-            .map((id) => videoById.get(id))
-            .filter(Boolean)
-            .map((v) => ({
-              type: 'video',
-              slug: v.slug, title: v.title, url: v.url,
-              channelTitle: v.channelTitle, publishedAt: v.publishedAt, thumbnailUrl: v.thumbnailUrl,
-              overlapCount: videoT.overlapByFk.get(v.ID),
-            }));
-          const apiDocById = new Map(apiDocs.map((a) => [a.ID, a]));
-          const apiDocOtherResources = apiDocT.topIds
-            .map((id) => apiDocById.get(id))
-            .filter(Boolean)
-            .map((a) => ({
-              type: 'api-doc',
-              slug: a.slug, title: a.title, url: a.url,
-              category: a.category, apiType: a.apiType,
-              overlapCount: apiDocT.overlapByFk.get(a.ID),
-            }));
-          const sampleById = new Map(samples.map((s) => [s.ID, s]));
-          const sampleOtherResources = sampleT.topIds
-            .map((id) => sampleById.get(id))
-            .filter(Boolean)
-            .map((s) => ({
-              type: 'sample',
-              slug: s.slug, title: s.title, url: s.url,
-              language: s.language, stars: s.stars, lastCommitAt: s.lastCommitAt,
-              overlapCount: sampleT.overlapByFk.get(s.ID),
-            }));
-
-          // Step 5: merge + cap top-5 across all 6 types.
-          otherResources = mergeOtherResources(
-            journeyOtherResources,
-            blogOtherResources,
-            missionOtherResources,
-            videoOtherResources,
-            apiDocOtherResources,
-            sampleOtherResources,
-          );
+          // Sidebar: merge + cap top-5 across all 6 types (variadic).
+          otherResources = mergeOtherResources(...byType.values());
 
           // Step 6 (Task 4 of #850): stamp metaText on each row via
           // RESOURCE_TYPE_CONFIG.renderMeta. Server owns the meta-text
