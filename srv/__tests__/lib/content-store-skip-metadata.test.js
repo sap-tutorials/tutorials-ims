@@ -3,7 +3,7 @@
 // Tests the skipMetadataUpsert option on createContentHandlers.
 //
 // Key constraints:
-//   - QA HDI has NO Steps, TutorialMeta, ContributorEmails, ChatSettings, Tags, TutorialTags
+//   - QA HDI has NO Steps, TutorialMeta, ChatSettings, Tags, TutorialTags
 //   - skipMetadataUpsert:true must skip the metadata block silently and not schedule embeddings
 //   - skipMetadataUpsert:false (default) must attempt metadata upsert (prod path unchanged)
 //   - Default factory (no options) must behave the same as skipMetadataUpsert:false
@@ -155,7 +155,7 @@ describe('content-store skipMetadataUpsert option', () => {
   });
 
   it('(d) skip=true: no entity-not-found errors despite missing Steps/TutorialMeta/ChatSettings', async () => {
-    // The QA schema has no Steps, TutorialMeta, ContributorEmails, ChatSettings.
+    // The QA schema has no Steps, TutorialMeta, ChatSettings.
     // If the metadata block ran, cds.entities(QA_NS).Steps === undefined and
     // SELECT.from(undefined) would throw, causing a 500 response.
     // With skipMetadataUpsert:true the handler must still resolve cleanly.

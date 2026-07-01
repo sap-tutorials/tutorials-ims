@@ -566,17 +566,17 @@ export function createContentHandlers({ namespace = 'com.sap.developers.ims', ap
             try {
               const ims = cds.entities(namespace);
               const { TutorialMeta } = ims;
-              const ContributorEmails = ims.ContributorEmails;
               const existingMeta = await SELECT.one.from(TutorialMeta).where({ tutorial_ID: tutorialId });
               const lastUpdated = meta.lastUpdated || null;
               const directEmail = meta.primaryContributorEmail || null;
-              const login = meta.primaryContributorLogin || null;
 
-              let resolvedOwner = directEmail;
-              if (!resolvedOwner && login && ContributorEmails) {
-                const mapping = await SELECT.one.from(ContributorEmails).where({ login });
-                if (mapping?.email) resolvedOwner = mapping.email;
-              }
+              // Note: an earlier design here looked up a `login → corporate
+              // email` mapping table (`ContributorEmails`) when directEmail
+              // was null. That entity was never declared in db/*.cds so the
+              // fallback was dead code (silent no-op). PR #849 (2026-06-30)
+              // removed it. See the parallel comment in
+              // srv/lib/content-publish-session.js.
+              const resolvedOwner = directEmail;
 
               if (!existingMeta) {
                 await INSERT.into(TutorialMeta).entries({
