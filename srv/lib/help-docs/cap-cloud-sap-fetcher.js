@@ -65,12 +65,18 @@ export async function fetchCapCloudSapCorpus({
 async function fetchTree(apiKey) {
   const mock = globalThis[SYM].mockFetcher;
   if (mock) return mock(TREE_URL);
+  // Only send Authorization when we have a real token. Sending `Bearer undefined`
+  // (which happens when apiKey is missing) causes GitHub to 401 the request
+  // even though the git-trees endpoint is public-read; omitting the header
+  // lets the unauth path work at GitHub's ~60/hr shared-IP quota, which is
+  // enough for a single cron cycle against cap-js/docs (~1 request).
+  const headers = {
+    'Accept': 'application/vnd.github+json',
+    'User-Agent': 'sap-tutorials-fetch-help-docs',
+  };
+  if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
   const res = await fetch(TREE_URL, {
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Accept': 'application/vnd.github+json',
-      'User-Agent': 'sap-tutorials-fetch-help-docs',
-    },
+    headers,
     signal: AbortSignal.timeout(PER_PAGE_TIMEOUT_MS),
   });
   if (!res.ok) {
