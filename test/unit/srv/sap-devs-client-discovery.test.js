@@ -55,7 +55,9 @@ describe('sap-devs-client.searchDiscovery', () => {
     await expect(sapDevsClient.searchDiscovery({ type: 'missions' })).rejects.toThrow(/id/);
   });
 
-  it('validator throws when a mission row is missing description', async () => {
+  it('validator throws when a mission row is missing description (non-string)', async () => {
+    // `description` is optional-value but must be a string. Undefined is
+    // a wire-shape regression, not a curation gap.
     _setMockTransport({
       async call() {
         return {
@@ -64,6 +66,42 @@ describe('sap-devs-client.searchDiscovery', () => {
       },
     });
     await expect(sapDevsClient.searchDiscovery({ type: 'missions' })).rejects.toThrow(/description/);
+  });
+
+  it('validator ACCEPTS empty effort (rows for new missions with no estimate)', async () => {
+    // Discovery Center returns Effort: "" for missions that don't have
+    // an estimated hour count yet. The fetcher's downstream code
+    // (fetch-discovery-missions-job.js:146-147) parses empty to null
+    // and writes it to a nullable column — the validator must let those
+    // rows through. Regression from PR #851 where empty effort blocked
+    // the whole fetcher cycle.
+    _setMockTransport({
+      async call() {
+        return {
+          results: [
+            { id: '4064', name: 'Multitenant CAP', effort: '', category: 'appdev', description: 'Long desc' },
+          ],
+        };
+      },
+    });
+    const rows = await sapDevsClient.searchDiscovery({ type: 'missions' });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].effort).toBe('');
+  });
+
+  it('validator ACCEPTS empty description (missions with only a title)', async () => {
+    _setMockTransport({
+      async call() {
+        return {
+          results: [
+            { id: '4064', name: 'Some Mission', effort: '2', category: 'appdev', description: '' },
+          ],
+        };
+      },
+    });
+    const rows = await sapDevsClient.searchDiscovery({ type: 'missions' });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].description).toBe('');
   });
 
   it('caches successive calls with the same params', async () => {
