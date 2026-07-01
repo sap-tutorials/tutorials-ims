@@ -260,3 +260,83 @@ describe.runIf(isSafeForWrites())('BlogPost DELETE cascades to BlogPostConceptLi
     expect(concept).toBeDefined();
   });
 });
+
+// ────────────────────────────────────────────────────────────────────
+// Rows 6/7: DiscoveryMissions → DiscoveryMissionConceptLinks + DiscoveryMissionServices
+// ────────────────────────────────────────────────────────────────────
+describe.runIf(isSafeForWrites())('DiscoveryMission DELETE cascades to concept-links AND services', () => {
+  const missionId = '00000000-0000-0000-0000-789000000030';
+  const conceptId = '00000000-0000-0000-0000-789000000031';
+  const linkId    = '00000000-0000-0000-0000-789000000032';
+  const serviceId = '00000000-0000-0000-0000-789000000033';
+
+  beforeAll(async () => {
+    const db = await cds.connect.to('db');
+    assertHanaKind(db);
+  });
+
+  afterAll(async () => {
+    const {
+      DiscoveryMissions, DiscoveryMissionConceptLinks, DiscoveryMissionServices,
+    } = cds.entities('com.sap.developers.ims.external');
+    const { Concepts } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(DiscoveryMissionConceptLinks).where({ ID: linkId });
+    await DELETE.from(DiscoveryMissionServices).where({ ID: serviceId });
+    await DELETE.from(Concepts).where({ ID: conceptId });
+    await DELETE.from(DiscoveryMissions).where({ ID: missionId });
+  });
+
+  it('deletes DiscoveryMissionConceptLinks rows when the parent DiscoveryMission is deleted', async () => {
+    const { DiscoveryMissions, DiscoveryMissionConceptLinks } =
+      cds.entities('com.sap.developers.ims.external');
+    const { Concepts } = cds.entities('com.sap.developers.ims');
+
+    await INSERT.into(DiscoveryMissions).entries({
+      ID: missionId,
+      slug: '__test__-789-dm',
+      title: '__test__ Discovery Mission 789',
+    });
+    await INSERT.into(Concepts).entries({
+      ID: conceptId,
+      slug: '__test__-789-cascade-concept-dm',
+      name: '__test__ Cascade Concept (dm)',
+      status: 'ACTIVE',
+    });
+    await INSERT.into(DiscoveryMissionConceptLinks).entries({
+      ID: linkId,
+      mission_ID: missionId,
+      concept_ID: conceptId,
+      predicate: 'teaches',
+    });
+
+    await DELETE.from(DiscoveryMissions).where({ ID: missionId });
+
+    const orphan = await SELECT.one.from(DiscoveryMissionConceptLinks).where({ ID: linkId });
+    expect(orphan).toBeUndefined();
+    const concept = await SELECT.one.from(Concepts).where({ ID: conceptId });
+    expect(concept).toBeDefined();
+  });
+
+  it('deletes DiscoveryMissionServices rows when the parent DiscoveryMission is deleted', async () => {
+    // Secondary composition — free-form service names, no concept side.
+    const { DiscoveryMissions, DiscoveryMissionServices } =
+      cds.entities('com.sap.developers.ims.external');
+
+    // Re-INSERT the mission (first `it` deleted it via cascade).
+    await INSERT.into(DiscoveryMissions).entries({
+      ID: missionId,
+      slug: '__test__-789-dm',
+      title: '__test__ Discovery Mission 789',
+    });
+    await INSERT.into(DiscoveryMissionServices).entries({
+      ID: serviceId,
+      mission_ID: missionId,
+      serviceName: '__test__-789-btp-service',
+    });
+
+    await DELETE.from(DiscoveryMissions).where({ ID: missionId });
+
+    const orphan = await SELECT.one.from(DiscoveryMissionServices).where({ ID: serviceId });
+    expect(orphan).toBeUndefined();
+  });
+});
