@@ -152,6 +152,7 @@ export default defineConfig({
           { text: 'HDI deploy checklist',      link: '/developers/operations/hdi-deploy-checklist' },
           { text: 'IAS setup',                 link: '/developers/operations/ias-setup' },
           { text: 'Joule chat admin settings', link: '/developers/operations/joule-chat-admin-settings' },
+          { text: 'KG concept operations',     link: '/developers/operations/kg-concept-operations' },
           { text: 'KG grantor setup',          link: '/developers/operations/kg-grantor-setup' },
           { text: 'Live probing',              link: '/developers/operations/live-probing' },
           { text: 'MTA deployment',            link: '/developers/operations/mta-deployment' },
