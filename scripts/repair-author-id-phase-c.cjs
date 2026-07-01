@@ -86,12 +86,12 @@ const T_USERS = '"COM_SAP_DEVELOPERS_IMS_USERS"';
 
 // ─── Frontmatter helpers ───────────────────────────────────────────────
 //
-// Deliberately minimal — we only need `authorProfile` and `githubLogin`
-// out of a well-formed YAML frontmatter. Bringing in js-yaml would work
-// but this pattern-based extractor is dependency-free and fast enough
-// (10ms × ~1400 files).
+// Deliberately minimal — we only need `authorProfile`, `githubLogin`, and
+// `author` (name) out of a well-formed YAML frontmatter. Bringing in
+// js-yaml would work but this pattern-based extractor is dependency-free
+// and fast enough (10ms × ~1400 files).
 
-function extractFrontmatterLogin(mdPath) {
+function extractFrontmatter(mdPath) {
   let raw;
   try {
     raw = fs.readFileSync(mdPath, 'utf8');
@@ -102,17 +102,47 @@ function extractFrontmatterLogin(mdPath) {
   if (!fmMatch) return null;
   const fm = fmMatch[1];
 
+  let login = null;
   // authorProfile: https://github.com/<login>
   //   or:          https://github.com/<login>/
   const profileMatch = fm.match(/^authorProfile:\s*['"]?(https?:\/\/github\.com\/([A-Za-z0-9-]+))\/?['"]?\s*$/m);
-  if (profileMatch && profileMatch[2]) return profileMatch[2].toLowerCase();
+  if (profileMatch && profileMatch[2]) login = profileMatch[2].toLowerCase();
 
   // githubLogin: <login>
-  const loginMatch = fm.match(/^githubLogin:\s*['"]?([A-Za-z0-9-]+)['"]?\s*$/m);
-  if (loginMatch && loginMatch[1]) return loginMatch[1].toLowerCase();
+  if (!login) {
+    const loginMatch = fm.match(/^githubLogin:\s*['"]?([A-Za-z0-9-]+)['"]?\s*$/m);
+    if (loginMatch && loginMatch[1]) login = loginMatch[1].toLowerCase();
+  }
 
-  return null;
+  // author: <human name> — the display name of the tutorial's declared
+  // author, as scraped from the GitHub commit's `author.name` field for
+  // the file's authoring commit. This is a signal INDEPENDENT of
+  // TutorialMeta.ownerEmail (which encodes monitoring, not authorship),
+  // so we can use it to safely augment loginToUserId without dragging
+  // the ownerEmail corruption we're trying to repair into the map.
+  //
+  // Skip generic placeholders — "Unknown", "SAP Community", empty strings.
+  let authorName = null;
+  const authorMatch = fm.match(/^author:\s*['"]?([^'"\r\n]+?)['"]?\s*$/m);
+  if (authorMatch && authorMatch[1]) {
+    const raw = authorMatch[1].trim();
+    // Filter out the sentinel values the parser emits when GitHub metadata
+    // doesn't carry a real human author.
+    if (raw && raw.toLowerCase() !== 'unknown' && raw.toLowerCase() !== 'sap community' && !raw.includes('@')) {
+      authorName = raw;
+    }
+  }
+
+  return { login, authorName };
 }
+
+// Backward-compat wrapper — the second scan below still uses the
+// pattern-based extractor directly.
+function extractFrontmatterLogin(mdPath) {
+  const fm = extractFrontmatter(mdPath);
+  return fm ? fm.login : null;
+}
+
 
 async function main() {
   process.env.cds_requires_auth_kind = 'mocked';
@@ -144,9 +174,9 @@ async function main() {
   }
 
   // Prime login → Users.ID from Users.githubLogin. This is the map the
-  // live publish path uses for Phase 0. If DEV Users have sparse
-  // githubLogin (common), Phase 0 misses a lot — that's the whole reason
-  // v1 of this script over-flagged. We augment it below.
+  // live publish path uses for Phase 0. DEV has sparse githubLogin, so
+  // we augment below using a signal INDEPENDENT of the corrupted
+  // TutorialMeta.ownerEmail data.
   const loginRows = await db.run(
     `SELECT "ID" AS id, LOWER(TRIM("GITHUBLOGIN")) AS login FROM ${T_USERS} WHERE "GITHUBLOGIN" IS NOT NULL AND LENGTH(TRIM("GITHUBLOGIN")) > 0`,
   );
@@ -157,58 +187,98 @@ async function main() {
     if (login && !loginToUserId.has(login)) loginToUserId.set(login, id);
   }
 
-  // Augment loginToUserId: for every tutorial with a frontmatter login AND
-  // an ownerEmail that matches a Users row, INFER the login→user mapping.
-  // This is exactly what the publish-time bootstrap in
-  // content-publish-session.js does (line ~756), transplanted client-side
-  // so this script can reason about Phase 0 without needing HANA writes
-  // first. The augmented map lives only in memory; no DB writes here.
-  let augmentedLogins = 0;
+  // Prime name → Users.ID map from firstName + lastName + displayName. The
+  // frontmatter's `author:` field is the tutorial's declared author name
+  // (scraped from the GitHub commit author.name for the authoring commit).
+  // It is INDEPENDENT of TutorialMeta.ownerEmail — that's the whole point
+  // of augmenting on it: we don't want to re-import the corruption we're
+  // trying to repair.
+  //
+  // Two lookup shapes handled:
+  //   - "first last" (both fields set) — canonical
+  //   - displayName — some Users rows only carry this
+  // Both are normalized to lower-case with collapsed whitespace so
+  // "Dhrubajyoti  Paul" (double-space) still hits.
+  const nameToUserId = new Map();
+  const nameRows = await db.run(
+    `SELECT "ID" AS id, "FIRSTNAME" AS firstname, "LASTNAME" AS lastname, "DISPLAYNAME" AS displayname FROM ${T_USERS}`,
+  );
+  const normName = (s) => s.trim().toLowerCase().replace(/\s+/g, ' ');
+  for (const r of nameRows || []) {
+    const id = r.id || r.ID;
+    const first = (r.firstname || r.FIRSTNAME || '').trim();
+    const last = (r.lastname || r.LASTNAME || '').trim();
+    const display = (r.displayname || r.DISPLAYNAME || '').trim();
+    if (first && last) {
+      const key = normName(`${first} ${last}`);
+      if (!nameToUserId.has(key)) nameToUserId.set(key, id);
+    }
+    if (display) {
+      const key = normName(display);
+      if (!nameToUserId.has(key)) nameToUserId.set(key, id);
+    }
+  }
+
+  // Scan all tutorial frontmatter into a per-slug record. We keep both
+  // the login AND the declared author name — the augmentation below uses
+  // the name to make sure we're mapping the login to the right person.
   const files = fs.readdirSync(CONTENT_DIR);
-  const bySlugLogin = new Map(); // slug → frontmatter login
+  const bySlug = new Map(); // slug → { login, authorName }
   for (const file of files) {
     if (!file.endsWith('.md')) continue;
     const slug = file.slice(0, -3).toLowerCase();
-    const login = extractFrontmatterLogin(path.join(CONTENT_DIR, file));
-    if (login) bySlugLogin.set(slug, login);
+    const fm = extractFrontmatter(path.join(CONTENT_DIR, file));
+    if (fm && (fm.login || fm.authorName)) bySlug.set(slug, fm);
   }
-  console.log(`[repair] scanned ${bySlugLogin.size} tutorial frontmatter file(s) with authorProfile/githubLogin`);
+  console.log(`[repair] scanned ${bySlug.size} tutorial frontmatter file(s) with authorProfile/githubLogin/author`);
 
-  // Second pass — for each slug's frontmatter login, check DB for a
-  // Users row with matching email (via TutorialMeta.ownerEmail or
-  // TutorialContributors) and register the login → user mapping.
-  // Query in one batch for efficiency.
-  const uniqueLogins = Array.from(new Set(bySlugLogin.values()));
+  // Augment loginToUserId by name match. For each unique frontmatter login,
+  // gather the declared `author:` names that appear alongside it across
+  // ALL slugs. If a single unambiguous name resolves to a Users row via
+  // firstName+lastName (or displayName), register the mapping.
+  //
+  // Why this is safe: TutorialMeta.ownerEmail is not consulted here. The
+  // signal chain is: GitHub commit author.name → frontmatter `author:` →
+  // Users.firstName+lastName. All three come from different sources
+  // (GitHub, tutorial markdown, IDP profile) that agree on the person's
+  // real name.
+  //
+  // Ambiguity guard: if a single login is paired with multiple DIFFERENT
+  // author names across slugs (rare — usually a person only authors under
+  // one name), we skip the augmentation for that login. Better to leave
+  // it out than register a wrong mapping.
+  let augmentedLogins = 0;
+  let ambiguousLogins = 0;
+  const uniqueLogins = new Set();
+  const loginToNames = new Map(); // login → Set<normalized author name>
+  for (const [, fm] of bySlug) {
+    if (!fm.login) continue;
+    uniqueLogins.add(fm.login);
+    if (fm.authorName) {
+      if (!loginToNames.has(fm.login)) loginToNames.set(fm.login, new Set());
+      loginToNames.get(fm.login).add(normName(fm.authorName));
+    }
+  }
   for (const login of uniqueLogins) {
     if (loginToUserId.has(login)) continue; // already known
-    // For each slug that carries this login, look up ownerEmail + contribs
-    // for a match. This is O(N * M) worst-case but N is ~1400 and we bail
-    // on first hit so it's fast in practice.
-    const matchingSlugs = [...bySlugLogin.entries()]
-      .filter(([, l]) => l === login)
-      .map(([s]) => s);
-    let found = null;
-    for (const slug of matchingSlugs.slice(0, 20)) { // cap at 20 slugs per login
-      const rows = await db.run(
-        `SELECT LOWER(TRIM(m."OWNEREMAIL")) AS email
-           FROM ${T_TUTORIAL_META} m
-           JOIN ${T_TUTORIALS} t ON t.ID = m.TUTORIAL_ID
-          WHERE LOWER(t.SLUG) = ?
-            AND m."OWNEREMAIL" IS NOT NULL`,
-        [slug],
-      );
-      const email = rows?.[0]?.email || rows?.[0]?.EMAIL;
-      if (email && emailToUserId.has(email)) {
-        found = emailToUserId.get(email);
-        break;
-      }
+    const names = loginToNames.get(login);
+    if (!names || names.size === 0) continue; // no name signal — skip
+    // Resolve every candidate name to a Users.ID; skip if any of them
+    // resolve to DIFFERENT users (ambiguous — better to leave out).
+    const resolvedIds = new Set();
+    for (const name of names) {
+      const id = nameToUserId.get(name);
+      if (id) resolvedIds.add(id);
     }
-    if (found) {
-      loginToUserId.set(login, found);
-      augmentedLogins++;
+    if (resolvedIds.size === 0) continue; // no Users match
+    if (resolvedIds.size > 1) {
+      ambiguousLogins++;
+      continue;
     }
+    loginToUserId.set(login, [...resolvedIds][0]);
+    augmentedLogins++;
   }
-  console.log(`[repair] loginToUserId: ${loginRows?.length ?? 0} seeded from Users.githubLogin + ${augmentedLogins} inferred from frontmatter+ownerEmail`);
+  console.log(`[repair] loginToUserId: ${loginRows?.length ?? 0} seeded from Users.githubLogin + ${augmentedLogins} inferred via name-match (skipped ${ambiguousLogins} ambiguous)`);
 
   // ─── Scan ─────────────────────────────────────────────────────────────
   const rows = await db.run(
@@ -242,7 +312,7 @@ async function main() {
     );
     if (metaRows.length > 0) ownerEmail = metaRows[0].owneremail ?? metaRows[0].OWNEREMAIL ?? null;
 
-    const fmLogin = bySlugLogin.get(slug) || null;
+    const fmLogin = (bySlug.get(slug) && bySlug.get(slug).login) || null;
 
     const resolved = resolveTutorialAuthor({
       contributors,
@@ -277,9 +347,51 @@ async function main() {
     const ownerEmailUserId = normOwnerEmail ? emailToUserId.get(normOwnerEmail) : null;
     const isPhaseCFootprint = ownerEmailUserId && ownerEmailUserId === currentAuthor;
 
-    if (isPhaseCFootprint) {
+    // Corroboration guard: if the tutorial's frontmatter declares a
+    // GitHub login AND that login also shows up in the contributors'
+    // noreply-email form, the person shown in the frontmatter genuinely
+    // did commit against this tutorial. Even if the resolver couldn't
+    // bridge them via emailToUserId (their Users row uses a corporate
+    // email, not the noreply form), leaving the row alone is safer than
+    // nulling it. Riley's rbrainey-sandbox-1 is the canonical case —
+    // frontmatter says rbrainey authored, contributors[0].email is
+    // rbrainey@users.noreply.github.com, ownerEmail is riley's corporate
+    // email. The Phase-C footprint matches, but this is legitimate
+    // self-monitoring; not a Phase-C fault.
+    //
+    // Login parse regex: strip either `<login>@users.noreply.github.com`
+    // or `<id>+<login>@users.noreply.github.com` (both GitHub-emitted
+    // shapes).
+    let corroboratedByContributor = false;
+    const fmSlug = bySlug.get(slug);
+    if (isPhaseCFootprint && fmSlug && fmSlug.login) {
+      const fmLoginLc = fmSlug.login.toLowerCase();
+      for (const c of contributors) {
+        const em = c.email ? String(c.email).trim().toLowerCase() : '';
+        if (!em) continue;
+        const m = em.match(/^(?:\d+\+)?([a-z0-9-]+)@users\.noreply\.github\.com$/);
+        if (m && m[1] === fmLoginLc) {
+          corroboratedByContributor = true;
+          break;
+        }
+      }
+    }
+
+    if (isPhaseCFootprint && !corroboratedByContributor) {
       summary.nullOut++;
       nullOutList.push({ slug, current: currentAuthor, ownerEmail });
+    } else if (isPhaseCFootprint && corroboratedByContributor) {
+      // Legitimate self-monitoring; frontmatter + contributor agree on
+      // authorship even though the resolver couldn't reproduce (e.g. because
+      // the author has no Users.githubLogin populated). Log as suspect so
+      // Ops can see it, but do NOT null.
+      summary.suspectNoFootprint++;
+      suspectList.push({
+        slug,
+        current: currentAuthor,
+        ownerEmail,
+        reason: `frontmatter login '${fmSlug.login}' corroborated by a contributor noreply email — likely self-monitoring, not Phase-C fault`,
+      });
     } else {
       summary.suspectNoFootprint++;
       suspectList.push({
