@@ -62,6 +62,26 @@ service AuthorService {
   @Capabilities.ChangeTracking : { Supported: true }
   @readonly entity MyTutorials as projection on ims.MyTutorialsView;
 
+  // #862 — MyAuthoredTutorials is the narrow surface for "tutorials I am
+  // currently responsible for maintaining". It projects MyTutorialsView
+  // filtered to bestPriority = 1 (strict `Tutorials.author_ID` matches only,
+  // per db/views.cds MyTutorialsRaw source 1).
+  //
+  // Rationale for a separate entity (rather than changing MyTutorials'
+  // default): #777 landed MyTutorials as a deliberately broad four-source
+  // UNION so the advocate roster and admin Tutorial Health surfaces get
+  // contributor + legacy-owner matches too. Narrowing that default would
+  // break those consumers. Sage's My Tutorials panel wants strict authorship
+  // (issue #862); MyAuthoredTutorials gives it a purpose-built endpoint that
+  // GET /author/MyAuthoredTutorials returns with zero client-side filtering.
+  //
+  // Callers wanting *contributor* rows can still hit
+  //   GET /author/MyTutorials?$filter=bestPriority ne 1
+  // — the underlying view exposes bestPriority as a column.
+  @Capabilities.ChangeTracking : { Supported: true }
+  @readonly entity MyAuthoredTutorials as
+    projection on ims.MyTutorialsView { * } where bestPriority = 1;
+
   action reviewTutorial(tutorialId : UUID) returns {
     reviewedDate       : Timestamp;
     notificationNumber : Integer;
