@@ -1,26 +1,23 @@
 // hugo-apps/src/related-graph/related-graph-helpers.ts
 //
-// Pure formatting helpers for the otherResources sidebar rendering.
-// Lives outside RelatedGraph.vue for unit-testability.
+// Re-exports pure formatters from the byte-equal mirror at
+// hugo-apps/src/related-graph/kg-meta-formatters.js. That mirror is the
+// client-side copy of srv/lib/kg-meta-formatters.js (the server's
+// authoritative), enforced byte-equal by
+// scripts/check-kg-meta-formatters-mirror.ts (wired into
+// npm run postbuild:apps).
 //
-// Phase 4.6 (#747 §5) introduced this helpers module to host
-// formatRelativeMonth — invoked from the 'sample' v-else-if branch to
-// render the GitHub sample's `lastCommitAt` ISO timestamp as a compact
-// "Mon YYYY" badge in the sidebar meta-row. The concept-page section
-// uses Hugo's `dateFormat "Jan 2006"` for the same shape; this helper
-// keeps the sidebar in lockstep without re-parsing markdown.
+// Rationale: the server pre-renders `metaText` on every otherResources row
+// via RESOURCE_TYPE_CONFIG.renderMeta, which uses these same formatters. The
+// client MUST see the same formatter output for any date/level string it
+// computes locally, or byte-for-byte match between server-rendered and
+// client-rendered strings breaks silently at timezone boundaries.
 //
-// Defensive defaults: returns '' for null / undefined / empty / invalid
-// input so the v-else-if template guard `v-if="r.lastCommitAt"` keeps
-// the meta-row clean instead of rendering "Invalid Date".
+// Historical note: this file previously owned formatRelativeMonth
+// (introduced by PR #747, phase 4.6). #850 redesign moved the shared
+// formatters to the mirror pattern so both server + client share one
+// source of truth. Existing callers (RelatedGraph.vue and the tests)
+// continue to import from this path unchanged.
 
-export function formatRelativeMonth(iso: string | null | undefined): string {
-  if (!iso) return ''
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return ''
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'UTC',
-  }).format(date)
-}
+export { formatRelativeMonth, formatDate, formatLevel }
+  from './kg-meta-formatters.js';
