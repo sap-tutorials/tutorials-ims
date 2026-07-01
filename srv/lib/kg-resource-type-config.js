@@ -26,6 +26,12 @@ import {
   formatRelativeMonth,
 } from './kg-meta-formatters.js';
 
+// Shared tail expression for every renderMeta that composes a segment list.
+// Empty parts → '' (no orphan ' · ' delimiter); non-empty → leading ' · '
+// plus segments joined by ' · '. api-doc uses a different shape (unconditional
+// "Official reference" lead) and does NOT use this helper.
+const joinMeta = (parts) => (parts.length ? ' · ' + parts.join(' · ') : '');
+
 export const RESOURCE_TYPE_CONFIG = [
   {
     type: 'learning-journey',
@@ -35,10 +41,14 @@ export const RESOURCE_TYPE_CONFIG = [
     priority: 10,
     metaTemplate: 'Level · Duration',
     renderMeta(r) {
+      const row = r || {};
       const parts = [];
-      if (r.level) parts.push(formatLevel(r.level));
-      if (r.durationHours) parts.push(`${r.durationHours}h`);
-      return parts.length ? ' · ' + parts.join(' · ') : '';
+      if (row.level) {
+        const s = formatLevel(row.level);
+        if (s) parts.push(s);
+      }
+      if (row.durationHours != null) parts.push(`${row.durationHours}h`);
+      return joinMeta(parts);
     },
   },
   {
@@ -49,10 +59,14 @@ export const RESOURCE_TYPE_CONFIG = [
     priority: 20,
     metaTemplate: 'Author · Date',
     renderMeta(r) {
+      const row = r || {};
       const parts = [];
-      if (r.authorName) parts.push(`by ${r.authorName}`);
-      if (r.postedAt) parts.push(formatDate(r.postedAt));
-      return parts.length ? ' · ' + parts.join(' · ') : '';
+      if (row.authorName) parts.push(`by ${row.authorName}`);
+      if (row.postedAt) {
+        const d = formatDate(row.postedAt);
+        if (d) parts.push(d);
+      }
+      return joinMeta(parts);
     },
   },
   {
@@ -63,10 +77,11 @@ export const RESOURCE_TYPE_CONFIG = [
     priority: 30,
     metaTemplate: 'Effort · Category',
     renderMeta(r) {
+      const row = r || {};
       const parts = [];
-      if (r.effortLevel) parts.push(`effort ${r.effortLevel}`);
-      if (r.categoryLabel) parts.push(r.categoryLabel);
-      return parts.length ? ' · ' + parts.join(' · ') : '';
+      if (row.effortLevel != null) parts.push(`effort ${row.effortLevel}`);
+      if (row.categoryLabel) parts.push(row.categoryLabel);
+      return joinMeta(parts);
     },
   },
   {
@@ -77,10 +92,14 @@ export const RESOURCE_TYPE_CONFIG = [
     priority: 40,
     metaTemplate: 'Channel · Date',
     renderMeta(r) {
+      const row = r || {};
       const parts = [];
-      if (r.channelTitle) parts.push(`by ${r.channelTitle}`);
-      if (r.publishedAt) parts.push(formatDate(r.publishedAt));
-      return parts.length ? ' · ' + parts.join(' · ') : '';
+      if (row.channelTitle) parts.push(`by ${row.channelTitle}`);
+      if (row.publishedAt) {
+        const d = formatDate(row.publishedAt);
+        if (d) parts.push(d);
+      }
+      return joinMeta(parts);
     },
   },
   {
@@ -95,8 +114,9 @@ export const RESOURCE_TYPE_CONFIG = [
       // is an official reference by construction. Category is optional.
       // apiType is deliberately NOT rendered in metaText (see spec §4.5) —
       // the concept page shows the apiType badge separately.
+      const row = r || {};
       let out = ' · Official reference';
-      if (r.category) out += ` · ${r.category}`;
+      if (row.category) out += ` · ${row.category}`;
       return out;
     },
   },
@@ -108,11 +128,15 @@ export const RESOURCE_TYPE_CONFIG = [
     priority: 60,
     metaTemplate: 'Language · Stars · Last commit month',
     renderMeta(r) {
+      const row = r || {};
       const parts = [];
-      if (r.language) parts.push(r.language);
-      if (r.stars) parts.push(`${r.stars} stars`);
-      if (r.lastCommitAt) parts.push(`Updated ${formatRelativeMonth(r.lastCommitAt)}`);
-      return parts.length ? ' · ' + parts.join(' · ') : '';
+      if (row.language) parts.push(row.language);
+      if (row.stars != null) parts.push(`${row.stars} stars`);
+      if (row.lastCommitAt) {
+        const m = formatRelativeMonth(row.lastCommitAt);
+        if (m) parts.push(`Updated ${m}`);
+      }
+      return joinMeta(parts);
     },
   },
 ];

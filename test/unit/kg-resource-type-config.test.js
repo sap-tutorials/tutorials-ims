@@ -238,6 +238,55 @@ describe('renderMeta — empty-input contract (non api-doc)', () => {
   }
 });
 
+// Null/undefined safety — renderMeta must not throw when called with a
+// missing row object. Every non-api-doc type returns ''; api-doc returns
+// its unconditional "Official reference" lead.
+describe('renderMeta — null/undefined input safety', () => {
+  for (const entry of RESOURCE_TYPE_CONFIG) {
+    it(`${entry.type}.renderMeta(null) does not throw`, () => {
+      expect(() => entry.renderMeta(null)).not.toThrow();
+    });
+    it(`${entry.type}.renderMeta(undefined) does not throw`, () => {
+      expect(() => entry.renderMeta(undefined)).not.toThrow();
+    });
+    if (entry.type === 'api-doc') {
+      it(`${entry.type}.renderMeta(null) still renders "Official reference"`, () => {
+        expect(entry.renderMeta(null)).toContain('Official reference');
+      });
+      it(`${entry.type}.renderMeta(undefined) still renders "Official reference"`, () => {
+        expect(entry.renderMeta(undefined)).toContain('Official reference');
+      });
+    } else {
+      it(`${entry.type}.renderMeta(null) returns ''`, () => {
+        expect(entry.renderMeta(null)).toBe('');
+      });
+      it(`${entry.type}.renderMeta(undefined) returns ''`, () => {
+        expect(entry.renderMeta(undefined)).toBe('');
+      });
+    }
+  }
+});
+
+// Falsy-numeric fields — a legitimate value of 0 must render, not be dropped
+// by truthiness checks. A brand-new sample repo has 0 stars; that's still
+// meaningful information for the sidebar.
+describe('renderMeta — falsy-numeric field handling', () => {
+  it('sample: renderMeta({ stars: 0 }) renders "0 stars"', () => {
+    const out = byType('sample').renderMeta({ stars: 0 });
+    expect(out).toContain('0 stars');
+  });
+
+  it('discovery-mission: renderMeta({ effortLevel: 0 }) renders "effort 0"', () => {
+    const out = byType('discovery-mission').renderMeta({ effortLevel: 0 });
+    expect(out).toContain('effort 0');
+  });
+
+  it('learning-journey: renderMeta({ durationHours: 0 }) renders "0h"', () => {
+    const out = byType('learning-journey').renderMeta({ durationHours: 0 });
+    expect(out).toContain('0h');
+  });
+});
+
 // Reference-value spot-check — pins the formatter contract so a future
 // formatter refactor can't silently drift the wire output. Uses the imported
 // formatters as the source of truth.
