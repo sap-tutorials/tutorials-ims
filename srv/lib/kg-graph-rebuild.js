@@ -43,6 +43,8 @@
 import { randomUUID } from 'node:crypto';
 import { kgGraphClear, kgGraphInsert } from './kg-sparql-client.js';
 import { projectTriples } from './kg-projection.js';
+import { bustTutorialTeachesCache } from './kg-tutorial-teaches-map.js';
+import { bustNeighborhoodCache } from './kg-neighborhood-cache.js';
 
 // Production graph IRI. Bumped from `https://developers.sap.com/kg/tutorials`
 // to `…/tutorials-v2` on 2026-06-21 (issue #533) because the original IRI
@@ -252,6 +254,15 @@ export async function graphRebuild({ db, log, graphIri, batchSize } = {}) {
     edgeCount,
     ...predicateCountFields,
   });
+
+  // Step 6: bust in-process caches whose keying is tied to the OLD
+  // graphVersion. The neighborhood-result cache keys by (slug, graphVersion)
+  // so its old entries are unreachable — but freeing them proactively
+  // saves LRU pressure. The tutorial-teaches map cache is keyed by nothing
+  // — a rebuild is exactly when its underlying data could have changed
+  // (new concept published, status flipped), so we bust it too.
+  bustTutorialTeachesCache();
+  bustNeighborhoodCache();
 
   logger.info(
     { graphVersion, tripleCount, durationMs, conceptCount, edgeCount, predicateCounts: predicateCountsObj },

@@ -130,3 +130,32 @@ entity GraphMetadata : cuid, managed {
   inCategoryCount       : Integer default 0;
   coCompletedWithCount  : Integer default 0;
 }
+
+/**
+ * CoCompletions — pre-materialized tutorial co-completion graph.
+ *
+ * The runtime signal is "users who completed A also completed B, with weight
+ * = number of users." Computed nightly by srv/jobs/materialize-co-completions.js
+ * over the (~1M-row on prod) TaskRecords table, then upserted here so the
+ * neighborhood handler can do a single indexed lookup per request instead of
+ * paying a ~60s scan on every cold start.
+ *
+ * Storage semantics:
+ *   - Each undirected edge (A ↔ B) is stored TWICE — once as (A → B) and once
+ *     as (B → A) — so `WHERE sourceSlug = ?` returns all neighbors of `?` in
+ *     one query, sorted by score DESC.
+ *   - `score` is the raw co-completion count. Downstream consumers cap and
+ *     re-rank as needed (rankNeighborhood applies a whatToLearnNext boost).
+ *   - No `cuid` / `managed` — this is a rebuilt-nightly derived table; no
+ *     audit trail, no soft delete. Composite key (sourceSlug, targetSlug)
+ *     dedupes naturally.
+ *
+ * Cache invalidation: the cron truncates + repopulates the whole table
+ * inside one transaction. Readers see the old snapshot until commit, then
+ * atomically see the new one.
+ */
+entity CoCompletions {
+  key sourceSlug : String(120);
+  key targetSlug : String(120);
+      score      : Integer;
+}
