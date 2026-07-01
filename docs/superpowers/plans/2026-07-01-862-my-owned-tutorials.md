@@ -995,5 +995,5 @@ No hybrid test added — `MyOwnedTutorials` is a pure projection with no HANA-sp
 - **Do all commits in the worktree** at `D:/projects/tutorials-poc/.claude/worktrees/issue-862-my-owned-tutorials`. Never commit to `main` directly.
 - **Do NOT run the scrub or soft-delete scripts from the worktree** — `hugo/content/tutorials/` is gitignored and won't exist there. Run them from the primary tree, after `npm run build:all`.
 - **`TutorialRepositories` is the entity name** (verified — `db/schema.cds:373`). If a future refactor renames it, both this script and the scrub script's cds.entities call will need updating.
-- **If test fixtures in `test/unit/author-service.test.js` don't include `tut-3` (an owner-only row for alice)**, add a minimal `INSERT INTO ... TutorialMeta ...` in the new `describe`'s own `beforeAll` — do not touch the parent describe's fixture setup.
+- **The Task 1 assertions rely on `tut-1` + `tut-A2` for alice's priority-3 set.** Both are already seeded by the existing `beforeAll` blocks (parent MyTutorialsView + sibling MyAuthoredTutorials). Do NOT add fixture INSERTs — the existing seed is sufficient.
 - **Spec-review advisory (item 3, remediation for --commit mtime gate):** the error message in the scrub script explicitly tells the operator to "re-run the script without --commit within 60 minutes." No separate documentation needed.
