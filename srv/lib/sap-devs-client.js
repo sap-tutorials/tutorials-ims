@@ -179,9 +179,23 @@ function validateSearchDiscovery(response) {
     throw new Error('sap-devs.searchDiscovery: results is not an array');
   }
   for (const row of response.results) {
-    for (const field of ['id', 'name', 'effort', 'category', 'description']) {
+    // `id`, `name`, `category` MUST be non-empty — they're the join keys
+    // and the primary display field. `effort` and `description` are
+    // allowed to be empty strings because Discovery Center returns rows
+    // with no estimated effort (e.g. new missions) or no long description
+    // set yet; both are optional-semantic per the fetcher's downstream
+    // handling (fetch-discovery-missions-job.js:146-147 parses empty
+    // effort to null and writes it to a nullable column). Type must still
+    // be `string` — any non-string is a wire-shape regression, not a
+    // curation gap.
+    for (const field of ['id', 'name', 'category']) {
       if (typeof row?.[field] !== 'string' || row[field] === '') {
         throw new Error(`sap-devs.searchDiscovery: row missing ${field} — ${JSON.stringify(row).slice(0, 200)}`);
+      }
+    }
+    for (const field of ['effort', 'description']) {
+      if (typeof row?.[field] !== 'string') {
+        throw new Error(`sap-devs.searchDiscovery: row ${field} is not a string — ${JSON.stringify(row).slice(0, 200)}`);
       }
     }
   }
