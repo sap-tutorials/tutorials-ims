@@ -39,6 +39,29 @@ export const MIN_SEARCH_CHARS = 2
 
 const escOData = (v: string) => v.replace(/'/g, "''")
 
+// Build the `getFacets(...)` URL using OData V4 parameter aliases. Inline
+// collection literals in a URL segment are `["a","b"]` (JSON array, double
+// quotes), NOT the OData string-literal form `['a','b']` — the latter is a
+// v2-era artifact that CAP's v4 parser rejects with HTTP 400
+// `Invalid value: taskTypes`. Aliases keep the JSON payload out of the URL
+// path, so URLSearchParams handles all encoding for us and single quotes in
+// the search term don't need to be doubled twice (once for OData, once for
+// URL). See issue #869.
+export function buildFacetsUrl(term: string, taskTypes: string[], experience: string[]): string {
+  const q = new URLSearchParams()
+  q.set('@s', JSON.stringify(term))
+  const params: string[] = ['search=@s']
+  if (taskTypes.length) {
+    q.set('@t', JSON.stringify(taskTypes.map(t => t.toUpperCase())))
+    params.push('taskTypes=@t')
+  }
+  if (experience.length) {
+    q.set('@e', JSON.stringify(experience))
+    params.push('experience=@e')
+  }
+  return `/search/getFacets(${params.join(',')})?${q}`
+}
+
 export interface BuildFilterFlags {
   isNew: boolean
   isNewCutoffISO: string
@@ -132,7 +155,7 @@ export function useSearch(options: UseSearchOptions) {
 
       const [itemsRes, facetsRes] = await Promise.all([
         fetch(`/search/SearchableItems?${params}`),
-        fetch(`/search/getFacets(search='${escOData(term)}'${filterTypes.value.length ? `,taskTypes=[${filterTypes.value.map(t => `'${escOData(t.toUpperCase())}'`).join(',')}]` : ''}${filterLevels.value.length ? `,experience=[${filterLevels.value.map(e => `'${escOData(e)}'`).join(',')}]` : ''})`),
+        fetch(buildFacetsUrl(term, filterTypes.value, filterLevels.value)),
       ])
 
       if (!itemsRes.ok || !facetsRes.ok) {
