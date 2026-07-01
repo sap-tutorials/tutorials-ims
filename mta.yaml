@@ -216,6 +216,11 @@ modules:
       APPROUTER_URL: ""
     requires:
       - name: tutorials-xsuaa
+      # #867 — approuter reads REBUILD_API_KEY from credstore via
+      # approuter/lib/credstore-secret.js. Same binding the srv uses; alias
+      # namespace is `tutorials`. Env fallback still works, so this is
+      # order-independent with the mtaext-injected placeholder.
+      - name: tutorials-credstore
       - name: srv-api
         group: destinations
         properties:

@@ -180,6 +180,9 @@ modules:
       XS_APP_LOG_LEVEL: info
     requires:
       - name: tutorials-xsuaa
+      # #867 — approuter reads REBUILD_API_KEY from credstore via
+      # approuter/lib/credstore-secret.js. Same binding the srv uses.
+      - name: tutorials-credstore
       - name: srv-api
         group: destinations
         properties:
