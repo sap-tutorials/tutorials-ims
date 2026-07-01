@@ -649,13 +649,17 @@ async function upsertTutorialMetadata(namespace, metadata) {
 // diverge.
 //
 // Resolution sources at publish time:
-//   - metadata[slug].primaryContributorEmail (single contributor — what
-//     the publish payload carries today; full TutorialContributors rows
-//     are seeded once by migrate-from-hana.js, not refreshed per publish)
-//   - TutorialMeta.ownerEmail (just-written by upsertTutorialMetadata
-//     above; typically === primaryContributorEmail)
-//   - any existing TutorialContributors rows on this tutorial (opportunistic
-//     contributor → user_ID link for rows that haven't been linked yet)
+//   - metadata[slug].frontmatterGithubLogin → Users.githubLogin (Phase 0,
+//     durable signal; overrides existing author_ID when it hits)
+//   - any existing TutorialContributors rows on this tutorial (Phase a/b,
+//     role-match then any-contributor; also opportunistic contributor →
+//     user_ID link for unlinked contributor rows)
+//   - metadata[slug].primaryContributorEmail is passed as `ownerEmail` to
+//     the resolver for orphan reporting only. As of #862 reopen, Phase (c)
+//     (ownerEmail fallback) is REMOVED: TutorialMeta.ownerEmail encodes a
+//     monitoring/staleness signal, not authorship, and elevating it to
+//     author_ID caused 36 tutorials to falsely attribute to a monitoring
+//     user on DEV. See srv/lib/resolve-tutorial-author.js for full rationale.
 //
 // Conservative: every UPDATE is gated by `…_ID IS NULL` so admin
 // corrections are preserved. Failure mode: caller wraps this in
@@ -809,8 +813,10 @@ export async function linkTutorialAuthorship(namespace, metadata) {
             }
           }
         } else {
-          // Commit-history fallback (role-match / any-contributor / owner-email)
-          // — preserve admin corrections by only filling NULL.
+          // Commit-history fallback (role-match / any-contributor).
+          // (Phase (c) `owner-email` was removed in #862 reopen; see
+          // srv/lib/resolve-tutorial-author.js for rationale.)
+          // Preserve admin corrections by only filling NULL.
           const res = await db.run(
             `UPDATE ${tutorialsTable} SET "AUTHOR_ID" = ? WHERE "ID" = ? AND "AUTHOR_ID" IS NULL`,
             [authorUserId, tutorialId]

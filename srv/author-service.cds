@@ -59,8 +59,14 @@ service AuthorService {
     SUBSTR_AFTER(name, '>') as actualTag : String
   };
 
+  // MyTutorials + MyAuthoredTutorials projections expose the underlying
+  // view's `tutorial_ID` key column ALSO as `ID` so plain-OData clients
+  // (Sage's imsApiClient reads `row.ID`) can consume the row without
+  // knowing the CDS view's naming quirk. Backward-compatible: tutorial_ID
+  // still appears on the response for existing consumers. See #862 reopen.
   @Capabilities.ChangeTracking : { Supported: true }
-  @readonly entity MyTutorials as projection on ims.MyTutorialsView;
+  @readonly entity MyTutorials as
+    projection on ims.MyTutorialsView { *, tutorial_ID as ID };
 
   // #862 — MyAuthoredTutorials is the narrow surface for "tutorials I am
   // currently responsible for maintaining". It projects MyTutorialsView
@@ -80,7 +86,7 @@ service AuthorService {
   // — the underlying view exposes bestPriority as a column.
   @Capabilities.ChangeTracking : { Supported: true }
   @readonly entity MyAuthoredTutorials as
-    projection on ims.MyTutorialsView { * } where bestPriority = 1;
+    projection on ims.MyTutorialsView { *, tutorial_ID as ID } where bestPriority = 1;
 
   action reviewTutorial(tutorialId : UUID) returns {
     reviewedDate       : Timestamp;

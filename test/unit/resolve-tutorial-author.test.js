@@ -92,15 +92,22 @@ describe('resolveTutorialAuthor (spec 2026-06-24-tutorial-authorship-fk)', () =>
     expect(result.authorUserId).toBe('user-alice');
   });
 
-  it('empty contributors → ownerEmail falls through', () => {
+  it('empty contributors + ownerEmail-only does NOT elevate ownerEmail to author (#862 reopen)', () => {
+    // Regression guard: TutorialMeta.ownerEmail encodes monitoring/watchers,
+    // NOT authorship. Phase (c) `ownerEmail` fallback was removed because
+    // it silently promoted stale monitoring assignments (e.g. legacy IMS
+    // migration data) to strict authorship on Tutorials.author_ID.
     const emailToUserId = new Map([['owner@sap.com', 'user-owner']]);
     const result = resolveTutorialAuthor({
       contributors: [],
       ownerEmail: 'owner@sap.com',
       emailToUserId,
     });
-    expect(result.authorUserId).toBe('user-owner');
+    expect(result.authorUserId).toBeNull();
+    expect(result.source).toBeNull();
     expect(result.contributorUserIds).toEqual([]);
+    // Orphan still surfaces the ownerEmail so backfill CSVs can flag it.
+    expect(result.orphans.some(o => o.kind === 'tutorial')).toBe(true);
   });
 
   it('nothing matches → authorUserId null + orphans list', () => {
@@ -214,7 +221,10 @@ describe('resolveTutorialAuthor — Phase 0 (frontmatter)', () => {
     expect(result.source).toBe('any-contributor');
   });
 
-  it('falls through to ownerEmail (Phase B c)', () => {
+  it('does NOT fall through to ownerEmail when contributors miss (#862 reopen)', () => {
+    // Was Phase (c). Now unset — a tutorial with no frontmatter author, no
+    // matching contributor email, and a monitor-only ownerEmail resolves to
+    // null so the row's author_ID stays NULL.
     const result = resolveTutorialAuthor({
       contributors: [{ email: 'noone@sap.com' }],
       ownerEmail: 'tom@sap.com',
@@ -222,8 +232,8 @@ describe('resolveTutorialAuthor — Phase 0 (frontmatter)', () => {
       frontmatterGithubLogin: null,
       loginToUserId: new Map(),
     });
-    expect(result.authorUserId).toBe('USER-TOM');
-    expect(result.source).toBe('owner-email');
+    expect(result.authorUserId).toBeNull();
+    expect(result.source).toBeNull();
   });
 
   it('source is null when nothing matches', () => {
