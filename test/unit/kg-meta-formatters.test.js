@@ -33,7 +33,10 @@ describe('kg-meta-formatters', () => {
       expect(formatDate('2026-06-30T23:00:00Z')).toBe('Jun 30, 2026');
     });
 
-    it('falls back to the raw slice(0,10) when the string is parseable-but-bad', () => {
+    // 'bad' is unparseable → new Date('bad').getTime() is NaN.
+    // formatDate falls back to iso.slice(0, 10) so the row still shows
+    // something legible instead of 'Invalid Date'.
+    it('falls back to iso.slice(0,10) when the input is unparseable', () => {
       expect(formatDate('bad')).toBe('bad');
     });
 

@@ -1,24 +1,20 @@
-// srv/lib/kg-meta-formatters.js
+// kg-meta-formatters.js
 //
-// AUTHORITATIVE COPY.
+// SHARED SOURCE. This file exists in TWO byte-identical copies:
+//   * srv/lib/kg-meta-formatters.js                       (imported by CAP handlers)
+//   * hugo-apps/src/related-graph/kg-meta-formatters.js   (imported by Vue island)
 //
-// Shared meta-formatters for the KG widget — rendered on both the server
-// (renderMeta in the related-graph endpoint) and the client (sidebar row
-// in RelatedGraph.vue). Vite root and CDS build separation prevents a
-// single source module, so we keep a byte-equal mirror at:
-//
-//   hugo-apps/src/related-graph/kg-meta-formatters.js
-//
-// After editing THIS file, regenerate the mirror:
+// Vite root and CDS build separation prevents a single source module, so
+// byte-equality is enforced by `scripts/check-kg-meta-formatters-mirror.ts`
+// (wired into `npm run postbuild:apps`). After editing either copy,
+// regenerate the other:
 //
 //   cp srv/lib/kg-meta-formatters.js hugo-apps/src/related-graph/kg-meta-formatters.js
 //
-// The mirror is enforced by `scripts/check-kg-meta-formatters-mirror.ts`,
-// wired into `scripts.postbuild:apps` in package.json.
-//
-// Every formatter pins to UTC so the server and the client render the
-// same string regardless of the reader's local timezone (day boundaries
-// don't flip months/days across e.g. Sydney vs Los Angeles).
+// Every formatter pins to timeZone: 'UTC' so a metaText string rendered on
+// the server matches a metaText string rendered on the client regardless of
+// the reader's local timezone (day boundaries don't flip months/days across
+// e.g. Sydney vs Los Angeles).
 
 export function formatRelativeMonth(iso) {
   if (!iso) return '';
