@@ -165,6 +165,7 @@ export default defineConfig({
           { text: 'QA channel bootstrap',      link: '/developers/operations/qa-channel-bootstrap' },
           { text: 'Re-migration runbook',      link: '/developers/operations/re-migration-runbook' },
           { text: 'Rebuild content workflow',  link: '/developers/operations/rebuild-content-workflow' },
+          { text: 'Content rollback',          link: '/developers/operations/content-rollback' },
           { text: 'Runtime config',            link: '/developers/operations/runtime-config' },
           { text: 'Secrets tracking',          link: '/developers/operations/secrets-tracking' },
           { text: 'SMTP credentials rotation', link: '/developers/operations/smtp-credentials-rotation' },
