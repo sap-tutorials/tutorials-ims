@@ -70,8 +70,69 @@
   {{ end }}
 
   {{/*
-    Phase 4.2 (#447 §9): "Blog posts discussing this" — section #3 on the
-    concept landing page, between Learning Journeys and Prerequisites.
+    Phase 4.7 (#748 §4.8.1): "Docs explaining this concept" — section #3
+    on the concept landing page, INSERTED between Learning journeys (#2)
+    and Blog posts (which shifts from #3 to #4).
+
+    This is the FIRST mid-list section insert in the Phase 4 sequence.
+    Phase 4.1-4.6 each appended to the tail; Phase 4.7 shifts existing
+    sections #3-#8 down one slot. No other section's HTML changes — only
+    their file position.
+
+    Row format per §3 Q10:
+        `<badge> Title ↗ · <anchor label> · <snippet>`
+
+    - `<badge>` is a small tinted pill (`.kg-help-source--{source}`)
+      reading `SAP Help` / `CAP` / `UI5`.
+    - `↗` (link-out) is inline, mirroring Phase 4.5/4.6.
+    - `<anchor label>` is the human-readable H2/H3 title
+      (title-cased from the slug at payload build time; may be null).
+    - `<snippet>` is the first ~120 chars of the docs page description,
+      precomputed at link-INSERT time and served from the
+      `HelpDocConceptLinks.snippet` column (LOB-locator-safe read).
+
+    URL construction: base URL + optional `#<anchor>` fragment.
+
+    Hide-when-empty: `{{ with .Params.helpDocs }}` — Hugo treats an empty
+    slice as falsy, so no additional guard needed.
+  */}}
+  {{ with .Params.helpDocs }}
+  <section
+    class="concept-page__section"
+    data-kg-section="help-docs"
+    data-concept-slug="{{ $.Params.slug }}"
+  >
+    <h2>Docs explaining this concept</h2>
+    <ul class="kg-help-doc-list">
+      {{ range . }}
+        {{ $url := .url }}
+        {{ $isSafe := or (hasPrefix $url "https://") (hasPrefix $url "http://") }}
+        {{ $href := $url }}
+        {{ with .anchor }}{{ $href = printf "%s#%s" $url . }}{{ end }}
+        <li>
+          <span class="kg-help-source kg-help-source--{{ .source }}">{{ .sourceLabel }}</span>
+          {{ if $isSafe }}
+          <a
+            href="{{ $href }}"
+            target="_blank"
+            rel="noopener"
+            data-help-doc-slug="{{ .slug }}"
+          >{{ .title }} <span class="kg-link-out" aria-hidden="true">↗</span></a>
+          {{ else }}
+          <span data-help-doc-slug="{{ .slug }}">{{ .title }}</span>
+          {{ end }}
+          {{ with .anchorLabel }} <span class="kg-help-anchor">· {{ . }}</span>{{ end }}
+          {{ with .snippet }} <span class="kg-help-snippet">· {{ . }}</span>{{ end }}
+        </li>
+      {{ end }}
+    </ul>
+  </section>
+  {{ end }}
+
+  {{/*
+    Phase 4.2 (#447 §9): "Blog posts discussing this" — section #4 on the
+    concept landing page (was #3 before Phase 4.7 inserted the help-docs
+    section above).
 
     Mirrors the Phase 4.1 hardening: external links open in a new tab
     (target=_blank rel=noopener); a URL scheme guard (`$isSafe`) falls back
@@ -115,7 +176,7 @@
   {{ end }}
 
   {{/*
-    Phase 4.3 (#447 §8): "Discovery missions teaching this" — section #4
+    Phase 4.3 (#447 §8): "Discovery missions teaching this" — section #5
     on the concept landing page, between Blog Posts and Prerequisites.
 
     Mirrors the Phase 4.1/4.2 hardening: external links open in a new tab
@@ -162,7 +223,7 @@
   {{ end }}
 
   {{/*
-    Phase 4.4 (#447 §9): "Videos teaching this" — section #5 on the
+    Phase 4.4 (#447 §9): "Videos teaching this" — section #6 on the
     concept landing page, between Discovery Missions and Prerequisites.
 
     Mirrors the Phase 4.1/4.2/4.3 hardening: external links open in a new
@@ -219,7 +280,7 @@
   {{ end }}
 
   {{/*
-    Phase 4.5 (#746 §5): "Official reference documentation" — section #6
+    Phase 4.5 (#746 §5): "Official reference documentation" — section #7
     on the concept landing page, between Videos and Prerequisites.
 
     api.sap.com authority docs. Row format:
@@ -267,7 +328,7 @@
   {{ end }}
 
   {{/*
-    Phase 4.6 (#747 §5): "Code samples embodying this" — section #7
+    Phase 4.6 (#747 §5): "Code samples embodying this" — section #8
     on the concept landing page, between API docs and Prerequisites.
 
     SAP-samples GitHub repositories that embody this concept. Row format:
@@ -517,6 +578,31 @@
               } catch (e) { /* never let telemetry break the page */ }
             });
           })(sampleLinks[o]);
+        }
+      }
+
+      // Phase 4.7 (#748 §8): delegated click listener on the "Docs
+      // explaining this concept" section. CSP-safe — addEventListener
+      // only, no inline onclick. Parallels the seven prior blocks above;
+      // only the event name + detail field name differ. Uses `var p` to
+      // avoid colliding with `var o` from the Phase 4.6 samples block.
+      var helpDocSection = document.querySelector('[data-kg-section="help-docs"]');
+      if (helpDocSection) {
+        var helpDocSectionConceptSlug = helpDocSection.getAttribute('data-concept-slug');
+        var helpDocLinks = helpDocSection.querySelectorAll('a[data-help-doc-slug]');
+        for (var p = 0; p < helpDocLinks.length; p++) {
+          (function (a) {
+            a.addEventListener('click', function () {
+              try {
+                window.dispatchEvent(new CustomEvent('kg.help-doc.linked_from_concept_page', {
+                  detail: {
+                    conceptSlug: helpDocSectionConceptSlug,
+                    helpDocSlug: a.getAttribute('data-help-doc-slug')
+                  }
+                }));
+              } catch (e) { /* never let telemetry break the page */ }
+            });
+          })(helpDocLinks[p]);
         }
       }
     })();

@@ -9,7 +9,7 @@
 // include 'learning-journey'. Phase 4.2 (#447 §9) adds 'blog-post'.
 // Phase 4.3 (#447 §8) adds 'discovery-mission'. Phase 4.4 (#447 §9) adds
 // 'video'. Phase 4.5 (#746) adds 'api-doc'. Phase 4.6 (#747) adds
-// 'sample'.
+// 'sample'. Phase 4.7 (#748) adds 'help-doc'.
 export type NodeType =
   | 'tutorial'
   | 'concept'
@@ -24,6 +24,7 @@ export type NodeType =
   | 'video'
   | 'api-doc'
   | 'sample'
+  | 'help-doc'
 
 export type ConceptRef = {
   slug: string
@@ -53,10 +54,10 @@ export type TutorialInfo = {
 // journeys) populated it. Phase 4.2 (#447 §9) widens the discriminant to
 // include 'blog-post' rows; Phase 4.3 (#447 §8) adds 'discovery-mission';
 // Phase 4.4 (#447 §9) adds 'video'; Phase 4.5 (#746) adds 'api-doc';
-// Phase 4.6 (#747) adds 'sample'.
+// Phase 4.6 (#747) adds 'sample'; Phase 4.7 (#748) adds 'help-doc'.
 // Mirrors the OtherResource type in srv/knowledge-graph-service.cds.
 export type OtherResource = {
-  type: 'learning-journey' | 'blog-post' | 'discovery-mission' | 'video' | 'api-doc' | 'sample'   // widens per sub-phase
+  type: 'learning-journey' | 'blog-post' | 'discovery-mission' | 'video' | 'api-doc' | 'sample' | 'help-doc'   // widens per sub-phase
   slug: string
   title: string
   url: string
@@ -91,6 +92,18 @@ export type OtherResource = {
   language?: string | null
   stars?: number | null
   lastCommitAt?: string | null   // ISO timestamp
+  // help-doc only (Phase 4.7 #748 §4.8.2): sidebar renders
+  // "<badge> Title ↗" (one line, tight — per §3 Q10). Concept page
+  // (more real estate) uses the same source + anchor + snippet fields
+  // but adds anchorLabel and snippet. `sourceLabel` is derived at
+  // payload time (`published-concepts-query.js` in Task 2's extension);
+  // rendering side reads it verbatim. Same rule for `anchorLabel`.
+  source?: 'help-sap-com' | 'cap-cloud-sap' | 'ui5-sap-com' | null
+  sourceLabel?: string | null
+  anchor?: string | null
+  anchorLabel?: string | null
+  snippet?: string | null
+  product?: string | null
   overlapCount?: number | null
   // Phase 5 (#850): server-rendered meta string, e.g. " · by Alice · Jun 3, 2026".
   // Consumers (ResourceRow / SidebarPanel / ExpandedPanel) should render this

@@ -189,6 +189,15 @@ function onOtherResourceClick(r: OtherResource): void {
       tutorialSlug: slug,
       sampleSlug: r.slug,
     })
+  } else if (r.type === 'help-doc') {
+    // Phase 4.7 (#748 §8): seventh branch — mirrors the six above, only
+    // the event name + slug field name differ. `kg.help-doc.linked_from_sidebar`
+    // per spec §8 (dotted event names — `.` separates namespace / entity /
+    // action).
+    emit('kg.help-doc.linked_from_sidebar', {
+      tutorialSlug: slug,
+      helpDocSlug: r.slug,
+    })
   }
 }
 
