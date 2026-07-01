@@ -1,8 +1,17 @@
 // srv/lib/sap-devs-client.js
 //
-// Phase 4 chassis: shared wrapper around sap-devs MCP server access.
-// 4.1 implements `searchLearningJourneys`; 4.2-4.6 fill in the other 6 methods
-// (currently TODO-throws — see test/unit/srv/sap-devs-client.test.js).
+// Shared wrapper around the "sap-devs" tool namespace. Historically this
+// dispatched over an MCP transport (see the sap-devs CLI at
+// D:\projects\sap-devs-cli). The MCP transport never got wired in the
+// deployed CF container, so the default transport now dispatches directly
+// to vendored JS ports of the two Go clients we actually use:
+//
+//   - search_learning_journeys  →  srv/lib/sap-devs-learning.js
+//   - search_discovery          →  srv/lib/sap-devs-discovery.js
+//
+// Tests continue to swap in a mock via _setMockTransport() — the transport
+// contract (`{ call(toolName, params) → Promise<{results: [...]}> }`) is
+// unchanged.
 //
 // Per-tool TTL cache:
 //   - in-process LRU
@@ -14,6 +23,8 @@
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { searchLearningJourneys as _learningSearch } from './sap-devs-learning.js';
+import { searchDiscoveryMissions as _discoverySearch } from './sap-devs-discovery.js';
 
 const TOOL_TTL_MS = {
   search_learning_journeys: 24 * 60 * 60 * 1000,  // 24h
@@ -30,23 +41,36 @@ const CACHE_DIR = join(process.cwd(), '.cache', 'sap-devs');
 const inProcessCache = new Map();  // key: `${tool}:${sha256(params)}`, value: { rows, cachedAt }
 let mockTransport = null;          // test hook
 
-// Real MCP transport. Lazy-init on first use.
+// Real transport. Lazy-init on first use. Historically this hit an MCP
+// server; now it dispatches directly to the vendored library ports so
+// nothing has to leave the CAP process to talk to sap-devs.
 let _transport = null;
 async function getTransport() {
   if (mockTransport) return mockTransport;
   if (!_transport) {
-    // Real impl: this connects to the sap-devs MCP server.
-    // In production, the project's existing MCP wiring provides this.
-    // The wiring detail is OUT OF SCOPE for this client — the client just
-    // calls `.call(toolName, args)` and gets a JSON response back.
-    // For now, throw to surface missing wiring; the cron job's hybrid test
-    // requires the real transport to be available.
     _transport = {
-      async call(toolName /* , args */) {
-        // TODO: wire up to real MCP server. See project's existing MCP
-        // integration (e.g. srv/homepage-service.js uses sap-devs for
-        // events — same pattern).
-        throw new Error(`sap-devs MCP transport not wired; can't call ${toolName}`);
+      async call(toolName, args) {
+        // Dispatch by MCP tool name. Wrapping the return in {results: […]}
+        // preserves the envelope shape that callCached + the validators
+        // downstream expect.
+        if (toolName === 'search_learning_journeys') {
+          const rows = await _learningSearch({
+            query: args?.query ?? '',
+            limit: args?.limit ?? 200,
+          });
+          return { results: rows };
+        }
+        if (toolName === 'search_discovery') {
+          // The tool's `type` param used to select missions vs services;
+          // in practice we've only ever called it with type='missions',
+          // and the vendored client is missions-only.
+          const rows = await _discoverySearch({
+            query: args?.query ?? '',
+            top: args?.limit ?? 200,
+          });
+          return { results: rows };
+        }
+        throw new Error(`sap-devs: unknown tool "${toolName}"`);
       },
     };
   }
