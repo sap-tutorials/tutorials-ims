@@ -340,3 +340,85 @@ describe.runIf(isSafeForWrites())('DiscoveryMission DELETE cascades to concept-l
     expect(orphan).toBeUndefined();
   });
 });
+
+// ────────────────────────────────────────────────────────────────────
+// Rows 8/9: Videos → VideoConceptLinks + VideoServices
+// NOTE: Videos.description is LargeString (NCLOB). Never SELECT it
+// alongside scalar metadata via CDS QL on HANA — LOB locators expire
+// (see db/external-content.cds LOB-locator note).
+// ────────────────────────────────────────────────────────────────────
+describe.runIf(isSafeForWrites())('Video DELETE cascades to concept-links AND services', () => {
+  const videoId   = '00000000-0000-0000-0000-789000000040';
+  const conceptId = '00000000-0000-0000-0000-789000000041';
+  const linkId    = '00000000-0000-0000-0000-789000000042';
+  const serviceId = '00000000-0000-0000-0000-789000000043';
+
+  beforeAll(async () => {
+    const db = await cds.connect.to('db');
+    assertHanaKind(db);
+  });
+
+  afterAll(async () => {
+    const {
+      Videos, VideoConceptLinks, VideoServices,
+    } = cds.entities('com.sap.developers.ims.external');
+    const { Concepts } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(VideoConceptLinks).where({ ID: linkId });
+    await DELETE.from(VideoServices).where({ ID: serviceId });
+    await DELETE.from(Concepts).where({ ID: conceptId });
+    await DELETE.from(Videos).where({ ID: videoId });
+  });
+
+  it('deletes VideoConceptLinks rows when the parent Video is deleted', async () => {
+    const { Videos, VideoConceptLinks } =
+      cds.entities('com.sap.developers.ims.external');
+    const { Concepts } = cds.entities('com.sap.developers.ims');
+
+    await INSERT.into(Videos).entries({
+      ID: videoId,
+      slug: '__test__-789-vd',
+      title: '__test__ Video 789',
+    });
+    await INSERT.into(Concepts).entries({
+      ID: conceptId,
+      slug: '__test__-789-cascade-concept-vd',
+      name: '__test__ Cascade Concept (vd)',
+      status: 'ACTIVE',
+    });
+    await INSERT.into(VideoConceptLinks).entries({
+      ID: linkId,
+      video_ID: videoId,
+      concept_ID: conceptId,
+      predicate: 'teaches',
+    });
+
+    await DELETE.from(Videos).where({ ID: videoId });
+
+    const orphan = await SELECT.one.from(VideoConceptLinks).where({ ID: linkId });
+    expect(orphan).toBeUndefined();
+    const concept = await SELECT.one.from(Concepts).where({ ID: conceptId });
+    expect(concept).toBeDefined();
+  });
+
+  it('deletes VideoServices rows when the parent Video is deleted', async () => {
+    const { Videos, VideoServices } =
+      cds.entities('com.sap.developers.ims.external');
+
+    // Re-INSERT the video (first `it` deleted it via cascade).
+    await INSERT.into(Videos).entries({
+      ID: videoId,
+      slug: '__test__-789-vd',
+      title: '__test__ Video 789',
+    });
+    await INSERT.into(VideoServices).entries({
+      ID: serviceId,
+      video_ID: videoId,
+      serviceName: '__test__-789-btp-service',
+    });
+
+    await DELETE.from(Videos).where({ ID: videoId });
+
+    const orphan = await SELECT.one.from(VideoServices).where({ ID: serviceId });
+    expect(orphan).toBeUndefined();
+  });
+});
