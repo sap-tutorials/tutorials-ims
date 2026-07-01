@@ -1,21 +1,30 @@
 // srv/knowledge-graph-service.cds
 // Knowledge-graph query + curation surface — PR 5 of issue #381.
 //
-// Auth posture (revised 2026-06-28): the read surface is PUBLIC. Anonymous
-// readers must reach `neighborhood` (powers the tutorial sidebar at
-// /tutorials/*/) and the three projections (PublishedConcepts powers the
-// /explore page's node list). Admin actions carry their own
-// @requires : 'KnowledgeGraph.Admin'.
+// Auth posture (revised 2026-06-28, corrected 2026-07-01 in #853): the read
+// surface is PUBLIC. Anonymous readers must reach `neighborhood` (powers the
+// tutorial sidebar at /tutorials/*/) and the three projections
+// (PublishedConcepts powers the /explore page's node list). Admin actions
+// carry their own @requires : 'KnowledgeGraph.Admin'.
 //
-// What protects the writable `Concepts` projection now that the
-// service-level @requires is gone:
+// IMPORTANT: `@requires : 'any'` is the CDS pseudo-role for "no auth needed"
+// (see cap.cloud.sap/docs/guides/security/authorization#pseudo-roles).
+// Without it, CAP's default posture with `auth.kind: xsuaa` is "authenticated
+// required" — dropping a service-level annotation silently reverts to that
+// default and yields 401 for anonymous callers. #726 removed the old
+// `@requires : 'authenticated-user'` but didn't replace it with `'any'`,
+// which is why the widget was requiring login (issue #853).
+//
+// What protects the writable `Concepts` projection now that the service is
+// anonymous-readable:
 //   1. CREATE/DELETE are blocked at the OData layer by
 //      Capabilities.InsertRestrictions/DeleteRestrictions in
 //      app/admin-annotations.cds (search for `KnowledgeGraphService.Concepts`).
 //      CAP returns 405 on POST/DELETE attempts.
 //   2. UPDATE is policed imperatively by the before('UPDATE', 'Concepts')
-//      handler in srv/knowledge-graph-service.js, which (after Task 2)
-//      asserts the admin scope BEFORE the field-allowlist check runs.
+//      handler in srv/knowledge-graph-service.js, which asserts
+//      req.user.is('KnowledgeGraph.Admin') BEFORE the field allowlist check
+//      runs — so anonymous PATCH returns 403 without touching the DB.
 //
 // Phase 1 ships `neighborhood`; `pathBetween` and `conceptsForUser` declare
 // the Phase 2 contract so clients can compile against a stable surface, but
@@ -23,6 +32,7 @@
 
 using { com.sap.developers.ims as ims } from '../db/knowledge-graph';
 
+@requires : 'any'
 service KnowledgeGraphService @(path : '/graph') {
 
   // ─── Projections (curation introspection + admin tooling) ─────────────

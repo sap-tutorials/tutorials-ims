@@ -59,6 +59,23 @@ describe.runIf(APPROUTER && SRV)('Knowledge Graph endpoints smoke', () => {
     expect(body).toHaveProperty('teaches');
   });
 
+  // Whole /graph/* reader surface must be anonymous. #853 was caused by
+  // `neighborhood` being the only endpoint the widget hits, but the four
+  // projections back the /explore page + admin tooling — if we ever drop
+  // `@requires: 'any'` again, all four regress in lockstep, so pin them.
+  it.each([
+    ['PublishedConcepts',      '$top=1'],
+    ['Concepts',               '$top=1'],
+    ['ConceptEdges',           '$top=1'],
+    ['TutorialConceptLinks',   '$top=1'],
+  ])('GET /graph/%s without auth returns 200 (issue #853)', async (entity, query) => {
+    const res = await fetchWithRetry(`${SRV_URL}/graph/${entity}?${query}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toHaveProperty('value');
+    expect(Array.isArray(body.value)).toBe(true);
+  });
+
   it('POST /graph/runSparql without auth is rejected', async () => {
     const res = await fetchWithRetry(`${SRV_URL}/graph/runSparql`, {
       method: 'POST',
