@@ -422,3 +422,59 @@ describe.runIf(isSafeForWrites())('Video DELETE cascades to concept-links AND se
     expect(orphan).toBeUndefined();
   });
 });
+
+// ────────────────────────────────────────────────────────────────────
+// Row 10: ApiDocs → ApiDocConceptLinks
+// NOTE: ApiDocs.description is LargeString (NCLOB). Never SELECT it
+// alongside scalar metadata (LOB-locator gotcha).
+// ────────────────────────────────────────────────────────────────────
+describe.runIf(isSafeForWrites())('ApiDoc DELETE cascades to ApiDocConceptLinks', () => {
+  const apiDocId  = '00000000-0000-0000-0000-789000000050';
+  const conceptId = '00000000-0000-0000-0000-789000000051';
+  const linkId    = '00000000-0000-0000-0000-789000000052';
+
+  beforeAll(async () => {
+    const db = await cds.connect.to('db');
+    assertHanaKind(db);
+  });
+
+  afterAll(async () => {
+    const { ApiDocs, ApiDocConceptLinks } =
+      cds.entities('com.sap.developers.ims.external');
+    const { Concepts } = cds.entities('com.sap.developers.ims');
+    await DELETE.from(ApiDocConceptLinks).where({ ID: linkId });
+    await DELETE.from(Concepts).where({ ID: conceptId });
+    await DELETE.from(ApiDocs).where({ ID: apiDocId });
+  });
+
+  it('deletes ApiDocConceptLinks rows when the parent ApiDoc is deleted', async () => {
+    const { ApiDocs, ApiDocConceptLinks } =
+      cds.entities('com.sap.developers.ims.external');
+    const { Concepts } = cds.entities('com.sap.developers.ims');
+
+    await INSERT.into(ApiDocs).entries({
+      ID: apiDocId,
+      slug: '__test__-789-ad',
+      title: '__test__ ApiDoc 789',
+    });
+    await INSERT.into(Concepts).entries({
+      ID: conceptId,
+      slug: '__test__-789-cascade-concept-ad',
+      name: '__test__ Cascade Concept (ad)',
+      status: 'ACTIVE',
+    });
+    await INSERT.into(ApiDocConceptLinks).entries({
+      ID: linkId,
+      apiDoc_ID: apiDocId,
+      concept_ID: conceptId,
+      predicate: 'officialReferenceFor',
+    });
+
+    await DELETE.from(ApiDocs).where({ ID: apiDocId });
+
+    const orphan = await SELECT.one.from(ApiDocConceptLinks).where({ ID: linkId });
+    expect(orphan).toBeUndefined();
+    const concept = await SELECT.one.from(Concepts).where({ ID: conceptId });
+    expect(concept).toBeDefined();
+  });
+});
